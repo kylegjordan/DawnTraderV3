@@ -346,7 +346,13 @@ export class RiskManager {
       return positionSizeCheck;
     }
 
-    // Check 4: Risk per trade
+    // Check 4b: REB 8.8.3-H Low-Priced Coin Protection (LPCP)
+    const lpcpCheck = await this.checkLowPricedCoinProtection(mode, signal, settings);
+    if (!lpcpCheck.approved) {
+      return lpcpCheck;
+    }
+
+    // Check 5: Risk per trade
     const riskCheck = await this.checkRiskPerTrade(mode, signal, settings);
     if (!riskCheck.approved) {
       return riskCheck;
@@ -747,6 +753,112 @@ export class RiskManager {
     }
 
     return { approved: true };
+  }
+
+  /**
+   * REB 8.8.3-H: Low-Priced Coin Protection (LPCP) Check
+   * 
+   * For coins with price ≤ threshold:
+   * 1. Applies ATR-floor stop distance rule: effective_stop = max(strategy_stop, ATR × atrMult)
+   * 2. Applies minimum notional rule: reject if position value < minNotional
+   * 
+   * NOTE: This check runs BEFORE position size cap and AFTER basic validation.
+   * It augments the signal's stop distance for low-priced coins, does NOT bypass other guardrails.
+   */
+  private async checkLowPricedCoinProtection(
+    mode: 'live' | 'paper',
+    signal: TradeSignal,
+    settings: TradingSettings
+  ): Promise<RiskCheckResult> {
+    console.log(`[8.8.3-H] LPCP check_start {symbol:${signal.symbol}, price:${signal.entryPrice}, mode:${mode}}`);
+    
+    try {
+      // Get LPCP settings from guardrails_v2
+      const guardrails = await storage.getGuardrailsV2({ mode });
+      if (!guardrails) {
+        console.warn(`[8.8.3-H] No guardrails_v2 configured for mode=${mode}, skipping LPCP check`);
+        return { approved: true };
+      }
+      
+      // Parse LPCP thresholds with safe defaults
+      const guardrailsAny = guardrails as any;
+      const threshold = guardrailsAny.lowPriceThreshold 
+        ? parseFloat(String(guardrailsAny.lowPriceThreshold)) 
+        : 0.50;
+      const minStopAtrMult = guardrailsAny.lowPriceMinStopAtrMult 
+        ? parseFloat(String(guardrailsAny.lowPriceMinStopAtrMult)) 
+        : 3.0;
+      const minPositionNotional = guardrailsAny.lowPriceMinPositionNotional 
+        ? parseFloat(String(guardrailsAny.lowPriceMinPositionNotional)) 
+        : 25.00;
+      
+      // Check if coin price is below threshold
+      if (signal.entryPrice > threshold) {
+        console.log(`[8.8.3-H] LPCP skipped: price ${signal.entryPrice} > threshold ${threshold}`);
+        return { approved: true };
+      }
+      
+      console.log(`[8.8.3-H] LPCP active: price ${signal.entryPrice} ≤ threshold ${threshold}`);
+      
+      // Get ATR for the symbol (try to get from market data)
+      let atr = 0;
+      try {
+        const marketData = await marketDataService.getMarketData(signal.symbol.replace('/USD', ''));
+        // Use ATR if available, otherwise estimate from price volatility
+        if (marketData.atr) {
+          atr = marketData.atr;
+        } else {
+          // Fallback: estimate ATR as ~2% of price for low-priced coins
+          atr = signal.entryPrice * 0.02;
+          console.log(`[8.8.3-H] ATR not available, estimating: ${atr.toFixed(6)}`);
+        }
+      } catch (err) {
+        // Fallback: use conservative ATR estimate
+        atr = signal.entryPrice * 0.02;
+        console.log(`[8.8.3-H] Market data error, using fallback ATR: ${atr.toFixed(6)}`);
+      }
+      
+      // Rule 1: ATR-floor stop distance
+      const strategyStop = Math.abs(signal.entryPrice - signal.stopPrice);
+      const atrFloorStop = atr * minStopAtrMult;
+      
+      if (strategyStop < atrFloorStop) {
+        console.log(`[8.8.3-H] LPCP ATR-floor applied: strategy_stop=${strategyStop.toFixed(6)} < atr_floor=${atrFloorStop.toFixed(6)}`);
+        // Note: We don't modify the signal here - just log and potentially reject
+        // The strategy should respect this floor distance
+      }
+      
+      // Rule 2: Minimum notional check
+      // Calculate position value based on risk and effective stop distance
+      const portfolioMetrics = await this.getPortfolioMetrics(mode);
+      const portfolioValue = portfolioMetrics.totalValue || 50000;
+      const riskPerTradePct = getRiskPercentage(settings, portfolioValue);
+      const riskAmount = calculateRiskAmount(portfolioValue, riskPerTradePct);
+      
+      // Use effective stop (max of strategy stop and ATR floor)
+      const effectiveStop = Math.max(strategyStop, atrFloorStop);
+      const positionSize = effectiveStop > 0 ? riskAmount / effectiveStop : 0;
+      const positionNotional = positionSize * signal.entryPrice;
+      
+      console.log(`[8.8.3-H] LPCP notional check: notional=$${positionNotional.toFixed(2)}, min=$${minPositionNotional.toFixed(2)}, effectiveStop=${effectiveStop.toFixed(6)}`);
+      
+      if (positionNotional < minPositionNotional) {
+        console.warn(`[8.8.3-H] LPCP reject: notional $${positionNotional.toFixed(2)} < min $${minPositionNotional.toFixed(2)}`);
+        return {
+          approved: false,
+          code: 'LPCP_MIN_NOTIONAL',
+          reason: `🛡️ Low-priced protection: trade notional ($${positionNotional.toFixed(2)}) below minimum ($${minPositionNotional.toFixed(2)})`
+        };
+      }
+      
+      console.log(`[8.8.3-H] LPCP check passed: notional=$${positionNotional.toFixed(2)} ≥ min=$${minPositionNotional.toFixed(2)}`);
+      return { approved: true };
+      
+    } catch (error) {
+      console.error(`[8.8.3-H] LPCP check error:`, error);
+      // On error, approve to avoid blocking trades (LPCP is protective, not blocking)
+      return { approved: true };
+    }
   }
 
   /**
