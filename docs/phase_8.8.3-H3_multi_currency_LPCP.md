@@ -153,17 +153,42 @@ TradeSignal → checkLowPricedCoinProtection()
 ## Verification
 
 Tested with:
-1. ✅ USD pair (VINE/USD) - behavior unchanged
-2. ✅ USDT pair (XRP/USDT) - treated as USD
+1. ✅ USD pair (VINE/USD) - behavior unchanged, no FX calls
+2. ✅ USDT pair (XRP/USDT) - treated as USD, no FX calls
 3. ✅ EUR pair (ARB/EUR) - price × EUR/USD rate applied
 4. ✅ JPY pair (BTC/JPY) - correctly bypasses LPCP (high USD price)
 5. ✅ Low-priced EUR pair - LPCP triggers correctly
+6. ✅ FX failure handling - trades blocked with FX_CONVERSION_FAILED code
+
+## Error Codes
+
+| Code | Description |
+|------|-------------|
+| `FX_CONVERSION_FAILED` | FX rate unavailable for non-USD currency. Trade blocked for safety. |
+| `LPCP_MIN_NOTIONAL` | Trade notional below minimum threshold (after FX conversion). |
 
 ## Files Modified
 
 1. `server/services/fx-conversion-service.ts` (NEW)
 2. `server/services/risk-manager.ts` (MODIFIED)
 3. `docs/phase_8.8.3-H3_multi_currency_LPCP.md` (NEW - this file)
+
+## Key Implementation Details
+
+### USD/USDT/USDC Fast Path
+- `convertToUSD()` maps Kraken codes first (e.g., ZUSD→USD)
+- Returns immediately for USD-equivalents WITHOUT any network calls
+- `requiresConversion()` uses same mapping logic for consistency
+
+### Fail-Safe Behavior
+- Entry/stop price FX failure → `FX_CONVERSION_FAILED`, trade blocked
+- ATR FX failure → `FX_CONVERSION_FAILED`, trade blocked
+- Fallback ATR estimate (when market data unavailable) uses already-converted USD price
+
+### Performance
+- FX rates cached for 30 seconds
+- Concurrent FX requests coalesced into single API call
+- USD pairs have zero network overhead
 
 ## Rollback Instructions
 

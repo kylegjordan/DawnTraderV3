@@ -213,25 +213,22 @@ class FXConversionService {
   async convertToUSD(value: number, quoteCurrency: string): Promise<number> {
     const normalized = quoteCurrency.toUpperCase().trim();
     
-    // Fast path: already USD
-    if (normalized === 'USD') {
-      return value;
-    }
-    
-    // Map Kraken currency codes
+    // Map Kraken currency codes first
     const mappedCurrency = this.KRAKEN_CURRENCY_MAP[normalized] || normalized;
     
-    // USDC is 1:1 with USD
-    if (mappedCurrency === 'USDC') {
-      console.log(`${LOG_TAG} convertToUSD: ${value} USDC → ${value} USD (1:1)`);
+    // Fast path: USD and USD-equivalents (no network call, no rate lookup)
+    const USD_EQUIVALENTS = ['USD', 'USDT', 'USDC'];
+    if (USD_EQUIVALENTS.includes(mappedCurrency)) {
+      console.log(`${LOG_TAG} convertToUSD: ${value} ${normalized} → ${value} USD (direct, no conversion)`);
       return value;
     }
     
+    // Non-USD currencies require FX rate lookup
     try {
       const rates = await this.getCachedRates();
       const rate = rates[mappedCurrency];
       
-      if (rate === undefined || rate === null) {
+      if (rate === undefined || rate === null || isNaN(rate)) {
         console.error(`${LOG_TAG}[FX_FAIL] No FX rate for ${mappedCurrency}, blocking trade`);
         throw new Error(`[8.8.3-H3][FX_FAIL] No FX rate available for ${mappedCurrency}`);
       }
@@ -248,11 +245,15 @@ class FXConversionService {
 
   /**
    * Check if a currency requires FX conversion (not USD/USDT/USDC)
+   * Handles Kraken legacy codes like ZUSD as well
    */
   requiresConversion(quoteCurrency: string): boolean {
     const normalized = quoteCurrency.toUpperCase().trim();
-    const usdEquivalents = ['USD', 'USDT', 'USDC', 'ZUSD'];
-    return !usdEquivalents.includes(normalized);
+    // Map Kraken codes first
+    const mappedCurrency = this.KRAKEN_CURRENCY_MAP[normalized] || normalized;
+    // USD equivalents don't need conversion
+    const USD_EQUIVALENTS = ['USD', 'USDT', 'USDC'];
+    return !USD_EQUIVALENTS.includes(mappedCurrency);
   }
 
   /**

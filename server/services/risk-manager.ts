@@ -828,6 +828,9 @@ export class RiskManager {
       
       console.log(`[8.8.3-H] LPCP active: priceUSD ${entryPriceUSD.toFixed(6)} ≤ threshold ${threshold}`);
       
+      // REB 8.8.3-H3: Determine if this pair needs FX conversion (cached for reuse)
+      const needsFxConversion = fxConversionService.requiresConversion(quoteCurrency);
+      
       // Get ATR for the symbol (try to get from market data)
       let atr = 0;
       try {
@@ -836,9 +839,19 @@ export class RiskManager {
         if (marketData.atr) {
           atr = marketData.atr;
           // REB 8.8.3-H3: Convert ATR to USD if needed
-          if (fxConversionService.requiresConversion(quoteCurrency)) {
-            atr = await fxConversionService.convertToUSD(atr, quoteCurrency);
-            console.log(`[8.8.3-H3][FX] ATR converted to USD: ${atr.toFixed(6)}`);
+          if (needsFxConversion) {
+            try {
+              atr = await fxConversionService.convertToUSD(atr, quoteCurrency);
+              console.log(`[8.8.3-H3][FX] ATR converted to USD: ${atr.toFixed(6)}`);
+            } catch (fxError) {
+              // REB 8.8.3-H3: Fail-safe - block trade if FX conversion fails for non-USD pairs
+              console.error(`[8.8.3-H3][FX_FAIL] ATR FX conversion failed, blocking trade:`, fxError);
+              return {
+                approved: false,
+                code: 'FX_CONVERSION_FAILED',
+                reason: `🛡️ FX conversion failed for ${quoteCurrency} ATR. Unable to verify low-priced coin protection.`
+              };
+            }
           }
         } else {
           // Fallback: estimate ATR as ~2% of USD price for low-priced coins
