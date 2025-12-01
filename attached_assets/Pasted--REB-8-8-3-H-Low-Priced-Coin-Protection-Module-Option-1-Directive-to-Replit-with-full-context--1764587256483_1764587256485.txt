@@ -1,0 +1,221 @@
+✅ REB 8.8.3-H — Low-Priced Coin Protection Module (Option 1)
+Directive to Replit (with full context + test credentials)
+📌 CONTEXT (READ FULLY BEFORE IMPLEMENTATION)
+
+The Dawn Trader now exposes five Core Guardrails:
+
+Portfolio Risk Per Trade
+
+Symbol Cooldown
+
+Max Open Positions
+
+Daily Loss Kill Switch
+
+Max Position Percent
+
+The next required upgrade is to introduce a Low-Priced Coin Protection Module, placed under its own dedicated section on the Goals → Guardrails page (below the Core Guardrails card).
+
+Purpose of this module
+
+Low-priced cryptocurrencies (e.g., below $0.50) frequently produce:
+
+extremely small ATR values
+
+extremely tight stop distances
+
+extremely large position sizing calculations
+
+This reliably triggers legitimate guardrail rejections because even micro-movements produce outsized position sizes relative to the portfolio.
+To solve this, the Dawn Trader needs a dedicated guardrail module with three controls that reduce noise and size requirements for these pairs.
+
+Key Constraints
+
+Must not break any part of the existing architecture.
+
+Must not override strategy-level logic.
+
+Must augment the risk manager without branching execution paths.
+
+Must be LATTi-compatible (toggle support, same as existing guardrails).
+
+Must integrate via the existing guardrails_v2 framework.
+
+Must be future-proof, as this module will be required for Phase 9 strategy refactor.
+
+✅ Implementation Requirements
+1. Add a new section to the Goals → Guardrails tab
+
+Title:
+
+Low-Priced Coin Protection (LPCP)
+
+Placement:
+Immediately below the Core Guardrails card and above the LATTi footer.
+
+This must be its own card component, visually distinct.
+
+2. Add three new guardrail parameters
+
+These fields must be added to guardrails_v2 with safe defaults.
+
+(A) Min Stop Distance (ATR-based)
+
+DB field name: low_price_min_stop_atr_mult
+
+Type: numeric(6,3)
+
+Default: 3.0
+
+UI label:
+"Minimum Stop Distance (ATR-Multiple)"
+
+UI description:
+“For low-priced coins, the stop-loss distance will never be smaller than this ATR multiple. Prevents ultra-tight stops caused by tiny price values.”
+
+Value meaning:
+Stop distance = max(strategy_stop, ATR × ATR_multiple)
+
+(B) Min Position Notional ($ Floor)
+
+DB field name: low_price_min_position_notional
+
+Type: numeric(12,2)
+
+Default: 25.00
+
+UI label:
+"Minimum Trade Notional"
+
+UI description:
+“The minimum USD value allowed for a low-priced coin trade. Smaller trades will be rejected to avoid noise and micro-positions.”
+
+(C) Low-Price Threshold
+
+DB field name: low_price_threshold
+
+Type: numeric(10,4)
+
+Default: 0.50
+
+UI label:
+"Low-Price Threshold"
+
+UI description:
+“Coins with price at or below this value activate the low-priced protection rules.”
+
+✅ 3. Required Behavior (Risk Manager)
+
+Modify risk-manager.ts as follows:
+
+When symbol price ≤ low_price_threshold:
+
+Apply:
+
+1️⃣ ATR-floor stop distance rule
+
+effective_stop = max(strategy_stop, ATR × low_price_min_stop_atr_mult)
+
+If ATR is not available for the timeframe needed, compute it using 14-period lookback on the 1m or 5m candles (more on ATR below).
+
+2️⃣ Minimum notional rule
+
+Before position size calculation completes:
+
+If (position_notional < low_price_min_position_notional):
+→ Reject trade with reason:
+"Low-priced protection: trade notional below minimum"
+
+3️⃣ Max Position Percent still applies afterward
+
+Existing Core Guardrails must apply as usual.
+
+❗ Do NOT bypass existing guardrails.
+✅ 4. LATTi Integration
+
+Each of the three fields must support:
+
+Manual override toggle
+
+LATTi-Managed mode
+
+Autosave
+
+Change toast messages (identical style to Core Guardrails)
+
+UI lock icon state
+
+✅ 5. UI Requirements
+
+Implement new card component:
+
+<LowPricedProtectionCard />
+
+
+Contains the three inputs, each with:
+
+label
+
+description
+
+numeric input
+
+unit (ATR multiple | USD | USD)
+
+LATTi / Manual switch
+
+persistent save
+
+identical styles to existing guardrails
+
+✅ 6. Testing Requirements
+
+Use the test account:
+
+username: testuser123
+password: SecurePass123!
+
+
+Verify:
+
+UI:
+
+All three settings appear under a new LPCP card
+
+Their descriptions and default values show
+
+LATTi/manual toggles work
+
+Values persist and reload
+
+Backend:
+
+guardrails_v2 shows new columns
+
+risk-manager applies low-priced rules only when price ≤ threshold
+
+ATR multiple correctly increases stop distances
+
+Minimum notional logic correctly rejects tiny trades
+
+No disruption to Core Guardrails
+
+🧪 7. Acceptance Criteria
+
+This directive is complete when:
+
+LPCP card shows with 3 user-controllable guardrails
+
+All three persist into DB
+
+Risk manager enforces all rules
+
+Strategy engine still runs normally
+
+Max Position Percent still applies after LPCP rules
+
+No regression in trade processing
+
+UI and backend tests with testuser123 pass
+
+📌 END OF DIRECTIVE — REB 8.8.3-H

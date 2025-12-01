@@ -297,6 +297,21 @@ export const guardrailsV2 = pgTable("guardrails_v2", {
   // REB 8.8.3-G: Maximum size of any single position as % of portfolio value
   maxPositionPercentPct: decimal("max_position_percent_pct", { precision: 5, scale: 2 }).notNull().default("30.00"),
   
+  // REB 8.8.3-H: LOW-PRICED COIN PROTECTION (LPCP) MODULE
+  // Protects against erratic position sizing for coins with very low prices
+  
+  // LPCP.1: Minimum Stop Distance (ATR-multiple)
+  // For low-priced coins, stop distance will never be smaller than ATR × this multiple
+  lowPriceMinStopAtrMult: decimal("low_price_min_stop_atr_mult", { precision: 6, scale: 3 }).notNull().default("3.000"),
+  
+  // LPCP.2: Minimum Trade Notional ($ floor)
+  // The minimum USD value allowed for a low-priced coin trade
+  lowPriceMinPositionNotional: decimal("low_price_min_position_notional", { precision: 12, scale: 2 }).notNull().default("25.00"),
+  
+  // LPCP.3: Low-Price Threshold
+  // Coins at or below this price activate low-priced protection rules
+  lowPriceThreshold: decimal("low_price_threshold", { precision: 10, scale: 4 }).notNull().default("0.5000"),
+  
   // Phase 3: Manual Override Controls (Lottie vs User)
   isManualOverride: boolean("is_manual_override").notNull().default(false), // true = user controls, false = LATTI controls
   tunedByLatti: boolean("tuned_by_latti").notNull().default(true), // true = LATTI manages, false = manual
