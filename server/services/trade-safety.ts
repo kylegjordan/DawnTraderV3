@@ -11,13 +11,16 @@
 import { storage } from '../storage';
 import { TradingSettings, PaperSimOpenPosition, Trade } from '@shared/schema';
 import { 
-  buildSettingsFromGuardrails, 
+  buildSettingsFromGuardrails as _buildSettingsFromGuardrails, 
   getRiskPercentageV2, 
-  calculateRiskAmount,
+  calculateRiskAmount as _calculateRiskAmount,
   getPortfolioBalanceV2 
 } from './guardrail-settings';
 import { fxConversionService } from './fx-conversion-service.js';
 import { marketDataService } from './market-data';
+
+export const buildSettingsFromGuardrails = _buildSettingsFromGuardrails;
+export const calculateRiskAmount = _calculateRiskAmount;
 
 export interface TradeCandidate {
   symbol: string;
@@ -192,7 +195,11 @@ async function checkSymbolCooldown(
     }
 
     const lastTrade = lastTrades[0];
-    const lastTradeTime = new Date(lastTrade.exitTime || lastTrade.entryTime).getTime();
+    const exitOrEntryTime = lastTrade.exitTime || lastTrade.entryTime;
+    if (!exitOrEntryTime) {
+      return { ok: true };
+    }
+    const lastTradeTime = new Date(exitOrEntryTime).getTime();
     const currentTime = Date.now();
     const minutesSinceLastTrade = (currentTime - lastTradeTime) / (1000 * 60);
 
@@ -308,9 +315,10 @@ async function checkLowPricedCoinProtection(
     let atr = trade.atr || 0;
     if (!atr) {
       try {
-        const marketData = await marketDataService.getMarketData(baseCurrency);
-        if (marketData.atr) {
-          atr = marketData.atr;
+        const marketData = await marketDataService.getMarketData(baseCurrency) as Record<string, any>;
+        const marketDataAtr = marketData?.atr;
+        if (marketDataAtr && typeof marketDataAtr === 'number') {
+          atr = marketDataAtr;
           if (fxConversionService.requiresConversion(quoteCurrency)) {
             atr = await fxConversionService.convertToUSD(atr, quoteCurrency);
           }

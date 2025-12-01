@@ -594,7 +594,11 @@ export class RiskManager {
       }
 
       const lastTrade = lastTrades[0];
-      const lastTradeTime = new Date(lastTrade.exitTime || lastTrade.entryTime).getTime();
+      const exitOrEntryTime = lastTrade.exitTime || lastTrade.entryTime;
+      if (!exitOrEntryTime) {
+        return { approved: true };
+      }
+      const lastTradeTime = new Date(exitOrEntryTime).getTime();
       const currentTime = Date.now();
       const minutesSinceLastTrade = (currentTime - lastTradeTime) / (1000 * 60);
 
@@ -834,10 +838,11 @@ export class RiskManager {
       // Get ATR for the symbol (try to get from market data)
       let atr = 0;
       try {
-        const marketData = await marketDataService.getMarketData(baseCurrency);
+        const marketData = await marketDataService.getMarketData(baseCurrency) as Record<string, any>;
+        const marketDataAtr = marketData?.atr;
         // Use ATR if available, otherwise estimate from price volatility
-        if (marketData.atr) {
-          atr = marketData.atr;
+        if (marketDataAtr && typeof marketDataAtr === 'number') {
+          atr = marketDataAtr;
           // REB 8.8.3-H3: Convert ATR to USD if needed
           if (needsFxConversion) {
             try {

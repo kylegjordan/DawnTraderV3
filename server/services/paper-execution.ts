@@ -1,7 +1,7 @@
 import { storage } from '../storage';
-import { RiskManager } from './risk-manager';
 import { PaperSimTrade, PaperSimOpenPosition, TradingSettings, InsertPaperSimTrade, InsertPaperSimOpenPosition, InsertPaperSimTradeLog } from '@shared/schema';
 import { nanoid } from 'nanoid';
+import { buildSettingsFromGuardrails, checkGuardrailRisk, calculateRiskAmount, type TradeCandidate } from './trade-safety';
 
 export interface TradeSignal {
   symbol: string;
@@ -19,15 +19,17 @@ export interface PaperConfig {
   feeRate?: number; // Trading fee rate as a percentage (default: 0.16%)
 }
 
+/**
+ * Paper Execution Service
+ * Phase 8.8.3-H4: Uses guardrail-driven checks instead of RiskManager
+ */
 export class PaperExecutionService {
-  private riskManager: RiskManager;
   private userId: string;
   private config: Required<PaperConfig>;
   private isRunning = false;
 
   constructor(userId: string, config?: PaperConfig) {
     this.userId = userId;
-    this.riskManager = new RiskManager();
     this.config = {
       slippageBps: config?.slippageBps ?? parseInt(process.env.PAPER_DEFAULT_SLIPPAGE_BPS || '10'),
       latencyMs: config?.latencyMs ?? parseInt(process.env.PAPER_DEFAULT_LATENCY_MS || '250'),
@@ -54,16 +56,11 @@ export class PaperExecutionService {
     console.log(`[PaperExecution:${this.userId}] Processing signal for ${signal.symbol} - ${signal.strategy}`);
 
     try {
-      // Phase 41F-L.E2E-PURGE: Fetch mode-level configuration (guardrails_v2 + portfolio_state)
-      const mode = 'paper'; // PaperExecutionService is always paper mode
-      const guardrails = await storage.getGuardrailsV2({ mode });
-      if (!guardrails) {
-        throw new Error('Guardrails not configured for paper mode');
-      }
-
-      // Phase 41F-L.E2E-PURGE: Build complete settings from mode-level data
-      const { buildSettingsFromModeLevel, calculateRiskAmount } = await import('./risk-manager.js');
-      const settings = await buildSettingsFromModeLevel(mode, this.userId);
+      // Phase 8.8.3-H4: PaperExecutionService is always paper mode
+      const mode = 'paper';
+      
+      // Phase 8.8.3-H4: Build complete settings from guardrails
+      const settings = await buildSettingsFromGuardrails(mode);
       
       const portfolioValue = parseFloat(settings.portfolioValue);
       const riskPct = parseFloat(settings.riskPerTradePct);
@@ -74,15 +71,20 @@ export class PaperExecutionService {
         return null;
       }
       
-      // Pre-trade risk checks (uses complete settings from mode-level adapter)
-      const riskCheck = await this.riskManager.checkPreTradeRisk(
-        mode,
-        signal,
-        settings
-      );
+      // Phase 8.8.3-H4: Pre-trade guardrail checks
+      const tradeCandidate: TradeCandidate = {
+        symbol: signal.symbol,
+        strategy: signal.strategy,
+        entryPrice: signal.entryPrice,
+        stopPrice: signal.stopPrice,
+        targetPrice: signal.targetPrice,
+      };
+      
+      const riskCheck = await checkGuardrailRisk(mode, tradeCandidate);
 
-      if (!riskCheck.approved) {
-        console.log(`[PaperExecution] Trade rejected: ${riskCheck.reason}`);
+      if (!riskCheck.ok) {
+        const reason = riskCheck.reason;
+        console.log(`[PaperExecution] Trade rejected: ${reason}`);
         
         // Log rejection to paper_sim_trade_logs
         await storage.createPaperSimTradeLog({
@@ -90,7 +92,7 @@ export class PaperExecutionService {
           tradeId: null,
           positionId: null,
           eventType: 'risk_rejected',
-          message: `Signal rejected: ${riskCheck.reason}`,
+          message: `Signal rejected: ${reason}`,
           metadata: {
             symbol: signal.symbol,
             strategy: signal.strategy,

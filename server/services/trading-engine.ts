@@ -1,5 +1,6 @@
 import { KrakenService } from './kraken';
-import { RiskManager, buildSettingsFromModeLevel } from './risk-manager';
+import { checkGuardrailRisk, type TradeCandidate } from './trade-safety';
+import { buildSettingsFromGuardrails } from './guardrail-settings';
 import { StrategyEngine, StrategySignal } from './strategy-engine';
 import { SignalOrchestrator } from './signal-orchestrator';
 import { storage } from '../storage';
@@ -21,13 +22,11 @@ export interface TradeSignal {
 
 export interface TradingEngineDependencies {
   krakenService?: KrakenService;
-  riskManager?: RiskManager;
   strategyEngine?: StrategyEngine;
 }
 
 export class TradingEngine {
   private kraken: KrakenService;
-  private riskManager: RiskManager;
   private strategyEngine: StrategyEngine;
   private signalOrchestrator: SignalOrchestrator | null = null;
   private isRunning = false;
@@ -41,7 +40,6 @@ export class TradingEngine {
   ) {
     this.mode = mode;
     this.kraken = dependencies?.krakenService || new KrakenService(apiKey, apiSecret);
-    this.riskManager = dependencies?.riskManager || new RiskManager();
     this.strategyEngine = dependencies?.strategyEngine || new StrategyEngine();
   }
 
@@ -208,8 +206,8 @@ export class TradingEngine {
     }
 
     try {
-      // Phase 41F-L.E2E-PURGE: Get mode-level settings from guardrails_v2
-      const settings = await buildSettingsFromModeLevel(this.mode);
+      // Phase 8.8.3-H4: Get mode-level settings from guardrails_v2
+      const settings = await buildSettingsFromGuardrails(this.mode);
       if (!settings) {
         throw new Error(`Trading settings not found for mode: ${this.mode}`);
       }
@@ -224,15 +222,19 @@ export class TradingEngine {
       console.log(`[Phase-27.F.15.B.3][mode=${this.mode}] Goal Alignment Score: ${(goalAlignmentScore * 100).toFixed(1)}%`);
       console.log(`[Phase-27.F.15.B.3][mode=${this.mode}] Final Score: ${(signal.finalScore * 100).toFixed(1)}%`);
 
-      // Pre-trade risk checks (Phase 27.F.15.B.3: mode-based, no userId)
-      const riskCheck = await this.riskManager.checkPreTradeRisk(
-        this.mode,
-        signal,
-        settings
-      );
+      // Phase 8.8.3-H4: Pre-trade guardrail checks (replaces legacy RiskManager)
+      const tradeCandidate: TradeCandidate = {
+        symbol: signal.symbol,
+        strategy: signal.strategy,
+        entryPrice: signal.entryPrice,
+        stopPrice: signal.stopPrice,
+        targetPrice: signal.targetPrice,
+      };
+      
+      const riskCheck = await checkGuardrailRisk(this.mode, tradeCandidate);
 
-      if (!riskCheck.approved) {
-        console.log(`[Phase-27.F.15.B.3][mode=${this.mode}] Trade rejected: ${riskCheck.reason}`);
+      if (!riskCheck.ok) {
+        console.log(`[8.8.3-H4][GUARDRAIL_BLOCK][mode=${this.mode}] Trade rejected: ${riskCheck.reason}`);
         return null;
       }
 
@@ -289,12 +291,8 @@ export class TradingEngine {
     let filledQuantity = quantity; // Will be adjusted for partial fills
 
     if (this.mode === 'live') {
-      // Phase 27.F.15.B.3: Get mode-based settings (global)
-      const systemContext = await storage.getSystemContext(this.mode);
-      if (!systemContext) {
-        throw new Error(`System context not found for mode: ${this.mode}`);
-      }
-// Phase 41F-L.E2E-PURGE: DISABLED -       const settings = await storage.getTradingSettings(systemContext.id);
+      // Phase 8.8.3-H4: Get mode-based settings (global) from guardrails
+      const settings = await buildSettingsFromGuardrails(this.mode);
       if (!settings) {
         throw new Error(`Trading settings not found for mode: ${this.mode}`);
       }
@@ -503,8 +501,8 @@ export class TradingEngine {
       console.log(`   Trade ID: ${trade.id}`);
       console.log(`   Entry: $${trade.entryPrice}, Stop: $${trade.stopPrice}, Target: $${trade.targetPrice}`);
 
-      // Phase 41F-L.E2E-PURGE: Get mode-level settings from guardrails_v2
-      const settings = await buildSettingsFromModeLevel(this.mode);
+      // Phase 8.8.3-H4: Get mode-level settings from guardrails_v2
+      const settings = await buildSettingsFromGuardrails(this.mode);
       if (!settings) {
         throw new Error(`Trading settings not found for mode: ${this.mode}`);
       }
@@ -667,8 +665,8 @@ export class TradingEngine {
   private async checkTradeExitConditions(trade: Trade): Promise<void> {
     try {
       const currentPrice = await this.getCurrentPrice(trade.symbol);
-      // Phase 41F-L.E2E-PURGE: Get mode-level settings from guardrails_v2
-      const settings = await buildSettingsFromModeLevel(this.mode);
+      // Phase 8.8.3-H4: Get mode-level settings from guardrails_v2
+      const settings = await buildSettingsFromGuardrails(this.mode);
       if (!settings) return;
 
       // Check strategy-specific exit conditions

@@ -10,7 +10,8 @@
  */
 
 import { storage } from '../storage.js';
-import { RiskManager, buildSettingsFromModeLevel, calculateRiskAmount } from './risk-manager.js';
+import { checkGuardrailRisk, type TradeCandidate } from './trade-safety.js';
+import { buildSettingsFromGuardrails, calculateRiskAmount } from './guardrail-settings.js';
 import { lifecycleEventsService } from './lifecycle-events.js';
 import { nanoid } from 'nanoid';
 import type { TradingSettings, PaperSimTrade, InsertPaperSimTrade, InsertPaperSimOpenPosition } from '@shared/schema';
@@ -46,15 +47,14 @@ export interface TradeExecutorConfig {
 
 /**
  * Abstract base class for trade executors
+ * Phase 8.8.3-H4: Uses guardrail-driven checks instead of RiskManager
  */
 abstract class BaseTradeExecutor {
   protected mode: 'paper' | 'live';
-  protected riskManager: RiskManager;
   protected config: Required<TradeExecutorConfig>;
 
   constructor(mode: 'paper' | 'live', config?: TradeExecutorConfig) {
     this.mode = mode;
-    this.riskManager = new RiskManager();
     this.config = {
       slippageBps: config?.slippageBps ?? 10,
       latencyMs: config?.latencyMs ?? 250,
@@ -64,15 +64,22 @@ abstract class BaseTradeExecutor {
 
   /**
    * Validate a signal before execution
+   * Phase 8.8.3-H4: Uses checkGuardrailRisk instead of RiskManager
    * Emits signalValidated lifecycle event
    */
-  async validateSignal(signal: TradeSignal): Promise<{ valid: boolean; reason?: string }> {
-    const settings = await buildSettingsFromModeLevel(this.mode);
+  async validateSignal(signal: TradeSignal): Promise<{ valid: boolean; reason?: string; code?: string }> {
+    const tradeCandidate: TradeCandidate = {
+      symbol: signal.symbol,
+      strategy: signal.strategy,
+      entryPrice: signal.entryPrice,
+      stopPrice: signal.stopPrice,
+      targetPrice: signal.targetPrice,
+    };
     
-    const riskCheck = await this.riskManager.checkPreTradeRisk(this.mode, signal as any, settings);
+    const riskCheck = await checkGuardrailRisk(this.mode, tradeCandidate);
     
     const validationDetails = {
-      riskCheck: riskCheck.approved,
+      riskCheck: riskCheck.ok,
       guardrailCheck: true,
       liquidityCheck: true,
       timeframeConfirmation: true,
@@ -83,14 +90,19 @@ abstract class BaseTradeExecutor {
       symbol: signal.symbol,
       strategy: signal.strategy,
       confidence: signal.confidence,
-      validationResult: riskCheck.approved ? 'passed' : 'failed',
+      validationResult: riskCheck.ok ? 'passed' : 'failed',
       validationDetails,
     });
 
-    return {
-      valid: riskCheck.approved,
-      reason: riskCheck.reason,
-    };
+    if (!riskCheck.ok) {
+      return {
+        valid: false,
+        reason: riskCheck.reason,
+        code: riskCheck.code,
+      };
+    }
+
+    return { valid: true };
   }
 
   /**
@@ -126,7 +138,7 @@ export class PaperTradeExecutor extends BaseTradeExecutor {
     }
 
     try {
-      const settings = await buildSettingsFromModeLevel(this.mode);
+      const settings = await buildSettingsFromGuardrails(this.mode);
       const portfolioValue = parseFloat(settings.portfolioValue || '10000');
       const riskPct = parseFloat(settings.riskPerTradePct || '1');
       const riskAmount = calculateRiskAmount(portfolioValue, riskPct);
@@ -173,7 +185,7 @@ export class PaperTradeExecutor extends BaseTradeExecutor {
         fees: fees.toString(),
         slippage: slippage.toString(),
         confidence: signal.confidence.toString(),
-        openedAt: new Date().toISOString(),
+        openedAt: new Date(),
         metadata: signal.metadata || {},
       };
 

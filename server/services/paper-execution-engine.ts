@@ -1,7 +1,8 @@
 import { storage } from '../storage';
 import { KrakenService } from './kraken';
 import { StrategyEngine, type StrategySignal, type TechnicalIndicators } from './strategy-engine';
-import { RiskManager, buildSettingsFromModeLevel } from './risk-manager';
+import { checkGuardrailRisk, type TradeCandidate } from './trade-safety';
+import { buildSettingsFromGuardrails, calculateRiskAmount } from './guardrail-settings';
 import type { TradingSettings, PriceData } from '@shared/schema';
 import { contextBridge } from './context-bridge';
 import { activeFilterPool, type ActiveFilteredPair } from './active-filter-pool';
@@ -18,7 +19,6 @@ export class PaperExecutionEngine {
   private isCycleRunning: boolean = false; // Re-entrancy guard
   private krakenService: KrakenService;
   private strategyEngine: StrategyEngine;
-  private riskManager: RiskManager;
   private monitoringInterval: NodeJS.Timeout | null = null;
   private priceHistory: Map<string, PriceData[]> = new Map();
   private lastCycleSummary: any = {}; // Phase 27.F.14.DIAG: Cache last cycle for telemetry
@@ -34,7 +34,6 @@ export class PaperExecutionEngine {
     this.mode = mode;
     this.krakenService = new KrakenService();
     this.strategyEngine = new StrategyEngine();
-    this.riskManager = new RiskManager();
   }
 
   async start(): Promise<void> {
@@ -332,8 +331,8 @@ export class PaperExecutionEngine {
     const cycleTimestamp = new Date().toISOString();
     
     try {
-      // REB 8.8.3-D: Get trading settings from mode-level guardrails
-      const modeSettings = await buildSettingsFromModeLevel(this.mode);
+      // Phase 8.8.3-H4: Get trading settings from guardrails_v2
+      const modeSettings = await buildSettingsFromGuardrails(this.mode);
       
       // Check if kill switch is tripped
       if (modeSettings.killSwitchTripped) {
@@ -749,36 +748,28 @@ export class PaperExecutionEngine {
     console.log(`  Strategy: ${signal.strategy}, Confidence: ${(signal.confidence * 100).toFixed(1)}%`);
     console.log(`  Entry: ${signal.entryPrice.toFixed(2)}, Stop: ${signal.stopPrice.toFixed(2)}, Target: ${signal.targetPrice.toFixed(2)}`);
 
-    // Pre-trade risk checks (using paper mode settings)
-    const tradeSignal = {
+    // Phase 8.8.3-H4: Pre-trade guardrail checks (replaces legacy RiskManager)
+    const tradeCandidate: TradeCandidate = {
       symbol: signal.symbol,
       strategy: signal.strategy,
       entryPrice: signal.entryPrice,
       stopPrice: signal.stopPrice,
       targetPrice: signal.targetPrice,
-      confidence: signal.confidence,
-      goalAlignmentScore: 0.5, // Will be calculated by risk manager
-      finalScore: signal.confidence,
-      metadata: signal.metadata
     };
 
-    const riskCheck = await this.riskManager.checkPreTradeRisk(
-      this.mode,
-      tradeSignal,
-      settings
-    );
+    const riskCheck = await checkGuardrailRisk(this.mode, tradeCandidate);
 
-    if (!riskCheck.approved) {
-      console.log(`[PaperExecution:${this.mode}] Paper trade rejected by risk manager: ${riskCheck.reason}`);
+    if (!riskCheck.ok) {
+      console.log(`[PaperExecution:${this.mode}] Paper trade rejected by guardrails: ${riskCheck.reason}`);
       
-      // [8.8.3-F][RISK_REJECT] REB 8.8.3-F: Lifecycle log for risk rejection
-      console.log(`[8.8.3-F][RISK_REJECT]`, JSON.stringify({
+      // [8.8.3-H4][GUARDRAIL_BLOCK] Lifecycle log for guardrail rejection
+      console.log(`[8.8.3-H4][GUARDRAIL_BLOCK]`, JSON.stringify({
         symbol: signal.symbol,
         strategy: signal.strategy,
         direction: 'long',
         entryPrice: signal.entryPrice,
         reason: riskCheck.reason,
-        code: riskCheck.code || 'UNKNOWN',
+        code: riskCheck.code,
         timestamp: new Date().toISOString()
       }));
       
@@ -794,7 +785,8 @@ export class PaperExecutionEngine {
           metadata: {
             symbol: signal.symbol,
             reason: riskCheck.reason,
-            signal: tradeSignal
+            code: riskCheck.code,
+            signal: tradeCandidate
           }
         }
       });
@@ -806,8 +798,9 @@ export class PaperExecutionEngine {
         eventType: 'trade_rejected',
         message: `Trade rejected: ${signal.symbol} - ${riskCheck.reason}`,
         metadata: {
-          signal: tradeSignal,
-          rejectionReason: riskCheck.reason
+          signal: tradeCandidate,
+          rejectionReason: riskCheck.reason,
+          code: riskCheck.code
         }
       });
       
@@ -1041,8 +1034,8 @@ export class PaperExecutionEngine {
         return;
       }
 
-      // REB 8.8.3-F: Use guardrails_v2 to build settings (replaces legacy getTradingSettings)
-      const settings = await buildSettingsFromModeLevel(this.mode, systemContext.lastStartedBy);
+      // Phase 8.8.3-H4: Use guardrails_v2 to build settings
+      const settings = await buildSettingsFromGuardrails(this.mode, systemContext.lastStartedBy);
       
       // REB 8.8.3-F: Check kill switch before processing
       if (settings.killSwitchTripped) {

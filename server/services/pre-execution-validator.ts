@@ -1,9 +1,9 @@
 import { storage } from '../storage';
-import { RiskManager } from './risk-manager';
 import { slippageFeeModel } from './slippage-fee-model';
 import { TradeSignal } from './trading-engine';
 import { nanoid } from 'nanoid';
 import { provenanceLogger } from './provenance-logger';
+import { buildSettingsFromGuardrails, checkGuardrailRisk, calculateRiskAmount, type TradeCandidate } from './trade-safety';
 
 export interface ValidationRequest {
   userId: string;
@@ -27,12 +27,12 @@ export interface ValidationResponse {
   blockReason?: string;
 }
 
+/**
+ * Pre-Execution Validator
+ * Phase 8.8.3-H4: Uses guardrail-driven checks instead of RiskManager
+ */
 export class PreExecutionValidator {
-  private riskManager: RiskManager;
-
-  constructor() {
-    this.riskManager = new RiskManager();
-  }
+  constructor() {}
 
   async validateTrade(request: ValidationRequest): Promise<ValidationResponse> {
     const traceId = request.traceId || `trace_${nanoid(10)}`;
@@ -41,9 +41,8 @@ export class PreExecutionValidator {
     console.log(`[PreValidator:${traceId}] Validating trade: ${request.signal.symbol} ${request.signal.strategy}`);
 
     try {
-      // Phase 41F-L.E2E-PURGE: Build complete settings from mode-level data
-      const { buildSettingsFromModeLevel, calculateRiskAmount } = await import('./risk-manager.js');
-      const settings = await buildSettingsFromModeLevel(request.mode, request.userId);
+      // Phase 8.8.3-H4: Build complete settings from guardrails
+      const settings = await buildSettingsFromGuardrails(request.mode);
       
       const portfolioValue = parseFloat(settings.portfolioValue);
       const riskPct = parseFloat(settings.riskPerTradePct);
@@ -57,12 +56,16 @@ export class PreExecutionValidator {
 
       const goalAlignmentPercent = Math.round(goalAlignmentScore * 100);
       
-      // Pre-trade risk checks (uses complete settings from mode-level adapter)
-      const riskCheckResult = await this.riskManager.checkPreTradeRisk(
-        request.mode,
-        request.signal,
-        settings
-      );
+      // Phase 8.8.3-H4: Pre-trade guardrail checks
+      const tradeCandidate: TradeCandidate = {
+        symbol: request.signal.symbol,
+        strategy: request.signal.strategy,
+        entryPrice: request.signal.entryPrice,
+        stopPrice: request.signal.stopPrice,
+        targetPrice: request.signal.targetPrice,
+      };
+      
+      const riskCheckResult = await checkGuardrailRisk(request.mode, tradeCandidate);
 
       const stopDistance = Math.abs(request.signal.entryPrice - request.signal.stopPrice);
       const quantity = riskAmount / stopDistance;
@@ -101,9 +104,12 @@ export class PreExecutionValidator {
       const minNetProfitPct = minNetProfitThreshold * 100;
 
       const details: string[] = [];
-      details.push(`Risk checks: ${riskCheckResult.approved ? 'PASSED' : 'FAILED'}`);
-      if (riskCheckResult.reason) {
-        details.push(`Risk reason: ${riskCheckResult.reason}`);
+      const riskApproved = riskCheckResult.ok;
+      const riskReason = !riskCheckResult.ok ? riskCheckResult.reason : undefined;
+      
+      details.push(`Risk checks: ${riskApproved ? 'PASSED' : 'FAILED'}`);
+      if (riskReason) {
+        details.push(`Risk reason: ${riskReason}`);
       }
       details.push(`Goal alignment: ${goalAlignmentPercent}%`);
       details.push(`Slippage estimate: ${slippagePercent.toFixed(3)}%`);
@@ -117,11 +123,11 @@ export class PreExecutionValidator {
       const goalAlignmentPassed = goalAlignmentPercent >= goalAlignmentThreshold;
       const feeProfitabilityPassed = netExpectedGainPct >= minNetProfitPct;
 
-      let canExecute = riskCheckResult.approved && goalAlignmentPassed && feeProfitabilityPassed;
+      let canExecute = riskApproved && goalAlignmentPassed && feeProfitabilityPassed;
       let blockReason: string | undefined;
 
-      if (!riskCheckResult.approved) {
-        blockReason = `Risk check failed: ${riskCheckResult.reason}`;
+      if (!riskApproved) {
+        blockReason = `Risk check failed: ${riskReason}`;
         details.push(`❌ Blocked: ${blockReason}`);
       } else if (!goalAlignmentPassed) {
         blockReason = `Goal alignment score ${goalAlignmentPercent}% below threshold ${goalAlignmentThreshold}%`;
@@ -141,14 +147,14 @@ export class PreExecutionValidator {
         sourceTable: 'pre_execution_validation',
         mode: request.mode,
         operation: 'write',
-        data: { canExecute, goalAlignmentPercent, riskApproved: riskCheckResult.approved },
+        data: { canExecute, goalAlignmentPercent, riskApproved },
         metadata: {
           userId: request.userId,
           symbol: request.signal.symbol,
           strategy: request.signal.strategy,
           canExecute,
           goalAlignmentScore: goalAlignmentPercent,
-          riskApproved: riskCheckResult.approved
+          riskApproved
         }
       });
 
@@ -158,8 +164,8 @@ export class PreExecutionValidator {
         fees: feesPercent,
         goalAlignmentScore: goalAlignmentPercent,
         riskChecks: {
-          approved: riskCheckResult.approved,
-          failedCheck: riskCheckResult.reason,
+          approved: riskApproved,
+          failedCheck: riskReason,
           details
         },
         traceId,
