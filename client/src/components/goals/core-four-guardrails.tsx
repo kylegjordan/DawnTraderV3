@@ -21,10 +21,12 @@ import {
 import { ModeIndicator } from "./mode-indicator";
 
 /**
- * Phase 3b: Core Four Guardrails Component
+ * Phase 3b: Core Guardrails Component (now 5 guardrails as of REB 8.8.3-G)
  * 
- * Displays the modernized Core Four guardrails with Lottie/Manual override controls.
+ * Displays the modernized Core guardrails with Lottie/Manual override controls.
  * Integrates with guardrails_v2 backend and provides real-time WebSocket sync.
+ * 
+ * REB 8.8.3-G: Added maxPositionPercentPct as 5th core guardrail
  */
 
 interface GuardrailsV2 {
@@ -33,41 +35,49 @@ interface GuardrailsV2 {
   symbolCooldownMinutes: number;
   maxOpenPositions: number;
   dailyLossKillSwitchPct: number;
+  maxPositionPercentPct: number; // REB 8.8.3-G: Max position size as % of portfolio
   isManualOverride: boolean;
   tunedByLatti: boolean;
   lockedByUser: Record<string, boolean>;
 }
 
 interface GuardrailParam {
-  key: keyof Pick<GuardrailsV2, 'portfolioRiskPerTradePct' | 'symbolCooldownMinutes' | 'maxOpenPositions' | 'dailyLossKillSwitchPct'>;
+  key: keyof Pick<GuardrailsV2, 'portfolioRiskPerTradePct' | 'symbolCooldownMinutes' | 'maxOpenPositions' | 'dailyLossKillSwitchPct' | 'maxPositionPercentPct'>;
   label: string;
   description: string;
   unit: string;
 }
 
+// REB 8.8.3-G: Updated descriptions to be user-friendly (for Kyle, not technical)
 const CORE_FOUR_PARAMS: GuardrailParam[] = [
   {
     key: 'portfolioRiskPerTradePct',
     label: 'Portfolio Risk per Trade',
-    description: 'Percentage of portfolio value at risk per trade',
+    description: 'How much of your portfolio you plan to risk on each individual trade when sizing position and stop distance.',
     unit: '%'
   },
   {
     key: 'symbolCooldownMinutes',
     label: 'Symbol Cooldown',
-    description: 'Minimum time between trades on the same symbol',
+    description: 'After a trade closes on a symbol, wait this many minutes before opening another trade on the same symbol.',
     unit: 'minutes'
   },
   {
     key: 'maxOpenPositions',
     label: 'Max Open Positions',
-    description: 'Maximum concurrent open positions',
+    description: 'The maximum number of simultaneous open positions allowed at once.',
     unit: 'count'
   },
   {
     key: 'dailyLossKillSwitchPct',
     label: 'Daily Loss Kill Switch',
-    description: 'Portfolio loss threshold that triggers emergency shutdown',
+    description: 'If your portfolio loses this percent or more in a single day, trading automatically stops until you resume.',
+    unit: '%'
+  },
+  {
+    key: 'maxPositionPercentPct',
+    label: 'Max Position Percent',
+    description: 'The maximum size of any single position as a percent of your total portfolio value. Larger positions will be blocked.',
     unit: '%'
   }
 ];
@@ -176,7 +186,7 @@ export function CoreFourGuardrails() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Core Four Guardrails (LATTi-Managed)</CardTitle>
+          <CardTitle>Core Guardrails (LATTi-Managed)</CardTitle>
         </CardHeader>
         <CardContent>
           <Skeleton className="h-96 w-full" />
@@ -198,7 +208,7 @@ export function CoreFourGuardrails() {
           <div>
             <CardTitle className="flex items-center gap-2">
               <Shield className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              Core Four Guardrails (LATTi-Managed)
+              Core Guardrails (LATTi-Managed)
               <ModeIndicator />
             </CardTitle>
             <p className="text-sm text-muted-foreground mt-2">
