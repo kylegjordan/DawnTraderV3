@@ -1,0 +1,200 @@
+📘 Phase 8.8.3-H5 — FX5 Scan Loop Failure Capture & Diagnosis Only (NO FIXES)
+Objective
+
+The FX5 scanner is freezing after the first cycle.
+This phase must only reproduce the issue, collect diagnostic logs, and identify the failing component(s).
+No code changes or fixes are permitted in this phase.
+
+We need:
+
+The exact exception or failure that stops the scan loop.
+
+The file + line number where it originates.
+
+A detailed written analysis of root cause candidates.
+
+A summary report for human review before implementing any fixes.
+
+1. Tasks
+H5.1 — Trigger the FX5 Scan Loop & Capture Live Logs
+
+Using the test account:
+
+username: testuser123
+password: SecurePass123!
+
+
+Perform the following:
+
+Log in.
+
+Navigate to Trading → Filter Insights.
+
+Switch Trading toggle → ACTIVE (paper mode).
+
+Observe the screen for at least 3 minutes.
+
+While doing so, the system must capture:
+
+all STDOUT logs
+
+all STDERR logs
+
+any uncaught exceptions
+
+console warnings
+
+[8.8.3-H4] or [GUARDRAIL] messages
+
+any stack traces
+
+anything referencing:
+
+numeric field overflow
+
+risk-manager (deprecated)
+
+trade-safety.ts
+
+guardrail-settings.ts
+
+pre-execution-validator.ts
+
+fx5-scanner.ts
+
+market-scanner.ts
+
+scan_tick
+
+Important:
+We care specifically about the moment the scanner stops emitting new scan cycles.
+
+Expected symptoms to capture:
+
+Last Scan Cycle ID stops incrementing
+
+Next scan countdown freezes at 0
+
+Filter activity stops updating
+
+H5.2 — Identify the Root Cause (Analysis Only)
+
+Based on the captured logs, determine:
+
+What error actually stopped the scan loop?
+
+Where the error originated
+
+file name
+
+function name
+
+line number
+
+Which subsystem caused it
+Examples (not exhaustive):
+
+guardrail migration side effect
+
+numeric overflow
+
+kill switch logic firing
+
+a bad DB write
+
+an unhandled promise rejection
+
+an unexpected import dependency
+
+a race condition in simulation startup
+
+Whether the process:
+
+exited
+
+stalled
+
+rejected an async loop
+
+or simply threw inside the interval and never recovered
+
+H5.3 — No Code Modifications Allowed
+
+In this phase:
+
+❌ Do not fix anything
+❌ Do not comment out code
+❌ Do not add guardrails
+❌ Do not add try/catch wrappers
+❌ Do not touch FX5 logic, trade-safety logic, or scanner setup
+❌ Do not modify database schema
+❌ Do not attempt recovery code
+
+Only diagnostic logging, reading, and reporting are allowed.
+
+H5.4 — Produce a Full Diagnosis Report
+
+Create a report in:
+
+docs/audits/phase_8.8.3-H5_fx5_scan_regression.md
+
+
+This report must include:
+
+1. Exact Error Logs
+
+Copy/paste all relevant logs:
+
+timestamps
+
+error messages
+
+stack traces
+
+2. Root Cause Summary
+
+Short explanation of why the scan loop failed.
+
+3. File + Line Number
+
+Where the failure originated.
+
+4. Impact Assessment
+
+What subsystems were affected:
+
+scan loop
+
+ready-to-buy refresh
+
+strategy engine
+
+paper trader
+
+state cache
+
+5. Next-Step Recommendations (No Code)
+
+Bullet list of potential fixes only.
+Do not implement them.
+
+2. Acceptance Criteria
+
+The phase is complete when:
+
+✔ FX5 scan loop has been triggered with Trading ACTIVE
+✔ Failure has been captured in logs
+✔ Root cause is clearly identified
+✔ A complete report is delivered
+✔ No fixes have been attempted
+✔ System state remains unchanged except for additional logs/report files
+
+3. Deliverables
+Mandatory
+
+docs/audits/phase_8.8.3-H5_fx5_scan_regression.md
+
+Optional
+
+Any additional log snapshots or artifacts in
+/tmp/logs/ or docs/diagnostics/
