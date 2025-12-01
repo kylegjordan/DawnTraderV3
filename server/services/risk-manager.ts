@@ -1,3 +1,30 @@
+/**
+ * @deprecated Phase 8.8.3-H4 DEPRECATION NOTICE
+ * 
+ * This module is being phased out in favor of guardrail-driven risk management.
+ * 
+ * MIGRATION GUIDE:
+ * - For pre-trade risk checks: Use checkGuardrailRisk() from './trade-safety.ts'
+ * - For settings building: Use buildSettingsFromGuardrails() from './guardrail-settings.ts'
+ * - For risk calculations: Use calculateRiskAmount() from './guardrail-settings.ts'
+ * 
+ * COMPLETED MIGRATIONS:
+ * - trading-engine.ts → uses checkGuardrailRisk
+ * - trade-executor.ts → uses checkGuardrailRisk
+ * - paper-execution-engine.ts → uses checkGuardrailRisk
+ * - pre-execution-validator.ts → uses checkGuardrailRisk
+ * - paper-execution.ts → uses checkGuardrailRisk
+ * 
+ * REMAINING TO MIGRATE:
+ * - routes.ts (secondary endpoints)
+ * - heuristic-trader.ts
+ * - daily-brief.ts
+ * - behavioral-template.ts
+ * - paper-sim-diagnostic.ts
+ * 
+ * See: docs/audits/phase_8.8.3-H4_risk_manager_usage.md
+ */
+
 import { storage } from '../storage';
 import { TradingSettings, PaperSimOpenPosition } from '@shared/schema';
 import { TradeSignal } from './trading-engine';
@@ -191,6 +218,7 @@ export class RiskManager {
   private readonly BALANCE_CACHE_TTL = 45000;
 
   constructor() {
+    console.warn('[8.8.3-H4][DEPRECATED] RiskManager instantiated. Please migrate to checkGuardrailRisk() from trade-safety.ts');
     this.krakenService = new KrakenService();
     this.assetCapabilitiesService = new AssetCapabilitiesService();
   }
