@@ -1,0 +1,240 @@
+REB 8.8.3-H2 — Fix LATTi / Manual Disable Behavior for Guardrails & LPCP
+
+Goal:
+Make LATTi-managed guardrail inputs truly read-only, so that:
+
+When LATTi is ON for a guardrail, its input is fully disabled and not editable.
+
+When LATTi is OFF (Manual), only that guardrail’s input becomes editable.
+
+Editing a manual field must never unlock any other LATTi-managed fields.
+
+This applies to all guardrails:
+
+Portfolio Risk per Trade
+
+Symbol Cooldown
+
+Max Open Positions
+
+Daily Loss Kill Switch
+
+Max Position Percent
+
+Low-Price Threshold (LPCP)
+
+Min Stop Distance (ATR multiple, LPCP)
+
+Minimum Trade Notional (LPCP)
+
+1. Scope & Constraints
+
+Files to inspect and modify (Frontend only):
+
+client/src/pages/goals-engine.tsx
+
+client/src/components/goals/core-four-guardrails.tsx
+
+client/src/components/goals/low-priced-protection-card.tsx (or whatever the LPCP card is named)
+
+Any shared guardrail form/context used by these components
+
+Do NOT change:
+
+server/services/risk-manager.ts
+
+server/services/guardrail-policy.ts
+
+Guardrails calculations, maxPositionPercent logic, or risk checks
+
+Any scan cadence, trading engine behavior, or backend schemas beyond what was already done in 8.8.3-G / H
+
+This directive is UI/state-layer only.
+
+2. Correct Behavior Specification (Option A – strict lock)
+
+For each guardrail, define:
+
+isLattiManaged: boolean (true when lock icon is blue / LATTi is managing the value)
+
+value: number (current value shown)
+
+isDisabled: boolean = isLattiManaged
+
+Rules:
+
+When isLattiManaged === true:
+
+Input must be truly disabled:
+
+<input disabled /> or <NumberInput isDisabled />
+
+No typing, no editing, no scroll-wheel changes
+
+Visual:
+
+Greyed-out appearance (as today)
+
+Lock icon ON
+
+When isLattiManaged === false (Manual):
+
+Only that guardrail’s input becomes editable.
+
+Other guardrails with isLattiManaged === true remain disabled.
+
+Focus behavior:
+
+Focusing any manual input must not change the disabled state of any other input.
+
+There must be no shared “editing” or “dirty” state that affects other guardrails.
+
+3. Implementation Tasks
+Task H2.1 — Audit state wiring
+
+In goals-engine.tsx and the two card components:
+
+Identify any global form state that might control disabled/enabled behavior, such as:
+
+isEditing, hasDirtyFields, or similar flags
+
+shared handlers that flip isDisabled based on “any field is being edited”
+
+Confirm how isLattiManaged (or equivalent) is passed into each input.
+
+Expected finding:
+There is a shared editing flag or parent-level state update triggered on focus/input in a manual field that causes other inputs to lose disabled.
+
+Task H2.2 — Isolate guardrail state
+
+Refactor so that each guardrail (and each LPCP parameter) has its own:
+
+{
+  isLattiManaged: boolean;
+  value: number;
+}
+
+
+The disabled prop on the input must be computed locally, e.g.:
+
+const isDisabled = isLattiManaged;
+
+<NumberInput
+  value={value}
+  onChange={handleChange}
+  isDisabled={isDisabled}
+/>
+
+
+Do not base isDisabled on any global “form editing” flag.
+
+If there is a shared context, it should provide per-guardrail flags (e.g. keyed by name), not one global flag.
+
+Task H2.3 — Fix input props
+
+For all guardrail + LPCP inputs:
+
+Use disabled={isLattiManaged} for plain <input>
+
+Use isDisabled={isLattiManaged} (or equivalent) for design-system NumberInput components.
+
+Ensure the lock icon’s visual state is only driven by isLattiManaged.
+
+Verify that changing value in a manual field does not re-render other fields as enabled.
+
+Task H2.4 — Prevent accidental backend overrides
+
+Confirm that when LATTi is ON for a guardrail:
+
+The frontend either:
+
+does not send manual overrides for that guardrail, or
+
+the backend ignores the value and uses the LATTi setting.
+
+Do not change server logic, just make sure you’re not sending bogus “manual” values for LATTi-managed fields.
+
+4. Testing Requirements
+
+Use the test account:
+
+username: testuser123
+password: SecurePass123!
+
+UI Tests
+
+Baseline lock behavior
+
+Log in → Goals Engine → Guardrails tab.
+
+Confirm all Core Guardrails + LPCP fields show:
+
+LATTi toggle ON (for those you haven’t manually changed)
+
+Inputs disabled/greyed out.
+
+Single Manual edit
+
+Set Max Position Percent to Manual.
+
+Type a new value.
+
+Verify:
+
+Max Position Percent input is editable.
+
+Portfolio Risk per Trade, Symbol Cooldown, Max Open Positions, Daily Loss Kill Switch remain disabled.
+
+LPCP fields (Low-Price Threshold, Min Stop Distance, Min Trade Notional) remain disabled if LATTi is ON for them.
+
+LPCP Manual edit
+
+Set Low-Price Threshold to Manual.
+
+Type a new value.
+
+Verify:
+
+Only Low-Price Threshold is editable.
+
+Min Stop Distance and Min Trade Notional remain disabled if their LATTi is ON.
+
+No Core Guardrail fields unlock.
+
+Focus behavior regression
+
+With one field already in Manual, click/focus repeatedly into its input.
+
+Confirm that this never unlocks any other LATTi-managed fields.
+
+Toggle roundtrip
+
+Switch a field from LATTi → Manual → LATTi again.
+
+Confirm:
+
+It becomes editable only in Manual.
+
+It becomes completely disabled again when back to LATTi.
+
+Other fields unaffected.
+
+Reload persistence
+
+Adjust some manual values and some LATTi values.
+
+Save, reload page, log back in.
+
+Ensure:
+
+Manual vs LATTi toggles persist.
+
+Disabled/enabled behavior remains correct.
+
+No Behavior Change Elsewhere
+
+Confirm that:
+
+Guardrail values still flow through to the backend as before.
+
+Trading / risk behavior is unchanged other than the UI not allowing unintended edits.

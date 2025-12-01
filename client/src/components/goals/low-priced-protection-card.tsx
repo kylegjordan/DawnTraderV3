@@ -287,7 +287,7 @@ export function LowPricedProtectionCard() {
                     step={param.step}
                     value={currentValue}
                     onChange={(e) => handleValueChange(param.key, e.target.value)}
-                    disabled={!isLocked && !hasChanges}
+                    disabled={!isLocked}
                     className={isLocked ? 'bg-white dark:bg-slate-950' : 'bg-muted'}
                     data-testid={`input-${param.key}`}
                   />
