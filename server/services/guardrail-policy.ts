@@ -26,6 +26,12 @@ export interface EffectiveGuardrails {
   maxOpenPositions: number;
   dailyLossKillSwitchPct: number;
   maxPositionPercentPct: number; // REB 8.8.3-G: Max position size as % of portfolio
+  // REB 8.8.3-H: Low-Priced Coin Protection (LPCP) Module
+  lpcp: {
+    minStopAtrMult: number;       // Minimum stop distance as ATR multiple
+    minPositionNotional: number;   // Minimum trade notional in USD
+    threshold: number;             // Price threshold for low-priced coin rules
+  };
   management: {
     isManualOverride: boolean;
     tunedByLatti: boolean;
@@ -170,6 +176,19 @@ class GuardrailPolicyService {
       ? parseFloat(String(guardrailAny.maxPositionPercentPct))
       : guardrail.mode === 'paper' ? 30.00 : 10.00;
     
+    // REB 8.8.3-H: LPCP fields with safe defaults
+    const lpcp = {
+      minStopAtrMult: guardrailAny.lowPriceMinStopAtrMult 
+        ? parseFloat(String(guardrailAny.lowPriceMinStopAtrMult)) 
+        : 3.0,
+      minPositionNotional: guardrailAny.lowPriceMinPositionNotional 
+        ? parseFloat(String(guardrailAny.lowPriceMinPositionNotional)) 
+        : 25.00,
+      threshold: guardrailAny.lowPriceThreshold 
+        ? parseFloat(String(guardrailAny.lowPriceThreshold)) 
+        : 0.50
+    };
+    
     return {
       mode: guardrail.mode as TradingMode,
       portfolioRiskPerTradePct: parseFloat(String(guardrail.portfolioRiskPerTradePct)),
@@ -177,6 +196,7 @@ class GuardrailPolicyService {
       maxOpenPositions: guardrail.maxOpenPositions,
       dailyLossKillSwitchPct: parseFloat(String(guardrail.dailyLossKillSwitchPct)),
       maxPositionPercentPct, // REB 8.8.3-G
+      lpcp, // REB 8.8.3-H
       management: {
         isManualOverride: guardrail.isManualOverride,
         tunedByLatti: guardrail.tunedByLatti,
