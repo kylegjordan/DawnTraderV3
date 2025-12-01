@@ -5,6 +5,7 @@ import { KrakenService } from './kraken';
 import { marketDataService } from './market-data';
 import { AssetCapabilitiesService } from './asset-capabilities';
 import { telemetryService } from './telemetry-service.js';
+import { fxConversionService } from './fx-conversion-service.js';
 
 export interface RiskCheckResult {
   approved: boolean;
@@ -757,8 +758,9 @@ export class RiskManager {
 
   /**
    * REB 8.8.3-H: Low-Priced Coin Protection (LPCP) Check
+   * REB 8.8.3-H3: Multi-Currency Support - converts all values to USD before LPCP checks
    * 
-   * For coins with price ≤ threshold:
+   * For coins with price ≤ threshold (in USD):
    * 1. Applies ATR-floor stop distance rule: effective_stop = max(strategy_stop, ATR × atrMult)
    * 2. Applies minimum notional rule: reject if position value < minNotional
    * 
@@ -780,7 +782,7 @@ export class RiskManager {
         return { approved: true };
       }
       
-      // Parse LPCP thresholds with safe defaults
+      // Parse LPCP thresholds with safe defaults (all thresholds are in USD)
       const guardrailsAny = guardrails as any;
       const threshold = guardrailsAny.lowPriceThreshold 
         ? parseFloat(String(guardrailsAny.lowPriceThreshold)) 
@@ -792,66 +794,97 @@ export class RiskManager {
         ? parseFloat(String(guardrailsAny.lowPriceMinPositionNotional)) 
         : 25.00;
       
-      // Check if coin price is below threshold
-      if (signal.entryPrice > threshold) {
-        console.log(`[8.8.3-H] LPCP skipped: price ${signal.entryPrice} > threshold ${threshold}`);
+      // REB 8.8.3-H3: Parse symbol to extract quote currency
+      const { baseCurrency, quoteCurrency, success: parseSuccess } = fxConversionService.parseSymbol(signal.symbol);
+      console.log(`[8.8.3-H3][FX] Symbol parsed: ${signal.symbol} → base=${baseCurrency}, quote=${quoteCurrency}`);
+      
+      // REB 8.8.3-H3: Convert entry price to USD
+      let entryPriceUSD = signal.entryPrice;
+      let stopPriceUSD = signal.stopPrice;
+      
+      if (fxConversionService.requiresConversion(quoteCurrency)) {
+        try {
+          entryPriceUSD = await fxConversionService.convertToUSD(signal.entryPrice, quoteCurrency);
+          stopPriceUSD = await fxConversionService.convertToUSD(signal.stopPrice, quoteCurrency);
+          console.log(`[8.8.3-H3][FX] Converted prices: entry ${signal.entryPrice} ${quoteCurrency} → $${entryPriceUSD.toFixed(6)} USD, stop ${signal.stopPrice} ${quoteCurrency} → $${stopPriceUSD.toFixed(6)} USD`);
+        } catch (fxError) {
+          // REB 8.8.3-H3: Fail-safe - block trade if FX conversion fails
+          console.error(`[8.8.3-H3][FX_FAIL] FX conversion failed, blocking trade for safety:`, fxError);
+          return {
+            approved: false,
+            code: 'FX_CONVERSION_FAILED',
+            reason: `🛡️ FX conversion failed for ${quoteCurrency}. Unable to verify low-priced coin protection.`
+          };
+        }
+      } else {
+        console.log(`[8.8.3-H3][FX] No conversion needed: ${quoteCurrency} is USD-equivalent`);
+      }
+      
+      // Check if coin price (in USD) is below threshold
+      if (entryPriceUSD > threshold) {
+        console.log(`[8.8.3-H] LPCP skipped: priceUSD ${entryPriceUSD.toFixed(6)} > threshold ${threshold}`);
         return { approved: true };
       }
       
-      console.log(`[8.8.3-H] LPCP active: price ${signal.entryPrice} ≤ threshold ${threshold}`);
+      console.log(`[8.8.3-H] LPCP active: priceUSD ${entryPriceUSD.toFixed(6)} ≤ threshold ${threshold}`);
       
       // Get ATR for the symbol (try to get from market data)
       let atr = 0;
       try {
-        const marketData = await marketDataService.getMarketData(signal.symbol.replace('/USD', ''));
+        const marketData = await marketDataService.getMarketData(baseCurrency);
         // Use ATR if available, otherwise estimate from price volatility
         if (marketData.atr) {
           atr = marketData.atr;
+          // REB 8.8.3-H3: Convert ATR to USD if needed
+          if (fxConversionService.requiresConversion(quoteCurrency)) {
+            atr = await fxConversionService.convertToUSD(atr, quoteCurrency);
+            console.log(`[8.8.3-H3][FX] ATR converted to USD: ${atr.toFixed(6)}`);
+          }
         } else {
-          // Fallback: estimate ATR as ~2% of price for low-priced coins
-          atr = signal.entryPrice * 0.02;
-          console.log(`[8.8.3-H] ATR not available, estimating: ${atr.toFixed(6)}`);
+          // Fallback: estimate ATR as ~2% of USD price for low-priced coins
+          atr = entryPriceUSD * 0.02;
+          console.log(`[8.8.3-H] ATR not available, estimating: ${atr.toFixed(6)} USD`);
         }
       } catch (err) {
-        // Fallback: use conservative ATR estimate
-        atr = signal.entryPrice * 0.02;
-        console.log(`[8.8.3-H] Market data error, using fallback ATR: ${atr.toFixed(6)}`);
+        // Fallback: use conservative ATR estimate based on USD price
+        atr = entryPriceUSD * 0.02;
+        console.log(`[8.8.3-H] Market data error, using fallback ATR: ${atr.toFixed(6)} USD`);
       }
       
-      // Rule 1: ATR-floor stop distance
-      const strategyStop = Math.abs(signal.entryPrice - signal.stopPrice);
-      const atrFloorStop = atr * minStopAtrMult;
+      // Rule 1: ATR-floor stop distance (all in USD)
+      const strategyStopUSD = Math.abs(entryPriceUSD - stopPriceUSD);
+      const atrFloorStopUSD = atr * minStopAtrMult;
       
-      if (strategyStop < atrFloorStop) {
-        console.log(`[8.8.3-H] LPCP ATR-floor applied: strategy_stop=${strategyStop.toFixed(6)} < atr_floor=${atrFloorStop.toFixed(6)}`);
+      if (strategyStopUSD < atrFloorStopUSD) {
+        console.log(`[8.8.3-H] LPCP ATR-floor applied: strategy_stop=$${strategyStopUSD.toFixed(6)} < atr_floor=$${atrFloorStopUSD.toFixed(6)}`);
         // Note: We don't modify the signal here - just log and potentially reject
         // The strategy should respect this floor distance
       }
       
-      // Rule 2: Minimum notional check
+      // Rule 2: Minimum notional check (all in USD)
       // Calculate position value based on risk and effective stop distance
       const portfolioMetrics = await this.getPortfolioMetrics(mode);
       const portfolioValue = portfolioMetrics.totalValue || 50000;
       const riskPerTradePct = getRiskPercentage(settings, portfolioValue);
       const riskAmount = calculateRiskAmount(portfolioValue, riskPerTradePct);
       
-      // Use effective stop (max of strategy stop and ATR floor)
-      const effectiveStop = Math.max(strategyStop, atrFloorStop);
-      const positionSize = effectiveStop > 0 ? riskAmount / effectiveStop : 0;
-      const positionNotional = positionSize * signal.entryPrice;
+      // Use effective stop (max of strategy stop and ATR floor) - all in USD
+      const effectiveStopUSD = Math.max(strategyStopUSD, atrFloorStopUSD);
+      const positionSize = effectiveStopUSD > 0 ? riskAmount / effectiveStopUSD : 0;
+      const positionNotionalUSD = positionSize * entryPriceUSD;
       
-      console.log(`[8.8.3-H] LPCP notional check: notional=$${positionNotional.toFixed(2)}, min=$${minPositionNotional.toFixed(2)}, effectiveStop=${effectiveStop.toFixed(6)}`);
+      console.log(`[8.8.3-H] LPCP notional check: notional=$${positionNotionalUSD.toFixed(2)} USD, min=$${minPositionNotional.toFixed(2)}, effectiveStop=$${effectiveStopUSD.toFixed(6)} USD`);
       
-      if (positionNotional < minPositionNotional) {
-        console.warn(`[8.8.3-H] LPCP reject: notional $${positionNotional.toFixed(2)} < min $${minPositionNotional.toFixed(2)}`);
+      if (positionNotionalUSD < minPositionNotional) {
+        console.warn(`[8.8.3-H] LPCP reject: notional $${positionNotionalUSD.toFixed(2)} USD < min $${minPositionNotional.toFixed(2)}`);
         return {
           approved: false,
           code: 'LPCP_MIN_NOTIONAL',
-          reason: `🛡️ Low-priced protection: trade notional ($${positionNotional.toFixed(2)}) below minimum ($${minPositionNotional.toFixed(2)})`
+          reason: `🛡️ Low-priced protection: trade notional ($${positionNotionalUSD.toFixed(2)} USD) below minimum ($${minPositionNotional.toFixed(2)})`
         };
       }
       
-      console.log(`[8.8.3-H] LPCP check passed: notional=$${positionNotional.toFixed(2)} ≥ min=$${minPositionNotional.toFixed(2)}`);
+      console.log(`[8.8.3-H] LPCP check passed: notional=$${positionNotionalUSD.toFixed(2)} USD ≥ min=$${minPositionNotional.toFixed(2)}`);
       return { approved: true };
       
     } catch (error) {
