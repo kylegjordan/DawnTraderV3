@@ -1,0 +1,415 @@
+Phase 8.8.3-H4 — Remove Legacy Risk Manager & Consolidate Risk into Guardrails
+
+Context for Replit
+
+In earlier restoration work (REB1 / REB2), the legacy risk-manager.ts module was intentionally removed from the trading path because it imposed hidden safety rules (min stop sizes, size caps, etc.) that were:
+
+not visible in the UI
+
+not controlled via the Guardrails tab
+
+overlapping with FX5 filters and later guardrails_v2.
+
+In recent 8.8.3 work (especially 8.8.3-F and LPCP phases), risk-manager.ts was re-introduced into the live execution path (e.g. via checkPreTradeRisk) and extended with low-priced coin protection and other checks. That has effectively recreated the exact “hidden risk layer” we were trying to avoid.
+
+The product intent is very clear:
+
+All risk / safety controls must be explicit, visible, and configurable:
+
+FX5 filters → Screeners tab
+
+Guardrails (including LPCP, max position percent, etc.) → Guardrails tab
+
+No hidden risk manager, no invisible caps, no duplicate or silent blockers.
+
+We already:
+
+Exposed Max Position Percent as a first-class guardrail (Phase 8.8.3-G).
+
+Implemented Low-Priced Coin Protection (LPCP) and surfaced it on the Guardrails tab (8.8.3-H & H3).
+
+Use guardrails_v2 as the single source of truth for risk settings.
+
+The goal of this phase is to fully decommission the legacy Risk Manager module and ensure all risk decisions are driven only by:
+
+FX5 filters (screeners)
+
+Guardrails v2 values, including:
+
+portfolioRiskPerTradePct
+
+maxPositionPercentPct
+
+dailyLossKillSwitchPct
+
+symbol cooldown
+
+LPCP values (low price threshold, ATR multiple, min notional)
+
+Explicit strategy safety rules (within strategy code, not a hidden manager)
+
+…and nothing else.
+
+Objectives
+
+Remove risk-manager.ts from the active trading path.
+
+Re-home any legitimate logic (especially LPCP) into transparent, guardrail-driven helpers used by the execution engine.
+
+Ensure no hidden “risk” rules remain that aren’t represented in:
+
+Guardrails tab
+
+Screeners / FX5
+
+Keep the system stable and predictable:
+
+Trade execution still flows: RTB → trade attempt → open/close
+
+Existing guardrail values continue to work (portfolio risk %, max position %, LPCP)
+
+8.8.3-F logging remains useful, but no longer references a Risk Manager module.
+
+Task List
+Task 1 — Audit Actual Use of risk-manager.ts
+
+Search for all imports/uses of risk-manager.ts and its exports:
+
+buildSettingsFromModeLevel
+
+RiskManager
+
+checkPreTradeRisk
+
+Any named exports from risk-manager.ts
+
+For example (pseudo-rg):
+
+rg "risk-manager" server -n
+rg "RiskManager" server -n
+rg "checkPreTradeRisk" server -n
+rg "buildSettingsFromModeLevel" server -n
+
+
+Document exact call sites in:
+
+server/services/paper-execution-engine.ts
+
+server/services/trading-engine.ts (if present)
+
+Any other services / routes using Risk Manager functions.
+
+Summarize in a short audit file:
+
+docs/audits/phase_8.8.3-H4_risk_manager_usage.md
+
+Include:
+
+List of files and line ranges where Risk Manager is used
+
+Which checks are being applied (e.g. position size cap, LPCP, ATR floor, etc.)
+
+Constraint: We are not allowed to keep “thin wrappers” around risk-manager. The outcome of this phase is: no runtime dependency on risk-manager.ts at all.
+
+Task 2 — Extract & Re-home Settings Builder (if needed)
+
+Right now, risk-manager.ts likely contains:
+
+buildSettingsFromModeLevel(mode, userId, guardrails) — helper to convert guardrails_v2 row into a settings object used for risk checks.
+
+We want guardrail → settings mapping to live with the guardrails domain, not in Risk Manager.
+
+If any part of buildSettingsFromModeLevel is still used outside risk-manager.ts:
+
+Move the implementation into:
+
+either server/services/guardrail-policy.ts, or
+
+a new dedicated module: server/services/guardrail-settings.ts
+
+Update all imports to reference the new location.
+
+Ensure the mapping uses only guardrails_v2 + LPCP fields, no extra magic defaults beyond what’s already agreed:
+
+portfolioRiskPerTradePct
+
+maxPositionPercentPct
+
+dailyLossKillSwitchPct
+
+symbolCooldownMinutes
+
+lpcpLowPriceThresholdUsd
+
+lpcpMinStopAtrMultiple
+
+lpcpMinNotionalUsd
+
+After this, no one should import buildSettingsFromModeLevel from risk-manager.ts.
+
+Task 3 — Replace RiskManager.checkPreTradeRisk with Guardrails-Driven Helpers
+
+Currently, pre-trade checks likely flow like:
+
+const riskManager = new RiskManager(...);
+const riskResult = await riskManager.checkPreTradeRisk({ ...tradeContext });
+if (!riskResult.ok) { /* reject trade */ }
+
+
+We want to remove that class entirely and replace it with:
+
+One or more plain functions that:
+
+Take a settings object derived from guardrails_v2
+
+Take the trade candidate (symbol, side, entry, stop, quantity, notional, ATR, etc.)
+
+Return a clear result like { ok: boolean; reason?: string; code?: string }
+
+Suggested structure (feel free to adjust names, but keep them clearly tied to guardrails):
+
+// server/services/trade-safety.ts  (NEW MODULE)
+
+export type TradeSafetyResult =
+  | { ok: true }
+  | { ok: false; code: 'MAX_POSITION' | 'PORTFOLIO_RISK' | 'LPCP_LOW_PRICE' | 'LPCP_MIN_NOTIONAL'; reason: string };
+
+export async function checkGuardrailRisk(
+  mode: 'paper' | 'live',
+  userId: string,
+  trade: TradeCandidateContext,
+): Promise<TradeSafetyResult> {
+  // 1) Load guardrails_v2 for this mode + user
+  // 2) Derive settings from guardrails
+  // 3) Apply:
+  //    - portfolio risk per trade
+  //    - max position percent
+  //    - LPCP rules (low-price threshold, ATR floor, min notional)
+  // 4) Return { ok: true } or { ok: false, code, reason }
+}
+
+
+Important constraints:
+
+Only check what is explicitly represented in guardrails_v2 (including LPCP).
+
+No new hidden limits.
+
+No extra “mystery” rules.
+
+Any new safety code must be tied to a guardrail or clearly documented front-and-center.
+
+Then:
+
+In paper-execution-engine.ts (and any other trade-execution entry point):
+
+Remove construction and usage of RiskManager.
+
+Replace with calls to checkGuardrailRisk (or equivalent function) before opening a trade.
+
+Example conceptual change:
+
+// BEFORE
+const riskResult = await riskManager.checkPreTradeRisk(tradeCtx);
+if (!riskResult.ok) { /* reject with riskResult.reason */ }
+
+// AFTER
+const riskResult = await checkGuardrailRisk(mode, userId, tradeCtx);
+if (!riskResult.ok) {
+  // log with a prefix like [8.8.3-H4][GUARDRAIL_BLOCK]
+  // include riskResult.code + reason
+  return { ok: false, reason: riskResult.reason, code: riskResult.code };
+}
+
+
+Remove any remaining calls to:
+
+riskManager.checkPreTradeRisk
+
+riskManager.checkPositionSizeCap
+
+riskManager.checkLowPricedCoinProtection
+
+etc.
+
+All pre-trade blocking must now flow through a guardrail-named function.
+
+Task 4 — Migrate LPCP Logic Out of Risk Manager
+
+In 8.8.3-H/H3 we implemented Low-Priced Coin Protection (LPCP) directly inside risk-manager.ts. That’s now a problem, because:
+
+The controls are visible on the Guardrails tab
+
+But the actual enforcement is buried in a “Risk Manager” module
+
+We want LPCP to be:
+
+Purely guardrail-driven
+
+Enforced via the same guardrail safety helper from Task 3
+
+Not tied to a special manager class.
+
+Take the checkLowPricedCoinProtection logic that now lives in risk-manager.ts and move it into:
+
+either trade-safety.ts (if created), or
+
+a dedicated helper within guardrail-policy.ts that is called from the execution engine.
+
+Make sure LPCP checks use only:
+
+lpcpLowPriceThresholdUsd
+
+lpcpMinStopAtrMultiple
+
+lpcpMinNotionalUsd
+
+FX conversion service (already implemented in 8.8.3-H3)
+
+The enforcement path should be something like:
+
+if (priceInUsd <= lpcpLowPriceThresholdUsd) {
+  // enforce min ATR multiple + min notional
+}
+
+
+Once LPCP logic is migrated, delete it from risk-manager.ts.
+
+Task 5 — Fully Decommission risk-manager.ts
+
+Once Tasks 1–4 are complete:
+
+Confirm via search:
+
+rg "RiskManager" server -n
+rg "risk-manager" server -n
+rg "checkPreTradeRisk" server -n
+
+
+All of these should return zero matches in the active code path.
+
+Either:
+
+Move server/services/risk-manager.ts to a clearly marked legacy folder, e.g.:
+
+server/legacy/risk-manager-archive.ts
+
+And add a header comment:
+
+// LEGACY ARCHIVE ONLY – DO NOT IMPORT
+// This file is kept purely for historical reference and must never be used in runtime.
+
+
+Or delete it entirely if you’re comfortable doing so (preferred).
+
+Update any documentation that previously referenced the “Risk Manager”:
+
+docs/audits/REB_8.8.3-F_Execution_Path_Notes.md
+
+replit.md
+
+Any 8.8.3 audit docs that describe a “Risk Manager” as an active component.
+
+Replace those references with:
+
+“Guardrails-driven risk checks”
+
+“LPCP guardrails”
+
+“Max Position Percent” guardrail
+
+Task 6 — Verify No Hidden Risk Logic Remains
+
+Grep for any phrases like:
+
+rg "risk manager" docs server client -n
+rg "Internal risk" docs server client -n
+rg "hidden risk" docs server client -n
+rg "position size .* exceeds .*" server -n
+
+
+For every remaining pre-trade rejection, ensure it falls into exactly one of these buckets:
+
+FX5 / filter rejection (screeners)
+
+Guardrails (including LPCP)
+
+Strategy-level explicit safety (e.g. “strategy refuses to fire if ATR missing”)
+
+Confirm there are no “silent” blockers:
+
+No additional caps hardcoded in the execution engine
+
+No arbitrary constants like 0.10 or 10% that aren’t surfaced as guardrails.
+
+Task 7 — Logging & Documentation
+
+Update pre-trade logs to no longer reference “Risk Manager”. For example:
+
+Before: [8.8.3-F][RISK_REJECT] ...
+
+After: [8.8.3-H4][GUARDRAIL_BLOCK] ...
+
+Use explicit codes that tie to visible knobs:
+
+code: 'MAX_POSITION' (→ Max Position Percent guardrail)
+
+code: 'PORTFOLIO_RISK' (→ Portfolio Risk % guardrail)
+
+code: 'LPCP_LOW_PRICE', LPCP_MIN_NOTIONAL, etc.
+
+Create/Update audit doc:
+
+docs/audits/phase_8.8.3-H4_risk_manager_removed.md
+
+Include:
+
+Summary of all call sites that used to invoke Risk Manager
+
+Description of their new guardrail-driven replacements
+
+Explicit statement:
+
+“There is no active Risk Manager module. All pre-trade risk decisions are done via FX5 filters, guardrails_v2 (including LPCP), and strategy code. No hidden risk rules remain.”
+
+Test Plan (Paper Mode)
+
+Use the existing test user:
+
+username: testuser123
+
+password: SecurePass123!
+
+Log in as testuser123.
+
+Confirm:
+
+Guardrails tab loads and shows:
+
+5 Core Guardrails (including Max Position Percent)
+
+Low-Priced Coin Protection card
+
+No UI references to a “Risk Manager.”
+
+Start paper trading with a known portfolio balance (e.g. 10,000).
+
+Allow the engine to run for enough time to generate some RTB signals.
+
+Confirm:
+
+Some trades are attempted, and:
+
+Rejections are labeled as guardrail blocks (with clear codes matching guardrails), not “Risk Manager.”
+
+If/when trades are accepted, they appear in:
+
+Active Trades tab
+
+Paper trades API (/api/paper/trades, /api/paper/trades/active).
+
+Verify in logs:
+
+No [RISK_REJECT] / “RiskManager” messages.
+
+Only [GUARDRAIL_BLOCK] (or equivalent) messages remain for safety rejections.
