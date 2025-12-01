@@ -1,0 +1,299 @@
+📘 Phase 8.8.3-I — Ready-To-Buy (RTB) Lifecycle Fixes
+
+Directive to Replit
+
+🎯 Phase Goal
+
+Ensure the Ready-To-Buy (RTB) Signals Pool behaves exactly as designed in the DawnTrader future-state architecture:
+
+RTB MUST ALWAYS reflect the most recent, valid strategy signals generated from:
+
+Active Filtered Pool → Strategy Evaluation → RTB Candidate Queue
+
+And the RTB pool must stay:
+
+fresh
+
+deduped
+
+auto-expiring
+
+aligned with active trades
+
+correctly WebSocket-updating
+
+This phase ensures pipeline integrity before we proceed to 8.8.3-J Metrics and 8.8.3-K Trade History.
+
+📍 CONTEXT (Full System Summary)
+
+To avoid ambiguity, here is the intended lifecycle exactly as ChatGPT and the future-state blueprint specify.
+
+1. Strategy signals generate ~every FX5 cycle
+
+FX5 runs every 30 seconds
+
+Strategy Engine evaluates all Active Filtered Pool symbols
+
+This produces zero or more signals
+
+RTB should reflect exactly the most recent signals, not a historical accumulation
+
+2. RTB pool should store only FRESH signals
+
+1 signal = 1 pair + 1 strategy + 1 timestamp
+TTL should match exactly one FX5 cycle (≈ 30 seconds)
+
+3. RTB must NOT contain:
+
+expired signals
+
+duplicates
+
+signals for symbols with an active trade already open
+
+symbols already in RTB
+
+stale signals from prior simulations
+
+signals whose FX5 eligibility has expired
+
+4. RTB Auto-Refresh
+
+UI auto-refresh is 30 seconds, but the backend pipeline should correctly manage:
+
+signal expiration
+
+signal deduping
+
+removal of signals once they are processed or become invalid
+
+5. Once a trade executes for a signal →
+
+it MUST be removed immediately from RTB
+
+it MUST NOT re-enter RTB until cooldown finishes
+
+backend must enforce this with storage checks
+
+This has been implemented in parts but not holistically validated after the watchlist removal + Active Filter Pool integration.
+
+🧰 Phase 8.8.3-I — Required Fixes & Tasks
+Task 1 — Verify RTB Storage Implementation
+
+Audit:
+
+RTB storage interface
+
+RTB table schema
+
+RTB service logic
+
+Dedupe logic
+
+TTL/expiration logic
+
+getReadyToBuy() API endpoint
+
+Strategy → RTB enqueue pipeline
+
+Expected finding:
+RTB expiration + dedupe is implemented, but not fully aligned with new Active Filter Pool architecture.
+
+Deliverable:
+Short audit markdown:
+docs/audits/phase_8.8.3-I_RTB_Audit.md
+
+Task 2 — Fix RTB Expiration (TTL)
+
+Ensure signals expire after EXACTLY one FX5 cycle.
+
+Requirements:
+
+Each signal must store createdAt timestamp
+
+TTL = 30 seconds (or FX5_SCAN_INTERVAL from config)
+
+Any signal older than TTL is removed automatically
+
+Implementation:
+
+Add cleanup method to RTB service
+
+Run at each FX5 cycle OR at each enqueue
+
+Also run when getReadyToBuy() is called
+
+Task 3 — Prevent Any RTB Entry for Symbols Already Being Traded
+
+Current state:
+
+This logic exists in some code paths
+
+But must be audited post-watchlist removal and Active Pool migration
+
+Requirements:
+
+Before inserting a signal into RTB:
+
+Check if symbol exists in storage.getActiveTrades()
+
+If active trade exists → reject signal
+
+Add detailed logging tag prefix:
+[8.8.3-I][RTB_REJECT_ACTIVE]
+
+Task 4 — RTB Deduping (Exact Behavior)
+
+If a symbol already exists in RTB, then:
+
+It must NOT be added again
+
+BUT its timestamp should refresh if a new signal arrives
+(fresh signal replaces stale one)
+
+Required behavior:
+
+either REPLACE existing signal
+
+or UPDATE timestamp + strategy info
+
+Rejecting duplicates entirely is wrong — newer signals should override older ones.
+
+Task 5 — Remove All Stale Data Between Simulations
+
+Problem:
+
+Replit logs show RTB sometimes persists across simulations
+
+Old signals appear after simulation restart
+
+This is unacceptable
+
+Fix:
+
+When paper sim resets → RTB storage must fully clear
+
+Add logs:
+[8.8.3-I][RTB_RESET]
+
+Task 6 — Fix RTB → Active Trades Transition
+
+When a trade is opened (BUY):
+
+Remove matching signal from RTB immediately
+
+Add logs:
+[8.8.3-I][RTB_CONSUMED]
+
+Also:
+
+Ensure if a trade fails risk validation, the RTB signal remains but has its TTL counted from original timestamp
+
+Ensure if a trade opens later on the same symbol, stale signals are not resurrected
+
+Task 7 — Fix Race Conditions in Strategy Tick
+
+You must verify:
+
+Strategy Engine doesn’t double-enqueue a signal
+
+Strategy Engine doesn’t enqueue while RTB cleanup runs
+
+All RTB operations are atomic
+
+No stale Ready-to-Buy entries survive across ticks
+
+If needed:
+
+Add a mutex or lock wrapper around RTB mutation operations
+
+This is lightweight and appropriate here
+
+Task 8 — WebSocket & API Verification
+
+Ensure:
+
+/api/trading-signals returns only valid, non-expired, deduped signals
+
+scan_tick WebSocket matches changes
+
+RTB updates reliably every cycle
+
+UI sees exactly what backend sees
+
+Task 9 — Create Final Report
+
+docs/phase_8.8.3-I_RTB_Lifecycle_Fixes.md
+Include:
+
+Before/after behavior
+
+Logs from tests
+
+Notes on race conditions
+
+Explanation of TTL mechanism
+
+Confirmation that RTB pool now fully adheres to future-state architecture
+
+🧪 Acceptance Criteria (Must Pass)
+RTB Behavior
+
+TTL expiration within 30 seconds
+
+No duplicates unless replacing older signals
+
+No stale signals
+
+No RTB entries for symbols actively traded
+
+RTB resets on simulation reset
+
+RTB pipeline produces fresh signals reliably
+
+No old signals resurrected
+
+Logging
+
+Must include these prefixes:
+
+[8.8.3-I][RTB_TTL_EXPIRE]
+
+[8.8.3-I][RTB_REJECT_ACTIVE]
+
+[8.8.3-I][RTB_RESET]
+
+[8.8.3-I][RTB_CONSUMED]
+
+UI Behavior
+
+Ready-to-Buy table only shows fresh, valid entries
+
+No ghost signals
+
+No accumulation
+
+No stale signals after restart
+
+API
+
+/api/trading-signals shows exactly the RTB pool state, no extras.
+
+🧪 Test User Credentials
+
+Use these for all automated and manual testing:
+
+username: testuser123
+password: SecurePass123!
+
+📦 Files You Will Touch
+server/services/ready-to-buy-service.ts
+server/services/paper-execution-engine.ts
+server/services/strategy-engine.ts
+server/services/paper-sim-service.ts
+server/storage.ts
+server/routes.ts
+shared/schema.ts
+client/src/components/trading/ready-to-buy-table.tsx
+client/src/pages/trading.tsx
+docs/phase_8.8.3-I_RTB_Lifecycle_Fixes.md
