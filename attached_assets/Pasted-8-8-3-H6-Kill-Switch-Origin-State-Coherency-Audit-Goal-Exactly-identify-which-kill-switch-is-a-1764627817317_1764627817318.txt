@@ -1,0 +1,122 @@
+8.8.3-H6 — Kill Switch Origin & State Coherency Audit
+
+Goal:
+Exactly identify which kill switch is active, why it’s tripped, and why the UI/engine states are out of sync — without changing any code or schema.
+
+Scope (Replit only observes & records):
+
+Directly inspect kill switch state
+
+Call GET /api/guardrails-v2?mode=paper for testuser123 and record:
+
+killSwitchTripped
+
+killSwitchReason
+
+killSwitchTrippedAt
+
+Call GET /api/kill-switch/status?mode=paper and record:
+
+killSwitchTripped
+
+dailyLossKillSwitchPct
+(This confirms which threshold is configured and whether it’s using your 15% etc.)
+
+Inspect kill-switch event history
+
+Call GET /api/kill-switch/events?limit=10 for testuser123.
+
+For the latest event(s), record:
+
+eventType (kill_switch vs warning)
+
+lossPercent, killSwitchThreshold
+
+tradesClosed
+
+timestamp
+
+From this we’ll know if the last trip was:
+
+a daily loss event,
+
+a manual trip (with a custom reason),
+
+or something else.
+
+Engine state vs UI state
+
+While trading is toggled to ACTIVE in the UI:
+
+Call GET /api/trading-status?mode=paper and capture:
+
+isEngineActive
+
+passiveLearning
+
+killSwitchTripped (if present)
+
+Compare that to:
+
+what the UI shows at the top (Active/Stopped),
+
+what the Trading tab shows for:
+
+Cycle Info
+
+CPH
+
+24h Filter Activity
+
+Save screenshots plus the raw JSON in the audit doc.
+
+Start-trading flow trace
+
+With kill switch tripped (if it is):
+
+Trigger the “start trading” toggle once.
+
+Capture server log lines for:
+
+POST /api/trading/start
+
+any [guardrails.kill_switch or [SafetyGuardrails] messages
+
+any [8.8.3-KS-B] logs about reset.
+
+Confirm whether:
+
+engine start succeeds (isEngineActive flips true), and
+
+killSwitchTripped flips false,
+
+or if pre-flight fails and leaves KS unchanged.
+
+Write all of this into a markdown audit
+
+File: docs/audits/phase_8.8.3-H6_kill_switch_origin_and_state.md
+
+Must include:
+
+raw API responses (sanitized),
+
+last 1–2 kill switch events,
+
+clear determination of:
+
+origin of current kill switch state,
+
+whether auto-reset on start is working,
+
+whether UI and backend agree on engine state.
+
+Constraints:
+
+No code or schema changes allowed in this phase.
+
+Diagnostics only — your job will be to review the findings with me before any fix is attempted.
+
+Credentials for Replit to use:
+
+username: testuser123
+password: SecurePass123!
