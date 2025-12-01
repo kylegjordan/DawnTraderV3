@@ -164,12 +164,11 @@ export async function buildSettingsFromModeLevel(
   const riskPct = getRiskPercentageV2(mode, guardrails);
 
   // REB 8.8.3-KS-B: Build settings object using killSwitchTripped (tradingSuspended removed)
-  // REB 8.8.3-F: Added maxPositionPercent to allow trades to pass position size cap check
-  // Forward-compatible: reads from guardrails_v2.maxPositionPercent if present, otherwise defaults to 30%
+  // REB 8.8.3-G: maxPositionPercent now sourced from guardrails_v2.maxPositionPercentPct (user-configurable)
   const guardrailsAny = guardrails as any;
-  const maxPositionPercent = guardrailsAny.maxPositionPercent 
-    ? String(guardrailsAny.maxPositionPercent) 
-    : mode === 'paper' ? '30.00' : '10.00'; // Paper: 30%, Live: 10% (safer default)
+  const maxPositionPercent = guardrailsAny.maxPositionPercentPct 
+    ? String(guardrailsAny.maxPositionPercentPct) 
+    : mode === 'paper' ? '30.00' : '10.00'; // Fallback for pre-8.8.3-G rows
   
   return {
     portfolioValue: portfolioValue.toString(),
@@ -178,7 +177,7 @@ export async function buildSettingsFromModeLevel(
     maxOpenTrades: Number(guardrails.maxOpenPositions) || 5,
     dailyLossKillSwitch: guardrails.dailyLossKillSwitchPct ? guardrails.dailyLossKillSwitchPct.toString() : '7.00',
     maxExposurePercent: '50.00', // Not in guardrails_v2, using safe default
-    maxPositionPercent, // REB 8.8.3-F: Forward-compatible, sourced from guardrails or mode-specific default
+    maxPositionPercent, // REB 8.8.3-G: Sourced from guardrails_v2.maxPositionPercentPct
     autoTrade: false,
   };
 }

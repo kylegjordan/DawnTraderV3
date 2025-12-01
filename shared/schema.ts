@@ -293,6 +293,10 @@ export const guardrailsV2 = pgTable("guardrails_v2", {
   // 4. Daily Loss Kill Switch (%) - Range: 1.00% - 20.00%
   dailyLossKillSwitchPct: decimal("daily_loss_kill_switch_pct", { precision: 5, scale: 2 }).notNull().default("7.00"),
   
+  // 5. Max Position Percent (%) - Range: 1.00% - 100.00%
+  // REB 8.8.3-G: Maximum size of any single position as % of portfolio value
+  maxPositionPercentPct: decimal("max_position_percent_pct", { precision: 5, scale: 2 }).notNull().default("30.00"),
+  
   // Phase 3: Manual Override Controls (Lottie vs User)
   isManualOverride: boolean("is_manual_override").notNull().default(false), // true = user controls, false = LATTI controls
   tunedByLatti: boolean("tuned_by_latti").notNull().default(true), // true = LATTI manages, false = manual
@@ -1914,6 +1918,7 @@ export const insertGuardrailsV2Schema = createInsertSchema(guardrailsV2).omit({
 }).extend({
   portfolioRiskPerTradePct: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
   dailyLossKillSwitchPct: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  maxPositionPercentPct: z.union([z.string(), z.number()]).transform(val => String(val)).optional(), // REB 8.8.3-G
 });
 
 // Phase 4: Goals Presets Insert Schema

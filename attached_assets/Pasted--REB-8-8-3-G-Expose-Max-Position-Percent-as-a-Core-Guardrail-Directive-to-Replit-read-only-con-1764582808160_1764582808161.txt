@@ -1,0 +1,348 @@
+🧩 REB 8.8.3-G — Expose Max Position Percent as a Core Guardrail
+
+Directive to Replit (read-only context + tightly scoped change)
+
+0. Context (Do NOT skip)
+
+This work is part of the REB 8.8.3 line of phases for DawnTrader:
+
+Kill switch, trading state, Active Filtered Pool, Ready-to-Buy, and execution path have already been repaired and unified.
+
+Guardrails now flow through guardrails_v2 → GuardrailPolicy → RiskManager → Strategy/Execution.
+
+The risk per trade guardrail (portfolioRiskPerTradePct) is already in use; do NOT change its semantics.
+
+There is already a hidden “max position” cap enforced in risk-manager.ts (e.g., 10% or 30% depending on mode).
+Right now:
+
+That max position cap is not visible in the UI.
+
+It behaves like a silent, hard-coded guardrail.
+
+Kyle wants this visible and adjustable, like the other guardrails.
+
+From this phase onward:
+
+Max Position Percent must become a first-class guardrail, visible and controllable in the UI, but we must NOT change the existing risk logic semantics.
+
+We are not building any new strategy logic in this phase.
+We are not changing scan cadence, FX5, or RTB in this phase.
+
+1. Goals
+
+Surface Max Position Percent as a Core Guardrail
+
+Make the backend and UI treat “Max Position Percent” as an explicit guardrail, not a hidden constant.
+
+It should participate in the same pipeline as other guardrails (dailyLossKillSwitch, portfolioRiskPerTradePct, symbolCooldownMinutes, maxOpenPositions).
+
+Keep risk per trade logic exactly as-is
+
+portfolioRiskPerTradePct remains the position-sizing input (“how much risk to plan”).
+
+Max Position Percent remains a hard cap on actual position notional (“how large a position we actually allow”).
+
+We do not change the core risk formula in this phase.
+
+Add clear human-readable descriptions under each guardrail
+
+For every core guardrail, including the new one, add a short description directly under the control on the Guardrails tab.
+
+This is for Kyle (the user), not for LATTI — plain language, one–two lines each.
+
+No architectural disruption
+
+No changes to:
+
+FX5 cadence
+
+Active Filter Pool logic
+
+Ready-to-Buy lifecycle
+
+Trading engine start/stop
+
+Only extend guardrail configuration and its UI reflection.
+
+2. Non-Goals (Very Important)
+
+Do NOT in this phase:
+
+Change how portfolioRiskPerTradePct is interpreted or used.
+
+Change the risk sizing formula beyond plugging in the already-existing max position cap.
+
+Add new cadences or background loops.
+
+Change anything about LATTi autonomy logic beyond allowing her to set this new guardrail value the same way she sets others.
+
+Modify Ready-to-Buy behavior, execution logic, or cooldowns.
+
+All of that is for later phases (8.8.3-H, 8.8.3-I, 8.8.3-J, 8.8.3-K / Phase 9).
+
+3. Implementation Plan
+
+Follow these steps in order.
+
+3.1. Audit current max-position logic (read-only)
+
+In server/services/risk-manager.ts:
+
+Locate where position size is validated against a percentage of portfolio value (earlier logs referred to “10% portfolio limit” and “30% portfolio limit”).
+
+Confirm:
+
+The field name used in settings (e.g., maxPositionPercent or similar).
+
+Where those values come from (buildSettingsFromModeLevel, defaults, etc.).
+
+In server/services/risk-manager.ts, find buildSettingsFromModeLevel:
+
+Confirm if maxPositionPercent is:
+
+Already present in the return object, or
+
+Added ad-hoc with hardcoded defaults per mode (paper/live).
+
+In shared/schema.ts:
+
+Inspect the guardrails_v2 table definition.
+
+Confirm whether a maxPositionPercent / maxPositionPercentPct or similar column already exists.
+
+If it exists: note type, default, and mode handling.
+
+If it does not exist: we will add it.
+
+In server/services/guardrail-policy.ts and server/storage.ts:
+
+Check how guardrails_v2 is:
+
+Loaded
+
+Normalized in GuardrailPolicy.getEffective
+
+Exposed in /api/guardrails-v2.
+
+✅ Output of this step: Clear understanding of where maxPositionPercent currently lives and how the risk manager uses it.
+
+3.2. Extend guardrails_v2 schema (if needed)
+
+Only if maxPositionPercent is not already in guardrails_v2:
+
+In shared/schema.ts, extend guardrails_v2:
+
+Add a numeric column (e.g.):
+
+maxPositionPercentPct: numeric('max_position_percent_pct')
+  .notNull()
+  .default('30.00') // paper default; see note below
+
+
+Use a percentage (e.g., 30.00 = 30%).
+
+Choose sensible defaults consistent with previous behavior:
+
+For paper mode: 30% (what we already effectively used in 8.8.3-F).
+
+For live mode: 10% (previously used hard-coded limit).
+
+If you cannot safely differentiate by mode at schema level, use:
+
+A single column and interpret via buildSettingsFromModeLevel.
+
+Apply migrations as required for the existing DB schema.
+
+🔒 Important:
+Do not overwrite existing guardrails rows with null; always ensure a non-null, safe default.
+
+3.3. Wire guardrails_v2 → GuardrailPolicy → RiskManager
+
+In server/services/guardrail-policy.ts:
+
+Ensure getEffective() includes maxPositionPercentPct in the computed effective guardrail set.
+
+This should respect:
+
+Base values from guardrails_v2.
+
+Any LATTi overrides via learning/autonomy if already wired.
+
+In server/storage.ts, wherever getGuardrailsV2 is used for UI:
+
+Confirm that maxPositionPercentPct is returned as part of the guardrails payload for:
+
+Goals / Guardrails tab
+
+Any config snapshots
+
+In server/services/risk-manager.ts:
+
+In buildSettingsFromModeLevel():
+
+Map the new guardrail field into settings:
+
+maxPositionPercent: guardrails.maxPositionPercentPct ?? DEFAULTS[mode].maxPositionPercentPct;
+
+
+Ensure maxPositionPercent is the same value used in the existing position size cap calculation.
+
+✅ The goal is no change in runtime behavior, only replacing hidden defaults with guardrail-driven values.
+
+3.4. Confirm RiskManager behavior is unchanged (logic-wise)
+
+In risk-manager.ts, locate the position-size cap check (e.g. checkPositionSizeCap or similar):
+
+Confirm it still uses:
+
+settings.portfolioValue
+
+settings.maxPositionPercent
+
+computedPositionValue
+
+Confirm its behavior:
+
+Reject if positionValue > maxPositionPercent * portfolioValue.
+
+Log reason with current % and $ values.
+
+Do NOT change the formula in this phase.
+
+Just ensure it pulls its maxPositionPercent from guardrails_v2 via settings (as wired above).
+
+3.5. UI: Expose Max Position Percent on Guardrails Tab
+
+In client/src/components/goals/guardrails-tab.tsx and/or core-four-guardrails.tsx:
+
+Add a new core guardrail field:
+“Max Position Percent”
+
+It should sit logically next to:
+
+portfolioRiskPerTradePct
+
+dailyLossKillSwitch
+
+maxOpenPositions
+
+Use a percentage input (like the others):
+
+E.g. input value displayed as 30.00 → means 30% of portfolio.
+
+Wire the data:
+
+When fetching guardrails (via /api/guardrails-v2), map maxPositionPercentPct into local state.
+
+Ensure it participates in:
+
+Manual editing
+
+LATTi-managed mode (if present)
+
+Save / reset logic.
+
+Ensure the UI clearly indicates:
+
+Label: “Max Position Percent”
+
+Units: % of portfolio
+
+This is for the maximum position size, not risk %.
+
+3.6. UI: Add Descriptions Under Each Core Guardrail
+
+In the Guardrails tab, for each of the Core Guardrails (existing + new), add a short description text directly under the field.
+
+You may implement a small helper structure like:
+
+const GUARDRAIL_DESCRIPTIONS = {
+  portfolioRiskPerTradePct: "How much of your portfolio you plan to risk on each individual trade when sizing position and stop distance.",
+  dailyLossKillSwitchPct: "If your portfolio loses this percent or more in a single day, trading automatically stops until you resume.",
+  maxPositionPercentPct: "The maximum size of any single position as a percent of your total portfolio value. Larger positions will be blocked.",
+  symbolCooldownMinutes: "After a trade closes on a symbol, wait this many minutes before opening another trade on the same symbol.",
+  maxOpenPositions: "The maximum number of simultaneous open positions allowed at once."
+};
+
+
+And render these as small muted descriptions (e.g. text-xs text-muted-foreground) under each control.
+
+🔎 These descriptions are for Kyle, so keep them non-technical and accurate to current behavior.
+
+4. Testing & Validation
+
+Use the test user:
+
+Username: testuser123
+
+Password: SecurePass123!
+
+All tests in paper mode only.
+
+4.1. Basic UI / API round-trip
+
+Login as testuser123.
+
+Open Goals → Guardrails tab.
+
+Confirm:
+
+“Max Position Percent” is visible, with a realistic default (e.g., 30.00% for paper).
+
+Each Core Guardrail field has a human-readable description underneath.
+
+Change “Max Position Percent” value (e.g., from 30 to 5).
+
+Save guardrails.
+
+Reload the page / logout+login:
+
+Confirm the updated value persists.
+
+Confirm /api/guardrails-v2 returns the same value.
+
+4.2. RiskManager respect of UI-configured max position
+
+With “Max Position Percent” set to a very low value (e.g. 1%):
+
+Start paper trading via the UI (paper toggle).
+
+Wait for RTB signals to appear.
+
+Observe logs with tag: [8.8.3-F][RISK_REJECT] (or similar).
+
+Confirm that rejection messages use the configured percentage (1%) in their Max calculations, not old defaults.
+
+Then set “Max Position Percent” to a higher value (e.g. 50%):
+
+Restart paper trading.
+
+Confirm risk logs now show Max=50% and that some trades that previously failed on “Max position limit” may now pass (if any other guardrails allow them).
+
+✅ These tests confirm that max position cap is both configurable and used, without changing sizing semantics.
+
+5. Safety / Regression Guardrails
+
+While implementing, please:
+
+Do NOT touch any of:
+
+FX5 filter logic
+
+Active Filter Pool logic
+
+Ready-to-Buy pipeline
+
+Kill switch logic
+
+Trading engine start/stop endpoints
+
+Do NOT change names or types of existing guardrail fields.
+
+Do NOT add new routes.
+
+Do NOT change the behavior of portfolioRiskPerTradePct in any calculator.
+
+We want this phase to be:
+
+A pure guardrail exposure & UX clarity upgrade plus wiring, with no business logic surprises.

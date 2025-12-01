@@ -25,6 +25,7 @@ export interface EffectiveGuardrails {
   symbolCooldownMinutes: number;
   maxOpenPositions: number;
   dailyLossKillSwitchPct: number;
+  maxPositionPercentPct: number; // REB 8.8.3-G: Max position size as % of portfolio
   management: {
     isManualOverride: boolean;
     tunedByLatti: boolean;
@@ -163,12 +164,19 @@ class GuardrailPolicyService {
   public getEffective(guardrail: GuardrailsV2): EffectiveGuardrails {
     const lockedByUser = (guardrail.lockedByUser as Record<string, boolean>) || {};
     
+    // REB 8.8.3-G: Include maxPositionPercentPct with fallback for existing rows
+    const guardrailAny = guardrail as any;
+    const maxPositionPercentPct = guardrailAny.maxPositionPercentPct 
+      ? parseFloat(String(guardrailAny.maxPositionPercentPct))
+      : guardrail.mode === 'paper' ? 30.00 : 10.00;
+    
     return {
       mode: guardrail.mode as TradingMode,
       portfolioRiskPerTradePct: parseFloat(String(guardrail.portfolioRiskPerTradePct)),
       symbolCooldownMinutes: guardrail.symbolCooldownMinutes,
       maxOpenPositions: guardrail.maxOpenPositions,
       dailyLossKillSwitchPct: parseFloat(String(guardrail.dailyLossKillSwitchPct)),
+      maxPositionPercentPct, // REB 8.8.3-G
       management: {
         isManualOverride: guardrail.isManualOverride,
         tunedByLatti: guardrail.tunedByLatti,
