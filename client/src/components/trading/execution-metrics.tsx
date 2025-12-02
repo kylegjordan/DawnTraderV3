@@ -3,82 +3,113 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTradingMode } from "@/contexts/trading-mode-context";
-import { CheckCircle, XCircle, Clock, Activity, TrendingUp, Ban } from "lucide-react";
+import { CheckCircle, XCircle, Activity, TrendingUp, Ban, BarChart3, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatTime } from "@/lib/timezone";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
-interface ExecutionAttempt {
-  id: string;
-  mode: 'live' | 'paper';
-  symbol: string;
-  strategy: string;
-  decision: 'BLOCKED' | 'OPENED';
-  blockReason: string | null;
-  blockDetail: string | null;
-  entryPrice: string;
-  stopPrice: string | null;
-  targetPrice: string | null;
-  confidence: string | null;
-  createdAt: string;
-}
-
-interface ExecutionStats {
+interface RTBSummary {
   totalAttempts: number;
-  openedCount: number;
-  blockedCount: number;
-  openRate: number;
-  blocksByReason: Record<string, number>;
-  byStrategy: Record<string, { opened: number; blocked: number }>;
+  opened: number;
+  blocked: number;
+  openedRate: string;
+  blockedRate: string;
+  last24h: {
+    attempts: number;
+    opened: number;
+    blocked: number;
+  };
 }
+
+interface RTBBlockedSummary {
+  totalBlocked: number;
+  blockedLast24h: number;
+  byReason: Record<string, number>;
+  byStrategy: Record<string, number>;
+  topReasons: Array<{ reason: string; count: number }>;
+}
+
+interface RTBOpenedSummary {
+  totalOpened: number;
+  openedLast24h: number;
+  byStrategy: Record<string, number>;
+  bySymbol: Array<{ symbol: string; count: number }>;
+  topStrategies: Array<{ strategy: string; count: number }>;
+}
+
+const REFRESH_INTERVAL = 30000;
 
 export function ExecutionMetricsPanel() {
   const { mode } = useTradingMode();
   
-  const { data: stats, isLoading: statsLoading } = useQuery<{ success: boolean; data: ExecutionStats }>({
-    queryKey: ['/api/metrics/execution-attempts/stats', mode],
+  const { data: rtbSummary, isLoading: summaryLoading } = useQuery<{ success: boolean; data: RTBSummary }>({
+    queryKey: ['/api/metrics/rtb-summary', mode],
     queryFn: async () => {
-      const response = await fetch(`/api/metrics/execution-attempts/stats?mode=${mode}&hours=24`, {
+      const response = await fetch(`/api/metrics/rtb-summary?mode=${mode}`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
-      if (!response.ok) throw new Error('Failed to fetch execution stats');
+      if (!response.ok) throw new Error('Failed to fetch RTB summary');
       return response.json();
     },
-    refetchInterval: 60000,
-    staleTime: 30000,
+    refetchInterval: REFRESH_INTERVAL,
+    staleTime: REFRESH_INTERVAL / 2,
   });
 
-  const { data: recentAttempts, isLoading: attemptsLoading } = useQuery<{ success: boolean; data: ExecutionAttempt[] }>({
-    queryKey: ['/api/metrics/execution-attempts', mode],
+  const { data: blockedSummary, isLoading: blockedLoading } = useQuery<{ success: boolean; data: RTBBlockedSummary }>({
+    queryKey: ['/api/metrics/rtb-blocked-summary', mode],
     queryFn: async () => {
-      const response = await fetch(`/api/metrics/execution-attempts?mode=${mode}&limit=10`, {
+      const response = await fetch(`/api/metrics/rtb-blocked-summary?mode=${mode}`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
-      if (!response.ok) throw new Error('Failed to fetch execution attempts');
+      if (!response.ok) throw new Error('Failed to fetch blocked summary');
       return response.json();
     },
-    refetchInterval: 30000,
-    staleTime: 15000,
+    refetchInterval: REFRESH_INTERVAL,
+    staleTime: REFRESH_INTERVAL / 2,
   });
 
-  const { data: settings } = useQuery<{ timezone?: string; timeFormat?: string }>({ 
-    queryKey: ['/api/settings'],
-    refetchInterval: 300000,
-    staleTime: 300000,
-    refetchOnWindowFocus: false
+  const { data: openedSummary, isLoading: openedLoading } = useQuery<{ success: boolean; data: RTBOpenedSummary }>({
+    queryKey: ['/api/metrics/rtb-opened-summary', mode],
+    queryFn: async () => {
+      const response = await fetch(`/api/metrics/rtb-opened-summary?mode=${mode}`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (!response.ok) throw new Error('Failed to fetch opened summary');
+      return response.json();
+    },
+    refetchInterval: REFRESH_INTERVAL,
+    staleTime: REFRESH_INTERVAL / 2,
   });
 
-  if (statsLoading || attemptsLoading) {
+  const isLoading = summaryLoading || blockedLoading || openedLoading;
+
+  const formatBlockReason = (reason: string): string => {
+    return reason.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  };
+
+  const formatStrategy = (strategy: string): string => {
+    return strategy.replace(/_/g, ' ');
+  };
+
+  if (isLoading) {
     return (
       <Card className="mt-4">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
             <Activity className="w-4 h-4" />
-            Execution Metrics (24h)
+            RTB Execution Metrics
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
             <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-32 w-full" />
             <Skeleton className="h-32 w-full" />
           </div>
         </CardContent>
@@ -86,110 +117,158 @@ export function ExecutionMetricsPanel() {
     );
   }
 
-  const metricsData = stats?.data;
-  const attempts = recentAttempts?.data || [];
-
-  const formatBlockReason = (reason: string | null): string => {
-    if (!reason) return 'Unknown';
-    return reason.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
-  };
+  const summary = rtbSummary?.data;
+  const blocked = blockedSummary?.data;
+  const opened = openedSummary?.data;
 
   return (
     <Card className="mt-4">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <Activity className="w-4 h-4" />
-          Execution Metrics (24h)
+          RTB Execution Metrics
+          <Badge variant="secondary" className="text-[10px] ml-auto">
+            Auto-refresh: 30s
+          </Badge>
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-4 gap-4 mb-4">
-          <div className="text-center p-3 bg-muted/50 rounded-lg">
-            <div className="text-2xl font-bold">{metricsData?.totalAttempts || 0}</div>
-            <div className="text-xs text-muted-foreground">Total Attempts</div>
-          </div>
-          <div className="text-center p-3 bg-success/10 rounded-lg">
-            <div className="text-2xl font-bold text-success flex items-center justify-center gap-1">
-              <CheckCircle className="w-4 h-4" />
-              {metricsData?.openedCount || 0}
-            </div>
-            <div className="text-xs text-muted-foreground">Opened</div>
-          </div>
-          <div className="text-center p-3 bg-destructive/10 rounded-lg">
-            <div className="text-2xl font-bold text-destructive flex items-center justify-center gap-1">
-              <XCircle className="w-4 h-4" />
-              {metricsData?.blockedCount || 0}
-            </div>
-            <div className="text-xs text-muted-foreground">Blocked</div>
-          </div>
-          <div className="text-center p-3 bg-primary/10 rounded-lg">
-            <div className="text-2xl font-bold text-primary flex items-center justify-center gap-1">
-              <TrendingUp className="w-4 h-4" />
-              {((metricsData?.openRate || 0) * 100).toFixed(1)}%
-            </div>
-            <div className="text-xs text-muted-foreground">Open Rate</div>
-          </div>
+      <CardContent className="space-y-6">
+        {/* J5.1 - RTB Summary Table */}
+        <div>
+          <h4 className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-2">
+            <BarChart3 className="w-3 h-3" />
+            Overall RTB Summary
+          </h4>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-xs">Metric</TableHead>
+                <TableHead className="text-xs text-right">Total</TableHead>
+                <TableHead className="text-xs text-right">Last 24h</TableHead>
+                <TableHead className="text-xs text-right">Rate</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow>
+                <TableCell className="text-xs font-medium flex items-center gap-1">
+                  <Activity className="w-3 h-3" />
+                  Attempts
+                </TableCell>
+                <TableCell className="text-xs text-right">{summary?.totalAttempts || 0}</TableCell>
+                <TableCell className="text-xs text-right">{summary?.last24h?.attempts || 0}</TableCell>
+                <TableCell className="text-xs text-right">-</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="text-xs font-medium flex items-center gap-1 text-success">
+                  <CheckCircle className="w-3 h-3" />
+                  Opened
+                </TableCell>
+                <TableCell className="text-xs text-right text-success">{summary?.opened || 0}</TableCell>
+                <TableCell className="text-xs text-right text-success">{summary?.last24h?.opened || 0}</TableCell>
+                <TableCell className="text-xs text-right text-success">{summary?.openedRate || '0.0'}%</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="text-xs font-medium flex items-center gap-1 text-destructive">
+                  <XCircle className="w-3 h-3" />
+                  Blocked
+                </TableCell>
+                <TableCell className="text-xs text-right text-destructive">{summary?.blocked || 0}</TableCell>
+                <TableCell className="text-xs text-right text-destructive">{summary?.last24h?.blocked || 0}</TableCell>
+                <TableCell className="text-xs text-right text-destructive">{summary?.blockedRate || '0.0'}%</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
         </div>
 
-        {metricsData?.blocksByReason && Object.keys(metricsData.blocksByReason).length > 0 && (
-          <div className="mb-4">
-            <h4 className="text-xs font-medium text-muted-foreground mb-2">Block Reasons</h4>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(metricsData.blocksByReason).map(([reason, count]) => (
-                <Badge key={reason} variant="outline" className="text-xs">
-                  <Ban className="w-3 h-3 mr-1" />
-                  {formatBlockReason(reason)}: {count}
-                </Badge>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {attempts.length > 0 && (
+        {/* J5.2 - Blocked Summary Table */}
+        {blocked && blocked.totalBlocked > 0 && (
           <div>
-            <h4 className="text-xs font-medium text-muted-foreground mb-2">Recent Attempts</h4>
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              {attempts.map((attempt) => (
-                <div
-                  key={attempt.id}
-                  className={cn(
-                    "flex items-center justify-between p-2 rounded-md text-xs",
-                    attempt.decision === 'OPENED' ? "bg-success/5 border border-success/20" : "bg-destructive/5 border border-destructive/20"
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    {attempt.decision === 'OPENED' ? (
-                      <CheckCircle className="w-3 h-3 text-success" />
-                    ) : (
-                      <XCircle className="w-3 h-3 text-destructive" />
-                    )}
-                    <span className="font-medium">{attempt.symbol}</span>
-                    <Badge variant="secondary" className="text-[10px]">
-                      {attempt.strategy.replace(/_/g, ' ')}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    {attempt.decision === 'BLOCKED' && attempt.blockReason && (
-                      <span className="text-destructive">{formatBlockReason(attempt.blockReason)}</span>
-                    )}
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {settings && formatTime(attempt.createdAt, {
-                        timezone: settings.timezone || 'Asia/Dubai',
-                        timeFormat: (settings.timeFormat as '12hr' | '24hr') || '12hr'
-                      })}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <h4 className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-2">
+              <Ban className="w-3 h-3" />
+              Blocked Breakdown
+            </h4>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs">Block Reason</TableHead>
+                  <TableHead className="text-xs text-right">Count</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {blocked.topReasons.map(({ reason, count }) => (
+                  <TableRow key={reason}>
+                    <TableCell className="text-xs">{formatBlockReason(reason)}</TableCell>
+                    <TableCell className="text-xs text-right text-destructive">{count}</TableCell>
+                  </TableRow>
+                ))}
+                {blocked.topReasons.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={2} className="text-xs text-center text-muted-foreground">
+                      No blocked attempts recorded
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+            {Object.keys(blocked.byStrategy).length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {Object.entries(blocked.byStrategy).slice(0, 5).map(([strategy, count]) => (
+                  <Badge key={strategy} variant="outline" className="text-[10px]">
+                    {formatStrategy(strategy)}: {count}
+                  </Badge>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
-        {(!metricsData?.totalAttempts || metricsData.totalAttempts === 0) && attempts.length === 0 && (
+        {/* J5.3 - Opened Summary Table */}
+        {opened && opened.totalOpened > 0 && (
+          <div>
+            <h4 className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-2">
+              <Target className="w-3 h-3" />
+              Opened Breakdown
+            </h4>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs">Strategy</TableHead>
+                  <TableHead className="text-xs text-right">Opened</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {opened.topStrategies.map(({ strategy, count }) => (
+                  <TableRow key={strategy}>
+                    <TableCell className="text-xs">{formatStrategy(strategy)}</TableCell>
+                    <TableCell className="text-xs text-right text-success">{count}</TableCell>
+                  </TableRow>
+                ))}
+                {opened.topStrategies.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={2} className="text-xs text-center text-muted-foreground">
+                      No opened trades recorded
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+            {opened.bySymbol.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                <span className="text-xs text-muted-foreground">Top Symbols:</span>
+                {opened.bySymbol.slice(0, 5).map(({ symbol, count }) => (
+                  <Badge key={symbol} variant="secondary" className="text-[10px]">
+                    {symbol}: {count}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {(!summary?.totalAttempts || summary.totalAttempts === 0) && (
           <div className="text-center py-6 text-muted-foreground">
             <Activity className="w-8 h-8 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">No execution attempts in the last 24 hours</p>
+            <p className="text-sm">No execution attempts recorded</p>
             <p className="text-xs">Trades will appear here when the engine processes signals</p>
           </div>
         )}
@@ -201,17 +280,17 @@ export function ExecutionMetricsPanel() {
 export function ExecutionMetricsCompact() {
   const { mode } = useTradingMode();
   
-  const { data: stats, isLoading } = useQuery<{ success: boolean; data: ExecutionStats }>({
-    queryKey: ['/api/metrics/execution-attempts/stats', mode],
+  const { data: rtbSummary, isLoading } = useQuery<{ success: boolean; data: RTBSummary }>({
+    queryKey: ['/api/metrics/rtb-summary', mode],
     queryFn: async () => {
-      const response = await fetch(`/api/metrics/execution-attempts/stats?mode=${mode}&hours=24`, {
+      const response = await fetch(`/api/metrics/rtb-summary?mode=${mode}`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
-      if (!response.ok) throw new Error('Failed to fetch execution stats');
+      if (!response.ok) throw new Error('Failed to fetch RTB summary');
       return response.json();
     },
-    refetchInterval: 60000,
-    staleTime: 30000,
+    refetchInterval: REFRESH_INTERVAL,
+    staleTime: REFRESH_INTERVAL / 2,
   });
 
   if (isLoading) {
@@ -224,29 +303,29 @@ export function ExecutionMetricsCompact() {
     );
   }
 
-  const metricsData = stats?.data;
+  const summary = rtbSummary?.data;
 
-  if (!metricsData || metricsData.totalAttempts === 0) {
+  if (!summary || summary.totalAttempts === 0) {
     return null;
   }
 
   return (
     <div className="flex items-center gap-4 text-xs py-2 border-t mt-4 pt-3">
-      <span className="text-muted-foreground">24h Execution:</span>
+      <span className="text-muted-foreground">RTB Execution:</span>
       <span className="flex items-center gap-1">
         <Activity className="w-3 h-3" />
-        {metricsData.totalAttempts} attempts
+        {summary.totalAttempts} attempts
       </span>
       <span className="flex items-center gap-1 text-success">
         <CheckCircle className="w-3 h-3" />
-        {metricsData.openedCount} opened
+        {summary.opened} opened
       </span>
       <span className="flex items-center gap-1 text-destructive">
         <XCircle className="w-3 h-3" />
-        {metricsData.blockedCount} blocked
+        {summary.blocked} blocked
       </span>
       <span className="flex items-center gap-1 text-primary">
-        ({((metricsData.openRate || 0) * 100).toFixed(0)}% open rate)
+        ({summary.openedRate}% open rate)
       </span>
     </div>
   );

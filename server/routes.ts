@@ -3612,6 +3612,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   // Trading Signals (Ready-to-Buy opportunities)
   // REB 8.8.3-E: Now returns real strategy signals from Active Filtered Pool pipeline
+  // Phase 8.8.3-J5: Added computed quantity field for RTB display
   apiRouter.get('/trading-signals', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
@@ -3624,6 +3625,50 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       });
       console.log('[Phase-27.F.15.B.1] Updated route /api/trading-signals → mode-based only');
       
+      // Phase 8.8.3-J5: Compute quantity for each signal based on position sizing
+      let portfolioValue = 50000;
+      const portfolioState = await storage.getPortfolioState({ mode });
+      if (portfolioState?.totalValue) {
+        const parsedValue = parseFloat(String(portfolioState.totalValue));
+        if (Number.isFinite(parsedValue) && parsedValue > 0) {
+          portfolioValue = parsedValue;
+        }
+      }
+      
+      // Phase 8.8.3-J5: Get risk per trade from guardrails (not deprecated getSettings)
+      const guardrails = await storage.getGuardrailsV2({ mode });
+      const riskPerTradePct = parseFloat(String(guardrails?.portfolioRiskPerTradePct || '1.50'));
+      const safeRiskPct = Number.isFinite(riskPerTradePct) && riskPerTradePct > 0 ? riskPerTradePct : 1.50;
+      const riskAmount = (portfolioValue * safeRiskPct) / 100;
+      
+      const signalsWithQuantity = signals.map(signal => {
+        const entryPrice = parseFloat(String(signal.entryPrice));
+        const stopPrice = parseFloat(String(signal.stopPrice));
+        const stopDistance = Math.abs(entryPrice - stopPrice);
+        
+        // Guard against invalid calculations (NaN/Infinity)
+        let quantity = 0;
+        let estimatedValue = 0;
+        
+        if (stopDistance > 0 && Number.isFinite(riskAmount) && Number.isFinite(entryPrice)) {
+          quantity = riskAmount / stopDistance;
+          if (Number.isFinite(quantity)) {
+            estimatedValue = quantity * entryPrice;
+            if (!Number.isFinite(estimatedValue)) {
+              estimatedValue = 0;
+            }
+          } else {
+            quantity = 0;
+          }
+        }
+        
+        return {
+          ...signal,
+          estimatedQuantity: quantity,
+          estimatedValue: estimatedValue
+        };
+      });
+      
       // REB 8.8.3-E: Debug logging for RTB API verification
       console.log('[8.8.3-E][RTB_API]', {
         mode,
@@ -3631,7 +3676,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         sample: signals.slice(0, 3).map(s => s.symbol),
       });
       
-      res.json(signals);
+      res.json(signalsWithQuantity);
     } catch (error) {
       console.error('Error fetching trading signals:', error);
       res.status(500).json({ error: 'Failed to fetch trading signals' });
@@ -10641,7 +10686,7 @@ Provide specific, actionable recommendations.`,
       const strategy = req.query.strategy as string | undefined;
       const decision = req.query.decision as 'BLOCKED' | 'OPENED' | undefined;
 
-      const attempts = await storage.getExecutionAttempts(mode, { limit, symbol, strategy, decision });
+      const attempts = await storage.getExecutionAttemptAudits(mode, { limit, symbol, strategy, decision });
       
       res.json({
         success: true,
@@ -10662,7 +10707,7 @@ Provide specific, actionable recommendations.`,
       const mode = (req.query.mode as 'live' | 'paper') || 'paper';
       const hours = parseInt(req.query.hours as string) || 24;
 
-      const stats = await storage.getExecutionAttemptStats(mode, hours);
+      const stats = await storage.getExecutionAttemptMetrics(mode);
       
       res.json({
         success: true,
@@ -10672,6 +10717,115 @@ Provide specific, actionable recommendations.`,
       });
     } catch (error: any) {
       console.error('[8.8.3-J] Error fetching execution attempt stats:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ===== PHASE 8.8.3-J5: RTB AGGREGATED EXECUTION METRICS =====
+  
+  // J5.1 - RTB Summary (overall execution attempt metrics)
+  apiRouter.get('/metrics/rtb-summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.query.mode as 'live' | 'paper') || 'paper';
+      const metrics = await storage.getExecutionAttemptMetrics(mode);
+      
+      res.json({
+        success: true,
+        data: {
+          totalAttempts: metrics.totalAttempts,
+          opened: metrics.opened,
+          blocked: metrics.blocked,
+          openedRate: metrics.totalAttempts > 0 ? ((metrics.opened / metrics.totalAttempts) * 100).toFixed(1) : '0.0',
+          blockedRate: metrics.totalAttempts > 0 ? ((metrics.blocked / metrics.totalAttempts) * 100).toFixed(1) : '0.0',
+          last24h: {
+            attempts: metrics.last24hAttempts,
+            opened: metrics.last24hOpened,
+            blocked: metrics.last24hBlocked
+          }
+        },
+        mode,
+        refreshedAt: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[8.8.3-J5] Error fetching RTB summary:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // J5.2 - RTB Blocked Summary (breakdown by block reason)
+  apiRouter.get('/metrics/rtb-blocked-summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.query.mode as 'live' | 'paper') || 'paper';
+      const metrics = await storage.getExecutionAttemptMetrics(mode);
+      const blockedAudits = await storage.getExecutionAttemptAudits(mode, { decision: 'BLOCKED', limit: 500 });
+      
+      const byStrategy: Record<string, number> = {};
+      blockedAudits.forEach(a => {
+        if (a.strategy) {
+          byStrategy[a.strategy] = (byStrategy[a.strategy] || 0) + 1;
+        }
+      });
+      
+      res.json({
+        success: true,
+        data: {
+          totalBlocked: metrics.blocked,
+          blockedLast24h: metrics.last24hBlocked,
+          byReason: metrics.blockedByReason,
+          byStrategy,
+          topReasons: Object.entries(metrics.blockedByReason)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([reason, count]) => ({ reason, count }))
+        },
+        mode,
+        refreshedAt: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[8.8.3-J5] Error fetching RTB blocked summary:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // J5.3 - RTB Opened Summary (breakdown by strategy for successful executions)
+  apiRouter.get('/metrics/rtb-opened-summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.query.mode as 'live' | 'paper') || 'paper';
+      const metrics = await storage.getExecutionAttemptMetrics(mode);
+      const openedAudits = await storage.getExecutionAttemptAudits(mode, { decision: 'OPENED', limit: 500 });
+      
+      const byStrategy: Record<string, number> = {};
+      const bySymbol: Record<string, number> = {};
+      
+      openedAudits.forEach(a => {
+        if (a.strategy) {
+          byStrategy[a.strategy] = (byStrategy[a.strategy] || 0) + 1;
+        }
+        if (a.symbol) {
+          bySymbol[a.symbol] = (bySymbol[a.symbol] || 0) + 1;
+        }
+      });
+      
+      res.json({
+        success: true,
+        data: {
+          totalOpened: metrics.opened,
+          openedLast24h: metrics.last24hOpened,
+          byStrategy,
+          bySymbol: Object.entries(bySymbol)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10)
+            .map(([symbol, count]) => ({ symbol, count })),
+          topStrategies: Object.entries(byStrategy)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([strategy, count]) => ({ strategy, count }))
+        },
+        mode,
+        refreshedAt: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[8.8.3-J5] Error fetching RTB opened summary:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   });

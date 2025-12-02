@@ -21,6 +21,8 @@ interface TradingSignal {
   dailyRange: number | null;
   status: 'active' | 'expired' | 'executed';
   detectedAt: string;
+  estimatedQuantity?: number;
+  estimatedValue?: number;
 }
 
 interface TradingSignalsResponse {
@@ -28,7 +30,7 @@ interface TradingSignalsResponse {
   timestamp: string;
 }
 
-type SortField = 'symbol' | 'volume' | 'price' | 'vwap' | 'range' | 'strategy' | 'entry' | 'target' | 'stop' | 'confidence';
+type SortField = 'symbol' | 'volume' | 'price' | 'vwap' | 'range' | 'strategy' | 'entry' | 'target' | 'stop' | 'confidence' | 'quantity';
 type SortDirection = 'asc' | 'desc';
 
 export default function ReadyToBuyTable() {
@@ -105,6 +107,10 @@ export default function ReadyToBuyTable() {
       case 'confidence':
         aValue = a.confidence;
         bValue = b.confidence;
+        break;
+      case 'quantity':
+        aValue = a.estimatedQuantity || 0;
+        bValue = b.estimatedQuantity || 0;
         break;
       default:
         aValue = 0;
@@ -203,6 +209,7 @@ export default function ReadyToBuyTable() {
                   <SortHeader field="entry" label="Entry" />
                   <SortHeader field="target" label="Target" />
                   <SortHeader field="stop" label="Stop" />
+                  <SortHeader field="quantity" label="Qty" />
                   <SortHeader field="confidence" label="Confidence" />
                 </tr>
               </thead>
@@ -291,6 +298,19 @@ export default function ReadyToBuyTable() {
                           </span>
                           {!isNaN(riskPercent) && (
                             <span className="text-xs text-destructive">-{riskPercent.toFixed(1)}%</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="text-right py-3 px-3" data-testid={`text-quantity-${index}`}>
+                        <div className="flex flex-col items-end">
+                          <span className="font-mono">
+                            {signal.estimatedQuantity !== undefined && !isNaN(signal.estimatedQuantity)
+                              ? signal.estimatedQuantity.toFixed(signal.estimatedQuantity < 1 ? 6 : 2)
+                              : '—'
+                            }
+                          </span>
+                          {signal.estimatedValue !== undefined && !isNaN(signal.estimatedValue) && (
+                            <span className="text-xs text-muted-foreground">${signal.estimatedValue.toFixed(0)}</span>
                           )}
                         </div>
                       </td>

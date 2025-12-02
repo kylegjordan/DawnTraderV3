@@ -1,0 +1,257 @@
+✅ Updated Phase 8.8.3-J5 — RTB Aggregated Execution Metrics Implementation Directive
+
+Purpose:
+Implement three new aggregated metrics tables for Ready-To-Buy (RTB), remove the old “attempt list” table UI, keep the backend audit table intact, and add the quantity column to RTB signals.
+
+Test Credentials:
+
+username: testuser123
+password: SecurePass123!
+
+📌 STRICT CONSTRAINTS
+
+These are unchanged, but reaffirmed:
+
+NO behavior changes to strategy → RTB → execution → guardrails → FX5 → passive mode.
+
+NO activation of ANY legacy code (especially V1/V2).
+
+NO change to future-state architecture.
+
+All new data must come ONLY from the audit table:
+→ execution_attempt_audit
+
+UI-only changes plus new READ-ONLY APIs.
+
+If Replit identifies any need for behavior change, STOP and report before implementing.
+
+❗ NEW REQUIREMENT (MUST BE DONE IN J5)
+🔥 REMOVE/REPLACE the Existing “Execution Attempt List” UI Table
+
+The UI panel that currently:
+
+Flickers in/out
+
+Shows every individual trade attempt
+
+Lists symbol/decision rows
+
+…must be hidden or removed entirely.
+
+BUT:
+
+✔ The backend audit database table stays (DO NOT remove it!)
+✔ The top row “summary metrics” stays
+✔ All new aggregated tables must pull from that same audit table
+
+This ensures:
+
+No duplication
+
+No flickering
+
+No UI clutter
+
+No wasteful polling
+
+Backend remains fully instrumented for future debugging
+
+📊 WHAT TO IMPLEMENT IN J5
+1. Three Aggregated Metrics Tables
+
+(Placed below the RTB active signals list.)
+
+1️⃣ RTB → Execution Outcome Summary
+
+Total RTB signals (from audit table)
+
+Total Opened
+
+Total Blocked
+
+Must satisfy: Opened + Blocked = Total
+
+2️⃣ Blocked Reasons Summary
+
+Break down:
+
+Low Price Threshold
+
+Min Stop Distance
+
+Position Too Large
+
+Risk Too High
+
+Cooldown
+
+Missing Market Data
+
+FX Failure
+
+Other
+
+Total must match “Total Blocked”
+
+3️⃣ Opened Strategy Summary
+
+Break down:
+
+VWAP Pullback
+
+ABCD Long
+
+SMA Trend Ride
+
+Breakout
+
+Mean Reversion
+
+Range Trading
+
+VWAP Bounce
+
+Liquidity Trap
+
+DHMA
+
+Total must match “Total Opened”
+
+Defaults:
+
+Aggregation: Last 24 hours
+
+Refresh: Every 30 seconds
+
+User may select: date range
+
+2. Quantity Column in RTB Live Table
+
+Add between Entry and Target
+
+Pull from:
+
+The quantity calculated by the strategy when the RTB signal was created
+
+If unavailable in RTB storage, derive from strategy-config logic (no behavior change)
+
+3. Remove the Old Execution Attempt List UI
+
+UI Components to remove or hide:
+
+The table inside ExecutionMetricsPanel showing per-signal rows
+
+Any map loop rendering lists of individual attempts
+
+Any “recent attempts list” section
+
+Keep:
+
+The four-value summary row
+
+Backend:
+
+KEEP execution_attempt_audit storage logic exactly as-is
+
+KEEP logging (for P2/P3 diagnostics)
+
+4. New API Endpoints
+
+Read-only, serving aggregated metrics:
+
+GET /api/metrics/rtb-summary
+GET /api/metrics/rtb-blocked-summary
+GET /api/metrics/rtb-opened-summary
+
+
+Params:
+
+mode (paper/live)
+
+start, end
+
+Must use execution_attempt_audit only
+
+5. Frontend Requirements
+
+All three tables:
+
+Refresh every 30s
+
+No flicker
+
+No scroll jump
+
+No full-page re-render
+
+Must fetch only their own queries
+
+Must not trigger global invalidation
+
+6. Testing Required
+
+Replit must complete all:
+
+Backend:
+
+Verify all three endpoints return correct totals matching raw audit entries
+
+Confirm no behavior changed in execution engine
+
+Confirm all 9 strategies still fire at P2
+
+UI:
+
+Login with test creds
+
+Start/stop trading
+
+Observe RTB list
+
+Confirm quantity column appears
+
+Confirm three aggregated tables appear
+
+Confirm values update every 30 seconds
+
+Confirm no Execution Attempt List is visible
+
+Confirm summary row still visible
+
+Architecture:
+
+Verify zero legacy V1/V2 reactivation
+
+Verify we did not break passive mode, FX5, RTB TTL logic
+
+7. STOP Conditions
+
+Replit must pause and notify before proceeding if it detects:
+
+missing fields in audit table
+
+unexpected strategy IDs
+
+inconsistent block_reason values
+
+quantity not present in RTB payloads
+
+a behavior change being required
+
+anything that affects execution or guardrails
+
+📁 Required Deliverables Post-Implementation
+
+Updated UI components
+
+New API endpoints
+
+Screenshots with sample data
+
+Architect review
+
+E2E test playback
+
+Console log showing no regressions
+
+Confirmation that old attempt list UI is removed/hidden
