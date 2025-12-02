@@ -1,0 +1,393 @@
+📘 Phase 8.8.3-J – Execution Attempt Metrics & RTB/Execution Diagnostics
+
+Goal:
+Add transparent, read-only diagnostics that explain:
+
+Why Active Filter Pool → RTB transitions fail or succeed
+
+Why RTB → Active Trade execution attempts fail or succeed
+
+Do this without changing any existing trading behavior, thresholds, or logic, and without re-enabling any legacy or hidden systems.
+
+Absolutely no behavior changes to:
+
+Guardrails logic
+
+Strategy Engine
+
+FX5 filters
+
+LPCP rules
+
+Kill switch behavior
+
+Position sizing logic
+
+This phase is metrics & logging only.
+
+J.0 – Constraints & Safety Rails (Must Read First)
+
+No scope creep / surprises
+
+Implement only what’s described below.
+
+If you believe the plan must change (e.g., you discover a structural issue that requires more than logging), stop and report:
+
+What you found
+
+Why it matters
+
+What you propose
+
+Do not implement the extra change until Kyle explicitly approves.
+
+Do NOT re-enable any legacy systems
+
+Do NOT re-enable or newly wire:
+
+RiskManager (legacy risk-manager.ts)
+
+SafetyGuardrails as an active blocker
+
+Walter as a trade-controlling entity
+
+Any old V1 risk logic
+
+Guardrails-driven risk must remain sole enforcement path via:
+
+guardrail-settings.ts
+
+trade-safety.ts → checkGuardrailRisk()
+
+Trading behavior must remain identical
+
+A signal that would have been blocked before J must still be blocked after J.
+
+A trade that would have opened must still open.
+
+J is purely observational: new logging, tables, and APIs, nothing more.
+
+Strategy count sanity check
+
+As part of this phase:
+
+Log the strategy catalog from the live Strategy Engine (the one used to produce RTB signals).
+
+Confirm that there are 9 strategies, including DHMA.
+
+If you find only 8 or any mismatch:
+
+Do not “fix” it silently.
+
+Document exactly what you see and stop for Kyle’s approval before changing anything.
+
+Test user credentials
+
+For all UI/E2E checks, use:
+
+username: testuser123
+
+password: SecurePass123!
+
+J.1 – Backend Audit: Where to Tap for Metrics
+
+Audit (read-only) these files to understand the current flow:
+
+server/services/fx5-scanner.ts
+
+server/services/active-filter-pool.ts
+
+server/services/paper-execution-engine.ts
+
+server/services/trade-executor.ts
+
+server/services/trade-safety.ts (guardrail risk checks)
+
+server/storage.ts (RTB signals, active trades, positions)
+
+Identify three key decision points (no code changes yet):
+
+P1 – Active Filter Pool → RTB
+
+Where a filtered symbol can become a Ready-to-Buy signal.
+
+Where rejection reasons (e.g., “no strategy fired”) live or can be inferred.
+
+P2 – RTB → Execution Attempt
+
+Where the engine decides: “Take this RTB signal and attempt a trade now.”
+
+P3 – Execution Attempt → Opened / Blocked
+
+Where checkGuardrailRisk() and other validations decide:
+
+OPENED (trade created)
+
+BLOCKED (and why: guardrail violation, LPCP, data missing, etc.)
+
+From this, produce in the audit doc:
+
+A short text description of the existing flow:
+
+FX5 → Active Pool → Strategy Evaluation → RTB → Execution Attempt → Trade Opened/Rejected.
+
+Confirm which functions you’ll hook into for logging only at P1, P2, P3.
+
+J.2 – New Schema: Execution Attempt Audit Table
+
+Create a lightweight, append-only table for execution diagnostics. You may name it, for example:
+
+execution_attempt_audit
+
+Define fields (adjust naming to fit existing conventions, but keep semantics):
+
+id – primary key (UUID or serial)
+
+created_at – timestamp with timezone
+
+mode – paper | live
+
+symbol – text (e.g., XDGUSD)
+
+strategy – text (e.g., vwap_pullback, dhma, etc.)
+
+signal_id – nullable text/UUID linking to RTB signal if available
+
+decision – enum: OPENED | BLOCKED
+
+block_reason – enum with a small, clear set of categories, for example:
+
+GUARDRAIL_MAX_POSITIONS
+
+GUARDRAIL_DAILY_LOSS_KILL_SWITCH
+
+GUARDRAIL_RISK_PCT_TOO_HIGH
+
+GUARDRAIL_MAX_POSITION_PCT
+
+GUARDRAIL_COOLDOWN
+
+LPCP_LOW_PRICE_OR_STOP_TOO_TIGHT
+
+LPCP_MIN_NOTIONAL
+
+DATA_NO_ENTRY_PRICE
+
+DATA_NO_STOP_OR_TARGET
+
+DATA_MISSING_CANDLES
+
+DATA_INVALID_SPREAD
+
+ENGINE_INTERNAL_ERROR
+
+OTHER
+
+block_detail – text or JSONB with a human-readable explanation (e.g., “Position size 364% > 30% cap ($3,000.00)”).
+
+portfolio_value – numeric (snapshot at attempt time)
+
+risk_amount – numeric (calculated risk per trade, if available)
+
+Important: This table is strictly diagnostic. No code is allowed to read from it to make trading decisions.
+
+J.3 – Backend Wiring: Logging Only (NO Behavior Changes)
+
+P3 – Execution Attempt Logging (high priority)
+
+In the code path where:
+
+A trade opens successfully
+
+Or checkGuardrailRisk() (or equivalent) blocks the trade
+
+Add a non-blocking write to execution_attempt_audit:
+
+On success (OPENED):
+
+Record: OPENED, symbol, strategy, mode, portfolio snapshot, risk amount, etc.
+
+On block (BLOCKED):
+
+Map the guardrail/LPCP/data error to one of the block_reason enum values.
+
+Fill block_detail with the existing log message or a concise summary.
+
+Non-blocking requirement:
+
+Wrap the insert in a try/catch:
+
+If the insert fails (DB down, etc.), do not change the trading decision.
+
+Log a warning with [8.8.3-J][EXEC_METRICS_WRITE_FAILED] and continue.
+
+P2 – RTB → Execution Attempt Summary (optional but useful)
+
+If there is a clean, central location where the engine decides which RTB signals to attempt in this cycle, you may add:
+
+A light counter or logging (no schema change required) that later feeds a metrics view like:
+
+“RTB signals available vs. RTB signals attempted vs. RTB signals skipped”.
+
+If this requires structural changes, stop and report before doing it.
+
+No changes to existing validation logic
+
+You must not:
+
+Add new guardrail conditions
+
+Tighten or relax LPCP logic
+
+Change risk formulas
+
+Change how position size is computed
+
+You’re only observing outcomes that already happen.
+
+J.4 – API: Read-Only Execution Metrics Endpoint
+
+Add an internal API for the UI to query the new diagnostics, for example:
+
+GET /api/trading-metrics/execution-attempts
+
+Query parameters:
+
+mode – required: paper | live
+
+since – optional ISO timestamp (default: now − 24h)
+
+limit – paging (e.g., default 100, max 500)
+
+decision – optional filter: OPENED | BLOCKED
+
+block_reason – optional filter
+
+Response (example shape):
+
+{
+  "items": [
+    {
+      "timestamp": "2025-12-02T11:45:21Z",
+      "symbol": "XDGUSD",
+      "strategy": "vwap_pullback",
+      "decision": "BLOCKED",
+      "block_reason": "GUARDRAIL_MAX_POSITION_PCT",
+      "block_detail": "Position size 364% > 30% cap ($3000.00)",
+      "portfolio_value": 10000.0,
+      "risk_amount": 400.0
+    }
+  ],
+  "summary": {
+    "total_attempts": 42,
+    "opened": 3,
+    "blocked": 39,
+    "by_reason": {
+      "GUARDRAIL_MAX_POSITION_PCT": 27,
+      "LPCP_LOW_PRICE_OR_STOP_TOO_TIGHT": 8,
+      "DATA_MISSING_CANDLES": 4
+    }
+  }
+}
+
+
+Important:
+This endpoint must be read-only. It must not trigger any trading actions.
+
+J.5 – UI: Metrics Surfaces (Lightweight Tables & Counters)
+
+Active Trades tab – Execution Attempt Metrics Panel
+
+Add a panel (could be collapsible) such as:
+
+Header: “Execution Attempt Metrics (Last 24h)”
+
+High-level counters:
+
+Total attempts
+
+Opened
+
+Blocked
+
+Top reasons table (aggregated):
+
+Reason
+
+Count
+
+Percent of blocked
+
+Recent attempts table (last N rows):
+
+Time
+
+Symbol
+
+Strategy
+
+Decision (Opened/Blocked)
+
+Block Reason
+
+Ready-to-Buy tab – Simple Summary Tile
+
+Add a small summary box, e.g.:
+
+“Last 24h: X RTB signals, Y execution attempts, Z trades opened, W blocked.”
+
+Use the API above; do not create new business logic.
+
+Filter Insights tab
+
+For J, keep it minimal. If you need to surface anything here, reuse aggregated data, don’t add heavy new logic.
+
+J.6 – Tests & Verification
+
+Using testuser123 / SecurePass123!:
+
+Backend sanity
+
+Start paper trading.
+
+Let it run long enough to accumulate at least some RTB signals and execution attempts (even if all blocked).
+
+Verify:
+
+Records appear in execution_attempt_audit.
+
+block_reason values match the expected guardrail/LPCP/data scenarios.
+
+API
+
+Call GET /api/trading-metrics/execution-attempts?mode=paper.
+
+Verify:
+
+No errors
+
+Summary aggregates match row data
+
+Filters (decision, block_reason) work.
+
+UI
+
+Log in → Trading page → Active Trades tab → confirm the new metrics panel loads and updates without freezing or breaking existing UI.
+
+Switch between tabs (Ready-to-Buy / Filter Insights / Active Trades) and confirm metrics continue to update correctly.
+
+Confirm there are no new warnings or errors related to:
+
+RiskManager
+
+SafetyGuardrails blocking trading
+
+Walter attempting to control risk or kill switches
+
+Strategy count check
+
+As part of the test logs, print a single diagnostic line (tagged [8.8.3-J][STRATEGY_CATALOG]) that lists the strategies the live Strategy Engine sees and uses for RTB.
+
+Confirm there are 9 strategies including DHMA.
+
+If there are only 8, stop and report, no “auto-fixing.”
