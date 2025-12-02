@@ -558,6 +558,56 @@ export class PaperExecutionEngine {
       signals.push(smaSignal);
     }
 
+    // [8.8.3-J4] Phase J4.2: Add missing 6 strategies for full coverage
+    // Breakout Strategy
+    const breakoutSignal = this.strategyEngine.detectBreakout(priceData, {});
+    if (breakoutSignal) {
+      breakoutSignal.symbol = symbol;
+      signals.push(breakoutSignal);
+    }
+
+    // Mean Reversion Strategy
+    const meanReversionSignal = this.strategyEngine.detectMeanReversion(indicators, priceData, {});
+    if (meanReversionSignal) {
+      meanReversionSignal.symbol = symbol;
+      signals.push(meanReversionSignal);
+    }
+
+    // Range Trading Strategy
+    const rangeTradingSignal = this.strategyEngine.detectRangeTrading(priceData, {});
+    if (rangeTradingSignal) {
+      rangeTradingSignal.symbol = symbol;
+      signals.push(rangeTradingSignal);
+    }
+
+    // VWAP Bounce Strategy
+    const vwapBounceSignal = this.strategyEngine.detectVWAPBounce(indicators, priceData, {});
+    if (vwapBounceSignal) {
+      vwapBounceSignal.symbol = symbol;
+      signals.push(vwapBounceSignal);
+    }
+
+    // Liquidity Trap Strategy
+    const liquidityTrapSignal = this.strategyEngine.detectLiquidityTrap(priceData, {});
+    if (liquidityTrapSignal) {
+      liquidityTrapSignal.symbol = symbol;
+      signals.push(liquidityTrapSignal);
+    }
+
+    // DHMA Strategy
+    const dhmaSignal = this.strategyEngine.detectDHMA(indicators, priceData, {});
+    if (dhmaSignal) {
+      dhmaSignal.symbol = symbol;
+      signals.push(dhmaSignal);
+    }
+
+    // [8.8.3-J4][EXEC_DIAG] Phase J4.5: Diagnostic log for strategy evaluation
+    console.log(`[8.8.3-J4][EXEC_DIAG] Symbol ${symbol} evaluated: ${signals.length}/9 strategies produced signals`);
+    if (signals.length > 0) {
+      const strategyList = signals.map(s => `${s.strategy}(${(s.confidence * 100).toFixed(0)}%)`).join(', ');
+      console.log(`[8.8.3-J4][EXEC_DIAG] Signals: ${strategyList}`);
+    }
+
     // Execute the highest confidence signal
     if (signals.length > 0) {
       const bestSignal = signals.reduce((prev, current) => 
