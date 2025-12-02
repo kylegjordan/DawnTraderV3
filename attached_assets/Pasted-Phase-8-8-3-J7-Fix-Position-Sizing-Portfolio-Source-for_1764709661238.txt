@@ -1,0 +1,303 @@
+Phase 8.8.3-J7 – Fix Position Sizing & Portfolio Source for RTB Signals (Paper Mode Only)
+
+High-level goal
+
+Make Ready-to-Buy signals use correct, realistic position sizing based on the actual paper portfolio value and guardrailsV2, so that:
+
+Quantities and $ values in the RTB table are realistic.
+
+MAX_POSITION (and other guardrails) don’t fire 100% of the time just because sizing is absurd.
+
+Execution metrics (attempts, blocked, opened) become meaningful.
+
+This phase is still part of the J-series diagnostics/fixes. It should not introduce any new strategies, filters, or behavioral templates.
+
+J7.0 – Constraints & Non-Goals
+
+Paper mode only for now
+
+All code changes in this phase must affect paper mode only.
+
+Do not change live-mode sizing/behavior yet (that will be a later phase).
+
+No legacy risk modules
+
+Do not re-introduce or touch any legacy “Risk Manager” modules (e.g. risk-manager.ts, old getSettings calls, or anything purged in Phase 41F-L.E2E-PURGE).
+
+All risk / sizing logic must rely on the existing guardrailsV2 config and the canonical paper-portfolio source.
+
+No new guardrails or strategy logic
+
+We are not changing strategy internals (how entries, targets, stops, or confidence are computed).
+
+We are not changing guardrails semantics (kill-switches, maxPosition, low-price rules, etc.) at P3.
+
+We are only:
+
+fixing where the portfolio value comes from, and
+
+where and how the sizing calculation is applied.
+
+J7 may change behavior
+
+Unlike J5/J6, J7 is allowed to change runtime behavior in paper mode (i.e., quantities will shrink; some trades may actually open).
+
+But changes must stay within the existing architecture and future-state blueprint (no patchwork side-systems).
+
+J7.1 – Paper-Mode Portfolio Source Audit (Single Source of Truth)
+
+Goal: RTB quantity/value sizing must use the same paper portfolio value that powers the paper‐mode Dashboard Overview (total portfolio value).
+
+Locate the canonical paper portfolio source used by the dashboard in paper mode:
+
+The value that reflects:
+
+Initial portfolio amount when a new simulation is started, or
+
+The persisted balance when continuing an existing simulation.
+
+This is the same value that was aligned across the UI back on 2025-11-30 (per chat archive).
+
+Document this in docs/audits/phase_8.8.3-J7_position_sizing.md:
+
+File(s) and function(s) that:
+
+Load the paper portfolio when a simulation starts.
+
+Persist and update the portfolio after simulated trades.
+
+Confirm there is no hard-coded $50,000 or similar fallback anywhere in the paper-mode pipeline.
+
+If you find any hard-coded portfolio fallbacks for paper mode (e.g. 50000, DEFAULT_PORTFOLIO_VALUE, etc.):
+
+Remove them and wire the logic to always use the canonical paper-mode portfolio value from step 1.
+
+There should never be a “can’t find portfolio, default to 50k” scenario in paper mode.
+
+If there is a genuine error reading the portfolio, fail loudly in logs instead of silently defaulting.
+
+Important: All paper-mode sizing must ultimately flow from this single paper-portfolio source. Do not derive a separate “shadow” portfolio for RTB sizing.
+
+J7.2 – Introduce a Paper-Mode Position Sizing Helper at P2
+
+Goal: Add a pure sizing helper that runs during signal generation (P2), not at execution (P3).
+
+Create a helper in an appropriate place (e.g. server/services/paper-position-sizing.ts or a similar module):
+
+// Pseudocode signature – adjust types as needed
+export function sizePaperPositionForSignal(params: {
+  portfolioValue: number;         // from canonical paper portfolio source
+  guardrails: GuardrailsV2;      // current guardrailsV2 for paper mode
+  entryPrice: number;
+  stopPrice: number;
+  symbol: string;
+  strategy: StrategyId;          // one of the 9 strategies
+  mode: 'paper';
+}): {
+  quantity: number;              // integer size
+  estimatedValue: number;        // quantity * entryPrice
+}
+
+
+Requirements for the helper:
+
+Pure function:
+
+No DB calls.
+
+No network calls.
+
+No filesystem access.
+
+Uses:
+
+portfolioRiskPerTradePct and maxPositionPercentPct from guardrailsV2.
+
+Low-priced coin protections already defined in guardrailsV2 (thresholds for price, etc.).
+
+High-level logic (you can choose exact implementation, but please document it):
+
+Compute a risk amount based on portfolio and portfolioRiskPerTradePct.
+
+Use the distance between entry and stop to estimate a maximum size consistent with that risk.
+
+Clamp by maxPositionPercentPct on notional value.
+
+Apply any special rules for low-priced coins from guardrailsV2.
+
+If input is malformed (NaN, 0, negative stop distance, etc.):
+
+Return { quantity: 0, estimatedValue: 0 }.
+
+Do not throw; we will handle that at P3 with normal block reasons.
+
+Sizing should be performed once per candidate signal at P2 and then stored with the signal (see J7.3).
+It should not be recomputed later in trading-signals or at P3.
+
+J7.3 – Apply Sizing During Signal Generation (P2) and Store It on RTB Signals
+
+Goal: When a strategy generates a signal, that signal already has a sane quantity & estimated value.
+
+In the strategy→RTB pipeline (likely in strategy-engine.ts and/or paper-execution-engine.ts where P2 lives):
+
+At the start of each FX5 scan cycle in paper mode:
+
+Load once:
+
+The canonical portfolioValue for paper mode (from J7.1).
+
+The current guardrailsV2 for paper mode.
+
+Pass these into strategy evaluation as a “cycle context” so we don’t hit the DB repeatedly.
+
+When any of the 9 strategies emits a candidate RTB signal:
+
+After computing entry, target, and stop, call the sizing helper:
+
+const { quantity, estimatedValue } = sizePaperPositionForSignal({
+  portfolioValue,
+  guardrails,
+  entryPrice: entry,
+  stopPrice: stop,
+  symbol,
+  strategy,
+  mode: 'paper',
+});
+
+
+Attach these fields to the RTB signal before it is saved:
+
+{
+  ...existingSignalFields,
+  quantity,
+  estimatedValue,
+}
+
+
+Ensure the RTB store (Redis / in-memory / DB, wherever it lives now) persists quantity and estimatedValue along with other fields for that signal.
+
+The /api/trading-signals endpoint should read these stored values and just return them; it should no longer perform its own portfolio-based sizing calculation for paper mode.
+
+J7.4 – Execution Phase (P3) Must Use the Pre-Sized Quantity
+
+Goal: Keep P3 logic focused on guardrail decisions, not on recalculating quantity.
+
+In paper-execution-engine.ts (or the module responsible for P3 execution attempts):
+
+When evaluating a signal for execution:
+
+Use the stored quantity and estimatedValue from the signal.
+
+Do not recompute new quantities at P3 for paper mode.
+
+Guardrails should still be checked at P3 using current portfolio and price data:
+
+If the pre-sized quantity now violates risk or maxPosition (due to portfolio changes or price drift), the trade can still be blocked with the appropriate block reason (e.g., MAX_POSITION).
+
+That is expected behavior and is different from the previous “everything is absurdly huge” problem.
+
+Verify that:
+
+execution_attempt_audit logs attempts with the correct quantity and block reasons.
+
+RTB metrics (summary + blocked breakdown) now reflect more sensible numbers over time.
+
+J7.5 – Engine-Gated RTB Metrics Logging (24h Window)
+
+This is the part we previously discussed as “Option 1 (engine-gated logging).”
+
+Goal: RTB execution metrics should only accumulate while the engine is ACTIVE, similar to Filter Insights.
+
+In the code that writes to execution_attempt_audit:
+
+Add a check using the canonical engine state (whatever is used for FX5 / Filter Insights):
+
+Only record a row when isEngineActive === true for the given mode.
+
+When Trading = STOPPED:
+
+Do not log new attempts into execution_attempt_audit.
+
+This will make RTB “Last 24h” counters behave like Filter Insights:
+
+When you stop trading, no new rows are logged.
+
+After ~24h of inactivity the “Last 24h” metrics naturally decay to zero.
+
+Do not change existing SQL schema or delete old records in this phase.
+
+We just want the write gating, not a full “reset” mechanism yet.
+
+Update the J-series docs (probably in phase_8.8.3-J5_rtb_aggregated_metrics.md or new J7 doc) to note:
+
+That RTB metrics are now engine-gated.
+
+Any remaining discrepancies vs Filter Insights, if there are any.
+
+J7.6 – Testing & Verification
+
+Please perform and document all of the following (using testuser123 / SecurePass123! in paper mode):
+
+Portfolio source correctness
+
+Start a new paper simulation with a non-default value (e.g. $847 as in my screenshot).
+
+Confirm via logs / code inspection that the sizing helper receives this exact portfolio value.
+
+Confirm there is no hard-coded $50k or other fallback in the paper path.
+
+Reasonable quantities
+
+Let the engine run for 2–3 cycles in paper mode.
+
+Inspect a few RTB signals in the UI:
+
+Quantity and $ value should be orders of magnitude smaller than the old millions / six-figure values.
+
+They should be in the general range consistent with portfolioValue * portfolioRiskPerTradePct and maxPositionPercentPct.
+
+Execution metrics sanity
+
+Let trading run for a while and watch the RTB Execution Metrics:
+
+Attempts (Last 24h) count should grow at a rate that roughly matches:
+
+[Active Filter Pool size] × [number of strategies] × [cycles per hour], but with obvious reductions once the guardrails start blocking some candidates before they ever become full attempts.
+
+Blocked reasons should now be meaningful:
+
+MAX_POSITION may still be common, but not 100% of attempts.
+
+Other reasons (invalid stop, FX conversion, etc.) should appear where appropriate.
+
+Engine-gated metrics
+
+While trading is running, note the “Last 24h Attempts” value.
+
+Stop trading:
+
+Confirm no new rows are written to execution_attempt_audit while stopped.
+
+Start again:
+
+Confirm logging resumes.
+
+Docs
+
+Create docs/audits/phase_8.8.3-J7_position_sizing.md with:
+
+Portfolio source mapping (paper mode).
+
+Sizing helper behavior (inputs, outputs, formulas, constraints).
+
+Verification steps and screenshots / log excerpts.
+
+If any unexpected architectural issues come up (e.g. you discover a second hidden portfolio store, or some legacy risk utility still being invoked), pause before implementing workarounds, update the J7 audit doc, and explain:
+
+What you found.
+
+Why it matters.
+
+What change you propose.
+
+Then wait for my confirmation before proceeding with anything that deviates from this directive.

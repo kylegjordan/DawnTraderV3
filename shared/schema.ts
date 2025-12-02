@@ -524,6 +524,8 @@ export const tradingSignals = pgTable("trading_signals", {
   expiresAt: timestamp("expires_at", { withTimezone: true }), // Signals expire after certain time
   executedAt: timestamp("executed_at", { withTimezone: true }),
   metadata: jsonb("metadata"), // Additional signal context (technical indicators, etc.)
+  quantity: decimal("quantity", { precision: 20, scale: 8 }), // Phase 8.8.3-J7: Pre-computed position size
+  estimatedValue: decimal("estimated_value", { precision: 20, scale: 2 }), // Phase 8.8.3-J7: Pre-computed notional value
 }, (table) => ({
   modeStatusIdx: index("trading_signals_mode_status_idx").on(table.mode, table.status),
   symbolStrategyIdx: index("trading_signals_symbol_strategy_idx").on(table.symbol, table.strategy),
