@@ -601,13 +601,6 @@ export class PaperExecutionEngine {
       signals.push(dhmaSignal);
     }
 
-    // [8.8.3-J4][EXEC_DIAG] Phase J4.5: Diagnostic log for strategy evaluation
-    console.log(`[8.8.3-J4][EXEC_DIAG] Symbol ${symbol} evaluated: ${signals.length}/9 strategies produced signals`);
-    if (signals.length > 0) {
-      const strategyList = signals.map(s => `${s.strategy}(${(s.confidence * 100).toFixed(0)}%)`).join(', ');
-      console.log(`[8.8.3-J4][EXEC_DIAG] Signals: ${strategyList}`);
-    }
-
     // Execute the highest confidence signal
     if (signals.length > 0) {
       const bestSignal = signals.reduce((prev, current) => 
