@@ -96,9 +96,11 @@ function normalizeSymbol(symbol: string): string {
 /**
  * Check 1: Kill Switch
  * Guardrail: killSwitchTripped (boolean)
+ * Phase 8.8.3-H7: Added audit logging to align with SafetyGuardrails event structure
  */
-function checkKillSwitch(settings: TradingSettings): TradeSafetyResult {
+function checkKillSwitch(settings: TradingSettings, mode: 'paper' | 'live' = 'paper', symbol?: string): TradeSafetyResult {
   if ((settings as any).killSwitchTripped) {
+    console.log(`[8.8.3-H7][KILL_SWITCH_BLOCKED] {mode:"${mode}", symbol:"${symbol || 'unknown'}", source:"trade-safety", reason:"kill_switch_tripped"}`);
     return {
       ok: false,
       code: 'KILL_SWITCH',
@@ -405,7 +407,7 @@ export async function checkGuardrailRisk(
   
   const settings = await buildSettingsFromGuardrails(mode, userId);
   
-  const killSwitchCheck = checkKillSwitch(settings);
+  const killSwitchCheck = checkKillSwitch(settings, mode, trade.symbol);
   if (!killSwitchCheck.ok) return killSwitchCheck;
   
   const stopLossCheck = checkStopLossRequired(trade);

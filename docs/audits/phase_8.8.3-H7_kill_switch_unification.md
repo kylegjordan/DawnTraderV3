@@ -100,6 +100,22 @@ if (safetyEval.policyHits.includes('KILL_SWITCH')) {
 - `trade-executor.ts`: Clean
 - `trade-safety.ts`: Uses `checkGuardrailRisk()` which uses guardrails_v2
 
+### H7.5b: Audit Logging Alignment
+**File**: `server/services/trade-safety.ts`
+
+Added kill switch audit logging to `checkKillSwitch()` function to align with SafetyGuardrails event structure:
+
+```typescript
+function checkKillSwitch(settings: TradingSettings, mode: 'paper' | 'live' = 'paper', symbol?: string): TradeSafetyResult {
+  if ((settings as any).killSwitchTripped) {
+    console.log(`[8.8.3-H7][KILL_SWITCH_BLOCKED] {mode:"${mode}", symbol:"${symbol || 'unknown'}", source:"trade-safety", reason:"kill_switch_tripped"}`);
+    // ...
+  }
+}
+```
+
+**Rationale**: Per architect recommendation, both trade execution and autonomy paths now emit consistent kill switch audit events, enabling unified log analysis without performance impact of full SafetyGuardrails policy evaluation in the hot trade path.
+
 ### H7.5: Runtime Verification
 **Log Evidence** (Dec 2, 2025 06:07 UTC):
 ```
