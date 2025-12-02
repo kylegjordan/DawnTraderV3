@@ -305,12 +305,17 @@ export default function ReadyToBuyTable() {
                         <div className="flex flex-col items-end">
                           <span className="font-mono">
                             {signal.estimatedQuantity !== undefined && !isNaN(signal.estimatedQuantity)
-                              ? signal.estimatedQuantity.toFixed(signal.estimatedQuantity < 1 ? 6 : 2)
+                              ? new Intl.NumberFormat('en-US', { 
+                                  minimumFractionDigits: signal.estimatedQuantity < 1 ? 6 : 2,
+                                  maximumFractionDigits: signal.estimatedQuantity < 1 ? 6 : 2
+                                }).format(signal.estimatedQuantity)
                               : '—'
                             }
                           </span>
                           {signal.estimatedValue !== undefined && !isNaN(signal.estimatedValue) && (
-                            <span className="text-xs text-muted-foreground">${signal.estimatedValue.toFixed(0)}</span>
+                            <span className="text-xs text-muted-foreground">
+                              ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(signal.estimatedValue)}
+                            </span>
                           )}
                         </div>
                       </td>

@@ -1,0 +1,180 @@
+✅ FINAL DIRECTIVE MESSAGE FOR REPLIT — Phase 8.8.3-J6 (Diagnostics + Formatting)
+
+Please run Phase 8.8.3-J6, which consists of two parts:
+
+📌 Part J6.1 — FULL RTB METRICS DATA SOURCE MAPPING (Diagnostic Only)
+
+This phase is strictly diagnostic.
+
+You must fill out the mapping tables below completely.
+Do NOT change any backend or engine behavior.
+Do NOT “fix” anything.
+Do NOT refactor anything.
+Do NOT optimize anything.
+
+Your only job is to inspect, map, and document.
+
+If you discover inconsistencies, simply document them — do not correct them.
+
+Use test credentials for authenticated API calls:
+
+username: testuser123
+
+password: SecurePass123!
+
+Include the x-app-mode: paper header as required.
+
+🧩 J6.1 — RTB Summary Metrics Mapping
+
+Fill in each row with:
+
+Function or query name
+
+File and line number
+
+SQL or Drizzle operation
+
+DB table + columns used
+
+Time window logic
+
+Filters applied
+
+Any multipliers / joins
+
+Notes on discrepancies
+
+Metric	Query / Function Source	DB Table	Columns Used	Time Window Logic	Filters	Notes
+Total Attempts (Last 24h)						
+Total Opened (Last 24h)						
+Total Blocked (Last 24h)						
+Open Rate %						
+Block Rate %						
+🧩 J6.2 — Blocked Breakdown Mapping
+
+List every block reason in the DB even if not shown in the UI.
+
+Block Reason	Source Query	Table	Aggregation Method	Count	Notes
+Max Position					
+Invalid Stop Loss					
+FX Conversion Failed					
+(Any Others Found)					
+
+Also produce:
+
+A complete list of every guardrail decision code recorded in the DB
+
+Identify which are missing from the UI
+
+Identify which are unused or unexpected
+
+🧩 J6.3 — Strategy Breakdown (Blocked)
+Strategy	Source Query	Table	Aggregation Method	Count	Notes
+SMA Trend Ride					
+VWAP Pullback					
+ABCD Long					
+Breakout					
+Mean Reversion					
+Range Trading					
+VWAP Bounce					
+Liquidity Trap					
+DHMA					
+
+Ensure the sum equals the total blocked (document discrepancies).
+
+🧩 J6.4 — Opened Breakdown Mapping
+
+Even if all values are zero:
+
+Strategy	Source Query	DB Table	Count	Notes
+(All 9 strategies)			0	
+🧩 J6.5 — Mapping for Qty and $ Value in RTB Table
+
+Provide exact formulas and data sources for:
+
+Qty
+
+$ Value
+
+UI Column	Source Query	DB Table	Calculation Formula	Guardrails Used	Notes
+Qty					
+Notional Value ($)					
+
+Document any NaN, Infinity, or fallback logic.
+
+📌 Part J6.2 — Safe UI Formatting Improvements
+
+These are UI-only changes and are safe to perform alongside mapping.
+
+Make these UI adjustments:
+
+➊ Add comma separators for all large numeric values in these components:
+
+RTB Summary top-row metrics
+
+Blocked breakdown table
+
+Strategy breakdown table
+
+Qty column
+
+$ value under Qty
+
+Use standard formatting:
+Intl.NumberFormat('en-US').format(number).
+
+➋ Improve Qty column formatting
+Current structure:
+
+Qty
+123456.78
+$98765.43
+
+
+Update to:
+
+Add comma separators
+
+Right-align numeric columns
+
+Format $ values with $ + comma separators
+
+Ensure both lines visually align with other numeric columns
+
+➌ Remove the old “Recent Attempts” list (already removed)
+Confirm that no leftover empty boxes or flickering containers remain.
+
+➍ Remove the "Total" column from the RTB Summary
+Keep only “Last 24h” as the default/statistically meaningful period.
+
+📌 Part J6.3 — DO NOT Fix Behavior
+
+Even if you discover:
+
+wrong queries
+
+incorrect time windows
+
+double counting
+
+incorrect joins
+
+broken strategy aggregation
+
+missing reasons
+
+bad SQL
+
+You must NOT fix them now.
+
+Just document them.
+
+We will issue J7 for the correction phase.
+
+📌 Part J6.4 — Ask Before Deviating
+
+If any requested mapping, inspection, or formatting change requires altering engine behavior, guardrails, strategy logic, or execution flows:
+
+👉 STOP and report before implementing
+
+✔ Please proceed with Phase 8.8.3-J6 exactly as described above.

@@ -45,6 +45,11 @@ interface RTBOpenedSummary {
 
 const REFRESH_INTERVAL = 30000;
 
+const formatNumber = (num: number | undefined): string => {
+  if (num === undefined || num === null) return '0';
+  return new Intl.NumberFormat('en-US').format(num);
+};
+
 export function ExecutionMetricsPanel() {
   const { mode } = useTradingMode();
   
@@ -133,19 +138,18 @@ export function ExecutionMetricsPanel() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* J5.1 - RTB Summary Table */}
+        {/* J5.1 - RTB Summary Table (J6.2: Removed Total column, kept Last 24h only) */}
         <div>
           <h4 className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-2">
             <BarChart3 className="w-3 h-3" />
-            Overall RTB Summary
+            Overall RTB Summary (Last 24h)
           </h4>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="text-xs">Metric</TableHead>
-                <TableHead className="text-xs text-right">Total</TableHead>
                 <TableHead className="text-xs text-right">Last 24h</TableHead>
-                <TableHead className="text-xs text-right">Rate</TableHead>
+                <TableHead className="text-xs text-right" title="Rate calculated using all-time totals">Rate*</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -154,8 +158,7 @@ export function ExecutionMetricsPanel() {
                   <Activity className="w-3 h-3" />
                   Attempts
                 </TableCell>
-                <TableCell className="text-xs text-right">{summary?.totalAttempts || 0}</TableCell>
-                <TableCell className="text-xs text-right">{summary?.last24h?.attempts || 0}</TableCell>
+                <TableCell className="text-xs text-right font-mono">{formatNumber(summary?.last24h?.attempts)}</TableCell>
                 <TableCell className="text-xs text-right">-</TableCell>
               </TableRow>
               <TableRow>
@@ -163,8 +166,7 @@ export function ExecutionMetricsPanel() {
                   <CheckCircle className="w-3 h-3" />
                   Opened
                 </TableCell>
-                <TableCell className="text-xs text-right text-success">{summary?.opened || 0}</TableCell>
-                <TableCell className="text-xs text-right text-success">{summary?.last24h?.opened || 0}</TableCell>
+                <TableCell className="text-xs text-right text-success font-mono">{formatNumber(summary?.last24h?.opened)}</TableCell>
                 <TableCell className="text-xs text-right text-success">{summary?.openedRate || '0.0'}%</TableCell>
               </TableRow>
               <TableRow>
@@ -172,12 +174,12 @@ export function ExecutionMetricsPanel() {
                   <XCircle className="w-3 h-3" />
                   Blocked
                 </TableCell>
-                <TableCell className="text-xs text-right text-destructive">{summary?.blocked || 0}</TableCell>
-                <TableCell className="text-xs text-right text-destructive">{summary?.last24h?.blocked || 0}</TableCell>
+                <TableCell className="text-xs text-right text-destructive font-mono">{formatNumber(summary?.last24h?.blocked)}</TableCell>
                 <TableCell className="text-xs text-right text-destructive">{summary?.blockedRate || '0.0'}%</TableCell>
               </TableRow>
             </TableBody>
           </Table>
+          <p className="text-[10px] text-muted-foreground mt-1">*Rate uses all-time totals</p>
         </div>
 
         {/* J5.2 - Blocked Summary Table */}
@@ -198,7 +200,7 @@ export function ExecutionMetricsPanel() {
                 {blocked.topReasons.map(({ reason, count }) => (
                   <TableRow key={reason}>
                     <TableCell className="text-xs">{formatBlockReason(reason)}</TableCell>
-                    <TableCell className="text-xs text-right text-destructive">{count}</TableCell>
+                    <TableCell className="text-xs text-right text-destructive font-mono">{formatNumber(count)}</TableCell>
                   </TableRow>
                 ))}
                 {blocked.topReasons.length === 0 && (
@@ -213,8 +215,8 @@ export function ExecutionMetricsPanel() {
             {Object.keys(blocked.byStrategy).length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1">
                 {Object.entries(blocked.byStrategy).slice(0, 5).map(([strategy, count]) => (
-                  <Badge key={strategy} variant="outline" className="text-[10px]">
-                    {formatStrategy(strategy)}: {count}
+                  <Badge key={strategy} variant="outline" className="text-[10px] font-mono">
+                    {formatStrategy(strategy)}: {formatNumber(count)}
                   </Badge>
                 ))}
               </div>
@@ -240,7 +242,7 @@ export function ExecutionMetricsPanel() {
                 {opened.topStrategies.map(({ strategy, count }) => (
                   <TableRow key={strategy}>
                     <TableCell className="text-xs">{formatStrategy(strategy)}</TableCell>
-                    <TableCell className="text-xs text-right text-success">{count}</TableCell>
+                    <TableCell className="text-xs text-right text-success font-mono">{formatNumber(count)}</TableCell>
                   </TableRow>
                 ))}
                 {opened.topStrategies.length === 0 && (
@@ -256,8 +258,8 @@ export function ExecutionMetricsPanel() {
               <div className="mt-2 flex flex-wrap gap-1">
                 <span className="text-xs text-muted-foreground">Top Symbols:</span>
                 {opened.bySymbol.slice(0, 5).map(({ symbol, count }) => (
-                  <Badge key={symbol} variant="secondary" className="text-[10px]">
-                    {symbol}: {count}
+                  <Badge key={symbol} variant="secondary" className="text-[10px] font-mono">
+                    {symbol}: {formatNumber(count)}
                   </Badge>
                 ))}
               </div>
