@@ -26,13 +26,15 @@ export function TradingModeProvider({ children }: { children: ReactNode }) {
   });
 
   // Phase 27.F.24: Wrap setMode in useCallback for stable reference
+  // REB 2.8.9: Only invalidate queries when mode ACTUALLY changes to prevent polling disruption
   const setMode = useCallback((newMode: TradingMode) => {
     setModeState((currentMode) => {
+      if (currentMode === newMode) {
+        return currentMode;
+      }
       console.log('[UI] Auto-refresh triggered on mode switch:', currentMode, '->', newMode);
       localStorage.setItem(MODE_STORAGE_KEY, newMode);
-      // Sync with global mode for API requests
       setGlobalTradingMode(newMode);
-      // Invalidate all queries to fetch fresh data for the new mode
       queryClient.invalidateQueries();
       console.log('[UI] Mode switch complete - all queries invalidated for:', newMode);
       return newMode;
