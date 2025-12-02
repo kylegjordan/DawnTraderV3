@@ -149,50 +149,50 @@ export function detectIntent(userMessage: string): IntentType {
 
 /**
  * Fetch real-time user trading context
+ * Phase 3B/8.8.3-H9: Uses mode-based architecture with guardrails_v2 as single source of truth
  */
-export async function fetchUserContext(userId: string): Promise<UserTradingContext> {
+export async function fetchUserContext(mode: 'live' | 'paper'): Promise<UserTradingContext> {
   try {
-    // Fetch in parallel
-    const [settings, user, activeTrades] = await Promise.all([
-// Phase 41F-L.E2E-PURGE: DISABLED -       storage.getTradingSettings(userId),
-      storage.getUser(userId),
-      storage.getActiveTrades()
+    // Phase 3B: Fetch trades in parallel (single-tenant, mode-based)
+    const [activeTrades] = await Promise.all([
+      storage.getActiveTrades(mode)
     ]);
 
-    const mode = (user?.tradingMode || 'paper') as 'live' | 'paper';
-
-    // Get portfolio metrics
-    const metrics = await riskManager.getPortfolioMetrics(userId);
+    // Get portfolio metrics (mode-based)
+    const metrics = await riskManager.getPortfolioMetrics(mode);
 
     // Phase 8.5 Addendum I: Get portfolio value from portfolio_state table
     // Fallback to 0 (no hardcoded initial capital) to match live API behavior
-    const portfolioState = await storage.getPortfolioState({ userId, mode });
+    const portfolioState = await storage.getPortfolioState({ mode });
     const portfolioValue = portfolioState 
       ? parseFloat(portfolioState.balance) 
       : 0;
     
-    const riskPerTrade = settings?.riskPerTrade 
-      ? parseFloat(settings.riskPerTrade) 
+    // Phase 8.8.3-H9: Get settings from guardrails_v2 (single source of truth)
+    const guardrails = await storage.getGuardrailsV2({ mode });
+    
+    const riskPerTrade = guardrails?.portfolioRiskPerTradePct 
+      ? parseFloat(guardrails.portfolioRiskPerTradePct) 
       : 0;
     
-    const dailyLossKillSwitch = settings?.dailyLossKillSwitch 
-      ? parseFloat(settings.dailyLossKillSwitch) 
+    const dailyLossKillSwitch = guardrails?.dailyLossKillSwitchPct 
+      ? parseFloat(guardrails.dailyLossKillSwitchPct) 
       : 7.0;
     
-    const maxExposurePercent = settings?.maxExposurePercent 
-      ? parseFloat(settings.maxExposurePercent) 
+    const maxExposurePercent = guardrails?.maxPositionPercentPct 
+      ? parseFloat(guardrails.maxPositionPercentPct) 
       : 100;
 
     // Calculate daily loss
     const currentDailyLoss = Math.abs(metrics.realizedPL); // Simplified
 
-    // Get enabled strategies from strategy_settings table
-    const strategySettingsList = await storage.listStrategySettings({ userId, mode });
+    // Get enabled strategies from strategy_settings table (mode-based)
+    const strategySettingsList = await storage.listStrategySettings({ mode });
     const enabledStrategies = strategySettingsList
       .filter(s => s.enabled)
       .map(s => s.strategy);
     
-    console.log(`[BehavioralTemplate] User ${userId} (${mode}): Found ${strategySettingsList.length} strategies, ${enabledStrategies.length} enabled:`, enabledStrategies);
+    console.log(`[BehavioralTemplate] Mode ${mode}: Found ${strategySettingsList.length} strategies, ${enabledStrategies.length} enabled:`, enabledStrategies);
 
     return {
       portfolioValue,

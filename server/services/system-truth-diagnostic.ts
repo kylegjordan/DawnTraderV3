@@ -212,10 +212,10 @@ class SystemTruthDiagnosticService {
 
   /**
    * Get Walter truth snapshot from current context
-   * Phase 3B: Removed userId parameter - uses canonical user ID
+   * Phase 3B/8.8.3-H9: Uses mode-based fetchUserContext (single-tenant, guardrails_v2)
    */
   private async getWalterSnapshot(mode: 'live' | 'paper'): Promise<TruthSnapshot> {
-    const context = await fetchUserContext(CANONICAL_USER_ID);
+    const context = await fetchUserContext(mode);
 
     return {
       source: 'walter',
