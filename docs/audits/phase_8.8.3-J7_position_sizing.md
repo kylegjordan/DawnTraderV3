@@ -234,3 +234,31 @@ This matches Filter Insights behavior where metrics only accumulate while engine
 - [x] No new guardrails or strategy logic
 - [x] Uses existing guardrailsV2 architecture
 - [x] Uses canonical paper-portfolio source
+
+---
+
+## Implementation Complete
+
+**Date Completed:** 2025-12-02
+
+### Summary of Changes
+
+1. **J7.1 - Canonical Portfolio Source Audit:** Documented that `storage.getPortfolioState({ mode: 'paper' }).balance` is the canonical source (not `.totalValue` which doesn't exist)
+
+2. **J7.2 - Position Sizing Helper:** Created `server/services/paper-position-sizing.ts` with `sizePaperPositionForSignal()` function that uses guardrailsV2 settings
+
+3. **J7.3 - P2 Sizing Integration:** Updated `paper-execution-engine.ts` to load `cycleContext` (portfolioValue + guardrails) at scan start and apply sizing when RTB signals are generated
+
+4. **J7.4 - P3 Uses Pre-Sized Values:** Modified `executeSimulatedTrade()` to accept `cycleContext` and use stored `signal.quantity` instead of recalculating
+
+5. **J7.5 - Engine-Gated Logging:** Added `isRunning` check to `logExecutionAttempt()` so metrics only log when trading is active
+
+6. **Fallback Removal:** Updated `trade-safety.ts` to skip position-size-dependent checks if no valid portfolioValue (rather than using hardcoded $50k)
+
+### RTB Display Path
+```
+P2 (Signal Generation) → sizePaperPositionForSignal() → trading_signals.quantity/estimatedValue
+P3 (Execution) → signal.quantity → trade execution
+API → /api/trading-signals → returns stored quantity/estimatedValue
+UI → Ready-to-Buy card → displays pre-computed values
+```
