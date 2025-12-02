@@ -1,0 +1,331 @@
+Phase 8.8.3-H8 — Remove SafetyGuardrails & Kill-Switch Control From Autonomy Subsystem
+1. Objective
+
+Fully remove SafetyGuardrails as a runtime component and strip AutonomyController of any ability to influence trading or kill the engine.
+
+After this phase:
+
+guardrails_v2.killSwitchTripped remains the single source of truth for kill switch.
+
+trade-safety.ts + guardrail-settings.ts remain the only runtime risk / kill-switch enforcers for trading.
+
+AutonomyController is preserved only as a non-blocking diagnostic/self-check module that cannot stop trading, now or in the future, unless explicitly re-wired in a later phase.
+
+This phase must not introduce any new hidden filters, risk rules, or kill conditions.
+
+2. Scope & Constraints
+
+In scope
+
+safety-guardrails.ts and its usage.
+
+Kill-switch-related logic in:
+
+autonomy-controller.ts
+
+guardrail-policy.ts
+
+Any other files that still call SafetyGuardrails or the legacy kill_switch table for runtime safety.
+
+Logging and error behavior for autonomy/safety around kill-switch and policy hits.
+
+Explicitly out of scope (document only, no changes)
+
+decision_quality_audit schema and numeric overflow on accuracy_score.
+
+Any future Walter / autonomy intelligence features beyond removing their ability to control trading.
+
+Any changes to trade-safety.ts, guardrail-settings.ts, or the main trading pipeline other than deleting calls into SafetyGuardrails / legacy kill-switch.
+
+If you find anything outside the defined scope that looks dangerous, document it clearly in the audit doc but do not modify it in this phase.
+
+3. Files to Focus On
+
+Please start by reviewing these (some of them were already uploaded):
+
+server/services/safety-guardrails.ts
+
+server/services/autonomy-controller.ts
+
+server/services/guardrail-policy.ts
+
+server/services/trade-safety.ts (read-only; ensure it’s the sole kill-switch gate)
+
+server/routes.ts
+
+Any other file that references:
+
+SafetyGuardrails
+
+kill_switch table
+
+policyHits / "KILL_SWITCH"
+
+"global_kill_switch"
+
+4. Tasks
+H8.1 – Deep Autonomy & Safety Audit (Read-Only, Documented)
+
+Search the codebase for all references to:
+
+SafetyGuardrails
+
+new SafetyGuardrails
+
+kill_switch
+
+"global_kill_switch"
+
+policyHits and "KILL_SWITCH"
+
+AutonomyController
+
+Create an audit document:
+docs/audits/phase_8.8.3-H8_autonomy_and_safety_cleanup.md with:
+
+A list of all files & functions where:
+
+SafetyGuardrails is imported or instantiated.
+
+kill_switch table is queried.
+
+AutonomyController is involved in safety / kill decisions.
+
+For each usage, answer:
+
+Is this currently able to block or halt trading?
+
+Is this legacy / Walter-era logic (V1/V2), or part of the new guardrails system?
+
+A short “Before H8” architecture diagram/summary for:
+
+AutonomyController → SafetyGuardrails → kill_switch
+
+TradeExecution → trade-safety.ts → guardrails_v2
+
+This is to ensure we’re not doing a shallow pass. Be explicit and exhaustive here.
+
+H8.2 – Remove SafetyGuardrails From the Runtime
+
+Goal: After this step, SafetyGuardrails is no longer used anywhere in the code that runs.
+
+In server/services/safety-guardrails.ts:
+
+Add a clear comment at the top:
+
+// [Phase 8.8.3-H8] LEGACY MODULE
+// SafetyGuardrails is deprecated and MUST NOT be used for runtime decisions.
+// All kill-switch and risk enforcement is owned by guardrails_v2 + trade-safety.ts.
+
+
+Do not add new logic. This file will be removed or archived in a later big cleanup, but for now we just disconnect it.
+
+Remove all imports and usages of SafetyGuardrails from:
+
+autonomy-controller.ts
+
+Any other file that currently constructs or uses SafetyGuardrails.
+
+Replace any call pattern like:
+
+const safety = new SafetyGuardrails(...);
+const result = await safety.evaluateAction(...);
+
+
+with a non-blocking diagnostic call or simple logging, e.g.:
+
+// [8.8.3-H8] SafetyGuardrails removed; autonomy operates in diagnostic mode only.
+// TODO: future Walter v2 integration here.
+
+
+The key point: no action, no kill, no block.
+
+H8.3 – Strip Kill-Switch & Trading Control from AutonomyController
+
+Goal: AutonomyController can observe and report, but never block or kill trades.
+
+Open server/services/autonomy-controller.ts.
+
+Identify ALL places where AutonomyController:
+
+Checks a kill switch (directly or via SafetyGuardrails).
+
+Returns a “blocked / denied / unsafe” outcome that could be hooked into trading.
+
+References policyHits including "KILL_SWITCH" or similar semantics.
+
+For each of these:
+
+Convert blocking logic into diagnostic-only behavior:
+
+Example transformation:
+
+// BEFORE (hypothetical)
+if (safetyResult.killSwitchActive) {
+  logger.warn("[AutonomyController] Kill switch active - blocking action");
+  return { allowed: false, reason: "KILL_SWITCH" };
+}
+
+// AFTER
+if (safetyResult.killSwitchActive) {
+  logger.warn("[8.8.3-H8][AutonomyController] Kill switch ACTIVE (diagnostic only)");
+  // Do NOT block trading, do NOT influence guardrails.
+  // Just log the situation for future Walter integrations.
+}
+
+
+Any allowed: false / “deny” return value that is not used anywhere can be simplified to “log + return diagnostic info”, not enforcement.
+
+Ensure AutonomyController does not call any method that can mutate kill-switch state (no toggling, tripping, resetting).
+
+In the H8 audit doc, add a short section:
+
+“After H8, AutonomyController no longer participates in runtime enforcement. It is diagnostic-only.”
+
+H8.4 – Remove Legacy Kill-Switch Usage Outside Guardrails V2
+
+Goal: Ensure no other subsystem still references the legacy Kill Switch table for runtime decisions.
+
+Using your earlier rg searches, identify all places using:
+
+kill_switch
+
+"global_kill_switch"
+
+policyHits.includes("KILL_SWITCH") or similar
+
+For each remaining usage outside the guarded, already-unified guardrails path:
+
+If it is clearly legacy & unused:
+
+Comment the block with:
+
+// [8.8.3-H8] Legacy kill-switch logic (Walter V1/V2) — now disabled.
+// Kept only for reference; not used by any live path.
+
+
+Make sure it is not reachable in any runtime path (no function call).
+
+If you are not 100% sure it’s unused:
+
+Log it in the H8 audit doc, do not modify it.
+
+Mark it clearly as “H8 deferred follow-up” with file + function name.
+
+Confirm by search that no active trading or safety paths are:
+
+Reading from kill_switch table.
+
+Making decisions based on a second kill switch.
+
+After H8, the only enforcer should be:
+
+checkGuardrailRisk() // in trade-safety.ts, using guardrails_v2
+
+H8.5 – Verification & Regression Tests
+
+Use the test user:
+
+username: testuser123
+
+password: SecurePass123!
+
+Please run:
+
+Server starts cleanly
+
+No new TypeScript or runtime errors related to:
+
+AutonomyController
+
+SafetyGuardrails
+
+guardrail-policy
+
+trade-safety
+
+No new imports failing from removed SafetyGuardrails usage.
+
+Trading Flow (Paper Mode)
+
+Log in as testuser123.
+
+Navigate to Trading page.
+
+Start paper trading (mode: "paper").
+
+Confirm:
+
+FX5 scan cycles update (Cycle ID, 24h metrics).
+
+Ready-to-Buy populates as before.
+
+No log entries like:
+
+[SafetyGuardrails] ⛔ Kill switch is ENABLED
+
+[SafetyGuardrails] blocking ...
+
+Legacy kill-switch error messages.
+
+Kill Switch Behavior
+
+From the Guardrails (Core Guardrails) UI:
+
+Trip the daily-loss kill switch via settings / test endpoint (if available).
+
+Confirm that:
+
+Trading stops based only on guardrails_v2.killSwitchTripped.
+
+No other kill-switch components or SafetyGuardrails logs appear.
+
+Reset / restart trading.
+
+Confirm kill switch resets as designed in previous KS directive.
+
+AutonomyController Non-Interference
+
+Trigger any existing Autonomy / self-check behavior (if there’s a way from UI or logs).
+
+Confirm:
+
+Autonomy logs may mention “kill switch active” only as diagnostic, but:
+
+Trading is not blocked by Autonomy.
+
+No “Autonomy blocked trade” or similar behavior is observed.
+
+Confirm in logs that any [8.8.3-H8][AutonomyController] messages are informational only.
+
+Report
+
+Update docs/audits/phase_8.8.3-H8_autonomy_and_safety_cleanup.md with:
+
+Final list of removed / disabled SafetyGuardrails usages.
+
+Confirmation that AutonomyController is diagnostic-only.
+
+Confirmation that no runtime path uses kill_switch table.
+
+5. Deliverables
+
+docs/audits/phase_8.8.3-H8_autonomy_and_safety_cleanup.md
+
+Before/after architecture summary.
+
+File-by-file list of changes.
+
+Explicit statement that AutonomyController no longer controls trading or kill switch.
+
+Explicit statement that SafetyGuardrails is no longer used anywhere in runtime code.
+
+Any updated files (no need to list in the directive; Replit will show them in its own report).
+
+Confirmation in the final Replit notes that:
+
+The only active kill switch is guardrails_v2.killSwitchTripped.
+
+The only risk / kill-switch enforcer is checkGuardrailRisk() in trade-safety.ts.
+
+There are no remaining hidden risk managers or safety layers making go/no-go decisions.
