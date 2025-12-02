@@ -296,14 +296,59 @@ try {
 
 | Task | File | Change | Status |
 |------|------|--------|--------|
-| H8.2 | safety-guardrails.ts | Add LEGACY MODULE deprecation header | Pending |
-| H8.2 | autonomy-controller.ts | Remove safetyGuardrails import & usage | Pending |
-| H8.3 | autonomy-controller.ts | Convert safety check to diagnostic-only | Pending |
-| H8.4 | autonomy-scheduler.ts | Remove safetyGuardrails from safety_sweeper | Pending |
-| H8.5 | - | Runtime verification | Pending |
+| H8.2 | safety-guardrails.ts | Added LEGACY MODULE deprecation header | ✅ Complete |
+| H8.2 | autonomy-controller.ts | Removed safetyGuardrails import, added guardrailPolicy import | ✅ Complete |
+| H8.3 | autonomy-controller.ts | Converted safety check to diagnostic-only using `guardrailPolicy.isKillSwitchTripped()` | ✅ Complete |
+| H8.4 | autonomy-scheduler.ts | Removed safetyGuardrails from safety_sweeper, using direct DB queries | ✅ Complete |
+| H8.4 | routes.ts | Added deprecation comments to /api/safety/* routes | ✅ Complete |
+| H8.4 | safety-guardrails.ts | Added deprecation warning logs to evaluateAction() method | ✅ Complete |
+| H8.4 | autonomy-scheduler.ts | Improved delete count logging for safety_sweeper task | ✅ Complete |
+| H8.5 | - | Runtime verification: Server starts cleanly, no SafetyGuardrails blocking | ✅ Complete |
+
+---
+
+## 10. Verification Evidence (H8.5)
+
+### Server Startup (Dec 2, 2025 06:37 UTC)
+- ✅ No TypeScript/runtime errors related to SafetyGuardrails removal
+- ✅ AutonomyController self-check runs without SafetyGuardrails dependency
+- ✅ No `[SafetyGuardrails] ⛔ Kill switch is ENABLED - blocking` messages
+- ✅ LATTI, HeuristicTrader, and FX5 Scanner running normally
+
+### Autonomy Behavior
+- AutonomyController now uses `guardrailPolicy.isKillSwitchTripped('paper')` for diagnostic telemetry only
+- Self-check continues regardless of kill switch state (no blocking)
+- All safety decisions are purely informational
+
+### Kill Switch Enforcement
+- Only active enforcer: `checkGuardrailRisk()` in `trade-safety.ts`
+- Sources from: `guardrails_v2.killSwitchTripped`
+- No other hidden risk managers or safety layers
+
+---
+
+## 11. Final Statements
+
+**After Phase 8.8.3-H8:**
+
+1. **SafetyGuardrails** is deprecated and NOT used for runtime enforcement.
+   - Kept only for backward compatibility with admin API routes
+   - Event logging to safety_event_log table preserved
+
+2. **AutonomyController** is now **diagnostic-only**.
+   - Cannot block trading
+   - Cannot toggle, trip, or reset kill switch
+   - Reads kill switch state for telemetry purposes only
+
+3. **The only active kill switch** is `guardrails_v2.killSwitchTripped`.
+
+4. **The only risk/kill-switch enforcer** is `checkGuardrailRisk()` in `trade-safety.ts`.
+
+5. **There are no remaining hidden risk managers** or safety layers making go/no-go trading decisions.
 
 ---
 
 **Document Created**: 2025-12-02  
 **Phase**: 8.8.3-H8  
+**Last Updated**: 2025-12-02 06:37 UTC  
 **Author**: Agent

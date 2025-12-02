@@ -1,3 +1,22 @@
+/**
+ * [Phase 8.8.3-H8] LEGACY MODULE - DO NOT USE FOR RUNTIME DECISIONS
+ * 
+ * SafetyGuardrails is DEPRECATED and MUST NOT be used for runtime safety enforcement.
+ * All kill-switch and risk enforcement is now owned by:
+ *   - guardrails_v2 table (single source of truth)
+ *   - trade-safety.ts / checkGuardrailRisk() (runtime enforcer)
+ *   - guardrail-policy.ts / GuardrailPolicy (policy management)
+ * 
+ * This module is kept for:
+ *   - Backward compatibility with admin API routes (/api/safety/*)
+ *   - Event logging to safety_event_log table
+ *   - Historical reference only
+ * 
+ * After H8, NO RUNTIME CODE should call SafetyGuardrails for go/no-go decisions.
+ * 
+ * @deprecated Phase 8.8.3-H8 - Use GuardrailPolicy + trade-safety.ts instead
+ */
+
 import { db } from '../db';
 import { safetyPolicy, safetyEventLog } from '@shared/schema';
 import type { SafetyPolicy, SafetyEventLog, SafetySeverity, SafetyScope, InsertSafetyEventLog } from '@shared/schema';
@@ -7,13 +26,9 @@ import { contextBridge } from './context-bridge';
 /**
  * Phase 11.0: Safety Guardrails Service
  * Phase 8.8.3-H7: Kill Switch Unification - Now delegates to guardrails_v2 via GuardrailPolicy
+ * Phase 8.8.3-H8: DEPRECATED - No longer used for runtime enforcement
  * 
- * Enforces safety policies, kill-switch control, and logs safety events.
- * Integrates with Context Bridge for real-time safety event broadcasting.
- * 
- * IMPORTANT: As of Phase 8.8.3-H7, kill switch state is sourced exclusively from
- * guardrails_v2 table via GuardrailPolicy. The legacy kill_switch table is no longer
- * used for runtime semantics.
+ * @deprecated Use GuardrailPolicy for kill-switch state, trade-safety.ts for enforcement
  */
 
 export interface SafetyEvaluationResult {
@@ -33,9 +48,12 @@ export interface SafetyAction {
 class SafetyGuardrailsService {
   /**
    * Evaluate an action against all active safety policies
+   * @deprecated [Phase 8.8.3-H8] DO NOT use this method for runtime trading decisions.
+   * Use checkGuardrailRisk() from trade-safety.ts instead.
    */
   async evaluateAction(safetyAction: SafetyAction): Promise<SafetyEvaluationResult> {
-    console.log(`[SafetyGuardrails] Evaluating action: ${safetyAction.action} by ${safetyAction.actor}`);
+    console.warn(`[8.8.3-H8][DEPRECATED] SafetyGuardrails.evaluateAction() called for: ${safetyAction.action} by ${safetyAction.actor}`);
+    console.warn(`[8.8.3-H8][DEPRECATED] This method should NOT be used for runtime trading decisions. Use checkGuardrailRisk() instead.`);
 
     // Step 1: Check kill switch first
     const killSwitchStatus = await this.getKillSwitchStatus();

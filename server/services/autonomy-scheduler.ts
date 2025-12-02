@@ -532,37 +532,66 @@ schedulerRegistry.registerTask({
 });
 
 // Every 2 hours - Safety Event Sweeper (Phase 11.0)
+// [8.8.3-H8] SafetyGuardrails removed - using direct DB queries for event housekeeping
 schedulerRegistry.registerTask({
   name: 'safety_sweeper',
-  description: 'Archive old low-severity safety events and surface high-severity ones',
+  description: '[H8 Updated] Archive old low-severity safety events via direct DB query',
   frequency: 'custom',
   intervalMs: 2 * 60 * 60 * 1000, // 2 hours
   lastRun: null,
   nextRun: null,
   status: 'idle',
   run: async () => {
-    console.log('[AutonomyScheduler] 🛡️ Running safety event sweeper...');
+    console.log('[AutonomyScheduler] 🛡️ Running safety event sweeper (H8: direct DB mode)...');
     
     try {
-      const { safetyGuardrails } = await import('./safety-guardrails').then((m) => ({
-        safetyGuardrails: m.safetyGuardrails,
-      }));
-
+      const { db } = await import('../db');
+      const { safetyEventLog } = await import('@shared/schema');
+      const { lt, eq, and, desc } = await import('drizzle-orm');
+      
       // Archive low-severity events older than 7 days
-      const archivedCount = await safetyGuardrails.archiveOldEvents(7);
-      console.log(`[AutonomyScheduler] 🗑️ Archived ${archivedCount} old low-severity events`);
-
-      // Get high-severity events for oversight
-      const highSeverityEvents = await safetyGuardrails.getHighSeverityEvents(50);
-      console.log(`[AutonomyScheduler] ⚠️ Found ${highSeverityEvents.length} high-severity events`);
-
-      // Surface to meta-cognitive oversight if there are high-severity events
-      if (highSeverityEvents.length > 0) {
-        console.log('[AutonomyScheduler] 📊 Surfacing high-severity events to oversight system');
-        // Note: Oversight system will pick these up via its own query
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      
+      // First count how many will be deleted
+      const { count } = await import('drizzle-orm');
+      const [countResult] = await db
+        .select({ count: count() })
+        .from(safetyEventLog)
+        .where(
+          and(
+            eq(safetyEventLog.severity, 'low'),
+            lt(safetyEventLog.createdAt, sevenDaysAgo)
+          )
+        );
+      
+      const toDelete = countResult?.count || 0;
+      
+      // Then delete them
+      if (toDelete > 0) {
+        await db
+          .delete(safetyEventLog)
+          .where(
+            and(
+              eq(safetyEventLog.severity, 'low'),
+              lt(safetyEventLog.createdAt, sevenDaysAgo)
+            )
+          );
       }
+      
+      console.log(`[AutonomyScheduler] 🗑️ Archived ${toDelete} old low-severity events (H8: direct DB)`);
 
-      console.log(`[AutonomyScheduler] ✅ Safety sweeper complete`);
+      // Get count of high-severity events for oversight telemetry
+      const highSeverityEvents = await db
+        .select()
+        .from(safetyEventLog)
+        .where(eq(safetyEventLog.severity, 'critical'))
+        .orderBy(desc(safetyEventLog.createdAt))
+        .limit(50);
+      
+      console.log(`[AutonomyScheduler] ⚠️ Found ${highSeverityEvents.length} high-severity events (diagnostic only)`);
+
+      console.log(`[AutonomyScheduler] ✅ Safety sweeper complete (H8: no SafetyGuardrails)`);
     } catch (error) {
       console.error('[AutonomyScheduler] ❌ Safety sweeper failed:', error);
       throw error;

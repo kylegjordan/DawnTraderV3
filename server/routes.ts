@@ -16452,6 +16452,10 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // ==================== Phase 11.0: Safety Guardrails Routes ====================
+  // [8.8.3-H8] LEGACY ROUTES - Kept for backward compatibility with admin UI
+  // These routes use the deprecated SafetyGuardrails service for event logging only.
+  // Kill switch enforcement is ONLY done via trade-safety.ts + guardrails_v2.
+  // DO NOT use these routes for runtime go/no-go trading decisions.
 
   apiRouter.get('/safety/status', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {

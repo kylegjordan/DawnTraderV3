@@ -17,7 +17,9 @@ import { learningBridge } from './learning-bridge';
 import metaOversightService from './meta-oversight';
 import longtermMemoryService from './longterm-memory';
 import { unifiedCore } from './unified-core';
-import { safetyGuardrails } from './safety-guardrails';
+// [8.8.3-H8] SafetyGuardrails REMOVED - AutonomyController is now diagnostic-only
+// import { safetyGuardrails } from './safety-guardrails';
+import { guardrailPolicy } from './guardrail-policy';
 import { ethicalReasoner } from './ethical-reasoner'; // Phase 13.0
 import { ethicsConsensusOrchestrator } from './ethics-consensus-orchestrator'; // Phase 14.0
 import { performanceMonitor } from './performance-monitor'; // Phase 12.1
@@ -303,41 +305,23 @@ class AutonomyControllerService {
         console.error('[AutonomyController] Confidence drift calculation failed (non-blocking):', err)
       );
 
-      // Phase 11.0: Safety Guardrails Pre-Execution Check
-      // Phase 8.8.3-H7: Kill switch no longer blocks self-check, only records telemetry
+      // [8.8.3-H8] SafetyGuardrails REMOVED - AutonomyController is now diagnostic-only
+      // Kill switch state is read from guardrails_v2 via GuardrailPolicy for telemetry purposes only.
+      // AutonomyController CANNOT block trading or influence the kill switch in any way.
       try {
-        const safetyEval = await safetyGuardrails.evaluateAction({
-          actor: 'autonomy_controller',
-          action: 'self_check',
-          scope: 'autonomy',
-          metadata: {
-            healthScore,
-            cognitiveScore,
-            issuesDetected: issuesDetected.length,
-            runId,
-          },
-        });
-
-        if (!safetyEval.allowed) {
-          // Phase 8.8.3-H7: Kill switch is now informational only for AutonomyController
-          if (safetyEval.policyHits.includes('KILL_SWITCH')) {
-            console.warn('[8.8.3-H7][AUTONOMY] Kill switch active; proceeding with self-check in read-only/diagnostic mode');
-            actionsTriggered.push('kill_switch_active_diagnostic_mode');
-            // DO NOT block - continue with self-check for diagnostic purposes
-          } else {
-            // Other safety violations still block
-            console.error(`[AutonomyController] ⛔ SAFETY GUARDRAILS VIOLATION - blocking self-check`);
-            console.error(`[AutonomyController] Policy hits: ${safetyEval.policyHits.join(', ')}`);
-            
-            issuesDetected.push(`SAFETY VIOLATION: ${safetyEval.reason}`);
-            actionsTriggered.push('blocked_by_safety_guardrails');
-          }
-        } else {
-          console.log(`[AutonomyController] ✅ Safety guardrails: passed`);
+        const ksActive = await guardrailPolicy.isKillSwitchTripped('paper');
+        
+        if (ksActive) {
+          console.log('[8.8.3-H8][AUTONOMY] Kill switch active (diagnostic telemetry only - no blocking)');
+          actionsTriggered.push('kill_switch_active_diagnostic');
+          // Diagnostic only - self-check continues regardless of kill switch state
         }
+        
+        console.log('[8.8.3-H8][AUTONOMY] Safety check: diagnostic-only mode (no blocking capability)');
+        console.log(`[8.8.3-H8][AUTONOMY] Telemetry: healthScore=${healthScore.toFixed(2)}, cognitiveScore=${cognitiveScore.toFixed(2)}, issues=${issuesDetected.length}`);
       } catch (err: any) {
-        console.error('[AutonomyController] Safety guardrails check failed:', err);
-        issuesDetected.push('Safety guardrails system error');
+        // Non-blocking - failure to read kill switch state should not affect autonomy self-check
+        console.warn('[8.8.3-H8][AUTONOMY] Kill switch status check failed (non-blocking):', err);
       }
 
       // Phase 14.0: Federated Ethics Consensus Check (BLOCKING - after Safety, before Execution)
