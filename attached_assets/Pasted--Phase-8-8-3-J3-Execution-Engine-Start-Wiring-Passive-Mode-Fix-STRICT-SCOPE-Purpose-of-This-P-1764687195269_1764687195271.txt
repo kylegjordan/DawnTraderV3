@@ -1,0 +1,204 @@
+✅ Phase 8.8.3-J3 — Execution Engine Start Wiring & Passive Mode Fix (STRICT SCOPE)
+Purpose of This Phase
+
+Restore the intended P2→P3 pipeline behavior so that when the UI shows Trading = ACTIVE (Paper Mode):
+
+the paper-execution-engine is actually “running,”
+
+the active filter pool is not cleared every cycle,
+
+the execution engine evaluates RTB signals,
+
+and execution_attempt_audit logs attempts (OPENED or BLOCKED).
+
+No other subsystems may be modified.
+
+Directive to Repl.it
+J3.0 — STRICT RULES (must follow exactly)
+
+❗ Do NOT modify:
+
+Guardrails or guardrail-policy
+
+Strategy logic
+
+P1/P2/P3 architecture
+
+Future-state blueprint behavior
+
+FX5 scanner logic
+
+Risk Manager (deprecated)
+
+SafetyGuardrails / Autonomy / Walter
+
+Sizing calculations
+
+Ready-to-Buy logic
+
+❗ If you discover anything requiring modification outside the scope defined below, STOP and ask before implementing.
+
+❗ You must NOT introduce new behavior, guardrails, or logic. Only fix wiring so the intended design functions.
+
+J3.1 — Execution Engine State Audit
+
+Perform a complete audit of start/stop behavior across:
+
+server/services/paper-execution-engine.ts
+
+any file that calls:
+
+.start(mode)
+
+.stop(mode)
+
+.isRunning
+
+.enforcePassiveModeIfStopped
+
+Record (in audit doc):
+
+what APIs affect engine state
+
+whether engine state is stored in memory, DB, Stage-3 cache, or mixed
+
+whether UI start/stop calls are actually setting the correct state
+
+No changes yet. Pure audit.
+
+J3.2 — Fix Engine Start/Stop Wiring (BEHAVIORAL but strictly scoped)
+
+Fix the system so that:
+
+When user starts trading (Paper):
+
+/api/trading/start?mode=paper
+must reliably set paper-execution-engine.isRunning = true.
+
+When user stops trading (Paper):
+
+/api/trading/stop?mode=paper
+must reliably set isRunning = false.
+
+Requirements:
+
+Fix ONLY the wiring (start/stop → execution engine state).
+
+No additional logic or filtering.
+
+No other modules may be altered except where necessary to restore expected wiring behavior.
+
+J3.3 — Fix Passive Mode Clearing Behavior
+
+Fix paper-execution-engine.enforcePassiveModeIfStopped() so that:
+
+When isRunning == false → passive mode (clearing pool) is correct.
+
+When Trading = ACTIVE and execution engine should be running →
+
+isRunning must be true
+
+passive mode clearing must NOT run
+
+active filter pool must persist each scan cycle
+
+P2→P3 must be reachable
+
+Must NOT change:
+
+FX5 scanner behavior
+
+Active filter pool TTL rules
+
+RTB generation rules
+
+Guardrail enforcement
+
+Strategy calculations
+
+Only correct passive-mode conditioning.
+
+J3.4 — Verification Logging (temporary, allowed)
+
+Add temporary diagnostic logs only to confirm the wiring works:
+
+When engine starts/stops
+
+When passive mode clears the pool
+
+When passive mode is skipped because engine is running
+
+When checkSymbolForSignal() is reached
+
+When executeSimulatedTrade() is reached
+
+When an attempt is logged to execution_attempt_audit
+
+Format:
+[8.8.3-J3][DIAG] message...
+
+These logs MUST be removed in J3.6.
+
+J3.5 — Validation Test (Repl.it must run this)
+
+Repl.it must confirm:
+
+With Trading = ACTIVE (Paper):
+
+isRunning=true
+
+passive clearing NOT running
+
+active filter pool persists
+
+ready-to-buy signals remain stable
+
+execution_attempt_audit shows OPENED and/or BLOCKED attempts
+
+the new Execution Metrics panel shows non-zero values
+
+With Trading = STOPPED:
+
+isRunning=false
+
+passive clearing resumes
+
+no P2/P3 attempts logged
+
+active filter pool clears once properly
+
+J3.6 — Remove Diagnostic Logs
+
+After validation succeeds, remove all [8.8.3-J3][DIAG] logs.
+
+J3.7 — Documentation Deliverables
+
+Repl.it must deliver:
+
+docs/audits/phase_8.8.3-J3_execution_engine_fix.md including:
+
+Audit findings
+
+Before/after engine start-state behavior
+
+Verified P1→P2→P3 pipeline screenshots
+
+Query logs from execution_attempt_audit showing entries
+
+Update to replit.md summarizing the fix.
+
+SUMMARY OF APPROVED SCOPE
+
+This phase is ONLY:
+
+auditing execution engine state
+
+fixing start/stop wiring
+
+fixing passive mode clearing
+
+verifying P2→P3 attempts occur
+
+enabling execution metrics to populate
+
+no other modifications of functionality
