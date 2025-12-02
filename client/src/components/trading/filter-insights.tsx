@@ -251,9 +251,10 @@ export function FilterInsights() {
 
   // REB 2.8.5A: Query for 24h scan activity metrics (now using FX5-native window)
   // REB 2.8.9: Fixed React Query polling - added refetchIntervalInBackground and staleTime:0
+  // REB 2.8.10: Changed from 30s to 5s to sync with scan-latest updates
   const { data: scan24hData, isLoading: isLoading24h } = useQuery<Scan24hResponse>({
     queryKey: ['/api/paper-sim/diagnostics/scan-24h?mode=paper'],
-    refetchInterval: 30 * 1000, // Refresh every 30s for more responsive updates
+    refetchInterval: 5000, // REB 2.8.10: Match scan-latest interval for synchronized updates
     refetchIntervalInBackground: true, // REB 2.8.9: CRITICAL - Keep polling when tab loses focus
     refetchOnWindowFocus: true,
     staleTime: 0, // REB 2.8.9: Always fetch fresh data, never use stale cache
