@@ -790,6 +790,12 @@ export class DatabaseStorage implements IStorage {
         symbolCooldownMinutes: data.symbolCooldownMinutes ?? existing.symbolCooldownMinutes,
         maxOpenPositions: data.maxOpenPositions ?? existing.maxOpenPositions,
         dailyLossKillSwitchPct: data.dailyLossKillSwitchPct ?? existing.dailyLossKillSwitchPct,
+        // Phase 8.8.3-J7.1: Add missing guardrail fields
+        maxPositionPercentPct: data.maxPositionPercentPct ?? existing.maxPositionPercentPct,
+        lowPriceThreshold: data.lowPriceThreshold ?? existing.lowPriceThreshold,
+        lowPriceMinStopAtrMult: data.lowPriceMinStopAtrMult ?? existing.lowPriceMinStopAtrMult,
+        lowPriceMinPositionNotional: data.lowPriceMinPositionNotional ?? existing.lowPriceMinPositionNotional,
+        // Override controls
         isManualOverride: data.isManualOverride ?? existing.isManualOverride,
         tunedByLatti: data.tunedByLatti ?? existing.tunedByLatti,
         lockedByUser: data.lockedByUser ?? existing.lockedByUser,

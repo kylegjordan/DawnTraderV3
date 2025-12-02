@@ -1,0 +1,259 @@
+Phase 8.8.3-J7.1 — Guardrails Persistence & Sizing Consistency (Paper Mode)
+
+Goal
+
+Fix guardrails editing so that:
+
+Values set on the Goals Engine → Guardrails page (manual mode) persist correctly and become the single source of truth for paper mode.
+
+The J7 sizing helper (paper-position-sizing.ts) always uses those persisted values.
+
+No behavior that is currently working (J5 metrics, J7 sizing, RTB tables, FX5 scanner, kill-switches, etc.) is broken.
+
+This is a narrow, corrective phase, not a redesign.
+
+1. Guardrails Editing Bug – Fix & Audit
+
+Symptoms (current behavior)
+
+On the Guardrails page:
+
+Changing “Portfolio Risk per Trade %” from 3 to some other value, clicking Save → field visually reverts to 3.
+
+Changing “Max Position Percent %” from 30 to another value, clicking Save → field reverts to 30.
+
+Changing Low Price Coin Protection threshold from 0.50 (50¢) to 0.075 (7.5¢) → UI accepts input, but after save it snaps back to 0.50.
+
+Toggle is on Manual in all of these cases, so LATTi should not be overwriting them.
+
+1.1 Code-Path Audit (diagnostic only)
+
+Document, in docs/audits/phase_8.8.3-J7.1_guardrails_persistence.md:
+
+For each of these fields in paper mode:
+
+portfolioRiskPerTradePct
+
+maxPositionPercentPct
+
+lowPriceCoinThreshold (LPCP threshold used by low-price coin protection)
+
+Answer explicitly:
+
+Source of truth table / record
+
+Which DB table(s) and column(s) back each field?
+
+Are there separate “LATTi defaults” vs “manual overrides”, or only one record?
+
+API path
+
+Exact REST endpoints used to:
+
+Read these values for the Guardrails UI
+
+Write/Save changes from the Guardrails UI
+
+Include HTTP method + path + the handler function names (in routes.ts or wherever else).
+
+LATTi vs Manual logic
+
+Where is the Manual / LATTi toggle interpreted on the backend?
+
+Under what conditions does LATTi overwrite values?
+
+Why, in the current implementation, does Save appear to succeed in UI but revert values (validation error, overwrite from LATTi, or something else)?
+
+Constraint: this part is diagnostic only. No behavior changes in this subsection — just mapping and documentation.
+
+2. Persistence Fix (Manual Mode Wins for Paper)
+
+After the mapping is done, implement the minimal fix so that for paper mode:
+
+When the user:
+
+Chooses Manual for a guardrail (risk per trade, max position %, LPCP threshold)
+
+Enters a value
+
+Clicks Save and the save succeeds
+
+→ That value must be reliably persisted and read back unchanged on page reload.
+
+LATTi / auto values must not overwrite manual values in paper mode while the control is set to Manual.
+
+If there is any server-side validation error (e.g., out-of-range value), the user must see a clear validation message and the field should not silently revert; instead:
+
+Do not update the stored value
+
+Show an inline error saying what range is allowed
+
+Keep the user’s typed value in the input until they change it or cancel
+
+Handle decimal values for LPCP correctly:
+
+Values like 0.075 (7.5¢) are valid and must round-trip correctly:
+
+User enters 0.075
+
+Save
+
+Reload page → field still shows 0.075 (or 0.08 if we enforce a rounding rule — but if so, document and show that rule).
+
+Important constraints
+
+Do not reintroduce or depend on any legacy risk manager or getSettings() / pre-guardrails modules.
+
+All work must stay on the guardrailsV2 / current architecture path.
+
+Do not change any kill-switch, daily loss, or LTC/LATTi algorithms beyond what’s necessary to fix persistence.
+
+3. Ensure J7 Sizing Helper Uses the Saved Guardrails
+
+The J7 sizing helper (server/services/paper-position-sizing.ts) should already:
+
+Read guardrails via getGuardrailsV2(mode: 'paper')
+
+Use:
+
+portfolioRiskPerTradePct
+
+maxPositionPercentPct
+
+LPCP fields (for low-price behavior)
+
+Use storage.getPortfolioState({ mode: 'paper' }).balance as the portfolio source
+
+3.1 Alignment Check
+
+Confirm and document in the same audit file:
+
+Exactly which guardrails fields J7 currently reads.
+
+That the values it reads match what we just fixed in Section 2 (no shadow values or alternative sources).
+
+That there are no remaining magic numbers or fallbacks ($50k or similar) anywhere in:
+
+paper-position-sizing.ts
+
+trade-safety.ts
+
+paper-execution-engine.ts
+
+If you find any new fallback or “temporary” constant, stop and document it first in the audit file — do not silently introduce or keep new defaults.
+
+4. Low-Price Coin Protection Interaction
+
+Confirm and document:
+
+Where the LPCP threshold is read in the sizing / block logic.
+
+That the same value shown on the Guardrails page (after our persistence fix) is the value used:
+
+When computing quantities for low-priced pairs pre-RTB
+
+When evaluating block reasons like LOW_PRICE_COIN_PROTECTION (if applicable)
+
+If the sizing helper currently does not condition behavior on the LPCP threshold:
+
+Document that clearly in the audit file (this is acceptable for J7.1).
+
+Do not add new LPCP behavior here; we’ll handle LPCP-specific sizing tweaks in a later J phase.
+
+5. Engine-Gated Metrics (No Regression)
+
+From earlier J work:
+
+logExecutionAttempt() is gated by engine state so RTB metrics only accrue while trading is ACTIVE.
+
+This must remain true after your changes.
+
+Verify in logs & code that nothing in this phase alters:
+
+RTB summary endpoints:
+
+/api/metrics/rtb-summary
+
+/api/metrics/rtb-blocked-summary
+
+/api/metrics/rtb-opened-summary
+
+The “Last 24h” vs “Rate* (all-time)” semantics already documented in J6
+
+No change needed here, just confirm no regression.
+
+6. Tests & Acceptance Criteria
+
+Please run these manual tests with testuser123 in paper mode and note results in the audit doc.
+
+6.1 Guardrails Edit & Persistence
+
+Go to Goals Engine → Guardrails (paper mode).
+
+Set:
+
+Portfolio Risk per Trade % to a new value (e.g., from 3 to 2.5).
+
+Max Position Percent % from 30 down to 10.
+
+LPCP threshold from 0.50 to 0.075.
+
+Ensure all three are in Manual mode.
+
+Click Save.
+
+Refresh the page (hard reload).
+
+Confirm all three fields show the new values and still show as Manual (no reversion, no hidden overwrite).
+
+6.2 Sizing Helper Consumes New Values
+
+With trading ACTIVE (paper mode) and the new guardrail values set:
+
+Capture at least one Ready-to-Buy signal.
+
+Confirm that, for that session, the Qty/$ value:
+
+Changes appropriately if you adjust risk per trade or max position % and then restart trading with a new simulation balance.
+
+Does not remain stuck at the old setting after a successful guardrail change + engine restart.
+
+In logs or via a targeted API call:
+
+Show that sizePaperPositionForSignal() is reading the updated guardrails values (log once per cycle if needed, but remove any extra logs before finalizing).
+
+6.3 No Legacy Re-enablement
+
+Confirm:
+
+No new references to legacy risk modules (e.g. risk-manager.ts, old getSettings, etc.) were added.
+
+No previous legacy calls were silently reintroduced.
+
+7. Constraints & Safety
+
+Do not modify:
+
+Walter, Autonomy, or behavioral templates.
+
+Kill-switch behavior or existing guardrail rule evaluation, beyond persistence and reading the correct values.
+
+Do not introduce new cross-mode behavior. All work here is paper mode only.
+
+If, during implementation, you discover any additional change you believe is required that is outside this directive, stop and:
+
+Document it in the audit file.
+
+Wait for explicit approval before implementing.
+
+Once complete, please:
+
+Attach docs/audits/phase_8.8.3-J7.1_guardrails_persistence.md.
+
+Summarize:
+
+Root cause for the “values snap back” bug.
+
+What was changed to fix persistence.
+
+Evidence that J7 sizing now reads the corrected guardrails values.

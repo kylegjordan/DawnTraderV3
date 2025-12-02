@@ -1395,6 +1395,23 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const lockedByUser = rawPayload.lockedByUser !== undefined 
         ? rawPayload.lockedByUser 
         : undefined;
+      
+      // Phase 8.8.3-J7.1: Add missing guardrail fields
+      // REB 8.8.3-G: Max Position Percent (5th core guardrail)
+      const maxPositionPercentPct = rawPayload.maxPositionPercentPct !== undefined
+        ? parseFloat(String(rawPayload.maxPositionPercentPct))
+        : undefined;
+      
+      // REB 8.8.3-H: Low-Priced Coin Protection (LPCP) fields
+      const lowPriceThreshold = rawPayload.lowPriceThreshold !== undefined
+        ? parseFloat(String(rawPayload.lowPriceThreshold))
+        : undefined;
+      const lowPriceMinStopAtrMult = rawPayload.lowPriceMinStopAtrMult !== undefined
+        ? parseFloat(String(rawPayload.lowPriceMinStopAtrMult))
+        : undefined;
+      const lowPriceMinPositionNotional = rawPayload.lowPriceMinPositionNotional !== undefined
+        ? parseFloat(String(rawPayload.lowPriceMinPositionNotional))
+        : undefined;
 
       // Phase 5: Comprehensive coherency validation using GuardrailPolicy
       const { guardrailPolicy } = await import('./services/guardrail-policy');
@@ -1405,6 +1422,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       if (symbolCooldownMinutes !== undefined) validationPayload.symbolCooldownMinutes = symbolCooldownMinutes;
       if (maxOpenPositions !== undefined) validationPayload.maxOpenPositions = maxOpenPositions;
       if (dailyLossKillSwitchPct !== undefined) validationPayload.dailyLossKillSwitchPct = dailyLossKillSwitchPct;
+      if (maxPositionPercentPct !== undefined) validationPayload.maxPositionPercentPct = maxPositionPercentPct;
+      if (lowPriceThreshold !== undefined) validationPayload.lowPriceThreshold = lowPriceThreshold;
+      if (lowPriceMinStopAtrMult !== undefined) validationPayload.lowPriceMinStopAtrMult = lowPriceMinStopAtrMult;
+      if (lowPriceMinPositionNotional !== undefined) validationPayload.lowPriceMinPositionNotional = lowPriceMinPositionNotional;
       if (isManualOverride !== undefined || tunedByLatti !== undefined || lockedByUser !== undefined) {
         validationPayload.management = {
           isManualOverride: isManualOverride ?? false,
@@ -1447,6 +1468,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       if (symbolCooldownMinutes !== undefined) updatePayload.symbolCooldownMinutes = symbolCooldownMinutes;
       if (maxOpenPositions !== undefined) updatePayload.maxOpenPositions = maxOpenPositions;
       if (dailyLossKillSwitchPct !== undefined) updatePayload.dailyLossKillSwitchPct = String(dailyLossKillSwitchPct);
+      if (maxPositionPercentPct !== undefined) updatePayload.maxPositionPercentPct = String(maxPositionPercentPct);
+      if (lowPriceThreshold !== undefined) updatePayload.lowPriceThreshold = String(lowPriceThreshold);
+      if (lowPriceMinStopAtrMult !== undefined) updatePayload.lowPriceMinStopAtrMult = String(lowPriceMinStopAtrMult);
+      if (lowPriceMinPositionNotional !== undefined) updatePayload.lowPriceMinPositionNotional = String(lowPriceMinPositionNotional);
       if (isManualOverride !== undefined) updatePayload.isManualOverride = isManualOverride;
       if (tunedByLatti !== undefined) updatePayload.tunedByLatti = tunedByLatti;
       if (lockedByUser !== undefined) updatePayload.lockedByUser = lockedByUser;
@@ -1502,6 +1527,51 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             field: 'dailyLossKillSwitchPct',
             oldValue: oldGuardrails.dailyLossKillSwitchPct,
             newValue: String(dailyLossKillSwitchPct),
+            changedBy: userId,
+            tradingMode: mode
+          }));
+        }
+        
+        // Phase 8.8.3-J7.1: Audit logging for new guardrail fields
+        if (maxPositionPercentPct !== undefined && oldGuardrails.maxPositionPercentPct !== String(maxPositionPercentPct)) {
+          auditPromises.push(storage.addAuditLog({
+            entityType: 'guardrails',
+            field: 'maxPositionPercentPct',
+            oldValue: oldGuardrails.maxPositionPercentPct,
+            newValue: String(maxPositionPercentPct),
+            changedBy: userId,
+            tradingMode: mode
+          }));
+        }
+        
+        if (lowPriceThreshold !== undefined && oldGuardrails.lowPriceThreshold !== String(lowPriceThreshold)) {
+          auditPromises.push(storage.addAuditLog({
+            entityType: 'guardrails',
+            field: 'lowPriceThreshold',
+            oldValue: oldGuardrails.lowPriceThreshold,
+            newValue: String(lowPriceThreshold),
+            changedBy: userId,
+            tradingMode: mode
+          }));
+        }
+        
+        if (lowPriceMinStopAtrMult !== undefined && oldGuardrails.lowPriceMinStopAtrMult !== String(lowPriceMinStopAtrMult)) {
+          auditPromises.push(storage.addAuditLog({
+            entityType: 'guardrails',
+            field: 'lowPriceMinStopAtrMult',
+            oldValue: oldGuardrails.lowPriceMinStopAtrMult,
+            newValue: String(lowPriceMinStopAtrMult),
+            changedBy: userId,
+            tradingMode: mode
+          }));
+        }
+        
+        if (lowPriceMinPositionNotional !== undefined && oldGuardrails.lowPriceMinPositionNotional !== String(lowPriceMinPositionNotional)) {
+          auditPromises.push(storage.addAuditLog({
+            entityType: 'guardrails',
+            field: 'lowPriceMinPositionNotional',
+            oldValue: oldGuardrails.lowPriceMinPositionNotional,
+            newValue: String(lowPriceMinPositionNotional),
             changedBy: userId,
             tradingMode: mode
           }));
