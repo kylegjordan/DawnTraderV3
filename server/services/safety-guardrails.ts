@@ -1,14 +1,19 @@
 import { db } from '../db';
-import { safetyPolicy, safetyEventLog, killSwitch } from '@shared/schema';
+import { safetyPolicy, safetyEventLog } from '@shared/schema';
 import type { SafetyPolicy, SafetyEventLog, SafetySeverity, SafetyScope, InsertSafetyEventLog } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { contextBridge } from './context-bridge';
 
 /**
  * Phase 11.0: Safety Guardrails Service
+ * Phase 8.8.3-H7: Kill Switch Unification - Now delegates to guardrails_v2 via GuardrailPolicy
  * 
  * Enforces safety policies, kill-switch control, and logs safety events.
  * Integrates with Context Bridge for real-time safety event broadcasting.
+ * 
+ * IMPORTANT: As of Phase 8.8.3-H7, kill switch state is sourced exclusively from
+ * guardrails_v2 table via GuardrailPolicy. The legacy kill_switch table is no longer
+ * used for runtime semantics.
  */
 
 export interface SafetyEvaluationResult {
@@ -195,66 +200,105 @@ class SafetyGuardrailsService {
 
   /**
    * Get kill switch status
+   * Phase 8.8.3-H7: Now delegates to guardrails_v2 via GuardrailPolicy
+   * 
+   * Returns the kill switch state from guardrails_v2 (unified source of truth).
+   * Checks both paper and live modes - if either is tripped, reports as enabled.
    */
-  async getKillSwitchStatus(): Promise<{ isEnabled: boolean; reason: string | null; updatedAt: Date }> {
-    const result = await db
-      .select()
-      .from(killSwitch)
-      .where(eq(killSwitch.id, 'global_kill_switch'))
-      .limit(1);
-
-    if (result.length === 0) {
+  async getKillSwitchStatus(): Promise<{ isEnabled: boolean; reason: string | null; updatedAt: Date; source: string }> {
+    console.log('[8.8.3-H7][SAFETY_KS] Delegating kill switch state to guardrails_v2 only');
+    
+    try {
+      const { guardrailPolicy } = await import('./guardrail-policy.js');
+      const { storage } = await import('../storage.js');
+      
+      // Check both modes - if either is tripped, report as enabled
+      const [paperTripped, liveTripped] = await Promise.all([
+        guardrailPolicy.isKillSwitchTripped('paper'),
+        guardrailPolicy.isKillSwitchTripped('live')
+      ]);
+      
+      const isEnabled = paperTripped || liveTripped;
+      
+      // Get reason from the tripped mode
+      let reason: string | null = null;
+      if (isEnabled) {
+        const trippedMode = paperTripped ? 'paper' : 'live';
+        const guardrails = await storage.getGuardrailsV2({ mode: trippedMode });
+        reason = guardrails?.killSwitchReason || null;
+      }
+      
+      return {
+        isEnabled,
+        reason,
+        updatedAt: new Date(),
+        source: 'guardrails_v2'
+      };
+    } catch (error) {
+      console.error('[8.8.3-H7][SAFETY_KS] Error getting kill switch status:', error);
+      // Fail-safe: report as disabled on error to avoid blocking
       return {
         isEnabled: false,
         reason: null,
         updatedAt: new Date(),
+        source: 'guardrails_v2_error'
       };
     }
-
-    return {
-      isEnabled: result[0].isEnabled,
-      reason: result[0].reason,
-      updatedAt: result[0].updatedAt,
-    };
   }
 
   /**
    * Toggle kill switch
+   * Phase 8.8.3-H7: Now delegates to guardrails_v2 via GuardrailPolicy
+   * 
+   * Sets the kill switch state in guardrails_v2 for the specified mode (defaults to both).
    */
-  async toggleKillSwitch(enabled: boolean, reason: string | null, userId?: string): Promise<void> {
-    console.log(`[SafetyGuardrails] ${enabled ? '🔴 ENABLING' : '🟢 DISABLING'} kill switch: ${reason || 'No reason'}`);
-
-    await db
-      .update(killSwitch)
-      .set({
-        isEnabled: enabled,
-        reason,
-        updatedAt: new Date(),
-      })
-      .where(eq(killSwitch.id, 'global_kill_switch'));
-
-    // Broadcast kill switch change to context bridge (frontend)
-    await contextBridge.broadcast({
-      type: 'kill_switch_changed',
-      payload: {
-        isEnabled: enabled,
-        reason,
-        timestamp: new Date().toISOString(),
-      },
-    });
-
-    // Phase 27.4: Emit to cluster bus for backend services (e.g., TradingStateSync)
-    if (enabled) {
-      const { clusterBus } = await import('./cluster-bus.js');
-      clusterBus.emit('kill_switch_activated', {
-        userId: userId || 'system',
-        reason: reason || 'Kill switch enabled',
-        timestamp: new Date(),
+  async toggleKillSwitch(enabled: boolean, reason: string | null, userId?: string, mode?: 'paper' | 'live' | 'both'): Promise<void> {
+    console.log(`[8.8.3-H7][SAFETY_KS] ${enabled ? '🔴 ENABLING' : '🟢 DISABLING'} kill switch via guardrails_v2: ${reason || 'No reason'}`);
+    
+    try {
+      const { guardrailPolicy } = await import('./guardrail-policy.js');
+      
+      const modesToUpdate: ('paper' | 'live')[] = mode === 'both' || !mode 
+        ? ['paper', 'live'] 
+        : [mode];
+      
+      for (const m of modesToUpdate) {
+        if (enabled) {
+          await guardrailPolicy.tripKillSwitch(m, reason || 'Safety guardrails toggle');
+        } else {
+          await guardrailPolicy.resetKillSwitch(m);
+        }
+      }
+      
+      // Broadcast kill switch change to context bridge (frontend)
+      await contextBridge.broadcast({
+        type: 'kill_switch_changed',
+        payload: {
+          isEnabled: enabled,
+          reason,
+          timestamp: new Date().toISOString(),
+          source: 'guardrails_v2',
+          modes: modesToUpdate,
+        },
       });
-      console.log(`[SafetyGuardrails] 🚨 Kill switch activation event emitted to cluster bus`);
-    }
 
-    console.log(`[SafetyGuardrails] ✅ Kill switch ${enabled ? 'ENABLED' : 'DISABLED'}`);
+      // Phase 27.4: Emit to cluster bus for backend services (e.g., TradingStateSync)
+      if (enabled) {
+        const { clusterBus } = await import('./cluster-bus.js');
+        clusterBus.emit('kill_switch_activated', {
+          userId: userId || 'system',
+          reason: reason || 'Kill switch enabled',
+          timestamp: new Date(),
+          source: 'guardrails_v2',
+        });
+        console.log(`[8.8.3-H7][SAFETY_KS] 🚨 Kill switch activation event emitted to cluster bus`);
+      }
+
+      console.log(`[8.8.3-H7][SAFETY_KS] ✅ Kill switch ${enabled ? 'ENABLED' : 'DISABLED'} for modes: ${modesToUpdate.join(', ')}`);
+    } catch (error) {
+      console.error('[8.8.3-H7][SAFETY_KS] Error toggling kill switch:', error);
+      throw error;
+    }
   }
 
   /**

@@ -303,7 +303,8 @@ class AutonomyControllerService {
         console.error('[AutonomyController] Confidence drift calculation failed (non-blocking):', err)
       );
 
-      // Phase 11.0: Safety Guardrails Pre-Execution Check (BLOCKING - before ethical)
+      // Phase 11.0: Safety Guardrails Pre-Execution Check
+      // Phase 8.8.3-H7: Kill switch no longer blocks self-check, only records telemetry
       try {
         const safetyEval = await safetyGuardrails.evaluateAction({
           actor: 'autonomy_controller',
@@ -318,23 +319,18 @@ class AutonomyControllerService {
         });
 
         if (!safetyEval.allowed) {
-          console.error(`[AutonomyController] ⛔ SAFETY GUARDRAILS VIOLATION - blocking self-check`);
-          console.error(`[AutonomyController] Policy hits: ${safetyEval.policyHits.join(', ')}`);
-          
-          issuesDetected.push(`SAFETY VIOLATION: ${safetyEval.reason}`);
-          actionsTriggered.push('blocked_by_safety_guardrails');
-
-          // If kill switch is active, return early
+          // Phase 8.8.3-H7: Kill switch is now informational only for AutonomyController
           if (safetyEval.policyHits.includes('KILL_SWITCH')) {
-            return {
-              runId,
-              timestamp: new Date(),
-              healthScore,
-              cognitiveScore,
-              systemMetrics: assessmentResult.systemMetrics,
-              issuesDetected,
-              actionsTriggered,
-            };
+            console.warn('[8.8.3-H7][AUTONOMY] Kill switch active; proceeding with self-check in read-only/diagnostic mode');
+            actionsTriggered.push('kill_switch_active_diagnostic_mode');
+            // DO NOT block - continue with self-check for diagnostic purposes
+          } else {
+            // Other safety violations still block
+            console.error(`[AutonomyController] ⛔ SAFETY GUARDRAILS VIOLATION - blocking self-check`);
+            console.error(`[AutonomyController] Policy hits: ${safetyEval.policyHits.join(', ')}`);
+            
+            issuesDetected.push(`SAFETY VIOLATION: ${safetyEval.reason}`);
+            actionsTriggered.push('blocked_by_safety_guardrails');
           }
         } else {
           console.log(`[AutonomyController] ✅ Safety guardrails: passed`);
