@@ -1,9 +1,9 @@
 import { storage } from '../storage';
 import { KrakenService } from './kraken';
 import { StrategyEngine, type StrategySignal, type TechnicalIndicators } from './strategy-engine';
-import { checkGuardrailRisk, type TradeCandidate } from './trade-safety';
+import { checkGuardrailRisk, type TradeCandidate, type TradeSafetyResultCode } from './trade-safety';
 import { buildSettingsFromGuardrails, calculateRiskAmount } from './guardrail-settings';
-import type { TradingSettings, PriceData } from '@shared/schema';
+import type { TradingSettings, PriceData, InsertExecutionAttemptAudit } from '@shared/schema';
 import { contextBridge } from './context-bridge';
 import { activeFilterPool, type ActiveFilteredPair } from './active-filter-pool';
 
@@ -804,6 +804,20 @@ export class PaperExecutionEngine {
         }
       });
       
+      // Phase 8.8.3-J: Execution Attempt Audit - BLOCKED decision (non-blocking)
+      this.logExecutionAttempt({
+        mode: this.mode,
+        symbol: signal.symbol,
+        strategy: signal.strategy,
+        decision: 'BLOCKED',
+        blockReason: riskCheck.code as any,
+        blockDetail: riskCheck.reason,
+        entryPrice: signal.entryPrice.toString(),
+        stopPrice: signal.stopPrice.toString(),
+        targetPrice: signal.targetPrice.toString(),
+        confidence: (signal.confidence * 100).toString(),
+      }).catch(err => console.error('[8.8.3-J][AUDIT_ERROR] Failed to log blocked execution attempt:', err));
+      
       return;
     }
 
@@ -961,6 +975,23 @@ export class PaperExecutionEngine {
           timestamp: new Date().toISOString()
         }
       });
+      
+      // Phase 8.8.3-J: Execution Attempt Audit - OPENED decision (non-blocking)
+      this.logExecutionAttempt({
+        mode: this.mode,
+        symbol: signal.symbol,
+        strategy: signal.strategy,
+        decision: 'OPENED',
+        entryPrice: actualEntryPrice.toString(),
+        stopPrice: signal.stopPrice.toString(),
+        targetPrice: signal.targetPrice.toString(),
+        confidence: (signal.confidence * 100).toString(),
+        portfolioValue: portfolioValue.toString(),
+        riskAmount: riskAmount.toString(),
+        positionSize: quantity.toString(),
+        tradeId: trade.id,
+      }).catch(err => console.error('[8.8.3-J][AUDIT_ERROR] Failed to log opened execution attempt:', err));
+      
     } catch (err: any) {
       // [27.F.14.DIAG] DIAGNOSTIC: Trade insert failed
       console.error(`[DB] trade_insert_err {symbol:${signal.symbol}, error:${err.message}}`);
@@ -1012,6 +1043,19 @@ export class PaperExecutionEngine {
   // Phase 27.F.14.DIAG: Telemetry accessor for last cycle diagnostics
   getLastCycleSummary() {
     return this.lastCycleSummary;
+  }
+
+  /**
+   * Phase 8.8.3-J: Log execution attempt to audit table (non-blocking)
+   * Records every P3 decision (execution_attempt → OPENED or BLOCKED)
+   */
+  private async logExecutionAttempt(audit: Omit<InsertExecutionAttemptAudit, 'createdAt'>): Promise<void> {
+    try {
+      await storage.createExecutionAttemptAudit(audit);
+      console.log(`[8.8.3-J][AUDIT] Execution attempt logged: ${audit.decision} for ${audit.symbol}`);
+    } catch (err) {
+      console.error(`[8.8.3-J][AUDIT_ERROR] Failed to log execution attempt:`, err);
+    }
   }
 
   /**

@@ -170,6 +170,9 @@ import {
   type PaperSimSession,
   type InsertPaperSimSession,
   paperSimSessions,
+  type ExecutionAttemptAudit,
+  type InsertExecutionAttemptAudit,
+  executionAttemptAudit,
   type WalterPendingApproval,
   type InsertWalterPendingApproval,
   walterPendingApprovals,
@@ -577,6 +580,24 @@ export interface IStorage {
   getActivePaperSimSession(mode: 'live' | 'paper'): Promise<PaperSimSession | undefined>;
   getActivePaperSimSessions(): Promise<PaperSimSession[]>; // Get all active sessions (for heartbeat)
   getPaperSimSessions(userId: string, filters?: { limit?: number; status?: string }): Promise<PaperSimSession[]>;
+  
+  // Phase 8.8.3-J: Execution Attempt Audit methods (read-only diagnostics)
+  createExecutionAttemptAudit(audit: InsertExecutionAttemptAudit): Promise<ExecutionAttemptAudit>;
+  getExecutionAttemptAudits(mode: 'live' | 'paper', filters?: { 
+    limit?: number; 
+    decision?: 'OPENED' | 'BLOCKED';
+    symbol?: string;
+    strategy?: string;
+  }): Promise<ExecutionAttemptAudit[]>;
+  getExecutionAttemptMetrics(mode: 'live' | 'paper'): Promise<{
+    totalAttempts: number;
+    opened: number;
+    blocked: number;
+    blockedByReason: Record<string, number>;
+    last24hAttempts: number;
+    last24hOpened: number;
+    last24hBlocked: number;
+  }>;
   
   // Walter AI Assistant methods
   createWalterPendingApproval(data: InsertWalterPendingApproval): Promise<WalterPendingApproval>;
@@ -3420,6 +3441,83 @@ export class DatabaseStorage implements IStorage {
       .where(and(...conditions))
       .orderBy(desc(paperSimSessions.startedAt))
       .limit(limit);
+  }
+  
+  // Phase 8.8.3-J: Execution Attempt Audit methods (read-only diagnostics)
+  async createExecutionAttemptAudit(audit: InsertExecutionAttemptAudit): Promise<ExecutionAttemptAudit> {
+    const [result] = await db.insert(executionAttemptAudit).values(audit).returning();
+    return result;
+  }
+  
+  async getExecutionAttemptAudits(mode: 'live' | 'paper', filters?: { 
+    limit?: number; 
+    decision?: 'OPENED' | 'BLOCKED';
+    symbol?: string;
+    strategy?: string;
+  }): Promise<ExecutionAttemptAudit[]> {
+    const limit = filters?.limit || 100;
+    const conditions: any[] = [eq(executionAttemptAudit.mode, mode)];
+    
+    if (filters?.decision) {
+      conditions.push(eq(executionAttemptAudit.decision, filters.decision));
+    }
+    if (filters?.symbol) {
+      conditions.push(eq(executionAttemptAudit.symbol, filters.symbol));
+    }
+    if (filters?.strategy) {
+      conditions.push(eq(executionAttemptAudit.strategy, filters.strategy as any));
+    }
+    
+    return await db.select()
+      .from(executionAttemptAudit)
+      .where(and(...conditions))
+      .orderBy(desc(executionAttemptAudit.createdAt))
+      .limit(limit);
+  }
+  
+  async getExecutionAttemptMetrics(mode: 'live' | 'paper'): Promise<{
+    totalAttempts: number;
+    opened: number;
+    blocked: number;
+    blockedByReason: Record<string, number>;
+    last24hAttempts: number;
+    last24hOpened: number;
+    last24hBlocked: number;
+  }> {
+    const allAudits = await db.select()
+      .from(executionAttemptAudit)
+      .where(eq(executionAttemptAudit.mode, mode));
+    
+    const totalAttempts = allAudits.length;
+    const opened = allAudits.filter(a => a.decision === 'OPENED').length;
+    const blocked = allAudits.filter(a => a.decision === 'BLOCKED').length;
+    
+    // Group blocked by reason
+    const blockedByReason: Record<string, number> = {};
+    allAudits
+      .filter(a => a.decision === 'BLOCKED' && a.blockReason)
+      .forEach(a => {
+        const reason = a.blockReason as string;
+        blockedByReason[reason] = (blockedByReason[reason] || 0) + 1;
+      });
+    
+    // Last 24 hours
+    const now = new Date();
+    const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const last24hAudits = allAudits.filter(a => new Date(a.createdAt) >= last24h);
+    const last24hAttempts = last24hAudits.length;
+    const last24hOpened = last24hAudits.filter(a => a.decision === 'OPENED').length;
+    const last24hBlocked = last24hAudits.filter(a => a.decision === 'BLOCKED').length;
+    
+    return {
+      totalAttempts,
+      opened,
+      blocked,
+      blockedByReason,
+      last24hAttempts,
+      last24hOpened,
+      last24hBlocked
+    };
   }
   
   // Walter AI Assistant methods

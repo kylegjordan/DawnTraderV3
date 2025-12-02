@@ -10630,6 +10630,52 @@ Provide specific, actionable recommendations.`,
     }
   });
 
+  // ===== PHASE 8.8.3-J: EXECUTION ATTEMPT METRICS =====
+  
+  // Get execution attempts with filtering (read-only diagnostic endpoint)
+  apiRouter.get('/metrics/execution-attempts', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.query.mode as 'live' | 'paper') || 'paper';
+      const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+      const symbol = req.query.symbol as string | undefined;
+      const strategy = req.query.strategy as string | undefined;
+      const decision = req.query.decision as 'BLOCKED' | 'OPENED' | undefined;
+
+      const attempts = await storage.getExecutionAttempts(mode, { limit, symbol, strategy, decision });
+      
+      res.json({
+        success: true,
+        data: attempts,
+        mode,
+        count: attempts.length,
+        limit
+      });
+    } catch (error: any) {
+      console.error('[8.8.3-J] Error fetching execution attempts:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Get execution attempt statistics (aggregated metrics)
+  apiRouter.get('/metrics/execution-attempts/stats', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.query.mode as 'live' | 'paper') || 'paper';
+      const hours = parseInt(req.query.hours as string) || 24;
+
+      const stats = await storage.getExecutionAttemptStats(mode, hours);
+      
+      res.json({
+        success: true,
+        data: stats,
+        mode,
+        hours
+      });
+    } catch (error: any) {
+      console.error('[8.8.3-J] Error fetching execution attempt stats:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // ===== LEARNING FEEDBACK ENGINE ROUTES =====
 
   // Get prediction accuracy metrics

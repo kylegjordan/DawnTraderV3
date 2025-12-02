@@ -2629,6 +2629,26 @@
     ]
   },
   {
+    "path": "/api/metrics/execution-attempts",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/metrics/execution-attempts/stats",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/learning/prediction-accuracy",
     "methods": [
       "GET"

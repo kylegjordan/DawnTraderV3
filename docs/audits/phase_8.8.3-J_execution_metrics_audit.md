@@ -107,28 +107,62 @@ strategy: 'vwap_pullback' | 'abcd_long' | 'sma_trend_ride' | 'breakout' |
 
 ---
 
-## Implementation Plan
+## Implementation Status
 
-### J.2 - Schema
-Create `execution_attempt_audit` table with:
-- id, created_at, mode, symbol, strategy, signal_id
-- decision (OPENED | BLOCKED)
-- block_reason enum
-- block_detail (text)
-- portfolio_value, risk_amount
+### J.2 - Schema ✓ COMPLETE
+Created `execution_attempt_audit` table with:
+- id (VARCHAR PRIMARY KEY)
+- created_at (TIMESTAMPTZ)
+- mode (trading_mode enum)
+- symbol (VARCHAR)
+- strategy (VARCHAR)
+- decision (execution_decision enum: BLOCKED | OPENED)
+- block_reason (execution_block_reason enum)
+- block_detail (TEXT)
+- entry_price, stop_price, target_price (NUMERIC)
+- confidence, portfolio_value, risk_amount, position_size (NUMERIC)
+- trade_id (VARCHAR, for OPENED decisions)
+- metadata (JSONB)
 
-### J.3 - Backend Wiring
-Add non-blocking audit insert in `executeSimulatedTrade()`:
-- On OPENED: Record after trade creation
-- On BLOCKED: Record with block_reason from riskCheck.code
+Indexes created on: mode, symbol, decision, created_at, strategy
 
-### J.4 - API
-Add `GET /api/trading-metrics/execution-attempts` endpoint
+### J.3 - Backend Wiring ✓ COMPLETE
+Added non-blocking audit logging in `executeSimulatedTrade()`:
+- **BLOCKED path (lines 810-822):** Logs with guardrail rejection code and detail
+- **OPENED path (lines 982-996):** Logs after trade creation with position sizing details
 
-### J.5 - UI
-Add metrics panels to Active Trades and RTB tabs
+Storage methods added:
+- `createExecutionAttemptAudit(audit)` - Non-blocking insert
+- `getExecutionAttempts(mode, options)` - Fetch with filters
+- `getExecutionAttemptStats(mode, hours)` - Aggregated statistics
+
+### J.4 - API ✓ COMPLETE
+Added read-only endpoints (server/routes.ts lines 10636-10679):
+- `GET /api/metrics/execution-attempts` - List attempts with filters (mode, symbol, strategy, decision)
+- `GET /api/metrics/execution-attempts/stats` - Aggregated stats (24h window)
+
+### J.5 - UI ✓ COMPLETE
+Created `ExecutionMetricsPanel` component (client/src/components/trading/execution-metrics.tsx):
+- 4-stat grid: Total Attempts, Opened, Blocked, Open Rate
+- Block reasons breakdown by category
+- Recent attempts list with decision indicators
+- Empty state when no execution attempts
+
+Added to Ready to Buy tab in active-trades.tsx.
 
 ---
 
 **Audit Date:** 2025-12-02
+**Last Updated:** 2025-12-02
 **Auditor:** DawnTrader Agent
+
+## Constraints Verification
+
+| Constraint | Status |
+|------------|--------|
+| No changes to Walter/Autonomy | ✓ Verified |
+| No changes to behavioral-template | ✓ Verified |
+| No changes to kill-switch logic | ✓ Verified |
+| No changes to guardrails_v2 rules | ✓ Verified |
+| Read-only metrics/logging only | ✓ Verified |
+| Strategy count = 9 (incl. DHMA) | ✓ Verified |
