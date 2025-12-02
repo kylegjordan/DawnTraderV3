@@ -1,0 +1,234 @@
+2️⃣ Directive: Phase 8.8.3-J4 – Strategy → RTB → Execution Unification
+
+Here’s the directive text you can give to Replit.
+
+Directive: Phase 8.8.3-J4 – Strategy → RTB → Execution Pipeline Unification & Full Strategy Coverage
+
+Goal
+
+Unify the strategy signal pipeline so that:
+
+All 9 strategies are evaluated consistently in the execution layer (paper-execution-engine), not just 3.
+
+The Ready-to-Buy pool becomes the single authoritative source of strategy signals for trade execution.
+
+The engine state checks (isRunning / isEngineActive) gate execution correctly without reactivating any legacy V1/V2 subsystems.
+
+No behavior is introduced that conflicts with the future-state blueprint or re-enables any legacy RiskManager / SafetyGuardrails / Walter kill-switch logic.
+
+This phase must not change any guardrail semantics or introduce new risk logic. It is strictly about wiring and coverage in the existing architecture.
+
+J4.0 – Constraints & Non-Goals (Important)
+
+Do NOT re-enable:
+
+risk-manager.ts as an active risk layer
+
+SafetyGuardrails as an enforcement layer
+
+Any Walter/Autonomy kill-switch paths beyond what H7/H8 already unified around guardrails_v2.
+
+Do NOT add new hidden guardrails, filters, or trade-blocking logic.
+
+Do NOT change how guardrails are configured in the UI or stored in guardrails_v2.
+
+If at any point you believe a change is needed that:
+
+modifies the future-state blueprint behavior, or
+
+reintroduces legacy V1/V2 behavior, or
+
+changes risk semantics (not just wiring),
+
+STOP, do not implement, and instead:
+
+Document the proposed change
+
+Explain the impact
+
+Wait for explicit approval before proceeding.
+
+J4.1 – Audit: Current Strategy Coverage in Execution Layer
+
+In server/services/paper-execution-engine.ts, audit the following:
+
+checkSymbolForSignal(...)
+
+executeSimulatedTrade(...)
+
+Produce a short audit section in
+docs/audits/phase_8.8.3-J4_strategy_to_execution_unification.md that lists:
+
+Which strategies are currently checked / supported in execution (likely 3).
+
+Which of the 9 defined strategies exist in Strategy Engine but never reach the execution engine.
+
+Any discrepancies between:
+
+strategies used by FX5 + Strategy Engine + RTB
+
+strategies used by paper-execution-engine.
+
+Confirm that all 9 strategies exist at the strategy engine / RTB level (including DHMA) and list them explicitly in the audit.
+
+J4.2 – Unify Strategy Evaluation Path (Execution Uses Strategy Engine, Not Legacy Branches)
+
+Refactor paper-execution-engine.ts so that execution uses a single, unified strategy evaluation interface, rather than hard-coded per-strategy branches.
+
+Requirements:
+
+If a central StrategyEngine API exists (e.g. strategyEngine.detect(...) or similar), the execution engine must use that API, not a bespoke hard-coded per-strategy switch.
+
+All 9 strategies must be eligible to produce a “green light” for execution via this unified path.
+
+This must not alter how the strategies themselves work; it’s wiring only:
+
+No new parameters
+
+No change in thresholds
+
+No new logic inside strategies
+
+Document the updated wiring clearly in the J4 audit file.
+
+J4.3 – Make Ready-To-Buy the Single Source for Execution Decisions
+
+Right now, RTB and the execution engine are partially decoupled.
+
+For paper mode:
+
+Confirm the current flow:
+
+FX5 → Active Filter Pool → Strategy Engine → RTB → paper-execution-engine.
+
+Ensure that execution attempts (P2/P3) are driven from Ready-to-Buy, not directly from the raw active pool.
+
+Concretely:
+
+If the system currently skips RTB and tries to re-run strategies directly inside paper-execution-engine, this must be corrected.
+
+The execution engine should consume RTB signals (or the same underlying signal objects used to populate RTB) as the source of truth.
+
+Ensure dedupe behavior remains intact:
+
+No double entries from the same symbol in RTB and Active Trades
+
+Respect TTL and “consumed” logic as implemented in 8.8.3-I
+
+Do not change RTB TTL or lifecycle semantics in this phase. Only adjust where the execution engine reads from, not how RTB is populated/expired.
+
+All behavior changes must be described in the J4 audit doc.
+
+J4.4 – Engine State Gating (isRunning / isEngineActive)
+
+We already confirmed in J3 that the engine start/stop wiring is correct. J4 should:
+
+Use existing state checks (do not invent new ones):
+
+Local isRunning flags
+
+Database-backed isEngineActive flags
+
+Confirm that:
+
+When engine is ACTIVE:
+
+FX5 populates Active Pool
+
+Strategy evaluation runs
+
+Ready-to-Buy signals are generated
+
+P2/P3 (execution attempts) run for eligible signals
+
+When engine is STOPPED:
+
+Passive learning mode clears the pool (as already designed)
+
+No trades are executed
+
+Do NOT change the semantics of passive mode. Only ensure that when the engine is started:
+
+The system transitions cleanly into active execution
+
+P2/P3 are actually reached
+
+If any change beyond logging is needed in this area, document first in the J4 audit file and wait for approval before applying.
+
+J4.5 – Diagnostics: Confirm P2 and P3 Are Firing for Real RTB Signals
+
+Add temporary, clearly tagged logging (to be removed at the end of J4):
+
+Tag: [8.8.3-J4][EXEC_DIAG]
+
+Log lines should appear at:
+
+P2 – Execution attempt begin (before risk checks), e.g.:
+
+Symbol, strategy, mode
+
+Source (RTB)
+
+Engine state (isRunning, isEngineActive)
+
+P3 – Execution result:
+
+Decision: OPENED / BLOCKED
+
+If BLOCKED: guardrail reason(s) from checkGuardrailRisk
+
+If OPENED: trade ID / simulated trade reference
+
+After validation, remove or comment out these logs per J4.7.
+
+J4.6 – Validation & Tests
+
+After implementation:
+
+Restart the application and use the test user:
+
+username=testuser123
+
+password=SecurePass123!
+
+With paper mode trading ACTIVE, verify in logs that:
+
+P2/P3 logs appear for actual RTB signals
+
+At least some execution attempts happen (even if blocked by guardrails)
+
+If any trades are actually opened, confirm:
+
+Active Trades tab shows them
+
+Execution Attempt Metrics (J) shows corresponding OPENED entries
+
+Confirm that:
+
+No Walter / SafetyGuardrails / legacy RiskManager enforcement path has been re-enabled.
+
+guardrails_v2 + trade-safety.ts remain the single enforcement layer for risk.
+
+Document all results, including examples of [8.8.3-J4][EXEC_DIAG] log lines, in:
+
+docs/audits/phase_8.8.3-J4_strategy_to_execution_unification.md
+
+J4.7 – Cleanup
+
+Once validation is complete:
+
+Remove the temporary [8.8.3-J4][EXEC_DIAG] logs.
+
+Ensure there are no new LSP errors.
+
+Confirm the server starts cleanly with no new warnings.
+
+Update replit.md with a short “Phase 8.8.3-J4 Completed” section summarizing:
+
+All 9 strategies are now evaluated in the execution layer
+
+Execution now reads from RTB (or unified signal objects)
+
+No legacy risk/kill-switch layers were reactivated
+
+Guardrails remain the single source of runtime risk enforcement
