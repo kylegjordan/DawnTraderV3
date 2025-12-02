@@ -1,0 +1,241 @@
+✅ **Phase 8.8.3-H10 — Post-H9 Behavior Integrity Audit
+
+(with explicit rollback point BEFORE H9)**
+
+⚠️ MANDATORY FIRST STEP — CREATE ROLLBACK POINT BEFORE H9
+
+Before doing anything else:
+
+H10.0 — Create Rollback Snapshot
+
+Replit must:
+
+Identify the exact commit or workspace snapshot immediately before Phase 8.8.3-H9 was implemented.
+(This is the pre-H9 system state.)
+
+Save a rollback marker:
+
+rollback_points/phase_8.8.3-H9_prechange
+
+Record in this rollback file:
+
+Git commit hash / workspace snapshot ID
+
+Timestamp
+
+Description:
+"System state immediately prior to Phase 8.8.3-H9 implementation."
+
+Confirm rollback ability by doing a dry-run checkout (no actual rollback).
+
+🔒 After this rollback point is created, proceed with H10.1–H10.6 below.
+
+Phase 8.8.3-H10 — Behavior Integrity Audit
+
+Goal:
+Ensure Phase H9 introduced zero unintended behavioral changes in:
+
+Trading execution
+
+FX5 filtering
+
+Guardrail enforcement
+
+RTB lifecycle
+
+Paper-sim
+
+Kill switch
+
+Mode handling
+
+Trade sizing
+
+This is not a refactor.
+This is not a functionality phase.
+This is an audit + minimal rollbacks ONLY.
+
+H10.1 — Enumerate every file H9 touched
+
+Using Git history + ripgrep:
+
+rg -n "8.8.3-H9" server shared client docs
+
+
+Create table:
+
+docs/audits/phase_8.8.3-H10_behavior_integrity.md
+
+Columns:
+
+| File | Category | Summary of H9 Change | Behavioral Risk (low/med/high) |
+
+No changes made yet — just documentation.
+
+H10.2 — Deep Static Behavior Audit (Trading Path Only)
+
+Review line-by-line:
+
+trading-engine.ts
+
+trade-executor.ts
+
+pre-execution-validator.ts
+
+trade-safety.ts
+
+guardrail-policy.ts
+
+paper-execution-engine.ts
+
+paper-sim-service.ts
+
+fx5-scanner.ts
+
+active-filter-pool.ts
+
+routes.ts (only sections touching trading or FX5)
+
+Document in the audit file:
+
+Answer explicitly:
+
+Did H9 alter any guardrail behavior?
+
+Did H9 alter trade allow/block logic?
+
+Did H9 modify kill switch behavior?
+
+Did H9 alter risk sizing calculations?
+
+Did H9 alter FX5 filter semantics?
+
+Did H9 alter RTB TTL, enqueue, dedupe, expire logic?
+
+Did H9 modify paper/live mode behavior?
+
+If anything is unclear: mark “suspect”.
+
+H10.3 — Audit Autonomy/Walter/Safety Modules
+
+Inspect:
+
+autonomy-controller.ts
+
+autonomy-scheduler.ts
+
+safety-guardrails.ts
+
+walter-memory.ts
+
+reflective-intelligence.ts
+
+behavioral-template.ts
+
+context-refresh-coordinator.ts
+
+system-truth-diagnostic.ts
+
+Confirm:
+
+✔ They cannot influence:
+
+kill switch
+
+guardrails
+
+FX5
+
+RTB
+
+trades
+
+mode switching
+
+✔ Autonomy/Walter is diagnostic only
+✔ SafetyGuardrails must be fully isolated
+✔ No call path remains that can block trading
+
+Document findings.
+
+H10.4 — Runtime Verification (Read-Only)
+
+With:
+
+username: testuser123
+
+password: SecurePass123!
+
+Steps:
+
+Start paper trading
+
+Let ~10 FX5 cycles run
+
+Collect logs:
+
+grep -E "\[GUARDRAIL_BLOCK\]|\[KILL_SWITCH_BLOCKED\]|\[8.8.3-H[4-10]\]" /tmp/logs/Start_application*.log
+
+
+Document:
+
+Any unexpected guardrail blocks
+
+Any unexpected kill-switch blocks
+
+Any autonomy/safety/walter warnings
+
+Whether RTB → trade execution pipeline triggers correctly
+
+Any discrepant behavior vs pre-H9 system
+
+No changes yet.
+
+H10.5 — Apply ONLY Minimal Behavioral Rollbacks
+
+Rollback is allowed ONLY IF:
+
+H9 unintentionally changed trading logic
+
+H9 introduced behavior not in the future-state blueprint
+
+H9 revived legacy modules
+
+H9 created inconsistent guardrail enforcement
+
+H9 changed FX5 or RTB semantics
+
+Rollback must:
+
+Restore pre-H9 behavior only
+
+Preserve H9’s safe warning fixes
+
+Preserve H9’s benign analytics/schema fixes
+
+NOT introduce refactoring or new functionality
+
+Document each rollback in the audit file.
+
+H10.6 — Final Deliverables
+1. Audit Report
+
+docs/audits/phase_8.8.3-H10_behavior_integrity.md containing:
+
+Full H9 file-touch table
+
+Behavior impact analysis
+
+Autonomy/Walter isolation confirmation
+
+Runtime logs
+
+List of all rollbacks made
+
+Confirmation the system now matches pre-H9 behavior with H9-warning-fixes intact
+
+2. replit.md Update
+
+Add:
+
+H10 complete — Pre-H9 behavior fully restored, all H9 warning/analytics fixes retained, no legacy risk systems active, no autonomy/walter interference, guardrails remain sole authority.

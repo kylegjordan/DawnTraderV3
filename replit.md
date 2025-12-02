@@ -21,6 +21,8 @@ The system incorporates a modern `guardrails_v2` schema with four core guardrail
 
 **Phase 8.8.3-H7 Kill Switch Unification** eliminated the dual kill switch architecture. The `guardrails_v2.killSwitchTripped` column is now the single source of truth for all kill switch state, replacing legacy `kill_switch` table lookups. `SafetyGuardrails` service delegates all kill switch operations to `GuardrailPolicy`. `AutonomyController` no longer blocks on KILL_SWITCH policy violations for diagnostic operations. All kill switch operations are logged with `[8.8.3-H7]` prefix for traceability. See `docs/audits/phase_8.8.3-H7_kill_switch_unification.md` for details.
 
+**Phase 8.8.3-H10 Behavior Integrity Audit** complete — Pre-H9 behavior fully restored. All unauthorized H9 changes to Walter, autonomy, and system-truth logic reverted. Files restored: `behavioral-template.ts`, `system-truth-diagnostic.ts`, `context-refresh-coordinator.ts`. No legacy risk systems active, no autonomy/walter interference with trading, guardrails remain sole authority. See `docs/audits/phase_8.8.3-H10_behavior_integrity.md` and `rollback_points/phase_8.8.3-H9_prechange` for details.
+
 The Screeners tab uses a unified v2 filter configuration. A comprehensive audit system ensures that only current, visible fields influence the trade engine. An automated anomaly detection system for override configuration changes, `AuditAnomalyDetectionService`, analyzes audit logs for unusual patterns.
 
 **Adaptive Guardrails** introduces a local-only learning system (`AdaptiveGuardrails` service) that allows LATTI to adaptively tune parameters based on trading outcomes using variance-based statistical analysis of 30-day performance metrics.
