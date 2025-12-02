@@ -235,9 +235,12 @@ class ActiveFilterPoolService {
     if (!isEngineRunning) {
       const pool = this.getPool(mode);
       if (pool.size > 0) {
+        console.log(`[8.8.3-J3][DIAG] PASSIVE_MODE_CLEAR: mode=${mode}, poolSize=${pool.size}, isEngineRunning=${isEngineRunning}`);
         console.log(`[8.6.7][DEBUG] Engine stopped for ${mode} - clearing Active Pool (passive mode enforcement)`);
         this.clearPool(mode);
       }
+    } else {
+      console.log(`[8.8.3-J3][DIAG] PASSIVE_MODE_SKIP: mode=${mode}, isEngineRunning=${isEngineRunning}, pool preserved`);
     }
   }
 }

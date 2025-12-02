@@ -197,6 +197,7 @@ export class Fx5ScannerService {
       // Check if trading engine is active for this mode (from database, not aggregator)
       const context = await storage.getSystemContext(mode);
       const isEngineActive = context?.isEngineActive || false;
+      console.log(`[8.8.3-J3][DIAG] FX5_ENGINE_CHECK: mode=${mode}, isEngineActive=${isEngineActive}, survivors=${survivors.length}`);
 
       // REB 2.8.7: Enforce passive mode - clear pool if engine stopped
       activeFilterPool.enforcePassiveModeIfStopped(mode, isEngineActive);
