@@ -1,0 +1,385 @@
+Phase 8.8.3-H11 — Autonomy / Walter / Safety Isolation Verification (Diagnostic-Only)
+Objective
+
+Verify that all Autonomy / Walter / Safety subsystems are:
+
+Fully isolated from the live trading pipeline (FX5 → Active Filter Pool → Ready-to-Buy → Guardrails → Trade Execution).
+
+Not able to:
+
+Trip or reset any kill switch.
+
+Change guardrails or portfolio settings.
+
+Block or alter trades directly or indirectly.
+
+Safe to keep in place as dormant/observability-only components while DawnTrader V3 continues toward the future-state blueprint.
+
+This phase is diagnostic-only.
+No behavioral changes may be introduced to the trading engine, guardrails, or autonomy/Walter logic in this phase.
+
+Hard Constraints (Do NOT violate these)
+
+No new legacy re-enablement
+
+DO NOT re-enable any legacy system (RiskManager, V1 kill switch paths, old safety pipelines, etc.).
+
+DO NOT rewire anything to go through risk-manager.ts.
+
+No functional behavior changes
+
+You may not change how trades are accepted/rejected, how kill switches behave, or how guardrails block trades.
+
+You may not add or change any database columns, enums, tables, or constraints.
+
+You may not change any function signatures used by the trading engine, guardrails, or RTB pipeline.
+
+Code edits allowed only for:
+
+Adding narrowly-scoped diagnostic logging (with a clear [8.8.3-H11] prefix) if and only if existing logs are insufficient.
+
+Adding comments or updating the audit markdown.
+
+No other changes.
+
+If you discover anything that contradicts the future-state blueprint or user’s stated intentions (e.g., some hidden kill-switch path, or Walter affecting trades):
+
+STOP immediately.
+
+Do not “fix” it in this phase.
+
+Document it in the audit file with file + function + line references.
+
+Report it as a “blocking finding” for Kyle and the architect.
+
+Do not change:
+
+guardrails_v2 schema.
+
+Kill switch behavior.
+
+Guardrail thresholds or defaults.
+
+Any strategy logic.
+
+Any FX5 filter logic.
+
+Any Ready-to-Buy lifecycle logic.
+
+Files / Areas to Inspect
+
+You must audit, at a minimum, these files and any closely related ones you find along the way:
+
+Autonomy / Safety / Walter:
+
+server/services/autonomy-controller.ts
+
+server/services/autonomy-scheduler.ts
+
+server/services/safety-guardrails.ts
+
+server/services/reflective-intelligence.ts
+
+server/services/walter-memory.ts
+
+server/services/behavioral-template.ts
+
+server/services/context-refresh-coordinator.ts
+
+server/services/system-truth-diagnostic.ts
+
+Guardrails & trade safety:
+
+server/services/guardrail-policy.ts
+
+server/services/trade-safety.ts
+
+server/services/guardrail-settings.ts (if present)
+
+Trading pipeline (read-only context check):
+
+server/services/trading-engine.ts
+
+server/services/trade-executor.ts
+
+server/services/paper-execution-engine.ts
+
+server/services/pre-execution-validator.ts
+
+server/services/paper-execution.ts
+
+server/services/fx5-scanner.ts
+
+server/routes.ts (only sections touching kill switches, safety, autonomy, Walter)
+
+Legacy Risk Manager (for confirmation only):
+
+server/services/risk-manager.ts
+
+Deliverables
+
+Create:
+
+docs/audits/phase_8.8.3-H11_autonomy_walter_isolation.md
+
+This must include:
+
+High-level summary
+
+1–2 paragraphs summarizing whether Autonomy/Walter/Safety can influence:
+
+Kill switches
+
+Guardrails
+
+Trade decisions
+
+Explicit statement:
+
+“Autonomy/Walter can/cannot trip or reset kill switches”
+
+“Autonomy/Walter can/cannot modify guardrails or portfolio values”
+
+“Autonomy/Walter can/cannot block trades”
+
+Dataflow diagram (textual)
+
+Describe, in text/bullets, the flow of:
+
+Kill switch state: guardrails_v2 → guardrail-policy → trade-safety → trading engine
+
+Any kill switch reads/writes from:
+
+SafetyGuardrails
+
+AutonomyController
+
+Walter-related services
+
+Clearly mark which paths are active and which are legacy/dead.
+
+Kill Switch Control Points
+
+List every function that can trip or reset a kill switch (by reading the code), including:
+
+File path
+
+Function name
+
+Whether it is reachable in V3
+
+Whether it is used only via guardrail-policy or something else
+
+Explicitly state if SafetyGuardrails or AutonomyController can still call any of these.
+
+Autonomy / Walter Influence Map
+
+For each of these modules:
+
+autonomy-controller.ts
+
+autonomy-scheduler.ts
+
+reflective-intelligence.ts
+
+walter-memory.ts
+
+behavioral-template.ts
+
+system-truth-diagnostic.ts
+
+Answer:
+
+Does this module read guardrails?
+
+Does it write guardrails or kill switches?
+
+Does it call any trade-related functions (directly or indirectly)?
+
+Does it write to any tables that trading logic reads from?
+
+Runtime log snapshot
+
+After running paper trading for at least 10 minutes, capture representative log excerpts showing:
+
+checkGuardrailRisk / [8.8.3-H4] / [8.8.3-H7] logs, if present
+
+Any [SafetyGuardrails], [AutonomyController], [Walter], [ReflectiveIntelligence] logs
+
+For each log family, annotate:
+
+Is it informational only?
+
+Does it suggest any ability to block or alter trades?
+
+Findings classification
+
+Group all findings into:
+
+✅ Safe & aligned
+
+⚠️ Noisy but safe (future cleanup suggested)
+
+🛑 Dangerous / unexpected (must be addressed in a future phase)
+
+Any 🛑 items must include:
+
+Exact file + function + line range
+
+Summary of why it’s dangerous
+
+A clear statement that no fix was applied in H11 (by design).
+
+Tasks
+H11.1 — Static Mapping & Code Walk
+
+Search for all references to:
+
+SafetyGuardrails
+
+AutonomyController
+
+Walter
+
+reflective-intelligence
+
+killSwitch / kill_switch / killSwitchTripped
+
+GuardrailPolicy
+
+checkGuardrailRisk
+
+For each occurrence:
+
+Note the file, function, and whether:
+
+It is used at runtime in V3, or
+
+It’s clearly legacy/admin-only.
+
+Document all of this in the H11 audit markdown.
+
+NO code changes in this step. Pure reading and documenting.
+
+H11.2 — Kill Switch & Guardrail Single-Source-of-Truth Verification
+
+Goal: Prove that only guardrails_v2 → guardrail-policy → trade-safety can enforce kill switch & risk rules.
+
+Confirm in code that:
+
+checkGuardrailRisk() (in trade-safety.ts) is the only pre-trade risk gate in the execution path.
+
+It reads from settings built via guardrails_v2 (e.g. buildSettingsFromGuardrails).
+
+Confirm that:
+
+SafetyGuardrails does not have its own kill switch state separate from guardrails_v2.
+
+Any kill switch reads in SafetyGuardrails delegate to GuardrailPolicy (after H7).
+
+Any mutation methods there are either:
+
+Not present, or
+
+Not reachable in V3.
+
+Confirm that AutonomyController:
+
+Cannot trip or reset the kill switch independently.
+
+Only reads kill switch state (for diagnostics or self-checks) — not enforce trading decisions.
+
+Document all findings in the H11 audit file.
+
+Again: NO changes to any logic in this step.
+
+H11.3 — Runtime Verification (Paper Mode)
+
+Using the test user credentials:
+
+username = testuser123
+
+password = SecurePass123!
+
+Start the app, log in, open the Trading page.
+
+Start paper trading.
+
+Let it run for at least 10 minutes with the current guardrails configuration.
+
+During this run:
+
+Tail the logs and collect:
+
+Any [SafetyGuardrails] messages.
+
+Any [AutonomyController] messages.
+
+Any Walter/reflective-intelligence logs.
+
+All kill-switch related messages (KILL_SWITCH, [8.8.3-H7], [SAFETY_KS], etc.).
+
+Confirm:
+
+No [SafetyGuardrails] ⛔ Kill switch is ENABLED messages appear from any legacy path.
+
+No Walter/autonomy process is blocking trades or flipping kill switches.
+
+Summarize concrete log excerpts in the audit file and annotate them.
+
+H11.4 — Diagnostic Logging (Only If Absolutely Needed)
+
+If — and only if — you cannot answer a critical isolation question using existing logs:
+
+You may add minimal logging with a clear prefix, e.g.:
+
+console.log('[8.8.3-H11][INFO] AutonomyController read kill switch state:', { mode, isTripped });
+
+
+Rules:
+
+Only in read-only locations (no side effects).
+
+No changes to behavior.
+
+No new branches or conditionals that alter logic.
+
+Keep logs few and very targeted.
+
+Every new log line added must be mentioned in the H11 audit doc.
+
+H11.5 — Final Classification & Recommendations
+
+At the end, the H11 audit doc must answer clearly:
+
+Can Walter / Autonomy / SafetyGuardrails affect trading decisions in DawnTrader V3 right now?
+
+Yes/No, with evidence.
+
+Can any code outside GuardrailPolicy + trade-safety trip/reset a kill switch?
+
+Yes/No, with evidence.
+
+Are there any remaining dangerous or confusing warning messages?
+
+If yes, list them and mark them as 🛑 for a future phase (no fix in H11).
+
+Is the system safe to proceed to:
+
+Metrics tables phase
+
+Trade history restoration phase
+
+Ready-to-Buy deeper audit phase
+
+Summary of What You MUST NOT Do in H11
+
+Don’t modify any trading behavior.
+
+Don’t add or change DB migrations.
+
+Don’t re-enable risk-manager.ts.
+
+Don’t give Walter, SafetyGuardrails, or Autonomy new powers.
+
+Don’t patch any issues you find — only document them.

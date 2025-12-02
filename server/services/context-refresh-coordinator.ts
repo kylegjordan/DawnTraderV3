@@ -111,7 +111,8 @@ class ContextRefreshCoordinator extends EventEmitter {
       await this.updateWalterMemory(mode, freshData, traceId);
 
       // Run truth check to detect any remaining discrepancies
-      const truthCheck = await systemTruthDiagnostic.runTruthCheck(CANONICAL_USER_ID, mode);
+      // [8.8.3-H11] Fixed: Pre-H9 signature uses mode-only (single-tenant architecture)
+      const truthCheck = await systemTruthDiagnostic.runTruthCheck(mode);
       const discrepanciesFound = truthCheck.discrepancies.length;
 
       // Phase 8.5 Addendum I: Auto-resync if discrepancies detected
@@ -757,7 +758,8 @@ class ContextRefreshCoordinator extends EventEmitter {
       await this.updateWalterMemory(mode, freshData, finalTraceId);
 
       // Run truth check to detect any remaining discrepancies
-      const truthCheck = await systemTruthDiagnostic.runTruthCheck(CANONICAL_USER_ID, mode);
+      // [8.8.3-H11] Fixed: Pre-H9 signature uses mode-only (single-tenant architecture)
+      const truthCheck = await systemTruthDiagnostic.runTruthCheck(mode);
       const discrepanciesFound = truthCheck.discrepancies.length;
 
       // Phase 8.5 Addendum I: Auto-resync if discrepancies detected

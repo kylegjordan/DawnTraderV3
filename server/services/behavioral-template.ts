@@ -152,17 +152,20 @@ export function detectIntent(userMessage: string): IntentType {
  */
 export async function fetchUserContext(userId: string): Promise<UserTradingContext> {
   try {
-    // Fetch in parallel
-    const [settings, user, activeTrades] = await Promise.all([
-// Phase 41F-L.E2E-PURGE: DISABLED -       storage.getTradingSettings(userId),
-      storage.getUser(userId),
-      storage.getActiveTrades()
-    ]);
-
+    // Fetch user first to get mode
+    const user = await storage.getUser(userId);
     const mode = (user?.tradingMode || 'paper') as 'live' | 'paper';
 
+    // Fetch active trades with correct mode parameter
+    // [8.8.3-H11] Fixed: getActiveTrades requires mode parameter
+    const activeTrades = await storage.getActiveTrades(mode);
+    
+    // Phase 41F-L.E2E-PURGE: Settings are disabled, use defaults
+    const settings = null;
+
     // Get portfolio metrics
-    const metrics = await riskManager.getPortfolioMetrics(userId);
+    // [8.8.3-H11] Fixed: getPortfolioMetrics expects mode, not userId
+    const metrics = await riskManager.getPortfolioMetrics(mode);
 
     // Phase 8.5 Addendum I: Get portfolio value from portfolio_state table
     // Fallback to 0 (no hardcoded initial capital) to match live API behavior
