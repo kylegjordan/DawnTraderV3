@@ -3612,7 +3612,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   // Trading Signals (Ready-to-Buy opportunities)
   // REB 8.8.3-E: Now returns real strategy signals from Active Filtered Pool pipeline
-  // Phase 8.8.3-J5: Added computed quantity field for RTB display
+  // Phase 8.8.3-J7: Returns pre-computed quantity/estimatedValue from signal storage (no more on-the-fly sizing)
   apiRouter.get('/trading-signals', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
@@ -3625,42 +3625,16 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       });
       console.log('[Phase-27.F.15.B.1] Updated route /api/trading-signals → mode-based only');
       
-      // Phase 8.8.3-J5: Compute quantity for each signal based on position sizing
-      let portfolioValue = 50000;
-      const portfolioState = await storage.getPortfolioState({ mode });
-      if (portfolioState?.totalValue) {
-        const parsedValue = parseFloat(String(portfolioState.totalValue));
-        if (Number.isFinite(parsedValue) && parsedValue > 0) {
-          portfolioValue = parsedValue;
-        }
-      }
-      
-      // Phase 8.8.3-J5: Get risk per trade from guardrails (not deprecated getSettings)
-      const guardrails = await storage.getGuardrailsV2({ mode });
-      const riskPerTradePct = parseFloat(String(guardrails?.portfolioRiskPerTradePct || '1.50'));
-      const safeRiskPct = Number.isFinite(riskPerTradePct) && riskPerTradePct > 0 ? riskPerTradePct : 1.50;
-      const riskAmount = (portfolioValue * safeRiskPct) / 100;
-      
+      // Phase 8.8.3-J7: Use stored quantity and estimatedValue from signal (computed at P2)
+      // No more on-the-fly sizing calculation - values are pre-computed by paper-execution-engine
       const signalsWithQuantity = signals.map(signal => {
-        const entryPrice = parseFloat(String(signal.entryPrice));
-        const stopPrice = parseFloat(String(signal.stopPrice));
-        const stopDistance = Math.abs(entryPrice - stopPrice);
+        // J7: Use stored values if available, otherwise return 0
+        const storedQuantity = signal.quantity ? parseFloat(String(signal.quantity)) : 0;
+        const storedEstimatedValue = signal.estimatedValue ? parseFloat(String(signal.estimatedValue)) : 0;
         
-        // Guard against invalid calculations (NaN/Infinity)
-        let quantity = 0;
-        let estimatedValue = 0;
-        
-        if (stopDistance > 0 && Number.isFinite(riskAmount) && Number.isFinite(entryPrice)) {
-          quantity = riskAmount / stopDistance;
-          if (Number.isFinite(quantity)) {
-            estimatedValue = quantity * entryPrice;
-            if (!Number.isFinite(estimatedValue)) {
-              estimatedValue = 0;
-            }
-          } else {
-            quantity = 0;
-          }
-        }
+        // Validate stored values
+        const quantity = Number.isFinite(storedQuantity) ? storedQuantity : 0;
+        const estimatedValue = Number.isFinite(storedEstimatedValue) ? storedEstimatedValue : 0;
         
         return {
           ...signal,
@@ -3673,7 +3647,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       console.log('[8.8.3-E][RTB_API]', {
         mode,
         count: signals.length,
-        sample: signals.slice(0, 3).map(s => s.symbol),
+        sample: signals.slice(0, 3).map(s => ({ symbol: s.symbol, qty: s.quantity })),
       });
       
       res.json(signalsWithQuantity);

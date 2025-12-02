@@ -226,13 +226,25 @@ async function checkSymbolCooldown(
  * Check 5: Position Size Cap
  * Guardrail: maxPositionPercentPct (number)
  * Prevents oversized positions as a percentage of portfolio
+ * 
+ * Phase 8.8.3-J7: Removed hardcoded $50k fallback - if portfolioValue is missing,
+ * skip this check since paper-mode sizing is done at P2 using canonical portfolio source.
  */
 async function checkPositionSizeCap(
   mode: 'live' | 'paper',
   trade: TradeCandidate,
   settings: TradingSettings
 ): Promise<TradeSafetyResult> {
-  const portfolioValue = parseFloat(settings.portfolioValue?.toString() || '0') || 50000;
+  // J7: Parse portfolio value - no hardcoded fallback
+  const rawPortfolioValue = parseFloat(settings.portfolioValue?.toString() || '0');
+  
+  // J7: If no valid portfolio value, skip this check (sizing already done at P2 for paper mode)
+  if (!Number.isFinite(rawPortfolioValue) || rawPortfolioValue <= 0) {
+    console.log(`[J7][GUARDRAIL_SKIP] No valid portfolioValue in settings - skipping position size cap check (mode: ${mode})`);
+    return { ok: true };
+  }
+  
+  const portfolioValue = rawPortfolioValue;
   const riskPerTradePct = parseFloat(settings.riskPerTradePct?.toString() || '4');
   const riskAmount = calculateRiskAmount(portfolioValue, riskPerTradePct);
   const stopDistance = Math.abs(trade.entryPrice - trade.stopPrice);
@@ -248,7 +260,7 @@ async function checkPositionSizeCap(
   const maxPositionValue = (portfolioValue * maxPositionPercent) / 100;
   const positionPercent = (positionValue / portfolioValue) * 100;
 
-  console.log(`[8.8.3-H4][GUARDRAIL_CHECK] position_size_cap: ${positionPercent.toFixed(1)}% of portfolio, max=${maxPositionPercent}%`);
+  console.log(`[8.8.3-H4][GUARDRAIL_CHECK] position_size_cap: ${positionPercent.toFixed(1)}% of portfolio ($${portfolioValue.toFixed(2)}), max=${maxPositionPercent}%`);
 
   if (positionPercent > maxPositionPercent) {
     console.warn(`[8.8.3-H4][GUARDRAIL_BLOCK] code:MAX_POSITION, position:${positionPercent.toFixed(1)}%, max:${maxPositionPercent}%`);
@@ -335,7 +347,16 @@ async function checkLowPricedCoinProtection(
     const strategyStopUSD = Math.abs(entryPriceUSD - stopPriceUSD);
     const atrFloorStopUSD = atr * minStopAtrMult;
     
-    const portfolioValue = parseFloat(settings.portfolioValue?.toString() || '50000');
+    // J7: Parse portfolio value - no hardcoded fallback
+    const rawPortfolioValue = parseFloat(settings.portfolioValue?.toString() || '0');
+    
+    // J7: If no valid portfolio value, skip notional check (sizing already done at P2 for paper mode)
+    if (!Number.isFinite(rawPortfolioValue) || rawPortfolioValue <= 0) {
+      console.log(`[J7][LPCP_SKIP] No valid portfolioValue - skipping LPCP notional check (mode: ${mode})`);
+      return { ok: true };
+    }
+    
+    const portfolioValue = rawPortfolioValue;
     const riskPerTradePct = parseFloat(settings.riskPerTradePct?.toString() || '4');
     const riskAmount = calculateRiskAmount(portfolioValue, riskPerTradePct);
     

@@ -3,9 +3,10 @@ import { KrakenService } from './kraken';
 import { StrategyEngine, type StrategySignal, type TechnicalIndicators } from './strategy-engine';
 import { checkGuardrailRisk, type TradeCandidate, type TradeSafetyResultCode } from './trade-safety';
 import { buildSettingsFromGuardrails, calculateRiskAmount } from './guardrail-settings';
-import type { TradingSettings, PriceData, InsertExecutionAttemptAudit } from '@shared/schema';
+import type { TradingSettings, PriceData, InsertExecutionAttemptAudit, GuardrailsV2 } from '@shared/schema';
 import { contextBridge } from './context-bridge';
 import { activeFilterPool, type ActiveFilteredPair } from './active-filter-pool';
+import { sizePaperPositionForSignal, validatePaperPortfolioValue, type StrategyType } from './paper-position-sizing';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail';
@@ -374,6 +375,38 @@ export class PaperExecutionEngine {
         return;
       }
       
+      // Phase 8.8.3-J7: Load paper portfolio and guardrails ONCE per cycle (Cycle Context)
+      // This is the canonical source for paper-mode position sizing
+      let paperPortfolioValue = 0;
+      let paperGuardrails: GuardrailsV2 | null = null;
+      
+      if (this.mode === 'paper') {
+        try {
+          const paperPortfolio = await storage.getPortfolioState({ mode: 'paper' });
+          paperPortfolioValue = validatePaperPortfolioValue(paperPortfolio?.balance, 'scanForSignals');
+          paperGuardrails = await storage.getGuardrailsV2({ mode: 'paper' }) || null;
+          
+          console.log('[J7][CYCLE_CONTEXT]', {
+            mode: this.mode,
+            portfolioValue: paperPortfolioValue.toFixed(2),
+            riskPerTradePct: paperGuardrails?.portfolioRiskPerTradePct || 'default',
+            maxPositionPct: paperGuardrails?.maxPositionPercentPct || 'default'
+          });
+        } catch (portfolioError) {
+          console.error('[J7][CYCLE_CONTEXT_ERROR] Failed to load paper portfolio:', portfolioError);
+          this.lastCycleSummary = {
+            timestamp: cycleTimestamp,
+            readyToBuyCount: 0,
+            pulledCount: 0,
+            evaluatedSymbols: [],
+            tradesExecuted: 0,
+            mode: this.mode,
+            error: 'portfolio_load_failed'
+          };
+          return;
+        }
+      }
+      
       // REB 8.8.3-D: Build TradingSettings-compatible object from mode-level guardrails only
       // Note: getTradingSettings removed - use guardrails_v2 + defaults
       // Cast to unknown first to avoid type mismatch, then to TradingSettings
@@ -432,6 +465,7 @@ export class PaperExecutionEngine {
       }
       
       // REB 8.8.3-D-FIX: Scan each Active Filtered Pool symbol for signals
+      // Phase 8.8.3-J7: Pass cycle context (portfolioValue + guardrails) to avoid repeated DB calls
       for (const pair of activePool) {
         if (openPositions.length + tradesExecuted >= maxPositions) {
           console.log(`[PaperExecution:${this.mode}] Position limit reached during scan`);
@@ -440,7 +474,10 @@ export class PaperExecutionEngine {
         
         try {
           evaluatedSymbols.push(pair.symbol);
-          const hasSignal = await this.checkSymbolForSignal(pair.symbol, settings);
+          const hasSignal = await this.checkSymbolForSignal(pair.symbol, settings, {
+            portfolioValue: paperPortfolioValue,
+            guardrails: paperGuardrails
+          });
           if (hasSignal) {
             readyToBuyCount++;
             tradesExecuted++;
@@ -475,7 +512,12 @@ export class PaperExecutionEngine {
     }
   }
 
-  private async checkSymbolForSignal(symbol: string, settings: TradingSettings): Promise<boolean> {
+  // Phase 8.8.3-J7: Added cycleContext parameter for paper-mode sizing
+  private async checkSymbolForSignal(
+    symbol: string, 
+    settings: TradingSettings,
+    cycleContext?: { portfolioValue: number; guardrails: GuardrailsV2 | null }
+  ): Promise<boolean> {
     // Check if we already have an open position for this symbol
     const existingPosition = await storage.getPaperSimOpenPositionBySymbol(this.mode,  symbol);
     if (existingPosition) {
@@ -671,6 +713,23 @@ export class PaperExecutionEngine {
         // REB 8.8.3-I: TTL = 30 seconds (one FX5 cycle)
         const expiresAt = new Date(Date.now() + this.RTB_TTL_SECONDS * 1000);
         
+        // Phase 8.8.3-J7: Compute position sizing at P2 using cycle context
+        let signalQuantity = 0;
+        let signalEstimatedValue = 0;
+        
+        if (this.mode === 'paper' && cycleContext) {
+          const sizing = sizePaperPositionForSignal({
+            portfolioValue: cycleContext.portfolioValue,
+            guardrails: cycleContext.guardrails,
+            entryPrice: bestSignal.entryPrice,
+            stopPrice: bestSignal.stopPrice,
+            symbol: bestSignal.symbol,
+            strategy: bestSignal.strategy as StrategyType
+          });
+          signalQuantity = sizing.quantity;
+          signalEstimatedValue = sizing.estimatedValue;
+        }
+        
         try {
           await storage.saveTradingSignal({
             mode: this.mode,
@@ -690,11 +749,14 @@ export class PaperExecutionEngine {
               : null,
             status: 'active',
             expiresAt,
+            quantity: signalQuantity > 0 ? signalQuantity.toString() : null,
+            estimatedValue: signalEstimatedValue > 0 ? signalEstimatedValue.toString() : null,
             metadata: {
               detectedBy: 'paper_execution_engine',
               source: 'active_filtered_pool',
               scanCycle: new Date().toISOString(),
-              ttlSeconds: this.RTB_TTL_SECONDS
+              ttlSeconds: this.RTB_TTL_SECONDS,
+              sizingSource: this.mode === 'paper' ? 'paper_position_sizing' : 'none'
             }
           });
           
@@ -703,15 +765,21 @@ export class PaperExecutionEngine {
             symbol: bestSignal.symbol,
             strategy: bestSignal.strategy,
             confidence: bestSignal.confidence,
+            quantity: signalQuantity.toFixed(8),
+            estimatedValue: signalEstimatedValue.toFixed(2),
             ttlSeconds: this.RTB_TTL_SECONDS,
             expiresAt: expiresAt.toISOString()
           });
         } catch (signalError) {
           console.error(`[8.8.3-I][RTB_ENQUEUE] Failed to save signal for ${bestSignal.symbol}:`, signalError);
         }
+        
+        // Phase 8.8.3-J7: Pass computed sizing to executeSimulatedTrade
+        (bestSignal as any).quantity = signalQuantity;
+        (bestSignal as any).estimatedValue = signalEstimatedValue;
       }
 
-      await this.executeSimulatedTrade(bestSignal, settings);
+      await this.executeSimulatedTrade(bestSignal, settings, cycleContext);
       return true;
     }
 
@@ -786,7 +854,12 @@ export class PaperExecutionEngine {
     await this.executeSimulatedTrade(forcedSignal, settings);
   }
 
-  private async executeSimulatedTrade(signal: StrategySignal, settings: TradingSettings): Promise<void> {
+  // Phase 8.8.3-J7: Added cycleContext parameter for paper-mode sizing
+  private async executeSimulatedTrade(
+    signal: StrategySignal & { quantity?: number; estimatedValue?: number },
+    settings: TradingSettings,
+    cycleContext?: { portfolioValue: number; guardrails: GuardrailsV2 | null }
+  ): Promise<void> {
     console.log(`[PaperExecution:${this.mode}] Signal detected for ${signal.symbol}:`);
     console.log(`  Strategy: ${signal.strategy}, Confidence: ${(signal.confidence * 100).toFixed(1)}%`);
     console.log(`  Entry: ${signal.entryPrice.toFixed(2)}, Stop: ${signal.stopPrice.toFixed(2)}, Target: ${signal.targetPrice.toFixed(2)}`);
@@ -877,13 +950,32 @@ export class PaperExecutionEngine {
       }
     });
 
-    // REB 8.8.3-F: Calculate position size using guardrails_v2 percentage-based risk
-    // Portfolio value from settings, risk percentage from guardrails_v2
-    const portfolioValue = parseFloat(settings.portfolioValue || '50000');
-    const riskPerTradePct = parseFloat(settings.riskPerTradePct || '4.0');
-    const riskAmount = (portfolioValue * riskPerTradePct) / 100;
-    const stopDistance = Math.abs(signal.entryPrice - signal.stopPrice);
-    const quantity = stopDistance > 0 ? riskAmount / stopDistance : 0;
+    // Phase 8.8.3-J7: Use pre-sized quantity from signal (computed at P2)
+    // For paper mode, use the pre-computed quantity; for live mode, use fallback calculation
+    let quantity: number;
+    let portfolioValue: number;
+    let riskAmount: number;
+    
+    if (this.mode === 'paper' && signal.quantity && signal.quantity > 0) {
+      // J7: Use pre-sized quantity from P2
+      quantity = signal.quantity;
+      portfolioValue = cycleContext?.portfolioValue || 0;
+      const riskPct = parseFloat(String(cycleContext?.guardrails?.portfolioRiskPerTradePct || '1.50'));
+      riskAmount = (portfolioValue * riskPct) / 100;
+      console.log(`[J7][EXEC_P3] Using pre-sized quantity: ${quantity.toFixed(8)} (portfolio: $${portfolioValue.toFixed(2)})`);
+    } else {
+      // Fallback for live mode or if no pre-sized quantity (should not happen in paper mode after J7)
+      portfolioValue = parseFloat(settings.portfolioValue || '0');
+      if (portfolioValue <= 0) {
+        console.error(`[J7][EXEC_P3_ERROR] No valid portfolio value for ${this.mode} mode - cannot size position`);
+        return;
+      }
+      const riskPerTradePct = parseFloat(settings.riskPerTradePct || '4.0');
+      riskAmount = (portfolioValue * riskPerTradePct) / 100;
+      const stopDistance = Math.abs(signal.entryPrice - signal.stopPrice);
+      quantity = stopDistance > 0 ? riskAmount / stopDistance : 0;
+      console.log(`[J7][EXEC_P3_FALLBACK] Calculated quantity: ${quantity.toFixed(8)} (mode: ${this.mode})`);
+    }
     
     if (quantity <= 0) {
       console.log(`[8.8.3-F][RISK_REJECT] Invalid position size (quantity=${quantity}) - skipping trade`);
@@ -1091,8 +1183,17 @@ export class PaperExecutionEngine {
   /**
    * Phase 8.8.3-J: Log execution attempt to audit table (non-blocking)
    * Records every P3 decision (execution_attempt → OPENED or BLOCKED)
+   * 
+   * Phase 8.8.3-J7.5: Engine-gated - only logs when engine is ACTIVE
+   * This matches Filter Insights behavior where metrics only accumulate while trading
    */
   private async logExecutionAttempt(audit: Omit<InsertExecutionAttemptAudit, 'createdAt'>): Promise<void> {
+    // J7.5: Engine-gated logging - skip if engine not running
+    if (!this.isRunning) {
+      console.log(`[8.8.3-J7][AUDIT_SKIP] Engine not running - skipping execution audit for ${audit.symbol}`);
+      return;
+    }
+    
     try {
       await storage.createExecutionAttemptAudit(audit);
       console.log(`[8.8.3-J][AUDIT] Execution attempt logged: ${audit.decision} for ${audit.symbol}`);
