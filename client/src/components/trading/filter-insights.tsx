@@ -239,17 +239,24 @@ export function FilterInsights() {
   const [restFetchTime, setRestFetchTime] = useState<number>(Date.now());
 
   // REB 2.8.5A: Query latest scan data from REST (replaces WebSocket for Cycle Info + Last Scan Result)
+  // REB 2.8.9: Fixed React Query polling - added refetchIntervalInBackground and staleTime:0
+  // This ensures polling NEVER pauses when tab loses focus or modal opens
   const { data: scanLatestData, isLoading: isLoadingScan } = useQuery<ScanLatestResponse>({
     queryKey: ['/api/paper-sim/diagnostics/scan-latest?mode=paper'],
     refetchInterval: 5000, // Refresh every 5 seconds for near-real-time updates
+    refetchIntervalInBackground: true, // REB 2.8.9: CRITICAL - Keep polling when tab loses focus
     refetchOnWindowFocus: true,
+    staleTime: 0, // REB 2.8.9: Always fetch fresh data, never use stale cache
   });
 
   // REB 2.8.5A: Query for 24h scan activity metrics (now using FX5-native window)
+  // REB 2.8.9: Fixed React Query polling - added refetchIntervalInBackground and staleTime:0
   const { data: scan24hData, isLoading: isLoading24h } = useQuery<Scan24hResponse>({
     queryKey: ['/api/paper-sim/diagnostics/scan-24h?mode=paper'],
     refetchInterval: 30 * 1000, // Refresh every 30s for more responsive updates
+    refetchIntervalInBackground: true, // REB 2.8.9: CRITICAL - Keep polling when tab loses focus
     refetchOnWindowFocus: true,
+    staleTime: 0, // REB 2.8.9: Always fetch fresh data, never use stale cache
   });
 
   // Query for filter settings (thresholds)
