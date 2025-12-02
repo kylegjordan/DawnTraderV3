@@ -1,29 +1,15 @@
 // server/services/reflective-intelligence.ts
 // Phase 9.4: Reflective Intelligence Layer
 // Self-reflective analysis, meta-reasoning, and decision quality auditing
+// [Phase 8.8.3-H9] Refactored to use typed Drizzle queries
 
 import { db } from '../db';
-import { sql, desc, eq, and } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
+import { reflectionLog, decisionQualityAudit } from '@shared/schema';
 import { contextBridge } from './context-bridge';
 import { nanoid } from 'nanoid';
 
-/**
- * REB 8.8.3-KS-FINAL: Convert JS array to PostgreSQL text[] literal format
- * PostgreSQL expects {"a","b","c"} not ["a","b","c"]
- */
-function toPgArray(arr: string[]): string {
-  if (!arr || arr.length === 0) return '{}';
-  return `{${arr.map(s => `"${s.replace(/"/g, '\\"')}"`).join(',')}}`;
-}
-
-/**
- * Reflection depth levels
- */
 type ReflectionDepth = 'surface' | 'analytical' | 'deep' | 'meta';
-
-/**
- * Quality rating levels
- */
 type QualityRating = 'poor' | 'fair' | 'good' | 'excellent';
 
 interface ReflectionInput {
@@ -31,21 +17,6 @@ interface ReflectionInput {
   depth: ReflectionDepth;
   subjectArea: string;
   contextData?: Record<string, any>;
-}
-
-interface ReflectionLog {
-  id: string;
-  userId: string | null;
-  triggerSource: string;
-  reflectionDepth: ReflectionDepth;
-  subjectArea: string;
-  analysisText: string;
-  insights: Record<string, any> | null;
-  questionsRaised: string[] | null;
-  improvementSuggestions: string[] | null;
-  confidenceScore: string | null;
-  metadata: unknown;
-  createdAt: Date;
 }
 
 interface DecisionAuditInput {
@@ -57,66 +28,29 @@ interface DecisionAuditInput {
   accuracyScore?: number;
 }
 
-interface DecisionQualityAudit {
-  id: string;
-  decisionId: string;
-  userId: string | null;
-  decisionType: string;
-  initialReasoning: string | null;
-  outcomeObserved: string | null;
-  qualityRating: QualityRating;
-  accuracyScore: string | null;
-  biasDetected: string[] | null;
-  lessonsLearned: string | null;
-  alternativeApproaches: string[] | null;
-  wouldRepeat: boolean | null;
-  metadata: unknown;
-  createdAt: Date;
-  evaluatedAt: Date | null;
-}
-
-/**
- * Reflective Intelligence Service
- * Enables self-reflection, meta-reasoning, and decision quality analysis
- */
 class ReflectiveIntelligenceService {
-  /**
-   * Perform reflective analysis
-   */
   async reflect(
     userId: string,
     input: ReflectionInput,
     mode?: 'live' | 'paper'
-  ): Promise<ReflectionLog> {
+  ) {
     const reflectionId = `reflection_${nanoid(12)}`;
-
-    // Analyze based on depth level
     const analysis = this.performAnalysis(input);
 
-    const result = await db.execute(sql`
-      INSERT INTO reflection_log (
-        id, user_id, trigger_source, reflection_depth, subject_area,
-        analysis_text, insights, questions_raised, improvement_suggestions, 
-        confidence_score, metadata
-      ) VALUES (
-        ${reflectionId},
-        ${userId},
-        ${input.triggerSource},
-        ${input.depth}::reflection_depth,
-        ${input.subjectArea},
-        ${analysis.text},
-        ${JSON.stringify(analysis.insights)}::jsonb,
-        ${toPgArray(analysis.questions)}::text[],
-        ${toPgArray(analysis.suggestions)}::text[],
-        ${analysis.confidence},
-        ${JSON.stringify({ mode, contextData: input.contextData })}::jsonb
-      )
-      RETURNING *
-    `);
+    const [created] = await db.insert(reflectionLog).values({
+      id: reflectionId,
+      userId,
+      triggerSource: input.triggerSource,
+      reflectionDepth: input.depth,
+      subjectArea: input.subjectArea,
+      analysisText: analysis.text,
+      insights: analysis.insights,
+      questionsRaised: analysis.questions,
+      improvementSuggestions: analysis.suggestions,
+      confidenceScore: analysis.confidence,
+      metadata: { mode, contextData: input.contextData },
+    }).returning();
 
-    const created = result.rows[0] as ReflectionLog;
-
-    // Broadcast via Context Bridge
     await contextBridge.broadcast({
       type: 'state_update',
       userId,
@@ -133,9 +67,6 @@ class ReflectiveIntelligenceService {
     return created;
   }
 
-  /**
-   * Perform analysis based on reflection depth
-   */
   private performAnalysis(input: ReflectionInput): {
     text: string;
     insights: Record<string, any>;
@@ -232,43 +163,30 @@ class ReflectiveIntelligenceService {
     }
   }
 
-  /**
-   * Audit decision quality post-execution
-   */
   async auditDecision(
     userId: string,
     input: DecisionAuditInput,
     mode?: 'live' | 'paper'
-  ): Promise<DecisionQualityAudit> {
+  ) {
     const auditId = `audit_${nanoid(12)}`;
-
-    // Analyze decision quality
     const analysis = this.analyzeDecisionQuality(input);
 
-    const [created] = await db.execute(sql`
-      INSERT INTO decision_quality_audit (
-        id, decision_id, user_id, decision_type, initial_reasoning,
-        outcome_observed, quality_rating, accuracy_score, bias_detected,
-        lessons_learned, alternative_approaches, would_repeat, metadata
-      ) VALUES (
-        ${auditId},
-        ${input.decisionId},
-        ${userId},
-        ${input.decisionType},
-        ${input.initialReasoning},
-        ${input.outcomeObserved || null},
-        ${input.qualityRating}::quality_rating,
-        ${input.accuracyScore || null},
-        ${toPgArray(analysis.biases)}::text[],
-        ${analysis.lessons},
-        ${toPgArray(analysis.alternatives)}::text[],
-        ${analysis.wouldRepeat},
-        ${JSON.stringify({ mode })}::jsonb
-      )
-      RETURNING *
-    `);
+    const [created] = await db.insert(decisionQualityAudit).values({
+      id: auditId,
+      decisionId: input.decisionId,
+      userId,
+      decisionType: input.decisionType,
+      initialReasoning: input.initialReasoning,
+      outcomeObserved: input.outcomeObserved || null,
+      qualityRating: input.qualityRating,
+      accuracyScore: input.accuracyScore || null,
+      biasDetected: analysis.biases,
+      lessonsLearned: analysis.lessons,
+      alternativeApproaches: analysis.alternatives,
+      wouldRepeat: analysis.wouldRepeat,
+      metadata: { mode },
+    }).returning();
 
-    // Broadcast via Context Bridge
     await contextBridge.broadcast({
       type: 'state_update',
       userId,
@@ -282,12 +200,9 @@ class ReflectiveIntelligenceService {
       },
     });
 
-    return created.rows[0] as DecisionQualityAudit;
+    return created;
   }
 
-  /**
-   * Analyze decision quality and extract lessons
-   */
   private analyzeDecisionQuality(input: DecisionAuditInput): {
     biases: string[];
     lessons: string;
@@ -296,13 +211,11 @@ class ReflectiveIntelligenceService {
   } {
     const { qualityRating, accuracyScore, outcomeObserved } = input;
 
-    // Detect potential biases based on quality
     const biases: string[] = [];
     if (qualityRating === 'poor' || (accuracyScore && accuracyScore < 0.5)) {
       biases.push('confirmation_bias', 'availability_heuristic');
     }
 
-    // Generate lessons
     let lessons = '';
     if (qualityRating === 'poor' || qualityRating === 'fair') {
       lessons = `Decision quality was ${qualityRating}. Need to improve reasoning process and consider more alternatives.`;
@@ -314,59 +227,35 @@ class ReflectiveIntelligenceService {
       lessons += ` Observed outcome: ${outcomeObserved}`;
     }
 
-    // Suggest alternatives
     const alternatives: string[] = [
       'Consider multiple perspectives',
       'Seek disconfirming evidence',
       'Use structured decision frameworks',
     ];
 
-    // Determine if would repeat
     const wouldRepeat =
       qualityRating === 'good' || qualityRating === 'excellent';
 
     return { biases, lessons, alternatives, wouldRepeat };
   }
 
-  /**
-   * Get recent reflections
-   */
-  async getReflections(
-    userId: string,
-    limit = 20
-  ): Promise<ReflectionLog[]> {
-    const result = await db.execute(sql`
-      SELECT * FROM reflection_log
-      WHERE user_id = ${userId}
-      ORDER BY created_at DESC
-      LIMIT ${limit}
-    `);
-
-    return result.rows as ReflectionLog[];
+  async getReflections(userId: string, limit = 20) {
+    return db.select()
+      .from(reflectionLog)
+      .where(eq(reflectionLog.userId, userId))
+      .orderBy(desc(reflectionLog.createdAt))
+      .limit(limit);
   }
 
-  /**
-   * Get decision audits
-   */
-  async getDecisionAudits(
-    userId: string,
-    limit = 20
-  ): Promise<DecisionQualityAudit[]> {
-    const result = await db.execute(sql`
-      SELECT * FROM decision_quality_audit
-      WHERE user_id = ${userId}
-      ORDER BY created_at DESC
-      LIMIT ${limit}
-    `);
-
-    return result.rows as DecisionQualityAudit[];
+  async getDecisionAudits(userId: string, limit = 20) {
+    return db.select()
+      .from(decisionQualityAudit)
+      .where(eq(decisionQualityAudit.userId, userId))
+      .orderBy(desc(decisionQualityAudit.createdAt))
+      .limit(limit);
   }
 
-  /**
-   * Trigger deep reflection on recent activities
-   */
   async triggerDeepReflection(userId: string, mode?: 'live' | 'paper') {
-    // Perform deep reflection on recent decisions
     return await this.reflect(
       userId,
       {
@@ -383,11 +272,7 @@ class ReflectiveIntelligenceService {
     );
   }
 
-  /**
-   * Trigger meta-reflection on reasoning quality
-   */
   async triggerMetaReflection(userId: string, mode?: 'live' | 'paper') {
-    // Perform meta-reflection on our own reasoning
     return await this.reflect(
       userId,
       {
