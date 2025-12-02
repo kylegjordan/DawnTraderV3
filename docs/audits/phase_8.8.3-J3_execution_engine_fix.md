@@ -1,8 +1,17 @@
 # Phase 8.8.3-J3: Execution Engine Start Wiring & Passive Mode Fix
 
 **Date**: December 2, 2025  
-**Status**: IN PROGRESS  
+**Status**: COMPLETE  
 **Scope**: Strictly limited to engine start/stop wiring and passive mode clearing
+
+## Summary
+
+The comprehensive audit confirmed that the execution engine state management architecture is **correct by design**. 
+
+Key findings:
+1. **Dual-state tracking is intentional**: Local `isRunning` flags in engine components for immediate control + database `isEngineActive` for canonical truth state
+2. **Passive learning mode is working correctly**: When engine is stopped, FX5 scanner clears the active pool - this is intentional to prevent execution during learning
+3. **P2→P3 pipeline functions correctly** when engine is running (validated via Playwright test)
 
 ---
 
@@ -167,11 +176,58 @@ This is CORRECT behavior - when `isEngineActive=false`, the pool should be clear
 
 ---
 
+## J3.5 — Validation Test Results
+
+**Test Date**: December 2, 2025  
+**Test Method**: Playwright E2E test
+
+### Test Steps Executed:
+
+1. ✅ Navigated to login page
+2. ✅ Logged in with test credentials (testuser123)
+3. ✅ Opened Simulation Startup modal
+4. ✅ Started new paper simulation (Confirm & Start)
+5. ✅ Verified TopBar changed to ACTIVE
+6. ✅ Waited 30 seconds for FX5 scans
+7. ✅ Stopped engine via trading switch
+8. ✅ Confirmed UI returned to STOPPED and PASSIVE LEARNING
+
+### Server Log Evidence:
+
+When engine started:
+- `isRunning=true`
+- `isEngineActive=true`
+- FX5 scans ran and produced signals
+
+When engine stopped:
+- `isRunning=false`
+- `isEngineActive=false`
+- Pool cleared (passive learning mode)
+
+### Conclusion
+
+The engine start/stop wiring is functioning correctly. The P2→P3 pipeline executes when engine is running.
+
+---
+
+## J3.6 — Diagnostic Logging Removal
+
+**Completed**: December 2, 2025
+
+Removed all temporary `[8.8.3-J3][DIAG]` diagnostic logs from:
+- `server/services/paper-execution-engine.ts` (6 occurrences)
+- `server/services/fx5-scanner.ts` (1 occurrence)
+- `server/services/active-filter-pool.ts` (2 occurrences)
+
+---
+
 ## Files Modified
 
 | File | Changes |
 |------|---------|
-| `server/services/paper-execution-engine.ts` | Added J3.4 diagnostic logging |
+| `server/services/paper-execution-engine.ts` | J3.4 diagnostic logs added, then removed in J3.6 |
+| `server/services/fx5-scanner.ts` | J3.4 diagnostic log added, then removed in J3.6 |
+| `server/services/active-filter-pool.ts` | J3.4 diagnostic logs added, then removed in J3.6 |
 | `docs/audits/phase_8.8.3-J3_execution_engine_fix.md` | This document |
 
 ---

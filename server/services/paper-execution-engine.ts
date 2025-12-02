@@ -44,7 +44,6 @@ export class PaperExecutionEngine {
 
     this.isRunning = true;
     console.log(`[PaperExecution:${this.mode}] Starting paper trading engine`);
-    console.log(`[8.8.3-J3][DIAG] ENGINE_START: mode=${this.mode}, isRunning=${this.isRunning}, timestamp=${new Date().toISOString()}`);
 
     // Broadcast engine start
     contextBridge.broadcast({
@@ -68,7 +67,6 @@ export class PaperExecutionEngine {
 
   async stop(): Promise<void> {
     this.isRunning = false;
-    console.log(`[8.8.3-J3][DIAG] ENGINE_STOP: mode=${this.mode}, isRunning=${this.isRunning}, timestamp=${new Date().toISOString()}`);
     
     if (this.monitoringInterval) {
       clearInterval(this.monitoringInterval);
@@ -478,8 +476,6 @@ export class PaperExecutionEngine {
   }
 
   private async checkSymbolForSignal(symbol: string, settings: TradingSettings): Promise<boolean> {
-    console.log(`[8.8.3-J3][DIAG] checkSymbolForSignal: symbol=${symbol}, mode=${this.mode}`);
-    
     // Check if we already have an open position for this symbol
     const existingPosition = await storage.getPaperSimOpenPositionBySymbol(this.mode,  symbol);
     if (existingPosition) {
@@ -748,7 +744,6 @@ export class PaperExecutionEngine {
   }
 
   private async executeSimulatedTrade(signal: StrategySignal, settings: TradingSettings): Promise<void> {
-    console.log(`[8.8.3-J3][DIAG] executeSimulatedTrade: symbol=${signal.symbol}, strategy=${signal.strategy}, mode=${this.mode}`);
     console.log(`[PaperExecution:${this.mode}] Signal detected for ${signal.symbol}:`);
     console.log(`  Strategy: ${signal.strategy}, Confidence: ${(signal.confidence * 100).toFixed(1)}%`);
     console.log(`  Entry: ${signal.entryPrice.toFixed(2)}, Stop: ${signal.stopPrice.toFixed(2)}, Target: ${signal.targetPrice.toFixed(2)}`);
@@ -810,7 +805,6 @@ export class PaperExecutionEngine {
       });
       
       // Phase 8.8.3-J: Execution Attempt Audit - BLOCKED decision (non-blocking)
-      console.log(`[8.8.3-J3][DIAG] execution_attempt_audit: decision=BLOCKED, symbol=${signal.symbol}, reason=${riskCheck.code}`);
       this.logExecutionAttempt({
         mode: this.mode,
         symbol: signal.symbol,
@@ -983,7 +977,6 @@ export class PaperExecutionEngine {
       });
       
       // Phase 8.8.3-J: Execution Attempt Audit - OPENED decision (non-blocking)
-      console.log(`[8.8.3-J3][DIAG] execution_attempt_audit: decision=OPENED, symbol=${signal.symbol}, tradeId=${trade.id}`);
       this.logExecutionAttempt({
         mode: this.mode,
         symbol: signal.symbol,

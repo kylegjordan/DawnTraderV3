@@ -49,6 +49,8 @@ The Filter Insights UI now uses REST data for Cycle Info and Last Scan Result fi
 
 **Phase REB 2.8.9 Filter Insights Polling Fix**: Root cause identified - React Query's default `refetchIntervalInBackground: false` caused polling to pause when tab lost focus or modals opened. Fixed by adding `refetchIntervalInBackground: true` and `staleTime: 0` to both scan-latest (5s interval) and scan-24h (30s interval) queries. This ensures continuous background polling regardless of tab focus state.
 
+**Phase 8.8.3-J3 Execution Engine State Audit (Complete)**: Comprehensive audit verified the execution engine state management architecture is correct by design. Key findings: (1) Dual-state tracking is intentional - local `isRunning` flags in engine components for immediate control + database `isEngineActive` for canonical truth state. (2) Passive learning mode works correctly - when engine is stopped, FX5 scanner clears the active pool to prevent execution during learning. (3) P2→P3 pipeline functions correctly when engine is running (validated via Playwright test). The flow: `/api/trading/start` → `startPaperSimulation()` → `PaperPortfolioManager.start()` → `PaperExecutionEngine.start()` (sets `isRunning=true`) → database `isEngineActive=true` update. See `docs/audits/phase_8.8.3-J3_execution_engine_fix.md` for full details.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.
