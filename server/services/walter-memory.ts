@@ -310,14 +310,9 @@ export async function displayIngestionSummary(userId: string, sessionLabel?: str
  * Prioritizes keeping recent and high-importance memories
  */
 async function enforceMemoryLimit(userId: string): Promise<void> {
-  // Get user settings with NEW DEFAULT: 1,500 memories (Phase 6.3)
-// Phase 41F-L.E2E-PURGE: DISABLED -   const settings = await storage.getTradingSettings(userId);
-  const memoryLimit = (settings as any)?.walterMemoryLimit ?? 1500;
-  
-  // -1 means unlimited
-  if (memoryLimit === -1) {
-    return;
-  }
+  // Phase 41F-L.E2E-PURGE: Use default memory limit (settings fetch disabled)
+  // Default: 1,500 memories (Phase 6.3)
+  const memoryLimit = 1500;
   
   // Get all memories for user
   const memories = await storage.getWalterMemories(userId);
