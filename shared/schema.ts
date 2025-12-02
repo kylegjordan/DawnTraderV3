@@ -74,6 +74,10 @@ export const outcomeConfidenceEnum = pgEnum("outcome_confidence", ["very_low", "
 export const collaborationRoleEnum = pgEnum("collaboration_role", ["coordinator", "analyst", "executor", "reviewer", "observer"]);
 export const consensusStateEnum = pgEnum("consensus_state", ["forming", "discussing", "evaluating", "agreed", "disagreed", "overridden"]);
 
+// Phase 9.4 enums (Reflective Intelligence)
+export const reflectionDepthEnum = pgEnum("reflection_depth", ["surface", "analytical", "deep", "meta"]);
+export const qualityRatingEnum = pgEnum("quality_rating", ["poor", "fair", "good", "excellent"]);
+
 // Phase 9.7 enums
 export const feedbackSourceEnum = pgEnum("feedback_source", ["self", "peer", "system"]);
 
@@ -3192,6 +3196,52 @@ export const metaCognitionLog = pgTable("meta_cognition_log", {
   severityIdx: index("meta_cognition_log_severity_idx").on(table.severity),
   resolvedIdx: index("meta_cognition_log_resolved_idx").on(table.resolved),
   createdAtIdx: index("meta_cognition_log_created_at_idx").on(table.createdAt),
+}));
+
+// Phase 9.4: Reflection Log - Self-Reflective Analysis Records
+export const reflectionLog = pgTable("reflection_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id", { length: 50 }),
+  triggerSource: varchar("trigger_source", { length: 100 }).notNull(),
+  reflectionDepth: reflectionDepthEnum("reflection_depth").default("analytical").notNull(),
+  subjectArea: varchar("subject_area", { length: 200 }).notNull(),
+  analysisText: text("analysis_text").notNull(),
+  insights: jsonb("insights"),
+  questionsRaised: text("questions_raised").array().default(sql`ARRAY[]::text[]`),
+  improvementSuggestions: text("improvement_suggestions").array().default(sql`ARRAY[]::text[]`),
+  confidenceScore: doublePrecision("confidence_score"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("reflection_log_user_id_idx").on(table.userId),
+  triggerSourceIdx: index("reflection_log_trigger_source_idx").on(table.triggerSource),
+  depthIdx: index("reflection_log_reflection_depth_idx").on(table.reflectionDepth),
+  createdAtIdx: index("reflection_log_created_at_idx").on(table.createdAt),
+}));
+
+// Phase 9.4: Decision Quality Audit - Post-Execution Decision Analysis
+export const decisionQualityAudit = pgTable("decision_quality_audit", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  decisionId: varchar("decision_id", { length: 100 }).notNull(),
+  userId: varchar("user_id", { length: 50 }),
+  decisionType: varchar("decision_type", { length: 100 }).notNull(),
+  initialReasoning: text("initial_reasoning"),
+  outcomeObserved: text("outcome_observed"),
+  qualityRating: qualityRatingEnum("quality_rating").notNull(),
+  accuracyScore: doublePrecision("accuracy_score"),
+  biasDetected: text("bias_detected").array().default(sql`ARRAY[]::text[]`),
+  lessonsLearned: text("lessons_learned"),
+  alternativeApproaches: text("alternative_approaches").array().default(sql`ARRAY[]::text[]`),
+  wouldRepeat: boolean("would_repeat"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  evaluatedAt: timestamp("evaluated_at", { withTimezone: true }),
+}, (table) => ({
+  decisionIdIdx: index("decision_quality_audit_decision_id_idx").on(table.decisionId),
+  userIdIdx: index("decision_quality_audit_user_id_idx").on(table.userId),
+  decisionTypeIdx: index("decision_quality_audit_decision_type_idx").on(table.decisionType),
+  qualityRatingIdx: index("decision_quality_audit_quality_rating_idx").on(table.qualityRating),
+  createdAtIdx: index("decision_quality_audit_created_at_idx").on(table.createdAt),
 }));
 
 // Phase 9.9: Strategic Memory Archive - Long-Term Knowledge Persistence

@@ -1,0 +1,312 @@
+Phase 8.8.3-H9 — Warning Cleanup & Non-Critical Analytics Fixes
+0. Context (for the Replit agent)
+
+You are working on The Dawn Trader V3.
+
+The trading engine, FX5 scanner, strategies, guardrails, and LPCP are now considered the single source of truth for trading decisions.
+
+Legacy subsystems (RiskManager, SafetyGuardrails, Walter/autonomy extras, etc.) must not be re-enabled or allowed to influence trading decisions.
+
+The user has a Future-State Blueprint and an agreed roadmap. Any feature that exists there but is not fully wired now must be preserved (or cleanly stubbed), not deleted.
+
+This phase is H9 – Warning Cleanup only. It is not allowed to change how trades are selected, blocked, or executed.
+
+Your mission:
+Reduce noise in logs by fixing well-understood, non-critical warnings/errors without changing trading behavior.
+
+1. Goals
+
+Eliminate or correct the following known warning/error sources:
+
+decision_quality_audit.accuracy_score numeric field overflow in Reflective Intelligence / AutonomyController.
+
+Any autonomy-scheduler / safety_sweeper log spam or mis-reported counts.
+
+Excessive or confusing deprecated SafetyGuardrails warnings (while keeping it deprecated & non-functional for trading).
+
+Confirm that none of these systems are part of the current trading decision path and that any changes:
+
+Do not affect guardrails, FX5, RTB lifecycle, or trade execution.
+
+Do not re-introduce hidden kill switches or hidden blockers.
+
+Produce a clear, human-readable audit doc summarizing:
+
+What was noisy before
+
+What you changed
+
+Why it is safe relative to current + future-state architecture
+
+2. Non-Goals / Hard Constraints
+
+You MUST NOT:
+
+Modify trading decision behavior:
+
+No changes to FX5 filters, guardrails, LPCP, RTB lifecycle, execution, position sizing, or ATR rules.
+
+No new hidden checks, thresholds, or safety logic.
+
+Re-enable any legacy subsystems:
+
+Do not revive old RiskManager behavior.
+
+Do not give SafetyGuardrails or Walter/autonomy the ability to block trades, flip kill switches, or stop engines.
+
+Delete or cripple any feature that appears in the Future-State Blueprint:
+
+If a module is referenced there (e.g., future Walter/Autonomy analytics), you may de-noise or stub, but not remove the concept.
+
+If in doubt, leave the behavior as-is and document the uncertainty in the audit.
+
+Make any “extra” change that wasn’t part of this plan without first documenting it in the audit and exposing it via logs (see §6).
+
+3. Files & Areas to Inspect
+
+You MUST review these before changing anything:
+
+Reflective Intelligence & Decision Audit
+
+server/services/reflective-intelligence.ts
+
+DB schema for decision_quality_audit (especially accuracy_score)
+
+Autonomy / Safety / Kill Switch Analytics
+
+server/services/autonomy-controller.ts
+
+server/services/autonomy-scheduler.ts
+
+server/services/safety-guardrails.ts (or similarly named)
+
+Any helper modules used only for analytics / self-checks
+
+Guardrail Policy & Kill Switch
+
+server/services/guardrail-policy.ts
+
+server/services/trade-safety.ts
+
+Confirm again that kill switch state flows only from guardrails_v2.
+
+Logs
+
+Recent log files from a 5–10 minute active paper session, focusing on:
+
+numeric field overflow
+
+[AutonomyController] / ReflectiveIntelligence
+
+[SafetyGuardrails] deprecation warnings
+
+Autonomy sweeper / delete count messages
+
+4. Planned Changes (What you MAY change)
+H9.1 — Fix decision_quality_audit.accuracy_score Overflow
+
+Intent: keep the decision-quality auditing working, but stop numeric overflow errors.
+
+Steps:
+
+Inspect DB schema for decision_quality_audit.accuracy_score.
+
+Confirm it is currently NUMERIC(3,2) (range ~ -9.99 to 9.99).
+
+Inspect all usages in code (search for decision_quality_audit, accuracy_score, ReflectiveIntelligence).
+
+Confirm these scores are diagnostic only (health %, cognitive score %, etc.), not used for trading decisions.
+
+Confirm they are intended to be 0–100 style percentages.
+
+If they are diagnostic only (no influence on guardrails / RTB / execution), then:
+
+Apply a DB migration:
+
+Change accuracy_score to NUMERIC(5,2) or equivalent, able to hold 0.00–100.00.
+
+In reflective-intelligence.ts:
+
+Ensure values written are clamped to a safe range, e.g. 0 ≤ score ≤ 100.
+
+Guard against NaN / Infinity (log and skip rather than error).
+
+If you find any path where accuracy_score or these scores influence trading decisions:
+
+Stop. Do not change behavior.
+
+Document the finding in the H9 audit doc and do not proceed beyond adding defensive try/catch that logs and skips the insert.
+
+H9.2 — Tidy Autonomy Scheduler / Safety Sweeper Warnings
+
+Intent: keep autonomy’s archival tasks working, but make logs honest and non-spammy.
+
+Steps:
+
+In autonomy-scheduler.ts and any “sweeper” / cleanup job:
+
+Ensure log messages correctly report:
+
+how many rows were scanned
+
+how many were deleted
+
+how often jobs run.
+
+Ensure there is **no interaction with:
+
+guardrails_v2
+
+trading status
+
+kill switches
+
+trading engine start/stop.**
+
+If you find any logic in autonomy scheduler that:
+
+toggles kill switches,
+
+modifies guardrails,
+
+toggles engine state,
+
+or alters trading data:
+
+Do not modify it yet.
+
+Clearly document it in the H9 audit doc under “Unexpected autonomy dependencies” and leave behavior unchanged.
+
+You may:
+
+Fix off-by-one counters,
+
+Reduce log verbosity (e.g., log summary once per run instead of per-row),
+
+Wrap non-critical errors in try/catch and log them as warnings instead of exploding the logs.
+
+H9.3 — De-Noise Deprecated SafetyGuardrails (Without Re-Enabling)
+
+We already unified kill-switch state to guardrails_v2. SafetyGuardrails must remain:
+
+Deprecated
+
+Non-blocking
+
+Non-essential
+
+You may:
+
+Adjust its logging so that:
+
+It logs a clear single deprecation warning at first use (or at startup).
+
+It does not spam logs on each call.
+
+It never claims to be blocking trading decisions.
+
+Ensure that any remaining use is:
+
+strictly diagnostic (e.g., Autonomy self-checks),
+
+never used to make yes/no trade decisions.
+
+You may not:
+
+Reintroduce kill-switch toggling in SafetyGuardrails.
+
+Add any new checks that control trading.
+
+5. Testing Requirements
+
+Use this test account:
+
+username: testuser123
+password: SecurePass123!
+
+H9.T1 — 10-Minute Paper Trading Smoke Test
+
+Start paper trading with the user’s current guardrails and LPCP values.
+
+Leave trading ACTIVE for at least 10 minutes.
+
+During that time:
+
+Visit Filter Insights → confirm CPH, scan IDs, 24h metrics updating.
+
+Visit Ready-to-Buy → confirm signals accumulating.
+
+Confirm no active trades are appearing solely as a result of H9 (we are not trying to change trade behavior here).
+
+Capture logs and verify:
+
+No numeric field overflow errors from decision_quality_audit.
+
+No new error categories were introduced.
+
+SafetyGuardrails logs at most one or a small number of deprecation warnings, not continuous spam.
+
+Autonomy sweeper logs are sane and not flooding.
+
+H9.T2 — Regression Check Against Trading Behavior
+
+Before making H9 changes, note:
+
+For a 5-minute paper run:
+
+Rough number of RTB signals,
+
+Number of executed trades (likely 0 right now),
+
+Number of pairs in Active Filtered Pool.
+
+After H9 changes, run the same 5-minute test:
+
+Same profile of RTB counts, trades, and pool size should hold within reasonable variance.
+
+If any major behavioral difference appears (e.g., suddenly trades start/stop appearing), stop and document it instead of “fixing” it.
+
+6. Documentation & Reporting Back
+
+You must create/update:
+
+docs/audits/phase_8.8.3-H9_warning_cleanup.md
+
+This document must include:
+
+List of all warnings/errors you targeted, with:
+
+Example log lines before and after (short snippets).
+
+Which file(s) you changed.
+
+Why each change is safe relative to trading behavior.
+
+Any surprises or out-of-scope findings:
+
+e.g., “Autonomy scheduler appears to touch X table; we did NOT modify this.”
+
+These should be clearly marked as “Discovered, not changed” for future phases.
+
+Confirmations:
+
+“No legacy RiskManager functionality was re-enabled.”
+
+“SafetyGuardrails remains deprecated and non-blocking.”
+
+“Trade decision logic (FX5, guardrails, LPCP, execution) is unchanged.”
+
+7. Scope-Creep / Unexpected Issues — What to Do
+
+If, during this phase, you discover anything that seems important but is not covered above (for example, a hidden dependency or a legacy mechanism still influencing trading):
+
+Do NOT change it.
+
+Log it clearly in:
+
+the H9 audit doc, and
+
+a short summary in replit.md under a new heading like
+Open Questions / Deferred Items.
+
+Stop and return control to the user for guidance before any additional directive.
