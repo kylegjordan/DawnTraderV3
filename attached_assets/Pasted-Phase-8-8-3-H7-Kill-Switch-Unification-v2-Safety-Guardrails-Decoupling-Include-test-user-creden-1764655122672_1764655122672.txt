@@ -1,0 +1,279 @@
+Phase 8.8.3-H7 — Kill Switch Unification v2 & Safety Guardrails Decoupling
+
+Include test user credentials per your request:
+
+username: testuser123
+
+password: SecurePass123!
+
+Phase 8.8.3-H7 — Kill Switch Unification v2 & Safety Guardrails Decoupling
+
+Objective
+
+Make Guardrails v2 the only kill switch for trading.
+
+Neutralize the SafetyGuardrails global kill switch and prevent it from affecting or confusing the system.
+
+Ensure AutonomyController and any background processes can no longer silently block or spam KILL_SWITCH because of legacy state.
+
+H7.0 — Files to Inspect (Read-Only)
+
+Ask Replit to review, but not modify yet:
+
+server/services/safety-guardrails.ts
+
+server/services/autonomy-controller.ts
+
+server/routes.ts (sections for:
+
+/safety/* routes
+
+/autonomy/* routes
+
+/api/trading/start
+
+any kill_switch or SafetyGuardrails references)
+
+server/services/guardrail-policy.ts (for official kill switch behavior)
+
+Database tables:
+
+kill_switch
+
+guardrails_v2
+
+Goal: confirm that the only place kill_switch.global_kill_switch is used for kill-switch semantics is SafetyGuardrails / Autonomy, not the trading engine.
+
+H7.1 — One-Time Data Fix: Turn Off the Global Kill Switch
+
+Scope: DB only. No code yet.
+
+Run this SQL migration:
+
+UPDATE kill_switch
+SET is_enabled = FALSE,
+    reason = 'Manual reset via Phase 8.8.3-H7 kill switch unification',
+    updated_at = NOW()
+WHERE id = 'global_kill_switch';
+
+
+Verify:
+
+SELECT * FROM kill_switch WHERE id = 'global_kill_switch';
+
+
+Ensure:
+
+is_enabled = false
+
+reason reflects the reset
+
+Confirm via API (while logged in as testuser123):
+
+GET /safety/status (if implemented) — SafetyGuardrails should report kill switch as disabled.
+
+GET /api/kill-switch/status?mode=paper and ?mode=live — both should still show killSwitchTripped: false (this is already true per H6).
+
+H7.2 — Architectural Change: Make Guardrails v2 the Single Kill Switch Source
+
+Goal: No service in the system should own its own kill-switch state apart from guardrails_v2. SafetyGuardrails can read/reflect that state, but not create a second truth.
+
+Steps:
+
+Update safety-guardrails.ts kill-switch logic
+
+Locate all places it:
+
+Reads kill_switch table
+
+Writes to kill_switch table
+
+Exposes getKillSwitchStatus, toggleKillSwitch, or similar.
+
+Refactor:
+
+Remove direct dependency on kill_switch table for runtime semantics.
+
+Implement getKillSwitchStatus() as a thin view over guardrails_v2, e.g.:
+
+// Pseudocode
+const status = await guardrailPolicy.getKillSwitchStatus(modeOrGlobal);
+return {
+  isEnabled: status.killSwitchTripped,  // or false if you want SafetyGuardrails "soft only"
+  reason: status.killSwitchReason,
+  source: 'guardrails_v2',
+};
+
+
+Implement toggleKillSwitch(enabled, reason) to simply:
+
+Call guardrailPolicy.setKillSwitch(mode, enabled, reason) or the appropriate method that writes to guardrails_v2.
+
+Do not write to kill_switch table anymore.
+
+Add logging once for traceability:
+
+console.log('[8.8.3-H7][SAFETY_KS] Delegating kill switch state to guardrails_v2 only');
+
+
+Leave kill_switch table as legacy-only storage
+
+After this phase, kill_switch should not be written to or read from in any runtime logic.
+
+It can stay in DB for now as historical artifact; we can drop it in a future cleanup phase.
+
+Update any /safety/kill-switch route to use GuardrailsPolicy instead of SafetyGuardrails global table
+
+In routes.ts:
+
+Keep the route shape the same for now (POST /safety/kill-switch).
+
+Internally:
+
+Call SafetyGuardrails, which now delegates to GuardrailPolicy.
+
+Or directly call GuardrailPolicy and let SafetyGuardrails become a thin façade.
+
+H7.3 — Decouple SafetyGuardrails from Blocking Behavior
+
+Currently, H6 shows that AutonomyController calls SafetyGuardrails and gets “kill switch enabled,” which then blocks its self-check and produces noisy KILL_SWITCH events.
+
+We want:
+
+AutonomyController diagnostics to never block trading, and ideally:
+
+Not be blocked themselves by legacy safety state
+
+Not spam KILL_SWITCH events just because someone flipped a UI toggle months ago
+
+Steps:
+
+Inspect autonomy-controller.ts for SafetyGuardrails usage
+
+Identify:
+
+Calls like safetyGuardrails.evaluateAction(...)
+
+Any conditional like “if policy hits include KILL_SWITCH ⇒ block”
+
+Change semantics for phase 8.8.3:
+
+For now, we want no hidden guardrail here:
+
+If SafetyGuardrails returns killSwitch.isEnabled based on guardrails_v2.killSwitchTripped, it should be informational only for AutonomyController.
+
+AutonomyController can log a warning or record a telemetry event, but must not block its self-checks purely due to kill-switch.
+
+Concretely:
+
+Replace any early-return like:
+
+if (policyHits.includes('KILL_SWITCH')) {
+  // block self-check
+  return { blocked: true, reason: 'Kill switch enabled' };
+}
+
+
+with something like:
+
+if (policyHits.includes('KILL_SWITCH')) {
+  console.warn('[8.8.3-H7][AUTONOMY] Kill switch active; proceeding with self-check in read-only mode');
+  // proceed, maybe with a flag in the result but do NOT block
+}
+
+
+The key is: no “hidden KILL_SWITCH” semantics left in the autonomy layer.
+
+Safety events
+
+Keep safety telemetry events (for future analysis) but downgrade the noise:
+
+If kill switch is enabled, broadcast once per self-check, not as a continuous spam.
+
+Tag them clearly as “diagnostic-only, no trading impact” in the payload.
+
+H7.4 — Remove Any Remaining Hard Dependencies on kill_switch for Trading
+
+Search for kill_switch usage:
+
+In routes.ts, trading-engine.ts, paper-execution-engine.ts, trade-executor.ts, any “start trading” or “execute trade” flow.
+
+Confirm:
+
+All trading decisions are based only on:
+
+guardrails_v2.killSwitchTripped
+
+daily loss checks in GuardrailPolicy / Trade-Safety
+
+Nothing in the trading pipeline consults kill_switch or SafetyGuardrails.
+
+If any trading code still checks the global kill switch, remove that check in this phase and replace it with a call into GuardrailPolicy / Trade-Safety.
+
+H7.5 — Tests (Replit + You)
+
+Automated / scripted tests Replit should run:
+
+DB + API sanity
+
+Run the SQL update (H7.1).
+
+SELECT * FROM kill_switch to confirm global_kill_switch.is_enabled = false.
+
+GET /api/guardrails-v2?mode=paper|live ⇒ killSwitchTripped still false.
+
+GET /safety/status ⇒ kill switch shows disabled and explicitly reports source guardrails_v2 or similar.
+
+Trading state + scan loop
+
+Log in as testuser123 / SecurePass123!.
+
+Start paper trading.
+
+Leave Trading page open at least 4–5 minutes:
+
+Confirm scan IDs increment
+
+Countdown resets
+
+24h filter activity increases
+
+Confirm no [SafetyGuardrails] ⛔ Kill switch is ENABLED logs and no KILL_SWITCH safety events in WebSocket payloads during normal operation.
+
+Autonomy self-check
+
+Using /autonomy/self-check with simulate: true:
+
+Confirm that:
+
+The self-check runs and completes.
+
+Any SafetyGuardrails policies are recorded as telemetry only, not as “blocked due to kill switch”.
+
+Guardrails kill switch still works
+
+On Goals → Guardrails → Daily Loss Kill Switch %:
+
+Temporarily lower the daily loss threshold and simulate enough P/L to trip it (or mock via DB/test harness).
+
+Confirm:
+
+guardrails_v2.killSwitchTripped becomes true.
+
+Trading engine refuses new trades (as per existing design).
+
+Then start trading again:
+
+Confirm REB 8.8.3-KS-B reset logic clears guardrails_v2.killSwitchTripped and SafetyGuardrails now reports disabled (since it delegates to guardrails_v2).
+
+Your manual check after they’re done:
+
+Log in as you / test user.
+
+Start paper trading, watch the Trading > Filter Insights tab and Ready-to-Buy for a few minutes:
+
+Confirm scan cycles and stats are updating.
+
+Confirm there’s no kill-switch banner or random “kill switch enabled” warnings.
+
+Optionally hit the Autonomy routes and confirm they respond without kill-switch error messages.
