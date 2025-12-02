@@ -132,6 +132,24 @@ export const auditEntityTypeEnum = pgEnum("audit_entity_type", ["guardrails", "f
 export const behavioralTriggerTypeEnum = pgEnum("behavioral_trigger_type", ["adaptive_change", "user_override", "risk_trigger", "performance_feedback", "coherency_violation"]);
 export const learningModeEnum = pgEnum("learning_mode", ["slow", "normal", "aggressive", "disabled"]);
 
+// Phase 8.8.3-J: Execution Attempt Audit Enums
+export const executionDecisionEnum = pgEnum("execution_decision", ["OPENED", "BLOCKED"]);
+export const executionBlockReasonEnum = pgEnum("execution_block_reason", [
+  "KILL_SWITCH",
+  "NO_STOP_LOSS",
+  "INVALID_STOP_LOSS",
+  "POSITION_LIMIT",
+  "COOLDOWN",
+  "MAX_POSITION",
+  "LPCP_LOW_PRICE",
+  "LPCP_MIN_NOTIONAL",
+  "FX_CONVERSION_FAILED",
+  "PORTFOLIO_RISK",
+  "INSUFFICIENT_BALANCE",
+  "MAX_EXPOSURE",
+  "MAX_TRADES"
+]);
+
 // Users table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1714,6 +1732,35 @@ export const tradingAuditLog = pgTable("trading_audit_log", {
   createdAtIdx: index("trading_audit_log_created_at_idx").on(table.createdAt),
 }));
 
+// Phase 8.8.3-J: Execution Attempt Audit - Append-only diagnostic table for execution attempts
+// Tracks every P3 decision (execution_attempt → OPENED or BLOCKED)
+// Read-only metrics - NO behavioral changes to trading
+export const executionAttemptAudit = pgTable("execution_attempt_audit", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  mode: tradingModeEnum("mode").notNull(),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  strategy: strategyTypeEnum("strategy").notNull(),
+  signalId: varchar("signal_id"), // Optional reference to trading_signals.id for RTB linkage
+  decision: executionDecisionEnum("decision").notNull(),
+  blockReason: executionBlockReasonEnum("block_reason"), // Only set when decision = BLOCKED
+  blockDetail: text("block_detail"), // Human-readable description of why blocked
+  entryPrice: decimal("entry_price", { precision: 20, scale: 8 }),
+  stopPrice: decimal("stop_price", { precision: 20, scale: 8 }),
+  targetPrice: decimal("target_price", { precision: 20, scale: 8 }),
+  confidence: decimal("confidence", { precision: 5, scale: 2 }),
+  portfolioValue: decimal("portfolio_value", { precision: 20, scale: 2 }),
+  riskAmount: decimal("risk_amount", { precision: 20, scale: 2 }),
+  positionSize: decimal("position_size", { precision: 20, scale: 8 }),
+  tradeId: varchar("trade_id"), // Set only when decision = OPENED, references paper_sim_trades.id
+}, (table) => ({
+  createdAtIdx: index("execution_attempt_audit_created_at_idx").on(table.createdAt),
+  modeIdx: index("execution_attempt_audit_mode_idx").on(table.mode),
+  symbolIdx: index("execution_attempt_audit_symbol_idx").on(table.symbol),
+  strategyIdx: index("execution_attempt_audit_strategy_idx").on(table.strategy),
+  decisionIdx: index("execution_attempt_audit_decision_idx").on(table.decision),
+}));
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   settings: many(tradingSettings),
@@ -2270,6 +2317,12 @@ export const insertPaperSimSessionSchema = createInsertSchema(paperSimSessions).
   startedAt: true,
 });
 
+// Phase 8.8.3-J: Execution Attempt Audit insert schema
+export const insertExecutionAttemptAuditSchema = createInsertSchema(executionAttemptAudit).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Walter insert schemas
 export const insertWalterPendingApprovalSchema = createInsertSchema(walterPendingApprovals).omit({
   id: true,
@@ -2529,6 +2582,10 @@ export type PaperSimTradeLog = typeof paperSimTradeLogs.$inferSelect;
 
 export type InsertPaperSimSession = z.infer<typeof insertPaperSimSessionSchema>;
 export type PaperSimSession = typeof paperSimSessions.$inferSelect;
+
+// Phase 8.8.3-J: Execution Attempt Audit types
+export type InsertExecutionAttemptAudit = z.infer<typeof insertExecutionAttemptAuditSchema>;
+export type ExecutionAttemptAudit = typeof executionAttemptAudit.$inferSelect;
 
 // AI Orchestrator logs table
 export const aiOrchestratorLogs = pgTable("ai_orchestrator_logs", {
