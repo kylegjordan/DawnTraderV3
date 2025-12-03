@@ -73,6 +73,24 @@ export interface MaxPositionDiagnosticSummary {
   recentBlocked: MaxPositionDiagnosticEntry[];
 }
 
+/**
+ * Would-be trade entry for dryRunNoGuardrails mode
+ */
+export interface WouldBeTradeEntry {
+  timestamp: Date;
+  symbol: string;
+  strategy: string;
+  entryPrice: number;
+  stopPrice: number;
+  targetPrice: number;
+  confidence: number;
+  estimatedValue?: number;
+  quantity?: number;
+  portfolioValue?: number;
+  mode: 'paper' | 'live';
+  reason: string; // Why this would have been a trade
+}
+
 class AJ19MaxPositionDiagnostic {
   private static instance: AJ19MaxPositionDiagnostic;
   
@@ -80,6 +98,12 @@ class AJ19MaxPositionDiagnostic {
   private sessionStart: Date = new Date();
   private isEnabled: boolean = false;
   private dryRunMode: boolean = false;
+  
+  // New: dryRunNoGuardrails mode - skip trade creation AND guardrails
+  private dryRunNoGuardrails: boolean = false;
+  private wouldBeTrades: WouldBeTradeEntry[] = [];
+  private signalsGenerated: number = 0;
+  private dryRunSessionStart: Date | null = null;
   
   private maxEntries = 5000; // Keep last 5000 entries
   
@@ -121,6 +145,121 @@ class AJ19MaxPositionDiagnostic {
   
   isDryRunMode(): boolean {
     return this.dryRunMode;
+  }
+  
+  /**
+   * Enable dryRunNoGuardrails mode:
+   * - Runs filters + strategies normally
+   * - Logs signals and would-be trades
+   * - Skips creating trades / open positions
+   * - Skips all guardrail checks
+   * 
+   * Purpose: Test if RTB signals continue generating when no trades are opened
+   */
+  setDryRunNoGuardrails(enabled: boolean): void {
+    this.dryRunNoGuardrails = enabled;
+    if (enabled) {
+      this.wouldBeTrades = [];
+      this.signalsGenerated = 0;
+      this.dryRunSessionStart = new Date();
+      console.log(`[AJ19][DRY_RUN_NO_GUARDRAILS] ENABLED at ${this.dryRunSessionStart.toISOString()}`);
+      console.log(`[AJ19][DRY_RUN_NO_GUARDRAILS] Filters + strategies will run normally`);
+      console.log(`[AJ19][DRY_RUN_NO_GUARDRAILS] Signals will be logged but NO trades will be created`);
+      console.log(`[AJ19][DRY_RUN_NO_GUARDRAILS] ALL guardrail checks will be SKIPPED`);
+    } else {
+      console.log(`[AJ19][DRY_RUN_NO_GUARDRAILS] DISABLED - normal trade execution will resume`);
+    }
+  }
+  
+  isDryRunNoGuardrails(): boolean {
+    return this.dryRunNoGuardrails;
+  }
+  
+  /**
+   * Log a signal that was generated (before guardrail checks)
+   */
+  logSignalGenerated(signal: {
+    symbol: string;
+    strategy: string;
+    entryPrice: number;
+    stopPrice: number;
+    targetPrice: number;
+    confidence: number;
+    estimatedValue?: number;
+    quantity?: number;
+    mode: 'paper' | 'live';
+  }): void {
+    this.signalsGenerated++;
+    console.log(`[AJ19][SIGNAL_GENERATED] #${this.signalsGenerated} | ${signal.symbol} | ${signal.strategy} | conf=${(signal.confidence * 100).toFixed(1)}% | entry=$${signal.entryPrice.toFixed(4)} | est=$${signal.estimatedValue?.toFixed(2) || 'N/A'}`);
+  }
+  
+  /**
+   * Log a would-be trade (trade that would have been opened if not in dry-run mode)
+   */
+  logWouldBeTrade(trade: Omit<WouldBeTradeEntry, 'timestamp'>): void {
+    const entry: WouldBeTradeEntry = {
+      ...trade,
+      timestamp: new Date()
+    };
+    
+    this.wouldBeTrades.push(entry);
+    
+    // Trim old entries
+    if (this.wouldBeTrades.length > 1000) {
+      this.wouldBeTrades = this.wouldBeTrades.slice(-1000);
+    }
+    
+    console.log(`[AJ19][WOULD_OPEN_TRADE] ${trade.symbol} | ${trade.strategy}`);
+    console.log(`  Entry: $${trade.entryPrice.toFixed(4)} | Stop: $${trade.stopPrice.toFixed(4)} | Target: $${trade.targetPrice.toFixed(4)}`);
+    console.log(`  Confidence: ${(trade.confidence * 100).toFixed(1)}% | EstValue: $${trade.estimatedValue?.toFixed(2) || 'N/A'} | Qty: ${trade.quantity?.toFixed(4) || 'N/A'}`);
+    console.log(`  Reason: ${trade.reason}`);
+  }
+  
+  /**
+   * Get dry-run no-guardrails summary
+   */
+  getDryRunNoGuardrailsSummary(): {
+    isEnabled: boolean;
+    sessionStart: Date | null;
+    signalsGenerated: number;
+    wouldBeTradesCount: number;
+    uniqueSymbols: string[];
+    byStrategy: Record<string, number>;
+    recentWouldBeTrades: WouldBeTradeEntry[];
+    durationMinutes: number;
+  } {
+    const byStrategy: Record<string, number> = {};
+    const symbols = new Set<string>();
+    
+    for (const trade of this.wouldBeTrades) {
+      symbols.add(trade.symbol);
+      byStrategy[trade.strategy] = (byStrategy[trade.strategy] || 0) + 1;
+    }
+    
+    const durationMinutes = this.dryRunSessionStart 
+      ? (Date.now() - this.dryRunSessionStart.getTime()) / 60000 
+      : 0;
+    
+    return {
+      isEnabled: this.dryRunNoGuardrails,
+      sessionStart: this.dryRunSessionStart,
+      signalsGenerated: this.signalsGenerated,
+      wouldBeTradesCount: this.wouldBeTrades.length,
+      uniqueSymbols: Array.from(symbols),
+      byStrategy,
+      recentWouldBeTrades: this.wouldBeTrades.slice(-20),
+      durationMinutes: Math.round(durationMinutes * 10) / 10
+    };
+  }
+  
+  /**
+   * Clear dry-run data
+   */
+  clearDryRunData(): void {
+    this.wouldBeTrades = [];
+    this.signalsGenerated = 0;
+    this.dryRunSessionStart = this.dryRunNoGuardrails ? new Date() : null;
+    console.log(`[AJ19][DRY_RUN_NO_GUARDRAILS] Data cleared`);
   }
   
   /**

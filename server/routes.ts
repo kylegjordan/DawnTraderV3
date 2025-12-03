@@ -2773,6 +2773,63 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       res.status(500).json({ ok: false, error: 'Failed to clear AJ19 diagnostic data' });
     }
   });
+  
+  // AJ19.7: Enable/disable dryRunNoGuardrails mode
+  // This mode skips BOTH trade creation AND guardrail checks
+  // Purpose: Test if RTB signals continue generating when no trades are opened
+  apiRouter.post('/diagnostics/aj19/dry-run-no-guardrails', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aj19Diagnostic } = await import('./services/aj19-max-position-diagnostic.js');
+      const { enabled } = req.body;
+      
+      aj19Diagnostic.setDryRunNoGuardrails(enabled !== false);
+      
+      res.json({
+        ok: true,
+        isDryRunNoGuardrails: aj19Diagnostic.isDryRunNoGuardrails(),
+        message: aj19Diagnostic.isDryRunNoGuardrails()
+          ? 'DryRunNoGuardrails ENABLED - Signals logged, NO trades created, ALL guardrails skipped'
+          : 'DryRunNoGuardrails DISABLED - Normal trade execution will resume'
+      });
+    } catch (error: any) {
+      console.error('[AJ19] Error toggling dryRunNoGuardrails mode:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to toggle dryRunNoGuardrails mode' });
+    }
+  });
+  
+  // AJ19.8: Get dryRunNoGuardrails summary
+  apiRouter.get('/diagnostics/aj19/dry-run-no-guardrails/summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aj19Diagnostic } = await import('./services/aj19-max-position-diagnostic.js');
+      
+      const summary = aj19Diagnostic.getDryRunNoGuardrailsSummary();
+      
+      res.json({
+        ok: true,
+        ...summary
+      });
+    } catch (error: any) {
+      console.error('[AJ19] Error fetching dryRunNoGuardrails summary:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to fetch dryRunNoGuardrails summary' });
+    }
+  });
+  
+  // AJ19.9: Clear dryRunNoGuardrails data
+  apiRouter.post('/diagnostics/aj19/dry-run-no-guardrails/clear', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aj19Diagnostic } = await import('./services/aj19-max-position-diagnostic.js');
+      
+      aj19Diagnostic.clearDryRunData();
+      
+      res.json({
+        ok: true,
+        message: 'DryRunNoGuardrails data cleared'
+      });
+    } catch (error: any) {
+      console.error('[AJ19] Error clearing dryRunNoGuardrails data:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to clear dryRunNoGuardrails data' });
+    }
+  });
 
   // ===== PHASE 8.8.3-AJ19-B: TRADE LIFECYCLE INTEGRITY TRACING =====
   // Diagnoses whether trade closures properly free slots in the guardrail system

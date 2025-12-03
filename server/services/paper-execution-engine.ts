@@ -11,6 +11,7 @@ import { aj16Diagnostic } from './aj16-rtb-diagnostic';
 import { aj17DiagnosticRunner } from './aj17-diagnostic-runner';
 import { aj18Diagnostic } from './aj18-rtb-diagnostic';
 import { aj19bDiagnostic } from './aj19b-lifecycle-diagnostic';
+import { aj19Diagnostic } from './aj19-max-position-diagnostic';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail';
@@ -1205,6 +1206,39 @@ export class PaperExecutionEngine {
     console.log(`[PaperExecution:${this.mode}] Signal detected for ${signal.symbol}:`);
     console.log(`  Strategy: ${signal.strategy}, Confidence: ${(signal.confidence * 100).toFixed(1)}%`);
     console.log(`  Entry: ${signal.entryPrice.toFixed(2)}, Stop: ${signal.stopPrice.toFixed(2)}, Target: ${signal.targetPrice.toFixed(2)}`);
+
+    // [AJ19] Log signal generated for diagnostic tracking
+    aj19Diagnostic.logSignalGenerated({
+      symbol: signal.symbol,
+      strategy: signal.strategy,
+      entryPrice: signal.entryPrice,
+      stopPrice: signal.stopPrice,
+      targetPrice: signal.targetPrice,
+      confidence: signal.confidence,
+      estimatedValue: signal.estimatedValue,
+      quantity: signal.quantity,
+      mode: this.mode
+    });
+
+    // [AJ19] DryRunNoGuardrails mode: Skip guardrails and trade creation, just log
+    if (aj19Diagnostic.isDryRunNoGuardrails()) {
+      aj19Diagnostic.logWouldBeTrade({
+        symbol: signal.symbol,
+        strategy: signal.strategy,
+        entryPrice: signal.entryPrice,
+        stopPrice: signal.stopPrice,
+        targetPrice: signal.targetPrice,
+        confidence: signal.confidence,
+        estimatedValue: signal.estimatedValue,
+        quantity: signal.quantity,
+        portfolioValue: cycleContext?.portfolioValue,
+        mode: this.mode,
+        reason: 'Signal passed filters and strategies - would open trade in normal mode'
+      });
+      
+      console.log(`[AJ19][DRY_RUN_NO_GUARDRAILS] Skipping guardrails and trade creation for ${signal.symbol}`);
+      return; // Exit early - no trade created, no guardrails checked
+    }
 
     // Phase 8.8.3-H4: Pre-trade guardrail checks (replaces legacy RiskManager)
     // AJ10.1: Include pre-computed notional from P2 sizing so MAX_POSITION check trusts it
