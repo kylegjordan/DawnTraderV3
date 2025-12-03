@@ -1,0 +1,182 @@
+Phase 8.8.3 — AJ18 “RTB Starvation Root-Cause Investigation”
+
+(No browser interaction required — execution entirely server-side)
+
+Paste the following directly into Replit:
+
+📘 Directive: Implement AJ18 RTB Starvation Investigation (Automated, No UI Auth Required)
+
+Please implement Phase 8.8.3-AJ18, designed to determine why RTB signal flow collapses after 3–5 minutes of trading, despite the active pool remaining populated.
+
+This diagnostic test must be fully automated, requiring no tokens, no browser interaction, and no manual trading start/stop.
+You will perform the full test cycle inside the Replit environment exactly as you did for AJ16 and AJ17.
+
+AJ18 Objectives
+### 1. Verify that Max Open Positions does NOT suppress strategy scanning or RTB generation
+
+Instrument the engine to detect any early-return paths where maxOpenPositions causes:
+
+skipping strategy evaluation
+
+skipping indicator evaluation
+
+skipping RTB candidate creation
+
+Add logs:
+
+[AJ18][MAX_POSITIONS_SKIP]
+Log whenever the scan cycle exits early due to max positions.
+
+[AJ18][MAX_POSITIONS_EVALUATION] symbolsEvaluated=… rtbGenerated=…
+Summary per cycle, even when at max positions.
+
+2. Audit Active Pool Stability
+
+Add cycle-level metrics for:
+
+activePoolSize
+
+symbolsEvaluatedThisCycle
+
+symbolsSkipped and reason (e.g. stale data, active position exclusion, invalid indicators)
+
+rtbCandidatesProposed
+
+Add logs:
+
+[AJ18][POOL_STATE] activePoolSize=… evaluated=… skipped=…
+
+3. Extended Strategy Failure Diagnostics
+
+Replace the aggregated failed_criteria with the actual failing component:
+
+Examples:
+
+sma_trend_ride.no_uptrend
+
+vwap_pullback.not_near_vwap
+
+dhma.regime_mismatch
+
+range_trading.no_volatility_window
+
+Log individually:
+
+[AJ18][CRITERIA_FAIL] strategy=… reason=…
+
+4. Trade Lifecycle Audit
+
+Instrument:
+
+trade open
+
+trade close
+
+guardrail blocks
+
+stuck-open detection
+
+Add:
+
+[AJ18][TRADE_LIFECYCLE] event=OPEN|CLOSE|ERROR tradeId=… symbol=…
+
+This will confirm whether trades are being closed properly and whether state flags stick around longer than intended.
+
+5. Automated Test Runner (AJ18 Runner)
+
+Create aj18-diagnostic-runner.ts similar to AJ17:
+
+It must:
+
+Start paper trading programmatically
+
+Run for 20 minutes
+
+Collect all AJ18 logs
+
+Stop trading
+
+Generate a ZIP bundle in the project root containing:
+
+aj18-diagnostic-report.md
+raw-log-stream.jsonl
+snapshots.json
+session-info.json
+
+
+No UI involvement. No authentication. Fully backend-controlled.
+
+6. Report Generation (aj18-diagnostic-report.md)
+
+The report must answer:
+
+A. Did max positions suppress scanning?
+
+Show cycles before/after max exposure:
+
+cycles with normal scanning
+
+cycles where scanning dropped
+
+any [AJ18][MAX_POSITIONS_SKIP] occurrences
+
+B. Did the active pool shrink incorrectly?
+
+Graph activePoolSize over time.
+
+C. Did strategy criteria cluster around specific failures?
+
+Tabulate:
+
+reason                               count
+-------------------------------------------
+sma_trend_ride.no_uptrend           ###
+vwap_pullback.not_near_vwap          ##
+dhma.regime_mismatch                 #
+...
+
+D. Did any stuck trades affect engine state?
+
+Include lifecycle anomalies.
+
+E. Timeline correlation
+
+Show signal flow for first 5 minutes vs next 15 minutes.
+
+7. Place the ZIP bundle in the root folder
+
+Same behavior as AJ17:
+
+./aj18-diagnostic-bundle.zip
+
+You will notify via console log that the file is ready.
+
+Execution Requirements
+
+No user participation needed.
+
+No browser auth needed.
+
+No need to start/stop trading; the AJ18 runner handles this internally.
+
+All logs written asynchronously (non-blocking).
+
+Bundle generated regardless of engine errors.
+
+Deliverables
+
+Fully instrumented AJ18 diagnostics (engine + runner)
+
+aj18-diagnostic-bundle.zip
+
+aj18-diagnostic-report.md
+
+Confirmation that max positions is not suppressing scanning
+
+Confirmation that active pool is stable or detailed report showing where it collapses
+
+Strategy-failure breakdown
+
+Trade-lifecycle stability report
+
+✔ End of Directive
