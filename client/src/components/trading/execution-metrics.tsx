@@ -50,6 +50,36 @@ const formatNumber = (num: number | undefined): string => {
   return new Intl.NumberFormat('en-US').format(num);
 };
 
+// AJ9: All 13 block reasons in display order
+const ALL_BLOCK_REASONS = [
+  'KILL_SWITCH',
+  'STOP_LOSS_REQUIRED',
+  'ASSET_MAX_POSITIONS',
+  'COOLDOWN',
+  'MAX_POSITION',
+  'LPCP_LOW_PRICE',
+  'LPCP_MIN_NOTIONAL',
+  'FX_CONVERSION_FAILED',
+  'PORTFOLIO_RISK',
+  'INSUFFICIENT_BALANCE',
+  'MAX_EXPOSURE',
+  'MAX_TRADES',
+  'UNKNOWN'
+] as const;
+
+// AJ9: All 9 strategies in display order
+const ALL_STRATEGIES = [
+  'vwap_pullback',
+  'abcd_long',
+  'sma_trend_ride',
+  'breakout',
+  'mean_reversion',
+  'range_trading',
+  'vwap_bounce',
+  'liquidity_trap',
+  'dhma'
+] as const;
+
 export function ExecutionMetricsPanel() {
   const { mode } = useTradingMode();
   
@@ -182,90 +212,103 @@ export function ExecutionMetricsPanel() {
           <p className="text-[10px] text-muted-foreground mt-1">*Rate uses all-time totals</p>
         </div>
 
-        {/* J5.2 - Blocked Summary Table */}
-        {blocked && blocked.totalBlocked > 0 && (
-          <div>
-            <h4 className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-2">
-              <Ban className="w-3 h-3" />
-              Blocked Breakdown
-            </h4>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-xs">Block Reason</TableHead>
-                  <TableHead className="text-xs text-right">Count</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {blocked.topReasons.map(({ reason, count }) => (
+        {/* J5.2/AJ9 - Blocked Summary Table: Always show all 13 block reasons */}
+        <div>
+          <h4 className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-2">
+            <Ban className="w-3 h-3" />
+            Blocked Breakdown (All Reasons)
+          </h4>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-xs">Block Reason</TableHead>
+                <TableHead className="text-xs text-right">Count</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {ALL_BLOCK_REASONS.map((reason) => {
+                const count = blocked?.byReason?.[reason] || 0;
+                return (
                   <TableRow key={reason}>
                     <TableCell className="text-xs">{formatBlockReason(reason)}</TableCell>
-                    <TableCell className="text-xs text-right text-destructive font-mono">{formatNumber(count)}</TableCell>
-                  </TableRow>
-                ))}
-                {blocked.topReasons.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={2} className="text-xs text-center text-muted-foreground">
-                      No blocked attempts recorded
+                    <TableCell className={cn(
+                      "text-xs text-right font-mono",
+                      count > 0 ? "text-destructive" : "text-muted-foreground"
+                    )}>
+                      {formatNumber(count)}
                     </TableCell>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-            {Object.keys(blocked.byStrategy).length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1">
-                {Object.entries(blocked.byStrategy).slice(0, 5).map(([strategy, count]) => (
-                  <Badge key={strategy} variant="outline" className="text-[10px] font-mono">
+                );
+              })}
+            </TableBody>
+          </Table>
+          {/* AJ9: Show all 9 strategies in chips */}
+          <div className="mt-3">
+            <p className="text-[10px] text-muted-foreground mb-1">Blocked by Strategy:</p>
+            <div className="flex flex-wrap gap-1">
+              {ALL_STRATEGIES.map((strategy) => {
+                const count = blocked?.byStrategy?.[strategy] || 0;
+                return (
+                  <Badge 
+                    key={strategy} 
+                    variant={count > 0 ? "destructive" : "outline"} 
+                    className={cn(
+                      "text-[10px] font-mono",
+                      count === 0 && "opacity-60"
+                    )}
+                  >
                     {formatStrategy(strategy)}: {formatNumber(count)}
                   </Badge>
-                ))}
-              </div>
-            )}
+                );
+              })}
+            </div>
           </div>
-        )}
+        </div>
 
-        {/* J5.3 - Opened Summary Table */}
-        {opened && opened.totalOpened > 0 && (
-          <div>
-            <h4 className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-2">
-              <Target className="w-3 h-3" />
-              Opened Breakdown
-            </h4>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-xs">Strategy</TableHead>
-                  <TableHead className="text-xs text-right">Opened</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {opened.topStrategies.map(({ strategy, count }) => (
+        {/* AJ9.5 - Opened by Strategy Table: Always show all 9 strategies */}
+        <div>
+          <h4 className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-2">
+            <Target className="w-3 h-3" />
+            Opened by Strategy (Last 24h)
+          </h4>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-xs">Strategy</TableHead>
+                <TableHead className="text-xs text-right">Opened</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {ALL_STRATEGIES.map((strategy) => {
+                const count = opened?.byStrategy?.[strategy] || 0;
+                return (
                   <TableRow key={strategy}>
                     <TableCell className="text-xs">{formatStrategy(strategy)}</TableCell>
-                    <TableCell className="text-xs text-right text-success font-mono">{formatNumber(count)}</TableCell>
-                  </TableRow>
-                ))}
-                {opened.topStrategies.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={2} className="text-xs text-center text-muted-foreground">
-                      No opened trades recorded
+                    <TableCell className={cn(
+                      "text-xs text-right font-mono",
+                      count > 0 ? "text-success" : "text-muted-foreground"
+                    )}>
+                      {formatNumber(count)}
                     </TableCell>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-            {opened.bySymbol.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1">
-                <span className="text-xs text-muted-foreground">Top Symbols:</span>
-                {opened.bySymbol.slice(0, 5).map(({ symbol, count }) => (
+                );
+              })}
+            </TableBody>
+          </Table>
+          {/* Top Symbols (only show if there are opened trades) */}
+          {opened && opened.bySymbol && opened.bySymbol.length > 0 && (
+            <div className="mt-3">
+              <p className="text-[10px] text-muted-foreground mb-1">Top Opened Symbols:</p>
+              <div className="flex flex-wrap gap-1">
+                {opened.bySymbol.slice(0, 10).map(({ symbol, count }) => (
                   <Badge key={symbol} variant="secondary" className="text-[10px] font-mono">
                     {symbol}: {formatNumber(count)}
                   </Badge>
                 ))}
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
 
         {(!summary?.totalAttempts || summary.totalAttempts === 0) && (
           <div className="text-center py-6 text-muted-foreground">

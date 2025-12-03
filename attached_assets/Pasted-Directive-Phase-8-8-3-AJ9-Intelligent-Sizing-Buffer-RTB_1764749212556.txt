@@ -1,0 +1,377 @@
+Directive: Phase 8.8.3-AJ9 — Intelligent Sizing Buffer & RTB Metrics/Display Corrections
+
+Context & Current State
+
+Paper mode portfolio sizing now uses storage.getPortfolioState({ mode: 'paper' }).balance as the single source of truth.
+
+Position sizing helper (paper-position-sizing.ts) calculates quantity and estimatedValue per RTB signal and uses guardrails v2 values (portfolioRiskPerTradePct, maxPositionPercentPct).
+
+LPCP (Low-Priced Coin Protection) is dormant by design (always returns ok: true) and must stay that way in this phase.
+
+RTB execution metrics:
+
+Use session-based 24h metrics that reset when the engine stops (AJ8).
+
+Show overall attempts / opened / blocked, a “Blocked Breakdown” by reason, and strategy “chips” at the bottom.
+
+Trading is still not opening any trades: practically all execution attempts are blocked by MAX_POSITION, even with reasonable guardrails and portfolio values.
+
+The RTB metrics panel still has several issues:
+
+Blocked count sometimes doesn’t match the per-reason totals.
+
+Blocked breakdown shows only 4–5 reasons even though there are 13 enum reasons.
+
+Strategy chips only show 5 strategies, not all 9.
+
+There is no “Opened by Strategy” table.
+
+We want AJ9 to be targeted and minimal: fix sizing so trades can actually open, and complete the RTB metrics display, without destabilizing other systems.
+
+1. Scope & Constraints
+
+In scope
+
+Paper-mode RTB sizing and execution only:
+
+paper-position-sizing.ts
+
+paper-execution-engine.ts
+
+RTB metrics & execution audit endpoints (execution_attempt_audit APIs)
+
+RTB metrics UI (execution-metrics.tsx and related components)
+
+Guardrails v2 read access (paper mode) for sizing.
+
+Session-based metrics logic (may be adjusted but must remain session-gated).
+
+Out of scope / DO NOT CHANGE
+
+Autonomy, Walter, behavioral template, or any non-trading engine services.
+
+Guardrails v2 schema or behavior beyond what is required to read existing fields.
+
+LPCP logic must remain dormant (no blocking behavior reintroduced).
+
+No legacy risk-manager modules, v1/v2 logic, or getSettings/getTradingSettings re-enablement.
+
+Do not change filter configs, LATTi behavior, or strategy definitions.
+
+If you discover any issue that would require changes outside this scope, stop and document the finding, then ask for confirmation before proceeding.
+
+Use the paper test account:
+
+username: testuser123
+
+password: SecurePass123!
+
+2. AJ9 Goals
+
+Intelligent Sizing Buffer
+
+Add a small, configurable safety buffer so quantities are sized below the max position cap, giving “wiggle room” for price changes and execution slippage.
+
+Result: trades that meet guardrails should actually open, rather than being blocked 100% by MAX_POSITION.
+
+RTB Metrics Accuracy & Completeness
+
+Ensure RTB metrics (last 24h, session-gated) are internally consistent:
+
+Blocked total equals the sum of all per-reason counts for the current session.
+
+Strategy counts (blocked and opened breakdowns) align with summary totals.
+
+Make the UI show all data, even when some categories/strategies are zero.
+
+RTB UI Completeness
+
+Always show:
+
+All 13 block reasons (even if zero).
+
+All 9 strategies (even if zero) in the chips/badges section.
+
+Add a new “Opened Trades by Strategy (Last 24h)” table.
+
+3. AJ9 Tasks
+AJ9.1 — Add Sizing Buffer Below Max Position Cap
+
+Objective:
+Prevent legitimate trades from being blocked by MAX_POSITION due to tiny price changes between RTB sizing and execution.
+
+Implementation details:
+
+In paper-position-sizing.ts:
+
+Introduce a constant buffer factor for the max position, e.g.:
+
+const MAX_POSITION_BUFFER_FACTOR = 0.97; // 3% below max cap
+
+
+When computing the notional cap from guardrails, use:
+
+const maxNotional = portfolioValue * (maxPositionPercentPct / 100);
+const bufferedMaxNotional = maxNotional * MAX_POSITION_BUFFER_FACTOR;
+
+
+Use bufferedMaxNotional when deriving maxQty:
+
+const maxQty = bufferedMaxNotional / entryPrice;
+
+
+Keep the existing risk-based sizing path, but ensure the final chosen quantity is still:
+
+quantity = Math.min(riskQty, maxQtyWithBuffer);
+
+
+Do not change the guardrails v2 structure or add new DB fields; the buffer can be a constant in code for now, clearly documented so we can make it configurable in a future phase.
+
+In executeSimulatedTrade (paper execution):
+
+Continue to use the pre-sized quantity stored on the trading signal (do not recalc differently).
+
+Ensure the notional used for MAX_POSITION checks at execution time is:
+
+executionNotional = currentPrice * quantity;
+
+
+MAX_POSITION guardrail should still compare against the full max position cap from guardrails (not the buffered value) so the buffer provides real slack.
+
+Logging & diagnostics:
+
+If you log any diagnostic for AJ9, keep it temporary and remove it in this phase once validated.
+
+Success criteria:
+
+With:
+
+Portfolio ≈ $800–900 in paper mode
+
+portfolioRiskPerTradePct ≈ 2–3%
+
+maxPositionPercentPct ≈ 10–20%
+
+At least some RTB signals should successfully open trades, not be 100% blocked by MAX_POSITION.
+
+AJ9.2 — Fix RTB Blocked Totals vs Per-Reason Counts
+
+Problem:
+We have observed cases where:
+
+Blocked (summary row) < Max Position count in the breakdown.
+
+This should never happen for the same session.
+
+Required behavior:
+
+For the current engine session (Last 24h):
+
+Blocked (summary) must equal the sum of all 13 block reason counts.
+
+Any difference due to query limits or out-of-sync filters must be eliminated.
+
+Implementation:
+
+In the RTB metrics backend:
+
+Reuse the same underlying query / filter for:
+
+Summary Blocked total.
+
+Per-reason breakdown.
+
+Ensure both:
+
+Use the same sessionStart and isSessionActive gating.
+
+Apply the same time window and mode filters.
+
+Use the same dataset (no extra filters on one side).
+
+Confirm that no client-side filtering or partial result limiting is causing mismatches.
+
+If you must introduce a separate internal helper to compute “blocked totals,” document it in the AJ9 audit and ensure both summary and breakdown functions call it.
+
+AJ9.3 — Always Show All 13 Block Reasons
+
+Objective:
+The RTB “Blocked Breakdown” table must always show all 13 executionBlockReasonEnum values, even when the count is 0.
+
+Implementation:
+
+Backend:
+
+Ensure the RTB blocked summary endpoint always returns an entry for each enum value with a count (default 0 if none recorded this session).
+
+Frontend (execution-metrics.tsx):
+
+Render all 13 reasons as table rows:
+
+If count is 0, still show the row with 0.
+
+Avoid any filtering logic that hides zero rows.
+
+Verify that adding more reasons in the future (enum expansion) remains safe (e.g., using a mapped list from backend rather than hardcoded subset).
+
+AJ9.4 — Always Show All 9 Strategies in RTB Strategy Chips
+
+Objective:
+The RTB metrics panel currently shows only 5 strategy chips; it must always show all 9 strategies, even when a strategy has 0 attempts/blocks/opens for the session.
+
+Implementation:
+
+Backend:
+
+Ensure strategy breakdown data includes all 9 strategies with counts (default 0 where applicable).
+
+Frontend:
+
+Render all 9 strategy chips in the RTB Execution Metrics panel:
+
+Show the count for each chip.
+
+Use consistent ordering (e.g., same as strategy engine or shared enum).
+
+Do not hide chips with 0 counts.
+
+Ensure that the sum of counts across all strategy chips:
+
+For “blocked by strategy” view → matches blocked total.
+
+For “opened by strategy” view (see AJ9.5) → matches opened total.
+
+AJ9.5 — Add “Opened Trades by Strategy (Last 24h)” Table
+
+Objective:
+We need a dedicated table showing which strategies actually open trades.
+
+Design:
+
+New section in RTB Execution Metrics, below “Blocked Breakdown”:
+
+Title: “Opened by Strategy (Last 24h)”
+
+Columns:
+
+Strategy
+
+Opened (count)
+
+Optional (if cheap): Total Notional ($) per strategy (but not required in AJ9).
+
+Implementation:
+
+Backend:
+
+Extend the existing RTB opened summary endpoint (or add a helper) to provide:
+
+strategy
+
+openedCount
+
+Use the same sessionStart and last-24h filters as the main summary.
+
+Frontend:
+
+Render the “Opened by Strategy” table even when all counts are zero.
+
+Ensure the sum of openedCount equals the Opened value from the summary table.
+
+AJ9.6 — Preserve Session-Based Metrics & LPCP Dormancy
+
+While making the above changes:
+
+Do not break or remove:
+
+isSessionActive
+
+sessionStart
+
+Session-gated metrics behavior (metrics zero out when engine stops).
+
+LPCP
+
+Must remain in its current dormant state (always ok: true, no blocking or sizing changes).
+
+No new LPCP conditions or branches should be introduced in this phase.
+
+4. Verification Checklist
+
+Please run through these using testuser123 / SecurePass123! in PAPER mode.
+
+Sizing & Execution
+
+Set:
+
+Portfolio: ~$800–900
+
+portfolioRiskPerTradePct: 2–3%
+
+maxPositionPercentPct: 10–20%
+
+Min price filter: 0.25 (manual) as currently configured.
+
+Start the trading engine and let it run for at least 30 minutes.
+
+Confirm:
+
+RTB table shows multiple signals with Qty and value.
+
+At least some trades show as Opened in the RTB metrics.
+
+At least some appear in Open Trades / Trade History.
+
+RTB Metrics Consistency
+
+While engine is active:
+
+Blocked summary = sum of all 13 block reason counts.
+
+Opened summary = sum of “Opened by Strategy” counts.
+
+Strategy chips show 9 strategies, and counts line up with summary totals.
+
+Session Reset
+
+Stop the engine:
+
+After ~10–30 seconds, RTB metrics should:
+
+Show attempts / opened / blocked = 0.
+
+Blocked breakdown rows persist but with 0 counts.
+
+Strategy chips persist but with 0 counts.
+
+RTB signals table clears as it does now.
+
+No Regressions
+
+Guardrails v2 manual saving still works (Max Position Percent, Portfolio Risk Per Trade, LPCP threshold).
+
+No new warnings or errors in logs related to:
+
+trade-safety
+
+paper-position-sizing
+
+execution-attempt metrics
+
+No changes to Walter, Autonomy, or behavioral template services.
+
+Documentation
+
+Create an audit document, e.g.:
+
+docs/audits/phase_8.8.3-AJ9_intelligent_sizing_and_rtb_metrics.md
+
+Summarize:
+
+Sizing buffer logic
+
+RTB metrics consistency changes
+
+UI completeness changes (13 reasons, 9 strategies, “Opened by Strategy” table)
+
+Verification logs and screenshots if available.

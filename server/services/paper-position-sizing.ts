@@ -1,5 +1,5 @@
 /**
- * Phase 8.8.3-J7: Paper-Mode Position Sizing Helper
+ * Phase 8.8.3-J7/AJ9: Paper-Mode Position Sizing Helper
  * 
  * Pure function for calculating position sizes during signal generation (P2).
  * This helper does NOT access the database or make any network calls.
@@ -9,9 +9,21 @@
  * - Paper mode only
  * - No legacy risk modules
  * - Uses guardrailsV2 configuration
+ * 
+ * AJ9 Addition:
+ * - MAX_POSITION_BUFFER_FACTOR (0.97) provides 3% wiggle room below max position cap
+ * - This prevents legitimate trades from being blocked by MAX_POSITION due to
+ *   price changes between RTB sizing and execution
  */
 
 import type { GuardrailsV2 } from '@shared/schema';
+
+/**
+ * AJ9: Buffer factor for max position sizing.
+ * Size positions at 97% of max to provide 3% wiggle room for price fluctuations.
+ * This prevents trades from being blocked by MAX_POSITION during execution.
+ */
+const MAX_POSITION_BUFFER_FACTOR = 0.97;
 
 export type StrategyType = 'vwap_pullback' | 'abcd_long' | 'sma_trend_ride' | 'breakout' | 'mean_reversion' | 'range_trading' | 'vwap_bounce' | 'liquidity_trap' | 'dhma';
 
@@ -34,6 +46,7 @@ export interface PaperPositionSizingResult {
     stopDistance: number;
     maxPositionPct: number;
     maxNotional: number;
+    bufferedMaxNotional: number;
     wasClamped: boolean;
   };
 }
@@ -104,13 +117,19 @@ export function sizePaperPositionForSignal(params: PaperPositionSizingParams): P
   
   // Step 3: Calculate max notional from maxPositionPercentPct
   const maxNotional = (portfolioValue * safeMaxPositionPct) / 100;
+  
+  // AJ9: Apply buffer factor to max notional for sizing (3% below max cap)
+  // This provides wiggle room for price changes between RTB sizing and execution
+  const bufferedMaxNotional = maxNotional * MAX_POSITION_BUFFER_FACTOR;
+  
   let estimatedValue = quantity * entryPrice;
   let wasClamped = false;
   
-  // Step 4: Clamp quantity if notional exceeds max position
-  if (estimatedValue > maxNotional) {
+  // Step 4: Clamp quantity if notional exceeds buffered max position
+  // Use buffered value for sizing, but MAX_POSITION check at execution uses full max
+  if (estimatedValue > bufferedMaxNotional) {
     wasClamped = true;
-    quantity = maxNotional / entryPrice;
+    quantity = bufferedMaxNotional / entryPrice;
     estimatedValue = quantity * entryPrice;
   }
   
@@ -120,8 +139,8 @@ export function sizePaperPositionForSignal(params: PaperPositionSizingParams): P
     return invalidResult;
   }
   
-  // Log sizing details
-  console.log(`[J7][SIZING]`, {
+  // Log sizing details (AJ9: includes buffer info)
+  console.log(`[AJ9][SIZING]`, {
     symbol,
     strategy,
     portfolioValue: portfolioValue.toFixed(2),
@@ -131,6 +150,9 @@ export function sizePaperPositionForSignal(params: PaperPositionSizingParams): P
     quantity: quantity.toFixed(8),
     estimatedValue: estimatedValue.toFixed(2),
     maxPositionPct: safeMaxPositionPct.toFixed(2),
+    maxNotional: maxNotional.toFixed(2),
+    bufferedMaxNotional: bufferedMaxNotional.toFixed(2),
+    bufferFactor: MAX_POSITION_BUFFER_FACTOR,
     wasClamped
   });
   
@@ -144,6 +166,7 @@ export function sizePaperPositionForSignal(params: PaperPositionSizingParams): P
       stopDistance,
       maxPositionPct: safeMaxPositionPct,
       maxNotional,
+      bufferedMaxNotional,
       wasClamped
     }
   };
