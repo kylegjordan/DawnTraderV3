@@ -622,6 +622,36 @@
     ]
   },
   {
+    "path": "/api/diagnostics/aj19/dry-run-no-guardrails",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/diagnostics/aj19/dry-run-no-guardrails/summary",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/diagnostics/aj19/dry-run-no-guardrails/clear",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/diagnostics/aj19b/status",
     "methods": [
       "GET"
