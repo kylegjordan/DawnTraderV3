@@ -236,3 +236,98 @@ After collecting diagnostic data:
 3. Check if position exclusions dominate after initial trades
 4. Review cooldown configuration impact
 5. Consider strategy parameter adjustments based on findings
+
+---
+
+## Phase 8.8.3-AJ17: Automated Diagnostic Runner
+
+**Added:** December 3, 2024
+
+### Overview
+
+AJ17 extends AJ16 with automated diagnostic session management. When the paper trading engine starts, AJ17 automatically:
+- Begins capturing all `[AJ16]` logs
+- Tracks session duration and log counts
+- Auto-generates downloadable diagnostic bundles when engine stops
+
+### Key Components
+
+#### AJ17 Diagnostic Runner Service
+
+**File:** `server/services/aj17-diagnostic-runner.ts`
+
+Features:
+- **Session Management** - Tracks start/end times, mode, log counts
+- **Global Log Capture** - Intercepts console.log to capture all `[AJ16]` prefixed logs
+- **Async Buffered Writes** - Uses fs.createWriteStream with callback-based writes to avoid blocking the trading loop
+- **Automatic Bundle Generation** - Creates ZIP with all artifacts on engine stop
+- **WebSocket Notification** - Emits `aj17_report_ready` when bundle is ready
+
+#### Engine Integration
+
+**File:** `server/services/paper-execution-engine.ts`
+
+- `start()` calls `aj17DiagnosticRunner.startSession(mode)`
+- `stop()` calls `aj17DiagnosticRunner.stopSessionAndGenerateReport()`
+
+### API Endpoints
+
+#### GET `/api/diagnostics/aj17/status`
+
+Returns current diagnostic session status:
+```json
+{
+  "ok": true,
+  "active": true,
+  "currentSession": {
+    "sessionId": "20241203_120530",
+    "startTime": "2024-12-03T12:05:30.000Z",
+    "mode": "paper",
+    "logCount": 145,
+    "snapshotCount": 3,
+    "status": "active"
+  },
+  "lastCompleted": null,
+  "lastBundlePath": null
+}
+```
+
+#### GET `/api/diagnostics/aj17/download`
+
+Downloads the latest diagnostic bundle as a ZIP file containing:
+- `aj16-diagnostic-report.md` - Enhanced report with session metadata
+- `raw-log-stream.jsonl` - All captured AJ16 logs in JSONL format
+- `snapshots.json` - Cycle snapshots from AJ16 service
+- `session-info.json` - Session metadata
+
+### UI Component
+
+**File:** `client/src/components/goals/aj17-diagnostic-card.tsx`
+
+Dashboard card showing:
+- Session status (Recording/Completed)
+- Log count and snapshot count
+- Download button for diagnostic bundle
+- Only visible in paper trading mode
+
+### Performance Safeguards
+
+1. **Async Buffered Writes** - Uses fs.createWriteStream with non-blocking callbacks
+2. **Flush Guard** - Prevents concurrent flush operations with isFlushingLogs flag
+3. **Buffer Recovery** - Preserves buffer on write error for retry
+4. **5-Second Flush Interval** - Balances memory usage with I/O efficiency
+5. **100-Entry Max Buffer** - Triggers early flush under high log volume
+
+### WebSocket Events
+
+- `aj17_report_ready` - Broadcast when diagnostic bundle is generated
+  - Payload includes sessionId, mode, duration, logCount, snapshotCount
+
+### Usage
+
+1. Switch to Paper Trading mode
+2. Start the paper trading engine
+3. Let trading run for desired duration
+4. Stop the engine
+5. Click "Download Diagnostic Bundle" in the AJ17 card
+6. Analyze the generated report and logs
