@@ -2830,6 +2830,43 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       res.status(500).json({ ok: false, error: 'Failed to clear dryRunNoGuardrails data' });
     }
   });
+  
+  // AJ19.10: Export dryRunNoGuardrails data to file
+  apiRouter.post('/diagnostics/aj19/dry-run-no-guardrails/export-to-file', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aj19Diagnostic } = await import('./services/aj19-max-position-diagnostic.js');
+      
+      const filepath = aj19Diagnostic.exportDryRunToFile();
+      
+      res.json({
+        ok: true,
+        message: 'DryRunNoGuardrails data exported to file',
+        filepath,
+        summary: aj19Diagnostic.getDryRunNoGuardrailsSummary()
+      });
+    } catch (error: any) {
+      console.error('[AJ19] Error exporting dryRunNoGuardrails data to file:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to export dryRunNoGuardrails data to file' });
+    }
+  });
+  
+  // AJ19.11: Export full AJ19 diagnostic data to file
+  apiRouter.post('/diagnostics/aj19/export-to-file', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aj19Diagnostic } = await import('./services/aj19-max-position-diagnostic.js');
+      
+      const filepath = aj19Diagnostic.exportFullToFile();
+      
+      res.json({
+        ok: true,
+        message: 'Full AJ19 diagnostic data exported to file',
+        filepath
+      });
+    } catch (error: any) {
+      console.error('[AJ19] Error exporting full diagnostic data to file:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to export full diagnostic data to file' });
+    }
+  });
 
   // ===== PHASE 8.8.3-AJ19-B: TRADE LIFECYCLE INTEGRITY TRACING =====
   // Diagnoses whether trade closures properly free slots in the guardrail system

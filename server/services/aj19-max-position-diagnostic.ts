@@ -16,6 +16,9 @@
  * - POSITION_LIMIT (checkMaxPositionsPerAsset): Already have position in same symbol
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
+
 export interface MaxPositionDiagnosticEntry {
   timestamp: Date;
   cycleId: string;
@@ -396,6 +399,75 @@ class AJ19MaxPositionDiagnostic {
         totalEntries: this.entries.length
       }
     };
+  }
+  
+  /**
+   * Export dryRunNoGuardrails data to a file
+   * Saves to diagnostic-reports/aj19-dry-run-{timestamp}.json
+   */
+  exportDryRunToFile(): string {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `aj19-dry-run-${timestamp}.json`;
+    const filepath = path.join(process.cwd(), 'diagnostic-reports', filename);
+    
+    const summary = this.getDryRunNoGuardrailsSummary();
+    const data = {
+      exportTime: new Date().toISOString(),
+      testType: 'dryRunNoGuardrails',
+      description: 'Test to see if RTB signals continue generating when no trades are opened',
+      summary: {
+        ...summary,
+        sessionStart: summary.sessionStart?.toISOString() || null
+      },
+      allWouldBeTrades: this.wouldBeTrades.map(t => ({
+        ...t,
+        timestamp: t.timestamp.toISOString()
+      }))
+    };
+    
+    try {
+      // Ensure directory exists
+      const dir = path.dirname(filepath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      
+      fs.writeFileSync(filepath, JSON.stringify(data, null, 2));
+      console.log(`[AJ19][EXPORT] DryRunNoGuardrails data saved to ${filepath}`);
+      return filepath;
+    } catch (err: any) {
+      console.error(`[AJ19][EXPORT] Failed to save file:`, err.message);
+      throw err;
+    }
+  }
+  
+  /**
+   * Export full AJ19 diagnostic data to a file
+   * Saves to diagnostic-reports/aj19-full-{timestamp}.json
+   */
+  exportFullToFile(): string {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `aj19-full-${timestamp}.json`;
+    const filepath = path.join(process.cwd(), 'diagnostic-reports', filename);
+    
+    const data = {
+      ...this.exportData(),
+      dryRunNoGuardrailsSummary: this.getDryRunNoGuardrailsSummary()
+    };
+    
+    try {
+      const dir = path.dirname(filepath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      
+      fs.writeFileSync(filepath, JSON.stringify(data, null, 2));
+      console.log(`[AJ19][EXPORT] Full diagnostic data saved to ${filepath}`);
+      return filepath;
+    } catch (err: any) {
+      console.error(`[AJ19][EXPORT] Failed to save file:`, err.message);
+      throw err;
+    }
   }
 }
 

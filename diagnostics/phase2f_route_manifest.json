@@ -652,6 +652,26 @@
     ]
   },
   {
+    "path": "/api/diagnostics/aj19/dry-run-no-guardrails/export-to-file",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/diagnostics/aj19/export-to-file",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/diagnostics/aj19b/status",
     "methods": [
       "GET"
