@@ -29,6 +29,7 @@ export interface LifecycleOpenEvent {
   slotCountBefore: number;
   slotCountAfter: number;
   dbOpenPositionsCount: number;
+  mode: 'live' | 'paper';
 }
 
 export interface LifecycleMonitorEvent {
@@ -57,6 +58,7 @@ export interface LifecycleCloseEvent {
   dbOpenPositionsCount: number;
   deleteSuccessful: boolean;
   deleteError?: string;
+  mode: 'live' | 'paper';
 }
 
 export interface ReconciliationEvent {
@@ -67,6 +69,9 @@ export interface ReconciliationEvent {
   mismatchDetected: boolean;
   positionIds?: string[];
   symbols?: string[];
+  strandedPositionIds?: string[]; // Positions that should have been closed but weren't
+  failedDeleteCount?: number; // Number of delete failures since last reconcile
+  mode: 'live' | 'paper';
 }
 
 export interface SlotFreedEvent {
@@ -164,17 +169,18 @@ class AJ19BLifecycleDiagnostic {
   /**
    * Log when a trade/position OPENS
    */
-  async logOpen(event: Omit<LifecycleOpenEvent, 'timestamp' | 'dbOpenPositionsCount'>): Promise<void> {
+  async logOpen(event: Omit<LifecycleOpenEvent, 'timestamp' | 'dbOpenPositionsCount'>, mode: 'live' | 'paper' = 'paper'): Promise<void> {
     if (!this.isEnabled) return;
     
-    // Get current DB count
-    const dbPositions = await storage.getPaperSimOpenPositions('paper');
+    // Get current DB count using correct mode
+    const dbPositions = await storage.getPaperSimOpenPositions(mode);
     const dbCount = dbPositions.length;
     
     const fullEvent: LifecycleOpenEvent = {
       ...event,
       timestamp: new Date(),
-      dbOpenPositionsCount: dbCount
+      dbOpenPositionsCount: dbCount,
+      mode
     };
     
     this.openEvents.push(fullEvent);
@@ -185,7 +191,7 @@ class AJ19BLifecycleDiagnostic {
       this.openEvents = this.openEvents.slice(-this.maxEvents);
     }
     
-    console.log(`[AJ19B][OPEN] tradeId=${event.tradeId} | positionId=${event.positionId || 'N/A'} | symbol=${event.symbol} | qty=${event.quantity} | notional=$${event.notionalValue.toFixed(2)} | slotsBefore=${event.slotCountBefore} | slotsAfter=${event.slotCountAfter} | dbCount=${dbCount}`);
+    console.log(`[AJ19B][OPEN] mode=${mode} | tradeId=${event.tradeId} | positionId=${event.positionId || 'N/A'} | symbol=${event.symbol} | qty=${event.quantity} | notional=$${event.notionalValue.toFixed(2)} | slotsBefore=${event.slotCountBefore} | slotsAfter=${event.slotCountAfter} | dbCount=${dbCount}`);
   }
   
   /**
@@ -215,17 +221,18 @@ class AJ19BLifecycleDiagnostic {
   /**
    * Log when a trade/position CLOSES
    */
-  async logClose(event: Omit<LifecycleCloseEvent, 'timestamp' | 'dbOpenPositionsCount'>): Promise<void> {
+  async logClose(event: Omit<LifecycleCloseEvent, 'timestamp' | 'dbOpenPositionsCount'>, mode: 'live' | 'paper' = 'paper'): Promise<void> {
     if (!this.isEnabled) return;
     
-    // Get current DB count AFTER the close attempt
-    const dbPositions = await storage.getPaperSimOpenPositions('paper');
+    // Get current DB count AFTER the close attempt using correct mode
+    const dbPositions = await storage.getPaperSimOpenPositions(mode);
     const dbCount = dbPositions.length;
     
     const fullEvent: LifecycleCloseEvent = {
       ...event,
       timestamp: new Date(),
-      dbOpenPositionsCount: dbCount
+      dbOpenPositionsCount: dbCount,
+      mode
     };
     
     this.closeEvents.push(fullEvent);
@@ -243,7 +250,7 @@ class AJ19BLifecycleDiagnostic {
     }
     
     const status = event.deleteSuccessful ? 'SUCCESS' : 'FAILED';
-    console.log(`[AJ19B][CLOSE][${status}] positionId=${event.positionId} | symbol=${event.symbol} | reason=${event.closeReason} | pnl=$${event.pnl.toFixed(2)} | slotsBefore=${event.slotCountBefore} | slotsAfter=${event.slotCountAfter} | dbCount=${dbCount}${event.deleteError ? ` | error=${event.deleteError}` : ''}`);
+    console.log(`[AJ19B][CLOSE][${status}] mode=${mode} | positionId=${event.positionId} | symbol=${event.symbol} | reason=${event.closeReason} | pnl=$${event.pnl.toFixed(2)} | slotsBefore=${event.slotCountBefore} | slotsAfter=${event.slotCountAfter} | dbCount=${dbCount}${event.deleteError ? ` | error=${event.deleteError}` : ''}`);
     
     // If delete was successful, log slot freed event
     if (event.deleteSuccessful) {
@@ -276,19 +283,75 @@ class AJ19BLifecycleDiagnostic {
   
   /**
    * Run per-cycle reconciliation check
-   * Compares DB open positions with guardrail's view
+   * Detects stranded positions from failed deletions AND unlogged/skipped closes
    */
   async runReconciliation(cycleId: string, mode: 'paper' | 'live' = 'paper'): Promise<ReconciliationEvent> {
     // Get DB count
     const dbPositions = await storage.getPaperSimOpenPositions(mode);
     const dbOpenCount = dbPositions.length;
+    const dbPositionIds = new Set(dbPositions.map(p => String(p.id)));
     
-    // Guardrail uses the same source, but let's verify
-    // In trade-safety.ts, getActivePositions() calls storage.getPaperSimOpenPositions()
-    // So guardrailOpenCount should equal dbOpenCount
-    const guardrailOpenCount = dbOpenCount; // Same source
+    // Compute expected open count based on lifecycle events (since diagnostic was enabled)
+    // Expected = (pre-existing positions before diagnostic started) + opens - successful_closes
+    // Since we don't know pre-existing count at enable time, we track from opens
+    const modeOpens = this.openEvents.filter(e => e.mode === mode).length;
+    const modeSuccessfulCloses = this.closeEvents.filter(e => e.mode === mode && e.deleteSuccessful).length;
+    const modeFailedCloses = this.closeEvents.filter(e => e.mode === mode && !e.deleteSuccessful).length;
     
-    const mismatchDetected = false; // They use the same source, so no mismatch expected
+    // Baseline: If no opens recorded yet, expected = dbOpenCount (we don't know pre-existing state)
+    // Otherwise: expected = opens - successful_closes (ignoring pre-existing for now)
+    // The key indicator is: if opens > 0 and dbCount > (opens - successful_closes), we have stranded positions
+    let expectedOpenCount: number;
+    let deltaCount = 0;
+    
+    if (modeOpens === 0) {
+      // No opens recorded yet, use DB count as expected (we just started tracking)
+      expectedOpenCount = dbOpenCount;
+    } else {
+      // Expected = modeOpens - modeSuccessfulCloses
+      // If dbOpenCount > expected, we have stranded positions
+      expectedOpenCount = modeOpens - modeSuccessfulCloses;
+      deltaCount = dbOpenCount - expectedOpenCount;
+    }
+    
+    // Stranded positions from logged failed closes
+    const loggedFailedCloseIds = this.closeEvents
+      .filter(e => e.mode === mode && !e.deleteSuccessful)
+      .map(e => String(e.positionId));
+    
+    // If dbOpenCount > expectedOpenCount, find the excess DB positions
+    // These are positions that should have been closed but weren't (either failed or skipped/unlogged)
+    const loggedOpenPositionIds = new Set(this.openEvents
+      .filter(e => e.mode === mode && e.positionId)
+      .map(e => String(e.positionId)));
+    
+    // Find positions in DB that we opened but haven't successfully closed
+    // These are potentially stranded (though some may just be legitimately open)
+    const unloggedStrandedIds: string[] = [];
+    if (deltaCount > 0) {
+      // We have more positions in DB than expected
+      // The excess could be from unlogged/skipped closes
+      for (const posId of dbPositionIds) {
+        if (!loggedOpenPositionIds.has(posId)) {
+          // Position exists in DB but wasn't opened during this diagnostic session
+          // This could be a stranded position from before the diagnostic started
+          // Mark as potentially stranded if we're seeing a mismatch
+          unloggedStrandedIds.push(posId);
+          if (unloggedStrandedIds.length >= deltaCount) break;
+        }
+      }
+    }
+    
+    // Combine logged failed closes and unlogged stranded
+    const strandedPositionIds = [...new Set([...loggedFailedCloseIds, ...unloggedStrandedIds])];
+    
+    // Guardrail uses the same DB source, so guardrailOpenCount = dbOpenCount
+    const guardrailOpenCount = dbOpenCount;
+    
+    // Mismatch detected if:
+    // 1. Any failed deletes (logged stranded positions)
+    // 2. Or DB count > expected (unlogged/skipped closes)
+    const mismatchDetected = modeFailedCloses > 0 || deltaCount > 0;
     
     const event: ReconciliationEvent = {
       timestamp: new Date(),
@@ -297,7 +360,21 @@ class AJ19BLifecycleDiagnostic {
       guardrailOpenCount,
       mismatchDetected,
       positionIds: dbPositions.map(p => String(p.id)),
-      symbols: dbPositions.map(p => p.symbol)
+      symbols: dbPositions.map(p => p.symbol),
+      strandedPositionIds,
+      failedDeleteCount: modeFailedCloses,
+      mode
+    };
+    
+    // Add diagnostic metadata
+    (event as any).diagnosticMeta = {
+      modeOpens,
+      modeSuccessfulCloses,
+      modeFailedCloses,
+      expectedOpenCount,
+      deltaCount,
+      loggedFailedCloseIds: loggedFailedCloseIds.length,
+      unloggedStrandedIds: unloggedStrandedIds.length
     };
     
     this.reconciliationEvents.push(event);
@@ -313,7 +390,8 @@ class AJ19BLifecycleDiagnostic {
     }
     
     if (this.isEnabled) {
-      console.log(`[AJ19B][RECONCILE] cycleId=${cycleId} | dbOpen=${dbOpenCount} | guardrailOpen=${guardrailOpenCount} | positions=[${event.symbols?.slice(0, 5).join(', ')}${(event.symbols?.length || 0) > 5 ? '...' : ''}]`);
+      const status = mismatchDetected ? 'MISMATCH' : 'OK';
+      console.log(`[AJ19B][RECONCILE][${status}] mode=${mode} | cycleId=${cycleId} | dbOpen=${dbOpenCount} | expected=${expectedOpenCount} | delta=${deltaCount} | failedDeletes=${modeFailedCloses} | strandedIds=${strandedPositionIds.slice(0, 3).join(',')}${strandedPositionIds.length > 3 ? '...' : ''}`);
     }
     
     return event;
@@ -322,9 +400,9 @@ class AJ19BLifecycleDiagnostic {
   /**
    * Get summary of lifecycle events
    */
-  async getSummary(): Promise<LifecycleSummary> {
-    // Get current DB state
-    const dbPositions = await storage.getPaperSimOpenPositions('paper');
+  async getSummary(mode: 'live' | 'paper' = 'paper'): Promise<LifecycleSummary> {
+    // Get current DB state for the specified mode
+    const dbPositions = await storage.getPaperSimOpenPositions(mode);
     
     // Build close reason breakdown
     const closesByReason: Record<string, number> = {};

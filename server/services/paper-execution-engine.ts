@@ -378,8 +378,9 @@ export class PaperExecutionEngine {
         slotCountBefore,
         slotCountAfter,
         deleteSuccessful,
-        deleteError
-      });
+        deleteError,
+        mode: this.mode
+      }, this.mode);
     } catch (aj19bErr) {
       console.error('[AJ19-B] Error logging close event:', aj19bErr);
     }
@@ -1415,8 +1416,9 @@ export class PaperExecutionEngine {
           notionalValue: positionValue,
           openPrice: actualEntryPrice,
           slotCountBefore: openPositionsAfter.length - 1, // Before this position was added
-          slotCountAfter: openPositionsAfter.length
-        });
+          slotCountAfter: openPositionsAfter.length,
+          mode: this.mode
+        }, this.mode);
       } catch (aj19bErr) {
         console.error('[AJ19-B] Error logging open event:', aj19bErr);
       }
