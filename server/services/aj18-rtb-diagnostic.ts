@@ -744,6 +744,61 @@ class AJ18RTBDiagnosticService {
     return this.cycleSnapshots.slice(-limit);
   }
   
+  getSnapshots(): any[] {
+    return this.cycleSnapshots.map(snapshot => ({
+      cycleId: snapshot.cycleId,
+      timestamp: snapshot.timestamp,
+      mode: snapshot.mode,
+      maxPositionsSkipped: snapshot.maxPositionsState.skippedScanning,
+      poolState: {
+        activePoolSize: snapshot.poolState.activePoolSize,
+        symbolsEvaluated: snapshot.poolState.symbolsEvaluated,
+        symbolsSkipped: snapshot.poolState.symbolsSkipped,
+        rtbCandidatesProposed: snapshot.signalState.rtbCandidatesProposed
+      },
+      signalsGenerated: Array.from({ length: snapshot.signalState.signalsGenerated }).map((_, i) => ({
+        strategy: Object.keys(snapshot.criteriaFailureBreakdown)[i] || 'unknown'
+      })),
+      criteriaFails: Object.entries(snapshot.criteriaFailureBreakdown).map(([key, count]) => ({
+        strategy: key.split('.')[0] || key,
+        specificReason: key.split('.')[1] || key,
+        count
+      })),
+      tradeLifecycle: this.tradeLifecycleEvents
+        .filter(e => e.cycleId === snapshot.cycleId)
+        .map(e => ({
+          eventType: e.eventType,
+          symbol: e.symbol,
+          holdingMinutes: e.holdingDurationMinutes
+        }))
+    }));
+  }
+  
+  getSummary(): {
+    totalCycles: number;
+    signalsGenerated: number;
+    criteriaFailures: number;
+    maxPositionsSkips: number;
+    tradeOpens: number;
+    tradeCloses: number;
+    tradeErrors: number;
+  } {
+    return {
+      totalCycles: this.cycleCounter,
+      signalsGenerated: this.cycleSnapshots.reduce((sum, s) => sum + s.signalState.signalsGenerated, 0),
+      criteriaFailures: this.criteriaFailLogs.length,
+      maxPositionsSkips: this.maxPositionsEvents.filter(e => e.eventType === 'SKIP').length,
+      tradeOpens: this.tradeLifecycleEvents.filter(e => e.eventType === 'OPEN').length,
+      tradeCloses: this.tradeLifecycleEvents.filter(e => e.eventType === 'CLOSE').length,
+      tradeErrors: this.tradeLifecycleEvents.filter(e => e.eventType === 'ERROR').length
+    };
+  }
+  
+  reset(): void {
+    this.resetLogs();
+    console.log('[AJ18] Diagnostic state reset');
+  }
+  
   getPoolStateLogs(): PoolStateLog[] {
     return [...this.poolStateLogs];
   }

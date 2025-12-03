@@ -2532,6 +2532,131 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 8.8.3-AJ18: Enhanced RTB Starvation Diagnostic Endpoints
+  apiRouter.get('/diagnostics/aj18/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aj18DiagnosticRunner } = await import('./services/aj18-diagnostic-runner.js');
+      const status = aj18DiagnosticRunner.getSessionStatus();
+      
+      res.json({
+        ok: true,
+        ...status,
+        lastBundlePath: aj18DiagnosticRunner.getLastBundlePath()
+      });
+    } catch (error: any) {
+      console.error('[AJ18] Error fetching session status:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to fetch AJ18 session status' });
+    }
+  });
+
+  apiRouter.post('/diagnostics/aj18/start', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aj18DiagnosticRunner } = await import('./services/aj18-diagnostic-runner.js');
+      const mode = req.mode!;
+      const { durationMinutes = 20 } = req.body;
+      
+      if (aj18DiagnosticRunner.isSessionActive()) {
+        return res.status(400).json({
+          ok: false,
+          error: 'A diagnostic session is already active. Stop it first.'
+        });
+      }
+      
+      aj18DiagnosticRunner.startSession(mode, durationMinutes);
+      
+      res.json({
+        ok: true,
+        message: `AJ18 diagnostic session started (${mode} mode, ${durationMinutes} minutes)`,
+        session: aj18DiagnosticRunner.getCurrentSession()
+      });
+    } catch (error: any) {
+      console.error('[AJ18] Error starting session:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to start AJ18 diagnostic session' });
+    }
+  });
+
+  apiRouter.post('/diagnostics/aj18/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aj18DiagnosticRunner } = await import('./services/aj18-diagnostic-runner.js');
+      
+      if (!aj18DiagnosticRunner.isSessionActive()) {
+        return res.status(400).json({
+          ok: false,
+          error: 'No active diagnostic session to stop.'
+        });
+      }
+      
+      const session = await aj18DiagnosticRunner.stopSessionAndGenerateReport();
+      
+      res.json({
+        ok: true,
+        message: 'AJ18 diagnostic session stopped and report generated',
+        session
+      });
+    } catch (error: any) {
+      console.error('[AJ18] Error stopping session:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to stop AJ18 diagnostic session' });
+    }
+  });
+
+  apiRouter.get('/diagnostics/aj18/live-metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aj18DiagnosticRunner } = await import('./services/aj18-diagnostic-runner.js');
+      
+      if (!aj18DiagnosticRunner.isSessionActive()) {
+        return res.json({
+          ok: true,
+          sessionActive: false,
+          message: 'No active session. Start a session first.'
+        });
+      }
+      
+      const metrics = aj18DiagnosticRunner.getLiveMetrics();
+      
+      res.json({
+        ok: true,
+        ...metrics
+      });
+    } catch (error: any) {
+      console.error('[AJ18] Error fetching live metrics:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to fetch AJ18 live metrics' });
+    }
+  });
+
+  apiRouter.get('/diagnostics/aj18/download', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aj18DiagnosticRunner } = await import('./services/aj18-diagnostic-runner.js');
+      const fs = await import('fs');
+      
+      const lastSession = aj18DiagnosticRunner.getLastCompletedSession();
+      
+      if (!lastSession || !lastSession.zipPath) {
+        return res.status(404).json({ 
+          ok: false, 
+          error: 'No AJ18 diagnostic bundle available. Complete a diagnostic session first.' 
+        });
+      }
+      
+      if (!fs.existsSync(lastSession.zipPath)) {
+        return res.status(404).json({ 
+          ok: false, 
+          error: 'Diagnostic bundle file not found. It may have been cleaned up.' 
+        });
+      }
+      
+      const fileName = `aj18-diagnostic-${lastSession.sessionId}.zip`;
+      
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      
+      const fileStream = fs.createReadStream(lastSession.zipPath);
+      fileStream.pipe(res);
+    } catch (error: any) {
+      console.error('[AJ18] Error downloading diagnostic bundle:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to download AJ18 diagnostic bundle' });
+    }
+  });
+
   // Phase 8.8.2-MAP-FINAL: Filter settings endpoint for Filter Insights thresholds
   apiRouter.get('/settings/filters', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {

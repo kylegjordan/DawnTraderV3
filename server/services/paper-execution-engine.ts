@@ -9,6 +9,7 @@ import { activeFilterPool, type ActiveFilteredPair } from './active-filter-pool'
 import { sizePaperPositionForSignal, validatePaperPortfolioValue, type StrategyType } from './paper-position-sizing';
 import { aj16Diagnostic } from './aj16-rtb-diagnostic';
 import { aj17DiagnosticRunner } from './aj17-diagnostic-runner';
+import { aj18Diagnostic } from './aj18-rtb-diagnostic';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail';
@@ -63,6 +64,9 @@ export class PaperExecutionEngine {
     
     // Phase 8.8.3-AJ17: Start diagnostic session to capture all AJ16 logs
     aj17DiagnosticRunner.startSession(this.mode);
+    
+    // Phase 8.8.3-AJ18: Start starvation diagnostic session
+    aj18Diagnostic.startSession(this.mode);
     
     console.log(`[PaperExecution:${this.mode}] Starting paper trading engine`);
 
@@ -353,6 +357,22 @@ export class PaperExecutionEngine {
       closeReason: exitCondition.type,
       timestamp: new Date().toISOString()
     }));
+    
+    // [AJ18] Trade lifecycle - CLOSE event
+    const openTime = position.openedAt ? new Date(position.openedAt).getTime() : Date.now();
+    const holdingMinutes = (Date.now() - openTime) / 60000;
+    aj18Diagnostic.logTradeLifecycle({
+      cycleId: aj18Diagnostic.getCycleId(),
+      eventType: 'CLOSE',
+      tradeId: trade?.id,
+      symbol: position.symbol,
+      strategy: position.strategyName,
+      entryPrice: avgPrice,
+      exitPrice: actualExitPrice,
+      pnl: netPnl,
+      closeReason: exitCondition.type,
+      holdingDurationMinutes: holdingMinutes
+    });
 
     console.log(`[PaperExecution:${this.mode}] Position ${position.symbol} closed successfully`);
   }
@@ -364,6 +384,9 @@ export class PaperExecutionEngine {
     // [AJ16.7] Start a new diagnostic cycle with unique cycleId
     const cycleId = aj16Diagnostic.startCycle(this.mode);
     console.log(`[AJ16][CYCLE_START] mode=${this.mode} | cycleId=${cycleId}`);
+    
+    // [AJ18] Start AJ18 diagnostic cycle
+    aj18Diagnostic.startCycle(this.mode);
     
     try {
       // Phase 8.8.3-H4: Get trading settings from guardrails_v2
@@ -507,6 +530,24 @@ export class PaperExecutionEngine {
       
       if (openPositions.length >= maxPositions) {
         console.log(`[PaperExecution:${this.mode}] Max open positions (${maxPositions}) reached - skipping new signals`);
+        
+        // [AJ18] Log max positions skip event - this is a key diagnostic for RTB starvation
+        aj18Diagnostic.logMaxPositionsSkip({
+          cycleId,
+          openPositions: openPositions.length,
+          maxPositions,
+          reason: 'max_positions_reached_early_exit'
+        });
+        
+        // [AJ18] Capture snapshot showing we skipped due to max positions
+        aj18Diagnostic.captureSnapshot(this.mode, {
+          openPositions: openPositions.length,
+          maxPositions,
+          activePoolSize: activePool.length,
+          atMaxCapacity: true,
+          skippedScanning: true
+        });
+        
         this.lastCycleSummary = {
           timestamp: cycleTimestamp,
           readyToBuyCount: 0,
@@ -550,6 +591,34 @@ export class PaperExecutionEngine {
       }
       
       console.log(`[PaperExecution:${this.mode}] Scan complete: ${evaluatedSymbols.length} symbols, ${readyToBuyCount} signals, ${tradesExecuted} trades`);
+      
+      // [AJ18] Log pool state for this cycle
+      aj18Diagnostic.logPoolState({
+        cycleId: aj18Diagnostic.getCycleId(),
+        activePoolSize: activePool.length,
+        symbolsEvaluated: evaluatedSymbols.length,
+        symbolsSkipped: activePool.length - evaluatedSymbols.length,
+        skipReasons: {},
+        rtbCandidatesProposed: readyToBuyCount
+      });
+      
+      // [AJ18] Log max positions evaluation summary (when NOT at max)
+      aj18Diagnostic.logMaxPositionsEvaluation({
+        cycleId: aj18Diagnostic.getCycleId(),
+        openPositions: openPositions.length,
+        maxPositions,
+        symbolsEvaluated: evaluatedSymbols.length,
+        rtbGenerated: readyToBuyCount
+      });
+      
+      // [AJ18] Capture snapshot for this cycle
+      aj18Diagnostic.captureSnapshot(this.mode, {
+        openPositions: openPositions.length,
+        maxPositions,
+        activePoolSize: activePool.length,
+        atMaxCapacity: openPositions.length >= maxPositions,
+        skippedScanning: false
+      });
       
       // [AJ16.6] Force snapshot for every cycle (per-cycle, no throttle)
       aj16Diagnostic.forceSnapshot(this.mode, {
@@ -681,17 +750,24 @@ export class PaperExecutionEngine {
     // [AJ16.1] Log strategy outputs with signal emit status
     // VWAP Pullback
     const vwapSignal = this.strategyEngine.detectVWAPPullback(indicators, settings, priceData);
+    const pctFromVwap = vwap > 0 ? ((currentPrice - vwap) / vwap * 100) : 0;
     aj16Diagnostic.logStrategySignal({
       cycleId, pair: symbol, strategy: 'vwap_pullback', 
       signalEmitted: !!vwapSignal, 
       price: vwapSignal?.entryPrice,
       signalValue: vwapSignal?.confidence,
       reason: vwapSignal ? 'met_criteria' : 'failed_criteria',
-      indicators: { vwap, currentPrice, pctFromVwap: vwap > 0 ? ((currentPrice - vwap) / vwap * 100).toFixed(2) : 0 }
+      indicators: { vwap, currentPrice, pctFromVwap: pctFromVwap.toFixed(2) }
     });
     if (vwapSignal) {
       vwapSignal.symbol = symbol;
       signals.push(vwapSignal);
+      aj18Diagnostic.logSignalGenerated({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'vwap_pullback', confidence: vwapSignal.confidence });
+    } else {
+      // [AJ18] Detailed criteria failure
+      const vwapFailReason = currentPrice <= vwap ? 'price_below_vwap' : 
+                             Math.abs(pctFromVwap) > 2 ? 'not_near_vwap' : 'no_reversal_pattern';
+      aj18Diagnostic.logCriteriaFail({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'vwap_pullback', specificReason: vwapFailReason, indicators: { pctFromVwap: pctFromVwap.toFixed(2) } });
     }
 
     // ABCD Long
@@ -706,10 +782,14 @@ export class PaperExecutionEngine {
     if (abcdSignal) {
       abcdSignal.symbol = symbol;
       signals.push(abcdSignal);
+      aj18Diagnostic.logSignalGenerated({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'abcd_long', confidence: abcdSignal.confidence });
+    } else {
+      aj18Diagnostic.logCriteriaFail({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'abcd_long', specificReason: 'no_pattern_detected' });
     }
 
     // SMA Trend Ride
     const smaSignal = this.strategyEngine.detectSMATrendRide(indicators, priceData, settings);
+    const pctFromSma = sma > 0 ? ((currentPrice - sma) / sma * 100) : 0;
     aj16Diagnostic.logStrategySignal({
       cycleId, pair: symbol, strategy: 'sma_trend_ride',
       signalEmitted: !!smaSignal,
@@ -721,6 +801,11 @@ export class PaperExecutionEngine {
     if (smaSignal) {
       smaSignal.symbol = symbol;
       signals.push(smaSignal);
+      aj18Diagnostic.logSignalGenerated({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'sma_trend_ride', confidence: smaSignal.confidence });
+    } else {
+      const smaFailReason = currentPrice <= sma ? 'price_below_sma' : 
+                            Math.abs(pctFromSma) > 2 ? 'not_near_sma' : 'no_uptrend';
+      aj18Diagnostic.logCriteriaFail({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'sma_trend_ride', specificReason: smaFailReason, indicators: { pctFromSma: pctFromSma.toFixed(2) } });
     }
 
     // [8.8.3-J4] Phase J4.2: Add missing 6 strategies for full coverage
@@ -736,6 +821,9 @@ export class PaperExecutionEngine {
     if (breakoutSignal) {
       breakoutSignal.symbol = symbol;
       signals.push(breakoutSignal);
+      aj18Diagnostic.logSignalGenerated({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'breakout', confidence: breakoutSignal.confidence });
+    } else {
+      aj18Diagnostic.logCriteriaFail({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'breakout', specificReason: 'no_consolidation_breakout' });
     }
 
     // Mean Reversion Strategy
@@ -750,6 +838,9 @@ export class PaperExecutionEngine {
     if (meanReversionSignal) {
       meanReversionSignal.symbol = symbol;
       signals.push(meanReversionSignal);
+      aj18Diagnostic.logSignalGenerated({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'mean_reversion', confidence: meanReversionSignal.confidence });
+    } else {
+      aj18Diagnostic.logCriteriaFail({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'mean_reversion', specificReason: 'not_oversold' });
     }
 
     // Range Trading Strategy
@@ -764,6 +855,9 @@ export class PaperExecutionEngine {
     if (rangeTradingSignal) {
       rangeTradingSignal.symbol = symbol;
       signals.push(rangeTradingSignal);
+      aj18Diagnostic.logSignalGenerated({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'range_trading', confidence: rangeTradingSignal.confidence });
+    } else {
+      aj18Diagnostic.logCriteriaFail({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'range_trading', specificReason: 'no_range_or_not_at_support' });
     }
 
     // VWAP Bounce Strategy
@@ -778,6 +872,10 @@ export class PaperExecutionEngine {
     if (vwapBounceSignal) {
       vwapBounceSignal.symbol = symbol;
       signals.push(vwapBounceSignal);
+      aj18Diagnostic.logSignalGenerated({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'vwap_bounce', confidence: vwapBounceSignal.confidence });
+    } else {
+      const vwapBounceFailReason = currentPrice > vwap ? 'price_above_vwap' : 'no_bounce_confirmation';
+      aj18Diagnostic.logCriteriaFail({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'vwap_bounce', specificReason: vwapBounceFailReason });
     }
 
     // Liquidity Trap Strategy
@@ -792,6 +890,9 @@ export class PaperExecutionEngine {
     if (liquidityTrapSignal) {
       liquidityTrapSignal.symbol = symbol;
       signals.push(liquidityTrapSignal);
+      aj18Diagnostic.logSignalGenerated({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'liquidity_trap', confidence: liquidityTrapSignal.confidence });
+    } else {
+      aj18Diagnostic.logCriteriaFail({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'liquidity_trap', specificReason: 'no_trap_pattern' });
     }
 
     // DHMA Strategy
@@ -806,6 +907,9 @@ export class PaperExecutionEngine {
     if (dhmaSignal) {
       dhmaSignal.symbol = symbol;
       signals.push(dhmaSignal);
+      aj18Diagnostic.logSignalGenerated({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'dhma', confidence: dhmaSignal.confidence });
+    } else {
+      aj18Diagnostic.logCriteriaFail({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'dhma', specificReason: 'regime_mismatch' });
     }
 
     // Execute the highest confidence signal
@@ -1291,6 +1395,16 @@ export class PaperExecutionEngine {
         confidence: signal.confidence,
         timestamp: new Date().toISOString()
       }));
+      
+      // [AJ18] Trade lifecycle - OPEN event
+      aj18Diagnostic.logTradeLifecycle({
+        cycleId: aj18Diagnostic.getCycleId(),
+        eventType: 'OPEN',
+        tradeId: trade.id,
+        symbol: signal.symbol,
+        strategy: signal.strategy,
+        entryPrice: actualEntryPrice
+      });
 
       // [27.F.14.DIAG] DIAGNOSTIC: Trade insert successful
       console.log(`[DB] trade_insert_ok {tradeId:${trade.id}, symbol:${signal.symbol}}`);
