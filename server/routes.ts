@@ -2479,6 +2479,59 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 8.8.3-AJ17: Diagnostic session status endpoint
+  apiRouter.get('/diagnostics/aj17/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aj17DiagnosticRunner } = await import('./services/aj17-diagnostic-runner.js');
+      const status = aj17DiagnosticRunner.getSessionStatus();
+      
+      res.json({
+        ok: true,
+        ...status,
+        lastBundlePath: aj17DiagnosticRunner.getLastBundlePath()
+      });
+    } catch (error: any) {
+      console.error('[AJ17] Error fetching session status:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to fetch AJ17 session status' });
+    }
+  });
+
+  // Phase 8.8.3-AJ17: Download diagnostic bundle
+  apiRouter.get('/diagnostics/aj17/download', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aj17DiagnosticRunner } = await import('./services/aj17-diagnostic-runner.js');
+      const fs = await import('fs');
+      const path = await import('path');
+      
+      const lastSession = aj17DiagnosticRunner.getLastCompletedSession();
+      
+      if (!lastSession || !lastSession.zipPath) {
+        return res.status(404).json({ 
+          ok: false, 
+          error: 'No diagnostic bundle available. Run a paper trading session first.' 
+        });
+      }
+      
+      if (!fs.existsSync(lastSession.zipPath)) {
+        return res.status(404).json({ 
+          ok: false, 
+          error: 'Diagnostic bundle file not found. It may have been cleaned up.' 
+        });
+      }
+      
+      const fileName = `aj16-diagnostic-${lastSession.sessionId}.zip`;
+      
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      
+      const fileStream = fs.createReadStream(lastSession.zipPath);
+      fileStream.pipe(res);
+    } catch (error: any) {
+      console.error('[AJ17] Error downloading diagnostic bundle:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to download AJ17 diagnostic bundle' });
+    }
+  });
+
   // Phase 8.8.2-MAP-FINAL: Filter settings endpoint for Filter Insights thresholds
   apiRouter.get('/settings/filters', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {

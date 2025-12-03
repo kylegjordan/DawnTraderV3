@@ -1,0 +1,222 @@
+✅ Directive for Repl.it — “AJ16 Automated Diagnostic Runner”
+
+Please run exactly as written.
+
+📘 Phase 8.8.3 — AJ17: Automated RTB Cooling Diagnostic Runner
+
+Goal:
+Create a fully automated diagnostic workflow so Kyle can:
+
+Start paper trading
+
+Let it run 20–30 minutes
+
+Stop trading
+
+Automatically receive a downloadable AJ16 diagnostic bundle:
+
+aj16-diagnostic-report.md
+
+aj16-raw-log-dump.json
+
+aj16-cycle-snapshots.json
+
+Plus any other logs captured during the run
+
+No manual URL calls. No console scraping. No timing issues.
+
+📌 AJ17 — Requirements
+AJ17.1 — Create a Diagnostic Session Manager
+
+Implement a new backend service:
+
+server/services/aj17-diagnostic-runner.ts
+
+Capabilities:
+
+Tracks when a diagnostic session begins & ends
+
+Captures:
+
+All [AJ16] logs during the trading session
+
+All AJ16 snapshots (forceSnapshot calls)
+
+All AJ16 event streams (RTB, indicators, cooldown, strategies, etc.)
+
+Stores data to a temp directory:
+/tmp/aj16/<timestamp>/raw-log-stream.jsonl
+/tmp/aj16/<timestamp>/snapshots.json
+
+When session ends, runner compiles:
+
+/tmp/aj16/<timestamp>/aj16-diagnostic-report.md
+/tmp/aj16/<timestamp>/aj16-diagnostic-bundle.zip
+
+
+The report is exactly what /api/diagnostics/aj16-rtb/report would return but saved to disk.
+
+AJ17.2 — Hook into Engine Start/Stop
+
+Modify paper-execution-engine.ts:
+
+When engine starts:
+
+Call aj17DiagnosticRunner.startSession()
+
+Begin capturing all logs/snapshots for the duration of the session
+
+When engine stops:
+
+Call aj17DiagnosticRunner.stopSessionAndGenerateReport()
+
+Generate the bundle + markdown report
+
+Engine behavior must remain unchanged — sessions only wrap diagnostics, never interfere.
+
+AJ17.3 — Capture ALL AJ16 logs globally
+
+Instrument the logger:
+
+Any log that contains:
+
+[AJ16]
+
+
+must be routed to the Diagnostic Runner:
+
+Strategy logs
+
+Cooldown logs
+
+Indicator logs
+
+Position exclusion logs
+
+RTB acceptance/rejection logs
+
+Early return logs
+
+Cycle snapshots
+
+Guardrail rejections
+
+Internal errors
+
+No filtering — all AJ16 logs go to the diagnostic session files.
+
+Do not store non-AJ16 logs.
+
+AJ17.4 — Add API endpoint to download the final report
+
+Add:
+
+GET /api/diagnostics/aj17/download
+
+
+This endpoint should:
+
+Return the .zip file from the last completed session
+
+If no session exists → return a structured error
+
+Include content-disposition headers so the browser forces a download
+
+AJ17.5 — Add UI Button to download the report
+
+In the Trading / Ready to Buy tab:
+
+Add a small UI card:
+
+AJ16 Diagnostic Tools
+[Download Last Diagnostic Report]
+
+
+Button calls /api/diagnostics/aj17/download
+
+Appears only in paper mode
+
+Do NOT expose this card in live mode
+
+Minimal styling required.
+
+AJ17.6 — Add notification when report is ready
+
+When the session ends (engine stop):
+
+Emit a WebSocket event aj17:report_ready
+
+Frontend listens and shows:
+
+Your AJ16 diagnostic report is ready for download.
+
+
+Include a link to the new download button.
+
+AJ17.7 — Ensure reports do not affect performance
+
+Constraints:
+
+AJ16 logs must be buffered and flushed asynchronously
+
+Never block the trading loop
+
+Never degrade cycle tick time
+
+Storage writes must be queued (e.g., appendFile)
+
+AJ17.8 — Maintain safety
+
+Do NOT:
+
+Change guardrails
+
+Modify strategy decisions
+
+Change ready-to-buy logic
+
+Change trade execution
+
+Modify the sizing system
+
+Interfere with AJ16 instrumentation
+
+Only wrap the existing AJ16 instrumentation in a capture-and-download workflow.
+
+📦 Final Deliverables
+
+After implementation:
+
+aj17-diagnostic-runner.ts created
+
+Trading start → session start (capture begins)
+
+Trading stop → report auto-generated
+
+Download button + API endpoint live
+
+.zip file downloadable containing:
+
+aj16-diagnostic-report.md
+
+aj16-cycle-snapshots.json
+
+aj16-raw-log-dump.jsonl
+
+Any additional AJ16 artifacts
+
+🧪 Please run automated test
+
+After building:
+
+Repl.it should start trading for 10 seconds
+
+Stop the engine
+
+Confirm a diagnostic zip appears
+
+Validate that the markdown report is not empty
+
+Expose the report via the UI button
+
+✔️ End of Directive

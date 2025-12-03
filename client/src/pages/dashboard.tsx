@@ -14,6 +14,7 @@ import TradingActivityWidget from "@/components/goals/trading-activity-widget";
 import AveragesWidget from "@/components/goals/averages-widget";
 import { FilterHealthWidget } from "@/components/dashboard/filter-health-widget";
 import { BaselineStatusWidget } from "@/components/dashboard/baseline-status-widget";
+import AJ17DiagnosticCard from "@/components/goals/aj17-diagnostic-card";
 import AlertBanner from "@/components/alerts/alert-banner";
 import { useSystemHealth } from "@/hooks/use-system-health";
 import { PortfolioProvider, type PortfolioOverview } from "@/contexts/portfolio-context";
@@ -155,6 +156,9 @@ export default function Dashboard() {
 
       {/* Filter Health Diagnostics */}
       <FilterHealthWidget />
+
+      {/* Phase 8.8.3-AJ17: Diagnostic Tools Card (paper mode only) */}
+      <AJ17DiagnosticCard />
 
       {/* Phase 27.F.31: LATTI Baseline Status Widget (moved from position 2) */}
       <BaselineStatusWidget />

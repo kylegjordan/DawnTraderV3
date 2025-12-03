@@ -8,6 +8,7 @@ import { contextBridge } from './context-bridge';
 import { activeFilterPool, type ActiveFilteredPair } from './active-filter-pool';
 import { sizePaperPositionForSignal, validatePaperPortfolioValue, type StrategyType } from './paper-position-sizing';
 import { aj16Diagnostic } from './aj16-rtb-diagnostic';
+import { aj17DiagnosticRunner } from './aj17-diagnostic-runner';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail';
@@ -60,6 +61,9 @@ export class PaperExecutionEngine {
     engineSessionStart.set(this.mode, sessionStartTime);
     console.log(`[AJ8][SESSION_START] mode=${this.mode}, sessionStart=${sessionStartTime.toISOString()}`);
     
+    // Phase 8.8.3-AJ17: Start diagnostic session to capture all AJ16 logs
+    aj17DiagnosticRunner.startSession(this.mode);
+    
     console.log(`[PaperExecution:${this.mode}] Starting paper trading engine`);
 
     // Broadcast engine start
@@ -94,6 +98,11 @@ export class PaperExecutionEngine {
     // When engine stops, session is cleared, next query returns 0 metrics
     console.log(`[AJ8][SESSION_STOP] mode=${this.mode}, sessionCleared=true`);
     engineSessionStart.set(this.mode, null);
+
+    // Phase 8.8.3-AJ17: Stop diagnostic session and generate report bundle
+    aj17DiagnosticRunner.stopSessionAndGenerateReport().catch(err => {
+      console.error(`[AJ17] Failed to generate diagnostic report:`, err);
+    });
 
     console.log(`[PaperExecution:${this.mode}] Stopped paper trading engine`);
   }

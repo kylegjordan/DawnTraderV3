@@ -491,6 +491,26 @@
     ]
   },
   {
+    "path": "/api/diagnostics/aj17/status",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/diagnostics/aj17/download",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/settings/filters",
     "methods": [
       "GET"
