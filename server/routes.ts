@@ -2657,6 +2657,123 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ===== PHASE 8.8.3-AJ19: MAX POSITION GUARDRAIL DIAGNOSTIC =====
+  // Investigates why MAX_POSITION guardrail blocks 99%+ of RTB signals after trades open
+  
+  // AJ19.1: Get diagnostic status and summary
+  apiRouter.get('/diagnostics/aj19/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aj19Diagnostic } = await import('./services/aj19-max-position-diagnostic.js');
+      
+      const summary = aj19Diagnostic.getSummary();
+      
+      res.json({
+        ok: true,
+        isEnabled: aj19Diagnostic.isActive(),
+        isDryRunMode: aj19Diagnostic.isDryRunMode(),
+        summary
+      });
+    } catch (error: any) {
+      console.error('[AJ19] Error fetching status:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to fetch AJ19 diagnostic status' });
+    }
+  });
+  
+  // AJ19.2: Enable/disable diagnostic logging
+  apiRouter.post('/diagnostics/aj19/enable', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aj19Diagnostic } = await import('./services/aj19-max-position-diagnostic.js');
+      const { enabled } = req.body;
+      
+      aj19Diagnostic.setEnabled(enabled !== false); // Default to true if not specified
+      
+      res.json({
+        ok: true,
+        isEnabled: aj19Diagnostic.isActive(),
+        message: aj19Diagnostic.isActive() 
+          ? 'AJ19 Max Position diagnostic enabled - logging all position size checks'
+          : 'AJ19 Max Position diagnostic disabled'
+      });
+    } catch (error: any) {
+      console.error('[AJ19] Error enabling/disabling diagnostic:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to toggle AJ19 diagnostic' });
+    }
+  });
+  
+  // AJ19.3: Enable/disable dry-run mode (MAX_POSITION logs but doesn't block)
+  apiRouter.post('/diagnostics/aj19/dry-run', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aj19Diagnostic } = await import('./services/aj19-max-position-diagnostic.js');
+      const { enabled } = req.body;
+      
+      aj19Diagnostic.setDryRunMode(enabled !== false); // Default to true if not specified
+      
+      res.json({
+        ok: true,
+        isDryRunMode: aj19Diagnostic.isDryRunMode(),
+        message: aj19Diagnostic.isDryRunMode() 
+          ? 'AJ19 dry-run mode ENABLED - MAX_POSITION will log but not block trades'
+          : 'AJ19 dry-run mode DISABLED - MAX_POSITION will block normally'
+      });
+    } catch (error: any) {
+      console.error('[AJ19] Error toggling dry-run mode:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to toggle AJ19 dry-run mode' });
+    }
+  });
+  
+  // AJ19.4: Get recent diagnostic entries
+  apiRouter.get('/diagnostics/aj19/entries', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aj19Diagnostic } = await import('./services/aj19-max-position-diagnostic.js');
+      const limit = parseInt(req.query.limit as string) || 100;
+      
+      const entries = aj19Diagnostic.getEntries(limit);
+      
+      res.json({
+        ok: true,
+        count: entries.length,
+        entries
+      });
+    } catch (error: any) {
+      console.error('[AJ19] Error fetching entries:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to fetch AJ19 diagnostic entries' });
+    }
+  });
+  
+  // AJ19.5: Export full diagnostic data
+  apiRouter.get('/diagnostics/aj19/export', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aj19Diagnostic } = await import('./services/aj19-max-position-diagnostic.js');
+      
+      const data = aj19Diagnostic.exportData();
+      
+      res.json({
+        ok: true,
+        ...data
+      });
+    } catch (error: any) {
+      console.error('[AJ19] Error exporting diagnostic data:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to export AJ19 diagnostic data' });
+    }
+  });
+  
+  // AJ19.6: Clear diagnostic data
+  apiRouter.post('/diagnostics/aj19/clear', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aj19Diagnostic } = await import('./services/aj19-max-position-diagnostic.js');
+      
+      aj19Diagnostic.clear();
+      
+      res.json({
+        ok: true,
+        message: 'AJ19 diagnostic data cleared, new session started'
+      });
+    } catch (error: any) {
+      console.error('[AJ19] Error clearing diagnostic data:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to clear AJ19 diagnostic data' });
+    }
+  });
+
   // Phase 8.8.2-MAP-FINAL: Filter settings endpoint for Filter Insights thresholds
   apiRouter.get('/settings/filters', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {

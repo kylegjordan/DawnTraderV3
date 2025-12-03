@@ -1,0 +1,194 @@
+Directive: Phase 8.8.3-AJ19 — Max Position Guardrail & RTB Starvation A/B Test
+
+Context (from project owner)
+After AJ10, trades started opening correctly, but a new problem appeared:
+
+For the first few minutes, the Ready-to-Buy list behaves as expected and trades open.
+
+After that, RTB signals dry up to zero, while:
+
+Filter Insights shows a healthy active filtered pool (hundreds of pairs with “All Filters Passed”).
+
+RTB metrics show thousands of attempts and >99% blocked.
+
+The Blocked Breakdown table shows all blocks as “Max Position”, with other reasons at 0.
+
+In older runs (before trades actually opened) the RTB list stayed populated continuously for 20–60 minutes under the same filters and strategy settings.
+
+This strongly suggests a bug in the Max Position guardrail and/or trade lifecycle, not just “strict strategies” or bad market conditions.
+
+Please treat this as a bug-hunt and A/B diagnostic, not a “tune the strategies until the numbers look nicer” task.
+
+Part A — Audit the Max Position guardrail
+
+Locate the guardrail logic
+
+Find the function that enforces max open positions (e.g. in trade-safety.ts or equivalent).
+
+Identify exactly how it computes currentOpenPositions:
+
+Which table(s) it queries (likely paper_sim_open_positions).
+
+Which fields / WHERE clauses it uses (mode, status, timestamps, etc.).
+
+Verify open position lifecycle
+
+Trace the full lifecycle for a paper-sim trade:
+
+Where the open position is inserted (createPaperSimOpenPosition).
+
+Where a position is supposed to be closed (and how that affects paper_sim_open_positions).
+
+Confirm whether closed positions are:
+
+Removed from paper_sim_open_positions, or
+
+Marked with a status that the guardrail excludes.
+
+Add targeted diagnostic logs
+
+Instrument the max position guardrail with a concise log (paper mode only), for example:
+
+[AJ19][MAX_POS_CHECK] mode=paper | openCount=X | maxAllowed=Y
+
+On block:
+
+[AJ19][MAX_POS_BLOCK] mode=paper | symbol=... | strategy=... | openCount=X | maxAllowed=Y
+
+And in the trade close path:
+
+[AJ19][POSITION_CLOSED] mode=paper | symbol=... | positionId=...
+
+These should be low-volume logs tied to the existing AJ16/AJ18 diagnostic framework, not noisy console spam.
+
+Run a short paper session (5–10 min) and confirm
+
+Start trading in paper mode.
+
+Let it open enough trades to hit the Max Position threshold (e.g. 10).
+
+Verify via:
+
+paper_sim_open_positions contents.
+
+AJ19 logs:
+
+How openCount evolves as trades open.
+
+Whether openCount ever decreases when trades (supposedly) close.
+
+Deliverable: a short markdown note summarizing:
+
+The actual formula used for the guardrail.
+
+Whether it counts current open positions correctly.
+
+Whether it treats old / closed positions as still open.
+
+Part B — A/B test: “No-Guardrail Dry Run” vs “Current Behavior”
+
+Goal: prove whether the presence of open trades + guardrails is what causes RTB starvation.
+
+Add a diagnostic “dry-run” mode
+
+Implement a temporary internal flag (e.g. diagnostics.dryRunNoGuardrails=true) that:
+
+Still runs filters + strategies normally.
+
+Still logs signals and would-be trades, including:
+
+[AJ19][SIGNAL_GENERATED]
+
+[AJ19][WOULD_OPEN_TRADE]
+
+Skips creating trades / open positions and skips all guardrail checks.
+
+This should be reachable via an internal API or diagnostic script – no UI changes needed.
+
+Session A — Dry-run (no guardrails, no real opens)
+
+Start paper trading in dry-run mode.
+
+Run for ~20 minutes.
+
+Capture:
+
+Number of strategy evaluations.
+
+Signals generated per strategy.
+
+“Would-be” trades (how many would pass strategies).
+
+RTB queue population (how many would be visible as RTB if guardrails weren’t present).
+
+Session B — Normal mode (current behavior)
+
+Start paper trading in normal mode with the same filters & goals settings.
+
+Run for ~20 minutes.
+
+Capture:
+
+Same metrics as Session A.
+
+Plus AJ19 max-position logs:
+
+How many attempts are blocked by Max Position.
+
+What openCount the guardrail thinks you have over time.
+
+Produce a comparison report
+
+Create docs/audits/phase_8.8.3-AJ19_max_position_guardrail_ab_test.md with:
+
+A simple table comparing Session A vs Session B:
+
+Metric	Session A (Dry)	Session B (Normal)
+Strategy evaluations		
+Signals generated		
+Would-be RTB candidates		
+Actual RTB entries shown		
+Trades opened	(0 by design)	
+Max Position blocks	0	(expected value)
+Guardrail openCount min / max	0..N	
+
+A short narrative explaining:
+
+Whether RTB starvation only appears when Max Position is enforced.
+
+Whether openCount ever returns to zero after trades close.
+
+Whether the guardrail is using “current open positions” vs “lifetime opened positions”.
+
+Part C — Quick sanity checks on strategy coverage & data
+
+While you’re in there, please also:
+
+Confirm strategy activation map
+
+Verify which strategies are actually enabled in the engine right now.
+
+Explain why only 3 strategies (mean reversion, sma trend ride, vwap pullback) show activity in the RTB metrics.
+
+If others are effectively disabled by config or wiring, document that explicitly.
+
+Confirm filter + data integrity
+
+Cross-check that the filter funnel numbers in the UI (evaluated / survived / ineligible) match the backend metrics for the same period.
+
+Confirm that no new helper (e.g. sizing helper, LPCP hooks) is able to silently veto trades before the guardrail step without a corresponding block reason.
+
+Deliverables
+
+Updated code with AJ19 diagnostic logs and (temporary) dry-run mode.
+
+One A/B diagnostic report at:
+docs/audits/phase_8.8.3-AJ19_max_position_guardrail_ab_test.md
+
+A short note in replit.md summarizing:
+
+Whether the Max Position guardrail is mis-counting open positions.
+
+Whether this explains the RTB starvation after a few minutes of trading.
+
+Please keep the whole flow fully automated inside Replit (no tokens or browser help required from me).

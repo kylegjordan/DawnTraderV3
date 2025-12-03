@@ -19,6 +19,7 @@ import {
 import { fxConversionService } from './fx-conversion-service.js';
 import { marketDataService } from './market-data';
 import { aj16Diagnostic } from './aj16-rtb-diagnostic';
+import { aj19Diagnostic } from './aj19-max-position-diagnostic';
 
 export const buildSettingsFromGuardrails = _buildSettingsFromGuardrails;
 export const calculateRiskAmount = _calculateRiskAmount;
@@ -286,11 +287,14 @@ async function checkSymbolCooldown(
  * When trade.preComputedNotional is provided from P2 sizing, use it directly
  * instead of recalculating. This prevents MAX_POSITION blocks on properly-sized trades
  * due to price drift between sizing and execution.
+ * 
+ * Phase 8.8.3-AJ19: Added diagnostic logging and dry-run mode support
  */
 async function checkPositionSizeCap(
   mode: 'live' | 'paper',
   trade: TradeCandidate,
-  settings: TradingSettings
+  settings: TradingSettings,
+  cycleId?: string
 ): Promise<TradeSafetyResult> {
   // J7: Parse portfolio value - no hardcoded fallback
   const rawPortfolioValue = parseFloat(settings.portfolioValue?.toString() || '0');
@@ -309,10 +313,13 @@ async function checkPositionSizeCap(
   // This is the canonical value calculated by paper-position-sizing.ts
   let positionValue: number;
   let sizingSource: string;
+  const preComputedNotionalMissing = trade.preComputedNotional === undefined || 
+    !Number.isFinite(trade.preComputedNotional) || 
+    trade.preComputedNotional <= 0;
   
-  if (trade.preComputedNotional !== undefined && Number.isFinite(trade.preComputedNotional) && trade.preComputedNotional > 0) {
+  if (!preComputedNotionalMissing) {
     // Use the pre-sized value - this was already calculated with the 3% buffer in paper-position-sizing.ts
-    positionValue = trade.preComputedNotional;
+    positionValue = trade.preComputedNotional!;
     sizingSource = 'pre-sized (P2)';
     console.log(`[AJ10.1][TRUST_PRESIZED] Using pre-computed notional=$${positionValue.toFixed(2)} for ${trade.symbol}`);
   } else {
@@ -332,12 +339,59 @@ async function checkPositionSizeCap(
   }
   
   const positionPercent = (positionValue / portfolioValue) * 100;
+  const wouldBlock = positionPercent > maxPositionPercent;
 
   console.log(`[8.8.3-H4][GUARDRAIL_CHECK] position_size_cap: ${positionPercent.toFixed(1)}% of portfolio ($${portfolioValue.toFixed(2)}), max=${maxPositionPercent}%, source=${sizingSource}`);
 
-  if (positionPercent > maxPositionPercent) {
+  // AJ19: Log diagnostic entry with P2 data from trade candidate
+  if (aj19Diagnostic.isActive()) {
+    // Extract P2 sizing data if available from trade metadata
+    const p2Notional = trade.preComputedNotional || undefined;
+    
+    // Calculate what P2 portfolio value would have been if sizing was done correctly
+    // P2 notional / maxPositionPct * 100 = estimated P2 portfolio
+    // This helps detect if P3 portfolio is different from P2 sizing assumptions
+    const estimatedP2PortfolioValue = p2Notional && maxPositionPercent > 0 
+      ? (p2Notional / maxPositionPercent) * 100 
+      : undefined;
+    
+    // Check if P3 portfolio differs significantly from P2 estimate (>5% difference)
+    const portfolioMismatchDetected = estimatedP2PortfolioValue !== undefined && 
+      Math.abs(portfolioValue - estimatedP2PortfolioValue) / portfolioValue > 0.05;
+    
+    aj19Diagnostic.logCheck({
+      cycleId: cycleId || 'unknown',
+      symbol: trade.symbol,
+      strategy: trade.strategy,
+      // P2 Sizing Data (from trade candidate's preComputedNotional)
+      p2Notional: p2Notional,
+      p2SizingSource: p2Notional ? 'preComputedNotional' : undefined,
+      // P3 Guardrail Check Data
+      p3PortfolioValue: portfolioValue,
+      p3MaxPositionPct: maxPositionPercent,
+      p3MaxPositionValue: maxPositionValue,
+      p3PositionValue: positionValue,
+      p3PositionPct: positionPercent,
+      p3SizingSource: sizingSource,
+      p3Result: wouldBlock ? 'BLOCK_MAX_POSITION' : 'PASS',
+      p3BlockReason: wouldBlock ? `${positionPercent.toFixed(1)}% > ${maxPositionPercent}%` : undefined,
+      // Diagnostic Flags
+      portfolioValueMismatch: portfolioMismatchDetected,
+      preComputedNotionalMissing,
+      wouldPassWithoutCheck: true // This trade would pass if MAX_POSITION was disabled
+    });
+  }
+
+  if (wouldBlock) {
     // AJ10.5: Diagnostic logging for MAX_POSITION blocks
     console.warn(`[AJ10.5][MAX_POSITION_BLOCK] ${new Date().toISOString()} | symbol=${trade.symbol} | strategy=${trade.strategy} | estimatedValue=$${positionValue.toFixed(2)} | allowedMax=$${maxPositionValue.toFixed(2)} | maxPct=${maxPositionPercent}% | portfolioRiskPct=${settings.riskPerTradePct || '?'}% | sizingSource=${sizingSource}`);
+    
+    // AJ19: Dry-run mode - log but don't block
+    if (aj19Diagnostic.isDryRunMode()) {
+      console.log(`[AJ19][DRY_RUN] MAX_POSITION would block ${trade.symbol} but dry-run mode is enabled - ALLOWING`);
+      return { ok: true };
+    }
+    
     return {
       ok: false,
       code: 'MAX_POSITION',
@@ -490,15 +544,19 @@ async function checkMaxOpenTrades(
  * guardrail-driven implementation. All checks use values from
  * guardrails_v2 that are visible in the Guardrails tab.
  * 
+ * Phase 8.8.3-AJ19: Added cycleId for diagnostic tracking
+ * 
  * @param mode Trading mode (live/paper)
  * @param trade Trade candidate to validate
  * @param userId Optional user ID for context lookup
+ * @param cycleId Optional cycle ID for AJ19 diagnostic tracking
  * @returns TradeSafetyResult with ok=true or ok=false with code and reason
  */
 export async function checkGuardrailRisk(
   mode: 'live' | 'paper',
   trade: TradeCandidate,
-  userId?: string
+  userId?: string,
+  cycleId?: string
 ): Promise<TradeSafetyResult> {
   console.log(`[8.8.3-H4][GUARDRAIL_CHECK] Starting pre-trade checks for ${trade.symbol} (mode=${mode})`);
   
@@ -516,7 +574,8 @@ export async function checkGuardrailRisk(
   const cooldownCheck = await checkSymbolCooldown(mode, trade);
   if (!cooldownCheck.ok) return cooldownCheck;
   
-  const positionSizeCheck = await checkPositionSizeCap(mode, trade, settings);
+  // AJ19: Pass cycleId for diagnostic tracking
+  const positionSizeCheck = await checkPositionSizeCap(mode, trade, settings, cycleId);
   if (!positionSizeCheck.ok) return positionSizeCheck;
   
   const lpcpCheck = await checkLowPricedCoinProtection(mode, trade, settings);
