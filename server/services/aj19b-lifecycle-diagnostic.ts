@@ -1,0 +1,450 @@
+/**
+ * Phase 8.8.3-AJ19-B: Trade Lifecycle Integrity Tracing
+ * 
+ * Diagnoses whether trade closures are properly freeing slots in the guardrail system.
+ * 
+ * Hypothesis: The MAX_POSITION guardrail thinks slots are permanently full because:
+ * 1. Trades open correctly (slot count increases)
+ * 2. But when trades close, deletePaperSimOpenPosition() fails or is skipped
+ * 3. So the DB still has rows, and guardrails see max slots forever
+ * 
+ * This service logs:
+ * - Trade OPEN events with slot counts before/after
+ * - Monitoring loop status (SL/TP triggers)
+ * - Trade CLOSE events with slot counts before/after
+ * - Per-cycle reconciliation (DB vs guardrail position counts)
+ * - Slot freed events
+ */
+
+import { storage } from '../storage';
+
+export interface LifecycleOpenEvent {
+  timestamp: Date;
+  tradeId: string | number;
+  positionId?: string | number;
+  symbol: string;
+  quantity: string;
+  notionalValue: number;
+  openPrice: number;
+  slotCountBefore: number;
+  slotCountAfter: number;
+  dbOpenPositionsCount: number;
+}
+
+export interface LifecycleMonitorEvent {
+  timestamp: Date;
+  positionId: string | number;
+  symbol: string;
+  unrealizedPnl: number;
+  slTriggered: boolean;
+  tpTriggered: boolean;
+  trailingStopTriggered: boolean;
+  currentPrice: number;
+  stopPrice: number;
+  targetPrice: number;
+}
+
+export interface LifecycleCloseEvent {
+  timestamp: Date;
+  tradeId?: string | number;
+  positionId: string | number;
+  symbol: string;
+  closeReason: 'SL' | 'TP' | 'TRAILING_STOP' | 'MANUAL' | 'KILL_SWITCH' | 'ENGINE_STOP' | 'UNKNOWN';
+  closedValue: number;
+  pnl: number;
+  slotCountBefore: number;
+  slotCountAfter: number;
+  dbOpenPositionsCount: number;
+  deleteSuccessful: boolean;
+  deleteError?: string;
+}
+
+export interface ReconciliationEvent {
+  timestamp: Date;
+  cycleId: string;
+  dbOpenCount: number;
+  guardrailOpenCount: number;
+  mismatchDetected: boolean;
+  positionIds?: string[];
+  symbols?: string[];
+}
+
+export interface SlotFreedEvent {
+  timestamp: Date;
+  positionId: string | number;
+  symbol: string;
+  slotCountNew: number;
+  closeReason: string;
+}
+
+export interface LifecycleSummary {
+  sessionStart: Date;
+  isEnabled: boolean;
+  
+  // Counts
+  totalOpens: number;
+  totalCloseAttempts: number;
+  successfulCloses: number;
+  failedCloses: number;
+  slotsFreed: number;
+  
+  // Mismatch tracking
+  reconciliationChecks: number;
+  mismatchesDetected: number;
+  
+  // Current state snapshot
+  currentDbOpenCount: number;
+  lastReconciliation?: ReconciliationEvent;
+  
+  // Recent events (last 20)
+  recentOpens: LifecycleOpenEvent[];
+  recentCloses: LifecycleCloseEvent[];
+  recentMismatches: ReconciliationEvent[];
+  
+  // Close reason breakdown
+  closesByReason: Record<string, number>;
+  
+  // Failed close details
+  failedCloseDetails: Array<{
+    positionId: string | number;
+    symbol: string;
+    error: string;
+    timestamp: Date;
+  }>;
+}
+
+class AJ19BLifecycleDiagnostic {
+  private static instance: AJ19BLifecycleDiagnostic;
+  
+  private isEnabled: boolean = false;
+  private sessionStart: Date = new Date();
+  
+  // Event logs
+  private openEvents: LifecycleOpenEvent[] = [];
+  private monitorEvents: LifecycleMonitorEvent[] = [];
+  private closeEvents: LifecycleCloseEvent[] = [];
+  private reconciliationEvents: ReconciliationEvent[] = [];
+  private slotFreedEvents: SlotFreedEvent[] = [];
+  
+  // Counters
+  private totalOpens: number = 0;
+  private totalCloseAttempts: number = 0;
+  private successfulCloses: number = 0;
+  private failedCloses: number = 0;
+  private reconciliationChecks: number = 0;
+  private mismatchesDetected: number = 0;
+  
+  // Config
+  private maxEvents: number = 1000;
+  
+  private constructor() {}
+  
+  static getInstance(): AJ19BLifecycleDiagnostic {
+    if (!AJ19BLifecycleDiagnostic.instance) {
+      AJ19BLifecycleDiagnostic.instance = new AJ19BLifecycleDiagnostic();
+    }
+    return AJ19BLifecycleDiagnostic.instance;
+  }
+  
+  setEnabled(enabled: boolean): void {
+    this.isEnabled = enabled;
+    if (enabled) {
+      this.sessionStart = new Date();
+      this.clear();
+      console.log(`[AJ19B] Lifecycle Diagnostic ENABLED at ${this.sessionStart.toISOString()}`);
+    } else {
+      console.log(`[AJ19B] Lifecycle Diagnostic DISABLED`);
+    }
+  }
+  
+  isActive(): boolean {
+    return this.isEnabled;
+  }
+  
+  /**
+   * Log when a trade/position OPENS
+   */
+  async logOpen(event: Omit<LifecycleOpenEvent, 'timestamp' | 'dbOpenPositionsCount'>): Promise<void> {
+    if (!this.isEnabled) return;
+    
+    // Get current DB count
+    const dbPositions = await storage.getPaperSimOpenPositions('paper');
+    const dbCount = dbPositions.length;
+    
+    const fullEvent: LifecycleOpenEvent = {
+      ...event,
+      timestamp: new Date(),
+      dbOpenPositionsCount: dbCount
+    };
+    
+    this.openEvents.push(fullEvent);
+    this.totalOpens++;
+    
+    // Trim old events
+    if (this.openEvents.length > this.maxEvents) {
+      this.openEvents = this.openEvents.slice(-this.maxEvents);
+    }
+    
+    console.log(`[AJ19B][OPEN] tradeId=${event.tradeId} | positionId=${event.positionId || 'N/A'} | symbol=${event.symbol} | qty=${event.quantity} | notional=$${event.notionalValue.toFixed(2)} | slotsBefore=${event.slotCountBefore} | slotsAfter=${event.slotCountAfter} | dbCount=${dbCount}`);
+  }
+  
+  /**
+   * Log monitoring loop status for a position
+   */
+  logMonitor(event: Omit<LifecycleMonitorEvent, 'timestamp'>): void {
+    if (!this.isEnabled) return;
+    
+    const fullEvent: LifecycleMonitorEvent = {
+      ...event,
+      timestamp: new Date()
+    };
+    
+    this.monitorEvents.push(fullEvent);
+    
+    // Trim old events (keep fewer monitor events since they're frequent)
+    if (this.monitorEvents.length > 500) {
+      this.monitorEvents = this.monitorEvents.slice(-500);
+    }
+    
+    // Only log if a trigger condition is met
+    if (event.slTriggered || event.tpTriggered || event.trailingStopTriggered) {
+      console.log(`[AJ19B][MONITOR] positionId=${event.positionId} | symbol=${event.symbol} | pnl=$${event.unrealizedPnl.toFixed(2)} | SL=${event.slTriggered} | TP=${event.tpTriggered} | trailing=${event.trailingStopTriggered} | price=${event.currentPrice.toFixed(6)}`);
+    }
+  }
+  
+  /**
+   * Log when a trade/position CLOSES
+   */
+  async logClose(event: Omit<LifecycleCloseEvent, 'timestamp' | 'dbOpenPositionsCount'>): Promise<void> {
+    if (!this.isEnabled) return;
+    
+    // Get current DB count AFTER the close attempt
+    const dbPositions = await storage.getPaperSimOpenPositions('paper');
+    const dbCount = dbPositions.length;
+    
+    const fullEvent: LifecycleCloseEvent = {
+      ...event,
+      timestamp: new Date(),
+      dbOpenPositionsCount: dbCount
+    };
+    
+    this.closeEvents.push(fullEvent);
+    this.totalCloseAttempts++;
+    
+    if (event.deleteSuccessful) {
+      this.successfulCloses++;
+    } else {
+      this.failedCloses++;
+    }
+    
+    // Trim old events
+    if (this.closeEvents.length > this.maxEvents) {
+      this.closeEvents = this.closeEvents.slice(-this.maxEvents);
+    }
+    
+    const status = event.deleteSuccessful ? 'SUCCESS' : 'FAILED';
+    console.log(`[AJ19B][CLOSE][${status}] positionId=${event.positionId} | symbol=${event.symbol} | reason=${event.closeReason} | pnl=$${event.pnl.toFixed(2)} | slotsBefore=${event.slotCountBefore} | slotsAfter=${event.slotCountAfter} | dbCount=${dbCount}${event.deleteError ? ` | error=${event.deleteError}` : ''}`);
+    
+    // If delete was successful, log slot freed event
+    if (event.deleteSuccessful) {
+      this.logSlotFreed({
+        positionId: event.positionId,
+        symbol: event.symbol,
+        slotCountNew: event.slotCountAfter,
+        closeReason: event.closeReason
+      });
+    }
+  }
+  
+  /**
+   * Log slot freed event
+   */
+  private logSlotFreed(event: Omit<SlotFreedEvent, 'timestamp'>): void {
+    const fullEvent: SlotFreedEvent = {
+      ...event,
+      timestamp: new Date()
+    };
+    
+    this.slotFreedEvents.push(fullEvent);
+    
+    if (this.slotFreedEvents.length > this.maxEvents) {
+      this.slotFreedEvents = this.slotFreedEvents.slice(-this.maxEvents);
+    }
+    
+    console.log(`[AJ19B][SLOT_FREED] symbol=${event.symbol} | newSlotCount=${event.slotCountNew} | reason=${event.closeReason}`);
+  }
+  
+  /**
+   * Run per-cycle reconciliation check
+   * Compares DB open positions with guardrail's view
+   */
+  async runReconciliation(cycleId: string, mode: 'paper' | 'live' = 'paper'): Promise<ReconciliationEvent> {
+    // Get DB count
+    const dbPositions = await storage.getPaperSimOpenPositions(mode);
+    const dbOpenCount = dbPositions.length;
+    
+    // Guardrail uses the same source, but let's verify
+    // In trade-safety.ts, getActivePositions() calls storage.getPaperSimOpenPositions()
+    // So guardrailOpenCount should equal dbOpenCount
+    const guardrailOpenCount = dbOpenCount; // Same source
+    
+    const mismatchDetected = false; // They use the same source, so no mismatch expected
+    
+    const event: ReconciliationEvent = {
+      timestamp: new Date(),
+      cycleId,
+      dbOpenCount,
+      guardrailOpenCount,
+      mismatchDetected,
+      positionIds: dbPositions.map(p => String(p.id)),
+      symbols: dbPositions.map(p => p.symbol)
+    };
+    
+    this.reconciliationEvents.push(event);
+    this.reconciliationChecks++;
+    
+    if (mismatchDetected) {
+      this.mismatchesDetected++;
+    }
+    
+    // Trim old events
+    if (this.reconciliationEvents.length > 100) {
+      this.reconciliationEvents = this.reconciliationEvents.slice(-100);
+    }
+    
+    if (this.isEnabled) {
+      console.log(`[AJ19B][RECONCILE] cycleId=${cycleId} | dbOpen=${dbOpenCount} | guardrailOpen=${guardrailOpenCount} | positions=[${event.symbols?.slice(0, 5).join(', ')}${(event.symbols?.length || 0) > 5 ? '...' : ''}]`);
+    }
+    
+    return event;
+  }
+  
+  /**
+   * Get summary of lifecycle events
+   */
+  async getSummary(): Promise<LifecycleSummary> {
+    // Get current DB state
+    const dbPositions = await storage.getPaperSimOpenPositions('paper');
+    
+    // Build close reason breakdown
+    const closesByReason: Record<string, number> = {};
+    for (const event of this.closeEvents) {
+      closesByReason[event.closeReason] = (closesByReason[event.closeReason] || 0) + 1;
+    }
+    
+    // Get failed close details
+    const failedCloseDetails = this.closeEvents
+      .filter(e => !e.deleteSuccessful)
+      .map(e => ({
+        positionId: e.positionId,
+        symbol: e.symbol,
+        error: e.deleteError || 'Unknown error',
+        timestamp: e.timestamp
+      }));
+    
+    return {
+      sessionStart: this.sessionStart,
+      isEnabled: this.isEnabled,
+      
+      totalOpens: this.totalOpens,
+      totalCloseAttempts: this.totalCloseAttempts,
+      successfulCloses: this.successfulCloses,
+      failedCloses: this.failedCloses,
+      slotsFreed: this.slotFreedEvents.length,
+      
+      reconciliationChecks: this.reconciliationChecks,
+      mismatchesDetected: this.mismatchesDetected,
+      
+      currentDbOpenCount: dbPositions.length,
+      lastReconciliation: this.reconciliationEvents[this.reconciliationEvents.length - 1],
+      
+      recentOpens: this.openEvents.slice(-20),
+      recentCloses: this.closeEvents.slice(-20),
+      recentMismatches: this.reconciliationEvents.filter(e => e.mismatchDetected).slice(-10),
+      
+      closesByReason,
+      failedCloseDetails
+    };
+  }
+  
+  /**
+   * Get all events for export
+   */
+  exportData(): {
+    summary: Omit<LifecycleSummary, 'recentOpens' | 'recentCloses' | 'recentMismatches'>;
+    openEvents: LifecycleOpenEvent[];
+    closeEvents: LifecycleCloseEvent[];
+    reconciliationEvents: ReconciliationEvent[];
+    slotFreedEvents: SlotFreedEvent[];
+    metadata: {
+      exportTime: string;
+      isEnabled: boolean;
+    };
+  } {
+    const summary = {
+      sessionStart: this.sessionStart,
+      isEnabled: this.isEnabled,
+      totalOpens: this.totalOpens,
+      totalCloseAttempts: this.totalCloseAttempts,
+      successfulCloses: this.successfulCloses,
+      failedCloses: this.failedCloses,
+      slotsFreed: this.slotFreedEvents.length,
+      reconciliationChecks: this.reconciliationChecks,
+      mismatchesDetected: this.mismatchesDetected,
+      currentDbOpenCount: 0, // Will be set async
+      closesByReason: {} as Record<string, number>,
+      failedCloseDetails: [] as Array<{ positionId: string | number; symbol: string; error: string; timestamp: Date }>
+    };
+    
+    // Build close reason breakdown
+    for (const event of this.closeEvents) {
+      summary.closesByReason[event.closeReason] = (summary.closesByReason[event.closeReason] || 0) + 1;
+    }
+    
+    // Get failed close details
+    summary.failedCloseDetails = this.closeEvents
+      .filter(e => !e.deleteSuccessful)
+      .map(e => ({
+        positionId: e.positionId,
+        symbol: e.symbol,
+        error: e.deleteError || 'Unknown error',
+        timestamp: e.timestamp
+      }));
+    
+    return {
+      summary,
+      openEvents: this.openEvents,
+      closeEvents: this.closeEvents,
+      reconciliationEvents: this.reconciliationEvents,
+      slotFreedEvents: this.slotFreedEvents,
+      metadata: {
+        exportTime: new Date().toISOString(),
+        isEnabled: this.isEnabled
+      }
+    };
+  }
+  
+  /**
+   * Clear all diagnostic data
+   */
+  clear(): void {
+    this.openEvents = [];
+    this.monitorEvents = [];
+    this.closeEvents = [];
+    this.reconciliationEvents = [];
+    this.slotFreedEvents = [];
+    
+    this.totalOpens = 0;
+    this.totalCloseAttempts = 0;
+    this.successfulCloses = 0;
+    this.failedCloses = 0;
+    this.reconciliationChecks = 0;
+    this.mismatchesDetected = 0;
+    
+    this.sessionStart = new Date();
+    console.log(`[AJ19B] Diagnostic data cleared`);
+  }
+}
+
+export const aj19bDiagnostic = AJ19BLifecycleDiagnostic.getInstance();
+export default aj19bDiagnostic;

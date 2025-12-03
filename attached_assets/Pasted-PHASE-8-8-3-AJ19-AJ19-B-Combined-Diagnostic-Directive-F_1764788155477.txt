@@ -1,0 +1,225 @@
+PHASE 8.8.3 — AJ19 + AJ19-B Combined Diagnostic Directive (Final)
+Max-Position Guardrail Investigation + Trade Lifecycle Integrity Tracing
+
+Replit — please implement the following combined diagnostic system and run the full test end-to-end.
+Kyle will ONLY observe the results in the UI.
+Everything else (starting/stopping trading, collecting logs, generating results) must be executed by you.
+
+🔷 PART 1 — AJ19: Max Position Guardrail Diagnostic (Fix RTB Starvation)
+
+The system is exhibiting clear symptoms of a guardrail miscount:
+
+Kyle sees thousands of “Max Position” blocks
+
+The database often contains stale open positions
+
+The UI frequently shows 0 Ready-to-Buy signals even with a large healthy filter pool
+
+RTB attempts increase rapidly while the engine appears “empty”
+
+The guardrail behaves as if all open slots remain permanently full
+
+This indicates a systemic mismatch between:
+
+• actual open trades
+• the engine’s in-memory position tracking
+• what the guardrail believes is open
+• what the database reports as open
+
+Therefore we need deep diagnostic instrumentation of the MAX_POSITION guardrail path.
+
+AJ19 Requirements
+
+Instrument the following:
+
+1. Every guardrail check
+
+Log:
+
+cycleId
+symbol
+strategy
+preComputedNotional (P2)
+computedNotional (P3)
+portfolioValue_P2
+portfolioValue_P3
+maxPositionPct
+positionValuePct
+block_decision
+reason
+
+2. Detect mismatches between P2 and P3 portfolio values
+
+Count and log when:
+
+portfolio value differs across pipeline stages
+
+notional values differ
+
+preComputedNotional is missing when expected
+
+3. Enable dry-run mode
+
+Dry-run means:
+
+STILL LOG guardrail blocks
+
+DO NOT ENFORCE the block (let trades through)
+
+This allows A/B comparison between true guardrail behavior vs bypass behavior
+
+Expose the following endpoints:
+
+GET  /api/diagnostics/aj19/status
+POST /api/diagnostics/aj19/enable
+POST /api/diagnostics/aj19/dry-run
+GET  /api/diagnostics/aj19/entries
+GET  /api/diagnostics/aj19/export
+POST /api/diagnostics/aj19/clear
+
+🔷 PART 2 — AJ19-B: Trade Lifecycle Integrity Tracing (CRITICAL)
+
+Kyle’s observations strongly suggest that trade closures are not being processed, and open slots are never freed, causing permanent MAX_POSITION blocks.
+
+THIS MUST BE DIAGNOSED IN PARALLEL.
+
+Add the following lifecycle instrumentation:
+(A) When a trade OPENS
+
+Log:
+
+[AJ19B][OPEN]
+tradeId
+symbol
+qty
+notionalValue
+openPrice
+slotCount_before
+slotCount_after
+db_open_positions_count
+engine_open_positions_count
+guardrail_position_count
+timestamp
+
+(B) During monitoring loop
+
+Each monitor cycle should log:
+
+[AJ19B][MONITOR]
+tradeId
+symbol
+unrealizedPnl
+sl_triggered
+tp_triggered
+exit_strategy_triggered
+engine_state: active/inactive
+timestamp
+
+(C) When a trade CLOSES
+
+Log:
+
+[AJ19B][CLOSE]
+tradeId
+symbol
+closeReason (SL, TP, ExitRule, Expired, Manual, etc.)
+closedValue
+pnl
+slotCount_before
+slotCount_after
+db_open_positions_count
+engine_open_positions_count
+guardrail_position_count
+timestamp
+
+(D) Add a per-cycle reconciliation check
+
+Every scan cycle, run:
+
+db_open = SELECT COUNT(*) FROM paper_sim_open_positions
+engine_open = number of open trades in engine memory
+guardrail_open = number guardrail believes are open
+
+
+If ANY mismatch is found, log:
+
+[AJ19B][MISMATCH]
+cycleId
+db_open
+engine_open
+guardrail_open
+
+(E) Emit a “slot freed” event
+
+After a successful close:
+
+[AJ19B][SLOT_FREED]
+symbol
+slotCount_new
+timestamp
+
+
+This allows us to confirm that the guardrail actually registers the freed slot.
+
+🔷 PART 3 — Test Execution (Replit MUST Run It)
+
+Kyle will NOT start/stop trading or hit API routes.
+Replit must perform all steps:
+
+1. Clear environment
+
+Reset DB state (ensure no ghost open positions)
+
+Clear AJ19 & AJ19-B logs
+
+2. Enable AJ19 + AJ19-B instrumentation
+POST /api/diagnostics/aj19/enable
+POST /api/diagnostics/aj19/dry-run (set to false for first run)
+
+3. Start paper trading from API
+
+(do not use UI buttons)
+
+POST /api/trading/start  (mode=paper)
+
+4. Let the engine run for at least 20–30 minutes
+5. Observe RTB count, block count, filter insights
+6. After 20–30 minutes, stop trading
+POST /api/trading/stop
+
+7. Export diagnostics
+GET /api/diagnostics/aj19/export
+
+8. Provide a summary that answers:
+
+Did the guardrail always think max slots were full?
+
+Did any trades successfully close?
+
+Did the “slot freed” event propagate to guardrail counters?
+
+Did DB, memory, and guardrails ever disagree?
+
+Is there ANY situation where a close event occurred but the slot count did NOT decrement?
+
+🔷 PART 4 — Success Criteria
+
+A successful diagnostic run will tell us:
+
+Whether the guardrail’s max-position counter is stuck
+
+Whether trades close correctly
+
+Whether DB state updates correctly
+
+Whether the engine frees slots upon close
+
+Whether lifecycle events fire
+
+Whether P2/P3 notional mismatches exist
+
+Whether bypass (dry-run) restores RTB signals
+
+Only after this do we modify ANY strategy logic.
+
+🔷 Please implement AJ19 + AJ19-B exactly as described, and run the full diagnostic session.

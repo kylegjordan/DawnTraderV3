@@ -10,6 +10,7 @@ import { sizePaperPositionForSignal, validatePaperPortfolioValue, type StrategyT
 import { aj16Diagnostic } from './aj16-rtb-diagnostic';
 import { aj17DiagnosticRunner } from './aj17-diagnostic-runner';
 import { aj18Diagnostic } from './aj18-rtb-diagnostic';
+import { aj19bDiagnostic } from './aj19b-lifecycle-diagnostic';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail';
@@ -338,8 +339,50 @@ export class PaperExecutionEngine {
       });
     }
 
-    // Delete open position
-    await storage.deletePaperSimOpenPosition(this.mode, positionId);
+    // [AJ19-B] Trade lifecycle CLOSE event - track slot counts before/after delete
+    const slotCountBefore = (await storage.getPaperSimOpenPositions(this.mode)).length;
+    let deleteSuccessful = false;
+    let deleteError: string | undefined;
+    
+    // Delete open position with error handling for AJ19-B
+    try {
+      await storage.deletePaperSimOpenPosition(this.mode, positionId);
+      deleteSuccessful = true;
+      console.log(`[AJ19-B][DELETE_SUCCESS] positionId=${positionId} | symbol=${position.symbol}`);
+    } catch (delErr: any) {
+      deleteError = delErr.message || 'Unknown delete error';
+      console.error(`[AJ19-B][DELETE_FAILED] positionId=${positionId} | symbol=${position.symbol} | error=${deleteError}`);
+    }
+    
+    // Get slot count after delete attempt
+    const slotCountAfter = (await storage.getPaperSimOpenPositions(this.mode)).length;
+    
+    // Map exit condition to close reason enum
+    const closeReasonMap: Record<string, 'SL' | 'TP' | 'TRAILING_STOP' | 'MANUAL' | 'KILL_SWITCH' | 'ENGINE_STOP' | 'UNKNOWN'> = {
+      'stop_hit': 'SL',
+      'target_hit': 'TP',
+      'trailing_stop_hit': 'TRAILING_STOP',
+      'max_holding_period': 'UNKNOWN',
+      'guardrail': 'KILL_SWITCH'
+    };
+    
+    // Log AJ19-B close event
+    try {
+      await aj19bDiagnostic.logClose({
+        tradeId: trade?.id,
+        positionId: positionId,
+        symbol: position.symbol,
+        closeReason: closeReasonMap[exitCondition.type] || 'UNKNOWN',
+        closedValue: actualExitPrice * quantity,
+        pnl: netPnl,
+        slotCountBefore,
+        slotCountAfter,
+        deleteSuccessful,
+        deleteError
+      });
+    } catch (aj19bErr) {
+      console.error('[AJ19-B] Error logging close event:', aj19bErr);
+    }
 
     // [8.8.3-F][CLOSE] REB 8.8.3-F: Lifecycle log for trade closed
     console.log(`[8.8.3-F][CLOSE]`, JSON.stringify({
@@ -387,6 +430,16 @@ export class PaperExecutionEngine {
     
     // [AJ18] Start AJ18 diagnostic cycle
     aj18Diagnostic.startCycle(this.mode);
+    
+    // [AJ19-B] Per-cycle reconciliation check (non-blocking)
+    try {
+      const reconcileResult = await aj19bDiagnostic.runReconciliation(cycleId, this.mode);
+      if (reconcileResult.mismatchDetected) {
+        console.warn(`[AJ19-B][MISMATCH] DB=${reconcileResult.dbOpenCount} vs Guardrail=${reconcileResult.guardrailOpenCount} | strandedIds=${(reconcileResult.strandedPositionIds || []).join(',')}`);
+      }
+    } catch (reconcileErr) {
+      console.error('[AJ19-B] Reconciliation check failed:', reconcileErr);
+    }
     
     try {
       // Phase 8.8.3-H4: Get trading settings from guardrails_v2
@@ -1350,6 +1403,23 @@ export class PaperExecutionEngine {
 
       // AJ10.3: Diagnostic - open position created
       console.log(`[AJ10.3][OPEN_POSITION_OK] positionId=${openPosition.id} | symbol=${signal.symbol} | tradeId=${trade.id}`);
+
+      // [AJ19-B] Trade lifecycle OPEN event - log slot counts
+      try {
+        const openPositionsAfter = await storage.getPaperSimOpenPositions(this.mode);
+        await aj19bDiagnostic.logOpen({
+          tradeId: trade.id,
+          positionId: openPosition.id,
+          symbol: signal.symbol,
+          quantity: quantity.toString(),
+          notionalValue: positionValue,
+          openPrice: actualEntryPrice,
+          slotCountBefore: openPositionsAfter.length - 1, // Before this position was added
+          slotCountAfter: openPositionsAfter.length
+        });
+      } catch (aj19bErr) {
+        console.error('[AJ19-B] Error logging open event:', aj19bErr);
+      }
 
       // Log the entry event
       await storage.createPaperSimTradeLog(this.mode, {

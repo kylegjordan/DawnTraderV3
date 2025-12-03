@@ -2774,6 +2774,170 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ===== PHASE 8.8.3-AJ19-B: TRADE LIFECYCLE INTEGRITY TRACING =====
+  // Diagnoses whether trade closures properly free slots in the guardrail system
+  
+  // AJ19-B.1: Get lifecycle diagnostic status and summary
+  apiRouter.get('/diagnostics/aj19b/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aj19bDiagnostic } = await import('./services/aj19b-lifecycle-diagnostic.js');
+      
+      const summary = await aj19bDiagnostic.getSummary();
+      
+      res.json({
+        ok: true,
+        isEnabled: aj19bDiagnostic.isActive(),
+        summary
+      });
+    } catch (error: any) {
+      console.error('[AJ19B] Error fetching status:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to fetch AJ19B diagnostic status' });
+    }
+  });
+  
+  // AJ19-B.2: Enable/disable lifecycle diagnostic logging
+  apiRouter.post('/diagnostics/aj19b/enable', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aj19bDiagnostic } = await import('./services/aj19b-lifecycle-diagnostic.js');
+      const { enabled } = req.body;
+      
+      aj19bDiagnostic.setEnabled(enabled !== false);
+      
+      res.json({
+        ok: true,
+        isEnabled: aj19bDiagnostic.isActive(),
+        message: aj19bDiagnostic.isActive() 
+          ? 'AJ19B Lifecycle diagnostic enabled - logging all open/close events'
+          : 'AJ19B Lifecycle diagnostic disabled'
+      });
+    } catch (error: any) {
+      console.error('[AJ19B] Error enabling/disabling diagnostic:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to toggle AJ19B diagnostic' });
+    }
+  });
+  
+  // AJ19-B.3: Run reconciliation check
+  apiRouter.post('/diagnostics/aj19b/reconcile', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aj19bDiagnostic } = await import('./services/aj19b-lifecycle-diagnostic.js');
+      const mode = (req.query.mode as 'live' | 'paper') || 'paper';
+      
+      const result = await aj19bDiagnostic.runReconciliation(`manual_${Date.now()}`, mode);
+      
+      res.json({
+        ok: true,
+        reconciliation: result,
+        message: result.mismatchDetected 
+          ? `MISMATCH DETECTED: DB=${result.dbOpenCount}, Guardrail=${result.guardrailOpenCount}`
+          : `Counts match: ${result.dbOpenCount} open positions`
+      });
+    } catch (error: any) {
+      console.error('[AJ19B] Error running reconciliation:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to run AJ19B reconciliation' });
+    }
+  });
+  
+  // AJ19-B.4: Export lifecycle diagnostic data
+  apiRouter.get('/diagnostics/aj19b/export', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aj19bDiagnostic } = await import('./services/aj19b-lifecycle-diagnostic.js');
+      
+      const data = aj19bDiagnostic.exportData();
+      
+      res.json({
+        ok: true,
+        ...data
+      });
+    } catch (error: any) {
+      console.error('[AJ19B] Error exporting diagnostic data:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to export AJ19B diagnostic data' });
+    }
+  });
+  
+  // AJ19-B.5: Clear lifecycle diagnostic data
+  apiRouter.post('/diagnostics/aj19b/clear', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aj19bDiagnostic } = await import('./services/aj19b-lifecycle-diagnostic.js');
+      
+      aj19bDiagnostic.clear();
+      
+      res.json({
+        ok: true,
+        message: 'AJ19B lifecycle diagnostic data cleared'
+      });
+    } catch (error: any) {
+      console.error('[AJ19B] Error clearing diagnostic data:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to clear AJ19B diagnostic data' });
+    }
+  });
+  
+  // AJ19-B.6: Get current open positions state (for debugging)
+  apiRouter.get('/diagnostics/aj19b/open-positions', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.query.mode as 'live' | 'paper') || 'paper';
+      
+      const positions = await storage.getPaperSimOpenPositions(mode);
+      
+      res.json({
+        ok: true,
+        mode,
+        count: positions.length,
+        positions: positions.map(p => ({
+          id: p.id,
+          symbol: p.symbol,
+          quantity: p.quantity,
+          avgPrice: p.avgPrice,
+          stopLoss: p.stopLoss,
+          takeProfit: p.takeProfit,
+          unrealizedPnl: p.unrealizedPnl,
+          createdAt: p.createdAt
+        }))
+      });
+    } catch (error: any) {
+      console.error('[AJ19B] Error fetching open positions:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to fetch open positions' });
+    }
+  });
+  
+  // AJ19-B.7: Force clear stale open positions (DANGEROUS - for debugging only)
+  apiRouter.post('/diagnostics/aj19b/force-clear-positions', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.query.mode as 'live' | 'paper') || 'paper';
+      const { confirm } = req.body;
+      
+      if (confirm !== 'CLEAR_ALL_POSITIONS') {
+        return res.status(400).json({ 
+          ok: false, 
+          error: 'Must confirm with body: { "confirm": "CLEAR_ALL_POSITIONS" }' 
+        });
+      }
+      
+      const positions = await storage.getPaperSimOpenPositions(mode);
+      const deleteCount = positions.length;
+      
+      for (const position of positions) {
+        try {
+          await storage.deletePaperSimOpenPosition(mode, position.id);
+          console.log(`[AJ19B][FORCE_DELETE] Deleted position ${position.id} (${position.symbol})`);
+        } catch (err: any) {
+          console.error(`[AJ19B][FORCE_DELETE_ERROR] Failed to delete position ${position.id}:`, err.message);
+        }
+      }
+      
+      const remainingPositions = await storage.getPaperSimOpenPositions(mode);
+      
+      res.json({
+        ok: true,
+        message: `Force-cleared ${deleteCount} positions`,
+        deletedCount: deleteCount,
+        remainingCount: remainingPositions.length
+      });
+    } catch (error: any) {
+      console.error('[AJ19B] Error force-clearing positions:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to force-clear positions' });
+    }
+  });
+
   // Phase 8.8.2-MAP-FINAL: Filter settings endpoint for Filter Insights thresholds
   apiRouter.get('/settings/filters', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
