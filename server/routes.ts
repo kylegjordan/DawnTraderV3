@@ -10751,13 +10751,18 @@ Provide specific, actionable recommendations.`,
       const mode = (req.query.mode as 'live' | 'paper') || 'paper';
       const hours = parseInt(req.query.hours as string) || 24;
 
-      const stats = await storage.getExecutionAttemptMetrics(mode);
+      // AJ8: Get session start time - metrics only count from session start
+      const { getEngineSessionStart } = await import('./services/paper-execution-engine.js');
+      const sessionStart = getEngineSessionStart(mode);
+      
+      const stats = await storage.getExecutionAttemptMetrics(mode, sessionStart);
       
       res.json({
         success: true,
         data: stats,
         mode,
-        hours
+        hours,
+        sessionStart: sessionStart?.toISOString() || null
       });
     } catch (error: any) {
       console.error('[8.8.3-J] Error fetching execution attempt stats:', error);
@@ -10765,13 +10770,19 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  // ===== PHASE 8.8.3-J5: RTB AGGREGATED EXECUTION METRICS =====
+  // ===== PHASE 8.8.3-J5/AJ8: RTB AGGREGATED EXECUTION METRICS =====
+  // AJ8: Metrics reset when engine stops, accumulate only when running
   
   // J5.1 - RTB Summary (overall execution attempt metrics)
   apiRouter.get('/metrics/rtb-summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.query.mode as 'live' | 'paper') || 'paper';
-      const metrics = await storage.getExecutionAttemptMetrics(mode);
+      
+      // AJ8: Get session start time - metrics only count from session start
+      const { getEngineSessionStart } = await import('./services/paper-execution-engine.js');
+      const sessionStart = getEngineSessionStart(mode);
+      
+      const metrics = await storage.getExecutionAttemptMetrics(mode, sessionStart);
       
       res.json({
         success: true,
@@ -10785,9 +10796,11 @@ Provide specific, actionable recommendations.`,
             attempts: metrics.last24hAttempts,
             opened: metrics.last24hOpened,
             blocked: metrics.last24hBlocked
-          }
+          },
+          isSessionActive: metrics.isSessionActive
         },
         mode,
+        sessionStart: sessionStart?.toISOString() || null,
         refreshedAt: new Date().toISOString()
       });
     } catch (error: any) {
@@ -10800,29 +10813,60 @@ Provide specific, actionable recommendations.`,
   apiRouter.get('/metrics/rtb-blocked-summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.query.mode as 'live' | 'paper') || 'paper';
-      const metrics = await storage.getExecutionAttemptMetrics(mode);
-      const blockedAudits = await storage.getExecutionAttemptAudits(mode, { decision: 'BLOCKED', limit: 500 });
       
-      const byStrategy: Record<string, number> = {};
-      blockedAudits.forEach(a => {
-        if (a.strategy) {
-          byStrategy[a.strategy] = (byStrategy[a.strategy] || 0) + 1;
-        }
+      // AJ8: Get session start time - metrics only count from session start
+      const { getEngineSessionStart } = await import('./services/paper-execution-engine.js');
+      const sessionStart = getEngineSessionStart(mode);
+      
+      const metrics = await storage.getExecutionAttemptMetrics(mode, sessionStart);
+      
+      // AJ8: All 13 block reasons with zero values for display
+      const allBlockReasons = [
+        'KILL_SWITCH', 'STOP_LOSS_REQUIRED', 'ASSET_MAX_POSITIONS', 'COOLDOWN',
+        'MAX_POSITION', 'LPCP_LOW_PRICE', 'LPCP_MIN_NOTIONAL', 'FX_CONVERSION_FAILED',
+        'PORTFOLIO_RISK', 'INSUFFICIENT_BALANCE', 'MAX_EXPOSURE', 'MAX_TRADES', 'UNKNOWN'
+      ];
+      const byReason: Record<string, number> = {};
+      allBlockReasons.forEach(reason => {
+        byReason[reason] = metrics.blockedByReason[reason] || 0;
       });
+      
+      // AJ8: All 9 strategies with zero values for display
+      const allStrategies = [
+        'vwap_pullback', 'abcd_long', 'sma_trend_ride', 'breakout',
+        'mean_reversion', 'range_trading', 'vwap_bounce', 'liquidity_trap', 'dhma'
+      ];
+      const byStrategy: Record<string, number> = {};
+      allStrategies.forEach(strategy => {
+        byStrategy[strategy] = 0;
+      });
+      
+      // AJ8: No limit cap - get all blocked audits from current session
+      if (sessionStart) {
+        const blockedAudits = await storage.getExecutionAttemptAudits(mode, { decision: 'BLOCKED', limit: 10000 });
+        const sessionAudits = blockedAudits.filter(a => new Date(a.createdAt) >= sessionStart);
+        sessionAudits.forEach(a => {
+          if (a.strategy) {
+            byStrategy[a.strategy] = (byStrategy[a.strategy] || 0) + 1;
+          }
+        });
+      }
       
       res.json({
         success: true,
         data: {
           totalBlocked: metrics.blocked,
           blockedLast24h: metrics.last24hBlocked,
-          byReason: metrics.blockedByReason,
+          byReason,
           byStrategy,
-          topReasons: Object.entries(metrics.blockedByReason)
+          topReasons: Object.entries(byReason)
             .sort((a, b) => b[1] - a[1])
             .slice(0, 5)
-            .map(([reason, count]) => ({ reason, count }))
+            .map(([reason, count]) => ({ reason, count })),
+          isSessionActive: metrics.isSessionActive
         },
         mode,
+        sessionStart: sessionStart?.toISOString() || null,
         refreshedAt: new Date().toISOString()
       });
     } catch (error: any) {
@@ -10835,20 +10879,38 @@ Provide specific, actionable recommendations.`,
   apiRouter.get('/metrics/rtb-opened-summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.query.mode as 'live' | 'paper') || 'paper';
-      const metrics = await storage.getExecutionAttemptMetrics(mode);
-      const openedAudits = await storage.getExecutionAttemptAudits(mode, { decision: 'OPENED', limit: 500 });
       
+      // AJ8: Get session start time - metrics only count from session start
+      const { getEngineSessionStart } = await import('./services/paper-execution-engine.js');
+      const sessionStart = getEngineSessionStart(mode);
+      
+      const metrics = await storage.getExecutionAttemptMetrics(mode, sessionStart);
+      
+      // AJ8: All 9 strategies with zero values for display
+      const allStrategies = [
+        'vwap_pullback', 'abcd_long', 'sma_trend_ride', 'breakout',
+        'mean_reversion', 'range_trading', 'vwap_bounce', 'liquidity_trap', 'dhma'
+      ];
       const byStrategy: Record<string, number> = {};
+      allStrategies.forEach(strategy => {
+        byStrategy[strategy] = 0;
+      });
+      
       const bySymbol: Record<string, number> = {};
       
-      openedAudits.forEach(a => {
-        if (a.strategy) {
-          byStrategy[a.strategy] = (byStrategy[a.strategy] || 0) + 1;
-        }
-        if (a.symbol) {
-          bySymbol[a.symbol] = (bySymbol[a.symbol] || 0) + 1;
-        }
-      });
+      // AJ8: No limit cap - get all opened audits from current session
+      if (sessionStart) {
+        const openedAudits = await storage.getExecutionAttemptAudits(mode, { decision: 'OPENED', limit: 10000 });
+        const sessionAudits = openedAudits.filter(a => new Date(a.createdAt) >= sessionStart);
+        sessionAudits.forEach(a => {
+          if (a.strategy) {
+            byStrategy[a.strategy] = (byStrategy[a.strategy] || 0) + 1;
+          }
+          if (a.symbol) {
+            bySymbol[a.symbol] = (bySymbol[a.symbol] || 0) + 1;
+          }
+        });
+      }
       
       res.json({
         success: true,
@@ -10863,9 +10925,11 @@ Provide specific, actionable recommendations.`,
           topStrategies: Object.entries(byStrategy)
             .sort((a, b) => b[1] - a[1])
             .slice(0, 5)
-            .map(([strategy, count]) => ({ strategy, count }))
+            .map(([strategy, count]) => ({ strategy, count })),
+          isSessionActive: metrics.isSessionActive
         },
         mode,
+        sessionStart: sessionStart?.toISOString() || null,
         refreshedAt: new Date().toISOString()
       });
     } catch (error: any) {

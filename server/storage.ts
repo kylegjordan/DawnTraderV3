@@ -3481,7 +3481,7 @@ export class DatabaseStorage implements IStorage {
       .limit(limit);
   }
   
-  async getExecutionAttemptMetrics(mode: 'live' | 'paper'): Promise<{
+  async getExecutionAttemptMetrics(mode: 'live' | 'paper', sessionStart?: Date | null): Promise<{
     totalAttempts: number;
     opened: number;
     blocked: number;
@@ -3489,10 +3489,31 @@ export class DatabaseStorage implements IStorage {
     last24hAttempts: number;
     last24hOpened: number;
     last24hBlocked: number;
+    isSessionActive: boolean;
   }> {
+    // Phase 8.8.3-AJ8: Session-based metrics - reset when engine stops
+    // If no sessionStart provided or null, return zeros (engine not running)
+    if (!sessionStart) {
+      console.log(`[AJ8][METRICS] No active session - returning zero metrics (mode=${mode})`);
+      return {
+        totalAttempts: 0,
+        opened: 0,
+        blocked: 0,
+        blockedByReason: {},
+        last24hAttempts: 0,
+        last24hOpened: 0,
+        last24hBlocked: 0,
+        isSessionActive: false
+      };
+    }
+    
+    // Only count audits from current session (after sessionStart)
     const allAudits = await db.select()
       .from(executionAttemptAudit)
-      .where(eq(executionAttemptAudit.mode, mode));
+      .where(and(
+        eq(executionAttemptAudit.mode, mode),
+        gte(executionAttemptAudit.createdAt, sessionStart)
+      ));
     
     const totalAttempts = allAudits.length;
     const opened = allAudits.filter(a => a.decision === 'OPENED').length;
@@ -3507,13 +3528,16 @@ export class DatabaseStorage implements IStorage {
         blockedByReason[reason] = (blockedByReason[reason] || 0) + 1;
       });
     
-    // Last 24 hours
+    // Last 24 hours (capped at session start)
     const now = new Date();
     const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const last24hAudits = allAudits.filter(a => new Date(a.createdAt) >= last24h);
+    const effectiveLast24h = last24h > sessionStart ? last24h : sessionStart;
+    const last24hAudits = allAudits.filter(a => new Date(a.createdAt) >= effectiveLast24h);
     const last24hAttempts = last24hAudits.length;
     const last24hOpened = last24hAudits.filter(a => a.decision === 'OPENED').length;
     const last24hBlocked = last24hAudits.filter(a => a.decision === 'BLOCKED').length;
+    
+    console.log(`[AJ8][METRICS] Session active since ${sessionStart.toISOString()}, metrics: attempts=${totalAttempts}, opened=${opened}, blocked=${blocked}`);
     
     return {
       totalAttempts,
@@ -3522,7 +3546,8 @@ export class DatabaseStorage implements IStorage {
       blockedByReason,
       last24hAttempts,
       last24hOpened,
-      last24hBlocked
+      last24hBlocked,
+      isSessionActive: true
     };
   }
   

@@ -14,6 +14,14 @@ interface ExitCondition {
   reason: string;
 }
 
+// Phase 8.8.3-AJ8: Session tracking for RTB metrics reset
+// Metrics only count from session start - resetting when engine stops
+const engineSessionStart: Map<string, Date | null> = new Map();
+
+export function getEngineSessionStart(mode: 'live' | 'paper'): Date | null {
+  return engineSessionStart.get(mode) || null;
+}
+
 export class PaperExecutionEngine {
   private mode: 'live' | 'paper'; // Phase 27.F.15.B.2: Mode-based only, global per mode
   private isRunning: boolean = false;
@@ -44,6 +52,13 @@ export class PaperExecutionEngine {
     }
 
     this.isRunning = true;
+    
+    // Phase 8.8.3-AJ8: Set session start timestamp for RTB metrics
+    // Metrics only count from this point forward (reset behavior)
+    const sessionStartTime = new Date();
+    engineSessionStart.set(this.mode, sessionStartTime);
+    console.log(`[AJ8][SESSION_START] mode=${this.mode}, sessionStart=${sessionStartTime.toISOString()}`);
+    
     console.log(`[PaperExecution:${this.mode}] Starting paper trading engine`);
 
     // Broadcast engine start
@@ -53,7 +68,7 @@ export class PaperExecutionEngine {
         mode: this.mode,
         eventType: 'engine_started',
         message: `${this.mode} paper trading engine started`,
-        timestamp: new Date().toISOString()
+        timestamp: sessionStartTime.toISOString()
       }
     });
 
@@ -73,6 +88,11 @@ export class PaperExecutionEngine {
       clearInterval(this.monitoringInterval);
       this.monitoringInterval = null;
     }
+
+    // Phase 8.8.3-AJ8: Clear session start - RTB metrics reset to zero
+    // When engine stops, session is cleared, next query returns 0 metrics
+    console.log(`[AJ8][SESSION_STOP] mode=${this.mode}, sessionCleared=true`);
+    engineSessionStart.set(this.mode, null);
 
     console.log(`[PaperExecution:${this.mode}] Stopped paper trading engine`);
   }
