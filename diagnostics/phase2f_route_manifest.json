@@ -460,6 +460,37 @@
     ]
   },
   {
+    "path": "/api/diagnostics/aj16-rtb",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/diagnostics/aj16-rtb/report",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/diagnostics/aj16-rtb/snapshot",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "validateMode",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/settings/filters",
     "methods": [
       "GET"

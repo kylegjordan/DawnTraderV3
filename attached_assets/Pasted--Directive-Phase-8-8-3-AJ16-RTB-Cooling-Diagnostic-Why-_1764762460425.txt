@@ -1,0 +1,197 @@
+✅ **Directive: Phase 8.8.3 — AJ16
+
+RTB Cooling Diagnostic (Why Ready-To-Buy Stops After 10 Minutes)**
+
+Objective:
+Identify and fix the exact cause(s) of the observed behavior where:
+
+RTB signals initially appear
+
+Several trades open
+
+RTB quickly dries up to zero
+
+Some RTBs appear briefly but disappear before trading engine processes them
+
+Meanwhile 20–70 active pool pairs remain eligible but produce no RTB signals
+
+This behavior indicates a systemic flow issue, not just strategy randomness.
+
+🟦 AJ16.1 — Instrument Strategy Outputs (Signal Emit Logging)
+
+Add detailed logging inside each strategy module immediately before a signal is returned.
+
+Log includes:
+
+[AJ16][STRATEGY_SIGNAL]
+pair=BTC/USD
+strategy=VWAP_PULLBACK
+price=42103.11
+cooldownOk=true
+riskOk=true
+signalValue=1.0
+reason="met all criteria"
+timestamp=...
+
+
+If no signal is returned, log:
+
+[AJ16][STRATEGY_NO_SIGNAL]
+pair=ETH/EUR
+strategy=DHMA
+reason="failed trend strength"
+trendStrength=0.14
+cooldownOk=true
+stopRuleOk=true
+timestamp=...
+
+
+Every strategy must emit one or the other every cycle.
+
+🟦 AJ16.2 — Instrument Cooldowns (Internal + Guardrail)
+
+Every symbol needs:
+
+[AJ16][COOLDOWN_CHECK]
+symbol=ADA/USD
+internalCooldown=true|false
+guardrailCooldown=true|false
+cooldownRemaining=180sec
+
+
+This reveals:
+
+✓ internal strategy cooldowns (hidden from Goals Engine!)
+✓ guardrail-enforced cooldowns
+✓ mismatches between UI cooldown (5 min) and strategy cooldown logic
+
+This is a required step.
+
+🟦 AJ16.3 — Active-Position Exclusion Logging
+
+Log whenever a symbol is skipped because an open position exists:
+
+[AJ16][ACTIVE_POSITION_EXCLUDE]
+symbol=XRP/USD
+reason="symbol has active trade"
+
+
+This tells us whether:
+
+32 open trades eliminate 32 symbols automatically
+
+this is starving RTB flow
+
+this needs to be redesigned later
+(we can allow multiple sequential trades per symbol in a later phase — Phase 9 or 10)
+
+🟦 AJ16.4 — Strategy Input Sanity Logging (Indicators)
+
+At least once per cycle, log:
+
+[AJ16][INDICATOR_STATUS]
+pair=LINK/USD
+rsi=54.1
+atr=0.0143
+vwap=12.24
+ma50=12.19
+ma200=11.92
+dataAge=0.23s
+
+
+Why?
+
+Because many historical “no signals” bugs came from:
+
+an indicator not updating
+
+stale data
+
+missing bars
+
+mismatched TFs
+
+NaN values creating silent failures
+
+This is required to verify the strategy inputs are valid.
+
+🟦 AJ16.5 — RTB Generation Logging (Final Gate)
+
+Add logging at the exact point where a filtered pair becomes RTB:
+
+[AJ16][BECAME_RTB]
+pair=ATOM/USD
+strategy=VWAP_BOUNCE
+confidence=78
+reason="Met all criteria"
+
+
+And when the pair is rejected at the last stage:
+
+[AJ16][RTB_REJECT]
+pair=SUSHI/USD
+reason="Stop too tight" | "Cooldown" | "Confidence < threshold"
+
+
+These are critical signals for diagnosing flow.
+
+🟦 AJ16.6 — Snapshot Export Every 5 Minutes
+
+Every 5 minutes, dump:
+
+of active filtered pairs
+of pairs producing signals
+of pairs failing cooldown
+of pairs failing strategy
+of pairs failing guardrails
+of pairs becoming RTB
+
+This creates a heatmap of system behavior over time.
+
+🟦 AJ16.7 — Ensure Logs Tag CycleId
+
+Everything must be tied to:
+
+cycleId = scanTickId or tradingTickId
+
+
+This allows replay analysis.
+
+🟦 AJ16.8 — Produce the AJ16 Diagnostic Report
+
+Replit must deliver a full markdown report showing:
+
+1. Which strategies are producing signals reliably
+2. Which strategies are failing criteria most often
+3. Whether cooldowns (internal or guardrail) are suppressing signals
+4. Whether Active Position Exclusion is suppressing signals
+5. Whether indicator feeds are stable
+6. Why RTB flow declines after ~10 minutes
+
+The report must be placed in:
+
+docs/audits/phase_8.8.3-AJ16_RTB_cooling_diagnostic.md
+
+🟩 Expected Output / Success Criteria
+
+RTB should never go to 0 unless:
+
+market conditions are truly flat
+
+all signals are failing due to real data
+
+cooldown suppresses temporarily
+
+If RTB constantly = zero:
+
+A bug exists
+
+A strategy misfire exists
+
+A data flow issue exists
+
+A guardrail is overfiring
+
+Or Active Position Exclusion is choking the market
+
+AJ16 pinpoints which one.

@@ -7,6 +7,7 @@ import type { TradingSettings, PriceData, InsertExecutionAttemptAudit, Guardrail
 import { contextBridge } from './context-bridge';
 import { activeFilterPool, type ActiveFilteredPair } from './active-filter-pool';
 import { sizePaperPositionForSignal, validatePaperPortfolioValue, type StrategyType } from './paper-position-sizing';
+import { aj16Diagnostic } from './aj16-rtb-diagnostic';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail';
@@ -351,6 +352,10 @@ export class PaperExecutionEngine {
     // [27.F.14.DIAG] Initialize default summary to prevent stale data on early exits
     const cycleTimestamp = new Date().toISOString();
     
+    // [AJ16.7] Start a new diagnostic cycle with unique cycleId
+    const cycleId = aj16Diagnostic.startCycle(this.mode);
+    console.log(`[AJ16][CYCLE_START] mode=${this.mode} | cycleId=${cycleId}`);
+    
     try {
       // Phase 8.8.3-H4: Get trading settings from guardrails_v2
       const modeSettings = await buildSettingsFromGuardrails(this.mode);
@@ -367,6 +372,13 @@ export class PaperExecutionEngine {
           mode: this.mode,
           skippedReason: 'kill_switch_tripped'
         };
+        // [AJ16.6] Force snapshot for early exit (per-cycle, no throttle)
+        aj16Diagnostic.forceSnapshot(this.mode, {
+          activeFilteredPairs: 0,
+          openPositionsCount: 0,
+          pairsWithActivePositions: 0
+        });
+        console.log(`[AJ16][CYCLE_END] mode=${this.mode} | cycleId=${cycleId} | reason=kill_switch_tripped`);
         return;
       }
       
@@ -392,6 +404,13 @@ export class PaperExecutionEngine {
           mode: this.mode,
           skippedReason: 'empty_active_pool'
         };
+        // [AJ16.6] Force snapshot for early exit (per-cycle, no throttle)
+        aj16Diagnostic.forceSnapshot(this.mode, {
+          activeFilteredPairs: 0,
+          openPositionsCount: 0,
+          pairsWithActivePositions: 0
+        });
+        console.log(`[AJ16][CYCLE_END] mode=${this.mode} | cycleId=${cycleId} | reason=empty_active_pool`);
         return;
       }
       
@@ -423,6 +442,13 @@ export class PaperExecutionEngine {
             mode: this.mode,
             error: 'portfolio_load_failed'
           };
+          // [AJ16.6] Force snapshot for early exit (per-cycle, no throttle)
+          aj16Diagnostic.forceSnapshot(this.mode, {
+            activeFilteredPairs: activePool.length,
+            openPositionsCount: 0,
+            pairsWithActivePositions: 0
+          });
+          console.log(`[AJ16][CYCLE_END] mode=${this.mode} | cycleId=${cycleId} | reason=portfolio_load_failed`);
           return;
         }
       }
@@ -481,6 +507,13 @@ export class PaperExecutionEngine {
           mode: this.mode,
           skippedReason: 'max_positions_reached'
         };
+        // [AJ16.6] Force snapshot for early exit (per-cycle, no throttle)
+        aj16Diagnostic.forceSnapshot(this.mode, {
+          activeFilteredPairs: activePool.length,
+          openPositionsCount: openPositions.length,
+          pairsWithActivePositions: openPositions.length
+        });
+        console.log(`[AJ16][CYCLE_END] mode=${this.mode} | cycleId=${cycleId} | reason=max_positions_reached`);
         return;
       }
       
@@ -509,6 +542,14 @@ export class PaperExecutionEngine {
       
       console.log(`[PaperExecution:${this.mode}] Scan complete: ${evaluatedSymbols.length} symbols, ${readyToBuyCount} signals, ${tradesExecuted} trades`);
       
+      // [AJ16.6] Force snapshot for every cycle (per-cycle, no throttle)
+      aj16Diagnostic.forceSnapshot(this.mode, {
+        activeFilteredPairs: activePool.length,
+        openPositionsCount: openPositions.length,
+        pairsWithActivePositions: openPositions.length
+      });
+      console.log(`[AJ16][CYCLE_END] mode=${this.mode} | cycleId=${cycleId} | evaluated=${evaluatedSymbols.length} | signals=${readyToBuyCount} | trades=${tradesExecuted}`);
+      
       // Update summary with scan results
       this.lastCycleSummary = {
         timestamp: cycleTimestamp,
@@ -529,6 +570,13 @@ export class PaperExecutionEngine {
         mode: this.mode,
         error: String(error)
       };
+      // [AJ16.6] Force snapshot for error path (per-cycle, no throttle)
+      aj16Diagnostic.forceSnapshot(this.mode, {
+        activeFilteredPairs: 0,
+        openPositionsCount: 0,
+        pairsWithActivePositions: 0
+      });
+      console.log(`[AJ16][CYCLE_END] mode=${this.mode} | cycleId=${cycleId} | reason=scan_error`);
     }
   }
 
@@ -538,10 +586,18 @@ export class PaperExecutionEngine {
     settings: TradingSettings,
     cycleContext?: { portfolioValue: number; guardrails: GuardrailsV2 | null }
   ): Promise<boolean> {
+    const cycleId = aj16Diagnostic.getCycleId();
+    
     // Check if we already have an open position for this symbol
     const existingPosition = await storage.getPaperSimOpenPositionBySymbol(this.mode,  symbol);
     if (existingPosition) {
-      // Skip - already have position for this symbol
+      // [AJ16.3] Log active position exclusion
+      aj16Diagnostic.logPositionExclusion({
+        cycleId,
+        symbol,
+        reason: 'already_has_open_position',
+        existingPositionId: existingPosition.id?.toString()
+      });
       return false;
     }
 
@@ -596,11 +652,34 @@ export class PaperExecutionEngine {
       low24h
     };
 
+    // [AJ16.4] Log indicator status for sanity checking
+    const indicatorsValid = currentPrice > 0 && vwap > 0 && sma > 0 && volume24h >= 0;
+    aj16Diagnostic.logIndicatorStatus({
+      cycleId,
+      pair: symbol,
+      vwap,
+      sma,
+      currentPrice,
+      volume24h,
+      isValid: indicatorsValid,
+      invalidReason: !indicatorsValid ? (currentPrice <= 0 ? 'invalid_price' : vwap <= 0 ? 'invalid_vwap' : sma <= 0 ? 'invalid_sma' : 'unknown') : undefined
+    });
+
     // Run all strategies and pick the best signal
     const signals: StrategySignal[] = [];
+    const strategiesEvaluated: string[] = [];
 
+    // [AJ16.1] Log strategy outputs with signal emit status
     // VWAP Pullback
     const vwapSignal = this.strategyEngine.detectVWAPPullback(indicators, settings, priceData);
+    aj16Diagnostic.logStrategySignal({
+      cycleId, pair: symbol, strategy: 'vwap_pullback', 
+      signalEmitted: !!vwapSignal, 
+      price: vwapSignal?.entryPrice,
+      signalValue: vwapSignal?.confidence,
+      reason: vwapSignal ? 'met_criteria' : 'failed_criteria',
+      indicators: { vwap, currentPrice, pctFromVwap: vwap > 0 ? ((currentPrice - vwap) / vwap * 100).toFixed(2) : 0 }
+    });
     if (vwapSignal) {
       vwapSignal.symbol = symbol;
       signals.push(vwapSignal);
@@ -608,6 +687,13 @@ export class PaperExecutionEngine {
 
     // ABCD Long
     const abcdSignal = this.strategyEngine.detectABCDLong(priceData, settings);
+    aj16Diagnostic.logStrategySignal({
+      cycleId, pair: symbol, strategy: 'abcd_long',
+      signalEmitted: !!abcdSignal,
+      price: abcdSignal?.entryPrice,
+      signalValue: abcdSignal?.confidence,
+      reason: abcdSignal ? 'met_criteria' : 'failed_criteria'
+    });
     if (abcdSignal) {
       abcdSignal.symbol = symbol;
       signals.push(abcdSignal);
@@ -615,6 +701,14 @@ export class PaperExecutionEngine {
 
     // SMA Trend Ride
     const smaSignal = this.strategyEngine.detectSMATrendRide(indicators, priceData, settings);
+    aj16Diagnostic.logStrategySignal({
+      cycleId, pair: symbol, strategy: 'sma_trend_ride',
+      signalEmitted: !!smaSignal,
+      price: smaSignal?.entryPrice,
+      signalValue: smaSignal?.confidence,
+      reason: smaSignal ? 'met_criteria' : 'failed_criteria',
+      indicators: { sma, currentPrice, aboveSma: currentPrice > sma }
+    });
     if (smaSignal) {
       smaSignal.symbol = symbol;
       signals.push(smaSignal);
@@ -623,6 +717,13 @@ export class PaperExecutionEngine {
     // [8.8.3-J4] Phase J4.2: Add missing 6 strategies for full coverage
     // Breakout Strategy
     const breakoutSignal = this.strategyEngine.detectBreakout(priceData, {});
+    aj16Diagnostic.logStrategySignal({
+      cycleId, pair: symbol, strategy: 'breakout',
+      signalEmitted: !!breakoutSignal,
+      price: breakoutSignal?.entryPrice,
+      signalValue: breakoutSignal?.confidence,
+      reason: breakoutSignal ? 'met_criteria' : 'failed_criteria'
+    });
     if (breakoutSignal) {
       breakoutSignal.symbol = symbol;
       signals.push(breakoutSignal);
@@ -630,6 +731,13 @@ export class PaperExecutionEngine {
 
     // Mean Reversion Strategy
     const meanReversionSignal = this.strategyEngine.detectMeanReversion(indicators, priceData, {});
+    aj16Diagnostic.logStrategySignal({
+      cycleId, pair: symbol, strategy: 'mean_reversion',
+      signalEmitted: !!meanReversionSignal,
+      price: meanReversionSignal?.entryPrice,
+      signalValue: meanReversionSignal?.confidence,
+      reason: meanReversionSignal ? 'met_criteria' : 'failed_criteria'
+    });
     if (meanReversionSignal) {
       meanReversionSignal.symbol = symbol;
       signals.push(meanReversionSignal);
@@ -637,6 +745,13 @@ export class PaperExecutionEngine {
 
     // Range Trading Strategy
     const rangeTradingSignal = this.strategyEngine.detectRangeTrading(priceData, {});
+    aj16Diagnostic.logStrategySignal({
+      cycleId, pair: symbol, strategy: 'range_trading',
+      signalEmitted: !!rangeTradingSignal,
+      price: rangeTradingSignal?.entryPrice,
+      signalValue: rangeTradingSignal?.confidence,
+      reason: rangeTradingSignal ? 'met_criteria' : 'failed_criteria'
+    });
     if (rangeTradingSignal) {
       rangeTradingSignal.symbol = symbol;
       signals.push(rangeTradingSignal);
@@ -644,6 +759,13 @@ export class PaperExecutionEngine {
 
     // VWAP Bounce Strategy
     const vwapBounceSignal = this.strategyEngine.detectVWAPBounce(indicators, priceData, {});
+    aj16Diagnostic.logStrategySignal({
+      cycleId, pair: symbol, strategy: 'vwap_bounce',
+      signalEmitted: !!vwapBounceSignal,
+      price: vwapBounceSignal?.entryPrice,
+      signalValue: vwapBounceSignal?.confidence,
+      reason: vwapBounceSignal ? 'met_criteria' : 'failed_criteria'
+    });
     if (vwapBounceSignal) {
       vwapBounceSignal.symbol = symbol;
       signals.push(vwapBounceSignal);
@@ -651,6 +773,13 @@ export class PaperExecutionEngine {
 
     // Liquidity Trap Strategy
     const liquidityTrapSignal = this.strategyEngine.detectLiquidityTrap(priceData, {});
+    aj16Diagnostic.logStrategySignal({
+      cycleId, pair: symbol, strategy: 'liquidity_trap',
+      signalEmitted: !!liquidityTrapSignal,
+      price: liquidityTrapSignal?.entryPrice,
+      signalValue: liquidityTrapSignal?.confidence,
+      reason: liquidityTrapSignal ? 'met_criteria' : 'failed_criteria'
+    });
     if (liquidityTrapSignal) {
       liquidityTrapSignal.symbol = symbol;
       signals.push(liquidityTrapSignal);
@@ -658,6 +787,13 @@ export class PaperExecutionEngine {
 
     // DHMA Strategy
     const dhmaSignal = this.strategyEngine.detectDHMA(indicators, priceData, {});
+    aj16Diagnostic.logStrategySignal({
+      cycleId, pair: symbol, strategy: 'dhma',
+      signalEmitted: !!dhmaSignal,
+      price: dhmaSignal?.entryPrice,
+      signalValue: dhmaSignal?.confidence,
+      reason: dhmaSignal ? 'met_criteria' : 'failed_criteria'
+    });
     if (dhmaSignal) {
       dhmaSignal.symbol = symbol;
       signals.push(dhmaSignal);
@@ -698,6 +834,15 @@ export class PaperExecutionEngine {
       
       if (hasActiveTrade) {
         console.log(`[8.8.3-I][RTB_REJECT_ACTIVE] Symbol ${bestSignal.symbol} already has active trade - skipping RTB enqueue`);
+        // [AJ16.5] Log RTB rejection due to active position
+        aj16Diagnostic.logRTBEvent({
+          cycleId,
+          pair: bestSignal.symbol,
+          eventType: 'RTB_REJECT',
+          strategy: bestSignal.strategy,
+          confidence: bestSignal.confidence,
+          reason: 'already_has_active_position'
+        });
         // Still execute the trade logic below if needed, just don't add to RTB
       } else {
         // REB 8.8.3-E: Save signal to trading_signals table for Ready-to-Buy display
@@ -789,6 +934,16 @@ export class PaperExecutionEngine {
             estimatedValue: signalEstimatedValue.toFixed(2),
             ttlSeconds: this.RTB_TTL_SECONDS,
             expiresAt: expiresAt.toISOString()
+          });
+          
+          // [AJ16.5] Log RTB generation success
+          aj16Diagnostic.logRTBEvent({
+            cycleId,
+            pair: bestSignal.symbol,
+            eventType: 'BECAME_RTB',
+            strategy: bestSignal.strategy,
+            confidence: bestSignal.confidence,
+            reason: 'signal_enqueued_to_rtb_list'
           });
         } catch (signalError) {
           console.error(`[8.8.3-I][RTB_ENQUEUE] Failed to save signal for ${bestSignal.symbol}:`, signalError);
@@ -885,12 +1040,15 @@ export class PaperExecutionEngine {
     console.log(`  Entry: ${signal.entryPrice.toFixed(2)}, Stop: ${signal.stopPrice.toFixed(2)}, Target: ${signal.targetPrice.toFixed(2)}`);
 
     // Phase 8.8.3-H4: Pre-trade guardrail checks (replaces legacy RiskManager)
+    // AJ10.1: Include pre-computed notional from P2 sizing so MAX_POSITION check trusts it
     const tradeCandidate: TradeCandidate = {
       symbol: signal.symbol,
       strategy: signal.strategy,
       entryPrice: signal.entryPrice,
       stopPrice: signal.stopPrice,
       targetPrice: signal.targetPrice,
+      // AJ10.1: Pass the pre-sized estimatedValue so checkPositionSizeCap trusts it
+      preComputedNotional: signal.estimatedValue,
     };
 
     const riskCheck = await checkGuardrailRisk(this.mode, tradeCandidate);
@@ -1035,6 +1193,9 @@ export class PaperExecutionEngine {
     });
 
     // [27.F.14.DIAG] Create trade record with comprehensive error handling
+    // AJ10.3: Diagnostic logging for Open Trades vs Opened metrics mismatch
+    console.log(`[AJ10.3][TRADE_CREATE_START] symbol=${signal.symbol} | strategy=${signal.strategy} | qty=${quantity.toFixed(8)} | estimatedValue=$${(signal.estimatedValue || 0).toFixed(2)}`);
+    
     try {
       const trade = await storage.createPaperSimTrade(this.mode, {
         symbol: signal.symbol,
@@ -1051,8 +1212,11 @@ export class PaperExecutionEngine {
         metadata: signal.metadata || {}
       });
 
+      // AJ10.3: Diagnostic - trade record created
+      console.log(`[AJ10.3][TRADE_RECORD_OK] tradeId=${trade.id} | symbol=${signal.symbol}`);
+
       // Create open position
-      await storage.createPaperSimOpenPosition(this.mode, {
+      const openPosition = await storage.createPaperSimOpenPosition(this.mode, {
         symbol: signal.symbol,
         strategyName: signal.strategy,
         side: 'buy',
@@ -1070,6 +1234,9 @@ export class PaperExecutionEngine {
           highWaterMark: actualEntryPrice.toString() // For trailing stop tracking
         }
       });
+
+      // AJ10.3: Diagnostic - open position created
+      console.log(`[AJ10.3][OPEN_POSITION_OK] positionId=${openPosition.id} | symbol=${signal.symbol} | tradeId=${trade.id}`);
 
       // Log the entry event
       await storage.createPaperSimTradeLog(this.mode, {

@@ -2416,6 +2416,69 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 8.8.3-AJ16: RTB Cooling Diagnostic endpoint
+  // Returns comprehensive diagnostic data about why RTB signals dry up
+  apiRouter.get('/diagnostics/aj16-rtb', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aj16Diagnostic } = await import('./services/aj16-rtb-diagnostic.js');
+      
+      const snapshots = aj16Diagnostic.getRecentSnapshots(20);
+      const strategyStats = aj16Diagnostic.getStrategyStats();
+      const topFailures = aj16Diagnostic.getTopFailureReasons(15);
+      const cycleSummary = aj16Diagnostic.getCycleSummary();
+      
+      res.json({
+        ok: true,
+        cycleId: aj16Diagnostic.getCycleId(),
+        cycleSummary,
+        strategyStats,
+        topFailures,
+        recentSnapshots: snapshots.slice(-10),
+        generatedAt: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[AJ16] Error fetching RTB diagnostics:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to fetch AJ16 RTB diagnostics' });
+    }
+  });
+  
+  // Phase 8.8.3-AJ16: Generate full diagnostic report
+  apiRouter.get('/diagnostics/aj16-rtb/report', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aj16Diagnostic } = await import('./services/aj16-rtb-diagnostic.js');
+      const report = aj16Diagnostic.generateDiagnosticReport();
+      
+      res.setHeader('Content-Type', 'text/markdown');
+      res.send(report);
+    } catch (error: any) {
+      console.error('[AJ16] Error generating RTB diagnostic report:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to generate AJ16 RTB diagnostic report' });
+    }
+  });
+  
+  // Phase 8.8.3-AJ16: Force snapshot capture
+  apiRouter.post('/diagnostics/aj16-rtb/snapshot', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = req.mode!;
+      const { aj16Diagnostic } = await import('./services/aj16-rtb-diagnostic.js');
+      const { activeFilterPool } = await import('./services/active-filter-pool.js');
+      
+      const activePool = activeFilterPool.getActivePool(mode);
+      const openPositions = await storage.getPaperSimOpenPositions(mode);
+      
+      aj16Diagnostic.forceSnapshot(mode, {
+        activeFilteredPairs: activePool.length,
+        openPositionsCount: openPositions.length,
+        pairsWithActivePositions: openPositions.length
+      });
+      
+      res.json({ ok: true, message: 'Snapshot captured' });
+    } catch (error: any) {
+      console.error('[AJ16] Error capturing snapshot:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to capture AJ16 snapshot' });
+    }
+  });
+
   // Phase 8.8.2-MAP-FINAL: Filter settings endpoint for Filter Insights thresholds
   apiRouter.get('/settings/filters', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {

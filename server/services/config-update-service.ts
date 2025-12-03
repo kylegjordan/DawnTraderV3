@@ -139,6 +139,9 @@ export async function updateGoals(
 
 /**
  * Update screener filters (market scanning criteria)
+ * 
+ * Phase 8.8.3-AJ10.4: Respects per-filter manualOverrideEnabled flags
+ * Filters marked as manual (manualOverrideEnabled=true) are NOT overwritten
  */
 export async function updateScreeners(
   userId: string,
@@ -151,22 +154,56 @@ export async function updateScreeners(
     // Phase 27.F.13.M: Fetch global screener filters (mode-only, no userId)
     const existing = await storage.getScreenerFilters({ mode });
     
-    // Merge existing data with updates to ensure all required fields are present
+    // AJ10.4: Check per-filter manual override flags
+    // Filters with manualOverrideEnabled=true should NOT be overwritten by LATTI/auto-tuning
+    const filterOverrides = (existing as any)?.filterOverrides as Record<string, { manualOverrideEnabled?: boolean }> ?? {};
+    
+    // Helper to check if a filter is in manual mode
+    const isManualFilter = (filterName: string): boolean => {
+      const override = filterOverrides[filterName];
+      return override?.manualOverrideEnabled === true;
+    };
+    
+    // AJ10.4: Protect manual overrides - only use update if filter is NOT manual
+    // Includes all tunable filter parameters (numeric and boolean)
+    const safeUpdates = {
+      minVolume: isManualFilter('minVolume') ? existing?.minVolume : updates.minVolume,
+      minPrice: isManualFilter('minPrice') ? existing?.minPrice : updates.minPrice,
+      maxPrice: isManualFilter('maxPrice') ? existing?.maxPrice : updates.maxPrice,
+      minMarketCap: isManualFilter('minMarketCap') ? existing?.minMarketCap : updates.minMarketCap,
+      maxBidAskSpread: isManualFilter('maxBidAskSpread') ? existing?.maxBidAskSpread : updates.maxBidAskSpread,
+      rsiMin: isManualFilter('rsiMin') ? existing?.rsiMin : updates.rsiMin,
+      rsiMax: isManualFilter('rsiMax') ? existing?.rsiMax : updates.rsiMax,
+      volatilityMin: isManualFilter('volatilityMin') ? existing?.volatilityMin : updates.volatilityMin,
+      volatilityMax: isManualFilter('volatilityMax') ? existing?.volatilityMax : updates.volatilityMax,
+      minLiquidity: isManualFilter('minLiquidity') ? existing?.minLiquidity : updates.minLiquidity,
+      // Boolean filters - also protected when in manual mode
+      excludeStablecoins: isManualFilter('excludeStablecoins') ? existing?.excludeStablecoins : updates.excludeStablecoins,
+      allowRegulatedOnly: isManualFilter('allowRegulatedOnly') ? existing?.allowRegulatedOnly : updates.allowRegulatedOnly,
+    };
+    
+    // Log if any manual filters were protected
+    const protectedFilters = Object.keys(updates).filter(k => isManualFilter(k));
+    if (protectedFilters.length > 0) {
+      console.log(`[AJ10.4][MANUAL_PROTECTED] Skipping update for manual filters: ${protectedFilters.join(', ')}`);
+    }
+    
+    // Merge existing data with safe updates to ensure all required fields are present
     const mergedData = {
       userId,
       mode,
-      minVolume: updates.minVolume ?? existing?.minVolume ?? '500000.00',
-      minPrice: updates.minPrice ?? existing?.minPrice ?? '0.001',
-      maxPrice: updates.maxPrice ?? existing?.maxPrice ?? '50000.00',
-      minMarketCap: updates.minMarketCap ?? existing?.minMarketCap ?? '10000000.00',
-      maxBidAskSpread: updates.maxBidAskSpread ?? existing?.maxBidAskSpread ?? '2.50',
-      rsiMin: updates.rsiMin ?? existing?.rsiMin ?? 20,
-      rsiMax: updates.rsiMax ?? existing?.rsiMax ?? 80,
-      volatilityMin: updates.volatilityMin ?? existing?.volatilityMin ?? '0.20',
-      volatilityMax: updates.volatilityMax ?? existing?.volatilityMax ?? '10.00',
-      excludeStablecoins: updates.excludeStablecoins ?? existing?.excludeStablecoins ?? true,
-      minLiquidity: updates.minLiquidity ?? existing?.minLiquidity ?? '250000.00',
-      allowRegulatedOnly: updates.allowRegulatedOnly ?? existing?.allowRegulatedOnly ?? false,
+      minVolume: safeUpdates.minVolume ?? existing?.minVolume ?? '500000.00',
+      minPrice: safeUpdates.minPrice ?? existing?.minPrice ?? '0.001',
+      maxPrice: safeUpdates.maxPrice ?? existing?.maxPrice ?? '50000.00',
+      minMarketCap: safeUpdates.minMarketCap ?? existing?.minMarketCap ?? '10000000.00',
+      maxBidAskSpread: safeUpdates.maxBidAskSpread ?? existing?.maxBidAskSpread ?? '2.50',
+      rsiMin: safeUpdates.rsiMin ?? existing?.rsiMin ?? 20,
+      rsiMax: safeUpdates.rsiMax ?? existing?.rsiMax ?? 80,
+      volatilityMin: safeUpdates.volatilityMin ?? existing?.volatilityMin ?? '0.20',
+      volatilityMax: safeUpdates.volatilityMax ?? existing?.volatilityMax ?? '10.00',
+      excludeStablecoins: safeUpdates.excludeStablecoins ?? existing?.excludeStablecoins ?? true,
+      minLiquidity: safeUpdates.minLiquidity ?? existing?.minLiquidity ?? '250000.00',
+      allowRegulatedOnly: safeUpdates.allowRegulatedOnly ?? existing?.allowRegulatedOnly ?? false,
     };
     
     // Validate merged data

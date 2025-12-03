@@ -18,6 +18,7 @@ import {
 } from './guardrail-settings';
 import { fxConversionService } from './fx-conversion-service.js';
 import { marketDataService } from './market-data';
+import { aj16Diagnostic } from './aj16-rtb-diagnostic';
 
 export const buildSettingsFromGuardrails = _buildSettingsFromGuardrails;
 export const calculateRiskAmount = _calculateRiskAmount;
@@ -29,6 +30,9 @@ export interface TradeCandidate {
   targetPrice?: number;
   strategy: string;
   atr?: number;
+  // AJ10.1: Pre-computed notional from position sizing (P2 stage)
+  // When provided, MAX_POSITION check trusts this value instead of recalculating
+  preComputedNotional?: number;
 }
 
 export type TradeSafetyResultCode = 
@@ -174,15 +178,32 @@ async function checkSymbolCooldown(
   trade: TradeCandidate
 ): Promise<TradeSafetyResult> {
   console.log(`[8.8.3-H4][GUARDRAIL_CHECK] cooldown {symbol:${trade.symbol}, mode:${mode}}`);
+  const cycleId = aj16Diagnostic.getCycleId();
   
   try {
     const guardrails = await storage.getGuardrails({ mode });
     if (!guardrails || guardrails.cooldownMinutes === null || guardrails.cooldownMinutes === undefined) {
+      // [AJ16.2] Log cooldown check - no guardrail configured
+      aj16Diagnostic.logCooldownCheck({
+        cycleId,
+        symbol: trade.symbol,
+        internalCooldown: false,
+        guardrailCooldown: false,
+        cooldownRemaining: 0
+      });
       return { ok: true };
     }
 
     const cooldownMinutes = guardrails.cooldownMinutes;
     if (cooldownMinutes === 0) {
+      // [AJ16.2] Log cooldown check - cooldown disabled
+      aj16Diagnostic.logCooldownCheck({
+        cycleId,
+        symbol: trade.symbol,
+        internalCooldown: false,
+        guardrailCooldown: false,
+        cooldownRemaining: 0
+      });
       return { ok: true };
     }
 
@@ -193,6 +214,14 @@ async function checkSymbolCooldown(
     });
 
     if (!lastTrades || lastTrades.length === 0) {
+      // [AJ16.2] Log cooldown check - no previous trades
+      aj16Diagnostic.logCooldownCheck({
+        cycleId,
+        symbol: trade.symbol,
+        internalCooldown: false,
+        guardrailCooldown: false,
+        cooldownRemaining: 0
+      });
       return { ok: true };
     }
 
@@ -207,13 +236,36 @@ async function checkSymbolCooldown(
 
     if (minutesSinceLastTrade < cooldownMinutes) {
       const remainingMinutes = Math.ceil(cooldownMinutes - minutesSinceLastTrade);
+      const remainingSeconds = Math.ceil((cooldownMinutes - minutesSinceLastTrade) * 60);
       console.warn(`[8.8.3-H4][GUARDRAIL_BLOCK] code:COOLDOWN, symbol:${trade.symbol}, remaining:${remainingMinutes}min`);
+      
+      // [AJ16.2] Log cooldown block
+      aj16Diagnostic.logCooldownCheck({
+        cycleId,
+        symbol: trade.symbol,
+        internalCooldown: false,
+        guardrailCooldown: true,
+        cooldownRemaining: remainingSeconds,
+        lastTradeTime: new Date(lastTradeTime)
+      });
+      aj16Diagnostic.logGuardrailBlock(cycleId, trade.symbol, 'COOLDOWN', `${remainingMinutes} minutes remaining`);
+      
       return {
         ok: false,
         code: 'COOLDOWN',
         reason: `Symbol ${trade.symbol} is in cooldown period. ${remainingMinutes} minute(s) remaining.`
       };
     }
+
+    // [AJ16.2] Log cooldown check passed
+    aj16Diagnostic.logCooldownCheck({
+      cycleId,
+      symbol: trade.symbol,
+      internalCooldown: false,
+      guardrailCooldown: false,
+      cooldownRemaining: 0,
+      lastTradeTime: new Date(lastTradeTime)
+    });
 
     return { ok: true };
   } catch (error) {
@@ -229,6 +281,11 @@ async function checkSymbolCooldown(
  * 
  * Phase 8.8.3-J7: Removed hardcoded $50k fallback - if portfolioValue is missing,
  * skip this check since paper-mode sizing is done at P2 using canonical portfolio source.
+ * 
+ * Phase 8.8.3-AJ10.1: TRUST PRE-SIZED SIGNALS
+ * When trade.preComputedNotional is provided from P2 sizing, use it directly
+ * instead of recalculating. This prevents MAX_POSITION blocks on properly-sized trades
+ * due to price drift between sizing and execution.
  */
 async function checkPositionSizeCap(
   mode: 'live' | 'paper',
@@ -245,25 +302,42 @@ async function checkPositionSizeCap(
   }
   
   const portfolioValue = rawPortfolioValue;
-  const riskPerTradePct = parseFloat(settings.riskPerTradePct?.toString() || '4');
-  const riskAmount = calculateRiskAmount(portfolioValue, riskPerTradePct);
-  const stopDistance = Math.abs(trade.entryPrice - trade.stopPrice);
-  
-  if (stopDistance === 0) {
-    return { ok: true };
-  }
-  
-  const positionSize = riskAmount / stopDistance;
-  const positionValue = positionSize * trade.entryPrice;
-  
   const maxPositionPercent = parseFloat(String((settings as any).maxPositionPercent || '10.00'));
   const maxPositionValue = (portfolioValue * maxPositionPercent) / 100;
+  
+  // AJ10.1: Trust pre-computed notional from P2 sizing if available
+  // This is the canonical value calculated by paper-position-sizing.ts
+  let positionValue: number;
+  let sizingSource: string;
+  
+  if (trade.preComputedNotional !== undefined && Number.isFinite(trade.preComputedNotional) && trade.preComputedNotional > 0) {
+    // Use the pre-sized value - this was already calculated with the 3% buffer in paper-position-sizing.ts
+    positionValue = trade.preComputedNotional;
+    sizingSource = 'pre-sized (P2)';
+    console.log(`[AJ10.1][TRUST_PRESIZED] Using pre-computed notional=$${positionValue.toFixed(2)} for ${trade.symbol}`);
+  } else {
+    // Fallback: Recalculate from risk parameters (only for signals without pre-sizing)
+    const riskPerTradePct = parseFloat(settings.riskPerTradePct?.toString() || '4');
+    const riskAmount = calculateRiskAmount(portfolioValue, riskPerTradePct);
+    const stopDistance = Math.abs(trade.entryPrice - trade.stopPrice);
+    
+    if (stopDistance === 0) {
+      return { ok: true };
+    }
+    
+    const positionSize = riskAmount / stopDistance;
+    positionValue = positionSize * trade.entryPrice;
+    sizingSource = 'recalculated';
+    console.log(`[AJ10.1][RECALC_SIZING] No pre-sized value for ${trade.symbol}, recalculated notional=$${positionValue.toFixed(2)}`);
+  }
+  
   const positionPercent = (positionValue / portfolioValue) * 100;
 
-  console.log(`[8.8.3-H4][GUARDRAIL_CHECK] position_size_cap: ${positionPercent.toFixed(1)}% of portfolio ($${portfolioValue.toFixed(2)}), max=${maxPositionPercent}%`);
+  console.log(`[8.8.3-H4][GUARDRAIL_CHECK] position_size_cap: ${positionPercent.toFixed(1)}% of portfolio ($${portfolioValue.toFixed(2)}), max=${maxPositionPercent}%, source=${sizingSource}`);
 
   if (positionPercent > maxPositionPercent) {
-    console.warn(`[8.8.3-H4][GUARDRAIL_BLOCK] code:MAX_POSITION, position:${positionPercent.toFixed(1)}%, max:${maxPositionPercent}%`);
+    // AJ10.5: Diagnostic logging for MAX_POSITION blocks
+    console.warn(`[AJ10.5][MAX_POSITION_BLOCK] ${new Date().toISOString()} | symbol=${trade.symbol} | strategy=${trade.strategy} | estimatedValue=$${positionValue.toFixed(2)} | allowedMax=$${maxPositionValue.toFixed(2)} | maxPct=${maxPositionPercent}% | portfolioRiskPct=${settings.riskPerTradePct || '?'}% | sizingSource=${sizingSource}`);
     return {
       ok: false,
       code: 'MAX_POSITION',

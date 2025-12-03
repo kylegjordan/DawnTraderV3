@@ -212,12 +212,18 @@ export function ExecutionMetricsPanel() {
           <p className="text-[10px] text-muted-foreground mt-1">*Rate uses all-time totals</p>
         </div>
 
-        {/* J5.2/AJ9 - Blocked Summary Table: Always show all 13 block reasons */}
+        {/* J5.2/AJ9/AJ10.2 - Blocked Summary Table: Always show all 13 block reasons */}
         <div>
           <h4 className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-2">
             <Ban className="w-3 h-3" />
             Blocked Breakdown (All Reasons)
           </h4>
+          {/* AJ10.2: Total Blocked line */}
+          <p className="text-xs font-medium mb-2 text-destructive">
+            Total Blocked (Last 24h): {formatNumber(
+              ALL_BLOCK_REASONS.reduce((sum, reason) => sum + (blocked?.byReason?.[reason] || 0), 0)
+            )}
+          </p>
           <Table>
             <TableHeader>
               <TableRow>
@@ -265,12 +271,18 @@ export function ExecutionMetricsPanel() {
           </div>
         </div>
 
-        {/* AJ9.5 - Opened by Strategy Table: Always show all 9 strategies */}
+        {/* AJ9.5/AJ10.2 - Opened by Strategy Table: Always show all 9 strategies */}
         <div>
           <h4 className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-2">
             <Target className="w-3 h-3" />
             Opened by Strategy (Last 24h)
           </h4>
+          {/* AJ10.2: Total Opened line */}
+          <p className="text-xs font-medium mb-2 text-success">
+            Total Opened (Last 24h): {formatNumber(
+              ALL_STRATEGIES.reduce((sum, strategy) => sum + (opened?.byStrategy?.[strategy] || 0), 0)
+            )}
+          </p>
           <Table>
             <TableHeader>
               <TableRow>
