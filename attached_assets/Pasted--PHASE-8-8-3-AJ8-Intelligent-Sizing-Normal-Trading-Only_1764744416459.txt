@@ -1,0 +1,199 @@
+✅ PHASE 8.8.3-AJ8 — Intelligent Sizing (Normal Trading Only) + LPCP Cleanup (Dormant Mode)
+Directive for Replit
+
+(Include test user credentials; forbid deviations; keep LPCP dormant; normal trading only)
+
+🚀 AJ8 — Objective
+
+Stabilize & complete intelligent, guardrail-aware position sizing for NORMAL-PRICED coins only, using the corrected guardrail values from the new guardrails-v2 module.
+
+Simultaneously:
+Clean up LPCP logic so it is dormant, harmless, and does not influence normal trades — but remains structurally intact for future phases.
+
+No new subsystems (no Kraken metadata, no hybrid trading).
+No new behavior for low-priced coins.
+No logic for LPCP other than deactivation.
+
+This phase ensures normal trading executes trades and readiness-to-buy signals produce correct quantities using guardrails only for normally priced pairs.
+
+🛑 Constraints
+
+Replit MUST NOT:
+
+reactivate legacy V1/V2 risk logic
+
+create alternative sizing formulas
+
+add Kraken metadata, order-rule sync, or tick-size logic
+
+alter strategy internals
+
+modify execution behavior beyond sizing
+
+introduce new guardrail fields
+
+adjust UI outside of sizing & RTB qty/value formatting
+
+If Replit discovers ANYTHING requiring changes beyond this scope, it MUST pause and report findings before implementing.
+
+🧩 AJ8 — Detailed Requirements
+1. Source of Portfolio Value (NON-NEGOTIABLE)
+
+All sizing MUST rely on the canonical portfolio state:
+
+storage.getPortfolioState({ mode: 'paper' }).balance
+
+
+This is the only correct source.
+
+No fallbacks.
+No defaults.
+No $50,000 hardcoding.
+
+If portfolio is missing/invalid → abort cycle, DO NOT SIZE.
+
+2. First-Phase Intelligent Sizing Logic (Normal Trading Only)
+
+For every ready-to-buy signal:
+
+maxPositionValue = portfolioValue * (guardrails.maxPositionPercentPct / 100)
+
+riskAmount = portfolioValue * (guardrails.portfolioRiskPerTradePct / 100)
+
+stopDistance = abs(entry - stop)
+
+riskQty = riskAmount / stopDistance
+
+riskValue = riskQty * entry
+
+finalValue = min(riskValue, maxPositionValue)
+
+quantity = finalValue / entry
+
+
+All numbers must match user-defined guardrails.
+
+For AJ8:
+
+Use the formula ABOVE.
+
+Do NOT apply LPCP adjustments.
+
+If stopDistance is 0 or invalid → quantity = 0.
+
+Store quantity and estimated_value directly into trading_signals at P2 (signal generation), not at P3.
+
+3. Low-Price Coin Protection (LPCP) Handling
+
+LPCP must be cleaned up but remain FULLY dormant:
+
+No LPCP logic should run inside sizing helper.
+
+No LPCP influence on quantity or estimated value.
+
+No LPCP block reasons triggered.
+
+No LPCP fallback values influencing sizing.
+
+No evaluation of LPCP thresholds at P2 or P3.
+
+But:
+
+LPCP guardrail fields must remain saved/persisted.
+
+No logic deleted (we will re-enable in future phase).
+
+Goal: Dormant, not removed. Clean, not broken.
+
+4. RTB “Qty” & “$ Value” UI Fixes
+
+Replit MUST:
+
+Use comma formatting (1,234 not 1234).
+
+Display quantity using user guardrails.
+
+Display estimated value correctly using AJ8 formula.
+
+Ensure values differ per signal (no flat $249 for all signals).
+
+5. RTB Metrics Reset Behavior
+
+RTB metrics MUST:
+
+Reset to zero when trading engine is STOPPED
+
+Only accumulate when engine is RUNNING
+
+Match Filter Insights 24-h reset behavior
+
+NOT show all-time totals
+
+The following MUST update:
+
+RTB Summary (Attempts / Opened / Blocked)
+
+Blocked breakdown
+
+Strategy breakdown
+
+Opened breakdown (even if all zeros)
+
+6. Blocked Breakdown Fixes
+
+Replit MUST:
+
+Display all 13 block reasons, even if zero.
+
+Display all 9 strategies, even if zero.
+
+Remove the “cap 500 rows” limit in backend queries.
+
+Ensure totals add up:
+
+sum(block reasons) = total blocked
+
+sum(strategy blocks) = total blocked
+
+7. Test User
+
+Replit MUST use:
+
+username: testuser123
+password: SecurePass123!
+
+🧪 Validation Requirements
+
+Replit must verify:
+
+Change guardrails → quantities update accordingly after next scan
+
+Set portfolio to new value → quantities change correctly
+
+Stop engine → metrics reset → start engine → metrics restart clean
+
+No flat-value sizing
+
+Different signals produce different estimated_value values
+
+📁 Deliverables
+
+Replit must provide:
+
+A change log of exactly which files were modified
+
+A brief explanation of final sizing formula used
+
+Confirmation of dormant LPCP logic
+
+Confirmation no legacy code was re-enabled
+
+Confirmation that only normal trading behavior was modified
+
+A screenshot or test confirmation of:
+
+Ready-to-Buy table with differing quantities
+
+Blocked breakdown showing 13 categories
+
+Strategy breakdown showing 9 categories

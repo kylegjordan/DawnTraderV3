@@ -276,22 +276,37 @@ async function checkPositionSizeCap(
 
 /**
  * Check 6: Low-Priced Coin Protection (LPCP)
- * Guardrails:
+ * 
+ * Phase 8.8.3-AJ8: LPCP is now DORMANT.
+ * - No LPCP logic runs during sizing or execution
+ * - No LPCP block reasons triggered
+ * - No LPCP thresholds evaluated
+ * - LPCP guardrail fields remain persisted for future phases
+ * 
+ * Original Guardrails (preserved for future use):
  * - lpcpLowPriceThresholdUsd (number)
  * - lpcpMinStopAtrMultiple (number) 
  * - lpcpMinNotionalUsd (number)
  * 
- * For coins with price ≤ threshold (in USD):
- * 1. Applies ATR-floor stop distance rule
- * 2. Applies minimum notional rule
+ * This function structure is kept intact for future re-enablement.
+ * @returns Always returns { ok: true } - no blocking
  */
 async function checkLowPricedCoinProtection(
   mode: 'live' | 'paper',
   trade: TradeCandidate,
   settings: TradingSettings
 ): Promise<TradeSafetyResult> {
-  console.log(`[8.8.3-H4][LPCP] check_start {symbol:${trade.symbol}, price:${trade.entryPrice}, mode:${mode}}`);
+  // Phase 8.8.3-AJ8: LPCP is DORMANT - always pass, no blocking
+  // This allows normal trading to proceed without LPCP interference
+  // LPCP guardrail values remain in DB for future phases
+  console.log(`[AJ8][LPCP_DORMANT] symbol=${trade.symbol}, price=${trade.entryPrice}, mode=${mode} → PASS (LPCP disabled per AJ8)`);
+  return { ok: true };
   
+  // ===============================================================
+  // DORMANT CODE BELOW - Preserved for future re-enablement
+  // Do not delete - will be re-enabled in a future phase
+  // ===============================================================
+  /*
   try {
     const extSettings = settings as any;
     const threshold = extSettings.lpcpLowPriceThresholdUsd || 0.50;
@@ -299,7 +314,6 @@ async function checkLowPricedCoinProtection(
     const minPositionNotional = extSettings.lpcpMinNotionalUsd || 25.00;
     
     const { baseCurrency, quoteCurrency } = fxConversionService.parseSymbol(trade.symbol);
-    console.log(`[8.8.3-H4][LPCP][FX] Symbol parsed: ${trade.symbol} → base=${baseCurrency}, quote=${quoteCurrency}`);
     
     let entryPriceUSD = trade.entryPrice;
     let stopPriceUSD = trade.stopPrice;
@@ -308,9 +322,7 @@ async function checkLowPricedCoinProtection(
       try {
         entryPriceUSD = await fxConversionService.convertToUSD(trade.entryPrice, quoteCurrency);
         stopPriceUSD = await fxConversionService.convertToUSD(trade.stopPrice, quoteCurrency);
-        console.log(`[8.8.3-H4][LPCP][FX] Converted: ${trade.entryPrice} ${quoteCurrency} → $${entryPriceUSD.toFixed(6)} USD`);
       } catch (fxError) {
-        console.error(`[8.8.3-H4][LPCP][FX_FAIL] FX conversion failed:`, fxError);
         return {
           ok: false,
           code: 'FX_CONVERSION_FAILED',
@@ -320,11 +332,8 @@ async function checkLowPricedCoinProtection(
     }
     
     if (entryPriceUSD > threshold) {
-      console.log(`[8.8.3-H4][LPCP] skipped: price $${entryPriceUSD.toFixed(6)} > threshold $${threshold}`);
       return { ok: true };
     }
-    
-    console.log(`[8.8.3-H4][LPCP] active: price $${entryPriceUSD.toFixed(6)} ≤ threshold $${threshold}`);
     
     let atr = trade.atr || 0;
     if (!atr) {
@@ -347,12 +356,9 @@ async function checkLowPricedCoinProtection(
     const strategyStopUSD = Math.abs(entryPriceUSD - stopPriceUSD);
     const atrFloorStopUSD = atr * minStopAtrMult;
     
-    // J7: Parse portfolio value - no hardcoded fallback
     const rawPortfolioValue = parseFloat(settings.portfolioValue?.toString() || '0');
     
-    // J7: If no valid portfolio value, skip notional check (sizing already done at P2 for paper mode)
     if (!Number.isFinite(rawPortfolioValue) || rawPortfolioValue <= 0) {
-      console.log(`[J7][LPCP_SKIP] No valid portfolioValue - skipping LPCP notional check (mode: ${mode})`);
       return { ok: true };
     }
     
@@ -364,10 +370,7 @@ async function checkLowPricedCoinProtection(
     const positionSize = effectiveStopUSD > 0 ? riskAmount / effectiveStopUSD : 0;
     const positionNotionalUSD = positionSize * entryPriceUSD;
     
-    console.log(`[8.8.3-H4][LPCP] notional check: $${positionNotionalUSD.toFixed(2)} USD, min=$${minPositionNotional.toFixed(2)}`);
-    
     if (positionNotionalUSD < minPositionNotional) {
-      console.warn(`[8.8.3-H4][GUARDRAIL_BLOCK] code:LPCP_MIN_NOTIONAL, notional:$${positionNotionalUSD.toFixed(2)}, min:$${minPositionNotional.toFixed(2)}`);
       return {
         ok: false,
         code: 'LPCP_MIN_NOTIONAL',
@@ -375,13 +378,12 @@ async function checkLowPricedCoinProtection(
       };
     }
     
-    console.log(`[8.8.3-H4][LPCP] check passed`);
     return { ok: true };
     
   } catch (error) {
-    console.error(`[8.8.3-H4][LPCP] check error:`, error);
     return { ok: true };
   }
+  */
 }
 
 /**
