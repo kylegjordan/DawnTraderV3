@@ -6652,6 +6652,56 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ==================== Phase 8.8.3-B3.5: Price Tick Cadence Diagnostics ====================
+  
+  // GET /api/diagnostics/price-tick-cadence - Get price refresh cadence diagnostics
+  apiRouter.get('/diagnostics/price-tick-cadence', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { modeRegistry } = await import('./services/mode-registry.js');
+      
+      // Get both paper and live engines (if available)
+      const paperEngine = modeRegistry.getEngine('paper');
+      const liveEngine = modeRegistry.getEngine('live');
+      
+      const paperDiagnostics = paperEngine?.getPriceTickDiagnostics?.() || null;
+      const liveDiagnostics = liveEngine?.getPriceTickDiagnostics?.() || null;
+      
+      // Include last N log entries if requested
+      const includeRaw = req.query.includeRaw === '1';
+      const paperLogs = includeRaw && paperEngine?.getPriceTickLogs ? paperEngine.getPriceTickLogs() : [];
+      const liveLogs = includeRaw && liveEngine?.getPriceTickLogs ? liveEngine.getPriceTickLogs() : [];
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        targetIntervalMs: 1500,
+        targetCadenceLabel: '1.5 seconds',
+        paper: {
+          diagnostics: paperDiagnostics,
+          isEngineAvailable: !!paperEngine,
+          logs: paperLogs
+        },
+        live: {
+          diagnostics: liveDiagnostics,
+          isEngineAvailable: !!liveEngine,
+          logs: liveLogs
+        },
+        summary: {
+          paperHealthy: paperDiagnostics?.isHealthy || false,
+          liveHealthy: liveDiagnostics?.isHealthy || false,
+          allHealthy: (paperDiagnostics?.isHealthy || false) && (liveDiagnostics?.isHealthy !== false)
+        }
+      });
+    } catch (error: any) {
+      console.error('[B3.5] Error fetching price tick cadence diagnostics:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to fetch price tick cadence diagnostics',
+        message: error.message
+      });
+    }
+  });
+
   // POST /api/reb-2-12F/strategy-health - Run strategy health check (with mock data verification)
   apiRouter.post('/reb-2-12F/strategy-health', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {

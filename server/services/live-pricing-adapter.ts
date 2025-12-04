@@ -36,8 +36,8 @@ export class LivePricingAdapter {
   private readonly BROADCAST_THROTTLE_MS = 1000; // 1 second minimum between broadcasts per symbol
   
   // Configuration
-  private readonly REFRESH_INTERVAL_MS = 15000; // 15 seconds
-  private readonly CACHE_TTL_MS = 30000; // 30 seconds
+  private readonly REFRESH_INTERVAL_MS = 15000; // 15 seconds for general price tracking
+  private readonly CACHE_TTL_MS = 1000; // Phase 8.8.3-B3.5: 1 second cache TTL for open-trade symbols
   private readonly MOCK_VOLATILITY = 0.002; // ±0.2% for mock prices
   private readonly MODULE_NAME = 'LivePricingAdapter';
   

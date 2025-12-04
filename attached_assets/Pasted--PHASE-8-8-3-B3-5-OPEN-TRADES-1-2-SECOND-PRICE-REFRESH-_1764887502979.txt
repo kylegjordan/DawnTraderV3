@@ -1,0 +1,131 @@
+✅ PHASE 8.8.3-B3.5 — OPEN TRADES 1–2 SECOND PRICE REFRESH DIRECTIVE
+
+Use credentials if required:
+username=testuser123
+password=SecurePass123!
+
+🎯 Objective
+
+Update DawnTrader so that Open Trades prices and exit checks refresh every 1–2 seconds, rather than every 10 seconds.
+
+This affects:
+
+UI refresh cadence
+
+Backend refresh cadence
+
+WebSocket events
+
+TP/SL exit evaluation timing
+
+Exposure recalculations
+
+This MUST be implemented before diagnostics, because accurate timing is a prerequisite for evaluating engine health.
+
+📌 PART 1 — Update UI Polling Interval to 1–2 Seconds
+
+Modify active-trades-v2.tsx:
+
+Replace:
+refetchInterval: 10000, // 10 seconds
+
+With:
+refetchInterval: 1500, // 1.5 seconds
+refetchIntervalInBackground: true,
+
+Also ensure:
+
+The WebSocket handler still invalidates cache immediately on:
+
+price_update
+
+position_update
+
+active_trade_closed
+
+trade_opened
+
+scan_tick
+
+This ensures UI is visually real-time and never stale.
+
+📌 PART 2 — Backend: Increase Price Fetch Cadence for Open Trades
+
+There are three places where price refresh cadence must be corrected.
+
+A. Update the price polling interval inside paper-execution-engine.ts
+
+Search for:
+
+setInterval(monitorOpenPositions, 10000)
+
+
+Replace with:
+
+setInterval(monitorOpenPositions, 1500)
+
+B. Ensure TP/SL evaluation runs on the same cadence
+
+Inside monitorOpenPositions():
+
+Ensure exit evaluation is run every time price updates
+
+Ensure no throttling prevents evaluation <10 seconds
+
+Expected exit loop cadence:
+
+1.5 seconds
+
+📌 PART 3 — Ensure Kraken Pricing Fetch Uses Live Price When Possible
+
+In pricing-service or wherever Kraken price is fetched:
+
+Verify that live Kraken price endpoint is hit at least every 1–2 seconds
+
+Ensure caching is set no longer than 1 second for open-trade symbols
+
+Set:
+
+cacheTTL = 1000 // 1 second max
+
+
+If TTL is longer, reduce it.
+
+📌 PART 4 — Add a Diagnostic Counter (Simple, Not Full Diagnostics Yet)
+
+Add simple internal logging to confirm the new cadence is actually happening.
+
+Every time monitorOpenPositions() runs, log:
+
+[PRICE_TICK] symbol=XRP/USD refreshed_at=timestamp diff_ms=###
+
+
+Store last 100 entries in memory for inspection.
+
+This is NOT the full diagnostic system — just a cadence verification.
+
+📌 PART 5 — Do NOT change Ready-To-Buy refresh cycles
+
+As agreed:
+
+RTB signals remain 30 seconds
+
+RTB eligibility recalculation remains per original blueprint
+
+No RTB work in this directive
+
+📌 PART 6 — Deliverables
+
+After implementation, please confirm:
+
+active-trades-v2.tsx polling = 1.5 seconds
+
+Engine monitoring loop runs every 1.5 seconds
+
+TP/SL exit evaluation is executed every 1.5 seconds
+
+Kraken price fetch TTL = 1 second
+
+Diagnostic mini-log confirms cadence
+
+No performance degradation or server overload

@@ -388,8 +388,9 @@ export default function ActiveTradesV2() {
   const { data, isLoading, refetch } = useQuery<ActiveTradesResponse>({
     queryKey: ['/api/paper-sim/active-trades'],
     enabled: isPaper,
-    refetchInterval: 10000,
-    staleTime: 5000,
+    refetchInterval: 1500, // Phase 8.8.3-B3.5: 1.5 second refresh for real-time pricing
+    refetchIntervalInBackground: true, // Continue refreshing even when tab is not focused
+    staleTime: 1000, // Mark data as stale after 1 second
     refetchOnWindowFocus: true
   });
   
@@ -400,6 +401,7 @@ export default function ActiveTradesV2() {
     const lastMessage = messages[messages.length - 1];
     
     // Listen for trade-related WebSocket events
+    // Phase 8.8.3-B3.5: Added price_update for real-time price refresh
     const tradeEventTypes = [
       'active_trade_closed',
       'trade_opened',
@@ -407,7 +409,8 @@ export default function ActiveTradesV2() {
       'position_update',
       'paper_trade_executed',
       'trading_state_changed',
-      'scan_tick'
+      'scan_tick',
+      'price_update' // B3.5: Invalidate on price updates for instant refresh
     ];
     
     if (tradeEventTypes.includes(lastMessage.type)) {

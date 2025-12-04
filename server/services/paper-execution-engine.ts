@@ -40,9 +40,14 @@ export class PaperExecutionEngine {
   // Configuration
   private readonly SLIPPAGE_PERCENT = 0.15; // 0.15% slippage
   private readonly FEE_PERCENT = 0.10; // 0.10% trading fee
-  private readonly MONITOR_INTERVAL_MS = 10000; // Check every 10 seconds
+  private readonly MONITOR_INTERVAL_MS = 1500; // Phase 8.8.3-B3.5: Check every 1.5 seconds for real-time TP/SL evaluation
   private readonly MAX_PRICE_HISTORY = 100; // Keep last 100 candles per symbol
   private readonly RTB_TTL_SECONDS = 30; // REB 8.8.3-I: RTB signals expire after one FX5 cycle (30 seconds)
+  
+  // Phase 8.8.3-B3.5: Diagnostic counter for price tick cadence verification
+  private readonly MAX_PRICE_TICK_LOGS = 100;
+  private priceTickLogs: Array<{ symbol: string; refreshedAt: string; diffMs: number }> = [];
+  private lastPriceTickTime: Map<string, number> = new Map();
 
   constructor(mode: 'live' | 'paper') {
     this.mode = mode;
@@ -169,6 +174,26 @@ export class PaperExecutionEngine {
         }
 
         const currentPrice = parseFloat(tickerData.c[0]); // Current price
+        
+        // Phase 8.8.3-B3.5: Log PRICE_TICK for cadence verification
+        const now = Date.now();
+        const lastTick = this.lastPriceTickTime.get(position.symbol) || now;
+        const diffMs = now - lastTick;
+        this.lastPriceTickTime.set(position.symbol, now);
+        
+        const tickEntry = {
+          symbol: position.symbol,
+          refreshedAt: new Date().toISOString(),
+          diffMs: diffMs
+        };
+        
+        // Keep last 100 entries (ring buffer behavior)
+        if (this.priceTickLogs.length >= this.MAX_PRICE_TICK_LOGS) {
+          this.priceTickLogs.shift();
+        }
+        this.priceTickLogs.push(tickEntry);
+        
+        console.log(`[PRICE_TICK] symbol=${position.symbol} refreshed_at=${tickEntry.refreshedAt} diff_ms=${diffMs}`);
         const avgPrice = parseFloat(position.avgPrice);
         const stopLoss = position.stopLoss ? parseFloat(position.stopLoss) : null;
         const takeProfit = position.takeProfit ? parseFloat(position.takeProfit) : null;
@@ -1658,5 +1683,61 @@ export class PaperExecutionEngine {
     } catch (error) {
       console.error(`[PaperExecution:${this.mode}] Error processing signal for ${signal.symbol}:`, error);
     }
+  }
+  
+  /**
+   * Phase 8.8.3-B3.5: Get price tick diagnostic logs
+   * Returns last 100 PRICE_TICK entries for cadence verification
+   */
+  getPriceTickLogs(): Array<{ symbol: string; refreshedAt: string; diffMs: number }> {
+    return [...this.priceTickLogs];
+  }
+  
+  /**
+   * Phase 8.8.3-B3.5: Get price tick diagnostic summary
+   * Returns average interval and cadence health status
+   */
+  getPriceTickDiagnostics(): {
+    logCount: number;
+    avgIntervalMs: number;
+    minIntervalMs: number;
+    maxIntervalMs: number;
+    isHealthy: boolean;
+    lastTick: string | null;
+    mode: 'live' | 'paper';
+  } {
+    if (this.priceTickLogs.length === 0) {
+      return {
+        logCount: 0,
+        avgIntervalMs: 0,
+        minIntervalMs: 0,
+        maxIntervalMs: 0,
+        isHealthy: false,
+        lastTick: null,
+        mode: this.mode
+      };
+    }
+    
+    const intervals = this.priceTickLogs.filter(l => l.diffMs > 0).map(l => l.diffMs);
+    const avgIntervalMs = intervals.length > 0 
+      ? Math.round(intervals.reduce((sum, i) => sum + i, 0) / intervals.length)
+      : 0;
+    const minIntervalMs = intervals.length > 0 ? Math.min(...intervals) : 0;
+    const maxIntervalMs = intervals.length > 0 ? Math.max(...intervals) : 0;
+    
+    // Healthy if average interval is under 3 seconds (allowing for jitter)
+    const isHealthy = avgIntervalMs > 0 && avgIntervalMs <= 3000;
+    
+    const lastLog = this.priceTickLogs[this.priceTickLogs.length - 1];
+    
+    return {
+      logCount: this.priceTickLogs.length,
+      avgIntervalMs,
+      minIntervalMs,
+      maxIntervalMs,
+      isHealthy,
+      lastTick: lastLog?.refreshedAt || null,
+      mode: this.mode
+    };
   }
 }
