@@ -122,10 +122,31 @@ function MetricCard({
   );
 }
 
+// Default empty analytics to prevent flickering
+const EMPTY_ANALYTICS: Analytics = {
+  totalOpened: 0,
+  closedAtTP: { count: 0, percent: 0 },
+  closedAtSL: { count: 0, percent: 0 },
+  closedManually: { count: 0, percent: 0 },
+  winRate: 0,
+  avgProfit: 0,
+  avgLoss: 0,
+  netPnl: 0,
+  netPnlPercent: 0,
+  avgProfitPercent: 0,
+  avgDailyProfitPercent: 0,
+  avgHoldingTime: 0,
+  medianHoldingTime: 0,
+  profitFactor: 0,
+  byStrategy: {},
+  largestWinner: null,
+  largestLoser: null
+};
+
 function AnalyticsPanel({ range }: { range: string }) {
   const { isPaper } = useTradingMode();
   
-  const { data, isLoading, refetch } = useQuery<AnalyticsResponse>({
+  const { data, isLoading, isFetching, refetch } = useQuery<AnalyticsResponse>({
     queryKey: ['/api/paper-sim/trades/analytics', range],
     queryFn: async () => {
       const response = await fetch(`/api/paper-sim/trades/analytics?range=${range}`, {
@@ -136,7 +157,8 @@ function AnalyticsPanel({ range }: { range: string }) {
     },
     enabled: isPaper,
     refetchInterval: 30000,
-    staleTime: 15000
+    staleTime: 15000,
+    placeholderData: (previousData) => previousData // Keep previous data while refetching
   });
 
   if (!isPaper) {
@@ -149,7 +171,8 @@ function AnalyticsPanel({ range }: { range: string }) {
     );
   }
 
-  if (isLoading) {
+  // Only show loading skeleton on initial load, not during refetch
+  if (isLoading && !data) {
     return (
       <Card className="mb-6">
         <CardHeader>
@@ -166,8 +189,8 @@ function AnalyticsPanel({ range }: { range: string }) {
     );
   }
 
-  const analytics = data?.analytics;
-  if (!analytics) return null;
+  // Use data analytics or fallback to empty analytics (prevents flickering)
+  const analytics = data?.analytics || EMPTY_ANALYTICS;
 
   return (
     <Card className="mb-6">
@@ -175,10 +198,11 @@ function AnalyticsPanel({ range }: { range: string }) {
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <BarChart3 className="w-5 h-5" />
-            {range === '24h' ? '24 Hour' : range === '7d' ? '7 Day' : range === '30d' ? '30 Day' : range} Performance Analytics
+            {range === 'session' ? 'Session' : range === '24h' ? '24 Hour' : range === '7d' ? '7 Day' : range === '30d' ? '30 Day' : range} Performance Analytics
+            {isFetching && <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />}
           </CardTitle>
-          <Button size="sm" variant="ghost" onClick={() => refetch()}>
-            <RefreshCw className="w-4 h-4" />
+          <Button size="sm" variant="ghost" onClick={() => refetch()} disabled={isFetching}>
+            <RefreshCw className={cn("w-4 h-4", isFetching && "animate-spin")} />
           </Button>
         </div>
       </CardHeader>
