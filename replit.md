@@ -50,8 +50,17 @@ The Filter Insights UI uses REST data for Cycle Info and Last Scan Result. The b
 - Fixed TypeScript error in `guardrail-settings.ts` return type (added `killSwitchTripped: boolean`)
 - **Removed automatic reset of guardrails and screener filters** when starting a "New Simulation" - user configurations are now preserved across simulation restarts
 
+**Phase 8.8.3-B3.6: Kraken WebSocket Price Engine** replaces REST polling with real-time WebSocket updates for open trade monitoring:
+- `KrakenWebSocketAdapter` (`server/services/kraken-websocket-adapter.ts`) connects to `wss://ws.kraken.com` for real-time ticker subscriptions
+- `LivePricingAdapter` now includes `updateFromWebSocket()` to update cache from WS ticks and `getPriceWithFallback()` for WS→REST fallback (5s stale threshold)
+- `PaperExecutionEngine.checkOpenPositions()` uses WS cache with REST fallback for TP/SL monitoring
+- Active Trades UI polling reduced from 1.5s to 10s (metadata only), with live WS prices merged in real-time via `price_updated` events
+- FX5 Scanner continues using REST API (unchanged per directive)
+- Diagnostics endpoint: `GET /api/diagnostics/ws-price-engine` for WS engine health monitoring
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
+-   **Kraken WebSocket API**: Real-time ticker feed (`wss://ws.kraken.com`) for open trade price monitoring.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.
 -   **Neon Database**: Serverless PostgreSQL database.
 -   **Binance Public API**: External market price feed (primary for live pricing).
