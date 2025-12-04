@@ -1,0 +1,287 @@
+🚨 DIRECTIVE: Implement Kraken WebSocket Price Engine (Phase 8.8.3-B3.6)
+WITH MANDATORY ROLLBACK POINT + VERIFICATION CHECKLIST
+🔒 PREAMBLE — CREATE A ROLLBACK CHECKPOINT (MANDATORY)
+
+Before doing anything else, create a full codebase rollback snapshot called:
+
+rollback_before_websocket_price_engine_migration
+
+
+This rollback point must capture:
+
+All server files
+
+All client files
+
+All routes
+
+All services
+
+All adapters
+
+All guards
+
+All engine modules
+
+The rollback must allow complete restoration of DawnTrader to its exact state prior to applying this directive.
+
+Confirm once the rollback snapshot is created.
+
+🧭 SUMMARY OF OBJECTIVE
+
+Replace all REST-based single-symbol price fetches for open trades with real-time, server-side WebSocket streaming from the Kraken Kraken Futures WebSocket feed (Kraken Spot if needed), feeding into the DawnTrader global price cache, so:
+
+Open trade pricing updates every 1–2 seconds with no REST calls.
+
+TP/SL logic runs optimally from the “live” cache.
+
+The UI receives updates through WebSocket → client reactive queries.
+
+Only FX5 scanner continues using REST (every 30s — unchanged).
+
+This matches the FutureState Blueprint requirements.
+
+🧩 SECTION 1 — Build the Kraken WebSocket Subscription Layer
+
+Create a new service:
+
+server/services/kraken-websocket-adapter.ts
+
+
+This service must:
+
+✔ Connect to Kraken’s Spot WebSocket book ticker feed
+
+Endpoint:
+
+wss://ws.kraken.com
+
+
+Channels to subscribe:
+
+"ticker"
+
+
+Symbols needed:
+
+Every Kraken pair DawnTrader trades
+
+Dynamically updated as new open positions appear
+
+Maintain subscriptions for the entire session
+
+✔ Normalize price payloads
+
+Extract:
+
+last trade price
+
+bid
+
+ask
+
+event timestamp
+
+Convert Kraken symbol format to DawnTrader format.
+
+✔ Push updates into the LivePriceCache
+
+Reuse or extend:
+
+live-pricing-adapter.ts
+
+
+Every WS event must:
+
+update the in-memory price object
+
+mark timestamp
+
+ensure lookup via getPrice(symbol) always hits fresh data
+
+TTL should be:
+
+priceCacheTTL = 1 second
+
+✔ Broadcast updates through server WebSocket
+
+Broadcast event:
+
+{ type: "price_update", symbol, price, timestamp }
+
+
+Throttle to max 1 update/sec per symbol to avoid UI overload.
+
+🧩 SECTION 2 — Switch Engine TP/SL Logic From REST → WS Cache
+
+Modify:
+
+server/services/paper-execution-engine.ts
+
+Replace:
+
+krakenService.getPrice(symbol) REST calls
+
+With:
+livePricingAdapter.getPrice(symbol)
+
+
+No REST calls are permitted during:
+
+open position monitoring
+
+TP/SL checks
+
+unrealized P/L calculations
+
+Monitoring loop interval:
+
+ENGINE_MONITOR_INTERVAL = 1500 ms
+
+
+Every cycle:
+
+read latest price from cache
+
+evaluate TP/SL
+
+update position
+
+broadcast via WS
+
+generate PRICE_TICK diagnostics
+
+REST must only be used as fallback when:
+
+no WS price received for > 5 seconds
+
+🧩 SECTION 3 — Modify Active Trades UI to Prefer WebSocket
+
+File:
+
+client/src/components/trading/active-trades-v2.tsx
+
+Requirements:
+
+Subscribe to "price_update" events
+
+Update the specific row immediately
+
+React Query refetch every 10s remains as fallback
+
+Remove forced polling at 1.5 seconds for price updates
+(Polling should only refresh metadata like durations)
+
+The UI must reflect price changes within 1–2 seconds.
+
+🧩 SECTION 4 — Remove REST Price Calls Except FX5 Scanner
+
+REST must remain only in:
+
+fx5-scanner.ts
+
+
+Which runs every 30 seconds, as intended.
+
+ALL other REST calls to Kraken for price must be removed or deactivated.
+
+Search for:
+
+getPrice
+fetchPrice
+price = ...
+
+
+Confirm they are replaced with WS-cache lookups.
+
+🧩 SECTION 5 — Add Price Engine Diagnostics
+
+Add a new endpoint:
+
+GET /api/diagnostics/ws-price-engine
+
+
+This must return:
+
+{
+  wsConnected: boolean,
+  subscribedSymbols: [],
+  lastUpdateBySymbol: {},
+  averageIntervalMs: number,
+  maxIntervalMs: number,
+  minIntervalMs: number,
+  staleSymbols: [], // > 3 seconds without update
+  cacheSize: number,
+  cacheTTL: 1000
+}
+
+
+Also expose last 100 PRICE_TICK events if ?raw=1.
+
+🧩 SECTION 6 — After Implementing, Run System Self-Tests
+
+Replit must:
+
+✔ Test WebSocket connection stability
+✔ Confirm all open trade rows update every 1–2 seconds
+✔ Confirm TP/SL is evaluated on WS data
+✔ Confirm no REST calls for open trades
+✔ Confirm FX5 scanner unaffected
+✔ Confirm analytics still work
+✔ Confirm no new ghost trades
+✔ Confirm price_update events broadcast successfully
+🔍 VERIFICATION CHECKLIST FOR REPL.IT (MUST COMPLETE & REPORT BACK)
+
+Replit must explicitly confirm each of the following:
+
+✔ V1 — Rollback Snapshot Created
+rollback_before_websocket_price_engine_migration
+
+
+☐ Created
+☐ Tested (restore + restart)
+☐ Verified
+
+✔ V2 — WebSocket Adapter Functionality
+
+☐ Successfully connects to Kraken WebSocket
+☐ Subscribes to all required symbols
+☐ Automatically updates subscriptions on open/close
+☐ Reconnect + resubscribe logic implemented
+☐ WS events parsed correctly
+☐ Normalized prices appear in LivePriceCache
+
+✔ V3 — Engine Integration
+
+☐ All TP/SL price reads now come from cache
+☐ REST calls removed (except FX5 scanner)
+☐ Engine loop updates every 1.5s
+☐ PRICE_TICK logs confirming cadence
+
+✔ V4 — Active Trades UI Integration
+
+☐ price_update events update UI rows instantly
+☐ No visual lag > 2 seconds
+☐ No reliance on REST for price data
+☐ Polling reduced or removed for price fields
+
+✔ V5 — Cache Health
+
+☐ Average update interval < 2000 ms
+☐ No stale symbols (> 3s)
+☐ TTL respected
+☐ Cache memory stable
+
+✔ V6 — RTB & Scanner Integrity
+
+☐ FX5 scanner unaffected
+☐ RTB logic remains 30-second cadence
+☐ No increased load on system
+
+✔ V7 — Final Regression Tests
+
+☐ Manual close still works
+☐ No ghost trades
+☐ TradeHistory analytics unaffected
+☐ No new UI errors
+☐ No 401 auth loop issues introduced
