@@ -7,20 +7,296 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { useTradingMode } from "@/contexts/trading-mode-context";
+import { 
+  TrendingUp, 
+  TrendingDown, 
+  Target, 
+  Shield, 
+  Clock,
+  BarChart3,
+  Award,
+  AlertTriangle,
+  RefreshCw
+} from "lucide-react";
 
-const strategyColors = {
+const strategyColors: Record<string, string> = {
   vwap_pullback: "bg-primary/10 text-primary",
   abcd_long: "bg-chart-2/10 text-chart-2",
-  sma_trend_ride: "bg-chart-3/10 text-chart-3"
+  sma_trend_ride: "bg-chart-3/10 text-chart-3",
+  vwap_bounce: "bg-blue-500/10 text-blue-600",
+  dhma: "bg-purple-500/10 text-purple-600",
+  breakout: "bg-orange-500/10 text-orange-600",
+  mean_reversion: "bg-green-500/10 text-green-600"
 };
 
-const strategyNames = {
+const strategyNames: Record<string, string> = {
   vwap_pullback: "VWAP Pullback",
   abcd_long: "ABCD Long",
-  sma_trend_ride: "SMA Trend Ride"
+  sma_trend_ride: "SMA Trend Ride",
+  vwap_bounce: "VWAP Bounce",
+  dhma: "DHMA",
+  breakout: "Breakout",
+  mean_reversion: "Mean Reversion"
 };
 
+interface Analytics {
+  totalOpened: number;
+  closedAtTP: { count: number; percent: number };
+  closedAtSL: { count: number; percent: number };
+  closedManually: { count: number; percent: number };
+  winRate: number;
+  avgProfit: number;
+  avgLoss: number;
+  netPnl: number;
+  netPnlPercent: number;
+  avgHoldingTime: number;
+  medianHoldingTime: number;
+  profitFactor: number;
+  byStrategy: Record<string, { count: number; pnl: number; winRate: number }>;
+  largestWinner: { symbol: string; pnl: number; strategy: string } | null;
+  largestLoser: { symbol: string; pnl: number; strategy: string } | null;
+}
+
+interface AnalyticsResponse {
+  ok: boolean;
+  range: string;
+  analytics: Analytics;
+}
+
+function formatDuration(ms: number): string {
+  if (ms <= 0) return '-';
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (days > 0) return `${days}d ${hours % 24}h`;
+  if (hours > 0) return `${hours}h ${minutes % 60}m`;
+  if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+  return `${seconds}s`;
+}
+
+function MetricCard({ 
+  title, 
+  value, 
+  subValue, 
+  icon: Icon, 
+  trend 
+}: { 
+  title: string; 
+  value: string | number; 
+  subValue?: string; 
+  icon?: any;
+  trend?: 'up' | 'down' | 'neutral';
+}) {
+  return (
+    <div className="p-4 rounded-lg border bg-card">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs text-muted-foreground uppercase tracking-wider">{title}</span>
+        {Icon && <Icon className="w-4 h-4 text-muted-foreground" />}
+      </div>
+      <div className={cn(
+        "text-xl font-bold",
+        trend === 'up' && "text-green-600",
+        trend === 'down' && "text-red-600"
+      )}>
+        {value}
+      </div>
+      {subValue && (
+        <div className="text-xs text-muted-foreground mt-1">{subValue}</div>
+      )}
+    </div>
+  );
+}
+
+function AnalyticsPanel({ range }: { range: string }) {
+  const { isPaper } = useTradingMode();
+  
+  const { data, isLoading, refetch } = useQuery<AnalyticsResponse>({
+    queryKey: ['/api/paper-sim/trades/analytics', range],
+    queryFn: async () => {
+      const response = await fetch(`/api/paper-sim/trades/analytics?range=${range}`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (!response.ok) throw new Error('Failed to fetch analytics');
+      return response.json();
+    },
+    enabled: isPaper,
+    refetchInterval: 30000,
+    staleTime: 15000
+  });
+
+  if (!isPaper) {
+    return (
+      <Card className="mb-6">
+        <CardContent className="p-6 text-center text-muted-foreground">
+          Analytics available for Paper Trading mode only
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <Card className="mb-6">
+        <CardHeader>
+          <Skeleton className="h-6 w-48" />
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <Skeleton key={i} className="h-20" />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const analytics = data?.analytics;
+  if (!analytics) return null;
+
+  return (
+    <Card className="mb-6">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <BarChart3 className="w-5 h-5" />
+            {range === '24h' ? '24 Hour' : range === '7d' ? '7 Day' : range === '30d' ? '30 Day' : range} Performance Analytics
+          </CardTitle>
+          <Button size="sm" variant="ghost" onClick={() => refetch()}>
+            <RefreshCw className="w-4 h-4" />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 mb-6">
+          <MetricCard 
+            title="Total Trades" 
+            value={analytics.totalOpened}
+            icon={BarChart3}
+          />
+          <MetricCard 
+            title="Closed at TP" 
+            value={analytics.closedAtTP.count}
+            subValue={`${analytics.closedAtTP.percent.toFixed(1)}%`}
+            icon={Target}
+            trend="up"
+          />
+          <MetricCard 
+            title="Closed at SL" 
+            value={analytics.closedAtSL.count}
+            subValue={`${analytics.closedAtSL.percent.toFixed(1)}%`}
+            icon={Shield}
+            trend="down"
+          />
+          <MetricCard 
+            title="Manual Close" 
+            value={analytics.closedManually.count}
+            subValue={`${analytics.closedManually.percent.toFixed(1)}%`}
+          />
+          <MetricCard 
+            title="Win Rate" 
+            value={`${analytics.winRate.toFixed(1)}%`}
+            trend={analytics.winRate >= 50 ? 'up' : 'down'}
+          />
+          <MetricCard 
+            title="Net P/L" 
+            value={`${analytics.netPnl >= 0 ? '+' : ''}$${analytics.netPnl.toFixed(2)}`}
+            trend={analytics.netPnl >= 0 ? 'up' : 'down'}
+          />
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 mb-6">
+          <MetricCard 
+            title="Avg Profit" 
+            value={`+$${analytics.avgProfit.toFixed(2)}`}
+            icon={TrendingUp}
+            trend="up"
+          />
+          <MetricCard 
+            title="Avg Loss" 
+            value={`-$${analytics.avgLoss.toFixed(2)}`}
+            icon={TrendingDown}
+            trend="down"
+          />
+          <MetricCard 
+            title="Profit Factor" 
+            value={analytics.profitFactor.toFixed(2)}
+            trend={analytics.profitFactor >= 1 ? 'up' : 'down'}
+          />
+          <MetricCard 
+            title="Avg Hold Time" 
+            value={formatDuration(analytics.avgHoldingTime)}
+            icon={Clock}
+          />
+          <MetricCard 
+            title="Median Hold" 
+            value={formatDuration(analytics.medianHoldingTime)}
+            icon={Clock}
+          />
+          <div className="p-4 rounded-lg border bg-card col-span-1">
+            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
+              Best / Worst Trade
+            </div>
+            {analytics.largestWinner && (
+              <div className="flex items-center gap-1 text-green-600 text-sm">
+                <Award className="w-3 h-3" />
+                <span className="font-medium">{analytics.largestWinner.symbol}</span>
+                <span className="font-mono">+${analytics.largestWinner.pnl.toFixed(2)}</span>
+              </div>
+            )}
+            {analytics.largestLoser && (
+              <div className="flex items-center gap-1 text-red-600 text-sm">
+                <AlertTriangle className="w-3 h-3" />
+                <span className="font-medium">{analytics.largestLoser.symbol}</span>
+                <span className="font-mono">${analytics.largestLoser.pnl.toFixed(2)}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {Object.keys(analytics.byStrategy).length > 0 && (
+          <div>
+            <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+              Performance by Strategy
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {Object.entries(analytics.byStrategy).map(([strategy, stats]) => (
+                <div key={strategy} className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                  <div className="flex items-center gap-2">
+                    <Badge className={cn("text-xs", strategyColors[strategy] || "bg-gray-500/10")}>
+                      {strategyNames[strategy] || strategy}
+                    </Badge>
+                    <span className="text-sm text-muted-foreground">
+                      {stats.count} trades
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={cn(
+                      "font-mono text-sm font-semibold",
+                      stats.pnl >= 0 ? "text-green-600" : "text-red-600"
+                    )}>
+                      {stats.pnl >= 0 ? '+' : ''}${stats.pnl.toFixed(2)}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {stats.winRate.toFixed(0)}% WR
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function TradeHistoryTab() {
+  const { isPaper } = useTradingMode();
+  const [analyticsRange, setAnalyticsRange] = useState('24h');
   const [filters, setFilters] = useState({
     symbol: '',
     strategy: 'all',
@@ -29,16 +305,17 @@ export function TradeHistoryTab() {
     dateTo: ''
   });
   
-  const { data: trades = [], isLoading } = useQuery<any[]>({
-    queryKey: ['/api/trades'],
+  const { data: tradesData = [], isLoading } = useQuery<any[]>({
+    queryKey: ['/api/paper-sim/trades'],
+    enabled: isPaper,
     refetchInterval: 30000
   });
 
-  const filteredTrades = trades.filter((trade: any) => {
+  const filteredTrades = tradesData.filter((trade: any) => {
     if (filters.symbol && !trade.symbol.toLowerCase().includes(filters.symbol.toLowerCase())) {
       return false;
     }
-    if (filters.strategy && filters.strategy !== 'all' && trade.strategy !== filters.strategy) {
+    if (filters.strategy && filters.strategy !== 'all' && trade.strategyName !== filters.strategy) {
       return false;
     }
     return true;
@@ -71,13 +348,33 @@ export function TradeHistoryTab() {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-sm text-muted-foreground">Time Range:</span>
+        <Select value={analyticsRange} onValueChange={setAnalyticsRange}>
+          <SelectTrigger className="w-32">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="1h">1 Hour</SelectItem>
+            <SelectItem value="6h">6 Hours</SelectItem>
+            <SelectItem value="12h">12 Hours</SelectItem>
+            <SelectItem value="24h">24 Hours</SelectItem>
+            <SelectItem value="7d">7 Days</SelectItem>
+            <SelectItem value="30d">30 Days</SelectItem>
+            <SelectItem value="all">All Time</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <AnalyticsPanel range={analyticsRange} />
+
       <Card>
         <CardHeader>
           <CardTitle>
             <div className="flex items-center gap-2 text-muted-foreground text-sm font-normal mb-2">
-              This tab displays historical trade data for Paper and Live modes.
+              Historical trade data for Paper Trading mode
             </div>
-            <div className="text-2xl">Filters</div>
+            <div className="text-2xl">Trade Filters</div>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -101,6 +398,8 @@ export function TradeHistoryTab() {
                 <SelectItem value="vwap_pullback">VWAP Pullback</SelectItem>
                 <SelectItem value="abcd_long">ABCD Long</SelectItem>
                 <SelectItem value="sma_trend_ride">SMA Trend Ride</SelectItem>
+                <SelectItem value="vwap_bounce">VWAP Bounce</SelectItem>
+                <SelectItem value="dhma">DHMA</SelectItem>
               </SelectContent>
             </Select>
             
@@ -156,42 +455,35 @@ export function TradeHistoryTab() {
                     <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Strategy</th>
                     <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Entry</th>
                     <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Exit</th>
-                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Quantity</th>
+                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Close Reason</th>
                     <th className="text-left p-3 text-sm font-semibold text-muted-foreground">P/L</th>
-                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">R</th>
-                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Fees</th>
+                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">P/L %</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {filteredTrades.map((trade: any) => {
-                    const realizedPL = parseFloat(trade.realizedPL || '0');
-                    const realizedPLR = parseFloat(trade.realizedPLR || '0');
-                    const isProfit = realizedPL > 0;
-                    const totalFees = parseFloat(trade.entryFee || '0') + parseFloat(trade.exitFee || '0');
+                    const pnl = parseFloat(trade.pnl || '0');
+                    const pnlPercent = parseFloat(trade.pnlPercent || '0');
+                    const isProfit = pnl > 0;
                     
                     return (
                       <tr key={trade.id} className="hover:bg-muted/50" data-testid={`trade-history-${trade.id}`}>
                         <td className="p-3 text-sm">
-                          {trade.exitTime ? 
-                            new Date(trade.exitTime).toLocaleDateString() : 
-                            new Date(trade.entryTime).toLocaleDateString()
+                          {trade.closedAt ? 
+                            new Date(trade.closedAt).toLocaleDateString() : 
+                            new Date(trade.openedAt).toLocaleDateString()
                           }
                         </td>
                         
                         <td className="p-3">
-                          <div className="flex items-center gap-2">
-                            <span className={cn("text-sm font-semibold", getSymbolColor(trade.symbol))}>
-                              {trade.symbol}
-                            </span>
-                            <Badge variant={trade.mode === 'live' ? 'default' : 'secondary'} className="text-xs">
-                              {trade.mode}
-                            </Badge>
-                          </div>
+                          <span className={cn("text-sm font-semibold", getSymbolColor(trade.symbol))}>
+                            {trade.symbol}
+                          </span>
                         </td>
                         
                         <td className="p-3">
-                          <Badge className={cn("text-xs", strategyColors[trade.strategy as keyof typeof strategyColors] || "bg-muted/10")}>
-                            {strategyNames[trade.strategy as keyof typeof strategyNames] || trade.strategy}
+                          <Badge className={cn("text-xs", strategyColors[trade.strategyName as keyof typeof strategyColors] || "bg-muted/10")}>
+                            {strategyNames[trade.strategyName as keyof typeof strategyNames] || trade.strategyName}
                           </Badge>
                         </td>
                         
@@ -203,28 +495,25 @@ export function TradeHistoryTab() {
                           {trade.exitPrice ? `$${parseFloat(trade.exitPrice).toFixed(4)}` : '-'}
                         </td>
                         
-                        <td className="p-3 font-mono text-sm">
-                          {trade.quantity ? parseFloat(trade.quantity).toLocaleString() : '-'}
+                        <td className="p-3">
+                          <Badge variant="outline" className="text-xs">
+                            {trade.closeReason === 'target_hit' ? 'Target Hit' :
+                             trade.closeReason === 'stop_hit' ? 'Stop Hit' :
+                             trade.closeReason === 'manual_close' ? 'Manual' :
+                             trade.closeReason || 'Unknown'}
+                          </Badge>
                         </td>
                         
                         <td className="p-3">
-                          <div className={cn("font-mono text-sm font-semibold", isProfit ? "text-success" : "text-destructive")}>
-                            {isProfit ? '+' : ''}${realizedPL.toFixed(2)}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {trade.entryPrice && trade.quantity ? 
-                              ((realizedPL / (parseFloat(trade.entryPrice) * parseFloat(trade.quantity))) * 100).toFixed(2) : '0.00'}%
+                          <div className={cn("font-mono text-sm font-semibold", isProfit ? "text-green-600" : "text-red-600")}>
+                            {isProfit ? '+' : ''}${pnl.toFixed(2)}
                           </div>
                         </td>
                         
                         <td className="p-3">
-                          <div className={cn("font-mono text-sm font-semibold", realizedPLR >= 0 ? "text-success" : "text-destructive")}>
-                            {realizedPLR >= 0 ? '+' : ''}{realizedPLR.toFixed(2)}R
+                          <div className={cn("font-mono text-sm font-semibold", isProfit ? "text-green-600" : "text-red-600")}>
+                            {isProfit ? '+' : ''}{pnlPercent.toFixed(2)}%
                           </div>
-                        </td>
-                        
-                        <td className="p-3 font-mono text-xs text-muted-foreground">
-                          ${totalFees.toFixed(2)}
                         </td>
                       </tr>
                     );

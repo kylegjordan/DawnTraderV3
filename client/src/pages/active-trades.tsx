@@ -1,6 +1,6 @@
 import { useState, useEffect, Component, ErrorInfo, ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import ActiveTrades from "@/components/trading/active-trades";
+import ActiveTradesV2 from "@/components/trading/active-trades-v2";
 import Watchlist from "@/components/trading/watchlist";
 import ReadyToBuyTable from "@/components/trading/ready-to-buy-table";
 import { ExecutionMetricsPanel } from "@/components/trading/execution-metrics";
@@ -110,7 +110,7 @@ function TradingPageContent() {
         </TabsList>
 
         <TabsContent value="open" className="mt-6">
-          <ActiveTrades />
+          <ActiveTradesV2 />
         </TabsContent>
 
         <TabsContent value="ready" className="mt-6">

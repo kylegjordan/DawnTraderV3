@@ -7380,6 +7380,294 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 8.8.3-B1: Enhanced Active Trades endpoint with slot visibility and integrity checking
+  apiRouter.get('/paper-sim/active-trades', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      
+      // Get open positions from paper_sim_open_positions
+      const positions = await storage.getPaperSimOpenPositions('paper');
+      
+      // Get guardrail settings for max open positions
+      const guardrails = await storage.getGuardrailsV2({ mode: 'paper' });
+      const maxOpenTrades = guardrails?.maxOpenPositions || 15;
+      
+      // Enrich positions with slot numbers and health status
+      const enrichedPositions = positions.map((pos, index) => {
+        const entryPrice = parseFloat(pos.avgPrice?.toString() || '0');
+        const currentPrice = parseFloat(pos.currentPrice?.toString() || entryPrice.toString());
+        const takeProfit = parseFloat(pos.takeProfit?.toString() || '0');
+        const stopLoss = parseFloat(pos.stopLoss?.toString() || '0');
+        const openedAt = pos.openedAt ? new Date(pos.openedAt) : new Date();
+        const holdingDurationMs = Date.now() - openedAt.getTime();
+        
+        // Calculate % distance to TP/SL
+        const distanceToTP = takeProfit > 0 ? ((takeProfit - currentPrice) / currentPrice) * 100 : 0;
+        const distanceToSL = stopLoss > 0 ? ((currentPrice - stopLoss) / currentPrice) * 100 : 0;
+        
+        // Health indicator: green (profitable), yellow (near breakeven), red (losing)
+        const pnlPercent = parseFloat(pos.unrealizedPnlPercent?.toString() || '0');
+        let health: 'green' | 'yellow' | 'red' = 'yellow';
+        if (pnlPercent >= 0.5) health = 'green';
+        else if (pnlPercent <= -0.5) health = 'red';
+        
+        return {
+          id: pos.id,
+          symbol: pos.symbol,
+          strategy: pos.strategyName,
+          side: pos.side,
+          quantity: parseFloat(pos.quantity?.toString() || '0'),
+          entryPrice,
+          currentPrice,
+          unrealizedPnl: parseFloat(pos.unrealizedPnl?.toString() || '0'),
+          unrealizedPnlPercent: pnlPercent,
+          takeProfit,
+          stopLoss,
+          distanceToTP,
+          distanceToSL,
+          holdingDurationMs,
+          slotNumber: index + 1,
+          maxSlots: maxOpenTrades,
+          health,
+          openedAt: openedAt.toISOString(),
+          confidence: parseFloat(pos.confidence?.toString() || '0'),
+          metadata: pos.metadata
+        };
+      });
+      
+      // Integrity check
+      const systemCount = positions.length;
+      const slotsAvailable = Math.max(0, maxOpenTrades - systemCount);
+      const isMismatch = false; // Will be compared with UI count on client side
+      
+      res.json({
+        ok: true,
+        positions: enrichedPositions,
+        integrity: {
+          systemCount,
+          maxOpenTrades,
+          slotsAvailable,
+          status: systemCount <= maxOpenTrades ? 'OK' : 'OVER_LIMIT'
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching active trades:', error);
+      res.status(500).json({ ok: false, error: 'Failed to fetch active trades' });
+    }
+  });
+
+  // Phase 8.8.3-B1: Close single trade endpoint
+  apiRouter.post('/paper-sim/close-trade/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { id } = req.params;
+      const { reason } = req.body;
+      
+      // Get the position to close
+      const positions = await storage.getPaperSimOpenPositions('paper');
+      const position = positions.find(p => p.id === id);
+      
+      if (!position) {
+        return res.status(404).json({ ok: false, error: 'Position not found' });
+      }
+      
+      const entryPrice = parseFloat(position.avgPrice?.toString() || '0');
+      const currentPrice = parseFloat(position.currentPrice?.toString() || entryPrice.toString());
+      const quantity = parseFloat(position.quantity?.toString() || '0');
+      const pnl = (currentPrice - entryPrice) * quantity;
+      const pnlPercent = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice) * 100 : 0;
+      
+      // Move to closed trades
+      await storage.createPaperSimTrade('paper', {
+        id: position.id,
+        symbol: position.symbol,
+        strategyName: position.strategyName,
+        side: position.side,
+        quantity: position.quantity?.toString() || '0',
+        entryPrice: position.avgPrice?.toString() || '0',
+        exitPrice: currentPrice.toString(),
+        stopLoss: position.stopLoss?.toString(),
+        takeProfit: position.takeProfit?.toString(),
+        pnl: pnl.toString(),
+        pnlPercent: pnlPercent.toString(),
+        fees: '0',
+        slippage: '0',
+        openedAt: position.openedAt,
+        closedAt: new Date(),
+        closeReason: reason || 'manual_close',
+        confidence: position.confidence?.toString(),
+        metadata: position.metadata
+      });
+      
+      // Delete from open positions
+      await storage.deletePaperSimOpenPosition('paper', id);
+      
+      // Broadcast update via WebSocket
+      broadcastToAll({
+        type: 'active_trade_closed',
+        data: {
+          id,
+          symbol: position.symbol,
+          pnl,
+          pnlPercent,
+          reason: reason || 'manual_close'
+        }
+      });
+      
+      res.json({ ok: true, message: `Closed ${position.symbol} position`, pnl, pnlPercent });
+    } catch (error) {
+      console.error('Error closing trade:', error);
+      res.status(500).json({ ok: false, error: 'Failed to close trade' });
+    }
+  });
+
+  // Phase 8.8.3-B1: 24h Trade History Analytics endpoint
+  apiRouter.get('/paper-sim/trades/analytics', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { range = '24h' } = req.query;
+      
+      // Calculate time range
+      const now = new Date();
+      let startTime: Date;
+      switch (range) {
+        case '1h': startTime = new Date(now.getTime() - 60 * 60 * 1000); break;
+        case '6h': startTime = new Date(now.getTime() - 6 * 60 * 60 * 1000); break;
+        case '12h': startTime = new Date(now.getTime() - 12 * 60 * 60 * 1000); break;
+        case '24h': startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000); break;
+        case '7d': startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); break;
+        case '30d': startTime = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); break;
+        case 'all': startTime = new Date(0); break;
+        default: startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      }
+      
+      // Get trades within range
+      const allTrades = await storage.getPaperSimTrades('paper', {});
+      const trades = allTrades.filter(t => {
+        const tradeTime = t.closedAt ? new Date(t.closedAt) : null;
+        return tradeTime && tradeTime >= startTime;
+      });
+      
+      if (trades.length === 0) {
+        return res.json({
+          ok: true,
+          range,
+          analytics: {
+            totalOpened: 0,
+            closedAtTP: { count: 0, percent: 0 },
+            closedAtSL: { count: 0, percent: 0 },
+            closedManually: { count: 0, percent: 0 },
+            winRate: 0,
+            avgProfit: 0,
+            avgLoss: 0,
+            netPnl: 0,
+            netPnlPercent: 0,
+            avgHoldingTime: 0,
+            medianHoldingTime: 0,
+            profitFactor: 0,
+            byStrategy: {},
+            largestWinner: null,
+            largestLoser: null
+          }
+        });
+      }
+      
+      // Calculate analytics
+      const closedAtTP = trades.filter(t => t.closeReason === 'target_hit');
+      const closedAtSL = trades.filter(t => t.closeReason === 'stop_hit');
+      const closedManually = trades.filter(t => t.closeReason === 'manual_close' || t.closeReason === 'timeout');
+      
+      const wins = trades.filter(t => parseFloat(t.pnl?.toString() || '0') > 0);
+      const losses = trades.filter(t => parseFloat(t.pnl?.toString() || '0') <= 0);
+      
+      const winRate = trades.length > 0 ? (wins.length / trades.length) * 100 : 0;
+      
+      const totalProfit = wins.reduce((sum, t) => sum + parseFloat(t.pnl?.toString() || '0'), 0);
+      const totalLoss = Math.abs(losses.reduce((sum, t) => sum + parseFloat(t.pnl?.toString() || '0'), 0));
+      
+      const avgProfit = wins.length > 0 ? totalProfit / wins.length : 0;
+      const avgLoss = losses.length > 0 ? totalLoss / losses.length : 0;
+      
+      const netPnl = trades.reduce((sum, t) => sum + parseFloat(t.pnl?.toString() || '0'), 0);
+      
+      // Calculate holding times
+      const holdingTimes = trades.map(t => {
+        const opened = t.openedAt ? new Date(t.openedAt).getTime() : 0;
+        const closed = t.closedAt ? new Date(t.closedAt).getTime() : Date.now();
+        return closed - opened;
+      }).filter(t => t > 0);
+      
+      const avgHoldingTime = holdingTimes.length > 0 ? 
+        holdingTimes.reduce((a, b) => a + b, 0) / holdingTimes.length : 0;
+      
+      const sortedHoldingTimes = [...holdingTimes].sort((a, b) => a - b);
+      const medianHoldingTime = sortedHoldingTimes.length > 0 ?
+        sortedHoldingTimes[Math.floor(sortedHoldingTimes.length / 2)] : 0;
+      
+      const profitFactor = totalLoss > 0 ? totalProfit / totalLoss : totalProfit > 0 ? Infinity : 0;
+      
+      // By strategy
+      const byStrategy: Record<string, { count: number; pnl: number; winRate: number }> = {};
+      trades.forEach(t => {
+        const strategy = t.strategyName || 'unknown';
+        if (!byStrategy[strategy]) {
+          byStrategy[strategy] = { count: 0, pnl: 0, winRate: 0 };
+        }
+        byStrategy[strategy].count++;
+        byStrategy[strategy].pnl += parseFloat(t.pnl?.toString() || '0');
+      });
+      
+      // Calculate win rate per strategy
+      Object.keys(byStrategy).forEach(strategy => {
+        const stratTrades = trades.filter(t => (t.strategyName || 'unknown') === strategy);
+        const stratWins = stratTrades.filter(t => parseFloat(t.pnl?.toString() || '0') > 0);
+        byStrategy[strategy].winRate = stratTrades.length > 0 ? (stratWins.length / stratTrades.length) * 100 : 0;
+      });
+      
+      // Largest winner/loser
+      const sortedByPnl = [...trades].sort((a, b) => 
+        parseFloat(b.pnl?.toString() || '0') - parseFloat(a.pnl?.toString() || '0')
+      );
+      
+      const largestWinner = sortedByPnl[0] ? {
+        symbol: sortedByPnl[0].symbol,
+        pnl: parseFloat(sortedByPnl[0].pnl?.toString() || '0'),
+        strategy: sortedByPnl[0].strategyName
+      } : null;
+      
+      const largestLoser = sortedByPnl[sortedByPnl.length - 1] ? {
+        symbol: sortedByPnl[sortedByPnl.length - 1].symbol,
+        pnl: parseFloat(sortedByPnl[sortedByPnl.length - 1].pnl?.toString() || '0'),
+        strategy: sortedByPnl[sortedByPnl.length - 1].strategyName
+      } : null;
+      
+      res.json({
+        ok: true,
+        range,
+        analytics: {
+          totalOpened: trades.length,
+          closedAtTP: { count: closedAtTP.length, percent: (closedAtTP.length / trades.length) * 100 },
+          closedAtSL: { count: closedAtSL.length, percent: (closedAtSL.length / trades.length) * 100 },
+          closedManually: { count: closedManually.length, percent: (closedManually.length / trades.length) * 100 },
+          winRate,
+          avgProfit,
+          avgLoss,
+          netPnl,
+          netPnlPercent: 0, // Would need starting balance to calculate
+          avgHoldingTime,
+          medianHoldingTime,
+          profitFactor: isFinite(profitFactor) ? profitFactor : 0,
+          byStrategy,
+          largestWinner,
+          largestLoser
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching trade analytics:', error);
+      res.status(500).json({ ok: false, error: 'Failed to fetch analytics' });
+    }
+  });
+
   apiRouter.get('/paper-sim/metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
