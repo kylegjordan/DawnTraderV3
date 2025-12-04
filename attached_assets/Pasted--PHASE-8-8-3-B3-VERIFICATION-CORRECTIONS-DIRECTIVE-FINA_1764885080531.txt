@@ -1,0 +1,158 @@
+✅ PHASE 8.8.3-B3 VERIFICATION & CORRECTIONS DIRECTIVE (FINAL)
+
+Paste into Replit
+
+PHASE 8.8.3-B3 — REQUIRED VERIFICATION & CORRECTIONS
+
+Please perform the following checks and corrections.
+Each item requires explicit proof via code excerpts, screenshots, or console output confirming where the logic exists and how it is applied.
+
+1. PRICE REFRESH AUDIT (OPEN TRADES ONLY)
+
+We must confirm that Active/Open Trades pricing is refreshing frequently enough in the UI and in the backend evaluation logic.
+
+Action Items
+
+Show the exact lines of code where the refresh interval for Open Trades price updates is defined (frontend polling or WebSocket subscription).
+
+Show the exact lines of code where the backend trading engine obtains price updates during open-trade monitoring.
+
+Confirm the following with evidence:
+
+Open Trade prices update at least every 10 seconds
+
+UI prices reliably update without freezing
+
+The trading engine receives the same refreshed prices
+
+If polling is used, specify the setInterval timing.
+
+If WebSockets are used, show the subscription handler and throttle interval.
+
+2. MAX POSITION SIZING LOGIC — VALIDATION REQUIRED
+
+A guardrail check was added, but we need confirmation that the actual position sizing logic obeys the intended sizing rules.
+
+Action Items
+
+Locate and show the code where trade quantity is calculated during trade creation.
+
+Verify that quantity sizing uses the following formula:
+
+max_single_trade_usd = (portfolio_balance * max_total_exposure_pct) * max_position_pct
+
+
+Verify that the value used for quantity calculation never exceeds max_single_trade_usd.
+
+If the sizing logic is wrong or incomplete, apply the correction.
+
+3. GHOST TRADES — FULL QUARANTINE CONFIRMATION
+
+Ghost trades must not appear anywhere or contaminate any metrics.
+
+Action Items
+
+Confirm that ghost trades (missing closed_at, exit_price, or close_reason) are:
+
+removed from the visible history table
+
+moved into paper_sim_ghost_trades
+
+Show the filtering logic for how they’re excluded from the main table.
+
+Most important: confirm that ghost trades are excluded from ALL analytics, including:
+
+Total trades
+
+Win rate
+
+Strategy-level metrics
+
+Average profit/loss
+
+Daily averages
+
+Current Simulation analytics
+
+24-hour analytics
+
+Show the exact code where analytics queries apply this filtering.
+
+4. PORTFOLIO SUMMARY STRIP — MUST APPEAR ON ALL TRADING SUBTABS
+
+The strip should appear consistently across the entire Trading section.
+
+Action Items
+
+Confirm that the Portfolio Summary Strip appears on ALL four tabs:
+
+Filter Insights
+
+Ready to Buy
+
+Open Trades
+
+Trade History
+
+If any tab is missing the strip, correct it.
+
+5. CONFIRM CURRENT BALANCE CALCULATION IS CORRECT
+
+This was partially implemented but requires verification.
+
+Action Items
+
+Show the code computing current_balance.
+
+Confirm that it uses:
+
+current_balance = starting_balance + realized_pnl_from_closed_trades_in_current_simulation
+
+
+Confirm that open position value is NOT included in current balance.
+
+6. MANUAL CLOSE ERROR TOAST — VERIFY FIX WORKS
+
+We must ensure the toast no longer shows incorrectly.
+
+Action Items
+
+Validate the manual close action end-to-end.
+
+If the toast still appears on success, correct the mutation handler.
+
+7. FILTER INSIGHTS — TOTAL ACTIVE FILTERED PAIRS COUNT FIX
+
+The count was corrected, but needs verification.
+
+Action Items
+
+Confirm that the displayed count now uses:
+activeFilteredPool.length
+
+Confirm the count matches the visible rows in the list.
+
+TEST USER CREDENTIALS FOR VALIDATION
+
+Please apply all fixes and verification steps using:
+
+username = testuser123
+password = SecurePass123!
+
+REQUIRED OUTPUT
+
+After completing all work, provide:
+
+Code excerpts showing the relevant logic for each of the above sections.
+
+Screenshots confirming UI visibility where required.
+
+A final checklist table, marking each item as:
+
+PASS (Fully implemented & verified)
+
+FIXED (Corrections applied)
+
+REVIEW NEEDED (Cannot be reproduced or incomplete)
+
+END OF DIRECTIVE

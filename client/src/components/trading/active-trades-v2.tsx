@@ -418,13 +418,11 @@ export default function ActiveTradesV2() {
   
   const closeTradeMutation = useMutation({
     mutationFn: async (id: string) => {
-      const response = await apiFetch(`/api/paper-sim/close-trade/${id}`, {
+      return await apiFetch(`/api/paper-sim/close-trade/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: 'manual_close' })
       });
-      if (!response.ok) throw new Error('Failed to close trade');
-      return response.json();
     },
     onSuccess: (result) => {
       const pnl = result?.pnl ?? 0;
@@ -445,12 +443,10 @@ export default function ActiveTradesV2() {
   
   const clearStrandedMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiFetch('/api/paper-sim/force-clear-stranded', { 
+      return await apiFetch('/api/paper-sim/force-clear-stranded', { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
-      if (!response.ok) throw new Error('Force clear failed');
-      return response.json();
     },
     onSuccess: (result) => {
       toast({

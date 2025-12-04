@@ -7745,7 +7745,18 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Get trades within range
       const allTrades = await storage.getPaperSimTrades('paper', {});
-      const trades = allTrades.filter(t => {
+      
+      // Phase 8.8.3-B3: Filter out ghost trades from analytics
+      // Ghost trades = closed trades without proper exit_price or close_reason
+      const validTrades = allTrades.filter(trade => {
+        // Only consider properly closed trades (have closedAt, exit_price, and close_reason)
+        if (!trade.closedAt) return false;
+        const hasExitPrice = trade.exitPrice && parseFloat(trade.exitPrice.toString()) > 0;
+        const hasCloseReason = trade.closeReason && trade.closeReason.trim() !== '';
+        return hasExitPrice && hasCloseReason;
+      });
+      
+      const trades = validTrades.filter(t => {
         const tradeTime = t.closedAt ? new Date(t.closedAt) : null;
         return tradeTime && tradeTime >= startTime;
       });
