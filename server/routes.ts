@@ -7108,47 +7108,15 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         console.log('[LATTI][Paper] Baseline mode: per_simulation');
         console.log('[LATTI][Paper] Baseline reset successfully');
         
-        // Phase 27.F.14.J: Reset guardrails, screener filters, and trading pace to defaults
-        console.log('[LATTI][Paper] Resetting guardrails and filters to baseline defaults...');
-        
-        // Reset guardrails to defaults (Phase 27.F.14.K: Fixed field names)
-        await storage.upsertGuardrails({
-          mode: 'paper',
-          maxDailyLoss: '150.00',
-          maxDrawdown: '10.00',
-          maxPositionSize: '10.00',
-          maxOpenPositions: 5,
-          riskPerTrade: '1.5',
-          maxRequiredCapital: '100000.00',
-          maxRiskPerTradeLimit: '1000.00',
-          aiCanAdjust: false,
-          lastUpdatedBy: userId
-        });
-        
-        // Reset screener filters to defaults (Phase 27.F.14.L: Fixed method name and payload)
-        await storage.upsertScreenerFilters({
-          mode: 'paper',
-          minVolume: '5000.00',
-          minLiquidity: '0.00',
-          maxBidAskSpread: '2.00',
-          minPrice: '0.01',
-          maxPrice: '10000.00',
-          volatilityMin: '0.50',
-          volatilityMax: '5.00',
-          rsiMin: 30,
-          rsiMax: 70,
-          minMarketCap: '100000000.00',
-          excludeStablecoins: true,
-          allowRegulatedOnly: false,
-          lastUpdatedBy: userId
-        });
+        // Phase 27.F.14.J: Reset trading pace to defaults (guardrails and filters preserved)
+        console.log('[LATTI][Paper] Resetting trading pace to baseline (preserving user guardrails and filters)...');
         
         // Reset trading pace to baseline
         await storage.updateSystemContext('paper', {
           tradingPace: 'baseline'
         });
         
-        console.log('[LATTI][Paper] Guardrails and filters reset to baseline defaults');
+        console.log('[LATTI][Paper] Trading pace reset to baseline (guardrails and filters preserved)');
         
         // Start the simulation
         const { startPaperSimulation } = await import('./services/paper-sim-service.js');

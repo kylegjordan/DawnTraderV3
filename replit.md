@@ -48,7 +48,7 @@ The Filter Insights UI uses REST data for Cycle Info and Last Scan Result. The b
 - Both diagnostic services (`aj19-max-position-diagnostic.ts`, `aj19b-lifecycle-diagnostic.ts`) installed but **disabled by default** (`isEnabled = false`)
 - `dryRunNoGuardrails` mode disabled by default - no guardrail bypass paths active
 - Fixed TypeScript error in `guardrail-settings.ts` return type (added `killSwitchTripped: boolean`)
-- Screener filter reset behavior documented: filters intentionally reset to defaults when starting a "New Simulation" via `POST /paper-sim/start` with `mode: 'new'`
+- **Removed automatic reset of guardrails and screener filters** when starting a "New Simulation" - user configurations are now preserved across simulation restarts
 
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
