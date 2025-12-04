@@ -146,6 +146,103 @@ export class LivePricingAdapter {
       source: cached.source
     };
   }
+  
+  /**
+   * Phase 8.8.3-B3.6: Update cache from WebSocket price tick
+   * Called by KrakenWebSocketAdapter when it receives a ticker update
+   */
+  updateFromWebSocket(symbol: string, price: number, timestamp: string, source: 'kraken' | 'mock' = 'kraken'): void {
+    const normalized = this.normalizeSymbol(symbol);
+    
+    // Update cache
+    this.priceCache.set(normalized, {
+      symbol: normalized,
+      price,
+      timestamp,
+      source: source as any,
+      cachedAt: Date.now()
+    });
+    
+    // Throttled broadcast
+    const lastBroadcast = this.lastBroadcastTime.get(normalized) || 0;
+    const now = Date.now();
+    
+    if (now - lastBroadcast >= this.BROADCAST_THROTTLE_MS) {
+      this.lastBroadcastTime.set(normalized, now);
+      
+      contextBridge.broadcast('price_updated', {
+        mode: 'paper',
+        symbol: normalized,
+        price,
+        timestamp,
+        source: 'kraken_ws'
+      });
+    }
+  }
+  
+  /**
+   * Phase 8.8.3-B3.6: Get price with REST fallback
+   * Prefer WebSocket cache, fallback to REST if cache is stale (>5 seconds)
+   */
+  async getPriceWithFallback(
+    symbol: string, 
+    restFetcher: () => Promise<number | null>,
+    staleMs: number = 5000
+  ): Promise<{ price: number | null; source: 'cache' | 'rest' | 'none'; age: number }> {
+    const normalized = this.normalizeSymbol(symbol);
+    const cached = this.priceCache.get(normalized);
+    
+    if (cached) {
+      const age = Date.now() - cached.cachedAt;
+      
+      // Cache is fresh - use it
+      if (age <= staleMs) {
+        return { price: cached.price, source: 'cache', age };
+      }
+      
+      // Cache is stale - try REST fallback
+      console.log(`[B3.6][Pricing] Cache stale for ${normalized} (${age}ms > ${staleMs}ms), fetching REST`);
+      try {
+        const restPrice = await restFetcher();
+        if (restPrice !== null) {
+          // Update cache with REST price
+          this.priceCache.set(normalized, {
+            symbol: normalized,
+            price: restPrice,
+            timestamp: new Date().toISOString(),
+            source: 'binance' as any,
+            cachedAt: Date.now()
+          });
+          return { price: restPrice, source: 'rest', age: 0 };
+        }
+      } catch (error) {
+        console.error(`[B3.6][Pricing] REST fallback failed for ${normalized}:`, error);
+      }
+      
+      // REST failed, return stale cache as last resort
+      return { price: cached.price, source: 'cache', age };
+    }
+    
+    // No cache at all - fetch from REST
+    console.log(`[B3.6][Pricing] No cache for ${normalized}, fetching REST`);
+    try {
+      const restPrice = await restFetcher();
+      if (restPrice !== null) {
+        this.priceCache.set(normalized, {
+          symbol: normalized,
+          price: restPrice,
+          timestamp: new Date().toISOString(),
+          source: 'binance' as any,
+          cachedAt: Date.now()
+        });
+        return { price: restPrice, source: 'rest', age: 0 };
+      }
+    } catch (error) {
+      console.error(`[B3.6][Pricing] REST fetch failed for ${normalized}:`, error);
+    }
+    
+    return { price: null, source: 'none', age: -1 };
+  }
 
   /**
    * Get all cached prices
@@ -397,6 +494,71 @@ export class LivePricingAdapter {
     return symbol.toUpperCase()
       .replace('USDT', 'USD')
       .replace(/([A-Z]{3,4})USD/, '$1/USD');
+  }
+
+  /**
+   * Phase 8.8.3-B3.6: Update price from WebSocket
+   * Called by KrakenWebSocketAdapter when real-time prices arrive
+   */
+  updateFromWebSocket(symbol: string, price: number, source: 'kraken_ws' | 'binance_ws' = 'kraken_ws'): void {
+    const normalized = this.normalizeSymbol(symbol);
+    const timestamp = new Date().toISOString();
+    
+    this.priceCache.set(normalized, {
+      symbol: normalized,
+      price,
+      timestamp,
+      source: source as any,
+      cachedAt: Date.now()
+    });
+    
+    if (!this.trackedSymbols.has(normalized)) {
+      this.trackedSymbols.add(normalized);
+    }
+  }
+
+  /**
+   * Phase 8.8.3-B3.6: Get price with REST fallback
+   * Returns cached price if fresh, otherwise attempts REST fetch
+   */
+  async getPriceWithFallback(symbol: string, staleThresholdMs: number = 5000): Promise<PriceQuote | null> {
+    const normalized = this.normalizeSymbol(symbol);
+    const cached = this.priceCache.get(normalized);
+    
+    if (cached) {
+      const age = Date.now() - cached.cachedAt;
+      if (age <= staleThresholdMs) {
+        return {
+          symbol: cached.symbol,
+          price: cached.price,
+          timestamp: cached.timestamp,
+          source: cached.source
+        };
+      }
+      console.log(`[27.F.15.D][Pricing] Cache stale for ${normalized} (age: ${age}ms > ${staleThresholdMs}ms), falling back to REST`);
+    }
+    
+    try {
+      await this.fetchPrice(normalized);
+      const updated = this.priceCache.get(normalized);
+      if (updated) {
+        return {
+          symbol: updated.symbol,
+          price: updated.price,
+          timestamp: updated.timestamp,
+          source: updated.source
+        };
+      }
+    } catch (error) {
+      console.error(`[27.F.15.D][Pricing] REST fallback failed for ${normalized}:`, error);
+    }
+    
+    return cached ? {
+      symbol: cached.symbol,
+      price: cached.price,
+      timestamp: cached.timestamp,
+      source: cached.source
+    } : null;
   }
 
   /**

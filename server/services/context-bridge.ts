@@ -6,7 +6,7 @@ import { sql } from 'drizzle-orm';
 import { appendFileSync } from 'fs';
 
 export interface ContextUpdate {
-  type: 'state_update' | 'chat_update' | 'config_update' | 'trade_update' | 'safety_event' | 'kill_switch_changed' | 'ethical_event' | 'ethics_federation_sync_complete' | 'ethics_conflict_updated' | 'trading_state_changed' | 'portfolio_balance_updated' | 'alerts_updated' | 'mode_status_updated' | 'metrics_updated' | 'price_updated' | 'guardrail.kill_switch.tripped' | 'guardrail.kill_switch.reset' | 'guardrail.override.conflict' | 'guardrail.policy.updated' | 'guardrails_updated' | 'tuning_policy_updated' | 'guardrail.override.changed' | 'guardrails_v2_updated' | 'goals_preset_changed' | 'trading_data_updated' | 'background_jobs_complete' | 'health_engine' | 'health_recovery' | 'trade_event' | 'scan_tick' | 'scanner:breakdown:paper' | 'scanner:breakdown:live';
+  type: 'state_update' | 'chat_update' | 'config_update' | 'trade_update' | 'safety_event' | 'kill_switch_changed' | 'ethical_event' | 'ethics_federation_sync_complete' | 'ethics_conflict_updated' | 'trading_state_changed' | 'portfolio_balance_updated' | 'alerts_updated' | 'mode_status_updated' | 'metrics_updated' | 'price_updated' | 'guardrail.kill_switch.tripped' | 'guardrail.kill_switch.reset' | 'guardrail.override.conflict' | 'guardrail.policy.updated' | 'guardrails_updated' | 'tuning_policy_updated' | 'guardrail.override.changed' | 'guardrails_v2_updated' | 'goals_preset_changed' | 'trading_data_updated' | 'background_jobs_complete' | 'health_engine' | 'health_recovery' | 'trade_event' | 'scan_tick' | 'scanner:breakdown:paper' | 'scanner:breakdown:live' | 'ws_price_engine';
   payload: any;
   timestamp: string;
   traceId: string;

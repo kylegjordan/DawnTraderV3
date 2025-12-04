@@ -6702,6 +6702,50 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ==================== Phase 8.8.3-B3.6: WebSocket Price Engine Diagnostics ====================
+  
+  // GET /api/diagnostics/ws-price-engine - Get WebSocket price engine diagnostics
+  apiRouter.get('/diagnostics/ws-price-engine', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      
+      const diagnostics = krakenWebSocketAdapter.getDiagnostics();
+      const includeRaw = req.query.raw === '1';
+      const priceLogs = includeRaw ? krakenWebSocketAdapter.getPriceLogs() : [];
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        wsConnected: diagnostics.wsConnected,
+        subscribedSymbols: diagnostics.subscribedSymbols,
+        lastUpdateBySymbol: diagnostics.lastUpdateBySymbol,
+        averageIntervalMs: diagnostics.averageIntervalMs,
+        maxIntervalMs: diagnostics.maxIntervalMs,
+        minIntervalMs: diagnostics.minIntervalMs,
+        staleSymbols: diagnostics.staleSymbols,
+        cacheSize: diagnostics.cacheSize,
+        cacheTTL: diagnostics.cacheTTL,
+        reconnectAttempts: diagnostics.reconnectAttempts,
+        lastPongAgeMs: diagnostics.lastPongAgeMs,
+        priceLogs: priceLogs,
+        priceLogCount: priceLogs.length,
+        health: {
+          isConnected: diagnostics.wsConnected,
+          hasStaleSymbols: diagnostics.staleSymbols.length > 0,
+          averageIntervalHealthy: diagnostics.averageIntervalMs > 0 && diagnostics.averageIntervalMs < 2000,
+          overall: diagnostics.wsConnected && diagnostics.staleSymbols.length === 0
+        }
+      });
+    } catch (error: any) {
+      console.error('[B3.6] Error fetching WS price engine diagnostics:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to fetch WebSocket price engine diagnostics',
+        message: error.message
+      });
+    }
+  });
+
   // POST /api/reb-2-12F/strategy-health - Run strategy health check (with mock data verification)
   apiRouter.post('/reb-2-12F/strategy-health', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {

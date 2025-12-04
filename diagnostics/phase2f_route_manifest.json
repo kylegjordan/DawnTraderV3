@@ -1654,6 +1654,16 @@
     ]
   },
   {
+    "path": "/api/diagnostics/ws-price-engine",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/reb-2-12F/strategy-health",
     "methods": [
       "POST"

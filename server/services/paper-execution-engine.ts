@@ -12,6 +12,8 @@ import { aj17DiagnosticRunner } from './aj17-diagnostic-runner';
 import { aj18Diagnostic } from './aj18-rtb-diagnostic';
 import { aj19bDiagnostic } from './aj19b-lifecycle-diagnostic';
 import { aj19Diagnostic } from './aj19-max-position-diagnostic';
+import { livePricingAdapter } from './live-pricing-adapter';
+import { krakenWebSocketAdapter } from './kraken-websocket-adapter';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail';
@@ -76,6 +78,22 @@ export class PaperExecutionEngine {
     aj18Diagnostic.startSession(this.mode);
     
     console.log(`[PaperExecution:${this.mode}] Starting paper trading engine`);
+
+    // Phase 8.8.3-B3.6: Start Kraken WebSocket adapter for real-time prices
+    try {
+      await krakenWebSocketAdapter.start();
+      console.log(`[PaperExecution:${this.mode}] Kraken WebSocket adapter started`);
+      
+      // Subscribe to symbols for existing open positions
+      const openPositions = await storage.getPaperSimOpenPositions(this.mode);
+      if (openPositions.length > 0) {
+        const symbols = openPositions.map(p => p.symbol);
+        krakenWebSocketAdapter.subscribeToSymbols(symbols);
+        console.log(`[PaperExecution:${this.mode}] Subscribed to ${symbols.length} open position symbols`);
+      }
+    } catch (error) {
+      console.error(`[PaperExecution:${this.mode}] WebSocket adapter start failed (continuing with REST fallback):`, error);
+    }
 
     // Broadcast engine start
     contextBridge.broadcast({
@@ -164,16 +182,30 @@ export class PaperExecutionEngine {
 
     for (const position of openPositions) {
       try {
-        // Fetch current price
-        const ticker = await this.krakenService.getTicker(position.symbol);
-        const tickerData = Object.values(ticker)[0];
+        // Phase 8.8.3-B3.6: Use WebSocket cache with REST fallback (5 second stale threshold)
+        const restFetcher = async (): Promise<number | null> => {
+          try {
+            const ticker = await this.krakenService.getTicker(position.symbol);
+            const tickerData = Object.values(ticker)[0];
+            if (!tickerData) return null;
+            return parseFloat(tickerData.c[0]);
+          } catch {
+            return null;
+          }
+        };
         
-        if (!tickerData) {
-          console.warn(`[PaperExecution:${this.mode}] No ticker data for ${position.symbol}`);
+        const priceResult = await livePricingAdapter.getPriceWithFallback(position.symbol, restFetcher, 5000);
+        
+        let currentPrice: number;
+        let priceSource: string;
+        
+        if (priceResult.price !== null) {
+          currentPrice = priceResult.price;
+          priceSource = priceResult.source === 'cache' ? 'ws_cache' : 'kraken_rest';
+        } else {
+          console.warn(`[PaperExecution:${this.mode}] No price data for ${position.symbol}`);
           continue;
         }
-
-        const currentPrice = parseFloat(tickerData.c[0]); // Current price
         
         // Phase 8.8.3-B3.5: Log PRICE_TICK for cadence verification
         const now = Date.now();
@@ -193,7 +225,7 @@ export class PaperExecutionEngine {
         }
         this.priceTickLogs.push(tickEntry);
         
-        console.log(`[PRICE_TICK] symbol=${position.symbol} refreshed_at=${tickEntry.refreshedAt} diff_ms=${diffMs}`);
+        console.log(`[PRICE_TICK] symbol=${position.symbol} refreshed_at=${tickEntry.refreshedAt} diff_ms=${diffMs} source=${priceSource}`);
         const avgPrice = parseFloat(position.avgPrice);
         const stopLoss = position.stopLoss ? parseFloat(position.stopLoss) : null;
         const takeProfit = position.takeProfit ? parseFloat(position.takeProfit) : null;

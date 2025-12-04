@@ -385,23 +385,42 @@ export default function ActiveTradesV2() {
   const [sortField, setSortField] = useState<SortField>('slotNumber');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   
+  // Phase 8.8.3-B3.6: Local state for real-time price updates from WebSocket
+  const [livePrices, setLivePrices] = useState<Record<string, { price: number; timestamp: string }>>({});
+  const [wsConnectionStatus, setWsConnectionStatus] = useState<'connected' | 'disconnected'>('disconnected');
+  
   const { data, isLoading, refetch } = useQuery<ActiveTradesResponse>({
     queryKey: ['/api/paper-sim/active-trades'],
     enabled: isPaper,
-    refetchInterval: 1500, // Phase 8.8.3-B3.5: 1.5 second refresh for real-time pricing
+    refetchInterval: 10000, // Phase 8.8.3-B3.6: 10 second refresh for metadata only (prices from WS)
     refetchIntervalInBackground: true, // Continue refreshing even when tab is not focused
-    staleTime: 1000, // Mark data as stale after 1 second
+    staleTime: 5000, // Mark data as stale after 5 seconds
     refetchOnWindowFocus: true
   });
   
-  // Phase 8.8.3-B1: WebSocket subscription for real-time updates
+  // Phase 8.8.3-B3.6: WebSocket subscription for real-time price updates
   useEffect(() => {
     if (!isPaper || messages.length === 0) return;
     
     const lastMessage = messages[messages.length - 1];
     
-    // Listen for trade-related WebSocket events
-    // Phase 8.8.3-B3.5: Added price_update for real-time price refresh
+    // Handle price_updated events for real-time price display (no full refetch needed)
+    if (lastMessage.type === 'price_updated' && lastMessage.payload?.symbol) {
+      const { symbol, price, timestamp } = lastMessage.payload;
+      setLivePrices(prev => ({
+        ...prev,
+        [symbol]: { price, timestamp }
+      }));
+      return; // Don't trigger full refetch for price updates
+    }
+    
+    // Handle WebSocket price engine status updates
+    if (lastMessage.type === 'ws_price_engine') {
+      setWsConnectionStatus(lastMessage.payload?.status === 'connected' ? 'connected' : 'disconnected');
+      return;
+    }
+    
+    // Listen for trade-related WebSocket events that require full refetch
     const tradeEventTypes = [
       'active_trade_closed',
       'trade_opened',
@@ -409,8 +428,7 @@ export default function ActiveTradesV2() {
       'position_update',
       'paper_trade_executed',
       'trading_state_changed',
-      'scan_tick',
-      'price_update' // B3.5: Invalidate on price updates for instant refresh
+      'scan_tick'
     ];
     
     if (tradeEventTypes.includes(lastMessage.type)) {
@@ -476,10 +494,37 @@ export default function ActiveTradesV2() {
     }
   };
   
-  const sortedPositions = useMemo(() => {
+  // Phase 8.8.3-B3.6: Merge live prices from WebSocket with REST data
+  const positionsWithLivePrices = useMemo(() => {
     if (!data?.positions) return [];
     
-    return [...data.positions].sort((a, b) => {
+    return data.positions.map(position => {
+      const livePrice = livePrices[position.symbol];
+      if (livePrice) {
+        // Update price and recalculate P/L
+        const newCurrentPrice = livePrice.price;
+        const newPnl = (newCurrentPrice - position.entryPrice) * position.quantity;
+        const newPnlPercent = ((newCurrentPrice - position.entryPrice) / position.entryPrice) * 100;
+        const newHealth = newPnlPercent > 1 ? 'green' : newPnlPercent < -1 ? 'red' : 'yellow';
+        
+        return {
+          ...position,
+          currentPrice: newCurrentPrice,
+          unrealizedPnl: newPnl,
+          unrealizedPnlPercent: newPnlPercent,
+          health: newHealth as 'green' | 'yellow' | 'red',
+          distanceToTP: position.takeProfit - newCurrentPrice,
+          distanceToSL: newCurrentPrice - position.stopLoss
+        };
+      }
+      return position;
+    });
+  }, [data?.positions, livePrices]);
+  
+  const sortedPositions = useMemo(() => {
+    if (!positionsWithLivePrices.length) return [];
+    
+    return [...positionsWithLivePrices].sort((a, b) => {
       let aVal: any = a[sortField];
       let bVal: any = b[sortField];
       
@@ -498,7 +543,7 @@ export default function ActiveTradesV2() {
       if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [data?.positions, sortField, sortDirection]);
+  }, [positionsWithLivePrices, sortField, sortDirection]);
 
   if (!isPaper) {
     return (
