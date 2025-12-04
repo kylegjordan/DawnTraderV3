@@ -159,8 +159,13 @@ function TradeRow({
     ? trade.symbol.split('/') 
     : [trade.symbol.slice(0, 3), trade.symbol.slice(3)];
 
+  // Calculate distance as actual value (price difference), not percentage
+  const distanceToTPValue = trade.takeProfit - trade.currentPrice;
+  const distanceToSLValue = trade.currentPrice - trade.stopLoss;
+
   return (
     <tr className="transition-colors hover:bg-muted/30 border-b border-border/50">
+      {/* 1. Symbol */}
       <td className="px-3 py-3">
         <div className="flex items-center gap-2">
           <HealthIndicator health={trade.health} />
@@ -170,51 +175,19 @@ function TradeRow({
         </div>
       </td>
       
+      {/* 2. Strategy */}
       <td className="px-3 py-3">
         <Badge className={cn("text-xs font-medium", strategyColors[trade.strategy] || "bg-gray-500/10 text-gray-600")}>
           {strategyNames[trade.strategy] || trade.strategy}
         </Badge>
       </td>
       
+      {/* 3. Entry */}
       <td className="px-3 py-3">
         <div className="font-mono text-sm">${trade.entryPrice.toFixed(6)}</div>
       </td>
       
-      <td className="px-3 py-3">
-        <div className={cn(
-          "font-mono text-sm font-medium",
-          trade.currentPrice > trade.entryPrice ? "text-green-600" : 
-          trade.currentPrice < trade.entryPrice ? "text-red-600" : "text-muted-foreground"
-        )}>
-          ${trade.currentPrice.toFixed(6)}
-        </div>
-      </td>
-      
-      <td className="px-3 py-3">
-        <div className={cn(
-          "font-mono text-sm font-semibold",
-          trade.unrealizedPnlPercent >= 0 ? "text-green-600" : "text-red-600"
-        )}>
-          {trade.unrealizedPnlPercent >= 0 ? '+' : ''}{trade.unrealizedPnlPercent.toFixed(2)}%
-        </div>
-      </td>
-      
-      <td className="px-3 py-3">
-        <div className={cn(
-          "font-mono text-sm font-semibold",
-          trade.unrealizedPnl >= 0 ? "text-green-600" : "text-red-600"
-        )}>
-          {trade.unrealizedPnl >= 0 ? '+' : ''}${trade.unrealizedPnl.toFixed(2)}
-        </div>
-      </td>
-      
-      <td className="px-3 py-3">
-        <div className="flex items-center gap-1 text-sm text-muted-foreground">
-          <Clock className="w-3 h-3" />
-          {formatDuration(trade.holdingDurationMs)}
-        </div>
-      </td>
-      
+      {/* 4. TP / SL (stacked) */}
       <td className="px-3 py-3">
         <div className="text-xs space-y-0.5">
           <div className="flex items-center gap-1">
@@ -228,23 +201,65 @@ function TradeRow({
         </div>
       </td>
       
+      {/* 5. Current Price */}
+      <td className="px-3 py-3">
+        <div className={cn(
+          "font-mono text-sm font-medium",
+          trade.currentPrice > trade.entryPrice ? "text-green-600" : 
+          trade.currentPrice < trade.entryPrice ? "text-red-600" : "text-muted-foreground"
+        )}>
+          ${trade.currentPrice.toFixed(6)}
+        </div>
+      </td>
+      
+      {/* 6. Distance to TP / SL (as actual values) */}
       <td className="px-3 py-3">
         <div className="text-xs space-y-0.5">
-          <div className={cn("font-mono", trade.distanceToTP > 0 ? "text-green-600" : "text-muted-foreground")}>
-            TP: {trade.distanceToTP >= 0 ? '+' : ''}{trade.distanceToTP.toFixed(2)}%
+          <div className={cn("font-mono", distanceToTPValue > 0 ? "text-green-600" : "text-muted-foreground")}>
+            TP: {distanceToTPValue >= 0 ? '+' : ''}${distanceToTPValue.toFixed(4)}
           </div>
-          <div className={cn("font-mono", trade.distanceToSL > 0 ? "text-red-600" : "text-muted-foreground")}>
-            SL: {trade.distanceToSL >= 0 ? '+' : ''}{trade.distanceToSL.toFixed(2)}%
+          <div className={cn("font-mono", distanceToSLValue > 0 ? "text-green-600" : "text-red-600")}>
+            SL: {distanceToSLValue >= 0 ? '+' : ''}${distanceToSLValue.toFixed(4)}
           </div>
         </div>
       </td>
       
+      {/* 7. P/L ($) - FIRST */}
+      <td className="px-3 py-3">
+        <div className={cn(
+          "font-mono text-sm font-semibold",
+          trade.unrealizedPnl >= 0 ? "text-green-600" : "text-red-600"
+        )}>
+          {trade.unrealizedPnl >= 0 ? '+' : ''}${trade.unrealizedPnl.toFixed(2)}
+        </div>
+      </td>
+      
+      {/* 8. P/L (%) */}
+      <td className="px-3 py-3">
+        <div className={cn(
+          "font-mono text-sm font-semibold",
+          trade.unrealizedPnlPercent >= 0 ? "text-green-600" : "text-red-600"
+        )}>
+          {trade.unrealizedPnlPercent >= 0 ? '+' : ''}{trade.unrealizedPnlPercent.toFixed(2)}%
+        </div>
+      </td>
+      
+      {/* 9. Duration */}
+      <td className="px-3 py-3">
+        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+          <Clock className="w-3 h-3" />
+          {formatDuration(trade.holdingDurationMs)}
+        </div>
+      </td>
+      
+      {/* 10. Slot */}
       <td className="px-3 py-3">
         <Badge variant="outline" className="font-mono text-xs">
           {trade.slotNumber}/{trade.maxSlots}
         </Badge>
       </td>
       
+      {/* 11. Actions */}
       <td className="px-3 py-3">
         <Button
           size="sm"
@@ -265,12 +280,16 @@ function IntegrityBanner({
   integrity, 
   uiCount, 
   onClearStranded,
-  isClearing
+  onSyncCounts,
+  isClearing,
+  isSyncing
 }: { 
   integrity: IntegrityStatus; 
   uiCount: number;
   onClearStranded: () => void;
+  onSyncCounts: () => void;
   isClearing: boolean;
+  isSyncing: boolean;
 }) {
   const isMismatch = integrity.systemCount !== uiCount;
   const status = isMismatch ? 'MISMATCH' : integrity.status;
@@ -311,28 +330,38 @@ function IntegrityBanner({
               <span className="text-sm font-medium">Status: OK</span>
             </div>
           ) : status === 'MISMATCH' ? (
-            <>
-              <div className="flex items-center gap-2 text-yellow-600">
-                <AlertTriangle className="w-4 h-4" />
-                <span className="text-sm font-medium">MISMATCH - Possible Stranded Trade</span>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={onClearStranded}
-                disabled={isClearing}
-                className="text-xs"
-              >
-                {isClearing ? <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> : <Trash2 className="w-3 h-3 mr-1" />}
-                Clear Stranded
-              </Button>
-            </>
+            <div className="flex items-center gap-2 text-yellow-600">
+              <AlertTriangle className="w-4 h-4" />
+              <span className="text-sm font-medium">MISMATCH - Possible Stranded Trade</span>
+            </div>
           ) : (
             <div className="flex items-center gap-2 text-red-600">
               <AlertTriangle className="w-4 h-4" />
               <span className="text-sm font-medium">OVER LIMIT</span>
             </div>
           )}
+          
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onSyncCounts}
+            disabled={isSyncing}
+            className="text-xs"
+          >
+            {isSyncing ? <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> : <RefreshCw className="w-3 h-3 mr-1" />}
+            Sync Counts
+          </Button>
+          
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onClearStranded}
+            disabled={isClearing}
+            className="text-xs border-red-200 text-red-600 hover:bg-red-50"
+          >
+            {isClearing ? <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> : <Trash2 className="w-3 h-3 mr-1" />}
+            Clear Stranded
+          </Button>
         </div>
       </div>
     </div>
@@ -407,18 +436,17 @@ export default function ActiveTradesV2() {
   
   const clearStrandedMutation = useMutation({
     mutationFn: async () => {
-      const reconcileResponse = await apiFetch('/api/diagnostics/aj19b/reconcile', { method: 'POST' });
-      if (!reconcileResponse.ok) throw new Error('Reconcile failed');
-      
-      const clearResponse = await apiFetch('/api/diagnostics/aj19b/force-clear', { method: 'POST' });
-      if (!clearResponse.ok) throw new Error('Force clear failed');
-      
-      return { reconcile: await reconcileResponse.json(), clear: await clearResponse.json() };
+      const response = await apiFetch('/api/paper-sim/force-clear-stranded', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (!response.ok) throw new Error('Force clear failed');
+      return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       toast({
         title: "Stranded Trades Cleared",
-        description: "Integrity check complete",
+        description: result.message || `Cleared ${result.clearedCount || 0} stranded trades`,
       });
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/active-trades'] });
     },
@@ -427,6 +455,19 @@ export default function ActiveTradesV2() {
         title: "Error",
         description: "Failed to clear stranded trades",
         variant: "destructive",
+      });
+    }
+  });
+  
+  const syncCountsMutation = useMutation({
+    mutationFn: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/active-trades'] });
+      return refetch();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Counts Synced",
+        description: "UI synced with system state",
       });
     }
   });
@@ -506,15 +547,6 @@ export default function ActiveTradesV2() {
             {isConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
             <span>{isConnected ? "Live" : "Offline"}</span>
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => refetch()}
-            className="text-xs"
-          >
-            <RefreshCw className="w-3 h-3 mr-1" />
-            Refresh
-          </Button>
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-blue-500/10">
             <Beaker className="w-4 h-4 text-blue-600 dark:text-blue-400" />
             <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
@@ -528,7 +560,9 @@ export default function ActiveTradesV2() {
         integrity={integrity} 
         uiCount={positions.length}
         onClearStranded={() => clearStrandedMutation.mutate()}
+        onSyncCounts={() => syncCountsMutation.mutate()}
         isClearing={clearStrandedMutation.isPending}
+        isSyncing={syncCountsMutation.isPending}
       />
       
       <Card className="rounded-xl border shadow-sm overflow-hidden">
@@ -548,12 +582,12 @@ export default function ActiveTradesV2() {
                   <SortableHeader field="symbol" label="Symbol" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="strategy" label="Strategy" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="entryPrice" label="Entry" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <SortableHeader field="currentPrice" label="Current" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <SortableHeader field="unrealizedPnlPercent" label="P/L %" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <SortableHeader field="unrealizedPnl" label="P/L $" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <SortableHeader field="holdingDurationMs" label="Duration" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">TP / SL</th>
+                  <SortableHeader field="currentPrice" label="Current" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="distanceToTP" label="Distance" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortableHeader field="unrealizedPnl" label="P/L $" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortableHeader field="unrealizedPnlPercent" label="P/L %" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortableHeader field="holdingDurationMs" label="Duration" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="slotNumber" label="Slot" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
                 </tr>

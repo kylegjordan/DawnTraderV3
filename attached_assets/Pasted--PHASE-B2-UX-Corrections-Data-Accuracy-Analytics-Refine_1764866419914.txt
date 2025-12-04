@@ -1,0 +1,300 @@
+✅ **PHASE B2 — UX Corrections, Data Accuracy, Analytics Refinements & Tab Order
+
+(Final Directive for Replit)**
+
+Context:
+Phase B1 delivered the new Active Trades panel, Integrity Banner, manual-close, and 24h analytics. Phase B2 focuses on corrections, refinements, and ensuring accurate behavior across the UI and backend.
+
+📌 PART 1 — Active Trades Table Refinements
+1. Column Order Update (KEEP stacked TP/SL and stacked Distance)
+
+Please reorder all columns to the following sequence:
+
+Symbol
+
+Strategy
+
+Entry
+
+TP / SL (stacked — KEEP current visual)
+
+Current Price
+
+Distance to TP / SL
+
+Important change: Distance must be shown as actual values, not percentages.
+
+P/L ($)
+
+P/L (%)
+
+Switch order: show dollar PL FIRST, percent second.
+
+Duration
+
+Slot (e.g., 4/15)
+
+Actions (Close button)
+
+📌 PART 2 — Current Price Must Update at Engine Cadence
+2. Ensure backend & UI current_price updates match exit-check cadence
+
+Right now the UI shows static prices for 60+ seconds. This is not acceptable.
+
+Required:
+
+A. Backend must update each open position’s current_price each time exit conditions are evaluated.
+
+If exit checks run every 10 seconds → update prices every 10 seconds.
+
+B. UI must update current price using:
+
+WebSocket (primary)
+
+Polling fallback every ≤10 seconds
+
+C. Add backend debug logging showing:
+
+timestamp
+
+symbol
+
+previous price
+
+new price
+
+(This will validate that prices are actually changing.)
+
+📌 PART 3 — Integrity Banner Corrections
+3. The “Clear Stranded” button must appear and function
+
+Ensure it renders next to status indicator.
+
+Calls: POST /api/paper-sim/force-clear-stranded
+
+Show success/failure UI feedback.
+
+4. Rename or relocate the “Refresh” button
+
+If its function is to resync UI counts vs system counts →
+Rename to “Sync Counts” and move inside the Integrity Banner.
+
+If it merely reloads data → relabel for clarity.
+
+If unused → remove it.
+
+📌 PART 4 — Ready-to-Buy Signal Logic Fix
+5. MAX_POSITION block reason fires incorrectly
+
+MAX_POSITION should fire only when actual open trades = guardrail max.
+
+Required diagnostics:
+
+Log every Max Position rejection with values for:
+
+activePositionsCount
+
+guardrailMax
+
+slotsAvailable
+
+symbol
+
+Verify count logic reads from V3 table:
+paper_sim_open_positions
+
+Remove any latent references to legacy table paper_trades.
+
+📌 PART 5 — Trade History Tab Improvements
+
+The Trade History tab is the correct location for all analytics — but requires enhancements.
+
+A. Replace “100 Trades” header with: “Trade History”
+
+(Always show all trades unless filters apply.)
+
+B. Add timestamps to BOTH Opened At and Closed At
+
+Not just dates.
+
+We need accurate session-by-session visibility.
+
+C. New Required Analytics Metrics
+Add these two key metrics at the top of the analytics panel:
+1. Average Profit % Per Trade
+
+Formula:
+(sum of P/L %) / (total number of trades)
+
+2. Average Daily Profit %
+
+Definition:
+Total net P/L % / number of trading days represented in the filter.
+
+Both metrics should appear in Tier 1 alongside Win Rate and Net P/L.
+
+D. Reorganize Analytics Cards by Priority
+Tier 1: Primary Indicators (Top Row)
+
+Total Trades
+
+Win Rate
+
+Net P/L
+
+Avg Profit % per Trade (new)
+
+Avg Daily Profit % (new)
+
+Profit Factor
+
+Avg Hold Time
+
+Median Hold
+
+Tier 2: Secondary Indicators
+
+Closed at TP
+
+Closed at SL
+
+Manual Close
+
+Avg Profit $
+
+Avg Loss $
+
+Best/Worst Trade
+
+E. Strategy Performance Cards
+
+All nine strategies must always appear, even if their values are zero.
+
+Show:
+
+trades
+
+WR
+
+Net P/L
+
+No strategy card should ever disappear.
+
+F. Refresh Button (in Analytics Panel)
+
+Make sure it refreshes:
+
+aggregated metrics
+
+strategy metrics
+
+trade history list
+
+timestamps
+
+win/loss counts
+
+close reasons
+
+If not functional → fix.
+If unnecessary → remove.
+
+G. Default Date Range Behavior
+
+Add a new filter option:
+
+“Since Last Simulation Start” (DEFAULT)
+
+Simulation start timestamp should be stored and used for analytics queries.
+
+Other options remain:
+
+Last 1 hour
+
+Last 24 hours
+
+Last 30 days
+
+All time
+
+📌 PART 6 — Manual Close Button Reliability Fix
+6. Manual Close must consistently work
+
+Errors like “Failed to close trade” must be resolved.
+
+Required steps:
+
+For every manual-close attempt, log:
+
+symbol
+
+active position ID
+
+strategy
+
+current_price
+
+exit logic selected
+
+DB state before/after
+
+Confirm the correct V3 close routine is used:
+closePaperSimPosition
+
+Record exit_reason = "manual_close"
+
+Ensure exit_price = most recent current_price
+
+Remove the row from paper_sim_open_positions
+
+Insert into paper_sim_trades correctly
+
+UI must update immediately on success.
+
+📌 PART 7 — Tab Order Correction
+7. Reorder Trading Tabs to reflect the real funnel
+
+From left → right:
+
+Filter Insights
+
+Ready to Buy
+
+Open Trades
+
+Trade History
+
+(The natural processing flow should guide UI navigation.)
+
+📌 PART 8 — VWAP Target Bug (Schedule Only)
+8. DO NOT FIX NOW. Move to Phase D.
+
+But maintain a placeholder reminder:
+
+Strategy-engine uses Math.min() incorrectly
+
+Can generate targets below entry price
+
+Causes inverted exits and false target-hits
+
+This will require systematic review of all VWAP branches.
+
+📌 Final Deliverables for B2
+
+Replit should deliver:
+
+✔ Reordered Active Trades table
+✔ Distance shown as numeric value
+✔ Dollar PL displayed before % PL
+✔ Fast, accurate current_price updates
+✔ Integrity Banner fully operational with Clear Stranded button
+✔ Correct RTB block logic
+✔ Improved Trade History analytics
+✔ New Avg Profit % per Trade
+✔ New Avg Daily Profit %
+✔ Fixed header (“Trade History”)
+✔ Added timestamps
+✔ Strategy cards always shown
+✔ Working manual-close button
+✔ Updated tab order
+✔ Updated refresh functions

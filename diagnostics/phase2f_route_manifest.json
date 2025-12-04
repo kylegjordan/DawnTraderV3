@@ -1814,6 +1814,16 @@
     ]
   },
   {
+    "path": "/api/paper-sim/force-clear-stranded",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/paper-sim/trades/analytics",
     "methods": [
       "GET"

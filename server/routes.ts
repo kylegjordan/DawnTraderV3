@@ -7521,24 +7521,106 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Phase 8.8.3-B1: 24h Trade History Analytics endpoint
+  // Phase 8.8.3-B2: Force clear all stranded trades endpoint
+  apiRouter.post('/paper-sim/force-clear-stranded', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      
+      // Get all open positions
+      const positions = await storage.getPaperSimOpenPositions('paper');
+      
+      if (positions.length === 0) {
+        return res.json({ ok: true, message: 'No stranded trades to clear', clearedCount: 0 });
+      }
+      
+      console.log(`[B2-ClearStranded] Clearing ${positions.length} stranded positions for user ${userId}`);
+      
+      // Close each position and move to trade history
+      let clearedCount = 0;
+      for (const position of positions) {
+        try {
+          const entryPrice = parseFloat(position.avgPrice?.toString() || '0');
+          const currentPrice = parseFloat(position.currentPrice?.toString() || entryPrice.toString());
+          const quantity = parseFloat(position.quantity?.toString() || '0');
+          const pnl = (currentPrice - entryPrice) * quantity;
+          const pnlPercent = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice) * 100 : 0;
+          
+          // Create closed trade record
+          await storage.createPaperSimTrade('paper', {
+            id: position.id,
+            symbol: position.symbol,
+            strategyName: position.strategyName,
+            side: position.side,
+            quantity: position.quantity?.toString() || '0',
+            entryPrice: position.avgPrice?.toString() || '0',
+            exitPrice: currentPrice.toString(),
+            stopLoss: position.stopLoss?.toString(),
+            takeProfit: position.takeProfit?.toString(),
+            pnl: pnl.toString(),
+            pnlPercent: pnlPercent.toString(),
+            fees: '0',
+            slippage: '0',
+            openedAt: position.openedAt,
+            closedAt: new Date(),
+            closeReason: 'stranded_clear',
+            confidence: position.confidence?.toString(),
+            metadata: position.metadata
+          });
+          
+          // Delete from open positions
+          await storage.deletePaperSimOpenPosition('paper', position.id);
+          clearedCount++;
+          
+          console.log(`[B2-ClearStranded] Cleared position ${position.symbol} (${position.id})`);
+        } catch (posError) {
+          console.error(`[B2-ClearStranded] Error clearing position ${position.id}:`, posError);
+        }
+      }
+      
+      // Broadcast update
+      broadcastToAll({
+        type: 'stranded_trades_cleared',
+        data: { clearedCount, userId }
+      });
+      
+      res.json({ ok: true, message: `Cleared ${clearedCount} stranded trades`, clearedCount });
+    } catch (error) {
+      console.error('[B2-ClearStranded] Error clearing stranded trades:', error);
+      res.status(500).json({ ok: false, error: 'Failed to clear stranded trades' });
+    }
+  });
+
+  // Phase 8.8.3-B1/B2: Trade History Analytics endpoint with new metrics
   apiRouter.get('/paper-sim/trades/analytics', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const { range = '24h' } = req.query;
+      const { range = 'session' } = req.query;
       
       // Calculate time range
       const now = new Date();
       let startTime: Date;
-      switch (range) {
-        case '1h': startTime = new Date(now.getTime() - 60 * 60 * 1000); break;
-        case '6h': startTime = new Date(now.getTime() - 6 * 60 * 60 * 1000); break;
-        case '12h': startTime = new Date(now.getTime() - 12 * 60 * 60 * 1000); break;
-        case '24h': startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000); break;
-        case '7d': startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); break;
-        case '30d': startTime = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); break;
-        case 'all': startTime = new Date(0); break;
-        default: startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      
+      // B2: Handle "session" range - since last simulation start
+      if (range === 'session') {
+        // Try to get last engine session start from storage
+        const sessionState = await storage.getEngineState('paper').catch(() => null);
+        if (sessionState?.lastSessionStart) {
+          startTime = new Date(sessionState.lastSessionStart);
+        } else {
+          // Fallback to last 24h if no session info
+          startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        }
+      } else {
+        switch (range) {
+          case '1h': startTime = new Date(now.getTime() - 60 * 60 * 1000); break;
+          case '6h': startTime = new Date(now.getTime() - 6 * 60 * 60 * 1000); break;
+          case '12h': startTime = new Date(now.getTime() - 12 * 60 * 60 * 1000); break;
+          case '24h': startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000); break;
+          case '7d': startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); break;
+          case '30d': startTime = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); break;
+          case 'all': startTime = new Date(0); break;
+          default: startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        }
       }
       
       // Get trades within range
@@ -7562,6 +7644,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             avgLoss: 0,
             netPnl: 0,
             netPnlPercent: 0,
+            avgProfitPercent: 0,
+            avgDailyProfitPercent: 0,
             avgHoldingTime: 0,
             medianHoldingTime: 0,
             profitFactor: 0,
@@ -7605,6 +7689,19 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         sortedHoldingTimes[Math.floor(sortedHoldingTimes.length / 2)] : 0;
       
       const profitFactor = totalLoss > 0 ? totalProfit / totalLoss : totalProfit > 0 ? Infinity : 0;
+      
+      // B2: Calculate Avg Profit % per Trade
+      const totalPnlPercent = trades.reduce((sum, t) => sum + parseFloat(t.pnlPercent?.toString() || '0'), 0);
+      const avgProfitPercent = trades.length > 0 ? totalPnlPercent / trades.length : 0;
+      
+      // B2: Calculate Avg Daily Profit %
+      // Get unique trading days in the range
+      const tradingDays = new Set(trades.map(t => {
+        const d = t.closedAt ? new Date(t.closedAt) : new Date();
+        return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      }));
+      const numDays = Math.max(1, tradingDays.size);
+      const avgDailyProfitPercent = totalPnlPercent / numDays;
       
       // By strategy
       const byStrategy: Record<string, { count: number; pnl: number; winRate: number }> = {};
@@ -7654,6 +7751,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           avgLoss,
           netPnl,
           netPnlPercent: 0, // Would need starting balance to calculate
+          avgProfitPercent, // B2: New metric
+          avgDailyProfitPercent, // B2: New metric
           avgHoldingTime,
           medianHoldingTime,
           profitFactor: isFinite(profitFactor) ? profitFactor : 0,

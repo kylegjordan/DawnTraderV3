@@ -68,7 +68,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 // Functionality consolidated into Filter Insights tab as per Phase 8.7 final design
 
 function TradingPageContent() {
-  const [activeTab, setActiveTab] = useState("open");
+  const [activeTab, setActiveTab] = useState("insights"); // B2: Default to Filter Insights (first in funnel)
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6" data-testid="trading-page">
@@ -85,22 +85,23 @@ function TradingPageContent() {
         </p>
       </div>
 
+      {/* B2: Tab order changed to reflect natural trading funnel: Filter → Ready → Open → History */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-4" data-testid="trading-tabs">
-          <TabsTrigger value="open" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-open-trades">
-            <BarChart3 className="w-3 h-3 sm:w-4 sm:h-4" />
-            <span className="hidden xs:inline">Open Trades</span>
-            <span className="xs:hidden">Open</span>
+          <TabsTrigger value="insights" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-filter-insights">
+            <Lightbulb className="w-3 h-3 sm:w-4 sm:h-4" />
+            <span className="hidden xs:inline">Filter Insights</span>
+            <span className="xs:hidden">Insights</span>
           </TabsTrigger>
           <TabsTrigger value="ready" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-ready-to-buy">
             <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4" />
             <span className="hidden xs:inline">Ready to Buy</span>
             <span className="xs:hidden">Ready</span>
           </TabsTrigger>
-          <TabsTrigger value="insights" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-filter-insights">
-            <Lightbulb className="w-3 h-3 sm:w-4 sm:h-4" />
-            <span className="hidden xs:inline">Filter Insights</span>
-            <span className="xs:hidden">Insights</span>
+          <TabsTrigger value="open" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-open-trades">
+            <BarChart3 className="w-3 h-3 sm:w-4 sm:h-4" />
+            <span className="hidden xs:inline">Open Trades</span>
+            <span className="xs:hidden">Open</span>
           </TabsTrigger>
           <TabsTrigger value="history" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-trade-history">
             <History className="w-3 h-3 sm:w-4 sm:h-4" />
@@ -109,8 +110,8 @@ function TradingPageContent() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="open" className="mt-6">
-          <ActiveTradesV2 />
+        <TabsContent value="insights" className="mt-6">
+          <FilterInsights />
         </TabsContent>
 
         <TabsContent value="ready" className="mt-6">
@@ -118,8 +119,8 @@ function TradingPageContent() {
           <ExecutionMetricsPanel />
         </TabsContent>
 
-        <TabsContent value="insights" className="mt-6">
-          <FilterInsights />
+        <TabsContent value="open" className="mt-6">
+          <ActiveTradesV2 />
         </TabsContent>
 
         <TabsContent value="history" className="mt-6">

@@ -27,7 +27,9 @@ const strategyColors: Record<string, string> = {
   vwap_bounce: "bg-blue-500/10 text-blue-600",
   dhma: "bg-purple-500/10 text-purple-600",
   breakout: "bg-orange-500/10 text-orange-600",
-  mean_reversion: "bg-green-500/10 text-green-600"
+  mean_reversion: "bg-green-500/10 text-green-600",
+  range_trading: "bg-cyan-500/10 text-cyan-600",
+  liquidity_trap: "bg-rose-500/10 text-rose-600"
 };
 
 const strategyNames: Record<string, string> = {
@@ -37,8 +39,16 @@ const strategyNames: Record<string, string> = {
   vwap_bounce: "VWAP Bounce",
   dhma: "DHMA",
   breakout: "Breakout",
-  mean_reversion: "Mean Reversion"
+  mean_reversion: "Mean Reversion",
+  range_trading: "Range Trading",
+  liquidity_trap: "Liquidity Trap"
 };
+
+// All 9 strategies that should always be displayed
+const ALL_STRATEGIES = [
+  'vwap_pullback', 'abcd_long', 'sma_trend_ride', 'vwap_bounce', 
+  'dhma', 'breakout', 'mean_reversion', 'range_trading', 'liquidity_trap'
+];
 
 interface Analytics {
   totalOpened: number;
@@ -50,6 +60,8 @@ interface Analytics {
   avgLoss: number;
   netPnl: number;
   netPnlPercent: number;
+  avgProfitPercent: number; // B2: New - Avg Profit % per Trade
+  avgDailyProfitPercent: number; // B2: New - Avg Daily Profit %
   avgHoldingTime: number;
   medianHoldingTime: number;
   profitFactor: number;
@@ -171,99 +183,124 @@ function AnalyticsPanel({ range }: { range: string }) {
         </div>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 mb-6">
-          <MetricCard 
-            title="Total Trades" 
-            value={analytics.totalOpened}
-            icon={BarChart3}
-          />
-          <MetricCard 
-            title="Closed at TP" 
-            value={analytics.closedAtTP.count}
-            subValue={`${analytics.closedAtTP.percent.toFixed(1)}%`}
-            icon={Target}
-            trend="up"
-          />
-          <MetricCard 
-            title="Closed at SL" 
-            value={analytics.closedAtSL.count}
-            subValue={`${analytics.closedAtSL.percent.toFixed(1)}%`}
-            icon={Shield}
-            trend="down"
-          />
-          <MetricCard 
-            title="Manual Close" 
-            value={analytics.closedManually.count}
-            subValue={`${analytics.closedManually.percent.toFixed(1)}%`}
-          />
-          <MetricCard 
-            title="Win Rate" 
-            value={`${analytics.winRate.toFixed(1)}%`}
-            trend={analytics.winRate >= 50 ? 'up' : 'down'}
-          />
-          <MetricCard 
-            title="Net P/L" 
-            value={`${analytics.netPnl >= 0 ? '+' : ''}$${analytics.netPnl.toFixed(2)}`}
-            trend={analytics.netPnl >= 0 ? 'up' : 'down'}
-          />
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 mb-6">
-          <MetricCard 
-            title="Avg Profit" 
-            value={`+$${analytics.avgProfit.toFixed(2)}`}
-            icon={TrendingUp}
-            trend="up"
-          />
-          <MetricCard 
-            title="Avg Loss" 
-            value={`-$${analytics.avgLoss.toFixed(2)}`}
-            icon={TrendingDown}
-            trend="down"
-          />
-          <MetricCard 
-            title="Profit Factor" 
-            value={analytics.profitFactor.toFixed(2)}
-            trend={analytics.profitFactor >= 1 ? 'up' : 'down'}
-          />
-          <MetricCard 
-            title="Avg Hold Time" 
-            value={formatDuration(analytics.avgHoldingTime)}
-            icon={Clock}
-          />
-          <MetricCard 
-            title="Median Hold" 
-            value={formatDuration(analytics.medianHoldingTime)}
-            icon={Clock}
-          />
-          <div className="p-4 rounded-lg border bg-card col-span-1">
-            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
-              Best / Worst Trade
-            </div>
-            {analytics.largestWinner && (
-              <div className="flex items-center gap-1 text-green-600 text-sm">
-                <Award className="w-3 h-3" />
-                <span className="font-medium">{analytics.largestWinner.symbol}</span>
-                <span className="font-mono">+${analytics.largestWinner.pnl.toFixed(2)}</span>
-              </div>
-            )}
-            {analytics.largestLoser && (
-              <div className="flex items-center gap-1 text-red-600 text-sm">
-                <AlertTriangle className="w-3 h-3" />
-                <span className="font-medium">{analytics.largestLoser.symbol}</span>
-                <span className="font-mono">${analytics.largestLoser.pnl.toFixed(2)}</span>
-              </div>
-            )}
+        {/* Tier 1: Primary Indicators */}
+        <div className="mb-3">
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Primary Indicators</h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+            <MetricCard 
+              title="Total Trades" 
+              value={analytics.totalOpened}
+              icon={BarChart3}
+            />
+            <MetricCard 
+              title="Win Rate" 
+              value={`${analytics.winRate.toFixed(1)}%`}
+              trend={analytics.winRate >= 50 ? 'up' : 'down'}
+            />
+            <MetricCard 
+              title="Net P/L" 
+              value={`${analytics.netPnl >= 0 ? '+' : ''}$${analytics.netPnl.toFixed(2)}`}
+              trend={analytics.netPnl >= 0 ? 'up' : 'down'}
+            />
+            <MetricCard 
+              title="Avg Profit %" 
+              value={`${(analytics.avgProfitPercent || 0) >= 0 ? '+' : ''}${(analytics.avgProfitPercent || 0).toFixed(2)}%`}
+              subValue="per trade"
+              trend={(analytics.avgProfitPercent || 0) >= 0 ? 'up' : 'down'}
+            />
+            <MetricCard 
+              title="Avg Daily %" 
+              value={`${(analytics.avgDailyProfitPercent || 0) >= 0 ? '+' : ''}${(analytics.avgDailyProfitPercent || 0).toFixed(2)}%`}
+              subValue="daily profit"
+              trend={(analytics.avgDailyProfitPercent || 0) >= 0 ? 'up' : 'down'}
+            />
+            <MetricCard 
+              title="Profit Factor" 
+              value={analytics.profitFactor.toFixed(2)}
+              trend={analytics.profitFactor >= 1 ? 'up' : 'down'}
+            />
+            <MetricCard 
+              title="Avg Hold" 
+              value={formatDuration(analytics.avgHoldingTime)}
+              icon={Clock}
+            />
+            <MetricCard 
+              title="Median Hold" 
+              value={formatDuration(analytics.medianHoldingTime)}
+              icon={Clock}
+            />
           </div>
         </div>
 
-        {Object.keys(analytics.byStrategy).length > 0 && (
-          <div>
-            <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-              Performance by Strategy
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {Object.entries(analytics.byStrategy).map(([strategy, stats]) => (
+        {/* Tier 2: Secondary Indicators */}
+        <div className="mb-6">
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Secondary Indicators</h4>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <MetricCard 
+              title="Closed at TP" 
+              value={analytics.closedAtTP.count}
+              subValue={`${analytics.closedAtTP.percent.toFixed(1)}%`}
+              icon={Target}
+              trend="up"
+            />
+            <MetricCard 
+              title="Closed at SL" 
+              value={analytics.closedAtSL.count}
+              subValue={`${analytics.closedAtSL.percent.toFixed(1)}%`}
+              icon={Shield}
+              trend="down"
+            />
+            <MetricCard 
+              title="Manual Close" 
+              value={analytics.closedManually.count}
+              subValue={`${analytics.closedManually.percent.toFixed(1)}%`}
+            />
+            <MetricCard 
+              title="Avg Profit $" 
+              value={`+$${analytics.avgProfit.toFixed(2)}`}
+              icon={TrendingUp}
+              trend="up"
+            />
+            <MetricCard 
+              title="Avg Loss $" 
+              value={`-$${analytics.avgLoss.toFixed(2)}`}
+              icon={TrendingDown}
+              trend="down"
+            />
+            <div className="p-4 rounded-lg border bg-card">
+              <div className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
+                Best / Worst
+              </div>
+              {analytics.largestWinner && (
+                <div className="flex items-center gap-1 text-green-600 text-xs">
+                  <Award className="w-3 h-3" />
+                  <span className="font-medium truncate">{analytics.largestWinner.symbol}</span>
+                  <span className="font-mono">+${analytics.largestWinner.pnl.toFixed(2)}</span>
+                </div>
+              )}
+              {analytics.largestLoser && (
+                <div className="flex items-center gap-1 text-red-600 text-xs">
+                  <AlertTriangle className="w-3 h-3" />
+                  <span className="font-medium truncate">{analytics.largestLoser.symbol}</span>
+                  <span className="font-mono">${analytics.largestLoser.pnl.toFixed(2)}</span>
+                </div>
+              )}
+              {!analytics.largestWinner && !analytics.largestLoser && (
+                <span className="text-xs text-muted-foreground">No trades yet</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Strategy Performance - Always show all 9 strategies */}
+        <div>
+          <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+            Performance by Strategy
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {ALL_STRATEGIES.map((strategy) => {
+              const stats = analytics.byStrategy[strategy] || { count: 0, pnl: 0, winRate: 0 };
+              return (
                 <div key={strategy} className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
                   <div className="flex items-center gap-2">
                     <Badge className={cn("text-xs", strategyColors[strategy] || "bg-gray-500/10")}>
@@ -276,7 +313,7 @@ function AnalyticsPanel({ range }: { range: string }) {
                   <div className="flex items-center gap-3">
                     <span className={cn(
                       "font-mono text-sm font-semibold",
-                      stats.pnl >= 0 ? "text-green-600" : "text-red-600"
+                      stats.pnl > 0 ? "text-green-600" : stats.pnl < 0 ? "text-red-600" : "text-muted-foreground"
                     )}>
                       {stats.pnl >= 0 ? '+' : ''}${stats.pnl.toFixed(2)}
                     </span>
@@ -285,10 +322,10 @@ function AnalyticsPanel({ range }: { range: string }) {
                     </span>
                   </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
-        )}
+        </div>
       </CardContent>
     </Card>
   );
@@ -296,7 +333,7 @@ function AnalyticsPanel({ range }: { range: string }) {
 
 export function TradeHistoryTab() {
   const { isPaper } = useTradingMode();
-  const [analyticsRange, setAnalyticsRange] = useState('24h');
+  const [analyticsRange, setAnalyticsRange] = useState('session'); // B2: Default to "Since Last Simulation Start"
   const [filters, setFilters] = useState({
     symbol: '',
     strategy: 'all',
@@ -351,16 +388,14 @@ export function TradeHistoryTab() {
       <div className="flex items-center gap-2 mb-4">
         <span className="text-sm text-muted-foreground">Time Range:</span>
         <Select value={analyticsRange} onValueChange={setAnalyticsRange}>
-          <SelectTrigger className="w-32">
+          <SelectTrigger className="w-48">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="1h">1 Hour</SelectItem>
-            <SelectItem value="6h">6 Hours</SelectItem>
-            <SelectItem value="12h">12 Hours</SelectItem>
-            <SelectItem value="24h">24 Hours</SelectItem>
-            <SelectItem value="7d">7 Days</SelectItem>
-            <SelectItem value="30d">30 Days</SelectItem>
+            <SelectItem value="session">Since Last Simulation</SelectItem>
+            <SelectItem value="1h">Last 1 Hour</SelectItem>
+            <SelectItem value="24h">Last 24 Hours</SelectItem>
+            <SelectItem value="30d">Last 30 Days</SelectItem>
             <SelectItem value="all">All Time</SelectItem>
           </SelectContent>
         </Select>
@@ -400,6 +435,10 @@ export function TradeHistoryTab() {
                 <SelectItem value="sma_trend_ride">SMA Trend Ride</SelectItem>
                 <SelectItem value="vwap_bounce">VWAP Bounce</SelectItem>
                 <SelectItem value="dhma">DHMA</SelectItem>
+                <SelectItem value="breakout">Breakout</SelectItem>
+                <SelectItem value="mean_reversion">Mean Reversion</SelectItem>
+                <SelectItem value="range_trading">Range Trading</SelectItem>
+                <SelectItem value="liquidity_trap">Liquidity Trap</SelectItem>
               </SelectContent>
             </Select>
             
@@ -436,8 +475,11 @@ export function TradeHistoryTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle>
-            {filteredTrades.length} Trade{filteredTrades.length !== 1 ? 's' : ''}
+          <CardTitle className="flex items-center justify-between">
+            <span>Trade History</span>
+            <span className="text-sm font-normal text-muted-foreground">
+              {filteredTrades.length} trade{filteredTrades.length !== 1 ? 's' : ''}
+            </span>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -450,7 +492,8 @@ export function TradeHistoryTab() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Date</th>
+                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Opened At</th>
+                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Closed At</th>
                     <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Symbol</th>
                     <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Strategy</th>
                     <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Entry</th>
@@ -466,13 +509,26 @@ export function TradeHistoryTab() {
                     const pnlPercent = parseFloat(trade.pnlPercent || '0');
                     const isProfit = pnl > 0;
                     
+                    // B2: Format with full timestamps
+                    const formatTimestamp = (dateStr: string | null) => {
+                      if (!dateStr) return '-';
+                      const d = new Date(dateStr);
+                      return d.toLocaleString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric', 
+                        hour: '2-digit', 
+                        minute: '2-digit',
+                        second: '2-digit'
+                      });
+                    };
+                    
                     return (
                       <tr key={trade.id} className="hover:bg-muted/50" data-testid={`trade-history-${trade.id}`}>
-                        <td className="p-3 text-sm">
-                          {trade.closedAt ? 
-                            new Date(trade.closedAt).toLocaleDateString() : 
-                            new Date(trade.openedAt).toLocaleDateString()
-                          }
+                        <td className="p-3 text-xs font-mono">
+                          {formatTimestamp(trade.openedAt)}
+                        </td>
+                        <td className="p-3 text-xs font-mono">
+                          {formatTimestamp(trade.closedAt)}
                         </td>
                         
                         <td className="p-3">
