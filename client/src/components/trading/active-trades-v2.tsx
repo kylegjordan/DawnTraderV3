@@ -46,7 +46,17 @@ interface ActiveTrade {
   health: 'green' | 'yellow' | 'red';
   openedAt: string;
   confidence: number;
+  positionValue: number;
   metadata?: any;
+}
+
+interface PortfolioSummary {
+  startingBalance: number;
+  currentBalance: number;
+  cashBalance: number;
+  totalPositionValue: number;
+  netPnl: number;
+  netPnlPercent: number;
 }
 
 interface IntegrityStatus {
@@ -60,6 +70,7 @@ interface ActiveTradesResponse {
   ok: boolean;
   positions: ActiveTrade[];
   integrity: IntegrityStatus;
+  portfolio: PortfolioSummary;
 }
 
 type SortField = 'symbol' | 'strategy' | 'entryPrice' | 'currentPrice' | 'unrealizedPnlPercent' | 
@@ -162,6 +173,9 @@ function TradeRow({
   // Calculate distance as actual value (price difference), not percentage
   const distanceToTPValue = trade.takeProfit - trade.currentPrice;
   const distanceToSLValue = trade.currentPrice - trade.stopLoss;
+  
+  // B3: Calculate position value
+  const positionValue = trade.quantity * trade.currentPrice;
 
   return (
     <tr className="transition-colors hover:bg-muted/30 border-b border-border/50">
@@ -182,12 +196,20 @@ function TradeRow({
         </Badge>
       </td>
       
-      {/* 3. Entry */}
+      {/* 3. B3: Qty / Value (stacked) */}
+      <td className="px-3 py-3">
+        <div className="text-xs space-y-0.5">
+          <div className="font-mono text-sm">{trade.quantity.toFixed(6)}</div>
+          <div className="font-mono text-muted-foreground">${positionValue.toFixed(2)}</div>
+        </div>
+      </td>
+      
+      {/* 4. Entry */}
       <td className="px-3 py-3">
         <div className="font-mono text-sm">${trade.entryPrice.toFixed(6)}</div>
       </td>
       
-      {/* 4. TP / SL (stacked) */}
+      {/* 5. TP / SL (stacked) */}
       <td className="px-3 py-3">
         <div className="text-xs space-y-0.5">
           <div className="flex items-center gap-1">
@@ -201,7 +223,7 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 5. Current Price */}
+      {/* 6. Current Price */}
       <td className="px-3 py-3">
         <div className={cn(
           "font-mono text-sm font-medium",
@@ -212,7 +234,7 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 6. Distance to TP / SL (as actual values) */}
+      {/* 7. Distance to TP / SL (as actual values) */}
       <td className="px-3 py-3">
         <div className="text-xs space-y-0.5">
           <div className={cn("font-mono", distanceToTPValue > 0 ? "text-green-600" : "text-muted-foreground")}>
@@ -224,7 +246,7 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 7. P/L ($) - FIRST */}
+      {/* 8. P/L ($) */}
       <td className="px-3 py-3">
         <div className={cn(
           "font-mono text-sm font-semibold",
@@ -234,7 +256,7 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 8. P/L (%) */}
+      {/* 9. P/L (%) */}
       <td className="px-3 py-3">
         <div className={cn(
           "font-mono text-sm font-semibold",
@@ -244,7 +266,7 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 9. Duration */}
+      {/* 10. Duration */}
       <td className="px-3 py-3">
         <div className="flex items-center gap-1 text-sm text-muted-foreground">
           <Clock className="w-3 h-3" />
@@ -252,14 +274,14 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 10. Slot */}
+      {/* 11. Slot */}
       <td className="px-3 py-3">
         <Badge variant="outline" className="font-mono text-xs">
           {trade.slotNumber}/{trade.maxSlots}
         </Badge>
       </td>
       
-      {/* 11. Actions */}
+      {/* 12. Actions */}
       <td className="px-3 py-3">
         <Button
           size="sm"
@@ -280,16 +302,12 @@ function IntegrityBanner({
   integrity, 
   uiCount, 
   onClearStranded,
-  onSyncCounts,
-  isClearing,
-  isSyncing
+  isClearing
 }: { 
   integrity: IntegrityStatus; 
   uiCount: number;
   onClearStranded: () => void;
-  onSyncCounts: () => void;
   isClearing: boolean;
-  isSyncing: boolean;
 }) {
   const isMismatch = integrity.systemCount !== uiCount;
   const status = isMismatch ? 'MISMATCH' : integrity.status;
@@ -344,17 +362,6 @@ function IntegrityBanner({
           <Button
             size="sm"
             variant="outline"
-            onClick={onSyncCounts}
-            disabled={isSyncing}
-            className="text-xs"
-          >
-            {isSyncing ? <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> : <RefreshCw className="w-3 h-3 mr-1" />}
-            Sync Counts
-          </Button>
-          
-          <Button
-            size="sm"
-            variant="outline"
             onClick={onClearStranded}
             disabled={isClearing}
             className="text-xs border-red-200 text-red-600 hover:bg-red-50"
@@ -363,6 +370,44 @@ function IntegrityBanner({
             Clear Stranded
           </Button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// B3: Portfolio Summary Strip
+function PortfolioSummaryStrip({ portfolio }: { portfolio: PortfolioSummary }) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 p-4 rounded-lg border bg-muted/30 mb-4">
+      <div className="text-center">
+        <div className="text-xs text-muted-foreground uppercase tracking-wider">Starting Balance</div>
+        <div className="font-mono text-lg font-semibold">${portfolio.startingBalance.toFixed(2)}</div>
+      </div>
+      <div className="text-center">
+        <div className="text-xs text-muted-foreground uppercase tracking-wider">Current Balance</div>
+        <div className="font-mono text-lg font-semibold">${portfolio.currentBalance.toFixed(2)}</div>
+      </div>
+      <div className="text-center">
+        <div className="text-xs text-muted-foreground uppercase tracking-wider">Net P/L ($)</div>
+        <div className={cn(
+          "font-mono text-lg font-semibold",
+          portfolio.netPnl >= 0 ? "text-green-600" : "text-red-600"
+        )}>
+          {portfolio.netPnl >= 0 ? '+' : ''}${portfolio.netPnl.toFixed(2)}
+        </div>
+      </div>
+      <div className="text-center">
+        <div className="text-xs text-muted-foreground uppercase tracking-wider">Net P/L (%)</div>
+        <div className={cn(
+          "font-mono text-lg font-semibold",
+          portfolio.netPnlPercent >= 0 ? "text-green-600" : "text-red-600"
+        )}>
+          {portfolio.netPnlPercent >= 0 ? '+' : ''}{portfolio.netPnlPercent.toFixed(2)}%
+        </div>
+      </div>
+      <div className="text-center">
+        <div className="text-xs text-muted-foreground uppercase tracking-wider">Open Position Value</div>
+        <div className="font-mono text-lg font-semibold">${portfolio.totalPositionValue.toFixed(2)}</div>
       </div>
     </div>
   );
@@ -459,19 +504,6 @@ export default function ActiveTradesV2() {
     }
   });
   
-  const syncCountsMutation = useMutation({
-    mutationFn: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/active-trades'] });
-      return refetch();
-    },
-    onSuccess: () => {
-      toast({
-        title: "Counts Synced",
-        description: "UI synced with system state",
-      });
-    }
-  });
-  
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
@@ -534,6 +566,7 @@ export default function ActiveTradesV2() {
 
   const positions = sortedPositions;
   const integrity = data?.integrity || { systemCount: 0, maxOpenTrades: 15, slotsAvailable: 15, status: 'OK' as const };
+  const portfolio = data?.portfolio || { startingBalance: 0, currentBalance: 0, cashBalance: 0, totalPositionValue: 0, netPnl: 0, netPnlPercent: 0 };
 
   return (
     <section data-testid="active-trades-v2">
@@ -560,10 +593,11 @@ export default function ActiveTradesV2() {
         integrity={integrity} 
         uiCount={positions.length}
         onClearStranded={() => clearStrandedMutation.mutate()}
-        onSyncCounts={() => syncCountsMutation.mutate()}
         isClearing={clearStrandedMutation.isPending}
-        isSyncing={syncCountsMutation.isPending}
       />
+      
+      {/* B3: Portfolio Summary Strip */}
+      <PortfolioSummaryStrip portfolio={portfolio} />
       
       <Card className="rounded-xl border shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
@@ -581,6 +615,7 @@ export default function ActiveTradesV2() {
                 <tr>
                   <SortableHeader field="symbol" label="Symbol" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="strategy" label="Strategy" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Qty / Value</th>
                   <SortableHeader field="entryPrice" label="Entry" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">TP / SL</th>
                   <SortableHeader field="currentPrice" label="Current" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />

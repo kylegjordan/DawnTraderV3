@@ -189,7 +189,7 @@ function AnalyticsPanel({ range }: { range: string }) {
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <BarChart3 className="w-5 h-5" />
-            {range === 'session' ? 'Session' : range === '24h' ? '24 Hour' : range === '7d' ? '7 Day' : range === '30d' ? '30 Day' : range} Performance Analytics
+            {range === 'session' ? 'Current Simulation' : range === '24h' ? '24 Hour' : range === '7d' ? '7 Day' : range === '30d' ? '30 Day' : range} Performance Analytics
             {isFetching && <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />}
           </CardTitle>
           <Button size="sm" variant="ghost" onClick={() => refetch()} disabled={isFetching}>
@@ -207,7 +207,7 @@ function AnalyticsPanel({ range }: { range: string }) {
             {/* Tier 1: Primary Indicators */}
             <div className="mb-3">
               <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Primary Indicators</h4>
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                 <MetricCard 
                   title="Total Trades" 
                   value={analytics.totalOpened}
@@ -236,18 +236,8 @@ function AnalyticsPanel({ range }: { range: string }) {
                   trend={(analytics.avgDailyProfitPercent || 0) >= 0 ? 'up' : 'down'}
                 />
                 <MetricCard 
-                  title="Profit Factor" 
-                  value={analytics.profitFactor.toFixed(2)}
-                  trend={analytics.profitFactor >= 1 ? 'up' : 'down'}
-                />
-                <MetricCard 
                   title="Avg Hold" 
                   value={formatDuration(analytics.avgHoldingTime)}
-                  icon={Clock}
-                />
-                <MetricCard 
-                  title="Median Hold" 
-                  value={formatDuration(analytics.medianHoldingTime)}
                   icon={Clock}
                 />
               </div>
@@ -401,7 +391,7 @@ export function TradeHistoryTab() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="session">Since Last Simulation</SelectItem>
+            <SelectItem value="session">Current Simulation</SelectItem>
             <SelectItem value="1h">Last 1 Hour</SelectItem>
             <SelectItem value="24h">Last 24 Hours</SelectItem>
             <SelectItem value="30d">Last 30 Days</SelectItem>

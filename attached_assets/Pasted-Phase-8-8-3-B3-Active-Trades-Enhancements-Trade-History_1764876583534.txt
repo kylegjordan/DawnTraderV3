@@ -1,0 +1,332 @@
+Phase 8.8.3-B3 – Active Trades Enhancements & Trade History Integrity
+0. Context / Goals
+
+We’ve now got:
+
+Active Trades V2 table wired to paper_sim_open_positions
+
+Integrity banner with system counts & Clear Stranded
+
+Trade History tab with analytics widgets
+
+Phase B3 is about making this panel usable and trustworthy before we dive into heavy diagnostics in B4:
+
+Improve Active Trades visibility (position sizing & portfolio view).
+
+Fix trade history integrity (no ghost trades, clean analytics).
+
+Clean up UX noise (extra buttons, confusing widgets).
+
+Fix the VWAP target bug so we stop generating obviously bad trades.
+
+No new diagnostics funnels in B3 – that will be Phase B4.
+
+1) Active Trades Table – Columns & Portfolio Summary
+
+Goal: Give a clear view of how much is at risk in each trade and in total.
+
+1.1 Add Quantity + Position Value column
+
+Update client/src/components/trading/active-trades-v2.tsx:
+
+Add a new stacked column “Qty / Value” with:
+
+Top line: quantity (number of units)
+
+Bottom line: positionValue = quantity * currentPrice
+
+Use the current price from paper_sim_open_positions.current_price for positionValue.
+
+Column order should be:
+
+Symbol
+
+Strategy
+
+Qty / Value (stacked)
+
+Entry
+
+TP / SL (stacked)
+
+Current
+
+Distance (value, not %)
+
+P/L $
+
+P/L %
+
+Duration
+
+Slot
+
+Actions
+
+1.2 Portfolio summary strip above Active Trades table
+
+Add a summary line above the Active Trades table (below the green integrity banner) that shows:
+
+Starting Balance – paper trading starting balance for the current simulation (captured when user clicks “Start Trading”)
+
+Current Balance – current portfolio equity:
+
+currentBalance = cashBalance + Σ (positionValue) across all open positions
+
+Net P/L ($) – currentBalance - startingBalance
+
+Net P/L (%) – (currentBalance - startingBalance) / startingBalance * 100
+
+Total Open Positions Value – Σ positionValue across all open trades
+
+Requirements:
+
+These values must update automatically as trades open/close and as prices update.
+
+Current Balance & Total Open Positions Value should reflect live mark-to-market based on current_price.
+
+If there is already a paper-trading balance service, reuse that instead of duplicating logic – but the math above is the source of truth.
+
+2) Manual Close – Fix Error Toast & History Row
+
+Goal: Manual close should just work, without error noise, and create a clean history record.
+
+Current behaviour:
+
+Clicking Close removes the trade, but the UI shows an error toast (“Failed to close trade”), and the history row sometimes has close_reason = Unknown.
+
+2.1 Backend close handler
+
+In the route that handles manual close for paper sim positions:
+
+Ensure it:
+
+Closes the position
+
+Writes a complete trade history record to paper_sim_trades with:
+
+exit_price
+
+closed_at
+
+close_reason = 'manual_close'
+
+Returns a 200 or 204 with { ok: true } (or another explicit success shape the UI expects)
+
+2.2 Frontend handling
+
+In active-trades-v2:
+
+Treat a 200/204 response as success and:
+
+Remove the row from Active Trades
+
+Trigger a refetch of Trade History list
+
+Show a success toast like “Trade closed manually”
+
+Do NOT show an error toast if the request succeeded.
+
+3) Trade History Integrity – No Ghost Trades & Clean Analytics
+
+Goal: The trade history list and analytics widgets should reflect real, fully-closed trades only.
+
+3.1 Filter out ghost rows from Trade History table
+
+In the Trade History list component (client/src/components/trading/trade-history-tab.tsx) and the backend query powering it:
+
+Only include rows where:
+
+closed_at IS NOT NULL
+
+exit_price IS NOT NULL
+
+close_reason IS NOT NULL
+
+Any historical rows missing these fields should not appear in the UI list.
+
+If needed, add a one-time migration / cleanup script to delete or fix malformed rows in paper_sim_trades (e.g. from earlier test sessions).
+
+3.2 Exclude ghost rows from analytics widgets
+
+In the analytics endpoint (e.g. /api/paper-sim/trades/analytics):
+
+All widget counts and aggregates must be computed only for rows that satisfy:
+
+closed_at IS NOT NULL
+
+exit_price IS NOT NULL
+
+close_reason IN ('target_hit', 'stop_hit', 'manual_close')
+(ignore Unknown rows or treat them as invalid until we know why they exist)
+
+Specifically:
+
+Total Trades must count only valid closed trades
+
+Win Rate, Avg Profit / Loss, Net P/L, etc. must be based on the same filtered set
+
+This ensures ghost trades do not pollute the top cards.
+
+3.3 Timestamps & header label
+
+Ensure the Trade History list shows:
+
+Opened At – full timestamp (date + time)
+
+Closed At – full timestamp (date + time)
+
+And the section header above the table should be:
+
+“Trade History” (not “100 Trades”)
+
+4) Session / Range Behaviour in Trade History Analytics
+
+Goal: “Current Simulation” should actually reflect the currently running / last run session, not all time.
+
+4.1 Rename & define the range
+
+Rename “Since Last Simulation” to “Current Simulation” in the time-range dropdown.
+
+Backend must track simulation_start_at for paper trading:
+
+Set when the user presses Start Trading
+
+Persist for the lifetime of that simulation
+
+4.2 Analytics query logic
+
+For the “Current Simulation” range:
+
+Filter analytics where:
+
+closed_at >= simulation_start_at
+
+If no trades have closed since simulation_start_at, all metrics should show zero / “no trades yet”, but the cards must still be rendered (no flicker).
+
+Other ranges (1h, 24h, 30d, All Time) can reuse existing logic as long as they still obey the ghost-row rules above.
+
+4.3 Widgets: remove noise, keep key metrics
+
+Top analytics row:
+
+Keep:
+
+Total Trades
+
+Win Rate
+
+Net P/L
+
+Avg Profit % per trade
+
+Avg Daily Profit % (average daily percentage return over the selected range)
+
+Avg Hold Time (optional)
+
+Remove:
+
+Profit Factor
+
+Median Hold
+
+Keep all 9 strategies visible in the “Performance by Strategy” strip, even if some are zero.
+
+5) Buttons in Active Trades – Remove “Sync Counts”
+
+Goal: Reduce confusion; only keep the button that actually changes state.
+
+In the Active Trades integrity banner:
+
+Remove the “Sync Counts” button entirely.
+
+Keep “Clear Stranded” as the single action button.
+
+Ensure Clear Stranded continues to:
+
+Remove orphan rows from paper_sim_open_positions that the engine no longer considers active
+
+Refresh the counts (System Active Trades, UI Active Trades, Slots Available)
+
+6) VWAP Target Bug – Quick, Safe Fix
+
+Goal: Stop generating invalid long trades where target <= entry.
+
+In server/services/strategy-engine.ts (or the equivalent):
+
+Fix the target selection logic for long trades:
+
+// Existing (buggy)
+const targetPrice = high24h * 0.995;
+const finalTarget = Math.min(targetPrice, twoRTarget);
+
+
+Replace with:
+
+const targetPrice = high24h * 0.995;
+const finalTarget = Math.max(targetPrice, twoRTarget);
+
+
+(For long trades we want the higher of the two candidates, not the lower.)
+
+Add a safety validation before emitting the signal:
+
+if (finalTarget <= entryPrice) {
+  // Do not emit a trade signal if target is not above entry.
+  return null; // or the local equivalent of "no valid signal"
+}
+
+
+Confirm that the orchestrator / validation layer still has:
+
+if (signal.targetPrice <= signal.entryPrice) {
+  return invalid;
+}
+
+
+so we have two lines of defence against inverted targets.
+
+After this change, no new trades should be opened with targets below entry, and you should no longer see “Target Hit” closures that are actually losses from inverted TP logic.
+
+7) Ready-to-Buy: Block Breakdown Descriptions (Small UX)
+
+In the Ready-to-Buy tab’s RTB Execution Metrics / Block Breakdown section:
+
+For each block category (e.g. Kill Switch, Max Positions, Cooldown, etc.), add a one-line description under the label explaining in plain English what that guardrail means.
+
+Examples (you can adjust copy, but this is the intent):
+
+Kill Switch – “All trading disabled by global safety switch.”
+
+Max Positions – “This trade would exceed the maximum number of open positions.”
+
+Max Position – “This trade’s size would exceed the per-position portfolio limit.”
+
+Cooldown – “Symbol recently traded – waiting for cooldown period to end.”
+
+etc.
+
+This doesn’t change any logic; it just makes the block reasons easier for a human to interpret.
+
+8) Non-Goals / Deferred to Phase B4
+
+Do NOT attempt these in B3 (they will be Phase B4):
+
+Detailed diagnostic funnel from:
+
+Active Filter Pool → Attempts → RTB → Guardrails → Open Trades
+
+Deep analysis of Max Position vs Max Open Trades behaviour and whether position value math is correct.
+
+Rich attempt-level logging tables or export reports.
+
+Full audit of price update cadence on the engine side.
+
+B3 should focus on making what we already have correct and visible.
+B4 will then instrument the funnel and guardrails so we can answer your questions about:
+
+Why Attempts >> RTB
+
+Whether Max Position is firing for the right reasons
+
+Whether we’re filtering out good trades due to mis-calcs or overly strict guardrails.

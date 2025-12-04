@@ -75,10 +75,16 @@ export class StrategyEngine {
       const stopPrice = Math.min(vwap * 0.997, low24h * 1.001); // Below VWAP or pullback low
       const targetPrice = high24h * 0.995; // Near prior swing high
       
-      // Alternative target: +2R
+      // B3 FIX: For long trades, use Math.max to pick the HIGHER of the two targets (not the lower)
       const riskDistance = entryPrice - stopPrice;
       const twoRTarget = entryPrice + (riskDistance * 2);
-      const finalTarget = Math.min(targetPrice, twoRTarget);
+      const finalTarget = Math.max(targetPrice, twoRTarget);
+      
+      // B3: Safety validation - reject signal if target is not above entry
+      if (finalTarget <= entryPrice) {
+        console.log(`[VWAP Strategy] ❌ Target validation failed - target (${finalTarget.toFixed(2)}) <= entry (${entryPrice.toFixed(2)})`);
+        return null;
+      }
       
       console.log(`[VWAP Strategy] ✅ Signal generated - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${finalTarget.toFixed(2)}`);
       

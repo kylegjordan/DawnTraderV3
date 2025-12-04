@@ -67,6 +67,23 @@ const ALL_BLOCK_REASONS = [
   'UNKNOWN'
 ] as const;
 
+// B3: Block reason descriptions
+const BLOCK_REASON_DESCRIPTIONS: Record<string, string> = {
+  'KILL_SWITCH': 'Daily loss limit exceeded, trading halted',
+  'STOP_LOSS_REQUIRED': 'Signal rejected - no stop loss defined',
+  'ASSET_MAX_POSITIONS': 'Already holding max positions in this asset',
+  'COOLDOWN': 'Asset in cooldown period after recent trade',
+  'MAX_POSITION': 'Position size exceeds % of portfolio limit',
+  'LPCP_LOW_PRICE': 'Asset price below minimum trading threshold',
+  'LPCP_MIN_NOTIONAL': 'Trade value below minimum notional amount',
+  'FX_CONVERSION_FAILED': 'Currency conversion failed for this pair',
+  'PORTFOLIO_RISK': 'Trade exceeds portfolio risk per trade limit',
+  'INSUFFICIENT_BALANCE': 'Not enough balance to execute trade',
+  'MAX_EXPOSURE': 'Would exceed maximum portfolio exposure',
+  'MAX_TRADES': 'Maximum open trades limit reached',
+  'UNKNOWN': 'Trade blocked for unspecified reason'
+};
+
 // AJ9: All 9 strategies in display order
 const ALL_STRATEGIES = [
   'vwap_pullback',
@@ -228,6 +245,7 @@ export function ExecutionMetricsPanel() {
             <TableHeader>
               <TableRow>
                 <TableHead className="text-xs">Block Reason</TableHead>
+                <TableHead className="text-xs">Description</TableHead>
                 <TableHead className="text-xs text-right">Count</TableHead>
               </TableRow>
             </TableHeader>
@@ -236,7 +254,8 @@ export function ExecutionMetricsPanel() {
                 const count = blocked?.byReason?.[reason] || 0;
                 return (
                   <TableRow key={reason}>
-                    <TableCell className="text-xs">{formatBlockReason(reason)}</TableCell>
+                    <TableCell className="text-xs font-medium">{formatBlockReason(reason)}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{BLOCK_REASON_DESCRIPTIONS[reason] || '-'}</TableCell>
                     <TableCell className={cn(
                       "text-xs text-right font-mono",
                       count > 0 ? "text-destructive" : "text-muted-foreground"

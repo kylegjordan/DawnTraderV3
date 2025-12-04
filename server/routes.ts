@@ -7440,6 +7440,21 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const slotsAvailable = Math.max(0, maxOpenTrades - systemCount);
       const isMismatch = false; // Will be compared with UI count on client side
       
+      // B3: Calculate portfolio summary
+      const portfolioState = await storage.getPortfolioState({ mode: 'paper' });
+      const startingBalance = portfolioState ? parseFloat(portfolioState.startingBalance?.toString() || portfolioState.balance?.toString() || '0') : 0;
+      const cashBalance = portfolioState ? parseFloat(portfolioState.balance?.toString() || '0') : 0;
+      
+      // Calculate total position value (mark-to-market)
+      const totalPositionValue = enrichedPositions.reduce((sum, pos) => {
+        return sum + (pos.quantity * pos.currentPrice);
+      }, 0);
+      
+      // Current balance = cash + open positions value
+      const currentBalance = cashBalance + totalPositionValue;
+      const netPnl = currentBalance - startingBalance;
+      const netPnlPercent = startingBalance > 0 ? (netPnl / startingBalance) * 100 : 0;
+      
       res.json({
         ok: true,
         positions: enrichedPositions,
@@ -7448,6 +7463,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           maxOpenTrades,
           slotsAvailable,
           status: systemCount <= maxOpenTrades ? 'OK' : 'OVER_LIMIT'
+        },
+        portfolio: {
+          startingBalance,
+          currentBalance,
+          cashBalance,
+          totalPositionValue,
+          netPnl,
+          netPnlPercent
         }
       });
     } catch (error) {
