@@ -433,15 +433,19 @@ export class PaperExecutionEngine {
     // [AJ18] Start AJ18 diagnostic cycle
     aj18Diagnostic.startCycle(this.mode);
     
-    // [AJ19-B] Per-cycle reconciliation check (non-blocking)
-    try {
-      const reconcileResult = await aj19bDiagnostic.runReconciliation(cycleId, this.mode);
-      if (reconcileResult.mismatchDetected) {
-        console.warn(`[AJ19-B][MISMATCH] DB=${reconcileResult.dbOpenCount} vs Guardrail=${reconcileResult.guardrailOpenCount} | strandedIds=${(reconcileResult.strandedPositionIds || []).join(',')}`);
-      }
-    } catch (reconcileErr) {
-      console.error('[AJ19-B] Reconciliation check failed:', reconcileErr);
-    }
+    // [AJ19-B] Per-cycle reconciliation DISABLED for normal operation
+    // Reconciliation should only run on-demand via API: POST /api/diagnostics/aj19b/reconcile
+    // Re-enable by uncommenting below if needed for debugging:
+    // try {
+    //   if (aj19bDiagnostic.isActive()) {
+    //     const reconcileResult = await aj19bDiagnostic.runReconciliation(cycleId, this.mode);
+    //     if (reconcileResult.mismatchDetected) {
+    //       console.warn(`[AJ19-B][MISMATCH] DB=${reconcileResult.dbOpenCount} vs Guardrail=${reconcileResult.guardrailOpenCount}`);
+    //     }
+    //   }
+    // } catch (reconcileErr) {
+    //   console.error('[AJ19-B] Reconciliation check failed:', reconcileErr);
+    // }
     
     try {
       // Phase 8.8.3-H4: Get trading settings from guardrails_v2

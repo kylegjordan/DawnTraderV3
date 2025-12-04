@@ -1,0 +1,186 @@
+PHASE A — FULL DIRECTIVE FOR REPL.IT
+1. Fix the Goals Engine Screener Filter Value Issue (High Priority)
+
+There is a persistent bug where values in the Goals Engine Screener revert or fail to apply.
+This affects:
+
+filter thresholds
+
+market universe eligibility
+
+pool composition
+
+RTB generation
+
+Action:
+
+Identify and fix the source of filter-value resets (likely state sync or persistence layer bug).
+
+Ensure values remain stable between page loads and persist correctly through server restarts.
+
+Confirm that updated filter values propagate to the actual filter engine during scan cycles.
+
+2. Remove / Disable the Temporary Diagnostic Behaviors Added During AJ19 & AJ19-B Testing
+
+During the testing cycle, several modifications were made that must now be rolled back or safely disabled to return the engine to normal operation.
+
+Please apply the following changes:
+2.1 Disable dryRunNoGuardrails mode (and remove UI routing if any)
+
+This mode must be OFF by default and should not affect normal trading.
+
+Ensure the flag is set to false on startup.
+
+Ensure no guardrail bypass logic runs when the flag is false.
+
+Ensure no execution path can accidentally activate this mode.
+
+2.2 Remove heavy cycle-level reconciliation inside the main scan loop
+
+AJ19-B added reconciliation checks inside cycle execution.
+
+This must be disabled for normal mode:
+
+Reconciliation should only run on demand, through the API.
+
+Remove or comment out reconciliation calls inside scan-cycle processing.
+
+These checks generate extra DB reads and CPU load and should not run continuously.
+
+2.3 Keep the AJ19 and AJ19-B diagnostics installed but DISABLED
+
+Important: DO NOT delete these modules.
+
+They must remain available for future debugging but should not affect performance.
+
+Required state during normal trading:
+
+aj19Diagnostic.isEnabled = false
+
+aj19Diagnostic.isDryRunMode = false
+
+aj19BDiagnostic.isEnabled = false
+
+No diagnostic writes should occur unless explicitly enabled.
+
+2.4 Disable or remove auto-export / periodic export behaviors
+
+These write to disk and were intended only for testing.
+
+Remove or disable:
+
+periodic export timers
+
+auto-export on engine stop
+
+export triggers inside normal runtime sections
+
+Keep the manual API endpoints operational.
+
+2.5 Re-enable normal guardrail behavior
+
+Ensure the following is true again:
+
+Guardrails run for every RTB candidate
+
+Position-limit logic is active
+
+Max-trades logic is active
+
+Position-size percent logic is active
+
+No bypass paths remain except when explicitly toggled via API
+
+During the test period some bypass conditions were inserted — these must be removed.
+
+3. Ensure the Paper Execution Engine Is Fully Restored to Standard Workflow
+
+Specifically:
+
+3.1 executeSimulatedTrade() must follow the original intended pipeline
+
+Validate RTB candidate
+
+Apply guardrails
+
+Open trade if allowed
+
+Log attempts correctly
+
+Do not skip any steps except when diagnostics explicitly enabled
+
+3.2 Clean up any test-only logging
+
+Examples of logging that should be disabled in normal mode:
+
+AJ19 verbose trace logging
+
+AJ19-B lifecycle event details
+
+Per-cycle reconciliation logs
+
+Deep guardrail traces
+
+Debug-level console logs written during development
+
+These logs are useful during audit but should not run during normal operation.
+
+4. Confirm Normal RTB → Guardrail → Trade Pipeline Is Fully Restored
+
+After rolling back the test-specific behaviors, confirm that:
+
+RTB signals appear normally
+
+Guardrails correctly block/open trades
+
+Attempts count increments only when guardrail layer is hit
+
+No unexpected skip or bypass occurs
+
+Max Position block is correct (no phantom blocking from stale state)
+
+5. Validate End State
+
+When Phase A is complete:
+
+The system should exhibit:
+
+stable filters
+
+correct RTB population
+
+normal guardrail behavior
+
+no test bypasses
+
+no unexpected blocking
+
+lower CPU load
+
+faster cycle processing
+
+normal attempts/RTB behavior
+
+Diagnostics should:
+
+remain installed
+
+default to disabled
+
+be toggleable via API
+
+✔ WHAT TO CONFIRM BACK TO KYLE
+
+Once Phase A is complete, please provide:
+
+List of all files modified
+
+Confirmation that all test modes are disabled
+
+Confirmation that guardrails are returned to normal
+
+Confirmation the screener value bug is fixed
+
+One screenshot of RTB + Filter Insights running after rollback
+
+Brief notes on anything discovered during the cleanup

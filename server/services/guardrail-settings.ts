@@ -113,6 +113,7 @@ export async function buildSettingsFromGuardrails(
   userId?: string,
   globalContextId?: string
 ): Promise<TradingSettings & { 
+  killSwitchTripped: boolean;
   lpcpLowPriceThresholdUsd: number;
   lpcpMinStopAtrMultiple: number;
   lpcpMinNotionalUsd: number;
