@@ -43,6 +43,13 @@ The Filter Insights UI uses REST data for Cycle Info and Last Scan Result. The b
 
 **Phase 8.8.3-AJ19: Max Position Guardrail Diagnostic** investigates why MAX_POSITION guardrail blocks 99%+ of RTB signals after trades start opening. Key components: `aj19-max-position-diagnostic.ts` service for comprehensive logging of position size checks with P2/P3 value comparison, dry-run mode support (logs but doesn't block), and 6 API endpoints (`/api/diagnostics/aj19/*`) for status, enable/disable, dry-run toggle, entries, export, and clear operations. Block reason clarification: MAX_POSITION (position size % of portfolio), MAX_TRADES (total open trades count), POSITION_LIMIT (existing position in same symbol).
 
+**Phase A Cleanup (Dec 2025)**: Rolled back AJ19/AJ19-B test behaviors to normal production operation:
+- Per-cycle reconciliation disabled (lines 439-451 in `paper-execution-engine.ts`) - reconciliation now only runs via API: `POST /api/diagnostics/aj19b/reconcile`
+- Both diagnostic services (`aj19-max-position-diagnostic.ts`, `aj19b-lifecycle-diagnostic.ts`) installed but **disabled by default** (`isEnabled = false`)
+- `dryRunNoGuardrails` mode disabled by default - no guardrail bypass paths active
+- Fixed TypeScript error in `guardrail-settings.ts` return type (added `killSwitchTripped: boolean`)
+- Screener filter reset behavior documented: filters intentionally reset to defaults when starting a "New Simulation" via `POST /paper-sim/start` with `mode: 'new'`
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.
