@@ -49,6 +49,7 @@ export type TradeSafetyResultCode =
   | 'PORTFOLIO_RISK'
   | 'INSUFFICIENT_BALANCE'
   | 'MAX_EXPOSURE'
+  | 'MAX_TOTAL_EXPOSURE'
   | 'MAX_TRADES';
 
 export type TradeSafetyResult = 
@@ -538,6 +539,49 @@ async function checkMaxOpenTrades(
 }
 
 /**
+ * Check 8: Max Total Portfolio Exposure
+ * Guardrail: maxTotalExposurePct (percentage)
+ * Phase 8.8.3-B3: Ensures total exposure across all open positions doesn't exceed limit
+ */
+async function checkMaxTotalExposure(
+  mode: 'live' | 'paper',
+  trade: TradeCandidate,
+  settings: TradingSettings
+): Promise<TradeSafetyResult> {
+  try {
+    const portfolioBalance = await getPortfolioBalanceV2(mode);
+    const maxTotalExposurePct = parseFloat((settings as any).maxTotalExposurePct?.toString() || '25');
+    const maxTotalExposureUSD = portfolioBalance * (maxTotalExposurePct / 100);
+    
+    const activePositions = await getActivePositions(mode);
+    
+    let currentExposure = 0;
+    for (const pos of activePositions) {
+      const quantity = parseFloat(pos.quantity?.toString() || '0');
+      const entryPrice = parseFloat(pos.entryPrice?.toString() || pos.avgPrice?.toString() || '0');
+      currentExposure += quantity * entryPrice;
+    }
+    
+    const tradeNotional = trade.preComputedNotional || (trade.entryPrice * 1);
+    const projectedExposure = currentExposure + tradeNotional;
+    
+    if (projectedExposure > maxTotalExposureUSD) {
+      console.warn(`[8.8.3-B3][GUARDRAIL_BLOCK] code:MAX_TOTAL_EXPOSURE, current=$${currentExposure.toFixed(2)}, projected=$${projectedExposure.toFixed(2)}, max=$${maxTotalExposureUSD.toFixed(2)} (${maxTotalExposurePct}% of $${portfolioBalance.toFixed(2)})`);
+      return {
+        ok: false,
+        code: 'MAX_TOTAL_EXPOSURE',
+        reason: `Max Total Portfolio Exposure exceeded: $${projectedExposure.toFixed(2)} > $${maxTotalExposureUSD.toFixed(2)} (${maxTotalExposurePct}% limit)`
+      };
+    }
+    
+    return { ok: true };
+  } catch (error) {
+    console.error('[8.8.3-B3][MAX_TOTAL_EXPOSURE_ERROR]', error);
+    return { ok: true };
+  }
+}
+
+/**
  * Phase 8.8.3-H4: Main pre-trade guardrail check
  * 
  * Replaces RiskManager.checkPreTradeRisk() with a transparent,
@@ -583,6 +627,10 @@ export async function checkGuardrailRisk(
   
   const maxTradesCheck = await checkMaxOpenTrades(mode, settings);
   if (!maxTradesCheck.ok) return maxTradesCheck;
+  
+  // Phase 8.8.3-B3: Check total portfolio exposure
+  const totalExposureCheck = await checkMaxTotalExposure(mode, trade, settings);
+  if (!totalExposureCheck.ok) return totalExposureCheck;
   
   console.log(`[8.8.3-H4][GUARDRAIL_PASS] All pre-trade checks passed for ${trade.symbol}`);
   return { ok: true };

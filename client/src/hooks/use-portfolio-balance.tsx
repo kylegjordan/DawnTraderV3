@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTradingMode } from "@/contexts/trading-mode-context";
+import { apiFetch } from "@/lib/api";
 
 interface PortfolioOverview {
   totalValue: number;
@@ -25,9 +26,7 @@ export function usePortfolioBalance() {
   const { data, isLoading, error, isFetching } = useQuery<PortfolioOverview>({
     queryKey: ['portfolio-overview', mode],
     queryFn: async () => {
-      const res = await fetch(`/api/portfolio/overview?mode=${mode}`);
-      if (!res.ok) throw new Error('Failed to fetch portfolio overview');
-      return res.json();
+      return await apiFetch(`/api/portfolio/overview?mode=${mode}`);
     },
     // Wait for mode to be available before executing query
     enabled: !!mode,

@@ -514,13 +514,14 @@ export function FilterInsights() {
       </Card>
 
       {/* REB 2.8.2: Active Filtered Pool - Updated header per truth */}
+      {/* Phase 8.8.3-B3: Use actual array length to ensure consistency */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             Active Filtered Pool (Deduped, Non-Expired)
           </CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
-            Total Active Filtered Pairs: <span className="font-semibold">{scanData.activePoolCount || 0}</span>
+            Total Active Filtered Pairs: <span className="font-semibold">{scanData.activeFilteredPool?.length || 0}</span>
           </p>
         </CardHeader>
         <CardContent>

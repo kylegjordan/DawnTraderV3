@@ -1,0 +1,232 @@
+🚀 PHASE 8.8.3-B3 DIRECTIVE (Final)
+Trading Engine UX, Portfolio Logic Correction, Ghost Filtering, and Price Refresh Audit
+
+Use the following credentials for all testing:
+
+username: testuser123
+password: SecurePass123!
+
+🔧 SECTION 1 — Portfolio Summary Strip (REQUIRED)
+1. Move Portfolio Summary Strip Above All Tabs
+
+Move the entire portfolio summary strip (Starting Balance, Current Balance, Net P/L $, Net P/L %, Open Position Value) so that it appears directly under:
+
+Trading → [Header] → “Manage open positions, view ready-to-buy signals, and explore filter insights…”
+
+This strip must be visible on all four sub-tabs:
+
+Filter Insights
+
+Ready to Buy
+
+Open Trades
+
+Trade History
+
+2. Correct Balance Calculations
+Starting Balance
+
+✔ Correct as is.
+
+Current Balance — FIX LOGIC
+
+Current Balance must be calculated as:
+
+starting_balance + SUM(realized P/L from closed trades in the current simulation session)
+
+
+NOT based on the USD value of open trades.
+NOT based on total portfolio value.
+
+Open Position Value
+
+Continue showing total USD value of all open trades separately (already correct).
+
+🛡️ SECTION 2 — NEW GUARDRAIL: MAX TOTAL PORTFOLIO EXPOSURE
+
+Add a new editable guardrail block to the top of the Guardrails tab (directly above “Low Price Coin Protection”).
+
+Guardrail Name:
+Max Total Portfolio Exposure
+Behavior:
+
+This controls the maximum percentage of the portfolio balance that may be invested at any one time across all open positions.
+
+Example:
+
+portfolio_balance = 814
+max_total_portfolio_exposure = 25%
+max_exposure_usd = 814 * 0.25 = 203.50
+
+
+No combination of open trades may exceed this USD value.
+
+Controls:
+
+Include:
+
+Manual / LATTI toggle (same format as other guardrails)
+
+Editable percentage value (default 25%)
+
+Block Reason:
+
+Add a 14th block reason:
+
+"Max Total Portfolio Exposure Exceeded"
+
+(and include it in the RTB block table and filtering).
+
+Interaction with Max Position (%):
+
+Max Position (%) applies to the exposure USD value, not to full portfolio balance.
+
+Formula:
+
+max_single_trade_usd = (portfolio_balance * max_total_portfolio_exposure_pct)
+                       * max_position_pct
+
+🕵️ SECTION 3 — Ghost Trades Filtering (REQUIRED)
+
+Trades appearing in Trade History with:
+
+no closed_at
+
+no exit_price
+
+no close_reason
+
+must be blocked from display and must not appear in:
+
+trade tables
+
+analytics widget counts
+
+profit/loss calculations
+
+Action Required:
+1. Introduce a Ghost Filtering Rule
+IF closed_at IS NULL → DO NOT show in Trade History table
+IF close_reason IS NULL AND status != 'open' → mark as ghost
+IF exit_price IS NULL AND status != 'open' → mark as ghost
+
+2. Quarantine Table
+
+Move offending rows into a new table:
+
+paper_sim_ghost_trades
+
+🧰 SECTION 4 — Manual Close Error Toast (BUG FIX)
+
+Current behavior:
+
+Trade is closed successfully
+
+Error toast still displays
+
+Fix Required:
+
+Normalize the API response so the frontend sees:
+
+{ success: true }
+
+
+OR loosen the UI’s success-checking logic.
+
+🧊 SECTION 5 — Price Refresh Audit (REQUIRED BEFORE B4 DIAGNOSTICS)
+
+The current price updates on open trades are too slow (sometimes unchanged for 1–3 minutes).
+
+This prevents:
+
+Target hits
+
+Stop-loss hits
+
+Natural trade exits
+
+Realistic performance
+
+Backend Requirements:
+
+Verify Kraken price polling interval is <= 10 seconds
+
+Ensure websocket / stream pricing is used when possible
+
+Ensure Open Positions receive updated price data immediately
+
+Frontend Requirements:
+
+Open Trades table must refresh via WebSocket
+
+Polling fallback must be every 10 seconds, not 30–60
+
+Prices must visibly update on-screen at that cadence
+
+Ensure this update does not reset scroll position or flicker rows
+
+📊 SECTION 6 — Ready to Buy Tab Layout Adjustments
+Reduce widths of:
+
+The Block Breakdown table
+
+The "Open by Strategy" table
+
+This is a simple aesthetic tightening.
+
+🧹 SECTION 7 — Remaining Fixes from B2 That Still Need Attention
+1. 'Current Simulation' Widget Values Always Zero
+
+Fix the query so that:
+
+When trading begins → session start time is recorded
+
+“Current Simulation” filters trade and P/L metrics using that start time
+
+2. Ready-to-Buy Block Descriptions
+
+Already added — no action needed.
+
+But update the block list to include the new guardrail:
+
+"Max Total Portfolio Exposure Exceeded"
+
+🔍 SECTION 8 — Filter Insights Tab Count Fix
+
+The “Total Active Filtered Pairs” count must equal the number of rows rendered in the Active Filtered Pool table.
+
+Ensure the count reflects:
+
+count(active_filtered_pairs_window)
+
+
+NOT:
+
+unique survived (24h)
+
+cumulative totals
+
+prior windows
+
+🧭 Next Step Sequence (After B3)
+B4 — Price Diagnostics & Lifecycle Auditing
+
+Confirm price cadence & trading loop timing
+
+Verify RTB rescans every 30s
+
+Ensure active-trade checks run independently
+
+Identify mismatched lifecycle or timing bottlenecks
+
+B5 — RTB Attempt → ReadyToBuy Funnel Diagnostics
+
+Count attempts
+
+Count reasons rejected
+
+Measure loss between attempt → RTB → Opened
+
+Identify false negatives
+
+✔️ END OF DIRECTIVE

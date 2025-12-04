@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useTradingMode } from "@/contexts/trading-mode-context";
+import { apiFetch } from "@/lib/api";
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -153,11 +154,7 @@ function AnalyticsPanel({ range }: { range: string }) {
   const { data, isFetching, refetch } = useQuery<AnalyticsResponse>({
     queryKey: ['/api/paper-sim/trades/analytics', range],
     queryFn: async () => {
-      const response = await fetch(`/api/paper-sim/trades/analytics?range=${range}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      if (!response.ok) throw new Error('Failed to fetch analytics');
-      return response.json();
+      return await apiFetch(`/api/paper-sim/trades/analytics?range=${range}`);
     },
     enabled: isPaper,
     staleTime: Infinity,

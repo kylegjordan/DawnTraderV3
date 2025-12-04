@@ -36,20 +36,28 @@ interface GuardrailsV2 {
   maxOpenPositions: number;
   dailyLossKillSwitchPct: number;
   maxPositionPercentPct: number; // REB 8.8.3-G: Max position size as % of portfolio
+  maxTotalExposurePct: number; // Phase 8.8.3-B3: Max total portfolio exposure %
   isManualOverride: boolean;
   tunedByLatti: boolean;
   lockedByUser: Record<string, boolean>;
 }
 
 interface GuardrailParam {
-  key: keyof Pick<GuardrailsV2, 'portfolioRiskPerTradePct' | 'symbolCooldownMinutes' | 'maxOpenPositions' | 'dailyLossKillSwitchPct' | 'maxPositionPercentPct'>;
+  key: keyof Pick<GuardrailsV2, 'portfolioRiskPerTradePct' | 'symbolCooldownMinutes' | 'maxOpenPositions' | 'dailyLossKillSwitchPct' | 'maxPositionPercentPct' | 'maxTotalExposurePct'>;
   label: string;
   description: string;
   unit: string;
 }
 
 // REB 8.8.3-G: Updated descriptions to be user-friendly (for Kyle, not technical)
+// Phase 8.8.3-B3: Added maxTotalExposurePct as 6th core guardrail
 const CORE_FOUR_PARAMS: GuardrailParam[] = [
+  {
+    key: 'maxTotalExposurePct',
+    label: 'Max Total Portfolio Exposure',
+    description: 'The maximum percentage of your portfolio that can be invested across all open positions at any time.',
+    unit: '%'
+  },
   {
     key: 'portfolioRiskPerTradePct',
     label: 'Portfolio Risk per Trade',

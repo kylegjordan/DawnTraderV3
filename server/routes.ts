@@ -7362,7 +7362,31 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       if (closedOnly) options.closedOnly = closedOnly === 'true';
       
       const trades = await storage.getPaperSimTrades('paper', options);
-      res.json(trades);
+      
+      // Phase 8.8.3-B3: Ghost trade filtering
+      // Filter out trades that are "ghost" trades - closed trades without proper closing data
+      const validTrades = trades.filter(trade => {
+        // Open trades (status open or no closed_at) are always valid
+        if (!trade.closedAt && trade.status === 'open') return true;
+        
+        // For trades that should be closed, require proper closing data
+        // Ghost = has closedAt but no exit_price, or no close_reason with status != 'open'
+        if (trade.closedAt) {
+          // Properly closed trade needs exit_price and close_reason
+          const hasExitPrice = trade.exitPrice && parseFloat(trade.exitPrice.toString()) > 0;
+          const hasCloseReason = trade.closeReason && trade.closeReason.trim() !== '';
+          return hasExitPrice && hasCloseReason;
+        }
+        
+        // If no closedAt and status is not 'open', it's a ghost
+        if (trade.status && trade.status !== 'open') {
+          return false;
+        }
+        
+        return true;
+      });
+      
+      res.json(validTrades);
     } catch (error) {
       console.error('Error fetching paper sim trades:', error);
       res.status(500).json({ error: 'Failed to fetch trades' });
@@ -7476,6 +7500,79 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     } catch (error) {
       console.error('Error fetching active trades:', error);
       res.status(500).json({ ok: false, error: 'Failed to fetch active trades' });
+    }
+  });
+
+  // Phase 8.8.3-B3: Portfolio Summary endpoint - available on all trading tabs
+  // Current Balance = starting_balance + SUM(realized P/L from closed trades in current session)
+  apiRouter.get('/paper-sim/portfolio-summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { getEngineSessionStart } = await import('./services/paper-execution-engine');
+      const mode = 'paper' as const;
+      
+      // Get portfolio state
+      const portfolioState = await storage.getPortfolioState({ mode });
+      const startingBalance = portfolioState ? parseFloat((portfolioState as any).startingBalance?.toString() || portfolioState.balance?.toString() || '1000') : 1000;
+      
+      // Get session start time
+      const sessionStart = getEngineSessionStart(mode);
+      
+      // Get all closed trades in current session
+      const allTrades = await storage.getPaperSimTrades(mode, { closedOnly: true });
+      
+      // Filter to only trades closed in current session
+      const sessionTrades = sessionStart 
+        ? allTrades.filter(t => t.closedAt && new Date(t.closedAt) >= sessionStart)
+        : allTrades;
+      
+      // Sum realized P/L from closed trades (this is the correct calculation per directive)
+      const realizedPnl = sessionTrades.reduce((sum, trade) => {
+        return sum + parseFloat(trade.pnl?.toString() || '0');
+      }, 0);
+      
+      // Current Balance = starting_balance + realized P/L (NOT based on open positions value)
+      const currentBalance = startingBalance + realizedPnl;
+      
+      // Get open positions for "Open Position Value" (separate display)
+      const openPositions = await storage.getPaperSimOpenPositions(mode);
+      const krakenService = new (await import('./services/kraken')).KrakenService();
+      let totalPositionValue = 0;
+      
+      for (const pos of openPositions) {
+        const quantity = parseFloat(pos.quantity?.toString() || '0');
+        let currentPrice = parseFloat(pos.currentPrice?.toString() || pos.avgPrice?.toString() || '0');
+        
+        // Fetch live price if available
+        try {
+          const livePrice = await krakenService.getPrice(pos.symbol);
+          if (livePrice && livePrice.last > 0) {
+            currentPrice = livePrice.last;
+          }
+        } catch (e) {
+          // Use cached price on error
+        }
+        
+        totalPositionValue += quantity * currentPrice;
+      }
+      
+      // Calculate net P/L percent based on starting balance
+      const netPnl = currentBalance - startingBalance;
+      const netPnlPercent = startingBalance > 0 ? (netPnl / startingBalance) * 100 : 0;
+      
+      res.json({
+        ok: true,
+        startingBalance,
+        currentBalance,
+        realizedPnl,
+        totalPositionValue,
+        netPnl,
+        netPnlPercent,
+        sessionStart: sessionStart?.toISOString() || null,
+        closedTradesCount: sessionTrades.length
+      });
+    } catch (error) {
+      console.error('Error fetching portfolio summary:', error);
+      res.status(500).json({ ok: false, error: 'Failed to fetch portfolio summary' });
     }
   });
 

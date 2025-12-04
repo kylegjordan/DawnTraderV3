@@ -143,6 +143,11 @@ export async function buildSettingsFromGuardrails(
   const lpcpMinNotionalUsd = guardrailsAny.lowPriceMinPositionNotional 
     ? parseFloat(String(guardrailsAny.lowPriceMinPositionNotional)) 
     : 25.00;
+    
+  // Phase 8.8.3-B3: Max Total Portfolio Exposure
+  const maxTotalExposurePct = guardrailsAny.maxTotalExposurePct 
+    ? String(guardrailsAny.maxTotalExposurePct)
+    : '25.00';
   
   return {
     portfolioValue: portfolioValue.toString(),
@@ -152,6 +157,7 @@ export async function buildSettingsFromGuardrails(
     dailyLossKillSwitch: guardrails.dailyLossKillSwitchPct ? guardrails.dailyLossKillSwitchPct.toString() : '7.00',
     maxExposurePercent: '50.00',
     maxPositionPercent,
+    maxTotalExposurePct,
     autoTrade: false,
     lpcpLowPriceThresholdUsd,
     lpcpMinStopAtrMultiple,

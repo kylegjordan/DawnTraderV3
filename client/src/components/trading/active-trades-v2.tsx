@@ -375,43 +375,6 @@ function IntegrityBanner({
   );
 }
 
-// B3: Portfolio Summary Strip
-function PortfolioSummaryStrip({ portfolio }: { portfolio: PortfolioSummary }) {
-  return (
-    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 p-4 rounded-lg border bg-muted/30 mb-4">
-      <div className="text-center">
-        <div className="text-xs text-muted-foreground uppercase tracking-wider">Starting Balance</div>
-        <div className="font-mono text-lg font-semibold">${portfolio.startingBalance.toFixed(2)}</div>
-      </div>
-      <div className="text-center">
-        <div className="text-xs text-muted-foreground uppercase tracking-wider">Current Balance</div>
-        <div className="font-mono text-lg font-semibold">${portfolio.currentBalance.toFixed(2)}</div>
-      </div>
-      <div className="text-center">
-        <div className="text-xs text-muted-foreground uppercase tracking-wider">Net P/L ($)</div>
-        <div className={cn(
-          "font-mono text-lg font-semibold",
-          portfolio.netPnl >= 0 ? "text-green-600" : "text-red-600"
-        )}>
-          {portfolio.netPnl >= 0 ? '+' : ''}${portfolio.netPnl.toFixed(2)}
-        </div>
-      </div>
-      <div className="text-center">
-        <div className="text-xs text-muted-foreground uppercase tracking-wider">Net P/L (%)</div>
-        <div className={cn(
-          "font-mono text-lg font-semibold",
-          portfolio.netPnlPercent >= 0 ? "text-green-600" : "text-red-600"
-        )}>
-          {portfolio.netPnlPercent >= 0 ? '+' : ''}{portfolio.netPnlPercent.toFixed(2)}%
-        </div>
-      </div>
-      <div className="text-center">
-        <div className="text-xs text-muted-foreground uppercase tracking-wider">Open Position Value</div>
-        <div className="font-mono text-lg font-semibold">${portfolio.totalPositionValue.toFixed(2)}</div>
-      </div>
-    </div>
-  );
-}
 
 export default function ActiveTradesV2() {
   const { isPaper } = useTradingMode();
@@ -464,9 +427,10 @@ export default function ActiveTradesV2() {
       return response.json();
     },
     onSuccess: (result) => {
+      const pnl = result?.pnl ?? 0;
       toast({
         title: "Trade Closed",
-        description: `P/L: ${result.pnl >= 0 ? '+' : ''}$${result.pnl?.toFixed(2) || '0.00'}`,
+        description: result?.message || `P/L: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`,
       });
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/active-trades'] });
     },
@@ -595,9 +559,6 @@ export default function ActiveTradesV2() {
         onClearStranded={() => clearStrandedMutation.mutate()}
         isClearing={clearStrandedMutation.isPending}
       />
-      
-      {/* B3: Portfolio Summary Strip */}
-      <PortfolioSummaryStrip portfolio={portfolio} />
       
       <Card className="rounded-xl border shadow-sm overflow-hidden">
         <div className="overflow-x-auto">

@@ -50,7 +50,7 @@ const formatNumber = (num: number | undefined): string => {
   return new Intl.NumberFormat('en-US').format(num);
 };
 
-// AJ9: All 13 block reasons in display order
+// AJ9: All 14 block reasons in display order
 const ALL_BLOCK_REASONS = [
   'KILL_SWITCH',
   'STOP_LOSS_REQUIRED',
@@ -63,6 +63,7 @@ const ALL_BLOCK_REASONS = [
   'PORTFOLIO_RISK',
   'INSUFFICIENT_BALANCE',
   'MAX_EXPOSURE',
+  'MAX_TOTAL_EXPOSURE',
   'MAX_TRADES',
   'UNKNOWN'
 ] as const;
@@ -80,6 +81,7 @@ const BLOCK_REASON_DESCRIPTIONS: Record<string, string> = {
   'PORTFOLIO_RISK': 'Trade exceeds portfolio risk per trade limit',
   'INSUFFICIENT_BALANCE': 'Not enough balance to execute trade',
   'MAX_EXPOSURE': 'Would exceed maximum portfolio exposure',
+  'MAX_TOTAL_EXPOSURE': 'Max Total Portfolio Exposure exceeded',
   'MAX_TRADES': 'Maximum open trades limit reached',
   'UNKNOWN': 'Trade blocked for unspecified reason'
 };
@@ -229,8 +231,9 @@ export function ExecutionMetricsPanel() {
           <p className="text-[10px] text-muted-foreground mt-1">*Rate uses all-time totals</p>
         </div>
 
-        {/* J5.2/AJ9/AJ10.2 - Blocked Summary Table: Always show all 13 block reasons */}
-        <div>
+        {/* J5.2/AJ9/AJ10.2 - Blocked Summary Table: Always show all 14 block reasons */}
+        {/* Phase 8.8.3-B3: Reduced table width for aesthetic tightening */}
+        <div className="max-w-xl">
           <h4 className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-2">
             <Ban className="w-3 h-3" />
             Blocked Breakdown (All Reasons)
@@ -291,7 +294,8 @@ export function ExecutionMetricsPanel() {
         </div>
 
         {/* AJ9.5/AJ10.2 - Opened by Strategy Table: Always show all 9 strategies */}
-        <div>
+        {/* Phase 8.8.3-B3: Reduced table width for aesthetic tightening */}
+        <div className="max-w-xs">
           <h4 className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-2">
             <Target className="w-3 h-3" />
             Opened by Strategy (Last 24h)

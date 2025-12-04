@@ -319,6 +319,11 @@ export const guardrailsV2 = pgTable("guardrails_v2", {
   // REB 8.8.3-G: Maximum size of any single position as % of portfolio value
   maxPositionPercentPct: decimal("max_position_percent_pct", { precision: 5, scale: 2 }).notNull().default("30.00"),
   
+  // 6. Max Total Portfolio Exposure (%) - Range: 10.00% - 100.00%
+  // REB 8.8.3-B3: Maximum % of portfolio balance that may be invested across all open positions
+  // Formula for single trade: max_single_trade_usd = (portfolio_balance * maxTotalExposurePct) * maxPositionPercentPct
+  maxTotalExposurePct: decimal("max_total_exposure_pct", { precision: 5, scale: 2 }).notNull().default("25.00"),
+  
   // REB 8.8.3-H: LOW-PRICED COIN PROTECTION (LPCP) MODULE
   // Protects against erratic position sizing for coins with very low prices
   

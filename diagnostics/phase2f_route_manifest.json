@@ -1804,6 +1804,16 @@
     ]
   },
   {
+    "path": "/api/paper-sim/portfolio-summary",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/paper-sim/close-trade/:id",
     "methods": [
       "POST"
