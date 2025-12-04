@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -146,6 +146,11 @@ const EMPTY_ANALYTICS: Analytics = {
 function AnalyticsPanel({ range }: { range: string }) {
   const { isPaper } = useTradingMode();
   
+  // Use ref to cache last known analytics to prevent flickering during refetch
+  const cachedAnalyticsRef = useRef<Analytics>(EMPTY_ANALYTICS);
+  const [displayAnalytics, setDisplayAnalytics] = useState<Analytics>(EMPTY_ANALYTICS);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  
   const { data, isLoading, isFetching, refetch } = useQuery<AnalyticsResponse>({
     queryKey: ['/api/paper-sim/trades/analytics', range],
     queryFn: async () => {
@@ -158,8 +163,21 @@ function AnalyticsPanel({ range }: { range: string }) {
     enabled: isPaper,
     refetchInterval: 30000,
     staleTime: 15000,
-    placeholderData: (previousData) => previousData // Keep previous data while refetching
+    gcTime: 60000, // Keep cached data for 60 seconds
   });
+
+  // Update cached analytics only when we have new valid data
+  useEffect(() => {
+    if (data?.analytics) {
+      cachedAnalyticsRef.current = data.analytics;
+      setDisplayAnalytics(data.analytics);
+    }
+  }, [data]);
+  
+  // Track refreshing state separately
+  useEffect(() => {
+    setIsRefreshing(isFetching);
+  }, [isFetching]);
 
   if (!isPaper) {
     return (
@@ -171,8 +189,8 @@ function AnalyticsPanel({ range }: { range: string }) {
     );
   }
 
-  // Only show loading skeleton on initial load, not during refetch
-  if (isLoading && !data) {
+  // Only show loading skeleton on initial load when we have no cached data
+  if (isLoading && !data && displayAnalytics === EMPTY_ANALYTICS) {
     return (
       <Card className="mb-6">
         <CardHeader>
@@ -189,8 +207,8 @@ function AnalyticsPanel({ range }: { range: string }) {
     );
   }
 
-  // Use data analytics or fallback to empty analytics (prevents flickering)
-  const analytics = data?.analytics || EMPTY_ANALYTICS;
+  // Always use displayAnalytics which is cached and stable
+  const analytics = displayAnalytics;
 
   return (
     <Card className="mb-6">
@@ -199,10 +217,10 @@ function AnalyticsPanel({ range }: { range: string }) {
           <CardTitle className="flex items-center gap-2">
             <BarChart3 className="w-5 h-5" />
             {range === 'session' ? 'Session' : range === '24h' ? '24 Hour' : range === '7d' ? '7 Day' : range === '30d' ? '30 Day' : range} Performance Analytics
-            {isFetching && <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />}
+            {isRefreshing && <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />}
           </CardTitle>
-          <Button size="sm" variant="ghost" onClick={() => refetch()} disabled={isFetching}>
-            <RefreshCw className={cn("w-4 h-4", isFetching && "animate-spin")} />
+          <Button size="sm" variant="ghost" onClick={() => refetch()} disabled={isRefreshing}>
+            <RefreshCw className={cn("w-4 h-4", isRefreshing && "animate-spin")} />
           </Button>
         </div>
       </CardHeader>
