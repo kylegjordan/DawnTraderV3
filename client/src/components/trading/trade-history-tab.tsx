@@ -384,10 +384,11 @@ export function TradeHistoryTab() {
     dateTo: ''
   });
   
-  const { data: tradesData = [], isLoading } = useQuery<any[]>({
+  const { data: tradesData = [], isLoading, isFetching } = useQuery<any[]>({
     queryKey: ['/api/paper-sim/trades'],
     enabled: isPaper,
-    refetchInterval: 30000
+    refetchInterval: 30000,
+    staleTime: 15000,
   });
 
   const filteredTrades = tradesData.filter((trade: any) => {
@@ -406,24 +407,8 @@ export function TradeHistoryTab() {
     return 'text-primary';
   };
 
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <Card>
-          <CardHeader>
-            <Skeleton className="h-6 w-24" />
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {Array.from({ length: 10 }).map((_, i) => (
-                <Skeleton key={i} className="h-16 w-full" />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  // Determine if we should show loading state for trades table only (not the whole page)
+  const isTradesLoading = isLoading && tradesData.length === 0;
 
   return (
     <div className="space-y-6">
@@ -518,14 +503,23 @@ export function TradeHistoryTab() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
-            <span>Trade History</span>
+            <div className="flex items-center gap-2">
+              <span>Trade History</span>
+              {isFetching && <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />}
+            </div>
             <span className="text-sm font-normal text-muted-foreground">
               {filteredTrades.length} trade{filteredTrades.length !== 1 ? 's' : ''}
             </span>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {filteredTrades.length === 0 ? (
+          {isTradesLoading ? (
+            <div className="space-y-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : filteredTrades.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-muted-foreground">No trades match your filters</p>
             </div>
