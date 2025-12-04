@@ -146,12 +146,11 @@ const EMPTY_ANALYTICS: Analytics = {
 function AnalyticsPanel({ range }: { range: string }) {
   const { isPaper } = useTradingMode();
   
-  // Use ref to cache last known analytics to prevent flickering during refetch
-  const cachedAnalyticsRef = useRef<Analytics>(EMPTY_ANALYTICS);
-  const [displayAnalytics, setDisplayAnalytics] = useState<Analytics>(EMPTY_ANALYTICS);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  // Point 4: Cache analytics data in a stable React ref - NEVER loses data
+  const analyticsRef = useRef<Analytics>(EMPTY_ANALYTICS);
   
-  const { data, isLoading, isFetching, refetch } = useQuery<AnalyticsResponse>({
+  // Point 1: Updated React Query options to prevent data from becoming undefined
+  const { data, isFetching, refetch } = useQuery<AnalyticsResponse>({
     queryKey: ['/api/paper-sim/trades/analytics', range],
     queryFn: async () => {
       const response = await fetch(`/api/paper-sim/trades/analytics?range=${range}`, {
@@ -161,54 +160,28 @@ function AnalyticsPanel({ range }: { range: string }) {
       return response.json();
     },
     enabled: isPaper,
+    staleTime: Infinity,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
     refetchInterval: 30000,
-    staleTime: 15000,
-    gcTime: 60000, // Keep cached data for 60 seconds
+    refetchIntervalInBackground: true,
   });
 
-  // Update cached analytics only when we have new valid data
+  // Point 4: Update ref when we have valid data
   useEffect(() => {
     if (data?.analytics) {
-      cachedAnalyticsRef.current = data.analytics;
-      setDisplayAnalytics(data.analytics);
+      analyticsRef.current = data.analytics;
     }
   }, [data]);
   
-  // Track refreshing state separately
-  useEffect(() => {
-    setIsRefreshing(isFetching);
-  }, [isFetching]);
+  // Point 2 & 4: ALWAYS use stableAnalytics, never undefined
+  const stableAnalytics = data?.analytics ?? analyticsRef.current;
 
-  if (!isPaper) {
-    return (
-      <Card className="mb-6">
-        <CardContent className="p-6 text-center text-muted-foreground">
-          Analytics available for Paper Trading mode only
-        </CardContent>
-      </Card>
-    );
-  }
-
-  // Only show loading skeleton on initial load when we have no cached data
-  if (isLoading && !data && displayAnalytics === EMPTY_ANALYTICS) {
-    return (
-      <Card className="mb-6">
-        <CardHeader>
-          <Skeleton className="h-6 w-48" />
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            {Array.from({ length: 12 }).map((_, i) => (
-              <Skeleton key={i} className="h-20" />
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  // Always use displayAnalytics which is cached and stable
-  const analytics = displayAnalytics;
+  // Point 2 & 5: NO conditional returns that hide analytics - always render the full card
+  // Even for non-paper mode, render a message but never return null or unmount
+  
+  // Use stableAnalytics for all rendering - guaranteed to never be undefined
+  const analytics = stableAnalytics;
 
   return (
     <Card className="mb-6">
@@ -217,157 +190,165 @@ function AnalyticsPanel({ range }: { range: string }) {
           <CardTitle className="flex items-center gap-2">
             <BarChart3 className="w-5 h-5" />
             {range === 'session' ? 'Session' : range === '24h' ? '24 Hour' : range === '7d' ? '7 Day' : range === '30d' ? '30 Day' : range} Performance Analytics
-            {isRefreshing && <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />}
+            {isFetching && <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />}
           </CardTitle>
-          <Button size="sm" variant="ghost" onClick={() => refetch()} disabled={isRefreshing}>
-            <RefreshCw className={cn("w-4 h-4", isRefreshing && "animate-spin")} />
+          <Button size="sm" variant="ghost" onClick={() => refetch()} disabled={isFetching}>
+            <RefreshCw className={cn("w-4 h-4", isFetching && "animate-spin")} />
           </Button>
         </div>
       </CardHeader>
       <CardContent>
-        {/* Tier 1: Primary Indicators */}
-        <div className="mb-3">
-          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Primary Indicators</h4>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
-            <MetricCard 
-              title="Total Trades" 
-              value={analytics.totalOpened}
-              icon={BarChart3}
-            />
-            <MetricCard 
-              title="Win Rate" 
-              value={`${analytics.winRate.toFixed(1)}%`}
-              trend={analytics.winRate >= 50 ? 'up' : 'down'}
-            />
-            <MetricCard 
-              title="Net P/L" 
-              value={`${analytics.netPnl >= 0 ? '+' : ''}$${analytics.netPnl.toFixed(2)}`}
-              trend={analytics.netPnl >= 0 ? 'up' : 'down'}
-            />
-            <MetricCard 
-              title="Avg Profit %" 
-              value={`${(analytics.avgProfitPercent || 0) >= 0 ? '+' : ''}${(analytics.avgProfitPercent || 0).toFixed(2)}%`}
-              subValue="per trade"
-              trend={(analytics.avgProfitPercent || 0) >= 0 ? 'up' : 'down'}
-            />
-            <MetricCard 
-              title="Avg Daily %" 
-              value={`${(analytics.avgDailyProfitPercent || 0) >= 0 ? '+' : ''}${(analytics.avgDailyProfitPercent || 0).toFixed(2)}%`}
-              subValue="daily profit"
-              trend={(analytics.avgDailyProfitPercent || 0) >= 0 ? 'up' : 'down'}
-            />
-            <MetricCard 
-              title="Profit Factor" 
-              value={analytics.profitFactor.toFixed(2)}
-              trend={analytics.profitFactor >= 1 ? 'up' : 'down'}
-            />
-            <MetricCard 
-              title="Avg Hold" 
-              value={formatDuration(analytics.avgHoldingTime)}
-              icon={Clock}
-            />
-            <MetricCard 
-              title="Median Hold" 
-              value={formatDuration(analytics.medianHoldingTime)}
-              icon={Clock}
-            />
+        {!isPaper ? (
+          <div className="p-6 text-center text-muted-foreground">
+            Analytics available for Paper Trading mode only
           </div>
-        </div>
-
-        {/* Tier 2: Secondary Indicators */}
-        <div className="mb-6">
-          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Secondary Indicators</h4>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <MetricCard 
-              title="Closed at TP" 
-              value={analytics.closedAtTP.count}
-              subValue={`${analytics.closedAtTP.percent.toFixed(1)}%`}
-              icon={Target}
-              trend="up"
-            />
-            <MetricCard 
-              title="Closed at SL" 
-              value={analytics.closedAtSL.count}
-              subValue={`${analytics.closedAtSL.percent.toFixed(1)}%`}
-              icon={Shield}
-              trend="down"
-            />
-            <MetricCard 
-              title="Manual Close" 
-              value={analytics.closedManually.count}
-              subValue={`${analytics.closedManually.percent.toFixed(1)}%`}
-            />
-            <MetricCard 
-              title="Avg Profit $" 
-              value={`+$${analytics.avgProfit.toFixed(2)}`}
-              icon={TrendingUp}
-              trend="up"
-            />
-            <MetricCard 
-              title="Avg Loss $" 
-              value={`-$${analytics.avgLoss.toFixed(2)}`}
-              icon={TrendingDown}
-              trend="down"
-            />
-            <div className="p-4 rounded-lg border bg-card">
-              <div className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
-                Best / Worst
+        ) : (
+          <>
+            {/* Tier 1: Primary Indicators */}
+            <div className="mb-3">
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Primary Indicators</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+                <MetricCard 
+                  title="Total Trades" 
+                  value={analytics.totalOpened}
+                  icon={BarChart3}
+                />
+                <MetricCard 
+                  title="Win Rate" 
+                  value={`${analytics.winRate.toFixed(1)}%`}
+                  trend={analytics.winRate >= 50 ? 'up' : 'down'}
+                />
+                <MetricCard 
+                  title="Net P/L" 
+                  value={`${analytics.netPnl >= 0 ? '+' : ''}$${analytics.netPnl.toFixed(2)}`}
+                  trend={analytics.netPnl >= 0 ? 'up' : 'down'}
+                />
+                <MetricCard 
+                  title="Avg Profit %" 
+                  value={`${(analytics.avgProfitPercent || 0) >= 0 ? '+' : ''}${(analytics.avgProfitPercent || 0).toFixed(2)}%`}
+                  subValue="per trade"
+                  trend={(analytics.avgProfitPercent || 0) >= 0 ? 'up' : 'down'}
+                />
+                <MetricCard 
+                  title="Avg Daily %" 
+                  value={`${(analytics.avgDailyProfitPercent || 0) >= 0 ? '+' : ''}${(analytics.avgDailyProfitPercent || 0).toFixed(2)}%`}
+                  subValue="daily profit"
+                  trend={(analytics.avgDailyProfitPercent || 0) >= 0 ? 'up' : 'down'}
+                />
+                <MetricCard 
+                  title="Profit Factor" 
+                  value={analytics.profitFactor.toFixed(2)}
+                  trend={analytics.profitFactor >= 1 ? 'up' : 'down'}
+                />
+                <MetricCard 
+                  title="Avg Hold" 
+                  value={formatDuration(analytics.avgHoldingTime)}
+                  icon={Clock}
+                />
+                <MetricCard 
+                  title="Median Hold" 
+                  value={formatDuration(analytics.medianHoldingTime)}
+                  icon={Clock}
+                />
               </div>
-              {analytics.largestWinner && (
-                <div className="flex items-center gap-1 text-green-600 text-xs">
-                  <Award className="w-3 h-3" />
-                  <span className="font-medium truncate">{analytics.largestWinner.symbol}</span>
-                  <span className="font-mono">+${analytics.largestWinner.pnl.toFixed(2)}</span>
-                </div>
-              )}
-              {analytics.largestLoser && (
-                <div className="flex items-center gap-1 text-red-600 text-xs">
-                  <AlertTriangle className="w-3 h-3" />
-                  <span className="font-medium truncate">{analytics.largestLoser.symbol}</span>
-                  <span className="font-mono">${analytics.largestLoser.pnl.toFixed(2)}</span>
-                </div>
-              )}
-              {!analytics.largestWinner && !analytics.largestLoser && (
-                <span className="text-xs text-muted-foreground">No trades yet</span>
-              )}
             </div>
-          </div>
-        </div>
 
-        {/* Strategy Performance - Always show all 9 strategies */}
-        <div>
-          <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-            Performance by Strategy
-          </h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {ALL_STRATEGIES.map((strategy) => {
-              const stats = analytics.byStrategy[strategy] || { count: 0, pnl: 0, winRate: 0 };
-              return (
-                <div key={strategy} className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
-                  <div className="flex items-center gap-2">
-                    <Badge className={cn("text-xs", strategyColors[strategy] || "bg-gray-500/10")}>
-                      {strategyNames[strategy] || strategy}
-                    </Badge>
-                    <span className="text-sm text-muted-foreground">
-                      {stats.count} trades
-                    </span>
+            {/* Tier 2: Secondary Indicators */}
+            <div className="mb-6">
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Secondary Indicators</h4>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                <MetricCard 
+                  title="Closed at TP" 
+                  value={analytics.closedAtTP.count}
+                  subValue={`${analytics.closedAtTP.percent.toFixed(1)}%`}
+                  icon={Target}
+                  trend="up"
+                />
+                <MetricCard 
+                  title="Closed at SL" 
+                  value={analytics.closedAtSL.count}
+                  subValue={`${analytics.closedAtSL.percent.toFixed(1)}%`}
+                  icon={Shield}
+                  trend="down"
+                />
+                <MetricCard 
+                  title="Manual Close" 
+                  value={analytics.closedManually.count}
+                  subValue={`${analytics.closedManually.percent.toFixed(1)}%`}
+                />
+                <MetricCard 
+                  title="Avg Profit $" 
+                  value={`+$${analytics.avgProfit.toFixed(2)}`}
+                  icon={TrendingUp}
+                  trend="up"
+                />
+                <MetricCard 
+                  title="Avg Loss $" 
+                  value={`-$${analytics.avgLoss.toFixed(2)}`}
+                  icon={TrendingDown}
+                  trend="down"
+                />
+                <div className="p-4 rounded-lg border bg-card">
+                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
+                    Best / Worst
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className={cn(
-                      "font-mono text-sm font-semibold",
-                      stats.pnl > 0 ? "text-green-600" : stats.pnl < 0 ? "text-red-600" : "text-muted-foreground"
-                    )}>
-                      {stats.pnl >= 0 ? '+' : ''}${stats.pnl.toFixed(2)}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {stats.winRate.toFixed(0)}% WR
-                    </span>
-                  </div>
+                  {analytics.largestWinner && (
+                    <div className="flex items-center gap-1 text-green-600 text-xs">
+                      <Award className="w-3 h-3" />
+                      <span className="font-medium truncate">{analytics.largestWinner.symbol}</span>
+                      <span className="font-mono">+${analytics.largestWinner.pnl.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {analytics.largestLoser && (
+                    <div className="flex items-center gap-1 text-red-600 text-xs">
+                      <AlertTriangle className="w-3 h-3" />
+                      <span className="font-medium truncate">{analytics.largestLoser.symbol}</span>
+                      <span className="font-mono">${analytics.largestLoser.pnl.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {!analytics.largestWinner && !analytics.largestLoser && (
+                    <span className="text-xs text-muted-foreground">No trades yet</span>
+                  )}
                 </div>
-              );
-            })}
-          </div>
-        </div>
+              </div>
+            </div>
+
+            {/* Strategy Performance - Always show all 9 strategies */}
+            <div>
+              <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                Performance by Strategy
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {ALL_STRATEGIES.map((strategy) => {
+                  const stats = analytics.byStrategy[strategy] || { count: 0, pnl: 0, winRate: 0 };
+                  return (
+                    <div key={strategy} className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                      <div className="flex items-center gap-2">
+                        <Badge className={cn("text-xs", strategyColors[strategy] || "bg-gray-500/10")}>
+                          {strategyNames[strategy] || strategy}
+                        </Badge>
+                        <span className="text-sm text-muted-foreground">
+                          {stats.count} trades
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className={cn(
+                          "font-mono text-sm font-semibold",
+                          stats.pnl > 0 ? "text-green-600" : stats.pnl < 0 ? "text-red-600" : "text-muted-foreground"
+                        )}>
+                          {stats.pnl >= 0 ? '+' : ''}${stats.pnl.toFixed(2)}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {stats.winRate.toFixed(0)}% WR
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   );
@@ -384,11 +365,15 @@ export function TradeHistoryTab() {
     dateTo: ''
   });
   
-  const { data: tradesData = [], isLoading, isFetching } = useQuery<any[]>({
+  // Point 1: Updated React Query options to prevent data from becoming undefined
+  const { data: tradesData = [], isFetching } = useQuery<any[]>({
     queryKey: ['/api/paper-sim/trades'],
     enabled: isPaper,
+    staleTime: Infinity,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
     refetchInterval: 30000,
-    staleTime: 15000,
+    refetchIntervalInBackground: true,
   });
 
   const filteredTrades = tradesData.filter((trade: any) => {
@@ -406,9 +391,6 @@ export function TradeHistoryTab() {
     if (symbol.includes('ETH')) return 'text-blue-500';
     return 'text-primary';
   };
-
-  // Determine if we should show loading state for trades table only (not the whole page)
-  const isTradesLoading = isLoading && tradesData.length === 0;
 
   return (
     <div className="space-y-6">
@@ -513,13 +495,7 @@ export function TradeHistoryTab() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {isTradesLoading ? (
-            <div className="space-y-4">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
-          ) : filteredTrades.length === 0 ? (
+          {filteredTrades.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-muted-foreground">No trades match your filters</p>
             </div>
