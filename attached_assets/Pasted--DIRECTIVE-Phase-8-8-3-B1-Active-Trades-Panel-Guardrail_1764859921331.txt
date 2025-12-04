@@ -1,0 +1,154 @@
+📘 DIRECTIVE: Phase 8.8.3 – B1 Active Trades Panel, Guardrail Slot Visibility, and UI Table Audit
+
+Architectural Objective:
+Implement a fully functional Active Trades panel with manual controls, integrity monitoring, guardrail slot visibility, and audit the existing Open Trades UI table to decide whether to reuse or replace it. Also implement the 24h aggregated analytics panel in the Trade History section.
+
+SECTION 1 — AUDIT OF EXISTING “Open Trades” UI TABLE (MANDATORY BEFORE CHANGES)
+
+Replit must provide a short report answering:
+
+Which component renders the current Open Trades table?
+
+Which API endpoint(s) does it call?
+
+Does that endpoint return usable data?
+Test via direct API call.
+
+What data shape does the table expect?
+Compare against:
+
+paper_sim_open_positions table
+
+trade lifecycle structs
+
+Does the table subscribe to WebSocket updates?
+
+Is the table wired into the current V3 trade engine?
+
+Conclusion:
+
+YES, table is viable with repairs
+
+NO, table should be removed and replaced
+
+Provide evidence:
+
+code paths
+
+screenshots of API responses
+
+the expected vs actual schema table
+
+Only after this audit will we decide whether to replace or enhance it.
+
+SECTION 2 — Active Trades Table (Version B)
+
+After the audit above confirms whether to replace or enhance the table:
+
+Implement the following columns:
+
+Symbol (base/quote)
+
+Strategy
+
+Entry price
+
+Current price
+
+Unrealized P/L (%)
+
+Unrealized P/L ($)
+
+Holding duration
+
+TP / SL levels
+
+% distance to TP / SL
+
+Slot number (e.g. “Slot 4 of 15”)
+
+Health indicator (green/yellow/red)
+
+Close Trade button
+
+Table must be:
+
+Sortable by every column
+
+Updated every scan cycle or 10s
+
+SECTION 3 — Active Trades Integrity Banner
+
+Above the table:
+
+System Active Trades: {apiCount}
+UI Active Trades: {tableCount}
+Guardrail Max Trades Allowed: {maxOpenTrades}
+Open Trade Slots Available: {maxOpenTrades - apiCount}
+Status: OK / ⚠️ MISMATCH – Possible Stranded Trade
+
+
+Highlight MISMATCH in yellow or red.
+
+SECTION 4 — Manual Controls
+(1) Close Trade Button
+
+Each row includes a Close button that:
+
+triggers simulated close
+
+logs exit reason = "manual_close"
+
+removes DB entry
+
+refreshes integrity status
+
+(2) Clear Stranded Trades Button
+
+Runs:
+
+POST aj19b/reconcile
+POST aj19b/force-clear (if mismatch detected)
+
+
+Refreshes the table and banner.
+
+SECTION 5 — Trade History Panel (Aggregated 24h Analytics)
+
+Implement the full version of the analytics table:
+
+Metrics required:
+
+Total trades opened
+
+Closed at TP (count + %)
+
+Closed at SL (count + %)
+
+Closed manually
+
+Win rate %
+
+Avg profit %
+
+Avg loss %
+
+Net P/L ($)
+
+Net P/L %
+
+Average holding time
+
+Median holding time
+
+Profit factor
+
+Trades by strategy
+
+Largest winner / largest loser
+
+Requires a new endpoint (if missing):
+
+GET /api/paper/trades/history?range=24h
+
+👍 Directive COMPLETE
