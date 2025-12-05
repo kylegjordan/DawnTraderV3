@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "sessionStart": "2025-12-05T17:58:46.453Z",
+  "active_pool": 62,
+  "attempts": 1565,
+  "rtb_signals": 7,
+  "opened_trades": 7,
+  "conversions": {
+    "attempt_to_rtb_pct": 0.4,
+    "rtb_to_open_pct": 100
+  }
+}
