@@ -6924,6 +6924,146 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ==================== Phase 8.8.3-B5: Full Signal Creation & Sizing Pipeline Audit ====================
+  
+  // GET /api/diagnostics/b5/sizing-log - Get B5 sizing audit log entries
+  apiRouter.get('/diagnostics/b5/sizing-log', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { b5SizingAudit } = await import('./services/b5-sizing-audit.js');
+      const limit = parseInt(req.query.limit as string) || 2000;
+      
+      const entries = b5SizingAudit.getLog(limit);
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        entryCount: entries.length,
+        entries
+      });
+    } catch (error: any) {
+      console.error('[B5] Error fetching sizing log:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to fetch B5 sizing log',
+        message: error.message
+      });
+    }
+  });
+
+  // GET /api/diagnostics/b5/sizing-summary - Get B5 sizing audit summary
+  apiRouter.get('/diagnostics/b5/sizing-summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { b5SizingAudit } = await import('./services/b5-sizing-audit.js');
+      
+      const summary = b5SizingAudit.getSummary();
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        summary
+      });
+    } catch (error: any) {
+      console.error('[B5] Error fetching sizing summary:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to fetch B5 sizing summary',
+        message: error.message
+      });
+    }
+  });
+
+  // GET /api/diagnostics/b5/export - Export B5 audit data
+  apiRouter.get('/diagnostics/b5/export', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { b5SizingAudit } = await import('./services/b5-sizing-audit.js');
+      const format = req.query.format as string || 'json';
+      const csv = req.query.csv === '1';
+      
+      if (csv || format === 'csv') {
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename=b5-sizing-audit.csv');
+        res.send(b5SizingAudit.exportToCSV());
+      } else {
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', 'attachment; filename=b5-sizing-audit.json');
+        res.send(b5SizingAudit.exportToJSON());
+      }
+    } catch (error: any) {
+      console.error('[B5] Error exporting audit data:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to export B5 audit data',
+        message: error.message
+      });
+    }
+  });
+
+  // POST /api/diagnostics/b5/reset - Reset B5 audit buffer
+  apiRouter.post('/diagnostics/b5/reset', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { b5SizingAudit } = await import('./services/b5-sizing-audit.js');
+      
+      b5SizingAudit.reset();
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        message: 'B5 sizing audit buffer reset'
+      });
+    } catch (error: any) {
+      console.error('[B5] Error resetting audit buffer:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to reset B5 audit buffer',
+        message: error.message
+      });
+    }
+  });
+
+  // GET /api/diagnostics/b5/stats - Get B5 audit stats
+  apiRouter.get('/diagnostics/b5/stats', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { b5SizingAudit } = await import('./services/b5-sizing-audit.js');
+      
+      const stats = b5SizingAudit.getStats();
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        ...stats
+      });
+    } catch (error: any) {
+      console.error('[B5] Error fetching audit stats:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to fetch B5 audit stats',
+        message: error.message
+      });
+    }
+  });
+
+  // POST /api/diagnostics/b5/enable - Enable B5 audit
+  apiRouter.post('/diagnostics/b5/enable', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { b5SizingAudit } = await import('./services/b5-sizing-audit.js');
+      b5SizingAudit.enable();
+      res.json({ ok: true, message: 'B5 sizing audit enabled' });
+    } catch (error: any) {
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // POST /api/diagnostics/b5/disable - Disable B5 audit
+  apiRouter.post('/diagnostics/b5/disable', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { b5SizingAudit } = await import('./services/b5-sizing-audit.js');
+      b5SizingAudit.disable();
+      res.json({ ok: true, message: 'B5 sizing audit disabled' });
+    } catch (error: any) {
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   // POST /api/reb-2-12F/strategy-health - Run strategy health check (with mock data verification)
   apiRouter.post('/reb-2-12F/strategy-health', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
