@@ -1732,10 +1732,11 @@ export class PaperExecutionEngine {
   }
 
   /**
-   * Phase 37: Process external signal from SignalOrchestrator
+   * Phase 37/B6: Process external signal from SignalOrchestrator
    * Public method for SignalOrchestrator to submit signals for execution
    * 
    * REB 8.8.3-F: Restored execution using guardrails_v2 + risk-manager path
+   * B6: Trust pre-sized signals from orchestrator, only fall back if missing
    */
   async processSignal(signal: StrategySignal): Promise<void> {
     if (!this.isRunning) {
@@ -1743,7 +1744,7 @@ export class PaperExecutionEngine {
       return;
     }
 
-    // B5: Log signal receipt with field inspection
+    const signalAny = signal as any;
     const fieldsPresent: string[] = [];
     if (signal.symbol) fieldsPresent.push('symbol');
     if (signal.strategy) fieldsPresent.push('strategy');
@@ -1751,37 +1752,69 @@ export class PaperExecutionEngine {
     if (signal.stopPrice) fieldsPresent.push('stopPrice');
     if (signal.targetPrice) fieldsPresent.push('targetPrice');
     if (signal.confidence) fieldsPresent.push('confidence');
-    if ((signal as any).quantity) fieldsPresent.push('quantity');
-    if ((signal as any).estimatedValue) fieldsPresent.push('estimatedValue');
-    if ((signal as any).preComputedNotional) fieldsPresent.push('preComputedNotional');
+    if (signalAny.quantity) fieldsPresent.push('quantity');
+    if (signalAny.estimatedValue) fieldsPresent.push('estimatedValue');
+    if (signalAny.preComputedNotional) fieldsPresent.push('preComputedNotional');
     
     b5SizingAudit.logSignalReceivedByEngine({
       strategy: signal.strategy,
       symbol: signal.symbol,
       entryPrice: signal.entryPrice,
-      quantity: (signal as any).quantity ?? null,
-      estimatedValue: (signal as any).estimatedValue ?? null,
+      quantity: signalAny.quantity ?? null,
+      estimatedValue: signalAny.estimatedValue ?? null,
       fieldsPresent,
     });
 
     try {
-      // Get system context for this mode
       const systemContext = await storage.getSystemContext(this.mode);
       if (!systemContext || !systemContext.lastStartedBy) {
         console.error(`[PaperExecution:${this.mode}] No system context or user for ${this.mode} mode`);
         return;
       }
 
-      // Phase 8.8.3-H4: Use guardrails_v2 to build settings
       const settings = await buildSettingsFromGuardrails(this.mode, systemContext.lastStartedBy);
       
-      // REB 8.8.3-F: Check kill switch before processing
       if (settings.killSwitchTripped) {
         console.log(`[8.8.3-F][RISK_REJECT] Kill switch tripped - signal rejected for ${signal.symbol}`);
         return;
       }
 
-      // REB 8.8.3-F: Execute trade using modern path
+      const hasQuantity = signalAny.quantity != null && signalAny.quantity > 0;
+      const hasEstimatedValue = signalAny.estimatedValue != null && signalAny.estimatedValue > 0;
+      
+      if (hasQuantity && hasEstimatedValue) {
+        console.log(`[B6][TRUST_SIZED] Using pre-sized signal for ${signal.symbol}: qty=${signalAny.quantity.toFixed(8)}, value=$${signalAny.estimatedValue.toFixed(2)}`);
+      } else {
+        console.log(`[B6][FALLBACK_SIZING] Signal missing sizing fields for ${signal.symbol}, will size in executeSimulatedTrade`);
+        const guardrails = await storage.getGuardrailsV2({ mode: this.mode });
+        const portfolioState = await storage.getPortfolioState({ mode: this.mode, userId: systemContext.lastStartedBy });
+        const portfolioValue = portfolioState ? parseFloat(String(portfolioState.balance)) : 0;
+        
+        if (portfolioValue > 0) {
+          const sizingResult = sizePaperPositionForSignal({
+            portfolioValue,
+            guardrails,
+            entryPrice: signal.entryPrice,
+            stopPrice: signal.stopPrice,
+            symbol: signal.symbol,
+            strategy: signal.strategy as any,
+          });
+          
+          if (sizingResult.quantity > 0 && sizingResult.estimatedValue > 0) {
+            signalAny.quantity = sizingResult.quantity;
+            signalAny.estimatedValue = sizingResult.estimatedValue;
+            signalAny.preComputedNotional = sizingResult.estimatedValue;
+            console.log(`[B6][FALLBACK_SIZED] ${signal.symbol}: qty=${sizingResult.quantity.toFixed(8)}, value=$${sizingResult.estimatedValue.toFixed(2)}`);
+          } else {
+            console.log(`[B6][SIZING_FAILED] Zero sizing result for ${signal.symbol} - skipping`);
+            return;
+          }
+        } else {
+          console.error(`[B6][SIZING_ERROR] Invalid portfolio value for fallback sizing: ${portfolioValue}`);
+          return;
+        }
+      }
+
       console.log(`[8.8.3-F][PROCESS] Processing signal for ${signal.symbol} via guardrails_v2 path`);
       await this.executeSimulatedTrade(signal, settings);
       

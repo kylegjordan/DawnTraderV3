@@ -1,5 +1,5 @@
 /**
- * Phase 37: Signal Orchestrator
+ * Phase 37/B6: Signal Orchestrator
  * 
  * Implements hybrid signal-orchestration loop for mode-aware market evaluation.
  * Periodically scans filtered symbols and evaluates trading strategies to generate signals.
@@ -9,6 +9,7 @@
  * - Seeds immediate evaluation pass on start
  * - Timer-based evaluation (configurable interval)
  * - Calls all enabled strategies for each symbol
+ * - B6: All signals are sized via centralized sizing helper before forwarding
  * - De-duplicates and scores signals
  * - Forwards winning signals to TradingEngine for processing
  * 
@@ -17,21 +18,28 @@
  * - SignalOrchestrator: evaluates strategies and generates signals
  * - StrategyEngine: pure/deterministic strategy detection
  * - TradingEngine: executes trades and manages positions
+ * 
+ * B6 Refactor:
+ * - All 9 strategies now route through buildSizedSignalForStrategy()
+ * - Signals are pre-sized with quantity and estimatedValue before forwarding
+ * - Uses centralized sizing helper from paper-position-sizing.ts
  */
 
 import { StrategyEngine, StrategySignal } from './strategy-engine';
 import { FilteredPairsService } from './filtered-pairs-service';
 import { KrakenService } from './kraken';
 import { storage } from '../storage';
-import type { TradingSettings, ScreenerFilters, PriceData } from '@shared/schema';
+import type { TradingSettings, ScreenerFilters, PriceData, GuardrailsV2 } from '@shared/schema';
 import { telemetryTrace } from './telemetry-trace.js';
 import { PaperSimDiagnosticService } from './paper-sim-diagnostic.js';
 import { b5SizingAudit } from './b5-sizing-audit.js';
+import { sizePaperPositionForSignal, type StrategyType } from './paper-position-sizing.js';
+import { getPortfolioBalanceV2 } from './guardrail-settings.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
-  evaluationIntervalMs?: number; // Default: 30000 (30 seconds)
-  enabledStrategies?: string[]; // Default: all strategies
+  evaluationIntervalMs?: number;
+  enabledStrategies?: string[];
 }
 
 export interface EvaluationStats {
@@ -41,6 +49,18 @@ export interface EvaluationStats {
   signalsForwarded: number;
   lastEvaluationAt: Date;
   nextEvaluationAt: Date;
+}
+
+interface SizedStrategySignal extends StrategySignal {
+  quantity?: number;
+  estimatedValue?: number;
+  preComputedNotional?: number;
+}
+
+interface SizingContext {
+  portfolioValue: number;
+  guardrails: GuardrailsV2 | null;
+  mode: 'live' | 'paper';
 }
 
 export class SignalOrchestrator {
@@ -55,7 +75,6 @@ export class SignalOrchestrator {
   private readonly enabledStrategies: Set<string>;
   private onSignalCallback: ((signal: StrategySignal) => Promise<void>) | null = null;
   
-  // Statistics
   private stats: EvaluationStats = {
     symbolsEvaluated: 0,
     strategiesRun: 0,
@@ -67,7 +86,7 @@ export class SignalOrchestrator {
 
   constructor(config: SignalOrchestratorConfig) {
     this.mode = config.mode;
-    this.evaluationIntervalMs = config.evaluationIntervalMs || 30000; // Default: 30 seconds
+    this.evaluationIntervalMs = config.evaluationIntervalMs || 30000;
     this.enabledStrategies = new Set(config.enabledStrategies || [
       'vwap_pullback',
       'abcd_long',
@@ -77,7 +96,7 @@ export class SignalOrchestrator {
       'range_trading',
       'vwap_bounce',
       'liquidity_trap',
-      'dhma' // REB 2.12D: DHMA re-enabled with multi-timeframe confirmation
+      'dhma'
     ]);
     
     this.strategyEngine = new StrategyEngine();
@@ -86,11 +105,6 @@ export class SignalOrchestrator {
     this.diagnosticService = new PaperSimDiagnosticService();
   }
 
-  /**
-   * Start the signal orchestrator
-   * REB 2.5: Removed blocking evaluateMarket() to eliminate 143s startup delay
-   * Sets up periodic evaluation timer immediately without waiting for first evaluation
-   */
   async start(onSignal: (signal: StrategySignal) => Promise<void>): Promise<void> {
     if (this.isRunning) {
       console.log(`[37.A][SignalOrchestrator][${this.mode}] Already running`);
@@ -109,13 +123,10 @@ export class SignalOrchestrator {
       interval: this.evaluationIntervalMs 
     });
 
-    // REB 2.5: Run first evaluation asynchronously (non-blocking) to prevent startup delay
-    // This allows engine to become ACTIVE immediately while first evaluation runs in background
     this.evaluateMarket().catch(err => {
       console.error(`[SignalOrchestrator][${this.mode}] First evaluation failed:`, err);
     });
 
-    // Set up periodic evaluation timer
     this.evaluationTimer = setInterval(async () => {
       await this.evaluateMarket();
     }, this.evaluationIntervalMs);
@@ -125,9 +136,6 @@ export class SignalOrchestrator {
     telemetryTrace.trace('SignalOrchestrator', 'START_SUCCESS', 'INFO', { mode: this.mode });
   }
 
-  /**
-   * Stop the signal orchestrator
-   */
   stop(): void {
     if (!this.isRunning) {
       return;
@@ -147,34 +155,65 @@ export class SignalOrchestrator {
     telemetryTrace.trace('SignalOrchestrator', 'STOP_SUCCESS', 'INFO', { mode: this.mode });
   }
 
-  /**
-   * Get current evaluation statistics
-   */
   getStats(): EvaluationStats {
     return { ...this.stats };
   }
 
-  /**
-   * REB 2.12F: Check if a specific strategy is enabled
-   */
   isStrategyEnabled(strategyId: string): boolean {
     return this.enabledStrategies.has(strategyId);
   }
 
-  /**
-   * REB 2.12F: Get list of all enabled strategies
-   */
   getEnabledStrategies(): string[] {
     return Array.from(this.enabledStrategies);
   }
 
   /**
-   * Main market evaluation loop
-   * 1. Load filtered symbols
-   * 2. For each symbol, evaluate all enabled strategies
-   * 3. De-duplicate and score signals
-   * 4. Forward winning signals for processing
+   * B6: Build a sized signal from a raw strategy signal
+   * Routes all strategies through the centralized sizing helper
    */
+  private buildSizedSignalForStrategy(
+    rawSignal: StrategySignal | null,
+    strategyId: StrategyType,
+    sizingContext: SizingContext
+  ): SizedStrategySignal | null {
+    if (!rawSignal) return null;
+    
+    b5SizingAudit.logSignalCreated({
+      strategy: strategyId,
+      symbol: rawSignal.symbol,
+      entryPrice: rawSignal.entryPrice,
+      strategyQty: null,
+      strategyNotional: null,
+      hasEstimatedValue: false,
+      hasPreComputedNotional: false,
+    });
+
+    const sizingResult = sizePaperPositionForSignal({
+      portfolioValue: sizingContext.portfolioValue,
+      guardrails: sizingContext.guardrails,
+      entryPrice: rawSignal.entryPrice,
+      stopPrice: rawSignal.stopPrice,
+      symbol: rawSignal.symbol,
+      strategy: strategyId,
+    });
+
+    if (sizingResult.quantity <= 0 || sizingResult.estimatedValue <= 0) {
+      console.log(`[B6][SIZING_SKIP] Zero sizing result for ${rawSignal.symbol}/${strategyId}`);
+      return null;
+    }
+
+    const sizedSignal: SizedStrategySignal = {
+      ...rawSignal,
+      quantity: sizingResult.quantity,
+      estimatedValue: sizingResult.estimatedValue,
+      preComputedNotional: sizingResult.estimatedValue,
+    };
+
+    console.log(`[B6][SIZED] ${rawSignal.symbol}/${strategyId}: qty=${sizingResult.quantity.toFixed(8)}, value=$${sizingResult.estimatedValue.toFixed(2)}`);
+
+    return sizedSignal;
+  }
+
   private async evaluateMarket(): Promise<void> {
     if (!this.isRunning) {
       return;
@@ -185,7 +224,6 @@ export class SignalOrchestrator {
     telemetryTrace.trace('SignalOrchestrator', 'MARKET_EVALUATION_START', 'INFO', { mode: this.mode });
 
     try {
-      // Get system context and filters for this mode
       const systemContext = await storage.getSystemContext(this.mode);
       if (!systemContext) {
         console.error(`[37.A][SIGNAL] No system context found for mode ${this.mode}`);
@@ -200,7 +238,6 @@ export class SignalOrchestrator {
         return;
       }
 
-      // Get eligible symbols from FilteredPairsService
       const filteredPairsStats = await this.filteredPairsService.getValidPairs(this.mode, filters);
       const eligibleSymbols = filteredPairsStats.filteredPairs.map(p => p.symbol);
 
@@ -210,16 +247,11 @@ export class SignalOrchestrator {
         count: eligibleSymbols.length 
       });
 
-      // Phase 8.8.2: Stage-3 updates now handled by dedicated FX5Scanner service
-      // This service focuses solely on strategy signal evaluation
-
-      // Get trading settings from user who started the engine
       if (!systemContext.lastStartedBy) {
         console.error(`[37.A][SIGNAL] No user associated with ${this.mode} mode engine`);
         return;
       }
       
-      // Phase 41F-L.E2E-PURGE: Use default settings for single-user system
       const settings = {
         smaLength: 20,
         riskPerTradePercent: 2.0,
@@ -228,9 +260,24 @@ export class SignalOrchestrator {
         whitelistedSymbols: [],
         blacklistedSymbols: [],
         allowedTradingPairs: [],
-      } as any; // Minimal settings for strategy evaluation
+      } as any;
 
-      // Evaluate each symbol
+      const guardrails = await storage.getGuardrailsV2({ mode: this.mode });
+      const portfolioValue = await getPortfolioBalanceV2(this.mode, systemContext.lastStartedBy);
+      
+      if (portfolioValue <= 0) {
+        console.error(`[B6][SIZING_ERROR] Invalid portfolio value: ${portfolioValue}`);
+        return;
+      }
+
+      const sizingContext: SizingContext = {
+        portfolioValue,
+        guardrails,
+        mode: this.mode,
+      };
+
+      console.log(`[B6][CONTEXT] portfolioValue=$${portfolioValue.toFixed(2)}, guardrails=${guardrails ? 'loaded' : 'null'}`);
+
       let symbolsEvaluated = 0;
       let strategiesRun = 0;
       let signalsGenerated = 0;
@@ -238,25 +285,21 @@ export class SignalOrchestrator {
 
       for (const symbol of eligibleSymbols) {
         try {
-          // [8.8.3-B][SELECTION] Log strategy selection per symbol
-          // Currently all strategies are evaluated uniformly - no regime-based selection
           const selectedStrategies = Array.from(this.enabledStrategies);
           console.log("[8.8.3-B][SELECTION]", JSON.stringify({
             symbol,
-            regime: null, // No regime classification implemented
+            regime: null,
             selectedStrategies: "ALL_STRATEGIES",
             skippedStrategies: [],
             enabledCount: selectedStrategies.length
           }));
 
-          const signals = await this.evaluateSymbol(symbol, settings, filters);
+          const signals = await this.evaluateSymbol(symbol, settings, filters, sizingContext);
           symbolsEvaluated++;
           strategiesRun += this.enabledStrategies.size;
           signalsGenerated += signals.length;
 
-          // Forward signals to callback with validation
           for (const signal of signals) {
-            // [8.8.3-B] Validate signal before forwarding
             const validation = this.validateStrategySignal(signal);
             if (!validation.ok) {
               console.warn("[8.8.3-B][ROUTING] Dropped malformed StrategySignal", JSON.stringify({
@@ -271,13 +314,15 @@ export class SignalOrchestrator {
               continue;
             }
 
-            console.log("[8.8.3-B][ROUTING] StrategySignal accepted", JSON.stringify({
+            console.log("[B6][ROUTING] Sized StrategySignal accepted", JSON.stringify({
               symbol: signal.symbol,
               strategy: signal.strategy,
               entryPrice: signal.entryPrice?.toFixed(4),
               stopPrice: signal.stopPrice?.toFixed(4),
               targetPrice: signal.targetPrice?.toFixed(4),
-              confidence: signal.confidence?.toFixed(2)
+              confidence: signal.confidence?.toFixed(2),
+              quantity: (signal as any).quantity?.toFixed(8),
+              estimatedValue: (signal as any).estimatedValue?.toFixed(2)
             }));
 
             if (this.onSignalCallback) {
@@ -290,7 +335,6 @@ export class SignalOrchestrator {
         }
       }
 
-      // Update statistics
       const now = new Date();
       this.stats = {
         symbolsEvaluated,
@@ -310,38 +354,31 @@ export class SignalOrchestrator {
     }
   }
 
-  /**
-   * Evaluate all enabled strategies for a single symbol
-   * Returns array of generated signals
-   */
   private async evaluateSymbol(
     symbol: string,
     settings: TradingSettings,
-    filters: ScreenerFilters
-  ): Promise<StrategySignal[]> {
-    const signals: StrategySignal[] = [];
+    filters: ScreenerFilters,
+    sizingContext: SizingContext
+  ): Promise<SizedStrategySignal[]> {
+    const signals: SizedStrategySignal[] = [];
 
     try {
-      // Fetch OHLC data for the symbol (last 100 candles, 1h timeframe)
       const ohlcResponse = await this.kraken.getOHLCData(symbol, 60);
       const ohlcData = ohlcResponse.ohlc;
       
       if (!ohlcData || ohlcData.length < 20) {
-        // console.log(`[37.A][SIGNAL] Insufficient OHLC data for ${symbol}: ${ohlcData?.length || 0} candles`);
         return signals;
       }
 
-      // Get current ticker for real-time price
       const ticker = await this.kraken.getTicker(symbol);
       const currentPrice = parseFloat(ticker[symbol]?.c[0] || '0');
-      const currentVolume = parseFloat(ticker[symbol]?.v[1] || '0'); // 24h volume
+      const currentVolume = parseFloat(ticker[symbol]?.v[1] || '0');
       
       if (!currentPrice || currentPrice === 0) {
         console.log(`[37.A][SIGNAL] Invalid price for ${symbol}`);
         return signals;
       }
 
-      // Calculate technical indicators
       const vwap = this.calculateVWAP(ohlcData);
       const sma = this.calculateSMA(ohlcData, settings.smaLength || 20);
       const high24h = Math.max(...ohlcData.slice(-24).map(c => parseFloat(c.high)));
@@ -356,180 +393,112 @@ export class SignalOrchestrator {
         low24h,
       };
 
-      // Evaluate each enabled strategy
-      // Note: Casting to any[] to bypass TypeScript's strict type checking
-      // KrakenOHLCData has compatible structure (high, low, close, volume fields)
       const ohlcAsAny = ohlcData as any[];
       
       if (this.enabledStrategies.has('vwap_pullback')) {
-        const signal = this.strategyEngine.detectVWAPPullback(indicators, settings, ohlcAsAny);
-        if (signal) {
-          signal.symbol = symbol;
-          b5SizingAudit.logSignalCreated({
-            strategy: 'vwap_pullback',
-            symbol,
-            entryPrice: signal.entryPrice,
-            strategyQty: null,
-            strategyNotional: null,
-            hasEstimatedValue: false,
-            hasPreComputedNotional: false,
-          });
-          signals.push(signal);
+        const rawSignal = this.strategyEngine.detectVWAPPullback(indicators, settings, ohlcAsAny);
+        if (rawSignal) {
+          rawSignal.symbol = symbol;
+          const sizedSignal = this.buildSizedSignalForStrategy(rawSignal, 'vwap_pullback', sizingContext);
+          if (sizedSignal) signals.push(sizedSignal);
         }
       }
 
       if (this.enabledStrategies.has('abcd_long')) {
-        const signal = this.strategyEngine.detectABCDLong(ohlcAsAny, settings);
-        if (signal) {
-          signal.symbol = symbol;
-          b5SizingAudit.logSignalCreated({
-            strategy: 'abcd_long',
-            symbol,
-            entryPrice: signal.entryPrice,
-            strategyQty: null,
-            strategyNotional: null,
-            hasEstimatedValue: false,
-            hasPreComputedNotional: false,
-          });
-          signals.push(signal);
+        const rawSignal = this.strategyEngine.detectABCDLong(ohlcAsAny, settings);
+        if (rawSignal) {
+          rawSignal.symbol = symbol;
+          const sizedSignal = this.buildSizedSignalForStrategy(rawSignal, 'abcd_long', sizingContext);
+          if (sizedSignal) signals.push(sizedSignal);
         }
       }
 
       if (this.enabledStrategies.has('sma_trend_ride')) {
-        const signal = this.strategyEngine.detectSMATrendRide(indicators, ohlcAsAny, settings);
-        if (signal) {
-          signal.symbol = symbol;
-          b5SizingAudit.logSignalCreated({
-            strategy: 'sma_trend_ride',
-            symbol,
-            entryPrice: signal.entryPrice,
-            strategyQty: null,
-            strategyNotional: null,
-            hasEstimatedValue: false,
-            hasPreComputedNotional: false,
-          });
-          signals.push(signal);
+        const rawSignal = this.strategyEngine.detectSMATrendRide(indicators, ohlcAsAny, settings);
+        if (rawSignal) {
+          rawSignal.symbol = symbol;
+          const sizedSignal = this.buildSizedSignalForStrategy(rawSignal, 'sma_trend_ride', sizingContext);
+          if (sizedSignal) signals.push(sizedSignal);
         }
       }
 
       if (this.enabledStrategies.has('breakout')) {
-        const signal = this.strategyEngine.detectBreakout(ohlcAsAny, {
+        const rawSignal = this.strategyEngine.detectBreakout(ohlcAsAny, {
           minConsolidationBars: 10,
           maxRangeWidth: 3,
           breakoutBuffer: 1,
           volumeMultiplier: 2,
           maxHoldingHours: 12
         });
-        if (signal) {
-          signal.symbol = symbol;
-          b5SizingAudit.logSignalCreated({
-            strategy: 'breakout',
-            symbol,
-            entryPrice: signal.entryPrice,
-            strategyQty: null,
-            strategyNotional: null,
-            hasEstimatedValue: false,
-            hasPreComputedNotional: false,
-          });
-          signals.push(signal);
+        if (rawSignal) {
+          rawSignal.symbol = symbol;
+          const sizedSignal = this.buildSizedSignalForStrategy(rawSignal, 'breakout', sizingContext);
+          if (sizedSignal) signals.push(sizedSignal);
         }
       }
 
       if (this.enabledStrategies.has('mean_reversion')) {
-        const signal = this.strategyEngine.detectMeanReversion(indicators, ohlcAsAny, {
+        const rawSignal = this.strategyEngine.detectMeanReversion(indicators, ohlcAsAny, {
           meanType: 'vwap',
           smaLength: 20,
           deviationThreshold: 2.5,
           partialExitPercent: 50,
           stopLossBuffer: 1
         });
-        if (signal) {
-          signal.symbol = symbol;
-          b5SizingAudit.logSignalCreated({
-            strategy: 'mean_reversion',
-            symbol,
-            entryPrice: signal.entryPrice,
-            strategyQty: null,
-            strategyNotional: null,
-            hasEstimatedValue: false,
-            hasPreComputedNotional: false,
-          });
-          signals.push(signal);
+        if (rawSignal) {
+          rawSignal.symbol = symbol;
+          const sizedSignal = this.buildSizedSignalForStrategy(rawSignal, 'mean_reversion', sizingContext);
+          if (sizedSignal) signals.push(sizedSignal);
         }
       }
 
       if (this.enabledStrategies.has('range_trading')) {
-        const signal = this.strategyEngine.detectRangeTrading(ohlcAsAny, {
+        const rawSignal = this.strategyEngine.detectRangeTrading(ohlcAsAny, {
           minRangeDurationHours: 12,
           minRangeWidth: 3,
           minBoundaryTouches: 3,
           entryZoneWidth: 0.5,
           stopLossBeyond: 1
         });
-        if (signal) {
-          signal.symbol = symbol;
-          b5SizingAudit.logSignalCreated({
-            strategy: 'range_trading',
-            symbol,
-            entryPrice: signal.entryPrice,
-            strategyQty: null,
-            strategyNotional: null,
-            hasEstimatedValue: false,
-            hasPreComputedNotional: false,
-          });
-          signals.push(signal);
+        if (rawSignal) {
+          rawSignal.symbol = symbol;
+          const sizedSignal = this.buildSizedSignalForStrategy(rawSignal, 'range_trading', sizingContext);
+          if (sizedSignal) signals.push(sizedSignal);
         }
       }
 
       if (this.enabledStrategies.has('vwap_bounce')) {
-        const signal = this.strategyEngine.detectVWAPBounce(indicators, ohlcAsAny, {
+        const rawSignal = this.strategyEngine.detectVWAPBounce(indicators, ohlcAsAny, {
           vwapProximity: 0.5,
           minVWAPSlope: 0.3,
           volumeMultiplier: 1.3,
           maxPullbackBars: 5,
           partialExitR: 1.5
         });
-        if (signal) {
-          signal.symbol = symbol;
-          b5SizingAudit.logSignalCreated({
-            strategy: 'vwap_bounce',
-            symbol,
-            entryPrice: signal.entryPrice,
-            strategyQty: null,
-            strategyNotional: null,
-            hasEstimatedValue: false,
-            hasPreComputedNotional: false,
-          });
-          signals.push(signal);
+        if (rawSignal) {
+          rawSignal.symbol = symbol;
+          const sizedSignal = this.buildSizedSignalForStrategy(rawSignal, 'vwap_bounce', sizingContext);
+          if (sizedSignal) signals.push(sizedSignal);
         }
       }
 
       if (this.enabledStrategies.has('liquidity_trap')) {
-        const signal = this.strategyEngine.detectLiquidityTrap(ohlcAsAny, {
+        const rawSignal = this.strategyEngine.detectLiquidityTrap(ohlcAsAny, {
           maxTrapExtension: 1.2,
           trapReturnBars: 2,
           minStopZoneSize: 'medium',
           minLevelTouches: 3,
           volumeRatio: 1.5
         });
-        if (signal) {
-          signal.symbol = symbol;
-          b5SizingAudit.logSignalCreated({
-            strategy: 'liquidity_trap',
-            symbol,
-            entryPrice: signal.entryPrice,
-            strategyQty: null,
-            strategyNotional: null,
-            hasEstimatedValue: false,
-            hasPreComputedNotional: false,
-          });
-          signals.push(signal);
+        if (rawSignal) {
+          rawSignal.symbol = symbol;
+          const sizedSignal = this.buildSizedSignalForStrategy(rawSignal, 'liquidity_trap', sizingContext);
+          if (sizedSignal) signals.push(sizedSignal);
         }
       }
 
-      // REB 2.12F: DHMA enabled with full microstructure parameters
       if (this.enabledStrategies.has('dhma')) {
-        const signal = this.strategyEngine.detectDHMA(indicators, ohlcAsAny, {
+        const rawSignal = this.strategyEngine.detectDHMA(indicators, ohlcAsAny, {
           theta_OBI: 0.3,
           epsilon_micro: 0.2,
           tau_toxicity: 0.7,
@@ -539,23 +508,15 @@ export class SignalOrchestrator {
           N_burst: 10,
           window_session: 20
         });
-        if (signal) {
-          signal.symbol = symbol;
-          b5SizingAudit.logSignalCreated({
-            strategy: 'dhma',
-            symbol,
-            entryPrice: signal.entryPrice,
-            strategyQty: null,
-            strategyNotional: null,
-            hasEstimatedValue: false,
-            hasPreComputedNotional: false,
-          });
-          signals.push(signal);
+        if (rawSignal) {
+          rawSignal.symbol = symbol;
+          const sizedSignal = this.buildSizedSignalForStrategy(rawSignal, 'dhma', sizingContext);
+          if (sizedSignal) signals.push(sizedSignal);
         }
       }
 
       if (signals.length > 0) {
-        console.log(`[37.A][SIGNAL] ${symbol}: Generated ${signals.length} signal(s) - ${signals.map(s => s.strategy).join(', ')}`);
+        console.log(`[37.A][SIGNAL] ${symbol}: Generated ${signals.length} sized signal(s) - ${signals.map(s => s.strategy).join(', ')}`);
       }
 
     } catch (error) {
@@ -565,9 +526,6 @@ export class SignalOrchestrator {
     return signals;
   }
 
-  /**
-   * Calculate Volume-Weighted Average Price (VWAP)
-   */
   private calculateVWAP(data: any[]): number {
     if (data.length === 0) return 0;
 
@@ -588,9 +546,6 @@ export class SignalOrchestrator {
     return sumVolume > 0 ? sumPriceVolume / sumVolume : 0;
   }
 
-  /**
-   * Calculate Simple Moving Average (SMA)
-   */
   private calculateSMA(data: any[], period: number): number {
     if (data.length < period) return 0;
 
@@ -599,10 +554,6 @@ export class SignalOrchestrator {
     return sum / period;
   }
 
-  /**
-   * [8.8.3-B] Validate StrategySignal for malformed data before forwarding
-   * Ensures all required fields are present and have valid values
-   */
   private validateStrategySignal(signal: StrategySignal): { ok: boolean; reason?: string } {
     if (!signal.symbol) return { ok: false, reason: "missing symbol" };
     if (!signal.strategy) return { ok: false, reason: "missing strategy" };

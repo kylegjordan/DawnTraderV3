@@ -1,0 +1,281 @@
+📌 PHASE 8.8.3 – B6
+
+Unified Sizing Pipeline Refactor (All 9 Strategies + Exposure-Aligned Sizing)
+
+High-level goal
+
+Bring the implementation in line with the blueprint:
+
+Strategy output → Sizing helper → Guardrails → Ready-to-Buy → Open Trades
+
+for all 9 strategies, with the sizing helper using the same exposure-budget formula as the max total exposure guardrail.
+
+This is a refactor, not a new feature and not a hack. No business rules should change except that:
+
+Signals are now sized consistently for all strategies, and
+
+The sizing helper and max exposure guardrail use the same math.
+
+🔒 Constraints
+
+Do NOT change:
+
+Guardrail rule semantics (MAX_TOTAL_EXPOSURE, MAX_POSITION, etc.).
+
+Signal generation logic inside each strategy (the “brain” of each strategy).
+
+WebSocket/REST pricing behavior.
+
+Any DB schema.
+
+This phase is sizing-only:
+
+We are correcting how sizes are computed and where they are applied.
+
+We are not changing when signals are generated or when exits happen.
+
+For any ambiguity, mirror the existing VWAP Pullback + sizing pipeline (which is currently the closest to “correct”) and standardize that pattern across all strategies.
+
+PART 1 – Update the sizing helper to use exposure budget
+
+File: server/services/paper-position-sizing.ts
+
+1.1 Introduce an exposure-budget-based maxNotional
+
+Currently, maxNotional is derived directly from portfolioValue * maxPositionPercentPct / 100.
+
+Refactor the sizing helper so that it:
+
+Reads maxTotalExposurePct from the guardrail/settings layer.
+
+Computes an exposure budget.
+
+Computes maxNotional as a percentage of that exposure budget.
+
+Applies the existing buffer factor.
+
+Concrete target behavior (in pseudocode):
+
+// 1. Read portfolio value and guardrail settings
+const portfolioValue = /* existing logic, unchanged */;
+const safeMaxPositionPct = /* existing maxPositionPercentPct, already “safe” clamped */;
+
+// NEW: read maxTotalExposurePct from guardrails_v2 settings
+// If not present, default to 100 (backwards-compatible)
+const maxTotalExposurePct =
+  settings.maxTotalExposurePct != null
+    ? Number(settings.maxTotalExposurePct)
+    : 100;
+
+// 2. Compute exposure budget
+const exposureBudget = portfolioValue * (maxTotalExposurePct / 100);
+
+// 3. Compute maxNotional from exposure budget and max position
+const rawMaxNotional = exposureBudget * (safeMaxPositionPct / 100);
+
+// 4. Apply the existing safety buffer (already defined in this file)
+const bufferedMaxNotional = rawMaxNotional * MAX_POSITION_BUFFER_FACTOR;
+
+// 5. When sizing, clamp estimatedValue / quantity to bufferedMaxNotional
+if (estimatedValue > bufferedMaxNotional) {
+  quantity = bufferedMaxNotional / entryPrice;
+  estimatedValue = quantity * entryPrice;
+}
+
+
+Important:
+
+Reuse the same maxTotalExposurePct field that the guardrails are already using (this was added earlier in guardrails_v2 and trade-safety.ts).
+
+Do not introduce a second, different “max exposure” field. It must be the same single source of truth.
+
+If for any reason maxTotalExposurePct is missing, use 100 as a safe, backward-compatible default.
+
+1.2 Keep risk-based sizing intact
+
+If there is existing logic for:
+
+portfolioRiskPerTradePct,
+
+risk-per-trade sizing,
+
+or stop-loss-distance based sizing,
+
+do not remove it. Integrate the maxNotional cap as a hard upper bound:
+
+// If risk-based sizing suggests a notional > bufferedMaxNotional,
+// clamp down to bufferedMaxNotional
+if (riskBasedNotional > bufferedMaxNotional) {
+  finalNotional = bufferedMaxNotional;
+} else {
+  finalNotional = riskBasedNotional;
+}
+
+
+The key is:
+
+Every path to a final estimatedValue must respect bufferedMaxNotional derived from maxTotalExposurePct and maxPositionPercentPct.
+
+PART 2 – Ensure ALL 9 strategies use the sizing helper
+
+File: server/services/signal-orchestrator.ts
+
+Right now, only some strategies (e.g., VWAP Pullback) feed their outputs into the sizing helper before emitting a signal. Others emit raw strategy outputs directly.
+
+We want:
+
+All 9 strategies → same sizing pipeline → same fields on the final signal.
+
+2.1 Introduce a common helper for “strategy → sized signal”
+
+Add a private helper in signal-orchestrator.ts, something like:
+
+async function buildSizedSignalForStrategy(
+  rawSignal: StrategySignal | null,
+  context: {
+    strategyId: string;
+    mode: 'paper' | 'live';
+    portfolioSnapshot: PortfolioSnapshot;
+    settings: GuardrailSettings; // or whatever your settings type is
+  }
+): Promise<StrategySignal | null> {
+  if (!rawSignal) return null;
+
+  // Delegate to the existing sizing helper in paper-position-sizing.ts
+  const sizedSignal = await paperPositionSizing.sizeSignal({
+    signal: rawSignal,
+    strategyId: context.strategyId,
+    mode: context.mode,
+    portfolio: context.portfolioSnapshot,
+    settings: context.settings,
+  });
+
+  return sizedSignal;
+}
+
+
+Adjust the parameter names/types to match what is already used today for the VWAP strategy.
+
+2.2 For each strategy, route the raw output through this helper
+
+For every strategy block in signal-orchestrator.ts (VWAP Pullback, ABCD, SMA Trend Ride, Breakout, Mean Reversion, Range, VWAP Bounce, Liquidity Trap, DHMA):
+
+Find the code that looks like:
+
+const signal = StrategyXYZ.generate(/* ... */);
+return signal;
+
+
+or
+
+const signal = StrategyXYZ.buildSignal(/* ... */);
+if (!signal) return null;
+return {
+  ...signal,
+  // maybe extra metadata
+};
+
+
+Replace it with something like:
+
+const rawSignal = StrategyXYZ.generate(/* ... */);
+if (!rawSignal) return null;
+
+const sizedSignal = await buildSizedSignalForStrategy(rawSignal, {
+  strategyId: 'XYZ',          // use the real strategy key used elsewhere
+  mode,                       // paper/live from context
+  portfolioSnapshot,          // existing portfolio snapshot
+  settings: guardrailSettings // existing guardrail / risk settings
+});
+
+return sizedSignal;
+
+
+Use the exact same sizing call pattern that is currently used for the strategy that already goes through the sizing helper (VWAP Pullback). Copy that pattern and apply it to all other strategies.
+
+Outcome:
+
+Every strategy always passes through the sizing helper.
+
+No raw “estimatedValue from strategy only” goes directly to the engine.
+
+The signals that reach the engine have:
+
+quantity
+
+estimatedValue
+
+notional respecting max exposure
+
+risk sizing consistent with guardrails
+
+PART 3 – Engine: use sized signals, only fall back if absolutely necessary
+
+File: server/services/paper-execution-engine.ts
+
+The goal here is not to add new behavior, but to:
+
+Confirm the engine trusts the sized signals, and
+
+Only calls sizing as a safety net if a signal arrives without quantity or estimatedValue.
+
+3.1 In processSignal (or equivalent):
+
+If the signal already has:
+
+signal.quantity != null &&
+signal.estimatedValue != null
+
+
+then:
+
+Do NOT recompute size.
+
+Use the provided quantity / estimatedValue directly (they came from the sizing helper).
+
+Only if the signal is missing sizing fields, do a fallback sizing call:
+
+if (!signal.quantity || !signal.estimatedValue) {
+  const resized = await paperPositionSizing.sizeSignal(/* signal, context */);
+  if (!resized) return; // or skip
+  signal = resized;
+}
+
+
+This ensures:
+
+The canonical path is Strategy → Sizing helper → Engine.
+
+We do not double-size or override the helper.
+
+If some future refactor accidentally omits sizing in a strategy, the engine doesn’t blow up; it just does a “last-resort” size.
+
+PART 4 – Verification checklist (what you must prove in logs & diagnostics)
+
+After making these changes, Replit must:
+
+Run a 20–30 minute paper sim with:
+
+maxTotalExposurePct set to something realistic (e.g. 25–40%).
+
+maxPositionPercentPct matching your current preference.
+
+Use B5 sizing diagnostics to prove:
+
+For all 9 strategies, SIGNAL_CREATED events are followed by SIZING_CALLED events.
+
+There are no strategy families where SIGNAL_CREATED exists but SIZING_CALLED never appears.
+
+The distribution of estimatedValue after sizing is clustered around maxNotional and below, not wildly above it.
+
+Use B4 MAX_POSITION diagnostics to prove:
+
+The proportion of MAX_POSITION blocks drops dramatically compared to the prior session.
+
+Remaining MAX_POSITION blocks make sense given the exposure budget & guardrail settings (spot-check 5–10 examples).
+
+Use Funnel diagnostics to verify:
+
+The funnel still works end-to-end (Active pool → Attempts → RTB → Open trades).
+
+There is no new bottleneck introduced by sizing.

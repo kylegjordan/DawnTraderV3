@@ -1,5 +1,5 @@
 /**
- * Phase 8.8.3-J7/AJ9: Paper-Mode Position Sizing Helper
+ * Phase 8.8.3-J7/AJ9/B6: Paper-Mode Position Sizing Helper
  * 
  * Pure function for calculating position sizes during signal generation (P2).
  * This helper does NOT access the database or make any network calls.
@@ -14,6 +14,12 @@
  * - MAX_POSITION_BUFFER_FACTOR (0.97) provides 3% wiggle room below max position cap
  * - This prevents legitimate trades from being blocked by MAX_POSITION due to
  *   price changes between RTB sizing and execution
+ * 
+ * B6 Refactor:
+ * - maxNotional is now derived from exposure budget (portfolioValue × maxTotalExposurePct)
+ * - This aligns sizing with the MAX_TOTAL_EXPOSURE guardrail check
+ * - Formula: exposureBudget = portfolioValue × (maxTotalExposurePct / 100)
+ *            maxNotional = exposureBudget × (maxPositionPercentPct / 100)
  */
 
 import type { GuardrailsV2 } from '@shared/schema';
@@ -46,6 +52,8 @@ export interface PaperPositionSizingResult {
     riskAmount: number;
     stopDistance: number;
     maxPositionPct: number;
+    maxTotalExposurePct: number;
+    exposureBudget: number;
     maxNotional: number;
     bufferedMaxNotional: number;
     wasClamped: boolean;
@@ -57,12 +65,15 @@ export interface PaperPositionSizingResult {
  * 
  * Pure function - no DB calls, no network calls.
  * 
- * Logic:
+ * B6 Logic:
  * 1. Calculate risk amount: portfolioValue × (portfolioRiskPerTradePct / 100)
  * 2. Calculate stop distance: |entryPrice - stopPrice|
- * 3. Calculate raw quantity: riskAmount / stopDistance
- * 4. Clamp by maxPositionPercentPct if needed
- * 5. Return quantity and estimatedValue
+ * 3. Calculate raw quantity (risk-based): riskAmount / stopDistance
+ * 4. Calculate exposure budget: portfolioValue × (maxTotalExposurePct / 100)
+ * 5. Calculate maxNotional: exposureBudget × (maxPositionPercentPct / 100)
+ * 6. Apply buffer factor to maxNotional
+ * 7. Clamp quantity if risk-based notional exceeds bufferedMaxNotional
+ * 8. Return quantity and estimatedValue
  * 
  * Returns { quantity: 0, estimatedValue: 0 } for any invalid input
  * (NaN, zero, negative values, malformed data)
@@ -70,99 +81,94 @@ export interface PaperPositionSizingResult {
 export function sizePaperPositionForSignal(params: PaperPositionSizingParams): PaperPositionSizingResult {
   const { portfolioValue, guardrails, entryPrice, stopPrice, symbol, strategy } = params;
   
-  // Default return for invalid cases
   const invalidResult: PaperPositionSizingResult = { quantity: 0, estimatedValue: 0 };
   
-  // Validate inputs
   if (!Number.isFinite(portfolioValue) || portfolioValue <= 0) {
-    console.log(`[J7][SIZING] Invalid portfolioValue (${portfolioValue}) for ${symbol} - returning 0`);
+    console.log(`[B6][SIZING] Invalid portfolioValue (${portfolioValue}) for ${symbol} - returning 0`);
     return invalidResult;
   }
   
   if (!Number.isFinite(entryPrice) || entryPrice <= 0) {
-    console.log(`[J7][SIZING] Invalid entryPrice (${entryPrice}) for ${symbol} - returning 0`);
+    console.log(`[B6][SIZING] Invalid entryPrice (${entryPrice}) for ${symbol} - returning 0`);
     return invalidResult;
   }
   
   if (!Number.isFinite(stopPrice) || stopPrice <= 0) {
-    console.log(`[J7][SIZING] Invalid stopPrice (${stopPrice}) for ${symbol} - returning 0`);
+    console.log(`[B6][SIZING] Invalid stopPrice (${stopPrice}) for ${symbol} - returning 0`);
     return invalidResult;
   }
   
-  // Calculate stop distance
   const stopDistance = Math.abs(entryPrice - stopPrice);
   if (stopDistance === 0 || !Number.isFinite(stopDistance)) {
-    console.log(`[J7][SIZING] Invalid stopDistance (${stopDistance}) for ${symbol} - returning 0`);
+    console.log(`[B6][SIZING] Invalid stopDistance (${stopDistance}) for ${symbol} - returning 0`);
     return invalidResult;
   }
   
-  // Extract guardrail values with safe defaults
   const riskPerTradePct = parseFloat(String(guardrails?.portfolioRiskPerTradePct || '1.50'));
   const maxPositionPct = parseFloat(String(guardrails?.maxPositionPercentPct || '10.00'));
   
-  // Validate guardrail values
+  const guardrailsAny = guardrails as any;
+  const maxTotalExposurePctRaw = guardrailsAny?.maxTotalExposurePct;
+  const maxTotalExposurePct = maxTotalExposurePctRaw != null 
+    ? parseFloat(String(maxTotalExposurePctRaw)) 
+    : 100;
+  
   const safeRiskPct = Number.isFinite(riskPerTradePct) && riskPerTradePct > 0 ? riskPerTradePct : 1.50;
   const safeMaxPositionPct = Number.isFinite(maxPositionPct) && maxPositionPct > 0 ? maxPositionPct : 10.00;
+  const safeMaxTotalExposurePct = Number.isFinite(maxTotalExposurePct) && maxTotalExposurePct > 0 ? maxTotalExposurePct : 100;
   
-  // Step 1: Calculate risk amount
   const riskAmount = (portfolioValue * safeRiskPct) / 100;
   
-  // Step 2: Calculate raw quantity based on risk
   let quantity = riskAmount / stopDistance;
   
-  // Validate quantity
   if (!Number.isFinite(quantity) || quantity <= 0) {
-    console.log(`[J7][SIZING] Invalid quantity (${quantity}) for ${symbol} - returning 0`);
+    console.log(`[B6][SIZING] Invalid risk-based quantity (${quantity}) for ${symbol} - returning 0`);
     return invalidResult;
   }
   
-  // Step 3: Calculate max notional from maxPositionPercentPct
-  const maxNotional = (portfolioValue * safeMaxPositionPct) / 100;
-  
-  // AJ9: Apply buffer factor to max notional for sizing (3% below max cap)
-  // This provides wiggle room for price changes between RTB sizing and execution
+  const exposureBudget = portfolioValue * (safeMaxTotalExposurePct / 100);
+  const maxNotional = exposureBudget * (safeMaxPositionPct / 100);
   const bufferedMaxNotional = maxNotional * MAX_POSITION_BUFFER_FACTOR;
   
-  let estimatedValue = quantity * entryPrice;
+  let riskBasedNotional = quantity * entryPrice;
+  let estimatedValue = riskBasedNotional;
   let wasClamped = false;
   
-  // Step 4: Clamp quantity if notional exceeds buffered max position
-  // Use buffered value for sizing, but MAX_POSITION check at execution uses full max
-  if (estimatedValue > bufferedMaxNotional) {
+  if (riskBasedNotional > bufferedMaxNotional) {
     wasClamped = true;
     quantity = bufferedMaxNotional / entryPrice;
     estimatedValue = quantity * entryPrice;
   }
   
-  // Final validation
   if (!Number.isFinite(quantity) || !Number.isFinite(estimatedValue)) {
-    console.log(`[J7][SIZING] Final validation failed for ${symbol} - returning 0`);
+    console.log(`[B6][SIZING] Final validation failed for ${symbol} - returning 0`);
     return invalidResult;
   }
   
-  // Log sizing details (AJ9: includes buffer info)
-  console.log(`[AJ9][SIZING]`, {
+  console.log(`[B6][SIZING]`, {
     symbol,
     strategy,
     portfolioValue: portfolioValue.toFixed(2),
     riskPct: safeRiskPct.toFixed(2),
     riskAmount: riskAmount.toFixed(2),
     stopDistance: stopDistance.toFixed(8),
-    quantity: quantity.toFixed(8),
-    estimatedValue: estimatedValue.toFixed(2),
+    maxTotalExposurePct: safeMaxTotalExposurePct.toFixed(2),
+    exposureBudget: exposureBudget.toFixed(2),
     maxPositionPct: safeMaxPositionPct.toFixed(2),
     maxNotional: maxNotional.toFixed(2),
     bufferedMaxNotional: bufferedMaxNotional.toFixed(2),
+    riskBasedNotional: riskBasedNotional.toFixed(2),
+    quantity: quantity.toFixed(8),
+    estimatedValue: estimatedValue.toFixed(2),
     bufferFactor: MAX_POSITION_BUFFER_FACTOR,
     wasClamped
   });
   
-  // B5: Log sizing call to diagnostic service
   b5SizingAudit.logSizingCalled({
     strategy: strategy,
     symbol,
     entryPrice,
-    rawNotional: null,
+    rawNotional: riskBasedNotional,
     sizedQuantity: quantity,
     sizedNotional: estimatedValue,
     riskPct: safeRiskPct,
@@ -179,6 +185,8 @@ export function sizePaperPositionForSignal(params: PaperPositionSizingParams): P
       riskAmount,
       stopDistance,
       maxPositionPct: safeMaxPositionPct,
+      maxTotalExposurePct: safeMaxTotalExposurePct,
+      exposureBudget,
       maxNotional,
       bufferedMaxNotional,
       wasClamped
@@ -192,14 +200,14 @@ export function sizePaperPositionForSignal(params: PaperPositionSizingParams): P
  */
 export function validatePaperPortfolioValue(balance: string | number | null | undefined, source: string): number {
   if (balance === null || balance === undefined) {
-    console.error(`[J7][PORTFOLIO_ERROR] No portfolio balance found from ${source}`);
+    console.error(`[B6][PORTFOLIO_ERROR] No portfolio balance found from ${source}`);
     throw new Error(`Paper portfolio value not found. Cannot size positions.`);
   }
   
   const parsed = typeof balance === 'number' ? balance : parseFloat(String(balance));
   
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    console.error(`[J7][PORTFOLIO_ERROR] Invalid portfolio balance: ${balance} from ${source}`);
+    console.error(`[B6][PORTFOLIO_ERROR] Invalid portfolio balance: ${balance} from ${source}`);
     throw new Error(`Invalid paper portfolio value: ${balance}. Cannot size positions.`);
   }
   
