@@ -1412,6 +1412,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const lowPriceMinPositionNotional = rawPayload.lowPriceMinPositionNotional !== undefined
         ? parseFloat(String(rawPayload.lowPriceMinPositionNotional))
         : undefined;
+      
+      // Phase 8.8.3-B3: Max Total Portfolio Exposure
+      const maxTotalExposurePct = rawPayload.maxTotalExposurePct !== undefined
+        ? parseFloat(String(rawPayload.maxTotalExposurePct))
+        : undefined;
 
       // Phase 5: Comprehensive coherency validation using GuardrailPolicy
       const { guardrailPolicy } = await import('./services/guardrail-policy');
@@ -1426,6 +1431,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       if (lowPriceThreshold !== undefined) validationPayload.lowPriceThreshold = lowPriceThreshold;
       if (lowPriceMinStopAtrMult !== undefined) validationPayload.lowPriceMinStopAtrMult = lowPriceMinStopAtrMult;
       if (lowPriceMinPositionNotional !== undefined) validationPayload.lowPriceMinPositionNotional = lowPriceMinPositionNotional;
+      if (maxTotalExposurePct !== undefined) validationPayload.maxTotalExposurePct = maxTotalExposurePct;
       if (isManualOverride !== undefined || tunedByLatti !== undefined || lockedByUser !== undefined) {
         validationPayload.management = {
           isManualOverride: isManualOverride ?? false,
@@ -1472,6 +1478,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       if (lowPriceThreshold !== undefined) updatePayload.lowPriceThreshold = String(lowPriceThreshold);
       if (lowPriceMinStopAtrMult !== undefined) updatePayload.lowPriceMinStopAtrMult = String(lowPriceMinStopAtrMult);
       if (lowPriceMinPositionNotional !== undefined) updatePayload.lowPriceMinPositionNotional = String(lowPriceMinPositionNotional);
+      if (maxTotalExposurePct !== undefined) updatePayload.maxTotalExposurePct = String(maxTotalExposurePct);
       if (isManualOverride !== undefined) updatePayload.isManualOverride = isManualOverride;
       if (tunedByLatti !== undefined) updatePayload.tunedByLatti = tunedByLatti;
       if (lockedByUser !== undefined) updatePayload.lockedByUser = lockedByUser;

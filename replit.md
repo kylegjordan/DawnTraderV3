@@ -50,6 +50,13 @@ The Filter Insights UI uses REST data for Cycle Info and Last Scan Result. The b
 - Fixed TypeScript error in `guardrail-settings.ts` return type (added `killSwitchTripped: boolean`)
 - **Removed automatic reset of guardrails and screener filters** when starting a "New Simulation" - user configurations are now preserved across simulation restarts
 
+**Phase 8.8.3-B3.7: Max Total Portfolio Exposure Fix** (Dec 2025):
+The `maxTotalExposurePct` guardrail field was not updating when edited because it was missing from:
+1. Field mapping in `PUT /api/guardrails-v2` endpoint (routes.ts lines 1419-1422)
+2. Validation payload builder (routes.ts line 1437)
+3. Update payload builder (routes.ts line 1484)
+4. Storage upsert function (storage.ts line 802)
+
 **Phase 8.8.3-B3.6: Kraken WebSocket Price Engine** replaces REST polling with real-time WebSocket updates for open trade monitoring:
 - `KrakenWebSocketAdapter` (`server/services/kraken-websocket-adapter.ts`) connects to `wss://ws.kraken.com` for real-time ticker subscriptions
 - `LivePricingAdapter` now includes `updateFromWebSocket()` to update cache from WS ticks and `getPriceWithFallback()` for WS→REST fallback (5s stale threshold)
