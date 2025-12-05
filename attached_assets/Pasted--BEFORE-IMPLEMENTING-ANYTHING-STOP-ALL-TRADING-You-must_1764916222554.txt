@@ -1,0 +1,210 @@
+🚨 BEFORE IMPLEMENTING ANYTHING
+STOP ALL TRADING
+
+You must fully halt the paper simulation engine:
+
+“Stop the paper trading engine and ensure no background trading loops are running before applying any diagnostics.”
+
+This is required because diagnostics must be installed against a stable, non-moving system.
+
+🔄 ROLLBACK POINT (MANDATORY)
+
+Before making any changes:
+
+“Create a rollback checkpoint for the current commit.
+Label it: PRE-B4-DIAGNOSTICS-SAFEPOINT
+This checkpoint must be restorable.”
+
+No B4 change may modify trading behavior — only diagnostics and logging.
+
+🎯 B4 SCOPE (STRICT COMPLIANCE REQUIRED)
+
+This phase does NOT change how the trading engine behaves.
+It only records what it is already doing.
+
+Forbidden in B4:
+
+❌ modifying guardrails
+
+❌ modifying position sizing logic
+
+❌ modifying signal routing
+
+❌ modifying WS pricing logic
+
+❌ modifying risk or target logic
+
+❌ modifying scanning logic
+
+Allowed in B4:
+
+✔️ Add diagnostics hooks
+
+✔️ Add data logging
+
+✔️ Add observational endpoints
+
+✔️ Add CSV export
+
+✔️ Add summary panel
+
+🧠 B4 Diagnostic Framework
+
+B4 is divided into three diagnostic modules:
+
+MODULE 1 — MAX POSITION / EXPOSURE GUARDRAIL DIAGNOSTICS
+🎯 Goal:
+
+Identify why most block reasons fall under MAX_POSITION and capture full sizing context for every attempt.
+
+Implementation Requirements
+
+Add a diagnostic logger inside trade-safety.ts specifically inside the max-position evaluation section.
+
+For every attempt that hits MAX_POSITION, log:
+
+timestamp
+symbol
+strategy
+entry_price
+portfolio_balance
+max_single_position_allowed
+max_total_exposure_allowed
+current_total_exposure
+calculated_quantity
+calculated_notional
+buffered_max_notional
+block_reason = MAX_POSITION
+
+
+The log must be stored in memory as a ring buffer (size ~5,000) to avoid memory bloat.
+
+Add endpoint:
+
+GET /api/diagnostics/max-position
+
+
+Query params:
+
+?limit=5000
+
+?csv=1 → returns downloadable CSV
+
+This endpoint must NOT affect trading performance.
+
+MODULE 2 — FUNNEL DIAGNOSTICS (ATTEMPT → RTB → OPENED)
+🎯 Goal:
+
+Understand where volume is lost between each stage.
+
+Implementation Requirements
+
+Create counters:
+
+active_pool_count
+
+attempt_count
+
+attempt_blocked_count
+
+rtb_count
+
+trade_opened_count
+
+Create summarized endpoint:
+
+GET /api/diagnostics/funnel-summary
+
+
+Return format:
+
+{
+  active_pool: 1127,
+  attempts: 643,
+  rtb_signals: 47,
+  opened_trades: 12,
+  conversions: {
+      attempt_to_rtb_pct: 7.3,
+      rtb_to_open_pct: 25.5
+  }
+}
+
+Full detail logs for funnel?
+
+Because you chose Summary + Full CSV Download:
+
+Add:
+
+GET /api/diagnostics/funnel-download?csv=1
+
+
+This returns all signals with:
+
+timestamp
+symbol
+strategy
+stage (attempt | rtb | opened)
+block_reason (if any)
+
+MODULE 3 — WEBSOCKET PRICE PIPELINE VALIDATION
+
+Even though WS is working, B4 must confirm this formally.
+
+Add endpoint:
+
+GET /api/diagnostics/ws-health
+
+
+Return fields:
+
+ws_connected (true/false)
+
+subscribed_symbols
+
+last_update_by_symbol (timestamp + age)
+
+avg_tick_interval_ms
+
+stale_symbols (age > 5 seconds)
+
+This ensures WebSocket pricing stays stable going forward.
+
+No pipeline logic changes allowed.
+
+MODULE 4 — EXPORT LOGGING
+
+Add a unified download endpoint:
+
+GET /api/diagnostics/export?module=maxpos|funnel|ws&csv=1
+
+
+To keep CSV formatting consistent.
+
+🧪 POST-IMPLEMENTATION VERIFICATION CHECKLIST (MANDATORY)
+
+Replit must perform and show screenshots/log output of:
+
+✔️ 1. Rollback checkpoint exists
+
+Show commit hash stored under PRE-B4-DIAGNOSTICS-SAFEPOINT.
+
+✔️ 2. Max Position endpoint returns real logs
+
+Simulate a few attempts (without trading).
+
+✔️ 3. Funnel summary shows non-zero counters
+
+It must show structure only; not required to be full.
+
+✔️ 4. Funnel CSV export downloads without error
+✔️ 5. WebSocket health endpoint shows:
+
+connected = true
+
+subscription list present
+
+tick age < 5000 ms
+
+✔️ 6. No changes to trading behavior
+
+Replit must confirm no core functions changed.

@@ -742,6 +742,76 @@
     ]
   },
   {
+    "path": "/api/diagnostics/max-position",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/diagnostics/funnel-summary",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/diagnostics/funnel-download",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/diagnostics/ws-health",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/diagnostics/export",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/diagnostics/b4/reset",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/diagnostics/b4/stats",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/settings/filters",
     "methods": [
       "GET"

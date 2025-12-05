@@ -3039,6 +3039,177 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ===== PHASE B4: DIAGNOSTIC FRAMEWORK =====
+  // Observational diagnostics - NO modifications to core trading logic
+  
+  // B4.1: MAX_POSITION diagnostic logs
+  apiRouter.get('/diagnostics/max-position', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { b4Diagnostics } = await import('./services/b4-diagnostics.js');
+      const limit = parseInt(req.query.limit as string) || 5000;
+      const csv = req.query.csv === '1';
+      
+      if (csv) {
+        const csvData = b4Diagnostics.exportToCSV('maxpos');
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename=max-position-diagnostics.csv');
+        return res.send(csvData);
+      }
+      
+      const logs = b4Diagnostics.getMaxPositionLogs(limit);
+      const stats = b4Diagnostics.getStats();
+      
+      res.json({
+        ok: true,
+        count: logs.length,
+        sessionStart: stats.sessionStart,
+        totalLogged: stats.maxPositionLogCount,
+        logs
+      });
+    } catch (error: any) {
+      console.error('[B4] Error fetching max-position logs:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to fetch max-position diagnostics' });
+    }
+  });
+  
+  // B4.2: Funnel diagnostics summary
+  apiRouter.get('/diagnostics/funnel-summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { b4Diagnostics } = await import('./services/b4-diagnostics.js');
+      
+      const summary = b4Diagnostics.getFunnelSummary();
+      const stats = b4Diagnostics.getStats();
+      
+      res.json({
+        ok: true,
+        sessionStart: stats.sessionStart,
+        ...summary
+      });
+    } catch (error: any) {
+      console.error('[B4] Error fetching funnel summary:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to fetch funnel summary' });
+    }
+  });
+  
+  // B4.3: Funnel diagnostics download (CSV)
+  apiRouter.get('/diagnostics/funnel-download', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { b4Diagnostics } = await import('./services/b4-diagnostics.js');
+      const csv = req.query.csv === '1';
+      
+      if (csv) {
+        const csvData = b4Diagnostics.exportToCSV('funnel');
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename=funnel-diagnostics.csv');
+        return res.send(csvData);
+      }
+      
+      const logs = b4Diagnostics.getFunnelLogs();
+      res.json({
+        ok: true,
+        count: logs.length,
+        logs
+      });
+    } catch (error: any) {
+      console.error('[B4] Error downloading funnel data:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to download funnel diagnostics' });
+    }
+  });
+  
+  // B4.4: WebSocket health validation
+  apiRouter.get('/diagnostics/ws-health', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { b4Diagnostics } = await import('./services/b4-diagnostics.js');
+      
+      const health = b4Diagnostics.getWSHealth();
+      
+      res.json({
+        ok: true,
+        ...health
+      });
+    } catch (error: any) {
+      console.error('[B4] Error fetching WS health:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to fetch WebSocket health' });
+    }
+  });
+  
+  // B4.5: Unified export endpoint
+  apiRouter.get('/diagnostics/export', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { b4Diagnostics } = await import('./services/b4-diagnostics.js');
+      const module = req.query.module as 'maxpos' | 'funnel' | 'ws';
+      const csv = req.query.csv === '1';
+      
+      if (!module || !['maxpos', 'funnel', 'ws'].includes(module)) {
+        return res.status(400).json({ 
+          ok: false, 
+          error: 'Invalid module. Use: maxpos, funnel, or ws' 
+        });
+      }
+      
+      if (csv) {
+        const csvData = b4Diagnostics.exportToCSV(module);
+        const filename = `${module}-diagnostics.csv`;
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+        return res.send(csvData);
+      }
+      
+      let data: any;
+      switch (module) {
+        case 'maxpos':
+          data = b4Diagnostics.getMaxPositionLogs();
+          break;
+        case 'funnel':
+          data = b4Diagnostics.getFunnelLogs();
+          break;
+        case 'ws':
+          data = b4Diagnostics.getWSHealth();
+          break;
+      }
+      
+      res.json({ ok: true, module, data });
+    } catch (error: any) {
+      console.error('[B4] Error exporting diagnostics:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to export diagnostics' });
+    }
+  });
+  
+  // B4.6: Reset diagnostic session
+  apiRouter.post('/diagnostics/b4/reset', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { b4Diagnostics } = await import('./services/b4-diagnostics.js');
+      
+      b4Diagnostics.resetSession();
+      
+      res.json({
+        ok: true,
+        message: 'B4 diagnostic session reset',
+        stats: b4Diagnostics.getStats()
+      });
+    } catch (error: any) {
+      console.error('[B4] Error resetting diagnostic session:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to reset diagnostic session' });
+    }
+  });
+  
+  // B4.7: Get diagnostic stats
+  apiRouter.get('/diagnostics/b4/stats', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { b4Diagnostics } = await import('./services/b4-diagnostics.js');
+      
+      const stats = b4Diagnostics.getStats();
+      
+      res.json({
+        ok: true,
+        ...stats
+      });
+    } catch (error: any) {
+      console.error('[B4] Error fetching diagnostic stats:', error.message);
+      res.status(500).json({ ok: false, error: 'Failed to fetch diagnostic stats' });
+    }
+  });
+
   // Phase 8.8.2-MAP-FINAL: Filter settings endpoint for Filter Insights thresholds
   apiRouter.get('/settings/filters', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
