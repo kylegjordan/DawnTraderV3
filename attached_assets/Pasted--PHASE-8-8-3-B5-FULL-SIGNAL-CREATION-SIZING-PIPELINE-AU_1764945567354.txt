@@ -1,0 +1,208 @@
+✅ **PHASE 8.8.3 — B5
+
+FULL SIGNAL CREATION & SIZING PIPELINE AUDIT**
+
+Directive for Replit Implementation
+
+IMPORTANT — DO NOT MODIFY ANY EXISTING SIZING OR TRADING BEHAVIOR.
+This phase is OBSERVATIONAL ONLY.
+
+🎯 OBJECTIVE
+
+Create a full audit trail showing:
+
+How each of the 9 strategies generates signals
+
+Whether each signal includes the expected sizing fields
+
+Where the sizing helper is called (if at all)
+
+Whether guardrails receive properly sized values, or only raw strategy outputs
+
+The exact field-by-field data the system uses at each step
+
+This audit must reveal why most signals are reaching guardrails without being sized, which is causing massive MAX_POSITION blocking and incorrect trading behavior.
+
+🧩 PART 1 — Instrument Signal Creation (All 9 Strategies)
+
+Add diagnostic logging AT THE MOMENT a strategy produces a signal, BEFORE any sizing or guardrails.
+
+For each of the 9 strategies:
+
+Add a log entry:
+
+[B5.SIGNAL_CREATED]
+strategy=<strategy_name>
+symbol=<symbol>
+entry_price=<number>
+strategy_qty=<number or null>
+strategy_notional=<number or null>
+has_estimatedValue=<true/false>
+has_preComputedNotional=<true/false>
+timestamp=<iso>
+
+
+This MUST occur before any modifications from sizing helpers.
+
+🧩 PART 2 — Instrument the Sizing Layer (But Do NOT modify it)
+
+Wherever the sizing helper should be called:
+
+sizePaperPositionForSignal (if exists)
+
+compute sized quantity
+
+apply maxPositionPercentPct
+
+apply buffers
+
+risk-per-trade logic
+
+P2 sizing logic (if applicable)
+
+Add a log entry:
+
+[B5.SIZING_CALLED]
+strategy=<strategy_name>
+symbol=<symbol>
+entry_price=<entry_price>
+strategy_notional=<raw_notional_before_sizing>
+sized_quantity=<quantity_after_sizing>
+sized_notional=<notional_after_sizing>
+risk_pct=<risk_pct_used>
+max_position_usd=<computed cap>
+buffer_factor=<buffer>
+timestamp=<iso>
+
+
+If a strategy proceeds without sizing, log:
+
+[B5.SIZING_SKIPPED]
+strategy=<strategy_name>
+symbol=<symbol>
+reason="Sizing helper not called"
+timestamp=<iso>
+
+🧩 PART 3 — Instrument processSignal()
+
+(Without modifying its logic)
+
+Immediately upon receiving a signal:
+
+Log what processSignal received:
+
+[B5.SIGNAL_RECEIVED_BY_ENGINE]
+strategy=<strategy>
+symbol=<symbol>
+entry_price=<entry_price>
+quantity=<quantity or null>
+estimatedValue=<value or null>
+fields_present=<list_of_fields_detected>
+timestamp=<iso>
+
+
+This will show whether signals are arriving sized or unsized.
+
+🧩 PART 4 — Instrument Guardrail Checks (Sizing-Relevant Only)
+
+Inside trade-safety.ts, ONLY in guardrails that depend on size:
+
+MAX_POSITION
+
+MAX_TOTAL_EXPOSURE
+
+RISK_PER_TRADE
+
+MAX_OPEN_POSITIONS (optional but helpful)
+
+Add structured logs:
+
+[B5.GUARDRAIL_CHECK]
+strategy=<strategy>
+symbol=<symbol>
+entry_price=<entry_price>
+incoming_quantity=<quantity>
+incoming_estimatedValue=<estimatedValue>
+computed_max_position_usd=<cap>
+computed_total_exposure_usd=<exposure>
+decision=<allowed|blocked>
+reason=<if blocked>
+timestamp=<iso>
+
+
+If the guardrail sees estimatedValue > 10,000 or other massive numbers, we know sizing is missing.
+
+🧩 PART 5 — Build a Unified B5 Sizing Audit Report
+
+Create a dedicated diagnostic service:
+
+server/services/b5-sizing-audit.ts
+
+Features:
+
+➤ A rolling buffer (10,000 entries) of sizing-related logs
+➤ Aggregated summary of:
+
+strategies with sizing applied
+
+strategies without sizing applied
+
+signals that reached guardrails without sizing
+
+average raw notional by strategy
+
+average sized notional (if ever applied)
+
+count of SIZING_SKIPPED events
+
+➤ Export endpoints (in routes.ts)
+GET /api/diagnostics/b5/sizing-log?limit=2000
+GET /api/diagnostics/b5/sizing-summary
+GET /api/diagnostics/b5/export?csv=1
+POST /api/diagnostics/b5/reset
+
+🧩 PART 6 — What MUST NOT Change
+
+This is critical:
+
+❌ Do NOT modify:
+
+position sizing logic
+
+strategy logic
+
+guardrail formulas
+
+trade-opening logic
+
+signal routing logic
+
+WebSocket code
+
+anything affecting live trading behavior
+
+This phase must be 100% observation, 0% logic alteration.
+
+🧪 PART 7 — Verification Checklist (Replit must complete these after implementation)
+
+Replit must confirm:
+
+✔ All 9 strategies produce B5.SIGNAL_CREATED logs
+✔ At least 50 signals in a test session
+✔ At least 20 guardrail checks logged
+✔ Presence of B5.SIZING_CALLED (or SKIPPED)
+✔ processSignal logs show full field list
+✔ Aggregated summary endpoint returns correctly formatted JSON
+✔ Export to CSV works
+✔ No modifications were made to sizing or strategy behavior
+🧨 PART 8 — After B5 Is Complete
+
+We will use these diagnostics to produce:
+
+A map of which strategies never size
+
+A trace showing exactly where the sizing pipeline is broken
+
+A reconstruction of the correct sizing pipeline (for Phase B6)
+
+This ensures our fix is correct the first time.
