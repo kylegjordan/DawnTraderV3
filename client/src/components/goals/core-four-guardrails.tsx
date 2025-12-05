@@ -94,7 +94,10 @@ export function CoreFourGuardrails() {
   const { toast } = useToast();
   const { mode } = useTradingMode();
   const [hasChanges, setHasChanges] = useState(false);
-  const [editedValues, setEditedValues] = useState<Partial<GuardrailsV2>>({});
+  // Use string values for editing to prevent input issues with number conversion
+  const [editedValues, setEditedValues] = useState<Record<string, string>>({});
+  // Track which fields are currently being edited to prevent server data from overwriting
+  const [activelyEditing, setActivelyEditing] = useState<Set<string>>(new Set());
   
   // Phase 3b: WebSocket integration for real-time sync
   useOverrideState();
@@ -144,6 +147,7 @@ export function CoreFourGuardrails() {
       });
       setHasChanges(false);
       setEditedValues({});
+      setActivelyEditing(new Set());
     },
     onError: (error: any) => {
       toast({
@@ -154,9 +158,23 @@ export function CoreFourGuardrails() {
     },
   });
 
+  // Handle input focus - mark field as actively being edited
+  const handleFocus = (key: string) => {
+    setActivelyEditing(prev => new Set(prev).add(key));
+  };
+
+  // Handle input blur - stop tracking as actively edited
+  const handleBlur = (key: string) => {
+    setActivelyEditing(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(key);
+      return newSet;
+    });
+  };
+
   const handleValueChange = (key: string, value: string) => {
-    const numValue = parseFloat(value) || 0;
-    setEditedValues(prev => ({ ...prev, [key]: numValue }));
+    // Keep the raw string value to allow proper editing
+    setEditedValues(prev => ({ ...prev, [key]: value }));
     setHasChanges(true);
   };
 
@@ -187,7 +205,15 @@ export function CoreFourGuardrails() {
   };
 
   const handleSave = () => {
-    updateMutation.mutate(editedValues);
+    // Convert string values to numbers for saving
+    const numericUpdates: Partial<GuardrailsV2> = {};
+    for (const [key, value] of Object.entries(editedValues)) {
+      const numValue = parseFloat(value);
+      if (!isNaN(numValue)) {
+        (numericUpdates as any)[key] = numValue;
+      }
+    }
+    updateMutation.mutate(numericUpdates);
   };
 
   if (isLoading) {
@@ -244,7 +270,12 @@ export function CoreFourGuardrails() {
         <div className="space-y-6">
           {CORE_FOUR_PARAMS.map((param) => {
             const isLocked = data.lockedByUser?.[param.key] || false;
-            const currentValue = editedValues[param.key] ?? data[param.key];
+            // Use edited value if user has made changes, otherwise use server data
+            // Keep as string to prevent number input quirks during editing
+            const isBeingEdited = activelyEditing.has(param.key) || param.key in editedValues;
+            const displayValue = isBeingEdited && param.key in editedValues
+              ? editedValues[param.key]
+              : String(data[param.key]);
             
             return (
               <div key={param.key} className="p-4 border rounded-lg bg-muted/30">
@@ -307,8 +338,10 @@ export function CoreFourGuardrails() {
                     id={param.key}
                     type="number"
                     step="0.1"
-                    value={currentValue}
+                    value={displayValue}
                     onChange={(e) => handleValueChange(param.key, e.target.value)}
+                    onFocus={() => handleFocus(param.key)}
+                    onBlur={() => handleBlur(param.key)}
                     disabled={!isLocked}
                     className={isLocked ? 'bg-white dark:bg-slate-950' : 'bg-muted'}
                     data-testid={`input-${param.key}`}
