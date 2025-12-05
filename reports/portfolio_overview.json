@@ -1,0 +1,17 @@
+{
+  "totalValue": 25000,
+  "unrealizedPL": 0,
+  "realizedPL": 0,
+  "currentExposure": 0,
+  "openTradesCount": 0,
+  "winRate": 0,
+  "totalTrades": 0,
+  "wins": 0,
+  "losses": 0,
+  "profitFactor": 0,
+  "cash": 25000,
+  "crypto": 0,
+  "cashPercent": 100,
+  "cryptoPercent": 0,
+  "balanceSource": "paper-sim"
+}

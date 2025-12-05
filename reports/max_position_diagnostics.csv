@@ -1,0 +1,1 @@
+timestamp,symbol,strategy,entry_price,portfolio_balance,max_single_position_allowed,max_total_exposure_allowed,current_total_exposure,calculated_quantity,calculated_notional,buffered_max_notional,block_reason
