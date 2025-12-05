@@ -1755,7 +1755,7 @@ export class PaperExecutionEngine {
     if ((signal as any).estimatedValue) fieldsPresent.push('estimatedValue');
     if ((signal as any).preComputedNotional) fieldsPresent.push('preComputedNotional');
     
-    b5SizingAudit.logSignalReceived({
+    b5SizingAudit.logSignalReceivedByEngine({
       strategy: signal.strategy,
       symbol: signal.symbol,
       entryPrice: signal.entryPrice,

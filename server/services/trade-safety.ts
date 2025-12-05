@@ -21,6 +21,7 @@ import { marketDataService } from './market-data';
 import { aj16Diagnostic } from './aj16-rtb-diagnostic';
 import { aj19Diagnostic } from './aj19-max-position-diagnostic';
 import { b4Diagnostics } from './b4-diagnostics.js';
+import { b5SizingAudit } from './b5-sizing-audit.js';
 
 export const buildSettingsFromGuardrails = _buildSettingsFromGuardrails;
 export const calculateRiskAmount = _calculateRiskAmount;
@@ -622,31 +623,79 @@ export async function checkGuardrailRisk(
   
   const settings = await buildSettingsFromGuardrails(mode, userId);
   
+  // B5: Helper to log guardrail checks
+  const logGuardrailCheck = (
+    guardrailType: string, 
+    result: TradeSafetyResult, 
+    extra?: { maxPositionUsd?: number; totalExposureUsd?: number }
+  ) => {
+    b5SizingAudit.logGuardrailCheck({
+      guardrailType,
+      strategy: trade.strategy,
+      symbol: trade.symbol,
+      entryPrice: trade.entryPrice,
+      incomingQuantity: trade.preComputedNotional ? trade.preComputedNotional / trade.entryPrice : null,
+      incomingEstimatedValue: trade.preComputedNotional ?? null,
+      computedMaxPositionUsd: extra?.maxPositionUsd ?? null,
+      computedTotalExposureUsd: extra?.totalExposureUsd ?? null,
+      decision: result.ok ? 'allowed' : 'blocked',
+      reason: result.ok ? null : (result as any).reason,
+    });
+  };
+  
   const killSwitchCheck = checkKillSwitch(settings, mode, trade.symbol);
-  if (!killSwitchCheck.ok) return killSwitchCheck;
+  if (!killSwitchCheck.ok) {
+    logGuardrailCheck('KILL_SWITCH', killSwitchCheck);
+    return killSwitchCheck;
+  }
   
   const stopLossCheck = checkStopLossRequired(trade);
-  if (!stopLossCheck.ok) return stopLossCheck;
+  if (!stopLossCheck.ok) {
+    logGuardrailCheck('STOP_LOSS', stopLossCheck);
+    return stopLossCheck;
+  }
   
   const assetCheck = await checkMaxPositionsPerAsset(mode, trade);
-  if (!assetCheck.ok) return assetCheck;
+  if (!assetCheck.ok) {
+    logGuardrailCheck('MAX_POSITIONS_PER_ASSET', assetCheck);
+    return assetCheck;
+  }
   
   const cooldownCheck = await checkSymbolCooldown(mode, trade);
-  if (!cooldownCheck.ok) return cooldownCheck;
+  if (!cooldownCheck.ok) {
+    logGuardrailCheck('SYMBOL_COOLDOWN', cooldownCheck);
+    return cooldownCheck;
+  }
   
   // AJ19: Pass cycleId for diagnostic tracking
   const positionSizeCheck = await checkPositionSizeCap(mode, trade, settings, cycleId);
-  if (!positionSizeCheck.ok) return positionSizeCheck;
+  if (!positionSizeCheck.ok) {
+    const maxPosNum = settings.maxPositionPercent ? parseFloat(settings.maxPositionPercent) : undefined;
+    logGuardrailCheck('POSITION_SIZE_CAP', positionSizeCheck, { maxPositionUsd: maxPosNum });
+    return positionSizeCheck;
+  }
   
   const lpcpCheck = await checkLowPricedCoinProtection(mode, trade, settings);
-  if (!lpcpCheck.ok) return lpcpCheck;
+  if (!lpcpCheck.ok) {
+    logGuardrailCheck('LOW_PRICED_COIN_PROTECTION', lpcpCheck);
+    return lpcpCheck;
+  }
   
   const maxTradesCheck = await checkMaxOpenTrades(mode, settings);
-  if (!maxTradesCheck.ok) return maxTradesCheck;
+  if (!maxTradesCheck.ok) {
+    logGuardrailCheck('MAX_OPEN_TRADES', maxTradesCheck);
+    return maxTradesCheck;
+  }
   
   // Phase 8.8.3-B3: Check total portfolio exposure
   const totalExposureCheck = await checkMaxTotalExposure(mode, trade, settings);
-  if (!totalExposureCheck.ok) return totalExposureCheck;
+  if (!totalExposureCheck.ok) {
+    logGuardrailCheck('MAX_TOTAL_EXPOSURE', totalExposureCheck);
+    return totalExposureCheck;
+  }
+  
+  // B5: Log successful guardrail pass
+  logGuardrailCheck('ALL_PASSED', { ok: true });
   
   console.log(`[8.8.3-H4][GUARDRAIL_PASS] All pre-trade checks passed for ${trade.symbol}`);
   return { ok: true };
