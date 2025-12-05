@@ -68,6 +68,15 @@ The Filter Insights UI uses REST data for Cycle Info and Last Scan Result. The b
 - Session management: `POST /api/diagnostics/b4/reset` to reset counters, `GET /api/diagnostics/b4/stats` for session info
 - **SCOPE COMPLIANCE**: NO modifications to guardrails, position sizing, signal routing, WS pricing, risk/target logic, or scanning logic
 
+**Phase 8.8.3-B5: Signal Creation & Sizing Pipeline Audit (Dec 2025)** provides comprehensive audit trail for the entire signal-to-trade pipeline:
+- `B5SizingAuditService` (`server/services/b5-sizing-audit.ts`) - Centralized audit service with 10,000-entry ring buffer
+- **SIGNAL_CREATED**: Logged when any of the 9 strategies generates a signal (before sizing), instrumented in `signal-orchestrator.ts`
+- **SIZING_CALLED**: Logged when `sizePaperPositionForSignal()` calculates position size, includes riskPct, maxPositionUsd, bufferFactor
+- **SIGNAL_RECEIVED_BY_ENGINE**: Logged when `processSignal()` receives a signal, includes field inspection (quantity, estimatedValue, preComputedNotional)
+- **GUARDRAIL_CHECK**: Logged for each guardrail evaluation in `checkGuardrailRisk()`, includes decision (allowed/blocked) and reason
+- **API Endpoints**: `GET /api/diagnostics/b5/sizing-log?limit=2000` (JSON entries), `GET /api/diagnostics/b5/sizing-summary` (aggregation by strategy/type), `GET /api/diagnostics/b5/stats`, `GET /api/diagnostics/b5/export?format=json` (JSON export preferred), `POST /api/diagnostics/b5/reset`, `POST /api/diagnostics/b5/enable`, `POST /api/diagnostics/b5/disable`
+- **SCOPE COMPLIANCE**: OBSERVATIONAL ONLY - no modifications to trading behavior, guardrails, position sizing, or signal routing
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed (`wss://ws.kraken.com`) for open trade price monitoring.
