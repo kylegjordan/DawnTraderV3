@@ -63,6 +63,7 @@ import { contextBridge } from './services/context-bridge.js';
 import { getCache, setCache, coalesce } from './services/cache';
 import { metricsService } from './services/metrics-service';
 import { activeFilterPool } from './services/active-filter-pool.js';
+import { b5SizingAudit } from './services/b5-sizing-audit.js';
 import os from 'os';
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks

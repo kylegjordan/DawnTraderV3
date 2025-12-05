@@ -115,6 +115,7 @@ class B5SizingAuditService {
   private constructor() {
     this.sessionStart = new Date().toISOString();
     console.log(`[B5] Sizing Audit Service initialized at ${this.sessionStart}`);
+    console.log(`[B5] Initial stats: enabled=${this.isEnabled}, entry_count=${this.buffer.length}, buffer_size=${this.maxBufferSize}`);
   }
 
   public static getInstance(): B5SizingAuditService {
