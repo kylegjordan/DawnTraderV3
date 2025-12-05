@@ -1,0 +1,204 @@
+Directive: Phase 8.8.3-B6 Verification – Unified Sizing Pipeline
+
+Goal:
+Verify that all nine strategies now follow the unified pipeline
+strategy → sizing helper (exposure-budget based) → guardrails → RTB/open trades,
+and that MAX_POSITION blocks no longer occur because signals are unsized.
+
+0. Use test credentials safely
+
+Use the existing test user already wired in the environment:
+
+Prefer APP_TEST_USERNAME / APP_TEST_PASSWORD from env.
+
+If those are missing, you may use testuser123 / SecurePass123! only in local shell, and do not print passwords or JWT secrets to logs.
+
+All API calls in this directive must use a Bearer token returned by /api/auth/login.
+
+1. Hardened reset – clear all paper-sim open trades & exposure
+
+Before running any tests:
+
+Stop the engine (if running):
+
+POST /api/paper-sim/stop
+
+Reset paper sim via API:
+
+POST /api/paper-sim/reset with body:
+
+{ "balance": 20000 }
+
+
+Defensively clear backend tables for mode='paper' only (SQL):
+
+In paper_sim_trades:
+
+Set closed_at = NOW() and close_reason = 'b6_reset' for all rows with status='open' or closed_at IS NULL.
+
+In paper_sim_open_positions:
+
+Delete all rows.
+
+Verify via API (using test user token):
+
+GET /api/paper-sim/active-trades → should return 0 positions.
+
+GET /api/paper-sim/trades?status=active → array length 0.
+
+GET /api/paper-sim/status → openPositions should be 0, currentBalance ≈ starting balance.
+
+Only once all of the above are clean should you proceed.
+
+2. Guardrail settings – make test predictable
+
+For this verification run:
+
+GET /api/guardrails-v2?mode=paper
+
+PUT /api/guardrails-v2?mode=paper with:
+
+{
+  "maxTotalExposurePct": 100,
+  "maxPositionPercentPct": 15,
+  "lockedByUser": {
+    "maxTotalExposurePct": true,
+    "maxPositionPercentPct": true
+  }
+}
+
+
+This keeps behavior close to what you’ve been testing, but still uses the new exposure-budget math. Later we can drop maxTotalExposurePct to 25% once we’re happy with how everything flows.
+
+Confirm via re-fetch that those values stick and survive one server restart.
+
+3. Start a fresh paper simulation (B6 verification session)
+
+Using the test user token:
+
+POST /api/paper-sim/start
+Content-Type: application/json
+
+{
+  "mode": "new",
+  "initialBalance": 20000
+}
+
+
+Confirm:
+
+GET /api/paper-sim/status → isRunning: true.
+
+The Active Trades UI begins to show attempts/open positions over time.
+
+Let this session run for at least 20–30 minutes so we have enough data.
+
+4. Enable and confirm diagnostics
+
+Make sure diagnostics are turned on:
+
+B4 diagnostics (funnel + max position):
+
+POST /api/diagnostics/b4/reset
+
+Confirm via GET /api/diagnostics/b4/stats that:
+
+funnelLogCount: 0
+
+maxPositionLogCount: 0
+
+B5 sizing audit:
+
+POST /api/diagnostics/b5/reset
+
+POST /api/diagnostics/b5/enable
+
+Confirm via GET /api/diagnostics/b5/stats:
+
+enabled: true
+
+entryCount: 0
+
+Let trading run with these diagnostics capturing data.
+
+5. Runtime checks during the session
+
+While trading is running, periodically:
+
+Check B5 summary:
+
+GET /api/diagnostics/b5/sizing-summary
+
+What we expect to see:
+
+For each strategy:
+
+Every SIGNAL_CREATED count should be matched by a SIZING_CALLED count (or very close; a small difference from stale signals is acceptable).
+
+No strategies where SIGNAL_CREATED >> SIZING_CALLED.
+
+Check B4 max-position logs:
+
+GET /api/diagnostics/max-position?limit=200
+
+What we expect:
+
+Very few or no entries with:
+
+block_reason: "MAX_POSITION"
+
+where sized.estimatedValue is missing or 0.
+
+If MAX_POSITION appears, it should only be for genuinely large sized positions where:
+
+sized.estimatedValue is present and
+
+clearly > computed maxNotional.
+
+Check WebSocket health (sanity):
+
+GET /api/diagnostics/ws-health
+
+Expect:
+
+ws_connected: true while trades are open.
+
+last_update_by_symbol non-empty.
+
+Price sources in logs showing source: "kraken_ws" rather than only REST.
+
+6. Export diagnostics for analysis
+
+After 20–30 minutes of trading:
+
+B5 sizing log (full)
+
+GET /api/diagnostics/b5/export?format=json
+
+Save as b5-sizing-log-b6.json.
+
+B5 summary & stats
+
+GET /api/diagnostics/b5/sizing-summary → b5-sizing-summary-b6.json
+
+GET /api/diagnostics/b5/stats → b5-stats-b6.json
+
+B4 funnel & max position
+
+GET /api/diagnostics/funnel-summary → funnel-summary-b6.json
+
+GET /api/diagnostics/funnel-download → funnel-download-b6.json
+
+GET /api/diagnostics/max-position?limit=5000 → max-position-diagnostics-b6.json
+
+WS health (at end of session)
+
+GET /api/diagnostics/ws-health → ws-health-b6.json
+
+You can then download those files and send them to me again like you did for B4/B5, and we’ll:
+
+Verify every strategy is being sized,
+
+Check that maxNotional and estimatedValue line up with the exposure budget math, and
+
+Confirm MAX_POSITION guardrail blocks look “honest” rather than symptoms of missing sizing.
