@@ -54,6 +54,7 @@ The Filter Insights UI uses REST data for Cycle Info and Last Scan Result. The b
 - `KrakenWebSocketAdapter` (`server/services/kraken-websocket-adapter.ts`) connects to `wss://ws.kraken.com` for real-time ticker subscriptions
 - `LivePricingAdapter` now includes `updateFromWebSocket()` to update cache from WS ticks and `getPriceWithFallback()` for WS→REST fallback (5s stale threshold)
 - `PaperExecutionEngine.checkOpenPositions()` uses WS cache with REST fallback for TP/SL monitoring
+- **Subscription Lifecycle**: Automatic symbol subscription at trade open (`krakenWebSocketAdapter.subscribeToSymbols([symbol])`) and unsubscription at trade close (`krakenWebSocketAdapter.unsubscribeFromSymbols([symbol])`), both wrapped in try/catch for resilience
 - Active Trades UI polling reduced from 1.5s to 10s (metadata only), with live WS prices merged in real-time via `price_updated` events
 - FX5 Scanner continues using REST API (unchanged per directive)
 - Diagnostics endpoint: `GET /api/diagnostics/ws-price-engine` for WS engine health monitoring

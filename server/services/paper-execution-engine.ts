@@ -407,6 +407,14 @@ export class PaperExecutionEngine {
       await storage.deletePaperSimOpenPosition(this.mode, positionId);
       deleteSuccessful = true;
       console.log(`[AJ19-B][DELETE_SUCCESS] positionId=${positionId} | symbol=${position.symbol}`);
+      
+      // Phase 8.8.3-B3.6: Unsubscribe from Kraken WebSocket after position close
+      try {
+        krakenWebSocketAdapter.unsubscribeFromSymbols([position.symbol]);
+        console.log(`[KrakenWS] Unsubscribed from ${position.symbol} after position close`);
+      } catch (wsUnsubError) {
+        console.warn(`[KrakenWS] Failed to unsubscribe from ${position.symbol}:`, wsUnsubError);
+      }
     } catch (delErr: any) {
       deleteError = delErr.message || 'Unknown delete error';
       console.error(`[AJ19-B][DELETE_FAILED] positionId=${positionId} | symbol=${position.symbol} | error=${deleteError}`);
@@ -1499,6 +1507,14 @@ export class PaperExecutionEngine {
 
       // AJ10.3: Diagnostic - open position created
       console.log(`[AJ10.3][OPEN_POSITION_OK] positionId=${openPosition.id} | symbol=${signal.symbol} | tradeId=${trade.id}`);
+
+      // Phase 8.8.3-B3.6: Subscribe to Kraken WebSocket for real-time price updates
+      try {
+        krakenWebSocketAdapter.subscribeToSymbols([signal.symbol]);
+        console.log(`[KrakenWS] Subscribed to ${signal.symbol} for real-time price updates`);
+      } catch (wsSubError) {
+        console.warn(`[KrakenWS] Failed to subscribe to ${signal.symbol} (REST fallback active):`, wsSubError);
+      }
 
       // [AJ19-B] Trade lifecycle OPEN event - log slot counts
       try {
