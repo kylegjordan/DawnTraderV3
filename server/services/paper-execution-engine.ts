@@ -1724,6 +1724,32 @@ export class PaperExecutionEngine {
         return;
       }
 
+      // Phase 8.8.3-B3.5a: Compute position sizing if not already set
+      // Signals from signal-orchestrator don't have estimatedValue computed
+      const signalEstimatedValue = (signal as any).estimatedValue;
+      if (!signalEstimatedValue || signalEstimatedValue <= 0) {
+        const guardrails = await storage.getGuardrailsV2({ mode: this.mode });
+        const portfolioState = await storage.getPortfolioState({ mode: this.mode });
+        const portfolioValue = portfolioState?.balance ? parseFloat(String(portfolioState.balance)) : 20000;
+        
+        if (portfolioValue > 0 && guardrails) {
+          const sizing = sizePaperPositionForSignal({
+            portfolioValue,
+            guardrails,
+            entryPrice: signal.entryPrice,
+            stopPrice: signal.stopPrice,
+            symbol: signal.symbol,
+            strategy: signal.strategy as StrategyType
+          });
+          
+          if (sizing.quantity > 0 && sizing.estimatedValue > 0) {
+            (signal as any).quantity = sizing.quantity;
+            (signal as any).estimatedValue = sizing.estimatedValue;
+            console.log(`[8.8.3-B3.5a][SIZING] Computed sizing for ${signal.symbol}: qty=${sizing.quantity.toFixed(8)}, estimatedValue=$${sizing.estimatedValue.toFixed(2)}`);
+          }
+        }
+      }
+
       // REB 8.8.3-F: Execute trade using modern path
       console.log(`[8.8.3-F][PROCESS] Processing signal for ${signal.symbol} via guardrails_v2 path`);
       await this.executeSimulatedTrade(signal, settings);
