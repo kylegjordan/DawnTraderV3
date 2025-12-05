@@ -26,6 +26,7 @@ import { storage } from '../storage';
 import type { TradingSettings, ScreenerFilters, PriceData } from '@shared/schema';
 import { telemetryTrace } from './telemetry-trace.js';
 import { PaperSimDiagnosticService } from './paper-sim-diagnostic.js';
+import { b5SizingAudit } from './b5-sizing-audit.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -364,6 +365,15 @@ export class SignalOrchestrator {
         const signal = this.strategyEngine.detectVWAPPullback(indicators, settings, ohlcAsAny);
         if (signal) {
           signal.symbol = symbol;
+          b5SizingAudit.logSignalCreated({
+            strategy: 'vwap_pullback',
+            symbol,
+            entryPrice: signal.entryPrice,
+            strategyQty: null,
+            strategyNotional: null,
+            hasEstimatedValue: false,
+            hasPreComputedNotional: false,
+          });
           signals.push(signal);
         }
       }
@@ -372,6 +382,15 @@ export class SignalOrchestrator {
         const signal = this.strategyEngine.detectABCDLong(ohlcAsAny, settings);
         if (signal) {
           signal.symbol = symbol;
+          b5SizingAudit.logSignalCreated({
+            strategy: 'abcd_long',
+            symbol,
+            entryPrice: signal.entryPrice,
+            strategyQty: null,
+            strategyNotional: null,
+            hasEstimatedValue: false,
+            hasPreComputedNotional: false,
+          });
           signals.push(signal);
         }
       }
@@ -380,6 +399,15 @@ export class SignalOrchestrator {
         const signal = this.strategyEngine.detectSMATrendRide(indicators, ohlcAsAny, settings);
         if (signal) {
           signal.symbol = symbol;
+          b5SizingAudit.logSignalCreated({
+            strategy: 'sma_trend_ride',
+            symbol,
+            entryPrice: signal.entryPrice,
+            strategyQty: null,
+            strategyNotional: null,
+            hasEstimatedValue: false,
+            hasPreComputedNotional: false,
+          });
           signals.push(signal);
         }
       }
@@ -394,6 +422,15 @@ export class SignalOrchestrator {
         });
         if (signal) {
           signal.symbol = symbol;
+          b5SizingAudit.logSignalCreated({
+            strategy: 'breakout',
+            symbol,
+            entryPrice: signal.entryPrice,
+            strategyQty: null,
+            strategyNotional: null,
+            hasEstimatedValue: false,
+            hasPreComputedNotional: false,
+          });
           signals.push(signal);
         }
       }
@@ -408,6 +445,15 @@ export class SignalOrchestrator {
         });
         if (signal) {
           signal.symbol = symbol;
+          b5SizingAudit.logSignalCreated({
+            strategy: 'mean_reversion',
+            symbol,
+            entryPrice: signal.entryPrice,
+            strategyQty: null,
+            strategyNotional: null,
+            hasEstimatedValue: false,
+            hasPreComputedNotional: false,
+          });
           signals.push(signal);
         }
       }
@@ -422,6 +468,15 @@ export class SignalOrchestrator {
         });
         if (signal) {
           signal.symbol = symbol;
+          b5SizingAudit.logSignalCreated({
+            strategy: 'range_trading',
+            symbol,
+            entryPrice: signal.entryPrice,
+            strategyQty: null,
+            strategyNotional: null,
+            hasEstimatedValue: false,
+            hasPreComputedNotional: false,
+          });
           signals.push(signal);
         }
       }
@@ -436,6 +491,15 @@ export class SignalOrchestrator {
         });
         if (signal) {
           signal.symbol = symbol;
+          b5SizingAudit.logSignalCreated({
+            strategy: 'vwap_bounce',
+            symbol,
+            entryPrice: signal.entryPrice,
+            strategyQty: null,
+            strategyNotional: null,
+            hasEstimatedValue: false,
+            hasPreComputedNotional: false,
+          });
           signals.push(signal);
         }
       }
@@ -450,6 +514,15 @@ export class SignalOrchestrator {
         });
         if (signal) {
           signal.symbol = symbol;
+          b5SizingAudit.logSignalCreated({
+            strategy: 'liquidity_trap',
+            symbol,
+            entryPrice: signal.entryPrice,
+            strategyQty: null,
+            strategyNotional: null,
+            hasEstimatedValue: false,
+            hasPreComputedNotional: false,
+          });
           signals.push(signal);
         }
       }
@@ -468,6 +541,15 @@ export class SignalOrchestrator {
         });
         if (signal) {
           signal.symbol = symbol;
+          b5SizingAudit.logSignalCreated({
+            strategy: 'dhma',
+            symbol,
+            entryPrice: signal.entryPrice,
+            strategyQty: null,
+            strategyNotional: null,
+            hasEstimatedValue: false,
+            hasPreComputedNotional: false,
+          });
           signals.push(signal);
         }
       }
