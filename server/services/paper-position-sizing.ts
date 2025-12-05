@@ -17,6 +17,7 @@
  */
 
 import type { GuardrailsV2 } from '@shared/schema';
+import { b5SizingAudit } from './b5-sizing-audit.js';
 
 /**
  * AJ9: Buffer factor for max position sizing.
@@ -154,6 +155,19 @@ export function sizePaperPositionForSignal(params: PaperPositionSizingParams): P
     bufferedMaxNotional: bufferedMaxNotional.toFixed(2),
     bufferFactor: MAX_POSITION_BUFFER_FACTOR,
     wasClamped
+  });
+  
+  // B5: Log sizing call to diagnostic service
+  b5SizingAudit.logSizingCalled({
+    strategy: strategy,
+    symbol,
+    entryPrice,
+    rawNotional: null,
+    sizedQuantity: quantity,
+    sizedNotional: estimatedValue,
+    riskPct: safeRiskPct,
+    maxPositionUsd: maxNotional,
+    bufferFactor: MAX_POSITION_BUFFER_FACTOR,
   });
   
   return {
