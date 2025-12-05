@@ -792,6 +792,8 @@ export class DatabaseStorage implements IStorage {
         dailyLossKillSwitchPct: data.dailyLossKillSwitchPct ?? existing.dailyLossKillSwitchPct,
         // Phase 8.8.3-J7.1: Add missing guardrail fields
         maxPositionPercentPct: data.maxPositionPercentPct ?? existing.maxPositionPercentPct,
+        // Phase 8.8.3-B3: Max Total Portfolio Exposure
+        maxTotalExposurePct: data.maxTotalExposurePct ?? existing.maxTotalExposurePct,
         lowPriceThreshold: data.lowPriceThreshold ?? existing.lowPriceThreshold,
         lowPriceMinStopAtrMult: data.lowPriceMinStopAtrMult ?? existing.lowPriceMinStopAtrMult,
         lowPriceMinPositionNotional: data.lowPriceMinPositionNotional ?? existing.lowPriceMinPositionNotional,

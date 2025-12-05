@@ -1402,6 +1402,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         ? parseFloat(String(rawPayload.maxPositionPercentPct))
         : undefined;
       
+      // Phase 8.8.3-B3: Max Total Portfolio Exposure (6th core guardrail)
+      const maxTotalExposurePct = rawPayload.maxTotalExposurePct !== undefined
+        ? parseFloat(String(rawPayload.maxTotalExposurePct))
+        : undefined;
+      
       // REB 8.8.3-H: Low-Priced Coin Protection (LPCP) fields
       const lowPriceThreshold = rawPayload.lowPriceThreshold !== undefined
         ? parseFloat(String(rawPayload.lowPriceThreshold))
@@ -1423,6 +1428,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       if (maxOpenPositions !== undefined) validationPayload.maxOpenPositions = maxOpenPositions;
       if (dailyLossKillSwitchPct !== undefined) validationPayload.dailyLossKillSwitchPct = dailyLossKillSwitchPct;
       if (maxPositionPercentPct !== undefined) validationPayload.maxPositionPercentPct = maxPositionPercentPct;
+      if (maxTotalExposurePct !== undefined) validationPayload.maxTotalExposurePct = maxTotalExposurePct;
       if (lowPriceThreshold !== undefined) validationPayload.lowPriceThreshold = lowPriceThreshold;
       if (lowPriceMinStopAtrMult !== undefined) validationPayload.lowPriceMinStopAtrMult = lowPriceMinStopAtrMult;
       if (lowPriceMinPositionNotional !== undefined) validationPayload.lowPriceMinPositionNotional = lowPriceMinPositionNotional;
@@ -1469,6 +1475,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       if (maxOpenPositions !== undefined) updatePayload.maxOpenPositions = maxOpenPositions;
       if (dailyLossKillSwitchPct !== undefined) updatePayload.dailyLossKillSwitchPct = String(dailyLossKillSwitchPct);
       if (maxPositionPercentPct !== undefined) updatePayload.maxPositionPercentPct = String(maxPositionPercentPct);
+      if (maxTotalExposurePct !== undefined) updatePayload.maxTotalExposurePct = String(maxTotalExposurePct);
       if (lowPriceThreshold !== undefined) updatePayload.lowPriceThreshold = String(lowPriceThreshold);
       if (lowPriceMinStopAtrMult !== undefined) updatePayload.lowPriceMinStopAtrMult = String(lowPriceMinStopAtrMult);
       if (lowPriceMinPositionNotional !== undefined) updatePayload.lowPriceMinPositionNotional = String(lowPriceMinPositionNotional);
