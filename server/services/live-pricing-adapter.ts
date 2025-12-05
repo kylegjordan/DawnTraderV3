@@ -170,12 +170,15 @@ export class LivePricingAdapter {
     if (now - lastBroadcast >= this.BROADCAST_THROTTLE_MS) {
       this.lastBroadcastTime.set(normalized, now);
       
-      contextBridge.broadcast('price_updated', {
-        mode: 'paper',
-        symbol: normalized,
-        price,
-        timestamp,
-        source: 'kraken_ws'
+      contextBridge.broadcast({
+        type: 'price_updated',
+        payload: {
+          mode: 'paper',
+          symbol: normalized,
+          price,
+          timestamp,
+          source: 'kraken_ws'
+        }
       });
     }
   }
@@ -494,71 +497,6 @@ export class LivePricingAdapter {
     return symbol.toUpperCase()
       .replace('USDT', 'USD')
       .replace(/([A-Z]{3,4})USD/, '$1/USD');
-  }
-
-  /**
-   * Phase 8.8.3-B3.6: Update price from WebSocket
-   * Called by KrakenWebSocketAdapter when real-time prices arrive
-   */
-  updateFromWebSocket(symbol: string, price: number, source: 'kraken_ws' | 'binance_ws' = 'kraken_ws'): void {
-    const normalized = this.normalizeSymbol(symbol);
-    const timestamp = new Date().toISOString();
-    
-    this.priceCache.set(normalized, {
-      symbol: normalized,
-      price,
-      timestamp,
-      source: source as any,
-      cachedAt: Date.now()
-    });
-    
-    if (!this.trackedSymbols.has(normalized)) {
-      this.trackedSymbols.add(normalized);
-    }
-  }
-
-  /**
-   * Phase 8.8.3-B3.6: Get price with REST fallback
-   * Returns cached price if fresh, otherwise attempts REST fetch
-   */
-  async getPriceWithFallback(symbol: string, staleThresholdMs: number = 5000): Promise<PriceQuote | null> {
-    const normalized = this.normalizeSymbol(symbol);
-    const cached = this.priceCache.get(normalized);
-    
-    if (cached) {
-      const age = Date.now() - cached.cachedAt;
-      if (age <= staleThresholdMs) {
-        return {
-          symbol: cached.symbol,
-          price: cached.price,
-          timestamp: cached.timestamp,
-          source: cached.source
-        };
-      }
-      console.log(`[27.F.15.D][Pricing] Cache stale for ${normalized} (age: ${age}ms > ${staleThresholdMs}ms), falling back to REST`);
-    }
-    
-    try {
-      await this.fetchPrice(normalized);
-      const updated = this.priceCache.get(normalized);
-      if (updated) {
-        return {
-          symbol: updated.symbol,
-          price: updated.price,
-          timestamp: updated.timestamp,
-          source: updated.source
-        };
-      }
-    } catch (error) {
-      console.error(`[27.F.15.D][Pricing] REST fallback failed for ${normalized}:`, error);
-    }
-    
-    return cached ? {
-      symbol: cached.symbol,
-      price: cached.price,
-      timestamp: cached.timestamp,
-      source: cached.source
-    } : null;
   }
 
   /**
