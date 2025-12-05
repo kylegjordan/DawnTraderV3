@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "sessionStart": "2025-12-05T09:55:39.349Z",
+  "maxPositionLogCount": 5000,
+  "funnelLogCount": 5000,
+  "funnelCounters": {
+    "active_pool_count": 65,
+    "attempt_count": 40352,
+    "attempt_blocked_count": 20146,
+    "rtb_count": 59,
+    "trade_opened_count": 59
+  }
+}
