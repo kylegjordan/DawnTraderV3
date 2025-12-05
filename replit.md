@@ -59,6 +59,15 @@ The Filter Insights UI uses REST data for Cycle Info and Last Scan Result. The b
 - FX5 Scanner continues using REST API (unchanged per directive)
 - Diagnostics endpoint: `GET /api/diagnostics/ws-price-engine` for WS engine health monitoring
 
+**Phase B4: Diagnostic Framework (Dec 2025)** provides observational diagnostics without modifying core trading logic:
+- `B4DiagnosticService` (`server/services/b4-diagnostics.ts`) - Centralized diagnostic service with 5,000-entry ring buffers
+- **MODULE 1 - MAX_POSITION Diagnostics**: Ring buffer logging for position size cap checks, endpoint `GET /api/diagnostics/max-position?limit=5000&csv=1`
+- **MODULE 2 - Funnel Diagnostics**: Counters for active_pool, attempts, rtb_signals, opened_trades with conversion percentages, endpoints `GET /api/diagnostics/funnel-summary` and `GET /api/diagnostics/funnel-download?csv=1`
+- **MODULE 3 - WebSocket Health**: Real-time WS status via `GET /api/diagnostics/ws-health` returning ws_connected, subscribed_symbols, last_update_by_symbol, avg_tick_interval_ms, stale_symbols
+- **MODULE 4 - Unified Export**: `GET /api/diagnostics/export?module=maxpos|funnel|ws&csv=1` for CSV downloads
+- Session management: `POST /api/diagnostics/b4/reset` to reset counters, `GET /api/diagnostics/b4/stats` for session info
+- **SCOPE COMPLIANCE**: NO modifications to guardrails, position sizing, signal routing, WS pricing, risk/target logic, or scanning logic
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed (`wss://ws.kraken.com`) for open trade price monitoring.
