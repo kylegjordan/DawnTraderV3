@@ -15,6 +15,7 @@ import { aj19Diagnostic } from './aj19-max-position-diagnostic';
 import { livePricingAdapter } from './live-pricing-adapter';
 import { krakenWebSocketAdapter } from './kraken-websocket-adapter.js';
 import { b4Diagnostics } from './b4-diagnostics.js';
+import { b5SizingAudit } from './b5-sizing-audit.js';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail';
@@ -1741,6 +1742,27 @@ export class PaperExecutionEngine {
       console.log(`[PaperExecution:${this.mode}] Cannot process signal - engine not running`);
       return;
     }
+
+    // B5: Log signal receipt with field inspection
+    const fieldsPresent: string[] = [];
+    if (signal.symbol) fieldsPresent.push('symbol');
+    if (signal.strategy) fieldsPresent.push('strategy');
+    if (signal.entryPrice) fieldsPresent.push('entryPrice');
+    if (signal.stopPrice) fieldsPresent.push('stopPrice');
+    if (signal.targetPrice) fieldsPresent.push('targetPrice');
+    if (signal.confidence) fieldsPresent.push('confidence');
+    if ((signal as any).quantity) fieldsPresent.push('quantity');
+    if ((signal as any).estimatedValue) fieldsPresent.push('estimatedValue');
+    if ((signal as any).preComputedNotional) fieldsPresent.push('preComputedNotional');
+    
+    b5SizingAudit.logSignalReceived({
+      strategy: signal.strategy,
+      symbol: signal.symbol,
+      entryPrice: signal.entryPrice,
+      quantity: (signal as any).quantity ?? null,
+      estimatedValue: (signal as any).estimatedValue ?? null,
+      fieldsPresent,
+    });
 
     try {
       // Get system context for this mode
