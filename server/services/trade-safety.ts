@@ -20,6 +20,7 @@ import { fxConversionService } from './fx-conversion-service.js';
 import { marketDataService } from './market-data';
 import { aj16Diagnostic } from './aj16-rtb-diagnostic';
 import { aj19Diagnostic } from './aj19-max-position-diagnostic';
+import { b4Diagnostics } from './b4-diagnostics';
 
 export const buildSettingsFromGuardrails = _buildSettingsFromGuardrails;
 export const calculateRiskAmount = _calculateRiskAmount;
@@ -343,6 +344,21 @@ async function checkPositionSizeCap(
   const wouldBlock = positionPercent > maxPositionPercent;
 
   console.log(`[8.8.3-H4][GUARDRAIL_CHECK] position_size_cap: ${positionPercent.toFixed(1)}% of portfolio ($${portfolioValue.toFixed(2)}), max=${maxPositionPercent}%, source=${sizingSource}`);
+
+  // [B4] Log MAX_POSITION check for diagnostics
+  b4Diagnostics.logMaxPositionCheck({
+    symbol: trade.symbol,
+    strategy: trade.strategy,
+    entry_price: trade.entryPrice,
+    portfolio_balance: portfolioValue,
+    max_single_position_allowed: maxPositionValue,
+    max_total_exposure_allowed: portfolioValue * 0.25, // 25% default total exposure
+    current_total_exposure: 0, // Would need open positions to calculate
+    calculated_quantity: trade.preComputedNotional ? trade.preComputedNotional / trade.entryPrice : 0,
+    calculated_notional: positionValue,
+    buffered_max_notional: maxPositionValue * 0.97, // 3% buffer from paper-position-sizing
+    block_reason: wouldBlock ? 'MAX_POSITION' : 'PASS'
+  });
 
   // AJ19: Log diagnostic entry with P2 data from trade candidate
   if (aj19Diagnostic.isActive()) {

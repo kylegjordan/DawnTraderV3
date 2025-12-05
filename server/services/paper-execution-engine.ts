@@ -14,6 +14,7 @@ import { aj19bDiagnostic } from './aj19b-lifecycle-diagnostic';
 import { aj19Diagnostic } from './aj19-max-position-diagnostic';
 import { livePricingAdapter } from './live-pricing-adapter';
 import { krakenWebSocketAdapter } from './kraken-websocket-adapter';
+import { b4Diagnostics } from './b4-diagnostics';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail';
@@ -541,6 +542,9 @@ export class PaperExecutionEngine {
       // REB 8.8.3-D-FIX: Get Active Filtered Pool (replaces watchlist)
       // The Active Filtered Pool contains all pairs that passed FX5 filters (deduped, non-expired)
       const activePool: ActiveFilteredPair[] = activeFilterPool.getActivePool(this.mode);
+      
+      // [B4] Update active pool count for funnel diagnostics
+      b4Diagnostics.updateActivePoolCount(activePool.length);
       
       // Debug log for evaluation input verification
       console.log('[8.8.3-D-FIX][EVAL_INPUT]', {
@@ -1321,9 +1325,24 @@ export class PaperExecutionEngine {
       preComputedNotional: signal.estimatedValue,
     };
 
+    // [B4] Log funnel attempt - signal generated, entering guardrail check
+    b4Diagnostics.logFunnelEvent({
+      symbol: signal.symbol,
+      strategy: signal.strategy,
+      stage: 'attempt',
+      block_reason: null
+    });
+
     const riskCheck = await checkGuardrailRisk(this.mode, tradeCandidate);
 
     if (!riskCheck.ok) {
+      // [B4] Log funnel attempt blocked by guardrails
+      b4Diagnostics.logFunnelEvent({
+        symbol: signal.symbol,
+        strategy: signal.strategy,
+        stage: 'attempt',
+        block_reason: riskCheck.code || riskCheck.reason || 'GUARDRAIL_BLOCK'
+      });
       console.log(`[PaperExecution:${this.mode}] Paper trade rejected by guardrails: ${riskCheck.reason}`);
       
       // [8.8.3-H4][GUARDRAIL_BLOCK] Lifecycle log for guardrail rejection
@@ -1384,6 +1403,14 @@ export class PaperExecutionEngine {
       
       return;
     }
+
+    // [B4] Log funnel RTB - signal passed all guardrails, ready to buy
+    b4Diagnostics.logFunnelEvent({
+      symbol: signal.symbol,
+      strategy: signal.strategy,
+      stage: 'rtb',
+      block_reason: null
+    });
 
     // [27.F.14.B] INSTRUMENTATION: Risk check passed
     console.log(`[27.F.14.B][PaperSim] risk_check_passed {symbol:"${signal.symbol}"}`);
@@ -1484,6 +1511,14 @@ export class PaperExecutionEngine {
 
       // AJ10.3: Diagnostic - trade record created
       console.log(`[AJ10.3][TRADE_RECORD_OK] tradeId=${trade.id} | symbol=${signal.symbol}`);
+
+      // [B4] Log funnel opened - trade successfully created
+      b4Diagnostics.logFunnelEvent({
+        symbol: signal.symbol,
+        strategy: signal.strategy,
+        stage: 'opened',
+        block_reason: null
+      });
 
       // Create open position
       const openPosition = await storage.createPaperSimOpenPosition(this.mode, {

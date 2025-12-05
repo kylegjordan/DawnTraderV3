@@ -12,6 +12,7 @@ import { tradingStateSync } from './trading-state-sync.js';
 import { KrakenService } from './kraken.js';
 import { paperOperationQueue } from '../utils/operation-queue.js';
 import { reset24hWindow, resetHourlyScanHistory } from './fx5-24h-window.js';
+import { b4Diagnostics } from './b4-diagnostics.js';
 
 console.log('[41E-S][LIVE-CODE] paper-sim-service.ts loaded');
 console.log('[41F][QUEUE] Paper operation queue integrated');
@@ -367,6 +368,11 @@ export async function startPaperSimulation(
         };
 
         console.log('[ENGINE_DB_CHECKPOINT_1] Creating paper sim session in database...');
+        
+        // [B4] Reset diagnostic session for clean data capture
+        b4Diagnostics.resetSession();
+        console.log('[B4] Diagnostic session reset for new simulation');
+        
         const dbSession = await storage.createPaperSimSession(sessionData);
         console.log(`[ENGINE_DB_CHECKPOINT_2] Session created in database: ${sessionId}`);
 
