@@ -368,13 +368,12 @@ export async function startPaperSimulation(
         };
 
         console.log('[ENGINE_DB_CHECKPOINT_1] Creating paper sim session in database...');
-        
-        // [B4] Reset diagnostic session for clean data capture
-        b4Diagnostics.resetSession();
-        console.log('[B4] Diagnostic session reset for new simulation');
-        
         const dbSession = await storage.createPaperSimSession(sessionData);
         console.log(`[ENGINE_DB_CHECKPOINT_2] Session created in database: ${sessionId}`);
+        
+        // [B4] Reset diagnostic session for clean data capture (after DB session created)
+        b4Diagnostics.resetSession();
+        console.log('[B4] Diagnostic session reset for new simulation');
 
         // REB 2.8.11: Cache previous portfolio balance for rollback on failure
         const previousPortfolioState = await storage.getPortfolioState({ mode: 'paper' });

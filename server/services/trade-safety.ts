@@ -20,7 +20,7 @@ import { fxConversionService } from './fx-conversion-service.js';
 import { marketDataService } from './market-data';
 import { aj16Diagnostic } from './aj16-rtb-diagnostic';
 import { aj19Diagnostic } from './aj19-max-position-diagnostic';
-import { b4Diagnostics } from './b4-diagnostics';
+import { b4Diagnostics } from './b4-diagnostics.js';
 
 export const buildSettingsFromGuardrails = _buildSettingsFromGuardrails;
 export const calculateRiskAmount = _calculateRiskAmount;

@@ -14,7 +14,7 @@ import { aj19bDiagnostic } from './aj19b-lifecycle-diagnostic';
 import { aj19Diagnostic } from './aj19-max-position-diagnostic';
 import { livePricingAdapter } from './live-pricing-adapter';
 import { krakenWebSocketAdapter } from './kraken-websocket-adapter';
-import { b4Diagnostics } from './b4-diagnostics';
+import { b4Diagnostics } from './b4-diagnostics.js';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail';
