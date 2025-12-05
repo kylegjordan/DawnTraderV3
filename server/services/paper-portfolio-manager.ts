@@ -57,7 +57,7 @@ export class PaperPortfolioManager {
   constructor(mode: 'live' | 'paper', userId?: string) {
     this.mode = mode;
     this.userId = userId || 'system'; // Fallback for backward compatibility
-    this.executionEngine = new PaperExecutionEngine(mode);
+    this.executionEngine = new PaperExecutionEngine(mode, userId);
     this.microExecutionService = new MicroExecutionService(mode); // Phase 27.F.14.MICRO
     this.kraken = new KrakenService();
     
@@ -171,7 +171,7 @@ export class PaperPortfolioManager {
     
     try {
       // Get user's paper mode watchlist
-      const watchlist = await storage.getWatchlist({ mode: this.mode });
+      const watchlist = await storage.getWatchlist({ userId: this.userId, mode: 'paper' });
       
       if (watchlist.length === 0) {
         return; // No symbols to refresh
@@ -343,7 +343,7 @@ export class PaperPortfolioManager {
           const pnlPercent = ((currentPrice - avgPrice) / avgPrice) * 100;
 
           // Update trade record
-          await storage.updatePaperSimTrade(this.mode, trade.id, {
+          await storage.updatePaperSimTrade(trade.id, {
             exitPrice: currentPrice.toString(),
             pnl: pnl.toString(),
             pnlPercent: pnlPercent.toString(),
@@ -352,7 +352,8 @@ export class PaperPortfolioManager {
           });
 
           // Log the close event
-          await storage.createPaperSimTradeLog(this.mode, {
+          await storage.createPaperSimTradeLog({
+            userId: this.userId,
             tradeId: trade.id,
             positionId: position.id,
             eventType: 'position_closed',
@@ -367,7 +368,7 @@ export class PaperPortfolioManager {
         }
 
         // Delete open position
-        await storage.deletePaperSimOpenPosition(this.mode, position.id);
+        await storage.deletePaperSimOpenPosition(position.id);
       } catch (error) {
         console.error(`[PaperPortfolio:${this.userId}] Error closing position ${position.symbol}:`, error);
       }

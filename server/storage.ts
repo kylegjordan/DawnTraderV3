@@ -795,8 +795,6 @@ export class DatabaseStorage implements IStorage {
         lowPriceThreshold: data.lowPriceThreshold ?? existing.lowPriceThreshold,
         lowPriceMinStopAtrMult: data.lowPriceMinStopAtrMult ?? existing.lowPriceMinStopAtrMult,
         lowPriceMinPositionNotional: data.lowPriceMinPositionNotional ?? existing.lowPriceMinPositionNotional,
-        // Phase 8.8.3-B3: Max Total Portfolio Exposure
-        maxTotalExposurePct: data.maxTotalExposurePct ?? existing.maxTotalExposurePct,
         // Override controls
         isManualOverride: data.isManualOverride ?? existing.isManualOverride,
         tunedByLatti: data.tunedByLatti ?? existing.tunedByLatti,
