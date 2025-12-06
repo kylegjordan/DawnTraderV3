@@ -37,6 +37,8 @@ Phase 8.8.3-B7.1 enforces a strict API contract for `/api/paper-sim/start`: the 
 
 Phase 8.8.3-B9 (Execution Engine Integrity) ensures P&L calculations use only real market data. Mock pricing is DISABLED by default (requires `ENABLE_MOCK_PRICING=true` env var for dev/testing). The `LivePricingAdapter` returns `no_reliable_price` source when no real data is available instead of falling back to hardcoded mock prices. Price cache is seeded with entry prices on trade open via `seedLastKnownGoodPrice()` to prevent cold-start mock fallback. Position monitoring skips positions when no reliable price is available rather than using synthetic data. Legacy `paper-execution.ts` moved to `server/legacy/` folder with tsconfig exclude to prevent accidental usage.
 
+Phase 8.8.3-B9.FIX-WS-START (WebSocket Startup Fix) fixes a critical bug where the Kraken WebSocket never started on simulation start. The root cause was an early-return block in `startPaperSimulation()` that bypassed `manager.start()` when session and manager both existed but manager wasn't running. The fix adds `getIsRunning()` check before early-return, ensuring WebSocket starts even when manager exists but is idle. Diagnostic logging added with markers `[DEBUG-B9]` for startup chain tracing. `KrakenWebSocketAdapter.stop()` now clears `pendingSubscriptions` to prevent stale resubscriptions on restart.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed (`wss://ws.kraken.com`) for open trade price monitoring.
