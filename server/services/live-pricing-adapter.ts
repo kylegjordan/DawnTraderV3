@@ -147,102 +147,6 @@ export class LivePricingAdapter {
     };
   }
   
-  /**
-   * Phase 8.8.3-B3.6: Update cache from WebSocket price tick
-   * Called by KrakenWebSocketAdapter when it receives a ticker update
-   */
-  updateFromWebSocket(symbol: string, price: number, timestamp: string, source: 'kraken' | 'mock' = 'kraken'): void {
-    const normalized = this.normalizeSymbol(symbol);
-    
-    // Update cache
-    this.priceCache.set(normalized, {
-      symbol: normalized,
-      price,
-      timestamp,
-      source: source as any,
-      cachedAt: Date.now()
-    });
-    
-    // Throttled broadcast
-    const lastBroadcast = this.lastBroadcastTime.get(normalized) || 0;
-    const now = Date.now();
-    
-    if (now - lastBroadcast >= this.BROADCAST_THROTTLE_MS) {
-      this.lastBroadcastTime.set(normalized, now);
-      
-      contextBridge.broadcast('price_updated', {
-        mode: 'paper',
-        symbol: normalized,
-        price,
-        timestamp,
-        source: 'kraken_ws'
-      });
-    }
-  }
-  
-  /**
-   * Phase 8.8.3-B3.6: Get price with REST fallback
-   * Prefer WebSocket cache, fallback to REST if cache is stale (>5 seconds)
-   */
-  async getPriceWithFallback(
-    symbol: string, 
-    restFetcher: () => Promise<number | null>,
-    staleMs: number = 5000
-  ): Promise<{ price: number | null; source: 'cache' | 'rest' | 'none'; age: number }> {
-    const normalized = this.normalizeSymbol(symbol);
-    const cached = this.priceCache.get(normalized);
-    
-    if (cached) {
-      const age = Date.now() - cached.cachedAt;
-      
-      // Cache is fresh - use it
-      if (age <= staleMs) {
-        return { price: cached.price, source: 'cache', age };
-      }
-      
-      // Cache is stale - try REST fallback
-      console.log(`[B3.6][Pricing] Cache stale for ${normalized} (${age}ms > ${staleMs}ms), fetching REST`);
-      try {
-        const restPrice = await restFetcher();
-        if (restPrice !== null) {
-          // Update cache with REST price
-          this.priceCache.set(normalized, {
-            symbol: normalized,
-            price: restPrice,
-            timestamp: new Date().toISOString(),
-            source: 'binance' as any,
-            cachedAt: Date.now()
-          });
-          return { price: restPrice, source: 'rest', age: 0 };
-        }
-      } catch (error) {
-        console.error(`[B3.6][Pricing] REST fallback failed for ${normalized}:`, error);
-      }
-      
-      // REST failed, return stale cache as last resort
-      return { price: cached.price, source: 'cache', age };
-    }
-    
-    // No cache at all - fetch from REST
-    console.log(`[B3.6][Pricing] No cache for ${normalized}, fetching REST`);
-    try {
-      const restPrice = await restFetcher();
-      if (restPrice !== null) {
-        this.priceCache.set(normalized, {
-          symbol: normalized,
-          price: restPrice,
-          timestamp: new Date().toISOString(),
-          source: 'binance' as any,
-          cachedAt: Date.now()
-        });
-        return { price: restPrice, source: 'rest', age: 0 };
-      }
-    } catch (error) {
-      console.error(`[B3.6][Pricing] REST fetch failed for ${normalized}:`, error);
-    }
-    
-    return { price: null, source: 'none', age: -1 };
-  }
 
   /**
    * Get all cached prices
@@ -504,11 +408,14 @@ export class LivePricingAdapter {
     const normalized = this.normalizeSymbol(symbol);
     const timestamp = new Date().toISOString();
     
+    // Map WebSocket source to cache source type
+    const cacheSource: 'binance' | 'coingecko' | 'mock' = source === 'kraken_ws' ? 'binance' : 'binance';
+    
     this.priceCache.set(normalized, {
       symbol: normalized,
       price,
       timestamp,
-      source: source as any,
+      source: cacheSource,
       cachedAt: Date.now()
     });
     
@@ -559,6 +466,24 @@ export class LivePricingAdapter {
       timestamp: cached.timestamp,
       source: cached.source
     } : null;
+  }
+
+  /**
+   * Phase B7.MDR: Clear all price caches for hard reset
+   * Called during paper simulation reset to ensure fresh market data
+   */
+  clearCache(): void {
+    const previousSize = this.priceCache.size;
+    this.priceCache.clear();
+    this.lastBroadcastTime.clear();
+    console.log(`[PRICE_ENGINE][RESET] Cleared price cache (${previousSize} entries)`);
+  }
+
+  /**
+   * Get cache size for verification
+   */
+  getCacheSize(): number {
+    return this.priceCache.size;
   }
 
   /**

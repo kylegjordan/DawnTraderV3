@@ -18,6 +18,7 @@ import { b5SizingAudit } from './b5-sizing-audit.js';
 import { getGlobalPaperSimManager, clearGlobalPaperSimManager, getEngineByMode, getOrchestratorByMode } from './paper-sim-service.js';
 import { reset24hWindow, resetHourlyScanHistory } from './fx5-24h-window.js';
 import { krakenWebSocketAdapter } from './kraken-websocket-adapter.js';
+import { livePricingAdapter } from './live-pricing-adapter.js';
 
 export interface HardResetResult {
   success: boolean;
@@ -30,6 +31,7 @@ export interface HardResetResult {
     closedTrades: number;
     clearedPositions: number;
     fx5WindowsReset: boolean;
+    marketDataReset: boolean;
   };
 }
 
@@ -67,6 +69,7 @@ class PaperSessionResetService {
         closedTrades: 0,
         clearedPositions: 0,
         fx5WindowsReset: false,
+        marketDataReset: false,
       },
     };
 
@@ -119,16 +122,45 @@ class PaperSessionResetService {
           console.warn(`[B7.A][HARD_RESET] Direct orchestrator reset warning:`, orchErr);
         }
         
-        // Clear WebSocket subscriptions as failsafe
-        try {
-          krakenWebSocketAdapter.clearAllSubscriptions();
-          console.log(`[B7.A][HARD_RESET] WebSocket subscriptions cleared (fallback)`);
-        } catch (wsErr) {
-          console.warn(`[B7.A][HARD_RESET] WebSocket clear warning:`, wsErr);
-        }
-        
         result.details.engineReset = true;
         result.details.orchestratorReset = true;
+      }
+
+      // 1.5) B7.MDR: UNCONDITIONAL Market Data Reset - Always clear price and WebSocket caches
+      console.log(`[B7.MDR] Starting market data reset...`);
+      try {
+        // Get pre-reset stats for verification
+        const wsStats = krakenWebSocketAdapter.getSubscriptionStats();
+        const priceCacheSize = livePricingAdapter.getCacheSize();
+        console.log(`[B7.MDR][PRE] priceCache=${priceCacheSize}, subscribedSymbols=${wsStats.subscribedSymbols}, symbolStats=${wsStats.symbolStats}, priceTickLogs=${wsStats.priceTickLogs}`);
+        
+        // Clear WebSocket subscriptions (unconditional)
+        krakenWebSocketAdapter.clearAllSubscriptions();
+        
+        // Clear price cache (unconditional)
+        livePricingAdapter.clearCache();
+        
+        // Verify post-reset stats - MUST all be zero
+        const wsStatsPost = krakenWebSocketAdapter.getSubscriptionStats();
+        const priceCacheSizePost = livePricingAdapter.getCacheSize();
+        console.log(`[B7.MDR][POST] priceCache=${priceCacheSizePost}, subscribedSymbols=${wsStatsPost.subscribedSymbols}, symbolStats=${wsStatsPost.symbolStats}, priceTickLogs=${wsStatsPost.priceTickLogs}`);
+        
+        // Validate all caches are actually cleared
+        const allCachesCleared = priceCacheSizePost === 0 && 
+          wsStatsPost.subscribedSymbols === 0 && 
+          wsStatsPost.symbolStats === 0 && 
+          wsStatsPost.priceTickLogs === 0;
+        
+        if (allCachesCleared) {
+          result.details.marketDataReset = true;
+          console.log(`[B7.MDR] Market data reset complete - all caches verified empty`);
+        } else {
+          console.error(`[B7.MDR][FAIL] Market data reset incomplete - caches not fully cleared: priceCache=${priceCacheSizePost}, subscribedSymbols=${wsStatsPost.subscribedSymbols}, symbolStats=${wsStatsPost.symbolStats}, priceTickLogs=${wsStatsPost.priceTickLogs}`);
+          result.details.marketDataReset = false;
+        }
+      } catch (mdErr) {
+        console.error(`[B7.MDR][ERROR] Market data reset failed:`, mdErr);
+        result.details.marketDataReset = false;
       }
 
       // 2) Clear diagnostics buffers (B4/B5)

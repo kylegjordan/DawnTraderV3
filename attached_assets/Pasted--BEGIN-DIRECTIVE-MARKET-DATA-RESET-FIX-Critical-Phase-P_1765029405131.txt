@@ -1,0 +1,87 @@
+🚨 BEGIN DIRECTIVE — MARKET DATA RESET FIX (Critical Phase)
+
+Please implement the following mandatory corrections to ensure that starting a new V3 paper trading simulation always begins with a truly clean market-data environment.
+
+This directive MUST be applied to DawnTrader Version 3 only — not Version 2.
+
+🎯 A. Add clearCache() to LivePricingAdapter
+
+File: server/services/live-pricing-adapter.ts
+
+Add:
+clearCache() {
+  this.priceCache.clear();
+  console.log(`[PRICE_ENGINE][RESET] Cleared price cache`);
+}
+
+🎯 B. Ensure WebSocketAdapter.clearAllSubscriptions() ALWAYS runs on hard reset
+
+File: server/services/paper-session-reset.ts
+
+Move this OUT of the fallback branch and make it unconditional:
+
+await krakenWebSocketAdapter.clearAllSubscriptions();
+
+
+Also add:
+
+console.log("[WEBSOCKET][RESET] Cleared all subscriptions");
+
+🎯 C. Inside KrakenWebSocketAdapter, clear ALL internal caches
+
+File: server/services/kraken-websocket-adapter.ts
+
+Add:
+
+clearAllSubscriptions() {
+  // unsubscribe logic...
+
+  this.subscribedSymbols.clear();
+  this.pendingSubscriptions.clear();
+  this.symbolStats.clear();
+  this.priceTickLogs = [];
+
+  console.log("[WEBSOCKET][RESET] Cleared symbolStats, pending subscriptions, price tick logs");
+}
+
+🎯 D. In PaperExecutionEngine, clear tick/bar snapshots at session start
+
+File: server/services/paper-execution-engine.ts
+
+Inside resetSessionState() or constructor:
+
+this.lastTickPrices.clear?.();
+this.currentBarCache?.clear?.();
+this.priceSnapshot = null;
+
+console.log("[ENGINE][RESET] Cleared price snapshot and bar caches");
+
+🎯 E. Ensure hardResetPaperSimulation() calls ALL reset functions
+
+Verify this sequence runs in order:
+
+await storage.hardResetPaperSim();
+await orchestrator.resetSession();
+await engine.resetSessionState();
+await krakenWebSocketAdapter.clearAllSubscriptions();
+await livePricingAdapter.clearCache();
+
+
+Add logs:
+
+[B7.MDR] Market data reset complete
+
+🎯 F. After implementation, confirm with these checks at simulation start:
+
+Please output:
+
+1) priceCache size
+2) subscribedSymbols size
+3) symbolStats size
+4) priceTickLogs length
+5) engine.lastTickPrices size
+
+
+All should be zero before first scan cycle.
+
+📘 END DIRECTIVE

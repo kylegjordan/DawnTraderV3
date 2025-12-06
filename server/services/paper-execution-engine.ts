@@ -146,6 +146,12 @@ export class PaperExecutionEngine {
   resetSessionState(): void {
     console.log(`[B7.A][ENGINE] Resetting session state for mode=${this.mode}`);
     
+    // B7.MDR: Capture pre-reset cache sizes for verification (Directive Section F)
+    const prePriceHistory = this.priceHistory.size;
+    const preTickLogs = this.priceTickLogs.length;
+    const preTickTime = this.lastPriceTickTime.size;
+    console.log(`[ENGINE][RESET][PRE] priceHistory=${prePriceHistory}, tickLogs=${preTickLogs}, lastPriceTickTime=${preTickTime}`);
+    
     // Clear running state
     this.isRunning = false;
     this.isCycleRunning = false;
@@ -168,6 +174,9 @@ export class PaperExecutionEngine {
     
     // Clear last cycle summary
     this.lastCycleSummary = {};
+    
+    // B7.MDR: Log post-reset verification (Directive Section D)
+    console.log(`[ENGINE][RESET] Cleared price snapshot and bar caches (priceHistory=${this.priceHistory.size}, tickLogs=${this.priceTickLogs.length}, lastPriceTickTime=${this.lastPriceTickTime.size})`);
     
     // B7.A Enhancement: Clear WebSocket subscriptions to prevent stale price feeds
     try {
@@ -237,28 +246,29 @@ export class PaperExecutionEngine {
     for (const position of openPositions) {
       try {
         // Phase 8.8.3-B3.6: Use WebSocket cache with REST fallback (5 second stale threshold)
-        const restFetcher = async (): Promise<number | null> => {
-          try {
-            const ticker = await this.krakenService.getTicker(position.symbol);
-            const tickerData = Object.values(ticker)[0];
-            if (!tickerData) return null;
-            return parseFloat(tickerData.c[0]);
-          } catch {
-            return null;
-          }
-        };
-        
-        const priceResult = await livePricingAdapter.getPriceWithFallback(position.symbol, restFetcher, 5000);
+        const priceResult = await livePricingAdapter.getPriceWithFallback(position.symbol, 5000);
         
         let currentPrice: number;
         let priceSource: string;
         
-        if (priceResult.price !== null) {
+        if (priceResult !== null && priceResult.price !== null) {
           currentPrice = priceResult.price;
-          priceSource = priceResult.source === 'cache' ? 'ws_cache' : 'kraken_rest';
+          priceSource = priceResult.source === 'mock' ? 'mock' : 'ws_cache';
         } else {
-          console.warn(`[PaperExecution:${this.mode}] No price data for ${position.symbol}`);
-          continue;
+          // Fallback to Kraken REST if cache unavailable
+          try {
+            const ticker = await this.krakenService.getTicker(position.symbol);
+            const tickerData = Object.values(ticker)[0];
+            if (!tickerData) {
+              console.warn(`[PaperExecution:${this.mode}] No price data for ${position.symbol}`);
+              continue;
+            }
+            currentPrice = parseFloat(tickerData.c[0]);
+            priceSource = 'kraken_rest';
+          } catch {
+            console.warn(`[PaperExecution:${this.mode}] No price data for ${position.symbol}`);
+            continue;
+          }
         }
         
         // Phase 8.8.3-B3.5: Log PRICE_TICK for cadence verification

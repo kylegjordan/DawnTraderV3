@@ -266,7 +266,7 @@ export class KrakenWebSocketAdapter {
       }
       
       // Phase 8.8.3-B3.6: Update LivePricingAdapter cache with WebSocket price
-      livePricingAdapter.updateFromWebSocket(normalizedSymbol, lastPrice, new Date().toISOString(), 'kraken');
+      livePricingAdapter.updateFromWebSocket(normalizedSymbol, lastPrice, 'kraken_ws');
       
       this.throttledBroadcast(normalizedSymbol, lastPrice, bid, ask);
       
@@ -561,11 +561,17 @@ export class KrakenWebSocketAdapter {
    * Used during paper simulation reset to prevent stale price updates
    */
   clearAllSubscriptions(): void {
-    console.log(`[${this.MODULE_NAME}] Clearing all subscriptions (${this.subscribedSymbols.size} active, ${this.pendingSubscriptions.size} pending)`);
+    const prevSubscribed = this.subscribedSymbols.size;
+    const prevPending = this.pendingSubscriptions.size;
+    const prevStats = this.symbolStats.size;
+    const prevTickLogs = this.priceTickLogs.length;
+    
+    console.log(`[WEBSOCKET][RESET] Starting clear - subscribed=${prevSubscribed}, pending=${prevPending}, stats=${prevStats}, tickLogs=${prevTickLogs}`);
     
     if (this.isConnected && this.subscribedSymbols.size > 0) {
       const symbols = Array.from(this.subscribedSymbols);
       this.unsubscribeFromSymbols(symbols);
+      console.log(`[WEBSOCKET][RESET] Unsubscribed from ${symbols.length} symbols`);
     }
     
     this.subscribedSymbols.clear();
@@ -573,7 +579,19 @@ export class KrakenWebSocketAdapter {
     this.symbolStats.clear();
     this.priceTickLogs = [];
     
-    console.log(`[${this.MODULE_NAME}] All subscriptions cleared`);
+    console.log(`[WEBSOCKET][RESET] Cleared all subscriptions - symbolStats, pending subscriptions, price tick logs`);
+  }
+
+  /**
+   * Get subscription stats for verification
+   */
+  getSubscriptionStats(): { subscribedSymbols: number; pendingSubscriptions: number; symbolStats: number; priceTickLogs: number } {
+    return {
+      subscribedSymbols: this.subscribedSymbols.size,
+      pendingSubscriptions: this.pendingSubscriptions.size,
+      symbolStats: this.symbolStats.size,
+      priceTickLogs: this.priceTickLogs.length
+    };
   }
 }
 
