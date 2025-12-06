@@ -1,0 +1,438 @@
+{
+  "ok": true,
+  "timestamp": "2025-12-06T21:32:08.197Z",
+  "wsConnected": true,
+  "subscribedSymbols": [
+    "FARTCOIN/EUR",
+    "TRX/USD"
+  ],
+  "lastUpdateBySymbol": {
+    "FARTCOIN/EUR": "2025-12-06T21:30:11.470Z",
+    "TRX/USD": "2025-12-06T21:31:43.717Z"
+  },
+  "averageIntervalMs": 89217,
+  "maxIntervalMs": 799916,
+  "minIntervalMs": 1795,
+  "staleSymbols": [
+    "FARTCOIN/EUR",
+    "TRX/USD"
+  ],
+  "cacheSize": 2,
+  "cacheTTL": 1000,
+  "reconnectAttempts": 0,
+  "lastPongAgeMs": 10433,
+  "priceLogs": [
+    {
+      "symbol": "FARTCOIN/EUR",
+      "price": 0.3317,
+      "bid": 0.3305,
+      "ask": 0.3307,
+      "timestamp": "2025-12-06T21:01:39.821Z",
+      "receivedAt": 1765054899821,
+      "intervalMs": 0
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.28712,
+      "bid": 0.28712,
+      "ask": 0.287121,
+      "timestamp": "2025-12-06T21:02:15.908Z",
+      "receivedAt": 1765054935908,
+      "intervalMs": 0
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287121,
+      "bid": 0.28712,
+      "ask": 0.287121,
+      "timestamp": "2025-12-06T21:03:03.651Z",
+      "receivedAt": 1765054983651,
+      "intervalMs": 47743
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287121,
+      "bid": 0.28712,
+      "ask": 0.287121,
+      "timestamp": "2025-12-06T21:03:42.047Z",
+      "receivedAt": 1765055022047,
+      "intervalMs": 38396
+    },
+    {
+      "symbol": "FARTCOIN/EUR",
+      "price": 0.3307,
+      "bid": 0.3304,
+      "ask": 0.3307,
+      "timestamp": "2025-12-06T21:04:02.798Z",
+      "receivedAt": 1765055042797,
+      "intervalMs": 142976
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287121,
+      "bid": 0.28712,
+      "ask": 0.287121,
+      "timestamp": "2025-12-06T21:04:17.038Z",
+      "receivedAt": 1765055057038,
+      "intervalMs": 34991
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287121,
+      "bid": 0.28712,
+      "ask": 0.287121,
+      "timestamp": "2025-12-06T21:04:30.801Z",
+      "receivedAt": 1765055070800,
+      "intervalMs": 13762
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.28712,
+      "bid": 0.28712,
+      "ask": 0.287121,
+      "timestamp": "2025-12-06T21:04:56.214Z",
+      "receivedAt": 1765055096214,
+      "intervalMs": 25414
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287121,
+      "bid": 0.28712,
+      "ask": 0.287121,
+      "timestamp": "2025-12-06T21:05:18.987Z",
+      "receivedAt": 1765055118987,
+      "intervalMs": 22773
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287121,
+      "bid": 0.28712,
+      "ask": 0.287121,
+      "timestamp": "2025-12-06T21:05:39.897Z",
+      "receivedAt": 1765055139897,
+      "intervalMs": 20910
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287121,
+      "bid": 0.28712,
+      "ask": 0.287121,
+      "timestamp": "2025-12-06T21:05:39.897Z",
+      "receivedAt": 1765055139897,
+      "intervalMs": 0
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287121,
+      "bid": 0.28712,
+      "ask": 0.287121,
+      "timestamp": "2025-12-06T21:05:39.897Z",
+      "receivedAt": 1765055139897,
+      "intervalMs": 0
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287121,
+      "bid": 0.28712,
+      "ask": 0.287121,
+      "timestamp": "2025-12-06T21:05:39.897Z",
+      "receivedAt": 1765055139897,
+      "intervalMs": 0
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287121,
+      "bid": 0.28712,
+      "ask": 0.287121,
+      "timestamp": "2025-12-06T21:05:39.897Z",
+      "receivedAt": 1765055139897,
+      "intervalMs": 0
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287121,
+      "bid": 0.28712,
+      "ask": 0.287121,
+      "timestamp": "2025-12-06T21:05:44.733Z",
+      "receivedAt": 1765055144733,
+      "intervalMs": 4836
+    },
+    {
+      "symbol": "FARTCOIN/EUR",
+      "price": 0.3342,
+      "bid": 0.3341,
+      "ask": 0.3348,
+      "timestamp": "2025-12-06T21:05:55.295Z",
+      "receivedAt": 1765055155295,
+      "intervalMs": 112498
+    },
+    {
+      "symbol": "FARTCOIN/EUR",
+      "price": 0.3342,
+      "bid": 0.3341,
+      "ask": 0.3349,
+      "timestamp": "2025-12-06T21:05:57.320Z",
+      "receivedAt": 1765055157320,
+      "intervalMs": 2025
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287121,
+      "bid": 0.28712,
+      "ask": 0.287121,
+      "timestamp": "2025-12-06T21:06:32.551Z",
+      "receivedAt": 1765055192551,
+      "intervalMs": 47818
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.28712,
+      "bid": 0.28712,
+      "ask": 0.287121,
+      "timestamp": "2025-12-06T21:06:35.630Z",
+      "receivedAt": 1765055195630,
+      "intervalMs": 3079
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.28712,
+      "bid": 0.28712,
+      "ask": 0.287121,
+      "timestamp": "2025-12-06T21:06:52.875Z",
+      "receivedAt": 1765055212875,
+      "intervalMs": 17245
+    },
+    {
+      "symbol": "FARTCOIN/EUR",
+      "price": 0.3344,
+      "bid": 0.3337,
+      "ask": 0.3344,
+      "timestamp": "2025-12-06T21:07:07.301Z",
+      "receivedAt": 1765055227301,
+      "intervalMs": 69981
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.28712,
+      "bid": 0.28712,
+      "ask": 0.287121,
+      "timestamp": "2025-12-06T21:08:23.642Z",
+      "receivedAt": 1765055303642,
+      "intervalMs": 90767
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287121,
+      "bid": 0.28712,
+      "ask": 0.287121,
+      "timestamp": "2025-12-06T21:08:25.437Z",
+      "receivedAt": 1765055305437,
+      "intervalMs": 1795
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287121,
+      "bid": 0.28712,
+      "ask": 0.287121,
+      "timestamp": "2025-12-06T21:08:31.289Z",
+      "receivedAt": 1765055311289,
+      "intervalMs": 5852
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287121,
+      "bid": 0.28712,
+      "ask": 0.287121,
+      "timestamp": "2025-12-06T21:09:27.846Z",
+      "receivedAt": 1765055367846,
+      "intervalMs": 56557
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.28712,
+      "bid": 0.287119,
+      "ask": 0.28712,
+      "timestamp": "2025-12-06T21:10:32.115Z",
+      "receivedAt": 1765055432115,
+      "intervalMs": 64269
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287121,
+      "bid": 0.28712,
+      "ask": 0.287121,
+      "timestamp": "2025-12-06T21:11:28.057Z",
+      "receivedAt": 1765055488057,
+      "intervalMs": 55942
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287178,
+      "bid": 0.28712,
+      "ask": 0.287178,
+      "timestamp": "2025-12-06T21:11:52.884Z",
+      "receivedAt": 1765055512884,
+      "intervalMs": 24827
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287178,
+      "bid": 0.287162,
+      "ask": 0.287178,
+      "timestamp": "2025-12-06T21:12:20.439Z",
+      "receivedAt": 1765055540439,
+      "intervalMs": 27555
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287233,
+      "bid": 0.2872,
+      "ask": 0.287233,
+      "timestamp": "2025-12-06T21:15:04.608Z",
+      "receivedAt": 1765055704608,
+      "intervalMs": 164169
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287158,
+      "bid": 0.287098,
+      "ask": 0.287158,
+      "timestamp": "2025-12-06T21:18:57.954Z",
+      "receivedAt": 1765055937954,
+      "intervalMs": 233346
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.286956,
+      "bid": 0.286956,
+      "ask": 0.287154,
+      "timestamp": "2025-12-06T21:19:33.151Z",
+      "receivedAt": 1765055973151,
+      "intervalMs": 35197
+    },
+    {
+      "symbol": "FARTCOIN/EUR",
+      "price": 0.3309,
+      "bid": 0.3309,
+      "ask": 0.3313,
+      "timestamp": "2025-12-06T21:20:27.217Z",
+      "receivedAt": 1765056027217,
+      "intervalMs": 799916
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287101,
+      "bid": 0.287055,
+      "ask": 0.287101,
+      "timestamp": "2025-12-06T21:20:33.228Z",
+      "receivedAt": 1765056033228,
+      "intervalMs": 60077
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287142,
+      "bid": 0.287096,
+      "ask": 0.287142,
+      "timestamp": "2025-12-06T21:20:50.494Z",
+      "receivedAt": 1765056050494,
+      "intervalMs": 17266
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287109,
+      "bid": 0.287085,
+      "ask": 0.287109,
+      "timestamp": "2025-12-06T21:22:25.309Z",
+      "receivedAt": 1765056145309,
+      "intervalMs": 94815
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287138,
+      "bid": 0.287085,
+      "ask": 0.287138,
+      "timestamp": "2025-12-06T21:22:48.140Z",
+      "receivedAt": 1765056168140,
+      "intervalMs": 22831
+    },
+    {
+      "symbol": "FARTCOIN/EUR",
+      "price": 0.3296,
+      "bid": 0.329,
+      "ask": 0.3296,
+      "timestamp": "2025-12-06T21:22:55.816Z",
+      "receivedAt": 1765056175816,
+      "intervalMs": 148599
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287019,
+      "bid": 0.287019,
+      "ask": 0.287088,
+      "timestamp": "2025-12-06T21:23:21.211Z",
+      "receivedAt": 1765056201211,
+      "intervalMs": 33071
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287086,
+      "bid": 0.287022,
+      "ask": 0.287086,
+      "timestamp": "2025-12-06T21:23:25.156Z",
+      "receivedAt": 1765056205156,
+      "intervalMs": 3945
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.286989,
+      "bid": 0.286949,
+      "ask": 0.286989,
+      "timestamp": "2025-12-06T21:26:01.613Z",
+      "receivedAt": 1765056361613,
+      "intervalMs": 156457
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.287047,
+      "bid": 0.287017,
+      "ask": 0.287047,
+      "timestamp": "2025-12-06T21:27:22.243Z",
+      "receivedAt": 1765056442243,
+      "intervalMs": 80630
+    },
+    {
+      "symbol": "FARTCOIN/EUR",
+      "price": 0.3304,
+      "bid": 0.3299,
+      "ask": 0.3304,
+      "timestamp": "2025-12-06T21:29:22.150Z",
+      "receivedAt": 1765056562150,
+      "intervalMs": 386334
+    },
+    {
+      "symbol": "FARTCOIN/EUR",
+      "price": 0.33,
+      "bid": 0.3296,
+      "ask": 0.33,
+      "timestamp": "2025-12-06T21:30:11.470Z",
+      "receivedAt": 1765056611470,
+      "intervalMs": 49320
+    },
+    {
+      "symbol": "TRX/USD",
+      "price": 0.28704,
+      "bid": 0.287009,
+      "ask": 0.28704,
+      "timestamp": "2025-12-06T21:31:43.717Z",
+      "receivedAt": 1765056703717,
+      "intervalMs": 261474
+    }
+  ],
+  "priceLogCount": 45,
+  "health": {
+    "isConnected": true,
+    "hasStaleSymbols": true,
+    "averageIntervalHealthy": false,
+    "overall": false
+  }
+}
