@@ -33,6 +33,8 @@ A Diagnostic Framework (`B4DiagnosticService`) provides observational diagnostic
 
 A Hard Reset Service (`B7.A PaperSessionResetService`) provides a single authoritative path for complete paper simulation reset. The service coordinates reset across: engine in-memory state (`resetSessionState()`), orchestrator session state (`resetSession()`), diagnostics buffers (B4/B5), FX5 24h windows, and database (open positions, trades, sessions). The `/api/paper-sim/reset` endpoint now uses this service, eliminating ghost trades and ensuring genuinely fresh sessions without manual SQL.
 
+Phase 8.8.3-B7.1 enforces a strict API contract for `/api/paper-sim/start`: the `mode` parameter is now REQUIRED ('new' or 'continue'). Hard reset only runs when `mode='new'`, preserving existing state on `mode='continue'`. Frontend callers use structured payloads (`paper-new`, `paper-continue`, `live`) via the `startTradingMutation` hook, ensuring no accidental resets.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed (`wss://ws.kraken.com`) for open trade price monitoring.
