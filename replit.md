@@ -35,6 +35,8 @@ A Hard Reset Service (`B7.A PaperSessionResetService`) provides a single authori
 
 Phase 8.8.3-B7.1 enforces a strict API contract for `/api/paper-sim/start`: the `mode` parameter is now REQUIRED ('new' or 'continue'). Hard reset only runs when `mode='new'`, preserving existing state on `mode='continue'`. Frontend callers use structured payloads (`paper-new`, `paper-continue`, `live`) via the `startTradingMutation` hook, ensuring no accidental resets.
 
+Phase 8.8.3-B9 (Execution Engine Integrity) ensures P&L calculations use only real market data. Mock pricing is DISABLED by default (requires `ENABLE_MOCK_PRICING=true` env var for dev/testing). The `LivePricingAdapter` returns `no_reliable_price` source when no real data is available instead of falling back to hardcoded mock prices. Price cache is seeded with entry prices on trade open via `seedLastKnownGoodPrice()` to prevent cold-start mock fallback. Position monitoring skips positions when no reliable price is available rather than using synthetic data. Legacy `paper-execution.ts` moved to `server/legacy/` folder with tsconfig exclude to prevent accidental usage.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed (`wss://ws.kraken.com`) for open trade price monitoring.
