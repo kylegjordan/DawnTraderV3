@@ -1,0 +1,97 @@
+We are on DawnTrader V3. When I press “Start” for the paper trading simulation, I still get this error toast:
+
+400: "Error starting paper trading simulation: Portfolio in critical state: Max drawdown 20.15% exceeds limit 20%"
+
+In V3, this max drawdown / “portfolio in critical state” guardrail is legacy and must be removed for paper trading. It is not part of the current guardrail set, and it is not exposed in the UI.
+
+Please implement Phase 8.8.3-B7.B – Remove Legacy Max Drawdown Blocker From Paper Engine with the following requirements:
+
+1. Locate the legacy check
+
+Search the V3 server code for these strings:
+
+"Portfolio in critical state"
+
+"Max drawdown"
+
+any error text that matches the toast message above.
+
+Identify the exact file and function where this error is thrown or returned, most likely in:
+
+paper-sim-service, paper-execution-engine, trade-safety, or a risk/kill-switch module.
+
+Confirm what data it uses (session metrics, analytics tables, etc.), but do not change any schema.
+
+2. Disable this behavior for V3 paper trading
+
+For paper mode in V3:
+
+Do not block engine start based on legacy max drawdown / portfolio critical state checks.
+
+Implement one of these patterns (choose whichever is most appropriate for the current architecture, and document which you used):
+
+Preferred: Add a configuration flag like enableMaxDrawdownKillSwitch which defaults to false in V3 paper mode, and wrap the legacy check:
+
+if (mode === 'paper' && !settings.enableMaxDrawdownKillSwitch) {
+  // skip legacy max drawdown / critical state block for V3 paper mode
+} else {
+  // existing logic, if still needed elsewhere
+}
+
+
+Or, if the check is only used for this purpose and not needed anywhere else in V3, short-circuit it entirely for paper:
+
+if (mode === 'paper') {
+  // log that the legacy max-drawdown check is skipped in V3 paper mode
+  return { ok: true };
+}
+
+
+The important outcome:
+
+No code path in V3 paper mode should be able to throw / return
+"Portfolio in critical state: Max drawdown XX% exceeds limit YY%".
+
+3. Keep V3 boundaries clean
+
+Do not touch any V1 or V2 folders or files.
+
+Only modify DawnTraderV3 server files (the ones we have been working in: paper-sim-service, paper-execution-engine, trade-safety, etc.).
+
+Do not change shared/schema.ts. This is correct as-is.
+
+4. Verification steps
+
+After the change:
+
+Restart the server.
+
+Run the same backend cleanliness audit you ran before to confirm:
+
+paper_sim_trades has no closed_at IS NULL rows,
+
+paper_sim_open_positions is empty.
+
+From the UI:
+
+Set a paper starting balance (for example, $818).
+
+Press Start.
+
+Verify and report:
+
+The paper engine starts successfully (no 400 error).
+
+The "Portfolio in critical state: Max drawdown …" error cannot be triggered in paper mode anymore.
+
+The existing V3 guardrails (Core Four) still behave as before.
+
+Finally, please summarize:
+
+The file(s) and function(s) where the legacy check lived.
+
+The exact conditional logic you added/changed.
+
+Confirmation that this change only affects V3 paper mode, and does not introduce any new DB schema changes.
+
+The goal is: Starting a new paper simulation in DawnTrader V3 must never be blocked by hidden / legacy max drawdown logic.

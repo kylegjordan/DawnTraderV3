@@ -71,12 +71,28 @@ export class PaperPortfolioManager {
       return;
     }
 
-    // Check portfolio health before starting
-    const health = await this.checkPortfolioHealth();
-    if (health.status === 'critical') {
-      console.error(`[PaperPortfolio:${this.userId}] Cannot start - portfolio in critical state:`);
-      health.issues.forEach(issue => console.error(`  - ${issue}`));
-      throw new Error(`Portfolio in critical state: ${health.issues.join(', ')}`);
+    // Phase 8.8.3-B7.B: Bypass legacy max drawdown check for V3 paper mode
+    // The legacy portfolio health check uses historical data that may carry over
+    // from previous sessions. For V3 paper mode, hard reset clears positions/trades
+    // at start, so we skip this check. The V3 guardrail system (Core Four) handles
+    // real-time risk management during trading instead.
+    if (this.mode === 'paper') {
+      console.log(`[B7.B][PaperPortfolio:${this.userId}] Skipping legacy portfolio health check for V3 paper mode`);
+      // Log health status for observability, but don't block start
+      const health = await this.checkPortfolioHealth();
+      console.log(`[B7.B][PaperPortfolio:${this.userId}] Portfolio health status (informational only):`, {
+        status: health.status,
+        issues: health.issues,
+        metrics: health.metrics
+      });
+    } else {
+      // Live mode retains the legacy check for safety
+      const health = await this.checkPortfolioHealth();
+      if (health.status === 'critical') {
+        console.error(`[PaperPortfolio:${this.userId}] Cannot start - portfolio in critical state:`);
+        health.issues.forEach(issue => console.error(`  - ${issue}`));
+        throw new Error(`Portfolio in critical state: ${health.issues.join(', ')}`);
+      }
     }
 
     this.isRunning = true;
