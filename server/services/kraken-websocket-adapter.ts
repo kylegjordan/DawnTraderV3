@@ -555,6 +555,26 @@ export class KrakenWebSocketAdapter {
       healthy: this.isHealthy()
     };
   }
+
+  /**
+   * Phase 8.8.3-B7.A: Clear all subscriptions for hard reset
+   * Used during paper simulation reset to prevent stale price updates
+   */
+  clearAllSubscriptions(): void {
+    console.log(`[${this.MODULE_NAME}] Clearing all subscriptions (${this.subscribedSymbols.size} active, ${this.pendingSubscriptions.size} pending)`);
+    
+    if (this.isConnected && this.subscribedSymbols.size > 0) {
+      const symbols = Array.from(this.subscribedSymbols);
+      this.unsubscribeFromSymbols(symbols);
+    }
+    
+    this.subscribedSymbols.clear();
+    this.pendingSubscriptions.clear();
+    this.symbolStats.clear();
+    this.priceTickLogs = [];
+    
+    console.log(`[${this.MODULE_NAME}] All subscriptions cleared`);
+  }
 }
 
 export const krakenWebSocketAdapter = new KrakenWebSocketAdapter();

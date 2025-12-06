@@ -258,6 +258,38 @@ export function clearGlobalPaperSimManager(): void {
 }
 
 /**
+ * Phase 8.8.3-B7.A: Get engine instance by mode for direct reset
+ * Used by PaperSessionResetService when no manager is available
+ */
+export function getEngineByMode(mode: 'paper' | 'live'): any | null {
+  const manager = getGlobalPaperSimManager();
+  if (manager && typeof manager.getEngine === 'function') {
+    return manager.getEngine();
+  }
+  // Try to get engine from global scope if manager doesn't expose it
+  if (mode === 'paper' && (global as any).globalPaperEngine) {
+    return (global as any).globalPaperEngine;
+  }
+  return null;
+}
+
+/**
+ * Phase 8.8.3-B7.A: Get orchestrator instance by mode for direct reset
+ * Used by PaperSessionResetService when no manager is available
+ */
+export function getOrchestratorByMode(mode: 'paper' | 'live'): any | null {
+  const manager = getGlobalPaperSimManager();
+  if (manager && typeof manager.getOrchestrator === 'function') {
+    return manager.getOrchestrator();
+  }
+  // Try to get orchestrator from global scope if manager doesn't expose it
+  if (mode === 'paper' && (global as any).globalPaperOrchestrator) {
+    return (global as any).globalPaperOrchestrator;
+  }
+  return null;
+}
+
+/**
  * Start paper trading simulation (IDEMPOTENT)
  * - Checks database for existing running session
  * - If running session exists, returns success with existing session info

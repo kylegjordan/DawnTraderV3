@@ -15,8 +15,9 @@
 import { storage } from '../storage';
 import { b4Diagnostics } from './b4-diagnostics.js';
 import { b5SizingAudit } from './b5-sizing-audit.js';
-import { getGlobalPaperSimManager, clearGlobalPaperSimManager } from './paper-sim-service.js';
+import { getGlobalPaperSimManager, clearGlobalPaperSimManager, getEngineByMode, getOrchestratorByMode } from './paper-sim-service.js';
 import { reset24hWindow, resetHourlyScanHistory } from './fx5-24h-window.js';
+import { krakenWebSocketAdapter } from './kraken-websocket-adapter.js';
 
 export interface HardResetResult {
   success: boolean;
@@ -93,7 +94,39 @@ class PaperSessionResetService {
         result.details.orchestratorReset = true;
         console.log(`[B7.A][HARD_RESET] Global manager cleared`);
       } else {
-        console.log(`[B7.A][HARD_RESET] No active manager to stop`);
+        console.log(`[B7.A][HARD_RESET] No active manager - attempting direct component reset`);
+        
+        // B7.A Enhancement: Direct fallback to engine/orchestrator reset even without manager
+        try {
+          const engine = getEngineByMode(mode);
+          if (engine && typeof engine.resetSessionState === 'function') {
+            engine.resetSessionState();
+            result.details.engineReset = true;
+            console.log(`[B7.A][HARD_RESET] Direct engine reset for mode=${mode}`);
+          }
+        } catch (engineErr) {
+          console.warn(`[B7.A][HARD_RESET] Direct engine reset warning:`, engineErr);
+        }
+        
+        try {
+          const orchestrator = getOrchestratorByMode(mode);
+          if (orchestrator && typeof orchestrator.resetSession === 'function') {
+            orchestrator.resetSession();
+            result.details.orchestratorReset = true;
+            console.log(`[B7.A][HARD_RESET] Direct orchestrator reset for mode=${mode}`);
+          }
+        } catch (orchErr) {
+          console.warn(`[B7.A][HARD_RESET] Direct orchestrator reset warning:`, orchErr);
+        }
+        
+        // Clear WebSocket subscriptions as failsafe
+        try {
+          krakenWebSocketAdapter.clearAllSubscriptions();
+          console.log(`[B7.A][HARD_RESET] WebSocket subscriptions cleared (fallback)`);
+        } catch (wsErr) {
+          console.warn(`[B7.A][HARD_RESET] WebSocket clear warning:`, wsErr);
+        }
+        
         result.details.engineReset = true;
         result.details.orchestratorReset = true;
       }

@@ -157,7 +157,7 @@ export class SignalOrchestrator {
 
   /**
    * Phase 8.8.3-B7.A: Reset all in-memory session state
-   * Called during hard reset to clear cooldowns, recent signals, and session caches.
+   * Called during hard reset to clear cooldowns, recent signals, session caches, and diagnostics.
    */
   resetSession(): void {
     console.log(`[B7.A][ORCHESTRATOR] Resetting session state for mode=${this.mode}`);
@@ -174,6 +174,24 @@ export class SignalOrchestrator {
       lastEvaluationAt: new Date(0),
       nextEvaluationAt: new Date(0),
     };
+    
+    // B7.A Enhancement: Reset diagnostics service buffers
+    try {
+      if (this.diagnosticService && typeof this.diagnosticService.resetSession === 'function') {
+        this.diagnosticService.resetSession();
+        console.log(`[B7.A][ORCHESTRATOR] Diagnostics service reset`);
+      }
+    } catch (diagErr) {
+      console.warn(`[B7.A][ORCHESTRATOR] Diagnostics reset warning:`, diagErr);
+    }
+    
+    // B7.A Enhancement: Reset B5 sizing audit for this mode
+    try {
+      b5SizingAudit.reset();
+      console.log(`[B7.A][ORCHESTRATOR] B5 sizing audit reset`);
+    } catch (sizingErr) {
+      console.warn(`[B7.A][ORCHESTRATOR] B5 sizing reset warning:`, sizingErr);
+    }
     
     console.log(`[B7.A][ORCHESTRATOR] Session state reset complete for mode=${this.mode}`);
   }

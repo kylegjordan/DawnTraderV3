@@ -7662,9 +7662,18 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // Phase 27.F.13.C + B7.A: Reset paper simulation with hard reset
   apiRouter.post('/paper-sim/reset', authenticateToken, async (req: AuthenticatedRequest, res) => {
     const userId = req.user!.id;
-    const { newBalance } = req.body;
+    const { newBalance, mode: requestedMode } = req.body;
     
     try {
+      // B7.A: Enforce paper-mode only for this endpoint
+      const mode: 'paper' = 'paper';
+      if (requestedMode && requestedMode !== 'paper') {
+        return res.status(400).json({
+          error: 'Invalid mode',
+          message: 'This endpoint only supports paper mode reset. Use separate endpoints for live mode.'
+        });
+      }
+      
       // Phase 41F-L.E2E-FIX: Require explicit newBalance, no hardcoded $800 fallback
       if (!newBalance || isNaN(parseFloat(newBalance))) {
         return res.status(400).json({ 
@@ -7679,11 +7688,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Phase 8.8.3-B7.A: Use hard reset service for complete cleanup
       const { paperSessionResetService } = await import('./services/paper-session-reset.js');
-      const resetResult = await paperSessionResetService.hardResetPaperSimulation('paper');
+      const resetResult = await paperSessionResetService.hardResetPaperSimulation(mode);
       
       if (!resetResult.success) {
         console.error(`[B7.A] Hard reset failed:`, resetResult.message);
-        // Continue with legacy cleanup as fallback
+        // Continue with legacy cleanup as fallback, but still invalidate caches
+        bobCore.invalidate('metrics:paperSimStatus');
+        bobCore.invalidate('metrics:portfolioOverview');
       }
       
       console.log(`[B7.A] Hard reset result:`, resetResult.details);

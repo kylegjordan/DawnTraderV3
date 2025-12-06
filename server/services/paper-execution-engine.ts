@@ -141,6 +141,7 @@ export class PaperExecutionEngine {
   /**
    * Phase 8.8.3-B7.A: Reset all in-memory session state
    * Called during hard reset to ensure no ghost state from previous sessions.
+   * Clears: running state, intervals, price history, diagnostics, WebSocket subscriptions
    */
   resetSessionState(): void {
     console.log(`[B7.A][ENGINE] Resetting session state for mode=${this.mode}`);
@@ -158,7 +159,7 @@ export class PaperExecutionEngine {
     // Clear price history cache
     this.priceHistory.clear();
     
-    // Clear session start timestamp
+    // Clear session start timestamp (zeroes RTB metrics)
     engineSessionStart.set(this.mode, null);
     
     // Clear price tick diagnostics
@@ -167,6 +168,24 @@ export class PaperExecutionEngine {
     
     // Clear last cycle summary
     this.lastCycleSummary = {};
+    
+    // B7.A Enhancement: Clear WebSocket subscriptions to prevent stale price feeds
+    try {
+      krakenWebSocketAdapter.clearAllSubscriptions();
+      console.log(`[B7.A][ENGINE] WebSocket subscriptions cleared`);
+    } catch (wsErr) {
+      console.warn(`[B7.A][ENGINE] WebSocket clear warning:`, wsErr);
+    }
+    
+    // B7.A Enhancement: Stop AJ17 diagnostic session
+    try {
+      aj17DiagnosticRunner.stopSessionAndGenerateReport().catch(err => {
+        console.warn(`[B7.A][ENGINE] AJ17 stop warning:`, err);
+      });
+      console.log(`[B7.A][ENGINE] AJ17 diagnostics stopped`);
+    } catch (diagErr) {
+      console.warn(`[B7.A][ENGINE] AJ17 diagnostics warning:`, diagErr);
+    }
     
     console.log(`[B7.A][ENGINE] Session state reset complete for mode=${this.mode}`);
   }
