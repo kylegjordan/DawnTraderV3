@@ -16,12 +16,16 @@ import { contextBridge } from './context-bridge';
 
 interface PriceQuote {
   symbol: string;
-  price: number;
+  price: number | null;
   timestamp: string;
-  source: 'binance' | 'coingecko' | 'mock';
+  source: 'binance' | 'coingecko' | 'mock' | 'kraken_ws' | 'kraken_rest' | 'entry_seed' | 'last_known_good' | 'no_reliable_price';
 }
 
-interface CachedPrice extends PriceQuote {
+interface CachedPrice {
+  symbol: string;
+  price: number;
+  timestamp: string;
+  source: 'binance' | 'coingecko' | 'mock' | 'kraken_ws' | 'kraken_rest' | 'entry_seed' | 'last_known_good';
   cachedAt: number;
 }
 
@@ -189,10 +193,11 @@ export class LivePricingAdapter {
 
   /**
    * Fetch price for a single symbol
+   * Phase 8.8.3-B9: Only cache valid prices (not null/no_reliable_price)
    */
   private async fetchPrice(symbol: string): Promise<void> {
     try {
-      let quote: PriceQuote;
+      let quote: PriceQuote | null;
 
       if (this.useMockMode) {
         quote = await this.fetchMockPrice(symbol);
@@ -200,14 +205,21 @@ export class LivePricingAdapter {
         quote = await this.fetchLivePrice(symbol);
       }
 
-      // Cache the price
-      this.priceCache.set(symbol, {
-        ...quote,
-        cachedAt: Date.now()
-      });
+      // Phase 8.8.3-B9: Only cache if we got a valid price
+      if (quote && quote.price !== null && quote.source !== 'no_reliable_price') {
+        this.priceCache.set(symbol, {
+          symbol: quote.symbol,
+          price: quote.price,
+          timestamp: quote.timestamp,
+          source: quote.source as CachedPrice['source'],
+          cachedAt: Date.now()
+        });
 
-      // Broadcast update
-      await this.broadcastPriceUpdate(quote);
+        // Broadcast update
+        await this.broadcastPriceUpdate(quote);
+      } else {
+        console.log(`[B9.PRICING][SKIP_CACHE] ${symbol}: No valid price to cache`);
+      }
 
     } catch (error) {
       console.error(`[27.F.15.D][Pricing] Error fetching ${symbol}:`, error);
@@ -216,8 +228,9 @@ export class LivePricingAdapter {
 
   /**
    * Fetch live price from API (Binance or CoinGecko)
+   * Phase 8.8.3-B9: Mock pricing disabled in production - returns null if no reliable price
    */
-  private async fetchLivePrice(symbol: string): Promise<PriceQuote> {
+  private async fetchLivePrice(symbol: string): Promise<PriceQuote | null> {
     try {
       // Try Binance first
       const binancePrice = await this.fetchFromBinance(symbol);
@@ -241,13 +254,59 @@ export class LivePricingAdapter {
         };
       }
 
-      // If both fail, use mock
-      console.log(`[27.F.15.D][Pricing] API unavailable for ${symbol}, falling back to mock`);
-      return await this.fetchMockPrice(symbol);
+      // Phase 8.8.3-B9: Check if mock mode is EXPLICITLY enabled (dev/testing only)
+      if (this.useMockMode) {
+        console.log(`[27.F.15.D][Pricing] API unavailable for ${symbol}, falling back to mock (MOCK_MODE=true)`);
+        return await this.fetchMockPrice(symbol);
+      }
+      
+      // Phase 8.8.3-B9: Try lastKnownGoodPrice from cache before returning null
+      const cached = this.priceCache.get(this.normalizeSymbol(symbol));
+      if (cached && cached.price > 0) {
+        console.log(`[B9.PRICING][LAST_KNOWN_GOOD] ${symbol}: Using cached price $${cached.price.toFixed(2)} (source: ${cached.source})`);
+        return {
+          symbol,
+          price: cached.price,
+          timestamp: new Date().toISOString(),
+          source: 'last_known_good'
+        };
+      }
+      
+      // Phase 8.8.3-B9: NO mock fallback in production - return null
+      console.warn(`[B9.PRICING][NO_REAL_PRICE] ${symbol}: No reliable price available (Binance/CoinGecko failed, no cached data)`);
+      return {
+        symbol,
+        price: null,
+        timestamp: new Date().toISOString(),
+        source: 'no_reliable_price'
+      };
 
     } catch (error) {
-      console.error(`[27.F.15.D][Pricing] Live fetch failed for ${symbol}, using mock`, error);
-      return await this.fetchMockPrice(symbol);
+      // Phase 8.8.3-B9: Only use mock in explicit mock mode
+      if (this.useMockMode) {
+        console.error(`[27.F.15.D][Pricing] Live fetch failed for ${symbol}, using mock (MOCK_MODE=true)`, error);
+        return await this.fetchMockPrice(symbol);
+      }
+      
+      // Try cached price as last resort
+      const cached = this.priceCache.get(this.normalizeSymbol(symbol));
+      if (cached && cached.price > 0) {
+        console.log(`[B9.PRICING][LAST_KNOWN_GOOD] ${symbol}: Using cached price $${cached.price.toFixed(2)} after error (source: ${cached.source})`);
+        return {
+          symbol,
+          price: cached.price,
+          timestamp: new Date().toISOString(),
+          source: 'last_known_good'
+        };
+      }
+      
+      console.error(`[B9.PRICING][NO_REAL_PRICE] ${symbol}: Live fetch failed, no cached data`, error);
+      return {
+        symbol,
+        price: null,
+        timestamp: new Date().toISOString(),
+        source: 'no_reliable_price'
+      };
     }
   }
 
@@ -357,9 +416,16 @@ export class LivePricingAdapter {
   /**
    * Broadcast price update via WebSocket
    * Phase 34: Throttled to max 1 broadcast per second per symbol
+   * Phase 8.8.3-B9: Skip broadcast for null prices (no_reliable_price)
    */
   private async broadcastPriceUpdate(quote: PriceQuote): Promise<void> {
     try {
+      // Phase 8.8.3-B9: Don't broadcast null prices
+      if (quote.price === null) {
+        console.log(`[B9.PRICING][SKIP_BROADCAST] ${quote.symbol}: Price is null, skipping broadcast`);
+        return;
+      }
+      
       // Phase 34: Throttle broadcasts to ≤1/second per symbol
       const now = Date.now();
       const lastBroadcast = this.lastBroadcastTime.get(quote.symbol) || 0;
@@ -408,20 +474,52 @@ export class LivePricingAdapter {
     const normalized = this.normalizeSymbol(symbol);
     const timestamp = new Date().toISOString();
     
-    // Map WebSocket source to cache source type
-    const cacheSource: 'binance' | 'coingecko' | 'mock' = source === 'kraken_ws' ? 'binance' : 'binance';
-    
     this.priceCache.set(normalized, {
       symbol: normalized,
       price,
       timestamp,
-      source: cacheSource,
+      source: source === 'kraken_ws' ? 'kraken_ws' : 'binance',
       cachedAt: Date.now()
     });
     
     if (!this.trackedSymbols.has(normalized)) {
       this.trackedSymbols.add(normalized);
     }
+  }
+
+  /**
+   * Phase 8.8.3-B9: Seed price cache with entry price
+   * Called when a trade opens to establish a lastKnownGoodPrice anchor
+   * This prevents mock fallback from using fabricated prices on exit
+   */
+  seedLastKnownGoodPrice(symbol: string, price: number): void {
+    const normalized = this.normalizeSymbol(symbol);
+    const timestamp = new Date().toISOString();
+    
+    // Only seed if we don't have a more recent real price
+    const existing = this.priceCache.get(normalized);
+    if (existing && existing.source !== 'mock' && existing.source !== 'entry_seed') {
+      const age = Date.now() - existing.cachedAt;
+      if (age < 60000) { // Keep existing real price if less than 60s old
+        console.log(`[B9.PRICING][SEED_SKIP] ${normalized}: Keeping existing real price $${existing.price.toFixed(2)} (${existing.source}, age: ${age}ms)`);
+        return;
+      }
+    }
+    
+    this.priceCache.set(normalized, {
+      symbol: normalized,
+      price,
+      timestamp,
+      source: 'entry_seed',
+      cachedAt: Date.now()
+    });
+    
+    // Ensure symbol is tracked
+    if (!this.trackedSymbols.has(normalized)) {
+      this.trackedSymbols.add(normalized);
+    }
+    
+    console.log(`[B9.PRICING][ENTRY_SEED] ${normalized}: Seeded price cache with entry price $${price.toFixed(2)}`);
   }
 
   /**
