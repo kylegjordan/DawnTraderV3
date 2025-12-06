@@ -543,8 +543,10 @@ app.use((req, res, next) => {
     try {
       const { livePricingAdapter } = await import('./services/live-pricing-adapter');
       
-      // Start in mock mode by default (change to false for production with real APIs)
-      const useMockMode = process.env.LIVE_PRICING_MOCK !== 'false';
+      // Phase 8.8.3-B9: Mock mode DISABLED by default - only enabled via explicit ENABLE_MOCK_PRICING=true
+      // This ensures P&L calculations use real market data, not hardcoded mock prices
+      const useMockMode = process.env.ENABLE_MOCK_PRICING === 'true';
+      console.log(`[B9.PRICING] Mock mode: ${useMockMode ? 'ENABLED (ENABLE_MOCK_PRICING=true)' : 'DISABLED (production mode)'}`);
       await livePricingAdapter.start(useMockMode);
       
       console.log('[27.F.15.D] ✅ LivePricingAdapter started successfully');
@@ -557,6 +559,9 @@ app.use((req, res, next) => {
           const prices = livePricingAdapter.getAllPrices();
           
           for (const quote of prices) {
+            // Phase 8.8.3-B9: Only forward valid prices (not null)
+            if (quote.price === null) continue;
+            
             // Forward to paper micro-service
             const paperMicroService = getMicroService('paper');
             if (paperMicroService) {
