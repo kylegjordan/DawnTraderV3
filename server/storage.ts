@@ -4139,6 +4139,8 @@ export class DatabaseStorage implements IStorage {
   /**
    * Phase 8.8.3-B7.A: Hard reset paper simulation
    * Closes all open trades and clears all open positions for a clean session start.
+   * Note: paperSimTrades and paperSimOpenPositions are single-tenant (no mode column).
+   * paperSimSessions has a mode column for session tracking.
    */
   async hardResetPaperSim(mode: 'paper' | 'live' = 'paper'): Promise<{ closedTrades: number; clearedPositions: number }> {
     console.log(`[B7.A][DB] Starting hard reset for mode=${mode}`);
@@ -4150,31 +4152,29 @@ export class DatabaseStorage implements IStorage {
     
     try {
       // 1. Close any open paper trades with hard_reset reason
+      // Note: paperSimTrades is single-tenant, no mode column
       const closeTradesResult = await db
         .update(paperSimTrades)
         .set({ 
           closedAt: new Date(), 
           closeReason: 'hard_reset' 
         })
-        .where(and(
-          eq(paperSimTrades.mode, mode),
-          isNull(paperSimTrades.closedAt)
-        ))
+        .where(isNull(paperSimTrades.closedAt))
         .returning();
       
       closedTrades = closeTradesResult.length;
       console.log(`[B7.A][DB] Closed ${closedTrades} open trades`);
       
       // 2. Delete all open positions snapshot
+      // Note: paperSimOpenPositions is single-tenant, no mode column
       const deletePositionsResult = await db
         .delete(paperSimOpenPositions)
-        .where(eq(paperSimOpenPositions.mode, mode))
         .returning();
       
       clearedPositions = deletePositionsResult.length;
       console.log(`[B7.A][DB] Cleared ${clearedPositions} open positions`);
       
-      // 3. End any running paper sim sessions
+      // 3. End any running paper sim sessions (this table HAS a mode column)
       await db
         .update(paperSimSessions)
         .set({ 
