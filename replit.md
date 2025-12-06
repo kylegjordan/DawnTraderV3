@@ -31,6 +31,8 @@ The Filter Insights UI uses REST data for Cycle Info and Last Scan Result. The l
 
 A Diagnostic Framework (`B4DiagnosticService`) provides observational diagnostics for MAX_POSITION, Funnel, and WebSocket Health, without modifying core trading logic. A Signal Creation & Sizing Pipeline Audit (`B5SizingAuditService`) provides a comprehensive audit trail for the entire signal-to-trade pipeline across all 9 strategies, also observational only. A Unified Sizing Pipeline Refactor (`B6`) standardizes the signal-to-trade sizing pipeline, implementing exposure-budget-based sizing and centralizing sizing in the Signal Orchestrator, ensuring the engine trusts pre-sized signals.
 
+A Hard Reset Service (`B7.A PaperSessionResetService`) provides a single authoritative path for complete paper simulation reset. The service coordinates reset across: engine in-memory state (`resetSessionState()`), orchestrator session state (`resetSession()`), diagnostics buffers (B4/B5), FX5 24h windows, and database (open positions, trades, sessions). The `/api/paper-sim/reset` endpoint now uses this service, eliminating ghost trades and ensuring genuinely fresh sessions without manual SQL.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed (`wss://ws.kraken.com`) for open trade price monitoring.

@@ -4135,6 +4135,66 @@ export class DatabaseStorage implements IStorage {
     
     return await query;
   }
+
+  /**
+   * Phase 8.8.3-B7.A: Hard reset paper simulation
+   * Closes all open trades and clears all open positions for a clean session start.
+   */
+  async hardResetPaperSim(mode: 'paper' | 'live' = 'paper'): Promise<{ closedTrades: number; clearedPositions: number }> {
+    console.log(`[B7.A][DB] Starting hard reset for mode=${mode}`);
+    
+    const { paperSimTrades, paperSimOpenPositions, paperSimSessions } = await import('@shared/schema');
+    
+    let closedTrades = 0;
+    let clearedPositions = 0;
+    
+    try {
+      // 1. Close any open paper trades with hard_reset reason
+      const closeTradesResult = await db
+        .update(paperSimTrades)
+        .set({ 
+          closedAt: new Date(), 
+          closeReason: 'hard_reset' 
+        })
+        .where(and(
+          eq(paperSimTrades.mode, mode),
+          isNull(paperSimTrades.closedAt)
+        ))
+        .returning();
+      
+      closedTrades = closeTradesResult.length;
+      console.log(`[B7.A][DB] Closed ${closedTrades} open trades`);
+      
+      // 2. Delete all open positions snapshot
+      const deletePositionsResult = await db
+        .delete(paperSimOpenPositions)
+        .where(eq(paperSimOpenPositions.mode, mode))
+        .returning();
+      
+      clearedPositions = deletePositionsResult.length;
+      console.log(`[B7.A][DB] Cleared ${clearedPositions} open positions`);
+      
+      // 3. End any running paper sim sessions
+      await db
+        .update(paperSimSessions)
+        .set({ 
+          status: 'stopped',
+          stoppedAt: new Date(),
+          stoppedBy: 'hard_reset'
+        })
+        .where(and(
+          eq(paperSimSessions.mode, mode),
+          eq(paperSimSessions.status, 'running')
+        ));
+      
+      console.log(`[B7.A][DB] Hard reset complete: ${closedTrades} trades closed, ${clearedPositions} positions cleared`);
+      
+      return { closedTrades, clearedPositions };
+    } catch (error) {
+      console.error(`[B7.A][DB] Hard reset error:`, error);
+      throw error;
+    }
+  }
 }
 
 export const storage = new DatabaseStorage();

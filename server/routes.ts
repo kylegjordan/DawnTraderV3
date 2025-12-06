@@ -7659,7 +7659,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Phase 27.F.13.C: Reset paper simulation
+  // Phase 27.F.13.C + B7.A: Reset paper simulation with hard reset
   apiRouter.post('/paper-sim/reset', authenticateToken, async (req: AuthenticatedRequest, res) => {
     const userId = req.user!.id;
     const { newBalance } = req.body;
@@ -7677,11 +7677,18 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       console.log(`[PaperSim] Resetting simulation for user ${userId} with balance $${balance}`);
       
-      // Stop paper simulation if running
-      const { stopPaperSimulation } = await import('./services/paper-sim-service.js');
-      await stopPaperSimulation(userId);
+      // Phase 8.8.3-B7.A: Use hard reset service for complete cleanup
+      const { paperSessionResetService } = await import('./services/paper-session-reset.js');
+      const resetResult = await paperSessionResetService.hardResetPaperSimulation('paper');
       
-      // Delete all paper sim data
+      if (!resetResult.success) {
+        console.error(`[B7.A] Hard reset failed:`, resetResult.message);
+        // Continue with legacy cleanup as fallback
+      }
+      
+      console.log(`[B7.A] Hard reset result:`, resetResult.details);
+      
+      // Legacy cleanup as additional safety (B7.A handles most, this catches edge cases)
       await storage.deleteAllPaperSimTrades('paper');
       await storage.deleteAllPaperSimOpenPositions('paper');
       await storage.deleteAllPaperSimTradeLogs('paper');
@@ -7713,7 +7720,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       res.json({
         success: true,
         message: 'PaperSim reset complete.',
-        newBalance: balance
+        newBalance: balance,
+        hardResetDetails: resetResult.details
       });
     } catch (error: any) {
       console.error('[PaperSim] Error resetting simulation:', error);
@@ -8387,24 +8395,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  apiRouter.post('/paper-sim/reset', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const status = await getPaperSimulationStatus(userId);
-      const manager = (global as any).globalPaperPortfolioManager;
-      
-      if (!status.isRunning || !manager) {
-        return res.status(400).json({ error: 'Paper trading simulation not running' });
-      }
-
-      await manager.resetPortfolio();
-      
-      res.json({ success: true, message: 'Portfolio reset complete' });
-    } catch (error) {
-      console.error('Error resetting portfolio:', error);
-      res.status(500).json({ error: 'Failed to reset portfolio' });
-    }
-  });
+  // B7.A: Duplicate reset route removed - use main route at /api/paper-sim/reset with hard reset service
 
   apiRouter.get('/paper-sim/logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {

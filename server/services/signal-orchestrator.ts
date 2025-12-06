@@ -155,6 +155,29 @@ export class SignalOrchestrator {
     telemetryTrace.trace('SignalOrchestrator', 'STOP_SUCCESS', 'INFO', { mode: this.mode });
   }
 
+  /**
+   * Phase 8.8.3-B7.A: Reset all in-memory session state
+   * Called during hard reset to clear cooldowns, recent signals, and session caches.
+   */
+  resetSession(): void {
+    console.log(`[B7.A][ORCHESTRATOR] Resetting session state for mode=${this.mode}`);
+    
+    // Stop orchestrator if running
+    this.stop();
+    
+    // Reset stats
+    this.stats = {
+      symbolsEvaluated: 0,
+      strategiesRun: 0,
+      signalsGenerated: 0,
+      signalsForwarded: 0,
+      lastEvaluationAt: new Date(0),
+      nextEvaluationAt: new Date(0),
+    };
+    
+    console.log(`[B7.A][ORCHESTRATOR] Session state reset complete for mode=${this.mode}`);
+  }
+
   getStats(): EvaluationStats {
     return { ...this.stats };
   }

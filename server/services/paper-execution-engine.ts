@@ -138,6 +138,39 @@ export class PaperExecutionEngine {
     console.log(`[PaperExecution:${this.mode}] Stopped paper trading engine`);
   }
 
+  /**
+   * Phase 8.8.3-B7.A: Reset all in-memory session state
+   * Called during hard reset to ensure no ghost state from previous sessions.
+   */
+  resetSessionState(): void {
+    console.log(`[B7.A][ENGINE] Resetting session state for mode=${this.mode}`);
+    
+    // Clear running state
+    this.isRunning = false;
+    this.isCycleRunning = false;
+    
+    // Clear monitoring interval
+    if (this.monitoringInterval) {
+      clearInterval(this.monitoringInterval);
+      this.monitoringInterval = null;
+    }
+    
+    // Clear price history cache
+    this.priceHistory.clear();
+    
+    // Clear session start timestamp
+    engineSessionStart.set(this.mode, null);
+    
+    // Clear price tick diagnostics
+    this.priceTickLogs = [];
+    this.lastPriceTickTime.clear();
+    
+    // Clear last cycle summary
+    this.lastCycleSummary = {};
+    
+    console.log(`[B7.A][ENGINE] Session state reset complete for mode=${this.mode}`);
+  }
+
   private async monitoringCycle(): Promise<void> {
     // Re-entrancy guard: skip if previous cycle is still running
     if (this.isCycleRunning) {

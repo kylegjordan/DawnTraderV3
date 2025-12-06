@@ -1,0 +1,353 @@
+Phase 8.8.3-B7.A — Hard Reset for DawnTrader V3 (Eliminate Ghost Paper Trades)
+0. Context (for the dev)
+
+We’re seeing:
+
+Ghost open trades in the backend that the UI doesn’t show.
+
+“Fresh” paper sessions that still hit MAX_TOTAL_EXPOSURE based on old positions.
+
+Trades showing up almost immediately in the first few FX5 scan cycles.
+
+This tells us the current paper reset only clears some DB rows but leaves in-memory engine state and diagnostics buffers intact.
+
+We want a single, authoritative hard reset path inside DawnTrader V3 so that:
+
+Clicking “Reset / New paper sim” in the UI gives a genuinely fresh session.
+
+No one (human or script) needs to run ad-hoc SQL for clean starts.
+
+1. Files and components to modify
+
+Please work in DawnTrader V3 codebase only.
+
+You’ll be touching (at minimum):
+
+server/services/paper-execution-engine.ts
+
+server/services/signal-orchestrator.ts
+
+server/services/paper-position-sizing.ts
+
+server/services/trading-signals-cleanup.ts
+
+server/services/guardrail-settings.ts (read-only if needed)
+
+server/services/schema.ts (or whichever file defines paper_sim_trades / paper_sim_open_positions)
+
+server/routes.ts (or the router/controller that defines /api/paper-sim/reset and /api/paper-sim/start)
+
+You may also need to locate the B4/B5/B6 diagnostic services via rg "B4" server/services and rg "B5SizingAudit" server/services.
+
+2. Implement a dedicated PaperSessionResetService
+
+Create a new service file:
+
+server/services/paper-session-reset.ts
+
+Add a class that coordinates a full paper-sim reset:
+
+// server/services/paper-session-reset.ts
+import { PaperExecutionEngine } from './paper-execution-engine';
+import { PaperPositionSizing } from './paper-position-sizing';
+import { SignalOrchestrator } from './signal-orchestrator';
+import { TradingSignalsCleanupService } from './trading-signals-cleanup';
+import { PaperSimRepository } from './schema'; // or the actual repo file
+import { B4DiagnosticsService } from './b4-diagnostics'; // adapt to actual names
+import { B5SizingAudit } from './b5-sizing-audit';
+import { B6PipelineDiagnostics } from './b6-pipeline-diagnostics'; // if exists
+
+export class PaperSessionResetService {
+  constructor(
+    private engine: PaperExecutionEngine,
+    private sizing: PaperPositionSizing,
+    private orchestrator: SignalOrchestrator,
+    private signalsCleanup: TradingSignalsCleanupService,
+    private paperRepo: PaperSimRepository,
+    private b4: B4DiagnosticsService,
+    private b5: B5SizingAudit,
+    private b6?: B6PipelineDiagnostics
+  ) {}
+
+  /**
+   * Hard reset for paper mode.
+   * Clears ALL paper session state: engine, sizing, orchestrator,
+   * filters/signals, diagnostics, and DB rows for open positions.
+   */
+  async hardResetPaperSimulation(): Promise<void> {
+    // 1) Stop engine / loops safely
+    await this.engine.stopPaperTrading?.(); // use the actual stop method
+
+    // 2) Clear in-memory engine state
+    this.engine.resetSessionState();
+
+    // 3) Clear sizing and exposure tracking
+    this.sizing.resetSession();
+
+    // 4) Clear orchestrator and signal-related session state
+    this.orchestrator.resetSession();
+    await this.signalsCleanup.resetSession();
+
+    // 5) Clear diagnostics buffers (B4/B5/B6)
+    this.b4.reset();
+    this.b5.reset();
+    this.b6?.reset?.();
+
+    // 6) Clear DB state for open paper positions and trades
+    await this.paperRepo.hardResetPaperSim();
+  }
+}
+
+
+Important: If class names or constructor signatures differ, adapt them, but keep the same intent: a single service coordinating a full reset.
+
+Wire this into your service container / DI (where other services are instantiated) so it can be injected into the controller later.
+
+3. Add explicit reset methods to the existing services
+3.1 paper-execution-engine.ts
+
+Add a method to explicitly clear all in-memory session state.
+
+Search in this file for:
+
+the main engine class (e.g. export class PaperExecutionEngine)
+
+the structures holding open positions, exposure, or per-cycle state (openPositionsBySymbol, openPositions, exposureTracker, scanState, etc.)
+
+Add:
+
+// inside PaperExecutionEngine
+resetSessionState(): void {
+  // Clear any in-memory collections that track open paper positions
+  this.openPositionsBySymbol?.clear?.();
+  this.openPositions?.clear?.();
+
+  // Clear any cached exposure or per-symbol risk data
+  this.exposureTracker?.reset?.();
+
+  // Clear any per-cycle or per-session counters / maps
+  this.scanState?.reset?.();
+  this.pendingSignals?.clear?.();
+
+  // If there are timers/intervals tied to a previous session,
+  // ensure stopPaperTrading() cancels them; resetSessionState()
+  // should assume engine is logically idle at this point.
+}
+
+
+Use the actual property names in this file. If state is stored under different names, apply the same logic: everything that tracks current open paper positions or session state must be cleared.
+
+3.2 signal-orchestrator.ts
+
+This is where the 9 strategies are orchestrated and where cooldowns / recent signals usually live.
+
+Search for:
+
+class SignalOrchestrator
+
+any fields like cooldowns, recentSignals, strategyState, lastSignalBySymbol, etc.
+
+Add:
+
+// inside SignalOrchestrator
+resetSession(): void {
+  this.cooldownsBySymbol?.clear?.();
+  this.recentSignals?.clear?.();
+  this.lastSignalBySymbol?.clear?.();
+  this.strategyState?.clear?.();
+
+  // Any other per-session caches or maps that depend on prior activity
+  this.blockedSignalsByReason?.clear?.();
+}
+
+
+Again, adapt field names to what actually exists. The goal: no cooldowns, dedupe maps, or signal caches survive a new session.
+
+3.3 trading-signals-cleanup.ts
+
+This file likely already has helpers to clean up stale RTB / signals.
+
+Add a method with a clear entry point the reset service can call:
+
+export class TradingSignalsCleanupService {
+  // existing methods...
+
+  /**
+   * Clear all paper-mode signals and RTB state for a fresh session.
+   */
+  async resetSession(): Promise<void> {
+    // If you already have logic for cleaning trading signals,
+    // reuse it here, but ensure it covers:
+    // - RTB signals for paper mode
+    // - any in-memory caches in this service
+    await this.clearAllPaperSignals?.();
+
+    this.inMemorySignalCache?.clear?.();
+  }
+}
+
+
+If there are existing “clear all” methods, call them here instead of duplicating logic.
+
+3.4 paper-position-sizing.ts
+
+Add a dedicated reset to clear exposure/caches:
+
+export class PaperPositionSizing {
+  // existing members...
+
+  resetSession(): void {
+    this.currentExposure = 0;
+    this.perSymbolExposure?.clear?.();
+    this.cachedPortfolioValue = null;
+    this.cachedGuardrailConfig = null;
+
+    // If there is any sessionStart or rolling window, reset it
+    this.sessionStart = new Date();
+  }
+}
+
+
+Adapt field names exactly to this file.
+
+3.5 Diagnostics: B4 / B5 / B6
+
+You already have b5-sizing-audit and B4 funnel diagnostics.
+
+In each diagnostic service file (names may vary):
+
+B4 funnel: file likely named b4-diagnostics.ts or similar.
+
+B5 sizing audit: b5-sizing-audit.ts.
+
+B6 pipeline: there may be a small service or the log tags are integrated elsewhere.
+
+Add a reset() method to each:
+
+// B5 example
+export class B5SizingAudit {
+  reset(): void {
+    this.buffer = [];
+    this.entryCount = 0;
+    this.sessionStart = new Date();
+  }
+}
+
+
+Do the same in B4 and B6 so that a new session starts with clean diagnostics.
+
+3.6 DB layer (schema.ts or the paper sim repo)
+
+In the file where paper_sim_trades and paper_sim_open_positions are handled (you mentioned schema.ts and we’ve seen Replit doing raw SQL), add a repository method:
+
+export class PaperSimRepository {
+  // existing db client...
+
+  async hardResetPaperSim(): Promise<void> {
+    // Close any open paper trades
+    await this.db.query(`
+      UPDATE paper_sim_trades
+      SET closed_at = NOW(), close_reason = 'hard_reset'
+      WHERE closed_at IS NULL AND mode = 'paper';
+    `);
+
+    // Remove current open positions snapshot
+    await this.db.query(`
+      DELETE FROM paper_sim_open_positions
+      WHERE mode = 'paper';
+    `);
+  }
+}
+
+
+If you’re using an ORM instead of raw SQL, do the equivalent via the ORM APIs. The behavior must be identical to the raw SQL Replit has been pasting into the console, but now inside the app and version-controlled.
+
+4. Wire the hard reset into the API
+
+We want the existing reset flow you use in the UI to call this new orchestrator.
+
+In server/routes.ts (or wherever the paper-sim routes are defined):
+
+Locate the POST /api/paper-sim/reset handler.
+
+Change its implementation to call PaperSessionResetService.hardResetPaperSimulation() instead of only resetting balance or DB partially.
+
+Example:
+
+// routes.ts (or paper-sim-controller.ts)
+import { PaperSessionResetService } from './services/paper-session-reset';
+
+// assume resetService is constructed with dependencies
+router.post('/api/paper-sim/reset', requireAuth, async (req, res) => {
+  try {
+    await paperSessionResetService.hardResetPaperSimulation();
+
+    // You can optionally accept a new balance here or leave that to /start
+    const { newBalance } = req.body || {};
+    if (newBalance != null) {
+      await paperSimRepository.setBalance(newBalance);
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    // log error details
+    res.status(500).json({ ok: false, error: 'HARD_RESET_FAILED' });
+  }
+});
+
+
+Key point:
+
+After this change, when you click Reset from the UI, everything is cleared:
+
+engine memory,
+
+sizing memory,
+
+orchestrator memory,
+
+signals/RTB,
+
+diagnostics,
+
+DB open trades and positions.
+
+No one needs to log into Replit and run SQL anymore.
+
+5. Verification checklist (what Replit should actually show you)
+
+Once this is implemented, ask Replit to:
+
+Trigger reset via the app itself
+
+From the UI or via:
+
+POST /api/paper-sim/reset
+POST /api/paper-sim/start { mode: "new", initialBalance: 20000 }
+
+
+Confirm no ghost positions remain
+
+GET /api/paper/paper-sim/trades?status=active → []
+
+GET /api/paper-sim/status → openPositions: 0, balance: 20000
+
+No MAX_TOTAL_EXPOSURE blocks on the first new trades unless the new session itself reaches exposure.
+
+Confirm diagnostics are clean at session start
+
+GET /api/diagnostics/b4/stats → entryCount: 0
+
+GET /api/diagnostics/b5/stats → entryCount: 0
+
+B6 logs show a new sessionStart near the reset time.
+
+Run two back-to-back paper sims without any manual SQL
+
+Session A: run for several minutes, open some trades, then reset via /api/paper-sim/reset.
+
+Session B: start fresh and confirm:
+
+No trades appear “immediately” from old state.
+
+Exposure and open positions match only what Session B creates.
