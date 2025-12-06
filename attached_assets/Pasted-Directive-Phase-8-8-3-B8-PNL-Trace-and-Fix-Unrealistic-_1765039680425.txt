@@ -1,0 +1,207 @@
+Directive: Phase 8.8.3 – B8.PNL – Trace and Fix Unrealistic Exit Prices & P&L
+
+Goal:
+We now have:
+
+Hard reset working for DB + in-memory state
+
+Market data reset and freshness likely OK
+
+But we are still seeing trades very early in the session with insane P/L% and inflated exit prices in the Trade History UI.
+
+We need to instrument the P&L/exit pipeline end-to-end and add temporary safety checks so we can see exactly where the bad numbers come from.
+
+A. Instrument trade closing in paper-execution-engine.ts
+
+Open:
+server/services/paper-execution-engine.ts
+
+In the method:
+
+private async closePosition(
+  position: PaperSimOpenPosition,
+  exitPrice: number,
+  closeReason: PaperSimTradeCloseReason,
+  // ...any existing params
+)
+
+
+add a detailed debug log before any math is done and before writing to the DB.
+
+Log structure (pseudo-code – adapt to current variables):
+
+this.logger?.info('[B8.PNL][CLOSE_ATTEMPT]', {
+  symbol: position.symbol,
+  strategy: position.strategyName,
+  side: position.side,
+  quantity: position.quantity,
+  entryPrice: position.avgPrice,
+  rawExitPriceParam: exitPrice,
+  // source / context if available:
+  exitPriceSource: priceSource ?? 'unknown',
+  sessionId: this.currentSessionId,
+  positionOpenedAt: position.openedAt,
+  now: new Date().toISOString(),
+});
+
+
+After the P&L is computed (right before the DB UPDATE / INSERT):
+
+Add another log:
+
+this.logger?.info('[B8.PNL][CLOSE_COMPUTED]', {
+  symbol: position.symbol,
+  strategy: position.strategyName,
+  side: position.side,
+  quantity: position.quantity,
+  entryPrice: position.avgPrice,
+  actualExitPrice,
+  profit,
+  profitPct,
+  closeReason,
+  sessionId: this.currentSessionId,
+});
+
+
+Important: Don’t change any behavior yet in this step – just add logging.
+
+B. Add a temporary anomaly guard in closePosition
+
+Still in closePosition, after computing actualExitPrice, profit, profitPct, but before writing to DB:
+
+Add a sanity check:
+
+const priceMoveRatio =
+  position.avgPrice > 0 ? Math.abs((actualExitPrice - position.avgPrice) / position.avgPrice) : 0;
+
+
+If the price move is absurd (for debugging purposes, say > 100% within a short hold time):
+
+if (priceMoveRatio > 1 && position.openedAt) {
+  const msOpen = Date.now() - new Date(position.openedAt).getTime();
+
+  if (msOpen < 5 * 60 * 1000) { // opened less than 5 minutes ago
+    this.logger?.error('[B8.PNL][ANOMALOUS_CLOSE]', {
+      symbol: position.symbol,
+      strategy: position.strategyName,
+      side: position.side,
+      quantity: position.quantity,
+      entryPrice: position.avgPrice,
+      actualExitPrice,
+      priceMoveRatio,
+      msOpen,
+      closeReason,
+    });
+  }
+}
+
+
+For now do not block the close, just log the anomaly. We want a clean view into what values are being used.
+
+C. Verify DB → UI mapping for Trade History
+
+We also need to confirm that the Trade History UI is showing the same exit price the engine is using.
+
+On the backend, open whichever file builds the Trade History response (likely something like):
+
+server/routes.ts in the section that serves paper trade history, or
+
+a dedicated controller/service like paper-sim-service.ts.
+
+Confirm which DB columns are being selected for:
+
+entry_price
+
+exit_price
+
+pnl
+
+pnl_pct
+
+On the frontend, find the Trade History table component by searching in client/src for "Trade History" or the headers you see in the UI (e.g., "Opened At", "Closed At", "P/L %").
+
+Typical candidates:
+
+client/src/features/trading/trade-history-table.tsx
+
+client/src/pages/trading/trade-history.tsx
+(Use rg -n "Trade History" client/src to locate.)
+
+In that component, verify:
+
+The “Entry” column is bound to the API field that truly represents entry_price in paper_sim_trades.
+
+The “Exit” column is bound to the API field that truly represents exit_price in paper_sim_trades.
+
+The “P/L %” is using the backend’s computed pnl_pct, not recomputing it using some other field.
+
+If any column is wired to the wrong field (e.g., using target_price, position_value, or notional_value instead of exit_price), fix the mapping.
+
+D. Cross-check price source at close time
+
+We also want to verify what price the engine thinks it’s using when it calls closePosition.
+
+In the code where closePosition is called for paper mode (still in paper-execution-engine.ts), log:
+
+The currentPrice you’re passing into closePosition
+
+Where that price came from: livePricingAdapter.getPriceWithFallback, WebSocket, REST, or mock
+
+For example, right before this.closePosition(position, currentPrice, closeReason, ...):
+
+this.logger?.info('[B8.PNL][EXIT_SOURCE]', {
+  symbol: position.symbol,
+  side: position.side,
+  currentPrice,
+  entryPrice: position.avgPrice,
+  priceSource: priceSource ?? 'unknown',
+  closeReason,
+});
+
+
+Ensure currentPrice is always coming from LivePricingAdapter.getPriceWithFallback(position.symbol, ...) for paper mode, and not from some other path.
+
+E. Minimal run & data collection plan
+
+Once the above is implemented:
+
+Start a NEW paper simulation with a small initial balance.
+
+Let it run only 1–3 minutes, just long enough to get a handful of closed trades – especially those with huge P/L%.
+
+Then stop the simulation and ask Replit to:
+
+Tail the logs for:
+
+[B8.PNL][EXIT_SOURCE]
+
+[B8.PNL][CLOSE_ATTEMPT]
+
+[B8.PNL][CLOSE_COMPUTED]
+
+[B8.PNL][ANOMALOUS_CLOSE]
+
+For each anomalous trade you see in the UI (huge P/L%), run an SQL query like:
+
+SELECT id, symbol, entry_price, exit_price, quantity, pnl, pnl_pct, opened_at, closed_at
+FROM paper_sim_trades
+WHERE symbol = 'XXX/YYY'
+ORDER BY closed_at DESC
+LIMIT 5;
+
+
+Cross-reference:
+
+entryPrice in logs vs entry_price in DB
+
+actualExitPrice in logs vs exit_price in DB
+
+profit/profitPct in logs vs pnl/pnl_pct in DB
+
+what the UI shows for Entry / Exit / P/L % for that trade
+
+This will tell us very quickly whether:
+
+The engine is actually using a crazy exit price, or
+
+The engine’s exit price is fine, but the UI is mis-displaying it.

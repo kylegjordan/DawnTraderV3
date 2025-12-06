@@ -315,7 +315,17 @@ export class PaperExecutionEngine {
         );
 
         if (exitCondition) {
-          await this.closePosition(position.id, currentPrice, exitCondition);
+          // [B8.PNL][EXIT_SOURCE] - Log price source before calling closePosition
+          console.log(`[B8.PNL][EXIT_SOURCE]`, JSON.stringify({
+            symbol: position.symbol,
+            side: position.side,
+            currentPrice: currentPrice,
+            entryPrice: avgPrice,
+            priceSource: priceSource,
+            closeReason: exitCondition.type
+          }));
+          
+          await this.closePosition(position.id, currentPrice, exitCondition, priceSource);
         }
       } catch (error) {
         console.error(`[PaperExecution:${this.mode}] Error checking position ${position.symbol}:`, error);
@@ -397,13 +407,28 @@ export class PaperExecutionEngine {
   private async closePosition(
     positionId: string,
     exitPrice: number,
-    exitCondition: ExitCondition
+    exitCondition: ExitCondition,
+    priceSource?: string
   ): Promise<void> {
     const position = await storage.getPaperSimOpenPosition(this.mode, positionId);
     if (!position) {
       console.warn(`[PaperExecution:${this.mode}] Position ${positionId} not found`);
       return;
     }
+
+    // [B8.PNL][CLOSE_ATTEMPT] - Log before any math is done
+    console.log(`[B8.PNL][CLOSE_ATTEMPT]`, JSON.stringify({
+      symbol: position.symbol,
+      strategy: position.strategyName,
+      side: position.side,
+      quantity: position.quantity,
+      entryPrice: position.avgPrice,
+      rawExitPriceParam: exitPrice,
+      exitPriceSource: priceSource ?? 'unknown',
+      mode: this.mode,
+      positionOpenedAt: position.openedAt,
+      now: new Date().toISOString()
+    }));
 
     const avgPrice = parseFloat(position.avgPrice);
     const quantity = parseFloat(position.quantity);
@@ -422,6 +447,41 @@ export class PaperExecutionEngine {
     const totalSlippage = slippage * quantity; // Total slippage impact
     const netPnl = grossPnl - totalFees;
     const pnlPercent = (netPnl / entryValue) * 100;
+
+    // [B8.PNL] Anomaly guard: Check for >100% price move within 5 minutes
+    const priceMoveRatio = avgPrice > 0 ? Math.abs((actualExitPrice - avgPrice) / avgPrice) : 0;
+    if (priceMoveRatio > 1 && position.openedAt) {
+      const msOpen = Date.now() - new Date(position.openedAt).getTime();
+      if (msOpen < 5 * 60 * 1000) {
+        console.error(`[B8.PNL][ANOMALOUS_CLOSE]`, JSON.stringify({
+          symbol: position.symbol,
+          strategy: position.strategyName,
+          side: position.side,
+          quantity: quantity,
+          entryPrice: avgPrice,
+          actualExitPrice: actualExitPrice,
+          priceMoveRatio: priceMoveRatio,
+          priceMovePercent: (priceMoveRatio * 100).toFixed(2) + '%',
+          msOpen: msOpen,
+          closeReason: exitCondition.type,
+          priceSource: priceSource ?? 'unknown'
+        }));
+      }
+    }
+
+    // [B8.PNL][CLOSE_COMPUTED] - Log computed values before DB write
+    console.log(`[B8.PNL][CLOSE_COMPUTED]`, JSON.stringify({
+      symbol: position.symbol,
+      strategy: position.strategyName,
+      side: position.side,
+      quantity: quantity,
+      entryPrice: avgPrice,
+      actualExitPrice: actualExitPrice,
+      profit: netPnl,
+      profitPct: pnlPercent,
+      closeReason: exitCondition.type,
+      mode: this.mode
+    }));
 
     console.log(`[PaperExecution:${this.mode}] Closing position ${position.symbol}:`);
     console.log(`  Entry: ${avgPrice.toFixed(2)}, Exit: ${actualExitPrice.toFixed(2)}`);
