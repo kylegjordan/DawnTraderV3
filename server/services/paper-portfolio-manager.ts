@@ -196,6 +196,118 @@ export class PaperPortfolioManager {
     await this.executionEngine.stop();
   }
 
+  /**
+   * Phase 8.8.3: Force-close all open positions on stop (Hard Stop behavior)
+   * This ensures no ghost trades survive across stop/start cycles.
+   * Uses real market prices from LivePricingAdapter where available.
+   * 
+   * @returns Summary of closure results for diagnostics
+   */
+  async forceCloseAllOpenPositionsOnStop(): Promise<{
+    closedCount: number;
+    failedCount: number;
+    skippedCount: number;
+    details: Array<{ positionId: string; symbol: string; status: 'closed' | 'failed' | 'skipped'; reason?: string }>;
+  }> {
+    console.log('[DEBUG-B9][MANAGER_FORCE_CLOSE_ON_STOP][START]', {
+      mode: this.mode,
+      userId: this.userId,
+    });
+
+    const { livePricingAdapter } = await import('./live-pricing-adapter.js');
+    const openPositions = await storage.getPaperSimOpenPositions(this.mode);
+
+    if (!openPositions || openPositions.length === 0) {
+      console.log('[DEBUG-B9][MANAGER_FORCE_CLOSE_ON_STOP][NO_OPEN_POSITIONS]');
+      return {
+        closedCount: 0,
+        failedCount: 0,
+        skippedCount: 0,
+        details: [],
+      };
+    }
+
+    console.log('[DEBUG-B9][MANAGER_FORCE_CLOSE_ON_STOP][POSITIONS_FOUND]', {
+      count: openPositions.length,
+      symbols: openPositions.map(p => p.symbol),
+    });
+
+    const details: Array<{ positionId: string; symbol: string; status: 'closed' | 'failed' | 'skipped'; reason?: string }> = [];
+    let closedCount = 0;
+    let failedCount = 0;
+    let skippedCount = 0;
+
+    for (const position of openPositions) {
+      try {
+        console.log('[DEBUG-B9][MANAGER_FORCE_CLOSE_ON_STOP][CLOSE_POSITION]', {
+          positionId: position.id,
+          symbol: position.symbol,
+          entryPrice: position.avgPrice,
+        });
+
+        // Get exit price from live pricing
+        const priceResult = await livePricingAdapter.getPrice(position.symbol);
+        
+        if (!priceResult || !priceResult.price || priceResult.source === 'no_reliable_price') {
+          // Use entry price as fallback if no reliable price available
+          const entryPrice = parseFloat(String(position.avgPrice));
+          console.warn('[DEBUG-B9][MANAGER_FORCE_CLOSE_ON_STOP][NO_PRICE]', {
+            positionId: position.id,
+            symbol: position.symbol,
+            fallbackPrice: entryPrice,
+          });
+          
+          const result = await this.executionEngine.forceClosePosition(
+            position.id,
+            entryPrice,
+            'entry_price_fallback'
+          );
+
+          if (result.success) {
+            closedCount++;
+            details.push({ positionId: position.id, symbol: position.symbol, status: 'closed', reason: 'Used entry price as exit (no market price)' });
+          } else {
+            failedCount++;
+            details.push({ positionId: position.id, symbol: position.symbol, status: 'failed', reason: result.error });
+          }
+        } else {
+          // Use live market price
+          const result = await this.executionEngine.forceClosePosition(
+            position.id,
+            priceResult.price,
+            `manual_stop_${priceResult.source}`
+          );
+
+          if (result.success) {
+            closedCount++;
+            details.push({ positionId: position.id, symbol: position.symbol, status: 'closed' });
+          } else {
+            failedCount++;
+            details.push({ positionId: position.id, symbol: position.symbol, status: 'failed', reason: result.error });
+          }
+        }
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        console.error('[ERROR][MANAGER_FORCE_CLOSE_ON_STOP][FAILED_TO_CLOSE]', {
+          positionId: position.id,
+          symbol: position.symbol,
+          error: errorMessage,
+        });
+        failedCount++;
+        details.push({ positionId: position.id, symbol: position.symbol, status: 'failed', reason: errorMessage });
+      }
+    }
+
+    console.log('[DEBUG-B9][MANAGER_FORCE_CLOSE_ON_STOP][END]', {
+      closedCount,
+      failedCount,
+      skippedCount,
+      totalPositions: openPositions.length,
+    });
+
+    return { closedCount, failedCount, skippedCount, details };
+  }
+
   private async refreshWatchlistData(): Promise<void> {
     // Phase 41F-E: Early exit if engine stopped (prevent writes after stop)
     if (!this.isRunning) {

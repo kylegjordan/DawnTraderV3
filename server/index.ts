@@ -162,6 +162,20 @@ app.use((req, res, next) => {
   const { permissionCache } = await import('./services/permission-cache');
   await permissionCache.initialize();
 
+  // Phase 8.8.3: Initialize Kraken Pair Metadata Service for symbol normalization
+  try {
+    const { krakenPairMetadataService } = await import('./services/kraken-pair-metadata-service');
+    const success = await krakenPairMetadataService.loadAssetPairs();
+    if (success) {
+      console.log('[KrakenPairMetadata] ✅ Asset pairs loaded successfully');
+    } else {
+      console.warn('[KrakenPairMetadata] ⚠️ Asset pairs load failed - normalization will use fallback');
+    }
+  } catch (error) {
+    console.error('[KrakenPairMetadata] ❌ Failed to initialize:', error);
+    // Non-fatal - the system can still run with fallback normalization
+  }
+
   // Phase 27.4: Initialize Trading State Recovery
   const { tradingStateSync } = await import('./services/trading-state-sync.js');
   const { db } = await import('./db.js');

@@ -18,7 +18,7 @@ import { b4Diagnostics } from './b4-diagnostics.js';
 import { b5SizingAudit } from './b5-sizing-audit.js';
 
 interface ExitCondition {
-  type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail';
+  type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail' | 'manual_stop';
   price?: number;
   reason: string;
 }
@@ -157,6 +157,48 @@ export class PaperExecutionEngine {
     }
 
     console.log(`[PaperExecution:${this.mode}] Stopped paper trading engine`);
+  }
+
+  /**
+   * Phase 8.8.3: Force-close a position for manual stop
+   * Public wrapper for private closePosition with manual_stop exit condition.
+   * Used by PaperPortfolioManager.forceCloseAllOpenPositionsOnStop()
+   * 
+   * @param positionId - The position ID to close
+   * @param exitPrice - Current market price for the position
+   * @param priceSource - Source of the exit price (e.g., 'manual_stop', 'live_pricing')
+   * @returns Success status and any error message
+   */
+  async forceClosePosition(
+    positionId: string,
+    exitPrice: number,
+    priceSource: string = 'manual_stop'
+  ): Promise<{ success: boolean; error?: string }> {
+    console.log('[DEBUG-B9][ENGINE_FORCE_CLOSE]', {
+      positionId,
+      exitPrice,
+      priceSource,
+      mode: this.mode,
+    });
+
+    try {
+      const exitCondition: ExitCondition = {
+        type: 'manual_stop',
+        price: exitPrice,
+        reason: 'Manual stop requested by user',
+      };
+
+      await this.closePosition(positionId, exitPrice, exitCondition, priceSource);
+      
+      return { success: true };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('[DEBUG-B9][ENGINE_FORCE_CLOSE_FAILED]', {
+        positionId,
+        error: errorMessage,
+      });
+      return { success: false, error: errorMessage };
+    }
   }
 
   /**

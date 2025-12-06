@@ -1,6 +1,7 @@
 import WebSocket from 'ws';
 import { contextBridge } from './context-bridge.js';
 import { livePricingAdapter } from './live-pricing-adapter.js';
+import { krakenPairMetadataService } from './kraken-pair-metadata-service.js';
 
 /**
  * Phase 8.8.3-B3.6: Kraken WebSocket Price Engine
@@ -51,6 +52,7 @@ export class KrakenWebSocketAdapter {
   private isConnecting: boolean = false;
   private subscribedSymbols: Set<string> = new Set();
   private pendingSubscriptions: Set<string> = new Set();
+  private unrecognizedSymbols: Set<string> = new Set(); // Phase 8.8.3: Track symbols that fail normalization
   private reconnectAttempts: number = 0;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private heartbeatInterval: NodeJS.Timeout | null = null;
@@ -455,7 +457,18 @@ export class KrakenWebSocketAdapter {
   }
 
   private normalToKrakenSymbol(symbol: string): string | null {
-    const mapping: Record<string, string> = {
+    // Phase 8.8.3: Use KrakenPairMetadataService for deterministic normalization
+    const canonical = krakenPairMetadataService.getCanonicalKrakenSymbol(symbol);
+    
+    if (canonical) {
+      // Successfully normalized
+      this.unrecognizedSymbols.delete(symbol);
+      return canonical;
+    }
+    
+    // Fallback: Legacy hardcoded mapping for critical symbols
+    // This ensures basic functionality even if metadata service hasn't loaded
+    const legacyMapping: Record<string, string> = {
       'BTC/USD': 'XBT/USD',
       'ETH/USD': 'ETH/USD',
       'SOL/USD': 'SOL/USD',
@@ -473,13 +486,25 @@ export class KrakenWebSocketAdapter {
       'TRX/USD': 'TRX/USD'
     };
     
-    if (mapping[symbol]) return mapping[symbol];
+    if (legacyMapping[symbol]) {
+      return legacyMapping[symbol];
+    }
     
+    // If symbol already has a slash and wasn't found, try passthrough
     if (symbol.includes('/')) {
       const [base, quote] = symbol.split('/');
       if (base === 'BTC') return `XBT/${quote}`;
+      // Return the symbol as-is for passthrough (Kraken may accept it)
       return symbol;
     }
+    
+    // Symbol is unrecognized - track it
+    console.warn('[SYM][UNRECOGNIZED_FOR_WS]', {
+      internalSymbol: symbol,
+      context: 'normalToKrakenSymbol',
+      metadataLoaded: krakenPairMetadataService.isMetadataLoaded(),
+    });
+    this.unrecognizedSymbols.add(symbol);
     
     return null;
   }
@@ -525,6 +550,20 @@ export class KrakenWebSocketAdapter {
     });
     
     return stale;
+  }
+
+  /**
+   * Phase 8.8.3: Get symbols that failed normalization
+   */
+  getUnrecognizedSymbols(): string[] {
+    return Array.from(this.unrecognizedSymbols);
+  }
+
+  /**
+   * Phase 8.8.3: Clear unrecognized symbols (for fresh start)
+   */
+  clearUnrecognizedSymbols(): void {
+    this.unrecognizedSymbols.clear();
   }
 
   getDiagnostics(): {

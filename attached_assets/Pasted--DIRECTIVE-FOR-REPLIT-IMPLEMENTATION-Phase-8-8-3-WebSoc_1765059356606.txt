@@ -1,0 +1,503 @@
+🚀 DIRECTIVE FOR REPLIT IMPLEMENTATION
+Phase 8.8.3 – WebSocket Symbol Normalization & Hard Stop Trade Closure
+(V3 Architecture Only – No Legacy, No Heuristics, No Drift)
+0. CONTEXT (READ FIRST)
+
+The DawnTrader V3 engine is currently:
+
+Opening trades correctly
+
+Running FX5 and generating RTB signals correctly
+
+Starting the Kraken WebSocket connection correctly
+
+…but:
+
+WebSocket is only subscribing to a subset of symbols
+
+E.g. FARTCOIN/EUR and TRX/USD, but not ADAUSD/ADAEUR/ADAAUD/ADAGBP etc.
+
+This is caused by symbol format mismatches (slash vs no-slash).
+
+Open trades are preserved across STOP, and then later auto-closed with Unknown reason
+
+There is no proper Hard Stop routine that force-closes all open trades when the sim is stopped.
+
+This causes ghost trades, slot starvation, and confusing history entries.
+
+We are NOT trying to support “continue previous simulation” right now.
+
+For this phase, we want:
+
+STOP = Hard stop → force-close all open trades, clear state
+
+Start Simulation = always clean slate (no continuation model)
+
+All changes must:
+
+Stay 100% within the V3 architecture
+
+Avoid any use of legacy files or logic
+
+Be stable, sustainable, and scalable
+
+Align with the future-state blueprint and Phase 8.8.3 direction
+
+1. NON-GOALS / HARD CONSTRAINTS
+
+❌ Do NOT modify FX5’s core filtering/scanning logic or its 30-second cycle.
+
+❌ Do NOT pull back any legacy execution, pricing, or paper sim code (no server/legacy/*).
+
+❌ Do NOT fetch Kraken AssetPairs on every FX5 run.
+
+❌ Do NOT add heuristic “auto-insert slashes” logic that guesses symbols.
+
+❌ Do NOT introduce any continuation mode semantics in this phase.
+
+2. ADD KRAKEN PAIR METADATA & SYMBOL NORMALIZATION SERVICE
+2.1. Create a new service
+
+Create a new file:
+
+server/services/kraken-pair-metadata-service.ts
+
+Implement a singleton service with responsibilities:
+
+Fetch Kraken AssetPairs metadata at startup.
+
+Build deterministic symbol maps:
+
+internalToExchange: Map<string, string>
+
+exchangeToInternal: Map<string, string>
+
+Provide fast lookup helpers:
+
+getCanonicalKrakenSymbol(internalSymbol: string): string | null
+
+getInternalSymbol(krakenSymbol: string): string | null
+
+Provide diagnostics:
+
+getDiagnostics() returning:
+
+list of known internal symbols
+
+list of known kraken symbols
+
+timestamps of last load / last refresh
+
+error counters, if any
+
+Implementation details:
+
+Use Kraken REST endpoint: /0/public/AssetPairs (public, unauthenticated).
+
+Fetch once on server startup.
+
+Parse all tradeable pairs, and build:
+
+interface KrakenPairInfo {
+  wsname?: string;   // Prefer wsname if present
+  altname: string;
+}
+
+
+For each pair:
+
+Choose canonical symbol for WS usage:
+
+Prefer wsname if present (e.g. "ADA/USD")
+
+Otherwise fallback to altname if WS doesn’t use wsname (still canonical enough)
+
+Map:
+
+internalToExchange.set(altname, wsNameOrAlt);
+
+Also support a simple uppercase normalization: internalToExchange.set(altname.toUpperCase(), wsNameOrAlt);
+
+Do NOT do any “guessing” beyond those mappings.
+
+If a symbol isn’t present in the Kraken response, treat it as unrecognized.
+
+2.2. Add periodic refresh
+
+Inside the service:
+
+After initial load, schedule refresh:
+
+const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+
+setInterval(() => {
+  // safely re-fetch AssetPairs and rebuild maps
+}, TWELVE_HOURS_MS);
+
+
+Make sure refresh:
+
+Rebuilds maps atomically (swap reference, don’t mutate partially).
+
+Logs errors if refresh fails, but does not crash the server.
+
+2.3. Wire the service into server startup
+
+Where the app initializes core services (main server bootstrap), ensure:
+
+krakenPairMetadataService.loadAssetPairs() is called once on startup.
+
+Trading/sim start must not depend on successful refresh; if initial fetch fails:
+
+Log [SYM][PAIR_METADATA_LOAD_FAILED] with error details.
+
+The system can still run, but any symbol normalization will fall back to unrecognized handling (see below).
+
+3. WIRE NORMALIZATION INTO KRAKEN WEBSOCKET ADAPTER
+3.1. Update server/services/kraken-websocket-adapter.ts
+
+Import and use the new service:
+
+import { krakenPairMetadataService } from './kraken-pair-metadata-service';
+
+
+Replace the existing symbol mapping logic so that all WebSocket subscriptions go through:
+
+const canonical = krakenPairMetadataService.getCanonicalKrakenSymbol(symbol);
+
+
+Update subscribeToSymbols(symbols: string[]):
+
+Input symbols are internal symbols (e.g. ADAUSD, ADAEUR, FARTCOIN/EUR, TRX/USD).
+
+For each symbol:
+
+const krakenSymbol = krakenPairMetadataService.getCanonicalKrakenSymbol(symbol);
+
+If krakenSymbol is null:
+
+Add to a unrecognizedSymbols set.
+
+Log:
+
+console.warn('[SYM][UNRECOGNIZED_FOR_WS]', {
+  internalSymbol: symbol,
+  context: 'subscribeToSymbols',
+});
+
+
+Do NOT subscribe this symbol.
+
+Else:
+
+Add to a recognizedSymbols list for this call.
+
+Subscribe only to recognizedSymbols.
+
+Maintain internal diagnostics:
+
+this.subscribedSymbols: Set<string> — canonical Kraken symbols currently subscribed.
+
+this.unrecognizedSymbols: Set<string> — internal symbols that have recently failed normalization.
+
+Update diagnostics helper (if present) or add one:
+
+getDiagnostics() {
+  return {
+    wsConnected: this.wsConnected,
+    subscribedSymbols: Array.from(this.subscribedSymbols),
+    unrecognizedSymbols: Array.from(this.unrecognizedSymbols),
+    lastUpdateBySymbol: { ...this.lastUpdateBySymbol },
+    lastDiagnosticsAt: new Date().toISOString(),
+  };
+}
+
+4. USE NORMALIZED SYMBOLS FOR ALL CRITICAL SUBSCRIPTIONS
+4.1. Open trades → WS subscription
+
+In server/trading/paper-execution-engine.ts:
+
+Locate where open positions are loaded on start():
+
+const openPositions = await storage.getPaperSimOpenPositions(this.mode);
+if (openPositions.length > 0) {
+  const symbols = openPositions.map(p => p.symbol);
+  krakenWebSocketAdapter.subscribeToSymbols(symbols);
+}
+
+
+Leave the call signature as is but rely on the normalizer in the WS adapter (per section 3).
+
+Ensure we do not try to pre-normalize here; all canonicalization goes through the service.
+
+4.2. RTB symbols → WS subscription
+
+Where RTB (Ready-To-Buy) symbols are produced (likely in strategy-engine or related orchestration):
+
+Identify the set of RTB symbols for the active simulation.
+
+Add a method in PaperPortfolioManager or an appropriate orchestration layer:
+
+ensureSubscriptionsForTradingUniverse({
+  openTradeSymbols: string[],
+  rtbSymbols: string[],
+  fx5FilteredSymbols: string[],
+});
+
+
+This method should:
+
+Build a combined set:
+
+const combined = new Set([
+  ...openTradeSymbols,
+  ...rtbSymbols,
+  ...fx5FilteredSymbols,
+]);
+
+
+Call krakenWebSocketAdapter.subscribeToSymbols(Array.from(combined));
+
+IMPORTANT: For this directive, you may implement the method and wire:
+
+openTradeSymbols and rtbSymbols now
+
+fx5FilteredSymbols can be added when the FX5 universe is easily accessible; if it is already trivially available, include it now. Otherwise, leave a clear, documented TODO and do not break current FX5 behavior.
+
+4.3. FX5 filtered universe → WS subscription (optional now, required later)
+
+If FX5 currently exposes an in-memory list of active filtered symbols cleanly, you can pass it into the ensureSubscriptionsForTradingUniverse method.
+
+Otherwise:
+
+Leave subscription to FX5 filtered pool as a TODO with a clear comment, and do not over-refactor FX5 in this directive.
+
+5. HARD STOP: FORCE-CLOSE ALL OPEN TRADES ON STOP
+
+We are not implementing continuation now.
+STOP must behave as Hard Stop:
+
+All open trades closed
+
+All positions removed from open positions tables
+
+UI Open/Active Trades tab becomes empty
+
+History shows these trades closed with a clear reason
+
+5.1. Add a force-close routine in paper-portfolio-manager.ts
+
+In server/trading/paper-portfolio-manager.ts:
+
+Add a new method:
+
+public async forceCloseAllOpenPositionsOnStop(): Promise<void> {
+  console.log('[DEBUG-B9][MANAGER_FORCE_CLOSE_ON_STOP][START]');
+  const openPositions = await this.storage.getPaperSimOpenPositions(this.mode);
+
+  if (!openPositions || openPositions.length === 0) {
+    console.log('[DEBUG-B9][MANAGER_FORCE_CLOSE_ON_STOP][NO_OPEN_POSITIONS]');
+    return;
+  }
+
+  for (const position of openPositions) {
+    try {
+      console.log('[DEBUG-B9][MANAGER_FORCE_CLOSE_ON_STOP][CLOSE_POSITION]', {
+        positionId: position.id,
+        symbol: position.symbol,
+      });
+
+      await this.executionEngine.closePosition(position.id, {
+        type: 'manual_stop',
+        reason: 'Manual stop requested by user',
+      });
+    } catch (err) {
+      console.error('[ERROR][MANAGER_FORCE_CLOSE_ON_STOP][FAILED_TO_CLOSE]', {
+        positionId: position.id,
+        symbol: position.symbol,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  console.log('[DEBUG-B9][MANAGER_FORCE_CLOSE_ON_STOP][END]');
+}
+
+
+Constraints:
+
+Use the existing V3 executionEngine.closePosition() logic.
+
+Do not bypass the engine or manually manipulate DB rows.
+
+Do not introduce any legacy close logic.
+
+5.2. Wire force-close into paper-sim-service.ts stop flow
+
+In server/services/paper-sim-service.ts, in the stop handler (paper sim stop):
+
+After verifying existingSession and existingManager but before calling manager.stop():
+
+console.log('[DEBUG-B9][PAPER_SIM_STOP][FORCE_CLOSE_ON_STOP]', {
+  sessionId: existingSession.id,
+});
+
+await existingManager.forceCloseAllOpenPositionsOnStop();
+
+
+Then, proceed to await existingManager.stop(); as it currently does.
+
+5.3. Ensure clean state after stop
+
+After manager.stop() and DB session status update, add a DB consistency check:
+
+const remainingOpenPositions = await this.storage.getPaperSimOpenPositions('paper');
+if (remainingOpenPositions.length > 0) {
+  console.warn('[WARN][PAPER_SIM_STOP][OPEN_POSITIONS_REMAIN_AFTER_FORCE_CLOSE]', {
+    count: remainingOpenPositions.length,
+    ids: remainingOpenPositions.map(p => p.id),
+  });
+}
+
+
+This allows us to detect any cases where force-close failed.
+
+6. DIAGNOSTICS: UNRECOGNIZED SYMBOLS & HARD STOP VISIBILITY
+6.1. Extend /api/diagnostics/ws-price-engine?raw=1
+
+Ensure the diagnostics payload for this endpoint includes:
+
+subscribedSymbols: string[] – canonical Kraken symbols
+
+unrecognizedSymbols: string[] – internal symbols that failed normalization
+
+openPositionsWithMissingSubscription: { symbol: string; positionId: string }[] – any open positions that have no matching WS subscription
+
+Basic metrics:
+
+totalSubscribed
+
+totalUnrecognized
+
+lastPairMetadataRefreshAt
+
+This will let the user clearly see:
+
+When open trades exist for symbols that are not recognized
+
+Which symbols are missing WS coverage
+
+Whether the normalization registry is working
+
+6.2. Make unrecognized symbols visible to the user
+
+In addition to logs, ensure there is a diagnostic view the UI can surface (later) by surfacing unrecognizedSymbols and openPositionsWithMissingSubscription from the diagnostics endpoint.
+
+Do not implement UI changes in this directive, but ensure the backend provides clean JSON fields for them.
+
+7. VALIDATION & VERIFICATION (MANDATORY)
+
+Use the test credentials:
+
+username: testuser123
+password: SecurePass123!
+
+7.1. Start a fresh simulation
+
+Log in and start a new paper simulation with a non-trivial balance (e.g. 800 or 1000).
+
+Allow FX5 and strategies to run until there are several signals and open trades.
+
+Verify:
+
+/api/diagnostics/ws-price-engine?raw=1 shows:
+
+subscribedSymbols containing all open trade symbols in canonical form.
+
+unrecognizedSymbols is empty (or only contains expected synthetic/test symbols).
+
+openPositionsWithMissingSubscription is empty.
+
+Prices in the UI:
+
+Open/ActiveTrades current prices should visibly tick roughly every ~1.5 seconds.
+
+P/L values should adjust over time.
+
+7.2. Hard Stop behavior
+
+While trades are open, call /api/paper-sim/stop (via UI or curl).
+
+Verify logs show:
+
+[DEBUG-B9][MANAGER_FORCE_CLOSE_ON_STOP][START]
+
+[DEBUG-B9][MANAGER_FORCE_CLOSE_ON_STOP][CLOSE_POSITION] for each open position
+
+[DEBUG-B9][MANAGER_FORCE_CLOSE_ON_STOP][END]
+
+No warnings that open positions remain
+
+Check DB / consistency:
+
+paper_sim_open_positions should be empty.
+
+paper_sim_trades should show those trades closed with:
+
+close_reason = "manual_stop" (or equivalent string).
+
+UI Active/OpenTrades tab should be empty.
+
+History should show closed trades with "manual_stop" or friendly mapped text.
+
+7.3. Restart simulation (new)
+
+Start a new simulation (mode “new”).
+
+Confirm:
+
+No leftover open trades from the previous session.
+
+No ghost P/L.
+
+WS diagnostics show a fresh subscription set aligned with new open trades.
+
+7.4. Diagnostic visibility of unrecognized symbols
+
+Temporarily introduce (or simulate) a symbol that is not present in Kraken metadata and ends up in open positions.
+
+Verify:
+
+/api/diagnostics/ws-price-engine?raw=1 lists it under unrecognizedSymbols and openPositionsWithMissingSubscription.
+
+Logs contain [SYM][UNRECOGNIZED_FOR_WS] entries.
+
+8. COMPLETION CRITERIA
+
+This directive is complete when:
+
+✅ WebSocket always subscribes to all open trades, and (where wired) RTB and FX5 filtered symbols.
+
+✅ Symbol normalization uses real Kraken AssetPairs metadata, refreshed every 12 hours.
+
+✅ No heuristic guessing is used; all unknown symbols are clearly reported.
+
+✅ Hard Stop force-closes all open trades via the V3 execution engine, no legacy logic.
+
+✅ After STOP:
+
+No open positions remain in DB.
+
+UI Active/OpenTrades tab is empty.
+
+Trades appear in history with a clear “manual stop” reason.
+
+✅ /api/diagnostics/ws-price-engine?raw=1 exposes:
+
+subscribedSymbols
+
+unrecognizedSymbols
+
+openPositionsWithMissingSubscription
+
+✅ No architectural drift, no legacy reintroduction, and no impact on FX5’s scanning cadence.

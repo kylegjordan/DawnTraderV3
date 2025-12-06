@@ -676,6 +676,20 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
         const t0 = Date.now();
         
         if (currentManager) {
+          // Phase 8.8.3: Force-close all open positions before manager stop (Hard Stop behavior)
+          console.log('[DEBUG-B9][STOP_FLOW][FORCE_CLOSE_START]');
+          try {
+            const closeResult = await currentManager.forceCloseAllOpenPositionsOnStop();
+            console.log('[DEBUG-B9][STOP_FLOW][FORCE_CLOSE_RESULT]', {
+              closedCount: closeResult.closedCount,
+              failedCount: closeResult.failedCount,
+              skippedCount: closeResult.skippedCount,
+            });
+          } catch (closeErr) {
+            console.error('[DEBUG-B9][STOP_FLOW][FORCE_CLOSE_ERROR]', closeErr);
+            // Non-blocking: continue with stop even if force-close fails
+          }
+          
           console.log('[41E-S][TIMING] Starting manager.stop()...');
           await currentManager.stop();
           clearGlobalPaperSimManager();
