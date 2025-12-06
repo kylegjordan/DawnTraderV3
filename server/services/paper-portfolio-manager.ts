@@ -63,9 +63,28 @@ export class PaperPortfolioManager {
     
     // Phase 27.F.14.MICRO: Link micro-service to main execution engine
     this.microExecutionService.setPaperEngine(this.executionEngine);
+    
+    // Phase 8.8.3-B9.FIX-WS-START: Diagnostic log on construction
+    console.log('[DEBUG-B9][MANAGER_CREATED]', {
+      createdAt: new Date().toISOString(),
+      mode: this.mode,
+      userId: this.userId,
+    });
+  }
+  
+  // Phase 8.8.3-B9.FIX-WS-START: Expose isRunning state for control flow checks
+  getIsRunning(): boolean {
+    return this.isRunning;
   }
 
   async start(): Promise<void> {
+    // Phase 8.8.3-B9.FIX-WS-START: Diagnostic log on start
+    console.log('[DEBUG-B9][MANAGER_START_CALLED]', {
+      mode: this.mode,
+      userId: this.userId,
+      wasAlreadyRunning: this.isRunning,
+    });
+    
     if (this.isRunning) {
       console.log(`[PaperPortfolio:${this.userId}] Already running`);
       return;
@@ -141,6 +160,13 @@ export class PaperPortfolioManager {
   }
 
   async stop(): Promise<void> {
+    // Phase 8.8.3-B9.FIX-WS-START: Diagnostic log on stop
+    console.log('[DEBUG-B9][MANAGER_STOP_CALLED]', {
+      mode: this.mode,
+      userId: this.userId,
+      wasRunning: this.isRunning,
+    });
+    
     if (!this.isRunning) {
       return;
     }

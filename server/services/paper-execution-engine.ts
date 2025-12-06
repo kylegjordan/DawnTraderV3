@@ -60,6 +60,13 @@ export class PaperExecutionEngine {
   }
 
   async start(): Promise<void> {
+    // Phase 8.8.3-B9.FIX-WS-START: Diagnostic log on start
+    console.log('[DEBUG-B9][ENGINE_START_CALLED]', {
+      mode: this.mode,
+      wasAlreadyRunning: this.isRunning,
+      timestamp: new Date().toISOString(),
+    });
+    
     if (this.isRunning) {
       console.log(`[PaperExecution:${this.mode}] Already running`);
       return;
@@ -118,6 +125,12 @@ export class PaperExecutionEngine {
   }
 
   async stop(): Promise<void> {
+    // Phase 8.8.3-B9.FIX-WS-START: Diagnostic log on stop
+    console.log('[DEBUG-B9][ENGINE_STOP_CALLED]', {
+      mode: this.mode,
+      wasRunning: this.isRunning,
+    });
+    
     this.isRunning = false;
     
     if (this.monitoringInterval) {
@@ -134,6 +147,14 @@ export class PaperExecutionEngine {
     aj17DiagnosticRunner.stopSessionAndGenerateReport().catch(err => {
       console.error(`[AJ17] Failed to generate diagnostic report:`, err);
     });
+    
+    // Phase 8.8.3-B9.FIX-WS-START: Stop WebSocket adapter on engine stop
+    try {
+      krakenWebSocketAdapter.stop();
+      console.log(`[PaperExecution:${this.mode}] Kraken WebSocket adapter stopped`);
+    } catch (error) {
+      console.error(`[PaperExecution:${this.mode}] Error stopping WebSocket adapter:`, error);
+    }
 
     console.log(`[PaperExecution:${this.mode}] Stopped paper trading engine`);
   }

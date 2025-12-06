@@ -76,6 +76,14 @@ export class KrakenWebSocketAdapter {
   }
 
   async start(): Promise<void> {
+    // Phase 8.8.3-B9.FIX-WS-START: Diagnostic log on start
+    console.log('[DEBUG-B9][KrakenWS][START]', {
+      startedAt: new Date().toISOString(),
+      isConnected: this.isConnected,
+      isConnecting: this.isConnecting,
+      subscribedSymbolCount: this.subscribedSymbols.size,
+    });
+    
     if (this.isConnected || this.isConnecting) {
       console.log(`[${this.MODULE_NAME}] Already connected or connecting`);
       return;
@@ -86,6 +94,14 @@ export class KrakenWebSocketAdapter {
   }
 
   stop(): void {
+    // Phase 8.8.3-B9.FIX-WS-START: Diagnostic log on stop
+    console.log('[DEBUG-B9][KrakenWS][STOP]', {
+      stoppedAt: new Date().toISOString(),
+      wasConnected: this.isConnected,
+      subscribedSymbolCount: this.subscribedSymbols.size,
+      pendingSubscriptionCount: this.pendingSubscriptions.size,
+    });
+    
     console.log(`[${this.MODULE_NAME}] Stopping WebSocket adapter`);
     
     this.cleanup();
@@ -102,7 +118,13 @@ export class KrakenWebSocketAdapter {
     this.isConnected = false;
     this.isConnecting = false;
     this.subscribedSymbols.clear();
+    this.pendingSubscriptions.clear(); // Phase 8.8.3-B9.FIX-WS-START: Clear pending to avoid stale resubscriptions
     this.reconnectAttempts = 0;
+    
+    console.log('[DEBUG-B9][KrakenWS][STOP_COMPLETE]', {
+      subscribedCleared: this.subscribedSymbols.size === 0,
+      pendingCleared: this.pendingSubscriptions.size === 0,
+    });
   }
 
   private cleanup(): void {
@@ -393,6 +415,13 @@ export class KrakenWebSocketAdapter {
     try {
       this.ws?.send(JSON.stringify(subscribeMessage));
       console.log(`[${this.MODULE_NAME}] Subscribing to ${krakenSymbols.length} symbols: ${krakenSymbols.slice(0, 5).join(', ')}${krakenSymbols.length > 5 ? '...' : ''}`);
+      
+      // Phase 8.8.3-B9.FIX-WS-START: Diagnostic log after subscription update
+      console.log('[DEBUG-B9][KrakenWS][SUBSCRIPTIONS_UPDATED]', {
+        newSymbols: symbols,
+        allSubscribed: Array.from(this.subscribedSymbols),
+        pendingCount: this.pendingSubscriptions.size,
+      });
     } catch (error) {
       console.error(`[${this.MODULE_NAME}] Subscribe error:`, error);
     }

@@ -325,7 +325,36 @@ export async function startPaperSimulation(
 
         
         if (existingSession && existingManager) {
-          // IDEMPOTENT: Both session and manager exist, return success
+          // Phase 8.8.3-B9.FIX-WS-START: Check if manager is actually running
+          // Previously this early-return prevented WebSocket from starting
+          console.log('[DEBUG-B9][EARLY_RETURN_CHECK]', {
+            existingSession: !!existingSession,
+            existingManager: !!existingManager,
+            managerIsRunning: existingManager?.getIsRunning?.() ?? 'unknown',
+            sessionId: existingSession.sessionId,
+          });
+          
+          // If manager exists but is not running, we need to start it
+          if (!existingManager.getIsRunning || !existingManager.getIsRunning()) {
+            console.log('[DEBUG-B9][MANAGER_NOT_RUNNING] Manager exists but not running - starting it now');
+            await existingManager.start();
+            
+            return {
+              success: true,
+              message: 'Paper trading simulation started (manager was idle)',
+              data: {
+                sessionId: existingSession.sessionId,
+                startedAt: existingSession.startedAt,
+                status: existingSession.status,
+                mode: existingSession.mode,
+                isIdempotentReuse: true,
+                wasRestarted: true,
+              },
+              shouldBroadcast: true,
+            };
+          }
+          
+          // Manager is truly running - return idempotent success
           console.log(`[PaperSimService] Paper trading already running (session: ${existingSession.sessionId})`);
           
           return {

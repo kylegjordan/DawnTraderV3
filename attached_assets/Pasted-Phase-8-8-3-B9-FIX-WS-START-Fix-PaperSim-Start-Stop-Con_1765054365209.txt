@@ -1,0 +1,272 @@
+Phase 8.8.3-B9.FIX-WS-START
+Fix PaperSim Start/Stop Control Flow & Guarantee Kraken WebSocket Startup
+Add Deep Diagnostics + Subscription Validation
+Run Full Verification Using Test Credentials
+📌 CONTEXT FOR REPLIT — READ THIS BEFORE IMPLEMENTING
+
+DawnTrader currently exhibits a “frozen prices” problem:
+
+ActiveTrades prices do not update
+
+Trades fail to close
+
+Pricing logs show only last_known_good / CG fallback
+
+WebSocket tick logs are missing
+
+You correctly identified the root cause:
+
+❗ The WebSocket never starts
+
+because paper-sim-service.ts contains this block:
+
+if (existingSession && existingManager) {
+  console.log('[PaperSimService] Paper trading already running...');
+  return {...};       // ❌ EARLY RETURN
+}
+
+
+This early return prevents:
+
+manager.start()
+  → executionEngine.start()
+     → krakenWebSocketAdapter.start()
+
+
+from ever being called.
+
+As a result:
+
+No WS connection
+
+No symbol subscriptions
+
+No live prices
+
+Last Known Good prices stay frozen
+
+No TP/SL triggers
+
+The system appears “frozen”
+
+You already confirmed the V3 engine is running correctly.
+The only error is in simulation start/stop control flow.
+
+This directive fixes that issue, adds diagnostics, fixes restart behavior, ensures proper WebSocket subscriptions, and instructs you on verification.
+
+🔧 PART 1 — Add Diagnostic Logs to Identify Control Flow
+File: server/services/paper-sim-service.ts
+
+Inside the early-return block, add:
+
+console.log('[DEBUG-B9][EARLY_RETURN_TRIGGERED]', {
+  existingSession: !!existingSession,
+  existingManager: !!existingManager,
+  managerIsRunning: existingManager?.isRunning ?? null,
+});
+
+
+This helps confirm how often this branch fires.
+
+🔧 PART 2 — Replace Early-Return With Correct Start Logic
+
+Remove or overwrite:
+
+if (existingSession && existingManager) {
+  console.log('[PaperSimService] Paper trading already running...');
+  return {...};
+}
+
+Replace with the following:
+const manager = existingManager ?? createNewManager(session);
+
+if (manager.isRunning) {
+  console.log('[PaperSimService] Manager already running, returning status.');
+  return {
+    status: 'already_running',
+    sessionId: session.id,
+  };
+}
+
+console.log('[PaperSimService] Starting or restarting paper trading manager...', {
+  hadExistingSession: !!existingSession,
+  hadExistingManager: !!existingManager,
+});
+
+await manager.start();
+
+return {
+  status: 'started',
+  sessionId: session.id,
+};
+
+
+This ensures:
+
+We never skip starting the engine when we shouldn’t
+
+WebSocket startup is always reached
+
+🔧 PART 3 — Instrument Manager and Engine Startup Chain
+File: server/trading/paper-portfolio-manager.ts
+
+At construction:
+
+console.log('[DEBUG-B9][MANAGER_CREATED]', {
+  createdAt: new Date().toISOString(),
+  sessionId: this.sessionId,
+});
+
+
+Inside start():
+
+console.log('[DEBUG-B9][MANAGER_START_CALLED]', { sessionId: this.sessionId });
+
+File: server/trading/execution/paper-execution-engine.ts
+
+Inside start():
+
+console.log('[ENGINE][EXECUTION_START]', {
+  sessionId: this.sessionId,
+});
+
+File: server/pricing/kraken-websocket-adapter.ts
+
+Inside start():
+
+console.log('[KrakenWS][START]', {
+  startedAt: new Date().toISOString(),
+});
+
+
+After subscriptions update:
+
+console.log('[KrakenWS][SUBSCRIPTIONS_UPDATED]', {
+  symbols: Array.from(this.subscribedSymbols),
+});
+
+🔧 PART 4 — Ensure WebSocket Subscriptions Include Proper Symbol Groups
+
+WebSocket must subscribe to:
+
+FX5 Active Pool Symbols
+
+Symbols with currently open positions
+
+RTB (Ready-To-Buy) signal symbols
+
+Merge these:
+
+const requiredSymbols = new Set([
+  ...fx5ActivePoolSymbols,
+  ...symbolsWithOpenPositions,
+  ...rtbSignalSymbols,
+]);
+
+this.subscribeTo(requiredSymbols);
+
+
+Kraken WebSocket subscription rate limits:
+
+They do not restrict number of subscribed symbols in practice
+
+Subscribing to 20–50 symbols is typical
+
+Our pools are <25 symbols → safe
+
+🔧 PART 5 — Fix Stop Logic So Restart Works Reliably
+
+Simulation STOP must guarantee that the next START:
+
+Calls manager.start()
+
+Calls executionEngine.start()
+
+Calls krakenWebSocketAdapter.start()
+
+In stop path:
+manager.isRunning = false;
+await manager.stop();
+
+// Preferred: destroy manager on stop
+global.paperPortfolioManager = null;
+
+
+If manager is not destroyed:
+
+Ensure manager.start() can restart:
+
+Recreate timers
+
+Restart WebSocket
+
+Re-subscribe to required symbols
+
+Either option is acceptable if restart is guaranteed.
+
+🧪 PART 6 — REQUIRED VERIFICATION (MANDATORY)
+
+Use test user credentials:
+
+username: testuser123
+password: SecurePass123!
+
+✔ VERIFICATION STEPS
+STEP 1 — Reset Environment
+
+No active sessions
+
+Global manager = null OR isRunning = false
+
+STEP 2 — Start Simulation
+
+Provide logs showing:
+
+[DEBUG-B9][MANAGER_CREATED]
+
+[DEBUG-B9][MANAGER_START_CALLED]
+
+[ENGINE][EXECUTION_START]
+
+[KrakenWS][START]
+
+[KrakenWS][SUBSCRIPTIONS_UPDATED] with actual symbol list
+
+Live price tick logs MUST appear.
+
+STEP 3 — Check ActiveTrades Behavior
+
+Prices must update every second
+
+Trades must close normally with TP/SL
+
+STEP 4 — Stop Simulation → Start Simulation Again
+
+Show:
+
+No improper early-return
+
+Engine start chain logs again
+
+WebSocket running and subscribed
+
+STEP 5 — Diagnostics Snapshot
+
+Return response payloads from:
+
+/api/diagnostics/ws-price-engine?raw=1
+
+/api/paper-sim/status
+
+📌 SUCCESS CRITERIA
+
+Replit must demonstrate:
+
+✔ WebSocket always starts on simulation start
+✔ pricing engine receives live tick data
+✔ TP/SL exits occur naturally
+✔ Subscriptions include FX5 pool, open positions, and RTB symbols
+✔ Start/stop/restart cycle works without manual resets
+✔ No improper early-return path blocks engine startup
+
+✅ END OF DIRECTIVE
