@@ -7474,6 +7474,39 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     
     try {
       console.log(`[41D-ROUTE-3] Entering try block (t+${Date.now()-t0}ms)`);
+      
+      // Phase 8.8.3-B7.A: ALWAYS run hard reset FIRST before any initialization
+      // This ensures no ghost trades, positions, or stale state from previous sessions
+      console.log(`[B7.A][START] Running hard reset before simulation start...`);
+      const { paperSessionResetService } = await import('./services/paper-session-reset.js');
+      const resetResult = await paperSessionResetService.hardResetPaperSimulation('paper');
+      console.log(`[B7.A][START] Hard reset complete:`, {
+        success: resetResult.success,
+        closedTrades: resetResult.details.closedTrades,
+        clearedPositions: resetResult.details.clearedPositions,
+        elapsed: resetResult.message
+      });
+      
+      // Broadcast reset completion to invalidate UI caches immediately
+      const { contextBridge } = await import('./services/context-bridge.js');
+      await contextBridge.broadcast({
+        type: 'paper_sim_reset',
+        payload: {
+          mode: 'paper',
+          resetResult: resetResult.details,
+          timestamp: new Date().toISOString(),
+          reason: 'simulation_start_cleanup'
+        },
+        mode: 'paper'
+      });
+      
+      // Invalidate Bob Core caches after reset
+      bobCore.invalidate('metrics:paperSimStatus');
+      bobCore.invalidate('metrics:portfolioOverview');
+      bobCore.invalidate('metrics:openPositions');
+      bobCore.invalidate('metrics:recentTrades');
+      console.log(`[B7.A][START] UI caches invalidated`);
+      
       // Phase 27.F.14.J: Handle "Start New Simulation" mode
       if (mode === 'new') {
         console.log(`[41D-ROUTE-4] Mode is 'new' (t+${Date.now()-t0}ms)`);

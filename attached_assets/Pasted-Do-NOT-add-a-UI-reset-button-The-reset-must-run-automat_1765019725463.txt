@@ -1,0 +1,81 @@
+Do NOT add a UI reset button.
+
+The reset must run automatically every time I start a new paper simulation.
+
+The B7.A Hard Reset Service exists, but it is NOT wired into the paper simulator start flow. This is why ghost trades still show both in the backend AND in the UI.
+
+Please implement the following fixes:
+
+---
+
+### 1. Wire Hard Reset Into /api/paper-sim/start
+Open server/routes.ts.
+
+In the POST /api/paper-sim/start handler, BEFORE any of the following:
+- engine.start()
+- orchestrator.start()
+- session initialization
+- diagnostics initialization
+
+Insert this line:
+
+    await paperSessionResetService.hardResetPaperSimulation();
+
+This must be the very first operation in the start handler.
+
+---
+
+### 2. Ensure the Hard Reset Service Clears ALL Trade State Everywhere
+Confirm that hardResetPaperSimulation() does ALL of the following:
+
+**A. Database state**
+- DELETE all rows from paper_sim_open_positions
+- UPDATE paper_sim_trades SET closed_at = NOW() WHERE closed_at IS NULL
+
+**B. In-memory state**
+- clear engine open positions map
+- clear orchestrator open trades buffer
+- clear any internal position caches
+- clear signal queues and strategy state
+- clear subscription state in krakenWebSocketAdapter
+
+**C. Diagnostics state**
+- reset B4 Funnel diagnostics
+- reset B5 Sizing Audit buffer
+- reset AJ17 WebSocket diagnostics
+
+**D. UI state**
+The UI’s "Open Trades" tab must show ZERO open trades immediately after reset.
+
+If any cached UI state exists in the TradingStore or React Query caches, clear them as part of the reset response.
+
+---
+
+### 3. Confirm That the Start Route Enforces a Clean System
+After implementing the above:
+
+A. Show me the updated /api/paper-sim/start route before and after edits.
+
+B. Simulate calling /api/paper-sim/start and run this backend audit:
+
+- Count open positions
+- Count unclosed trades
+- Count in-memory engine open positions
+- Count orchestrator open trades
+- Confirm ALL are zero BEFORE the engine begins trading
+
+C. Then confirm the UI shows NO open trades immediately after reset.
+
+---
+
+### 4. Remove Any Reset Button Work
+If any code was created for a UI reset button, delete it.  
+Resetting must be fully automatic and must NOT require UI interaction.
+
+---
+
+This update ensures:
+- No ghost trades in backend
+- No ghost trades in memory
+- No ghost trades in the UI
+- Every simulation always starts clean without manual SQL or UI involvement
