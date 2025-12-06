@@ -251,22 +251,28 @@ export class PaperExecutionEngine {
         let currentPrice: number;
         let priceSource: string;
         
-        if (priceResult !== null && priceResult.price !== null) {
+        // Phase 8.8.3-B9: Strict price source validation - no mock pricing
+        if (priceResult !== null && priceResult.price !== null && priceResult.source !== 'no_reliable_price') {
+          // Phase 8.8.3-B9: Reject mock prices in production mode
+          if (priceResult.source === 'mock') {
+            console.warn(`[B9.PRICING][SKIP_DUE_TO_MOCK] ${position.symbol}: Mock price rejected, skipping position check`);
+            continue;
+          }
           currentPrice = priceResult.price;
-          priceSource = priceResult.source === 'mock' ? 'mock' : 'ws_cache';
+          priceSource = priceResult.source;
         } else {
           // Fallback to Kraken REST if cache unavailable
           try {
             const ticker = await this.krakenService.getTicker(position.symbol);
             const tickerData = Object.values(ticker)[0];
             if (!tickerData) {
-              console.warn(`[PaperExecution:${this.mode}] No price data for ${position.symbol}`);
+              console.warn(`[B9.PRICING][SKIP_DUE_TO_NO_PRICE] ${position.symbol}: No Kraken REST data, skipping position check`);
               continue;
             }
             currentPrice = parseFloat(tickerData.c[0]);
             priceSource = 'kraken_rest';
-          } catch {
-            console.warn(`[PaperExecution:${this.mode}] No price data for ${position.symbol}`);
+          } catch (krakenError) {
+            console.warn(`[B9.PRICING][SKIP_DUE_TO_NO_PRICE] ${position.symbol}: Kraken REST failed, skipping position check`, krakenError);
             continue;
           }
         }
@@ -1673,6 +1679,10 @@ export class PaperExecutionEngine {
       } catch (wsSubError) {
         console.warn(`[KrakenWS] Failed to subscribe to ${signal.symbol} (REST fallback active):`, wsSubError);
       }
+
+      // Phase 8.8.3-B9: Seed price cache with entry price to prevent mock fallback
+      livePricingAdapter.seedLastKnownGoodPrice(signal.symbol, actualEntryPrice);
+      console.log(`[B9.PRICING][ENTRY_SEED] ${signal.symbol}: Seeded at entry price $${actualEntryPrice.toFixed(2)}`)
 
       // [AJ19-B] Trade lifecycle OPEN event - log slot counts
       try {
