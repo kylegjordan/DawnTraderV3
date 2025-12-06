@@ -1,0 +1,224 @@
+✅ DIRECTIVE — Phase 8.8.3 – B9 “Execution Engine Integrity + Real Pricing Enforcement”
+CONTEXT
+
+DawnTrader V3 must run exclusively on the modern execution engine (paper-execution-engine.ts).
+Paper simulations must never use mock pricing unless explicitly in a developer/testing mode.
+
+Recent findings show:
+
+The correct V3 engine is being used, but old legacy engine code (paper-execution.ts) remains in the repository and can cause confusion or regressions.
+
+Mock pricing is being used during paper trading, causing fake prices such as $100 or $170 for altcoins (e.g., LDOUSD, NANOUSD, ADAAUD), which produced massive and unrealistic P&L percentages (+12,000% to +20,000%).
+
+Fallback pricing behavior is unsafe:
+
+When WS/REST price is unavailable → system uses mock → dangerous.
+
+Entry prices are not stored as “last known good” reference.
+
+This leads to fantasy exits even though the engine logic is correct.
+
+To stabilize DawnTrader V3 and ensure accurate strategy behavior, these issues must be corrected in a coordinated way.
+
+🎯 GOALS
+A. Ensure only the V3 engine (paper-execution-engine.ts) is ever used in runtime
+
+Eliminate or isolate the legacy paper-execution.ts.
+
+Add guardrails to prevent accidental legacy imports.
+
+Confirm all runtime imports use the V3 engine.
+
+B. Disable mock pricing in real paper simulation workflows
+
+Mock pricing should be used only for explicit developer testing, not for normal trading simulations.
+
+For production-like paper mode:
+
+Do NOT fall back to $100 or $170 fabricated mock prices.
+
+If real pricing is unavailable → mark the symbol as “no reliable price” → skip trade entry or skip closing rather than fabricate a price.
+
+Continue logging diagnostics, not using mock price for live simulation.
+
+C. Strengthen price-cache behavior for reliability
+
+When a trade opens:
+
+Seed the price cache with the entry price as lastKnownGoodPrice.
+
+When attempting to close:
+
+Prefer:
+
+Fresh Kraken WS price
+
+Fresh REST price
+
+lastKnownGoodPrice, NOT mock
+
+Retain B8.PNL anomaly logs.
+
+This prevents price “teleportation” during brief data gaps.
+
+🛠️ IMPLEMENTATION INSTRUCTIONS
+STEP 1 — Execution Engine Integrity (remove legacy engine)
+
+Identify file:
+server/services/paper-execution.ts
+
+Move this file into a new folder:
+server/legacy/paper-execution.legacy.ts
+(or delete entirely if safe).
+
+Update build system so that server/legacy is not included in imports automatically:
+
+Adjust tsconfig.json includes/excludes accordingly.
+
+Add a guard in the V3 runtime:
+
+Inside paper-sim-service.ts, mode-registry.ts, or a central service initializer, add:
+
+if ((global as any).PaperExecutionServiceLegacy) {
+  throw new Error('Legacy PaperExecutionService is not supported in DawnTrader V3.');
+}
+
+
+Search entire repo for accidental use of legacy class name:
+
+Reject or replace any occurrence of:
+
+PaperExecutionService
+
+paper-execution.ts
+
+All must be removed or replaced with:
+
+import { PaperExecutionEngine } from './paper-execution-engine';
+
+STEP 2 — Disable Mock Pricing in Paper Mode
+
+In live-pricing-adapter.ts, update constructor behavior:
+
+When running DawnTrader V3 paper simulations in the real app:
+
+this.useMockMode = false;
+
+
+Mock mode should only be activated via explicit env flags during dev/testing.
+
+In getPriceWithFallback(symbol):
+
+Replace mock fallback logic:
+
+CURRENT (unsafe):
+
+return await this.fetchMockPrice(symbol);
+
+
+REQUIRED:
+
+this.logger?.warn('[B9.PRICING][NO_REAL_PRICE]', { symbol });
+
+return {
+  price: null,
+  source: 'no_reliable_price',
+  timestamp: new Date().toISOString(),
+};
+
+
+Meaning:
+
+NO fabricated prices.
+
+Engine must handle “no price available.”
+
+Update engine logic:
+
+In entry and exit operations, if price source is "no_reliable_price":
+
+Do not enter a trade.
+
+Do not close a position at a fantasy price.
+
+Log diagnostic:
+
+this.logger?.warn('[B9.PRICING][SKIP_DUE_TO_NO_PRICE]', { symbol });
+
+
+Confirm that all WS/REST price requests occur before mock fallback.
+
+STEP 3 — Strengthen Price Cache: seed on entry & fall back to last-known-good
+3A — When a trade opens:
+
+Update paper-execution-engine.ts:
+
+livePricingAdapter.seedLastKnownGoodPrice(symbol, entryPrice);
+
+
+Add this helper:
+
+seedLastKnownGoodPrice(symbol: string, price: number) {
+  this.priceCache.set(symbol, {
+    price,
+    source: 'entry_seed',
+    timestamp: new Date().toISOString(),
+  });
+}
+
+3B — When closing a trade:
+
+Update close flow to:
+
+Try fresh WS price
+
+Try fresh REST price
+
+Else → use lastKnownGoodPrice
+
+Else → skip and log anomaly
+
+🔍 VERIFICATION EXPECTATIONS
+
+After implementation, running a NEW simulation must show:
+
+1. No mock pricing logs
+
+No lines like:
+
+[Pricing-MOCK]
+basePrice = 100
+
+2. Engine runtime must report only V3 engine
+
+On start:
+
+[ENGINE][INIT] Using PaperExecutionEngine (V3)
+
+
+No logs referencing legacy engine.
+
+3. No exit prices of $99.85 or $170 unless these are real Kraken prices
+
+Exit price sources should be:
+
+source: 'kraken_ws'
+source: 'kraken_rest'
+source: 'entry_seed'
+source: 'last_known_good'
+
+
+Never:
+
+source: mock
+
+4. B8.PNL instrumentation must appear on every close attempt
+[B8.PNL][EXIT_SOURCE]
+[B8.PNL][CLOSE_ATTEMPT]
+[B8.PNL][CLOSE_COMPUTED]
+
+5. No anomalous P&L spikes unless truly market-driven
+
+If prices move realistically, trades close realistically.
+
+✅ END OF DIRECTIVE
