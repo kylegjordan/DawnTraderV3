@@ -1,0 +1,200 @@
+We’re working in DawnTrader V3.
+Phase 8.8.3 – B7 Phase 1: Make “Start New Simulation” perform a guaranteed hard reset.
+
+Important context:
+
+There is no UI reset button and we do not want one.
+
+A hard reset must run automatically whenever I start a new paper simulation, and only then.
+
+A “continue simulation” path should NOT reset, but must be explicit, never implicit.
+
+The reset logic (B7.A + PaperSessionResetService) is already implemented – we need to be sure it is always called on the correct path, and never skipped because of missing mode values.
+
+Step 1 – Normalize /api/paper-sim/start API contract
+
+Open server/routes.ts and find the apiRouter.post('/paper-sim/start', ...) handler.
+
+Update the request parsing so that:
+
+mode is required for paper simulation starts.
+
+Valid modes are "new" and "continue".
+
+If mode is missing or invalid, respond with HTTP 400 and a clear error.
+
+Target shape (pseudocode):
+
+apiRouter.post('/paper-sim/start', authenticateToken, async (req, res) => {
+  try {
+    const { mode, initialBalance } = req.body || {};
+
+    if (mode !== 'new' && mode !== 'continue') {
+      return res.status(400).json({
+        error: 'Invalid mode. Expected "new" or "continue" for paper-sim start.'
+      });
+    }
+
+    // For paper sim:
+    if (mode === 'new') {
+      // B7.A HARD RESET MUST RUN FIRST
+      await storage.hardResetPaperSim();           // DB: trades + positions
+      await paperSessionResetService.resetPaper(); // engine/orchestrator/FX5/WS/diagnostics
+    }
+
+    // Existing logic for starting the engine / session goes here
+    // (respect initialBalance only when mode === 'new')
+  } catch (err) {
+    // existing error handling
+  }
+});
+
+
+Make sure the hard reset (storage.hardResetPaperSim() and paperSessionResetService.resetPaper()) is executed:
+
+Only when mode === 'new'.
+
+Before any engine/orchestrator/session start logic.
+
+In exactly one place – this route – so there’s no duplicate or stale reset paths.
+
+Leave schema and existing reset logic intact:
+
+hardResetPaperSim must continue to:
+
+DELETE all rows from paper_sim_open_positions.
+
+UPDATE paper_sim_trades SET closed_at = NOW(), close_reason = 'hard_reset' WHERE closed_at IS NULL.
+
+Do not add any mode columns to the DB.
+
+Step 2 – Fix all UI entry points to send the correct mode
+2a. top-bar.tsx
+
+Open client/src/components/layout/top-bar.tsx.
+
+Find handleStartNewSimulation() and handleContinueSimulation().
+
+Ensure they call the API with the explicit body:
+
+// Start a *new* paper simulation with a new initial balance
+const handleStartNewSimulation = async () => {
+  // however you get newBalance in this component:
+  const newBalance = ...;
+
+  await apiRequest('POST', '/api/paper-sim/start', {
+    mode: 'new',
+    initialBalance: newBalance,
+  });
+};
+
+// Continue existing simulation
+const handleContinueSimulation = async () => {
+  await apiRequest('POST', '/api/paper-sim/start', {
+    mode: 'continue',
+  });
+};
+
+
+Confirm there is no code path in top-bar.tsx that calls '/api/paper-sim/start' without a body.
+
+2b. use-trading.tsx
+
+Open client/src/hooks/use-trading.tsx.
+
+Find startTradingMutation (or equivalent).
+
+It currently looks like (simplified):
+
+const startTradingMutation = useMutation({
+  mutationFn: async (mode: 'live' | 'paper') => {
+    if (mode === 'paper') {
+      return await apiRequest('POST', '/api/paper-sim/start');
+    } else {
+      return await apiRequest('POST', '/api/trading/start', { mode });
+    }
+  },
+  ...
+});
+
+
+Replace the paper branch so that it also requires a mode (new vs continue) and never calls the endpoint with an empty body. For example, change the mutation to accept a structured payload:
+
+type PaperStartOptions =
+  | { type: 'paper-new'; initialBalance: number }
+  | { type: 'paper-continue' }
+  | { type: 'live' };
+
+const startTradingMutation = useMutation({
+  mutationFn: async (options: PaperStartOptions) => {
+    if (options.type === 'paper-new') {
+      return await apiRequest('POST', '/api/paper-sim/start', {
+        mode: 'new',
+        initialBalance: options.initialBalance,
+      });
+    }
+
+    if (options.type === 'paper-continue') {
+      return await apiRequest('POST', '/api/paper-sim/start', {
+        mode: 'continue',
+      });
+    }
+
+    if (options.type === 'live') {
+      return await apiRequest('POST', '/api/trading/start', { mode: 'live' });
+    }
+
+    throw new Error('Unsupported start options');
+  },
+  ...
+});
+
+
+Update any callers of startTradingMutation to pass one of these explicit options.
+If the TopBar component doesn’t use this hook, either:
+
+update it to use the new structured mutation, or
+
+ensure no other component is using the old “paper with no body” call.
+
+Confirm via a code search (rg "paper-sim/start" client/src) that every frontend call to /api/paper-sim/start now passes a body with mode: 'new' or mode: 'continue'.
+
+Step 3 – Logging and verification
+
+In server/routes.ts in the /paper-sim/start handler, add a concise log line before the reset:
+
+console.log('[B7.A][START]', { mode, initialBalance });
+if (mode === 'new') {
+  console.log('[B7.A][HARD_RESET] Running hardResetPaperSim + resetPaper() before start');
+  // reset calls...
+}
+
+
+After implementing the changes, do the following verification (and include results in your notes):
+
+Before pressing Start:
+
+SELECT COUNT(*) AS unclosed_trades FROM paper_sim_trades WHERE closed_at IS NULL;
+SELECT COUNT(*) AS open_positions  FROM paper_sim_open_positions;
+
+
+Record both counts.
+
+Press Start New Simulation from the UI with a new balance.
+
+Immediately after Start returns 200:
+
+SELECT COUNT(*) AS unclosed_trades FROM paper_sim_trades WHERE closed_at IS NULL;
+SELECT COUNT(*) AS open_positions  FROM paper_sim_open_positions;
+
+
+Expected:
+
+Both counts should be 0 (no ghost trades/positions).
+
+Logs should show [B7.A][START] { mode: 'new', ... } followed by [B7.A][HARD_RESET] ....
+
+Confirm in the logs that the first trades only appear after a few scan cycles, not immediately at cycle 1, and that there is no burst of dozens of trades in the first minute.
+
+Do NOT add any reset button to the UI.
+The only way to trigger a hard reset should be starting a new paper simulation via the mode: 'new' path.

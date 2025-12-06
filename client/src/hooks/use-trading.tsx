@@ -130,15 +130,34 @@ export function useTrading() {
     refetchOnWindowFocus: true
   });
 
+  // Phase 8.8.3-B7.1: Structured payload for paper simulation start
+  // Prevents accidental calls without explicit mode
+  type StartTradingOptions =
+    | { type: 'paper-new'; initialBalance: number }
+    | { type: 'paper-continue' }
+    | { type: 'live' };
+
   const startTradingMutation = useMutation({
-    mutationFn: async (mode: 'live' | 'paper') => {
-      if (mode === 'paper') {
-        // Start Paper Trading Simulation Engine
-        return await apiRequest('POST', '/api/paper-sim/start');
-      } else {
-        // Start Live Trading Engine
-        return await apiRequest('POST', '/api/trading/start', { mode });
+    mutationFn: async (options: StartTradingOptions) => {
+      // Phase 8.8.3-B7.1: Paper simulation requires explicit mode ('new' or 'continue')
+      if (options.type === 'paper-new') {
+        return await apiRequest('POST', '/api/paper-sim/start', {
+          mode: 'new',
+          initialBalance: options.initialBalance,
+        });
       }
+
+      if (options.type === 'paper-continue') {
+        return await apiRequest('POST', '/api/paper-sim/start', {
+          mode: 'continue',
+        });
+      }
+
+      if (options.type === 'live') {
+        return await apiRequest('POST', '/api/trading/start', { mode: 'live' });
+      }
+
+      throw new Error('Unsupported start options');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });

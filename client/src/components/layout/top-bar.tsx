@@ -359,7 +359,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     console.log('[Phase-27.F.6] Live trading start confirmed');
     
     try {
-      await startTrading('live');
+      await startTrading({ type: 'live' });
       
       // Minimal invalidations - WebSocket will handle most updates
       await queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
@@ -455,9 +455,9 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       // Close the modal
       setShowBalanceConfirmation(false);
       
-      // Retry starting trading
+      // Retry starting trading with explicit continue mode
       console.log('[Phase-27.F.14.D-POST] Balance confirmed, retrying start...');
-      await startTrading('paper');
+      await startTrading({ type: 'paper-continue' });
       
       // Phase 33.A: Toast removed - WebSocket will trigger UI feedback
     } catch (error: any) {

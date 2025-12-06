@@ -7469,43 +7469,57 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     console.log(`[41D-ROUTE-1] /paper-sim/start entered at ${new Date().toISOString()}`);
     
     const userId = req.user!.id;
-    const { mode = 'continue', initialBalance } = req.body; // Phase 27.F.14.I: Support continue/new modes
-    console.log(`[41D-ROUTE-2] userId: ${userId}, mode: ${mode}, balance: ${initialBalance}`);
+    const { mode, initialBalance } = req.body || {};
+    
+    // Phase 8.8.3-B7.1: mode is REQUIRED - must be 'new' or 'continue'
+    console.log(`[B7.1][START]`, { mode, initialBalance });
+    
+    if (mode !== 'new' && mode !== 'continue') {
+      console.log(`[B7.1][ERROR] Invalid mode: ${mode}`);
+      return res.status(400).json({
+        error: 'Invalid mode. Expected "new" or "continue" for paper-sim start.',
+        received: mode
+      });
+    }
     
     try {
       console.log(`[41D-ROUTE-3] Entering try block (t+${Date.now()-t0}ms)`);
       
-      // Phase 8.8.3-B7.A: ALWAYS run hard reset FIRST before any initialization
-      // This ensures no ghost trades, positions, or stale state from previous sessions
-      console.log(`[B7.A][START] Running hard reset before simulation start...`);
-      const { paperSessionResetService } = await import('./services/paper-session-reset.js');
-      const resetResult = await paperSessionResetService.hardResetPaperSimulation('paper');
-      console.log(`[B7.A][START] Hard reset complete:`, {
-        success: resetResult.success,
-        closedTrades: resetResult.details.closedTrades,
-        clearedPositions: resetResult.details.clearedPositions,
-        elapsed: resetResult.message
-      });
-      
-      // Broadcast reset completion to invalidate UI caches immediately
-      const { contextBridge } = await import('./services/context-bridge.js');
-      await contextBridge.broadcast({
-        type: 'paper_sim_reset',
-        payload: {
-          mode: 'paper',
-          resetResult: resetResult.details,
-          timestamp: new Date().toISOString(),
-          reason: 'simulation_start_cleanup'
-        },
-        mode: 'paper'
-      });
-      
-      // Invalidate Bob Core caches after reset
-      bobCore.invalidate('metrics:paperSimStatus');
-      bobCore.invalidate('metrics:portfolioOverview');
-      bobCore.invalidate('metrics:openPositions');
-      bobCore.invalidate('metrics:recentTrades');
-      console.log(`[B7.A][START] UI caches invalidated`);
+      // Phase 8.8.3-B7.1: Hard reset ONLY on mode='new'
+      // Continue mode preserves existing state (trades, positions, portfolio)
+      if (mode === 'new') {
+        console.log(`[B7.1][HARD_RESET] Running hardResetPaperSim + resetPaper() before new simulation...`);
+        const { paperSessionResetService } = await import('./services/paper-session-reset.js');
+        const resetResult = await paperSessionResetService.hardResetPaperSimulation('paper');
+        console.log(`[B7.1][HARD_RESET] Complete:`, {
+          success: resetResult.success,
+          closedTrades: resetResult.details.closedTrades,
+          clearedPositions: resetResult.details.clearedPositions,
+          elapsed: resetResult.message
+        });
+        
+        // Broadcast reset completion to invalidate UI caches immediately
+        const { contextBridge } = await import('./services/context-bridge.js');
+        await contextBridge.broadcast({
+          type: 'paper_sim_reset',
+          payload: {
+            mode: 'paper',
+            resetResult: resetResult.details,
+            timestamp: new Date().toISOString(),
+            reason: 'new_simulation_hard_reset'
+          },
+          mode: 'paper'
+        });
+        
+        // Invalidate Bob Core caches after reset
+        bobCore.invalidate('metrics:paperSimStatus');
+        bobCore.invalidate('metrics:portfolioOverview');
+        bobCore.invalidate('metrics:openPositions');
+        bobCore.invalidate('metrics:recentTrades');
+        console.log(`[B7.1][HARD_RESET] UI caches invalidated`);
+      } else {
+        console.log(`[B7.1][CONTINUE] Preserving existing state (no hard reset)`);
+      }
       
       // Phase 27.F.14.J: Handle "Start New Simulation" mode
       if (mode === 'new') {
