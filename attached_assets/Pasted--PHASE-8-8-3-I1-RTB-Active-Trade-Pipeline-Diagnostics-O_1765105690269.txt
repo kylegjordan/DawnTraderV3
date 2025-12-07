@@ -1,0 +1,508 @@
+✅ PHASE 8.8.3-I1 — RTB + Active-Trade Pipeline Diagnostics (OBSERVE-ONLY, NO BEHAVIOR CHANGES)
+
+Goal:
+Stop guessing. Add end-to-end diagnostics (no behavior changes) so we can prove, in one run, exactly:
+
+Why only 6–7 positions are open instead of 15.
+
+Why some trades open with exit reason unknown and weird timing.
+
+Whether the hard stop is actually closing positions vs leaving them orphaned.
+
+Whether RTB attempts are being blocked by a new / hidden reason.
+
+Whether the UI is out of sync with DB vs the in-memory engine.
+
+This is a pure diagnostic phase.
+Absolutely no functional logic changes (scanner, strategies, sizing, guardrails, trade executor, RTB logic) are allowed in I1.
+
+0. Rules and Constraints
+
+NO behavior changes. Diagnostics only.
+
+You may add logging, counters, diagnostic services, and API endpoints.
+
+You may NOT change:
+
+Guardrail conditions.
+
+Max open trades / Max positions logic.
+
+Sizing helper calculations.
+
+Strategy outputs.
+
+Scanner / RTB selection rules.
+
+Hard-stop semantics.
+
+No UI changes.
+
+Do not change React components or UI text.
+
+We’ll inspect diagnostics via logs, JSON exports, and DB snapshots.
+
+Namespace all new logs and endpoints with [8.8.3-I1].
+
+Examples:
+
+[8.8.3-I1][FX5] ...
+
+[8.8.3-I1][RTB_ATTEMPT] ...
+
+[8.8.3-I1][TRADE_OPEN] ...
+
+[8.8.3-I1][TRADE_CLOSE] ...
+
+[8.8.3-I1][HARD_STOP] ...
+
+Reuse existing diagnostics where possible.
+
+AJ19 (Max Position diagnostic) stays as-is and may be read, but do not alter its behavior.
+
+1. Document the Full Pipeline (Files + Functions)
+
+Create a new doc:
+
+docs/diagnostics/Phase-8.8.3-I1_Trading_Pipeline_Diagnostics.md
+
+In that file, document, with file + function names, the exact code paths for:
+
+FX5 Scanner / Filtered Pool
+
+Where FX5 scans are pulled and filtered.
+
+Where the FX5 filtered/active pool is stored and updated.
+
+Ready-To-Buy (RTB) Queue
+
+Where RTB entries are created from FX5 + strategy signals.
+
+Where RTB attempts are evaluated (including block reasons).
+
+Sizing + Guardrails
+
+Where the sizing helper is called for each signal.
+
+Where Max Position / Max Open Trades / LPCP / other guardrails are evaluated.
+
+Note explicitly any functions that can block an attempt before it becomes an open trade.
+
+Trade Creation (Open Trades)
+
+The function(s) that take a “passed” RTB signal and actually create:
+
+a DB position in paper_sim_open_positions
+
+an in-memory open trade
+
+Trade Closure
+
+All ways a trade can close:
+
+target hit
+
+stop loss
+
+manual close (UI X button)
+
+hard stop / session stop
+
+any other reason
+
+Where the close reason is set and written to paper_sim_trades.
+
+Session Lifecycle + Hard Stop
+
+Where paper sim sessions are started/stopped:
+
+paper-sim-service.ts
+
+any helper(s)
+
+Where the “hard stop” logic lives (forced close on stop).
+
+WebSocket + Price Engine
+
+Where WS subscriptions are initiated and tracked.
+
+Where price ticks are written to the price cache used by the trading engine.
+
+For each of the above, include:
+
+File name
+
+Function(s)
+
+Upstream input (e.g., FX5 output, StrategySignal, RTB entry)
+
+Downstream effect (e.g., RTB attempt created, trade opened, DB row inserted)
+
+This is just documentation – no code changes yet.
+
+2. Restore and Expand RTB Block-Reason Visibility
+
+Problem:
+The Ready-to-Buy tab used to show a breakdown of why attempts were blocked (max positions, max trades, LPCP, etc.). Now we only see high-level counts (Attempts, Opened, Blocked) with no per-reason breakdown.
+
+We suspect:
+
+Either the UI isn’t getting the per-reason data anymore, or
+
+A new / unexpected block reason is being used and not reported.
+
+Task 2.1 – Identify Current Block Reasons
+
+In whatever code builds RTB entries and evaluates guardrails (likely in or around signal-orchestrator.ts, risk-manager.ts, guardrail-policy.ts):
+
+Identify every place where an attempt can be blocked before becoming an open trade.
+
+Enumerate all block reasons, e.g.:
+
+MAX_POSITION
+
+MAX_TRADES
+
+POSITION_LIMIT
+
+LPCP_LOW_PRICE
+
+LPCP_ATR_TOO_LOW
+
+COOLDOWN
+
+TOO_VOLATILE
+
+UNKNOWN (if exists)
+
+Any new reason you find
+
+Write the list into:
+
+docs/diagnostics/Phase-8.8.3-I1_Trading_Pipeline_Diagnostics.md under a section:
+
+“RTB Block Reasons (Current Code)”
+
+Task 2.2 – Add Unified RTB Block Diagnostics Service
+
+Create a new service:
+
+server/services/rtb-diagnostics-service.ts
+
+Responsibilities:
+
+Maintain in-memory counters (resettable) of RTB attempts and block reasons, keyed by:
+
+symbol
+
+strategyName
+
+blockReason (string)
+
+Provide methods (usable ONLY by the existing pipeline, no new behavior):
+
+recordAttempt(symbol, strategyName);
+recordOpen(symbol, strategyName);
+recordBlock(symbol, strategyName, blockReason);
+getSummary(); // aggregated stats
+clear();      // reset counters
+
+
+Add no new guardrail decisions here; just record what the existing code already decided.
+
+Wire this into the existing RTB / guardrail pipeline:
+
+At the point where a signal is evaluated for RTB:
+
+Call recordAttempt.
+
+If it passes and becomes an open trade:
+
+Call recordOpen.
+
+If any guardrail or rule blocks it:
+
+Call recordBlock(symbol, strategyName, <existing blockReason>).
+
+All calls must log JSON to the main log with prefix:
+
+[8.8.3-I1][RTB_ATTEMPT] ...
+
+[8.8.3-I1][RTB_BLOCK] ...
+
+[8.8.3-I1][RTB_OPEN] ...
+
+with fields:
+
+{
+  "symbol": "ADAUSD",
+  "strategy": "mean_reversion",
+  "blockReason": "MAX_POSITION",  // only for RTB_BLOCK
+  "ts": "2025-12-07T10:00:51.123Z"
+}
+
+
+Task 2.3 – Add Diagnostics API Endpoint (Read-Only)
+
+Add a read-only endpoint:
+
+GET /api/diagnostics/rtb-blocks?raw=1
+
+It should:
+
+Return the current getSummary() result, including:
+
+{
+  "totals": {
+    "attempts": 2484,
+    "opened": 6,
+    "blocked": 2478
+  },
+  "byReason": {
+    "MAX_POSITION": 1800,
+    "MAX_TRADES": 120,
+    "POSITION_LIMIT": 30,
+    "LPCP_LOW_PRICE": 50,
+    "UNKNOWN": 478
+  },
+  "bySymbol": {
+    "ADAUSD": { "attempts": 200, "opened": 1, "blocked": 199, "byReason": {...} },
+    ...
+  }
+}
+
+
+Do not change existing RTB APIs or UI wiring in this phase.
+
+We’ll use this endpoint manually while running paper sim.
+
+3. Open-Trade Lifecycle Diagnostics (from Attempt → Open → Close)
+
+We’re seeing:
+
+Open trades appearing before anything shows in RTB.
+
+Trades closing with Unknown reasons, then later flipping to manual_stop.
+
+Hard stop leaving positions behind / creating new ones right at shutdown.
+
+We need a single audit trail for each trade.
+
+Task 3.1 – Trade Lifecycle ID
+
+Ensure that every trade / position has a stable ID that can be followed end-to-end. If a suitable ID already exists (e.g. tradeId or positionId), use that.
+
+If not already present, add a lifecycle ID field to:
+
+RTB entry
+
+Position / trade model (in memory + DB)
+
+WITHOUT changing behavior, add a helper:
+
+server/services/trade-lifecycle-diagnostics.ts
+
+Responsibilities:
+
+For each trade lifecycle, log structured JSON events:
+
+[8.8.3-I1][TRADE_SIGNAL] — when a StrategySignal is accepted into RTB.
+
+[8.8.3-I1][TRADE_OPEN] — when a trade is created from RTB.
+
+[8.8.3-I1][TRADE_UPDATE] — when P&L / price is updated.
+
+[8.8.3-I1][TRADE_CLOSE] — when the trade is closed, with:
+
+closeReason
+
+closedAt
+
+exitPrice
+
+[8.8.3-I1][TRADE_FORCE_CLOSE] — when closed as part of a hard stop.
+
+Each event should include at least:
+
+{
+  "tradeId": "60371b2f-...",
+  "symbol": "WIFUSD",
+  "strategy": "mean_reversion",
+  "eventType": "TRADE_OPEN",
+  "source": "normal" | "hard_stop" | "manual",
+  "closeReason": "manual_stop" | "target_hit" | "stop_loss" | "unknown",
+  "ts": "2025-12-07T10:00:51.123Z"
+}
+
+
+Task 3.2 – No Behavior Changes on Hard Stop
+
+In paper-sim-service.ts (and any helper that performs hard stop):
+
+Do NOT change the logic of which positions are closed.
+
+After the existing close logic runs, call into the diagnostic helper to emit:
+
+[8.8.3-I1][HARD_STOP_SUMMARY]
+
+with:
+
+{
+  "sessionId": "...",
+  "openPositionsBefore": 7,
+  "positionsClosedByHardStop": 7,
+  "positionsRemainingOpen": 0,
+  "ts": "...",
+  "dbCounts": {
+    "paper_sim_open_positions": 0,
+    "paper_sim_trades": 13
+  }
+}
+
+
+(You can gather dbCounts via existing session/DB services – again, read-only, no behavior changes.)
+
+4. Active-Trade Slot & Guardrail Diagnostics (Why Only 6–7 Trades?)
+
+We need to tell if the “open slot” logic is actually capping at 6–7, or if something upstream is starving attempts.
+
+In the component that enforces:
+
+Max open trades (e.g., 15)
+
+Any per-slot or per-strategy caps
+
+add diagnostic logging:
+
+[8.8.3-I1][SLOT_STATE] once per evaluation cycle, including:
+
+{
+  "ts": "...",
+  "sessionId": "...",
+  "maxOpenTradesConfigured": 15,
+  "currentOpenTrades": 7,
+  "pendingSignals": 23,
+  "rtbQueueLength": 9,
+  "blockReasonsSnapshot": {
+    "MAX_TRADES": 0,
+    "MAX_POSITION": 18,
+    "POSITION_LIMIT": 2
+  }
+}
+
+
+Do not change the actual decision logic; just emit the snapshot.
+
+5. Minimal WebSocket Linkage Check (For Open Positions Only)
+
+We’ve already debugged WS symbol normalization, but we still need a lightweight check that each open position actually has a live WS feed when the engine is running.
+
+Add a method (in an existing WS diagnostic or a new helper, whichever is cleaner):
+
+getWsStatusForSymbol(symbol: string) → returns:
+
+{
+  symbol: string;           // internal, e.g. "XXRPZUSD"
+  wsSymbol: string | null;  // Kraken format, e.g. "XRP/USD"
+  subscribed: boolean;
+  lastTickSource: "kraken_ws" | "coingecko" | "last_known_good" | null;
+  lastTickAt: string | null;
+}
+
+
+Then add a diagnostics endpoint:
+
+GET /api/diagnostics/open-position-ws-linkage?raw=1
+
+This should:
+
+Look up all current open positions from paper_sim_open_positions.
+
+For each, call getWsStatusForSymbol.
+
+Return a JSON array like:
+
+[
+  {
+    "symbol": "WIFUSD",
+    "wsSymbol": "WIF/USD",
+    "subscribed": true,
+    "lastTickSource": "kraken_ws",
+    "lastTickAt": "2025-12-07T09:33:23.260Z",
+    "ageMs": 3400
+  },
+  ...
+]
+
+
+No subscription logic changes; just report the current state.
+
+6. Runtime Test Script (How Replit Should Run This Phase)
+
+At the end of implementation, Replit should:
+
+Clean start
+
+Confirm /api/paper-sim/status = isRunning: false.
+
+Confirm DB has no open positions.
+
+Start paper sim in the UI (paper mode, FX5 on, same configuration you used today).
+
+Let it run for 25–30 minutes (enough to:
+
+Open multiple trades
+
+Cycle RTB lists
+
+Hit some guardrails
+
+During / after the run, Replit should capture these artifacts and put them in /diagnostics:
+
+ws_diagnostics_post_I1.json
+
+Output of /api/diagnostics/ws-price-engine?raw=1
+
+Output of /api/diagnostics/open-position-ws-linkage?raw=1
+
+rtb_block_summary_post_I1.json
+
+Output of /api/diagnostics/rtb-blocks?raw=1
+
+trade_lifecycle_log_post_I1.json
+
+Filter of /tmp/logs/... for [8.8.3-I1][TRADE_*], [8.8.3-I1][HARD_STOP_*]
+
+db_open_positions_post_I1.json
+
+DB snapshot of paper_sim_open_positions
+
+db_recent_trades_post_I1.json
+
+DB snapshot of paper_sim_trades for the current session
+
+sim_status_post_I1.json
+
+Output of /api/paper-sim/status
+
+Then stop trading via the UI hard stop, wait until /api/paper-sim/status reports isRunning: false, and capture a second set of:
+
+db_open_positions_post_I1_after_stop.json
+
+db_recent_trades_post_I1_after_stop.json
+
+rtb_block_summary_post_I1_after_stop.json
+
+trade_lifecycle_log_post_I1_after_stop.json
+
+Summarize in docs/diagnostics/Phase-8.8.3-I1_Trading_Pipeline_Diagnostics.md:
+
+Max open trades observed vs configured.
+
+Breakdown of RTB block reasons.
+
+Whether any trades closed with Unknown closeReason.
+
+Whether any positions remained open after hard stop.
+
+Whether any open positions had WS subscribed = false or stale ageMs.
