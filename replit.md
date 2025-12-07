@@ -39,6 +39,8 @@ Phase 8.8.3-B9 (Execution Engine Integrity) ensures P&L calculations use only re
 
 Phase 8.8.3-B9.FIX-WS-START (WebSocket Startup Fix) fixes a critical bug where the Kraken WebSocket never started on simulation start. The root cause was an early-return block in `startPaperSimulation()` that bypassed `manager.start()` when session and manager both existed but manager wasn't running. The fix adds `getIsRunning()` check before early-return, ensuring WebSocket starts even when manager exists but is idle. Diagnostic logging added with markers `[DEBUG-B9]` for startup chain tracing. `KrakenWebSocketAdapter.stop()` now clears `pendingSubscriptions` to prevent stale resubscriptions on restart.
 
+Phase 8.8.4 (WebSocket Symbol Normalization) implements bidirectional symbol mapping for Kraken WebSocket to ensure real-time price updates at 1.5-second intervals. Key changes: (1) `KrakenPairMetadataService` enhanced with dedicated `wsSymbolToPairId` map for clean reverse lookups from WS symbols (XRP/USD) to DB pairIds (XXRPZUSD), avoiding collisions with `exchangeToInternal`. (2) `normalToKrakenSymbol()` prioritizes metadata service lookups before legacy fallbacks, with `convertInternalToWsFormat()` as last resort for cold-start resilience. (3) `mapKrakenPairToInternalSymbol()` uses `getPairId()` for incoming ticks, ensuring price cache keys match DB format. (4) Added `unrecognizedSymbols` diagnostics and DB verification after position closes.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed (`wss://ws.kraken.com`) for open trade price monitoring.
