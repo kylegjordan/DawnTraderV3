@@ -1,0 +1,61 @@
+{
+    "ok": true,
+    "mode": "paper",
+    "count": 6,
+    "positions": [
+        {
+            "id": "0b3b401d-2cdb-4231-ad34-6fca2cf46856",
+            "symbol": "SUSHIUSD",
+            "quantity": 355.49897977,
+            "avgPrice": 0.32791824,
+            "stopLoss": 0.323829,
+            "takeProfit": 0.47107753,
+            "unrealizedPnl": 0
+        },
+        {
+            "id": "c275babe-510e-468e-a944-2ed17dd2368f",
+            "symbol": "ETHW/USD",
+            "quantity": 204.72485261,
+            "avgPrice": 0.56942085,
+            "stopLoss": 0.564302,
+            "takeProfit": 0.5771,
+            "unrealizedPnl": 0
+        },
+        {
+            "id": "0e81930d-6ac3-4dbd-865d-245a6befab00",
+            "symbol": "AKTUSD",
+            "quantity": 266.82816954,
+            "avgPrice": 0.43689015,
+            "stopLoss": 0.431442,
+            "takeProfit": 0.54521961,
+            "unrealizedPnl": 0
+        },
+        {
+            "id": "8590490d-62b5-4e13-bd10-515a46414b6b",
+            "symbol": "XRPUSDC",
+            "quantity": 56.96300868,
+            "avgPrice": 2.04649654,
+            "stopLoss": 2.0209761,
+            "takeProfit": 2.12416551,
+            "unrealizedPnl": 0
+        },
+        {
+            "id": "5a6e340a-48cd-483c-816a-3a229d9b0d33",
+            "symbol": "TRACEUR",
+            "quantity": 259.27250008,
+            "avgPrice": 0.44962192,
+            "stopLoss": 0.444015,
+            "takeProfit": 0.49826364,
+            "unrealizedPnl": 0
+        },
+        {
+            "id": "84697526-edc1-4d1e-9d4f-0d76fd08c7bb",
+            "symbol": "XXRPZCAD",
+            "quantity": 41.2002963,
+            "avgPrice": 2.82946023,
+            "stopLoss": 2.794176,
+            "takeProfit": 3.05444313,
+            "unrealizedPnl": 0
+        }
+    ]
+}

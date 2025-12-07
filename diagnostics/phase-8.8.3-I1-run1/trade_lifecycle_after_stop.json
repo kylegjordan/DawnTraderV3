@@ -1,0 +1,216 @@
+{
+    "ok": true,
+    "timestamp": "2025-12-07T12:11:29.194Z",
+    "sessionStart": "2025-12-07T11:37:01.954Z",
+    "totalSignals": 0,
+    "totalOpened": 12,
+    "totalClosed": 6,
+    "totalForceClosed": 6,
+    "byCloseReason": {
+        "manual_stop": 6
+    },
+    "byStrategy": {
+        "vwap_pullback": {
+            "opened": 1,
+            "closed": 1
+        },
+        "mean_reversion": {
+            "opened": 10,
+            "closed": 5
+        },
+        "vwap_bounce": {
+            "opened": 1,
+            "closed": 0
+        }
+    },
+    "hardStopSummaries": [
+        {
+            "sessionId": "paper_T7cXYml60E",
+            "openPositionsBefore": 6,
+            "positionsClosedByHardStop": 6,
+            "positionsRemainingOpen": 5,
+            "dbCounts": {
+                "paper_sim_open_positions": 5,
+                "paper_sim_trades": 12
+            },
+            "timestamp": "2025-12-07T12:11:08.136Z"
+        }
+    ],
+    "slotStateSnapshots": [],
+    "recentEvents": [
+        {
+            "tradeId": "0aa9c710-3ee3-4468-a44e-12cc100187ca",
+            "symbol": "SUSHIUSD",
+            "strategy": "mean_reversion",
+            "eventType": "TRADE_OPEN",
+            "source": "normal",
+            "entryPrice": 0.32791824064999997,
+            "timestamp": "2025-12-07T12:11:08.352Z"
+        },
+        {
+            "tradeId": "7719785e-9923-44a7-92fc-3d2dd0c617c1",
+            "symbol": "DOT/USD",
+            "strategy": "vwap_pullback",
+            "eventType": "TRADE_FORCE_CLOSE",
+            "source": "hard_stop",
+            "closeReason": "manual_stop",
+            "exitPrice": 2.1005937758999997,
+            "pnl": -0.40783623856109036,
+            "timestamp": "2025-12-07T12:11:07.888Z"
+        },
+        {
+            "tradeId": "52ad42ba-bea9-42f6-b911-ac1aecd46539",
+            "symbol": "ETHW/USD",
+            "strategy": "vwap_bounce",
+            "eventType": "TRADE_OPEN",
+            "source": "normal",
+            "entryPrice": 0.5694208519999998,
+            "timestamp": "2025-12-07T12:11:07.705Z"
+        },
+        {
+            "tradeId": "17f0c03b-90aa-4a88-a8d0-7aeebf34207a",
+            "symbol": "XXRPZUSD",
+            "strategy": "mean_reversion",
+            "eventType": "TRADE_FORCE_CLOSE",
+            "source": "hard_stop",
+            "closeReason": "manual_stop",
+            "exitPrice": 2.0351085013750003,
+            "pnl": -0.4078362382090418,
+            "timestamp": "2025-12-07T12:11:07.361Z"
+        },
+        {
+            "tradeId": "7fde28a7-2717-46ed-b801-f8e396871d9e",
+            "symbol": "AKTUSD",
+            "strategy": "mean_reversion",
+            "eventType": "TRADE_OPEN",
+            "source": "normal",
+            "entryPrice": 0.43689015369999995,
+            "timestamp": "2025-12-07T12:11:06.842Z"
+        },
+        {
+            "tradeId": "2f8f5ba7-f2b7-46c3-b155-027e691db9b0",
+            "symbol": "XRPUSDC",
+            "strategy": "mean_reversion",
+            "eventType": "TRADE_OPEN",
+            "source": "normal",
+            "entryPrice": 2.0464965370849995,
+            "timestamp": "2025-12-07T12:11:06.815Z"
+        },
+        {
+            "tradeId": "7e6eaac8-b5cb-4a74-8328-2d091c090a44",
+            "symbol": "ADAUSD",
+            "strategy": "mean_reversion",
+            "eventType": "TRADE_FORCE_CLOSE",
+            "source": "hard_stop",
+            "closeReason": "manual_stop",
+            "exitPrice": 0.41633598785500003,
+            "pnl": -0.40783624163973625,
+            "timestamp": "2025-12-07T12:11:06.814Z"
+        },
+        {
+            "tradeId": "4c899ef9-65af-4a0c-a1a5-817e2a0db52a",
+            "symbol": "XXRPZEUR",
+            "strategy": "mean_reversion",
+            "eventType": "TRADE_FORCE_CLOSE",
+            "source": "hard_stop",
+            "closeReason": "manual_stop",
+            "exitPrice": 1.7533759850000001,
+            "pnl": -0.2004560781362985,
+            "timestamp": "2025-12-07T12:11:06.230Z"
+        },
+        {
+            "tradeId": "c2b07d02-7807-47e1-89a2-aa415bce38af",
+            "symbol": "TRACEUR",
+            "strategy": "mean_reversion",
+            "eventType": "TRADE_OPEN",
+            "source": "normal",
+            "entryPrice": 0.44962192274999996,
+            "timestamp": "2025-12-07T12:11:06.004Z"
+        },
+        {
+            "tradeId": "297bc18e-5cd0-4d28-a951-728a4a9691a1",
+            "symbol": "ENAUSD",
+            "strategy": "mean_reversion",
+            "eventType": "TRADE_FORCE_CLOSE",
+            "source": "hard_stop",
+            "closeReason": "manual_stop",
+            "exitPrice": 0.259458617415,
+            "pnl": -0.4078362399875615,
+            "timestamp": "2025-12-07T12:11:05.677Z"
+        },
+        {
+            "tradeId": "456af9b4-ee2f-402f-b2c5-48a4d0fb2c50",
+            "symbol": "XXRPZCAD",
+            "strategy": "mean_reversion",
+            "eventType": "TRADE_OPEN",
+            "source": "normal",
+            "entryPrice": 2.8294602336,
+            "timestamp": "2025-12-07T12:11:05.542Z"
+        },
+        {
+            "tradeId": "c2512bbd-51db-4171-9cc8-b4074bfa646b",
+            "symbol": "ADAEUR",
+            "strategy": "mean_reversion",
+            "eventType": "TRADE_FORCE_CLOSE",
+            "source": "hard_stop",
+            "closeReason": "manual_stop",
+            "exitPrice": 0.35773257503,
+            "pnl": -0.40783624258395357,
+            "timestamp": "2025-12-07T12:11:05.146Z"
+        },
+        {
+            "tradeId": "c2512bbd-51db-4171-9cc8-b4074bfa646b",
+            "symbol": "ADAEUR",
+            "strategy": "mean_reversion",
+            "eventType": "TRADE_OPEN",
+            "source": "normal",
+            "entryPrice": 0.358269976064,
+            "timestamp": "2025-12-07T11:39:26.802Z"
+        },
+        {
+            "tradeId": "297bc18e-5cd0-4d28-a951-728a4a9691a1",
+            "symbol": "ENAUSD",
+            "strategy": "mean_reversion",
+            "eventType": "TRADE_OPEN",
+            "source": "normal",
+            "entryPrice": 0.25984838879999994,
+            "timestamp": "2025-12-07T11:39:24.565Z"
+        },
+        {
+            "tradeId": "4c899ef9-65af-4a0c-a1a5-817e2a0db52a",
+            "symbol": "XXRPZEUR",
+            "strategy": "mean_reversion",
+            "eventType": "TRADE_OPEN",
+            "source": "normal",
+            "entryPrice": 1.7528838977649999,
+            "timestamp": "2025-12-07T11:39:22.937Z"
+        },
+        {
+            "tradeId": "7e6eaac8-b5cb-4a74-8328-2d091c090a44",
+            "symbol": "ADAUSD",
+            "strategy": "mean_reversion",
+            "eventType": "TRADE_OPEN",
+            "source": "normal",
+            "entryPrice": 0.4169614263814999,
+            "timestamp": "2025-12-07T11:39:19.887Z"
+        },
+        {
+            "tradeId": "17f0c03b-90aa-4a88-a8d0-7aeebf34207a",
+            "symbol": "XXRPZUSD",
+            "strategy": "mean_reversion",
+            "eventType": "TRADE_OPEN",
+            "source": "normal",
+            "entryPrice": 2.03816574962,
+            "timestamp": "2025-12-07T11:39:18.176Z"
+        },
+        {
+            "tradeId": "7719785e-9923-44a7-92fc-3d2dd0c617c1",
+            "symbol": "DOT/USD",
+            "strategy": "vwap_pullback",
+            "eventType": "TRADE_OPEN",
+            "source": "normal",
+            "entryPrice": 2.1037493977499997,
+            "timestamp": "2025-12-07T11:39:06.059Z"
+        }
+    ]
+}

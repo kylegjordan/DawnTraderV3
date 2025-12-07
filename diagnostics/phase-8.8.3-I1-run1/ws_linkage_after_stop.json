@@ -1,0 +1,61 @@
+{
+    "ok": true,
+    "timestamp": "2025-12-07T12:11:32.618Z",
+    "mode": "paper",
+    "openPositionCount": 6,
+    "wsSubscribedCount": 0,
+    "linkedCount": 0,
+    "orphanedCount": 6,
+    "health": "degraded",
+    "linkageDetails": [
+        {
+            "positionId": "0b3b401d-2cdb-4231-ad34-6fca2cf46856",
+            "symbol": "SUSHIUSD",
+            "strategy": "mean_reversion",
+            "openedAt": "2025-12-07T12:11:07.985Z",
+            "isWebSocketSubscribed": false,
+            "linkageStatus": "ORPHANED"
+        },
+        {
+            "positionId": "c275babe-510e-468e-a944-2ed17dd2368f",
+            "symbol": "ETHW/USD",
+            "strategy": "vwap_bounce",
+            "openedAt": "2025-12-07T12:11:07.447Z",
+            "isWebSocketSubscribed": false,
+            "linkageStatus": "ORPHANED"
+        },
+        {
+            "positionId": "0e81930d-6ac3-4dbd-865d-245a6befab00",
+            "symbol": "AKTUSD",
+            "strategy": "mean_reversion",
+            "openedAt": "2025-12-07T12:11:06.551Z",
+            "isWebSocketSubscribed": false,
+            "linkageStatus": "ORPHANED"
+        },
+        {
+            "positionId": "8590490d-62b5-4e13-bd10-515a46414b6b",
+            "symbol": "XRPUSDC",
+            "strategy": "mean_reversion",
+            "openedAt": "2025-12-07T12:11:06.544Z",
+            "isWebSocketSubscribed": false,
+            "linkageStatus": "ORPHANED"
+        },
+        {
+            "positionId": "5a6e340a-48cd-483c-816a-3a229d9b0d33",
+            "symbol": "TRACEUR",
+            "strategy": "mean_reversion",
+            "openedAt": "2025-12-07T12:11:05.744Z",
+            "isWebSocketSubscribed": false,
+            "linkageStatus": "ORPHANED"
+        },
+        {
+            "positionId": "84697526-edc1-4d1e-9d4f-0d76fd08c7bb",
+            "symbol": "XXRPZCAD",
+            "strategy": "mean_reversion",
+            "openedAt": "2025-12-07T12:11:05.273Z",
+            "isWebSocketSubscribed": false,
+            "linkageStatus": "ORPHANED"
+        }
+    ],
+    "wsSubscribedSymbols": []
+}

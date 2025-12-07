@@ -1,10 +1,10 @@
 {
   "bob_snapshot": {
-    "timestamp": "2025-12-07T12:10:02.898Z",
+    "timestamp": "2025-12-07T12:12:02.951Z",
     "modules": {
       "MetricsBob": {
         "name": "MetricsBob",
-        "lastUpdate": "2025-12-07T12:10:02.892Z",
+        "lastUpdate": "2025-12-07T12:12:02.906Z",
         "stale": false,
         "hitRate": "97.3%",
         "cacheSize": 2,
@@ -12,7 +12,7 @@
       },
       "DataBob": {
         "name": "DataBob",
-        "lastUpdate": "2025-12-07T12:10:02.892Z",
+        "lastUpdate": "2025-12-07T12:12:02.906Z",
         "stale": false,
         "hitRate": "97.3%",
         "cacheSize": 2,
@@ -20,7 +20,7 @@
       },
       "ConfigBob": {
         "name": "ConfigBob",
-        "lastUpdate": "2025-12-07T12:10:02.892Z",
+        "lastUpdate": "2025-12-07T12:12:02.906Z",
         "stale": false,
         "hitRate": "97.3%",
         "cacheSize": 2,
@@ -28,7 +28,7 @@
       },
       "StrategyBob": {
         "name": "StrategyBob",
-        "lastUpdate": "2025-12-07T12:10:02.892Z",
+        "lastUpdate": "2025-12-07T12:12:02.906Z",
         "stale": false,
         "hitRate": "97.3%",
         "cacheSize": 2,
@@ -36,7 +36,7 @@
       },
       "TradeBob": {
         "name": "TradeBob",
-        "lastUpdate": "2025-12-07T12:10:02.892Z",
+        "lastUpdate": "2025-12-07T12:12:02.906Z",
         "stale": false,
         "hitRate": "97.3%",
         "cacheSize": 2,
@@ -44,7 +44,7 @@
       },
       "InsightBob": {
         "name": "InsightBob",
-        "lastUpdate": "2025-12-07T12:10:02.892Z",
+        "lastUpdate": "2025-12-07T12:12:02.906Z",
         "stale": false,
         "hitRate": "97.3%",
         "cacheSize": 2,
@@ -52,7 +52,7 @@
       },
       "UIBob": {
         "name": "UIBob",
-        "lastUpdate": "2025-12-07T12:10:02.892Z",
+        "lastUpdate": "2025-12-07T12:12:02.906Z",
         "stale": false,
         "hitRate": "97.3%",
         "cacheSize": 2,
@@ -63,8 +63,8 @@
       "modulesActive": 7,
       "totalCacheSize": 2,
       "overallHitRate": "97.3%",
-      "totalHits": 7354,
-      "totalMisses": 207
+      "totalHits": 7632,
+      "totalMisses": 215
     },
     "recentChanges": [],
     "systemHealth": "healthy",
@@ -73,23 +73,23 @@
       "warnings": [],
       "criticalIssues": [],
       "metrics": {
-        "timestamp": "2025-12-07T12:10:02.897Z",
+        "timestamp": "2025-12-07T12:12:02.950Z",
         "system": {
           "cpuUsage": 51.4,
           "memoryUsage": {
             "total": 67428118528,
-            "used": 38072328192,
-            "free": 29355790336,
-            "percentUsed": 56
+            "used": 39154606080,
+            "free": 28273512448,
+            "percentUsed": 58
           },
-          "uptime": 2895
+          "uptime": 3015
         },
         "cache": {
           "hitRate": 97,
           "missRate": 3,
-          "totalRequests": 7559,
-          "hits": 7354,
-          "misses": 205
+          "totalRequests": 7845,
+          "hits": 7632,
+          "misses": 213
         },
         "latency": {
           "cortex": null,
@@ -98,11 +98,11 @@
         },
         "schedulers": {
           "cortexSync": {
-            "uptime": 2895,
-            "lastRun": "2025-12-07T12:09:32.894Z"
+            "uptime": 3015,
+            "lastRun": "2025-12-07T12:11:32.935Z"
           },
           "analytics": {
-            "uptime": 2895,
+            "uptime": 3015,
             "lastRun": "2025-12-07T12:07:03.890Z"
           }
         },
@@ -136,7 +136,7 @@
         },
         "execution": {
           "marketDataSource": "rest_fallback",
-          "lastTickAgeMs": 12574,
+          "lastTickAgeMs": 12634,
           "avgSubmitAckMs": 0,
           "avgSlippageBps": 0,
           "avgFeesPerTrade": 0,
@@ -158,10 +158,10 @@
     "current": {
       "view": "Dashboard",
       "mode": "live",
-      "timestamp": "2025-12-07T12:10:02.892Z"
+      "timestamp": "2025-12-07T12:12:02.907Z"
     }
   },
-  "last_sync": "2025-12-07T12:10:02.898Z",
+  "last_sync": "2025-12-07T12:12:02.951Z",
   "memory": {
     "analytics_paper_6c591801-3072-431d-b192-30aaf426f15e": {
       "value": {
