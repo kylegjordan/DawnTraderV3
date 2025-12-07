@@ -1,0 +1,267 @@
+Phase 8.8.3-I3 — RTB Metrics Integrity + Trade Status Consistency (Stability Phase)
+Directive for Replit (IMPLEMENT EXACTLY AS WRITTEN)
+
+(No new behavioral changes to trading logic, no queueing logic, no reconfirmation logic.)
+
+PHASE 8.8.3-I3 OBJECTIVE
+
+Stabilize the trading engine by ensuring:
+
+1. All trade records accurately reflect final status
+
+No lingering "Open – Not Closed Yet" in trade history after the engine stops.
+
+All trades with closed_at = null must either:
+
+still have a matching open position OR
+
+be immediately closed with an appropriate close_reason.
+
+2. RTB Metrics correctly represent reality
+
+RtbMetricsService is the single source of truth for:
+
+total attempts
+
+total opened
+
+total blocked
+
+all block reasons
+
+The RTB Breakdown UI table must show:
+
+every guardrail block reason that increments metrics
+
+correct counts
+
+totals that equal blockedTotal
+
+Top-level RTB Summary:
+
+attemptsTotal === openedTotal + blockedTotal must always hold
+
+Breakdown subtotal must equal blockedTotal
+
+3. No changes to trading behavior
+
+Do NOT implement RTB queueing logic
+
+Do NOT modify signal expiration
+
+Do NOT change confidence semantics
+
+Do NOT change guardrail decision-making
+This phase is strictly stability and truth-alignment.
+
+-----------------------------------------
+PHASE REQUIREMENTS
+-----------------------------------------
+A. TRADE STATUS CONSISTENCY FIX
+A1. On STOP, fully reconcile trade records
+
+Modify the stop flow (paper-sim-service + portfolio manager) to:
+
+After force-closing all open positions:
+
+Query DB for any trades for this session where:
+
+closed_at IS NULL
+
+
+For each such trade:
+
+If a matching row exists in paper_sim_open_positions → leave it as open
+
+If no matching open position exists → close it immediately:
+
+closed_at = NOW()
+close_reason = 'engine_stop_cleanup'
+exit_price = last known price (or entry_price if unavailable)
+
+
+Emit trade-lifecycle event: { type: 'trade_closed_cleanup', ... }
+
+Result:
+No “Open – Not Closed Yet” trades after a stop unless the DB truly has an open position.
+
+B. RTB METRICS INTEGRITY FIX
+B1. All block reasons counted
+
+Ensure RtbMetricsService.recordBlock(reason) is called in every guardrail location:
+
+MAX_TRADES
+
+MAX_EXPOSURE
+
+POSITION_LIMIT
+
+STOP_LOSS_REQUIRED
+
+INVALID_TARGET
+
+COOLDOWN
+
+INSUFFICIENT_BALANCE
+
+ENGINE_STOPPING
+
+ANY OTHER guardrail that returns blocked
+
+B2. RTB breakdown endpoint
+
+Update the API endpoint /api/diagnostics/rtb-metrics to return:
+
+{
+  attemptsTotal: number,
+  openedTotal: number,
+  blockedTotal: number,
+  blockReasons: {
+     MAX_TRADES: number,
+     MAX_EXPOSURE: number,
+     POSITION_LIMIT: number,
+     COOLDOWN: number,
+     STOP_LOSS_REQUIRED: number,
+     INVALID_TARGET: number,
+     INSUFFICIENT_BALANCE: number,
+     ENGINE_STOPPING: number,
+     ...
+  }
+}
+
+B3. RTB Block Breakdown UI
+
+Use blockReasons from RtbMetricsService (not I1 diagnostics).
+
+Every reason with a non-zero count must appear.
+
+Sum of table = blockedTotal.
+
+B4. Add metrics invariant checks (internal logs only)
+
+Every 60s log:
+
+[I3][RTB] attemptsTotal = X, openedTotal = Y, blockedTotal = Z, invariant = X == Y + Z
+
+C. NO BEHAVIORAL CHANGES
+
+The following must not be changed in I3:
+
+No RTB queue or waiting logic
+
+No reconfirmation on RTB entries
+
+No changes to signal expiration (30s scan replacement remains)
+
+No changes to confidence behavior
+
+No changes to guardrail decision ordering
+
+This is strictly a data and truth consistency phase.
+
+-----------------------------------------
+IMPLEMENTATION STEPS
+-----------------------------------------
+1. Update Stop Flow
+
+Files to modify:
+
+server/services/paper-sim-service.ts
+
+server/services/paper-portfolio-manager.ts
+
+server/services/paper-execution-engine.ts (if required for event emission)
+
+server/db/paper-sim-trades.ts OR where trades are written
+
+Add cleanup routine:
+
+async function reconcileIncompleteTrades(sessionId) {
+   const openDBTrades = await db.getTradesWithNoClose(sessionId);
+   for (const t of openDBTrades) {
+      const stillOpen = await db.findOpenPosition(t.position_id);
+      if (!stillOpen) {
+         await db.closeTrade({
+            tradeId: t.id,
+            closeReason: 'engine_stop_cleanup',
+            closedAt: now,
+            exitPrice: t.lastKnownPrice ?? t.entryPrice
+         });
+         tradeLifecycle.emitCleanupEvent(t);
+      }
+   }
+}
+
+
+Call it after forceCloseAllOpenPositions.
+
+2. Fix RTB Metrics & Block Breakdown
+
+Files to update:
+
+server/services/rtb-metrics-service.ts
+
+server/services/trade-safety.ts
+
+server/routes.ts (RTB metrics endpoint)
+
+ui/.../ReadyToBuyMetrics.tsx (or wherever the table is rendered)
+
+Requirements:
+
+Every guardrail path must call recordBlock().
+
+RTB metrics endpoint must return full block reason map.
+
+UI table must read that map.
+
+Totals must match.
+
+3. Add I3 Logging
+
+Add:
+
+[I3][STOP_FLOW] cleanup trade detected → closing stale trade { tradeId }
+
+[I3][RTB] invariant check: attempts=X opened=Y blocked=Z match=true|false
+
+
+No log spam—sample every 60 seconds.
+
+-----------------------------------------
+EXPECTED OUTCOMES
+-----------------------------------------
+Trade History
+
+No more “Open – Not Closed Yet” rows after stop.
+
+Every closed trade has a valid close reason:
+
+stop_hit
+
+manual
+
+manual_stop
+
+hard_stop
+
+engine_stop_cleanup
+
+RTB Metrics
+
+Top-level totals correct.
+
+Block breakdown table complete.
+
+MAX_EXPOSURE, MAX_TRADES, COOLDOWN, POSITION_LIMIT, etc. all reported.
+
+No mismatched totals.
+
+UI
+
+RTB Block Breakdown table becomes a true representation of the backend logic.
+
+The system becomes diagnosable again.
+
+-----------------------------------------
+END OF DIRECTIVE

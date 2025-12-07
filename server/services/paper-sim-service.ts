@@ -13,8 +13,11 @@ import { KrakenService } from './kraken.js';
 import { paperOperationQueue } from '../utils/operation-queue.js';
 import { reset24hWindow, resetHourlyScanHistory } from './fx5-24h-window.js';
 import { b4Diagnostics } from './b4-diagnostics.js';
+import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js';
+import { livePricingAdapter } from './live-pricing-adapter.js';
 
 console.log('[41E-S][LIVE-CODE] paper-sim-service.ts loaded');
+console.log('[8.8.3-I3][LOADED] Trade status consistency module integrated');
 console.log('[41F][QUEUE] Paper operation queue integrated');
 
 export interface PaperSimResult {
@@ -287,6 +290,121 @@ export function getOrchestratorByMode(mode: 'paper' | 'live'): any | null {
     return (global as any).globalPaperOrchestrator;
   }
   return null;
+}
+
+/**
+ * Phase 8.8.3-I3: Reconcile incomplete trades on stop
+ * 
+ * After force-closing all open positions, this function ensures data consistency by:
+ * 1. Finding all trades with closed_at = NULL (incomplete trades)
+ * 2. For each incomplete trade:
+ *    - If a matching open position exists → leave as open (active trade)
+ *    - If NO matching open position exists → close it with close_reason='engine_stop_cleanup'
+ * 
+ * This eliminates "Open – Not Closed Yet" entries in Trade History after a stop.
+ * 
+ * @param mode Trading mode ('paper' or 'live')
+ * @param sessionId Current session ID for logging
+ */
+async function reconcileIncompleteTrades(mode: 'paper' | 'live', sessionId: string): Promise<{
+  reconciled: number;
+  stillOpen: number;
+  errors: number;
+}> {
+  console.log(`[8.8.3-I3][STOP_FLOW] Reconciling incomplete trades for session=${sessionId}, mode=${mode}`);
+  
+  let reconciled = 0;
+  let stillOpen = 0;
+  let errors = 0;
+  
+  try {
+    // Get all trades for this mode (including unclosed ones)
+    const allTrades = await storage.getPaperSimTrades(mode, { limit: 1000 });
+    
+    // Filter to only trades where closed_at is NULL
+    const incompleteTrades = allTrades.filter(t => t.closedAt === null);
+    
+    if (incompleteTrades.length === 0) {
+      console.log(`[8.8.3-I3][STOP_FLOW] No incomplete trades found - reconciliation complete`);
+      return { reconciled: 0, stillOpen: 0, errors: 0 };
+    }
+    
+    console.log(`[8.8.3-I3][STOP_FLOW] Found ${incompleteTrades.length} incomplete trades to check`);
+    
+    // Get remaining open positions (should be 0 after force-close, but check to be safe)
+    const openPositions = await storage.getPaperSimOpenPositions(mode);
+    const openPositionSymbols = new Set(openPositions.map(p => p.symbol));
+    
+    for (const trade of incompleteTrades) {
+      try {
+        // Check if a matching open position still exists
+        const hasOpenPosition = openPositionSymbols.has(trade.symbol);
+        
+        if (hasOpenPosition) {
+          // Trade has a matching open position - it's legitimately open
+          console.log(`[8.8.3-I3][STOP_FLOW] Trade ${trade.id} for ${trade.symbol} has matching open position - leaving as open`);
+          stillOpen++;
+          continue;
+        }
+        
+        // No matching open position - this trade should be closed
+        console.log(`[8.8.3-I3][STOP_FLOW] Closing stale trade ${trade.id} for ${trade.symbol} (no matching open position)`);
+        
+        // Try to get exit price from live pricing, fallback to entry price
+        let exitPrice = parseFloat(trade.entryPrice);
+        try {
+          const priceResult = await livePricingAdapter.getPrice(trade.symbol);
+          if (priceResult && priceResult.price && priceResult.source !== 'no_reliable_price') {
+            exitPrice = priceResult.price;
+          }
+        } catch (priceErr) {
+          // Use entry price as fallback
+        }
+        
+        // Calculate P&L
+        const entryPrice = parseFloat(trade.entryPrice);
+        const quantity = parseFloat(trade.quantity);
+        const pnl = (exitPrice - entryPrice) * quantity;
+        const pnlPercent = entryPrice > 0 ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0;
+        
+        // Update trade with close info
+        await storage.updatePaperSimTrade(trade.id, {
+          closedAt: new Date(),
+          exitPrice: exitPrice.toString(),
+          pnl: pnl.toString(),
+          pnlPercent: pnlPercent.toString(),
+          closeReason: 'engine_stop_cleanup'
+        });
+        
+        // Emit trade lifecycle event for diagnostics
+        i1TradeLifecycleDiagnostics.logEvent({
+          tradeId: trade.id,
+          symbol: trade.symbol,
+          strategy: trade.strategy || 'unknown',
+          eventType: 'TRADE_CLOSE',
+          source: 'cleanup',
+          closeReason: 'engine_stop_cleanup',
+          exitPrice,
+          pnl
+        });
+        
+        console.log(`[8.8.3-I3][STOP_FLOW] Cleanup closed trade ${trade.id}: ${trade.symbol} exit=$${exitPrice.toFixed(4)} pnl=$${pnl.toFixed(2)}`);
+        reconciled++;
+        
+      } catch (tradeErr) {
+        console.error(`[8.8.3-I3][STOP_FLOW] Error reconciling trade ${trade.id}:`, tradeErr);
+        errors++;
+      }
+    }
+    
+    console.log(`[8.8.3-I3][STOP_FLOW] Reconciliation complete: reconciled=${reconciled}, stillOpen=${stillOpen}, errors=${errors}`);
+    
+  } catch (err) {
+    console.error(`[8.8.3-I3][STOP_FLOW] Error in reconcileIncompleteTrades:`, err);
+    errors++;
+  }
+  
+  return { reconciled, stillOpen, errors };
 }
 
 /**
