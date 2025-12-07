@@ -1,0 +1,1828 @@
+{
+    "ok": true,
+    "timestamp": "2025-12-07T12:09:35.664Z",
+    "sessionStart": "2025-12-07T11:37:00.534Z",
+    "totals": {
+        "attempts": 5624,
+        "opened": 6,
+        "blocked": 5614
+    },
+    "byReason": {
+        "MAX_TOTAL_EXPOSURE": 5241,
+        "POSITION_LIMIT": 367,
+        "INVALID_STOP_LOSS": 6
+    },
+    "byStrategy": {
+        "vwap_pullback": {
+            "attempts": 511,
+            "opened": 1,
+            "blocked": 510
+        },
+        "mean_reversion": {
+            "attempts": 4975,
+            "opened": 5,
+            "blocked": 4966
+        },
+        "range_trading": {
+            "attempts": 108,
+            "opened": 0,
+            "blocked": 108
+        },
+        "dhma": {
+            "attempts": 6,
+            "opened": 0,
+            "blocked": 6
+        },
+        "vwap_bounce": {
+            "attempts": 24,
+            "opened": 0,
+            "blocked": 24
+        }
+    },
+    "bySymbol": {
+        "DOT/USD": {
+            "attempts": 1,
+            "opened": 1,
+            "blocked": 0,
+            "byReason": {}
+        },
+        "XXRPZUSD": {
+            "attempts": 59,
+            "opened": 1,
+            "blocked": 58,
+            "byReason": {
+                "POSITION_LIMIT": 58
+            }
+        },
+        "ADAUSD": {
+            "attempts": 60,
+            "opened": 1,
+            "blocked": 59,
+            "byReason": {
+                "POSITION_LIMIT": 59
+            }
+        },
+        "XXRPZEUR": {
+            "attempts": 61,
+            "opened": 1,
+            "blocked": 60,
+            "byReason": {
+                "POSITION_LIMIT": 60
+            }
+        },
+        "ENAUSD": {
+            "attempts": 61,
+            "opened": 1,
+            "blocked": 60,
+            "byReason": {
+                "POSITION_LIMIT": 60
+            }
+        },
+        "ADAEUR": {
+            "attempts": 61,
+            "opened": 1,
+            "blocked": 60,
+            "byReason": {
+                "POSITION_LIMIT": 60
+            }
+        },
+        "WIFUSD": {
+            "attempts": 61,
+            "opened": 0,
+            "blocked": 61,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 61
+            }
+        },
+        "CRVUSD": {
+            "attempts": 61,
+            "opened": 0,
+            "blocked": 61,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 61
+            }
+        },
+        "XRPUSDC": {
+            "attempts": 61,
+            "opened": 0,
+            "blocked": 61,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 61
+            }
+        },
+        "VIRTUALUSD": {
+            "attempts": 61,
+            "opened": 0,
+            "blocked": 61,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 61
+            }
+        },
+        "AUDUSD": {
+            "attempts": 61,
+            "opened": 0,
+            "blocked": 61,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 61
+            }
+        },
+        "XRP/CAD": {
+            "attempts": 12,
+            "opened": 0,
+            "blocked": 12,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 12
+            }
+        },
+        "TIAUSD": {
+            "attempts": 61,
+            "opened": 0,
+            "blocked": 61,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 61
+            }
+        },
+        "ICP/USD": {
+            "attempts": 12,
+            "opened": 0,
+            "blocked": 12,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 12
+            }
+        },
+        "ADAUSDT": {
+            "attempts": 61,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "EURCUSDC": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "LINK/USD": {
+            "attempts": 11,
+            "opened": 0,
+            "blocked": 11,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 11
+            }
+        },
+        "ONDOUSD": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "ADAUSDC": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "XRP/USDT": {
+            "attempts": 12,
+            "opened": 0,
+            "blocked": 12,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 12
+            }
+        },
+        "TIAEUR": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "AKTUSD": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "XRPGBP": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "ONDOEUR": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "DOTUSD": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "POSITION_LIMIT": 60
+            }
+        },
+        "WLDUSD": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "STXUSD": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "XXRPZCAD": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "ICPUSD": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "XRPUSDT": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "ADAGBP": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "FILUSD": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "MORPHOUSD": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "NEARUSD": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "TONUSD": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "DOTEUR": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "RAYUSD": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "XTZUSD": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "CRVEUR": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "WIFEUR": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "RENDERUSD": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "IMXUSD": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "SOLUSD": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "CRV/EUR": {
+            "attempts": 20,
+            "opened": 0,
+            "blocked": 20,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 20
+            }
+        },
+        "UNIUSD": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "TRACEUR": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "AVAXUSD": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "EIGENUSD": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "ATOMUSD": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "ADAAUD": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "LINKEUR": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "AKTEUR": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "RUNEUSD": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "AXSUSD": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "SUSHIUSD": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "NEAREUR": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "XRPAUD": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 60,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 60
+            }
+        },
+        "XTZEUR": {
+            "attempts": 60,
+            "opened": 0,
+            "blocked": 59,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 59
+            }
+        },
+        "PROVEUSD": {
+            "attempts": 75,
+            "opened": 0,
+            "blocked": 75,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 75
+            }
+        },
+        "VIRTUALEUR": {
+            "attempts": 59,
+            "opened": 0,
+            "blocked": 59,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 59
+            }
+        },
+        "TONEUR": {
+            "attempts": 59,
+            "opened": 0,
+            "blocked": 59,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 59
+            }
+        },
+        "ETHFIUSD": {
+            "attempts": 59,
+            "opened": 0,
+            "blocked": 59,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 59
+            }
+        },
+        "XLTCZUSD": {
+            "attempts": 59,
+            "opened": 0,
+            "blocked": 59,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 59
+            }
+        },
+        "TRUMPUSD": {
+            "attempts": 59,
+            "opened": 0,
+            "blocked": 59,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 59
+            }
+        },
+        "SOLEUR": {
+            "attempts": 59,
+            "opened": 0,
+            "blocked": 59,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 59
+            }
+        },
+        "ZROUSD": {
+            "attempts": 59,
+            "opened": 0,
+            "blocked": 59,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 59
+            }
+        },
+        "UNIEUR": {
+            "attempts": 58,
+            "opened": 0,
+            "blocked": 58,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 58
+            }
+        },
+        "IPUSD": {
+            "attempts": 59,
+            "opened": 0,
+            "blocked": 59,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 59
+            }
+        },
+        "RENDEREUR": {
+            "attempts": 58,
+            "opened": 0,
+            "blocked": 58,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 58
+            }
+        },
+        "XION/USD": {
+            "attempts": 18,
+            "opened": 0,
+            "blocked": 18,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 18
+            }
+        },
+        "XLTCZEUR": {
+            "attempts": 58,
+            "opened": 0,
+            "blocked": 58,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 58
+            }
+        },
+        "SOL/USD": {
+            "attempts": 20,
+            "opened": 0,
+            "blocked": 20,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 20
+            }
+        },
+        "DOTUSDC": {
+            "attempts": 58,
+            "opened": 0,
+            "blocked": 58,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 58
+            }
+        },
+        "CVXUSD": {
+            "attempts": 58,
+            "opened": 0,
+            "blocked": 58,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 58
+            }
+        },
+        "0G/EUR": {
+            "attempts": 11,
+            "opened": 0,
+            "blocked": 11,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 11
+            }
+        },
+        "UNI/USD": {
+            "attempts": 11,
+            "opened": 0,
+            "blocked": 11,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 11
+            }
+        },
+        "ORCAUSD": {
+            "attempts": 58,
+            "opened": 0,
+            "blocked": 58,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 58
+            }
+        },
+        "MORPHOEUR": {
+            "attempts": 58,
+            "opened": 0,
+            "blocked": 58,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 58
+            }
+        },
+        "XTZUSDT": {
+            "attempts": 58,
+            "opened": 0,
+            "blocked": 58,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 58
+            }
+        },
+        "INJUSD": {
+            "attempts": 58,
+            "opened": 0,
+            "blocked": 57,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 57
+            }
+        },
+        "SOSOUSD": {
+            "attempts": 57,
+            "opened": 0,
+            "blocked": 57,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 57
+            }
+        },
+        "STXEUR": {
+            "attempts": 57,
+            "opened": 0,
+            "blocked": 57,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 57
+            }
+        },
+        "FILEUR": {
+            "attempts": 57,
+            "opened": 0,
+            "blocked": 57,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 57
+            }
+        },
+        "ATOMEUR": {
+            "attempts": 57,
+            "opened": 0,
+            "blocked": 57,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 57
+            }
+        },
+        "EIGENEUR": {
+            "attempts": 77,
+            "opened": 0,
+            "blocked": 77,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 77
+            }
+        },
+        "ICPEUR": {
+            "attempts": 57,
+            "opened": 0,
+            "blocked": 57,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 57
+            }
+        },
+        "XRPRLUSD": {
+            "attempts": 57,
+            "opened": 0,
+            "blocked": 57,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 57
+            }
+        },
+        "ARUSD": {
+            "attempts": 57,
+            "opened": 0,
+            "blocked": 57,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 57
+            }
+        },
+        "DOTGBP": {
+            "attempts": 56,
+            "opened": 0,
+            "blocked": 56,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 56
+            }
+        },
+        "FORTHUSD": {
+            "attempts": 56,
+            "opened": 0,
+            "blocked": 56,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 56
+            }
+        },
+        "XTZUSDC": {
+            "attempts": 56,
+            "opened": 0,
+            "blocked": 56,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 56
+            }
+        },
+        "BANDUSD": {
+            "attempts": 56,
+            "opened": 0,
+            "blocked": 56,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 56
+            }
+        },
+        "LPTUSD": {
+            "attempts": 56,
+            "opened": 0,
+            "blocked": 56,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 56
+            }
+        },
+        "AVAXEUR": {
+            "attempts": 50,
+            "opened": 0,
+            "blocked": 50,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 50
+            }
+        },
+        "UMAEUR": {
+            "attempts": 56,
+            "opened": 0,
+            "blocked": 56,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 56
+            }
+        },
+        "DOTUSDT": {
+            "attempts": 36,
+            "opened": 0,
+            "blocked": 36,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 36
+            }
+        },
+        "BNTUSD": {
+            "attempts": 12,
+            "opened": 0,
+            "blocked": 12,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 12
+            }
+        },
+        "APT/USD": {
+            "attempts": 7,
+            "opened": 0,
+            "blocked": 7,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 7
+            }
+        },
+        "FARTCOIN/USD": {
+            "attempts": 17,
+            "opened": 0,
+            "blocked": 17,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 17
+            }
+        },
+        "ADA/AUD": {
+            "attempts": 7,
+            "opened": 0,
+            "blocked": 7,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 7
+            }
+        },
+        "AXS/USD": {
+            "attempts": 6,
+            "opened": 0,
+            "blocked": 6,
+            "byReason": {
+                "INVALID_STOP_LOSS": 6
+            }
+        },
+        "B2/EUR": {
+            "attempts": 5,
+            "opened": 0,
+            "blocked": 5,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 5
+            }
+        },
+        "NEAR/EUR": {
+            "attempts": 3,
+            "opened": 0,
+            "blocked": 3,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 3
+            }
+        },
+        "XRP/AUD": {
+            "attempts": 3,
+            "opened": 0,
+            "blocked": 3,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 3
+            }
+        },
+        "XTZ/EUR": {
+            "attempts": 3,
+            "opened": 0,
+            "blocked": 3,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 3
+            }
+        },
+        "PROVE/USD": {
+            "attempts": 5,
+            "opened": 0,
+            "blocked": 5,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 5
+            }
+        },
+        "VIRTUAL/EUR": {
+            "attempts": 3,
+            "opened": 0,
+            "blocked": 3,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 3
+            }
+        },
+        "TON/EUR": {
+            "attempts": 3,
+            "opened": 0,
+            "blocked": 3,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 3
+            }
+        },
+        "ETHFI/USD": {
+            "attempts": 3,
+            "opened": 0,
+            "blocked": 3,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 3
+            }
+        },
+        "UNI/EUR": {
+            "attempts": 7,
+            "opened": 0,
+            "blocked": 7,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 7
+            }
+        },
+        "OP/EUR": {
+            "attempts": 3,
+            "opened": 0,
+            "blocked": 3,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 3
+            }
+        },
+        "GRASS/USD": {
+            "attempts": 3,
+            "opened": 0,
+            "blocked": 3,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 3
+            }
+        },
+        "IP/USD": {
+            "attempts": 3,
+            "opened": 0,
+            "blocked": 3,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 3
+            }
+        },
+        "RENDER/EUR": {
+            "attempts": 3,
+            "opened": 0,
+            "blocked": 3,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 3
+            }
+        },
+        "OPEUR": {
+            "attempts": 93,
+            "opened": 0,
+            "blocked": 92,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 92
+            }
+        },
+        "CVX/USD": {
+            "attempts": 1,
+            "opened": 0,
+            "blocked": 1,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 1
+            }
+        },
+        "INJ/USD": {
+            "attempts": 2,
+            "opened": 0,
+            "blocked": 2,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 2
+            }
+        },
+        "SOSO/USD": {
+            "attempts": 2,
+            "opened": 0,
+            "blocked": 2,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 2
+            }
+        },
+        "XETHZUSD": {
+            "attempts": 11,
+            "opened": 0,
+            "blocked": 11,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 11
+            }
+        },
+        "ICP/EUR": {
+            "attempts": 3,
+            "opened": 0,
+            "blocked": 3,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 3
+            }
+        },
+        "DOT/GBP": {
+            "attempts": 2,
+            "opened": 0,
+            "blocked": 2,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 2
+            }
+        },
+        "AVNT/EUR": {
+            "attempts": 2,
+            "opened": 0,
+            "blocked": 2,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 2
+            }
+        },
+        "BAND/USD": {
+            "attempts": 3,
+            "opened": 0,
+            "blocked": 3,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 3
+            }
+        },
+        "ASTER/EUR": {
+            "attempts": 3,
+            "opened": 0,
+            "blocked": 3,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 3
+            }
+        },
+        "AVAX/EUR": {
+            "attempts": 3,
+            "opened": 0,
+            "blocked": 3,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 3
+            }
+        },
+        "DOT/USDT": {
+            "attempts": 3,
+            "opened": 0,
+            "blocked": 3,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 3
+            }
+        },
+        "TRX/USD": {
+            "attempts": 25,
+            "opened": 0,
+            "blocked": 25,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 25
+            }
+        },
+        "ADA/USD": {
+            "attempts": 9,
+            "opened": 0,
+            "blocked": 9,
+            "byReason": {
+                "POSITION_LIMIT": 9
+            }
+        },
+        "ZUSDZJPY": {
+            "attempts": 35,
+            "opened": 0,
+            "blocked": 35,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 35
+            }
+        },
+        "XRP/GBP": {
+            "attempts": 7,
+            "opened": 0,
+            "blocked": 7,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 7
+            }
+        },
+        "AUD/USD": {
+            "attempts": 4,
+            "opened": 0,
+            "blocked": 4,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 4
+            }
+        },
+        "ONDO/EUR": {
+            "attempts": 10,
+            "opened": 0,
+            "blocked": 10,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 10
+            }
+        },
+        "XRP/USD": {
+            "attempts": 1,
+            "opened": 0,
+            "blocked": 1,
+            "byReason": {
+                "POSITION_LIMIT": 1
+            }
+        },
+        "MERL/USD": {
+            "attempts": 8,
+            "opened": 0,
+            "blocked": 8,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 8
+            }
+        },
+        "EURC/EUR": {
+            "attempts": 5,
+            "opened": 0,
+            "blocked": 5,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 5
+            }
+        },
+        "MNT/USD": {
+            "attempts": 8,
+            "opened": 0,
+            "blocked": 8,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 8
+            }
+        },
+        "RUNEEUR": {
+            "attempts": 26,
+            "opened": 0,
+            "blocked": 26,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 26
+            }
+        },
+        "AKT/EUR": {
+            "attempts": 7,
+            "opened": 0,
+            "blocked": 7,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 7
+            }
+        },
+        "GOMINING/USD": {
+            "attempts": 4,
+            "opened": 0,
+            "blocked": 4,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 4
+            }
+        },
+        "AERO/EUR": {
+            "attempts": 4,
+            "opened": 0,
+            "blocked": 4,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 4
+            }
+        },
+        "LQTY/USD": {
+            "attempts": 1,
+            "opened": 0,
+            "blocked": 1,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 1
+            }
+        },
+        "BERA/USD": {
+            "attempts": 4,
+            "opened": 0,
+            "blocked": 4,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 4
+            }
+        },
+        "LTC/USD": {
+            "attempts": 1,
+            "opened": 0,
+            "blocked": 1,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 1
+            }
+        },
+        "TIA/EUR": {
+            "attempts": 6,
+            "opened": 0,
+            "blocked": 6,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 6
+            }
+        },
+        "B2/USD": {
+            "attempts": 4,
+            "opened": 0,
+            "blocked": 4,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 4
+            }
+        },
+        "DOT/EUR": {
+            "attempts": 4,
+            "opened": 0,
+            "blocked": 4,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 4
+            }
+        },
+        "MET/USD": {
+            "attempts": 1,
+            "opened": 0,
+            "blocked": 1,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 1
+            }
+        },
+        "RENDER/USD": {
+            "attempts": 2,
+            "opened": 0,
+            "blocked": 2,
+            "byReason": {
+                "MAX_TOTAL_EXPOSURE": 2
+            }
+        }
+    },
+    "recentBlocks": [
+        {
+            "symbol": "ARUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:34.770Z"
+        },
+        {
+            "symbol": "XTZUSDT",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:34.715Z"
+        },
+        {
+            "symbol": "XRPAUD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:34.645Z"
+        },
+        {
+            "symbol": "TIAUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:34.178Z"
+        },
+        {
+            "symbol": "ZROUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:34.102Z"
+        },
+        {
+            "symbol": "MORPHOEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:33.359Z"
+        },
+        {
+            "symbol": "XRPRLUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:32.859Z"
+        },
+        {
+            "symbol": "NEAREUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:32.772Z"
+        },
+        {
+            "symbol": "IPUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:32.183Z"
+        },
+        {
+            "symbol": "AUDUSD",
+            "strategy": "vwap_pullback",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:32.034Z"
+        },
+        {
+            "symbol": "ICPEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:31.445Z"
+        },
+        {
+            "symbol": "ORCAUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:31.411Z"
+        },
+        {
+            "symbol": "AXSUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:31.179Z"
+        },
+        {
+            "symbol": "VIRTUALUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:30.363Z"
+        },
+        {
+            "symbol": "SOLEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:30.311Z"
+        },
+        {
+            "symbol": "EIGENEUR",
+            "strategy": "range_trading",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:30.115Z"
+        },
+        {
+            "symbol": "EIGENEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:29.199Z"
+        },
+        {
+            "symbol": "AKTEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:28.754Z"
+        },
+        {
+            "symbol": "CVXUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:28.544Z"
+        },
+        {
+            "symbol": "XLTCZUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:28.522Z"
+        },
+        {
+            "symbol": "XRPUSDC",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:28.510Z"
+        },
+        {
+            "symbol": "RENDEREUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:27.162Z"
+        },
+        {
+            "symbol": "LINKEUR",
+            "strategy": "vwap_pullback",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:27.094Z"
+        },
+        {
+            "symbol": "TRUMPUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:27.081Z"
+        },
+        {
+            "symbol": "ATOMEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:26.801Z"
+        },
+        {
+            "symbol": "ETHFIUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:25.975Z"
+        },
+        {
+            "symbol": "CRVUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:25.962Z"
+        },
+        {
+            "symbol": "ADAAUD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:25.827Z"
+        },
+        {
+            "symbol": "FILEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:25.334Z"
+        },
+        {
+            "symbol": "DOTUSDC",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:25.098Z"
+        },
+        {
+            "symbol": "SOL/USD",
+            "strategy": "vwap_pullback",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:25.021Z"
+        },
+        {
+            "symbol": "RUNEUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:24.466Z"
+        },
+        {
+            "symbol": "TONEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:24.314Z"
+        },
+        {
+            "symbol": "WIFUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:24.256Z"
+        },
+        {
+            "symbol": "STXEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:23.720Z"
+        },
+        {
+            "symbol": "XLTCZEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:23.125Z"
+        },
+        {
+            "symbol": "ATOMUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:23.114Z"
+        },
+        {
+            "symbol": "ADAEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "POSITION_LIMIT",
+            "timestamp": "2025-12-07T12:09:22.885Z"
+        },
+        {
+            "symbol": "VIRTUALEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:22.624Z"
+        },
+        {
+            "symbol": "SOSOUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:21.989Z"
+        },
+        {
+            "symbol": "RENDER/USD",
+            "strategy": "vwap_pullback",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:21.839Z"
+        },
+        {
+            "symbol": "EIGENUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:21.571Z"
+        },
+        {
+            "symbol": "ENAUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "POSITION_LIMIT",
+            "timestamp": "2025-12-07T12:09:21.464Z"
+        },
+        {
+            "symbol": "UNIEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:21.126Z"
+        },
+        {
+            "symbol": "PROVEUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:20.786Z"
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "POSITION_LIMIT",
+            "timestamp": "2025-12-07T12:09:20.443Z"
+        },
+        {
+            "symbol": "INJUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:19.959Z"
+        },
+        {
+            "symbol": "AVAXUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:19.951Z"
+        },
+        {
+            "symbol": "OPEUR",
+            "strategy": "range_trading",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:19.830Z"
+        },
+        {
+            "symbol": "XTZEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:19.217Z"
+        },
+        {
+            "symbol": "OPEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:18.918Z"
+        },
+        {
+            "symbol": "ADAUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "POSITION_LIMIT",
+            "timestamp": "2025-12-07T12:09:18.548Z"
+        },
+        {
+            "symbol": "XTZUSDT",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:18.424Z"
+        },
+        {
+            "symbol": "UNIUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:17.971Z"
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "POSITION_LIMIT",
+            "timestamp": "2025-12-07T12:09:17.787Z"
+        },
+        {
+            "symbol": "XRPAUD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:17.272Z"
+        },
+        {
+            "symbol": "ZROUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:16.882Z"
+        },
+        {
+            "symbol": "SUSHIUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:16.376Z"
+        },
+        {
+            "symbol": "MORPHOEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:16.292Z"
+        },
+        {
+            "symbol": "DOT/EUR",
+            "strategy": "vwap_pullback",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:15.758Z"
+        },
+        {
+            "symbol": "NEAREUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:15.660Z"
+        },
+        {
+            "symbol": "TRACEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:15.049Z"
+        },
+        {
+            "symbol": "IPUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:14.792Z"
+        },
+        {
+            "symbol": "ORCAUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:14.334Z"
+        },
+        {
+            "symbol": "AXSUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:13.721Z"
+        },
+        {
+            "symbol": "SOLEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:13.162Z"
+        },
+        {
+            "symbol": "WIFEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:13.112Z"
+        },
+        {
+            "symbol": "CVXUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:12.292Z"
+        },
+        {
+            "symbol": "B2/USD",
+            "strategy": "vwap_bounce",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:12.214Z"
+        },
+        {
+            "symbol": "XLTCZUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:11.569Z"
+        },
+        {
+            "symbol": "IMXUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:11.404Z"
+        },
+        {
+            "symbol": "AKTEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:11.304Z"
+        },
+        {
+            "symbol": "RENDEREUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:10.970Z"
+        },
+        {
+            "symbol": "TRUMPUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:10.465Z"
+        },
+        {
+            "symbol": "LINKEUR",
+            "strategy": "vwap_pullback",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:10.102Z"
+        },
+        {
+            "symbol": "SOLUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:09.875Z"
+        },
+        {
+            "symbol": "DOTUSDC",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:09.665Z"
+        },
+        {
+            "symbol": "ETHFIUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:08.843Z"
+        },
+        {
+            "symbol": "ADAAUD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:08.812Z"
+        },
+        {
+            "symbol": "XLTCZEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:08.129Z"
+        },
+        {
+            "symbol": "RENDERUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:07.469Z"
+        },
+        {
+            "symbol": "TONEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:07.274Z"
+        },
+        {
+            "symbol": "RUNEUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:07.226Z"
+        },
+        {
+            "symbol": "UNIEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:06.817Z"
+        },
+        {
+            "symbol": "VIRTUALEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:05.763Z"
+        },
+        {
+            "symbol": "CRVEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:05.599Z"
+        },
+        {
+            "symbol": "ATOMUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:05.440Z"
+        },
+        {
+            "symbol": "OPEUR",
+            "strategy": "range_trading",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:05.349Z"
+        },
+        {
+            "symbol": "OPEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:04.569Z"
+        },
+        {
+            "symbol": "PROVEUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:04.295Z"
+        },
+        {
+            "symbol": "XTZUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:04.112Z"
+        },
+        {
+            "symbol": "EIGENUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:03.931Z"
+        },
+        {
+            "symbol": "ZROUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:03.126Z"
+        },
+        {
+            "symbol": "DOTEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:02.919Z"
+        },
+        {
+            "symbol": "XTZEUR",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:02.841Z"
+        },
+        {
+            "symbol": "AVAXUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:02.669Z"
+        },
+        {
+            "symbol": "RAYUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:01.282Z"
+        },
+        {
+            "symbol": "XRPAUD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:01.251Z"
+        },
+        {
+            "symbol": "UNIUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:01.093Z"
+        },
+        {
+            "symbol": "IPUSD",
+            "strategy": "mean_reversion",
+            "blockReason": "MAX_TOTAL_EXPOSURE",
+            "timestamp": "2025-12-07T12:09:01.055Z"
+        }
+    ]
+}

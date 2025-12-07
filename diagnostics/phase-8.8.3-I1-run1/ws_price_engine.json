@@ -1,0 +1,945 @@
+{
+    "ok": true,
+    "timestamp": "2025-12-07T12:09:45.751Z",
+    "wsConnected": true,
+    "subscribedSymbols": [
+        "DOTUSD",
+        "XXRPZUSD",
+        "ADAUSD",
+        "XXRPZEUR",
+        "ENAUSD",
+        "ADAEUR"
+    ],
+    "lastUpdateBySymbol": {
+        "DOTUSD": "2025-12-07T12:07:45.735Z",
+        "XXRPZUSD": "2025-12-07T12:09:15.649Z",
+        "ADAUSD": "2025-12-07T12:08:44.214Z",
+        "XXRPZEUR": "2025-12-07T12:09:17.203Z",
+        "ENAUSD": "2025-12-07T12:02:28.720Z",
+        "ADAEUR": "2025-12-07T12:07:16.262Z"
+    },
+    "averageIntervalMs": 27726,
+    "maxIntervalMs": 869269,
+    "minIntervalMs": 1,
+    "staleSymbols": [
+        "DOTUSD",
+        "XXRPZUSD",
+        "ADAUSD",
+        "XXRPZEUR",
+        "ENAUSD",
+        "ADAEUR"
+    ],
+    "cacheSize": 6,
+    "cacheTTL": 1000,
+    "reconnectAttempts": 0,
+    "lastPongAgeMs": 8701,
+    "priceLogs": [
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03367,
+            "bid": 2.03366,
+            "ask": 2.03367,
+            "timestamp": "2025-12-07T12:02:11.501Z",
+            "receivedAt": 1765108931501,
+            "intervalMs": 2575
+        },
+        {
+            "symbol": "ADAUSD",
+            "price": 0.415068,
+            "bid": 0.415,
+            "ask": 0.415069,
+            "timestamp": "2025-12-07T12:02:14.500Z",
+            "receivedAt": 1765108934500,
+            "intervalMs": 103068
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.74825,
+            "bid": 1.74804,
+            "ask": 1.74825,
+            "timestamp": "2025-12-07T12:02:14.708Z",
+            "receivedAt": 1765108934708,
+            "intervalMs": 21714
+        },
+        {
+            "symbol": "ADAEUR",
+            "price": 0.356719,
+            "bid": 0.356719,
+            "ask": 0.35672,
+            "timestamp": "2025-12-07T12:02:25.863Z",
+            "receivedAt": 1765108945863,
+            "intervalMs": 113749
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.748,
+            "bid": 1.748,
+            "ask": 1.74819,
+            "timestamp": "2025-12-07T12:02:27.690Z",
+            "receivedAt": 1765108947690,
+            "intervalMs": 12982
+        },
+        {
+            "symbol": "ENAUSD",
+            "price": 0.2581,
+            "bid": 0.2581,
+            "ask": 0.2583,
+            "timestamp": "2025-12-07T12:02:28.720Z",
+            "receivedAt": 1765108948720,
+            "intervalMs": 514964
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03374,
+            "bid": 2.03366,
+            "ask": 2.03375,
+            "timestamp": "2025-12-07T12:02:43.852Z",
+            "receivedAt": 1765108963852,
+            "intervalMs": 32351
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03372,
+            "bid": 2.03371,
+            "ask": 2.03372,
+            "timestamp": "2025-12-07T12:02:48.182Z",
+            "receivedAt": 1765108968182,
+            "intervalMs": 4330
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.74863,
+            "bid": 1.74863,
+            "ask": 1.74864,
+            "timestamp": "2025-12-07T12:02:48.540Z",
+            "receivedAt": 1765108968540,
+            "intervalMs": 20850
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03367,
+            "bid": 2.03366,
+            "ask": 2.03367,
+            "timestamp": "2025-12-07T12:02:58.350Z",
+            "receivedAt": 1765108978350,
+            "intervalMs": 10168
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.74861,
+            "bid": 1.7485,
+            "ask": 1.74861,
+            "timestamp": "2025-12-07T12:03:17.777Z",
+            "receivedAt": 1765108997777,
+            "intervalMs": 29237
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03409,
+            "bid": 2.03408,
+            "ask": 2.03409,
+            "timestamp": "2025-12-07T12:03:27.974Z",
+            "receivedAt": 1765109007974,
+            "intervalMs": 29624
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.74898,
+            "bid": 1.74898,
+            "ask": 1.74918,
+            "timestamp": "2025-12-07T12:03:36.833Z",
+            "receivedAt": 1765109016833,
+            "intervalMs": 19056
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03432,
+            "bid": 2.03431,
+            "ask": 2.03432,
+            "timestamp": "2025-12-07T12:03:37.139Z",
+            "receivedAt": 1765109017139,
+            "intervalMs": 9165
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03431,
+            "bid": 2.03431,
+            "ask": 2.03432,
+            "timestamp": "2025-12-07T12:03:43.361Z",
+            "receivedAt": 1765109023361,
+            "intervalMs": 6222
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03431,
+            "bid": 2.03431,
+            "ask": 2.03432,
+            "timestamp": "2025-12-07T12:03:43.742Z",
+            "receivedAt": 1765109023742,
+            "intervalMs": 381
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03472,
+            "bid": 2.03469,
+            "ask": 2.03472,
+            "timestamp": "2025-12-07T12:03:52.177Z",
+            "receivedAt": 1765109032177,
+            "intervalMs": 8435
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.74951,
+            "bid": 1.74951,
+            "ask": 1.74952,
+            "timestamp": "2025-12-07T12:03:55.444Z",
+            "receivedAt": 1765109035444,
+            "intervalMs": 18611
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.74946,
+            "bid": 1.74926,
+            "ask": 1.74946,
+            "timestamp": "2025-12-07T12:03:59.920Z",
+            "receivedAt": 1765109039920,
+            "intervalMs": 4476
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.74943,
+            "bid": 1.74928,
+            "ask": 1.74943,
+            "timestamp": "2025-12-07T12:04:03.624Z",
+            "receivedAt": 1765109043624,
+            "intervalMs": 3704
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.74966,
+            "bid": 1.74954,
+            "ask": 1.74966,
+            "timestamp": "2025-12-07T12:04:19.777Z",
+            "receivedAt": 1765109059777,
+            "intervalMs": 16153
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.74957,
+            "bid": 1.74954,
+            "ask": 1.74957,
+            "timestamp": "2025-12-07T12:04:20.347Z",
+            "receivedAt": 1765109060347,
+            "intervalMs": 570
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.74939,
+            "bid": 1.74937,
+            "ask": 1.74939,
+            "timestamp": "2025-12-07T12:04:25.695Z",
+            "receivedAt": 1765109065695,
+            "intervalMs": 5348
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.74936,
+            "bid": 1.74932,
+            "ask": 1.74936,
+            "timestamp": "2025-12-07T12:04:27.967Z",
+            "receivedAt": 1765109067967,
+            "intervalMs": 2272
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03478,
+            "bid": 2.03477,
+            "ask": 2.03478,
+            "timestamp": "2025-12-07T12:04:33.891Z",
+            "receivedAt": 1765109073891,
+            "intervalMs": 41714
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03478,
+            "bid": 2.03477,
+            "ask": 2.03478,
+            "timestamp": "2025-12-07T12:04:34.480Z",
+            "receivedAt": 1765109074480,
+            "intervalMs": 589
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.74946,
+            "bid": 1.74946,
+            "ask": 1.74953,
+            "timestamp": "2025-12-07T12:04:51.085Z",
+            "receivedAt": 1765109091085,
+            "intervalMs": 23118
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03477,
+            "bid": 2.03477,
+            "ask": 2.03478,
+            "timestamp": "2025-12-07T12:04:51.511Z",
+            "receivedAt": 1765109091511,
+            "intervalMs": 17031
+        },
+        {
+            "symbol": "ADAEUR",
+            "price": 0.356919,
+            "bid": 0.356812,
+            "ask": 0.356919,
+            "timestamp": "2025-12-07T12:05:05.116Z",
+            "receivedAt": 1765109105116,
+            "intervalMs": 159253
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.74925,
+            "bid": 1.74906,
+            "ask": 1.74925,
+            "timestamp": "2025-12-07T12:05:17.942Z",
+            "receivedAt": 1765109117942,
+            "intervalMs": 26857
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.74943,
+            "bid": 1.74926,
+            "ask": 1.74943,
+            "timestamp": "2025-12-07T12:05:22.822Z",
+            "receivedAt": 1765109122822,
+            "intervalMs": 4880
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.74933,
+            "bid": 1.74933,
+            "ask": 1.74953,
+            "timestamp": "2025-12-07T12:05:32.046Z",
+            "receivedAt": 1765109132046,
+            "intervalMs": 9224
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03477,
+            "bid": 2.03477,
+            "ask": 2.03478,
+            "timestamp": "2025-12-07T12:05:32.321Z",
+            "receivedAt": 1765109132321,
+            "intervalMs": 40810
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.74954,
+            "bid": 1.74938,
+            "ask": 1.74954,
+            "timestamp": "2025-12-07T12:05:34.118Z",
+            "receivedAt": 1765109134118,
+            "intervalMs": 2072
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03482,
+            "bid": 2.03481,
+            "ask": 2.03482,
+            "timestamp": "2025-12-07T12:05:39.769Z",
+            "receivedAt": 1765109139769,
+            "intervalMs": 7448
+        },
+        {
+            "symbol": "ADAEUR",
+            "price": 0.356827,
+            "bid": 0.356803,
+            "ask": 0.356866,
+            "timestamp": "2025-12-07T12:05:41.993Z",
+            "receivedAt": 1765109141993,
+            "intervalMs": 36877
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03494,
+            "bid": 2.03485,
+            "ask": 2.03494,
+            "timestamp": "2025-12-07T12:05:46.790Z",
+            "receivedAt": 1765109146790,
+            "intervalMs": 7021
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03492,
+            "bid": 2.03492,
+            "ask": 2.03493,
+            "timestamp": "2025-12-07T12:05:48.785Z",
+            "receivedAt": 1765109148785,
+            "intervalMs": 1995
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03492,
+            "bid": 2.03492,
+            "ask": 2.03493,
+            "timestamp": "2025-12-07T12:05:49.390Z",
+            "receivedAt": 1765109149390,
+            "intervalMs": 605
+        },
+        {
+            "symbol": "DOTUSD",
+            "price": 2.091,
+            "bid": 2.091,
+            "ask": 2.0919,
+            "timestamp": "2025-12-07T12:05:57.263Z",
+            "receivedAt": 1765109157263,
+            "intervalMs": 235641
+        },
+        {
+            "symbol": "ADAEUR",
+            "price": 0.356834,
+            "bid": 0.356833,
+            "ask": 0.356834,
+            "timestamp": "2025-12-07T12:06:01.111Z",
+            "receivedAt": 1765109161111,
+            "intervalMs": 19118
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.74989,
+            "bid": 1.74989,
+            "ask": 1.7499,
+            "timestamp": "2025-12-07T12:06:11.151Z",
+            "receivedAt": 1765109171151,
+            "intervalMs": 37033
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.0355,
+            "bid": 2.03494,
+            "ask": 2.0359,
+            "timestamp": "2025-12-07T12:06:13.044Z",
+            "receivedAt": 1765109173044,
+            "intervalMs": 23654
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03587,
+            "bid": 2.03587,
+            "ask": 2.0359,
+            "timestamp": "2025-12-07T12:06:14.780Z",
+            "receivedAt": 1765109174780,
+            "intervalMs": 1736
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03597,
+            "bid": 2.03597,
+            "ask": 2.03598,
+            "timestamp": "2025-12-07T12:06:19.781Z",
+            "receivedAt": 1765109179781,
+            "intervalMs": 5001
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03602,
+            "bid": 2.03601,
+            "ask": 2.03602,
+            "timestamp": "2025-12-07T12:06:21.595Z",
+            "receivedAt": 1765109181595,
+            "intervalMs": 1814
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03607,
+            "bid": 2.03607,
+            "ask": 2.03608,
+            "timestamp": "2025-12-07T12:06:23.521Z",
+            "receivedAt": 1765109183521,
+            "intervalMs": 1926
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.0363,
+            "bid": 2.0363,
+            "ask": 2.03631,
+            "timestamp": "2025-12-07T12:06:27.212Z",
+            "receivedAt": 1765109187212,
+            "intervalMs": 3691
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03666,
+            "bid": 2.03639,
+            "ask": 2.03666,
+            "timestamp": "2025-12-07T12:06:30.390Z",
+            "receivedAt": 1765109190390,
+            "intervalMs": 3178
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03639,
+            "bid": 2.03639,
+            "ask": 2.03666,
+            "timestamp": "2025-12-07T12:06:30.397Z",
+            "receivedAt": 1765109190397,
+            "intervalMs": 7
+        },
+        {
+            "symbol": "DOTUSD",
+            "price": 2.094,
+            "bid": 2.0932,
+            "ask": 2.094,
+            "timestamp": "2025-12-07T12:06:30.397Z",
+            "receivedAt": 1765109190397,
+            "intervalMs": 33134
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.75094,
+            "bid": 1.74989,
+            "ask": 1.75094,
+            "timestamp": "2025-12-07T12:06:30.871Z",
+            "receivedAt": 1765109190871,
+            "intervalMs": 19720
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.0364,
+            "bid": 2.0364,
+            "ask": 2.03666,
+            "timestamp": "2025-12-07T12:06:31.355Z",
+            "receivedAt": 1765109191355,
+            "intervalMs": 958
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.75094,
+            "bid": 1.75093,
+            "ask": 1.75094,
+            "timestamp": "2025-12-07T12:06:31.530Z",
+            "receivedAt": 1765109191530,
+            "intervalMs": 659
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.75094,
+            "bid": 1.75093,
+            "ask": 1.75094,
+            "timestamp": "2025-12-07T12:06:31.530Z",
+            "receivedAt": 1765109191530,
+            "intervalMs": 0
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.75093,
+            "bid": 1.75093,
+            "ask": 1.75094,
+            "timestamp": "2025-12-07T12:06:31.530Z",
+            "receivedAt": 1765109191530,
+            "intervalMs": 0
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.0375,
+            "bid": 2.03749,
+            "ask": 2.0375,
+            "timestamp": "2025-12-07T12:06:38.974Z",
+            "receivedAt": 1765109198974,
+            "intervalMs": 7619
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03749,
+            "bid": 2.03749,
+            "ask": 2.0375,
+            "timestamp": "2025-12-07T12:06:54.621Z",
+            "receivedAt": 1765109214621,
+            "intervalMs": 15647
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.0375,
+            "bid": 2.03749,
+            "ask": 2.0375,
+            "timestamp": "2025-12-07T12:07:10.681Z",
+            "receivedAt": 1765109230681,
+            "intervalMs": 16060
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.0375,
+            "bid": 2.03749,
+            "ask": 2.0375,
+            "timestamp": "2025-12-07T12:07:15.124Z",
+            "receivedAt": 1765109235124,
+            "intervalMs": 4443
+        },
+        {
+            "symbol": "ADAEUR",
+            "price": 0.357184,
+            "bid": 0.357074,
+            "ask": 0.357184,
+            "timestamp": "2025-12-07T12:07:16.262Z",
+            "receivedAt": 1765109236262,
+            "intervalMs": 75151
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03749,
+            "bid": 2.03749,
+            "ask": 2.0375,
+            "timestamp": "2025-12-07T12:07:29.774Z",
+            "receivedAt": 1765109249774,
+            "intervalMs": 14650
+        },
+        {
+            "symbol": "ADAUSD",
+            "price": 0.415226,
+            "bid": 0.415225,
+            "ask": 0.415226,
+            "timestamp": "2025-12-07T12:07:29.775Z",
+            "receivedAt": 1765109249775,
+            "intervalMs": 315275
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03749,
+            "bid": 2.03749,
+            "ask": 2.0375,
+            "timestamp": "2025-12-07T12:07:29.879Z",
+            "receivedAt": 1765109249879,
+            "intervalMs": 105
+        },
+        {
+            "symbol": "ADAUSD",
+            "price": 0.415226,
+            "bid": 0.415225,
+            "ask": 0.415226,
+            "timestamp": "2025-12-07T12:07:33.674Z",
+            "receivedAt": 1765109253674,
+            "intervalMs": 3899
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.7512,
+            "bid": 1.75119,
+            "ask": 1.75293,
+            "timestamp": "2025-12-07T12:07:37.301Z",
+            "receivedAt": 1765109257301,
+            "intervalMs": 65771
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.75278,
+            "bid": 1.75277,
+            "ask": 1.75278,
+            "timestamp": "2025-12-07T12:07:37.589Z",
+            "receivedAt": 1765109257589,
+            "intervalMs": 288
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.0375,
+            "bid": 2.03749,
+            "ask": 2.0375,
+            "timestamp": "2025-12-07T12:07:39.435Z",
+            "receivedAt": 1765109259435,
+            "intervalMs": 9556
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.0375,
+            "bid": 2.03749,
+            "ask": 2.0375,
+            "timestamp": "2025-12-07T12:07:43.990Z",
+            "receivedAt": 1765109263990,
+            "intervalMs": 4555
+        },
+        {
+            "symbol": "ADAUSD",
+            "price": 0.415226,
+            "bid": 0.415225,
+            "ask": 0.415342,
+            "timestamp": "2025-12-07T12:07:44.014Z",
+            "receivedAt": 1765109264014,
+            "intervalMs": 10340
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03758,
+            "bid": 2.03749,
+            "ask": 2.03758,
+            "timestamp": "2025-12-07T12:07:44.028Z",
+            "receivedAt": 1765109264028,
+            "intervalMs": 38
+        },
+        {
+            "symbol": "DOTUSD",
+            "price": 2.0944,
+            "bid": 2.0943,
+            "ask": 2.0944,
+            "timestamp": "2025-12-07T12:07:44.029Z",
+            "receivedAt": 1765109264029,
+            "intervalMs": 73632
+        },
+        {
+            "symbol": "ADAUSD",
+            "price": 0.415342,
+            "bid": 0.415307,
+            "ask": 0.415342,
+            "timestamp": "2025-12-07T12:07:44.043Z",
+            "receivedAt": 1765109264043,
+            "intervalMs": 29
+        },
+        {
+            "symbol": "DOTUSD",
+            "price": 2.0944,
+            "bid": 2.0943,
+            "ask": 2.0945,
+            "timestamp": "2025-12-07T12:07:44.043Z",
+            "receivedAt": 1765109264043,
+            "intervalMs": 14
+        },
+        {
+            "symbol": "DOTUSD",
+            "price": 2.0945,
+            "bid": 2.0944,
+            "ask": 2.0945,
+            "timestamp": "2025-12-07T12:07:44.196Z",
+            "receivedAt": 1765109264196,
+            "intervalMs": 153
+        },
+        {
+            "symbol": "DOTUSD",
+            "price": 2.0945,
+            "bid": 2.0944,
+            "ask": 2.0954,
+            "timestamp": "2025-12-07T12:07:44.196Z",
+            "receivedAt": 1765109264196,
+            "intervalMs": 0
+        },
+        {
+            "symbol": "ADAUSD",
+            "price": 0.415342,
+            "bid": 0.415341,
+            "ask": 0.415342,
+            "timestamp": "2025-12-07T12:07:45.069Z",
+            "receivedAt": 1765109265069,
+            "intervalMs": 1026
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03758,
+            "bid": 2.03757,
+            "ask": 2.03949,
+            "timestamp": "2025-12-07T12:07:45.317Z",
+            "receivedAt": 1765109265317,
+            "intervalMs": 1289
+        },
+        {
+            "symbol": "DOTUSD",
+            "price": 2.0954,
+            "bid": 2.0953,
+            "ask": 2.0954,
+            "timestamp": "2025-12-07T12:07:45.734Z",
+            "receivedAt": 1765109265734,
+            "intervalMs": 1538
+        },
+        {
+            "symbol": "DOTUSD",
+            "price": 2.0954,
+            "bid": 2.0953,
+            "ask": 2.0973,
+            "timestamp": "2025-12-07T12:07:45.735Z",
+            "receivedAt": 1765109265735,
+            "intervalMs": 1
+        },
+        {
+            "symbol": "ADAUSD",
+            "price": 0.415342,
+            "bid": 0.415341,
+            "ask": 0.415342,
+            "timestamp": "2025-12-07T12:07:45.748Z",
+            "receivedAt": 1765109265748,
+            "intervalMs": 679
+        },
+        {
+            "symbol": "ADAUSD",
+            "price": 0.415342,
+            "bid": 0.415341,
+            "ask": 0.415342,
+            "timestamp": "2025-12-07T12:07:45.748Z",
+            "receivedAt": 1765109265748,
+            "intervalMs": 0
+        },
+        {
+            "symbol": "ADAUSD",
+            "price": 0.415342,
+            "bid": 0.415341,
+            "ask": 0.415681,
+            "timestamp": "2025-12-07T12:07:45.748Z",
+            "receivedAt": 1765109265748,
+            "intervalMs": 0
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.75424,
+            "bid": 1.754,
+            "ask": 1.75424,
+            "timestamp": "2025-12-07T12:07:47.064Z",
+            "receivedAt": 1765109267064,
+            "intervalMs": 9475
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.75424,
+            "bid": 1.754,
+            "ask": 1.75424,
+            "timestamp": "2025-12-07T12:07:47.065Z",
+            "receivedAt": 1765109267065,
+            "intervalMs": 1
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.75426,
+            "bid": 1.75423,
+            "ask": 1.75426,
+            "timestamp": "2025-12-07T12:07:52.433Z",
+            "receivedAt": 1765109272433,
+            "intervalMs": 5368
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.04,
+            "bid": 2.03999,
+            "ask": 2.04,
+            "timestamp": "2025-12-07T12:07:58.905Z",
+            "receivedAt": 1765109278905,
+            "intervalMs": 13588
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.03999,
+            "bid": 2.03999,
+            "ask": 2.04,
+            "timestamp": "2025-12-07T12:07:59.818Z",
+            "receivedAt": 1765109279818,
+            "intervalMs": 913
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.04,
+            "bid": 2.03999,
+            "ask": 2.04026,
+            "timestamp": "2025-12-07T12:08:01.125Z",
+            "receivedAt": 1765109281125,
+            "intervalMs": 1307
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.04037,
+            "bid": 2.04037,
+            "ask": 2.04039,
+            "timestamp": "2025-12-07T12:08:03.256Z",
+            "receivedAt": 1765109283256,
+            "intervalMs": 2131
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.75458,
+            "bid": 1.75458,
+            "ask": 1.75459,
+            "timestamp": "2025-12-07T12:08:21.570Z",
+            "receivedAt": 1765109301570,
+            "intervalMs": 29137
+        },
+        {
+            "symbol": "ADAUSD",
+            "price": 0.41568,
+            "bid": 0.41568,
+            "ask": 0.415681,
+            "timestamp": "2025-12-07T12:08:34.541Z",
+            "receivedAt": 1765109314541,
+            "intervalMs": 48793
+        },
+        {
+            "symbol": "ADAUSD",
+            "price": 0.415667,
+            "bid": 0.415588,
+            "ask": 0.415667,
+            "timestamp": "2025-12-07T12:08:44.214Z",
+            "receivedAt": 1765109324214,
+            "intervalMs": 9673
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.04039,
+            "bid": 2.04038,
+            "ask": 2.04039,
+            "timestamp": "2025-12-07T12:08:48.252Z",
+            "receivedAt": 1765109328252,
+            "intervalMs": 44996
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.7547,
+            "bid": 1.7547,
+            "ask": 1.75471,
+            "timestamp": "2025-12-07T12:08:49.263Z",
+            "receivedAt": 1765109329263,
+            "intervalMs": 27693
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.7547,
+            "bid": 1.7547,
+            "ask": 1.75471,
+            "timestamp": "2025-12-07T12:08:49.838Z",
+            "receivedAt": 1765109329838,
+            "intervalMs": 575
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.04039,
+            "bid": 2.04038,
+            "ask": 2.04039,
+            "timestamp": "2025-12-07T12:09:11.291Z",
+            "receivedAt": 1765109351291,
+            "intervalMs": 23039
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.04039,
+            "bid": 2.04038,
+            "ask": 2.04039,
+            "timestamp": "2025-12-07T12:09:13.432Z",
+            "receivedAt": 1765109353432,
+            "intervalMs": 2141
+        },
+        {
+            "symbol": "XXRPZUSD",
+            "price": 2.0409,
+            "bid": 2.04038,
+            "ask": 2.0409,
+            "timestamp": "2025-12-07T12:09:15.649Z",
+            "receivedAt": 1765109355649,
+            "intervalMs": 2217
+        },
+        {
+            "symbol": "XXRPZEUR",
+            "price": 1.7547,
+            "bid": 1.7547,
+            "ask": 1.75471,
+            "timestamp": "2025-12-07T12:09:17.203Z",
+            "receivedAt": 1765109357203,
+            "intervalMs": 27365
+        }
+    ],
+    "priceLogCount": 100,
+    "health": {
+        "isConnected": true,
+        "hasStaleSymbols": true,
+        "averageIntervalHealthy": false,
+        "overall": false
+    }
+}

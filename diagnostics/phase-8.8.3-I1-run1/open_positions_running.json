@@ -1,0 +1,61 @@
+{
+    "ok": true,
+    "mode": "paper",
+    "count": 6,
+    "positions": [
+        {
+            "id": "5a7bec19-61b2-4b08-925d-ee0b8dc817d7",
+            "symbol": "ADAEUR",
+            "quantity": 325.38199623,
+            "avgPrice": 0.35826998,
+            "stopLoss": 0.35380224,
+            "takeProfit": 0.39566186,
+            "unrealizedPnl": -0.35335834
+        },
+        {
+            "id": "e4604191-595b-40a5-b734-516c06eb40c4",
+            "symbol": "ENAUSD",
+            "quantity": 448.62544863,
+            "avgPrice": 0.25984839,
+            "stopLoss": 0.256608,
+            "takeProfit": 0.28406217,
+            "unrealizedPnl": -0.78437225
+        },
+        {
+            "id": "3a3558a6-e870-4388-8ef0-1326139d73ab",
+            "symbol": "XXRPZEUR",
+            "quantity": 66.50446168,
+            "avgPrice": 1.7528839,
+            "stopLoss": 1.7310249,
+            "takeProfit": 1.88377116,
+            "unrealizedPnl": 0.12077875
+        },
+        {
+            "id": "9dc78751-ee9f-4f34-a027-c1dea0ee41c4",
+            "symbol": "ADAUSD",
+            "quantity": 279.5812577,
+            "avgPrice": 0.41696143,
+            "stopLoss": 0.41176179,
+            "takeProfit": 0.460771,
+            "unrealizedPnl": -0.36189837
+        },
+        {
+            "id": "7c07dc6d-e15d-47e7-b2fa-e4b39684db92",
+            "symbol": "XXRPZUSD",
+            "quantity": 57.19583897,
+            "avgPrice": 2.03816575,
+            "stopLoss": 2.0127492,
+            "takeProfit": 2.18180225,
+            "unrealizedPnl": 0.15638772
+        },
+        {
+            "id": "384350ec-267a-48a8-9bb4-6f5835d1fe8a",
+            "symbol": "DOT/USD",
+            "quantity": 55.41277879,
+            "avgPrice": 2.1037494,
+            "stopLoss": 2.0903102,
+            "takeProfit": 2.152384,
+            "unrealizedPnl": -0.46266346
+        }
+    ]
+}

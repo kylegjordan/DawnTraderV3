@@ -1,0 +1,78 @@
+{
+    "ok": true,
+    "timestamp": "2025-12-07T12:09:38.726Z",
+    "sessionStart": "2025-12-07T11:37:01.954Z",
+    "totalSignals": 0,
+    "totalOpened": 6,
+    "totalClosed": 0,
+    "totalForceClosed": 0,
+    "byCloseReason": {},
+    "byStrategy": {
+        "vwap_pullback": {
+            "opened": 1,
+            "closed": 0
+        },
+        "mean_reversion": {
+            "opened": 5,
+            "closed": 0
+        }
+    },
+    "hardStopSummaries": [],
+    "slotStateSnapshots": [],
+    "recentEvents": [
+        {
+            "tradeId": "c2512bbd-51db-4171-9cc8-b4074bfa646b",
+            "symbol": "ADAEUR",
+            "strategy": "mean_reversion",
+            "eventType": "TRADE_OPEN",
+            "source": "normal",
+            "entryPrice": 0.358269976064,
+            "timestamp": "2025-12-07T11:39:26.802Z"
+        },
+        {
+            "tradeId": "297bc18e-5cd0-4d28-a951-728a4a9691a1",
+            "symbol": "ENAUSD",
+            "strategy": "mean_reversion",
+            "eventType": "TRADE_OPEN",
+            "source": "normal",
+            "entryPrice": 0.25984838879999994,
+            "timestamp": "2025-12-07T11:39:24.565Z"
+        },
+        {
+            "tradeId": "4c899ef9-65af-4a0c-a1a5-817e2a0db52a",
+            "symbol": "XXRPZEUR",
+            "strategy": "mean_reversion",
+            "eventType": "TRADE_OPEN",
+            "source": "normal",
+            "entryPrice": 1.7528838977649999,
+            "timestamp": "2025-12-07T11:39:22.937Z"
+        },
+        {
+            "tradeId": "7e6eaac8-b5cb-4a74-8328-2d091c090a44",
+            "symbol": "ADAUSD",
+            "strategy": "mean_reversion",
+            "eventType": "TRADE_OPEN",
+            "source": "normal",
+            "entryPrice": 0.4169614263814999,
+            "timestamp": "2025-12-07T11:39:19.887Z"
+        },
+        {
+            "tradeId": "17f0c03b-90aa-4a88-a8d0-7aeebf34207a",
+            "symbol": "XXRPZUSD",
+            "strategy": "mean_reversion",
+            "eventType": "TRADE_OPEN",
+            "source": "normal",
+            "entryPrice": 2.03816574962,
+            "timestamp": "2025-12-07T11:39:18.176Z"
+        },
+        {
+            "tradeId": "7719785e-9923-44a7-92fc-3d2dd0c617c1",
+            "symbol": "DOT/USD",
+            "strategy": "vwap_pullback",
+            "eventType": "TRADE_OPEN",
+            "source": "normal",
+            "entryPrice": 2.1037493977499997,
+            "timestamp": "2025-12-07T11:39:06.059Z"
+        }
+    ]
+}

@@ -1,0 +1,68 @@
+{
+    "ok": true,
+    "timestamp": "2025-12-07T12:09:42.609Z",
+    "mode": "paper",
+    "openPositionCount": 6,
+    "wsSubscribedCount": 6,
+    "linkedCount": 5,
+    "orphanedCount": 1,
+    "health": "degraded",
+    "linkageDetails": [
+        {
+            "positionId": "5a7bec19-61b2-4b08-925d-ee0b8dc817d7",
+            "symbol": "ADAEUR",
+            "strategy": "mean_reversion",
+            "openedAt": "2025-12-07T11:39:26.542Z",
+            "isWebSocketSubscribed": true,
+            "linkageStatus": "LINKED"
+        },
+        {
+            "positionId": "e4604191-595b-40a5-b734-516c06eb40c4",
+            "symbol": "ENAUSD",
+            "strategy": "mean_reversion",
+            "openedAt": "2025-12-07T11:39:24.302Z",
+            "isWebSocketSubscribed": true,
+            "linkageStatus": "LINKED"
+        },
+        {
+            "positionId": "3a3558a6-e870-4388-8ef0-1326139d73ab",
+            "symbol": "XXRPZEUR",
+            "strategy": "mean_reversion",
+            "openedAt": "2025-12-07T11:39:22.682Z",
+            "isWebSocketSubscribed": true,
+            "linkageStatus": "LINKED"
+        },
+        {
+            "positionId": "9dc78751-ee9f-4f34-a027-c1dea0ee41c4",
+            "symbol": "ADAUSD",
+            "strategy": "mean_reversion",
+            "openedAt": "2025-12-07T11:39:19.619Z",
+            "isWebSocketSubscribed": true,
+            "linkageStatus": "LINKED"
+        },
+        {
+            "positionId": "7c07dc6d-e15d-47e7-b2fa-e4b39684db92",
+            "symbol": "XXRPZUSD",
+            "strategy": "mean_reversion",
+            "openedAt": "2025-12-07T11:39:17.916Z",
+            "isWebSocketSubscribed": true,
+            "linkageStatus": "LINKED"
+        },
+        {
+            "positionId": "384350ec-267a-48a8-9bb4-6f5835d1fe8a",
+            "symbol": "DOT/USD",
+            "strategy": "vwap_pullback",
+            "openedAt": "2025-12-07T11:39:05.783Z",
+            "isWebSocketSubscribed": false,
+            "linkageStatus": "ORPHANED"
+        }
+    ],
+    "wsSubscribedSymbols": [
+        "DOTUSD",
+        "XXRPZUSD",
+        "ADAUSD",
+        "XXRPZEUR",
+        "ENAUSD",
+        "ADAEUR"
+    ]
+}
