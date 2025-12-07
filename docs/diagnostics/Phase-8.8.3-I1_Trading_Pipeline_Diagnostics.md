@@ -157,12 +157,57 @@ These are all the block reason codes that can prevent an RTB signal from becomin
 
 ## Diagnostic Endpoints (Phase 8.8.3-I1)
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/diagnostics/rtb-blocks?raw=1` | RTB block reason summary with per-symbol and per-reason breakdown |
-| `GET /api/diagnostics/open-position-ws-linkage?raw=1` | WebSocket subscription status for all open positions |
-| `GET /api/diagnostics/ws-price-engine?raw=1` | WebSocket price engine status (existing) |
-| `GET /api/diagnostics/trade-lifecycle?raw=1` | Trade lifecycle events summary |
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/diagnostics/rtb-blocks?raw=1` | GET | RTB block reason summary with per-symbol and per-reason breakdown |
+| `/api/diagnostics/rtb-blocks/reset` | POST | Reset RTB block diagnostics buffer |
+| `/api/diagnostics/trade-lifecycle?raw=1` | GET | Trade lifecycle events with hard stop summaries |
+| `/api/diagnostics/trade-lifecycle/reset` | POST | Reset trade lifecycle diagnostics buffer |
+| `/api/diagnostics/open-position-ws-linkage?mode=paper&raw=1` | GET | WebSocket subscription status for all open positions |
+| `/api/diagnostics/ws-price-engine?raw=1` | GET | WebSocket price engine status (existing B3.6) |
+
+### Response Examples
+
+**RTB Blocks Response:**
+```json
+{
+  "ok": true,
+  "sessionStart": "2025-12-07T10:00:00.000Z",
+  "totals": { "attempts": 150, "blocks": 45 },
+  "byReason": { "COOLDOWN": 20, "POSITION_LIMIT": 15, "MAX_POSITION": 10 },
+  "byStrategy": { "vwap_pullback": 25, "breakout": 20 },
+  "recentBlocks": [...]
+}
+```
+
+**Trade Lifecycle Response:**
+```json
+{
+  "ok": true,
+  "sessionStart": "2025-12-07T10:00:00.000Z",
+  "totalSignals": 100,
+  "totalOpened": 55,
+  "totalClosed": 48,
+  "totalForceClosed": 7,
+  "byCloseReason": { "target_hit": 30, "stop_hit": 10, "manual_stop": 8 },
+  "hardStopSummaries": [{ "sessionId": "...", "openPositionsBefore": 7, "positionsClosedByHardStop": 7 }],
+  "recentEvents": [...]
+}
+```
+
+**WS Linkage Response:**
+```json
+{
+  "ok": true,
+  "mode": "paper",
+  "openPositionCount": 5,
+  "wsSubscribedCount": 5,
+  "linkedCount": 5,
+  "orphanedCount": 0,
+  "health": "healthy",
+  "linkageDetails": [...]
+}
+```
 
 ---
 

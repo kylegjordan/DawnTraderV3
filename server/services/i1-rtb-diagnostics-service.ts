@@ -72,7 +72,7 @@ class I1RTBDiagnosticsService {
   private byStrategy: Record<string, { attempts: number; opened: number; blocked: number }> = {};
   
   private readonly MAX_RECENT_BLOCKS = 100;
-  private readonly MAX_EVENT_HISTORY = 5000;
+  private readonly MAX_EVENT_HISTORY = 300; // Per-buffer limit (3 buffers x 300 = 900 max combined)
   
   private constructor() {}
   

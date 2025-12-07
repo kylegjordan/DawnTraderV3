@@ -95,8 +95,8 @@ class I1TradeLifecycleDiagnosticsService {
   private byCloseReason: Record<string, number> = {};
   private byStrategy: Record<string, { opened: number; closed: number }> = {};
   
-  private readonly MAX_EVENTS = 2000;
-  private readonly MAX_SNAPSHOTS = 500;
+  private readonly MAX_EVENTS = 800; // Combined with snapshots stays under 1000
+  private readonly MAX_SNAPSHOTS = 100;
   
   private constructor() {}
   
