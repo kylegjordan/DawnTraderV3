@@ -676,51 +676,75 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
         const t0 = Date.now();
         
         if (currentManager) {
-          // Phase 8.8.3-I2: Set stop-in-progress flag BEFORE force-close to block new trades
-          console.log('[8.8.3-I2][STOP_FLOW][SETTING_STOP_FLAG]');
+          // Phase 8.8.3-I2: CORRECTED STOP SEQUENCE
+          // 1. Set stop-in-progress flag FIRST to block new trades via ENGINE_STOPPING check
+          console.log('[8.8.3-I2][STOP_FLOW][1_BEGIN] Hard stop sequence initiated');
+          console.log('[8.8.3-I2][STOP_FLOW][2_SETTING_STOP_FLAG] ENGINE_STOPPING flag set');
           currentManager.markStopInProgress();
           
           try {
-            // Phase 8.8.3: Force-close all open positions before manager stop (Hard Stop behavior)
-            console.log('[DEBUG-B9][STOP_FLOW][FORCE_CLOSE_START]');
+            // 2. Stop execution engine FIRST (stops signals and execution loop)
+            // This prevents any new trades from being processed while we close positions
+            console.log('[8.8.3-I2][STOP_FLOW][3_STOPPING_EXECUTION_ENGINE]');
+            await currentManager.stop();
+            console.log('[8.8.3-I2][STOP_FLOW][4_EXECUTION_ENGINE_STOPPED]');
+            
+            // 3. Force-close all open positions AFTER engine is stopped
+            // This ensures no race condition - engine is dead, now clean up positions
+            console.log('[8.8.3-I2][STOP_FLOW][5_FORCE_CLOSE_START] Closing all open positions...');
             try {
               const closeResult = await currentManager.forceCloseAllOpenPositionsOnStop();
-              console.log('[DEBUG-B9][STOP_FLOW][FORCE_CLOSE_RESULT]', {
+              console.log('[8.8.3-I2][STOP_FLOW][6_FORCE_CLOSE_RESULT]', {
                 closedCount: closeResult.closedCount,
                 failedCount: closeResult.failedCount,
                 skippedCount: closeResult.skippedCount,
+                details: closeResult.details.map((d: { positionId: string; symbol: string; status: string; reason?: string }) => `${d.symbol}:${d.status}${d.reason ? ':' + d.reason : ''}`),
               });
+              
+              // Log each position closure for verification
+              for (const detail of closeResult.details) {
+                console.log(`[8.8.3-I2][STOP_FLOW][POSITION_CLOSED] ${detail.symbol} (${detail.positionId}): ${detail.status}${detail.reason ? ' - ' + detail.reason : ''}`);
+              }
             } catch (closeErr) {
-              console.error('[DEBUG-B9][STOP_FLOW][FORCE_CLOSE_ERROR]', closeErr);
+              console.error('[8.8.3-I2][STOP_FLOW][FORCE_CLOSE_ERROR]', closeErr);
               // Non-blocking: continue with stop even if force-close fails
             }
             
-            // Phase 8.8.4: DB verification after force-close (non-blocking diagnostic)
+            // 4. DB verification after force-close - ensure no open positions remain
+            console.log('[8.8.3-I2][STOP_FLOW][7_DB_VERIFICATION]');
             try {
               const remainingOpen = await storage.getPaperSimOpenPositions('paper');
               if (remainingOpen.length > 0) {
-                console.warn('[DEBUG-B9][STOP_FLOW][OPEN_POSITIONS_REMAIN_AFTER_FORCE_CLOSE]', {
+                console.error('[8.8.3-I2][STOP_FLOW][CRITICAL] OPEN POSITIONS REMAIN AFTER FORCE-CLOSE!', {
                   count: remainingOpen.length,
                   ids: remainingOpen.map(p => p.id),
                   symbols: remainingOpen.map(p => p.symbol),
                 });
+                
+                // Attempt cleanup: mark remaining positions as closed in DB
+                for (const orphan of remainingOpen) {
+                  console.log(`[8.8.3-I2][STOP_FLOW][CLEANUP] Force-removing orphan position: ${orphan.symbol} (${orphan.id})`);
+                  try {
+                    await storage.deletePaperSimOpenPosition('paper', orphan.id);
+                    console.log(`[8.8.3-I2][STOP_FLOW][CLEANUP_SUCCESS] Removed orphan: ${orphan.id}`);
+                  } catch (cleanupErr) {
+                    console.error(`[8.8.3-I2][STOP_FLOW][CLEANUP_FAILED] Could not remove orphan: ${orphan.id}`, cleanupErr);
+                  }
+                }
               } else {
-                console.log('[DEBUG-B9][STOP_FLOW][DB_VERIFICATION_PASSED]', {
-                  message: 'All positions successfully closed',
-                });
+                console.log('[8.8.3-I2][STOP_FLOW][8_DB_VERIFICATION_PASSED] All positions successfully closed');
               }
             } catch (verifyErr) {
-              console.error('[DEBUG-B9][STOP_FLOW][DB_VERIFICATION_ERROR]', verifyErr);
+              console.error('[8.8.3-I2][STOP_FLOW][DB_VERIFICATION_ERROR]', verifyErr);
             }
             
-            console.log('[41E-S][TIMING] Starting manager.stop()...');
-            await currentManager.stop();
             clearGlobalPaperSimManager();
-            console.log(`[41E-S][TIMING] Manager shutdown completed in ${Date.now() - t0}ms`);
+            console.log(`[8.8.3-I2][STOP_FLOW][9_COMPLETE] Manager shutdown completed in ${Date.now() - t0}ms`);
           } finally {
-            // Phase 8.8.3-I2: Always clear the stop flag in finally block
+            // 5. Always clear the stop flag in finally block
             currentManager.clearStopInProgress();
-            console.log('[8.8.3-I2][STOP_FLOW][STOP_FLAG_CLEARED]');
+            console.log('[8.8.3-I2][STOP_FLOW][10_STOP_FLAG_CLEARED] ENGINE_STOPPING flag cleared');
+            console.log('[8.8.3-I2][STOP_FLOW][END] Hard stop sequence complete');
           }
         } else {
           console.warn('[PaperSimService] No active manager found, updating database only');

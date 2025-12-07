@@ -1,14 +1,19 @@
 /**
  * Phase 8.8.3-I1: RTB Block Diagnostics Service
  * 
- * Maintains in-memory counters of RTB attempts and block reasons.
- * This is DIAGNOSTIC ONLY - no behavior changes.
+ * UPDATED in Phase 8.8.3-I2:
+ * - No longer maintains its own counters
+ * - Reads aggregated stats from RtbMetricsService.getSummary() (single source of truth)
+ * - Only stores per-event logs (samples) in circular buffers
  * 
  * Responsibilities:
- * - Track RTB attempts, opens, and blocks by symbol/strategy/reason
- * - Provide summary statistics via API
+ * - Store recent RTB events (attempts, opens, blocks) with timestamps
+ * - Provide detailed event history via API
  * - Log all events with [8.8.3-I1] prefix
+ * - Read summary statistics from RtbMetricsService
  */
+
+import { rtbMetricsService } from './rtb-metrics-service.js';
 
 interface RTBAttempt {
   symbol: string;
@@ -30,13 +35,6 @@ interface RTBOpen {
   timestamp: Date;
 }
 
-interface SymbolStats {
-  attempts: number;
-  opened: number;
-  blocked: number;
-  byReason: Record<string, number>;
-}
-
 interface I1RTBSummary {
   sessionStart: Date;
   totals: {
@@ -45,7 +43,7 @@ interface I1RTBSummary {
     blocked: number;
   };
   byReason: Record<string, number>;
-  bySymbol: Record<string, SymbolStats>;
+  bySymbol: Record<string, { attempts: number; opened: number; blocked: number; byReason: Record<string, number> }>;
   byStrategy: Record<string, { attempts: number; opened: number; blocked: number }>;
   recentBlocks: Array<{
     symbol: string;
@@ -53,25 +51,28 @@ interface I1RTBSummary {
     blockReason: string;
     timestamp: string;
   }>;
+  recentAttempts: Array<{
+    symbol: string;
+    strategy: string;
+    timestamp: string;
+  }>;
+  recentOpens: Array<{
+    symbol: string;
+    strategy: string;
+    tradeId?: string;
+    timestamp: string;
+  }>;
 }
 
 class I1RTBDiagnosticsService {
   private static instance: I1RTBDiagnosticsService;
   
-  private sessionStart: Date = new Date();
+  // Phase 8.8.3-I2: Only store event samples, not counters
   private attempts: RTBAttempt[] = [];
   private blocks: RTBBlock[] = [];
   private opens: RTBOpen[] = [];
   
-  private totalAttempts = 0;
-  private totalOpened = 0;
-  private totalBlocked = 0;
-  
-  private byReason: Record<string, number> = {};
-  private bySymbol: Record<string, SymbolStats> = {};
-  private byStrategy: Record<string, { attempts: number; opened: number; blocked: number }> = {};
-  
-  private readonly MAX_RECENT_BLOCKS = 100;
+  private readonly MAX_RECENT_EVENTS = 100;
   private readonly MAX_EVENT_HISTORY = 300; // Per-buffer limit (3 buffers x 300 = 900 max combined)
   
   private constructor() {}
@@ -85,22 +86,12 @@ class I1RTBDiagnosticsService {
   
   /**
    * Record an RTB attempt (signal evaluation started)
+   * Phase 8.8.3-I2: Only logs and stores event sample - counters are in RtbMetricsService
    */
   recordAttempt(symbol: string, strategy: string): void {
     const timestamp = new Date();
     
-    this.totalAttempts++;
-    
-    if (!this.bySymbol[symbol]) {
-      this.bySymbol[symbol] = { attempts: 0, opened: 0, blocked: 0, byReason: {} };
-    }
-    this.bySymbol[symbol].attempts++;
-    
-    if (!this.byStrategy[strategy]) {
-      this.byStrategy[strategy] = { attempts: 0, opened: 0, blocked: 0 };
-    }
-    this.byStrategy[strategy].attempts++;
-    
+    // Store event sample only - counters are managed by RtbMetricsService
     this.attempts.push({ symbol, strategy, timestamp });
     if (this.attempts.length > this.MAX_EVENT_HISTORY) {
       this.attempts.shift();
@@ -115,22 +106,12 @@ class I1RTBDiagnosticsService {
   
   /**
    * Record a successful trade open from RTB
+   * Phase 8.8.3-I2: Only logs and stores event sample - counters are in RtbMetricsService
    */
   recordOpen(symbol: string, strategy: string, tradeId?: string): void {
     const timestamp = new Date();
     
-    this.totalOpened++;
-    
-    if (!this.bySymbol[symbol]) {
-      this.bySymbol[symbol] = { attempts: 0, opened: 0, blocked: 0, byReason: {} };
-    }
-    this.bySymbol[symbol].opened++;
-    
-    if (!this.byStrategy[strategy]) {
-      this.byStrategy[strategy] = { attempts: 0, opened: 0, blocked: 0 };
-    }
-    this.byStrategy[strategy].opened++;
-    
+    // Store event sample only - counters are managed by RtbMetricsService
     this.opens.push({ symbol, strategy, tradeId, timestamp });
     if (this.opens.length > this.MAX_EVENT_HISTORY) {
       this.opens.shift();
@@ -146,31 +127,12 @@ class I1RTBDiagnosticsService {
   
   /**
    * Record a blocked RTB attempt with reason
+   * Phase 8.8.3-I2: Only logs and stores event sample - counters are in RtbMetricsService
    */
   recordBlock(symbol: string, strategy: string, blockReason: string): void {
     const timestamp = new Date();
     
-    this.totalBlocked++;
-    
-    if (!this.byReason[blockReason]) {
-      this.byReason[blockReason] = 0;
-    }
-    this.byReason[blockReason]++;
-    
-    if (!this.bySymbol[symbol]) {
-      this.bySymbol[symbol] = { attempts: 0, opened: 0, blocked: 0, byReason: {} };
-    }
-    this.bySymbol[symbol].blocked++;
-    if (!this.bySymbol[symbol].byReason[blockReason]) {
-      this.bySymbol[symbol].byReason[blockReason] = 0;
-    }
-    this.bySymbol[symbol].byReason[blockReason]++;
-    
-    if (!this.byStrategy[strategy]) {
-      this.byStrategy[strategy] = { attempts: 0, opened: 0, blocked: 0 };
-    }
-    this.byStrategy[strategy].blocked++;
-    
+    // Store event sample only - counters are managed by RtbMetricsService
     this.blocks.push({ symbol, strategy, blockReason, timestamp });
     if (this.blocks.length > this.MAX_EVENT_HISTORY) {
       this.blocks.shift();
@@ -186,10 +148,15 @@ class I1RTBDiagnosticsService {
   
   /**
    * Get aggregated summary statistics
+   * Phase 8.8.3-I2: Now reads from RtbMetricsService for counters, adds local event samples
    */
   getSummary(): I1RTBSummary {
+    // Get authoritative stats from RtbMetricsService (single source of truth)
+    const rtbSummary = rtbMetricsService.getSummary();
+    
+    // Get recent event samples from local buffers
     const recentBlocks = this.blocks
-      .slice(-this.MAX_RECENT_BLOCKS)
+      .slice(-this.MAX_RECENT_EVENTS)
       .reverse()
       .map(b => ({
         symbol: b.symbol,
@@ -198,36 +165,64 @@ class I1RTBDiagnosticsService {
         timestamp: b.timestamp.toISOString()
       }));
     
+    const recentAttempts = this.attempts
+      .slice(-this.MAX_RECENT_EVENTS)
+      .reverse()
+      .map(a => ({
+        symbol: a.symbol,
+        strategy: a.strategy,
+        timestamp: a.timestamp.toISOString()
+      }));
+    
+    const recentOpens = this.opens
+      .slice(-this.MAX_RECENT_EVENTS)
+      .reverse()
+      .map(o => ({
+        symbol: o.symbol,
+        strategy: o.strategy,
+        tradeId: o.tradeId,
+        timestamp: o.timestamp.toISOString()
+      }));
+    
+    // Parse session start from RtbMetricsService
+    const sessionStart = new Date(rtbSummary.sessionStart);
+    
     return {
-      sessionStart: this.sessionStart,
-      totals: {
-        attempts: this.totalAttempts,
-        opened: this.totalOpened,
-        blocked: this.totalBlocked
-      },
-      byReason: { ...this.byReason },
-      bySymbol: { ...this.bySymbol },
-      byStrategy: { ...this.byStrategy },
-      recentBlocks
+      sessionStart,
+      totals: rtbSummary.totals,
+      byReason: rtbSummary.byReason,
+      bySymbol: rtbSummary.bySymbol,
+      byStrategy: rtbSummary.byStrategy,
+      recentBlocks,
+      recentAttempts,
+      recentOpens
     };
   }
   
   /**
-   * Clear all counters and reset session
+   * Clear event buffers (session reset)
+   * Phase 8.8.3-I2: Also clears RtbMetricsService
    */
   clear(): void {
-    this.sessionStart = new Date();
     this.attempts = [];
     this.blocks = [];
     this.opens = [];
-    this.totalAttempts = 0;
-    this.totalOpened = 0;
-    this.totalBlocked = 0;
-    this.byReason = {};
-    this.bySymbol = {};
-    this.byStrategy = {};
     
-    console.log(`[8.8.3-I1][RTB_DIAGNOSTICS_CLEARED] Session reset at ${this.sessionStart.toISOString()}`);
+    // Also reset the central metrics service
+    rtbMetricsService.reset();
+    
+    console.log(`[8.8.3-I1][RTB_DIAGNOSTICS_CLEARED] Session reset at ${new Date().toISOString()}`);
+  }
+  
+  /**
+   * Get buffer sizes for memory diagnostics
+   */
+  getBufferSizes(): { attempts: number; blocks: number; opens: number } {
+    return {
+      attempts: this.attempts.length,
+      blocks: this.blocks.length,
+      opens: this.opens.length
+    };
   }
 }
 

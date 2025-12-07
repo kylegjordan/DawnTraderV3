@@ -552,10 +552,15 @@ export function TradeHistoryTab() {
                         
                         <td className="p-3">
                           <Badge variant="outline" className="text-xs">
-                            {trade.closeReason === 'target_hit' ? 'Target Hit' :
+                            {/* Phase 8.8.3-I2: Show "Open – Not Closed Yet" for trades with no closed_at */}
+                            {!trade.closedAt ? 'Open – Not Closed Yet' :
+                             trade.closeReason === 'target_hit' ? 'Target Hit' :
                              trade.closeReason === 'stop_hit' ? 'Stop Hit' :
                              trade.closeReason === 'manual_close' ? 'Manual' :
-                             trade.closeReason || 'Unknown'}
+                             trade.closeReason === 'hard_stop' ? 'Hard Stop' :
+                             trade.closeReason === 'force_close' ? 'Force Close' :
+                             trade.closeReason === 'engine_stop' ? 'Engine Stop' :
+                             trade.closeReason || 'Closed'}
                           </Badge>
                         </td>
                         

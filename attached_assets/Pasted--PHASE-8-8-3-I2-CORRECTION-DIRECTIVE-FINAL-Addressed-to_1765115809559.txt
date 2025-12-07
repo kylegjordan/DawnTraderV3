@@ -1,0 +1,125 @@
+🚀 PHASE 8.8.3-I2 CORRECTION DIRECTIVE (FINAL)
+Addressed to: Replit AI Developer
+
+Please implement the required corrections below.
+These must be completed before running the next 40-minute trading session.
+
+A. HARD STOP CORRECTION (CRITICAL)
+1. Hard stop must close all open positions — no exceptions
+
+Update PaperPortfolioManager.forceCloseAllOpenPositionsOnStop() so that:
+
+It queries all positions from paper_sim_open_positions where status = 'open'
+
+Closes each of them
+
+Writes closure to DB
+
+Creates lifecycle events
+
+Clears them from in-memory position store
+
+Ensures no open positions remain after stop
+
+This is required to eliminate ghost/orphan positions.
+
+2. Stop sequence ordering must be:
+markStopInProgress()
+await executionEngine.stop()   // stops signals and execution loop
+await portfolioManager.forceCloseAllOpenPositionsOnStop()
+clearStopInProgress()
+
+3. Add detailed logs for verification
+
+Log when:
+
+Stop begins
+
+ENGINE_STOPPING flag set
+
+Any trade is blocked due to ENGINE_STOPPING
+
+Each position is closed during stop
+
+Stop ends
+
+These logs are required for diagnostic verification.
+
+B. RTB METRICS REPAIR (REQUIRED)
+1. Wire all RTB metrics to RtbMetricsService.getSummary()
+
+Replace any internal counters with:
+
+const summary = RtbMetricsService.getInstance().getSummary();
+
+
+This applies to:
+
+RTB summary metrics
+
+RTB block breakdown table
+
+Ready-to-Buy top metrics
+
+Any counters referenced by the UI
+
+2. Enforce invariant
+attemptsTotal === openedTotal + blockedTotal
+blockedTotal === sum(blockedByReason)
+
+3. Ensure missing block reasons are included
+
+The following reasons must be counted and appear in block breakdown:
+
+MAX_TOTAL_EXPOSURE
+
+POSITION_LIMIT
+
+ENGINE_STOPPING
+
+If they do not exist in the reason enum, add them.
+
+C. DIAGNOSTICS SERVICE CORRECTION
+The diagnostic service:
+
+Must NOT maintain its own counters
+
+Must read counts from RtbMetricsService.getSummary()
+
+Must only store per-event logs (samples) in the circular buffer
+
+D. FIX TRADE HISTORY “UNKNOWN” LABEL
+
+For any trade where:
+
+closed_at == null
+
+
+Set:
+
+close_reason = "Open – Not Closed Yet"
+
+
+Do not display "Unknown".
+
+E. ENSURE UI CLEARS ACTIVE TRADES ON STOP
+
+Verify backend logic so that after stop:
+
+GET /api/paper-sim/open-positions
+
+
+returns:
+
+[]
+
+
+Frontend will clear automatically if backend returns no positions.
+
+F. TESTING
+
+Once all corrections above are complete:
+
+Do NOT run a full trading session yet.
+
+I will provide a testing script after you confirm all changes are implemented.
