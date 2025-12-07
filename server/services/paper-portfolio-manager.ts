@@ -5,6 +5,7 @@ import { KrakenService } from './kraken';
 import { registerEngine, registerMicroService } from './mode-registry';
 import { SignalOrchestrator } from './signal-orchestrator';
 import type { StrategySignal } from './strategy-engine';
+import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js';
 
 interface PortfolioMetrics {
   totalTrades: number;
@@ -303,6 +304,22 @@ export class PaperPortfolioManager {
       failedCount,
       skippedCount,
       totalPositions: openPositions.length,
+    });
+
+    // [8.8.3-I1] Log hard stop summary for diagnostics
+    const openPositionsRemaining = await storage.getPaperSimOpenPositions(this.mode);
+    const tradesCount = (await storage.getPaperSimTrades(this.mode, { limit: 1000 })).length;
+    const session = await storage.getActivePaperSimSession(this.mode);
+    
+    i1TradeLifecycleDiagnostics.logHardStopSummary({
+      sessionId: session?.sessionId || 'unknown',
+      openPositionsBefore: openPositions.length,
+      positionsClosedByHardStop: closedCount,
+      positionsRemainingOpen: openPositionsRemaining.length,
+      dbCounts: {
+        paper_sim_open_positions: openPositionsRemaining.length,
+        paper_sim_trades: tradesCount
+      }
     });
 
     return { closedCount, failedCount, skippedCount, details };

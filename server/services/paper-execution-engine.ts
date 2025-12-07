@@ -16,6 +16,8 @@ import { livePricingAdapter } from './live-pricing-adapter';
 import { krakenWebSocketAdapter } from './kraken-websocket-adapter.js';
 import { b4Diagnostics } from './b4-diagnostics.js';
 import { b5SizingAudit } from './b5-sizing-audit.js';
+import { i1RtbDiagnostics } from './i1-rtb-diagnostics-service.js';
+import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail' | 'manual_stop';
@@ -676,6 +678,29 @@ export class PaperExecutionEngine {
       closeReason: exitCondition.type,
       holdingDurationMinutes: holdingMinutes
     });
+
+    // [8.8.3-I1] Trade lifecycle close event
+    const isForceClose = exitCondition.type === 'manual_stop' || exitCondition.type === 'guardrail';
+    if (isForceClose) {
+      i1TradeLifecycleDiagnostics.logForceClose(
+        trade?.id || positionId,
+        position.symbol,
+        position.strategyName || 'unknown',
+        actualExitPrice,
+        netPnl
+      );
+    } else {
+      const closeReason = exitCondition.type as any;
+      i1TradeLifecycleDiagnostics.logClose(
+        trade?.id || positionId,
+        position.symbol,
+        position.strategyName || 'unknown',
+        closeReason,
+        actualExitPrice,
+        netPnl,
+        'normal'
+      );
+    }
 
     console.log(`[PaperExecution:${this.mode}] Position ${position.symbol} closed successfully`);
   }
@@ -1819,6 +1844,10 @@ export class PaperExecutionEngine {
         strategy: signal.strategy,
         entryPrice: actualEntryPrice
       });
+
+      // [8.8.3-I1] Record successful RTB open
+      i1RtbDiagnostics.recordOpen(signal.symbol, signal.strategy, trade.id);
+      i1TradeLifecycleDiagnostics.logOpen(trade.id, signal.symbol, signal.strategy, actualEntryPrice, 'normal');
 
       // [27.F.14.DIAG] DIAGNOSTIC: Trade insert successful
       console.log(`[DB] trade_insert_ok {tradeId:${trade.id}, symbol:${signal.symbol}}`);

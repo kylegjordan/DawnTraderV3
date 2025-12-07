@@ -7065,6 +7065,136 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ==================== Phase 8.8.3-I1: RTB Block Diagnostics ====================
+  
+  // GET /api/diagnostics/rtb-blocks - Get RTB block reason summary
+  apiRouter.get('/diagnostics/rtb-blocks', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { i1RtbDiagnostics } = await import('./services/i1-rtb-diagnostics-service.js');
+      
+      const summary = i1RtbDiagnostics.getSummary();
+      const includeRaw = req.query.raw === '1';
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        sessionStart: summary.sessionStart.toISOString(),
+        totals: summary.totals,
+        byReason: summary.byReason,
+        byStrategy: summary.byStrategy,
+        bySymbol: includeRaw ? summary.bySymbol : Object.keys(summary.bySymbol).length,
+        recentBlocks: includeRaw ? summary.recentBlocks : summary.recentBlocks.slice(0, 10)
+      });
+    } catch (error: any) {
+      console.error('[8.8.3-I1] Error fetching RTB block diagnostics:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to fetch RTB block diagnostics',
+        message: error.message
+      });
+    }
+  });
+
+  // POST /api/diagnostics/rtb-blocks/reset - Reset RTB block diagnostics
+  apiRouter.post('/diagnostics/rtb-blocks/reset', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { i1RtbDiagnostics } = await import('./services/i1-rtb-diagnostics-service.js');
+      i1RtbDiagnostics.clear();
+      res.json({ ok: true, message: 'RTB block diagnostics reset' });
+    } catch (error: any) {
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // GET /api/diagnostics/trade-lifecycle - Get trade lifecycle diagnostics
+  apiRouter.get('/diagnostics/trade-lifecycle', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { i1TradeLifecycleDiagnostics } = await import('./services/i1-trade-lifecycle-diagnostics.js');
+      
+      const summary = i1TradeLifecycleDiagnostics.getSummary();
+      const includeRaw = req.query.raw === '1';
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        sessionStart: summary.sessionStart.toISOString(),
+        totalSignals: summary.totalSignals,
+        totalOpened: summary.totalOpened,
+        totalClosed: summary.totalClosed,
+        totalForceClosed: summary.totalForceClosed,
+        byCloseReason: summary.byCloseReason,
+        byStrategy: summary.byStrategy,
+        hardStopSummaries: summary.hardStopSummaries,
+        slotStateSnapshots: includeRaw ? summary.slotStateSnapshots : summary.slotStateSnapshots.length,
+        recentEvents: includeRaw ? summary.recentEvents : summary.recentEvents.slice(0, 20)
+      });
+    } catch (error: any) {
+      console.error('[8.8.3-I1] Error fetching trade lifecycle diagnostics:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to fetch trade lifecycle diagnostics',
+        message: error.message
+      });
+    }
+  });
+
+  // POST /api/diagnostics/trade-lifecycle/reset - Reset trade lifecycle diagnostics
+  apiRouter.post('/diagnostics/trade-lifecycle/reset', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { i1TradeLifecycleDiagnostics } = await import('./services/i1-trade-lifecycle-diagnostics.js');
+      i1TradeLifecycleDiagnostics.clear();
+      res.json({ ok: true, message: 'Trade lifecycle diagnostics reset' });
+    } catch (error: any) {
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // GET /api/diagnostics/open-position-ws-linkage - Get WebSocket subscription status for open positions
+  apiRouter.get('/diagnostics/open-position-ws-linkage', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.query.mode as 'paper' | 'live') || 'paper';
+      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      
+      const openPositions = await storage.getPaperSimOpenPositions(mode);
+      const wsSubscribed = krakenWebSocketAdapter.getSubscribedSymbols();
+      
+      const linkageDetails = openPositions.map(pos => {
+        const isSubscribed = wsSubscribed.includes(pos.symbol);
+        return {
+          positionId: pos.id,
+          symbol: pos.symbol,
+          strategy: pos.strategyName,
+          openedAt: pos.openedAt,
+          isWebSocketSubscribed: isSubscribed,
+          linkageStatus: isSubscribed ? 'LINKED' : 'ORPHANED'
+        };
+      });
+      
+      const orphanedCount = linkageDetails.filter(d => d.linkageStatus === 'ORPHANED').length;
+      const linkedCount = linkageDetails.filter(d => d.linkageStatus === 'LINKED').length;
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        mode,
+        openPositionCount: openPositions.length,
+        wsSubscribedCount: wsSubscribed.length,
+        linkedCount,
+        orphanedCount,
+        health: orphanedCount === 0 ? 'healthy' : 'degraded',
+        linkageDetails: req.query.raw === '1' ? linkageDetails : linkageDetails.filter(d => d.linkageStatus === 'ORPHANED'),
+        wsSubscribedSymbols: wsSubscribed
+      });
+    } catch (error: any) {
+      console.error('[8.8.3-I1] Error fetching WS linkage diagnostics:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to fetch WebSocket linkage diagnostics',
+        message: error.message
+      });
+    }
+  });
+
   // POST /api/reb-2-12F/strategy-health - Run strategy health check (with mock data verification)
   apiRouter.post('/reb-2-12F/strategy-health', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
