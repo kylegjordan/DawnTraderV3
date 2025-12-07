@@ -1,0 +1,175 @@
+✅ PHASE 8.8.3-I2 — 40-Minute Full Trading Pipeline Test Protocol
+
+(Diagnostics-Only — No Code Modifications Allowed)
+Addressed to: Replit
+
+REPLIT — BEGIN TEST PROTOCOL
+
+You must follow this protocol exactly.
+Do not modify any code.
+Do not restart the workflow mid-test.
+Do not auto-fix errors.
+This is a pure observation run.
+
+All output must be saved into JSON files inside:
+
+diagnostics/phase-8.8.3-I2-run1/
+
+
+If the folder exists, empty it before beginning.
+
+STEP 1 — FULL SYSTEM RESET (CLEAN START)
+
+Authenticate using the test credentials already stored.
+
+Stop any existing simulation (ignore errors).
+
+Reset the following diagnostic buffers:
+
+POST /api/diagnostics/trade-lifecycle/reset
+POST /api/diagnostics/rtb-metrics/reset
+POST /api/diagnostics/rtb-blocks/reset   (if endpoint exists)
+
+
+Clean these DB tables completely:
+
+paper_sim_open_positions
+
+paper_sim_trades
+
+paper_sim_sessions
+
+Confirm all three tables have zero rows.
+
+Save initial snapshots:
+
+open_positions_initial.json
+sim_status_initial.json
+
+STEP 2 — START A NEW PAPER SIMULATION
+
+Start the simulation with:
+
+POST /api/paper-sim/start  { "mode": "new" }
+
+
+Then save:
+
+sim_status_start.json
+
+STEP 3 — RUN FOR 40 MINUTES WITH NO INTERRUPTIONS
+
+The trading engine must run continuously for 40 full minutes.
+
+During this period you must preserve state:
+
+❌ Do NOT restart the server
+
+❌ Do NOT restart the workflow
+
+❌ Do NOT reload trading engine
+
+❌ Do NOT reset WebSocket
+
+❌ Do NOT clear memory
+
+❌ Do NOT stop the simulation early
+
+This period is critical for capturing real-world behavior such as:
+
+RTB attempts
+
+RTB block reasons
+
+Open trade lifecycle
+
+WebSocket subscription linkage
+
+Price tick cadence per symbol
+
+Sizing & guardrail behavior over time
+
+Wait the full 40 minutes using sleep 2400.
+
+STEP 4 — COLLECT MID-RUN (“RUNNING”) SNAPSHOTS
+
+After 40 minutes, collect the following and save them in the folder:
+
+sim_status_running.json
+open_positions_running.json
+rtb_blocks.json
+rtb_metrics.json
+trade_lifecycle.json
+ws_linkage.json
+ws_price_engine.json
+
+
+Each must contain the full raw JSON data.
+
+STEP 5 — STOP THE SIMULATION (HARD STOP)
+
+Call:
+
+POST /api/paper-sim/stop
+
+
+Wait 5 seconds to allow:
+
+engine_stop flag to take effect
+
+execution engine to shut down
+
+force closure sequence to run
+
+orphan cleanup to execute
+
+Then collect post-stop data:
+
+sim_status_after_stop.json
+open_positions_after_stop.json
+trade_lifecycle_after_stop.json
+ws_linkage_after_stop.json
+
+STEP 6 — FILE VERIFICATION
+
+Confirm that:
+
+All files below exist
+
+All contain valid JSON
+
+Total file count = 14
+
+Files Required:
+
+open_positions_initial.json
+
+sim_status_initial.json
+
+sim_status_start.json
+
+sim_status_running.json
+
+open_positions_running.json
+
+rtb_blocks.json
+
+rtb_metrics.json
+
+trade_lifecycle.json
+
+ws_linkage.json
+
+ws_price_engine.json
+
+sim_status_after_stop.json
+
+open_positions_after_stop.json
+
+trade_lifecycle_after_stop.json
+
+ws_linkage_after_stop.json
+
+Report success once all files are written.
+
+REPLIT — END TEST PROTOCOL
