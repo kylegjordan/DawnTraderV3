@@ -1824,6 +1824,26 @@
     ]
   },
   {
+    "path": "/api/diagnostics/rtb-metrics",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/diagnostics/rtb-metrics/reset",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/diagnostics/trade-lifecycle",
     "methods": [
       "GET"

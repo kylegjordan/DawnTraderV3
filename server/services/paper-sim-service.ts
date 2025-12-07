@@ -676,42 +676,52 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
         const t0 = Date.now();
         
         if (currentManager) {
-          // Phase 8.8.3: Force-close all open positions before manager stop (Hard Stop behavior)
-          console.log('[DEBUG-B9][STOP_FLOW][FORCE_CLOSE_START]');
-          try {
-            const closeResult = await currentManager.forceCloseAllOpenPositionsOnStop();
-            console.log('[DEBUG-B9][STOP_FLOW][FORCE_CLOSE_RESULT]', {
-              closedCount: closeResult.closedCount,
-              failedCount: closeResult.failedCount,
-              skippedCount: closeResult.skippedCount,
-            });
-          } catch (closeErr) {
-            console.error('[DEBUG-B9][STOP_FLOW][FORCE_CLOSE_ERROR]', closeErr);
-            // Non-blocking: continue with stop even if force-close fails
-          }
+          // Phase 8.8.3-I2: Set stop-in-progress flag BEFORE force-close to block new trades
+          console.log('[8.8.3-I2][STOP_FLOW][SETTING_STOP_FLAG]');
+          currentManager.markStopInProgress();
           
-          // Phase 8.8.4: DB verification after force-close (non-blocking diagnostic)
           try {
-            const remainingOpen = await storage.getPaperSimOpenPositions('paper');
-            if (remainingOpen.length > 0) {
-              console.warn('[DEBUG-B9][STOP_FLOW][OPEN_POSITIONS_REMAIN_AFTER_FORCE_CLOSE]', {
-                count: remainingOpen.length,
-                ids: remainingOpen.map(p => p.id),
-                symbols: remainingOpen.map(p => p.symbol),
+            // Phase 8.8.3: Force-close all open positions before manager stop (Hard Stop behavior)
+            console.log('[DEBUG-B9][STOP_FLOW][FORCE_CLOSE_START]');
+            try {
+              const closeResult = await currentManager.forceCloseAllOpenPositionsOnStop();
+              console.log('[DEBUG-B9][STOP_FLOW][FORCE_CLOSE_RESULT]', {
+                closedCount: closeResult.closedCount,
+                failedCount: closeResult.failedCount,
+                skippedCount: closeResult.skippedCount,
               });
-            } else {
-              console.log('[DEBUG-B9][STOP_FLOW][DB_VERIFICATION_PASSED]', {
-                message: 'All positions successfully closed',
-              });
+            } catch (closeErr) {
+              console.error('[DEBUG-B9][STOP_FLOW][FORCE_CLOSE_ERROR]', closeErr);
+              // Non-blocking: continue with stop even if force-close fails
             }
-          } catch (verifyErr) {
-            console.error('[DEBUG-B9][STOP_FLOW][DB_VERIFICATION_ERROR]', verifyErr);
+            
+            // Phase 8.8.4: DB verification after force-close (non-blocking diagnostic)
+            try {
+              const remainingOpen = await storage.getPaperSimOpenPositions('paper');
+              if (remainingOpen.length > 0) {
+                console.warn('[DEBUG-B9][STOP_FLOW][OPEN_POSITIONS_REMAIN_AFTER_FORCE_CLOSE]', {
+                  count: remainingOpen.length,
+                  ids: remainingOpen.map(p => p.id),
+                  symbols: remainingOpen.map(p => p.symbol),
+                });
+              } else {
+                console.log('[DEBUG-B9][STOP_FLOW][DB_VERIFICATION_PASSED]', {
+                  message: 'All positions successfully closed',
+                });
+              }
+            } catch (verifyErr) {
+              console.error('[DEBUG-B9][STOP_FLOW][DB_VERIFICATION_ERROR]', verifyErr);
+            }
+            
+            console.log('[41E-S][TIMING] Starting manager.stop()...');
+            await currentManager.stop();
+            clearGlobalPaperSimManager();
+            console.log(`[41E-S][TIMING] Manager shutdown completed in ${Date.now() - t0}ms`);
+          } finally {
+            // Phase 8.8.3-I2: Always clear the stop flag in finally block
+            currentManager.clearStopInProgress();
+            console.log('[8.8.3-I2][STOP_FLOW][STOP_FLAG_CLEARED]');
           }
-          
-          console.log('[41E-S][TIMING] Starting manager.stop()...');
-          await currentManager.stop();
-          clearGlobalPaperSimManager();
-          console.log(`[41E-S][TIMING] Manager shutdown completed in ${Date.now() - t0}ms`);
         } else {
           console.warn('[PaperSimService] No active manager found, updating database only');
         }

@@ -23,6 +23,8 @@ import { aj19Diagnostic } from './aj19-max-position-diagnostic';
 import { b4Diagnostics } from './b4-diagnostics.js';
 import { b5SizingAudit } from './b5-sizing-audit.js';
 import { i1RtbDiagnostics } from './i1-rtb-diagnostics-service.js';
+import { rtbMetricsService } from './rtb-metrics-service.js';
+import { getGlobalPaperSimManager } from './paper-sim-service.js';
 
 export const buildSettingsFromGuardrails = _buildSettingsFromGuardrails;
 export const calculateRiskAmount = _calculateRiskAmount;
@@ -53,7 +55,8 @@ export type TradeSafetyResultCode =
   | 'INSUFFICIENT_BALANCE'
   | 'MAX_EXPOSURE'
   | 'MAX_TOTAL_EXPOSURE'
-  | 'MAX_TRADES';
+  | 'MAX_TRADES'
+  | 'ENGINE_STOPPING'; // Phase 8.8.3-I2: Block during hard stop
 
 export type TradeSafetyResult = 
   | { ok: true }
@@ -622,8 +625,27 @@ export async function checkGuardrailRisk(
 ): Promise<TradeSafetyResult> {
   console.log(`[8.8.3-H4][GUARDRAIL_CHECK] Starting pre-trade checks for ${trade.symbol} (mode=${mode})`);
   
-  // [8.8.3-I1] Record RTB attempt for diagnostics
+  // [8.8.3-I2] Record RTB attempt in central metrics service (single source of truth)
+  rtbMetricsService.recordAttempt(trade.symbol, trade.strategy);
+  
+  // [8.8.3-I1] Also record in I1 diagnostics for detailed event history
   i1RtbDiagnostics.recordAttempt(trade.symbol, trade.strategy);
+  
+  // [8.8.3-I2] Check ENGINE_STOPPING first - block new trades during hard stop
+  if (mode === 'paper') {
+    const manager = getGlobalPaperSimManager();
+    if (manager && typeof manager.getStopInProgress === 'function' && manager.getStopInProgress()) {
+      console.log(`[8.8.3-I2][ENGINE_STOPPING] Blocking trade for ${trade.symbol} - hard stop in progress`);
+      const result: TradeSafetyResult = {
+        ok: false,
+        code: 'ENGINE_STOPPING',
+        reason: 'Trade blocked: engine is stopping. No new trades allowed during hard stop.'
+      };
+      rtbMetricsService.recordBlock(trade.symbol, trade.strategy, 'ENGINE_STOPPING');
+      i1RtbDiagnostics.recordBlock(trade.symbol, trade.strategy, 'ENGINE_STOPPING');
+      return result;
+    }
+  }
   
   const settings = await buildSettingsFromGuardrails(mode, userId);
   
@@ -647,9 +669,10 @@ export async function checkGuardrailRisk(
     });
   };
   
-  // [8.8.3-I1] Helper to record block in I1 diagnostics
-  const recordI1Block = (result: TradeSafetyResult): TradeSafetyResult => {
+  // [8.8.3-I2] Helper to record block in both RtbMetricsService (source of truth) and I1 diagnostics
+  const recordBlock = (result: TradeSafetyResult): TradeSafetyResult => {
     if (!result.ok) {
+      rtbMetricsService.recordBlock(trade.symbol, trade.strategy, result.code);
       i1RtbDiagnostics.recordBlock(trade.symbol, trade.strategy, result.code);
     }
     return result;
@@ -658,25 +681,25 @@ export async function checkGuardrailRisk(
   const killSwitchCheck = checkKillSwitch(settings, mode, trade.symbol);
   if (!killSwitchCheck.ok) {
     logGuardrailCheck('KILL_SWITCH', killSwitchCheck);
-    return recordI1Block(killSwitchCheck);
+    return recordBlock(killSwitchCheck);
   }
   
   const stopLossCheck = checkStopLossRequired(trade);
   if (!stopLossCheck.ok) {
     logGuardrailCheck('STOP_LOSS', stopLossCheck);
-    return recordI1Block(stopLossCheck);
+    return recordBlock(stopLossCheck);
   }
   
   const assetCheck = await checkMaxPositionsPerAsset(mode, trade);
   if (!assetCheck.ok) {
     logGuardrailCheck('MAX_POSITIONS_PER_ASSET', assetCheck);
-    return recordI1Block(assetCheck);
+    return recordBlock(assetCheck);
   }
   
   const cooldownCheck = await checkSymbolCooldown(mode, trade);
   if (!cooldownCheck.ok) {
     logGuardrailCheck('SYMBOL_COOLDOWN', cooldownCheck);
-    return recordI1Block(cooldownCheck);
+    return recordBlock(cooldownCheck);
   }
   
   // AJ19: Pass cycleId for diagnostic tracking
@@ -684,26 +707,26 @@ export async function checkGuardrailRisk(
   if (!positionSizeCheck.ok) {
     const maxPosNum = settings.maxPositionPercent ? parseFloat(settings.maxPositionPercent) : undefined;
     logGuardrailCheck('POSITION_SIZE_CAP', positionSizeCheck, { maxPositionUsd: maxPosNum });
-    return recordI1Block(positionSizeCheck);
+    return recordBlock(positionSizeCheck);
   }
   
   const lpcpCheck = await checkLowPricedCoinProtection(mode, trade, settings);
   if (!lpcpCheck.ok) {
     logGuardrailCheck('LOW_PRICED_COIN_PROTECTION', lpcpCheck);
-    return recordI1Block(lpcpCheck);
+    return recordBlock(lpcpCheck);
   }
   
   const maxTradesCheck = await checkMaxOpenTrades(mode, settings);
   if (!maxTradesCheck.ok) {
     logGuardrailCheck('MAX_OPEN_TRADES', maxTradesCheck);
-    return recordI1Block(maxTradesCheck);
+    return recordBlock(maxTradesCheck);
   }
   
   // Phase 8.8.3-B3: Check total portfolio exposure
   const totalExposureCheck = await checkMaxTotalExposure(mode, trade, settings);
   if (!totalExposureCheck.ok) {
     logGuardrailCheck('MAX_TOTAL_EXPOSURE', totalExposureCheck);
-    return recordI1Block(totalExposureCheck);
+    return recordBlock(totalExposureCheck);
   }
   
   // B5: Log successful guardrail pass

@@ -18,6 +18,7 @@ import { b4Diagnostics } from './b4-diagnostics.js';
 import { b5SizingAudit } from './b5-sizing-audit.js';
 import { i1RtbDiagnostics } from './i1-rtb-diagnostics-service.js';
 import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js';
+import { rtbMetricsService } from './rtb-metrics-service.js';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail' | 'manual_stop';
@@ -1845,7 +1846,10 @@ export class PaperExecutionEngine {
         entryPrice: actualEntryPrice
       });
 
-      // [8.8.3-I1] Record successful RTB open
+      // [8.8.3-I2] Record successful RTB open in central metrics service (source of truth)
+      rtbMetricsService.recordOpen(signal.symbol, signal.strategy);
+      
+      // [8.8.3-I1] Also record in I1 diagnostics for detailed event history
       i1RtbDiagnostics.recordOpen(signal.symbol, signal.strategy, trade.id);
       i1TradeLifecycleDiagnostics.logOpen(trade.id, signal.symbol, signal.strategy, actualEntryPrice, 'normal');
 

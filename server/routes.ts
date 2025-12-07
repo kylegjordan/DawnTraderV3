@@ -7106,6 +7106,49 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ==================== Phase 8.8.3-I2: RTB Metrics (Single Source of Truth) ====================
+  
+  // GET /api/diagnostics/rtb-metrics - Get RTB metrics from central source of truth
+  apiRouter.get('/diagnostics/rtb-metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { rtbMetricsService } = await import('./services/rtb-metrics-service.js');
+      
+      const summary = rtbMetricsService.getSummary();
+      const includeRaw = req.query.raw === '1';
+      
+      res.json({
+        ok: true,
+        phase: '8.8.3-I2',
+        description: 'RTB Metrics Service - Single source of truth for RTB statistics',
+        timestamp: summary.timestamp,
+        sessionStart: summary.sessionStart,
+        totals: summary.totals,
+        byBlockReason: summary.byReason,
+        byStrategy: summary.byStrategy,
+        bySymbol: includeRaw ? summary.bySymbol : Object.keys(summary.bySymbol).length,
+        invariantCheck: summary.invariantCheck
+      });
+    } catch (error: any) {
+      console.error('[8.8.3-I2] Error fetching RTB metrics:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to fetch RTB metrics',
+        message: error.message
+      });
+    }
+  });
+
+  // POST /api/diagnostics/rtb-metrics/reset - Reset RTB metrics
+  apiRouter.post('/diagnostics/rtb-metrics/reset', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { rtbMetricsService } = await import('./services/rtb-metrics-service.js');
+      rtbMetricsService.reset();
+      res.json({ ok: true, message: 'RTB metrics reset', phase: '8.8.3-I2' });
+    } catch (error: any) {
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   // GET /api/diagnostics/trade-lifecycle - Get trade lifecycle diagnostics
   apiRouter.get('/diagnostics/trade-lifecycle', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {

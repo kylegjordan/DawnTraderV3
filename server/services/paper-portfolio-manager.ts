@@ -49,6 +49,9 @@ export class PaperPortfolioManager {
   private signalOrchestrator: SignalOrchestrator | null = null; // Phase 37: Signal generation
   private isRefreshingWatchlist: boolean = false; // Phase 41F-E: Prevent overlapping refresh cycles
   
+  // Phase 8.8.3-I2: Hard-stop freeze flag - prevents new trades during stop
+  private isStopInProgress: boolean = false;
+  
   // Portfolio-level guardrails
   private readonly MAX_DRAWDOWN_PERCENT = 20; // Max 20% drawdown
   private readonly MAX_OPEN_POSITIONS = 10; // Max 10 concurrent positions
@@ -76,6 +79,21 @@ export class PaperPortfolioManager {
   // Phase 8.8.3-B9.FIX-WS-START: Expose isRunning state for control flow checks
   getIsRunning(): boolean {
     return this.isRunning;
+  }
+
+  // Phase 8.8.3-I2: Hard-stop freeze flag accessors
+  markStopInProgress(): void {
+    this.isStopInProgress = true;
+    console.log(`[8.8.3-I2][STOP_FLAG_SET] Stop in progress flag set for mode=${this.mode}`);
+  }
+
+  clearStopInProgress(): void {
+    this.isStopInProgress = false;
+    console.log(`[8.8.3-I2][STOP_FLAG_CLEARED] Stop in progress flag cleared for mode=${this.mode}`);
+  }
+
+  getStopInProgress(): boolean {
+    return this.isStopInProgress;
   }
 
   async start(): Promise<void> {

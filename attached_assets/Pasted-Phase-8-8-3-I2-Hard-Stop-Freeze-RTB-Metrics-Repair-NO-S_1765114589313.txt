@@ -1,0 +1,386 @@
+Phase 8.8.3-I2 – Hard-Stop Freeze & RTB Metrics Repair (NO STRATEGY CHANGES)
+
+Goal:
+
+Eliminate orphaned positions during hard stop by preventing new trades from opening once a stop is requested.
+
+Repair the RTB block breakdown so its counts match the RTB summary metrics and the I1 diagnostics, including MAX_TOTAL_EXPOSURE and POSITION_LIMIT.
+
+Clarify Trade History UI so “Unknown” is not shown for trades that are still open.
+
+Keep diagnostics observational only and low-overhead – they must not be the source of truth for trading logic.
+
+A. Non-Code Preconditions (for your awareness only)
+
+Do not change any Goals / guardrail values in code.
+
+The owner will manage these in the UI. For your testing pass, assume:
+
+Max Total Portfolio Exposure = 100%
+
+Max Position % = 6% (so each trade ≈ 6% of portfolio)
+
+Max Open Positions = 15
+
+Leave all other guardrails as they are. In particular:
+
+MAX_TOTAL_EXPOSURE guardrail must remain active.
+
+POSITION_LIMIT guardrail must remain active.
+
+All of your work should respect those existing settings.
+
+B. Hard-Stop Freeze – Prevent New Trades During Stop
+B1. Introduce an “engine stopping” flag
+
+In the paper trading stack (paper-sim-service.ts, paper-portfolio-manager.ts, paper-execution-engine.ts):
+
+Add a boolean flag that indicates we are in the middle of a hard stop. Name it something explicit like:
+
+// In a central place, e.g. PaperExecutionEngine or PaperPortfolioManager
+private isStopInProgress: boolean = false;
+
+
+Expose safe accessors:
+
+public markStopInProgress(): void { this.isStopInProgress = true; }
+public clearStopInProgress(): void { this.isStopInProgress = false; }
+public getStopInProgress(): boolean { return this.isStopInProgress; }
+
+
+You can choose the exact class where this lives (manager vs engine), but there must be one authoritative place and it must be accessible from the trade-opening pipeline.
+
+B2. Set the flag before force-closing positions
+
+In paper-sim-service.ts stop flow (the same place you currently call forceCloseAllOpenPositionsOnStop):
+
+Before calling any force-close logic, set the flag:
+
+manager.markStopInProgress();
+
+
+Then call the existing force-close routine:
+
+const hardStopSummary = await manager.forceCloseAllOpenPositionsOnStop(...);
+
+
+Only after:
+
+All open positions are closed
+
+The session has been marked stopped in the DB
+
+Any final diagnostics are recorded
+
+…clear the flag:
+
+manager.clearStopInProgress();
+
+
+Important: if any exception occurs during hard stop, make sure clearStopInProgress() is called in a finally block so the system is not stuck in “stopping” forever.
+
+B3. Block new trades while the stop flag is set
+
+In the trade-opening path (wherever a StrategySignal becomes an order / position – likely in paper-execution-engine.ts’s processSignal / tryOpenTrade flow):
+
+Before doing any risk checks or order sizing, check the stop flag:
+
+if (this.getStopInProgress()) {
+  // record as blocked and return
+}
+
+
+When the flag is true, do not open a trade. Instead:
+
+Treat it as a blocked RTB attempt with a dedicated block reason, e.g. ENGINE_STOPPING.
+
+Record that reason in:
+
+The core RTB metrics counters (see Section C).
+
+The I1 RTB diagnostics service.
+
+This guarantees:
+
+No new trades can open once a hard stop has begun.
+
+No new “orphaned” positions can be created between openPositionsBefore and positionsClosedByHardStop.
+
+Do not change any other guardrail logic here. The only new behavior should be:
+
+“If engine is stopping → block this attempt with reason ENGINE_STOPPING and exit early.”
+
+C. RTB Metrics & Block Breakdown Repair
+C1. Create a single source of truth for RTB stats
+
+Right now we have:
+
+Top-level RTB metrics table (attempts / opened / blocked).
+
+RTB block breakdown table.
+
+I1 RTB diagnostics service (rtb_blocks.json).
+
+These must all read from one canonical stats object, not three separate counters.
+
+Create (or refactor to) a central RTB stats structure in the trading engine / risk layer (e.g. trade-safety.ts or a dedicated RtbMetricsService):
+
+export type RtbBlockReason =
+  | 'MAX_TOTAL_EXPOSURE'
+  | 'POSITION_LIMIT'
+  | 'INVALID_STOP_LOSS'
+  | 'ENGINE_STOPPING'
+  | 'OTHER' // catch-all if needed
+  // plus any existing reasons already in your enums
+
+interface RtbStats {
+  attemptsTotal: number;
+  openedTotal: number;
+  blockedTotal: number;
+  blockedByReason: Record<RtbBlockReason, number>;
+}
+
+
+Maintain a single in-memory instance (singleton or service) that lives in the server process and is updated by trade-opening code.
+
+C2. Update stats on every RTB attempt
+
+In the code path where signals are evaluated (the same place you already know the block reason or success):
+
+When you start evaluating a signal:
+
+rtbStats.attemptsTotal++;
+
+
+If the signal results in an opened trade:
+
+rtbStats.openedTotal++;
+
+
+If the signal is blocked, and you know the guardrail that blocked it:
+
+rtbStats.blockedTotal++;
+rtbStats.blockedByReason[reason] = (rtbStats.blockedByReason[reason] ?? 0) + 1;
+
+
+Ensure that:
+
+attemptsTotal === openedTotal + blockedTotal
+
+
+If you ever detect these drifting apart, log a diagnostic warning – that’s a bug.
+
+C3. Wire the top RTB metrics row to this stats object
+
+Wherever the top RTB metrics summary is populated (attempts, opened, blocked):
+
+Replace any ad-hoc calculations with values from RtbStats:
+
+Total Attempts → attemptsTotal
+
+Opened → openedTotal
+
+Blocked → blockedTotal
+
+No HTTP call or diagnostics service should be required for this; use the in-memory stats object directly.
+
+C4. Wire the RTB block breakdown table to the same stats
+
+For the breakdown table shown on the RTB page:
+
+Use the same RtbStats.blockedByReason map to populate each row:
+
+MAX_TOTAL_EXPOSURE row uses blockedByReason['MAX_TOTAL_EXPOSURE'].
+
+POSITION_LIMIT row uses blockedByReason['POSITION_LIMIT'].
+
+INVALID_STOP_LOSS row uses blockedByReason['INVALID_STOP_LOSS'].
+
+Any other existing block reasons should also map 1:1 to entries in blockedByReason.
+
+Required invariants:
+
+The sum of all breakdown counts must equal blockedTotal.
+If it doesn’t, treat that as a bug and log an error.
+
+The “Blocked” number in the top row must equal blockedTotal.
+This ensures:
+
+Top Summary Blocked = RTB Breakdown Total = I1 Diagnostics Block Total
+
+
+MAX_TOTAL_EXPOSURE and POSITION_LIMIT must appear with non-zero counts if those guardrails fire during your test runs.
+
+C5. Make I1 RTB diagnostics a read-only mirror, not the driver
+
+Update the I1 RTB diagnostics service so that:
+
+It reads from RtbStats for counts by reason and totals.
+
+It may also keep its own bounded buffer of sample events (for detailed inspection), but:
+
+The counts it reports must match RtbStats.
+
+No trading decision (open/close/block) may depend on the diagnostics service.
+
+In other words:
+
+Trading logic → updates RtbStats → diagnostics & UI read from RtbStats.
+
+Never: Diagnostics → drive trading decisions.
+
+C6. Performance / overhead requirements
+
+RTB stats updates must be O(1) per attempt (simple counter increments).
+
+No synchronous file or DB writes in the hot path.
+
+Diagnostic endpoints should only read from memory; any serialization to JSON happens when the endpoint is called, not on every trade.
+
+D. Trade History “Unknown” Label Fix
+
+In the frontend Trade History component (the table that shows Opened At / Closed At / Symbol / Strategy / Close Reason / P&L):
+
+Locate the logic that turns a trade row into a “Close Reason” label.
+
+Implement the following behavior:
+
+If closed_at == null:
+
+Display “Open – Not Closed Yet” (or similar clear wording).
+
+Optionally style this differently (e.g. same style as “Open” status).
+
+Else if closed_at != null and close_reason == null:
+
+This is a true “unknown close reason” case – leave “Unknown”, but consider logging this for future cleanup.
+
+Else if close_reason is one of the known reasons (manual_stop, stop_hit, etc.):
+
+Display the appropriate label as you already do.
+
+This change must be purely presentational:
+
+Do not change any backend behavior.
+
+Do not change how trades are stored; only how they are labelled in the UI.
+
+The goal is that trades which are still open no longer look like already-closed “Unknown” trades.
+
+E. Validation Protocol (Single 40-Minute Run)
+
+After implementing B–D, please perform one full diagnostics run, similar to the I1 run, and save the outputs under a new folder:
+
+diagnostics/phase-8.8.3-I2-run1/
+
+E1. Reset & start
+
+Use the same JWT token approach you used for I1.
+
+Stop any running paper sim, clear I1 diagnostics and relevant DB tables (sessions, open positions, paper sim trades), as you did last time.
+
+Save:
+
+open_positions_initial.json
+
+sim_status_initial.json
+
+Start a new paper sim session with mode: "new" and save:
+
+sim_status_start.json
+
+Do not change Goals from code; rely on the existing configuration (Max Position % should already be set to 6% in the UI by the owner).
+
+E2. 40-minute observation period
+
+Let the engine run uninterrupted for ~40 minutes.
+
+Keep WebSocket and engine running; do not restart the workflow.
+
+At the end of the period, save:
+
+sim_status_running.json
+
+open_positions_running.json
+
+rtb_blocks.json (using the I1 RTB diagnostics endpoint)
+
+trade_lifecycle.json
+
+ws_linkage.json
+
+ws_price_engine.json
+
+E3. Hard stop & post-stop diagnostics
+
+Issue a paper sim stop via the API (same as previous test).
+
+Wait at least 10 seconds for the hard stop to complete.
+
+Then save:
+
+sim_status_after_stop.json
+
+open_positions_after_stop.json
+
+trade_lifecycle_after_stop.json
+
+ws_linkage_after_stop.json
+
+E4. Expected properties you must explicitly verify in your notes
+
+Please summarize these checks in your Replit notes so the owner can see them:
+
+No new trades during stop:
+
+In trade_lifecycle_after_stop.json, the last trade open events must occur before the first hard-stop close events.
+
+There must be no opens with timestamps at or after the start of the hard stop window.
+
+No orphaned positions:
+
+open_positions_after_stop.json should show 0 open positions.
+
+ws_linkage_after_stop.json should show:
+
+0 open positions, or
+
+At least no positions with missing WebSocket linkage.
+
+RTB metric consistency:
+
+From the RTB metrics (top row) and rtb_blocks.json:
+
+TotalAttempts == Opened + Blocked.
+
+Blocked == sum(all block reasons in the RTB breakdown table).
+
+Blocked == sum(all block reasons in rtb_blocks diagnostics).
+
+MAX_TOTAL_EXPOSURE and POSITION_LIMIT counts are:
+
+Present in the breakdown table.
+
+Match the corresponding entries in rtb_blocks.json.
+
+Slots and exposure:
+
+With Max Position % at 6% and Max Open Positions at 15, we expect:
+
+More than 6 positions to open over a 40-minute run, unless guardrails truly constrain them.
+
+If MAX_TOTAL_EXPOSURE is still responsible for a very high percentage of blocks, call that out explicitly.
+
+Trade History label behavior (manual visual check):
+
+While the sim is running:
+
+Some trades should appear in Trade History with “Open – Not Closed Yet” (or your exact label).
+
+After hard stop:
+
+Those trades should transition to proper close reasons (e.g. manual_stop), with non-zero P&L.
+
+No open trades should remain labelled “Unknown” simply because they are open.
+
+If any of these invariants cannot be satisfied due to existing constraints in the codebase, please document exactly which constraint is blocking it and why, rather than working around it.
