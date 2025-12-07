@@ -1,0 +1,209 @@
+Phase 8.8.3-I1 – Full Trading Pipeline Diagnostics Run
+(OBSERVE ONLY – DO NOT MODIFY ANY BEHAVIOR OR LOGIC)
+
+Replit, please execute the following protocol exactly and in order.
+
+0. Preparation
+
+Create directory:
+
+mkdir -p diagnostics/phase-8.8.3-I1-run1
+
+1. RESET THE SYSTEM COMPLETELY
+1.1 Stop any running simulation
+
+Stop paper simulation gracefully if running.
+
+1.2 Confirm in-memory engine is fully stopped
+
+Verify:
+
+isRunning = false
+
+no manager instances exist
+
+1.3 Reset diagnostics buffers
+
+Run:
+
+POST /api/diagnostics/rtb-blocks/reset
+POST /api/diagnostics/trade-lifecycle/reset
+
+1.4 Clean all simulation DB tables
+
+Delete all rows from:
+
+paper_sim_open_positions
+
+paper_sim_sessions
+
+paper_sim_trades
+
+Then verify row count = 0 for all.
+
+1.5 Confirm clean state
+
+Save output of:
+
+GET /api/paper-sim/status
+GET /api/paper-sim/open-positions
+
+
+Store in:
+
+diagnostics/phase-8.8.3-I1-run1/sim_status_initial.json
+diagnostics/phase-8.8.3-I1-run1/open_positions_initial.json
+
+2. START A NEW PAPER SIMULATION
+
+Start the simulation programmatically exactly as the UI does.
+
+Save confirmation from:
+
+GET /api/paper-sim/status
+
+
+into:
+
+diagnostics/phase-8.8.3-I1-run1/sim_status_start.json
+
+3. LET THE ENGINE RUN FOR 30 MINUTES
+
+Very important:
+
+Do NOT restart workflow
+
+Do NOT reload engine
+
+Do NOT stop WebSocket
+
+Do NOT modify startup state
+
+Allow the trading engine to run uninterrupted for full 30 minutes.
+
+During this period, gather nothing yet.
+
+4. AFTER 30 MINUTES — COLLECT ALL RUNNING DIAGNOSTICS
+
+Gather the required six diagnostic outputs:
+
+4.1 RTB Block Reasons
+GET /api/diagnostics/rtb-blocks?raw=1
+
+
+→ Save to:
+
+diagnostics/phase-8.8.3-I1-run1/rtb_blocks.json
+
+4.2 Trade Lifecycle Log
+GET /api/diagnostics/trade-lifecycle?raw=1
+
+
+→ Save to:
+
+diagnostics/phase-8.8.3-I1-run1/trade_lifecycle.json
+
+4.3 Open Position WebSocket Linkage
+GET /api/diagnostics/open-position-ws-linkage?mode=paper&raw=1
+
+
+→ Save to:
+
+diagnostics/phase-8.8.3-I1-run1/ws_linkage.json
+
+4.4 WebSocket Price Engine Status
+GET /api/diagnostics/ws-price-engine?raw=1
+
+
+→ Save to:
+
+diagnostics/phase-8.8.3-I1-run1/ws_price_engine.json
+
+4.5 Open Positions (DB truth)
+GET /api/paper-sim/open-positions
+
+
+→ Save to:
+
+diagnostics/phase-8.8.3-I1-run1/open_positions_running.json
+
+4.6 Simulation Session Status
+GET /api/paper-sim/status
+
+
+→ Save to:
+
+diagnostics/phase-8.8.3-I1-run1/sim_status_running.json
+
+5. STOP THE SIMULATION
+
+Stop the simulation normally using the same method the UI uses.
+
+6. AFTER STOP — COLLECT POST-STOP DIAGNOSTICS
+6.1 Paper sim status
+GET /api/paper-sim/status
+
+
+→ Save to:
+
+diagnostics/phase-8.8.3-I1-run1/sim_status_after_stop.json
+
+6.2 Open positions after stop (should be zero if hard stop worked)
+GET /api/paper-sim/open-positions
+
+
+→ Save to:
+
+diagnostics/phase-8.8.3-I1-run1/open_positions_after_stop.json
+
+6.3 Latest trade lifecycle diagnostic (captures hard stop events)
+GET /api/diagnostics/trade-lifecycle?raw=1
+
+
+→ Save to:
+
+diagnostics/phase-8.8.3-I1-run1/trade_lifecycle_after_stop.json
+
+6.4 Latest WS linkage
+GET /api/diagnostics/open-position-ws-linkage?mode=paper&raw=1
+
+
+→ Save to:
+
+diagnostics/phase-8.8.3-I1-run1/ws_linkage_after_stop.json
+
+7. VERIFY ALL FILES EXIST
+
+List:
+
+ls -la diagnostics/phase-8.8.3-I1-run1
+
+
+Ensure the directory contains at minimum:
+
+rtb_blocks.json
+trade_lifecycle.json
+ws_linkage.json
+ws_price_engine.json
+open_positions_running.json
+open_positions_after_stop.json
+sim_status_initial.json
+sim_status_start.json
+sim_status_running.json
+sim_status_after_stop.json
+trade_lifecycle_after_stop.json
+ws_linkage_after_stop.json
+
+
+If any file is missing, rerun the associated query.
+
+8. DO NOT MODIFY ANY CODE
+
+Diagnostics ONLY.
+No behavioral changes under any circumstances.
+
+9. Once complete
+
+Return a final summary and notify the user that all diagnostic files are ready for download.
+
+END OF DIRECTIVE

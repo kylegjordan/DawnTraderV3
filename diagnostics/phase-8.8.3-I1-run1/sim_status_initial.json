@@ -1,0 +1,10 @@
+{
+    "isRunning": false,
+    "sessionInfo": null,
+    "diagnostics": {
+        "hasDbSession": false,
+        "hasManager": false,
+        "isConsistent": true,
+        "reconciliationNeeded": false
+    }
+}
