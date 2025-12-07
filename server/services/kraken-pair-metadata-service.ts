@@ -104,12 +104,21 @@ class KrakenPairMetadataService {
   }
 
   /**
+   * Phase 8.8.4: Dedicated map for WS symbol -> pairId lookups
+   * Kept separate from exchangeToInternal to avoid key collisions
+   */
+  private wsSymbolToPairId = new Map<string, string>();
+
+  /**
    * Build symbol maps from Kraken pair data
    * Atomically swaps map references to avoid partial updates
+   * 
+   * Phase 8.8.4: Enhanced to support bidirectional mapping including pairId
    */
   private buildMaps(pairs: Record<string, KrakenPairInfo>): void {
     const newInternalToExchange = new Map<string, string>();
     const newExchangeToInternal = new Map<string, string>();
+    const newWsSymbolToPairId = new Map<string, string>();
     
     for (const [pairId, info] of Object.entries(pairs)) {
       if (info.status && info.status !== 'online') {
@@ -119,6 +128,7 @@ class KrakenPairMetadataService {
       const wsSymbol = info.wsname || info.altname;
       const altname = info.altname;
       
+      // Forward mappings: internal -> exchange (WS format)
       newInternalToExchange.set(altname, wsSymbol);
       newInternalToExchange.set(altname.toUpperCase(), wsSymbol);
       
@@ -138,19 +148,29 @@ class KrakenPairMetadataService {
         newInternalToExchange.set(wsNoSlash.toUpperCase(), wsSymbol);
       }
       
+      // Phase 8.8.4: Also map pairId (e.g., XXRPZUSD) to WS symbol
+      newInternalToExchange.set(pairId, wsSymbol);
+      newInternalToExchange.set(pairId.toUpperCase(), wsSymbol);
+      
+      // Reverse mappings: exchange (WS format) -> altname
+      // Used for display/logging purposes
       newExchangeToInternal.set(wsSymbol, altname);
       newExchangeToInternal.set(wsSymbol.toUpperCase(), altname);
       
-      newInternalToExchange.set(pairId, wsSymbol);
-      newInternalToExchange.set(pairId.toUpperCase(), wsSymbol);
+      // Phase 8.8.4: WS symbol -> pairId mapping in DEDICATED map
+      // This avoids collisions with exchangeToInternal
+      newWsSymbolToPairId.set(wsSymbol, pairId);
+      newWsSymbolToPairId.set(wsSymbol.toUpperCase(), pairId);
     }
     
     this.internalToExchange = newInternalToExchange;
     this.exchangeToInternal = newExchangeToInternal;
+    this.wsSymbolToPairId = newWsSymbolToPairId;
     
     console.log('[SYM][PAIR_METADATA_MAPS_BUILT]', {
       internalToExchangeSize: this.internalToExchange.size,
       exchangeToInternalSize: this.exchangeToInternal.size,
+      wsSymbolToPairIdSize: this.wsSymbolToPairId.size,
     });
   }
 
@@ -241,6 +261,7 @@ class KrakenPairMetadataService {
 
   /**
    * Get internal symbol from Kraken WebSocket symbol
+   * Returns altname format (e.g., XRPUSD) - suitable for display
    * Returns null if symbol is not recognized
    */
   getInternalSymbol(krakenSymbol: string): string | null {
@@ -251,6 +272,24 @@ class KrakenPairMetadataService {
     
     const upperInternal = this.exchangeToInternal.get(krakenSymbol.toUpperCase());
     if (upperInternal) return upperInternal;
+    
+    return null;
+  }
+
+  /**
+   * Phase 8.8.4: Get Kraken pairId from WebSocket symbol
+   * Returns pairId format (e.g., XXRPZUSD) - matches DB storage format
+   * Uses dedicated wsSymbolToPairId map to avoid collisions
+   * Returns null if symbol is not recognized
+   */
+  getPairId(krakenSymbol: string): string | null {
+    if (!krakenSymbol) return null;
+    
+    const pairId = this.wsSymbolToPairId.get(krakenSymbol);
+    if (pairId) return pairId;
+    
+    const upperPairId = this.wsSymbolToPairId.get(krakenSymbol.toUpperCase());
+    if (upperPairId) return upperPairId;
     
     return null;
   }

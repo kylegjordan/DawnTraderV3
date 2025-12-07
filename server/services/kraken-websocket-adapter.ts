@@ -222,9 +222,14 @@ export class KrakenWebSocketAdapter {
         
       case 'subscriptionStatus':
         if (status === 'subscribed') {
-          console.log(`[${this.MODULE_NAME}] Subscribed to ${channelName} for ${pair}`);
-          const normalized = this.krakenToNormalSymbol(pair);
-          this.subscribedSymbols.add(normalized);
+          // Phase 8.8.4: Use mapKrakenPairToInternalSymbol for consistent symbol tracking
+          const internalSymbol = this.mapKrakenPairToInternalSymbol(pair);
+          if (internalSymbol) {
+            console.log(`[${this.MODULE_NAME}] Subscribed to ${channelName} for ${pair} -> ${internalSymbol}`);
+            this.subscribedSymbols.add(internalSymbol);
+          } else {
+            console.warn(`[${this.MODULE_NAME}] Subscribed to ${channelName} for ${pair} but could not map to internal symbol`);
+          }
         } else if (status === 'error') {
           console.error(`[${this.MODULE_NAME}] Subscription error for ${pair}: ${errorMessage}`);
         }
@@ -249,7 +254,16 @@ export class KrakenWebSocketAdapter {
     
     try {
       const ticker = tickerData as KrakenTickerPayload;
-      const normalizedSymbol = this.krakenToNormalSymbol(pair);
+      
+      // Phase 8.8.4: Use mapKrakenPairToInternalSymbol for proper symbol normalization
+      // This ensures incoming ticks are keyed by the same internal symbol used in DB
+      const internalSymbol = this.mapKrakenPairToInternalSymbol(pair);
+
+      if (!internalSymbol) {
+        console.warn(`[${this.MODULE_NAME}][TICKER][UNMAPPED_PAIR]`, { pair });
+        return;
+      }
+      
       const now = Date.now();
       
       const lastPrice = parseFloat(ticker.c[0]);
@@ -257,11 +271,11 @@ export class KrakenWebSocketAdapter {
       const ask = parseFloat(ticker.a[0]);
       
       if (isNaN(lastPrice) || lastPrice <= 0) {
-        console.warn(`[${this.MODULE_NAME}] Invalid price for ${normalizedSymbol}: ${ticker.c[0]}`);
+        console.warn(`[${this.MODULE_NAME}] Invalid price for ${internalSymbol}: ${ticker.c[0]}`);
         return;
       }
       
-      const stats = this.symbolStats.get(normalizedSymbol) || {
+      const stats = this.symbolStats.get(internalSymbol) || {
         lastUpdate: 0,
         updateCount: 0,
         intervals: []
@@ -272,10 +286,10 @@ export class KrakenWebSocketAdapter {
       if (stats.intervals.length > 100) stats.intervals.shift();
       stats.lastUpdate = now;
       stats.updateCount++;
-      this.symbolStats.set(normalizedSymbol, stats);
+      this.symbolStats.set(internalSymbol, stats);
       
       const logEntry: PriceTickLog = {
-        symbol: normalizedSymbol,
+        symbol: internalSymbol,
         price: lastPrice,
         bid,
         ask,
@@ -289,10 +303,10 @@ export class KrakenWebSocketAdapter {
         this.priceTickLogs.shift();
       }
       
-      // Phase 8.8.3-B3.6: Update LivePricingAdapter cache with WebSocket price
-      livePricingAdapter.updateFromWebSocket(normalizedSymbol, lastPrice, 'kraken_ws');
+      // Phase 8.8.4: Update LivePricingAdapter cache with properly normalized symbol
+      livePricingAdapter.updateFromWebSocket(internalSymbol, lastPrice, 'kraken_ws');
       
-      this.throttledBroadcast(normalizedSymbol, lastPrice, bid, ask);
+      this.throttledBroadcast(internalSymbol, lastPrice, bid, ask);
       
     } catch (error) {
       console.error(`[${this.MODULE_NAME}] Error processing ticker update:`, error);
@@ -457,17 +471,17 @@ export class KrakenWebSocketAdapter {
   }
 
   private normalToKrakenSymbol(symbol: string): string | null {
-    // Phase 8.8.3: Use KrakenPairMetadataService for deterministic normalization
+    // Phase 8.8.4: PRIORITY 1 - Use metadata service first (handles pairId like XXRPZUSD)
+    // The metadata service maps pairId -> wsSymbol directly from Kraken's AssetPairs
     const canonical = krakenPairMetadataService.getCanonicalKrakenSymbol(symbol);
     
     if (canonical) {
-      // Successfully normalized
       this.unrecognizedSymbols.delete(symbol);
       return canonical;
     }
     
-    // Fallback: Legacy hardcoded mapping for critical symbols
-    // This ensures basic functionality even if metadata service hasn't loaded
+    // Phase 8.8.4: PRIORITY 2 - Fallback legacy hardcoded mapping for critical symbols
+    // This ensures basic functionality if metadata service hasn't loaded yet
     const legacyMapping: Record<string, string> = {
       'BTC/USD': 'XBT/USD',
       'ETH/USD': 'ETH/USD',
@@ -483,22 +497,42 @@ export class KrakenWebSocketAdapter {
       'LTC/USD': 'LTC/USD',
       'ATOM/USD': 'ATOM/USD',
       'SHIB/USD': 'SHIB/USD',
-      'TRX/USD': 'TRX/USD'
+      'TRX/USD': 'TRX/USD',
+      'STX/USD': 'STX/USD',
+      'LDO/USD': 'LDO/USD',
+      'SUI/USD': 'SUI/USD'
     };
     
     if (legacyMapping[symbol]) {
+      this.unrecognizedSymbols.delete(symbol);
       return legacyMapping[symbol];
     }
     
-    // If symbol already has a slash and wasn't found, try passthrough
+    // Phase 8.8.4: PRIORITY 3 - If symbol already has a slash, try passthrough
     if (symbol.includes('/')) {
       const [base, quote] = symbol.split('/');
-      if (base === 'BTC') return `XBT/${quote}`;
-      // Return the symbol as-is for passthrough (Kraken may accept it)
+      if (base === 'BTC') {
+        this.unrecognizedSymbols.delete(symbol);
+        return `XBT/${quote}`;
+      }
+      this.unrecognizedSymbols.delete(symbol);
       return symbol;
     }
     
-    // Symbol is unrecognized - track it
+    // Phase 8.8.4: PRIORITY 4 - Convert internal DB format to WS format as last resort
+    // This handles cases where metadata hasn't loaded but we have a DB symbol
+    const wsFormat = this.convertInternalToWsFormat(symbol);
+    if (wsFormat) {
+      console.log(`[${this.MODULE_NAME}][SYMBOL_CONVERTED_FALLBACK]`, {
+        original: symbol,
+        wsFormat,
+        metadataLoaded: krakenPairMetadataService.isMetadataLoaded(),
+      });
+      this.unrecognizedSymbols.delete(symbol);
+      return wsFormat;
+    }
+    
+    // Symbol is completely unrecognized - track it
     console.warn('[SYM][UNRECOGNIZED_FOR_WS]', {
       internalSymbol: symbol,
       context: 'normalToKrakenSymbol',
@@ -509,6 +543,100 @@ export class KrakenWebSocketAdapter {
     return null;
   }
 
+  /**
+   * Phase 8.8.4: Convert Kraken internal symbol format to WebSocket format
+   * Examples:
+   *   XXRPZUSD -> XRP/USD
+   *   XXRPZEUR -> XRP/EUR
+   *   ADAUSD -> ADA/USD
+   *   TRXUSD -> TRX/USD
+   *   SUIUSD -> SUI/USD
+   *   LDOUSD -> LDO/USD
+   *   STXUSD -> STX/USD
+   */
+  private convertInternalToWsFormat(symbol: string): string | null {
+    if (!symbol || symbol.includes('/')) return null;
+    
+    // Known quote currencies at the end of Kraken symbols
+    const quoteCurrencies = ['USD', 'EUR', 'GBP', 'CAD', 'JPY', 'CHF', 'AUD', 'USDC', 'USDT'];
+    
+    for (const quote of quoteCurrencies) {
+      if (symbol.endsWith(quote) || symbol.endsWith(`Z${quote}`)) {
+        let base = symbol.endsWith(`Z${quote}`) 
+          ? symbol.slice(0, -quote.length - 1)  // Remove ZXXX
+          : symbol.slice(0, -quote.length);      // Remove XXX
+        
+        // Handle Kraken's X-prefix convention (XXRP = XRP, XXBT = XBT/BTC)
+        if (base.startsWith('X') && base.length > 3) {
+          base = base.slice(1);
+        }
+        
+        // Handle Z-prefix quote currencies (ZUSD, ZEUR, etc.)
+        const cleanQuote = quote;
+        
+        // Construct WS format
+        const wsFormat = `${base}/${cleanQuote}`;
+        return wsFormat;
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * Phase 8.8.4: Map incoming Kraken WS pair to internal symbol using metadata service
+   * This is the PRIMARY method for normalizing incoming ticker symbols.
+   * 
+   * Priority order for incoming WS ticks:
+   * 1. Try getPairId() - returns DB format (e.g., XXRPZUSD) which matches open_positions
+   * 2. Try getInternalSymbol() - returns altname format (e.g., XRPUSD) 
+   * 3. Fallback to legacy string manipulation
+   * 
+   * We also update prices under multiple formats to maximize cache hits.
+   */
+  private mapKrakenPairToInternalSymbol(krakenPair: string): string | null {
+    // Phase 8.8.4: First try to get pairId (DB format like XXRPZUSD)
+    // This matches how symbols are stored in paper_sim_open_positions
+    const pairId = krakenPairMetadataService.getPairId(krakenPair);
+    if (pairId) {
+      return pairId;
+    }
+
+    // Fallback to altname format (like XRPUSD)
+    const internalFromMetadata = krakenPairMetadataService.getInternalSymbol(krakenPair);
+    if (internalFromMetadata) {
+      return internalFromMetadata;
+    }
+
+    // Fallback: existing krakenToNormalSymbol for legacy safety
+    const legacy = this.krakenToNormalSymbol(krakenPair);
+    if (legacy) {
+      // Log that we're using legacy mapping (for monitoring)
+      if (!this.unrecognizedSymbols.has(krakenPair)) {
+        console.log(`[${this.MODULE_NAME}][TICKER][LEGACY_FALLBACK]`, {
+          krakenPair,
+          legacyResult: legacy,
+          metadataLoaded: krakenPairMetadataService.isMetadataLoaded(),
+        });
+      }
+      return legacy;
+    }
+
+    // Symbol is completely unrecognized
+    console.warn('[SYM][UNRECOGNIZED_FOR_WS]', {
+      internalSymbol: krakenPair,
+      context: 'ticker_inbound',
+      metadataLoaded: krakenPairMetadataService.isMetadataLoaded(),
+    });
+    this.unrecognizedSymbols.add(krakenPair);
+    
+    return null;
+  }
+
+  /**
+   * Legacy method for basic Kraken pair to normal symbol conversion
+   * Only used as fallback when metadata service fails
+   */
   private krakenToNormalSymbol(krakenPair: string): string {
     const pair = krakenPair.replace('XBT', 'BTC');
     
@@ -569,6 +697,7 @@ export class KrakenWebSocketAdapter {
   getDiagnostics(): {
     wsConnected: boolean;
     subscribedSymbols: string[];
+    unrecognizedSymbols: string[];
     lastUpdateBySymbol: Record<string, string>;
     averageIntervalMs: number;
     maxIntervalMs: number;
@@ -597,6 +726,7 @@ export class KrakenWebSocketAdapter {
     return {
       wsConnected: this.isConnected,
       subscribedSymbols: Array.from(this.subscribedSymbols),
+      unrecognizedSymbols: Array.from(this.unrecognizedSymbols),
       lastUpdateBySymbol,
       averageIntervalMs: Math.round(avgInterval),
       maxIntervalMs: maxInterval,

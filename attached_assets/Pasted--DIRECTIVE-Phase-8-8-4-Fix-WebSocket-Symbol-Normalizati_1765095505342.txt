@@ -1,0 +1,263 @@
+🚀 DIRECTIVE: Phase 8.8.4 – Fix WebSocket Symbol Normalization & Restore Real-Time Architecture
+
+Scope:
+This directive must be implemented against the current codebase (after 8.8.3 changes), specifically the versions of:
+
+server/services/kraken-pair-metadata-service.ts
+
+server/services/kraken-websocket-adapter.ts
+
+server/services/paper-execution-engine.ts
+
+server/services/paper-portfolio-manager.ts
+
+server/services/paper-sim-service.ts
+
+server/services/live-pricing-adapter.ts
+
+Do not reintroduce any legacy modules or alter high-level architecture (FX5 cadence, RTB cadence, trading engine structure).
+
+0. Non-Goals / Constraints
+
+❌ Do NOT change the FX5 scan cadence (30s via REST).
+
+❌ Do NOT change the RTB cadence (30s).
+
+❌ Do NOT add WebSocket subscriptions for the entire FX5 pool or all Kraken pairs.
+
+❌ Do NOT modify the paper sim hard-stop behavior that calls forceCloseAllOpenPositionsOnStop() before manager.stop().
+
+❌ Do NOT re-add any legacy price adapter or legacy execution files.
+
+We are restoring the intended architecture:
+
+WebSocket is used only for Active Trades,
+FX5 + RTB remain REST-based.
+
+1. FIX: Use KrakenPairMetadataService for incoming ticker symbols
+
+File: server/services/kraken-websocket-adapter.ts
+
+Problem:
+handleTickerUpdate() currently derives normalizedSymbol via krakenToNormalSymbol(pair), which does dumb string manipulation and ignores the metadata registry:
+
+const ticker = tickerData as KrakenTickerPayload;
+const normalizedSymbol = this.krakenToNormalSymbol(pair);
+
+
+This breaks pairs like XXRPZUSD / XXRPZEUR, causing:
+
+Ticks to be stored under "XXRPZ/USD" or "XRP/USD"
+
+Engine + UI to look up "XXRPZUSD" / "XXRPZEUR"
+
+=> No live price updates for those positions.
+
+Required changes:
+
+Add a helper method in the adapter:
+
+private mapKrakenPairToInternalSymbol(krakenPair: string): string | null {
+  // First, ask KrakenPairMetadataService
+  const internalFromMetadata = krakenPairMetadataService.getInternalSymbol(krakenPair);
+  if (internalFromMetadata) {
+    return internalFromMetadata;
+  }
+
+  // Fallback: existing krakenToNormalSymbol for logging / legacy safety
+  const legacy = this.krakenToNormalSymbol(krakenPair);
+  return legacy || null;
+}
+
+
+Update handleTickerUpdate to use this mapping:
+
+const ticker = tickerData as KrakenTickerPayload;
+const internalSymbol = this.mapKrakenPairToInternalSymbol(pair);
+
+if (!internalSymbol) {
+  console.warn(`[${this.MODULE_NAME}][TICKER][UNMAPPED_PAIR]`, { pair });
+  return;
+}
+
+
+Replace all uses of normalizedSymbol in that method with internalSymbol:
+
+Symbol key in symbolStats
+
+Calls to livePricingAdapter.updateFromWebSocket(...)
+
+Any logs referring to the symbol
+
+Keep krakenToNormalSymbol ONLY as a fallback, not as the primary mapping.
+
+Result:
+
+Incoming WS ticks will be keyed by the same internal symbol used in:
+
+paper_sim_open_positions
+
+paper_sim_trades
+
+execution engine / strategy engine
+
+Positions like XXRPZUSD, XXRPZEUR, ADAUSD, etc. will finally receive their live prices correctly.
+
+2. ENSURE: WebSocket subscribes only for Active Trades (and uses registry for outgoing)
+
+This is mostly already in place, but we need to confirm and tighten the usage.
+
+File: server/services/kraken-websocket-adapter.ts
+
+You already have:
+
+normalToKrakenSymbol(symbol: string): string | null {
+  const canonical = krakenPairMetadataService.getCanonicalKrakenSymbol(symbol);
+  ...
+}
+
+
+And:
+
+subscribeToSymbols(symbols: string[]): void {
+  const krakenSymbols = symbols
+    .map(s => this.normalToKrakenSymbol(s))
+    .filter(s => s !== null) as string[];
+  ...
+}
+
+
+Required guarantees:
+
+No code path should subscribe using raw internal symbols without going through normalToKrakenSymbol.
+
+Confirm any direct calls to subscribeToSymbols rely on internal symbols like ADAUSD, XXRPZUSD, etc.
+
+No one should call subscribeToSymbols with XRP/USD etc., because that bypasses the normalizer.
+
+No FX5 or RTB pool subscription.
+
+Verify there are no calls that subscribe the entire FX5 pool or RTB list.
+
+WebSocket subscription must be driven exclusively by:
+
+open positions at engine start
+
+new trade entries (once opened)
+
+Optional but preferred: When a position closes, call an unsubscribeSymbols([symbol]) method.
+If unsubscribing is already implemented, keep it; if not, do not implement unsubscribe in this directive unless trivial — no large refactors.
+
+3. CONNECT: Active Trades ↔ WebSocket Subscription Flow
+
+Files:
+
+server/services/paper-execution-engine.ts
+
+server/services/paper-portfolio-manager.ts
+
+Required behaviors:
+
+On engine start (paper execution engine):
+
+After loading existing open positions from storage, you must call:
+
+const openPositions = await storage.getPaperSimOpenPositions(this.mode);
+const symbols = openPositions.map(p => p.symbol);
+krakenWebSocketAdapter.subscribeToSymbols(symbols);
+
+
+Confirm this is present and uses the symbols as stored in the DB (e.g. ADAUSD, XXRPZUSD).
+
+Ensure there is no pre-normalization here — normalization is handled in the adapter via normalToKrakenSymbol.
+
+On new trade opened (wherever a trade transitions from signal → open position):
+
+Confirm we call krakenWebSocketAdapter.subscribeToSymbols([position.symbol]) immediately after the trade is successfully opened.
+
+On force-close via Hard Stop:
+
+If the open positions list becomes empty after forceCloseAllOpenPositionsOnStop, we can optionally unsubscribe all symbols; but this is not required for correctness in this directive.
+
+4. DIAGNOSTICS: Surface unrecognized symbols & missing subscriptions
+
+We need visibility into symbol mismatches so we can trust the system.
+
+File: server/services/kraken-websocket-adapter.ts (adapter)
+File: server/services/b4-diagnostics.ts (or wherever /api/diagnostics/ws-price-engine?raw=1 is implemented)
+
+Required:
+
+In the adapter, ensure there is a method:
+
+getDiagnostics() {
+  return {
+    wsConnected: this.isConnected,
+    subscribedSymbols: Array.from(this.subscribedSymbols),
+    unrecognizedSymbols: Array.from(this.unrecognizedSymbols),
+    lastUpdateBySymbol: { ...this.lastUpdateBySymbol },
+    averageIntervalMs: ...,
+    staleSymbols: [...],
+    reconnectAttempts: this.reconnectAttempts,
+    // any other existing fields
+  };
+}
+
+
+In the diagnostics service/route that powers /api/diagnostics/ws-price-engine?raw=1, include:
+
+unrecognizedSymbols
+
+(Optionally later) openPositionsWithMissingSubscription
+
+For any symbol that fails normalToKrakenSymbol or getInternalSymbol mapping, ensure:
+
+console.warn('[SYM][UNRECOGNIZED_FOR_WS]', {
+  internalSymbol: symbol,
+  context: 'subscribeToSymbols' | 'ticker_inbound',
+  metadataLoaded: krakenPairMetadataService.isMetadataLoaded(),
+});
+this.unrecognizedSymbols.add(symbol);
+
+
+This lets us see:
+
+Which symbols are in your trading world but not mapped to Kraken
+
+Whether any open positions are stuck without a subscription
+
+5. VERIFY: Hard Stop truly closes all positions in DB
+
+This part is mostly correct already, but we want a final safety check.
+
+File: server/services/paper-sim-service.ts
+
+Inside stopPaperSimulation, after:
+
+if (currentManager) {
+  const closeResult = await currentManager.forceCloseAllOpenPositionsOnStop();
+  await currentManager.stop();
+  clearGlobalPaperSimManager();
+  ...
+}
+
+
+Add a DB verification step:
+
+const remainingOpen = await storage.getPaperSimOpenPositions('paper');
+if (remainingOpen.length > 0) {
+  console.warn('[DEBUG-B9][STOP_FLOW][OPEN_POSITIONS_REMAIN_AFTER_FORCE_CLOSE]', {
+    count: remainingOpen.length,
+    ids: remainingOpen.map(p => p.id),
+    symbols: remainingOpen.map(p => p.symbol),
+  });
+}
+
+
+This does NOT block the stop — it just warns if something went wrong.
+
+Later, if Kyle hits STOP and still sees trades in the UI, we can compare:
+
+If DB has 0 open positions → UI bug.
+
+If DB still has rows → force-close bug.

@@ -690,6 +690,24 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
             // Non-blocking: continue with stop even if force-close fails
           }
           
+          // Phase 8.8.4: DB verification after force-close (non-blocking diagnostic)
+          try {
+            const remainingOpen = await storage.getPaperSimOpenPositions('paper');
+            if (remainingOpen.length > 0) {
+              console.warn('[DEBUG-B9][STOP_FLOW][OPEN_POSITIONS_REMAIN_AFTER_FORCE_CLOSE]', {
+                count: remainingOpen.length,
+                ids: remainingOpen.map(p => p.id),
+                symbols: remainingOpen.map(p => p.symbol),
+              });
+            } else {
+              console.log('[DEBUG-B9][STOP_FLOW][DB_VERIFICATION_PASSED]', {
+                message: 'All positions successfully closed',
+              });
+            }
+          } catch (verifyErr) {
+            console.error('[DEBUG-B9][STOP_FLOW][DB_VERIFICATION_ERROR]', verifyErr);
+          }
+          
           console.log('[41E-S][TIMING] Starting manager.stop()...');
           await currentManager.stop();
           clearGlobalPaperSimManager();
