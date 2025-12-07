@@ -18,7 +18,7 @@ type TradeEventType =
   | 'TRADE_CLOSE'
   | 'TRADE_FORCE_CLOSE';
 
-type TradeSource = 'normal' | 'hard_stop' | 'manual';
+type TradeSource = 'normal' | 'hard_stop' | 'manual' | 'cleanup';  // Phase 8.8.3-I3: Added 'cleanup' for reconciliation
 
 type CloseReason = 
   | 'target_hit'
@@ -28,6 +28,7 @@ type CloseReason =
   | 'max_holding_period'
   | 'guardrail'
   | 'manual_stop'
+  | 'engine_stop_cleanup'  // Phase 8.8.3-I3: Added for trade reconciliation on stop
   | 'unknown';
 
 interface TradeLifecycleEvent {

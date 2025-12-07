@@ -50,6 +50,10 @@ class RtbMetricsService {
 
   private bySymbol: Record<string, { attempts: number; opened: number; blocked: number; byReason: Record<string, number> }> = {};
   private byStrategy: Record<string, { attempts: number; opened: number; blocked: number }> = {};
+  
+  // Phase 8.8.3-I3: 60-second periodic invariant check
+  private invariantCheckInterval: ReturnType<typeof setInterval> | null = null;
+  private invariantCheckIntervalMs = 60000; // 60 seconds
 
   private constructor() {
     this.initializeBlockReasons();
@@ -226,6 +230,61 @@ class RtbMetricsService {
     this.bySymbol = {};
     this.byStrategy = {};
     console.log(`[8.8.3-I2][RTB_METRICS_RESET] Session reset at ${this.stats.sessionStart.toISOString()}`);
+  }
+
+  /**
+   * Phase 8.8.3-I3: Start 60-second periodic invariant check logging
+   * Called when trading engine starts
+   */
+  startInvariantCheck(): void {
+    if (this.invariantCheckInterval) {
+      console.log('[8.8.3-I3][INVARIANT_CHECK] Already running, skipping start');
+      return;
+    }
+
+    console.log('[8.8.3-I3][INVARIANT_CHECK] Starting 60-second periodic invariant check');
+    
+    this.invariantCheckInterval = setInterval(() => {
+      this.logInvariantCheck();
+    }, this.invariantCheckIntervalMs);
+  }
+
+  /**
+   * Phase 8.8.3-I3: Stop periodic invariant check logging
+   * Called when trading engine stops
+   */
+  stopInvariantCheck(): void {
+    if (this.invariantCheckInterval) {
+      clearInterval(this.invariantCheckInterval);
+      this.invariantCheckInterval = null;
+      console.log('[8.8.3-I3][INVARIANT_CHECK] Stopped periodic invariant check');
+    }
+  }
+
+  /**
+   * Phase 8.8.3-I3: Log invariant check status
+   * Logs every 60 seconds to verify attemptsTotal === openedTotal + blockedTotal
+   */
+  private logInvariantCheck(): void {
+    const { attemptsTotal, openedTotal, blockedTotal, blockedByReason } = this.stats;
+    const expectedTotal = openedTotal + blockedTotal;
+    const invariantValid = attemptsTotal === expectedTotal;
+    const reasonSum = Object.values(blockedByReason).reduce((a, b) => a + b, 0);
+    const breakdownValid = reasonSum === blockedTotal;
+
+    const status = invariantValid && breakdownValid ? 'OK' : 'MISMATCH';
+    const symbol = invariantValid && breakdownValid ? '\u2713' : '\u2717';
+
+    console.log(`[8.8.3-I3][INVARIANT_CHECK][${status}] ${symbol} attempts=${attemptsTotal}, opened=${openedTotal}, blocked=${blockedTotal}, reasonSum=${reasonSum}`);
+
+    if (!invariantValid) {
+      console.error(`[8.8.3-I3][INVARIANT_VIOLATION] attemptsTotal(${attemptsTotal}) !== openedTotal(${openedTotal}) + blockedTotal(${blockedTotal}) = ${expectedTotal}`);
+    }
+
+    if (!breakdownValid) {
+      console.error(`[8.8.3-I3][BREAKDOWN_MISMATCH] blockedTotal(${blockedTotal}) !== reasonSum(${reasonSum})`);
+      console.error(`[8.8.3-I3][BREAKDOWN_DETAILS]`, blockedByReason);
+    }
   }
 }
 

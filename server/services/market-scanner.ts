@@ -613,9 +613,12 @@ export class MarketScanner {
 
       // Phase 27.F.15.B.4: listStrategySettings is now mode-only (global)
       const strategySettings = await storage.listStrategySettings({ mode });
+      
+      // Phase 8.8.3-I3: Provide default settings for SMA calculations
+      const defaultSettings = { smaLength: '20' };
 
       for (const pair of watchlist) {
-        await this.analyzeSymbolForSignals(userId, pair, settings, strategySettings, mode);
+        await this.analyzeSymbolForSignals(userId, pair, defaultSettings, strategySettings, mode);
         
         // Add delay to respect API rate limits
         await new Promise(resolve => setTimeout(resolve, 100));

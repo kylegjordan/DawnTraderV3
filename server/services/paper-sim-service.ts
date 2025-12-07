@@ -15,6 +15,7 @@ import { reset24hWindow, resetHourlyScanHistory } from './fx5-24h-window.js';
 import { b4Diagnostics } from './b4-diagnostics.js';
 import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js';
 import { livePricingAdapter } from './live-pricing-adapter.js';
+import { rtbMetricsService } from './rtb-metrics-service.js';
 
 console.log('[41E-S][LIVE-CODE] paper-sim-service.ts loaded');
 console.log('[8.8.3-I3][LOADED] Trade status consistency module integrated');
@@ -368,7 +369,7 @@ async function reconcileIncompleteTrades(mode: 'paper' | 'live', sessionId: stri
         const pnlPercent = entryPrice > 0 ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0;
         
         // Update trade with close info
-        await storage.updatePaperSimTrade(trade.id, {
+        await storage.updatePaperSimTrade(mode, trade.id, {
           closedAt: new Date(),
           exitPrice: exitPrice.toString(),
           pnl: pnl.toString(),
@@ -377,16 +378,16 @@ async function reconcileIncompleteTrades(mode: 'paper' | 'live', sessionId: stri
         });
         
         // Emit trade lifecycle event for diagnostics
-        i1TradeLifecycleDiagnostics.logEvent({
-          tradeId: trade.id,
-          symbol: trade.symbol,
-          strategy: trade.strategy || 'unknown',
-          eventType: 'TRADE_CLOSE',
-          source: 'cleanup',
-          closeReason: 'engine_stop_cleanup',
+        const strategy = trade.strategyName || 'unknown';
+        i1TradeLifecycleDiagnostics.logClose(
+          trade.id,
+          trade.symbol,
+          strategy,
+          'engine_stop_cleanup',
           exitPrice,
-          pnl
-        });
+          pnl,
+          'cleanup'
+        );
         
         console.log(`[8.8.3-I3][STOP_FLOW] Cleanup closed trade ${trade.id}: ${trade.symbol} exit=$${exitPrice.toFixed(4)} pnl=$${pnl.toFixed(2)}`);
         reconciled++;
@@ -589,6 +590,9 @@ export async function startPaperSimulation(
         try {
           await manager.start();
           console.log('[ENGINE_CHECKPOINT_12] Manager started successfully');
+          
+          // Phase 8.8.3-I3: Start periodic invariant check for RTB metrics
+          rtbMetricsService.startInvariantCheck();
           
           // REB 2.8.11: Sync portfolioState.balance with new startingBalance AFTER manager starts
           // This ensures the session is fully live before touching canonical portfolio state
@@ -856,12 +860,26 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
               console.error('[8.8.3-I2][STOP_FLOW][DB_VERIFICATION_ERROR]', verifyErr);
             }
             
+            // Phase 8.8.3-I3: Reconcile incomplete trades (close stale trades without open positions)
+            console.log('[8.8.3-I3][STOP_FLOW][RECONCILE_START] Checking for stale trades...');
+            try {
+              const reconcileResult = await reconcileIncompleteTrades('paper', existingSession.sessionId);
+              console.log('[8.8.3-I3][STOP_FLOW][RECONCILE_RESULT]', reconcileResult);
+            } catch (reconcileErr) {
+              console.error('[8.8.3-I3][STOP_FLOW][RECONCILE_ERROR]', reconcileErr);
+              // Non-blocking: continue with stop even if reconciliation fails
+            }
+            
             clearGlobalPaperSimManager();
             console.log(`[8.8.3-I2][STOP_FLOW][9_COMPLETE] Manager shutdown completed in ${Date.now() - t0}ms`);
           } finally {
             // 5. Always clear the stop flag in finally block
             currentManager.clearStopInProgress();
             console.log('[8.8.3-I2][STOP_FLOW][10_STOP_FLAG_CLEARED] ENGINE_STOPPING flag cleared');
+            
+            // Phase 8.8.3-I3: Stop periodic invariant check for RTB metrics
+            rtbMetricsService.stopInvariantCheck();
+            
             console.log('[8.8.3-I2][STOP_FLOW][END] Hard stop sequence complete');
           }
         } else {

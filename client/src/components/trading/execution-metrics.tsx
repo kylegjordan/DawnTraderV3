@@ -50,11 +50,13 @@ const formatNumber = (num: number | undefined): string => {
   return new Intl.NumberFormat('en-US').format(num);
 };
 
-// AJ9: All 14 block reasons in display order
+// AJ9: All block reasons in display order - aligned with RtbMetricsService
+// Phase 8.8.3-I3: Updated to match RtbBlockReason type in rtb-metrics-service.ts
 const ALL_BLOCK_REASONS = [
   'KILL_SWITCH',
-  'STOP_LOSS_REQUIRED',
-  'ASSET_MAX_POSITIONS',
+  'NO_STOP_LOSS',
+  'INVALID_STOP_LOSS',
+  'POSITION_LIMIT',
   'COOLDOWN',
   'MAX_POSITION',
   'LPCP_LOW_PRICE',
@@ -65,14 +67,17 @@ const ALL_BLOCK_REASONS = [
   'MAX_EXPOSURE',
   'MAX_TOTAL_EXPOSURE',
   'MAX_TRADES',
-  'UNKNOWN'
+  'ENGINE_STOPPING',
+  'OTHER'
 ] as const;
 
-// B3: Block reason descriptions
+// B3: Block reason descriptions - aligned with RtbMetricsService
+// Phase 8.8.3-I3: Updated to match RtbBlockReason type
 const BLOCK_REASON_DESCRIPTIONS: Record<string, string> = {
   'KILL_SWITCH': 'Daily loss limit exceeded, trading halted',
-  'STOP_LOSS_REQUIRED': 'Signal rejected - no stop loss defined',
-  'ASSET_MAX_POSITIONS': 'Already holding max positions in this asset',
+  'NO_STOP_LOSS': 'Signal rejected - no stop loss defined',
+  'INVALID_STOP_LOSS': 'Stop loss price is invalid or misconfigured',
+  'POSITION_LIMIT': 'Already holding max positions in this asset',
   'COOLDOWN': 'Asset in cooldown period after recent trade',
   'MAX_POSITION': 'Position size exceeds % of portfolio limit',
   'LPCP_LOW_PRICE': 'Asset price below minimum trading threshold',
@@ -83,7 +88,8 @@ const BLOCK_REASON_DESCRIPTIONS: Record<string, string> = {
   'MAX_EXPOSURE': 'Would exceed maximum portfolio exposure',
   'MAX_TOTAL_EXPOSURE': 'Max Total Portfolio Exposure exceeded',
   'MAX_TRADES': 'Maximum open trades limit reached',
-  'UNKNOWN': 'Trade blocked for unspecified reason'
+  'ENGINE_STOPPING': 'Engine is shutting down, new trades blocked',
+  'OTHER': 'Trade blocked for unspecified reason'
 };
 
 // AJ9: All 9 strategies in display order
