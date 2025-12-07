@@ -1,0 +1,40 @@
+{
+  "ok": true,
+  "timestamp": "2025-12-07T15:00:21.399Z",
+  "mode": "paper",
+  "openPositionCount": 15,
+  "wsSubscribedCount": 18,
+  "linkedCount": 14,
+  "orphanedCount": 1,
+  "health": "degraded",
+  "linkageDetails": [
+    {
+      "positionId": "5974854c-0eb0-4b0c-9c20-0c36574fd12a",
+      "symbol": "ADA/GBP",
+      "strategy": "vwap_pullback",
+      "openedAt": "2025-12-07T14:20:05.693Z",
+      "isWebSocketSubscribed": false,
+      "linkageStatus": "ORPHANED"
+    }
+  ],
+  "wsSubscribedSymbols": [
+    "AKTEUR",
+    "AUDUSD",
+    "NEARUSD",
+    "LDOUSD",
+    "ZUSDZJPY",
+    "SOSOUSD",
+    "WLDUSD",
+    "AKTUSD",
+    "XRPAUD",
+    "STXUSD",
+    "FILEUR",
+    "XXRPZCAD",
+    "SOLEUR",
+    "EURCUSDC",
+    "TRACEUR",
+    "XXRPZUSD",
+    "TRUMPUSD",
+    "SOLUSD"
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "ok": true,
+  "phase": "8.8.3-I2",
+  "description": "RTB Metrics Service - Single source of truth for RTB statistics",
+  "timestamp": "2025-12-07T15:00:33.817Z",
+  "sessionStart": "2025-12-07T14:16:16.175Z",
+  "totals": {
+    "attempts": 3886,
+    "opened": 39,
+    "blocked": 3847
+  },
+  "byBlockReason": {
+    "KILL_SWITCH": 0,
+    "NO_STOP_LOSS": 0,
+    "INVALID_STOP_LOSS": 0,
+    "POSITION_LIMIT": 727,
+    "COOLDOWN": 0,
+    "MAX_POSITION": 0,
+    "LPCP_LOW_PRICE": 0,
+    "LPCP_MIN_NOTIONAL": 0,
+    "FX_CONVERSION_FAILED": 0,
+    "PORTFOLIO_RISK": 0,
+    "INSUFFICIENT_BALANCE": 0,
+    "MAX_EXPOSURE": 0,
+    "MAX_TOTAL_EXPOSURE": 0,
+    "MAX_TRADES": 3120,
+    "ENGINE_STOPPING": 0,
+    "OTHER": 0
+  },
+  "byStrategy": {
+    "vwap_pullback": {
+      "attempts": 217,
+      "opened": 4,
+      "blocked": 213
+    },
+    "mean_reversion": {
+      "attempts": 3649,
+      "opened": 34,
+      "blocked": 3615
+    },
+    "sma_trend_ride": {
+      "attempts": 8,
+      "opened": 1,
+      "blocked": 7
+    },
+    "range_trading": {
+      "attempts": 12,
+      "opened": 0,
+      "blocked": 12
+    }
+  },
+  "bySymbol": 103,
+  "invariantCheck": {
+    "valid": true,
+    "message": "OK: attemptsTotal === openedTotal + blockedTotal && blockedTotal === sum(byReason)"
+  }
+}

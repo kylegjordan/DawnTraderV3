@@ -1,0 +1,19 @@
+{
+  "isRunning": true,
+  "sessionInfo": {
+    "sessionId": "paper_poBu7V3FY0",
+    "startTime": "2025-12-07T14:19:38.422Z",
+    "mode": "paper",
+    "status": "running",
+    "startedBy": "manual",
+    "startingBalance": 800,
+    "runForMs": null,
+    "endsAt": null
+  },
+  "diagnostics": {
+    "hasDbSession": true,
+    "hasManager": true,
+    "isConsistent": true,
+    "reconciliationNeeded": false
+  }
+}
