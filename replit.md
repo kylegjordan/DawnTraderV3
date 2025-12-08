@@ -31,6 +31,8 @@ Execution Engine Integrity (B9) ensures P&L calculations use only real market da
 
 RTB Pipeline Diagnostics (I1), Hard-Stop Freeze + RTB Metrics Repair (I2), Trade Status Consistency & RTB Metrics Integrity (I3), RTB Metrics UI & Price Tick Health Diagnostics (I4), and RTB Block Recording & Price Tick Engine Flow Audit (I5) phases introduce diagnostic and consistency improvements without altering trading behavior. These include tracking RTB attempts/blocks, trade lifecycle events, implementing an `isStopInProgress` flag to prevent new trades during a hard stop, reconciling incomplete trades after a stop, aligning RTB block reasons between backend and frontend, and providing extensive logging and API endpoints for auditing price tick flow and RTB blocks.
 
+Live Price Distribution Fix (I6) ensures all modern endpoints use `getPriceWithFallback()` for consistent live pricing with comprehensive fallback tracking. Updated endpoints include `/paper-sim/active-trades`, `/paper-sim/portfolio-summary`, `/paper-sim/close-trade/:id`, `/paper-sim/force-clear-stranded`, and `paper-portfolio-manager.ts` closeAllPositions(). Diagnostic logging with `[8.8.3-I6]` tags tracks `fallbackType` (none/rest_fallback/entry_fallback), `priceAgeMs`, and `source` for complete price audit trails. Legacy files (risk-manager.ts, heuristic-trader.ts) remain untouched per corrective directive.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed (`wss://ws.kraken.com`) for open trade price monitoring.
