@@ -1,0 +1,135 @@
+Please perform the following backend-first diagnostics, and produce a report without modifying any files.
+
+✔️ 1. Confirm whether the trade engine receives updated prices
+
+Instrument (temporarily log, but do not commit code) the following function:
+
+paper-execution-engine.ts → checkOpenPositions()
+
+Add temporary console statements:
+
+symbol
+
+livePrice
+
+priceAgeMs
+
+Run for 60 seconds and report whether:
+
+priceAgeMs stays small (0–2000 ms), or grows large (20,000+ ms)
+
+livePrice changes every few seconds
+
+This tells us whether the trade engine is receiving live pricing.
+
+✔️ 2. Confirm whether SL/TP evaluation runs AND uses fresh prices
+
+In the same temporary instrumentation, log:
+
+[I6-TRACE][EXIT_EVAL] slDistance, tpDistance, price
+
+Report:
+
+how often EXIT_EVAL fires
+
+whether price changes over time
+
+whether slDistance/tpDistance ever shrink
+
+This tells us whether SL/TP logic is alive and using new prices.
+
+✔️ 3. Confirm whether the price cache receives updates DURING TRADING
+
+Add temporary logging inside:
+
+live-pricing-adapter.ts → updatePrice()
+
+Log each update:
+
+symbol
+
+newPrice
+
+timestamp
+
+Report whether:
+
+updates occur continuously
+
+updates correspond to symbols currently being traded
+
+This tells us if the backend cache is alive, not just WebSocket messages.
+
+✔️ 4. Confirm whether the trade engine reads FROM the same cache being updated
+
+There may be a split-brain scenario:
+
+WebSocket adapter updates one cache
+
+Trade engine reads a different cache instance
+
+Inspect:
+
+how livePricingAdapter is instantiated
+
+where its instance is passed into the trade engine
+
+whether multiple instances exist
+
+Report whether there is any chance multiple adapters exist.
+
+✔️ 5. Confirm whether WebSocket → broadcast → UI pipeline is wired to the correct global event handler
+
+We need to know:
+
+Does the backend broadcast correctly?
+
+Does the client WebSocket hook subscribe to the correct channel?
+
+Are messages dropped because the hook is not mounted?
+
+Report:
+
+number of price_updated messages broadcast
+
+number received in useWebSocket
+
+(Again: do NOT fix yet.)
+
+✔️ 6. Confirm whether REST fallback is returning fresh prices
+
+Hit:
+
+GET /api/paper-sim/active-trades
+
+
+Every 5 seconds for 1 minute.
+
+Report whether:
+
+prices change
+
+priceAgeMs grows
+
+If REST API returns stale prices → backend is stuck.
+If REST API returns fresh prices → backend is correct, UI is stuck.
+
+FINAL OUTPUT REQUIRED
+
+A concise report with:
+
+Does the trade engine get live prices?
+
+Does SL/TP run with updated prices?
+
+Does the live pricing cache update continuously?
+
+Does the trade engine read from the correct cache instance?
+
+Do WebSocket messages reach the UI?
+
+Does REST fallback return fresh data?
+
+Do not implement fixes.
+Do not refactor.
+Investigation only.
