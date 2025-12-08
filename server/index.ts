@@ -563,6 +563,15 @@ app.use((req, res, next) => {
       console.log(`[B9.PRICING] Mock mode: ${useMockMode ? 'ENABLED (ENABLE_MOCK_PRICING=true)' : 'DISABLED (production mode)'}`);
       await livePricingAdapter.start(useMockMode);
       
+      // Phase 8.8.3-I7-WS-E: Register WebSocket subscription checker
+      try {
+        const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter');
+        livePricingAdapter.setWsSubscriptionChecker(() => krakenWebSocketAdapter.getSubscribedSymbols());
+        console.log('[I7-WS-E] ✅ WebSocket subscription checker registered');
+      } catch (wsError) {
+        console.warn('[I7-WS-E] ⚠️ Failed to register WebSocket subscription checker:', wsError);
+      }
+      
       console.log('[27.F.15.D] ✅ LivePricingAdapter started successfully');
       
       // Phase 27.F.14.MICRO: Forward price updates to MicroExecutionService

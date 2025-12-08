@@ -14,7 +14,27 @@ import { priceTraceService } from './price-trace-service';
  * - In-memory caching: live_prices:<symbol>
  * - WebSocket broadcasts: price_updated events
  * - Mock fallback: Synthetic ±0.2% price movements when offline
+ * 
+ * Phase 8.8.3-I7-WS-E: REST Fallback Optimization
+ * - REST fallback only when: WS cache stale >2s OR no WS subscription
+ * - Thresholds: fresh ≤2s, warning ≥3s, immediate fallback ≥5s
+ * - Diagnostic tracking for REST fallback reasons
  */
+
+/**
+ * Phase 8.8.3-I7-WS-E: REST fallback reason types
+ */
+type RestFallbackReason = 'cache_stale' | 'no_ws_subscription' | 'cache_miss';
+
+/**
+ * Phase 8.8.3-I7-WS-E: REST fallback metric entry
+ */
+interface RestFallbackMetric {
+  symbol: string;
+  count: number;
+  lastReason: RestFallbackReason;
+  lastTimestamp: number;
+}
 
 interface PriceQuote {
   symbol: string;
@@ -44,6 +64,16 @@ export class LivePricingAdapter {
   // D1: Changed from 1000ms to 150ms to ensure WebSocket ticks reach frontend
   private lastBroadcastTime: Map<string, number> = new Map();
   private readonly BROADCAST_THROTTLE_MS = 150; // 150ms minimum between broadcasts per symbol
+  
+  // Phase 8.8.3-I7-WS-E: REST Fallback Optimization
+  // Thresholds for WebSocket cache freshness
+  private readonly WS_CACHE_FRESH_MS = 2000;      // ≤2s = fresh, use WS cache
+  private readonly WS_CACHE_WARNING_MS = 3000;    // ≥3s = mild warning
+  private readonly WS_CACHE_FALLBACK_MS = 5000;   // ≥5s = immediate REST fallback
+  
+  // I7-WS-E: REST fallback metrics tracking
+  private restFallbackMetrics: Map<string, RestFallbackMetric> = new Map();
+  private wsSubscriptionChecker: (() => string[]) | null = null;
   
   // Configuration
   private readonly REFRESH_INTERVAL_MS = 15000; // 15 seconds for general price tracking
@@ -715,16 +745,69 @@ export class LivePricingAdapter {
   }
 
   /**
-   * Phase 8.8.3-B3.6: Get price with REST fallback
-   * Returns cached price if fresh, otherwise attempts REST fetch
+   * Phase 8.8.3-I7-WS-E: Set WebSocket subscription checker
+   * Allows the adapter to check if a symbol has an active WS subscription
+   */
+  setWsSubscriptionChecker(checker: () => string[]): void {
+    this.wsSubscriptionChecker = checker;
+    console.log(`[I7-WS-E] WebSocket subscription checker registered`);
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-E: Check if symbol has active WebSocket subscription
+   */
+  private hasWsSubscription(symbol: string): boolean {
+    if (!this.wsSubscriptionChecker) {
+      return false;
+    }
+    const subscribedSymbols = this.wsSubscriptionChecker();
+    const normalized = this.normalizeSymbol(symbol);
+    return subscribedSymbols.includes(normalized) || subscribedSymbols.some(s => 
+      this.normalizeSymbol(s) === normalized
+    );
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-E: Record REST fallback metric
+   */
+  private recordRestFallback(symbol: string, reason: RestFallbackReason): void {
+    const existing = this.restFallbackMetrics.get(symbol);
+    if (existing) {
+      existing.count++;
+      existing.lastReason = reason;
+      existing.lastTimestamp = Date.now();
+    } else {
+      this.restFallbackMetrics.set(symbol, {
+        symbol,
+        count: 1,
+        lastReason: reason,
+        lastTimestamp: Date.now()
+      });
+    }
+    console.log(`[I7-WS-E][REST_FALLBACK] symbol=${symbol} reason=${reason}`);
+  }
+
+  /**
+   * Phase 8.8.3-B3.6 + I7-WS-E: Get price with optimized REST fallback
+   * 
+   * I7-WS-E Logic:
+   * - Use WebSocket cache if fresh (≤2s)
+   * - Log warning if cache age ≥3s
+   * - REST fallback if: cache stale >2s OR no WS subscription
    */
   async getPriceWithFallback(symbol: string, staleThresholdMs: number = 5000): Promise<PriceQuote | null> {
     const normalized = this.normalizeSymbol(symbol);
     const cached = this.priceCache.get(normalized);
+    const now = Date.now();
+    
+    // Phase 8.8.3-I7-WS-E: Check WebSocket subscription status
+    const hasWsSub = this.hasWsSubscription(normalized);
     
     if (cached) {
-      const age = Date.now() - cached.cachedAt;
-      if (age <= staleThresholdMs) {
+      const age = now - cached.cachedAt;
+      
+      // I7-WS-E: Fresh WebSocket cache (≤2s) - use directly
+      if (age <= this.WS_CACHE_FRESH_MS && cached.source === 'kraken_ws') {
         return {
           symbol: cached.symbol,
           price: cached.price,
@@ -732,9 +815,33 @@ export class LivePricingAdapter {
           source: cached.source
         };
       }
-      console.log(`[27.F.15.D][Pricing] Cache stale for ${normalized} (age: ${age}ms > ${staleThresholdMs}ms), falling back to REST`);
+      
+      // I7-WS-E: Any source within stale threshold - use cache
+      if (age <= staleThresholdMs) {
+        // Mild warning at ≥3s
+        if (age >= this.WS_CACHE_WARNING_MS) {
+          console.log(`[I7-WS-E][CACHE_WARNING] symbol=${normalized} age=${age}ms source=${cached.source} (approaching stale)`);
+        }
+        return {
+          symbol: cached.symbol,
+          price: cached.price,
+          timestamp: cached.timestamp,
+          source: cached.source
+        };
+      }
+      
+      // I7-WS-E: Cache is stale, determine reason and fallback
+      if (!hasWsSub) {
+        this.recordRestFallback(normalized, 'no_ws_subscription');
+      } else {
+        this.recordRestFallback(normalized, 'cache_stale');
+      }
+    } else {
+      // No cache at all
+      this.recordRestFallback(normalized, hasWsSub ? 'cache_miss' : 'no_ws_subscription');
     }
     
+    // Perform REST fallback
     try {
       await this.fetchPrice(normalized);
       const updated = this.priceCache.get(normalized);
@@ -747,15 +854,67 @@ export class LivePricingAdapter {
         };
       }
     } catch (error) {
-      console.error(`[27.F.15.D][Pricing] REST fallback failed for ${normalized}:`, error);
+      console.error(`[I7-WS-E][REST_FALLBACK_ERROR] symbol=${normalized}:`, error);
     }
     
+    // Return stale cache as last resort
     return cached ? {
       symbol: cached.symbol,
       price: cached.price,
       timestamp: cached.timestamp,
       source: cached.source
     } : null;
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-E: Get REST fallback metrics for diagnostics
+   */
+  getRestFallbackMetrics(): {
+    totalFallbacks: number;
+    bySymbol: Array<{
+      symbol: string;
+      count: number;
+      lastReason: string;
+      lastTimestamp: string;
+      wsTimestamp: string | null;
+      hasWsSubscription: boolean;
+    }>;
+    summary: {
+      cache_stale: number;
+      no_ws_subscription: number;
+      cache_miss: number;
+    };
+  } {
+    const now = Date.now();
+    const summary = { cache_stale: 0, no_ws_subscription: 0, cache_miss: 0 };
+    let totalFallbacks = 0;
+    
+    const bySymbol = Array.from(this.restFallbackMetrics.entries()).map(([symbol, metric]) => {
+      totalFallbacks += metric.count;
+      summary[metric.lastReason] = (summary[metric.lastReason] || 0) + metric.count;
+      
+      const cached = this.priceCache.get(symbol);
+      const wsTimestamp = cached?.source === 'kraken_ws' ? cached.timestamp : null;
+      
+      return {
+        symbol,
+        count: metric.count,
+        lastReason: metric.lastReason,
+        lastTimestamp: new Date(metric.lastTimestamp).toISOString(),
+        wsTimestamp,
+        hasWsSubscription: this.hasWsSubscription(symbol)
+      };
+    });
+    
+    return { totalFallbacks, bySymbol, summary };
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-E: Clear REST fallback metrics (for testing/reset)
+   */
+  clearRestFallbackMetrics(): void {
+    this.restFallbackMetrics.clear();
+    console.log(`[I7-WS-E] REST fallback metrics cleared`);
   }
 
   /**

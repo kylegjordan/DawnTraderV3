@@ -7411,6 +7411,46 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // GET /api/diagnostics/i7-ws-e/rest-fallback-metrics - Phase 8.8.3-I7-WS-E: Get REST fallback metrics
+  apiRouter.get('/diagnostics/i7-ws-e/rest-fallback-metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { livePricingAdapter } = await import('./services/live-pricing-adapter.js');
+      const metrics = livePricingAdapter.getRestFallbackMetrics();
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.3-I7-WS-E',
+        description: 'REST fallback optimization metrics',
+        thresholds: {
+          wsCacheFreshMs: 2000,
+          wsCacheWarningMs: 3000,
+          wsCacheFallbackMs: 5000
+        },
+        ...metrics
+      });
+    } catch (error: any) {
+      console.error('[I7-WS-E] Error fetching REST fallback metrics:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to fetch I7-WS-E REST fallback metrics',
+        message: error.message
+      });
+    }
+  });
+
+  // POST /api/diagnostics/i7-ws-e/reset - Phase 8.8.3-I7-WS-E: Reset REST fallback metrics
+  apiRouter.post('/diagnostics/i7-ws-e/reset', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { livePricingAdapter } = await import('./services/live-pricing-adapter.js');
+      livePricingAdapter.clearRestFallbackMetrics();
+      res.json({ ok: true, message: 'I7-WS-E REST fallback metrics reset' });
+    } catch (error: any) {
+      console.error('[I7-WS-E] Error resetting REST fallback metrics:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   // POST /api/reb-2-12F/strategy-health - Run strategy health check (with mock data verification)
   apiRouter.post('/reb-2-12F/strategy-health', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
