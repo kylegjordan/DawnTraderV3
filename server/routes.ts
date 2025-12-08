@@ -7378,6 +7378,39 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // GET /api/diagnostics/i7-ws-c/trace-history - Phase 8.8.3-I7-WS-C: Get price pipeline trace history
+  apiRouter.get('/diagnostics/i7-ws-c/trace-history', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { priceTraceService } = await import('./services/price-trace-service.js');
+      const traceHistory = priceTraceService.getTraceHistory();
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        ...traceHistory
+      });
+    } catch (error: any) {
+      console.error('[I7-WS-C] Error fetching trace history:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to fetch I7-WS-C trace history',
+        message: error.message
+      });
+    }
+  });
+
+  // POST /api/diagnostics/i7-ws-c/reset - Phase 8.8.3-I7-WS-C: Reset trace history for fresh diagnostic run
+  apiRouter.post('/diagnostics/i7-ws-c/reset', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { priceTraceService } = await import('./services/price-trace-service.js');
+      priceTraceService.reset();
+      res.json({ ok: true, message: 'I7-WS-C trace history reset' });
+    } catch (error: any) {
+      console.error('[I7-WS-C] Error resetting trace history:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   // POST /api/reb-2-12F/strategy-health - Run strategy health check (with mock data verification)
   apiRouter.post('/reb-2-12F/strategy-health', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {

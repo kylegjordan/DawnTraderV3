@@ -20,6 +20,7 @@ import { i1RtbDiagnostics } from './i1-rtb-diagnostics-service.js';
 import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js';
 import { rtbMetricsService } from './rtb-metrics-service.js';
 import { normalizeToInternalSymbol, getKrakenRestPair } from '../markets/kraken-symbol-resolver.js';
+import { priceTraceService } from './price-trace-service.js';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail' | 'manual_stop';
@@ -389,6 +390,14 @@ export class PaperExecutionEngine {
         const avgPrice = parseFloat(position.avgPrice);
         const stopLoss = position.stopLoss ? parseFloat(position.stopLoss) : null;
         const takeProfit = position.takeProfit ? parseFloat(position.takeProfit) : null;
+        
+        // Phase 8.8.3-I7-WS-C (C2 Stage 7): Generate trace ID and log engine price read
+        const engineTraceId = priceTraceService.generateTraceId(position.symbol.replace('/', ''));
+        priceTraceService.recordStage(engineTraceId, 7, 'ENGINE_PRICE_READ', {
+          internal_symbol: position.symbol,
+          engine_price: currentPrice,
+          source: priceSource
+        });
 
         // Phase 8.8.3-I6 B3: Calculate current P/L using LIVE price
         const pnl = (currentPrice - avgPrice) * parseFloat(position.quantity);
@@ -405,12 +414,14 @@ export class PaperExecutionEngine {
         });
 
         // Check for exit conditions
+        // Phase 8.8.3-I7-WS-C: Pass trace ID for Stage 8 logging
         const exitCondition = await this.checkExitConditions(
           position,
           currentPrice,
           avgPrice,
           stopLoss,
-          takeProfit
+          takeProfit,
+          engineTraceId
         );
 
         if (exitCondition) {
@@ -437,11 +448,21 @@ export class PaperExecutionEngine {
     currentPrice: number,
     avgPrice: number,
     stopLoss: number | null,
-    takeProfit: number | null
+    takeProfit: number | null,
+    traceId?: string
   ): Promise<ExitCondition | null> {
     // Phase 8.8.3-I6 B2: Calculate distance to SL/TP using live price
     const distanceToTP = takeProfit ? ((takeProfit - currentPrice) / currentPrice) * 100 : null;
     const distanceToSL = stopLoss ? ((currentPrice - stopLoss) / currentPrice) * 100 : null;
+    
+    // Phase 8.8.3-I7-WS-C (C2 Stage 8): Log exit evaluation
+    if (traceId) {
+      priceTraceService.recordStage(traceId, 8, 'EXIT_EVAL', {
+        symbol: position.symbol,
+        distSL: distanceToSL,
+        distTP: distanceToTP
+      });
+    }
     
     // Phase 8.8.3-I6 B2: Diagnostic logging for SL/TP evaluation
     console.log(`[8.8.3-I6][EXIT_EVAL] symbol=${position.symbol} livePrice=${currentPrice} tp=${takeProfit} sl=${stopLoss} distTP=${distanceToTP?.toFixed(4)}% distSL=${distanceToSL?.toFixed(4)}%`);

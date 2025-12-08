@@ -1,5 +1,6 @@
 import { contextBridge } from './context-bridge';
 import { normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver';
+import { priceTraceService } from './price-trace-service';
 
 /**
  * Phase 27.F.15.D: Live Pricing Adapter
@@ -574,8 +575,9 @@ export class LivePricingAdapter {
   /**
    * Phase 8.8.3-B3.6: Update price from WebSocket
    * Called by KrakenWebSocketAdapter when real-time prices arrive
+   * Phase 8.8.3-I7-WS-C: Added traceId parameter for pipeline tracing
    */
-  updateFromWebSocket(symbol: string, price: number, source: 'kraken_ws' | 'binance_ws' = 'kraken_ws'): void {
+  updateFromWebSocket(symbol: string, price: number, source: 'kraken_ws' | 'binance_ws' = 'kraken_ws', traceId?: string): void {
     const normalized = this.normalizeSymbol(symbol);
     const timestamp = new Date().toISOString();
     const now = Date.now();
@@ -587,6 +589,14 @@ export class LivePricingAdapter {
       source: source === 'kraken_ws' ? 'kraken_ws' : 'binance',
       cachedAt: now
     });
+    
+    // Phase 8.8.3-I7-WS-C (C2 Stage 3): Log cache update with trace ID
+    if (traceId) {
+      priceTraceService.recordStage(traceId, 3, 'CACHE_UPDATE', {
+        internal_symbol: normalized,
+        price
+      });
+    }
     
     // Phase 8.8.3-I5: Diagnostic logging for cache update audit
     console.log(`[8.8.3-I5][CACHE_UPDATE] symbol=${normalized} newPrice=${price} lastTickMsAgo=0 timestamp=${now}`);

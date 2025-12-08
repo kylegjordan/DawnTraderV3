@@ -411,12 +411,18 @@ export default function ActiveTradesV2() {
     
     // Handle price_updated events for real-time price display (no full refetch needed)
     if (lastMessage.type === 'price_updated' && lastMessage.payload?.symbol) {
-      const { symbol, price, timestamp } = lastMessage.payload;
+      const { symbol, price, timestamp, traceId } = lastMessage.payload;
       const normalized = normalizeSymbol(symbol);
       console.log(`[I6-UI] Price update received: ${symbol} -> ${normalized} = $${price}`);
+      
+      // Phase 8.8.3-I7-WS-C (C2 Stage 5): Log UI receive event
+      if (traceId) {
+        console.log(`[I7-WS-C][5] UI_RECEIVE ${JSON.stringify({ trace_id: traceId, internal_symbol: normalized, price })}`);
+      }
+      
       setLivePrices(prev => ({
         ...prev,
-        [normalized]: { price, timestamp }
+        [normalized]: { price, timestamp, traceId }
       }));
       return; // Don't trigger full refetch for price updates
     }
@@ -507,13 +513,22 @@ export default function ActiveTradesV2() {
     
     return data.positions.map(position => {
       const symbolNorm = normalizeSymbol(position.symbol);
-      const livePrice = livePrices[symbolNorm];
+      const livePrice = livePrices[symbolNorm] as { price: number; timestamp: string; traceId?: string } | undefined;
       if (livePrice) {
         // Update price and recalculate P/L
         const newCurrentPrice = livePrice.price;
         const newPnl = (newCurrentPrice - position.entryPrice) * position.quantity;
         const newPnlPercent = ((newCurrentPrice - position.entryPrice) / position.entryPrice) * 100;
         const newHealth = newPnlPercent > 1 ? 'green' : newPnlPercent < -1 ? 'red' : 'yellow';
+        
+        // Phase 8.8.3-I7-WS-C (C2 Stage 6): Log UI apply to position event
+        if (livePrice.traceId) {
+          console.log(`[I7-WS-C][6] UI_APPLY_TO_POSITION ${JSON.stringify({ 
+            trace_id: livePrice.traceId, 
+            position_symbol: position.symbol, 
+            applied_price: newCurrentPrice 
+          })}`);
+        }
         
         return {
           ...position,

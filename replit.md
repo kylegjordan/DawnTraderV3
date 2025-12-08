@@ -60,6 +60,16 @@ WebSocket Subscription & Tick Flow Diagnostics (I7-WS-A, Dec 2025) implements di
 - **Pending State Persistence**: `pendingSubscriptions` and `subscriptionRequests` persist until ACK/rejection arrives, enabling detection of stalled subscriptions
 All logging uses `[I7-WS-A]` prefix for easy filtering. Strictly observational - no changes to trading behavior, price cache logic, symbol resolver logic, or execution engine.
 
+Full Price Pipeline Tracing (I7-WS-C, Dec 2025) implements comprehensive 8-stage price tracing from WebSocket tick arrival through UI updates to engine exit evaluation. Key components:
+- **Price Trace Service** (`server/services/price-trace-service.ts`): Centralized trace infrastructure with `generateTraceId()`, `recordStage()`, `getTraceHistory()`, and `reset()` methods
+- **8-Stage Pipeline**: (1) INCOMING_WS_TICK, (2) INTERNAL_MAP, (3) CACHE_UPDATE, (4) BROADCAST, (5) UI_RECEIVE, (6) UI_APPLY_TO_POSITION, (7) ENGINE_PRICE_READ, (8) EXIT_EVAL
+- **Backend Tracing**: Stages 1-4 in kraken-websocket-adapter.ts and live-pricing-adapter.ts, Stages 7-8 in paper-execution-engine.ts
+- **Frontend Tracing**: Stages 5-6 console logging in active-trades-v2.tsx
+- **Diagnostic Endpoints**: `/api/diagnostics/i7-ws-c/trace-history` returns trace analysis with stage counts; `/api/diagnostics/i7-ws-c/reset` clears trace history
+- **Trace ID Format**: `${SYMBOL}_${timestamp}_${randomSuffix}` for complete lifecycle tracking
+- **Two Trace Types**: WebSocket-originated (stages 1-4) and Engine-originated (stages 7-8)
+All logging uses `[I7-WS-C]` prefix. Strictly observational - no changes to trading behavior.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed (`wss://ws.kraken.com`) for open trade price monitoring.

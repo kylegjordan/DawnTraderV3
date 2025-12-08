@@ -3,6 +3,7 @@ import { contextBridge } from './context-bridge.js';
 import { livePricingAdapter } from './live-pricing-adapter.js';
 import { krakenPairMetadataService } from './kraken-pair-metadata-service.js';
 import { resolveByKrakenWsPair, normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver.js';
+import { priceTraceService } from './price-trace-service.js';
 
 /**
  * Phase 8.8.3-B3.6: Kraken WebSocket Price Engine
@@ -298,6 +299,19 @@ export class KrakenWebSocketAdapter {
     try {
       const ticker = tickerData as KrakenTickerPayload;
       
+      const lastPrice = parseFloat(ticker.c[0]);
+      const bid = parseFloat(ticker.b[0]);
+      const ask = parseFloat(ticker.a[0]);
+      
+      // Phase 8.8.3-I7-WS-C (C1): Generate trace ID for this tick
+      const traceId = priceTraceService.generateTraceId(pair.replace('/', ''));
+      
+      // Phase 8.8.3-I7-WS-C (C2 Stage 1): Log incoming WebSocket tick
+      priceTraceService.recordStage(traceId, 1, 'INCOMING_WS_TICK', {
+        kraken_symbol: pair,
+        ws_price: lastPrice
+      });
+      
       // Phase 8.8.4: Use mapKrakenPairToInternalSymbol for proper symbol normalization
       // This ensures incoming ticks are keyed by the same internal symbol used in DB
       const internalSymbol = this.mapKrakenPairToInternalSymbol(pair);
@@ -311,11 +325,12 @@ export class KrakenWebSocketAdapter {
         return;
       }
       
-      const now = Date.now();
+      // Phase 8.8.3-I7-WS-C (C2 Stage 2): Log internal symbol mapping
+      priceTraceService.recordStage(traceId, 2, 'INTERNAL_MAP', {
+        internal_symbol: internalSymbol
+      });
       
-      const lastPrice = parseFloat(ticker.c[0]);
-      const bid = parseFloat(ticker.b[0]);
-      const ask = parseFloat(ticker.a[0]);
+      const now = Date.now();
       
       if (isNaN(lastPrice) || lastPrice <= 0) {
         console.warn(`[${this.MODULE_NAME}] Invalid price for ${internalSymbol}: ${ticker.c[0]}`);
@@ -363,12 +378,14 @@ export class KrakenWebSocketAdapter {
       }
       
       // Phase 8.8.4: Update LivePricingAdapter cache with properly normalized symbol
-      livePricingAdapter.updateFromWebSocket(internalSymbol, lastPrice, 'kraken_ws');
+      // Phase 8.8.3-I7-WS-C: Pass trace ID for Stage 3 logging
+      livePricingAdapter.updateFromWebSocket(internalSymbol, lastPrice, 'kraken_ws', traceId);
       
       // Phase 8.8.3-I6: Diagnostic logging to confirm WS -> cache pipeline
       console.log(`[I6][WS_CACHE_UPDATE] symbol=${internalSymbol} price=${lastPrice} timestamp=${new Date().toISOString()}`);
       
-      this.throttledBroadcast(internalSymbol, lastPrice, bid, ask);
+      // Phase 8.8.3-I7-WS-C: Pass trace ID for Stage 4 logging
+      this.throttledBroadcast(internalSymbol, lastPrice, bid, ask, traceId);
       
     } catch (error) {
       console.error(`[${this.MODULE_NAME}] Error processing ticker update:`, error);
@@ -378,8 +395,9 @@ export class KrakenWebSocketAdapter {
   /**
    * Phase 8.8.3-I6-FIX: Throttled broadcast with correct trading mode
    * Gets mode from LivePricingAdapter to ensure paper/live consistency
+   * Phase 8.8.3-I7-WS-C: Added traceId parameter for pipeline tracing
    */
-  private async throttledBroadcast(symbol: string, price: number, bid: number, ask: number): Promise<void> {
+  private async throttledBroadcast(symbol: string, price: number, bid: number, ask: number, traceId?: string): Promise<void> {
     const now = Date.now();
     const lastBroadcast = this.lastBroadcastTime.get(symbol) || 0;
     
@@ -402,9 +420,18 @@ export class KrakenWebSocketAdapter {
           bid,
           ask,
           timestamp: new Date().toISOString(),
-          source: 'kraken_ws'
+          source: 'kraken_ws',
+          traceId: traceId || null // Phase 8.8.3-I7-WS-C: Include trace ID in broadcast
         }
       });
+      
+      // Phase 8.8.3-I7-WS-C (C2 Stage 4): Log broadcast event
+      if (traceId) {
+        priceTraceService.recordStage(traceId, 4, 'BROADCAST', {
+          internal_symbol: symbol,
+          price
+        });
+      }
       
       // Phase 8.8.3-I6-FIX: Diagnostic logging with mode
       console.log(`[8.8.3-I6-FIX][KrakenWS] Broadcast: ${symbol} = $${price} [mode=${currentMode}]`);
