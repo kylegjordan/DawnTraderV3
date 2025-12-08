@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "positions": [],
+  "integrity": {
+    "systemCount": 0,
+    "maxOpenTrades": 15,
+    "slotsAvailable": 15,
+    "status": "OK"
+  },
+  "portfolio": {
+    "startingBalance": 800,
+    "currentBalance": 800,
+    "cashBalance": 800,
+    "totalPositionValue": 0,
+    "netPnl": 0,
+    "netPnlPercent": 0
+  }
+}

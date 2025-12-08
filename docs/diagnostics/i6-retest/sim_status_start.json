@@ -1,0 +1,19 @@
+{
+  "isRunning": true,
+  "sessionInfo": {
+    "sessionId": "paper_zirR67P1-9",
+    "startTime": "2025-12-08T11:16:18.875Z",
+    "mode": "paper",
+    "status": "running",
+    "startedBy": "manual",
+    "startingBalance": 800,
+    "runForMs": null,
+    "endsAt": null
+  },
+  "diagnostics": {
+    "hasDbSession": true,
+    "hasManager": true,
+    "isConsistent": true,
+    "reconciliationNeeded": false
+  }
+}
