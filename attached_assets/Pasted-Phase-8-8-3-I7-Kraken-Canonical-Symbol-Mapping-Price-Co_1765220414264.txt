@@ -1,0 +1,440 @@
+Phase 8.8.3-I7 — Kraken Canonical Symbol Mapping & Price Consistency
+0. High-Level Goal
+
+Create a single, authoritative symbol mapping layer for Kraken so that:
+
+Backend and frontend always agree on which pair we’re talking about
+
+REST + WebSocket both resolve through the same mapping
+
+No more string hacks (USDT→USD, slash insertion, etc.)
+
+Price engine, SL/TP, UI, and diagnostics all use one internal symbol format
+
+This is a foundational architecture phase. No new trading logic; we’re fixing the plumbing so that:
+
+WebSocket prices flow reliably to the engine and UI
+
+REST fallback uses the correct Kraken pair
+
+Symbol mismatches stop blocking price updates and exits
+
+1. Design Overview (simple version)
+
+We’ll add three core pieces:
+
+Canonical Symbol Map (Kraken-only, for now)
+
+Symbol Resolver Module (internal ⇄ Kraken REST/WS)
+
+Engine & UI Integration (everything uses the resolver, no custom formatting)
+
+1.1 Canonical Internal Symbol Format
+
+Pick a single internal format and standardize on it:
+
+Use: BASE/QUOTE, e.g. "AVAX/USD", "AVAX/USDT", "XTZ/USDC", "FXS/USD".
+
+This is what the engine, DB, filters, and UI should see.
+
+Key rule:
+
+AVAX/USD, AVAX/USDT, and AVAX/USDC are different internal symbols.
+No conversions between them. No USDT→USD collapsing.
+
+1.2 Mapping to Kraken
+
+For each internal symbol, we store:
+
+type KrakenPairMapping = {
+  internalSymbol: string;    // "AVAX/USD"
+  krakenRestPair: string;    // "XAVAXZUSD"
+  krakenWsPair: string;      // "AVAX/USD"
+  baseAsset: string;         // "AVAX"
+  quoteAsset: string;        // "USD"
+};
+
+
+Example:
+
+{
+  internalSymbol: "AVAX/USD",
+  krakenRestPair: "XAVAXZUSD",
+  krakenWsPair: "AVAX/USD",
+  baseAsset: "AVAX",
+  quoteAsset: "USD"
+}
+
+
+We will use Kraken’s own asset legend (e.g. XXBT, ZUSD, ZEUR, etc.) to populate this, but once the map exists, the rest of the system only ever deals in internalSymbol + resolver calls.
+
+2. New Files / Modules
+2.1 server/markets/kraken-symbol-map.ts
+
+Create a dedicated module:
+
+// server/markets/kraken-symbol-map.ts
+
+export type KrakenPairMapping = {
+  internalSymbol: string;
+  krakenRestPair: string;
+  krakenWsPair: string;
+  baseAsset: string;
+  quoteAsset: string;
+};
+
+const KRAKEN_SYMBOL_MAP: KrakenPairMapping[] = [
+  // Examples – real values should be filled using Kraken docs + asset legend
+  {
+    internalSymbol: "AVAX/USD",
+    krakenRestPair: "XAVAXZUSD",
+    krakenWsPair: "AVAX/USD",
+    baseAsset: "AVAX",
+    quoteAsset: "USD",
+  },
+  {
+    internalSymbol: "AVAX/USDT",
+    krakenRestPair: "XAVAXZUSDT",
+    krakenWsPair: "AVAX/USDT",
+    baseAsset: "AVAX",
+    quoteAsset: "USDT",
+  },
+  {
+    internalSymbol: "XXRP/ZUSD", // or your internal choice "XRP/USD"
+    krakenRestPair: "XXRPZUSD",
+    krakenWsPair: "XRP/USD",
+    baseAsset: "XRP",
+    quoteAsset: "USD",
+  },
+  // ... repeat for all pairs Dawn Trader trades
+];
+
+export { KRAKEN_SYMBOL_MAP };
+
+
+Important: internalSymbol must not use ZUSD, ZEUR, etc.
+Use normalized asset names: USD, EUR, BTC, ETH, etc.
+The mapping layer is where we map between Kraken’s ZUSD/ZEUR and our USD/EUR.
+
+Use the attached Kraken asset legend JSON to validate base/quote mapping.
+
+2.2 server/markets/kraken-symbol-resolver.ts
+
+Create a resolver that everything else calls:
+
+// server/markets/kraken-symbol-resolver.ts
+
+import { KRAKEN_SYMBOL_MAP, KrakenPairMapping } from "./kraken-symbol-map";
+
+const mapByInternal = new Map<string, KrakenPairMapping>();
+const mapByRestPair = new Map<string, KrakenPairMapping>();
+const mapByWsPair = new Map<string, KrakenPairMapping>();
+
+for (const entry of KRAKEN_SYMBOL_MAP) {
+  mapByInternal.set(entry.internalSymbol, entry);
+  mapByRestPair.set(entry.krakenRestPair, entry);
+  mapByWsPair.set(entry.krakenWsPair, entry);
+}
+
+export function resolveByInternalSymbol(internal: string): KrakenPairMapping | undefined {
+  return mapByInternal.get(internal);
+}
+
+export function resolveByKrakenRestPair(restPair: string): KrakenPairMapping | undefined {
+  return mapByRestPair.get(restPair);
+}
+
+export function resolveByKrakenWsPair(wsPair: string): KrakenPairMapping | undefined {
+  return mapByWsPair.get(wsPair);
+}
+
+// Optional: helper to normalize internal from "AVAXUSD" / "AVAX/USDT" etc
+export function normalizeInternalSymbol(raw: string): string {
+  // For now: if it already contains '/', assume it's internal
+  if (raw.includes("/")) return raw.toUpperCase();
+
+  // e.g. "AVAXUSD" → "AVAX/USD" based on known pairs
+  // (Look up in mapByInternal by checking suffixes or add extra index)
+  const upper = raw.toUpperCase();
+  for (const entry of KRAKEN_SYMBOL_MAP) {
+    const compact = entry.internalSymbol.replace("/", "");
+    if (compact === upper) return entry.internalSymbol;
+  }
+  return upper; // fallback, but we should try to avoid this case
+}
+
+
+This becomes the single source of truth for symbol translation.
+
+3. Integrations
+3.1 Live Pricing Adapter
+
+File: server/services/live-pricing-adapter.ts
+
+Goals:
+
+Stop doing custom string normalization (USDT→USD, adding slashes, etc.).
+
+Whenever we need Kraken REST or WebSocket, ask the resolver.
+
+3.1.1 REST fallback
+
+Wherever we call Kraken REST:
+
+// Before:
+const ticker = await this.krakenService.getTicker(position.symbol);
+
+// After:
+import { resolveByInternalSymbol } from "../markets/kraken-symbol-resolver";
+
+const mapping = resolveByInternalSymbol(position.symbol);
+if (!mapping) {
+  // log and bail gracefully
+}
+const ticker = await this.krakenService.getTicker(mapping.krakenRestPair);
+
+
+The position.symbol here must be the internalSymbol ("AVAX/USD", "TON/USDC", etc.).
+
+3.1.2 WebSocket broadcasts
+
+Where we broadcast updates:
+
+// Before (pseudo):
+this.broadcastPriceUpdate({
+  mode: currentTradingMode,
+  symbol: normalizedSymbol,
+  price,
+  ...
+});
+
+// After:
+import { resolveByInternalSymbol } from "../markets/kraken-symbol-resolver";
+
+const mapping = resolveByInternalSymbol(internalSymbol); // e.g. "AVAX/USD"
+
+this.broadcastPriceUpdate({
+  mode: currentTradingMode,
+  // Always use internalSymbol as broadcast symbol
+  symbol: mapping.internalSymbol,
+  price,
+  ...
+});
+
+
+The frontend will then match by internalSymbol, not by Kraken WS format.
+
+Remove or disable any helper that tries to infer or reformat symbols (e.g. replacing USDT with USD).
+
+3.2 Kraken WebSocket Adapter
+
+File: server/services/kraken-websocket-adapter.ts
+
+3.2.1 Subscriptions
+
+When the engine wants to subscribe for a pair, it should provide the internal symbol, and the adapter translates:
+
+import { resolveByInternalSymbol } from "../markets/kraken-symbol-resolver";
+
+subscribeToSymbol(internalSymbol: string) {
+  const mapping = resolveByInternalSymbol(internalSymbol);
+  if (!mapping) { /* log error */ return; }
+
+  const wsPair = mapping.krakenWsPair; // "AVAX/USD"
+  // Use wsPair in the actual Kraken subscription message
+}
+
+3.2.2 Incoming ticks
+
+When Kraken WS sends:
+
+["1234.5", "1234.6", "1234.7", ...], "AVAX/USD"
+
+
+We:
+
+Take wsPair = "AVAX/USD"
+
+Call resolveByKrakenWsPair(wsPair)
+
+Get the internal mapping (e.g. "AVAX/USD" internalSymbol)
+
+Update the cache keyed by internalSymbol
+
+Broadcast to the engine/UI using internalSymbol
+
+No guesses; no regex.
+
+3.3 Paper Execution Engine
+
+File: server/services/paper-execution-engine.ts
+
+All open positions should have symbol = internalSymbol.
+
+When evaluating SL/TP:
+
+const mapping = resolveByInternalSymbol(position.symbol);
+const priceResult = await livePricingAdapter.getPriceWithFallback(mapping.internalSymbol);
+
+
+No direct use of Kraken pair codes here; always internal.
+
+If there are places still doing:
+
+this.krakenService.getTicker(position.symbol);
+
+
+they must be refactored to go through the resolver.
+
+3.4 REST Endpoints
+
+File: server/routes.ts
+
+For all endpoints that expose positions/pricing:
+
+GET /api/paper-sim/active-trades
+
+GET /api/paper-sim/portfolio-summary
+
+POST /api/paper-sim/close-trade/:id
+
+POST /api/paper-sim/force-clear-stranded
+
+Ensure:
+
+position.symbol in responses is the internalSymbol (e.g. AVAX/USD).
+
+When these endpoints need a live price, they call:
+
+const mapping = resolveByInternalSymbol(position.symbol);
+const priceResult = await livePricingAdapter.getPriceWithFallback(mapping.internalSymbol);
+
+
+No direct Kraken codes in routes.
+
+3.5 Frontend Active Trades Component
+
+File: client/src/components/trading/active-trades-v2.tsx
+
+Once the backend broadcasts internal symbols consistently:
+
+Drop most of the local normalization hacks.
+
+Treat position.symbol and price_update.symbol as the same internal key.
+
+Simplest approach:
+
+const normalizeSymbol = (s: string) => s.toUpperCase(); // for now
+
+const key = normalizeSymbol(position.symbol);
+const livePrice = livePrices[key];
+
+
+We can extend this later, but after I7, internalSymbol should already be stable like "AVAX/USD", "TON/USDC".
+
+4. Data / Migration Considerations
+4.1 Existing DB data
+
+If paper_sim tables currently store symbols like AVAXUSD, AVAXUSDT, etc.:
+
+For I7, we can:
+
+either treat those as internalSymbols and have a small translation step in the resolver ("AVAXUSD" → "AVAX/USD")
+
+or leave them as is and include them explicitly in kraken-symbol-map.ts as additional aliases.
+
+But new data paths (new trades) should always write the canonical internalSymbol form.
+
+5. WebSocket vs REST (rate concerns)
+
+This plan keeps the intended hierarchy:
+
+WebSocket = primary source of ticks for every subscribed pair
+
+Kraken REST fallback is used only when:
+
+the cache doesn’t have a price yet, or
+
+the price is stale beyond the acceptable window
+
+Because we now have:
+
+a consistent mapping for krakenWsPair
+
+clear subscription logs
+
+we can:
+
+audit how many pairs are actually subscribed
+
+ensure all open internalSymbols are subscribed once each
+
+avoid REST hammering on every slot
+
+Later, we can add:
+
+simple rate-limit counters
+
+staggered fallback usage
+
+But that’s a follow-up optimization; first we need the mapping correct.
+
+6. Testing Plan (for Replit)
+
+Use test user:
+
+username: testuser123
+
+password: SecurePass123!
+
+Step 1 — Symbol Map Sanity Check
+
+Add a handful of core pairs to kraken-symbol-map.ts:
+
+BTC/USD, ETH/USD, XRP/USD, AVAX/USD, TON/USDC, etc.
+
+Write a tiny diagnostic endpoint or log statement that prints:
+
+internalSymbol → restPair → wsPair
+
+Confirm they match Kraken docs and your asset legend.
+
+Step 2 — WebSocket Subscription Test
+
+Start paper sim with 3–5 active trades.
+
+Verify logs:
+
+SUBSCRIBE messages for each krakenWsPair.
+
+Confirm incoming WS messages map correctly back to internalSymbol and update the cache.
+
+Step 3 — REST Fallback Test
+
+Temporarily simulate a stale cache or WS dropout.
+
+Confirm REST_FALLBACK logs use the correct krakenRestPair per mapping.
+
+Confirm prices are different over time, not stuck.
+
+Step 4 — Frontend / UI Test
+
+Open Active Trades tab.
+
+Confirm:
+
+price_updated messages arrive with symbol=internalSymbol.
+
+prices in the table change every few seconds for several pairs.
+
+Step 5 — Trade Exit Test
+
+Run a 20–30 minute paper session.
+
+Watch logs:
+
+EXIT_EVAL using internalSymbol.
+
+Confirm:
+
+at least some trades close via TP or SL using the updated prices.
