@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import { contextBridge } from './context-bridge.js';
 import { livePricingAdapter } from './live-pricing-adapter.js';
 import { krakenPairMetadataService } from './kraken-pair-metadata-service.js';
+import { resolveByKrakenWsPair, normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver.js';
 
 /**
  * Phase 8.8.3-B3.6: Kraken WebSocket Price Engine
@@ -655,36 +656,45 @@ export class KrakenWebSocketAdapter {
   }
 
   /**
-   * Phase 8.8.4: Map incoming Kraken WS pair to internal symbol using metadata service
-   * This is the PRIMARY method for normalizing incoming ticker symbols.
+   * Phase 8.8.3-I7: Map incoming Kraken WS pair to internal symbol
+   * Uses the new canonical symbol resolver as PRIMARY source of truth.
    * 
    * Priority order for incoming WS ticks:
-   * 1. Try getPairId() - returns DB format (e.g., XXRPZUSD) which matches open_positions
-   * 2. Try getInternalSymbol() - returns altname format (e.g., XRPUSD) 
-   * 3. Fallback to legacy string manipulation
-   * 
-   * We also update prices under multiple formats to maximize cache hits.
+   * 1. Try I7 resolver (canonical mapping) - returns BASE/QUOTE format (e.g., AVAX/USD)
+   * 2. Try metadata service getPairId() - returns DB format (e.g., XXRPZUSD)
+   * 3. Try metadata service getInternalSymbol() - returns altname format (e.g., XRPUSD)
+   * 4. Fallback to legacy string manipulation
    */
   private mapKrakenPairToInternalSymbol(krakenPair: string): string | null {
-    // Phase 8.8.4: First try to get pairId (DB format like XXRPZUSD)
-    // This matches how symbols are stored in paper_sim_open_positions
+    // Phase 8.8.3-I7: FIRST try the canonical symbol resolver
+    const i7Mapping = resolveByKrakenWsPair(krakenPair);
+    if (i7Mapping) {
+      console.log(`[I7][WS_MAP] krakenPair=${krakenPair} -> internal=${i7Mapping.internalSymbol}`);
+      return i7Mapping.internalSymbol;
+    }
+
+    // Fallback 1: Try metadata service pairId (DB format like XXRPZUSD)
     const pairId = krakenPairMetadataService.getPairId(krakenPair);
     if (pairId) {
-      return pairId;
+      // Try to normalize pairId through I7 resolver
+      const normalized = normalizeToInternalSymbol(pairId);
+      console.log(`[I7][WS_MAP_FALLBACK1] krakenPair=${krakenPair} -> pairId=${pairId} -> normalized=${normalized}`);
+      return normalized;
     }
 
-    // Fallback to altname format (like XRPUSD)
+    // Fallback 2: Try metadata service altname format (like XRPUSD)
     const internalFromMetadata = krakenPairMetadataService.getInternalSymbol(krakenPair);
     if (internalFromMetadata) {
-      return internalFromMetadata;
+      const normalized = normalizeToInternalSymbol(internalFromMetadata);
+      console.log(`[I7][WS_MAP_FALLBACK2] krakenPair=${krakenPair} -> altname=${internalFromMetadata} -> normalized=${normalized}`);
+      return normalized;
     }
 
-    // Fallback: existing krakenToNormalSymbol for legacy safety
+    // Fallback 3: Legacy krakenToNormalSymbol for safety
     const legacy = this.krakenToNormalSymbol(krakenPair);
     if (legacy) {
-      // Log that we're using legacy mapping (for monitoring)
       if (!this.unrecognizedSymbols.has(krakenPair)) {
-        console.log(`[${this.MODULE_NAME}][TICKER][LEGACY_FALLBACK]`, {
+        console.log(`[${this.MODULE_NAME}][TICKER][I7_LEGACY_FALLBACK]`, {
           krakenPair,
           legacyResult: legacy,
           metadataLoaded: krakenPairMetadataService.isMetadataLoaded(),
@@ -694,7 +704,7 @@ export class KrakenWebSocketAdapter {
     }
 
     // Symbol is completely unrecognized
-    console.warn('[SYM][UNRECOGNIZED_FOR_WS]', {
+    console.warn('[I7][SYM_UNRECOGNIZED]', {
       internalSymbol: krakenPair,
       context: 'ticker_inbound',
       metadataLoaded: krakenPairMetadataService.isMetadataLoaded(),

@@ -375,6 +375,10 @@ function IntegrityBanner({
   );
 }
 
+/**
+ * Phase 8.8.3-I7: Normalize symbol for cache key matching
+ * Strips slashes and uppercases - must match backend internalSymbol format after slash removal
+ */
 const normalizeSymbol = (s: string) => s.replace('/', '').toUpperCase();
 
 export default function ActiveTradesV2() {

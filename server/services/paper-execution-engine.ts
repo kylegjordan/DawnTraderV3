@@ -19,6 +19,7 @@ import { b5SizingAudit } from './b5-sizing-audit.js';
 import { i1RtbDiagnostics } from './i1-rtb-diagnostics-service.js';
 import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js';
 import { rtbMetricsService } from './rtb-metrics-service.js';
+import { normalizeToInternalSymbol, getKrakenRestPair } from '../markets/kraken-symbol-resolver.js';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail' | 'manual_stop';
@@ -337,9 +338,13 @@ export class PaperExecutionEngine {
           currentPrice = priceResult.price;
           priceSource = priceResult.source;
         } else {
-          // Fallback to Kraken REST if cache unavailable
+          // Phase 8.8.3-I7: Fallback to Kraken REST if cache unavailable
+          // Use the resolver to get correct REST pair format
           try {
-            const ticker = await this.krakenService.getTicker(position.symbol);
+            const restPair = getKrakenRestPair(position.symbol);
+            console.log(`[I7][REST_FALLBACK] symbol=${position.symbol} -> restPair=${restPair}`);
+            
+            const ticker = await this.krakenService.getTicker(restPair);
             const tickerData = Object.values(ticker)[0];
             if (!tickerData) {
               console.warn(`[B9.PRICING][SKIP_DUE_TO_NO_PRICE] ${position.symbol}: No Kraken REST data, skipping position check`);
@@ -347,6 +352,12 @@ export class PaperExecutionEngine {
             }
             currentPrice = parseFloat(tickerData.c[0]);
             priceSource = 'kraken_rest';
+            
+            // Phase 8.8.3-I7: Broadcast this REST price to frontend
+            // Normalize to internal format for consistent cache keys
+            const internalSymbol = normalizeToInternalSymbol(position.symbol);
+            livePricingAdapter.updateFromWebSocket(internalSymbol, currentPrice, 'kraken_ws');
+            console.log(`[I7][REST_BROADCAST] symbol=${internalSymbol} price=${currentPrice}`);
           } catch (krakenError) {
             console.warn(`[B9.PRICING][SKIP_DUE_TO_NO_PRICE] ${position.symbol}: Kraken REST failed, skipping position check`, krakenError);
             continue;

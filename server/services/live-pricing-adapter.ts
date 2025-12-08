@@ -1,4 +1,5 @@
 import { contextBridge } from './context-bridge';
+import { normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver';
 
 /**
  * Phase 27.F.15.D: Live Pricing Adapter
@@ -560,13 +561,11 @@ export class LivePricingAdapter {
   }
 
   /**
-   * Normalize symbol format
+   * Phase 8.8.3-I7: Normalize symbol using canonical resolver
+   * No more USDT→USD collapsing - each quote currency is distinct
    */
   private normalizeSymbol(symbol: string): string {
-    // Convert various formats to BTC/USD standard
-    return symbol.toUpperCase()
-      .replace('USDT', 'USD')
-      .replace(/([A-Z]{3,4})USD/, '$1/USD');
+    return normalizeToInternalSymbol(symbol);
   }
 
   /**
