@@ -84,6 +84,31 @@ export class KrakenWebSocketAdapter {
   private readonly ACK_TIMEOUT_MS = 5000; // 5 seconds without ACK
   private readonly NO_TICK_TIMEOUT_MS = 10000; // 10 seconds without tick after ACK
   
+  // Phase 8.8.3-I7-WS-G: Tick Frequency Stabilization
+  private tickFrequencyData: Map<string, {
+    lastTickTimestamp: number;
+    tickIntervals: number[];
+    frozenSince: number | null;
+    classification: 'normal' | 'slow' | 'very_slow' | 'frozen';
+    correctionAttempts: { timestamp: number }[];
+    isUnstable: boolean;
+    currentChannel: 'ticker' | 'book';
+    bookRevertTimer: NodeJS.Timeout | null;
+  }> = new Map();
+  private tickFrequencyMonitorInterval: NodeJS.Timeout | null = null;
+  private readonly SLOW_THRESHOLD_MS = 3500;
+  private readonly VERY_SLOW_THRESHOLD_MS = 6000;
+  private readonly FROZEN_THRESHOLD_MS = 10000;
+  private readonly MAX_CORRECTION_ATTEMPTS = 3;
+  private readonly CORRECTION_WINDOW_MS = 60000; // 60 seconds
+  private readonly BOOK_REVERT_DELAY_MS = 120000; // 120 seconds stable before reverting
+  
+  // Phase 8.8.3-I7-WS-G (G3): Channel hints for low-liquidity pairs
+  private readonly KRAKEN_CHANNEL_HINTS = {
+    low_liquidity: ['TIA/USD', 'FORTH/USD', 'PROVEEUR', 'BAND/USD', 'SC/USD', 'RLC/EUR', 'OGN/USD'],
+    prefer_book: ['TIA/USD', 'BAND/USD', 'SC/USD', 'RLC/EUR']
+  };
+  
   // Phase 8.8.3-I4 B4: Periodic price tick health logging
   private priceTickHealthInterval: NodeJS.Timeout | null = null;
   private openPositionSymbolsProvider: (() => string[] | Promise<string[]>) | null = null;
@@ -375,6 +400,9 @@ export class KrakenWebSocketAdapter {
       
       // Phase 8.8.3-I5: Diagnostic logging for tick arrival audit
       console.log(`[8.8.3-I5][TICK_ARRIVE] symbol=${internalSymbol} price=${lastPrice} timestamp=${now}`);
+      
+      // Phase 8.8.3-I7-WS-G (G1): Update tick frequency data
+      this.updateTickFrequency(internalSymbol, intervalMs);
       
       // Phase 8.8.3-I7-WS-A (A3): Log first tick received for each pair (only once)
       if (!this.firstTickReceived.has(internalSymbol)) {
@@ -1481,6 +1509,334 @@ export class KrakenWebSocketAdapter {
     });
     
     return { ack_timeouts: ackTimeouts, no_tick_symbols: noTickSymbols };
+  }
+
+  // ===== Phase 8.8.3-I7-WS-G: Tick Frequency Stabilization =====
+
+  /**
+   * Phase 8.8.3-I7-WS-G (G1.1): Update tick frequency data for a symbol
+   */
+  private updateTickFrequency(symbol: string, intervalMs: number): void {
+    const now = Date.now();
+    let data = this.tickFrequencyData.get(symbol);
+    
+    if (!data) {
+      data = {
+        lastTickTimestamp: now,
+        tickIntervals: [],
+        frozenSince: null,
+        classification: 'normal',
+        correctionAttempts: [],
+        isUnstable: false,
+        currentChannel: 'ticker',
+        bookRevertTimer: null
+      };
+      this.tickFrequencyData.set(symbol, data);
+    }
+    
+    data.lastTickTimestamp = now;
+    data.frozenSince = null; // Reset frozen since we got a tick
+    
+    if (intervalMs > 0) {
+      data.tickIntervals.push(intervalMs);
+      // Keep last 200 intervals for bucket averaging
+      if (data.tickIntervals.length > 200) {
+        data.tickIntervals.shift();
+      }
+      
+      const avgInterval = this.calculateRollingAverage(data.tickIntervals, 30000, now);
+      console.log(`[I7-WS-G][TICK_INTERVAL] symbol=${symbol} interval=${intervalMs}ms avg=${Math.round(avgInterval)}ms`);
+    }
+    
+    // Update classification
+    this.classifyTickFrequency(symbol);
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-G (G1.2): Calculate rolling bucket average
+   * @param intervals Array of tick intervals
+   * @param windowMs Time window in milliseconds
+   * @param now Current timestamp
+   */
+  private calculateRollingAverage(intervals: number[], windowMs: number, now: number): number {
+    if (intervals.length === 0) return 0;
+    
+    // Use up to the last N intervals based on window
+    const maxIntervals = Math.min(intervals.length, Math.ceil(windowMs / 1000));
+    const recentIntervals = intervals.slice(-maxIntervals);
+    
+    if (recentIntervals.length === 0) return 0;
+    return recentIntervals.reduce((a, b) => a + b, 0) / recentIntervals.length;
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-G (G1.2): Get rolling bucket averages for a symbol
+   */
+  private getRollingAverages(symbol: string): { avg_30s: number; avg_60s: number; avg_180s: number } {
+    const data = this.tickFrequencyData.get(symbol);
+    if (!data || data.tickIntervals.length === 0) {
+      return { avg_30s: 0, avg_60s: 0, avg_180s: 0 };
+    }
+    
+    const now = Date.now();
+    return {
+      avg_30s: this.calculateRollingAverage(data.tickIntervals, 30000, now),
+      avg_60s: this.calculateRollingAverage(data.tickIntervals, 60000, now),
+      avg_180s: this.calculateRollingAverage(data.tickIntervals, 180000, now)
+    };
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-G (G1.3): Classify tick frequency for a symbol
+   */
+  private classifyTickFrequency(symbol: string): void {
+    const data = this.tickFrequencyData.get(symbol);
+    if (!data) return;
+    
+    const { avg_60s } = this.getRollingAverages(symbol);
+    const now = Date.now();
+    const timeSinceLastTick = now - data.lastTickTimestamp;
+    
+    let prevClassification = data.classification;
+    
+    // Check for frozen first
+    if (timeSinceLastTick >= this.FROZEN_THRESHOLD_MS) {
+      data.classification = 'frozen';
+      if (data.frozenSince === null) {
+        data.frozenSince = data.lastTickTimestamp;
+      }
+      console.log(`[I7-WS-G][FROZEN] symbol=${symbol} lastTick=${new Date(data.lastTickTimestamp).toISOString()}`);
+    } else if (avg_60s >= this.VERY_SLOW_THRESHOLD_MS) {
+      data.classification = 'very_slow';
+      data.frozenSince = null;
+      console.log(`[I7-WS-G][SLOW_TICK] symbol=${symbol} avg=${Math.round(avg_60s)}ms classification=very_slow`);
+    } else if (avg_60s >= this.SLOW_THRESHOLD_MS) {
+      data.classification = 'slow';
+      data.frozenSince = null;
+      console.log(`[I7-WS-G][SLOW_TICK] symbol=${symbol} avg=${Math.round(avg_60s)}ms classification=slow`);
+    } else {
+      data.classification = 'normal';
+      data.frozenSince = null;
+      
+      // G3.2: If classification improved to normal, schedule book channel revert
+      if (prevClassification !== 'normal' && data.currentChannel === 'book') {
+        this.scheduleBookChannelRevert(symbol);
+      }
+    }
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-G (G2.1): Trigger corrective action for slow/frozen symbols
+   */
+  private async triggerCorrectiveAction(symbol: string, reason: 'slow' | 'frozen'): Promise<void> {
+    const data = this.tickFrequencyData.get(symbol);
+    if (!data || data.isUnstable) return;
+    
+    const now = Date.now();
+    
+    // Clean up old attempts outside the window
+    data.correctionAttempts = data.correctionAttempts.filter(
+      a => now - a.timestamp < this.CORRECTION_WINDOW_MS
+    );
+    
+    // G2.3: Check if we've exceeded max attempts
+    if (data.correctionAttempts.length >= this.MAX_CORRECTION_ATTEMPTS) {
+      if (!data.isUnstable) {
+        data.isUnstable = true;
+        console.warn(`[I7-WS-G][UNSTABLE] symbol=${symbol} attempts=${data.correctionAttempts.length}`);
+      }
+      return;
+    }
+    
+    // Record this attempt
+    data.correctionAttempts.push({ timestamp: now });
+    
+    // G3.1: Check if we should switch to book channel for low-liquidity pairs
+    const internalSymbol = normalizeToInternalSymbol(symbol);
+    const shouldUseBook = this.KRAKEN_CHANNEL_HINTS.prefer_book.some(
+      hint => internalSymbol.includes(hint.replace('/', ''))
+    );
+    
+    if (shouldUseBook && data.currentChannel === 'ticker') {
+      await this.switchToBookChannel(symbol);
+    } else {
+      // G2.1/G2.2: Re-subscribe to ticker for the affected symbol only
+      console.log(`[I7-WS-G][RESUBSCRIBE] pair=${symbol} reason=${reason}`);
+      this.subscribeToSymbols([symbol]);
+    }
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-G (G3.1): Switch to book channel for better tick frequency
+   */
+  private async switchToBookChannel(symbol: string): Promise<void> {
+    const data = this.tickFrequencyData.get(symbol);
+    if (!data) return;
+    
+    console.log(`[I7-WS-G][CHANNEL_SWITCH] symbol=${symbol} use=book depth=1`);
+    
+    // Get Kraken pair
+    const krakenPair = this.normalToKrakenSymbol(symbol);
+    if (!krakenPair || !this.isConnected || !this.ws) return;
+    
+    // Subscribe to book channel with depth 1
+    const subscribeMessage = {
+      event: 'subscribe',
+      pair: [krakenPair],
+      subscription: {
+        name: 'book',
+        depth: 1
+      }
+    };
+    
+    try {
+      this.ws.send(JSON.stringify(subscribeMessage));
+      data.currentChannel = 'book';
+    } catch (error) {
+      console.error(`[I7-WS-G][CHANNEL_SWITCH_ERROR] symbol=${symbol}`, error);
+    }
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-G (G3.2): Schedule revert to ticker channel after stable period
+   */
+  private scheduleBookChannelRevert(symbol: string): void {
+    const data = this.tickFrequencyData.get(symbol);
+    if (!data || data.currentChannel !== 'book') return;
+    
+    // Clear existing timer if any
+    if (data.bookRevertTimer) {
+      clearTimeout(data.bookRevertTimer);
+    }
+    
+    data.bookRevertTimer = setTimeout(() => {
+      if (data.classification === 'normal') {
+        console.log(`[I7-WS-G][CHANNEL_REVERT] symbol=${symbol} from=book to=ticker`);
+        data.currentChannel = 'ticker';
+        this.subscribeToSymbols([symbol]); // Resubscribe to ticker
+      }
+      data.bookRevertTimer = null;
+    }, this.BOOK_REVERT_DELAY_MS);
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-G (G1): Start tick frequency monitoring
+   * Runs every 5 seconds to check for slow/frozen symbols and trigger corrections
+   */
+  startTickFrequencyMonitoring(): void {
+    if (this.tickFrequencyMonitorInterval) {
+      console.log('[I7-WS-G][FREQ_MONITOR] Already running, skipping start');
+      return;
+    }
+    
+    console.log('[I7-WS-G][FREQ_MONITOR] Starting tick frequency monitoring');
+    
+    this.tickFrequencyMonitorInterval = setInterval(() => {
+      const now = Date.now();
+      
+      this.tickFrequencyData.forEach((data, symbol) => {
+        // Re-classify based on current state
+        this.classifyTickFrequency(symbol);
+        
+        // Trigger corrective actions for slow/frozen symbols
+        if (data.classification === 'frozen' && !data.isUnstable) {
+          this.triggerCorrectiveAction(symbol, 'frozen');
+        } else if ((data.classification === 'slow' || data.classification === 'very_slow') && !data.isUnstable) {
+          this.triggerCorrectiveAction(symbol, 'slow');
+        }
+      });
+    }, 5000); // Check every 5 seconds
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-G: Stop tick frequency monitoring
+   */
+  stopTickFrequencyMonitoring(): void {
+    if (this.tickFrequencyMonitorInterval) {
+      clearInterval(this.tickFrequencyMonitorInterval);
+      this.tickFrequencyMonitorInterval = null;
+      console.log('[I7-WS-G][FREQ_MONITOR] Stopped tick frequency monitoring');
+    }
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-G (G4.1): Get tick frequency metrics for all symbols
+   */
+  getTickFrequencyMetrics(): Array<{
+    symbol: string;
+    lastTickTimestamp: string;
+    ticksSinceMs: number;
+    intervalCount: number;
+    minInterval: number;
+    maxInterval: number;
+    avg_30s: number;
+    avg_60s: number;
+    avg_180s: number;
+    classification: 'normal' | 'slow' | 'very_slow' | 'frozen';
+    isUnstable: boolean;
+    correctionAttempts: number;
+    currentChannel: 'ticker' | 'book';
+  }> {
+    const now = Date.now();
+    const results: Array<any> = [];
+    
+    this.tickFrequencyData.forEach((data, symbol) => {
+      const averages = this.getRollingAverages(symbol);
+      const intervals = data.tickIntervals;
+      
+      results.push({
+        symbol,
+        lastTickTimestamp: new Date(data.lastTickTimestamp).toISOString(),
+        ticksSinceMs: now - data.lastTickTimestamp,
+        intervalCount: intervals.length,
+        minInterval: intervals.length > 0 ? Math.min(...intervals) : 0,
+        maxInterval: intervals.length > 0 ? Math.max(...intervals) : 0,
+        avg_30s: Math.round(averages.avg_30s),
+        avg_60s: Math.round(averages.avg_60s),
+        avg_180s: Math.round(averages.avg_180s),
+        classification: data.classification,
+        isUnstable: data.isUnstable,
+        correctionAttempts: data.correctionAttempts.length,
+        currentChannel: data.currentChannel
+      });
+    });
+    
+    return results;
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-G (G4.2): Reset tick frequency data
+   */
+  resetTickFrequencyData(): void {
+    // Clear any book revert timers
+    this.tickFrequencyData.forEach((data) => {
+      if (data.bookRevertTimer) {
+        clearTimeout(data.bookRevertTimer);
+      }
+    });
+    
+    this.tickFrequencyData.clear();
+    console.log('[I7-WS-G][RESET] Cleared all tick frequency data');
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-G (G4.3): Get list of unstable symbols
+   */
+  getUnstableSymbols(): string[] {
+    const unstable: string[] = [];
+    this.tickFrequencyData.forEach((data, symbol) => {
+      if (data.isUnstable) {
+        unstable.push(symbol);
+      }
+    });
+    return unstable;
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-G: Get channel hints configuration
+   */
+  getChannelHints(): { low_liquidity: string[]; prefer_book: string[] } {
+    return this.KRAKEN_CHANNEL_HINTS;
   }
 }
 

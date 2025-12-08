@@ -1,0 +1,221 @@
+✅ PHASE 8.8.3-I7-WS-G — WEBSOCKET TICK FREQUENCY STABILIZATION
+(Directive for Replit – copy/paste as-is)
+Objective
+
+Improve the reliability of WebSocket tick arrival by:
+
+Detecting symbols with slow, irregular, or frozen tick frequency
+
+Validating Kraken ticker channel behavior and subscription quality
+
+Applying corrective actions (auto-resubscribe, reconnect, alternate channel, deeper feed)
+
+Producing diagnostic reports showing tick frequency across all subscribed symbols
+
+This phase extends I7-WS-A/F diagnostics and ensures smooth & predictable real-time price flow, preventing REST fallbacks caused by slow Kraken tick streams.
+
+--------------------------------------------
+🟦 TASK GROUP G1 — Tick Frequency Tracking
+--------------------------------------------
+G1.1 — Add per-symbol tick frequency monitoring
+
+Modify kraken-websocket-adapter.ts to track:
+
+lastTickTimestamp[symbol]
+
+tickIntervals[symbol] → array of deltas between ticks
+
+avgInterval[symbol] (rolling)
+
+maxInterval[symbol]
+
+minInterval[symbol]
+
+frozenSince[symbol] → timestamp when symbol stops receiving ticks
+
+Log tag:
+[I7-WS-G][TICK_INTERVAL] symbol=... interval=...ms avg=...ms
+
+G1.2 — Add rolling bucket averaging
+
+Use 30, 60, and 180 second buckets to determine:
+
+avg_30s
+
+avg_60s
+
+avg_180s
+
+G1.3 — Detect slow or frozen symbols
+
+Automatically classify each symbol:
+
+Condition	Meaning
+slow	average interval > 3500ms
+very_slow	avg > 6000ms
+frozen	no tick for ≥ 10 seconds
+
+Log tag:
+[I7-WS-G][SLOW_TICK] symbol=... avg=...ms
+[I7-WS-G][FROZEN] symbol=... lastTick=...
+
+--------------------------------------------
+🟦 TASK GROUP G2 — Corrective Behavior
+--------------------------------------------
+
+When a symbol is classified as slow or frozen:
+
+G2.1 — Auto-resubscribe logic
+
+Trigger re-subscription for that specific Kraken pair.
+
+Log tag:
+[I7-WS-G][RESUBSCRIBE] pair=... reason=slow|frozen
+
+G2.2 — Single-symbol re-subscribe (do NOT reset global WS connection)
+
+Call the adapter’s subscribe function only for the affected symbol.
+
+G2.3 — Track the number of corrective attempts
+
+Prevent infinite loops.
+After 3 attempts within 60s, mark symbol as unstable.
+
+Log tag:
+[I7-WS-G][UNSTABLE] symbol=... attempts=3
+
+--------------------------------------------
+🟦 TASK GROUP G3 — Kraken Channel Quality Detection
+--------------------------------------------
+
+Some Kraken pairs require specific channels to deliver frequent ticks.
+
+Add metadata in resolver:
+
+KRAKEN_CHANNEL_HINTS = {
+  "low_liquidity": ["TIA/USD", "FORTH/USD", "PROVEEUR", ...],
+  "prefer_book": ["TIA/USD", "BAND/USD", ...]
+}
+
+G3.1 — If ticker feed is slow and symbol is in prefer_book
+
+Auto-subscribe to book channel with depth=1 to boost tick rate.
+
+Log tag:
+[I7-WS-G][CHANNEL_SWITCH] symbol=... use=book depth=1
+
+G3.2 — If ticker feed recovers, revert back to ticker
+
+On stable tick frequency for 120 seconds, revert to ticker channel.
+
+--------------------------------------------
+🟦 TASK GROUP G4 — Diagnostic Endpoints
+--------------------------------------------
+
+Add to routes.ts:
+
+1. GET /api/diagnostics/i7-ws-g/frequency
+
+Returns per-symbol tick frequency metrics:
+
+intervals
+
+avg_30s, avg_60s, avg_180s
+
+slow, very_slow, frozen
+
+corrective_actions
+
+2. POST /api/diagnostics/i7-ws-g/reset
+
+Reset all tick interval history.
+
+**3. GET /api/diagnostics/i7-ws-g/unstable`
+
+List symbols marked as unstable.
+
+--------------------------------------------
+🟦 TASK GROUP G5 — Testing Plan
+--------------------------------------------
+5.1 — Paper Simulation Test
+
+Start a 60-second paper simulation:
+
+Expect:
+
+TICK_INTERVAL logs flowing
+
+No symbol marked as frozen unless truly thin liquidity
+
+Slow symbols get corrective actions
+
+5.2 — Forced Freeze Test
+
+Manually pause WS stream for one symbol (kill a subscription):
+
+Expect:
+
+detection via frozen
+
+re-subscribe attempts
+
+system recovers without full WS restart
+
+5.3 — Manual Validation
+
+Call diagnostic endpoint:
+
+GET /api/diagnostics/i7-ws-g/frequency
+
+
+Verify:
+
+All 15 paper symbols show values
+
+No symbol has interval > 3500ms except truly thin markets
+
+No false positives
+
+--------------------------------------------
+🟦 TASK GROUP G6 — Documentation
+--------------------------------------------
+
+Update replit.md:
+
+Add section: "Phase I7-WS-G — Tick Frequency Stabilization"
+
+Include explanation of:
+
+tick interval tracking
+
+slow/frozen detection
+
+corrective subscription logic
+
+recommended Kraken channel fallback rules
+
+all new endpoints
+
+🎯 Expected Outcome After Phase G
+
+After implementing WS-G:
+
+You will have:
+
+Smooth, stable tick flow
+
+No unexpected stale cache conditions
+
+Automatic healing of frozen subscriptions
+
+Deterministic tick cadence
+
+Visibility into tick health for every active symbol
+
+Handling for thin-liquidity Kraken assets
+
+Reduced REST fallback usage
+
+Real-time detection of price flow degradation
+
+This is the final major stabilization step before entering I8 (multi-exchange pricing) in the blueprint.

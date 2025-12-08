@@ -7632,6 +7632,132 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ===== Phase 8.8.3-I7-WS-G: Tick Frequency Stabilization Endpoints =====
+
+  // GET /api/diagnostics/i7-ws-g/frequency - Phase 8.8.3-I7-WS-G (G4.1): Get tick frequency metrics
+  apiRouter.get('/diagnostics/i7-ws-g/frequency', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const metrics = krakenWebSocketAdapter.getTickFrequencyMetrics();
+      
+      const summary = {
+        total_symbols: metrics.length,
+        normal: metrics.filter(m => m.classification === 'normal').length,
+        slow: metrics.filter(m => m.classification === 'slow').length,
+        very_slow: metrics.filter(m => m.classification === 'very_slow').length,
+        frozen: metrics.filter(m => m.classification === 'frozen').length,
+        unstable: metrics.filter(m => m.isUnstable).length
+      };
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.3-I7-WS-G',
+        description: 'Per-symbol tick frequency metrics',
+        thresholds: {
+          slow_ms: 3500,
+          very_slow_ms: 6000,
+          frozen_ms: 10000
+        },
+        summary,
+        metrics
+      });
+    } catch (error: any) {
+      console.error('[I7-WS-G] Error fetching frequency metrics:', error);
+      res.status(500).json({ ok: false, error: 'Failed to fetch frequency metrics', message: error.message });
+    }
+  });
+
+  // POST /api/diagnostics/i7-ws-g/reset - Phase 8.8.3-I7-WS-G (G4.2): Reset tick frequency data
+  apiRouter.post('/diagnostics/i7-ws-g/reset', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      krakenWebSocketAdapter.resetTickFrequencyData();
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.3-I7-WS-G',
+        message: 'Tick frequency data reset successfully'
+      });
+    } catch (error: any) {
+      console.error('[I7-WS-G] Error resetting frequency data:', error);
+      res.status(500).json({ ok: false, error: 'Failed to reset frequency data', message: error.message });
+    }
+  });
+
+  // GET /api/diagnostics/i7-ws-g/unstable - Phase 8.8.3-I7-WS-G (G4.3): Get unstable symbols
+  apiRouter.get('/diagnostics/i7-ws-g/unstable', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const unstable = krakenWebSocketAdapter.getUnstableSymbols();
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.3-I7-WS-G',
+        description: 'Symbols marked as unstable (exceeded correction attempts)',
+        count: unstable.length,
+        symbols: unstable
+      });
+    } catch (error: any) {
+      console.error('[I7-WS-G] Error fetching unstable symbols:', error);
+      res.status(500).json({ ok: false, error: 'Failed to fetch unstable symbols', message: error.message });
+    }
+  });
+
+  // POST /api/diagnostics/i7-ws-g/start-monitoring - Phase 8.8.3-I7-WS-G: Start frequency monitoring
+  apiRouter.post('/diagnostics/i7-ws-g/start-monitoring', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      krakenWebSocketAdapter.startTickFrequencyMonitoring();
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.3-I7-WS-G',
+        message: 'Tick frequency monitoring started'
+      });
+    } catch (error: any) {
+      console.error('[I7-WS-G] Error starting frequency monitoring:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // POST /api/diagnostics/i7-ws-g/stop-monitoring - Phase 8.8.3-I7-WS-G: Stop frequency monitoring
+  apiRouter.post('/diagnostics/i7-ws-g/stop-monitoring', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      krakenWebSocketAdapter.stopTickFrequencyMonitoring();
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.3-I7-WS-G',
+        message: 'Tick frequency monitoring stopped'
+      });
+    } catch (error: any) {
+      console.error('[I7-WS-G] Error stopping frequency monitoring:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // GET /api/diagnostics/i7-ws-g/channel-hints - Phase 8.8.3-I7-WS-G (G3): Get channel hints configuration
+  apiRouter.get('/diagnostics/i7-ws-g/channel-hints', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const hints = krakenWebSocketAdapter.getChannelHints();
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.3-I7-WS-G',
+        description: 'Channel hints for low-liquidity pairs',
+        ...hints
+      });
+    } catch (error: any) {
+      console.error('[I7-WS-G] Error fetching channel hints:', error);
+      res.status(500).json({ ok: false, error: 'Failed to fetch channel hints', message: error.message });
+    }
+  });
+
   // POST /api/reb-2-12F/strategy-health - Run strategy health check (with mock data verification)
   apiRouter.post('/reb-2-12F/strategy-health', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
