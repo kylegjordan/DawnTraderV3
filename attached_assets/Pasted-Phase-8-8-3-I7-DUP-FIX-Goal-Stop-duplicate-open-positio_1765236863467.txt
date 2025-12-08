@@ -1,0 +1,302 @@
+Phase 8.8.3 – I7-DUP-FIX
+
+Goal:
+
+Stop duplicate open positions per symbol (root cause: race in open guardrail).
+
+Stop duplicate Ready-To-Buy signals per symbol per scan.
+
+Make the Active Trades UI show only one row per symbol and keep prices updating normally.
+
+Do not auto-close existing duplicates yet – only prevent new ones and hide duplicates in the UI.
+
+0. Scope / Safety
+
+Backend only: server/ (trade engines, DB layer, WebSocket infra), plus client/src/components/trading/active-trades-v2.tsx and the Ready-To-Buy UI/component if needed.
+
+Trading behavior change is guardrail only: when a duplicate-open is attempted, it must be cleanly rejected and logged, not crash the app.
+
+Do not delete or mutate existing DB rows in this phase.
+
+Keep all new logs clearly tagged with "[8.8.3-I7-DUP]".
+
+1. Prevent Duplicate Open Positions (DB Unique Constraint)
+1.1 Inspect DB schema
+
+Find the schema / migrations for the paper trades table (e.g. paper_trades) and the live trades table (e.g. live_trades or trades).
+
+Confirm there is a symbol column and a status column with values like 'open', 'closed', etc.
+
+1.2 Add partial unique index per table
+
+Add a migration (or direct SQL, consistent with existing style) that creates partial unique indexes so there can be at most one open position per symbol per table:
+
+For paper trades table (exact table name may differ, adjust accordingly):
+
+-- 8.8.3-I7-DUP-FIX: prevent duplicate open paper trades per symbol
+CREATE UNIQUE INDEX IF NOT EXISTS idx_paper_trades_symbol_open_unique
+ON paper_trades(symbol)
+WHERE status = 'open';
+
+
+For live trades table (adjust table name):
+
+-- 8.8.3-I7-DUP-FIX: prevent duplicate open live trades per symbol
+CREATE UNIQUE INDEX IF NOT EXISTS idx_live_trades_symbol_open_unique
+ON live_trades(symbol)
+WHERE status = 'open';
+
+
+Notes:
+
+If there is already some other uniqueness on (account_id, symbol, status) or similar, extend that instead of creating a conflicting index.
+
+Do not modify existing constraints; add a new partial index unless one already exists with the same semantics.
+
+1.3 Harden open-trade path to handle unique violation cleanly
+
+Locate the trade open logic for paper and live trading.
+
+For paper, this is likely in server/services/paper-execution-engine.ts or a closely related service.
+
+For live, a similar engine or service file.
+
+Wherever a new trade is inserted into the DB, wrap the DB insert call in a try/catch (or promise .catch) that specifically looks for a unique-constraint violation from the index above.
+
+Pseudocode pattern (TypeScript-ish):
+
+try {
+  const trade = await storage.createPaperTrade(newTradeData);
+  // continue as normal
+} catch (err: any) {
+  if (isUniqueOpenSymbolViolation(err)) {
+    console.warn('[8.8.3-I7-DUP][OPEN_GUARD] Duplicate open position prevented', {
+      symbol: newTradeData.symbol,
+      mode: 'paper',
+      reason: 'db_unique_constraint',
+    });
+    // Do NOT crash. Treat as guardrail:
+    // - Option A: Return gracefully, indicating "no new position opened".
+    // - Option B: Bubble a typed error that the caller understands as "open skipped".
+    return null; // or a special result object
+  }
+  throw err;
+}
+
+
+Implement isUniqueOpenSymbolViolation(err) to detect the DB error code:
+
+For Postgres, look for err.code === '23505' and message/constraint name containing idx_paper_trades_symbol_open_unique or idx_live_trades_symbol_open_unique.
+
+For SQLite, check err.code and/or err.message for a similar unique-constraint indicator.
+
+Add a log when a duplicate is attempted and blocked:
+
+console.warn('[8.8.3-I7-DUP][OPEN_GUARD]', {
+  symbol,
+  table: 'paper_trades',
+  reason: 'unique_constraint_open_symbol',
+});
+
+
+Ensure callers (e.g. the strategy engine / RTB execution) handle the “no trade opened” result silently, not as a fatal error.
+
+1.4 Keep existing soft guardrail, but treat DB as source of truth
+
+If there is an existing pre-check like:
+
+const openCount = await storage.countOpenTradesForSymbol(symbol);
+if (openCount >= maxPositionsPerAsset) { /* reject */ }
+
+
+keep it for early rejection, but treat the DB unique index as the final authority.
+
+Add a comment pointing to this directive so future devs know the DB constraint is intentional.
+
+2. Prevent Duplicate Ready-To-Buy Signals
+
+Goal: During a single scan cycle, only one RTB signal per (symbol, strategy, direction) should be emitted to the API/UI.
+
+2.1 Locate RTB signal engine
+
+Find the service that generates Ready-To-Buy signals, e.g. a file like:
+
+server/services/ready-to-buy-engine.ts
+
+or similar (look for "Ready-to-Buy" text, RTB endpoints, or the RTB API handler).
+
+Confirm where the signal list is built and returned to the client (probably an array of objects with symbol, price, strategy, etc.).
+
+2.2 Deduplicate signals per scan
+
+In the code that assembles the signals array for a single scan:
+
+Before returning, dedupe by a composite key. For example:
+
+const seen = new Set<string>();
+const dedupedSignals: ReadyToBuySignal[] = [];
+
+for (const sig of rawSignals) {
+  const key = `${sig.symbol}__${sig.strategy}__${sig.direction ?? 'long'}`;
+  if (seen.has(key)) {
+    console.warn('[8.8.3-I7-DUP][RTB_DEDUP]', {
+      symbol: sig.symbol,
+      strategy: sig.strategy,
+      direction: sig.direction ?? 'long',
+      reason: 'duplicate_in_same_scan',
+    });
+    continue;
+  }
+  seen.add(key);
+  dedupedSignals.push(sig);
+}
+
+return dedupedSignals;
+
+
+Make sure this deduping happens once per scan just before the signals are:
+
+returned from the service, and/or
+
+sent to the client in the RTB API.
+
+If there is any client-side RTB polling that merges old and new signals, ensure it also de-dups on the same key to avoid front-end duplicates across multiple polls.
+
+2.3 Optional: avoid signals where a position is already open
+
+If not already done:
+
+When building RTB signals, filter out any symbol that currently has an open position (as seen by the engine or DB).
+
+This further reduces duplicates like: signal + open position for same symbol.
+
+Add a log when a signal is suppressed:
+
+console.info('[8.8.3-I7-DUP][RTB_SUPPRESS_OPEN_POSITION]', { symbol, strategy });
+
+3. Active Trades UI – Deduplicate Rows & Keep Prices Updating
+
+We want the UI to:
+
+Show one row per symbol even if the backend still has old duplicates.
+
+Continue to receive and display live WebSocket prices (the I7 WS work already wired this up – we must not break it).
+
+3.1 Deduplicate positions by symbol in ActiveTrades component
+
+File:
+client/src/components/trading/active-trades-v2.tsx
+
+Find where the positions array is obtained (likely from a hook/selector like useActiveTrades()).
+
+Add a memoized deduped array before rendering:
+
+const dedupedPositions = useMemo(() => {
+  if (!positions) return [];
+  const seen = new Set<string>();
+  const result: typeof positions = [];
+
+  for (const p of positions) {
+    if (seen.has(p.symbol)) {
+      // Optional: log once per render in dev mode
+      // console.debug('[8.8.3-I7-DUP][UI_DEDUP]', p.symbol);
+      continue;
+    }
+    seen.add(p.symbol);
+    result.push(p);
+  }
+  return result;
+}, [positions]);
+
+
+Use dedupedPositions instead of positions in the table render:
+
+{dedupedPositions.map(position => (
+  // existing row rendering
+))}
+
+
+If you have sorting/filtering logic (e.g. by P/L, symbol), apply it on dedupedPositions, not the full original list.
+
+3.2 Confirm price binding uses live price fields
+
+While in active-trades-v2.tsx:
+
+Confirm the “Current” price column is bound to the correct field that gets updated by the LivePricingAdapter WebSocket pipeline (e.g. position.currentPrice or position.livePrice – whichever is updated by our I7 work).
+
+If it is using a static entry price or a computed snapshot, change it to use the live price field that is continuously updated.
+
+Add a comment:
+
+// 8.8.3-I7-DUP-FIX: Current price must come from live WS feed (LivePricingAdapter),
+// not from static entry or cached snapshot.
+
+4. Diagnostics & Verification (No Code Changes Beyond This)
+
+After implementation, run the following checks (scripts / curl calls can be adapted to the environment):
+
+4.1 Verify DB constraints
+
+Attempt to open two trades for the same symbol in quick succession (e.g. via test script or RTB execution).
+
+Expected:
+
+First insert succeeds.
+
+Second insert hits the unique index, is caught, and logs:
+
+[8.8.3-I7-DUP][OPEN_GUARD] Duplicate open position prevented ...
+
+
+App continues running; no crash.
+
+In DB:
+
+SELECT symbol, COUNT(*) AS open_count
+FROM paper_trades
+WHERE status = 'open'
+GROUP BY symbol
+HAVING COUNT(*) > 1;
+
+
+should return 0 rows for newly-opened trades.
+
+4.2 Verify RTB signal deduplication
+
+Trigger a RTB scan (same way you normally do – via UI or API).
+
+Check RTB API response: there must be at most one entry per (symbol, strategy, direction).
+
+If you intentionally create a scenario where two identical signals would be generated, expect logs:
+
+[8.8.3-I7-DUP][RTB_DEDUP] ...
+
+
+and only one signal in the response.
+
+4.3 Verify Active Trades UI
+
+Start a paper sim with 15 slots and wait for some positions to open.
+
+Open Active Trades tab:
+
+You should see no duplicate rows for the same symbol.
+
+The “Current” price column should move over time for WebSocket-subscribed symbols (using the I7 WS pipeline).
+
+If the backend still has historical duplicates, they should not show as separate rows in the UI.
+
+5. Logging & Documentation
+
+Prefix all new logs with:
+"[8.8.3-I7-DUP]"
+
+Update replit.md (or equivalent) with a short section:
+
+DB-level unique index for open trades per symbol
+
+RTB per-scan dedupe behavior
+
+UI dedup behavior (one row per symbol)
+
+Note that this phase prevents new duplicates but does not remove existing ones.
