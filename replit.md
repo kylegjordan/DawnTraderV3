@@ -33,6 +33,8 @@ RTB Pipeline Diagnostics (I1), Hard-Stop Freeze + RTB Metrics Repair (I2), Trade
 
 Live Price Distribution Fix (I6) ensures all modern endpoints use `getPriceWithFallback()` for consistent live pricing with comprehensive fallback tracking. Updated endpoints include `/paper-sim/active-trades`, `/paper-sim/portfolio-summary`, `/paper-sim/close-trade/:id`, `/paper-sim/force-clear-stranded`, and `paper-portfolio-manager.ts` closeAllPositions(). Diagnostic logging with `[8.8.3-I6]` tags tracks `fallbackType` (none/rest_fallback/entry_fallback), `priceAgeMs`, and `source` for complete price audit trails. Legacy files (risk-manager.ts, heuristic-trader.ts) remain untouched per corrective directive.
 
+Frontend Symbol Normalization Fix (I6-UI) resolves a UI price update staleness issue in the Active Trades tab. The fix adds a `normalizeSymbol()` function that strips slashes and uppercases symbols, applied to both WebSocket `price_updated` events when storing in `livePrices` state and to position symbols when looking up live prices. This ensures symbols like "FXS/USD" and "FXSUSD" resolve to the same cache key ("FXSUSD"), enabling real-time price updates regardless of symbol format variations.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed (`wss://ws.kraken.com`) for open trade price monitoring.
