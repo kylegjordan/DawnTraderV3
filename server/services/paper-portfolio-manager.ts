@@ -265,8 +265,9 @@ export class PaperPortfolioManager {
           entryPrice: position.avgPrice,
         });
 
-        // Get exit price from live pricing
-        const priceResult = await livePricingAdapter.getPrice(position.symbol);
+        // Phase 8.8.3-I6: Get exit price using getPriceWithFallback for proper staleness handling
+        const priceResult = await livePricingAdapter.getPriceWithFallback(position.symbol, 5000);
+        console.log(`[8.8.3-I6][FORCE_CLOSE_LIVE_PRICE] symbol=${position.symbol} price=${priceResult?.price || 'null'} source=${priceResult?.source || 'none'}`);
         
         if (!priceResult || !priceResult.price || priceResult.source === 'no_reliable_price') {
           // Use entry price as fallback if no reliable price available
@@ -529,21 +530,21 @@ export class PaperPortfolioManager {
           const avgPrice = parseFloat(position.avgPrice);
           const quantity = parseFloat(position.quantity);
           
-          // Phase 8.8.3-I6: Use live price for closeAllPositions calculation
+          // Phase 8.8.3-I6: Use getPriceWithFallback (includes 5s staleness guard + REST fallback)
           let currentPrice = avgPrice;
           let priceSource = 'entry_fallback';
-          const liveQuote = livePricingAdapter.getPrice(position.symbol);
+          let fallbackType: 'none' | 'rest_fallback' | 'entry_fallback' = 'entry_fallback';
+          const liveQuote = await livePricingAdapter.getPriceWithFallback(position.symbol, 5000);
           if (liveQuote && liveQuote.price !== null && liveQuote.source !== 'no_reliable_price') {
             currentPrice = liveQuote.price;
             priceSource = liveQuote.source;
+            const restFallbackSources = ['rest_fallback', 'kraken_rest', 'binance_rest', 'coingecko', 'last_known_good'];
+            fallbackType = restFallbackSources.some(s => liveQuote.source.includes(s)) ? 'rest_fallback' : 'none';
           } else {
-            const fallbackQuote = await livePricingAdapter.getPriceWithFallback(position.symbol, 5000);
-            if (fallbackQuote && fallbackQuote.price !== null && fallbackQuote.source !== 'no_reliable_price') {
-              currentPrice = fallbackQuote.price;
-              priceSource = fallbackQuote.source;
-            }
+            fallbackType = 'entry_fallback';
+            console.log(`[8.8.3-I6][FALLBACK_TO_ENTRY] symbol=${position.symbol} reason=no_reliable_price`);
           }
-          console.log(`[8.8.3-I6][CLOSE_ALL_LIVE_PRICE] symbol=${position.symbol} price=${currentPrice} source=${priceSource}`);
+          console.log(`[8.8.3-I6][CLOSE_ALL_LIVE_PRICE] symbol=${position.symbol} price=${currentPrice} source=${priceSource} fallbackType=${fallbackType}`);
           
           const pnl = (currentPrice - avgPrice) * quantity;
           const pnlPercent = ((currentPrice - avgPrice) / avgPrice) * 100;

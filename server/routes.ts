@@ -8138,28 +8138,28 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         const openedAt = pos.openedAt ? new Date(pos.openedAt) : new Date();
         const holdingDurationMs = Date.now() - openedAt.getTime();
         
-        // Phase 8.8.3-I6 A1: Get LIVE price from LivePricingAdapter instead of stale DB price
-        let currentPrice = entryPrice; // Fallback to entry price
+        // Phase 8.8.3-I6 A1: Get LIVE price using getPriceWithFallback (includes 5s staleness guard + REST fallback)
+        let currentPrice = entryPrice; // Fallback to entry price if all else fails
         let priceSource = 'entry_fallback';
         let priceAgeMs = 0;
+        let fallbackType: 'none' | 'rest_fallback' | 'entry_fallback' = 'entry_fallback';
         
-        const liveQuote = livePricingAdapter.getPrice(pos.symbol);
+        const liveQuote = await livePricingAdapter.getPriceWithFallback(pos.symbol, 5000);
         if (liveQuote && liveQuote.price !== null && liveQuote.source !== 'no_reliable_price') {
           currentPrice = liveQuote.price;
           priceSource = liveQuote.source;
           priceAgeMs = Date.now() - new Date(liveQuote.timestamp).getTime();
+          // Track REST fallback vs WebSocket primary source
+          const restFallbackSources = ['rest_fallback', 'kraken_rest', 'binance_rest', 'coingecko', 'last_known_good'];
+          fallbackType = restFallbackSources.some(s => liveQuote.source.includes(s)) ? 'rest_fallback' : 'none';
         } else {
-          // Try with fallback (includes REST fetch if cache stale)
-          const fallbackQuote = await livePricingAdapter.getPriceWithFallback(pos.symbol, 5000);
-          if (fallbackQuote && fallbackQuote.price !== null && fallbackQuote.source !== 'no_reliable_price') {
-            currentPrice = fallbackQuote.price;
-            priceSource = fallbackQuote.source;
-            priceAgeMs = Date.now() - new Date(fallbackQuote.timestamp).getTime();
-          }
+          // Log that we fell back to entry price due to no reliable live price
+          fallbackType = 'entry_fallback';
+          console.log(`[8.8.3-I6][FALLBACK_TO_ENTRY] symbol=${pos.symbol} reason=no_reliable_price`);
         }
         
-        // Phase 8.8.3-I6 D2: Diagnostic logging for live price feed audit
-        console.log(`[8.8.3-I6][LIVE_PRICE_FEED] symbol=${pos.symbol} price=${currentPrice} age=${priceAgeMs}ms source=${priceSource}`);
+        // Phase 8.8.3-I6 D2: Diagnostic logging for live price feed audit (includes fallback tracking)
+        console.log(`[8.8.3-I6][LIVE_PRICE_FEED] symbol=${pos.symbol} price=${currentPrice} age=${priceAgeMs}ms source=${priceSource} fallbackType=${fallbackType}`);
         
         // Phase 8.8.3-I6 E1: Calculate P/L and distance using LIVE price
         const quantity = parseFloat(pos.quantity?.toString() || '0');
@@ -8285,20 +8285,19 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         let currentPrice = entryPrice;
         let priceSource = 'entry_fallback';
         
-        // Phase 8.8.3-I6: Use livePricingAdapter for consistent live price source
-        const liveQuote = livePricingAdapter.getPrice(pos.symbol);
+        // Phase 8.8.3-I6: Use getPriceWithFallback (includes 5s staleness guard + REST fallback)
+        const liveQuote = await livePricingAdapter.getPriceWithFallback(pos.symbol, 5000);
+        let fallbackType: 'none' | 'rest_fallback' | 'entry_fallback' = 'entry_fallback';
         if (liveQuote && liveQuote.price !== null && liveQuote.source !== 'no_reliable_price') {
           currentPrice = liveQuote.price;
           priceSource = liveQuote.source;
+          const restFallbackSources = ['rest_fallback', 'kraken_rest', 'binance_rest', 'coingecko', 'last_known_good'];
+          fallbackType = restFallbackSources.some(s => liveQuote.source.includes(s)) ? 'rest_fallback' : 'none';
         } else {
-          const fallbackQuote = await livePricingAdapter.getPriceWithFallback(pos.symbol, 5000);
-          if (fallbackQuote && fallbackQuote.price !== null && fallbackQuote.source !== 'no_reliable_price') {
-            currentPrice = fallbackQuote.price;
-            priceSource = fallbackQuote.source;
-          }
+          fallbackType = 'entry_fallback';
+          console.log(`[8.8.3-I6][FALLBACK_TO_ENTRY] symbol=${pos.symbol} reason=no_reliable_price`);
         }
-        
-        console.log(`[8.8.3-I6][PORTFOLIO_LIVE_PRICE] symbol=${pos.symbol} price=${currentPrice} source=${priceSource}`);
+        console.log(`[8.8.3-I6][PORTFOLIO_LIVE_PRICE] symbol=${pos.symbol} price=${currentPrice} source=${priceSource} fallbackType=${fallbackType}`);
         totalPositionValue += quantity * currentPrice;
       }
       
@@ -8341,21 +8340,21 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const entryPrice = parseFloat(position.avgPrice?.toString() || '0');
       const quantity = parseFloat(position.quantity?.toString() || '0');
       
-      // Phase 8.8.3-I6: Use live price for close calculation
+      // Phase 8.8.3-I6: Use getPriceWithFallback (includes 5s staleness guard + REST fallback)
       let currentPrice = entryPrice;
       let priceSource = 'entry_fallback';
-      const liveQuote = livePricingAdapter.getPrice(position.symbol);
+      let fallbackType: 'none' | 'rest_fallback' | 'entry_fallback' = 'entry_fallback';
+      const liveQuote = await livePricingAdapter.getPriceWithFallback(position.symbol, 5000);
       if (liveQuote && liveQuote.price !== null && liveQuote.source !== 'no_reliable_price') {
         currentPrice = liveQuote.price;
         priceSource = liveQuote.source;
+        const restFallbackSources = ['rest_fallback', 'kraken_rest', 'binance_rest', 'coingecko', 'last_known_good'];
+        fallbackType = restFallbackSources.some(s => liveQuote.source.includes(s)) ? 'rest_fallback' : 'none';
       } else {
-        const fallbackQuote = await livePricingAdapter.getPriceWithFallback(position.symbol, 5000);
-        if (fallbackQuote && fallbackQuote.price !== null && fallbackQuote.source !== 'no_reliable_price') {
-          currentPrice = fallbackQuote.price;
-          priceSource = fallbackQuote.source;
-        }
+        fallbackType = 'entry_fallback';
+        console.log(`[8.8.3-I6][FALLBACK_TO_ENTRY] symbol=${position.symbol} reason=no_reliable_price`);
       }
-      console.log(`[8.8.3-I6][CLOSE_TRADE_LIVE_PRICE] symbol=${position.symbol} price=${currentPrice} source=${priceSource}`);
+      console.log(`[8.8.3-I6][CLOSE_TRADE_LIVE_PRICE] symbol=${position.symbol} price=${currentPrice} source=${priceSource} fallbackType=${fallbackType}`);
       
       const pnl = (currentPrice - entryPrice) * quantity;
       const pnlPercent = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice) * 100 : 0;
@@ -8425,21 +8424,21 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           const entryPrice = parseFloat(position.avgPrice?.toString() || '0');
           const quantity = parseFloat(position.quantity?.toString() || '0');
           
-          // Phase 8.8.3-I6: Use live price for stranded clear calculation
+          // Phase 8.8.3-I6: Use getPriceWithFallback (includes 5s staleness guard + REST fallback)
           let currentPrice = entryPrice;
           let priceSource = 'entry_fallback';
-          const liveQuote = livePricingAdapter.getPrice(position.symbol);
+          let fallbackType: 'none' | 'rest_fallback' | 'entry_fallback' = 'entry_fallback';
+          const liveQuote = await livePricingAdapter.getPriceWithFallback(position.symbol, 5000);
           if (liveQuote && liveQuote.price !== null && liveQuote.source !== 'no_reliable_price') {
             currentPrice = liveQuote.price;
             priceSource = liveQuote.source;
+            const restFallbackSources = ['rest_fallback', 'kraken_rest', 'binance_rest', 'coingecko', 'last_known_good'];
+            fallbackType = restFallbackSources.some(s => liveQuote.source.includes(s)) ? 'rest_fallback' : 'none';
           } else {
-            const fallbackQuote = await livePricingAdapter.getPriceWithFallback(position.symbol, 5000);
-            if (fallbackQuote && fallbackQuote.price !== null && fallbackQuote.source !== 'no_reliable_price') {
-              currentPrice = fallbackQuote.price;
-              priceSource = fallbackQuote.source;
-            }
+            fallbackType = 'entry_fallback';
+            console.log(`[8.8.3-I6][FALLBACK_TO_ENTRY] symbol=${position.symbol} reason=no_reliable_price`);
           }
-          console.log(`[8.8.3-I6][STRANDED_CLEAR_LIVE_PRICE] symbol=${position.symbol} price=${currentPrice} source=${priceSource}`);
+          console.log(`[8.8.3-I6][STRANDED_CLEAR_LIVE_PRICE] symbol=${position.symbol} price=${currentPrice} source=${priceSource} fallbackType=${fallbackType}`);
           
           const pnl = (currentPrice - entryPrice) * quantity;
           const pnlPercent = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice) * 100 : 0;
