@@ -1,0 +1,1 @@
+{"ok":true,"timestamp":"2025-12-08T23:05:01.445Z","phase":"8.8.3-I7-WS-F","description":"WebSocket subscription coverage status","summary":{"total":0,"subscribed":0,"pending":0,"missing":0,"unmappable":0},"symbols":[],"health":{"ack_timeouts":[],"no_tick_symbols":[]}}
