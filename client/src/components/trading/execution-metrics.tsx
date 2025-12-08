@@ -3,8 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTradingMode } from "@/contexts/trading-mode-context";
-import { CheckCircle, XCircle, Activity, TrendingUp, Ban, BarChart3, Target } from "lucide-react";
+import { CheckCircle, XCircle, Activity, TrendingUp, Ban, BarChart3, Target, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useEffect } from "react";
 import {
   Table,
   TableBody,
@@ -14,33 +15,28 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-interface RTBSummary {
-  totalAttempts: number;
-  opened: number;
-  blocked: number;
-  openedRate: string;
-  blockedRate: string;
-  last24h: {
+/**
+ * Phase 8.8.3-I4: RTB Metrics Response from /api/diagnostics/rtb-metrics
+ * This is now the SINGLE SOURCE OF TRUTH for all RTB metrics
+ */
+interface RtbMetricsResponse {
+  ok: boolean;
+  phase: string;
+  description: string;
+  timestamp: string;
+  sessionStart: string;
+  totals: {
     attempts: number;
     opened: number;
     blocked: number;
   };
-}
-
-interface RTBBlockedSummary {
-  totalBlocked: number;
-  blockedLast24h: number;
-  byReason: Record<string, number>;
-  byStrategy: Record<string, number>;
-  topReasons: Array<{ reason: string; count: number }>;
-}
-
-interface RTBOpenedSummary {
-  totalOpened: number;
-  openedLast24h: number;
-  byStrategy: Record<string, number>;
-  bySymbol: Array<{ symbol: string; count: number }>;
-  topStrategies: Array<{ strategy: string; count: number }>;
+  byBlockReason: Record<string, number>;
+  byStrategy: Record<string, { attempts: number; opened: number; blocked: number }>;
+  bySymbol: number | Record<string, { attempts: number; opened: number; blocked: number; byReason: Record<string, number> }>;
+  invariantCheck: {
+    valid: boolean;
+    message: string;
+  };
 }
 
 const REFRESH_INTERVAL = 30000;
@@ -105,49 +101,58 @@ const ALL_STRATEGIES = [
   'dhma'
 ] as const;
 
+/**
+ * Phase 8.8.3-I4: ExecutionMetricsPanel
+ * Now uses /api/diagnostics/rtb-metrics as single source of truth
+ */
 export function ExecutionMetricsPanel() {
   const { mode } = useTradingMode();
   
-  const { data: rtbSummary, isLoading: summaryLoading } = useQuery<{ success: boolean; data: RTBSummary }>({
-    queryKey: ['/api/metrics/rtb-summary', mode],
+  /**
+   * Phase 8.8.3-I4: Single query to the canonical RTB metrics endpoint
+   * This replaces the previous three separate queries
+   */
+  const { data: rtbMetrics, isLoading } = useQuery<RtbMetricsResponse>({
+    queryKey: ['/api/diagnostics/rtb-metrics', mode],
     queryFn: async () => {
-      const response = await fetch(`/api/metrics/rtb-summary?mode=${mode}`, {
+      const response = await fetch(`/api/diagnostics/rtb-metrics`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
-      if (!response.ok) throw new Error('Failed to fetch RTB summary');
+      if (!response.ok) throw new Error('Failed to fetch RTB metrics');
       return response.json();
     },
     refetchInterval: REFRESH_INTERVAL,
     staleTime: REFRESH_INTERVAL / 2,
   });
 
-  const { data: blockedSummary, isLoading: blockedLoading } = useQuery<{ success: boolean; data: RTBBlockedSummary }>({
-    queryKey: ['/api/metrics/rtb-blocked-summary', mode],
-    queryFn: async () => {
-      const response = await fetch(`/api/metrics/rtb-blocked-summary?mode=${mode}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      if (!response.ok) throw new Error('Failed to fetch blocked summary');
-      return response.json();
-    },
-    refetchInterval: REFRESH_INTERVAL,
-    staleTime: REFRESH_INTERVAL / 2,
-  });
+  /**
+   * Phase 8.8.3-I4 A4: Invariant checking - log mismatch to console
+   */
+  useEffect(() => {
+    if (!rtbMetrics || !rtbMetrics.ok) return;
 
-  const { data: openedSummary, isLoading: openedLoading } = useQuery<{ success: boolean; data: RTBOpenedSummary }>({
-    queryKey: ['/api/metrics/rtb-opened-summary', mode],
-    queryFn: async () => {
-      const response = await fetch(`/api/metrics/rtb-opened-summary?mode=${mode}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      if (!response.ok) throw new Error('Failed to fetch opened summary');
-      return response.json();
-    },
-    refetchInterval: REFRESH_INTERVAL,
-    staleTime: REFRESH_INTERVAL / 2,
-  });
+    const { totals, byBlockReason, invariantCheck } = rtbMetrics;
+    const sumByReason = Object.values(byBlockReason || {}).reduce((a, b) => a + b, 0);
 
-  const isLoading = summaryLoading || blockedLoading || openedLoading;
+    // Check invariant: attemptsTotal === openedTotal + blockedTotal
+    const expectedTotal = totals.opened + totals.blocked;
+    const invariantValid = totals.attempts === expectedTotal;
+
+    // Check breakdown: blockedTotal === sum(byReason)
+    const breakdownValid = totals.blocked === sumByReason;
+
+    if (!invariantValid || !breakdownValid) {
+      console.warn('[8.8.3-I4][RTB_METRICS_MISMATCH]', {
+        attemptsTotal: totals.attempts,
+        openedTotal: totals.opened,
+        blockedTotal: totals.blocked,
+        sumByReason,
+        invariantValid,
+        breakdownValid,
+        serverInvariantCheck: invariantCheck,
+      });
+    }
+  }, [rtbMetrics]);
 
   const formatBlockReason = (reason: string): string => {
     return reason.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
@@ -156,6 +161,36 @@ export function ExecutionMetricsPanel() {
   const formatStrategy = (strategy: string): string => {
     return strategy.replace(/_/g, ' ');
   };
+
+  // Compute derived values from the single source of truth
+  const totals = rtbMetrics?.totals || { attempts: 0, opened: 0, blocked: 0 };
+  const byBlockReason = rtbMetrics?.byBlockReason || {};
+  const byStrategy = rtbMetrics?.byStrategy || {};
+  
+  // Compute rates
+  const openedRate = totals.attempts > 0 ? ((totals.opened / totals.attempts) * 100).toFixed(1) : '0.0';
+  const blockedRate = totals.attempts > 0 ? ((totals.blocked / totals.attempts) * 100).toFixed(1) : '0.0';
+  
+  // Phase 8.8.3-I4: Build block reasons from keys of byBlockReason instead of hardcoded list
+  // We still use ALL_BLOCK_REASONS for ordering, but show any reason that has count > 0
+  const blockReasonRows: Array<{ reason: string; count: number; description: string }> = 
+    ALL_BLOCK_REASONS.map(reason => ({
+      reason,
+      count: byBlockReason[reason] || 0,
+      description: BLOCK_REASON_DESCRIPTIONS[reason] || '-'
+    }));
+  
+  // Add any unknown reasons from byBlockReason that aren't in ALL_BLOCK_REASONS
+  Object.keys(byBlockReason).forEach(reasonKey => {
+    const isKnown = (ALL_BLOCK_REASONS as readonly string[]).includes(reasonKey);
+    if (!isKnown) {
+      blockReasonRows.push({
+        reason: reasonKey,
+        count: byBlockReason[reasonKey],
+        description: BLOCK_REASON_DESCRIPTIONS[reasonKey] || 'Unknown block reason'
+      });
+    }
+  });
 
   if (isLoading) {
     return (
@@ -177,10 +212,6 @@ export function ExecutionMetricsPanel() {
     );
   }
 
-  const summary = rtbSummary?.data;
-  const blocked = blockedSummary?.data;
-  const opened = openedSummary?.data;
-
   return (
     <Card className="mt-4">
       <CardHeader className="pb-2">
@@ -190,21 +221,28 @@ export function ExecutionMetricsPanel() {
           <Badge variant="secondary" className="text-[10px] ml-auto">
             Auto-refresh: 30s
           </Badge>
+          {/* Phase 8.8.3-I4: Show invariant status indicator */}
+          {rtbMetrics?.invariantCheck && !rtbMetrics.invariantCheck.valid && (
+            <Badge variant="destructive" className="text-[10px] flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3" />
+              Metrics Mismatch
+            </Badge>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* J5.1 - RTB Summary Table (J6.2: Removed Total column, kept Last 24h only) */}
+        {/* Phase 8.8.3-I4: RTB Summary Table - Now from single source of truth */}
         <div>
           <h4 className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-2">
             <BarChart3 className="w-3 h-3" />
-            Overall RTB Summary (Last 24h)
+            RTB Summary (Session)
           </h4>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="text-xs">Metric</TableHead>
-                <TableHead className="text-xs text-right">Last 24h</TableHead>
-                <TableHead className="text-xs text-right" title="Rate calculated using all-time totals">Rate*</TableHead>
+                <TableHead className="text-xs text-right">Count</TableHead>
+                <TableHead className="text-xs text-right">Rate</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -213,7 +251,7 @@ export function ExecutionMetricsPanel() {
                   <Activity className="w-3 h-3" />
                   Attempts
                 </TableCell>
-                <TableCell className="text-xs text-right font-mono">{formatNumber(summary?.last24h?.attempts)}</TableCell>
+                <TableCell className="text-xs text-right font-mono">{formatNumber(totals.attempts)}</TableCell>
                 <TableCell className="text-xs text-right">-</TableCell>
               </TableRow>
               <TableRow>
@@ -221,34 +259,35 @@ export function ExecutionMetricsPanel() {
                   <CheckCircle className="w-3 h-3" />
                   Opened
                 </TableCell>
-                <TableCell className="text-xs text-right text-success font-mono">{formatNumber(summary?.last24h?.opened)}</TableCell>
-                <TableCell className="text-xs text-right text-success">{summary?.openedRate || '0.0'}%</TableCell>
+                <TableCell className="text-xs text-right text-success font-mono">{formatNumber(totals.opened)}</TableCell>
+                <TableCell className="text-xs text-right text-success">{openedRate}%</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell className="text-xs font-medium flex items-center gap-1 text-destructive">
                   <XCircle className="w-3 h-3" />
                   Blocked
                 </TableCell>
-                <TableCell className="text-xs text-right text-destructive font-mono">{formatNumber(summary?.last24h?.blocked)}</TableCell>
-                <TableCell className="text-xs text-right text-destructive">{summary?.blockedRate || '0.0'}%</TableCell>
+                <TableCell className="text-xs text-right text-destructive font-mono">{formatNumber(totals.blocked)}</TableCell>
+                <TableCell className="text-xs text-right text-destructive">{blockedRate}%</TableCell>
               </TableRow>
             </TableBody>
           </Table>
-          <p className="text-[10px] text-muted-foreground mt-1">*Rate uses all-time totals</p>
+          {rtbMetrics?.sessionStart && (
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Session started: {new Date(rtbMetrics.sessionStart).toLocaleString()}
+            </p>
+          )}
         </div>
 
-        {/* J5.2/AJ9/AJ10.2 - Blocked Summary Table: Always show all 14 block reasons */}
-        {/* Phase 8.8.3-B3: Reduced table width for aesthetic tightening */}
+        {/* Phase 8.8.3-I4: Blocked Breakdown - From byBlockReason */}
         <div className="max-w-xl">
           <h4 className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-2">
             <Ban className="w-3 h-3" />
             Blocked Breakdown (All Reasons)
           </h4>
-          {/* AJ10.2: Total Blocked line */}
+          {/* Total Blocked from totals.blocked - must match sum of byBlockReason */}
           <p className="text-xs font-medium mb-2 text-destructive">
-            Total Blocked (Last 24h): {formatNumber(
-              ALL_BLOCK_REASONS.reduce((sum, reason) => sum + (blocked?.byReason?.[reason] || 0), 0)
-            )}
+            Total Blocked: {formatNumber(totals.blocked)}
           </p>
           <Table>
             <TableHeader>
@@ -259,29 +298,27 @@ export function ExecutionMetricsPanel() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {ALL_BLOCK_REASONS.map((reason) => {
-                const count = blocked?.byReason?.[reason] || 0;
-                return (
-                  <TableRow key={reason}>
-                    <TableCell className="text-xs font-medium">{formatBlockReason(reason)}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{BLOCK_REASON_DESCRIPTIONS[reason] || '-'}</TableCell>
-                    <TableCell className={cn(
-                      "text-xs text-right font-mono",
-                      count > 0 ? "text-destructive" : "text-muted-foreground"
-                    )}>
-                      {formatNumber(count)}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
+              {blockReasonRows.map(({ reason, count, description }) => (
+                <TableRow key={reason}>
+                  <TableCell className="text-xs font-medium">{formatBlockReason(reason)}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{description}</TableCell>
+                  <TableCell className={cn(
+                    "text-xs text-right font-mono",
+                    count > 0 ? "text-destructive" : "text-muted-foreground"
+                  )}>
+                    {formatNumber(count)}
+                  </TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
-          {/* AJ9: Show all 9 strategies in chips */}
+          {/* Strategy breakdown - from byStrategy */}
           <div className="mt-3">
             <p className="text-[10px] text-muted-foreground mb-1">Blocked by Strategy:</p>
             <div className="flex flex-wrap gap-1">
               {ALL_STRATEGIES.map((strategy) => {
-                const count = blocked?.byStrategy?.[strategy] || 0;
+                const strategyData = byStrategy[strategy];
+                const count = strategyData?.blocked || 0;
                 return (
                   <Badge 
                     key={strategy} 
@@ -299,18 +336,14 @@ export function ExecutionMetricsPanel() {
           </div>
         </div>
 
-        {/* AJ9.5/AJ10.2 - Opened by Strategy Table: Always show all 9 strategies */}
-        {/* Phase 8.8.3-B3: Reduced table width for aesthetic tightening */}
+        {/* Phase 8.8.3-I4: Opened by Strategy - From byStrategy */}
         <div className="max-w-xs">
           <h4 className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-2">
             <Target className="w-3 h-3" />
-            Opened by Strategy (Last 24h)
+            Opened by Strategy (Session)
           </h4>
-          {/* AJ10.2: Total Opened line */}
           <p className="text-xs font-medium mb-2 text-success">
-            Total Opened (Last 24h): {formatNumber(
-              ALL_STRATEGIES.reduce((sum, strategy) => sum + (opened?.byStrategy?.[strategy] || 0), 0)
-            )}
+            Total Opened: {formatNumber(totals.opened)}
           </p>
           <Table>
             <TableHeader>
@@ -321,7 +354,8 @@ export function ExecutionMetricsPanel() {
             </TableHeader>
             <TableBody>
               {ALL_STRATEGIES.map((strategy) => {
-                const count = opened?.byStrategy?.[strategy] || 0;
+                const strategyData = byStrategy[strategy];
+                const count = strategyData?.opened || 0;
                 return (
                   <TableRow key={strategy}>
                     <TableCell className="text-xs">{formatStrategy(strategy)}</TableCell>
@@ -336,22 +370,9 @@ export function ExecutionMetricsPanel() {
               })}
             </TableBody>
           </Table>
-          {/* Top Symbols (only show if there are opened trades) */}
-          {opened && opened.bySymbol && opened.bySymbol.length > 0 && (
-            <div className="mt-3">
-              <p className="text-[10px] text-muted-foreground mb-1">Top Opened Symbols:</p>
-              <div className="flex flex-wrap gap-1">
-                {opened.bySymbol.slice(0, 10).map(({ symbol, count }) => (
-                  <Badge key={symbol} variant="secondary" className="text-[10px] font-mono">
-                    {symbol}: {formatNumber(count)}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
-        {(!summary?.totalAttempts || summary.totalAttempts === 0) && (
+        {totals.attempts === 0 && (
           <div className="text-center py-6 text-muted-foreground">
             <Activity className="w-8 h-8 mx-auto mb-2 opacity-50" />
             <p className="text-sm">No execution attempts recorded</p>
@@ -363,16 +384,20 @@ export function ExecutionMetricsPanel() {
   );
 }
 
+/**
+ * Phase 8.8.3-I4: ExecutionMetricsCompact
+ * Now uses /api/diagnostics/rtb-metrics as single source of truth
+ */
 export function ExecutionMetricsCompact() {
   const { mode } = useTradingMode();
   
-  const { data: rtbSummary, isLoading } = useQuery<{ success: boolean; data: RTBSummary }>({
-    queryKey: ['/api/metrics/rtb-summary', mode],
+  const { data: rtbMetrics, isLoading } = useQuery<RtbMetricsResponse>({
+    queryKey: ['/api/diagnostics/rtb-metrics', mode],
     queryFn: async () => {
-      const response = await fetch(`/api/metrics/rtb-summary?mode=${mode}`, {
+      const response = await fetch(`/api/diagnostics/rtb-metrics`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
-      if (!response.ok) throw new Error('Failed to fetch RTB summary');
+      if (!response.ok) throw new Error('Failed to fetch RTB metrics');
       return response.json();
     },
     refetchInterval: REFRESH_INTERVAL,
@@ -389,9 +414,10 @@ export function ExecutionMetricsCompact() {
     );
   }
 
-  const summary = rtbSummary?.data;
+  const totals = rtbMetrics?.totals || { attempts: 0, opened: 0, blocked: 0 };
+  const openedRate = totals.attempts > 0 ? ((totals.opened / totals.attempts) * 100).toFixed(1) : '0.0';
 
-  if (!summary || summary.totalAttempts === 0) {
+  if (totals.attempts === 0) {
     return null;
   }
 
@@ -400,18 +426,18 @@ export function ExecutionMetricsCompact() {
       <span className="text-muted-foreground">RTB Execution:</span>
       <span className="flex items-center gap-1">
         <Activity className="w-3 h-3" />
-        {summary.totalAttempts} attempts
+        {totals.attempts} attempts
       </span>
       <span className="flex items-center gap-1 text-success">
         <CheckCircle className="w-3 h-3" />
-        {summary.opened} opened
+        {totals.opened} opened
       </span>
       <span className="flex items-center gap-1 text-destructive">
         <XCircle className="w-3 h-3" />
-        {summary.blocked} blocked
+        {totals.blocked} blocked
       </span>
       <span className="flex items-center gap-1 text-primary">
-        ({summary.openedRate}% open rate)
+        ({openedRate}% open rate)
       </span>
     </div>
   );

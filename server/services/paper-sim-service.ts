@@ -16,6 +16,7 @@ import { b4Diagnostics } from './b4-diagnostics.js';
 import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js';
 import { livePricingAdapter } from './live-pricing-adapter.js';
 import { rtbMetricsService } from './rtb-metrics-service.js';
+import { krakenWebSocketAdapter } from './kraken-websocket-adapter.js';
 
 console.log('[41E-S][LIVE-CODE] paper-sim-service.ts loaded');
 console.log('[8.8.3-I3][LOADED] Trade status consistency module integrated');
@@ -594,6 +595,16 @@ export async function startPaperSimulation(
           // Phase 8.8.3-I3: Start periodic invariant check for RTB metrics
           rtbMetricsService.startInvariantCheck();
           
+          // Phase 8.8.3-I4 B4: Start periodic price tick health logging
+          krakenWebSocketAdapter.startPriceTickHealthLogging(async () => {
+            try {
+              const positions = await storage.getPaperSimOpenPositions('paper');
+              return positions.map(p => p.symbol);
+            } catch {
+              return [];
+            }
+          });
+          
           // REB 2.8.11: Sync portfolioState.balance with new startingBalance AFTER manager starts
           // This ensures the session is fully live before touching canonical portfolio state
           // Moved here from before manager.start() to prevent partial initialization on failure
@@ -608,6 +619,12 @@ export async function startPaperSimulation(
             console.log('[REB 2.8.11] Portfolio balance synchronized successfully');
           } catch (balanceUpdateError: any) {
             console.error('[REB 2.8.11] Failed to sync portfolio balance:', balanceUpdateError);
+            
+            // Phase 8.8.3-I4 B4: Stop price tick health logging before rollback
+            krakenWebSocketAdapter.stopPriceTickHealthLogging();
+            
+            // Phase 8.8.3-I3: Stop invariant check before rollback
+            rtbMetricsService.stopInvariantCheck();
             
             // REB 2.8.11: CRITICAL - Stop manager before rollback to prevent divergent state
             // The manager is already running; we must stop it atomically before clearing reference
@@ -879,6 +896,9 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
             
             // Phase 8.8.3-I3: Stop periodic invariant check for RTB metrics
             rtbMetricsService.stopInvariantCheck();
+            
+            // Phase 8.8.3-I4 B4: Stop periodic price tick health logging
+            krakenWebSocketAdapter.stopPriceTickHealthLogging();
             
             console.log('[8.8.3-I2][STOP_FLOW][END] Hard stop sequence complete');
           }

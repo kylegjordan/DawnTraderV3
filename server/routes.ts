@@ -6884,6 +6884,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // ==================== Phase 8.8.3-B3.6: WebSocket Price Engine Diagnostics ====================
   
   // GET /api/diagnostics/ws-price-engine - Get WebSocket price engine diagnostics
+  // Phase 8.8.3-I4 B2: Enhanced with per-symbol timing stats
   apiRouter.get('/diagnostics/ws-price-engine', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
@@ -6891,6 +6892,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const diagnostics = krakenWebSocketAdapter.getDiagnostics();
       const includeRaw = req.query.raw === '1';
       const priceLogs = includeRaw ? krakenWebSocketAdapter.getPriceLogs() : [];
+      
+      // Phase 8.8.3-I4 B2: Get per-symbol timing stats
+      const perSymbolStats = krakenWebSocketAdapter.getPerSymbolTimingStats();
       
       res.json({
         ok: true,
@@ -6908,6 +6912,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         lastPongAgeMs: diagnostics.lastPongAgeMs,
         priceLogs: priceLogs,
         priceLogCount: priceLogs.length,
+        // Phase 8.8.3-I4 B2: Per-symbol timing stats
+        perSymbolTimingStats: perSymbolStats,
         health: {
           isConnected: diagnostics.wsConnected,
           hasStaleSymbols: diagnostics.staleSymbols.length > 0,

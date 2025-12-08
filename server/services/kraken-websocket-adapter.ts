@@ -44,6 +44,19 @@ interface SymbolStats {
   lastUpdate: number;
   updateCount: number;
   intervals: number[];
+  firstUpdate: number; // Phase 8.8.3-I4: Track when first tick received
+}
+
+/**
+ * Phase 8.8.3-I4: Per-symbol timing stats for diagnostics
+ */
+interface PerSymbolTimingStats {
+  symbol: string;
+  lastTickTime: string;
+  lastTickAgeMs: number;
+  ticksPerMinute: number;
+  source: string;
+  updateCount: number;
 }
 
 export class KrakenWebSocketAdapter {
@@ -57,6 +70,10 @@ export class KrakenWebSocketAdapter {
   private reconnectTimer: NodeJS.Timeout | null = null;
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private lastPongTime: number = Date.now();
+  
+  // Phase 8.8.3-I4 B4: Periodic price tick health logging
+  private priceTickHealthInterval: NodeJS.Timeout | null = null;
+  private openPositionSymbolsProvider: (() => string[] | Promise<string[]>) | null = null;
   
   private readonly WS_URL = 'wss://ws.kraken.com';
   private readonly MAX_RECONNECT_ATTEMPTS = 10;
@@ -278,7 +295,8 @@ export class KrakenWebSocketAdapter {
       const stats = this.symbolStats.get(internalSymbol) || {
         lastUpdate: 0,
         updateCount: 0,
-        intervals: []
+        intervals: [],
+        firstUpdate: now // Phase 8.8.3-I4: Track first tick time
       };
       
       const intervalMs = stats.lastUpdate > 0 ? now - stats.lastUpdate : 0;
@@ -286,6 +304,8 @@ export class KrakenWebSocketAdapter {
       if (stats.intervals.length > 100) stats.intervals.shift();
       stats.lastUpdate = now;
       stats.updateCount++;
+      // Phase 8.8.3-I4: Ensure firstUpdate is set on first tick
+      if (stats.firstUpdate === 0) stats.firstUpdate = now;
       this.symbolStats.set(internalSymbol, stats);
       
       const logEntry: PriceTickLog = {
@@ -741,6 +761,132 @@ export class KrakenWebSocketAdapter {
 
   getPriceLogs(): PriceTickLog[] {
     return [...this.priceTickLogs];
+  }
+
+  /**
+   * Phase 8.8.3-I4 B2: Get per-symbol timing stats for diagnostics
+   */
+  getPerSymbolTimingStats(): PerSymbolTimingStats[] {
+    const now = Date.now();
+    const stats: PerSymbolTimingStats[] = [];
+    
+    this.symbolStats.forEach((symbolStats, symbol) => {
+      // Calculate ticks per minute from intervals
+      const timeWindowMs = now - symbolStats.firstUpdate;
+      const timeWindowMinutes = timeWindowMs / 60000;
+      const ticksPerMinute = timeWindowMinutes > 0 ? symbolStats.updateCount / timeWindowMinutes : 0;
+      
+      stats.push({
+        symbol,
+        lastTickTime: new Date(symbolStats.lastUpdate).toISOString(),
+        lastTickAgeMs: now - symbolStats.lastUpdate,
+        ticksPerMinute: Math.round(ticksPerMinute * 10) / 10, // Round to 1 decimal
+        source: 'kraken_ws',
+        updateCount: symbolStats.updateCount
+      });
+    });
+    
+    return stats;
+  }
+
+  /**
+   * Phase 8.8.3-I4 B4: Log price tick health for open positions
+   * Call this with a list of open position symbols to log their tick health
+   */
+  logPriceTickHealth(openPositionSymbols: string[]): void {
+    const now = Date.now();
+    const healthEntries: Array<{
+      symbol: string;
+      lastTickAgeMs: number;
+      ticksPerMinute: number;
+      source: string;
+    }> = [];
+    
+    for (const symbol of openPositionSymbols) {
+      const stats = this.symbolStats.get(symbol);
+      if (stats) {
+        const timeWindowMs = now - stats.firstUpdate;
+        const timeWindowMinutes = timeWindowMs / 60000;
+        const ticksPerMinute = timeWindowMinutes > 0 ? stats.updateCount / timeWindowMinutes : 0;
+        
+        healthEntries.push({
+          symbol,
+          lastTickAgeMs: now - stats.lastUpdate,
+          ticksPerMinute: Math.round(ticksPerMinute * 10) / 10,
+          source: 'kraken_ws'
+        });
+      } else {
+        // Symbol not in stats - no ticks received
+        healthEntries.push({
+          symbol,
+          lastTickAgeMs: -1, // No data
+          ticksPerMinute: 0,
+          source: 'not_subscribed'
+        });
+      }
+    }
+    
+    // Log aggregate stats
+    const validEntries = healthEntries.filter(e => e.lastTickAgeMs >= 0);
+    if (validEntries.length > 0) {
+      const ages = validEntries.map(e => e.lastTickAgeMs);
+      const minAge = Math.min(...ages);
+      const maxAge = Math.max(...ages);
+      const avgAge = ages.reduce((a, b) => a + b, 0) / ages.length;
+      
+      console.log(`[8.8.3-I4][PRICE_TICK_HEALTH] Open positions: ${openPositionSymbols.length}, ` +
+        `min/avg/max lastTickAgeMs: ${minAge}/${Math.round(avgAge)}/${maxAge}`);
+      
+      // Log individual entries if any are stale (> 3 seconds)
+      const staleEntries = validEntries.filter(e => e.lastTickAgeMs > 3000);
+      if (staleEntries.length > 0) {
+        console.warn(`[8.8.3-I4][PRICE_TICK_HEALTH][STALE] ${staleEntries.length} symbols with stale ticks:`, 
+          staleEntries.map(e => `${e.symbol}=${e.lastTickAgeMs}ms`).join(', '));
+      }
+    } else if (openPositionSymbols.length > 0) {
+      console.warn(`[8.8.3-I4][PRICE_TICK_HEALTH] No tick data for ${openPositionSymbols.length} open positions`);
+    }
+  }
+
+  /**
+   * Phase 8.8.3-I4 B4: Start periodic 60-second price tick health logging
+   * @param openPositionSymbolsProvider Function that returns current open position symbols (sync or async)
+   */
+  startPriceTickHealthLogging(openPositionSymbolsProvider: () => string[] | Promise<string[]>): void {
+    if (this.priceTickHealthInterval) {
+      console.log('[8.8.3-I4][PRICE_TICK_HEALTH] Already running, skipping start');
+      return;
+    }
+    
+    this.openPositionSymbolsProvider = openPositionSymbolsProvider;
+    console.log('[8.8.3-I4][PRICE_TICK_HEALTH] Starting 60-second periodic health logging');
+    
+    this.priceTickHealthInterval = setInterval(async () => {
+      if (this.openPositionSymbolsProvider) {
+        try {
+          const symbols = await this.openPositionSymbolsProvider();
+          if (symbols.length > 0) {
+            this.logPriceTickHealth(symbols);
+          } else {
+            console.log('[8.8.3-I4][PRICE_TICK_HEALTH] No open positions to monitor');
+          }
+        } catch (error) {
+          console.error('[8.8.3-I4][PRICE_TICK_HEALTH] Error getting open positions:', error);
+        }
+      }
+    }, 60000); // 60 seconds
+  }
+
+  /**
+   * Phase 8.8.3-I4 B4: Stop periodic price tick health logging
+   */
+  stopPriceTickHealthLogging(): void {
+    if (this.priceTickHealthInterval) {
+      clearInterval(this.priceTickHealthInterval);
+      this.priceTickHealthInterval = null;
+      this.openPositionSymbolsProvider = null;
+      console.log('[8.8.3-I4][PRICE_TICK_HEALTH] Stopped periodic health logging');
+    }
   }
 
   getStatus() {
