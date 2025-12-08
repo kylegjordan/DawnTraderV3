@@ -1,0 +1,145 @@
+DIAGNOSTIC A — Confirm the backend price engine is receiving fresh WebSocket ticks
+
+Begin a clean 60-second capture.
+
+Count occurrences of:
+
+[I6][WS_CACHE_UPDATE]
+
+source=kraken_ws
+
+Report:
+
+Total WebSocket ticks received
+
+Average priceAgeMs
+
+Any symbol with priceAgeMs > 5000 for more than 10 seconds
+
+Goal: Prove whether the backend is actually receiving WS ticks during trading.
+
+DIAGNOSTIC B — Confirm the backend fallback (Kraken REST) is being triggered
+
+Search logs for:
+
+[8.8.3-I6][REST_FALLBACK]
+
+source=kraken_rest
+
+Report:
+
+Number of Kraken REST calls during the last 60 seconds
+
+Which symbols triggered REST fallback
+
+Price changes across those calls
+
+Goal: Prove whether backend fallback is producing fresh prices.
+
+DIAGNOSTIC C — Verify execution engine (SL/TP) is using those prices
+
+Find the last 100 EXIT_EVAL logs.
+
+For each symbol report:
+
+Last 5 distSL values
+
+Last 5 distTP values
+
+Whether they change or remain frozen
+
+Goal: If backend values don’t change, execution engine cannot close trades.
+
+DIAGNOSTIC D — Confirm WebSocket price_updated events are emitted to the frontend
+
+Search for backend broadcasts:
+
+BROADCAST price_updated
+
+Count:
+
+Messages broadcast by backend
+
+Messages delivered to UI
+
+Messages received by ActiveTradesV2 component
+
+Goal: Determine whether the broadcast is being lost between backend → browser → React component.
+
+DIAGNOSTIC E — Compare backend REST polling values with UI displayed prices
+
+Every 10 seconds for 60 seconds:
+
+Call /api/paper-sim/active-trades
+
+Record:
+
+currentPrice
+
+priceSource
+
+Compare to the UI price displayed on screen
+
+Goal: Determine if:
+
+Backend has fresh prices but UI is stale
+
+Backend itself is stale
+
+Both are stale
+
+Finally: Provide a unified root-cause report
+
+The report must answer:
+
+Is the backend receiving fresh ticks?
+
+Is the backend generating fresh prices (WS or REST)?
+
+Is the backend feeding fresh prices to the execution engine?
+
+Is the backend API returning fresh prices?
+
+Is the UI receiving the price_updated events?
+
+Is the React component properly consuming them?
+
+Do NOT propose fixes yet.
+Do NOT change any code.
+Just provide a structured root-cause analysis with evidence.
+
+📌 Why this is the correct next move
+
+Because right now, we do NOT know where the break is:
+
+Possibility 1 — Backend is still stale
+
+If Kraken REST fallback is firing but returning old data or errors, the backend price engine is still broken.
+
+Possibility 2 — Backend is fine but UI isn't receiving WebSocket updates
+
+This is likely if:
+
+price_updated events are broadcast but not arriving in browser console
+
+Or ActiveTradesV2 isn’t mounted or isn’t listening correctly
+
+Possibility 3 — Backend is receiving ticks but execution engine isn’t consuming them
+
+This can happen if:
+
+A wrong pricing adapter instance is used
+
+Or checkOpenPositions runs before cache updates
+
+Possibility 4 — Both front and back are stale
+
+This would match your observation:
+
+Pricing doesn’t move
+
+Trades never close
+
+UI freezes at one price tick
+
+This diagnostic removes guesswork and forces hard evidence on where the pipeline breaks.
