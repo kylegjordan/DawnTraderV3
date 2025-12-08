@@ -1,0 +1,415 @@
+Phase 8.8.3-I7-VER – Active Trades End-to-End Verification (NO NEW FEATURES)
+
+Purpose
+This phase must not change trading behavior. It is a verification-only phase to confirm that all work in I7 + WS-A/B/C/D/E/F/G has actually fixed the real business problem:
+
+Active Trades prices update correctly and trades are opened and closed correctly using WebSocket prices.
+
+Only allow:
+
+Diagnostic commands (curl, logs, existing endpoints)
+
+New markdown report files in docs/diagnostics
+
+Optional screenshots / notes
+
+Do NOT:
+
+Change thresholds (stale age, throttles, WS fallback rules, etc.)
+
+Change engine logic, adapters, or UI behavior
+
+Add new code paths beyond trivial console/log output if needed
+
+I7-VER-0 – Preparation & Constraints
+
+Re-read key components (read-only):
+
+server/services/live-pricing-adapter.ts
+
+server/services/kraken-websocket-adapter.ts
+
+server/services/paper-execution-engine.ts
+
+client/src/components/trading/active-trades-v2.tsx
+
+server/routes.ts
+
+Existing diagnostics:
+
+I7-WS-A: /api/diagnostics/i7-ws/subscription-map
+
+I7-WS-C: /api/diagnostics/i7-ws-c/trace-history
+
+I7-WS-D`: tick delivery logs
+
+I7-WS-E: /api/diagnostics/i7-ws-e/rest-fallback-metrics
+
+I7-WS-F: /api/diagnostics/i7-ws-f/coverage, /health
+
+I7-WS-G: /api/diagnostics/i7-ws-g/frequency, /unstable
+
+Confirm no behavior changes are needed for this phase. If you think you must change behavior to proceed, STOP and note it in the report instead.
+
+I7-VER-1 – Clean Start & Diagnostics Reset
+
+Use the existing test user auth (e.g., testuser123) and obtain a fresh TOKEN as usual if needed.
+
+Stop any existing simulations/trading:
+
+TOKEN="…"
+curl -s -X POST "http://localhost:5000/api/paper-sim/stop" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" | jq '.'
+
+
+If /api/trading/stop exists and is the orchestrator, call that too (read server/routes.ts and use the proper stop endpoint).
+
+Reset the diagnostics where applicable:
+
+I7-WS-C trace history:
+
+curl -s -X POST "http://localhost:5000/api/diagnostics/i7-ws-c/reset" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" | jq '.'
+
+
+If I7-WS-E / I7-WS-G have reset/clear endpoints, call them too (read routes.ts and their services; if not present, just note that in the report).
+
+Ensure the server is restarted cleanly (Start application workflow) so new logs are isolated to this verification run.
+
+I7-VER-2 – Start a Fresh Paper Trading Session
+
+Goal: start one coherent paper trading session that will be used for all checks.
+
+Find the canonical way to start trading:
+
+Prefer the orchestration endpoint (e.g. /api/trading/start) if that is now the standard.
+
+Otherwise use /api/paper-sim/start with the correct mode (check server/routes.ts and paper-sim-service.ts).
+
+Start a new session (paper mode, fresh run):
+Example (adjust to actual endpoint & body if different):
+
+TOKEN="…"
+echo "=== Start I7-VER paper session ==="
+curl -s -X POST "http://localhost:5000/api/trading/start" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"paper"}' | tee docs/diagnostics/I7-VER/start_response.json | jq '.'
+
+
+Or, if direct sim:
+
+curl -s -X POST "http://localhost:5000/api/paper-sim/start" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"new"}' | tee docs/diagnostics/I7-VER/start_response.json | jq '.'
+
+
+Wait ~10–15 seconds to let trades open and WebSocket subscriptions establish:
+
+sleep 15
+
+
+Snapshot the starting state:
+
+# Active trades
+curl -s "http://localhost:5000/api/paper-sim/active-trades" \
+  -H "Authorization: Bearer $TOKEN" \
+  | tee docs/diagnostics/I7-VER/active_trades_start.json | jq 'length, .[0:5]'
+
+# Trade history (should be mostly empty at start)
+curl -s "http://localhost:5000/api/paper-sim/trade-history?limit=50" \
+  -H "Authorization: Bearer $TOKEN" \
+  | tee docs/diagnostics/I7-VER/trade_history_start.json | jq '.trades | length'
+
+I7-VER-3 – Verify WebSocket Subscription & Tick Flow (Backend)
+
+Goal: Confirm that for the currently active paper positions:
+
+They are subscribed on the Kraken WS adapter
+
+They are receiving ticks
+
+WS ticks update the cache
+
+Cache updates broadcast to frontend
+
+Use the existing diagnostics:
+
+Subscription coverage (I7-WS-A + I7-WS-F):
+
+curl -s "http://localhost:5000/api/diagnostics/i7-ws/subscription-map?mode=paper" \
+  -H "Authorization: Bearer $TOKEN" \
+  | tee docs/diagnostics/I7-VER/subscription_map.json | jq '{summary, gaps}'
+
+curl -s "http://localhost:5000/api/diagnostics/i7-ws-f/coverage" \
+  -H "Authorization: Bearer $TOKEN" \
+  | tee docs/diagnostics/I7-VER/wsf_coverage.json | jq '{summary, health}'
+
+
+Confirm all active trade symbols are subscribed (not never_requested or stuck pending).
+
+Note any exceptions in the I7-VER report.
+
+Tick and pipeline stages (I7-WS-C):
+After ~2–3 minutes of runtime:
+
+curl -s "http://localhost:5000/api/diagnostics/i7-ws-c/trace-history" \
+  -H "Authorization: Bearer $TOKEN" \
+  > docs/diagnostics/I7-VER/trace_history.json
+
+cat docs/diagnostics/I7-VER/trace_history.json \
+  | jq '{ totalTraces: .totalTraces,
+          stageCounts: [.traces[].stages[].stage]
+            | group_by(.) | map({stage: .[0], count: length}) | sort_by(.stage) }'
+
+
+Verify that for at least several active symbols, you see stages 1,2,3,4 in traces:
+
+1 = INCOMING_WS_TICK
+
+2 = symbol mapped
+
+3 = cache updated
+
+4 = broadcast
+
+If some symbols only show engine stages (7/8) but no WS stages (1–4), note that in the report.
+
+Delivery parity check (I7-WS-D logs):
+
+In /tmp/logs/Start_application_*.log, confirm:
+
+[I7-WS-D][CACHE_WRITE] and [I7-WS-D][BROADCAST_SEND] are present.
+
+For WS-driven symbols, counts should be reasonably close (difference explained by 150ms throttle and REST updates).
+
+Capture a small excerpt of these logs into docs/diagnostics/I7-VER/i7-ws-d_sample.txt.
+
+I7-VER-4 – Verify Active Trades UI Updates in Real Time
+
+Now verify the frontend behavior.
+
+Open the client in the browser (whatever URL you normally use), log in as the test user (e.g. testuser123).
+
+Navigate to Active Trades (v2) tab.
+
+Open the browser dev tools console and watch for:
+
+Existing UI logs (e.g. [I6-UI] Price update received, I7-WS-C stage 5/6 logs if implemented).
+
+For at least one symbol that you know is subscribed and receiving WS ticks (from I7-WS-C):
+
+Watch its price column in Active Trades:
+
+Confirm it changes multiple times over a few minutes.
+
+Confirm the movement direction roughly matches the ticker updates in logs.
+
+Take at least 2 screenshots:
+
+docs/diagnostics/I7-VER/screenshots/active_trades_t0.png – soon after session start.
+
+docs/diagnostics/I7-VER/screenshots/active_trades_tN.png – several minutes later showing changed prices.
+
+(If the environment doesn’t support saving actual images, describe what you see in text instead.)
+
+If you see any symbols whose price does not change in UI while WS ticks are clearly arriving in backend logs, note:
+
+Symbol
+
+Approx time window
+
+Any relevant console log output
+
+in the I7-VER report.
+
+I7-VER-5 – Verify Trade Closures (Stop/Target Hits)
+
+This is the core business outcome check.
+
+Let the paper session run long enough for exits to happen (or until at least a few trades close). During this period, every ~5 minutes, capture:
+
+# Active trades snapshot
+curl -s "http://localhost:5000/api/paper-sim/active-trades" \
+  -H "Authorization: Bearer $TOKEN" \
+  > docs/diagnostics/I7-VER/active_trades_t${TS}.json
+
+# Trade history snapshot
+curl -s "http://localhost:5000/api/paper-sim/trade-history?limit=100" \
+  -H "Authorization: Bearer $TOKEN" \
+  > docs/diagnostics/I7-VER/trade_history_t${TS}.json
+
+
+where TS can be start, mid, end for simplicity.
+
+In the Trade History API responses, check for trades with:
+
+status = closed (or equivalent)
+
+exitReason / close_reason indicating TP hit or SL hit (names depend on your schema – inspect the existing data).
+
+Cross-check for at least 1–3 example trades:
+
+Confirm they existed earlier in active_trades_* and later appear closed in trade_history_*.
+
+Note symbol, side, entry price, TP/SL, and close price if available.
+
+In the frontend Trade History tab, confirm:
+
+You see closed trades accumulating.
+
+They correspond to what you see in the API data.
+
+If no trades close at all during a reasonable test run, note that clearly in the report and, if possible, inspect engine logs for [EXIT_EVAL] or equivalent exit evaluation logs to make sure the engine is trying to close as prices approach TP/SL.
+
+I7-VER-6 – Verify REST Fallback Behavior (I7-WS-E)
+
+We need to confirm that REST fallback is now an exception, not the primary price source.
+
+While the session is running, capture REST fallback metrics:
+
+curl -s -X GET "http://localhost:5000/api/diagnostics/i7-ws-e/rest-fallback-metrics" \
+  -H "Authorization: Bearer $TOKEN" \
+  > docs/diagnostics/I7-VER/ws_e_metrics.json
+
+cat docs/diagnostics/I7-VER/ws_e_metrics.json | jq '.'
+
+
+Note in the report:
+
+totalFallbacks
+
+Breakdown by reason: cache_stale, no_ws_subscription, cache_miss
+
+In Start_application_*.log, sample a few [I7-WS-E][REST_FALLBACK] lines and confirm:
+
+They are not firing continuously for the same symbol at high frequency.
+
+Reasons for fallback are consistent with expectations (e.g., occasional cache_stale, maybe some no_ws_subscription for pairs without WS).
+
+If any symbol shows constant fallback for the whole run, note that symbol and reason in the report.
+
+I7-VER-7 – Summarize WebSocket Health (I7-WS-F & I7-WS-G)
+
+Use existing endpoints to summarize overall WS health during this verification run:
+
+Coverage & health (WS-F):
+
+curl -s -X GET "http://localhost:5000/api/diagnostics/i7-ws-f/coverage" \
+  -H "Authorization: Bearer $TOKEN" \
+  > docs/diagnostics/I7-VER/ws_f_coverage_final.json
+
+curl -s -X GET "http://localhost:5000/api/diagnostics/i7-ws-f/health" \
+  -H "Authorization: Bearer $TOKEN" \
+  > docs/diagnostics/I7-VER/ws_f_health_final.json
+
+
+Frequency & unstable symbols (WS-G):
+
+curl -s -X GET "http://localhost:5000/api/diagnostics/i7-ws-g/frequency" \
+  -H "Authorization: Bearer $TOKEN" \
+  > docs/diagnostics/I7-VER/ws_g_frequency.json
+
+curl -s -X GET "http://localhost:5000/api/diagnostics/i7-ws-g/unstable" \
+  -H "Authorization: Bearer $TOKEN" \
+  > docs/diagnostics/I7-VER/ws_g_unstable.json
+
+
+No changes to behavior here – this is only to feed the final verification report.
+
+I7-VER-8 – Stop Session & Write the Verification Report
+
+Stop the paper trading session cleanly:
+
+TOKEN="…"
+curl -s -X POST "http://localhost:5000/api/paper-sim/stop" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" | jq '.'
+
+
+Or use the orchestration stop endpoint if applicable.
+
+Create the report file:
+
+docs/diagnostics/Phase-8.8.3-I7-VER_Report.md
+
+Minimum contents:
+
+1. Overview
+
+Date/time of test
+
+Duration of session (approx)
+
+Number of active positions at start
+
+2. WebSocket Subscription & Tick Flow
+
+Summary of I7-WS-A & I7-WS-F coverage
+
+Confirmation that at least several symbols had stages 1–4 in I7-WS-C
+
+Summary of I7-WS-D cache vs broadcast counts
+
+3. Active Trades UI Behavior
+
+Whether prices visibly updated in Active Trades
+
+Any symbols that did not move despite WS ticks
+
+Reference to screenshots / observations
+
+4. Trade Closures
+
+Number of trades closed during run
+
+Examples of trades that opened in Active Trades and later appeared closed in Trade History due to TP/SL
+
+Or: explicit statement that no trades closed and why you think that is (e.g., price ranges, very tight session, etc.)
+
+5. REST Fallback Behavior
+
+totalFallbacks and reason breakdown from I7-WS-E
+
+Statement on whether fallback is now occasional vs dominant
+
+6. WebSocket Health
+
+Summary of I7-WS-F /coverage and /health
+
+Summary of I7-WS-G frequency and unstable symbols
+
+7. Verdict
+
+Clear answer to:
+
+“Are Active Trades prices updating correctly in the UI with WebSocket prices?”
+
+“Are trades opening and closing correctly based on live prices?”
+
+“Is the REST fallback under control and only used as a backup?”
+
+Do NOT make any further code changes in this phase.
+The output of this phase is the report, logs, and snapshots.
+
+Acceptance Criteria for Phase 8.8.3-I7-VER
+
+✅ A single, clearly labeled report exists at:
+docs/diagnostics/Phase-8.8.3-I7-VER_Report.md
+
+✅ Report is based on:
+
+Real paper trading session
+
+Actual Active Trades UI observations
+
+Actual Trade History closures (or explicit note if none occurred)
+
+Current diagnostics (I7-WS-A/C/D/E/F/G)
+
+✅ No behavioral logic was changed; only diagnostics and documentation were used.
+
+✅ The report clearly states whether the system is ready to consider 8.8.3 closed or whether more targeted bugfixes are needed.
