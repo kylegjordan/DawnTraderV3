@@ -375,6 +375,7 @@ function IntegrityBanner({
   );
 }
 
+const normalizeSymbol = (s: string) => s.replace('/', '').toUpperCase();
 
 export default function ActiveTradesV2() {
   const { isPaper } = useTradingMode();
@@ -407,9 +408,10 @@ export default function ActiveTradesV2() {
     // Handle price_updated events for real-time price display (no full refetch needed)
     if (lastMessage.type === 'price_updated' && lastMessage.payload?.symbol) {
       const { symbol, price, timestamp } = lastMessage.payload;
+      const normalized = normalizeSymbol(symbol);
       setLivePrices(prev => ({
         ...prev,
-        [symbol]: { price, timestamp }
+        [normalized]: { price, timestamp }
       }));
       return; // Don't trigger full refetch for price updates
     }
@@ -499,7 +501,8 @@ export default function ActiveTradesV2() {
     if (!data?.positions) return [];
     
     return data.positions.map(position => {
-      const livePrice = livePrices[position.symbol];
+      const symbolNorm = normalizeSymbol(position.symbol);
+      const livePrice = livePrices[symbolNorm];
       if (livePrice) {
         // Update price and recalculate P/L
         const newCurrentPrice = livePrice.price;
