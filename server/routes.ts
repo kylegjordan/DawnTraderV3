@@ -7456,15 +7456,17 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
       
-      // Get active symbols from both paper and live modes
-      const [paperTrades, liveTrades] = await Promise.all([
-        storage.getOpenPaperTrades(),
+      // I7-PERSIST-FIX: Get active symbols from paper_sim_open_positions (actual data) + live trades
+      const [paperPositions, liveTrades] = await Promise.all([
+        storage.getPaperSimOpenPositions('paper'),
         storage.getActiveTrades('live')
       ]);
       const activeSymbols = [...new Set([
-        ...paperTrades.map(t => t.symbol),
+        ...paperPositions.map(t => t.symbol),
         ...liveTrades.map(t => t.symbol)
       ])];
+      
+      console.log(`[I7-PERSIST-FIX][COVERAGE] paperPositions=${paperPositions.length} liveTrades=${liveTrades.length} activeSymbols=${activeSymbols.length}`);
       
       const coverageMap = await krakenWebSocketAdapter.getI7CoverageMap(activeSymbols);
       const healthStatus = krakenWebSocketAdapter.getSubscriptionHealthStatus();
@@ -7497,13 +7499,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
       
-      // Get active symbols from both paper and live modes
-      const [paperTrades, liveTrades] = await Promise.all([
-        storage.getOpenPaperTrades(),
+      // I7-PERSIST-FIX: Get active symbols from paper_sim_open_positions (actual data) + live trades
+      const [paperPositions, liveTrades] = await Promise.all([
+        storage.getPaperSimOpenPositions('paper'),
         storage.getActiveTrades('live')
       ]);
       const activeSymbols = [...new Set([
-        ...paperTrades.map(t => t.symbol),
+        ...paperPositions.map(t => t.symbol),
         ...liveTrades.map(t => t.symbol)
       ])];
       
@@ -7528,13 +7530,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
       
-      // Get active symbols from both paper and live modes
-      const [paperTrades, liveTrades] = await Promise.all([
-        storage.getOpenPaperTrades(),
+      // I7-PERSIST-FIX: Get active symbols from paper_sim_open_positions (actual data) + live trades
+      const [paperPositions, liveTrades] = await Promise.all([
+        storage.getPaperSimOpenPositions('paper'),
         storage.getActiveTrades('live')
       ]);
       const activeSymbols = [...new Set([
-        ...paperTrades.map(t => t.symbol),
+        ...paperPositions.map(t => t.symbol),
         ...liveTrades.map(t => t.symbol)
       ])];
       
@@ -7558,13 +7560,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
       
-      // Get active symbols from both paper and live modes
-      const [paperTrades, liveTrades] = await Promise.all([
-        storage.getOpenPaperTrades(),
+      // I7-PERSIST-FIX: Get active symbols from paper_sim_open_positions (actual data) + live trades
+      const [paperPositions, liveTrades] = await Promise.all([
+        storage.getPaperSimOpenPositions('paper'),
         storage.getActiveTrades('live')
       ]);
       const activeSymbols = [...new Set([
-        ...paperTrades.map(t => t.symbol),
+        ...paperPositions.map(t => t.symbol),
         ...liveTrades.map(t => t.symbol)
       ])];
       
@@ -7629,6 +7631,51 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     } catch (error: any) {
       console.error('[I7-WS-F] Error stopping monitoring:', error);
       res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // ===== Phase 8.8.3-I7-PERSIST-FIX: Paper Trade Persistence Diagnostics =====
+
+  // GET /api/diagnostics/i7-persist/status - Phase 8.8.3-I7-PERSIST-FIX: Compare engine vs DB position counts
+  apiRouter.get('/diagnostics/i7-persist/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      // Get positions from paper_sim_open_positions (what the engine uses)
+      const paperSimPositions = await storage.getPaperSimOpenPositions('paper');
+      
+      // Get positions from paper_trades table (legacy/unused)
+      const paperTrades = await storage.getOpenPaperTrades();
+      
+      // Get live trades for comparison
+      const liveTrades = await storage.getActiveTrades('live');
+      
+      res.json({
+        ok: true,
+        phase: '8.8.3-I7-PERSIST-FIX',
+        timestamp: new Date().toISOString(),
+        description: 'Paper trade persistence status - comparing data sources',
+        paper_sim_open_positions: {
+          count: paperSimPositions.length,
+          symbols: paperSimPositions.map(p => p.symbol),
+          note: 'This is the CORRECT table used by paper execution engine'
+        },
+        paper_trades_table: {
+          count: paperTrades.length,
+          symbols: paperTrades.map(t => t.symbol),
+          note: 'This was the WRONG table being used by I7-WS-F (now fixed)'
+        },
+        live_trades: {
+          count: liveTrades.length,
+          symbols: liveTrades.map(t => t.symbol)
+        },
+        fix_applied: 'I7-WS-F endpoints now use getPaperSimOpenPositions instead of getOpenPaperTrades'
+      });
+    } catch (error: any) {
+      console.error('[I7-PERSIST] Error fetching status:', error);
+      res.status(500).json({
+        ok: false,
+        phase: '8.8.3-I7-PERSIST-FIX',
+        error: error.message
+      });
     }
   });
 

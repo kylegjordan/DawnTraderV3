@@ -1,0 +1,306 @@
+Phase 8.8.3 – I7-PERSIST-FIX
+
+Restore paper trade DB persistence so WebSocket + guardrails have a real source of truth
+
+Goal: Make sure paper trades are properly written to and updated in the paper_trades table so:
+
+open trades exist in DB (not only in memory),
+
+WebSocket coverage (I7-WS-F) can subscribe to all active symbols,
+
+future duplicate-prevention logic (I7-DUP-FIX) can rely on the DB.
+
+Scope: Paper simulation only. Do not change live trading order persistence or production trade tables.
+
+P0 – Files to Inspect
+
+server/services/paper-execution-engine.ts
+
+server/storage/* (whatever contains paper trade repositories/models)
+
+server/routes.ts (for paper-sim endpoints)
+
+Existing DB migration or model for paper_trades (if present)
+
+P1 – Add a Persistence Diagnostic Endpoint
+
+Objective: Give us a simple way to see “engine vs DB” open-trade counts & symbols.
+
+In server/services/paper-execution-engine.ts, add a public helper:
+
+// I7-PERSIST-FIX: diagnostics
+export function getOpenPositionsSnapshot() {
+  return {
+    count: paperPositions.size ?? paperPositions.length ?? 0,
+    symbols: Array.from(paperPositions.values?.() ?? paperPositions ?? []).map(p => p.symbol),
+  };
+}
+
+
+Use the real in-memory collection name for open paper positions (usually a Map or array).
+
+symbol should be the same “internal” symbol used in active-trades (e.g. FORTHUSD, EUR/USD, etc).
+
+In server/routes.ts add a diagnostics endpoint:
+
+// I7-PERSIST-FIX diagnostics
+router.get('/api/diagnostics/i7-persist/status', authMiddleware, async (req, res) => {
+  try {
+    const engineSnapshot = paperExecutionEngine.getOpenPositionsSnapshot();
+
+    // Replace with the real storage helper for paper_trades
+    const dbRows = await storage.paperTrades.getOpenPaperTrades(); 
+    const dbSnapshot = {
+      count: dbRows.length,
+      symbols: dbRows.map(r => r.symbol),
+    };
+
+    return res.json({
+      ok: true,
+      phase: '8.8.3-I7-PERSIST-FIX',
+      engine: engineSnapshot,
+      db: dbSnapshot,
+    });
+  } catch (err) {
+    console.error('[I7-PERSIST][STATUS_ERROR]', err);
+    return res.status(500).json({
+      ok: false,
+      phase: '8.8.3-I7-PERSIST-FIX',
+      error: (err as Error).message,
+    });
+  }
+});
+
+
+If you don’t have storage.paperTrades.getOpenPaperTrades(), create a simple wrapper around your DB layer that returns status = 'open' rows.
+
+Restart the app and call:
+
+GET /api/diagnostics/i7-persist/status
+
+
+You should expect current behavior to show:
+
+engine.count = 15 (or whatever open positions exist),
+
+db.count = 0.
+
+P2 – Implement DB Write on Paper Trade OPEN
+
+Objective: When the engine opens a paper position, also insert a row in paper_trades.
+
+In server/storage/ create or extend a repository for paper trades, if it doesn’t exist yet:
+
+// server/storage/paper-trades-repo.ts
+import db from './db'; // use your existing db client / ORM
+
+export interface PaperTradeRecord {
+  id?: number;
+  symbol: string;
+  side: 'long' | 'short';
+  entryPrice: number;
+  quantity: number;
+  status: 'open' | 'closed';
+  openedAt: Date;
+  closedAt?: Date | null;
+  strategy?: string | null;
+  slotNumber?: number | null;
+  // add any other fields you already track
+}
+
+export async function insertOpenPaperTrade(rec: PaperTradeRecord) {
+  const [row] = await db('paper_trades')
+    .insert({
+      symbol: rec.symbol,
+      side: rec.side,
+      entry_price: rec.entryPrice,
+      quantity: rec.quantity,
+      status: 'open',
+      opened_at: rec.openedAt,
+      strategy: rec.strategy ?? null,
+      slot_number: rec.slotNumber ?? null,
+    })
+    .returning('*'); // adjust for your DB/ORM
+
+  return row;
+}
+
+export async function getOpenPaperTrades() {
+  return db('paper_trades').where({ status: 'open' });
+}
+
+export async function updatePaperTradeById(id: number, patch: Partial<PaperTradeRecord>) {
+  const [row] = await db('paper_trades')
+    .where({ id })
+    .update({
+      // only include fields from patch that are not undefined
+      ...(patch.status && { status: patch.status }),
+      ...(patch.closedAt && { closed_at: patch.closedAt }),
+      ...(patch.entryPrice && { entry_price: patch.entryPrice }),
+      ...(patch.quantity && { quantity: patch.quantity }),
+    })
+    .returning('*');
+  return row;
+}
+
+
+Reuse your existing DB conventions (column naming, ORM style).
+
+In paper-execution-engine.ts, locate the code path where a paper trade is opened. Usually something like openPosition, openPaperPosition, executePaperOrder, etc.
+
+After the in-memory position object is created and added to the engine’s map/list, add:
+
+import * as paperTradesRepo from '../storage/paper-trades-repo';
+
+// Inside the open position flow, after the in-memory position is created:
+try {
+  const dbRow = await paperTradesRepo.insertOpenPaperTrade({
+    symbol: position.symbol,
+    side: position.side,               // adapt field names
+    entryPrice: position.entryPrice,
+    quantity: position.quantity,
+    status: 'open',
+    openedAt: new Date(position.openedAt ?? Date.now()),
+    strategy: position.strategyId ?? position.strategyName ?? null,
+    slotNumber: position.slotNumber ?? null,
+  });
+
+  // Store the DB id back on the in-memory position so we can update it later
+  (position as any).dbId = dbRow.id;
+
+  console.log('[I7-PERSIST][OPEN_DB_WRITE]', {
+    symbol: position.symbol,
+    dbId: dbRow.id,
+  });
+} catch (err) {
+  console.error('[I7-PERSIST][OPEN_DB_ERROR]', position.symbol, err);
+  // Do NOT fail the trade open, but log clearly; this is diagnostics, not risk logic.
+}
+
+
+Important: this is paper only. Guard with a flag if the same engine handles live trades:
+
+if (mode === 'paper') { /* do DB writes */ }
+
+P3 – Implement DB Update on Paper Trade CLOSE
+
+Objective: When the engine closes a paper trade, mark the corresponding DB row as closed and set closed_at.
+
+Find the close/exit logic in paper-execution-engine.ts – functions like closePosition, exitTrade, or where status changes to closed and the position is removed from the in-memory map.
+
+After a position is closed in memory, add:
+
+if ((position as any).dbId) {
+  try {
+    await paperTradesRepo.updatePaperTradeById((position as any).dbId, {
+      status: 'closed',
+      closedAt: new Date(),
+    });
+    console.log('[I7-PERSIST][CLOSE_DB_WRITE]', {
+      symbol: position.symbol,
+      dbId: (position as any).dbId,
+    });
+  } catch (err) {
+    console.error('[I7-PERSIST][CLOSE_DB_ERROR]', position.symbol, err);
+  }
+} else {
+  console.warn('[I7-PERSIST][CLOSE_NO_DBID]', {
+    symbol: position.symbol,
+    reason: 'position.dbId missing; open flow may have failed to persist',
+  });
+}
+
+
+Do not change trading logic or exit conditions — this is only adding persistence side-effects.
+
+P4 – Wire I7-WS-F to Use getOpenPaperTrades() (If Not Already)
+
+NOTE: I7-WS-F already reads from storage; we’re just ensuring it uses the new repo for clarity.
+
+In kraken-websocket-adapter.ts (or whichever file implements I7-WS-F coverage checks), replace any direct DB code for open paper trades with:
+
+const openPaperTrades = await paperTradesRepo.getOpenPaperTrades();
+const symbols = openPaperTrades.map(t => t.symbol);
+
+
+Keep existing behavior for live trades unchanged.
+
+P5 – Verification Steps
+
+After implementing P2–P4, run this full verification sequence.
+
+Reset state
+
+POST /api/paper-sim/stop
+POST /api/diagnostics/i7-ws/reset-tracking
+DELETE or TRUNCATE paper_trades      # optional in dev
+
+
+Start a fresh paper simulation
+
+POST /api/paper-sim/start { "mode": "new" }
+
+
+Wait for 10–20s, then call:
+
+GET /api/paper-sim/active-trades
+GET /api/diagnostics/i7-persist/status
+
+
+Expect:
+
+engine.count ≈ number of open positions (e.g. 15)
+
+db.count = same number
+
+engine.symbols and db.symbols should match (order doesn’t matter).
+
+Check the DB directly (if you have SQL console):
+
+SELECT status, COUNT(*) 
+FROM paper_trades 
+GROUP BY status;
+
+
+Expect at least one row with status = 'open'.
+
+Verify WebSocket coverage now sees symbols
+
+GET /api/diagnostics/i7-ws-f/coverage
+
+
+Expect:
+
+coverage.summary.total > 0
+
+Subscribed count equals or approaches total.
+
+Close one or more paper trades via normal UI/actions, then re-run:
+
+GET /api/diagnostics/i7-persist/status
+SELECT status, COUNT(*) FROM paper_trades GROUP BY status;
+
+
+Expect:
+
+db.count decreases for open,
+
+At least one status = 'closed' row.
+
+Watch logs for:
+
+[I7-PERSIST][OPEN_DB_WRITE]
+
+[I7-PERSIST][CLOSE_DB_WRITE]
+
+No frequent [OPEN_DB_ERROR] or [CLOSE_DB_ERROR].
+
+P6 – Safety & Non-Goals
+
+Do not change live trading order persistence (anything tied to real exchanges / real money).
+
+Do not alter execution logic, SL/TP rules, or risk checks.
+
+This phase does not yet add duplicate-prevention. That will come in I7-DUP-FIX-B, which will rely on the DB being correct.
+
+If any unexpected errors occur in DB writes, log them, but do not stop the trading engine — paper trades should continue in memory; persistence is diagnostic-critical but not allowed to crash the app.
