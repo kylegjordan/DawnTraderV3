@@ -1,0 +1,220 @@
+Phase 8.8.3-I4 — RTB Block Breakdown + Price Tick Engine Health
+
+(Metrics & data-flow only — no strategy / queue / guardrail behavior changes)
+
+Goal:
+
+Make the Ready-to-Buy block breakdown UI accurately reflect real RTB metrics.
+
+Verify and, if needed, correct the price tick engine so open trades get timely price updates.
+
+Do not change RTB queue semantics, trading guardrails, or strategy behavior in this phase.
+
+A. RTB Block Breakdown Integrity (UI ↔ Backend)
+
+A1. Inspect backend RTB metrics shape
+
+Open:
+
+server/services/rtb-metrics-service.ts
+
+server/routes.ts (the /api/diagnostics/rtb-metrics endpoint)
+
+Confirm what /api/diagnostics/rtb-metrics returns. It should be something logically equivalent to:
+
+type RtbSummary = {
+  attemptsTotal: number;
+  openedTotal: number;
+  blockedTotal: number;
+  blockedByReason: { [reason: string]: number };
+  blockedByStrategy: { [strategy: string]: number };
+};
+
+
+If the names differ (e.g., attempts, opened, blocked vs attemptsTotal), do not change the semantics, just note the actual JSON shape for the next step.
+
+Constraint: Do not change how metrics are recorded in RtbMetricsService in this phase. Only expose and wire them correctly.
+
+A2. Make RTB metrics endpoint the single source of truth
+
+In server/routes.ts, ensure /api/diagnostics/rtb-metrics returns the summary object from RtbMetricsService (e.g., getSummary()), including blockedByReason and blockedByStrategy.
+
+Confirm that no other endpoint is being used by the UI for RTB totals or breakdown. If there is any older RTB diagnostics endpoint that the UI could still be calling (e.g. /api/diagnostics/rtb-blocks or something similar), leave it in place for diagnostics, but the UI should not depend on it anymore.
+
+A3. Align the frontend RTB Execution Metrics UI
+
+Open the RTB metrics UI component, e.g.:
+
+client/src/components/trading/execution-metrics.tsx
+(or whatever file renders the “RTB Execution Metrics / Attempts / Blocked Breakdown (All Reasons)” section.)
+
+Find where it:
+
+Fetches RTB data (the API call), and
+
+Defines the list of block reasons used to render rows (often an ALL_BLOCK_REASONS or similar array).
+
+Update the RTB metrics UI to:
+
+Use /api/diagnostics/rtb-metrics as its data source.
+
+Read top-line numbers from the summary object returned by that endpoint (e.g. attemptsTotal, openedTotal, blockedTotal or the existing equivalent names).
+
+Render the block breakdown from blockedByReason and the strategy breakdown from blockedByStrategy.
+
+Block reason list alignment (critical):
+
+Build the block reason rows from the keys of blockedByReason, not from a manually hard-coded list that can drift.
+
+If you need labels/descriptions, you can map enum keys → human-readable labels, but the keys themselves (e.g., MAX_TRADES, COOLDOWN, ENGINE_STOPPING, etc.) must exactly match the backend’s TradeSafetyResultCode.
+
+Ensure all reasons known to RtbMetricsService appear in the UI table if their counts are > 0.
+
+Constraint: We’re not changing what counts as a “block”, only how it’s displayed. No changes to guardrail logic in this phase.
+
+A4. Enforce and display invariants
+
+Using the data returned from /api/diagnostics/rtb-metrics, make sure the UI computes:
+
+blockedTotalUI = sum(blockedByReason values)
+
+invariantUI: attemptsTotal === openedTotal + blockedTotal
+
+For now, this invariant can just be asserted in code or logged to console in dev builds; no need for a visible warning banner yet. The important part:
+
+The top-line “Blocked” value in the RTB metrics panel must match blockedTotal.
+
+The sum of all visible block reasons must equal that same blockedTotal.
+
+If you detect a mismatch, log a warning with a clear tag:
+
+console.warn('[8.8.3-I4][RTB_METRICS_MISMATCH]', {
+  attemptsTotal,
+  openedTotal,
+  blockedTotal,
+  sumByReason,
+});
+
+B. Price Tick Engine Health & Alignment
+
+Goal: Confirm that open trades receive timely price updates from the price engine, and that any slowness is diagnosed and, if it’s due to a bug/wiring issue, corrected.
+
+We will not change strategy behavior, SL/TP logic, or queue semantics in this phase — only the data-flow and diagnostics around price ticks.
+
+B1. Inspect current tick engine behavior
+
+Open the tick-related services:
+
+server/services/kraken-websocket-adapter.ts
+
+server/services/ws-price-engine / similar (whatever backs /api/diagnostics/ws-price-engine)
+
+Any price cache / tick store that feeds the trading engine and UI (e.g. price-tick.ts, price-cache.ts, or similar).
+
+Confirm:
+
+How incoming Kraken WS ticks are normalized (symbol mapping, base/quote).
+
+Where they are stored (in-memory map, cache object).
+
+How the “current price” for a symbol is exposed to:
+
+The execution engine (for SL/TP checks), and
+
+The UI Active Trades (for the “Current” price column).
+
+Make sure there is a single source of truth for the current price per symbol (no separate, slowly-updated cache for UI vs engine).
+
+B2. Enrich /api/diagnostics/ws-price-engine with timing stats
+
+Without altering how trades are executed, extend the diagnostics endpoint used in ws_price_engine.json so that, for each active symbol, it includes:
+
+lastTickTime (ISO timestamp)
+
+lastTickAgeMs (now − lastTickTime in ms)
+
+ticksPerMinute (over a recent sliding window, e.g., last 5–10 minutes if available)
+
+source (kraken_ws vs fallback)
+
+The existing JSON structure can be extended; don’t remove any current fields that other diagnostics might rely on.
+
+This will let us see whether slow UI price changes are due to:
+
+genuinely sparse market ticks, or
+
+a bottleneck in ingestion or propagation.
+
+B3. Ensure UI current price uses the live price cache
+
+Open the Active Trades UI component and its backing data-fetch logic, e.g.:
+
+client/src/components/trading/active-trades-table.tsx (or equivalent), and
+
+The server API handler for /api/paper-sim/open-positions / /api/trades/open that supplies the current price value shown in the UI.
+
+Confirm that the currentPrice / current field returned for each open position is derived from:
+
+The same price cache that ws-price-engine reports, with minimal delay.
+
+If instead the UI is reading from a slower, stage-3 or snapshot-based cache that only updates on a 30s or 60s loop, re-wire the server-side API so that:
+
+The open positions endpoint looks up the latest price from the live price cache (used by the engine) at request time.
+
+Do not change how often ticks are processed — only which value the UI reads.
+
+Constraint: No changes to SL/TP logic or trade-trigger intervals in this phase, only making sure the UI and diagnostics are seeing the true current price.
+
+B4. Add minimal logging to detect tick staleness
+
+Add a lightweight periodic log (e.g. every 60 seconds) from the price engine:
+
+Tag: [8.8.3-I4][PRICE_TICK_HEALTH]
+
+For each symbol that currently has an open paper position, log:
+
+{
+  "symbol": "XYZ/USDT",
+  "lastTickAgeMs": 1234,
+  "ticksPerMinute": 7.5,
+  "source": "kraken_ws"
+}
+
+
+or a concise aggregate such as min/avg/max lastTickAgeMs across all open symbols.
+
+This lets us validate whether “prices rarely update” is because ticks aren’t arriving or because the UI isn’t being fed the freshest values.
+
+C. Quick Sanity Test After I4
+
+After implementing A & B:
+
+Short paper run (10–15 minutes is fine)
+
+Starting balance around $800 (same conditions as before).
+
+Let the system run with auto-trading on.
+
+During the run:
+
+Open the RTB Execution Metrics panel and confirm:
+
+Top metrics (Attempts / Opened / Blocked) are non-zero.
+
+Block Breakdown (All Reasons) shows non-zero counts and totals that match the top “Blocked” value.
+
+After ~10–15 minutes, export:
+
+diagnostics/rtb_metrics.json
+
+diagnostics/rtb_blocks.json (if still present)
+
+diagnostics/ws_price_engine.json
+
+Confirm in the logs:
+
+[8.8.3-I4][RTB_METRICS_MISMATCH] does not appear, or if it does, note the values.
+
+[8.8.3-I4][PRICE_TICK_HEALTH] shows reasonable lastTickAgeMs (< a few seconds) and non-zero ticksPerMinute for symbols with open trades.
+
+No additional behavior changes or long diagnostic sessions are required for this phase.
