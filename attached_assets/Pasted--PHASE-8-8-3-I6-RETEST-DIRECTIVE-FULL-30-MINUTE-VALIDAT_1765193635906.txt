@@ -1,0 +1,274 @@
+✅ PHASE 8.8.3-I6 — RETEST DIRECTIVE (FULL 30-MINUTE VALIDATION RUN)
+
+Addressed to: Replit
+User Credentials:
+
+username: testuser123
+
+password: SecurePass123!
+
+📌 OBJECTIVE
+
+Validate the complete I6 live-price pipeline under sustained live trading conditions.
+This test confirms:
+
+Every price used by the system is live and sourced through getPriceWithFallback()
+
+All priceage & source diagnostics are correct
+
+SL/TP evaluations use live prices exclusively
+
+PnL calculations use live prices exclusively
+
+Active trades endpoint shows correct price + priceAgeMs
+
+Portfolio valuation uses live prices
+
+WebSocket price ticks remain fresh over a 30-minute run
+
+All fallback types are logged correctly (none / rest_fallback / entry_fallback)
+
+No stale DB values leak into any endpoint
+
+WebSocket subscribe/unsubscribe behavior remains correct
+
+This is a pure test. No code changes should be made.
+
+📂 OUTPUT DIRECTORY
+
+Create:
+
+docs/diagnostics/phase-8.8.3-I6-full-retest/
+
+
+All artifacts (JSON files + test report) must go here.
+
+🧹 STEP 1 — FULL RESET
+
+Authenticate using test credentials
+
+Stop any running simulation
+
+Reset diagnostics:
+
+/api/diagnostics/trade-lifecycle/reset
+
+/api/diagnostics/rtb-metrics/reset
+
+/api/diagnostics/rtb-blocks/reset (if exists)
+
+Clear DB tables:
+
+DELETE FROM paper_sim_open_positions;
+DELETE FROM paper_sim_trades;
+DELETE FROM paper_sim_sessions;
+
+
+Save clean snapshots:
+
+Save these into the I6 directory:
+
+sim_status_initial.json
+
+open_positions_initial.json
+
+▶️ STEP 2 — START CLEAN PAPER SIMULATION
+
+Start:
+
+POST /api/paper-sim/start   { "mode": "new" }
+
+
+Then save:
+
+sim_status_start.json
+
+Wait 5 seconds to allow pricing and scanning engines to initialize.
+
+⏱ STEP 3 — RUN A FULL 30-MINUTE TRADING SESSION
+
+Important: Do NOT stop the simulation. Do NOT refresh the workflow. Do NOT restart the app.
+
+During this 30-minute window, the following must be running:
+
+✔ WebSocket price feed
+✔ scanning engine
+✔ strategy evaluation
+✔ trade-open pipeline
+✔ SL/TP evaluation
+✔ fallback diagnostics
+✔ I6 logs capturing pricing behavior
+
+After 30 minutes, proceed automatically to Step 4.
+
+📸 STEP 4 — MID-RUN SNAPSHOT (SAVE ALL DATA)
+
+At the 30-minute mark, save the following:
+
+1. Simulation status
+
+sim_status_running.json
+
+2. Active trades with live prices
+
+open_positions_running.json
+
+3. RTB metrics snapshot
+
+rtb_metrics.json
+
+4. I5 Block Log
+
+rtb_blocks.json
+
+5. Trade Lifecycle Events (I1)
+
+trade_lifecycle.json
+
+6. WebSocket linkage state (I5)
+
+ws_linkage.json
+
+7. Price Engine State (I5/I6)
+
+ws_price_engine.json
+
+All files must be saved to the I6 directory.
+
+🛑 STEP 5 — HARD STOP VALIDATION
+
+Stop the simulation:
+
+POST /api/paper-sim/stop
+
+
+Wait 5 seconds.
+
+Then save:
+
+1. Post-stop sim status
+
+sim_status_after_stop.json
+
+2. Post-stop open positions
+
+open_positions_after_stop.json
+
+3. Trade lifecycle after stop
+
+trade_lifecycle_after_stop.json
+
+4. WebSocket linkage after stop
+
+ws_linkage_after_stop.json
+
+🚨 STEP 6 — FORCE-CLEAR ANY STRANDED POSITIONS
+
+Call:
+
+POST /api/paper-sim/force-clear-stranded
+
+
+Save resulting open-positions again if needed.
+
+Expected result: 0 stranded positions.
+
+🧪 STEP 7 — VERIFY LIVE PRICE PIPELINE (LOG ANALYSIS)
+
+Greps must confirm:
+
+Live Pricing Used Everywhere
+
+Look for:
+
+[8.8.3-I6][ENGINE_LIVE_PRICE]
+[8.8.3-I6][ENGINE_PNL_CALC]
+[8.8.3-I6][EXIT_EVAL]
+[8.8.3-I6][PORTFOLIO_LIVE_PRICE]
+
+Correct fallback types
+
+Search for:
+
+fallbackType=none
+fallbackType=rest_fallback
+fallbackType=entry_fallback
+
+WebSocket health
+
+Look for:
+
+[8.8.3-I5][TICK_ARRIVE]
+[8.8.3-I4][PRICE_TICK_HEALTH]
+
+Correct subscribe/unsubscribe behavior
+
+Greps:
+
+[KrakenWS] Subscribed
+[KrakenWS] Unsubscribed
+
+Correct SL/TP behavior
+
+Greps:
+
+[8.8.3-I6][EXIT_EVAL]
+distance_to_sl=
+distance_to_tp=
+
+📄 STEP 8 — GENERATE THE OFFICIAL RETEST REPORT
+
+Save as:
+
+docs/diagnostics/phase-8.8.3-I6-full-retest/TEST_REPORT.md
+
+
+The report must include:
+
+Required Sections
+
+Start/stop timestamps
+
+Number of trades opened
+
+Number of SL/TP closes
+
+Number of force closes
+
+Number of live-price diagnostic logs
+
+WebSocket tick frequency summary
+
+Price fallback usage summary
+
+Confirmation that no DB pricing leaked
+
+Confirmation all positions closed at stop
+
+Summary of any anomalies observed
+
+📌 Expected Success Criteria
+
+To consider I6 fully validated:
+
+Active-Trades endpoint shows fresh prices and priceAgeMs < 3000ms
+
+SL/TP logic fires using live prices (confirmed via logs)
+
+Portfolio summary uses live prices
+
+No stale DB prices anywhere
+
+WebSocket ticks consistently received
+
+FallbackType=none is dominant
+
+FallbackType=rest_fallback appears only occasionally
+
+FallbackType=entry_fallback should be extremely rare
+
+No orphaned symbols or subscriptions
+
+Hard stop clears everything
+
+If any of these criteria fail, stop and report the anomaly.

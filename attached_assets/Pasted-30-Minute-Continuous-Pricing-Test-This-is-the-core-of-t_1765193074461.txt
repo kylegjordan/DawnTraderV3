@@ -1,0 +1,143 @@
+30-Minute Continuous Pricing Test
+
+This is the core of the I6 retest.
+
+During the 30 minutes you MUST NOT:
+
+Restart the workflow
+
+Reload the server
+
+Restart WebSocket adapter
+
+Reset diagnostics
+
+Touch DB tables
+
+During these 30 minutes the system should:
+
+Open trades normally
+
+Subscribe each symbol to Kraken WebSocket
+
+Update prices every ~1.5–3 seconds
+
+Feed live prices into:
+
+active trades endpoint
+
+trade lifecycle engine
+
+SL/TP evaluation
+
+current PNL calculations
+
+Save mid-run snapshots (after 30 minutes):
+
+sim_status_running.json
+
+open_positions_running.json
+
+rtb_metrics.json
+
+rtb_blocks.json
+
+trade_lifecycle.json
+
+ws_linkage.json
+
+ws_price_engine.json
+
+These confirm that:
+
+Prices are flowing from WebSocket → cache → trade engine
+
+Active trades endpoint returns live prices
+
+No stale avg_price or DB-stored price appears
+
+WebSocket subscriptions match open positions
+
+Tick timing is healthy (min, max, avg age < 4 seconds)
+
+STEP 5 — Hard Stop
+
+Run:
+
+POST /api/paper-sim/stop
+
+
+Wait: 5 seconds
+
+Save:
+
+sim_status_after_stop.json
+
+open_positions_after_stop.json
+
+trade_lifecycle_after_stop.json
+
+ws_linkage_after_stop.json
+
+Expected:
+Metric	Expected
+Remaining open positions	0
+WebSocket subscriptions	0
+Force-close count	matches open position count
+No “Open – Not Closed Yet” entries	NONE
+STEP 6 — Validate Pricing Pipeline
+
+Replit must verify:
+
+1. Active trades endpoint uses live prices
+
+In server/routes.ts:
+
+currentPrice = livePricingAdapter.getPriceWithFallback(symbol)
+
+2. SL/TP evaluation uses live prices
+
+In paper-execution-engine.ts:
+
+checkOpenPositions()
+evaluateStopLoss()
+evaluateTakeProfit()
+
+
+All must use live prices only.
+
+3. Portfolio summary uses live prices
+livePricingAdapter.getPrice
+
+4. No code path anywhere uses:
+
+position.currentPrice from DB
+
+cached DB values
+
+stale route-level computed prices
+
+STEP 7 — Provide Test Results
+
+Replit must deliver all 14 JSON files plus:
+
+docs/diagnostics/Phase-8.8.3-I6_Retest_Report.md
+
+
+Report must answer:
+
+PASS/FAIL Questions
+
+Do all active trades receive real-time pricing updates?
+
+Does the UI show live prices (not DB prices)?
+
+Are SL/TP triggers evaluated using live prices?
+
+Did any position fail to update price within 5 seconds?
+
+Did WebSocket subscriptions remain active the entire session?
+
+Did any legacy file interfere with pricing?
+
+After stop: were ALL positions closed and WS unsubscribed?
