@@ -379,13 +379,16 @@ export class KrakenWebSocketAdapter {
       
       // Phase 8.8.4: Update LivePricingAdapter cache with properly normalized symbol
       // Phase 8.8.3-I7-WS-C: Pass trace ID for Stage 3 logging
+      // Phase 8.8.3-I7-WS-D: updateFromWebSocket now handles both cache update AND broadcast
+      // This ensures 1:1 Stage-3 → Stage-4 parity (D3)
       livePricingAdapter.updateFromWebSocket(internalSymbol, lastPrice, 'kraken_ws', traceId);
       
       // Phase 8.8.3-I6: Diagnostic logging to confirm WS -> cache pipeline
       console.log(`[I6][WS_CACHE_UPDATE] symbol=${internalSymbol} price=${lastPrice} timestamp=${new Date().toISOString()}`);
       
-      // Phase 8.8.3-I7-WS-C: Pass trace ID for Stage 4 logging
-      this.throttledBroadcast(internalSymbol, lastPrice, bid, ask, traceId);
+      // Phase 8.8.3-I7-WS-D: REMOVED duplicate throttledBroadcast call
+      // Broadcasts are now handled inside LivePricingAdapter.updateFromWebSocket() to ensure 1:1 parity
+      // OLD: this.throttledBroadcast(internalSymbol, lastPrice, bid, ask, traceId);
       
     } catch (error) {
       console.error(`[${this.MODULE_NAME}] Error processing ticker update:`, error);

@@ -1,0 +1,96 @@
+🚨 PHASE 8.8.3-I7-WS-D — Correct the WebSocket Tick Delivery Pipeline
+
+Objective:
+Fix the internal LivePricingAdapter logic so that every incoming WebSocket tick reaches both:
+
+the price cache, and
+
+the frontend broadcast pipeline,
+unless explicitly filtered by business logic.
+
+D1 — Remove or relax throttling in LivePricingAdapter
+
+Locate the throttled broadcast logic. It currently limits broadcasts to ~1.5 seconds.
+
+Change:
+
+Replace throttling with a minimum broadcast interval of 100–200 ms, OR
+
+Broadcast every WebSocket tick, whichever is simpler.
+
+D2 — Ensure cache updates on EVERY WebSocket tick
+
+Currently, cache only updates if:
+
+price age threshold passes
+
+or delta is large enough
+
+Change:
+
+Update the cache on every WS tick, even if price delta is small.
+
+Preserve price age, source, timestamp.
+
+D3 — Ensure broadcasts occur for EVERY cache update
+
+Stage-3 → Stage-4 transition must be 1:1.
+
+If cache updates, broadcast MUST fire.
+
+D4 — Remove any suppression due to:
+
+"priceAgeMs"
+
+"last broadcast timestamp"
+
+"same price as before"
+
+"insufficient delta"
+
+"WS tick suppressed because REST was used recently"
+
+No more suppression except explicit business logic you define later.
+
+D5 — Force the engine (Stage-7) to read WS prices first
+
+Currently, the engine almost always hits REST fallback.
+
+Fix the logic so:
+
+If WS cache has a value ≤ 2 seconds old → use that.
+
+Only fall back to REST if:
+
+symbol has no WS feed
+
+WS feed stalled ≥ 2 seconds
+
+WS mapping failed
+
+D6 — Add logs to verify fixes
+
+Add logs for:
+
+[I7-WS-D][CACHE_WRITE] symbol=..., price=..., source=kraken_ws
+[I7-WS-D][BROADCAST_SEND] symbol=..., price=...
+[I7-WS-D][ENGINE_WS_PRICE] symbol=..., price=...
+
+
+Ensure logs confirm:
+
+Stage-1 = Stage-3 = Stage-4 counts match
+
+Stage-7 increasingly uses kraken_ws, not kraken_rest
+
+D7 — No mutation to trading engine logic
+
+Only fix cache & broadcast pipeline.
+
+🚀 EXPECTED BEHAVIOR AFTER THE FIX
+Component	Expected Behavior
+WebSocket → Cache	100% of WS ticks write into cache
+Cache → Broadcast	100% of cache updates broadcast
+Engine Price Reads	90%+ from WS, <10% from REST
+Frontend	Prices update every 300–800 ms
+Trade Closures	SL/TP hits become frequent again

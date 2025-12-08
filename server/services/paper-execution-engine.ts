@@ -323,8 +323,9 @@ export class PaperExecutionEngine {
 
     for (const position of openPositions) {
       try {
-        // Phase 8.8.3-B3.6: Use WebSocket cache with REST fallback (5 second stale threshold)
-        const priceResult = await livePricingAdapter.getPriceWithFallback(position.symbol, 5000);
+        // Phase 8.8.3-I7-WS-D (D5): Use WebSocket cache FIRST with 2-second stale threshold
+        // Only fall back to REST if WS cache is stale > 2 seconds
+        const priceResult = await livePricingAdapter.getPriceWithFallback(position.symbol, 2000);
         
         let currentPrice: number;
         let priceSource: string;
@@ -338,6 +339,11 @@ export class PaperExecutionEngine {
           }
           currentPrice = priceResult.price;
           priceSource = priceResult.source;
+          
+          // Phase 8.8.3-I7-WS-D (D6): Log engine WS price usage
+          if (priceSource === 'kraken_ws') {
+            console.log(`[I7-WS-D][ENGINE_WS_PRICE] symbol=${position.symbol} price=${currentPrice}`);
+          }
         } else {
           // Phase 8.8.3-I7: Fallback to Kraken REST if cache unavailable
           // Use the resolver to get correct REST pair format

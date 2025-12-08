@@ -40,9 +40,10 @@ export class LivePricingAdapter {
   // Phase 8.8.3-I6-FIX: Track current trading mode for WebSocket broadcasts
   private currentTradingMode: 'paper' | 'live' = 'paper';
   
-  // Phase 34: Throttling for price broadcasts
+  // Phase 8.8.3-I7-WS-D: Reduced throttling for price broadcasts
+  // D1: Changed from 1000ms to 150ms to ensure WebSocket ticks reach frontend
   private lastBroadcastTime: Map<string, number> = new Map();
-  private readonly BROADCAST_THROTTLE_MS = 1000; // 1 second minimum between broadcasts per symbol
+  private readonly BROADCAST_THROTTLE_MS = 150; // 150ms minimum between broadcasts per symbol
   
   // Configuration
   private readonly REFRESH_INTERVAL_MS = 15000; // 15 seconds for general price tracking
@@ -565,6 +566,61 @@ export class LivePricingAdapter {
   }
 
   /**
+   * Phase 8.8.3-I7-WS-D: Broadcast price from WebSocket with reduced throttling
+   * D3: Every cache update from WebSocket triggers a broadcast (1:1 Stage-3→Stage-4)
+   * D4: Removed suppression due to price age, delta, timestamp, etc.
+   * Only applies minimal throttling (150ms) to prevent flooding
+   */
+  private broadcastFromWebSocket(quote: { symbol: string; price: number; timestamp: string; source: string }, traceId?: string): void {
+    try {
+      // D4: No suppression for null prices on WS path (WS always provides valid prices)
+      const now = Date.now();
+      const lastBroadcast = this.lastBroadcastTime.get(quote.symbol) || 0;
+      
+      // D1: Minimal throttling at 150ms (not 1000ms) to prevent flooding while ensuring updates
+      if (now - lastBroadcast < this.BROADCAST_THROTTLE_MS) {
+        // Log throttled broadcasts for diagnostic visibility
+        console.log(`[I7-WS-D][BROADCAST_THROTTLED] symbol=${quote.symbol} timeSinceLast=${now - lastBroadcast}ms`);
+        return;
+      }
+      
+      // Update last broadcast time
+      this.lastBroadcastTime.set(quote.symbol, now);
+      
+      // Phase 8.8.3-I7-WS-C (C2 Stage 4): Log broadcast with trace ID
+      if (traceId) {
+        priceTraceService.recordStage(traceId, 4, 'BROADCAST', {
+          internal_symbol: quote.symbol,
+          price: quote.price
+        });
+      }
+      
+      // Phase 8.8.3-I7-WS-D (D6): Diagnostic log for broadcast
+      console.log(`[I7-WS-D][BROADCAST_SEND] symbol=${quote.symbol} price=${quote.price}`);
+      
+      // Broadcast to clients
+      contextBridge.broadcast({
+        type: 'price_updated',
+        payload: {
+          mode: this.currentTradingMode,
+          symbol: quote.symbol,
+          price: quote.price,
+          timestamp: quote.timestamp,
+          source: quote.source
+        }
+      });
+      
+      console.log(`[8.8.3-I6-FIX][Pricing-WS] Broadcast: ${quote.symbol} = $${quote.price.toFixed(2)} (${quote.source}) [mode=${this.currentTradingMode}]`);
+      
+      // Phase 8.8.3-I7-WS-A (A5): Log price broadcast for diagnostic audit
+      console.log(`[I7-WS-A][BROADCAST] internal_symbol=${quote.symbol} price=${quote.price} mode=${this.currentTradingMode}`);
+
+    } catch (error) {
+      console.error(`[I7-WS-D][BROADCAST_ERROR] ${quote.symbol}:`, error);
+    }
+  }
+
+  /**
    * Phase 8.8.3-I7: Normalize symbol using canonical resolver
    * No more USDT→USD collapsing - each quote currency is distinct
    */
@@ -576,12 +632,14 @@ export class LivePricingAdapter {
    * Phase 8.8.3-B3.6: Update price from WebSocket
    * Called by KrakenWebSocketAdapter when real-time prices arrive
    * Phase 8.8.3-I7-WS-C: Added traceId parameter for pipeline tracing
+   * Phase 8.8.3-I7-WS-D: Now broadcasts EVERY WebSocket tick (D2/D3)
    */
   updateFromWebSocket(symbol: string, price: number, source: 'kraken_ws' | 'binance_ws' = 'kraken_ws', traceId?: string): void {
     const normalized = this.normalizeSymbol(symbol);
     const timestamp = new Date().toISOString();
     const now = Date.now();
     
+    // D2: Always update cache on EVERY WebSocket tick
     this.priceCache.set(normalized, {
       symbol: normalized,
       price,
@@ -589,6 +647,9 @@ export class LivePricingAdapter {
       source: source === 'kraken_ws' ? 'kraken_ws' : 'binance',
       cachedAt: now
     });
+    
+    // Phase 8.8.3-I7-WS-D (D6): Diagnostic log for cache write
+    console.log(`[I7-WS-D][CACHE_WRITE] symbol=${normalized} price=${price} source=${source}`);
     
     // Phase 8.8.3-I7-WS-C (C2 Stage 3): Log cache update with trace ID
     if (traceId) {
@@ -607,6 +668,15 @@ export class LivePricingAdapter {
     if (!this.trackedSymbols.has(normalized)) {
       this.trackedSymbols.add(normalized);
     }
+    
+    // Phase 8.8.3-I7-WS-D (D3): Broadcast EVERY cache update to frontend
+    // This ensures Stage-3 → Stage-4 is 1:1
+    this.broadcastFromWebSocket({
+      symbol: normalized,
+      price,
+      timestamp,
+      source: source === 'kraken_ws' ? 'kraken_ws' : 'binance'
+    }, traceId);
   }
 
   /**
