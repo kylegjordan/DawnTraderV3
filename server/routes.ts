@@ -7451,6 +7451,187 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // GET /api/diagnostics/i7-ws-f/coverage - Phase 8.8.3-I7-WS-F: Get WebSocket coverage status
+  apiRouter.get('/diagnostics/i7-ws-f/coverage', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      
+      // Get active symbols from both paper and live modes
+      const [paperTrades, liveTrades] = await Promise.all([
+        storage.getOpenPaperTrades(),
+        storage.getActiveTrades('live')
+      ]);
+      const activeSymbols = [...new Set([
+        ...paperTrades.map(t => t.symbol),
+        ...liveTrades.map(t => t.symbol)
+      ])];
+      
+      const coverageMap = await krakenWebSocketAdapter.getI7CoverageMap(activeSymbols);
+      const healthStatus = krakenWebSocketAdapter.getSubscriptionHealthStatus();
+      
+      const summary = {
+        total: coverageMap.length,
+        subscribed: coverageMap.filter(c => c.coverage_status === 'subscribed').length,
+        pending: coverageMap.filter(c => c.coverage_status === 'pending').length,
+        missing: coverageMap.filter(c => c.coverage_status === 'missing').length,
+        unmappable: coverageMap.filter(c => c.coverage_status === 'unmappable').length
+      };
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.3-I7-WS-F',
+        description: 'WebSocket subscription coverage status',
+        summary,
+        symbols: coverageMap,
+        health: healthStatus
+      });
+    } catch (error: any) {
+      console.error('[I7-WS-F] Error fetching coverage:', error);
+      res.status(500).json({ ok: false, error: 'Failed to fetch I7-WS-F coverage', message: error.message });
+    }
+  });
+
+  // POST /api/diagnostics/i7-ws-f/audit - Phase 8.8.3-I7-WS-F: Run coverage audit
+  apiRouter.post('/diagnostics/i7-ws-f/audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      
+      // Get active symbols from both paper and live modes
+      const [paperTrades, liveTrades] = await Promise.all([
+        storage.getOpenPaperTrades(),
+        storage.getActiveTrades('live')
+      ]);
+      const activeSymbols = [...new Set([
+        ...paperTrades.map(t => t.symbol),
+        ...liveTrades.map(t => t.symbol)
+      ])];
+      
+      const auditResults = await krakenWebSocketAdapter.auditWebSocketCoverage(activeSymbols);
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.3-I7-WS-F',
+        description: 'WebSocket coverage audit results',
+        total_symbols: activeSymbols.length,
+        audit: auditResults
+      });
+    } catch (error: any) {
+      console.error('[I7-WS-F] Error running audit:', error);
+      res.status(500).json({ ok: false, error: 'Failed to run I7-WS-F audit', message: error.message });
+    }
+  });
+
+  // POST /api/diagnostics/i7-ws-f/auto-subscribe - Phase 8.8.3-I7-WS-F: Auto-subscribe missing symbols
+  apiRouter.post('/diagnostics/i7-ws-f/auto-subscribe', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      
+      // Get active symbols from both paper and live modes
+      const [paperTrades, liveTrades] = await Promise.all([
+        storage.getOpenPaperTrades(),
+        storage.getActiveTrades('live')
+      ]);
+      const activeSymbols = [...new Set([
+        ...paperTrades.map(t => t.symbol),
+        ...liveTrades.map(t => t.symbol)
+      ])];
+      
+      const result = await krakenWebSocketAdapter.autoSubscribeMissingSymbols(activeSymbols);
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.3-I7-WS-F',
+        description: 'Auto-subscribe missing symbols result',
+        ...result
+      });
+    } catch (error: any) {
+      console.error('[I7-WS-F] Error auto-subscribing:', error);
+      res.status(500).json({ ok: false, error: 'Failed to auto-subscribe', message: error.message });
+    }
+  });
+
+  // GET /api/diagnostics/i7-ws-f/validate-map - Phase 8.8.3-I7-WS-F: Validate symbol map integrity
+  apiRouter.get('/diagnostics/i7-ws-f/validate-map', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      
+      // Get active symbols from both paper and live modes
+      const [paperTrades, liveTrades] = await Promise.all([
+        storage.getOpenPaperTrades(),
+        storage.getActiveTrades('live')
+      ]);
+      const activeSymbols = [...new Set([
+        ...paperTrades.map(t => t.symbol),
+        ...liveTrades.map(t => t.symbol)
+      ])];
+      
+      const validationResult = await krakenWebSocketAdapter.validateSymbolMapIntegrity(activeSymbols);
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.3-I7-WS-F',
+        description: 'Symbol map validation results',
+        ...validationResult
+      });
+    } catch (error: any) {
+      console.error('[I7-WS-F] Error validating map:', error);
+      res.status(500).json({ ok: false, error: 'Failed to validate symbol map', message: error.message });
+    }
+  });
+
+  // GET /api/diagnostics/i7-ws-f/health - Phase 8.8.3-I7-WS-F: Get subscription health status
+  apiRouter.get('/diagnostics/i7-ws-f/health', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const healthStatus = krakenWebSocketAdapter.getSubscriptionHealthStatus();
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.3-I7-WS-F',
+        description: 'Subscription health status',
+        thresholds: {
+          ack_timeout_ms: 5000,
+          no_tick_timeout_ms: 10000
+        },
+        ack_timeout_count: healthStatus.ack_timeouts.length,
+        no_tick_count: healthStatus.no_tick_symbols.length,
+        ...healthStatus
+      });
+    } catch (error: any) {
+      console.error('[I7-WS-F] Error fetching health:', error);
+      res.status(500).json({ ok: false, error: 'Failed to fetch health status', message: error.message });
+    }
+  });
+
+  // POST /api/diagnostics/i7-ws-f/start-monitoring - Phase 8.8.3-I7-WS-F: Start health monitoring
+  apiRouter.post('/diagnostics/i7-ws-f/start-monitoring', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      krakenWebSocketAdapter.startSubscriptionHealthMonitoring();
+      res.json({ ok: true, message: 'I7-WS-F subscription health monitoring started' });
+    } catch (error: any) {
+      console.error('[I7-WS-F] Error starting monitoring:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // POST /api/diagnostics/i7-ws-f/stop-monitoring - Phase 8.8.3-I7-WS-F: Stop health monitoring
+  apiRouter.post('/diagnostics/i7-ws-f/stop-monitoring', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      krakenWebSocketAdapter.stopSubscriptionHealthMonitoring();
+      res.json({ ok: true, message: 'I7-WS-F subscription health monitoring stopped' });
+    } catch (error: any) {
+      console.error('[I7-WS-F] Error stopping monitoring:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   // POST /api/reb-2-12F/strategy-health - Run strategy health check (with mock data verification)
   apiRouter.post('/reb-2-12F/strategy-health', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {

@@ -79,6 +79,11 @@ export class KrakenWebSocketAdapter {
   private subscriptionRequests: Map<string, { krakenWsPair: string; internalSymbol: string; timestamp: number }> = new Map();
   private unmappedTicks: Map<string, { count: number; lastSeen: number }> = new Map(); // Track unmapped tick events for gap reporting
   
+  // Phase 8.8.3-I7-WS-F: Subscription health monitoring
+  private subscriptionHealthInterval: NodeJS.Timeout | null = null;
+  private readonly ACK_TIMEOUT_MS = 5000; // 5 seconds without ACK
+  private readonly NO_TICK_TIMEOUT_MS = 10000; // 10 seconds without tick after ACK
+  
   // Phase 8.8.3-I4 B4: Periodic price tick health logging
   private priceTickHealthInterval: NodeJS.Timeout | null = null;
   private openPositionSymbolsProvider: (() => string[] | Promise<string[]>) | null = null;
@@ -1156,6 +1161,326 @@ export class KrakenWebSocketAdapter {
     this.subscriptionRequests.clear();
     this.unmappedTicks.clear();
     console.log('[I7-WS-A][RESET] Cleared first tick tracking for fresh diagnostic run');
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-F (F1): Audit WebSocket coverage for active symbols
+   * Verifies: internal symbol → canonical map → Kraken WS pair → subscription request → subscription ACK
+   */
+  async auditWebSocketCoverage(activeSymbols: string[]): Promise<{
+    symbol: string;
+    coverage_status: 'subscribed' | 'pending' | 'missing' | 'unmappable';
+    kraken_ws_pair: string | null;
+    has_ack: boolean;
+    has_ticks: boolean;
+    last_tick_age_ms: number | null;
+    pair_resolve_error: string | null;
+  }[]> {
+    const { getKrakenWsPair } = await import('../markets/kraken-symbol-resolver.js');
+    const now = Date.now();
+    
+    return activeSymbols.map(symbol => {
+      const normalizedInternal = normalizeToInternalSymbol(symbol);
+      let krakenWsPair: string | null = null;
+      let pairResolveError: string | null = null;
+      
+      try {
+        krakenWsPair = getKrakenWsPair(normalizedInternal);
+        if (krakenWsPair === normalizedInternal) {
+          krakenWsPair = this.normalToKrakenSymbol(normalizedInternal);
+        }
+      } catch (err: any) {
+        pairResolveError = err.message || 'Unknown error resolving pair';
+      }
+      
+      const isSubscribed = this.subscribedSymbols.has(normalizedInternal);
+      const isPending = this.pendingSubscriptions.has(normalizedInternal);
+      const hasRequest = this.subscriptionRequests.has(normalizedInternal);
+      const ackInfo = this.subscriptionAcks.get(normalizedInternal);
+      const hasFirstTick = this.firstTickReceived.has(normalizedInternal);
+      const stats = this.symbolStats.get(normalizedInternal);
+      const lastTickAgeMs = stats ? now - stats.lastUpdate : null;
+      
+      let coverageStatus: 'subscribed' | 'pending' | 'missing' | 'unmappable';
+      if (!krakenWsPair) {
+        coverageStatus = 'unmappable';
+      } else if (isSubscribed) {
+        coverageStatus = 'subscribed';
+      } else if (isPending || hasRequest) {
+        coverageStatus = 'pending';
+      } else {
+        coverageStatus = 'missing';
+      }
+      
+      console.log(`[I7-WS-F][COVERAGE_AUDIT] symbol=${normalizedInternal} status=${coverageStatus} ws_pair=${krakenWsPair || 'null'}`);
+      
+      return {
+        symbol: normalizedInternal,
+        coverage_status: coverageStatus,
+        kraken_ws_pair: krakenWsPair,
+        has_ack: ackInfo?.acked || false,
+        has_ticks: hasFirstTick,
+        last_tick_age_ms: lastTickAgeMs,
+        pair_resolve_error: pairResolveError
+      };
+    });
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-F (F2): Automatically subscribe to missing symbols
+   * Derives Kraken pair and subscribes dynamically for symbols with coverage gaps
+   */
+  async autoSubscribeMissingSymbols(activeSymbols: string[]): Promise<{
+    attempted: string[];
+    subscribed: string[];
+    failed: string[];
+    unmappable: string[];
+  }> {
+    const coverageAudit = await this.auditWebSocketCoverage(activeSymbols);
+    const missingSymbols = coverageAudit.filter(a => a.coverage_status === 'missing');
+    const unmappableSymbols = coverageAudit.filter(a => a.coverage_status === 'unmappable');
+    
+    const attempted: string[] = [];
+    const subscribed: string[] = [];
+    const failed: string[] = [];
+    const unmappable = unmappableSymbols.map(u => u.symbol);
+    
+    for (const audit of missingSymbols) {
+      if (!audit.kraken_ws_pair) {
+        failed.push(audit.symbol);
+        continue;
+      }
+      
+      attempted.push(audit.symbol);
+      console.log(`[I7-WS-F][AUTO_SUBSCRIBE] symbol=${audit.symbol} kraken_ws_pair=${audit.kraken_ws_pair}`);
+      
+      try {
+        this.subscribeToSymbols([audit.symbol]);
+        subscribed.push(audit.symbol);
+      } catch (err: any) {
+        console.error(`[I7-WS-F][AUTO_SUBSCRIBE_FAIL] symbol=${audit.symbol} error=${err.message}`);
+        failed.push(audit.symbol);
+      }
+    }
+    
+    console.log(`[I7-WS-F][AUTO_SUBSCRIBE_SUMMARY] attempted=${attempted.length} subscribed=${subscribed.length} failed=${failed.length} unmappable=${unmappable.length}`);
+    
+    return { attempted, subscribed, failed, unmappable };
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-F (F4): Start subscription health monitoring
+   * Detects ACK timeouts and no-tick situations
+   */
+  startSubscriptionHealthMonitoring(): void {
+    if (this.subscriptionHealthInterval) {
+      console.log('[I7-WS-F][HEALTH_MONITOR] Already running, skipping start');
+      return;
+    }
+    
+    console.log('[I7-WS-F][HEALTH_MONITOR] Starting subscription health monitoring');
+    
+    this.subscriptionHealthInterval = setInterval(() => {
+      const now = Date.now();
+      
+      // Check for ACK timeouts (pending > 5 seconds)
+      this.subscriptionRequests.forEach((request, symbol) => {
+        const ackInfo = this.subscriptionAcks.get(symbol);
+        if (!ackInfo || !ackInfo.acked) {
+          const pendingDuration = now - request.timestamp;
+          if (pendingDuration > this.ACK_TIMEOUT_MS) {
+            console.warn(`[I7-WS-F][ACK_TIMEOUT] symbol=${symbol} kraken_ws_pair=${request.krakenWsPair} pending_ms=${pendingDuration}`);
+          }
+        }
+      });
+      
+      // Check for no-tick situations (subscribed but no tick after 10 seconds)
+      this.subscribedSymbols.forEach(symbol => {
+        const ackInfo = this.subscriptionAcks.get(symbol);
+        const hasFirstTick = this.firstTickReceived.has(symbol);
+        
+        if (ackInfo?.acked && !hasFirstTick) {
+          const timeSinceAck = now - ackInfo.timestamp;
+          if (timeSinceAck > this.NO_TICK_TIMEOUT_MS) {
+            console.warn(`[I7-WS-F][NO_TICK] symbol=${symbol} time_since_ack_ms=${timeSinceAck}`);
+          }
+        }
+      });
+    }, 5000); // Check every 5 seconds
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-F (F4): Stop subscription health monitoring
+   */
+  stopSubscriptionHealthMonitoring(): void {
+    if (this.subscriptionHealthInterval) {
+      clearInterval(this.subscriptionHealthInterval);
+      this.subscriptionHealthInterval = null;
+      console.log('[I7-WS-F][HEALTH_MONITOR] Stopped subscription health monitoring');
+    }
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-F (F5): Validate symbol map integrity
+   * Detects symbols where internal symbol exists but Kraken pair mapping is missing
+   */
+  async validateSymbolMapIntegrity(activeSymbols: string[]): Promise<{
+    total: number;
+    valid: number;
+    missing_ws_mapping: string[];
+    format_mismatches: Array<{ symbol: string; expected: string; actual: string }>;
+  }> {
+    const { getKrakenWsPair, resolveByInternalSymbol } = await import('../markets/kraken-symbol-resolver.js');
+    
+    const missingWsMapping: string[] = [];
+    const formatMismatches: Array<{ symbol: string; expected: string; actual: string }> = [];
+    let validCount = 0;
+    
+    for (const symbol of activeSymbols) {
+      const normalized = normalizeToInternalSymbol(symbol);
+      const mapping = resolveByInternalSymbol(normalized);
+      
+      if (!mapping) {
+        missingWsMapping.push(normalized);
+        console.log(`[I7-WS-F][MAP_VALIDATION] symbol=${normalized} status=missing_mapping`);
+        continue;
+      }
+      
+      const wsPair = getKrakenWsPair(normalized);
+      if (wsPair !== mapping.krakenWsPair) {
+        formatMismatches.push({
+          symbol: normalized,
+          expected: mapping.krakenWsPair,
+          actual: wsPair
+        });
+        console.log(`[I7-WS-F][MAP_VALIDATION] symbol=${normalized} status=mismatch expected=${mapping.krakenWsPair} actual=${wsPair}`);
+        continue;
+      }
+      
+      validCount++;
+    }
+    
+    console.log(`[I7-WS-F][MAP_VALIDATION_SUMMARY] total=${activeSymbols.length} valid=${validCount} missing=${missingWsMapping.length} mismatches=${formatMismatches.length}`);
+    
+    return {
+      total: activeSymbols.length,
+      valid: validCount,
+      missing_ws_mapping: missingWsMapping,
+      format_mismatches: formatMismatches
+    };
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-F (F3): Get enhanced subscription map with coverage_status
+   */
+  async getI7CoverageMap(activePositionSymbols: string[]): Promise<Array<{
+    internal: string;
+    kraken_ws: string;
+    kraken_rest: string;
+    coverage_status: 'subscribed' | 'pending' | 'missing' | 'unmappable';
+    subscribed: boolean;
+    pending: boolean;
+    first_tick_received: boolean;
+    acked: boolean;
+    last_tick_age_ms: number | null;
+    pair_resolve_error: string | null;
+  }>> {
+    const { getKrakenWsPair, getKrakenRestPair } = await import('../markets/kraken-symbol-resolver.js');
+    const now = Date.now();
+    
+    return activePositionSymbols.map(internalSymbol => {
+      const normalizedInternal = normalizeToInternalSymbol(internalSymbol);
+      let krakenWsPair: string = 'unknown';
+      let krakenRestPair: string = 'unknown';
+      let pairResolveError: string | null = null;
+      
+      try {
+        krakenWsPair = getKrakenWsPair(normalizedInternal) || 'unknown';
+        krakenRestPair = getKrakenRestPair(normalizedInternal) || 'unknown';
+        
+        if (krakenWsPair === normalizedInternal || krakenWsPair === 'unknown') {
+          const fallback = this.normalToKrakenSymbol(normalizedInternal);
+          if (fallback) krakenWsPair = fallback;
+        }
+      } catch (err: any) {
+        pairResolveError = err.message || 'Unknown error';
+      }
+      
+      const isSubscribed = this.subscribedSymbols.has(normalizedInternal);
+      const isPending = this.pendingSubscriptions.has(normalizedInternal);
+      const hasRequest = this.subscriptionRequests.has(normalizedInternal);
+      const hasFirstTick = this.firstTickReceived.has(normalizedInternal);
+      const ackInfo = this.subscriptionAcks.get(normalizedInternal);
+      const stats = this.symbolStats.get(normalizedInternal);
+      const lastTickAgeMs = stats ? now - stats.lastUpdate : null;
+      
+      let coverageStatus: 'subscribed' | 'pending' | 'missing' | 'unmappable';
+      if (krakenWsPair === 'unknown' || krakenWsPair === normalizedInternal) {
+        coverageStatus = 'unmappable';
+      } else if (isSubscribed) {
+        coverageStatus = 'subscribed';
+      } else if (isPending || hasRequest) {
+        coverageStatus = 'pending';
+      } else {
+        coverageStatus = 'missing';
+      }
+      
+      return {
+        internal: normalizedInternal,
+        kraken_ws: krakenWsPair,
+        kraken_rest: krakenRestPair,
+        coverage_status: coverageStatus,
+        subscribed: isSubscribed,
+        pending: isPending,
+        first_tick_received: hasFirstTick,
+        acked: ackInfo?.acked || false,
+        last_tick_age_ms: lastTickAgeMs,
+        pair_resolve_error: pairResolveError
+      };
+    });
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-F: Get subscription health status
+   */
+  getSubscriptionHealthStatus(): {
+    ack_timeouts: Array<{ symbol: string; kraken_ws_pair: string; pending_ms: number }>;
+    no_tick_symbols: Array<{ symbol: string; time_since_ack_ms: number }>;
+  } {
+    const now = Date.now();
+    const ackTimeouts: Array<{ symbol: string; kraken_ws_pair: string; pending_ms: number }> = [];
+    const noTickSymbols: Array<{ symbol: string; time_since_ack_ms: number }> = [];
+    
+    this.subscriptionRequests.forEach((request, symbol) => {
+      const ackInfo = this.subscriptionAcks.get(symbol);
+      if (!ackInfo || !ackInfo.acked) {
+        const pendingDuration = now - request.timestamp;
+        if (pendingDuration > this.ACK_TIMEOUT_MS) {
+          ackTimeouts.push({
+            symbol,
+            kraken_ws_pair: request.krakenWsPair,
+            pending_ms: pendingDuration
+          });
+        }
+      }
+    });
+    
+    this.subscribedSymbols.forEach(symbol => {
+      const ackInfo = this.subscriptionAcks.get(symbol);
+      const hasFirstTick = this.firstTickReceived.has(symbol);
+      
+      if (ackInfo?.acked && !hasFirstTick) {
+        const timeSinceAck = now - ackInfo.timestamp;
+        if (timeSinceAck > this.NO_TICK_TIMEOUT_MS) {
+          noTickSymbols.push({
+            symbol,
+            time_since_ack_ms: timeSinceAck
+          });
+        }
+      }
+    });
+    
+    return { ack_timeouts: ackTimeouts, no_tick_symbols: noTickSymbols };
   }
 }
 
