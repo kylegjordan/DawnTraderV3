@@ -35,6 +35,9 @@ export class LivePricingAdapter {
   private isRunning: boolean = false;
   private useMockMode: boolean = false;
   
+  // Phase 8.8.3-I6-FIX: Track current trading mode for WebSocket broadcasts
+  private currentTradingMode: 'paper' | 'live' = 'paper';
+  
   // Phase 34: Throttling for price broadcasts
   private lastBroadcastTime: Map<string, number> = new Map();
   private readonly BROADCAST_THROTTLE_MS = 1000; // 1 second minimum between broadcasts per symbol
@@ -495,9 +498,27 @@ export class LivePricingAdapter {
   }
 
   /**
+   * Phase 8.8.3-I6-FIX: Set the current trading mode for WebSocket broadcasts
+   * Called when simulation starts/stops or trading mode changes
+   */
+  setTradingMode(mode: 'paper' | 'live'): void {
+    const previousMode = this.currentTradingMode;
+    this.currentTradingMode = mode;
+    console.log(`[8.8.3-I6-FIX][PRICING] Trading mode changed: ${previousMode} -> ${mode}`);
+  }
+
+  /**
+   * Phase 8.8.3-I6-FIX: Get the current trading mode
+   */
+  getTradingMode(): 'paper' | 'live' {
+    return this.currentTradingMode;
+  }
+
+  /**
    * Broadcast price update via WebSocket
    * Phase 34: Throttled to max 1 broadcast per second per symbol
    * Phase 8.8.3-B9: Skip broadcast for null prices (no_reliable_price)
+   * Phase 8.8.3-I6-FIX: Use currentTradingMode instead of hardcoded 'live'
    */
   private async broadcastPriceUpdate(quote: PriceQuote): Promise<void> {
     try {
@@ -519,10 +540,11 @@ export class LivePricingAdapter {
       // Update last broadcast time
       this.lastBroadcastTime.set(quote.symbol, now);
       
+      // Phase 8.8.3-I6-FIX: Use currentTradingMode instead of hardcoded 'live'
       await contextBridge.broadcast({
         type: 'price_updated',
         payload: {
-          mode: 'live',
+          mode: this.currentTradingMode,
           symbol: quote.symbol,
           price: quote.price,
           timestamp: quote.timestamp,
@@ -530,7 +552,7 @@ export class LivePricingAdapter {
         }
       });
 
-      console.log(`[27.F.15.D][Pricing-WS] Broadcast: ${quote.symbol} = $${quote.price.toFixed(2)} (${quote.source})`);
+      console.log(`[8.8.3-I6-FIX][Pricing-WS] Broadcast: ${quote.symbol} = $${quote.price.toFixed(2)} (${quote.source}) [mode=${this.currentTradingMode}]`);
 
     } catch (error) {
       console.error(`[27.F.15.D][Pricing-WS] Broadcast failed:`, error);

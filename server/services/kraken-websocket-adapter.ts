@@ -339,6 +339,10 @@ export class KrakenWebSocketAdapter {
     }
   }
 
+  /**
+   * Phase 8.8.3-I6-FIX: Throttled broadcast with correct trading mode
+   * Gets mode from LivePricingAdapter to ensure paper/live consistency
+   */
   private async throttledBroadcast(symbol: string, price: number, bid: number, ask: number): Promise<void> {
     const now = Date.now();
     const lastBroadcast = this.lastBroadcastTime.get(symbol) || 0;
@@ -349,10 +353,14 @@ export class KrakenWebSocketAdapter {
     
     this.lastBroadcastTime.set(symbol, now);
     
+    // Phase 8.8.3-I6-FIX: Get current trading mode from LivePricingAdapter
+    const currentMode = livePricingAdapter.getTradingMode();
+    
     try {
       await contextBridge.broadcast({
         type: 'price_updated',
         payload: {
+          mode: currentMode,
           symbol,
           price,
           bid,
@@ -361,6 +369,9 @@ export class KrakenWebSocketAdapter {
           source: 'kraken_ws'
         }
       });
+      
+      // Phase 8.8.3-I6-FIX: Diagnostic logging with mode
+      console.log(`[8.8.3-I6-FIX][KrakenWS] Broadcast: ${symbol} = $${price} [mode=${currentMode}]`);
     } catch (error) {
       console.error(`[${this.MODULE_NAME}] Broadcast error:`, error);
     }
@@ -434,14 +445,24 @@ export class KrakenWebSocketAdapter {
   }
 
   subscribeToSymbols(symbols: string[]): void {
+    // Phase 8.8.3-I6-FIX: Enhanced diagnostic logging for subscription audit
+    console.log(`[8.8.3-I6-FIX][WS_SUB_REQUEST] internalSymbols=${JSON.stringify(symbols)}`);
+    
     const krakenSymbols = symbols
       .map(s => this.normalToKrakenSymbol(s))
       .filter(s => s !== null) as string[];
     
-    if (krakenSymbols.length === 0) return;
+    // Phase 8.8.3-I6-FIX: Log symbol format mapping
+    console.log(`[8.8.3-I6-FIX][WS_SUB_MAPPED] krakenSymbols=${JSON.stringify(krakenSymbols)} (mapped from ${symbols.length} internal symbols)`);
+    
+    if (krakenSymbols.length === 0) {
+      console.warn(`[8.8.3-I6-FIX][WS_SUB_EMPTY] No valid Kraken symbols after mapping - check symbol format`);
+      return;
+    }
     
     if (!this.isConnected) {
       symbols.forEach(s => this.pendingSubscriptions.add(s));
+      console.log(`[8.8.3-I6-FIX][WS_SUB_QUEUED] queued=${symbols.length} (WS not connected)`);
       console.log(`[${this.MODULE_NAME}] Queued ${symbols.length} symbols for subscription (not connected)`);
       return;
     }
@@ -458,23 +479,40 @@ export class KrakenWebSocketAdapter {
       this.ws?.send(JSON.stringify(subscribeMessage));
       console.log(`[${this.MODULE_NAME}] Subscribing to ${krakenSymbols.length} symbols: ${krakenSymbols.slice(0, 5).join(', ')}${krakenSymbols.length > 5 ? '...' : ''}`);
       
-      // Phase 8.8.3-B9.FIX-WS-START: Diagnostic log after subscription update
-      console.log('[DEBUG-B9][KrakenWS][SUBSCRIPTIONS_UPDATED]', {
-        newSymbols: symbols,
-        allSubscribed: Array.from(this.subscribedSymbols),
+      // Phase 8.8.3-I6-FIX: Enhanced diagnostic log after subscription update
+      console.log('[8.8.3-I6-FIX][WS_SUB_SENT]', {
+        sentSymbols: krakenSymbols,
+        currentSubscribed: Array.from(this.subscribedSymbols),
         pendingCount: this.pendingSubscriptions.size,
+        totalAfterSend: this.subscribedSymbols.size + krakenSymbols.length,
       });
     } catch (error) {
+      console.error(`[8.8.3-I6-FIX][WS_SUB_ERROR]`, error);
       console.error(`[${this.MODULE_NAME}] Subscribe error:`, error);
     }
   }
 
   unsubscribeFromSymbols(symbols: string[]): void {
+    // Phase 8.8.3-I6-FIX: Enhanced diagnostic logging for unsubscription audit
+    console.log(`[8.8.3-I6-FIX][WS_UNSUB_REQUEST] internalSymbols=${JSON.stringify(symbols)}`);
+    
     const krakenSymbols = symbols
       .map(s => this.normalToKrakenSymbol(s))
       .filter(s => s !== null) as string[];
     
-    if (krakenSymbols.length === 0 || !this.isConnected) return;
+    if (krakenSymbols.length === 0) {
+      console.warn(`[8.8.3-I6-FIX][WS_UNSUB_EMPTY] No valid Kraken symbols after mapping`);
+      return;
+    }
+    
+    if (!this.isConnected) {
+      console.log(`[8.8.3-I6-FIX][WS_UNSUB_SKIP] Not connected - cleaning up local state only`);
+      symbols.forEach(s => {
+        this.subscribedSymbols.delete(s);
+        this.pendingSubscriptions.delete(s);
+      });
+      return;
+    }
     
     const unsubscribeMessage = {
       event: 'unsubscribe',
@@ -490,8 +528,15 @@ export class KrakenWebSocketAdapter {
         this.subscribedSymbols.delete(s);
         this.pendingSubscriptions.delete(s);
       });
+      // Phase 8.8.3-I6-FIX: Enhanced diagnostic log after unsubscription
+      console.log('[8.8.3-I6-FIX][WS_UNSUB_SENT]', {
+        unsubscribedSymbols: krakenSymbols,
+        remainingSubscribed: Array.from(this.subscribedSymbols),
+        remainingCount: this.subscribedSymbols.size,
+      });
       console.log(`[${this.MODULE_NAME}] Unsubscribed from ${krakenSymbols.length} symbols`);
     } catch (error) {
+      console.error(`[8.8.3-I6-FIX][WS_UNSUB_ERROR]`, error);
       console.error(`[${this.MODULE_NAME}] Unsubscribe error:`, error);
     }
   }

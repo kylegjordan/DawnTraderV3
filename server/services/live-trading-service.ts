@@ -16,6 +16,7 @@ import { permissionCache } from './permission-cache.js';
 import type { UserRole } from '../config/permissions.js';
 import { liveOperationQueue } from '../utils/operation-queue';
 import { reset24hWindow, resetHourlyScanHistory } from './fx5-24h-window.js';
+import { livePricingAdapter } from './live-pricing-adapter.js';
 
 // Initialize ExecutionPolicyController instance
 const executionPolicyController = new ExecutionPolicyController(storage as any);
@@ -172,6 +173,10 @@ This is a high-risk operation and requires your explicit consent.`;
         startedAt: new Date(),
         engine,
       });
+
+      // Phase 8.8.3-I6-FIX: Set trading mode to 'live' for correct WebSocket broadcasts
+      livePricingAdapter.setTradingMode('live');
+      console.log('[8.8.3-I6-FIX] LivePricingAdapter trading mode set to live');
 
       // 4. Emit cluster bus event with policy-confirmed payload
       try {

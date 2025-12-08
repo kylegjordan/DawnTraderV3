@@ -72,10 +72,16 @@ export class PaperExecutionEngine {
     
     if (this.isRunning) {
       console.log(`[PaperExecution:${this.mode}] Already running`);
+      // Phase 8.8.3-I6-FIX: Ensure mode is correct even on idempotent call
+      livePricingAdapter.setTradingMode(this.mode);
       return;
     }
 
     this.isRunning = true;
+    
+    // Phase 8.8.3-I6-FIX: Set trading mode for correct WebSocket broadcasts
+    livePricingAdapter.setTradingMode(this.mode);
+    console.log(`[8.8.3-I6-FIX][ENGINE_START] Trading mode set to ${this.mode}`);
     
     // Phase 8.8.3-AJ8: Set session start timestamp for RTB metrics
     // Metrics only count from this point forward (reset behavior)
@@ -101,7 +107,11 @@ export class PaperExecutionEngine {
       if (openPositions.length > 0) {
         const symbols = openPositions.map(p => p.symbol);
         krakenWebSocketAdapter.subscribeToSymbols(symbols);
+        // Phase 8.8.3-I6-FIX: Enhanced diagnostic logging for subscription audit
+        console.log(`[8.8.3-I6-FIX][WS_SUB_AUDIT] openPositionCount=${openPositions.length} subscribedSymbols=${JSON.stringify(symbols)}`);
         console.log(`[PaperExecution:${this.mode}] Subscribed to ${symbols.length} open position symbols`);
+      } else {
+        console.log(`[8.8.3-I6-FIX][WS_SUB_AUDIT] openPositionCount=0 (no subscriptions needed at start)`);
       }
     } catch (error) {
       console.error(`[PaperExecution:${this.mode}] WebSocket adapter start failed (continuing with REST fallback):`, error);
@@ -620,10 +630,13 @@ export class PaperExecutionEngine {
       console.log(`[AJ19-B][DELETE_SUCCESS] positionId=${positionId} | symbol=${position.symbol}`);
       
       // Phase 8.8.3-B3.6: Unsubscribe from Kraken WebSocket after position close
+      // Phase 8.8.3-I6-FIX: Enhanced diagnostic logging for unsubscription audit
       try {
         krakenWebSocketAdapter.unsubscribeFromSymbols([position.symbol]);
+        console.log(`[8.8.3-I6-FIX][WS_UNSUB] closedSymbol=${position.symbol} | action=unsubscribe`);
         console.log(`[KrakenWS] Unsubscribed from ${position.symbol} after position close`);
       } catch (wsUnsubError) {
+        console.warn(`[8.8.3-I6-FIX][WS_UNSUB_FAILED] symbol=${position.symbol} error=${wsUnsubError}`);
         console.warn(`[KrakenWS] Failed to unsubscribe from ${position.symbol}:`, wsUnsubError);
       }
     } catch (delErr: any) {
@@ -1777,10 +1790,13 @@ export class PaperExecutionEngine {
       console.log(`[AJ10.3][OPEN_POSITION_OK] positionId=${openPosition.id} | symbol=${signal.symbol} | tradeId=${trade.id}`);
 
       // Phase 8.8.3-B3.6: Subscribe to Kraken WebSocket for real-time price updates
+      // Phase 8.8.3-I6-FIX: Enhanced diagnostic logging for subscription audit
       try {
         krakenWebSocketAdapter.subscribeToSymbols([signal.symbol]);
+        console.log(`[8.8.3-I6-FIX][WS_SUB_NEW] newSymbol=${signal.symbol} | action=subscribe`);
         console.log(`[KrakenWS] Subscribed to ${signal.symbol} for real-time price updates`);
       } catch (wsSubError) {
+        console.warn(`[8.8.3-I6-FIX][WS_SUB_FAILED] symbol=${signal.symbol} error=${wsSubError}`);
         console.warn(`[KrakenWS] Failed to subscribe to ${signal.symbol} (REST fallback active):`, wsSubError);
       }
 

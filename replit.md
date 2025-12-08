@@ -35,6 +35,11 @@ Live Price Distribution Fix (I6) ensures all modern endpoints use `getPriceWithF
 
 Frontend Symbol Normalization Fix (I6-UI) resolves a UI price update staleness issue in the Active Trades tab. The fix adds a `normalizeSymbol()` function that strips slashes and uppercases symbols, applied to both WebSocket `price_updated` events when storing in `livePrices` state and to position symbols when looking up live prices. This ensures symbols like "FXS/USD" and "FXSUSD" resolve to the same cache key ("FXSUSD"), enabling real-time price updates regardless of symbol format variations.
 
+WebSocket Broadcast Mode Fix (I6-FIX, Dec 2025) resolves a critical bug where `price_updated` broadcasts were hardcoded with `mode=live` regardless of actual trading mode. The fix introduces a `currentTradingMode` property in `LivePricingAdapter` with `setTradingMode()` and `getTradingMode()` methods. Mode is now correctly set:
+- To `'paper'` in paper-sim-service.ts (4 start paths), PaperExecutionEngine.start() (new and idempotent)
+- To `'live'` in live-trading-service.ts when activating live trading
+Enhanced diagnostic logging with `[8.8.3-I6-FIX]` tags tracks subscription counts, unsubscription events, and mode labels in price broadcasts.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed (`wss://ws.kraken.com`) for open trade price monitoring.

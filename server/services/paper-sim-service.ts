@@ -459,6 +459,10 @@ export async function startPaperSimulation(
             console.log('[DEBUG-B9][MANAGER_NOT_RUNNING] Manager exists but not running - starting it now');
             await existingManager.start();
             
+            // Phase 8.8.3-I6-FIX: Set trading mode to 'paper' for correct WebSocket broadcasts
+            livePricingAdapter.setTradingMode('paper');
+            console.log('[8.8.3-I6-FIX] LivePricingAdapter trading mode set to paper (manager restart)');
+            
             return {
               success: true,
               message: 'Paper trading simulation started (manager was idle)',
@@ -476,6 +480,9 @@ export async function startPaperSimulation(
           
           // Manager is truly running - return idempotent success
           console.log(`[PaperSimService] Paper trading already running (session: ${existingSession.sessionId})`);
+          
+          // Phase 8.8.3-I6-FIX: Ensure trading mode is correct (idempotent safety)
+          livePricingAdapter.setTradingMode('paper');
           
           return {
             success: true,
@@ -499,6 +506,10 @@ export async function startPaperSimulation(
           const manager = new PaperPortfolioManager(mode, userId);
           setGlobalPaperSimManager(manager);
           await manager.start();
+          
+          // Phase 8.8.3-I6-FIX: Set trading mode to 'paper' for correct WebSocket broadcasts
+          livePricingAdapter.setTradingMode('paper');
+          console.log('[8.8.3-I6-FIX] LivePricingAdapter trading mode set to paper (reconcile)');
           
           return {
             success: true,
@@ -591,6 +602,10 @@ export async function startPaperSimulation(
         try {
           await manager.start();
           console.log('[ENGINE_CHECKPOINT_12] Manager started successfully');
+          
+          // Phase 8.8.3-I6-FIX: Set trading mode to 'paper' for correct WebSocket broadcasts
+          livePricingAdapter.setTradingMode('paper');
+          console.log('[8.8.3-I6-FIX] LivePricingAdapter trading mode set to paper');
           
           // Phase 8.8.3-I3: Start periodic invariant check for RTB metrics
           rtbMetricsService.startInvariantCheck();
