@@ -1,0 +1,155 @@
+PHASE 8.8.3-I7-WS-A — WEBSOCKET SUBSCRIPTION & TICK FLOW DIAGNOSTIC (NO FIXES)
+
+Purpose:
+We need a complete diagnostic of the Kraken WebSocket subscription and tick flow pipeline across all active trading symbols.
+This phase must NOT change trading behavior or modify any existing logic.
+Only add diagnostic logging and run a controlled capture.
+
+✅ TASK A — Add Diagnostic Logging (NO LOGIC CHANGES)
+
+Add log lines at the following points:
+
+A1 — When the system subscribes to a WebSocket pair
+
+In KrakenWebSocketAdapter.subscribe(pair) add:
+
+[I7-WS-A][SUB_REQ] kraken_ws_pair=<pair> internal_symbol=<resolver-normalized> 
+
+A2 — When Kraken acknowledges the subscription
+
+In the WS message handler where subscription confirmations are processed, log:
+
+[I7-WS-A][SUB_ACK] kraken_ws_pair=<pair> status=success 
+
+
+If Kraken rejects a subscription:
+
+[I7-WS-A][SUB_REJECT] kraken_ws_pair=<pair> error=<message>
+
+A3 — When the first tick is received for a pair
+
+When a price update from Kraken WS is received:
+
+[I7-WS-A][FIRST_TICK] kraken_ws_pair=<pair> internal_symbol=<mapped> price=<p>
+
+
+IMPORTANT:
+
+Only log FIRST tick per symbol (use a simple Set to track which symbols have logged).
+
+Do NOT change cache behavior.
+
+A4 — When a tick updates the internal price cache
+
+Where the internal price cache is updated, add:
+
+[I7-WS-A][CACHE_UPDATE] internal_symbol=<symbol> price=<price> 
+
+A5 — When the backend broadcasts the updated price
+
+In the live-pricing broadcast path, add:
+
+[I7-WS-A][BROADCAST] internal_symbol=<symbol> price=<price> mode=<mode>
+
+✅ TASK B — Produce a Full Mapping Table for Active Trades
+
+Create (during runtime) a diagnostic endpoint:
+
+GET /api/diagnostics/i7-ws/subscription-map
+
+The endpoint must return JSON:
+
+{
+  "active_positions": [
+    {
+      "internal": "AVAX/USDT",
+      "kraken_ws": "<resolved Kraken WS pair>",
+      "kraken_rest": "<resolved Kraken REST pair>",
+      "subscribed": true|false,
+      "first_tick_received": true|false
+    },
+    ...
+  ]
+}
+
+
+No logic changes.
+Just gather information into an API response.
+
+✅ TASK C — 5-Minute Controlled Diagnostic Run (automatic)
+
+After implementing logging:
+
+Start a new clean paper simulation.
+
+Run for 5 minutes.
+
+Capture all logs and snapshot data.
+
+Save diagnostic artifacts to:
+
+docs/diagnostics/I7-WS-A/
+
+
+Files should include:
+
+ws_subscription_events.log (all SUB_REQ, SUB_ACK, SUB_REJECT)
+
+ws_ticks.log (all FIRST_TICK and CACHE_UPDATE)
+
+broadcasts.log (all BROADCAST)
+
+subscription_map.json
+
+active_trades_start.json
+
+active_trades_end.json
+
+✅ TASK D — Diagnostic Report
+
+Generate a Markdown file:
+
+docs/diagnostics/Phase-8.8.3-I7-WS-A_Report.md
+
+
+The report must answer:
+
+Which active symbols correctly subscribed to Kraken WS?
+
+Which symbols received ACK?
+
+Which symbols received ticks?
+
+Which symbols updated the internal cache?
+
+Which symbols broadcast updated prices?
+
+Which symbols NEVER received a tick?
+
+Which symbols had to rely exclusively on REST fallback?
+
+Which symbols appear unsupported by Kraken WS?
+
+Does symbol mapping fully align with WS + REST behavior?
+
+No changes to system behavior — diagnostics only.
+
+⛔ STRICT RULES
+
+❗ DO NOT modify trading logic
+
+❗ DO NOT modify price cache logic
+
+❗ DO NOT modify symbol resolver logic
+
+❗ DO NOT modify execution engine behavior
+
+✔ Only add diagnostics and reporting
+
+✔ Only run tests
+
+✔ No hotfixes until directed
+
+⭐ FINAL LINE FOR REPLIT
+
+Do not make any behavioral changes. Add diagnostics only, run 5-minute capture, produce the report, and wait for approval.

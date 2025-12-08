@@ -72,6 +72,12 @@ export class KrakenWebSocketAdapter {
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private lastPongTime: number = Date.now();
   
+  // Phase 8.8.3-I7-WS-A: Diagnostic tracking for subscription and tick flow audit
+  private firstTickReceived: Set<string> = new Set(); // Track which symbols have received first tick
+  private subscriptionAcks: Map<string, { acked: boolean; timestamp: number }> = new Map();
+  private subscriptionRequests: Map<string, { krakenWsPair: string; internalSymbol: string; timestamp: number }> = new Map();
+  private unmappedTicks: Map<string, { count: number; lastSeen: number }> = new Map(); // Track unmapped tick events for gap reporting
+  
   // Phase 8.8.3-I4 B4: Periodic price tick health logging
   private priceTickHealthInterval: NodeJS.Timeout | null = null;
   private openPositionSymbolsProvider: (() => string[] | Promise<string[]>) | null = null;
@@ -193,7 +199,8 @@ export class KrakenWebSocketAdapter {
     if (this.pendingSubscriptions.size > 0) {
       console.log(`[${this.MODULE_NAME}] Subscribing to ${this.pendingSubscriptions.size} pending symbols`);
       this.subscribeToSymbols(Array.from(this.pendingSubscriptions));
-      this.pendingSubscriptions.clear();
+      // Phase 8.8.3-I7-WS-A: Do NOT clear pendingSubscriptions here - wait for ACK in handleSystemMessage()
+      // Premature clearing prevents detection of pending-ACK state in diagnostics
     }
     
     if (this.subscribedSymbols.size > 0) {
@@ -245,11 +252,29 @@ export class KrakenWebSocketAdapter {
           if (internalSymbol) {
             console.log(`[${this.MODULE_NAME}] Subscribed to ${channelName} for ${pair} -> ${internalSymbol}`);
             this.subscribedSymbols.add(internalSymbol);
+            
+            // Phase 8.8.3-I7-WS-A (A2): Clear pending state on ACK
+            this.pendingSubscriptions.delete(internalSymbol);
+            this.subscriptionRequests.delete(internalSymbol);
+            
+            // Phase 8.8.3-I7-WS-A (A2): Log subscription acknowledgment
+            console.log(`[I7-WS-A][SUB_ACK] kraken_ws_pair=${pair} status=success internal_symbol=${internalSymbol}`);
+            this.subscriptionAcks.set(internalSymbol, { acked: true, timestamp: Date.now() });
           } else {
             console.warn(`[${this.MODULE_NAME}] Subscribed to ${channelName} for ${pair} but could not map to internal symbol`);
+            // Phase 8.8.3-I7-WS-A (A2): Log ACK with mapping failure
+            console.log(`[I7-WS-A][SUB_ACK] kraken_ws_pair=${pair} status=success_unmapped internal_symbol=null`);
           }
         } else if (status === 'error') {
+          // Phase 8.8.3-I7-WS-A: Try to map and clear pending state on rejection too
+          const failedInternalSymbol = this.mapKrakenPairToInternalSymbol(pair);
+          if (failedInternalSymbol) {
+            this.pendingSubscriptions.delete(failedInternalSymbol);
+            this.subscriptionRequests.delete(failedInternalSymbol);
+          }
           console.error(`[${this.MODULE_NAME}] Subscription error for ${pair}: ${errorMessage}`);
+          // Phase 8.8.3-I7-WS-A (A2): Log subscription rejection
+          console.log(`[I7-WS-A][SUB_REJECT] kraken_ws_pair=${pair} error=${errorMessage}`);
         }
         break;
         
@@ -279,6 +304,10 @@ export class KrakenWebSocketAdapter {
 
       if (!internalSymbol) {
         console.warn(`[${this.MODULE_NAME}][TICKER][UNMAPPED_PAIR]`, { pair });
+        // Phase 8.8.3-I7-WS-A: Track unmapped tick events for gap reporting
+        const existing = this.unmappedTicks.get(pair) || { count: 0, lastSeen: 0 };
+        this.unmappedTicks.set(pair, { count: existing.count + 1, lastSeen: Date.now() });
+        console.log(`[I7-WS-A][UNMAPPED_TICK] kraken_ws_pair=${pair} count=${existing.count + 1}`);
         return;
       }
       
@@ -326,6 +355,12 @@ export class KrakenWebSocketAdapter {
       
       // Phase 8.8.3-I5: Diagnostic logging for tick arrival audit
       console.log(`[8.8.3-I5][TICK_ARRIVE] symbol=${internalSymbol} price=${lastPrice} timestamp=${now}`);
+      
+      // Phase 8.8.3-I7-WS-A (A3): Log first tick received for each pair (only once)
+      if (!this.firstTickReceived.has(internalSymbol)) {
+        this.firstTickReceived.add(internalSymbol);
+        console.log(`[I7-WS-A][FIRST_TICK] kraken_ws_pair=${pair} internal_symbol=${internalSymbol} price=${lastPrice}`);
+      }
       
       // Phase 8.8.4: Update LivePricingAdapter cache with properly normalized symbol
       livePricingAdapter.updateFromWebSocket(internalSymbol, lastPrice, 'kraken_ws');
@@ -455,6 +490,21 @@ export class KrakenWebSocketAdapter {
     
     // Phase 8.8.3-I6-FIX: Log symbol format mapping
     console.log(`[8.8.3-I6-FIX][WS_SUB_MAPPED] krakenSymbols=${JSON.stringify(krakenSymbols)} (mapped from ${symbols.length} internal symbols)`);
+    
+    // Phase 8.8.3-I7-WS-A (A1): Log subscription request with resolver-normalized internal symbol
+    for (let i = 0; i < symbols.length; i++) {
+      const internalSymbol = symbols[i];
+      const krakenWsPair = krakenSymbols[i] || 'unmapped';
+      const normalizedInternal = normalizeToInternalSymbol(internalSymbol);
+      console.log(`[I7-WS-A][SUB_REQ] kraken_ws_pair=${krakenWsPair} internal_symbol=${normalizedInternal}`);
+      
+      // Track subscription request for diagnostic endpoint
+      this.subscriptionRequests.set(normalizedInternal, {
+        krakenWsPair,
+        internalSymbol: normalizedInternal,
+        timestamp: Date.now()
+      });
+    }
     
     if (krakenSymbols.length === 0) {
       console.warn(`[8.8.3-I6-FIX][WS_SUB_EMPTY] No valid Kraken symbols after mapping - check symbol format`);
@@ -997,6 +1047,85 @@ export class KrakenWebSocketAdapter {
       symbolStats: this.symbolStats.size,
       priceTickLogs: this.priceTickLogs.length
     };
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-A: Get diagnostic subscription map for all active positions
+   * Returns detailed mapping information for diagnostic endpoint
+   */
+  async getI7SubscriptionMap(activePositionSymbols: string[]): Promise<Array<{
+    internal: string;
+    kraken_ws: string;
+    kraken_rest: string;
+    subscribed: boolean;
+    pending: boolean;
+    first_tick_received: boolean;
+    acked: boolean;
+    subscription_status: 'subscribed' | 'pending' | 'never_requested';
+  }>> {
+    // Import resolver functions dynamically to avoid circular deps (ESM compatible)
+    const { getKrakenWsPair, getKrakenRestPair } = await import('../markets/kraken-symbol-resolver.js');
+    
+    return activePositionSymbols.map(internalSymbol => {
+      const normalizedInternal = normalizeToInternalSymbol(internalSymbol);
+      const krakenWsPair = getKrakenWsPair(normalizedInternal) || 'unknown';
+      const krakenRestPair = getKrakenRestPair(normalizedInternal) || 'unknown';
+      const isSubscribed = this.subscribedSymbols.has(normalizedInternal);
+      const isPending = this.pendingSubscriptions.has(normalizedInternal);
+      const hasRequest = this.subscriptionRequests.has(normalizedInternal);
+      const hasFirstTick = this.firstTickReceived.has(normalizedInternal);
+      const ackInfo = this.subscriptionAcks.get(normalizedInternal);
+      
+      // Determine subscription status for gap analysis
+      let subscription_status: 'subscribed' | 'pending' | 'never_requested';
+      if (isSubscribed) {
+        subscription_status = 'subscribed';
+      } else if (isPending || hasRequest) {
+        subscription_status = 'pending';
+      } else {
+        subscription_status = 'never_requested';
+      }
+      
+      return {
+        internal: normalizedInternal,
+        kraken_ws: krakenWsPair,
+        kraken_rest: krakenRestPair,
+        subscribed: isSubscribed,
+        pending: isPending,
+        first_tick_received: hasFirstTick,
+        acked: ackInfo?.acked || false,
+        subscription_status
+      };
+    });
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-A: Get list of symbols that received first tick
+   */
+  getFirstTickReceivedSymbols(): string[] {
+    return Array.from(this.firstTickReceived);
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-A: Get unmapped tick events for gap reporting
+   */
+  getUnmappedTicks(): Array<{ pair: string; count: number; lastSeen: string }> {
+    return Array.from(this.unmappedTicks.entries()).map(([pair, data]) => ({
+      pair,
+      count: data.count,
+      lastSeen: new Date(data.lastSeen).toISOString()
+    }));
+  }
+
+  /**
+   * Phase 8.8.3-I7-WS-A: Clear first tick tracking (for fresh diagnostic runs)
+   */
+  clearFirstTickTracking(): void {
+    this.firstTickReceived.clear();
+    this.subscriptionAcks.clear();
+    this.subscriptionRequests.clear();
+    this.unmappedTicks.clear();
+    console.log('[I7-WS-A][RESET] Cleared first tick tracking for fresh diagnostic run');
   }
 }
 

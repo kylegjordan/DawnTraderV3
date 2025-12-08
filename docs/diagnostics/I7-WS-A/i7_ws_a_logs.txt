@@ -1,0 +1,5 @@
+/tmp/logs/Start_application_20251208_195622_255.log:[I7-WS-A][BROADCAST] internal_symbol=XRP/USD price=2.08222 mode=paper
+/tmp/logs/Start_application_20251208_195622_255.log:[I7-WS-A][BROADCAST] internal_symbol=ETH/USD price=3124.19 mode=paper
+/tmp/logs/Start_application_20251208_195622_255.log:[I7-WS-A][BROADCAST] internal_symbol=SOL/USD price=134.49 mode=paper
+/tmp/logs/Start_application_20251208_195622_255.log:[I7-WS-A][BROADCAST] internal_symbol=ADA/USD price=0.435052 mode=paper
+/tmp/logs/Start_application_20251208_195622_255.log:[I7-WS-A][BROADCAST] internal_symbol=BTC/USD price=90276 mode=paper

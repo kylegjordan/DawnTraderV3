@@ -1884,6 +1884,26 @@
     ]
   },
   {
+    "path": "/api/diagnostics/i7-ws/subscription-map",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/diagnostics/i7-ws/reset-tracking",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/reb-2-12F/strategy-health",
     "methods": [
       "POST"

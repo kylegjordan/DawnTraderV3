@@ -7299,6 +7299,85 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ==================== Phase 8.8.3-I7-WS-A: WebSocket Subscription & Tick Flow Diagnostic ====================
+  
+  // GET /api/diagnostics/i7-ws/subscription-map - Get subscription mapping for active positions
+  apiRouter.get('/diagnostics/i7-ws/subscription-map', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.query.mode as 'paper' | 'live') || 'paper';
+      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      
+      // Get open positions for the current mode
+      const openPositions = await storage.getPaperSimOpenPositions(mode);
+      const positionSymbols = openPositions.map(p => p.symbol);
+      
+      // Get subscription map data from adapter
+      const subscriptionMap = await krakenWebSocketAdapter.getI7SubscriptionMap(positionSymbols);
+      
+      // Get additional diagnostic data
+      const subscribedSymbols = krakenWebSocketAdapter.getSubscribedSymbols();
+      const firstTickSymbols = krakenWebSocketAdapter.getFirstTickReceivedSymbols();
+      const unmappedTicks = krakenWebSocketAdapter.getUnmappedTicks();
+      const status = krakenWebSocketAdapter.getStatus();
+      
+      // Compute summary statistics with granular subscription status
+      const totalPositions = subscriptionMap.length;
+      const subscribedCount = subscriptionMap.filter(s => s.subscription_status === 'subscribed').length;
+      const pendingCount = subscriptionMap.filter(s => s.subscription_status === 'pending').length;
+      const neverRequestedCount = subscriptionMap.filter(s => s.subscription_status === 'never_requested').length;
+      const ackedCount = subscriptionMap.filter(s => s.acked).length;
+      const firstTickCount = subscriptionMap.filter(s => s.first_tick_received).length;
+      const neverTickedSymbols = subscriptionMap.filter(s => s.subscribed && !s.first_tick_received).map(s => s.internal);
+      const pendingSymbols = subscriptionMap.filter(s => s.subscription_status === 'pending').map(s => s.internal);
+      const neverRequestedSymbols = subscriptionMap.filter(s => s.subscription_status === 'never_requested').map(s => s.internal);
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        mode,
+        wsStatus: status,
+        summary: {
+          totalActivePositions: totalPositions,
+          subscribedToWs: subscribedCount,
+          pendingSubscription: pendingCount,
+          neverRequested: neverRequestedCount,
+          receivedAck: ackedCount,
+          receivedFirstTick: firstTickCount,
+          neverReceivedTick: neverTickedSymbols.length,
+          unmappedTickPairs: unmappedTicks.length
+        },
+        gaps: {
+          neverTickedSymbols,
+          pendingSymbols,
+          neverRequestedSymbols,
+          unmappedTicks
+        },
+        active_positions: subscriptionMap,
+        allSubscribedSymbols: subscribedSymbols,
+        allFirstTickSymbols: firstTickSymbols
+      });
+    } catch (error: any) {
+      console.error('[I7-WS-A] Error fetching subscription map:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to fetch I7-WS-A subscription map',
+        message: error.message
+      });
+    }
+  });
+
+  // POST /api/diagnostics/i7-ws/reset-tracking - Reset first tick tracking for fresh diagnostic run
+  apiRouter.post('/diagnostics/i7-ws/reset-tracking', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      krakenWebSocketAdapter.clearFirstTickTracking();
+      res.json({ ok: true, message: 'I7-WS-A diagnostic tracking reset' });
+    } catch (error: any) {
+      console.error('[I7-WS-A] Error resetting tracking:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   // POST /api/reb-2-12F/strategy-health - Run strategy health check (with mock data verification)
   apiRouter.post('/reb-2-12F/strategy-health', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {

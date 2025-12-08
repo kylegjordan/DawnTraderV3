@@ -49,6 +49,17 @@ Kraken Canonical Symbol Mapping (I7, Dec 2025) introduces a single authoritative
 - **PaperExecutionEngine Integration**: REST fallback uses `getKrakenRestPair()` for correct API format and broadcasts prices through `livePricingAdapter.updateFromWebSocket()` for frontend visibility.
 Diagnostic logging with `[I7]` tags tracks symbol mappings for auditing.
 
+WebSocket Subscription & Tick Flow Diagnostics (I7-WS-A, Dec 2025) implements diagnostic-only tracing of the complete WebSocket subscription lifecycle from subscription request through price broadcast. Key components:
+- **A1 SUB_REQ**: Logs when subscribing to WebSocket pairs in `subscribeToSymbols()` with tracking Map
+- **A2 SUB_ACK/SUB_REJECT**: Logs when Kraken acknowledges/rejects subscriptions in `handleSystemMessage()` with cleanup of pending state
+- **A3 FIRST_TICK/UNMAPPED_TICK**: Logs first tick received per symbol or unmapped pair failures with count and lastSeen timestamp
+- **A4 CACHE_UPDATE**: Logs when cache is updated in `LivePricingAdapter.updateFromWebSocket()`
+- **A5 BROADCAST**: Logs when price is broadcast in `broadcastPriceUpdate()`
+- **Diagnostic Endpoint**: `/api/diagnostics/i7-ws/subscription-map` provides comprehensive subscription state with granular `subscription_status` field (subscribed/pending/never_requested), gap reporting for neverTickedSymbols, pendingSymbols, neverRequestedSymbols, and unmappedTicks with count and lastSeen timestamps
+- **Reset Endpoint**: `/api/diagnostics/i7-ws/reset-tracking` resets tracking state for fresh diagnostic runs
+- **Pending State Persistence**: `pendingSubscriptions` and `subscriptionRequests` persist until ACK/rejection arrives, enabling detection of stalled subscriptions
+All logging uses `[I7-WS-A]` prefix for easy filtering. Strictly observational - no changes to trading behavior, price cache logic, symbol resolver logic, or execution engine.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed (`wss://ws.kraken.com`) for open trade price monitoring.

@@ -554,6 +554,9 @@ export class LivePricingAdapter {
       });
 
       console.log(`[8.8.3-I6-FIX][Pricing-WS] Broadcast: ${quote.symbol} = $${quote.price.toFixed(2)} (${quote.source}) [mode=${this.currentTradingMode}]`);
+      
+      // Phase 8.8.3-I7-WS-A (A5): Log price broadcast for diagnostic audit
+      console.log(`[I7-WS-A][BROADCAST] internal_symbol=${quote.symbol} price=${quote.price} mode=${this.currentTradingMode}`);
 
     } catch (error) {
       console.error(`[27.F.15.D][Pricing-WS] Broadcast failed:`, error);
@@ -587,6 +590,9 @@ export class LivePricingAdapter {
     
     // Phase 8.8.3-I5: Diagnostic logging for cache update audit
     console.log(`[8.8.3-I5][CACHE_UPDATE] symbol=${normalized} newPrice=${price} lastTickMsAgo=0 timestamp=${now}`);
+    
+    // Phase 8.8.3-I7-WS-A (A4): Log cache update for diagnostic audit
+    console.log(`[I7-WS-A][CACHE_UPDATE] internal_symbol=${normalized} price=${price}`);
     
     if (!this.trackedSymbols.has(normalized)) {
       this.trackedSymbols.add(normalized);
