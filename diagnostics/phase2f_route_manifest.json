@@ -2014,6 +2014,16 @@
     ]
   },
   {
+    "path": "/api/diagnostics/i7-persist/status",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/diagnostics/i7-ws-g/frequency",
     "methods": [
       "GET"
