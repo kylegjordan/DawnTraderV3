@@ -1,0 +1,55 @@
+{
+  "ok": true,
+  "positions": [
+    {
+      "id": "628c217f-f562-4b38-9ce4-d0f7a6ef83e5",
+      "symbol": "UNI/EUR",
+      "strategy": "dhma",
+      "side": "buy",
+      "quantity": 9.44436274,
+      "entryPrice": 4.93731989,
+      "currentPrice": 4.937319887499999,
+      "unrealizedPnl": -2.3610917191854368E-8,
+      "unrealizedPnlPercent": -5.063478062446035E-8,
+      "takeProfit": 4.9325543,
+      "stopLoss": 4.9174457,
+      "distanceToTP": -0.09652174881487602,
+      "distanceToSL": 0.402529873551752,
+      "holdingDurationMs": 1651,
+      "slotNumber": 1,
+      "maxSlots": 15,
+      "health": "yellow",
+      "openedAt": "2025-12-08T11:19:51.620Z",
+      "confidence": 77.67,
+      "metadata": {
+        "obi": 0.7378707298493028,
+        "k_tp": 1.5,
+        "tradeId": "0d85793d-662f-445f-992d-6ef3bc4470a5",
+        "toxicity": 0.47797917224622316,
+        "burstRegime": "long",
+        "spreadTicks": 1.8550606462134196,
+        "highWaterMark": 4.937319887499999,
+        "sessionRegime": "up",
+        "micropriceTilt": 2.142857142857143,
+        "signedFlowRatio": 0.3769841314996906,
+        "realizedVolatility": 0.0050361986154048915
+      },
+      "priceSource": "last_known_good",
+      "priceAgeMs": 83
+    }
+  ],
+  "integrity": {
+    "systemCount": 1,
+    "maxOpenTrades": 15,
+    "slotsAvailable": 14,
+    "status": "OK"
+  },
+  "portfolio": {
+    "startingBalance": 800,
+    "currentBalance": 846.629839980966,
+    "cashBalance": 800,
+    "totalPositionValue": 46.62983998096599,
+    "netPnl": 46.62983998096604,
+    "netPnlPercent": 5.828729997620755
+  }
+}

@@ -1,0 +1,222 @@
+{
+  "ok": true,
+  "timestamp": "2025-12-08T11:19:08.879Z",
+  "sessionStart": "2025-12-08T11:15:01.808Z",
+  "totalSignals": 0,
+  "totalOpened": 18,
+  "totalClosed": 2,
+  "totalForceClosed": 0,
+  "byCloseReason": {
+    "target_hit": 2
+  },
+  "byStrategy": {
+    "sma_trend_ride": {
+      "opened": 8,
+      "closed": 0
+    },
+    "vwap_pullback": {
+      "opened": 5,
+      "closed": 0
+    },
+    "dhma": {
+      "opened": 2,
+      "closed": 2
+    },
+    "vwap_bounce": {
+      "opened": 1,
+      "closed": 0
+    },
+    "mean_reversion": {
+      "opened": 2,
+      "closed": 0
+    }
+  },
+  "hardStopSummaries": [],
+  "slotStateSnapshots": 0,
+  "recentEvents": [
+    {
+      "tradeId": "39a43598-915c-4b23-b56b-9ab11f6ffbd8",
+      "symbol": "XTZUSDT",
+      "strategy": "sma_trend_ride",
+      "eventType": "TRADE_OPEN",
+      "source": "normal",
+      "entryPrice": 0.48950876340000005,
+      "timestamp": "2025-12-08T11:17:35.768Z"
+    },
+    {
+      "tradeId": "bfafc82d-2b0c-4f55-b0da-9f16e8e31299",
+      "symbol": "XTZUSDT",
+      "strategy": "sma_trend_ride",
+      "eventType": "TRADE_OPEN",
+      "source": "normal",
+      "entryPrice": 0.48950876340000005,
+      "timestamp": "2025-12-08T11:17:35.644Z"
+    },
+    {
+      "tradeId": "a2ce5171-1233-4dab-ad3c-440aaf424c3a",
+      "symbol": "XTZEUR",
+      "strategy": "sma_trend_ride",
+      "eventType": "TRADE_OPEN",
+      "source": "normal",
+      "entryPrice": 0.419464254,
+      "timestamp": "2025-12-08T11:17:33.473Z"
+    },
+    {
+      "tradeId": "9a570e33-8f99-4481-a327-dd836b8971c3",
+      "symbol": "TRXUSD",
+      "strategy": "vwap_pullback",
+      "eventType": "TRADE_OPEN",
+      "source": "normal",
+      "entryPrice": 0.28696906187949994,
+      "timestamp": "2025-12-08T11:17:26.849Z"
+    },
+    {
+      "tradeId": "bad9d298-483b-4b88-a696-ef8b4c133d1f",
+      "symbol": "UNI/EUR",
+      "strategy": "dhma",
+      "eventType": "TRADE_CLOSE",
+      "source": "normal",
+      "closeReason": "target_hit",
+      "exitPrice": 4.929913907668749,
+      "pnl": -0.16313451880793622,
+      "timestamp": "2025-12-08T11:17:24.852Z"
+    },
+    {
+      "tradeId": "cbb20cb4-9fbc-4fc0-89fc-860243edb458",
+      "symbol": "TRUMPUSD",
+      "strategy": "sma_trend_ride",
+      "eventType": "TRADE_OPEN",
+      "source": "normal",
+      "entryPrice": 5.756093208,
+      "timestamp": "2025-12-08T11:17:24.172Z"
+    },
+    {
+      "tradeId": "b6bf4797-a73d-4b86-90e5-88ec8360df1c",
+      "symbol": "ETH/USD",
+      "strategy": "dhma",
+      "eventType": "TRADE_CLOSE",
+      "source": "normal",
+      "closeReason": "target_hit",
+      "exitPrice": 3161.841575840447,
+      "pnl": -0.1631344693702653,
+      "timestamp": "2025-12-08T11:17:23.168Z"
+    },
+    {
+      "tradeId": "b6bf4797-a73d-4b86-90e5-88ec8360df1c",
+      "symbol": "ETH/USD",
+      "strategy": "dhma",
+      "eventType": "TRADE_OPEN",
+      "source": "normal",
+      "entryPrice": 3166.591463035,
+      "timestamp": "2025-12-08T11:17:21.792Z"
+    },
+    {
+      "tradeId": "863e69d3-a471-4cb2-94af-789da554d0c8",
+      "symbol": "FXSUSD",
+      "strategy": "mean_reversion",
+      "eventType": "TRADE_OPEN",
+      "source": "normal",
+      "entryPrice": 0.7949836895,
+      "timestamp": "2025-12-08T11:17:18.814Z"
+    },
+    {
+      "tradeId": "2992cf1f-be99-4f13-ae80-a84b2602baec",
+      "symbol": "FXSUSD",
+      "strategy": "mean_reversion",
+      "eventType": "TRADE_OPEN",
+      "source": "normal",
+      "entryPrice": 0.7949836895,
+      "timestamp": "2025-12-08T11:17:18.489Z"
+    },
+    {
+      "tradeId": "e5f3f10e-a2fc-4613-8fe5-517bc80f1735",
+      "symbol": "ZEURZUSD",
+      "strategy": "vwap_pullback",
+      "eventType": "TRADE_OPEN",
+      "source": "normal",
+      "entryPrice": 1.1677939473199999,
+      "timestamp": "2025-12-08T11:17:15.889Z"
+    },
+    {
+      "tradeId": "5fe1293e-5e45-4a9d-a80f-f4f13b014350",
+      "symbol": "ZEURZUSD",
+      "strategy": "vwap_pullback",
+      "eventType": "TRADE_OPEN",
+      "source": "normal",
+      "entryPrice": 1.1677939473199999,
+      "timestamp": "2025-12-08T11:17:15.734Z"
+    },
+    {
+      "tradeId": "58d5059c-5370-46c2-a327-e6812c82ecae",
+      "symbol": "LTC/USD",
+      "strategy": "vwap_bounce",
+      "eventType": "TRADE_OPEN",
+      "source": "normal",
+      "entryPrice": 84.099850835,
+      "timestamp": "2025-12-08T11:17:12.129Z"
+    },
+    {
+      "tradeId": "c0019be0-69b7-49cf-bf82-c57cfdebacfc",
+      "symbol": "EURCUSDC",
+      "strategy": "vwap_pullback",
+      "eventType": "TRADE_OPEN",
+      "source": "normal",
+      "entryPrice": 1.1678440723949999,
+      "timestamp": "2025-12-08T11:17:08.617Z"
+    },
+    {
+      "tradeId": "f5fbe12b-2348-47cd-b572-eb49bc8703c2",
+      "symbol": "XTZ/USDT",
+      "strategy": "sma_trend_ride",
+      "eventType": "TRADE_OPEN",
+      "source": "normal",
+      "entryPrice": 0.48950876340000005,
+      "timestamp": "2025-12-08T11:17:06.977Z"
+    },
+    {
+      "tradeId": "bad9d298-483b-4b88-a696-ef8b4c133d1f",
+      "symbol": "UNI/EUR",
+      "strategy": "dhma",
+      "eventType": "TRADE_OPEN",
+      "source": "normal",
+      "entryPrice": 4.937319887499999,
+      "timestamp": "2025-12-08T11:17:04.486Z"
+    },
+    {
+      "tradeId": "d5679af7-0a94-4046-ad0d-556fd5317f58",
+      "symbol": "DOT/USDC",
+      "strategy": "sma_trend_ride",
+      "eventType": "TRADE_OPEN",
+      "source": "normal",
+      "entryPrice": 2.1596388063,
+      "timestamp": "2025-12-08T11:16:50.953Z"
+    },
+    {
+      "tradeId": "6ee83bee-572a-4c4d-8300-130bd99ffe28",
+      "symbol": "AUDUSD",
+      "strategy": "vwap_pullback",
+      "eventType": "TRADE_OPEN",
+      "source": "normal",
+      "entryPrice": 0.6649592449499999,
+      "timestamp": "2025-12-08T11:16:47.825Z"
+    },
+    {
+      "tradeId": "8ff5d33e-7815-4daf-960d-a885fd728c1d",
+      "symbol": "ADA/USD",
+      "strategy": "sma_trend_ride",
+      "eventType": "TRADE_OPEN",
+      "source": "normal",
+      "entryPrice": 0.43418463950700004,
+      "timestamp": "2025-12-08T11:16:46.088Z"
+    },
+    {
+      "tradeId": "8b1676f7-d739-4194-a0b1-71b01918f0e8",
+      "symbol": "API3EUR",
+      "strategy": "sma_trend_ride",
+      "eventType": "TRADE_OPEN",
+      "source": "normal",
+      "entryPrice": 0.433513296,
+      "timestamp": "2025-12-08T11:16:45.466Z"
+    }
+  ]
+}

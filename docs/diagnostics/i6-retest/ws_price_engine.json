@@ -1,0 +1,6 @@
+{
+  "error": "Not Found",
+  "message": "API endpoint not found: /api/diagnostics/i5/price-engine",
+  "path": "/api/diagnostics/i5/price-engine",
+  "method": "GET"
+}

@@ -1,0 +1,62 @@
+{
+  "ok": true,
+  "phase": "8.8.3-I2",
+  "description": "RTB Metrics Service - Single source of truth for RTB statistics",
+  "timestamp": "2025-12-08T11:19:08.625Z",
+  "sessionStart": "2025-12-08T11:15:01.957Z",
+  "totals": {
+    "attempts": 54,
+    "opened": 18,
+    "blocked": 35
+  },
+  "byBlockReason": {
+    "KILL_SWITCH": 0,
+    "NO_STOP_LOSS": 0,
+    "INVALID_STOP_LOSS": 0,
+    "POSITION_LIMIT": 32,
+    "COOLDOWN": 0,
+    "MAX_POSITION": 0,
+    "LPCP_LOW_PRICE": 0,
+    "LPCP_MIN_NOTIONAL": 0,
+    "FX_CONVERSION_FAILED": 0,
+    "PORTFOLIO_RISK": 0,
+    "INSUFFICIENT_BALANCE": 0,
+    "MAX_EXPOSURE": 0,
+    "MAX_TOTAL_EXPOSURE": 0,
+    "MAX_TRADES": 3,
+    "ENGINE_STOPPING": 0,
+    "OTHER": 0
+  },
+  "byStrategy": {
+    "sma_trend_ride": {
+      "attempts": 23,
+      "opened": 8,
+      "blocked": 14
+    },
+    "vwap_pullback": {
+      "attempts": 20,
+      "opened": 5,
+      "blocked": 15
+    },
+    "dhma": {
+      "attempts": 4,
+      "opened": 2,
+      "blocked": 2
+    },
+    "vwap_bounce": {
+      "attempts": 2,
+      "opened": 1,
+      "blocked": 1
+    },
+    "mean_reversion": {
+      "attempts": 5,
+      "opened": 2,
+      "blocked": 3
+    }
+  },
+  "bySymbol": 16,
+  "invariantCheck": {
+    "valid": false,
+    "message": "MISMATCH: attempts=54, opened=18, blocked=35, reasonSum=35"
+  }
+}

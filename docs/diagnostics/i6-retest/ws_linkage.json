@@ -1,0 +1,6 @@
+{
+  "error": "Not Found",
+  "message": "API endpoint not found: /api/diagnostics/i5/ws-linkage",
+  "path": "/api/diagnostics/i5/ws-linkage",
+  "method": "GET"
+}

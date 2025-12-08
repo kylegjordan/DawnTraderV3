@@ -1,0 +1,223 @@
+{
+  "ok": true,
+  "phase": "8.8.3-I5",
+  "description": "RTB Block Recording Audit - Last 500 block events",
+  "timestamp": "2025-12-08T11:19:08.747Z",
+  "count": 35,
+  "distinctReasons": [
+    "POSITION_LIMIT",
+    "MAX_TRADES"
+  ],
+  "events": [
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "API3EUR",
+      "strategy": "sma_trend_ride",
+      "timestamp": 1765192611302
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "AUDUSD",
+      "strategy": "vwap_pullback",
+      "timestamp": 1765192613283
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "EURCUSDC",
+      "strategy": "vwap_pullback",
+      "timestamp": 1765192633830
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "API3EUR",
+      "strategy": "sma_trend_ride",
+      "timestamp": 1765192644101
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "TRUMPUSD",
+      "strategy": "sma_trend_ride",
+      "timestamp": 1765192644238
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "AUDUSD",
+      "strategy": "vwap_pullback",
+      "timestamp": 1765192646509
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "TRXUSD",
+      "strategy": "vwap_pullback",
+      "timestamp": 1765192646636
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "XTZEUR",
+      "strategy": "sma_trend_ride",
+      "timestamp": 1765192653336
+    },
+    {
+      "reason": "MAX_TRADES",
+      "symbol": "UNI/EUR",
+      "strategy": "dhma",
+      "timestamp": 1765192655905
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "EURCUSDC",
+      "strategy": "vwap_pullback",
+      "timestamp": 1765192656809
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "ZEURZUSD",
+      "strategy": "vwap_pullback",
+      "timestamp": 1765192658073
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "FXSUSD",
+      "strategy": "mean_reversion",
+      "timestamp": 1765192659396
+    },
+    {
+      "reason": "MAX_TRADES",
+      "symbol": "ETH/USD",
+      "strategy": "dhma",
+      "timestamp": 1765192660455
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "TRUMPUSD",
+      "strategy": "sma_trend_ride",
+      "timestamp": 1765192662210
+    },
+    {
+      "reason": "MAX_TRADES",
+      "symbol": "SOON/USD",
+      "strategy": "vwap_bounce",
+      "timestamp": 1765192662929
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "TRXUSD",
+      "strategy": "vwap_pullback",
+      "timestamp": 1765192663644
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "XTZEUR",
+      "strategy": "sma_trend_ride",
+      "timestamp": 1765192665962
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "XTZUSDT",
+      "strategy": "sma_trend_ride",
+      "timestamp": 1765192667734
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "API3EUR",
+      "strategy": "sma_trend_ride",
+      "timestamp": 1765192680550
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "AUDUSD",
+      "strategy": "vwap_pullback",
+      "timestamp": 1765192681845
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "EURCUSDC",
+      "strategy": "vwap_pullback",
+      "timestamp": 1765192686287
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "ZEURZUSD",
+      "strategy": "vwap_pullback",
+      "timestamp": 1765192687414
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "FXSUSD",
+      "strategy": "mean_reversion",
+      "timestamp": 1765192688985
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "TRUMPUSD",
+      "strategy": "sma_trend_ride",
+      "timestamp": 1765192691532
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "TRXUSD",
+      "strategy": "vwap_pullback",
+      "timestamp": 1765192693042
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "XTZEUR",
+      "strategy": "sma_trend_ride",
+      "timestamp": 1765192695091
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "XTZUSDT",
+      "strategy": "sma_trend_ride",
+      "timestamp": 1765192696116
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "API3EUR",
+      "strategy": "sma_trend_ride",
+      "timestamp": 1765192701681
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "AUDUSD",
+      "strategy": "vwap_pullback",
+      "timestamp": 1765192704714
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "EURCUSDC",
+      "strategy": "vwap_pullback",
+      "timestamp": 1765192719092
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "ZEURZUSD",
+      "strategy": "vwap_pullback",
+      "timestamp": 1765192721626
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "FXSUSD",
+      "strategy": "mean_reversion",
+      "timestamp": 1765192725360
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "TRUMPUSD",
+      "strategy": "sma_trend_ride",
+      "timestamp": 1765192737676
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "TRXUSD",
+      "strategy": "vwap_pullback",
+      "timestamp": 1765192739483
+    },
+    {
+      "reason": "POSITION_LIMIT",
+      "symbol": "XTZEUR",
+      "strategy": "sma_trend_ride",
+      "timestamp": 1765192744904
+    }
+  ]
+}
