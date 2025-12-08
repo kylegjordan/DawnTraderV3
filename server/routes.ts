@@ -6896,6 +6896,23 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Phase 8.8.3-I4 B2: Get per-symbol timing stats
       const perSymbolStats = krakenWebSocketAdapter.getPerSymbolTimingStats();
       
+      // Phase 8.8.3-I5 B4: Calculate tick arrival rate and cache update statistics
+      const symbolCount = Object.keys(perSymbolStats).length;
+      let totalUpdateCount = 0;
+      let avgTickAge = 0;
+      const now = Date.now();
+      
+      for (const [symbol, stats] of Object.entries(perSymbolStats)) {
+        const typedStats = stats as { updateCount: number; lastUpdate: number };
+        totalUpdateCount += typedStats.updateCount;
+        if (typedStats.lastUpdate > 0) {
+          avgTickAge += (now - typedStats.lastUpdate);
+        }
+      }
+      if (symbolCount > 0) {
+        avgTickAge = avgTickAge / symbolCount;
+      }
+      
       res.json({
         ok: true,
         timestamp: new Date().toISOString(),
@@ -6914,6 +6931,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         priceLogCount: priceLogs.length,
         // Phase 8.8.3-I4 B2: Per-symbol timing stats
         perSymbolTimingStats: perSymbolStats,
+        // Phase 8.8.3-I5 B4: Tick flow statistics for audit
+        i5TickFlowStats: {
+          symbolCount,
+          totalUpdateCount,
+          avgTickAgeMs: Math.round(avgTickAge),
+          phase: '8.8.3-I5'
+        },
         health: {
           isConnected: diagnostics.wsConnected,
           hasStaleSymbols: diagnostics.staleSymbols.length > 0,
@@ -7152,6 +7176,35 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       res.json({ ok: true, message: 'RTB metrics reset', phase: '8.8.3-I2' });
     } catch (error: any) {
       res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // ==================== Phase 8.8.3-I5: RTB Block Recording Audit ====================
+  
+  // GET /api/diagnostics/i5/rtb-block-log - Get RTB block event log for audit
+  apiRouter.get('/diagnostics/i5/rtb-block-log', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { rtbMetricsService } = await import('./services/rtb-metrics-service.js');
+      
+      const blockLog = rtbMetricsService.getBlockEventLog();
+      const distinctReasons = [...new Set(blockLog.map(e => e.reason))];
+      
+      res.json({
+        ok: true,
+        phase: '8.8.3-I5',
+        description: 'RTB Block Recording Audit - Last 500 block events',
+        timestamp: new Date().toISOString(),
+        count: blockLog.length,
+        distinctReasons,
+        events: blockLog
+      });
+    } catch (error: any) {
+      console.error('[8.8.3-I5] Error fetching RTB block log:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to fetch RTB block log',
+        message: error.message
+      });
     }
   });
 
@@ -8082,6 +8135,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         const stopLoss = parseFloat(pos.stopLoss?.toString() || '0');
         const openedAt = pos.openedAt ? new Date(pos.openedAt) : new Date();
         const holdingDurationMs = Date.now() - openedAt.getTime();
+        
+        // Phase 8.8.3-I5 B2: Diagnostic logging for UI price resolution audit
+        console.log(`[8.8.3-I5][UI_PRICE_RESOLVE] symbol=${pos.symbol} currentPrice=${currentPrice} entryPrice=${entryPrice} source=db_position timestamp=${Date.now()}`);
         
         // Calculate % distance to TP/SL
         const distanceToTP = takeProfit > 0 ? ((takeProfit - currentPrice) / currentPrice) * 100 : 0;

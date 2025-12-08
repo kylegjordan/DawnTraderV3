@@ -473,14 +473,18 @@ export class LivePricingAdapter {
   updateFromWebSocket(symbol: string, price: number, source: 'kraken_ws' | 'binance_ws' = 'kraken_ws'): void {
     const normalized = this.normalizeSymbol(symbol);
     const timestamp = new Date().toISOString();
+    const now = Date.now();
     
     this.priceCache.set(normalized, {
       symbol: normalized,
       price,
       timestamp,
       source: source === 'kraken_ws' ? 'kraken_ws' : 'binance',
-      cachedAt: Date.now()
+      cachedAt: now
     });
+    
+    // Phase 8.8.3-I5: Diagnostic logging for cache update audit
+    console.log(`[8.8.3-I5][CACHE_UPDATE] symbol=${normalized} newPrice=${price} lastTickMsAgo=0 timestamp=${now}`);
     
     if (!this.trackedSymbols.has(normalized)) {
       this.trackedSymbols.add(normalized);

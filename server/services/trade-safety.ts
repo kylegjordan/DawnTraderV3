@@ -670,10 +670,14 @@ export async function checkGuardrailRisk(
   };
   
   // [8.8.3-I2] Helper to record block in both RtbMetricsService (source of truth) and I1 diagnostics
+  // [8.8.3-I5] Added diagnostic logging for guardrail fire audit
   const recordBlock = (result: TradeSafetyResult): TradeSafetyResult => {
     if (!result.ok) {
       rtbMetricsService.recordBlock(trade.symbol, trade.strategy, result.code);
       i1RtbDiagnostics.recordBlock(trade.symbol, trade.strategy, result.code);
+      
+      // Phase 8.8.3-I5: Diagnostic logging for guardrail fire audit
+      console.log(`[8.8.3-I5][GUARDRAIL_FIRE] guardrail=${result.code} symbol=${trade.symbol} strategy=${trade.strategy} reason=${(result as any).reason?.slice(0, 100)} timestamp=${Date.now()}`);
     }
     return result;
   };

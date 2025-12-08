@@ -323,6 +323,9 @@ export class KrakenWebSocketAdapter {
         this.priceTickLogs.shift();
       }
       
+      // Phase 8.8.3-I5: Diagnostic logging for tick arrival audit
+      console.log(`[8.8.3-I5][TICK_ARRIVE] symbol=${internalSymbol} price=${lastPrice} timestamp=${now}`);
+      
       // Phase 8.8.4: Update LivePricingAdapter cache with properly normalized symbol
       livePricingAdapter.updateFromWebSocket(internalSymbol, lastPrice, 'kraken_ws');
       

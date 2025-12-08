@@ -1844,6 +1844,16 @@
     ]
   },
   {
+    "path": "/api/diagnostics/i5/rtb-block-log",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/diagnostics/trade-lifecycle",
     "methods": [
       "GET"

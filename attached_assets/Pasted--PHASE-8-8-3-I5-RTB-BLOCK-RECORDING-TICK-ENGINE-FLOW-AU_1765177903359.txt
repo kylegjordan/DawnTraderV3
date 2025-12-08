@@ -1,0 +1,242 @@
+📘 PHASE 8.8.3-I5 — RTB BLOCK RECORDING + TICK ENGINE FLOW AUDIT (NO BEHAVIOR CHANGES)
+Directive for Replit
+👤 Authentication Credentials
+
+Use the following credentials for all authenticated API calls:
+
+username: testuser123
+password: SecurePass123!
+
+🎯 PHASE SCOPE (MUST FOLLOW EXACTLY)
+This phase has two goals only:
+A. RTB Block Recording Audit
+
+We must determine exactly which guardrails are not recording blocks.
+
+✔ No guardrail behavior changes
+✔ No recordBlock() logic changes
+✔ Add logging ONLY
+✔ Zero functional modifications
+B. Price Tick Engine Flow Audit
+
+We must determine:
+
+Why UI prices appear stale
+
+Whether the tick engine propagates ticks correctly
+
+Whether price cache → execution engine → UI path is broken
+
+✔ No logic changes
+✔ Add diagnostics ONLY
+✔ Zero behavioral modifications
+———————————————————————————
+🧱 PART A — RTB BLOCK RECORDING AUDIT
+———————————————————————————
+A1 — Add Diagnostic Logs Inside recordBlock()
+
+Modify RtbMetricsService.recordBlock(reason, symbol, strategy) ONLY to add the following log:
+
+[8.8.3-I5][RTB_BLOCK]
+reason={{reason}}
+symbol={{symbol}}
+strategy={{strategy}}
+timestamp={{Date.now()}}
+
+
+Keep this logging extremely lightweight.
+
+❗ Do not modify RTB metrics logic.
+❗ Do not modify behavior. Logging only.
+
+A2 — Add Logging to All Guardrail Checks
+
+In trade-safety.ts:
+
+Before each return Blocked(...) path, add:
+
+[8.8.3-I5][GUARDRAIL_FIRE]
+reason={{GUARDRAIL_NAME}}
+symbol={{signal.symbol}}
+strategy={{signal.strategy}}
+details={{relevant variables such as exposure, positionCount, cooldownRemaining, etc.}}
+timestamp={{Date.now()}}
+
+
+Ensure logs appear for ALL guardrails, including:
+
+ENGINE_STOPPING
+
+MAX_TRADES
+
+POSITION_LIMIT
+
+MAX_EXPOSURE
+
+COOLDOWN
+
+INVALID_STOP_LOSS
+
+FX_CONVERSION_FAILED
+
+PORTFOLIO_RISK_EXCEEDED
+
+MIN_NOTIONAL
+
+PRICE_LOWER_THAN_MIN
+
+KILL_SWITCH
+
+RISK_PER_TRADE
+
+SYMBOL_NOT_SUPPORTED
+
+any others in TradeSafetyResultCode
+
+❗ DO NOT change guardrail logic or flow. Logging only.
+
+A3 — Add Diagnostic Endpoint to Retrieve All RTB Block Logs
+
+Create:
+
+GET /api/diagnostics/i5/rtb-block-log
+
+
+Returns last 500 [RTB_BLOCK] events.
+
+No filtering or aggregation required.
+
+———————————————————————————
+🧱 PART B — PRICE TICK ENGINE FLOW AUDIT
+———————————————————————————
+
+We need to trace every step from Kraken → Tick Engine → Price Cache → Execution Engine → UI.
+
+B1 — Add Tick Arrival Logs in KrakenWebSocketAdapter
+
+Whenever a price tick arrives for a subscribed symbol, add:
+
+[8.8.3-I5][TICK_ARRIVE]
+symbol={{symbol}}
+price={{price}}
+timestamp={{Date.now()}}
+
+B2 — Add a “UI Price Resolution” Log
+
+In the backend route that returns open trade data (usually /api/open-positions or equivalent):
+
+Before returning each trade’s currentPrice, log:
+
+[8.8.3-I5][UI_PRICE_RESOLUTION]
+symbol={{symbol}}
+uiPrice={{priceReturnedToUI}}
+cachePrice={{latestPriceFromPriceCache}}
+lastTickMsAgo={{Date.now() - priceCache.lastTickTimestamp}}
+timestamp={{Date.now()}}
+
+
+This tells us exactly where staleness occurs.
+
+B3 — Add Price Cache Mutation Logs
+
+Whenever the price cache updates a symbol price:
+
+[8.8.3-I5][CACHE_UPDATE]
+symbol={{symbol}}
+newPrice={{price}}
+lastTickMsAgo=0
+timestamp={{Date.now()}}
+
+B4 — Enhance the ws-price-engine Diagnostic Endpoint
+
+Extend
+
+GET /api/diagnostics/ws-price-engine
+
+
+Add the following fields per symbol:
+
+{
+  symbol,
+  lastTickTimestamp,
+  lastTickMsAgo,
+  updateCount,
+  priceCacheValue,
+  adapterLastPrice,
+  uiLastReportedPrice (if easy to include)
+}
+
+
+UI value can be null if not directly available.
+
+———————————————————————————
+🧱 PART C — TEST RUN REQUIREMENTS
+———————————————————————————
+
+After implementing logs:
+
+C1 — Replit should run a 10-minute trading session
+
+Start paper sim
+
+Leave engine running for 10 minutes
+
+Do NOT restart workflow
+
+No intervention
+
+C2 — Collect the Following Files
+
+Place into:
+
+diagnostics/phase-8.8.3-I5-run1/
+
+
+Files required:
+
+rtb_block_log.json               (from /api/diagnostics/i5/rtb-block-log)
+ws_price_engine.json             (from updated ws-price-engine endpoint)
+open_positions_running.json
+sim_status_running.json
+trade_lifecycle.json
+server_log_excerpt.txt           (last 5 min, including all I5 logs)
+
+C3 — Expected Log Volume
+
+Expect:
+
+Hundreds of [RTB_BLOCK] events
+
+Hundreds to thousands of [TICK_ARRIVE] events
+
+Dozens of [UI_PRICE_RESOLUTION] records
+
+This is intended.
+
+———————————————————————————
+🧱 PART D — REQUIRED OUTPUT
+———————————————————————————
+
+Replit must produce a summary:
+
+PHASE 8.8.3-I5 — COMPLETE
+
+RTB Block Log Count: X
+Distinct RTB reasons observed: [...]
+Tick arrival rate median: X ms/tick
+UI price staleness median: X ms
+Symbols with stale ticks: [...]
+Symbols with correct synchronous ticks: [...]
+
+All diagnostic files saved at:
+diagnostics/phase-8.8.3-I5-run1/
+
+📌 Final Notes for Replit
+
+This phase must not modify trading behavior in ANY way.
+No guardrail logic changes.
+No RTB behavior changes.
+No price engine behavior changes.
+
+This is a visibility / audit phase only.
+Corrections will be implemented in 8.8.3-I6 based on findings.

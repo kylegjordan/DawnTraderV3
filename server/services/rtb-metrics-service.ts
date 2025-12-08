@@ -130,6 +130,47 @@ class RtbMetricsService {
     if (this.byStrategy[strategy]) {
       this.byStrategy[strategy].blocked++;
     }
+    
+    // Phase 8.8.3-I5: Diagnostic logging for RTB block recording audit
+    console.log(`[8.8.3-I5][RTB_BLOCK] reason=${normalizedReason} symbol=${symbol} strategy=${strategy} timestamp=${Date.now()}`);
+    
+    // Phase 8.8.3-I5: Store block event in circular buffer for API retrieval
+    this.recordBlockEvent(symbol, strategy, normalizedReason);
+  }
+  
+  // Phase 8.8.3-I5: Circular buffer for block events
+  private blockEventBuffer: Array<{
+    reason: string;
+    symbol: string;
+    strategy: string;
+    timestamp: number;
+  }> = [];
+  private readonly MAX_BLOCK_EVENTS = 500;
+  
+  private recordBlockEvent(symbol: string, strategy: string, reason: string): void {
+    this.blockEventBuffer.push({
+      reason,
+      symbol,
+      strategy,
+      timestamp: Date.now()
+    });
+    
+    // Trim to max size
+    if (this.blockEventBuffer.length > this.MAX_BLOCK_EVENTS) {
+      this.blockEventBuffer = this.blockEventBuffer.slice(-this.MAX_BLOCK_EVENTS);
+    }
+  }
+  
+  /**
+   * Phase 8.8.3-I5: Get block event log for diagnostics API
+   */
+  getBlockEventLog(): Array<{
+    reason: string;
+    symbol: string;
+    strategy: string;
+    timestamp: number;
+  }> {
+    return [...this.blockEventBuffer];
   }
 
   /**
