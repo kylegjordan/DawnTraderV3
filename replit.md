@@ -40,6 +40,15 @@ WebSocket Broadcast Mode Fix (I6-FIX, Dec 2025) resolves a critical bug where `p
 - To `'live'` in live-trading-service.ts when activating live trading
 Enhanced diagnostic logging with `[8.8.3-I6-FIX]` tags tracks subscription counts, unsubscription events, and mode labels in price broadcasts.
 
+Kraken Canonical Symbol Mapping (I7, Dec 2025) introduces a single authoritative symbol mapping layer for Kraken to ensure backend and frontend always agree on symbol identifiers. Key components:
+- **Canonical Internal Format**: Uses `BASE/QUOTE` format (e.g., "AVAX/USD", "AVAX/USDT", "TON/USDC") as the single source of truth. AVAX/USD, AVAX/USDT, and AVAX/USDC are treated as distinct symbols - no USDT→USD collapsing.
+- **Symbol Map** (`server/markets/kraken-symbol-map.ts`): Contains mappings for each internal symbol to Kraken REST pair format and Kraken WebSocket pair format.
+- **Symbol Resolver** (`server/markets/kraken-symbol-resolver.ts`): Provides functions for resolving symbols across different formats: `resolveByInternalSymbol()`, `resolveByKrakenRestPair()`, `resolveByKrakenWsPair()`, `normalizeToInternalSymbol()`, `getKrakenRestPair()`, `getKrakenWsPair()`.
+- **LivePricingAdapter Integration**: The `normalizeSymbol()` method now uses `normalizeToInternalSymbol()` from the resolver, eliminating the USDT→USD conversion hack that caused symbol mismatches.
+- **KrakenWebSocketAdapter Integration**: The `mapKrakenPairToInternalSymbol()` method now uses the I7 resolver as the primary source of truth for incoming ticker symbols.
+- **PaperExecutionEngine Integration**: REST fallback uses `getKrakenRestPair()` for correct API format and broadcasts prices through `livePricingAdapter.updateFromWebSocket()` for frontend visibility.
+Diagnostic logging with `[I7]` tags tracks symbol mappings for auditing.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed (`wss://ws.kraken.com`) for open trade price monitoring.
