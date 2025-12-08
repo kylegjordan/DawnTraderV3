@@ -409,6 +409,7 @@ export default function ActiveTradesV2() {
     if (lastMessage.type === 'price_updated' && lastMessage.payload?.symbol) {
       const { symbol, price, timestamp } = lastMessage.payload;
       const normalized = normalizeSymbol(symbol);
+      console.log(`[I6-UI] Price update received: ${symbol} -> ${normalized} = $${price}`);
       setLivePrices(prev => ({
         ...prev,
         [normalized]: { price, timestamp }
