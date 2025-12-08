@@ -6,6 +6,7 @@ import { registerEngine, registerMicroService } from './mode-registry';
 import { SignalOrchestrator } from './signal-orchestrator';
 import type { StrategySignal } from './strategy-engine';
 import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js';
+import { livePricingAdapter } from './live-pricing-adapter.js';
 
 interface PortfolioMetrics {
   totalTrades: number;
@@ -525,9 +526,25 @@ export class PaperPortfolioManager {
         const trade = trades.find(t => t.openedAt && !t.closedAt);
         
         if (trade) {
-          const currentPrice = position.currentPrice ? parseFloat(position.currentPrice) : parseFloat(position.avgPrice);
           const avgPrice = parseFloat(position.avgPrice);
           const quantity = parseFloat(position.quantity);
+          
+          // Phase 8.8.3-I6: Use live price for closeAllPositions calculation
+          let currentPrice = avgPrice;
+          let priceSource = 'entry_fallback';
+          const liveQuote = livePricingAdapter.getPrice(position.symbol);
+          if (liveQuote && liveQuote.price !== null && liveQuote.source !== 'no_reliable_price') {
+            currentPrice = liveQuote.price;
+            priceSource = liveQuote.source;
+          } else {
+            const fallbackQuote = await livePricingAdapter.getPriceWithFallback(position.symbol, 5000);
+            if (fallbackQuote && fallbackQuote.price !== null && fallbackQuote.source !== 'no_reliable_price') {
+              currentPrice = fallbackQuote.price;
+              priceSource = fallbackQuote.source;
+            }
+          }
+          console.log(`[8.8.3-I6][CLOSE_ALL_LIVE_PRICE] symbol=${position.symbol} price=${currentPrice} source=${priceSource}`);
+          
           const pnl = (currentPrice - avgPrice) * quantity;
           const pnlPercent = ((currentPrice - avgPrice) / avgPrice) * 100;
 

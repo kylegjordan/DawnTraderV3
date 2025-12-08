@@ -1,0 +1,181 @@
+✅ PHASE 8.8.3-I6 — LIVE PRICE DISTRIBUTION FIX
+Objective:
+
+Correctly route live Kraken WebSocket prices into:
+
+Active Trades UI
+
+Backend Trade-Monitoring Engine
+
+P/L & TP/SL evaluation
+
+…and eliminate stale DB price usage entirely.
+
+This is the foundational correctness fix required before Ready-to-Buy (8.8.4) and Strategy Engine audit work.
+
+🟦 SECTION A — Correct Price Flow for Active Trades (UI)
+A1 — Replace all stale price sources with livePriceCache
+
+In any backend endpoint that feeds Active Trades (especially /api/paper-sim/open-positions and /api/trades/...):
+
+Replace:
+
+currentPrice = db_price_snapshot
+
+
+With:
+
+currentPrice = livePricingAdapter.getLatestPrice(symbol)
+
+
+This applies to:
+
+open positions endpoint
+
+trade detail endpoint
+
+any P/L calculation logic used by the UI
+
+Result:
+UI P/L, distance-to-SL/TP, and position valuations update instantly with every tick.
+
+🟦 SECTION B — Correct Price Flow for Trade-Monitoring Engine
+B1 — Stop using DB prices for engine decisions
+
+Open paper-portfolio-manager.ts and/or trade-monitoring engine (where SL/TP and exit logic are checked):
+
+Replace:
+
+const price = trade.entryOrStoredPrice;
+
+
+With:
+
+const price = livePricingAdapter.getLatestPrice(trade.symbol);
+if (!price) return; // no tick received yet → safely skip this cycle
+
+B2 — Evaluate SL/TP using live price
+if (price <= trade.stopLoss) closeTrade("stop_hit");
+if (price >= trade.takeProfit) closeTrade("take_profit");
+
+B3 — Recompute P/L using live price
+
+Remove any P/L code that uses DB values.
+
+🟦 SECTION C — WebSocket Subscription Correctness
+C1 — On trade open → subscribe to ticker
+
+Inside trade-open logic:
+
+krakenWebSocketAdapter.subscribeSymbol(symbol);
+
+C2 — On trade close → unsubscribe
+krakenWebSocketAdapter.unsubscribeSymbol(symbol);
+
+C3 — Add defensive guard (optional but recommended)
+
+If subscribing twice, ignore the second request.
+If unsubscribing when not subscribed, ignore safely.
+
+🟦 SECTION D — Price Cache / LivePricingAdapter Verification
+D1 — Ensure getLatestPrice is stable, synchronous, and fast
+
+Confirm this method:
+
+returns the latest tick immediately
+
+never hits the DB
+
+never performs async waits
+
+does not mutate state
+
+D2 — Add lightweight debug log (temporary, remove later)
+
+Only for testing:
+
+[8.8.3-I6][LIVE_PRICE_FEED] symbol=X price=Y age=Zms
+
+🟦 SECTION E — Backend P/L & UI Distance Calculations
+
+Now that the live price is always available:
+
+E1 — Recompute distance-to-target & distance-to-stop on backend
+distanceToTP = trade.takeProfit - currentPrice;
+distanceToSL = currentPrice - trade.stopLoss;
+
+E2 — Remove any “cached” or “stored” price values
+
+They do not reflect reality and must be removed.
+
+🟦 SECTION F — Remove ALL Legacy Price Sources
+
+Search for any of the following patterns and REMOVE them:
+
+trade.last_known_price
+
+position_snapshot.price
+
+db_price
+
+latest_price_from_db
+
+any SQL pulling current price
+
+endpoints under /api/pricing/... that load stale prices
+
+Live trades must use live prices only, no exceptions.
+
+🟦 SECTION G — Testing Protocol (Replit must run this)
+
+Ask Replit to perform:
+
+G1 — Quick 2-minute smoke test
+
+Open at least 5 trades
+
+Confirm P/L updates every tick (1–2 seconds)
+
+Confirm TP/SL triggers execute instantly
+
+G2 — 20-minute continuous live price test
+
+Replit must log:
+
+[8.8.3-I6][LIVE_PRICE_FEED]
+[8.8.3-I6][TRADE_ENGINE_PRICE]
+
+Success Criteria
+
+Tick age ≤ 2 seconds for all active symbols
+
+P/L in UI visibly updates
+
+At least one trade closes via SL/TP without manual stop
+
+No stale DB prices appear anywhere
+
+🟦 SECTION H — Credentials for Testing
+
+(test environment credentials)
+
+username: testuser123
+password: SecurePass123!
+
+🟩 DELIVERABLE
+
+At the end of I6, Replit must produce:
+
+Phase-8.8.3-I6_LogExtract.md
+
+Before/After UI screenshots
+
+Summary confirming:
+
+Active Trades now use live price
+
+Trade engine uses live price
+
+SL/TP trigger behavior validated
+
+No DB price references remain

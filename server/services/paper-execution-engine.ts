@@ -362,13 +362,19 @@ export class PaperExecutionEngine {
         this.priceTickLogs.push(tickEntry);
         
         console.log(`[PRICE_TICK] symbol=${position.symbol} refreshed_at=${tickEntry.refreshedAt} diff_ms=${diffMs} source=${priceSource}`);
+        
+        // Phase 8.8.3-I6 B1: Diagnostic logging for trade engine live price usage
+        console.log(`[8.8.3-I6][ENGINE_LIVE_PRICE] symbol=${position.symbol} price=${currentPrice} source=${priceSource} age=${diffMs}ms`);
         const avgPrice = parseFloat(position.avgPrice);
         const stopLoss = position.stopLoss ? parseFloat(position.stopLoss) : null;
         const takeProfit = position.takeProfit ? parseFloat(position.takeProfit) : null;
 
-        // Calculate current P/L
+        // Phase 8.8.3-I6 B3: Calculate current P/L using LIVE price
         const pnl = (currentPrice - avgPrice) * parseFloat(position.quantity);
         const pnlPercent = ((currentPrice - avgPrice) / avgPrice) * 100;
+        
+        // Phase 8.8.3-I6 B3: Diagnostic logging for P/L calculation
+        console.log(`[8.8.3-I6][ENGINE_PNL_CALC] symbol=${position.symbol} entry=${avgPrice} live=${currentPrice} pnl=${pnl.toFixed(4)} pnlPct=${pnlPercent.toFixed(4)}%`);
 
         // Update position with current P/L
         await storage.updatePaperSimOpenPosition(this.mode, position.id, {
@@ -412,8 +418,16 @@ export class PaperExecutionEngine {
     stopLoss: number | null,
     takeProfit: number | null
   ): Promise<ExitCondition | null> {
+    // Phase 8.8.3-I6 B2: Calculate distance to SL/TP using live price
+    const distanceToTP = takeProfit ? ((takeProfit - currentPrice) / currentPrice) * 100 : null;
+    const distanceToSL = stopLoss ? ((currentPrice - stopLoss) / currentPrice) * 100 : null;
+    
+    // Phase 8.8.3-I6 B2: Diagnostic logging for SL/TP evaluation
+    console.log(`[8.8.3-I6][EXIT_EVAL] symbol=${position.symbol} livePrice=${currentPrice} tp=${takeProfit} sl=${stopLoss} distTP=${distanceToTP?.toFixed(4)}% distSL=${distanceToSL?.toFixed(4)}%`);
+    
     // Check target hit (long position)
     if (takeProfit && currentPrice >= takeProfit) {
+      console.log(`[8.8.3-I6][EXIT_TRIGGER] symbol=${position.symbol} type=target_hit price=${currentPrice} tp=${takeProfit}`);
       return {
         type: 'target_hit',
         price: currentPrice,
@@ -423,6 +437,7 @@ export class PaperExecutionEngine {
 
     // Check stop hit (long position)
     if (stopLoss && currentPrice <= stopLoss) {
+      console.log(`[8.8.3-I6][EXIT_TRIGGER] symbol=${position.symbol} type=stop_hit price=${currentPrice} sl=${stopLoss}`);
       return {
         type: 'stop_hit',
         price: currentPrice,

@@ -64,6 +64,8 @@ import { getCache, setCache, coalesce } from './services/cache';
 import { metricsService } from './services/metrics-service';
 import { activeFilterPool } from './services/active-filter-pool.js';
 import { b5SizingAudit } from './services/b5-sizing-audit.js';
+import { livePricingAdapter } from './services/live-pricing-adapter.js';
+import { krakenWebSocketAdapter } from './services/kraken-websocket-adapter.js';
 import os from 'os';
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
@@ -8116,6 +8118,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 8.8.3-B1: Enhanced Active Trades endpoint with slot visibility and integrity checking
+  // Phase 8.8.3-I6: Now uses live prices from LivePricingAdapter instead of stale DB prices
   apiRouter.get('/paper-sim/active-trades', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
@@ -8127,38 +8130,61 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const guardrails = await storage.getGuardrailsV2({ mode: 'paper' });
       const maxOpenTrades = guardrails?.maxOpenPositions || 15;
       
-      // Enrich positions with slot numbers and health status
-      const enrichedPositions = positions.map((pos, index) => {
+      // Phase 8.8.3-I6: Enrich positions with LIVE prices from LivePricingAdapter
+      const enrichedPositions = await Promise.all(positions.map(async (pos, index) => {
         const entryPrice = parseFloat(pos.avgPrice?.toString() || '0');
-        const currentPrice = parseFloat(pos.currentPrice?.toString() || entryPrice.toString());
         const takeProfit = parseFloat(pos.takeProfit?.toString() || '0');
         const stopLoss = parseFloat(pos.stopLoss?.toString() || '0');
         const openedAt = pos.openedAt ? new Date(pos.openedAt) : new Date();
         const holdingDurationMs = Date.now() - openedAt.getTime();
         
-        // Phase 8.8.3-I5 B2: Diagnostic logging for UI price resolution audit
-        console.log(`[8.8.3-I5][UI_PRICE_RESOLVE] symbol=${pos.symbol} currentPrice=${currentPrice} entryPrice=${entryPrice} source=db_position timestamp=${Date.now()}`);
+        // Phase 8.8.3-I6 A1: Get LIVE price from LivePricingAdapter instead of stale DB price
+        let currentPrice = entryPrice; // Fallback to entry price
+        let priceSource = 'entry_fallback';
+        let priceAgeMs = 0;
         
-        // Calculate % distance to TP/SL
+        const liveQuote = livePricingAdapter.getPrice(pos.symbol);
+        if (liveQuote && liveQuote.price !== null && liveQuote.source !== 'no_reliable_price') {
+          currentPrice = liveQuote.price;
+          priceSource = liveQuote.source;
+          priceAgeMs = Date.now() - new Date(liveQuote.timestamp).getTime();
+        } else {
+          // Try with fallback (includes REST fetch if cache stale)
+          const fallbackQuote = await livePricingAdapter.getPriceWithFallback(pos.symbol, 5000);
+          if (fallbackQuote && fallbackQuote.price !== null && fallbackQuote.source !== 'no_reliable_price') {
+            currentPrice = fallbackQuote.price;
+            priceSource = fallbackQuote.source;
+            priceAgeMs = Date.now() - new Date(fallbackQuote.timestamp).getTime();
+          }
+        }
+        
+        // Phase 8.8.3-I6 D2: Diagnostic logging for live price feed audit
+        console.log(`[8.8.3-I6][LIVE_PRICE_FEED] symbol=${pos.symbol} price=${currentPrice} age=${priceAgeMs}ms source=${priceSource}`);
+        
+        // Phase 8.8.3-I6 E1: Calculate P/L and distance using LIVE price
+        const quantity = parseFloat(pos.quantity?.toString() || '0');
+        const unrealizedPnl = (currentPrice - entryPrice) * quantity;
+        const unrealizedPnlPercent = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice) * 100 : 0;
+        
+        // Phase 8.8.3-I6 E1: Distance to TP/SL using live price
         const distanceToTP = takeProfit > 0 ? ((takeProfit - currentPrice) / currentPrice) * 100 : 0;
         const distanceToSL = stopLoss > 0 ? ((currentPrice - stopLoss) / currentPrice) * 100 : 0;
         
         // Health indicator: green (profitable), yellow (near breakeven), red (losing)
-        const pnlPercent = parseFloat(pos.unrealizedPnlPercent?.toString() || '0');
         let health: 'green' | 'yellow' | 'red' = 'yellow';
-        if (pnlPercent >= 0.5) health = 'green';
-        else if (pnlPercent <= -0.5) health = 'red';
+        if (unrealizedPnlPercent >= 0.5) health = 'green';
+        else if (unrealizedPnlPercent <= -0.5) health = 'red';
         
         return {
           id: pos.id,
           symbol: pos.symbol,
           strategy: pos.strategyName,
           side: pos.side,
-          quantity: parseFloat(pos.quantity?.toString() || '0'),
+          quantity,
           entryPrice,
           currentPrice,
-          unrealizedPnl: parseFloat(pos.unrealizedPnl?.toString() || '0'),
-          unrealizedPnlPercent: pnlPercent,
+          unrealizedPnl,
+          unrealizedPnlPercent,
           takeProfit,
           stopLoss,
           distanceToTP,
@@ -8169,9 +8195,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           health,
           openedAt: openedAt.toISOString(),
           confidence: parseFloat(pos.confidence?.toString() || '0'),
-          metadata: pos.metadata
+          metadata: pos.metadata,
+          priceSource, // Phase 8.8.3-I6: Expose price source for debugging
+          priceAgeMs   // Phase 8.8.3-I6: Expose price age for staleness monitoring
         };
-      });
+      }));
       
       // Integrity check
       const systemCount = positions.length;
@@ -8247,25 +8275,30 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Current Balance = starting_balance + realized P/L (NOT based on open positions value)
       const currentBalance = startingBalance + realizedPnl;
       
-      // Get open positions for "Open Position Value" (separate display)
+      // Phase 8.8.3-I6: Get open positions for "Open Position Value" using LIVE prices
       const openPositions = await storage.getPaperSimOpenPositions(mode);
-      const krakenService = new (await import('./services/kraken')).KrakenService();
       let totalPositionValue = 0;
       
       for (const pos of openPositions) {
         const quantity = parseFloat(pos.quantity?.toString() || '0');
-        let currentPrice = parseFloat(pos.currentPrice?.toString() || pos.avgPrice?.toString() || '0');
+        const entryPrice = parseFloat(pos.avgPrice?.toString() || '0');
+        let currentPrice = entryPrice;
+        let priceSource = 'entry_fallback';
         
-        // Fetch live price if available
-        try {
-          const livePrice = await krakenService.getPrice(pos.symbol);
-          if (livePrice && livePrice.last > 0) {
-            currentPrice = livePrice.last;
+        // Phase 8.8.3-I6: Use livePricingAdapter for consistent live price source
+        const liveQuote = livePricingAdapter.getPrice(pos.symbol);
+        if (liveQuote && liveQuote.price !== null && liveQuote.source !== 'no_reliable_price') {
+          currentPrice = liveQuote.price;
+          priceSource = liveQuote.source;
+        } else {
+          const fallbackQuote = await livePricingAdapter.getPriceWithFallback(pos.symbol, 5000);
+          if (fallbackQuote && fallbackQuote.price !== null && fallbackQuote.source !== 'no_reliable_price') {
+            currentPrice = fallbackQuote.price;
+            priceSource = fallbackQuote.source;
           }
-        } catch (e) {
-          // Use cached price on error
         }
         
+        console.log(`[8.8.3-I6][PORTFOLIO_LIVE_PRICE] symbol=${pos.symbol} price=${currentPrice} source=${priceSource}`);
         totalPositionValue += quantity * currentPrice;
       }
       
@@ -8306,8 +8339,24 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       }
       
       const entryPrice = parseFloat(position.avgPrice?.toString() || '0');
-      const currentPrice = parseFloat(position.currentPrice?.toString() || entryPrice.toString());
       const quantity = parseFloat(position.quantity?.toString() || '0');
+      
+      // Phase 8.8.3-I6: Use live price for close calculation
+      let currentPrice = entryPrice;
+      let priceSource = 'entry_fallback';
+      const liveQuote = livePricingAdapter.getPrice(position.symbol);
+      if (liveQuote && liveQuote.price !== null && liveQuote.source !== 'no_reliable_price') {
+        currentPrice = liveQuote.price;
+        priceSource = liveQuote.source;
+      } else {
+        const fallbackQuote = await livePricingAdapter.getPriceWithFallback(position.symbol, 5000);
+        if (fallbackQuote && fallbackQuote.price !== null && fallbackQuote.source !== 'no_reliable_price') {
+          currentPrice = fallbackQuote.price;
+          priceSource = fallbackQuote.source;
+        }
+      }
+      console.log(`[8.8.3-I6][CLOSE_TRADE_LIVE_PRICE] symbol=${position.symbol} price=${currentPrice} source=${priceSource}`);
+      
       const pnl = (currentPrice - entryPrice) * quantity;
       const pnlPercent = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice) * 100 : 0;
       
@@ -8374,8 +8423,24 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       for (const position of positions) {
         try {
           const entryPrice = parseFloat(position.avgPrice?.toString() || '0');
-          const currentPrice = parseFloat(position.currentPrice?.toString() || entryPrice.toString());
           const quantity = parseFloat(position.quantity?.toString() || '0');
+          
+          // Phase 8.8.3-I6: Use live price for stranded clear calculation
+          let currentPrice = entryPrice;
+          let priceSource = 'entry_fallback';
+          const liveQuote = livePricingAdapter.getPrice(position.symbol);
+          if (liveQuote && liveQuote.price !== null && liveQuote.source !== 'no_reliable_price') {
+            currentPrice = liveQuote.price;
+            priceSource = liveQuote.source;
+          } else {
+            const fallbackQuote = await livePricingAdapter.getPriceWithFallback(position.symbol, 5000);
+            if (fallbackQuote && fallbackQuote.price !== null && fallbackQuote.source !== 'no_reliable_price') {
+              currentPrice = fallbackQuote.price;
+              priceSource = fallbackQuote.source;
+            }
+          }
+          console.log(`[8.8.3-I6][STRANDED_CLEAR_LIVE_PRICE] symbol=${position.symbol} price=${currentPrice} source=${priceSource}`);
+          
           const pnl = (currentPrice - entryPrice) * quantity;
           const pnlPercent = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice) * 100 : 0;
           

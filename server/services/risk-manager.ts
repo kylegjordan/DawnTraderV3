@@ -33,6 +33,7 @@ import { marketDataService } from './market-data';
 import { AssetCapabilitiesService } from './asset-capabilities';
 import { telemetryService } from './telemetry-service.js';
 import { fxConversionService } from './fx-conversion-service.js';
+import { livePricingAdapter } from './live-pricing-adapter.js';
 
 export interface RiskCheckResult {
   approved: boolean;
@@ -1297,8 +1298,14 @@ export class RiskManager {
       
       for (const position of paperPositions) {
         try {
-          // Get current market price (simplified - would need real-time price)
-          const exitPrice = parseFloat(position.currentPrice || position.avgPrice) * 0.99; // Simulate 1% loss
+          // Phase 8.8.3-I6: Use live price for kill switch close
+          let currentPrice = parseFloat(position.avgPrice);
+          const liveQuote = livePricingAdapter.getPrice(position.symbol);
+          if (liveQuote && liveQuote.price !== null && liveQuote.source !== 'no_reliable_price') {
+            currentPrice = liveQuote.price;
+          }
+          console.log(`[8.8.3-I6][KILL_SWITCH_CLOSE] symbol=${position.symbol} price=${currentPrice}`);
+          const exitPrice = currentPrice * 0.99; // Simulate 1% slippage
           
           // For paper mode, we'd need to call paper trading close logic
           // For now, just delete the position (simplified)
