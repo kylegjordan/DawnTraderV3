@@ -15,7 +15,6 @@
 
 import { storage } from '../storage';
 import { contextBridge } from './context-bridge';
-import { livePricingAdapter } from './live-pricing-adapter.js';
 
 type TradingMode = 'paper' | 'live';
 
@@ -200,20 +199,12 @@ class MetricsCollector {
       // Calculate 24h P/L (simplified since settings disabled)
       const currentDrawdown = 0; // Simplified - would need settings for accurate calculation
       
-      // Phase 8.8.3-I6: Calculate exposure using live prices
-      let totalExposure = 0;
-      for (const pos of activePositions as any[]) {
-        const symbol = pos.symbol;
+      // Calculate exposure
+      const totalExposure = activePositions.reduce((sum, pos: any) => {
+        const price = parseFloat(pos.entryPrice || pos.currentPrice || '0');
         const qty = parseFloat(pos.amount || pos.quantity || '0');
-        let price = parseFloat(pos.entryPrice || '0');
-        
-        // Try to get live price
-        const liveQuote = livePricingAdapter.getPrice(symbol);
-        if (liveQuote && liveQuote.price !== null && liveQuote.source !== 'no_reliable_price') {
-          price = liveQuote.price;
-        }
-        totalExposure += price * qty;
-      }
+        return sum + (price * qty);
+      }, 0);
       const exposurePercent = portfolioValue > 0 
         ? (totalExposure / portfolioValue) * 100 
         : 0;

@@ -1,0 +1,98 @@
+🔵 PHASE 8.8.3-I6 CORRECTIVE DIRECTIVE — REMOVE LEGACY RISK MANAGER
+
+STOP modifying risk-manager.ts.
+This file is legacy and must be fully removed from active code paths.
+
+1. Move risk-manager.ts to /server/legacy/
+
+Create folder if needed:
+
+/server/legacy/risk-manager.ts
+
+2. Remove every import of risk-manager.ts
+
+Search:
+
+rg -n "risk-manager" server
+
+
+For each hit:
+
+Comment out or remove the import
+
+Remove any code that calls the risk-manager
+
+3. Confirm the modern trading engine does NOT depend on this file
+
+Specifically verify in:
+
+paper-execution-engine.ts
+
+paper-portfolio-manager.ts
+
+trade-safety.ts
+
+rtb-metrics-service.ts
+
+guardrail logic
+
+pricing engine
+
+There should be no references to risk-manager.
+
+4. If any dependency is discovered:
+
+Replace its functionality using trade-safety.ts, which is the correct home for all modern guardrail logic.
+
+5. DO NOT update or refactor risk-manager.ts
+
+It must not receive additional logic.
+It must not be patched to use live prices.
+It must not be part of I6.
+
+6. Confirm with this checklist:
+
+Replit must confirm:
+
+✔ risk-manager.ts moved to /server/legacy/
+✔ 0 references in active code
+✔ 0 guardrails depend on risk-manager
+✔ I6 modifications ONLY affect modern files:
+
+kraken-websocket-adapter
+
+live-pricing-adapter
+
+active trades endpoint
+
+paper-portfolio-manager
+
+paper-execution-engine
+
+7. Restart workflow and ensure no LSP errors appear from risk-manager removal.
+🟢 Should heuristic-trader.ts also be removed?
+
+Yes, but not now.
+It is also legacy and not part of Phase 8.8.3.
+
+However:
+
+It must NOT receive updates
+
+It must NOT be touched by future I6 steps
+
+It should eventually be moved to /server/legacy/ in a later cleanup phase
+
+For now: focus on removing risk-manager.ts only.
+
+🧭 NEXT STEP AFTER THIS FIX
+
+Once Replit completes this corrective action:
+
+We re-run I6 cleanly
+
+We confirm no legacy files influence live pricing
+
+We test the pricing flow again for correctness
+
+We continue toward the final price-engine stabilization
