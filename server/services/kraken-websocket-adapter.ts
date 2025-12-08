@@ -329,6 +329,9 @@ export class KrakenWebSocketAdapter {
       // Phase 8.8.4: Update LivePricingAdapter cache with properly normalized symbol
       livePricingAdapter.updateFromWebSocket(internalSymbol, lastPrice, 'kraken_ws');
       
+      // Phase 8.8.3-I6: Diagnostic logging to confirm WS -> cache pipeline
+      console.log(`[I6][WS_CACHE_UPDATE] symbol=${internalSymbol} price=${lastPrice} timestamp=${new Date().toISOString()}`);
+      
       this.throttledBroadcast(internalSymbol, lastPrice, bid, ask);
       
     } catch (error) {

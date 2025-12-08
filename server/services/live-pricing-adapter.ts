@@ -227,12 +227,13 @@ export class LivePricingAdapter {
   }
 
   /**
-   * Fetch live price from API (Binance or CoinGecko)
+   * Fetch live price from API (Binance, CoinGecko, or Kraken REST)
+   * Phase 8.8.3-I6: Added Kraken REST API as PRIMARY fallback for Kraken pairs
    * Phase 8.8.3-B9: Mock pricing disabled in production - returns null if no reliable price
    */
   private async fetchLivePrice(symbol: string): Promise<PriceQuote | null> {
     try {
-      // Try Binance first
+      // Try Binance first (good for common pairs)
       const binancePrice = await this.fetchFromBinance(symbol);
       if (binancePrice !== null) {
         return {
@@ -243,7 +244,7 @@ export class LivePricingAdapter {
         };
       }
 
-      // Fallback to CoinGecko
+      // Fallback to CoinGecko (limited to mapped coins)
       const coinGeckoPrice = await this.fetchFromCoinGecko(symbol);
       if (coinGeckoPrice !== null) {
         return {
@@ -254,16 +255,30 @@ export class LivePricingAdapter {
         };
       }
 
+      // Phase 8.8.3-I6: CRITICAL - Kraken REST API as PRIMARY fallback for Kraken-specific pairs
+      // This ensures we always get fresh prices when WebSocket is stale
+      const krakenPrice = await this.fetchFromKrakenRest(symbol);
+      if (krakenPrice !== null) {
+        return {
+          symbol,
+          price: krakenPrice,
+          timestamp: new Date().toISOString(),
+          source: 'kraken_rest'
+        };
+      }
+
       // Phase 8.8.3-B9: Check if mock mode is EXPLICITLY enabled (dev/testing only)
       if (this.useMockMode) {
         console.log(`[27.F.15.D][Pricing] API unavailable for ${symbol}, falling back to mock (MOCK_MODE=true)`);
         return await this.fetchMockPrice(symbol);
       }
       
-      // Phase 8.8.3-B9: Try lastKnownGoodPrice from cache before returning null
+      // Phase 8.8.3-I6: Only use last_known_good if ALL external APIs fail
+      // This should now be rare since Kraken REST is the authoritative source
       const cached = this.priceCache.get(this.normalizeSymbol(symbol));
       if (cached && cached.price > 0) {
-        console.log(`[B9.PRICING][LAST_KNOWN_GOOD] ${symbol}: Using cached price $${cached.price.toFixed(2)} (source: ${cached.source})`);
+        const cacheAge = Date.now() - cached.cachedAt;
+        console.log(`[8.8.3-I6][LAST_KNOWN_GOOD_FALLBACK] symbol=${symbol} price=${cached.price.toFixed(4)} age=${cacheAge}ms reason=all_apis_failed`);
         return {
           symbol,
           price: cached.price,
@@ -273,7 +288,7 @@ export class LivePricingAdapter {
       }
       
       // Phase 8.8.3-B9: NO mock fallback in production - return null
-      console.warn(`[B9.PRICING][NO_REAL_PRICE] ${symbol}: No reliable price available (Binance/CoinGecko failed, no cached data)`);
+      console.warn(`[8.8.3-I6][NO_RELIABLE_PRICE] ${symbol}: All APIs failed (Binance/CoinGecko/Kraken), no cached data`);
       return {
         symbol,
         price: null,
@@ -291,7 +306,8 @@ export class LivePricingAdapter {
       // Try cached price as last resort
       const cached = this.priceCache.get(this.normalizeSymbol(symbol));
       if (cached && cached.price > 0) {
-        console.log(`[B9.PRICING][LAST_KNOWN_GOOD] ${symbol}: Using cached price $${cached.price.toFixed(2)} after error (source: ${cached.source})`);
+        const cacheAge = Date.now() - cached.cachedAt;
+        console.log(`[8.8.3-I6][LAST_KNOWN_GOOD_FALLBACK] symbol=${symbol} price=${cached.price.toFixed(4)} age=${cacheAge}ms reason=fetch_exception`);
         return {
           symbol,
           price: cached.price,
@@ -300,7 +316,7 @@ export class LivePricingAdapter {
         };
       }
       
-      console.error(`[B9.PRICING][NO_REAL_PRICE] ${symbol}: Live fetch failed, no cached data`, error);
+      console.error(`[8.8.3-I6][NO_RELIABLE_PRICE] ${symbol}: Live fetch exception, no cached data`, error);
       return {
         symbol,
         price: null,
@@ -373,6 +389,71 @@ export class LivePricingAdapter {
       return data[coinId]?.usd || null;
 
     } catch (error) {
+      return null;
+    }
+  }
+
+  /**
+   * Phase 8.8.3-I6: Fetch from Kraken public REST API
+   * This is the PRIMARY fallback for Kraken-specific pairs when WebSocket is stale
+   */
+  private async fetchFromKrakenRest(symbol: string): Promise<number | null> {
+    try {
+      // Convert internal symbol to Kraken REST API format
+      // Examples: XTZ/USD -> XTZUSD, XXRPZUSD -> XXRPZUSD, SUI/USD -> SUIUSD
+      let krakenPair = symbol.replace('/', '');
+      
+      // Handle slash-format symbols (e.g., XTZ/USD -> XTZUSD)
+      if (symbol.includes('/')) {
+        const [base, quote] = symbol.split('/');
+        // Special case for BTC -> XBT
+        const krakenBase = base === 'BTC' ? 'XBT' : base;
+        krakenPair = `${krakenBase}${quote}`;
+      }
+      
+      const response = await fetch(
+        `https://api.kraken.com/0/public/Ticker?pair=${krakenPair}`,
+        {
+          signal: AbortSignal.timeout(5000),
+          headers: { 'User-Agent': 'DawnTrader/1.0' }
+        }
+      );
+
+      if (!response.ok) {
+        console.log(`[8.8.3-I6][KRAKEN_REST_FAIL] ${symbol}: HTTP ${response.status}`);
+        return null;
+      }
+
+      const data = await response.json() as { 
+        error: string[];
+        result: Record<string, { c: [string, string] }> // c = last trade close [price, lot volume]
+      };
+      
+      if (data.error && data.error.length > 0) {
+        console.log(`[8.8.3-I6][KRAKEN_REST_ERROR] ${symbol}: ${data.error.join(', ')}`);
+        return null;
+      }
+      
+      // Get the first result key (Kraken returns dynamic key names)
+      const resultKey = Object.keys(data.result || {})[0];
+      if (!resultKey) {
+        console.log(`[8.8.3-I6][KRAKEN_REST_NO_DATA] ${symbol}: No result in response`);
+        return null;
+      }
+      
+      const tickerData = data.result[resultKey];
+      const lastPrice = parseFloat(tickerData?.c?.[0] || '0');
+      
+      if (lastPrice <= 0 || isNaN(lastPrice)) {
+        console.log(`[8.8.3-I6][KRAKEN_REST_INVALID_PRICE] ${symbol}: price=${tickerData?.c?.[0]}`);
+        return null;
+      }
+      
+      console.log(`[8.8.3-I6][REST_FALLBACK] symbol=${symbol} price=${lastPrice} source=kraken_rest priceAgeMs=0`);
+      return lastPrice;
+
+    } catch (error) {
+      console.error(`[8.8.3-I6][KRAKEN_REST_EXCEPTION] ${symbol}:`, error);
       return null;
     }
   }
