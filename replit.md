@@ -47,6 +47,8 @@ Phase 8.8.3-I7-MAP-AUTO-FIX (December 2025) resolves a critical singleton initia
 
 Phase 8.8.3-I7-WS-STARTUP (December 2025) ensures the Kraken WebSocket adapter starts during server initialization, not just when the paper trading engine is started. Previously, `krakenWebSocketAdapter.start()` was only called from `paper-execution-engine.ts`, meaning no WebSocket connection existed until the engine was manually started. The fix adds `await krakenWebSocketAdapter.start()` to `server/index.ts` immediately after registering the WebSocket subscription checker, enabling real-time WebSocket pricing from server boot. Diagnostic logs (`[I7-WS-DEBUG]`, `[I7-WS-STARTUP]`) confirm proper initialization with `isReady=true` and successful connection to Kraken's WebSocket API (`wss://ws.kraken.com`).
 
+Phase 8.8.4-IA-PRICE-CACHE (December 2025) introduces a centralized price cache module (`server/services/price-cache.ts`) for active trade pricing. The cache provides a single source of truth for current prices across the trading system, updated from both WebSocket ticks (`updateFromWebSocket`) and REST fallback calls (`updateFromRest`). Key features include: source tagging (`kraken_ws` | `kraken_rest`), timestamp tracking for freshness evaluation, and a snapshot API for diagnostics. The Kraken WebSocket adapter and LivePricingAdapter both write to this centralized cache, ensuring consistent pricing for exit evaluation. Diagnostic endpoints at `/api/diagnostics/ia-price-cache/status` and `/api/diagnostics/ia-price-cache/clear` provide visibility into cache state.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.

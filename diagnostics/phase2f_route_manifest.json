@@ -2094,6 +2094,26 @@
     ]
   },
   {
+    "path": "/api/diagnostics/ia-price-cache/status",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/diagnostics/ia-price-cache/clear",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/diagnostics/i7-root/engine-status",
     "methods": [
       "GET"
