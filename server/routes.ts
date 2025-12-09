@@ -8092,6 +8092,69 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ===== Phase 8.8.3-I7-PRICE-FIX: Price Pipeline Diagnostics =====
+  
+  // GET /api/diagnostics/i7-price/status - Phase 8.8.3-I7-PRICE-FIX (A2): Price pipeline status
+  // Returns detailed per-position pricing info for active trade price/exit diagnostics
+  apiRouter.get('/diagnostics/i7-price/status', async (req, res) => {
+    try {
+      const { getGlobalPaperSimManager, getEngineByMode } = await import('./services/paper-sim-service.js');
+      
+      // Get paper engine status
+      const paperManager = getGlobalPaperSimManager();
+      const paperEngine = getEngineByMode('paper');
+      
+      let paperPriceStatus: any = null;
+      if (paperEngine && typeof paperEngine.getI7PriceStatus === 'function') {
+        paperPriceStatus = await paperEngine.getI7PriceStatus();
+      } else {
+        // Fallback: manual construction if engine doesn't have the method yet
+        const { storage } = await import('./storage.js');
+        const { livePricingAdapter } = await import('./services/live-pricing-adapter.js');
+        const openPositions = await storage.getPaperSimOpenPositions('paper');
+        const now = Date.now();
+        
+        const positions = await Promise.all(openPositions.map(async (pos: any) => {
+          const priceResult = await livePricingAdapter.getPriceWithFallback(pos.symbol, 5000);
+          const sl = pos.stopLoss ? parseFloat(pos.stopLoss) : null;
+          const tp = pos.takeProfit ? parseFloat(pos.takeProfit) : null;
+          const currentPrice = priceResult?.price ?? null;
+          
+          return {
+            symbol: pos.symbol,
+            priceSource: priceResult?.source ?? 'none',
+            priceAgeMs: priceResult ? now - new Date(priceResult.timestamp).getTime() : -1,
+            lastPriceAt: priceResult?.timestamp ?? null,
+            lastExitEvalPrice: currentPrice,
+            sl,
+            tp,
+            slTriggered: sl !== null && currentPrice !== null && currentPrice <= sl,
+            tpTriggered: tp !== null && currentPrice !== null && currentPrice >= tp
+          };
+        }));
+        
+        paperPriceStatus = {
+          isRunning: paperManager?.getIsRunning?.() ?? false,
+          lastTickAt: null,
+          lastExitEvalAt: null,
+          positions
+        };
+      }
+      
+      res.json({
+        ok: true,
+        phase: '8.8.3-I7-PRICE-FIX',
+        paper: paperPriceStatus
+      });
+    } catch (err) {
+      console.error('[I7-PRICE-FIX] Error fetching price status:', err);
+      res.status(500).json({
+        ok: false,
+        error: (err as Error).message
+      });
+    }
+  });
+
   // ===== Phase 8.8.3-I7-WS-G: Tick Frequency Stabilization Endpoints =====
 
   // GET /api/diagnostics/i7-ws-g/frequency - Phase 8.8.3-I7-WS-G (G4.1): Get tick frequency metrics

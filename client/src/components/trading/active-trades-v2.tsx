@@ -394,6 +394,9 @@ export default function ActiveTradesV2() {
   const [livePrices, setLivePrices] = useState<Record<string, { price: number; timestamp: string }>>({});
   const [wsConnectionStatus, setWsConnectionStatus] = useState<'connected' | 'disconnected'>('disconnected');
   
+  // Phase 8.8.3-I7-PRICE-FIX (C3): Track last data refresh for diagnostics
+  const [lastDataRefreshAt, setLastDataRefreshAt] = useState<string | null>(null);
+  
   const { data, isLoading, refetch } = useQuery<ActiveTradesResponse>({
     queryKey: ['/api/paper-sim/active-trades'],
     enabled: isPaper,
@@ -402,6 +405,15 @@ export default function ActiveTradesV2() {
     staleTime: 5000, // Mark data as stale after 5 seconds
     refetchOnWindowFocus: true
   });
+  
+  // Phase 8.8.3-I7-PRICE-FIX (C3): Log when data is refreshed
+  useEffect(() => {
+    if (data?.positions) {
+      const ts = new Date().toISOString();
+      setLastDataRefreshAt(ts);
+      console.debug('[I7-PRICE-FIX][UI_ACTIVE_TRADES_UPDATE]', { ts, positions: data.positions.length });
+    }
+  }, [data]);
   
   // Phase 8.8.3-B3.6: WebSocket subscription for real-time price updates
   useEffect(() => {
@@ -622,7 +634,7 @@ export default function ActiveTradesV2() {
   const portfolio = data?.portfolio || { startingBalance: 0, currentBalance: 0, cashBalance: 0, totalPositionValue: 0, netPnl: 0, netPnlPercent: 0 };
 
   return (
-    <section data-testid="active-trades-v2">
+    <section data-testid="active-trades-v2" data-last-update-at={lastDataRefreshAt || ''}>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl sm:text-2xl font-bold text-foreground">Active Trades</h2>
         <div className="flex items-center gap-3">

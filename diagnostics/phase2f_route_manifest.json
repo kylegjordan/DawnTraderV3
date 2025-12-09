@@ -2103,6 +2103,15 @@
     ]
   },
   {
+    "path": "/api/diagnostics/i7-price/status",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/diagnostics/i7-ws-g/frequency",
     "methods": [
       "GET"

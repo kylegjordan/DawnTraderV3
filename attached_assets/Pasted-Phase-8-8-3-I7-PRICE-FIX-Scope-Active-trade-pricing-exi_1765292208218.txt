@@ -1,0 +1,427 @@
+Phase 8.8.3-I7-PRICE-FIX
+
+Scope: Active-trade pricing + exit evaluation (backend & UI)
+Out of scope (for now): Ready-To-Buy logic, RTB filters/queue
+
+0. Context (please read)
+
+Current status after I7-ROOT-FIX and I7-PM-FOCUS:
+
+✅ Engine start/stop
+
+/api/paper-sim/start and /api/paper-sim/stop appear to work most of the time.
+
+The new engine diagnostics /api/diagnostics/i7-root/engine-status correctly show:
+
+paper.isRunning flips true/false on start/stop.
+
+lastTickAt and lastExitEvalAt are populated while running and reset after stop.
+
+✅ Duplicate active trades
+
+The duplicate guard in paper-execution-engine.ts (pre-creation check) is working.
+
+UI dedupe in active-trades-v2.tsx is working. No duplicate symbols visible in Active Trades.
+
+⚠️ Stop behavior still flaky
+
+In some sessions, no new trades appear after Stop (desired).
+
+In other sessions, 1–2 new trades show up shortly after Stop, and Trade History shows these as opened after the stop.
+
+“Open – Not Closed Yet” entries in Trade History can linger for ~4–5 minutes before being marked manual_stop.
+
+❌ Pricing / exits still wrong (this is the focus of this directive)
+
+In Active Trades:
+
+Current price is largely static (no visible ticking) for most symbols.
+
+In Trade History:
+
+Over a 5–10 minute session, usually only 0–1 position closes via stop_hit / target_hit.
+
+Many trades stay “Open – Not Closed Yet” until a manual stop (via Stop button) closes them.
+
+Ready-To-Buy shows some weird behavior (same symbols, e.g. RARIEUR, TRXUSDD, REPV2USD appearing over and over, persisting between sessions), but we are not addressing RTB in this phase.
+
+You already have the following diagnostics in place:
+
+/api/diagnostics/i7-root/engine-status
+
+exposes lastTickAt, lastExitEvalAt
+
+/api/diagnostics/i7-ws-f/coverage
+
+/api/diagnostics/i7-ws-g/frequency
+
+/api/diagnostics/i7-map-auto/*
+
+Price source & age fields on active trades (e.g. priceSource, priceAgeMs) from previous phases.
+
+We now need one focused pass to prove and fix the entire price pipeline for active trades + exit logic, without touching RTB.
+
+1. Strict Non-Goals for This Phase
+
+Please do NOT change or “improve” any of the following in this phase:
+
+Ready-To-Buy (RTB):
+
+/api/trading-signals
+
+/api/trading/status
+
+Any RTB queue / filters / scoring
+
+Any RTB UI behavior
+We will do a dedicated RTB audit in 8.8.4.
+
+Guardrails & block reasons:
+
+The “Position Limit – already holding max positions in this asset” behavior is OK for now.
+
+Don’t change how blocks are counted or reported; just make sure they still work after your changes.
+
+Engine architecture choice:
+
+Paper trading must remain centered on PaperPortfolioManager + PaperExecutionEngine.
+
+Do not introduce or resurrect any TradingEngine singleton code.
+
+2. Files Likely Involved
+
+Please focus your work in (and around) these files:
+
+Backend
+
+server/services/kraken-websocket-adapter.ts
+
+server/services/live-pricing-adapter.ts
+
+server/services/paper-execution-engine.ts
+
+server/services/paper-portfolio-manager.ts
+
+server/routes.ts
+
+Any shared pricing caches / DTOs used by /api/paper-sim/active-trades or exit evaluation.
+
+Frontend
+
+client/src/components/trading/active-trades-v2.tsx
+
+client/src/hooks/use-websocket.tsx (or similar pricing hook, if used)
+
+Any polling hook or query that powers the Active Trades grid.
+
+If you discover additional files that are clearly in the active-trade price pipeline, feel free to include them, but please keep the scope tightly focused.
+
+3. Goal A — Map and instrument the price pipeline for active trades
+
+A1. Document the pipeline (in comments / doc)
+
+In code comments (and optionally docs/diagnostics/), explicitly document the pipeline for Current price of an open paper position:
+
+Source
+
+Kraken WebSocket → KrakenWebSocketAdapter
+
+REST fallback → KrakenREST → live-pricing-adapter
+
+Price caching
+
+Where is the “latest price” per symbol stored? (e.g. in a map inside live-pricing-adapter)
+
+Engine consumption
+
+When PaperExecutionEngine evaluates exits, which function does it call to get the price?
+
+Does it always request the latest cached price? Is there any per-position “currentPrice” stored?
+
+API exposure
+
+/api/paper-sim/active-trades → which fields come from where?
+
+currentPrice
+
+priceSource
+
+priceAgeMs (or equivalent)
+
+The goal is that we can read this and say:
+
+“This is exactly how an updated Kraken tick becomes Current in Active Trades.”
+
+**A2. Add a focused price/exit diagnostic endpoint
+
+Add a new read-only diagnostic endpoint, for example:
+
+GET /api/diagnostics/i7-price/status
+
+
+Requirements:
+
+No side-effects (purely read diagnostics).
+
+Return something like:
+
+{
+  "ok": true,
+  "phase": "8.8.3-I7-PRICE-FIX",
+  "paper": {
+    "isRunning": true,
+    "lastTickAt": "...",
+    "lastExitEvalAt": "...",
+    "positions": [
+      {
+        "symbol": "AVAXUSD",
+        "priceSource": "kraken_ws" | "kraken_rest" | "none",
+        "priceAgeMs": 1234,
+        "lastPriceAt": "...",
+        "lastExitEvalAt": "...",
+        "lastExitEvalPrice": 0.1234,
+        "sl": 0.0,
+        "tp": 0.0,
+        "slTriggered": false,
+        "tpTriggered": false
+      }
+    ]
+  }
+}
+
+
+Implementation detail:
+
+You can pull positions from the same source used by paper-sim/active-trades (likely PaperExecutionEngine’s in-memory positions) and combine them with whatever pricing cache you use.
+
+A3. Log per-cycle exit pricing
+
+During the exit evaluation cycle (whatever method is currently updating lastExitEvalAt):
+
+Add a single aggregated log line per cycle, not per position. Something like:
+
+[I7-PRICE-FIX][EVAL_EXIT]
+  cycleId=...
+  positionsEvaluated=15
+  withWsPrice=10
+  withRestPrice=5
+  withoutPrice=0
+  slHits=1
+  tpHits=0
+
+
+This should be near the place where you loop through positions and check SL/TP, after prices are fetched.
+
+4. Goal B — Fix backend pricing / exits if diagnostics show gaps
+
+After you wire up A1–A3, run a short trading session (see verification section below). Use the diagnostics to confirm or fix the following:
+
+WebSocket prices actually flow into the engine
+
+For most active symbols, priceSource should be kraken_ws and priceAgeMs should stay reasonably low (e.g. under 10–20 seconds most of the time).
+
+If symbols stay priceSource: "kraken_rest" and priceAgeMs grows large:
+
+Check I7-WS-F coverage & subscriptions.
+
+Ensure KrakenWebSocketAdapter updates the same price cache that the engine uses.
+
+Exit evaluation uses fresh prices
+
+When lastExitEvalAt advances, the new /api/diagnostics/i7-price/status should show new lastExitEvalPrice values, not stale copies.
+
+For a symbol with a tight SL/TP:
+
+If its Current price moves past SL/TP thresholds in the cache, a subsequent exit evaluation cycle should produce an actual close (stop_hit / target_hit) in Trade History.
+
+Stuck trades (“Open – Not Closed Yet”)
+
+If diagnostics show positions where:
+
+priceSource is valid
+
+priceAgeMs is low
+
+lastExitEvalAt is moving
+but they remain “Open – Not Closed Yet” indefinitely, investigate the exit condition logic in paper-execution-engine.ts:
+
+are SL/TP comparisons correct?
+
+is there any threshold / dead-band preventing triggers?
+
+Only make minimal changes necessary to ensure:
+
+For a reasonably volatile symbol, some trades are closed by stop_hit or target_hit within a 10–15 minute session.
+
+5. Goal C — Fix Active Trades UI pricing refresh (no RTB work)
+
+We need to ensure the Active Trades grid shows changing Current prices if the backend does.
+
+C1. Confirm the data source
+
+In active-trades-v2.tsx:
+
+Identify exactly how it gets its data:
+
+Is it polling /api/paper-sim/active-trades on an interval?
+
+Is it listening to a WebSocket (via use-websocket.tsx)?
+
+Confirm that the fields shown in the Current column are the same values returned by /api/paper-sim/active-trades (e.g. position.currentPrice).
+
+C2. Wire up proper refresh
+
+Depending on the current design:
+
+If it’s polling:
+
+Ensure the poll interval is actually firing while trading is ACTIVE (e.g. 3–5s).
+
+Ensure the React state is updated when fresh data arrives.
+
+If it’s WebSocket-driven:
+
+Confirm the messages for price updates are actually being received on the client.
+
+Ensure they are applied to the correct positions in state (key by symbol and side, not by array index).
+
+C3. Add a very light client-side diagnostic
+
+No noisy logs, but something simple we can toggle, e.g.:
+
+A data-last-update-at attribute on the Active Trades container, showing when the last data refresh happened.
+
+Or a console.debug('[I7-PRICE-FIX][UI_ACTIVE_TRADES_UPDATE]', { ts, positions: positions.length }) behind a simple flag.
+
+The goal: during verification we should be able to see evidence that the UI is refreshing even if we’re not staring at numbers.
+
+6. Verification Steps
+
+Please run this end-to-end verification using the test user below.
+
+Test user credentials (do NOT change):
+username = testuser123
+password = SecurePass123!
+
+Login and start trading
+
+APP_TEST_USERNAME="testuser123"
+APP_TEST_PASSWORD="SecurePass123!"
+
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"'"$APP_TEST_USERNAME"'","password":"'"$APP_TEST_PASSWORD"'"}' \
+  | jq -r '.token')
+
+echo "TOKEN prefix: ${TOKEN:0:16}..."
+
+# Start paper trading (fresh session)
+curl -s -X POST http://localhost:5000/api/paper-sim/start \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"new"}' | jq .
+
+
+Wait 5–7 minutes with trading ACTIVE
+
+During this time:
+
+Watch Active Trades in the UI:
+
+Current prices should visibly change for at least some symbols.
+
+Watch Trade History:
+
+At least a few trades should close via stop_hit or target_hit (not all manual_stop).
+
+Check diagnostics
+
+# Engine status
+curl -s http://localhost:5000/api/diagnostics/i7-root/engine-status \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+# Price pipeline status
+curl -s http://localhost:5000/api/diagnostics/i7-price/status \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+
+Expectations:
+
+paper.isRunning: true
+
+lastTickAt and lastExitEvalAt both recent (a few seconds or tens of seconds old).
+
+Most positions:
+
+have a valid priceSource
+
+have reasonable priceAgeMs
+
+and show recent lastExitEvalPrice.
+
+Compare backend vs UI
+
+# Current backend view of active trades
+curl -s http://localhost:5000/api/paper-sim/active-trades \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq '.positions | map({symbol, currentPrice, priceSource, priceAgeMs})'
+
+
+Confirm that:
+
+currentPrice values in this payload are changing over time.
+
+These numbers match what you see in the UI (within normal refresh lag).
+
+Stop trading & ensure clean stop
+
+curl -s -X POST http://localhost:5000/api/paper-sim/stop \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+sleep 5
+
+# Engine status after stop
+curl -s http://localhost:5000/api/diagnostics/i7-root/engine-status \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+
+Check:
+
+paper.isRunning: false
+
+No new trades appear in Active Trades after stop.
+
+In Trade History:
+
+remaining open positions should eventually flip to manual_stop within a reasonable window (if that is the intended design).
+
+7. Deliverables
+
+When you’re done, please:
+
+Update replit.md with:
+
+A short description of 8.8.3-I7-PRICE-FIX.
+
+How to run the diagnostics (i7-root + new i7-price endpoint).
+
+Expected healthy behavior (brief).
+
+Add a short diagnostic report in
+docs/diagnostics/I7-PRICE-FIX/verification_report.md summarizing:
+
+What changed in the price pipeline.
+
+A snapshot of:
+
+active-trades pricing (sample JSON)
+
+i7-price/status output
+
+A few Trade History lines showing stop_hit / target_hit.
+
+Do not modify RTB logic
+
+Confirm that /api/trading-signals and /api/trading/status still work, but leave their internal implementation unchanged.
+
+If anything about this directive is unclear while you’re implementing, please annotate your questions as code comments near the relevant logic rather than broad refactors. We can then iterate on those specific spots.

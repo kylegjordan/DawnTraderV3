@@ -1,3 +1,46 @@
+/**
+ * Phase 8.8.3-I7-PRICE-FIX: Paper Execution Engine
+ * 
+ * ============================================================================
+ * PRICE PIPELINE DOCUMENTATION (Goal A1)
+ * ============================================================================
+ * 
+ * This file documents how live prices flow from Kraken into active trade
+ * exit evaluation and the Active Trades UI.
+ * 
+ * 1. PRICE SOURCE (Kraken WebSocket)
+ *    - KrakenWebSocketAdapter connects to wss://ws.kraken.com
+ *    - Subscribes to ticker channel for each active trade symbol
+ *    - On tick arrival: calls livePricingAdapter.updateFromWebSocket(symbol, price)
+ *    - Updates priceCache Map in LivePricingAdapter
+ * 
+ * 2. PRICE CACHING (LivePricingAdapter.priceCache)
+ *    - Map<symbol, CachedPrice> where CachedPrice includes:
+ *      { symbol, price, timestamp, source, cachedAt }
+ *    - source can be: 'kraken_ws' | 'kraken_rest' | 'binance' | 'coingecko' | 'last_known_good'
+ *    - Cache TTL is 1 second for open-trade symbols (CACHE_TTL_MS = 1000)
+ * 
+ * 3. ENGINE CONSUMPTION (checkOpenPositions)
+ *    - Runs every 1.5 seconds via monitoringInterval
+ *    - For each open position, calls:
+ *        livePricingAdapter.getPriceWithFallback(symbol, 2000)
+ *    - Uses WebSocket cache if fresh (≤2s)
+ *    - Falls back to Kraken REST if cache stale
+ *    - Evaluates SL/TP against fetched price
+ * 
+ * 4. API EXPOSURE (/api/paper-sim/active-trades)
+ *    - For each position, calls:
+ *        livePricingAdapter.getPriceWithFallback(symbol, 5000)
+ *    - Returns: currentPrice, priceSource, priceAgeMs
+ *    - Frontend polls this endpoint every 10 seconds
+ * 
+ * 5. FRONTEND REFRESH (active-trades-v2.tsx)
+ *    - Uses useQuery with refetchInterval: 10000 (10 seconds)
+ *    - Displays currentPrice from API response
+ * 
+ * ============================================================================
+ */
+
 import { storage } from '../storage';
 import { KrakenService } from './kraken';
 import { StrategyEngine, type StrategySignal, type TechnicalIndicators } from './strategy-engine';
@@ -204,6 +247,60 @@ export class PaperExecutionEngine {
   }
 
   /**
+   * Phase 8.8.3-I7-PRICE-FIX (A2): Get detailed price status for diagnostics
+   * Returns per-position pricing info for the i7-price/status endpoint
+   */
+  public async getI7PriceStatus(): Promise<{
+    isRunning: boolean;
+    lastTickAt: string | null;
+    lastExitEvalAt: string | null;
+    positions: Array<{
+      symbol: string;
+      priceSource: string;
+      priceAgeMs: number;
+      lastPriceAt: string | null;
+      lastExitEvalPrice: number | null;
+      sl: number | null;
+      tp: number | null;
+      slTriggered: boolean;
+      tpTriggered: boolean;
+    }>;
+  }> {
+    const openPositions = await storage.getPaperSimOpenPositions(this.mode);
+    const now = Date.now();
+    
+    const positions = await Promise.all(openPositions.map(async (pos) => {
+      const priceResult = await livePricingAdapter.getPriceWithFallback(pos.symbol, 5000);
+      const sl = pos.stopLoss ? parseFloat(pos.stopLoss) : null;
+      const tp = pos.takeProfit ? parseFloat(pos.takeProfit) : null;
+      const currentPrice = priceResult?.price ?? null;
+      
+      // Check if exit would trigger at current price
+      const slTriggered = sl !== null && currentPrice !== null && currentPrice <= sl;
+      const tpTriggered = tp !== null && currentPrice !== null && currentPrice >= tp;
+      
+      return {
+        symbol: pos.symbol,
+        priceSource: priceResult?.source ?? 'none',
+        priceAgeMs: priceResult ? now - new Date(priceResult.timestamp).getTime() : -1,
+        lastPriceAt: priceResult?.timestamp ?? null,
+        lastExitEvalPrice: currentPrice,
+        sl,
+        tp,
+        slTriggered,
+        tpTriggered
+      };
+    }));
+    
+    return {
+      isRunning: this.isRunning,
+      lastTickAt: this.lastCycleAt ? new Date(this.lastCycleAt).toISOString() : null,
+      lastExitEvalAt: this.lastEvaluateAt ? new Date(this.lastEvaluateAt).toISOString() : null,
+      positions
+    };
+  }
+
+  /**
    * Phase 8.8.3: Force-close a position for manual stop
    * Public wrapper for private closePosition with manual_stop exit condition.
    * Used by PaperPortfolioManager.forceCloseAllOpenPositionsOnStop()
@@ -361,8 +458,13 @@ export class PaperExecutionEngine {
     
     const openPositions = await storage.getPaperSimOpenPositions(this.mode);
     
-    // Phase 8.8.3-I7-PM-FOCUS: Aggregate exit evaluation log
+    // Phase 8.8.3-I7-PRICE-FIX (A3): Aggregate exit evaluation stats
     let positionsEvaluated = 0;
+    let withWsPrice = 0;
+    let withRestPrice = 0;
+    let withoutPrice = 0;
+    let slHits = 0;
+    let tpHits = 0;
 
     for (const position of openPositions) {
       try {
@@ -378,14 +480,18 @@ export class PaperExecutionEngine {
           // Phase 8.8.3-B9: Reject mock prices in production mode
           if (priceResult.source === 'mock') {
             console.warn(`[B9.PRICING][SKIP_DUE_TO_MOCK] ${position.symbol}: Mock price rejected, skipping position check`);
+            withoutPrice++;
             continue;
           }
           currentPrice = priceResult.price;
           priceSource = priceResult.source;
           
-          // Phase 8.8.3-I7-WS-D (D6): Log engine WS price usage
+          // Phase 8.8.3-I7-PRICE-FIX: Track price source stats
           if (priceSource === 'kraken_ws') {
+            withWsPrice++;
             console.log(`[I7-WS-D][ENGINE_WS_PRICE] symbol=${position.symbol} price=${currentPrice}`);
+          } else if (priceSource === 'kraken_rest' || priceSource === 'binance' || priceSource === 'coingecko') {
+            withRestPrice++;
           }
         } else {
           // Phase 8.8.3-I7: Fallback to Kraken REST if cache unavailable
@@ -398,10 +504,12 @@ export class PaperExecutionEngine {
             const tickerData = Object.values(ticker)[0];
             if (!tickerData) {
               console.warn(`[B9.PRICING][SKIP_DUE_TO_NO_PRICE] ${position.symbol}: No Kraken REST data, skipping position check`);
+              withoutPrice++;
               continue;
             }
             currentPrice = parseFloat(tickerData.c[0]);
             priceSource = 'kraken_rest';
+            withRestPrice++;
             
             // Phase 8.8.3-I7: Broadcast this REST price to frontend
             // Normalize to internal format for consistent cache keys
@@ -410,6 +518,7 @@ export class PaperExecutionEngine {
             console.log(`[I7][REST_BROADCAST] symbol=${internalSymbol} price=${currentPrice}`);
           } catch (krakenError) {
             console.warn(`[B9.PRICING][SKIP_DUE_TO_NO_PRICE] ${position.symbol}: Kraken REST failed, skipping position check`, krakenError);
+            withoutPrice++;
             continue;
           }
         }
@@ -490,6 +599,10 @@ export class PaperExecutionEngine {
         });
 
         if (exitCondition) {
+          // Phase 8.8.3-I7-PRICE-FIX: Track exit types
+          if (exitCondition.type === 'stop_hit') slHits++;
+          if (exitCondition.type === 'target_hit') tpHits++;
+          
           // [B8.PNL][EXIT_SOURCE] - Log price source before calling closePosition
           console.log(`[B8.PNL][EXIT_SOURCE]`, JSON.stringify({
             symbol: position.symbol,
@@ -507,8 +620,8 @@ export class PaperExecutionEngine {
       }
     }
     
-    // Phase 8.8.3-I7-PM-FOCUS: EVAL_EXIT aggregate log
-    console.log(`[I7-PM-FOCUS][EVAL_EXIT] mode=${this.mode} positionsEvaluated=${positionsEvaluated} ts=${new Date().toISOString()}`);
+    // Phase 8.8.3-I7-PRICE-FIX (A3): Enhanced EVAL_EXIT aggregate log with price stats
+    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits}`);
   }
 
   private async checkExitConditions(
