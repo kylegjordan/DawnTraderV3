@@ -7679,6 +7679,58 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ===== Phase 8.8.3-I7-MAP-FIX: Symbol Mapping Diagnostics =====
+
+  // GET /api/diagnostics/i7-map-fix/check - I7-MAP-FIX: Check symbol mapping for all positions
+  apiRouter.get('/diagnostics/i7-map-fix/check', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { getSymbolMappingDetails, listUnmappableSymbols, getMappingCount } = await import('./markets/kraken-symbol-resolver.js');
+      
+      // Get active symbols from paper positions + live trades
+      const [paperPositions, liveTrades] = await Promise.all([
+        storage.getPaperSimOpenPositions('paper'),
+        storage.getActiveTrades('live')
+      ]);
+      
+      const activeSymbols = [...new Set([
+        ...paperPositions.map(t => t.symbol),
+        ...liveTrades.map(t => t.symbol)
+      ])];
+      
+      // Get mapping details for each symbol
+      const mappingResults = activeSymbols.map(symbol => getSymbolMappingDetails(symbol));
+      
+      // Summarize results
+      const summary = {
+        total_active_symbols: activeSymbols.length,
+        mappable: mappingResults.filter(r => r.mappable).length,
+        unmappable: mappingResults.filter(r => !r.mappable).length,
+        in_static_map: mappingResults.filter(r => r.in_static_map).length,
+        dynamic_fallback: mappingResults.filter(r => r.mappable && !r.in_static_map).length,
+        static_map_size: getMappingCount()
+      };
+      
+      const unmappableList = listUnmappableSymbols(activeSymbols);
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.3-I7-MAP-FIX',
+        description: 'Symbol mapping status for all active positions',
+        summary,
+        symbols: mappingResults,
+        unmappable_details: unmappableList
+      });
+    } catch (error: any) {
+      console.error('[I7-MAP-FIX] Error checking symbol mappings:', error);
+      res.status(500).json({
+        ok: false,
+        phase: '8.8.3-I7-MAP-FIX',
+        error: error.message
+      });
+    }
+  });
+
   // ===== Phase 8.8.3-I7-WS-G: Tick Frequency Stabilization Endpoints =====
 
   // GET /api/diagnostics/i7-ws-g/frequency - Phase 8.8.3-I7-WS-G (G4.1): Get tick frequency metrics

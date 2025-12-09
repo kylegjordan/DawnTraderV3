@@ -572,6 +572,31 @@ app.use((req, res, next) => {
         console.warn('[I7-WS-E] ⚠️ Failed to register WebSocket subscription checker:', wsError);
       }
       
+      // I7-MAP-FIX: Startup audit for unmappable symbols (both paper and live)
+      try {
+        const { listUnmappableSymbols, getMappingCount } = await import('./markets/kraken-symbol-resolver');
+        const { storage } = await import('./storage');
+        
+        // Check both paper and live positions
+        const paperPositions = await storage.getPaperSimOpenPositions('paper');
+        const livePositions = await storage.getPaperSimOpenPositions('live');
+        
+        const paperSymbols = paperPositions.map(p => p.symbol);
+        const liveSymbols = livePositions.map(p => p.symbol);
+        const allActiveSymbols = [...new Set([...paperSymbols, ...liveSymbols])];
+        
+        const unmappable = listUnmappableSymbols(allActiveSymbols);
+        
+        if (unmappable.length > 0) {
+          console.warn(`[I7-MAP-FIX][STARTUP] ⚠️ Unmappable symbols detected (${unmappable.length}):`, unmappable);
+          console.warn(`[I7-MAP-FIX][STARTUP] ⚠️ These symbols need to be added to KRAKEN_SYMBOL_MAP in server/markets/kraken-symbol-map.ts`);
+        } else {
+          console.log(`[I7-MAP-FIX][STARTUP] ✅ All ${allActiveSymbols.length} active symbols are mappable (paper: ${paperSymbols.length}, live: ${liveSymbols.length}, static map: ${getMappingCount()} entries)`);
+        }
+      } catch (auditError) {
+        console.warn('[I7-MAP-FIX][STARTUP] ⚠️ Symbol mapping audit failed:', auditError);
+      }
+      
       console.log('[27.F.15.D] ✅ LivePricingAdapter started successfully');
       
       // Phase 27.F.14.MICRO: Forward price updates to MicroExecutionService

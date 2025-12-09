@@ -1,0 +1,208 @@
+✅ I7-MAP-FIX – Canonical Symbol Mapping Repair Directive
+
+Paste the entire block below into Replit as your formal instruction:
+
+🔧 PHASE 8.8.3 – I7-MAP-FIX
+Directive: Repair Canonical Symbol Mapping (Resolver, Coverage, and Subscription Integration)
+
+You must implement the following changes exactly and in the order listed.
+Do not alter trading behavior outside these instructions.
+
+🎯 Goal
+
+Restore working WebSocket subscriptions by ensuring every ActiveTrade symbol correctly maps to a valid Kraken REST and WebSocket pair using the canonical resolver.
+
+Right now, symbols like:
+
+FORTH/USD
+
+EURC/USDC
+
+BAND/USD
+
+BERA/USD
+
+TIA/USD
+are marked unmappable or missing, preventing all WebSocket price updates.
+
+This fix must ensure:
+
+1. Every internal normalized symbol → canonical Kraken pair
+2. Every Kraken WS tick → internal normalized symbol
+3. Coverage and auto-subscribe use the repaired mapping
+4. Missing mappings automatically detected and logged
+1️⃣ Update KRAKEN_SYMBOL_MAP (kraken-symbol-map.ts)
+Requirements:
+
+Add both REST (altname, wsname, wsFormat) and WebSocket tick format for all tradable pairs returned by Kraken /AssetPairs.
+
+Ensure bidirectional mapping:
+
+internal → kraken (rest, ws)
+kraken_ws → internal
+kraken_rest → internal
+
+Implementation Instructions:
+
+Fetch the full Kraken /0/public/AssetPairs JSON (already available in repo).
+
+For every asset pair:
+
+Normalize: BASE/QUOTE (e.g., ZUSD → USD, XEUR → EUR)
+
+Add complete entry under its internal normalized form
+
+Store:
+
+altname (e.g., ZEURZUSD → EURUSD)
+
+wsname (e.g., EUR/USD)
+
+rest pair
+
+ws pair
+
+pairId
+
+both directions for reverse lookup
+
+Important:
+
+Do not create per-symbol hacks like the previous USD→USDT shortcuts.
+All mappings must come from canonical Kraken metadata.
+
+2️⃣ Update kraken-symbol-resolver.ts
+Add resolver methods or correct existing ones:
+Required:
+normalizeInternal(symbol)
+toKrakenRest(symbol)
+toKrakenWS(symbol)
+mapKrakenPairToInternal(wsname)
+isMappable(symbol)
+
+
+Resolver must:
+
+Always prefer KRAKEN_SYMBOL_MAP over fallback string logic
+
+Return null when unmappable without throwing
+
+Emit diagnostic logs: [I7-MAP-FIX][UNMAPPABLE] symbol=XYZ reason="no mapping"
+
+3️⃣ Repair mapping usage inside KrakenWebSocketAdapter
+
+Modify subscription logic:
+
+When subscribing:
+
+Convert internal symbol → Kraken WS pair before sending the subscription request
+
+If resolver returns null:
+
+log [I7-MAP-FIX][SUBSCRIBE_SKIPPED]
+
+skip subscription
+
+If WS pair exists:
+
+send subscription normally
+
+When receiving ticks:
+
+Convert Kraken tick name (e.g., BAND/USD) → internal
+
+If unmappable:
+
+log [I7-MAP-FIX][UNMAPPED_TICK]
+
+continue without updating cache
+
+Map tick to internal symbol and continue updateFromWebSocket
+
+4️⃣ Repair I7-WS-F Coverage Logic
+
+Inside /coverage, /audit, /auto-subscribe, and /validate-map:
+
+Replace existing symbol extraction logic with:
+const positions = await storage.getPaperSimOpenPositions('paper');
+const dedupSymbols = unique positions.map(p => p.symbol);
+const mappable = resolver.isMappable(symbol)
+
+Coverage output must include:
+coverage_status:
+  "mapped"
+  "unmappable"
+  "missing_ws_pair"
+  "missing_rest_pair"
+  "unknown_symbol"
+
+5️⃣ Add Diagnostic Endpoint: /api/diagnostics/i7-map-fix/check
+
+Must return for all positions + all symbols in symbol map:
+
+{
+  symbol,
+  internal,
+  rest_pair,
+  ws_pair,
+  mappable: true/false,
+  reason_if_unmappable
+}
+
+6️⃣ Add Startup Audit
+
+During server startup (server/index.ts):
+
+Run:
+
+const missing = resolver.listUnmappableSymbols();
+if (missing.length > 0) {
+  console.warn(`[I7-MAP-FIX][STARTUP] Unmappable symbols detected`, missing);
+}
+
+
+This ensures every new session surfaces mapping failures immediately.
+
+7️⃣ Do NOT modify any trading logic outside mapping and subscription paths.
+8️⃣ After implementation: Run the following tests
+Test A — Coverage:
+
+/api/diagnostics/i7-ws-f/coverage must show:
+
+0 unmappable
+
+0 missing
+
+All symbols = “subscribed”
+
+Test B — Subscription map:
+
+/api/diagnostics/i7-ws-f/coverage must show:
+
+WS pair exists
+
+Resolver returned correct mapping
+
+Subscribed symbols count matches ActiveTrades unique symbols
+
+Test C — Price updates:
+
+ActiveTrades UI must show:
+
+Current prices updating every 150–1200 ms
+
+No symbol stuck on REST fallback (except low-liquidity pairs)
+
+9️⃣ Log Tags to Use
+
+All logs added must use:
+
+[I7-MAP-FIX][...]
+
+
+Example:
+
+[I7-MAP-FIX][MAPPED] internal=BNT/USD ws=BNTA/USD rest=XYZ...
+[I7-MAP-FIX][UNMAPPABLE] symbol=EURC/USDC reason="no mapping in metadata"
+
+🔚 End of Directive

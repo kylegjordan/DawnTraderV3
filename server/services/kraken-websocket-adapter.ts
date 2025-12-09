@@ -2,7 +2,14 @@ import WebSocket from 'ws';
 import { contextBridge } from './context-bridge.js';
 import { livePricingAdapter } from './live-pricing-adapter.js';
 import { krakenPairMetadataService } from './kraken-pair-metadata-service.js';
-import { resolveByKrakenWsPair, normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver.js';
+import { 
+  resolveByKrakenWsPair, 
+  normalizeToInternalSymbol, 
+  toKrakenWS, 
+  mapKrakenPairToInternal, 
+  isMappable,
+  getSymbolMappingDetails
+} from '../markets/kraken-symbol-resolver.js';
 import { priceTraceService } from './price-trace-service.js';
 
 /**
@@ -656,73 +663,32 @@ export class KrakenWebSocketAdapter {
   }
 
   private normalToKrakenSymbol(symbol: string): string | null {
-    // Phase 8.8.4: PRIORITY 1 - Use metadata service first (handles pairId like XXRPZUSD)
-    // The metadata service maps pairId -> wsSymbol directly from Kraken's AssetPairs
-    const canonical = krakenPairMetadataService.getCanonicalKrakenSymbol(symbol);
+    // I7-MAP-FIX: PRIORITY 1 - Use new resolver (static map + dynamic fallback)
+    const wsPair = toKrakenWS(symbol);
+    if (wsPair) {
+      console.log(`[I7-MAP-FIX][MAPPED] internal=${symbol} ws=${wsPair}`);
+      this.unrecognizedSymbols.delete(symbol);
+      return wsPair;
+    }
     
+    // I7-MAP-FIX: PRIORITY 2 - Use metadata service (handles pairId like XXRPZUSD)
+    const canonical = krakenPairMetadataService.getCanonicalKrakenSymbol(symbol);
     if (canonical) {
+      console.log(`[I7-MAP-FIX][METADATA] internal=${symbol} ws=${canonical}`);
       this.unrecognizedSymbols.delete(symbol);
       return canonical;
     }
     
-    // Phase 8.8.4: PRIORITY 2 - Fallback legacy hardcoded mapping for critical symbols
-    // This ensures basic functionality if metadata service hasn't loaded yet
-    const legacyMapping: Record<string, string> = {
-      'BTC/USD': 'XBT/USD',
-      'ETH/USD': 'ETH/USD',
-      'SOL/USD': 'SOL/USD',
-      'XRP/USD': 'XRP/USD',
-      'ADA/USD': 'ADA/USD',
-      'DOGE/USD': 'DOGE/USD',
-      'DOT/USD': 'DOT/USD',
-      'AVAX/USD': 'AVAX/USD',
-      'MATIC/USD': 'MATIC/USD',
-      'LINK/USD': 'LINK/USD',
-      'UNI/USD': 'UNI/USD',
-      'LTC/USD': 'LTC/USD',
-      'ATOM/USD': 'ATOM/USD',
-      'SHIB/USD': 'SHIB/USD',
-      'TRX/USD': 'TRX/USD',
-      'STX/USD': 'STX/USD',
-      'LDO/USD': 'LDO/USD',
-      'SUI/USD': 'SUI/USD'
-    };
-    
-    if (legacyMapping[symbol]) {
-      this.unrecognizedSymbols.delete(symbol);
-      return legacyMapping[symbol];
-    }
-    
-    // Phase 8.8.4: PRIORITY 3 - If symbol already has a slash, try passthrough
-    if (symbol.includes('/')) {
-      const [base, quote] = symbol.split('/');
-      if (base === 'BTC') {
-        this.unrecognizedSymbols.delete(symbol);
-        return `XBT/${quote}`;
-      }
-      this.unrecognizedSymbols.delete(symbol);
-      return symbol;
-    }
-    
-    // Phase 8.8.4: PRIORITY 4 - Convert internal DB format to WS format as last resort
-    // This handles cases where metadata hasn't loaded but we have a DB symbol
+    // I7-MAP-FIX: PRIORITY 3 - Convert internal DB format to WS format as last resort
     const wsFormat = this.convertInternalToWsFormat(symbol);
     if (wsFormat) {
-      console.log(`[${this.MODULE_NAME}][SYMBOL_CONVERTED_FALLBACK]`, {
-        original: symbol,
-        wsFormat,
-        metadataLoaded: krakenPairMetadataService.isMetadataLoaded(),
-      });
+      console.log(`[I7-MAP-FIX][FALLBACK_CONVERT] internal=${symbol} ws=${wsFormat}`);
       this.unrecognizedSymbols.delete(symbol);
       return wsFormat;
     }
     
-    // Symbol is completely unrecognized - track it
-    console.warn('[SYM][UNRECOGNIZED_FOR_WS]', {
-      internalSymbol: symbol,
-      context: 'normalToKrakenSymbol',
-      metadataLoaded: krakenPairMetadataService.isMetadataLoaded(),
-    });
+    // I7-MAP-FIX: Symbol is completely unmappable - log and skip
+    console.warn(`[I7-MAP-FIX][SUBSCRIBE_SKIPPED] symbol=${symbol} reason="no valid mapping found"`);
     this.unrecognizedSymbols.add(symbol);
     
     return null;
@@ -769,59 +735,44 @@ export class KrakenWebSocketAdapter {
   }
 
   /**
-   * Phase 8.8.3-I7: Map incoming Kraken WS pair to internal symbol
-   * Uses the new canonical symbol resolver as PRIMARY source of truth.
-   * 
-   * Priority order for incoming WS ticks:
-   * 1. Try I7 resolver (canonical mapping) - returns BASE/QUOTE format (e.g., AVAX/USD)
-   * 2. Try metadata service getPairId() - returns DB format (e.g., XXRPZUSD)
-   * 3. Try metadata service getInternalSymbol() - returns altname format (e.g., XRPUSD)
-   * 4. Fallback to legacy string manipulation
+   * I7-MAP-FIX: Map incoming Kraken WS pair to internal symbol
+   * Uses the enhanced resolver as PRIMARY source of truth.
    */
   private mapKrakenPairToInternalSymbol(krakenPair: string): string | null {
-    // Phase 8.8.3-I7: FIRST try the canonical symbol resolver
+    // I7-MAP-FIX: PRIORITY 1 - Use new resolver's mapKrakenPairToInternal
+    const fromResolver = mapKrakenPairToInternal(krakenPair);
+    if (fromResolver) {
+      return fromResolver;
+    }
+
+    // I7-MAP-FIX: PRIORITY 2 - Try static map by WS pair
     const i7Mapping = resolveByKrakenWsPair(krakenPair);
     if (i7Mapping) {
-      console.log(`[I7][WS_MAP] krakenPair=${krakenPair} -> internal=${i7Mapping.internalSymbol}`);
       return i7Mapping.internalSymbol;
     }
 
-    // Fallback 1: Try metadata service pairId (DB format like XXRPZUSD)
+    // I7-MAP-FIX: PRIORITY 3 - Try metadata service pairId (DB format like XXRPZUSD)
     const pairId = krakenPairMetadataService.getPairId(krakenPair);
     if (pairId) {
-      // Try to normalize pairId through I7 resolver
       const normalized = normalizeToInternalSymbol(pairId);
-      console.log(`[I7][WS_MAP_FALLBACK1] krakenPair=${krakenPair} -> pairId=${pairId} -> normalized=${normalized}`);
       return normalized;
     }
 
-    // Fallback 2: Try metadata service altname format (like XRPUSD)
+    // I7-MAP-FIX: PRIORITY 4 - Try metadata service altname format (like XRPUSD)
     const internalFromMetadata = krakenPairMetadataService.getInternalSymbol(krakenPair);
     if (internalFromMetadata) {
       const normalized = normalizeToInternalSymbol(internalFromMetadata);
-      console.log(`[I7][WS_MAP_FALLBACK2] krakenPair=${krakenPair} -> altname=${internalFromMetadata} -> normalized=${normalized}`);
       return normalized;
     }
 
-    // Fallback 3: Legacy krakenToNormalSymbol for safety
+    // I7-MAP-FIX: PRIORITY 5 - Legacy fallback for safety
     const legacy = this.krakenToNormalSymbol(krakenPair);
     if (legacy) {
-      if (!this.unrecognizedSymbols.has(krakenPair)) {
-        console.log(`[${this.MODULE_NAME}][TICKER][I7_LEGACY_FALLBACK]`, {
-          krakenPair,
-          legacyResult: legacy,
-          metadataLoaded: krakenPairMetadataService.isMetadataLoaded(),
-        });
-      }
       return legacy;
     }
 
-    // Symbol is completely unrecognized
-    console.warn('[I7][SYM_UNRECOGNIZED]', {
-      internalSymbol: krakenPair,
-      context: 'ticker_inbound',
-      metadataLoaded: krakenPairMetadataService.isMetadataLoaded(),
-    });
+    // I7-MAP-FIX: Symbol is completely unmappable - log warning
+    console.warn(`[I7-MAP-FIX][UNMAPPED_TICK] kraken_ws_pair=${krakenPair} reason="no valid reverse mapping"`);
     this.unrecognizedSymbols.add(krakenPair);
     
     return null;
@@ -1442,8 +1393,11 @@ export class KrakenWebSocketAdapter {
       const stats = this.symbolStats.get(normalizedInternal);
       const lastTickAgeMs = stats ? now - stats.lastUpdate : null;
       
+      // I7-MAP-FIX: Use isMappable for accurate coverage status
+      const symbolIsMappable = isMappable(normalizedInternal);
+      
       let coverageStatus: 'subscribed' | 'pending' | 'missing' | 'unmappable';
-      if (krakenWsPair === 'unknown' || krakenWsPair === normalizedInternal) {
+      if (!symbolIsMappable || krakenWsPair === 'unknown') {
         coverageStatus = 'unmappable';
       } else if (isSubscribed) {
         coverageStatus = 'subscribed';

@@ -35,6 +35,8 @@ Tick Frequency Stabilization (I7-WS-G) improves WebSocket tick reliability by de
 
 Paper Trade Persistence Fix (I7-PERSIST-FIX) corrects a critical database table mismatch where I7-WS-F coverage endpoints were querying the wrong table. The fix changes all I7-WS-F endpoints to use `storage.getPaperSimOpenPositions('paper')` (reads from `paper_sim_open_positions` table with actual data) instead of `storage.getOpenPaperTrades()` (reads from legacy empty `paper_trades` table). Affected endpoints: `/api/diagnostics/i7-ws-f/coverage`, `/audit`, `/auto-subscribe`, `/validate-map`. A new diagnostic endpoint `/api/diagnostics/i7-persist/status` compares both tables for visibility. Log tag: `[I7-PERSIST-FIX]`.
 
+Canonical Symbol Mapping Repair (I7-MAP-FIX) fixes unmappable symbols that were blocking WebSocket subscriptions. The static `KRAKEN_SYMBOL_MAP` was expanded from ~100 to 130 entries, adding missing crypto pairs including BERA, BNT, API3, TIA, FORTH, and others. The `kraken-symbol-resolver.ts` now implements a smart resolver with priority fallback: static map → dynamic fallback → metadata service → legacy conversion. Key functions include `resolveToKrakenWsPair()`, `resolveToKrakenRestPair()`, `isMappable()`, and `listUnmappableSymbols()`. A startup audit runs at server boot to detect unmappable active symbols. Diagnostic endpoint `/api/diagnostics/i7-map-fix/check` provides real-time mapping validation. Log tag: `[I7-MAP-FIX]`.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.

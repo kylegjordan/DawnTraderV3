@@ -2024,6 +2024,16 @@
     ]
   },
   {
+    "path": "/api/diagnostics/i7-map-fix/check",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/diagnostics/i7-ws-g/frequency",
     "methods": [
       "GET"
