@@ -8029,6 +8029,78 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ===== Phase 8.8.4-IA-PRICE-CACHE: Centralized Price Cache Diagnostics =====
+  
+  // GET /api/diagnostics/ia-price-cache/status - Phase 8.8.4-IA-PRICE-CACHE: Price cache status
+  apiRouter.get('/diagnostics/ia-price-cache/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { priceCache } = await import('./services/price-cache.js');
+      
+      const snapshot = priceCache.snapshot();
+      const now = Date.now();
+      
+      const cacheEntries = snapshot.map(entry => ({
+        symbol: entry.symbol,
+        price: entry.price,
+        source: entry.lastSource,
+        lastUpdatedAt: new Date(entry.lastUpdatedAt).toISOString(),
+        ageMs: now - entry.lastUpdatedAt,
+        isFresh: (now - entry.lastUpdatedAt) < 2000
+      }));
+      
+      const freshCount = cacheEntries.filter(e => e.isFresh).length;
+      const staleCount = cacheEntries.filter(e => !e.isFresh).length;
+      const wsSourceCount = cacheEntries.filter(e => e.source === 'kraken_ws').length;
+      const restSourceCount = cacheEntries.filter(e => e.source === 'kraken_rest').length;
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.4-IA-PRICE-CACHE',
+        description: 'Centralized price cache status for active trade pricing',
+        summary: {
+          total_entries: cacheEntries.length,
+          fresh_count: freshCount,
+          stale_count: staleCount,
+          ws_source_count: wsSourceCount,
+          rest_source_count: restSourceCount,
+          freshness_threshold_ms: 2000
+        },
+        entries: cacheEntries.sort((a, b) => a.symbol.localeCompare(b.symbol))
+      });
+    } catch (error: any) {
+      console.error('[IA-PRICE-CACHE] Error fetching status:', error);
+      res.status(500).json({
+        ok: false,
+        phase: '8.8.4-IA-PRICE-CACHE',
+        error: error.message
+      });
+    }
+  });
+
+  // POST /api/diagnostics/ia-price-cache/clear - Phase 8.8.4-IA-PRICE-CACHE: Clear price cache
+  apiRouter.post('/diagnostics/ia-price-cache/clear', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { priceCache } = await import('./services/price-cache.js');
+      
+      priceCache.clear();
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.4-IA-PRICE-CACHE',
+        message: 'Price cache cleared successfully'
+      });
+    } catch (error: any) {
+      console.error('[IA-PRICE-CACHE] Error clearing cache:', error);
+      res.status(500).json({
+        ok: false,
+        phase: '8.8.4-IA-PRICE-CACHE',
+        error: error.message
+      });
+    }
+  });
+
   // ===== Phase 8.8.3-I7-ROOT-FIX: Engine Status Diagnostics =====
   
   // GET /api/diagnostics/i7-root/engine-status - Phase 8.8.3-I7-PM-FOCUS: Engine status diagnostics
