@@ -3554,6 +3554,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       console.log('[41D-FIX] Broadcast triggered asynchronously');
       
+      // I7-ROOT-FIX (A3): Ensure WS coverage hooks run when trading starts
+      try {
+        await krakenWebSocketAdapter.ensureCoverageForOpenPositions?.('i7-root-fix');
+        await krakenWebSocketAdapter.ensureTickMonitoringStarted?.('i7-root-fix');
+      } catch (wsHooksErr) {
+        console.warn('[I7-ROOT-FIX][WS_HOOKS_FAILED]', wsHooksErr);
+      }
+      
       // Get current global context for deterministic response
       const context = await storage.getSystemContext(mode);
       
@@ -8017,6 +8025,28 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         ok: false,
         phase: '8.8.3-I7-MAP-AUTO',
         error: error.message
+      });
+    }
+  });
+
+  // ===== Phase 8.8.3-I7-ROOT-FIX: Engine Status Diagnostics =====
+  
+  // GET /api/diagnostics/i7-root/engine-status - Phase 8.8.3-I7-ROOT-FIX (A2): Engine status diagnostics
+  apiRouter.get('/diagnostics/i7-root/engine-status', async (req, res) => {
+    try {
+      const paper = globalPaperEngine?.getEngineStatusSnapshot?.() ?? null;
+      const live = globalLiveEngine?.getEngineStatusSnapshot?.() ?? null;
+
+      res.json({
+        ok: true,
+        phase: '8.8.3-I7-ROOT-FIX',
+        paper,
+        live,
+      });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        error: (err as Error).message,
       });
     }
   });

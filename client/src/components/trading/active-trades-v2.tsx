@@ -544,10 +544,21 @@ export default function ActiveTradesV2() {
     });
   }, [data?.positions, livePrices]);
   
+  // I7-ROOT-FIX (D): Deduplicate positions to prevent duplicate entries
+  const dedupedPositions = useMemo(() => {
+    const seen = new Set<string>();
+    return positionsWithLivePrices.filter((p) => {
+      const key = `${p.symbol}:${p.slotNumber ?? ''}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [positionsWithLivePrices]);
+
   const sortedPositions = useMemo(() => {
-    if (!positionsWithLivePrices.length) return [];
+    if (!dedupedPositions.length) return [];
     
-    return [...positionsWithLivePrices].sort((a, b) => {
+    return [...dedupedPositions].sort((a, b) => {
       let aVal: any = a[sortField];
       let bVal: any = b[sortField];
       
@@ -566,7 +577,7 @@ export default function ActiveTradesV2() {
       if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [positionsWithLivePrices, sortField, sortDirection]);
+  }, [dedupedPositions, sortField, sortDirection]);
 
   if (!isPaper) {
     return (

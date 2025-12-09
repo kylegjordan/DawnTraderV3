@@ -83,20 +83,46 @@ export class TradingEngine {
   }
 
   async stop(): Promise<void> {
+    // I7-ROOT-FIX (B): Robust stop with early return if already stopped
+    if (!this.isRunning) {
+      console.log('[I7-ROOT-FIX][STOP_IGNORED_ALREADY_STOPPED]', { mode: this.mode });
+      return;
+    }
+    
+    console.log('[I7-ROOT-FIX][STOP_CALLED]', { mode: this.mode });
     telemetryTrace.trace('TradingEngine', 'STOP_REQUESTED', 'INFO', { mode: this.mode });
     
     this.isRunning = false;
     
     // Phase 37: Stop signal orchestrator
-    if (this.signalOrchestrator) {
-      this.signalOrchestrator.stop();
-      this.signalOrchestrator = null;
-      console.log(`[37.A][ENGINE][mode=${this.mode}] Signal orchestrator stopped`);
-      telemetryTrace.trace('TradingEngine', 'SIGNAL_ORCHESTRATOR_STOPPED', 'INFO', { mode: this.mode });
+    try {
+      if (this.signalOrchestrator) {
+        this.signalOrchestrator.stop();
+        this.signalOrchestrator = null;
+        console.log(`[37.A][ENGINE][mode=${this.mode}] Signal orchestrator stopped`);
+        telemetryTrace.trace('TradingEngine', 'SIGNAL_ORCHESTRATOR_STOPPED', 'INFO', { mode: this.mode });
+      }
+      
+      console.log('[I7-ROOT-FIX][STOP_COMPLETED]', { mode: this.mode });
+    } catch (err) {
+      console.log('[I7-ROOT-FIX][STOP_ERROR]', {
+        mode: this.mode,
+        error: (err as Error).message,
+      });
     }
     
     console.log(`[37.A][ENGINE][mode=${this.mode}] Trading engine stopped`);
     telemetryTrace.trace('TradingEngine', 'ENGINE_STOPPED', 'INFO', { mode: this.mode });
+  }
+
+  // I7-ROOT-FIX (A1): Expose engine status for diagnostics
+  public getEngineStatusSnapshot() {
+    return {
+      mode: this.mode,
+      isRunning: this.isRunning,
+      hasSignalOrchestrator: this.signalOrchestrator !== null,
+      lastStatusAt: new Date().toISOString(),
+    };
   }
 
   private async calculateGoalAlignmentScore(signal: TradeSignal, mode: 'live' | 'paper'): Promise<number> {
@@ -200,7 +226,12 @@ export class TradingEngine {
   }
 
   async processSignal(signal: TradeSignal): Promise<Trade | null> {
+    // I7-ROOT-FIX (B): Drop signals when engine is stopped
     if (!this.isRunning) {
+      console.log('[I7-ROOT-FIX][SIGNAL_DROPPED_ENGINE_STOPPED]', {
+        symbol: signal.symbol,
+        mode: this.mode,
+      });
       console.log(`[Phase-27.F.15.B.3][mode=${this.mode}] Trading engine stopped, ignoring signal`);
       return null;
     }

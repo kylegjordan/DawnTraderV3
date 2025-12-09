@@ -1792,6 +1792,32 @@ export class KrakenWebSocketAdapter {
   getChannelHints(): { low_liquidity: string[]; prefer_book: string[] } {
     return this.KRAKEN_CHANNEL_HINTS;
   }
+
+  // I7-ROOT-FIX (A3): Wrapper for ensuring WS coverage for open positions
+  async ensureCoverageForOpenPositions(reason: string): Promise<void> {
+    console.log('[I7-ROOT-FIX][WS_COVERAGE]', { reason });
+    // Use existing auditWebSocketCoverage and autoSubscribeMissingSymbols
+    const { storage } = await import('../storage.js');
+    const openPositions = await storage.getPaperSimOpenPositions('paper');
+    const livePositions = await storage.getPaperSimOpenPositions('live');
+    const allSymbols = [...new Set([...openPositions.map(p => p.symbol), ...livePositions.map(p => p.symbol)])];
+    
+    if (allSymbols.length > 0) {
+      const result = await this.autoSubscribeMissingSymbols(allSymbols);
+      console.log('[I7-ROOT-FIX][WS_COVERAGE_RESULT]', {
+        reason,
+        symbols: allSymbols.length,
+        subscribed: result.subscribed.length,
+        failed: result.failed.length
+      });
+    }
+  }
+
+  // I7-ROOT-FIX (A3): Wrapper for ensuring tick monitoring is started
+  async ensureTickMonitoringStarted(reason: string): Promise<void> {
+    console.log('[I7-ROOT-FIX][WS_MONITOR_START]', { reason });
+    this.startTickFrequencyMonitoring();
+  }
 }
 
 export const krakenWebSocketAdapter = new KrakenWebSocketAdapter();

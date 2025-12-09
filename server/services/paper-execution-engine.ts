@@ -58,6 +58,17 @@ export class PaperExecutionEngine {
   private priceTickLogs: Array<{ symbol: string; refreshedAt: string; diffMs: number }> = [];
   private lastPriceTickTime: Map<string, number> = new Map();
 
+  // I7-ROOT-FIX: minimal engine status diagnostics
+  private lastEvaluateAt: number | null = null;
+  private lastExitChecks: {
+    symbol: string;
+    slotNumber?: number;
+    price: number;
+    priceSource: string;
+    evaluatedAt: string;
+    triggeredExit: boolean;
+  }[] = [];
+
   constructor(mode: 'live' | 'paper') {
     this.mode = mode;
     this.krakenService = new KrakenService();
@@ -172,6 +183,19 @@ export class PaperExecutionEngine {
     }
 
     console.log(`[PaperExecution:${this.mode}] Stopped paper trading engine`);
+  }
+
+  // I7-ROOT-FIX: Expose engine status for diagnostics
+  public getEngineStatusSnapshot() {
+    return {
+      mode: this.mode,
+      isRunning: this.isRunning,
+      lastEvaluateAt: this.lastEvaluateAt,
+      lastEvaluateAtIso: this.lastEvaluateAt
+        ? new Date(this.lastEvaluateAt).toISOString()
+        : null,
+      lastExitChecks: this.lastExitChecks.slice(-20),
+    };
   }
 
   /**
@@ -319,6 +343,10 @@ export class PaperExecutionEngine {
   }
 
   private async checkOpenPositions(): Promise<void> {
+    // I7-ROOT-FIX: Track evaluation timing
+    this.lastEvaluateAt = Date.now();
+    this.lastExitChecks = [];
+    
     const openPositions = await storage.getPaperSimOpenPositions(this.mode);
 
     for (const position of openPositions) {
@@ -421,6 +449,7 @@ export class PaperExecutionEngine {
 
         // Check for exit conditions
         // Phase 8.8.3-I7-WS-C: Pass trace ID for Stage 8 logging
+        const evalStartedAt = Date.now();
         const exitCondition = await this.checkExitConditions(
           position,
           currentPrice,
@@ -429,6 +458,16 @@ export class PaperExecutionEngine {
           takeProfit,
           engineTraceId
         );
+
+        // I7-ROOT-FIX: Track exit evaluation for diagnostics
+        this.lastExitChecks.push({
+          symbol: position.symbol,
+          slotNumber: (position as any).slotNumber,
+          price: currentPrice,
+          priceSource: priceSource,
+          evaluatedAt: new Date(evalStartedAt).toISOString(),
+          triggeredExit: exitCondition !== null
+        });
 
         if (exitCondition) {
           // [B8.PNL][EXIT_SOURCE] - Log price source before calling closePosition
@@ -1803,6 +1842,17 @@ export class PaperExecutionEngine {
         stage: 'opened',
         block_reason: null
       });
+
+      // I7-ROOT-FIX (C): Prevent duplicate positions for same symbol
+      const existingForSymbol = await storage.getPaperSimOpenPositions(this.mode);
+      const existingPosition = existingForSymbol.find(p => p.symbol === signal.symbol);
+      if (existingPosition) {
+        console.log('[I7-ROOT-FIX][DUP_OPEN_POSITION_SKIPPED]', {
+          symbol: signal.symbol,
+          existingCount: existingForSymbol.filter(p => p.symbol === signal.symbol).length,
+        });
+        return; // Exit early - position already exists
+      }
 
       // Create open position
       const openPosition = await storage.createPaperSimOpenPosition(this.mode, {

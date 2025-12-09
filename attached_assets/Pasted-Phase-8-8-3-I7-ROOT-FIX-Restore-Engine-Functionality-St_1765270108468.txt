@@ -1,0 +1,296 @@
+Phase 8.8.3-I7-ROOT-FIX — Restore Engine Functionality, Stop Behavior, and Remove Duplicates
+Context for Replit
+
+The trading system has regressed in multiple critical ways:
+
+The engine is no longer closing trades.
+Despite receiving price updates (or at least appearing to), the engine does not execute exit checks or closures.
+
+Prices appear static on both UI and engine side.
+There are no trade history entries despite 15 active positions.
+
+Clicking “Stop Trading” still results in new positions opening.
+This indicates that:
+
+The wrong engine instance may be stopped
+
+Or stop() is not having effect
+
+Or a second engine instance is still consuming signals
+
+Active Trades + Ready To Buy are showing duplicate entries.
+These duplicates were not present before recent phases were implemented, so they are likely a consequence of new changes.
+
+The purpose of this directive is to fix the root problems, not symptoms.
+
+The entire I7-MAP series (MAP-FIX, MAP-AUTO, MAP-VER) produced correct diagnostics, but mapping was never the cause of these failures.
+
+This phase introduces minimal, targeted patches to restore:
+
+Engine evaluation cycle
+
+Exit execution
+
+True stop behavior
+
+Deduplication of positions
+
+Visibility into engine status
+
+Guardrails to prevent duplicate entries
+
+🔐 Test User Credentials
+
+Use these credentials for all auth-protected endpoints:
+
+username: testuser123
+password: testpassword123
+
+
+Token retrieval example:
+
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"testuser123","password":"testpassword123"}' | jq -r '.token')
+
+✅ Your Goal in This Directive
+
+Implement Phase 8.8.3-I7-ROOT-FIX by performing the concrete code modifications listed below.
+
+These are not general guidelines — they are explicit code changes for specific files already uploaded.
+
+Do not invent alternative implementations.
+Follow these instructions exactly.
+
+🧩 SECTION A — Restore Engine Exit Evaluation
+A1 — Add Engine Status Diagnostics
+File: paper-execution-engine.ts
+
+Add the following fields near the top of the class:
+
+// I7-ROOT-FIX: minimal engine status diagnostics
+private lastEvaluateAt: number | null = null;
+private lastExitChecks: {
+  symbol: string;
+  slotNumber?: number;
+  price: number;
+  priceSource: string;
+  evaluatedAt: string;
+  triggeredExit: boolean;
+}[] = [];
+
+Inside the method that loops over active positions and evaluates exit conditions, add:
+
+Right before loop:
+
+this.lastEvaluateAt = Date.now();
+this.lastExitChecks = [];
+
+
+Immediately before calling checkExitConditions:
+
+const evalStartedAt = Date.now();
+let triggeredExit = false;
+
+
+Immediately after:
+
+this.lastExitChecks.push({
+  symbol: position.symbol,
+  slotNumber: (position as any).slotNumber,
+  price,
+  priceSource: source,
+  evaluatedAt: new Date(evalStartedAt).toISOString(),
+  triggeredExit: false,
+});
+
+Modify checkExitConditions to accept a callback
+
+Change signature:
+
+private async checkExitConditions(
+  position: PaperPosition,
+  price: number,
+  source: 'kraken_ws' | 'kraken_rest' | 'none',
+  staleMs: number | null,
+  traceId?: string,
+  markExitTriggered?: () => void,
+): Promise<void>
+
+
+Inside the block where a stop-loss or take-profit triggers a close:
+
+if (markExitTriggered) markExitTriggered();
+
+Expose diagnostic snapshot
+
+Add this method:
+
+public getEngineStatusSnapshot() {
+  return {
+    mode: this.mode,
+    lastEvaluateAt: this.lastEvaluateAt,
+    lastEvaluateAtIso: this.lastEvaluateAt
+      ? new Date(this.lastEvaluateAt).toISOString()
+      : null,
+    lastExitChecks: this.lastExitChecks.slice(-20),
+  };
+}
+
+A2 — Add diagnostics endpoint
+File: routes.ts
+
+Add near the other diagnostics endpoints:
+
+apiRouter.get('/diagnostics/i7-root/engine-status', async (req, res) => {
+  try {
+    const paper = globalPaperEngine?.getEngineStatusSnapshot?.() ?? null;
+    const live = globalLiveEngine?.getEngineStatusSnapshot?.() ?? null;
+
+    res.json({
+      ok: true,
+      phase: '8.8.3-I7-ROOT-FIX',
+      paper,
+      live,
+    });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      error: (err as Error).message,
+    });
+  }
+});
+
+A3 — Ensure WS coverage hooks run when trading starts
+File: routes.ts
+
+Inside /api/trading/start, after the engine is successfully started:
+
+try {
+  await krakenWebSocketAdapter.ensureCoverageForOpenPositions?.('i7-root-fix');
+  await krakenWebSocketAdapter.ensureTickMonitoringStarted?.('i7-root-fix');
+} catch (err) {
+  console.warn('[I7-ROOT-FIX][WS_HOOKS_FAILED]', err);
+}
+
+File: kraken-websocket-adapter.ts
+
+Add helper methods:
+
+public async ensureCoverageForOpenPositions(reason: string) {
+  this.log('[I7-ROOT-FIX][WS_COVERAGE]', { reason });
+  await this.i7WsFEnsureCoverageForOpenPositions?.();
+}
+
+public async ensureTickMonitoringStarted(reason: string) {
+  this.log('[I7-ROOT-FIX][WS_MONITOR_START]', { reason });
+  if (!this.i7WsGMonitoringStarted) {
+    await this.startFrequencyMonitoring?.();
+  }
+}
+
+🛑 SECTION B — Fix Stop Behavior (Regression Fix)
+File: trading-engine.ts
+
+Modify stop():
+
+async stop(): Promise<void> {
+  if (!this.isRunning) {
+    this.log('[I7-ROOT-FIX][STOP_IGNORED_ALREADY_STOPPED]', { mode: this.mode });
+    return;
+  }
+
+  this.log('[I7-ROOT-FIX][STOP_CALLED]', { mode: this.mode });
+  this.isRunning = false;
+
+  try {
+    await this.signalOrchestrator.stop();
+    this.log('[I7-ROOT-FIX][STOP_COMPLETED]', { mode: this.mode });
+  } catch (err) {
+    this.log('[I7-ROOT-FIX][STOP_ERROR]', {
+      mode: this.mode,
+      error: (err as Error).message,
+    });
+  }
+}
+
+
+At the top of processSignal():
+
+if (!this.isRunning) {
+  this.log('[I7-ROOT-FIX][SIGNAL_DROPPED_ENGINE_STOPPED]', {
+    symbol: signal.symbol,
+    mode: this.mode,
+  });
+  return;
+}
+
+File: routes.ts, inside /api/trading/stop
+
+Ensure correct engine instance is stopped:
+
+if (mode === 'paper') {
+  await globalPaperEngine.stop();
+} else if (mode === 'live') {
+  await globalLiveEngine.stop();
+}
+
+🔁 SECTION C — Prevent Duplicate Positions
+C1 — Application-level duplicate guard
+File: paper-execution-engine.ts
+
+Before calling createPaperSimOpenPosition:
+
+const existingForSymbol =
+  await this.storage.getPaperSimOpenPositions(this.mode, {
+    status: 'open',
+    symbol: signal.symbol,
+  });
+
+if (existingForSymbol.length > 0) {
+  this.log('[I7-ROOT-FIX][DUP_OPEN_POSITION_SKIPPED]', {
+    symbol: signal.symbol,
+    existingCount: existingForSymbol.length,
+  });
+  return;
+}
+
+🎨 SECTION D — UI Deduplication
+File: active-trades-v2.tsx
+
+After positionsWithLivePrices:
+
+const dedupedPositions = useMemo(() => {
+  const seen = new Set<string>();
+  return positionsWithLivePrices.filter((p) => {
+    const key = `${p.symbol}:${p.slotNumber ?? ''}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}, [positionsWithLivePrices]);
+
+
+Use dedupedPositions instead of positionsWithLivePrices for sorting and rendering.
+
+🧪 SECTION E — After Implementation
+
+Run:
+
+curl -s http://localhost:5000/api/diagnostics/i7-root/engine-status \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+
+Confirm:
+
+lastEvaluateAt updates every cycle
+
+lastExitChecks shows active price evaluations
+
+triggeredExit becomes true when targets/stops are hit
+
+No new trades appear after stop
+
+No duplicate rows appear in Active Trades
+
+✅ End of Directive
