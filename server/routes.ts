@@ -7731,6 +7731,296 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ===== Phase 8.8.3-I7-MAP-AUTO: Automatic Symbol Mapping Endpoints =====
+
+  // GET /api/diagnostics/i7-map-auto/summary - I7-MAP-AUTO: Get mapping summary statistics
+  apiRouter.get('/diagnostics/i7-map-auto/summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenAssetPairsService } = await import('./markets/kraken-asset-pairs-service.js');
+      
+      if (!krakenAssetPairsService.isReady()) {
+        return res.status(503).json({
+          ok: false,
+          phase: '8.8.3-I7-MAP-AUTO',
+          error: 'Auto-map not initialized yet',
+          hint: 'Wait for startup or call POST /rebuild'
+        });
+      }
+      
+      const summary = krakenAssetPairsService.getSummary();
+      const tierBreakdown = {
+        tier1_verified: summary.tier1,
+        tier2_derived: summary.tier2,
+        tier3_uncertain: summary.tier3,
+        total_mapped: summary.total,
+        coverage_pct: summary.total > 0 
+          ? ((summary.tier1 + summary.tier2) / summary.total * 100).toFixed(2) + '%' 
+          : '0%'
+      };
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.3-I7-MAP-AUTO',
+        description: 'Automatic Kraken symbol mapping summary',
+        summary: {
+          total_kraken_pairs: summary.total,
+          mapped_tier1: summary.tier1,
+          mapped_tier2: summary.tier2,
+          mapped_tier3: summary.tier3,
+          unmappable: summary.unmappable,
+          collisions: summary.collisions,
+          static_map_size: summary.staticMapSize,
+          last_refresh: summary.lastRefresh
+        },
+        tier_breakdown: tierBreakdown,
+        quality: {
+          tier1_2_coverage: summary.tier1 + summary.tier2,
+          target: '98%+ Tier 1/2',
+          status: (summary.tier1 + summary.tier2) / summary.total >= 0.98 ? 'PASS' : 'NEEDS_ATTENTION'
+        }
+      });
+    } catch (error: any) {
+      console.error('[I7-MAP-AUTO] Error fetching summary:', error);
+      res.status(500).json({
+        ok: false,
+        phase: '8.8.3-I7-MAP-AUTO',
+        error: error.message
+      });
+    }
+  });
+
+  // GET /api/diagnostics/i7-map-auto/unmappable - I7-MAP-AUTO: Get unmappable symbols
+  apiRouter.get('/diagnostics/i7-map-auto/unmappable', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenAssetPairsService } = await import('./markets/kraken-asset-pairs-service.js');
+      
+      if (!krakenAssetPairsService.isReady()) {
+        return res.status(503).json({
+          ok: false,
+          phase: '8.8.3-I7-MAP-AUTO',
+          error: 'Auto-map not initialized yet'
+        });
+      }
+      
+      const unmappable = krakenAssetPairsService.getUnmappable();
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.3-I7-MAP-AUTO',
+        description: 'Symbols that could not be automatically mapped',
+        count: unmappable.length,
+        symbols: unmappable
+      });
+    } catch (error: any) {
+      console.error('[I7-MAP-AUTO] Error fetching unmappable:', error);
+      res.status(500).json({
+        ok: false,
+        phase: '8.8.3-I7-MAP-AUTO',
+        error: error.message
+      });
+    }
+  });
+
+  // GET /api/diagnostics/i7-map-auto/conflicts - I7-MAP-AUTO: Get symbol conflicts
+  apiRouter.get('/diagnostics/i7-map-auto/conflicts', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenAssetPairsService } = await import('./markets/kraken-asset-pairs-service.js');
+      
+      if (!krakenAssetPairsService.isReady()) {
+        return res.status(503).json({
+          ok: false,
+          phase: '8.8.3-I7-MAP-AUTO',
+          error: 'Auto-map not initialized yet'
+        });
+      }
+      
+      const conflicts = krakenAssetPairsService.getConflicts();
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.3-I7-MAP-AUTO',
+        description: 'Symbols with inconsistent Kraken metadata (collisions)',
+        count: conflicts.length,
+        conflicts
+      });
+    } catch (error: any) {
+      console.error('[I7-MAP-AUTO] Error fetching conflicts:', error);
+      res.status(500).json({
+        ok: false,
+        phase: '8.8.3-I7-MAP-AUTO',
+        error: error.message
+      });
+    }
+  });
+
+  // POST /api/diagnostics/i7-map-auto/rebuild - I7-MAP-AUTO: Force refresh mapping
+  apiRouter.post('/diagnostics/i7-map-auto/rebuild', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenAssetPairsService } = await import('./markets/kraken-asset-pairs-service.js');
+      
+      console.log('[I7-MAP-AUTO] Manual rebuild triggered by user');
+      await krakenAssetPairsService.refresh();
+      
+      const summary = krakenAssetPairsService.getSummary();
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.3-I7-MAP-AUTO',
+        message: 'Kraken AssetPairs mapping rebuilt successfully',
+        summary: {
+          total: summary.total,
+          tier1: summary.tier1,
+          tier2: summary.tier2,
+          tier3: summary.tier3,
+          unmappable: summary.unmappable,
+          collisions: summary.collisions
+        }
+      });
+    } catch (error: any) {
+      console.error('[I7-MAP-AUTO] Error rebuilding mapping:', error);
+      res.status(500).json({
+        ok: false,
+        phase: '8.8.3-I7-MAP-AUTO',
+        error: error.message
+      });
+    }
+  });
+
+  // GET /api/diagnostics/i7-map-auto/audit - I7-MAP-AUTO: Audit active positions
+  apiRouter.get('/diagnostics/i7-map-auto/audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenAssetPairsService } = await import('./markets/kraken-asset-pairs-service.js');
+      
+      if (!krakenAssetPairsService.isReady()) {
+        return res.status(503).json({
+          ok: false,
+          phase: '8.8.3-I7-MAP-AUTO',
+          error: 'Auto-map not initialized yet'
+        });
+      }
+      
+      // Get active symbols from paper positions + live trades
+      const [paperPositions, liveTrades] = await Promise.all([
+        storage.getPaperSimOpenPositions('paper'),
+        storage.getActiveTrades('live')
+      ]);
+      
+      const activeSymbols = [...new Set([
+        ...paperPositions.map(t => t.symbol),
+        ...liveTrades.map(t => t.symbol)
+      ])];
+      
+      const auditResult = krakenAssetPairsService.auditSymbols(activeSymbols);
+      
+      // Get tier details for each active symbol (use resolveAny for any format)
+      const symbolDetails = activeSymbols.map(symbol => {
+        const entry = krakenAssetPairsService.resolveAny(symbol);
+        return {
+          symbol,
+          internalSymbol: entry?.internalSymbol || null,
+          tier: entry?.tier || null,
+          tierReason: entry?.tierReason || 'Not found in auto-map',
+          krakenRestPair: entry?.krakenRestPair || null,
+          krakenWsPair: entry?.krakenWsPair || null,
+          status: entry ? (entry.tier <= 2 ? 'SAFE' : 'NEEDS_REVIEW') : 'UNMAPPED'
+        };
+      });
+      
+      const allTier1 = auditResult.unmapped.length === 0 && auditResult.tier3 === 0 && auditResult.tier2 === 0;
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.3-I7-MAP-AUTO',
+        description: 'Audit of active positions mapping coverage',
+        audit: {
+          total_active: auditResult.total,
+          mapped: auditResult.mapped,
+          tier1: auditResult.tier1,
+          tier2: auditResult.tier2,
+          tier3: auditResult.tier3,
+          unmapped: auditResult.unmapped.length
+        },
+        quality: {
+          all_tier1: allTier1,
+          all_safe: auditResult.unmapped.length === 0 && auditResult.tier3 === 0,
+          target: 'All active symbols should be Tier 1'
+        },
+        symbols: symbolDetails,
+        unmapped_details: auditResult.unmapped
+      });
+    } catch (error: any) {
+      console.error('[I7-MAP-AUTO] Error auditing positions:', error);
+      res.status(500).json({
+        ok: false,
+        phase: '8.8.3-I7-MAP-AUTO',
+        error: error.message
+      });
+    }
+  });
+
+  // GET /api/diagnostics/i7-map-auto/tiers - I7-MAP-AUTO: Get symbols by tier
+  apiRouter.get('/diagnostics/i7-map-auto/tiers', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenAssetPairsService } = await import('./markets/kraken-asset-pairs-service.js');
+      
+      if (!krakenAssetPairsService.isReady()) {
+        return res.status(503).json({
+          ok: false,
+          phase: '8.8.3-I7-MAP-AUTO',
+          error: 'Auto-map not initialized yet'
+        });
+      }
+      
+      const tier = parseInt(req.query.tier as string) || 0;
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 500);
+      
+      let mappings;
+      if (tier === 1) {
+        mappings = krakenAssetPairsService.getTier1Mappings();
+      } else if (tier === 2) {
+        mappings = krakenAssetPairsService.getTier2Mappings();
+      } else if (tier === 3) {
+        mappings = krakenAssetPairsService.getTier3Mappings();
+      } else {
+        mappings = krakenAssetPairsService.getAllMappings();
+      }
+      
+      const total = mappings.length;
+      const sample = mappings.slice(0, limit).map(m => ({
+        internal: m.internalSymbol,
+        rest: m.krakenRestPair,
+        ws: m.krakenWsPair,
+        tier: m.tier,
+        reason: m.tierReason,
+        base: m.base,
+        quote: m.quote
+      }));
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.3-I7-MAP-AUTO',
+        description: tier > 0 ? `Tier ${tier} mappings` : 'All mappings',
+        filter: { tier: tier || 'all', limit },
+        count: total,
+        showing: sample.length,
+        mappings: sample
+      });
+    } catch (error: any) {
+      console.error('[I7-MAP-AUTO] Error fetching tiers:', error);
+      res.status(500).json({
+        ok: false,
+        phase: '8.8.3-I7-MAP-AUTO',
+        error: error.message
+      });
+    }
+  });
+
   // ===== Phase 8.8.3-I7-WS-G: Tick Frequency Stabilization Endpoints =====
 
   // GET /api/diagnostics/i7-ws-g/frequency - Phase 8.8.3-I7-WS-G (G4.1): Get tick frequency metrics

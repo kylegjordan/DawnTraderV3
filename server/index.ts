@@ -176,6 +176,41 @@ app.use((req, res, next) => {
     // Non-fatal - the system can still run with fallback normalization
   }
 
+  // Phase 8.8.3-I7-MAP-AUTO: Initialize automatic Kraken symbol mapping
+  try {
+    const { krakenAssetPairsService } = await import('./markets/kraken-asset-pairs-service');
+    const { storage } = await import('./storage');
+    
+    await krakenAssetPairsService.initialize();
+    const summary = krakenAssetPairsService.getSummary();
+    
+    // Audit active positions for mapping coverage
+    const [paperPositions, liveTrades] = await Promise.all([
+      storage.getPaperSimOpenPositions('paper'),
+      storage.getActiveTrades('live')
+    ]);
+    
+    const activeSymbols = [...new Set([
+      ...paperPositions.map((t: any) => t.symbol),
+      ...liveTrades.map((t: any) => t.symbol)
+    ])];
+    
+    if (activeSymbols.length > 0) {
+      const auditResult = krakenAssetPairsService.auditSymbols(activeSymbols);
+      console.log(`[I7-MAP-AUTO][STARTUP] Active positions audit: mapped=${auditResult.mapped}, tier1=${auditResult.tier1}, tier2=${auditResult.tier2}, tier3=${auditResult.tier3}, unmapped=${auditResult.unmapped.length}`);
+      
+      if (auditResult.unmapped.length > 0) {
+        console.warn(`[I7-MAP-AUTO][STARTUP] ⚠️ Unmapped active symbols:`, auditResult.unmapped.map(u => u.symbol).join(', '));
+      }
+    }
+    
+    const tier12Coverage = summary.total > 0 ? ((summary.tier1 + summary.tier2) / summary.total * 100).toFixed(1) : '0';
+    console.log(`[I7-MAP-AUTO][STARTUP] ✅ Auto-map ready: total=${summary.total}, tier1=${summary.tier1}, tier2=${summary.tier2}, tier3=${summary.tier3}, coverage=${tier12Coverage}%`);
+  } catch (error) {
+    console.error('[I7-MAP-AUTO] ❌ Failed to initialize:', error);
+    // Non-fatal - static map fallback will be used
+  }
+
   // Phase 27.4: Initialize Trading State Recovery
   const { tradingStateSync } = await import('./services/trading-state-sync.js');
   const { db } = await import('./db.js');

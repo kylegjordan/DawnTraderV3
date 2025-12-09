@@ -1,13 +1,21 @@
 /**
- * Phase 8.8.3-I7 / I7-MAP-FIX: Kraken Symbol Resolver
+ * Phase 8.8.3-I7 / I7-MAP-FIX / I7-MAP-AUTO: Kraken Symbol Resolver
  * 
  * Single source of truth for symbol translation.
  * All components use this resolver - no custom formatting elsewhere.
  * 
  * I7-MAP-FIX: Enhanced with dynamic fallback for symbols not in static map.
+ * I7-MAP-AUTO: Now integrates with auto-generated Kraken AssetPairs mapping.
+ * 
+ * Resolution order (tiered):
+ * - Tier 0: Static map (KRAKEN_SYMBOL_MAP) - highest trust, manually verified
+ * - Tier 1: Auto-map verified (matches static map)
+ * - Tier 2: Auto-map derived (from Kraken API normalization)
+ * - Tier 3: Auto-map uncertain (not safe for auto-use)
  */
 
 import { KRAKEN_SYMBOL_MAP, KrakenPairMapping } from "./kraken-symbol-map";
+import { krakenAssetPairsService } from "./kraken-asset-pairs-service";
 
 const mapByInternal = new Map<string, KrakenPairMapping>();
 const mapByRestPair = new Map<string, KrakenPairMapping>();
@@ -114,34 +122,50 @@ export function normalizeToInternalSymbol(raw: string): string {
 }
 
 /**
- * I7-MAP-FIX: Convert internal symbol to Kraken REST format
- * Conservative: Only returns value if found in static map
+ * I7-MAP-AUTO: Convert internal symbol to Kraken REST format
+ * Resolution order: Static map (Tier 0) → Auto-map (Tier 1/2)
  */
 export function toKrakenRest(internalSymbol: string): string | null {
   const normalized = normalizeInternal(internalSymbol).toUpperCase();
   
-  // Only trust static map - no dynamic fallback to prevent invalid Kraken pair names
-  const mapping = mapByInternal.get(normalized);
-  if (mapping) return mapping.krakenRestPair;
+  // Tier 0: Static map has highest priority (manually verified)
+  const staticMapping = mapByInternal.get(normalized);
+  if (staticMapping) return staticMapping.krakenRestPair;
   
-  // I7-MAP-FIX: Conservative - do not guess, return null
-  console.warn(`[I7-MAP-FIX][WARN] No static mapping for REST: ${internalSymbol} (normalized: ${normalized})`);
+  // I7-MAP-AUTO: Try auto-map for Tier 1/2 symbols
+  if (krakenAssetPairsService.isReady()) {
+    const autoResult = krakenAssetPairsService.toKrakenRest(normalized);
+    if (autoResult) {
+      return autoResult;
+    }
+  }
+  
+  // No mapping found
+  console.warn(`[I7-MAP-AUTO][WARN] No mapping for REST: ${internalSymbol} (normalized: ${normalized})`);
   return null;
 }
 
 /**
- * I7-MAP-FIX: Convert internal symbol to Kraken WebSocket format
- * Conservative: Only returns value if found in static map
+ * I7-MAP-AUTO: Convert internal symbol to Kraken WebSocket format
+ * Resolution order: Static map (Tier 0) → Auto-map (Tier 1/2)
  */
 export function toKrakenWS(internalSymbol: string): string | null {
   const normalized = normalizeInternal(internalSymbol).toUpperCase();
   
-  // Only trust static map - no dynamic fallback to prevent invalid Kraken pair names
-  const mapping = mapByInternal.get(normalized);
-  if (mapping) return mapping.krakenWsPair;
+  // Tier 0: Static map has highest priority (manually verified)
+  const staticMapping = mapByInternal.get(normalized);
+  if (staticMapping) return staticMapping.krakenWsPair;
   
-  // I7-MAP-FIX: Conservative - do not guess, return null
-  console.warn(`[I7-MAP-FIX][WARN] No static mapping for WS: ${internalSymbol} (normalized: ${normalized})`);
+  // I7-MAP-AUTO: Try auto-map for Tier 1/2 symbols
+  if (krakenAssetPairsService.isReady()) {
+    const autoResult = krakenAssetPairsService.toKrakenWS(normalized);
+    if (autoResult) {
+      return autoResult;
+    }
+  }
+  
+  // No mapping found
+  console.warn(`[I7-MAP-AUTO][WARN] No mapping for WS: ${internalSymbol} (normalized: ${normalized})`);
   return null;
 }
 
@@ -166,20 +190,26 @@ export function mapKrakenPairToInternal(wsPair: string): string | null {
 }
 
 /**
- * I7-MAP-FIX: Check if a symbol can be mapped to Kraken formats
- * Conservative: Only returns true if found in static map (verified mappings)
+ * I7-MAP-AUTO: Check if a symbol can be mapped to Kraken formats
+ * Returns true if found in static map OR auto-map (Tier 1/2)
  */
 export function isMappable(symbol: string): boolean {
   const normalized = normalizeInternal(symbol).toUpperCase();
   
-  // I7-MAP-FIX: Conservative - only trust static map entries
-  // Dynamic resolution can produce invalid Kraken pair names
-  return mapByInternal.has(normalized);
+  // Tier 0: Static map is always trusted
+  if (mapByInternal.has(normalized)) return true;
+  
+  // I7-MAP-AUTO: Auto-map Tier 1/2 is also considered mappable
+  if (krakenAssetPairsService.isReady()) {
+    return krakenAssetPairsService.isMappable(normalized);
+  }
+  
+  return false;
 }
 
 /**
- * I7-MAP-FIX: List unmappable symbols from a given list
- * Conservative: Only considers symbols in static map as mappable
+ * I7-MAP-AUTO: List unmappable symbols from a given list
+ * Checks both static map and auto-map (Tier 1/2)
  */
 export function listUnmappableSymbols(symbols: string[]): Array<{ symbol: string; reason: string }> {
   const unmappable: Array<{ symbol: string; reason: string }> = [];
@@ -187,16 +217,28 @@ export function listUnmappableSymbols(symbols: string[]): Array<{ symbol: string
   for (const symbol of symbols) {
     const normalized = normalizeInternal(symbol).toUpperCase();
     
-    // I7-MAP-FIX: Only trust static map entries
+    // Check static map first (Tier 0)
     if (mapByInternal.has(normalized)) {
-      continue; // This symbol is mappable
+      continue; // Mapped via static map
     }
     
-    // Symbol not in static map - determine reason
+    // Check auto-map (Tier 1/2)
+    if (krakenAssetPairsService.isReady() && krakenAssetPairsService.isMappable(normalized)) {
+      continue; // Mapped via auto-map
+    }
+    
+    // Symbol not mappable - determine reason
     if (!normalized.includes("/")) {
       unmappable.push({ symbol, reason: "not in BASE/QUOTE format" });
+    } else if (krakenAssetPairsService.isReady()) {
+      const tier = krakenAssetPairsService.getTier(normalized);
+      if (tier === 3) {
+        unmappable.push({ symbol, reason: "Tier 3 (uncertain) - needs manual verification" });
+      } else {
+        unmappable.push({ symbol, reason: "not found in static map or auto-map" });
+      }
     } else {
-      unmappable.push({ symbol, reason: "not in static symbol map (add to KRAKEN_SYMBOL_MAP)" });
+      unmappable.push({ symbol, reason: "not in static map (auto-map not ready)" });
     }
   }
   
@@ -259,7 +301,8 @@ export function dumpMappings(): void {
 }
 
 /**
- * I7-MAP-FIX: Get detailed mapping info for a symbol
+ * I7-MAP-AUTO: Get detailed mapping info for a symbol
+ * Includes tier information from auto-map
  */
 export function getSymbolMappingDetails(symbol: string): {
   symbol: string;
@@ -268,23 +311,49 @@ export function getSymbolMappingDetails(symbol: string): {
   ws_pair: string | null;
   mappable: boolean;
   in_static_map: boolean;
+  in_auto_map: boolean;
+  tier: number | null;
+  tier_reason: string | null;
   reason_if_unmappable: string | null;
 } {
   const normalized = normalizeInternal(symbol);
+  const normalizedUpper = normalized.toUpperCase();
   const restPair = toKrakenRest(symbol);
   const wsPair = toKrakenWS(symbol);
   const mappable = isMappable(symbol);
-  const inStaticMap = mapByInternal.has(normalized.toUpperCase());
+  const inStaticMap = mapByInternal.has(normalizedUpper);
+  
+  // Check auto-map
+  let inAutoMap = false;
+  let tier: number | null = null;
+  let tierReason: string | null = null;
+  
+  if (krakenAssetPairsService.isReady()) {
+    const autoEntry = krakenAssetPairsService.resolveByInternal(normalizedUpper);
+    if (autoEntry) {
+      inAutoMap = true;
+      tier = autoEntry.tier;
+      tierReason = autoEntry.tierReason;
+    }
+  }
+  
+  // Determine effective tier (static map = Tier 0)
+  if (inStaticMap) {
+    tier = 0;
+    tierReason = "Static map (manually verified)";
+  }
   
   let reason: string | null = null;
   if (!mappable) {
     if (!normalized.includes("/")) {
       reason = "not in BASE/QUOTE format";
+    } else if (tier === 3) {
+      reason = "Tier 3 (uncertain) - needs manual verification";
     } else {
       const [base, quote] = normalized.split("/");
       if (!base) reason = "empty base asset";
       else if (!VALID_QUOTES.includes(quote)) reason = `unknown quote currency: ${quote}`;
-      else reason = "unknown";
+      else reason = "not found in any mapping source";
     }
   }
   
@@ -295,6 +364,9 @@ export function getSymbolMappingDetails(symbol: string): {
     ws_pair: wsPair,
     mappable,
     in_static_map: inStaticMap,
+    in_auto_map: inAutoMap,
+    tier,
+    tier_reason: tierReason,
     reason_if_unmappable: reason
   };
 }

@@ -1,0 +1,197 @@
+🔵 PHASE 8.8.3-I7-MAP-AUTO — Automatic Kraken Symbol Mapping Expansion
+
+Objective:
+Replace static, manually-managed symbol maps with a dynamic, verified, auto-generated canonical mapping layer backed by live Kraken AssetPairs metadata.
+
+Why we’re doing this:
+
+Kraken has 1399+ market pairs, but the static map covers only ~130
+
+Each new symbol currently requires manual updates
+
+Manual updates are error-prone
+
+The mapping must be deterministic, safe, and scalable
+
+This unlocks future multi-exchange abstract mapping architecture
+
+✅ SCOPE
+
+Implement a safe, deterministic, runtime-generated Kraken mapping system with:
+
+A. AssetPairs ingestion
+
+Pull /0/public/AssetPairs from Kraken and extract:
+
+REST altname
+
+WS wsname
+
+Kraken pair key (like XETHZUSD)
+
+Base / Quote
+
+Asset class metadata
+
+Status flags (halted, margin, etc.)
+
+B. Canonical normalization
+
+Normalize Kraken assets using the following rules:
+
+Kraken Base/Quote	Canonical
+XBT	BTC
+XETH	ETH
+USD, ZUSD	USD
+USDT	USDT
+EUR, ZEUR	EUR
+BERA	BERA
+API3	API3
+FORTH	FORTH
+
+…and so on.
+(This replaces the static map’s normalization logic.)
+
+C. Auto-built full symbol map
+
+Build an in-memory mapping table at startup:
+
+normalSymbol → {
+    krakenRestPair,
+    krakenWsPair,
+    base,
+    quote,
+    krakenPairKey,
+    isSpot,
+    isMargin,
+    isHalted
+}
+
+
+This table must:
+
+Deduplicate / collapse Kraken’s inconsistent fields
+
+Choose canonical representations
+
+Support both WS and REST
+
+Support reverse lookup if required
+
+Fail safe (never guess incorrectly)
+
+D. Tiered confidence system
+
+Every mapped symbol gets a “confidence”:
+
+Tier 1: Verified 1:1 match (SAFE — default)
+
+Tier 2: Derived from base/quote via normalization
+
+Tier 3: Uncertain / needs manual attention (never auto-accepted)
+
+Only Tier 1 and 2 are allowed to be used for WebSocket subscriptions.
+Tier 3 symbols appear in diagnostics and can be promoted manually if needed.
+
+E. New Diagnostic Endpoints
+
+Add endpoints under /api/diagnostics/i7-map-auto/*:
+
+GET /summary
+Shows counts:
+
+total Kraken pairs
+
+mapped Tier1 / Tier2 / Tier3
+
+unmappable
+
+collisions
+
+GET /unmappable
+Returns symbols that could not be automatically mapped.
+
+GET /conflicts
+Identifies symbols with inconsistent Kraken metadata.
+
+POST /rebuild
+Forces a refresh of Kraken mapping without restarting the server.
+
+F. Integration changes
+
+Replace static map lookups
+All toKrakenWS(), toKrakenRest(), isMappable() must use the new dynamic map.
+
+Update I7-WS-F coverage
+Coverage should use dynamic map results.
+
+Update I7-WS-G frequency mapping
+Tick classification must use canonical symbol mapping.
+
+Update price pipeline
+Stage 1→4 must route tick symbols using the new resolved pairs.
+
+G. Startup audit
+
+At startup:
+
+Download Kraken AssetPairs
+
+Build full auto-map
+
+Scan all paper positions, live positions, and ReadyToBuy symbols
+
+Log:
+
+[I7-MAP-AUTO][STARTUP]
+mapped={x}, tier1={y}, tier2={z}, tier3={a}, unmappable={b}
+unmappableSymbols=[...]
+
+🟩 NON-GOALS (intentionally NOT included)
+
+(To prevent Replit from doing too much.)
+
+❌ No database persistence of mapping yet
+❌ No multi-exchange abstraction yet
+❌ No static map removal (kept as fallback Tier 0)
+❌ No cross-exchange arbitrage prep
+
+These will come in 8.8.4, not now.
+
+🟦 DELIVERABLES
+
+After implementation, Replit must demonstrate:
+
+Auto-map builds without error
+
+At least 98% of Kraken symbols produce Tier 1 or Tier 2 mappings
+
+All your currently active symbols map to Tier 1
+
+No guessing
+
+No unmappable entries for your current positions
+
+WebSocket subscriptions can now be created for all symbols
+
+If everything passes, we immediately proceed with I7-MAP-VER.
+
+🟣 NEXT PHASE (after AUTO): I7-MAP-VER (verification)
+
+This phase will:
+
+Validate that every symbol resolves correctly
+
+Confirm WS and REST routes work
+
+Confirm no ActiveTrades symbols are unmappable
+
+Confirm subscription ACKs
+
+Confirm price ticks reach UI
+
+Confirm engine receives live WS prices
+
+Generate a report: “mapping health,” “coverage health,” and “tickflow health”
+
+But VER must not start until AUTO is fully implemented and stable.
