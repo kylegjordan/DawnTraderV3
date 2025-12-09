@@ -1,0 +1,114 @@
+Phase 8.8.3-I7-ROOT-DIAG-RUN (Engine & Pricing Diagnostic Capture)
+📌 Context (Repl.it must read this carefully)
+
+We have completed multiple phases of WebSocket, mapping, persistence, and engine-stability fixes.
+However, the system is still not functioning correctly:
+
+Active Trades pricing appears static.
+
+No trades are closing (no trade-history events).
+
+Duplicate symbols appear in Active Trades.
+
+When stopping trading, positions clear but NEW trades immediately appear (regression).
+
+We now need a controlled diagnostic run using the instrumentation already built in I7-ROOT-FIX, I7-WS-F, I7-WS-E, and I7-MAP-AUTO to identify the root cause.
+
+⚠️ This directive does NOT request any code changes.
+It ONLY requests executing diagnostic commands and showing results.
+
+Do not attempt to “fix” anything yet.
+
+🚀 DIRECTIVE — Execute the Diagnostic Sequence and Return the Results
+
+Repl.it must run these commands exactly, in order, inside the workspace container terminal.
+Use the existing test user with its current password (do NOT change it).
+
+STEP 1 — Log In and Capture TOKEN
+APP_TEST_USERNAME="testuser123"
+APP_TEST_PASSWORD="testpassword123"
+
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"'"$APP_TEST_USERNAME"'","password":"'"$APP_TEST_PASSWORD"'"}' \
+  | jq -r '.token')
+
+echo "TOKEN prefix: ${TOKEN:0:16}..."
+
+
+Return the full command output.
+
+STEP 2 — Start Paper Trading (fresh session)
+echo "=== START PAPER TRADING ==="
+curl -s -X POST http://localhost:5000/api/trading/start \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"paper"}' | jq .
+
+
+Then wait 10 seconds:
+
+sleep 10
+
+
+Return the full output.
+
+STEP 3 — Query Engine Status (critical)
+echo "=== ENGINE STATUS (T+10s) ==="
+curl -s http://localhost:5000/api/diagnostics/i7-root/engine-status \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+
+This must show whether the engine actually started.
+Return the full JSON output.
+
+STEP 4 — WebSocket Subscription Coverage
+echo "=== I7-WS-F Coverage ==="
+curl -s http://localhost:5000/api/diagnostics/i7-ws-f/coverage \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+
+Return the full JSON.
+
+STEP 5 — REST Fallback Metrics
+echo "=== I7-WS-E REST Fallback Metrics ==="
+curl -s http://localhost:5000/api/diagnostics/i7-ws-e/rest-fallback-metrics \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+
+Return the full JSON.
+
+STEP 6 — STOP Trading and Verify Engine Tear-Down
+echo "=== STOP PAPER TRADING ==="
+curl -s -X POST http://localhost:5000/api/paper-sim/stop \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+sleep 3
+
+echo "=== ENGINE STATUS AFTER STOP ==="
+curl -s http://localhost:5000/api/diagnostics/i7-root/engine-status \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+
+Return both outputs.
+
+📄 Repl.it MUST return:
+
+Output of each curl command, in order.
+
+Any error or unexpected behavior observed in the logs.
+
+Confirmation that no code changes were made.
+
+🎯 Purpose of This Diagnostic Phase
+
+This sequence will reveal exactly which system is failing:
+
+Failure	Root Cause Location
+Engine not running after start	TradingEngine / PaperExecutionEngine wiring issue
+Engine running but no WS subscriptions	KrakenWebSocketAdapter
+WS subscriptions active but no ticks	Pricing adapter or symbol mapping
+WS ticks flowing but no exits firing	Exit evaluation logic
+New trades appear after stop	Stop handler / orchestrator / scan loop
+
+Once the results are returned, I will produce a surgical repair directive targeting the exact faulty subsystem — not general patchwork.
