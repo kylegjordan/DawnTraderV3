@@ -35,7 +35,7 @@ Paper Trade Persistence Fix (I7-PERSIST-FIX) corrects a database table mismatch 
 
 Phase 8.8.3-I7-ROOT-FIX and Phase 8.8.3-I7-ROOT-FIX-2 restore core engine functionality and fix diagnostic endpoint wiring for paper trading. Phase 8.8.3-I7-MAP-AUTO-FIX resolves a critical singleton initialization issue in `krakenAssetPairsService` for consistent symbol mapping. Phase 8.8.3-I7-WS-STARTUP ensures the Kraken WebSocket adapter starts during server initialization.
 
-Phase 8.8.4-IA-PRICE-CACHE introduces a centralized price cache module (`server/services/price-cache.ts`) for active trade pricing, ensuring a single source of truth updated from WebSocket and REST. Phase 8.8.3-I8C (WebSocket Subscription Reliability Fix) addresses low WebSocket coverage by subscribing all open positions on engine start, new trades, and reconnects, with a 5-second subscription health audit.
+Phase 8.8.4-IA-PRICE-CACHE introduces a centralized price cache module (`server/services/price-cache.ts`) for active trade pricing, ensuring a single source of truth updated from WebSocket and REST. Phase 8.8.3-I8C (WebSocket Subscription Reliability Fix) addresses low WebSocket coverage by subscribing all open positions on engine start, new trades, and reconnects, with a 5-second subscription health audit. Phase 8.8.3-I8C-SYMBOL-NORM (Database Symbol Normalization) ensures all database symbols use canonical BASE/QUOTE format, with normalization at the storage layer during trade creation to prevent format mismatches with the WebSocket price cache.
 
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
