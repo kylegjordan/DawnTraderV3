@@ -1,5 +1,5 @@
 import { contextBridge } from './context-bridge';
-import { normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver';
+import { normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver.js';
 import { priceTraceService } from './price-trace-service';
 
 /**

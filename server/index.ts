@@ -600,7 +600,7 @@ app.use((req, res, next) => {
 
     // Phase 27.F.15.D: Start Live Pricing Adapter (CRITICAL PATH)
     try {
-      const { livePricingAdapter } = await import('./services/live-pricing-adapter');
+      const { livePricingAdapter } = await import('./services/live-pricing-adapter.js');
       
       // Phase 8.8.3-B9: Mock mode DISABLED by default - only enabled via explicit ENABLE_MOCK_PRICING=true
       // This ensures P&L calculations use real market data, not hardcoded mock prices
@@ -610,16 +610,21 @@ app.use((req, res, next) => {
       
       // Phase 8.8.3-I7-WS-E: Register WebSocket subscription checker
       try {
-        const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter');
+        const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
         livePricingAdapter.setWsSubscriptionChecker(() => krakenWebSocketAdapter.getSubscribedSymbols());
         console.log('[I7-WS-E] ✅ WebSocket subscription checker registered');
+        
+        // Phase 8.8.3-I7-WS-STARTUP: Start WebSocket adapter during server boot
+        // This enables real-time pricing for all clients immediately, not just when engine starts
+        await krakenWebSocketAdapter.start();
+        console.log('[I7-WS-STARTUP] ✅ Kraken WebSocket adapter started on server boot');
       } catch (wsError) {
         console.warn('[I7-WS-E] ⚠️ Failed to register WebSocket subscription checker:', wsError);
       }
       
       // I7-MAP-FIX: Startup audit for unmappable symbols (both paper and live)
       try {
-        const { listUnmappableSymbols, getMappingCount } = await import('./markets/kraken-symbol-resolver');
+        const { listUnmappableSymbols, getMappingCount } = await import('./markets/kraken-symbol-resolver.js');
         const { storage } = await import('./storage');
         
         // Check both paper and live positions

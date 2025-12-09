@@ -11,6 +11,7 @@ import {
   getSymbolMappingDetails
 } from '../markets/kraken-symbol-resolver.js';
 import { priceTraceService } from './price-trace-service.js';
+import { krakenAssetPairsService } from '../markets/kraken-asset-pairs-service.js';
 
 /**
  * Phase 8.8.3-B3.6: Kraken WebSocket Price Engine
@@ -135,11 +136,24 @@ export class KrakenWebSocketAdapter {
   
   private readonly MODULE_NAME = 'KrakenWS';
 
+  private readonly instanceId = `ws-adapter-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  
   constructor() {
-    console.log(`[${this.MODULE_NAME}] Kraken WebSocket Adapter initialized`);
+    console.log(`[${this.MODULE_NAME}] Kraken WebSocket Adapter initialized (instanceId: ${this.instanceId})`);
   }
 
   async start(): Promise<void> {
+    // Phase 8.8.3-I7-WS-DEBUG: Verify krakenAssetPairsService initialization
+    const assetPairsReady = krakenAssetPairsService.isReady();
+    const assetPairsSummary = krakenAssetPairsService.getSummary();
+    console.log(`[I7-WS-DEBUG] krakenAssetPairsService status:`, {
+      instanceId: this.instanceId,
+      isReady: assetPairsReady,
+      total: assetPairsSummary.total,
+      tier1: assetPairsSummary.tier1,
+      tier2: assetPairsSummary.tier2
+    });
+    
     // Phase 8.8.3-B9.FIX-WS-START: Diagnostic log on start
     console.log('[DEBUG-B9][KrakenWS][START]', {
       startedAt: new Date().toISOString(),

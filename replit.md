@@ -45,6 +45,8 @@ Phase 8.8.3-I7-ROOT-FIX-2 fixes a critical diagnostic endpoint wiring issue. The
 
 Phase 8.8.3-I7-MAP-AUTO-FIX (December 2025) resolves a critical singleton initialization issue in `krakenAssetPairsService`. The root cause was a module path inconsistency where imports without the `.js` extension created separate module instances in ESM—one initialized during startup, another uninitialized used by the resolver. The fix standardizes all imports to use the `.js` extension (`'./markets/kraken-asset-pairs-service.js'`), ensuring a single shared singleton. Verification logs (`[I7-MAP-AUTO-FIX][VERIFY]`) confirm proper initialization with 1349 symbol pairs (tier1=108, tier2=1233, ~98% coverage). This eliminates REST fallback delays (5-8s) for symbols not in the static map by enabling WebSocket subscriptions for the full Kraken universe.
 
+Phase 8.8.3-I7-WS-STARTUP (December 2025) ensures the Kraken WebSocket adapter starts during server initialization, not just when the paper trading engine is started. Previously, `krakenWebSocketAdapter.start()` was only called from `paper-execution-engine.ts`, meaning no WebSocket connection existed until the engine was manually started. The fix adds `await krakenWebSocketAdapter.start()` to `server/index.ts` immediately after registering the WebSocket subscription checker, enabling real-time WebSocket pricing from server boot. Diagnostic logs (`[I7-WS-DEBUG]`, `[I7-WS-STARTUP]`) confirm proper initialization with `isReady=true` and successful connection to Kraken's WebSocket API (`wss://ws.kraken.com`).
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.
