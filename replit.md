@@ -39,6 +39,28 @@ Canonical Symbol Mapping Repair (I7-MAP-FIX) fixes unmappable symbols that were 
 
 Automatic Symbol Mapping (I7-MAP-AUTO) replaces static, manually-managed symbol maps with a dynamic, verified, auto-generated canonical mapping layer backed by live Kraken AssetPairs metadata. The `KrakenAssetPairsService` fetches all Kraken pairs at startup and builds an in-memory mapping table with tiered confidence: Tier 0 (static map, highest trust), Tier 1 (verified 1:1 match with static), Tier 2 (derived from Kraken API normalization), Tier 3 (uncertain, not safe for auto-use). Only Tier 0-2 symbols are used for WebSocket subscriptions. Safety features include: mutex-protected refresh (prevents concurrent corruption), halted pair filtering (`status !== 'online'`), and margin-only exclusion (`aclass_base/quote === 'currency'` required for spot trading). Dynamic quote currencies are built from API metadata for accurate symbol resolution. Canonical normalization rules convert Kraken assets (XBT→BTC, XETH→ETH, ZUSD→USD, etc.). The resolver uses resolution order: static map → auto-map Tier 1/2. Current coverage: 99.41% Tier 1/2 (target: 98%+). Diagnostic endpoints at `/api/diagnostics/i7-map-auto/*` include: `/summary` (mapping statistics), `/unmappable` (unmappable symbols), `/conflicts` (collisions), `/rebuild` (force refresh), `/audit` (active position mapping), `/tiers` (symbols by tier). Key files: `server/markets/kraken-asset-pairs-service.ts`, `server/markets/kraken-symbol-resolver.ts`. Log tag: `[I7-MAP-AUTO]`.
 
+### Phase 8.8.3-I7-MAP-VER – How to Run Verification
+
+This phase provides a diagnostic-only verification script that validates I7-MAP-AUTO mapping coverage and WebSocket integration without changing trading behavior.
+
+**How to run:**
+```bash
+bash scripts/i7-map-ver.sh            # Full verification with 60s live test
+bash scripts/i7-map-ver.sh --skip-live # Quick verification without live test
+```
+
+**Output files produced:**
+- `docs/diagnostics/I7-MAP-VER/map_auto_summary.json` - I7-MAP-AUTO mapping statistics
+- `docs/diagnostics/I7-MAP-VER/map_auto_audit.json` - Active symbol audit
+- `docs/diagnostics/I7-MAP-VER/ws_f_coverage.json` - WebSocket subscription coverage
+- `docs/diagnostics/I7-MAP-VER/correlation_summary.json` - Symbol set correlation analysis
+- `docs/diagnostics/I7-MAP-VER/active_symbol_matrix.json` - Per-symbol status matrix
+- `docs/diagnostics/I7-MAP-VER/trace_history_60s.json` - 60s WebSocket trace history
+- `docs/diagnostics/I7-MAP-VER/trace_stage_summary.json` - Stage distribution summary
+- `docs/diagnostics/I7-MAP-VER/report.md` - Human-readable verification report
+
+**Note:** This phase is verification-only and does not change trading behavior. Any issues found must be addressed in separate, explicitly approved phases.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.

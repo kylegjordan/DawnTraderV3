@@ -1,0 +1,53 @@
+{
+  "timestamp": "2025-12-09T06:29:33Z",
+  "activeSymbolsCount": 9,
+  "auditSymbolsCount": 9,
+  "coverageSymbolsCount": 9,
+  "activeSymbols": [
+    "API3EUR",
+    "API3USD",
+    "AUDUSD",
+    "BANDUSD",
+    "BERAUSD",
+    "BNTUSD",
+    "EURCUSDC",
+    "FORTHUSD",
+    "ZEURZUSD"
+  ],
+  "auditSymbols": [
+    "API3EUR",
+    "API3USD",
+    "AUDUSD",
+    "BANDUSD",
+    "BERAUSD",
+    "BNTUSD",
+    "EURCUSDC",
+    "FORTHUSD",
+    "ZEURZUSD"
+  ],
+  "auditInternalSymbols": [
+    "API3/EUR",
+    "API3/USD",
+    "AUD/USD",
+    "BAND/USD",
+    "BERA/USD",
+    "BNT/USD",
+    "EUR/USD",
+    "EURC/USDC",
+    "FORTH/USD"
+  ],
+  "coverageSymbols": [
+    "API3/EUR",
+    "API3/USD",
+    "AUD/USD",
+    "BAND/USD",
+    "BERA/USD",
+    "BNT/USD",
+    "EUR/USD",
+    "EURC/USDC",
+    "FORTH/USD"
+  ],
+  "active_not_in_audit": [],
+  "audit_not_in_coverage": [],
+  "coverage_not_in_active": []
+}

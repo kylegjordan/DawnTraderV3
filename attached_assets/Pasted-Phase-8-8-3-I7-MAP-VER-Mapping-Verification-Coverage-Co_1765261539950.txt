@@ -1,0 +1,290 @@
+Phase 8.8.3-I7-MAP-VER — Mapping Verification & Coverage Correlation
+
+Objective
+Verify that the new automatic Kraken symbol mapping layer (I7-MAP-AUTO) is:
+
+Correct for all currently relevant symbols (paper + live + ReadyToBuy)
+
+Correctly wired into WebSocket coverage (I7-WS-F)
+
+Fully usable by the price pipeline (I7-WS-C)
+
+Not leaving any ActiveTrades symbols unmappable or unsubscribed
+
+Important: This phase is diagnostic-only. It must not change trading behavior, mappings, throttles, or subscription logic. It only reads, analyzes, and documents.
+
+V0 – Preparation & Guardrails
+
+Do not change:
+
+kraken-asset-pairs-service.ts
+
+kraken-symbol-resolver.ts
+
+kraken-websocket-adapter.ts
+
+live-pricing-adapter.ts
+
+paper-execution-engine.ts
+
+You may:
+
+Add a small verification script under scripts/ or in replit.md
+
+Add one markdown report file under docs/diagnostics/I7-MAP-VER/
+
+Use existing diagnostics endpoints only (no new endpoints unless strictly necessary)
+
+V1 – Create a Mapping Verification Script
+
+Add a shell script (or equivalent documented command block in replit.md) that will:
+
+File: scripts/i7-map-ver.sh (or similar)
+
+V1.1 – Get Auth Token
+
+Log in using the existing test user env vars:
+
+TOKEN=$(
+  curl -s -X POST "http://localhost:5000/api/auth/login" \
+    -H "Content-Type: application/json" \
+    -d '{"username":"'"$APP_TEST_USERNAME"'","password":"'"$APP_TEST_PASSWORD"'"}' \
+  | jq -r '.token'
+)
+
+
+If TOKEN is empty or "null", print a clear error and exit.
+
+V1.2 – Capture Core Mapping Diagnostics
+
+Call these endpoints and save their output under docs/diagnostics/I7-MAP-VER/:
+
+I7-MAP-AUTO Summary
+
+curl -s "http://localhost:5000/api/diagnostics/i7-map-auto/summary" \
+  -H "Authorization: Bearer $TOKEN" \
+  > docs/diagnostics/I7-MAP-VER/map_auto_summary.json
+
+
+I7-MAP-AUTO Audit (active symbols)
+
+curl -s "http://localhost:5000/api/diagnostics/i7-map-auto/audit" \
+  -H "Authorization: Bearer $TOKEN" \
+  > docs/diagnostics/I7-MAP-VER/map_auto_audit.json
+
+
+I7-MAP-FIX Check
+
+curl -s "http://localhost:5000/api/diagnostics/i7-map-fix/check" \
+  -H "Authorization: Bearer $TOKEN" \
+  > docs/diagnostics/I7-MAP-VER/map_fix_check.json
+
+
+I7-WS-F Coverage (WebSocket subscriptions)
+
+curl -s "http://localhost:5000/api/diagnostics/i7-ws-f/coverage" \
+  -H "Authorization: Bearer $TOKEN" \
+  > docs/diagnostics/I7-MAP-VER/ws_f_coverage.json
+
+
+Active Trades (paper sim)
+
+curl -s "http://localhost:5000/api/paper-sim/active-trades" \
+  -H "Authorization: Bearer $TOKEN" \
+  > docs/diagnostics/I7-MAP-VER/active_trades.json
+
+V2 – Symbol Correlation & Mismatch Detection
+
+Using jq in the same script, compute a correlation summary and write it to docs/diagnostics/I7-MAP-VER/correlation_summary.json.
+
+V2.1 – Extract symbol sets
+
+From active_trades.json:
+
+Set A: activeSymbols = list of unique symbols from positions[].symbol
+
+From map_auto_audit.json:
+
+Set B: auditSymbols = list of symbols reported in the audit
+
+From ws_f_coverage.json:
+
+Set C: coverageSymbols = list of symbols in .symbols[].symbol (or .internalSymbol depending on structure)
+
+Compute:
+
+A_not_in_B (active trades not present in I7-MAP-AUTO audit)
+
+B_not_in_C (audited mapped symbols not present in WebSocket coverage)
+
+C_not_in_A (subscribed symbols that have no active trades — just informational)
+
+Then write a JSON object like:
+
+{
+  "activeSymbolsCount": 15,
+  "auditSymbolsCount": 9,
+  "coverageSymbolsCount": 9,
+  "active_not_in_audit": [...],
+  "audit_not_in_coverage": [...],
+  "coverage_not_in_active": [...]
+}
+
+
+…to correlation_summary.json.
+
+V2.2 – Include mapping tiers per symbol
+
+For each symbol in activeSymbols, construct a per-symbol record:
+
+symbol
+
+map_auto_tier (Tier1/Tier2/Tier3 or null)
+
+map_auto_status (from map-auto audit or details)
+
+ws_f_coverage_status (e.g., subscribed/pending/never_requested from I7-WS-F)
+
+is_unmappable_in_fix_check (bool from I7-MAP-FIX check, if present)
+
+Write this to:
+
+docs/diagnostics/I7-MAP-VER/active_symbol_matrix.json
+
+This is purely data — no changes to behavior.
+
+V3 – Minimal 60-Second Live Verification (No Code Changes)
+
+This step uses existing WS & trace diagnostics to confirm that mapped symbols actually see WebSocket activity.
+
+V3.1 – Reset diagnostics (optional but helpful)
+
+In the script (or manually documented in replit.md):
+
+# Reset I7-WS-C trace history
+curl -s -X POST "http://localhost:5000/api/diagnostics/i7-ws-c/reset" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" > /dev/null 2>&1 || true
+
+# Reset I7-WS-A tracking (if available)
+curl -s -X POST "http://localhost:5000/api/diagnostics/i7-ws/reset-tracking" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" > /dev/null 2>&1 || true
+
+
+(If reset endpoints don’t exist or differ, just skip gracefully.)
+
+V3.2 – Start a fresh short simulation
+curl -s -X POST "http://localhost:5000/api/paper-sim/stop" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" > /dev/null 2>&1 || true
+
+curl -s -X POST "http://localhost:5000/api/paper-sim/start" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"continue"}' \
+  > docs/diagnostics/I7-MAP-VER/start_response.json
+
+sleep 60
+
+V3.3 – Capture trace history
+curl -s -X GET "http://localhost:5000/api/diagnostics/i7-ws-c/trace-history" \
+  -H "Authorization: Bearer $TOKEN" \
+  > docs/diagnostics/I7-MAP-VER/trace_history_60s.json
+
+
+Then, in the script, compute a stage distribution:
+
+cat docs/diagnostics/I7-MAP-VER/trace_history_60s.json \
+  | jq '{
+      totalTraces: .totalTraces,
+      stageCounts: (
+        [.traces[].stages[].stage]
+        | group_by(.)
+        | map({stage: .[0], count: length})
+        | sort_by(.stage)
+      )
+    }' \
+  > docs/diagnostics/I7-MAP-VER/trace_stage_summary.json
+
+
+Optionally also compute how many traces include stages 1–4 (WS) vs 7–8 (engine) for active symbols only.
+
+V4 – Human-Readable Mapping Verification Report
+
+Create:
+
+File: docs/diagnostics/I7-MAP-VER/report.md
+
+Content (Replit should generate from the captured JSON):
+
+Overview
+
+Date/time of run
+
+Active trades count
+
+Mapping coverage summary (Tier1/Tier2/Tier3)
+
+I7-MAP-AUTO quality status
+
+Per-Symbol Status Table
+
+For each active symbol:
+
+symbol
+
+tier (1/2/3)
+
+ws_coverage_status (from I7-WS-F)
+
+whether it appeared in WS-C stages 1–4 during the 60s capture (yes/no)
+
+whether engine saw it in stages 7–8 (yes/no)
+
+Mismatches / Issues
+
+List any active_not_in_audit
+
+List any audit_not_in_coverage
+
+List any symbols with Tier3 or unmappable status
+
+Short explanation of what each mismatch means (no fixes, just interpretation)
+
+Conclusion
+
+Single-line summary:
+
+e.g. “All active symbols are Tier1/2 mapped and present in coverage; WS pipeline shows activity for X/Y symbols within 60s.”
+
+Mark CLEAR vs ATTENTION REQUIRED but do not propose code changes in this report; that’s for a later phase.
+
+V5 – Update replit.md (Runbook Only)
+
+Add a short section:
+
+“Phase 8.8.3-I7-MAP-VER – How to Run Verification”
+
+How to run the script:
+bash scripts/i7-map-ver.sh
+
+Which files are produced:
+
+docs/diagnostics/I7-MAP-VER/map_auto_summary.json
+
+docs/diagnostics/I7-MAP-VER/map_auto_audit.json
+
+docs/diagnostics/I7-MAP-VER/ws_f_coverage.json
+
+docs/diagnostics/I7-MAP-VER/correlation_summary.json
+
+docs/diagnostics/I7-MAP-VER/trace_history_60s.json
+
+docs/diagnostics/I7-MAP-VER/trace_stage_summary.json
+
+docs/diagnostics/I7-MAP-VER/report.md
+
+Clarify:
+
+“This phase is verification-only and does not change trading behavior. Any issues found must be addressed in separate, explicitly approved phases.”
