@@ -97,6 +97,15 @@ export class PaperPortfolioManager {
     return this.isStopInProgress;
   }
 
+  // Phase 8.8.3-I7-ROOT-FIX-2: Expose engine and orchestrator for diagnostics
+  getEngine(): any {
+    return this.executionEngine;
+  }
+
+  getOrchestrator(): any {
+    return this.signalOrchestrator;
+  }
+
   async start(): Promise<void> {
     // Phase 8.8.3-B9.FIX-WS-START: Diagnostic log on start
     console.log('[DEBUG-B9][MANAGER_START_CALLED]', {

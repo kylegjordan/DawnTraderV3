@@ -41,6 +41,8 @@ Automatic Symbol Mapping (I7-MAP-AUTO) replaces static, manually-managed symbol 
 
 Phase 8.8.3-I7-ROOT-FIX restores core engine functionality that regressed during the I7-MAP series, including Engine Exit Evaluation Diagnostics, Stop Behavior Fix, Duplicate Position Prevention, and UI Deduplication.
 
+Phase 8.8.3-I7-ROOT-FIX-2 fixes a critical diagnostic endpoint wiring issue. The `/api/diagnostics/i7-root/engine-status` endpoint was checking disconnected `TradingEngine` singletons while the actual paper trading uses `PaperPortfolioManager` via `getGlobalPaperSimManager()`. The fix imports proper helpers from `paper-sim-service.ts` and checks `paperManager?.getIsRunning?.()` for accurate status. Added `getEngine()` and `getOrchestrator()` accessors to `PaperPortfolioManager` for diagnostics. Verification confirmed: engine start shows `isRunning: true`, stop shows `isRunning: false`, and duplicate guard prevents symbol duplicates.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.

@@ -8031,15 +8031,38 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   // ===== Phase 8.8.3-I7-ROOT-FIX: Engine Status Diagnostics =====
   
-  // GET /api/diagnostics/i7-root/engine-status - Phase 8.8.3-I7-ROOT-FIX (A2): Engine status diagnostics
+  // GET /api/diagnostics/i7-root/engine-status - Phase 8.8.3-I7-ROOT-FIX-2: Engine status diagnostics
+  // Fixed to check actual PaperPortfolioManager state instead of disconnected TradingEngine singletons
   apiRouter.get('/diagnostics/i7-root/engine-status', async (req, res) => {
     try {
-      const paper = globalPaperEngine?.getEngineStatusSnapshot?.() ?? null;
-      const live = globalLiveEngine?.getEngineStatusSnapshot?.() ?? null;
+      const { getGlobalPaperSimManager, getOrchestratorByMode, getEngineByMode } = await import('./services/paper-sim-service.js');
+      
+      // Get actual paper manager state (this is what paper-sim/start actually starts)
+      const paperManager = getGlobalPaperSimManager();
+      const paperOrchestrator = getOrchestratorByMode('paper');
+      const paperEngine = getEngineByMode('paper');
+      
+      const paper = {
+        mode: 'paper',
+        isRunning: paperManager?.getIsRunning?.() ?? false,
+        hasManager: !!paperManager,
+        hasSignalOrchestrator: !!paperOrchestrator,
+        hasExecutionEngine: !!paperEngine,
+        managerStopInProgress: paperManager?.getStopInProgress?.() ?? false,
+        lastStatusAt: new Date().toISOString(),
+      };
+      
+      // Live mode uses the global TradingEngine
+      const live = globalLiveEngine?.getEngineStatusSnapshot?.() ?? {
+        mode: 'live',
+        isRunning: false,
+        hasSignalOrchestrator: false,
+        lastStatusAt: new Date().toISOString(),
+      };
 
       res.json({
         ok: true,
-        phase: '8.8.3-I7-ROOT-FIX',
+        phase: '8.8.3-I7-ROOT-FIX-2',
         paper,
         live,
       });
