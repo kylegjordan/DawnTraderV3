@@ -1,0 +1,158 @@
+📘 DIRECTIVE: Phase 8.8.3-I8A — Price Cache Verification & WebSocket Coverage Diagnostics
+
+Replit — perform the following verification steps.
+⚠️ NO code changes unless explicitly instructed.
+This is a diagnostic-only phase.
+
+STEP 0 — Authenticate
+
+Use:
+
+username = testuser123
+password = SecurePass123!
+
+
+Get TOKEN and store it for all following requests.
+
+STEP 1 — Start a new Paper Trading Session
+
+Run:
+
+POST /api/paper-sim/start  { "mode": "new" }
+
+
+Confirm:
+
+isRunning = true
+
+Open positions begin appearing
+
+STEP 2 — Observe WebSocket Subscriptions
+
+Tail logs and extract all lines containing:
+
+I7-ENGINE-SUBCALL
+
+I7-WS-SUBSCRIBE
+
+I7-WS-SEND
+
+I7-WS-A (subscription acknowledged)
+
+I7-WS-RAW (incoming ticker)
+
+Record:
+
+Which symbols subscribed successfully
+
+Which symbols failed or never tried to subscribe
+
+STEP 3 — Query the Price Cache (Central Cache Diagnostic)
+
+Every 15 seconds for at least 2 minutes:
+
+curl -s http://localhost:5000/api/diagnostics/ia-price-cache/status \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq '.entries | map({symbol, price, source, ageMs})'
+
+
+Record:
+
+Symbols using kraken_ws
+
+Symbols using kraken_rest
+
+Age in ms for each entry
+
+Any entries that become stale or do not update
+
+STEP 4 — Verify Backend Exit Pricing (Engine Price Source)
+
+Every 30 seconds:
+
+curl -s http://localhost:5000/api/diagnostics/i7-price/status \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq '.paper.positions | map({symbol, priceSource, priceAgeMs})'
+
+
+Record:
+
+Whether the engine is using the cache
+
+Whether it detects WebSocket values
+
+Whether fallback is still used for specific symbols
+
+If priceAgeMs behaves correctly (monotonically resetting)
+
+STEP 5 — Observe Real Trade Closures
+
+Run periodically:
+
+GET /api/paper-sim/history?limit=10
+
+
+Record:
+
+SL hits
+
+TP hits
+
+"manual_stop" entries
+
+Whether closures are timely and correct given the price feed
+
+STEP 6 — UI Observation
+
+Using the Active Trades UI:
+
+Confirm which prices tick
+
+Compare movement to real WebSocket ticks
+
+Note any symbols that remain frozen
+
+Watch for differences between UI and backend diagnostics
+
+Take screenshots if needed.
+
+📌 REPORT FINDINGS
+
+After 5–8 minutes of active trading, report:
+
+1. WebSocket subscription success rate
+2. Price cache update consistency
+3. % of trades using kraken_ws vs kraken_rest
+4. Exit conditions firing (or not)
+5. UI price behavior
+6. Any symbols stuck in REST-only mode
+7. Any stale cache entries
+
+🚫 Do NOT modify code yet.
+This phase is diagnostics only.
+
+⭐ Purpose of Phase 8.8.3-I8A
+
+We must confirm:
+
+Whether the new centralized cache is fully functional
+
+Whether the engine reads from the cache correctly
+
+Whether WebSocket subscription coverage is now correct
+
+Whether UI reflects live backend pricing
+
+Whether fallback behavior is behaving under load
+
+Whether compact → canonical symbol resolution is stable
+
+This determines whether we proceed to:
+
+8.8.3-I8B (cache-driven normalization improvements)
+
+8.8.3-I8C (WebSocket subscription reliability)
+
+8.8.3-I8D (UI cache sync layer)
+
+We will not move forward until this verification is complete.
