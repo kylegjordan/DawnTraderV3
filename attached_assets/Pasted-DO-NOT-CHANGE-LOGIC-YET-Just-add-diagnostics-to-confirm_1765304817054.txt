@@ -1,0 +1,114 @@
+DO NOT CHANGE LOGIC YET
+Just add diagnostics to confirm whether subscriptions are being called
+
+STEP 1 — Add these logs to the Kraken WebSocket adapter
+
+In kraken-websocket-adapter.ts, inside the subscribe method:
+
+subscribe(pairs: string[]) {
+  console.log("[I7-WS-SUBSCRIBE] subscribe() called with pairs:", pairs);
+
+  if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+    console.log("[I7-WS-SUBSCRIBE] ERROR: ws not open, readyState=", this.ws?.readyState);
+  }
+
+  // Log the exact subscription payload
+  const payload = {
+    event: "subscribe",
+    pair: pairs,
+    subscription: { name: "ticker" }
+  };
+  console.log("[I7-WS-SEND]", JSON.stringify(payload));
+
+  this.ws.send(JSON.stringify(payload));
+}
+
+STEP 2 — Add diagnostic logs in paper-execution-engine.ts where subscriptions are triggered
+
+Wherever the engine calls:
+
+krakenWebSocketAdapter.subscribe(...)
+
+
+Add:
+
+console.log("[I7-ENGINE-SUBCALL] engine calling subscribe() with:", pairs);
+
+STEP 3 — Add log listener for incoming Kraken messages
+
+Inside the WebSocket onmessage handler:
+
+this.ws.on("message", (msg) => {
+  console.log("[I7-WS-RAW]", msg.toString().slice(0, 200)); // limit length
+});
+
+STEP 4 — Restart server and start trading
+
+Then gather:
+
+Output of:
+
+grep -E "I7-WS-SUBSCRIBE|I7-ENGINE-SUBCALL|I7-WS-RAW" /tmp/logs/...
+
+
+Output of /api/diagnostics/i7-price/status
+
+🎯 What these diagnostics will reveal:
+Case A — subscribe() is never called
+
+→ The engine is not triggering subscription events at all.
+Fix required in paper-execution-engine.ts.
+
+Case B — subscribe() is called before ws.readyState === OPEN
+
+→ Subscription messages are lost.
+Fix is to queue subscriptions until WebSocket is open.
+
+Case C — subscribe() is called, but Kraken returns errors
+
+→ Wrong symbol format (“ETHUSD” vs “ETH/USD”).
+Fix needed in kraken-symbol-resolver mapping.
+
+Case D — subscribe() is called AND acknowledged, but no ticks arrive
+
+→ Subscription is to a non-ticker channel.
+Fix needed in subscription payload.
+
+Case E — all messages appear correct but adapter filters them out
+
+→ Message handler is discarding ticker messages.
+Fix needed in ws message parser.
+
+📌 WHY THIS DIRECTIVE IS THE CORRECT NEXT STEP
+
+You already confirmed:
+
+mapping is fixed
+
+startup order is fixed
+
+adapter starts correctly
+
+resolver is ready
+
+REST fallback works
+
+There is one missing piece:
+
+🧨 The WebSocket adapter is simply not subscribing.
+
+We MUST prove where the failure occurs, and the added logs will show:
+
+whether subscribe() is called
+
+with what symbols
+
+at what time
+
+before or after WebSocket is open
+
+whether Kraken acknowledges the subscription
+
+whether ticker data arrives
+
+This will pinpoint the missing or incorrect step → and then we implement the actual fix.

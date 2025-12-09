@@ -272,8 +272,12 @@ export class KrakenWebSocketAdapter {
   }
 
   private handleMessage(data: WebSocket.Data): void {
+    // I7-WS-RAW: Log raw incoming Kraken messages (first 200 chars)
+    const rawStr = data.toString();
+    console.log("[I7-WS-RAW]", rawStr.slice(0, 200));
+    
     try {
-      const message = JSON.parse(data.toString());
+      const message = JSON.parse(rawStr);
       
       if (message.event) {
         this.handleSystemMessage(message);
@@ -565,6 +569,9 @@ export class KrakenWebSocketAdapter {
   }
 
   subscribeToSymbols(symbols: string[]): void {
+    // I7-WS-SUBSCRIBE: Diagnostic logging for subscription call tracing
+    console.log("[I7-WS-SUBSCRIBE] subscribe() called with pairs:", symbols);
+    
     // Phase 8.8.3-I6-FIX: Enhanced diagnostic logging for subscription audit
     console.log(`[8.8.3-I6-FIX][WS_SUB_REQUEST] internalSymbols=${JSON.stringify(symbols)}`);
     
@@ -596,6 +603,7 @@ export class KrakenWebSocketAdapter {
     }
     
     if (!this.isConnected) {
+      console.log("[I7-WS-SUBSCRIBE] ERROR: ws not connected, isConnected=", this.isConnected, "ws.readyState=", this.ws?.readyState);
       symbols.forEach(s => this.pendingSubscriptions.add(s));
       console.log(`[8.8.3-I6-FIX][WS_SUB_QUEUED] queued=${symbols.length} (WS not connected)`);
       console.log(`[${this.MODULE_NAME}] Queued ${symbols.length} symbols for subscription (not connected)`);
@@ -609,6 +617,9 @@ export class KrakenWebSocketAdapter {
         name: 'ticker'
       }
     };
+    
+    // I7-WS-SUBSCRIBE: Log exact payload being sent
+    console.log("[I7-WS-SEND]", JSON.stringify(subscribeMessage));
     
     try {
       this.ws?.send(JSON.stringify(subscribeMessage));

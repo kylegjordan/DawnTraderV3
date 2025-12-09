@@ -163,6 +163,8 @@ export class PaperExecutionEngine {
       const openPositions = await storage.getPaperSimOpenPositions(this.mode);
       if (openPositions.length > 0) {
         const symbols = openPositions.map(p => p.symbol);
+        // I7-ENGINE-SUBCALL: Diagnostic log before calling subscribe
+        console.log("[I7-ENGINE-SUBCALL] engine calling subscribe() with:", symbols);
         krakenWebSocketAdapter.subscribeToSymbols(symbols);
         // Phase 8.8.3-I6-FIX: Enhanced diagnostic logging for subscription audit
         console.log(`[8.8.3-I6-FIX][WS_SUB_AUDIT] openPositionCount=${openPositions.length} subscribedSymbols=${JSON.stringify(symbols)}`);
@@ -2018,6 +2020,8 @@ export class PaperExecutionEngine {
       // Phase 8.8.3-B3.6: Subscribe to Kraken WebSocket for real-time price updates
       // Phase 8.8.3-I6-FIX: Enhanced diagnostic logging for subscription audit
       try {
+        // I7-ENGINE-SUBCALL: Diagnostic log before calling subscribe for new trade
+        console.log("[I7-ENGINE-SUBCALL] engine calling subscribe() with:", [signal.symbol]);
         krakenWebSocketAdapter.subscribeToSymbols([signal.symbol]);
         console.log(`[8.8.3-I6-FIX][WS_SUB_NEW] newSymbol=${signal.symbol} | action=subscribe`);
         console.log(`[KrakenWS] Subscribed to ${signal.symbol} for real-time price updates`);
