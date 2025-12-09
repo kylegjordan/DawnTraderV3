@@ -1,0 +1,851 @@
+Phase 8.8.3 – I7-PM-FOCUS
+Goal: Fix the real runtime issues in the PaperPortfolioManager pipeline
+Context (Very Important)
+
+
+Canonical paper engine
+
+
+The only engine that should matter for paper trading is:
+
+
+PaperPortfolioManager (orchestrator)
+
+
+PaperExecutionEngine (execution & exits)
+
+
+paper-sim-service.ts (global manager & API entrypoints)
+
+
+
+
+
+
+Legacy / obsolete components
+
+
+The old TradingEngine singletons (e.g. globalPaperEngine, globalLiveEngine) are not used for paper trading and must not be used going forward.
+
+
+The bug where diagnostics pointed at these legacy singletons is already addressed; treat that as a red herring for current issues.
+
+
+
+
+Current production problems to fix
+All of these are observed in paper mode and must be debugged/fixed in the PaperPortfolioManager path:
+
+
+Static prices & no exits
+
+
+Active Trades shows “Current Price” values that do not change.
+
+
+Trade history is empty or barely moves; exits (SL/TP) are not firing.
+
+
+This suggests either:
+
+
+The engine loop is not evaluating exits; or
+
+
+It is evaluating, but using stale / wrong prices.
+
+
+
+
+
+
+Duplicate symbols / positions
+
+
+Active Trades and ReadyToBuy show duplicate entries for the same symbol, e.g.:
+
+
+FORTHUSD twice, ZEURZUSD twice, etc.
+
+
+
+
+Sometimes ready-to-buy & open-trade logic produce the same symbol in multiple slots.
+
+
+
+
+New trades after Stop
+
+
+When the user presses Stop:
+
+
+The UI briefly clears open trades.
+
+
+Then new trades appear as if the engine is still active or re-started itself.
+
+
+
+
+
+
+These are the only functional targets for this phase. All work must be done in the PaperPortfolioManager pipeline, not by reintroducing or wiring anything to the legacy TradingEngine.
+
+
+Test user credentials
+For all auth-protected diagnostics and trading endpoints, use:
+
+
+username = testuser123
+
+
+password = SecurePass123!
+
+
+
+
+
+Hard Constraints
+
+
+Do NOT:
+
+
+Do not wire anything new to the old TradingEngine singletons.
+
+
+Do not weaken or remove the existing “duplicate guard” logic without replacing it with a stronger, more explicit mechanism.
+
+
+Do not apply purely cosmetic UI changes to hide real backend bugs.
+
+
+
+
+Do:
+
+
+Treat PaperPortfolioManager as the single source of truth for whether paper trading is running.
+
+
+Treat PaperExecutionEngine as the single source of truth for:
+
+
+When positions are created.
+
+
+How many open positions per symbol exist.
+
+
+When and how exits are evaluated.
+
+
+
+
+
+
+
+Files in Scope
+You already have these files locally; they are the ones to work in:
+
+
+Paper trading core
+
+
+server/services/paper-portfolio-manager.ts
+
+
+server/services/paper-execution-engine.ts
+
+
+server/services/paper-sim-service.ts
+
+
+server/storage.ts (for open positions, etc.)
+
+
+server/db.ts (for persistence if needed)
+
+
+
+
+Price pipeline
+
+
+server/services/live-pricing-adapter.ts
+
+
+server/services/kraken-websocket-adapter.ts
+
+
+server/markets/kraken-asset-pairs-service.ts
+
+
+server/markets/kraken-symbol-resolver.ts
+
+
+server/markets/kraken-symbol-map.ts
+
+
+
+
+Diagnostics & API
+
+
+server/routes.ts
+
+
+Any existing I7 diagnostic helpers (i7-root, i7-ws-*, i7-map-*), but only as observers.
+
+
+
+
+Frontend (Active Trades / WS UI)
+
+
+client/src/components/trading/active-trades-v2.tsx
+
+
+client/src/hooks/use-websocket.tsx
+
+
+
+
+
+A. Instrument the PaperPortfolioManager Path (without changing behavior)
+A1. Engine loop & exit evaluation visibility
+In paper-portfolio-manager.ts and paper-execution-engine.ts:
+
+
+Add precise, low-noise diagnostics in the actual execution path, e.g.:
+
+
+When the paper engine’s main loop / orchestrator runs a cycle:
+
+
+Log once per N seconds (e.g. 5–10s) something like:
+
+
+[I7-PM-FOCUS][ENGINE_TICK] mode=paper positions=<count> ts=<iso>
+
+
+
+
+
+
+When PaperExecutionEngine evaluates exits:
+
+
+Log per evaluation cycle, not per symbol:
+
+
+[I7-PM-FOCUS][EVAL_EXIT] mode=paper positionsEvaluated=<count> ts=<iso>
+
+
+
+
+
+
+
+
+Add a snapshot helper (if not already existing) on PaperPortfolioManager, e.g.:
+
+
+A method like getStatusSnapshot() that includes at minimum:
+
+
+mode (paper/live)
+
+
+isRunning
+
+
+isStopped
+
+
+openPositionsCount
+
+
+lastTickAt
+
+
+lastExitEvalAt
+
+
+
+
+
+
+Expose this snapshot via the existing i7-root engine-status diagnostic endpoint, but backed only by PaperPortfolioManager, not the legacy TradingEngine.
+
+
+If you need a small adapter method, place it in paper-sim-service.ts or routes.ts.
+
+
+Ensure /api/diagnostics/i7-root/engine-status returns:
+{
+  "ok": true,
+  "phase": "8.8.3-I7-PM-FOCUS",
+  "paper": {
+    "mode": "paper",
+    "isRunning": true/false,
+    "isStopped": true/false,
+    "openPositionsCount": <number>,
+    "lastTickAt": "...",
+    "lastExitEvalAt": "..."
+  },
+  "live": {
+    "mode": "live",
+    "isRunning": ...,
+    "isStopped": ...,
+    ...
+  }
+}
+
+
+
+Use the real PaperPortfolioManager info for paper, and whatever is appropriate for live.
+
+
+
+
+Goal of A: be able to say with certainty:
+
+
+“The engine loop is running every X seconds.”
+
+
+“Exit evaluation is happening.”
+
+
+“After Stop, tick/eval no longer occur.”
+
+
+
+B. Fix “New trades after Stop” (Stop behavior)
+B1. Trace start/stop flow
+In paper-sim-service.ts and paper-portfolio-manager.ts:
+
+
+Identify the exact methods called by:
+
+
+POST /api/paper-sim/start
+
+
+POST /api/paper-sim/stop
+
+
+
+
+Map how they:
+
+
+Instantiate or retrieve the global PaperPortfolioManager.
+
+
+Start any orchestrator / timers.
+
+
+Stop / teardown those orchestrators / timers.
+
+
+
+
+Add clear logs:
+
+
+On start:
+
+
+[I7-PM-FOCUS][START] mode=paper sessionId=...
+
+
+
+
+On stop:
+
+
+[I7-PM-FOCUS][STOP] mode=paper reason=user_request
+
+
+
+
+
+
+B2. Introduce/confirm an isStopped guard
+In PaperPortfolioManager:
+
+
+Ensure there is an internal, authoritative state flag, e.g.:
+
+
+this.isRunning
+
+
+this.isStopped
+
+
+or an equivalent enum-like state.
+
+
+
+
+Ensure the following are true:
+
+
+The main orchestrator loop / scheduler checks isRunning (or !isStopped) before:
+
+
+Generating new signals.
+
+
+Applying “fill free slots” logic.
+
+
+Enqueuing any new trades.
+
+
+
+
+Any signal handlers or “ready-to-buy” processors also check this state before creating trades.
+
+
+
+
+On stop():
+
+
+Set isRunning = false, isStopped = true (or equivalent).
+
+
+Cancel/clear any intervals, timeouts, or loops that might generate new signals.
+
+
+Ensure no asynchronous “late continuation” can enqueue trades after stop.
+
+
+
+
+Add diagnostics:
+
+
+When a trade creation attempt occurs while isStopped === true, log:
+
+
+[I7-PM-FOCUS][BLOCK_AFTER_STOP] symbol=<symbol> reason="engine_stopped"
+
+
+
+
+During verification, confirm you see zero of these logs.
+
+
+
+
+Goal of B: After pressing Stop:
+
+
+engine-status shows isRunning=false.
+
+
+No new trades appear in active-trades or history.
+
+
+No new create-position logs appear.
+
+
+
+C. Fix Duplicate Positions (backend + UI)
+C1. Backend duplicate guard in PaperExecutionEngine
+In paper-execution-engine.ts:
+
+
+Identify the method that creates a new position in paper mode. (Wherever a row is inserted into the open-positions store / paper_sim_open_positions).
+
+
+Before inserting / creating a new position for symbol X:
+
+
+Query the canonical source of open positions for paper mode (likely paper_sim_open_positions table or in-memory structure).
+
+
+Count the number of open positions for that symbol.
+
+
+If count > 0 (and the strategy dictates max 1 per symbol), then:
+
+
+Do not create a second position.
+
+
+Log a clear diagnostic:
+
+
+[I7-PM-FOCUS][DUP_GUARD_BLOCK] symbol=<symbol> existingCount=<count> action="skip_new_position"
+
+
+
+
+
+
+
+
+Ensure this check is centralized:
+
+
+It should sit in the lowest-level “create position” function, not only in a higher-level signal handler.
+
+
+That way, any call path that tries to open a position for that symbol runs through the same guard.
+
+
+
+
+This guard must be synchronous and atomic in logic (within a single-threaded Node loop), so that two back-to-back signals in the same tick still see the updated state.
+
+
+C2. UI deduplication in ActiveTrades (display only)
+In client/src/components/trading/active-trades-v2.tsx:
+
+
+Continue to fetch all positions from the API as before.
+
+
+Before rendering, build a deduplicated view of active positions:
+
+
+Group by (symbol, side) (or symbol if your strategy is strictly one position per symbol).
+
+
+Pick a representative row to render:
+
+
+For example, the earliest opening time or the one with the largest size.
+
+
+
+
+Optionally, expose a secondary field like duplicateCount to show how many were collapsed.
+
+
+Pseudocode (conceptual, not exact TS):
+const dedupedPositions = useMemo(() => {
+  const byKey = new Map<string, Position>();
+
+  positions.forEach(pos => {
+    const key = `${pos.symbol}:${pos.side}`;
+    if (!byKey.has(key)) {
+      byKey.set(key, pos);
+    } else {
+      // Optionally update some aggregated fields (size, P&L) if desired
+    }
+  });
+
+  return Array.from(byKey.values());
+}, [positions]);
+
+
+
+Render dedupedPositions in the Active Trades table instead of the raw positions array.
+
+
+This is only a cosmetic / UX guardrail. The primary fix is in the backend (C1). We use this to:
+
+
+Avoid confusing duplicate rows in the UI.
+
+
+Provide a clearer view of the real trading behavior during debugging.
+
+
+
+
+Goal of C: After running a trading session:
+
+
+Backend logs show DUP_GUARD_BLOCK for any attempted duplicates.
+
+
+active-trades UI shows at most one row per symbol/side.
+
+
+
+D. Fix Static Prices & No Exits (wiring between WS, pricing, engine, UI)
+D1. Confirm engine is reading fresh prices
+In paper-execution-engine.ts and live-pricing-adapter.ts:
+
+
+Identify the function where the engine obtains the current price for a symbol during exit evaluation, e.g. getPriceWithFallback or equivalent.
+
+
+Add diagnostics there:
+
+
+When a price is read for exit checks:
+
+
+[I7-PM-FOCUS][ENGINE_PRICE_READ] symbol=<symbol> source=<kraken_ws|kraken_rest|cache> ageMs=<age> price=<value>
+
+
+
+
+
+
+Ensure that:
+
+
+For symbols with working WS subscriptions, source=kraken_ws and ageMs is well under 2000ms most of the time.
+
+
+REST fallback (kraken_rest) is only used when:
+
+
+WS data is stale (e.g. ageMs > 2000–3000) or
+
+
+There is no WS subscription.
+
+
+
+
+
+
+D2. Confirm WebSocket coverage for active symbols
+Use the existing I7-WS-F / I7-WS-E / I7-WS-C diagnostics:
+
+
+With paper trading running, call:
+APP_TEST_USERNAME="testuser123"
+APP_TEST_PASSWORD="SecurePass123!"
+
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"'"$APP_TEST_USERNAME"'","password":"'"$APP_TEST_PASSWORD"'"}' \
+  | jq -r '.token')
+
+curl -s http://localhost:5000/api/diagnostics/i7-ws-f/coverage \
+  -H "Authorization: Bearer $TOKEN" | jq '.summary'
+
+
+
+Expected once everything is working:
+
+
+total > 0
+
+
+subscribed == total (no missing subscriptions)
+
+
+pending low or 0
+
+
+No unmappable symbols (mapping issues have been addressed already by I7-MAP-*).
+
+
+
+
+D3. Confirm UI vs engine consistency
+In active-trades-v2.tsx and use-websocket.tsx:
+
+
+Ensure the price fields shown in the UI come from the same source as what the engine uses:
+
+
+If the UI subscribes to WS prices via a hook (use-websocket), make sure:
+
+
+It uses the same symbol format and mapping as kraken-websocket-adapter.
+
+
+
+
+Confirm that when the engine logs ENGINE_PRICE_READ with a new price:
+
+
+Within a short time window, the UI also shows updated “Current Price” for that symbol.
+
+
+
+
+
+
+If necessary, add a small debug banner (visible only in dev mode) on the Active Trades UI that shows:
+
+
+priceSource (ws/rest)
+
+
+priceAgeMs
+
+
+For each row, for now, during debugging.
+
+
+
+
+Goal of D: During a short paper session:
+
+
+WS coverage shows all active symbols subscribed.
+
+
+ENGINE_PRICE_READ logs appear regularly for each symbol.
+
+
+“Current Price” in the UI moves over time in sync with engine reads.
+
+
+Exits (SL/TP) eventually fire and appear in trade history.
+
+
+
+E. Verification Script (Replit must run this exactly)
+Once all the above changes are implemented, run this end-to-end verification sequence as-is in the Repl shell:
+APP_TEST_USERNAME="testuser123"
+APP_TEST_PASSWORD="SecurePass123!"
+
+echo "=== STEP 1: Login ==="
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"'"$APP_TEST_USERNAME"'","password":"'"$APP_TEST_PASSWORD"'"}' \
+  | jq -r '.token')
+echo "TOKEN prefix: ${TOKEN:0:12}..."
+echo ""
+
+echo "=== STEP 2: START PAPER TRADING (mode=new) ==="
+curl -s -X POST http://localhost:5000/api/paper-sim/start \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"new"}' | jq .
+echo ""
+
+echo "=== Waiting 20 seconds for positions & prices... ==="
+sleep 20
+echo ""
+
+echo "=== STEP 3: ENGINE STATUS (i7-root) ==="
+curl -s http://localhost:5000/api/diagnostics/i7-root/engine-status \
+  -H "Authorization: Bearer $TOKEN" | jq .
+echo ""
+
+echo "=== STEP 4: WS COVERAGE (i7-ws-f) ==="
+curl -s http://localhost:5000/api/diagnostics/i7-ws-f/coverage \
+  -H "Authorization: Bearer $TOKEN" | jq '.summary'
+echo ""
+
+echo "=== STEP 5: REST FALLBACK METRICS (i7-ws-e) ==="
+curl -s http://localhost:5000/api/diagnostics/i7-ws-e/rest-fallback-metrics \
+  -H "Authorization: Bearer $TOKEN" | jq '.summary'
+echo ""
+
+echo "=== Waiting 60 seconds for exits to evaluate... ==="
+sleep 60
+echo ""
+
+echo "=== STEP 6a: ACTIVE TRADES (check for duplicates) ==="
+curl -s http://localhost:5000/api/paper-sim/active-trades \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq '.positions | group_by(.symbol) | map({symbol: .[0].symbol, count:length})'
+echo ""
+
+echo "=== STEP 6b: TRADE HISTORY (recent 5) ==="
+curl -s "http://localhost:5000/api/paper-sim/history?limit=5" \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq 'if .trades then (.trades | length) as $count | {tradeCount: $count, trades: .trades} else {message:"No trades array"} end'
+echo ""
+
+echo "=== STEP 7: STOP PAPER TRADING ==="
+curl -s -X POST http://localhost:5000/api/paper-sim/stop \
+  -H "Authorization: Bearer $TOKEN" | jq .
+sleep 5
+echo ""
+
+echo "=== STEP 8: ENGINE STATUS AFTER STOP ==="
+curl -s http://localhost:5000/api/diagnostics/i7-root/engine-status \
+  -H "Authorization: Bearer $TOKEN" | jq .
+echo ""
+
+echo "=== STEP 9: ACTIVE TRADES AFTER STOP ==="
+curl -s http://localhost:5000/api/paper-sim/active-trades \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq '.positions | length'
+echo ""
+
+Expected Outcomes
+For this phase to be considered successful, Replit should demonstrate (with logs and JSON outputs):
+
+
+Engine & stop behavior
+
+
+engine-status.paper.isRunning === true after start and before stop.
+
+
+engine-status.paper.isRunning === false and isStopped === true after stop.
+
+
+No new positions created after the stop timestamp; log shows no [BLOCK_AFTER_STOP] or create attempts post-stop.
+
+
+
+
+Duplicates
+
+
+In Step 6a (group_by(.symbol)), count is 1 for every symbol.
+
+
+If any count > 1, backend logs must show corresponding [DUP_GUARD_BLOCK] entries where a second position was attempted and blocked.
+
+
+
+
+Prices & exits
+
+
+I7-WS-F summary shows total > 0 and subscribed == total.
+
+
+I7-WS-E summary shows some activity, but engine logs show primary price source as kraken_ws with fresh ageMs.
+
+
+Step 6b shows tradeCount > 0 after 60–80 seconds, demonstrating exits firing.
+
+
+Active Trades in the UI displays moving prices and no visual duplicates.
+
+
+
+
+
+Please implement only what’s in this directive, focusing strictly on the PaperPortfolioManager pipeline. Once you’ve run the verification script and captured logs/output, report back with:
+
+
+The exact JSON outputs from Steps 3–9.
+
+
+Any [I7-PM-FOCUS][...] log lines relevant to:
+
+
+ENGINE_TICK
+
+
+EVAL_EXIT
+
+
+ENGINE_PRICE_READ
+
+
+DUP_GUARD_BLOCK
+
+
+BLOCK_AFTER_STOP
+
+
+
+
+We’ll use that evidence to confirm the three core issues are resolved or to further narrow any remaining gaps.

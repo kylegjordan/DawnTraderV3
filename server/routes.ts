@@ -8031,38 +8031,56 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   // ===== Phase 8.8.3-I7-ROOT-FIX: Engine Status Diagnostics =====
   
-  // GET /api/diagnostics/i7-root/engine-status - Phase 8.8.3-I7-ROOT-FIX-2: Engine status diagnostics
-  // Fixed to check actual PaperPortfolioManager state instead of disconnected TradingEngine singletons
+  // GET /api/diagnostics/i7-root/engine-status - Phase 8.8.3-I7-PM-FOCUS: Engine status diagnostics
+  // Returns comprehensive status snapshot from PaperPortfolioManager
   apiRouter.get('/diagnostics/i7-root/engine-status', async (req, res) => {
     try {
       const { getGlobalPaperSimManager, getOrchestratorByMode, getEngineByMode } = await import('./services/paper-sim-service.js');
       
       // Get actual paper manager state (this is what paper-sim/start actually starts)
       const paperManager = getGlobalPaperSimManager();
-      const paperOrchestrator = getOrchestratorByMode('paper');
-      const paperEngine = getEngineByMode('paper');
+      
+      // Phase 8.8.3-I7-PM-FOCUS: Get status snapshot from manager if available
+      let paperSnapshot: any = null;
+      if (paperManager && typeof paperManager.getStatusSnapshot === 'function') {
+        paperSnapshot = paperManager.getStatusSnapshot();
+      }
+      
+      // Get open positions count for snapshot
+      let openPositionsCount = 0;
+      try {
+        const { storage } = await import('./storage.js');
+        const openPositions = await storage.getPaperSimOpenPositions('paper');
+        openPositionsCount = openPositions.length;
+      } catch (e) {
+        // Ignore errors, use 0
+      }
       
       const paper = {
         mode: 'paper',
-        isRunning: paperManager?.getIsRunning?.() ?? false,
+        isRunning: paperSnapshot?.isRunning ?? paperManager?.getIsRunning?.() ?? false,
+        isStopped: paperSnapshot?.isStopped ?? !paperManager?.getIsRunning?.() ?? true,
+        openPositionsCount: openPositionsCount,
+        lastTickAt: paperSnapshot?.lastTickAt ?? null,
+        lastExitEvalAt: paperSnapshot?.lastExitEvalAt ?? null,
         hasManager: !!paperManager,
-        hasSignalOrchestrator: !!paperOrchestrator,
-        hasExecutionEngine: !!paperEngine,
-        managerStopInProgress: paperManager?.getStopInProgress?.() ?? false,
-        lastStatusAt: new Date().toISOString(),
+        hasSignalOrchestrator: !!getOrchestratorByMode('paper'),
+        hasExecutionEngine: !!getEngineByMode('paper'),
       };
       
       // Live mode uses the global TradingEngine
       const live = globalLiveEngine?.getEngineStatusSnapshot?.() ?? {
         mode: 'live',
         isRunning: false,
-        hasSignalOrchestrator: false,
-        lastStatusAt: new Date().toISOString(),
+        isStopped: true,
+        openPositionsCount: 0,
+        lastTickAt: null,
+        lastExitEvalAt: null,
       };
 
       res.json({
         ok: true,
-        phase: '8.8.3-I7-ROOT-FIX-2',
+        phase: '8.8.3-I7-PM-FOCUS',
         paper,
         live,
       });

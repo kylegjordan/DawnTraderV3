@@ -60,6 +60,7 @@ export class PaperExecutionEngine {
 
   // I7-ROOT-FIX: minimal engine status diagnostics
   private lastEvaluateAt: number | null = null;
+  private lastCycleAt: number | null = null; // Phase 8.8.3-I7-PM-FOCUS: Track monitoring cycle tick
   private lastExitChecks: {
     symbol: string;
     slotNumber?: number;
@@ -190,6 +191,10 @@ export class PaperExecutionEngine {
     return {
       mode: this.mode,
       isRunning: this.isRunning,
+      lastCycleAt: this.lastCycleAt, // Phase 8.8.3-I7-PM-FOCUS: Tick timestamp
+      lastCycleAtIso: this.lastCycleAt
+        ? new Date(this.lastCycleAt).toISOString()
+        : null,
       lastEvaluateAt: this.lastEvaluateAt,
       lastEvaluateAtIso: this.lastEvaluateAt
         ? new Date(this.lastEvaluateAt).toISOString()
@@ -316,7 +321,14 @@ export class PaperExecutionEngine {
 
     this.isCycleRunning = true;
     
+    // Phase 8.8.3-I7-PM-FOCUS: Track cycle timestamp
+    this.lastCycleAt = Date.now();
+    
     try {
+      // Phase 8.8.3-I7-PM-FOCUS: Get current open positions count for ENGINE_TICK log
+      const openPositions = await storage.getPaperSimOpenPositions(this.mode);
+      console.log(`[I7-PM-FOCUS][ENGINE_TICK] mode=${this.mode} positions=${openPositions.length} ts=${new Date().toISOString()}`);
+      
       // Step 1: Check open positions for exit conditions
       await this.checkOpenPositions();
 
@@ -348,6 +360,9 @@ export class PaperExecutionEngine {
     this.lastExitChecks = [];
     
     const openPositions = await storage.getPaperSimOpenPositions(this.mode);
+    
+    // Phase 8.8.3-I7-PM-FOCUS: Aggregate exit evaluation log
+    let positionsEvaluated = 0;
 
     for (const position of openPositions) {
       try {
@@ -419,8 +434,13 @@ export class PaperExecutionEngine {
         
         console.log(`[PRICE_TICK] symbol=${position.symbol} refreshed_at=${tickEntry.refreshedAt} diff_ms=${diffMs} source=${priceSource}`);
         
+        // Phase 8.8.3-I7-PM-FOCUS: ENGINE_PRICE_READ diagnostic
+        console.log(`[I7-PM-FOCUS][ENGINE_PRICE_READ] symbol=${position.symbol} source=${priceSource} ageMs=${diffMs} price=${currentPrice}`);
+        
         // Phase 8.8.3-I6 B1: Diagnostic logging for trade engine live price usage
         console.log(`[8.8.3-I6][ENGINE_LIVE_PRICE] symbol=${position.symbol} price=${currentPrice} source=${priceSource} age=${diffMs}ms`);
+        
+        positionsEvaluated++;
         const avgPrice = parseFloat(position.avgPrice);
         const stopLoss = position.stopLoss ? parseFloat(position.stopLoss) : null;
         const takeProfit = position.takeProfit ? parseFloat(position.takeProfit) : null;
@@ -486,6 +506,9 @@ export class PaperExecutionEngine {
         console.error(`[PaperExecution:${this.mode}] Error checking position ${position.symbol}:`, error);
       }
     }
+    
+    // Phase 8.8.3-I7-PM-FOCUS: EVAL_EXIT aggregate log
+    console.log(`[I7-PM-FOCUS][EVAL_EXIT] mode=${this.mode} positionsEvaluated=${positionsEvaluated} ts=${new Date().toISOString()}`);
   }
 
   private async checkExitConditions(
@@ -1812,6 +1835,16 @@ export class PaperExecutionEngine {
       }
     });
 
+    // Phase 8.8.3-I7-PM-FOCUS (C1): Check for duplicate BEFORE creating trade
+    // This prevents orphan trade records when duplicate is detected
+    const existingPositions = await storage.getPaperSimOpenPositions(this.mode);
+    const existingPositionForSymbol = existingPositions.find(p => p.symbol === signal.symbol);
+    if (existingPositionForSymbol) {
+      const existingCount = existingPositions.filter(p => p.symbol === signal.symbol).length;
+      console.log(`[I7-PM-FOCUS][DUP_GUARD_BLOCK] symbol=${signal.symbol} existingCount=${existingCount} action="skip_new_position"`);
+      return; // Exit early - do not create trade or position
+    }
+
     // [27.F.14.DIAG] Create trade record with comprehensive error handling
     // AJ10.3: Diagnostic logging for Open Trades vs Opened metrics mismatch
     console.log(`[AJ10.3][TRADE_CREATE_START] symbol=${signal.symbol} | strategy=${signal.strategy} | qty=${quantity.toFixed(8)} | estimatedValue=$${(signal.estimatedValue || 0).toFixed(2)}`);
@@ -1843,16 +1876,8 @@ export class PaperExecutionEngine {
         block_reason: null
       });
 
-      // I7-ROOT-FIX (C): Prevent duplicate positions for same symbol
-      const existingForSymbol = await storage.getPaperSimOpenPositions(this.mode);
-      const existingPosition = existingForSymbol.find(p => p.symbol === signal.symbol);
-      if (existingPosition) {
-        console.log('[I7-ROOT-FIX][DUP_OPEN_POSITION_SKIPPED]', {
-          symbol: signal.symbol,
-          existingCount: existingForSymbol.filter(p => p.symbol === signal.symbol).length,
-        });
-        return; // Exit early - position already exists
-      }
+      // Note: Duplicate guard moved to BEFORE trade creation (I7-PM-FOCUS C1)
+      // Old I7-ROOT-FIX (C) removed - duplicate guard now prevents orphan trades
 
       // Create open position
       const openPosition = await storage.createPaperSimOpenPosition(this.mode, {
@@ -2087,6 +2112,8 @@ export class PaperExecutionEngine {
    */
   async processSignal(signal: StrategySignal): Promise<void> {
     if (!this.isRunning) {
+      // Phase 8.8.3-I7-PM-FOCUS: BLOCK_AFTER_STOP diagnostic
+      console.log(`[I7-PM-FOCUS][BLOCK_AFTER_STOP] symbol=${signal.symbol} reason="engine_stopped"`);
       console.log(`[PaperExecution:${this.mode}] Cannot process signal - engine not running`);
       return;
     }

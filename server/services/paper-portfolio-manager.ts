@@ -106,6 +106,30 @@ export class PaperPortfolioManager {
     return this.signalOrchestrator;
   }
 
+  // Phase 8.8.3-I7-PM-FOCUS: Status snapshot for diagnostics
+  // Timestamps are now pulled from execution engine directly
+  
+  getStatusSnapshot(): {
+    mode: 'paper' | 'live';
+    isRunning: boolean;
+    isStopped: boolean;
+    openPositionsCount: number | null;
+    lastTickAt: string | null;
+    lastExitEvalAt: string | null;
+  } {
+    // Phase 8.8.3-I7-PM-FOCUS: Get timestamps from engine snapshot
+    const engineSnapshot = this.executionEngine?.getEngineStatusSnapshot();
+    
+    return {
+      mode: this.mode,
+      isRunning: this.isRunning,
+      isStopped: this.isStopInProgress || !this.isRunning,
+      openPositionsCount: null, // Will be populated by caller from storage
+      lastTickAt: engineSnapshot?.lastCycleAtIso || null,
+      lastExitEvalAt: engineSnapshot?.lastEvaluateAtIso || null,
+    };
+  }
+
   async start(): Promise<void> {
     // Phase 8.8.3-B9.FIX-WS-START: Diagnostic log on start
     console.log('[DEBUG-B9][MANAGER_START_CALLED]', {
@@ -144,6 +168,9 @@ export class PaperPortfolioManager {
     }
 
     this.isRunning = true;
+    this.isStopInProgress = false; // Phase 8.8.3-I7-PM-FOCUS: Clear stop flag on start
+    
+    console.log(`[I7-PM-FOCUS][START] mode=${this.mode} sessionId=${this.userId}`);
     console.log(`[PaperPortfolio:${this.userId}] Starting paper portfolio manager`);
 
     // Phase 27.F.14.MICRO: Register engines with mode registry
@@ -200,7 +227,11 @@ export class PaperPortfolioManager {
       return;
     }
 
+    // Phase 8.8.3-I7-PM-FOCUS: Set stop flag FIRST to prevent late trades
+    this.isStopInProgress = true;
     this.isRunning = false;
+    
+    console.log(`[I7-PM-FOCUS][STOP] mode=${this.mode} reason=user_request`);
     console.log(`[PaperPortfolio:${this.userId}] Stopping paper portfolio manager`);
 
     // Phase 37: Stop signal orchestrator

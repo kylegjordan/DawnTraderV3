@@ -544,15 +544,26 @@ export default function ActiveTradesV2() {
     });
   }, [data?.positions, livePrices]);
   
-  // I7-ROOT-FIX (D): Deduplicate positions to prevent duplicate entries
+  // Phase 8.8.3-I7-PM-FOCUS (C2): Deduplicate positions by symbol+side
+  // Backend duplicate guard should prevent duplicates, but this is a UI safeguard
   const dedupedPositions = useMemo(() => {
-    const seen = new Set<string>();
-    return positionsWithLivePrices.filter((p) => {
-      const key = `${p.symbol}:${p.slotNumber ?? ''}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
+    const byKey = new Map<string, ActiveTrade>();
+    
+    positionsWithLivePrices.forEach(pos => {
+      const key = `${pos.symbol}:${pos.side}`;
+      if (!byKey.has(key)) {
+        byKey.set(key, pos);
+      } else {
+        // Keep the one with the earlier openedAt time
+        const existing = byKey.get(key)!;
+        if (new Date(pos.openedAt) < new Date(existing.openedAt)) {
+          byKey.set(key, pos);
+        }
+        console.log(`[I7-PM-FOCUS][UI_DEDUP] Filtered duplicate: ${pos.symbol} (keeping earliest entry)`);
+      }
     });
+    
+    return Array.from(byKey.values());
   }, [positionsWithLivePrices]);
 
   const sortedPositions = useMemo(() => {
