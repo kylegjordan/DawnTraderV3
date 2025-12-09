@@ -12,6 +12,7 @@ import {
 } from '../markets/kraken-symbol-resolver.js';
 import { priceTraceService } from './price-trace-service.js';
 import { krakenAssetPairsService } from '../markets/kraken-asset-pairs-service.js';
+import { priceCache } from './price-cache.js';
 
 /**
  * Phase 8.8.3-B3.6: Kraken WebSocket Price Engine
@@ -440,6 +441,9 @@ export class KrakenWebSocketAdapter {
       // Phase 8.8.3-I7-WS-D: updateFromWebSocket now handles both cache update AND broadcast
       // This ensures 1:1 Stage-3 → Stage-4 parity (D3)
       livePricingAdapter.updateFromWebSocket(internalSymbol, lastPrice, 'kraken_ws', traceId);
+      
+      // Phase 8.8.4-IA-PRICE-CACHE: Update centralized price cache for active trades
+      priceCache.updateFromWebSocket(internalSymbol, lastPrice);
       
       // Phase 8.8.3-I6: Diagnostic logging to confirm WS -> cache pipeline
       console.log(`[I6][WS_CACHE_UPDATE] symbol=${internalSymbol} price=${lastPrice} timestamp=${new Date().toISOString()}`);

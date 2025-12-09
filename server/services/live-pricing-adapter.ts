@@ -1,6 +1,7 @@
 import { contextBridge } from './context-bridge';
 import { normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver.js';
 import { priceTraceService } from './price-trace-service';
+import { priceCache } from './price-cache.js';
 
 /**
  * Phase 27.F.15.D: Live Pricing Adapter
@@ -486,6 +487,11 @@ export class LivePricingAdapter {
       }
       
       console.log(`[8.8.3-I6][REST_FALLBACK] symbol=${symbol} price=${lastPrice} source=kraken_rest priceAgeMs=0`);
+      
+      // Phase 8.8.4-IA-PRICE-CACHE: Update centralized price cache from REST
+      const normalized = this.normalizeSymbol(symbol);
+      priceCache.updateFromRest(normalized, lastPrice);
+      
       return lastPrice;
 
     } catch (error) {
@@ -677,6 +683,9 @@ export class LivePricingAdapter {
       source: source === 'kraken_ws' ? 'kraken_ws' : 'binance',
       cachedAt: now
     });
+    
+    // Phase 8.8.4-IA-PRICE-CACHE: Update centralized price cache for active trades
+    priceCache.updateFromWebSocket(normalized, price);
     
     // Phase 8.8.3-I7-WS-D (D6): Diagnostic log for cache write
     console.log(`[I7-WS-D][CACHE_WRITE] symbol=${normalized} price=${price} source=${source}`);
