@@ -1,0 +1,472 @@
+Phase 8.8.4-IA-PRICE-CACHE – Centralized Price Cache for Active Trades
+Target: Replit Agent working on DawnTrader for user Kyle
+
+0. Safety: Rollback + Export Project Snapshot
+0.1 – Create a rollback commit & tag (BEFORE any changes)
+
+From the project root:
+
+git status
+git add -A
+git commit -m "8.8.4-IA-PRICE-CACHE: pre-change snapshot"
+git tag pre-8.8.4-IA-PRICE-CACHE
+
+
+If there are no changes to commit, still create the tag on the current HEAD.
+
+0.2 – Create a pre-change source archive (no node_modules / runtime)
+
+From the project root:
+
+tar \
+  --exclude='node_modules' \
+  --exclude='.git' \
+  --exclude='.replit' \
+  --exclude='replit.nix' \
+  --exclude='.cache' \
+  --exclude='dist' \
+  --exclude='build' \
+  --exclude='tmp' \
+  --exclude='logs' \
+  -czf dawntrader-pre-8.8.4-IA.tar.gz \
+  .
+
+
+This archive should contain all code and config needed to restore the app (server, client, services, markets, etc.), but not runtime junk. Leave the archive in the workspace root so Kyle can download it.
+
+1. Scope & Non-Goals (Very Important)
+
+Do implement:
+
+A centralized price cache used by:
+
+Active Trades UI
+
+Exit evaluation / SL/TP logic
+
+Any backend logic that needs current price for open positions
+
+Cache is fed exclusively by:
+
+Kraken WebSocket ticks (primary)
+
+Existing REST fallback path (secondary), without adding extra REST calls
+
+Do NOT change in this phase:
+
+🟡 Ready-to-Buy signals
+
+🟡 StrategyEngine behavior
+
+🟡 SignalOrchestrator behavior
+
+🟡 Position sizing helper
+
+They must continue to use whichever price FX5 provides (REST-based) and must not start using the cache.
+
+No changes to those flows in IA-PRICE-CACHE.
+
+2. Introduce Central Price Cache Module
+2.1 – New file: server/services/price-cache.ts
+
+Create a small, in-memory singleton cache keyed by internal canonical symbol (e.g. "APT/EUR", "TRX/USD"):
+
+// server/services/price-cache.ts
+
+export type PriceSourceTag = 'kraken_ws' | 'kraken_rest';
+
+export interface CachedPrice {
+  symbol: string;                // internal / canonical symbol, e.g. "APT/EUR"
+  price: number;
+  lastSource: PriceSourceTag;
+  lastUpdatedAt: number;         // Date.now() ms
+}
+
+class PriceCache {
+  private prices = new Map<string, CachedPrice>();
+
+  updateFromWebSocket(symbol: string, price: number) {
+    const now = Date.now();
+    this.prices.set(symbol, {
+      symbol,
+      price,
+      lastSource: 'kraken_ws',
+      lastUpdatedAt: now,
+    });
+  }
+
+  updateFromRest(symbol: string, price: number) {
+    const now = Date.now();
+    this.prices.set(symbol, {
+      symbol,
+      price,
+      lastSource: 'kraken_rest',
+      lastUpdatedAt: now,
+    });
+  }
+
+  get(symbol: string): CachedPrice | null {
+    return this.prices.get(symbol) ?? null;
+  }
+
+  snapshot() {
+    return Array.from(this.prices.values());
+  }
+
+  clear() {
+    this.prices.clear();
+  }
+}
+
+export const priceCache = new PriceCache();
+
+
+Notes:
+
+This cache is only for open positions in practice, because we will only call it from the WebSocket adapter and the price adapters that are already used by the paper engine.
+
+No persistence. In-memory only.
+
+3. Wire the Kraken WebSocket Adapter → Price Cache
+3.1 – Import cache in server/services/kraken-websocket-adapter.ts
+
+Add near the top:
+
+import { priceCache } from '../services/price-cache.js';
+
+
+(adjust relative path if needed; use .js extension consistently like the rest of the project).
+
+3.2 – On each resolved incoming tick, update the cache
+
+Find the part of kraken-websocket-adapter.ts where a Kraken ticker message is:
+
+Parsed
+
+Resolved to an internal symbol via the resolver (e.g. "TRX/USD")
+
+Used to broadcast a price update to the app
+
+Right after you have the internal symbol and price (and before or after broadcasting), call:
+
+// Pseudo-structure; wire into the actual tick handler
+
+const internalSymbol = /* result from kraken-symbol-resolver / resolveAny */;
+// e.g. "TRX/USD"
+const wsPrice = /* parsed price from Kraken tick */;
+
+if (internalSymbol && typeof wsPrice === 'number') {
+  priceCache.updateFromWebSocket(internalSymbol, wsPrice);
+}
+
+
+Key requirement: The symbol passed into the cache must be the canonical internal form that the engine uses for positions (the same symbol used in paper_sim_open_positions / active trades).
+
+4. Wire REST Fallback → Price Cache (No Extra REST Calls)
+
+We do not want to introduce new REST calls. We only want to reuse the prices that are already being obtained by the existing pricing adapters.
+
+4.1 – Import cache in the REST-based pricing helper
+
+Identify where REST prices are resolved for the engine, e.g.:
+
+server/services/live-pricing-adapter.ts
+
+Or any helper used by the paper execution engine for Kraken REST pricing.
+
+In that file, after you’ve already fetched a final REST price for a given internal symbol (e.g. "APT/EUR"):
+
+import { priceCache } from '../services/price-cache.js';
+
+
+And after you compute the final price:
+
+// existing logic
+const internalSymbol = /* canonical symbol like "APT/EUR" */;
+const price = /* final REST price from Kraken REST / pricing pipeline */;
+
+if (internalSymbol && typeof price === 'number') {
+  priceCache.updateFromRest(internalSymbol, price);
+}
+
+return { price, source: 'kraken_rest', ... };
+
+
+Rules:
+
+✅ Don’t perform any additional REST requests.
+
+✅ Only call updateFromRest after the existing REST pricing logic has succeeded.
+
+✅ Use the same internal symbol as the engine uses for positions.
+
+5. Engine Exit Evaluation & ActiveTrades UI → Use Cache
+5.1 – PaperExecutionEngine reading from cache
+
+In server/services/paper-execution-engine.ts, find the logic that:
+
+Evaluates exits (SL / TP)
+
+Computes per-position currentPrice, priceSource, priceAgeMs for diagnostics and /api/paper-sim/active-trades
+
+Refactor that logic so that price comes from the cache first:
+
+import { priceCache } from '../services/price-cache.js';
+
+
+Then, when resolving the price for a position:
+
+const internalSymbol = position.symbol; // must be canonical, e.g. "APT/EUR"
+
+const cached = priceCache.get(internalSymbol);
+let effectivePrice: number | null = null;
+let priceSource: 'kraken_ws' | 'kraken_rest' | 'unknown' = 'unknown';
+let priceAgeMs: number | null = null;
+
+if (cached) {
+  effectivePrice = cached.price;
+  priceSource = cached.lastSource;
+  priceAgeMs = Date.now() - cached.lastUpdatedAt;
+}
+
+// If cached is null, do NOT trigger extra REST here.
+// Just behave as you currently do in the absence of a price,
+// or rely on the already-fetched REST price that fed the cache.
+
+
+Use this effectivePrice and its metadata:
+
+For exit evaluation (SL/TP checks)
+
+For PnL% calculation
+
+For currentPrice, priceSource, priceAgeMs returned by /api/paper-sim/active-trades
+
+You can keep the existing logic that computes “fallback” prices; just ensure:
+
+If cached exists → use it
+
+If not, you can continue using whatever price the engine was using before IA-PRICE-CACHE (but ideally that path will also update the cache as described in Section 4).
+
+5.2 – Ensure the ActiveTrades API uses the same effective price
+
+Wherever we build the JSON for:
+
+/api/paper-sim/active-trades
+
+/api/diagnostics/i7-price/status
+
+Make sure they both use the same effectivePrice, priceSource, priceAgeMs from the cache logic above, not independent lookups.
+
+6. Keep Ready-to-Buy & Position Sizing UNCHANGED
+
+Do not modify any of the following in this phase:
+
+SignalOrchestrator / signal generation
+
+StrategyEngine
+
+Position sizing helpers
+
+/api/trading-signals implementation
+
+Any Ready-to-Buy calculations in routes.ts
+
+They must continue to:
+
+Use the FX5-provided price that comes with each signal
+
+Not consult priceCache
+
+IA-PRICE-CACHE is only for active trades & exits.
+
+7. Diagnostics Updates
+7.1 – Extend /api/diagnostics/i7-price/status
+
+Enhance the existing endpoint (already returning priceSource and priceAgeMs) so we can see cache behavior clearly.
+
+For each position in paper.positions, return at least:
+
+{
+  symbol: string,
+  priceSource: 'kraken_ws' | 'kraken_rest' | 'unknown',
+  priceAgeMs: number | null,
+  cacheLastSource?: 'kraken_ws' | 'kraken_rest',
+  cacheLastUpdatedAt?: string | null
+}
+
+
+If priceCache.get(symbol) returns a value, populate cacheLastSource and cacheLastUpdatedAt.
+
+7.2 – New diagnostic endpoint: /api/diagnostics/ia-price-cache/status
+
+In server/routes.ts, add:
+
+router.get('/api/diagnostics/ia-price-cache/status', async (req, res) => {
+  try {
+    const snapshot = priceCache.snapshot();
+    const now = Date.now();
+
+    const summary = {
+      totalSymbols: snapshot.length,
+      bySource: snapshot.reduce((acc, p) => {
+        acc[p.lastSource] = (acc[p.lastSource] ?? 0) + 1;
+        return acc;
+      }, {} as Record<string, number>),
+      maxAgeMs: snapshot.length
+        ? Math.max(...snapshot.map(p => now - p.lastUpdatedAt))
+        : 0,
+    };
+
+    res.json({
+      ok: true,
+      phase: '8.8.4-IA-PRICE-CACHE',
+      summary,
+      prices: snapshot.map(p => ({
+        symbol: p.symbol,
+        price: p.price,
+        lastSource: p.lastSource,
+        ageMs: now - p.lastUpdatedAt,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      phase: '8.8.4-IA-PRICE-CACHE',
+      error: (err as Error).message,
+    });
+  }
+});
+
+8. Verification Plan (using test user)
+
+Test user credentials (do not change):
+
+username = testuser123
+
+password = SecurePass123!
+
+All commands below assume project root.
+
+8.1 – Login & store token
+APP_TEST_USERNAME="testuser123"
+APP_TEST_PASSWORD="SecurePass123!"
+
+LOGIN_RESPONSE=$(curl -s -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d "{\"username\":\"$APP_TEST_USERNAME\",\"password\":\"$APP_TEST_PASSWORD\"}")
+
+echo "$LOGIN_RESPONSE" | jq .
+
+TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.token // .accessToken // empty')
+echo "TOKEN prefix: ${TOKEN:0:16}..."
+
+8.2 – Start fresh paper session
+curl -s -X POST http://localhost:5000/api/paper-sim/start \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"new"}' | jq .
+
+
+Wait ~60–90 seconds for some positions to open.
+
+8.3 – Check engine status
+curl -s http://localhost:5000/api/diagnostics/i7-root/engine-status \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+
+Verify:
+
+paper.isRunning === true
+
+lastTickAt and lastExitEvalAt are non-null and moving over time
+
+8.4 – Check price cache status
+curl -s http://localhost:5000/api/diagnostics/ia-price-cache/status \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+
+Expect:
+
+ok: true
+
+summary.totalSymbols > 0
+
+summary.bySource.kraken_ws ≥ 1 (some positions backed by WebSocket ticks)
+
+8.5 – Check per-position price sources
+curl -s http://localhost:5000/api/diagnostics/i7-price/status \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq '.paper.positions | map({symbol, priceSource, priceAgeMs})'
+
+
+Expectation (after a couple minutes of trading):
+
+Most liquid pairs should show "priceSource": "kraken_ws"
+
+priceAgeMs should generally be within a few seconds for those pairs
+
+Some low-liquidity pairs may still show "kraken_rest" but should be using cache-backed values (not independent calls).
+
+8.6 – Stop trading & ensure clean shutdown
+curl -s -X POST http://localhost:5000/api/paper-sim/stop \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" | jq .
+
+sleep 5
+
+echo "=== ENGINE STATUS AFTER STOP ==="
+curl -s http://localhost:5000/api/diagnostics/i7-root/engine-status \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+echo "=== ACTIVE TRADES AFTER STOP ==="
+curl -s http://localhost:5000/api/paper-sim/active-trades \
+  -H "Authorization: Bearer $TOKEN" | jq '.positions | length'
+
+
+Verify:
+
+paper.isRunning === false
+
+positions.length === 0
+
+No new trades appear after stop.
+
+9. Post-Change Project Archive
+
+After all tests pass and IA-PRICE-CACHE is complete:
+
+9.1 – Commit & tag post-change state
+git status
+git add -A
+git commit -m "8.8.4-IA-PRICE-CACHE: centralized price cache for active trades"
+git tag post-8.8.4-IA-PRICE-CACHE
+
+9.2 – Create a post-change source archive
+tar \
+  --exclude='node_modules' \
+  --exclude='.git' \
+  --exclude='.replit' \
+  --exclude='replit.nix' \
+  --exclude='.cache' \
+  --exclude='dist' \
+  --exclude='build' \
+  --exclude='tmp' \
+  --exclude='logs' \
+  -czf dawntrader-post-8.8.4-IA.tar.gz \
+  .
+
+
+Leave dawntrader-post-8.8.4-IA.tar.gz in the workspace root so the user can download and store it in their cloud storage.
+
+If you follow this directive exactly, we will:
+
+Preserve a safe rollback point
+
+Introduce a clean, centralized price cache only for active trades
+
+Keep Ready-to-Buy and Position Sizing unchanged and REST-only (via FX5)
+
+Reduce REST load and align pricing across backend and UI
+
+Make it easy for Kyle to archive both pre- and post-change versions of the code.
