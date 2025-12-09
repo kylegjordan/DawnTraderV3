@@ -1,0 +1,97 @@
+Please run this end-to-end verification using the test user below.
+
+Test user credentials (do NOT change):
+username = testuser123
+password = SecurePass123!
+
+Login and start trading
+
+APP_TEST_USERNAME="testuser123"
+APP_TEST_PASSWORD="SecurePass123!"
+
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"'"$APP_TEST_USERNAME"'","password":"'"$APP_TEST_PASSWORD"'"}' \
+  | jq -r '.token')
+
+echo "TOKEN prefix: ${TOKEN:0:16}..."
+
+# Start paper trading (fresh session)
+curl -s -X POST http://localhost:5000/api/paper-sim/start \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"new"}' | jq .
+
+
+Wait 5–7 minutes with trading ACTIVE
+
+During this time:
+
+Watch Active Trades in the UI:
+
+Current prices should visibly change for at least some symbols.
+
+Watch Trade History:
+
+At least a few trades should close via stop_hit or target_hit (not all manual_stop).
+
+Check diagnostics
+
+# Engine status
+curl -s http://localhost:5000/api/diagnostics/i7-root/engine-status \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+# Price pipeline status
+curl -s http://localhost:5000/api/diagnostics/i7-price/status \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+
+Expectations:
+
+paper.isRunning: true
+
+lastTickAt and lastExitEvalAt both recent (a few seconds or tens of seconds old).
+
+Most positions:
+
+have a valid priceSource
+
+have reasonable priceAgeMs
+
+and show recent lastExitEvalPrice.
+
+Compare backend vs UI
+
+# Current backend view of active trades
+curl -s http://localhost:5000/api/paper-sim/active-trades \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq '.positions | map({symbol, currentPrice, priceSource, priceAgeMs})'
+
+
+Confirm that:
+
+currentPrice values in this payload are changing over time.
+
+These numbers match what you see in the UI (within normal refresh lag).
+
+Stop trading & ensure clean stop
+
+curl -s -X POST http://localhost:5000/api/paper-sim/stop \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+sleep 5
+
+# Engine status after stop
+curl -s http://localhost:5000/api/diagnostics/i7-root/engine-status \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+
+Check:
+
+paper.isRunning: false
+
+No new trades appear in Active Trades after stop.
+
+In Trade History:
+
+remaining open positions should eventually flip to manual_stop within a reasonable window (if that is the intended design).
