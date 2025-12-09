@@ -178,7 +178,7 @@ app.use((req, res, next) => {
 
   // Phase 8.8.3-I7-MAP-AUTO: Initialize automatic Kraken symbol mapping
   try {
-    const { krakenAssetPairsService } = await import('./markets/kraken-asset-pairs-service');
+    const { krakenAssetPairsService } = await import('./markets/kraken-asset-pairs-service.js');
     const { storage } = await import('./storage');
     
     await krakenAssetPairsService.initialize();
@@ -578,6 +578,16 @@ app.use((req, res, next) => {
 
     // Phase 4A: Startup acceleration - defer non-critical services
     console.log('[Gemini-4A] 🚀 Server ready - deferring non-critical services...');
+    
+    // I7-MAP-AUTO-FIX: Verify auto-map initialization status (captured in logs)
+    try {
+      const { krakenAssetPairsService } = await import('./markets/kraken-asset-pairs-service.js');
+      const isReady = krakenAssetPairsService.isReady();
+      const summary = krakenAssetPairsService.getSummary();
+      console.log(`[I7-MAP-AUTO-FIX][VERIFY] isReady=${isReady}, total=${summary.total}, tier1=${summary.tier1}, tier2=${summary.tier2}`);
+    } catch (err) {
+      console.error('[I7-MAP-AUTO-FIX][VERIFY] Failed to check status:', err);
+    }
 
     // Phase 7.2: Prefetch metrics on server startup to warm Bob Core cache (CRITICAL PATH)
     try {

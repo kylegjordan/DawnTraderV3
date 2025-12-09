@@ -15,7 +15,7 @@
  */
 
 import { KRAKEN_SYMBOL_MAP, KrakenPairMapping } from "./kraken-symbol-map";
-import { krakenAssetPairsService } from "./kraken-asset-pairs-service";
+import { krakenAssetPairsService } from "./kraken-asset-pairs-service.js";
 
 const mapByInternal = new Map<string, KrakenPairMapping>();
 const mapByRestPair = new Map<string, KrakenPairMapping>();
