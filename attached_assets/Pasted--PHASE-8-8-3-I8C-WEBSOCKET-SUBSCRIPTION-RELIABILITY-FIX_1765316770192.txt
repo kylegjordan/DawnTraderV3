@@ -1,0 +1,230 @@
+🚀 PHASE 8.8.3-I8C — WEBSOCKET SUBSCRIPTION RELIABILITY FIX (FULL VERSION)
+(Option A: Full subscription, resubscription, and auditing system)
+📌 PURPOSE
+
+Despite working WebSocket connectivity and a complete compact/canonical mapping system, only 1 of 15 active positions is receiving real-time prices.
+This is the root cause of stale pricing, delayed exits, slow UI updates, and excessive REST fallback reliance.
+
+This phase will deliver 100% WebSocket subscription coverage and ensure subscriptions remain healthy for the entire session.
+
+📌 BEFORE YOU BEGIN — CREATE A REPLIT SNAPSHOT (ROLLBACK POINT)
+
+Before implementing anything, create a Replit snapshot named:
+
+SNAPSHOT-8.8.3-I8C-BEFORE
+
+
+This is NOT a GitHub push and MUST NOT modify GitHub.
+This snapshot must allow restoring the Replit workspace back to the exact state before this phase begins.
+
+📌 TEST USER CREDENTIALS
+
+Use these credentials when needed:
+
+username = testuser123
+password = SecurePass123!
+
+📌 IMPLEMENTATION REQUIREMENTS
+1. Subscribe ALL open positions on trading START
+
+When paper trading starts:
+
+Load all open positions
+
+Extract their normalized Kraken WS symbols via resolver
+
+Call krakenWebSocketAdapter.subscribe() with the full list
+
+Emit diagnostic logs:
+
+[I8C-STARTUP][ENGINE_INIT_SUBSCRIBE] subscribing_to=[...normalizedSymbols]
+
+
+If zero symbols are open, log:
+
+[I8C-STARTUP] no open positions to subscribe
+
+2. Subscribe each NEW trade immediately upon creation
+
+In paper-execution-engine.ts, within the trade-creation workflow:
+
+Add:
+
+[I8C-ENGINE-SUBCALL] symbol=XYZ reason=new_trade
+
+
+Then call the websocket adapter:
+
+krakenWebSocketAdapter.subscribe([normalizedSymbol])
+
+
+The normalized symbol MUST come from kraken-symbol-resolver.resolveAny().
+
+3. SUBSCRIBE ALL open positions again on WEBSOCKET RECONNECT
+
+Inside kraken-websocket-adapter.ts:
+
+When the adapter emits or detects a reconnect event:
+
+[I8C-WS-RECONNECT] reconnect_detected
+
+
+Then:
+
+Query engine or paper portfolio manager for current open positions
+
+Resolve symbols
+
+Re-subscribe all of them
+
+And log:
+
+[I8C-WS-RESUBSCRIBE][RECONNECT] symbols=[...]
+
+4. Implement a 5-second SUBSCRIPTION HEALTH AUDIT
+
+Create a repeating timer inside the WebSocket adapter:
+
+setInterval(auditWebSocketSubscriptions, 5000)
+
+
+The audit must:
+
+Collect:
+
+All currently open positions (compact or canonical)
+
+All active Kraken WebSocket subscriptions
+
+Compare:
+
+For each position, determine:
+
+Is it subscribed?
+
+Has the channel expired?
+
+Has tick age become > 10s? (stale)
+
+If unsubscribed or stale:
+
+Re-subscribe immediately
+
+Log:
+
+[I8C-AUDIT][FIX] symbol=XYZ reason=stale_or_missing_subscription
+
+Audit summary log:
+[I8C-AUDIT][SUMMARY] total_positions=15 subscribed=14 missing=1 stale=2
+
+5. Implement TICK-ACK CONFIRMATION
+
+Every time Kraken returns ticker data, log:
+
+[I8C-WS-TICK][ACK] symbol=XYZ price=123.45
+
+
+And update the centralized price cache.
+
+This acts as proof that:
+
+The subscription succeeded
+
+The feed is active
+
+The symbol is no longer reliant on REST fallback
+
+6. Add DIAGNOSTIC ENDPOINT
+
+Add:
+
+GET /api/diagnostics/i8c/subscription-health
+
+This endpoint must return:
+
+{
+  ok: true,
+  engineRunning: true/false,
+  openPositions: [...],
+  websocketSubscriptions: [...],
+  staleSymbols: [...],
+  missingSymbols: [...],
+  tickAges: { symbol: ms },
+  summary: { total, subscribed, stale, missing }
+}
+
+
+This endpoint is critical for verifying correctness.
+
+📌 VERIFICATION STEPS (MANDATORY)
+
+After implementation, perform this sequence:
+
+1. Start paper trading (fresh session)
+
+Using the UI or:
+
+POST /api/paper-sim/start
+
+2. After 15 seconds, run:
+curl -s http://localhost:5000/api/diagnostics/i8c/subscription-health \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+Expected:
+summary.subscribed == summary.total
+summary.missing == 0
+summary.stale == 0 or very low (< 2)
+
+3. Run price cache diagnostics:
+/api/diagnostics/i7-price/status
+
+Expected:
+
+priceSource should be kraken_ws for the vast majority of positions.
+
+If under 10% REST fallback: PASS
+
+📌 SUCCESS CRITERIA
+This phase is complete when ALL of the following are true:
+
+✔️ 100% of open positions are subscribed to WebSocket
+✔️ Subscriptions persist after reconnect
+✔️ Stale or missing subscriptions are automatically fixed
+✔️ Most positions use kraken_ws as price source
+✔️ Price cache stays fresh (<2s age for most symbols)
+✔️ System logs reflect:
+
+ENGINE_INIT_SUBSCRIBE
+
+ENGINE-SUBCALL
+
+WS-SUBSCRIBE
+
+WS-TICK ACK
+
+AUDIT SUMMARY
+
+AUDIT FIX
+
+📌 SAFETY & NON-BREAKING REQUIREMENTS
+
+Do NOT modify strategy engine, orchestrator, or ready-to-buy systems
+
+Do NOT change symbol normalization logic
+
+Do NOT remove or alter the price cache
+
+Do NOT remove REST fallback
+
+Do NOT change trade-entry logic or position sizing
+
+Only modify subscription-related components
+
+📌 FINAL STEP — CREATE POST-IMPLEMENTATION SNAPSHOT
+
+After tests pass, create snapshot:
+
+SNAPSHOT-8.8.3-I8C-AFTER
+
+
+Do NOT push to GitHub.

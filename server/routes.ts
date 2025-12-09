@@ -7642,6 +7642,113 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ===== Phase 8.8.3-I8C: Subscription Reliability Diagnostics =====
+
+  // GET /api/diagnostics/i8c/subscription-health - Phase 8.8.3-I8C: Get comprehensive subscription health
+  apiRouter.get('/diagnostics/i8c/subscription-health', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      
+      // Get open positions from both paper and live
+      const [paperPositions, liveTrades] = await Promise.all([
+        storage.getPaperSimOpenPositions('paper'),
+        storage.getActiveTrades('live')
+      ]);
+      const allSymbols = [...new Set([
+        ...paperPositions.map(p => p.symbol),
+        ...liveTrades.map(t => t.symbol)
+      ])];
+      
+      const health = await krakenWebSocketAdapter.getI8CSubscriptionHealth(allSymbols);
+      
+      res.json({
+        ok: health.ok,
+        phase: '8.8.3-I8C',
+        timestamp: new Date().toISOString(),
+        description: 'WebSocket subscription reliability health status',
+        thresholds: {
+          stale_threshold_ms: 10000,
+          audit_interval_ms: 5000
+        },
+        ...health
+      });
+    } catch (error: any) {
+      console.error('[I8C] Error fetching subscription health:', error);
+      res.status(500).json({
+        ok: false,
+        phase: '8.8.3-I8C',
+        error: 'Failed to fetch I8C subscription health',
+        message: error.message
+      });
+    }
+  });
+
+  // POST /api/diagnostics/i8c/force-audit - Phase 8.8.3-I8C: Force run subscription audit
+  apiRouter.post('/diagnostics/i8c/force-audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      
+      // Get open positions to audit
+      const [paperPositions, liveTrades] = await Promise.all([
+        storage.getPaperSimOpenPositions('paper'),
+        storage.getActiveTrades('live')
+      ]);
+      const allSymbols = [...new Set([
+        ...paperPositions.map(p => p.symbol),
+        ...liveTrades.map(t => t.symbol)
+      ])];
+      
+      // Subscribe to all symbols (this is what the audit does)
+      if (allSymbols.length > 0) {
+        krakenWebSocketAdapter.subscribeToSymbols(allSymbols);
+      }
+      
+      const health = await krakenWebSocketAdapter.getI8CSubscriptionHealth(allSymbols);
+      
+      res.json({
+        ok: true,
+        phase: '8.8.3-I8C',
+        timestamp: new Date().toISOString(),
+        description: 'Forced subscription audit completed',
+        symbols_audited: allSymbols.length,
+        symbols_subscribed: allSymbols,
+        health
+      });
+    } catch (error: any) {
+      console.error('[I8C] Error forcing audit:', error);
+      res.status(500).json({
+        ok: false,
+        phase: '8.8.3-I8C',
+        error: 'Failed to force I8C audit',
+        message: error.message
+      });
+    }
+  });
+
+  // POST /api/diagnostics/i8c/start-audit - Phase 8.8.3-I8C: Start subscription audit interval
+  apiRouter.post('/diagnostics/i8c/start-audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      krakenWebSocketAdapter.startI8CSubscriptionAudit();
+      res.json({ ok: true, phase: '8.8.3-I8C', message: 'I8C subscription audit started (5-second interval)' });
+    } catch (error: any) {
+      console.error('[I8C] Error starting audit:', error);
+      res.status(500).json({ ok: false, phase: '8.8.3-I8C', error: error.message });
+    }
+  });
+
+  // POST /api/diagnostics/i8c/stop-audit - Phase 8.8.3-I8C: Stop subscription audit interval
+  apiRouter.post('/diagnostics/i8c/stop-audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      krakenWebSocketAdapter.stopI8CSubscriptionAudit();
+      res.json({ ok: true, phase: '8.8.3-I8C', message: 'I8C subscription audit stopped' });
+    } catch (error: any) {
+      console.error('[I8C] Error stopping audit:', error);
+      res.status(500).json({ ok: false, phase: '8.8.3-I8C', error: error.message });
+    }
+  });
+
   // ===== Phase 8.8.3-I7-PERSIST-FIX: Paper Trade Persistence Diagnostics =====
 
   // GET /api/diagnostics/i7-persist/status - Phase 8.8.3-I7-PERSIST-FIX: Compare engine vs DB position counts

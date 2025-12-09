@@ -159,19 +159,25 @@ export class PaperExecutionEngine {
       await krakenWebSocketAdapter.start();
       console.log(`[PaperExecution:${this.mode}] Kraken WebSocket adapter started`);
       
-      // Subscribe to symbols for existing open positions
-      const openPositions = await storage.getPaperSimOpenPositions(this.mode);
-      if (openPositions.length > 0) {
-        const symbols = openPositions.map(p => p.symbol);
-        // I7-ENGINE-SUBCALL: Diagnostic log before calling subscribe
-        console.log("[I7-ENGINE-SUBCALL] engine calling subscribe() with:", symbols);
-        krakenWebSocketAdapter.subscribeToSymbols(symbols);
-        // Phase 8.8.3-I6-FIX: Enhanced diagnostic logging for subscription audit
-        console.log(`[8.8.3-I6-FIX][WS_SUB_AUDIT] openPositionCount=${openPositions.length} subscribedSymbols=${JSON.stringify(symbols)}`);
-        console.log(`[PaperExecution:${this.mode}] Subscribed to ${symbols.length} open position symbols`);
+      // Phase 8.8.3-I8C: Set up open positions provider for reconnect and audit
+      const mode = this.mode;
+      krakenWebSocketAdapter.setI8COpenPositionsProvider(async () => {
+        const positions = await storage.getPaperSimOpenPositions(mode);
+        return positions.map(p => p.symbol);
+      });
+      
+      // Phase 8.8.3-I8C: Subscribe ALL open positions on trading START using I8C helper
+      const i8cResult = await krakenWebSocketAdapter.i8cSubscribeAllOpenPositions();
+      if (i8cResult.count > 0) {
+        console.log(`[8.8.3-I6-FIX][WS_SUB_AUDIT] openPositionCount=${i8cResult.count} subscribedSymbols=${JSON.stringify(i8cResult.subscribed)}`);
+        console.log(`[PaperExecution:${this.mode}] Subscribed to ${i8cResult.count} open position symbols via I8C`);
       } else {
         console.log(`[8.8.3-I6-FIX][WS_SUB_AUDIT] openPositionCount=0 (no subscriptions needed at start)`);
       }
+      
+      // Phase 8.8.3-I8C: Start 5-second subscription health audit
+      krakenWebSocketAdapter.startI8CSubscriptionAudit();
+      console.log(`[PaperExecution:${this.mode}] I8C subscription audit started`);
     } catch (error) {
       console.error(`[PaperExecution:${this.mode}] WebSocket adapter start failed (continuing with REST fallback):`, error);
     }
@@ -219,6 +225,14 @@ export class PaperExecutionEngine {
     aj17DiagnosticRunner.stopSessionAndGenerateReport().catch(err => {
       console.error(`[AJ17] Failed to generate diagnostic report:`, err);
     });
+    
+    // Phase 8.8.3-I8C: Stop subscription health audit
+    try {
+      krakenWebSocketAdapter.stopI8CSubscriptionAudit();
+      console.log(`[PaperExecution:${this.mode}] I8C subscription audit stopped`);
+    } catch (error) {
+      console.error(`[PaperExecution:${this.mode}] Error stopping I8C audit:`, error);
+    }
     
     // Phase 8.8.3-B9.FIX-WS-START: Stop WebSocket adapter on engine stop
     try {
@@ -2018,11 +2032,10 @@ export class PaperExecutionEngine {
       console.log(`[AJ10.3][OPEN_POSITION_OK] positionId=${openPosition.id} | symbol=${signal.symbol} | tradeId=${trade.id}`);
 
       // Phase 8.8.3-B3.6: Subscribe to Kraken WebSocket for real-time price updates
-      // Phase 8.8.3-I6-FIX: Enhanced diagnostic logging for subscription audit
+      // Phase 8.8.3-I8C: Subscribe each NEW trade immediately upon creation
       try {
-        // I7-ENGINE-SUBCALL: Diagnostic log before calling subscribe for new trade
-        console.log("[I7-ENGINE-SUBCALL] engine calling subscribe() with:", [signal.symbol]);
-        krakenWebSocketAdapter.subscribeToSymbols([signal.symbol]);
+        // I8C-ENGINE-SUBCALL: Subscribe to new trade with I8C logging
+        krakenWebSocketAdapter.i8cSubscribeNewTrade(signal.symbol, 'new_trade');
         console.log(`[8.8.3-I6-FIX][WS_SUB_NEW] newSymbol=${signal.symbol} | action=subscribe`);
         console.log(`[KrakenWS] Subscribed to ${signal.symbol} for real-time price updates`);
       } catch (wsSubError) {

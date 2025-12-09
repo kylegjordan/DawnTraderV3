@@ -93,6 +93,13 @@ export class KrakenWebSocketAdapter {
   private readonly ACK_TIMEOUT_MS = 5000; // 5 seconds without ACK
   private readonly NO_TICK_TIMEOUT_MS = 10000; // 10 seconds without tick after ACK
   
+  // Phase 8.8.3-I8C: Subscription reliability - open positions provider and audit interval
+  private i8cAuditInterval: NodeJS.Timeout | null = null;
+  private i8cOpenPositionsProvider: (() => Promise<string[]>) | null = null;
+  private i8cIsReconnecting: boolean = false;
+  private readonly I8C_AUDIT_INTERVAL_MS = 5000; // 5-second subscription health audit
+  private readonly I8C_STALE_THRESHOLD_MS = 10000; // 10 seconds without tick = stale
+  
   // Phase 8.8.3-I7-WS-G: Tick Frequency Stabilization
   private tickFrequencyData: Map<string, {
     lastTickTimestamp: number;
@@ -242,6 +249,11 @@ export class KrakenWebSocketAdapter {
 
   private handleOpen(): void {
     console.log(`[${this.MODULE_NAME}] WebSocket connected`);
+    
+    // Phase 8.8.3-I8C: Detect reconnect scenario
+    const wasReconnect = this.i8cIsReconnecting;
+    this.i8cIsReconnecting = false;
+    
     this.isConnected = true;
     this.isConnecting = false;
     this.reconnectAttempts = 0;
@@ -256,8 +268,16 @@ export class KrakenWebSocketAdapter {
       // Premature clearing prevents detection of pending-ACK state in diagnostics
     }
     
-    if (this.subscribedSymbols.size > 0) {
-      console.log(`[${this.MODULE_NAME}] Resubscribing to ${this.subscribedSymbols.size} symbols after reconnect`);
+    // Phase 8.8.3-I8C: On reconnect, use I8C helper exclusively for all open positions
+    // This avoids double-subscribe and ensures audit tagging
+    if (wasReconnect) {
+      console.log(`[I8C-WS-RECONNECT] reconnect_detected`);
+      // Clear previous subscriptions - I8C helper will resubscribe all open positions
+      this.subscribedSymbols.clear();
+      this.i8cResubscribeAllOpenPositions();
+    } else if (this.subscribedSymbols.size > 0) {
+      // Non-reconnect case: resubscribe to existing symbols
+      console.log(`[${this.MODULE_NAME}] Resubscribing to ${this.subscribedSymbols.size} symbols`);
       const symbols = Array.from(this.subscribedSymbols);
       this.subscribedSymbols.clear();
       this.subscribeToSymbols(symbols);
@@ -427,6 +447,11 @@ export class KrakenWebSocketAdapter {
       // Phase 8.8.3-I5: Diagnostic logging for tick arrival audit
       console.log(`[8.8.3-I5][TICK_ARRIVE] symbol=${internalSymbol} price=${lastPrice} timestamp=${now}`);
       
+      // Phase 8.8.3-I8C: TICK-ACK CONFIRMATION - log FIRST tick only to prove subscription succeeded
+      if (!this.firstTickReceived.has(internalSymbol)) {
+        console.log(`[I8C-WS-TICK][ACK] symbol=${internalSymbol} price=${lastPrice} first_tick=true subscription_confirmed=true`);
+      }
+      
       // Phase 8.8.3-I7-WS-G (G1): Update tick frequency data
       this.updateTickFrequency(internalSymbol, intervalMs);
       
@@ -565,6 +590,9 @@ export class KrakenWebSocketAdapter {
     );
     
     console.log(`[${this.MODULE_NAME}] Scheduling reconnect in ${delay}ms (attempt ${this.reconnectAttempts + 1})`);
+    
+    // Phase 8.8.3-I8C: Mark as reconnecting so handleOpen knows to resubscribe
+    this.i8cIsReconnecting = true;
     
     this.reconnectTimer = setTimeout(() => {
       this.reconnectAttempts++;
@@ -1846,6 +1874,225 @@ export class KrakenWebSocketAdapter {
   async ensureTickMonitoringStarted(reason: string): Promise<void> {
     console.log('[I7-ROOT-FIX][WS_MONITOR_START]', { reason });
     this.startTickFrequencyMonitoring();
+  }
+
+  // ===== Phase 8.8.3-I8C: Subscription Reliability Methods =====
+
+  /**
+   * Phase 8.8.3-I8C (1): Set open positions provider for audit and reconnect
+   */
+  setI8COpenPositionsProvider(provider: () => Promise<string[]>): void {
+    this.i8cOpenPositionsProvider = provider;
+    console.log('[I8C-STARTUP][PROVIDER_SET] Open positions provider registered');
+  }
+
+  /**
+   * Phase 8.8.3-I8C (1): Subscribe to all open positions at engine start
+   */
+  async i8cSubscribeAllOpenPositions(): Promise<{ subscribed: string[]; count: number }> {
+    if (!this.i8cOpenPositionsProvider) {
+      console.log('[I8C-STARTUP] no open positions provider set');
+      return { subscribed: [], count: 0 };
+    }
+
+    try {
+      const symbols = await this.i8cOpenPositionsProvider();
+      
+      if (symbols.length === 0) {
+        console.log('[I8C-STARTUP] no open positions to subscribe');
+        return { subscribed: [], count: 0 };
+      }
+
+      const normalizedSymbols = symbols.map(s => normalizeToInternalSymbol(s));
+      console.log(`[I8C-STARTUP][ENGINE_INIT_SUBSCRIBE] subscribing_to=[${normalizedSymbols.join(', ')}]`);
+      
+      this.subscribeToSymbols(normalizedSymbols);
+      
+      return { subscribed: normalizedSymbols, count: normalizedSymbols.length };
+    } catch (error) {
+      console.error('[I8C-STARTUP][ERROR] Failed to subscribe to open positions:', error);
+      return { subscribed: [], count: 0 };
+    }
+  }
+
+  /**
+   * Phase 8.8.3-I8C (2): Subscribe to a single new trade immediately upon creation
+   */
+  i8cSubscribeNewTrade(symbol: string, reason: string = 'new_trade'): void {
+    const normalizedSymbol = normalizeToInternalSymbol(symbol);
+    console.log(`[I8C-ENGINE-SUBCALL] symbol=${normalizedSymbol} reason=${reason}`);
+    this.subscribeToSymbols([normalizedSymbol]);
+  }
+
+  /**
+   * Phase 8.8.3-I8C (3): Resubscribe to all open positions on WebSocket reconnect
+   */
+  private async i8cResubscribeAllOpenPositions(): Promise<void> {
+    if (!this.i8cOpenPositionsProvider) {
+      console.log('[I8C-WS-RESUBSCRIBE][RECONNECT] no provider, skipping resubscribe');
+      return;
+    }
+
+    try {
+      const symbols = await this.i8cOpenPositionsProvider();
+      
+      if (symbols.length === 0) {
+        console.log('[I8C-WS-RESUBSCRIBE][RECONNECT] symbols=[]');
+        return;
+      }
+
+      const normalizedSymbols = symbols.map(s => normalizeToInternalSymbol(s));
+      console.log(`[I8C-WS-RESUBSCRIBE][RECONNECT] symbols=[${normalizedSymbols.join(', ')}]`);
+      
+      this.subscribeToSymbols(normalizedSymbols);
+    } catch (error) {
+      console.error('[I8C-WS-RESUBSCRIBE][ERROR] Failed to resubscribe:', error);
+    }
+  }
+
+  /**
+   * Phase 8.8.3-I8C (4): Start 5-second subscription health audit
+   */
+  startI8CSubscriptionAudit(): void {
+    if (this.i8cAuditInterval) {
+      console.log('[I8C-AUDIT] Already running, skipping start');
+      return;
+    }
+
+    console.log('[I8C-AUDIT] Starting 5-second subscription health audit');
+
+    this.i8cAuditInterval = setInterval(async () => {
+      await this.i8cRunSubscriptionAudit();
+    }, this.I8C_AUDIT_INTERVAL_MS);
+  }
+
+  /**
+   * Phase 8.8.3-I8C (4): Stop subscription health audit
+   */
+  stopI8CSubscriptionAudit(): void {
+    if (this.i8cAuditInterval) {
+      clearInterval(this.i8cAuditInterval);
+      this.i8cAuditInterval = null;
+      console.log('[I8C-AUDIT] Stopped subscription health audit');
+    }
+  }
+
+  /**
+   * Phase 8.8.3-I8C (4): Run subscription health audit
+   */
+  private async i8cRunSubscriptionAudit(): Promise<void> {
+    if (!this.i8cOpenPositionsProvider) {
+      return;
+    }
+
+    try {
+      const openPositions = await this.i8cOpenPositionsProvider();
+      
+      if (openPositions.length === 0) {
+        return;
+      }
+
+      const now = Date.now();
+      let subscribedCount = 0;
+      let missingCount = 0;
+      let staleCount = 0;
+      const fixes: string[] = [];
+
+      for (const symbol of openPositions) {
+        const normalizedSymbol = normalizeToInternalSymbol(symbol);
+        const isSubscribed = this.subscribedSymbols.has(normalizedSymbol);
+        const stats = this.symbolStats.get(normalizedSymbol);
+        const lastTickAgeMs = stats ? now - stats.lastUpdate : null;
+        const isStale = lastTickAgeMs !== null && lastTickAgeMs > this.I8C_STALE_THRESHOLD_MS;
+
+        if (isSubscribed && !isStale) {
+          subscribedCount++;
+        } else if (!isSubscribed) {
+          missingCount++;
+          fixes.push(normalizedSymbol);
+          console.log(`[I8C-AUDIT][FIX] symbol=${normalizedSymbol} reason=missing_subscription`);
+        } else if (isStale) {
+          staleCount++;
+          fixes.push(normalizedSymbol);
+          console.log(`[I8C-AUDIT][FIX] symbol=${normalizedSymbol} reason=stale_or_missing_subscription tick_age_ms=${lastTickAgeMs}`);
+        }
+      }
+
+      // Resubscribe to missing/stale symbols
+      if (fixes.length > 0) {
+        this.subscribeToSymbols(fixes);
+      }
+
+      console.log(`[I8C-AUDIT][SUMMARY] total_positions=${openPositions.length} subscribed=${subscribedCount} missing=${missingCount} stale=${staleCount}`);
+    } catch (error) {
+      console.error('[I8C-AUDIT][ERROR] Failed to run audit:', error);
+    }
+  }
+
+  /**
+   * Phase 8.8.3-I8C (6): Get comprehensive subscription health for diagnostic endpoint
+   */
+  async getI8CSubscriptionHealth(openPositions?: string[]): Promise<{
+    ok: boolean;
+    engineRunning: boolean;
+    openPositions: string[];
+    websocketSubscriptions: string[];
+    staleSymbols: string[];
+    missingSymbols: string[];
+    tickAges: Record<string, number>;
+    summary: { total: number; subscribed: number; stale: number; missing: number };
+  }> {
+    // Get open positions from provider or parameter
+    let positions = openPositions || [];
+    if (!openPositions && this.i8cOpenPositionsProvider) {
+      try {
+        positions = await this.i8cOpenPositionsProvider();
+      } catch (error) {
+        console.error('[I8C] Failed to get open positions:', error);
+      }
+    }
+
+    const now = Date.now();
+    const tickAges: Record<string, number> = {};
+    const staleSymbols: string[] = [];
+    const missingSymbols: string[] = [];
+    let subscribedCount = 0;
+
+    for (const symbol of positions) {
+      const normalizedSymbol = normalizeToInternalSymbol(symbol);
+      const isSubscribed = this.subscribedSymbols.has(normalizedSymbol);
+      const stats = this.symbolStats.get(normalizedSymbol);
+      const lastTickAgeMs = stats ? now - stats.lastUpdate : -1;
+      
+      tickAges[normalizedSymbol] = lastTickAgeMs;
+
+      if (!isSubscribed) {
+        missingSymbols.push(normalizedSymbol);
+      } else if (lastTickAgeMs > this.I8C_STALE_THRESHOLD_MS) {
+        staleSymbols.push(normalizedSymbol);
+        subscribedCount++; // Still subscribed, just stale
+      } else {
+        subscribedCount++;
+      }
+    }
+
+    const summary = {
+      total: positions.length,
+      subscribed: subscribedCount,
+      stale: staleSymbols.length,
+      missing: missingSymbols.length
+    };
+
+    return {
+      ok: missingSymbols.length === 0 && staleSymbols.length < 2,
+      engineRunning: this.isConnected,
+      openPositions: positions.map(s => normalizeToInternalSymbol(s)),
+      websocketSubscriptions: Array.from(this.subscribedSymbols),
+      staleSymbols,
+      missingSymbols,
+      tickAges,
+      summary
+    };
   }
 }
 
