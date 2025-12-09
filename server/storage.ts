@@ -1,3 +1,4 @@
+import { normalizeToInternalSymbol } from './markets/kraken-symbol-resolver';
 import { 
   users, 
   tradingSettings,
@@ -3132,7 +3133,13 @@ export class DatabaseStorage implements IStorage {
 
   // Paper simulation methods (Milestone 18)
   async createPaperSimTrade(mode: TradingMode, trade: InsertPaperSimTrade): Promise<PaperSimTrade> {
-    const [result] = await db.insert(paperSimTrades).values(trade).returning();
+    // [I8C-SYMBOL-NORM] Normalize symbol to canonical BASE/QUOTE format
+    const canonicalSymbol = normalizeToInternalSymbol(trade.symbol);
+    if (trade.symbol !== canonicalSymbol) {
+      console.log(`[I8C-SYMBOL-NORM] raw=${trade.symbol} canonical=${canonicalSymbol}`);
+    }
+    const normalizedTrade = { ...trade, symbol: canonicalSymbol };
+    const [result] = await db.insert(paperSimTrades).values(normalizedTrade).returning();
     return result;
   }
 
@@ -3206,7 +3213,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createPaperSimOpenPosition(mode: TradingMode, position: InsertPaperSimOpenPosition): Promise<PaperSimOpenPosition> {
-    const [result] = await db.insert(paperSimOpenPositions).values(position).returning();
+    // [I8C-SYMBOL-NORM] Normalize symbol to canonical BASE/QUOTE format
+    const canonicalSymbol = normalizeToInternalSymbol(position.symbol);
+    if (position.symbol !== canonicalSymbol) {
+      console.log(`[I8C-SYMBOL-NORM] raw=${position.symbol} canonical=${canonicalSymbol}`);
+    }
+    const normalizedPosition = { ...position, symbol: canonicalSymbol };
+    const [result] = await db.insert(paperSimOpenPositions).values(normalizedPosition).returning();
     return result;
   }
 
