@@ -98,7 +98,12 @@ export class KrakenWebSocketAdapter {
   private i8cOpenPositionsProvider: (() => Promise<string[]>) | null = null;
   private i8cIsReconnecting: boolean = false;
   private readonly I8C_AUDIT_INTERVAL_MS = 5000; // 5-second subscription health audit
-  private readonly I8C_STALE_THRESHOLD_MS = 10000; // 10 seconds without tick = stale
+  // Phase 8.8.3-I8E: Increased stale threshold for low-volume pairs (was 10s)
+  // Kraken low-volume pairs tick every 10-40 seconds
+  // 30s threshold differentiates low-volume from truly broken connections
+  private readonly I8C_STALE_THRESHOLD_MS = 30000; // 30 seconds = truly stale (resubscribe)
+  private readonly I8E_LOW_VOLUME_MIN_MS = 5000;  // 5-25s = normal low-volume behavior
+  private readonly I8E_LOW_VOLUME_MAX_MS = 25000; // don't resubscribe in this window
   
   // Phase 8.8.3-I7-WS-G: Tick Frequency Stabilization
   private tickFrequencyData: Map<string, {
@@ -1071,6 +1076,78 @@ export class KrakenWebSocketAdapter {
     }
   }
 
+  /**
+   * Phase 8.8.3-I8E: Get WS health data for all subscribed symbols
+   * Returns detailed health status per symbol for diagnostic endpoint
+   */
+  getI8EWsHealth(): Array<{
+    symbol: string;
+    subscribed: boolean;
+    lastTickAt: string | null;
+    ageMs: number | null;
+    isLowVolume: boolean;
+    isStale: boolean;
+    ticksPerMinute: number;
+    classification: string;
+  }> {
+    const now = Date.now();
+    const healthData: Array<{
+      symbol: string;
+      subscribed: boolean;
+      lastTickAt: string | null;
+      ageMs: number | null;
+      isLowVolume: boolean;
+      isStale: boolean;
+      ticksPerMinute: number;
+      classification: string;
+    }> = [];
+    
+    // Get all subscribed symbols
+    for (const symbol of this.subscribedSymbols) {
+      const stats = this.symbolStats.get(symbol);
+      const ageMs = stats ? now - stats.lastUpdate : null;
+      
+      // Phase 8.8.3-I8E classification thresholds
+      const isLowVolume = ageMs !== null && ageMs > this.I8E_LOW_VOLUME_MIN_MS && ageMs <= this.I8E_LOW_VOLUME_MAX_MS;
+      const isStale = ageMs !== null && ageMs > this.I8C_STALE_THRESHOLD_MS;
+      
+      // Classification
+      let classification = 'healthy';
+      if (ageMs === null) {
+        classification = 'no_ticks_yet';
+      } else if (isStale) {
+        classification = 'stale';
+      } else if (isLowVolume) {
+        classification = 'low_volume';
+      } else if (ageMs <= 2000) {
+        classification = 'healthy';
+      } else {
+        classification = 'warming_up';
+      }
+      
+      // Calculate ticks per minute
+      let ticksPerMinute = 0;
+      if (stats) {
+        const timeWindowMs = now - stats.firstUpdate;
+        const timeWindowMinutes = timeWindowMs / 60000;
+        ticksPerMinute = timeWindowMinutes > 0 ? Math.round((stats.updateCount / timeWindowMinutes) * 10) / 10 : 0;
+      }
+      
+      healthData.push({
+        symbol,
+        subscribed: true,
+        lastTickAt: stats ? new Date(stats.lastUpdate).toISOString() : null,
+        ageMs,
+        isLowVolume,
+        isStale,
+        ticksPerMinute,
+        classification
+      });
+    }
+    
+    return healthData;
+  }
+
   getStatus() {
     return {
       isConnected: this.isConnected,
@@ -1998,15 +2075,25 @@ export class KrakenWebSocketAdapter {
       let staleCount = 0;
       const fixes: string[] = [];
 
+      let lowVolumeCount = 0;
       for (const symbol of openPositions) {
         const normalizedSymbol = normalizeToInternalSymbol(symbol);
         const isSubscribed = this.subscribedSymbols.has(normalizedSymbol);
         const stats = this.symbolStats.get(normalizedSymbol);
         const lastTickAgeMs = stats ? now - stats.lastUpdate : null;
+        
+        // Phase 8.8.3-I8E: Only truly stale (>30s) should trigger resubscription
+        // Low-volume pairs (5-25s without tick) are expected and should NOT resubscribe
         const isStale = lastTickAgeMs !== null && lastTickAgeMs > this.I8C_STALE_THRESHOLD_MS;
+        const isLowVolume = lastTickAgeMs !== null && 
+          lastTickAgeMs > this.I8E_LOW_VOLUME_MIN_MS && 
+          lastTickAgeMs <= this.I8E_LOW_VOLUME_MAX_MS;
 
         if (isSubscribed && !isStale) {
           subscribedCount++;
+          if (isLowVolume) {
+            lowVolumeCount++; // Track low-volume but healthy subscriptions
+          }
         } else if (!isSubscribed) {
           missingCount++;
           fixes.push(normalizedSymbol);
@@ -2014,7 +2101,7 @@ export class KrakenWebSocketAdapter {
         } else if (isStale) {
           staleCount++;
           fixes.push(normalizedSymbol);
-          console.log(`[I8C-AUDIT][FIX] symbol=${normalizedSymbol} reason=stale_or_missing_subscription tick_age_ms=${lastTickAgeMs}`);
+          console.log(`[I8E-WS-RESUB] stale_channel_detected symbol=${normalizedSymbol} ageMs=${lastTickAgeMs} threshold=${this.I8C_STALE_THRESHOLD_MS}`);
         }
       }
 
@@ -2023,7 +2110,8 @@ export class KrakenWebSocketAdapter {
         this.subscribeToSymbols(fixes);
       }
 
-      console.log(`[I8C-AUDIT][SUMMARY] total_positions=${openPositions.length} subscribed=${subscribedCount} missing=${missingCount} stale=${staleCount}`);
+      // Phase 8.8.3-I8E: Enhanced summary with low-volume tracking
+      console.log(`[I8C-AUDIT][SUMMARY] total_positions=${openPositions.length} subscribed=${subscribedCount} low_volume=${lowVolumeCount} missing=${missingCount} stale=${staleCount}`);
     } catch (error) {
       console.error('[I8C-AUDIT][ERROR] Failed to run audit:', error);
     }

@@ -67,10 +67,12 @@ export class LivePricingAdapter {
   private readonly BROADCAST_THROTTLE_MS = 150; // 150ms minimum between broadcasts per symbol
   
   // Phase 8.8.3-I7-WS-E: REST Fallback Optimization
+  // Phase 8.8.3-I8E: Increased staleness thresholds for low-volume pairs
+  // Kraken low-volume pairs tick every 10-40 seconds, so 5s was too strict
   // Thresholds for WebSocket cache freshness
-  private readonly WS_CACHE_FRESH_MS = 2000;      // ≤2s = fresh, use WS cache
-  private readonly WS_CACHE_WARNING_MS = 3000;    // ≥3s = mild warning
-  private readonly WS_CACHE_FALLBACK_MS = 5000;   // ≥5s = immediate REST fallback
+  private readonly WS_CACHE_FRESH_MS = 2000;       // ≤2s = fresh, use WS cache
+  private readonly WS_CACHE_WARNING_MS = 10000;    // ≥10s = mild warning (was 3s)
+  private readonly WS_CACHE_FALLBACK_MS = 25000;   // ≥25s = REST fallback (was 5s)
   
   // I7-WS-E: REST fallback metrics tracking
   private restFallbackMetrics: Map<string, RestFallbackMetric> = new Map();

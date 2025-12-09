@@ -6965,6 +6965,55 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ==================== Phase 8.8.3-I8E: WebSocket Health & Staleness Diagnostics ====================
+  
+  // GET /api/diagnostics/i8e/ws-health - Get per-symbol WebSocket health status
+  apiRouter.get('/diagnostics/i8e/ws-health', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      
+      const healthData = krakenWebSocketAdapter.getI8EWsHealth();
+      
+      // Aggregate stats
+      const healthySymbols = healthData.filter(h => h.classification === 'healthy');
+      const lowVolumeSymbols = healthData.filter(h => h.classification === 'low_volume');
+      const staleSymbols = healthData.filter(h => h.classification === 'stale');
+      const warmingUpSymbols = healthData.filter(h => h.classification === 'warming_up');
+      const noTicksSymbols = healthData.filter(h => h.classification === 'no_ticks_yet');
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.3-I8E',
+        thresholds: {
+          lowVolumeRangeMs: '5000-25000',
+          staleThresholdMs: 30000,
+          restFallbackMs: 25000
+        },
+        summary: {
+          totalSymbols: healthData.length,
+          healthy: healthySymbols.length,
+          lowVolume: lowVolumeSymbols.length,
+          warmingUp: warmingUpSymbols.length,
+          stale: staleSymbols.length,
+          noTicksYet: noTicksSymbols.length
+        },
+        symbols: healthData.sort((a, b) => {
+          // Sort: stale first, then low_volume, then no_ticks_yet, then warming_up, then healthy
+          const order: Record<string, number> = { stale: 0, no_ticks_yet: 1, low_volume: 2, warming_up: 3, healthy: 4 };
+          return (order[a.classification] ?? 5) - (order[b.classification] ?? 5);
+        })
+      });
+    } catch (error: any) {
+      console.error('[I8E] Error fetching WS health:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to fetch I8E WebSocket health',
+        message: error.message
+      });
+    }
+  });
+
   // ==================== Phase 8.8.3-B5: Full Signal Creation & Sizing Pipeline Audit ====================
   
   // GET /api/diagnostics/b5/sizing-log - Get B5 sizing audit log entries

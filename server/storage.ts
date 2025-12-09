@@ -3219,8 +3219,27 @@ export class DatabaseStorage implements IStorage {
       console.log(`[I8C-SYMBOL-NORM] raw=${position.symbol} canonical=${canonicalSymbol}`);
     }
     const normalizedPosition = { ...position, symbol: canonicalSymbol };
-    const [result] = await db.insert(paperSimOpenPositions).values(normalizedPosition).returning();
-    return result;
+    
+    // Phase 8.8.3-I8E: Handle unique constraint violations gracefully
+    try {
+      const [result] = await db.insert(paperSimOpenPositions).values(normalizedPosition).returning();
+      return result;
+    } catch (error: any) {
+      // Check for unique constraint violation (code 23505 in PostgreSQL)
+      if (error?.code === '23505' || error?.message?.includes('unique_symbol_side') || error?.message?.includes('duplicate key')) {
+        console.log(`[I8E-DB-DEDUP] Duplicate position blocked: ${canonicalSymbol}/${position.side} - constraint prevented insert`);
+        // Return the existing position instead
+        const existing = await db.select()
+          .from(paperSimOpenPositions)
+          .where(eq(paperSimOpenPositions.symbol, canonicalSymbol));
+        if (existing.length > 0) {
+          console.log(`[I8E-DB-DEDUP] Returning existing position: ${existing[0].id}`);
+          return existing[0];
+        }
+      }
+      // Re-throw other errors
+      throw error;
+    }
   }
 
   async updatePaperSimOpenPosition(mode: TradingMode, id: string, updates: Partial<PaperSimOpenPosition>): Promise<PaperSimOpenPosition> {

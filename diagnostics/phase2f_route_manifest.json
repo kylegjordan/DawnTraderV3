@@ -1734,6 +1734,16 @@
     ]
   },
   {
+    "path": "/api/diagnostics/i8e/ws-health",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/diagnostics/b5/sizing-log",
     "methods": [
       "GET"
