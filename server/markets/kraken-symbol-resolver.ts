@@ -122,50 +122,62 @@ export function normalizeToInternalSymbol(raw: string): string {
 }
 
 /**
- * I7-MAP-AUTO: Convert internal symbol to Kraken REST format
- * Resolution order: Static map (Tier 0) → Auto-map (Tier 1/2)
+ * I7-COMPACT-MAP: Convert any symbol format to Kraken REST format
+ * Resolution order: Static map (Tier 0) → Auto-map resolveAny (compact-aware)
+ * Now supports compact symbols (e.g., "MORPHOUSD", "RUJIEUR") directly
  */
 export function toKrakenRest(internalSymbol: string): string | null {
-  const normalized = normalizeInternal(internalSymbol).toUpperCase();
+  if (!internalSymbol) return null;
+  const s = internalSymbol.trim().toUpperCase();
   
   // Tier 0: Static map has highest priority (manually verified)
-  const staticMapping = mapByInternal.get(normalized);
+  // Check both internal format and compact format
+  let staticMapping = mapByInternal.get(s);
   if (staticMapping) return staticMapping.krakenRestPair;
   
-  // I7-MAP-AUTO: Try auto-map for Tier 1/2 symbols
+  staticMapping = mapByCompact.get(s);
+  if (staticMapping) return staticMapping.krakenRestPair;
+  
+  // I7-COMPACT-MAP: Use resolveAny which handles all formats (compact, internal, REST, WS)
   if (krakenAssetPairsService.isReady()) {
-    const autoResult = krakenAssetPairsService.toKrakenRest(normalized);
-    if (autoResult) {
-      return autoResult;
+    const entry = krakenAssetPairsService.resolveAny(s);
+    if (entry && entry.tier <= 2) {
+      return entry.krakenRestPair;
     }
   }
   
   // No mapping found
-  console.warn(`[I7-MAP-AUTO][WARN] No mapping for REST: ${internalSymbol} (normalized: ${normalized})`);
+  console.warn(`[I7-COMPACT-MAP][WARN] No mapping for REST: ${internalSymbol}`);
   return null;
 }
 
 /**
- * I7-MAP-AUTO: Convert internal symbol to Kraken WebSocket format
- * Resolution order: Static map (Tier 0) → Auto-map (Tier 1/2)
+ * I7-COMPACT-MAP: Convert any symbol format to Kraken WebSocket format
+ * Resolution order: Static map (Tier 0) → Auto-map resolveAny (compact-aware)
+ * Now supports compact symbols (e.g., "MORPHOUSD", "RUJIEUR") directly
  */
 export function toKrakenWS(internalSymbol: string): string | null {
-  const normalized = normalizeInternal(internalSymbol).toUpperCase();
+  if (!internalSymbol) return null;
+  const s = internalSymbol.trim().toUpperCase();
   
   // Tier 0: Static map has highest priority (manually verified)
-  const staticMapping = mapByInternal.get(normalized);
+  // Check both internal format and compact format
+  let staticMapping = mapByInternal.get(s);
   if (staticMapping) return staticMapping.krakenWsPair;
   
-  // I7-MAP-AUTO: Try auto-map for Tier 1/2 symbols
+  staticMapping = mapByCompact.get(s);
+  if (staticMapping) return staticMapping.krakenWsPair;
+  
+  // I7-COMPACT-MAP: Use resolveAny which handles all formats (compact, internal, REST, WS)
   if (krakenAssetPairsService.isReady()) {
-    const autoResult = krakenAssetPairsService.toKrakenWS(normalized);
-    if (autoResult) {
-      return autoResult;
+    const entry = krakenAssetPairsService.resolveAny(s);
+    if (entry && entry.tier <= 2) {
+      return entry.krakenWsPair;
     }
   }
   
   // No mapping found
-  console.warn(`[I7-MAP-AUTO][WARN] No mapping for WS: ${internalSymbol} (normalized: ${normalized})`);
+  console.warn(`[I7-COMPACT-MAP][WARN] No mapping for WS: ${internalSymbol}`);
   return null;
 }
 
@@ -190,49 +202,45 @@ export function mapKrakenPairToInternal(wsPair: string): string | null {
 }
 
 /**
- * I7-MAP-AUTO: Check if a symbol can be mapped to Kraken formats
+ * I7-COMPACT-MAP: Check if a symbol can be mapped to Kraken formats
  * Returns true if found in static map OR auto-map (Tier 1/2)
+ * Now supports compact symbols directly
  */
 export function isMappable(symbol: string): boolean {
-  const normalized = normalizeInternal(symbol).toUpperCase();
+  if (!symbol) return false;
+  const s = symbol.trim().toUpperCase();
   
-  // Tier 0: Static map is always trusted
-  if (mapByInternal.has(normalized)) return true;
+  // Tier 0: Static map is always trusted (check internal + compact formats)
+  if (mapByInternal.has(s)) return true;
+  if (mapByCompact.has(s)) return true;
   
-  // I7-MAP-AUTO: Auto-map Tier 1/2 is also considered mappable
+  // I7-COMPACT-MAP: Use resolveAny to check any format (Tier 1/2)
   if (krakenAssetPairsService.isReady()) {
-    return krakenAssetPairsService.isMappable(normalized);
+    const entry = krakenAssetPairsService.resolveAny(s);
+    return !!entry && entry.tier <= 2;
   }
   
   return false;
 }
 
 /**
- * I7-MAP-AUTO: List unmappable symbols from a given list
- * Checks both static map and auto-map (Tier 1/2)
+ * I7-COMPACT-MAP: List unmappable symbols from a given list
+ * Checks static map and auto-map using resolveAny (supports compact symbols)
  */
 export function listUnmappableSymbols(symbols: string[]): Array<{ symbol: string; reason: string }> {
   const unmappable: Array<{ symbol: string; reason: string }> = [];
   
   for (const symbol of symbols) {
-    const normalized = normalizeInternal(symbol).toUpperCase();
-    
-    // Check static map first (Tier 0)
-    if (mapByInternal.has(normalized)) {
-      continue; // Mapped via static map
-    }
-    
-    // Check auto-map (Tier 1/2)
-    if (krakenAssetPairsService.isReady() && krakenAssetPairsService.isMappable(normalized)) {
-      continue; // Mapped via auto-map
+    // Use isMappable which now supports all formats including compact
+    if (isMappable(symbol)) {
+      continue; // Mapped
     }
     
     // Symbol not mappable - determine reason
-    if (!normalized.includes("/")) {
-      unmappable.push({ symbol, reason: "not in BASE/QUOTE format" });
-    } else if (krakenAssetPairsService.isReady()) {
-      const tier = krakenAssetPairsService.getTier(normalized);
-      if (tier === 3) {
+    const s = symbol.trim().toUpperCase();
+    if (krakenAssetPairsService.isReady()) {
+      const entry = krakenAssetPairsService.resolveAny(s);
+      if (entry && entry.tier === 3) {
         unmappable.push({ symbol, reason: "Tier 3 (uncertain) - needs manual verification" });
       } else {
         unmappable.push({ symbol, reason: "not found in static map or auto-map" });
@@ -301,8 +309,9 @@ export function dumpMappings(): void {
 }
 
 /**
- * I7-MAP-AUTO: Get detailed mapping info for a symbol
+ * I7-COMPACT-MAP: Get detailed mapping info for a symbol
  * Includes tier information from auto-map
+ * Now supports compact symbols directly via resolveAny
  */
 export function getSymbolMappingDetails(symbol: string): {
   symbol: string;
@@ -316,24 +325,29 @@ export function getSymbolMappingDetails(symbol: string): {
   tier_reason: string | null;
   reason_if_unmappable: string | null;
 } {
-  const normalized = normalizeInternal(symbol);
-  const normalizedUpper = normalized.toUpperCase();
+  const s = symbol.trim().toUpperCase();
   const restPair = toKrakenRest(symbol);
   const wsPair = toKrakenWS(symbol);
   const mappable = isMappable(symbol);
-  const inStaticMap = mapByInternal.has(normalizedUpper);
   
-  // Check auto-map
+  // Check static maps (both internal and compact formats)
+  const inStaticMapInternal = mapByInternal.has(s);
+  const inStaticMapCompact = mapByCompact.has(s);
+  const inStaticMap = inStaticMapInternal || inStaticMapCompact;
+  
+  // Check auto-map using resolveAny (handles all formats)
   let inAutoMap = false;
   let tier: number | null = null;
   let tierReason: string | null = null;
+  let resolvedInternal = s;
   
   if (krakenAssetPairsService.isReady()) {
-    const autoEntry = krakenAssetPairsService.resolveByInternal(normalizedUpper);
+    const autoEntry = krakenAssetPairsService.resolveAny(s);
     if (autoEntry) {
       inAutoMap = true;
       tier = autoEntry.tier;
       tierReason = autoEntry.tierReason;
+      resolvedInternal = autoEntry.internalSymbol;
     }
   }
   
@@ -345,21 +359,16 @@ export function getSymbolMappingDetails(symbol: string): {
   
   let reason: string | null = null;
   if (!mappable) {
-    if (!normalized.includes("/")) {
-      reason = "not in BASE/QUOTE format";
-    } else if (tier === 3) {
+    if (tier === 3) {
       reason = "Tier 3 (uncertain) - needs manual verification";
     } else {
-      const [base, quote] = normalized.split("/");
-      if (!base) reason = "empty base asset";
-      else if (!VALID_QUOTES.includes(quote)) reason = `unknown quote currency: ${quote}`;
-      else reason = "not found in any mapping source";
+      reason = "not found in any mapping source";
     }
   }
   
   return {
     symbol,
-    internal: normalized,
+    internal: resolvedInternal,
     rest_pair: restPair,
     ws_pair: wsPair,
     mappable,

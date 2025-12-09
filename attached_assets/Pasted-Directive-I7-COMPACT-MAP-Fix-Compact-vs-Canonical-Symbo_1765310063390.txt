@@ -1,0 +1,448 @@
+Directive: I7-COMPACT-MAP – Fix Compact vs Canonical Symbol Mapping for WebSocket & REST
+Context (Please Read First)
+We’ve confirmed all of the following:
+
+
+The only exchange DawnTrader currently trades on is Kraken.
+
+
+FX5 emits symbols that ultimately arrive in DawnTrader as “compact” symbols (no slash, sometimes with Z-prefixed fiat codes, e.g.:
+
+
+RUJIUSD, RUJIEUR
+
+
+ZUSDZJPY
+
+
+MORPHOUSD
+
+
+APTEUR
+
+
+GOMININGEUR
+
+
+
+
+The paper positions stored in paper_sim_open_positions also use these compact symbols.
+
+
+The KrakenAssetPairsService (server/markets/kraken-asset-pairs-service.ts) and mapping logic already:
+
+
+Fetch all Kraken AssetPairs (≈1,349 pairs).
+
+
+Build a canonical view (base/quote, wsname, altname, etc).
+
+
+Are correctly initialized (I7-MAP-AUTO-FIX is working).
+
+
+
+
+WebSocket adapter is now starting at server boot and can receive ticks when correctly subscribed.
+
+
+Current problem: The mapping layer does not reliably interpret these compact symbols, so WebSocket subscriptions and REST mapping fall back to kraken_rest for most symbols.
+
+
+Key constraints / decisions:
+
+
+✅ Do NOT change the database schema.
+
+
+✅ Do NOT change the signal/strategy/orchestrator pipeline to stop compacting names.
+
+
+✅ All fixes should be contained in:
+
+
+kraken-asset-pairs-service.ts
+
+
+kraken-symbol-resolver.ts
+
+
+The price / subscription call sites (PaperExecutionEngine / LivePricingAdapter / WS adapter), without altering signal generation.
+
+
+
+
+Goal:
+Make the mapping layer treat compact symbols as first-class citizens, so that both WebSocket and REST mapping work correctly for any FX5-emitted symbol, without touching DB schema or strategy engine behavior.
+
+High-Level Design
+Current Flow (Simplified)
+
+
+FX5 → DawnTrader receives symbol as compact (e.g. MORPHOUSD).
+
+
+Strategy engine / SignalOrchestrator creates signals using compact symbols.
+
+
+PaperExecutionEngine opens positions with symbol stored as compact (e.g. MORPHOUSD).
+
+
+Pricing / exits / WS subscribe call mapping functions like toKrakenWS(symbol) or toKrakenRest(symbol) with that compact symbol.
+
+
+Mapping layer is primarily keyed by canonical format (MORPHO/USD), not compact.
+
+
+Result: many symbols fall back to REST, and WebSocket coverage is partial.
+
+
+Target Flow
+
+
+FX5 + strategy pipeline still produce compact symbols (no change).
+
+
+When pricing or subscribing:
+
+
+Engine passes compact symbol (e.g. MORPHOUSD).
+
+
+Mapping layer:
+
+
+Recognizes it as compact.
+
+
+Resolves to canonical MORPHO/USD.
+
+
+From canonical, resolves both:
+
+
+Kraken WebSocket wsname (e.g. MORPHO/USD)
+
+
+Kraken REST pair (e.g. MORPHOUSD or same wsname if appropriate).
+
+
+
+
+
+
+
+
+WebSocket and REST calls always go through the mapping layer, which supports:
+
+
+canonical → exchange pairs
+
+
+compact → canonical → pairs
+
+
+
+
+No DB schema changes required. No changes to strategy engine / orchestrator behavior.
+
+
+
+Implementation Steps
+1) Extend KrakenAssetPairsService to Support Compact Symbols
+File: server/markets/kraken-asset-pairs-service.ts
+1.1 Add in-memory map(s) for compact symbols
+Inside the KrakenAssetPairsService class, where you store pair metadata (e.g. maps keyed by canonical symbol, wsname, altname), add:
+// New: map from compact symbol (e.g. 'MORPHOUSD') → pair info
+private compactSymbolMap: Map<string, KrakenPairInfo> = new Map();
+
+Where KrakenPairInfo is whatever struct you currently use internally (base, quote, wsname, restName / altname, tier, status, etc.).
+1.2 Populate compactSymbolMap during refresh()
+In refresh() where you iterate through Kraken’s AssetPairs results and build the internal map(s):
+
+
+After you determine the canonical internal symbol and base/quote (e.g. "MORPHO/USD", base=MORPHO, quote=USD):
+const canonical = `${internalBase}/${internalQuote}`; // whatever canonical format you already use
+
+// Existing: store in main map(s)
+internalSymbolMap.set(canonical, info);
+
+// NEW: compute compact symbol
+const compact = `${internalBase}${internalQuote}`; // e.g. 'MORPHOUSD', 'APTEUR', 'ZUSDZJPY'
+
+this.compactSymbolMap.set(compact.toUpperCase(), info);
+
+
+
+IMPORTANT: Use Kraken internal base/quote codes, not wsname base/quote. This ensures:
+
+
+ZUSD + ZJPY → ZUSDZJPY
+
+
+RUJI + USD → RUJIUSD
+
+
+etc.
+
+
+
+
+If you already produce a compact somewhere else, unify and reuse that logic rather than duplicating.
+
+
+1.3 Add a resolver for compact symbols
+Add a new public method:
+public resolveByCompactSymbol(compact: string): KrakenPairInfo | null {
+  if (!compact) return null;
+  const key = compact.trim().toUpperCase();
+
+  const hit = this.compactSymbolMap.get(key);
+  if (hit) return hit;
+
+  // Optional: lenient fallbacks if needed
+  // e.g. if key contains '/', try removing it and look again.
+  // For now keep it simple.
+  return null;
+}
+
+1.4 Update resolveAny to consult compact map
+You already have a method like resolveAny(symbol: string) that tries canonical + wsname + altname.
+Update it roughly as:
+public resolveAny(symbol: string): KrakenPairInfo | null {
+  if (!symbol) return null;
+  const trimmed = symbol.trim();
+  const upper = trimmed.toUpperCase();
+
+  // 1) If it looks canonical (has '/'), use existing canonical resolution
+  if (upper.includes('/')) {
+    const byCanonical = this.resolveByInternalSymbol(upper);
+    if (byCanonical) return byCanonical;
+  }
+
+  // 2) Try compact map (no slash)
+  const byCompact = this.resolveByCompactSymbol(upper);
+  if (byCompact) return byCompact;
+
+  // 3) Existing fallback logic (wsname, altname, tier-based, etc.)
+  // ...
+}
+
+This ensures both forms are fully supported.
+
+2) Update Kraken Symbol Resolver to Use the Compact-Aware Service
+File: server/markets/kraken-symbol-resolver.ts
+Currently you have functions like:
+
+
+toKrakenWS(normalSymbol: string): string | null
+
+
+toKrakenRest(normalSymbol: string): string | null
+
+
+isMappable(symbol: string): boolean
+
+
+listUnmappableSymbols(...), getSymbolMappingDetails(...)
+
+
+All of these should rely on the auto-map service, which now knows about compact symbols.
+2.1 Normalize and route through resolveAny
+Update toKrakenWS to use resolveAny:
+export function toKrakenWS(normalSymbol: string): string | null {
+  if (!normalSymbol) return null;
+  const s = normalSymbol.trim().toUpperCase();
+
+  // 1) Static map (Tier 0) – if you still maintain KRAKEN_SYMBOL_MAP
+  const staticHit = KRAKEN_SYMBOL_MAP[s];
+  if (staticHit?.wsName) {
+    return staticHit.wsName;
+  }
+
+  // 2) Auto-map service (Tier 1/2)
+  if (!krakenAssetPairsService.isReady()) {
+    return null;
+  }
+
+  const info = krakenAssetPairsService.resolveAny(s);
+  if (!info) return null;
+
+  // Use whatever field you treat as WebSocket pair (e.g. wsname)
+  return info.wsname ?? info.restPair ?? null;
+}
+
+2.2 Same for toKrakenRest
+export function toKrakenRest(normalSymbol: string): string | null {
+  if (!normalSymbol) return null;
+  const s = normalSymbol.trim().toUpperCase();
+
+  const staticHit = KRAKEN_SYMBOL_MAP[s];
+  if (staticHit?.restName) {
+    return staticHit.restName;
+  }
+
+  if (!krakenAssetPairsService.isReady()) {
+    return null;
+  }
+
+  const info = krakenAssetPairsService.resolveAny(s);
+  if (!info) return null;
+
+  // Use the field you use for REST API (altname or pair name)
+  return info.restName ?? info.wsname ?? null;
+}
+
+2.3 Make isMappable truly cover compact symbols
+export function isMappable(symbol: string): boolean {
+  if (!symbol) return false;
+  const s = symbol.trim().toUpperCase();
+
+  // Static Tier 0
+  if (KRAKEN_SYMBOL_MAP[s]) return true;
+
+  if (!krakenAssetPairsService.isReady()) return false;
+
+  // Any form (canonical or compact) is fine
+  return !!krakenAssetPairsService.resolveAny(s);
+}
+
+listUnmappableSymbols and getSymbolMappingDetails should rely on isMappable / resolveAny so they correctly treat compact names as mappable if they correspond to a real Kraken pair.
+
+3) Ensure All Pricing / Subscription Call Sites Use the Resolver
+The whole point is: engine passes “whatever symbol it has” → resolver interprets it correctly.
+We do not want individual call sites attempting to re-normalize the symbol on their own.
+Please verify and adjust only if needed:
+3.1 PaperExecutionEngine
+File: server/services/paper-execution-engine.ts
+Anywhere you see:
+
+
+WebSocket subscribe calls, e.g.:
+krakenWebSocketAdapter.ensureCoverageForSymbols(openSymbols)
+// or
+krakenWebSocketAdapter.subscribeToSymbols([...symbols])
+
+
+
+Price lookups via LivePricingAdapter, e.g.:
+livePricingAdapter.getPrice(symbol)
+
+
+
+Confirm that:
+
+
+These are passing along the position symbol as-is.
+
+
+Those downstream layers always go through toKrakenWS / toKrakenRest (which we just made compact-aware).
+
+
+If you find any direct string mangling like .replace('/', '') or appending/removing prefixes before calling the resolver, remove those and let the resolver handle the interpretation.
+3.2 LivePricingAdapter
+File: server/services/live-pricing-adapter.ts
+Ensure that internally it uses toKrakenRest() / toKrakenWS() and does not hard-code assumptions about having slashes or non-slashes.
+3.3 KrakenWebSocketAdapter
+File: server/services/kraken-websocket-adapter.ts
+Confirm subscription code looks like:
+const krakenPair = toKrakenWS(symbol);
+if (!krakenPair) { /* log unmappable & skip */ }
+
+No need to change call sites if they already call toKrakenWS — the resolver changes above are enough.
+
+4) Tests & Verification
+Use the known test user:
+APP_TEST_USERNAME="testuser123"
+APP_TEST_PASSWORD="SecurePass123!"
+
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"'"$APP_TEST_USERNAME"'","password":"'"$APP_TEST_PASSWORD"'"}' \
+  | jq -r '.token')
+echo "TOKEN prefix: ${TOKEN:0:16}..."
+
+4.1 Start a fresh paper session
+curl -s -X POST http://localhost:5000/api/paper-sim/start \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"new"}' | jq .
+
+Wait ~60–90 seconds for positions to open.
+4.2 Check price sources
+curl -s http://localhost:5000/api/diagnostics/i7-price/status \
+  -H "Authorization: Bearer $TOKEN" | \
+  jq '.paper.positions | map({symbol, priceSource, priceAgeMs})'
+
+Expected behavior after fix:
+
+
+The majority of positions should now show:
+
+
+"priceSource": "kraken_ws"
+
+
+
+
+Some may still be "kraken_rest" for low-liquidity pairs or temporary fallback, but:
+
+
+It should no longer be “all REST” for compact-only symbols like:
+
+
+RUJIUSD, RUJIEUR
+
+
+ZUSDZJPY
+
+
+MORPHOUSD
+
+
+APTEUR
+
+
+GOMININGEUR, etc.
+
+
+
+
+
+
+4.3 Sanity check WebSocket subscription logs (no code changes, just confirm)
+In the logs:
+grep -E "I7-ENGINE-SUBCALL|I7-WS-SUBSCRIBE|I7-WS-SEND|I7-WS-C\[1\] INCOMING_WS_TICK" \
+  /tmp/logs/Start_application_*.log 2>/dev/null | tail -40
+
+You should see:
+
+
+[I7-ENGINE-SUBCALL] lines with a mix of compact and canonical symbols.
+
+
+[I7-WS-SUBSCRIBE] with a pair array containing canonical Kraken WS pairs (e.g. MORPHO/USD, RUJI/USD, ZUSD/JPY).
+
+
+[I7-WS-C][1] INCOMING_WS_TICK entries for those pairs.
+
+
+
+5) Important: Do NOT Touch These in This Phase
+
+
+Do NOT change the database schema.
+
+
+Do NOT change StrategyEngine, SignalOrchestrator, PaperPositionSizing, or Ready-To-Buy logic in this directive.
+
+
+Do NOT add new diagnostics to Ready-To-Buy in this phase.
+
+
+Do NOT attempt to support non-Kraken markets. Assume all symbols originate from Kraken AssetPairs.
+
+
+This phase is strictly about making compact vs canonical symbol mapping robust and consistent for WebSocket + REST pricing, using Kraken only.
+
+If you run into any ambiguity about how to derive compact from base/quote inside the AssetPairs service, please show me the exact snippet you’re unsure about rather than guessing.

@@ -130,6 +130,9 @@ class KrakenAssetPairsService {
   private byWsPair: Map<string, AutoMappingEntry> = new Map();
   private byKrakenKey: Map<string, AutoMappingEntry> = new Map();
   
+  // I7-COMPACT-MAP: Map from compact symbol (e.g., 'MORPHOUSD', 'RUJIEUR') → pair info
+  private compactSymbolMap: Map<string, AutoMappingEntry> = new Map();
+  
   private unmappableSymbols: Array<{ symbol: string; reason: string }> = [];
   private conflicts: Array<{ symbol: string; details: string }> = [];
   private lastRefresh: Date | null = null;
@@ -287,6 +290,7 @@ class KrakenAssetPairsService {
       this.byRestPair.clear();
       this.byWsPair.clear();
       this.byKrakenKey.clear();
+      this.compactSymbolMap.clear(); // I7-COMPACT-MAP
       this.unmappableSymbols = [];
       this.conflicts = [];
       
@@ -370,6 +374,9 @@ class KrakenAssetPairsService {
               });
               this.autoMap.set(internalSymbol.toUpperCase(), entry);
               this.byKrakenKey.set(krakenKey.toUpperCase(), entry);
+              // I7-COMPACT-MAP: Also update compact symbol map on collision resolution
+              const compactSymbol = `${base}${quote}`.toUpperCase();
+              this.compactSymbolMap.set(compactSymbol, entry);
             } else {
               this.conflicts.push({
                 symbol: internalSymbol,
@@ -384,6 +391,13 @@ class KrakenAssetPairsService {
           this.byRestPair.set(krakenRestPair.toUpperCase(), entry);
           this.byWsPair.set(krakenWsPair.toUpperCase(), entry);
           this.byKrakenKey.set(krakenKey.toUpperCase(), entry);
+          
+          // I7-COMPACT-MAP: Add compact symbol entry (e.g., "MORPHOUSD", "RUJIEUR", "ZUSDZJPY")
+          // Use normalized base/quote to create compact key
+          const compactSymbol = `${base}${quote}`.toUpperCase();
+          if (!this.compactSymbolMap.has(compactSymbol)) {
+            this.compactSymbolMap.set(compactSymbol, entry);
+          }
 
         } catch (err) {
           this.unmappableSymbols.push({
@@ -400,6 +414,7 @@ class KrakenAssetPairsService {
       console.log(`${LOG_PREFIX}[STARTUP] Auto-map built successfully`);
       console.log(`${LOG_PREFIX}[STARTUP] mapped=${summary.total}, tier1=${summary.tier1}, tier2=${summary.tier2}, tier3=${summary.tier3}, unmappable=${summary.unmappable}`);
       console.log(`${LOG_PREFIX}[STARTUP] skipped: halted=${skippedHalted}, marginOnly=${skippedMarginOnly}, dynamicQuotes=${this.dynamicQuotes.size}`);
+      console.log(`${LOG_PREFIX}[I7-COMPACT-MAP] compactSymbolMap size=${this.compactSymbolMap.size}`);
       
       if (this.conflicts.length > 0) {
         console.log(`${LOG_PREFIX}[STARTUP] collisions=${this.conflicts.length}`);
@@ -499,6 +514,16 @@ class KrakenAssetPairsService {
   }
 
   /**
+   * I7-COMPACT-MAP: Resolve by compact symbol (e.g., "MORPHOUSD", "RUJIEUR", "APTEUR")
+   * This is the primary entry point for FX5-emitted symbols
+   */
+  resolveByCompactSymbol(compact: string): AutoMappingEntry | undefined {
+    if (!compact) return undefined;
+    const key = compact.trim().toUpperCase();
+    return this.compactSymbolMap.get(key);
+  }
+
+  /**
    * Convert internal symbol to Kraken REST pair
    * Only returns Tier 1 or 2 mappings (safe for use)
    */
@@ -584,30 +609,40 @@ class KrakenAssetPairsService {
   }
 
   /**
-   * Resolve a symbol in any format (internal, REST, WS, compact)
+   * I7-COMPACT-MAP: Resolve a symbol in any format (internal, REST, WS, compact)
    * Tries all lookup methods to find the mapping
+   * Priority: canonical (has '/') → compact map (O(1)) → other maps → fallback parsing
    */
   resolveAny(symbol: string): AutoMappingEntry | undefined {
-    const upper = symbol.toUpperCase().trim();
+    if (!symbol) return undefined;
+    const trimmed = symbol.trim();
+    const upper = trimmed.toUpperCase();
     
-    // Try internal format first (e.g., "FORTH/USD")
-    let entry = this.autoMap.get(upper);
+    // 1) If it looks canonical (has '/'), use internal map first
+    if (upper.includes('/')) {
+      const entry = this.autoMap.get(upper);
+      if (entry) return entry;
+      
+      // Also check WS pair map (some WS names differ slightly)
+      const wsEntry = this.byWsPair.get(upper);
+      if (wsEntry) return wsEntry;
+    }
+    
+    // 2) I7-COMPACT-MAP: Try compact symbol map directly (O(1) lookup)
+    // This is the primary path for FX5-emitted symbols like "MORPHOUSD", "RUJIEUR"
+    const compactEntry = this.compactSymbolMap.get(upper);
+    if (compactEntry) return compactEntry;
+    
+    // 3) Try REST pair (e.g., "ADAUSD" in altname format)
+    let entry = this.byRestPair.get(upper);
     if (entry) return entry;
     
-    // Try REST pair (e.g., "FORTHUSD")
-    entry = this.byRestPair.get(upper);
-    if (entry) return entry;
-    
-    // Try WS pair (e.g., "FORTH/USD" or "XBT/USD")
-    entry = this.byWsPair.get(upper);
-    if (entry) return entry;
-    
-    // Try Kraken key (e.g., "FORTHUSD", "XXBTZUSD")
+    // 4) Try Kraken key (e.g., "XXBTZUSD")
     entry = this.byKrakenKey.get(upper);
     if (entry) return entry;
     
-    // Try normalizing compact format to internal (e.g., "FORTHUSD" → "FORTH/USD")
-    // Use dynamicQuotes (built from API) for better coverage
+    // 5) Fallback: Try normalizing compact format to internal (e.g., "FORTHUSD" → "FORTH/USD")
+    // Use dynamicQuotes (built from API) for edge cases not in compactSymbolMap
     for (const quote of this.dynamicQuotes) {
       if (upper.endsWith(quote) && upper.length > quote.length) {
         const base = upper.slice(0, -quote.length);
