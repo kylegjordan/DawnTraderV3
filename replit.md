@@ -43,6 +43,8 @@ Phase 8.8.3-I7-ROOT-FIX restores core engine functionality that regressed during
 
 Phase 8.8.3-I7-ROOT-FIX-2 fixes a critical diagnostic endpoint wiring issue. The `/api/diagnostics/i7-root/engine-status` endpoint was checking disconnected `TradingEngine` singletons while the actual paper trading uses `PaperPortfolioManager` via `getGlobalPaperSimManager()`. The fix imports proper helpers from `paper-sim-service.ts` and checks `paperManager?.getIsRunning?.()` for accurate status. Added `getEngine()` and `getOrchestrator()` accessors to `PaperPortfolioManager` for diagnostics. Verification confirmed: engine start shows `isRunning: true`, stop shows `isRunning: false`, and duplicate guard prevents symbol duplicates.
 
+Phase 8.8.3-I7-MAP-AUTO-FIX (December 2025) resolves a critical singleton initialization issue in `krakenAssetPairsService`. The root cause was a module path inconsistency where imports without the `.js` extension created separate module instances in ESM—one initialized during startup, another uninitialized used by the resolver. The fix standardizes all imports to use the `.js` extension (`'./markets/kraken-asset-pairs-service.js'`), ensuring a single shared singleton. Verification logs (`[I7-MAP-AUTO-FIX][VERIFY]`) confirm proper initialization with 1349 symbol pairs (tier1=108, tier2=1233, ~98% coverage). This eliminates REST fallback delays (5-8s) for symbols not in the static map by enabling WebSocket subscriptions for the full Kraken universe.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.
