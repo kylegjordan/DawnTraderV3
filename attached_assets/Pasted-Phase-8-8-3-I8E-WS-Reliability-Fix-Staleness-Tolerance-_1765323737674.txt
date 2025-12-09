@@ -1,0 +1,180 @@
+Phase 8.8.3-I8E
+WS Reliability Fix + Staleness Tolerance + DB Dedup Repair (with rollback & test user details)
+
+(Symbol-normalization-on-insert removed — already implemented earlier)
+
+0. Create Rollback Point (Replit Only)
+
+Before making any changes, create a rollback snapshot inside Replit:
+
+phase-8.8.3-I8E-before-fix
+
+
+(Do NOT push to GitHub; this rollback is Replit-only.)
+
+TEST USER (for all diagnostic calls)
+
+Use the following credentials when authentication is required:
+
+username = testuser123
+password = SecurePass123!
+
+1. FIX: Duplicate Database Entries in paper_sim_open_positions
+Why:
+
+Duplicates cause:
+
+mismatched UI counts
+
+duplicate WS subscriptions
+
+REST fallback due to timestamp skew
+
+exit-eval inconsistencies
+
+Directive:
+
+Query duplicates:
+
+SELECT symbol, side, COUNT(*) 
+FROM paper_sim_open_positions
+GROUP BY symbol, side
+HAVING COUNT(*) > 1;
+
+
+For each group, keep oldest row (lowest created_at), delete all others.
+
+Log each cleanup action:
+
+[I8E-DB-CLEAN] removed duplicate entries for <symbol>/<side>
+
+2. Prevent Future Duplicates with DB Constraint
+
+Add unique constraint:
+
+ALTER TABLE paper_sim_open_positions
+ADD CONSTRAINT unique_symbol_side UNIQUE(symbol, side);
+
+
+This prevents duplicates from ever reappearing.
+
+(This will not break current code since normalization has already been implemented previously.)
+
+3. FIX: Initial WebSocket Subscription Timing Issue
+Problem:
+
+When engine starts:
+
+user had cleared DB
+
+engine sees 0 positions
+
+subscribes to 0 symbols
+
+new trades open → NOT subscribed until 5s audit runs
+
+Fix:
+
+In paper-execution-engine.ts, inside trade creation logic, ensure:
+
+krakenWebSocketAdapter.i8cSubscribeNewTrade(symbol);
+
+
+This forces immediate WS subscription for every new trade.
+
+4. FIX: WS Staleness Threshold Too Strict
+Problem:
+
+Kraken low-volume pairs tick every 10–40 seconds.
+
+Current threshold = 5 seconds
+→ falsely marked stale
+→ triggers REST fallback
+→ operator sees “WS not working”
+
+Fix:
+
+Increase staleness threshold to 25 seconds.
+
+In live-pricing-adapter.ts:
+
+const STALE_THRESHOLD_MS = 25000;
+
+5. FIX: True Stale-Connection Detection + Auto-Resubscribe
+
+Differentiate between:
+
+Low liquidity (normal) — ticks 5–25 seconds apart
+vs
+Stale subscription (broken) — no tick > 30 seconds
+
+Directive:
+
+if (ageMs > 30000) {
+    resubscribe(symbol);
+    log("[I8E-WS-RESUB] stale_channel_detected", { symbol, ageMs });
+}
+
+
+But do NOT resubscribe if:
+
+ageMs > 5000 && ageMs < 30000
+
+
+That window is expected low-volume behavior.
+
+6. Add New Diagnostic Endpoint for WS Health
+
+Create:
+
+GET /api/diagnostics/i8e/ws-health
+
+
+Return for each symbol:
+
+{
+  symbol,
+  subscribed,
+  lastTickAt,
+  ageMs,
+  isLowVolume: ageMs > 5000 && ageMs < 30000,
+  isStale: ageMs >= 30000
+}
+
+
+This allows us to confirm:
+
+which symbols are healthy
+
+which are slow due to market
+
+which are broken
+
+7. Verification After Implementation
+
+After changes are deployed:
+
+Start new paper trading session (test user)
+
+Verify:
+
+DB rows = UI rows (no duplicates)
+
+WS subscription coverage → approaching 100%
+
+priceSource = kraken_ws for MOST assets
+
+REST fallback appears only on truly non-supported pairs
+
+Run:
+
+/api/diagnostics/i8e/ws-health
+
+
+Confirm:
+
+low-volume symbols flagged correctly
+
+stale symbols resubscribed
+
+no future duplicates appear
