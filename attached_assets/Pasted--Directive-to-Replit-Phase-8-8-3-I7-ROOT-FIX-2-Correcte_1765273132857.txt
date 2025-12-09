@@ -1,0 +1,277 @@
+✅ Directive to Replit — Phase 8.8.3-I7-ROOT-FIX-2 (Corrected Credentials)
+Restore Engine Start/Stop Wiring, Backend Duplicate Guard, and Data Flow
+Test User Credentials (USE THESE EXACT VALUES)
+username = testuser123
+password = SecurePass123!
+
+Context (must be included for Replit)
+
+/api/paper-sim/start reports success, but the engine never actually starts, per diagnostics.
+
+i7-root/engine-status always shows:
+
+isRunning: false  
+hasSignalOrchestrator: false
+
+
+Therefore:
+
+No WebSocket subscriptions
+
+No price updates in backend
+
+No exits
+
+No trade history
+
+Duplicates appear
+
+Engine “stop” doesn’t stop (engine was never running)
+
+This is not a WebSocket or symbol mapping issue.
+This is engine not wired to the paper-sim start mechanism.
+
+Your task is to fix this wiring, fix duplicate creation, and correct stop behavior.
+
+🚨 A. Fix Engine Start Wiring (Critical)
+A1 — Trace the start path
+
+Search for the handler:
+
+POST /api/paper-sim/start
+
+
+Identify which function it calls:
+
+Likely in paper-sim-service.ts
+
+It currently updates session state but does not call the TradingEngine / PaperExecutionEngine at all.
+
+A2 — Fix it
+
+Inside the start handler (e.g., startPaperSimulation()):
+
+After marking the session active:
+
+Explicitly call the engine start method for paper mode.
+
+Example (adapt names to actual file structure):
+
+// After session is activated
+await tradingEngine.start({
+    mode: 'paper',
+    userId,
+});
+
+
+If paper mode uses a separate engine (e.g. PaperExecutionEngine):
+
+await paperExecutionEngine.start();
+
+A3 — Ensure diagnostics use the same engine instance
+
+The engine instance used by:
+
+GET /api/diagnostics/i7-root/engine-status
+
+
+must be the same instance you start above.
+
+If the project has multiple engine instances floating around:
+
+Consolidate → diagnostics, start, stop must reference the same object.
+
+🚨 B. Fix Engine Stop Wiring
+
+The regression “new trades appear after stop” means the engine keeps running.
+
+B1 — Inspect the stop path
+
+Find the handler:
+
+POST /api/paper-sim/stop
+
+
+It currently:
+
+Stops session
+
+BUT does not stop the engine
+
+B2 — Fix it
+
+Add:
+
+await tradingEngine.stop({ mode: 'paper' });
+
+
+or:
+
+paperExecutionEngine.stop();
+
+
+Ensure:
+
+All intervals/timers are cleared
+
+Orchestrator is canceled
+
+No new signals flow
+
+No new trades can open
+
+🚨 C. Fix Backend Duplicate Guard (Before Insert)
+
+UI dedup is a visual patch only — duplicates must be prevented at the backend.
+
+C1 — Identify the paper position creation path
+
+Look in one of these:
+
+paper-execution-engine.ts
+
+storage.ts
+
+db.ts
+
+trading-engine.ts
+
+Find the code that inserts a new record into:
+
+paper_sim_open_positions
+
+C2 — Add duplicate guard
+
+Before inserting:
+
+const existing = await storage.getOpenPaperPositionsBySymbol(symbol);
+
+if (existing.length > 0) {
+    console.warn(`[I7-ROOT-FIX][DUP_GUARD] Prevented duplicate open position for ${symbol}`);
+    return; // do NOT insert a duplicate
+}
+
+
+Matching fields:
+
+same symbol
+
+same direction
+
+same mode (“paper”)
+
+status = "open"
+
+This must run BEFORE persistence.
+
+🚨 D. Keep UI Deduplication (Safety Belt Only)
+
+Ensure the dedup filter in:
+
+client/src/components/trading/active-trades-v2.tsx
+
+
+still removes visual duplicates.
+
+But backend prevention (Section C) is the real fix.
+
+🧪 E. REQUIRED VERIFICATION STEPS (Replit Must Run These)
+
+Use the correct credentials:
+
+username: testuser123
+password: SecurePass123!
+
+
+Run:
+
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"testuser123","password":"SecurePass123!"}' \
+  | jq -r '.token')
+
+echo "TOKEN prefix: ${TOKEN:0:12}..."
+
+1. Start Paper Trading
+curl -s -X POST http://localhost:5000/api/paper-sim/start \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"new"}' | jq .
+
+2. Wait 15 seconds
+
+Then:
+
+curl -s http://localhost:5000/api/diagnostics/i7-root/engine-status \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+
+Expected:
+
+paper.isRunning = true
+paper.hasSignalOrchestrator = true
+
+3. WebSocket Coverage Should Now Show Subscriptions
+curl -s http://localhost:5000/api/diagnostics/i7-ws-f/coverage \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+
+Expected:
+
+total > 0
+
+subscribed > 0
+
+4. REST Fallback Metrics Should Begin Logging
+curl -s http://localhost:5000/api/diagnostics/i7-ws-e/rest-fallback-metrics \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+5. Wait 45–60 seconds
+
+Then verify trade history and duplicates:
+
+curl -s http://localhost:5000/api/paper-sim/history?limit=10 \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+curl -s http://localhost:5000/api/paper-sim/active-trades \
+  -H "Authorization: Bearer $TOKEN" | \
+  jq '.positions | group_by(.symbol) | map({symbol: .[0].symbol, count:length})'
+
+
+Expected: all counts = 1
+
+6. Stop Paper Trading
+curl -s -X POST http://localhost:5000/api/paper-sim/stop \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+
+Then:
+
+curl -s http://localhost:5000/api/diagnostics/i7-root/engine-status \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+
+Expected:
+
+paper.isRunning = false
+
+📌 Final Requirements Summary for Replit
+You must:
+
+Fix start wiring
+
+Fix stop wiring
+
+Fix duplicate guard
+
+Keep UI dedup
+
+Ensure diagnostics reflect actual engine state
+
+You must NOT:
+
+Change test user credentials
+
+Add new phases or additional diagnostics
+
+Modify WebSocket or symbol mapping systems again
