@@ -1,0 +1,88 @@
+📘 DIRECTIVE for Replit (Next Step — Investigation Only)
+
+Do NOT make changes yet. Only investigate and report.
+
+Investigate the following:
+1. Why are these symbols Tier 3?
+
+For each symbol missing WS updates (e.g., RUNE/USD, MORPHO/USD, AERO/USD, ONDO/USD):
+
+What does krakenAssetPairsService.toKrakenWS() return?
+
+What raw pair data is Kraken returning for these?
+
+Why is the confidence tier < 2?
+
+Is symbol normalization ambiguous?
+
+Is the WS pair listed under wsname or altname in Kraken’s /AssetPairs API?
+
+2. Does Kraken WebSocket actually support these pairs?
+
+Check via API:
+
+Are they present in Kraken’s WS channel “subscribe status”?
+
+Do they have wsname at all?
+
+Do they require alternative normalization (e.g., “XBT” vs “BTC”)?
+
+3. What causes the WebSocket adapter to reject subscription?
+
+Produce a list:
+
+Symbol
+
+Kraken API canonical name
+
+Kraken WS name (if exists)
+
+Mapper confidence tier
+
+Subscription rejection reason
+
+4. Identify whether fallback to REST is occurring because:
+
+Subscription was rejected
+
+Subscription was accepted but no ticks are arriving
+
+Mapping resolved to WS name that doesn’t exist
+
+Kraken throttled or rate-limited subscriptions
+
+Kraken WS channel for certain altcoins is slow or dead
+
+🧪 Once the above diagnostic report is complete, we decide:
+If Kraken WebSocket does support the missing assets
+
+→ We fix the auto-mapper logic so it correctly resolves and subscribes.
+
+If Kraken WebSocket does NOT support some assets
+
+→ We keep REST fallback but classify those assets explicitly as REST-preferred.
+
+If some assets are slow due to liquidity
+
+→ We classify them “slow WS assets” and maintain baseline expectations.
+
+🚨 WHY WE MUST NOT ACCEPT THE CURRENT SITUATION
+
+You saw it during your testing:
+
+SOL/USD updated → because it had WS ticks
+
+Others froze → because they never had WS ticks
+
+Exit timing was off
+
+UI looked broken
+
+Only occasional stop_hit fired
+
+Many trades were stuck as “Open – Not Closed Yet”
+
+Price mismatches caused RTB anomalies (even though we pause RTB work)
+
+Price pipeline correctness is foundational.
+Everything downstream depends on it.
