@@ -9538,6 +9538,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const netPnl = currentBalance - startingBalance;
       const netPnlPercent = startingBalance > 0 ? (netPnl / startingBalance) * 100 : 0;
       
+      // Phase 8.8.3-I9: Get open trades count and max slots for TopBar metric
+      const maxOpenTrades = await storage.getGuardrailValue('paper', 'max_open_positions') || 15;
+      const openTradesCount = openPositions.length;
+      const slotsAvailable = Math.max(0, maxOpenTrades - openTradesCount);
+      
       res.json({
         ok: true,
         startingBalance,
@@ -9547,7 +9552,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         netPnl,
         netPnlPercent,
         sessionStart: sessionStart?.toISOString() || null,
-        closedTradesCount: sessionTrades.length
+        closedTradesCount: sessionTrades.length,
+        openTradesCount,
+        maxOpenTrades,
+        slotsAvailable
       });
     } catch (error) {
       console.error('Error fetching portfolio summary:', error);

@@ -23,8 +23,20 @@ import {
   RefreshCw,
   Beaker,
   Wifi,
-  WifiOff
+  WifiOff,
+  RotateCcw
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface ActiveTrade {
   id: string;
@@ -470,6 +482,30 @@ export default function ActiveTradesV2() {
   const [sortField, setSortField] = useState<SortField>('slotNumber');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   
+  // Phase 8.8.3-I9 Part C: Reset Session Mutation
+  const resetSessionMutation = useMutation({
+    mutationFn: async () => {
+      return await apiFetch('/api/paper-sim/reset', { method: 'POST', body: JSON.stringify({ mode: 'paper' }) });
+    },
+    onSuccess: (result: any) => {
+      toast({
+        title: "Session Reset",
+        description: result?.message || "Paper trading session has been cleared. Set new balance when you restart trading.",
+      });
+      // Invalidate relevant queries
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/active-trades'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/portfolio-summary'] });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to reset session",
+        variant: "destructive",
+      });
+    }
+  });
+  
   // Phase 8.8.3-B3.6: Local state for real-time price updates from WebSocket
   const [livePrices, setLivePrices] = useState<Record<string, { price: number; timestamp: string }>>({});
   const [wsConnectionStatus, setWsConnectionStatus] = useState<'connected' | 'disconnected'>('disconnected');
@@ -725,6 +761,43 @@ export default function ActiveTradesV2() {
             {isConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
             <span>{isConnected ? "Connected" : "Offline"}</span>
           </div>
+          
+          {/* Phase 8.8.3-I9 Part C: Clear & Reset Session Button */}
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs h-7 border-orange-200 text-orange-600 hover:bg-orange-50"
+                data-testid="button-clear-reset"
+              >
+                <RotateCcw className="w-3 h-3 mr-1" />
+                <span className="hidden sm:inline">Clear & Reset</span>
+                <span className="sm:hidden">Reset</span>
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Reset Paper Trading Session?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will close all open positions and clear all trade history. 
+                  Your balance at time of reset will be preserved until you set a new balance when restarting trading.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>No</AlertDialogCancel>
+                <AlertDialogAction 
+                  onClick={() => resetSessionMutation.mutate()}
+                  disabled={resetSessionMutation.isPending}
+                  className="bg-orange-600 hover:bg-orange-700"
+                >
+                  {resetSessionMutation.isPending ? <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> : null}
+                  Yes, Reset
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-blue-500/10">
             <Beaker className="w-4 h-4 text-blue-600 dark:text-blue-400" />
             <span className="text-sm font-medium text-blue-600 dark:text-blue-400">

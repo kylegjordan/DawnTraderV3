@@ -107,13 +107,15 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   const { mode: currentMode, setMode } = useTradingMode();
   
   // Phase 8.8.3-I9 Part B: Portfolio Summary for TopBar metrics row
-  const { data: portfolioData, isFetching: isPortfolioFetching } = useQuery<{
+  const { data: portfolioData } = useQuery<{
     ok: boolean;
     startingBalance: number;
     currentBalance: number;
     netPnl: number;
     netPnlPercent: number;
     totalPositionValue: number;
+    openTradesCount: number;
+    slotsAvailable: number;
   }>({
     queryKey: ['/api/paper-sim/portfolio-summary'],
     queryFn: async () => {
@@ -129,34 +131,6 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     staleTime: 5000,
   });
   
-  // Phase 8.8.3-I9 Part C: Reset Session state
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
-  
-  // Phase 8.8.3-I9 Part C: Reset Session Mutation
-  const resetSessionMutation = useMutation({
-    mutationFn: async () => {
-      return await apiRequest('POST', '/api/paper-sim/reset', { mode: 'paper' });
-    },
-    onSuccess: (result: any) => {
-      toast({
-        title: "Session Reset",
-        description: result?.message || "Paper trading session has been cleared. Set new balance when you restart trading.",
-      });
-      setShowResetConfirm(false);
-      // Invalidate relevant queries
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/active-trades'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/portfolio-summary'] });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to reset session",
-        variant: "destructive",
-      });
-    }
-  });
-
   // Update dual time display (UTC + Local)
   useEffect(() => {
     const updateTime = () => {
@@ -899,47 +873,6 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
             </div>
           </div>
           
-          {/* Phase 8.8.3-I9 Part C: Clear & Reset Session Button */}
-          {currentMode === 'paper' && (
-            showResetConfirm ? (
-              <div className="flex items-center gap-1 animate-in fade-in duration-200">
-                <span className="text-xs text-muted-foreground hidden sm:inline">Reset?</span>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={() => resetSessionMutation.mutate()}
-                  disabled={resetSessionMutation.isPending}
-                  className="text-xs h-7 px-2"
-                  data-testid="button-confirm-reset"
-                >
-                  {resetSessionMutation.isPending ? <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> : null}
-                  Yes
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setShowResetConfirm(false)}
-                  className="text-xs h-7 px-2"
-                  data-testid="button-cancel-reset"
-                >
-                  No
-                </Button>
-              </div>
-            ) : (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setShowResetConfirm(true)}
-                className="text-xs h-7 border-orange-200 text-orange-600 hover:bg-orange-50"
-                data-testid="button-clear-reset"
-              >
-                <RotateCcw className="w-3 h-3 mr-1" />
-                <span className="hidden sm:inline">Clear & Reset</span>
-                <span className="sm:hidden">Reset</span>
-              </Button>
-            )
-          )}
-          
           {/* Walter Approvals Notifications */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -1020,7 +953,6 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
             <span className="text-muted-foreground">Current:</span>
             <span className="font-mono font-semibold">
               ${portfolioData.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              {isPortfolioFetching && <RefreshCw className="w-3 h-3 ml-1 animate-spin inline" />}
             </span>
           </div>
           <div className="flex items-center gap-1 text-xs md:text-sm">
@@ -1044,6 +976,10 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
           <div className="hidden md:flex items-center gap-1 text-xs md:text-sm">
             <span className="text-muted-foreground">Positions:</span>
             <span className="font-mono font-semibold">${portfolioData.totalPositionValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          </div>
+          <div className="flex items-center gap-1 text-xs md:text-sm">
+            <span className="text-muted-foreground">Open/Slots:</span>
+            <span className="font-mono font-semibold">{portfolioData.openTradesCount ?? 0} / {portfolioData.slotsAvailable ?? 0}</span>
           </div>
         </div>
       )}
