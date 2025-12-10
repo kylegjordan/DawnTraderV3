@@ -627,13 +627,17 @@ export default function ActiveTradesV2() {
       });
     },
     onSuccess: (result) => {
-      if (result?.success === true) {
+      console.log('[8.8.3-A1][DEBUG] Close trade response:', result);
+      // Check for success (supports both new 'success' and legacy 'ok' fields)
+      const isSuccess = result?.success === true || result?.ok === true || result?.closedTradeId;
+      if (isSuccess) {
         const pnl = result?.pnl ?? 0;
         toast({
           title: "Trade Closed",
           description: result?.message || `P/L: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`,
         });
       } else {
+        console.error('[8.8.3-A1][ERROR] Close trade failed:', result);
         toast({
           title: "Error",
           description: result?.error || "Failed to close trade",
@@ -642,7 +646,8 @@ export default function ActiveTradesV2() {
       }
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/active-trades'] });
     },
-    onError: () => {
+    onError: (error) => {
+      console.error('[8.8.3-A1][ERROR] Close trade mutation error:', error);
       toast({
         title: "Error",
         description: "Failed to close trade",
@@ -660,12 +665,16 @@ export default function ActiveTradesV2() {
       });
     },
     onSuccess: (result) => {
-      if (result?.success === true) {
+      console.log('[8.8.3-A3][DEBUG] Clear stranded response:', result);
+      // Check for success (supports both new 'success' and legacy 'ok' fields)
+      const isSuccess = result?.success === true || result?.ok === true;
+      if (isSuccess) {
         toast({
           title: "Stranded Trades Cleared",
-          description: result.message || `Cleared ${result.strandedClosed || 0} stranded trades`,
+          description: result.message || `Cleared ${result.strandedClosed || result.clearedCount || 0} stranded trades`,
         });
       } else {
+        console.error('[8.8.3-A3][ERROR] Clear stranded failed:', result);
         toast({
           title: "Error",
           description: result?.error || "Failed to clear stranded trades",
@@ -674,7 +683,8 @@ export default function ActiveTradesV2() {
       }
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/active-trades'] });
     },
-    onError: () => {
+    onError: (error) => {
+      console.error('[8.8.3-A3][ERROR] Clear stranded mutation error:', error);
       toast({
         title: "Error",
         description: "Failed to clear stranded trades",
