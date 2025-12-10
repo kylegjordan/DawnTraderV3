@@ -47,6 +47,18 @@ Phase 8.8.3-I9 (Enhanced Active Trades UI) provides comprehensive UI improvement
 - **Part D - Cosmetic Fixes**: `formatNumber()` utility applied to all monetary values for comma-separated formatting
 Backend methods `getSymbolFrequencyInfo()` in KrakenWebSocketAdapter and `getSymbolVolumeInfo()` in ActiveFilterPoolService provide the data.
 
+Phase 8.8.3-I10 (Volume Enrichment) persists 24h volume data at trade creation time using FX5 as the authoritative source, with a Kraken REST API fallback via `MarketVolumeCache`:
+- **DB Columns**: Added `volume_24h` and `volume_bucket` to `paper_sim_open_positions` table
+- **Volume Source Priority**: FX5 signal metadata → Active Filter Pool → Kraken REST (5-min TTL cache)
+- **Volume Buckets**: ≥$5M=High, ≥$500K=Medium, ≥$50K=Low, <$50K=Very Low
+- **No Per-Refresh Fetching**: Volume is captured at trade creation, not updated per UI refresh
+- **API Responses**: `/api/paper-sim/active-trades` returns volume from DB with pool/cache fallback
+
+Trade History Table enhancements:
+- **New Columns**: Quantity (between Exit and Close Reason), Confidence (after P/L%)
+- **Number Formatting**: `formatNumber()` utility for comma-separated monetary values
+- **Confidence Display**: Normalized to 0-100%, color-coded (Green ≥80%, Blue 60-79%, Orange 40-59%, Red <40%)
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.
