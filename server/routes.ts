@@ -9651,9 +9651,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const pnl = (currentPrice - entryPrice) * quantity;
       const pnlPercent = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice) * 100 : 0;
       
-      // Move to closed trades
-      await storage.createPaperSimTrade('paper', {
-        id: position.id,
+      // Build closed trade payload
+      const closedTradePayload = {
         symbol: position.symbol,
         strategyName: position.strategyName,
         side: position.side,
@@ -9666,12 +9665,23 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         pnlPercent: pnlPercent.toString(),
         fees: '0',
         slippage: '0',
-        openedAt: position.openedAt,
+        openedAt: position.openedAt || new Date(),
         closedAt: new Date(),
         closeReason: reason || 'manual_close',
         confidence: position.confidence?.toString(),
         metadata: position.metadata
-      });
+      };
+      
+      console.log('[8.8.3-B1][CLOSE_TRADE_PAYLOAD]', JSON.stringify(closedTradePayload, null, 2));
+      
+      // Move to closed trades
+      try {
+        await storage.createPaperSimTrade('paper', closedTradePayload);
+      } catch (insertError) {
+        const insertErrorMsg = insertError instanceof Error ? insertError.message : String(insertError);
+        console.error('[8.8.3-B1][INSERT_ERROR]', insertErrorMsg, insertError);
+        throw insertError;
+      }
       
       // Delete from open positions
       await storage.deletePaperSimOpenPosition('paper', id);
@@ -9697,8 +9707,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         pnlPercent 
       });
     } catch (error) {
-      console.error('Error closing trade:', error);
-      res.status(500).json({ success: false, error: 'Failed to close trade' });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('[8.8.3-B1][CLOSE_TRADE_ERROR]', errorMessage, error);
+      res.status(500).json({ success: false, error: 'Failed to close trade', details: errorMessage });
     }
   });
 
