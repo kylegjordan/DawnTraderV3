@@ -9201,10 +9201,19 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       console.log(`[B7.A] Hard reset result:`, resetResult.details);
       
-      // Legacy cleanup as additional safety (B7.A handles most, this catches edge cases)
-      await storage.deleteAllPaperSimTrades('paper');
-      await storage.deleteAllPaperSimOpenPositions('paper');
-      await storage.deleteAllPaperSimTradeLogs('paper');
+      // Phase 8.8.3-I9-RESET-FIX: Soft reset preserves trade history
+      // Only clear open positions - trade history remains for review
+      if (isSoftReset) {
+        // Soft reset: only clear open positions, preserve trade history
+        await storage.deleteAllPaperSimOpenPositions('paper');
+        console.log(`[PaperSim] Soft reset: cleared open positions, trade history preserved`);
+      } else {
+        // Hard reset: full cleanup including trade history
+        await storage.deleteAllPaperSimTrades('paper');
+        await storage.deleteAllPaperSimOpenPositions('paper');
+        await storage.deleteAllPaperSimTradeLogs('paper');
+        console.log(`[PaperSim] Hard reset: cleared trades, positions, and logs`);
+      }
       
       // REB 8.8.3-I: Clear RTB signals on simulation reset
       const clearedSignals = await storage.deleteAllTradingSignals('paper');
