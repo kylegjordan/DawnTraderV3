@@ -643,7 +643,7 @@ export default function ActiveTradesV2() {
             isConnected ? "text-green-600 bg-green-500/10" : "text-red-600 bg-red-500/10"
           )}>
             {isConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-            <span>{isConnected ? "Live" : "Offline"}</span>
+            <span>{isConnected ? "Connected" : "Offline"}</span>
           </div>
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-blue-500/10">
             <Beaker className="w-4 h-4 text-blue-600 dark:text-blue-400" />
