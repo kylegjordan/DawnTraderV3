@@ -483,8 +483,8 @@ function IntegrityBanner({
               <AlertDialogHeader>
                 <AlertDialogTitle>Reset Paper Trading Session?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will close all open positions and clear all trade history. 
-                  Your balance at time of reset will be preserved until you set a new balance when restarting trading.
+                  This will close all open positions and refresh session state. 
+                  Your trade history will remain intact for review.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
