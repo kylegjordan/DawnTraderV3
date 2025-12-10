@@ -9687,9 +9687,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       await storage.deletePaperSimOpenPosition('paper', id);
       
       // Broadcast update via WebSocket
-      broadcastToAll({
+      contextBridge.broadcast({
         type: 'active_trade_closed',
-        data: {
+        payload: {
           id,
           symbol: position.symbol,
           pnl,
@@ -9787,9 +9787,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       }
       
       // Broadcast update
-      broadcastToAll({
+      contextBridge.broadcast({
         type: 'stranded_trades_cleared',
-        data: { clearedCount, userId }
+        payload: { clearedCount, userId }
       });
       
       // Phase 8.8.3-A3: Standardized success response (includes clearedCount for backward compatibility)
