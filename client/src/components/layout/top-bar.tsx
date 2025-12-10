@@ -184,6 +184,30 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     }
   }, [wsMessages, queryClient, setMode]);
 
+  // Phase 8.8.3-I10-FIX: Listen for trade_closed events to immediately refresh portfolio
+  useEffect(() => {
+    const tradeClosedUpdates = wsMessages.filter((msg: any) => msg.type === 'trade_closed');
+    if (tradeClosedUpdates.length > 0 && currentMode === 'paper') {
+      console.log('[TopBar][I10-FIX] Trade closed - refreshing portfolio summary');
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/portfolio-summary'] });
+    }
+  }, [wsMessages, queryClient, currentMode]);
+
+  // Phase 8.8.3-I10-FIX: Throttled price update listener for portfolio (every 3 seconds max)
+  const [lastPortfolioRefresh, setLastPortfolioRefresh] = useState<number>(0);
+  useEffect(() => {
+    const priceUpdates = wsMessages.filter((msg: any) => msg.type === 'price_updated');
+    if (priceUpdates.length > 0 && currentMode === 'paper') {
+      const now = Date.now();
+      // Throttle to max once every 3 seconds to avoid UI thrashing
+      if (now - lastPortfolioRefresh > 3000) {
+        console.log('[TopBar][I10-FIX] Price update - refreshing portfolio summary (throttled)');
+        queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/portfolio-summary'] });
+        setLastPortfolioRefresh(now);
+      }
+    }
+  }, [wsMessages, queryClient, currentMode, lastPortfolioRefresh]);
+
   // Phase 27.F.14.N: Listen for trading_data_updated events to refresh trading tabs
   useEffect(() => {
     const tradingDataUpdates = wsMessages.filter((msg: any) => msg.type === 'trading_data_updated');
