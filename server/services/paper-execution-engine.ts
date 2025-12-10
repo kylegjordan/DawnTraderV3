@@ -64,6 +64,7 @@ import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js
 import { rtbMetricsService } from './rtb-metrics-service.js';
 import { normalizeToInternalSymbol, getKrakenRestPair } from '../markets/kraken-symbol-resolver.js';
 import { priceTraceService } from './price-trace-service.js';
+import { marketVolumeCache } from './market-volume-cache.js';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail' | 'manual_stop';
@@ -2008,6 +2009,35 @@ export class PaperExecutionEngine {
       // Note: Duplicate guard moved to BEFORE trade creation (I7-PM-FOCUS C1)
       // Old I7-ROOT-FIX (C) removed - duplicate guard now prevents orphan trades
 
+      // Phase 8.8.3-I10: Get volume data (FX5 first, then cache/Kraken fallback)
+      let volume24h = 0;
+      let volumeBucket: 'High' | 'Medium' | 'Low' | 'Very Low' = 'Very Low';
+      
+      // Try FX5 metadata first (authoritative source at trade creation)
+      if (signal.metadata?.volume24h && signal.metadata.volume24h > 0) {
+        volume24h = signal.metadata.volume24h;
+        volumeBucket = marketVolumeCache.classifyVolume(volume24h);
+        console.log(`[I10-VOLUME] Using FX5 volume for ${signal.symbol}: $${(volume24h/1000000).toFixed(2)}M (${volumeBucket})`);
+      } else {
+        // Try active filter pool
+        const poolEntry = activeFilterPool.getSymbolVolumeInfo(signal.symbol, this.mode);
+        if (poolEntry.volume24h > 0) {
+          volume24h = poolEntry.volume24h;
+          volumeBucket = poolEntry.volumeBucket;
+          console.log(`[I10-VOLUME] Using pool volume for ${signal.symbol}: $${(volume24h/1000000).toFixed(2)}M (${volumeBucket})`);
+        } else {
+          // Fallback: Fetch from Kraken via cache (async but non-blocking for position creation)
+          try {
+            const cachedVolume = await marketVolumeCache.getVolume(signal.symbol);
+            volume24h = cachedVolume.volume24h;
+            volumeBucket = cachedVolume.volumeBucket;
+            console.log(`[I10-VOLUME] Using Kraken fallback for ${signal.symbol}: $${(volume24h/1000000).toFixed(2)}M (${volumeBucket})`);
+          } catch (volError) {
+            console.warn(`[I10-VOLUME] Failed to get volume for ${signal.symbol}:`, volError);
+          }
+        }
+      }
+
       // Create open position
       const openPosition = await storage.createPaperSimOpenPosition(this.mode, {
         symbol: signal.symbol,
@@ -2021,6 +2051,8 @@ export class PaperExecutionEngine {
         unrealizedPnl: '0',
         unrealizedPnlPercent: '0',
         confidence: (signal.confidence * 100).toString(),
+        volume24h: volume24h.toString(),
+        volumeBucket: volumeBucket,
         metadata: {
           ...signal.metadata,
           tradeId: trade.id,
