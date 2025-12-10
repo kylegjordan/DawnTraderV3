@@ -21,6 +21,12 @@ import {
   RefreshCw
 } from "lucide-react";
 
+function formatNumber(value: number | string, decimals: number = 2): string {
+  const num = typeof value === 'string' ? parseFloat(value) : value;
+  if (isNaN(num)) return '-';
+  return num.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
 const strategyColors: Record<string, string> = {
   vwap_pullback: "bg-primary/10 text-primary",
   abcd_long: "bg-chart-2/10 text-chart-2",
@@ -497,9 +503,11 @@ export function TradeHistoryTab() {
                     <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Strategy</th>
                     <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Entry</th>
                     <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Exit</th>
+                    <th className="text-right p-3 text-sm font-semibold text-muted-foreground">Quantity</th>
                     <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Close Reason</th>
-                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">P/L</th>
-                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">P/L %</th>
+                    <th className="text-right p-3 text-sm font-semibold text-muted-foreground">P/L</th>
+                    <th className="text-right p-3 text-sm font-semibold text-muted-foreground">P/L %</th>
+                    <th className="text-right p-3 text-sm font-semibold text-muted-foreground">Confidence</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -543,11 +551,15 @@ export function TradeHistoryTab() {
                         </td>
                         
                         <td className="p-3 font-mono text-sm">
-                          {trade.entryPrice ? `$${parseFloat(trade.entryPrice).toFixed(4)}` : '-'}
+                          {trade.entryPrice ? `$${formatNumber(trade.entryPrice, 4)}` : '-'}
                         </td>
                         
                         <td className="p-3 font-mono text-sm">
-                          {trade.exitPrice ? `$${parseFloat(trade.exitPrice).toFixed(4)}` : '-'}
+                          {trade.exitPrice ? `$${formatNumber(trade.exitPrice, 4)}` : '-'}
+                        </td>
+                        
+                        <td className="p-3 text-right font-mono text-sm">
+                          {trade.quantity ? formatNumber(trade.quantity, 6) : '-'}
                         </td>
                         
                         <td className="p-3">
@@ -564,16 +576,30 @@ export function TradeHistoryTab() {
                           </Badge>
                         </td>
                         
-                        <td className="p-3">
+                        <td className="p-3 text-right">
                           <div className={cn("font-mono text-sm font-semibold", isProfit ? "text-green-600" : "text-red-600")}>
-                            {isProfit ? '+' : ''}${pnl.toFixed(2)}
+                            {isProfit ? '+' : ''}${formatNumber(pnl)}
                           </div>
                         </td>
                         
-                        <td className="p-3">
+                        <td className="p-3 text-right">
                           <div className={cn("font-mono text-sm font-semibold", isProfit ? "text-green-600" : "text-red-600")}>
-                            {isProfit ? '+' : ''}{pnlPercent.toFixed(2)}%
+                            {isProfit ? '+' : ''}{formatNumber(pnlPercent)}%
                           </div>
+                        </td>
+                        
+                        <td className="p-3 text-right">
+                          {(() => {
+                            const confidence = parseFloat(trade.confidence || '0') * 100;
+                            const confColor = confidence >= 80 ? 'text-green-600' : 
+                                             confidence >= 60 ? 'text-blue-600' : 
+                                             confidence >= 40 ? 'text-orange-500' : 'text-red-600';
+                            return (
+                              <span className={cn("font-mono text-sm font-medium", confColor)}>
+                                {trade.confidence ? `${formatNumber(confidence, 0)}%` : '-'}
+                              </span>
+                            );
+                          })()}
                         </td>
                       </tr>
                     );
