@@ -23,7 +23,13 @@ import {
   RefreshCw,
   Beaker,
   Wifi,
-  WifiOff
+  WifiOff,
+  RotateCcw,
+  TrendingUp,
+  TrendingDown,
+  Wallet,
+  DollarSign,
+  BarChart3
 } from "lucide-react";
 
 interface ActiveTrade {
@@ -133,6 +139,114 @@ function formatVolume(volume: number): string {
     return `$${(volume / 1000).toFixed(0)}K`;
   }
   return `$${volume.toFixed(0)}`;
+}
+
+// Phase 8.8.3-I9 Part B: Global Metrics Bar
+function GlobalMetricsBar({ 
+  portfolio, 
+  positionCount,
+  onReset,
+  isResetting 
+}: { 
+  portfolio: PortfolioSummary;
+  positionCount: number;
+  onReset: () => void;
+  isResetting: boolean;
+}) {
+  const isProfitable = portfolio.netPnl >= 0;
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  
+  return (
+    <div className="mb-4 p-4 rounded-lg border bg-card">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-6">
+          <div className="flex items-center gap-2">
+            <Wallet className="w-4 h-4 text-muted-foreground" />
+            <div className="text-sm">
+              <span className="text-muted-foreground">Balance:</span>
+              <span className="ml-2 font-semibold">${formatNumber(portfolio.currentBalance, 2)}</span>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <DollarSign className="w-4 h-4 text-muted-foreground" />
+            <div className="text-sm">
+              <span className="text-muted-foreground">Cash:</span>
+              <span className="ml-2 font-semibold">${formatNumber(portfolio.cashBalance, 2)}</span>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-muted-foreground" />
+            <div className="text-sm">
+              <span className="text-muted-foreground">Positions:</span>
+              <span className="ml-2 font-semibold">${formatNumber(portfolio.totalPositionValue, 2)}</span>
+              <span className="ml-1 text-muted-foreground">({positionCount})</span>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            {isProfitable ? (
+              <TrendingUp className="w-4 h-4 text-green-600" />
+            ) : (
+              <TrendingDown className="w-4 h-4 text-red-600" />
+            )}
+            <div className="text-sm">
+              <span className="text-muted-foreground">Net P/L:</span>
+              <span className={cn(
+                "ml-2 font-bold",
+                isProfitable ? "text-green-600" : "text-red-600"
+              )}>
+                {isProfitable ? '+' : ''}{formatNumber(portfolio.netPnl, 2)}
+                <span className="ml-1 text-xs">
+                  ({isProfitable ? '+' : ''}{portfolio.netPnlPercent.toFixed(2)}%)
+                </span>
+              </span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          {showResetConfirm ? (
+            <div className="flex items-center gap-2 animate-in fade-in duration-200">
+              <span className="text-sm text-muted-foreground">Reset all data?</span>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => {
+                  onReset();
+                  setShowResetConfirm(false);
+                }}
+                disabled={isResetting}
+                className="text-xs"
+              >
+                {isResetting ? <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> : null}
+                Yes, Reset
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowResetConfirm(false)}
+                className="text-xs"
+              >
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowResetConfirm(true)}
+              className="text-xs border-orange-200 text-orange-600 hover:bg-orange-50"
+            >
+              <RotateCcw className="w-3 h-3 mr-1" />
+              Reset Session
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function HealthIndicator({ health }: { health: 'green' | 'yellow' | 'red' }) {
@@ -590,6 +704,35 @@ export default function ActiveTradesV2() {
     }
   });
   
+  // Phase 8.8.3-I9 Part C: Reset Session Mutation
+  const resetSessionMutation = useMutation({
+    mutationFn: async () => {
+      return await apiFetch('/api/paper-sim/reset', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'paper', balance: 10000 })
+      });
+    },
+    onSuccess: (result) => {
+      toast({
+        title: "Session Reset",
+        description: result.message || "Paper trading session has been reset to $10,000",
+      });
+      // Clear live prices state
+      setLivePrices({});
+      // Invalidate all paper-sim related queries
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/active-trades'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to reset session",
+        variant: "destructive",
+      });
+    }
+  });
+  
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
@@ -733,6 +876,13 @@ export default function ActiveTradesV2() {
           </div>
         </div>
       </div>
+      
+      <GlobalMetricsBar 
+        portfolio={portfolio}
+        positionCount={positions.length}
+        onReset={() => resetSessionMutation.mutate()}
+        isResetting={resetSessionMutation.isPending}
+      />
       
       <IntegrityBanner 
         integrity={integrity} 
