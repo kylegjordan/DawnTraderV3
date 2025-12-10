@@ -37,6 +37,13 @@ Phase 8.8.3-I7-ROOT-FIX and Phase 8.8.3-I7-ROOT-FIX-2 restore core engine functi
 
 Phase 8.8.4-IA-PRICE-CACHE introduces a centralized price cache module (`server/services/price-cache.ts`) for active trade pricing, ensuring a single source of truth updated from WebSocket and REST. Phase 8.8.3-I8C (WebSocket Subscription Reliability Fix) addresses low WebSocket coverage by subscribing all open positions on engine start, new trades, and reconnects, with a 5-second subscription health audit. Phase 8.8.3-I8C-SYMBOL-NORM (Database Symbol Normalization) ensures all database symbols use canonical BASE/QUOTE format, with normalization at the storage layer during trade creation to prevent format mismatches with the WebSocket price cache.
 
+Phase 8.8.3-A2R (Engine Stop & Reset Integrity Fix) ensures the trading engine is fully stopped before any database reset operations:
+- Reset endpoint (`/api/paper-sim/reset`) now calls `stopPaperSimulation()` FIRST and aborts with 500 if stop fails
+- Triple post-stop verification: session status check, manager null check, AND direct `globalPaperEngine.isEngineRunning()` check
+- Only proceeds to `hardResetPaperSimulation()` after ALL three verifications pass
+- All logging normalized to `[8.8.3-A2R]` prefix for consistent telemetry filtering
+- Eliminates race condition where engine could open trades during DB reset
+
 Phase 8.8.3-I9 (Enhanced Active Trades UI) provides comprehensive UI improvements:
 - **Part A - New Columns**: Three new columns added (Source/Frequency, Volume 24h, Confidence) with reordered layout: Symbol, Slot, Strategy, Qty/Value, Entry, TP/SL, Current, Distance, P/L$, P/L%, Confidence, Source, Volume, Duration, Actions
 - **Source/Frequency**: Shows data source (WS/REST) and tick frequency bucket (High/Medium/Low/Very Low based on average tick interval: <3s=High, 3-10s=Medium, 10-30s=Low, >30s=Very Low)
