@@ -394,12 +394,16 @@ function IntegrityBanner({
   integrity, 
   uiCount, 
   onClearStranded,
-  isClearing
+  isClearing,
+  onResetAll,
+  isResetting
 }: { 
   integrity: IntegrityStatus; 
   uiCount: number;
   onClearStranded: () => void;
   isClearing: boolean;
+  onResetAll: () => void;
+  isResetting: boolean;
 }) {
   const isMismatch = integrity.systemCount !== uiCount;
   const status = isMismatch ? 'MISMATCH' : integrity.status;
@@ -461,6 +465,41 @@ function IntegrityBanner({
             {isClearing ? <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> : <Trash2 className="w-3 h-3 mr-1" />}
             Clear Stranded
           </Button>
+          
+          {/* Phase 8.8.3-I9 Part C: Clear & Reset All Button */}
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs border-orange-200 text-orange-600 hover:bg-orange-50"
+                data-testid="button-clear-reset-all"
+              >
+                <RotateCcw className="w-3 h-3 mr-1" />
+                Clear & Reset All
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Reset Paper Trading Session?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will close all open positions and clear all trade history. 
+                  Your balance at time of reset will be preserved until you set a new balance when restarting trading.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>No</AlertDialogCancel>
+                <AlertDialogAction 
+                  onClick={onResetAll}
+                  disabled={isResetting}
+                  className="bg-orange-600 hover:bg-orange-700"
+                >
+                  {isResetting ? <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> : null}
+                  Yes, Reset All
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
     </div>
@@ -762,42 +801,6 @@ export default function ActiveTradesV2() {
             <span>{isConnected ? "Connected" : "Offline"}</span>
           </div>
           
-          {/* Phase 8.8.3-I9 Part C: Clear & Reset Session Button */}
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                size="sm"
-                variant="outline"
-                className="text-xs h-7 border-orange-200 text-orange-600 hover:bg-orange-50"
-                data-testid="button-clear-reset"
-              >
-                <RotateCcw className="w-3 h-3 mr-1" />
-                <span className="hidden sm:inline">Clear & Reset</span>
-                <span className="sm:hidden">Reset</span>
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Reset Paper Trading Session?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will close all open positions and clear all trade history. 
-                  Your balance at time of reset will be preserved until you set a new balance when restarting trading.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>No</AlertDialogCancel>
-                <AlertDialogAction 
-                  onClick={() => resetSessionMutation.mutate()}
-                  disabled={resetSessionMutation.isPending}
-                  className="bg-orange-600 hover:bg-orange-700"
-                >
-                  {resetSessionMutation.isPending ? <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> : null}
-                  Yes, Reset
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-          
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-blue-500/10">
             <Beaker className="w-4 h-4 text-blue-600 dark:text-blue-400" />
             <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
@@ -812,6 +815,8 @@ export default function ActiveTradesV2() {
         uiCount={positions.length}
         onClearStranded={() => clearStrandedMutation.mutate()}
         isClearing={clearStrandedMutation.isPending}
+        onResetAll={() => resetSessionMutation.mutate()}
+        isResetting={resetSessionMutation.isPending}
       />
       
       <Card className="rounded-xl border shadow-sm overflow-hidden">

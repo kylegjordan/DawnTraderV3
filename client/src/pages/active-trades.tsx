@@ -11,7 +11,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart3, TrendingUp, Lightbulb, AlertTriangle, History } from "lucide-react";
 import { FilterInsights } from "@/components/trading/filter-insights";
 import { TradeHistoryTab } from "@/components/trading/trade-history-tab";
-import { PortfolioSummaryStrip } from "@/components/trading/portfolio-summary-strip";
 import { Button } from "@/components/ui/button";
 
 interface ErrorBoundaryProps {
@@ -85,9 +84,6 @@ function TradingPageContent() {
           Manage open positions, view ready-to-buy signals, and explore filter insights
         </p>
       </div>
-
-      {/* B3: Portfolio Summary Strip - visible on all tabs */}
-      <PortfolioSummaryStrip />
 
       {/* B2: Tab order changed to reflect natural trading funnel: Filter → Ready → Open → History */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
