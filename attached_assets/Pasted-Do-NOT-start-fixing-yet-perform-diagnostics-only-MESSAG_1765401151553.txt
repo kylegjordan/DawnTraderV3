@@ -1,0 +1,85 @@
+Do NOT start fixing yet — perform diagnostics only.
+
+MESSAGE TO REPLIT:
+
+Please run the following investigation steps ONLY, without applying any fixes until I explicitly approve them.
+
+Step 1 — Confirm Whether the Reset Handler Stops the Engine
+
+Inspect the /api/paper-sim/reset endpoint and the reset button flow and confirm:
+
+Does the reset endpoint stop the engine synchronously before clearing DB tables?
+
+Or is engine.stop() never called?
+
+You must check:
+
+paperSessionResetService.hardResetPaperSimulation()
+
+manager.stop() and engine.stopTrading() presence & order
+
+Whether the stop method returns a Promise and whether the endpoint waits for it
+
+Report:
+
+A) Does the reset endpoint attempt to stop the engine?
+B) Does it await the stop?
+C) Is engine still running when DB reset begins?
+
+Step 2 — Inspect the Engine Loop for Race Conditions
+
+Check in paper-execution-engine.ts:
+
+Does the cycle loop continue running even if a reset is triggered mid-cycle?
+
+Does the loop check a isRunning flag at every iteration BEFORE opening trades?
+
+Report:
+
+A) Does the engine check isRunning before each cycle?
+B) Does the loop fully exit when engine.stop() is called?
+C) Can the engine open new trades during a reset? (Should be impossible)
+
+Step 3 — Diagnose the Orphan Trade
+
+The orphan LTC/USD position means:
+
+DB.clearPositions ran after engine opened a new trade
+
+Trade history mapping for that position may be incomplete (session/user/mode fields missing)
+
+Find out:
+
+A) Was LTC/USD opened before, during, or after the reset call?
+B) Do logs show the engine opening trades during the reset?
+C) Did the DB delete/insert operations overlap with the engine’s trade generation?
+
+
+Share timestamps from logs.
+
+Step 4 — Verify Whether Reset Audit Ran
+
+Search logs for:
+
+[I8E-AUDIT][RESET_INTEGRITY]
+checkPostResetState()
+
+
+Confirm:
+
+A) Did the audit run?
+B) What failed checks were logged?
+C) Was the engine still marked as running?
+D) Were WebSocket subscriptions still active?
+
+Step 5 — DO NOT FIX ANYTHING YET
+
+Only return:
+
+Findings for Steps 1–4
+
+Relevant log snippets
+
+Your interpretation of why the engine stayed active and reopened trades
+
+After that, I will provide the correct fix.
