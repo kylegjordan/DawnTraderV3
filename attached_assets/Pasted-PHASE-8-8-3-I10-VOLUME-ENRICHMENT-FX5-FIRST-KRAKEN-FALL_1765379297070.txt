@@ -1,0 +1,232 @@
+PHASE 8.8.3-I10 — VOLUME ENRICHMENT (FX5- FIRST, KRAKEN FALLBACK)
+
+Directive to Replit
+
+Purpose
+
+Fix the $0 volume problem and stabilize trade volume data by persisting FX5 volume at trade creation, providing UI buckets, and adding a caching fallback for Kraken volume without increasing REST load.
+
+1. REQUIREMENTS SUMMARY (IMPLEMENT ALL OF THIS)
+1.1 Use FX5 volume as the authoritative source at trade creation
+
+When a trade is executed from Ready-to-Buy → createPaperSimOpenPosition:
+
+Read the FX5 scan metadata attached to the signal
+
+Extract:
+
+volume_24h
+
+liquidity (if available)
+
+Persist these values into the new open-position record.
+
+1.2 Persist in DB (no async fetching needed per UI refresh)
+
+In the paper_sim_open_positions table, add:
+
+volume_24h (numeric)
+
+volume_bucket (string, one of: "High" | "Medium" | "Low" | "Very Low")
+
+Use the same bucket system as Active Filter Insights.
+
+1.3 Populate volume in backend API responses
+
+Modify:
+
+/api/paper-sim/active-trades
+
+/api/paper-sim/trade-history
+
+to include:
+
+volume_24h
+volume_bucket
+
+
+in each returned position.
+
+1.4 Add 5-min cached fallback when FX5 volume is missing
+
+Implement a lightweight fallback in a new in-memory module:
+
+krakenVolumeCache.ts
+
+
+Functionality:
+
+TTL: 5 minutes
+
+Key: canonical symbol (BTC/USD)
+
+Value: { volume_24h, timestamp }
+
+If FX5 volume missing →
+
+check cache
+
+else fetch Kraken REST /0/public/Ticker once
+
+store result
+
+DO NOT fetch again until TTL expires
+
+This avoids REST flooding and ensures all trades have volume.
+
+1.5 UI Volume Column
+
+The Active Trades tab must show:
+
+VOLUME
+$37K  (High)
+$540  (Low)
+$0    (Very Low)
+
+
+Format:
+
+$ prefix
+
+Thousands separators
+
+K/M abbreviations for large numbers
+
+Bucket label under the value (same style as CONF column)
+
+1.6 No Per-Tick Volume Fetching
+
+Volume must NOT:
+
+refresh per WebSocket tick
+
+refresh per position evaluation cycle
+
+cause new REST calls during live trading
+
+Volume changes slowly; we only update:
+
+when trade is created
+
+or manually via cache fallback (5 min TTL)
+
+1.7 No UI Blocking
+
+Volume computation must never block the Active Trades render path.
+
+2. SPECIFIC FILES TO MODIFY
+Backend — Required Changes
+2.1 server/storage.ts
+
+Update createPaperSimOpenPosition():
+
+Extract FX5 metadata from the signal
+
+Persist:
+
+volume_24h
+
+volume_bucket
+
+2.2 server/services/paper-execution-engine.ts
+
+Ensure that when a trade is built using a signal:
+
+attach FX5 volume metadata if available
+
+if missing, fetch from krakenVolumeCache (async)
+
+2.3 server/services/market-volume-cache.ts (NEW FILE)
+
+Functions:
+
+getVolume(symbol)
+setVolume(symbol, vol)
+refreshFromKraken(symbol)
+
+
+TTL = 5 minutes
+No repeated Kraken calls.
+
+2.4 server/routes.ts
+
+Modify:
+
+/api/paper-sim/active-trades
+
+/api/paper-sim/trade-history
+
+to include volume fields in the output.
+
+3. VOLUME BUCKET CLASSIFICATION
+
+Use a helper function:
+
+function classifyVolume(v) {
+  if (v >= 5_000_000) return "High";
+  if (v >= 500_000)   return "Medium";
+  if (v >= 50_000)    return "Low";
+  return "Very Low";
+}
+
+
+You may adjust thresholds based on Kraken’s volume distribution.
+
+4. TEST USER (required for backend verification)
+username: testuser123
+password: SecurePass123!
+
+
+Use this to:
+
+start paper trading
+
+open trades
+
+confirm new volume appears
+
+ensure fallback works when FX5 metadata missing
+
+5. WHAT NOT TO DO
+
+❌ Do NOT fetch Kraken volume per trade row
+
+❌ Do NOT make any REST calls per UI refresh
+
+❌ Do NOT try to fetch volume from WebSocket (Kraken doesn’t send it)
+
+❌ Do NOT compute volume at exit evaluation time
+
+❌ Do NOT mutate volume dynamically during position lifetime
+
+Volume is a trade-time attribute, not a live metric.
+
+6. ACCEPTANCE CRITERIA
+6.1 Active Trades Table
+
+Each row must show:
+
+SOURCE   VOLUME
+WS       $37K High
+REST     $540 Very Low
+
+6.2 DB state
+
+Open positions must now contain volume_24h and volume_bucket.
+
+6.3 No position should show $0 volume unless Kraken AND FX5 both fail.
+6.4 REST call pattern
+
+REST volume calls must remain:
+
+low frequency
+
+cached
+
+safe from rate limitation
+
+6.5 UX
+
+Volume should appear immediately upon trade creation.
+
+Directive End

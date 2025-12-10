@@ -1681,6 +1681,9 @@ export const paperSimOpenPositions = pgTable("paper_sim_open_positions", {
   openedAt: timestamp("opened_at", { withTimezone: true }).defaultNow(),
   lastUpdated: timestamp("last_updated", { withTimezone: true }).defaultNow(),
   confidence: decimal("confidence", { precision: 5, scale: 2 }),
+  // Phase 8.8.3-I10: Volume enrichment - FX5 first, Kraken fallback
+  volume24h: decimal("volume_24h", { precision: 20, scale: 2 }),
+  volumeBucket: varchar("volume_bucket", { length: 20 }), // 'High' | 'Medium' | 'Low' | 'Very Low'
   metadata: jsonb("metadata"), // Signal details, entry reasons, etc.
 }, (table) => ({
   symbolIdx: uniqueIndex("paper_sim_open_positions_symbol_idx").on(table.symbol),
