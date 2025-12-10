@@ -213,14 +213,103 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 2. Strategy */}
+      {/* 2. Slot */}
+      <td className="px-3 py-3">
+        <Badge variant="outline" className="font-mono text-xs">
+          {trade.slotNumber}/{trade.maxSlots}
+        </Badge>
+      </td>
+      
+      {/* 3. Strategy */}
       <td className="px-3 py-3">
         <Badge className={cn("text-xs font-medium", strategyColors[trade.strategy] || "bg-gray-500/10 text-gray-600")}>
           {strategyNames[trade.strategy] || trade.strategy}
         </Badge>
       </td>
       
-      {/* 3. Phase 8.8.3-I9: Source + Frequency (stacked) */}
+      {/* 4. Qty / Value (stacked) */}
+      <td className="px-3 py-3">
+        <div className="text-xs space-y-0.5">
+          <div className="font-mono text-sm">{formatNumber(trade.quantity, 6)}</div>
+          <div className="font-mono text-muted-foreground">${formatNumber(positionValue, 2)}</div>
+        </div>
+      </td>
+      
+      {/* 5. Entry */}
+      <td className="px-3 py-3">
+        <div className="font-mono text-sm">${trade.entryPrice.toFixed(6)}</div>
+      </td>
+      
+      {/* 6. TP / SL (stacked) */}
+      <td className="px-3 py-3">
+        <div className="text-xs space-y-0.5">
+          <div className="flex items-center gap-1">
+            <Target className="w-3 h-3 text-green-600" />
+            <span className="font-mono">${trade.takeProfit.toFixed(4)}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Shield className="w-3 h-3 text-red-600" />
+            <span className="font-mono">${trade.stopLoss.toFixed(4)}</span>
+          </div>
+        </div>
+      </td>
+      
+      {/* 7. Current Price */}
+      <td className="px-3 py-3">
+        <div className={cn(
+          "font-mono text-sm font-medium",
+          trade.currentPrice > trade.entryPrice ? "text-green-600" : 
+          trade.currentPrice < trade.entryPrice ? "text-red-600" : "text-muted-foreground"
+        )}>
+          ${trade.currentPrice.toFixed(6)}
+        </div>
+      </td>
+      
+      {/* 8. Distance to TP / SL (as actual values) */}
+      <td className="px-3 py-3">
+        <div className="text-xs space-y-0.5">
+          <div className={cn("font-mono", distanceToTPValue > 0 ? "text-green-600" : "text-muted-foreground")}>
+            TP: {distanceToTPValue >= 0 ? '+' : ''}${distanceToTPValue.toFixed(4)}
+          </div>
+          <div className={cn("font-mono", distanceToSLValue > 0 ? "text-green-600" : "text-red-600")}>
+            SL: {distanceToSLValue >= 0 ? '+' : ''}${distanceToSLValue.toFixed(4)}
+          </div>
+        </div>
+      </td>
+      
+      {/* 9. P/L ($) */}
+      <td className="px-3 py-3">
+        <div className={cn(
+          "font-mono text-sm font-semibold",
+          trade.unrealizedPnl >= 0 ? "text-green-600" : "text-red-600"
+        )}>
+          {trade.unrealizedPnl >= 0 ? '+$' : '-$'}{formatNumber(Math.abs(trade.unrealizedPnl), 2)}
+        </div>
+      </td>
+      
+      {/* 10. P/L (%) */}
+      <td className="px-3 py-3">
+        <div className={cn(
+          "font-mono text-sm font-semibold",
+          trade.unrealizedPnlPercent >= 0 ? "text-green-600" : "text-red-600"
+        )}>
+          {trade.unrealizedPnlPercent >= 0 ? '+' : ''}{trade.unrealizedPnlPercent.toFixed(2)}%
+        </div>
+      </td>
+      
+      {/* 11. Confidence */}
+      <td className="px-3 py-3">
+        <div className={cn(
+          "font-mono text-sm font-medium",
+          trade.confidence >= 80 ? "text-green-600" :
+          trade.confidence >= 60 ? "text-blue-600" :
+          trade.confidence >= 40 ? "text-orange-600" : "text-red-600"
+        )}>
+          {trade.confidence}%
+        </div>
+      </td>
+      
+      {/* 12. Source + Frequency (stacked) */}
       <td className="px-3 py-3">
         <div className="text-xs space-y-0.5">
           <div className="flex items-center gap-1">
@@ -247,7 +336,7 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 4. Phase 8.8.3-I9: Volume (24h) */}
+      {/* 13. Volume (24h) */}
       <td className="px-3 py-3">
         <div className="text-xs space-y-0.5">
           <div className="font-mono text-sm">
@@ -264,89 +353,7 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 5. Phase 8.8.3-I9: Confidence (already 0-100 from backend) */}
-      <td className="px-3 py-3">
-        <div className={cn(
-          "font-mono text-sm font-medium",
-          trade.confidence >= 80 ? "text-green-600" :
-          trade.confidence >= 60 ? "text-blue-600" :
-          trade.confidence >= 40 ? "text-orange-600" : "text-red-600"
-        )}>
-          {trade.confidence}%
-        </div>
-      </td>
-      
-      {/* 6. B3: Qty / Value (stacked) - Phase 8.8.3-I9 D1: Comma formatting */}
-      <td className="px-3 py-3">
-        <div className="text-xs space-y-0.5">
-          <div className="font-mono text-sm">{formatNumber(trade.quantity, 6)}</div>
-          <div className="font-mono text-muted-foreground">${formatNumber(positionValue, 2)}</div>
-        </div>
-      </td>
-      
-      {/* 4. Entry */}
-      <td className="px-3 py-3">
-        <div className="font-mono text-sm">${trade.entryPrice.toFixed(6)}</div>
-      </td>
-      
-      {/* 5. TP / SL (stacked) */}
-      <td className="px-3 py-3">
-        <div className="text-xs space-y-0.5">
-          <div className="flex items-center gap-1">
-            <Target className="w-3 h-3 text-green-600" />
-            <span className="font-mono">${trade.takeProfit.toFixed(4)}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <Shield className="w-3 h-3 text-red-600" />
-            <span className="font-mono">${trade.stopLoss.toFixed(4)}</span>
-          </div>
-        </div>
-      </td>
-      
-      {/* 6. Current Price */}
-      <td className="px-3 py-3">
-        <div className={cn(
-          "font-mono text-sm font-medium",
-          trade.currentPrice > trade.entryPrice ? "text-green-600" : 
-          trade.currentPrice < trade.entryPrice ? "text-red-600" : "text-muted-foreground"
-        )}>
-          ${trade.currentPrice.toFixed(6)}
-        </div>
-      </td>
-      
-      {/* 7. Distance to TP / SL (as actual values) */}
-      <td className="px-3 py-3">
-        <div className="text-xs space-y-0.5">
-          <div className={cn("font-mono", distanceToTPValue > 0 ? "text-green-600" : "text-muted-foreground")}>
-            TP: {distanceToTPValue >= 0 ? '+' : ''}${distanceToTPValue.toFixed(4)}
-          </div>
-          <div className={cn("font-mono", distanceToSLValue > 0 ? "text-green-600" : "text-red-600")}>
-            SL: {distanceToSLValue >= 0 ? '+' : ''}${distanceToSLValue.toFixed(4)}
-          </div>
-        </div>
-      </td>
-      
-      {/* 8. P/L ($) - Phase 8.8.3-I9 D1: Comma formatting */}
-      <td className="px-3 py-3">
-        <div className={cn(
-          "font-mono text-sm font-semibold",
-          trade.unrealizedPnl >= 0 ? "text-green-600" : "text-red-600"
-        )}>
-          {trade.unrealizedPnl >= 0 ? '+$' : '-$'}{formatNumber(Math.abs(trade.unrealizedPnl), 2)}
-        </div>
-      </td>
-      
-      {/* 9. P/L (%) */}
-      <td className="px-3 py-3">
-        <div className={cn(
-          "font-mono text-sm font-semibold",
-          trade.unrealizedPnlPercent >= 0 ? "text-green-600" : "text-red-600"
-        )}>
-          {trade.unrealizedPnlPercent >= 0 ? '+' : ''}{trade.unrealizedPnlPercent.toFixed(2)}%
-        </div>
-      </td>
-      
-      {/* 10. Duration */}
+      {/* 14. Duration */}
       <td className="px-3 py-3">
         <div className="flex items-center gap-1 text-sm text-muted-foreground">
           <Clock className="w-3 h-3" />
@@ -354,14 +361,7 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 11. Slot */}
-      <td className="px-3 py-3">
-        <Badge variant="outline" className="font-mono text-xs">
-          {trade.slotNumber}/{trade.maxSlots}
-        </Badge>
-      </td>
-      
-      {/* 12. Actions */}
+      {/* 15. Actions */}
       <td className="px-3 py-3">
         <Button
           size="sm"
@@ -756,10 +756,8 @@ export default function ActiveTradesV2() {
               <thead className="bg-muted/50 sticky top-0">
                 <tr>
                   <SortableHeader field="symbol" label="Symbol" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortableHeader field="slotNumber" label="Slot" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="strategy" label="Strategy" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Source</th>
-                  <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Volume</th>
-                  <SortableHeader field="confidence" label="Conf" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Qty / Value</th>
                   <SortableHeader field="entryPrice" label="Entry" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">TP / SL</th>
@@ -767,8 +765,10 @@ export default function ActiveTradesV2() {
                   <SortableHeader field="distanceToTP" label="Distance" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="unrealizedPnl" label="P/L $" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="unrealizedPnlPercent" label="P/L %" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortableHeader field="confidence" label="Conf" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Source</th>
+                  <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Volume</th>
                   <SortableHeader field="holdingDurationMs" label="Duration" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <SortableHeader field="slotNumber" label="Slot" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
