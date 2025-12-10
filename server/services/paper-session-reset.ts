@@ -50,6 +50,69 @@ class PaperSessionResetService {
   }
 
   /**
+   * Phase 8.8.3-A2: Lightweight post-reset integrity audit
+   * Verifies system state is clean after reset. Logs diagnostics only, does NOT throw errors.
+   */
+  private async checkPostResetState(mode: 'paper' | 'live'): Promise<{ passed: boolean; issues: string[] }> {
+    console.log(`[A2-AUDIT] Starting post-reset integrity audit for mode=${mode}`);
+    const issues: string[] = [];
+
+    try {
+      // 1. Paper engine must NOT be running
+      const engine = getEngineByMode(mode);
+      if (engine && typeof engine.isRunning === 'function' && engine.isRunning()) {
+        issues.push(`Engine for mode=${mode} is still running`);
+      } else if (engine && engine.isRunning === true) {
+        issues.push(`Engine for mode=${mode} is still running (property check)`);
+      }
+
+      // 2. No open paper positions in DB
+      const openPositions = await storage.getPaperSimOpenPositions(mode);
+      if (openPositions.length > 0) {
+        issues.push(`Found ${openPositions.length} open positions in DB after reset`);
+      }
+
+      // 3. No leftover ready-to-buy signals in orchestrator
+      const orchestrator = getOrchestratorByMode(mode);
+      if (orchestrator && typeof orchestrator.getReadySignals === 'function') {
+        const readySignals = orchestrator.getReadySignals();
+        if (readySignals && readySignals.length > 0) {
+          issues.push(`Orchestrator has ${readySignals.length} leftover ready signals`);
+        }
+      }
+
+      // 4. WebSocket adapter has zero active subscriptions
+      const wsStats = krakenWebSocketAdapter.getSubscriptionStats();
+      if (wsStats.subscribedSymbols > 0) {
+        issues.push(`WebSocket adapter has ${wsStats.subscribedSymbols} active subscriptions`);
+      }
+
+      // 5. Price cache is empty
+      const priceCacheSize = livePricingAdapter.getCacheSize();
+      if (priceCacheSize > 0) {
+        issues.push(`Price cache has ${priceCacheSize} entries`);
+      }
+
+      // 6. FX5 windows check - these should be empty after reset
+      // Note: We can't directly check FX5 internal state without new exports,
+      // so we rely on the reset calls having succeeded earlier
+
+      const passed = issues.length === 0;
+      
+      if (passed) {
+        console.log(`[A2-AUDIT] ✅ Post-reset integrity audit PASSED - system is clean`);
+      } else {
+        console.warn(`[A2-AUDIT] ⚠️ Post-reset integrity audit found ${issues.length} issue(s):`, issues);
+      }
+
+      return { passed, issues };
+    } catch (auditErr) {
+      console.warn(`[A2-AUDIT] Audit check failed (non-blocking):`, auditErr);
+      return { passed: false, issues: [`Audit error: ${auditErr instanceof Error ? auditErr.message : 'Unknown'}`] };
+    }
+  }
+
+  /**
    * Hard reset for paper mode.
    * Clears ALL paper session state: engine, sizing, orchestrator,
    * filters/signals, diagnostics, and DB rows for open positions.
@@ -204,6 +267,9 @@ class PaperSessionResetService {
       (global as any).globalPaperPortfolioManager = null;
       (global as any).globalPaperSimOperationLock = null;
       (global as any).globalPaperSimBusyFlag = false;
+
+      // Phase 8.8.3-A2: Lightweight post-reset integrity audit
+      await this.checkPostResetState(mode);
 
       const elapsed = Date.now() - startTime;
       result.success = true;

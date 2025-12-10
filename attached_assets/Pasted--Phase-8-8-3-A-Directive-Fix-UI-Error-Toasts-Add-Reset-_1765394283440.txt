@@ -1,0 +1,193 @@
+✅ Phase 8.8.3-A Directive — Fix UI Error Toasts + Add Reset Integrity Audit (Option B)
+
+Important:
+Use test user credentials when validating flows:
+
+username: testuser123
+password: SecurePass123!
+
+🎯 Objective
+
+Fix incorrect UI error toasts for:
+
+Closing an individual trade
+
+Using Clear Stranded
+
+Using Clear & Reset All (only if response contract still mismatched)
+
+And implement a lightweight integrity audit to ensure the trading engine, orchestrator, WebSocket, and price caches all fully reset.
+
+This phase MUST NOT introduce new behaviors, only corrections.
+
+📌 PART A — Fix Individual Trade Close Error Toast (A1)
+Problem
+
+UI always shows an error toast after clicking Close on a single trade, even though:
+
+Trade closes successfully
+
+DB updates correctly
+
+Engine position is removed
+
+UI refreshes correctly
+
+Root Cause
+
+Backend response shape does not match what the UI expects.
+
+UI expects:
+
+{ success: true }
+
+
+Backend returns variations such as:
+
+{ status: "ok" }
+{ closed: 1 }
+{ removed: true }
+
+Required Fix
+
+Update the backend endpoint called by Close Trade to always return:
+
+{
+  success: true,
+  closedTradeId: "<uuid>",
+  message: "Trade closed successfully"
+}
+
+
+Do not change existing functionality.
+Only unify the success response shape.
+
+Also update the UI handler to look for success === true and show a green confirmation toast instead of red error toast.
+
+📌 PART B — Lightweight Reset Integrity Audit (A2, Option B)
+
+We are NOT doing major changes to reset logic.
+Instead, add a 1-step audit AFTER any reset operation to verify system state is clean.
+
+Where
+
+Inside paperSessionResetService.hardResetPaperSimulation() after all existing reset tasks complete.
+
+Add audit method:
+await engineIntegrityAudit.checkPostResetState();
+
+Audit Rules (all must pass)
+
+Paper engine must NOT be running
+
+engine.isRunning === false
+
+No open paper positions
+
+DB query returns count = 0
+
+No leftover ready-to-buy signals
+
+orchestrator’s ready list empty
+
+WebSocket adapter has zero active subscriptions
+
+adapter.subscriptionMap empty
+
+Price caches are empty
+
+centralized price cache has zero entries
+
+No dangling FX5 windows
+
+hourly and 24h windows must reset to empty arrays
+
+If audit passes → return:
+{ success: true, message: "Reset complete" }
+
+If audit fails → log diagnostic only
+
+DO NOT throw errors, DO NOT block reset.
+
+📌 PART C — Fix “Clear Stranded” Error Toast (A3)
+Problem
+
+Clear Stranded executes correctly but UI always shows an error toast.
+
+Root Cause
+
+Same as A1 — backend returns a nonstandard response shape.
+
+Fix
+
+Update Clear Stranded endpoint to always return:
+
+{
+  success: true,
+  strandedClosed: <number>,
+  message: "Stranded trades cleared"
+}
+
+
+Update UI handler to look for success === true.
+
+📌 Common Fix Required for A1 + A3
+
+Create a unified Backend Success Response Contract.
+
+Every trading-action endpoint must return:
+
+{ success: true, ...metadata }
+
+
+on success, and
+
+{ success: false, error: "..." }
+
+
+on failure.
+
+This fixes 100% of the incorrect toasts.
+
+📌 Testing Checklist for Replit (Mandatory)
+1. Close Individual Trade
+
+Trade disappears
+
+UI refreshes
+
+Green toast: “Trade closed successfully”
+
+NO red error toast
+
+2. Clear Stranded
+
+Stranded cleared
+
+Engine unaffected
+
+Green toast: “Stranded trades cleared”
+
+NO error toast
+
+3. Clear & Reset All
+
+Engine stops
+
+All positions cleared
+
+Windows cleared
+
+Caches cleared
+
+Post-reset audit shows no errors
+
+UI clean slate and no error toast
+
+📌 Notes
+
+Do NOT modify slippage, fees, ranking, or ready-to-buy logic yet (belongs to 8.8.3-C & 8.8.4).
+
+Do NOT change engine execution behavior.
+
+Only unify response contract + fix toasts + add integrity check.

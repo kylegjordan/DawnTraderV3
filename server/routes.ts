@@ -9626,7 +9626,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const position = positions.find(p => p.id === id);
       
       if (!position) {
-        return res.status(404).json({ ok: false, error: 'Position not found' });
+        return res.status(404).json({ success: false, error: 'Position not found' });
       }
       
       const entryPrice = parseFloat(position.avgPrice?.toString() || '0');
@@ -9688,10 +9688,17 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         }
       });
       
-      res.json({ ok: true, message: `Closed ${position.symbol} position`, pnl, pnlPercent });
+      // Phase 8.8.3-A1: Standardized success response
+      res.json({ 
+        success: true, 
+        closedTradeId: id,
+        message: `Closed ${position.symbol} position`,
+        pnl, 
+        pnlPercent 
+      });
     } catch (error) {
       console.error('Error closing trade:', error);
-      res.status(500).json({ ok: false, error: 'Failed to close trade' });
+      res.status(500).json({ success: false, error: 'Failed to close trade' });
     }
   });
 
@@ -9704,7 +9711,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const positions = await storage.getPaperSimOpenPositions('paper');
       
       if (positions.length === 0) {
-        return res.json({ ok: true, message: 'No stranded trades to clear', clearedCount: 0 });
+        // Phase 8.8.3-A3: Standardized success response (includes clearedCount for backward compatibility)
+        return res.json({ success: true, strandedClosed: 0, clearedCount: 0, message: 'No stranded trades to clear' });
       }
       
       console.log(`[B2-ClearStranded] Clearing ${positions.length} stranded positions for user ${userId}`);
@@ -9773,10 +9781,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         data: { clearedCount, userId }
       });
       
-      res.json({ ok: true, message: `Cleared ${clearedCount} stranded trades`, clearedCount });
+      // Phase 8.8.3-A3: Standardized success response (includes clearedCount for backward compatibility)
+      res.json({ success: true, strandedClosed: clearedCount, clearedCount, message: `Cleared ${clearedCount} stranded trades` });
     } catch (error) {
       console.error('[B2-ClearStranded] Error clearing stranded trades:', error);
-      res.status(500).json({ ok: false, error: 'Failed to clear stranded trades' });
+      res.status(500).json({ success: false, error: 'Failed to clear stranded trades' });
     }
   });
 

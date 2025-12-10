@@ -617,6 +617,7 @@ export default function ActiveTradesV2() {
     }
   }, [messages, isPaper, queryClient]);
   
+  // Phase 8.8.3-A1: Updated to use standardized success response
   const closeTradeMutation = useMutation({
     mutationFn: async (id: string) => {
       return await apiFetch(`/api/paper-sim/close-trade/${id}`, {
@@ -626,11 +627,19 @@ export default function ActiveTradesV2() {
       });
     },
     onSuccess: (result) => {
-      const pnl = result?.pnl ?? 0;
-      toast({
-        title: "Trade Closed",
-        description: result?.message || `P/L: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`,
-      });
+      if (result?.success === true) {
+        const pnl = result?.pnl ?? 0;
+        toast({
+          title: "Trade Closed",
+          description: result?.message || `P/L: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`,
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: result?.error || "Failed to close trade",
+          variant: "destructive",
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/active-trades'] });
     },
     onError: () => {
@@ -642,6 +651,7 @@ export default function ActiveTradesV2() {
     }
   });
   
+  // Phase 8.8.3-A3: Updated to use standardized success response
   const clearStrandedMutation = useMutation({
     mutationFn: async () => {
       return await apiFetch('/api/paper-sim/force-clear-stranded', { 
@@ -650,10 +660,18 @@ export default function ActiveTradesV2() {
       });
     },
     onSuccess: (result) => {
-      toast({
-        title: "Stranded Trades Cleared",
-        description: result.message || `Cleared ${result.clearedCount || 0} stranded trades`,
-      });
+      if (result?.success === true) {
+        toast({
+          title: "Stranded Trades Cleared",
+          description: result.message || `Cleared ${result.strandedClosed || 0} stranded trades`,
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: result?.error || "Failed to clear stranded trades",
+          variant: "destructive",
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/active-trades'] });
     },
     onError: () => {
