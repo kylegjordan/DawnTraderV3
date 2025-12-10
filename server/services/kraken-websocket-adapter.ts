@@ -1160,6 +1160,61 @@ export class KrakenWebSocketAdapter {
   }
 
   /**
+   * Phase 8.8.3-I9: Get frequency info for a specific symbol
+   * Returns source (WS/REST) and frequency bucket (High/Medium/Low/Very Low)
+   * 
+   * Buckets based on avg tick interval:
+   * - High: < 3 seconds
+   * - Medium: 3-10 seconds
+   * - Low: 10-30 seconds
+   * - Very Low: > 30 seconds or unknown
+   */
+  getSymbolFrequencyInfo(symbol: string): { source: 'WS' | 'REST' | 'Unknown'; frequency: 'High' | 'Medium' | 'Low' | 'Very Low'; avgIntervalMs: number } {
+    const stats = this.symbolStats.get(symbol);
+    const now = Date.now();
+    
+    // No stats available - return defaults
+    if (!stats || stats.updateCount === 0) {
+      return { source: 'REST', frequency: 'Very Low', avgIntervalMs: -1 };
+    }
+    
+    const tickAgeMs = now - stats.lastUpdate;
+    const timeWindowMs = now - stats.firstUpdate;
+    
+    // Guard: need at least 10 seconds of data and 2+ ticks to calculate meaningful interval
+    if (timeWindowMs < 10000 || stats.updateCount < 2) {
+      // Not enough data yet - classify based on tick age
+      const source: 'WS' | 'REST' = tickAgeMs < 25000 ? 'WS' : 'REST';
+      return { source, frequency: 'Very Low', avgIntervalMs: -1 };
+    }
+    
+    // Calculate average interval between ticks
+    // For N ticks over T time, avg interval = T / (N-1)
+    const avgIntervalMs = timeWindowMs / (stats.updateCount - 1);
+    
+    // Determine source: if last tick was recent (< 25s), it's WebSocket; otherwise REST fallback
+    const source: 'WS' | 'REST' = tickAgeMs < 25000 ? 'WS' : 'REST';
+    
+    // Frequency buckets:
+    // < 3 sec avg interval = High (very active trading pair)
+    // 3-10 sec = Medium
+    // 10-30 sec = Low
+    // > 30 sec = Very Low (REST fallback expected)
+    let frequency: 'High' | 'Medium' | 'Low' | 'Very Low';
+    if (avgIntervalMs < 3000) {
+      frequency = 'High';
+    } else if (avgIntervalMs < 10000) {
+      frequency = 'Medium';
+    } else if (avgIntervalMs < 30000) {
+      frequency = 'Low';
+    } else {
+      frequency = 'Very Low';
+    }
+    
+    return { source, frequency, avgIntervalMs: Math.round(avgIntervalMs) };
+  }
+
+  /**
    * Phase 8.8.3-B7.A: Clear all subscriptions for hard reset
    * Used during paper simulation reset to prevent stale price updates
    */

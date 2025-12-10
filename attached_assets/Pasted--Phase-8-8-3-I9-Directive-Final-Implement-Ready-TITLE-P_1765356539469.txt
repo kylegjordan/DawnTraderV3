@@ -1,0 +1,270 @@
+📄 Phase 8.8.3-I9 Directive (Final, Implement-Ready)
+
+TITLE: Phase 8.8.3-I9 — UI Pricing Metrics, Volume/Confidence Columns, Global Reset Button, and Stability Enhancements
+TEST USER: username=testuser123, password=SecurePass123!
+
+📌 PREPARATION
+
+Before beginning, create a rollback checkpoint:
+
+git add .
+git commit -m "Phase 8.8.3-I9 pre-change snapshot"
+
+📘 PART A — Active Trades UI Enhancements
+A1 — Add NEW column: “Price Source & Frequency”
+UI Requirements
+
+Add a new column to Active Trades:
+
+Column Header: Source / Frequency
+
+Row Value Example:
+
+WS (High)
+REST (Low)
+WS (Medium)
+
+Source Label Logic
+
+Use the actual last recorded update source:
+
+"kraken_ws" → WS
+
+"kraken_rest" → REST
+
+This is dynamic — it changes as fallback happens.
+
+Frequency Buckets (per symbol)
+
+Compute using rolling average of tick intervals:
+
+Avg Tick Interval	Label
+< 3 sec	High
+3–10 sec	Medium
+10–25 sec	Low
+> 25 sec	Very Low
+
+No additional poll traffic allowed.
+Use existing timestamps in the price cache and the WebSocket adapter.
+
+Backend
+
+Add /api/diagnostics/i9/frequency if needed, or embed frequency in /paper-sim/active-trades response.
+
+A2 — Add NEW column: “Volume”
+Definition
+
+Use the 24h volume value already coming in through FX5 (no new REST calls allowed).
+
+Bucket UI labeling
+
+Example:
+
+High (24h vol = $85M)
+Medium (24h vol = $12M)
+Low (24h vol = $1.2M)
+
+
+Volume buckets:
+
+24h Volume	Label
+> $50M	High
+$10–50M	Medium
+$1–10M	Low
+< $1M	Very Low
+
+Use volume already processed via FX5 → Strategy Engine → Signal.
+
+A3 — Add NEW column: “Confidence”
+
+Reuse the exact confidence value already used in Ready-To-Buy, with no new computation.
+
+Column format:
+
+0.82
+0.64
+0.91
+
+
+Confidence is passed from:
+
+SignalOrchestrator → PositionSizing → Trade Creation.
+
+Add the confidence field into /active-trades output.
+
+📘 PART B — Reposition Global Trading Metrics Bar
+
+The bar showing:
+
+Starting Balance
+
+Current Balance
+
+Net P&L
+
+Net P&L %
+
+Open Position Value
+
+Should be moved into the blue top bar as a new row under:
+
+Paper Trading Mode (Simulated – No Real Money)
+[ STOP ] button
+
+B1 — Add one new combined metric
+
+Add:
+
+Open Trades: 12 / 15
+
+
+This is:
+
+current open trade count
+
+max allowed slots
+
+displayed in the same row as the relocated balance stats.
+
+📘 PART C — “Clear & Reset Engine” Button
+
+Add a new button to the Active Trades tab:
+
+Button label: Clear & Reset
+
+Behavioral Requirements
+
+If trading is active
+
+Call the existing stop-trading endpoint (no new stop logic).
+
+Wait for engine to confirm: isRunning = false.
+
+Then perform cleanup:
+
+Delete all rows from paper_sim_open_positions.
+
+Delete all temporary/signal/trade tables flagged as non-historical.
+
+Retain normal trade history.
+
+Then reset engine state:
+
+Clear price cache.
+
+Clear WebSocket subscription map.
+
+Reset orchestrator (if needed).
+
+Return UI confirmation toast:
+
+Trading reset successfully.
+
+
+NO new start-mechanism created.
+Start always happens through the existing toggle/start function.
+
+📘 PART D — Cosmetic UI Fixes
+D1 — Comma-separated numbers in Active Trades & History
+
+Format:
+
+Size
+
+Entry Price
+
+Current Price
+
+Value
+
+P&L
+
+P&L %
+
+D2 — Manual Close Toast Fix
+
+Current behavior:
+
+Trade closes correctly
+
+UI shows an error toast
+
+Fix:
+
+Suppress error and show:
+
+Position closed.
+
+D3 — Trade History Enhancements
+
+Add columns:
+
+Quantity
+
+Entry Target vs Actual (slippage)
+
+Exit Target vs Actual
+
+Fees (already factored into P&L — expose the values)
+
+Add sorting on all sortable columns.
+
+D4 — Fix Trade Filters
+
+Ensure:
+
+Entered filters actually trigger backend query
+
+Pagination works
+
+Filters do not silently fail or default to “max N trades”
+
+📘 PART E — Backend Stabilization
+E1 — Symbol Consistency Sweep
+
+Confirm all stored symbols are in canonical BASE/QUOTE format.
+
+Normalize at:
+
+Trade creation
+
+WebSocket writes
+
+Price cache keys
+
+Position sizing
+
+E2 — Duplicate Prevention
+
+Front-end dedup remains, but backend must enforce true prevention via:
+
+Unique constraint (already implemented)
+
+Pre-insert duplicate guard in engine
+
+Optional ready-to-buy prerejection (later in 8.8.4)
+
+E3 — Diagnostic Load Cleanup Plan
+
+Do not remove diagnostics in this phase, but:
+
+Tag all diagnostics for future selective disabling
+
+Prepare list of “safe to remove” logs for post-8.8.4 cleanup
+
+📘 FINAL STEP — restart trading + validate
+
+Perform the following:
+
+/api/paper-sim/start
+(Wait 30s)
+Check UI columns
+Check pricing source
+Check frequency
+Check volume
+Check confidence
+
+
+Confirm everything operates correctly.
+
+✔️ END OF DIRECTIVE

@@ -240,6 +240,39 @@ class ActiveFilterPoolService {
       }
     }
   }
+
+  /**
+   * Phase 8.8.3-I9: Get volume info for a specific symbol
+   * Returns volume24h and volume bucket (High/Medium/Low/Very Low)
+   */
+  getSymbolVolumeInfo(symbol: string, mode: 'paper' | 'live'): { volume24h: number; volumeBucket: 'High' | 'Medium' | 'Low' | 'Very Low' } {
+    const pool = this.getPool(mode);
+    const entry = pool.get(symbol);
+    
+    if (!entry) {
+      return { volume24h: 0, volumeBucket: 'Very Low' };
+    }
+    
+    const volume24h = entry.volume24h;
+    
+    // Volume buckets per spec:
+    // > $50M = High
+    // $10-50M = Medium
+    // $1-10M = Low
+    // < $1M = Very Low
+    let volumeBucket: 'High' | 'Medium' | 'Low' | 'Very Low';
+    if (volume24h > 50000000) {
+      volumeBucket = 'High';
+    } else if (volume24h >= 10000000) {
+      volumeBucket = 'Medium';
+    } else if (volume24h >= 1000000) {
+      volumeBucket = 'Low';
+    } else {
+      volumeBucket = 'Very Low';
+    }
+    
+    return { volume24h, volumeBucket };
+  }
 }
 
 // Singleton instance

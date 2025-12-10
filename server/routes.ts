@@ -9329,9 +9329,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   // Phase 8.8.3-B1: Enhanced Active Trades endpoint with slot visibility and integrity checking
   // Phase 8.8.3-I6: Now uses live prices from LivePricingAdapter instead of stale DB prices
+  // Phase 8.8.3-I9: Added frequency and volume data
   apiRouter.get('/paper-sim/active-trades', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
+      
+      // Phase 8.8.3-I9: Import services for frequency and volume data
+      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { activeFilterPool } = await import('./services/active-filter-pool.js');
       
       // Get open positions from paper_sim_open_positions
       const positions = await storage.getPaperSimOpenPositions('paper');
@@ -9385,6 +9390,17 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         if (unrealizedPnlPercent >= 0.5) health = 'green';
         else if (unrealizedPnlPercent <= -0.5) health = 'red';
         
+        // Phase 8.8.3-I9: Get frequency and volume info
+        const frequencyInfo = krakenWebSocketAdapter.getSymbolFrequencyInfo(pos.symbol);
+        const volumeInfo = activeFilterPool.getSymbolVolumeInfo(pos.symbol, 'paper');
+        
+        // Phase 8.8.3-I9: Derive source from actual priceSource (WS takes precedence)
+        const sourceLabel = priceSource.includes('kraken_ws') ? 'WS' : frequencyInfo.source;
+        
+        // Phase 8.8.3-I9: Normalize confidence to 0-100 (stored as 0-1 in database)
+        const rawConfidence = parseFloat(pos.confidence?.toString() || '0');
+        const confidencePercent = rawConfidence <= 1 ? Math.round(rawConfidence * 100) : Math.round(rawConfidence);
+        
         return {
           id: pos.id,
           symbol: pos.symbol,
@@ -9404,10 +9420,17 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           maxSlots: maxOpenTrades,
           health,
           openedAt: openedAt.toISOString(),
-          confidence: parseFloat(pos.confidence?.toString() || '0'),
+          confidence: confidencePercent, // Phase 8.8.3-I9: Now normalized to 0-100%
           metadata: pos.metadata,
           priceSource, // Phase 8.8.3-I6: Expose price source for debugging
-          priceAgeMs   // Phase 8.8.3-I6: Expose price age for staleness monitoring
+          priceAgeMs,  // Phase 8.8.3-I6: Expose price age for staleness monitoring
+          // Phase 8.8.3-I9: New columns
+          sourceLabel,  // 'WS' or 'REST'
+          frequency: frequencyInfo.frequency, // 'High', 'Medium', 'Low', 'Very Low'
+          avgIntervalMs: frequencyInfo.avgIntervalMs,
+          volume24h: volumeInfo.volume24h,
+          volumeBucket: volumeInfo.volumeBucket, // 'High', 'Medium', 'Low', 'Very Low'
+          positionValue: quantity * currentPrice // Total value of position
         };
       }));
       

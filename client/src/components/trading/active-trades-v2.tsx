@@ -48,6 +48,12 @@ interface ActiveTrade {
   confidence: number;
   positionValue: number;
   metadata?: any;
+  // Phase 8.8.3-I9: New fields
+  sourceLabel?: 'WS' | 'REST';
+  frequency?: 'High' | 'Medium' | 'Low' | 'Very Low';
+  avgIntervalMs?: number;
+  volume24h?: number;
+  volumeBucket?: 'High' | 'Medium' | 'Low' | 'Very Low';
 }
 
 interface PortfolioSummary {
@@ -74,7 +80,7 @@ interface ActiveTradesResponse {
 }
 
 type SortField = 'symbol' | 'strategy' | 'entryPrice' | 'currentPrice' | 'unrealizedPnlPercent' | 
-                  'unrealizedPnl' | 'holdingDurationMs' | 'distanceToTP' | 'distanceToSL' | 'slotNumber' | 'health';
+                  'unrealizedPnl' | 'holdingDurationMs' | 'distanceToTP' | 'distanceToSL' | 'slotNumber' | 'health' | 'confidence';
 type SortDirection = 'asc' | 'desc';
 
 const strategyColors: Record<string, string> = {
@@ -109,6 +115,24 @@ function formatDuration(ms: number): string {
   if (hours > 0) return `${hours}h ${minutes % 60}m`;
   if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
   return `${seconds}s`;
+}
+
+// Phase 8.8.3-I9 D1: Format numbers with commas
+function formatNumber(value: number, decimals: number = 2): string {
+  return value.toLocaleString('en-US', { 
+    minimumFractionDigits: decimals, 
+    maximumFractionDigits: decimals 
+  });
+}
+
+// Phase 8.8.3-I9 A2: Format volume with units (M/K)
+function formatVolume(volume: number): string {
+  if (volume >= 1000000) {
+    return `$${(volume / 1000000).toFixed(1)}M`;
+  } else if (volume >= 1000) {
+    return `$${(volume / 1000).toFixed(0)}K`;
+  }
+  return `$${volume.toFixed(0)}`;
 }
 
 function HealthIndicator({ health }: { health: 'green' | 'yellow' | 'red' }) {
@@ -196,11 +220,67 @@ function TradeRow({
         </Badge>
       </td>
       
-      {/* 3. B3: Qty / Value (stacked) */}
+      {/* 3. Phase 8.8.3-I9: Source + Frequency (stacked) */}
       <td className="px-3 py-3">
         <div className="text-xs space-y-0.5">
-          <div className="font-mono text-sm">{trade.quantity.toFixed(6)}</div>
-          <div className="font-mono text-muted-foreground">${positionValue.toFixed(2)}</div>
+          <div className="flex items-center gap-1">
+            {trade.sourceLabel === 'WS' ? (
+              <Wifi className="w-3 h-3 text-green-500" />
+            ) : (
+              <WifiOff className="w-3 h-3 text-orange-500" />
+            )}
+            <span className={cn(
+              "font-medium",
+              trade.sourceLabel === 'WS' ? "text-green-600" : "text-orange-600"
+            )}>
+              {trade.sourceLabel || 'REST'}
+            </span>
+          </div>
+          <div className={cn(
+            "font-mono text-xs",
+            trade.frequency === 'High' ? "text-green-600" :
+            trade.frequency === 'Medium' ? "text-blue-600" :
+            trade.frequency === 'Low' ? "text-orange-600" : "text-muted-foreground"
+          )}>
+            {trade.frequency || 'Very Low'}
+          </div>
+        </div>
+      </td>
+      
+      {/* 4. Phase 8.8.3-I9: Volume (24h) */}
+      <td className="px-3 py-3">
+        <div className="text-xs space-y-0.5">
+          <div className="font-mono text-sm">
+            {formatVolume(trade.volume24h || 0)}
+          </div>
+          <div className={cn(
+            "text-xs",
+            trade.volumeBucket === 'High' ? "text-green-600" :
+            trade.volumeBucket === 'Medium' ? "text-blue-600" :
+            trade.volumeBucket === 'Low' ? "text-orange-600" : "text-muted-foreground"
+          )}>
+            {trade.volumeBucket || 'Very Low'}
+          </div>
+        </div>
+      </td>
+      
+      {/* 5. Phase 8.8.3-I9: Confidence (already 0-100 from backend) */}
+      <td className="px-3 py-3">
+        <div className={cn(
+          "font-mono text-sm font-medium",
+          trade.confidence >= 80 ? "text-green-600" :
+          trade.confidence >= 60 ? "text-blue-600" :
+          trade.confidence >= 40 ? "text-orange-600" : "text-red-600"
+        )}>
+          {trade.confidence}%
+        </div>
+      </td>
+      
+      {/* 6. B3: Qty / Value (stacked) - Phase 8.8.3-I9 D1: Comma formatting */}
+      <td className="px-3 py-3">
+        <div className="text-xs space-y-0.5">
+          <div className="font-mono text-sm">{formatNumber(trade.quantity, 6)}</div>
+          <div className="font-mono text-muted-foreground">${formatNumber(positionValue, 2)}</div>
         </div>
       </td>
       
@@ -246,13 +326,13 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 8. P/L ($) */}
+      {/* 8. P/L ($) - Phase 8.8.3-I9 D1: Comma formatting */}
       <td className="px-3 py-3">
         <div className={cn(
           "font-mono text-sm font-semibold",
           trade.unrealizedPnl >= 0 ? "text-green-600" : "text-red-600"
         )}>
-          {trade.unrealizedPnl >= 0 ? '+' : ''}${trade.unrealizedPnl.toFixed(2)}
+          {trade.unrealizedPnl >= 0 ? '+$' : '-$'}{formatNumber(Math.abs(trade.unrealizedPnl), 2)}
         </div>
       </td>
       
@@ -677,6 +757,9 @@ export default function ActiveTradesV2() {
                 <tr>
                   <SortableHeader field="symbol" label="Symbol" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="strategy" label="Strategy" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Source</th>
+                  <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Volume</th>
+                  <SortableHeader field="confidence" label="Conf" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Qty / Value</th>
                   <SortableHeader field="entryPrice" label="Entry" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">TP / SL</th>

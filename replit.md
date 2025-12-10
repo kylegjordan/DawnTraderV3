@@ -37,6 +37,12 @@ Phase 8.8.3-I7-ROOT-FIX and Phase 8.8.3-I7-ROOT-FIX-2 restore core engine functi
 
 Phase 8.8.4-IA-PRICE-CACHE introduces a centralized price cache module (`server/services/price-cache.ts`) for active trade pricing, ensuring a single source of truth updated from WebSocket and REST. Phase 8.8.3-I8C (WebSocket Subscription Reliability Fix) addresses low WebSocket coverage by subscribing all open positions on engine start, new trades, and reconnects, with a 5-second subscription health audit. Phase 8.8.3-I8C-SYMBOL-NORM (Database Symbol Normalization) ensures all database symbols use canonical BASE/QUOTE format, with normalization at the storage layer during trade creation to prevent format mismatches with the WebSocket price cache.
 
+Phase 8.8.3-I9 (Enhanced Active Trades UI) adds three new columns to the Active Trades table:
+- **Source/Frequency**: Shows data source (WS/REST) and tick frequency bucket (High/Medium/Low/Very Low based on average tick interval: <3s=High, 3-10s=Medium, 10-30s=Low, >30s=Very Low)
+- **Volume (24h)**: Displays 24-hour trading volume with K/M formatting and bucket classification ($50M+=High, $10-50M=Medium, $1-10M=Low, <$1M=Very Low)
+- **Confidence**: Shows trade signal confidence percentage (0-100%) with color-coded thresholds (>=80=green, 60-79=blue, 40-59=orange, <40=red)
+Backend methods `getSymbolFrequencyInfo()` in KrakenWebSocketAdapter and `getSymbolVolumeInfo()` in ActiveFilterPoolService provide the data. Uses `formatNumber()` utility for comma-separated number formatting.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.
