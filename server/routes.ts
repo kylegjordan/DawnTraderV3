@@ -9545,12 +9545,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return sum + parseFloat(trade.pnl?.toString() || '0');
       }, 0);
       
-      // Current Balance = starting_balance + realized P/L (NOT based on open positions value)
-      const currentBalance = startingBalance + realizedPnl;
-      
       // Phase 8.8.3-I6: Get open positions for "Open Position Value" using LIVE prices
+      // Phase 8.8.3-I10-FIX: Also calculate unrealized P/L from open positions
       const openPositions = await storage.getPaperSimOpenPositions(mode);
       let totalPositionValue = 0;
+      let unrealizedPnl = 0;
       
       for (const pos of openPositions) {
         const quantity = parseFloat(pos.quantity?.toString() || '0');
@@ -9571,11 +9570,21 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           console.log(`[8.8.3-I6][FALLBACK_TO_ENTRY] symbol=${pos.symbol} reason=no_reliable_price`);
         }
         console.log(`[8.8.3-I6][PORTFOLIO_LIVE_PRICE] symbol=${pos.symbol} price=${currentPrice} source=${priceSource} fallbackType=${fallbackType}`);
-        totalPositionValue += quantity * currentPrice;
+        
+        const positionValue = quantity * currentPrice;
+        const entryValue = quantity * entryPrice;
+        const positionPnl = positionValue - entryValue;
+        
+        totalPositionValue += positionValue;
+        unrealizedPnl += positionPnl;
       }
       
-      // Calculate net P/L percent based on starting balance
-      const netPnl = currentBalance - startingBalance;
+      // Phase 8.8.3-I10-FIX: Current Balance = starting balance + realized P/L + unrealized P/L
+      // This reflects the actual current portfolio value including open position P/L
+      const currentBalance = startingBalance + realizedPnl + unrealizedPnl;
+      
+      // Phase 8.8.3-I10-FIX: Net P/L = realized P/L (from closed trades) + unrealized P/L (from open positions)
+      const netPnl = realizedPnl + unrealizedPnl;
       const netPnlPercent = startingBalance > 0 ? (netPnl / startingBalance) * 100 : 0;
       
       // Phase 8.8.3-I9: Get open trades count and max slots for TopBar metric
@@ -9589,6 +9598,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         startingBalance,
         currentBalance,
         realizedPnl,
+        unrealizedPnl,
         totalPositionValue,
         netPnl,
         netPnlPercent,
