@@ -10,7 +10,7 @@
  * - Volume is a trade-time attribute, not a live metric
  */
 
-import { krakenSymbolResolver } from '../markets/kraken-symbol-resolver.js';
+import { toKrakenRest } from '../markets/kraken-symbol-resolver.js';
 
 const VOLUME_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -103,7 +103,7 @@ class MarketVolumeCache {
   private async fetchFromKraken(symbol: string): Promise<VolumeCacheEntry> {
     try {
       // Convert canonical symbol (BTC/USD) to Kraken format (XXBTZUSD)
-      const krakenSymbol = krakenSymbolResolver.toKrakenTicker(symbol);
+      const krakenSymbol = toKrakenRest(symbol);
       
       const response = await fetch(`https://api.kraken.com/0/public/Ticker?pair=${krakenSymbol}`);
       const data = await response.json();
@@ -157,7 +157,7 @@ class MarketVolumeCache {
     // Fetch missing symbols from Kraken in batch
     if (symbolsToFetch.length > 0) {
       try {
-        const krakenSymbols = symbolsToFetch.map(s => krakenSymbolResolver.toKrakenTicker(s));
+        const krakenSymbols = symbolsToFetch.map(s => toKrakenRest(s));
         const response = await fetch(`https://api.kraken.com/0/public/Ticker?pair=${krakenSymbols.join(',')}`);
         const data = await response.json();
         
@@ -167,7 +167,14 @@ class MarketVolumeCache {
         
         // Process results
         for (const symbol of symbolsToFetch) {
-          const krakenSymbol = krakenSymbolResolver.toKrakenTicker(symbol);
+          const krakenSymbol = toKrakenRest(symbol);
+          
+          // Skip if symbol couldn't be mapped
+          if (!krakenSymbol) {
+            const entry = this.setVolume(symbol, 0);
+            results.set(symbol, { volume24h: entry.volume24h, volumeBucket: entry.volumeBucket });
+            continue;
+          }
           
           // Find the matching result (Kraken may use different naming)
           let ticker = null;

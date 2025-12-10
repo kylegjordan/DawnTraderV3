@@ -63,6 +63,7 @@ import { contextBridge } from './services/context-bridge.js';
 import { getCache, setCache, coalesce } from './services/cache';
 import { metricsService } from './services/metrics-service';
 import { activeFilterPool } from './services/active-filter-pool.js';
+import { marketVolumeCache } from './services/market-volume-cache.js';
 import { b5SizingAudit } from './services/b5-sizing-audit.js';
 import { livePricingAdapter } from './services/live-pricing-adapter.js';
 import { krakenWebSocketAdapter } from './services/kraken-websocket-adapter.js';
@@ -9413,9 +9414,25 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         if (unrealizedPnlPercent >= 0.5) health = 'green';
         else if (unrealizedPnlPercent <= -0.5) health = 'red';
         
-        // Phase 8.8.3-I9: Get frequency and volume info
+        // Phase 8.8.3-I9: Get frequency info
         const frequencyInfo = krakenWebSocketAdapter.getSymbolFrequencyInfo(pos.symbol);
-        const volumeInfo = activeFilterPool.getSymbolVolumeInfo(pos.symbol, 'paper');
+        
+        // Phase 8.8.3-I10: Get volume info (DB first, then pool, then cache fallback)
+        let volume24h = 0;
+        let volumeBucket: 'High' | 'Medium' | 'Low' | 'Very Low' = 'Very Low';
+        
+        // Try DB first (persisted at trade creation)
+        if (pos.volume24h && parseFloat(pos.volume24h.toString()) > 0) {
+          volume24h = parseFloat(pos.volume24h.toString());
+          volumeBucket = (pos.volumeBucket as 'High' | 'Medium' | 'Low' | 'Very Low') || marketVolumeCache.classifyVolume(volume24h);
+        } else {
+          // Fallback: try active filter pool
+          const poolInfo = activeFilterPool.getSymbolVolumeInfo(pos.symbol, 'paper');
+          if (poolInfo.volume24h > 0) {
+            volume24h = poolInfo.volume24h;
+            volumeBucket = poolInfo.volumeBucket;
+          }
+        }
         
         // Phase 8.8.3-I9: Derive source from actual priceSource (WS takes precedence)
         const sourceLabel = priceSource.includes('kraken_ws') ? 'WS' : frequencyInfo.source;
@@ -9451,8 +9468,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           sourceLabel,  // 'WS' or 'REST'
           frequency: frequencyInfo.frequency, // 'High', 'Medium', 'Low', 'Very Low'
           avgIntervalMs: frequencyInfo.avgIntervalMs,
-          volume24h: volumeInfo.volume24h,
-          volumeBucket: volumeInfo.volumeBucket, // 'High', 'Medium', 'Low', 'Very Low'
+          volume24h: volume24h, // Phase 8.8.3-I10: From DB, pool, or cache
+          volumeBucket: volumeBucket, // 'High', 'Medium', 'Low', 'Very Low'
           positionValue: quantity * currentPrice // Total value of position
         };
       }));
