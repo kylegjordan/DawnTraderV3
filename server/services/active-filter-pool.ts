@@ -18,6 +18,7 @@ import { storage } from '../storage.js';
 
 // REB 2.2: TTL from truth state (Nov 20 chat archive)
 const SYMBOL_COOLDOWN_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const VOLUME_CACHE_TTL_MS = 60 * 1000; // 1 minute cache for Kraken ticker fallback
 
 export interface ActiveFilteredPair {
   symbol: string;
@@ -35,10 +36,20 @@ export interface ActiveFilteredPair {
   };
 }
 
+// Volume cache entry for Kraken ticker fallback
+interface VolumeCacheEntry {
+  volume24h: number;
+  volumeBucket: 'High' | 'Medium' | 'Low' | 'Very Low';
+  expiresAt: number;
+}
+
 class ActiveFilterPoolService {
   // In-memory pools (one per mode)
   private paperPool: Map<string, ActiveFilteredPair> = new Map();
   private livePool: Map<string, ActiveFilteredPair> = new Map();
+  
+  // Volume cache for Kraken ticker fallback (symbol -> volume data)
+  private volumeCache: Map<string, VolumeCacheEntry> = new Map();
 
   /**
    * Get the pool for a specific mode
