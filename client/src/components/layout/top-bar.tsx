@@ -1,4 +1,4 @@
-import { Menu, Bell, Clock, Globe, AlertTriangle, MoreVertical } from "lucide-react";
+import { Menu, Bell, Clock, Globe, AlertTriangle, MoreVertical, RotateCcw, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatUTCTimeWithDate, formatLocalTimeWithDate, getTimezoneAbbr, formatUTCCompact, formatLocalCompact } from "@/lib/timezone";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { apiRequest } from "@/lib/queryClient";
@@ -104,6 +104,59 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     refetchInterval: 10000, // Refetch every 10 seconds
   });
 
+  const { mode: currentMode, setMode } = useTradingMode();
+  
+  // Phase 8.8.3-I9 Part B: Portfolio Summary for TopBar metrics row
+  const { data: portfolioData, isFetching: isPortfolioFetching } = useQuery<{
+    ok: boolean;
+    startingBalance: number;
+    currentBalance: number;
+    netPnl: number;
+    netPnlPercent: number;
+    totalPositionValue: number;
+  }>({
+    queryKey: ['/api/paper-sim/portfolio-summary'],
+    queryFn: async () => {
+      try {
+        const response = await apiRequest('GET', '/api/paper-sim/portfolio-summary');
+        return response;
+      } catch (error) {
+        return { ok: false, startingBalance: 0, currentBalance: 0, netPnl: 0, netPnlPercent: 0, totalPositionValue: 0 };
+      }
+    },
+    enabled: currentMode === 'paper',
+    refetchInterval: 10000,
+    staleTime: 5000,
+  });
+  
+  // Phase 8.8.3-I9 Part C: Reset Session state
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  
+  // Phase 8.8.3-I9 Part C: Reset Session Mutation
+  const resetSessionMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('POST', '/api/paper-sim/reset', { mode: 'paper' });
+    },
+    onSuccess: (result: any) => {
+      toast({
+        title: "Session Reset",
+        description: result?.message || "Paper trading session has been cleared. Set new balance when you restart trading.",
+      });
+      setShowResetConfirm(false);
+      // Invalidate relevant queries
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/active-trades'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/portfolio-summary'] });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to reset session",
+        variant: "destructive",
+      });
+    }
+  });
+
   // Update dual time display (UTC + Local)
   useEffect(() => {
     const updateTime = () => {
@@ -124,8 +177,6 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
   }, [settings?.timezone, settings?.timeFormat]);
-
-  const { mode: currentMode, setMode } = useTradingMode();
 
   // Listen for approval_update WebSocket events to refresh notifications in real-time
   useEffect(() => {
@@ -848,6 +899,47 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
             </div>
           </div>
           
+          {/* Phase 8.8.3-I9 Part C: Clear & Reset Session Button */}
+          {currentMode === 'paper' && (
+            showResetConfirm ? (
+              <div className="flex items-center gap-1 animate-in fade-in duration-200">
+                <span className="text-xs text-muted-foreground hidden sm:inline">Reset?</span>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => resetSessionMutation.mutate()}
+                  disabled={resetSessionMutation.isPending}
+                  className="text-xs h-7 px-2"
+                  data-testid="button-confirm-reset"
+                >
+                  {resetSessionMutation.isPending ? <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> : null}
+                  Yes
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowResetConfirm(false)}
+                  className="text-xs h-7 px-2"
+                  data-testid="button-cancel-reset"
+                >
+                  No
+                </Button>
+              </div>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowResetConfirm(true)}
+                className="text-xs h-7 border-orange-200 text-orange-600 hover:bg-orange-50"
+                data-testid="button-clear-reset"
+              >
+                <RotateCcw className="w-3 h-3 mr-1" />
+                <span className="hidden sm:inline">Clear & Reset</span>
+                <span className="sm:hidden">Reset</span>
+              </Button>
+            )
+          )}
+          
           {/* Walter Approvals Notifications */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -916,6 +1008,45 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
           </DropdownMenu>
         </div>
       </div>
+      
+      {/* Phase 8.8.3-I9 Part B: Portfolio Metrics Row (Paper Mode Only) */}
+      {currentMode === 'paper' && portfolioData && (
+        <div className="flex items-center justify-center gap-4 md:gap-8 px-3 sm:px-6 py-2 bg-primary/5 border-t border-primary/10">
+          <div className="flex items-center gap-1 text-xs md:text-sm">
+            <span className="text-muted-foreground">Starting:</span>
+            <span className="font-mono font-semibold">${portfolioData.startingBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          </div>
+          <div className="flex items-center gap-1 text-xs md:text-sm">
+            <span className="text-muted-foreground">Current:</span>
+            <span className="font-mono font-semibold">
+              ${portfolioData.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {isPortfolioFetching && <RefreshCw className="w-3 h-3 ml-1 animate-spin inline" />}
+            </span>
+          </div>
+          <div className="flex items-center gap-1 text-xs md:text-sm">
+            <span className="text-muted-foreground">Net P/L:</span>
+            <span className={cn(
+              "font-mono font-bold",
+              portfolioData.netPnl >= 0 ? "text-green-600" : "text-red-600"
+            )}>
+              {portfolioData.netPnl >= 0 ? '+' : ''}${portfolioData.netPnl.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          </div>
+          <div className="hidden sm:flex items-center gap-1 text-xs md:text-sm">
+            <span className="text-muted-foreground">P/L %:</span>
+            <span className={cn(
+              "font-mono font-bold",
+              portfolioData.netPnlPercent >= 0 ? "text-green-600" : "text-red-600"
+            )}>
+              {portfolioData.netPnlPercent >= 0 ? '+' : ''}{portfolioData.netPnlPercent.toFixed(2)}%
+            </span>
+          </div>
+          <div className="hidden md:flex items-center gap-1 text-xs md:text-sm">
+            <span className="text-muted-foreground">Positions:</span>
+            <span className="font-mono font-semibold">${portfolioData.totalPositionValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          </div>
+        </div>
+      )}
 
       {/* Phase 27.F.6: Live Trading Confirmation Modals */}
       <ConfirmLiveTradingModal
