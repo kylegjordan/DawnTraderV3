@@ -1,0 +1,139 @@
+Phase 8.8.3-A2R (Engine Stop + Reset Integrity)
+
+Please implement Phase 8.8.3-A2R – Engine Stop & Reset Integrity Fix as follows.
+
+0. Safety
+
+Create a rollback point in Replit before any changes.
+
+No DB schema changes in this phase.
+
+Do not touch any Ready-To-Buy or strategy logic.
+
+1. Reuse the Same Stop Logic as /api/paper-sim/stop
+
+Goal: The Clear & Reset All button must stop the same trading engine that the stop toggle uses, before any DB reset happens.
+
+Tasks:
+
+In server/routes.ts, locate:
+
+The /api/paper-sim/stop handler (this is already working correctly).
+
+The /api/paper-sim/reset handler (currently calling paperSessionResetService.hardResetPaperSimulation(mode) but not stopping globalPaperEngine).
+
+Identify the exact function used to stop the engine in /api/paper-sim/stop.
+For example (names may differ):
+
+const engine = globalPaperEngine; // or getGlobalPaperEngine()
+await engine.stop();              // or engine.stopTrading()
+
+
+Refactor, don’t duplicate:
+
+Extract the engine-stop logic into a small shared helper (in the same file or a small service), e.g.:
+
+async function stopPaperEngineIfRunning(mode: 'paper' | 'live') {
+  const engine = globalPaperEngine; // or getGlobalPaperEngine(mode)
+  if (engine && engine.isRunning) {
+    console.log('[8.8.3-A2R][ENGINE_STOP] Stopping paper engine before reset');
+    await engine.stop(); // or stopTrading()
+  } else {
+    console.log('[8.8.3-A2R][ENGINE_STOP] Engine already stopped');
+  }
+}
+
+
+Make sure /api/paper-sim/stop continues to use this helper (to prove we’re not changing semantics).
+
+2. Fix the Reset Flow to Stop the Real Engine First
+
+Goal: On reset, we must stop both the engine and the manager, in the correct order, and await them before wiping the DB.
+
+Tasks:
+
+In /api/paper-sim/reset handler (in server/routes.ts), update the flow to:
+
+// BEFORE resetting session data:
+await stopPaperEngineIfRunning('paper');
+
+// THEN call the existing reset service
+const { paperSessionResetService } = await import('./services/paper-session-reset.js');
+const resetResult = await paperSessionResetService.hardResetPaperSimulation(mode);
+
+
+In server/services/paper-session-reset.ts:
+
+Confirm hardResetPaperSimulation(mode) still stops the PaperSimManager as it does today (that’s fine; keep it).
+
+Do not move the new engine stop logic into this file; we want:
+
+Routes: stop global engine (globalPaperEngine)
+
+Reset service: stop manager + clear DB + clear caches
+
+Add clear logging:
+
+console.log('[8.8.3-A2R][RESET] Starting hard reset for mode=', mode);
+console.log('[8.8.3-A2R][RESET] Engine stop completed, proceeding with DB reset');
+
+3. Ensure the Reset Integrity Audit Actually Runs
+
+You already implemented checkPostResetState() but logs show it never runs.
+
+Tasks:
+
+In paper-session-reset.ts, at the end of hardResetPaperSimulation(mode) (after DB + cache clean-up), call:
+
+await this.checkPostResetState(mode);
+
+
+or the equivalent method on paperSessionResetService.
+
+Ensure that checkPostResetState():
+
+Never throws; it should only log warnings/errors.
+
+Logs with a consistent tag, e.g.:
+
+console.log('[8.8.3-A2R][RESET_AUDIT] summary=', {...});
+
+4. After Fix – Run and Report These Checks (No Extra Changes)
+
+After implementing the above:
+
+Start a fresh paper session via UI.
+
+Let it open several trades (fill most or all slots).
+
+Click “Clear & Reset All” once.
+
+Then run these diagnostics from the Replit shell (using the test user token as before):
+
+# Price engine / positions
+curl -s http://localhost:5000/api/diagnostics/i7-price/status \
+  -H "Authorization: Bearer $TOKEN" | jq '{paper: {isRunning, positions}}'
+
+# WebSocket health
+curl -s http://localhost:5000/api/diagnostics/i8e/ws-health \
+  -H "Authorization: Bearer $TOKEN" | jq '{summary, symbols}'
+
+# (Optional) Any reset audit logs
+grep -E '8\.8\.3-A2R|RESET_AUDIT|checkPostResetState' /tmp/logs/Start_application_*.log | tail -40
+
+
+Expected behavior after clicking Clear & Reset All:
+
+paper.isRunning is false.
+
+paper.positions is an empty array.
+
+ws-health.summary.totalSymbols is 0 or only shows symbols classified as “not subscribed”.
+
+No new trades open themselves after reset.
+
+No orphan trades remain in the UI or DB.
+
+Reset audit logs show a clean state (or clearly report if any invariant fails).
+
+Please do not make any further behavioral changes beyond the steps above. Once this is done and you’ve run those diagnostics, paste the outputs so we can confirm the race is fully resolved.

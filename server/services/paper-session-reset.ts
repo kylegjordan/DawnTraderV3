@@ -39,7 +39,7 @@ class PaperSessionResetService {
   private static instance: PaperSessionResetService;
 
   private constructor() {
-    console.log('[B7.A] PaperSessionResetService initialized');
+    console.log('[8.8.3-A2R] PaperSessionResetService initialized');
   }
 
   public static getInstance(): PaperSessionResetService {
@@ -50,20 +50,23 @@ class PaperSessionResetService {
   }
 
   /**
-   * Phase 8.8.3-A2: Lightweight post-reset integrity audit
+   * Phase 8.8.3-A2R: Lightweight post-reset integrity audit
    * Verifies system state is clean after reset. Logs diagnostics only, does NOT throw errors.
    */
   private async checkPostResetState(mode: 'paper' | 'live'): Promise<{ passed: boolean; issues: string[] }> {
-    console.log(`[A2-AUDIT] Starting post-reset integrity audit for mode=${mode}`);
+    console.log(`[8.8.3-A2R][RESET_AUDIT] Starting post-reset integrity audit for mode=${mode}`);
     const issues: string[] = [];
 
     try {
       // 1. Paper engine must NOT be running
       const engine = getEngineByMode(mode);
+      let engineRunning = false;
       if (engine && typeof engine.isRunning === 'function' && engine.isRunning()) {
         issues.push(`Engine for mode=${mode} is still running`);
+        engineRunning = true;
       } else if (engine && engine.isRunning === true) {
         issues.push(`Engine for mode=${mode} is still running (property check)`);
+        engineRunning = true;
       }
 
       // 2. No open paper positions in DB
@@ -74,10 +77,12 @@ class PaperSessionResetService {
 
       // 3. No leftover ready-to-buy signals in orchestrator
       const orchestrator = getOrchestratorByMode(mode);
+      let pendingSignals = 0;
       if (orchestrator && typeof orchestrator.getReadySignals === 'function') {
         const readySignals = orchestrator.getReadySignals();
         if (readySignals && readySignals.length > 0) {
           issues.push(`Orchestrator has ${readySignals.length} leftover ready signals`);
+          pendingSignals = readySignals.length;
         }
       }
 
@@ -99,15 +104,29 @@ class PaperSessionResetService {
 
       const passed = issues.length === 0;
       
+      // Phase 8.8.3-A2R: Detailed summary log
+      const summary = {
+        passed,
+        mode,
+        engineRunning,
+        openPositions: openPositions.length,
+        pendingSignals,
+        wsSubscriptions: wsStats.subscribedSymbols,
+        priceCacheSize,
+        issues
+      };
+      
       if (passed) {
-        console.log(`[A2-AUDIT] ✅ Post-reset integrity audit PASSED - system is clean`);
+        console.log(`[8.8.3-A2R][RESET_AUDIT] ✅ Post-reset integrity audit PASSED - system is clean`);
+        console.log(`[8.8.3-A2R][RESET_AUDIT] summary=`, JSON.stringify(summary));
       } else {
-        console.warn(`[A2-AUDIT] ⚠️ Post-reset integrity audit found ${issues.length} issue(s):`, issues);
+        console.warn(`[8.8.3-A2R][RESET_AUDIT] ⚠️ Post-reset integrity audit found ${issues.length} issue(s):`, issues);
+        console.warn(`[8.8.3-A2R][RESET_AUDIT] summary=`, JSON.stringify(summary));
       }
 
       return { passed, issues };
     } catch (auditErr) {
-      console.warn(`[A2-AUDIT] Audit check failed (non-blocking):`, auditErr);
+      console.warn(`[8.8.3-A2R][RESET_AUDIT] Audit check failed (non-blocking):`, auditErr);
       return { passed: false, issues: [`Audit error: ${auditErr instanceof Error ? auditErr.message : 'Unknown'}`] };
     }
   }
@@ -118,7 +137,7 @@ class PaperSessionResetService {
    * filters/signals, diagnostics, and DB rows for open positions.
    */
   async hardResetPaperSimulation(mode: 'paper' | 'live' = 'paper'): Promise<HardResetResult> {
-    console.log(`[B7.A][HARD_RESET] Starting hard reset for mode=${mode}`);
+    console.log(`[8.8.3-A2R][HARD_RESET] Starting hard reset for mode=${mode}`);
     const startTime = Date.now();
 
     const result: HardResetResult = {
@@ -143,35 +162,35 @@ class PaperSessionResetService {
         try {
           if (typeof manager.stop === 'function') {
             await manager.stop();
-            console.log(`[B7.A][HARD_RESET] Manager stopped for mode=${mode}`);
+            console.log(`[8.8.3-A2R][HARD_RESET] Manager stopped for mode=${mode}`);
           }
           
           if (typeof manager.resetSessionState === 'function') {
             manager.resetSessionState();
             result.details.engineReset = true;
-            console.log(`[B7.A][HARD_RESET] Manager session state cleared`);
+            console.log(`[8.8.3-A2R][HARD_RESET] Manager session state cleared`);
           }
         } catch (managerErr) {
-          console.warn(`[B7.A][HARD_RESET] Manager stop warning:`, managerErr);
+          console.warn(`[8.8.3-A2R][HARD_RESET] Manager stop warning:`, managerErr);
         }
         
         clearGlobalPaperSimManager();
         result.details.engineReset = true;
         result.details.orchestratorReset = true;
-        console.log(`[B7.A][HARD_RESET] Global manager cleared`);
+        console.log(`[8.8.3-A2R][HARD_RESET] Global manager cleared`);
       } else {
-        console.log(`[B7.A][HARD_RESET] No active manager - attempting direct component reset`);
+        console.log(`[8.8.3-A2R][HARD_RESET] No active manager - attempting direct component reset`);
         
-        // B7.A Enhancement: Direct fallback to engine/orchestrator reset even without manager
+        // Direct fallback to engine/orchestrator reset even without manager
         try {
           const engine = getEngineByMode(mode);
           if (engine && typeof engine.resetSessionState === 'function') {
             engine.resetSessionState();
             result.details.engineReset = true;
-            console.log(`[B7.A][HARD_RESET] Direct engine reset for mode=${mode}`);
+            console.log(`[8.8.3-A2R][HARD_RESET] Direct engine reset for mode=${mode}`);
           }
         } catch (engineErr) {
-          console.warn(`[B7.A][HARD_RESET] Direct engine reset warning:`, engineErr);
+          console.warn(`[8.8.3-A2R][HARD_RESET] Direct engine reset warning:`, engineErr);
         }
         
         try {
@@ -179,23 +198,23 @@ class PaperSessionResetService {
           if (orchestrator && typeof orchestrator.resetSession === 'function') {
             orchestrator.resetSession();
             result.details.orchestratorReset = true;
-            console.log(`[B7.A][HARD_RESET] Direct orchestrator reset for mode=${mode}`);
+            console.log(`[8.8.3-A2R][HARD_RESET] Direct orchestrator reset for mode=${mode}`);
           }
         } catch (orchErr) {
-          console.warn(`[B7.A][HARD_RESET] Direct orchestrator reset warning:`, orchErr);
+          console.warn(`[8.8.3-A2R][HARD_RESET] Direct orchestrator reset warning:`, orchErr);
         }
         
         result.details.engineReset = true;
         result.details.orchestratorReset = true;
       }
 
-      // 1.5) B7.MDR: UNCONDITIONAL Market Data Reset - Always clear price and WebSocket caches
-      console.log(`[B7.MDR] Starting market data reset...`);
+      // 1.5) Market Data Reset - Always clear price and WebSocket caches
+      console.log(`[8.8.3-A2R][MARKET_DATA] Starting market data reset...`);
       try {
         // Get pre-reset stats for verification
         const wsStats = krakenWebSocketAdapter.getSubscriptionStats();
         const priceCacheSize = livePricingAdapter.getCacheSize();
-        console.log(`[B7.MDR][PRE] priceCache=${priceCacheSize}, subscribedSymbols=${wsStats.subscribedSymbols}, symbolStats=${wsStats.symbolStats}, priceTickLogs=${wsStats.priceTickLogs}`);
+        console.log(`[8.8.3-A2R][MARKET_DATA][PRE] priceCache=${priceCacheSize}, subscribedSymbols=${wsStats.subscribedSymbols}, symbolStats=${wsStats.symbolStats}, priceTickLogs=${wsStats.priceTickLogs}`);
         
         // Clear WebSocket subscriptions (unconditional)
         krakenWebSocketAdapter.clearAllSubscriptions();
@@ -206,7 +225,7 @@ class PaperSessionResetService {
         // Verify post-reset stats - MUST all be zero
         const wsStatsPost = krakenWebSocketAdapter.getSubscriptionStats();
         const priceCacheSizePost = livePricingAdapter.getCacheSize();
-        console.log(`[B7.MDR][POST] priceCache=${priceCacheSizePost}, subscribedSymbols=${wsStatsPost.subscribedSymbols}, symbolStats=${wsStatsPost.symbolStats}, priceTickLogs=${wsStatsPost.priceTickLogs}`);
+        console.log(`[8.8.3-A2R][MARKET_DATA][POST] priceCache=${priceCacheSizePost}, subscribedSymbols=${wsStatsPost.subscribedSymbols}, symbolStats=${wsStatsPost.symbolStats}, priceTickLogs=${wsStatsPost.priceTickLogs}`);
         
         // Validate all caches are actually cleared
         const allCachesCleared = priceCacheSizePost === 0 && 
@@ -216,29 +235,29 @@ class PaperSessionResetService {
         
         if (allCachesCleared) {
           result.details.marketDataReset = true;
-          console.log(`[B7.MDR] Market data reset complete - all caches verified empty`);
+          console.log(`[8.8.3-A2R][MARKET_DATA] Market data reset complete - all caches verified empty`);
         } else {
-          console.error(`[B7.MDR][FAIL] Market data reset incomplete - caches not fully cleared: priceCache=${priceCacheSizePost}, subscribedSymbols=${wsStatsPost.subscribedSymbols}, symbolStats=${wsStatsPost.symbolStats}, priceTickLogs=${wsStatsPost.priceTickLogs}`);
+          console.error(`[8.8.3-A2R][MARKET_DATA][FAIL] Market data reset incomplete - caches not fully cleared: priceCache=${priceCacheSizePost}, subscribedSymbols=${wsStatsPost.subscribedSymbols}, symbolStats=${wsStatsPost.symbolStats}, priceTickLogs=${wsStatsPost.priceTickLogs}`);
           result.details.marketDataReset = false;
         }
       } catch (mdErr) {
-        console.error(`[B7.MDR][ERROR] Market data reset failed:`, mdErr);
+        console.error(`[8.8.3-A2R][MARKET_DATA][ERROR] Market data reset failed:`, mdErr);
         result.details.marketDataReset = false;
       }
 
       // 2) Clear diagnostics buffers (B4/B5)
       try {
         b4Diagnostics.resetSession();
-        console.log(`[B7.A][HARD_RESET] B4 diagnostics reset`);
+        console.log(`[8.8.3-A2R][HARD_RESET] B4 diagnostics reset`);
         
         if (typeof b5SizingAudit.reset === 'function') {
           b5SizingAudit.reset();
-          console.log(`[B7.A][HARD_RESET] B5 diagnostics reset`);
+          console.log(`[8.8.3-A2R][HARD_RESET] B5 diagnostics reset`);
         }
         
         result.details.diagnosticsReset = true;
       } catch (diagErr) {
-        console.warn(`[B7.A][HARD_RESET] Diagnostics reset warning:`, diagErr);
+        console.warn(`[8.8.3-A2R][HARD_RESET] Diagnostics reset warning:`, diagErr);
       }
 
       // 3) Reset FX5 24h windows and hourly scan history
@@ -246,9 +265,9 @@ class PaperSessionResetService {
         reset24hWindow(mode);
         resetHourlyScanHistory(mode);
         result.details.fx5WindowsReset = true;
-        console.log(`[B7.A][HARD_RESET] FX5 windows and scan history reset`);
+        console.log(`[8.8.3-A2R][HARD_RESET] FX5 windows and scan history reset`);
       } catch (fx5Err) {
-        console.warn(`[B7.A][HARD_RESET] FX5 reset warning:`, fx5Err);
+        console.warn(`[8.8.3-A2R][HARD_RESET] FX5 reset warning:`, fx5Err);
       }
 
       // 4) Clear DB state for open paper positions and trades
@@ -257,9 +276,9 @@ class PaperSessionResetService {
         result.details.closedTrades = dbResult.closedTrades;
         result.details.clearedPositions = dbResult.clearedPositions;
         result.details.databaseReset = true;
-        console.log(`[B7.A][HARD_RESET] Database reset: ${dbResult.closedTrades} trades closed, ${dbResult.clearedPositions} positions cleared`);
+        console.log(`[8.8.3-A2R][HARD_RESET] Database reset: ${dbResult.closedTrades} trades closed, ${dbResult.clearedPositions} positions cleared`);
       } catch (dbErr) {
-        console.error(`[B7.A][HARD_RESET] Database reset error:`, dbErr);
+        console.error(`[8.8.3-A2R][HARD_RESET] Database reset error:`, dbErr);
         throw dbErr;
       }
 
@@ -268,20 +287,20 @@ class PaperSessionResetService {
       (global as any).globalPaperSimOperationLock = null;
       (global as any).globalPaperSimBusyFlag = false;
 
-      // Phase 8.8.3-A2: Lightweight post-reset integrity audit
+      // Phase 8.8.3-A2R: Lightweight post-reset integrity audit
       await this.checkPostResetState(mode);
 
       const elapsed = Date.now() - startTime;
       result.success = true;
       result.message = `Hard reset completed in ${elapsed}ms`;
       
-      console.log(`[B7.A][HARD_RESET] ✅ Complete: ${result.message}`, result.details);
+      console.log(`[8.8.3-A2R][HARD_RESET] ✅ Complete: ${result.message}`, result.details);
       
       return result;
     } catch (error) {
       const elapsed = Date.now() - startTime;
       result.message = `Hard reset failed after ${elapsed}ms: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      console.error(`[B7.A][HARD_RESET] ❌ Failed:`, error);
+      console.error(`[8.8.3-A2R][HARD_RESET] ❌ Failed:`, error);
       return result;
     }
   }

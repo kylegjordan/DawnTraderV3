@@ -9166,6 +9166,22 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         });
       }
       
+      // Phase 8.8.3-A2R: CRITICAL - Stop the trading engine FIRST before any DB reset
+      // This prevents race conditions where engine opens trades during reset
+      console.log('[8.8.3-A2R][RESET] Starting reset - stopping engine first');
+      const { stopPaperSimulation } = await import('./services/paper-sim-service.js');
+      const stopResult = await stopPaperSimulation(userId);
+      if (!stopResult.success) {
+        // Phase 8.8.3-A2R: ABORT reset if engine stop fails - never proceed with DB reset while engine may be active
+        console.error('[8.8.3-A2R][RESET] ABORT - Engine stop failed:', stopResult.message);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to stop trading engine before reset',
+          message: stopResult.message
+        });
+      }
+      console.log('[8.8.3-A2R][RESET] Engine stopped successfully, proceeding with DB reset');
+      
       // Phase 8.8.3-I9-RESET-FIX: Soft reset fallback using existing balance
       // If newBalance is provided, use it (hard reset with new balance)
       // If newBalance is NOT provided, fetch current balance and do soft reset (clear positions only)
