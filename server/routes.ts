@@ -9539,7 +9539,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const netPnlPercent = startingBalance > 0 ? (netPnl / startingBalance) * 100 : 0;
       
       // Phase 8.8.3-I9: Get open trades count and max slots for TopBar metric
-      const maxOpenTrades = await storage.getGuardrailValue('paper', 'max_open_positions') || 15;
+      const guardrailsV2 = await storage.getGuardrailsV2({ mode: 'paper' });
+      const maxOpenTrades = guardrailsV2?.maxOpenPositions || 15;
       const openTradesCount = openPositions.length;
       const slotsAvailable = Math.max(0, maxOpenTrades - openTradesCount);
       
