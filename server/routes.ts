@@ -9165,15 +9165,26 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         });
       }
       
-      // Phase 41F-L.E2E-FIX: Require explicit newBalance, no hardcoded $800 fallback
-      if (!newBalance || isNaN(parseFloat(newBalance))) {
-        return res.status(400).json({ 
-          error: 'newBalance parameter required',
-          message: 'Please provide a valid newBalance value to reset the paper trading simulation.'
-        });
-      }
+      // Phase 8.8.3-I9-RESET-FIX: Soft reset fallback using existing balance
+      // If newBalance is provided, use it (hard reset with new balance)
+      // If newBalance is NOT provided, fetch current balance and do soft reset (clear positions only)
+      let balance: number;
+      let isSoftReset = false;
       
-      const balance = parseFloat(newBalance);
+      if (newBalance !== undefined && !isNaN(parseFloat(newBalance))) {
+        balance = parseFloat(newBalance);
+        console.log(`[PaperSim] Hard reset with new balance: $${balance}`);
+      } else {
+        // Soft reset: fetch current balance from portfolio state
+        isSoftReset = true;
+        const systemContext = await storage.getSystemContext('paper');
+        if (!systemContext) {
+          return res.status(500).json({ error: 'System context not found for paper mode' });
+        }
+        const portfolioState = await storage.getPortfolioState(systemContext.id, 'paper');
+        balance = portfolioState ? parseFloat(portfolioState.cash || '10000') : 10000;
+        console.log(`[PaperSim] Soft reset using existing balance: $${balance}`);
+      }
       
       console.log(`[PaperSim] Resetting simulation for user ${userId} with balance $${balance}`);
       
@@ -9221,8 +9232,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       res.json({
         success: true,
-        message: 'PaperSim reset complete.',
+        message: isSoftReset 
+          ? 'Paper simulation soft reset complete. Positions cleared, balance preserved.'
+          : 'Paper simulation hard reset complete.',
         newBalance: balance,
+        isSoftReset,
         hardResetDetails: resetResult.details
       });
     } catch (error: any) {
