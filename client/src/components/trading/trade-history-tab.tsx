@@ -590,7 +590,8 @@ export function TradeHistoryTab() {
                         
                         <td className="p-3 text-right">
                           {(() => {
-                            const confidence = parseFloat(trade.confidence || '0') * 100;
+                            const rawConf = parseFloat(trade.confidence || '0');
+                            const confidence = rawConf > 1 ? rawConf : rawConf * 100;
                             const confColor = confidence >= 80 ? 'text-green-600' : 
                                              confidence >= 60 ? 'text-blue-600' : 
                                              confidence >= 40 ? 'text-orange-500' : 'text-red-600';
