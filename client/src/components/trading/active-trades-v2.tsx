@@ -315,13 +315,19 @@ function TradeRow({
       <td className="px-3 py-3">
         <div className="flex items-center gap-1">
           <Target className="w-3 h-3 text-green-500" />
-          <span className="font-mono text-sm text-green-600">${trade.takeProfit.toFixed(6)}</span>
+          <span className="font-mono text-sm text-foreground">${trade.takeProfit.toFixed(6)}</span>
         </div>
       </td>
       
-      {/* 7. Current Price - C2A: Restored */}
+      {/* 7. Current Price - C2A: Colored based on entry comparison */}
       <td className="px-3 py-3">
-        <div className="font-mono text-sm font-medium">${trade.currentPrice.toFixed(6)}</div>
+        <div className={cn(
+          "font-mono text-sm font-medium",
+          trade.currentPrice > (trade.intendedEntryPrice || trade.entryPrice) ? "text-green-600" :
+          trade.currentPrice < (trade.intendedEntryPrice || trade.entryPrice) ? "text-red-600" : "text-foreground"
+        )}>
+          ${trade.currentPrice.toFixed(6)}
+        </div>
       </td>
       
       {/* 8. Distance (stacked: TP on top, SL on bottom) - C2A */}
