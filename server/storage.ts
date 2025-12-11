@@ -3256,6 +3256,7 @@ export class DatabaseStorage implements IStorage {
       conditions.push(sql`${paperSimTrades.closedAt} <= ${endOfDay}`);
     }
     
+    // Phase 8.8.3-C-FINAL: Expanded sort columns for all Trade History columns
     const sortColumn = {
       openedAt: paperSimTrades.openedAt,
       closedAt: paperSimTrades.closedAt,
@@ -3263,6 +3264,14 @@ export class DatabaseStorage implements IStorage {
       pnl: paperSimTrades.pnl,
       pnlPercent: paperSimTrades.pnlPercent,
       strategyName: paperSimTrades.strategyName,
+      entryPrice: paperSimTrades.entryPrice,
+      exitPrice: paperSimTrades.exitPrice,
+      quantity: paperSimTrades.quantity,
+      closeReason: paperSimTrades.closeReason,
+      confidence: paperSimTrades.confidence,
+      totalFee: paperSimTrades.totalFee,
+      entrySlippage: paperSimTrades.entrySlippage,
+      exitSlippage: paperSimTrades.exitSlippage,
     }[sortBy];
     
     const orderFn = order === 'asc' ? asc : desc;

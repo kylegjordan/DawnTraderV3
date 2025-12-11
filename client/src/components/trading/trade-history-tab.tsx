@@ -652,16 +652,16 @@ export function TradeHistoryTab() {
                       <SortableHeader column="closedAt" label="Closed" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
                       <SortableHeader column="symbol" label="Symbol" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
                       <SortableHeader column="strategyName" label="Strategy" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
-                      <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Entry</th>
-                      <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Exit</th>
-                      <th className="text-right p-3 text-sm font-semibold text-muted-foreground">Qty</th>
-                      <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Reason</th>
+                      <SortableHeader column="entryPrice" label="Entry" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
+                      <SortableHeader column="exitPrice" label="Exit" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
+                      <SortableHeader column="quantity" label="Qty" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
+                      <SortableHeader column="closeReason" label="Reason" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
                       <SortableHeader column="pnl" label="P/L" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
                       <SortableHeader column="pnlPercent" label="P/L %" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
-                      <th className="text-right p-3 text-sm font-semibold text-muted-foreground">Conf</th>
-                      <th className="text-right p-3 text-sm font-semibold text-muted-foreground">Fees</th>
-                      <th className="text-right p-3 text-sm font-semibold text-muted-foreground">Entry Slip</th>
-                      <th className="text-right p-3 text-sm font-semibold text-muted-foreground">Exit Slip</th>
+                      <SortableHeader column="confidence" label="Conf" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
+                      <SortableHeader column="totalFee" label="Fees" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
+                      <SortableHeader column="entrySlippage" label="Entry Slip" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
+                      <SortableHeader column="exitSlippage" label="Exit Slip" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
