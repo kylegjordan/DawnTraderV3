@@ -45,6 +45,15 @@ Phase 8.8.3-C-FINAL (Trade History Bug Fixes) resolves critical trade history di
 
 Phase 8.8.3-C-FINAL-2 (Trade Table Enhancements) provides comprehensive sorting and fee fixes: Active Trades now supports sorting on all columns including Qty/Value, TP/SL, Fees, and Volume. Manual close trades now calculate exit fees using `slippageFeeModel.calculateFees()`. Trade entry populates `entryFee`, `intendedEntryPrice`, and `entrySlippage` fields in open positions. Date filters use consistent start-of-day and end-of-day normalization. The `closeReason` dropdown options now match actual database values (`target_hit`, `manual_stop`, `hard_reset`, `manual_close`, `engine_stop_cleanup`, `stop_hit`).
 
+Phase 8.8.3-C2 (Full Cost Transparency) implements comprehensive P/L breakdown across the platform:
+- **P/L Calculations**: Gross P/L = (currentPrice - intendedEntryPrice) × quantity; Total Cost = entryFee + exitFee + entrySlippage + exitSlippage; Net P/L = grossPnl - totalCost
+- **Entry Price Tracking**: `intendedEntryPrice` = signal price (before slippage), `actualEntryPrice` = signal price + 0.15% slippage
+- **Cost Constants**: SLIPPAGE_PERCENT = 0.15%, FEE_PERCENT = 0.10%
+- **Active Trades UI (18 columns)**: Symbol, Slot, Strategy, Qty/Value, Entry (Signal), Entry (Actual), Gross P/L $%, Entry Fee/Slip, Est Exit Fee/Slip, Total Cost, Net P/L $%, Confidence, Volume, Source, Duration, Actions
+- **Trade History Columns**: Gross P/L, Entry Fee, Entry Slip, Exit Fee, Exit Slip, Total Cost, Net P/L
+- **Database Columns Added**: `total_cost`, `gross_pnl`, `net_pnl`, `net_pnl_percent` to `paper_sim_trades`
+- **DualScrollTable Component**: Synchronized horizontal scroll bars at top and bottom of wide tables for easier navigation
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.
