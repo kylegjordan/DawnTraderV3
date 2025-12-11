@@ -66,6 +66,10 @@ interface ActiveTrade {
   avgIntervalMs?: number;
   volume24h?: number;
   volumeBucket?: 'High' | 'Medium' | 'Low' | 'Very Low';
+  // Phase 8.8.3-C1: Fee tracking
+  entryFee?: string;
+  intendedEntryPrice?: string;
+  entrySlippage?: string;
 }
 
 interface PortfolioSummary {
@@ -318,6 +322,15 @@ function TradeRow({
           trade.confidence >= 40 ? "text-orange-600" : "text-red-600"
         )}>
           {trade.confidence}%
+        </div>
+      </td>
+      
+      {/* 11b. Fees (C1: projected entry fee * 2) */}
+      <td className="px-3 py-3">
+        <div className="font-mono text-xs text-muted-foreground">
+          {trade.entryFee && parseFloat(trade.entryFee) > 0 
+            ? `~$${formatNumber(parseFloat(trade.entryFee) * 2, 2)}`
+            : '-'}
         </div>
       </td>
       
@@ -872,6 +885,7 @@ export default function ActiveTradesV2() {
                   <SortableHeader field="unrealizedPnl" label="P/L $" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="unrealizedPnlPercent" label="P/L %" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="confidence" label="Conf" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fees</th>
                   <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Source</th>
                   <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Volume</th>
                   <SortableHeader field="holdingDurationMs" label="Duration" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
