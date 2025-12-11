@@ -1,0 +1,252 @@
+✅ PHASE 8.8.3-C2 — P/L Architecture Upgrade, Cost Transparency, Trade History Enhancements
+Primary Goal
+
+Separate Gross P/L from all execution costs, clearly surface slippage + fees, calculate Net P/L, and ensure Trade History + Active Trades display consistent, accurate values.
+
+🎯 Part A — Data Model & Backend Logic Updates
+A1. Database Fields Required (Trade History Only)
+
+You do NOT need to change open-positions schema — only the closed trade records (paper_sim_trades).
+
+Ensure the following fields exist (many are already present):
+
+Trade Table Required Columns
+Column	Type	Description
+entry_fee	numeric	Actual entry fee paid
+exit_fee	numeric	Actual exit fee paid (or estimated at close)
+total_fee	numeric	entry_fee + exit_fee
+entry_slippage	numeric	Actual entry slippage cost
+exit_slippage	numeric	Calculated when trade closes
+total_cost	numeric	entry_fee + exit_fee + entry_slippage + exit_slippage
+gross_pnl	numeric	Market P/L without costs
+net_pnl	numeric	gross_pnl – total_cost
+net_pnl_percent	numeric	Percent net return on the position
+Directive
+
+Add missing DB columns if not present
+
+Ensure exit_slippage, total_cost, gross_pnl, net_pnl, net_pnl_percent exist
+
+Backfill: Existing trades may have zero cost values — this is acceptable
+
+A2. Execution Engine Updates (Open Trades Only)
+
+Open trade P/L should now include:
+
+Gross P/L
+grossPL = (currentPrice – entryPriceWithoutSlippage) × quantity
+
+Costs (separate columns)
+
+entry_slippage (actual from entry)
+
+entry_fee (actual)
+
+exit_fee_estimate (estimated using fee rate × current value)
+
+exit_slippage_estimate (apply same slippage % used for entry)
+
+Estimated total_cost
+estimatedTotalCost = entry_fee + entry_slippage + estimated_exit_fee + estimated_exit_slippage
+
+Net P/L
+netPL = grossPL – estimatedTotalCost
+
+Directive
+
+DO NOT modify core trade execution logic for slippage or fees
+
+DO add the new calculations for UI consumption
+
+Expose these to the /api/paper-sim/open-positions response
+
+A3. Guardrail and Balance Logic
+
+Current guardrails incorrectly use startingBalance.
+
+Directive
+
+Update guardrails to use currentBalance, where:
+
+currentBalance = startingBalance + realizedNetPL + unrealizedNetPL
+
+🎯 Part B — ACTIVE TRADES UI Updates
+B1. Add new columns (in correct order)
+
+Replace current columns with the following ordering:
+
+Column Order (Left → Right)
+
+Symbol
+
+Slot
+
+Strategy
+
+Qty / Value
+
+Entry Price (signal)
+
+Entry Price (actual)
+
+Gross P/L ($)
+
+Gross P/L (%)
+
+Entry Fee
+
+Entry Slippage
+
+Est. Exit Fee
+
+Est. Exit Slippage
+
+Total Est. Cost
+
+Net P/L ($)
+
+Net P/L (%)
+
+Confidence
+
+Volume
+
+Source
+
+Duration
+
+Actions (Close)
+
+🎯 Part C — TRADE HISTORY UI Updates
+C1. Column Changes
+Replace current Fees + Slippage columns with the following:
+Column	Description
+Entry Fee	Actual entry fee from DB
+Exit Fee	Actual exit fee from DB
+Fees (Entry + Exit)	entry_fee + exit_fee
+Entry Slip	Actual entry slippage cost
+Exit Slip	Actual exit slippage cost
+Total Cost	entry_fee + exit_fee + entry_slippage + exit_slippage
+Gross P/L	Without costs
+Net P/L	net_pnl from DB
+Net P/L %	net_pnl_percent
+Directive
+
+Use existing DB fields
+
+Backfill earlier trades where values = 0 (acceptable)
+
+Ensure SL trades correctly populate exit_slippage and exit_fee
+
+C2. Date Range Fix
+
+JS was interpreting dateTo as midnight, excluding same-day trades.
+
+Directive
+
+Always convert dateTo to 23:59:59 UTC
+
+Ensure filtering uses UTC consistently
+
+Ensure Trade History always includes trades closed today
+
+C3. Default Behavior
+Directive
+
+Default Trade History = show ALL trades with pagination
+
+User can then filter by symbol, strategy, reason, and date range
+
+No ghost filtering
+
+🎯 Part D — NEW UI FEATURES
+D1. Add Close-Reason Filter
+
+Dropdown options:
+
+stop_hit
+
+tp_hit
+
+manual_close
+
+hard_reset
+
+engine_stop_cleanup
+
+all
+
+D2. Add Horizontal Slider (Required)
+Directive:
+
+Add a top-of-table horizontal scroll bar
+
+This prevents needing to scroll to bottom to scroll horizontally
+
+Apply same component to both Active Trades and Trade History
+
+🎯 Part E — Reconciliation Rules
+E1. Gross P/L = Market only
+
+No slippage
+No fees
+
+E2. Net P/L = Realistic economic value
+
+Slippage + fees all included
+
+E3. Current Balance = Sum of:
+
+startingBalance
+
+all realized net P/L
+
+all unrealized net P/L
+
+🎯 Part F — Testing Requirements (must pass)
+
+Open a fresh trading session
+
+Verify each new trade begins at:
+
+Gross P/L near $0
+
+Entry slippage reflects cost
+
+Entry fee populates
+
+Net P/L = gross - costs
+
+Close a trade manually
+
+Trade History must show:
+
+entry_fee
+
+exit_fee
+
+entry_slippage
+
+exit_slippage
+
+total_cost
+
+net_pnl
+
+SL or TP hit
+
+Costs must populate properly
+
+Exit_slippage must no longer be 0
+
+Filter by:
+
+today → must show today's trades
+
+strategy → must filter
+
+close reason → must filter
+
+date range → must include all trades inside range, using UTC 23:59:59 logic
+
+👍 Directive Ready for Replit

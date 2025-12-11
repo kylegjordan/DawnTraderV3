@@ -1664,6 +1664,11 @@ export const paperSimTrades = pgTable("paper_sim_trades", {
   targetExitPrice: decimal("target_exit_price", { precision: 20, scale: 8 }),
   actualExitPrice: decimal("actual_exit_price", { precision: 20, scale: 8 }),
   exitSlippage: decimal("exit_slippage", { precision: 20, scale: 8 }).default("0"),
+  // Phase 8.8.3-C2: Cost transparency and P/L breakdown
+  totalCost: decimal("total_cost", { precision: 20, scale: 8 }).default("0"), // entry_fee + exit_fee + entry_slippage + exit_slippage
+  grossPnl: decimal("gross_pnl", { precision: 20, scale: 8 }).default("0"), // Market P/L without costs
+  netPnl: decimal("net_pnl", { precision: 20, scale: 8 }).default("0"), // gross_pnl - total_cost
+  netPnlPercent: decimal("net_pnl_percent", { precision: 10, scale: 4 }).default("0"), // Net return percentage
   openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
   closedAt: timestamp("closed_at", { withTimezone: true }),
   closeReason: varchar("close_reason", { length: 50 }), // 'target_hit', 'stop_hit', 'strategy_exit', 'manual', 'guardrail'

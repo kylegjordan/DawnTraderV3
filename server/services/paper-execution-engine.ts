@@ -757,23 +757,42 @@ export class PaperExecutionEngine {
       now: new Date().toISOString()
     }));
 
-    const avgPrice = parseFloat(position.avgPrice);
+    const avgPrice = parseFloat(position.avgPrice); // Actual entry price (with slippage)
     const quantity = parseFloat(position.quantity);
     const entryValue = avgPrice * quantity;
+    
+    // Phase 8.8.3-C2: Get intended entry price for gross P/L calculation
+    const intendedEntryPrice = position.intendedEntryPrice 
+      ? parseFloat(position.intendedEntryPrice) 
+      : avgPrice; // Fallback for old positions
+    const intendedEntryValue = intendedEntryPrice * quantity;
 
     // Apply exit slippage and fees
-    const slippage = exitPrice * (this.SLIPPAGE_PERCENT / 100);
-    const actualExitPrice = exitPrice - slippage; // Worse price due to slippage
+    const exitSlippagePerUnit = exitPrice * (this.SLIPPAGE_PERCENT / 100);
+    const actualExitPrice = exitPrice - exitSlippagePerUnit; // Worse price due to slippage
     const exitValue = actualExitPrice * quantity;
     const exitFee = exitValue * (this.FEE_PERCENT / 100);
-    const entryFee = entryValue * (this.FEE_PERCENT / 100);
+    
+    // Get entry costs from position (persisted at entry time)
+    const entryFee = position.entryFee ? parseFloat(position.entryFee) : (entryValue * (this.FEE_PERCENT / 100));
+    const entrySlippage = position.entrySlippage ? parseFloat(position.entrySlippage) : 0;
+    const exitSlippage = exitSlippagePerUnit * quantity;
 
-    // Calculate final P/L
-    const grossPnl = exitValue - entryValue;
+    // Phase 8.8.3-C2: P/L breakdown per directive
+    // Gross P/L = Pure market movement (no slippage, no fees)
+    const grossPnl = (exitPrice - intendedEntryPrice) * quantity;
+    
+    // Total Cost = All execution costs
+    const totalCost = entryFee + exitFee + entrySlippage + exitSlippage;
     const totalFees = entryFee + exitFee;
-    const totalSlippage = slippage * quantity; // Total slippage impact
-    const netPnl = grossPnl - totalFees;
-    const pnlPercent = (netPnl / entryValue) * 100;
+    
+    // Net P/L = Gross P/L minus all costs
+    const netPnl = grossPnl - totalCost;
+    const netPnlPercent = intendedEntryValue > 0 ? (netPnl / intendedEntryValue) * 100 : 0;
+    
+    // Legacy fields for backward compatibility
+    const totalSlippage = entrySlippage + exitSlippage;
+    const pnlPercent = netPnlPercent; // For backward compatibility
 
     // [B8.PNL] Anomaly guard: Check for >100% price move within 5 minutes
     const priceMoveRatio = avgPrice > 0 ? Math.abs((actualExitPrice - avgPrice) / avgPrice) : 0;
@@ -811,8 +830,11 @@ export class PaperExecutionEngine {
     }));
 
     console.log(`[PaperExecution:${this.mode}] Closing position ${position.symbol}:`);
-    console.log(`  Entry: ${avgPrice.toFixed(2)}, Exit: ${actualExitPrice.toFixed(2)}`);
-    console.log(`  Gross P/L: $${grossPnl.toFixed(2)}, Fees: $${totalFees.toFixed(2)}, Net P/L: $${netPnl.toFixed(2)} (${pnlPercent.toFixed(2)}%)`);
+    console.log(`  Entry (signal): $${intendedEntryPrice.toFixed(2)}, Entry (actual): $${avgPrice.toFixed(2)}`);
+    console.log(`  Exit (market): $${exitPrice.toFixed(2)}, Exit (actual): $${actualExitPrice.toFixed(2)}`);
+    console.log(`  [C2] Gross P/L: $${grossPnl.toFixed(2)} (pure market)`);
+    console.log(`  [C2] Costs: Entry Fee $${entryFee.toFixed(2)} + Exit Fee $${exitFee.toFixed(2)} + Entry Slip $${entrySlippage.toFixed(2)} + Exit Slip $${exitSlippage.toFixed(2)} = Total $${totalCost.toFixed(2)}`);
+    console.log(`  [C2] Net P/L: $${netPnl.toFixed(2)} (${netPnlPercent.toFixed(2)}%)`);
     console.log(`  Reason: ${exitCondition.reason}`);
 
     // Find the corresponding trade record
@@ -820,7 +842,7 @@ export class PaperExecutionEngine {
     const trade = trades.find(t => t.openedAt && !t.closedAt);
     
     if (trade) {
-      // Update trade record
+      // Update trade record - Phase 8.8.3-C2: Include all cost/P&L breakdown fields
       await storage.updatePaperSimTrade(this.mode, trade.id, {
         exitPrice: actualExitPrice.toString(),
         pnl: netPnl.toString(),
@@ -828,10 +850,24 @@ export class PaperExecutionEngine {
         fees: totalFees.toString(),
         slippage: totalSlippage.toString(),
         closeReason: exitCondition.type,
-        closedAt: new Date()
+        closedAt: new Date(),
+        // Phase 8.8.3-C2: New cost transparency fields
+        entryFee: entryFee.toString(),
+        exitFee: exitFee.toString(),
+        totalFee: totalFees.toString(),
+        intendedEntryPrice: intendedEntryPrice.toString(),
+        actualEntryPrice: avgPrice.toString(),
+        entrySlippage: entrySlippage.toString(),
+        targetExitPrice: exitPrice.toString(),
+        actualExitPrice: actualExitPrice.toString(),
+        exitSlippage: exitSlippage.toString(),
+        totalCost: totalCost.toString(),
+        grossPnl: grossPnl.toString(),
+        netPnl: netPnl.toString(),
+        netPnlPercent: netPnlPercent.toString()
       });
 
-      // Log the exit event
+      // Log the exit event with C2 breakdown
       await storage.createPaperSimTradeLog(this.mode, {
         tradeId: trade.id,
         positionId: positionId,
@@ -843,7 +879,15 @@ export class PaperExecutionEngine {
           fees: totalFees,
           pnl: netPnl,
           pnlPercent: pnlPercent,
-          closeReason: exitCondition.type
+          closeReason: exitCondition.type,
+          // C2 breakdown
+          grossPnl,
+          netPnl,
+          entryFee,
+          exitFee,
+          entrySlippage,
+          exitSlippage,
+          totalCost
         }
       });
     }
