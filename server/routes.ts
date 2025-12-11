@@ -9299,11 +9299,59 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 8.8.3-C5: Enhanced trades endpoint with pagination, sorting, and filtering
   apiRouter.get('/paper-sim/trades', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const { limit, closedOnly } = req.query;
+      const { limit, offset, sortBy, order, closedOnly, symbol, strategy, dateFrom, dateTo, paginated } = req.query;
       
+      // Phase 8.8.3-C5: If paginated=true, use new paginated method
+      if (paginated === 'true') {
+        const filters: any = {
+          limit: limit ? parseInt(limit as string) : 50,
+          offset: offset ? parseInt(offset as string) : 0,
+          sortBy: (sortBy as string) || 'closedAt',
+          order: (order as string) || 'desc',
+          closedOnly: closedOnly === 'true',
+          symbol: symbol as string,
+          strategy: strategy as string,
+        };
+        
+        if (dateFrom) {
+          filters.dateFrom = new Date(dateFrom as string);
+        }
+        if (dateTo) {
+          filters.dateTo = new Date(dateTo as string);
+        }
+        
+        const result = await storage.getPaperSimTradesPaginated('paper', filters);
+        
+        // Phase 8.8.3-B3: Ghost trade filtering
+        const validTrades = result.trades.filter((trade: any) => {
+          if (!trade.closedAt && trade.status === 'open') return true;
+          if (trade.closedAt) {
+            const hasExitPrice = trade.exitPrice && parseFloat(trade.exitPrice.toString()) > 0;
+            const hasCloseReason = trade.closeReason && trade.closeReason.trim() !== '';
+            return hasExitPrice && hasCloseReason;
+          }
+          if (trade.status && trade.status !== 'open') {
+            return false;
+          }
+          return true;
+        });
+        
+        res.json({
+          trades: validTrades,
+          totalCount: result.totalCount,
+          limit: filters.limit,
+          offset: filters.offset,
+          sortBy: filters.sortBy,
+          order: filters.order
+        });
+        return;
+      }
+      
+      // Legacy non-paginated path for backwards compatibility
       const options: any = {};
       if (limit) options.limit = parseInt(limit as string);
       if (closedOnly) options.closedOnly = closedOnly === 'true';
@@ -9311,25 +9359,16 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const trades = await storage.getPaperSimTrades('paper', options);
       
       // Phase 8.8.3-B3: Ghost trade filtering
-      // Filter out trades that are "ghost" trades - closed trades without proper closing data
-      const validTrades = trades.filter(trade => {
-        // Open trades (status open or no closed_at) are always valid
+      const validTrades = trades.filter((trade: any) => {
         if (!trade.closedAt && trade.status === 'open') return true;
-        
-        // For trades that should be closed, require proper closing data
-        // Ghost = has closedAt but no exit_price, or no close_reason with status != 'open'
         if (trade.closedAt) {
-          // Properly closed trade needs exit_price and close_reason
           const hasExitPrice = trade.exitPrice && parseFloat(trade.exitPrice.toString()) > 0;
           const hasCloseReason = trade.closeReason && trade.closeReason.trim() !== '';
           return hasExitPrice && hasCloseReason;
         }
-        
-        // If no closedAt and status is not 'open', it's a ghost
         if (trade.status && trade.status !== 'open') {
           return false;
         }
-        
         return true;
       });
       
