@@ -2038,7 +2038,7 @@ export class PaperExecutionEngine {
         }
       }
 
-      // Create open position
+      // Create open position - Phase 8.8.3-C-FINAL: Include entryFee
       const openPosition = await storage.createPaperSimOpenPosition(this.mode, {
         symbol: signal.symbol,
         strategyName: signal.strategy,
@@ -2053,6 +2053,9 @@ export class PaperExecutionEngine {
         confidence: (signal.confidence * 100).toString(),
         volume24h: volume24h.toString(),
         volumeBucket: volumeBucket,
+        entryFee: entryFee.toString(),
+        intendedEntryPrice: signal.entryPrice.toString(),
+        entrySlippage: totalSlippage.toString(),
         metadata: {
           ...signal.metadata,
           tradeId: trade.id,

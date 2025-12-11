@@ -67,6 +67,7 @@ import { marketVolumeCache } from './services/market-volume-cache.js';
 import { b5SizingAudit } from './services/b5-sizing-audit.js';
 import { livePricingAdapter } from './services/live-pricing-adapter.js';
 import { krakenWebSocketAdapter } from './services/kraken-websocket-adapter.js';
+import { slippageFeeModel } from './services/slippage-fee-model.js';
 import os from 'os';
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
@@ -9676,8 +9677,19 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       }
       console.log(`[8.8.3-I6][CLOSE_TRADE_LIVE_PRICE] symbol=${position.symbol} price=${currentPrice} source=${priceSource} fallbackType=${fallbackType}`);
       
+      // Phase 8.8.3-C-FINAL: Calculate exit fee for manual close
+      const exitNotional = currentPrice * quantity;
+      const exitFeeModel = slippageFeeModel.calculateFees(exitNotional, false);
+      const exitFee = exitFeeModel.totalFees;
+      
+      // Get entry fee from the position if available
+      const entryFee = parseFloat(position.entryFee?.toString() || '0');
+      const totalFees = entryFee + exitFee;
+      
       const pnl = (currentPrice - entryPrice) * quantity;
       const pnlPercent = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice) * 100 : 0;
+      
+      console.log(`[8.8.3-C-FINAL][MANUAL_CLOSE_FEES] symbol=${position.symbol} exitNotional=${exitNotional.toFixed(2)} exitFee=${exitFee.toFixed(4)} entryFee=${entryFee.toFixed(4)} totalFees=${totalFees.toFixed(4)}`);
       
       // Build closed trade payload
       const closedTradePayload = {
@@ -9691,7 +9703,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         takeProfit: position.takeProfit?.toString(),
         pnl: pnl.toString(),
         pnlPercent: pnlPercent.toString(),
-        fees: '0',
+        fees: totalFees.toString(),
+        entryFee: entryFee.toString(),
+        exitFee: exitFee.toString(),
+        totalFee: totalFees.toString(),
         slippage: '0',
         openedAt: position.openedAt || new Date(),
         closedAt: new Date(),
