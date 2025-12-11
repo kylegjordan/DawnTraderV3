@@ -43,6 +43,8 @@ Phase 8.8.3-C (Fee and Slippage Tracking + Pagination) enhances trade transparen
 
 Phase 8.8.3-C-FINAL (Trade History Bug Fixes) resolves critical trade history display issues: moves ghost trade filtering to SQL, fixes `dateTo` end-of-day logic, adds server-side `closeReason` filter, and implements an Apply/Clear UX pattern for filters.
 
+Phase 8.8.3-C-FINAL-2 (Trade Table Enhancements) provides comprehensive sorting and fee fixes: Active Trades now supports sorting on all columns including Qty/Value, TP/SL, Fees, and Volume. Manual close trades now calculate exit fees using `slippageFeeModel.calculateFees()`. Trade entry populates `entryFee`, `intendedEntryPrice`, and `entrySlippage` fields in open positions. Date filters use consistent start-of-day and end-of-day normalization. The `closeReason` dropdown options now match actual database values (`target_hit`, `manual_stop`, `hard_reset`, `manual_close`, `engine_stop_cleanup`, `stop_hit`).
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.
