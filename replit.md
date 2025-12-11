@@ -59,6 +59,11 @@ Trade History Table enhancements:
 - **Number Formatting**: `formatNumber()` utility for comma-separated monetary values
 - **Confidence Display**: Normalized to 0-100%, color-coded (Green ≥80%, Blue 60-79%, Orange 40-59%, Red <40%)
 
+Phase 8.8.3-C (Fee and Slippage Tracking + Pagination) enhances trade transparency and table usability:
+- **C1 - Fee Handling**: Added `entryFee`, `exitFee`, `totalFee` columns to `paper_sim_trades` table; `entryFee` column to `paper_sim_open_positions` table. Active Trades UI shows projected fees (entryFee * 2), Trade History shows total fees.
+- **C4 - Slippage Tracking**: Added `intendedEntryPrice`, `actualEntryPrice`, `entrySlippage`, `targetExitPrice`, `actualExitPrice`, `exitSlippage` columns to `paper_sim_trades` table; `intendedEntryPrice`, `entrySlippage` to `paper_sim_open_positions`. Trade History displays Entry Slip and Exit Slip columns.
+- **C5 - Pagination & Sorting**: `getPaperSimTradesPaginated()` method supports `limit`, `offset`, `sortBy`, `order` parameters with `totalCount` return. `/api/paper-sim/trades?paginated=true` endpoint returns paginated response with `trades`, `totalCount`, `page`, `pageSize`, `totalPages`. Trade History UI has pagination controls (10/25/50 per page), sortable column headers, and page navigation.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.
