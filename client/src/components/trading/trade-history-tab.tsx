@@ -394,10 +394,21 @@ function SortableHeader({
 export function TradeHistoryTab() {
   const { isPaper } = useTradingMode();
   const [analyticsRange, setAnalyticsRange] = useState('session'); // B2: Default to "Since Last Simulation Start"
-  const [filters, setFilters] = useState({
+  
+  // Phase 8.8.3-C-FINAL PART 6: Pending filters (user edits these)
+  const [pendingFilters, setPendingFilters] = useState({
     symbol: '',
     strategy: 'all',
-    status: 'closed',
+    closeReason: 'all',
+    dateFrom: '',
+    dateTo: ''
+  });
+  
+  // Phase 8.8.3-C-FINAL PART 6: Applied filters (used for API calls, triggered by Apply button)
+  const [appliedFilters, setAppliedFilters] = useState({
+    symbol: '',
+    strategy: 'all',
+    closeReason: 'all',
     dateFrom: '',
     dateTo: ''
   });
@@ -408,8 +419,28 @@ export function TradeHistoryTab() {
   const [sortBy, setSortBy] = useState<string>('closedAt');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   
+  // Phase 8.8.3-C-FINAL PART 6: Apply filters handler
+  const handleApplyFilters = () => {
+    setAppliedFilters({ ...pendingFilters });
+    setPage(0); // Reset to first page when applying filters
+  };
+  
+  // Phase 8.8.3-C-FINAL PART 6: Clear filters handler
+  const handleClearFilters = () => {
+    const cleared = {
+      symbol: '',
+      strategy: 'all',
+      closeReason: 'all',
+      dateFrom: '',
+      dateTo: ''
+    };
+    setPendingFilters(cleared);
+    setAppliedFilters(cleared);
+    setPage(0);
+  };
+  
   // Phase 8.8.3-C5: Use paginated API endpoint
-  // Phase 8.8.3-C HOTFIX-1: Added explicit queryFn to build URL with query parameters
+  // Phase 8.8.3-C-FINAL PART 5: Fixed queryFn with closeReason and applied filters
   const { data: paginatedData, isFetching, refetch } = useQuery<{
     trades: any[];
     totalCount: number;
@@ -423,10 +454,11 @@ export function TradeHistoryTab() {
       sortBy,
       order,
       closedOnly: 'true',
-      symbol: filters.symbol || undefined,
-      strategy: filters.strategy !== 'all' ? filters.strategy : undefined,
-      dateFrom: filters.dateFrom || undefined,
-      dateTo: filters.dateTo || undefined
+      symbol: appliedFilters.symbol || undefined,
+      strategy: appliedFilters.strategy !== 'all' ? appliedFilters.strategy : undefined,
+      closeReason: appliedFilters.closeReason !== 'all' ? appliedFilters.closeReason : undefined,
+      dateFrom: appliedFilters.dateFrom || undefined,
+      dateTo: appliedFilters.dateTo || undefined
     }],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -436,10 +468,11 @@ export function TradeHistoryTab() {
       params.set('sortBy', sortBy);
       params.set('order', order);
       params.set('closedOnly', 'true');
-      if (filters.symbol) params.set('symbol', filters.symbol);
-      if (filters.strategy !== 'all') params.set('strategy', filters.strategy);
-      if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
-      if (filters.dateTo) params.set('dateTo', filters.dateTo);
+      if (appliedFilters.symbol) params.set('symbol', appliedFilters.symbol);
+      if (appliedFilters.strategy !== 'all') params.set('strategy', appliedFilters.strategy);
+      if (appliedFilters.closeReason !== 'all') params.set('closeReason', appliedFilters.closeReason);
+      if (appliedFilters.dateFrom) params.set('dateFrom', appliedFilters.dateFrom);
+      if (appliedFilters.dateTo) params.set('dateTo', appliedFilters.dateTo);
       return apiFetch(`/api/paper-sim/trades?${params.toString()}`);
     },
     enabled: isPaper,
@@ -498,17 +531,17 @@ export function TradeHistoryTab() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
             <Input
               placeholder="Search symbol..."
-              value={filters.symbol}
-              onChange={(e) => setFilters(prev => ({ ...prev, symbol: e.target.value }))}
+              value={pendingFilters.symbol}
+              onChange={(e) => setPendingFilters(prev => ({ ...prev, symbol: e.target.value }))}
               data-testid="input-symbol-filter"
             />
             
             <Select 
-              value={filters.strategy} 
-              onValueChange={(value) => setFilters(prev => ({ ...prev, strategy: value }))}
+              value={pendingFilters.strategy} 
+              onValueChange={(value) => setPendingFilters(prev => ({ ...prev, strategy: value }))}
             >
               <SelectTrigger data-testid="select-strategy-filter">
                 <SelectValue placeholder="All strategies" />
@@ -527,29 +560,50 @@ export function TradeHistoryTab() {
               </SelectContent>
             </Select>
             
+            {/* Phase 8.8.3-C-FINAL PART 4: Close Reason filter dropdown */}
+            <Select 
+              value={pendingFilters.closeReason} 
+              onValueChange={(value) => setPendingFilters(prev => ({ ...prev, closeReason: value }))}
+            >
+              <SelectTrigger data-testid="select-close-reason-filter">
+                <SelectValue placeholder="All close reasons" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All close reasons</SelectItem>
+                <SelectItem value="stop_hit">Stop Loss (SL)</SelectItem>
+                <SelectItem value="take_profit">Take Profit (TP)</SelectItem>
+                <SelectItem value="manual_stop">Manual Stop</SelectItem>
+                <SelectItem value="manual_close">Manual Close</SelectItem>
+                <SelectItem value="engine_stop_cleanup">Engine Cleanup</SelectItem>
+                <SelectItem value="orchestrator_stop">Orchestrator Stop</SelectItem>
+              </SelectContent>
+            </Select>
+            
             <Input
               type="date"
-              value={filters.dateFrom}
-              onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+              value={pendingFilters.dateFrom}
+              onChange={(e) => setPendingFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
               data-testid="input-date-from"
             />
             
             <Input
               type="date"
-              value={filters.dateTo}
-              onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+              value={pendingFilters.dateTo}
+              onChange={(e) => setPendingFilters(prev => ({ ...prev, dateTo: e.target.value }))}
               data-testid="input-date-to"
             />
             
+            {/* Phase 8.8.3-C-FINAL PART 6: Apply and Clear buttons */}
+            <Button
+              onClick={handleApplyFilters}
+              data-testid="button-apply-filters"
+            >
+              Apply
+            </Button>
+            
             <Button
               variant="outline"
-              onClick={() => setFilters({
-                symbol: '',
-                strategy: 'all',
-                status: 'closed',
-                dateFrom: '',
-                dateTo: ''
-              })}
+              onClick={handleClearFilters}
               data-testid="button-clear-filters"
             >
               Clear
