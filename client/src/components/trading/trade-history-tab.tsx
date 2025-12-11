@@ -731,7 +731,14 @@ export function TradeHistoryTab() {
                           </td>
                           
                           <td className="p-2">
-                            <Badge variant="outline" className="text-xs">
+                            <Badge 
+                              variant="outline" 
+                              className={cn(
+                                "text-xs",
+                                trade.closeReason === 'target_hit' && "bg-green-500/20 text-green-600 border-green-500/50",
+                                trade.closeReason === 'stop_hit' && "bg-red-500/20 text-red-600 border-red-500/50"
+                              )}
+                            >
                               {!trade.closedAt ? 'Open' :
                                trade.closeReason === 'target_hit' ? 'Target Price Hit' :
                                trade.closeReason === 'stop_hit' ? 'Stop Loss' :
