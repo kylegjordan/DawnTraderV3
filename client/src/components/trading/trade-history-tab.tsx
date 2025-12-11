@@ -583,11 +583,11 @@ export function TradeHistoryTab() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All close reasons</SelectItem>
-                <SelectItem value="target_hit">Take Profit (TP)</SelectItem>
-                <SelectItem value="stop_hit">Stop Loss (SL)</SelectItem>
+                <SelectItem value="target_hit">TP (Target Price Hit)</SelectItem>
+                <SelectItem value="stop_hit">SL (Stop/Loss)</SelectItem>
                 <SelectItem value="manual_stop">Manual Stop</SelectItem>
                 <SelectItem value="manual_close">Manual Close</SelectItem>
-                <SelectItem value="engine_stop_cleanup">Engine Cleanup</SelectItem>
+                <SelectItem value="engine_stop_cleanup">Engine Stop Clean</SelectItem>
                 <SelectItem value="hard_reset">Hard Reset</SelectItem>
               </SelectContent>
             </Select>
@@ -735,10 +735,12 @@ export function TradeHistoryTab() {
                               {!trade.closedAt ? 'Open' :
                                trade.closeReason === 'target_hit' ? 'TP' :
                                trade.closeReason === 'stop_hit' ? 'SL' :
-                               trade.closeReason === 'manual_close' ? 'Manual' :
-                               trade.closeReason === 'hard_stop' ? 'Hard' :
-                               trade.closeReason === 'force_close' ? 'Force' :
-                               trade.closeReason === 'engine_stop' ? 'Engine' :
+                               trade.closeReason === 'manual_close' ? 'Manual Close' :
+                               trade.closeReason === 'manual_stop' ? 'Manual Stop' :
+                               trade.closeReason === 'engine_stop_cleanup' ? 'Engine Stop Clean' :
+                               trade.closeReason === 'hard_reset' ? 'Hard Reset' :
+                               trade.closeReason === 'hard_stop' ? 'Hard Stop' :
+                               trade.closeReason === 'force_close' ? 'Force Close' :
                                trade.closeReason || '?'}
                             </Badge>
                           </td>
