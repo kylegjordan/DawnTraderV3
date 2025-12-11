@@ -18,7 +18,14 @@ import {
   BarChart3,
   Award,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from "lucide-react";
 
 function formatNumber(value: number | string, decimals: number = 2): string {
@@ -347,6 +354,43 @@ function AnalyticsPanel({ range }: { range: string }) {
   );
 }
 
+// Phase 8.8.3-C5: Sortable column header component
+function SortableHeader({ 
+  column, 
+  label, 
+  currentSort, 
+  currentOrder, 
+  onSort,
+  align = 'left'
+}: { 
+  column: string; 
+  label: string; 
+  currentSort: string; 
+  currentOrder: 'asc' | 'desc'; 
+  onSort: (col: string) => void;
+  align?: 'left' | 'right';
+}) {
+  const isActive = currentSort === column;
+  return (
+    <th 
+      className={cn(
+        "p-3 text-sm font-semibold text-muted-foreground cursor-pointer hover:bg-muted/50 select-none",
+        align === 'right' ? 'text-right' : 'text-left'
+      )}
+      onClick={() => onSort(column)}
+    >
+      <div className={cn("flex items-center gap-1", align === 'right' && "justify-end")}>
+        {label}
+        {isActive ? (
+          currentOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+        ) : (
+          <ArrowUpDown className="w-3 h-3 opacity-40" />
+        )}
+      </div>
+    </th>
+  );
+}
+
 export function TradeHistoryTab() {
   const { isPaper } = useTradingMode();
   const [analyticsRange, setAnalyticsRange] = useState('session'); // B2: Default to "Since Last Simulation Start"
@@ -358,26 +402,50 @@ export function TradeHistoryTab() {
     dateTo: ''
   });
   
-  // Point 1: Updated React Query options to prevent data from becoming undefined
-  const { data: tradesData = [], isFetching } = useQuery<any[]>({
-    queryKey: ['/api/paper-sim/trades'],
+  // Phase 8.8.3-C5: Pagination and sorting state
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(25);
+  const [sortBy, setSortBy] = useState<string>('closedAt');
+  const [order, setOrder] = useState<'asc' | 'desc'>('desc');
+  
+  // Phase 8.8.3-C5: Use paginated API endpoint
+  const { data: paginatedData, isFetching, refetch } = useQuery<{
+    trades: any[];
+    totalCount: number;
+    limit: number;
+    offset: number;
+  }>({
+    queryKey: ['/api/paper-sim/trades', { 
+      paginated: 'true',
+      limit: pageSize, 
+      offset: page * pageSize,
+      sortBy,
+      order,
+      closedOnly: 'true',
+      symbol: filters.symbol || undefined,
+      strategy: filters.strategy !== 'all' ? filters.strategy : undefined,
+      dateFrom: filters.dateFrom || undefined,
+      dateTo: filters.dateTo || undefined
+    }],
     enabled: isPaper,
-    staleTime: Infinity,
-    refetchOnMount: false,
-    refetchOnReconnect: false,
-    refetchInterval: 30000,
-    refetchIntervalInBackground: true,
+    staleTime: 30000,
+    refetchInterval: 60000,
   });
-
-  const filteredTrades = tradesData.filter((trade: any) => {
-    if (filters.symbol && !trade.symbol.toLowerCase().includes(filters.symbol.toLowerCase())) {
-      return false;
+  
+  const filteredTrades = paginatedData?.trades || [];
+  const totalCount = paginatedData?.totalCount || 0;
+  const totalPages = Math.ceil(totalCount / pageSize);
+  
+  // Phase 8.8.3-C5: Handle column sorting
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      setOrder(order === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(column);
+      setOrder('desc');
     }
-    if (filters.strategy && filters.strategy !== 'all' && trade.strategyName !== filters.strategy) {
-      return false;
-    }
-    return true;
-  });
+    setPage(0); // Reset to first page on sort change
+  };
 
   const getSymbolColor = (symbol: string) => {
     if (symbol.includes('BTC')) return 'text-orange-500';
@@ -482,9 +550,22 @@ export function TradeHistoryTab() {
               <span>Trade History</span>
               {isFetching && <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />}
             </div>
-            <span className="text-sm font-normal text-muted-foreground">
-              {filteredTrades.length} trade{filteredTrades.length !== 1 ? 's' : ''}
-            </span>
+            <div className="flex items-center gap-4">
+              <span className="text-sm font-normal text-muted-foreground">
+                {totalCount} total trade{totalCount !== 1 ? 's' : ''}
+              </span>
+              <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(0); }}>
+                <SelectTrigger className="w-24 h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="25">25</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -493,121 +574,192 @@ export function TradeHistoryTab() {
               <p className="text-muted-foreground">No trades match your filters</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Opened At</th>
-                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Closed At</th>
-                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Symbol</th>
-                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Strategy</th>
-                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Entry</th>
-                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Exit</th>
-                    <th className="text-right p-3 text-sm font-semibold text-muted-foreground">Quantity</th>
-                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Close Reason</th>
-                    <th className="text-right p-3 text-sm font-semibold text-muted-foreground">P/L</th>
-                    <th className="text-right p-3 text-sm font-semibold text-muted-foreground">P/L %</th>
-                    <th className="text-right p-3 text-sm font-semibold text-muted-foreground">Confidence</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {filteredTrades.map((trade: any) => {
-                    const pnl = parseFloat(trade.pnl || '0');
-                    const pnlPercent = parseFloat(trade.pnlPercent || '0');
-                    const isProfit = pnl > 0;
-                    
-                    // B2: Format with full timestamps
-                    const formatTimestamp = (dateStr: string | null) => {
-                      if (!dateStr) return '-';
-                      const d = new Date(dateStr);
-                      return d.toLocaleString('en-US', { 
-                        month: 'short', 
-                        day: 'numeric', 
-                        hour: '2-digit', 
-                        minute: '2-digit',
-                        second: '2-digit'
-                      });
-                    };
-                    
-                    return (
-                      <tr key={trade.id} className="hover:bg-muted/50" data-testid={`trade-history-${trade.id}`}>
-                        <td className="p-3 text-xs font-mono">
-                          {formatTimestamp(trade.openedAt)}
-                        </td>
-                        <td className="p-3 text-xs font-mono">
-                          {formatTimestamp(trade.closedAt)}
-                        </td>
-                        
-                        <td className="p-3">
-                          <span className={cn("text-sm font-semibold", getSymbolColor(trade.symbol))}>
-                            {trade.symbol}
-                          </span>
-                        </td>
-                        
-                        <td className="p-3">
-                          <Badge className={cn("text-xs", strategyColors[trade.strategyName as keyof typeof strategyColors] || "bg-muted/10")}>
-                            {strategyNames[trade.strategyName as keyof typeof strategyNames] || trade.strategyName}
-                          </Badge>
-                        </td>
-                        
-                        <td className="p-3 font-mono text-sm">
-                          {trade.entryPrice ? `$${formatNumber(trade.entryPrice, 4)}` : '-'}
-                        </td>
-                        
-                        <td className="p-3 font-mono text-sm">
-                          {trade.exitPrice ? `$${formatNumber(trade.exitPrice, 4)}` : '-'}
-                        </td>
-                        
-                        <td className="p-3 text-right font-mono text-sm">
-                          {trade.quantity ? formatNumber(trade.quantity, 6) : '-'}
-                        </td>
-                        
-                        <td className="p-3">
-                          <Badge variant="outline" className="text-xs">
-                            {/* Phase 8.8.3-I2: Show "Open – Not Closed Yet" for trades with no closed_at */}
-                            {!trade.closedAt ? 'Open – Not Closed Yet' :
-                             trade.closeReason === 'target_hit' ? 'Target Hit' :
-                             trade.closeReason === 'stop_hit' ? 'Stop Hit' :
-                             trade.closeReason === 'manual_close' ? 'Manual' :
-                             trade.closeReason === 'hard_stop' ? 'Hard Stop' :
-                             trade.closeReason === 'force_close' ? 'Force Close' :
-                             trade.closeReason === 'engine_stop' ? 'Engine Stop' :
-                             trade.closeReason || 'Closed'}
-                          </Badge>
-                        </td>
-                        
-                        <td className="p-3 text-right">
-                          <div className={cn("font-mono text-sm font-semibold", isProfit ? "text-green-600" : "text-red-600")}>
-                            {isProfit ? '+' : ''}${formatNumber(pnl)}
-                          </div>
-                        </td>
-                        
-                        <td className="p-3 text-right">
-                          <div className={cn("font-mono text-sm font-semibold", isProfit ? "text-green-600" : "text-red-600")}>
-                            {isProfit ? '+' : ''}{formatNumber(pnlPercent)}%
-                          </div>
-                        </td>
-                        
-                        <td className="p-3 text-right">
-                          {(() => {
-                            const rawConf = parseFloat(trade.confidence || '0');
-                            const confidence = rawConf > 1 ? rawConf : rawConf * 100;
-                            const confColor = confidence >= 80 ? 'text-green-600' : 
-                                             confidence >= 60 ? 'text-blue-600' : 
-                                             confidence >= 40 ? 'text-orange-500' : 'text-red-600';
-                            return (
-                              <span className={cn("font-mono text-sm font-medium", confColor)}>
-                                {trade.confidence ? `${formatNumber(confidence, 0)}%` : '-'}
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <SortableHeader column="openedAt" label="Opened" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
+                      <SortableHeader column="closedAt" label="Closed" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
+                      <SortableHeader column="symbol" label="Symbol" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
+                      <SortableHeader column="strategyName" label="Strategy" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
+                      <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Entry</th>
+                      <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Exit</th>
+                      <th className="text-right p-3 text-sm font-semibold text-muted-foreground">Qty</th>
+                      <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Reason</th>
+                      <SortableHeader column="pnl" label="P/L" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
+                      <SortableHeader column="pnlPercent" label="P/L %" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
+                      <th className="text-right p-3 text-sm font-semibold text-muted-foreground">Conf</th>
+                      <th className="text-right p-3 text-sm font-semibold text-muted-foreground">Fees</th>
+                      <th className="text-right p-3 text-sm font-semibold text-muted-foreground">Entry Slip</th>
+                      <th className="text-right p-3 text-sm font-semibold text-muted-foreground">Exit Slip</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {filteredTrades.map((trade: any) => {
+                      const pnl = parseFloat(trade.pnl || '0');
+                      const pnlPercent = parseFloat(trade.pnlPercent || '0');
+                      const isProfit = pnl > 0;
+                      const totalFee = parseFloat(trade.totalFee || trade.fees || '0');
+                      const entrySlippage = parseFloat(trade.entrySlippage || '0');
+                      const exitSlippage = parseFloat(trade.exitSlippage || '0');
+                      
+                      const formatTimestamp = (dateStr: string | null) => {
+                        if (!dateStr) return '-';
+                        const d = new Date(dateStr);
+                        return d.toLocaleString('en-US', { 
+                          month: 'short', 
+                          day: 'numeric', 
+                          hour: '2-digit', 
+                          minute: '2-digit'
+                        });
+                      };
+                      
+                      return (
+                        <tr key={trade.id} className="hover:bg-muted/50" data-testid={`trade-history-${trade.id}`}>
+                          <td className="p-2 text-xs font-mono whitespace-nowrap">
+                            {formatTimestamp(trade.openedAt)}
+                          </td>
+                          <td className="p-2 text-xs font-mono whitespace-nowrap">
+                            {formatTimestamp(trade.closedAt)}
+                          </td>
+                          
+                          <td className="p-2">
+                            <span className={cn("text-sm font-semibold", getSymbolColor(trade.symbol))}>
+                              {trade.symbol}
+                            </span>
+                          </td>
+                          
+                          <td className="p-2">
+                            <Badge className={cn("text-xs", strategyColors[trade.strategyName as keyof typeof strategyColors] || "bg-muted/10")}>
+                              {strategyNames[trade.strategyName as keyof typeof strategyNames] || trade.strategyName}
+                            </Badge>
+                          </td>
+                          
+                          <td className="p-2 font-mono text-xs">
+                            {trade.entryPrice ? `$${formatNumber(trade.entryPrice, 4)}` : '-'}
+                          </td>
+                          
+                          <td className="p-2 font-mono text-xs">
+                            {trade.exitPrice ? `$${formatNumber(trade.exitPrice, 4)}` : '-'}
+                          </td>
+                          
+                          <td className="p-2 text-right font-mono text-xs">
+                            {trade.quantity ? formatNumber(trade.quantity, 4) : '-'}
+                          </td>
+                          
+                          <td className="p-2">
+                            <Badge variant="outline" className="text-xs">
+                              {!trade.closedAt ? 'Open' :
+                               trade.closeReason === 'target_hit' ? 'TP' :
+                               trade.closeReason === 'stop_hit' ? 'SL' :
+                               trade.closeReason === 'manual_close' ? 'Manual' :
+                               trade.closeReason === 'hard_stop' ? 'Hard' :
+                               trade.closeReason === 'force_close' ? 'Force' :
+                               trade.closeReason === 'engine_stop' ? 'Engine' :
+                               trade.closeReason || '?'}
+                            </Badge>
+                          </td>
+                          
+                          <td className="p-2 text-right">
+                            <div className={cn("font-mono text-xs font-semibold", isProfit ? "text-green-600" : "text-red-600")}>
+                              {isProfit ? '+' : ''}${formatNumber(pnl)}
+                            </div>
+                          </td>
+                          
+                          <td className="p-2 text-right">
+                            <div className={cn("font-mono text-xs font-semibold", isProfit ? "text-green-600" : "text-red-600")}>
+                              {isProfit ? '+' : ''}{formatNumber(pnlPercent)}%
+                            </div>
+                          </td>
+                          
+                          <td className="p-2 text-right">
+                            {(() => {
+                              const rawConf = parseFloat(trade.confidence || '0');
+                              const confidence = rawConf > 1 ? rawConf : rawConf * 100;
+                              const confColor = confidence >= 80 ? 'text-green-600' : 
+                                               confidence >= 60 ? 'text-blue-600' : 
+                                               confidence >= 40 ? 'text-orange-500' : 'text-red-600';
+                              return (
+                                <span className={cn("font-mono text-xs font-medium", confColor)}>
+                                  {trade.confidence ? `${formatNumber(confidence, 0)}%` : '-'}
+                                </span>
+                              );
+                            })()}
+                          </td>
+                          
+                          <td className="p-2 text-right font-mono text-xs text-muted-foreground">
+                            {totalFee > 0 ? `$${formatNumber(totalFee, 2)}` : '-'}
+                          </td>
+                          
+                          <td className="p-2 text-right font-mono text-xs">
+                            {entrySlippage !== 0 ? (
+                              <span className={entrySlippage > 0 ? 'text-red-500' : 'text-green-500'}>
+                                {entrySlippage > 0 ? '+' : ''}{formatNumber(entrySlippage * 100, 3)}%
                               </span>
-                            );
-                          })()}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                            ) : '-'}
+                          </td>
+                          
+                          <td className="p-2 text-right font-mono text-xs">
+                            {exitSlippage !== 0 ? (
+                              <span className={exitSlippage > 0 ? 'text-red-500' : 'text-green-500'}>
+                                {exitSlippage > 0 ? '+' : ''}{formatNumber(exitSlippage * 100, 3)}%
+                              </span>
+                            ) : '-'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              
+              {/* Phase 8.8.3-C5: Pagination controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {page * pageSize + 1}-{Math.min((page + 1) * pageSize, totalCount)} of {totalCount}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => setPage(0)} 
+                      disabled={page === 0}
+                    >
+                      <ChevronsLeft className="w-4 h-4" />
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => setPage(p => Math.max(0, p - 1))} 
+                      disabled={page === 0}
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </Button>
+                    <span className="px-3 text-sm">
+                      Page {page + 1} of {totalPages}
+                    </span>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} 
+                      disabled={page >= totalPages - 1}
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => setPage(totalPages - 1)} 
+                      disabled={page >= totalPages - 1}
+                    >
+                      <ChevronsRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
