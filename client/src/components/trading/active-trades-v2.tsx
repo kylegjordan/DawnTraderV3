@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -143,6 +143,53 @@ function formatDuration(ms: number): string {
   if (hours > 0) return `${hours}h ${minutes % 60}m`;
   if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
   return `${seconds}s`;
+}
+
+// Phase 8.8.3-C2: Dual scroll bar component - provides scroll at top and bottom
+function DualScrollTable({ children }: { children: React.ReactNode }) {
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const bottomScrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [scrollWidth, setScrollWidth] = useState(0);
+  
+  useEffect(() => {
+    if (contentRef.current) {
+      setScrollWidth(contentRef.current.scrollWidth);
+    }
+  }, [children]);
+  
+  const syncScroll = useCallback((source: 'top' | 'bottom') => {
+    if (!topScrollRef.current || !bottomScrollRef.current) return;
+    const scrollLeft = source === 'top' 
+      ? topScrollRef.current.scrollLeft 
+      : bottomScrollRef.current.scrollLeft;
+    topScrollRef.current.scrollLeft = scrollLeft;
+    bottomScrollRef.current.scrollLeft = scrollLeft;
+  }, []);
+  
+  return (
+    <div>
+      {/* Top scroll bar */}
+      <div 
+        ref={topScrollRef}
+        className="overflow-x-auto overflow-y-hidden h-3 border-b border-border/50"
+        onScroll={() => syncScroll('top')}
+      >
+        <div style={{ width: scrollWidth, height: 1 }} />
+      </div>
+      {/* Table container */}
+      <div 
+        ref={(el) => { 
+          (bottomScrollRef as any).current = el; 
+          (contentRef as any).current = el;
+        }}
+        className="overflow-x-auto"
+        onScroll={() => syncScroll('bottom')}
+      >
+        {children}
+      </div>
+    </div>
+  );
 }
 
 // Phase 8.8.3-I9 D1: Format numbers with commas
@@ -879,16 +926,16 @@ export default function ActiveTradesV2() {
       />
       
       <Card className="rounded-xl border shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          {positions.length === 0 ? (
-            <div className="p-8 text-center min-h-[200px] flex flex-col items-center justify-center gap-2">
-              <div className="text-4xl mb-2">📭</div>
-              <p className="text-muted-foreground font-medium">No active trades</p>
-              <p className="text-xs text-muted-foreground">
-                {integrity.slotsAvailable} slots available for new positions
-              </p>
-            </div>
-          ) : (
+        {positions.length === 0 ? (
+          <div className="p-8 text-center min-h-[200px] flex flex-col items-center justify-center gap-2">
+            <div className="text-4xl mb-2">📭</div>
+            <p className="text-muted-foreground font-medium">No active trades</p>
+            <p className="text-xs text-muted-foreground">
+              {integrity.slotsAvailable} slots available for new positions
+            </p>
+          </div>
+        ) : (
+          <DualScrollTable>
             <table className="w-full">
               <thead className="bg-muted/50 sticky top-0">
                 <tr>
@@ -924,8 +971,8 @@ export default function ActiveTradesV2() {
                 ))}
               </tbody>
             </table>
-          )}
-        </div>
+          </DualScrollTable>
+        )}
       </Card>
     </section>
   );

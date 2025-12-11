@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +32,53 @@ function formatNumber(value: number | string, decimals: number = 2): string {
   const num = typeof value === 'string' ? parseFloat(value) : value;
   if (isNaN(num)) return '-';
   return num.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+// Phase 8.8.3-C2: Dual scroll bar component - provides scroll at top and bottom
+function DualScrollTable({ children }: { children: React.ReactNode }) {
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const bottomScrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [scrollWidth, setScrollWidth] = useState(0);
+  
+  useEffect(() => {
+    if (contentRef.current) {
+      setScrollWidth(contentRef.current.scrollWidth);
+    }
+  }, [children]);
+  
+  const syncScroll = useCallback((source: 'top' | 'bottom') => {
+    if (!topScrollRef.current || !bottomScrollRef.current) return;
+    const scrollLeft = source === 'top' 
+      ? topScrollRef.current.scrollLeft 
+      : bottomScrollRef.current.scrollLeft;
+    topScrollRef.current.scrollLeft = scrollLeft;
+    bottomScrollRef.current.scrollLeft = scrollLeft;
+  }, []);
+  
+  return (
+    <div>
+      {/* Top scroll bar */}
+      <div 
+        ref={topScrollRef}
+        className="overflow-x-auto overflow-y-hidden h-3 border-b border-border/50"
+        onScroll={() => syncScroll('top')}
+      >
+        <div style={{ width: scrollWidth, height: 1 }} />
+      </div>
+      {/* Table container */}
+      <div 
+        ref={(el) => { 
+          (bottomScrollRef as any).current = el; 
+          (contentRef as any).current = el;
+        }}
+        className="overflow-x-auto"
+        onScroll={() => syncScroll('bottom')}
+      >
+        {children}
+      </div>
+    </div>
+  );
 }
 
 const strategyColors: Record<string, string> = {
@@ -657,7 +704,7 @@ export function TradeHistoryTab() {
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto">
+              <DualScrollTable>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border">
@@ -827,7 +874,7 @@ export function TradeHistoryTab() {
                     })}
                   </tbody>
                 </table>
-              </div>
+              </DualScrollTable>
               
               {/* Phase 8.8.3-C5: Pagination controls */}
               {totalPages > 1 && (
