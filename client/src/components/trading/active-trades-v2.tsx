@@ -306,24 +306,56 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 5. Entry (Signal) - C2 */}
+      {/* 5. Entry (Signal) - C2A: Signal price only */}
       <td className="px-3 py-3">
         <div className="font-mono text-sm">${(trade.intendedEntryPrice || trade.entryPrice).toFixed(6)}</div>
       </td>
       
-      {/* 6. Entry (Actual) - C2 */}
+      {/* 6. Target Exit (TP) - C2A: Restored */}
       <td className="px-3 py-3">
-        <div className="font-mono text-sm">${trade.entryPrice.toFixed(6)}</div>
+        <div className="flex items-center gap-1">
+          <Target className="w-3 h-3 text-green-500" />
+          <span className="font-mono text-sm text-green-600">${trade.takeProfit.toFixed(6)}</span>
+        </div>
       </td>
       
-      {/* 7. Gross P/L ($ + %) - C2 */}
+      {/* 7. Current Price - C2A: Restored */}
+      <td className="px-3 py-3">
+        <div className="font-mono text-sm font-medium">${trade.currentPrice.toFixed(6)}</div>
+      </td>
+      
+      {/* 8. Distance (stacked: TP on top, SL on bottom) - C2A */}
+      <td className="px-3 py-3">
+        <div className="text-xs space-y-0.5">
+          <div className="flex items-center gap-1">
+            <Target className="w-3 h-3 text-green-500" />
+            <span className={cn(
+              "font-mono",
+              trade.distanceToTP >= 0 ? "text-green-600" : "text-muted-foreground"
+            )}>
+              {trade.distanceToTP >= 0 ? '+' : ''}{trade.distanceToTP.toFixed(2)}%
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Shield className="w-3 h-3 text-red-500" />
+            <span className={cn(
+              "font-mono",
+              trade.distanceToSL <= 0 ? "text-red-600" : "text-muted-foreground"
+            )}>
+              {trade.distanceToSL.toFixed(2)}%
+            </span>
+          </div>
+        </div>
+      </td>
+      
+      {/* 9. Gross P/L (stacked: $ on top, % on bottom) - C2A */}
       <td className="px-3 py-3">
         <div className="text-xs space-y-0.5">
           <div className={cn(
             "font-mono text-sm font-semibold",
             (trade.grossPnl || 0) >= 0 ? "text-green-600" : "text-red-600"
           )}>
-            {(trade.grossPnl || 0) >= 0 ? '+' : ''}{formatNumber(trade.grossPnl || 0, 2)}
+            {(trade.grossPnl || 0) >= 0 ? '+' : ''}${formatNumber(Math.abs(trade.grossPnl || 0), 2)}
           </div>
           <div className={cn(
             "font-mono text-xs",
@@ -334,49 +366,49 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 8. Entry Fee - C2 */}
+      {/* 10. Entry Fee - C2A */}
       <td className="px-3 py-3">
         <div className="font-mono text-xs text-muted-foreground">
           ${formatNumber(trade.entryFee || 0, 2)}
         </div>
       </td>
       
-      {/* 9. Entry Slippage - C2 */}
+      {/* 11. Entry Slippage - C2A */}
       <td className="px-3 py-3">
         <div className="font-mono text-xs text-orange-600">
           ${formatNumber(trade.entrySlippage || 0, 2)}
         </div>
       </td>
       
-      {/* 10. Est Exit Fee - C2 */}
+      {/* 12. Est Exit Fee - C2A: Show positive value */}
       <td className="px-3 py-3">
         <div className="font-mono text-xs text-muted-foreground">
-          ~${formatNumber(trade.estExitFee || 0, 2)}
+          ~${formatNumber(Math.abs(trade.estExitFee || 0), 2)}
         </div>
       </td>
       
-      {/* 11. Est Exit Slippage - C2 */}
+      {/* 13. Est Exit Slippage - C2A: Show positive value */}
       <td className="px-3 py-3">
         <div className="font-mono text-xs text-orange-600">
-          ~${formatNumber(trade.estExitSlippage || 0, 2)}
+          ~${formatNumber(Math.abs(trade.estExitSlippage || 0), 2)}
         </div>
       </td>
       
-      {/* 12. Total Est Cost - C2 */}
+      {/* 14. Total Est Cost - C2A */}
       <td className="px-3 py-3">
         <div className="font-mono text-xs font-medium text-red-600">
           ${formatNumber(trade.estTotalCost || 0, 2)}
         </div>
       </td>
       
-      {/* 13. Net P/L ($ + %) - C2 */}
+      {/* 15. Net P/L (stacked: $ on top, % on bottom) - C2A */}
       <td className="px-3 py-3">
         <div className="text-xs space-y-0.5">
           <div className={cn(
             "font-mono text-sm font-semibold",
             (trade.netPnl || 0) >= 0 ? "text-green-600" : "text-red-600"
           )}>
-            {(trade.netPnl || 0) >= 0 ? '+' : ''}{formatNumber(trade.netPnl || 0, 2)}
+            {(trade.netPnl || 0) >= 0 ? '+' : ''}${formatNumber(Math.abs(trade.netPnl || 0), 2)}
           </div>
           <div className={cn(
             "font-mono text-xs",
@@ -387,7 +419,7 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 14. Confidence */}
+      {/* 16. Confidence */}
       <td className="px-3 py-3">
         <div className={cn(
           "font-mono text-sm font-medium",
@@ -399,7 +431,7 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 15. Volume (24h) */}
+      {/* 17. Volume (24h) */}
       <td className="px-3 py-3">
         <div className="text-xs space-y-0.5">
           <div className="font-mono text-sm">
@@ -416,7 +448,7 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 16. Source + Frequency (stacked) */}
+      {/* 18. Source + Frequency (stacked) */}
       <td className="px-3 py-3">
         <div className="text-xs space-y-0.5">
           <div className="flex items-center gap-1">
@@ -443,7 +475,7 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 17. Duration */}
+      {/* 19. Duration */}
       <td className="px-3 py-3">
         <div className="flex items-center gap-1 text-sm text-muted-foreground">
           <Clock className="w-3 h-3" />
@@ -451,7 +483,7 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 18. Actions */}
+      {/* 20. Actions */}
       <td className="px-3 py-3">
         <Button
           size="sm"
@@ -939,18 +971,20 @@ export default function ActiveTradesV2() {
             <table className="w-full">
               <thead className="bg-muted/50 sticky top-0">
                 <tr>
-                  {/* Phase 8.8.3-C2: Updated column order per directive */}
+                  {/* Phase 8.8.3-C2A: Final column order per directive */}
                   <SortableHeader field="symbol" label="Symbol" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="slotNumber" label="Slot" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="strategy" label="Strategy" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="quantity" label="Qty / Value" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <SortableHeader field="intendedEntryPrice" label="Entry (Signal)" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <SortableHeader field="entryPrice" label="Entry (Actual)" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortableHeader field="intendedEntryPrice" label="Entry" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortableHeader field="takeProfit" label="Target (TP)" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortableHeader field="currentPrice" label="Current" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Dist</th>
                   <SortableHeader field="grossPnl" label="Gross P/L" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="entryFee" label="Entry Fee" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="entrySlippage" label="Entry Slip" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <SortableHeader field="estExitFee" label="Est Exit Fee" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <SortableHeader field="estExitSlippage" label="Est Exit Slip" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortableHeader field="estExitFee" label="Exit Fee" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortableHeader field="estExitSlippage" label="Exit Slip" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="estTotalCost" label="Total Cost" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="netPnl" label="Net P/L" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="confidence" label="Conf" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />

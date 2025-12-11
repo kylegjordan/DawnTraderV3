@@ -1,0 +1,258 @@
+📘 Phase 8.8.3-C2A — Cost Transparency + Column Corrections + Table Reformatting Directive
+Summary
+
+This directive corrects the new cost-transparency layout introduced in Phase C2.
+The implementation currently works, but several columns are mis-ordered or unnecessary, one required column is missing, and some cost columns display values incorrectly.
+
+This directive updates both Active Trades and Trade History tables to their final intended layout and presentation.
+
+---------------------------------------
+✅ SECTION A — ACTIVE TRADES TABLE FIXES
+---------------------------------------
+A1 — Remove “Entry (Actual)” Column
+
+The column Entry (Actual) should be completely removed.
+
+Reason:
+It no longer adds value since gross/net P/L already express the effect of slippage.
+
+A2 — Restore the CURRENT PRICE Column (Critical)
+
+Add back a dedicated Current column after Entry and Exit, as it existed before the C2 upgrade.
+
+Column order should be:
+
+Entry
+
+Target Exit / TP
+
+Current ← (newly restored)
+
+Distance metrics
+
+P/L metrics
+
+A3 — Stack Distance Metrics
+
+Distance to TP and Distance to SL must be stacked vertically inside one column:
+
+DIST
+
+TP distance (top)
+
+SL distance (bottom)
+
+(Use the original Dawn Trader stacked metric formatting.)
+
+A4 — Stack Gross Metrics
+
+Gross P/L should be shown as:
+
+Column: GROSS P/L
+
+Dollar value (top)
+
+Percent value (bottom)
+
+No separate columns.
+
+A5 — Stack Net Metrics
+
+Net P/L should be shown as:
+
+Column: NET P/L
+
+Dollar value (top)
+
+Percent value (bottom)
+
+A6 — Exit Fee & Exit Slip Must Show Positive Values
+
+Currently they appear as -0.05 and -0.07.
+
+These values represent costs and should always display as positive numbers, consistent with Entry Fee and Entry Slip.
+
+Implementation:
+
+displayValue = Math.abs(exitFee)
+
+
+and same for exitSlip.
+
+A7 — Column Reordering (Final Active Trades Layout)
+
+Here is the final required table structure:
+
+ACTIVE TRADES – FINAL COLUMN ORDER
+
+Symbol
+
+Slot
+
+Strategy
+
+Qty / Value
+
+Entry (signal)
+
+Target Exit (TP)
+
+Current Price
+
+Distance (stacked)
+
+TP distance
+
+SL distance
+
+Gross P/L (stacked)
+
+Entry Fee
+
+Entry Slip
+
+Exit Fee (est)
+
+Exit Slip (est)
+
+Total Cost
+
+Net P/L (stacked)
+
+Confidence
+
+Volume
+
+Source
+
+Duration
+
+Actions
+
+This matches the mental model of the trading engine and aligns perfectly with your intended UX.
+
+---------------------------------------
+✅ SECTION B — TRADE HISTORY TABLE FIXES
+---------------------------------------
+B1 — Column Reordering
+
+Reorder columns to the following final layout:
+
+TRADE HISTORY – FINAL COLUMN ORDER
+
+Symbol
+
+Strategy
+
+Quantity
+
+Entry
+
+Exit
+
+Reason
+
+Gross P/L
+
+Entry Fee
+
+Entry Slip
+
+Exit Fee
+
+Exit Slip
+
+Total Cost
+
+Net P/L
+
+Confidence
+
+Opened (timestamp)
+
+Closed (timestamp)
+
+This is clean, logical, chronological, and consistent with Active Trades.
+
+B2 — Cost Columns Showing Zero for Historical Trades
+
+This is correct behavior.
+
+Only new trades created after Phase C2 have data for:
+
+entry_fee
+
+entry_slip
+
+exit_fee
+
+exit_slip
+
+total_cost
+
+net_pnl
+
+No fix needed.
+
+B3 — Dual Horizontal Scrollbars (Top & Bottom)
+
+Continue using the DualScrollTable component for both tables.
+
+No changes required here unless reflow issues occur after column reordering.
+
+---------------------------------------
+✅ SECTION C — ENGINE & BALANCE INTEGRATION
+---------------------------------------
+The balance logic should not be touched until formatting is finalized.
+
+After the UI is corrected, we will test:
+
+Gross P/L
+
+Net P/L
+
+Running account balance
+
+Guardrail % of balance → Position sizing logic
+
+No engine modifications should be made in this phase.
+
+---------------------------------------
+⚙️ SECTION D — IMPLEMENTATION NOTES (For Replit)
+---------------------------------------
+
+Remove or adjust:
+
+Remove Entry (Actual) column entirely
+
+Rename columns as needed
+
+Apply absolute value for exit costs
+
+Ensure stacked metric formatting matches legacy implementation
+
+Add or restore:
+
+Add Current Price column
+
+Restore stacked Gross P/L and Net P/L appearance
+
+Stack distance metrics
+
+Reorder:
+
+Active Trades per A7
+
+Trade History per B1
+
+Do NOT modify engine calculations
+Only the UI and the returned API property mappings should be adjusted.
+
+---------------------------------------
+🔐 TEST USER CREDENTIALS (As Required)
+---------------------------------------
+
+Use the following account when testing:
+
+username: testuser123
+password: SecurePass123!

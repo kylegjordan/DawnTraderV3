@@ -708,9 +708,7 @@ export function TradeHistoryTab() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border">
-                      {/* Phase 8.8.3-C2: Updated columns for P/L breakdown */}
-                      <SortableHeader column="openedAt" label="Opened" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
-                      <SortableHeader column="closedAt" label="Closed" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
+                      {/* Phase 8.8.3-C2A: Final column order per directive */}
                       <SortableHeader column="symbol" label="Symbol" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
                       <SortableHeader column="strategyName" label="Strategy" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
                       <SortableHeader column="quantity" label="Qty" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
@@ -725,6 +723,8 @@ export function TradeHistoryTab() {
                       <SortableHeader column="totalCost" label="Total Cost" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
                       <SortableHeader column="netPnl" label="Net P/L" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
                       <SortableHeader column="confidence" label="Conf" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
+                      <SortableHeader column="openedAt" label="Opened" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
+                      <SortableHeader column="closedAt" label="Closed" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -752,37 +752,36 @@ export function TradeHistoryTab() {
                       
                       return (
                         <tr key={trade.id} className="hover:bg-muted/50" data-testid={`trade-history-${trade.id}`}>
-                          <td className="p-2 text-xs font-mono whitespace-nowrap">
-                            {formatTimestamp(trade.openedAt)}
-                          </td>
-                          <td className="p-2 text-xs font-mono whitespace-nowrap">
-                            {formatTimestamp(trade.closedAt)}
-                          </td>
-                          
+                          {/* 1. Symbol - C2A */}
                           <td className="p-2">
                             <span className={cn("text-sm font-semibold", getSymbolColor(trade.symbol))}>
                               {trade.symbol}
                             </span>
                           </td>
                           
+                          {/* 2. Strategy - C2A */}
                           <td className="p-2">
                             <Badge className={cn("text-xs", strategyColors[trade.strategyName as keyof typeof strategyColors] || "bg-muted/10")}>
                               {strategyNames[trade.strategyName as keyof typeof strategyNames] || trade.strategyName}
                             </Badge>
                           </td>
                           
+                          {/* 3. Quantity - C2A */}
                           <td className="p-2 text-right font-mono text-xs">
                             {trade.quantity ? formatNumber(trade.quantity, 4) : '-'}
                           </td>
                           
+                          {/* 4. Entry - C2A */}
                           <td className="p-2 font-mono text-xs">
                             {trade.entryPrice ? `$${formatNumber(trade.entryPrice, 4)}` : '-'}
                           </td>
                           
+                          {/* 5. Exit - C2A */}
                           <td className="p-2 font-mono text-xs">
                             {trade.exitPrice ? `$${formatNumber(trade.exitPrice, 4)}` : '-'}
                           </td>
                           
+                          {/* 6. Reason - C2A */}
                           <td className="p-2">
                             <Badge 
                               variant="outline" 
@@ -793,23 +792,23 @@ export function TradeHistoryTab() {
                               )}
                             >
                               {!trade.closedAt ? 'Open' :
-                               trade.closeReason === 'target_hit' ? 'Target Price Hit' :
-                               trade.closeReason === 'stop_hit' ? 'Stop Loss' :
-                               trade.closeReason === 'manual_close' ? 'Manual Close' :
-                               trade.closeReason === 'manual_stop' ? 'Manual Stop' :
-                               trade.closeReason === 'engine_stop_cleanup' ? 'Engine Stop Clean' :
-                               trade.closeReason === 'hard_reset' ? 'Hard Reset' :
-                               trade.closeReason === 'hard_stop' ? 'Hard Stop' :
-                               trade.closeReason === 'force_close' ? 'Force Close' :
+                               trade.closeReason === 'target_hit' ? 'Target' :
+                               trade.closeReason === 'stop_hit' ? 'Stop' :
+                               trade.closeReason === 'manual_close' ? 'Manual' :
+                               trade.closeReason === 'manual_stop' ? 'M.Stop' :
+                               trade.closeReason === 'engine_stop_cleanup' ? 'Engine' :
+                               trade.closeReason === 'hard_reset' ? 'Reset' :
+                               trade.closeReason === 'hard_stop' ? 'H.Stop' :
+                               trade.closeReason === 'force_close' ? 'Force' :
                                trade.closeReason || '?'}
                             </Badge>
                           </td>
                           
-                          {/* Phase 8.8.3-C2: Gross P/L ($ + %) stacked */}
+                          {/* 7. Gross P/L ($ + %) stacked - C2A */}
                           <td className="p-2 text-right">
                             <div className="space-y-0.5">
                               <div className={cn("font-mono text-xs font-semibold", grossPnl >= 0 ? "text-green-600" : "text-red-600")}>
-                                {grossPnl >= 0 ? '+' : ''}${formatNumber(grossPnl)}
+                                {grossPnl >= 0 ? '+' : ''}${formatNumber(Math.abs(grossPnl))}
                               </div>
                               <div className={cn("font-mono text-xs", grossPnl >= 0 ? "text-green-600" : "text-red-600")}>
                                 {grossPnl >= 0 ? '+' : ''}{formatNumber((grossPnl / (parseFloat(trade.quantity || '1') * parseFloat(trade.entryPrice || '1'))) * 100)}%
@@ -817,36 +816,36 @@ export function TradeHistoryTab() {
                             </div>
                           </td>
                           
-                          {/* Entry Fee */}
+                          {/* 8. Entry Fee - C2A */}
                           <td className="p-2 text-right font-mono text-xs text-muted-foreground">
                             {entryFee > 0 ? `$${formatNumber(entryFee, 2)}` : '-'}
                           </td>
                           
-                          {/* Entry Slippage */}
+                          {/* 9. Entry Slippage - C2A */}
                           <td className="p-2 text-right font-mono text-xs text-orange-600">
                             {entrySlippage !== 0 ? `$${formatNumber(Math.abs(entrySlippage), 2)}` : '-'}
                           </td>
                           
-                          {/* Exit Fee */}
+                          {/* 10. Exit Fee - C2A: Show positive value */}
                           <td className="p-2 text-right font-mono text-xs text-muted-foreground">
-                            {exitFee > 0 ? `$${formatNumber(exitFee, 2)}` : '-'}
+                            {exitFee !== 0 ? `$${formatNumber(Math.abs(exitFee), 2)}` : '-'}
                           </td>
                           
-                          {/* Exit Slippage */}
+                          {/* 11. Exit Slippage - C2A: Show positive value */}
                           <td className="p-2 text-right font-mono text-xs text-orange-600">
                             {exitSlippage !== 0 ? `$${formatNumber(Math.abs(exitSlippage), 2)}` : '-'}
                           </td>
                           
-                          {/* Total Cost */}
+                          {/* 12. Total Cost - C2A */}
                           <td className="p-2 text-right font-mono text-xs font-medium text-red-600">
                             {totalCost > 0 ? `$${formatNumber(totalCost, 2)}` : '-'}
                           </td>
                           
-                          {/* Phase 8.8.3-C2: Net P/L ($ + %) stacked */}
+                          {/* 13. Net P/L ($ + %) stacked - C2A */}
                           <td className="p-2 text-right">
                             <div className="space-y-0.5">
                               <div className={cn("font-mono text-xs font-semibold", isProfit ? "text-green-600" : "text-red-600")}>
-                                {isProfit ? '+' : ''}${formatNumber(netPnl)}
+                                {isProfit ? '+' : ''}${formatNumber(Math.abs(netPnl))}
                               </div>
                               <div className={cn("font-mono text-xs", isProfit ? "text-green-600" : "text-red-600")}>
                                 {isProfit ? '+' : ''}{formatNumber(parseFloat(trade.netPnlPercent || trade.pnlPercent || '0'))}%
@@ -854,7 +853,7 @@ export function TradeHistoryTab() {
                             </div>
                           </td>
                           
-                          {/* Confidence */}
+                          {/* 14. Confidence - C2A */}
                           <td className="p-2 text-right">
                             {(() => {
                               const rawConf = parseFloat(trade.confidence || '0');
@@ -868,6 +867,16 @@ export function TradeHistoryTab() {
                                 </span>
                               );
                             })()}
+                          </td>
+                          
+                          {/* 15. Opened - C2A */}
+                          <td className="p-2 text-xs font-mono whitespace-nowrap">
+                            {formatTimestamp(trade.openedAt)}
+                          </td>
+                          
+                          {/* 16. Closed - C2A */}
+                          <td className="p-2 text-xs font-mono whitespace-nowrap">
+                            {formatTimestamp(trade.closedAt)}
                           </td>
                         </tr>
                       );
