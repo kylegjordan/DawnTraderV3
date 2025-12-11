@@ -545,6 +545,7 @@ export interface IStorage {
     closedOnly?: boolean;
     symbol?: string;
     strategy?: string;
+    closeReason?: string;
     dateFrom?: Date;
     dateTo?: Date;
   }): Promise<{ trades: PaperSimTrade[]; totalCount: number }>;
@@ -3203,6 +3204,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Phase 8.8.3-C5: Paginated trades with sorting and filtering support
+  // Phase 8.8.3-C-FINAL: Ghost filter moved to SQL, dateTo end-of-day fix, closeReason filter
   async getPaperSimTradesPaginated(mode: TradingMode, filters: {
     limit?: number;
     offset?: number;
@@ -3211,6 +3213,7 @@ export class DatabaseStorage implements IStorage {
     closedOnly?: boolean;
     symbol?: string;
     strategy?: string;
+    closeReason?: string;
     dateFrom?: Date;
     dateTo?: Date;
   }): Promise<{ trades: PaperSimTrade[]; totalCount: number }> {
@@ -3221,8 +3224,14 @@ export class DatabaseStorage implements IStorage {
     
     const conditions: any[] = [];
     
+    // Phase 8.8.3-C-FINAL PART 1: Ghost filter in SQL - only return valid trades
+    // Valid trade = closed_at IS NOT NULL AND exit_price > 0 AND close_reason IS NOT NULL AND close_reason != ''
     if (filters.closedOnly) {
       conditions.push(sql`${paperSimTrades.closedAt} IS NOT NULL`);
+      conditions.push(sql`${paperSimTrades.exitPrice} IS NOT NULL`);
+      conditions.push(sql`${paperSimTrades.exitPrice} > 0`);
+      conditions.push(sql`${paperSimTrades.closeReason} IS NOT NULL`);
+      conditions.push(sql`${paperSimTrades.closeReason} != ''`);
     }
     if (filters.symbol) {
       conditions.push(sql`LOWER(${paperSimTrades.symbol}) LIKE LOWER(${'%' + filters.symbol + '%'})`);
@@ -3230,11 +3239,18 @@ export class DatabaseStorage implements IStorage {
     if (filters.strategy && filters.strategy !== 'all') {
       conditions.push(eq(paperSimTrades.strategyName, filters.strategy as any));
     }
+    // Phase 8.8.3-C-FINAL PART 4: Add closeReason filter
+    if (filters.closeReason && filters.closeReason !== 'all') {
+      conditions.push(sql`${paperSimTrades.closeReason} = ${filters.closeReason}`);
+    }
     if (filters.dateFrom) {
       conditions.push(sql`${paperSimTrades.openedAt} >= ${filters.dateFrom}`);
     }
+    // Phase 8.8.3-C-FINAL PART 2: Fix dateTo to use end-of-day (23:59:59.999)
     if (filters.dateTo) {
-      conditions.push(sql`${paperSimTrades.closedAt} <= ${filters.dateTo}`);
+      const endOfDay = new Date(filters.dateTo);
+      endOfDay.setHours(23, 59, 59, 999);
+      conditions.push(sql`${paperSimTrades.closedAt} <= ${endOfDay}`);
     }
     
     const sortColumn = {

@@ -1,0 +1,208 @@
+✅ PHASE 8.8.3-C FINAL DIRECTIVE — Trade History Stability, Filtering, and Pagination Fixes
+OBJECTIVE
+
+Fix all issues with Trade History so that:
+
+All valid trades always appear
+
+Manual-close and stop-loss trades always appear on correct dates
+
+Pagination works properly
+
+Date filters work as expected
+
+Ghost trades are removed cleanly from results
+
+Filtering triggers only when user clicks "Apply"
+
+No changes to the trading engine, pricing system, or RTB logic.
+
+SCOPE OF CHANGES (APPROVED)
+
+Replit is authorized to modify only:
+
+server/storage.ts
+
+server/routes.ts
+
+client/src/components/trading/trade-history-tab.tsx
+
+No other files should be modified unless required for compilation.
+
+---------------------------------------------------------
+🔵 PART 1 — FIX GHOST TRADES & PAGINATION (SERVER-SIDE)
+---------------------------------------------------------
+Problem
+
+Ghost trade filtering happens after pagination, causing correct trades to disappear.
+
+Required Fix
+
+Move the ghost-trade filter into the SQL WHERE clause so that:
+
+A trade is considered valid if:
+exit_price IS NOT NULL
+exit_price > 0
+close_reason IS NOT NULL
+close_reason != ''
+
+Required SQL WHERE additions:
+
+Apply to all paginated trade-history queries:
+
+WHERE closed_at IS NOT NULL
+  AND exit_price IS NOT NULL
+  AND exit_price > 0
+  AND close_reason IS NOT NULL
+  AND close_reason != ''
+
+Remove the old post-query ghost filter entirely:
+
+In routes.ts remove:
+
+const validTrades = trades.filter(t => { ... });
+
+
+Pagination, sorting, limit, offset must operate only on valid trades.
+
+---------------------------------------------------------
+🔵 PART 2 — FIX DATE FILTER LOGIC (SERVER-SIDE)
+---------------------------------------------------------
+Problem
+
+dateTo is interpreted as midnight (00:00:00), which excludes all trades on that date.
+
+Required Fix
+
+When dateTo is provided, convert it to end-of-day 23:59:59.999 UTC before applying filters.
+
+Required implementation:
+
+In storage.ts or routes.ts (wherever filtering is applied):
+
+if (filters.dateTo) {
+  const endOfDay = new Date(filters.dateTo);
+  endOfDay.setHours(23, 59, 59, 999);
+  conditions.push(sql`${paperSimTrades.closedAt} <= ${endOfDay}`);
+}
+
+
+This ensures selecting Dec 12 includes all trades closed on Dec 12.
+
+---------------------------------------------------------
+🔵 PART 3 — DEFAULT BEHAVIOR: SHOW ALL TRADES
+---------------------------------------------------------
+
+Remove any default that forces the UI to require filters before showing results.
+
+Default (no filters) must return ALL valid trades sorted by closed_at DESC.
+
+---------------------------------------------------------
+🔵 PART 4 — ADD CLOSE-REASON FILTER (SERVER + CLIENT)
+---------------------------------------------------------
+Supported close reasons:
+
+stop_hit (SL)
+
+take_profit (TP)
+
+manual_stop
+
+engine_stop_cleanup
+
+hard_reset
+
+orchestrator_stop
+
+(any others present in DB)
+
+Server:
+
+Add SQL WHERE condition only if filter provided:
+
+if (filters.closeReason) {
+  conditions.push(sql`${paperSimTrades.closeReason} = ${filters.closeReason}`);
+}
+
+Client:
+
+Add close-reason dropdown to Trade History filters.
+
+Values returned as straightforward strings.
+
+---------------------------------------------------------
+🔵 PART 5 — FIX FRONTEND QUERY FUNCTION
+---------------------------------------------------------
+Problem
+
+The frontend continues using an incorrect default queryFn.
+
+Required Fix
+
+Inside trade-history-tab.tsx, the useQuery must always use an explicit queryFn:
+
+queryFn: async () => {
+  const params = new URLSearchParams();
+  params.set("paginated", "true");
+  params.set("limit", String(pageSize));
+  params.set("offset", String(page * pageSize));
+  params.set("sortBy", sortBy);
+  params.set("order", order);
+  params.set("closedOnly", "true");
+
+  if (selectedSymbol) params.set("symbol", selectedSymbol);
+  if (selectedStrategy) params.set("strategy", selectedStrategy);
+  if (closeReason) params.set("closeReason", closeReason);
+  if (dateFrom) params.set("dateFrom", dateFrom);
+  if (dateTo) params.set("dateTo", dateTo);
+
+  return apiFetch(`/api/paper-sim/trades?${params.toString()}`);
+}
+
+
+This must replace any previously attempted fixes.
+
+---------------------------------------------------------
+🔵 PART 6 — ADD “APPLY FILTERS” BUTTON (UI)
+---------------------------------------------------------
+
+Filters should not auto-trigger when the user selects just one date.
+
+Required changes:
+
+User modifies filters (date, strategy, close reason, symbol)
+
+Filters take effect only when the user clicks Apply
+
+Add "Apply" and "Clear" buttons
+
+This prevents premature filtering and incorrect half-filter states.
+
+---------------------------------------------------------
+🔵 PART 7 — VALIDATION TESTS (REQUIRED BEFORE COMPLETION)
+---------------------------------------------------------
+
+Replit must verify:
+
+✅ On first load
+
+All valid trades show (no ghosts)
+
+Pagination shows correct totalCount
+
+✅ When user sets date range Dec 1 → Dec 12
+
+All trades between those dates appear, including:
+
+Manual close trades
+
+SL-hit trades
+
+TP trades
+
+✅ Close reason dropdown filters correctly
+✅ Changing pageSize works (10/25/50)
+✅ No blank-table states unless result truly empty
+✅ No ghost trades appear
+---------------------------------------------------------
+🟢 END OF DIRECTIVE — NO OTHER CHANGES PERMITTED
