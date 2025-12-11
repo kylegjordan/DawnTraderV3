@@ -3243,19 +3243,16 @@ export class DatabaseStorage implements IStorage {
     if (filters.closeReason && filters.closeReason !== 'all') {
       conditions.push(sql`${paperSimTrades.closeReason} = ${filters.closeReason}`);
     }
-    // Phase 8.8.3-C-FINAL-2: Fix date filters to use UTC consistently
-    // dateFrom = start of day UTC (00:00:00.000Z), dateTo = end of day UTC (23:59:59.999Z)
+    // Phase 8.8.3-C-FINAL-2: Date filters now receive UTC ISO timestamps from frontend
+    // Frontend converts user's local date selection to UTC boundaries before sending
+    // We use the timestamps directly - no re-adjustment needed
     if (filters.dateFrom) {
-      const startOfDay = new Date(filters.dateFrom);
-      startOfDay.setUTCHours(0, 0, 0, 0);
-      conditions.push(sql`${paperSimTrades.closedAt} >= ${startOfDay}`);
-      console.log(`[C-FINAL-2][DATE_FILTER] dateFrom=${filters.dateFrom.toISOString()} -> startOfDay=${startOfDay.toISOString()}`);
+      console.log(`[C-FINAL-2][DATE_FILTER] dateFrom=${filters.dateFrom.toISOString()} (using directly)`);
+      conditions.push(sql`${paperSimTrades.closedAt} >= ${filters.dateFrom}`);
     }
     if (filters.dateTo) {
-      const endOfDay = new Date(filters.dateTo);
-      endOfDay.setUTCHours(23, 59, 59, 999);
-      conditions.push(sql`${paperSimTrades.closedAt} <= ${endOfDay}`);
-      console.log(`[C-FINAL-2][DATE_FILTER] dateTo=${filters.dateTo.toISOString()} -> endOfDay=${endOfDay.toISOString()}`);
+      console.log(`[C-FINAL-2][DATE_FILTER] dateTo=${filters.dateTo.toISOString()} (using directly)`);
+      conditions.push(sql`${paperSimTrades.closedAt} <= ${filters.dateTo}`);
     }
     
     // Phase 8.8.3-C-FINAL: Expanded sort columns for all Trade History columns

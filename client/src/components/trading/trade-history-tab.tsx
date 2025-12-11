@@ -471,8 +471,21 @@ export function TradeHistoryTab() {
       if (appliedFilters.symbol) params.set('symbol', appliedFilters.symbol);
       if (appliedFilters.strategy !== 'all') params.set('strategy', appliedFilters.strategy);
       if (appliedFilters.closeReason !== 'all') params.set('closeReason', appliedFilters.closeReason);
-      if (appliedFilters.dateFrom) params.set('dateFrom', appliedFilters.dateFrom);
-      if (appliedFilters.dateTo) params.set('dateTo', appliedFilters.dateTo);
+      // Phase 8.8.3-C-FINAL-2: Convert local date to UTC ISO timestamps
+      // When user selects "2025-12-10", they mean Dec 10 in their LOCAL timezone
+      // We need to send the UTC boundaries for that local date
+      if (appliedFilters.dateFrom) {
+        // Create date at start of day in LOCAL timezone, then convert to UTC ISO string
+        const localStart = new Date(appliedFilters.dateFrom + 'T00:00:00');
+        params.set('dateFrom', localStart.toISOString());
+        console.log(`[C-FINAL-2][FE] dateFrom local=${appliedFilters.dateFrom} -> UTC=${localStart.toISOString()}`);
+      }
+      if (appliedFilters.dateTo) {
+        // Create date at end of day in LOCAL timezone, then convert to UTC ISO string
+        const localEnd = new Date(appliedFilters.dateTo + 'T23:59:59.999');
+        params.set('dateTo', localEnd.toISOString());
+        console.log(`[C-FINAL-2][FE] dateTo local=${appliedFilters.dateTo} -> UTC=${localEnd.toISOString()}`);
+      }
       return apiFetch(`/api/paper-sim/trades?${params.toString()}`);
     },
     enabled: isPaper,

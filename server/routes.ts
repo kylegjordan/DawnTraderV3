@@ -9322,12 +9322,19 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         
         if (dateFrom) {
           filters.dateFrom = new Date(dateFrom as string);
+          console.log(`[C-FINAL-2][ROUTES] dateFrom input="${dateFrom}" parsed=${filters.dateFrom.toISOString()}`);
         }
         if (dateTo) {
           filters.dateTo = new Date(dateTo as string);
+          console.log(`[C-FINAL-2][ROUTES] dateTo input="${dateTo}" parsed=${filters.dateTo.toISOString()}`);
         }
         
         // Phase 8.8.3-C-FINAL: Ghost filter now in SQL, no post-query filtering needed
+        console.log(`[C-FINAL-2][ROUTES] Calling getPaperSimTradesPaginated with filters:`, JSON.stringify({
+          ...filters,
+          dateFrom: filters.dateFrom?.toISOString(),
+          dateTo: filters.dateTo?.toISOString()
+        }));
         const result = await storage.getPaperSimTradesPaginated('paper', filters);
         
         res.json({
