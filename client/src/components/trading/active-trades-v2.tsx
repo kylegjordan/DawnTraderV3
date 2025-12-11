@@ -386,24 +386,24 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 12. Est Exit Fee - C2A: Show positive value */}
+      {/* 12. Exit Fee - C2A: Show positive value */}
       <td className="px-3 py-3">
         <div className="font-mono text-xs text-muted-foreground">
-          ~${formatNumber(Math.abs(trade.estExitFee || 0), 2)}
+          ${formatNumber(Math.abs(Number(trade.estExitFee) || 0), 2)}
         </div>
       </td>
       
-      {/* 13. Est Exit Slippage - C2A: Show positive value */}
+      {/* 13. Exit Slippage - C2A: Show positive value */}
       <td className="px-3 py-3">
         <div className="font-mono text-xs text-orange-600">
-          ~${formatNumber(Math.abs(trade.estExitSlippage || 0), 2)}
+          ${formatNumber(Math.abs(Number(trade.estExitSlippage) || 0), 2)}
         </div>
       </td>
       
-      {/* 14. Total Est Cost - C2A */}
+      {/* 14. Total Cost - C2A */}
       <td className="px-3 py-3">
         <div className="font-mono text-xs font-medium text-red-600">
-          ${formatNumber(trade.estTotalCost || 0, 2)}
+          ${formatNumber(Math.abs(Number(trade.estTotalCost) || 0), 2)}
         </div>
       </td>
       
