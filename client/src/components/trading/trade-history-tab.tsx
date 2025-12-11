@@ -570,12 +570,12 @@ export function TradeHistoryTab() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All close reasons</SelectItem>
+                <SelectItem value="target_hit">Take Profit (TP)</SelectItem>
                 <SelectItem value="stop_hit">Stop Loss (SL)</SelectItem>
-                <SelectItem value="take_profit">Take Profit (TP)</SelectItem>
                 <SelectItem value="manual_stop">Manual Stop</SelectItem>
                 <SelectItem value="manual_close">Manual Close</SelectItem>
                 <SelectItem value="engine_stop_cleanup">Engine Cleanup</SelectItem>
-                <SelectItem value="orchestrator_stop">Orchestrator Stop</SelectItem>
+                <SelectItem value="hard_reset">Hard Reset</SelectItem>
               </SelectContent>
             </Select>
             

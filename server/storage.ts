@@ -3243,10 +3243,13 @@ export class DatabaseStorage implements IStorage {
     if (filters.closeReason && filters.closeReason !== 'all') {
       conditions.push(sql`${paperSimTrades.closeReason} = ${filters.closeReason}`);
     }
+    // Phase 8.8.3-C-FINAL PART 2: Fix date filters to use closedAt consistently
+    // dateFrom = start of day (00:00:00.000), dateTo = end of day (23:59:59.999)
     if (filters.dateFrom) {
-      conditions.push(sql`${paperSimTrades.openedAt} >= ${filters.dateFrom}`);
+      const startOfDay = new Date(filters.dateFrom);
+      startOfDay.setHours(0, 0, 0, 0);
+      conditions.push(sql`${paperSimTrades.closedAt} >= ${startOfDay}`);
     }
-    // Phase 8.8.3-C-FINAL PART 2: Fix dateTo to use end-of-day (23:59:59.999)
     if (filters.dateTo) {
       const endOfDay = new Date(filters.dateTo);
       endOfDay.setHours(23, 59, 59, 999);
