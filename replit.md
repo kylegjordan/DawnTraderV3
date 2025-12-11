@@ -63,6 +63,7 @@ Phase 8.8.3-C (Fee and Slippage Tracking + Pagination) enhances trade transparen
 - **C1 - Fee Handling**: Added `entryFee`, `exitFee`, `totalFee` columns to `paper_sim_trades` table; `entryFee` column to `paper_sim_open_positions` table. Active Trades UI shows projected fees (entryFee * 2), Trade History shows total fees.
 - **C4 - Slippage Tracking**: Added `intendedEntryPrice`, `actualEntryPrice`, `entrySlippage`, `targetExitPrice`, `actualExitPrice`, `exitSlippage` columns to `paper_sim_trades` table; `intendedEntryPrice`, `entrySlippage` to `paper_sim_open_positions`. Trade History displays Entry Slip and Exit Slip columns.
 - **C5 - Pagination & Sorting**: `getPaperSimTradesPaginated()` method supports `limit`, `offset`, `sortBy`, `order` parameters with `totalCount` return. `/api/paper-sim/trades?paginated=true` endpoint returns paginated response with `trades`, `totalCount`, `page`, `pageSize`, `totalPages`. Trade History UI has pagination controls (10/25/50 per page), sortable column headers, and page navigation.
+- **HOTFIX-1 - Trade History QueryFn Fix**: Added explicit `queryFn` to Trade History useQuery hook to properly build API URL with all query parameters. The default query client fetcher only used `queryKey[0]` and ignored query parameters in `queryKey[1]`, causing the API to be called without `paginated=true` or `closedOnly=true`. Fix ensures pagination, sorting, and filtering work correctly.
 
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.

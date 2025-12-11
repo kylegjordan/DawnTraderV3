@@ -409,6 +409,7 @@ export function TradeHistoryTab() {
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   
   // Phase 8.8.3-C5: Use paginated API endpoint
+  // Phase 8.8.3-C HOTFIX-1: Added explicit queryFn to build URL with query parameters
   const { data: paginatedData, isFetching, refetch } = useQuery<{
     trades: any[];
     totalCount: number;
@@ -427,6 +428,20 @@ export function TradeHistoryTab() {
       dateFrom: filters.dateFrom || undefined,
       dateTo: filters.dateTo || undefined
     }],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.set('paginated', 'true');
+      params.set('limit', String(pageSize));
+      params.set('offset', String(page * pageSize));
+      params.set('sortBy', sortBy);
+      params.set('order', order);
+      params.set('closedOnly', 'true');
+      if (filters.symbol) params.set('symbol', filters.symbol);
+      if (filters.strategy !== 'all') params.set('strategy', filters.strategy);
+      if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
+      if (filters.dateTo) params.set('dateTo', filters.dateTo);
+      return apiFetch(`/api/paper-sim/trades?${params.toString()}`);
+    },
     enabled: isPaper,
     staleTime: 30000,
     refetchInterval: 60000,
