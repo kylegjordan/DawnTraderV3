@@ -536,6 +536,18 @@ export interface IStorage {
   updatePaperSimTrade(mode: TradingMode, id: string, updates: Partial<PaperSimTrade>): Promise<PaperSimTrade>;
   getPaperSimTrade(mode: TradingMode, id: string): Promise<PaperSimTrade | undefined>;
   getPaperSimTrades(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean }): Promise<PaperSimTrade[]>;
+  // Phase 8.8.3-C5: Paginated trades with sorting support
+  getPaperSimTradesPaginated(mode: TradingMode, filters: {
+    limit?: number;
+    offset?: number;
+    sortBy?: 'openedAt' | 'closedAt' | 'symbol' | 'pnl' | 'pnlPercent' | 'strategyName';
+    order?: 'asc' | 'desc';
+    closedOnly?: boolean;
+    symbol?: string;
+    strategy?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+  }): Promise<{ trades: PaperSimTrade[]; totalCount: number }>;
   getPaperSimTradesBySymbol(mode: TradingMode, symbol: string): Promise<PaperSimTrade[]>;
   getPaperSimTradesGlobal(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean }): Promise<PaperSimTrade[]>; // Phase 27.F.14.B: Global-per-mode query for LATTI
   
@@ -3188,6 +3200,71 @@ export class DatabaseStorage implements IStorage {
       .from(paperSimTrades)
       .where(eq(paperSimTrades.symbol, symbol))
       .orderBy(desc(paperSimTrades.openedAt));
+  }
+
+  // Phase 8.8.3-C5: Paginated trades with sorting and filtering support
+  async getPaperSimTradesPaginated(mode: TradingMode, filters: {
+    limit?: number;
+    offset?: number;
+    sortBy?: 'openedAt' | 'closedAt' | 'symbol' | 'pnl' | 'pnlPercent' | 'strategyName';
+    order?: 'asc' | 'desc';
+    closedOnly?: boolean;
+    symbol?: string;
+    strategy?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+  }): Promise<{ trades: PaperSimTrade[]; totalCount: number }> {
+    const limit = filters.limit || 50;
+    const offset = filters.offset || 0;
+    const sortBy = filters.sortBy || 'closedAt';
+    const order = filters.order || 'desc';
+    
+    const conditions: any[] = [];
+    
+    if (filters.closedOnly) {
+      conditions.push(sql`${paperSimTrades.closedAt} IS NOT NULL`);
+    }
+    if (filters.symbol) {
+      conditions.push(sql`LOWER(${paperSimTrades.symbol}) LIKE LOWER(${'%' + filters.symbol + '%'})`);
+    }
+    if (filters.strategy && filters.strategy !== 'all') {
+      conditions.push(eq(paperSimTrades.strategyName, filters.strategy as any));
+    }
+    if (filters.dateFrom) {
+      conditions.push(sql`${paperSimTrades.openedAt} >= ${filters.dateFrom}`);
+    }
+    if (filters.dateTo) {
+      conditions.push(sql`${paperSimTrades.closedAt} <= ${filters.dateTo}`);
+    }
+    
+    const sortColumn = {
+      openedAt: paperSimTrades.openedAt,
+      closedAt: paperSimTrades.closedAt,
+      symbol: paperSimTrades.symbol,
+      pnl: paperSimTrades.pnl,
+      pnlPercent: paperSimTrades.pnlPercent,
+      strategyName: paperSimTrades.strategyName,
+    }[sortBy];
+    
+    const orderFn = order === 'asc' ? asc : desc;
+    
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    
+    const [countResult] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(paperSimTrades)
+      .where(whereClause);
+    
+    const trades = await db.select()
+      .from(paperSimTrades)
+      .where(whereClause)
+      .orderBy(orderFn(sortColumn))
+      .limit(limit)
+      .offset(offset);
+    
+    return {
+      trades,
+      totalCount: countResult?.count || 0
+    };
   }
 
   // Phase 27.F.14.B: Global-per-mode query for LATTI baseline calculations
