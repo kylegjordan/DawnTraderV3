@@ -49,10 +49,14 @@ Phase 8.8.3-C2 (Full Cost Transparency) implements comprehensive P/L breakdown a
 - **P/L Calculations**: Gross P/L = (currentPrice - intendedEntryPrice) × quantity; Total Cost = entryFee + exitFee + entrySlippage + exitSlippage; Net P/L = grossPnl - totalCost
 - **Entry Price Tracking**: `intendedEntryPrice` = signal price (before slippage), `actualEntryPrice` = signal price + 0.15% slippage
 - **Cost Constants**: SLIPPAGE_PERCENT = 0.15%, FEE_PERCENT = 0.10%
-- **Active Trades UI (18 columns)**: Symbol, Slot, Strategy, Qty/Value, Entry (Signal), Entry (Actual), Gross P/L $%, Entry Fee/Slip, Est Exit Fee/Slip, Total Cost, Net P/L $%, Confidence, Volume, Source, Duration, Actions
-- **Trade History Columns**: Gross P/L, Entry Fee, Entry Slip, Exit Fee, Exit Slip, Total Cost, Net P/L
 - **Database Columns Added**: `total_cost`, `gross_pnl`, `net_pnl`, `net_pnl_percent` to `paper_sim_trades`
 - **DualScrollTable Component**: Synchronized horizontal scroll bars at top and bottom of wide tables for easier navigation
+
+Phase 8.8.3-C2A (Table Column Restructure) reorganizes both Active Trades and Trade History tables:
+- **Active Trades UI (20 columns)**: Symbol, Slot, Strategy, Qty/Value, Entry (Signal), Target (TP), Current Price, Distance (stacked TP/SL), Gross P/L (stacked $%), Entry Fee, Entry Slip, Exit Fee, Exit Slip, Total Cost, Net P/L (stacked $%), Confidence, Volume, Source, Duration, Actions
+- **Trade History UI (16 columns)**: Symbol, Strategy, Qty, Entry, Exit, Reason, Gross P/L (stacked $%), Entry Fee, Entry Slip, Exit Fee, Exit Slip, Total Cost, Net P/L (stacked $%), Confidence, Opened, Closed
+- **Exit Cost Display**: Exit Fee and Exit Slip show positive values using Math.abs() for clarity
+- **Stacked Cells**: Distance column stacks TP distance (top) and SL distance (bottom); P/L columns stack $ amount (top) and % (bottom)
 
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.

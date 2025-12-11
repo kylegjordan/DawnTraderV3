@@ -737,7 +737,8 @@ export function TradeHistoryTab() {
                       const entrySlippage = parseFloat(trade.entrySlippage || '0');
                       const exitSlippage = parseFloat(trade.exitSlippage || '0');
                       const totalCost = parseFloat(trade.totalCost || '0');
-                      const isProfit = netPnl > 0;
+                      const isNetProfit = netPnl >= 0;
+                      const isGrossProfit = grossPnl >= 0;
                       
                       const formatTimestamp = (dateStr: string | null) => {
                         if (!dateStr) return '-';
@@ -807,11 +808,11 @@ export function TradeHistoryTab() {
                           {/* 7. Gross P/L ($ + %) stacked - C2A */}
                           <td className="p-2 text-right">
                             <div className="space-y-0.5">
-                              <div className={cn("font-mono text-xs font-semibold", grossPnl >= 0 ? "text-green-600" : "text-red-600")}>
-                                {grossPnl >= 0 ? '+' : ''}${formatNumber(Math.abs(grossPnl))}
+                              <div className={cn("font-mono text-xs font-semibold", isGrossProfit ? "text-green-600" : "text-red-600")}>
+                                {isGrossProfit ? '+' : '-'}${formatNumber(Math.abs(grossPnl))}
                               </div>
-                              <div className={cn("font-mono text-xs", grossPnl >= 0 ? "text-green-600" : "text-red-600")}>
-                                {grossPnl >= 0 ? '+' : ''}{formatNumber((grossPnl / (parseFloat(trade.quantity || '1') * parseFloat(trade.entryPrice || '1'))) * 100)}%
+                              <div className={cn("font-mono text-xs", isGrossProfit ? "text-green-600" : "text-red-600")}>
+                                {isGrossProfit ? '+' : ''}{formatNumber((grossPnl / (parseFloat(trade.quantity || '1') * parseFloat(trade.entryPrice || '1'))) * 100)}%
                               </div>
                             </div>
                           </td>
@@ -844,11 +845,11 @@ export function TradeHistoryTab() {
                           {/* 13. Net P/L ($ + %) stacked - C2A */}
                           <td className="p-2 text-right">
                             <div className="space-y-0.5">
-                              <div className={cn("font-mono text-xs font-semibold", isProfit ? "text-green-600" : "text-red-600")}>
-                                {isProfit ? '+' : ''}${formatNumber(Math.abs(netPnl))}
+                              <div className={cn("font-mono text-xs font-semibold", isNetProfit ? "text-green-600" : "text-red-600")}>
+                                {isNetProfit ? '+' : '-'}${formatNumber(Math.abs(netPnl))}
                               </div>
-                              <div className={cn("font-mono text-xs", isProfit ? "text-green-600" : "text-red-600")}>
-                                {isProfit ? '+' : ''}{formatNumber(parseFloat(trade.netPnlPercent || trade.pnlPercent || '0'))}%
+                              <div className={cn("font-mono text-xs", isNetProfit ? "text-green-600" : "text-red-600")}>
+                                {isNetProfit ? '+' : ''}{formatNumber(parseFloat(trade.netPnlPercent || trade.pnlPercent || '0'))}%
                               </div>
                             </div>
                           </td>

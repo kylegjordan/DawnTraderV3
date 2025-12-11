@@ -355,7 +355,7 @@ function TradeRow({
             "font-mono text-sm font-semibold",
             (trade.grossPnl || 0) >= 0 ? "text-green-600" : "text-red-600"
           )}>
-            {(trade.grossPnl || 0) >= 0 ? '+' : ''}${formatNumber(Math.abs(trade.grossPnl || 0), 2)}
+            {(trade.grossPnl || 0) >= 0 ? '+' : '-'}${formatNumber(Math.abs(trade.grossPnl || 0), 2)}
           </div>
           <div className={cn(
             "font-mono text-xs",
@@ -408,7 +408,7 @@ function TradeRow({
             "font-mono text-sm font-semibold",
             (trade.netPnl || 0) >= 0 ? "text-green-600" : "text-red-600"
           )}>
-            {(trade.netPnl || 0) >= 0 ? '+' : ''}${formatNumber(Math.abs(trade.netPnl || 0), 2)}
+            {(trade.netPnl || 0) >= 0 ? '+' : '-'}${formatNumber(Math.abs(trade.netPnl || 0), 2)}
           </div>
           <div className={cn(
             "font-mono text-xs",
