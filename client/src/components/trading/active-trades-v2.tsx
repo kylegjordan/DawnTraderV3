@@ -95,8 +95,10 @@ interface ActiveTradesResponse {
   portfolio: PortfolioSummary;
 }
 
+// Phase 8.8.3-C-FINAL: Added quantity, entryFee, volume24h for full column sorting
 type SortField = 'symbol' | 'strategy' | 'entryPrice' | 'currentPrice' | 'unrealizedPnlPercent' | 
-                  'unrealizedPnl' | 'holdingDurationMs' | 'distanceToTP' | 'distanceToSL' | 'slotNumber' | 'health' | 'confidence';
+                  'unrealizedPnl' | 'holdingDurationMs' | 'distanceToTP' | 'distanceToSL' | 'slotNumber' | 
+                  'health' | 'confidence' | 'quantity' | 'entryFee' | 'volume24h' | 'takeProfit' | 'stopLoss';
 type SortDirection = 'asc' | 'desc';
 
 const strategyColors: Record<string, string> = {
@@ -877,17 +879,17 @@ export default function ActiveTradesV2() {
                   <SortableHeader field="symbol" label="Symbol" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="slotNumber" label="Slot" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="strategy" label="Strategy" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Qty / Value</th>
+                  <SortableHeader field="quantity" label="Qty / Value" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="entryPrice" label="Entry" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">TP / SL</th>
+                  <SortableHeader field="takeProfit" label="TP / SL" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="currentPrice" label="Current" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="distanceToTP" label="Distance" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="unrealizedPnl" label="P/L $" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="unrealizedPnlPercent" label="P/L %" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="confidence" label="Conf" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fees</th>
+                  <SortableHeader field="entryFee" label="Fees" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Source</th>
-                  <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Volume</th>
+                  <SortableHeader field="volume24h" label="Volume" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="holdingDurationMs" label="Duration" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
                 </tr>
