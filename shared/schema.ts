@@ -1653,6 +1653,17 @@ export const paperSimTrades = pgTable("paper_sim_trades", {
   pnlPercent: decimal("pnl_percent", { precision: 10, scale: 4 }),
   fees: decimal("fees", { precision: 20, scale: 8 }).default("0"),
   slippage: decimal("slippage", { precision: 20, scale: 8 }).default("0"),
+  // Phase 8.8.3-C1: Granular fee tracking
+  entryFee: decimal("entry_fee", { precision: 20, scale: 8 }).default("0"),
+  exitFee: decimal("exit_fee", { precision: 20, scale: 8 }).default("0"),
+  totalFee: decimal("total_fee", { precision: 20, scale: 8 }).default("0"),
+  // Phase 8.8.3-C4: Slippage tracking
+  intendedEntryPrice: decimal("intended_entry_price", { precision: 20, scale: 8 }),
+  actualEntryPrice: decimal("actual_entry_price", { precision: 20, scale: 8 }),
+  entrySlippage: decimal("entry_slippage", { precision: 20, scale: 8 }).default("0"),
+  targetExitPrice: decimal("target_exit_price", { precision: 20, scale: 8 }),
+  actualExitPrice: decimal("actual_exit_price", { precision: 20, scale: 8 }),
+  exitSlippage: decimal("exit_slippage", { precision: 20, scale: 8 }).default("0"),
   openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
   closedAt: timestamp("closed_at", { withTimezone: true }),
   closeReason: varchar("close_reason", { length: 50 }), // 'target_hit', 'stop_hit', 'strategy_exit', 'manual', 'guardrail'
@@ -1684,6 +1695,11 @@ export const paperSimOpenPositions = pgTable("paper_sim_open_positions", {
   // Phase 8.8.3-I10: Volume enrichment - FX5 first, Kraken fallback
   volume24h: decimal("volume_24h", { precision: 20, scale: 2 }),
   volumeBucket: varchar("volume_bucket", { length: 20 }), // 'High' | 'Medium' | 'Low' | 'Very Low'
+  // Phase 8.8.3-C1: Entry fee for projected total fees display
+  entryFee: decimal("entry_fee", { precision: 20, scale: 8 }).default("0"),
+  // Phase 8.8.3-C4: Intended entry price for slippage tracking
+  intendedEntryPrice: decimal("intended_entry_price", { precision: 20, scale: 8 }),
+  entrySlippage: decimal("entry_slippage", { precision: 20, scale: 8 }).default("0"),
   metadata: jsonb("metadata"), // Signal details, entry reasons, etc.
 }, (table) => ({
   symbolIdx: uniqueIndex("paper_sim_open_positions_symbol_idx").on(table.symbol),
