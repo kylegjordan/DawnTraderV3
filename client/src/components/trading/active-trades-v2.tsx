@@ -45,9 +45,21 @@ interface ActiveTrade {
   side: string;
   quantity: number;
   entryPrice: number;
+  intendedEntryPrice: number; // Signal price before slippage
   currentPrice: number;
   unrealizedPnl: number;
   unrealizedPnlPercent: number;
+  // Phase 8.8.3-C2: P/L breakdown
+  grossPnl: number;
+  grossPnlPercent: number;
+  netPnl: number;
+  netPnlPercent: number;
+  // Phase 8.8.3-C2: Cost breakdown
+  entryFee: number;
+  entrySlippage: number;
+  estExitFee: number;
+  estExitSlippage: number;
+  estTotalCost: number;
   takeProfit: number;
   stopLoss: number;
   distanceToTP: number;
@@ -66,10 +78,6 @@ interface ActiveTrade {
   avgIntervalMs?: number;
   volume24h?: number;
   volumeBucket?: 'High' | 'Medium' | 'Low' | 'Very Low';
-  // Phase 8.8.3-C1: Fee tracking
-  entryFee?: string;
-  intendedEntryPrice?: string;
-  entrySlippage?: string;
 }
 
 interface PortfolioSummary {
@@ -95,10 +103,12 @@ interface ActiveTradesResponse {
   portfolio: PortfolioSummary;
 }
 
-// Phase 8.8.3-C-FINAL: Added quantity, entryFee, volume24h for full column sorting
-type SortField = 'symbol' | 'strategy' | 'entryPrice' | 'currentPrice' | 'unrealizedPnlPercent' | 
-                  'unrealizedPnl' | 'holdingDurationMs' | 'distanceToTP' | 'distanceToSL' | 'slotNumber' | 
-                  'health' | 'confidence' | 'quantity' | 'entryFee' | 'volume24h' | 'takeProfit' | 'stopLoss';
+// Phase 8.8.3-C2: Updated sort fields for new P/L breakdown columns
+type SortField = 'symbol' | 'strategy' | 'intendedEntryPrice' | 'entryPrice' | 'currentPrice' | 
+                  'grossPnl' | 'grossPnlPercent' | 'netPnl' | 'netPnlPercent' | 
+                  'entryFee' | 'entrySlippage' | 'estExitFee' | 'estExitSlippage' | 'estTotalCost' |
+                  'holdingDurationMs' | 'distanceToTP' | 'distanceToSL' | 'slotNumber' | 
+                  'health' | 'confidence' | 'quantity' | 'volume24h' | 'takeProfit' | 'stopLoss' | 'positionValue';
 type SortDirection = 'asc' | 'desc';
 
 const strategyColors: Record<string, string> = {
@@ -212,10 +222,6 @@ function TradeRow({
     ? trade.symbol.split('/') 
     : [trade.symbol.slice(0, 3), trade.symbol.slice(3)];
 
-  // Calculate distance as actual value (price difference), not percentage
-  const distanceToTPValue = trade.takeProfit - trade.currentPrice;
-  const distanceToSLValue = trade.currentPrice - trade.stopLoss;
-  
   // B3: Calculate position value
   const positionValue = trade.quantity * trade.currentPrice;
 
@@ -253,69 +259,88 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 5. Entry */}
+      {/* 5. Entry (Signal) - C2 */}
+      <td className="px-3 py-3">
+        <div className="font-mono text-sm">${(trade.intendedEntryPrice || trade.entryPrice).toFixed(6)}</div>
+      </td>
+      
+      {/* 6. Entry (Actual) - C2 */}
       <td className="px-3 py-3">
         <div className="font-mono text-sm">${trade.entryPrice.toFixed(6)}</div>
       </td>
       
-      {/* 6. TP / SL (stacked) */}
+      {/* 7. Gross P/L ($ + %) - C2 */}
       <td className="px-3 py-3">
         <div className="text-xs space-y-0.5">
-          <div className="flex items-center gap-1">
-            <Target className="w-3 h-3 text-green-600" />
-            <span className="font-mono">${trade.takeProfit.toFixed(4)}</span>
+          <div className={cn(
+            "font-mono text-sm font-semibold",
+            (trade.grossPnl || 0) >= 0 ? "text-green-600" : "text-red-600"
+          )}>
+            {(trade.grossPnl || 0) >= 0 ? '+' : ''}{formatNumber(trade.grossPnl || 0, 2)}
           </div>
-          <div className="flex items-center gap-1">
-            <Shield className="w-3 h-3 text-red-600" />
-            <span className="font-mono">${trade.stopLoss.toFixed(4)}</span>
+          <div className={cn(
+            "font-mono text-xs",
+            (trade.grossPnlPercent || 0) >= 0 ? "text-green-600" : "text-red-600"
+          )}>
+            {(trade.grossPnlPercent || 0) >= 0 ? '+' : ''}{(trade.grossPnlPercent || 0).toFixed(2)}%
           </div>
         </div>
       </td>
       
-      {/* 7. Current Price */}
+      {/* 8. Entry Fee - C2 */}
       <td className="px-3 py-3">
-        <div className={cn(
-          "font-mono text-sm font-medium",
-          trade.currentPrice > trade.entryPrice ? "text-green-600" : 
-          trade.currentPrice < trade.entryPrice ? "text-red-600" : "text-muted-foreground"
-        )}>
-          ${trade.currentPrice.toFixed(6)}
+        <div className="font-mono text-xs text-muted-foreground">
+          ${formatNumber(trade.entryFee || 0, 2)}
         </div>
       </td>
       
-      {/* 8. Distance to TP / SL (as actual values) */}
+      {/* 9. Entry Slippage - C2 */}
+      <td className="px-3 py-3">
+        <div className="font-mono text-xs text-orange-600">
+          ${formatNumber(trade.entrySlippage || 0, 2)}
+        </div>
+      </td>
+      
+      {/* 10. Est Exit Fee - C2 */}
+      <td className="px-3 py-3">
+        <div className="font-mono text-xs text-muted-foreground">
+          ~${formatNumber(trade.estExitFee || 0, 2)}
+        </div>
+      </td>
+      
+      {/* 11. Est Exit Slippage - C2 */}
+      <td className="px-3 py-3">
+        <div className="font-mono text-xs text-orange-600">
+          ~${formatNumber(trade.estExitSlippage || 0, 2)}
+        </div>
+      </td>
+      
+      {/* 12. Total Est Cost - C2 */}
+      <td className="px-3 py-3">
+        <div className="font-mono text-xs font-medium text-red-600">
+          ${formatNumber(trade.estTotalCost || 0, 2)}
+        </div>
+      </td>
+      
+      {/* 13. Net P/L ($ + %) - C2 */}
       <td className="px-3 py-3">
         <div className="text-xs space-y-0.5">
-          <div className={cn("font-mono", distanceToTPValue > 0 ? "text-green-600" : "text-muted-foreground")}>
-            TP: {distanceToTPValue >= 0 ? '+' : ''}${distanceToTPValue.toFixed(4)}
+          <div className={cn(
+            "font-mono text-sm font-semibold",
+            (trade.netPnl || 0) >= 0 ? "text-green-600" : "text-red-600"
+          )}>
+            {(trade.netPnl || 0) >= 0 ? '+' : ''}{formatNumber(trade.netPnl || 0, 2)}
           </div>
-          <div className={cn("font-mono", distanceToSLValue > 0 ? "text-green-600" : "text-red-600")}>
-            SL: {distanceToSLValue >= 0 ? '+' : ''}${distanceToSLValue.toFixed(4)}
+          <div className={cn(
+            "font-mono text-xs",
+            (trade.netPnlPercent || 0) >= 0 ? "text-green-600" : "text-red-600"
+          )}>
+            {(trade.netPnlPercent || 0) >= 0 ? '+' : ''}{(trade.netPnlPercent || 0).toFixed(2)}%
           </div>
         </div>
       </td>
       
-      {/* 9. P/L ($) */}
-      <td className="px-3 py-3">
-        <div className={cn(
-          "font-mono text-sm font-semibold",
-          trade.unrealizedPnl >= 0 ? "text-green-600" : "text-red-600"
-        )}>
-          {trade.unrealizedPnl >= 0 ? '+$' : '-$'}{formatNumber(Math.abs(trade.unrealizedPnl), 2)}
-        </div>
-      </td>
-      
-      {/* 10. P/L (%) */}
-      <td className="px-3 py-3">
-        <div className={cn(
-          "font-mono text-sm font-semibold",
-          trade.unrealizedPnlPercent >= 0 ? "text-green-600" : "text-red-600"
-        )}>
-          {trade.unrealizedPnlPercent >= 0 ? '+' : ''}{trade.unrealizedPnlPercent.toFixed(2)}%
-        </div>
-      </td>
-      
-      {/* 11. Confidence */}
+      {/* 14. Confidence */}
       <td className="px-3 py-3">
         <div className={cn(
           "font-mono text-sm font-medium",
@@ -327,16 +352,24 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 11b. Fees (C1: projected entry fee * 2) */}
+      {/* 15. Volume (24h) */}
       <td className="px-3 py-3">
-        <div className="font-mono text-xs text-muted-foreground">
-          {trade.entryFee && parseFloat(trade.entryFee) > 0 
-            ? `~$${formatNumber(parseFloat(trade.entryFee) * 2, 2)}`
-            : '-'}
+        <div className="text-xs space-y-0.5">
+          <div className="font-mono text-sm">
+            {formatVolume(trade.volume24h || 0)}
+          </div>
+          <div className={cn(
+            "text-xs",
+            trade.volumeBucket === 'High' ? "text-green-600" :
+            trade.volumeBucket === 'Medium' ? "text-blue-600" :
+            trade.volumeBucket === 'Low' ? "text-orange-600" : "text-muted-foreground"
+          )}>
+            {trade.volumeBucket || 'Very Low'}
+          </div>
         </div>
       </td>
       
-      {/* 12. Source + Frequency (stacked) */}
+      {/* 16. Source + Frequency (stacked) */}
       <td className="px-3 py-3">
         <div className="text-xs space-y-0.5">
           <div className="flex items-center gap-1">
@@ -363,24 +396,7 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 13. Volume (24h) */}
-      <td className="px-3 py-3">
-        <div className="text-xs space-y-0.5">
-          <div className="font-mono text-sm">
-            {formatVolume(trade.volume24h || 0)}
-          </div>
-          <div className={cn(
-            "text-xs",
-            trade.volumeBucket === 'High' ? "text-green-600" :
-            trade.volumeBucket === 'Medium' ? "text-blue-600" :
-            trade.volumeBucket === 'Low' ? "text-orange-600" : "text-muted-foreground"
-          )}>
-            {trade.volumeBucket || 'Very Low'}
-          </div>
-        </div>
-      </td>
-      
-      {/* 14. Duration */}
+      {/* 17. Duration */}
       <td className="px-3 py-3">
         <div className="flex items-center gap-1 text-sm text-muted-foreground">
           <Clock className="w-3 h-3" />
@@ -388,7 +404,7 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 15. Actions */}
+      {/* 18. Actions */}
       <td className="px-3 py-3">
         <Button
           size="sm"
@@ -876,20 +892,23 @@ export default function ActiveTradesV2() {
             <table className="w-full">
               <thead className="bg-muted/50 sticky top-0">
                 <tr>
+                  {/* Phase 8.8.3-C2: Updated column order per directive */}
                   <SortableHeader field="symbol" label="Symbol" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="slotNumber" label="Slot" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="strategy" label="Strategy" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="quantity" label="Qty / Value" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <SortableHeader field="entryPrice" label="Entry" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <SortableHeader field="takeProfit" label="TP / SL" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <SortableHeader field="currentPrice" label="Current" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <SortableHeader field="distanceToTP" label="Distance" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <SortableHeader field="unrealizedPnl" label="P/L $" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <SortableHeader field="unrealizedPnlPercent" label="P/L %" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortableHeader field="intendedEntryPrice" label="Entry (Signal)" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortableHeader field="entryPrice" label="Entry (Actual)" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortableHeader field="grossPnl" label="Gross P/L" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortableHeader field="entryFee" label="Entry Fee" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortableHeader field="entrySlippage" label="Entry Slip" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortableHeader field="estExitFee" label="Est Exit Fee" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortableHeader field="estExitSlippage" label="Est Exit Slip" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortableHeader field="estTotalCost" label="Total Cost" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortableHeader field="netPnl" label="Net P/L" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="confidence" label="Conf" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <SortableHeader field="entryFee" label="Fees" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Source</th>
                   <SortableHeader field="volume24h" label="Volume" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Source</th>
                   <SortableHeader field="holdingDurationMs" label="Duration" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
                 </tr>

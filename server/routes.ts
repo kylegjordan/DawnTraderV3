@@ -9441,6 +9441,36 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         const unrealizedPnl = (currentPrice - entryPrice) * quantity;
         const unrealizedPnlPercent = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice) * 100 : 0;
         
+        // Phase 8.8.3-C2: P/L Breakdown for cost transparency
+        const SLIPPAGE_PCT = 0.15; // 0.15% slippage
+        const FEE_PCT = 0.10; // 0.10% fee
+        
+        // Get intended entry price (signal price before slippage)
+        const intendedEntryPrice = pos.intendedEntryPrice 
+          ? parseFloat(pos.intendedEntryPrice.toString()) 
+          : entryPrice; // Fallback for old positions
+        const intendedEntryValue = intendedEntryPrice * quantity;
+        const currentValue = currentPrice * quantity;
+        
+        // Gross P/L = Pure market movement (no slippage, no fees)
+        const grossPnl = (currentPrice - intendedEntryPrice) * quantity;
+        const grossPnlPercent = intendedEntryValue > 0 ? (grossPnl / intendedEntryValue) * 100 : 0;
+        
+        // Entry costs (persisted at trade creation)
+        const entryFee = pos.entryFee ? parseFloat(pos.entryFee.toString()) : (entryPrice * quantity * FEE_PCT / 100);
+        const entrySlippage = pos.entrySlippage ? parseFloat(pos.entrySlippage.toString()) : 0;
+        
+        // Estimated exit costs (based on current price)
+        const estExitFee = currentValue * (FEE_PCT / 100);
+        const estExitSlippage = currentPrice * (SLIPPAGE_PCT / 100) * quantity;
+        
+        // Total estimated cost
+        const estTotalCost = entryFee + entrySlippage + estExitFee + estExitSlippage;
+        
+        // Net P/L = Gross P/L minus all costs
+        const netPnl = grossPnl - estTotalCost;
+        const netPnlPercent = intendedEntryValue > 0 ? (netPnl / intendedEntryValue) * 100 : 0;
+        
         // Phase 8.8.3-I6 E1: Distance to TP/SL using live price
         const distanceToTP = takeProfit > 0 ? ((takeProfit - currentPrice) / currentPrice) * 100 : 0;
         const distanceToSL = stopLoss > 0 ? ((currentPrice - stopLoss) / currentPrice) * 100 : 0;
@@ -9484,9 +9514,21 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           side: pos.side,
           quantity,
           entryPrice,
+          intendedEntryPrice, // Phase 8.8.3-C2: Signal price before slippage
           currentPrice,
           unrealizedPnl,
           unrealizedPnlPercent,
+          // Phase 8.8.3-C2: P/L breakdown
+          grossPnl,
+          grossPnlPercent,
+          netPnl,
+          netPnlPercent,
+          // Phase 8.8.3-C2: Cost breakdown
+          entryFee,
+          entrySlippage,
+          estExitFee,
+          estExitSlippage,
+          estTotalCost,
           takeProfit,
           stopLoss,
           distanceToTP,
