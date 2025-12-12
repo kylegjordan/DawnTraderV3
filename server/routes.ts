@@ -9559,9 +9559,23 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const isMismatch = false; // Will be compared with UI count on client side
       
       // B3: Calculate portfolio summary
+      // Phase 8.8.3-C7-FIX: Use same calculation as portfolio-summary endpoint
+      const { getEngineSessionStart } = await import('./services/paper-execution-engine.js');
       const portfolioState = await storage.getPortfolioState({ mode: 'paper' });
       const startingBalance = portfolioState ? parseFloat(portfolioState.startingBalance?.toString() || portfolioState.balance?.toString() || '0') : 0;
-      const cashBalance = portfolioState ? parseFloat(portfolioState.balance?.toString() || '0') : 0;
+      
+      // Phase 8.8.3-C7-FIX: Calculate realized P/L from closed trades (same as portfolio-summary)
+      const sessionStart = getEngineSessionStart('paper');
+      const allTrades = await storage.getPaperSimTrades('paper', { closedOnly: true });
+      const sessionTrades = sessionStart 
+        ? allTrades.filter(t => t.closedAt && new Date(t.closedAt) >= sessionStart)
+        : allTrades;
+      const realizedPnl = sessionTrades.reduce((sum, trade) => {
+        return sum + parseFloat(trade.pnl?.toString() || '0');
+      }, 0);
+      
+      // Phase 8.8.3-C7-FIX: Cash Balance = Starting Balance + Realized P/L (NOT portfolioState.balance)
+      const cashBalance = startingBalance + realizedPnl;
       
       // Calculate total position value (mark-to-market)
       const totalPositionValue = enrichedPositions.reduce((sum, pos) => {
