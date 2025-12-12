@@ -557,7 +557,7 @@ function IntegrityBanner({
           <div className="flex items-center gap-2">
             <span className="text-muted-foreground">Current Bal + Open Trades:</span>
             <span className="font-bold text-blue-600">
-              ${((portfolio.currentBalance || 0) + (portfolio.totalPositionValue || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ${((portfolio.cashBalance ?? portfolio.currentBalance ?? 0) + (portfolio.totalPositionValue || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
         </div>
