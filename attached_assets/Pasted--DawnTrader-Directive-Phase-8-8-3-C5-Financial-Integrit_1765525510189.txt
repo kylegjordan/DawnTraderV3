@@ -1,0 +1,249 @@
+📘 DawnTrader Directive
+Phase 8.8.3-C5 — Financial Integrity Verification & Diagnostic Validation
+⚠️ Scope Lock (Read First)
+
+This phase is verification-only.
+
+DO NOT:
+
+Modify trading logic
+
+Modify execution engine behavior
+
+Modify guardrail thresholds
+
+Modify balances or P/L formulas
+
+Add new features or UI components
+
+Add duplicate hardening logic
+
+ALLOWED:
+
+Logging
+
+Diagnostics
+
+Assertions
+
+One-time validation checks
+
+Cleanup or reduction of temporary diagnostics introduced during earlier C phases
+
+🎯 Objectives
+
+This phase validates that all financial calculations are correct, consistent, and feeding the correct downstream systems.
+
+Specifically:
+
+Confirm balance correctness
+
+Confirm guardrails are using the correct balance source
+
+Confirm analytics calculations are scoped correctly
+
+Reduce noisy or redundant diagnostics now that C-phases are complete
+
+✅ Phase C5 Tasks
+C5-1 — Balance Reconciliation Diagnostics
+
+Add temporary logging (clearly tagged) to verify:
+
+STARTING_BALANCE
++ SUM(realized net P/L from closed trades)
+= CURRENT_BALANCE (UI + backend)
+
+Requirements
+
+Log values at:
+
+Session start
+
+After each trade close
+
+After manual close
+
+After stop/reset
+
+Logs must include:
+
+starting_balance
+
+realized_net_pnl_total
+
+calculated_current_balance
+
+displayed_current_balance
+
+If mismatch > $0.01 → log WARN (do not throw)
+
+Tag all logs with:
+[C5-BALANCE-CHECK]
+
+C5-2 — Guardrail Input Verification
+
+Add logging at the moment a new trade is sized.
+
+Log:
+
+balance_used_for_guardrails
+
+starting_balance
+
+realized_net_pnl
+
+open_unrealized_pnl (if present — must NOT be used)
+
+Assertion Rules
+
+balance_used_for_guardrails MUST equal current balance
+
+It MUST NOT equal starting balance once any trade has closed
+
+Tag:
+[C5-GUARDRAIL-CHECK]
+
+No behavior changes — logging only.
+
+C5-3 — Single-Trade P/L Sanity Check
+
+For each trade close, log:
+
+gross_pnl
+- entry_fee
+- entry_slippage
+- exit_fee
+- exit_slippage
+= net_pnl
+
+
+Compare:
+
+Execution engine value
+
+Stored DB value
+
+API response value
+
+UI-rendered value (if available via logs)
+
+Tolerance: ± $0.01
+
+Tag:
+[C5-PNL-RECON]
+
+C5-4 — Analytics Scope Verification
+
+Validate analytics queries for each time range:
+
+Current Simulation
+
+Last Hour
+
+Last 24 Hours
+
+For each mode, log:
+
+mode
+
+filters applied (session_id vs time window)
+
+trade count used
+
+net P/L used
+
+win / loss counts
+
+Confirm:
+
+Current Simulation uses session_id or simulation start timestamp
+
+It does not rely on time-of-day filtering
+
+Non-zero results appear once trades exist
+
+Tag:
+[C5-ANALYTICS-SCOPE]
+
+C5-5 — Diagnostic Reduction / Cleanup
+
+Now that C-phases are complete:
+
+Identify diagnostics added in:
+
+C1
+
+C2
+
+C3
+
+C4
+
+Remove or downgrade:
+
+Console spam
+
+Redundant debug logs
+
+Temporary trace logs no longer needed
+
+Keep:
+
+Financial integrity logs added in C5
+
+Any WARN / ERROR logs related to mismatches
+
+No functional changes allowed.
+
+🧪 Test Credentials (Corrected)
+
+Use only the following test user:
+
+Username: testuser123
+Password: SecurePass123!
+Mode: PAPER
+
+
+Tests should include:
+
+Let trades open and close naturally
+
+Manually close at least one trade
+
+Stop and restart simulation
+
+Verify analytics for all time ranges
+
+📦 Deliverables
+
+Replit must provide:
+
+Confirmation that no trading logic was modified
+
+Sample logs from:
+
+One trade lifecycle
+
+One manual close
+
+One guardrail sizing event
+
+Explicit confirmation that:
+
+Guardrails use current balance
+
+Current balance uses realized net P/L
+
+Current Simulation analytics are non-zero once trades exist
+
+🧠 Architectural Note (Non-Negotiable)
+
+This phase exists to prove correctness, not to “fix by tweaking.”
+
+If inconsistencies are found:
+
+Log them
+
+Report them
+
+Do not auto-fix without approval

@@ -68,6 +68,7 @@ import { b5SizingAudit } from './services/b5-sizing-audit.js';
 import { livePricingAdapter } from './services/live-pricing-adapter.js';
 import { krakenWebSocketAdapter } from './services/kraken-websocket-adapter.js';
 import { slippageFeeModel } from './services/slippage-fee-model.js';
+import { c5FinancialDiagnostics } from './services/c5-financial-diagnostics.js';
 import os from 'os';
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
@@ -9986,6 +9987,20 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const avgLoss = losses.length > 0 ? totalLoss / losses.length : 0;
       
       const netPnl = trades.reduce((sum, t) => sum + parseFloat(t.pnl?.toString() || '0'), 0);
+      
+      // Phase 8.8.3-C5-4: Analytics Scope Verification - log analytics query scope
+      const c5SessionState = await storage.getEngineState('paper').catch(() => null);
+      c5FinancialDiagnostics.logAnalyticsScope({
+        mode: 'paper',
+        timeRange: range === 'session' ? 'current_simulation' : range === '1h' ? 'last_hour' : 'last_24h',
+        filtersApplied: String(range),
+        tradeCount: trades.length,
+        netPnlUsed: netPnl,
+        winCount: wins.length,
+        lossCount: losses.length,
+        sessionId: c5SessionState?.sessionId || null,
+        timestamp: new Date().toISOString()
+      });
       
       // Calculate holding times
       const holdingTimes = trades.map(t => {

@@ -17,6 +17,7 @@ import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js
 import { livePricingAdapter } from './live-pricing-adapter.js';
 import { rtbMetricsService } from './rtb-metrics-service.js';
 import { krakenWebSocketAdapter } from './kraken-websocket-adapter.js';
+import { c5FinancialDiagnostics } from './c5-financial-diagnostics.js';
 
 console.log('[41E-S][LIVE-CODE] paper-sim-service.ts loaded');
 console.log('[8.8.3-I3][LOADED] Trade status consistency module integrated');
@@ -716,6 +717,9 @@ export async function startPaperSimulation(
         // Emit start acknowledgment log (backward compatibility)
         console.log(`[TradeEngine] start_ack { runId: "${sessionId}", mode: "paper", t: "${startedAt.toISOString()}" }`);
         
+        // Phase 8.8.3-C5-1: Balance Reconciliation at session start
+        await c5FinancialDiagnostics.logBalanceReconciliation('paper', 'session_start');
+        
         return {
           success: true,
           message: 'Paper trading simulation started successfully. Monitoring live market data and executing trades in simulation mode.',
@@ -967,6 +971,9 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
 
         // Emit stop acknowledgment log (backward compatibility)
         console.log(`[TradeEngine] stop_ack { mode: "paper", t: "${stoppedAt.toISOString()}" }`);
+        
+        // Phase 8.8.3-C5-1: Balance Reconciliation at session stop/reset
+        await c5FinancialDiagnostics.logBalanceReconciliation('paper', 'stop_reset');
         
         return {
           success: true,

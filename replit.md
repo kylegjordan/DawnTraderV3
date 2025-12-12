@@ -58,6 +58,14 @@ Phase 8.8.3-C2A (Table Column Restructure) reorganizes both Active Trades and Tr
 - **Exit Cost Display**: Exit Fee and Exit Slip show positive values using Math.abs() for clarity
 - **Stacked Cells**: Distance column stacks TP distance (top) and SL distance (bottom); P/L columns stack $ amount (top) and % (bottom)
 
+Phase 8.8.3-C5 (Financial Integrity Verification & Diagnostic Validation) implements a verification-only diagnostic suite without modifying trading logic:
+- **C5-1 Balance Reconciliation**: Verifies STARTING_BALANCE + SUM(realized net P/L) = CURRENT_BALANCE at session start/stop and trade close points
+- **C5-2 Guardrail Input Verification**: Logs balance values used when sizing new trades in signal-orchestrator.ts
+- **C5-3 P/L Sanity Check**: Reconciles engine, DB, and API net P/L calculations with tolerance-only assertions at trade close
+- **C5-4 Analytics Scope Verification**: Logs analytics query scope with session context for traceability in routes.ts
+- **C5-5 Diagnostic Reduction**: Consolidates verbose C2 debug logs into single-line summaries for cleaner output
+- **SCOPE LOCK**: This is a verification-only service - no modifications to trading logic, execution engine behavior, guardrail thresholds, or P/L formulas
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.

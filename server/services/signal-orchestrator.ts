@@ -35,6 +35,7 @@ import { PaperSimDiagnosticService } from './paper-sim-diagnostic.js';
 import { b5SizingAudit } from './b5-sizing-audit.js';
 import { sizePaperPositionForSignal, type StrategyType } from './paper-position-sizing.js';
 import { getPortfolioBalanceV2 } from './guardrail-settings.js';
+import { c5FinancialDiagnostics } from './c5-financial-diagnostics.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -237,6 +238,14 @@ export class SignalOrchestrator {
       symbol: rawSignal.symbol,
       strategy: strategyId,
     });
+
+    // Phase 8.8.3-C5-2: Guardrail Input Verification - log balance used for trade sizing
+    c5FinancialDiagnostics.logGuardrailInput(
+      sizingContext.mode,
+      rawSignal.symbol,
+      strategyId,
+      sizingContext.portfolioValue
+    );
 
     if (sizingResult.quantity <= 0 || sizingResult.estimatedValue <= 0) {
       console.log(`[B6][SIZING_SKIP] Zero sizing result for ${rawSignal.symbol}/${strategyId}`);

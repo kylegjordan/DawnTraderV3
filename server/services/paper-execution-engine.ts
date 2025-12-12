@@ -65,6 +65,7 @@ import { rtbMetricsService } from './rtb-metrics-service.js';
 import { normalizeToInternalSymbol, getKrakenRestPair } from '../markets/kraken-symbol-resolver.js';
 import { priceTraceService } from './price-trace-service.js';
 import { marketVolumeCache } from './market-volume-cache.js';
+import { c5FinancialDiagnostics } from './c5-financial-diagnostics.js';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail' | 'manual_stop';
@@ -829,13 +830,8 @@ export class PaperExecutionEngine {
       mode: this.mode
     }));
 
-    console.log(`[PaperExecution:${this.mode}] Closing position ${position.symbol}:`);
-    console.log(`  Entry (signal): $${intendedEntryPrice.toFixed(2)}, Entry (actual): $${avgPrice.toFixed(2)}`);
-    console.log(`  Exit (market): $${exitPrice.toFixed(2)}, Exit (actual): $${actualExitPrice.toFixed(2)}`);
-    console.log(`  [C2] Gross P/L: $${grossPnl.toFixed(2)} (pure market)`);
-    console.log(`  [C2] Costs: Entry Fee $${entryFee.toFixed(2)} + Exit Fee $${exitFee.toFixed(2)} + Entry Slip $${entrySlippage.toFixed(2)} + Exit Slip $${exitSlippage.toFixed(2)} = Total $${totalCost.toFixed(2)}`);
-    console.log(`  [C2] Net P/L: $${netPnl.toFixed(2)} (${netPnlPercent.toFixed(2)}%)`);
-    console.log(`  Reason: ${exitCondition.reason}`);
+    // Phase 8.8.3-C5-5: Consolidated close log (reduced from verbose C2 debug logs)
+    console.log(`[PaperExecution:${this.mode}] Position closed ${position.symbol}: Entry $${avgPrice.toFixed(2)} -> Exit $${actualExitPrice.toFixed(2)}, Net P/L: $${netPnl.toFixed(2)} (${netPnlPercent.toFixed(2)}%), Costs: $${totalCost.toFixed(2)}, Reason: ${exitCondition.type}`);
 
     // Find the corresponding trade record
     const trades = await storage.getPaperSimTradesBySymbol(this.mode,  position.symbol);
@@ -1006,6 +1002,26 @@ export class PaperExecutionEngine {
     }
 
     console.log(`[PaperExecution:${this.mode}] Position ${position.symbol} closed successfully`);
+    
+    // Phase 8.8.3-C5-3: P/L Sanity Check - verify P/L calculations match
+    c5FinancialDiagnostics.logPnlReconciliation(
+      this.mode,
+      trade?.id || positionId,
+      position.symbol,
+      grossPnl,
+      entryFee,
+      entrySlippage,
+      exitFee,
+      exitSlippage,
+      netPnl
+    );
+    
+    // Phase 8.8.3-C5-1: Balance Reconciliation after trade close
+    const isManualClose = exitCondition.type === 'manual_stop';
+    await c5FinancialDiagnostics.logBalanceReconciliation(
+      this.mode,
+      isManualClose ? 'manual_close' : 'trade_close'
+    );
   }
 
   private async scanForSignals(): Promise<void> {
