@@ -9658,11 +9658,18 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         unrealizedPnl += positionPnl;
       }
       
-      // Phase 8.8.3-I10-FIX: Current Balance = starting balance + realized P/L + unrealized P/L
-      // This reflects the actual current portfolio value including open position P/L
-      const currentBalance = startingBalance + realizedPnl + unrealizedPnl;
+      // Phase 8.8.3-C7-FIX: Separate cash balance from portfolio value
+      // Cash Balance = starting balance + realized P/L (from closed trades only)
+      // This is the amount of cash available, not including unrealized gains/losses
+      const cashBalance = startingBalance + realizedPnl;
       
-      // Phase 8.8.3-I10-FIX: Net P/L = realized P/L (from closed trades) + unrealized P/L (from open positions)
+      // Portfolio Value = cash balance + unrealized P/L (total account equity)
+      const portfolioValue = cashBalance + unrealizedPnl;
+      
+      // Current Balance = Cash Balance (user expectation: realized-only balance)
+      const currentBalance = cashBalance;
+      
+      // Net P/L = realized P/L (from closed trades) + unrealized P/L (from open positions)
       const netPnl = realizedPnl + unrealizedPnl;
       const netPnlPercent = startingBalance > 0 ? (netPnl / startingBalance) * 100 : 0;
       
@@ -9675,7 +9682,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       res.json({
         ok: true,
         startingBalance,
-        currentBalance,
+        currentBalance,      // Cash balance (realized only) - for backward compatibility
+        cashBalance,         // Explicit: starting + realized P/L
+        portfolioValue,      // Cash + unrealized P/L (total equity)
         realizedPnl,
         unrealizedPnl,
         totalPositionValue,
@@ -9727,37 +9736,65 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       }
       console.log(`[8.8.3-I6][CLOSE_TRADE_LIVE_PRICE] symbol=${position.symbol} price=${currentPrice} source=${priceSource} fallbackType=${fallbackType}`);
       
-      // Phase 8.8.3-C-FINAL: Calculate exit fee for manual close
-      const exitNotional = currentPrice * quantity;
-      const exitFeeModel = slippageFeeModel.calculateFees(exitNotional, false);
-      const exitFee = exitFeeModel.totalFees;
+      // Phase 8.8.3-C7-FIX: Calculate exit slippage and fees mirroring engine's closePosition method
+      // Engine uses SLIPPAGE_PERCENT = 0.15% and FEE_PERCENT = 0.10%
+      const SLIPPAGE_PERCENT = 0.15;
+      const FEE_PERCENT = 0.10;
       
-      // Get entry fee from the position if available
+      // Calculate exit slippage (same formula as paper-execution-engine.ts line 772-780)
+      const exitSlippagePerUnit = currentPrice * (SLIPPAGE_PERCENT / 100);
+      const actualExitPrice = currentPrice - exitSlippagePerUnit; // Worse price due to slippage
+      const exitValue = actualExitPrice * quantity;
+      const exitFee = exitValue * (FEE_PERCENT / 100);
+      const exitSlippage = exitSlippagePerUnit * quantity;
+      
+      // Get entry costs from the position (persisted at entry time)
       const entryFee = parseFloat(position.entryFee?.toString() || '0');
+      const entrySlippage = parseFloat(position.entrySlippage?.toString() || '0');
+      
+      // Get intended entry price for gross P/L calculation (same as engine line 766-768)
+      const intendedEntryPrice = position.intendedEntryPrice 
+        ? parseFloat(position.intendedEntryPrice.toString()) 
+        : entryPrice; // Fallback for old positions
+      const intendedEntryValue = intendedEntryPrice * quantity;
+      
+      // Phase 8.8.3-C2: P/L breakdown per directive
+      // Gross P/L = Pure market movement (no slippage, no fees)
+      const grossPnl = (currentPrice - intendedEntryPrice) * quantity;
+      
+      // Total Cost = All execution costs (same formula as engine line 787)
+      const totalCost = entryFee + exitFee + entrySlippage + exitSlippage;
       const totalFees = entryFee + exitFee;
+      const totalSlippage = entrySlippage + exitSlippage;
       
-      const pnl = (currentPrice - entryPrice) * quantity;
-      const pnlPercent = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice) * 100 : 0;
+      // Net P/L = Gross P/L minus all costs (same formula as engine line 791)
+      const netPnl = grossPnl - totalCost;
+      const netPnlPercent = intendedEntryValue > 0 ? (netPnl / intendedEntryValue) * 100 : 0;
       
-      console.log(`[8.8.3-C-FINAL][MANUAL_CLOSE_FEES] symbol=${position.symbol} exitNotional=${exitNotional.toFixed(2)} exitFee=${exitFee.toFixed(4)} entryFee=${entryFee.toFixed(4)} totalFees=${totalFees.toFixed(4)}`);
+      console.log(`[8.8.3-C7-FIX][MANUAL_CLOSE_COSTS] symbol=${position.symbol} exitPrice=${currentPrice.toFixed(4)} actualExitPrice=${actualExitPrice.toFixed(4)} entryFee=${entryFee.toFixed(4)} exitFee=${exitFee.toFixed(4)} entrySlip=${entrySlippage.toFixed(4)} exitSlip=${exitSlippage.toFixed(4)} totalCost=${totalCost.toFixed(4)} grossPnl=${grossPnl.toFixed(4)} netPnl=${netPnl.toFixed(4)}`);
       
-      // Build closed trade payload
+      // Build closed trade payload with all cost fields
       const closedTradePayload = {
         symbol: position.symbol,
         strategyName: position.strategyName,
         side: position.side,
         quantity: position.quantity?.toString() || '0',
         entryPrice: position.avgPrice?.toString() || '0',
-        exitPrice: currentPrice.toString(),
+        exitPrice: actualExitPrice.toString(), // Use actual exit price (after slippage)
         stopLoss: position.stopLoss?.toString(),
         takeProfit: position.takeProfit?.toString(),
-        pnl: pnl.toString(),
-        pnlPercent: pnlPercent.toString(),
+        pnl: netPnl.toString(), // Net P/L for backward compatibility
+        pnlPercent: netPnlPercent.toString(),
         fees: totalFees.toString(),
         entryFee: entryFee.toString(),
         exitFee: exitFee.toString(),
         totalFee: totalFees.toString(),
-        slippage: '0',
+        slippage: totalSlippage.toString(),
+        entrySlippage: entrySlippage.toString(),
+        exitSlippage: exitSlippage.toString(),
+        totalCost: totalCost.toString(),
+        grossPnl: grossPnl.toString(),
+        netPnl: netPnl.toString(),
         openedAt: position.openedAt || new Date(),
         closedAt: new Date(),
         closeReason: reason || 'manual_close',
@@ -9785,8 +9822,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         payload: {
           id,
           symbol: position.symbol,
-          pnl,
-          pnlPercent,
+          pnl: netPnl,
+          pnlPercent: netPnlPercent,
           reason: reason || 'manual_close'
         }
       });
@@ -9796,8 +9833,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         success: true, 
         closedTradeId: id,
         message: `Closed ${position.symbol} position`,
-        pnl, 
-        pnlPercent 
+        pnl: netPnl, 
+        pnlPercent: netPnlPercent,
+        grossPnl,
+        totalCost
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

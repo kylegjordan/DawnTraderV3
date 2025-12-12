@@ -43,6 +43,8 @@ Financial Integrity Verification & Diagnostic Validation (C5) implements a verif
 
 Current Simulation Analytics Alignment & Diagnostic Cleanup (C6) fixes "Current Simulation" analytics to use all trades since the trading engine was last started, defined by `engine_start_timestamp`.
 
+Manual Close Cost Model Fix (C7) corrects the `/paper-sim/close-trade/:id` endpoint to properly calculate exit slippage and total cost, mirroring the engine's `closePosition` method. It uses SLIPPAGE_PERCENT (0.15%) and FEE_PERCENT (0.10%) to compute actualExitPrice, exitSlippage, exitFee, totalCost, grossPnl, and netPnl. All cost fields are persisted to the trade record. The portfolio summary endpoint now separates `cashBalance` (starting + realized P/L only) from `portfolioValue` (cash + unrealized P/L), with `currentBalance` returning the realized-only cash balance.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.
