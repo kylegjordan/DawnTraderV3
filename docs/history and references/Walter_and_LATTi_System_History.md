@@ -49,13 +49,22 @@ Walter's design was built on several foundational principles:
 
 ---
 
-## 1.2 Why Walter Didn't Work: The API Latency Problem
+## 1.2 Why Walter Was Turned Off: The Canonical Story
 
-### The Core Issue
+### The Core Issue: Operational, Not Philosophical
 
-While Walter's design was architecturally sound, **the implementation proved impractical for real-time trading operations**. The fundamental problem was Walter's dependency on external OpenAI API calls.
+**The decision to turn Walter off was not philosophical — it was operational and unavoidable.**
 
-### The Problem in Detail
+Per the October 23, 2025 context file, the fundamental problem was clear:
+
+1. **Walter was OpenAI-API dependent**
+2. **Real-time trading created too many calls**
+3. **This caused rate-limit throttling, delayed responses, and instability during live loops**
+4. **This made Walter unsafe as a real-time dependency**, even though his logic was sound
+
+### Key Insight
+
+> **Walter wasn't "wrong" — he was in the wrong place in the architecture.**
 
 Walter's conversational intelligence required multiple API calls to OpenAI for each interaction:
 
@@ -63,33 +72,48 @@ Walter's conversational intelligence required multiple API calls to OpenAI for e
 User Message → Context Gathering → Prompt Construction → OpenAI API Call → Response Processing
                                                               ↑
                                                     BOTTLENECK: 2-8 seconds per call
+                                                    RATE-LIMITED during live loops
+                                                    UNSTABLE under trading pressure
 ```
 
-**Issues encountered:**
+**Specific issues encountered:**
 
 | Problem | Impact |
 |---------|--------|
-| **Too many API calls** | Each Walter interaction required multiple OpenAI calls (context analysis, response generation, memory extraction) |
-| **API latency** | OpenAI API calls averaged 2-8 seconds, sometimes longer during high-traffic periods |
+| **Rate-limit throttling** | OpenAI rate limits constrained interactions during active trading |
+| **Delayed responses** | 2-8 second API latency made real-time decisions impossible |
+| **Instability during live loops** | Trading engine cycles couldn't wait for Walter's responses |
 | **Cumulative delays** | Multiple calls per interaction meant 5-15+ seconds total response time |
-| **Rate limiting** | OpenAI rate limits constrained how many interactions could occur per minute |
-| **Cost accumulation** | Each API call incurred costs, making frequent use expensive |
-| **Real-time incompatibility** | Trading decisions require sub-second response times; Walter couldn't deliver |
+| **Cost accumulation** | Each API call incurred costs, making frequent use unsustainable |
 
-### Operational Reality
+### The Decision: Turn Walter Off Entirely
 
-In practice, Walter's response times made him unsuitable for:
+The explicit decision was made to:
 
-- **Real-time market analysis**: Markets move faster than Walter could respond
-- **Quick configuration changes**: Users couldn't get rapid answers about settings
-- **Trading decision support**: By the time Walter analyzed an opportunity, conditions changed
-- **System health monitoring**: Delayed diagnostics reduced operational value
+1. **Turn Walter off entirely** — not partially disable, not reduce functionality
+2. **Replace him with a fully local heuristic system** — what later evolved into Lottie's internal role
+
+This local system:
+- Adjusts risk parameters, guardrails, filters
+- Responds to portfolio performance, drawdown, win-rate
+- Has **zero external API dependencies**
+- Can run continuously without latency risk
+
+### What This Created
+
+This decision is the **exact origin** of:
+
+| Concept | Meaning |
+|---------|---------|
+| **Lottie as embedded autonomy** | Optimization layer inside the engine, not outside it |
+| **LATTi / SDPOE concepts** | Local, autonomous tuning intelligence |
+| **"AI inside the engine, not outside it"** | Core architectural principle |
 
 ### The Lesson Learned
 
-**Walter's architecture was correct; his implementation was API-bound.**
+**Walter's architecture was correct; his placement was wrong.**
 
-The solution wasn't to abandon intelligent automation — it was to move the intelligence **local** rather than relying on external API calls. This realization led directly to the creation of LATTi.
+The solution wasn't to abandon intelligent automation — it was to move the intelligence **local** rather than relying on external API calls. This realization led directly to the creation of LATTi/Lottie.
 
 ---
 
@@ -398,36 +422,86 @@ When V2 failed catastrophically and DawnTrader V1 was restored, LATTi survived b
 
 ---
 
-## 2.2 LATTi's Purpose and Design
+## 2.2 LATTi/Lottie's Purpose and Design
 
-LATTi (Learning Autonomous Trading Tuning Intelligence) is the autonomous optimization engine for DawnTrader's guardrails and filters. Unlike Walter (which is conversational), LATTi operates autonomously in the background, continuously optimizing trading parameters based on market conditions and performance data.
+LATTi (Learning Autonomous Trading Tuning Intelligence), also known as **Lottie**, is the autonomous optimization engine for DawnTrader's guardrails and filters. Unlike Walter (which is conversational), Lottie operates autonomously in the background as an embedded optimization layer.
 
 ### Core Design Philosophy
 
-LATTi was designed around these principles:
+Lottie was designed around these principles:
 
-1. **Autonomous Optimization**: Continuously tune guardrails and filters without user intervention
+1. **Local Execution**: All intelligence runs locally — zero external API dependencies
 2. **Safe Boundaries**: Operate within defined safe limits, never exceeding risk thresholds
 3. **User Override Respect**: Immediately defer to manual user settings when activated
 4. **Passive Learning**: Collect market data during all conditions for future optimization
-5. **Transparent Operation**: Clear visibility into what LATTi is doing and why
+5. **Transparent Operation**: Clear visibility into what Lottie is doing and why
+6. **"AI Inside the Engine"**: Embedded in the trading system, not external to it
 
-### LATTi vs. Walter: Key Differences
+### Lottie vs. Walter: Canonical Differences
 
-| Aspect | Walter | LATTi |
-|--------|--------|-------|
-| **Interaction Model** | Conversational (chat) | Autonomous (background) |
-| **User Interface** | Chat window | Toggle switches + status badges |
-| **Primary Function** | Advice and guidance | Parameter optimization |
-| **Learning Style** | Memory from conversations | Performance-based tuning |
-| **Scope** | Broad (strategies, psychology, configuration) | Focused (guardrails, filters) |
-| **Current Status** | Isolated (Phase 13 rebuild) | Active and operational |
+| Aspect | Walter | Lottie |
+|--------|--------|--------|
+| **Architecture** | External (API-dependent) | Local (embedded) |
+| **Execution** | Conversational (chat) | Autonomous (background) |
+| **Timing** | Strategic, offline | Real-time, continuous |
+| **Dependencies** | OpenAI API | None — fully local |
+| **Scope** | Advisory (strategies, psychology) | Operational (guardrails, filters) |
+| **Control** | Advisory only | Will control parameters (when active) |
+| **Current Status** | Isolated (Phase 13 rebuild) | **Passive-only** (see below) |
+
+### Canonical Truth
+
+```
+Lottie = real-time, local, constrained
+Walter = strategic, offline, advisory
+```
 
 ---
 
-## 2.2 LATTi's Technical Architecture
+## 2.3 Lottie's Current State: PASSIVE-ONLY (Critical)
 
-### 2.2.1 Core Components
+### What Lottie Does NOW (December 2025)
+
+**From the future-state blueprint and 8.x rules, Lottie is currently PASSIVE-ONLY.**
+
+She:
+- ✅ **Observes telemetry** — monitors trading engine state, metrics, performance
+- ✅ **Records outcomes** — tracks trade results, win-rates, drawdown
+- ✅ **Collects data** — maintains 20-cycle passive learning buffer
+- ✅ **Tracks 24h statistics** — monitors volume, momentum, volatility trends
+
+She does **NOT**:
+- ❌ **Open or close trades** — no execution control
+- ❌ **Change guardrails** — no parameter modification
+- ❌ **Override user settings** — respects manual control
+- ❌ **Make autonomous decisions** — observation only
+
+### Why Passive-Only?
+
+This is **BY DESIGN**, not a temporary limitation:
+
+1. The trading pipeline needed verification after V1 restoration
+2. Active autonomous control requires complete system stability
+3. Passive learning is collecting data for future optimization
+4. Risk of introducing new variables during stabilization was too high
+
+### When Lottie Becomes Active
+
+**Active control returns in Phase 10/11** (depending on roadmap variant):
+
+| Phase | Lottie Capability |
+|-------|-------------------|
+| **Current (Post-8.x)** | Passive observation only |
+| **Phase 10** | Guardrail optimization (tentative) |
+| **Phase 11** | Full autonomous tuning (tentative) |
+
+Until then, Lottie remains a **learning engine**, not a **control engine**.
+
+---
+
+## 2.4 LATTi's Technical Architecture
+
+### 2.4.1 Core Components
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -458,7 +532,7 @@ LATTi was designed around these principles:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 2.2.2 Service Files
+### 2.4.2 Service Files
 
 | Service File | Purpose | Current Status |
 |--------------|---------|----------------|
@@ -469,7 +543,7 @@ LATTi was designed around these principles:
 | `dhma-tuning-service.ts` | DHMA strategy optimization | **Active** |
 | `baseline-indicator.ts` | Performance baseline tracking | **Active** |
 
-### 2.2.3 Database Schema (guardrails_v2)
+### 2.4.3 Database Schema (guardrails_v2)
 
 ```sql
 CREATE TABLE guardrails_v2 (
@@ -500,7 +574,7 @@ CREATE TABLE guardrails_v2 (
 );
 ```
 
-### 2.2.4 Control Flow: Manual Override vs. LATTi-Managed
+### 2.4.4 Control Flow: Manual Override vs. LATTi-Managed
 
 ```
 User Action (Toggle Switch)
@@ -521,7 +595,7 @@ User Action (Toggle Switch)
 └─────────────────────────────────────────────┘
 ```
 
-### 2.2.5 RULE_005: Mutual Exclusivity
+### 2.4.5 RULE_005: Mutual Exclusivity
 
 A critical coherency rule prevents conflicts:
 
@@ -821,7 +895,13 @@ LATTi is now fully operational:
 
 # Part 4: Current System State (December 2025)
 
-## 4.1 Walter Status: Isolated, Infrastructure Preserved
+## 4.1 Walter Status: Demoted and Deferred, Not Abandoned
+
+### The Important Distinction
+
+**Walter was never killed conceptually. He was demoted and deferred.**
+
+The decision was not "Walter is bad" — it was "Walter cannot be a real-time execution dependency."
 
 | Aspect | Status | Notes |
 |--------|--------|-------|
@@ -836,27 +916,48 @@ LATTi is now fully operational:
 
 ### Walter's Future (Phase 13)
 
-Per the roadmap, Phase 13 will restore Walter as:
-- Long-horizon trading advisor
-- Full conversational AI capability
-- Integrated trading insights
-- Performance pattern analysis
-- Strategy recommendation engine
+Walter returns in Phase 13 as:
+
+| Role | Description |
+|------|-------------|
+| **Long-horizon advisor** | Strategic guidance, not real-time decisions |
+| **Analytics engine** | Pattern analysis, performance insights |
+| **Simulation & suggestion layer** | "What-if" scenarios, strategy recommendations |
+| **Full conversational AI** | Chat-based interaction restored |
+
+**The critical constraint**: Walter will **never again be a real-time execution dependency**.
+
+His future role is **advisory and strategic** — operating on a different timescale than the trading engine. He will analyze, suggest, and advise, but Lottie (or the user) will control real-time execution.
 
 ---
 
-## 4.2 LATTi Status: Fully Operational
+## 4.2 LATTi/Lottie Status: Passive-Only, Learning Active
+
+### Current Operational State
+
+**Lottie is currently PASSIVE-ONLY by design.** Her infrastructure is operational, but she is observing rather than controlling.
 
 | Aspect | Status | Notes |
 |--------|--------|-------|
-| **Guardrail Management** | Active | Core Four parameters |
-| **Filter Optimization** | Active | 16 filter parameters |
-| **Manual Override** | Functional | Per-parameter control |
-| **Passive Learning** | Active | 20-cycle buffer |
-| **Kill Switch Integration** | Active | Can be tripped by RiskManager |
-| **WebSocket Sync** | Active | Sub-1-second updates |
-| **UI Integration** | Complete | Goals Engine tab |
-| **Dual Mode Support** | Active | Paper + Live modes |
+| **Telemetry Observation** | ✅ Active | Monitors engine state, metrics |
+| **Outcome Recording** | ✅ Active | Tracks trade results, win-rates |
+| **Passive Learning** | ✅ Active | 20-cycle buffer collecting data |
+| **24h Statistics** | ✅ Active | Volume, momentum, volatility |
+| **Manual Override System** | ✅ Functional | Users can control parameters |
+| **UI Integration** | ✅ Complete | Goals Engine tab |
+| **WebSocket Sync** | ✅ Active | Sub-1-second updates |
+| **Dual Mode Support** | ✅ Active | Paper + Live modes |
+| **Trade Execution Control** | ❌ Disabled | Opens/closes trades: NO |
+| **Guardrail Modification** | ❌ Disabled | Changes parameters: NO |
+| **Autonomous Decisions** | ❌ Disabled | Self-directed actions: NO |
+
+### Why Passive-Only Is Correct
+
+This is the **intended state**, not a bug or limitation:
+1. Trading pipeline stability must be verified first
+2. Passive learning collects optimization data
+3. Active control returns in Phase 10/11
+4. Risk mitigation during post-V1-restoration period
 
 ### LATTi Operational Metrics
 
@@ -910,27 +1011,41 @@ WebSocket Broadcast Latency: <100ms
 
 # Part 5: Lessons Learned
 
-## 5.1 From Walter's API Performance Failure
+## 5.1 From the Walter → Lottie Transition
+
+### The Canonical Lesson
 
 The most critical lesson from Walter's implementation:
 
-**External API dependencies are incompatible with real-time trading operations.**
+> **Walter wasn't "wrong" — he was in the wrong place in the architecture.**
 
-| Lesson | Detail |
-|--------|--------|
-| **Latency kills** | 2-8 second API response times are unacceptable for trading decisions that require sub-second responses |
-| **Multiple calls compound the problem** | Each additional API call adds latency; Walter's multi-call architecture multiplied delays |
-| **Rate limits constrain scale** | OpenAI rate limits prevented high-frequency interactions |
-| **Cost scales with usage** | API costs made frequent use expensive and unsustainable |
-| **Local is better for real-time** | LATTi's local architecture solved all these problems simultaneously |
+### What Actually Happened
 
-**The Solution Formula:**
+| Event | Lesson |
+|-------|--------|
+| **Walter was API-dependent** | External dependencies create latency, rate limits, and cost issues |
+| **Real-time trading needs speed** | 2-8 second API calls are incompatible with sub-second trading decisions |
+| **Rate-limit throttling occurred** | OpenAI limits constrained interactions during active trading |
+| **Instability during live loops** | Trading engine couldn't wait for Walter's responses |
+| **Decision: Turn Walter off entirely** | Not partial — complete removal from real-time path |
+| **Replacement: Fully local system** | What evolved into Lottie's internal role |
+
+### The Solution Formula
+
 ```
 If (operation requires real-time response) + (operation will be called frequently):
     → Build it LOCAL, not API-dependent
+    → Put "AI inside the engine, not outside it"
 ```
 
-This lesson directly informed LATTi's design: all intelligence runs locally within the system, with zero external API dependencies for core optimization logic.
+### The Canonical Architecture
+
+| System | Role | Timing | Dependencies |
+|--------|------|--------|--------------|
+| **Lottie** | Real-time optimization | Continuous | None (local) |
+| **Walter** | Strategic advisor | Offline | OpenAI API (isolated) |
+
+This separation is permanent. Walter's future role (Phase 13) is **advisory only**, never again a real-time execution dependency.
 
 ---
 
