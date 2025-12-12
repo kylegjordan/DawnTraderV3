@@ -54,10 +54,12 @@
 The paper trading engine simulates real cryptocurrency trades **without using real money**. It:
 - Uses real-time market prices from Kraken
 - Simulates order execution with realistic slippage (0.15%) and fees (0.10%)
-- Tracks a simulated portfolio balance starting at $100,000
+- Tracks a simulated portfolio balance starting at a user-defined amount
 - Records all trades to a database for performance analysis
 
 **Purpose:** Validate trading strategies and system behavior before risking real capital in Phase 11 (Live Mode).
+
+**Starting Balance:** User-configurable (set when initializing paper trading session).
 
 ## 1.2 Engine Architecture Diagram
 
@@ -131,7 +133,7 @@ The paper trading engine simulates real cryptocurrency trades **without using re
 |----------|-------|----------|
 | `SLIPPAGE_PERCENT` | 0.15% | `paper-execution-engine.ts` |
 | `FEE_PERCENT` | 0.10% | `paper-execution-engine.ts` |
-| `STARTING_BALANCE` | $100,000 | `paper-sim-service.ts` |
+| `STARTING_BALANCE` | User-defined | `paper-sim-service.ts` |
 | `FX5_SCAN_INTERVAL` | 30 seconds | `fx5-scanner.ts` |
 | `SIGNAL_EVAL_INTERVAL` | 30 seconds | `signal-orchestrator.ts` |
 | `MONITOR_INTERVAL` | 1.5 seconds | `paper-execution-engine.ts` |
