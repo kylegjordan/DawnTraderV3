@@ -12,10 +12,12 @@ This document provides a comprehensive history of Walter and LATTi, the two AI-p
 
 **Key Timeline:**
 - **October 2025**: Walter v1 designed as AI SysAdmin Co-Pilot
-- **October-November 2025**: DawnTrader V2 attempted and failed catastrophically
+- **October 2025**: Walter proves impractical due to slow OpenAI API call latency
+- **October 2025**: LATTi created as a local alternative to Walter's API-dependent architecture
+- **October-November 2025**: DawnTrader V2 attempted (motivated partly by Walter legacy code issues) and failed catastrophically
 - **November 2025**: DawnTrader V1 restored via REB (Rebuild) phases
-- **November-December 2025**: DawnTrader V3 stabilized, Walter isolated to diagnostic-only mode
-- **December 2025**: LATTi operational as autonomous guardrail and filter optimization engine
+- **November-December 2025**: DawnTrader V3 stabilized; Walter isolated to diagnostic-only mode; LATTi kept in observational mode
+- **December 2025**: LATTi operational as autonomous guardrail and filter optimization engine, with full restoration planned
 
 ---
 
@@ -47,9 +49,53 @@ Walter's design was built on several foundational principles:
 
 ---
 
-## 1.2 Walter's Technical Architecture
+## 1.2 Why Walter Didn't Work: The API Latency Problem
 
-### 1.2.1 Core Components
+### The Core Issue
+
+While Walter's design was architecturally sound, **the implementation proved impractical for real-time trading operations**. The fundamental problem was Walter's dependency on external OpenAI API calls.
+
+### The Problem in Detail
+
+Walter's conversational intelligence required multiple API calls to OpenAI for each interaction:
+
+```
+User Message → Context Gathering → Prompt Construction → OpenAI API Call → Response Processing
+                                                              ↑
+                                                    BOTTLENECK: 2-8 seconds per call
+```
+
+**Issues encountered:**
+
+| Problem | Impact |
+|---------|--------|
+| **Too many API calls** | Each Walter interaction required multiple OpenAI calls (context analysis, response generation, memory extraction) |
+| **API latency** | OpenAI API calls averaged 2-8 seconds, sometimes longer during high-traffic periods |
+| **Cumulative delays** | Multiple calls per interaction meant 5-15+ seconds total response time |
+| **Rate limiting** | OpenAI rate limits constrained how many interactions could occur per minute |
+| **Cost accumulation** | Each API call incurred costs, making frequent use expensive |
+| **Real-time incompatibility** | Trading decisions require sub-second response times; Walter couldn't deliver |
+
+### Operational Reality
+
+In practice, Walter's response times made him unsuitable for:
+
+- **Real-time market analysis**: Markets move faster than Walter could respond
+- **Quick configuration changes**: Users couldn't get rapid answers about settings
+- **Trading decision support**: By the time Walter analyzed an opportunity, conditions changed
+- **System health monitoring**: Delayed diagnostics reduced operational value
+
+### The Lesson Learned
+
+**Walter's architecture was correct; his implementation was API-bound.**
+
+The solution wasn't to abandon intelligent automation — it was to move the intelligence **local** rather than relying on external API calls. This realization led directly to the creation of LATTi.
+
+---
+
+## 1.3 Walter's Technical Architecture
+
+### 1.3.1 Core Components
 
 Walter's architecture consisted of multiple interconnected services:
 
@@ -79,7 +125,7 @@ Walter's architecture consisted of multiple interconnected services:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 1.2.2 Service Files (Current State)
+### 1.3.2 Service Files (Current State)
 
 The following Walter-related services exist in the codebase:
 
@@ -106,7 +152,7 @@ The following Walter-related services exist in the codebase:
 | `walter-adaptive-heuristics.ts` | Adaptive behavior patterns | Active (isolated) |
 | `walter-reference-tracker.ts` | Reference tracking for responses | Active (isolated) |
 
-### 1.2.3 Database Tables
+### 1.3.3 Database Tables
 
 Walter's data persists in dedicated database tables:
 
@@ -150,7 +196,7 @@ CREATE TABLE chat_messages (
 );
 ```
 
-### 1.2.4 Expert Corpus
+### 1.3.4 Expert Corpus
 
 Walter's Expert Corpus (v1) contains 80 curated trading principles organized into four categories:
 
@@ -316,7 +362,43 @@ Per `docs/history and references/DawnTrader V3 8.6 through 8.7 Rebuild and Resto
 
 # Part 2: LATTi — The Autonomous Learning Engine
 
-## 2.1 LATTi's Purpose and Design
+## 2.1 LATTi's Origin: The Local Solution to Walter's API Problem
+
+### Why LATTi Was Created
+
+**LATTi was created in direct response to Walter's API latency problem.**
+
+When Walter proved impractical due to slow OpenAI API calls, the team recognized that the concept of autonomous optimization was sound — only the implementation approach was wrong. The solution: build an optimization engine that operates **entirely locally**, requiring no external API calls.
+
+### The Key Insight
+
+```
+Walter's Problem:  Intelligence depends on external OpenAI API → Slow, expensive, rate-limited
+LATTi's Solution:  Intelligence runs locally in the system → Fast, free, unlimited
+```
+
+**LATTi was implemented BEFORE the V2 transition attempt.** This is important for understanding the timeline:
+
+1. **October 2025**: Walter designed and built
+2. **October 2025**: Walter's API latency makes him impractical
+3. **October 2025**: LATTi created as local alternative
+4. **October-November 2025**: V2 transition attempted (motivated partly by Walter's legacy code)
+5. **November 2025**: V2 fails, V1 restored
+6. **November-December 2025**: LATTi kept in observational mode during stabilization
+7. **December 2025**: LATTi fully operational with plans for complete restoration
+
+### The V2 Connection
+
+The decision to attempt the V2 rebuild was motivated in part by the technical debt accumulated from Walter's original setup. Many modules, interfaces, and patterns from Walter's initial implementation had become entangled with the core trading system. The V2 rebuild was intended to modernize everything and clean up this legacy code.
+
+When V2 failed catastrophically and DawnTrader V1 was restored, LATTi survived because:
+- She was designed to be modular and isolated
+- She had no dependencies on the corrupted V2 code
+- Her local architecture made her resilient to API and integration failures
+
+---
+
+## 2.2 LATTi's Purpose and Design
 
 LATTi (Learning Autonomous Trading Tuning Intelligence) is the autonomous optimization engine for DawnTrader's guardrails and filters. Unlike Walter (which is conversational), LATTi operates autonomously in the background, continuously optimizing trading parameters based on market conditions and performance data.
 
@@ -617,13 +699,23 @@ DawnTrader V1 was a functional, production-ready trading platform:
 
 ### Why V2 Was Attempted
 
-V1 had accumulated technical debt:
+V1 had accumulated technical debt from multiple sources:
+
+**General Technical Debt:**
 - Fragmented logic across modules
 - No strict schemas
 - Strategy engine relied on deprecated helpers
 - Stage-3 state had become cluttered
 
-V2 was intended to modernize everything with a complete rewrite.
+**Walter Legacy Code Issues:**
+- Walter's initial setup created many entangled modules and interfaces
+- Walter's 20+ service files had become intertwined with core trading logic
+- Many patterns from Walter's architecture had spread throughout the codebase
+- Walter's API-dependent design left orphaned code paths when he was sidelined
+
+**Note:** LATTi was already created at this point (October 2025) as a local alternative to Walter. LATTi's modular design meant she survived the V2 disaster while V1 components were corrupted.
+
+V2 was intended to modernize everything, clean up Walter's legacy code, and implement a fresh architecture.
 
 ### Why V2 Failed
 
@@ -685,15 +777,45 @@ This isolation allows:
 
 ---
 
-## 3.4 LATTi Activation (November-December 2025)
+## 3.4 LATTi's Post-V1-Restoration State (November-December 2025)
 
-As Walter was isolated, LATTi became the active autonomous system:
+### Kept in Observational Mode
+
+After DawnTrader V1 was restored, LATTi was intentionally kept in **observational mode** during the stabilization period. This was a deliberate decision:
+
+**Reasons for Observational Mode:**
+- The trading pipeline needed to be verified stable before autonomous optimization
+- Focus was on restoring core trading functionality first
+- LATTi's passive learning continued to collect data for future optimization
+- Risk of introducing new variables during critical restoration phases
+
+### Observational Mode Characteristics
+
+During this period, LATTi:
+- **Did NOT** actively modify guardrails or filters
+- **Did** continue passive learning (collecting FX5 cycle data)
+- **Did** maintain the 20-cycle buffer for pattern analysis
+- **Did** track 24-hour statistics for trend detection
+- **Was** accessible in the UI but not actively tuning
+
+### Full Restoration Planned
+
+The roadmap includes complete LATTi restoration:
+- Full autonomous guardrail optimization
+- Active filter tuning based on market conditions
+- Integration with the Strategic Drive Index (SDI)
+- Adaptive learning system for preset boundary optimization
+
+### Current Operational State (December 2025)
+
+LATTi is now fully operational:
 
 1. **Phase 3 Implementation**: Guardrails v2 schema with control flags
 2. **Manual Override System**: Per-parameter lock/unlock capability
 3. **Passive Learning**: 20-cycle buffer operational
 4. **Real-Time Sync**: WebSocket broadcasts for instant updates
 5. **Goals Engine Integration**: Full UI for LATTi controls
+6. **Core Four Guardrails**: Active management of primary risk parameters
 
 ---
 
@@ -788,21 +910,45 @@ WebSocket Broadcast Latency: <100ms
 
 # Part 5: Lessons Learned
 
-## 5.1 From the V2 Failure
+## 5.1 From Walter's API Performance Failure
+
+The most critical lesson from Walter's implementation:
+
+**External API dependencies are incompatible with real-time trading operations.**
+
+| Lesson | Detail |
+|--------|--------|
+| **Latency kills** | 2-8 second API response times are unacceptable for trading decisions that require sub-second responses |
+| **Multiple calls compound the problem** | Each additional API call adds latency; Walter's multi-call architecture multiplied delays |
+| **Rate limits constrain scale** | OpenAI rate limits prevented high-frequency interactions |
+| **Cost scales with usage** | API costs made frequent use expensive and unsustainable |
+| **Local is better for real-time** | LATTi's local architecture solved all these problems simultaneously |
+
+**The Solution Formula:**
+```
+If (operation requires real-time response) + (operation will be called frequently):
+    → Build it LOCAL, not API-dependent
+```
+
+This lesson directly informed LATTi's design: all intelligence runs locally within the system, with zero external API dependencies for core optimization logic.
+
+---
+
+## 5.2 From the V2 Failure
 
 1. **Never do partial rewrites** — Either isolate completely or don't start
 2. **Type guarantees matter** — Loose typing caused cascading failures
 3. **Event-driven architecture is fragile** — One broken event breaks everything
 4. **Incremental improvement beats revolution** — V3 succeeded by fixing incrementally
 
-## 5.2 From the Walter Isolation
+## 5.3 From the Walter Isolation
 
 1. **Isolation enables future flexibility** — Walter can be rebuilt without starting over
 2. **Clear boundaries prevent interference** — Trading pipeline is protected
 3. **Documentation preserves intent** — This document enables future developers
 4. **Infrastructure preservation is strategic** — All Walter services remain functional
 
-## 5.3 From the LATTi Implementation
+## 5.4 From the LATTi Implementation
 
 1. **Single source of truth is critical** — `guardrails_v2` is authoritative
 2. **User override must be respected** — Manual control always wins
