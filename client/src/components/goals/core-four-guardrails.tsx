@@ -122,15 +122,18 @@ function getGuardrailDescription(key: string, currentBalance: number | null): st
   return baseDescription;
 }
 
-// Phase 8.8.3-C7-FIX: Portfolio summary response type
-interface PortfolioSummary {
+// Phase 8.8.3-C7-FIX: Portfolio summary response type (matches endpoint response structure)
+interface PortfolioSummaryResponse {
+  ok: boolean;
   startingBalance: number;
   cashBalance: number;
+  currentBalance: number;
   totalPositionValue: number;
   portfolioValue: number;
   unrealizedPnl: number;
-  unrealizedPnlPercent: number;
   realizedPnl: number;
+  netPnl: number;
+  netPnlPercent: number;
 }
 
 export function CoreFourGuardrails() {
@@ -143,7 +146,7 @@ export function CoreFourGuardrails() {
   useOverrideState();
   
   // Phase 8.8.3-C7-FIX: Fetch portfolio summary to get Current Balance (same source as guardrail calculations)
-  const { data: portfolioData } = useQuery<{ok: boolean; data: PortfolioSummary}>({
+  const { data: portfolioData } = useQuery<PortfolioSummaryResponse>({
     queryKey: ['/api/paper-sim/portfolio-summary'],
     queryFn: async () => {
       const response = await fetch('/api/paper-sim/portfolio-summary', {
@@ -160,7 +163,8 @@ export function CoreFourGuardrails() {
   });
   
   // Phase 8.8.3-C7-FIX: Extract cashBalance (Current Balance = Starting + Realized P/L)
-  const currentBalance = portfolioData?.data?.cashBalance ?? null;
+  // Note: endpoint returns cashBalance directly at root level, not inside a 'data' object
+  const currentBalance = portfolioData?.cashBalance ?? null;
 
   // Fetch Core Four Guardrails from guardrails_v2 endpoint
   const { data: guardrails, isLoading } = useQuery<{ok: boolean; data: GuardrailsV2}>({
