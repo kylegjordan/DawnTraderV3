@@ -1,0 +1,129 @@
+5️⃣ 📌 DIRECTIVE FOR REPLIT
+
+Phase 8.8.3-C6 — Current Simulation Analytics Fix + Diagnostic Cleanup
+
+Use this verbatim.
+
+Phase 8.8.3-C6: Current Simulation Analytics Alignment & Diagnostic Cleanup
+Objective
+
+Align “Current Simulation” analytics to the correct definition and reduce temporary diagnostics now that financial integrity has been verified.
+
+Authoritative Definition (Must Follow)
+
+Current Simulation = all trades since the trading engine was last started.
+
+Defined by engine start timestamp
+
+Ends when engine stops
+
+Independent of resets, session IDs, or date filters
+
+Scope A — Fix Current Simulation Analytics
+Required Changes
+
+Capture and persist engine_start_timestamp when the trading engine is toggled ON.
+
+Update all “Current Simulation” analytics queries to:
+
+WHERE trade.opened_at >= engine_start_timestamp
+
+
+Ensure this applies consistently to:
+
+Trade counts
+
+Net P/L
+
+Win rate
+
+Average profit
+
+SL / TP / manual close breakdowns
+
+Explicit Non-Goals
+
+Do NOT use reset timestamps
+
+Do NOT use session_id
+
+Do NOT use date ranges
+
+Do NOT change trade execution logic
+
+Scope B — Analytics UI Validation
+
+Verify that:
+
+“Current Simulation” shows metrics immediately after engine start
+
+Metrics update as trades close
+
+Metrics reset to zero when engine is stopped and restarted
+
+Ensure “Last Hour” and “Last 24 Hours” remain unchanged.
+
+Scope C — Diagnostic Cleanup (Phase D-lite)
+Reduce / Remove
+
+Temporary C5 debug-level logs that:
+
+Print intermediate values repeatedly
+
+Do not indicate errors or mismatches
+
+Retain (Important)
+
+Balance mismatch warnings
+
+Guardrail input verification logs
+
+Analytics scope logs (until validated in production)
+
+Rules
+
+Diagnostics must remain:
+
+Non-blocking
+
+Read-only
+
+Logging-only
+
+Testing Instructions
+
+Use the following test account:
+
+username: testuser123
+password: SecurePass123!
+
+
+Test flow:
+
+Start trading engine
+
+Allow multiple trades to open
+
+Manually close at least one trade
+
+Allow at least one automated close (SL or TP)
+
+Stop trading engine
+
+Verify:
+
+Current Simulation analytics reflect only trades from this run
+
+Restarting engine resets Current Simulation metrics to zero
+
+Out of Scope
+
+Duplicate hardening
+
+Strategy changes
+
+Guardrail math changes
+
+Trade sizing changes
+
+Execution engine refactors

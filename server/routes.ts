@@ -9894,6 +9894,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 8.8.3-B1/B2: Trade History Analytics endpoint with new metrics
+  // Phase 8.8.3-C6: Current Simulation = trades opened since engine was last started
   apiRouter.get('/paper-sim/trades/analytics', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
@@ -9902,16 +9903,46 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Calculate time range
       const now = new Date();
       let startTime: Date;
+      let isCurrentSimulation = false;
       
-      // B2: Handle "session" range - since last simulation start
+      // Phase 8.8.3-C6: Get actual engine running state for all responses
+      const { getEngineSessionStart } = await import('./services/paper-execution-engine.js');
+      const engineStartTime = getEngineSessionStart('paper');
+      const isEngineRunning = engineStartTime !== null;
+      
+      // Phase 8.8.3-C6: Handle "session" range - since last engine START (not reset, not session ID)
       if (range === 'session') {
-        // Try to get last engine session start from storage
-        const sessionState = await storage.getEngineState('paper').catch(() => null);
-        if (sessionState?.lastSessionStart) {
-          startTime = new Date(sessionState.lastSessionStart);
+        if (engineStartTime) {
+          startTime = engineStartTime;
+          isCurrentSimulation = true;
+          console.log(`[C6][ANALYTICS] Current Simulation: using engine_start_timestamp=${engineStartTime.toISOString()}`);
         } else {
-          // Fallback to last 24h if no session info
-          startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          // Phase 8.8.3-C6: Engine not running - explicitly return zero metrics immediately
+          console.log(`[C6][ANALYTICS] Engine not running - returning zero metrics`);
+          return res.json({
+            ok: true,
+            range,
+            engineRunning: false,
+            analytics: {
+              totalOpened: 0,
+              closedAtTP: { count: 0, percent: 0 },
+              closedAtSL: { count: 0, percent: 0 },
+              closedManually: { count: 0, percent: 0 },
+              winRate: 0,
+              avgProfit: 0,
+              avgLoss: 0,
+              netPnl: 0,
+              netPnlPercent: 0,
+              avgProfitPercent: 0,
+              avgDailyProfitPercent: 0,
+              avgHoldingTime: 0,
+              medianHoldingTime: 0,
+              profitFactor: 0,
+              byStrategy: {},
+              largestWinner: null,
+              largestLoser: null
+            }
+          });
         }
       } else {
         switch (range) {
@@ -9939,15 +9970,26 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return hasExitPrice && hasCloseReason;
       });
       
+      // Phase 8.8.3-C6: Current Simulation uses openedAt >= engine_start_timestamp
+      // Other ranges use closedAt for backward compatibility
       const trades = validTrades.filter(t => {
-        const tradeTime = t.closedAt ? new Date(t.closedAt) : null;
-        return tradeTime && tradeTime >= startTime;
+        if (isCurrentSimulation) {
+          // Current Simulation: filter by when trade was OPENED
+          const openedTime = t.openedAt ? new Date(t.openedAt) : null;
+          return openedTime && openedTime >= startTime;
+        } else {
+          // Other ranges: filter by when trade was CLOSED
+          const closedTime = t.closedAt ? new Date(t.closedAt) : null;
+          return closedTime && closedTime >= startTime;
+        }
       });
       
       if (trades.length === 0) {
+        // Phase 8.8.3-C6: Include engineRunning flag to distinguish idle-but-running from stopped
         return res.json({
           ok: true,
           range,
+          engineRunning: isEngineRunning, // true if engine is running, derived from actual engine state
           analytics: {
             totalOpened: 0,
             closedAtTP: { count: 0, percent: 0 },
@@ -9989,7 +10031,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const netPnl = trades.reduce((sum, t) => sum + parseFloat(t.pnl?.toString() || '0'), 0);
       
       // Phase 8.8.3-C5-4: Analytics Scope Verification - log analytics query scope
-      const c5SessionState = await storage.getEngineState('paper').catch(() => null);
+      // Phase 8.8.3-C6: Use engine start timestamp for session info
       c5FinancialDiagnostics.logAnalyticsScope({
         mode: 'paper',
         timeRange: range === 'session' ? 'current_simulation' : range === '1h' ? 'last_hour' : 'last_24h',
@@ -9998,7 +10040,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         netPnlUsed: netPnl,
         winCount: wins.length,
         lossCount: losses.length,
-        sessionId: c5SessionState?.sessionId || null,
+        sessionId: isCurrentSimulation ? `engine_start_${startTime.toISOString()}` : null,
         timestamp: new Date().toISOString()
       });
       
@@ -10066,9 +10108,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         strategy: sortedByPnl[sortedByPnl.length - 1].strategyName
       } : null;
       
+      // Phase 8.8.3-C6: Include engineRunning flag for consistency
       res.json({
         ok: true,
         range,
+        engineRunning: isEngineRunning, // true if engine is running, derived from actual engine state
         analytics: {
           totalOpened: trades.length,
           closedAtTP: { count: closedAtTP.length, percent: (closedAtTP.length / trades.length) * 100 },

@@ -110,11 +110,11 @@ class C5FinancialDiagnostics {
         timestamp: new Date().toISOString()
       };
 
+      // Phase 8.8.3-C6: Diagnostic Cleanup - only log mismatches, reduce verbose VERIFIED logs
       if (mismatch > 0.01) {
         console.warn(`${TAG_BALANCE} MISMATCH DETECTED`, JSON.stringify(data));
-      } else {
-        console.log(`${TAG_BALANCE} VERIFIED`, JSON.stringify(data));
       }
+      // Note: Success verification silently passes - only warnings are logged
     } catch (error) {
       console.error(`${TAG_BALANCE} ERROR`, error);
     }
@@ -161,15 +161,11 @@ class C5FinancialDiagnostics {
       const usesStartingBalance = Math.abs(balanceUsedForGuardrails - startingBalance) < 0.01;
       const hasClosedTrades = closedTrades.length > 0;
 
+      // Phase 8.8.3-C6: Diagnostic Cleanup - only log warnings, reduce verbose VERIFIED logs
       if (hasClosedTrades && usesStartingBalance && !usesCurrentBalance) {
         console.warn(`${TAG_GUARDRAIL} WARNING: Using starting_balance instead of current_balance after trades closed`, JSON.stringify(data));
-      } else {
-        console.log(`${TAG_GUARDRAIL} VERIFIED`, JSON.stringify({
-          ...data,
-          usesCurrentBalance,
-          currentBalance
-        }));
       }
+      // Note: Success verification silently passes - only warnings are logged
     } catch (error) {
       console.error(`${TAG_GUARDRAIL} ERROR`, error);
     }
@@ -221,11 +217,11 @@ class C5FinancialDiagnostics {
         timestamp: new Date().toISOString()
       };
 
+      // Phase 8.8.3-C6: Diagnostic Cleanup - only log mismatches, reduce verbose VERIFIED logs
       if (!allMatched) {
         console.warn(`${TAG_PNL} MISMATCH DETECTED`, JSON.stringify(data));
-      } else {
-        console.log(`${TAG_PNL} VERIFIED`, JSON.stringify(data));
       }
+      // Note: Success verification silently passes - only warnings are logged
     } catch (error) {
       console.error(`${TAG_PNL} ERROR`, error);
     }
@@ -239,10 +235,12 @@ class C5FinancialDiagnostics {
     if (!this.isEnabled) return;
 
     try {
+      // Phase 8.8.3-C6: Retain analytics scope logs until validated in production
       if (data.timeRange === 'current_simulation' && !data.sessionId) {
         console.warn(`${TAG_ANALYTICS} WARNING: Current Simulation query missing session_id filter`, JSON.stringify(data));
       } else {
-        console.log(`${TAG_ANALYTICS} SCOPE`, JSON.stringify(data));
+        // Brief log for analytics scope - retained for production validation
+        console.log(`${TAG_ANALYTICS} ${data.timeRange} mode=${data.mode} trades=${data.tradeCount} netPnl=${data.netPnlUsed.toFixed(2)}`);
       }
     } catch (error) {
       console.error(`${TAG_ANALYTICS} ERROR`, error);
