@@ -51,44 +51,87 @@ interface GuardrailParam {
 
 // REB 8.8.3-G: Updated descriptions to be user-friendly (for Kyle, not technical)
 // Phase 8.8.3-B3: Added maxTotalExposurePct as 6th core guardrail
-const CORE_FOUR_PARAMS: GuardrailParam[] = [
+// Phase 8.8.3-C7-FIX: Guardrails using Current Balance now show it dynamically in their descriptions
+const CORE_FOUR_PARAMS_BASE: Omit<GuardrailParam, 'description'>[] = [
   {
     key: 'maxTotalExposurePct',
     label: 'Max Total Portfolio Exposure',
-    description: 'The maximum percentage of your portfolio that can be invested across all open positions at any time.',
     unit: '%'
   },
   {
     key: 'portfolioRiskPerTradePct',
     label: 'Portfolio Risk per Trade',
-    description: 'How much of your portfolio you plan to risk on each individual trade when sizing position and stop distance.',
     unit: '%'
   },
   {
     key: 'symbolCooldownMinutes',
     label: 'Symbol Cooldown',
-    description: 'After a trade closes on a symbol, wait this many minutes before opening another trade on the same symbol.',
     unit: 'minutes'
   },
   {
     key: 'maxOpenPositions',
     label: 'Max Open Positions',
-    description: 'The maximum number of simultaneous open positions allowed at once.',
     unit: 'count'
   },
   {
     key: 'dailyLossKillSwitchPct',
     label: 'Daily Loss Kill Switch',
-    description: 'If your portfolio loses this percent or more in a single day, trading automatically stops until you resume.',
     unit: '%'
   },
   {
     key: 'maxPositionPercentPct',
     label: 'Max Position Percent',
-    description: 'The maximum size of any single position as a percent of your total portfolio value. Larger positions will be blocked.',
     unit: '%'
   }
 ];
+
+// Phase 8.8.3-C7-FIX: Keys that use Current Balance for their calculations
+const CURRENT_BALANCE_GUARDRAILS = new Set([
+  'maxTotalExposurePct',
+  'portfolioRiskPerTradePct',
+  'dailyLossKillSwitchPct',
+  'maxPositionPercentPct'
+]);
+
+// Phase 8.8.3-C7-FIX: Base descriptions for each guardrail
+const GUARDRAIL_DESCRIPTIONS: Record<string, string> = {
+  maxTotalExposurePct: 'The maximum percentage of your portfolio that can be invested across all open positions at any time.',
+  portfolioRiskPerTradePct: 'How much of your portfolio you plan to risk on each individual trade when sizing position and stop distance.',
+  symbolCooldownMinutes: 'After a trade closes on a symbol, wait this many minutes before opening another trade on the same symbol.',
+  maxOpenPositions: 'The maximum number of simultaneous open positions allowed at once.',
+  dailyLossKillSwitchPct: 'If your portfolio loses this percent or more in a single day, trading automatically stops until you resume.',
+  maxPositionPercentPct: 'The maximum size of any single position as a percent of your total portfolio value. Larger positions will be blocked.'
+};
+
+// Phase 8.8.3-C7-FIX: Format currency for display
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value);
+}
+
+// Phase 8.8.3-C7-FIX: Generate descriptions with Current Balance for applicable guardrails
+function getGuardrailDescription(key: string, currentBalance: number | null): string {
+  const baseDescription = GUARDRAIL_DESCRIPTIONS[key] || '';
+  if (CURRENT_BALANCE_GUARDRAILS.has(key) && currentBalance !== null) {
+    return `${baseDescription} Current Balance = ${formatCurrency(currentBalance)}.`;
+  }
+  return baseDescription;
+}
+
+// Phase 8.8.3-C7-FIX: Portfolio summary response type
+interface PortfolioSummary {
+  startingBalance: number;
+  cashBalance: number;
+  totalPositionValue: number;
+  portfolioValue: number;
+  unrealizedPnl: number;
+  unrealizedPnlPercent: number;
+  realizedPnl: number;
+}
 
 export function CoreFourGuardrails() {
   const { toast } = useToast();
@@ -98,6 +141,26 @@ export function CoreFourGuardrails() {
   
   // Phase 3b: WebSocket integration for real-time sync
   useOverrideState();
+  
+  // Phase 8.8.3-C7-FIX: Fetch portfolio summary to get Current Balance (same source as guardrail calculations)
+  const { data: portfolioData } = useQuery<{ok: boolean; data: PortfolioSummary}>({
+    queryKey: ['/api/paper-sim/portfolio-summary'],
+    queryFn: async () => {
+      const response = await fetch('/api/paper-sim/portfolio-summary', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch portfolio summary');
+      }
+      return response.json();
+    },
+    refetchInterval: 5000, // Refresh every 5 seconds for live updates
+  });
+  
+  // Phase 8.8.3-C7-FIX: Extract cashBalance (Current Balance = Starting + Realized P/L)
+  const currentBalance = portfolioData?.data?.cashBalance ?? null;
 
   // Fetch Core Four Guardrails from guardrails_v2 endpoint
   const { data: guardrails, isLoading } = useQuery<{ok: boolean; data: GuardrailsV2}>({
@@ -175,7 +238,7 @@ export function CoreFourGuardrails() {
       await updateMutation.mutateAsync(updates);
       toast({
         title: "Saved",
-        description: `${CORE_FOUR_PARAMS.find(p => p.key === paramKey)?.label} is now ${newLockedState ? 'manually controlled' : 'managed by LATTi'}`,
+        description: `${CORE_FOUR_PARAMS_BASE.find(p => p.key === paramKey)?.label} is now ${newLockedState ? 'manually controlled' : 'managed by LATTi'}`,
       });
     } catch (error: any) {
       toast({
@@ -242,9 +305,11 @@ export function CoreFourGuardrails() {
       
       <CardContent className="mt-6">
         <div className="space-y-6">
-          {CORE_FOUR_PARAMS.map((param) => {
+          {CORE_FOUR_PARAMS_BASE.map((param) => {
             const isLocked = data.lockedByUser?.[param.key] || false;
             const currentValue = editedValues[param.key] ?? data[param.key];
+            // Phase 8.8.3-C7-FIX: Get dynamic description with Current Balance for applicable guardrails
+            const description = getGuardrailDescription(param.key, currentBalance);
             
             return (
               <div key={param.key} className="p-4 border rounded-lg bg-muted/30">
@@ -260,13 +325,13 @@ export function CoreFourGuardrails() {
                             <Info className="w-4 h-4 text-muted-foreground" />
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p className="max-w-xs">{param.description}</p>
+                            <p className="max-w-xs">{description}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {param.description}
+                      {description}
                     </p>
                   </div>
                   
