@@ -509,6 +509,7 @@ function TradeRow({
 function IntegrityBanner({ 
   integrity, 
   uiCount, 
+  portfolio,
   onClearStranded,
   isClearing,
   onResetAll,
@@ -516,6 +517,7 @@ function IntegrityBanner({
 }: { 
   integrity: IntegrityStatus; 
   uiCount: number;
+  portfolio: PortfolioSummary;
   onClearStranded: () => void;
   isClearing: boolean;
   onResetAll: () => void;
@@ -549,6 +551,13 @@ function IntegrityBanner({
             <span className="text-muted-foreground">Slots Available:</span>
             <span className={cn("font-bold", integrity.slotsAvailable > 0 ? "text-green-600" : "text-red-600")}>
               {integrity.slotsAvailable}
+            </span>
+          </div>
+          {/* Phase 8.8.3-C7: Current Bal + Open Trades (Portfolio Value) */}
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground">Current Bal + Open Trades:</span>
+            <span className="font-bold text-blue-600">
+              ${((portfolio.currentBalance || 0) + (portfolio.totalPositionValue || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
         </div>
@@ -957,6 +966,7 @@ export default function ActiveTradesV2() {
       <IntegrityBanner 
         integrity={integrity} 
         uiCount={positions.length}
+        portfolio={portfolio}
         onClearStranded={() => clearStrandedMutation.mutate()}
         isClearing={clearStrandedMutation.isPending}
         onResetAll={() => resetSessionMutation.mutate()}

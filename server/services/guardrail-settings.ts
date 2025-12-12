@@ -52,12 +52,13 @@ export function getRiskPercentageV2(
 }
 
 /**
- * Phase 8.8.3-H4: Get portfolio balance from mode-level portfolio_state
- * Single source of truth: portfolio_state.balance (per mode + user)
+ * Phase 8.8.3-H4/C7: Get portfolio balance from mode-level portfolio_state
+ * Phase 8.8.3-C7-FIX: Now returns Current Balance = Starting Balance + Realized P/L
+ * This is the cash balance available for risk calculations, not including unrealized P/L
  * @param mode Trading mode (live/paper)
  * @param userId User ID
  * @param globalContextId Optional global context ID
- * @returns Portfolio balance in USD, or 0 if not found
+ * @returns Current Balance (starting + realized P/L) in USD, or 0 if not found
  */
 export async function getPortfolioBalanceV2(
   mode: 'live' | 'paper',
@@ -76,13 +77,34 @@ export async function getPortfolioBalanceV2(
       return 0;
     }
 
-    const balance = Number(state.balance);
-    if (balance <= 0 || isNaN(balance)) {
-      console.warn(`[8.8.3-H4][GuardrailSettings] Invalid balance (${balance}) for mode=${mode}, userId=${userId}`);
+    // Phase 8.8.3-C7-FIX: Get starting balance
+    const startingBalance = Number((state as any).startingBalance || state.balance);
+    if (startingBalance <= 0 || isNaN(startingBalance)) {
+      console.warn(`[8.8.3-H4][GuardrailSettings] Invalid startingBalance (${startingBalance}) for mode=${mode}, userId=${userId}`);
       return 0;
     }
 
-    return balance;
+    // Phase 8.8.3-C7-FIX: Get realized P/L from closed trades
+    // Import dynamically to avoid circular dependency
+    const { getEngineSessionStart } = await import('./paper-execution-engine.js');
+    const sessionStart = getEngineSessionStart(mode);
+    
+    const allTrades = await storage.getPaperSimTrades(mode, { closedOnly: true });
+    const sessionTrades = sessionStart 
+      ? allTrades.filter(t => t.closedAt && new Date(t.closedAt) >= sessionStart)
+      : allTrades;
+    
+    // Sum realized P/L (net P/L from closed trades)
+    const realizedPnl = sessionTrades.reduce((sum, trade) => {
+      return sum + parseFloat(trade.pnl?.toString() || '0');
+    }, 0);
+    
+    // Current Balance = Starting Balance + Realized P/L
+    const currentBalance = startingBalance + realizedPnl;
+    
+    console.log(`[8.8.3-C7][GuardrailSettings] mode=${mode} startingBalance=${startingBalance.toFixed(2)} realizedPnl=${realizedPnl.toFixed(2)} currentBalance=${currentBalance.toFixed(2)}`);
+
+    return currentBalance;
   } catch (error) {
     console.error(`[8.8.3-H4][GuardrailSettings] Error fetching portfolio balance for mode=${mode}:`, error);
     return 0;
