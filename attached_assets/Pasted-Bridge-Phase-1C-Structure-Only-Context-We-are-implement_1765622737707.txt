@@ -1,0 +1,187 @@
+Bridge Phase 1C (Structure Only)
+
+Context:
+We are implementing Bridge Phase 1C for the DawnTrader project.
+This phase is purely structural.
+No application logic, no refactors, no automation.
+
+Objective:
+Create a persistent /bridge directory structure that will act as the long-term context, decision, and phase-tracking backbone for DawnTrader.
+
+✅ Scope Rules (Important)
+
+DO NOT modify any existing application code
+
+DO NOT move or delete any existing files
+
+DO NOT add automation, APIs, or background processes
+
+ONLY create the folders and files explicitly listed below
+
+File contents must match exactly what is specified
+
+📁 Step 1 — Create Folder Structure
+
+Create the following directories at the repo root:
+
+/bridge
+/bridge/canonical
+/bridge/reference
+/bridge/decisions
+/bridge/directives
+/bridge/phases
+/bridge/runtime
+
+📄 Step 2 — Create bridge.config.json
+
+Create this file:
+
+/bridge/bridge.config.json
+
+
+With exactly the following contents:
+
+{
+  "bridge_version": "1.0",
+  "source_of_truth": "replit",
+  "canonical_path": "/bridge/canonical",
+  "reference_path": "/bridge/reference",
+  "approval_required": true,
+  "execution_without_approval": false,
+  "chatgpt_role": "architect",
+  "replit_role": "executor",
+  "human_role": "final_authority",
+  "rules": {
+    "never_override_canonical": true,
+    "never_execute_unapproved_directives": true,
+    "document_all_phase_transitions": true,
+    "log_all_decisions": true
+  }
+}
+
+📄 Step 3 — Create Phase Tracking File
+
+Create this file:
+
+/bridge/phases/phase-1C.json
+
+
+With exactly the following contents:
+
+{
+  "phase": "1C",
+  "name": "Minimal Bridge Implementation",
+  "status": "IN_PROGRESS",
+  "approved": true,
+  "started_at": "2025-12-13",
+  "goals": [
+    "Create bridge folder structure",
+    "Establish canonical context location",
+    "Enable durable context across ChatGPT sessions"
+  ],
+  "completion_criteria": [
+    "Bridge folders exist",
+    "Canonical folder populated",
+    "Reference folder populated",
+    "bridge.config.json created",
+    "README files created"
+  ]
+}
+
+📄 Step 4 — Create Decision Ledger README
+
+Create this file:
+
+/bridge/decisions/README.md
+
+
+With exactly the following contents:
+
+# DawnTrader Decision Ledger
+
+This folder records **explicit human-approved decisions**.
+
+Rules:
+- No decision exists unless documented here
+- ChatGPT must not assume decisions
+- Replit must not reinterpret decisions
+- Decisions override historical discussion
+
+Required format for each decision:
+- Date
+- Context
+- Decision
+- Scope
+- Immutable constraints
+
+📄 Step 5 — Create Directives README
+
+Create this file:
+
+/bridge/directives/README.md
+
+
+With exactly the following contents:
+
+# Approved Directives
+
+This folder contains directives that were:
+
+1. Proposed by ChatGPT
+2. Explicitly approved by the human
+3. Executed by Replit
+
+Drafts, ideas, or unapproved instructions do NOT belong here.
+
+📄 Step 6 — Create Bridge README
+
+Create this file:
+
+/bridge/README.md
+
+
+With exactly the following contents:
+
+# DawnTrader Bridge
+
+The Bridge is the durable coordination layer between:
+
+- ChatGPT (architecture, reasoning, directives)
+- Replit (execution and implementation)
+- Human authority (final approval)
+
+Purpose:
+- Prevent context loss
+- Preserve decisions across sessions
+- Enforce explicit approval
+- Protect canonical system truth
+
+Canonical truth lives in:
+- /bridge/canonical
+
+Searchable history lives in:
+- /bridge/reference
+
+Nothing executes without approval.
+
+🧾 Step 7 — Confirmation Required
+
+When complete, please:
+
+Confirm every folder and file was created
+
+List the full /bridge directory tree
+
+Confirm no other files were modified
+
+🚫 Explicitly Do NOT:
+
+Populate canonical or reference folders
+
+Add any logic
+
+Make assumptions
+
+Optimize anything
+
+End of Directive

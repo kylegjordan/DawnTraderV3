@@ -1,0 +1,17 @@
+{
+  "bridge_version": "1.0",
+  "source_of_truth": "replit",
+  "canonical_path": "/bridge/canonical",
+  "reference_path": "/bridge/reference",
+  "approval_required": true,
+  "execution_without_approval": false,
+  "chatgpt_role": "architect",
+  "replit_role": "executor",
+  "human_role": "final_authority",
+  "rules": {
+    "never_override_canonical": true,
+    "never_execute_unapproved_directives": true,
+    "document_all_phase_transitions": true,
+    "log_all_decisions": true
+  }
+}
