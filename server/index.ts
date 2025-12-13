@@ -8,6 +8,7 @@ import { databaseMonitor } from "./services/database-monitor";
 import { marketDataHealthCheck } from "./services/market-data-health-check";
 import { healthRouter } from "./routes/health.js"; // Phase 41F-D/F: Health monitoring routes
 import { statusRouter } from "./routes/status.js"; // Phase 1: Status and version routes
+import chapletRouter from "../chaplet/index.js"; // Phase M4: Chaplet Context Service
 import { env } from "./config/index.js"; // Phase 1: Typed environment config
 import version from "./version.json";
 
@@ -132,6 +133,11 @@ app.use((req, res, next) => {
   
   // Phase 41F-D/F: Mount health monitoring routes
   app.use('/api/health', healthRouter);
+  
+  // Phase M4: Mount Chaplet Context Service (read-only)
+  app.use('/chaplet', chapletRouter);
+  console.log('[Server] Chaplet mounted at /chaplet (read-only)');
+  
   console.log('[Server] API routes mounted at /api');
 
   // Phase 41F-B-5: Initialize operation queues and clear orphaned state

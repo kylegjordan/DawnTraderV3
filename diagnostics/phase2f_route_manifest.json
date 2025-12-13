@@ -5800,6 +5800,42 @@
     ]
   },
   {
+    "path": "/chaplet/context/grounding",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/chaplet/context/canonical",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/chaplet/context/file/:folder/:filename",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/chaplet/health",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/walter/secure-core/enable",
     "methods": [
       "POST"
