@@ -1,0 +1,595 @@
+# Phase 8 — Complete Implementation History
+
+**Document Created:** December 13, 2025  
+**Scope:** All Phase 8 work from 8.1 through 8.8.3  
+**Purpose:** Comprehensive record of Phase 8 buildwork and implementations
+
+---
+
+# Table of Contents
+
+1. [Phase 8 Overview](#1-phase-8-overview)
+2. [Phase 8.1-8.7: Foundation Repairs](#2-phase-81-87-foundation-repairs)
+3. [REB 1.0-2.12F: Emergency Restoration](#3-reb-10-212f-emergency-restoration)
+4. [Phase 8.8.1-8.8.2: Pipeline Audits](#4-phase-881-882-pipeline-audits)
+5. [Phase 8.8.3: End-to-End Trading Pipeline](#5-phase-883-end-to-end-trading-pipeline)
+6. [Sub-Phase Implementation Details](#6-sub-phase-implementation-details)
+7. [Technical Deliverables Summary](#7-technical-deliverables-summary)
+
+---
+
+# 1. Phase 8 Overview
+
+## 1.1 Mission Statement
+
+Phase 8's mission was to **fix and complete the paper-mode trading engine**, bringing it to a fully functioning, end-to-end state without AI assistance (Lottie turned off).
+
+## 1.2 Phase 8 Timeline
+
+| Sub-Phase | Description | Status | Completion |
+|-----------|-------------|--------|------------|
+| 8.1 | Fix accounting model (FX5) | ✅ COMPLETED | November 2025 |
+| 8.2 | Fix passive learning isolation | ✅ COMPLETED | November 2025 |
+| 8.3 | Fix scan cadence | ✅ COMPLETED | November 2025 |
+| 8.4 | Fix breakdown accuracy | ✅ COMPLETED | November 2025 |
+| 8.5 | Fix batch selection | ✅ COMPLETED | November 2025 |
+| 8.6 | Fix top-end rotation & UI | ✅ COMPLETED | November 2025 |
+| 8.7 | Activate unused filters | ✅ COMPLETED | November 2025 |
+| 8.8.1 | Scanner output audit | ✅ COMPLETED | November 2025 |
+| 8.8.2 | Signal engine audit | ✅ COMPLETED | November 2025 |
+| 8.8.3 | Strategy engine & trading pipeline | ✅ COMPLETED | December 2025 |
+
+## 1.3 GitHub Incident Impact
+
+On **November 20, 2025**, a GitHub sync event erased 10-14 days of Phase 8 work. This triggered the **REB (Rebuild) program** (REB 1.0 through REB 2.12F) to restore lost functionality.
+
+---
+
+# 2. Phase 8.1-8.7: Foundation Repairs
+
+## 2.1 Phase 8.1 — Fix Accounting Model (FX5)
+
+**Problem:** FX5 scanner output was inconsistent with downstream expectations.
+
+**Implementation:**
+- Standardized FX5 output schema
+- Enforced numeric type casting
+- Removed deprecated metrics
+- Added contract validation
+
+**Outcome:** Filtering logic resumed predictable behavior.
+
+## 2.2 Phase 8.2 — Fix Passive Learning Isolation
+
+**Problem:** Passive learning mode was contaminating active trading pools.
+
+**Implementation:**
+- Isolated passive learning buffer (20-cycle FIFO)
+- Added mode flag enforcement
+- Separated paper/live data paths
+
+**Outcome:** Passive mode no longer interferes with active trading.
+
+## 2.3 Phase 8.3 — Fix Scan Cadence
+
+**Problem:** Scan intervals were inconsistent, causing data gaps.
+
+**Implementation:**
+- Standardized 30-second scan interval
+- Added cycle ID tracking
+- Implemented scan completion timestamps
+
+**Outcome:** Reliable 30-second scan cycles across all modes.
+
+## 2.4 Phase 8.4 — Fix Breakdown Accuracy
+
+**Problem:** Filter breakdown statistics were inaccurate.
+
+**Implementation:**
+- Rebuilt breakdown calculation logic
+- Added per-filter failure tracking
+- Implemented breakdown validation
+
+**Outcome:** Accurate filter failure reasons in UI.
+
+## 2.5 Phase 8.5 — Fix Batch Selection
+
+**Problem:** Batch composition was unstable (Top-N vs Tier-B).
+
+**Implementation:**
+- Restored batch-first architecture
+- Implemented 60-pair mixed batch (Top-N + Tier-B)
+- Added batch composition logging
+
+**Outcome:** Consistent batch selection per scan cycle.
+
+## 2.6 Phase 8.6 — Fix Top-End Rotation & UI
+
+**Problem:** Top-end rotation not working; UI not reflecting scan results.
+
+**Implementation:**
+- Fixed volume-ranked Top-N selection
+- Implemented Tier-B diversity sampling
+- Connected Stage-3 cache to UI
+- Added WebSocket emissions for scan results
+
+**Outcome:** UI correctly displays FX5 scan results.
+
+## 2.7 Phase 8.7 — Activate Unused Filters
+
+**Problem:** Many configured filters were silently disabled.
+
+**Implementation:**
+- Audited all 20+ filter types
+- Reactivated disabled filters
+- Added filter status logging
+- Implemented filter-by-filter audit mode
+
+**Outcome:** All configured filters actively applied.
+
+---
+
+# 3. REB 1.0-2.12F: Emergency Restoration
+
+The REB (Rebuild) program was launched after the GitHub incident to restore Phase 8.1-8.7 functionality.
+
+## 3.1 REB 1.0 — System Integrity Baseline
+
+**Purpose:** Determine if system was recoverable.
+
+**Findings:**
+- FX5 fetch loops functional
+- Database responsive
+- Filters partially working
+- Strategy references broken
+- Execution engine disconnected
+
+**Outcome:** System confirmed recoverable.
+
+## 3.2 REB 1.5 — Deep Dump Analysis
+
+**Purpose:** Map all corrupted pipelines.
+
+**Deliverable:** MASTER GAP ANALYSIS document identifying all broken components.
+
+## 3.3 REB 2.0 — Active Rebuild Start
+
+**Purpose:** Stabilize scan engine and passive learning.
+
+**Implementation:**
+- Standardized FX5 data structures
+- Repaired scan-batch composition
+- Implemented cycle snapshots
+
+## 3.4 REB 2.1 — FX5 Structure Normalization
+
+**Problem:** FX5 output structure mismatched filter expectations.
+
+**Implementation:**
+- Rebuilt FX5 output schema
+- Enforced numeric casting
+- Removed deprecated fields
+
+## 3.5 REB 2.2 — Filter Engine Stabilization
+
+**Problem:** Multiple filters silently failing.
+
+**Implementation:**
+- Rewrote filter manager
+- Added verbose failure reasons
+- Implemented filter audit mode
+
+## 3.6 REB 2.3 — Passive Learning Framework
+
+**Problem:** Passive learning buffer wiped during rollback.
+
+**Implementation:**
+- Added 20-cycle FIFO buffer
+- Integrated structured snapshots
+- Logged all filter decisions
+
+## 3.7 REB 2.4 — History Filter Restoration
+
+**Problem:** Pairs with insufficient history slipping past filters.
+
+**Implementation:**
+- Fixed OHLC lookup
+- Corrected Kraken symbol normalization
+- Added conservative fallback
+
+## 3.8 REB 2.5 — Active Filter Pool Fix
+
+**Problem:** Already-active pairs not being excluded.
+
+**Implementation:**
+- Rebuilt active-pool system
+- Introduced normalized symbol matching
+- Added 5-minute TTL expiry
+
+## 3.9 REB 2.6 — 24h Aggregator Cleanup
+
+**Problem:** Legacy V1 aggregator conflicting with FX5 metrics.
+
+**Implementation:**
+- Removed legacy scan-24h-aggregator.ts
+- Preserved fx5-24h-window.ts
+
+## 3.10 REB 2.7-2.8 — Audit Framework & Stress Tests
+
+**Purpose:** Verify system stability across multiple cycles.
+
+**Outcome:** Zero drift, zero inconsistencies.
+
+## 3.11 REB 2.9-2.12F — Final Fixes
+
+| Phase | Purpose | Outcome |
+|-------|---------|---------|
+| 2.9 | Full cycle drift detection | Zero drift detected |
+| 2.10 | Passive learning deep tests | Fully operational |
+| 2.11 | Already-active logic fix | Correct exclusions |
+| 2.12 | DHMA strategy restoration | All 9 strategies callable |
+| 2.12F | Final validation | System stable |
+
+---
+
+# 4. Phase 8.8.1-8.8.2: Pipeline Audits
+
+## 4.1 Phase 8.8.1 — Scanner Output Audit
+
+**Objective:** Ensure FX5 output is clean for downstream pipeline.
+
+**Tasks Completed:**
+- Verified eligibleSymbols structure
+- Removed legacy fields (score, reasons, confidence)
+- Validated numeric types
+- Confirmed Stage-3 emission payloads
+
+**Deliverable:** Clean scanner output contract.
+
+## 4.2 Phase 8.8.2 — Signal Engine Audit
+
+**Objective:** Validate signal generation from FX5 output.
+
+**Tasks Completed:**
+- Confirmed buy/sell triggers fire correctly
+- Detected missing indicator fields
+- Documented signals that never fire
+- Confirmed signals flow to ready-to-buy queue
+
+**Deliverable:** Signal engine operational status.
+
+---
+
+# 5. Phase 8.8.3: End-to-End Trading Pipeline
+
+Phase 8.8.3 was the **culminating phase** that made the trading pipeline fully functional.
+
+## 5.1 Objective
+
+Make DawnTrader execute end-to-end simulated trades:
+- FX5 Scanner → Active Filter Pool → Signal Orchestrator → Strategy Engine → Trade Safety → Paper Execution Engine → Portfolio Updates → UI
+
+## 5.2 Major Sub-Phases
+
+### AJ Series (Trade Safety & Diagnostics)
+
+| Phase | Implementation |
+|-------|----------------|
+| AJ8 | Session tracking for RTB metrics reset |
+| AJ16 | RTB diagnostic logging |
+| AJ17 | Diagnostic runner with report generation |
+| AJ18 | Starvation diagnostic session |
+| AJ19 | Max position diagnostic |
+| AJ19b | Trade lifecycle diagnostic |
+
+### B Series (Execution Pipeline)
+
+| Phase | Implementation |
+|-------|----------------|
+| B3.5 | Price tick cadence verification (1.5s cycle) |
+| B3.6 | Kraken WebSocket adapter start |
+| B4 | Observational diagnostics framework |
+| B5 | Sizing audit service |
+| B6 | Unified sizing pipeline (centralized sizing helper) |
+| B7.A | Hard reset service (complete session reset) |
+| B7.B | Legacy portfolio health check bypass |
+| B9 | Execution engine integrity (real prices only) |
+
+### C Series (Cost & Balance)
+
+| Phase | Implementation |
+|-------|----------------|
+| C2 | Full cost transparency (gross/net P/L breakdown) |
+| C5 | Financial integrity verification diagnostics |
+| C6 | Simulation analytics alignment |
+| C7 | Manual close cost model fix |
+
+### H Series (Guardrails)
+
+| Phase | Implementation |
+|-------|----------------|
+| H4 | Trade safety service (8-step checks) |
+| H7 | Kill switch audit logging |
+
+### I Series (Pricing Pipeline)
+
+| Phase | Implementation |
+|-------|----------------|
+| I1 | RTB diagnostics service |
+| I2 | Hard-stop freeze flag |
+| I6 | Live price distribution fix (getPriceWithFallback) |
+| I6-UI | Frontend symbol normalization |
+| I6-FIX | WebSocket broadcast mode fix |
+| I7 | Canonical symbol mapping layer |
+| I7-WS-A through G | WebSocket subscription diagnostics |
+| I7-PERSIST-FIX | Paper trade persistence fix |
+| I7-MAP-FIX | Canonical symbol mapping repair |
+| I7-MAP-AUTO | Automatic symbol mapping |
+| I8C | WebSocket subscription reliability |
+
+## 5.3 Key Architectural Achievements
+
+### 5.3.1 Trade Safety (8-Step Sequence)
+
+Implemented complete pre-trade validation:
+1. Kill Switch check
+2. Stop-Loss Required check
+3. Stop-Loss Valid check
+4. Max Positions Per Asset check
+5. Symbol Cooldown check
+6. Position Size Cap check
+7. LPCP Protection check (dormant)
+8. Max Open Trades check
+
+**File:** `server/services/trade-safety.ts`
+
+### 5.3.2 Unified Sizing Pipeline (B6)
+
+Centralized all position sizing through `paper-position-sizing.ts`:
+
+```
+riskAmount = portfolioValue × (portfolioRiskPerTradePct / 100)
+stopDistance = |entryPrice - stopPrice|
+rawQuantity = riskAmount / stopDistance
+exposureBudget = portfolioValue × (maxTotalExposurePct / 100)
+maxNotional = exposureBudget × (maxPositionPercentPct / 100)
+quantity = min(rawQuantity, bufferedMaxNotional / entryPrice)
+```
+
+**File:** `server/services/paper-position-sizing.ts`
+
+### 5.3.3 Cost Model Implementation
+
+Round-trip cost model:
+- Entry Slippage: 0.15% (added to entry price)
+- Exit Slippage: 0.15% (subtracted from exit price)
+- Entry Fee: 0.10% (entryPrice × quantity × 0.001)
+- Exit Fee: 0.10% (exitPrice × quantity × 0.001)
+- Total Round-Trip: ~0.50%
+
+**File:** `server/services/paper-execution-engine.ts`
+
+### 5.3.4 Balance Semantics (C7)
+
+Clarified balance definitions:
+- **cashBalance** = startingBalance + realizedPnl (for guardrails)
+- **portfolioValue** = cashBalance + unrealizedPnl (for display)
+- **currentBalance** = cashBalance (same as cashBalance)
+
+Guardrails now use Current Balance (realized only) instead of Starting Balance.
+
+### 5.3.5 Hard Reset Service (B7.A)
+
+Complete paper simulation reset capability:
+- Clears all paper_sim_trades
+- Clears all paper_sim_open_positions
+- Resets paper_sim_portfolio
+- Clears Active Filter Pool
+- Clears price cache
+- Resets engine session state
+- Clears WebSocket subscriptions
+
+**File:** `server/services/paper-session-reset-service.ts`
+
+### 5.3.6 WebSocket Price Pipeline
+
+Complete price pipeline:
+1. Kraken WebSocket → KrakenWebSocketAdapter
+2. Symbol normalization (Kraken → internal format)
+3. LivePricingAdapter.priceCache (1-2 second TTL)
+4. getPriceWithFallback() for all consumers
+5. REST API fallback if cache stale
+
+**Files:**
+- `server/services/kraken-websocket-adapter.ts`
+- `server/services/live-pricing-adapter.ts`
+- `server/markets/kraken-symbol-resolver.ts`
+
+### 5.3.7 Canonical Symbol Mapping (I7)
+
+Single authoritative symbol format: `BASE/QUOTE`
+
+Components:
+- KRAKEN_SYMBOL_MAP: Static mapping for common pairs
+- Symbol Resolver: Dynamic resolution with fallback
+- Bidirectional conversion: Kraken ↔ Internal
+
+**File:** `server/markets/kraken-symbol-resolver.ts`
+
+## 5.4 Monitoring & Diagnostics
+
+### Engine Health Monitor
+
+Real-time monitoring:
+- Position count tracking
+- Cycle timestamp logging
+- Exit evaluation tracking
+- Price source statistics
+
+### Diagnostic Endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `/api/i7-price/status` | Price pipeline status |
+| `/api/diagnostics/rtb` | RTB attempt/block tracking |
+| `/api/diagnostics/c5` | Financial integrity verification |
+| `/api/paper-sim/engine-status` | Engine running state |
+
+---
+
+# 6. Sub-Phase Implementation Details
+
+## 6.1 Files Created/Modified in Phase 8.8.3
+
+### New Services
+
+| File | Purpose |
+|------|---------|
+| `active-filter-pool.ts` | In-memory symbol pool with TTL |
+| `trade-safety.ts` | 8-step pre-trade validation |
+| `paper-position-sizing.ts` | Centralized position sizing |
+| `kraken-websocket-adapter.ts` | WebSocket connection management |
+| `live-pricing-adapter.ts` | Price caching and fallback |
+| `kraken-symbol-resolver.ts` | Symbol normalization |
+| `paper-session-reset-service.ts` | Hard reset capability |
+| `c5-financial-diagnostics.ts` | Balance reconciliation |
+| `b4-diagnostics.ts` | Observational diagnostics |
+| `b5-sizing-audit.ts` | Sizing pipeline audit |
+| `i1-rtb-diagnostics-service.ts` | RTB tracking |
+| `price-trace-service.ts` | Price flow tracing |
+
+### Modified Services
+
+| File | Changes |
+|------|---------|
+| `paper-execution-engine.ts` | Complete rewrite for C7 cost model |
+| `signal-orchestrator.ts` | B6 unified sizing integration |
+| `fx5-scanner.ts` | REB 2.x restoration |
+| `paper-portfolio-manager.ts` | Engine lifecycle management |
+| `guardrail-policy.ts` | Effective value resolution |
+| `guardrail-settings.ts` | Balance calculation updates |
+
+## 6.2 Database Schema Changes
+
+### New Columns Added
+
+```sql
+-- paper_sim_trades
+entry_slippage NUMERIC
+exit_slippage NUMERIC
+total_cost NUMERIC
+gross_pnl NUMERIC
+net_pnl NUMERIC
+
+-- paper_sim_portfolio
+engine_start_timestamp TIMESTAMP
+
+-- execution_attempt_audit (new table)
+id, mode, symbol, strategy, attempt_type, result, block_reason, trade_id, created_at
+```
+
+## 6.3 UI Enhancements
+
+### Active Trades Tab
+- GlobalMetricsBar showing portfolio metrics
+- "Current Bal + Open Trades" display
+- Source/Frequency column
+- Confidence column
+- Reset session button
+
+### Trade History Tab
+- Quantity column
+- Confidence column
+- Fee and slippage columns
+- Filtering, sorting, pagination
+- Apply/Clear filter UX pattern
+
+---
+
+# 7. Technical Deliverables Summary
+
+## 7.1 Phase 8 Success Criteria (All Met)
+
+| Criterion | Status |
+|-----------|--------|
+| FX5 Scanner produces consistent data | ✅ |
+| All 20+ filters working | ✅ |
+| Active Filter Pool with TTL | ✅ |
+| All 9 strategies callable | ✅ |
+| Signal Orchestrator functional | ✅ |
+| Trade Safety (8 checks) enforced | ✅ |
+| Paper Execution Engine working | ✅ |
+| Trades open correctly | ✅ |
+| Trades close correctly (SL/TP) | ✅ |
+| Portfolio updates correctly | ✅ |
+| Guardrails enforced real-time | ✅ |
+| WebSocket price pipeline working | ✅ |
+| Cost model accurate | ✅ |
+| Balance semantics correct | ✅ |
+
+## 7.2 Key Metrics
+
+| Metric | Value |
+|--------|-------|
+| FX5 Scan Interval | 30 seconds |
+| Signal Evaluation Interval | 30 seconds |
+| Position Monitoring Interval | 1.5 seconds |
+| Pool Entry TTL | 5 minutes |
+| Entry Slippage | 0.15% |
+| Exit Slippage | 0.15% |
+| Entry Fee | 0.10% |
+| Exit Fee | 0.10% |
+| Total Round-Trip Cost | ~0.50% |
+
+## 7.3 Files Reference
+
+### Core Trading Pipeline
+- `server/services/fx5-scanner.ts`
+- `server/services/active-filter-pool.ts`
+- `server/services/signal-orchestrator.ts`
+- `server/services/strategy-engine.ts`
+- `server/services/paper-position-sizing.ts`
+- `server/services/trade-safety.ts`
+- `server/services/paper-execution-engine.ts`
+- `server/services/paper-portfolio-manager.ts`
+
+### Pricing Pipeline
+- `server/services/live-pricing-adapter.ts`
+- `server/services/kraken-websocket-adapter.ts`
+- `server/markets/kraken-symbol-resolver.ts`
+
+### Configuration
+- `server/services/guardrail-policy.ts`
+- `server/services/guardrail-settings.ts`
+
+### Diagnostics
+- `server/services/c5-financial-diagnostics.ts`
+- `server/services/b4-diagnostics.ts`
+- `server/services/b5-sizing-audit.ts`
+- `server/services/i1-rtb-diagnostics-service.ts`
+
+---
+
+# Appendix A: Phase 8.8.3 Directive Tags
+
+The following directive tags were used throughout Phase 8.8.3 implementation:
+
+| Tag | Purpose |
+|-----|---------|
+| `[8.8.3-AJ*]` | Trade safety and diagnostics |
+| `[8.8.3-B*]` | Execution pipeline |
+| `[8.8.3-C*]` | Cost and balance |
+| `[8.8.3-H*]` | Guardrails |
+| `[8.8.3-I*]` | Pricing pipeline |
+| `[REB 2.*]` | Rebuild restoration |
+| `[B6]` | Unified sizing |
+| `[B7.A]` | Hard reset |
+| `[B9]` | Execution integrity |
+| `[C7]` | Cost model fix |
+| `[I7]` | Symbol mapping |
+
+---
+
+**Document Version:** 1.0  
+**Last Updated:** December 13, 2025  
+**Phase Status:** Phase 8.8.3 COMPLETE
