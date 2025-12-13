@@ -54,6 +54,23 @@ router.get('/context/grounding', (_req, res) => {
       'Draft candidate directives explicitly marked \'REQUIRES HUMAN APPROVAL\'',
       'Summarize and contextualize canonical and reference materials upon request'
     ],
+    phase_context: {
+      primary_domain: {
+        name: 'DawnTrader Product',
+        phase: 'Phase 8.8.3',
+        role: 'Primary reasoning anchor for all analytical and advisory work',
+        authoritative: true,
+        default: true
+      },
+      infrastructure_domain: {
+        name: 'Chaplet Governance',
+        phase: 'Phase M4.3',
+        role: 'Infrastructure-only context service. Does not govern reasoning unless explicitly requested.',
+        authoritative: false,
+        default: false
+      },
+      reasoning_anchor: 'DawnTrader Product'
+    },
     timestamp: new Date().toISOString()
   });
 });
