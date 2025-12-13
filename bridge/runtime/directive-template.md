@@ -41,3 +41,41 @@ password: SecurePass123!
 
 ## What Happens Next
 (What ChatGPT will do after review.)
+
+---
+
+## Directive Lifecycle Control (MANDATORY)
+
+### Execution State
+- Initial State: DRAFT
+- Post-Execution State: EXECUTED
+- Canonicalization State: AWAITING_APPROVAL
+- Final State: CANONICALIZED
+
+### Post-Execution Requirements (Replit MUST DO ALL)
+After implementing this directive, Replit MUST:
+
+1. Produce an implementation report using:
+   /bridge/runtime/replit-response-template.md
+
+2. Explicitly ask the human authority (Kyle):
+   "Is this directive approved for canonicalization?"
+
+3. Pause all further work related to this directive until approval is granted.
+
+### Canonicalization Instructions (DO NOT EXECUTE UNTIL APPROVED)
+Upon explicit approval, Replit MUST:
+
+- Write an execution trace using:
+  /bridge/runtime/execution-trace-template.md
+
+- Update or create any affected canonical artifacts in:
+  /bridge/canonical
+
+- Log the approval and outcome in:
+  /bridge/decisions/decision-ledger.md
+
+### Prohibitions
+- Replit MUST NOT mark a directive complete without explicit approval.
+- Replit MUST NOT advance phases or scopes without canonicalization.
+- ChatGPT MUST NOT issue follow-on directives until lifecycle completion.

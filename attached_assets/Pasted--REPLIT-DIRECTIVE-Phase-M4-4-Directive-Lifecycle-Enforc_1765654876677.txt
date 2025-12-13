@@ -1,0 +1,186 @@
+📌 REPLIT DIRECTIVE
+
+Phase M4.4 — Directive Lifecycle Enforcement Templates
+
+CONTEXT / WHY THIS EXISTS
+
+We have confirmed that the Bridge now successfully preserves context, governance, and phase anchoring.
+However, there is currently no enforced lifecycle loop that guarantees:
+
+Directives are paused after execution
+
+Human approval is explicitly requested
+
+Canonical history is always written
+
+Phase advancement cannot silently occur
+
+This creates a risk of:
+
+Lost execution history
+
+Unlogged decisions
+
+Phase drift due to human forgetfulness
+
+This directive introduces mandatory lifecycle enforcement using templates only — no automation.
+
+OBJECTIVE
+
+Upgrade Bridge templates so that every directive must follow a formal lifecycle:
+
+DRAFT → EXECUTED → AWAITING_APPROVAL → CANONICALIZED
+
+
+This lifecycle must be:
+
+Explicit
+
+Human-gated
+
+Logged
+
+Impossible to bypass accidentally
+
+SCOPE (STRICT)
+
+✅ Allowed
+
+Editing Bridge templates and READMEs
+
+Adding lifecycle language and required sections
+
+🚫 Not Allowed
+
+No automation
+
+No background jobs
+
+No logic changes
+
+No execution triggers
+
+No phase changes
+
+TASKS
+1️⃣ Update Directive Template
+
+File:
+/bridge/runtime/directive-template.md
+
+Action:
+Append the following section verbatim at the end of the file:
+
+---
+
+## Directive Lifecycle Control (MANDATORY)
+
+### Execution State
+- Initial State: DRAFT
+- Post-Execution State: EXECUTED
+- Canonicalization State: AWAITING_APPROVAL
+- Final State: CANONICALIZED
+
+### Post-Execution Requirements (Replit MUST DO ALL)
+After implementing this directive, Replit MUST:
+
+1. Produce an implementation report using:
+   /bridge/runtime/replit-response-template.md
+
+2. Explicitly ask the human authority (Kyle):
+   “Is this directive approved for canonicalization?”
+
+3. Pause all further work related to this directive until approval is granted.
+
+### Canonicalization Instructions (DO NOT EXECUTE UNTIL APPROVED)
+Upon explicit approval, Replit MUST:
+
+- Write an execution trace using:
+  /bridge/runtime/execution-trace-template.md
+
+- Update or create any affected canonical artifacts in:
+  /bridge/canonical
+
+- Log the approval and outcome in:
+  /bridge/decisions/decision-ledger.md
+
+### Prohibitions
+- Replit MUST NOT mark a directive complete without explicit approval.
+- Replit MUST NOT advance phases or scopes without canonicalization.
+- ChatGPT MUST NOT issue follow-on directives until lifecycle completion.
+
+2️⃣ Update Replit Response Template
+
+File:
+/bridge/runtime/replit-response-template.md
+
+Action:
+Insert the following section at the very top of the file:
+
+## Directive Status Declaration (MANDATORY)
+
+Directive ID:
+Current Lifecycle State: EXECUTED | AWAITING_APPROVAL
+Canonicalization Requested: YES | NO
+
+Blocking Question (Required):
+"Is this directive approved for canonicalization?"
+
+3️⃣ Update Directives README (Traceability Reminder)
+
+File:
+/bridge/directives/README.md
+
+Action:
+Append the following section at the end:
+
+## Mandatory Lifecycle Enforcement
+
+All directives follow this lifecycle:
+
+DRAFT → EXECUTED → AWAITING_APPROVAL → CANONICALIZED
+
+No directive is considered complete until:
+- Execution is reported
+- Explicit human approval is granted
+- Canonical records are written
+
+This lifecycle is enforced via templates and must not be bypassed.
+
+ACCEPTANCE CRITERIA
+
+Replit must confirm:
+
+✅ All edits were append-only (no deletions)
+
+✅ No files outside /bridge/runtime or /bridge/directives were modified
+
+✅ No automation or logic was introduced
+
+✅ Templates now structurally enforce approval gating
+
+✅ DawnTrader runtime behavior remains unchanged
+
+DELIVERABLE
+
+Replit must provide:
+
+A brief summary of changes
+
+Confirmation that lifecycle enforcement is now mandatory
+
+Confirmation that future directives cannot silently complete
+
+FINAL NOTE
+
+This directive closes the governance loop.
+
+After this:
+
+You no longer need to remember to log history
+
+Replit is forced to stop and ask
+
+ChatGPT cannot skip ahead
+
+The Bridge becomes authoritative by structure, not discipline

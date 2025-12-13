@@ -27,3 +27,18 @@ Every directive must declare:
 No directive is complete without:
 1. A corresponding decision record
 2. An execution trace documenting the implementation
+
+---
+
+## Mandatory Lifecycle Enforcement
+
+All directives follow this lifecycle:
+
+DRAFT → EXECUTED → AWAITING_APPROVAL → CANONICALIZED
+
+No directive is considered complete until:
+- Execution is reported
+- Explicit human approval is granted
+- Canonical records are written
+
+This lifecycle is enforced via templates and must not be bypassed.

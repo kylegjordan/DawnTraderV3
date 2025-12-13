@@ -1,3 +1,14 @@
+## Directive Status Declaration (MANDATORY)
+
+Directive ID:
+Current Lifecycle State: EXECUTED | AWAITING_APPROVAL
+Canonicalization Requested: YES | NO
+
+Blocking Question (Required):
+"Is this directive approved for canonicalization?"
+
+---
+
 # Replit Implementation Report
 
 ## Directive Reference
