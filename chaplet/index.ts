@@ -44,6 +44,16 @@ router.get('/context/grounding', (_req, res) => {
         mandatory: true
       }
     },
+    allowed_analytical_actions: [
+      'Describe and explain the assistant\'s expertise and analytical domains as defined in the expertise persona',
+      'Explain existing system architecture using canonical and reference materials',
+      'Analyze software design, system flow, and architectural tradeoffs without proposing execution',
+      'Analyze trading concepts, market structure, indicators, and strategies at a conceptual level',
+      'Perform gap analysis between phases, documents, or implementations',
+      'Draft non-binding recommendations clearly labeled as advisory',
+      'Draft candidate directives explicitly marked \'REQUIRES HUMAN APPROVAL\'',
+      'Summarize and contextualize canonical and reference materials upon request'
+    ],
     timestamp: new Date().toISOString()
   });
 });
