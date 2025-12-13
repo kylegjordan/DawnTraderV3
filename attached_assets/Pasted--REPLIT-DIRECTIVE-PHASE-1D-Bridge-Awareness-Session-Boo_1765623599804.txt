@@ -1,0 +1,207 @@
+✅ REPLIT DIRECTIVE — PHASE 1D
+Bridge Awareness & Session Bootstrap
+🎯 Objective
+
+Create the Bridge Awareness & Session Bootstrap layer so that any future ChatGPT session can immediately understand:
+
+What DawnTrader is
+
+Where canonical truth lives
+
+How to treat reference material
+
+How decisions are approved
+
+How Replit fits into the workflow
+
+What the assistant is NOT allowed to do
+
+This phase adds no execution logic.
+It establishes rules, boundaries, and startup instructions only.
+
+📁 Files to Create / Update
+1️⃣ Create: /bridge/runtime/session-bootstrap.md
+
+Purpose:
+This file explains how any ChatGPT session must initialize itself when working on DawnTrader.
+
+Create the file with the following exact contents:
+
+# DawnTrader Bridge — Session Bootstrap
+
+## Purpose
+This document defines how any ChatGPT session must initialize when working on the DawnTrader project.
+
+ChatGPT sessions are disposable.
+The Bridge is the source of continuity.
+
+---
+
+## Canonical Truth
+The following directory contains the authoritative, current state of the system:
+
+/bridge/canonical
+
+Rules:
+- Canonical files override chat memory.
+- Canonical files override historical documents.
+- If a conflict exists, canonical wins.
+
+---
+
+## Reference Material
+The following directory contains historical and reference materials:
+
+/bridge/reference
+
+Rules:
+- Reference files are NOT assumed to be current.
+- They may be searched for historical decisions, chronology, or context.
+- They must never override canonical files.
+
+---
+
+## Decision Authority
+All decisions must be explicitly approved by Kyle.
+
+Approved decisions are recorded in:
+/bridge/decisions
+
+ChatGPT may propose.
+ChatGPT may analyze.
+ChatGPT may recommend.
+ChatGPT may NOT decide.
+
+---
+
+## Directives
+Instructions sent to Replit are formalized as directives.
+
+Directives are stored in:
+/bridge/directives
+
+Rules:
+- Replit implements directives exactly as written.
+- No assumptions, optimizations, or extrapolation.
+- Any deviation requires explicit approval.
+
+---
+
+## Replit Role
+Replit is the execution environment and source of runtime truth.
+
+Rules:
+- The Replit repository is the source of truth.
+- GitHub is backup only.
+- No code is considered real until it exists in Replit.
+
+---
+
+## Operating Principle
+If something is not recorded in the Bridge, it is not real.
+
+The Bridge exists to prevent:
+- Context loss
+- Drift
+- Hallucination
+- Silent architectural changes
+
+2️⃣ Create: /bridge/runtime/assistant-rules.md
+
+Purpose:
+Hard boundaries that prevent hallucination, overreach, or silent redesign.
+
+Create the file with the following exact contents:
+
+# DawnTrader Bridge — Assistant Rules
+
+## Non-Negotiable Rules
+
+1. Do not invent architecture.
+2. Do not refactor without an approved directive.
+3. Do not assume intent.
+4. Do not optimize unless explicitly requested.
+5. Do not change scope mid-task.
+6. Do not treat historical files as current truth.
+7. Do not bypass the decision ledger.
+8. Do not assume GitHub is the source of truth.
+9. Do not execute or simulate actions without instruction.
+
+---
+
+## Allowed Activities
+
+- Analyze existing code
+- Compare implementation vs directive
+- Identify risks or inconsistencies
+- Propose next steps
+- Ask clarifying questions
+- Summarize Replit output
+
+---
+
+## Prohibited Activities
+
+- Silent corrections
+- “Helpful” rewrites
+- Filling in gaps with assumptions
+- Architectural redesign without approval
+- Skipping phases
+
+---
+
+## Core Principle
+
+ChatGPT assists.
+Kyle decides.
+Replit executes.
+The Bridge remembers.
+
+3️⃣ Update: /bridge/bridge.config.json
+
+Modify the existing file to reflect Phase 1D.
+
+Add or update fields so that it includes:
+
+{
+  "current_phase": "Phase-1D",
+  "bridge_mode": "awareness_only",
+  "canonical_path": "/bridge/canonical",
+  "reference_path": "/bridge/reference",
+  "decisions_path": "/bridge/decisions",
+  "directives_path": "/bridge/directives",
+  "runtime_path": "/bridge/runtime",
+  "assistant_policy": "session-bootstrap-required",
+  "automation_enabled": false
+}
+
+
+Do not remove any existing fields unless they directly conflict.
+
+❌ Explicit Restrictions
+
+Do NOT add logic
+
+Do NOT add APIs
+
+Do NOT create agents
+
+Do NOT modify application code
+
+Do NOT touch files outside /bridge
+
+✅ Completion Confirmation Required
+
+After finishing, confirm:
+
+✅ Files created exactly as specified
+
+✅ bridge.config.json updated
+
+✅ No other files modified
+
+✅ No logic added
+
+Provide a short confirmation summary only.
+
+🟢 End of Directive
