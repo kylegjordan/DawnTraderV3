@@ -1,0 +1,141 @@
+📌 PHASE 2D DIRECTIVE (COPY TO REPLIT)
+
+You may paste the following verbatim into Replit’s chat.
+
+BRIDGE PHASE 2D — Directive → Decision → Execution Traceability
+CONTEXT
+
+As DawnTrader grows, it must be possible to trace:
+
+directives → decisions → executions → outcomes
+
+Without this, complex refactors, audits, or production incidents become guesswork.
+
+This phase introduces documentation-level traceability only.
+No logic, automation, or enforcement.
+
+OBJECTIVE
+
+Create a formal trace system that links:
+
+Directive IDs
+
+Decision IDs
+
+Execution summaries
+
+Files impacted
+
+So any future session can reconstruct why the system looks the way it does.
+
+RESTRICTIONS (STRICT)
+
+🚫 Do NOT:
+
+Add logic
+
+Add automation
+
+Add APIs
+
+Modify application code
+
+Touch files outside /bridge
+
+📂 FILES TO CREATE
+1️⃣ Create:
+/bridge/runtime/execution-trace-template.md
+
+
+Purpose:
+
+Mandatory format Replit must follow when reporting completed work
+
+Must include:
+
+Directive ID
+
+Session ID
+
+Linked Decision ID(s)
+
+Summary of work performed
+
+Files changed (paths only)
+
+Known risks / follow-ups
+
+Verification steps completed
+
+2️⃣ Create:
+/bridge/runtime/trace-rules.md
+
+
+Explain:
+
+When execution traces are required
+
+What qualifies as “material execution”
+
+How partial or failed executions are recorded
+
+How reversals are traced
+
+3️⃣ Update (append only):
+/bridge/directives/README.md
+
+
+Add a section:
+
+“Traceability Requirements”
+
+Every directive must declare:
+
+expected decision
+
+expected execution trace
+
+4️⃣ Update (append only):
+/bridge/decisions/README.md
+
+
+Add:
+
+How decisions must reference originating directives
+
+How decisions link forward to execution traces
+
+5️⃣ Update (do NOT overwrite):
+/bridge/bridge.config.json
+
+
+Add:
+
+"traceability": {
+  "execution_template": "/bridge/runtime/execution-trace-template.md",
+  "rules": "/bridge/runtime/trace-rules.md",
+  "required": true
+}
+
+
+Preserve all existing fields.
+
+✅ COMPLETION CONFIRMATION REQUIRED
+
+Replit must explicitly confirm:
+
+Files created exactly as specified
+
+READMEs appended only
+
+bridge.config.json updated correctly
+
+No files outside /bridge touched
+
+No logic or automation added
+
+⛔ DO NOT PROCEED FURTHER
+
+Await explicit approval before Phase 3.
+
+🔚 END OF DIRECTIVE

@@ -1,6 +1,6 @@
 {
   "bridge_version": "1.0",
-  "current_phase": "Phase-2C",
+  "current_phase": "Phase-2D",
   "bridge_mode": "awareness_only",
   "source_of_truth": "replit",
   "canonical_path": "/bridge/canonical",
@@ -37,5 +37,10 @@
     "template": "/bridge/decisions/decision-template.md",
     "rules": "/bridge/decisions/README.md",
     "approval_required_by_default": true
+  },
+  "traceability": {
+    "execution_template": "/bridge/runtime/execution-trace-template.md",
+    "rules": "/bridge/runtime/trace-rules.md",
+    "required": true
   }
 }

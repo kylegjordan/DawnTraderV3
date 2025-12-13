@@ -55,3 +55,19 @@ To reverse a previous decision:
 5. Mark the original decision as "reversed" in notes
 
 Reversals are never silent. Every reversal is a new decision.
+
+---
+
+## Directive Linkage
+
+Decisions must reference their originating directive:
+- Include the Directive ID in the decision entry
+- Document which directive triggered the decision
+- Reference the directive's stated objective
+
+## Execution Trace Linkage
+
+Decisions link forward to execution traces:
+- After a decision is approved, implementation creates an execution trace
+- The execution trace references the Decision ID
+- This creates a complete audit trail: Directive → Decision → Execution
