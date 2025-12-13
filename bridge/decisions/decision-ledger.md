@@ -35,4 +35,17 @@ Each decision entry must include:
 
 ---
 
+### DEC-20251213-0002
+- **Date/Time**: 2025-12-13T17:55:00Z
+- **Session ID**: SESSION-20251213-0001
+- **Decision Type**: approval
+- **Description**: Implement Phase M4.4 Directive Lifecycle Enforcement Templates
+- **Impacted Areas**: /bridge/runtime/directive-template.md, /bridge/runtime/replit-response-template.md, /bridge/directives/README.md
+- **Authority Level**: Human (Kyle)
+- **Approval Status**: approved
+- **Human Approver**: Kyle
+- **Notes**: Closes governance loop. All directives now follow mandatory lifecycle: DRAFT → EXECUTED → AWAITING_APPROVAL → CANONICALIZED. Replit must ask for canonicalization approval. The Bridge is now authoritative by structure.
+
+---
+
 *New decisions are appended below this line.*
