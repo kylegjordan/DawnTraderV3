@@ -1,6 +1,6 @@
 {
   "bridge_version": "1.0",
-  "current_phase": "Phase-2A",
+  "current_phase": "Phase-2B",
   "bridge_mode": "awareness_only",
   "source_of_truth": "replit",
   "canonical_path": "/bridge/canonical",
@@ -25,5 +25,11 @@
     "directive_template": "/bridge/runtime/directive-template.md",
     "replit_response_template": "/bridge/runtime/replit-response-template.md",
     "review_checklist": "/bridge/runtime/review-checklist.md"
+  },
+  "sessions": {
+    "intake_template": "/bridge/runtime/session-intake-template.md",
+    "registry": "/bridge/sessions/session-registry.md",
+    "rules": "/bridge/sessions/README.md",
+    "enforcement": "declarative_only"
   }
 }

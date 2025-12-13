@@ -1,0 +1,202 @@
+📌 BRIDGE PHASE 2B DIRECTIVE
+
+Phase: 2B — Bridge Intake & Session Registration
+System: DawnTrader Bridge
+Location Scope: /bridge only
+
+1️⃣ CONTEXT (WHY THIS EXISTS)
+
+Up to now, the Bridge has established:
+
+Canonical context storage
+
+Reference archive storage
+
+Non-negotiable assistant rules
+
+Standardized directive + response formats
+
+However, ChatGPT sessions themselves are still anonymous:
+
+There is no formal way to declare who a session is, what it is doing, or what authority it has
+
+There is no durable record of session intent or scope
+
+Future sessions cannot reliably tell whether they should proceed, defer, or stop
+
+This creates risk of:
+
+Context drift
+
+Conflicting instructions
+
+Silent assumption overrides
+
+A future ChatGPT session acting beyond its mandate
+
+Phase 2B introduces Session Intake & Registration so that every session formally declares itself before doing work.
+
+2️⃣ OBJECTIVE (WHAT SUCCESS LOOKS LIKE)
+
+Create a documented, repeatable session intake system that allows:
+
+Any ChatGPT session to:
+
+Declare its purpose
+
+Declare its authority
+
+Declare its phase alignment
+
+The Bridge to:
+
+Record sessions
+
+Preserve intent
+
+Enforce boundaries
+
+Humans (Kyle) to:
+
+Audit session activity
+
+See what sessions existed, why, and when
+
+Prevent unauthorized progression
+
+⚠️ This phase is documentation + structure only.
+No logic, automation, or agents are introduced.
+
+3️⃣ EXPLICIT RESTRICTIONS (NON-NEGOTIABLE)
+
+🚫 Do NOT:
+
+Add any application logic
+
+Add any APIs
+
+Add any automation
+
+Create any agents
+
+Modify files outside /bridge
+
+Modify existing Bridge files unless explicitly instructed
+
+4️⃣ TASKS — EXACT FILES TO CREATE
+📁 Create folder (if missing)
+/bridge/sessions
+
+📄 Create file:
+/bridge/runtime/session-intake-template.md
+
+
+Purpose:
+A mandatory intake declaration every ChatGPT session must complete before doing work.
+
+Required sections:
+
+Session ID
+
+Session type (design / analysis / implementation / audit / advisory)
+
+Declared scope
+
+Active phase
+
+Authority level
+
+Explicit prohibitions
+
+Acknowledgement of assistant rules
+
+Timestamp
+
+Human approval reference (if required)
+
+📄 Create file:
+/bridge/sessions/README.md
+
+
+Purpose:
+Explains:
+
+What session registration is
+
+When a session must register
+
+When a session must stop
+
+When human approval is required
+
+📄 Create file:
+/bridge/sessions/session-registry.md
+
+
+Purpose:
+A chronological, append-only registry of all sessions.
+
+Each entry includes:
+
+Session ID
+
+Start time
+
+Declared purpose
+
+Phase
+
+Status (active / closed / superseded)
+
+Approval reference
+
+5️⃣ UPDATE EXISTING FILE (DO NOT OVERWRITE)
+📝 Update:
+/bridge/bridge.config.json
+
+
+Add a new top-level key:
+
+"sessions": {
+  "intake_template": "/bridge/runtime/session-intake-template.md",
+  "registry": "/bridge/sessions/session-registry.md",
+  "rules": "/bridge/sessions/README.md",
+  "enforcement": "declarative_only"
+}
+
+
+⚠️ Do NOT remove or modify any existing fields.
+
+6️⃣ COMPLETION CONFIRMATION REQUIRED
+
+After finishing, explicitly confirm:
+
+✅ All new folders created
+
+✅ All files created exactly as specified
+
+✅ bridge.config.json updated correctly
+
+✅ No files outside /bridge modified
+
+✅ No logic, automation, or APIs added
+
+7️⃣ WHAT HAPPENS NEXT (DO NOT IMPLEMENT)
+
+After Phase 2B approval, the next phase will be:
+
+Phase 2C — Decision Capture & Approval Ledger Integration
+
+This will formalize:
+
+Decisions
+
+Approvals
+
+Reversals
+
+Authority checkpoints
+
+🚫 Do NOT proceed to Phase 2C without explicit approval.
+
+🔚 END OF DIRECTIVE
