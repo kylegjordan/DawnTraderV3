@@ -1,6 +1,6 @@
 {
   "bridge_version": "1.0",
-  "current_phase": "Phase-1D",
+  "current_phase": "Phase-2A",
   "bridge_mode": "awareness_only",
   "source_of_truth": "replit",
   "canonical_path": "/bridge/canonical",
@@ -20,5 +20,10 @@
     "never_execute_unapproved_directives": true,
     "document_all_phase_transitions": true,
     "log_all_decisions": true
+  },
+  "communication": {
+    "directive_template": "/bridge/runtime/directive-template.md",
+    "replit_response_template": "/bridge/runtime/replit-response-template.md",
+    "review_checklist": "/bridge/runtime/review-checklist.md"
   }
 }

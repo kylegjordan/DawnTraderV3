@@ -1,0 +1,168 @@
+🔧 UPDATED REPLIT DIRECTIVE — PHASE 2A
+
+(Revised to include Context + Test Credentials)
+
+Paste this into Replit Chat exactly as written
+
+🔧 Directive: Bridge Phase 2A — Standardized Communication Templates (Revised)
+Objective
+
+Create standardized Markdown templates that define how directives, Replit responses, and reviews are structured for DawnTrader going forward.
+
+These templates are documentation only and introduce no automation or logic.
+
+📁 Files to Create
+
+Create the following files inside /bridge/runtime/:
+
+1️⃣ /bridge/runtime/directive-template.md
+
+Purpose:
+A strict template that ChatGPT (and the user) will use when issuing directives to Replit.
+
+This template is mandatory for all future directives.
+
+Required Template Structure (exact order):
+# Directive Title
+
+## Phase
+(e.g. Phase 8.8.3, Phase 9A, Bridge Phase 2A)
+
+## Context
+(Why this directive exists.
+What problem is being solved, what limitation was discovered, or what new capability is being added.
+This section explains the background and motivation.)
+
+## Objective
+(What success looks like once this directive is completed.
+Clear, outcome-focused.)
+
+## Scope
+(What files, folders, or systems may be touched.)
+
+## Test User Credentials
+(Only include if login or runtime verification is required.)
+
+username: testuser123  
+password: SecurePass123!
+
+## Explicit Instructions
+(Numbered, unambiguous instructions.)
+
+## Explicit Restrictions
+(What must NOT be done.)
+
+## Required Outputs
+(Files, reports, confirmations expected.)
+
+## Completion Confirmation Required
+(Checkbox list Replit must explicitly confirm.)
+
+## What Happens Next
+(What ChatGPT will do after review.)
+
+
+Add a note at the top of the file:
+
+“This template is mandatory for all future directives.
+Do not skip sections.
+If a section is not applicable, explicitly state ‘Not Applicable’.”
+
+2️⃣ /bridge/runtime/replit-response-template.md
+
+Purpose:
+Standardize how Replit reports implementation results back to the user.
+
+Template Structure:
+# Replit Implementation Report
+
+## Directive Reference
+(Directive title + phase)
+
+## Files Created
+(List)
+
+## Files Modified
+(List)
+
+## Files Deleted
+(List – usually empty)
+
+## Explicit Confirmations
+(Checkbox list matching directive requirements)
+
+## Test Verification Performed
+(Yes / No — explain briefly)
+
+## Notes / Observations
+(Replit commentary)
+
+## Known Issues or Warnings
+(If any)
+
+## Ready for Review
+(Yes / No)
+
+3️⃣ /bridge/runtime/review-checklist.md
+
+Purpose:
+Used by ChatGPT (and the user) to decide whether a phase is approved, blocked, or needs revision.
+
+Checklist Structure:
+## Scope Compliance
+## Architectural Alignment
+## Canonical Consistency
+## Risk Introduced
+## Reversibility
+## Test Coverage / Verification
+## Approval Decision
+
+
+End with:
+
+“No phase may proceed without an explicit approval decision.”
+
+📌 Update Existing File
+
+Update without overwriting:
+
+/bridge/bridge.config.json
+
+Add under a new key "communication":
+
+{
+  "directive_template": "/bridge/runtime/directive-template.md",
+  "replit_response_template": "/bridge/runtime/replit-response-template.md",
+  "review_checklist": "/bridge/runtime/review-checklist.md"
+}
+
+
+Do NOT remove or modify any existing fields.
+
+🚫 Explicit Restrictions
+
+❌ Do NOT add logic
+
+❌ Do NOT add automation
+
+❌ Do NOT create agents
+
+❌ Do NOT touch files outside /bridge
+
+❌ Do NOT modify application code
+
+❌ Do NOT optimize or refactor anything
+
+✅ Completion Confirmation Required
+
+After finishing, confirm:
+
+ All 3 template files created exactly as specified
+
+ bridge.config.json updated correctly
+
+ No other files modified
+
+ No logic or automation added
+
+End of Directive
