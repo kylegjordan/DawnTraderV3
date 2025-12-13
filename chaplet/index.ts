@@ -37,6 +37,13 @@ router.get('/context/grounding', (_req, res) => {
     bridge_config: config ? JSON.parse(config) : null,
     session_bootstrap: sessionBootstrap,
     assistant_rules: assistantRules,
+    assistant_context: {
+      expertise_reference: {
+        path: '/bridge/reference/ChatGPT Expertise Persona for The Dawn Trader.md',
+        role: 'Defines the required expertise, perspective, and decision standards for the ChatGPT assistant operating on DawnTrader.',
+        mandatory: true
+      }
+    },
     timestamp: new Date().toISOString()
   });
 });

@@ -1,0 +1,131 @@
+📌 Directive: Update Chaplet Grounding Schema to Include Assistant Expertise Reference
+
+Directive ID: M4.1-GROUNDING-EXPERTISE
+Phase: M4.1
+Target System: DawnTrader (Embedded Chaplet Context Service)
+Scope: Read-only context grounding
+Risk Level: Low
+Authorization: Governance / Architecture
+Execution Authority: Replit Agent only
+
+🎯 Objective
+
+Update the Chaplet grounding response so that assistant expertise requirements are explicitly declared as mandatory authoritative context, sourced from the bridge.
+
+This ensures all ChatGPT sessions operating under Chaplet are required to acknowledge and adhere to the defined expertise persona before any planning or directive work.
+
+📂 Authoritative Source
+
+The expertise definition already exists at:
+
+/bridge/reference/ChatGPT Expertise Persona for The Dawn Trader.md
+
+
+No new files are to be created.
+
+🔧 Required Changes
+1️⃣ Update the Grounding Response Schema
+
+Modify the response returned by:
+
+GET /chaplet/context/grounding
+
+
+to include a new top-level object:
+
+"assistant_context": {
+  "expertise_reference": {
+    "path": "/bridge/reference/ChatGPT Expertise Persona for The Dawn Trader.md",
+    "role": "Defines the required expertise, perspective, and decision standards for the ChatGPT assistant operating on DawnTrader.",
+    "mandatory": true
+  }
+}
+
+
+This object must be always present in the grounding response.
+
+2️⃣ Behavioral Constraints (Must Be Enforced)
+
+This is declarative only
+
+No file contents are to be embedded in the grounding payload
+
+No parsing, summarization, or interpretation logic added
+
+No new endpoints created
+
+No existing grounding fields removed or renamed
+
+The grounding endpoint remains:
+
+Read-only
+
+Deterministic
+
+Metadata-only
+
+🚫 Explicitly Out of Scope
+
+❌ No changes to /chaplet/context/canonical
+
+❌ No changes to file access endpoints
+
+❌ No ChatGPT execution logic
+
+❌ No authentication changes
+
+❌ No UI or dashboard changes
+
+❌ No bridge file mutations
+
+✅ Acceptance Criteria
+
+After implementation:
+
+GET /chaplet/context/grounding returns:
+
+Existing grounding data unchanged
+
+Plus the new assistant_context.expertise_reference object
+
+The response clearly signals that:
+
+Assistant expertise is authoritative
+
+Assistant expertise is mandatory
+
+Source location is explicit and discoverable
+
+DawnTrader application behavior remains unchanged.
+
+🧪 Verification Steps
+
+Call /chaplet/context/grounding
+
+Confirm the new object appears
+
+Confirm no additional data exposure
+
+Confirm no errors or warnings introduced
+
+📝 Documentation
+
+If a grounding schema or Chaplet documentation file exists:
+
+Append a short note explaining the new assistant_context field
+
+Do not rewrite or restructure existing documentation
+
+🔒 Governance Confirmation
+
+This directive:
+
+Preserves all invariants
+
+Strengthens grounding discipline
+
+Does not introduce execution authority
+
+Aligns with Phase M3-A and M4 objectives
+
+End of Directive
