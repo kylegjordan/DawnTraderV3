@@ -1,6 +1,6 @@
 {
   "bridge_version": "1.0",
-  "current_phase": "Phase-2B",
+  "current_phase": "Phase-2C",
   "bridge_mode": "awareness_only",
   "source_of_truth": "replit",
   "canonical_path": "/bridge/canonical",
@@ -31,5 +31,11 @@
     "registry": "/bridge/sessions/session-registry.md",
     "rules": "/bridge/sessions/README.md",
     "enforcement": "declarative_only"
+  },
+  "decisions": {
+    "ledger": "/bridge/decisions/decision-ledger.md",
+    "template": "/bridge/decisions/decision-template.md",
+    "rules": "/bridge/decisions/README.md",
+    "approval_required_by_default": true
   }
 }

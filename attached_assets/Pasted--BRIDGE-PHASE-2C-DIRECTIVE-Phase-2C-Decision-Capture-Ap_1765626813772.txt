@@ -1,0 +1,198 @@
+📌 BRIDGE PHASE 2C DIRECTIVE
+
+Phase: 2C — Decision Capture & Approval Ledger Integration
+System: DawnTrader Bridge
+Location Scope: /bridge only
+
+You may copy-paste this entire directive directly into Replit’s chat.
+
+1️⃣ CONTEXT (WHY THIS EXISTS)
+
+Up to this point, the Bridge can identify sessions, but it still cannot:
+
+Record decisions
+
+Track approvals vs proposals
+
+Distinguish binding outcomes from discussion
+
+Prevent silent reversals or accidental overrides
+
+Historically, this is where complex systems fail:
+
+Decisions get buried in chat logs
+
+Later work unknowingly contradicts earlier agreements
+
+There is no canonical “source of truth” for why something was done
+
+Phase 2C introduces a formal Decision Ledger so that:
+
+Nothing important is “decided” without being recorded
+
+Authority is explicit
+
+Reversals are intentional and auditable
+
+2️⃣ OBJECTIVE (WHAT SUCCESS LOOKS LIKE)
+
+Create a Decision Capture & Approval system that:
+
+Records every material decision
+
+Separates:
+
+proposals
+
+approvals
+
+rejections
+
+reversals
+
+Enforces human approval where required
+
+Allows future sessions to query decisions instead of guessing
+
+This phase is structure + documentation only
+🚫 No automation, logic, or agents
+
+3️⃣ EXPLICIT RESTRICTIONS (NON-NEGOTIABLE)
+
+🚫 Do NOT:
+
+Add logic
+
+Add APIs
+
+Add automation
+
+Create agents
+
+Modify files outside /bridge
+
+Change existing Bridge content unless explicitly instructed
+
+4️⃣ TASKS — EXACT FILES TO CREATE
+📁 Ensure folder exists
+/bridge/decisions
+
+
+(Should already exist from Phase 1C)
+
+📄 Create file:
+/bridge/decisions/decision-ledger.md
+
+
+Purpose:
+Canonical, append-only record of all decisions.
+
+Each entry must include:
+
+Decision ID
+
+Date / time
+
+Session ID
+
+Decision type (proposal / approval / rejection / reversal)
+
+Description
+
+Impacted areas
+
+Authority level
+
+Approval status
+
+Human approver (if applicable)
+
+Notes
+
+📄 Create file:
+/bridge/decisions/decision-template.md
+
+
+Purpose:
+Mandatory template used before a decision may be logged.
+
+Includes:
+
+Context
+
+Options considered
+
+Risks
+
+Recommendation
+
+Required authority
+
+Approval required? (yes/no)
+
+📄 Update file:
+/bridge/decisions/README.md
+
+
+Add sections explaining:
+
+What qualifies as a “decision”
+
+What does NOT require a decision record
+
+When human approval is mandatory
+
+How reversals must be handled
+
+⚠️ Do NOT remove existing content — append only.
+
+5️⃣ UPDATE EXISTING FILE (DO NOT OVERWRITE)
+📝 Update:
+/bridge/bridge.config.json
+
+
+Add a new top-level key:
+
+"decisions": {
+  "ledger": "/bridge/decisions/decision-ledger.md",
+  "template": "/bridge/decisions/decision-template.md",
+  "rules": "/bridge/decisions/README.md",
+  "approval_required_by_default": true
+}
+
+
+⚠️ Preserve all existing fields.
+
+6️⃣ COMPLETION CONFIRMATION REQUIRED
+
+After finishing, explicitly confirm:
+
+✅ All files created exactly as specified
+
+✅ README updated (appended only)
+
+✅ bridge.config.json updated correctly
+
+✅ No files outside /bridge modified
+
+✅ No logic, APIs, or automation added
+
+7️⃣ WHAT HAPPENS NEXT (DO NOT IMPLEMENT)
+
+After Phase 2C approval, the next phase will be:
+
+Phase 2D — Directive → Decision → Execution Traceability
+
+This will link:
+
+directives
+
+decisions
+
+sessions
+
+outcomes
+
+🚫 Do NOT proceed without explicit approval.
+
+🔚 END OF DIRECTIVE
