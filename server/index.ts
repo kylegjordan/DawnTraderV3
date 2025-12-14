@@ -1017,6 +1017,15 @@ app.use((req, res, next) => {
       console.error('[LearningCycleService] ⚠️ Startup failed:', error);
     }
 
+    // Phase 8.8.4-B: Start RTB Queue Refresher (30-second refresh cycle)
+    try {
+      const { rtbQueueRefresher } = await import('./core/rtb/rtb_queue_refresher');
+      rtbQueueRefresher.start();
+      console.log('[RTB-Refresher] ✅ Started successfully');
+    } catch (error) {
+      console.error('[RTB-Refresher] ⚠️ Startup failed:', error);
+    }
+
     // Phase 8.9: Start Autonomy Layer (hourly self-checks, daily optimization)
     try {
       const { initAutonomyScheduler } = await import('./services/autonomy-scheduler');

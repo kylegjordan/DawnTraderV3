@@ -1023,6 +1023,115 @@ export class PaperExecutionEngine {
       this.mode,
       isManualClose ? 'manual_close' : 'trade_close'
     );
+
+    // Phase 8.8.4-B: Check for RTB promotion after trade close (capacity freed up)
+    await this.checkRtbPromotion();
+  }
+
+  /**
+   * Phase 8.8.4-B: Check for RTB Queue Promotion
+   * Called after a trade closes to check if a queued signal can be promoted
+   */
+  private async checkRtbPromotion(): Promise<void> {
+    try {
+      const { readyToBuyService } = await import('../core/rtb/ready_to_buy_service');
+      
+      // Get the top queued signal
+      const topSignal = await readyToBuyService.checkForPromotion(this.mode);
+      
+      if (!topSignal) {
+        console.log(`[RTB-Promotion:${this.mode}] No queued signals available for promotion`);
+        return;
+      }
+
+      // Check if we now have capacity (guardrail check)
+      const openPositions = await storage.getPaperSimOpenPositions(this.mode);
+      const modeSettings = await buildSettingsFromGuardrails(this.mode);
+      const maxTrades = modeSettings.maxOpenTrades || 5;
+
+      if (openPositions.length >= maxTrades) {
+        console.log(`[RTB-Promotion:${this.mode}] Still at capacity (${openPositions.length}/${maxTrades}), skipping promotion`);
+        return;
+      }
+
+      // We have capacity! Promote the top signal
+      console.log(`[RTB-Promotion:${this.mode}] Promoting signal ${topSignal.symbol}/${topSignal.strategy} with CWQI ${topSignal.cwqi}`);
+
+      // Execute the promoted signal
+      const tradeResult = await this.executePromotedSignal(topSignal);
+
+      if (tradeResult.success && tradeResult.tradeId) {
+        // Mark signal as promoted
+        await readyToBuyService.promoteSignal(topSignal.id, tradeResult.tradeId);
+        console.log(`[RTB-Promotion:${this.mode}] ✅ Successfully promoted ${topSignal.symbol}/${topSignal.strategy} -> Trade ${tradeResult.tradeId}`);
+      } else {
+        // Failed to execute - log but don't expire (might work next cycle)
+        console.warn(`[RTB-Promotion:${this.mode}] ⚠️ Failed to execute promoted signal: ${tradeResult.error || 'unknown error'}`);
+      }
+    } catch (error) {
+      console.error(`[RTB-Promotion:${this.mode}] Error during promotion check:`, error);
+    }
+  }
+
+  /**
+   * Phase 8.8.4-B: Execute a promoted RTB signal
+   */
+  private async executePromotedSignal(signal: any): Promise<{ success: boolean; tradeId?: string; error?: string }> {
+    try {
+      const entryPrice = parseFloat(signal.entryPrice);
+      const stopPrice = parseFloat(signal.stopPrice);
+      const targetPrice = signal.targetPrice ? parseFloat(signal.targetPrice) : entryPrice * 1.02; // Default 2% target
+      const quantity = signal.quantity ? parseFloat(signal.quantity) : undefined;
+      const notional = signal.notional ? parseFloat(signal.notional) : undefined;
+
+      // Get trade count before execution to detect if new trade was created
+      const tradesBefore = await storage.getPaperSimTradesBySymbol(this.mode, signal.symbol);
+      const openTradesBefore = tradesBefore.filter(t => t.openedAt && !t.closedAt);
+
+      // Build a StrategySignal compatible object for processSignal
+      const promotedSignal: StrategySignal = {
+        symbol: signal.symbol,
+        strategy: signal.strategy,
+        type: 'LONG',
+        entryPrice: entryPrice,
+        stopPrice: stopPrice,
+        targetPrice: targetPrice,
+        confidence: parseFloat(signal.confidence),
+        timestamp: new Date(),
+        reason: `RTB Promoted (CWQI: ${signal.cwqi})`,
+        signalId: signal.signalId,
+        quantity: quantity,
+        estimatedValue: notional,
+        preComputedNotional: notional,
+        metadata: {
+          source: 'RTB_PROMOTION',
+          originalSignalId: signal.signalId,
+          rtbQueueId: signal.id,
+          cwqi: signal.cwqi,
+          queuedAt: signal.queuedAt,
+        }
+      } as any;
+
+      // Execute the trade via processSignal
+      await this.processSignal(promotedSignal);
+
+      // Check if a new trade was created
+      const tradesAfter = await storage.getPaperSimTradesBySymbol(this.mode, signal.symbol);
+      const openTradesAfter = tradesAfter.filter(t => t.openedAt && !t.closedAt);
+
+      // Find new trade (if any)
+      const newTrade = openTradesAfter.find(t => 
+        !openTradesBefore.some(ob => ob.id === t.id)
+      );
+
+      if (newTrade) {
+        return { success: true, tradeId: newTrade.id };
+      } else {
+        return { success: false, error: 'No new trade created after processSignal' };
+      }
+    } catch (error: any) {
+      return { success: false, error: error.message || 'Exception during promoted signal execution' };
+    }
   }
 
   private async scanForSignals(): Promise<void> {
