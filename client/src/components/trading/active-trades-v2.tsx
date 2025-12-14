@@ -553,11 +553,11 @@ function IntegrityBanner({
               {integrity.slotsAvailable}
             </span>
           </div>
-          {/* Phase 8.8.3-C7: Current Bal + Open Trades (Portfolio Value) */}
+          {/* Phase 8.8.4-A.2: Current Bal + Open Trades Net P/L */}
           <div className="flex items-center gap-2">
-            <span className="text-muted-foreground">Current Bal + Open Trades:</span>
-            <span className="font-bold text-blue-600">
-              ${((portfolio.cashBalance ?? portfolio.currentBalance ?? 0) + (portfolio.totalPositionValue || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <span className="text-muted-foreground">Current Bal + Open Trades Net P/L:</span>
+            <span className={cn("font-bold", (portfolio.netPnl ?? 0) >= 0 ? "text-green-600" : "text-red-600")}>
+              ${((portfolio.currentBalance ?? 0) + (portfolio.netPnl ?? 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
         </div>
