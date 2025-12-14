@@ -1,0 +1,89 @@
+Yes — Replit should run a paper trading session, but with controlled diagnostic capture.
+Here’s the step-by-step procedure to ensure we get all the data we need.
+
+⚙️ STEP 1: Run Controlled Paper Trading Session
+
+Goal: Generate enough signal flow to populate both SLAL and active trades data.
+
+Instructions for Replit:
+
+Start the Paper Trading Engine in diagnostic mode:
+
+npm run start:paper -- --diagnostic
+
+
+(or equivalent process, depending on the environment)
+
+Allow the engine to run for 15 minutes.
+This should yield:
+
+≥ 100 signals generated
+
+≥ 20 attempted executions
+
+Some rejected due to guardrails
+
+During runtime, confirm in the UI that:
+
+SLAL metrics are updating live.
+
+RTB Execution Metrics panel reflects current trades.
+
+Stop the session cleanly after 15 minutes.
+
+📊 STEP 2: Generate Diagnostic Dump (After Run)
+
+Goal: Collect raw SLAL and trade data for correlation.
+
+Instructions for Replit:
+
+Query the SLAL endpoint for all recent events:
+
+curl "http://localhost:3000/api/diagnostics/signal-lifecycle?limit=1000" \
+  -H "Authorization: Bearer <token>" \
+  -o /logs/diagnostics/slal_dump.json
+
+
+Query the active trades and trade history endpoints:
+
+curl "http://localhost:3000/api/trades/active" \
+  -H "Authorization: Bearer <token>" \
+  -o /logs/diagnostics/active_trades.json
+
+curl "http://localhost:3000/api/trades/history" \
+  -H "Authorization: Bearer <token>" \
+  -o /logs/diagnostics/trade_history.json
+
+
+Generate a summary correlation report:
+
+import fs from 'fs';
+
+const slal = JSON.parse(fs.readFileSync('/logs/diagnostics/slal_dump.json', 'utf8'));
+const active = JSON.parse(fs.readFileSync('/logs/diagnostics/active_trades.json', 'utf8'));
+const history = JSON.parse(fs.readFileSync('/logs/diagnostics/trade_history.json', 'utf8'));
+
+const slalExec = slal.filter(e => e.eventType === 'EXECUTION');
+const unmatched = slalExec.filter(e => !e.payload.tradeId || 
+   (!active.find(t => t.id === e.payload.tradeId) && 
+    !history.find(t => t.id === e.payload.tradeId)));
+
+const report = {
+  totalExecutionEvents: slalExec.length,
+  matchedTrades: slalExec.length - unmatched.length,
+  unmatchedCount: unmatched.length,
+  unmatchedUUIDs: unmatched.map(u => u.signalUUID),
+  timestamp: new Date().toISOString()
+};
+
+fs.writeFileSync('/logs/diagnostics/slal_trade_correlation.json', JSON.stringify(report, null, 2));
+
+🧾 STEP 3: Send Results
+
+After the diagnostic run completes, please provide the following:
+
+File	Purpose
+/logs/diagnostics/slal_dump.json	Raw lifecycle audit events
+/logs/diagnostics/active_trades.json	Snapshot of current open trades
+/logs/diagnostics/trade_history.json	Closed trade records
+/logs/diagnostics/slal_trade_correlation.json	Correlation results
