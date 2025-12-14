@@ -9,6 +9,12 @@ If a section is not applicable, explicitly state 'Not Applicable'.**
 ## Phase
 (e.g. Phase 8.8.3, Phase 9A, Bridge Phase 2A)
 
+## Phase Context (Required)
+Include 2–3 sentences explaining:
+- The purpose of the current DawnTrader phase
+- The problem or capability this directive addresses
+- How this directive advances the phase
+
 ## Context
 (Why this directive exists.
 What problem is being solved, what limitation was discovered, or what new capability is being added.
@@ -21,11 +27,10 @@ Clear, outcome-focused.)
 ## Scope
 (What files, folders, or systems may be touched.)
 
-## Test User Credentials
-(Only include if login or runtime verification is required.)
+## Test User Credentials (Required)
 
-username: testuser123  
-password: SecurePass123!
+Username: testuser123
+Password: SecurePass123!
 
 ## Explicit Instructions
 (Numbered, unambiguous instructions.)
