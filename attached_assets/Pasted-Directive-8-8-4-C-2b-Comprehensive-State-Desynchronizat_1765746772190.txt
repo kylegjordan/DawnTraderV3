@@ -1,0 +1,171 @@
+Directive 8.8.4-C.2b — Comprehensive State Desynchronization Diagnosis & Inspection
+Purpose
+
+To identify and isolate the root cause of the ghost trades, phantom metrics, and empty Ready-to-Buy (“RTB”) queue.
+The goal is to capture a complete, frozen snapshot of the system’s in-memory, database, and queue states before any resets or fixes are attempted.
+
+🧭 Phase 1 — Preparation and System Quiescence
+1. Stop the Trading Engine
+
+Gracefully stop the paper-trading engine to prevent background mutation during diagnostics.
+
+POST /api/paper-sim/stop
+
+
+✅ Expected response:
+{ ok: true, status: "stopped" }
+
+2. Verify Engine is Stopped
+GET /api/paper-sim/status
+
+
+✅ Confirm:
+"engineStatus": "stopped"
+
+3. Pause FX5 Scanner
+
+Disable all active scanning and signal generation so memory and metrics remain static.
+
+POST /api/fx5/disable
+
+
+✅ Expected log entry:
+[FX5] Scanner paused
+
+4. Confirm Quiescent State
+
+Run a state snapshot to ensure nothing is running.
+
+GET /api/paper-sim/diagnostics/engine-state
+
+
+✅ Expect:
+
+"active": false
+
+No “scan cycle” or “active pool refresh” logs for ≥ 60 s.
+
+🧩 Phase 2 — Diagnostic Inspection
+1. Dump All In-Memory State
+
+Collect current runtime contents of the simulation engine.
+
+GET /api/paper-sim/diagnostics/engine-state
+GET /api/paper-sim/diagnostics/rtb-queue
+GET /api/paper-sim/diagnostics/active-pool
+GET /api/paper-sim/positions
+
+
+✅ Look for:
+
+Trades with strategy:null or identical confidence≈42.67
+
+Positions appearing in memory but not in database
+
+RTB queue length = 0 with non-zero metrics counts
+
+2. Query Database Directly
+
+Confirm what is persisted versus what lives only in memory.
+
+SELECT COUNT(*) AS open_trades FROM paper_trades WHERE status='open';
+SELECT COUNT(*) AS closed_trades FROM paper_trades WHERE status='closed';
+SELECT * FROM paper_trades ORDER BY created_at DESC LIMIT 5;
+
+
+✅ Expected:
+
+open_trades = 0 after reset
+
+Any discrepancy indicates unsynced persistence
+
+3. Inspect Ready-to-Buy ( RTB ) Service
+
+Locate queue and persistence behavior.
+
+grep -n "class ReadyToBuyService" server/core/rtb/ready_to_buy_service.ts -A 20
+grep -n "this.queue" server/core/rtb/ready_to_buy_service.ts
+grep -n "persist" server/core/rtb/ready_to_buy_service.ts
+
+
+✅ Determine:
+
+Whether this.queue is re-instantiated on reset
+
+If persistQueue() or loadQueue() runs automatically
+
+If metrics increment without queue entries being created
+
+4. Inspect Reset Logic
+
+Verify whether reset() clears in-memory objects or only the database.
+
+grep -R "reset" server/services/paper_simulation_service.ts
+grep -R "clearPositions" server/
+grep -R "clearQueue" server/
+
+
+✅ Confirm:
+
+reset() re-instantiates all core services
+
+Static singletons are not surviving between sessions
+
+5. Trace Metrics Emission
+
+Ensure counters aren’t incrementing before queue insertion.
+
+grep -R "\[B\.3\]\[METRICS\]" server/core/filters/
+grep -R "totalRejected" server/core/metrics/
+
+
+✅ If metrics increment before enqueue, this explains the “3 000 rejected” spike with no actual signals queued.
+
+6. Check Front-End API Routing
+
+Confirm the UI is querying the correct endpoint.
+
+grep -R "ready-to-buy" server/routes.ts
+grep -R "/api/rtb" server/
+
+
+✅ Verify that:
+
+/api/rtb/queue returns the same data the frontend expects
+
+No mismatch between /api/ready-to-buy and /api/paper-sim/rtb/queue
+
+7. Capture and Export All Logs and Snapshots
+
+Bundle and archive for review before any changes.
+
+/tmp/logs/Start_application_*.log
+/logs/validation/session.log
+/api/paper-sim/diagnostics/engine-state
+/api/paper-sim/diagnostics/rtb-queue
+
+
+✅ Compress and attach for analysis.
+
+🧮 Deliverables to Return
+Output	Description
+Engine State Dump	Contents of in-memory positions, queue, and metrics
+Database Query Results	Counts of open/closed trades
+RTB Service Scan	Code snippets showing queue handling and reset logic
+Metrics Trace	Evidence of when rejection/open counters increment
+API Route Map	Verified endpoints for Ready-to-Buy table
+Log Bundle	Complete runtime and diagnostic logs for analysis
+🚫 Operational Rules
+
+Do not restart trading until this directive is fully complete and reviewed.
+
+Do not run /api/paper-sim/reset again until diagnostic data is collected.
+
+The system must remain in a stopped, quiescent state throughout.
+
+Once these results are returned and reviewed, we will issue Directive 8.8.4-C.2c — Memory and Metrics Synchronization Correction, which will safely purge the stale runtime caches, repair RTB state handling, and restore normal signal flow.
+
+✅ Directive 8.8.4-C.2b Authorized for Execution
+Title: Comprehensive State Desynchronization Diagnosis & Inspection
+Pre-conditions: Engine stopped, scanner paused, system quiescent.
+Goal: Identify all sources of desynchronization between runtime memory, database persistence, and RTB queue behavior before any purge or reset actions.
