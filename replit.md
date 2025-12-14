@@ -47,6 +47,12 @@ Manual Close Cost Model Fix (C7) corrects the `/paper-sim/close-trade/:id` endpo
 
 Signal Flow Correction & Confidence Source Consolidation (B.3) corrects the signal processing flow in Signal Orchestrator to follow the canonical order: Sizing → Metrics → SQE → RTB → TCL. NGC (Normalized Global Confidence) is now the single authoritative source of confidence, replacing raw strategy confidence in all signal payloads. The legacy `confidenceThreshold` filter is deprecated from the UI (hidden but retained for backend compatibility). SQE thresholds (MIN_NGC, MIN_CWQI) serve as the authoritative quality gates. Flow verification logging via `[B.3][FLOW_CORRECTED]` confirms the corrected pipeline on SignalOrchestrator start.
 
+Adaptive Normalization, Enhanced Risk & Durability Framework (8.8.4-C) implements five key enhancements:
+1. **Adaptive Rolling Normalization**: RollingNormalizer class in `quality_index.ts` tracks min/max over 500 signals or 60-minute windows with exponential smoothing (α=0.15) for NGC, ProfitRate, and ExpectedReturn. Log tag: `[C][ROLLING_NORMALIZATION]`.
+2. **Enhanced Risk Metric**: New `server/core/metrics/risk_index.ts` computes Risk = (StopDistance/ATR) × CorrPenalty, where CorrPenalty = 1 + max(0, Corr_adj - 0.8). Includes CorrelationMatrix with time decay for stale data. Log tag: `[C][ENHANCED_RISK]`.
+3. **CWQI Durability Decay**: RTB queue uses CWQI_decayed = CWQI_orig × e^(-λt), λ=0.03/min for ranking signals by freshness in `ready_to_buy_service.ts`. Log tag: `[C][CWQI_DECAY]`.
+4. **Strategy-Specific ProfitRate Floors**: `config/strategy_thresholds.json` defines per-strategy minimum ProfitRate (DHMA=0.22, VWAP_Bounce=0.25, MeanReversion=0.28, Breakout=0.30, Scalper=0.35). SQE enforces these floors. Log tag: `[C][PROFIT_FLOORS]`.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.
