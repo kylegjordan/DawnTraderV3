@@ -510,6 +510,7 @@ function IntegrityBanner({
   integrity, 
   uiCount, 
   portfolio,
+  openTradesNetPnlSum,
   onClearStranded,
   isClearing,
   onResetAll,
@@ -518,6 +519,7 @@ function IntegrityBanner({
   integrity: IntegrityStatus; 
   uiCount: number;
   portfolio: PortfolioSummary;
+  openTradesNetPnlSum: number;
   onClearStranded: () => void;
   isClearing: boolean;
   onResetAll: () => void;
@@ -556,8 +558,8 @@ function IntegrityBanner({
           {/* Phase 8.8.4-A.2: Current Bal + Open Trades Net P/L */}
           <div className="flex items-center gap-2">
             <span className="text-muted-foreground">Current Bal + Open Trades Net P/L:</span>
-            <span className={cn("font-bold", (portfolio.netPnl ?? 0) >= 0 ? "text-green-600" : "text-red-600")}>
-              ${((portfolio.currentBalance ?? 0) + (portfolio.netPnl ?? 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <span className={cn("font-bold", openTradesNetPnlSum >= 0 ? "text-green-600" : "text-red-600")}>
+              ${((portfolio.currentBalance ?? 0) + openTradesNetPnlSum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
         </div>
@@ -967,6 +969,7 @@ export default function ActiveTradesV2() {
         integrity={integrity} 
         uiCount={positions.length}
         portfolio={portfolio}
+        openTradesNetPnlSum={positions.reduce((sum, pos) => sum + (pos.netPnl ?? 0), 0)}
         onClearStranded={() => clearStrandedMutation.mutate()}
         isClearing={clearStrandedMutation.isPending}
         onResetAll={() => resetSessionMutation.mutate()}
