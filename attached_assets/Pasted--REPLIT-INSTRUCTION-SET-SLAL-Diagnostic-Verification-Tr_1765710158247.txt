@@ -1,0 +1,190 @@
+🧩 REPLIT INSTRUCTION SET: SLAL Diagnostic Verification & Trade Correlation Audit
+Purpose
+
+We’re performing a targeted verification of the Signal Lifecycle Audit Layer (SLAL) to determine why the “Executed” count is higher than the actual open trade count.
+The goal is to establish data consistency between:
+
+SLAL execution events,
+
+Actual activeTrades state,
+
+And persisted trade history.
+
+🧱 Phase 1 — Generate Diagnostic Dump
+Objective
+
+Export recent SLAL event data to verify how execution events are recorded and whether they link to actual trade records.
+
+Steps
+
+Open the SLAL diagnostics service
+File path:
+
+/server/core/audit/signal_lifecycle_audit.ts
+
+
+Confirm the endpoint is active:
+
+GET /diagnostics/signal-lifecycle
+
+
+Run the following filtered request (in Replit’s console or using fetch from an internal route test):
+
+// Node console example
+const res = await fetch('http://localhost:3000/diagnostics/signal-lifecycle?stage=EXECUTION&limit=50');
+const data = await res.json();
+console.log(JSON.stringify(data, null, 2));
+
+
+Save the output to:
+
+/logs/diagnostics/exec_stage_dump.json
+
+
+The dump should include:
+
+signalUUID
+
+eventType
+
+timestampUTC
+
+payload.tradeId
+
+payload.status
+
+payload.strategy
+
+payload.reasonCode
+
+🧭 Phase 2 — Verify Audit-to-Trade Correlation
+Objective
+
+Confirm that every SLAL “EXECUTION” event corresponds to a valid, instantiated trade object.
+
+Steps
+
+Locate the Paper Execution Engine
+File path:
+
+/server/services/paper-execution-engine.ts
+
+
+Within that file, identify where trade creation occurs — typically something like:
+
+const trade = await this.createTrade(signal);
+
+
+Log or extract the trade ID list from activeTrades:
+
+console.log('Active Trade IDs:', this.activeTrades.map(t => t.id));
+
+
+Cross-verify using the diagnostic dump:
+
+Compare payload.tradeId from SLAL EXECUTION events to IDs in activeTrades.
+
+Identify how many EXECUTION events have:
+
+tradeId = null
+
+tradeId not found in active trades
+
+Output correlation report as JSON:
+
+{
+  "totalExecutionEvents": 28,
+  "matchedTrades": 15,
+  "unmatched": 13,
+  "unmatchedUUIDs": [ ... ],
+  "timestamp": "2025-12-14TXX:XX:XXZ"
+}
+
+
+Save report as:
+
+/logs/diagnostics/slal_trade_correlation.json
+
+⚙️ Phase 3 — Add Post-Validation Hook (Code Update)
+Objective
+
+Ensure SLAL only records EXECUTION events after the trade object has been confirmed and added to the system’s active trade set.
+
+Steps
+
+In /server/services/paper-execution-engine.ts, find the section that currently calls:
+
+signalLifecycleAudit.recordExecution(signal.id, payload);
+
+
+Modify logic to delay SLAL recording until after trade creation is successful:
+
+const trade = await this.createTrade(signal);
+
+if (trade && trade.id) {
+  signalLifecycleAudit.recordExecution(signal.id, {
+    tradeId: trade.id,
+    status: 'confirmed',
+    strategy: signal.strategy,
+    pair: signal.pair
+  });
+} else {
+  console.warn(`Trade creation failed for signal ${signal.id}`);
+}
+
+
+Restart the workflow and verify that new EXECUTION logs now include:
+
+tradeId always populated
+
+Matching count between “Executed” signals and “Active Trades”
+
+🧩 Phase 4 — Validation
+
+Start a new paper trading session.
+
+Let it run for 5–10 minutes to accumulate signal flow.
+
+Check:
+
+SLAL “Executed” = total of “Open Trades + Closed Trades”
+
+No tradeId: null entries in diagnostics
+
+SLAL metrics panel’s pipeline flow matches the actual trade counts
+
+Save all three reference files after verification:
+
+/logs/diagnostics/exec_stage_dump.json
+/logs/diagnostics/slal_trade_correlation.json
+/logs/diagnostics/validation_session.json
+
+🧰 Phase 5 — Code Files Requested for Structural Review
+
+Once the diagnostics are complete, please provide read access or snapshots (via file dump or paste) of the following files so that I can verify the actual logic structure, event sequencing, and data propagation:
+
+File	Purpose
+/server/services/signal-orchestrator.ts	Signal generation, sizing, and handoff points to guardrails.
+/server/services/trade-safety.ts	Guardrail validation, including risk, slot, and exposure checks.
+/server/services/paper-execution-engine.ts	Trade creation, execution, and SLAL call sequence.
+/server/core/audit/signal_lifecycle_audit.ts	Audit logging structure, timing, and persistence.
+/client/src/components/trading/execution-metrics.tsx	UI layer showing SLAL metrics — to confirm which data endpoints are rendered.
+/server/routes.ts	Endpoint registrations — to confirm /diagnostics/signal-lifecycle integration.
+
+(Optional but helpful):
+
+/server/core/trade-manager.ts (if separate from paper-execution-engine.ts)
+
+/server/core/portfolio-manager.ts (for capacity and slot logic)
+
+/server/config/guardrails.json or equivalent (for thresholds)
+
+✅ Completion Criteria
+
+Diagnostic dumps show tradeId populated for every EXECUTION event.
+
+“Executed” signals in SLAL = “Open + Closed” trades in Trading panel.
+
+Post-validation hook confirmed operational.
+
+All inconsistencies resolved between audit layer and trading subsystem.
