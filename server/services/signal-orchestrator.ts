@@ -136,6 +136,7 @@ export class SignalOrchestrator {
     this.onSignalCallback = onSignal;
     
     console.log(`[37.A][SignalOrchestrator][${this.mode}] Starting with ${this.enabledStrategies.size} strategies, interval ${this.evaluationIntervalMs}ms`);
+    console.log(`[B.3][FLOW_CORRECTED] Signal flow order: Sizing → Metrics → SQE → RTB → TCL`);
     console.log(`[WARMUP][DEBUG] SignalOrchestrator starting (non-blocking)`);
     telemetryTrace.trace('SignalOrchestrator', 'START', 'INFO', { 
       mode: this.mode, 
@@ -229,11 +230,12 @@ export class SignalOrchestrator {
   }
 
   /**
-   * B6 + B.1: Build a sized signal from a raw strategy signal
+   * B6 + B.1 + B.3: Build a sized signal from a raw strategy signal
    * Routes all strategies through the centralized sizing helper
    * Phase 8.8.4-A: SLAL instrumentation for GENERATION and SIZING stages
    * Phase 8.8.4-B.1: Compute NGC, ExpectedDuration, ProfitRate, CWQI
    * Phase 8.8.4-B.1: Apply SQE quality filter
+   * Phase 8.8.4-B.3: Correct flow order - Sizing → Metrics → SQE
    */
   private buildSizedSignalForStrategy(
     rawSignal: StrategySignal | null,
@@ -270,46 +272,7 @@ export class SignalOrchestrator {
       hasPreComputedNotional: false,
     });
 
-    // Phase 8.8.4-B.1: Compute extended signal metrics (NGC, CWQI, etc.)
-    const extendedMetrics = calculateExtendedSignalMetrics({
-      confidence: rawSignal.confidence,
-      entryPrice: rawSignal.entryPrice,
-      stopPrice: rawSignal.stopPrice,
-      targetPrice: rawSignal.targetPrice,
-      atr: marketContext?.atr,
-      high24h: marketContext?.high24h,
-      low24h: marketContext?.low24h,
-    });
-
-    console.log(`[B.1][METRICS] ${rawSignal.symbol}/${strategyId}: NGC=${extendedMetrics.ngc.toFixed(4)}, CWQI=${extendedMetrics.cwqi.toFixed(4)}, ProfitRate=${extendedMetrics.profitRate.toFixed(4)}`);
-
-    // Phase 8.8.4-B.1: Apply SQE quality filter
-    const sqeInput: SQEInput = {
-      signalId,
-      symbol: rawSignal.symbol,
-      strategy: strategyId,
-      ngc: extendedMetrics.ngc,
-      riskScore: extendedMetrics.riskScore,
-      profitRate: extendedMetrics.profitRate,
-      cwqi: extendedMetrics.cwqi,
-    };
-
-    const sqeResult = signalQualityEvaluator.evaluate(sqeInput);
-    
-    if (!sqeResult.passed) {
-      console.log(`[B.1][SQE_REJECT] ${rawSignal.symbol}/${strategyId}: ${sqeResult.reason}`);
-      signalLifecycleAudit.recordSizing(
-        signalId,
-        sizingContext.mode,
-        rawSignal.symbol,
-        strategyId,
-        false,
-        { sqeReject: true, reason: sqeResult.reason },
-        'SQE_QUALITY_REJECT'
-      );
-      return null;
-    }
-
+    // Phase 8.8.4-B.3: STEP 1 - Sizing FIRST (before metrics computation)
     const sizingResult = sizePaperPositionForSignal({
       portfolioValue: sizingContext.portfolioValue,
       guardrails: sizingContext.guardrails,
@@ -338,7 +301,7 @@ export class SignalOrchestrator {
         { portfolioValue: sizingContext.portfolioValue, quantity: sizingResult.quantity, estimatedValue: sizingResult.estimatedValue },
         'ZERO_SIZE'
       );
-      console.log(`[B6][SIZING_SKIP] Zero sizing result for ${rawSignal.symbol}/${strategyId}`);
+      console.log(`[B.3][SIZING_SKIP] Zero sizing result for ${rawSignal.symbol}/${strategyId}`);
       return null;
     }
 
@@ -352,15 +315,60 @@ export class SignalOrchestrator {
       { quantity: sizingResult.quantity, estimatedValue: sizingResult.estimatedValue }
     );
 
-    // Phase 8.8.4-B.1: Build sized signal with extended metrics
+    console.log(`[B.3][SIZING] ${rawSignal.symbol}/${strategyId}: qty=${sizingResult.quantity.toFixed(8)}, value=$${sizingResult.estimatedValue.toFixed(2)}`);
+
+    // Phase 8.8.4-B.3: STEP 2 - Compute extended signal metrics AFTER sizing
+    const extendedMetrics = calculateExtendedSignalMetrics({
+      confidence: rawSignal.confidence,
+      entryPrice: rawSignal.entryPrice,
+      stopPrice: rawSignal.stopPrice,
+      targetPrice: rawSignal.targetPrice,
+      atr: marketContext?.atr,
+      high24h: marketContext?.high24h,
+      low24h: marketContext?.low24h,
+    });
+
+    console.log(`[B.3][METRICS] ${rawSignal.symbol}/${strategyId}: NGC=${extendedMetrics.ngc.toFixed(4)}, CWQI=${extendedMetrics.cwqi.toFixed(4)}, ProfitRate=${extendedMetrics.profitRate.toFixed(4)}`);
+
+    // Phase 8.8.4-B.3: STEP 3 - Apply SQE quality filter AFTER metrics
+    const sqeInput: SQEInput = {
+      signalId,
+      symbol: rawSignal.symbol,
+      strategy: strategyId,
+      ngc: extendedMetrics.ngc,
+      riskScore: extendedMetrics.riskScore,
+      profitRate: extendedMetrics.profitRate,
+      cwqi: extendedMetrics.cwqi,
+    };
+
+    const sqeResult = signalQualityEvaluator.evaluate(sqeInput);
+    
+    if (!sqeResult.passed) {
+      console.log(`[B.3][SQE_REJECT] ${rawSignal.symbol}/${strategyId}: ${sqeResult.reason}`);
+      signalLifecycleAudit.recordRejection(
+        signalId,
+        sizingContext.mode,
+        rawSignal.symbol,
+        strategyId,
+        'VALIDATION',
+        'SQE_QUALITY_REJECT',
+        { sqeReject: true, reason: sqeResult.reason }
+      );
+      return null;
+    }
+
+    console.log(`[B.3][SQE_PASS] ${rawSignal.symbol}/${strategyId}: passed SQE filter`);
+
+    // Phase 8.8.4-B.3: Build sized signal with extended metrics
+    // NGC replaces raw confidence as the single source of truth
     const sizedSignal: SizedStrategySignal = {
       ...rawSignal,
       quantity: sizingResult.quantity,
       estimatedValue: sizingResult.estimatedValue,
       preComputedNotional: sizingResult.estimatedValue,
       signalId,
-      // B.1 Extended metrics - NGC replaces raw confidence for UI display
-      confidence: extendedMetrics.ngc, // NGC is now the "confidence" shown to user
+      // B.3: NGC is the SINGLE source of confidence (replaces raw confidence)
+      confidence: extendedMetrics.ngc,
       ngc: extendedMetrics.ngc,
       riskScore: extendedMetrics.riskScore,
       volatility: extendedMetrics.volatility,
@@ -369,7 +377,7 @@ export class SignalOrchestrator {
       cwqi: extendedMetrics.cwqi,
     };
 
-    console.log(`[B6+B.1][SIZED] ${rawSignal.symbol}/${strategyId}: qty=${sizingResult.quantity.toFixed(8)}, value=$${sizingResult.estimatedValue.toFixed(2)}, CWQI=${extendedMetrics.cwqi.toFixed(4)}`);
+    console.log(`[B.3][SIZED_SIGNAL] ${rawSignal.symbol}/${strategyId}: qty=${sizingResult.quantity.toFixed(8)}, value=$${sizingResult.estimatedValue.toFixed(2)}, NGC=${extendedMetrics.ngc.toFixed(4)}, CWQI=${extendedMetrics.cwqi.toFixed(4)}`);
 
     return sizedSignal;
   }

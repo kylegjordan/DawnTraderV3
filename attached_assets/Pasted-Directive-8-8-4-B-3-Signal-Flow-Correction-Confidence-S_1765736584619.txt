@@ -1,0 +1,132 @@
+Directive 8.8.4-B.3 — Signal Flow Correction & Confidence Source Consolidation
+Objective
+
+Align the Signal Orchestration and Evaluation Pipeline with the approved architectural model defined in Directives 8.8.4-B and 8.8.4-B.1, ensuring:
+
+Correct sequencing of all processing layers (including Sizing → SQE → RTB → TCL → Execution).
+
+Consolidation of confidence handling under NGC (Normalized Global Confidence).
+
+Deprecation of the legacy Confidence Threshold (%) filter and verification of NGC as the single confidence source across all UI and back-end references.
+
+Implementation Tasks
+Task 1 — Correct the Signal Orchestrator Flow
+
+Re-establish the correct operational sequence in server/services/signal-orchestrator.ts:
+
+Current (incorrect):
+
+Compute Metrics → SQE Filter → TCL → Execution
+
+
+Required (correct):
+
+Signal Orchestrator
+   → Sizing Helper (assigns trade size)
+   → Compute Extended Metrics (NGC, CWQI, ProfitRate, ExpectedDuration)
+   → Signal Quality Evaluator (SQE Filter)
+   → Ready-to-Buy Queue (RTB ranking by CWQI)
+   → Trade Capacity Limits (TCL)
+   → Execution Engine
+
+
+Specific Requirements
+
+SQE must run after sizing is complete.
+
+SQE output must be forwarded to RTB, not directly to TCL.
+
+RTB must continue to rank signals by CWQI and only promote top-ranked signals when slots open.
+
+TCL must never receive raw SQE output directly.
+
+Update SLAL tagging for SQE → RTB → TCL transitions.
+
+Confirm [B.3][FLOW_CORRECTED] log entry on initialization.
+
+Task 2 — Deprecate the Legacy Confidence Threshold Filter
+
+File: client/src/components/goals/screener-filters-tab.tsx
+
+Remove or comment out the “Confidence Threshold (%)” control under Universe & Signal Controls.
+
+Ensure it no longer applies any active filtering logic in:
+
+Front-end state or context providers.
+
+Back-end filter evaluation code (search for references to confidenceThreshold, filterConfidence, baseConfidence).
+
+Replace any data-binding to baseConfidence with NGC.
+
+Add [B.3][DEPRECATE_CONFIDENCE] log entry in initialization confirming removal.
+
+Task 3 — Verify NGC as the Single Confidence Source
+
+Confirm and document that NGC is now used in all of the following:
+
+Area	File(s)	Verification Target
+Active Trades Tab	client/src/pages/active-trades.tsx	Confidence column → NGC
+Trade History Tab	client/src/pages/trade-history.tsx	Confidence column → NGC
+Ready-to-Buy Table	client/src/components/trading/ready-to-buy-table.tsx	Confidence column → NGC
+CWQI Calculation	server/core/metrics/quality_index.ts	Confidence term = NGC
+Signal Orchestrator Output	server/services/signal-orchestrator.ts	signal.confidence = NGC
+Database Schema	(if applicable)	Confidence field mapping → NGC
+
+Each location must output [B.3][NGC_SOURCE_CONFIRMED] in logs after verification.
+
+Task 4 — Confirm Ready-to-Buy Queue Integration
+
+Ensure:
+
+All signals passing SQE are inserted into RTB storage (insertRtbSignal).
+
+RTB ranking is by CWQI (descending).
+
+RTB promotions trigger when availableSlots > 0.
+
+Logging: [B.3][RTB_FLOW_ACTIVE].
+
+Task 5 — Verification & Architectural Review
+
+After implementation:
+
+Start a 15-minute paper-trading diagnostic session.
+
+Confirm in logs:
+
+[B.3][FLOW_CORRECTED]
+
+[B.3][NGC_SOURCE_CONFIRMED]
+
+[B.3][RTB_FLOW_ACTIVE]
+
+Review ready_to_buy_queue.json, active_trades.json, slal_dump.json for proper CWQI ordering and confidence source consistency.
+
+Update Decision Ledger entry with completion status and verification timestamp.
+
+Task 6 — Canonicalization
+
+After successful verification:
+
+Mark Directive 8.8.4-B.3 as “Completed & Canonicalized.”
+
+Append a Decision Ledger summary describing:
+
+Corrected signal flow sequence.
+
+Deprecated confidence filter.
+
+Unified NGC confidence source.
+
+Verification Checklist
+Verification Item	Expected Result
+SQE → RTB → TCL → Execution flow	Observed in logs with correct tags
+Legacy Confidence Filter Removed	Not present in UI or code
+Confidence Value = NGC	Confirmed in all tabs and tables
+CWQI Formula Uses NGC	Confirmed in metrics code
+RTB Ranking by CWQI	Verified during diagnostic session
+Directive 8.8.4-B.3 — Summary
+
+Purpose: Fix orchestration order, unify confidence handling under NGC, remove legacy confidence filter.
+Verification: Paper trading session with log validation and ledger update.
+Result: Fully normalized signal evaluation pipeline aligned with Dawn Trader canonical blueprint.

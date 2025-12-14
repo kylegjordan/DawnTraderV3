@@ -59,3 +59,59 @@ Normalization parameters are externalized to `config/metrics.json`:
 ### Rationale
 
 NGC provides a more conservative and reliable confidence measure that accounts for adverse market conditions, reducing false-positive signals during high volatility periods. Externalized configuration allows tuning normalization ranges without code changes.
+
+---
+
+## DEC-2025-B3-SIGNAL-FLOW-CORRECTION
+
+**Date:** 2024-12-14  
+**Directive:** 8.8.4-B.3 — Signal Flow Correction & Confidence Source Consolidation
+
+### Decision Summary
+
+Corrected the signal processing flow in Signal Orchestrator to follow the canonical order: Sizing → Metrics → SQE → RTB → TCL. Consolidated NGC as the single authoritative source of confidence, deprecating the legacy Confidence Threshold filter from the UI.
+
+### Key Changes
+
+1. **Signal Flow Correction:**
+   - **Previous (incorrect):** Metrics → SQE → Sizing
+   - **Corrected:** Sizing → Metrics → SQE
+   - Rationale: Sizing must happen first to determine position viability before computing quality metrics
+
+2. **NGC as Single Confidence Source:**
+   - NGC replaces raw strategy confidence in all signal payloads
+   - `sizedSignal.confidence = extendedMetrics.ngc`
+   - Ensures consistent confidence representation across UI and backend
+
+3. **Legacy Filter Deprecation:**
+   - Removed `confidenceThreshold` filter from UI visibility
+   - SQE thresholds (MIN_NGC, MIN_CWQI) are now the authoritative quality gates
+   - Backend filter data retained for compatibility but hidden from users
+
+4. **Flow Verification Logging:**
+   - Added `[B.3][FLOW_CORRECTED]` log on SignalOrchestrator start
+   - Step-by-step logging: `[B.3][SIZING]`, `[B.3][METRICS]`, `[B.3][SQE_PASS/REJECT]`, `[B.3][SIZED_SIGNAL]`
+
+### RTB Queue Integration
+
+The RTB (Ready-to-Buy) queue handles capacity-blocked signals:
+- Signals passing SQE are forwarded to TradingEngine (TCL)
+- If blocked by capacity guardrails (MAX_TRADES, MAX_EXPOSURE), signals queue in RTB
+- RTB ranks queued signals by CWQI for promotion priority
+- This integration happens at TradingEngine level, not SignalOrchestrator
+
+### Files Modified
+
+- `server/services/signal-orchestrator.ts` - Flow reordering, B.3 logging, NGC consolidation
+- `client/src/components/goals/filters-with-override.tsx` - Deprecated confidenceThreshold filter
+
+### Canonical Signal Flow
+
+```
+Strategy → GENERATION → SIZING → METRICS → SQE → RTB/TCL → EXECUTION
+            (raw)       (qty)    (NGC,CWQI) (filter) (queue/exec)
+```
+
+### Rationale
+
+The previous flow computed metrics before sizing, which could lead to wasted computation on signals that would fail sizing. By sizing first, we efficiently filter out non-viable signals early. NGC consolidation ensures users see a single, consistent confidence metric that already accounts for market conditions.

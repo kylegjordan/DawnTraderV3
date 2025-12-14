@@ -305,7 +305,10 @@ export function FiltersWithOverride() {
   }
 
   // REB 2.9B Stage 3 Section 4: Filter out quoteCurrencies before grouping
-  const visibleFilters = filtersData.data.filters.filter(f => f.name !== 'quoteCurrencies');
+  // Phase 8.8.4-B.3: Filter out confidenceThreshold (deprecated - NGC is now single confidence source)
+  const visibleFilters = filtersData.data.filters.filter(f => 
+    f.name !== 'quoteCurrencies' && f.name !== 'confidenceThreshold'
+  );
 
   // Group filters by category
   const filtersByCategory = visibleFilters.reduce((acc, filter) => {
