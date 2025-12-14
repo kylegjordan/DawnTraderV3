@@ -61,4 +61,17 @@ Each decision entry must include:
 
 ---
 
+### DEC-20251214-0001
+- **Date/Time**: 2025-12-14T00:00:00Z
+- **Session ID**: SESSION-20251214-0001
+- **Decision Type**: approval
+- **Description**: Canonicalize GROUNDING-MISSION-COLLEAGUE-COLLABORATION directive (M4.5)
+- **Impacted Areas**: /chaplet/index.ts (mission_and_purpose block, collaboration_model), /bridge/runtime/directive-template.md (phase context section)
+- **Authority Level**: Human (Kyle)
+- **Approval Status**: approved
+- **Human Approver**: Kyle
+- **Notes**: Mission statement now explicitly names Kyle as owner/beneficiary. Collaboration model treats Kyle as expert colleague. Directive template now requires Phase Context section.
+
+---
+
 *New decisions are appended below this line.*

@@ -25,6 +25,7 @@ import { b5SizingAudit } from './b5-sizing-audit.js';
 import { i1RtbDiagnostics } from './i1-rtb-diagnostics-service.js';
 import { rtbMetricsService } from './rtb-metrics-service.js';
 import { getGlobalPaperSimManager } from './paper-sim-service.js';
+import { signalLifecycleAudit, type RejectionReason } from '../core/audit/signal_lifecycle_audit.js';
 
 export const buildSettingsFromGuardrails = _buildSettingsFromGuardrails;
 export const calculateRiskAmount = _calculateRiskAmount;
@@ -39,6 +40,8 @@ export interface TradeCandidate {
   // AJ10.1: Pre-computed notional from position sizing (P2 stage)
   // When provided, MAX_POSITION check trusts this value instead of recalculating
   preComputedNotional?: number;
+  // Phase 8.8.4-A: SLAL lifecycle tracking ID
+  signalId?: string;
 }
 
 export type TradeSafetyResultCode = 
@@ -671,6 +674,7 @@ export async function checkGuardrailRisk(
   
   // [8.8.3-I2] Helper to record block in both RtbMetricsService (source of truth) and I1 diagnostics
   // [8.8.3-I5] Added diagnostic logging for guardrail fire audit
+  // Phase 8.8.4-A: Added SLAL VALIDATION stage recording
   const recordBlock = (result: TradeSafetyResult): TradeSafetyResult => {
     if (!result.ok) {
       rtbMetricsService.recordBlock(trade.symbol, trade.strategy, result.code);
@@ -678,8 +682,36 @@ export async function checkGuardrailRisk(
       
       // Phase 8.8.3-I5: Diagnostic logging for guardrail fire audit
       console.log(`[8.8.3-I5][GUARDRAIL_FIRE] guardrail=${result.code} symbol=${trade.symbol} strategy=${trade.strategy} reason=${(result as any).reason?.slice(0, 100)} timestamp=${Date.now()}`);
+      
+      // Phase 8.8.4-A: Record SLAL VALIDATION failure
+      if (trade.signalId) {
+        const slalReason = mapCodeToSLALReason(result.code);
+        signalLifecycleAudit.recordValidation(
+          trade.signalId,
+          mode,
+          trade.symbol,
+          trade.strategy,
+          false,
+          { guardrailCode: result.code, reason: (result as any).reason },
+          slalReason
+        );
+      }
     }
     return result;
+  };
+  
+  // Phase 8.8.4-A: Map TradeSafetyResultCode to SLAL RejectionReason
+  const mapCodeToSLALReason = (code: TradeSafetyResultCode): RejectionReason => {
+    switch (code) {
+      case 'KILL_SWITCH': return 'DAILY_LOSS_LIMIT';
+      case 'POSITION_LIMIT': return 'MAX_POSITIONS';
+      case 'COOLDOWN': return 'SYMBOL_COOLDOWN';
+      case 'MAX_POSITION': return 'POSITION_CAP';
+      case 'MAX_TRADES': return 'MAX_POSITIONS';
+      case 'MAX_TOTAL_EXPOSURE': return 'POSITION_CAP';
+      case 'ENGINE_STOPPING': return 'OTHER';
+      default: return 'GUARDRAIL_BLOCKED';
+    }
   };
   
   const killSwitchCheck = checkKillSwitch(settings, mode, trade.symbol);
@@ -735,6 +767,18 @@ export async function checkGuardrailRisk(
   
   // B5: Log successful guardrail pass
   logGuardrailCheck('ALL_PASSED', { ok: true });
+  
+  // Phase 8.8.4-A: Record SLAL VALIDATION success
+  if (trade.signalId) {
+    signalLifecycleAudit.recordValidation(
+      trade.signalId,
+      mode,
+      trade.symbol,
+      trade.strategy,
+      true,
+      { allChecks: 'passed' }
+    );
+  }
   
   console.log(`[8.8.3-H4][GUARDRAIL_PASS] All pre-trade checks passed for ${trade.symbol}`);
   return { ok: true };

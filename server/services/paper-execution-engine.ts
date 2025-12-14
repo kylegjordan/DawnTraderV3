@@ -66,6 +66,7 @@ import { normalizeToInternalSymbol, getKrakenRestPair } from '../markets/kraken-
 import { priceTraceService } from './price-trace-service.js';
 import { marketVolumeCache } from './market-volume-cache.js';
 import { c5FinancialDiagnostics } from './c5-financial-diagnostics.js';
+import { signalLifecycleAudit } from '../core/audit/signal_lifecycle_audit.js';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail' | 'manual_stop';
@@ -1807,8 +1808,9 @@ export class PaperExecutionEngine {
   }
 
   // Phase 8.8.3-J7: Added cycleContext parameter for paper-mode sizing
+  // Phase 8.8.4-A: Added signalId for SLAL lifecycle tracking
   private async executeSimulatedTrade(
-    signal: StrategySignal & { quantity?: number; estimatedValue?: number },
+    signal: StrategySignal & { quantity?: number; estimatedValue?: number; signalId?: string },
     settings: TradingSettings,
     cycleContext?: { portfolioValue: number; guardrails: GuardrailsV2 | null }
   ): Promise<void> {
@@ -1851,6 +1853,7 @@ export class PaperExecutionEngine {
 
     // Phase 8.8.3-H4: Pre-trade guardrail checks (replaces legacy RiskManager)
     // AJ10.1: Include pre-computed notional from P2 sizing so MAX_POSITION check trusts it
+    // Phase 8.8.4-A: Include signalId for SLAL lifecycle tracking
     const tradeCandidate: TradeCandidate = {
       symbol: signal.symbol,
       strategy: signal.strategy,
@@ -1859,6 +1862,8 @@ export class PaperExecutionEngine {
       targetPrice: signal.targetPrice,
       // AJ10.1: Pass the pre-sized estimatedValue so checkPositionSizeCap trusts it
       preComputedNotional: signal.estimatedValue,
+      // Phase 8.8.4-A: SLAL lifecycle tracking ID
+      signalId: signal.signalId,
     };
 
     // [B4] Log funnel attempt - signal generated, entering guardrail check
@@ -2032,6 +2037,19 @@ export class PaperExecutionEngine {
     if (existingPositionForSymbol) {
       const existingCount = existingPositions.filter(p => p.symbol === signal.symbol).length;
       console.log(`[I7-PM-FOCUS][DUP_GUARD_BLOCK] symbol=${signal.symbol} existingCount=${existingCount} action="skip_new_position"`);
+      
+      // Phase 8.8.4-A: SLAL - Record EXECUTION failure (duplicate position)
+      if (signal.signalId) {
+        signalLifecycleAudit.recordExecution(
+          signal.signalId,
+          this.mode,
+          signal.symbol,
+          signal.strategy,
+          false, // failure
+          { existingCount, reason: 'duplicate_position' },
+          'DUPLICATE_POSITION'
+        );
+      }
       return; // Exit early - do not create trade or position
     }
 
@@ -2125,6 +2143,26 @@ export class PaperExecutionEngine {
 
       // AJ10.3: Diagnostic - open position created
       console.log(`[AJ10.3][OPEN_POSITION_OK] positionId=${openPosition.id} | symbol=${signal.symbol} | tradeId=${trade.id}`);
+
+      // Phase 8.8.4-A: SLAL - Record EXECUTION success (trade successfully opened)
+      if (signal.signalId) {
+        signalLifecycleAudit.recordExecution(
+          signal.signalId,
+          this.mode,
+          signal.symbol,
+          signal.strategy,
+          true, // success
+          {
+            tradeId: trade.id,
+            positionId: openPosition.id,
+            quantity,
+            actualEntryPrice,
+            positionValue,
+            entryFee,
+            entrySlippage: totalSlippage,
+          }
+        );
+      }
 
       // Phase 8.8.3-B3.6: Subscribe to Kraken WebSocket for real-time price updates
       // Phase 8.8.3-I8C: Subscribe each NEW trade immediately upon creation

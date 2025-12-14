@@ -1854,6 +1854,26 @@
     ]
   },
   {
+    "path": "/api/diagnostics/signal-lifecycle",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/diagnostics/signal-lifecycle/reset",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/diagnostics/i5/rtb-block-log",
     "methods": [
       "GET"

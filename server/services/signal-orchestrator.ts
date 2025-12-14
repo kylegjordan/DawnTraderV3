@@ -36,6 +36,7 @@ import { b5SizingAudit } from './b5-sizing-audit.js';
 import { sizePaperPositionForSignal, type StrategyType } from './paper-position-sizing.js';
 import { getPortfolioBalanceV2 } from './guardrail-settings.js';
 import { c5FinancialDiagnostics } from './c5-financial-diagnostics.js';
+import { signalLifecycleAudit } from '../core/audit/signal_lifecycle_audit.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -56,6 +57,7 @@ interface SizedStrategySignal extends StrategySignal {
   quantity?: number;
   estimatedValue?: number;
   preComputedNotional?: number;
+  signalId?: string; // Phase 8.8.4-A: SLAL lifecycle tracking ID
 }
 
 interface SizingContext {
@@ -212,6 +214,7 @@ export class SignalOrchestrator {
   /**
    * B6: Build a sized signal from a raw strategy signal
    * Routes all strategies through the centralized sizing helper
+   * Phase 8.8.4-A: SLAL instrumentation for GENERATION and SIZING stages
    */
   private buildSizedSignalForStrategy(
     rawSignal: StrategySignal | null,
@@ -219,6 +222,23 @@ export class SignalOrchestrator {
     sizingContext: SizingContext
   ): SizedStrategySignal | null {
     if (!rawSignal) return null;
+    
+    // Phase 8.8.4-A: Generate unique signal ID for lifecycle tracking
+    const signalId = signalLifecycleAudit.generateSignalId(rawSignal.symbol, strategyId);
+    
+    // Phase 8.8.4-A: Record GENERATION stage
+    signalLifecycleAudit.recordGeneration(
+      signalId,
+      sizingContext.mode,
+      rawSignal.symbol,
+      strategyId,
+      {
+        entryPrice: rawSignal.entryPrice,
+        stopPrice: rawSignal.stopPrice,
+        targetPrice: rawSignal.targetPrice,
+        confidence: rawSignal.confidence,
+      }
+    );
     
     b5SizingAudit.logSignalCreated({
       strategy: strategyId,
@@ -248,15 +268,36 @@ export class SignalOrchestrator {
     );
 
     if (sizingResult.quantity <= 0 || sizingResult.estimatedValue <= 0) {
+      // Phase 8.8.4-A: Record SIZING failure
+      signalLifecycleAudit.recordSizing(
+        signalId,
+        sizingContext.mode,
+        rawSignal.symbol,
+        strategyId,
+        false,
+        { portfolioValue: sizingContext.portfolioValue, quantity: sizingResult.quantity, estimatedValue: sizingResult.estimatedValue },
+        'ZERO_SIZE'
+      );
       console.log(`[B6][SIZING_SKIP] Zero sizing result for ${rawSignal.symbol}/${strategyId}`);
       return null;
     }
+
+    // Phase 8.8.4-A: Record SIZING success
+    signalLifecycleAudit.recordSizing(
+      signalId,
+      sizingContext.mode,
+      rawSignal.symbol,
+      strategyId,
+      true,
+      { quantity: sizingResult.quantity, estimatedValue: sizingResult.estimatedValue }
+    );
 
     const sizedSignal: SizedStrategySignal = {
       ...rawSignal,
       quantity: sizingResult.quantity,
       estimatedValue: sizingResult.estimatedValue,
       preComputedNotional: sizingResult.estimatedValue,
+      signalId, // Phase 8.8.4-A: Attach signalId for downstream tracking
     };
 
     console.log(`[B6][SIZED] ${rawSignal.symbol}/${strategyId}: qty=${sizingResult.quantity.toFixed(8)}, value=$${sizingResult.estimatedValue.toFixed(2)}`);

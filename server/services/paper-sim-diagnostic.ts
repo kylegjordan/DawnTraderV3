@@ -74,6 +74,14 @@ export class PaperSimDiagnosticService {
     this.riskManager = new RiskManager();
   }
 
+  /**
+   * Phase B7.A: Reset session state for hard reset flow
+   * PaperSimDiagnosticService is stateless, so this is a no-op
+   */
+  resetSession(): void {
+    console.log('[B7.A][DIAGNOSTIC] Session reset (no-op - service is stateless)');
+  }
+
   async performUniverseScan(options: UniverseScanOptions): Promise<UniverseScanResult> {
     const {
       mode = 'paper',
