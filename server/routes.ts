@@ -9626,16 +9626,16 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return sum + parseFloat(trade.pnl?.toString() || '0');
       }, 0);
       
-      // Phase 8.8.3-C7-FIX: Cash Balance = Starting Balance + Realized P/L (NOT portfolioState.balance)
-      const cashBalance = startingBalance + realizedPnl;
+      // Phase 8.8.4: Realized Balance = Starting Balance + Realized P/L (renamed from cashBalance)
+      const realizedBalance = startingBalance + realizedPnl;
       
       // Calculate total position value (mark-to-market)
       const totalPositionValue = enrichedPositions.reduce((sum, pos) => {
         return sum + (pos.quantity * pos.currentPrice);
       }, 0);
       
-      // Current balance = cash + open positions value
-      const currentBalance = cashBalance + totalPositionValue;
+      // Current balance = realized balance + open positions value
+      const currentBalance = realizedBalance + totalPositionValue;
       const netPnl = currentBalance - startingBalance;
       const netPnlPercent = startingBalance > 0 ? (netPnl / startingBalance) * 100 : 0;
       
@@ -9651,7 +9651,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         portfolio: {
           startingBalance,
           currentBalance,
-          cashBalance,
+          realizedBalance,
           totalPositionValue,
           netPnl,
           netPnlPercent

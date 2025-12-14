@@ -74,4 +74,24 @@ Each decision entry must include:
 
 ---
 
+### DEC-20251214-0002
+- **Date/Time**: 2025-12-14T17:00:00Z
+- **Session ID**: SESSION-20251214-0002
+- **Decision Type**: approval
+- **Description**: Fix Portfolio Value calculation and rename cashBalance to realizedBalance
+- **Impacted Areas**: 
+  - server/routes.ts (active-trades endpoint portfolio calculation)
+  - client/src/components/trading/active-trades-v2.tsx (IntegrityBanner, PortfolioSummary interface)
+- **Authority Level**: Human (Kyle)
+- **Approval Status**: approved
+- **Human Approver**: Kyle
+- **Notes**: 
+  - Clarified terminology: "Current Balance" = Starting Balance + Realized P/L (from closed trades)
+  - Clarified terminology: "Portfolio Value (unrealized)" = Current Balance + Unrealized Net P/L from open trades
+  - Renamed backend field `cashBalance` → `realizedBalance` to remove confusing "cash" terminology
+  - The old `currentBalance` field (which was cashBalance + totalPositionValue) was identified as a "nonsense metric" and should not be used for display
+  - Fixed green bar in Active Trades to correctly calculate: realizedBalance + sum(open trade netPnl)
+
+---
+
 *New decisions are appended below this line.*

@@ -83,7 +83,7 @@ interface ActiveTrade {
 interface PortfolioSummary {
   startingBalance: number;
   currentBalance: number;
-  cashBalance: number;
+  realizedBalance: number; // Starting Balance + Realized P/L (renamed from cashBalance)
   totalPositionValue: number;
   netPnl: number;
   netPnlPercent: number;
@@ -555,13 +555,11 @@ function IntegrityBanner({
               {integrity.slotsAvailable}
             </span>
           </div>
-          {/* Phase 8.8.4-A.2: Current Balance + Unrealized Net P/L
-              cashBalance = startingBalance + realizedPnl (this IS "Current Balance")
-              openTradesNetPnlSum = sum of unrealized net P/L from open trades */}
+          {/* Phase 8.8.4-A.2: Portfolio Value (unrealized) = Current Balance + Unrealized Net P/L */}
           <div className="flex items-center gap-2">
-            <span className="text-muted-foreground">Current Bal + Unrealized P/L:</span>
-            <span className={cn("font-bold", ((portfolio.cashBalance ?? 0) + openTradesNetPnlSum) >= (portfolio.startingBalance ?? 0) ? "text-green-600" : "text-red-600")}>
-              ${((portfolio.cashBalance ?? 0) + openTradesNetPnlSum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <span className="text-muted-foreground">Portfolio Value (unrealized):</span>
+            <span className={cn("font-bold", ((portfolio.realizedBalance ?? 0) + openTradesNetPnlSum) >= (portfolio.startingBalance ?? 0) ? "text-green-600" : "text-red-600")}>
+              ${((portfolio.realizedBalance ?? 0) + openTradesNetPnlSum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
         </div>
@@ -968,7 +966,7 @@ export default function ActiveTradesV2() {
 
   const positions = sortedPositions;
   const integrity = data?.integrity || { systemCount: 0, maxOpenTrades: 15, slotsAvailable: 15, status: 'OK' as const };
-  const portfolio = data?.portfolio || { startingBalance: 0, currentBalance: 0, cashBalance: 0, totalPositionValue: 0, netPnl: 0, netPnlPercent: 0 };
+  const portfolio = data?.portfolio || { startingBalance: 0, currentBalance: 0, realizedBalance: 0, totalPositionValue: 0, netPnl: 0, netPnlPercent: 0 };
 
   // Calculate sum of all open trades' Net P/L for the green bar display
   const openTradesNetPnlSum = positions.reduce((sum, pos) => sum + (parseFloat(String(pos.netPnl)) || 0), 0);
