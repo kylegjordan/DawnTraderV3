@@ -4,6 +4,7 @@ import ActiveTradesV2 from "@/components/trading/active-trades-v2";
 import Watchlist from "@/components/trading/watchlist";
 import ReadyToBuyTable from "@/components/trading/ready-to-buy-table";
 import { ExecutionMetricsPanel } from "@/components/trading/execution-metrics";
+import { RTBQueuePanel } from "@/components/trading/rtb-queue-panel";
 import MaintenanceBanner from "@/components/maintenance/maintenance-banner";
 import ModeBanner from "@/components/mode-banner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -116,6 +117,7 @@ function TradingPageContent() {
 
         <TabsContent value="ready" className="mt-6">
           <ReadyToBuyTable />
+          <RTBQueuePanel />
           <ExecutionMetricsPanel />
         </TabsContent>
 

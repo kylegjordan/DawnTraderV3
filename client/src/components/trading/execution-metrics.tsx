@@ -434,7 +434,7 @@ export function ExecutionMetricsPanel() {
           
           {slalMetrics?.metrics && (
             <div className="space-y-4">
-              {/* SLAL Pipeline Summary */}
+              {/* SLAL Pipeline Summary - Phase 8.8.4-B: Added QUEUED and PROMOTED stages */}
               <div>
                 <p className="text-[10px] text-muted-foreground mb-2">Signal Pipeline Flow</p>
                 <div className="flex items-center gap-1 flex-wrap text-xs">
@@ -458,6 +458,19 @@ export function ExecutionMetricsPanel() {
                     Completed: {formatNumber(slalMetrics.metrics.signalsCompleted)}
                   </Badge>
                 </div>
+                {/* Phase 8.8.4-B: QUEUED/PROMOTED branch for capacity-blocked signals */}
+                {(slalMetrics.metrics.rejectionsByStage?.QUEUED > 0 || slalMetrics.metrics.rejectionsByStage?.PROMOTED > 0) && (
+                  <div className="flex items-center gap-1 flex-wrap text-xs mt-2 ml-4">
+                    <span className="text-muted-foreground text-[10px]">↳ Capacity Queue:</span>
+                    <Badge variant="outline" className="font-mono border-warning text-warning">
+                      Queued: {formatNumber(slalMetrics.metrics.rejectionsByStage?.QUEUED || 0)}
+                    </Badge>
+                    <span className="text-muted-foreground">→</span>
+                    <Badge variant="outline" className="font-mono border-success text-success">
+                      Promoted: {formatNumber(slalMetrics.metrics.rejectionsByStage?.PROMOTED || 0)}
+                    </Badge>
+                  </div>
+                )}
               </div>
 
               {/* SLAL Success Rate & Timing */}

@@ -7293,6 +7293,152 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ==================== Phase 8.8.4-B: RTB Queue (Capacity-Blocked Signals) ====================
+  
+  // GET /api/diagnostics/rtb-queue/signals - Get queued signals for RTB Queue display
+  apiRouter.get('/diagnostics/rtb-queue/signals', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { readyToBuyService } = await import('./core/rtb/ready_to_buy_service.js');
+      const mode = (req.query.mode as 'live' | 'paper') || 'paper';
+      
+      const signals = await readyToBuyService.getQueuedSignals(mode);
+      
+      res.json({
+        ok: true,
+        phase: '8.8.4-B',
+        description: 'RTB Queue - High-quality signals blocked by capacity constraints',
+        mode,
+        timestamp: new Date().toISOString(),
+        count: signals.length,
+        signals: signals.map(s => ({
+          id: s.id,
+          signalId: s.signalId,
+          symbol: s.symbol,
+          strategy: s.strategy,
+          entryPrice: parseFloat(s.entryPrice),
+          stopPrice: parseFloat(s.stopPrice),
+          targetPrice: s.targetPrice ? parseFloat(s.targetPrice) : null,
+          quantity: s.quantity ? parseFloat(s.quantity) : null,
+          notional: s.notional ? parseFloat(s.notional) : null,
+          confidence: parseFloat(s.confidence),
+          riskScore: parseFloat(s.riskScore),
+          expectedReturn: parseFloat(s.expectedReturn),
+          cwqi: parseFloat(s.cwqi),
+          status: s.status,
+          blockReason: s.blockReason,
+          queuedAt: s.queuedAt,
+          expiresAt: s.expiresAt,
+          queueDurationMs: Date.now() - new Date(s.queuedAt).getTime(),
+        }))
+      });
+    } catch (error: any) {
+      console.error('[8.8.4-B] Error fetching RTB queue signals:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to fetch RTB queue signals',
+        message: error.message
+      });
+    }
+  });
+
+  // GET /api/diagnostics/rtb-queue/stats - Get RTB queue statistics
+  apiRouter.get('/diagnostics/rtb-queue/stats', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { readyToBuyService } = await import('./core/rtb/ready_to_buy_service.js');
+      const mode = (req.query.mode as 'live' | 'paper') || 'paper';
+      
+      const stats = await readyToBuyService.getQueueStats(mode);
+      
+      res.json({
+        ok: true,
+        phase: '8.8.4-B',
+        description: 'RTB Queue Statistics',
+        mode,
+        timestamp: new Date().toISOString(),
+        stats
+      });
+    } catch (error: any) {
+      console.error('[8.8.4-B] Error fetching RTB queue stats:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to fetch RTB queue stats',
+        message: error.message
+      });
+    }
+  });
+
+  // GET /api/diagnostics/rtb-queue/refresher-status - Get RTB refresher background job status
+  apiRouter.get('/diagnostics/rtb-queue/refresher-status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { rtbQueueRefresher } = await import('./core/rtb/rtb_queue_refresher.js');
+      const status = rtbQueueRefresher.getStatus();
+      
+      res.json({
+        ok: true,
+        phase: '8.8.4-B',
+        description: 'RTB Queue Refresher Status',
+        timestamp: new Date().toISOString(),
+        ...status,
+        lastRunTime: status.lastRunTime?.toISOString() || null
+      });
+    } catch (error: any) {
+      console.error('[8.8.4-B] Error fetching RTB refresher status:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to fetch RTB refresher status',
+        message: error.message
+      });
+    }
+  });
+
+  // POST /api/diagnostics/rtb-queue/force-refresh - Force immediate queue refresh
+  apiRouter.post('/diagnostics/rtb-queue/force-refresh', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { rtbQueueRefresher } = await import('./core/rtb/rtb_queue_refresher.js');
+      await rtbQueueRefresher.forceRefresh();
+      
+      res.json({
+        ok: true,
+        phase: '8.8.4-B',
+        message: 'RTB Queue refresh forced successfully',
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[8.8.4-B] Error forcing RTB queue refresh:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to force RTB queue refresh',
+        message: error.message
+      });
+    }
+  });
+
+  // POST /api/diagnostics/rtb-queue/clear - Clear all queued signals for a mode
+  apiRouter.post('/diagnostics/rtb-queue/clear', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { readyToBuyService } = await import('./core/rtb/ready_to_buy_service.js');
+      const mode = (req.query.mode as 'live' | 'paper') || 'paper';
+      
+      const cleared = await readyToBuyService.clearQueue(mode);
+      
+      res.json({
+        ok: true,
+        phase: '8.8.4-B',
+        message: `Cleared ${cleared} queued signals from ${mode} queue`,
+        clearedCount: cleared,
+        mode,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[8.8.4-B] Error clearing RTB queue:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to clear RTB queue',
+        message: error.message
+      });
+    }
+  });
+
   // ==================== Phase 8.8.3-I5: RTB Block Recording Audit ====================
   
   // GET /api/diagnostics/i5/rtb-block-log - Get RTB block event log for audit
