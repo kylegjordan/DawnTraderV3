@@ -1,0 +1,118 @@
+🧭 Directive 8.8.4-C.2 — Live Validation and Performance Verification
+
+Purpose:
+Validate the full end-to-end signal quality, ranking, and execution pipeline in paper-trading mode, ensuring all Phase C metrics (NGC, CWQI, ProfitRate, Enhanced Risk, and Rolling Normalization) behave as expected under live conditions.
+
+🔹 Session Parameters
+Parameter	Setting
+Mode	Paper Trading
+Duration	Minimum 60 minutes continuous runtime
+Diagnostic Logging	Full (include [C], [B.1], [B.2], and SQE logs)
+Expected Signal Volume	≥ 200 signals across Tier A/B pairs
+Validation Focus	Metric correctness, timing cadence, performance stability
+🔹 Execution Steps for Replit
+1. Start the Paper Trading Engine
+
+Run the engine in diagnostic mode so that all [C] log tags are emitted.
+
+Confirm that the following appear within the first 5 minutes:
+
+[C][ROLLING_NORMALIZATION]
+[C][ENHANCED_RISK]
+[C][CWQI_DECAY]
+[C][PROFIT_FLOORS]
+[C][CONFIG_LOAD]
+[B.1][SQE_REJECT]
+[B.2][CONFIG]
+
+
+Each should show live numeric values.
+
+2. Observe and Record Live Metrics
+
+During the 60-minute run, collect metrics snapshots every 10 minutes:
+
+Metric	Source	Expectation
+NGC distribution	SQE logs	Mean ≈ 0.55–0.70, SD < 0.15
+CWQI distribution	RTB logs	Mean ≥ 0.60, stable decay trend
+ProfitRate	quality_index.ts	Within configured strategy floors
+Enhanced Risk	risk_index.ts	< 0.7 for most signals; occasional > 0.9 OK
+FX5 cadence	[REB2.10][CycleStart]	Tier A ≤ 40 s, Tier B ≤ 12 min
+Performance latency	system monitor	< 5 s scan lag; < 70 % CPU
+Queue turnover	RTB queue	CWQI decay visible; slots freeing & refilling
+3. Confirm Metric Propagation
+
+At least once during the session, verify in logs or UI:
+
+Confidence field (NGC) appears in:
+
+RTB table
+
+Active Trades table
+
+Trade History table
+
+CWQI ranking orders the RTB queue.
+
+SQE rejections appear with [C][PROFIT_FLOORS] or [B.1][SQE_REJECT].
+
+4. Validate CWQI Decay
+
+Check for CWQI decay over time in RTB queue logs:
+
+[C][CWQI_DECAY] symbol=EURUSD  cwqi_orig=0.64  cwqi_decayed=0.52  t=40m
+
+
+✅ Expectation: CWQI decayed ≈ e⁻⁰·⁰³ᵗ trend; highest-ranked signals refresh as older ones lose priority.
+
+5. Monitor Performance Stability
+
+Log average scan cycle latency and CPU utilization:
+
+Latency < 5 s
+
+CPU < 70 %
+
+No Kraken rate-limit or throttle events.
+
+If throttling appears, note timestamp and affected pairs.
+
+6. Export Validation Reports
+
+After 60 minutes:
+
+Export the following to /logs/validation/
+
+slal_dump.json
+
+active_trades.json
+
+trade_history.json
+
+slal_trade_correlation.json
+
+Capture the last 200 lines of the diagnostic log containing all [C] tags.
+
+Post a summary report containing:
+
+Average NGC, CWQI, ProfitRate, Risk
+
+% of signals rejected by SQE
+
+Queue turnover rate
+
+System latency averages
+
+🔹 Completion Criteria
+
+Directive 8.8.4-C.2 will be marked ✅ “Validated and Verified” when:
+
+All five [C] logs appear with numeric values.
+
+Metrics remain within expected ranges.
+
+FX5 cadence and system performance stable.
+
+CWQI decay and SQE filtering function as designed.
+
+Validation reports export successfully with no errors.
