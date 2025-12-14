@@ -968,6 +968,14 @@ export default function ActiveTradesV2() {
   const integrity = data?.integrity || { systemCount: 0, maxOpenTrades: 15, slotsAvailable: 15, status: 'OK' as const };
   const portfolio = data?.portfolio || { startingBalance: 0, currentBalance: 0, cashBalance: 0, totalPositionValue: 0, netPnl: 0, netPnlPercent: 0 };
 
+  // DEBUG: Log each position's netPnl to understand the sum calculation
+  const openTradesNetPnlSum = positions.reduce((sum, pos) => {
+    const netPnlValue = parseFloat(String(pos.netPnl)) || 0;
+    console.log(`[DEBUG_SUM] ${pos.symbol}: netPnl=${pos.netPnl}, parsed=${netPnlValue}, runningSum=${sum + netPnlValue}`);
+    return sum + netPnlValue;
+  }, 0);
+  console.log(`[DEBUG_SUM] TOTAL openTradesNetPnlSum=${openTradesNetPnlSum}, portfolio.currentBalance=${portfolio.currentBalance}, RESULT=${portfolio.currentBalance + openTradesNetPnlSum}`);
+
   return (
     <section data-testid="active-trades-v2" data-last-update-at={lastDataRefreshAt || ''}>
       <div className="flex items-center justify-between mb-4">
@@ -994,7 +1002,7 @@ export default function ActiveTradesV2() {
         integrity={integrity} 
         uiCount={positions.length}
         portfolio={portfolio}
-        openTradesNetPnlSum={positions.reduce((sum, pos) => sum + (parseFloat(String(pos.netPnl)) || 0), 0)}
+        openTradesNetPnlSum={openTradesNetPnlSum}
         onClearStranded={() => clearStrandedMutation.mutate()}
         isClearing={clearStrandedMutation.isPending}
         onResetAll={() => resetSessionMutation.mutate()}
