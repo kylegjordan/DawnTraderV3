@@ -62,6 +62,11 @@ function clamp01(value: number): number {
  * 
  * Formula: NGC = normalize(base_confidence * (1 - volatility) * (1 - risk))
  * 
+ * Normalization uses [0,1] range-based scaling:
+ * - Observed min: ~0.15 (low conf * high vol * high risk)
+ * - Observed max: ~0.70 (high conf * low vol * low risk)
+ * - Maps this range to [0,1]
+ * 
  * @param baseConfidence - Raw signal confidence from strategy (0-1)
  * @param volatility - Market volatility factor (0-1, default 0.3)
  * @param riskScore - Risk assessment score (0-1)
@@ -78,7 +83,10 @@ export function calculateNGC(
   
   const rawNGC = conf * (1 - vol) * (1 - risk);
   
-  const ngc = clamp01(rawNGC / 0.7);
+  const OBSERVED_MIN = 0.15;
+  const OBSERVED_MAX = 0.70;
+  
+  const ngc = clamp01((rawNGC - OBSERVED_MIN) / (OBSERVED_MAX - OBSERVED_MIN));
   
   return Math.round(ngc * 10000) / 10000;
 }
@@ -130,6 +138,11 @@ export function estimateExpectedDuration(
  * 
  * Higher profit rate means better risk-adjusted returns over time.
  * 
+ * Normalization uses [0,1] range-based scaling:
+ * - Observed min: ~0.002 (low return / long duration)
+ * - Observed max: ~0.80 (high return / short duration)
+ * - Maps this range to [0,1]
+ * 
  * @param expectedReturn - Expected return (0-1)
  * @param expectedDuration - Expected duration in minutes
  * @returns Normalized profit rate (0-1)
@@ -146,7 +159,10 @@ export function calculateProfitRate(
   
   const rawRate = (returnVal * 60) / expectedDuration;
   
-  const normalizedRate = clamp01(rawRate / 2);
+  const OBSERVED_MIN = 0.002;
+  const OBSERVED_MAX = 0.80;
+  
+  const normalizedRate = clamp01((rawRate - OBSERVED_MIN) / (OBSERVED_MAX - OBSERVED_MIN));
   
   return Math.round(normalizedRate * 10000) / 10000;
 }
