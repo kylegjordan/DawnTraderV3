@@ -837,11 +837,29 @@ export default function ActiveTradesV2() {
       const symbolNorm = normalizeSymbol(position.symbol);
       const livePrice = livePrices[symbolNorm] as { price: number; timestamp: string; traceId?: string } | undefined;
       if (livePrice) {
-        // Update price and recalculate P/L
+        // Update price and recalculate P/L (including cost-adjusted metrics)
         const newCurrentPrice = livePrice.price;
-        const newPnl = (newCurrentPrice - position.entryPrice) * position.quantity;
-        const newPnlPercent = ((newCurrentPrice - position.entryPrice) / position.entryPrice) * 100;
-        const newHealth = newPnlPercent > 1 ? 'green' : newPnlPercent < -1 ? 'red' : 'yellow';
+        const positionValue = position.quantity * newCurrentPrice;
+        
+        // Fee/slippage constants (same as backend)
+        const FEE_PERCENT = 0.0010; // 0.10%
+        const SLIPPAGE_PERCENT = 0.0015; // 0.15%
+        
+        // Recalculate exit costs based on new price
+        const newEstExitFee = positionValue * FEE_PERCENT;
+        const newEstExitSlippage = positionValue * SLIPPAGE_PERCENT;
+        const newEstTotalCost = (position.entryFee || 0) + (position.entrySlippage || 0) + newEstExitFee + newEstExitSlippage;
+        
+        // Gross P/L = price difference * quantity
+        const newGrossPnl = (newCurrentPrice - position.entryPrice) * position.quantity;
+        const newGrossPnlPercent = ((newCurrentPrice - position.entryPrice) / position.entryPrice) * 100;
+        
+        // Net P/L = Gross P/L - Total Costs
+        const newNetPnl = newGrossPnl - newEstTotalCost;
+        const entryValue = position.quantity * position.entryPrice;
+        const newNetPnlPercent = entryValue > 0 ? (newNetPnl / entryValue) * 100 : 0;
+        
+        const newHealth = newGrossPnlPercent > 1 ? 'green' : newGrossPnlPercent < -1 ? 'red' : 'yellow';
         
         // Phase 8.8.3-I7-WS-C (C2 Stage 6): Log UI apply to position event
         if (livePrice.traceId) {
@@ -855,8 +873,15 @@ export default function ActiveTradesV2() {
         return {
           ...position,
           currentPrice: newCurrentPrice,
-          unrealizedPnl: newPnl,
-          unrealizedPnlPercent: newPnlPercent,
+          unrealizedPnl: newGrossPnl,
+          unrealizedPnlPercent: newGrossPnlPercent,
+          grossPnl: newGrossPnl,
+          grossPnlPercent: newGrossPnlPercent,
+          netPnl: newNetPnl,
+          netPnlPercent: newNetPnlPercent,
+          estExitFee: newEstExitFee,
+          estExitSlippage: newEstExitSlippage,
+          estTotalCost: newEstTotalCost,
           health: newHealth as 'green' | 'yellow' | 'red',
           distanceToTP: position.takeProfit - newCurrentPrice,
           distanceToSL: newCurrentPrice - position.stopLoss
@@ -969,7 +994,7 @@ export default function ActiveTradesV2() {
         integrity={integrity} 
         uiCount={positions.length}
         portfolio={portfolio}
-        openTradesNetPnlSum={positions.reduce((sum, pos) => sum + (pos.netPnl ?? 0), 0)}
+        openTradesNetPnlSum={positions.reduce((sum, pos) => sum + (parseFloat(String(pos.netPnl)) || 0), 0)}
         onClearStranded={() => clearStrandedMutation.mutate()}
         isClearing={clearStrandedMutation.isPending}
         onResetAll={() => resetSessionMutation.mutate()}
