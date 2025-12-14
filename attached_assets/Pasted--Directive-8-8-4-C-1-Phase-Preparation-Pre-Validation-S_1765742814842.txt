@@ -1,0 +1,95 @@
+🧭 Directive 8.8.4-C.1 (Phase Preparation): Pre-Validation Session Checklist
+
+Purpose:
+Confirm that all 8.8.4-C metric subsystems are correctly initialized, synchronized, and emitting their diagnostic logs before the first live (paper) validation session.
+
+🔹 Tasks for Replit
+1. Confirm Log Initialization Sequence
+
+Run the application in paper mode for 2–3 minutes after startup and confirm that all the following log tags appear at least once in the console or log stream:
+
+[C][ROLLING_NORMALIZATION]
+[C][ENHANCED_RISK]
+[C][CWQI_DECAY]
+[C][PROFIT_FLOORS]
+[C][CONFIG_LOAD]
+
+
+✅ Expectation:
+Each tag should appear at least once and contain valid metric values (no “undefined” or NaN).
+
+2. Confirm FX5 Scanner Cadence & OHLCV Cache Activity
+
+Query or tail the FX5 scanner logs to verify:
+
+Tier A pairs update every ~30 s.
+
+Tier B pairs update every ~10 min.
+
+ATR and OHLCV buffers show new timestamps after each update.
+
+✅ Expectation:
+For Tier A: ≤ 40 s interval between consecutive bars.
+For Tier B: ≤ 12 min interval.
+
+3. Confirm Risk Metric Source Integrity
+
+Open server/core/metrics/risk_index.ts and verify:
+
+ATR values are read from the cached buffer (no external Kraken calls).
+
+Correlation matrix is updated asynchronously from cached data.
+
+Decay factor λ = 0.05 min⁻¹ is applied to stale correlations.
+
+✅ Expectation:
+No new API call instructions; only internal cache reads.
+
+4. Confirm Configuration Loads
+
+Open and show logs for:
+
+config/metrics.json
+config/strategy_thresholds.json
+
+
+and confirm [C][CONFIG_LOAD] indicates both files were successfully loaded with correct values:
+
+NGC min/max range
+
+ProfitRate floors by strategy
+
+5. Confirm SQE & RTB Integration
+
+SQE filters reference updated thresholds (NGC ≥ 0.40, Risk ≤ 0.70, ProfitRate ≥ strategy floor, CWQI ≥ 0.50).
+
+RTB queue uses decayed CWQI for ranking (λ = 0.03 min⁻¹).
+
+[B.1][SQE_REJECT] and [B.2][CONFIG] legacy tags still appear.
+
+✅ Expectation:
+No signals bypass SQE; RTB ranks by decayed CWQI.
+
+6. Confirm Performance Stability
+
+Run a brief scan cycle for 5 minutes:
+
+Observe system latency (no gaps > 5 s).
+
+Confirm CPU load < 70 %.
+
+Ensure no Kraken rate-limit or throttle messages appear.
+
+7. Report & Handoff
+
+After all confirmations:
+
+Post the log excerpt containing all [C][…] tags.
+
+Confirm that all expected behaviors were observed and no anomalies present.
+Once you confirm, the system is authorized to begin the validation session.
+
+✅ When Pre-Validation Is Completed
+
+Once Replit provides confirmation and logs for all seven steps above, you will hand over Part 2 – the Validation Trading Session Plan (the live paper session).
+Only then do we run the monitored trading validation.
