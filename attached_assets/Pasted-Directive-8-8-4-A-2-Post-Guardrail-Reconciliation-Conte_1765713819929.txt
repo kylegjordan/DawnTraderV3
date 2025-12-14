@@ -1,0 +1,104 @@
+Directive 8.8.4-A.2: Post-Guardrail Reconciliation
+Context / Phase
+
+This directive belongs to Phase 8.8.4 – Signal Lifecycle and Readiness Validation, following Directive 8.8.4-A (Signal Lifecycle Audit Layer – SLAL).
+Directive 8.8.4-A.2 addresses a discrepancy observed between SLAL “Executed / Completed” counts and actual open trades, caused by trades that were logged as executed before the portfolio’s guardrail logic rejected them due to slot capacity limits.
+
+Purpose
+
+Ensure that SLAL metrics, the portfolio manager, and the UI reflect a consistent and truthful trade state by reconciling any trades that are logged as executed but never successfully registered in the portfolio due to guardrail rejections (e.g., max open trades reached).
+
+This correction brings audit accuracy in line with actual trading capacity and closes the loop between SLAL execution logging and portfolio guardrail enforcement.
+
+Directive to Replit
+
+Implement Post-Guardrail Reconciliation Hook
+
+In server/services/paper-execution-engine.ts, immediately after the trade creation and guardrail validation sequence, add a reconciliation step that checks whether the executed trade was successfully persisted to the portfolio.
+
+If the trade was not confirmed, reclassify its lifecycle state as REJECTED with the reason SLOT_CONFLICT.
+
+// After trade creation and SLAL execution logging
+const confirmedTrade = portfolioManager.getTradeById(trade.id);
+
+if (!confirmedTrade) {
+  signalLifecycleAudit.recordEvent(signal.id, 'REJECTED', {
+    reason: 'SLOT_CONFLICT',
+    message: 'Trade execution failed due to max open trades limit'
+  });
+  console.warn(`[SLAL] Post-Guardrail reconciliation: Trade ${signal.id} rejected due to slot conflict.`);
+}
+
+
+Ensure this check occurs after all portfolio and guardrail validations but before control returns to the orchestrator.
+
+The hook must handle both paper-trading and live-simulation modes.
+
+Update SLAL Metrics Aggregation
+
+In server/core/audit/signal_lifecycle_audit.ts, update the metrics computation so that EXECUTION events that are later followed by a REJECTED event with reason SLOT_CONFLICT are excluded from the signalsExecuted and signalsCompleted tallies.
+
+Correct Rejection Reason Terminology
+
+In server/services/trade-safety.ts and server/core/guardrail-policy.ts, review the use of MAX_POSITIONS as a rejection reason.
+Replace or alias this with MAX_TRADES to clearly indicate that this refers to the maximum number of simultaneous open trades, not duplicate symbols or exposure.
+
+Verify that deduplication rejections (same symbol already active or queued) remain labeled distinctly (e.g., DUPLICATE_POSITION).
+
+Run Diagnostic Verification
+
+Execute a 10-minute controlled paper-trading session using the same test credentials:
+
+username: testuser123
+
+password: SecurePass123!
+
+Capture the following logs after the run:
+
+/logs/diagnostics/slal_dump.json
+
+/logs/diagnostics/active_trades.json
+
+/logs/diagnostics/trade_history.json
+
+/logs/diagnostics/slal_trade_correlation.json
+
+Confirm the following outcomes:
+
+signalsExecuted = signalsCompleted = number of open trades (≈ 15)
+
+signalsRejected increased to include any overflow (SLOT_CONFLICT) events
+
+MAX_TRADES rejection reason appears consistently in SLAL and UI metrics
+
+Confirm UI Alignment
+
+Verify that the Ready-to-Buy and Blocked-Signals panels correctly display MAX_TRADES as the primary rejection cause.
+
+Confirm that the Active-Trades tab and backend diagnostics both report identical open-trade counts.
+
+Expected Result
+
+After successful implementation and verification:
+
+SLAL “Executed” and “Completed” counts exactly equal the number of open trades in the portfolio.
+
+Overflow trade attempts are properly reclassified as REJECTED (SLOT_CONFLICT) rather than counted as completed.
+
+The “MAX_TRADES” terminology replaces ambiguous “MAX_POSITIONS” to reflect actual slot-capacity constraints.
+
+The UI, SLAL metrics, and trade manager remain in perfect synchronization.
+
+Directive Metadata
+
+Directive ID: DT-8.8.4-A.2
+
+Phase: 8.8.4 (Signal Lifecycle and Readiness Validation)
+
+Related Directive: DT-8.8.4-A (SLAL Implementation)
+
+Associated Test Credentials: testuser123 / SecurePass123!
+
+Approval: Architect Verification Required
+
+Canonical Reference: GROUNDING-MISSION-COLLEAGUE-COLLABORATION (Approved for Canonicalization)

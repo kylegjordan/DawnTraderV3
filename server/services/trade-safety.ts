@@ -700,14 +700,15 @@ export async function checkGuardrailRisk(
     return result;
   };
   
-  // Phase 8.8.4-A: Map TradeSafetyResultCode to SLAL RejectionReason
+  // Phase 8.8.4-A.2: Map TradeSafetyResultCode to SLAL RejectionReason
+  // Updated to use MAX_TRADES instead of MAX_POSITIONS for clarity
   const mapCodeToSLALReason = (code: TradeSafetyResultCode): RejectionReason => {
     switch (code) {
       case 'KILL_SWITCH': return 'DAILY_LOSS_LIMIT';
-      case 'POSITION_LIMIT': return 'MAX_POSITIONS';
+      case 'POSITION_LIMIT': return 'MAX_TRADES'; // Max trades per symbol/asset
       case 'COOLDOWN': return 'SYMBOL_COOLDOWN';
       case 'MAX_POSITION': return 'POSITION_CAP';
-      case 'MAX_TRADES': return 'MAX_POSITIONS';
+      case 'MAX_TRADES': return 'MAX_TRADES'; // Max simultaneous open trades
       case 'MAX_TOTAL_EXPOSURE': return 'POSITION_CAP';
       case 'ENGINE_STOPPING': return 'OTHER';
       default: return 'GUARDRAIL_BLOCKED';

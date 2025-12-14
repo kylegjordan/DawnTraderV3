@@ -24,7 +24,9 @@ export type RejectionReason =
   | 'INVALID_SIGNAL'          // Malformed signal (missing fields)
   | 'ZERO_SIZE'               // Sizing returned 0 qty
   | 'GUARDRAIL_BLOCKED'       // Risk guardrail rejected
-  | 'MAX_POSITIONS'           // Max open positions reached
+  | 'MAX_POSITIONS'           // Max open positions reached (legacy alias for MAX_TRADES)
+  | 'MAX_TRADES'              // Max simultaneous open trades limit reached
+  | 'SLOT_CONFLICT'           // Post-guardrail: trade rejected due to slot capacity overflow
   | 'DAILY_LOSS_LIMIT'        // Daily loss kill switch triggered
   | 'SYMBOL_COOLDOWN'         // Symbol on cooldown
   | 'POSITION_CAP'            // Position size cap exceeded
@@ -316,6 +318,8 @@ class SignalLifecycleAuditService {
       ZERO_SIZE: 0,
       GUARDRAIL_BLOCKED: 0,
       MAX_POSITIONS: 0,
+      MAX_TRADES: 0,
+      SLOT_CONFLICT: 0,
       DAILY_LOSS_LIMIT: 0,
       SYMBOL_COOLDOWN: 0,
       POSITION_CAP: 0,
