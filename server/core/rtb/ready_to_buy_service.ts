@@ -1,5 +1,5 @@
 /**
- * Phase 8.8.4-B: Ready-to-Buy (RTB) Queue Service
+ * Phase 8.8.4-B/C: Ready-to-Buy (RTB) Queue Service
  * 
  * Manages the queue of high-quality signals that pass quality guardrails
  * but are blocked by capacity constraints (MAX_TRADES, MAX_TOTAL_EXPOSURE, etc.)
@@ -10,6 +10,10 @@
  * 3. Enforces uniqueness by symbol + strategy pair
  * 4. Removes stale/expired signals (TTL: 3 minutes)
  * 5. Promotes highest-CWQI signals when capacity frees up
+ * 
+ * Phase C Enhancements:
+ * 6. CWQI Durability Decay: CWQI_decayed = CWQI_orig × e^(-λt), λ = 0.03 per minute
+ *    Prioritizes fresher signals by applying time-based decay to ranking
  */
 
 import { storage } from '../../storage';
@@ -56,6 +60,33 @@ export interface RTBPromotionResult {
 }
 
 const SIGNAL_TTL_MS = 3 * 60 * 1000; // 3 minutes
+
+const CWQI_DECAY_LAMBDA = 0.03;
+
+/**
+ * Phase C: Calculate decayed CWQI based on signal age
+ * CWQI_decayed = CWQI_orig × e^(-λt), λ = 0.03 per minute
+ * 
+ * @param originalCWQI - The original CWQI value
+ * @param queuedAt - Timestamp when signal was queued
+ * @returns Decayed CWQI value
+ */
+export function calculateDecayedCWQI(originalCWQI: number, queuedAt: Date | string): number {
+  const ageMs = Date.now() - new Date(queuedAt).getTime();
+  const ageMinutes = ageMs / (60 * 1000);
+  
+  const decayFactor = Math.exp(-CWQI_DECAY_LAMBDA * ageMinutes);
+  const decayedCWQI = originalCWQI * decayFactor;
+  
+  return Math.round(decayedCWQI * 10000) / 10000;
+}
+
+/**
+ * Phase C: Get CWQI decay factor for a given age
+ */
+export function getCWQIDecayFactor(ageMinutes: number): number {
+  return Math.exp(-CWQI_DECAY_LAMBDA * ageMinutes);
+}
 
 class ReadyToBuyService {
   private initialized = false;
@@ -160,17 +191,42 @@ class ReadyToBuyService {
 
   /**
    * Get the highest-CWQI queued signal for a mode
+   * Phase C: Uses decayed CWQI for ranking to prioritize fresher signals
    */
   async getTopSignal(mode: TradingMode): Promise<RtbSignal | null> {
     const signals = await storage.getRtbSignals({
       mode,
       status: 'queued',
-      orderBy: 'cwqi',
-      orderDir: 'desc',
-      limit: 1,
     });
     
-    return signals[0] || null;
+    if (signals.length === 0) {
+      return null;
+    }
+    
+    let bestSignal: RtbSignal | null = null;
+    let bestDecayedCWQI = -1;
+    
+    for (const signal of signals) {
+      const originalCWQI = parseFloat(signal.cwqi);
+      const decayedCWQI = calculateDecayedCWQI(originalCWQI, signal.queuedAt);
+      
+      if (decayedCWQI > bestDecayedCWQI) {
+        bestDecayedCWQI = decayedCWQI;
+        bestSignal = signal;
+      }
+    }
+    
+    if (bestSignal) {
+      const ageMinutes = (Date.now() - new Date(bestSignal.queuedAt).getTime()) / (60 * 1000);
+      console.log(
+        `[C][CWQI_DECAY] Top signal ${bestSignal.symbol}/${bestSignal.strategy}: ` +
+        `originalCWQI=${parseFloat(bestSignal.cwqi).toFixed(4)}, ` +
+        `decayedCWQI=${bestDecayedCWQI.toFixed(4)}, ` +
+        `age=${ageMinutes.toFixed(1)}min`
+      );
+    }
+    
+    return bestSignal;
   }
 
   /**

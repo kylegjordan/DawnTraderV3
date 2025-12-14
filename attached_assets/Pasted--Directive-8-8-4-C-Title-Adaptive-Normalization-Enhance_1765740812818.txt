@@ -1,0 +1,1094 @@
+📜 Directive 8.8.4-C
+
+Title: Adaptive Normalization, Enhanced Risk & Durability Framework
+Phase: 8.8.4-C (Signal Quality Optimization Series)
+Predecessor: 8.8.4-B.3 — Confidence Refactor & SQE Normalization Alignment
+Authorized by: Dawn Trader Core
+Audience: Replit (Implementation Target)
+
+🎯 Objective
+
+Implement the adaptive, cadence-aware quality and risk calculations described below.
+This update establishes dynamic normalization, correlation-aware risk, time-decayed ranking, and strategy-specific profitability floors while keeping all computations internal (no additional Kraken API calls).
+
+⚙️ Implementation Tasks
+Task 1 — Adaptive Rolling Normalization
+
+Compute rolling min/max for NGC and ProfitRate over the most recent 500 signals (or 60 min sliding window).
+
+Replace fixed normalization constants with:
+
+𝑁
+𝐺
+𝐶
+𝑛
+𝑜
+𝑟
+𝑚
+=
+𝑁
+𝐺
+𝐶
+−
+𝑁
+𝐺
+𝐶
+𝑚
+𝑖
+𝑛
+𝑟
+𝑜
+𝑙
+𝑙
+𝑖
+𝑛
+𝑔
+𝑁
+𝐺
+𝐶
+𝑚
+𝑎
+𝑥
+𝑟
+𝑜
+𝑙
+𝑙
+𝑖
+𝑛
+𝑔
+−
+𝑁
+𝐺
+𝐶
+𝑚
+𝑖
+𝑛
+𝑟
+𝑜
+𝑙
+𝑙
+𝑖
+𝑛
+𝑔
+NGC
+norm
+	​
+
+=
+NGC
+max
+rolling
+	​
+
+−NGC
+min
+rolling
+	​
+
+NGC−NGC
+min
+rolling
+	​
+
+	​
+
+𝑃
+𝑟
+𝑜
+𝑓
+𝑖
+𝑡
+𝑅
+𝑎
+𝑡
+𝑒
+𝑛
+𝑜
+𝑟
+𝑚
+=
+𝑃
+𝑅
+−
+𝑃
+𝑅
+𝑚
+𝑖
+𝑛
+𝑟
+𝑜
+𝑙
+𝑙
+𝑖
+𝑛
+𝑔
+𝑃
+𝑅
+𝑚
+𝑎
+𝑥
+𝑟
+𝑜
+𝑙
+𝑙
+𝑖
+𝑛
+𝑔
+−
+𝑃
+𝑅
+𝑚
+𝑖
+𝑛
+𝑟
+𝑜
+𝑙
+𝑙
+𝑖
+𝑛
+𝑔
+ProfitRate
+norm
+	​
+
+=
+PR
+max
+rolling
+	​
+
+−PR
+min
+rolling
+	​
+
+PR−PR
+min
+rolling
+	​
+
+	​
+
+
+Implement exponential smoothing (α = 0.15) to prevent oscillation.
+
+Tag logs with [C][ROLLING_NORMALIZATION].
+
+Task 2 — Enhanced Risk Metric (Stop Distance + Correlation Penalty)
+
+Create a new module server/core/metrics/risk_index.ts with:
+
+𝑅
+𝑖
+𝑠
+𝑘
+=
+𝑆
+𝑡
+𝑜
+𝑝
+𝐷
+𝑖
+𝑠
+𝑡
+𝑎
+𝑛
+𝑐
+𝑒
+𝐴
+𝑇
+𝑅
+×
+𝐶
+𝑜
+𝑟
+𝑟
+𝑃
+𝑒
+𝑛
+𝑎
+𝑙
+𝑡
+𝑦
+Risk=
+ATR
+StopDistance
+	​
+
+×CorrPenalty
+𝐶
+𝑜
+𝑟
+𝑟
+𝑃
+𝑒
+𝑛
+𝑎
+𝑙
+𝑡
+𝑦
+=
+1
++
+max
+⁡
+(
+0
+,
+𝐶
+𝑜
+𝑟
+𝑟
+𝑖
+𝑗
+𝑎
+𝑑
+𝑗
+−
+0.8
+)
+CorrPenalty=1+max(0,Corr
+ij
+adj
+	​
+
+−0.8)
+
+where
+
+StopDistance = |Entry – Stop| / Entry
+
+ATR = current average true range (already cached)
+
+Corr₍ᵢⱼ₎ᵃᵈʲ is the exponentially-decayed correlation coefficient between asset i and any open-position asset j:
+
+𝐶
+𝑜
+𝑟
+𝑟
+𝑖
+𝑗
+𝑎
+𝑑
+𝑗
+=
+𝐶
+𝑜
+𝑟
+𝑟
+𝑖
+𝑗
+𝑝
+𝑟
+𝑒
+𝑣
+×
+𝑒
+−
+0.05
+×
+𝐴
+𝑔
+𝑒
+𝑚
+𝑖
+𝑛
+𝑢
+𝑡
+𝑒
+𝑠
+Corr
+ij
+adj
+	​
+
+=Corr
+ij
+prev
+	​
+
+×e
+−0.05×Age
+minutes
+	​
+
+
+Execution constraints
+
+Use cached OHLCV buffers from FX5 scanner (no Kraken calls).
+
+Update correlation matrix every 30 s for Tier A pairs; opportunistically for Tier B pairs.
+
+Decay correlation weights if data older than 10 min.
+
+Tag logs with [C][ENHANCED_RISK].
+
+Task 3 — Expected-Return Normalization
+
+Normalize expected return identically to Task 1:
+
+𝐸
+𝑅
+𝑛
+𝑜
+𝑟
+𝑚
+=
+𝐸
+𝑅
+−
+𝐸
+𝑅
+𝑚
+𝑖
+𝑛
+𝑟
+𝑜
+𝑙
+𝑙
+𝑖
+𝑛
+𝑔
+𝐸
+𝑅
+𝑚
+𝑎
+𝑥
+𝑟
+𝑜
+𝑙
+𝑙
+𝑖
+𝑛
+𝑔
+−
+𝐸
+𝑅
+𝑚
+𝑖
+𝑛
+𝑟
+𝑜
+𝑙
+𝑙
+𝑖
+𝑛
+𝑔
+ER
+norm
+	​
+
+=
+ER
+max
+rolling
+	​
+
+−ER
+min
+rolling
+	​
+
+ER−ER
+min
+rolling
+	​
+
+	​
+
+
+This replaces fixed scaling in quality_index.ts.
+
+Task 4 — CWQI Durability Decay
+
+Add temporal decay to CWQI values within the Ready-to-Buy (RTB) queue:
+
+𝐶
+𝑊
+𝑄
+𝐼
+𝑑
+𝑒
+𝑐
+𝑎
+𝑦
+𝑒
+𝑑
+=
+𝐶
+𝑊
+𝑄
+𝐼
+𝑜
+𝑟
+𝑖
+𝑔
+×
+𝑒
+−
+𝜆
+𝑡
+CWQI
+decayed
+	​
+
+=CWQI
+orig
+	​
+
+×e
+−λt
+
+where
+λ = 0.03 min⁻¹ and t = minutes since signal.
+Integrate into rtb_queue_refresher.ts; tag logs [C][CWQI_DECAY].
+
+Task 5 — Strategy-Specific ProfitRate Floors
+
+Create config/strategy_thresholds.json with fields:
+
+{
+  "DHMA": 0.22,
+  "VWAP_Bounce": 0.25,
+  "MeanReversion": 0.28,
+  "Breakout": 0.30,
+  "Scalper": 0.35
+}
+
+
+Modify the SQE filter to apply:
+
+𝑖
+𝑓
+ 
+𝑃
+𝑟
+𝑜
+𝑓
+𝑖
+𝑡
+𝑅
+𝑎
+𝑡
+𝑒
+<
+𝐹
+𝑙
+𝑜
+𝑜
+𝑟
+[
+𝑠
+𝑡
+𝑟
+𝑎
+𝑡
+𝑒
+𝑔
+𝑦
+]
+:
+ 
+𝑟
+𝑒
+𝑗
+𝑒
+𝑐
+𝑡
+if ProfitRate<Floor[strategy]: reject
+
+Tag logs [C][PROFIT_FLOORS].
+
+🧾 Verification Deliverables
+
+Code Evidence
+
+quality_index.ts → rolling normalization formulas present.
+
+risk_index.ts → new correlation and stop-distance logic.
+
+rtb_queue_refresher.ts → CWQI decay routine.
+
+config/strategy_thresholds.json → added.
+
+Runtime Proof
+
+Show logs [C][ROLLING_NORMALIZATION], [C][ENHANCED_RISK], [C][CWQI_DECAY], [C][PROFIT_FLOORS], [C][CONFIG_LOAD].
+
+Demonstrate decayed CWQI and strategy-specific thresholds in diagnostics output.
+
+Architectural Note
+All computations must remain in-memory, asynchronous, non-blocking, and must not generate new Kraken API calls.
+Replit must confirm correlation calculations read exclusively from FX5’s internal OHLCV buffers.
+
+🧩 Outcome
+
+Upon completion, Directive 8.8.4-C will:
+
+Replace static normalization with adaptive rolling normalization.
+
+Upgrade risk computation to include stop-distance and correlation.
+
+Introduce time-decayed ranking to prioritize fresher signals.
+
+Enforce strategy-specific profitability floors.
+
+Maintain real-time performance with zero external call overhead.
+
+📘 Updated Documentation
+
+(For inclusion in Bridge Repository – replaces prior “Signal Quality & Ranking Metrics Overview”)
+
+Overview
+
+The Dawn Trader Signal Quality Framework ranks and filters generated signals to ensure that only the highest-quality opportunities occupy limited trade capacity.
+This system unifies confidence, risk, efficiency, and profitability into a single composite metric: CWQI (Composite Weighted Quality Index).
+
+1. Normalized Global Confidence (NGC)
+
+Purpose: Represent signal reliability on a universal 0–1 scale across all strategies.
+
+𝑁
+𝐺
+𝐶
+=
+normalize
+(
+𝑏
+𝑎
+𝑠
+𝑒
+𝐶
+𝑜
+𝑛
+𝑓
+𝑖
+𝑑
+𝑒
+𝑛
+𝑐
+𝑒
+×
+(
+1
+−
+𝑣
+𝑜
+𝑙
+𝑎
+𝑡
+𝑖
+𝑙
+𝑖
+𝑡
+𝑦
+)
+×
+(
+1
+−
+𝑟
+𝑖
+𝑠
+𝑘
+𝑆
+𝑐
+𝑜
+𝑟
+𝑒
+)
+)
+NGC=normalize(baseConfidence×(1−volatility)×(1−riskScore))
+
+Rolling normalization:
+
+𝑁
+𝐺
+𝐶
+𝑛
+𝑜
+𝑟
+𝑚
+=
+𝑁
+𝐺
+𝐶
+−
+𝑁
+𝐺
+𝐶
+𝑚
+𝑖
+𝑛
+𝑟
+𝑜
+𝑙
+𝑙
+𝑖
+𝑛
+𝑔
+𝑁
+𝐺
+𝐶
+𝑚
+𝑎
+𝑥
+𝑟
+𝑜
+𝑙
+𝑙
+𝑖
+𝑛
+𝑔
+−
+𝑁
+𝐺
+𝐶
+𝑚
+𝑖
+𝑛
+𝑟
+𝑜
+𝑙
+𝑙
+𝑖
+𝑛
+𝑔
+NGC
+norm
+	​
+
+=
+NGC
+max
+rolling
+	​
+
+−NGC
+min
+rolling
+	​
+
+NGC−NGC
+min
+rolling
+	​
+
+	​
+
+
+Updated every scan cycle using last 500 signals.
+
+2. Enhanced Risk Metric
+
+Purpose: Capture both inherent trade risk and portfolio correlation exposure.
+
+𝑅
+𝑖
+𝑠
+𝑘
+=
+∣
+𝐸
+𝑛
+𝑡
+𝑟
+𝑦
+−
+𝑆
+𝑡
+𝑜
+𝑝
+∣
+/
+𝐸
+𝑛
+𝑡
+𝑟
+𝑦
+𝐴
+𝑇
+𝑅
+×
+𝐶
+𝑜
+𝑟
+𝑟
+𝑃
+𝑒
+𝑛
+𝑎
+𝑙
+𝑡
+𝑦
+Risk=
+ATR
+∣Entry−Stop∣/Entry
+	​
+
+×CorrPenalty
+𝐶
+𝑜
+𝑟
+𝑟
+𝑃
+𝑒
+𝑛
+𝑎
+𝑙
+𝑡
+𝑦
+=
+1
++
+max
+⁡
+(
+0
+,
+𝐶
+𝑜
+𝑟
+𝑟
+𝑖
+𝑗
+𝑎
+𝑑
+𝑗
+−
+0.8
+)
+CorrPenalty=1+max(0,Corr
+ij
+adj
+	​
+
+−0.8)
+
+with
+
+𝐶
+𝑜
+𝑟
+𝑟
+𝑖
+𝑗
+𝑎
+𝑑
+𝑗
+=
+𝐶
+𝑜
+𝑟
+𝑟
+𝑖
+𝑗
+𝑝
+𝑟
+𝑒
+𝑣
+×
+𝑒
+−
+0.05
+×
+𝐴
+𝑔
+𝑒
+𝑚
+𝑖
+𝑛
+𝑢
+𝑡
+𝑒
+𝑠
+Corr
+ij
+adj
+	​
+
+=Corr
+ij
+prev
+	​
+
+×e
+−0.05×Age
+minutes
+	​
+
+
+Correlations computed from cached OHLCV data; decayed if older than 10 min.
+
+3. Expected Return (ER)
+
+Purpose: Estimate normalized potential return adjusted for instrument behavior.
+
+𝐸
+𝑅
+𝑛
+𝑜
+𝑟
+𝑚
+=
+𝐸
+𝑅
+−
+𝐸
+𝑅
+𝑚
+𝑖
+𝑛
+𝑟
+𝑜
+𝑙
+𝑙
+𝑖
+𝑛
+𝑔
+𝐸
+𝑅
+𝑚
+𝑎
+𝑥
+𝑟
+𝑜
+𝑙
+𝑙
+𝑖
+𝑛
+𝑔
+−
+𝐸
+𝑅
+𝑚
+𝑖
+𝑛
+𝑟
+𝑜
+𝑙
+𝑙
+𝑖
+𝑛
+𝑔
+ER
+norm
+	​
+
+=
+ER
+max
+rolling
+	​
+
+−ER
+min
+rolling
+	​
+
+ER−ER
+min
+rolling
+	​
+
+	​
+
+4. ProfitRate
+
+Purpose: Express efficiency — profit potential per expected duration.
+
+𝑃
+𝑟
+𝑜
+𝑓
+𝑖
+𝑡
+𝑅
+𝑎
+𝑡
+𝑒
+=
+𝐸
+𝑥
+𝑝
+𝑒
+𝑐
+𝑡
+𝑒
+𝑑
+𝑅
+𝑒
+𝑡
+𝑢
+𝑟
+𝑛
+𝐸
+𝑥
+𝑝
+𝑒
+𝑐
+𝑡
+𝑒
+𝑑
+𝐷
+𝑢
+𝑟
+𝑎
+𝑡
+𝑖
+𝑜
+𝑛
+ProfitRate=
+ExpectedDuration
+ExpectedReturn
+	​
+
+
+Rolling normalization applied as in (1).
+Minimum floors enforced per strategy via config.
+
+5. CWQI – Composite Weighted Quality Index
+
+Purpose: Final signal-quality rank used in Ready-to-Buy queue.
+
+𝐶
+𝑊
+𝑄
+𝐼
+=
+(
+𝑁
+𝐺
+𝐶
+𝑛
+𝑜
+𝑟
+𝑚
+×
+0.40
+)
++
+(
+(
+1
+−
+𝑅
+𝑖
+𝑠
+𝑘
+)
+×
+0.25
+)
++
+(
+𝐸
+𝑅
+𝑛
+𝑜
+𝑟
+𝑚
+×
+0.20
+)
++
+(
+𝑃
+𝑟
+𝑜
+𝑓
+𝑖
+𝑡
+𝑅
+𝑎
+𝑡
+𝑒
+𝑛
+𝑜
+𝑟
+𝑚
+×
+0.15
+)
+CWQI=(NGC
+norm
+	​
+
+×0.40)+((1−Risk)×0.25)+(ER
+norm
+	​
+
+×0.20)+(ProfitRate
+norm
+	​
+
+×0.15)
+
+Durability decay:
+
+𝐶
+𝑊
+𝑄
+𝐼
+𝑓
+𝑖
+𝑛
+𝑎
+𝑙
+=
+𝐶
+𝑊
+𝑄
+𝐼
+×
+𝑒
+−
+0.03
+×
+𝑡
+𝑚
+𝑖
+𝑛
+𝑢
+𝑡
+𝑒
+𝑠
+CWQI
+final
+	​
+
+=CWQI×e
+−0.03×t
+minutes
+	​
+
+6. Signal Flow Summary
+
+FX5 Scanner → provides OHLCV and ATR streams (30 s Tier A / 10 min Tier B).
+
+Signal Orchestrator → computes extended metrics (NGC, ER, ProfitRate, CWQI).
+
+Signal Quality Evaluator (SQE) → filters using thresholds (NGC ≥ 0.40, Risk ≤ 0.70, ProfitRate ≥ strategy floor, CWQI ≥ 0.50).
+
+Ready-to-Buy Queue → ranks by CWQI, applies decay over time.
+
+Trade Capacity Limits (TCL) → fills open-trade slots based on ranked priority.
+
+Execution Engine → opens positions for top-ranked signals.
+
+7. Data Integrity & Performance Notes
+
+All metrics computed in-memory, updated each scan cycle.
+
+Correlation matrix cached and decayed; no new Kraken calls.
+
+Rolling statistics and decay are O(1) updates, safe for real-time operation.
+
+Diagnostic logs tagged by subsystem for audit and profiling.
+
+8. Revision History
+Version	Date	Directive	Summary
+8.8.4-B.1	Earlier	Introduced NGC & SQE	Universal confidence metric
+8.8.4-B.2	Earlier	SQE thresholds surfaced in UI	Filter visualization
+8.8.4-B.3	Earlier	Confidence replacement verified	NGC propagation complete
+8.8.4-C	Current	Adaptive normalization, enhanced risk, CWQI decay	Full quality optimization

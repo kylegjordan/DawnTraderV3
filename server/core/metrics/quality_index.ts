@@ -1,5 +1,5 @@
 /**
- * Phase 8.8.4-B.1/B.2: Confidence-Weighted Quality Index (CWQI) with NGC Integration
+ * Phase 8.8.4-B.1/B.2/C: Confidence-Weighted Quality Index (CWQI) with NGC Integration
  * 
  * This module implements the complete signal quality metrics pipeline:
  * 1. NGC (Normalized Global Confidence) - Combines base confidence with volatility and risk
@@ -14,6 +14,7 @@
  *   NGC = normalize(base_confidence * (1 - volatility) * (1 - risk))
  * 
  * B.2: Normalization parameters are loaded from config/metrics.json
+ * C: Adaptive Rolling Normalization replaces fixed constants
  */
 
 import * as fs from 'fs';
@@ -24,6 +25,8 @@ interface MetricsConfig {
   NGC_MAX: number;
   PROFITRATE_MIN: number;
   PROFITRATE_MAX: number;
+  ER_MIN: number;
+  ER_MAX: number;
 }
 
 const DEFAULT_METRICS_CONFIG: MetricsConfig = {
@@ -31,7 +34,128 @@ const DEFAULT_METRICS_CONFIG: MetricsConfig = {
   NGC_MAX: 0.70,
   PROFITRATE_MIN: 0.002,
   PROFITRATE_MAX: 0.80,
+  ER_MIN: 0.1,
+  ER_MAX: 0.8,
 };
+
+interface RollingDataPoint {
+  value: number;
+  timestamp: number;
+}
+
+const ROLLING_WINDOW_SIZE = 500;
+const ROLLING_WINDOW_MINUTES = 60;
+const SMOOTHING_ALPHA = 0.15;
+
+class RollingNormalizer {
+  private name: string;
+  private dataPoints: RollingDataPoint[] = [];
+  private smoothedMin: number;
+  private smoothedMax: number;
+  private defaultMin: number;
+  private defaultMax: number;
+  private initialized = false;
+  
+  constructor(name: string, defaultMin: number, defaultMax: number) {
+    this.name = name;
+    this.defaultMin = defaultMin;
+    this.defaultMax = defaultMax;
+    this.smoothedMin = defaultMin;
+    this.smoothedMax = defaultMax;
+    console.log(`[C][ROLLING_NORMALIZATION] Initialized ${name} normalizer with defaults [${defaultMin}, ${defaultMax}]`);
+  }
+  
+  addSample(value: number): void {
+    const now = Date.now();
+    this.dataPoints.push({ value, timestamp: now });
+    
+    this.pruneOldData(now);
+    
+    if (this.dataPoints.length >= 10) {
+      const rawMin = Math.min(...this.dataPoints.map(d => d.value));
+      const rawMax = Math.max(...this.dataPoints.map(d => d.value));
+      
+      if (!this.initialized) {
+        this.smoothedMin = rawMin;
+        this.smoothedMax = rawMax;
+        this.initialized = true;
+      } else {
+        this.smoothedMin = SMOOTHING_ALPHA * rawMin + (1 - SMOOTHING_ALPHA) * this.smoothedMin;
+        this.smoothedMax = SMOOTHING_ALPHA * rawMax + (1 - SMOOTHING_ALPHA) * this.smoothedMax;
+      }
+    }
+  }
+  
+  private pruneOldData(now: number): void {
+    const cutoffTime = now - ROLLING_WINDOW_MINUTES * 60 * 1000;
+    
+    this.dataPoints = this.dataPoints.filter(d => d.timestamp >= cutoffTime);
+    
+    if (this.dataPoints.length > ROLLING_WINDOW_SIZE) {
+      this.dataPoints = this.dataPoints.slice(-ROLLING_WINDOW_SIZE);
+    }
+  }
+  
+  normalize(value: number): number {
+    const min = this.getMin();
+    const max = this.getMax();
+    const range = max - min;
+    
+    if (range <= 0.001) {
+      return 0.5;
+    }
+    
+    return Math.max(0, Math.min(1, (value - min) / range));
+  }
+  
+  getMin(): number {
+    return this.initialized ? this.smoothedMin : this.defaultMin;
+  }
+  
+  getMax(): number {
+    return this.initialized ? this.smoothedMax : this.defaultMax;
+  }
+  
+  getStats(): { min: number; max: number; sampleCount: number; initialized: boolean } {
+    return {
+      min: this.getMin(),
+      max: this.getMax(),
+      sampleCount: this.dataPoints.length,
+      initialized: this.initialized,
+    };
+  }
+  
+  reset(): void {
+    this.dataPoints = [];
+    this.smoothedMin = this.defaultMin;
+    this.smoothedMax = this.defaultMax;
+    this.initialized = false;
+    console.log(`[C][ROLLING_NORMALIZATION] Reset ${this.name} normalizer`);
+  }
+}
+
+const ngcNormalizer = new RollingNormalizer('NGC', DEFAULT_METRICS_CONFIG.NGC_MIN, DEFAULT_METRICS_CONFIG.NGC_MAX);
+const profitRateNormalizer = new RollingNormalizer('ProfitRate', DEFAULT_METRICS_CONFIG.PROFITRATE_MIN, DEFAULT_METRICS_CONFIG.PROFITRATE_MAX);
+const expectedReturnNormalizer = new RollingNormalizer('ExpectedReturn', DEFAULT_METRICS_CONFIG.ER_MIN, DEFAULT_METRICS_CONFIG.ER_MAX);
+
+export function getRollingNormalizerStats(): {
+  ngc: { min: number; max: number; sampleCount: number; initialized: boolean };
+  profitRate: { min: number; max: number; sampleCount: number; initialized: boolean };
+  expectedReturn: { min: number; max: number; sampleCount: number; initialized: boolean };
+} {
+  return {
+    ngc: ngcNormalizer.getStats(),
+    profitRate: profitRateNormalizer.getStats(),
+    expectedReturn: expectedReturnNormalizer.getStats(),
+  };
+}
+
+export function resetRollingNormalizers(): void {
+  ngcNormalizer.reset();
+  profitRateNormalizer.reset();
+  expectedReturnNormalizer.reset();
+  console.log('[C][ROLLING_NORMALIZATION] All normalizers reset');
+}
 
 let metricsConfig: MetricsConfig = { ...DEFAULT_METRICS_CONFIG };
 let configLoaded = false;
@@ -51,9 +175,11 @@ function loadMetricsConfig(): MetricsConfig {
         NGC_MAX: parsed.NGC_MAX ?? DEFAULT_METRICS_CONFIG.NGC_MAX,
         PROFITRATE_MIN: parsed.PROFITRATE_MIN ?? DEFAULT_METRICS_CONFIG.PROFITRATE_MIN,
         PROFITRATE_MAX: parsed.PROFITRATE_MAX ?? DEFAULT_METRICS_CONFIG.PROFITRATE_MAX,
+        ER_MIN: parsed.ER_MIN ?? DEFAULT_METRICS_CONFIG.ER_MIN,
+        ER_MAX: parsed.ER_MAX ?? DEFAULT_METRICS_CONFIG.ER_MAX,
       };
       configLoaded = true;
-      console.log(`[B.2][CONFIG] Loaded normalization parameters: NGC=[${metricsConfig.NGC_MIN},${metricsConfig.NGC_MAX}], ProfitRate=[${metricsConfig.PROFITRATE_MIN},${metricsConfig.PROFITRATE_MAX}]`);
+      console.log(`[B.2][CONFIG] Loaded normalization parameters: NGC=[${metricsConfig.NGC_MIN},${metricsConfig.NGC_MAX}], ProfitRate=[${metricsConfig.PROFITRATE_MIN},${metricsConfig.PROFITRATE_MAX}], ER=[${metricsConfig.ER_MIN},${metricsConfig.ER_MAX}]`);
     } else {
       console.log('[B.2][CONFIG] config/metrics.json not found, using defaults');
     }
@@ -117,20 +243,19 @@ function clamp01(value: number): number {
  * 
  * Formula: NGC = normalize(base_confidence * (1 - volatility) * (1 - risk))
  * 
- * Normalization uses [0,1] range-based scaling:
- * - Observed min: ~0.15 (low conf * high vol * high risk)
- * - Observed max: ~0.70 (high conf * low vol * low risk)
- * - Maps this range to [0,1]
+ * Phase C: Uses adaptive rolling normalization with exponential smoothing
  * 
  * @param baseConfidence - Raw signal confidence from strategy (0-1)
  * @param volatility - Market volatility factor (0-1, default 0.3)
  * @param riskScore - Risk assessment score (0-1)
+ * @param trackSample - Whether to track this sample for rolling normalization (default true)
  * @returns Normalized global confidence (0-1)
  */
 export function calculateNGC(
   baseConfidence: number,
   volatility: number = DEFAULT_VOLATILITY,
-  riskScore: number
+  riskScore: number,
+  trackSample: boolean = true
 ): number {
   const conf = clamp01(baseConfidence);
   const vol = clamp01(volatility);
@@ -138,8 +263,11 @@ export function calculateNGC(
   
   const rawNGC = conf * (1 - vol) * (1 - risk);
   
-  const config = loadMetricsConfig();
-  const ngc = clamp01((rawNGC - config.NGC_MIN) / (config.NGC_MAX - config.NGC_MIN));
+  if (trackSample) {
+    ngcNormalizer.addSample(rawNGC);
+  }
+  
+  const ngc = ngcNormalizer.normalize(rawNGC);
   
   return Math.round(ngc * 10000) / 10000;
 }
@@ -191,18 +319,17 @@ export function estimateExpectedDuration(
  * 
  * Higher profit rate means better risk-adjusted returns over time.
  * 
- * Normalization uses [0,1] range-based scaling:
- * - Observed min: ~0.002 (low return / long duration)
- * - Observed max: ~0.80 (high return / short duration)
- * - Maps this range to [0,1]
+ * Phase C: Uses adaptive rolling normalization with exponential smoothing
  * 
  * @param expectedReturn - Expected return (0-1)
  * @param expectedDuration - Expected duration in minutes
+ * @param trackSample - Whether to track this sample for rolling normalization (default true)
  * @returns Normalized profit rate (0-1)
  */
 export function calculateProfitRate(
   expectedReturn: number,
-  expectedDuration: number
+  expectedDuration: number,
+  trackSample: boolean = true
 ): number {
   if (expectedDuration <= 0) {
     return 0;
@@ -212,8 +339,11 @@ export function calculateProfitRate(
   
   const rawRate = (returnVal * 60) / expectedDuration;
   
-  const config = loadMetricsConfig();
-  const normalizedRate = clamp01((rawRate - config.PROFITRATE_MIN) / (config.PROFITRATE_MAX - config.PROFITRATE_MIN));
+  if (trackSample) {
+    profitRateNormalizer.addSample(rawRate);
+  }
+  
+  const normalizedRate = profitRateNormalizer.normalize(rawRate);
   
   return Math.round(normalizedRate * 10000) / 10000;
 }
@@ -269,17 +399,20 @@ export function calculateCWQI(components: CWQIComponents): CWQIResult {
 
 /**
  * Calculate expected return from entry/target/stop prices
- * Normalized to 0-1 scale based on risk/reward ratio
+ * 
+ * Phase C: Uses adaptive rolling normalization with exponential smoothing
  * 
  * @param entryPrice - Entry price
  * @param targetPrice - Target/take-profit price
  * @param stopPrice - Stop-loss price
+ * @param trackSample - Whether to track this sample for rolling normalization (default true)
  * @returns Normalized expected return (0-1)
  */
 export function calculateExpectedReturn(
   entryPrice: number,
   targetPrice: number | undefined,
-  stopPrice: number
+  stopPrice: number,
+  trackSample: boolean = true
 ): number {
   if (!targetPrice || targetPrice <= entryPrice || stopPrice >= entryPrice) {
     return 0.3;
@@ -294,7 +427,13 @@ export function calculateExpectedReturn(
   
   const rrRatio = potentialGain / potentialLoss;
   
-  const normalizedReturn = Math.min(0.8, rrRatio / (rrRatio + 2));
+  const rawReturn = rrRatio / (rrRatio + 2);
+  
+  if (trackSample) {
+    expectedReturnNormalizer.addSample(rawReturn);
+  }
+  
+  const normalizedReturn = expectedReturnNormalizer.normalize(rawReturn);
   
   return Math.round(normalizedReturn * 10000) / 10000;
 }

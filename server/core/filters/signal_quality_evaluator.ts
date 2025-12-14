@@ -1,5 +1,5 @@
 /**
- * Phase 8.8.4-B.1: Signal Quality Evaluator (SQE)
+ * Phase 8.8.4-B.1/C: Signal Quality Evaluator (SQE)
  * 
  * Pure filter that evaluates pre-computed signal quality metrics.
  * The SQE does NOT compute metrics - it only filters based on thresholds.
@@ -7,13 +7,64 @@
  * Filtering Thresholds:
  * - NGC >= 0.40 (Normalized Global Confidence)
  * - Risk <= 0.70 
- * - ProfitRate >= 0.25
+ * - ProfitRate >= strategy-specific floor (Phase C)
  * - CWQI >= 0.50
+ * 
+ * Phase C: Strategy-specific ProfitRate floors from config/strategy_thresholds.json
  * 
  * All metrics must be computed upstream (Signal Orchestrator) and passed to SQE.
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import { SQE_THRESHOLDS } from '../metrics/quality_index';
+
+interface StrategyThresholdsConfig {
+  profitRateFloors: Record<string, number>;
+}
+
+const DEFAULT_PROFIT_RATE_FLOORS: Record<string, number> = {
+  DHMA: 0.22,
+  VWAP_Bounce: 0.25,
+  MeanReversion: 0.28,
+  Breakout: 0.30,
+  Scalper: 0.35,
+};
+
+let strategyThresholds: StrategyThresholdsConfig | null = null;
+
+function loadStrategyThresholds(): StrategyThresholdsConfig {
+  if (strategyThresholds) {
+    return strategyThresholds;
+  }
+  
+  try {
+    const configPath = path.resolve(process.cwd(), 'config/strategy_thresholds.json');
+    if (fs.existsSync(configPath)) {
+      const configData = fs.readFileSync(configPath, 'utf-8');
+      strategyThresholds = JSON.parse(configData);
+      console.log('[C][PROFIT_FLOORS] Loaded strategy thresholds:', strategyThresholds?.profitRateFloors);
+      return strategyThresholds!;
+    }
+  } catch (err) {
+    console.log('[C][PROFIT_FLOORS] Error loading config, using defaults:', err);
+  }
+  
+  strategyThresholds = { profitRateFloors: DEFAULT_PROFIT_RATE_FLOORS };
+  console.log('[C][PROFIT_FLOORS] Using default strategy thresholds');
+  return strategyThresholds;
+}
+
+export function getProfitRateFloor(strategy: string): number {
+  const config = loadStrategyThresholds();
+  const floor = config.profitRateFloors[strategy];
+  
+  if (floor !== undefined) {
+    return floor;
+  }
+  
+  return SQE_THRESHOLDS.MIN_PROFIT_RATE;
+}
 
 export interface SQEInput {
   signalId: string;
@@ -49,6 +100,7 @@ export interface SQEBatchResult {
 
 /**
  * Evaluate a single signal against SQE quality thresholds
+ * Phase C: Uses strategy-specific ProfitRate floors
  * 
  * @param input - Pre-computed signal metrics
  * @returns SQEResult with pass/fail status and any failures
@@ -64,8 +116,10 @@ export function evaluateSignalQuality(input: SQEInput): SQEResult {
     failures.push(`Risk ${input.riskScore.toFixed(4)} > ${SQE_THRESHOLDS.MAX_RISK}`);
   }
   
-  if (input.profitRate < SQE_THRESHOLDS.MIN_PROFIT_RATE) {
-    failures.push(`ProfitRate ${input.profitRate.toFixed(4)} < ${SQE_THRESHOLDS.MIN_PROFIT_RATE}`);
+  const profitRateFloor = getProfitRateFloor(input.strategy);
+  if (input.profitRate < profitRateFloor) {
+    failures.push(`ProfitRate ${input.profitRate.toFixed(4)} < Floor[${input.strategy}]=${profitRateFloor}`);
+    console.log(`[C][PROFIT_FLOORS] Rejected ${input.symbol}/${input.strategy}: ProfitRate ${input.profitRate.toFixed(4)} < ${profitRateFloor}`);
   }
   
   if (input.cwqi < SQE_THRESHOLDS.MIN_CWQI) {
@@ -117,7 +171,7 @@ export function evaluateSignalBatch(inputs: SQEInput[]): SQEBatchResult {
 
 /**
  * Get the primary failure reason for a signal
- * Used for categorizing rejections
+ * Phase C: Uses strategy-specific ProfitRate floors for classification
  */
 export function getPrimaryFailureReason(result: SQEResult): string | null {
   if (result.passed || result.failures.length === 0) {
@@ -133,7 +187,9 @@ export function getPrimaryFailureReason(result: SQEResult): string | null {
   if (result.metrics.riskScore > SQE_THRESHOLDS.MAX_RISK) {
     return 'HIGH_RISK';
   }
-  if (result.metrics.profitRate < SQE_THRESHOLDS.MIN_PROFIT_RATE) {
+  
+  const profitRateFloor = getProfitRateFloor(result.strategy);
+  if (result.metrics.profitRate < profitRateFloor) {
     return 'LOW_PROFIT_RATE';
   }
   
@@ -142,16 +198,18 @@ export function getPrimaryFailureReason(result: SQEResult): string | null {
 
 /**
  * Check if a signal should be soft-rejected (close to thresholds)
- * Used for queue prioritization hints
+ * Phase C: Uses strategy-specific ProfitRate floors
  */
 export function isMarginallySafe(result: SQEResult): boolean {
   if (!result.passed) return false;
   
   const { ngc, riskScore, profitRate, cwqi } = result.metrics;
   
+  const profitRateFloor = getProfitRateFloor(result.strategy);
+  
   const ngcMargin = ngc - SQE_THRESHOLDS.MIN_NGC;
   const riskMargin = SQE_THRESHOLDS.MAX_RISK - riskScore;
-  const profitMargin = profitRate - SQE_THRESHOLDS.MIN_PROFIT_RATE;
+  const profitMargin = profitRate - profitRateFloor;
   const cwqiMargin = cwqi - SQE_THRESHOLDS.MIN_CWQI;
   
   const marginThreshold = 0.05;

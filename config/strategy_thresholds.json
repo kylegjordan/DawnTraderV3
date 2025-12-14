@@ -1,0 +1,11 @@
+{
+  "profitRateFloors": {
+    "DHMA": 0.22,
+    "VWAP_Bounce": 0.25,
+    "MeanReversion": 0.28,
+    "Breakout": 0.30,
+    "Scalper": 0.35
+  },
+  "description": "Phase 8.8.4-C: Strategy-specific minimum ProfitRate thresholds",
+  "version": "1.0.0"
+}
