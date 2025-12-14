@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTradingMode } from "@/contexts/trading-mode-context";
-import { CheckCircle, XCircle, Activity, TrendingUp, Ban, BarChart3, Target, AlertTriangle } from "lucide-react";
+import { CheckCircle, XCircle, Activity, TrendingUp, Ban, BarChart3, Target, AlertTriangle, GitBranch, Timer } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect } from "react";
 import {
@@ -14,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 /**
  * Phase 8.8.3-I4: RTB Metrics Response from /api/diagnostics/rtb-metrics
@@ -36,6 +37,32 @@ interface RtbMetricsResponse {
   invariantCheck: {
     valid: boolean;
     message: string;
+  };
+}
+
+interface SlalMetricsResponse {
+  ok: boolean;
+  phase: string;
+  timestamp: string;
+  metrics: {
+    mode: 'live' | 'paper';
+    since: string;
+    signalsGenerated: number;
+    signalsSized: number;
+    signalsValidated: number;
+    signalsExecuted: number;
+    signalsCompleted: number;
+    signalsRejected: number;
+    rejectionsByReason: Record<string, number>;
+    rejectionsByStage: Record<string, number>;
+    avgGenerationToCompletionMs: number;
+    successRate: number;
+    strategyBreakdown: Record<string, {
+      generated: number;
+      completed: number;
+      rejected: number;
+      successRate: number;
+    }>;
   };
 }
 
@@ -104,6 +131,7 @@ const ALL_STRATEGIES = [
 /**
  * Phase 8.8.3-I4: ExecutionMetricsPanel
  * Now uses /api/diagnostics/rtb-metrics as single source of truth
+ * Phase 8.8.4-A: Added SLAL (Signal Lifecycle Audit Layer) metrics tab
  */
 export function ExecutionMetricsPanel() {
   const { mode } = useTradingMode();
@@ -119,6 +147,22 @@ export function ExecutionMetricsPanel() {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       if (!response.ok) throw new Error('Failed to fetch RTB metrics');
+      return response.json();
+    },
+    refetchInterval: REFRESH_INTERVAL,
+    staleTime: REFRESH_INTERVAL / 2,
+  });
+
+  /**
+   * Phase 8.8.4-A: SLAL metrics query for signal lifecycle tracking
+   */
+  const { data: slalMetrics, isLoading: slalLoading } = useQuery<SlalMetricsResponse>({
+    queryKey: ['/api/diagnostics/signal-lifecycle', mode],
+    queryFn: async () => {
+      const response = await fetch(`/api/diagnostics/signal-lifecycle?mode=${mode}`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (!response.ok) throw new Error('Failed to fetch SLAL metrics');
       return response.json();
     },
     refetchInterval: REFRESH_INTERVAL,
@@ -379,6 +423,153 @@ export function ExecutionMetricsPanel() {
             <p className="text-xs">Trades will appear here when the engine processes signals</p>
           </div>
         )}
+
+        {/* Phase 8.8.4-A: Signal Lifecycle Audit Layer (SLAL) Metrics */}
+        <div className="border-t pt-4">
+          <h4 className="text-xs font-medium text-muted-foreground mb-3 flex items-center gap-2">
+            <GitBranch className="w-3 h-3" />
+            Signal Lifecycle Audit (SLAL)
+            {slalLoading && <Skeleton className="h-3 w-16 inline-block" />}
+          </h4>
+          
+          {slalMetrics?.metrics && (
+            <div className="space-y-4">
+              {/* SLAL Pipeline Summary */}
+              <div>
+                <p className="text-[10px] text-muted-foreground mb-2">Signal Pipeline Flow</p>
+                <div className="flex items-center gap-1 flex-wrap text-xs">
+                  <Badge variant="outline" className="font-mono">
+                    Generated: {formatNumber(slalMetrics.metrics.signalsGenerated)}
+                  </Badge>
+                  <span className="text-muted-foreground">→</span>
+                  <Badge variant="outline" className="font-mono">
+                    Sized: {formatNumber(slalMetrics.metrics.signalsSized)}
+                  </Badge>
+                  <span className="text-muted-foreground">→</span>
+                  <Badge variant="outline" className="font-mono">
+                    Validated: {formatNumber(slalMetrics.metrics.signalsValidated)}
+                  </Badge>
+                  <span className="text-muted-foreground">→</span>
+                  <Badge variant="outline" className="font-mono">
+                    Executed: {formatNumber(slalMetrics.metrics.signalsExecuted)}
+                  </Badge>
+                  <span className="text-muted-foreground">→</span>
+                  <Badge variant="secondary" className="font-mono text-success">
+                    Completed: {formatNumber(slalMetrics.metrics.signalsCompleted)}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* SLAL Success Rate & Timing */}
+              <div className="flex gap-4 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-3 h-3 text-success" />
+                  <span className="text-xs">
+                    Success Rate: <span className="font-mono font-medium">{slalMetrics.metrics.successRate.toFixed(1)}%</span>
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Timer className="w-3 h-3 text-primary" />
+                  <span className="text-xs">
+                    Avg Duration: <span className="font-mono font-medium">{slalMetrics.metrics.avgGenerationToCompletionMs.toFixed(0)}ms</span>
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <XCircle className="w-3 h-3 text-destructive" />
+                  <span className="text-xs">
+                    Rejected: <span className="font-mono font-medium text-destructive">{formatNumber(slalMetrics.metrics.signalsRejected)}</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* SLAL Rejections by Reason */}
+              {slalMetrics.metrics.signalsRejected > 0 && (
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Rejections by Reason</p>
+                  <div className="flex flex-wrap gap-1">
+                    {Object.entries(slalMetrics.metrics.rejectionsByReason)
+                      .filter(([, count]) => count > 0)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([reason, count]) => (
+                        <Badge 
+                          key={reason} 
+                          variant="destructive" 
+                          className="text-[10px] font-mono"
+                        >
+                          {reason.replace(/_/g, ' ')}: {count}
+                        </Badge>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* SLAL Rejections by Stage */}
+              {slalMetrics.metrics.signalsRejected > 0 && (
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Rejections by Stage</p>
+                  <div className="flex flex-wrap gap-1">
+                    {Object.entries(slalMetrics.metrics.rejectionsByStage)
+                      .filter(([, count]) => count > 0)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([stage, count]) => (
+                        <Badge 
+                          key={stage} 
+                          variant="outline" 
+                          className="text-[10px] font-mono border-destructive text-destructive"
+                        >
+                          {stage}: {count}
+                        </Badge>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* SLAL Strategy Breakdown */}
+              {Object.keys(slalMetrics.metrics.strategyBreakdown).length > 0 && (
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Strategy Performance</p>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-[10px]">Strategy</TableHead>
+                        <TableHead className="text-[10px] text-right">Gen</TableHead>
+                        <TableHead className="text-[10px] text-right">Done</TableHead>
+                        <TableHead className="text-[10px] text-right">Rej</TableHead>
+                        <TableHead className="text-[10px] text-right">Rate</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {Object.entries(slalMetrics.metrics.strategyBreakdown)
+                        .sort((a, b) => b[1].generated - a[1].generated)
+                        .map(([strategy, stats]) => (
+                          <TableRow key={strategy}>
+                            <TableCell className="text-[10px]">{formatStrategy(strategy)}</TableCell>
+                            <TableCell className="text-[10px] text-right font-mono">{stats.generated}</TableCell>
+                            <TableCell className="text-[10px] text-right font-mono text-success">{stats.completed}</TableCell>
+                            <TableCell className="text-[10px] text-right font-mono text-destructive">{stats.rejected}</TableCell>
+                            <TableCell className="text-[10px] text-right font-mono">{stats.successRate.toFixed(0)}%</TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {slalMetrics.metrics.signalsGenerated === 0 && (
+                <div className="text-center py-3 text-muted-foreground">
+                  <GitBranch className="w-6 h-6 mx-auto mb-1 opacity-50" />
+                  <p className="text-[10px]">No signals generated yet this session</p>
+                </div>
+              )}
+
+              {slalMetrics.metrics.since && (
+                <p className="text-[10px] text-muted-foreground">
+                  Session started: {new Date(slalMetrics.metrics.since).toLocaleString()}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
