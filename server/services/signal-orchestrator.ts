@@ -1,5 +1,5 @@
 /**
- * Phase 37/B6: Signal Orchestrator
+ * Phase 37/B6 + 8.8.4-B.1: Signal Orchestrator
  * 
  * Implements hybrid signal-orchestration loop for mode-aware market evaluation.
  * Periodically scans filtered symbols and evaluates trading strategies to generate signals.
@@ -10,12 +10,14 @@
  * - Timer-based evaluation (configurable interval)
  * - Calls all enabled strategies for each symbol
  * - B6: All signals are sized via centralized sizing helper before forwarding
+ * - B.1: Computes NGC, ExpectedDuration, ProfitRate, CWQI for each signal
+ * - B.1: Routes signals through SQE filter before forwarding
  * - De-duplicates and scores signals
  * - Forwards winning signals to TradingEngine for processing
  * 
  * Separation of Concerns:
  * - MarketScanner: maintains universe of eligible symbols
- * - SignalOrchestrator: evaluates strategies and generates signals
+ * - SignalOrchestrator: evaluates strategies, computes metrics, filters via SQE
  * - StrategyEngine: pure/deterministic strategy detection
  * - TradingEngine: executes trades and manages positions
  * 
@@ -23,6 +25,12 @@
  * - All 9 strategies now route through buildSizedSignalForStrategy()
  * - Signals are pre-sized with quantity and estimatedValue before forwarding
  * - Uses centralized sizing helper from paper-position-sizing.ts
+ * 
+ * B.1 Enhancements:
+ * - NGC (Normalized Global Confidence) computed upstream
+ * - Extended metrics (ExpectedDuration, ProfitRate) computed
+ * - SQE used as pure filter with pre-computed metrics
+ * - CWQI ranked signals forwarded to RTB queue
  */
 
 import { StrategyEngine, StrategySignal } from './strategy-engine';
@@ -37,6 +45,8 @@ import { sizePaperPositionForSignal, type StrategyType } from './paper-position-
 import { getPortfolioBalanceV2 } from './guardrail-settings.js';
 import { c5FinancialDiagnostics } from './c5-financial-diagnostics.js';
 import { signalLifecycleAudit } from '../core/audit/signal_lifecycle_audit.js';
+import { calculateExtendedSignalMetrics, estimateVolatility } from '../core/metrics/quality_index.js';
+import { signalQualityEvaluator, type SQEInput } from '../core/filters/signal_quality_evaluator.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -58,6 +68,13 @@ interface SizedStrategySignal extends StrategySignal {
   estimatedValue?: number;
   preComputedNotional?: number;
   signalId?: string; // Phase 8.8.4-A: SLAL lifecycle tracking ID
+  // Phase 8.8.4-B.1: Extended metrics
+  ngc?: number;           // Normalized Global Confidence
+  riskScore?: number;     // Computed risk score
+  volatility?: number;    // Estimated volatility
+  expectedDuration?: number; // Expected hold time in minutes
+  profitRate?: number;    // Profit per time unit
+  cwqi?: number;          // Confidence-Weighted Quality Index
 }
 
 interface SizingContext {
@@ -212,14 +229,17 @@ export class SignalOrchestrator {
   }
 
   /**
-   * B6: Build a sized signal from a raw strategy signal
+   * B6 + B.1: Build a sized signal from a raw strategy signal
    * Routes all strategies through the centralized sizing helper
    * Phase 8.8.4-A: SLAL instrumentation for GENERATION and SIZING stages
+   * Phase 8.8.4-B.1: Compute NGC, ExpectedDuration, ProfitRate, CWQI
+   * Phase 8.8.4-B.1: Apply SQE quality filter
    */
   private buildSizedSignalForStrategy(
     rawSignal: StrategySignal | null,
     strategyId: StrategyType,
-    sizingContext: SizingContext
+    sizingContext: SizingContext,
+    marketContext?: { high24h?: number; low24h?: number; atr?: number }
   ): SizedStrategySignal | null {
     if (!rawSignal) return null;
     
@@ -249,6 +269,46 @@ export class SignalOrchestrator {
       hasEstimatedValue: false,
       hasPreComputedNotional: false,
     });
+
+    // Phase 8.8.4-B.1: Compute extended signal metrics (NGC, CWQI, etc.)
+    const extendedMetrics = calculateExtendedSignalMetrics({
+      confidence: rawSignal.confidence,
+      entryPrice: rawSignal.entryPrice,
+      stopPrice: rawSignal.stopPrice,
+      targetPrice: rawSignal.targetPrice,
+      atr: marketContext?.atr,
+      high24h: marketContext?.high24h,
+      low24h: marketContext?.low24h,
+    });
+
+    console.log(`[B.1][METRICS] ${rawSignal.symbol}/${strategyId}: NGC=${extendedMetrics.ngc.toFixed(4)}, CWQI=${extendedMetrics.cwqi.toFixed(4)}, ProfitRate=${extendedMetrics.profitRate.toFixed(4)}`);
+
+    // Phase 8.8.4-B.1: Apply SQE quality filter
+    const sqeInput: SQEInput = {
+      signalId,
+      symbol: rawSignal.symbol,
+      strategy: strategyId,
+      ngc: extendedMetrics.ngc,
+      riskScore: extendedMetrics.riskScore,
+      profitRate: extendedMetrics.profitRate,
+      cwqi: extendedMetrics.cwqi,
+    };
+
+    const sqeResult = signalQualityEvaluator.evaluate(sqeInput);
+    
+    if (!sqeResult.passed) {
+      console.log(`[B.1][SQE_REJECT] ${rawSignal.symbol}/${strategyId}: ${sqeResult.reason}`);
+      signalLifecycleAudit.recordSizing(
+        signalId,
+        sizingContext.mode,
+        rawSignal.symbol,
+        strategyId,
+        false,
+        { sqeReject: true, reason: sqeResult.reason },
+        'SQE_QUALITY_REJECT'
+      );
+      return null;
+    }
 
     const sizingResult = sizePaperPositionForSignal({
       portfolioValue: sizingContext.portfolioValue,
@@ -292,15 +352,24 @@ export class SignalOrchestrator {
       { quantity: sizingResult.quantity, estimatedValue: sizingResult.estimatedValue }
     );
 
+    // Phase 8.8.4-B.1: Build sized signal with extended metrics
     const sizedSignal: SizedStrategySignal = {
       ...rawSignal,
       quantity: sizingResult.quantity,
       estimatedValue: sizingResult.estimatedValue,
       preComputedNotional: sizingResult.estimatedValue,
-      signalId, // Phase 8.8.4-A: Attach signalId for downstream tracking
+      signalId,
+      // B.1 Extended metrics - NGC replaces raw confidence for UI display
+      confidence: extendedMetrics.ngc, // NGC is now the "confidence" shown to user
+      ngc: extendedMetrics.ngc,
+      riskScore: extendedMetrics.riskScore,
+      volatility: extendedMetrics.volatility,
+      expectedDuration: extendedMetrics.expectedDuration,
+      profitRate: extendedMetrics.profitRate,
+      cwqi: extendedMetrics.cwqi,
     };
 
-    console.log(`[B6][SIZED] ${rawSignal.symbol}/${strategyId}: qty=${sizingResult.quantity.toFixed(8)}, value=$${sizingResult.estimatedValue.toFixed(2)}`);
+    console.log(`[B6+B.1][SIZED] ${rawSignal.symbol}/${strategyId}: qty=${sizingResult.quantity.toFixed(8)}, value=$${sizingResult.estimatedValue.toFixed(2)}, CWQI=${extendedMetrics.cwqi.toFixed(4)}`);
 
     return sizedSignal;
   }

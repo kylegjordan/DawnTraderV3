@@ -1,0 +1,189 @@
+Directive 8.8.4-B.1 — Signal Quality Evaluator & Normalized Global Confidence Integration
+Directive ID: 8.8.4-B.1
+Title: Signal Quality Evaluator & Normalized Global Confidence Integration
+Audience: REPLIT Implementation System
+Authorizing Context: Dawn Trader — Phase 8.8.4 (Guardrail Refactor Series)
+Supersedes / Extends: Directive 8.8.4-B (Guardrail Refactor: Quality vs. Capacity)
+Status: ACTIVE — Approved for Canonicalization upon completion and verification
+1. Context and Objective
+
+Directive 8.8.4-B.1 continues the Guardrail Refactor Phase by formalizing the Signal Constraint Layer (SCL) architecture and introducing the Signal Quality Evaluator (SQE) as a dedicated filtering stage for signal flow.
+
+This directive implements:
+
+The transition from local confidence scoring to a system-wide Normalized Global Confidence (NGC) metric.
+
+Relocation of signal quality calculations (CWQI, Expected Duration, ProfitRate) upstream into the Signal Orchestrator.
+
+Refactoring of the SQE to a purely evaluative filter (no computation).
+
+Adoption of the ProfitRate metric (profit per time) replacing Efficiency in the CWQI formula.
+
+Addition of user-facing explanatory text in the Ready-to-Buy tab.
+
+Logging of the new nomenclature and architectural decisions into the Bridge Repository.
+
+This directive aims to unify evaluation logic, streamline pipeline responsibility, and ground the ranking system in time-adjusted profitability.
+
+2. Decision Log Instruction
+
+REPLIT will record the following decision entry in bridge/decisions/decision-ledger.md:
+
+Decision ID: DEC-2025-NGC-SCL-NOMENCLATURE
+Title: Adoption of Signal Constraint Layer Architecture and Normalized Global Confidence Metric
+Summary:
+- “Quality Guardrails” renamed to Signal Quality Evaluator (SQE).
+- “Capacity Guardrails” renamed to Trade Capacity Limits (TCL).
+- Combined system renamed to Signal Constraint Layer (SCL).
+- Efficiency replaced by ProfitRate (ExpectedReturn / ExpectedDuration).
+- Confidence metric displayed in UI now reflects the new Normalized Global Confidence (NGC).
+- Internal per-strategy confidence remains private and unexposed.
+Impact:
+- Clarifies separation of evaluation vs. constraint responsibilities.
+- Establishes consistent data semantics for signals across SQE, RTB, and TCL systems.
+- Ensures UI metrics correspond to standardized calculations.
+Date: [Auto-fill current date on commit]
+Approved by: Dawn Trader Architect Authority
+
+3. Implementation Tasks
+Task 1 — Introduce Normalized Global Confidence (NGC)
+
+Implement the NGC calculation within the Signal Orchestrator or Sizing Helper modules.
+
+The NGC replaces prior per-strategy confidence in all downstream data (RTB queue, trades, SLAL).
+
+Formula for NGC normalization:
+
+NGC = normalize( base_confidence * (1 - volatility) * (1 - risk) )
+
+
+Normalization should scale output to [0, 1].
+
+Write the resulting NGC into the existing database field confidence.
+
+The UI will display this as “Confidence”.
+
+The internal per-strategy confidence remains internal and is never persisted or surfaced.
+
+Task 2 — Compute Derived Signal Metrics in Orchestrator
+
+Move the following calculations into the Signal Orchestrator (or Sizing Helper) to centralize computation:
+
+ExpectedDuration = estimateDuration(signal, volatility, ATR, historicalHoldTime)
+ProfitRate = normalize(ExpectedReturn / ExpectedDuration)
+CWQI = (NGC * 0.40)
+     + ((1 - Risk) * 0.25)
+     + (ExpectedReturn * 0.20)
+     + (ProfitRate * 0.15)
+
+
+Store these computed metrics with the signal payload forwarded downstream.
+
+Task 3 — Refactor the Signal Quality Evaluator (SQE)
+
+Refactor signal_quality_evaluator.ts to function only as a filter.
+
+Remove all CWQI, efficiency, and duration computations from SQE logic.
+
+Apply the following filtering thresholds:
+
+NGC ≥ 0.40
+
+Risk ≤ 0.70
+
+ProfitRate ≥ defined_minimum_rate (default: 0.25 normalized)
+
+CWQI ≥ defined_minimum_quality (default: 0.50 normalized)
+
+Only signals passing all thresholds will be forwarded to the Ready-to-Buy Queue Service.
+
+Task 4 — Ready-to-Buy Queue Service Enhancements
+
+Update the Ready-to-Buy Queue Service to rank signals purely by CWQI (descending).
+
+Use soft prioritization, not hard rejection:
+
+Slower trades with high profit potential remain in queue but are ranked lower.
+
+Faster, efficient trades rise naturally when capacity is constrained.
+
+Implement soft filtering logic:
+
+Reject signal if (ExpectedDuration > max_duration_threshold AND ProfitRate < min_rate_threshold)
+
+
+Ensure continuous re-evaluation of queued signals with each refresh cycle.
+
+Task 5 — Trade Capacity Limits (TCL) Integration
+
+No changes to TCL logic in this directive.
+
+Confirm SQE output seamlessly integrates with existing capacity enforcement logic.
+
+Ensure the SLAL tracks QUEUED → PROMOTED → EXECUTED → COMPLETED transitions for promoted signals.
+
+Task 6 — User Interface and Documentation Update
+
+In the Ready-to-Buy tab, add a small informational text block (static copy only) explaining the ranking system.
+Example text:
+
+About Signal Ranking:
+Signals are ranked by their Confidence-Weighted Quality Index (CWQI), combining confidence, risk, expected return, and profit rate.
+CWQI = (NGC × 0.40) + ((1 – Risk) × 0.25) + (Expected Return × 0.20) + (Profit Rate × 0.15).
+Higher CWQI scores indicate stronger, faster, and more balanced opportunities.
+
+Display NGC in Ready-to-Buy, Active Trades, and Trade History tables under the existing “Confidence” column.
+
+Task 7 — Verification and Diagnostics
+
+Run a 15-minute paper trading session using the testuser123 credentials.
+
+Verify:
+
+Signals flow through SQE, RTB Queue, and TCL in proper sequence.
+
+NGC and CWQI fields populate correctly in all diagnostics.
+
+No SQE computation logic remains.
+
+Re-ranking behavior works dynamically as slots open.
+
+Export verification artifacts:
+
+logs/diagnostics/slal_dump.json
+
+logs/diagnostics/active_trades.json
+
+logs/diagnostics/trade_history.json
+
+logs/diagnostics/slal_trade_correlation.json
+
+logs/diagnostics/ready_to_buy_queue.json
+
+4. Acceptance Criteria
+
+The directive will be considered successfully implemented and verified when:
+
+The Bridge Repository contains the DEC-2025-NGC-SCL-NOMENCLATURE entry.
+
+SQE acts as an evaluator only, not a calculator.
+
+SignalOrchestrator emits fully enriched signals (with NGC, ExpectedDuration, ProfitRate, CWQI).
+
+CWQI ranking reflects the new formula and behavior.
+
+UI “Confidence” displays NGC values.
+
+Verification session passes with no orphaned or misrouted signals.
+
+Upon successful verification, mark Directive 8.8.4-B.1 as Complete and Canonicalized.
+
+5. Post-Implementation Notes
+
+Future Expansion: The ProfitRate component can later incorporate volatility-adjusted trade efficiency once sufficient empirical trade history is collected.
+
+Backward Compatibility: All previous references to “confidence” will automatically reference NGC, requiring no schema migration.
+
+Next Directive (Planned): 8.8.4-B.2 — Empirical Feedback Integration & Dynamic Weight Adjustment.
+
+End of Directive 8.8.4-B.1

@@ -36,6 +36,7 @@ export type RejectionReason =
   | 'EXECUTION_FAILED'        // Trade execution failed
   | 'EXPIRED_SIGNAL'          // Signal TTL expired
   | 'NO_PRICE'                // Could not get reliable price
+  | 'SQE_QUALITY_REJECT'      // Phase 8.8.4-B.1: Signal failed SQE quality thresholds
   | 'OTHER';                  // Other reason
 
 export interface SignalLifecycleEvent {
@@ -391,6 +392,7 @@ class SignalLifecycleAuditService {
       EXECUTION_FAILED: 0,
       EXPIRED_SIGNAL: 0,
       NO_PRICE: 0,
+      SQE_QUALITY_REJECT: 0,
       OTHER: 0,
     };
 

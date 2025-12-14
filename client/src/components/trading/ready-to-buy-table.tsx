@@ -189,6 +189,15 @@ export default function ReadyToBuyTable() {
         </div>
       </CardHeader>
       <CardContent>
+        {/* Phase 8.8.4-B.1: Explanatory text about signal ranking */}
+        <div className="mb-4 p-3 bg-muted/50 rounded-lg text-sm text-muted-foreground">
+          <p>
+            <strong>Signal Ranking:</strong> Signals are ranked by Quality Index (CWQI), which combines 
+            Confidence (adjusted for market conditions), Risk level, Expected Return, and Profit Rate. 
+            Higher-ranked signals have better risk-adjusted return potential.
+          </p>
+        </div>
+        
         {isLoading && !data ? (
           <div className="text-center py-8">
             <RefreshCw className="w-8 h-8 mx-auto mb-3 animate-spin text-muted-foreground" />
