@@ -45,6 +45,8 @@ Current Simulation Analytics Alignment & Diagnostic Cleanup (C6) fixes "Current 
 
 Manual Close Cost Model Fix (C7) corrects the `/paper-sim/close-trade/:id` endpoint to properly calculate exit slippage and total cost, mirroring the engine's `closePosition` method. It uses SLIPPAGE_PERCENT (0.15%) and FEE_PERCENT (0.10%) to compute actualExitPrice, exitSlippage, exitFee, totalCost, grossPnl, and netPnl. All cost fields are persisted to the trade record. The portfolio summary endpoint now separates `cashBalance` (starting + realized P/L only) from `portfolioValue` (cash + unrealized P/L), with `currentBalance` returning the realized-only cash balance. Guardrails now use Current Balance (starting + realized P/L) for risk calculations instead of the static starting balance. The Active Trades green bar displays "Current Bal + Open Trades" showing total portfolio equity (cash + position value).
 
+Signal Flow Correction & Confidence Source Consolidation (B.3) corrects the signal processing flow in Signal Orchestrator to follow the canonical order: Sizing → Metrics → SQE → RTB → TCL. NGC (Normalized Global Confidence) is now the single authoritative source of confidence, replacing raw strategy confidence in all signal payloads. The legacy `confidenceThreshold` filter is deprecated from the UI (hidden but retained for backend compatibility). SQE thresholds (MIN_NGC, MIN_CWQI) serve as the authoritative quality gates. Flow verification logging via `[B.3][FLOW_CORRECTED]` confirms the corrected pipeline on SignalOrchestrator start.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.
