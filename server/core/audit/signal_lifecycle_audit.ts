@@ -16,6 +16,8 @@ export type SignalStage =
   | 'GENERATION'      // Strategy produced a raw signal
   | 'SIZING'          // Signal sized with qty/notional
   | 'VALIDATION'      // Guardrails check
+  | 'QUEUED'          // Phase 8.8.4-B: Signal queued (capacity block, high CWQI)
+  | 'PROMOTED'        // Phase 8.8.4-B: Signal promoted from queue to execution
   | 'EXECUTION'       // Trade execution attempt
   | 'COMPLETED'       // Trade successfully opened
   | 'REJECTED';       // Signal rejected at any stage
@@ -272,6 +274,68 @@ class SignalLifecycleAuditService {
   }
 
   /**
+   * Phase 8.8.4-B: Record a signal being queued (capacity blocked but high CWQI)
+   */
+  recordQueued(
+    signalId: string,
+    mode: 'live' | 'paper',
+    symbol: string,
+    strategy: string,
+    details?: Record<string, unknown>
+  ): void {
+    const journey = this.journeys.get(signalId);
+    const durationMs = journey ? Date.now() - journey.startedAt.getTime() : undefined;
+
+    const event: SignalLifecycleEvent = {
+      id: `${signalId}-QUEUED`,
+      timestamp: new Date(),
+      mode,
+      symbol,
+      strategy,
+      stage: 'QUEUED',
+      success: true,
+      details,
+      durationMs,
+    };
+
+    this.addEvent(event);
+    this.addEventToJourney(signalId, event);
+
+    console.log(`[SLAL][${mode}] QUEUED: ${symbol}/${strategy} cwqi=${(details as any)?.cwqi?.toFixed(4) || 'N/A'} (${signalId})`);
+  }
+
+  /**
+   * Phase 8.8.4-B: Record a signal being promoted from queue to execution
+   */
+  recordPromoted(
+    signalId: string,
+    mode: 'live' | 'paper',
+    symbol: string,
+    strategy: string,
+    details?: Record<string, unknown>
+  ): void {
+    const journey = this.journeys.get(signalId);
+    const durationMs = journey ? Date.now() - journey.startedAt.getTime() : undefined;
+
+    const event: SignalLifecycleEvent = {
+      id: `${signalId}-PROMOTED`,
+      timestamp: new Date(),
+      mode,
+      symbol,
+      strategy,
+      stage: 'PROMOTED',
+      success: true,
+      details,
+      durationMs,
+    };
+
+    this.addEvent(event);
+    this.addEventToJourney(signalId, event);
+
+    console.log(`[SLAL][${mode}] PROMOTED: ${symbol}/${strategy} tradeId=${(details as any)?.tradeId || 'N/A'} queueMs=${(details as any)?.queueDurationMs || 'N/A'} (${signalId})`);
+  }
+
+  /**
    * Record a signal rejection at any stage
    */
   recordRejection(
@@ -334,6 +398,8 @@ class SignalLifecycleAuditService {
       GENERATION: 0,
       SIZING: 0,
       VALIDATION: 0,
+      QUEUED: 0,
+      PROMOTED: 0,
       EXECUTION: 0,
       COMPLETED: 0,
       REJECTED: 0,

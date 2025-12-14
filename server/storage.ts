@@ -211,7 +211,10 @@ import {
   systemAlerts,
   type AuditLog,
   type InsertAuditLog,
-  auditLog
+  auditLog,
+  rtbSignals,
+  type RtbSignal,
+  type InsertRtbSignal
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, gt, lte, inArray, sql, isNotNull, isNull } from "drizzle-orm";
@@ -686,6 +689,20 @@ export interface IStorage {
   // Phase 28.C: Override Audit History methods
   addAuditLog(log: InsertAuditLog): Promise<AuditLog>;
   getRecentAuditLogs(params: { mode?: 'live' | 'paper'; entityType?: string; limit?: number; since?: Date }): Promise<AuditLog[]>;
+  
+  // Phase 8.8.4-B: RTB Signals Queue methods
+  insertRtbSignal(data: InsertRtbSignal): Promise<RtbSignal>;
+  getRtbSignals(filters: { 
+    mode: 'live' | 'paper'; 
+    status?: string; 
+    symbol?: string; 
+    strategy?: string; 
+    orderBy?: string; 
+    orderDir?: string; 
+    limit?: number 
+  }): Promise<RtbSignal[]>;
+  getRtbSignalById(id: string): Promise<RtbSignal | undefined>;
+  updateRtbSignal(id: string, updates: Partial<RtbSignal>): Promise<RtbSignal>;
 }
 
 // Phase 27.F: Canonical metric key generator for goals engine
@@ -4270,6 +4287,74 @@ export class DatabaseStorage implements IStorage {
     }
     
     return await query;
+  }
+
+  // Phase 8.8.4-B: RTB Signals Queue methods
+  async insertRtbSignal(data: InsertRtbSignal): Promise<RtbSignal> {
+    const [created] = await db
+      .insert(rtbSignals)
+      .values(data)
+      .returning();
+    return created;
+  }
+
+  async getRtbSignals(filters: { 
+    mode: 'live' | 'paper'; 
+    status?: string; 
+    symbol?: string; 
+    strategy?: string; 
+    orderBy?: string; 
+    orderDir?: string; 
+    limit?: number 
+  }): Promise<RtbSignal[]> {
+    const { mode, status, symbol, strategy, orderBy = 'queuedAt', orderDir = 'desc', limit } = filters;
+    
+    const conditions = [eq(rtbSignals.mode, mode)];
+    
+    if (status) {
+      conditions.push(eq(rtbSignals.status, status as any));
+    }
+    if (symbol) {
+      conditions.push(eq(rtbSignals.symbol, symbol));
+    }
+    if (strategy) {
+      conditions.push(eq(rtbSignals.strategy, strategy as any));
+    }
+    
+    let query = db
+      .select()
+      .from(rtbSignals)
+      .where(and(...conditions));
+    
+    // Apply ordering
+    if (orderBy === 'cwqi') {
+      query = query.orderBy(orderDir === 'asc' ? asc(rtbSignals.cwqi) : desc(rtbSignals.cwqi)) as any;
+    } else {
+      query = query.orderBy(orderDir === 'asc' ? asc(rtbSignals.queuedAt) : desc(rtbSignals.queuedAt)) as any;
+    }
+    
+    if (limit) {
+      query = query.limit(limit) as any;
+    }
+    
+    return await query;
+  }
+
+  async getRtbSignalById(id: string): Promise<RtbSignal | undefined> {
+    const [result] = await db
+      .select()
+      .from(rtbSignals)
+      .where(eq(rtbSignals.id, id));
+    return result;
+  }
+
+  async updateRtbSignal(id: string, updates: Partial<RtbSignal>): Promise<RtbSignal> {
+    const [updated] = await db
+      .update(rtbSignals)
+      .set(updates)
+      .where(eq(rtbSignals.id, id))
+      .returning();
+    return updated;
   }
 
   /**
