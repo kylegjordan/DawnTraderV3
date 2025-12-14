@@ -1747,6 +1747,48 @@ export const paperSimSessions = pgTable("paper_sim_sessions", {
   startedAtIdx: index("paper_sim_sessions_started_at_idx").on(table.startedAt),
 }));
 
+// Phase 8.8.4-B: RTB Signal Status Enum
+export const rtbSignalStatusEnum = pgEnum("rtb_signal_status", ["queued", "promoted", "expired", "rejected"]);
+
+// Phase 8.8.4-B: Ready-to-Buy (RTB) Signals Queue
+// Stores high-quality signals that pass quality guardrails but are blocked by capacity constraints
+// Signals are ranked by CWQI (Confidence-Weighted Quality Index) for promotion when slots free up
+export const rtbSignals = pgTable("rtb_signals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  mode: tradingModeEnum("mode").notNull(),
+  signalId: varchar("signal_id", { length: 100 }).notNull(), // SLAL signal ID
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  strategy: strategyTypeEnum("strategy").notNull(),
+  entryPrice: decimal("entry_price", { precision: 20, scale: 8 }).notNull(),
+  stopPrice: decimal("stop_price", { precision: 20, scale: 8 }).notNull(),
+  targetPrice: decimal("target_price", { precision: 20, scale: 8 }),
+  quantity: decimal("quantity", { precision: 20, scale: 8 }),
+  notional: decimal("notional", { precision: 20, scale: 2 }),
+  // Quality metrics for ranking
+  confidence: decimal("confidence", { precision: 5, scale: 4 }).notNull(), // 0.0000 to 1.0000
+  riskScore: decimal("risk_score", { precision: 5, scale: 4 }).notNull(), // 0.0000 to 1.0000 (lower is better)
+  expectedReturn: decimal("expected_return", { precision: 5, scale: 4 }).notNull(), // 0.0000 to 1.0000
+  cwqi: decimal("cwqi", { precision: 5, scale: 4 }).notNull(), // Confidence-Weighted Quality Index
+  // Queue management
+  status: rtbSignalStatusEnum("status").notNull().default("queued"),
+  queuedAt: timestamp("queued_at", { withTimezone: true }).notNull().defaultNow(),
+  promotedAt: timestamp("promoted_at", { withTimezone: true }),
+  expiredAt: timestamp("expired_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(), // TTL: queuedAt + 3 minutes
+  blockReason: varchar("block_reason", { length: 50 }), // Original capacity block: MAX_TRADES, MAX_TOTAL_EXPOSURE, etc.
+  promotedTradeId: varchar("promoted_trade_id"), // Trade ID if promoted to execution
+  metadata: jsonb("metadata"), // Original signal data for re-evaluation
+}, (table) => ({
+  modeStatusIdx: index("rtb_signals_mode_status_idx").on(table.mode, table.status),
+  symbolStrategyIdx: uniqueIndex("rtb_signals_symbol_strategy_idx").on(table.mode, table.symbol, table.strategy, table.status),
+  cwqiIdx: index("rtb_signals_cwqi_idx").on(table.cwqi),
+  queuedAtIdx: index("rtb_signals_queued_at_idx").on(table.queuedAt),
+  expiresAtIdx: index("rtb_signals_expires_at_idx").on(table.expiresAt),
+}));
+
+export type RtbSignal = typeof rtbSignals.$inferSelect;
+export type InsertRtbSignal = typeof rtbSignals.$inferInsert;
+
 // Trading Audit Log - Track all trading engine start/stop actions (Phase 27.F.6)
 export const tradingAuditLog = pgTable("trading_audit_log", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

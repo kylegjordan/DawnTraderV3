@@ -1,0 +1,167 @@
+Directive 8.8.4-B – Guardrail Refactor (Quality vs Capacity)
+Context / Phase
+
+This directive continues Phase 8.8.4 – Signal Lifecycle and Readiness Validation.
+Directive 8.8.4-A.2 (Post-Guardrail Reconciliation) is now complete and verified.
+All SLAL metrics, guardrail terminology, and portfolio synchronization are correct.
+
+The current system enforces capacity-based guardrails only — blocking further trades when all 15 portfolio slots are filled.
+However, it does not yet prioritize or rank which signals should occupy those slots, nor maintain a queue of high-quality pending opportunities when capacity is full.
+
+This phase introduces quality-driven trade selection to complement capacity constraints, ensuring that the Dawn Trader system chooses the best possible trades according to risk-adjusted signal quality.
+
+Purpose
+
+To redesign and extend the guardrail system so that the Dawn Trader can:
+
+Differentiate between capacity constraints (how many trades may be open) and signal quality constraints (which signals deserve those trades).
+
+Maintain a Ready-to-Buy (RTB) Queue of high-quality signals awaiting open slots.
+
+Re-evaluate queued signals periodically to keep the opportunity set fresh.
+
+Prioritize signals using a Confidence-Weighted Quality Index (CWQI) combining risk, confidence, and expected profitability.
+
+Automatically promote the highest-ranked queued signals into open trades when capacity becomes available.
+
+Directive to Replit
+
+Mark Completion of Prior Directive
+
+Record that Directive 8.8.4-A.2: Post-Guardrail Reconciliation is successfully completed and verified.
+
+Update canonical metadata and internal logs to reflect its canonicalization under ID DT-8.8.4-A.2.
+
+Implement Quality vs Capacity Guardrail Architecture
+
+In server/core/guardrail-policy.ts, split guardrails into two categories:
+
+CAPACITY_GUARDRAILS: max trades, max exposure, position limits.
+
+QUALITY_GUARDRAILS: risk factors, confidence score, volatility limits.
+
+Ensure both sets are enforced independently within trade-safety.ts.
+
+Create Ready-to-Buy Queue Service
+
+Add a new module server/core/rtb/ready_to_buy_service.ts to:
+
+Accept incoming signals that pass quality guardrails but fail capacity checks.
+
+Store these in a persistent queue table rtb_signals.
+
+Enforce uniqueness by symbol + strategy pair.
+
+Include fields:
+signalId, symbol, strategy, confidence, riskScore, expectedReturn, timestamp, cwqi.
+
+Implement CWQI (Confidence-Weighted Quality Index)
+
+Define formula in server/core/metrics/quality_index.ts:
+
+cwqi = (confidence * 0.5) + ((1 - riskScore) * 0.3) + (expectedReturn * 0.2);
+
+
+Normalize each component between 0 and 1.
+
+Higher CWQI = higher trade priority.
+
+Add unit tests verifying ranking order.
+
+Queue Re-Evaluation Cycle
+
+Add a background job rtb_queue_refresher.ts that:
+
+Runs every 30 seconds.
+
+Re-evaluates each queued signal’s CWQI with updated data.
+
+Removes any signals whose validity < threshold (e.g., confidence < 0.6 or signal age > 3 minutes).
+
+Promotion Mechanism
+
+When a trade slot frees (trade closes or exposure drops below limit):
+
+The Ready-to-Buy service selects the highest-CWQI signal.
+
+Sends it to the Strategy Engine for sizing → execution → SLAL tracking.
+
+Ensure deduplication against active and queued signals.
+
+Update SLAL Instrumentation
+
+Extend signal_lifecycle_audit.ts to include:
+
+QUEUED and PROMOTED stages.
+
+Duration metrics for average queue time.
+
+Add these to the /api/diagnostics/signal-lifecycle endpoint and metrics panel.
+
+Frontend Enhancements
+
+In client/src/components/trading/ready-to-buy.tsx:
+
+Display new columns: Confidence, RiskScore, ExpectedReturn, CWQI.
+
+Add color-coded ranking (green = top quartile).
+
+Include live count of queued vs active trades.
+
+In execution-metrics.tsx, show:
+
+CWQI distribution chart.
+
+Average queue time and promotion rate.
+
+Diagnostics and Verification
+
+Run a 15-minute paper-trading session with the test user:
+
+username: testuser123
+
+password: SecurePass123!
+
+Capture the standard diagnostic files (slal_dump.json, active_trades.json, trade_history.json, slal_trade_correlation.json).
+
+Confirm:
+
+SLAL shows new stages (QUEUED, PROMOTED).
+
+Rejections by reason distinguish MAX_TRADES vs QUALITY_REJECTED.
+
+Ready-to-Buy queue maintains ≈ 50–200 signals under full capacity.
+
+Active trades = 15 maximum at all times.
+
+Promotions occur correctly when slots free up.
+
+Expected Result
+
+After successful implementation and diagnostic verification:
+
+Quality and capacity guardrails operate independently.
+
+Ready-to-Buy queue functions as a dynamic opportunity pool.
+
+CWQI metric ranks signals by risk-adjusted profitability.
+
+SLAL reports now include QUEUED and PROMOTED stages.
+
+The system no longer discards high-quality signals when capacity is full; they are re-evaluated and promoted in turn.
+
+Terminology and data alignment remain canonical.
+
+Directive Metadata
+
+Directive ID: DT-8.8.4-B
+
+Phase: 8.8.4 (Signal Lifecycle and Readiness Validation)
+
+Preceding Directive: DT-8.8.4-A.2 (Post-Guardrail Reconciliation) – Completed & Canonicalized
+
+Associated Credentials: testuser123 / SecurePass123!
+
+Approval: Architect Verification Required after Diagnostics
+
+Canonical Reference: GROUNDING-MISSION-COLLEAGUE-COLLABORATION (Approved for Canonicalization)

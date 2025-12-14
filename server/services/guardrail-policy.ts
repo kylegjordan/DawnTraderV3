@@ -19,6 +19,57 @@ import { storage } from '../storage';
 export type TradingMode = 'paper' | 'live';
 export type CoherencyStatus = 'PASS' | 'WARN' | 'FAIL';
 
+/**
+ * Phase 8.8.4-B: Guardrail Category Types
+ * 
+ * CAPACITY_GUARDRAILS: Control how many trades can be open
+ * - maxOpenPositions, maxTotalExposure, position limits
+ * - Signals blocked by capacity can be queued for later
+ * 
+ * QUALITY_GUARDRAILS: Control which signals deserve to be trades
+ * - risk factors, confidence thresholds, volatility limits
+ * - Signals blocked by quality are rejected outright
+ */
+export type GuardrailCategory = 'CAPACITY' | 'QUALITY';
+
+export const CAPACITY_GUARDRAILS = [
+  'MAX_TRADES',           // Max simultaneous open trades
+  'MAX_TOTAL_EXPOSURE',   // Total portfolio exposure limit
+  'POSITION_LIMIT',       // Already have position in symbol
+  'SLOT_CONFLICT',        // Post-guardrail slot overflow
+] as const;
+
+export const QUALITY_GUARDRAILS = [
+  'KILL_SWITCH',          // Trading halted due to loss threshold
+  'NO_STOP_LOSS',         // Missing stop-loss (invalid signal)
+  'INVALID_STOP_LOSS',    // Stop above entry (invalid signal)
+  'COOLDOWN',             // Symbol still cooling down
+  'MAX_POSITION',         // Single position too large (sizing issue)
+  'INSUFFICIENT_BALANCE', // Not enough balance
+  'PORTFOLIO_RISK',       // Risk per trade exceeded
+  'LPCP_LOW_PRICE',       // Low-priced coin protection
+  'LPCP_MIN_NOTIONAL',    // Below minimum notional
+  'FX_CONVERSION_FAILED', // FX conversion error
+  'EXPIRED_SIGNAL',       // Signal TTL expired
+  'NO_PRICE',             // Cannot get reliable price
+] as const;
+
+export type CapacityGuardrailCode = typeof CAPACITY_GUARDRAILS[number];
+export type QualityGuardrailCode = typeof QUALITY_GUARDRAILS[number];
+export type GuardrailBlockCode = CapacityGuardrailCode | QualityGuardrailCode;
+
+/**
+ * Determines if a rejection reason is a capacity constraint (queueable)
+ * vs a quality constraint (rejected outright)
+ */
+export function isCapacityBlock(code: string): boolean {
+  return (CAPACITY_GUARDRAILS as readonly string[]).includes(code);
+}
+
+export function isQualityBlock(code: string): boolean {
+  return (QUALITY_GUARDRAILS as readonly string[]).includes(code);
+}
+
 export interface EffectiveGuardrails {
   mode: TradingMode;
   portfolioRiskPerTradePct: number;
