@@ -1,0 +1,160 @@
+# Directive 8.8.4-A – Signal Lifecycle Audit & Instrumentation
+
+**Phase:** 8.8.4 – Ready-to-Buy Signal Pooling, Ranking & Lifecycle Management  
+**Issued By:** Principal Architect, Dawn Trader Project  
+**Issued To:** Replit Execution Environment  
+**Directive Type:** Implementation  
+**Directive ID:** DT-8.8.4-A  
+**Grounding Authorization:** Directive ID: GROUNDING-MISSION-COLLEAGUE-COLLABORATION — *Approved for Canonicalization*
+
+---
+
+## 🔍 Context
+
+Phase 8.8.4 strengthens Dawn Trader’s trading intelligence by transforming the system from a reactive, first-come-first-served trade executor into an informed, ranked opportunity manager.  
+The problem this phase addresses is that high-quality trading signals are currently being lost or instantly executed without proper evaluation due to the absence of a unified signal-tracking and audit mechanism.  
+Directive 8.8.4-A establishes that diagnostic foundation — creating complete visibility of the signal lifecycle so subsequent directives can build the Ready-to-Buy queue, ranking system, and re-evaluation logic.
+
+---
+
+## 👤 Test User Credentials
+
+These credentials are for internal Replit runtime testing only.
+
+
+
+username: testuser123
+password: SecurePass123!
+
+
+**Purpose:** enables simulated login to trigger and validate audit logging, guardrail decisions, and trade events during controlled test sessions.
+
+---
+
+## 🎯 Objective
+
+Instrument every stage of the trading-signal lifecycle so that each decision taken by the engine is:
+1. Recorded with full contextual data,  
+2. Traceable from origin → decision → outcome, and  
+3. Accessible for later analysis and queue-ranking logic.
+
+This directive produces the canonical **Signal Lifecycle Audit Layer (SLAL).**
+
+---
+
+## 🧩 Scope of Instrumentation
+
+| Stage | Module / Layer | Required Output |
+|--------|----------------|-----------------|
+| **1** | Strategy Engines | Raw Signal object emitted with: `pair`, `strategy`, `timestamp`, `confidence`, `entry`, `target`, `stop`, `risk`, `indicators`, `rawScore` |
+| **2** | Guardrail Evaluation | For each guardrail applied, record: `name`, `type` (Quality or Capacity), `result` (pass/fail), `threshold`, `reasonCode` |
+| **3** | Portfolio Assessment | Capture `availableExposure%`, `openSlots`, `usedCapital`, `maxTradeLimit` at the moment of decision |
+| **4** | Decision Node | Record `decisionOutcome` (`OPENED`, `QUEUED`, `BLOCKED`, `EXPIRED`) + `sourceReason` |
+| **5** | Execution Result | For OPENED trades, store link to trade ID and execution metrics (`qty`, `price`, `slippage`, `fee`) |
+| **6** | Lifecycle Events | Record `refresh`, `re-evaluation`, and `expiry` events with timestamp and status. |
+
+Each signal must carry a persistent UUID through all stages.
+
+---
+
+## 🧠 Implementation Instructions
+
+### 1. Create Audit Data Structure
+
+- **File:** `/core/audit/signal_lifecycle_audit.ts`  
+- Define TypeScript interface `SignalAuditRecord` with all fields above.  
+- Initialize `SignalAuditLog` as append-only in-memory array with periodic flush to JSON or SQLite (`signal_audit_log.db`).  
+- Ensure non-blocking writes to avoid latency in trade execution.
+
+### 2. Insert Instrumentation Hooks
+
+Insert logging calls at the following points:
+
+1. `/core/strategyEngine.ts` → after signal generation.  
+2. `/core/guardrails/index.ts` → around each guardrail evaluation.  
+3. `/core/portfolioManager.ts` → before capacity checks.  
+4. `/core/tradeManager.ts` → at decision node (open / block / queue).  
+5. `/core/lifecycleManager.ts` → during refresh and expiry events.
+
+Use the shared utility:  
+```ts
+logSignalEvent(eventType, signalUUID, payload);
+
+3. Define Event Types
+type EventType =
+  | 'SIGNAL_CREATED'
+  | 'GUARDRAIL_CHECK'
+  | 'PORTFOLIO_STATE'
+  | 'DECISION'
+  | 'EXECUTION'
+  | 'REFRESH'
+  | 'EXPIRE';
+
+
+Each entry in SignalAuditLog must include eventType, timestampUTC, signalUUID, and payload.
+
+4. Store & Expose Diagnostics
+
+Expose endpoint /diagnostics/signal-lifecycle returning JSON records (filterable by pair or time window).
+
+Extend “RTB Execution Metrics” panel with:
+
+Total Signals Created
+
+Passed Quality Guardrails
+
+Blocked (Capacity)
+
+Blocked (Quality)
+
+Queued
+
+Expired
+
+Opened
+
+Add a Metrics Mismatch flag if audit counts differ from execution metrics.
+
+⚙️ Data Retention & Performance
+
+Maintain 30 minutes of live audit records in memory; persist every 10 minutes or on session close.
+
+Compress older records into daily archives under /logs/signal_audit/YYYY-MM-DD.json.
+
+Add .env flag AUDIT_ENABLED=true to toggle auditing mode.
+
+🧪 Verification Checklist
+Test	Expected Outcome
+Signal emission logs SIGNAL_CREATED	✅ Record appears with strategy & pair
+Guardrail run logs GUARDRAIL_CHECK	✅ Each with result & reason
+Blocked signals log DECISION:BLOCKED	✅ ReasonCode reflects guardrail
+Queue entry logs DECISION:QUEUED	✅ Signal visible for ranking
+Opened trade logs EXECUTION	✅ Trade ID recorded
+Expired signal logs EXPIRE	✅ Timestamp & reason present
+/diagnostics/signal-lifecycle returns data	✅ JSON output valid
+📦 Output Artifacts
+
+/core/audit/signal_lifecycle_audit.ts – audit module
+
+/logs/signal_audit/ – daily JSON archives
+
+/diagnostics/signal-lifecycle – diagnostic API endpoint
+
+Updated “Signal Lifecycle Metrics” panel in Trading → RTB Execution Metrics
+
+✅ Success Criteria
+
+≥ 99 % of signal events logged and traceable
+
+Diagnostic endpoint returns valid structured data
+
+Latency impact ≤ 2 ms per signal
+
+Metrics panel and audit log counts align (± 1 event)
+
+Verification under testuser123 confirms full operational coverage
+
+Directive Status: ACTIVE
+Execution Authority: Replit Runtime Environment
+Verification Authority: Principal Architect (Kyle Jordan)
+Next Directive: 8.8.4-B – Guardrail Refactor (Quality vs Capacity)
