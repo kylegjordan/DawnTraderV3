@@ -1166,6 +1166,10 @@ export const paperTrades = pgTable("paper_trades", {
   realizedPLR: decimal("realized_pl_r", { precision: 8, scale: 4 }),
   mfe: decimal("mfe", { precision: 10, scale: 2 }), // Maximum Favorable Excursion (max profit while open)
   mae: decimal("mae", { precision: 10, scale: 2 }), // Maximum Adverse Excursion (max loss while open)
+  ngc: decimal("ngc", { precision: 6, scale: 4 }), // Phase 8.8.4-C: Normalized Global Confidence
+  cwqi: decimal("cwqi", { precision: 6, scale: 4 }), // Phase 8.8.4-C: Confidence-Weighted Quality Index
+  confidence: decimal("confidence", { precision: 6, scale: 4 }), // Phase 8.8.4-C: Raw signal confidence
+  profitRate: decimal("profit_rate", { precision: 6, scale: 4 }), // Phase 8.8.4-C: Expected profit per time unit
   entryTime: timestamp("entry_time", { withTimezone: true }).defaultNow(),
   exitTime: timestamp("exit_time", { withTimezone: true }),
   metadata: jsonb("metadata"), // Additional strategy-specific data
