@@ -1,5 +1,5 @@
 /**
- * Phase 8.8.4-B.1: Confidence-Weighted Quality Index (CWQI) with NGC Integration
+ * Phase 8.8.4-B.1/B.2: Confidence-Weighted Quality Index (CWQI) with NGC Integration
  * 
  * This module implements the complete signal quality metrics pipeline:
  * 1. NGC (Normalized Global Confidence) - Combines base confidence with volatility and risk
@@ -7,12 +7,67 @@
  * 3. ProfitRate - Expected return per unit time
  * 4. CWQI - Comprehensive quality index for signal ranking
  * 
- * New CWQI Formula (B.1):
+ * CWQI Formula:
  *   CWQI = (NGC * 0.40) + ((1 - Risk) * 0.25) + (ExpectedReturn * 0.20) + (ProfitRate * 0.15)
  * 
  * NGC Formula:
  *   NGC = normalize(base_confidence * (1 - volatility) * (1 - risk))
+ * 
+ * B.2: Normalization parameters are loaded from config/metrics.json
  */
+
+import * as fs from 'fs';
+import * as path from 'path';
+
+interface MetricsConfig {
+  NGC_MIN: number;
+  NGC_MAX: number;
+  PROFITRATE_MIN: number;
+  PROFITRATE_MAX: number;
+}
+
+const DEFAULT_METRICS_CONFIG: MetricsConfig = {
+  NGC_MIN: 0.15,
+  NGC_MAX: 0.70,
+  PROFITRATE_MIN: 0.002,
+  PROFITRATE_MAX: 0.80,
+};
+
+let metricsConfig: MetricsConfig = { ...DEFAULT_METRICS_CONFIG };
+let configLoaded = false;
+
+function loadMetricsConfig(): MetricsConfig {
+  if (configLoaded) {
+    return metricsConfig;
+  }
+  
+  try {
+    const configPath = path.resolve(process.cwd(), 'config/metrics.json');
+    if (fs.existsSync(configPath)) {
+      const configData = fs.readFileSync(configPath, 'utf-8');
+      const parsed = JSON.parse(configData);
+      metricsConfig = {
+        NGC_MIN: parsed.NGC_MIN ?? DEFAULT_METRICS_CONFIG.NGC_MIN,
+        NGC_MAX: parsed.NGC_MAX ?? DEFAULT_METRICS_CONFIG.NGC_MAX,
+        PROFITRATE_MIN: parsed.PROFITRATE_MIN ?? DEFAULT_METRICS_CONFIG.PROFITRATE_MIN,
+        PROFITRATE_MAX: parsed.PROFITRATE_MAX ?? DEFAULT_METRICS_CONFIG.PROFITRATE_MAX,
+      };
+      configLoaded = true;
+      console.log(`[B.2][CONFIG] Loaded normalization parameters: NGC=[${metricsConfig.NGC_MIN},${metricsConfig.NGC_MAX}], ProfitRate=[${metricsConfig.PROFITRATE_MIN},${metricsConfig.PROFITRATE_MAX}]`);
+    } else {
+      console.log('[B.2][CONFIG] config/metrics.json not found, using defaults');
+    }
+  } catch (err) {
+    console.log('[B.2][CONFIG] Error loading config, using defaults:', err);
+  }
+  
+  configLoaded = true;
+  return metricsConfig;
+}
+
+export function getMetricsConfig(): MetricsConfig {
+  return loadMetricsConfig();
+}
 
 export interface CWQIComponents {
   confidence: number;      // Base confidence 0.0 to 1.0
@@ -83,10 +138,8 @@ export function calculateNGC(
   
   const rawNGC = conf * (1 - vol) * (1 - risk);
   
-  const OBSERVED_MIN = 0.15;
-  const OBSERVED_MAX = 0.70;
-  
-  const ngc = clamp01((rawNGC - OBSERVED_MIN) / (OBSERVED_MAX - OBSERVED_MIN));
+  const config = loadMetricsConfig();
+  const ngc = clamp01((rawNGC - config.NGC_MIN) / (config.NGC_MAX - config.NGC_MIN));
   
   return Math.round(ngc * 10000) / 10000;
 }
@@ -159,10 +212,8 @@ export function calculateProfitRate(
   
   const rawRate = (returnVal * 60) / expectedDuration;
   
-  const OBSERVED_MIN = 0.002;
-  const OBSERVED_MAX = 0.80;
-  
-  const normalizedRate = clamp01((rawRate - OBSERVED_MIN) / (OBSERVED_MAX - OBSERVED_MIN));
+  const config = loadMetricsConfig();
+  const normalizedRate = clamp01((rawRate - config.PROFITRATE_MIN) / (config.PROFITRATE_MAX - config.PROFITRATE_MIN));
   
   return Math.round(normalizedRate * 10000) / 10000;
 }

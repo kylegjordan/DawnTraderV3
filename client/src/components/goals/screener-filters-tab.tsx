@@ -552,11 +552,11 @@ export default function ScreenerFiltersTab() {
                 </p>
               </div>
 
-              {/* Confidence Threshold */}
+              {/* NGC (Normalized Global Confidence) Threshold - Phase B.2 */}
               <div className="space-y-3 p-4 border rounded-lg">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="confidenceThreshold" className="text-sm font-medium">
-                    Confidence Threshold ({filters.confidenceThreshold ?? DEFAULTS.confidenceThreshold}%)
+                    NGC Threshold ({filters.confidenceThreshold ?? DEFAULTS.confidenceThreshold}%)
                   </Label>
                 </div>
                 <Slider
@@ -572,7 +572,7 @@ export default function ScreenerFiltersTab() {
                   data-testid="slider-confidence-threshold"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Minimum confidence level required for trade signals (40-90%)
+                  NGC (Normalized Global Confidence) threshold for trade signals (40-90%)
                 </p>
               </div>
 
@@ -605,6 +605,69 @@ export default function ScreenerFiltersTab() {
                   Select timeframes for technical analysis
                 </p>
               </div>
+            </div>
+          </div>
+
+          {/* Phase 8.8.4-B.2: Signal Quality Evaluator (SQE) Filters */}
+          <div className="mt-8 space-y-4">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-emerald-500" />
+              Signal Quality Evaluator (SQE) Filters
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              These thresholds are applied automatically to filter trade signals before they enter the Ready-to-Buy queue.
+              Signals must pass all SQE criteria to be considered for execution.
+            </p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* NGC Filter */}
+              <div className="p-4 border rounded-lg bg-muted/30">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">NGC</span>
+                  <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded">Active</span>
+                </div>
+                <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">&ge; 0.40</div>
+                <p className="text-xs text-muted-foreground mt-1">Normalized Global Confidence</p>
+              </div>
+
+              {/* Risk Filter */}
+              <div className="p-4 border rounded-lg bg-muted/30">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">Risk</span>
+                  <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded">Active</span>
+                </div>
+                <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">&le; 0.70</div>
+                <p className="text-xs text-muted-foreground mt-1">Maximum risk score allowed</p>
+              </div>
+
+              {/* ProfitRate Filter */}
+              <div className="p-4 border rounded-lg bg-muted/30">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">ProfitRate</span>
+                  <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded">Active</span>
+                </div>
+                <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">&ge; 0.25</div>
+                <p className="text-xs text-muted-foreground mt-1">Minimum profit per time unit</p>
+              </div>
+
+              {/* CWQI Filter */}
+              <div className="p-4 border rounded-lg bg-muted/30">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">CWQI</span>
+                  <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded">Active</span>
+                </div>
+                <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">&ge; 0.50</div>
+                <p className="text-xs text-muted-foreground mt-1">Confidence-Weighted Quality Index</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <p className="text-xs text-blue-700 dark:text-blue-300">
+                <strong>How SQE Works:</strong> Each trade signal is evaluated against these four metrics. 
+                NGC combines raw confidence with market volatility and risk conditions. 
+                ProfitRate measures expected return per time unit. 
+                CWQI is the overall quality score used for ranking signals in the queue.
+              </p>
             </div>
           </div>
 

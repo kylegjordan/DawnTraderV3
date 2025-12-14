@@ -1,0 +1,6 @@
+{
+  "NGC_MIN": 0.15,
+  "NGC_MAX": 0.70,
+  "PROFITRATE_MIN": 0.002,
+  "PROFITRATE_MAX": 0.80
+}

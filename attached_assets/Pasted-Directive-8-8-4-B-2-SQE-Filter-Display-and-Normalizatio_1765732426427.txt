@@ -1,0 +1,188 @@
+Directive 8.8.4-B.2 — SQE Filter Display and Normalization Configuration
+Issued To: Replit
+Phase: 8.8.4 (Signal Quality & Guardrail System)
+Parent Directive: 8.8.4-B.1 — Signal Quality Evaluator & Normalized Global Confidence Integration
+Associated Decision ID: DEC-2025-NGC-SCL-NOMENCLATURE
+Issued By: Dawn Trader Core (Bridge Repository)
+Date: [Insert Current Date]
+Purpose
+
+This directive finalizes the 8.8.4-B implementation by:
+
+Surfacing the Signal Quality Evaluator (SQE) Filters in the UI for transparency and auditability.
+
+Ensuring proper configuration persistence for NGC and ProfitRate normalization ranges.
+
+Completing post-implementation verification of the Normalized Global Confidence (NGC) integration.
+
+These actions make the Signal Quality Evaluator visible within the trading system and ensure future calibration of its parameters can be performed without direct code modification.
+
+Background
+
+Directive 8.8.4-B.1 introduced the Normalized Global Confidence (NGC), ProfitRate, and Confidence-Weighted Quality Index (CWQI) metrics, while refactoring the signal filtering process under the Signal Constraint Layer (SCL).
+While implementation and internal verification were completed successfully, the following follow-ups are required:
+
+The SQE thresholds must be visible in the Screeners UI.
+
+The existing confidence filter should be repurposed to reflect NGC.
+
+Normalization range values must be persisted in configuration files.
+
+A structured verification session must confirm full system integration.
+
+Implementation Tasks
+Task 1 — Decision Log Verification
+
+Ensure the Bridge decision record is present and complete in:
+
+bridge/decisions/decision-ledger.md
+
+
+with the entry:
+
+Decision ID: DEC-2025-NGC-SCL-NOMENCLATURE
+Title: Adoption of Signal Constraint Layer Architecture and Normalized Global Confidence Metric
+Summary:
+- “Quality Guardrails” → Signal Quality Evaluator (SQE)
+- “Capacity Guardrails” → Trade Capacity Limits (TCL)
+- Unified under Signal Constraint Layer (SCL)
+- Efficiency replaced by ProfitRate
+- Confidence metric standardized as Normalized Global Confidence (NGC)
+
+
+If missing, add this record and commit before continuing.
+
+Task 2 — Normalization Configuration
+
+Implement configuration-based normalization for NGC and ProfitRate.
+
+Create or update config/metrics.json with:
+
+{
+  "NGC_MIN": 0.15,
+  "NGC_MAX": 0.70,
+  "PROFITRATE_MIN": 0.002,
+  "PROFITRATE_MAX": 0.80
+}
+
+
+Update quality_index.ts to read these parameters dynamically at startup.
+
+Confirm both NGC and ProfitRate values are clamped to [0,1] after normalization.
+
+Log normalization parameters at startup:
+
+[B.2][CONFIG] Loaded normalization parameters: NGC_MIN=0.15, NGC_MAX=0.70, PROFITRATE_MIN=0.002, PROFITRATE_MAX=0.80
+
+
+During each diagnostic session, include a summary line:
+
+[B.2][METRICS][RANGE] NGC_MIN=0.15, NGC_MAX=0.70, PROFITRATE_MIN=0.002, PROFITRATE_MAX=0.80
+
+Task 3 — Screeners Tab Update (SQE Filter Display)
+3.1 Relocate and Relabel Confidence Filter
+
+Move the existing Confidence filter control from its current position into a new section titled
+“Signal Quality Evaluator (SQE) Filters.”
+
+Relabel it to “NGC (Normalized Global Confidence)”.
+This field now reflects the NGC metric and no longer uses per-strategy confidence.
+
+3.2 Add Static SQE Filter Displays
+
+At the bottom of the Screeners tab, add four non-editable SQE filters with fixed thresholds and one-sentence descriptions:
+
+Filter	Threshold	Description
+NGC ≥ 0.40	Fixed	Minimum normalized global confidence required for a signal to pass quality evaluation. Reflects confidence adjusted for volatility and risk.
+Risk ≤ 0.70	Fixed	Maximum allowable volatility-adjusted exposure level per signal.
+ProfitRate ≥ 0.25	Fixed	Minimum profitability per unit of time required for trade qualification.
+CWQI ≥ 0.50	Fixed	Minimum Confidence-Weighted Quality Index for entry into the Ready-to-Buy queue.
+3.3 Add Section Description
+
+Add an explanatory text block beneath the filters:
+
+Signal Quality Evaluator (SQE) Filters
+These thresholds determine which trading signals are eligible for entry into the Ready-to-Buy queue.
+The filters represent system-wide trade quality standards and are applied automatically during signal evaluation.
+
+3.4 Interactivity
+
+Filters are non-editable in this phase.
+
+Future directives will extend control to LATTi for dynamic adjustment.
+
+Task 4 — Ready-to-Buy Queue Behavior Confirmation
+
+Validate queue behavior under the new SQE system:
+
+SQE filtering occurs before TCL checks.
+
+Rejected signals appear with [B.2][SQE_REJECT] and reason codes.
+
+Queue ranking strictly follows CWQI in descending order.
+
+Long-duration trades with sufficient ProfitRate remain queued (soft prioritization only).
+
+Include logs such as:
+
+[SQE_PASS] Symbol: EURUSD | CWQI: 0.68 | ProfitRate: 0.42
+[SQE_REJECT] Symbol: GBPJPY | Reason: ProfitRate<0.25
+
+Task 5 — Verification Session (Final Step)
+
+Conduct a 15-minute paper trading diagnostic verification session to confirm full system operation.
+
+Verification Checklist:
+
+[B.2][METRICS] logs display NGC, ProfitRate, and CWQI values.
+
+[B.2][SQE_REJECT] logs appear with accurate reasoning.
+
+NGC is shown in the “Confidence” column in Ready-to-Buy, Active Trades, and Trade History tables.
+
+SQE Filters section appears in the Screeners tab as described.
+
+Diagnostic reports are generated:
+
+logs/diagnostics/slal_dump.json
+
+logs/diagnostics/active_trades.json
+
+logs/diagnostics/trade_history.json
+
+logs/diagnostics/slal_trade_correlation.json
+
+logs/diagnostics/ready_to_buy_queue.json
+
+Once all conditions are met and verified, mark Directive 8.8.4-B.1 as canonicalized and mark Directive 8.8.4-B.2 as successfully implemented.
+
+Verification Authority
+
+Implementation is considered verified when:
+
+The above checklist items pass without deviation.
+
+Normalization parameters load successfully from configuration.
+
+SQE Filters section appears visually in the Screeners tab.
+
+Logs confirm the correct operational sequence (SQE → RTB → TCL).
+
+Post-Verification Logging
+
+After verification, Replit must:
+
+Append the successful status entry to:
+
+bridge/decisions/decision-ledger.md
+
+Decision ID: DEC-2025-NGC-SCL-NOMENCLATURE
+Addendum: Directive 8.8.4-B.2 (SQE Filter Display & Normalization Configuration)
+Status: Verified and Canonicalized
+
+✅ Directive Status
+
+Directive ID: 8.8.4-B.2
+Title: SQE Filter Display and Normalization Configuration
+Status: Pending Implementation
+Approval for Canonicalization: Granted upon verification
