@@ -555,10 +555,11 @@ function IntegrityBanner({
               {integrity.slotsAvailable}
             </span>
           </div>
-          {/* Phase 8.8.4-A.2: Cash Balance + Open Trades Net P/L = Total Equity 
-              Use cashBalance (not currentBalance) because currentBalance already includes position values */}
+          {/* Phase 8.8.4-A.2: Current Balance + Unrealized Net P/L
+              cashBalance = startingBalance + realizedPnl (this IS "Current Balance")
+              openTradesNetPnlSum = sum of unrealized net P/L from open trades */}
           <div className="flex items-center gap-2">
-            <span className="text-muted-foreground">Cash + Open Trades Net P/L:</span>
+            <span className="text-muted-foreground">Current Bal + Unrealized P/L:</span>
             <span className={cn("font-bold", ((portfolio.cashBalance ?? 0) + openTradesNetPnlSum) >= (portfolio.startingBalance ?? 0) ? "text-green-600" : "text-red-600")}>
               ${((portfolio.cashBalance ?? 0) + openTradesNetPnlSum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
