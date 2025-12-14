@@ -555,11 +555,12 @@ function IntegrityBanner({
               {integrity.slotsAvailable}
             </span>
           </div>
-          {/* Phase 8.8.4-A.2: Current Bal + Open Trades Net P/L */}
+          {/* Phase 8.8.4-A.2: Cash Balance + Open Trades Net P/L = Total Equity 
+              Use cashBalance (not currentBalance) because currentBalance already includes position values */}
           <div className="flex items-center gap-2">
-            <span className="text-muted-foreground">Current Bal + Open Trades Net P/L:</span>
-            <span className={cn("font-bold", openTradesNetPnlSum >= 0 ? "text-green-600" : "text-red-600")}>
-              ${((portfolio.currentBalance ?? 0) + openTradesNetPnlSum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <span className="text-muted-foreground">Cash + Open Trades Net P/L:</span>
+            <span className={cn("font-bold", ((portfolio.cashBalance ?? 0) + openTradesNetPnlSum) >= (portfolio.startingBalance ?? 0) ? "text-green-600" : "text-red-600")}>
+              ${((portfolio.cashBalance ?? 0) + openTradesNetPnlSum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
         </div>
@@ -968,13 +969,8 @@ export default function ActiveTradesV2() {
   const integrity = data?.integrity || { systemCount: 0, maxOpenTrades: 15, slotsAvailable: 15, status: 'OK' as const };
   const portfolio = data?.portfolio || { startingBalance: 0, currentBalance: 0, cashBalance: 0, totalPositionValue: 0, netPnl: 0, netPnlPercent: 0 };
 
-  // DEBUG: Log each position's netPnl to understand the sum calculation
-  const openTradesNetPnlSum = positions.reduce((sum, pos) => {
-    const netPnlValue = parseFloat(String(pos.netPnl)) || 0;
-    console.log(`[DEBUG_SUM] ${pos.symbol}: netPnl=${pos.netPnl}, parsed=${netPnlValue}, runningSum=${sum + netPnlValue}`);
-    return sum + netPnlValue;
-  }, 0);
-  console.log(`[DEBUG_SUM] TOTAL openTradesNetPnlSum=${openTradesNetPnlSum}, portfolio.currentBalance=${portfolio.currentBalance}, RESULT=${portfolio.currentBalance + openTradesNetPnlSum}`);
+  // Calculate sum of all open trades' Net P/L for the green bar display
+  const openTradesNetPnlSum = positions.reduce((sum, pos) => sum + (parseFloat(String(pos.netPnl)) || 0), 0);
 
   return (
     <section data-testid="active-trades-v2" data-last-update-at={lastDataRefreshAt || ''}>
