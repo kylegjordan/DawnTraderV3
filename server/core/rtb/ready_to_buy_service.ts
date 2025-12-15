@@ -96,6 +96,9 @@ const TCL_WARMUP_THRESHOLD = 100; // Minimum signals before TCL activates
 // Phase 8.8.4-C.5: RTB refresh cycle interval
 const RTB_REFRESH_INTERVAL_MS = 30 * 1000; // 30 seconds
 
+// Phase 8.8.4-C.6: TCL 5-minute failsafe
+const TCL_FAILSAFE_MS = 5 * 60 * 1000; // 5 minutes
+
 const CWQI_DECAY_LAMBDA = 0.03;
 
 /**
@@ -126,9 +129,30 @@ export function getCWQIDecayFactor(ageMinutes: number): number {
 class ReadyToBuyService {
   private initialized = false;
   private refreshIntervals: Map<TradingMode, NodeJS.Timeout> = new Map();
+  private engineStartTimes: Map<TradingMode, number> = new Map(); // Phase 8.8.4-C.6: Track engine start for TCL failsafe
+  private tclFailsafeTriggered: Map<TradingMode, boolean> = new Map(); // Phase 8.8.4-C.6: Track if failsafe was triggered
   
   constructor() {
     console.log('[RTB] Ready-to-Buy Queue Service initialized');
+  }
+
+  /**
+   * Phase 8.8.4-C.6: Set engine start time for TCL failsafe tracking
+   * Called when trading engine starts
+   */
+  setEngineStartTime(mode: TradingMode): void {
+    this.engineStartTimes.set(mode, Date.now());
+    this.tclFailsafeTriggered.set(mode, false);
+    console.log(`[8.8.4-C.6][TCL_FAILSAFE] Engine start time set for ${mode} mode`);
+  }
+
+  /**
+   * Phase 8.8.4-C.6: Clear engine start time
+   * Called when trading engine stops
+   */
+  clearEngineStartTime(mode: TradingMode): void {
+    this.engineStartTimes.delete(mode);
+    this.tclFailsafeTriggered.delete(mode);
   }
 
   /**
@@ -622,37 +646,78 @@ class ReadyToBuyService {
   }
 
   /**
-   * Phase 8.8.4-C.5: Check if TCL (Trading Capacity Limit) is active
-   * TCL only activates after the pool has accumulated ≥100 signals
+   * Phase 8.8.4-C.5 + C.6: Check if TCL (Trading Capacity Limit) is active
+   * TCL activates when:
+   * - Pool has accumulated ≥100 signals (normal activation), OR
+   * - 5 minutes have passed since engine start (failsafe activation)
    * 
    * @param mode - Trading mode to check
-   * @returns true if TCL is active (pool has ≥100 signals)
+   * @returns true if TCL is active
    */
   async isTCLActive(mode: TradingMode): Promise<boolean> {
     const poolSize = await this.getPoolSize(mode);
-    const isActive = poolSize >= TCL_WARMUP_THRESHOLD;
     
-    if (!isActive) {
-      console.log(`[8.8.4-C.5][TCL_WARMUP] mode=${mode}, poolSize=${poolSize}/${TCL_WARMUP_THRESHOLD}, TCL not yet active`);
-    } else {
+    // Normal activation: ≥100 signals
+    if (poolSize >= TCL_WARMUP_THRESHOLD) {
       console.log(`[8.8.4-C.5][TCL_ACTIVATE] mode=${mode}, poolSize=${poolSize} >= ${TCL_WARMUP_THRESHOLD}, TCL is active`);
+      return true;
     }
     
-    return isActive;
+    // Phase 8.8.4-C.6: Check 5-minute failsafe
+    const engineStartTime = this.engineStartTimes.get(mode);
+    if (engineStartTime) {
+      const elapsedMs = Date.now() - engineStartTime;
+      if (elapsedMs >= TCL_FAILSAFE_MS) {
+        // Failsafe triggered
+        if (!this.tclFailsafeTriggered.get(mode)) {
+          this.tclFailsafeTriggered.set(mode, true);
+          console.log(`[8.8.4-C.6][TCL_FALLBACK_TRIGGER] mode=${mode}, elapsed=${(elapsedMs/1000).toFixed(0)}s >= 300s, activating TCL via failsafe`);
+        }
+        console.log(`[8.8.4-C.6][TCL_FALLBACK_ACTIVATE] mode=${mode}, poolSize=${poolSize}, TCL active via 5-minute failsafe`);
+        return true;
+      } else {
+        const remainingMs = TCL_FAILSAFE_MS - elapsedMs;
+        console.log(`[8.8.4-C.5][TCL_WARMUP] mode=${mode}, poolSize=${poolSize}/${TCL_WARMUP_THRESHOLD}, failsafe in ${(remainingMs/1000).toFixed(0)}s`);
+      }
+    } else {
+      console.log(`[8.8.4-C.5][TCL_WARMUP] mode=${mode}, poolSize=${poolSize}/${TCL_WARMUP_THRESHOLD}, TCL not yet active (no engine start time)`);
+    }
+    
+    return false;
   }
 
   /**
-   * Phase 8.8.4-C.5: Get TCL warm-up status
-   * @returns Object with pool size, threshold, and active status
+   * Phase 8.8.4-C.5 + C.6: Get TCL warm-up status
+   * @returns Object with pool size, threshold, active status, and failsafe info
    */
   async getTCLStatus(mode: TradingMode): Promise<{
     poolSize: number;
     threshold: number;
     isActive: boolean;
     progressPercent: number;
+    failsafeEnabled: boolean;
+    failsafeTriggered: boolean;
+    failsafeRemainingMs: number | null;
   }> {
     const poolSize = await this.getPoolSize(mode);
-    const isActive = poolSize >= TCL_WARMUP_THRESHOLD;
+    const engineStartTime = this.engineStartTimes.get(mode);
+    const failsafeTriggered = this.tclFailsafeTriggered.get(mode) || false;
+    
+    let failsafeRemainingMs: number | null = null;
+    let isActiveViaFailsafe = false;
+    
+    if (engineStartTime) {
+      const elapsedMs = Date.now() - engineStartTime;
+      if (elapsedMs >= TCL_FAILSAFE_MS) {
+        isActiveViaFailsafe = true;
+        failsafeRemainingMs = 0;
+      } else {
+        failsafeRemainingMs = TCL_FAILSAFE_MS - elapsedMs;
+      }
+    }
+    
+    const isActiveViaThreshold = poolSize >= TCL_WARMUP_THRESHOLD;
+    const isActive = isActiveViaThreshold || isActiveViaFailsafe;
     const progressPercent = Math.min(100, (poolSize / TCL_WARMUP_THRESHOLD) * 100);
     
     return {
@@ -660,6 +725,9 @@ class ReadyToBuyService {
       threshold: TCL_WARMUP_THRESHOLD,
       isActive,
       progressPercent: Math.round(progressPercent * 10) / 10,
+      failsafeEnabled: engineStartTime !== undefined,
+      failsafeTriggered,
+      failsafeRemainingMs,
     };
   }
 }

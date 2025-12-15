@@ -1017,14 +1017,11 @@ app.use((req, res, next) => {
       console.error('[LearningCycleService] ⚠️ Startup failed:', error);
     }
 
-    // Phase 8.8.4-B: Start RTB Queue Refresher (30-second refresh cycle)
-    try {
-      const { rtbQueueRefresher } = await import('./core/rtb/rtb_queue_refresher');
-      rtbQueueRefresher.start();
-      console.log('[RTB-Refresher] ✅ Started successfully');
-    } catch (error) {
-      console.error('[RTB-Refresher] ⚠️ Startup failed:', error);
-    }
+    // Phase 8.8.4-C.6: RTB Queue Refresher DEPRECATED
+    // The old rtbQueueRefresher is now replaced by ReadyToBuyService.startRefreshCycle()
+    // which is wired into the PaperExecutionEngine lifecycle (start/stop/reset)
+    // See: server/services/paper-execution-engine.ts lines 189-191, 237-239, 431-433
+    console.log('[8.8.4-C.6] RTB refresh now handled by ReadyToBuyService (engine lifecycle)');
 
     // Phase 8.9: Start Autonomy Layer (hourly self-checks, daily optimization)
     try {

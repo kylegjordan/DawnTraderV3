@@ -7367,22 +7367,27 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // GET /api/diagnostics/rtb-queue/refresher-status - Get RTB refresher background job status
+  // GET /api/diagnostics/rtb-queue/refresher-status - Get RTB refresher status (Phase 8.8.4-C.6: Now uses ReadyToBuyService)
   apiRouter.get('/diagnostics/rtb-queue/refresher-status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { rtbQueueRefresher } = await import('./core/rtb/rtb_queue_refresher.js');
-      const status = rtbQueueRefresher.getStatus();
+      const { readyToBuyService } = await import('./core/rtb/ready_to_buy_service.js');
+      const mode = (req.query.mode as 'live' | 'paper') || 'paper';
+      
+      const isRunning = readyToBuyService.isRefreshCycleRunning(mode);
+      const tclStatus = await readyToBuyService.getTCLStatus(mode);
       
       res.json({
         ok: true,
-        phase: '8.8.4-B',
-        description: 'RTB Queue Refresher Status',
+        phase: '8.8.4-C.6',
+        description: 'RTB Refresh Cycle Status (ReadyToBuyService)',
         timestamp: new Date().toISOString(),
-        ...status,
-        lastRunTime: status.lastRunTime?.toISOString() || null
+        mode,
+        isRefreshCycleRunning: isRunning,
+        tclStatus,
+        note: 'Phase 8.8.4-C.6: Refresh now handled by ReadyToBuyService lifecycle'
       });
     } catch (error: any) {
-      console.error('[8.8.4-B] Error fetching RTB refresher status:', error);
+      console.error('[8.8.4-C.6] Error fetching RTB refresher status:', error);
       res.status(500).json({
         ok: false,
         error: 'Failed to fetch RTB refresher status',
@@ -7391,20 +7396,32 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // POST /api/diagnostics/rtb-queue/force-refresh - Force immediate queue refresh
+  // POST /api/diagnostics/rtb-queue/force-refresh - Force immediate queue refresh (Phase 8.8.4-C.6)
   apiRouter.post('/diagnostics/rtb-queue/force-refresh', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { rtbQueueRefresher } = await import('./core/rtb/rtb_queue_refresher.js');
-      await rtbQueueRefresher.forceRefresh();
+      const { readyToBuyService } = await import('./core/rtb/ready_to_buy_service.js');
+      const mode = (req.query.mode as 'live' | 'paper') || 'paper';
+      
+      // Manually trigger cleanup and re-evaluation
+      const expiredCount = await readyToBuyService.cleanupExpiredSignals(mode);
+      const { removed, remaining } = await readyToBuyService.reEvaluateQueue(mode);
+      const tclStatus = await readyToBuyService.getTCLStatus(mode);
+      
+      console.log(`[8.8.4-C.6][FORCE_REFRESH] mode=${mode}, expired=${expiredCount}, removed=${removed}, remaining=${remaining}`);
       
       res.json({
         ok: true,
-        phase: '8.8.4-B',
-        message: 'RTB Queue refresh forced successfully',
+        phase: '8.8.4-C.6',
+        message: 'RTB Queue refresh forced successfully via ReadyToBuyService',
+        mode,
+        expiredCount,
+        removedCount: removed,
+        remainingCount: remaining,
+        tclStatus,
         timestamp: new Date().toISOString()
       });
     } catch (error: any) {
-      console.error('[8.8.4-B] Error forcing RTB queue refresh:', error);
+      console.error('[8.8.4-C.6] Error forcing RTB queue refresh:', error);
       res.status(500).json({
         ok: false,
         error: 'Failed to force RTB queue refresh',

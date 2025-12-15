@@ -1,0 +1,161 @@
+Directive 8.8.4-C.6 — RTB Queue Unification, RTBQ Refresher Deprecation, and TCL Failsafe Integration
+Objective
+
+To complete the Ready-to-Buy (RTB) system stabilization by:
+
+Unifying the RTB display and signal handling logic into a single table and removing redundant capacity-blocked queues.
+
+Safely deprecating and archiving the old rtbQueueRefresher.ts service after confirming no dependencies exist elsewhere in the trading engine.
+
+Implementing a 5-minute TCL failsafe so the Trading Capacity Limit activates automatically even if fewer than 100 signals are present.
+
+Verifying that the integrated 30-second RTB refresh cycle is running as intended and that CWQI-based re-ranking functions correctly.
+
+Background
+
+Previous directives (8.8.4-C.4 and 8.8.4-C.5) revealed that:
+
+The RTB Queue existed but was not wired into the signal flow.
+
+The refresh logic was duplicated — both an old scheduler (rtbQueueRefresher.ts) and a new integrated refresh cycle inside ready_to_buy_service.ts were running.
+
+Two separate tables appeared in the UI (“Ready-to-Buy Signals” and “RTB Queue (Capacity-Blocked)”), though both serve the same purpose.
+
+The goal of this directive is to consolidate the RTB system into a single unified flow and verify lifecycle integrity before validation trading begins.
+
+Scope of Work
+Task 1 — Dependency Audit for RTBQ Refresher
+
+Run dependency search:
+
+rg -n "rtbQueueRefresher" server/
+rg -n "import.*rtbQueueRefresher" server/
+
+
+Confirm whether rtbQueueRefresher.ts is imported, scheduled, or referenced anywhere.
+
+If it is only used to trigger RTB refreshes, proceed to Task 2.
+
+If other modules depend on it, log the dependency for review (no changes yet).
+
+Expected Output:
+
+A short log summary showing “0 active imports found” or list of references if any exist.
+
+Task 2 — Deprecation and Archiving of RTBQ Refresher
+
+Move server/core/rtb/rtbQueueRefresher.ts to:
+
+server/legacy/rtbQueueRefresher.legacy.ts
+
+
+Add header comment:
+
+/**
+ * Legacy RTB Queue Refresher
+ * Deprecated under Directive 8.8.4-C.6
+ * Replaced by integrated 30-second refresh cycle in ReadyToBuyService
+ * Phase 8.8.4-C.5
+ */
+
+
+Remove or comment out all imports that auto-start this refresher.
+
+Verification:
+
+Start the trading engine.
+
+Confirm [8.8.4-C.5][RTB_REFRESH] logs fire every 30 seconds.
+
+Confirm there are no duplicate refresh entries within the same second (double-fire check).
+
+Task 3 — Unify RTB Display Tables
+
+Remove or disable the “RTB Queue (Capacity-Blocked)” component from the client UI:
+
+File: client/src/components/trading/ready-to-buy-table.tsx
+
+Remove or comment out the block rendering the capacity-blocked queue.
+
+Verify that the single unified “Ready-to-Buy Signals” table:
+
+Shows all SQE-qualified signals (blocked or not).
+
+Continues to refresh and re-rank based on CWQI every 30 seconds.
+
+Confirm the backend returns one unified data set from the RTB service API.
+
+Expected Result:
+A single Ready-to-Buy table continuously updating, with no “capacity-blocked” label.
+
+Task 4 — Implement TCL 5-Minute Failsafe
+
+Modify TCL activation logic in paper-execution-engine.ts:
+
+If ≥ 100 signals exist → normal activation.
+
+If < 100 signals exist for 5 minutes after engine start → activate anyway.
+
+Add diagnostic logs:
+
+[8.8.4-C.6][TCL_FALLBACK_TRIGGER]
+[8.8.4-C.6][TCL_FALLBACK_ACTIVATE]
+
+
+Confirm normal TCL activation still works when 100+ signals accumulate earlier.
+
+Task 5 — Persistence & Refresh Verification
+
+Confirm rtb_signals table receives records:
+
+SELECT COUNT(*) FROM rtb_signals;
+
+
+Expected result: count > 0 after signals begin flowing.
+
+Confirm CWQI values in the table change over time during refreshes.
+
+Validate that after engine restart, the RTB pool reloads correctly from the database.
+
+Task 6 — Logging & Performance
+
+Ensure that all diagnostic tags remain lightweight and asynchronous:
+
+[8.8.4-C.5][RTB_INSERT]
+[8.8.4-C.5][RTB_REFRESH]
+[8.8.4-C.5][TCL_WARMUP]
+[8.8.4-C.5][TCL_ACTIVATE]
+[8.8.4-C.5][TCL_PROMOTE]
+[8.8.4-C.6][TCL_FALLBACK_TRIGGER]
+[8.8.4-C.6][TCL_FALLBACK_ACTIVATE]
+
+
+Verify that log volume does not cause noticeable latency or storage growth.
+
+Add retention rule: purge or archive logs older than 30 days.
+
+Validation Criteria
+
+✅ No imports or calls to rtbQueueRefresher.ts remain.
+
+✅ [RTB_REFRESH] logs appear exactly once every 30 seconds.
+
+✅ Only one Ready-to-Buy table exists in UI.
+
+✅ Signals persist in rtb_signals and re-rank with each refresh.
+
+✅ TCL activates either at 100 signals or 5 minutes.
+
+✅ System performance stable (< 70 % CPU, < 5 s latency).
+
+Post-Directive Actions
+
+After successful implementation:
+
+Archive diagnostic results in
+logs/validation/directive_8.8.4-C.6_results.md.
+
+Confirm system readiness for Directive 8.8.4-C.7 — Validation Trading Session (live signal flow verification).
+
+Directive Status:
+🟡 Pending — Replit to execute tasks, verify dependencies, and produce audit report before changes are finalized.

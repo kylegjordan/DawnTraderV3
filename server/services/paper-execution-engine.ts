@@ -190,6 +190,10 @@ export class PaperExecutionEngine {
     readyToBuyService.startRefreshCycle(this.mode);
     console.log(`[PaperExecution:${this.mode}] RTB refresh cycle started`);
 
+    // Phase 8.8.4-C.6: Set engine start time for TCL 5-minute failsafe
+    readyToBuyService.setEngineStartTime(this.mode);
+    console.log(`[PaperExecution:${this.mode}] TCL failsafe timer started`);
+
     // Broadcast engine start
     contextBridge.broadcast({
       type: 'trading_pipeline_event' as any,
@@ -237,6 +241,9 @@ export class PaperExecutionEngine {
     // Phase 8.8.4-C.5: Stop RTB 30-second refresh cycle
     readyToBuyService.stopRefreshCycle(this.mode);
     console.log(`[PaperExecution:${this.mode}] RTB refresh cycle stopped`);
+    
+    // Phase 8.8.4-C.6: Clear engine start time for TCL failsafe
+    readyToBuyService.clearEngineStartTime(this.mode);
     
     // Phase 8.8.3-I8C: Stop subscription health audit
     try {
@@ -431,6 +438,9 @@ export class PaperExecutionEngine {
     // Phase 8.8.4-C.5: Stop RTB refresh cycle during reset
     readyToBuyService.stopRefreshCycle(this.mode);
     console.log(`[B7.A][ENGINE] RTB refresh cycle stopped`);
+    
+    // Phase 8.8.4-C.6: Clear engine start time for TCL failsafe during reset
+    readyToBuyService.clearEngineStartTime(this.mode);
     
     console.log(`[B7.A][ENGINE] Session state reset complete for mode=${this.mode}`);
   }
