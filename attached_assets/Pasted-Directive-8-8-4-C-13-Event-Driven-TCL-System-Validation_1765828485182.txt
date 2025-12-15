@@ -1,0 +1,129 @@
+Directive 8.8.4-C.13 — Event-Driven TCL System Validation & SQE Calibration Test
+
+Objective:
+Verify the stability, correctness, and responsiveness of the new event-driven TCL Watchdog system and collect system-wide diagnostic metrics during a controlled 3-hour trading session.
+
+🔧 1. Pre-Test Setup
+
+Environment
+
+Mode: PAPER
+
+Account: testuser123 / SecurePass123!
+
+Starting Balance: $830 (default OK)
+
+Database reset
+
+Clear all open trades, pending orders, and RTB signals.
+
+api/admin/reset-trading-data
+
+
+(or direct SQL cleanup via storage layer)
+
+SQE Filter thresholds (for calibration test)
+
+Metric	Threshold	Rationale
+NGC	≥ 0.45	reasonable baseline confidence
+CWQI	≥ 0.35	still moderately selective
+ProfitRate	≥ 0.10	positive expected return
+Risk	≤ 0.85	moderate risk tolerance
+
+Confirm via Goals → Signal Quality Evaluator page before starting.
+
+🧭 2. Test Execution Plan
+Phase	Duration	Expected Behavior
+Phase 1 – Warm-up (0–5 min)	Engine generates signals; TCL state =WARMING	RTB queue gradually fills (10–30 signals)
+Phase 2 – Failsafe Activation (≈5 min)	TCLWatchdog fires TCL_ACTIVATED event	checkRtbPromotion() runs; 1–3 signals promoted to active trades
+Phase 3 – Steady Cycle (5–180 min)	Normal signal generation + trade closing events	Each TRADE_CLOSED emits promotion event; capacity replenishes
+Phase 4 – Summary (≈180 min)	Validation Service compiles metrics	Reports produced and emailed/logged
+📊 3. Logging & Metrics to Verify
+
+Event Logs
+
+[8.8.4-C.12][TCL_EVENT] type=TCL_ACTIVATED reason=5min|100signals
+
+[8.8.4-C.12][PROMOTION] symbol=... strategy=...
+
+[8.8.4-C.12][TRADE_CLOSED] symbol=... PnL=...
+
+Engine Telemetry
+
+TCL State Transitions: WARMING → ACTIVE
+
+RTB Queue Size: initial > 0, never stalled
+
+SLAL: Validated > 0 after promotion
+
+UI Validation
+
+RTB table populates (Price, VWAP, Range now visible)
+
+Active Trades table shows new positions post-activation
+
+SLAL panel increments Validated / Executed
+
+Validation Session Summary
+
+Mean CWQI and NGC of executed trades
+
+Success rate (P/L positive vs negative)
+
+Correlation CWQI↔PnL
+
+🧪 4. Periodic Diagnostics (Automated)
+
+Every 30 minutes during the 3-hour session:
+
+Record in logs/validation/session_<timestamp>.md:
+
+Time | TCL | RTB_Size | Open_Trades | Avg_CWQI | Avg_NGC | Avg_PnL
+
+
+Use existing validation-session-service to append these snapshots.
+
+🧩 5. Success Criteria
+Area	Criteria
+TCL Lifecycle	TCL_ACTIVATED event fires exactly once per session
+RTB Promotion	≥ 1 promotion within 6 minutes of engine start
+Trade Turnover	Trades open and close normally (no hangs)
+UI Synchronization	All tables populate and refresh correctly
+System Stability	No duplicate events or double-executions in logs
+🧾 6. Post-Session Analysis Report
+
+Replit should automatically generate:
+
+logs/validation/results_8.8.4-C.13_<timestamp>.md
+
+
+Including:
+
+TCL activation timing and reason
+
+Promotion events and latency (ms since activation)
+
+Trade summary (P/L distribution)
+
+Average CWQI/NGC of profitable vs losing trades
+
+Any detected anomalies (duplicate signals, stalled queues)
+
+⚙️ 7. Next Phase Preview (after validation)
+
+If this test confirms correct event behavior and clean lifecycle transitions,
+Directive 8.8.4-C.14 will cover:
+
+Strategy Engine Audit (entry/exit math, fees, slippage)
+
+Dynamic Filter Control (Latti → manual override integration)
+
+✅ Deliverables for Replit to Start Directive 8.8.4-C.13
+
+Rollback from C.12 complete and deployed (event-driven TCL active).
+
+Confirm test user credentials work for automated login.
+
+Start 3-hour session with current SQE thresholds.
+
+Generate and log metrics as defined above.

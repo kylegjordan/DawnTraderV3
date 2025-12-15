@@ -471,10 +471,8 @@ export class PaperExecutionEngine {
       // Step 1: Check open positions for exit conditions
       await this.checkOpenPositions();
 
-      // Step 2: Check for RTB promotion (opens trades from queue when TCL is active and capacity available)
-      await this.checkRtbPromotion();
-
-      // Step 3: Scan for new trading opportunities (legacy - now disabled)
+      // Step 2: Scan for new trading opportunities (legacy - now disabled)
+      // Note: RTB promotion is now event-driven via TCLWatchdog (Phase 8.8.4-C.12)
       await this.scanForSignals();
     } catch (error) {
       console.error(`[PaperExecution:${this.mode}] Monitoring cycle error:`, error);
