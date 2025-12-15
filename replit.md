@@ -13,7 +13,7 @@ Core services include `KrakenService`, `TradingEngine`, `StrategyEngine`, `Marke
 
 The architecture utilizes a global mode-based engine with `ModeRegistry` for telemetry and `MetricsCore` for centralized metrics. Live pricing is managed by a `LivePricingAdapter` with dual-source integration and a `KrakenWebSocketAdapter`. The Goals Engine UI offers advanced universe and signal controls, execution rhythm controls, and simplified daily target goals with a Goal Feasibility Validation & Audit System.
 
-The system incorporates a modern `guardrails_v2` schema with parameters like Portfolio Risk per Trade %, Symbol Cooldown, Max Open Positions, and Daily Loss Kill Switch %. It supports dual-mode operation with independent guardrail sets and real-time WebSocket broadcasts. The `GuardrailPolicy Service` is the single backend source of truth for guardrail settings. The Goals Engine includes an adaptive learning system that optimizes preset boundaries based on 30-day performance.
+The system incorporates a modern `guardrails_v2` schema with configurable parameters. It supports dual-mode operation with independent guardrail sets and real-time WebSocket broadcasts. The `GuardrailPolicy Service` is the single backend source of truth for guardrail settings. The Goals Engine includes an adaptive learning system that optimizes preset boundaries based on 30-day performance.
 
 The Screeners tab uses a unified v2 filter configuration with an automated anomaly detection system. The DHMA Strategy implements Dual-Horizon Microstructure Alpha with dynamic position sizing and intelligent adaptive parameter optimization via `DHMATuningService`. The Strategic Drive & Profit Optimization Engine tracks strategies, computes a global Strategic Drive Index (SDI), and implements "Soft Guardrails, Hard Coherency" via `StrategicDriveGuardrailService`.
 
@@ -76,6 +76,11 @@ Event-Driven TCL Watchdog System (8.8.4-C.12) replaces polling-based TCL activat
 2. **Extended Event Bus** (`server/lib/event-bus.ts`): Added TCL_ACTIVATED, TRADE_CLOSED, and PROMOTION event types with type-safe emitters and handlers.
 3. **Event-Driven Promotion**: Paper execution engine binds to TCL_ACTIVATED and TRADE_CLOSED events to trigger RTB queue promotion checks.
 4. **Proper Lifecycle Management**: Watchdog timers and event listeners are cleaned up on engine stop to prevent leaks across sessions.
+
+RTB Queue Stability Fixes (8.8.4-C.13.B) addresses critical issues in the RTB pipeline:
+1. **RTB Upsert Logic**: Added `upsertRtbSignal` method to `storage.ts` with ON CONFLICT UPDATE to prevent duplicate key constraint violations when the same symbol/strategy/mode/status combination is queued multiple times.
+2. **TCL Timer Persistence**: Added backup interval mechanism (30-second checks) to the TCL Watchdog that verifies the 5-minute failsafe timer hasn't been lost. Guards against Node.js timer issues.
+3. **Proper Cleanup**: Both primary timer and backup interval are cleared on TCL activation, stop, and restart to prevent memory leaks.
 
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
