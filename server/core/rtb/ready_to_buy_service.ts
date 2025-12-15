@@ -30,6 +30,7 @@ import {
 import { isCapacityBlock, type TradingMode, type CapacityGuardrailCode } from '../../services/guardrail-policy';
 import { signalLifecycleAudit } from '../audit/signal_lifecycle_audit';
 import type { RtbSignal, InsertRtbSignal } from '@shared/schema';
+import { tclWatchdog } from './tcl_watchdog';
 
 export interface RTBSignalInput {
   signalId: string;
@@ -629,6 +630,9 @@ class ReadyToBuyService {
     const poolSize = await this.getPoolSize(input.mode);
 
     console.log(`[8.8.4-C.5][RTB_INSERT] ${input.symbol}/${input.strategy}: CWQI=${input.cwqi.toFixed(4)}, NGC=${input.ngc.toFixed(4)}, poolSize=${poolSize}`);
+    
+    // Phase 8.8.4-C.12: Check if 100-signal threshold reached for TCL activation
+    tclWatchdog.checkSignalThreshold(input.mode, poolSize);
     
     return signal;
   }

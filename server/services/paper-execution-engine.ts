@@ -68,6 +68,8 @@ import { marketVolumeCache } from './market-volume-cache.js';
 import { c5FinancialDiagnostics } from './c5-financial-diagnostics.js';
 import { signalLifecycleAudit } from '../core/audit/signal_lifecycle_audit.js';
 import { readyToBuyService } from '../core/rtb/ready_to_buy_service.js';
+import { tclWatchdog } from '../core/rtb/tcl_watchdog.js';
+import { eventBus, type TCLActivatedEvent, type TradeClosedEvent } from '../lib/event-bus.js';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail' | 'manual_stop';
@@ -117,10 +119,53 @@ export class PaperExecutionEngine {
     triggeredExit: boolean;
   }[] = [];
 
+  // Phase 8.8.4-C.12: Event handler references for cleanup
+  private tclActivatedHandler: ((event: TCLActivatedEvent) => void) | null = null;
+  private tradeClosedHandler: ((event: TradeClosedEvent) => void) | null = null;
+
   constructor(mode: 'live' | 'paper') {
     this.mode = mode;
     this.krakenService = new KrakenService();
     this.strategyEngine = new StrategyEngine();
+  }
+
+  /**
+   * Phase 8.8.4-C.12: Bind event listeners for TCL activation and trade close
+   * These events trigger RTB queue promotion checks
+   */
+  private bindTCLEventListeners(): void {
+    // Handler for TCL_ACTIVATED - triggers first promotion check
+    this.tclActivatedHandler = async (event: TCLActivatedEvent) => {
+      if (event.mode !== this.mode) return;
+      console.log(`[8.8.4-C.12][EVENT_RECEIVED] TCL_ACTIVATED for ${this.mode}, reason=${event.reason}`);
+      await this.checkRtbPromotion();
+    };
+
+    // Handler for TRADE_CLOSED - triggers promotion when capacity freed
+    this.tradeClosedHandler = async (event: TradeClosedEvent) => {
+      if (event.mode !== this.mode) return;
+      console.log(`[8.8.4-C.12][EVENT_RECEIVED] TRADE_CLOSED for ${this.mode}, symbol=${event.symbol}`);
+      await this.checkRtbPromotion();
+    };
+
+    eventBus.onTCLActivated(this.tclActivatedHandler);
+    eventBus.onTradeClosed(this.tradeClosedHandler);
+    console.log(`[8.8.4-C.12][EVENT_BIND] Bound TCL_ACTIVATED and TRADE_CLOSED listeners for ${this.mode}`);
+  }
+
+  /**
+   * Phase 8.8.4-C.12: Unbind event listeners on engine stop
+   */
+  private unbindTCLEventListeners(): void {
+    if (this.tclActivatedHandler) {
+      eventBus.offTCLActivated(this.tclActivatedHandler);
+      this.tclActivatedHandler = null;
+    }
+    if (this.tradeClosedHandler) {
+      eventBus.offTradeClosed(this.tradeClosedHandler);
+      this.tradeClosedHandler = null;
+    }
+    console.log(`[8.8.4-C.12][EVENT_UNBIND] Unbound TCL event listeners for ${this.mode}`);
   }
 
   async start(): Promise<void> {
@@ -194,6 +239,13 @@ export class PaperExecutionEngine {
     readyToBuyService.setEngineStartTime(this.mode);
     console.log(`[PaperExecution:${this.mode}] TCL failsafe timer started`);
 
+    // Phase 8.8.4-C.12: Start TCL Watchdog with event-driven activation
+    tclWatchdog.start(this.mode);
+    console.log(`[PaperExecution:${this.mode}] TCL Watchdog started (event-driven)`);
+
+    // Phase 8.8.4-C.12: Bind event listeners for TCL activation and trade close
+    this.bindTCLEventListeners();
+
     // Broadcast engine start
     contextBridge.broadcast({
       type: 'trading_pipeline_event' as any,
@@ -244,6 +296,13 @@ export class PaperExecutionEngine {
     
     // Phase 8.8.4-C.6: Clear engine start time for TCL failsafe
     readyToBuyService.clearEngineStartTime(this.mode);
+
+    // Phase 8.8.4-C.12: Stop TCL Watchdog
+    tclWatchdog.stop(this.mode);
+    console.log(`[PaperExecution:${this.mode}] TCL Watchdog stopped`);
+
+    // Phase 8.8.4-C.12: Unbind event listeners
+    this.unbindTCLEventListeners();
     
     // Phase 8.8.3-I8C: Stop subscription health audit
     try {
@@ -1048,24 +1107,31 @@ export class PaperExecutionEngine {
       isManualClose ? 'manual_close' : 'trade_close'
     );
 
-    // Phase 8.8.4-B: Check for RTB promotion after trade close (capacity freed up)
-    await this.checkRtbPromotion();
+    // Phase 8.8.4-C.12: Emit TRADE_CLOSED event (triggers RTB promotion via event handler)
+    eventBus.emitTradeClosed({
+      mode: this.mode,
+      symbol: position.symbol,
+      strategy: position.strategyName || 'unknown',
+      tradeId: trade?.id || positionId,
+      pnl: netPnl,
+      timestamp: new Date().toISOString(),
+    });
   }
 
   /**
-   * Phase 8.8.4-B + C.5: Check for RTB Queue Promotion
-   * Called after a trade closes to check if a queued signal can be promoted
-   * Phase C.5: Adds TCL warm-up check - promotions only happen when TCL is active (≥100 signals)
+   * Phase 8.8.4-B + C.5 + C.12: Check for RTB Queue Promotion
+   * Called via event handlers (TCL_ACTIVATED, TRADE_CLOSED) when promotion may be possible
+   * Phase C.12: Uses tclWatchdog for event-driven TCL state management
    */
   private async checkRtbPromotion(): Promise<void> {
     try {
       const { readyToBuyService } = await import('../core/rtb/ready_to_buy_service');
       
-      // Phase 8.8.4-C.5: Check TCL warm-up status before allowing promotions
-      const tclActive = await readyToBuyService.isTCLActive(this.mode);
+      // Phase 8.8.4-C.12: Check TCL activation state via watchdog
+      const tclActive = tclWatchdog.isActive(this.mode);
       if (!tclActive) {
-        const tclStatus = await readyToBuyService.getTCLStatus(this.mode);
-        console.log(`[8.8.4-C.5][TCL_WARMUP] mode=${this.mode}, poolSize=${tclStatus.poolSize}/${tclStatus.threshold} (${tclStatus.progressPercent}%), TCL not yet active - skipping promotion`);
+        const tclStatus = tclWatchdog.getStatus(this.mode);
+        console.log(`[8.8.4-C.12][TCL_WARMUP] mode=${this.mode}, state=${tclStatus.state}, elapsed=${(tclStatus.elapsedMs/1000).toFixed(0)}s - skipping promotion`);
         return;
       }
       
@@ -1087,8 +1153,8 @@ export class PaperExecutionEngine {
         return;
       }
 
-      // Phase 8.8.4-C.5: TCL is active and we have capacity! Promote the top signal
-      console.log(`[8.8.4-C.5][TCL_PROMOTE] ${topSignal.symbol}/${topSignal.strategy} with CWQI ${topSignal.cwqi}`);
+      // Phase 8.8.4-C.12: TCL is active and we have capacity! Promote the top signal
+      console.log(`[8.8.4-C.12][TCL_PROMOTE] ${topSignal.symbol}/${topSignal.strategy} with CWQI ${topSignal.cwqi}`);
 
       // Execute the promoted signal
       const tradeResult = await this.executePromotedSignal(topSignal);
@@ -1096,6 +1162,18 @@ export class PaperExecutionEngine {
       if (tradeResult.success && tradeResult.tradeId) {
         // Mark signal as promoted
         await readyToBuyService.promoteSignal(topSignal.id, tradeResult.tradeId);
+        
+        // Phase 8.8.4-C.12: Emit PROMOTION event for diagnostics
+        eventBus.emitPromotion({
+          mode: this.mode,
+          symbol: topSignal.symbol,
+          strategy: topSignal.strategy,
+          signalId: topSignal.signalId,
+          tradeId: tradeResult.tradeId,
+          cwqi: parseFloat(topSignal.cwqi),
+          timestamp: new Date().toISOString(),
+        });
+        
         console.log(`[RTB-Promotion:${this.mode}] ✅ Successfully promoted ${topSignal.symbol}/${topSignal.strategy} -> Trade ${tradeResult.tradeId}`);
       } else {
         // Failed to execute - log but don't expire (might work next cycle)
