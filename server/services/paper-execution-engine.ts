@@ -1125,7 +1125,8 @@ export class PaperExecutionEngine {
    */
   private async checkRtbPromotion(): Promise<void> {
     try {
-      const { readyToBuyService } = await import('../core/rtb/ready_to_buy_service');
+      // Phase 8.8.4-C.12: Use imported singleton instead of dynamic import
+      // This ensures we use the same readyToBuyService instance throughout
       
       // Phase 8.8.4-C.12: Check TCL activation state via watchdog
       const tclActive = tclWatchdog.isActive(this.mode);
