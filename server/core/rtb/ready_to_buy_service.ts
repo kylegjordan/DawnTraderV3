@@ -1,19 +1,23 @@
 /**
- * Phase 8.8.4-B/C: Ready-to-Buy (RTB) Queue Service
+ * Phase 8.8.4-B/C/C.5: Ready-to-Buy (RTB) Queue Service
  * 
- * Manages the queue of high-quality signals that pass quality guardrails
- * but are blocked by capacity constraints (MAX_TRADES, MAX_TOTAL_EXPOSURE, etc.)
+ * Manages the unified pool of high-quality, SQE-qualified signals.
  * 
  * Key Features:
- * 1. Accepts signals blocked by CAPACITY guardrails (not QUALITY guardrails)
+ * 1. Accepts ALL SQE-qualified signals into unified pool (Phase C.5)
  * 2. Ranks signals by CWQI (Confidence-Weighted Quality Index)
  * 3. Enforces uniqueness by symbol + strategy pair
- * 4. Removes stale/expired signals (TTL: 3 minutes)
- * 5. Promotes highest-CWQI signals when capacity frees up
+ * 4. Removes stale/expired signals (TTL: 5 minutes for unified pool)
+ * 5. Promotes highest-CWQI signals when TCL is active and capacity available
  * 
  * Phase C Enhancements:
  * 6. CWQI Durability Decay: CWQI_decayed = CWQI_orig × e^(-λt), λ = 0.03 per minute
  *    Prioritizes fresher signals by applying time-based decay to ranking
+ * 
+ * Phase C.5 Enhancements:
+ * 7. TCL Warm-Up: Trading Capacity Limit only activates after ≥100 signals
+ * 8. Unified RTB Pool: All SQE-qualified signals flow here regardless of capacity
+ * 9. 30-second refresh cycle for continuous re-evaluation
  */
 
 import { storage } from '../../storage';
@@ -43,6 +47,30 @@ export interface RTBSignalInput {
   metadata?: Record<string, unknown>;
 }
 
+/**
+ * Phase 8.8.4-C.5: SQE-qualified signal input for unified RTB pool
+ * All signals that pass SQE go directly into the pool regardless of capacity
+ */
+export interface SQESignalInput {
+  signalId: string;
+  mode: TradingMode;
+  symbol: string;
+  strategy: string;
+  entryPrice: number;
+  stopPrice: number;
+  targetPrice?: number;
+  quantity?: number;
+  notional?: number;
+  confidence: number;
+  ngc: number;
+  riskScore: number;
+  expectedReturn?: number;
+  profitRate: number;
+  cwqi: number;
+  atr?: number;
+  metadata?: Record<string, unknown>;
+}
+
 export interface RTBQueueStats {
   mode: TradingMode;
   totalQueued: number;
@@ -59,7 +87,14 @@ export interface RTBPromotionResult {
   reason?: string;
 }
 
-const SIGNAL_TTL_MS = 3 * 60 * 1000; // 3 minutes
+// Phase 8.8.4-C.5: Extended TTL for unified SQE pool
+const SIGNAL_TTL_MS = 5 * 60 * 1000; // 5 minutes (extended for unified pool)
+
+// Phase 8.8.4-C.5: TCL Warm-Up threshold
+const TCL_WARMUP_THRESHOLD = 100; // Minimum signals before TCL activates
+
+// Phase 8.8.4-C.5: RTB refresh cycle interval
+const RTB_REFRESH_INTERVAL_MS = 30 * 1000; // 30 seconds
 
 const CWQI_DECAY_LAMBDA = 0.03;
 
@@ -90,9 +125,80 @@ export function getCWQIDecayFactor(ageMinutes: number): number {
 
 class ReadyToBuyService {
   private initialized = false;
+  private refreshIntervals: Map<TradingMode, NodeJS.Timeout> = new Map();
   
   constructor() {
     console.log('[RTB] Ready-to-Buy Queue Service initialized');
+  }
+
+  /**
+   * Phase 8.8.4-C.5: Start the 30-second refresh cycle for a mode
+   * Continuously cleans up expired signals and re-evaluates the queue
+   */
+  startRefreshCycle(mode: TradingMode): void {
+    // Prevent duplicate intervals
+    if (this.refreshIntervals.has(mode)) {
+      console.log(`[8.8.4-C.5][RTB_REFRESH] Refresh cycle already running for ${mode} mode`);
+      return;
+    }
+
+    console.log(`[8.8.4-C.5][RTB_REFRESH] Starting 30s refresh cycle for ${mode} mode`);
+
+    const interval = setInterval(async () => {
+      try {
+        await this.executeRefreshCycle(mode);
+      } catch (error) {
+        console.error(`[8.8.4-C.5][RTB_ERROR] Refresh cycle error for ${mode}:`, error);
+      }
+    }, RTB_REFRESH_INTERVAL_MS);
+
+    this.refreshIntervals.set(mode, interval);
+  }
+
+  /**
+   * Phase 8.8.4-C.5: Stop the refresh cycle for a mode
+   */
+  stopRefreshCycle(mode: TradingMode): void {
+    const interval = this.refreshIntervals.get(mode);
+    if (interval) {
+      clearInterval(interval);
+      this.refreshIntervals.delete(mode);
+      console.log(`[8.8.4-C.5][RTB_REFRESH] Stopped refresh cycle for ${mode} mode`);
+    }
+  }
+
+  /**
+   * Phase 8.8.4-C.5: Execute a single refresh cycle
+   * - Cleans up expired signals
+   * - Re-evaluates queue quality
+   * - Logs pool status
+   */
+  private async executeRefreshCycle(mode: TradingMode): Promise<void> {
+    const startTime = Date.now();
+    
+    // Step 1: Clean up expired signals
+    const expiredCount = await this.cleanupExpiredSignals(mode);
+    
+    // Step 2: Re-evaluate remaining signals
+    const { removed, remaining } = await this.reEvaluateQueue(mode);
+    
+    // Step 3: Get TCL status
+    const tclStatus = await this.getTCLStatus(mode);
+    
+    const elapsedMs = Date.now() - startTime;
+    
+    console.log(
+      `[8.8.4-C.5][RTB_REFRESH] mode=${mode}, expired=${expiredCount}, removed=${removed}, ` +
+      `remaining=${remaining}, poolSize=${tclStatus.poolSize}, TCL=${tclStatus.isActive ? 'ACTIVE' : 'WARMING'} ` +
+      `(${tclStatus.progressPercent.toFixed(1)}%), elapsed=${elapsedMs}ms`
+    );
+  }
+
+  /**
+   * Phase 8.8.4-C.5: Check if refresh cycle is running for a mode
+   */
+  isRefreshCycleRunning(mode: TradingMode): boolean {
+    return this.refreshIntervals.has(mode);
   }
 
   /**
@@ -424,6 +530,137 @@ class ReadyToBuyService {
 
     console.log(`[RTB] Cleared ${signals.length} signals from ${mode} queue`);
     return signals.length;
+  }
+
+  /**
+   * Phase 8.8.4-C.5: Queue an SQE-qualified signal into the unified RTB pool
+   * 
+   * Unlike queueSignal(), this method:
+   * - Accepts ALL SQE-qualified signals regardless of capacity blocks
+   * - Uses pre-computed CWQI from SQE instead of re-calculating
+   * - Supports TCL warm-up tracking
+   * 
+   * @param input - SQE-qualified signal with pre-computed metrics
+   * @returns The queued signal record or null if rejected
+   */
+  async queueSQESignal(input: SQESignalInput): Promise<RtbSignal | null> {
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + SIGNAL_TTL_MS);
+
+    // Check for existing queued signal with same symbol+strategy
+    const existingSignal = await this.getQueuedSignal(input.mode, input.symbol, input.strategy);
+    
+    if (existingSignal) {
+      // If existing signal has higher CWQI, keep it
+      const existingCWQI = parseFloat(existingSignal.cwqi);
+      if (existingCWQI >= input.cwqi) {
+        console.log(`[8.8.4-C.5][RTB_SKIP] Keeping existing ${input.symbol}/${input.strategy} with CWQI ${existingCWQI.toFixed(4)} >= new ${input.cwqi.toFixed(4)}`);
+        return existingSignal;
+      }
+      
+      // New signal is better - expire the old one
+      await this.expireSignal(existingSignal.id, 'Replaced by higher-CWQI SQE signal');
+    }
+
+    // Insert new signal with pre-computed metrics from SQE
+    const insertData: InsertRtbSignal = {
+      mode: input.mode,
+      signalId: input.signalId,
+      symbol: input.symbol,
+      strategy: input.strategy as any,
+      entryPrice: input.entryPrice.toString(),
+      stopPrice: input.stopPrice.toString(),
+      targetPrice: input.targetPrice?.toString(),
+      quantity: input.quantity?.toString(),
+      notional: input.notional?.toString(),
+      confidence: input.ngc.toString(), // Use NGC as confidence
+      riskScore: input.riskScore.toString(),
+      expectedReturn: input.expectedReturn?.toString() || '0',
+      cwqi: input.cwqi.toString(),
+      status: 'queued',
+      queuedAt: now,
+      expiresAt,
+      blockReason: 'SQE_QUALIFIED', // Mark as SQE-qualified, not capacity-blocked
+      metadata: input.metadata as any,
+    };
+
+    const signal = await storage.insertRtbSignal(insertData);
+
+    // Record SLAL QUEUED event
+    signalLifecycleAudit.recordQueued(
+      input.signalId,
+      input.mode,
+      input.symbol,
+      input.strategy,
+      {
+        cwqi: input.cwqi,
+        ngc: input.ngc,
+        profitRate: input.profitRate,
+        blockReason: 'SQE_QUALIFIED',
+        expiresAt: expiresAt.toISOString(),
+      }
+    );
+
+    // Get current pool size for warm-up tracking
+    const poolSize = await this.getPoolSize(input.mode);
+
+    console.log(`[8.8.4-C.5][RTB_INSERT] ${input.symbol}/${input.strategy}: CWQI=${input.cwqi.toFixed(4)}, NGC=${input.ngc.toFixed(4)}, poolSize=${poolSize}`);
+    
+    return signal;
+  }
+
+  /**
+   * Phase 8.8.4-C.5: Get the current pool size for a mode
+   * @returns Number of queued signals
+   */
+  async getPoolSize(mode: TradingMode): Promise<number> {
+    const signals = await storage.getRtbSignals({
+      mode,
+      status: 'queued',
+    });
+    return signals.length;
+  }
+
+  /**
+   * Phase 8.8.4-C.5: Check if TCL (Trading Capacity Limit) is active
+   * TCL only activates after the pool has accumulated ≥100 signals
+   * 
+   * @param mode - Trading mode to check
+   * @returns true if TCL is active (pool has ≥100 signals)
+   */
+  async isTCLActive(mode: TradingMode): Promise<boolean> {
+    const poolSize = await this.getPoolSize(mode);
+    const isActive = poolSize >= TCL_WARMUP_THRESHOLD;
+    
+    if (!isActive) {
+      console.log(`[8.8.4-C.5][TCL_WARMUP] mode=${mode}, poolSize=${poolSize}/${TCL_WARMUP_THRESHOLD}, TCL not yet active`);
+    } else {
+      console.log(`[8.8.4-C.5][TCL_ACTIVATE] mode=${mode}, poolSize=${poolSize} >= ${TCL_WARMUP_THRESHOLD}, TCL is active`);
+    }
+    
+    return isActive;
+  }
+
+  /**
+   * Phase 8.8.4-C.5: Get TCL warm-up status
+   * @returns Object with pool size, threshold, and active status
+   */
+  async getTCLStatus(mode: TradingMode): Promise<{
+    poolSize: number;
+    threshold: number;
+    isActive: boolean;
+    progressPercent: number;
+  }> {
+    const poolSize = await this.getPoolSize(mode);
+    const isActive = poolSize >= TCL_WARMUP_THRESHOLD;
+    const progressPercent = Math.min(100, (poolSize / TCL_WARMUP_THRESHOLD) * 100);
+    
+    return {
+      poolSize,
+      threshold: TCL_WARMUP_THRESHOLD,
+      isActive,
+      progressPercent: Math.round(progressPercent * 10) / 10,
+    };
   }
 }
 

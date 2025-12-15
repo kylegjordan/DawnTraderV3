@@ -47,6 +47,7 @@ import { c5FinancialDiagnostics } from './c5-financial-diagnostics.js';
 import { signalLifecycleAudit } from '../core/audit/signal_lifecycle_audit.js';
 import { calculateExtendedSignalMetrics, estimateVolatility } from '../core/metrics/quality_index.js';
 import { signalQualityEvaluator, type SQEInput } from '../core/filters/signal_quality_evaluator.js';
+import { readyToBuyService, type SQESignalInput } from '../core/rtb/ready_to_buy_service.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -358,6 +359,30 @@ export class SignalOrchestrator {
     }
 
     console.log(`[B.3][SQE_PASS] ${rawSignal.symbol}/${strategyId}: passed SQE filter`);
+
+    // Phase 8.8.4-C.5: Queue SQE-qualified signal to RTB pool
+    // All signals that pass SQE go into the unified pool regardless of capacity
+    const sqeSignalInput: SQESignalInput = {
+      signalId,
+      mode: sizingContext.mode,
+      symbol: rawSignal.symbol,
+      strategy: strategyId,
+      entryPrice: rawSignal.entryPrice,
+      stopPrice: rawSignal.stopPrice,
+      targetPrice: rawSignal.targetPrice,
+      quantity: sizingResult.quantity,
+      notional: sizingResult.estimatedValue,
+      confidence: extendedMetrics.ngc,
+      ngc: extendedMetrics.ngc,
+      riskScore: extendedMetrics.riskScore,
+      profitRate: extendedMetrics.profitRate,
+      cwqi: extendedMetrics.cwqi,
+    };
+
+    // Queue to RTB pool (fire-and-forget, non-blocking)
+    readyToBuyService.queueSQESignal(sqeSignalInput).catch(err => {
+      console.error(`[8.8.4-C.5][RTB_ERROR] Failed to queue ${rawSignal.symbol}/${strategyId}:`, err);
+    });
 
     // Phase 8.8.4-B.3: Build sized signal with extended metrics
     // NGC replaces raw confidence as the single source of truth

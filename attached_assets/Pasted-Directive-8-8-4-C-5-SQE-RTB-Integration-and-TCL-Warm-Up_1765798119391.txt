@@ -1,0 +1,161 @@
+Directive 8.8.4-C.5 — SQE→RTB Integration and TCL Warm-Up Control
+Context
+
+Following completion of Directive 8.8.4-C.4 (RTB Queue & Metrics Integrity Audit), it was confirmed that:
+
+The SQE (Signal Quality Evaluator) is functioning correctly and identifying high-quality, strategy-filtered signals.
+
+The Ready-to-Buy (RTB) queue service is fully implemented but not currently wired into the signal pipeline.
+
+The Ready-to-Buy tab in the UI contains two tables (“Ready-to-Buy Signals” and “RTB Queue”), but only one unified pool is needed.
+
+The TCL (Trade Capacity Limit) currently activates immediately after the engine starts, which can cause premature trades before sufficient market data has been gathered.
+
+This directive establishes a single, unified Ready-to-Buy pool, connects SQE-qualified signals into that pool, and introduces a TCL warm-up delay to ensure sufficient market data density before trades are initiated.
+
+Objective
+
+To complete the Ready-to-Buy and TCL integration flow so that:
+
+All SQE-qualified signals are inserted into one unified RTB pool.
+
+The RTB pool maintains dynamic CWQI-based ranking and continuous requalification.
+
+TCL only activates once sufficient data (≥100 SQE-qualified signals) is present to ensure optimal trade selection.
+
+Tasks for Replit Implementation
+1. Remove Redundant RTB Table
+
+Remove the lower “RTB Queue” table from the Ready-to-Buy tab in the UI.
+
+Retain only the original upper “Ready-to-Buy Signals” table as the single unified pool.
+
+Ensure this table displays:
+
+Symbol
+
+Strategy
+
+Confidence
+
+NGC
+
+CWQI
+
+Expected Return
+
+Risk
+
+Profit Rate
+
+Timestamp (last refreshed)
+
+2. Connect SQE → RTB Pool
+
+In server/core/filters/signal_quality_evaluator.ts or equivalent orchestration file:
+
+After a signal passes SQE, immediately forward it to the ReadyToBuyService.queueSignal() method.
+
+Include all relevant metrics (CWQI, NGC, Confidence, ExpectedReturn, ProfitRate, etc.).
+
+Confirm the RTB pool persists signals correctly to the rtb_signals table.
+
+Ensure signals remain in the pool even if all trade slots are filled.
+
+3. Enable Continuous RTB Maintenance
+
+RTB should re-evaluate each signal every 30 seconds (aligned with FX5 scanner cadence):
+
+Re-calculate CWQI and risk metrics.
+
+Remove any expired or invalid signals.
+
+Maintain continuous CWQI-based ranking.
+
+4. Introduce TCL Warm-Up Delay (100-Signal Threshold)
+
+In server/core/rtb/ready_to_buy_service.ts or paper-execution-engine.ts, implement a TCL activation guard:
+
+Condition: TCL will remain inactive until at least 100 SQE-qualified signals exist in the Ready-to-Buy pool.
+
+Logic:
+
+if (readyToBuyPool.size < 100) {
+  logger.info("[8.8.4-C.5][TCL_WARMUP] TCL delayed — insufficient RTB population (" + readyToBuyPool.size + " signals)");
+  return;
+}
+
+
+Once ≥100 signals exist, TCL automatically transitions to “active” and begins promoting top-ranked signals into trades.
+
+Add logging tag:
+[8.8.4-C.5][TCL_WARMUP] for visibility in the logs.
+
+5. Ensure Proper Promotion and Capacity Handling
+
+Once TCL is active:
+
+Continuously check available trade slots.
+
+Promote the top CWQI-ranked signals from the RTB pool to the Active Trades list.
+
+Update trade creation to record source = "RTB_POOL".
+
+When a trade slot frees up, promote the next best signal automatically.
+
+6. Runtime Diagnostics & Logging
+
+Add logging for traceability:
+
+[8.8.4-C.5][RTB_INSERT] when SQE adds a new signal to RTB.
+
+[8.8.4-C.5][RTB_REFRESH] when signals are re-evaluated or dropped.
+
+[8.8.4-C.5][TCL_ACTIVATE] when TCL becomes active.
+
+[8.8.4-C.5][TCL_PROMOTE] when a signal is promoted to an active trade.
+
+Verification Evidence to Require from Replit
+A. Code Evidence
+
+Ask Replit to provide or show:
+
+server/core/filters/signal_quality_evaluator.ts → code showing SQE now calls queueSignal().
+
+server/core/rtb/ready_to_buy_service.ts → contains TCL warm-up logic and signal re-evaluation loop.
+
+server/services/paper-execution-engine.ts → shows TCL activation condition and promotion logic.
+
+Confirmation that the duplicate “RTB Queue” UI table has been removed.
+
+B. Runtime Verification
+
+Ask Replit to provide log evidence for:
+
+[8.8.4-C.5][RTB_INSERT] — signals being added to the unified RTB pool.
+
+[8.8.4-C.5][TCL_WARMUP] — log entries confirming TCL is delayed until pool size ≥100.
+
+[8.8.4-C.5][TCL_ACTIVATE] — TCL activation once threshold reached.
+
+[8.8.4-C.5][TCL_PROMOTE] — trades being promoted from RTB pool.
+
+[8.8.4-C.5][RTB_REFRESH] — ongoing pool refresh every 30s.
+
+Expected Outcome
+
+Once implemented and verified:
+
+The Ready-to-Buy tab will display all SQE-qualified signals in one table.
+
+The RTB pool will continuously refresh and rank signals by CWQI.
+
+The TCL will activate only after ≥100 SQE-qualified signals exist, ensuring optimal selection quality.
+
+Promotions to Active Trades will occur automatically as trade capacity becomes available.
+
+Logging tags will confirm every stage of the flow is operational.
+
+Directive 8.8.4-C.5: SQE→RTB Integration and TCL Warm-Up Control
+Status: Pending Implementation
+Action Required: Replit to implement, generate validation logs, and provide evidence for architectural review.

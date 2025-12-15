@@ -67,6 +67,7 @@ import { priceTraceService } from './price-trace-service.js';
 import { marketVolumeCache } from './market-volume-cache.js';
 import { c5FinancialDiagnostics } from './c5-financial-diagnostics.js';
 import { signalLifecycleAudit } from '../core/audit/signal_lifecycle_audit.js';
+import { readyToBuyService } from '../core/rtb/ready_to_buy_service.js';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail' | 'manual_stop';
@@ -185,6 +186,10 @@ export class PaperExecutionEngine {
       console.error(`[PaperExecution:${this.mode}] WebSocket adapter start failed (continuing with REST fallback):`, error);
     }
 
+    // Phase 8.8.4-C.5: Start RTB 30-second refresh cycle
+    readyToBuyService.startRefreshCycle(this.mode);
+    console.log(`[PaperExecution:${this.mode}] RTB refresh cycle started`);
+
     // Broadcast engine start
     contextBridge.broadcast({
       type: 'trading_pipeline_event' as any,
@@ -228,6 +233,10 @@ export class PaperExecutionEngine {
     aj17DiagnosticRunner.stopSessionAndGenerateReport().catch(err => {
       console.error(`[AJ17] Failed to generate diagnostic report:`, err);
     });
+    
+    // Phase 8.8.4-C.5: Stop RTB 30-second refresh cycle
+    readyToBuyService.stopRefreshCycle(this.mode);
+    console.log(`[PaperExecution:${this.mode}] RTB refresh cycle stopped`);
     
     // Phase 8.8.3-I8C: Stop subscription health audit
     try {
@@ -418,6 +427,10 @@ export class PaperExecutionEngine {
     } catch (diagErr) {
       console.warn(`[B7.A][ENGINE] AJ17 diagnostics warning:`, diagErr);
     }
+    
+    // Phase 8.8.4-C.5: Stop RTB refresh cycle during reset
+    readyToBuyService.stopRefreshCycle(this.mode);
+    console.log(`[B7.A][ENGINE] RTB refresh cycle stopped`);
     
     console.log(`[B7.A][ENGINE] Session state reset complete for mode=${this.mode}`);
   }
@@ -1029,12 +1042,21 @@ export class PaperExecutionEngine {
   }
 
   /**
-   * Phase 8.8.4-B: Check for RTB Queue Promotion
+   * Phase 8.8.4-B + C.5: Check for RTB Queue Promotion
    * Called after a trade closes to check if a queued signal can be promoted
+   * Phase C.5: Adds TCL warm-up check - promotions only happen when TCL is active (≥100 signals)
    */
   private async checkRtbPromotion(): Promise<void> {
     try {
       const { readyToBuyService } = await import('../core/rtb/ready_to_buy_service');
+      
+      // Phase 8.8.4-C.5: Check TCL warm-up status before allowing promotions
+      const tclActive = await readyToBuyService.isTCLActive(this.mode);
+      if (!tclActive) {
+        const tclStatus = await readyToBuyService.getTCLStatus(this.mode);
+        console.log(`[8.8.4-C.5][TCL_WARMUP] mode=${this.mode}, poolSize=${tclStatus.poolSize}/${tclStatus.threshold} (${tclStatus.progressPercent}%), TCL not yet active - skipping promotion`);
+        return;
+      }
       
       // Get the top queued signal
       const topSignal = await readyToBuyService.checkForPromotion(this.mode);
@@ -1054,8 +1076,8 @@ export class PaperExecutionEngine {
         return;
       }
 
-      // We have capacity! Promote the top signal
-      console.log(`[RTB-Promotion:${this.mode}] Promoting signal ${topSignal.symbol}/${topSignal.strategy} with CWQI ${topSignal.cwqi}`);
+      // Phase 8.8.4-C.5: TCL is active and we have capacity! Promote the top signal
+      console.log(`[8.8.4-C.5][TCL_PROMOTE] ${topSignal.symbol}/${topSignal.strategy} with CWQI ${topSignal.cwqi}`);
 
       // Execute the promoted signal
       const tradeResult = await this.executePromotedSignal(topSignal);
