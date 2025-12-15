@@ -300,7 +300,8 @@ class ReadyToBuyService {
       metadata: input.metadata as any,
     };
 
-    const signal = await storage.insertRtbSignal(insertData);
+    // Phase 8.8.4-C.13.B: Use upsert to prevent duplicate key errors
+    const signal = await storage.upsertRtbSignal(insertData);
 
     // Record SLAL QUEUED event
     signalLifecycleAudit.recordQueued(
@@ -609,7 +610,8 @@ class ReadyToBuyService {
       metadata: input.metadata as any,
     };
 
-    const signal = await storage.insertRtbSignal(insertData);
+    // Phase 8.8.4-C.13.B: Use upsert to prevent duplicate key errors
+    const signal = await storage.upsertRtbSignal(insertData);
 
     // Record SLAL QUEUED event
     signalLifecycleAudit.recordQueued(

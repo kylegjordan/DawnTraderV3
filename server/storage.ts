@@ -692,6 +692,7 @@ export interface IStorage {
   
   // Phase 8.8.4-B: RTB Signals Queue methods
   insertRtbSignal(data: InsertRtbSignal): Promise<RtbSignal>;
+  upsertRtbSignal(data: InsertRtbSignal): Promise<RtbSignal>;
   getRtbSignals(filters: { 
     mode: 'live' | 'paper'; 
     status?: string; 
@@ -4297,6 +4298,35 @@ export class DatabaseStorage implements IStorage {
       .values(data)
       .returning();
     return created;
+  }
+
+  /**
+   * Phase 8.8.4-C.13.B: Upsert RTB signal with ON CONFLICT UPDATE
+   * Prevents duplicate key errors by updating existing signals instead of failing
+   */
+  async upsertRtbSignal(data: InsertRtbSignal): Promise<RtbSignal> {
+    const [result] = await db
+      .insert(rtbSignals)
+      .values(data)
+      .onConflictDoUpdate({
+        target: [rtbSignals.mode, rtbSignals.symbol, rtbSignals.strategy, rtbSignals.status],
+        set: {
+          entryPrice: data.entryPrice,
+          stopPrice: data.stopPrice,
+          targetPrice: data.targetPrice,
+          quantity: data.quantity,
+          notional: data.notional,
+          confidence: data.confidence,
+          riskScore: data.riskScore,
+          expectedReturn: data.expectedReturn,
+          cwqi: data.cwqi,
+          queuedAt: new Date(),
+          expiresAt: data.expiresAt,
+          metadata: data.metadata,
+        },
+      })
+      .returning();
+    return result;
   }
 
   async getRtbSignals(filters: { 

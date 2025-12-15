@@ -21,6 +21,7 @@ interface TCLState {
   activatedAt: Date | null;
   activationReason: '5min' | '100signals' | null;
   timer: NodeJS.Timeout | null;
+  backupInterval: NodeJS.Timeout | null;
   startedAt: Date | null;
 }
 
@@ -41,6 +42,7 @@ class TCLWatchdog {
         activatedAt: null,
         activationReason: null,
         timer: null,
+        backupInterval: null,
         startedAt: null,
       });
     }
@@ -54,9 +56,12 @@ class TCLWatchdog {
   start(mode: TradingMode): void {
     const state = this.getState(mode);
 
-    // Clear any existing timer
+    // Clear any existing timer and backup interval
     if (state.timer) {
       clearTimeout(state.timer);
+    }
+    if (state.backupInterval) {
+      clearInterval(state.backupInterval);
     }
 
     // Reset state
@@ -65,12 +70,41 @@ class TCLWatchdog {
     state.activationReason = null;
     state.startedAt = new Date();
 
-    console.log(`[8.8.4-C.12][TCL_WATCHDOG] Started for ${mode} mode, 5-minute failsafe timer set`);
+    console.log(`[8.8.4-C.12][TCL_WATCHDOG] Started for ${mode} mode at ${state.startedAt.toISOString()}`);
+    console.log(`[8.8.4-C.12][TCL_WATCHDOG] 5-minute failsafe timer set for ${mode} mode (expires at ${new Date(Date.now() + TCL_FAILSAFE_MS).toISOString()})`);
 
     // Set 5-minute failsafe timer
     state.timer = setTimeout(() => {
+      console.log(`[8.8.4-C.12][TCL_WATCHDOG] Primary 5-min timer fired for ${mode}`);
       this.activateTCL(mode, '5min', 0);
     }, TCL_FAILSAFE_MS);
+
+    // Phase 8.8.4-C.13.B: Backup interval check every 30 seconds
+    // Guards against timer loss due to event loop issues
+    state.backupInterval = setInterval(() => {
+      if (state.isActive) {
+        // Already activated, no need to check
+        return;
+      }
+      
+      if (!state.startedAt) {
+        return;
+      }
+      
+      const elapsedMs = Date.now() - state.startedAt.getTime();
+      const elapsedSec = (elapsedMs / 1000).toFixed(1);
+      
+      // Log heartbeat for debugging
+      if (elapsedMs > 60000 && elapsedMs % 60000 < 30000) {
+        console.log(`[8.8.4-C.12][TCL_WATCHDOG] Backup check for ${mode}: elapsed=${elapsedSec}s, active=${state.isActive}`);
+      }
+      
+      // Check if 5 minutes have passed but timer didn't fire
+      if (elapsedMs >= TCL_FAILSAFE_MS) {
+        console.log(`[8.8.4-C.12][TCL_WATCHDOG] Backup activation triggered for ${mode} (primary timer missed)`);
+        this.activateTCL(mode, '5min', 0);
+      }
+    }, 30000); // Check every 30 seconds
   }
 
   /**
@@ -84,13 +118,18 @@ class TCLWatchdog {
       clearTimeout(state.timer);
       state.timer = null;
     }
+    
+    if (state.backupInterval) {
+      clearInterval(state.backupInterval);
+      state.backupInterval = null;
+    }
 
     state.isActive = false;
     state.activatedAt = null;
     state.activationReason = null;
     state.startedAt = null;
 
-    console.log(`[8.8.4-C.12][TCL_WATCHDOG] Stopped for ${mode} mode`);
+    console.log(`[8.8.4-C.12][TCL_WATCHDOG] Stopped for ${mode} mode, all timers cleared`);
   }
 
   /**
@@ -125,9 +164,15 @@ class TCLWatchdog {
     }
 
     // Clear timer if activating via threshold (before 5 min)
-    if (state.timer && reason === '100signals') {
+    if (state.timer) {
       clearTimeout(state.timer);
       state.timer = null;
+    }
+    
+    // Clear backup interval - no longer needed
+    if (state.backupInterval) {
+      clearInterval(state.backupInterval);
+      state.backupInterval = null;
     }
 
     // Update state

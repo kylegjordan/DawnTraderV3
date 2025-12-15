@@ -1,0 +1,90 @@
+🧩 Directive 8.8.4-C.13.B
+“RTB Cycle Uncoupling, Event-Driven Promotion, and Full-Context RTB Table Enhancement”
+🎯 Objectives
+
+Decouple the RTB refresh loop from the TCL watchdog lifecycle.
+
+Implement fully event-driven promotion (triggered by TCL_ACTIVATED and TRADE_CLOSED).
+
+Redesign the Ready-to-Buy (RTB) table UI to include all operationally relevant trading metrics: quality, confidence, price targets, strategy, and capacity indicators.
+
+Ensure the system maintains continuous, stable 30-second queue refresh independent of TCL activation.
+
+Provide a persistent TCL watchdog and proper upsert logic for queue maintenance.
+
+⚙️ Part 1: Backend Architecture Changes
+Component	Action	Purpose
+ready_to_buy_service.ts	Start 30-s refresh immediately on engine start (uncoupled from TCL).	Keeps CWQI / NGC rankings fresh and queue dynamic.
+tcl_watchdog.ts	Maintain independent 5-minute / 100-signal activation logic. Emits TCL_ACTIVATED exactly once per session.	Clean lifecycle separation.
+event-bus.ts	Confirm and document event types: TCL_ACTIVATED, TRADE_CLOSED, PROMOTION.	Establishes consistent cross-service signaling.
+paper-execution-engine.ts	Add Promotion Listener: when TCL_ACTIVATED or TRADE_CLOSED, call checkRtbPromotion().	Enables immediate promotions once capacity opens.
+storage.ts	Replace insert with ON CONFLICT UPDATE on (mode, symbol, strategy) for rtb_signals.	Prevent duplicate-key errors and enable seamless refresh.
+cwqi_engine.ts / signal_quality_evaluator.ts	Confirm both CWQI and NGC are computed and stored in rtb_signals.	Guarantees both metrics available for UI display.
+🧠 Part 2: Promotion Logic Specification
+
+Promotion Flow
+
+TCL Activation:
+When either 5 min elapsed or 100 signals queued → TCL_ACTIVATED.
+
+Fill all available slots (up to max_trades).
+
+Pull signals by descending CWQI rank.
+
+Trade Closure:
+On every TRADE_CLOSED event →
+
+Recalculate open vs max capacity.
+
+Promote max_trades – open_trades highest-ranked signals.
+
+No Polling:
+Promotions occur only on these two events — not continuously.
+Continuous queue movement comes from the 30-s refresh cycle.
+
+💻 Part 3: Front-End RTB Table Redesign
+Column	Source Field	Purpose / Notes
+Rank #	Calculated each 30 s from CWQI (desc)	Real-time order indicator.
+Pair / Symbol	symbol	Trading pair identifier.
+CWQI	cwqi	Composite quality score.
+NGC	ngc	Neural / Next-Gen confidence metric.
+Strategy	strategy	Shows which strategy produced the signal.
+Price	FX5 scanner price feed	Current market price.
+Entry	entry_price	Proposed entry level.
+Target	target_price	Take-profit target.
+Stop	stop_price	Stop-loss boundary.
+Quantity	quantity	Position size if executed.
+24 h Volume	FX5 scanner metric	Liquidity / durability insight.
+
+🗑 Removed: Name, VWAP, Range %.
+✅ Keep: 24 h Volume for context.
+
+Table updates every 30 s with live rank recomputation and CWQI/NGC refresh.
+
+🔍 Part 4: Verification Checklist
+
+Start a new paper-trading session.
+
+Within 30 s → RTB table populates and ranks signals.
+
+After 5 min or ≥ 100 signals → TCL_ACTIVATED fires.
+
+Promotions occur; trades open.
+
+After any trade closes → new promotions fill open slots.
+
+Table shows Rank, CWQI, NGC, Price, Entry, Target, Stop, Qty, Vol accurately.
+
+🧾 Deliverables
+
+Log file: logs/validation/directive_8.8.4-C.13B_results.md containing:
+
+TCL activation timestamps
+
+Promotion counts and capacity usage
+
+Queue refresh iterations
+
+CWQI / NGC averages
+
+UI snapshot with all columns verified
