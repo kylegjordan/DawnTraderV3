@@ -71,6 +71,12 @@ SQE Filter Tuning & Validation Session System (8.8.4-C.11) provides systematic S
 4. **Session Management Endpoints**: `/api/paper-sim/validation-session/start`, `/stop`, `/status`, `/report` for session lifecycle control.
 5. **Post-Session Summary**: Generates comprehensive reports with Pearson correlation analysis between signal metrics and trade outcomes.
 
+Event-Driven TCL Watchdog System (8.8.4-C.12) replaces polling-based TCL activation with an event-driven architecture:
+1. **TCLWatchdog Service** (`server/core/rtb/tcl_watchdog.ts`): Manages 5-minute timer and 100-signal threshold triggers, emitting TCL_ACTIVATED event exactly once per session.
+2. **Extended Event Bus** (`server/lib/event-bus.ts`): Added TCL_ACTIVATED, TRADE_CLOSED, and PROMOTION event types with type-safe emitters and handlers.
+3. **Event-Driven Promotion**: Paper execution engine binds to TCL_ACTIVATED and TRADE_CLOSED events to trigger RTB queue promotion checks.
+4. **Proper Lifecycle Management**: Watchdog timers and event listeners are cleaned up on engine stop to prevent leaks across sessions.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.
