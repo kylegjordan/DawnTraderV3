@@ -7,11 +7,11 @@ This project is a long-only, spot-trading cryptocurrency day trading web applica
 Preferred communication style: Simple, everyday language.
 
 ## System Architecture
-The application uses a React, TypeScript, Vite frontend with a mobile-first design, and a Node.js/Express backend providing a RESTful API and WebSocket support. PostgreSQL, accessed via Neon serverless driver and Drizzle ORM, handles data persistence. Authentication is managed using username/password, bcrypt, JWT, and WebAuthn.
+The application features a React, TypeScript, Vite frontend with a mobile-first design, and a Node.js/Express backend providing a RESTful API and WebSocket support. PostgreSQL, accessed via Neon serverless driver and Drizzle ORM, handles data persistence. Authentication is managed using username/password, bcrypt, JWT, and WebAuthn.
 
 Core services include `KrakenService`, `TradingEngine`, `StrategyEngine`, `MarketScanner`, `RiskManager`, `AIAnalyst`, and `AIOpportunitiesService`. An AI Orchestrator & Command Center, powered by GPT-4o, provides an AI SysAdmin Co-Pilot, Unified Command & Conversation Layer, Semantic Memory, and a Continuous Learning Pipeline. The system employs a Hybrid Cognitive-Operational design with an Intent Gateway, `SecureCoreService`, and an Autonomy Layer with Safety Guardrails, supporting paper trading simulation and multi-intent command processing.
 
-The architecture utilizes a global mode-based engine, `ModeRegistry` for telemetry, and `MetricsCore` for centralized metrics. Live pricing is managed by a `LivePricingAdapter` with dual-source integration and a `KrakenWebSocketAdapter` for real-time price updates. The Goals Engine UI offers advanced universe and signal controls, execution rhythm controls, and simplified daily target goals with a Goal Feasibility Validation & Audit System.
+The architecture utilizes a global mode-based engine with `ModeRegistry` for telemetry and `MetricsCore` for centralized metrics. Live pricing is managed by a `LivePricingAdapter` with dual-source integration and a `KrakenWebSocketAdapter`. The Goals Engine UI offers advanced universe and signal controls, execution rhythm controls, and simplified daily target goals with a Goal Feasibility Validation & Audit System.
 
 The system incorporates a modern `guardrails_v2` schema with parameters like Portfolio Risk per Trade %, Symbol Cooldown, Max Open Positions, and Daily Loss Kill Switch %. It supports dual-mode operation with independent guardrail sets and real-time WebSocket broadcasts. The `GuardrailPolicy Service` is the single backend source of truth for guardrail settings. The Goals Engine includes an adaptive learning system that optimizes preset boundaries based on 30-day performance.
 
@@ -23,7 +23,7 @@ Dry-Run Mode introduces safe, non-mutating trade pipeline validation. An Active 
 
 Execution Safety Alignment ensures `preComputedNotional` from P2 signals is used for `checkPositionSizeCap`. A Diagnostic Framework (`B4DiagnosticService`) provides observational diagnostics. A Signal Creation & Sizing Pipeline Audit (`B5SizingAuditService`) provides a comprehensive audit trail for the entire signal-to-trade pipeline across all 9 strategies. A Unified Sizing Pipeline Refactor (`B6`) standardizes the signal-to-trade sizing pipeline, implementing exposure-budget-based sizing and centralizing sizing in the Signal Orchestrator.
 
-A Hard Reset Service (`B7.A PaperSessionResetService`) provides a single authoritative path for complete paper simulation reset, coordinating across engine state, orchestrator session state, diagnostics buffers, FX5 24h windows, and the database. Execution Engine Integrity (B9) ensures P&L calculations use only real market data, with mock pricing disabled by default. The `LivePricingAdapter` returns `no_reliable_price` when real data is unavailable. WebSocket Symbol Normalization implements bidirectional symbol mapping for Kraken WebSocket to ensure real-time price updates at 1.5-second intervals.
+A Hard Reset Service (`B7.A PaperSessionResetService`) provides a single authoritative path for complete paper simulation reset. Execution Engine Integrity (B9) ensures P&L calculations use only real market data. The `LivePricingAdapter` returns `no_reliable_price` when real data is unavailable. WebSocket Symbol Normalization implements bidirectional symbol mapping for Kraken WebSocket to ensure real-time price updates.
 
 RTB Pipeline Diagnostics (I1-I5) introduce diagnostic and consistency improvements including tracking RTB attempts/blocks, trade lifecycle events, and providing extensive logging and API endpoints for auditing price tick flow and RTB blocks. Live Price Distribution Fix (I6) ensures all modern endpoints use `getPriceWithFallback()` for consistent live pricing with comprehensive fallback tracking. Frontend Symbol Normalization Fix (I6-UI) resolves a UI price update staleness issue by normalizing symbols for consistent caching. WebSocket Broadcast Mode Fix (I6-FIX) correctly sets the trading mode (`paper` or `live`) for `price_updated` broadcasts.
 
@@ -35,7 +35,7 @@ A centralized price cache module (`server/services/price-cache.ts`) ensures a si
 
 Enhanced Active Trades UI provides comprehensive UI improvements including new columns for Source/Frequency, Volume 24h, and Confidence, a prominent GlobalMetricsBar displaying portfolio metrics, and a reset session button for paper trading. Volume Enrichment persists 24h volume data at trade creation using FX5 with Kraken REST API fallback. Trade History Table enhancements include new columns for Quantity and Confidence, and improved number formatting.
 
-Fee and Slippage Tracking + Pagination enhances trade transparency and table usability by adding fee and slippage data to trades and open positions, and enabling filtering, sorting, and pagination of trade history records. Trade History Bug Fixes address critical display issues, moving ghost trade filtering to SQL, fixing `dateTo` logic, adding server-side `closeReason` filter, and implementing an Apply/Clear UX pattern. Trade Table Enhancements provide comprehensive sorting and fee fixes across Active Trades and Trade History.
+Fee and Slippage Tracking + Pagination enhances trade transparency and table usability by adding fee and slippage data to trades and open positions, and enabling filtering, sorting, and pagination of trade history records. Trade History Bug Fixes address critical display issues. Trade Table Enhancements provide comprehensive sorting and fee fixes across Active Trades and Trade History.
 
 Full Cost Transparency (C2) implements comprehensive P/L breakdown across the platform, tracking Gross P/L, Total Cost (entry/exit fees, slippage), and Net P/L. Database columns for these metrics are added. A DualScrollTable component provides synchronized horizontal scroll bars. Table Column Restructure reorganizes both Active Trades and Trade History tables for clarity.
 
@@ -45,19 +45,24 @@ Current Simulation Analytics Alignment & Diagnostic Cleanup (C6) fixes "Current 
 
 Manual Close Cost Model Fix (C7) corrects the `/paper-sim/close-trade/:id` endpoint to properly calculate exit slippage and total cost, mirroring the engine's `closePosition` method. It uses SLIPPAGE_PERCENT (0.15%) and FEE_PERCENT (0.10%) to compute actualExitPrice, exitSlippage, exitFee, totalCost, grossPnl, and netPnl. All cost fields are persisted to the trade record. The portfolio summary endpoint now separates `cashBalance` (starting + realized P/L only) from `portfolioValue` (cash + unrealized P/L), with `currentBalance` returning the realized-only cash balance. Guardrails now use Current Balance (starting + realized P/L) for risk calculations instead of the static starting balance. The Active Trades green bar displays "Current Bal + Open Trades" showing total portfolio equity (cash + position value).
 
-Signal Flow Correction & Confidence Source Consolidation (B.3) corrects the signal processing flow in Signal Orchestrator to follow the canonical order: Sizing → Metrics → SQE → RTB → TCL. NGC (Normalized Global Confidence) is now the single authoritative source of confidence, replacing raw strategy confidence in all signal payloads. The legacy `confidenceThreshold` filter is deprecated from the UI (hidden but retained for backend compatibility). SQE thresholds (MIN_NGC, MIN_CWQI) serve as the authoritative quality gates. Flow verification logging via `[B.3][FLOW_CORRECTED]` confirms the corrected pipeline on SignalOrchestrator start.
+Signal Flow Correction & Confidence Source Consolidation (B.3) corrects the signal processing flow in Signal Orchestrator to follow the canonical order: Sizing → Metrics → SQE → RTB → TCL. NGC (Normalized Global Confidence) is now the single authoritative source of confidence. SQE thresholds (MIN_NGC, MIN_CWQI) serve as the authoritative quality gates.
 
 Adaptive Normalization, Enhanced Risk & Durability Framework (8.8.4-C) implements five key enhancements:
-1. **Adaptive Rolling Normalization**: RollingNormalizer class in `quality_index.ts` tracks min/max over 500 signals or 60-minute windows with exponential smoothing (α=0.15) for NGC, ProfitRate, and ExpectedReturn. Log tag: `[C][ROLLING_NORMALIZATION]`.
-2. **Enhanced Risk Metric**: New `server/core/metrics/risk_index.ts` computes Risk = (StopDistance/ATR) × CorrPenalty, where CorrPenalty = 1 + max(0, Corr_adj - 0.8). Includes CorrelationMatrix with time decay for stale data. Log tag: `[C][ENHANCED_RISK]`.
-3. **CWQI Durability Decay**: RTB queue uses CWQI_decayed = CWQI_orig × e^(-λt), λ=0.03/min for ranking signals by freshness in `ready_to_buy_service.ts`. Log tag: `[C][CWQI_DECAY]`.
-4. **Strategy-Specific ProfitRate Floors**: `config/strategy_thresholds.json` defines per-strategy minimum ProfitRate (DHMA=0.22, VWAP_Bounce=0.25, MeanReversion=0.28, Breakout=0.30, Scalper=0.35). SQE enforces these floors. Log tag: `[C][PROFIT_FLOORS]`.
+1. **Adaptive Rolling Normalization**: Tracks min/max over 500 signals or 60-minute windows with exponential smoothing for NGC, ProfitRate, and ExpectedReturn.
+2. **Enhanced Risk Metric**: Computes Risk = (StopDistance/ATR) × CorrPenalty. Includes CorrelationMatrix with time decay for stale data.
+3. **CWQI Durability Decay**: RTB queue uses CWQI_decayed for ranking signals by freshness.
+4. **Strategy-Specific ProfitRate Floors**: Defines per-strategy minimum ProfitRate.
 
 RTB Queue Service Consolidation (8.8.4-C.6) consolidates RTB refresh responsibility:
-1. **Deprecated rtbQueueRefresher**: Legacy refresher moved to `server/legacy/rtbQueueRefresher.legacy.ts`, auto-start disabled in `server/index.ts`.
-2. **TCL 5-Minute Failsafe**: Trading Capacity Limit activates when pool ≥100 signals OR 5 minutes elapsed since engine start. Per-mode tracking via `engineStartTimes` Map. Log tags: `[8.8.4-C.6][TCL_FAILSAFE]`, `[8.8.4-C.6][TCL_FALLBACK_TRIGGER]`, `[8.8.4-C.6][TCL_FALLBACK_ACTIVATE]`.
-3. **Unified Refresh Cycle**: ReadyToBuyService now owns the 30-second refresh cycle entirely, wired via `startRefreshCycle()` and `stopRefreshCycle()` in paper-execution-engine.ts.
-4. **Updated Diagnostics**: `/api/diagnostics/rtb-queue/refresher-status` and `/api/diagnostics/rtb-queue/force-refresh` endpoints now delegate to readyToBuyService.
+1. **Deprecated rtbQueueRefresher**.
+2. **TCL 5-Minute Failsafe**: Trading Capacity Limit activates when pool ≥100 signals OR 5 minutes elapsed since engine start.
+3. **Unified Refresh Cycle**: ReadyToBuyService now owns the 30-second refresh cycle entirely.
+4. **Updated Diagnostics**.
+
+RTB UI Unification (8.8.4-C.7) consolidates the Ready-to-Buy UI:
+1. **RTBQueuePanel Removed**.
+2. **Unified ReadyToBuyTable**: Single component displays all SQE-qualified signals ranked by CWQI, with 30-second auto-refresh.
+3. **Unified Endpoint**: `/api/trading-signals` serves as the single data source for RTB signals with mode-based filtering.
 
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
