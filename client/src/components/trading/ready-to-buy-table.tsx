@@ -189,12 +189,12 @@ export default function ReadyToBuyTable() {
         </div>
       </CardHeader>
       <CardContent>
-        {/* Phase 8.8.4-B.1: Explanatory text about signal ranking */}
+        {/* Phase 8.8.4-C.7: Unified RTB pool description */}
         <div className="mb-4 p-3 bg-muted/50 rounded-lg text-sm text-muted-foreground">
           <p>
-            <strong>Signal Ranking:</strong> Signals are ranked by Quality Index (CWQI), which combines 
-            Confidence (adjusted for market conditions), Risk level, Expected Return, and Profit Rate. 
-            Higher-ranked signals have better risk-adjusted return potential.
+            <strong>Ready-to-Buy Signals:</strong> Displays all SQE-qualified signals ranked by CWQI 
+            (Confidence-Weighted Quality Index). Signals remain in this pool until expiration or 
+            promotion to active trades. CWQI combines Confidence, Risk, Expected Return, and Profit Rate.
           </p>
         </div>
         

@@ -1,0 +1,174 @@
+Directive 8.8.4-C.7 — Ready-to-Buy UI Unification & Validation-Trading Preparation
+Objective
+
+To complete the Ready-to-Buy (RTB) system unification and prepare for the upcoming validation trading phase by:
+
+Unifying the RTB UI into a single consolidated table (removing the “RTB Queue (Capacity-Blocked)” panel).
+
+Verifying full signal flow from FX5 → SQE → RTB → TCL → Active Trades under live engine operation.
+
+Confirming proper CWQI-based re-ranking and expiration handling during continuous refresh cycles.
+
+Preparing for Directive 8.8.4-C.8 (Validation Trading Execution) by ensuring UI, data persistence, and flow integrity are all confirmed stable.
+
+Background
+
+As of Directive 8.8.4-C.6, the backend RTB system has been consolidated:
+
+The legacy cron refresher (rtbQueueRefresher.ts) was deprecated and archived.
+
+The unified ReadyToBuyService now manages the single 30-second refresh cycle and TCL warm-up/failsafe logic.
+
+The backend architecture is stable, verified, and synchronized with the trading engine lifecycle.
+
+However, the frontend UI still displays two tables:
+
+“Ready-to-Buy Signals” (correct unified pool)
+
+“RTB Queue (Capacity-Blocked)” (deprecated, redundant)
+
+This creates user confusion and is now inconsistent with the backend flow, which no longer differentiates between “capacity-blocked” and “available” signals.
+
+Scope of Work
+Task 1 — Remove Deprecated RTB Queue Panel
+
+Locate and open the main component file:
+
+client/src/components/trading/ready-to-buy-table.tsx
+
+
+Identify and remove or comment out all references to:
+
+<RTBQueuePanel />
+
+
+or any imports such as:
+
+import RTBQueuePanel from "./rtb-queue-panel";
+
+
+Delete or archive the following file:
+
+client/src/components/trading/rtb-queue-panel.tsx
+
+
+unless it’s used elsewhere (expected: not used).
+
+Confirm that only the ReadyToBuyTable component is displayed in the “Ready to Buy” tab.
+
+Task 2 — Confirm Unified Data Source
+
+Verify that ReadyToBuyTable fetches data from the unified backend endpoint:
+
+/api/rtb/signals
+
+
+or whichever endpoint now serves the RTB unified pool.
+
+Remove any frontend filters that exclude capacity-blocked signals:
+
+filter(signal => !signal.capacityBlocked)
+
+
+These are no longer relevant — all signals are SQE-qualified.
+
+Ensure the table displays:
+
+Symbol
+
+Strategy
+
+CWQI
+
+Confidence
+
+Profit Rate
+
+Time Remaining / Expiry
+
+Status
+
+Confirm that CWQI values dynamically update every 30 seconds as part of the backend refresh cycle.
+
+Task 3 — Update UI Labels and Descriptions
+
+Update the Ready-to-Buy tab title and subtext to reflect unified logic:
+
+Ready-to-Buy Signals
+Displays all SQE-qualified signals ranked by CWQI. 
+Signals remain in this pool until expiration or promotion to active trades.
+
+
+Remove any textual references to “capacity-blocked” or “queued for capacity.”
+
+Task 4 — Validation-Trading Preparation
+
+After UI unification, perform a full validation-trading preparation check:
+
+Start paper trading engine and observe FX5 cycles for 5–10 minutes.
+
+Confirm that:
+
+SQE-qualified signals flow into the Ready-to-Buy table.
+
+The table begins populating within the first few minutes.
+
+CWQI and rankings refresh every 30 seconds.
+
+When capacity is full, additional signals remain in the same table (not rejected).
+
+When a trade closes, TCL automatically promotes the next-highest CWQI signals.
+
+Verify TCL activation behavior:
+
+Activates at ≥100 signals, or after 5 minutes if fewer.
+
+Logs: [8.8.4-C.6][TCL_ACTIVATE] or [8.8.4-C.6][TCL_FALLBACK_ACTIVATE].
+
+Verify that the RTB signals table in the database contains active records:
+
+SELECT COUNT(*), MIN(queued_at), MAX(queued_at) FROM rtb_signals;
+
+
+Expected: Non-zero count, timestamps within the last minute.
+
+Task 5 — Logging & Diagnostic Validation
+
+Confirm that the following log tags appear at expected intervals:
+
+[8.8.4-C.5][RTB_INSERT] — signal added to pool
+
+[8.8.4-C.5][RTB_REFRESH] — 30-second refresh triggered
+
+[8.8.4-C.6][TCL_WARMUP] and [TCL_ACTIVATE] — TCL activation
+
+[8.8.4-C.6][TCL_FALLBACK_TRIGGER] — 5-minute failsafe triggered
+
+Confirm no duplicate [RTB_REFRESH] logs appear within a single timestamp window (no double-fire).
+
+Capture and export logs to:
+
+logs/validation/directive_8.8.4-C.7_results.md
+
+Validation Criteria
+
+✅ Only one Ready-to-Buy table is visible in the UI.
+✅ Table dynamically updates every 30 seconds (CWQI values changing).
+✅ All SQE-qualified signals appear (none filtered as “blocked”).
+✅ RTB persistence confirmed in database (rtb_signals contains records).
+✅ TCL activates normally or via 5-minute failsafe.
+✅ Refresh cycle fires once every 30s with no duplication.
+✅ System performance: stable (<70% CPU, <5s refresh latency).
+
+Post-Directive Deliverables
+
+Visual confirmation screenshot showing unified Ready-to-Buy table.
+
+Diagnostic log file: logs/validation/directive_8.8.4-C.7_results.md.
+
+Final readiness confirmation: System approved for Directive 8.8.4-C.8 (Validation Trading Execution).
+
+Directive Status
+
+🟡 Pending — Replit to implement UI unification, verify backend flow, and produce validation report.
+No backend code modifications beyond UI/API consistency expected.
