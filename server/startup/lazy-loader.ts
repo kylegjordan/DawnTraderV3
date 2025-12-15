@@ -163,6 +163,17 @@ export async function lazyLoadServices() {
         console.error('[Lazy] StrategicDrive (deferred) failed:', error);
       }
     }, 6000);
+
+    // Phase 8.8.4-C.11: SQE Distribution Logging - defer by 8s (10-min reports for 30min)
+    setTimeout(async () => {
+      try {
+        const { validationSessionService } = await import('../services/validation-session-service');
+        await validationSessionService.startSQEDistributionLogging('paper', 10, 30);
+        console.log('[Gemini-5A] ✅ Deferred service loaded: SQEDistributionLogging (+8s)');
+      } catch (error) {
+        console.error('[Lazy] SQEDistributionLogging (deferred) failed:', error);
+      }
+    }, 8000);
     
     const duration = Date.now() - start;
     const durationSeconds = (duration / 1000).toFixed(1);

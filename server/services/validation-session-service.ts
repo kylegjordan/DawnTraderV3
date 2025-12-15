@@ -217,6 +217,74 @@ class ValidationSessionService {
     if (!this.currentSession?.reports.length) return null;
     return this.currentSession.reports[this.currentSession.reports.length - 1];
   }
+
+  private sqeDistributionInterval: NodeJS.Timeout | null = null;
+  private sqeDistributionCount = 0;
+
+  async startSQEDistributionLogging(mode: TradingMode, intervalMinutes: number = 10, durationMinutes: number = 30): Promise<void> {
+    if (this.sqeDistributionInterval) {
+      clearInterval(this.sqeDistributionInterval);
+    }
+
+    this.sqeDistributionCount = 0;
+    const maxReports = Math.floor(durationMinutes / intervalMinutes);
+
+    console.log(`[8.8.4-C.11][SQE_DISTRIBUTION] Starting distribution logging: every ${intervalMinutes}min for ${durationMinutes}min (${maxReports} reports)`);
+
+    await this.logSQEDistribution(mode);
+    this.sqeDistributionCount++;
+
+    this.sqeDistributionInterval = setInterval(async () => {
+      await this.logSQEDistribution(mode);
+      this.sqeDistributionCount++;
+
+      if (this.sqeDistributionCount >= maxReports) {
+        console.log(`[8.8.4-C.11][SQE_DISTRIBUTION] Completed ${maxReports} distribution reports`);
+        if (this.sqeDistributionInterval) {
+          clearInterval(this.sqeDistributionInterval);
+          this.sqeDistributionInterval = null;
+        }
+      }
+    }, intervalMinutes * 60 * 1000);
+  }
+
+  private async logSQEDistribution(mode: TradingMode): Promise<void> {
+    try {
+      const rtbSignals = await storage.getRtbSignals({ mode });
+
+      if (rtbSignals.length === 0) {
+        console.log(`[8.8.4-C.11][SQE_DISTRIBUTION] No signals in queue`);
+        return;
+      }
+
+      const ngcValues = rtbSignals.map((s: RtbSignal) => parseFloat(String(s.confidence || 0))).filter((v: number) => !isNaN(v));
+      const cwqiValues = rtbSignals.map((s: RtbSignal) => parseFloat(String(s.cwqi || 0))).filter((v: number) => !isNaN(v));
+      const riskValues = rtbSignals.map((s: RtbSignal) => parseFloat(String(s.riskScore || 0))).filter((v: number) => !isNaN(v));
+      const expectedReturnValues = rtbSignals.map((s: RtbSignal) => parseFloat(String(s.expectedReturn || 0))).filter((v: number) => !isNaN(v));
+
+      const stats = (arr: number[]) => {
+        if (arr.length === 0) return { avg: 0, min: 0, max: 0 };
+        return {
+          avg: arr.reduce((a, b) => a + b, 0) / arr.length,
+          min: Math.min(...arr),
+          max: Math.max(...arr),
+        };
+      };
+
+      const ngcStats = stats(ngcValues);
+      const cwqiStats = stats(cwqiValues);
+      const riskStats = stats(riskValues);
+      const profitRateStats = stats(expectedReturnValues);
+
+      console.log(`[8.8.4-C.11][SQE_DISTRIBUTION] Signals: ${rtbSignals.length}`);
+      console.log(`[8.8.4-C.11][SQE_DISTRIBUTION] NGC: avg=${ngcStats.avg.toFixed(4)}, min=${ngcStats.min.toFixed(4)}, max=${ngcStats.max.toFixed(4)}`);
+      console.log(`[8.8.4-C.11][SQE_DISTRIBUTION] CWQI: avg=${cwqiStats.avg.toFixed(4)}, min=${cwqiStats.min.toFixed(4)}, max=${cwqiStats.max.toFixed(4)}`);
+      console.log(`[8.8.4-C.11][SQE_DISTRIBUTION] ProfitRate: avg=${profitRateStats.avg.toFixed(4)}, min=${profitRateStats.min.toFixed(4)}, max=${profitRateStats.max.toFixed(4)}`);
+      console.log(`[8.8.4-C.11][SQE_DISTRIBUTION] Risk: avg=${riskStats.avg.toFixed(4)}, min=${riskStats.min.toFixed(4)}, max=${riskStats.max.toFixed(4)}`);
+    } catch (err) {
+      console.error('[8.8.4-C.11][SQE_DISTRIBUTION_ERROR]', err);
+    }
+  }
 }
 
 export const validationSessionService = new ValidationSessionService();

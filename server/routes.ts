@@ -9586,6 +9586,24 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 8.8.4-C.11: Start SQE distribution logging
+  apiRouter.post('/paper-sim/sqe-distribution/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { intervalMinutes = 10, durationMinutes = 30 } = req.body;
+      const { validationSessionService } = await import('./services/validation-session-service.js');
+      
+      await validationSessionService.startSQEDistributionLogging('paper', intervalMinutes, durationMinutes);
+      
+      res.json({
+        success: true,
+        message: `SQE distribution logging started: every ${intervalMinutes}min for ${durationMinutes}min`
+      });
+    } catch (error: any) {
+      console.error('[8.8.4-C.11][SQE_DISTRIBUTION_START_ERROR]', error);
+      res.status(500).json({ error: error.message || 'Failed to start SQE distribution logging' });
+    }
+  });
+
   // Phase 7.2: Paper trading status with Bob Core caching
   apiRouter.get('/paper-sim/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     // Phase 7.2: Try Bob Core first if enabled

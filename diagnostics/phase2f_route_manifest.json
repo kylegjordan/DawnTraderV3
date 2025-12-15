@@ -2482,6 +2482,16 @@
     ]
   },
   {
+    "path": "/api/paper-sim/sqe-distribution/start",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/paper-sim/status",
     "methods": [
       "GET"
