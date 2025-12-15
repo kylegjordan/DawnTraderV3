@@ -1,0 +1,172 @@
+Directive 8.8.4-C.8 — Validation Trading Execution & System Performance Audit
+Objective
+
+To perform a controlled validation trading session to confirm that the unified signal flow, CWQI-based ranking, RTB lifecycle, and TCL promotion logic are all operating correctly and efficiently under live simulation conditions.
+
+This directive verifies full operational readiness before transitioning to semi-live or live trading states.
+
+Scope of Work
+Phase 1 — System Preparation
+
+Start the Paper Trading Engine
+
+Use the following test credentials to log in and operate in validation mode:
+
+Username: testuser123
+Password: SecurePass123!
+
+
+Ensure “paper” mode is active and that all metrics reset at session start.
+
+Confirm that the FX5 scanner initializes successfully and that [CycleStart] logs appear every 30 seconds.
+
+Verify Pre-Session Conditions
+
+Confirm ReadyToBuyService refresh cycle starts successfully ([8.8.4-C.5][RTB_REFRESH] log within 30 s of engine start).
+
+Confirm the TCL warm-up threshold and failsafe timers initialize:
+
+[8.8.4-C.6][TCL_WARMUP_INIT]
+[8.8.4-C.6][TCL_FAILSAFE_TIMER_START]
+
+
+Ensure the database tables (rtb_signals, paper_trades, trade_history) are empty or cleared before the run.
+
+Phase 2 — Validation Trading Session
+
+Run the Engine for 10–15 Minutes
+
+Allow the FX5 scanner to perform at least 15 cycles (≈7 minutes 30 s).
+
+Continue until at least 100 SQE-qualified signals populate the RTB pool.
+
+Observe and Record the Following:
+
+Signal Flow Integrity
+
+Verify that every new SQE-qualified signal enters the unified RTB table.
+
+Confirm CWQI and Confidence fields populate correctly.
+
+Ranking and Re-confirmation
+
+Observe CWQI re-ranking every 30 seconds.
+
+Verify that expired or unqualified signals are removed on schedule.
+
+TCL Promotion Logic
+
+Once ≥ 100 signals OR 5 minutes elapsed, TCL should trigger:
+
+[8.8.4-C.6][TCL_ACTIVATE]   or
+[8.8.4-C.6][TCL_FALLBACK_ACTIVATE]
+
+
+Confirm promotions to Active Trades occur automatically based on highest CWQI.
+
+Trade Lifecycle
+
+RTB → Active Trades → Closed → Trade History progression should occur cleanly.
+
+Closed trades should persist correctly in trade_history.
+
+Performance Monitoring
+
+Capture engine performance metrics:
+
+CPU < 70 %
+
+Refresh latency < 5 s
+
+No skipped FX5 cycles
+
+Record [RTB_REFRESH] log timestamps to confirm consistent 30 s cadence.
+
+Phase 3 — Data Verification
+
+Database Snapshot
+
+Run the following SQL checks and include results in the report:
+
+SELECT COUNT(*), MIN(queued_at), MAX(queued_at) FROM rtb_signals;
+SELECT COUNT(*), MIN(created_at), MAX(created_at) FROM paper_trades;
+SELECT COUNT(*), MIN(closed_at), MAX(closed_at) FROM trade_history;
+
+
+Expected:
+
+Non-zero results for all three.
+
+Timestamps advancing in correct chronological order.
+
+Log Verification
+
+Confirm presence of log tags:
+
+[8.8.4-C.5][RTB_INSERT]
+[8.8.4-C.5][RTB_REFRESH]
+[8.8.4-C.6][TCL_ACTIVATE] or [TCL_FALLBACK_ACTIVATE]
+[8.8.4-C.8][VALIDATION_SUMMARY]
+
+
+Ensure no duplicate refresh or overlapping TCL activation logs.
+
+UI Validation
+
+The “Ready to Buy” tab must show a single unified table, continuously updating CWQI values.
+
+Active Trades and Trade History tabs must populate appropriately as promotions and closures occur.
+
+Phase 4 — Reporting & Deliverables
+
+Create Validation Report
+
+File path:
+
+logs/validation/directive_8.8.4-C.8_results.md
+
+
+Include:
+
+Summary of session duration
+
+Signal flow statistics (total scanned, qualified, promoted, closed)
+
+TCL activation method used (threshold or failsafe)
+
+Performance metrics (average latency, CPU load)
+
+Any anomalies or unexpected behavior
+
+Attach Screenshots (Optional)
+
+Ready-to-Buy table mid-session (showing CWQI ranks)
+
+Active Trades panel during trading
+
+Trade History after 10 minutes
+
+Post-Run Cleanup
+
+Stop paper trading engine.
+
+Confirm [ENGINE_STOP] and [RTB_REFRESH_STOP] logs appear.
+
+Verify refresh cycle halts correctly (no new [RTB_REFRESH] entries after 30 s).
+
+Validation Criteria
+Category	Expected Outcome
+Signal Flow	Continuous SQE → RTB → TCL → Active Trades → History flow
+CWQI Refresh	30 s interval, stable values
+TCL Activation	≥ 100 signals or 5 min elapsed
+Trade Lifecycle	Correct promotion and closure logging
+System Performance	CPU < 70 %, no skipped refresh cycles
+Logs	Proper tag cadence, no duplication
+UI State	Single RTB table, live updates
+Data Persistence	Non-zero counts in all key tables
+Directive Status
+
+🟡 Pending Execution —
+Replit to run full validation session in paper-trading mode using provided credentials.
+No code modifications are authorized under this directive.
+All findings must be documented in directive_8.8.4-C.8_results.md for subsequent review and approval.
