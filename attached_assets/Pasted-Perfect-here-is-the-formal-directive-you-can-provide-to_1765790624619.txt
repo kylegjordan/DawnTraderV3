@@ -1,0 +1,161 @@
+Perfect — here is the formal directive you can provide to Replit.
+This version (Directive 8.8.4-C.4) is designed for an analysis-only audit of the Ready-to-Buy (RTB) system. It includes the full background context, precise audit scope, instructions, and the expected deliverables.
+
+🧩 Directive 8.8.4-C.4 — RTB Queue & Metrics Integrity Audit
+Objective
+
+Perform a comprehensive diagnostic audit of the Ready-to-Buy (RTB) subsystem — including its queue, signal promotion logic, and statistical tracking — to verify accuracy and integrity following the removal of legacy trade-creation paths under Directive 8.8.4-C.3.
+
+⚠️ Important:
+This directive is analysis-only.
+Do not modify, refactor, or remove any code, configuration, or database entries at this stage.
+Your role is to investigate, analyze, and report your findings and recommendations.
+
+Background Context
+
+Following completion of Directive 8.8.4-C.3, all legacy trade-creation paths (scanForSignals, checkSymbolForSignal, and injectForcedTrade) have been deprecated and archived.
+Now, every trade in the system should originate from the Signal Orchestrator → SQE → RTB → TCL → Trade Execution flow.
+
+However, several operational anomalies remain:
+
+RTB Statistics Mismatch
+
+The Ready2BuyMetrics panel shows:
+
+~60 trades opened
+
+~3,000 signals rejected
+
+~2,655 rejected specifically by “Max Trades”
+
+These rejected counts do not align with the actual contents of Ready2BuySignals or Ready2BuyQueue.
+
+Empty Ready2BuyQueue Table
+
+The Ready2BuyQueue table (visible in UI and database) remains empty even though signals are being processed.
+
+Historically, this queue was used to hold pending signals prioritized by CWQI decay, awaiting TCL promotion.
+
+Missing Ready2BuySignals Entries
+
+Rejected and promoted signals are not consistently logged in Ready2BuySignals.
+
+The discrepancy suggests potential issues in:
+
+ready_to_buy_service.ts (enqueue/dequeue logic)
+
+signal_quality_evaluator.ts (filter rejection handling)
+
+or a stats aggregation layer (RTB metrics counters).
+
+Ghost Trade Correlation
+
+Earlier “ghost trades” may have originated from legacy paths that bypassed RTB completely.
+
+With those paths now disabled, this audit ensures no remnants or internal miscounts persist.
+
+Audit Scope
+
+You are to perform a non-destructive analysis across the following modules:
+
+Module	Purpose	Key Audit Targets
+server/core/rtb/ready_to_buy_service.ts	RTB queue management	Enqueue / dequeue operations, CWQI decay handling, queue persistence
+server/core/filters/signal_quality_evaluator.ts	Signal filtering and rejection logging	Rejection counts, max-trades enforcement
+server/services/signal-orchestrator.ts	Signal routing	Correct passage of CWQI / NGC into RTB
+server/core/metrics/quality_index.ts	Metric propagation	CWQI recalculation and decay functions
+RTB-related database tables	Persistent tracking	Ready2BuyQueue, Ready2BuySignals, Metrics counters
+Tasks
+Task 1 — Capture and Review Runtime Logs
+
+Start the paper trading engine and allow it to run for at least 5 minutes.
+
+Capture log output containing:
+
+[RTB_ENQUEUE]
+
+[RTB_PROMOTE]
+
+[CWQI_DECAY]
+
+[REJECT]
+
+[8.8.4-C.3] (for trace continuity)
+
+Store logs under:
+
+logs/validation/rtb_audit_session_<timestamp>.log
+
+Task 2 — Generate RTB Summary Report
+
+Use the captured data to build a detailed diagnostic report (directive_8.8.4-C.4_results.md) containing:
+
+Section	Description
+A. Signal Throughput Summary	Count of signals entering SQE, passing filters, enqueued to RTB, promoted to TCL, and executed as trades
+B. Rejection Breakdown	By reason (confidence threshold, CWQI floor, max trades, stale decay, etc.)
+C. Queue Health	Number of entries held, time-in-queue metrics, decay application rates
+D. Data Integrity Check	Verify that all RTB queue entries appear in database and are not lost in memory
+E. CWQI Validation	Sample CWQI decay formula outputs (compare expected vs actual)
+F. Performance Metrics	Latency, CPU, and memory use over the 5-minute window
+Task 3 — Perform Source Analysis
+
+Review the following files for logic consistency and document observations:
+
+ready_to_buy_service.ts
+
+signal_quality_evaluator.ts
+
+signal-orchestrator.ts
+
+Specifically:
+
+Confirm that enqueueSignal() is actually called after SQE filtering.
+
+Confirm that queue prioritization by CWQI decay (λ = 0.03) is active.
+
+Confirm that “Max Trades” rejection is triggered by the correct source and not counting stale signals.
+
+Identify any race conditions or conditions where the RTB queue could be overwritten or cleared prematurely.
+
+Task 4 — Provide Recommendations
+
+Based on your analysis:
+
+Identify any logic, threshold, or counting errors.
+
+Propose non-destructive fixes or improvements, if necessary.
+
+Include all findings and recommendations in your report.
+
+⚠️ Do not implement any changes at this time.
+Your task is to diagnose and document the issue — not to patch or modify code or data.
+
+Deliverables
+File	Purpose
+logs/validation/directive_8.8.4-C.4_results.md	Primary diagnostic report (Markdown format)
+logs/validation/rtb_audit_session_<timestamp>.log	Log capture (runtime)
+logs/exports/rtb_summary_<timestamp>.json	Optional machine-readable report of signal and queue stats
+Expected Outcomes
+
+✅ Confirmation of whether RTB queue operations and metrics are functioning as expected.
+✅ Identification of any inconsistencies between UI statistics, internal counters, and database entries.
+✅ Recommendations for code or configuration adjustments (without applying them yet).
+✅ Verified data integrity for CWQI decay and trade promotion logic.
+
+Follow-Up Plan
+
+Once the report is produced:
+
+I (the overseeing architect) will review the findings to validate the technical conclusions.
+
+I’ll assess whether Replit’s proposed corrections align with architectural intent.
+
+If approved, a new directive (8.8.4-C.5) will be issued to apply and validate those corrections.
+
+Execution Authorization
+
+Directive Authorized By: Architect GPT-5
+Directive Number: 8.8.4-C.4
+Execution Level: Audit-only (no code modifications)
+Scope: RTB queue, metrics, and statistics validation
+Expected Duration: ~10–15 minutes runtime analysis
+Next Directive Trigger: Upon completion and review of analysis report
