@@ -42,3 +42,11 @@ author = "agent"
 task = "shell.exec"
 args = "npm run dev"
 waitForPort = 5000
+
+[userenv]
+
+[userenv.development]
+SQE_NGC_MIN = "0.30"
+SQE_CWQI_MIN = "0.20"
+SQE_PROFIT_RATE_MIN = "0.00"
+SQE_MAX_RISK = "0.95"

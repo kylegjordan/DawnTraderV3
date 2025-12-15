@@ -9604,6 +9604,67 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 8.8.4-C.13: Start C.13 validation session with relaxed SQE thresholds
+  apiRouter.post('/paper-sim/c13-validation/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { durationHours = 3, intervalMinutes = 30 } = req.body;
+      const { c13ValidationService } = await import('./services/c13-validation-service.js');
+      
+      const result = await c13ValidationService.startSession('paper', durationHours, intervalMinutes);
+      
+      if (!result.ok) {
+        return res.status(400).json({ error: 'Session already active' });
+      }
+      
+      res.json({
+        ok: true,
+        sessionId: result.sessionId,
+        message: `C.13 validation session started for ${durationHours} hours with ${intervalMinutes}min snapshots`,
+        status: c13ValidationService.getStatus()
+      });
+    } catch (error: any) {
+      console.error('[8.8.4-C.13][SESSION_START_ERROR]', error);
+      res.status(500).json({ error: error.message || 'Failed to start C.13 validation session' });
+    }
+  });
+
+  // Phase 8.8.4-C.13: Stop C.13 validation session
+  apiRouter.post('/paper-sim/c13-validation/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { c13ValidationService } = await import('./services/c13-validation-service.js');
+      
+      const result = await c13ValidationService.endSession();
+      
+      res.json({
+        ok: result.ok,
+        resultsPath: result.resultsPath,
+        message: result.ok ? 'C.13 validation session ended' : 'No active session'
+      });
+    } catch (error: any) {
+      console.error('[8.8.4-C.13][SESSION_STOP_ERROR]', error);
+      res.status(500).json({ error: error.message || 'Failed to stop C.13 validation session' });
+    }
+  });
+
+  // Phase 8.8.4-C.13: Get C.13 validation session status
+  apiRouter.get('/paper-sim/c13-validation/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { c13ValidationService } = await import('./services/c13-validation-service.js');
+      
+      const status = c13ValidationService.getStatus();
+      const latestSnapshot = await c13ValidationService.getLatestSnapshot();
+      
+      res.json({
+        ok: true,
+        ...status,
+        latestSnapshot
+      });
+    } catch (error: any) {
+      console.error('[8.8.4-C.13][STATUS_ERROR]', error);
+      res.status(500).json({ error: error.message || 'Failed to get C.13 validation status' });
+    }
+  });
+
   // Phase 7.2: Paper trading status with Bob Core caching
   apiRouter.get('/paper-sim/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     // Phase 7.2: Try Bob Core first if enabled

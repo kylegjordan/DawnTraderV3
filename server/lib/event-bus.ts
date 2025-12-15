@@ -127,6 +127,10 @@ class EventBus extends EventEmitter {
   offTradeClosed(handler: (event: TradeClosedEvent) => void): void {
     this.off('TRADE_CLOSED', handler);
   }
+
+  offPromotion(handler: (event: PromotionEvent) => void): void {
+    this.off('PROMOTION', handler);
+  }
 }
 
 // Export singleton instance
