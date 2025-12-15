@@ -1,0 +1,111 @@
+⚙️ Directive 8.8.4-C.3 — Deprecation of Legacy Trade Creation Paths
+Objective
+
+Deprecate and isolate all obsolete trade-creation pathways that bypass the modern orchestrator-driven flow, ensuring all simulated and live paper trades originate exclusively from the Signal Orchestrator → SQE → RTB → TCL pipeline.
+
+Scope
+
+This directive applies to:
+
+server/services/paper-execution-engine.ts
+
+Environment variable: PAPER_FORCE_TRADE_SYMBOL
+
+Any dependent or commented legacy initialization references in paper-portfolio-manager.ts
+
+Tasks
+Task 1 — Identify and Comment Out Legacy Trade Creation Blocks
+
+In paper-execution-engine.ts:
+
+Locate and fully comment out:
+
+evaluateActiveStrategies() or runInternalCycle() (legacy loop)
+
+injectForcedTrade() (forced trade injector)
+
+Add deprecation banner above both functions:
+
+/**
+ * @deprecated Phase 8.8.3-I7 legacy trade path
+ * Deprecated by Directive 8.8.4-C.3
+ * This function bypasses Signal Orchestrator, SQE, and RTB. DO NOT USE.
+ */
+
+Task 2 — Disable Environment Variable Entry Point
+
+Remove or hard-disable the following environment variable:
+
+PAPER_FORCE_TRADE_SYMBOL
+
+
+Add in config/env.schema.json:
+
+"PAPER_FORCE_TRADE_SYMBOL": {
+  "deprecated": true,
+  "note": "Deprecated in 8.8.4-C.3 — legacy forced trade injector disabled."
+}
+
+
+Ensure that any code block referencing it is commented out or wrapped in:
+
+if (process.env.PAPER_FORCE_TRADE_SYMBOL && process.env.ENABLE_LEGACY_MODE === 'true') { ... }
+
+Task 3 — Create /server/legacy/ Archive
+
+Move deprecated sections into a new file:
+
+server/legacy/paper-execution-engine.legacy.ts
+
+
+Include header:
+
+/**
+ * Archived Legacy Trade Creation Code
+ * Directive: 8.8.4-C.3
+ * Purpose: Preserved for reference; not used by runtime.
+ */
+
+Task 4 — Enforce Signal Path Consistency
+
+Add a validation guard in signal-orchestrator.ts:
+
+if (!signal.origin || signal.origin !== 'FX5') {
+  throw new Error('[8.8.4-C.3] Invalid signal source — must originate from FX5 scanner.');
+}
+
+Task 5 — Verification After Deprecation
+
+After commenting out legacy paths:
+
+Restart the trading engine.
+
+Run:
+
+GET /api/paper-sim/start
+GET /api/paper-sim/active-trades
+
+
+Confirm no trades open without CWQI/NGC or source=FX5.
+
+Confirm RTB metrics align with expected trade volume.
+
+Expected Outcome
+
+✅ All trades now originate from the orchestrated pipeline.
+✅ No bypass routes exist.
+✅ Ghost trades cannot reappear.
+✅ The codebase is simplified and forward-compatible with 8.8.5 and modular trade adapters.
+
+Deliverables
+Deliverable	Description
+/server/legacy/paper-execution-engine.legacy.ts	Archived legacy paths
+/server/services/paper-execution-engine.ts	Updated with deprecation guards
+env.schema.json	Environment variable marked deprecated
+Verification log	Runtime output showing valid signal sources only
+Next Step (After This Directive)
+
+After this directive is completed and verified, we’ll proceed to:
+
+Directive 8.8.4-C.4 — RTB Queue and Metrics Integrity Audit
+to address the Ready-to-Buy queue desynchronization and rejected-signal statistic inflation.

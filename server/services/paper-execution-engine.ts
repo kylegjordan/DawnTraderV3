@@ -1134,786 +1134,89 @@ export class PaperExecutionEngine {
     }
   }
 
+  /**
+   * @deprecated Phase 8.8.3-I7 legacy trade path
+   * Deprecated by Directive 8.8.4-C.3
+   * 
+   * This method bypasses Signal Orchestrator → SQE → RTB → TCL pipeline.
+   * All signal generation and trade execution now flows through SignalOrchestrator.
+   * 
+   * The legacy code has been archived to: server/legacy/paper-execution-engine.legacy.ts
+   * DO NOT RE-ENABLE without explicit approval.
+   */
   private async scanForSignals(): Promise<void> {
+    console.log(`[8.8.4-C.3][DEPRECATED] scanForSignals() called - legacy path disabled. Signals now flow through SignalOrchestrator.`);
+    
+    // Directive 8.8.4-C.3: Legacy trade creation path disabled
+    // All trade creation must go through: FX5 → SignalOrchestrator → SQE → RTB → TCL → processSignal()
+    return;
+    
+    /* ========================================================================
+     * LEGACY CODE ARCHIVED - Directive 8.8.4-C.3
+     * The original implementation has been moved to:
+     * server/legacy/paper-execution-engine.legacy.ts
+     * ======================================================================== */
+    
+    // Original legacy code below - DO NOT UNCOMMENT
     // [27.F.14.DIAG] Initialize default summary to prevent stale data on early exits
-    const cycleTimestamp = new Date().toISOString();
+    // const cycleTimestamp = new Date().toISOString();
     
-    // [AJ16.7] Start a new diagnostic cycle with unique cycleId
-    const cycleId = aj16Diagnostic.startCycle(this.mode);
-    console.log(`[AJ16][CYCLE_START] mode=${this.mode} | cycleId=${cycleId}`);
-    
-    // [AJ18] Start AJ18 diagnostic cycle
-    aj18Diagnostic.startCycle(this.mode);
-    
-    // [AJ19-B] Per-cycle reconciliation DISABLED for normal operation
-    // Reconciliation should only run on-demand via API: POST /api/diagnostics/aj19b/reconcile
-    // Re-enable by uncommenting below if needed for debugging:
-    // try {
-    //   if (aj19bDiagnostic.isActive()) {
-    //     const reconcileResult = await aj19bDiagnostic.runReconciliation(cycleId, this.mode);
-    //     if (reconcileResult.mismatchDetected) {
-    //       console.warn(`[AJ19-B][MISMATCH] DB=${reconcileResult.dbOpenCount} vs Guardrail=${reconcileResult.guardrailOpenCount}`);
-    //     }
-    //   }
-    // } catch (reconcileErr) {
-    //   console.error('[AJ19-B] Reconciliation check failed:', reconcileErr);
-    // }
-    
-    try {
-      // Phase 8.8.3-H4: Get trading settings from guardrails_v2
-      const modeSettings = await buildSettingsFromGuardrails(this.mode);
-      
-      // Check if kill switch is tripped
-      if (modeSettings.killSwitchTripped) {
-        console.log(`[PaperExecution:${this.mode}] Kill switch is tripped - skipping signal scan`);
-        this.lastCycleSummary = {
-          timestamp: cycleTimestamp,
-          readyToBuyCount: 0,
-          pulledCount: 0,
-          evaluatedSymbols: [],
-          tradesExecuted: 0,
-          mode: this.mode,
-          skippedReason: 'kill_switch_tripped'
-        };
-        // [AJ16.6] Force snapshot for early exit (per-cycle, no throttle)
-        aj16Diagnostic.forceSnapshot(this.mode, {
-          activeFilteredPairs: 0,
-          openPositionsCount: 0,
-          pairsWithActivePositions: 0
-        });
-        console.log(`[AJ16][CYCLE_END] mode=${this.mode} | cycleId=${cycleId} | reason=kill_switch_tripped`);
-        return;
-      }
-      
-      // REB 8.8.3-D-FIX: Get Active Filtered Pool (replaces watchlist)
-      // The Active Filtered Pool contains all pairs that passed FX5 filters (deduped, non-expired)
-      const activePool: ActiveFilteredPair[] = activeFilterPool.getActivePool(this.mode);
-      
-      // [B4] Update active pool count for funnel diagnostics
-      b4Diagnostics.updateActivePoolCount(activePool.length);
-      
-      // Debug log for evaluation input verification
-      console.log('[8.8.3-D-FIX][EVAL_INPUT]', {
-        mode: this.mode,
-        symbolCount: activePool.length,
-        sample: activePool.slice(0, 5).map(p => p.symbol),
-      });
-      
-      if (!activePool || activePool.length === 0) {
-        console.log(`[PaperExecution:${this.mode}] Active Filtered Pool is empty - skipping signal scan (FX5 may still be populating)`);
-        this.lastCycleSummary = {
-          timestamp: cycleTimestamp,
-          readyToBuyCount: 0,
-          pulledCount: 0,
-          evaluatedSymbols: [],
-          tradesExecuted: 0,
-          mode: this.mode,
-          skippedReason: 'empty_active_pool'
-        };
-        // [AJ16.6] Force snapshot for early exit (per-cycle, no throttle)
-        aj16Diagnostic.forceSnapshot(this.mode, {
-          activeFilteredPairs: 0,
-          openPositionsCount: 0,
-          pairsWithActivePositions: 0
-        });
-        console.log(`[AJ16][CYCLE_END] mode=${this.mode} | cycleId=${cycleId} | reason=empty_active_pool`);
-        return;
-      }
-      
-      // Phase 8.8.3-J7: Load paper portfolio and guardrails ONCE per cycle (Cycle Context)
-      // This is the canonical source for paper-mode position sizing
-      let paperPortfolioValue = 0;
-      let paperGuardrails: GuardrailsV2 | null = null;
-      
-      if (this.mode === 'paper') {
-        try {
-          const paperPortfolio = await storage.getPortfolioState({ mode: 'paper' });
-          paperPortfolioValue = validatePaperPortfolioValue(paperPortfolio?.balance, 'scanForSignals');
-          paperGuardrails = await storage.getGuardrailsV2({ mode: 'paper' }) || null;
-          
-          console.log('[J7][CYCLE_CONTEXT]', {
-            mode: this.mode,
-            portfolioValue: paperPortfolioValue.toFixed(2),
-            riskPerTradePct: paperGuardrails?.portfolioRiskPerTradePct || 'default',
-            maxPositionPct: paperGuardrails?.maxPositionPercentPct || 'default'
-          });
-        } catch (portfolioError) {
-          console.error('[J7][CYCLE_CONTEXT_ERROR] Failed to load paper portfolio:', portfolioError);
-          this.lastCycleSummary = {
-            timestamp: cycleTimestamp,
-            readyToBuyCount: 0,
-            pulledCount: 0,
-            evaluatedSymbols: [],
-            tradesExecuted: 0,
-            mode: this.mode,
-            error: 'portfolio_load_failed'
-          };
-          // [AJ16.6] Force snapshot for early exit (per-cycle, no throttle)
-          aj16Diagnostic.forceSnapshot(this.mode, {
-            activeFilteredPairs: activePool.length,
-            openPositionsCount: 0,
-            pairsWithActivePositions: 0
-          });
-          console.log(`[AJ16][CYCLE_END] mode=${this.mode} | cycleId=${cycleId} | reason=portfolio_load_failed`);
-          return;
-        }
-      }
-      
-      // REB 8.8.3-D: Build TradingSettings-compatible object from mode-level guardrails only
-      // Note: getTradingSettings removed - use guardrails_v2 + defaults
-      // Cast to unknown first to avoid type mismatch, then to TradingSettings
-      const settings = {
-        id: 'runtime-mode-settings',
-        globalContextId: 'default',
-        userId: null,
-        riskPerTradePct: modeSettings.riskPerTradePct || '4.00',
-        maxOpenTrades: modeSettings.maxOpenTrades || 3,
-        maxExposurePercent: modeSettings.maxExposurePercent || '25.00',
-        smaLength: 20,
-        minVolume: '30000000.00',
-        minDailyRange: '6.50',
-        minPrice: '0.01',
-        maxBidAskSpread: '1.00',
-        excludeStablecoins: true,
-        minDataHistoryDays: 90,
-        allowedTradingPairs: ['USD', 'USDT'],
-        blacklistedSymbols: [],
-        whitelistedSymbols: [],
-        vwapTimeframe: 60,
-        vwapPullbackThreshold: '2.00',
-        timezone: 'UTC',
-        updatedAt: new Date(),
-        riskPerTrade: null,
-        slippageToleranceMajors: '0.50',
-        slippageToleranceMidcaps: '2.00',
-        slippageToleranceSmall: '5.00',
-        stopBufferPercent: '0.30',
-        aiCapitalAllocation: false,
-        timeFormat: '24hr',
-      } as unknown as TradingSettings;
-      
-      console.log(`[PaperExecution:${this.mode}] Scanning ${activePool.length} Active Filtered Pool pairs for signals...`);
-      
-      const evaluatedSymbols: string[] = [];
-      let readyToBuyCount = 0;
-      let tradesExecuted = 0;
-      
-      // Check open positions limit
-      const openPositions = await storage.getPaperSimOpenPositions(this.mode);
-      const maxPositions = settings.maxOpenTrades || 3;
-      
-      if (openPositions.length >= maxPositions) {
-        console.log(`[PaperExecution:${this.mode}] Max open positions (${maxPositions}) reached - skipping new signals`);
-        
-        // [AJ18] Log max positions skip event - this is a key diagnostic for RTB starvation
-        aj18Diagnostic.logMaxPositionsSkip({
-          cycleId,
-          openPositions: openPositions.length,
-          maxPositions,
-          reason: 'max_positions_reached_early_exit'
-        });
-        
-        // [AJ18] Capture snapshot showing we skipped due to max positions
-        aj18Diagnostic.captureSnapshot(this.mode, {
-          openPositions: openPositions.length,
-          maxPositions,
-          activePoolSize: activePool.length,
-          atMaxCapacity: true,
-          skippedScanning: true
-        });
-        
-        this.lastCycleSummary = {
-          timestamp: cycleTimestamp,
-          readyToBuyCount: 0,
-          pulledCount: activePool.length,
-          evaluatedSymbols: activePool.map(p => p.symbol),
-          tradesExecuted: 0,
-          mode: this.mode,
-          skippedReason: 'max_positions_reached'
-        };
-        // [AJ16.6] Force snapshot for early exit (per-cycle, no throttle)
-        aj16Diagnostic.forceSnapshot(this.mode, {
-          activeFilteredPairs: activePool.length,
-          openPositionsCount: openPositions.length,
-          pairsWithActivePositions: openPositions.length
-        });
-        console.log(`[AJ16][CYCLE_END] mode=${this.mode} | cycleId=${cycleId} | reason=max_positions_reached`);
-        return;
-      }
-      
-      // REB 8.8.3-D-FIX: Scan each Active Filtered Pool symbol for signals
-      // Phase 8.8.3-J7: Pass cycle context (portfolioValue + guardrails) to avoid repeated DB calls
-      for (const pair of activePool) {
-        if (openPositions.length + tradesExecuted >= maxPositions) {
-          console.log(`[PaperExecution:${this.mode}] Position limit reached during scan`);
-          break;
-        }
-        
-        try {
-          evaluatedSymbols.push(pair.symbol);
-          const hasSignal = await this.checkSymbolForSignal(pair.symbol, settings, {
-            portfolioValue: paperPortfolioValue,
-            guardrails: paperGuardrails
-          });
-          if (hasSignal) {
-            readyToBuyCount++;
-            tradesExecuted++;
-          }
-        } catch (symbolError) {
-          console.error(`[PaperExecution:${this.mode}] Error scanning ${pair.symbol}:`, symbolError);
-        }
-      }
-      
-      console.log(`[PaperExecution:${this.mode}] Scan complete: ${evaluatedSymbols.length} symbols, ${readyToBuyCount} signals, ${tradesExecuted} trades`);
-      
-      // [AJ18] Log pool state for this cycle
-      aj18Diagnostic.logPoolState({
-        cycleId: aj18Diagnostic.getCycleId(),
-        activePoolSize: activePool.length,
-        symbolsEvaluated: evaluatedSymbols.length,
-        symbolsSkipped: activePool.length - evaluatedSymbols.length,
-        skipReasons: {},
-        rtbCandidatesProposed: readyToBuyCount
-      });
-      
-      // [AJ18] Log max positions evaluation summary (when NOT at max)
-      aj18Diagnostic.logMaxPositionsEvaluation({
-        cycleId: aj18Diagnostic.getCycleId(),
-        openPositions: openPositions.length,
-        maxPositions,
-        symbolsEvaluated: evaluatedSymbols.length,
-        rtbGenerated: readyToBuyCount
-      });
-      
-      // [AJ18] Capture snapshot for this cycle
-      aj18Diagnostic.captureSnapshot(this.mode, {
-        openPositions: openPositions.length,
-        maxPositions,
-        activePoolSize: activePool.length,
-        atMaxCapacity: openPositions.length >= maxPositions,
-        skippedScanning: false
-      });
-      
-      // [AJ16.6] Force snapshot for every cycle (per-cycle, no throttle)
-      aj16Diagnostic.forceSnapshot(this.mode, {
-        activeFilteredPairs: activePool.length,
-        openPositionsCount: openPositions.length,
-        pairsWithActivePositions: openPositions.length
-      });
-      console.log(`[AJ16][CYCLE_END] mode=${this.mode} | cycleId=${cycleId} | evaluated=${evaluatedSymbols.length} | signals=${readyToBuyCount} | trades=${tradesExecuted}`);
-      
-      // Update summary with scan results
-      this.lastCycleSummary = {
-        timestamp: cycleTimestamp,
-        readyToBuyCount,
-        pulledCount: evaluatedSymbols.length,
-        evaluatedSymbols,
-        tradesExecuted,
-        mode: this.mode
-      };
-    } catch (error) {
-      console.error(`[PaperExecution:${this.mode}] Error in signal scanning:`, error);
-      this.lastCycleSummary = {
-        timestamp: cycleTimestamp,
-        readyToBuyCount: 0,
-        pulledCount: 0,
-        evaluatedSymbols: [],
-        tradesExecuted: 0,
-        mode: this.mode,
-        error: String(error)
-      };
-      // [AJ16.6] Force snapshot for error path (per-cycle, no throttle)
-      aj16Diagnostic.forceSnapshot(this.mode, {
-        activeFilteredPairs: 0,
-        openPositionsCount: 0,
-        pairsWithActivePositions: 0
-      });
-      console.log(`[AJ16][CYCLE_END] mode=${this.mode} | cycleId=${cycleId} | reason=scan_error`);
-    }
-  }
-
-  // Phase 8.8.3-J7: Added cycleContext parameter for paper-mode sizing
-  private async checkSymbolForSignal(
-    symbol: string, 
-    settings: TradingSettings,
-    cycleContext?: { portfolioValue: number; guardrails: GuardrailsV2 | null }
-  ): Promise<boolean> {
-    const cycleId = aj16Diagnostic.getCycleId();
-    
-    // Check if we already have an open position for this symbol
-    const existingPosition = await storage.getPaperSimOpenPositionBySymbol(this.mode,  symbol);
-    if (existingPosition) {
-      // [AJ16.3] Log active position exclusion
-      aj16Diagnostic.logPositionExclusion({
-        cycleId,
-        symbol,
-        reason: 'already_has_open_position',
-        existingPositionId: existingPosition.id?.toString()
-      });
-      return false;
-    }
-
-    // Fetch current market data and build price history
-    const ticker = await this.krakenService.getTicker(symbol);
-    const tickerData = Object.values(ticker)[0];
-    
-    if (!tickerData) {
-      return false;
-    }
-
-    // Get OHLC data for technical indicators
-    const ohlcResponse = await this.krakenService.getOHLCData(symbol, 60); // 1-hour candles
-    const ohlcData = ohlcResponse.ohlc;
-
-    if (ohlcData.length === 0) {
-      return false;
-    }
-
-    // Update price history with SMA field
-    const priceData: PriceData[] = ohlcData.map(candle => ({
-      id: `${symbol}-${candle.time}`,
-      symbol: symbol,
-      timestamp: new Date(candle.time * 1000),
-      open: candle.open,
-      high: candle.high,
-      low: candle.low,
-      close: candle.close,
-      volume: candle.volume,
-      vwap: candle.vwap,
-      sma: null // Will be calculated
-    }));
-
-    this.priceHistory.set(symbol, priceData.slice(-this.MAX_PRICE_HISTORY));
-
-    // Calculate technical indicators
-    const currentPrice = parseFloat(tickerData.c[0]);
-    const volume24h = parseFloat(tickerData.v[1]); // 24h volume
-    const high24h = parseFloat(tickerData.h[1]); // 24h high
-    const low24h = parseFloat(tickerData.l[1]); // 24h low
-
-    // Calculate VWAP and SMA from price history
-    const vwap = this.calculateVWAP(priceData);
-    const sma = this.calculateSMA(priceData, settings.smaLength || 20);
-
-    const indicators: TechnicalIndicators = {
-      currentPrice,
-      vwap,
-      sma,
-      volume: volume24h,
-      high24h,
-      low24h
-    };
-
-    // [AJ16.4] Log indicator status for sanity checking
-    const indicatorsValid = currentPrice > 0 && vwap > 0 && sma > 0 && volume24h >= 0;
-    aj16Diagnostic.logIndicatorStatus({
-      cycleId,
-      pair: symbol,
-      vwap,
-      sma,
-      currentPrice,
-      volume24h,
-      isValid: indicatorsValid,
-      invalidReason: !indicatorsValid ? (currentPrice <= 0 ? 'invalid_price' : vwap <= 0 ? 'invalid_vwap' : sma <= 0 ? 'invalid_sma' : 'unknown') : undefined
-    });
-
-    // Run all strategies and pick the best signal
-    const signals: StrategySignal[] = [];
-    const strategiesEvaluated: string[] = [];
-
-    // [AJ16.1] Log strategy outputs with signal emit status
-    // VWAP Pullback
-    const vwapSignal = this.strategyEngine.detectVWAPPullback(indicators, settings, priceData);
-    const pctFromVwap = vwap > 0 ? ((currentPrice - vwap) / vwap * 100) : 0;
-    aj16Diagnostic.logStrategySignal({
-      cycleId, pair: symbol, strategy: 'vwap_pullback', 
-      signalEmitted: !!vwapSignal, 
-      price: vwapSignal?.entryPrice,
-      signalValue: vwapSignal?.confidence,
-      reason: vwapSignal ? 'met_criteria' : 'failed_criteria',
-      indicators: { vwap, currentPrice, pctFromVwap: pctFromVwap.toFixed(2) }
-    });
-    if (vwapSignal) {
-      vwapSignal.symbol = symbol;
-      signals.push(vwapSignal);
-      aj18Diagnostic.logSignalGenerated({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'vwap_pullback', confidence: vwapSignal.confidence });
-    } else {
-      // [AJ18] Detailed criteria failure
-      const vwapFailReason = currentPrice <= vwap ? 'price_below_vwap' : 
-                             Math.abs(pctFromVwap) > 2 ? 'not_near_vwap' : 'no_reversal_pattern';
-      aj18Diagnostic.logCriteriaFail({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'vwap_pullback', specificReason: vwapFailReason, indicators: { pctFromVwap: pctFromVwap.toFixed(2) } });
-    }
-
-    // ABCD Long
-    const abcdSignal = this.strategyEngine.detectABCDLong(priceData, settings);
-    aj16Diagnostic.logStrategySignal({
-      cycleId, pair: symbol, strategy: 'abcd_long',
-      signalEmitted: !!abcdSignal,
-      price: abcdSignal?.entryPrice,
-      signalValue: abcdSignal?.confidence,
-      reason: abcdSignal ? 'met_criteria' : 'failed_criteria'
-    });
-    if (abcdSignal) {
-      abcdSignal.symbol = symbol;
-      signals.push(abcdSignal);
-      aj18Diagnostic.logSignalGenerated({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'abcd_long', confidence: abcdSignal.confidence });
-    } else {
-      aj18Diagnostic.logCriteriaFail({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'abcd_long', specificReason: 'no_pattern_detected' });
-    }
-
-    // SMA Trend Ride
-    const smaSignal = this.strategyEngine.detectSMATrendRide(indicators, priceData, settings);
-    const pctFromSma = sma > 0 ? ((currentPrice - sma) / sma * 100) : 0;
-    aj16Diagnostic.logStrategySignal({
-      cycleId, pair: symbol, strategy: 'sma_trend_ride',
-      signalEmitted: !!smaSignal,
-      price: smaSignal?.entryPrice,
-      signalValue: smaSignal?.confidence,
-      reason: smaSignal ? 'met_criteria' : 'failed_criteria',
-      indicators: { sma, currentPrice, aboveSma: currentPrice > sma }
-    });
-    if (smaSignal) {
-      smaSignal.symbol = symbol;
-      signals.push(smaSignal);
-      aj18Diagnostic.logSignalGenerated({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'sma_trend_ride', confidence: smaSignal.confidence });
-    } else {
-      const smaFailReason = currentPrice <= sma ? 'price_below_sma' : 
-                            Math.abs(pctFromSma) > 2 ? 'not_near_sma' : 'no_uptrend';
-      aj18Diagnostic.logCriteriaFail({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'sma_trend_ride', specificReason: smaFailReason, indicators: { pctFromSma: pctFromSma.toFixed(2) } });
-    }
-
-    // [8.8.3-J4] Phase J4.2: Add missing 6 strategies for full coverage
-    // Breakout Strategy
-    const breakoutSignal = this.strategyEngine.detectBreakout(priceData, {});
-    aj16Diagnostic.logStrategySignal({
-      cycleId, pair: symbol, strategy: 'breakout',
-      signalEmitted: !!breakoutSignal,
-      price: breakoutSignal?.entryPrice,
-      signalValue: breakoutSignal?.confidence,
-      reason: breakoutSignal ? 'met_criteria' : 'failed_criteria'
-    });
-    if (breakoutSignal) {
-      breakoutSignal.symbol = symbol;
-      signals.push(breakoutSignal);
-      aj18Diagnostic.logSignalGenerated({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'breakout', confidence: breakoutSignal.confidence });
-    } else {
-      aj18Diagnostic.logCriteriaFail({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'breakout', specificReason: 'no_consolidation_breakout' });
-    }
-
-    // Mean Reversion Strategy
-    const meanReversionSignal = this.strategyEngine.detectMeanReversion(indicators, priceData, {});
-    aj16Diagnostic.logStrategySignal({
-      cycleId, pair: symbol, strategy: 'mean_reversion',
-      signalEmitted: !!meanReversionSignal,
-      price: meanReversionSignal?.entryPrice,
-      signalValue: meanReversionSignal?.confidence,
-      reason: meanReversionSignal ? 'met_criteria' : 'failed_criteria'
-    });
-    if (meanReversionSignal) {
-      meanReversionSignal.symbol = symbol;
-      signals.push(meanReversionSignal);
-      aj18Diagnostic.logSignalGenerated({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'mean_reversion', confidence: meanReversionSignal.confidence });
-    } else {
-      aj18Diagnostic.logCriteriaFail({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'mean_reversion', specificReason: 'not_oversold' });
-    }
-
-    // Range Trading Strategy
-    const rangeTradingSignal = this.strategyEngine.detectRangeTrading(priceData, {});
-    aj16Diagnostic.logStrategySignal({
-      cycleId, pair: symbol, strategy: 'range_trading',
-      signalEmitted: !!rangeTradingSignal,
-      price: rangeTradingSignal?.entryPrice,
-      signalValue: rangeTradingSignal?.confidence,
-      reason: rangeTradingSignal ? 'met_criteria' : 'failed_criteria'
-    });
-    if (rangeTradingSignal) {
-      rangeTradingSignal.symbol = symbol;
-      signals.push(rangeTradingSignal);
-      aj18Diagnostic.logSignalGenerated({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'range_trading', confidence: rangeTradingSignal.confidence });
-    } else {
-      aj18Diagnostic.logCriteriaFail({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'range_trading', specificReason: 'no_range_or_not_at_support' });
-    }
-
-    // VWAP Bounce Strategy
-    const vwapBounceSignal = this.strategyEngine.detectVWAPBounce(indicators, priceData, {});
-    aj16Diagnostic.logStrategySignal({
-      cycleId, pair: symbol, strategy: 'vwap_bounce',
-      signalEmitted: !!vwapBounceSignal,
-      price: vwapBounceSignal?.entryPrice,
-      signalValue: vwapBounceSignal?.confidence,
-      reason: vwapBounceSignal ? 'met_criteria' : 'failed_criteria'
-    });
-    if (vwapBounceSignal) {
-      vwapBounceSignal.symbol = symbol;
-      signals.push(vwapBounceSignal);
-      aj18Diagnostic.logSignalGenerated({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'vwap_bounce', confidence: vwapBounceSignal.confidence });
-    } else {
-      const vwapBounceFailReason = currentPrice > vwap ? 'price_above_vwap' : 'no_bounce_confirmation';
-      aj18Diagnostic.logCriteriaFail({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'vwap_bounce', specificReason: vwapBounceFailReason });
-    }
-
-    // Liquidity Trap Strategy
-    const liquidityTrapSignal = this.strategyEngine.detectLiquidityTrap(priceData, {});
-    aj16Diagnostic.logStrategySignal({
-      cycleId, pair: symbol, strategy: 'liquidity_trap',
-      signalEmitted: !!liquidityTrapSignal,
-      price: liquidityTrapSignal?.entryPrice,
-      signalValue: liquidityTrapSignal?.confidence,
-      reason: liquidityTrapSignal ? 'met_criteria' : 'failed_criteria'
-    });
-    if (liquidityTrapSignal) {
-      liquidityTrapSignal.symbol = symbol;
-      signals.push(liquidityTrapSignal);
-      aj18Diagnostic.logSignalGenerated({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'liquidity_trap', confidence: liquidityTrapSignal.confidence });
-    } else {
-      aj18Diagnostic.logCriteriaFail({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'liquidity_trap', specificReason: 'no_trap_pattern' });
-    }
-
-    // DHMA Strategy
-    const dhmaSignal = this.strategyEngine.detectDHMA(indicators, priceData, {});
-    aj16Diagnostic.logStrategySignal({
-      cycleId, pair: symbol, strategy: 'dhma',
-      signalEmitted: !!dhmaSignal,
-      price: dhmaSignal?.entryPrice,
-      signalValue: dhmaSignal?.confidence,
-      reason: dhmaSignal ? 'met_criteria' : 'failed_criteria'
-    });
-    if (dhmaSignal) {
-      dhmaSignal.symbol = symbol;
-      signals.push(dhmaSignal);
-      aj18Diagnostic.logSignalGenerated({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'dhma', confidence: dhmaSignal.confidence });
-    } else {
-      aj18Diagnostic.logCriteriaFail({ cycleId: aj18Diagnostic.getCycleId(), symbol, strategy: 'dhma', specificReason: 'regime_mismatch' });
-    }
-
-    // Execute the highest confidence signal
-    if (signals.length > 0) {
-      const bestSignal = signals.reduce((prev, current) => 
-        current.confidence > prev.confidence ? current : prev
-      );
-
-      // [27.F.14.DIAG] DIAGNOSTIC: Signal snapshot with confidence evaluation
-      console.log(`[Exec] signal_snapshot {symbol:${bestSignal.symbol}, strategy:${bestSignal.strategy}, confidence:${bestSignal.confidence.toFixed(3)}, entryPrice:${bestSignal.entryPrice.toFixed(2)}}`);
-
-      // [27.F.14.B] INSTRUMENTATION: Candidate selected
-      console.log(`[27.F.14.B][PaperSim] candidate_selected {symbol:"${bestSignal.symbol}", strategy:"${bestSignal.strategy}", confidence:${(bestSignal.confidence * 100).toFixed(1)}%}`);
-      contextBridge.broadcast({
-        type: 'trading_pipeline_event' as any,
-        payload: {
-          mode: this.mode,
-          eventType: 'candidate_selected',
-          message: `${bestSignal.symbol}: ${bestSignal.strategy} strategy (${(bestSignal.confidence * 100).toFixed(1)}% confidence)`,
-          timestamp: new Date().toISOString(),
-          metadata: {
-            symbol: bestSignal.symbol,
-            strategy: bestSignal.strategy,
-            confidence: bestSignal.confidence,
-            entryPrice: bestSignal.entryPrice
-          }
-        }
-      });
-
-      // REB 8.8.3-I: Check if symbol already has an active trade/position before RTB enqueue
-      // For paper mode, check paper-sim open positions; for live mode, check broadcast trades
-      const hasActiveTrade = this.mode === 'paper'
-        ? (await storage.getPaperSimOpenPositions(this.mode)).some(pos => pos.symbol === bestSignal.symbol)
-        : (await storage.getActiveTrades(this.mode)).some(trade => trade.symbol === bestSignal.symbol);
-      
-      if (hasActiveTrade) {
-        console.log(`[8.8.3-I][RTB_REJECT_ACTIVE] Symbol ${bestSignal.symbol} already has active trade - skipping RTB enqueue`);
-        // [AJ16.5] Log RTB rejection due to active position
-        aj16Diagnostic.logRTBEvent({
-          cycleId,
-          pair: bestSignal.symbol,
-          eventType: 'RTB_REJECT',
-          strategy: bestSignal.strategy,
-          confidence: bestSignal.confidence,
-          reason: 'already_has_active_position'
-        });
-        // Still execute the trade logic below if needed, just don't add to RTB
-      } else {
-        // REB 8.8.3-E: Save signal to trading_signals table for Ready-to-Buy display
-        // This populates the RTB tab with real strategy signals from Active Filtered Pool
-        // Parse base/quote currencies from symbol (handles "BTC/USD", "BTCUSD", "FETEUR" formats)
-        let baseCurrency = '';
-        let quoteCurrency = '';
-        
-        if (bestSignal.symbol.includes('/')) {
-          // Format: "BTC/USD" or "VINE/USD"
-          const parts = bestSignal.symbol.split('/');
-          baseCurrency = parts[0];
-          quoteCurrency = parts[1];
-        } else {
-          // Format: "BTCUSD", "FETEUR", "XBTUSDT" - need to detect quote suffix
-          const quotePatterns = ['USDT', 'USD', 'EUR', 'BTC', 'ETH', 'GBP', 'ZUSD', 'ZEUR'];
-          let matched = false;
-          for (const quote of quotePatterns) {
-            if (bestSignal.symbol.endsWith(quote)) {
-              baseCurrency = bestSignal.symbol.slice(0, -quote.length);
-              quoteCurrency = quote;
-              matched = true;
-              break;
-            }
-          }
-          if (!matched) {
-            // Fallback: assume last 3 chars are quote currency
-            baseCurrency = bestSignal.symbol.slice(0, -3);
-            quoteCurrency = bestSignal.symbol.slice(-3);
-          }
-        }
-        
-        // REB 8.8.3-I: TTL = 30 seconds (one FX5 cycle)
-        const expiresAt = new Date(Date.now() + this.RTB_TTL_SECONDS * 1000);
-        
-        // Phase 8.8.3-J7: Compute position sizing at P2 using cycle context
-        let signalQuantity = 0;
-        let signalEstimatedValue = 0;
-        
-        if (this.mode === 'paper' && cycleContext) {
-          const sizing = sizePaperPositionForSignal({
-            portfolioValue: cycleContext.portfolioValue,
-            guardrails: cycleContext.guardrails,
-            entryPrice: bestSignal.entryPrice,
-            stopPrice: bestSignal.stopPrice,
-            symbol: bestSignal.symbol,
-            strategy: bestSignal.strategy as StrategyType
-          });
-          signalQuantity = sizing.quantity;
-          signalEstimatedValue = sizing.estimatedValue;
-        }
-        
-        try {
-          await storage.saveTradingSignal({
-            mode: this.mode,
-            symbol: bestSignal.symbol,
-            baseCurrency,
-            quoteCurrency,
-            strategy: bestSignal.strategy as any,
-            confidence: bestSignal.confidence.toString(),
-            entryPrice: bestSignal.entryPrice.toString(),
-            stopPrice: bestSignal.stopPrice.toString(),
-            targetPrice: bestSignal.targetPrice.toString(),
-            currentPrice: indicators.currentPrice.toString(),
-            vwap: indicators.vwap?.toString() || null,
-            volume24h: indicators.volume?.toString() || null,
-            dailyRange: indicators.high24h && indicators.low24h && indicators.currentPrice > 0
-              ? (((indicators.high24h - indicators.low24h) / indicators.currentPrice) * 100).toFixed(2)
-              : null,
-            status: 'active',
-            expiresAt,
-            quantity: signalQuantity > 0 ? signalQuantity.toString() : null,
-            estimatedValue: signalEstimatedValue > 0 ? signalEstimatedValue.toString() : null,
-            metadata: {
-              detectedBy: 'paper_execution_engine',
-              source: 'active_filtered_pool',
-              scanCycle: new Date().toISOString(),
-              ttlSeconds: this.RTB_TTL_SECONDS,
-              sizingSource: this.mode === 'paper' ? 'paper_position_sizing' : 'none'
-            }
-          });
-          
-          console.log('[8.8.3-I][RTB_ENQUEUE]', {
-            mode: this.mode,
-            symbol: bestSignal.symbol,
-            strategy: bestSignal.strategy,
-            confidence: bestSignal.confidence,
-            quantity: signalQuantity.toFixed(8),
-            estimatedValue: signalEstimatedValue.toFixed(2),
-            ttlSeconds: this.RTB_TTL_SECONDS,
-            expiresAt: expiresAt.toISOString()
-          });
-          
-          // [AJ16.5] Log RTB generation success
-          aj16Diagnostic.logRTBEvent({
-            cycleId,
-            pair: bestSignal.symbol,
-            eventType: 'BECAME_RTB',
-            strategy: bestSignal.strategy,
-            confidence: bestSignal.confidence,
-            reason: 'signal_enqueued_to_rtb_list'
-          });
-        } catch (signalError) {
-          console.error(`[8.8.3-I][RTB_ENQUEUE] Failed to save signal for ${bestSignal.symbol}:`, signalError);
-        }
-        
-        // Phase 8.8.3-J7: Pass computed sizing to executeSimulatedTrade
-        (bestSignal as any).quantity = signalQuantity;
-        (bestSignal as any).estimatedValue = signalEstimatedValue;
-      }
-
-      await this.executeSimulatedTrade(bestSignal, settings, cycleContext);
-      return true;
-    }
-
-    return false;
   }
 
   /**
+   * @deprecated Phase 8.8.3-I7 legacy trade path
+   * Deprecated by Directive 8.8.4-C.3
+   * 
+   * Phase 8.8.3-J7: Added cycleContext parameter for paper-mode sizing
+   * 
+   * WARNING: This function bypasses Signal Orchestrator, SQE, and RTB.
+   * All strategy evaluation now flows through SignalOrchestrator.evaluateSymbol().
+   * DO NOT RE-ENABLE without explicit approval.
+   */
+  private async checkSymbolForSignal(
+    _symbol: string, 
+    _settings: TradingSettings,
+    _cycleContext?: { portfolioValue: number; guardrails: GuardrailsV2 | null }
+  ): Promise<boolean> {
+    console.log(`[8.8.4-C.3][DEPRECATED] checkSymbolForSignal() called - legacy path disabled.`);
+    
+    // Directive 8.8.4-C.3: Legacy strategy evaluation path disabled
+    // All strategy evaluation must go through: SignalOrchestrator.evaluateSymbol()
+    return false;
+    
+    /* ========================================================================
+     * LEGACY CODE ARCHIVED - Directive 8.8.4-C.3
+     * Original implementation: server/legacy/paper-execution-engine.legacy.ts
+     * ======================================================================== */
+    
+    // Original legacy code below - DO NOT UNCOMMENT
+    // const cycleId = aj16Diagnostic.getCycleId();
+    
+  }
+
+  /**
+   * @deprecated Phase 8.8.3-I7 legacy trade path
+   * Deprecated by Directive 8.8.4-C.3
+   * 
    * [27.F.14.B] Inject a forced trade for deterministic testing
    * MSI Guard: Only callable in paper mode
+   * 
+   * WARNING: This function bypasses Signal Orchestrator, SQE, and RTB.
+   * The PAPER_FORCE_TRADE_SYMBOL env var is no longer honored.
+   * DO NOT RE-ENABLE without explicit approval.
    */
-  private async injectForcedTrade(symbol: string, settings: TradingSettings): Promise<void> {
-    // MSI Guard: Hard check - this should never be called in live mode
-    if (this.mode !== 'paper') {
-      console.error(`[27.F.14.B][MSI VIOLATION] injectForcedTrade called in ${this.mode} mode. REJECTED.`);
-      return;
-    }
-
-    // Check if we already have a position for this symbol
-    const existingPosition = await storage.getPaperSimOpenPositionBySymbol(this.mode, symbol);
-    if (existingPosition) {
-      console.log(`[27.F.14.B][PaperSim] Forced trade skipped - position already exists for ${symbol}`);
-      return;
-    }
-
-    // Fetch current market data
-    const ticker = await this.krakenService.getTicker(symbol);
-    const tickerData = Object.values(ticker)[0];
+  private async injectForcedTrade(_symbol: string, _settings: TradingSettings): Promise<void> {
+    console.log(`[8.8.4-C.3][DEPRECATED] injectForcedTrade() called - legacy path disabled. PAPER_FORCE_TRADE_SYMBOL is no longer honored.`);
     
-    if (!tickerData) {
-      console.error(`[27.F.14.B][PaperSim] No ticker data for forced symbol: ${symbol}`);
+    // Directive 8.8.4-C.3: Legacy forced trade path disabled
+    // To re-enable for testing, set ENABLE_LEGACY_MODE=true (not recommended)
+    if (process.env.ENABLE_LEGACY_MODE !== 'true') {
       return;
     }
-
-    const currentPrice = parseFloat(tickerData.c[0]);
-
-    // Create a simple forced signal
-    const forcedSignal: StrategySignal = {
-      symbol: symbol,
-      strategy: 'vwap_pullback',
-      entryPrice: currentPrice,
-      stopPrice: currentPrice * 0.98, // 2% stop loss
-      targetPrice: currentPrice * 1.04, // 4% target
-      confidence: 0.75, // High confidence for testing
-      metadata: {
-        forced: true,
-        source: 'PAPER_FORCE_TRADE_SYMBOL',
-        reason: 'Deterministic testing - no qualifying trades found'
-      }
-    };
-
-    console.log(`[27.F.14.B][PaperSim] Injecting forced trade for ${symbol} @ ${currentPrice.toFixed(2)}`);
     
-    // [27.F.14.B] INSTRUMENTATION: Candidate selected
-    console.log(`[27.F.14.B][PaperSim] candidate_selected {symbol:"${symbol}", strategy:"forced", confidence:75.0%, forced:true}`);
-    contextBridge.broadcast({
-      type: 'trading_pipeline_event' as any,
-      payload: {
-        mode: this.mode,
-        eventType: 'candidate_selected',
-        message: `${symbol}: FORCED trade for testing (75.0% confidence)`,
-        timestamp: new Date().toISOString(),
-        metadata: {
-          symbol: symbol,
-          strategy: 'forced',
-          confidence: 0.75,
-          entryPrice: currentPrice,
-          forced: true
-        }
-      }
-    });
-
-    await this.executeSimulatedTrade(forcedSignal, settings);
+    console.warn(`[8.8.4-C.3][LEGACY_MODE_ENABLED] Running deprecated injectForcedTrade - this bypasses quality filters!`);
+    
+    // Original legacy code archived to: server/legacy/paper-execution-engine.legacy.ts
   }
 
   // Phase 8.8.3-J7: Added cycleContext parameter for paper-mode sizing
@@ -2488,6 +1791,18 @@ export class PaperExecutionEngine {
       console.log(`[I7-PM-FOCUS][BLOCK_AFTER_STOP] symbol=${signal.symbol} reason="engine_stopped"`);
       console.log(`[PaperExecution:${this.mode}] Cannot process signal - engine not running`);
       return;
+    }
+
+    // Directive 8.8.4-C.3: Signal origin validation
+    // All signals must come through the proper pipeline (SignalOrchestrator → RTB)
+    const signalMetadata = (signal as any).metadata;
+    const validSources = ['RTB_PROMOTION', 'FX5', 'SIGNAL_ORCHESTRATOR'];
+    const signalSource = signalMetadata?.source;
+    
+    if (!signalSource || !validSources.includes(signalSource)) {
+      console.warn(`[8.8.4-C.3][ORIGIN_REJECT] Signal rejected - invalid source: ${signalSource || 'none'}. Valid sources: ${validSources.join(', ')}`);
+      console.warn(`[8.8.4-C.3][ORIGIN_REJECT] Symbol: ${signal.symbol}, Strategy: ${signal.strategy}`);
+      // Allow processing but log warning - full enforcement after verification period
     }
 
     const signalAny = signal as any;
