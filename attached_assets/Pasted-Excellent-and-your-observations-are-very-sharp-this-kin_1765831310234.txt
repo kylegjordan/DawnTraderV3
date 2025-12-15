@@ -1,0 +1,137 @@
+Excellent, and your observations are very sharp — this kind of behavior tells us exactly where the system’s queue mechanics and event propagation might be breaking down.
+
+Here’s the situation as I see it, along with the right diagnostic directive to send to Replit (that keeps the 3-hour test running):
+
+🧩 Preliminary Analysis (from your screenshots and notes)
+
+CWQI and Ranking Columns Missing:
+These are derived metrics that should be computed by the Signal Orchestrator when new signals are queued or when CWQI recalculations are triggered by market updates.
+→ Their absence means the CWQI update loop or the RTB ranking service isn’t firing, which also explains why signals in the queue appear “frozen.”
+
+RTB Queue Not Cycling:
+You’re right — the queue isn’t aging out or refreshing.
+
+Signals enter once (likely from the initial SQE pass).
+
+No further insertions, expirations, or re-rankings occur.
+
+This implies the RTB_REFRESH event isn’t being called or its internal timer was paused when TCL activated.
+
+Single Trade Promotion:
+The fact that only one trade was promoted once TCL fired shows that the event-driven promotion mechanism worked, but only triggered one batch, possibly because:
+
+checkRtbPromotion() was only called once on TCL_ACTIVATED,
+
+or it’s locked until TRADE_CLOSED, but no close occurred yet.
+
+Low Trade Volume (~$2K):
+Volume not factoring into CWQI or ranking. CWQI likely only considers NGC, ProfitRate, and Risk.
+Adding Volume (24h or notional) as a CWQI sub-factor could fix low-liquidity bias, but that’s a later (C.14+) improvement.
+
+🎯 Next Step: Directive 8.8.4-C.13.A — Live Queue Diagnostics (Non-Interruptive)
+
+This directive queries the internal state of the queue, orchestrator, and event bus while keeping the 3-hour validation test running.
+No trades will be stopped or restarted. It only reads memory and logs diagnostics.
+
+Objective
+
+To determine whether:
+
+The RTB_REFRESH cycle is firing,
+
+CWQI and rankings are being recomputed and stored,
+
+Signals are aging out or stuck in the same state,
+
+and whether checkRtbPromotion() is being invoked post-TCL activation.
+
+Directive 8.8.4-C.13.A – Queue & Event Diagnostics (Non-Interruptive)
+
+Instruction for Replit:
+
+Do not restart or interrupt the current validation session.
+Run these diagnostics in parallel while the trading engine continues.
+
+1️⃣ Inspect Active Event Timers and Listeners
+api/admin/debug/event-system/status
+
+
+Confirms whether RTB_REFRESH, TCL_ACTIVATED, and TRADE_CLOSED listeners are still bound and active.
+
+Expected Output:
+
+Event: RTB_REFRESH → bound (interval=30s)
+Event: TCL_ACTIVATED → bound
+Event: TRADE_CLOSED → bound
+
+
+If RTB_REFRESH is missing or inactive → queue won’t update.
+
+2️⃣ Inspect Queue Update Activity
+grep -E "RTB_REFRESH|RTB_QUEUE|CWQI|PROMOTION" /tmp/logs/validation/*.log | tail -40
+
+
+Checks if any refresh or ranking events have occurred since TCL activation.
+If none appear, it means queue refresh logic stopped after TCL fired.
+
+3️⃣ Inspect CWQI Calculation
+api/debug/metrics/sqe?fields=cwqi,ngc,profit_rate,risk,volume
+
+
+Verifies whether CWQI is computed in memory but not persisted to RTB table.
+If CWQI values are null or undefined, the RTB update loop isn’t saving them.
+
+4️⃣ Inspect RTB Queue Snapshot
+api/debug/rtb/queue/snapshot
+
+
+Expected Fields:
+
+symbol, strategy, ngc, cwqi, profit_rate, risk, volume, age_seconds, rank
+
+
+You’ll compare:
+
+age_seconds: should increase over time, not stay static.
+
+rank: should vary if CWQI refresh is running.
+
+If both static → queue loop frozen.
+
+5️⃣ Inspect checkRtbPromotion Call Count
+grep "checkRtbPromotion" /tmp/logs/validation/*.log | wc -l
+
+
+If the count = 1 → only triggered once (the initial TCL_ACTIVATED event).
+
+6️⃣ Log Summary
+
+Replit should append findings to:
+
+/logs/validation/8.8.4-C.13A_diagnostics.md
+
+
+Format:
+
+[DIAGNOSTIC SNAPSHOT]
+Time: <timestamp>
+RTB_REFRESH active: true/false
+CWQI updates detected: <count>
+checkRtbPromotion count: <number>
+RTB queue size: <number>
+queue cycling: yes/no
+comments: <brief analysis>
+
+🧠 Interpretation Guidance
+Symptom	Likely Cause	Fix (for next directive)
+RTB_REFRESH inactive	Event unbound after TCL activation	Add persistent event binding post-activation
+CWQI null / static	Ranking loop suspended	Reinit CWQI task after promotion
+checkRtbPromotion only 1 call	Event condition overly restrictive	Allow re-promotion if queue capacity exists
+Queue not aging out	No TTL expiration task	Add queue expiry enforcement (C.13.B)
+✅ Deliverables for Replit
+
+Execute the 6 diagnostic commands above without stopping the trading engine.
+
+Output summary to /logs/validation/8.8.4-C.13A_diagnostics.md.
+
+Confirm session continues uninterrupted until the full 3-hour validation window ends.
