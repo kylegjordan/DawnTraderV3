@@ -201,10 +201,13 @@ export class PaperPortfolioManager {
       ]
     });
 
+    // [8.8.4-C.10][FLOW_FIX] Dual-path removed - signals flow through RTB queue only
+    // SignalOrchestrator → SQE → RTB Queue → TCL → Execution
+    // No direct processSignal() call - RTB promotion handles execution
     await this.signalOrchestrator.start(async (signal: StrategySignal) => {
-      // Forward generated signals to execution engine
-      console.log(`[PaperPortfolio:${this.userId}] Received signal for ${signal.symbol} - forwarding to execution engine`);
-      await this.executionEngine.processSignal(signal);
+      // Log signal reception but do NOT forward directly to execution engine
+      // Signals are queued via SQE in SignalOrchestrator, then promoted by TCL
+      console.log(`[8.8.4-C.10][FLOW_FIX] Signal received for ${signal.symbol} - queued via RTB (not direct execution)`);
     });
 
     console.log(`[PaperPortfolio:${this.userId}] Signal orchestrator started successfully`);

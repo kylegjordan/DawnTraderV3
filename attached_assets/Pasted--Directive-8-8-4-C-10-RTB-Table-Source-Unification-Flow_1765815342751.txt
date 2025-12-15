@@ -1,0 +1,115 @@
+⚙️ Directive 8.8.4-C.10 — RTB Table Source Unification & Flow Validation
+Objective
+
+Unify the Ready-to-Buy (RTB) data source across the backend and frontend so all SQE-qualified signals appear in the UI immediately after trading starts, and ensure trades open only via the RTB promotion process (no direct bypass).
+
+Background
+
+Current state:
+
+The backend correctly populates the rtb_signals table (51 queued signals confirmed).
+
+The /api/trading-signals endpoint still queries tradingSignals, which is empty.
+
+The UI calls that endpoint, so it renders an empty placeholder even though valid data exists.
+
+Simultaneously, some signals bypass RTB entirely and execute trades directly (dual-path issue).
+
+Tasks for Replit
+1️⃣ Fix API Data Source
+
+File: server/routes.ts → endpoint /api/trading-signals
+
+Replace:
+
+const signals = await storage.getTradingSignals(...);
+
+
+with:
+
+const signals = await storage.getRtbSignals(...);
+
+
+Ensure the query fetches from the correct table and excludes expired signals.
+
+2️⃣ Add RTB Query to Storage Layer
+
+File: server/storage.ts
+
+export async function getRtbSignals(mode: string) {
+  return await db('rtb_signals')
+    .select('*')
+    .where({ mode })
+    .andWhereNot('status', 'expired')
+    .orderBy('cwqi', 'desc');
+}
+
+
+Add diagnostic log line:
+
+console.log('[8.8.4-C.10][API_SOURCE] using table=rtb_signals');
+
+3️⃣ Confirm Frontend Data Source
+
+File: client/src/components/trading/ready-to-buy-table.tsx
+
+Keep the useQuery('/api/trading-signals') call as-is — the backend fix will redirect it to the correct source.
+Verify the component mounts correctly on engine start and auto-refreshes every 30 seconds.
+
+4️⃣ Eliminate Dual-Path Execution
+
+File: server/services/paper-portfolio-manager.ts
+
+Replace:
+
+await this.executionEngine.processSignal(signal);
+
+
+with:
+
+await this.readyToBuyService.queueSQESignal(signal);
+
+
+Remove or comment out the direct call to the execution engine so signals flow strictly:
+
+SignalOrchestrator → SQE → RTB Queue → TCL → Execution
+
+5️⃣ Validate TCL Warm-Up Enforcement
+
+File: server/services/paper-execution-engine.ts
+
+Ensure promotions only occur after:
+
+if (!readyToBuyService.isTCLActive()) return;
+
+
+so trades open only after 100 signals or the 5-minute failsafe.
+
+6️⃣ Add Diagnostic Logging
+
+Insert logs for audit trail:
+
+[8.8.4-C.10][API_SOURCE] table=rtb_signals
+[8.8.4-C.10][RTB_UI_FETCH] returned N signals
+[8.8.4-C.10][FLOW_FIX] dual-path removed
+
+Validation Checklist
+Step	Expected Result
+Start paper trading	Ready-to-Buy table loads immediately (headers + rows).
+After 30 s	UI displays SQE-qualified signals ranked by CWQI.
+Open Trades tab	Remains empty until TCL activation or failsafe (5 min).
+Logs	[API_SOURCE] table=rtb_signals and [RTB_UI_FETCH] returned >0.
+DB Query	SELECT COUNT(*) FROM rtb_signals; → non-zero result.
+Signal Lifecycle	Confirm no direct processSignal() calls from PaperPortfolioManager.
+Test User Credentials
+Username: testuser123
+Password: SecurePass123!
+Mode: Paper
+
+Expected Outcome
+
+✅ The Ready-to-Buy UI and backend now share one source (rtb_signals).
+✅ All SQE-qualified signals appear in the UI instantly.
+✅ No empty placeholder state after engine start.
+✅ Trades open only after TCL warm-up or failsafe.
+✅ Full logging and audit visibility for diagnostic verification.

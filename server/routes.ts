@@ -4497,22 +4497,21 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const mode = req.mode!;
       const { status } = req.query;
       
-      const signals = await storage.getTradingSignals({ 
+      // [8.8.4-C.10][API_SOURCE] Using rtb_signals table as single source of truth
+      const signals = await storage.getRtbSignals({ 
         mode, 
         status: status as string | undefined 
       });
-      console.log('[Phase-27.F.15.B.1] Updated route /api/trading-signals → mode-based only');
+      console.log('[8.8.4-C.10][API_SOURCE] table=rtb_signals, mode=' + mode + ', count=' + signals.length);
       
-      // Phase 8.8.3-J7: Use stored quantity and estimatedValue from signal (computed at P2)
-      // No more on-the-fly sizing calculation - values are pre-computed by paper-execution-engine
+      // [8.8.4-C.10] Map RTB signal fields to frontend expected format
+      // RtbSignal has: quantity, notional (instead of estimatedValue)
       const signalsWithQuantity = signals.map(signal => {
-        // J7: Use stored values if available, otherwise return 0
         const storedQuantity = signal.quantity ? parseFloat(String(signal.quantity)) : 0;
-        const storedEstimatedValue = signal.estimatedValue ? parseFloat(String(signal.estimatedValue)) : 0;
+        const storedNotional = signal.notional ? parseFloat(String(signal.notional)) : 0;
         
-        // Validate stored values
         const quantity = Number.isFinite(storedQuantity) ? storedQuantity : 0;
-        const estimatedValue = Number.isFinite(storedEstimatedValue) ? storedEstimatedValue : 0;
+        const estimatedValue = Number.isFinite(storedNotional) ? storedNotional : 0;
         
         return {
           ...signal,
