@@ -85,7 +85,7 @@ class ValidationSessionService {
       const ngcValues = rtbSignals.map((s: RtbSignal) => parseFloat(String(s.confidence || 0))).filter((v: number) => !isNaN(v) && v > 0);
       const avgNGC = ngcValues.length > 0 ? ngcValues.reduce((a: number, b: number) => a + b, 0) / ngcValues.length : 0;
 
-      const cwqiValues = openPositions.map((p: PaperSimOpenPosition) => parseFloat(String((p as Record<string, unknown>).cwqi || 0))).filter((v: number) => !isNaN(v) && v > 0);
+      const cwqiValues = rtbSignals.map((s: RtbSignal) => parseFloat(String(s.cwqi || 0))).filter((v: number) => !isNaN(v) && v > 0);
       const avgCWQI = cwqiValues.length > 0 ? cwqiValues.reduce((a: number, b: number) => a + b, 0) / cwqiValues.length : 0;
 
       const pnlValues = closedTrades.map((t: PaperSimTrade) => parseFloat(String(t.netPnl || t.pnl || 0)));
@@ -147,12 +147,20 @@ class ValidationSessionService {
       pnl: number;
     }
 
-    const tradesWithMetrics: TradeMetric[] = closedTrades.map((t: PaperSimTrade) => ({
-      symbol: t.symbol,
-      cwqi: parseFloat(String((t as Record<string, unknown>).cwqi || 0)),
-      ngc: parseFloat(String((t as Record<string, unknown>).ngc || 0)),
-      pnl: parseFloat(String(t.netPnl || t.pnl || 0)),
-    }));
+    const signalsBySymbol = new Map<string, RtbSignal>();
+    for (const signal of rtbSignals) {
+      signalsBySymbol.set(signal.symbol, signal);
+    }
+
+    const tradesWithMetrics: TradeMetric[] = closedTrades.map((t: PaperSimTrade) => {
+      const signal = signalsBySymbol.get(t.symbol);
+      return {
+        symbol: t.symbol,
+        cwqi: signal ? parseFloat(String(signal.cwqi || 0)) : parseFloat(String(t.confidence || 0)),
+        ngc: signal ? parseFloat(String(signal.confidence || 0)) : parseFloat(String(t.confidence || 0)),
+        pnl: parseFloat(String(t.netPnl || t.pnl || 0)),
+      };
+    });
 
     const cwqiPnlCorrelation = this.calculateCorrelation(
       tradesWithMetrics.map((t: TradeMetric) => t.cwqi),

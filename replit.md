@@ -64,6 +64,13 @@ RTB UI Unification (8.8.4-C.7) consolidates the Ready-to-Buy UI:
 2. **Unified ReadyToBuyTable**: Single component displays all SQE-qualified signals ranked by CWQI, with 30-second auto-refresh.
 3. **Unified Endpoint**: `/api/trading-signals` serves as the single data source for RTB signals with mode-based filtering.
 
+SQE Filter Tuning & Validation Session System (8.8.4-C.11) provides systematic SQE threshold adjustment:
+1. **Environment Variable Configuration**: SQE thresholds are configurable via `DEFAULT_SQE_NGC_MIN` (0.35), `DEFAULT_SQE_CWQI_MIN` (0.45), `DEFAULT_SQE_PROFIT_RATE_MIN` (0.20), `DEFAULT_SQE_MAX_RISK` (0.75).
+2. **Validation Session Service**: Tracks multi-hour test sessions with periodic reports (every 30 minutes) logging metrics like signals processed, trades opened/closed, average NGC/CWQI, win rate, and P&L.
+3. **Data Cleanup Endpoint**: `/api/paper-sim/clear-data` truncates RTB signals, trades, and positions for clean test starts.
+4. **Session Management Endpoints**: `/api/paper-sim/validation-session/start`, `/stop`, `/status`, `/report` for session lifecycle control.
+5. **Post-Session Summary**: Generates comprehensive reports with Pearson correlation analysis between signal metrics and trade outcomes.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.
