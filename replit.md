@@ -53,6 +53,12 @@ Adaptive Normalization, Enhanced Risk & Durability Framework (8.8.4-C) implement
 3. **CWQI Durability Decay**: RTB queue uses CWQI_decayed = CWQI_orig × e^(-λt), λ=0.03/min for ranking signals by freshness in `ready_to_buy_service.ts`. Log tag: `[C][CWQI_DECAY]`.
 4. **Strategy-Specific ProfitRate Floors**: `config/strategy_thresholds.json` defines per-strategy minimum ProfitRate (DHMA=0.22, VWAP_Bounce=0.25, MeanReversion=0.28, Breakout=0.30, Scalper=0.35). SQE enforces these floors. Log tag: `[C][PROFIT_FLOORS]`.
 
+RTB Queue Service Consolidation (8.8.4-C.6) consolidates RTB refresh responsibility:
+1. **Deprecated rtbQueueRefresher**: Legacy refresher moved to `server/legacy/rtbQueueRefresher.legacy.ts`, auto-start disabled in `server/index.ts`.
+2. **TCL 5-Minute Failsafe**: Trading Capacity Limit activates when pool ≥100 signals OR 5 minutes elapsed since engine start. Per-mode tracking via `engineStartTimes` Map. Log tags: `[8.8.4-C.6][TCL_FAILSAFE]`, `[8.8.4-C.6][TCL_FALLBACK_TRIGGER]`, `[8.8.4-C.6][TCL_FALLBACK_ACTIVATE]`.
+3. **Unified Refresh Cycle**: ReadyToBuyService now owns the 30-second refresh cycle entirely, wired via `startRefreshCycle()` and `stopRefreshCycle()` in paper-execution-engine.ts.
+4. **Updated Diagnostics**: `/api/diagnostics/rtb-queue/refresher-status` and `/api/diagnostics/rtb-queue/force-refresh` endpoints now delegate to readyToBuyService.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.
