@@ -4,11 +4,11 @@
  * Pure filter that evaluates pre-computed signal quality metrics.
  * The SQE does NOT compute metrics - it only filters based on thresholds.
  * 
- * Filtering Thresholds:
- * - NGC >= 0.40 (Normalized Global Confidence)
- * - Risk <= 0.70 
- * - ProfitRate >= strategy-specific floor (Phase C)
- * - CWQI >= 0.50
+ * Filtering Thresholds (relaxed):
+ * - NGC >= 0.45 (Normalized Global Confidence)
+ * - Risk <= 0.85 
+ * - ProfitRate >= 0.10 (or strategy-specific floor if higher)
+ * - CWQI >= 0.35
  * 
  * Phase C: Strategy-specific ProfitRate floors from config/strategy_thresholds.json
  * 

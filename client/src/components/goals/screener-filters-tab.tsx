@@ -626,7 +626,7 @@ export default function ScreenerFiltersTab() {
                   <span className="text-sm font-medium">NGC</span>
                   <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded">Active</span>
                 </div>
-                <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">&ge; 0.65</div>
+                <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">&ge; 0.45</div>
                 <p className="text-xs text-muted-foreground mt-1">Normalized Global Confidence</p>
               </div>
 
@@ -636,7 +636,7 @@ export default function ScreenerFiltersTab() {
                   <span className="text-sm font-medium">Risk</span>
                   <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded">Active</span>
                 </div>
-                <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">&le; 0.65</div>
+                <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">&le; 0.85</div>
                 <p className="text-xs text-muted-foreground mt-1">Maximum risk score allowed</p>
               </div>
 
@@ -646,7 +646,7 @@ export default function ScreenerFiltersTab() {
                   <span className="text-sm font-medium">ProfitRate</span>
                   <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded">Active</span>
                 </div>
-                <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">&ge; 0.30</div>
+                <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">&ge; 0.10</div>
                 <p className="text-xs text-muted-foreground mt-1">Minimum profit per time unit</p>
               </div>
 
@@ -656,7 +656,7 @@ export default function ScreenerFiltersTab() {
                   <span className="text-sm font-medium">CWQI</span>
                   <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded">Active</span>
                 </div>
-                <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">&ge; 0.55</div>
+                <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">&ge; 0.35</div>
                 <p className="text-xs text-muted-foreground mt-1">Confidence-Weighted Quality Index</p>
               </div>
             </div>
