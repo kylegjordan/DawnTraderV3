@@ -620,23 +620,26 @@ export function getCWQITier(cwqi: number): 'excellent' | 'good' | 'moderate' | '
 }
 
 /**
- * Phase 8.8.4-B.1 SQE Thresholds
+ * Phase 8.8.4-C.11 SQE Thresholds
  * These are the filtering thresholds for Signal Quality Evaluator
+ * Parameterized via environment variables for runtime configuration
  */
 export const SQE_THRESHOLDS = {
-  MIN_NGC: 0.40,
-  MAX_RISK: 0.70,
-  MIN_PROFIT_RATE: 0.25,
-  MIN_CWQI: 0.50,
+  MIN_NGC: parseFloat(process.env.SQE_NGC_MIN || '0.65'),
+  MAX_RISK: parseFloat(process.env.SQE_MAX_RISK || '0.65'),
+  MIN_PROFIT_RATE: parseFloat(process.env.SQE_PROFIT_MIN || '0.30'),
+  MIN_CWQI: parseFloat(process.env.SQE_CWQI_MIN || '0.55'),
 };
 
+console.log(`[8.8.4-C.11][SQE_CONFIG] NGC=${SQE_THRESHOLDS.MIN_NGC} CWQI=${SQE_THRESHOLDS.MIN_CWQI} PROFIT=${SQE_THRESHOLDS.MIN_PROFIT_RATE} RISK=${SQE_THRESHOLDS.MAX_RISK}`);
+
 /**
- * Minimum CWQI threshold for queue eligibility (updated for B.1)
+ * Minimum CWQI threshold for queue eligibility (updated for C.11)
  */
-export const MIN_QUEUE_CWQI = 0.50;
+export const MIN_QUEUE_CWQI = SQE_THRESHOLDS.MIN_CWQI;
 
 /**
  * Minimum confidence threshold for queue eligibility
  * Note: This now refers to NGC, not raw confidence
  */
-export const MIN_QUEUE_CONFIDENCE = 0.40;
+export const MIN_QUEUE_CONFIDENCE = SQE_THRESHOLDS.MIN_NGC;

@@ -9474,6 +9474,118 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 8.8.4-C.11: Clear residual backend data before validation session
+  apiRouter.post('/paper-sim/clear-data', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = 'paper';
+      console.log('[8.8.4-C.11][CLEAR_DATA] Starting residual data cleanup');
+      
+      // Clear paper trades
+      const tradesDeleted = await storage.deleteAllPaperSimTrades(mode);
+      console.log(`[8.8.4-C.11][CLEAR_DATA] Cleared ${tradesDeleted} paper trades`);
+      
+      // Clear open positions
+      await storage.deleteAllPaperSimOpenPositions(mode);
+      console.log('[8.8.4-C.11][CLEAR_DATA] Cleared open positions');
+      
+      // Clear RTB signals
+      const signalsDeleted = await storage.deleteRtbSignals({ mode });
+      console.log(`[8.8.4-C.11][CLEAR_DATA] Cleared ${signalsDeleted} RTB signals`);
+      
+      // Clear trade logs
+      await storage.deleteAllPaperSimTradeLogs(mode);
+      console.log('[8.8.4-C.11][CLEAR_DATA] Cleared trade logs');
+      
+      res.json({
+        success: true,
+        message: 'Residual data cleared successfully',
+        cleared: {
+          trades: tradesDeleted,
+          signals: signalsDeleted,
+        }
+      });
+    } catch (error: any) {
+      console.error('[8.8.4-C.11][CLEAR_DATA_ERROR]', error);
+      res.status(500).json({ error: error.message || 'Failed to clear data' });
+    }
+  });
+
+  // Phase 8.8.4-C.11: Start validation session
+  apiRouter.post('/paper-sim/validation-session/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { durationHours = 3 } = req.body;
+      const { validationSessionService } = await import('./services/validation-session-service.js');
+      
+      await validationSessionService.startSession('paper', durationHours);
+      
+      res.json({
+        success: true,
+        message: `Validation session started for ${durationHours} hours`,
+        status: validationSessionService.getSessionStatus()
+      });
+    } catch (error: any) {
+      console.error('[8.8.4-C.11][SESSION_START_ERROR]', error);
+      res.status(500).json({ error: error.message || 'Failed to start validation session' });
+    }
+  });
+
+  // Phase 8.8.4-C.11: Stop validation session
+  apiRouter.post('/paper-sim/validation-session/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { validationSessionService } = await import('./services/validation-session-service.js');
+      
+      await validationSessionService.stopSession();
+      
+      res.json({
+        success: true,
+        message: 'Validation session stopped',
+        status: validationSessionService.getSessionStatus()
+      });
+    } catch (error: any) {
+      console.error('[8.8.4-C.11][SESSION_STOP_ERROR]', error);
+      res.status(500).json({ error: error.message || 'Failed to stop validation session' });
+    }
+  });
+
+  // Phase 8.8.4-C.11: Get validation session status and report
+  apiRouter.get('/paper-sim/validation-session/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { validationSessionService } = await import('./services/validation-session-service.js');
+      
+      const status = validationSessionService.getSessionStatus();
+      const latestReport = validationSessionService.getLatestReport();
+      
+      res.json({
+        ...status,
+        latestReport
+      });
+    } catch (error: any) {
+      console.error('[8.8.4-C.11][SESSION_STATUS_ERROR]', error);
+      res.status(500).json({ error: error.message || 'Failed to get session status' });
+    }
+  });
+
+  // Phase 8.8.4-C.11: Trigger manual status report
+  apiRouter.post('/paper-sim/validation-session/report', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { validationSessionService } = await import('./services/validation-session-service.js');
+      
+      const report = await validationSessionService.generateStatusReport();
+      
+      if (!report) {
+        return res.status(400).json({ error: 'No active validation session' });
+      }
+      
+      res.json({
+        success: true,
+        report
+      });
+    } catch (error: any) {
+      console.error('[8.8.4-C.11][REPORT_ERROR]', error);
+      res.status(500).json({ error: error.message || 'Failed to generate report' });
+    }
+  });
+
   // Phase 7.2: Paper trading status with Bob Core caching
   apiRouter.get('/paper-sim/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     // Phase 7.2: Try Bob Core first if enabled

@@ -1,0 +1,95 @@
+⚙️ Directive 8.8.4-C.11 — SQE Filter Tuning & 3-Hour System Validation Run
+Objective
+
+Validate the full end-to-end trading pipeline (Signal → SQE → RTB → TCL → Execution → Closure) under live paper-trading conditions for 3 hours, with adjusted SQE thresholds and regular performance logging.
+
+Tasks for Replit
+1️⃣ Adjust SQE Thresholds
+
+In server/services/signal-quality-evaluator.ts (or equivalent module):
+
+Raise NGC_MIN_THRESHOLD to 0.65
+
+Raise CWQI_MIN_THRESHOLD to 0.55
+
+Raise PROFIT_RATE_MIN to 0.30
+
+Tighten MAX_RISK_ALLOWED to 0.65
+
+Ensure these are parameterized constants, not hard-coded literals, so future manual/GUI control can simply update environment or configuration variables (e.g., process.env.SQE_NGC_MIN).
+
+Add diagnostic logs:
+
+[8.8.4-C.11][SQE_CONFIG] NGC=0.65 CWQI=0.55 PROFIT=0.30 RISK=0.65
+
+2️⃣ Clear Residual Backend Data
+
+Before starting the validation session, execute:
+
+TRUNCATE TABLE paper_trades;
+TRUNCATE TABLE rtb_signals;
+
+
+and clear any in-memory caches (SignalLifecycleAuditService, etc.) to remove ghost or orphaned records.
+
+3️⃣ Run 3-Hour Paper Trading Session
+
+Start the paper-trading engine in normal mode.
+
+Confirm engine logs show:
+
+[8.8.4-C.11][SESSION_START] mode=paper duration=3h
+
+
+Allow system to run for 3 hours or until manually stopped.
+
+4️⃣ Periodic Status Reports
+
+Every 30 minutes, generate a concise report automatically (or manually if automation isn’t feasible):
+
+Each report should include:
+
+Metric	Description
+RTB_queue_size	Number of active signals in rtb_signals
+open_trades	Count of current trades
+closed_trades	Count of completed trades
+avg_NGC	Mean NGC of queued signals
+avg_CWQI	Mean CWQI of open trades
+avg_PnL	Average profit/loss per closed trade
+win_rate	Percentage of profitable trades
+
+Tag logs with:
+
+[8.8.4-C.11][STATUS_REPORT] <metrics>
+
+5️⃣ Post-Session Summary
+
+At the end of the 3-hour run:
+
+Output full summary with correlations:
+
+[8.8.4-C.11][SUMMARY]
+Correlation(CWQI, PnL)=...
+Correlation(NGC, PnL)=...
+
+
+Include top 5 and bottom 5 signals by CWQI and their final trade outcomes.
+
+Validation Checklist
+Step	Expected Result
+Ready-to-Buy UI	Loads with live SQE-qualified signals (no placeholder)
+Open Trades	Stays empty until TCL warm-up or 5-min failsafe
+Logs	Show [SQE_CONFIG], [STATUS_REPORT], [SUMMARY]
+Database	rtb_signals and paper_trades populated with coherent entries
+Session End	Generates summary file logs/validation/directive_8.8.4-C.11_results.md
+Test User
+Username: testuser123
+Password: SecurePass123!
+Mode: Paper
+
+Expected Outcome
+
+✅ Filters tightened to admit only higher-quality signals
+✅ RTB queue and TCL flow verified under load
+✅ 30-minute interval reports validate stability and correlation metrics
+✅ No residual or ghost trades remain in backend

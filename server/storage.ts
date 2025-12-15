@@ -703,6 +703,7 @@ export interface IStorage {
   }): Promise<RtbSignal[]>;
   getRtbSignalById(id: string): Promise<RtbSignal | undefined>;
   updateRtbSignal(id: string, updates: Partial<RtbSignal>): Promise<RtbSignal>;
+  deleteRtbSignals(filters: { mode: 'live' | 'paper' }): Promise<number>;
 }
 
 // Phase 27.F: Canonical metric key generator for goals engine
@@ -4355,6 +4356,14 @@ export class DatabaseStorage implements IStorage {
       .where(eq(rtbSignals.id, id))
       .returning();
     return updated;
+  }
+
+  async deleteRtbSignals(filters: { mode: 'live' | 'paper' }): Promise<number> {
+    const result = await db
+      .delete(rtbSignals)
+      .where(eq(rtbSignals.mode, filters.mode))
+      .returning();
+    return result.length;
   }
 
   /**
