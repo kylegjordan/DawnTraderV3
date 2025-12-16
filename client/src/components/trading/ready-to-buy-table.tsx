@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, TrendingUp, ArrowUpDown, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useWebSocket } from "@/hooks/use-websocket";
 
 interface TradingSignal {
   id: string;
@@ -37,6 +38,8 @@ export default function ReadyToBuyTable() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [sortField, setSortField] = useState<SortField>('cwqi');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const queryClient = useQueryClient();
+  const { messages } = useWebSocket();
 
   const { data, isLoading, error, refetch } = useQuery<TradingSignal[]>({
     queryKey: ['/api/trading-signals'],
@@ -49,6 +52,18 @@ export default function ReadyToBuyTable() {
       setLastUpdated(new Date());
     }
   }, [data]);
+
+  // Directive 8.8.4-C.14.C: Listen for RTB cleared events via WebSocket
+  useEffect(() => {
+    const latestMessage = messages[messages.length - 1];
+    if (latestMessage?.type === 'trading_data_updated' && 
+        latestMessage?.payload?.event === 'rtb_cleared') {
+      console.log('[8.8.4-C.14.C][RTB_CLEARED] Received rtb_cleared event, clearing table');
+      // Invalidate the query to force an immediate refresh (will return empty)
+      queryClient.setQueryData(['/api/trading-signals'], []);
+      setLastUpdated(new Date());
+    }
+  }, [messages, queryClient]);
 
   const handleRefresh = async () => {
     await refetch();

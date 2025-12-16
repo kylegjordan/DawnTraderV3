@@ -1,0 +1,118 @@
+🔧 Directive 8.8.4-C.14.C — RTB Clearing Integration Enhancement
+
+Objective:
+Implement refined, centralized, and event-synchronized logic for clearing Ready-to-Buy (RTB) signals when trading stops or resets, ensuring immediate frontend synchronization and backend consistency.
+
+🧩 Background
+
+Replit’s proposal correctly identified how to integrate readyToBuyService.clearQueue(mode) into both the:
+
+Reset/Clear All routine (paper-session-reset.ts), and
+
+Stop Trading routine (routes.ts).
+
+However, the initial plan duplicated logic, relied only on passive table refresh, and lacked frontend synchronization.
+Directive 8.8.4-C.14.C enhances this to make it cleaner, maintainable, and user-responsive.
+
+⚙️ Scope of Work
+1. Create Unified Clear Helper
+
+File: server/utils/clear-routines.ts
+
+export async function clearReadyToBuy(mode: 'paper' | 'live', source = 'system') {
+  try {
+    const { readyToBuyService } = await import('../core/rtb/ready_to_buy_service.js');
+    const cleared = await readyToBuyService.clearQueue(mode);
+    console.log(`[8.8.4-C.14.C][RTB_CLEAR] source=${source} mode=${mode} cleared=${cleared}`);
+    return cleared;
+  } catch (err) {
+    console.warn(`[8.8.4-C.14.C][RTB_CLEAR][WARN] source=${source} mode=${mode} error=${err.message}`);
+    return 0;
+  }
+}
+
+
+✅ Purpose: Centralizes clearing logic; avoids code duplication in multiple handlers.
+
+2. Integrate Helper Into Reset Routine
+
+File: server/services/paper-session-reset.ts, around line 271
+Add:
+
+import { clearReadyToBuy } from '../utils/clear-routines.js';
+await clearReadyToBuy(mode, 'ResetButton');
+
+
+✅ Result: When Reset/Clear All is pressed, RTB signals are removed in sync with FX5, diagnostics, and open trades.
+
+3. Integrate Helper Into Stop Trading Endpoint
+
+File: server/routes.ts, near POST /api/trading/stop
+
+import { clearReadyToBuy } from './utils/clear-routines.js';
+
+if (!tradingEngine.isStopping) {
+  await clearReadyToBuy(mode as 'paper' | 'live', 'StopTrading');
+}
+
+
+✅ Result: Ensures RTB queue is cleared automatically when trading stops, matching Active Filter Pool behavior.
+
+4. Add Frontend Real-Time Synchronization
+
+Emit WebSocket event after clearing:
+
+import { broadcastEvent } from '../services/ws-server.js';
+broadcastEvent('rtb:cleared', { mode });
+
+
+Frontend handler in ready-to-buy-table.tsx:
+
+useEffect(() => {
+  socket.on('rtb:cleared', () => setSignals([]));
+  return () => socket.off('rtb:cleared');
+}, []);
+
+
+✅ Result: Table clears instantly without waiting for 30-second refresh.
+
+5. Logging and Diagnostics
+
+Unified tagging for all clear actions:
+
+[8.8.4-C.14.C][RTB_CLEAR] source=ResetButton mode=paper cleared=10
+[8.8.4-C.14.C][RTB_CLEAR] source=StopTrading mode=paper cleared=0
+
+
+✅ Result: Log uniformity across all modules for validation and future automation.
+
+6. Validation Checklist
+
+Replit must verify:
+
+Test	Expected Result
+Stop Trading → RTB Table	Table empties instantly
+Reset / Clear All → RTB Table	Table empties instantly
+Log Output	[RTB_CLEAR] entries appear once per event
+RTB Queue DB	rtb_signals table cleared (COUNT(*) = 0)
+No Duplicates	Only one clear event per action
+Trading Restart	RTB repopulates normally on resume
+Deliverables
+
+Updated code for clear-routines.ts, paper-session-reset.ts, routes.ts
+
+Updated frontend WebSocket listener
+
+Validation report: logs/validation/8.8.4-C.14C_rtb_clear_integration.md
+
+✅ Expected Outcome
+
+RTB queue always cleared on trading stop/reset
+
+No residual RTB signals between sessions
+
+No duplicate logic or async race conditions
+
+Immediate UI feedback without waiting for refresh
+
+Logs show single, traceable clear events per source

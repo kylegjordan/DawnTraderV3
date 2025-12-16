@@ -69,6 +69,7 @@ import { livePricingAdapter } from './services/live-pricing-adapter.js';
 import { krakenWebSocketAdapter } from './services/kraken-websocket-adapter.js';
 import { slippageFeeModel } from './services/slippage-fee-model.js';
 import { c5FinancialDiagnostics } from './services/c5-financial-diagnostics.js';
+import { clearReadyToBuy } from './utils/clear-routines.js';
 import os from 'os';
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
@@ -3662,6 +3663,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Passive learning is derived (!isEngineActive), not a separate flag
       activeFilterPool.enforcePassiveModeIfStopped(mode as 'paper' | 'live', false);
       console.log(`[REB 2.8.6B][PassivePool] Cleared Active Pool for ${mode} mode (engine stopped)`);
+      
+      // Directive 8.8.4-C.14.C: Clear Ready-to-Buy signals queue when trading stops
+      await clearReadyToBuy(mode as 'paper' | 'live', 'StopTrading');
       
       // REB 2.8.5D: Update system context AFTER successful engine stop (atomic truth)
       // This ensures isEngineActive only flips false when engine is actually stopped

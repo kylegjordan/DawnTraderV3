@@ -19,6 +19,7 @@ import { getGlobalPaperSimManager, clearGlobalPaperSimManager, getEngineByMode, 
 import { reset24hWindow, resetHourlyScanHistory } from './fx5-24h-window.js';
 import { krakenWebSocketAdapter } from './kraken-websocket-adapter.js';
 import { livePricingAdapter } from './live-pricing-adapter.js';
+import { clearReadyToBuy } from '../utils/clear-routines.js';
 
 export interface HardResetResult {
   success: boolean;
@@ -268,6 +269,14 @@ class PaperSessionResetService {
         console.log(`[8.8.3-A2R][HARD_RESET] FX5 windows and scan history reset`);
       } catch (fx5Err) {
         console.warn(`[8.8.3-A2R][HARD_RESET] FX5 reset warning:`, fx5Err);
+      }
+
+      // 3.5) Directive 8.8.4-C.14.C: Clear Ready-to-Buy signals queue
+      try {
+        const clearedRtb = await clearReadyToBuy(mode, 'ResetButton');
+        console.log(`[8.8.3-A2R][HARD_RESET] RTB signals cleared: ${clearedRtb}`);
+      } catch (rtbErr) {
+        console.warn(`[8.8.3-A2R][HARD_RESET] RTB clear warning:`, rtbErr);
       }
 
       // 4) Clear DB state for open paper positions and trades
