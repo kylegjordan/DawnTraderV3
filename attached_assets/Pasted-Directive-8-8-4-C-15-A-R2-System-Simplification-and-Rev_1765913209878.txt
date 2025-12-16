@@ -1,0 +1,134 @@
+Directive 8.8.4-C.15.A-R2 — System Simplification and Reversion to Core Architecture
+
+Issued by: Lead Architect
+To: Repl.it Engineering Environment
+Date: 2025-12-16
+Status: MANDATORY IMPLEMENTATION
+
+Objective
+
+To remove all unnecessary components introduced in or after Directive 8.8.4-C.14.D, including the C15A validation and reset APIs, redundant health monitors, and auxiliary middleware that have destabilized the trading system.
+
+This rollback returns the application to the stable, proven architecture that existed after Directive 8.8.4-C.14.C — ensuring the Ready-to-Buy (RTB) table, trading engine, and FX5 scanner operate in a synchronized, reliable state.
+
+Scope of Rollback
+Components to Retain
+Category	File(s)	Status
+Trading control APIs	/api/trading/start, /api/trading/stop	✅ Keep
+Paper simulation reset	/api/paper-sim/reset	✅ Keep
+RTB clearQueue implementation	ready_to_buy_service.ts	✅ Keep
+RTB clear broadcast event	clear-routines.ts	✅ Keep
+FX5 scanner core logic	server/services/fx5-scanner.ts	✅ Keep
+Filtered pairs and SQE	Existing modules	✅ Keep
+Components to Remove Completely
+Component	File / Location	Action
+C15A Reset & Start APIs	server/routes.ts — any route beginning with /api/c15a/	Delete entire route blocks
+Validation logger	server/services/c15a-validation-logger.ts	Delete file
+FX5 health monitor	server/services/fx5-health-monitor.ts	Delete file
+Optional paper auth middleware	Definition & uses in server/routes.ts	Delete
+Observation mode constants	Anywhere defined or referenced	Delete
+Validation session logging references	In replit.md and code comments	Remove
+Any “validation run” triggers in startup or background	e.g., bootstrapFX5Validation	Delete
+
+After removal, no /api/c15a/* endpoint should exist in the project.
+
+Core Code Restorations
+1️⃣ Re-establish Proper RTB Clearing Hooks
+In server/services/paper-session-reset.ts
+
+Immediately after the FX5 reset section (~line 270):
+
+// 3.5) Clear Ready-to-Buy signals queue
+const { readyToBuyService } = await import('../core/rtb/ready_to_buy_service.js');
+await readyToBuyService.clearQueue(mode);
+console.log(`[RTB_CLEAR][ResetButton] mode=${mode}`);
+
+In server/routes.ts within /api/trading/stop
+
+Add after the Active Filter Pool clear:
+
+// Clear Ready-to-Buy signals when trading stops
+const { readyToBuyService } = await import('./core/rtb/ready_to_buy_service.js');
+await readyToBuyService.clearQueue(mode as 'paper' | 'live');
+console.log(`[RTB_CLEAR][StopTrading] mode=${mode}`);
+
+2️⃣ Restore Correct Broadcast Event
+
+In server/utils/clear-routines.ts:
+
+await contextBridge.broadcast({
+  type: 'rtb:cleared',
+  payload: { mode, timestamp: new Date().toISOString() }
+});
+
+
+Frontend listener remains (no changes needed):
+
+if (latestMessage?.type === 'rtb:cleared') {
+  queryClient.setQueryData(['/api/trading-signals'], []);
+}
+
+3️⃣ Clean Engine Synchronization
+
+Ensure that only the canonical start/stop routes control the engine flag:
+
+In /api/trading/start
+await storage.updateSystemContext(mode, { isEngineActive: true });
+
+In /api/trading/stop
+await storage.updateSystemContext(mode, { isEngineActive: false });
+
+
+No other file should write to system_context.isEngineActive.
+
+Verification Checklist (Post-Rollback)
+Check	Expected Result
+Start app	[FX5Scanner] Started (interval=30s) appears once
+Toggle “Trading Active → ON”	Engine starts; RTB table populates
+Toggle “Trading Active → OFF”	Engine stops; RTB table clears
+Click “Clear & Reset”	RTB clears again; engine remains stopped
+Logs	Single [RTB_CLEAR] line per event
+FX5 cycles	Continuous; no oscillation
+WebSocket messages	Only rtb:cleared and core trading events
+No /api/c15a/* references	Verified removed
+Implementation Notes
+
+No new APIs are to be introduced during this rollback.
+
+No validation or monitoring subsystems are to remain active after this cleanup.
+
+The only background intervals should be:
+
+FX5 scanner 30-second cycle
+
+Any existing RTB refresh timers
+
+After rollback, run a 30-minute dry test to verify stability before re-enabling longer validation sessions.
+
+Expected Outcome
+
+Trading engine and FX5 scanner operate in sync.
+
+No oscillation between “active” and “stopped.”
+
+RTB table correctly clears and refreshes via two triggers (Stop Trading, Clear & Reset).
+
+Database (system_context) and in-memory state unified again.
+
+Application performance restored to pre-C15A stability.
+
+✅ Directive Enforcement
+
+Repl.it must:
+
+Execute all deletions and code edits exactly as written.
+
+Submit the updated replit.md and console log summary showing:
+
+[RTB_CLEAR] events firing correctly.
+
+Absence of /api/c15a/* routes.
+
+Stable engine start/stop cycles.
+
+No additional validation, monitoring, or “auto-recovery” code is permitted unless explicitly re-authorized by the Lead Architect.

@@ -26,7 +26,6 @@ import { activeFilterPool, type ActiveFilteredPair } from './active-filter-pool.
 import { nanoid } from 'nanoid';
 import type { ScreenerFilters } from '@shared/schema';
 import { recordScanFor24h, recordScanCompletion, getCyclesPerHour, get24hSummary } from './fx5-24h-window.js';
-import { fx5HealthMonitor } from './fx5-health-monitor.js';
 
 const SCAN_INTERVAL_MS = 30 * 1000; // 30 seconds
 const CYCLES_PER_HOUR = Math.round(3600000 / SCAN_INTERVAL_MS); // 120 for 30s intervals
@@ -322,9 +321,6 @@ export class Fx5ScannerService {
       }
 
       console.log(`[FX5Scanner][${mode}] ✅ Scan complete (evaluated=${evaluatedCount}, eligible=${eligibleCount})`);
-
-      // C15A: Record successful scan for health monitoring
-      fx5HealthMonitor.recordScan(mode);
 
       return scanResult;
     } catch (error) {

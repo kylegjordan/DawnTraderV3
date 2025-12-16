@@ -51,7 +51,7 @@ SQE Filter Tuning & Validation Session System provides systematic SQE threshold 
 
 RTB Queue Stability Fixes addresses critical issues in the RTB pipeline by adding `upsertRtbSignal` with ON CONFLICT UPDATE logic, implementing TCL Timer Persistence, and ensuring proper cleanup of timers. RTB Clear Flow & WebSocket Synchronization standardizes the WebSocket event type to `rtb:cleared` with mode-scoped broadcast for immediate UI synchronization when Reset or Stop Trading actions clear the RTB queue.
 
-FX5 Stability & Authentication Validation implements comprehensive FX5 scanner health monitoring and optional authentication for paper trading via an FX5 Health Monitor, a C15A Validation Logger, and optionalPaperAuth middleware. It also provides a C15A Validation API for health checks, session management, and pre-validation resets. A Validation Execution Protocol transitions the system to a controlled validation with observation-only mode, enhanced logging, and defined pass criteria.
+Directive 8.8.4-C.15.A-R2 (System Simplification) reverted the system to the stable core architecture from Directive 8.8.4-C.14.C. Removed C15A validation APIs, FX5 health monitor, optional paper auth middleware, and validation logging infrastructure. RTB clearing hooks are maintained via `clearReadyToBuy()` in clear-routines.ts, which calls `readyToBuyService.clearQueue(mode)` and broadcasts `rtb:cleared` WebSocket events. The FX5 Scanner runs independently on 30-second intervals for both paper and live modes. Engine state is controlled exclusively through `/api/trading/start` and `/api/trading/stop` endpoints which update `system_context.isEngineActive`.
 
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
