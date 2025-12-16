@@ -53,13 +53,12 @@ export default function ReadyToBuyTable() {
     }
   }, [data]);
 
-  // Directive 8.8.4-C.14.C: Listen for RTB cleared events via WebSocket
+  // Directive 8.8.4-C.14.D: Listen for rtb:cleared event directly
   useEffect(() => {
     const latestMessage = messages[messages.length - 1];
-    if (latestMessage?.type === 'trading_data_updated' && 
-        latestMessage?.payload?.event === 'rtb_cleared') {
-      console.log('[8.8.4-C.14.C][RTB_CLEARED] Received rtb_cleared event, clearing table');
-      // Invalidate the query to force an immediate refresh (will return empty)
+    if (latestMessage?.type === 'rtb:cleared') {
+      console.log('[8.8.4-C.14.D][RTB_CLEARED] Received rtb:cleared event, clearing table');
+      // Clear table immediately
       queryClient.setQueryData(['/api/trading-signals'], []);
       setLastUpdated(new Date());
     }

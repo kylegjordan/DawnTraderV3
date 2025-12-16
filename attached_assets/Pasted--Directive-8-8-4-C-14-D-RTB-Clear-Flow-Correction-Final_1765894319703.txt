@@ -1,0 +1,146 @@
+🧩 Directive 8.8.4-C.14.D — RTB Clear Flow Correction & Finalization
+
+Date: 2025-12-16
+Supersedes: 8.8.4-C.14.C
+Objective: Eliminate duplication, restore proper event scoping, and finalize the correct functional behavior for Ready-to-Buy (RTB) queue clearing on Stop Trading and Clear & Reset events.
+
+1. Background
+
+Directive 8.8.4-C.14.C introduced centralized clearing of RTB signals via the clearReadyToBuy() helper and tied it to two triggers:
+
+the global Stop Trading toggle, and
+
+the Clear & Reset button on the Active Trades tab.
+
+Implementation succeeded but included:
+
+a duplicate direct RTB deletion call in routes.ts,
+
+an overly broad WebSocket broadcast (sent to all clients, all modes), and
+
+an event payload format mismatch that can confuse listeners.
+
+Directive 8.8.4-C.14.D corrects these and locks down the intended behavior.
+
+2. Scope of Work
+2.1 Remove Duplicate RTB Clearing Call
+
+File: server/routes.ts
+Lines (approx.): 9439 – 9441
+
+Action:
+Delete the redundant call:
+
+await storage.deleteAllTradingSignals('paper');
+
+
+and rely solely on the centralized:
+
+await clearReadyToBuy(mode as 'paper' | 'live', 'ResetButton');
+
+
+✅ Ensures a single, traceable clearing path with proper broadcast handling.
+
+2.2 Reinstate Mode-Scoped WebSocket Broadcast
+
+File: server/utils/clear-routines.ts
+
+Replace the unscoped broadcast with mode-specific dispatch:
+
+import { broadcastEvent } from '../services/ws-server.js';
+broadcastEvent('rtb:cleared', { mode });
+
+
+✅ Prevents cross-session RTB clears (e.g., prevents paper events clearing live queues).
+
+2.3 Standardize WebSocket Payload Format
+
+Ensure the emitted payload uses a consistent schema:
+
+{
+  "event": "rtb:cleared",
+  "mode": "paper",
+  "timestamp": "2025-12-16T00:00:00Z"
+}
+
+
+✅ Aligns with frontend listener expectations for deterministic updates.
+
+2.4 Verify Frontend Listener Event
+
+File: client/src/components/trading/ready-to-buy-table.tsx
+
+Confirm the listener responds to "rtb:cleared" directly:
+
+useEffect(() => {
+  socket.on('rtb:cleared', () => setSignals([]));
+  return () => socket.off('rtb:cleared');
+}, []);
+
+
+✅ Ensures the Ready-to-Buy table clears instantly on event receipt.
+
+2.5 Confirm No New UI Elements
+
+Replit must verify that no separate “Reset RTB” button or additional menu item has been introduced.
+Only the following triggers may invoke RTB clearing:
+
+Stop Trading Toggle (top-bar control)
+
+Clear & Reset Button (Active Trades tab)
+
+✅ Maintains UX consistency and prevents redundant user actions.
+
+2.6 Validate Stop-Trading Flow Sequence
+
+Ensure the operational sequence executes in this exact order:
+
+[1] Trading engine stop initiated
+[2] ActiveFilterPool cleared
+[3] clearReadyToBuy('paper','StopTrading') executes
+[4] RTB queue cleared in database
+[5] WebSocket broadcast "rtb:cleared" emitted
+[6] Frontend Ready-to-Buy table clears immediately
+
+
+✅ Confirms clean state synchronization between backend and frontend.
+
+3. Logging Specification
+
+Unified log output for all RTB clears:
+
+[8.8.4-C.14.D][RTB_CLEAR] source=StopTrading mode=paper cleared=15
+[8.8.4-C.14.D][RTB_CLEAR] source=ResetButton mode=paper cleared=0
+
+
+✅ Enables accurate session tracing and validation.
+
+4. Validation & Acceptance Criteria
+Test	Expected Outcome
+Stop Trading Toggle	RTB queue cleared; UI table instantly empties; single log line with source=StopTrading.
+Clear & Reset Button	RTB queue cleared; UI table instantly empties; single log line with source=ResetButton.
+Backend DB Check	SELECT COUNT(*) FROM rtb_signals; → 0 rows.
+Cross-Mode Isolation	Paper clear events do not affect live mode RTB data.
+Frontend Latency	RTB table update ≤ 200 ms after button click.
+No Duplicate Logs	Exactly one [RTB_CLEAR] per event.
+5. Deliverables
+
+Updated routes.ts (no duplicate delete)
+
+Updated clear-routines.ts (mode-filtered broadcast, structured payload)
+
+Verified ready-to-buy-table.tsx listener
+
+Validation log: logs/validation/8.8.4-C.14.D_rtb_clear_finalization.md
+
+6. Expected Outcome
+
+After implementing Directive 8.8.4-C.14.D:
+
+RTB signals clear cleanly and deterministically on both triggers.
+
+No cross-mode contamination or redundant deletion calls.
+
+Frontend tables reflect state changes immediately.
+
+System logs are consistent, traceable, and audit-ready.
