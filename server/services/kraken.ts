@@ -743,7 +743,10 @@ export class KrakenService {
       if (!pairInfo) return;
 
       const currentPrice = parseFloat(ticker.c[0]);
-      const volume24h = parseFloat(ticker.v[1]);
+      // Directive 8.8.4-C.13.D: Convert 24h volume from coins to USD
+      const volume24hCoins = parseFloat(ticker.v[1]);
+      const volume24hUSD = volume24hCoins * currentPrice;
+      const volume24h = volume24hUSD; // Maintain backward compatibility
       const high24h = parseFloat(ticker.h[1]);
       const low24h = parseFloat(ticker.l[1]);
       const dailyRange = ((high24h - low24h) / low24h) * 100;
@@ -774,9 +777,11 @@ export class KrakenService {
         return;
       }
 
-      // Filter 4: Minimum 24h volume
-      if (volume24h < minVolume) {
-        exclusionReasons[pairName] = `Volume $${volume24h.toFixed(0)} < $${minVolume.toFixed(0)}`;
+      // Filter 4: Minimum 24h volume (USD-denominated per Directive 8.8.4-C.13.D)
+      console.debug(`[FILTER][VOLUME] ${pairName} Vol=$${volume24hUSD.toFixed(2)} vs Min=$${minVolume}`);
+      if (volume24hUSD < minVolume) {
+        console.warn(`[FILTER_REJECT][LOW_VOLUME] ${pairName} Vol=$${volume24hUSD.toFixed(2)} < $${minVolume}`);
+        exclusionReasons[pairName] = `Volume $${volume24hUSD.toFixed(0)} < $${minVolume.toFixed(0)}`;
         return;
       }
 
@@ -816,11 +821,13 @@ export class KrakenService {
       }
 
       // All pre-history filters passed - add to candidate pairs for history check
+      // Directive 8.8.4-C.13.D: volume24h is now USD-denominated (volume24hCoins * currentPrice)
       candidatePairs.push({
         symbol: pairName,
         baseCurrency: pairInfo.base,
         quoteCurrency: pairInfo.quote,
-        volume24h,
+        volume24h: volume24hUSD, // Explicit USD volume for downstream consumers
+        volume24hUSD, // Explicit USD volume property for pipeline transparency
         currentPrice,
         dailyRange,
         vwap: parseFloat(ticker.p[1]) // 24h VWAP
