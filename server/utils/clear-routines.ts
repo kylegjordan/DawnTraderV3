@@ -22,7 +22,8 @@ export async function clearReadyToBuy(mode: 'paper' | 'live', source = 'system')
     
     console.log(`[8.8.4-C.14.C][RTB_CLEAR] source=${source} mode=${mode} cleared=${cleared}`);
     
-    // Broadcast to frontend for immediate UI update
+    // Broadcast to ALL connected clients for immediate UI update
+    // Note: No mode filter so all frontends receive this immediately
     await contextBridge.broadcast({
       type: 'trading_data_updated',
       payload: { 
@@ -31,8 +32,8 @@ export async function clearReadyToBuy(mode: 'paper' | 'live', source = 'system')
         source,
         clearedCount: cleared,
         timestamp: new Date().toISOString()
-      },
-      mode
+      }
+      // Note: Removed mode filter to ensure all connected clients see RTB cleared event
     });
     
     return cleared;

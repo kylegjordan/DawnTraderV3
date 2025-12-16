@@ -9436,9 +9436,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         console.log(`[PaperSim] Hard reset: cleared trades, positions, and logs`);
       }
       
-      // REB 8.8.3-I: Clear RTB signals on simulation reset
-      const clearedSignals = await storage.deleteAllTradingSignals('paper');
-      console.log(`[8.8.3-I][RTB_RESET] Cleared ${clearedSignals} RTB signals during simulation reset`);
+      // 8.8.4-C.14.C: RTB signals already cleared via hardResetPaperSimulation -> clearReadyToBuy
+      // Note: Removed duplicate storage.deleteAllTradingSignals call as clearReadyToBuy provides WebSocket broadcast
       
       // Reset portfolio state for paper mode
       const systemContext = await storage.getSystemContext('paper');
