@@ -1,6 +1,7 @@
 /**
  * C15A Validation Logger Service
  * Directive 8.8.4-C.15.A: Structured logging for validation sessions
+ * Directive 8.8.4-C.15.A-R1: Validation Execution Protocol with observation-only mode
  * 
  * Logs to: logs/validation/8.8.4-C.15.A_validation_run1.md
  */
@@ -67,7 +68,7 @@ class C15aValidationLogger {
     await this.log('SESSION_START', { mode, balance, sessionId: this.sessionId });
     
     // Write initial header to file
-    const header = `# 8.8.4-C.15.A Validation Run Log
+    const header = `# 8.8.4-C.15.A-R1 Validation Run Log
 
 Session ID: ${this.sessionId}
 Start Time: ${this.sessionStart.toISOString()}
@@ -82,7 +83,8 @@ Starting Balance: $${balance.toFixed(2)}
     await fs.mkdir(path.dirname(this.logFilePath), { recursive: true });
     await fs.writeFile(this.logFilePath, header);
     
-    console.log(`[8.8.4-C.15.A] Validation session started: ${this.sessionId}`);
+    // C15A-R1: Use new log format per directive
+    console.log(`[C15A-R1][SESSION_START] mode=${mode} balance=${balance.toFixed(2)}`);
     return this.sessionId;
   }
 
@@ -117,11 +119,11 @@ Starting Balance: $${balance.toFixed(2)}
         break;
     }
 
-    // Format for console
+    // Format for console - C15A-R1: Use new log prefix per directive
     const dataStr = Object.entries(data)
       .map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`)
       .join(' ');
-    const logLine = `[8.8.4-C.15.A][${type}] ${dataStr}`;
+    const logLine = `[C15A-R1][${type}] ${dataStr}`;
     console.log(logLine);
 
     // Append to file
@@ -222,7 +224,8 @@ Starting Balance: $${balance.toFixed(2)}
       // Silently fail
     }
 
-    console.log(`[8.8.4-C.15.A] Session ended: ${this.sessionId}`);
+    // C15A-R1: Use new log format per directive
+    console.log(`[C15A-R1][SESSION_SUMMARY] cycles=${this.metrics.fx5Cycles} promotions=${this.metrics.promotions} authErrors=${this.metrics.authErrors}`);
     return summary;
   }
 

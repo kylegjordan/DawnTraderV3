@@ -1,18 +1,25 @@
 /**
  * FX5 Health Monitor Service
  * Directive 8.8.4-C.15.A: Monitor FX5 scanner health and auto-recover if timers stop
+ * Directive 8.8.4-C.15.A-R1: Observation-only mode for validation execution
  * 
  * Features:
  * - Tracks last successful scan time per mode
  * - Detects if scanner stops producing scans
- * - Auto-restarts scanner if stalled beyond threshold
+ * - Auto-restarts scanner if stalled beyond threshold (when enabled)
  * - Provides health status for diagnostics
+ * 
+ * R1 Mode: When OBSERVATION_ONLY_MODE is true, stall detection is logged
+ * but auto-recovery is disabled to maintain clean validation conditions.
  */
 
 import { fx5Scanner } from './fx5-scanner.js';
 
 const HEALTH_CHECK_INTERVAL_MS = 60 * 1000; // Check every 60 seconds
 const MAX_SCAN_AGE_MS = 90 * 1000; // Scanner should produce scan within 90s (3x the 30s interval)
+
+// C15A-R1: Observation-only mode flag - set to true during validation sessions
+const OBSERVATION_ONLY_MODE = true;
 
 interface HealthState {
   lastPaperScanTime: number | null;
@@ -87,6 +94,7 @@ class Fx5HealthMonitorService {
 
   /**
    * Perform a health check and auto-recover if needed
+   * C15A-R1: In observation mode, stall is detected and logged but no auto-recovery
    */
   private async performHealthCheck(): Promise<void> {
     const now = Date.now();
@@ -104,7 +112,13 @@ class Fx5HealthMonitorService {
       console.warn(`  Paper: ${paperStale ? 'STALE' : 'OK'} (age=${Math.round(paperAge / 1000)}s)`);
       console.warn(`  Live: ${liveStale ? 'STALE' : 'OK'} (age=${Math.round(liveAge / 1000)}s)`);
 
-      // Attempt recovery
+      // C15A-R1: In observation mode, log but do not auto-recover
+      if (OBSERVATION_ONLY_MODE) {
+        console.warn(`[C15A-R1][Health] FX5 idle > ${MAX_SCAN_AGE_MS / 1000}s — observation only, no auto-restart`);
+        return;
+      }
+
+      // Attempt recovery (only when not in observation mode)
       await this.attemptRecovery();
     } else {
       this.state.isHealthy = true;

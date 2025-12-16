@@ -1,0 +1,175 @@
+Excellent — here is the finalized and formally structured directive continuation, Directive 8.8.4-C.15.A-R1, which serves as the official Revision 1 of Directive 8.8.4-C.15.A.
+
+It transitions the system from “implementation and preparation” into “controlled validation execution,” with strict operational limits and observation-based testing.
+
+⚙️ Directive 8.8.4-C.15.A-R1 — Validation Execution Protocol
+
+Date: 2025-12-17
+Supersedes: Directive 8.8.4-C.15.A
+Related Directives: 8.8.4-C.14.D (RTB Clear Flow), 8.8.4-C.15.A (FX5 Stability & Authentication Validation)
+Objective:
+To conduct the formal one-hour monitored validation session of the FX5 scanner, authentication middleware, and Ready-to-Buy synchronization processes under controlled, observation-only conditions.
+
+1. Purpose and Context
+
+Directive 8.8.4-C.15.A implemented new infrastructure, including:
+
+FX5 Health Monitor with auto-recovery,
+
+C15A Validation Logger,
+
+Optional Authentication Middleware for paper trading, and
+
+Validation-specific API endpoints.
+
+The goal of this revision is to:
+
+Disable automated recovery or mutation features to maintain clean validation conditions,
+
+Lock the system in an observation-only mode, and
+
+Execute a continuous, fully monitored, 60-minute paper-trading cycle to validate long-term FX5 stability, authentication persistence, and correct synchronization between trading subsystems.
+
+2. Validation Scope
+
+This revision authorizes Replit to perform a single, uninterrupted validation session of the FX5 scanner and related systems in the paper trading mode only.
+
+Subsystem	Validation Objective
+FX5 Scanner	Verify continuous operation and cycle completion for 60 minutes without recovery triggers
+Health Monitor	Confirm accurate detection timing but no auto-restart
+Authentication Layer	Verify no 401 or unauthorized access errors occur
+RTB Synchronization	Confirm promoted signals are removed immediately from RTB table
+Logging Subsystem	Ensure validation log captures all cycles, RTB events, and auth events accurately
+3. Pre-Validation Configuration Adjustments
+3.1 Disable FX5 Auto-Recovery
+
+In server/services/fx5-health-monitor.ts:
+
+if (Date.now() - lastScan > thresholdMs) {
+  console.warn(`[C15A-R1][Health] FX5 idle > ${thresholdMs / 1000}s — observation only, no auto-restart`);
+  return;
+}
+
+
+This disables the restart action while retaining idle detection logging.
+
+3.2 Authentication Logging
+
+In optionalPaperAuth middleware:
+
+if (!req.user && mode === 'paper') {
+  console.warn(`[C15A-R1][Auth] Fallback authentication: testuser123`);
+}
+
+
+All fallback authentication events must be logged to the validation log.
+
+3.3 Validation Logger Path Enforcement
+
+Ensure all logs write to:
+
+logs/validation/8.8.4-C.15.A_validation_run1.md
+
+
+No alternate log paths or file rotations permitted.
+
+3.4 Confirm Reset Endpoint Scope
+
+Verify that POST /api/c15a/reset:
+
+Stops the trading engine (isEngineActive=false)
+
+Clears RTB table and open trades
+
+Resets FX5 scan cycle table
+
+Restarts FX5 scanner only after engine stop is confirmed
+
+Expected confirmation log:
+
+[C15A-R1][RESET] Engine stopped, RTB cleared, FX5 restarted cleanly
+
+4. Validation Execution Protocol
+4.1 Test Account Credentials
+
+Use only the designated test credentials:
+
+username = testuser123
+password = SecurePass123!
+
+4.2 Execution Sequence
+
+Execute:
+
+POST /api/c15a/reset
+
+
+Wait for confirmation in logs:
+
+[C15A-R1][RESET] Engine stopped, FX5 restarted
+
+
+Start validation:
+
+POST /api/c15a/validation/start
+
+
+Logs must confirm:
+
+[C15A-R1][SESSION_START] mode=paper balance=824.00
+
+
+Activate trading (Trading Active → ON in UI).
+Expected logs within 30 seconds:
+
+[FX5Scanner] Cycle #1 started (interval=30s)
+
+
+Maintain continuous operation for 60 minutes.
+
+End validation:
+
+POST /api/c15a/validation/end
+
+
+Expected completion log:
+
+[C15A-R1][SESSION_SUMMARY] cycles=120 promotions=≥1 authErrors=0
+
+5. Data Collection Requirements
+Data Type	Collection Point	Output Location
+Session Logs	FX5 cycles, RTB updates, auth events	logs/validation/8.8.4-C.15.A_validation_run1.md
+Health Data Snapshot	/api/c15a/fx5-health (start + end)	Included in log file
+DB State	fx5_scan_cycles, ready_to_buy_signals, paper_sim_trades	JSON snapshots
+System Health Summary	/logs/system_diagnostics/fx5_runtime_health.json	Generated at session end
+6. Validation Pass Criteria
+Metric	Target	Status Condition
+FX5 Scan Continuity	≥120 cycles/hour	No gap >90s between cycles
+Authentication	0 unauthorized (401) responses	Pass
+RTB Synchronization	100% promotion cleanup	Pass
+Engine Stability	Engine active throughout	Pass
+Log Integrity	Complete structured log entries	Pass
+
+Any deviations shall be annotated in the session log with [C15A-R1][ANOMALY] prefix.
+
+7. Post-Validation Actions
+
+Archive final logs and DB snapshots under:
+
+/logs/validation/archive/8.8.4-C.15.A_R1_<timestamp>/
+
+
+Do not modify code or restart services until post-validation review is completed.
+
+Await architectural review for Directive 8.8.4-C.15.B, which will re-enable the health monitor’s auto-recovery and implement permanent self-healing logic.
+
+8. Expected Deliverables
+Deliverable	Description
+8.8.4-C.15.A_validation_run1.md	Complete structured session log
+fx5_runtime_health.json	FX5 operational summary at start/end
+validation_db_snapshot.json	Exported state of relevant tables
+Summary Note	One-paragraph post-run narrative on stability and anomalies
+
+✅ Directive 8.8.4-C.15.A-R1 — Validation Execution Protocol
+is hereby authorized for immediate execution once all pre-validation adjustments are completed.
+No auto-recovery, code modifications, or unsanctioned debugging actions may be performed during this run.

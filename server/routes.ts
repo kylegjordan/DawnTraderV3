@@ -229,6 +229,7 @@ import { SystemUserCache } from './utils/system-user-cache.js';
 
 async function optionalPaperAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
+  const mode = (req.headers['x-app-mode'] as string) || (req.query.mode as string) || 'paper';
   
   // If auth header provided, use standard authentication
   if (authHeader) {
@@ -243,6 +244,11 @@ async function optionalPaperAuth(req: AuthenticatedRequest, res: Response, next:
     if (!user) {
       console.warn('[C15A][OptionalAuth] Fallback user testuser123 not found in database');
       return res.status(401).json({ error: 'No authentication credentials provided' });
+    }
+    
+    // C15A-R1: Log all fallback authentication events for validation
+    if (mode === 'paper') {
+      console.warn(`[C15A-R1][Auth] Fallback authentication: testuser123`);
     }
     
     const userRole = user.role || 'viewer';
@@ -21891,7 +21897,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  // C15A: Pre-validation Reset
+  // C15A-R1: Pre-validation Reset with enhanced logging
   apiRouter.post('/c15a/reset', async (req, res) => {
     try {
       const mode = 'paper' as const;
@@ -21900,30 +21906,31 @@ Important: Extract the exact field names and numeric values from the user's requ
       const paperContext = await storage.getSystemContext(mode);
       if (paperContext?.isEngineActive) {
         await storage.updateSystemContext(mode, { isEngineActive: false });
-        console.log('[C15A-Reset] Trading engine stopped');
       }
+      console.log('[C15A-R1][RESET] Engine stopped, isEngineActive=false');
       
       // 2. Clear RTB queue
       const { clearReadyToBuy } = await import('./utils/clear-routines.js');
       await clearReadyToBuy(mode);
-      console.log('[C15A-Reset] RTB queue cleared');
+      console.log('[C15A-R1][RESET] RTB cleared');
       
       // 3. Reset FX5 bootstrap flag
       const { resetBootstrapFlag } = await import('./startup/fx5-scanner-bootstrap.js');
       resetBootstrapFlag();
-      console.log('[C15A-Reset] FX5 bootstrap flag reset');
       
       // 4. Restart FX5 scanner
       const { fx5Scanner } = await import('./services/fx5-scanner.js');
       fx5Scanner.stop();
       await fx5Scanner.start();
-      console.log('[C15A-Reset] FX5 scanner restarted');
+      console.log('[C15A-R1][RESET] Engine stopped, FX5 restarted');
       
       // 5. Restart health monitor
       const { fx5HealthMonitor } = await import('./services/fx5-health-monitor.js');
       fx5HealthMonitor.stop();
       fx5HealthMonitor.start();
-      console.log('[C15A-Reset] FX5 health monitor restarted');
+      
+      // Final confirmation log per directive
+      console.log('[C15A-R1][RESET] Engine stopped, RTB cleared, FX5 restarted cleanly');
       
       res.json({ 
         ok: true, 
@@ -21937,7 +21944,7 @@ Important: Extract the exact field names and numeric values from the user's requ
         ]
       });
     } catch (error: any) {
-      console.error('[C15A-Reset] Error:', error);
+      console.error('[C15A-R1][RESET] Error:', error);
       res.status(500).json({ ok: false, error: error.message });
     }
   });
