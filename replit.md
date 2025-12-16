@@ -61,6 +61,12 @@ RTB Queue Stability Fixes (8.8.4-C.13.B) addresses critical issues in the RTB pi
 
 RTB Clear Flow & WebSocket Synchronization (8.8.4-C.14.D) standardizes the WebSocket event type to `rtb:cleared` with mode-scoped broadcast for immediate UI synchronization when Reset or Stop Trading actions clear the RTB queue. The centralized `clearReadyToBuy()` helper in `server/utils/clear-routines.ts` handles database deletion and WebSocket broadcast. The frontend mutation in `active-trades-v2.tsx` now invalidates `/api/trading-signals` to ensure the Ready-to-Buy table refreshes on reset.
 
+FX5 Stability & Authentication Validation (8.8.4-C.15.A) implements comprehensive FX5 scanner health monitoring and optional authentication for paper trading. Key components:
+- **FX5 Health Monitor** (`server/services/fx5-health-monitor.ts`): Tracks last successful scan time per mode, detects stalled scanners (>90s without scan), and auto-recovers by restarting the scanner with health metrics exposed via `/api/c15a/fx5-health`.
+- **C15A Validation Logger** (`server/services/c15a-validation-logger.ts`): Structured session logging for validation runs, tracking FX5 cycles, RTB updates, promotions, trade closes, and auth errors with output to `logs/validation/`.
+- **Optional Paper Auth** (`optionalPaperAuth` middleware): Falls back to testuser123 for paper trading endpoints (`/trading-signals`, `/portfolio-summary`, `/trading/status`, `/settings`) when no auth header is provided, eliminating 401 errors for paper trading.
+- **C15A Validation API**: Endpoints for health checks (`/api/c15a/fx5-health`), validation session management (`/api/c15a/validation/start|end|metrics`), and pre-validation reset (`/api/c15a/reset`).
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.

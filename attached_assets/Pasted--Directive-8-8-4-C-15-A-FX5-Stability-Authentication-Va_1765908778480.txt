@@ -1,0 +1,184 @@
+⚙️ Directive 8.8.4-C.15.A — FX5 Stability & Authentication Validation Run
+
+Date: 2025-12-16
+Supersedes: 8.8.4-C.14.D
+Objective: Conduct a fully monitored, one-hour trading session to validate system stability, authentication integrity, and FX5 scanner persistence following recent RTB and orchestrator updates.
+
+1. Background
+
+During an unmonitored paper-trading session (~2 hrs runtime), the system exhibited partial functionality:
+
+Component	Observed State	Effect
+Trading Engine (isEngineActive)	Active	System showed “Active” in UI
+FX5 Scanner	Stopped after restart	Scan cycles frozen at 19
+Authentication Layer	401 Errors	API endpoints for /api/trading-signals and /api/portfolio-summary failed
+WebSocket Streams	Running	Live prices continued updating
+RTB Table	Failing	“Failed to load trading signals” due to auth failure
+Trade History	Empty	UI blocked by 401s (data exists in DB)
+Starting/Current Balance	$0 displayed	API fetch blocked, but live portfolio value persisted
+
+These indicate auth context loss and scanner timer termination, leaving the system in a half-active state.
+Directive 8.8.4-C.15.A initiates a structured validation run to reproduce, observe, and document behavior under full supervision.
+
+2. Scope of Work
+
+Replit shall:
+
+Reset all system components and clear transient state
+
+Reinitialize trading and FX5 scanner modules
+
+Run a supervised one-hour trading session
+
+Collect structured logs and health metrics
+
+3. Pre-Validation Environment Reset
+3.1 Stop All Active Processes
+
+Execute:
+
+npm run stop-all
+
+
+Verify that:
+
+isEngineActive=false
+
+FX5Scanner logs show [STOPPED]
+
+No open WebSocket sessions persist
+
+3.2 Clear Volatile Data
+
+Truncate or reset:
+
+system_context
+
+fx5_scan_cycles
+
+ready_to_buy_signals
+
+paper_sim_sessions (mark all “running” sessions as closed)
+
+auth_sessions or token cache store
+
+3.3 Restart Backend
+npm run start:prod
+
+
+Confirm in logs:
+
+[FX5Scanner][BOOTSTRAP] FX5 scan timers initialized
+[SystemContext] Trading engine inactive (idle state)
+
+4. Authentication Re-Initialization
+4.1 Fresh Login Session
+
+Login using Test Account Credentials:
+
+username: test_trader
+password: test_session_001
+
+
+Verify via:
+
+GET /api/auth/status → { "authenticated": true }
+
+
+Store valid token in frontend memory.
+
+4.2 Verify Connectivity
+
+Check:
+
+GET /api/trading-signals → 200 OK
+GET /api/paper-sim/portfolio-summary → 200 OK
+
+
+✅ Confirms backend authentication chain restored.
+
+5. Controlled Validation Run
+5.1 Configuration Parameters
+Parameter	Value
+Mode	paper
+Starting Balance	$824.00
+Max Concurrent Trades	15
+FX5 Scan Interval	30 s
+Validation Duration	60 minutes
+Log Interval	2 minutes
+Session ID Prefix	C15A_VALIDATION_
+5.2 Operational Flow
+
+Activate trading (Trading Active → ON)
+
+Confirm in logs:
+
+[FX5Scanner] Cycle #1 started
+[Orchestrator] Promotion loop active
+[C15A_VALIDATION] Session start: <timestamp>
+
+
+Monitor throughout 60 minutes.
+
+6. Monitoring Goals & Validation Criteria
+Subsystem	Target Behavior	Validation Metric
+FX5 Scanner	Performs continuous 30-sec cycles	≥ 120 cycles / hour
+RTB Table	Updates dynamically with new signals	At least 20 signal refreshes
+Signal Promotion	Promoted RTB signals removed immediately	0 duplicate signal IDs post-promotion
+Auth Layer	No 401s during runtime	100 % successful API calls
+Trading Engine	Remains stable, no crash logs	engineActive persists true
+Trade History	Closed trades logged	≥ 1 close event recorded
+Balances	API and WS values match (± $0.01)	Consistency check
+Latency	RTB UI refresh ≤ 200 ms after broadcast	Pass
+7. Logging Requirements
+
+All logs under:
+
+logs/validation/8.8.4-C.15.A_validation_run1.md
+
+
+Log Content Example:
+
+[8.8.4-C.15.A][SESSION_START] mode=paper balance=824.00
+[8.8.4-C.15.A][FX5_CYCLE] count=37 eligible=14 duration=30s
+[8.8.4-C.15.A][RTB_UPDATE] signals=18 promotions=3
+[8.8.4-C.15.A][AUTH_STATUS] api=OK websocket=OK
+[8.8.4-C.15.A][SESSION_SUMMARY] cycles=120 promotions=27 closes=2
+
+8. Expected Outcomes
+
+FX5 scanner maintains continuous operation throughout session
+
+No authentication loss or 401s observed
+
+RTB and Open Trades stay synchronized (no ghost signals)
+
+At least one trade cycle (open → close) completes successfully
+
+Validation log produced and stored under /logs/validation/
+
+9. Deliverables
+
+logs/validation/8.8.4-C.15.A_validation_run1.md
+
+Snapshot of:
+
+fx5_scan_cycles
+
+ready_to_buy_signals
+
+paper_sim_trades
+
+System summary (logs/system_diagnostics/fx5_runtime_health.json)
+
+10. Follow-Up Actions (Post-Validation)
+
+If FX5 scanner halts or authentication context fails during run:
+
+Action	Responsible
+Record full stack trace	Replit
+Suspend trading engine	Auto-trigger
+Submit diagnostic package	logs/diagnostics/8.8.4-C.15.A_FX5_failure.md
+Await architect review before remediation	—
+
+If validation passes, the next directive (8.8.4-C.15.B) will formalize health monitoring and event-based RTB cleanup mechanisms.

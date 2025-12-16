@@ -236,7 +236,7 @@
       "PUT"
     ],
     "middlewares": [
-      "authenticateToken",
+      "optionalPaperAuth",
       "anonymous"
     ]
   },
@@ -904,7 +904,7 @@
       "GET"
     ],
     "middlewares": [
-      "authenticateToken",
+      "optionalPaperAuth",
       "anonymous"
     ]
   },
@@ -1015,7 +1015,7 @@
       "GET"
     ],
     "middlewares": [
-      "authenticateToken",
+      "optionalPaperAuth",
       "validateMode",
       "anonymous"
     ]
@@ -2627,7 +2627,7 @@
       "GET"
     ],
     "middlewares": [
-      "authenticateToken",
+      "optionalPaperAuth",
       "anonymous"
     ]
   },
@@ -6007,6 +6007,60 @@
     "path": "/api/health/circuit-breaker",
     "methods": [
       "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/c15a/fx5-health",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/c15a/fx5-health/check",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/c15a/validation/metrics",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/c15a/validation/start",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/c15a/validation/end",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/c15a/reset",
+    "methods": [
+      "POST"
     ],
     "middlewares": [
       "anonymous"

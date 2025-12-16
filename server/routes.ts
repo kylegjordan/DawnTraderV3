@@ -218,6 +218,54 @@ function requireAdmin(req: AuthenticatedRequest, res: Response, next: NextFuncti
   next();
 }
 
+/**
+ * C15A: Optional Authentication Middleware for Paper Trading Endpoints
+ * 
+ * Falls back to testuser123 if no auth header provided.
+ * This allows paper trading endpoints to work without explicit login
+ * while still supporting authenticated requests.
+ */
+import { SystemUserCache } from './utils/system-user-cache.js';
+
+async function optionalPaperAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  
+  // If auth header provided, use standard authentication
+  if (authHeader) {
+    return authenticateToken(req, res, next);
+  }
+  
+  // No auth header - fall back to testuser123 for paper trading
+  try {
+    const testUserId = await SystemUserCache.getOrResolve('testuser123');
+    const user = await storage.getUser(testUserId);
+    
+    if (!user) {
+      console.warn('[C15A][OptionalAuth] Fallback user testuser123 not found in database');
+      return res.status(401).json({ error: 'No authentication credentials provided' });
+    }
+    
+    const userRole = user.role || 'viewer';
+    const permissions = getPermissionsForRole(userRole as UserRole);
+    
+    req.user = {
+      id: testUserId,
+      username: 'testuser123',
+      isAdmin: user?.isAdmin || false,
+      role: userRole,
+      permissions
+    };
+    
+    // Set paper mode by default for unauthenticated requests
+    req.mode = 'paper';
+    
+    next();
+  } catch (error) {
+    console.error('[C15A][OptionalAuth] Error resolving fallback user:', error);
+    return res.status(401).json({ error: 'No authentication credentials provided' });
+  }
+}
+
 // RBAC Middleware - Role-Based Access Control for global context
 function requireOwner(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   if (req.user?.role !== 'owner') {
@@ -1068,7 +1116,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   // Phase 41F-L.E2E-PURGE: Settings now sourced from mode-level guardrails_v2 + portfolio_state
   // This endpoint provides backward compatibility using buildSettingsFromModeLevel adapter
-  apiRouter.get('/settings', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  // C15A: Uses optionalPaperAuth for paper trading without login
+  apiRouter.get('/settings', optionalPaperAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.query.mode as 'live' | 'paper') || 'paper';
@@ -3938,7 +3987,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // Phase 8.5 Addendum K.4: Returns DUAL-MODE data (both live and paper) regardless of engine status
   // Phase 27.F.3: Enhanced to return unified trading state authority
   // Phase 27.F.13.O: Refactored to use global mode-based context with audit fields
-  apiRouter.get('/trading/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  // C15A: Uses optionalPaperAuth for paper trading without login
+  apiRouter.get('/trading/status', optionalPaperAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const globalContextId = 'default';
@@ -4495,7 +4545,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // Trading Signals (Ready-to-Buy opportunities)
   // REB 8.8.3-E: Now returns real strategy signals from Active Filtered Pool pipeline
   // Phase 8.8.3-J7: Returns pre-computed quantity/estimatedValue from signal storage (no more on-the-fly sizing)
-  apiRouter.get('/trading-signals', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
+  // C15A: Uses optionalPaperAuth for paper trading without login
+  apiRouter.get('/trading-signals', optionalPaperAuth, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = req.mode!;
@@ -10146,7 +10197,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   // Phase 8.8.3-B3: Portfolio Summary endpoint - available on all trading tabs
   // Current Balance = starting_balance + SUM(realized P/L from closed trades in current session)
-  apiRouter.get('/paper-sim/portfolio-summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  // C15A: Uses optionalPaperAuth for paper trading without login
+  apiRouter.get('/paper-sim/portfolio-summary', optionalPaperAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const { getEngineSessionStart } = await import('./services/paper-execution-engine');
       const mode = 'paper' as const;
@@ -21778,6 +21830,119 @@ Important: Extract the exact field names and numeric values from the user's requ
   const { healthRouter } = await import('./routes/health.js');
   apiRouter.use('/health', healthRouter);
   console.log('[41F-D] Health routes mounted at /api/health');
+
+  // ========== Directive 8.8.4-C.15.A: Validation Session API ==========
+  
+  // C15A: Get FX5 Health Status
+  apiRouter.get('/c15a/fx5-health', async (req, res) => {
+    try {
+      const { fx5HealthMonitor } = await import('./services/fx5-health-monitor.js');
+      const status = fx5HealthMonitor.getHealthStatus();
+      res.json({ ok: true, ...status });
+    } catch (error: any) {
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // C15A: Force FX5 Health Check
+  apiRouter.post('/c15a/fx5-health/check', async (req, res) => {
+    try {
+      const { fx5HealthMonitor } = await import('./services/fx5-health-monitor.js');
+      const status = await fx5HealthMonitor.forceHealthCheck();
+      res.json({ ok: true, ...status });
+    } catch (error: any) {
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // C15A: Get Validation Session Metrics
+  apiRouter.get('/c15a/validation/metrics', async (req, res) => {
+    try {
+      const { c15aValidationLogger } = await import('./services/c15a-validation-logger.js');
+      const metrics = c15aValidationLogger.getMetrics();
+      res.json({ ok: true, ...metrics });
+    } catch (error: any) {
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // C15A: Start Validation Session
+  apiRouter.post('/c15a/validation/start', async (req, res) => {
+    try {
+      const { c15aValidationLogger } = await import('./services/c15a-validation-logger.js');
+      const mode = (req.body?.mode || 'paper') as 'paper' | 'live';
+      const balance = parseFloat(req.body?.balance || '824');
+      
+      const sessionId = await c15aValidationLogger.startSession(mode, balance);
+      res.json({ ok: true, sessionId, mode, balance });
+    } catch (error: any) {
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // C15A: End Validation Session
+  apiRouter.post('/c15a/validation/end', async (req, res) => {
+    try {
+      const { c15aValidationLogger } = await import('./services/c15a-validation-logger.js');
+      const summary = await c15aValidationLogger.endSession();
+      res.json({ ok: true, summary });
+    } catch (error: any) {
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // C15A: Pre-validation Reset
+  apiRouter.post('/c15a/reset', async (req, res) => {
+    try {
+      const mode = 'paper' as const;
+      
+      // 1. Stop trading engine
+      const paperContext = await storage.getSystemContext(mode);
+      if (paperContext?.isEngineActive) {
+        await storage.updateSystemContext(mode, { isEngineActive: false });
+        console.log('[C15A-Reset] Trading engine stopped');
+      }
+      
+      // 2. Clear RTB queue
+      const { clearReadyToBuy } = await import('./utils/clear-routines.js');
+      await clearReadyToBuy(mode);
+      console.log('[C15A-Reset] RTB queue cleared');
+      
+      // 3. Reset FX5 bootstrap flag
+      const { resetBootstrapFlag } = await import('./startup/fx5-scanner-bootstrap.js');
+      resetBootstrapFlag();
+      console.log('[C15A-Reset] FX5 bootstrap flag reset');
+      
+      // 4. Restart FX5 scanner
+      const { fx5Scanner } = await import('./services/fx5-scanner.js');
+      fx5Scanner.stop();
+      await fx5Scanner.start();
+      console.log('[C15A-Reset] FX5 scanner restarted');
+      
+      // 5. Restart health monitor
+      const { fx5HealthMonitor } = await import('./services/fx5-health-monitor.js');
+      fx5HealthMonitor.stop();
+      fx5HealthMonitor.start();
+      console.log('[C15A-Reset] FX5 health monitor restarted');
+      
+      res.json({ 
+        ok: true, 
+        message: 'Pre-validation reset complete',
+        actions: [
+          'Trading engine stopped',
+          'RTB queue cleared',
+          'FX5 bootstrap flag reset',
+          'FX5 scanner restarted',
+          'FX5 health monitor restarted'
+        ]
+      });
+    } catch (error: any) {
+      console.error('[C15A-Reset] Error:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  console.log('[8.8.4-C.15.A] Validation API routes mounted');
 
   // Catch-all handler for unmatched /api/* routes
   // This prevents requests from falling through to Vite's HTML handler
