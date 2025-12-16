@@ -21901,6 +21901,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   apiRouter.post('/c15a/reset', async (req, res) => {
     try {
       const mode = 'paper' as const;
+      const clearPositions = req.body?.clearPositions !== false; // Default true
       
       // 1. Stop trading engine
       const paperContext = await storage.getSystemContext(mode);
@@ -21914,17 +21915,27 @@ Important: Extract the exact field names and numeric values from the user's requ
       await clearReadyToBuy(mode);
       console.log('[C15A-R1][RESET] RTB cleared');
       
-      // 3. Reset FX5 bootstrap flag
+      // 3. Clear all open positions (if requested)
+      let clearedPositions = 0;
+      if (clearPositions) {
+        const { db } = await import('./db.js');
+        const { paperSimOpenPositions } = await import('../shared/schema.js');
+        const result = await db.delete(paperSimOpenPositions);
+        clearedPositions = result.rowCount || 0;
+        console.log(`[C15A-R1][RESET] Cleared ${clearedPositions} open positions`);
+      }
+      
+      // 4. Reset FX5 bootstrap flag
       const { resetBootstrapFlag } = await import('./startup/fx5-scanner-bootstrap.js');
       resetBootstrapFlag();
       
-      // 4. Restart FX5 scanner
+      // 5. Restart FX5 scanner
       const { fx5Scanner } = await import('./services/fx5-scanner.js');
       fx5Scanner.stop();
       await fx5Scanner.start();
       console.log('[C15A-R1][RESET] Engine stopped, FX5 restarted');
       
-      // 5. Restart health monitor
+      // 6. Restart health monitor
       const { fx5HealthMonitor } = await import('./services/fx5-health-monitor.js');
       fx5HealthMonitor.stop();
       fx5HealthMonitor.start();
@@ -21935,9 +21946,11 @@ Important: Extract the exact field names and numeric values from the user's requ
       res.json({ 
         ok: true, 
         message: 'Pre-validation reset complete',
+        clearedPositions,
         actions: [
           'Trading engine stopped',
           'RTB queue cleared',
+          `Cleared ${clearedPositions} open positions`,
           'FX5 bootstrap flag reset',
           'FX5 scanner restarted',
           'FX5 health monitor restarted'
@@ -21945,6 +21958,37 @@ Important: Extract the exact field names and numeric values from the user's requ
       });
     } catch (error: any) {
       console.error('[C15A-R1][RESET] Error:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // C15A-R1: Start Trading (for validation without UI)
+  apiRouter.post('/c15a/start-trading', async (req, res) => {
+    try {
+      const mode = 'paper' as const;
+      const testUserId = await SystemUserCache.getOrResolve('testuser123');
+      
+      // Update system context to enable trading
+      await storage.updateSystemContext(mode, { 
+        isEngineActive: true,
+        lastStartedBy: testUserId,
+        lastModeChange: new Date()
+      });
+      
+      // Start the paper trading engine
+      const { paperTradingEngine } = await import('./services/paper-execution-engine.js');
+      await paperTradingEngine.start();
+      
+      console.log('[C15A-R1][START_TRADING] Paper trading engine started');
+      
+      res.json({ 
+        ok: true, 
+        message: 'Trading started for validation',
+        mode,
+        isEngineActive: true
+      });
+    } catch (error: any) {
+      console.error('[C15A-R1][START_TRADING] Error:', error);
       res.status(500).json({ ok: false, error: error.message });
     }
   });

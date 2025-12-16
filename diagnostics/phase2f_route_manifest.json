@@ -6067,6 +6067,15 @@
     ]
   },
   {
+    "path": "/api/c15a/start-trading",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api*",
     "methods": [],
     "middlewares": [
