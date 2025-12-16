@@ -12,13 +12,13 @@ interface TradingSignal {
   quoteCurrency: string;
   strategy: string;
   confidence: number;
+  cwqi: number | null;
+  ngc: number | null;
   entryPrice: number;
   currentPrice: number;
   stopPrice: number;
   targetPrice: number;
-  vwap: number | null;
   volume24h: number | null;
-  dailyRange: number | null;
   status: 'active' | 'expired' | 'executed';
   detectedAt: string;
   estimatedQuantity?: number;
@@ -30,12 +30,12 @@ interface TradingSignalsResponse {
   timestamp: string;
 }
 
-type SortField = 'symbol' | 'volume' | 'price' | 'vwap' | 'range' | 'strategy' | 'entry' | 'target' | 'stop' | 'confidence' | 'quantity';
+type SortField = 'rank' | 'symbol' | 'cwqi' | 'ngc' | 'volume' | 'price' | 'strategy' | 'entry' | 'target' | 'stop' | 'quantity';
 type SortDirection = 'asc' | 'desc';
 
 export default function ReadyToBuyTable() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [sortField, setSortField] = useState<SortField>('confidence');
+  const [sortField, setSortField] = useState<SortField>('cwqi');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   const { data, isLoading, error, refetch } = useQuery<TradingSignal[]>({
@@ -68,6 +68,15 @@ export default function ReadyToBuyTable() {
     let bValue: number | string;
 
     switch (sortField) {
+      case 'rank':
+      case 'cwqi':
+        aValue = a.cwqi ?? a.confidence ?? 0;
+        bValue = b.cwqi ?? b.confidence ?? 0;
+        break;
+      case 'ngc':
+        aValue = a.ngc ?? 0;
+        bValue = b.ngc ?? 0;
+        break;
       case 'symbol':
         aValue = a.symbol;
         bValue = b.symbol;
@@ -79,14 +88,6 @@ export default function ReadyToBuyTable() {
       case 'price':
         aValue = a.currentPrice;
         bValue = b.currentPrice;
-        break;
-      case 'vwap':
-        aValue = a.vwap || 0;
-        bValue = b.vwap || 0;
-        break;
-      case 'range':
-        aValue = a.dailyRange || 0;
-        bValue = b.dailyRange || 0;
         break;
       case 'strategy':
         aValue = a.strategy;
@@ -103,10 +104,6 @@ export default function ReadyToBuyTable() {
       case 'stop':
         aValue = a.stopPrice;
         bValue = b.stopPrice;
-        break;
-      case 'confidence':
-        aValue = a.confidence;
-        bValue = b.confidence;
         break;
       case 'quantity':
         aValue = a.estimatedQuantity || 0;
@@ -208,34 +205,32 @@ export default function ReadyToBuyTable() {
             <table className="w-full" data-testid="table-trading-signals">
               <thead>
                 <tr className="border-b">
+                  <SortHeader field="rank" label="Rank" />
                   <SortHeader field="symbol" label="Symbol" />
-                  <th className="text-left py-2 px-3 font-medium">Name</th>
-                  <SortHeader field="volume" label="24h Volume" />
+                  <SortHeader field="cwqi" label="CWQI" />
+                  <SortHeader field="ngc" label="NGC" />
                   <SortHeader field="price" label="Price" />
-                  <SortHeader field="vwap" label="VWAP" />
-                  <SortHeader field="range" label="Range %" />
-                  <SortHeader field="strategy" label="Strategy" />
                   <SortHeader field="entry" label="Entry" />
                   <SortHeader field="target" label="Target" />
                   <SortHeader field="stop" label="Stop" />
                   <SortHeader field="quantity" label="Qty" />
-                  <SortHeader field="confidence" label="Confidence" />
+                  <SortHeader field="volume" label="24h Vol" />
+                  <SortHeader field="strategy" label="Strategy" />
                 </tr>
               </thead>
               <tbody>
                 {sortedSignals.map((signal, index) => {
-                  // Convert all numeric fields to numbers to handle potential string values from database
                   const entryPrice = Number(signal.entryPrice);
                   const targetPrice = Number(signal.targetPrice);
                   const stopPrice = Number(signal.stopPrice);
                   const currentPrice = Number(signal.currentPrice);
-                  const confidence = Number(signal.confidence);
-                  const dailyRange = signal.dailyRange !== null ? Number(signal.dailyRange) : null;
+                  const cwqi = signal.cwqi !== null ? Number(signal.cwqi) : (signal.confidence ?? 0);
+                  const ngc = signal.ngc !== null ? Number(signal.ngc) : null;
                   const volume24h = signal.volume24h !== null ? Number(signal.volume24h) : null;
-                  const vwap = signal.vwap !== null ? Number(signal.vwap) : null;
                   
                   const profitPotential = ((targetPrice - entryPrice) / entryPrice) * 100;
                   const riskPercent = ((entryPrice - stopPrice) / entryPrice) * 100;
+                  const rank = index + 1;
 
                   return (
                     <tr 
@@ -243,40 +238,38 @@ export default function ReadyToBuyTable() {
                       className="border-b hover:bg-muted/50 transition-colors" 
                       data-testid={`row-signal-${index}`}
                     >
+                      <td className="py-3 px-3 text-center font-semibold" data-testid={`text-rank-${index}`}>
+                        <span className={cn(
+                          "inline-flex items-center justify-center w-6 h-6 rounded-full text-xs",
+                          rank <= 3 ? "bg-success/20 text-success" : "bg-muted text-muted-foreground"
+                        )}>
+                          {rank}
+                        </span>
+                      </td>
                       <td className="py-3 px-3 font-semibold" data-testid={`text-symbol-${index}`}>
                         {signal.symbol}
                       </td>
-                      <td className="py-3 px-3 text-sm text-muted-foreground" data-testid={`text-name-${index}`}>
-                        {signal.baseCurrency}
+                      <td className="text-right py-3 px-3" data-testid={`text-cwqi-${index}`}>
+                        <span className={cn(
+                          "font-semibold",
+                          cwqi >= 0.8 ? "text-success" : cwqi >= 0.5 ? "text-primary" : "text-muted-foreground"
+                        )}>
+                          {!isNaN(cwqi) ? cwqi.toFixed(4) : '—'}
+                        </span>
                       </td>
-                      <td className="text-right py-3 px-3" data-testid={`text-volume-${index}`}>
-                        {volume24h !== null && !isNaN(volume24h)
-                          ? `$${(volume24h / 1000000).toFixed(2)}M`
-                          : '—'
-                        }
+                      <td className="text-right py-3 px-3" data-testid={`text-ngc-${index}`}>
+                        <span className={cn(
+                          "font-semibold",
+                          (ngc ?? 0) >= 0.8 ? "text-success" : (ngc ?? 0) >= 0.5 ? "text-primary" : "text-muted-foreground"
+                        )}>
+                          {ngc !== null && !isNaN(ngc) ? ngc.toFixed(4) : '—'}
+                        </span>
                       </td>
                       <td className="text-right py-3 px-3 font-mono" data-testid={`text-price-${index}`}>
                         {!isNaN(currentPrice) 
                           ? `$${currentPrice.toFixed(currentPrice < 1 ? 4 : 2)}`
                           : '—'
                         }
-                      </td>
-                      <td className="text-right py-3 px-3 font-mono" data-testid={`text-vwap-${index}`}>
-                        {vwap !== null && !isNaN(vwap)
-                          ? `$${vwap.toFixed(vwap < 1 ? 4 : 2)}`
-                          : '—'
-                        }
-                      </td>
-                      <td className="text-right py-3 px-3" data-testid={`text-range-${index}`}>
-                        {dailyRange !== null && !isNaN(dailyRange)
-                          ? `${dailyRange.toFixed(2)}%`
-                          : '—'
-                        }
-                      </td>
-                      <td className="py-3 px-3" data-testid={`text-strategy-${index}`}>
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                          {formatStrategy(signal.strategy)}
-                        </span>
                       </td>
                       <td className="text-right py-3 px-3 font-mono font-semibold text-success" data-testid={`text-entry-${index}`}>
                         {!isNaN(entryPrice) 
@@ -328,12 +321,17 @@ export default function ReadyToBuyTable() {
                           )}
                         </div>
                       </td>
-                      <td className="text-right py-3 px-3" data-testid={`text-confidence-${index}`}>
-                        <span className={cn(
-                          "font-semibold",
-                          confidence >= 0.8 ? "text-success" : confidence >= 0.6 ? "text-primary" : "text-muted-foreground"
-                        )}>
-                          {!isNaN(confidence) ? `${(confidence * 100).toFixed(0)}%` : '—'}
+                      <td className="text-right py-3 px-3" data-testid={`text-volume-${index}`}>
+                        {volume24h !== null && !isNaN(volume24h)
+                          ? volume24h >= 1000000 
+                            ? `$${(volume24h / 1000000).toFixed(2)}M`
+                            : `$${(volume24h / 1000).toFixed(0)}K`
+                          : '—'
+                        }
+                      </td>
+                      <td className="py-3 px-3" data-testid={`text-strategy-${index}`}>
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                          {formatStrategy(signal.strategy)}
                         </span>
                       </td>
                     </tr>

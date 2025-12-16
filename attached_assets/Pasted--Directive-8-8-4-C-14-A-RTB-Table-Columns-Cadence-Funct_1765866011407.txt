@@ -1,0 +1,113 @@
+🧩 Directive 8.8.4-C.14.A — RTB Table Columns & Cadence Functionality Audit (Non-Interruptive)
+🎯 Objective
+
+Verify that:
+
+The Ready-to-Buy (RTB) table updates made under Directive 8.8.4-C.13.C were correctly applied in both backend and frontend layers (schema + render).
+
+The decoupled RTB refresh cadence is functioning as intended—i.e., signals are cycling, expiring, and re-ranking dynamically during the trading session.
+
+The investigation must be performed without stopping or resetting the ongoing C.14 validation trading session.
+
+🔍 Context
+
+Under Directive 8.8.4-C.13.C, Replit implemented:
+
+RTB Table Schema Update:
+
+Added columns → Rank, CWQI, NGC, Price, Entry, Target, Stop, Qty, 24h Volume, Strategy
+
+Removed columns → Name, VWAP, Range % (unless explicitly in use)
+
+Decoupled RTB Cadence:
+
+Moved RTB refresh logic out of the TCL event dependency
+
+Introduced an independent 30-second refresh cycle for dynamic queue updates
+
+Allowed continuous queue cycling and re-ranking based on CWQI values
+
+Current observation:
+
+The table still displays the deprecated columns (Name, VWAP, Range %)
+
+New columns (Rank, CWQI, NGC) are not visible
+
+RTB queue populated once at startup (6 signals) and remains static
+
+⚙️ Audit Tasks
+
+Schema Verification
+
+Confirm that the latest RTB table schema from Directive 8.8.4-C.13.C is deployed:
+
+Check shared/schema.ts and client/components/Trading/ReadyToBuyTable.tsx
+
+Verify that rank, cwqi, ngc, and volume24hUSD fields are mapped and rendered in the component
+
+Confirm deprecated columns are removed
+
+UI/Backend Synchronization
+
+Ensure the /api/rtb-signals endpoint returns the new fields (rank, cwqi, ngc) in its payload
+
+Verify the front-end React table receives and renders them correctly
+
+RTB Cadence and Refresh Audit
+
+In server/core/rtb/ready_to_buy_service.ts, confirm that:
+
+The 30-second refresh interval is active
+
+Expired or stale signals are purged
+
+Queue re-ranking occurs based on CWQI/NGC scoring
+
+Confirm that this cadence runs independent of TCL events
+
+Runtime Diagnostic Check (Do Not Stop Trading)
+
+While trading continues:
+
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"testuser123","password":"SecurePass123!"}' | jq -r '.accessToken')
+
+curl -s http://localhost:5000/api/rtb-signals \
+  -H "Authorization: Bearer $TOKEN" | jq '.data | map({symbol, cwqi, ngc, rank})'
+
+
+Report how many signals are present and whether their CWQI / rank values change over 5-10 minutes
+
+Confirm the RTB refresh loop emits logs such as:
+
+[RTB_REFRESH] cycle complete: X refreshed, Y expired
+[RTB_RANK] top signal: {symbol} CWQI=...
+
+
+Report Findings
+
+Prepare a diagnostic summary at:
+
+logs/diagnostics/8.8.4-C.14A_rtb_table_and_cadence_audit.md
+
+
+Include:
+
+Confirmation of schema alignment (backend + frontend)
+
+Live RTB refresh cycle confirmation
+
+Field value movement evidence (CWQI, rank deltas)
+
+Any missing field mappings or refresh-loop malfunctions
+
+Recommendations for corrective action if needed
+
+🧠 Notes
+
+Do not restart or interrupt the active trading or validation processes.
+
+Focus strictly on verification and observation.
+
+Any corrective recommendations should be deferred to Directive 8.8.4-C.14.B after this audit report.
