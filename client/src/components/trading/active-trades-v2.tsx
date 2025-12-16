@@ -662,6 +662,9 @@ export default function ActiveTradesV2() {
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/active-trades'] });
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/portfolio-summary'] });
+      // Directive 8.8.4-C.14.D: Clear RTB signals table
+      queryClient.invalidateQueries({ queryKey: ['/api/trading-signals'] });
+      console.log('[8.8.4-C.14.D][RESET] Invalidated /api/trading-signals query');
     },
     onError: () => {
       toast({

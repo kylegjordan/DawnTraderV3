@@ -59,6 +59,8 @@ Event-Driven TCL Watchdog System (8.8.4-C.12) replaces polling-based TCL activat
 
 RTB Queue Stability Fixes (8.8.4-C.13.B) addresses critical issues in the RTB pipeline by adding `upsertRtbSignal` with ON CONFLICT UPDATE logic, implementing TCL Timer Persistence with a backup interval, and ensuring proper cleanup of timers.
 
+RTB Clear Flow & WebSocket Synchronization (8.8.4-C.14.D) standardizes the WebSocket event type to `rtb:cleared` with mode-scoped broadcast for immediate UI synchronization when Reset or Stop Trading actions clear the RTB queue. The centralized `clearReadyToBuy()` helper in `server/utils/clear-routines.ts` handles database deletion and WebSocket broadcast. The frontend mutation in `active-trades-v2.tsx` now invalidates `/api/trading-signals` to ensure the Ready-to-Buy table refreshes on reset.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.
