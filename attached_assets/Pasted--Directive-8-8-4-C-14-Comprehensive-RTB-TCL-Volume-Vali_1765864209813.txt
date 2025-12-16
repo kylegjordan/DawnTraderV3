@@ -1,0 +1,138 @@
+🧩 Directive 8.8.4-C.14 — Comprehensive RTB / TCL / Volume Validation
+🎯 Objective
+
+Run a 3-hour controlled paper-trading session to validate all recent subsystem improvements:
+
+Ready-to-Buy (RTB) queue refresh and re-ranking cycle
+
+TCL activation cadence (primary & backup timers)
+
+USD-denominated volume enforcement
+
+Promotion flow RTB → Trades
+
+Overall system stability & trade performance
+
+🔐 Authentication
+
+All validation commands and API calls are to be executed under the test user:
+
+username: testuser123
+password: SecurePass123!
+
+
+Replit should authenticate using:
+
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"testuser123","password":"SecurePass123!"}' \
+  | jq -r '.accessToken')
+
+
+and then include:
+
+-H "Authorization: Bearer $TOKEN"
+
+
+on all subsequent API requests.
+
+⚙️ Pre-Test Setup
+
+Stop the paper-trading engine
+
+curl -X POST http://localhost:5000/api/paper-sim/stop \
+     -H "Authorization: Bearer $TOKEN"
+
+
+Clear residual data
+
+curl -X DELETE http://localhost:5000/api/paper-sim/clear-rtb \
+     -H "Authorization: Bearer $TOKEN"
+curl -X DELETE http://localhost:5000/api/paper-sim/clear-trades \
+     -H "Authorization: Bearer $TOKEN"
+
+
+Initialize portfolio manually (not hard-coded)
+
+curl -X PATCH http://localhost:5000/api/paper-sim/config \
+     -H "Authorization: Bearer $TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"starting_balance":824.00}'
+
+
+Confirm environment thresholds
+
+SQE_NGC_MIN=0.30
+SQE_CWQI_MIN=0.20
+SQE_PROFIT_RATE_MIN=0.00
+SQE_MAX_RISK=0.95
+MIN_VOLUME_USD=5000
+
+🚀 Start Validation Session
+curl -X POST http://localhost:5000/api/paper-sim/c14-validation/start \
+     -H "Authorization: Bearer $TOKEN"
+
+🕒 Validation Schedule
+
+Duration: 3 hours
+Snapshots: Every 30 minutes (at 0:00, 0:30, 1:00, 1:30, 2:00, 2:30, 3:00)
+
+Each snapshot logs:
+
+Metric	Description
+RTB Queue Size	# of active signals
+RTB Refresh Delta	% of signals refreshed since last interval
+Avg CWQI / NGC	Mean signal quality indices
+TCL State	WARMING / ACTIVE / IDLE
+Open Trades	Count + symbols
+Closed Trades	Count + P&L
+Avg Trade Duration	Time between open & close
+Filter Rejections	By reason (low volume, SQE reject, etc.)
+Avg Volume USD	Mean 24 h volume of RTB signals
+Rank Spread	CWQI range in RTB queue
+
+Snapshots saved under:
+
+logs/validation/c14_snapshots/
+
+📊 End-of-Session Summary
+
+At 3 hours, Replit generates:
+
+logs/validation/results_8.8.4-C.14_final.md
+
+
+Sections:
+
+Session Overview — Start / End / Totals
+
+System Performance — TCL timing & event log
+
+RTB Dynamics — Queue turnover & promotion stats
+
+Volume Filter Audit — < $5000 rejection counts
+
+CWQI / NGC → P&L Correlation
+
+Profit Summary — ROI and Success Rate
+
+Recommendations — adjustment notes if needed
+
+🧠 Diagnostic Goals
+
+Verify RTB queue refreshes and ranks every 30 s
+
+Confirm TCL events fire (primary + backup)
+
+Ensure no sub-$5000 USD volume signals pass filters
+
+Validate correct promotion → trade → close → promotion chain
+
+Assess system stability and metric coherency over 3 hours
+
+✅ Deliverables
+File	Purpose
+/logs/validation/results_8.8.4-C.14_final.md	Final comprehensive report
+/logs/validation/c14_snapshots/*.md	30-minute interval logs
+/logs/system/rtb_queue.log	Continuous RTB activity
+/logs/system/tcl_events.log	TCL activations + promotions

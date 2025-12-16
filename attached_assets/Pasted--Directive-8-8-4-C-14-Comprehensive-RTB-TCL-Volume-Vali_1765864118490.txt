@@ -1,0 +1,144 @@
+🧩 Directive 8.8.4-C.14 — Comprehensive RTB / TCL / Volume Validation
+🎯 Objective
+
+Run a controlled 3-hour paper trading session to validate:
+
+RTB queue refresh and ranking cycle
+
+TCL activation cadence (primary + backup timer)
+
+USD volume enforcement
+
+Proper promotion flow from RTB → Active Trades
+
+End-to-end performance and stability
+
+⚙️ Pre-Test Setup
+
+Replit should:
+
+Stop the paper trading engine
+
+POST /api/paper-sim/stop
+
+
+Clear all residual data
+
+DELETE /api/paper-sim/clear-rtb
+DELETE /api/paper-sim/clear-trades
+
+
+→ Ensures no ghost signals or stranded positions remain.
+
+Initialize test portfolio
+
+PATCH /api/paper-sim/config
+{
+  "starting_balance": 824.00
+}
+
+
+(Manual initialization only, not hard-coded into logic — this simulates a fresh session start at $824 portfolio value.)
+
+Confirm environment settings
+
+SQE_NGC_MIN = 0.30
+
+SQE_CWQI_MIN = 0.20
+
+SQE_PROFIT_RATE_MIN = 0.00
+
+SQE_MAX_RISK = 0.95
+
+MIN_VOLUME_USD = 5000
+
+🚀 Start Validation Session
+
+Run:
+
+POST /api/paper-sim/c14-validation/start
+
+🔁 Validation Schedule
+
+Session Duration: 3 hours
+Sampling Interval: Every 30 minutes
+
+Replit’s validation service will log snapshots at 0:00, 0:30, 1:00, 1:30, 2:00, 2:30, and 3:00 hours.
+
+Snapshot Contents (each interval):
+Metric	Description
+RTB Queue Size	Total signals in queue
+RTB Refresh Delta	% of queue refreshed since last check
+Avg CWQI / NGC	Mean of all signals in queue
+TCL State	(WARMING, ACTIVE, IDLE)
+Open Trades	Count + Symbols
+Closed Trades	Count + P&L
+Avg Trade Duration	Mean duration of all closed trades
+Filter Rejections	Count + reasons (low volume, SQE reject, etc.)
+Avg Volume USD	Mean USD 24h volume of all RTB signals
+Ready-to-Buy Rank Spread	Highest vs lowest CWQI in queue
+
+These are automatically logged to:
+
+logs/validation/c14_snapshots/
+
+📊 End-of-Session Summary Report
+
+After 3 hours, Replit will generate:
+
+logs/validation/results_8.8.4-C.14_final.md
+
+Sections:
+
+Session Overview
+
+Start / End time
+
+Total runtime, signals processed, trades opened/closed
+
+System Performance
+
+TCL event activation logs (5-minute, trade-close, 100-signal triggers)
+
+RTB queue dynamics (entries, expirations, refresh %)
+
+Promotion cadence & trade slot utilization
+
+Volume Filter Audit
+
+Count of sub-$5000 rejections
+
+Any anomalies (if any trade < $5000 volume appears → flagged)
+
+CWQI & NGC Correlations
+
+Correlation between CWQI, NGC, and trade P&L
+
+Profit/Loss Summary
+
+Net P&L, Avg Trade ROI, Success Rate (%)
+
+Recommendations
+
+Any timing or weighting adjustments proposed
+
+🧠 Diagnostic Goals
+
+This session will confirm:
+
+RTB queue refreshes dynamically every 30 s (signals come in, expire, re-rank)
+
+TCL activates reliably via both primary and backup timers
+
+No low-volume pairs (< $5 000 USD) pass to SQE or RTB
+
+Promotion cadence follows logical event sequence (TCL → promotion → trade → trade-close → promotion)
+
+System maintains consistent state and stable metrics for ≥ 3 h
+
+✅ Deliverables
+File	Description
+/logs/validation/results_8.8.4-C.14_final.md	Comprehensive session summary
+/logs/validation/c14_snapshots/*.md	Half-hourly status snapshots
+/logs/system/rtb_queue.log	Continuous RTB activity log
+/logs/system/tcl_events.log	TCL activation + promotion logs
