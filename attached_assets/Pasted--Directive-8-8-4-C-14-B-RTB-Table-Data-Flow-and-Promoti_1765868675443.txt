@@ -1,0 +1,172 @@
+🧩 Directive 8.8.4-C.14.B — RTB Table, Data Flow, and Promotion Flow Completion
+🎯 Primary Objective
+
+Finalize stabilization of the Ready-to-Buy (RTB) system by:
+
+Ensuring data integrity between the FX5 Scanner and RTB queue
+
+Finalizing column population for the RTB display
+
+Restoring proper RTB refresh cadence and multi-signal promotion behavior
+
+Removing unsafe or unnecessary live data fallbacks
+
+This directive continues directly from the work completed under 8.8.4-C.13.C and 8.8.4-C.14.A.
+
+⚙️ Scope of Work
+1. Remove All Kraken Fallback Calls
+
+Delete or comment out any asynchronous fallback logic in active-filter-pool.ts or signal-orchestrator.ts that retrieves volume data from Kraken when the FX5 scanner pool lacks a match.
+
+The RTB display and orchestrator must only use cached data from the FX5 scanner.
+
+If a symbol does not exist in FX5 data, its volume_24h should be stored as NULL (not 0).
+
+This allows downstream analytics to detect missing data cleanly.
+
+✅ Rationale: Prevents rate-limit exposure, guarantees consistent update timing, and keeps data dependencies self-contained.
+
+2. Strengthen FX5 → RTB Synchronization
+
+Align the symbol universe between FX5 and the RTB signal generator:
+
+Normalize symbol formatting to the slash ("/") convention, e.g., NANO/EUR, VVV/USD.
+
+Update the signal orchestrator to ensure all generated symbols exist in the FX5 pool before SQE evaluation.
+
+Add a pre-validation check in the orchestrator:
+
+if (!activeFilterPool.hasSymbol(symbol)) {
+    logger.warn(`[RTB_SKIP][NO_FX5_DATA] ${symbol} skipped - not found in FX5 pool`);
+    return;
+}
+
+
+FX5 scanner logs should confirm all actively traded pairs.
+
+✅ Rationale: Keeps the RTB queue grounded in consistent, verified market data.
+
+3. Ensure All RTB Fields Are Populated
+
+Verify that every new signal inserted into rtb_signals contains:
+
+Field	Description	Source
+symbol	Normalized FX pair	Signal Orchestrator
+cwqi	Confidence-Weighted Quality Index	SQE pipeline
+ngc	Normalized Global Confidence	SQE pipeline
+current_price	Latest price from FX5	activeFilterPool
+volume_24h	24-hour USD volume	FX5 scanner only
+strategy	Generating strategy	Strategy Engine
+
+If any are null on insertion, log:
+
+[RTB_WARN][MISSING_FIELD] symbol=XXX fields=[cwqi, ngc]
+
+
+✅ Rationale: Guarantees front-end completeness and improves diagnostic traceability.
+
+4. Verify RTB Refresh Cycle
+
+In ready_to_buy_service.ts, confirm the 30-second refresh interval is active and independent from TCL.
+
+Add explicit logging:
+
+[RTB_REFRESH] started cycle
+[RTB_REFRESH] completed: 10 refreshed, 2 expired, 3 new
+
+
+Ensure the refresh:
+
+Re-ranks signals by CWQI descending
+
+Removes expired signals (older than configured lifespan)
+
+Updates prices and volumes from FX5 cache
+
+✅ Rationale: Confirms autonomous RTB cycling and prevents UI stagnation.
+
+5. Fix Promotion Logic
+
+In checkRtbPromotion(), update logic to:
+
+Loop through ranked RTB signals
+
+Promote all eligible signals up to the openSlots limit (default 15)
+
+Mark each as “promoted” to prevent duplicates
+
+Example:
+
+for (const signal of rankedSignals) {
+  if (openSlots <= 0) break;
+  if (signal.cwqi >= CWQI_MIN && signal.ngc >= NGC_MIN) {
+      await executeTrade(signal);
+      openSlots--;
+  }
+}
+
+
+✅ Rationale: Prevents single-trade promotions and uses all qualified signals effectively.
+
+6. Confirm Front-End Table Integration
+
+ready-to-buy-table.tsx should render:
+Rank | Symbol | CWQI | NGC | Price | Entry | Target | Stop | Qty | 24h Vol | Strategy
+
+Remove any unused or deprecated columns (Name, VWAP, Range %).
+
+Ensure proper sorting by CWQI descending.
+
+Confirm dynamic updates reflect backend refreshes every 30 seconds.
+
+✅ Rationale: Ensures user interface accurately represents live RTB state.
+
+7. Validate TCL Behavior
+
+Confirm that the TCL watchdog and RTB refresh remain fully decoupled.
+
+TCL events (TCL_ACTIVATED, TRADE_CLOSED) should trigger promotions only, not refreshes.
+
+The RTB refresh cycle must continue regardless of TCL state.
+
+✅ Rationale: Maintains consistent signal flow independent of event timing.
+
+🧠 Implementation Review Criteria
+
+Replit should produce a post-implementation log:
+
+logs/validation/8.8.4-C.14B_rtb_completion_report.md
+
+
+containing:
+
+Confirmation of deleted fallback Kraken calls
+
+Verification of FX5 and RTB symbol alignment
+
+Sample RTB refresh logs
+
+Demonstration of multi-signal promotion
+
+Screenshot or table snapshot confirming all new columns render properly
+
+🔐 Test User Credentials
+
+Use the existing credentials for diagnostics and validation:
+
+username: testuser123
+password: SecurePass123!
+
+📋 Summary of Expected Outcome
+
+All RTB fields now populated from FX5 scanner data only
+
+Fully functional 30-second refresh cadence
+
+RTB queue dynamically re-ranking and expiring signals
+
+Promotion logic capable of activating multiple trades per TCL cycle
+
+No external API fallbacks
+
+Front-end displays full CWQI/NGC metrics and accurate FX5 volumes

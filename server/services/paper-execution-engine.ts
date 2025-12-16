@@ -1119,15 +1119,13 @@ export class PaperExecutionEngine {
   }
 
   /**
-   * Phase 8.8.4-B + C.5 + C.12: Check for RTB Queue Promotion
+   * Phase 8.8.4-B + C.5 + C.12 + C.14.B: Check for RTB Queue Promotion
    * Called via event handlers (TCL_ACTIVATED, TRADE_CLOSED) when promotion may be possible
    * Phase C.12: Uses tclWatchdog for event-driven TCL state management
+   * Phase C.14.B: Multi-signal promotion - promotes all eligible signals up to openSlots limit
    */
   private async checkRtbPromotion(): Promise<void> {
     try {
-      // Phase 8.8.4-C.12: Use imported singleton instead of dynamic import
-      // This ensures we use the same readyToBuyService instance throughout
-      
       // Phase 8.8.4-C.12: Check TCL activation state via watchdog
       const tclActive = tclWatchdog.isActive(this.mode);
       if (!tclActive) {
@@ -1135,51 +1133,79 @@ export class PaperExecutionEngine {
         console.log(`[8.8.4-C.12][TCL_WARMUP] mode=${this.mode}, state=${tclStatus.state}, elapsed=${(tclStatus.elapsedMs/1000).toFixed(0)}s - skipping promotion`);
         return;
       }
-      
-      // Get the top queued signal
-      const topSignal = await readyToBuyService.checkForPromotion(this.mode);
-      
-      if (!topSignal) {
+
+      // Phase 8.8.4-C.14.B: Calculate available slots for multi-signal promotion
+      const openPositions = await storage.getPaperSimOpenPositions(this.mode);
+      const modeSettings = await buildSettingsFromGuardrails(this.mode);
+      const maxTrades = modeSettings.maxOpenTrades || 15;
+      let openSlots = maxTrades - openPositions.length;
+
+      if (openSlots <= 0) {
+        console.log(`[RTB-Promotion:${this.mode}] At capacity (${openPositions.length}/${maxTrades}), skipping promotion`);
+        return;
+      }
+
+      console.log(`[8.8.4-C.14.B][MULTI_PROMOTE] mode=${this.mode}, openSlots=${openSlots}, maxTrades=${maxTrades}`);
+
+      // Phase 8.8.4-C.14.B: Get all ranked signals and promote up to openSlots
+      const rankedSignals = await readyToBuyService.getRankedSignals(this.mode, openSlots);
+
+      if (!rankedSignals || rankedSignals.length === 0) {
         console.log(`[RTB-Promotion:${this.mode}] No queued signals available for promotion`);
         return;
       }
 
-      // Check if we now have capacity (guardrail check)
-      const openPositions = await storage.getPaperSimOpenPositions(this.mode);
-      const modeSettings = await buildSettingsFromGuardrails(this.mode);
-      const maxTrades = modeSettings.maxOpenTrades || 5;
+      let promotedCount = 0;
+      let failedCount = 0;
 
-      if (openPositions.length >= maxTrades) {
-        console.log(`[RTB-Promotion:${this.mode}] Still at capacity (${openPositions.length}/${maxTrades}), skipping promotion`);
-        return;
+      // Phase 8.8.4-C.14.B: Loop through ranked signals and promote all eligible
+      for (const signal of rankedSignals) {
+        if (openSlots <= 0) {
+          console.log(`[8.8.4-C.14.B][SLOT_LIMIT] No more open slots, stopping promotion loop`);
+          break;
+        }
+
+        // Check SQE thresholds
+        const ngc = parseFloat(signal.ngc || '0');
+        const cwqi = parseFloat(signal.cwqi || '0');
+        const MIN_NGC = 0.4;
+        const MIN_CWQI = 0.25;
+
+        if (cwqi < MIN_CWQI || ngc < MIN_NGC) {
+          console.log(`[8.8.4-C.14.B][QUALITY_SKIP] ${signal.symbol}/${signal.strategy}: CWQI=${cwqi.toFixed(4)} (min=${MIN_CWQI}), NGC=${ngc.toFixed(4)} (min=${MIN_NGC})`);
+          continue;
+        }
+
+        console.log(`[8.8.4-C.12][TCL_PROMOTE] ${signal.symbol}/${signal.strategy} with CWQI ${cwqi.toFixed(4)}, NGC ${ngc.toFixed(4)}`);
+
+        // Execute the promoted signal
+        const tradeResult = await this.executePromotedSignal(signal);
+
+        if (tradeResult.success && tradeResult.tradeId) {
+          // Mark signal as promoted
+          await readyToBuyService.promoteSignal(signal.id, tradeResult.tradeId);
+          
+          // Emit PROMOTION event for diagnostics
+          eventBus.emitPromotion({
+            mode: this.mode,
+            symbol: signal.symbol,
+            strategy: signal.strategy,
+            signalId: signal.signalId,
+            tradeId: tradeResult.tradeId,
+            cwqi: cwqi,
+            timestamp: new Date().toISOString(),
+          });
+          
+          console.log(`[RTB-Promotion:${this.mode}] ✅ Successfully promoted ${signal.symbol}/${signal.strategy} -> Trade ${tradeResult.tradeId}`);
+          promotedCount++;
+          openSlots--;
+        } else {
+          console.warn(`[RTB-Promotion:${this.mode}] ⚠️ Failed to execute promoted signal: ${tradeResult.error || 'unknown error'}`);
+          failedCount++;
+        }
       }
 
-      // Phase 8.8.4-C.12: TCL is active and we have capacity! Promote the top signal
-      console.log(`[8.8.4-C.12][TCL_PROMOTE] ${topSignal.symbol}/${topSignal.strategy} with CWQI ${topSignal.cwqi}`);
-
-      // Execute the promoted signal
-      const tradeResult = await this.executePromotedSignal(topSignal);
-
-      if (tradeResult.success && tradeResult.tradeId) {
-        // Mark signal as promoted
-        await readyToBuyService.promoteSignal(topSignal.id, tradeResult.tradeId);
-        
-        // Phase 8.8.4-C.12: Emit PROMOTION event for diagnostics
-        eventBus.emitPromotion({
-          mode: this.mode,
-          symbol: topSignal.symbol,
-          strategy: topSignal.strategy,
-          signalId: topSignal.signalId,
-          tradeId: tradeResult.tradeId,
-          cwqi: parseFloat(topSignal.cwqi),
-          timestamp: new Date().toISOString(),
-        });
-        
-        console.log(`[RTB-Promotion:${this.mode}] ✅ Successfully promoted ${topSignal.symbol}/${topSignal.strategy} -> Trade ${tradeResult.tradeId}`);
-      } else {
-        // Failed to execute - log but don't expire (might work next cycle)
-        console.warn(`[RTB-Promotion:${this.mode}] ⚠️ Failed to execute promoted signal: ${tradeResult.error || 'unknown error'}`);
-      }
+      console.log(`[8.8.4-C.14.B][PROMOTION_SUMMARY] mode=${this.mode}, promoted=${promotedCount}, failed=${failedCount}, remainingSlots=${openSlots}`);
     } catch (error) {
       console.error(`[RTB-Promotion:${this.mode}] Error during promotion check:`, error);
     }

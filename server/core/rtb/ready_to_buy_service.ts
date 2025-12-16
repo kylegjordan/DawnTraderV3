@@ -69,8 +69,8 @@ export interface SQESignalInput {
   profitRate: number;
   cwqi: number;
   atr?: number;
-  currentPrice?: number; // Directive 8.8.4-C.14.A: Market price at queue time
-  volume24h?: number; // Directive 8.8.4-C.14.A: 24h USD volume
+  currentPrice?: number; // Directive 8.8.4-C.14.B: Market price at queue time
+  volume24h?: number | null; // Directive 8.8.4-C.14.B: 24h USD volume (NULL if not in FX5 pool)
   metadata?: Record<string, unknown>;
 }
 
@@ -544,6 +544,33 @@ class ReadyToBuyService {
     }
 
     return topSignal;
+  }
+
+  /**
+   * Phase 8.8.4-C.14.B: Get ranked signals for multi-signal promotion
+   * Returns top N signals sorted by CWQI descending
+   */
+  async getRankedSignals(mode: TradingMode, limit: number = 15): Promise<RtbSignal[]> {
+    const signals = await this.getQueuedSignals(mode);
+    
+    if (signals.length === 0) {
+      return [];
+    }
+
+    // Filter out expired signals and sort by CWQI descending
+    const now = new Date();
+    const validSignals = signals.filter(s => new Date(s.expiresAt) > now);
+    
+    // Sort by CWQI descending (highest quality first)
+    validSignals.sort((a, b) => {
+      const cwqiA = parseFloat(a.cwqi || '0');
+      const cwqiB = parseFloat(b.cwqi || '0');
+      return cwqiB - cwqiA;
+    });
+
+    console.log(`[8.8.4-C.14.B][RTB_RANKED] mode=${mode}, total=${signals.length}, valid=${validSignals.length}, returning top ${Math.min(limit, validSignals.length)}`);
+    
+    return validSignals.slice(0, limit);
   }
 
   /**

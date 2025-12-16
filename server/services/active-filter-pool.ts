@@ -15,7 +15,6 @@
  */
 
 import { storage } from '../storage.js';
-import { KrakenService } from './kraken.js';
 
 // REB 2.2: TTL from truth state (Nov 20 chat archive)
 const SYMBOL_COOLDOWN_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -304,69 +303,59 @@ class ActiveFilterPoolService {
   }
 
   /**
-   * Directive 8.8.4-C.14.A: Async method to get volume with Kraken API fallback
-   * This is called when generating RTB signals to ensure volume data is available
+   * Directive 8.8.4-C.14.B: Check if symbol exists in FX5 pool
+   * Used for pre-validation before signal processing
    */
-  async getSymbolVolumeInfoAsync(symbol: string, mode: 'paper' | 'live', price?: number): Promise<{ volume24h: number; volumeBucket: 'High' | 'Medium' | 'Low' | 'Very Low' }> {
-    // First try the sync method (checks FX5 pool)
-    const poolResult = this.getSymbolVolumeInfo(symbol, mode);
-    if (poolResult.volume24h > 0) {
-      return poolResult;
-    }
-
-    // Check volume cache
-    const now = Date.now();
-    const cacheKey = symbol.replace('/', ''); // Normalize for cache
-    const cached = this.volumeCache.get(cacheKey);
-    if (cached && now < cached.expiresAt) {
-      return { volume24h: cached.volume24h, volumeBucket: cached.volumeBucket };
-    }
-
-    // Fallback: fetch from Kraken API
-    try {
-      const krakenService = new KrakenService();
-      
-      // Convert symbol to Kraken format (e.g., NANOEUR or NANO/EUR -> NANOEUR)
-      const krakenSymbol = symbol.replace('/', '');
-      const tickerData = await krakenService.getTicker(krakenSymbol);
-      
-      if (tickerData && Object.keys(tickerData).length > 0) {
-        const tickerKey = Object.keys(tickerData)[0];
-        const ticker = tickerData[tickerKey];
-        
-        // v[1] is 24h volume in coins, multiply by price to get USD volume
-        const volumeCoins = parseFloat(ticker.v[1]);
-        const currentPrice = price || parseFloat(ticker.c[0]); // Use provided price or last trade price
-        const volume24hUSD = volumeCoins * currentPrice;
-        
-        // Determine volume bucket
-        let volumeBucket: 'High' | 'Medium' | 'Low' | 'Very Low';
-        if (volume24hUSD > 50000000) {
-          volumeBucket = 'High';
-        } else if (volume24hUSD >= 10000000) {
-          volumeBucket = 'Medium';
-        } else if (volume24hUSD >= 1000000) {
-          volumeBucket = 'Low';
-        } else {
-          volumeBucket = 'Very Low';
+  hasSymbol(symbol: string, mode: 'paper' | 'live'): boolean {
+    const pool = this.getPool(mode);
+    
+    // Try direct lookup first
+    if (pool.has(symbol)) return true;
+    
+    // If not found and symbol has no slash, try canonical format
+    if (!symbol.includes('/')) {
+      const quoteCurrencies = ['USDT', 'USDC', 'EUR', 'USD', 'BTC', 'ETH', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF'];
+      for (const quote of quoteCurrencies) {
+        if (symbol.endsWith(quote)) {
+          const base = symbol.slice(0, -quote.length);
+          const canonicalSymbol = `${base}/${quote}`;
+          if (pool.has(canonicalSymbol)) return true;
         }
-
-        // Cache the result
-        this.volumeCache.set(cacheKey, {
-          volume24h: volume24hUSD,
-          volumeBucket,
-          expiresAt: now + VOLUME_CACHE_TTL_MS
-        });
-
-        console.log(`[C14.A][VOLUME_FALLBACK] ${symbol}: ${volumeCoins.toFixed(0)} coins × $${currentPrice.toFixed(4)} = $${(volume24hUSD / 1000000).toFixed(2)}M (${volumeBucket})`);
-        
-        return { volume24h: volume24hUSD, volumeBucket };
       }
-    } catch (error) {
-      console.log(`[C14.A][VOLUME_FALLBACK] Failed for ${symbol}:`, (error as Error).message);
     }
+    
+    return false;
+  }
 
-    return { volume24h: 0, volumeBucket: 'Very Low' };
+  /**
+   * Directive 8.8.4-C.14.B: Get FX5 pool data for a symbol
+   * Returns null if symbol not found (for proper NULL storage)
+   */
+  getFX5DataForSymbol(symbol: string, mode: 'paper' | 'live'): { price: number; volume24h: number } | null {
+    const pool = this.getPool(mode);
+    
+    // Try direct lookup
+    let entry = pool.get(symbol);
+    
+    // If not found and symbol has no slash, try canonical format
+    if (!entry && !symbol.includes('/')) {
+      const quoteCurrencies = ['USDT', 'USDC', 'EUR', 'USD', 'BTC', 'ETH', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF'];
+      for (const quote of quoteCurrencies) {
+        if (symbol.endsWith(quote)) {
+          const base = symbol.slice(0, -quote.length);
+          const canonicalSymbol = `${base}/${quote}`;
+          entry = pool.get(canonicalSymbol);
+          if (entry) break;
+        }
+      }
+    }
+    
+    if (!entry) return null;
+    
+    return {
+      price: entry.price,
+      volume24h: entry.volume24h
+    };
   }
 }
 

@@ -239,12 +239,12 @@ export class SignalOrchestrator {
    * Phase 8.8.4-B.1: Apply SQE quality filter
    * Phase 8.8.4-B.3: Correct flow order - Sizing → Metrics → SQE
    */
-  private async buildSizedSignalForStrategy(
+  private buildSizedSignalForStrategy(
     rawSignal: StrategySignal | null,
     strategyId: StrategyType,
     sizingContext: SizingContext,
     marketContext?: { high24h?: number; low24h?: number; atr?: number }
-  ): Promise<SizedStrategySignal | null> {
+  ): SizedStrategySignal | null {
     if (!rawSignal) return null;
     
     // Phase 8.8.4-A: Generate unique signal ID for lifecycle tracking
@@ -378,8 +378,8 @@ export class SignalOrchestrator {
       riskScore: extendedMetrics.riskScore,
       profitRate: extendedMetrics.profitRate,
       cwqi: extendedMetrics.cwqi,
-      currentPrice: rawSignal.entryPrice, // Directive 8.8.4-C.14.A: Use entry price as current market price
-      volume24h: (await activeFilterPool.getSymbolVolumeInfoAsync(rawSignal.symbol, sizingContext.mode, rawSignal.entryPrice)).volume24h, // Directive 8.8.4-C.14.A: 24h USD volume with Kraken fallback
+      currentPrice: rawSignal.entryPrice, // Directive 8.8.4-C.14.B: Use entry price as current market price
+      volume24h: activeFilterPool.getFX5DataForSymbol(rawSignal.symbol, sizingContext.mode)?.volume24h ?? null, // Directive 8.8.4-C.14.B: FX5 data only, NULL if not found
     };
 
     // Queue to RTB pool (fire-and-forget, non-blocking)
