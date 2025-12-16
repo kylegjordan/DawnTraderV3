@@ -69,6 +69,8 @@ export interface SQESignalInput {
   profitRate: number;
   cwqi: number;
   atr?: number;
+  currentPrice?: number; // Directive 8.8.4-C.14.A: Market price at queue time
+  volume24h?: number; // Directive 8.8.4-C.14.A: 24h USD volume
   metadata?: Record<string, unknown>;
 }
 
@@ -603,6 +605,9 @@ class ReadyToBuyService {
       riskScore: input.riskScore.toString(),
       expectedReturn: input.expectedReturn?.toString() || '0',
       cwqi: input.cwqi.toString(),
+      ngc: input.ngc.toString(), // Directive 8.8.4-C.14.A
+      currentPrice: input.currentPrice?.toString(), // Directive 8.8.4-C.14.A
+      volume24h: input.volume24h?.toString(), // Directive 8.8.4-C.14.A
       status: 'queued',
       queuedAt: now,
       expiresAt,

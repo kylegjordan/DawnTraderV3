@@ -1773,6 +1773,10 @@ export const rtbSignals = pgTable("rtb_signals", {
   riskScore: decimal("risk_score", { precision: 5, scale: 4 }).notNull(), // 0.0000 to 1.0000 (lower is better)
   expectedReturn: decimal("expected_return", { precision: 5, scale: 4 }).notNull(), // 0.0000 to 1.0000
   cwqi: decimal("cwqi", { precision: 5, scale: 4 }).notNull(), // Confidence-Weighted Quality Index
+  ngc: decimal("ngc", { precision: 5, scale: 4 }), // Directive 8.8.4-C.14.A: Normalized Global Confidence
+  // Market data for display (Directive 8.8.4-C.14.A)
+  currentPrice: decimal("current_price", { precision: 20, scale: 8 }), // Current market price at queue time
+  volume24h: decimal("volume_24h", { precision: 20, scale: 2 }), // 24h USD volume
   // Queue management
   status: rtbSignalStatusEnum("status").notNull().default("queued"),
   queuedAt: timestamp("queued_at", { withTimezone: true }).notNull().defaultNow(),
