@@ -1,19 +1,19 @@
 # Crypto Day Trading Web App
 
 ## Overview
-This project is a long-only, spot-trading cryptocurrency day trading web application for Kraken. It automates advanced trading strategies, integrates real-time market scanning, and incorporates disciplined risk management. The application supports both live and paper trading, leveraging OpenAI's GPT models for AI analysis, trade tracking, performance analytics, error diagnosis, and an autonomous learning engine. Its core purpose is to deliver a comprehensive, resilient, and continuously self-optimizing trading platform, aiming for market potential through advanced automation and AI integration.
+This project is a long-only, spot-trading cryptocurrency day trading web application designed for the Kraken exchange. It automates advanced trading strategies, integrates real-time market scanning, and incorporates disciplined risk management. The application supports both live and paper trading, leveraging OpenAI's GPT models for AI analysis, trade tracking, performance analytics, error diagnosis, and an autonomous learning engine. Its core purpose is to deliver a comprehensive, resilient, and continuously self-optimizing trading platform, aiming for market potential through advanced automation and AI integration.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
 ## System Architecture
-The application features a React, TypeScript, Vite frontend with a mobile-first design, and a Node.js/Express backend providing a RESTful API and WebSocket support. PostgreSQL, accessed via Neon serverless driver and Drizzle ORM, handles data persistence. Authentication is managed using username/password, bcrypt, JWT, and WebAuthn.
+The application features a mobile-first React, TypeScript, and Vite frontend, communicating with a Node.js/Express backend that provides a RESTful API and WebSocket support. PostgreSQL, accessed via Neon serverless driver and Drizzle ORM, handles data persistence. Authentication uses username/password, bcrypt, JWT, and WebAuthn.
 
 Core services include `KrakenService`, `TradingEngine`, `StrategyEngine`, `MarketScanner`, `RiskManager`, `AIAnalyst`, and `AIOpportunitiesService`. An AI Orchestrator & Command Center, powered by GPT-4o, provides an AI SysAdmin Co-Pilot, Unified Command & Conversation Layer, Semantic Memory, and a Continuous Learning Pipeline. The system employs a Hybrid Cognitive-Operational design with an Intent Gateway, `SecureCoreService`, and an Autonomy Layer with Safety Guardrails, supporting paper trading simulation and multi-intent command processing.
 
-The architecture utilizes a global mode-based engine with `ModeRegistry` for telemetry and `MetricsCore` for centralized metrics. Live pricing is managed by a `LivePricingAdapter` with dual-source integration and a `KrakenWebSocketAdapter`. The Goals Engine UI offers advanced universe and signal controls, execution rhythm controls, and simplified daily target goals with a Goal Feasibility Validation & Audit System.
+The architecture utilizes a global mode-based engine with a `ModeRegistry` for telemetry and `MetricsCore` for centralized metrics. Live pricing is managed by a `LivePricingAdapter` with dual-source integration and a `KrakenWebSocketAdapter`. The Goals Engine UI offers advanced universe and signal controls, execution rhythm controls, and simplified daily target goals with a Goal Feasibility Validation & Audit System.
 
-The system incorporates a modern `guardrails_v2` schema with configurable parameters. It supports dual-mode operation with independent guardrail sets and real-time WebSocket broadcasts. The `GuardrailPolicy Service` is the single backend source of truth for guardrail settings. The Goals Engine includes an adaptive learning system that optimizes preset boundaries based on 30-day performance.
+The system incorporates a modern `guardrails_v2` schema with configurable parameters, supporting dual-mode operation and real-time WebSocket broadcasts. The `GuardrailPolicy Service` is the single backend source of truth for guardrail settings. The Goals Engine includes an adaptive learning system that optimizes preset boundaries based on 30-day performance.
 
 The Screeners tab uses a unified v2 filter configuration with an automated anomaly detection system. The DHMA Strategy implements Dual-Horizon Microstructure Alpha with dynamic position sizing and intelligent adaptive parameter optimization via `DHMATuningService`. The Strategic Drive & Profit Optimization Engine tracks strategies, computes a global Strategic Drive Index (SDI), and implements "Soft Guardrails, Hard Coherency" via `StrategicDriveGuardrailService`.
 
@@ -47,46 +47,23 @@ Manual Close Cost Model Fix (C7) corrects the `/paper-sim/close-trade/:id` endpo
 
 Signal Flow Correction & Confidence Source Consolidation (B.3) corrects the signal processing flow in Signal Orchestrator to follow the canonical order: Sizing → Metrics → SQE → RTB → TCL. NGC (Normalized Global Confidence) is now the single authoritative source of confidence. SQE thresholds (MIN_NGC, MIN_CWQI) serve as the authoritative quality gates.
 
-Adaptive Normalization, Enhanced Risk & Durability Framework (8.8.4-C) implements five key enhancements:
-1. **Adaptive Rolling Normalization**: Tracks min/max over 500 signals or 60-minute windows with exponential smoothing for NGC, ProfitRate, and ExpectedReturn.
-2. **Enhanced Risk Metric**: Computes Risk = (StopDistance/ATR) × CorrPenalty. Includes CorrelationMatrix with time decay for stale data.
-3. **CWQI Durability Decay**: RTB queue uses CWQI_decayed for ranking signals by freshness.
-4. **Strategy-Specific ProfitRate Floors**: Defines per-strategy minimum ProfitRate.
+Adaptive Normalization, Enhanced Risk & Durability Framework (8.8.4-C) implements four key enhancements: Adaptive Rolling Normalization, an Enhanced Risk Metric, CWQI Durability Decay, and Strategy-Specific ProfitRate Floors.
 
-RTB Queue Service Consolidation (8.8.4-C.6) consolidates RTB refresh responsibility:
-1. **Deprecated rtbQueueRefresher**.
-2. **TCL 5-Minute Failsafe**: Trading Capacity Limit activates when pool ≥100 signals OR 5 minutes elapsed since engine start.
-3. **Unified Refresh Cycle**: ReadyToBuyService now owns the 30-second refresh cycle entirely.
-4. **Updated Diagnostics**.
+RTB Queue Service Consolidation (8.8.4-C.6) consolidates RTB refresh responsibility, deprecating `rtbQueueRefresher`, implementing a TCL 5-Minute Failsafe, a Unified Refresh Cycle owned by `ReadyToBuyService`, and updated diagnostics.
 
-RTB UI Unification (8.8.4-C.7) consolidates the Ready-to-Buy UI:
-1. **RTBQueuePanel Removed**.
-2. **Unified ReadyToBuyTable**: Single component displays all SQE-qualified signals ranked by CWQI, with 30-second auto-refresh.
-3. **Unified Endpoint**: `/api/trading-signals` serves as the single data source for RTB signals with mode-based filtering.
+RTB UI Unification (8.8.4-C.7) consolidates the Ready-to-Buy UI by removing `RTBQueuePanel`, introducing a `UnifiedReadyToBuyTable` with 30-second auto-refresh, and a unified endpoint `/api/trading-signals`.
 
-SQE Filter Tuning & Validation Session System (8.8.4-C.11) provides systematic SQE threshold adjustment:
-1. **Environment Variable Configuration**: SQE thresholds are configurable via `DEFAULT_SQE_NGC_MIN` (0.35), `DEFAULT_SQE_CWQI_MIN` (0.45), `DEFAULT_SQE_PROFIT_RATE_MIN` (0.20), `DEFAULT_SQE_MAX_RISK` (0.75).
-2. **Validation Session Service**: Tracks multi-hour test sessions with periodic reports (every 30 minutes) logging metrics like signals processed, trades opened/closed, average NGC/CWQI, win rate, and P&L.
-3. **Data Cleanup Endpoint**: `/api/paper-sim/clear-data` truncates RTB signals, trades, and positions for clean test starts.
-4. **Session Management Endpoints**: `/api/paper-sim/validation-session/start`, `/stop`, `/status`, `/report` for session lifecycle control.
-5. **Post-Session Summary**: Generates comprehensive reports with Pearson correlation analysis between signal metrics and trade outcomes.
+SQE Filter Tuning & Validation Session System (8.8.4-C.11) provides systematic SQE threshold adjustment via environment variables and a Validation Session Service for tracking test sessions, generating periodic reports, and providing session management endpoints.
 
-Event-Driven TCL Watchdog System (8.8.4-C.12) replaces polling-based TCL activation with an event-driven architecture:
-1. **TCLWatchdog Service** (`server/core/rtb/tcl_watchdog.ts`): Manages 5-minute timer and 100-signal threshold triggers, emitting TCL_ACTIVATED event exactly once per session.
-2. **Extended Event Bus** (`server/lib/event-bus.ts`): Added TCL_ACTIVATED, TRADE_CLOSED, and PROMOTION event types with type-safe emitters and handlers.
-3. **Event-Driven Promotion**: Paper execution engine binds to TCL_ACTIVATED and TRADE_CLOSED events to trigger RTB queue promotion checks.
-4. **Proper Lifecycle Management**: Watchdog timers and event listeners are cleaned up on engine stop to prevent leaks across sessions.
+Event-Driven TCL Watchdog System (8.8.4-C.12) replaces polling-based TCL activation with an event-driven architecture using a `TCLWatchdog Service` and an `Extended Event Bus` for `TCL_ACTIVATED`, `TRADE_CLOSED`, and `PROMOTION` events, ensuring proper lifecycle management.
 
-RTB Queue Stability Fixes (8.8.4-C.13.B) addresses critical issues in the RTB pipeline:
-1. **RTB Upsert Logic**: Added `upsertRtbSignal` method to `storage.ts` with ON CONFLICT UPDATE to prevent duplicate key constraint violations when the same symbol/strategy/mode/status combination is queued multiple times.
-2. **TCL Timer Persistence**: Added backup interval mechanism (30-second checks) to the TCL Watchdog that verifies the 5-minute failsafe timer hasn't been lost. Guards against Node.js timer issues.
-3. **Proper Cleanup**: Both primary timer and backup interval are cleared on TCL activation, stop, and restart to prevent memory leaks.
+RTB Queue Stability Fixes (8.8.4-C.13.B) addresses critical issues in the RTB pipeline by adding `upsertRtbSignal` with ON CONFLICT UPDATE logic, implementing TCL Timer Persistence with a backup interval, and ensuring proper cleanup of timers.
 
 ## External Dependencies
--   **Kraken Exchange API**: Market data, trade execution, account management.
--   **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.
--   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.
--   **Neon Database**: Serverless PostgreSQL database.
--   **Binance Public API**: External market price feed (primary for live pricing).
--   **CoinGecko API**: External market price feed (fallback for live pricing).
--   **WebSocket Infrastructure**: Custom WebSocket server for real-time data push.
+- **Kraken Exchange API**: Market data, trade execution, account management.
+- **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.
+- **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.
+- **Neon Database**: Serverless PostgreSQL database.
+- **Binance Public API**: External market price feed (primary for live pricing).
+- **CoinGecko API**: External market price feed (fallback for live pricing).
+- **WebSocket Infrastructure**: Custom WebSocket server for real-time data push.
