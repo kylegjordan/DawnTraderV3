@@ -69,6 +69,9 @@ class C14ValidationService {
     const sessionId = `c14_${Date.now()}`;
     const now = new Date();
     
+    // Directive 8.8.4-C.14: Clean-room requirement - sanitize environment before validation
+    await this.sanitizeEnvironment(mode);
+    
     this.session = {
       sessionId,
       mode,
@@ -143,6 +146,42 @@ class C14ValidationService {
     this.promotionHandler = null;
   }
 
+  /**
+   * Directive 8.8.4-C.14: Sanitize validation environment
+   * Clears RTB queue, trades, positions, and resets TCL state for clean-room validation
+   */
+  private async sanitizeEnvironment(mode: 'paper' | 'live'): Promise<void> {
+    console.log(`[8.8.4-C.14][SANITIZE] Clearing environment for mode=${mode}`);
+    
+    try {
+      // Clear RTB queue
+      const clearedRtb = await readyToBuyService.clearQueue(mode);
+      console.log(`[8.8.4-C.14][SANITIZE] Cleared ${clearedRtb} RTB signals`);
+      
+      // Clear trades and positions
+      await storage.deleteAllPaperSimTrades(mode);
+      await storage.deleteAllPaperSimOpenPositions(mode);
+      console.log(`[8.8.4-C.14][SANITIZE] Cleared trades and positions`);
+      
+      // Reset TCL watchdog state if available
+      try {
+        const watchdog = tclWatchdog as unknown as Record<string, unknown>;
+        if (typeof watchdog.reset === 'function') {
+          (watchdog.reset as (mode: string) => void)(mode);
+          console.log(`[8.8.4-C.14][SANITIZE] Reset TCL watchdog`);
+        } else {
+          console.log(`[8.8.4-C.14][SANITIZE] TCL watchdog reset not available - continuing`);
+        }
+      } catch (e) {
+        console.log(`[8.8.4-C.14][SANITIZE] TCL reset skipped`);
+      }
+      
+      console.log(`[8.8.4-C.14][SANITIZE] Environment sanitized successfully`);
+    } catch (error: any) {
+      console.error(`[8.8.4-C.14][SANITIZE_ERROR] ${error.message}`);
+    }
+  }
+
   recordFilterRejection(reason: string): void {
     if (!this.session) return;
     this.session.filterRejectionCounts[reason] = (this.session.filterRejectionCounts[reason] || 0) + 1;
@@ -187,14 +226,23 @@ class C14ValidationService {
     const closedTradesPnL = closedTrades.reduce((sum, t) => sum + parseFloat(String(t.netPnl || t.pnl || 0)), 0);
 
     const tradeDurations = closedTrades
-      .filter(t => t.entryTime && t.closedAt)
-      .map(t => new Date(t.closedAt!).getTime() - new Date(t.entryTime!).getTime());
+      .filter(t => (t as any).entryTime && t.closedAt)
+      .map(t => new Date(t.closedAt!).getTime() - new Date((t as any).entryTime!).getTime());
     const avgTradeDuration = tradeDurations.length > 0
       ? tradeDurations.reduce((sum, d) => sum + d, 0) / tradeDurations.length / 60000
       : 0;
 
     const avgVolumeUSD = rtbQueue.length > 0
-      ? rtbQueue.reduce((sum, s) => sum + (s.volume24hUSD || s.volume || 0), 0) / rtbQueue.length
+      ? rtbQueue.reduce((sum, s) => {
+          // Check signal root first, then metadata for backward compatibility
+          const signalWithVol = s as unknown as Record<string, unknown>;
+          const rootVol = signalWithVol.volume24hUSD ?? signalWithVol.volume24h ?? 0;
+          if (typeof rootVol === 'number' && rootVol > 0) return sum + rootVol;
+          // Fallback to metadata
+          const meta = s.metadata as Record<string, unknown> | null;
+          const metaVol = meta?.volume24hUSD ?? meta?.volume ?? 0;
+          return sum + (typeof metaVol === 'number' ? metaVol : 0);
+        }, 0) / rtbQueue.length
       : 0;
 
     const promotionsThisInterval = this.session.promotions.filter(p => 
@@ -210,7 +258,7 @@ class C14ValidationService {
         tclState = 'ACTIVE';
       } else {
         const status = tclWatchdog.getStatus(mode);
-        tclState = status.warmUpSignalsNeeded > 0 ? 'WARMING' : 'IDLE';
+        tclState = status.state === 'WARMING' ? 'WARMING' : 'IDLE';
       }
     } catch (e) {
       tclState = 'IDLE';

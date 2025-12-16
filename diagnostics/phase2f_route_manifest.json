@@ -2522,6 +2522,66 @@
     ]
   },
   {
+    "path": "/api/paper-sim/c14-validation/start",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/paper-sim/c14-validation/stop",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/paper-sim/c14-validation/status",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/paper-sim/clear-rtb",
+    "methods": [
+      "DELETE"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/paper-sim/clear-trades",
+    "methods": [
+      "DELETE"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/paper-sim/config",
+    "methods": [
+      "PATCH"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/paper-sim/status",
     "methods": [
       "GET"

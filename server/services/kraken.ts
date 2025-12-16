@@ -782,6 +782,11 @@ export class KrakenService {
       if (volume24hUSD < minVolume) {
         console.warn(`[FILTER_REJECT][LOW_VOLUME] ${pairName} Vol=$${volume24hUSD.toFixed(2)} < $${minVolume}`);
         exclusionReasons[pairName] = `Volume $${volume24hUSD.toFixed(0)} < $${minVolume.toFixed(0)}`;
+        // Directive 8.8.4-C.14: Record filter rejection for validation tracking
+        try {
+          const { c14ValidationService } = require('./c14-validation-service');
+          c14ValidationService.recordFilterRejection('LOW_VOLUME');
+        } catch (e) { /* C14 service may not be running */ }
         return;
       }
 

@@ -9665,6 +9665,131 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 8.8.4-C.14: Start C.14 comprehensive validation session
+  apiRouter.post('/paper-sim/c14-validation/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { durationHours = 3, intervalMinutes = 30 } = req.body;
+      const { c14ValidationService } = await import('./services/c14-validation-service.js');
+      
+      const result = await c14ValidationService.startSession('paper', durationHours, intervalMinutes);
+      
+      if (!result.ok) {
+        return res.status(400).json({ error: 'Session already active' });
+      }
+      
+      res.json({
+        ok: true,
+        sessionId: result.sessionId,
+        message: `C.14 validation session started for ${durationHours} hours with ${intervalMinutes}min snapshots`,
+        status: c14ValidationService.getStatus()
+      });
+    } catch (error: any) {
+      console.error('[8.8.4-C.14][SESSION_START_ERROR]', error);
+      res.status(500).json({ error: error.message || 'Failed to start C.14 validation session' });
+    }
+  });
+
+  // Phase 8.8.4-C.14: Stop C.14 validation session
+  apiRouter.post('/paper-sim/c14-validation/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { c14ValidationService } = await import('./services/c14-validation-service.js');
+      
+      const result = await c14ValidationService.endSession();
+      
+      res.json({
+        ok: result.ok,
+        resultsPath: result.resultsPath,
+        message: result.ok ? 'C.14 validation session ended' : 'No active session'
+      });
+    } catch (error: any) {
+      console.error('[8.8.4-C.14][SESSION_STOP_ERROR]', error);
+      res.status(500).json({ error: error.message || 'Failed to stop C.14 validation session' });
+    }
+  });
+
+  // Phase 8.8.4-C.14: Get C.14 validation session status
+  apiRouter.get('/paper-sim/c14-validation/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { c14ValidationService } = await import('./services/c14-validation-service.js');
+      
+      const status = c14ValidationService.getStatus();
+      const latestSnapshot = await c14ValidationService.getLatestSnapshot();
+      
+      res.json({
+        ok: true,
+        ...status,
+        latestSnapshot
+      });
+    } catch (error: any) {
+      console.error('[8.8.4-C.14][STATUS_ERROR]', error);
+      res.status(500).json({ error: error.message || 'Failed to get C.14 validation status' });
+    }
+  });
+
+  // Phase 8.8.4-C.14: Clear RTB queue
+  apiRouter.delete('/paper-sim/clear-rtb', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { readyToBuyService } = await import('./core/rtb/ready_to_buy_service.js');
+      
+      const clearedCount = await readyToBuyService.clearQueue('paper');
+      
+      res.json({
+        ok: true,
+        cleared: clearedCount,
+        message: `Cleared ${clearedCount} signals from RTB queue`
+      });
+    } catch (error: any) {
+      console.error('[8.8.4-C.14][CLEAR_RTB_ERROR]', error);
+      res.status(500).json({ error: error.message || 'Failed to clear RTB queue' });
+    }
+  });
+
+  // Phase 8.8.4-C.14: Clear trades
+  apiRouter.delete('/paper-sim/clear-trades', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode: 'paper' | 'live' = 'paper';
+      
+      await storage.deleteAllPaperSimTrades(mode);
+      await storage.deleteAllPaperSimOpenPositions(mode);
+      
+      res.json({
+        ok: true,
+        message: 'Cleared all trades and positions'
+      });
+    } catch (error: any) {
+      console.error('[8.8.4-C.14][CLEAR_TRADES_ERROR]', error);
+      res.status(500).json({ error: error.message || 'Failed to clear trades' });
+    }
+  });
+
+  // Phase 8.8.4-C.14: Update paper simulation config (starting_balance)
+  apiRouter.patch('/paper-sim/config', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { starting_balance } = req.body;
+      
+      if (starting_balance !== undefined) {
+        const balance = parseFloat(starting_balance);
+        if (isNaN(balance) || balance <= 0) {
+          return res.status(400).json({ error: 'Invalid starting_balance value' });
+        }
+        
+        const userId = req.user!.id;
+        await storage.updatePortfolioBalance({ userId, mode: 'paper', balance });
+        
+        console.log(`[8.8.4-C.14][CONFIG] Updated starting_balance to $${balance} for user ${userId}`);
+      }
+      
+      res.json({
+        ok: true,
+        message: 'Configuration updated',
+        starting_balance
+      });
+    } catch (error: any) {
+      console.error('[8.8.4-C.14][CONFIG_ERROR]', error);
+      res.status(500).json({ error: error.message || 'Failed to update configuration' });
+    }
+  });
+
   // Phase 7.2: Paper trading status with Bob Core caching
   apiRouter.get('/paper-sim/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     // Phase 7.2: Try Bob Core first if enabled
