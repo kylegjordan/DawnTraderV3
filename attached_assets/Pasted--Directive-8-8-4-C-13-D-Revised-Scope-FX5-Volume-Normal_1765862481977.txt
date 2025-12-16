@@ -1,0 +1,112 @@
+🧩 Directive 8.8.4-C.13.D (Revised Scope)
+“FX5 Volume Normalization & Integration into Unified RTB Validation Cycle”
+🎯 Objective
+
+Implement the FX5 volume normalization and filter enforcement fix immediately,
+but defer validation until it can be tested holistically together with:
+
+The new RTB refresh cycle,
+
+TCL/Promotion logic (C.13.B), and
+
+The corrected USD-denominated filtering logic.
+
+This will ensure all signal promotion and ranking logic is tested end-to-end under realistic trading conditions.
+
+⚙️ Implementation Plan
+1. Correct the FX5 Volume Calculation (Backend)
+
+File: server/services/kraken.ts
+
+Replace:
+
+const volume24h = parseFloat(ticker.v[1]);
+
+
+With:
+
+const volume24hCoins = parseFloat(ticker.v[1]);
+const volume24hUSD = volume24hCoins * currentPrice;
+
+pairData.volume24hUSD = volume24hUSD;
+pairData.volume24h = volume24hUSD; // Maintain backward compatibility
+
+
+This ensures all downstream filters, screeners, and CWQI/SQE logic receive true USD volumes.
+
+2. Update the Volume & Liquidity Filter
+
+File: server/core/filters/volume_liquidity_filter.ts
+
+Replace:
+
+if (volume24h >= minVolume && liquidity >= minLiquidity)
+
+
+With:
+
+if (volume24hUSD >= minVolume && liquidityUSD >= minLiquidity)
+
+3. Ensure Consistent Volume Usage Across Pipeline
+
+Cross-check that the following modules read volume24hUSD:
+
+Module	Purpose
+FX5 Scanner	Correctly supplies USD volume values
+Volume/Liquidity Filter	Screens against USD thresholds
+SQE	Uses normalized volume for scoring
+CWQI Engine	Uses volume in weighting confidence scores
+RTB Queue	Displays USD volume values for audit
+Goals Engine (Frontend)	Displays “24h Volume (USD)” in the UI
+4. Logging Enhancements
+
+Add to filter logger:
+
+logger.debug(`[FILTER][VOLUME] ${symbol} Vol=$${volume24hUSD.toFixed(2)} vs Min=$${minVolume}`);
+logger.warn(`[FILTER_REJECT][LOW_VOLUME] ${symbol} Vol=$${volume24hUSD.toFixed(2)} < $${minVolume}`);
+
+
+This will give explicit visibility into any sub-threshold pairs and confirm enforcement.
+
+5. Combine Validation
+
+Do not run a new validation session yet.
+Instead, once this fix is implemented and committed:
+
+We will run a single, unified validation —
+Directive 8.8.4-C.14: “Comprehensive RTB, TCL, and Volume Enforcement Validation.”
+
+That session will measure:
+
+TCL activation cadence
+
+RTB queue dynamism and ranking refresh
+
+CWQI / NGC / Volume interplay
+
+Proper enforcement of $5,000 minVolume threshold
+
+🧾 Deliverables
+
+Replit to implement and log:
+
+logs/implementation/directive_8.8.4-C.13D_fx5_volume_fix.md
+
+
+containing:
+
+The updated kraken.ts diff
+
+Confirmation of USD volume propagation
+
+Filter comparator updates
+
+Verification of log lines appearing during startup
+
+🧠 Notes
+
+Validation of C.13.D will be merged into C.14, ensuring we capture interdependencies.
+
+No new timers or process changes introduced — this is purely a data normalization and enforcement fix.
+
+The architecture remains stable and scalable.
