@@ -575,16 +575,14 @@ class ReadyToBuyService {
 
   /**
    * Clear all queued signals for a mode (used during engine reset)
+   * Directive 8.8.4-C.14.D: Actually DELETE records instead of just expiring them
    */
   async clearQueue(mode: TradingMode): Promise<number> {
-    const signals = await this.getQueuedSignals(mode);
+    // Delete ALL RTB signals for this mode (not just queued ones)
+    const deleted = await storage.deleteRtbSignals({ mode });
     
-    for (const signal of signals) {
-      await this.expireSignal(signal.id, 'Queue cleared');
-    }
-
-    console.log(`[RTB] Cleared ${signals.length} signals from ${mode} queue`);
-    return signals.length;
+    console.log(`[8.8.4-C.14.D][RTB] Deleted ${deleted} signals from ${mode} queue`);
+    return deleted;
   }
 
   /**
