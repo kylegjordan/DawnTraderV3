@@ -64,6 +64,9 @@ interface ActiveTrade {
   stopLoss: number;
   distanceToTP: number;
   distanceToSL: number;
+  distanceToTPDollars: number; // CR-001: Dollar-based distance
+  distanceToSLDollars: number; // CR-001: Dollar-based distance
+  cwqi: number; // CR-001: CWQI from SQE
   holdingDurationMs: number;
   slotNumber: number;
   maxSlots: number;
@@ -107,8 +110,8 @@ interface ActiveTradesResponse {
 type SortField = 'symbol' | 'strategy' | 'intendedEntryPrice' | 'entryPrice' | 'currentPrice' | 
                   'grossPnl' | 'grossPnlPercent' | 'netPnl' | 'netPnlPercent' | 
                   'entryFee' | 'entrySlippage' | 'estExitFee' | 'estExitSlippage' | 'estTotalCost' |
-                  'holdingDurationMs' | 'distanceToTP' | 'distanceToSL' | 'slotNumber' | 
-                  'health' | 'confidence' | 'quantity' | 'volume24h' | 'takeProfit' | 'stopLoss' | 'positionValue';
+                  'holdingDurationMs' | 'distanceToTP' | 'distanceToSL' | 'distanceToTPDollars' | 'distanceToSLDollars' | 'slotNumber' | 
+                  'health' | 'confidence' | 'cwqi' | 'quantity' | 'volume24h' | 'takeProfit' | 'stopLoss' | 'positionValue';
 type SortDirection = 'asc' | 'desc';
 
 const strategyColors: Record<string, string> = {
@@ -330,25 +333,25 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 8. Distance (stacked: TP on top, SL on bottom) - C2A */}
+      {/* 8. Distance (stacked: TP on top, SL on bottom) - CR-001: Now in dollars */}
       <td className="px-3 py-3">
         <div className="text-xs space-y-0.5">
           <div className="flex items-center gap-1">
             <Target className="w-3 h-3 text-green-500" />
             <span className={cn(
               "font-mono",
-              trade.distanceToTP >= 0 ? "text-green-600" : "text-muted-foreground"
+              (trade.distanceToTPDollars || 0) >= 0 ? "text-green-600" : "text-red-600"
             )}>
-              {trade.distanceToTP >= 0 ? '+' : ''}{trade.distanceToTP.toFixed(2)}%
+              {(trade.distanceToTPDollars || 0) >= 0 ? '+' : ''}${formatNumber(Math.abs(trade.distanceToTPDollars || 0), 2)}
             </span>
           </div>
           <div className="flex items-center gap-1">
             <Shield className="w-3 h-3 text-red-500" />
             <span className={cn(
               "font-mono",
-              trade.distanceToSL <= 0 ? "text-red-600" : "text-muted-foreground"
+              (trade.distanceToSLDollars || 0) >= 0 ? "text-muted-foreground" : "text-red-600"
             )}>
-              {trade.distanceToSL.toFixed(2)}%
+              -${formatNumber(Math.abs(trade.distanceToSLDollars || 0), 2)}
             </span>
           </div>
         </div>
@@ -425,7 +428,19 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 16. Confidence */}
+      {/* 16. CWQI - CR-001: Added before Confidence */}
+      <td className="px-3 py-3">
+        <div className={cn(
+          "font-mono text-sm font-medium",
+          (trade.cwqi || 0) >= 0.7 ? "text-green-600" :
+          (trade.cwqi || 0) >= 0.5 ? "text-blue-600" :
+          (trade.cwqi || 0) >= 0.3 ? "text-orange-600" : "text-red-600"
+        )}>
+          {((trade.cwqi || 0) * 100).toFixed(1)}%
+        </div>
+      </td>
+      
+      {/* 17. Confidence */}
       <td className="px-3 py-3">
         <div className={cn(
           "font-mono text-sm font-medium",
@@ -1037,6 +1052,7 @@ export default function ActiveTradesV2() {
                   <SortableHeader field="estExitSlippage" label="Exit Slip" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="estTotalCost" label="Total Cost" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="netPnl" label="Net P/L" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortableHeader field="cwqi" label="CWQI" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="confidence" label="Conf" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="volume24h" label="Volume" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Source</th>

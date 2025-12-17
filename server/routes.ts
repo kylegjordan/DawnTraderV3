@@ -10007,9 +10007,17 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         const netPnl = grossPnl - estTotalCost;
         const netPnlPercent = intendedEntryValue > 0 ? (netPnl / intendedEntryValue) * 100 : 0;
         
-        // Phase 8.8.3-I6 E1: Distance to TP/SL using live price
+        // Phase 8.8.3-I6 E1: Distance to TP/SL using live price (percentages)
         const distanceToTP = takeProfit > 0 ? ((takeProfit - currentPrice) / currentPrice) * 100 : 0;
         const distanceToSL = stopLoss > 0 ? ((currentPrice - stopLoss) / currentPrice) * 100 : 0;
+        
+        // CR-001: Distance in dollar values (absolute price difference * quantity)
+        const distanceToTPDollars = takeProfit > 0 ? (takeProfit - currentPrice) * quantity : 0;
+        const distanceToSLDollars = stopLoss > 0 ? (currentPrice - stopLoss) * quantity : 0;
+        
+        // CR-001: Extract CWQI from metadata if available
+        const posMetadata = (pos.metadata || {}) as Record<string, any>;
+        const cwqi = parseFloat(posMetadata.cwqi?.toString() || '0');
         
         // Health indicator: green (profitable), yellow (near breakeven), red (losing)
         let health: 'green' | 'yellow' | 'red' = 'yellow';
@@ -10069,6 +10077,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           stopLoss,
           distanceToTP,
           distanceToSL,
+          distanceToTPDollars, // CR-001: Dollar-based distance
+          distanceToSLDollars, // CR-001: Dollar-based distance
+          cwqi, // CR-001: CWQI from metadata
           holdingDurationMs,
           slotNumber: index + 1,
           maxSlots: maxOpenTrades,
