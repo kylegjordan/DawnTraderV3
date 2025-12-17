@@ -1,0 +1,143 @@
+🔷 Replit Directive — Phase N5: Repo Read-Only Introspection
+
+Directive ID: N5-REPO-READONLY-INTROSPECTION
+Lifecycle State: EXECUTION REQUESTED
+Phase Context (Required):
+Phase N5 establishes safe, governed, read-only introspection of the DawnTrader repository for ChatGPT. This eliminates manual file uploads, reduces context loss, and improves architectural correctness while preserving approval gating and execution safety.
+
+Objective:
+Enable ChatGPT to read and analyze the entire DawnTrader repository (read-only) via Chaplet, using an authoritative repo mapping file and strict governance rules.
+
+🔹 Tasks
+1️⃣ Create Repo Map (Canonical Navigation Index)
+
+Create the following file exactly:
+
+Path:
+/bridge/runtime/repo-map.json
+
+Contents:
+
+{
+  "repo_root": "/",
+  "purpose": "Authoritative navigation map for DawnTrader repository. ChatGPT MUST consult this file before accessing any repository files.",
+  "domains": {
+    "bridge": {
+      "path": "/bridge",
+      "description": "Governance, canonical truth, directives, decisions, runtime rules"
+    },
+    "chaplet": {
+      "path": "/chaplet",
+      "description": "Read-only context service exposing bridge and repo introspection"
+    },
+    "server": {
+      "path": "/server",
+      "description": "Backend services, trading engine, strategy engine, risk, data pipelines"
+    },
+    "client": {
+      "path": "/client",
+      "description": "Frontend UI, UX, dashboards, visualizations"
+    },
+    "shared": {
+      "path": "/shared",
+      "description": "Shared schemas, types, utilities"
+    },
+    "config": {
+      "path": "/config",
+      "description": "Application configuration (non-secret)"
+    }
+  },
+  "denied_paths": [
+    "/node_modules",
+    "/.git",
+    "/dist",
+    "/build",
+    "/out",
+    "/.env",
+    "/.env.*"
+  ],
+  "rules": {
+    "always_use_repo_map": true,
+    "no_blind_directory_scans": true,
+    "no_assumed_paths": true,
+    "repo_map_overrides_memory": true
+  },
+  "maintenance": {
+    "update_required_when_structure_changes": true,
+    "owner": "Kyle",
+    "governed_by_bridge": true
+  }
+}
+
+2️⃣ Extend Chaplet with Repo Read-Only Endpoints
+
+Add read-only endpoints under /chaplet/repo:
+
+GET /chaplet/repo/index
+
+Returns repo-map.json
+
+GET /chaplet/repo/file/{path}
+
+Reads a single file
+
+Must enforce denied paths
+
+No directory recursion without explicit file path
+
+Rules:
+
+Read-only
+
+No writes
+
+No execution
+
+No secrets
+
+No environment access
+
+3️⃣ Extend Grounding Schema (Declarative Only)
+
+Extend the grounding schema in /chaplet/index.ts by adding (not replacing) the following block:
+
+"repo_access": {
+  "enabled": true,
+  "mode": "read-only",
+  "scope": "entire-repository",
+  "mapping_file": "/bridge/runtime/repo-map.json",
+  "rules": [
+    "ChatGPT may read repository files for analysis and auditing",
+    "ChatGPT may NOT write, modify, or execute any repository files",
+    "ChatGPT must consult repo-map.json before accessing files",
+    "Denied paths must never be accessed"
+  ]
+}
+
+🔹 Constraints
+
+No runtime behavior changes to DawnTrader
+
+No write or execution authority
+
+No automation
+
+No background jobs
+
+Governance remains approval-gated
+
+🔹 Acceptance Criteria
+
+ChatGPT can read repo files through Chaplet
+
+Repo-map.json is enforced
+
+Denied paths are blocked
+
+No mutations possible
+
+Bridge remains source of truth
+
+🔹 Blocking Question (Required)
+
+“Is this directive approved for canonicalization?”
