@@ -1178,14 +1178,19 @@ export class PaperExecutionEngine {
 
         console.log(`[8.8.4-C.12][TCL_PROMOTE] ${signal.symbol}/${signal.strategy} with CWQI ${cwqi.toFixed(4)}, NGC ${ngc.toFixed(4)}`);
 
-        // Execute the promoted signal
+        // Directive 8.8.4-A3.R1: RTB removal must precede trade creation to prevent double-activation
+        // Step 1: Remove signal from RTB queue BEFORE attempting trade execution
+        await readyToBuyService.promoteSignal(signal.id, 'pending');
+        console.log(`[8.8.4-A3.R1][PROMOTION_ORDER] RTB signal ${signal.symbol} removed before trade creation`);
+        
+        // Step 2: Execute the promoted signal (create trade)
         const tradeResult = await this.executePromotedSignal(signal);
 
         if (tradeResult.success && tradeResult.tradeId) {
-          // Mark signal as promoted
+          // Step 3: Update signal with actual trade ID
           await readyToBuyService.promoteSignal(signal.id, tradeResult.tradeId);
           
-          // Emit PROMOTION event for diagnostics
+          // Step 4: Emit PROMOTION event for diagnostics (after both removal and trade creation succeed)
           eventBus.emitPromotion({
             mode: this.mode,
             symbol: signal.symbol,
@@ -1200,7 +1205,9 @@ export class PaperExecutionEngine {
           promotedCount++;
           openSlots--;
         } else {
+          // Trade execution failed - signal already removed from RTB, log warning
           console.warn(`[RTB-Promotion:${this.mode}] ⚠️ Failed to execute promoted signal: ${tradeResult.error || 'unknown error'}`);
+          console.warn(`[8.8.4-A3.R1][PROMOTION_ORDER] Signal ${signal.symbol} was removed from RTB but trade failed - signal not restored`);
           failedCount++;
         }
       }

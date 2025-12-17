@@ -106,11 +106,14 @@ const RTB_REFRESH_INTERVAL_MS = 30 * 1000; // 30 seconds
 // Phase 8.8.4-C.6: TCL 5-minute failsafe
 const TCL_FAILSAFE_MS = 5 * 60 * 1000; // 5 minutes
 
-const CWQI_DECAY_LAMBDA = 0.03;
+// Directive 8.8.4-A3.R1: CWQI decay rate is configurable via environment variable
+// Default: 0.03 per minute (λ = 0.03/min)
+const CWQI_DECAY_LAMBDA = parseFloat(process.env.CWQI_DECAY_RATE || '0.03');
+console.log(`[8.8.4-A3.R1][CONFIG] CWQI_DECAY_RATE=${CWQI_DECAY_LAMBDA} (per minute)`);
 
 /**
  * Phase C: Calculate decayed CWQI based on signal age
- * CWQI_decayed = CWQI_orig × e^(-λt), λ = 0.03 per minute
+ * CWQI_decayed = CWQI_orig × e^(-λt), λ = configurable (default 0.03) per minute
  * 
  * @param originalCWQI - The original CWQI value
  * @param queuedAt - Timestamp when signal was queued
@@ -131,6 +134,22 @@ export function calculateDecayedCWQI(originalCWQI: number, queuedAt: Date | stri
  */
 export function getCWQIDecayFactor(ageMinutes: number): number {
   return Math.exp(-CWQI_DECAY_LAMBDA * ageMinutes);
+}
+
+/**
+ * Directive 8.8.4-A3.R1: Normalize pair key to uppercase BASE/QUOTE format
+ * Ensures consistent comparison and storage of trading pairs
+ * 
+ * @param symbol - The trading pair (e.g., 'btc/usd', 'BTC/USD')
+ * @returns Normalized uppercase pair key (e.g., 'BTC/USD')
+ */
+export function normalizePairKey(symbol: string): string {
+  const trimmed = symbol.trim();
+  if (trimmed.includes('/')) {
+    const [base, quote] = trimmed.split('/');
+    return `${base.toUpperCase()}/${quote.toUpperCase()}`;
+  }
+  return trimmed.toUpperCase();
 }
 
 class ReadyToBuyService {
@@ -194,7 +213,9 @@ class ReadyToBuyService {
    * @returns true if the pair exists in the RTB queue
    */
   async hasPair(symbol: string, mode: TradingMode): Promise<boolean> {
-    const signals = await storage.getRtbSignals({ mode, status: 'queued', symbol });
+    // Directive 8.8.4-A3.R1: Normalize pair key for consistent comparison
+    const normalizedSymbol = normalizePairKey(symbol);
+    const signals = await storage.getRtbSignals({ mode, status: 'queued', symbol: normalizedSymbol });
     return signals.length > 0;
   }
 
@@ -285,8 +306,16 @@ class ReadyToBuyService {
    * - Logs pool status
    * 
    * Directive 8.8.4-A1-Extended: Also triggers refreshAndRank for dynamic re-ranking
+   * Directive 8.8.4-A3.R1: Only runs when engine is active for this mode
    */
   private async executeRefreshCycle(mode: TradingMode): Promise<void> {
+    // Directive 8.8.4-A3.R1: Engine-aware refresh control
+    // Only run refresh cycle when trading engine is active for this mode
+    const systemContext = await storage.getSystemContext(mode);
+    if (!systemContext?.isEngineActive) {
+      return; // Skip refresh when engine is inactive (passive learning mode)
+    }
+    
     const startTime = Date.now();
     
     // Step 1: Clean up expired signals
@@ -796,17 +825,20 @@ class ReadyToBuyService {
   async queueSQESignal(input: SQESignalInput): Promise<RtbSignal | null> {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + SIGNAL_TTL_MS);
+    
+    // Directive 8.8.4-A3.R1: Normalize pair key to uppercase BASE/QUOTE format
+    const normalizedSymbol = normalizePairKey(input.symbol);
 
     // Directive 8.8.4-A3: Pair-level duplicate validation
     // Check if this pair already exists in active trades (duplicate_pair_active)
-    const hasActivePosition = await storage.hasActivePair(input.symbol, input.mode);
+    const hasActivePosition = await storage.hasActivePair(normalizedSymbol, input.mode);
     if (hasActivePosition) {
-      console.log(`[8.8.4-A3][SQE][Validation] pair=${input.symbol} status=duplicate_pair_active`);
+      console.log(`[8.8.4-A3][SQE][Validation] pair=${normalizedSymbol} status=duplicate_pair_active`);
       return null;
     }
 
     // Check for existing queued signal with same symbol+strategy
-    const existingSignal = await this.getQueuedSignal(input.mode, input.symbol, input.strategy);
+    const existingSignal = await this.getQueuedSignal(input.mode, normalizedSymbol, input.strategy);
     
     if (existingSignal) {
       // If existing signal has higher CWQI, keep it
@@ -821,10 +853,11 @@ class ReadyToBuyService {
     }
 
     // Insert new signal with pre-computed metrics from SQE
+    // Directive 8.8.4-A3.R1: Store with normalized pair key
     const insertData: InsertRtbSignal = {
       mode: input.mode,
       signalId: input.signalId,
-      symbol: input.symbol,
+      symbol: normalizedSymbol,
       strategy: input.strategy as any,
       entryPrice: input.entryPrice.toString(),
       stopPrice: input.stopPrice.toString(),
@@ -852,7 +885,7 @@ class ReadyToBuyService {
     signalLifecycleAudit.recordQueued(
       input.signalId,
       input.mode,
-      input.symbol,
+      normalizedSymbol,
       input.strategy,
       {
         cwqi: input.cwqi,
@@ -866,7 +899,7 @@ class ReadyToBuyService {
     // Get current pool size for warm-up tracking
     const poolSize = await this.getPoolSize(input.mode);
 
-    console.log(`[8.8.4-C.5][RTB_INSERT] ${input.symbol}/${input.strategy}: CWQI=${input.cwqi.toFixed(4)}, NGC=${input.ngc.toFixed(4)}, poolSize=${poolSize}`);
+    console.log(`[8.8.4-C.5][RTB_INSERT] ${normalizedSymbol}/${input.strategy}: CWQI=${input.cwqi.toFixed(4)}, NGC=${input.ngc.toFixed(4)}, poolSize=${poolSize}`);
     
     // Phase 8.8.4-C.12: Check if 100-signal threshold reached for TCL activation
     tclWatchdog.checkSignalThreshold(input.mode, poolSize);

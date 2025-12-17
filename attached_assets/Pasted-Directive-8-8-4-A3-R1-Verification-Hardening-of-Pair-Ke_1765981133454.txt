@@ -1,0 +1,79 @@
+Directive 8.8.4-A3.R1 – Verification & Hardening of Pair-Key SQE Integration
+
+Classification: Verification & Stability Directive
+Parent Phase: 8.8.4 – Ready-to-Buy (RTB) Completion
+Issued: 2025-12-17
+Objective:
+Verify, harden, and finalize the 8.8.4-A3 implementation for pair-level validation and SQE re-qualification to guarantee long-term stability, correctness, and alignment with architectural standards.
+
+1. Verification Objectives
+
+Replit must verify and provide evidence (code excerpts or logs) that the following five areas are correctly implemented and functioning:
+
+Area	Verification Target	Expected Evidence
+1. Pair-Key Normalization	Pair keys must be normalized as uppercase ${BASE}/${QUOTE} prior to storage or comparison to prevent case mismatches (e.g., btc/usd ≠ BTC/USD).	Code snippet showing: const pairKey = \${signal.base.toUpperCase()}/${signal.quote.toUpperCase()}``
+2. Active Trade Verification Source	hasActivePair() must check the active trades table (e.g., open_trades or paper_sim_open_positions), not cached RTB data.	Code snippet of query used within hasActivePair()
+3. Engine-Aware Refresh Control	The 30-second refresh cycle (refreshAndRank()) must only run when the trading engine is active for that mode.	Code check: if (!engine.isActive(mode)) return;
+4. CWQI Decay Configurability	The CWQI decay coefficient (λ = 0.03/min) must be configurable (via system_settings, env, or constant).	Config file or code snippet showing CWQI_DECAY_RATE defined
+5. RTB Promotion Synchronization	When a pair is promoted to an active trade, it must be removed from RTB before the trade record is created to prevent double-activation.	Log or code snippet from promotion flow showing removal before trade insert
+2. Log Verification
+
+Replit must confirm that the following log signatures appear in the live runtime logs during a scan cycle:
+
+[8.8.4-A3][SQE][Validation] pair=<BASE/QUOTE> status=duplicate_pair_active
+[8.8.4-A3][SQE][Validation] pair=<BASE/QUOTE> status=failed_requalification
+[8.8.4-A3][SQE][Validation] pair=<BASE/QUOTE> status=passed
+[8.8.4-A3][RTB][Refresh] cycle mode=<mode> updated=<n> removed=<n> re-ranked=<n>
+
+
+This confirms the continuous integrity of the SQE layer, pair-key validation, and queue refresh operations.
+
+3. Functional Stability Testing
+
+Replit must perform a controlled 30-minute run under testuser123 credentials to confirm:
+
+✅ Continuous FX5 scanning and RTB refresh cycles every 30 seconds.
+
+✅ Dynamic re-ranking behavior (CWQI decay visible in order changes).
+
+✅ No duplicate pairs appearing in RTB or active trades.
+
+✅ No signals remain in RTB after promotion.
+
+✅ Stable synchronization between UI, database, and in-memory states.
+
+Credentials for testing:
+
+username: testuser123
+password: SecurePass123!
+
+4. Deliverables
+
+Verification Log Extract: 30-minute excerpt containing validation and refresh messages.
+
+Code Excerpts: For each of the five verification targets listed above.
+
+Architectural Report: 1-paragraph confirmation that no unauthorized modules or routes were added beyond:
+
+server/core/rtb/ready_to_buy_service.ts
+
+server/storage.ts
+
+Stability Confirmation: Statement verifying that no oscillation or redundant API/WebSocket events occurred.
+
+5. Completion Criteria
+Criterion	Pass Condition
+Pair normalization	All pairKeys consistently uppercase
+Active trade lookup	Queries correct open-trade table
+Refresh gating	refreshAndRank() conditional on active engine
+CWQI configuration	CWQI_DECAY_RATE configurable
+Promotion order	RTB removal precedes trade creation
+Log audit	All 4 expected log signatures present
+Runtime stability	30-minute uninterrupted operation
+6. Next Steps Upon Completion
+
+Once this verification is complete and validated, Directive 8.8.4-A3 will be locked.
+
+The architecture will be marked as Stable-Ready, closing Phase 8.8.4.
+
+Development will then proceed to Phase 8.8.5-A – Adaptive Entry & Exit Optimization (profitability phase).

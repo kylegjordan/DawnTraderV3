@@ -1539,11 +1539,16 @@ export class DatabaseStorage implements IStorage {
    * @returns true if an open trade exists for this pair
    */
   async hasActivePair(symbol: string, mode: 'live' | 'paper'): Promise<boolean> {
+    // Directive 8.8.4-A3.R1: Normalize pair key for consistent comparison
+    const normalizedSymbol = symbol.includes('/') 
+      ? symbol.split('/').map(s => s.trim().toUpperCase()).join('/')
+      : symbol.trim().toUpperCase();
+    
     const result = await db
       .select({ id: trades.id })
       .from(trades)
       .where(and(
-        eq(trades.symbol, symbol),
+        eq(trades.symbol, normalizedSymbol),
         eq(trades.status, "open"),
         eq(trades.mode, mode)
       ))
