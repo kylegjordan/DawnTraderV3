@@ -5,6 +5,22 @@ import * as path from 'path';
 const router = Router();
 
 const BRIDGE_PATH = path.join(process.cwd(), 'bridge');
+const REPO_ROOT = process.cwd();
+const REPO_MAP_PATH = path.join(BRIDGE_PATH, 'runtime', 'repo-map.json');
+
+const DENIED_PATHS = [
+  '/node_modules',
+  '/.git',
+  '/dist',
+  '/build',
+  '/out',
+  '/.env',
+];
+
+const DENIED_PATTERNS = [
+  /^\.env/,
+  /\.env\./,
+];
 
 function readBridgeFile(relativePath: string): string | null {
   try {
@@ -23,6 +39,61 @@ function listDirectory(relativePath: string): string[] {
     return fs.readdirSync(fullPath);
   } catch {
     return [];
+  }
+}
+
+function isPathDenied(requestedPath: string): boolean {
+  const normalizedPath = '/' + requestedPath.replace(/\\/g, '/').replace(/^\/+/, '');
+  
+  for (const deniedPath of DENIED_PATHS) {
+    if (normalizedPath.startsWith(deniedPath) || normalizedPath === deniedPath.slice(1)) {
+      return true;
+    }
+  }
+  
+  const filename = path.basename(normalizedPath);
+  for (const pattern of DENIED_PATTERNS) {
+    if (pattern.test(filename)) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+function readRepoFile(relativePath: string): string | null {
+  try {
+    if (isPathDenied(relativePath)) {
+      return null;
+    }
+    
+    const fullPath = path.join(REPO_ROOT, relativePath);
+    const realPath = fs.realpathSync(fullPath);
+    
+    if (!realPath.startsWith(REPO_ROOT)) {
+      return null;
+    }
+    
+    if (!fs.existsSync(fullPath)) return null;
+    
+    const stats = fs.statSync(fullPath);
+    if (stats.isDirectory()) {
+      return null;
+    }
+    
+    return fs.readFileSync(fullPath, 'utf-8');
+  } catch {
+    return null;
+  }
+}
+
+function getRepoMap(): object | null {
+  try {
+    if (!fs.existsSync(REPO_MAP_PATH)) return null;
+    const content = fs.readFileSync(REPO_MAP_PATH, 'utf-8');
+    return JSON.parse(content);
+  } catch {
+    return null;
   }
 }
 
@@ -167,6 +238,18 @@ router.get('/context/grounding', (_req, res) => {
       directives: '/bridge/directives',
       runtime: '/bridge/runtime'
     },
+    repo_access: {
+      enabled: true,
+      mode: "read-only",
+      scope: "entire-repository",
+      mapping_file: "/bridge/runtime/repo-map.json",
+      rules: [
+        "ChatGPT may read repository files for analysis and auditing",
+        "ChatGPT may NOT write, modify, or execute any repository files",
+        "ChatGPT must consult repo-map.json before accessing files",
+        "Denied paths must never be accessed"
+      ]
+    },
     timestamp: new Date().toISOString()
   });
 });
@@ -219,6 +302,60 @@ router.get('/context/file/:folder/:filename', (req, res) => {
   });
 });
 
+router.get('/repo/index', (_req, res) => {
+  const repoMap = getRepoMap();
+  
+  if (!repoMap) {
+    return res.status(500).json({ 
+      error: 'Repo map not found',
+      path: REPO_MAP_PATH
+    });
+  }
+  
+  res.json({
+    status: 'ok',
+    mode: 'read-only',
+    repo_map: repoMap,
+    timestamp: new Date().toISOString()
+  });
+});
+
+router.get('/repo/file/*', (req, res) => {
+  const requestedPath = (req.params as Record<string, string>)[0];
+  
+  if (!requestedPath) {
+    return res.status(400).json({ 
+      error: 'File path required',
+      example: '/chaplet/repo/file/server/index.ts'
+    });
+  }
+  
+  if (isPathDenied(requestedPath)) {
+    return res.status(403).json({ 
+      error: 'Access denied',
+      reason: 'Path is in denied list',
+      path: requestedPath
+    });
+  }
+  
+  const content = readRepoFile(requestedPath);
+  
+  if (content === null) {
+    return res.status(404).json({ 
+      error: 'File not found or is a directory',
+      path: requestedPath
+    });
+  }
+  
+  res.json({
+    status: 'ok',
+    mode: 'read-only',
+    path: requestedPath,
+    content,
+    timestamp: new Date().toISOString()
+  });
+});
+
 router.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
@@ -226,6 +363,7 @@ router.get('/health', (_req, res) => {
     mode: 'read-only',
     bridge_path: BRIDGE_PATH,
     bridge_exists: fs.existsSync(BRIDGE_PATH),
+    repo_map_exists: fs.existsSync(REPO_MAP_PATH),
     timestamp: new Date().toISOString()
   });
 });

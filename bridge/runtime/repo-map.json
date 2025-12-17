@@ -1,0 +1,50 @@
+{
+  "repo_root": "/",
+  "purpose": "Authoritative navigation map for DawnTrader repository. ChatGPT MUST consult this file before accessing any repository files.",
+  "domains": {
+    "bridge": {
+      "path": "/bridge",
+      "description": "Governance, canonical truth, directives, decisions, runtime rules"
+    },
+    "chaplet": {
+      "path": "/chaplet",
+      "description": "Read-only context service exposing bridge and repo introspection"
+    },
+    "server": {
+      "path": "/server",
+      "description": "Backend services, trading engine, strategy engine, risk, data pipelines"
+    },
+    "client": {
+      "path": "/client",
+      "description": "Frontend UI, UX, dashboards, visualizations"
+    },
+    "shared": {
+      "path": "/shared",
+      "description": "Shared schemas, types, utilities"
+    },
+    "config": {
+      "path": "/config",
+      "description": "Application configuration (non-secret)"
+    }
+  },
+  "denied_paths": [
+    "/node_modules",
+    "/.git",
+    "/dist",
+    "/build",
+    "/out",
+    "/.env",
+    "/.env.*"
+  ],
+  "rules": {
+    "always_use_repo_map": true,
+    "no_blind_directory_scans": true,
+    "no_assumed_paths": true,
+    "repo_map_overrides_memory": true
+  },
+  "maintenance": {
+    "update_required_when_structure_changes": true,
+    "owner": "Kyle",
+    "governed_by_bridge": true
+  }
+}

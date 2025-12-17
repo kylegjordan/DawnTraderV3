@@ -6047,6 +6047,24 @@
     ]
   },
   {
+    "path": "/chaplet/repo/index",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/chaplet/repo/file/*",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
     "path": "/chaplet/health",
     "methods": [
       "GET"
