@@ -1,0 +1,177 @@
+Directive 8.8.4-A1 & A2 – RTB Completion, Reconfirmation, and Dynamic Re-Ranking (Final Revision)
+
+Classification: Operational Directive
+Parent Phase: 8.8.4 — System Integrity & Trading Stability
+Issued: 2025-12-17
+Objective:
+Finalize the Ready-to-Buy (RTB) framework by ensuring that signals are (1) properly cleaned up when promoted, (2) reconfirmed and refreshed every 30 seconds, and (3) continuously re-ranked in real time according to their recalculated CWQI and strength scores.
+Complete full stability validation before the system transitions to 8.8.5.
+
+A1. RTB Promotion Cleanup
+
+Purpose:
+Ensure that signals promoted to active trades are immediately and cleanly removed from the RTB queue and broadcast to all clients, keeping the queue synchronized.
+
+Tasks
+
+Promotion Event Hook
+
+Add in paper_trading_engine.ts:
+
+eventBus.emit('rtb:promote', { symbol, mode });
+
+
+Cleanup Handler
+
+In ready_to_buy_service.ts:
+
+eventBus.on('rtb:promote', async ({ symbol, mode }) => {
+  await readyToBuyService.removeSignal(symbol, mode);
+  await websocket.broadcast('rtb:cleared', { symbol, mode });
+});
+
+
+Verification
+
+Promoted symbols disappear from RTB ≤ 30 s after promotion.
+
+UI updates immediately via rtb:cleared.
+
+A1-Extended — RTB Refresh, Reconfirmation, and Dynamic Re-Ranking
+
+Purpose:
+The RTB queue should act as a live, adaptive ranking system, revalidating and reordering all entries every 30 seconds based on the latest signal data and recalculated CWQI.
+
+1. Signal Reconfirmation
+
+Each RTB signal must be refreshed with updated price and indicator data every FX5 scan cycle.
+
+In fx5_scanner.ts:
+
+const signals = await readyToBuyService.getAll(mode);
+for (const signal of signals) {
+  const updatedData = await fx5Service.fetchSignalData(signal.symbol);
+  await readyToBuyService.refreshSignal(signal.symbol, updatedData);
+}
+
+
+This ensures:
+
+price, indicators, and CWQI are up-to-date every 30 seconds.
+
+Signals remain accurate reflections of current market conditions.
+
+2. Continuous CWQI Re-Ranking
+
+After refreshing signals, the RTB queue must re-sort dynamically based on CWQI, not insertion order.
+
+In ready_to_buy_service.ts:
+
+async refreshAndRank(mode) {
+  const signals = await this.getAll(mode);
+
+  // Recalculate CWQI for each signal
+  const rescored = signals.map(sig => ({
+    ...sig,
+    CWQI: calculateCWQI(sig),  // use latest indicators
+  }));
+
+  // Sort by CWQI descending (highest first)
+  rescored.sort((a, b) => b.CWQI - a.CWQI);
+
+  // Save back to DB or cache
+  await this.saveRankedSignals(mode, rescored);
+
+  // Broadcast the update to clients
+  await websocket.broadcast('rtb:updated', { mode });
+}
+
+
+Then, call readyToBuyService.refreshAndRank(mode) at the end of each FX5 cycle.
+
+3. Behavior and Verification
+
+Expected Behavior
+
+Every 30 seconds:
+
+All signals in RTB are reconfirmed with new price/indicator data.
+
+CWQI is recalculated.
+
+The queue is re-ranked based on current strength.
+
+Top-ranked signals rise to the top in the UI automatically.
+
+Validation Criteria
+
+Queue order changes over time as conditions shift.
+
+New strong signals can overtake older weaker ones.
+
+CWQI values visibly fluctuate each refresh.
+
+lastReconfirmedAt timestamps remain ≤ 30 s old for every entry.
+
+A2. System Stability and Hardening Review
+
+Perform the full 8–12 hour validation and stability audit under continuous operation.
+
+Checklist
+
+Area	Objective	Validation Method
+FX5 Scanner	Sustains 30 s scan interval ±2 s	Log timestamps
+RTB Refresh	All signals refreshed every cycle	Check timestamps
+RTB Re-Ranking	CWQI-driven ordering every cycle	Monitor order changes
+TCL Cycle	Promotions triggered once per available slot	Trace logs
+Engine Sync	DB vs. memory parity for isEngineActive	Start/stop × 5
+WebSocket	All rtb:updated, trade:open/close events	Client console
+Memory	Growth < 10 MB/h	Snapshot every 10 min
+Error Recovery	FX5 failure auto-recover in ≤ 1 cycle	Test transient disconnect
+Performance	CPU < 40 %, steady throughput	Internal metrics
+Credentials for Validation (Test Environment)
+
+Username: testuser123
+Password: SecurePass123!
+
+Use these credentials exclusively for validation and internal testing.
+⚠️ Do not use in production deployment.
+
+Deliverables
+
+✅ Updated code in:
+
+paper_trading_engine.ts – add RTB promotion event emit
+
+ready_to_buy_service.ts – implement refresh-and-rank logic
+
+fx5_scanner.ts – trigger RTB refresh-and-rank each 30 s
+
+✅ Continuous-run log: /logs/validation/8.8.4_stability_review.log
+
+✅ replit.md updated:
+
+Directive 8.8.4-A1/A2 complete.
+RTB dynamic re-ranking active (CWQI priority).
+Signal reconfirmation validated (30 s cadence).
+System stability confirmed (8 h runtime, 0 state drift).
+
+
+✅ Architect sign-off upon passing all validation criteria.
+
+Completion Criteria
+Criterion	Pass Condition
+RTB Cleanup	Promoted signals removed ≤ 30 s
+Signal Reconfirmation	All RTB entries refreshed ≤ 30 s
+Dynamic Ranking	CWQI-based reordering visible each cycle
+Continuous Run	8 h uninterrupted operation
+Engine Sync	No oscillation; states match
+Performance	CPU < 40 %, mem growth < 10 MB/h
+Transition to Phase 8.8.5
+
+After successful completion:
+
+Phase 8.8.4 is officially closed.
+
+Proceed to Phase 8.8.5 (“Profitability Core”)
+which includes adaptive entry/exit pricing and progressive trailing-stop logic.

@@ -26,6 +26,7 @@ import { activeFilterPool, type ActiveFilteredPair } from './active-filter-pool.
 import { nanoid } from 'nanoid';
 import type { ScreenerFilters } from '@shared/schema';
 import { recordScanFor24h, recordScanCompletion, getCyclesPerHour, get24hSummary } from './fx5-24h-window.js';
+import { readyToBuyService } from '../core/rtb/ready_to_buy_service.js';
 
 const SCAN_INTERVAL_MS = 30 * 1000; // 30 seconds
 const CYCLES_PER_HOUR = Math.round(3600000 / SCAN_INTERVAL_MS); // 120 for 30s intervals
@@ -321,6 +322,14 @@ export class Fx5ScannerService {
       }
 
       console.log(`[FX5Scanner][${mode}] ✅ Scan complete (evaluated=${evaluatedCount}, eligible=${eligibleCount})`);
+
+      // Directive 8.8.4-A1-Extended: Trigger RTB refresh and re-ranking at end of each FX5 cycle
+      // This ensures RTB signals are reconfirmed and dynamically re-ranked every 30 seconds
+      try {
+        await readyToBuyService.refreshAndRank(mode);
+      } catch (err) {
+        console.warn(`[FX5Scanner][${mode}] RTB refresh warning:`, err);
+      }
 
       return scanResult;
     } catch (error) {

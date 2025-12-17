@@ -31,6 +31,8 @@ import { isCapacityBlock, type TradingMode, type CapacityGuardrailCode } from '.
 import { signalLifecycleAudit } from '../audit/signal_lifecycle_audit';
 import type { RtbSignal, InsertRtbSignal } from '@shared/schema';
 import { tclWatchdog } from './tcl_watchdog';
+import { eventBus, type PromotionEvent } from '../../lib/event-bus';
+import { contextBridge } from '../../services/context-bridge';
 
 export interface RTBSignalInput {
   signalId: string;
@@ -134,9 +136,76 @@ class ReadyToBuyService {
   private refreshIntervals: Map<TradingMode, NodeJS.Timeout> = new Map();
   private engineStartTimes: Map<TradingMode, number> = new Map(); // Phase 8.8.4-C.6: Track engine start for TCL failsafe
   private tclFailsafeTriggered: Map<TradingMode, boolean> = new Map(); // Phase 8.8.4-C.6: Track if failsafe was triggered
+  private promotionHandlerRegistered = false; // Directive 8.8.4-A1: Track handler registration
   
   constructor() {
     console.log('[RTB] Ready-to-Buy Queue Service initialized');
+    this.registerPromotionHandler();
+  }
+
+  /**
+   * Directive 8.8.4-A1: Register PROMOTION event handler for cleanup
+   * When a signal is promoted to active trade, immediately remove it from RTB queue
+   * and broadcast rtb:cleared to all clients
+   */
+  private registerPromotionHandler(): void {
+    if (this.promotionHandlerRegistered) {
+      return;
+    }
+
+    eventBus.onPromotion(async (event: PromotionEvent) => {
+      try {
+        console.log(`[8.8.4-A1][RTB_CLEANUP] Processing promotion event: ${event.symbol}/${event.strategy} (mode=${event.mode})`);
+        
+        // Remove the promoted signal from the queue by symbol/mode
+        const removed = await this.removeSignalBySymbol(event.symbol, event.mode);
+        
+        if (removed) {
+          // Broadcast rtb:cleared for the promoted symbol
+          await contextBridge.broadcast({
+            type: 'rtb:cleared',
+            payload: {
+              mode: event.mode,
+              symbol: event.symbol,
+              reason: 'promoted',
+              timestamp: new Date().toISOString()
+            },
+            mode: event.mode
+          });
+          console.log(`[8.8.4-A1][RTB_CLEANUP] ✅ Signal ${event.symbol} removed and rtb:cleared broadcasted`);
+        }
+      } catch (err: any) {
+        console.error(`[8.8.4-A1][RTB_CLEANUP][ERROR] Failed to cleanup promoted signal:`, err);
+      }
+    });
+
+    this.promotionHandlerRegistered = true;
+    console.log('[8.8.4-A1][RTB_CLEANUP] PROMOTION event handler registered');
+  }
+
+  /**
+   * Directive 8.8.4-A1: Remove a signal by symbol and mode
+   * Used when a signal is promoted to an active trade
+   * 
+   * @param symbol - The symbol to remove (e.g., 'BTC/USD')
+   * @param mode - Trading mode ('paper' or 'live')
+   * @returns true if a signal was removed
+   */
+  async removeSignalBySymbol(symbol: string, mode: TradingMode): Promise<boolean> {
+    const signals = await storage.getRtbSignals({ mode, status: 'queued' });
+    const matchingSignal = signals.find(s => s.symbol === symbol);
+    
+    if (matchingSignal) {
+      // Mark as promoted (removes from queued pool)
+      await storage.updateRtbSignal(matchingSignal.id, {
+        status: 'promoted',
+        promotedAt: new Date()
+      });
+      console.log(`[8.8.4-A1][RTB] Removed signal ${symbol} (id=${matchingSignal.id}) from ${mode} queue`);
+      return true;
+    }
+    
+    return false;
   }
 
   /**
@@ -199,6 +268,8 @@ class ReadyToBuyService {
    * - Cleans up expired signals
    * - Re-evaluates queue quality
    * - Logs pool status
+   * 
+   * Directive 8.8.4-A1-Extended: Also triggers refreshAndRank for dynamic re-ranking
    */
   private async executeRefreshCycle(mode: TradingMode): Promise<void> {
     const startTime = Date.now();
@@ -209,7 +280,10 @@ class ReadyToBuyService {
     // Step 2: Re-evaluate remaining signals
     const { removed, remaining } = await this.reEvaluateQueue(mode);
     
-    // Step 3: Get TCL status
+    // Step 3: Directive 8.8.4-A1-Extended: Refresh and re-rank signals by CWQI
+    await this.refreshAndRank(mode);
+    
+    // Step 4: Get TCL status
     const tclStatus = await this.getTCLStatus(mode);
     
     const elapsedMs = Date.now() - startTime;
@@ -219,6 +293,73 @@ class ReadyToBuyService {
       `remaining=${remaining}, poolSize=${tclStatus.poolSize}, TCL=${tclStatus.isActive ? 'ACTIVE' : 'WARMING'} ` +
       `(${tclStatus.progressPercent.toFixed(1)}%), elapsed=${elapsedMs}ms`
     );
+  }
+
+  /**
+   * Directive 8.8.4-A1-Extended: Refresh and dynamically re-rank RTB signals
+   * 
+   * Every 30 seconds (at end of FX5 cycle or RTB refresh cycle):
+   * 1. Recalculate CWQI with decay for each signal (fresher signals rank higher)
+   * 2. Update lastReconfirmedAt timestamp for each signal
+   * 3. Sort queue by CWQI descending (highest quality first)
+   * 4. Broadcast rtb:updated to clients for UI refresh
+   * 
+   * @param mode - Trading mode ('paper' or 'live')
+   */
+  async refreshAndRank(mode: TradingMode): Promise<void> {
+    const startTime = Date.now();
+    
+    try {
+      // Get all queued signals for this mode
+      const signals = await this.getQueuedSignals(mode);
+      
+      if (signals.length === 0) {
+        return; // Nothing to refresh
+      }
+
+      // Recalculate CWQI with decay and update lastReconfirmedAt
+      const now = new Date();
+      let updatedCount = 0;
+      
+      for (const signal of signals) {
+        const originalCWQI = parseFloat(signal.cwqi || '0');
+        const queuedAt = signal.queuedAt;
+        
+        // Apply CWQI decay based on signal age
+        const decayedCWQI = calculateDecayedCWQI(originalCWQI, queuedAt);
+        
+        // Update signal with recalculated CWQI and refresh timestamp
+        await storage.updateRtbSignal(signal.id, {
+          cwqi: decayedCWQI.toString(),
+          metadata: {
+            ...(signal.metadata as object || {}),
+            lastReconfirmedAt: now.toISOString(),
+            originalCwqi: originalCWQI.toString(),
+            decayApplied: true
+          }
+        });
+        
+        updatedCount++;
+      }
+
+      // Broadcast rtb:updated to clients for UI refresh
+      await contextBridge.broadcast({
+        type: 'rtb:updated',
+        payload: {
+          mode,
+          timestamp: now.toISOString(),
+          signalCount: signals.length,
+          refreshedCount: updatedCount
+        },
+        mode
+      });
+
+      const elapsedMs = Date.now() - startTime;
+      console.log(`[8.8.4-A1][RTB_RERANK] mode=${mode}, signals=${signals.length}, updated=${updatedCount}, elapsed=${elapsedMs}ms`);
+      
+    } catch (error) {
+      console.error(`[8.8.4-A1][RTB_RERANK][ERROR] mode=${mode}:`, error);
+    }
   }
 
   /**
