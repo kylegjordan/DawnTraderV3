@@ -53,6 +53,8 @@ RTB Queue Stability Fixes addresses critical issues in the RTB pipeline by addin
 
 Directive 8.8.4-C.15.A-R2 (System Simplification) reverted the system to the stable core architecture from Directive 8.8.4-C.14.C. Removed C15A validation APIs, FX5 health monitor, optional paper auth middleware, and validation logging infrastructure. RTB clearing hooks are maintained via `clearReadyToBuy()` in clear-routines.ts, which calls `readyToBuyService.clearQueue(mode)` and broadcasts `rtb:cleared` WebSocket events. The FX5 Scanner runs independently on 30-second intervals for both paper and live modes. Engine state is controlled exclusively through `/api/trading/start` and `/api/trading/stop` endpoints which update `system_context.isEngineActive`.
 
+Directive 8.8.4-A1 & A2 (RTB Promotion Cleanup & Dynamic Re-Ranking) implements RTB queue quality maintenance. A1: PROMOTION event handler in `ReadyToBuyService` listens for TRADE_LIFECYCLE.SIGNAL_EXECUTED events to remove promoted signals from the RTB queue via `removeSignalBySymbol()`, preventing duplicates. A1-Extended: `refreshAndRank()` method reconfirms RTB signals with fresh market data every 30 seconds (triggered at end of each FX5 scan cycle), applying CWQI durability decay (λ=0.03/min) to prioritize fresher signals. Signals are dynamically re-ranked by CWQI, with `rtb:updated` WebSocket broadcasts for real-time UI synchronization. The system only refreshes when the trading engine is active, respecting passive learning mode.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.
