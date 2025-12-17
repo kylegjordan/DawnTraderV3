@@ -59,6 +59,8 @@ SQE Integrity Enforcement (Directive 8.8.4-A3) implements pair-level duplicate v
 
 Verification & Hardening (Directive 8.8.4-A3.R1) implements configurable CWQI Decay via `CWQI_DECAY_RATE`, Pair-Key Normalization via `normalizePairKey()`, a Promotion Order Fix ensuring RTB removal precedes trade creation, and Engine-Aware Refresh Control where `executeRefreshCycle()` checks `storage.getSystemContext(mode).isEngineActive` and skips refresh when the engine is stopped.
 
+RTB Stabilization & Diagnostics (Directive 8.8.4-A3.R2) implements seven authorized improvements: (1) Conditional TTL expiry replacing fixed 5-min TTL with ≥4 missed refresh expiry via `MISSED_REFRESH_THRESHOLD=4`; (2) Skip-self dedupe flag in `queueSQESignal()` with `skipSelfCheck` parameter, used by `refreshAndRank()` to bypass self-dedupe during reconfirmation; (3) CWQI floor clamping at 0.05 via `Math.max(decayedCWQI, CWQI_FLOOR)` to prevent decay cascade; (4) Auto-reinitialize refresh/TCL timers on startup via `trading-bootstrap.ts`; (5) TCL threshold adjustments with `TCL_FAILSAFE_MS=2min` and `TCL_SIGNAL_THRESHOLD=15`; (6) `cleanupExpiredSignals()` execution on engine start; (7) SQE rejection diagnostic logging to `logs/diagnostics/sqe_rejections.log`. SQE thresholds remain at mandated values: NGC=0.45, CWQI=0.35, PROFIT=0.10, RISK=0.85.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.
