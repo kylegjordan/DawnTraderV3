@@ -366,7 +366,7 @@ class ReadyToBuyService {
         // Remove signal if it fails SQE re-validation
         if (!sqeResult.passed) {
           await this.expireSignal(signal.id, `SQE re-validation failed: ${sqeResult.reason}`);
-          console.log(`[8.8.4-A3][SQE][Expired] pair=${signal.symbol} CWQI=${decayedCWQI.toFixed(4)} (${sqeResult.reason})`);
+          console.log(`[8.8.4-A3][SQE][Validation] pair=${signal.symbol} status=failed_requalification`);
           removedCount++;
           continue;
         }
@@ -375,10 +375,13 @@ class ReadyToBuyService {
         const hasActivePosition = await storage.hasActivePair(signal.symbol, mode);
         if (hasActivePosition) {
           await this.expireSignal(signal.id, 'duplicate_pair_active');
-          console.log(`[8.8.4-A3][SQE][Expired] pair=${signal.symbol} reason=duplicate_pair_active`);
+          console.log(`[8.8.4-A3][SQE][Validation] pair=${signal.symbol} status=duplicate_pair_active`);
           removedCount++;
           continue;
         }
+        
+        // Log successful requalification
+        console.log(`[8.8.4-A3][SQE][Validation] pair=${signal.symbol} status=passed`);
         
         // Update signal with recalculated CWQI and refresh timestamp
         await storage.updateRtbSignal(signal.id, {
