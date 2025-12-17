@@ -1,0 +1,155 @@
+Directive 8.8.4-A3 – SQE Integrity Enforcement & Pair-Level Validation
+
+Classification: Operational Directive
+Parent Phase: 8.8.4 – Ready-to-Buy Completion & System Stability
+Issued: 2025-12-17
+Objective:
+Finalize the integrity of the Signal Quality Evaluator (SQE) and the Ready-to-Buy (RTB) system by enforcing strict pair-level duplicate checks, reconfirmation re-validation, and codebase alignment auditing to prevent unauthorized or improvisational code changes.
+
+1. Pair-Level Duplicate Validation
+Purpose
+
+Ensure that signals are uniquely identified and qualified by their trading pair (symbol + quote currency) rather than by symbol alone.
+
+Implementation
+
+Update the SQE duplicate check to use a normalized pair key:
+
+const pairKey = `${signal.base}/${signal.quote}`.toUpperCase();
+const existsInRTB = await readyToBuyService.hasPair(pairKey, mode);
+const existsInActive = await openTradeService.hasPair(pairKey, mode);
+
+if (existsInRTB || existsInActive) {
+  return { valid: false, reason: 'duplicate_pair_active' };
+}
+
+
+Update storage methods accordingly:
+
+readyToBuyService.hasPair(pairKey, mode)
+
+openTradeService.hasPair(pairKey, mode)
+
+Database uniqueness key: (base, quote, mode)
+
+Verification condition:
+
+Two pairs with the same base but different quote (e.g., SOL/USD and SOL/GBP) are allowed.
+
+Two identical pairs (e.g., SOL/USD and SOL/USD) across RTB + Active trades are prohibited.
+
+2. Re-Qualification of Reconfirmed Signals
+Purpose
+
+Ensure that each RTB entry remains valid and high-quality through continuous re-evaluation of its CWQI and NGC scores.
+Signals must be re-passed through SQE on every 30-second reconfirmation cycle.
+
+Implementation
+
+In ready_to_buy_service.refreshAndRank():
+
+for (const signal of signals) {
+  const updated = await fx5Service.fetchSignalData(signal.symbol);
+
+  const validation = await sqe.validateSignal(updated, mode);
+
+  // Remove any signal that fails re-qualification
+  if (!validation.valid) {
+    await this.removeSignal(signal.pairKey, mode);
+    console.log(`[SQE][Expired] ${signal.pairKey} ${validation.reason}`);
+    continue;
+  }
+
+  updated.CWQI = validation.cwqi;
+  updated.NGC = validation.ngc;
+  await this.updateSignal(signal.pairKey, updated);
+}
+
+
+Expected behavior
+
+Signals failing thresholds are automatically removed from RTB.
+
+CWQI and NGC dynamically re-weight ranking each cycle.
+
+Logs clearly show SQE validation outcomes for auditability.
+
+3. System Integrity & Code Audit Check
+Purpose
+
+Ensure that Repl.it’s prior implementation of 8.8.4-A1/A2 conforms exactly to the approved architecture — no additional endpoints, no monitoring services, and no unapproved “helper” systems.
+
+Audit Requirements
+
+Repl.it must confirm and provide evidence that:
+
+No new API routes have been added (no /api/c15a, /api/debug, etc.).
+
+No new modules were introduced beyond:
+
+ready_to_buy_service.ts
+
+fx5_scanner.ts
+
+paper_trading_engine.ts
+
+refreshAndRank() executes only at the end of each FX5 cycle, not on a separate timer.
+
+eventBus.emit('rtb:promote') triggers only during legitimate signal promotions.
+
+WebSocket events remain limited to:
+
+rtb:cleared
+
+rtb:updated
+
+trade:open
+
+trade:close
+
+status:changed
+
+4. Verification Criteria
+Validation Area	Expected Outcome	Test
+Pair-Level Duplicate Check	No two identical pairs exist in RTB + Active	Add duplicate SOL/USD, expect rejection
+Re-Qualification on Reconfirmation	Weak or stale signals removed	Observe [SQE][Expired] logs
+CWQI Dynamic Re-Ranking	Queue order changes every cycle	Visual reorder in UI
+Event & API Audit	No unapproved routes/files	Code review checksum
+Behavioral Audit	FX5 refresh triggers exactly 1 RTB update per 30 s	Log timestamps
+5. Deliverables
+
+✅ sqe.ts (or equivalent) updated to support pair-key validation.
+
+✅ ready_to_buy_service.ts updated with re-qualification loop.
+
+✅ openTradeService and readyToBuyService include .hasPair() helper methods.
+
+✅ Architectural audit report confirming no extraneous modules added.
+
+✅ Validation log:
+
+[8.8.4-A3][SQE][Validation] pair=SOL/USD status=duplicate_pair_active
+[8.8.4-A3][SQE][Expired] pair=BTC/USD CWQI=0.18 (below threshold)
+[8.8.4-A3][RTB][Refresh] cycle=327 updated=14 removed=3 re-ranked=17
+
+6. Completion Criteria
+Criterion	Pass Condition
+Pair-Level Validation	RTB & Active contain no duplicate pairs
+Re-Qualification	All signals refreshed and re-evaluated each 30 s
+SQE Enforcement	Every entry validated via SQE, no bypass logic
+Code Integrity	No unauthorized modules or endpoints
+Stability	FX5 + RTB stable over 6+ hour run
+Credentials for Validation
+
+Username: testuser123
+Password: SecurePass123!
+
+Use for internal testing and validation only.
+
+Architectural Notes
+
+This directive must not introduce any new endpoints, loggers, or background services.
+
+The goal is to tighten, not expand the current system footprint.
+
+Once this is implemented and verified, Phase 8.8.4 is officially complete and locked.

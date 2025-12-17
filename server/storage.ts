@@ -302,6 +302,7 @@ export interface IStorage {
   // Trade methods
   getTrades(mode: 'live' | 'paper', filters?: { status?: string; symbol?: string; strategy?: string; limit?: number }): Promise<Trade[]>;
   getActiveTrades(mode: 'live' | 'paper'): Promise<Trade[]>;
+  hasActivePair(symbol: string, mode: 'live' | 'paper'): Promise<boolean>;
   createTrade(trade: InsertTrade): Promise<Trade>;
   updateTrade(id: string, updates: Partial<Trade>): Promise<Trade>;
   closeTrade(id: string, exitPrice: number, exitFee: number, exitSlippage: number): Promise<Trade>;
@@ -1527,6 +1528,28 @@ export class DatabaseStorage implements IStorage {
         eq(trades.mode, mode)
       ))
       .orderBy(desc(trades.entryTime));
+  }
+
+  /**
+   * Directive 8.8.4-A3: Check if an active trade exists for a given pair (symbol)
+   * Used for pair-level duplicate validation across active trades
+   * 
+   * @param symbol - The trading pair in BASE/QUOTE format (e.g., 'BTC/USD')
+   * @param mode - Trading mode ('paper' or 'live')
+   * @returns true if an open trade exists for this pair
+   */
+  async hasActivePair(symbol: string, mode: 'live' | 'paper'): Promise<boolean> {
+    const result = await db
+      .select({ id: trades.id })
+      .from(trades)
+      .where(and(
+        eq(trades.symbol, symbol),
+        eq(trades.status, "open"),
+        eq(trades.mode, mode)
+      ))
+      .limit(1);
+    
+    return result.length > 0;
   }
 
   async createTrade(trade: InsertTrade): Promise<Trade> {

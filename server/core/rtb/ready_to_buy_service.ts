@@ -184,6 +184,19 @@ class ReadyToBuyService {
   }
 
   /**
+   * Directive 8.8.4-A3: Check if a pair exists in the RTB queue
+   * Used for pair-level duplicate validation
+   * 
+   * @param symbol - The trading pair in BASE/QUOTE format (e.g., 'BTC/USD')
+   * @param mode - Trading mode ('paper' or 'live')
+   * @returns true if the pair exists in the RTB queue
+   */
+  async hasPair(symbol: string, mode: TradingMode): Promise<boolean> {
+    const signals = await storage.getRtbSignals({ mode, status: 'queued', symbol });
+    return signals.length > 0;
+  }
+
+  /**
    * Directive 8.8.4-A1: Remove a signal by symbol and mode
    * Used when a signal is promoted to an active trade
    * 
@@ -740,6 +753,14 @@ class ReadyToBuyService {
   async queueSQESignal(input: SQESignalInput): Promise<RtbSignal | null> {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + SIGNAL_TTL_MS);
+
+    // Directive 8.8.4-A3: Pair-level duplicate validation
+    // Check if this pair already exists in active trades (duplicate_pair_active)
+    const hasActivePosition = await storage.hasActivePair(input.symbol, input.mode);
+    if (hasActivePosition) {
+      console.log(`[8.8.4-A3][SQE][Validation] pair=${input.symbol} status=duplicate_pair_active`);
+      return null;
+    }
 
     // Check for existing queued signal with same symbol+strategy
     const existingSignal = await this.getQueuedSignal(input.mode, input.symbol, input.strategy);
