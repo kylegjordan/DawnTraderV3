@@ -67,14 +67,21 @@ function readRepoFile(relativePath: string): string | null {
       return null;
     }
     
-    const fullPath = path.join(REPO_ROOT, relativePath);
-    const realPath = fs.realpathSync(fullPath);
-    
-    if (!realPath.startsWith(REPO_ROOT)) {
+    const normalizedRelPath = path.normalize(relativePath);
+    if (normalizedRelPath.startsWith('..') || path.isAbsolute(normalizedRelPath)) {
       return null;
     }
     
+    const fullPath = path.join(REPO_ROOT, normalizedRelPath);
+    
     if (!fs.existsSync(fullPath)) return null;
+    
+    const realPath = fs.realpathSync(fullPath);
+    const realRepoRoot = fs.realpathSync(REPO_ROOT);
+    
+    if (!realPath.startsWith(realRepoRoot + path.sep) && realPath !== realRepoRoot) {
+      return null;
+    }
     
     const stats = fs.statSync(fullPath);
     if (stats.isDirectory()) {
