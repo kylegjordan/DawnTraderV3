@@ -13,8 +13,10 @@
 
 import { eventBus, type TradingMode } from '../../lib/event-bus';
 
-const TCL_FAILSAFE_MS = 5 * 60 * 1000; // 5 minutes
-const TCL_SIGNAL_THRESHOLD = 100; // Minimum signals for threshold activation
+// Directive 8.8.4-A3.R2: Reduced thresholds for faster TCL activation
+const TCL_FAILSAFE_MS = parseInt(process.env.TCL_FAILSAFE_MS || String(2 * 60 * 1000), 10); // 2 minutes (was 5)
+const TCL_SIGNAL_THRESHOLD = parseInt(process.env.TCL_SIGNAL_THRESHOLD || '15', 10); // 15 signals (was 100)
+console.log(`[A3.R2][TCL_CONFIG] FAILSAFE=${TCL_FAILSAFE_MS/1000}s THRESHOLD=${TCL_SIGNAL_THRESHOLD} signals`);
 
 interface TCLState {
   isActive: boolean;

@@ -1,0 +1,99 @@
+Directive 8.8.4-A3.R2 — Stabilization & Controlled Diagnostic Repair
+
+Objective
+Restore normal trading-cycle behavior (continuous signal intake → periodic RTB refresh → timely TCL promotion) while preserving the ability to roll back cleanly to the last known-good configuration.
+
+1 Scope
+
+This directive applies to the following files and services:
+
+server/core/rtb/ready_to_buy_service.ts
+
+server/core/rtb/tcl_watchdog.ts
+
+server/services/fx5-scanner.ts
+
+server/services/paper-execution-engine.ts
+
+server/storage.ts
+
+Startup bootstrap modules (server/startup/*)
+
+No schema changes are required. All changes are reversible via rollback tag 8.8.4-A3-baseline.
+
+2 Immediate Restorative Actions
+#	Action	Target File	Notes
+1	Remove fixed 5-minute TTL (SIGNAL_TTL_MS). Replace with conditional expiry: expire only if signal has missed ≥ 4 refreshes.	ready_to_buy_service.ts	Prevents premature expiry if refresh temporarily stalls.
+2	Add skip-self dedupe flag. In queueSQESignal(), add optional context.skipSelfCheck. refreshAndRank() should call with { skipSelfCheck:true }.	same	Allows reconfirmations to pass SQE even when pair already in RTB.
+3	Clamp CWQI floor and re-normalize NGC before thresholding:
+signal.cwqi = Math.max(signal.cwqi, 0.05) → signal.ngc = recalcNGC(signal)	same	Stops decay cascade driving NGC < 0.3 for all signals.
+4	Auto-reinitialize refresh/tcl timers on startup. On process boot, if isEngineActive === true, call startRefreshCycle() and startTCLWatchdog().	trading-bootstrap.ts	Fixes “engine active but inert” after restarts.
+5	Adjust TCL thresholds → FAILSAFE = 2 min, THRESHOLD = 15 signals.	tcl_watchdog.ts	Matches operational scale; allows faster promotions.
+6	Run cleanupExpiredSignals() inside startEngine() to purge leftovers.	ready_to_buy_service.ts	Ensures no stale rows at session start.
+7	Add diagnostic log logs/diagnostics/sqe_rejections.log capturing pair, strategy, NGC, CWQI, and rejection reason.	ready_to_buy_service.ts	Provides evidence if NGC collapse persists.
+3 Operational Validation Plan
+
+Phase 1 – Static Verification
+
+Replit to apply patch and run npm run lint / npm run build.
+
+Confirm start-up logs show:
+
+[A3.R2][Startup] Refresh/TCL timers initialized (engine active=true)
+[A3.R2][RTB] TTL logic → conditional expiry mode
+
+
+Phase 2 – Manual Observation (Your Session)
+
+Start trading normally.
+
+Observe first 5–10 minutes: you should see:
+
+Continuous signal intake (≥ 1–3 per minute).
+
+Re-ranking every 30 s ([RTB_REFRESH] updated=).
+
+TCL promotion within ≈ 2 min or ≥ 15 signals.
+
+Phase 3 – Post-Run Diagnostics
+
+Prompt Replit:
+
+curl -s -X POST http://localhost:5000/api/diagnostics/logs/report \
+-d '{"scope":"sqe,rtb,tcl","since":"<session_start_iso>"}'
+
+
+→ expect entries showing SQE passes and promotions.
+
+4 Rollback Contingency
+
+If post-patch behavior diverges (e.g., no signals > 5 min, or new instability):
+
+Tag current build 8.8.4-A3.R2-test.
+
+Execute rollback to 8.8.4-A3-baseline.
+
+Restore files: ready_to_buy_service.ts, tcl_watchdog.ts, storage.ts.
+
+Confirm regression clears.
+
+After rollback, begin clean rebuild under new branch 8.8.4-BETA-STABLE.
+
+5 Post-Stabilization Tasks
+
+After confirmation of normal cycles:
+
+Enable adaptive NGC thresholding (rolling average of last 50 signals).
+
+Add persistent last_confirmed_at column to RTB for historical analytics.
+
+Schedule 8.8.4-A3.R3 – Robustness & Auto-Recovery to introduce health-check daemons.
+
+Directive Control
+
+Directive ID: 8.8.4-A3.R2
+Title: Stabilization & Controlled Diagnostic Repair
+Authorized By: Architect – DawnTrader FX5
+Issued To: Replit Dev Environment
+Rollback Point: 8.8.4-A3-baseline
+Effective Immediately

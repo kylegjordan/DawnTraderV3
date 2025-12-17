@@ -248,6 +248,10 @@ app.use((req, res, next) => {
   const { initializePortfolioState } = await import('./startup/portfolio-initializer');
   await initializePortfolioState();
 
+  // Directive 8.8.4-A3.R2: Bootstrap RTB/TCL services if engine was active before restart
+  const { bootstrapTradingServices } = await import('./startup/trading-bootstrap');
+  await bootstrapTradingServices();
+
   // Phase 8.6.5 Task 1: Initialize Purpose Layer - Restore system.purpose semantic nodes
   const { purposeLayer } = await import('./services/purpose-layer');
   await purposeLayer.initialize();

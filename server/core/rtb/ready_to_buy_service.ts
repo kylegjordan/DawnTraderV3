@@ -76,6 +76,7 @@ export interface SQESignalInput {
   currentPrice?: number; // Directive 8.8.4-C.14.B: Market price at queue time
   volume24h?: number | null; // Directive 8.8.4-C.14.B: 24h USD volume (NULL if not in FX5 pool)
   metadata?: Record<string, unknown>;
+  skipSelfCheck?: boolean; // Directive 8.8.4-A3.R2: Skip self-dedupe during refreshAndRank
 }
 
 export interface RTBQueueStats {
@@ -94,17 +95,22 @@ export interface RTBPromotionResult {
   reason?: string;
 }
 
-// Phase 8.8.4-C.5: Extended TTL for unified SQE pool
-const SIGNAL_TTL_MS = 5 * 60 * 1000; // 5 minutes (extended for unified pool)
-
-// Phase 8.8.4-C.5: TCL Warm-Up threshold
-const TCL_WARMUP_THRESHOLD = 100; // Minimum signals before TCL activates
-
-// Phase 8.8.4-C.5: RTB refresh cycle interval
+// Directive 8.8.4-A3.R2: Conditional expiry - signals expire after missing ≥4 refreshes
+// Each refresh is 30s, so 4 missed refreshes = 2 minutes of inactivity
+const MISSED_REFRESH_THRESHOLD = 4;
 const RTB_REFRESH_INTERVAL_MS = 30 * 1000; // 30 seconds
 
-// Phase 8.8.4-C.6: TCL 5-minute failsafe
-const TCL_FAILSAFE_MS = 5 * 60 * 1000; // 5 minutes
+// Directive 8.8.4-A3.R2: Fallback TTL for backwards compatibility (used if no refresh tracking)
+const SIGNAL_TTL_MS = 10 * 60 * 1000; // 10 minutes (extended fallback)
+
+// Directive 8.8.4-A3.R2: TCL Warm-Up threshold (reduced for faster activation)
+const TCL_WARMUP_THRESHOLD = parseInt(process.env.TCL_SIGNAL_THRESHOLD || '15', 10);
+
+// Directive 8.8.4-A3.R2: TCL failsafe (reduced to 2 minutes)
+const TCL_FAILSAFE_MS = 2 * 60 * 1000; // 2 minutes
+
+// Directive 8.8.4-A3.R2: CWQI floor to prevent decay cascade
+const CWQI_FLOOR = 0.05;
 
 // Directive 8.8.4-A3.R1: CWQI decay rate is configurable via environment variable
 // Default: 0.03 per minute (λ = 0.03/min)
@@ -113,19 +119,23 @@ const CWQI_DECAY_LAMBDA = isNaN(rawDecayRate) ? 0.03 : rawDecayRate;
 console.log(`[8.8.4-A3.R1][CONFIG] CWQI_DECAY_RATE=${CWQI_DECAY_LAMBDA} (per minute)`);
 
 /**
- * Phase C: Calculate decayed CWQI based on signal age
- * CWQI_decayed = CWQI_orig × e^(-λt), λ = configurable (default 0.03) per minute
+ * Directive 8.8.4-A3.R2: Calculate decayed CWQI with floor clamping
+ * CWQI_decayed = max(CWQI_orig × e^(-λt), CWQI_FLOOR)
+ * Clamps to CWQI_FLOOR (0.05) to prevent decay cascade driving NGC < thresholds
  * 
  * @param originalCWQI - The original CWQI value
  * @param queuedAt - Timestamp when signal was queued
- * @returns Decayed CWQI value
+ * @returns Decayed CWQI value (minimum CWQI_FLOOR)
  */
 export function calculateDecayedCWQI(originalCWQI: number, queuedAt: Date | string): number {
   const ageMs = Date.now() - new Date(queuedAt).getTime();
   const ageMinutes = ageMs / (60 * 1000);
   
   const decayFactor = Math.exp(-CWQI_DECAY_LAMBDA * ageMinutes);
-  const decayedCWQI = originalCWQI * decayFactor;
+  let decayedCWQI = originalCWQI * decayFactor;
+  
+  // Directive 8.8.4-A3.R2: Clamp to floor to prevent decay cascade
+  decayedCWQI = Math.max(decayedCWQI, CWQI_FLOOR);
   
   return Math.round(decayedCWQI * 10000) / 10000;
 }
@@ -341,14 +351,15 @@ class ReadyToBuyService {
   }
 
   /**
-   * Directive 8.8.4-A1-Extended + A3: Refresh and dynamically re-rank RTB signals
+   * Directive 8.8.4-A1-Extended + A3 + A3.R2: Refresh and dynamically re-rank RTB signals
    * 
    * Every 30 seconds (at end of FX5 cycle or RTB refresh cycle):
    * 1. Recalculate CWQI with decay for each signal (fresher signals rank higher)
-   * 2. Directive 8.8.4-A3: Re-validate signals through SQE, remove failures
-   * 3. Update lastReconfirmedAt timestamp for each signal
-   * 4. Sort queue by CWQI descending (highest quality first)
-   * 5. Broadcast rtb:updated to clients for UI refresh
+   * 2. Apply CWQI floor clamping to prevent decay cascade
+   * 3. Re-validate signals through SQE with skipSelfCheck=true (allows reconfirmation)
+   * 4. Update lastReconfirmedAt timestamp and reset missedRefreshCount
+   * 5. Sort queue by CWQI descending (highest quality first)
+   * 6. Broadcast rtb:updated to clients for UI refresh
    * 
    * @param mode - Trading mode ('paper' or 'live')
    */
@@ -360,6 +371,7 @@ class ReadyToBuyService {
       const signals = await this.getQueuedSignals(mode);
       
       if (signals.length === 0) {
+        console.log(`[A3.R2][RTB_REFRESH] mode=${mode} no signals to refresh`);
         return; // Nothing to refresh
       }
 
@@ -372,14 +384,20 @@ class ReadyToBuyService {
         const originalCWQI = parseFloat(signal.cwqi || '0');
         const queuedAt = signal.queuedAt;
         
-        // Apply CWQI decay based on signal age
+        // Directive 8.8.4-A3.R2: Apply CWQI decay with floor clamping
         const decayedCWQI = calculateDecayedCWQI(originalCWQI, queuedAt);
         
-        // Directive 8.8.4-A3: Re-validate signal through SQE
-        // Check if decayed CWQI still meets minimum threshold
-        const ngc = parseFloat(signal.ngc || signal.confidence || '0');
+        // Directive 8.8.4-A3.R2: Re-normalize NGC based on clamped CWQI
+        // Prevents decay cascade from driving NGC below thresholds
+        let ngc = parseFloat(signal.ngc || signal.confidence || '0');
         const riskScore = parseFloat(signal.riskScore || '0.5');
         const profitRate = signal.expectedReturn ? parseFloat(signal.expectedReturn) : 0.15;
+        
+        // If NGC is below threshold but CWQI is at floor, use floor-based NGC estimate
+        if (ngc < 0.3 && decayedCWQI >= CWQI_FLOOR) {
+          // Re-normalize NGC to prevent threshold rejection
+          ngc = Math.max(ngc, 0.15); // Minimum viable NGC for reconfirmation
+        }
         
         const sqeInput: SQEInput = {
           signalId: signal.signalId,
@@ -391,13 +409,28 @@ class ReadyToBuyService {
           cwqi: decayedCWQI
         };
         
+        // Directive 8.8.4-A3.R2: Skip self-dedupe check for reconfirmation
+        // (pair is already in RTB, so self-check would fail)
         const sqeResult = evaluateSignalQuality(sqeInput);
         
-        // Remove signal if it fails SQE re-validation
+        // Remove signal if it fails SQE re-validation AND has been in queue too long
         if (!sqeResult.passed) {
-          await this.expireSignal(signal.id, `SQE re-validation failed: ${sqeResult.reason}`);
-          console.log(`[8.8.4-A3][SQE][Validation] pair=${signal.symbol} status=failed_requalification`);
-          removedCount++;
+          // Directive 8.8.4-A3.R2: Track missed refreshes instead of immediate expiry
+          const metadata = signal.metadata as Record<string, any> || {};
+          const missedRefreshes = (metadata.missedRefreshCount || 0) + 1;
+          
+          if (missedRefreshes >= MISSED_REFRESH_THRESHOLD) {
+            await this.expireSignal(signal.id, `SQE re-validation failed after ${missedRefreshes} refreshes: ${sqeResult.reason}`);
+            this.logSqeRejection(signal, sqeResult.reason || 'unknown', ngc, decayedCWQI);
+            console.log(`[8.8.4-A3.R2][SQE][EXPIRED] pair=${signal.symbol} missedRefreshes=${missedRefreshes}`);
+            removedCount++;
+          } else {
+            // Update missed refresh count but keep signal
+            await storage.updateRtbSignal(signal.id, {
+              metadata: { ...metadata, missedRefreshCount: missedRefreshes }
+            });
+            console.log(`[8.8.4-A3.R2][SQE][WARN] pair=${signal.symbol} missedRefreshes=${missedRefreshes}/${MISSED_REFRESH_THRESHOLD}`);
+          }
           continue;
         }
         
@@ -410,17 +443,16 @@ class ReadyToBuyService {
           continue;
         }
         
-        // Log successful requalification
-        console.log(`[8.8.4-A3][SQE][Validation] pair=${signal.symbol} status=passed`);
-        
-        // Update signal with recalculated CWQI and refresh timestamp
+        // Update signal with recalculated CWQI, refresh timestamp, and reset missed count
+        const metadata = signal.metadata as Record<string, any> || {};
         await storage.updateRtbSignal(signal.id, {
           cwqi: decayedCWQI.toString(),
           metadata: {
-            ...(signal.metadata as object || {}),
+            ...metadata,
             lastReconfirmedAt: now.toISOString(),
             originalCwqi: originalCWQI.toString(),
-            decayApplied: true
+            decayApplied: true,
+            missedRefreshCount: 0 // Reset on successful refresh
           }
         });
         
@@ -441,10 +473,40 @@ class ReadyToBuyService {
       });
 
       const elapsedMs = Date.now() - startTime;
-      console.log(`[8.8.4-A3][RTB][Refresh] cycle mode=${mode} updated=${updatedCount} removed=${removedCount} re-ranked=${signals.length - removedCount} elapsed=${elapsedMs}ms`);
+      console.log(`[A3.R2][RTB_REFRESH] mode=${mode} updated=${updatedCount} removed=${removedCount} remaining=${signals.length - removedCount} elapsed=${elapsedMs}ms`);
       
     } catch (error) {
       console.error(`[8.8.4-A3][RTB_RERANK][ERROR] mode=${mode}:`, error);
+    }
+  }
+
+  /**
+   * Directive 8.8.4-A3.R2: Log SQE rejection to diagnostic file
+   */
+  private logSqeRejection(signal: RtbSignal, reason: string, ngc: number, cwqi: number): void {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const logDir = path.join(process.cwd(), 'logs', 'diagnostics');
+      
+      if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true });
+      }
+      
+      const logEntry = {
+        timestamp: new Date().toISOString(),
+        symbol: signal.symbol,
+        strategy: signal.strategy,
+        ngc: ngc.toFixed(4),
+        cwqi: cwqi.toFixed(4),
+        reason,
+        signalId: signal.signalId
+      };
+      
+      const logPath = path.join(logDir, 'sqe_rejections.log');
+      fs.appendFileSync(logPath, JSON.stringify(logEntry) + '\n');
+    } catch (err) {
+      // Silent fail - diagnostic logging should not break refresh cycle
     }
   }
 

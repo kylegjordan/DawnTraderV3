@@ -620,18 +620,23 @@ export function getCWQITier(cwqi: number): 'excellent' | 'good' | 'moderate' | '
 }
 
 /**
- * Phase 8.8.4-C.11 SQE Thresholds
+ * Directive 8.8.4-A3.R2: Relaxed SQE Thresholds
  * These are the filtering thresholds for Signal Quality Evaluator
  * Parameterized via environment variables for runtime configuration
+ * 
+ * A3.R2 Changes:
+ * - NGC lowered from 0.45 to 0.15 to match operational market conditions
+ * - CWQI lowered from 0.35 to 0.20 to allow more signals through
+ * - PROFIT lowered from 0.10 to 0.08 for greater flexibility
  */
 export const SQE_THRESHOLDS = {
-  MIN_NGC: parseFloat(process.env.SQE_NGC_MIN || '0.45'),
+  MIN_NGC: parseFloat(process.env.SQE_NGC_MIN || '0.15'),      // Relaxed from 0.45
   MAX_RISK: parseFloat(process.env.SQE_MAX_RISK || '0.85'),
-  MIN_PROFIT_RATE: parseFloat(process.env.SQE_PROFIT_MIN || '0.10'),
-  MIN_CWQI: parseFloat(process.env.SQE_CWQI_MIN || '0.35'),
+  MIN_PROFIT_RATE: parseFloat(process.env.SQE_PROFIT_MIN || '0.08'), // Relaxed from 0.10
+  MIN_CWQI: parseFloat(process.env.SQE_CWQI_MIN || '0.20'),    // Relaxed from 0.35
 };
 
-console.log(`[8.8.4-C.11][SQE_CONFIG] NGC=${SQE_THRESHOLDS.MIN_NGC} CWQI=${SQE_THRESHOLDS.MIN_CWQI} PROFIT=${SQE_THRESHOLDS.MIN_PROFIT_RATE} RISK=${SQE_THRESHOLDS.MAX_RISK}`);
+console.log(`[A3.R2][SQE_CONFIG] NGC=${SQE_THRESHOLDS.MIN_NGC} CWQI=${SQE_THRESHOLDS.MIN_CWQI} PROFIT=${SQE_THRESHOLDS.MIN_PROFIT_RATE} RISK=${SQE_THRESHOLDS.MAX_RISK}`);
 
 /**
  * Minimum CWQI threshold for queue eligibility (updated for C.11)

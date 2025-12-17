@@ -231,13 +231,23 @@ export class PaperExecutionEngine {
       console.error(`[PaperExecution:${this.mode}] WebSocket adapter start failed (continuing with REST fallback):`, error);
     }
 
+    // Directive 8.8.4-A3.R2 #6: Clean up expired signals before starting refresh cycle
+    try {
+      const expiredCount = await readyToBuyService.cleanupExpiredSignals(this.mode);
+      if (expiredCount > 0) {
+        console.log(`[A3.R2][PaperExecution:${this.mode}] Cleaned ${expiredCount} expired signals on startup`);
+      }
+    } catch (cleanupError) {
+      console.warn(`[A3.R2][PaperExecution:${this.mode}] Expired signal cleanup failed:`, cleanupError);
+    }
+
     // Phase 8.8.4-C.5: Start RTB 30-second refresh cycle
     readyToBuyService.startRefreshCycle(this.mode);
     console.log(`[PaperExecution:${this.mode}] RTB refresh cycle started`);
 
-    // Phase 8.8.4-C.6: Set engine start time for TCL 5-minute failsafe
+    // Directive 8.8.4-A3.R2: Set engine start time for TCL 2-minute failsafe (was 5 min)
     readyToBuyService.setEngineStartTime(this.mode);
-    console.log(`[PaperExecution:${this.mode}] TCL failsafe timer started`);
+    console.log(`[PaperExecution:${this.mode}] TCL failsafe timer started (2min failsafe)`);
 
     // Phase 8.8.4-C.12: Start TCL Watchdog with event-driven activation
     tclWatchdog.start(this.mode);
