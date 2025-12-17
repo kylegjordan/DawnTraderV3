@@ -387,17 +387,10 @@ class ReadyToBuyService {
         // Directive 8.8.4-A3.R2: Apply CWQI decay with floor clamping
         const decayedCWQI = calculateDecayedCWQI(originalCWQI, queuedAt);
         
-        // Directive 8.8.4-A3.R2: Re-normalize NGC based on clamped CWQI
-        // Prevents decay cascade from driving NGC below thresholds
-        let ngc = parseFloat(signal.ngc || signal.confidence || '0');
+        // Use original NGC value (no artificial boosting per directive scope)
+        const ngc = parseFloat(signal.ngc || signal.confidence || '0');
         const riskScore = parseFloat(signal.riskScore || '0.5');
         const profitRate = signal.expectedReturn ? parseFloat(signal.expectedReturn) : 0.15;
-        
-        // If NGC is below threshold but CWQI is at floor, use floor-based NGC estimate
-        if (ngc < 0.3 && decayedCWQI >= CWQI_FLOOR) {
-          // Re-normalize NGC to prevent threshold rejection
-          ngc = Math.max(ngc, 0.15); // Minimum viable NGC for reconfirmation
-        }
         
         const sqeInput: SQEInput = {
           signalId: signal.signalId,
@@ -409,8 +402,11 @@ class ReadyToBuyService {
           cwqi: decayedCWQI
         };
         
-        // Directive 8.8.4-A3.R2: Skip self-dedupe check for reconfirmation
-        // (pair is already in RTB, so self-check would fail)
+        // Directive 8.8.4-A3.R2: Self-dedupe is inherently skipped during reconfirmation
+        // because we're updating existing signals in-place, not calling queueSQESignal().
+        // The skipSelfCheck flag in queueSQESignal is for external callers that may
+        // re-queue existing RTB signals (e.g., manual reconfirmation workflows).
+        console.log(`[A3.R2][RECONFIRM] pair=${signal.symbol} skipSelfCheck=implicit (in-place update)`);
         const sqeResult = evaluateSignalQuality(sqeInput);
         
         // Remove signal if it fails SQE re-validation AND has been in queue too long
@@ -434,19 +430,28 @@ class ReadyToBuyService {
           continue;
         }
         
-        // Also check for duplicate pair in active trades (can happen if trade opened since queue)
-        const hasActivePosition = await storage.hasActivePair(signal.symbol, mode);
-        if (hasActivePosition) {
-          await this.expireSignal(signal.id, 'duplicate_pair_active');
-          console.log(`[8.8.4-A3][SQE][Validation] pair=${signal.symbol} status=duplicate_pair_active`);
-          removedCount++;
-          continue;
-        }
-        
-        // Update signal with recalculated CWQI, refresh timestamp, and reset missed count
+        // Directive 8.8.4-A3.R2: Requeue via queueSQESignal with skipSelfCheck=true
+        // This is the mandated reconfirmation path that bypasses self-dedupe
         const metadata = signal.metadata as Record<string, any> || {};
-        await storage.updateRtbSignal(signal.id, {
-          cwqi: decayedCWQI.toString(),
+        const reconfirmInput: SQESignalInput = {
+          signalId: signal.signalId,
+          mode,
+          symbol: signal.symbol,
+          strategy: signal.strategy,
+          entryPrice: parseFloat(signal.entryPrice || '0'),
+          stopPrice: parseFloat(signal.stopPrice || '0'),
+          targetPrice: signal.targetPrice ? parseFloat(signal.targetPrice) : undefined,
+          quantity: signal.quantity ? parseFloat(signal.quantity) : undefined,
+          notional: signal.notional ? parseFloat(signal.notional) : undefined,
+          confidence: ngc,
+          ngc,
+          riskScore,
+          expectedReturn: profitRate,
+          profitRate,
+          cwqi: decayedCWQI,
+          currentPrice: signal.currentPrice ? parseFloat(signal.currentPrice) : undefined,
+          volume24h: signal.volume24h ? parseFloat(signal.volume24h) : undefined,
+          skipSelfCheck: true, // Directive 8.8.4-A3.R2: Skip self-dedupe for reconfirmation
           metadata: {
             ...metadata,
             lastReconfirmedAt: now.toISOString(),
@@ -454,9 +459,18 @@ class ReadyToBuyService {
             decayApplied: true,
             missedRefreshCount: 0 // Reset on successful refresh
           }
-        });
+        };
         
-        updatedCount++;
+        console.log(`[A3.R2][RECONFIRM] pair=${signal.symbol} skipSelfCheck=true via queueSQESignal`);
+        const requeued = await this.queueSQESignal(reconfirmInput);
+        
+        if (requeued) {
+          updatedCount++;
+        } else {
+          // queueSQESignal returned null - likely duplicate_pair_active
+          console.log(`[A3.R2][RECONFIRM] pair=${signal.symbol} rejected by queueSQESignal (likely active position)`);
+          removedCount++;
+        }
       }
 
       // Broadcast rtb:updated to clients for UI refresh
@@ -882,6 +896,10 @@ class ReadyToBuyService {
    * - Uses pre-computed CWQI from SQE instead of re-calculating
    * - Supports TCL warm-up tracking
    * 
+   * Directive 8.8.4-A3.R2: Supports skipSelfCheck flag for reconfirmation
+   * When skipSelfCheck=true, skips the existing RTB signal check to allow
+   * re-queuing during refresh cycles without self-rejection
+   * 
    * @param input - SQE-qualified signal with pre-computed metrics
    * @returns The queued signal record or null if rejected
    */
@@ -894,14 +912,23 @@ class ReadyToBuyService {
 
     // Directive 8.8.4-A3: Pair-level duplicate validation
     // Check if this pair already exists in active trades (duplicate_pair_active)
+    // NOTE: Always check active positions even with skipSelfCheck (trade may have opened)
     const hasActivePosition = await storage.hasActivePair(normalizedSymbol, input.mode);
     if (hasActivePosition) {
       console.log(`[8.8.4-A3][SQE][Validation] pair=${normalizedSymbol} status=duplicate_pair_active`);
       return null;
     }
 
+    // Directive 8.8.4-A3.R2: Skip self-dedupe check when reconfirming existing RTB signals
+    if (input.skipSelfCheck) {
+      console.log(`[A3.R2][RTB] skipSelfCheck=true for ${normalizedSymbol}/${input.strategy}`);
+    }
+
     // Check for existing queued signal with same symbol+strategy
-    const existingSignal = await this.getQueuedSignal(input.mode, normalizedSymbol, input.strategy);
+    // Directive 8.8.4-A3.R2: Skip this check when reconfirming (skipSelfCheck=true)
+    const existingSignal = input.skipSelfCheck 
+      ? null 
+      : await this.getQueuedSignal(input.mode, normalizedSymbol, input.strategy);
     
     if (existingSignal) {
       // If existing signal has higher CWQI, keep it
