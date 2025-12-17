@@ -108,7 +108,8 @@ const TCL_FAILSAFE_MS = 5 * 60 * 1000; // 5 minutes
 
 // Directive 8.8.4-A3.R1: CWQI decay rate is configurable via environment variable
 // Default: 0.03 per minute (λ = 0.03/min)
-const CWQI_DECAY_LAMBDA = parseFloat(process.env.CWQI_DECAY_RATE || '0.03');
+const rawDecayRate = parseFloat(process.env.CWQI_DECAY_RATE || '0.03');
+const CWQI_DECAY_LAMBDA = isNaN(rawDecayRate) ? 0.03 : rawDecayRate;
 console.log(`[8.8.4-A3.R1][CONFIG] CWQI_DECAY_RATE=${CWQI_DECAY_LAMBDA} (per minute)`);
 
 /**
@@ -844,7 +845,7 @@ class ReadyToBuyService {
       // If existing signal has higher CWQI, keep it
       const existingCWQI = parseFloat(existingSignal.cwqi);
       if (existingCWQI >= input.cwqi) {
-        console.log(`[8.8.4-C.5][RTB_SKIP] Keeping existing ${input.symbol}/${input.strategy} with CWQI ${existingCWQI.toFixed(4)} >= new ${input.cwqi.toFixed(4)}`);
+        console.log(`[8.8.4-C.5][RTB_SKIP] Keeping existing ${normalizedSymbol}/${input.strategy} with CWQI ${existingCWQI.toFixed(4)} >= new ${input.cwqi.toFixed(4)}`);
         return existingSignal;
       }
       
