@@ -430,14 +430,18 @@ function TradeRow({
       
       {/* 16. CWQI - CR-001: Added before Confidence */}
       <td className="px-3 py-3">
-        <div className={cn(
-          "font-mono text-sm font-medium",
-          (trade.cwqi || 0) >= 0.7 ? "text-green-600" :
-          (trade.cwqi || 0) >= 0.5 ? "text-blue-600" :
-          (trade.cwqi || 0) >= 0.3 ? "text-orange-600" : "text-red-600"
-        )}>
-          {((trade.cwqi || 0) * 100).toFixed(1)}%
-        </div>
+        {(trade.cwqi && trade.cwqi > 0) ? (
+          <div className={cn(
+            "font-mono text-sm font-medium",
+            trade.cwqi >= 0.7 ? "text-green-600" :
+            trade.cwqi >= 0.5 ? "text-blue-600" :
+            trade.cwqi >= 0.3 ? "text-orange-600" : "text-red-600"
+          )}>
+            {(trade.cwqi * 100).toFixed(1)}%
+          </div>
+        ) : (
+          <div className="font-mono text-sm text-muted-foreground">N/A</div>
+        )}
       </td>
       
       {/* 17. Confidence */}

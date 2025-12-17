@@ -10012,12 +10012,30 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         const distanceToSL = stopLoss > 0 ? ((currentPrice - stopLoss) / currentPrice) * 100 : 0;
         
         // CR-001: Distance in dollar values (absolute price difference * quantity)
-        const distanceToTPDollars = takeProfit > 0 ? (takeProfit - currentPrice) * quantity : 0;
-        const distanceToSLDollars = stopLoss > 0 ? (currentPrice - stopLoss) * quantity : 0;
+        // For long positions: TP is above entry, SL is below entry
+        // distanceToTPDollars = potential profit to TP, distanceToSLDollars = potential loss to SL
+        const isLong = (pos.side || 'buy').toLowerCase() === 'buy';
+        let distanceToTPDollars = 0;
+        let distanceToSLDollars = 0;
         
-        // CR-001: Extract CWQI from metadata if available
+        if (isLong) {
+          // Long: TP above current (positive = profit potential), SL below current (positive = loss buffer)
+          distanceToTPDollars = takeProfit > 0 ? (takeProfit - currentPrice) * quantity : 0;
+          distanceToSLDollars = stopLoss > 0 ? (currentPrice - stopLoss) * quantity : 0;
+        } else {
+          // Short: TP below current (profit when price drops), SL above current (loss when price rises)
+          distanceToTPDollars = takeProfit > 0 ? (currentPrice - takeProfit) * quantity : 0;
+          distanceToSLDollars = stopLoss > 0 ? (stopLoss - currentPrice) * quantity : 0;
+        }
+        
+        // CR-001: Extract CWQI from metadata (stored at trade creation from RTB signal)
         const posMetadata = (pos.metadata || {}) as Record<string, any>;
-        const cwqi = parseFloat(posMetadata.cwqi?.toString() || '0');
+        const cwqi = parseFloat(
+          posMetadata.cwqi?.toString() || 
+          posMetadata.sqe?.cwqi?.toString() || 
+          posMetadata.signal?.cwqi?.toString() || 
+          '0'
+        );
         
         // Health indicator: green (profitable), yellow (near breakeven), red (losing)
         let health: 'green' | 'yellow' | 'red' = 'yellow';

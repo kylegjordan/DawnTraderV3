@@ -16,11 +16,17 @@ Enhancements to the Active Trades table to improve trading visibility and signal
 
 **After:** Distance values are now displayed in **dollar amounts**, representing the actual P/L impact at TP/SL levels.
 
-**Calculation:**
-- `distanceToTPDollars = (takeProfit - currentPrice) * quantity`
-- `distanceToSLDollars = (currentPrice - stopLoss) * quantity`
+**Calculation (position-side aware):**
 
-**Rationale:** Dollar values provide a more intuitive understanding of potential gains/losses at target and stop levels, making risk assessment more straightforward.
+For Long positions:
+- `distanceToTPDollars = (takeProfit - currentPrice) * quantity` (positive = profit potential)
+- `distanceToSLDollars = (currentPrice - stopLoss) * quantity` (positive = loss buffer)
+
+For Short positions:
+- `distanceToTPDollars = (currentPrice - takeProfit) * quantity` (positive = profit potential)
+- `distanceToSLDollars = (stopLoss - currentPrice) * quantity` (positive = loss buffer)
+
+**Rationale:** Dollar values provide a more intuitive understanding of potential gains/losses at target and stop levels, making risk assessment more straightforward. Position-side awareness ensures correct signage for both long and short trades.
 
 ### 2. CWQI Column Added
 
@@ -32,7 +38,7 @@ Enhancements to the Active Trades table to improve trading visibility and signal
 - Orange (30-49%): Moderate quality signal
 - Red (<30%): Low quality signal
 
-**Source:** CWQI is extracted from the trade's metadata where it was stored at signal promotion time.
+**Source:** CWQI is extracted from the trade's metadata where it was stored at signal promotion time. The extraction checks multiple paths (`metadata.cwqi`, `metadata.sqe.cwqi`, `metadata.signal.cwqi`) for backwards compatibility. Displays "N/A" when CWQI is unavailable.
 
 **Rationale:** CWQI is a key signal quality metric used by the SQE (Signal Quality Evaluator) for filtering. Displaying it allows real-time monitoring of position quality relative to entry signal quality.
 
