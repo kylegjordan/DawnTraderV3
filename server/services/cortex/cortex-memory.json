@@ -1,10 +1,10 @@
 {
   "bob_snapshot": {
-    "timestamp": "2025-12-17T13:43:49.214Z",
+    "timestamp": "2025-12-17T13:44:49.222Z",
     "modules": {
       "MetricsBob": {
         "name": "MetricsBob",
-        "lastUpdate": "2025-12-17T13:43:49.212Z",
+        "lastUpdate": "2025-12-17T13:44:49.215Z",
         "stale": false,
         "hitRate": "97.6%",
         "cacheSize": 1,
@@ -12,7 +12,7 @@
       },
       "DataBob": {
         "name": "DataBob",
-        "lastUpdate": "2025-12-17T13:43:49.212Z",
+        "lastUpdate": "2025-12-17T13:44:49.215Z",
         "stale": false,
         "hitRate": "97.6%",
         "cacheSize": 1,
@@ -20,7 +20,7 @@
       },
       "ConfigBob": {
         "name": "ConfigBob",
-        "lastUpdate": "2025-12-17T13:43:49.212Z",
+        "lastUpdate": "2025-12-17T13:44:49.215Z",
         "stale": false,
         "hitRate": "97.6%",
         "cacheSize": 1,
@@ -28,7 +28,7 @@
       },
       "StrategyBob": {
         "name": "StrategyBob",
-        "lastUpdate": "2025-12-17T13:43:49.212Z",
+        "lastUpdate": "2025-12-17T13:44:49.215Z",
         "stale": false,
         "hitRate": "97.6%",
         "cacheSize": 1,
@@ -36,7 +36,7 @@
       },
       "TradeBob": {
         "name": "TradeBob",
-        "lastUpdate": "2025-12-17T13:43:49.212Z",
+        "lastUpdate": "2025-12-17T13:44:49.215Z",
         "stale": false,
         "hitRate": "97.6%",
         "cacheSize": 1,
@@ -44,7 +44,7 @@
       },
       "InsightBob": {
         "name": "InsightBob",
-        "lastUpdate": "2025-12-17T13:43:49.212Z",
+        "lastUpdate": "2025-12-17T13:44:49.215Z",
         "stale": false,
         "hitRate": "97.6%",
         "cacheSize": 1,
@@ -52,7 +52,7 @@
       },
       "UIBob": {
         "name": "UIBob",
-        "lastUpdate": "2025-12-17T13:43:49.212Z",
+        "lastUpdate": "2025-12-17T13:44:49.215Z",
         "stale": false,
         "hitRate": "97.6%",
         "cacheSize": 1,
@@ -63,8 +63,8 @@
       "modulesActive": 7,
       "totalCacheSize": 1,
       "overallHitRate": "97.6%",
-      "totalHits": 3484,
-      "totalMisses": 85
+      "totalHits": 3673,
+      "totalMisses": 90
     },
     "recentChanges": [],
     "systemHealth": "healthy",
@@ -73,23 +73,23 @@
       "warnings": [],
       "criticalIssues": [],
       "metrics": {
-        "timestamp": "2025-12-17T13:43:49.214Z",
+        "timestamp": "2025-12-17T13:44:49.217Z",
         "system": {
-          "cpuUsage": 48,
+          "cpuUsage": 48.1,
           "memoryUsage": {
             "total": 67430191104,
-            "used": 34329661440,
-            "free": 33100529664,
+            "used": 34085371904,
+            "free": 33344819200,
             "percentUsed": 51
           },
-          "uptime": 1095
+          "uptime": 1155
         },
         "cache": {
           "hitRate": 98,
           "missRate": 2,
-          "totalRequests": 3567,
-          "hits": 3484,
-          "misses": 83
+          "totalRequests": 3761,
+          "hits": 3673,
+          "misses": 88
         },
         "latency": {
           "cortex": null,
@@ -98,11 +98,11 @@
         },
         "schedulers": {
           "cortexSync": {
-            "uptime": 1095,
-            "lastRun": "2025-12-17T13:43:19.221Z"
+            "uptime": 1155,
+            "lastRun": "2025-12-17T13:44:19.217Z"
           },
           "analytics": {
-            "uptime": 1095,
+            "uptime": 1155,
             "lastRun": "2025-12-17T13:40:49.876Z"
           }
         },
@@ -136,7 +136,7 @@
         },
         "execution": {
           "marketDataSource": "rest_fallback",
-          "lastTickAgeMs": 12312,
+          "lastTickAgeMs": 12325,
           "avgSubmitAckMs": 0,
           "avgSlippageBps": 0,
           "avgFeesPerTrade": 0,
@@ -158,10 +158,10 @@
     "current": {
       "view": "Dashboard",
       "mode": "live",
-      "timestamp": "2025-12-17T13:43:49.212Z"
+      "timestamp": "2025-12-17T13:44:49.215Z"
     }
   },
-  "last_sync": "2025-12-17T13:43:49.214Z",
+  "last_sync": "2025-12-17T13:44:49.222Z",
   "memory": {
     "analytics_live_6c591801-3072-431d-b192-30aaf426f15e": {
       "value": {

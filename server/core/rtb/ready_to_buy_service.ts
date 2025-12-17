@@ -25,8 +25,10 @@ import {
   calculateCWQIFromSignal, 
   MIN_QUEUE_CWQI, 
   MIN_QUEUE_CONFIDENCE,
+  SQE_THRESHOLDS,
   type CWQIResult 
 } from '../metrics/quality_index';
+import { evaluateSignalQuality, type SQEInput } from '../filters/signal_quality_evaluator';
 import { isCapacityBlock, type TradingMode, type CapacityGuardrailCode } from '../../services/guardrail-policy';
 import { signalLifecycleAudit } from '../audit/signal_lifecycle_audit';
 import type { RtbSignal, InsertRtbSignal } from '@shared/schema';
@@ -309,13 +311,14 @@ class ReadyToBuyService {
   }
 
   /**
-   * Directive 8.8.4-A1-Extended: Refresh and dynamically re-rank RTB signals
+   * Directive 8.8.4-A1-Extended + A3: Refresh and dynamically re-rank RTB signals
    * 
    * Every 30 seconds (at end of FX5 cycle or RTB refresh cycle):
    * 1. Recalculate CWQI with decay for each signal (fresher signals rank higher)
-   * 2. Update lastReconfirmedAt timestamp for each signal
-   * 3. Sort queue by CWQI descending (highest quality first)
-   * 4. Broadcast rtb:updated to clients for UI refresh
+   * 2. Directive 8.8.4-A3: Re-validate signals through SQE, remove failures
+   * 3. Update lastReconfirmedAt timestamp for each signal
+   * 4. Sort queue by CWQI descending (highest quality first)
+   * 5. Broadcast rtb:updated to clients for UI refresh
    * 
    * @param mode - Trading mode ('paper' or 'live')
    */
@@ -333,6 +336,7 @@ class ReadyToBuyService {
       // Recalculate CWQI with decay and update lastReconfirmedAt
       const now = new Date();
       let updatedCount = 0;
+      let removedCount = 0;
       
       for (const signal of signals) {
         const originalCWQI = parseFloat(signal.cwqi || '0');
@@ -340,6 +344,41 @@ class ReadyToBuyService {
         
         // Apply CWQI decay based on signal age
         const decayedCWQI = calculateDecayedCWQI(originalCWQI, queuedAt);
+        
+        // Directive 8.8.4-A3: Re-validate signal through SQE
+        // Check if decayed CWQI still meets minimum threshold
+        const ngc = parseFloat(signal.ngc || signal.confidence || '0');
+        const riskScore = parseFloat(signal.riskScore || '0.5');
+        const profitRate = signal.expectedReturn ? parseFloat(signal.expectedReturn) : 0.15;
+        
+        const sqeInput: SQEInput = {
+          signalId: signal.signalId,
+          symbol: signal.symbol,
+          strategy: signal.strategy,
+          ngc,
+          riskScore,
+          profitRate,
+          cwqi: decayedCWQI
+        };
+        
+        const sqeResult = evaluateSignalQuality(sqeInput);
+        
+        // Remove signal if it fails SQE re-validation
+        if (!sqeResult.passed) {
+          await this.expireSignal(signal.id, `SQE re-validation failed: ${sqeResult.reason}`);
+          console.log(`[8.8.4-A3][SQE][Expired] pair=${signal.symbol} CWQI=${decayedCWQI.toFixed(4)} (${sqeResult.reason})`);
+          removedCount++;
+          continue;
+        }
+        
+        // Also check for duplicate pair in active trades (can happen if trade opened since queue)
+        const hasActivePosition = await storage.hasActivePair(signal.symbol, mode);
+        if (hasActivePosition) {
+          await this.expireSignal(signal.id, 'duplicate_pair_active');
+          console.log(`[8.8.4-A3][SQE][Expired] pair=${signal.symbol} reason=duplicate_pair_active`);
+          removedCount++;
+          continue;
+        }
         
         // Update signal with recalculated CWQI and refresh timestamp
         await storage.updateRtbSignal(signal.id, {
@@ -362,16 +401,17 @@ class ReadyToBuyService {
           mode,
           timestamp: now.toISOString(),
           signalCount: signals.length,
-          refreshedCount: updatedCount
+          refreshedCount: updatedCount,
+          removedCount
         },
         mode
       });
 
       const elapsedMs = Date.now() - startTime;
-      console.log(`[8.8.4-A1][RTB_RERANK] mode=${mode}, signals=${signals.length}, updated=${updatedCount}, elapsed=${elapsedMs}ms`);
+      console.log(`[8.8.4-A3][RTB][Refresh] cycle mode=${mode} updated=${updatedCount} removed=${removedCount} re-ranked=${signals.length - removedCount} elapsed=${elapsedMs}ms`);
       
     } catch (error) {
-      console.error(`[8.8.4-A1][RTB_RERANK][ERROR] mode=${mode}:`, error);
+      console.error(`[8.8.4-A3][RTB_RERANK][ERROR] mode=${mode}:`, error);
     }
   }
 
