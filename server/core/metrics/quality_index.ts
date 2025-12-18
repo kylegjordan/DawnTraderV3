@@ -96,7 +96,17 @@ class RollingNormalizer {
     }
   }
   
+  /**
+   * Directive A3.R8.3: Conditional normalization
+   * Only normalize if value is outside [0,1] range
+   * This prevents double-normalization of already-bounded metrics
+   */
   normalize(value: number): number {
+    // A3.R8.3: If already in [0,1] range, return as-is to prevent compression
+    if (value >= 0 && value <= 1) {
+      return value;
+    }
+    
     const min = this.getMin();
     const max = this.getMax();
     const range = max - min;
@@ -241,9 +251,14 @@ function clamp01(value: number): number {
  * NGC combines the base signal confidence with market conditions (volatility, risk)
  * to produce a more robust confidence measure that accounts for adverse conditions.
  * 
- * Formula: NGC = normalize(base_confidence * (1 - volatility) * (1 - risk))
+ * Directive A3.R8.3: Recalibrated NGC weighting
+ * OLD Formula (multiplicative, caused compression):
+ *   NGC = conf * (1 - vol) * (1 - risk)
  * 
- * Phase C: Uses adaptive rolling normalization with exponential smoothing
+ * NEW Formula (additive, prevents extreme compression):
+ *   NGC = (conf * 0.5) + ((1 - vol) * 0.3) + ((1 - risk) * 0.2)
+ * 
+ * This yields NGC in typical range 0.25-0.70 instead of 0.10-0.12
  * 
  * @param baseConfidence - Raw signal confidence from strategy (0-1)
  * @param volatility - Market volatility factor (0-1, default 0.3)
@@ -261,12 +276,17 @@ export function calculateNGC(
   const vol = clamp01(volatility);
   const risk = clamp01(riskScore);
   
-  const rawNGC = conf * (1 - vol) * (1 - risk);
+  // Directive A3.R8.3: Additive weighting to prevent multiplicative compression
+  // conf=0.9, vol=0.3, risk=0.4 → OLD: 0.378, NEW: 0.78
+  const rawNGC = (conf * 0.5) + ((1 - vol) * 0.3) + ((1 - risk) * 0.2);
   
   if (trackSample) {
     ngcNormalizer.addSample(rawNGC);
+    // A3.R8.3: Only log when this is a tracked sample (not when called as intermediate step)
+    console.log(`[A3.R8.3][NGC_BASE] conf=${conf.toFixed(3)} vol=${vol.toFixed(3)} risk=${risk.toFixed(3)} → rawNGC=${rawNGC.toFixed(4)}`);
   }
   
+  // A3.R8.3: With conditional normalization, already-bounded values pass through
   const ngc = ngcNormalizer.normalize(rawNGC);
   
   return Math.round(ngc * 10000) / 10000;
@@ -321,6 +341,9 @@ export function estimateExpectedDuration(
  * 
  * Phase C: Uses adaptive rolling normalization with exponential smoothing
  * 
+ * Directive A3.R8.3: Added minimum floor of 0.15 to prevent zero profit rate
+ * when target ≈ entry price, which was causing VWAP signals to be rejected.
+ * 
  * @param expectedReturn - Expected return (0-1)
  * @param expectedDuration - Expected duration in minutes
  * @param trackSample - Whether to track this sample for rolling normalization (default true)
@@ -332,7 +355,7 @@ export function calculateProfitRate(
   trackSample: boolean = true
 ): number {
   if (expectedDuration <= 0) {
-    return 0;
+    return 0.15; // A3.R8.3: Return floor instead of 0
   }
   
   const returnVal = clamp01(expectedReturn);
@@ -345,7 +368,10 @@ export function calculateProfitRate(
   
   const normalizedRate = profitRateNormalizer.normalize(rawRate);
   
-  return Math.round(normalizedRate * 10000) / 10000;
+  // Directive A3.R8.3: Apply minimum floor to prevent zero profit rate
+  const flooredRate = Math.max(normalizedRate, 0.15);
+  
+  return Math.round(flooredRate * 10000) / 10000;
 }
 
 /**
@@ -398,9 +424,66 @@ export function calculateCWQI(components: CWQIComponents): CWQIResult {
 }
 
 /**
+ * Directive A3.R8.3: Calculate CWQI with a pre-computed NGC and profitRate
+ * 
+ * This version allows passing in externally-computed metrics, ensuring that
+ * the profitability-informed NGC is used in the CWQI calculation.
+ * 
+ * @param precomputed - Pre-computed metrics including NGC and profitRate
+ * @returns CWQIResult with the calculated index and breakdown
+ */
+export function calculateCWQIWithPrecomputedMetrics(precomputed: {
+  confidence: number;
+  riskScore: number;
+  expectedReturn: number;
+  volatility: number;
+  ngc: number;
+  expectedDuration: number;
+  profitRate: number;
+}): CWQIResult {
+  const confidence = clamp01(precomputed.confidence);
+  const riskScore = clamp01(precomputed.riskScore);
+  const expectedReturn = clamp01(precomputed.expectedReturn);
+  const volatility = clamp01(precomputed.volatility ?? DEFAULT_VOLATILITY);
+  const ngc = clamp01(precomputed.ngc);
+  const profitRate = clamp01(precomputed.profitRate);
+  const expectedDuration = precomputed.expectedDuration;
+  
+  const ngcContribution = ngc * NGC_WEIGHT;
+  const riskContribution = (1 - riskScore) * RISK_WEIGHT;
+  const returnContribution = expectedReturn * RETURN_WEIGHT;
+  const profitRateContribution = profitRate * PROFIT_RATE_WEIGHT;
+  
+  const cwqi = ngcContribution + riskContribution + returnContribution + profitRateContribution;
+  
+  return {
+    cwqi: Math.round(cwqi * 10000) / 10000,
+    ngc: Math.round(ngc * 10000) / 10000,
+    components: {
+      confidence,
+      riskScore,
+      expectedReturn,
+      volatility,
+      ngc,
+      expectedDuration,
+      profitRate,
+    },
+    breakdown: {
+      ngcContribution: Math.round(ngcContribution * 10000) / 10000,
+      riskContribution: Math.round(riskContribution * 10000) / 10000,
+      returnContribution: Math.round(returnContribution * 10000) / 10000,
+      profitRateContribution: Math.round(profitRateContribution * 10000) / 10000,
+    },
+  };
+}
+
+/**
  * Calculate expected return from entry/target/stop prices
  * 
  * Phase C: Uses adaptive rolling normalization with exponential smoothing
+ * 
+ * Directive A3.R8.3: Added minimum floor to prevent zero rounding when
+ * target ≈ entry, which was causing VWAP signals to be rejected.
  * 
  * @param entryPrice - Entry price
  * @param targetPrice - Target/take-profit price
@@ -533,6 +616,12 @@ export function calculateCWQIFromSignal(signal: {
 /**
  * Calculate extended metrics for a signal (used by Signal Orchestrator)
  * Returns all derived metrics: NGC, ExpectedDuration, ProfitRate, CWQI
+ * 
+ * Directive A3.R8.3: Restructured calculation order to incorporate profitability into NGC
+ * 1. First compute base metrics (expectedReturn, riskScore, volatility, expectedDuration, profitRate)
+ * 2. Then compute NGC as a blend including profitability: 
+ *    NGC = (baseNGC * 0.4) + (profitRate * 0.4) + ((1-risk) * 0.2)
+ * 3. Finally compute CWQI using this profitability-informed NGC
  */
 export function calculateExtendedSignalMetrics(signal: {
   confidence: number;
@@ -554,6 +643,7 @@ export function calculateExtendedSignalMetrics(signal: {
   cwqi: number;
   cwqiResult: CWQIResult;
 } {
+  // Step 1: Compute base metrics FIRST (without NGC dependency)
   const expectedReturn = calculateExpectedReturn(
     signal.entryPrice,
     signal.targetPrice,
@@ -572,8 +662,6 @@ export function calculateExtendedSignalMetrics(signal: {
     signal.entryPrice
   );
   
-  const ngc = calculateNGC(signal.confidence, volatility, riskScore);
-  
   const expectedDuration = estimateExpectedDuration(
     volatility,
     signal.atr,
@@ -583,15 +671,31 @@ export function calculateExtendedSignalMetrics(signal: {
   
   const profitRate = calculateProfitRate(expectedReturn, expectedDuration);
   
-  const cwqiResult = calculateCWQI({
+  // Step 2: Directive A3.R8.3 - Compute NGC WITH profitability influence
+  // baseNGC = traditional confidence-based calculation
+  const baseNGC = calculateNGC(signal.confidence, volatility, riskScore, false);
+  
+  // A3.R8.3: Blend baseNGC with profitability metrics
+  // This ensures NGC reflects both confidence AND profit potential
+  const profitabilityInformedNGC = (baseNGC * 0.4) + (profitRate * 0.4) + ((1 - riskScore) * 0.2);
+  const ngc = clamp01(profitabilityInformedNGC);
+  
+  console.log(`[A3.R8.3][NGC_BLEND] baseNGC=${baseNGC.toFixed(4)} profitRate=${profitRate.toFixed(4)} risk=${riskScore.toFixed(4)} → blendedNGC=${ngc.toFixed(4)}`);
+  
+  // Step 3: Directive A3.R8.3 - Compute CWQI using the profitability-informed NGC
+  // Using calculateCWQIWithPrecomputedMetrics ensures CWQI reflects profitability
+  const cwqiResult = calculateCWQIWithPrecomputedMetrics({
     confidence: signal.confidence,
     riskScore,
     expectedReturn,
     volatility,
+    ngc: ngc,
+    expectedDuration,
+    profitRate,
   });
   
   return {
-    ngc,
+    ngc: Math.round(ngc * 10000) / 10000,
     expectedReturn,
     riskScore,
     volatility,
@@ -635,6 +739,7 @@ export const SQE_THRESHOLDS = {
 };
 
 console.log(`[8.8.4-C.11][SQE_CONFIG] NGC=${SQE_THRESHOLDS.MIN_NGC} CWQI=${SQE_THRESHOLDS.MIN_CWQI} PROFIT=${SQE_THRESHOLDS.MIN_PROFIT_RATE} RISK=${SQE_THRESHOLDS.MAX_RISK}`);
+console.log('[A3.R8.3] NGC Formula Calibration and Metric Scaling active');
 
 /**
  * Minimum CWQI threshold for queue eligibility (updated for C.11)

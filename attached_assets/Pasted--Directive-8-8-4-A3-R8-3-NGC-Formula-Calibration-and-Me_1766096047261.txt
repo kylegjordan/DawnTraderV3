@@ -1,0 +1,156 @@
+⚙️ Directive 8.8.4-A3.R8.3 — NGC Formula Calibration and Metric Scaling
+
+Issued by: System Architect
+Authorized Executor: Replit AI (Production Agent)
+Test Context: testuser123
+Mode: Paper Trading
+Issued: 2025-12-19
+Reference: A3.R8.2 SQE Decay & Lifecycle Alignment
+Scope: SQE core logic, metric normalization, VWAP profit floor
+
+🧭 Context
+
+After Directive A3.R8.2, timing and decay synchronization were restored; however, NGC (Normalized Global Confidence) values remain far too low (≈ 0.10–0.12) across all non-VWAP strategies, resulting in a 100 % rejection rate by SQE.
+
+Replit’s analysis shows:
+
+CWQI and ProfitRate values are valid (0.3–0.6 range).
+
+NGC output is under-weighted and over-normalized.
+
+VWAP signals are rejected for ProfitRate < 0.1 due to rounding to zero.
+
+This directive recalibrates the NGC formula, prevents double normalization, adjusts metric weighting, and adds a profit floor safeguard.
+
+🎯 Objectives
+
+Correct NGC weighting to reflect the true importance of CWQI and profitability.
+
+Prevent redundant normalization of already-bounded metrics (0–1 range).
+
+Fix VWAP ProfitRate = 0 rounding issue that invalidates strong signals.
+
+Restore balanced signal flow into the Ready-to-Buy (RTB) queue.
+
+🔧 Implementation Tasks
+1️⃣ File: shared/metrics/signal_metrics.ts
+
+Problem: All metrics (CWQI, ProfitRate, Risk) are normalized again even though strategy outputs are already 0–1 scaled, causing compression of midrange values.
+
+Fix:
+Replace unconditional normalization with conditional normalization only when out of bounds.
+
+export function normalizeMetric(value: number, min: number, max: number): number {
+  if (value == null || isNaN(value)) return 0;
+  // Only normalize if outside [0,1]
+  if (value < 0 || value > 1) {
+    const clamped = Math.max(min, Math.min(max, value));
+    return (clamped - min) / (max - min);
+  }
+  return value;
+}
+
+2️⃣ File: server/core/sqe/signal_quality_engine.ts
+
+Problem: Current NGC weighting (0.4/0.4/0.2) undervalues CWQI and over-normalizes final NGC.
+
+Fix: Update the weighting formula and remove final normalization.
+
+// Recalibrated NGC weighting
+const ngc =
+  (signal.metrics.cwqi * 0.5) +
+  (signal.metrics.profitRate * 0.3) +
+  ((1 - signal.metrics.riskScore) * 0.2);
+
+// Remove extra normalizeNGC() call
+signal.metrics.ngc = parseFloat(ngc.toFixed(4));
+
+// Trace log
+console.log(`[A3.R8.3][SQE] ${signal.symbol}/${signal.strategy} cwqi=${signal.metrics.cwqi.toFixed(3)} profit=${signal.metrics.profitRate.toFixed(3)} risk=${signal.metrics.riskScore.toFixed(3)} → ngc=${signal.metrics.ngc.toFixed(3)}`);
+
+
+This preserves linear scaling and yields realistic NGC distributions (0.25 – 0.6 typical).
+
+3️⃣ File: server/strategies/vwap_pullback.ts
+
+Problem: ProfitRate rounds to zero when takeProfit ≈ entry, triggering ProfitRate < 0.1 rejection even for valid setups.
+
+Fix: Add minimum floor to avoid zeroing due to rounding.
+
+profitRate = (takeProfit - entry) / entry;
+if (Math.abs(takeProfit - entry) < 0.0001) {
+  profitRate = 0.0001; // Prevent zero floor
+}
+
+4️⃣ Logging
+
+In server/startup/trading-bootstrap.ts append:
+
+console.log("[A3.R8.3] NGC Formula Calibration and Metric Scaling active");
+
+
+and ensure NGC trace entries go to:
+
+logs/diagnostics/sqe_ngc_trace.log
+
+
+Each line should include symbol, strategy, CWQI, ProfitRate, Risk, and computed NGC.
+
+🧪 Verification & Validation
+
+After deployment:
+
+Metric	Expected Range	Validation Source
+CWQI	0.30 – 0.60	Console & logs
+ProfitRate	0.20 – 0.80 (VWAP > 0.5)	SQE trace
+RiskScore	0.30 – 0.60	SQE trace
+NGC	0.25 – 0.70 typical	SQE trace + API
+SQE rejection rate	< 50 %	SLAL API
+RTB queue	Populated within 2 min	Dashboard
+Status column	Active/Reconfirmed visible	UI
+Validation Commands
+TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+curl -s "http://localhost:5000/api/diagnostics/signal-lifecycle?mode=paper&limit=10" \
+ -H "Authorization: Bearer $TOKEN" | python3 -m json.tool | grep -E '"status"|"ngc"'
+
+
+Expected: Mix of active, reconfirmed, and promoted statuses with NGC ≥ 0.3.
+
+📈 Post-Fix Observation Plan
+
+Start paper trading under testuser123.
+
+Allow 30-second FX5 warm-up.
+
+Observe RTB population and trace logs for 10 minutes.
+
+Validate ≥ 15 signals in RTB queue and at least one TCL promotion.
+
+Confirm NGC histogram centered 0.3–0.6.
+
+✅ Completion Criteria
+
+Directive 8.8.4-A3.R8.3 is successful when:
+
+≥ 10 signals accumulate in RTB queue within first 5 minutes.
+
+SQE rejection rate ≤ 50 %.
+
+At least one promotion event (status=promoted) recorded.
+
+Validation log logs/validation/8.8.4-A3.R8.3_ngc_calibration_verification.md created with summary.
+
+⚠️ Execution Notes
+
+Do not alter SQE thresholds (NGC_MIN=0.3, CWQI_MIN=0.35, PROFIT_MIN=0.1) without explicit authorization.
+
+Preserve all logging prefixes ([A3.R8.3]) for traceability.
+
+Apply code changes sequentially; confirm build restart before validation.
+
+End of Directive 8.8.4-A3.R8.3
+
+(NGC Formula Calibration and Metric Scaling)
+Authorized Executor: Replit AI (Production Agent)
+Test User Context: testuser123
+Mode: Paper Trading
