@@ -513,10 +513,10 @@ export class MarketScanner {
       const stalePairs = await storage.cleanStaleWatchlistPairs(15);
       console.log(`[Cleanup] ${stalePairs} stale filtered pairs removed`);
       
-      // 3. Clean old closed paper trades (older than 24 hours)
-      // Phase 27.F.15.B.4: Updated to mode-based signature
-      const oldPaperTrades = await storage.cleanOldPaperSimTrades('paper', 24);
-      console.log(`[Cleanup] ${oldPaperTrades} closed paper trades archived`);
+      // 3. Clean old closed paper trades (older than 30 days)
+      // Directive 8.8.4-A3.R4: Extended retention from 24 hours to 720 hours (30 days)
+      const oldPaperTrades = await storage.cleanOldPaperSimTrades('paper', 720);
+      console.log(`[Cleanup] ${oldPaperTrades} closed paper trades archived (30-day retention)`);
       
       // 4. Clean old closed live trades (older than 30 days)
       const oldLiveTrades = await storage.cleanOldLiveTrades(30);
