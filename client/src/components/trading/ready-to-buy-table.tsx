@@ -20,7 +20,7 @@ interface TradingSignal {
   stopPrice: number;
   targetPrice: number;
   volume24h: number | null;
-  status: 'active' | 'expired' | 'executed';
+  status: 'active' | 'reconfirmed' | 'promoted' | 'expired' | 'executed';
   detectedAt: string;
   estimatedQuantity?: number;
   estimatedValue?: number;
@@ -31,7 +31,7 @@ interface TradingSignalsResponse {
   timestamp: string;
 }
 
-type SortField = 'rank' | 'symbol' | 'cwqi' | 'ngc' | 'volume' | 'price' | 'strategy' | 'entry' | 'target' | 'stop' | 'quantity';
+type SortField = 'rank' | 'symbol' | 'cwqi' | 'ngc' | 'volume' | 'price' | 'strategy' | 'entry' | 'target' | 'stop' | 'quantity' | 'status';
 type SortDirection = 'asc' | 'desc';
 
 export default function ReadyToBuyTable() {
@@ -122,6 +122,10 @@ export default function ReadyToBuyTable() {
       case 'quantity':
         aValue = a.estimatedQuantity || 0;
         bValue = b.estimatedQuantity || 0;
+        break;
+      case 'status':
+        aValue = a.status || '';
+        bValue = b.status || '';
         break;
       default:
         aValue = 0;
@@ -230,6 +234,7 @@ export default function ReadyToBuyTable() {
                   <SortHeader field="quantity" label="Qty" />
                   <SortHeader field="volume" label="24h Vol" />
                   <SortHeader field="strategy" label="Strategy" />
+                  <SortHeader field="status" label="Status" />
                 </tr>
               </thead>
               <tbody>
@@ -346,6 +351,18 @@ export default function ReadyToBuyTable() {
                       <td className="py-3 px-3" data-testid={`text-strategy-${index}`}>
                         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
                           {formatStrategy(signal.strategy)}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3" data-testid={`text-status-${index}`}>
+                        <span className={cn(
+                          "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium",
+                          signal.status === 'active' ? "bg-blue-500/10 text-blue-500" :
+                          signal.status === 'reconfirmed' ? "bg-success/10 text-success" :
+                          signal.status === 'promoted' ? "bg-amber-500/10 text-amber-500" :
+                          signal.status === 'expired' ? "bg-destructive/10 text-destructive" :
+                          "bg-muted text-muted-foreground"
+                        )}>
+                          {signal.status || 'queued'}
                         </span>
                       </td>
                     </tr>

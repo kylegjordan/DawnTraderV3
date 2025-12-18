@@ -1,0 +1,160 @@
+🧭 Directive 8.8.4-A3.R8.2 — SQE Timing, Decay, and Lifecycle Alignment Fix
+
+Issued by: System Architect
+Authorized Executor: Replit AI (Production Agent)
+Test User Context: testuser123
+Mode: Paper
+Issued: 2025-12-19
+Reference: A3.R8.1 NGC Diagnostics / A3.R7 Central Clock Integration
+
+Context
+
+Following the successful integration of the Central Clock (Directive A3.R7) and lifecycle observability (Directive A3.R8), signal evaluations within the Signal Quality Engine (SQE) began exhibiting a 100% SQE_QUALITY_REJECT rate.
+
+Analysis of repo files (signal_quality_engine.ts, ready_to_buy_service.ts, and signal_metrics.ts) shows that this is not a data quality issue — it’s a timing misalignment caused by the Central Clock’s tick counter being used in the NGC decay formula, coupled with double-decay and double-normalization events during Ready-to-Buy (RTB) refresh cycles.
+
+Additionally, the status column (active / reconfirmed / promoted / expired) was added to the database schema but not yet surfaced in the frontend UI table.
+
+Objective
+
+To restore correct SQE behavior and RTB lifecycle tracking by:
+
+Re-synchronizing NGC decay timing with real timestamps.
+
+Preventing redundant decay and normalization in refresh cycles.
+
+Ensuring the RTB UI displays the full 4-state lifecycle status.
+
+Implementation Tasks
+1️⃣ server/core/sqe/signal_quality_engine.ts
+
+Replace:
+
+const elapsed = (CentralClock.now() - signal.createdAt) / 1000;
+
+
+With:
+
+const elapsed = (Date.now() - signal.createdAt) / 1000;
+
+
+Add inline log trace:
+
+console.log(`[A3.R8.2][NGC] symbol=${signal.symbol} pre=${pre.toFixed(4)} decay=${decay.toFixed(4)} post=${signal.metrics.ngc.toFixed(4)}`);
+
+
+Ensure this logging appears in logs/diagnostics/sqe_ngc_timing_trace.log.
+
+2️⃣ server/core/rtb/ready_to_buy_service.ts
+
+Modify evaluateSignalQuality() signature:
+
+async evaluateSignalQuality(signal, { skipDecay = false } = {}) { … }
+
+
+Within this function:
+
+if (!skipDecay) { applyDecay(signal); }
+
+
+In refreshAndRank() and reEvaluateQueue(), call:
+
+await this.evaluateSignalQuality(signal, { skipDecay: true });
+
+
+Remove redundant normalization call following refresh:
+
+// Remove or comment out:
+signal.metrics.ngc = normalizeNGC(signal.metrics.ngc);
+
+
+Confirm that only the initial SQE pass applies decay and normalization once per lifecycle.
+
+3️⃣ shared/metrics/signal_metrics.ts
+
+Remove secondary normalization if already normalized:
+
+// Before:
+signal.metrics.ngc = normalizeNGC(signal.metrics.ngc);
+// After:
+if (signal.metrics.ngc > 1) signal.metrics.ngc = normalizeNGC(signal.metrics.ngc);
+
+
+Retain normalization only at the end of the initial SQE computation pipeline.
+
+4️⃣ client/components/ReadyToBuyTable.tsx
+
+Add status column to RTB UI table definition:
+
+{ key: 'status', label: 'Status' }
+
+
+Ensure status is included in the RTB API query response.
+
+Verify values update dynamically as signals transition:
+
+active → on initial queue entry
+
+reconfirmed → after successful refresh
+
+promoted → once TCL executes promotion
+
+expired → after SQE failure or TTL lapse
+
+5️⃣ Logging Configuration
+
+Append to server/startup/trading-bootstrap.ts:
+
+console.log("[A3.R8.2] SQE Decay & Lifecycle Alignment activated");
+
+
+Ensure all SQE decay traces are written to:
+
+logs/diagnostics/sqe_ngc_timing_trace.log
+
+
+Create validation output file:
+
+logs/validation/8.8.4-A3.R8.2_ngc_fix_verification.md
+
+Verification & Validation
+
+After implementation and restart, run a 30-minute observation session in paper mode under testuser123.
+
+Checkpoint	Expected Result
+SQE rejection rate	< 50 % (formerly 100 %)
+NGC average	~ 0.3 – 0.5; VWAP > 0.6 passes
+RTB queue	Populated and cycling through active / reconfirmed
+Status column	Visible and updating in UI
+Logs	[A3.R8.2][NGC] pre=..., decay=..., post=... entries present
+TCL	Promotes top-ranked RTB signals normally after threshold
+
+Execute:
+
+TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+curl -s "http://localhost:5000/api/diagnostics/signal-lifecycle?mode=paper&limit=10" \
+ -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+
+
+Confirm that at least one RTB signal shows "status": "active" or "reconfirmed".
+
+Completion Criteria
+
+Directive 8.8.4-A3.R8.2 is considered successful when:
+
+The RTB queue contains ≥ 5 active signals within the first 10 minutes.
+
+At least one promotion event occurs via TCL.
+
+The NGC distribution histogram normalizes with no mass collapse near 0.
+
+logs/validation/8.8.4-A3.R8.2_ngc_fix_verification.md confirms expected behavior.
+
+Approval
+
+✅ Authorized for immediate implementation under Replit AI supervision.
+⚠️ Do not alter SQE thresholds or decay coefficients beyond timing alignment.
+📋 Log all operations under [A3.R8.2] tag for traceability.
+
+End of Directive 8.8.4-A3.R8.2
+(SQE Timing, Decay, and Lifecycle Alignment Fix — Test User: testuser123)

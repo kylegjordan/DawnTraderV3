@@ -76,6 +76,13 @@ export interface SQEInput {
   cwqi: number;
 }
 
+/**
+ * Directive A3.R8.2: SQE evaluation options
+ */
+export interface SQEOptions {
+  skipDecay?: boolean;  // Skip decay when re-evaluating during refresh cycles
+}
+
 export interface SQEResult {
   passed: boolean;
   signalId: string;
@@ -101,12 +108,17 @@ export interface SQEBatchResult {
 /**
  * Evaluate a single signal against SQE quality thresholds
  * Phase C: Uses strategy-specific ProfitRate floors
+ * Directive A3.R8.2: Supports skipDecay option for refresh cycles
  * 
  * @param input - Pre-computed signal metrics
+ * @param options - Optional evaluation settings (skipDecay for refresh cycles)
  * @returns SQEResult with pass/fail status and any failures
  */
-export function evaluateSignalQuality(input: SQEInput): SQEResult {
+export function evaluateSignalQuality(input: SQEInput, options: SQEOptions = {}): SQEResult {
   const failures: string[] = [];
+  
+  // Directive A3.R8.2: Log NGC timing trace
+  console.log(`[A3.R8.2][NGC] symbol=${input.symbol} ngc=${input.ngc.toFixed(4)} cwqi=${input.cwqi.toFixed(4)} skipDecay=${options.skipDecay || false}`);
   
   if (input.ngc < SQE_THRESHOLDS.MIN_NGC) {
     failures.push(`NGC ${input.ngc.toFixed(4)} < ${SQE_THRESHOLDS.MIN_NGC}`);
@@ -237,8 +249,11 @@ class SignalQualityEvaluatorService {
   private passCount = 0;
   private rejectCount = 0;
   
-  evaluate(input: SQEInput): SQEResult {
-    const result = evaluateSignalQuality(input);
+  /**
+   * Directive A3.R8.2: Evaluate with optional skipDecay for refresh cycles
+   */
+  evaluate(input: SQEInput, options: SQEOptions = {}): SQEResult {
+    const result = evaluateSignalQuality(input, options);
     
     this.evaluationCount++;
     if (result.passed) {

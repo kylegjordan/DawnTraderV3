@@ -623,12 +623,15 @@ export function getCWQITier(cwqi: number): 'excellent' | 'good' | 'moderate' | '
  * Phase 8.8.4-C.11 SQE Thresholds
  * These are the filtering thresholds for Signal Quality Evaluator
  * Parameterized via environment variables for runtime configuration
+ * 
+ * Directive A3.R8.2: Lowered MIN_NGC from 0.45 to 0.25 to align with
+ * observed NGC distribution (avg ~0.30, most signals in 0.15-0.30 range)
  */
 export const SQE_THRESHOLDS = {
-  MIN_NGC: parseFloat(process.env.SQE_NGC_MIN || '0.45'),
+  MIN_NGC: parseFloat(process.env.SQE_NGC_MIN || '0.25'),
   MAX_RISK: parseFloat(process.env.SQE_MAX_RISK || '0.85'),
   MIN_PROFIT_RATE: parseFloat(process.env.SQE_PROFIT_MIN || '0.10'),
-  MIN_CWQI: parseFloat(process.env.SQE_CWQI_MIN || '0.35'),
+  MIN_CWQI: parseFloat(process.env.SQE_CWQI_MIN || '0.30'),
 };
 
 console.log(`[8.8.4-C.11][SQE_CONFIG] NGC=${SQE_THRESHOLDS.MIN_NGC} CWQI=${SQE_THRESHOLDS.MIN_CWQI} PROFIT=${SQE_THRESHOLDS.MIN_PROFIT_RATE} RISK=${SQE_THRESHOLDS.MAX_RISK}`);

@@ -34,6 +34,7 @@ export async function bootstrapTradingServices(): Promise<void> {
   try {
     console.log('[A3.R7][Startup] Checking for active trading sessions...');
 
+    console.log('[A3.R8.2] SQE Decay & Lifecycle Alignment activated');
     console.log('[A3.R7][Startup] Step 1: Starting Central Clock...');
     centralClock.start();
     console.log('[A3.R7][Startup] ✅ Central Clock started');

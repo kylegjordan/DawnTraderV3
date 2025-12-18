@@ -420,18 +420,29 @@ class ReadyToBuyService {
       let expiredCount = 0;
       
       for (const signal of signals) {
-        const originalCWQI = parseFloat(signal.cwqi || '0');
+        // Directive A3.R8.2 FIX: Use TRUE original CWQI from metadata, not stored cwqi
+        // The stored signal.cwqi gets overwritten with decayed values after each refresh
+        // metadata.originalCwqi preserves the baseline value from signal creation
+        const metadata = signal.metadata as Record<string, any> || {};
+        const trueOriginalCWQI = metadata.originalCwqi 
+          ? parseFloat(metadata.originalCwqi) 
+          : parseFloat(signal.cwqi || '0');  // Fallback for signals without metadata
+        
         const queuedAt = signal.queuedAt;
         const oldStatus = signal.status || 'active';
         
         // Directive 8.8.4-A3.R8: Apply CWQI decay with floor clamping
-        const decayedCWQI = calculateDecayedCWQI(originalCWQI, queuedAt);
+        // Use TRUE original CWQI for decay calculation to prevent compounding decay
+        const decayedCWQI = calculateDecayedCWQI(trueOriginalCWQI, queuedAt);
         
         // Use original NGC value (no artificial boosting per directive scope)
         const ngc = parseFloat(signal.ngc || signal.confidence || '0');
         const riskScore = parseFloat(signal.riskScore || '0.5');
         const profitRate = signal.expectedReturn ? parseFloat(signal.expectedReturn) : 0.15;
         
+        // Directive A3.R8.2: Use TRUE ORIGINAL CWQI for SQE evaluation during refresh
+        // Decay is only for ranking, not for re-evaluating qualification
+        // This prevents compounding decay causing premature expiry
         const sqeInput: SQEInput = {
           signalId: signal.signalId,
           symbol: signal.symbol,
@@ -439,17 +450,19 @@ class ReadyToBuyService {
           ngc,
           riskScore,
           profitRate,
-          cwqi: decayedCWQI
+          cwqi: trueOriginalCWQI  // A3.R8.2 FIX: Use TRUE original from metadata
         };
         
-        console.log(`[A3.R8][RECONFIRM] pair=${signal.symbol} status=${oldStatus}`);
-        const sqeResult = evaluateSignalQuality(sqeInput);
+        console.log(`[A3.R8.2][RECONFIRM] pair=${signal.symbol} status=${oldStatus} trueOriginalCWQI=${trueOriginalCWQI.toFixed(4)} decayedCWQI=${decayedCWQI.toFixed(4)}`);
+        // Directive A3.R8.2: skipDecay=true confirms we're using true original CWQI
+        const sqeResult = evaluateSignalQuality(sqeInput, { skipDecay: true });
         
         // Directive 8.8.4-A3.R8: Immediate expiry on SQE failure (no missed refresh counter)
         if (!sqeResult.passed) {
           // Expire signal immediately and delete from queue
           this.logRtbTrace(mode, signal.symbol, signal.strategy, oldStatus, 'expired', 'SQE_failure');
-          this.logSqeRejection(signal, sqeResult.reason || 'unknown', ngc, decayedCWQI);
+          // A3.R8.2: Log true original CWQI since that's what SQE evaluated
+          this.logSqeRejection(signal, sqeResult.reason || 'unknown', ngc, trueOriginalCWQI);
           
           await storage.updateRtbSignal(signal.id, {
             status: 'expired',
@@ -463,16 +476,16 @@ class ReadyToBuyService {
           continue;
         }
         
-        // Directive 8.8.4-A3.R8: Update status to 'reconfirmed' on successful refresh
-        const metadata = signal.metadata as Record<string, any> || {};
+        // Directive 8.8.4-A3.R8.2: Update status to 'reconfirmed' on successful refresh
+        // IMPORTANT: Preserve trueOriginalCWQI in metadata to prevent compounding decay
         await storage.updateRtbSignal(signal.id, {
           status: 'reconfirmed',
-          cwqi: decayedCWQI.toString(),
+          cwqi: decayedCWQI.toString(),  // Store decayed for ranking only
           lastRefreshedAt: now,
           metadata: {
             ...metadata,
             lastReconfirmedAt: now.toISOString(),
-            originalCwqi: originalCWQI.toString(),
+            originalCwqi: trueOriginalCWQI.toString(),  // A3.R8.2: Preserve true original
             decayApplied: true
           }
         });
