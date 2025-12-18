@@ -41,6 +41,8 @@ SQE Integrity Enforcement implements pair-level duplicate validation and continu
 
 RTB Stabilization & Diagnostics includes conditional TTL expiry for missed refreshes, skip-self dedupe in `queueSQESignal()`, CWQI floor clamping, auto-reinitialize refresh/TCL timers on startup, TCL threshold adjustments, `cleanupExpiredSignals()` on engine start, and SQE rejection diagnostic logging. Paper Trade History Retention Fix extends paper trade retention to 30 days.
 
+Central Clock Architecture (Directive 8.8.4-A3.R7) introduces a synchronized timing system using `CentralClockService` that emits 1-second ticks to coordinate all timing-dependent subsystems. FX5 Scanner, RTB Refresh, and TCL Watchdog now subscribe to the Central Clock for deterministic 30-second aligned intervals. The TCL Watchdog uses tick-based failsafe timing (default 120 seconds) and emits SlotOpened, RTBThresholdMet, and FailsafeTrigger events via an enhanced EventBus with a 200ms event queue processor for reliable event handling. The startup sequence ensures Central Clock starts first, followed by event listeners, then services.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.
