@@ -732,8 +732,27 @@ class ReadyToBuyService {
 
   /**
    * Expire a signal (mark as expired)
+   * Phase 8.8.4-A3.R3: Pre-cleanup step to delete prior expired entries before updating
    */
   async expireSignal(signalId: string, reason?: string): Promise<void> {
+    const signal = await storage.getRtbSignalById(signalId);
+    
+    if (!signal) {
+      console.warn(`[RTB] Cannot expire - signal ${signalId} not found`);
+      return;
+    }
+    
+    const deletedCount = await storage.deleteRtbSignals({
+      mode: signal.mode as 'live' | 'paper',
+      symbol: signal.symbol,
+      strategy: signal.strategy,
+      status: 'expired'
+    });
+    
+    if (deletedCount > 0) {
+      console.log(`[8.8.4-A3.R3][RTB_EXPIRE] Cleared ${deletedCount} prior expired entries for ${signal.symbol}/${signal.strategy}`);
+    }
+    
     await storage.updateRtbSignal(signalId, {
       status: 'expired',
       expiredAt: new Date(),
