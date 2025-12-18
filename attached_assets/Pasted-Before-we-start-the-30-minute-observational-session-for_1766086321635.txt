@@ -1,0 +1,37 @@
+Before we start the 30-minute observational session for Directive 8.8.4-A3.R7,
+I need to confirm several technical and behavioral points.
+
+Please answer each item below explicitly “YES” or “NO” with short context where needed.
+
+1️⃣ Central Clock
+- Does the Central Clock emit 1-second ticks to *all* timing-dependent subsystems (FX5 Scanner, RTB Refresh, TCL Watchdog)?
+- Is the FX5 Scanner configured with a 30-second warm-up delay before beginning its first scan?
+
+2️⃣ RTB Refresh Cycle
+- On every 30-second tick, does each signal in the RTB queue automatically receive a data refresh (pricing, metrics) and pass back through the SQE for validation?
+- If the refreshed signal *fails* SQE, is it immediately removed from the RTB queue?
+- If the refreshed signal *passes* SQE, is its status updated to `reconfirmed` and TTL reset to zero?
+- Is the “missed refresh 4× before expiring” safeguard still active?  If YES, please explain the technical reason and whether it can now be safely removed.
+
+3️⃣ RTB Signal Status Column
+- Are `active`, `reconfirmed`, and `expired` statuses actively maintained in real-time in the database?
+- When a signal is removed (for SQE failure or promotion), is it completely deleted from RTB, or left with `expired` status?
+
+4️⃣ TCL Event Behavior
+- Does TCL only listen for these 3 events: `SlotOpened`, `RTBThresholdMet`, and `FailsafeTrigger`?
+- When `RTBThresholdMet` fires (15 valid signals in queue), does TCL immediately promote to open trades and permanently disable the failsafe timer?
+- After first promotion, does TCL operate purely on event basis (slot-open triggers only)?
+- Is there any “newSignalAdded” event still subscribed within TCL? (It should NOT be.)
+
+5️⃣ Logging and Observability
+- Are the following log files generated automatically on each run?
+  a. `logs/tcl_event_trace_<timestamp>.log`
+  b. `logs/rtb_refresh_trace_<timestamp>.log`
+- Do these include timestamps and signal identifiers?
+- Can you confirm that no log buffering or Replit-specific throttling prevents them from writing in real-time?
+
+6️⃣ Diagnostic Confirmation
+- If a signal ever “misses” a refresh, what log message appears, and how is that condition handled?
+- In current implementation, what exact sequence of operations occurs when a signal hits its 30-second mark?  (List the function calls or main flow.)
+
+Once these confirmations are complete and verified, I will begin the 30-minute observational run.
