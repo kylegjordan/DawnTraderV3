@@ -1,0 +1,123 @@
+🧩 Updated Directive — Directive 8.8.4-A3.R8 (Final RTB Integrity + Observability Fix)
+Directive 8.8.4-A3.R8 — RTB Lifecycle Integrity and Observability Finalization
+
+Purpose:
+To finalize deterministic RTB signal lifecycle management and ensure complete operational visibility through accurate status tracking and trace logs.
+
+Scope:
+
+This directive applies to:
+
+server/services/fx5-scanner.ts
+
+server/core/rtb/ready_to_buy_service.ts
+
+shared/schema.ts
+
+server/services/central-clock.ts
+
+Logging configuration
+
+Changes Required
+1️⃣ FX5 Warm-Up Delay
+
+Add a 30-second delay after engine start before initiating the first FX5 scan:
+
+await new Promise(r => setTimeout(r, 30000));
+await this.scanMode('paper');
+await this.scanMode('live');
+
+
+✅ Ensures TCL and RTB listeners are ready before signals flow.
+
+2️⃣ RTB Status Lifecycle
+
+Update schema and logic to support full four-state lifecycle:
+
+Status	Trigger	Description
+active	On insertion into RTBQ	Newly validated signal, pending first refresh
+reconfirmed	On successful SQE revalidation	Signal remains valid, TTL reset
+promoted	When promoted by TCL	Trade created; RTBQ cleanup required
+expired	On SQE failure or TTL exceed	Signal invalidated, pending cleanup
+
+Implementation details:
+
+Modify shared/schema.ts ENUM.
+
+In queueSQESignal() set status='active'.
+
+In refreshAndRank(), if pass → status='reconfirmed'; if fail → status='expired'.
+
+In TCL promotion handler → status='promoted' then remove from RTBQ after trade creation.
+
+3️⃣ Immediate Expiry on SQE Failure
+
+Remove the MISSED_REFRESH_THRESHOLD logic completely:
+
+if (!sqePassed) {
+  signal.status = 'expired';
+  await storage.deleteRtbSignal(signal.id);
+  continue;
+}
+
+
+✅ No “missed refresh” counter. Any failed reconfirmation → immediate expiry.
+
+4️⃣ Persistent Diagnostic Logs
+
+Implement file-based trace logging:
+
+Log File	Contents
+logs/tcl_event_trace_<timestamp>.log	Every TCL event (SlotOpened, RTBThresholdMet, FailsafeTrigger, Promotion)
+logs/rtb_refresh_trace_<timestamp>.log	Every RTB refresh cycle (status changes, reconfirmations, expirations)
+
+Include:
+
+Timestamp
+
+Symbol
+
+Strategy
+
+Old → new status
+
+Event trigger (e.g., “refresh”, “promotion”, “expiry”)
+
+✅ Enable precise post-run analysis of signal and event flow.
+
+5️⃣ Verification Checklist
+
+Replit must confirm the following after implementation:
+
+Checkpoint	Expected Result
+FX5 warm-up delay	First [FX5Scanner] log appears ~T+30s
+RTB status transitions	visible in DB as active → reconfirmed → promoted/expired
+Immediate expiry	No [WARN] missedRefresh logs appear
+Trace logs	Both trace files appear in /logs and populate continuously
+Promoted cleanup	No lingering promoted rows remain in RTBQ after promotion
+6️⃣ Deliverables
+
+After completion, generate verification report:
+
+logs/validation/8.8.4-A3.R8_integrity_verification.md
+
+
+Document:
+
+Sample rows from RTBQ showing correct status transitions.
+
+Sample TCL event log excerpts.
+
+Confirmed warm-up delay and no missed refreshes.
+
+Outcome
+
+Once Directive 8.8.4-A3.R8 is applied and validated:
+
+All subsystems will operate under synchronized timing.
+
+Every signal will follow a complete, observable lifecycle.
+
+The TCL → RTBQ relationship will be visually verifiable.
+
+Observation runs will be deterministic and fully auditable.

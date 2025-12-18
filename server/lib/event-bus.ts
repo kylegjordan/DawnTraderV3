@@ -123,33 +123,67 @@ class EventBus extends EventEmitter {
     this.emit('mitigation_event', event);
   }
 
+  /**
+   * Directive 8.8.4-A3.R8: Log TCL trace event to persistent file
+   */
+  private logTclTrace(eventType: string, payload: any): void {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const logDir = path.join(process.cwd(), 'logs');
+      
+      if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true });
+      }
+      
+      const timestamp = new Date().toISOString();
+      const dateStr = timestamp.split('T')[0].replace(/-/g, '');
+      const logEntry = {
+        timestamp,
+        eventType,
+        ...payload
+      };
+      
+      const logPath = path.join(logDir, `tcl_event_trace_${dateStr}.log`);
+      fs.appendFileSync(logPath, JSON.stringify(logEntry) + '\n');
+    } catch (err) {
+      // Silent fail - diagnostic logging should not break event processing
+    }
+  }
+
   emitTCLActivated(event: TCLActivatedEvent): void {
     console.log(`[A3.R7][TCL_EVENT] type=TCL_ACTIVATED reason=${event.reason} mode=${event.mode} poolSize=${event.poolSize}`);
+    this.logTclTrace('TCL_ACTIVATED', event);
     this.emit('TCL_ACTIVATED', event);
   }
 
   emitTradeClosed(event: TradeClosedEvent): void {
     console.log(`[A3.R7][TRADE_CLOSED] symbol=${event.symbol} strategy=${event.strategy} PnL=${event.pnl.toFixed(2)} mode=${event.mode}`);
+    this.logTclTrace('TRADE_CLOSED', event);
     this.emit('TRADE_CLOSED', event);
   }
 
   emitPromotion(event: PromotionEvent): void {
     console.log(`[A3.R7][PROMOTION] symbol=${event.symbol} strategy=${event.strategy} cwqi=${event.cwqi.toFixed(4)} tradeId=${event.tradeId} mode=${event.mode}`);
+    this.logTclTrace('PROMOTION', event);
     this.emit('PROMOTION', event);
   }
 
   emitSlotOpened(event: SlotOpenedEvent): void {
     console.log(`[TCL][Event] SlotOpened received – promoting new trade (symbol=${event.symbol} slots=${event.slotsAvailable})`);
+    this.logTclTrace('SlotOpened', event);
     this.queueEvent('SlotOpened', event);
   }
 
   emitRTBThresholdMet(event: RTBThresholdMetEvent): void {
     console.log(`[TCL][Event] RTBThresholdMet received – ${event.poolSize} signals active`);
+    this.logTclTrace('RTBThresholdMet', event);
     this.emit('RTBThresholdMet', event);
   }
 
   emitFailsafeTrigger(event: FailsafeTriggerEvent): void {
     console.log(`[TCL][Event] FailsafeTrigger triggered after ${event.elapsedSeconds}s idle`);
+    this.logTclTrace('FailsafeTrigger', event);
     this.emit('FailsafeTrigger', event);
   }
 

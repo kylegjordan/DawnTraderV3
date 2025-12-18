@@ -78,13 +78,19 @@ export class Fx5ScannerService {
 
     this.isRunning = true;
     this.startTime = Date.now(); // REB 2.8.5B: Set actual start time when scanner starts
-    console.log('[FX5Scanner][A3.R7] Starting 30-second scanner with Central Clock integration');
+    console.log('[FX5Scanner][A3.R8] Starting 30-second scanner with Central Clock integration');
 
     // Ensure Central Clock is running
     if (!centralClock.getIsRunning()) {
       centralClock.start();
-      console.log('[FX5Scanner][A3.R7] Started Central Clock');
+      console.log('[FX5Scanner][A3.R8] Started Central Clock');
     }
+
+    // Directive 8.8.4-A3.R8: 30-second warm-up delay before first scan
+    // Ensures TCL and RTB listeners are ready before signals flow
+    console.log('[FX5Scanner][A3.R8] Waiting 30 seconds for TCL/RTB warm-up...');
+    await new Promise(r => setTimeout(r, 30000));
+    console.log('[FX5Scanner][A3.R8] Warm-up complete, starting first scan');
 
     // Run initial scan for both modes
     await this.scanMode('paper');

@@ -1753,7 +1753,8 @@ export const paperSimSessions = pgTable("paper_sim_sessions", {
 
 // Phase 8.8.4-B: RTB Signal Status Enum
 // Directive 8.8.4-A3.R7: Added "reconfirmed" status for signals successfully refreshed before expiry
-export const rtbSignalStatusEnum = pgEnum("rtb_signal_status", ["queued", "promoted", "expired", "rejected", "reconfirmed"]);
+// Directive 8.8.4-A3.R8: Added "active" status for newly validated signals pending first refresh
+export const rtbSignalStatusEnum = pgEnum("rtb_signal_status", ["queued", "promoted", "expired", "rejected", "reconfirmed", "active"]);
 
 // Phase 8.8.4-B: Ready-to-Buy (RTB) Signals Queue
 // Stores high-quality signals that pass quality guardrails but are blocked by capacity constraints

@@ -101,12 +101,10 @@ export interface RTBPromotionResult {
   reason?: string;
 }
 
-// Directive 8.8.4-A3.R2: Conditional expiry - signals expire after missing ≥4 refreshes
-// Each refresh is 30s, so 4 missed refreshes = 2 minutes of inactivity
-const MISSED_REFRESH_THRESHOLD = 4;
+// Directive 8.8.4-A3.R8: Immediate expiry on SQE failure (no missed refresh counter)
 const RTB_REFRESH_INTERVAL_MS = 30 * 1000; // 30 seconds
 
-// Directive 8.8.4-A3.R2: Fallback TTL for backwards compatibility (used if no refresh tracking)
+// Directive 8.8.4-A3.R8: Fallback TTL for backwards compatibility
 const SIGNAL_TTL_MS = 10 * 60 * 1000; // 10 minutes (extended fallback)
 
 // Directive 8.8.4-A3.R2: TCL Warm-Up threshold (reduced for faster activation)
@@ -392,14 +390,14 @@ class ReadyToBuyService {
   }
 
   /**
-   * Directive 8.8.4-A1-Extended + A3 + A3.R2: Refresh and dynamically re-rank RTB signals
+   * Directive 8.8.4-A3.R8: Refresh and dynamically re-rank RTB signals
    * 
    * Every 30 seconds (at end of FX5 cycle or RTB refresh cycle):
    * 1. Recalculate CWQI with decay for each signal (fresher signals rank higher)
    * 2. Apply CWQI floor clamping to prevent decay cascade
-   * 3. Re-validate signals through SQE with skipSelfCheck=true (allows reconfirmation)
-   * 4. Update lastReconfirmedAt timestamp and reset missedRefreshCount
-   * 5. Sort queue by CWQI descending (highest quality first)
+   * 3. Re-validate signals through SQE
+   * 4. Immediate expiry on SQE failure (no missed refresh counter)
+   * 5. Update status to 'reconfirmed' on successful refresh
    * 6. Broadcast rtb:updated to clients for UI refresh
    * 
    * @param mode - Trading mode ('paper' or 'live')
@@ -408,24 +406,25 @@ class ReadyToBuyService {
     const startTime = Date.now();
     
     try {
-      // Get all queued signals for this mode
+      // Get all active/reconfirmed signals for this mode
       const signals = await this.getQueuedSignals(mode);
       
       if (signals.length === 0) {
-        console.log(`[A3.R2][RTB_REFRESH] mode=${mode} no signals to refresh`);
+        console.log(`[A3.R8][RTB_REFRESH] mode=${mode} no signals to refresh`);
         return; // Nothing to refresh
       }
 
-      // Recalculate CWQI with decay and update lastReconfirmedAt
+      // Recalculate CWQI with decay and update status
       const now = new Date();
-      let updatedCount = 0;
-      let removedCount = 0;
+      let reconfirmedCount = 0;
+      let expiredCount = 0;
       
       for (const signal of signals) {
         const originalCWQI = parseFloat(signal.cwqi || '0');
         const queuedAt = signal.queuedAt;
+        const oldStatus = signal.status || 'active';
         
-        // Directive 8.8.4-A3.R2: Apply CWQI decay with floor clamping
+        // Directive 8.8.4-A3.R8: Apply CWQI decay with floor clamping
         const decayedCWQI = calculateDecayedCWQI(originalCWQI, queuedAt);
         
         // Use original NGC value (no artificial boosting per directive scope)
@@ -443,75 +442,44 @@ class ReadyToBuyService {
           cwqi: decayedCWQI
         };
         
-        // Directive 8.8.4-A3.R2: Self-dedupe is inherently skipped during reconfirmation
-        // because we're updating existing signals in-place, not calling queueSQESignal().
-        // The skipSelfCheck flag in queueSQESignal is for external callers that may
-        // re-queue existing RTB signals (e.g., manual reconfirmation workflows).
-        console.log(`[A3.R2][RECONFIRM] pair=${signal.symbol} skipSelfCheck=implicit (in-place update)`);
+        console.log(`[A3.R8][RECONFIRM] pair=${signal.symbol} status=${oldStatus}`);
         const sqeResult = evaluateSignalQuality(sqeInput);
         
-        // Remove signal if it fails SQE re-validation AND has been in queue too long
+        // Directive 8.8.4-A3.R8: Immediate expiry on SQE failure (no missed refresh counter)
         if (!sqeResult.passed) {
-          // Directive 8.8.4-A3.R2: Track missed refreshes instead of immediate expiry
-          const metadata = signal.metadata as Record<string, any> || {};
-          const missedRefreshes = (metadata.missedRefreshCount || 0) + 1;
+          // Expire signal immediately and delete from queue
+          this.logRtbTrace(mode, signal.symbol, signal.strategy, oldStatus, 'expired', 'SQE_failure');
+          this.logSqeRejection(signal, sqeResult.reason || 'unknown', ngc, decayedCWQI);
           
-          if (missedRefreshes >= MISSED_REFRESH_THRESHOLD) {
-            await this.expireSignal(signal.id, `SQE re-validation failed after ${missedRefreshes} refreshes: ${sqeResult.reason}`);
-            this.logSqeRejection(signal, sqeResult.reason || 'unknown', ngc, decayedCWQI);
-            console.log(`[8.8.4-A3.R2][SQE][EXPIRED] pair=${signal.symbol} missedRefreshes=${missedRefreshes}`);
-            removedCount++;
-          } else {
-            // Update missed refresh count but keep signal
-            await storage.updateRtbSignal(signal.id, {
-              metadata: { ...metadata, missedRefreshCount: missedRefreshes }
-            });
-            console.log(`[8.8.4-A3.R2][SQE][WARN] pair=${signal.symbol} missedRefreshes=${missedRefreshes}/${MISSED_REFRESH_THRESHOLD}`);
-          }
+          await storage.updateRtbSignal(signal.id, {
+            status: 'expired',
+            expiredAt: new Date()
+          });
+          // Directive 8.8.4-A3.R8: Delete expired signal from RTBQ
+          await storage.deleteRtbSignals({ mode, symbol: signal.symbol, strategy: signal.strategy, status: 'expired' });
+          
+          console.log(`[A3.R8][SQE][EXPIRED] pair=${signal.symbol} reason=${sqeResult.reason}`);
+          expiredCount++;
           continue;
         }
         
-        // Directive 8.8.4-A3.R2: Requeue via queueSQESignal with skipSelfCheck=true
-        // This is the mandated reconfirmation path that bypasses self-dedupe
+        // Directive 8.8.4-A3.R8: Update status to 'reconfirmed' on successful refresh
         const metadata = signal.metadata as Record<string, any> || {};
-        const reconfirmInput: SQESignalInput = {
-          signalId: signal.signalId,
-          mode,
-          symbol: signal.symbol,
-          strategy: signal.strategy,
-          entryPrice: parseFloat(signal.entryPrice || '0'),
-          stopPrice: parseFloat(signal.stopPrice || '0'),
-          targetPrice: signal.targetPrice ? parseFloat(signal.targetPrice) : undefined,
-          quantity: signal.quantity ? parseFloat(signal.quantity) : undefined,
-          notional: signal.notional ? parseFloat(signal.notional) : undefined,
-          confidence: ngc,
-          ngc,
-          riskScore,
-          expectedReturn: profitRate,
-          profitRate,
-          cwqi: decayedCWQI,
-          currentPrice: signal.currentPrice ? parseFloat(signal.currentPrice) : undefined,
-          volume24h: signal.volume24h ? parseFloat(signal.volume24h) : undefined,
-          skipSelfCheck: true, // Directive 8.8.4-A3.R2: Skip self-dedupe for reconfirmation
+        await storage.updateRtbSignal(signal.id, {
+          status: 'reconfirmed',
+          cwqi: decayedCWQI.toString(),
+          lastRefreshedAt: now,
           metadata: {
             ...metadata,
             lastReconfirmedAt: now.toISOString(),
             originalCwqi: originalCWQI.toString(),
-            decayApplied: true,
-            missedRefreshCount: 0 // Reset on successful refresh
+            decayApplied: true
           }
-        };
+        });
         
-        console.log(`[A3.R2][RECONFIRM] pair=${signal.symbol} skipSelfCheck=true via queueSQESignal`);
-        const requeued = await this.queueSQESignal(reconfirmInput);
-        
-        if (requeued) {
-          updatedCount++;
-        } else {
-          // queueSQESignal returned null - likely duplicate_pair_active
-          console.log(`[A3.R2][RECONFIRM] pair=${signal.symbol} rejected by queueSQESignal (likely active position)`);
-          removedCount++;
-        }
+        this.logRtbTrace(mode, signal.symbol, signal.strategy, oldStatus, 'reconfirmed', 'refresh');
+        console.log(`[A3.R8][RECONFIRM] pair=${signal.symbol} ${oldStatus}→reconfirmed CWQI=${decayedCWQI.toFixed(4)}`);
+        reconfirmedCount++;
       }
 
       // Broadcast rtb:updated to clients for UI refresh
@@ -521,17 +489,50 @@ class ReadyToBuyService {
           mode,
           timestamp: now.toISOString(),
           signalCount: signals.length,
-          refreshedCount: updatedCount,
-          removedCount
+          reconfirmedCount,
+          expiredCount
         },
         mode
       });
 
       const elapsedMs = Date.now() - startTime;
-      console.log(`[A3.R2][RTB_REFRESH] mode=${mode} updated=${updatedCount} removed=${removedCount} remaining=${signals.length - removedCount} elapsed=${elapsedMs}ms`);
+      console.log(`[A3.R8][RTB_REFRESH] mode=${mode} reconfirmed=${reconfirmedCount} expired=${expiredCount} remaining=${signals.length - expiredCount} elapsed=${elapsedMs}ms`);
       
     } catch (error) {
-      console.error(`[8.8.4-A3][RTB_RERANK][ERROR] mode=${mode}:`, error);
+      console.error(`[A3.R8][RTB_RERANK][ERROR] mode=${mode}:`, error);
+    }
+  }
+
+  /**
+   * Directive 8.8.4-A3.R8: Log RTB trace event to persistent file
+   * Tracks all status transitions for observability
+   */
+  private logRtbTrace(mode: TradingMode, symbol: string, strategy: string, oldStatus: string, newStatus: string, trigger: string): void {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const logDir = path.join(process.cwd(), 'logs');
+      
+      if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true });
+      }
+      
+      const timestamp = new Date().toISOString();
+      const dateStr = timestamp.split('T')[0].replace(/-/g, '');
+      const logEntry = {
+        timestamp,
+        mode,
+        symbol,
+        strategy,
+        oldStatus,
+        newStatus,
+        trigger
+      };
+      
+      const logPath = path.join(logDir, `rtb_refresh_trace_${dateStr}.log`);
+      fs.appendFileSync(logPath, JSON.stringify(logEntry) + '\n');
+    } catch (err) {
+      // Silent fail - diagnostic logging should not break refresh cycle
     }
   }
 
@@ -724,14 +725,38 @@ class ReadyToBuyService {
 
   /**
    * Get all queued signals for a mode
+   * Directive 8.8.4-A3.R8: Include both 'active' and 'reconfirmed' statuses
    */
   async getQueuedSignals(mode: TradingMode): Promise<RtbSignal[]> {
-    return storage.getRtbSignals({
+    // Get active signals (newly inserted, pending first refresh)
+    const activeSignals = await storage.getRtbSignals({
+      mode,
+      status: 'active',
+      orderBy: 'cwqi',
+      orderDir: 'desc',
+    });
+    
+    // Get reconfirmed signals (passed at least one refresh)
+    const reconfirmedSignals = await storage.getRtbSignals({
+      mode,
+      status: 'reconfirmed',
+      orderBy: 'cwqi',
+      orderDir: 'desc',
+    });
+    
+    // Also include legacy 'queued' status for backward compatibility
+    const queuedSignals = await storage.getRtbSignals({
       mode,
       status: 'queued',
       orderBy: 'cwqi',
       orderDir: 'desc',
     });
+    
+    // Combine and sort by CWQI descending
+    const allSignals = [...activeSignals, ...reconfirmedSignals, ...queuedSignals];
+    allSignals.sort((a, b) => parseFloat(b.cwqi || '0') - parseFloat(a.cwqi || '0'));
+    
+    return allSignals;
   }
 
   /**
@@ -804,6 +829,7 @@ class ReadyToBuyService {
 
   /**
    * Promote a signal from queue to execution
+   * Directive 8.8.4-A3.R8: Log trace and delete signal after promotion
    */
   async promoteSignal(signalId: string, tradeId: string): Promise<void> {
     const signal = await storage.getRtbSignalById(signalId);
@@ -812,6 +838,12 @@ class ReadyToBuyService {
       console.warn(`[RTB] Cannot promote - signal ${signalId} not found`);
       return;
     }
+
+    const oldStatus = signal.status || 'active';
+    const mode = signal.mode as TradingMode;
+
+    // Directive 8.8.4-A3.R8: Log promotion trace
+    this.logRtbTrace(mode, signal.symbol, signal.strategy, oldStatus, 'promoted', 'TCL_promotion');
 
     await storage.updateRtbSignal(signalId, {
       status: 'promoted',
@@ -822,7 +854,7 @@ class ReadyToBuyService {
     // Record SLAL PROMOTED event
     signalLifecycleAudit.recordPromoted(
       signal.signalId,
-      signal.mode as TradingMode,
+      mode,
       signal.symbol,
       signal.strategy,
       {
@@ -832,7 +864,10 @@ class ReadyToBuyService {
       }
     );
 
-    console.log(`[RTB] Promoted signal ${signal.symbol}/${signal.strategy} to trade ${tradeId}`);
+    // Directive 8.8.4-A3.R8: Delete signal from RTBQ after promotion
+    await storage.deleteRtbSignals({ mode, symbol: signal.symbol, strategy: signal.strategy, status: 'promoted' });
+
+    console.log(`[A3.R8][RTB] Promoted signal ${signal.symbol}/${signal.strategy} to trade ${tradeId} and removed from RTBQ`);
   }
 
   /**
@@ -1021,12 +1056,15 @@ class ReadyToBuyService {
       ngc: input.ngc.toString(), // Directive 8.8.4-C.14.A
       currentPrice: input.currentPrice?.toString(), // Directive 8.8.4-C.14.A
       volume24h: input.volume24h?.toString(), // Directive 8.8.4-C.14.A
-      status: 'queued',
+      status: 'active', // Directive 8.8.4-A3.R8: Use 'active' for new signals pending first refresh
       queuedAt: now,
       expiresAt,
       blockReason: 'SQE_QUALIFIED', // Mark as SQE-qualified, not capacity-blocked
       metadata: input.metadata as any,
     };
+
+    // Directive 8.8.4-A3.R8: Log trace event for new signal insertion
+    this.logRtbTrace(input.mode, normalizedSymbol, input.strategy, 'queued', 'active', 'insertion');
 
     // Phase 8.8.4-C.13.B: Use upsert to prevent duplicate key errors
     const signal = await storage.upsertRtbSignal(insertData);
@@ -1059,13 +1097,11 @@ class ReadyToBuyService {
 
   /**
    * Phase 8.8.4-C.5: Get the current pool size for a mode
-   * @returns Number of queued signals
+   * Directive 8.8.4-A3.R8: Include active/reconfirmed/queued statuses
+   * @returns Number of signals in RTB queue
    */
   async getPoolSize(mode: TradingMode): Promise<number> {
-    const signals = await storage.getRtbSignals({
-      mode,
-      status: 'queued',
-    });
+    const signals = await this.getQueuedSignals(mode);
     return signals.length;
   }
 
