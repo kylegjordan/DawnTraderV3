@@ -1,16 +1,22 @@
 /**
  * Directive 8.8.4-A3.R2: Trading Bootstrap - Auto-reinitialize RTB/TCL on Startup
+ * Directive 8.8.4-A3.R7: Central Clock Integration for synchronized timing
  * 
  * On process boot, checks if trading engine was active (isEngineActive === true)
  * and auto-restarts the refresh cycle and TCL watchdog.
  * 
- * This fixes "engine active but inert" state after server restarts where the
- * database shows isEngineActive=true but the setInterval timers were lost.
+ * STARTUP ORDER (A3.R7):
+ * 1. Start Central Clock first
+ * 2. Register event listeners
+ * 3. Initialize RTB/TCL with clock subscriptions
+ * 4. Start FX5 scanner if engine active
  */
 
 import { storage } from '../storage';
 import { readyToBuyService } from '../core/rtb/ready_to_buy_service';
 import { tclWatchdog } from '../core/rtb/tcl_watchdog';
+import { centralClock } from '../services/central-clock';
+import { eventBus } from '../lib/event-bus';
 import type { TradingMode } from '../services/guardrail-policy';
 
 let bootstrapped = false;
@@ -21,14 +27,26 @@ let bootstrapped = false;
  */
 export async function bootstrapTradingServices(): Promise<void> {
   if (bootstrapped) {
-    console.log('[A3.R2][Startup] Trading services already bootstrapped, skipping');
+    console.log('[A3.R7][Startup] Trading services already bootstrapped, skipping');
     return;
   }
 
   try {
-    console.log('[A3.R2][Startup] Checking for active trading sessions...');
+    console.log('[A3.R7][Startup] Checking for active trading sessions...');
 
-    // Check both paper and live modes
+    console.log('[A3.R7][Startup] Step 1: Starting Central Clock...');
+    centralClock.start();
+    console.log('[A3.R7][Startup] ✅ Central Clock started');
+
+    console.log('[A3.R7][Startup] Step 2: Registering event listeners...');
+    eventBus.onTCLActivated((event) => {
+      console.log(`[A3.R7][EventListener] TCL_ACTIVATED: mode=${event.mode} reason=${event.reason}`);
+    });
+    eventBus.onSlotOpened((event) => {
+      console.log(`[A3.R7][EventListener] SlotOpened: symbol=${event.symbol} slots=${event.slotsAvailable}`);
+    });
+    console.log('[A3.R7][Startup] ✅ Event listeners registered');
+
     const modes: TradingMode[] = ['paper', 'live'];
     
     for (const mode of modes) {
@@ -36,40 +54,39 @@ export async function bootstrapTradingServices(): Promise<void> {
         const systemContext = await storage.getSystemContext(mode);
         
         if (systemContext?.isEngineActive) {
-          console.log(`[A3.R2][Startup] Found active ${mode} engine, reinitializing services...`);
+          console.log(`[A3.R7][Startup] Found active ${mode} engine, reinitializing services...`);
           
-          // Directive 8.8.4-A3.R2 #6: Clean up expired signals on startup
+          console.log(`[A3.R7][Startup] Step 3: Cleanup expired signals for ${mode}...`);
           const expiredCount = await readyToBuyService.cleanupExpiredSignals(mode);
-          console.log(`[A3.R2][Startup] Cleaned ${expiredCount} expired signals for ${mode} mode`);
+          console.log(`[A3.R7][Startup] Cleaned ${expiredCount} expired signals for ${mode} mode`);
           
-          // Start refresh cycle
+          console.log(`[A3.R7][Startup] Step 4: Starting RTB refresh cycle for ${mode}...`);
           readyToBuyService.startRefreshCycle(mode);
-          console.log(`[A3.R2][Startup] Refresh cycle started for ${mode} mode`);
+          console.log(`[A3.R7][Startup] Refresh cycle started for ${mode} mode`);
           
-          // Set engine start time for TCL failsafe
           readyToBuyService.setEngineStartTime(mode);
-          console.log(`[A3.R2][Startup] TCL failsafe timer started for ${mode} mode`);
+          console.log(`[A3.R7][Startup] Engine start time set for ${mode} mode`);
           
-          // Start TCL watchdog
+          console.log(`[A3.R7][Startup] Step 5: Starting TCL watchdog for ${mode}...`);
           tclWatchdog.start(mode);
-          console.log(`[A3.R2][Startup] TCL watchdog started for ${mode} mode`);
+          console.log(`[A3.R7][Startup] TCL watchdog started for ${mode} mode`);
           
-          console.log(`[A3.R2][Startup] ✅ Refresh/TCL timers initialized for ${mode} (engine active=true)`);
-          console.log(`[A3.R2][RTB] TTL logic → conditional expiry mode (≥4 missed refreshes)`);
+          console.log(`[A3.R7][Startup] ✅ All services initialized for ${mode} (engine active=true)`);
+          console.log(`[A3.R7][RTB] TTL logic → conditional expiry mode (≥4 missed refreshes)`);
         } else {
-          console.log(`[A3.R2][Startup] ${mode} engine is inactive, skipping timer initialization`);
+          console.log(`[A3.R7][Startup] ${mode} engine is inactive, skipping timer initialization`);
         }
       } catch (err) {
-        console.error(`[A3.R2][Startup] Error checking ${mode} mode:`, err);
+        console.error(`[A3.R7][Startup] Error checking ${mode} mode:`, err);
       }
     }
 
     bootstrapped = true;
-    console.log('[A3.R2][Startup] Trading services bootstrap complete');
+    console.log('[A3.R7][Startup] Trading services bootstrap complete');
+    console.log(`[A3.R7][Startup] Central Clock tick: ${centralClock.getTickNumber()}`);
     
   } catch (error) {
-    console.error('[A3.R2][Startup] Failed to bootstrap trading services:', error);
-    // Don't throw - allow server startup to continue
+    console.error('[A3.R7][Startup] Failed to bootstrap trading services:', error);
   }
 }
 

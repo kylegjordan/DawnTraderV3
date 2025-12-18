@@ -2,13 +2,14 @@
  * FX5 Scanner Service - Always-On 30-Second Market Scanner
  * REB 2.1 RESTORATION (Phase 8.6.7 Architecture)
  * REB 2.6: Passive learning mode enforcement for Active Pool
+ * Directive 8.8.4-A3.R7: Central Clock Integration
  * 
  * Restored to batch-first → FX5 filter architecture per Phase 8.6.7 truth state.
  * Uses collectMixedBatch() for 60-pair Top-N/Tier-B rotation instead of universe-scale filtering.
  * 
  * Architecture:
  * - Initializes at server startup
- * - Runs 30-second intervals for each mode
+ * - Runs 30-second intervals aligned with Central Clock ticks
  * - Loads screener filters and executes batch-first FX5 filtering
  * - Uses collectMixedBatch() from market-scanner.ts (Phase 8.6.7)
  * - Updates Stage-3 cache and emits WebSocket events
@@ -27,9 +28,11 @@ import { nanoid } from 'nanoid';
 import type { ScreenerFilters } from '@shared/schema';
 import { recordScanFor24h, recordScanCompletion, getCyclesPerHour, get24hSummary } from './fx5-24h-window.js';
 import { readyToBuyService } from '../core/rtb/ready_to_buy_service.js';
+import { centralClock, ClockTick } from './central-clock.js';
 
-const SCAN_INTERVAL_MS = 30 * 1000; // 30 seconds
-const CYCLES_PER_HOUR = Math.round(3600000 / SCAN_INTERVAL_MS); // 120 for 30s intervals
+const SCAN_INTERVAL_SECONDS = 30; // 30 seconds aligned with clock ticks
+const SCAN_INTERVAL_MS = SCAN_INTERVAL_SECONDS * 1000; // For backwards compatibility
+const CYCLES_PER_HOUR = Math.round(3600 / SCAN_INTERVAL_SECONDS); // 120 for 30s intervals
 
 interface ScanResult {
   mode: 'paper' | 'live';
@@ -45,12 +48,12 @@ interface ScanResult {
 export class Fx5ScannerService {
   private filteredPairsService: FilteredPairsService;
   private krakenService: KrakenService;
-  private paperTimer: NodeJS.Timeout | null = null;
-  private liveTimer: NodeJS.Timeout | null = null;
   private isRunning = false;
   private startTime: number = 0; // REB 2.8.5B: Track actual scanner start time
   private paperCycleCount: number = 0; // REB 2.8.15: Track cycle number for diagnostics
   private liveCycleCount: number = 0;  // REB 2.8.15: Track cycle number for diagnostics
+  private isScanning = false; // Directive 8.8.4-A3.R7: Prevent concurrent scans
+  private clockTickHandler: ((tick: ClockTick) => void) | null = null;
 
   constructor() {
     this.filteredPairsService = new FilteredPairsService();
@@ -64,6 +67,7 @@ export class Fx5ScannerService {
 
   /**
    * Start the FX5 scanner for both modes
+   * Directive 8.8.4-A3.R7: Uses Central Clock for synchronized timing
    * This runs independently of trading engine state
    */
   async start(): Promise<void> {
@@ -74,52 +78,59 @@ export class Fx5ScannerService {
 
     this.isRunning = true;
     this.startTime = Date.now(); // REB 2.8.5B: Set actual start time when scanner starts
-    console.log('[FX5Scanner] Starting 30-second scanner for paper and live modes');
+    console.log('[FX5Scanner][A3.R7] Starting 30-second scanner with Central Clock integration');
+
+    // Ensure Central Clock is running
+    if (!centralClock.getIsRunning()) {
+      centralClock.start();
+      console.log('[FX5Scanner][A3.R7] Started Central Clock');
+    }
 
     // Run initial scan for both modes
     await this.scanMode('paper');
     await this.scanMode('live');
 
-    // Schedule recurring scans
-    this.paperTimer = setInterval(async () => {
-      try {
-        await this.scanMode('paper');
-      } catch (error) {
-        console.error('[FX5Scanner] Paper scan error:', error);
+    // Directive 8.8.4-A3.R7: Subscribe to Central Clock for 30-second aligned scans
+    this.clockTickHandler = async (tick: ClockTick) => {
+      if (!this.isRunning || this.isScanning) return;
+      
+      // Run every 30 ticks (30 seconds)
+      if (tick.tickNumber > 0 && tick.tickNumber % SCAN_INTERVAL_SECONDS === 0) {
+        this.isScanning = true;
+        try {
+          console.log(`[FX5Scanner][A3.R7][TICK] tickNumber=${tick.tickNumber} drift=${tick.drift}ms`);
+          await Promise.all([
+            this.scanMode('paper').catch(err => console.error('[FX5Scanner] Paper scan error:', err)),
+            this.scanMode('live').catch(err => console.error('[FX5Scanner] Live scan error:', err))
+          ]);
+        } finally {
+          this.isScanning = false;
+        }
       }
-    }, SCAN_INTERVAL_MS);
+    };
 
-    this.liveTimer = setInterval(async () => {
-      try {
-        await this.scanMode('live');
-      } catch (error) {
-        console.error('[FX5Scanner] Live scan error:', error);
-      }
-    }, SCAN_INTERVAL_MS);
-
-    console.log('[FX5Scanner] ✅ Started (interval=30s)');
+    centralClock.subscribe('FX5Scanner', this.clockTickHandler);
+    console.log('[FX5Scanner][A3.R7] ✅ Started with Central Clock (interval=30s aligned)');
   }
 
   /**
    * Stop the FX5 scanner
+   * Directive 8.8.4-A3.R7: Unsubscribe from Central Clock
    */
   stop(): void {
     if (!this.isRunning) {
       return;
     }
 
-    if (this.paperTimer) {
-      clearInterval(this.paperTimer);
-      this.paperTimer = null;
-    }
-
-    if (this.liveTimer) {
-      clearInterval(this.liveTimer);
-      this.liveTimer = null;
+    // Unsubscribe from Central Clock
+    if (this.clockTickHandler) {
+      centralClock.unsubscribe('FX5Scanner');
+      this.clockTickHandler = null;
     }
 
     this.isRunning = false;
-    console.log('[FX5Scanner] Stopped');
+    this.isScanning = false;
+    console.log('[FX5Scanner][A3.R7] Stopped');
   }
 
   /**

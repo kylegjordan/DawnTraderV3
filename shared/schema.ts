@@ -1752,7 +1752,8 @@ export const paperSimSessions = pgTable("paper_sim_sessions", {
 }));
 
 // Phase 8.8.4-B: RTB Signal Status Enum
-export const rtbSignalStatusEnum = pgEnum("rtb_signal_status", ["queued", "promoted", "expired", "rejected"]);
+// Directive 8.8.4-A3.R7: Added "reconfirmed" status for signals successfully refreshed before expiry
+export const rtbSignalStatusEnum = pgEnum("rtb_signal_status", ["queued", "promoted", "expired", "rejected", "reconfirmed"]);
 
 // Phase 8.8.4-B: Ready-to-Buy (RTB) Signals Queue
 // Stores high-quality signals that pass quality guardrails but are blocked by capacity constraints
@@ -1783,6 +1784,9 @@ export const rtbSignals = pgTable("rtb_signals", {
   promotedAt: timestamp("promoted_at", { withTimezone: true }),
   expiredAt: timestamp("expired_at", { withTimezone: true }),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(), // TTL: queuedAt + 3 minutes
+  // Directive 8.8.4-A3.R7: Refresh tracking for Central Clock integration
+  lastRefreshedAt: timestamp("last_refreshed_at", { withTimezone: true }), // Last successful refresh timestamp
+  missedRefreshes: integer("missed_refreshes").default(0), // Count of failed refresh attempts
   blockReason: varchar("block_reason", { length: 50 }), // Original capacity block: MAX_TRADES, MAX_TOTAL_EXPOSURE, etc.
   promotedTradeId: varchar("promoted_trade_id"), // Trade ID if promoted to execution
   metadata: jsonb("metadata"), // Original signal data for re-evaluation

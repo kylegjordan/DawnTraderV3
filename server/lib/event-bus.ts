@@ -2,12 +2,14 @@ import { EventEmitter } from 'events';
 
 /**
  * Global Event Bus for inter-service communication
+ * Directive 8.8.4-A3.R7: Enhanced event handling with queue reliability
  * 
  * Used for event-driven architecture across services:
  * - Introspection events (bias detection, confidence drift)
  * - Mitigation events (bias corrections applied)
  * - System events (health checks, status changes)
  * - TCL events (Phase 8.8.4-C.12: event-driven TCL activation)
+ * - Directive A3.R7 events: SlotOpened, RTBThresholdMet, FailsafeTrigger
  */
 
 export type TradingMode = 'paper' | 'live';
@@ -38,16 +40,71 @@ export interface PromotionEvent {
   timestamp: string;
 }
 
+export interface SlotOpenedEvent {
+  mode: TradingMode;
+  symbol: string;
+  strategy: string;
+  tradeId: string;
+  pnl: number;
+  timestamp: string;
+  slotsAvailable: number;
+}
+
+export interface RTBThresholdMetEvent {
+  mode: TradingMode;
+  poolSize: number;
+  threshold: number;
+  timestamp: string;
+}
+
+export interface FailsafeTriggerEvent {
+  mode: TradingMode;
+  elapsedSeconds: number;
+  timestamp: string;
+}
+
+type QueuedEvent = {
+  type: string;
+  payload: any;
+  timestamp: number;
+};
+
 class EventBus extends EventEmitter {
+  private eventQueue: QueuedEvent[] = [];
+  private isProcessing = false;
+  private queueInterval: NodeJS.Timeout | null = null;
+
   constructor() {
     super();
-    // Increase max listeners to prevent warnings for many subscribers
     this.setMaxListeners(50);
+    this.startQueueProcessor();
   }
 
-  /**
-   * Emit an introspection event (bias detected, drift observed, etc.)
-   */
+  private startQueueProcessor(): void {
+    if (this.queueInterval) return;
+    
+    this.queueInterval = setInterval(async () => {
+      if (this.eventQueue.length > 0 && !this.isProcessing) {
+        this.isProcessing = true;
+        const next = this.eventQueue.shift();
+        if (next) {
+          try {
+            this.emit(next.type, next.payload);
+          } catch (error) {
+            console.error(`[A3.R7][EVENT_BUS] Error processing queued event ${next.type}:`, error);
+          }
+        }
+        this.isProcessing = false;
+      }
+    }, 200);
+    
+    console.log('[A3.R7][EVENT_BUS] Event queue processor started');
+  }
+
+  private queueEvent(type: string, payload: any): void {
+    this.eventQueue.push({ type, payload, timestamp: Date.now() });
+  }
+
   emitIntrospectionEvent(event: {
     type: string;
     userId?: string;
@@ -57,9 +114,6 @@ class EventBus extends EventEmitter {
     this.emit('introspection_event', event);
   }
 
-  /**
-   * Emit a mitigation event (correction applied, weights adjusted, etc.)
-   */
   emitMitigationEvent(event: {
     type: string;
     userId?: string;
@@ -69,57 +123,60 @@ class EventBus extends EventEmitter {
     this.emit('mitigation_event', event);
   }
 
-  /**
-   * Phase 8.8.4-C.12: Emit TCL_ACTIVATED event
-   * Triggered when TCL transitions to ACTIVE state (after 5 min or 100 signals)
-   */
   emitTCLActivated(event: TCLActivatedEvent): void {
-    console.log(`[8.8.4-C.12][TCL_EVENT] type=TCL_ACTIVATED reason=${event.reason} mode=${event.mode} poolSize=${event.poolSize}`);
+    console.log(`[A3.R7][TCL_EVENT] type=TCL_ACTIVATED reason=${event.reason} mode=${event.mode} poolSize=${event.poolSize}`);
     this.emit('TCL_ACTIVATED', event);
   }
 
-  /**
-   * Phase 8.8.4-C.12: Emit TRADE_CLOSED event
-   * Triggered when a trade is closed, signaling capacity freed up
-   */
   emitTradeClosed(event: TradeClosedEvent): void {
-    console.log(`[8.8.4-C.12][TRADE_CLOSED] symbol=${event.symbol} strategy=${event.strategy} PnL=${event.pnl.toFixed(2)} mode=${event.mode}`);
+    console.log(`[A3.R7][TRADE_CLOSED] symbol=${event.symbol} strategy=${event.strategy} PnL=${event.pnl.toFixed(2)} mode=${event.mode}`);
     this.emit('TRADE_CLOSED', event);
   }
 
-  /**
-   * Phase 8.8.4-C.12: Emit PROMOTION event
-   * Triggered when a signal is promoted from RTB queue to active trade
-   */
   emitPromotion(event: PromotionEvent): void {
-    console.log(`[8.8.4-C.12][PROMOTION] symbol=${event.symbol} strategy=${event.strategy} cwqi=${event.cwqi.toFixed(4)} tradeId=${event.tradeId} mode=${event.mode}`);
+    console.log(`[A3.R7][PROMOTION] symbol=${event.symbol} strategy=${event.strategy} cwqi=${event.cwqi.toFixed(4)} tradeId=${event.tradeId} mode=${event.mode}`);
     this.emit('PROMOTION', event);
   }
 
-  /**
-   * Phase 8.8.4-C.12: Subscribe to TCL_ACTIVATED events
-   */
+  emitSlotOpened(event: SlotOpenedEvent): void {
+    console.log(`[TCL][Event] SlotOpened received – promoting new trade (symbol=${event.symbol} slots=${event.slotsAvailable})`);
+    this.queueEvent('SlotOpened', event);
+  }
+
+  emitRTBThresholdMet(event: RTBThresholdMetEvent): void {
+    console.log(`[TCL][Event] RTBThresholdMet received – ${event.poolSize} signals active`);
+    this.emit('RTBThresholdMet', event);
+  }
+
+  emitFailsafeTrigger(event: FailsafeTriggerEvent): void {
+    console.log(`[TCL][Event] FailsafeTrigger triggered after ${event.elapsedSeconds}s idle`);
+    this.emit('FailsafeTrigger', event);
+  }
+
   onTCLActivated(handler: (event: TCLActivatedEvent) => void): void {
     this.on('TCL_ACTIVATED', handler);
   }
 
-  /**
-   * Phase 8.8.4-C.12: Subscribe to TRADE_CLOSED events
-   */
   onTradeClosed(handler: (event: TradeClosedEvent) => void): void {
     this.on('TRADE_CLOSED', handler);
   }
 
-  /**
-   * Phase 8.8.4-C.12: Subscribe to PROMOTION events
-   */
   onPromotion(handler: (event: PromotionEvent) => void): void {
     this.on('PROMOTION', handler);
   }
 
-  /**
-   * Phase 8.8.4-C.12: Remove TCL event listeners for a specific handler
-   */
+  onSlotOpened(handler: (event: SlotOpenedEvent) => void): void {
+    this.on('SlotOpened', handler);
+  }
+
+  onRTBThresholdMet(handler: (event: RTBThresholdMetEvent) => void): void {
+    this.on('RTBThresholdMet', handler);
+  }
+
+  onFailsafeTrigger(handler: (event: FailsafeTriggerEvent) => void): void {
+    this.on('FailsafeTrigger', handler);
+  }
+
   offTCLActivated(handler: (event: TCLActivatedEvent) => void): void {
     this.off('TCL_ACTIVATED', handler);
   }
@@ -131,7 +188,17 @@ class EventBus extends EventEmitter {
   offPromotion(handler: (event: PromotionEvent) => void): void {
     this.off('PROMOTION', handler);
   }
+
+  offSlotOpened(handler: (event: SlotOpenedEvent) => void): void {
+    this.off('SlotOpened', handler);
+  }
+
+  getQueueStatus(): { queueLength: number; isProcessing: boolean } {
+    return {
+      queueLength: this.eventQueue.length,
+      isProcessing: this.isProcessing
+    };
+  }
 }
 
-// Export singleton instance
 export const eventBus = new EventBus();

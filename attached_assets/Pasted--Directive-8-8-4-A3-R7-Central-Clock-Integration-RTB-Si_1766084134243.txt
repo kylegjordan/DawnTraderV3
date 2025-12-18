@@ -1,0 +1,166 @@
+🔧 Directive 8.8.4-A3.R7 — Central Clock Integration, RTB Signal States, and TCL Event Synchronization
+
+Objective:
+Stabilize the trading engine timing architecture, synchronize inter-module coordination, and implement a unified clock reference to eliminate inconsistent refreshes and event misses.
+
+This directive will:
+
+Establish a Central Clock shared by all engine subsystems.
+
+Implement explicit status tracking (expired, active, reconfirmed) for RTB signals.
+
+Introduce TCL event-handling diagnostics and ensure failsafe behavior is deterministic.
+
+Define a unified sequence order for engine startup and runtime operation.
+
+1. Central Clock Implementation
+1.1 Overview
+
+Create a single shared CentralClockService that emits time ticks every 1 s.
+All time-dependent modules subscribe to this same source for synchronization.
+
+1.2 Implementation
+// services/central-clock.ts
+import { EventEmitter } from 'events';
+class CentralClockService extends EventEmitter {
+  constructor(intervalMs = 1000) {
+    super();
+    setInterval(() => this.emit('tick', Date.now()), intervalMs);
+  }
+}
+export const centralClock = new CentralClockService();
+
+
+All modules import this shared clock:
+
+import { centralClock } from './central-clock';
+centralClock.on('tick', now => this.handleTick(now));
+
+1.3 Subscribers
+Module	Function	Action
+FX5 Scanner	performScan()	Runs every 30 s on tick alignment
+RTB Refresh	revalidateSignals()	Checks every tick for signals exceeding 30 s TTL
+TCL	checkFailsafe()	Checks elapsed time since last promotion
+Monitoring	recordClockHealth()	Ensures drift < 100 ms
+2. RTB Status Tracking
+2.1 New Status Field
+
+Add a status column to the ready_to_buy_signals table:
+
+ALTER TABLE ready_to_buy_signals ADD COLUMN status ENUM('active','expired','reconfirmed') DEFAULT 'active';
+
+2.2 Behavior
+Condition	Status	Action
+First insertion	active	Normal creation
+TTL ≥ 30 s without reconfirmation	expired	Excluded from promotion
+Successfully refreshed before expiry	reconfirmed	Resets TTL timer
+Promoted to open trade	(archived / removed)	Removed from queue
+2.3 Display
+
+Expose status in the UI’s Ready-to-Buy table with color coding:
+🟢 Active 🟡 Reconfirmed 🔴 Expired
+
+3. TCL Event Synchronization
+3.1 Event Model
+
+TCL listens for three event types only:
+
+SlotOpened — emitted by Trade Manager when a trade closes.
+
+RTBThresholdMet — emitted once when 15 unexpired signals exist in RTB queue (pre-failsafe).
+
+FailsafeTrigger — internal timer after 120 s of inactivity.
+
+No “new signal added” triggers TCL unless it raises RTBThresholdMet.
+
+3.2 Failsafe Behavior
+Condition	Result
+Failsafe triggered first (no RTB threshold reached)	Promotes available eligible signals
+RTBThresholdMet occurs first (≥ 15 active signals)	TCL promotes trades immediately and failsafe is permanently disabled
+After first activation	TCL runs exclusively on event basis (slot opened + signal availability)
+if (event === 'RTBThresholdMet') {
+   promoteTopSignals();
+   this.failsafeDisabled = true;
+   clearInterval(this.failsafeTimer);
+}
+
+3.3 Event Diagnostics
+
+Add lightweight logging to confirm visibility:
+
+[TCL][Event] RTBThresholdMet received – 15 signals active
+[TCL][Event] SlotOpened received – promoting new trade
+[TCL][Event] Failsafe triggered after 120 s idle
+
+4. Event Reliability Verification
+4.1 Shared Event Bus
+
+Ensure all services use one emitter instance:
+
+// services/event-bus.ts
+import { EventEmitter } from 'events';
+export const eventBus = new EventEmitter();
+
+4.2 Event Queue
+
+Implement internal queuing to prevent dropped events:
+
+const eventQueue = [];
+eventBus.on('SlotOpened', e => eventQueue.push(e));
+setInterval(async () => {
+  if (eventQueue.length && !this.isProcessing) {
+    this.isProcessing = true;
+    const next = eventQueue.shift();
+    await handleEvent(next);
+    this.isProcessing = false;
+  }
+}, 200);
+
+4.3 Startup Sequence
+
+To prevent “event-before-listener” races:
+
+await startTCL();          // attach listeners first
+await startRTB();          // begins accepting signals
+await startFX5Scanner();   // begins generating signals
+await startTradeManager(); // starts managing open trades
+
+5. Testing and Observation Plan
+5.1 Warm-Up Phase
+
+When trading mode activates:
+
+Central Clock runs for 30 s before data input begins.
+
+Confirm all modules show [READY] status in logs.
+
+After 30 s, enable scanning and RTB signal intake.
+
+5.2 Diagnostic Objectives
+
+TCL Event Reception — all SlotOpened and RTBThresholdMet events must be logged.
+
+RTB Status Accuracy — signals correctly shift between active → expired → reconfirmed.
+
+Failsafe Logic — verify failsafe runs only if not pre-triggered by RTBThresholdMet.
+
+Clock Drift Check — confirm tick alignment stays within ± 100 ms.
+
+5.3 Logging Artifacts
+
+Generate two files per run:
+
+/logs/tcl_event_trace_<timestamp>.log
+
+/logs/rtb_refresh_trace_<timestamp>.log
+
+6. Expected Behavior After Implementation
+Function	Before	After
+Clock Control	Independent intervals per module	One unified time base
+RTB Refresh	Multiple scattered timers	Centralized timestamp checks
+TCL Promotions	Inconsistent, sometimes missing	Deterministic, event-driven
+Failsafe	Re-arms repeatedly	Single-use failsafe, then disabled
+Debuggability	Limited	Full trace of all event paths
+
+Directive Status:
+🟢 Authorized for immediate integration and 30-minute observation cycle after deployment.

@@ -1,5 +1,6 @@
 /**
  * Phase 8.8.4-B/C/C.5: Ready-to-Buy (RTB) Queue Service
+ * Directive 8.8.4-A3.R7: Central Clock Integration
  * 
  * Manages the unified pool of high-quality, SQE-qualified signals.
  * 
@@ -18,6 +19,10 @@
  * 7. TCL Warm-Up: Trading Capacity Limit only activates after ≥100 signals
  * 8. Unified RTB Pool: All SQE-qualified signals flow here regardless of capacity
  * 9. 30-second refresh cycle for continuous re-evaluation
+ * 
+ * Directive A3.R7 Enhancements:
+ * 10. Central Clock synchronized refresh (every 30 ticks)
+ * 11. RTB status tracking (queued/reconfirmed/expired)
  */
 
 import { storage } from '../../storage';
@@ -35,6 +40,7 @@ import type { RtbSignal, InsertRtbSignal } from '@shared/schema';
 import { tclWatchdog } from './tcl_watchdog';
 import { eventBus, type PromotionEvent } from '../../lib/event-bus';
 import { contextBridge } from '../../services/context-bridge';
+import { centralClock, ClockTick } from '../../services/central-clock';
 
 export interface RTBSignalInput {
   signalId: string;
@@ -163,9 +169,14 @@ export function normalizePairKey(symbol: string): string {
   return trimmed.toUpperCase();
 }
 
+// Directive 8.8.4-A3.R7: Central Clock tick interval for RTB refresh
+const RTB_REFRESH_INTERVAL_SECONDS = 30;
+
 class ReadyToBuyService {
   private initialized = false;
   private refreshIntervals: Map<TradingMode, NodeJS.Timeout> = new Map();
+  private clockTickHandlers: Map<TradingMode, (tick: ClockTick) => void> = new Map(); // Directive A3.R7
+  private isRefreshing: Map<TradingMode, boolean> = new Map(); // Directive A3.R7: Prevent concurrent refreshes
   private engineStartTimes: Map<TradingMode, number> = new Map(); // Phase 8.8.4-C.6: Track engine start for TCL failsafe
   private tclFailsafeTriggered: Map<TradingMode, boolean> = new Map(); // Phase 8.8.4-C.6: Track if failsafe was triggered
   private promotionHandlerRegistered = false; // Directive 8.8.4-A1: Track handler registration
@@ -276,37 +287,67 @@ class ReadyToBuyService {
 
   /**
    * Phase 8.8.4-C.5: Start the 30-second refresh cycle for a mode
+   * Directive 8.8.4-A3.R7: Uses Central Clock for synchronized timing
    * Continuously cleans up expired signals and re-evaluates the queue
    */
   startRefreshCycle(mode: TradingMode): void {
-    // Prevent duplicate intervals
-    if (this.refreshIntervals.has(mode)) {
-      console.log(`[8.8.4-C.5][RTB_REFRESH] Refresh cycle already running for ${mode} mode`);
+    // Prevent duplicate subscriptions
+    if (this.clockTickHandlers.has(mode)) {
+      console.log(`[A3.R7][RTB_REFRESH] Refresh cycle already running for ${mode} mode`);
       return;
     }
 
-    console.log(`[8.8.4-C.5][RTB_REFRESH] Starting 30s refresh cycle for ${mode} mode`);
+    console.log(`[A3.R7][RTB_REFRESH] Starting 30s refresh cycle with Central Clock for ${mode} mode`);
 
-    const interval = setInterval(async () => {
+    // Ensure Central Clock is running
+    if (!centralClock.getIsRunning()) {
+      centralClock.start();
+      console.log(`[A3.R7][RTB_REFRESH] Started Central Clock`);
+    }
+
+    // Initialize refresh state
+    this.isRefreshing.set(mode, false);
+
+    // Directive 8.8.4-A3.R7: Subscribe to Central Clock for 30-second aligned refreshes
+    const tickHandler = async (tick: ClockTick) => {
+      // Skip if already refreshing or not aligned to 30-second interval
+      if (this.isRefreshing.get(mode)) return;
+      if (tick.tickNumber <= 0 || tick.tickNumber % RTB_REFRESH_INTERVAL_SECONDS !== 0) return;
+
+      this.isRefreshing.set(mode, true);
       try {
+        console.log(`[A3.R7][RTB_REFRESH][TICK] mode=${mode} tickNumber=${tick.tickNumber} drift=${tick.drift}ms`);
         await this.executeRefreshCycle(mode);
       } catch (error) {
-        console.error(`[8.8.4-C.5][RTB_ERROR] Refresh cycle error for ${mode}:`, error);
+        console.error(`[A3.R7][RTB_ERROR] Refresh cycle error for ${mode}:`, error);
+      } finally {
+        this.isRefreshing.set(mode, false);
       }
-    }, RTB_REFRESH_INTERVAL_MS);
+    };
 
-    this.refreshIntervals.set(mode, interval);
+    this.clockTickHandlers.set(mode, tickHandler);
+    centralClock.subscribe(`RTB_${mode}`, tickHandler);
+    console.log(`[A3.R7][RTB_REFRESH] ✅ Subscribed to Central Clock for ${mode} mode`);
   }
 
   /**
    * Phase 8.8.4-C.5: Stop the refresh cycle for a mode
+   * Directive 8.8.4-A3.R7: Unsubscribe from Central Clock
    */
   stopRefreshCycle(mode: TradingMode): void {
+    // Unsubscribe from Central Clock
+    if (this.clockTickHandlers.has(mode)) {
+      centralClock.unsubscribe(`RTB_${mode}`);
+      this.clockTickHandlers.delete(mode);
+      this.isRefreshing.delete(mode);
+      console.log(`[A3.R7][RTB_REFRESH] Stopped refresh cycle for ${mode} mode`);
+    }
+
+    // Also clean up legacy intervals if present
     const interval = this.refreshIntervals.get(mode);
     if (interval) {
       clearInterval(interval);
       this.refreshIntervals.delete(mode);
-      console.log(`[8.8.4-C.5][RTB_REFRESH] Stopped refresh cycle for ${mode} mode`);
     }
   }
 

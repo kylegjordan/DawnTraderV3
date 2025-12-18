@@ -1,51 +1,56 @@
 /**
  * Phase 8.8.4-C.12: TCL Watchdog Service
+ * Directive 8.8.4-A3.R7: Central Clock Integration
  * 
  * Event-driven TCL (Trade Capacity Limit) activation system.
- * Replaces polling-based approach with event-driven architecture.
+ * Uses Central Clock for synchronized timing and deterministic failsafe.
  * 
  * Responsibilities:
- * 1. Start 5-minute timer when engine starts
- * 2. Emit TCL_ACTIVATED exactly once after 5 minutes (failsafe)
- * 3. Emit TCL_ACTIVATED when RTB queue reaches 100 signals (threshold)
+ * 1. Start timer when engine starts (using Central Clock)
+ * 2. Emit TCL_ACTIVATED exactly once after failsafe period (default 2 min)
+ * 3. Emit TCL_ACTIVATED when RTB queue reaches threshold signals
  * 4. Track activation state per mode (paper/live)
+ * 5. Emit FailsafeTrigger event for diagnostic logging
+ * 
+ * Event Model (Directive A3.R7 Section 3):
+ * - SlotOpened: Emitted by Trade Manager when a trade closes
+ * - RTBThresholdMet: Emitted when 15 unexpired signals exist in RTB queue
+ * - FailsafeTrigger: Internal timer after 120s of inactivity
  */
 
 import { eventBus, type TradingMode } from '../../lib/event-bus';
+import { centralClock, ClockTick } from '../../services/central-clock';
 
-// Directive 8.8.4-A3.R2: Reduced thresholds for faster TCL activation
-const TCL_FAILSAFE_MS = parseInt(process.env.TCL_FAILSAFE_MS || String(2 * 60 * 1000), 10); // 2 minutes (was 5)
-const TCL_SIGNAL_THRESHOLD = parseInt(process.env.TCL_SIGNAL_THRESHOLD || '15', 10); // 15 signals (was 100)
-console.log(`[A3.R2][TCL_CONFIG] FAILSAFE=${TCL_FAILSAFE_MS/1000}s THRESHOLD=${TCL_SIGNAL_THRESHOLD} signals`);
+const TCL_FAILSAFE_SECONDS = parseInt(process.env.TCL_FAILSAFE_SECONDS || '120', 10);
+const TCL_SIGNAL_THRESHOLD = parseInt(process.env.TCL_SIGNAL_THRESHOLD || '15', 10);
+console.log(`[A3.R7][TCL_CONFIG] FAILSAFE=${TCL_FAILSAFE_SECONDS}s THRESHOLD=${TCL_SIGNAL_THRESHOLD} signals`);
 
 interface TCLState {
   isActive: boolean;
   activatedAt: Date | null;
   activationReason: '5min' | '100signals' | null;
-  timer: NodeJS.Timeout | null;
-  backupInterval: NodeJS.Timeout | null;
   startedAt: Date | null;
+  failsafeDisabled: boolean;
+  startTickNumber: number;
 }
 
 class TCLWatchdog {
   private states: Map<TradingMode, TCLState> = new Map();
+  private clockTickHandlers: Map<TradingMode, (tick: ClockTick) => void> = new Map();
 
   constructor() {
-    console.log('[8.8.4-C.12][TCL_WATCHDOG] TCL Watchdog Service initialized');
+    console.log('[A3.R7][TCL_WATCHDOG] TCL Watchdog Service initialized with Central Clock');
   }
 
-  /**
-   * Get or create state for a trading mode
-   */
   private getState(mode: TradingMode): TCLState {
     if (!this.states.has(mode)) {
       this.states.set(mode, {
         isActive: false,
         activatedAt: null,
         activationReason: null,
-        timer: null,
-        backupInterval: null,
         startedAt: null,
+        failsafeDisabled: false,
+        startTickNumber: 0,
       });
     }
     return this.states.get(mode)!;
@@ -53,131 +58,109 @@ class TCLWatchdog {
 
   /**
    * Start the TCL watchdog for a trading mode
-   * Called when trading engine starts
+   * Directive 8.8.4-A3.R7: Uses Central Clock for synchronized failsafe timing
    */
   start(mode: TradingMode): void {
     const state = this.getState(mode);
 
-    // Clear any existing timer and backup interval
-    if (state.timer) {
-      clearTimeout(state.timer);
-    }
-    if (state.backupInterval) {
-      clearInterval(state.backupInterval);
+    if (this.clockTickHandlers.has(mode)) {
+      centralClock.unsubscribe(`TCL_${mode}`);
+      this.clockTickHandlers.delete(mode);
     }
 
-    // Reset state
     state.isActive = false;
     state.activatedAt = null;
     state.activationReason = null;
     state.startedAt = new Date();
+    state.failsafeDisabled = false;
+    state.startTickNumber = centralClock.getTickNumber();
 
-    console.log(`[8.8.4-C.12][TCL_WATCHDOG] Started for ${mode} mode at ${state.startedAt.toISOString()}`);
-    console.log(`[8.8.4-C.12][TCL_WATCHDOG] 5-minute failsafe timer set for ${mode} mode (expires at ${new Date(Date.now() + TCL_FAILSAFE_MS).toISOString()})`);
+    if (!centralClock.getIsRunning()) {
+      centralClock.start();
+      console.log(`[A3.R7][TCL_WATCHDOG] Started Central Clock`);
+    }
 
-    // Set 5-minute failsafe timer
-    state.timer = setTimeout(() => {
-      console.log(`[8.8.4-C.12][TCL_WATCHDOG] Primary 5-min timer fired for ${mode}`);
-      this.activateTCL(mode, '5min', 0);
-    }, TCL_FAILSAFE_MS);
+    console.log(`[A3.R7][TCL_WATCHDOG] Started for ${mode} mode at ${state.startedAt.toISOString()}`);
+    console.log(`[A3.R7][TCL_WATCHDOG] Failsafe set for ${TCL_FAILSAFE_SECONDS}s (tick-aligned)`);
 
-    // Phase 8.8.4-C.13.B: Backup interval check every 30 seconds
-    // Guards against timer loss due to event loop issues
-    state.backupInterval = setInterval(() => {
-      if (state.isActive) {
-        // Already activated, no need to check
-        return;
+    const tickHandler = (tick: ClockTick) => {
+      if (state.isActive || state.failsafeDisabled) return;
+
+      const ticksElapsed = tick.tickNumber - state.startTickNumber;
+      
+      if (ticksElapsed > 0 && ticksElapsed % 30 === 0) {
+        console.log(`[A3.R7][TCL_WATCHDOG][${mode}] Heartbeat: elapsed=${ticksElapsed}s active=${state.isActive} failsafeDisabled=${state.failsafeDisabled}`);
       }
-      
-      if (!state.startedAt) {
-        return;
-      }
-      
-      const elapsedMs = Date.now() - state.startedAt.getTime();
-      const elapsedSec = (elapsedMs / 1000).toFixed(1);
-      
-      // Log heartbeat for debugging
-      if (elapsedMs > 60000 && elapsedMs % 60000 < 30000) {
-        console.log(`[8.8.4-C.12][TCL_WATCHDOG] Backup check for ${mode}: elapsed=${elapsedSec}s, active=${state.isActive}`);
-      }
-      
-      // Check if 5 minutes have passed but timer didn't fire
-      if (elapsedMs >= TCL_FAILSAFE_MS) {
-        console.log(`[8.8.4-C.12][TCL_WATCHDOG] Backup activation triggered for ${mode} (primary timer missed)`);
+
+      if (ticksElapsed >= TCL_FAILSAFE_SECONDS) {
+        console.log(`[A3.R7][TCL_WATCHDOG] FailsafeTrigger fired for ${mode} after ${ticksElapsed}s`);
+        
+        eventBus.emitFailsafeTrigger({
+          mode,
+          elapsedSeconds: ticksElapsed,
+          timestamp: new Date().toISOString()
+        });
+        
         this.activateTCL(mode, '5min', 0);
       }
-    }, 30000); // Check every 30 seconds
+    };
+
+    this.clockTickHandlers.set(mode, tickHandler);
+    centralClock.subscribe(`TCL_${mode}`, tickHandler);
+    console.log(`[A3.R7][TCL_WATCHDOG] ✅ Subscribed to Central Clock for ${mode} mode`);
   }
 
   /**
    * Stop the TCL watchdog for a trading mode
-   * Called when trading engine stops
    */
   stop(mode: TradingMode): void {
+    if (this.clockTickHandlers.has(mode)) {
+      centralClock.unsubscribe(`TCL_${mode}`);
+      this.clockTickHandlers.delete(mode);
+    }
+
     const state = this.getState(mode);
-
-    if (state.timer) {
-      clearTimeout(state.timer);
-      state.timer = null;
-    }
-    
-    if (state.backupInterval) {
-      clearInterval(state.backupInterval);
-      state.backupInterval = null;
-    }
-
     state.isActive = false;
     state.activatedAt = null;
     state.activationReason = null;
     state.startedAt = null;
+    state.failsafeDisabled = false;
+    state.startTickNumber = 0;
 
-    console.log(`[8.8.4-C.12][TCL_WATCHDOG] Stopped for ${mode} mode, all timers cleared`);
+    console.log(`[A3.R7][TCL_WATCHDOG] Stopped for ${mode} mode`);
   }
 
   /**
-   * Check if 100-signal threshold is reached and activate TCL if needed
-   * Called when a new signal is added to RTB queue
+   * Check if signal threshold is reached and activate TCL if needed
+   * Directive A3.R7: Permanently disables failsafe after RTBThresholdMet
    */
   checkSignalThreshold(mode: TradingMode, currentPoolSize: number): void {
     const state = this.getState(mode);
 
-    // Already activated - skip
     if (state.isActive) {
       return;
     }
 
-    // Check if threshold reached
     if (currentPoolSize >= TCL_SIGNAL_THRESHOLD) {
+      console.log(`[TCL][Event] RTBThresholdMet received – ${currentPoolSize} signals active`);
       this.activateTCL(mode, '100signals', currentPoolSize);
+      
+      state.failsafeDisabled = true;
+      console.log(`[A3.R7][TCL_WATCHDOG] Failsafe permanently disabled for ${mode} (RTBThresholdMet)`);
     }
   }
 
   /**
    * Activate TCL and emit event
-   * Called exactly once per session (either by 5min timer or 100signals threshold)
    */
   private activateTCL(mode: TradingMode, reason: '5min' | '100signals', poolSize: number): void {
     const state = this.getState(mode);
 
-    // Guard: already activated
     if (state.isActive) {
-      console.log(`[8.8.4-C.12][TCL_WATCHDOG] TCL already active for ${mode}, skipping duplicate activation`);
+      console.log(`[A3.R7][TCL_WATCHDOG] TCL already active for ${mode}, skipping`);
       return;
     }
 
-    // Clear timer if activating via threshold (before 5 min)
-    if (state.timer) {
-      clearTimeout(state.timer);
-      state.timer = null;
-    }
-    
-    // Clear backup interval - no longer needed
-    if (state.backupInterval) {
-      clearInterval(state.backupInterval);
-      state.backupInterval = null;
-    }
-
-    // Update state
     state.isActive = true;
     state.activatedAt = new Date();
     state.activationReason = reason;
@@ -185,9 +168,14 @@ class TCLWatchdog {
     const elapsedMs = state.startedAt ? Date.now() - state.startedAt.getTime() : 0;
     const elapsedSec = (elapsedMs / 1000).toFixed(1);
 
-    console.log(`[8.8.4-C.12][TCL_WATCHDOG] TCL ACTIVATED for ${mode} | reason=${reason} | elapsed=${elapsedSec}s | poolSize=${poolSize}`);
+    console.log(`[A3.R7][TCL_WATCHDOG] TCL ACTIVATED for ${mode} | reason=${reason} | elapsed=${elapsedSec}s | poolSize=${poolSize}`);
 
-    // Emit event
+    if (reason === '100signals') {
+      console.log(`[TCL][Event] RTBThresholdMet triggered – promoting top signals`);
+    } else {
+      console.log(`[TCL][Event] FailsafeTrigger activated – promoting available signals`);
+    }
+
     eventBus.emitTCLActivated({
       mode,
       reason,
@@ -196,16 +184,10 @@ class TCLWatchdog {
     });
   }
 
-  /**
-   * Check if TCL is active for a trading mode
-   */
   isActive(mode: TradingMode): boolean {
     return this.getState(mode).isActive;
   }
 
-  /**
-   * Get TCL status for a trading mode
-   */
   getStatus(mode: TradingMode): {
     isActive: boolean;
     activatedAt: string | null;
@@ -213,6 +195,7 @@ class TCLWatchdog {
     startedAt: string | null;
     elapsedMs: number;
     state: 'WARMING' | 'ACTIVE';
+    failsafeDisabled: boolean;
   } {
     const state = this.getState(mode);
     const elapsedMs = state.startedAt ? Date.now() - state.startedAt.getTime() : 0;
@@ -224,9 +207,9 @@ class TCLWatchdog {
       startedAt: state.startedAt?.toISOString() || null,
       elapsedMs,
       state: state.isActive ? 'ACTIVE' : 'WARMING',
+      failsafeDisabled: state.failsafeDisabled,
     };
   }
 }
 
-// Export singleton instance
 export const tclWatchdog = new TCLWatchdog();
