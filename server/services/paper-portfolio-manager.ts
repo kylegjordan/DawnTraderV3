@@ -130,12 +130,13 @@ export class PaperPortfolioManager {
     };
   }
 
-  async start(): Promise<void> {
+  async start(source: 'api' | 'internal' | 'unknown' = 'unknown'): Promise<void> {
     // Phase 8.8.3-B9.FIX-WS-START: Diagnostic log on start
     console.log('[DEBUG-B9][MANAGER_START_CALLED]', {
       mode: this.mode,
       userId: this.userId,
       wasAlreadyRunning: this.isRunning,
+      source,
     });
     
     if (this.isRunning) {
@@ -177,8 +178,8 @@ export class PaperPortfolioManager {
     registerEngine(this.mode, this.executionEngine);
     registerMicroService(this.mode, this.microExecutionService);
 
-    // Start execution engine
-    await this.executionEngine.start();
+    // Start execution engine with provenance tracking (A3.R9.0.B)
+    await this.executionEngine.start(source);
 
     // Phase 27.F.14.MICRO: Start micro-execution service
     await this.microExecutionService.start();

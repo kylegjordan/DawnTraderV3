@@ -168,15 +168,18 @@ export class PaperExecutionEngine {
     console.log(`[8.8.4-C.12][EVENT_UNBIND] Unbound TCL event listeners for ${this.mode}`);
   }
 
-  async start(): Promise<void> {
+  async start(source: 'api' | 'internal' | 'unknown' = 'unknown'): Promise<void> {
     // Phase 8.8.3-B9.FIX-WS-START: Diagnostic log on start
     console.log('[DEBUG-B9][ENGINE_START_CALLED]', {
       mode: this.mode,
       wasAlreadyRunning: this.isRunning,
       timestamp: new Date().toISOString(),
+      source,
     });
     
+    // Directive 8.8.4-A3.R9.0.B: Prevent redundant engine starts
     if (this.isRunning) {
+      console.warn(`[A3.R9.0.B][GUARD] Engine already active for mode=${this.mode}. Skipping redundant start.`);
       console.log(`[PaperExecution:${this.mode}] Already running`);
       // Phase 8.8.3-I6-FIX: Ensure mode is correct even on idempotent call
       livePricingAdapter.setTradingMode(this.mode);
@@ -184,6 +187,9 @@ export class PaperExecutionEngine {
     }
 
     this.isRunning = true;
+    
+    // Directive 8.8.4-A3.R9.0.B: Log valid activation with accurate provenance
+    console.log(`[A3.R9.0.B][ENGINE_START] Activated (source=${source}, PID=${process.pid}, mode=${this.mode})`)
     
     // Phase 8.8.3-I6-FIX: Set trading mode for correct WebSocket broadcasts
     livePricingAdapter.setTradingMode(this.mode);

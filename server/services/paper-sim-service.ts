@@ -458,7 +458,7 @@ export async function startPaperSimulation(
           // If manager exists but is not running, we need to start it
           if (!existingManager.getIsRunning || !existingManager.getIsRunning()) {
             console.log('[DEBUG-B9][MANAGER_NOT_RUNNING] Manager exists but not running - starting it now');
-            await existingManager.start();
+            await existingManager.start('api');
             
             // Phase 8.8.3-I6-FIX: Set trading mode to 'paper' for correct WebSocket broadcasts
             livePricingAdapter.setTradingMode('paper');
@@ -506,7 +506,7 @@ export async function startPaperSimulation(
           // Phase 27.F.13.O + Phase 3D: Use mode instead of userId
           const manager = new PaperPortfolioManager(mode, userId);
           setGlobalPaperSimManager(manager);
-          await manager.start();
+          await manager.start('api');
           
           // Phase 8.8.3-I6-FIX: Set trading mode to 'paper' for correct WebSocket broadcasts
           livePricingAdapter.setTradingMode('paper');
@@ -601,7 +601,7 @@ export async function startPaperSimulation(
         // Phase 41C-FIX: Start manager synchronously with proper error handling
         // Previous async approach caused UI to show ACTIVE while engine failed silently
         try {
-          await manager.start();
+          await manager.start('api');
           console.log('[ENGINE_CHECKPOINT_12] Manager started successfully');
           
           // Phase 8.8.3-I6-FIX: Set trading mode to 'paper' for correct WebSocket broadcasts

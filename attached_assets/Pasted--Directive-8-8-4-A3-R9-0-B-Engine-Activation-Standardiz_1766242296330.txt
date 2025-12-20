@@ -1,0 +1,73 @@
+🔧 Directive 8.8.4-A3.R9.0.B — Engine Activation Standardization
+
+Objective:
+Eliminate dual-engine startup behavior by enforcing single-process activation through authenticated HTTP API or interprocess bridge, not standalone script instantiation.
+
+Tasks
+1. Deprecate Direct Execution of server/paper-trading-start.ts
+
+Add a guard at the top of that file:
+
+if (process.env.ALLOW_DIRECT_ENGINE_START !== "true") {
+  console.error("[A3.R9.0.B] Direct execution of paper-trading-start.ts is disabled. Use POST /api/paper-sim/start instead.");
+  process.exit(1);
+}
+
+
+This ensures Replit (or anyone) can’t spawn isolated engines accidentally.
+
+2. Add Internal API Proxy Command for Automated Start
+
+Create a CLI-safe wrapper script:
+
+scripts/start-paper-sim.sh
+
+
+that calls the main API instead of launching a new process:
+
+curl -X POST "http://localhost:5000/api/paper-sim/start" \
+  -H "Authorization: Bearer $TOKEN"
+
+
+This makes Replit automation use the exact same mechanism as the UI, ensuring single-engine consistency.
+
+3. Add Safeguard in TradingEngineService.start()
+
+Within start():
+
+if (this.state === "active") {
+  console.warn("[A3.R9.0.B][GUARD] Engine already active. Skipping redundant start.");
+  return;
+}
+
+
+Prevents race restarts or conflicting attempts when Replit runs in quick succession.
+
+4. Add Log Signature
+
+All valid activations will log:
+
+[A3.R9.0.B][ENGINE_START] Activated via API (PID=XXXX)
+
+
+and all invalid activations:
+
+[A3.R9.0.B][ENGINE_START_BLOCKED] Standalone script execution blocked.
+
+🧠 Simple Analogy
+
+Think of this like having two different remote controls for one car engine —
+your remote starts the car correctly (UI API), but Replit’s remote actually starts a second fake car in another garage that isn’t connected to the dashboard.
+Now we’ll make sure both remotes control the same real car.
+
+🧩 Expected Result
+
+After implementing Directive 8.8.4-A3.R9.0.B:
+
+Replit will be unable to spawn isolated trading instances.
+
+All trading sessions — manual or automated — will start through the same in-process path.
+
+Engine state will remain stable (“Active”) with no toggling.
+
+Log activity will be unified across SQE → RTB → TCL.

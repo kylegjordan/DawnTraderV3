@@ -1,8 +1,19 @@
-import { Paper48HrSimulation } from './services/paper-48hr-simulation';
-import { storage } from './storage';
-import { SystemUserCache } from './utils/system-user-cache'; // Phase 31.I
+// Directive 8.8.4-A3.R9.0.B: Block direct script execution to prevent dual-engine instances
+// This guard MUST be at the top before any imports to prevent service initialization
+if (process.env.ALLOW_DIRECT_ENGINE_START !== "true") {
+  console.error("[A3.R9.0.B][ENGINE_START_BLOCKED] Direct execution of paper-trading-start.ts is disabled.");
+  console.error("[A3.R9.0.B][ENGINE_START_BLOCKED] Use POST /api/paper-sim/start via UI or scripts/start-paper-sim.sh instead.");
+  console.error("[A3.R9.0.B][ENGINE_START_BLOCKED] To override (not recommended): set ALLOW_DIRECT_ENGINE_START=true");
+  process.exit(1);
+}
 
+// Dynamic imports only load after guard passes
 async function startPaperTrading() {
+  // Import after guard check to avoid initializing services when blocked
+  const { Paper48HrSimulation } = await import('./services/paper-48hr-simulation');
+  const { storage } = await import('./storage');
+  const { SystemUserCache } = await import('./utils/system-user-cache');
+
   try {
     console.log('🚀 Initializing 48-Hour Paper Trading Simulation...\n');
 
@@ -33,7 +44,7 @@ async function startPaperTrading() {
       STARTING_BALANCE = parseFloat(STARTING_BALANCE_ENV);
       
       // Initialize paper trading (creates portfolio_state)
-      await storage.initializePaperTrading(userId, STARTING_BALANCE);
+      await (storage as any).initializePaperTrading(userId, STARTING_BALANCE);
       portfolioState = await storage.getPortfolioState({ userId, mode });
     } else {
       STARTING_BALANCE = parseFloat(portfolioState.balance);
