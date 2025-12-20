@@ -705,7 +705,7 @@ export interface IStorage {
   }): Promise<RtbSignal[]>;
   getRtbSignalById(id: string): Promise<RtbSignal | undefined>;
   updateRtbSignal(id: string, updates: Partial<RtbSignal>): Promise<RtbSignal>;
-  deleteRtbSignals(filters: { mode: 'live' | 'paper'; symbol?: string; strategy?: string; status?: string }): Promise<number>;
+  deleteRtbSignals(filters: { mode: 'live' | 'paper'; id?: string; symbol?: string; strategy?: string; status?: string }): Promise<number>;
 }
 
 // Phase 27.F: Canonical metric key generator for goals engine
@@ -4416,9 +4416,13 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async deleteRtbSignals(filters: { mode: 'live' | 'paper'; symbol?: string; strategy?: string; status?: string }): Promise<number> {
+  async deleteRtbSignals(filters: { mode: 'live' | 'paper'; id?: string; symbol?: string; strategy?: string; status?: string }): Promise<number> {
     const conditions = [eq(rtbSignals.mode, filters.mode)];
     
+    // A3.R8.4.A: Support deletion by ID for immediate cleanup
+    if (filters.id) {
+      conditions.push(eq(rtbSignals.id, filters.id));
+    }
     if (filters.symbol) {
       conditions.push(eq(rtbSignals.symbol, filters.symbol));
     }

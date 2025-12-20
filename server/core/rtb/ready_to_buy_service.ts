@@ -465,26 +465,16 @@ class ReadyToBuyService {
         // Directive A3.R8.2: skipDecay=true confirms we're using true original CWQI
         const sqeResult = evaluateSignalQuality(sqeInput, { skipDecay: true });
         
-        // Directive 8.8.4-A3.R8.4: Mark as expired, visible until deferred cleanup
-        // Previous: Immediately deleted expired signals
-        // Now: Mark as 'expired' with timestamp, defer deletion for one refresh cycle
+        // Directive 8.8.4-A3.R8.4.A: Immediate cleanup on SQE failure
+        // Amendment: Remove 60-second persistence window, delete immediately
         if (!sqeResult.passed) {
-          this.logRtbTrace(mode, signal.symbol, signal.strategy, oldStatus, 'expired', 'SQE_failure');
+          this.logRtbTrace(mode, signal.symbol, signal.strategy, oldStatus, 'deleted', 'SQE_failure');
           this.logSqeRejection(signal, sqeResult.reason || 'unknown', ngc, trueOriginalCWQI);
           
-          // A3.R8.4: Mark as expired with timestamp for deferred cleanup
-          await storage.updateRtbSignal(signal.id, {
-            status: 'expired',
-            expiredAt: new Date(),
-            metadata: {
-              ...(signal.metadata as Record<string, any> || {}),
-              expiredReason: sqeResult.reason || 'SQE_failure',
-              expiredAtMs: Date.now()
-            }
-          });
-          // A3.R8.4: Do NOT delete here - deferred cleanup will handle after one refresh cycle
+          // A3.R8.4.A: Immediately delete signal on SQE failure
+          await storage.deleteRtbSignals({ mode, id: signal.id });
           
-          console.log(`[A3.R8.4][SQE][EXPIRED] pair=${signal.symbol} reason=${sqeResult.reason} (deferred cleanup)`);
+          console.log(`[A3.R8.4.A][SQE][DELETED] pair=${signal.symbol} reason=${sqeResult.reason} (immediate cleanup)`);
           expiredCount++;
           continue;
         }
@@ -823,8 +813,8 @@ class ReadyToBuyService {
   }
 
   /**
-   * Expire a signal (mark as expired)
-   * Phase 8.8.4-A3.R3: Pre-cleanup step to delete prior expired entries before updating
+   * Directive 8.8.4-A3.R8.4.A: Immediately delete signal on expiry
+   * Amendment: No longer marks as 'expired' - deletes immediately
    */
   async expireSignal(signalId: string, reason?: string): Promise<void> {
     const signal = await storage.getRtbSignalById(signalId);
@@ -834,30 +824,13 @@ class ReadyToBuyService {
       return;
     }
     
-    const deletedCount = await storage.deleteRtbSignals({
+    // A3.R8.4.A: Immediately delete instead of marking expired
+    await storage.deleteRtbSignals({
       mode: signal.mode as 'live' | 'paper',
-      symbol: signal.symbol,
-      strategy: signal.strategy,
-      status: 'expired'
+      id: signal.id
     });
     
-    if (deletedCount > 0) {
-      console.log(`[8.8.4-A3.R3][RTB_EXPIRE] Cleared ${deletedCount} prior expired entries for ${signal.symbol}/${signal.strategy}`);
-    }
-    
-    // Directive 8.8.4-A3.R8.4: Store expiredAtMs in metadata for deferred cleanup
-    const existingMetadata = signal.metadata as Record<string, any> || {};
-    await storage.updateRtbSignal(signalId, {
-      status: 'expired',
-      expiredAt: new Date(),
-      metadata: {
-        ...existingMetadata,
-        expiredAtMs: Date.now(),
-        expiredReason: reason || 'TTL exceeded'
-      }
-    });
-    
-    console.log(`[RTB] Expired signal ${signalId}: ${reason || 'TTL exceeded'}`);
+    console.log(`[A3.R8.4.A][RTB] Deleted signal ${signal.symbol}/${signal.strategy}: ${reason || 'expired'}`);
   }
 
   /**
@@ -904,57 +877,30 @@ class ReadyToBuyService {
   }
 
   /**
-   * Directive 8.8.4-A3.R8.4: Deferred cleanup of expired signals
+   * Directive 8.8.4-A3.R8.4.A: Immediate cleanup of expired signals
    * 
-   * Only purges signals that have been in 'expired' status for at least
-   * one full refresh cycle (60 seconds). This allows users to observe
-   * status transitions before removal.
-   * 
-   * Also handles legacy TTL-based expiry for backward compatibility.
+   * Amendment: Removes 60-second persistence window. Signals are deleted
+   * immediately upon SQE failure. This method now only handles:
+   * 1. Legacy 'expired' status signals (immediate delete)
+   * 2. TTL-based expiry for 'queued' status signals
    */
   async cleanupExpiredSignals(mode: TradingMode): Promise<number> {
     const now = Date.now();
-    const DEFERRED_CLEANUP_MS = 60 * 1000; // One full refresh cycle (60 seconds)
+    let cleanedCount = 0;
     
-    // Step 1: Get all expired signals for deferred cleanup
+    // A3.R8.4.A: Immediately delete any signals with 'expired' status (legacy cleanup)
     const expiredSignals = await storage.getRtbSignals({
       mode,
       status: 'expired',
     });
     
-    let cleanedCount = 0;
-    
-    // A3.R8.4: Only delete expired signals after one refresh cycle
     for (const signal of expiredSignals) {
-      const metadata = signal.metadata as Record<string, any> || {};
-      
-      // A3.R8.4 FIX: Safely derive expiredAtMs with proper fallback
-      // Priority: metadata.expiredAtMs > signal.expiredAt > signal.queuedAt
-      let expiredAtMs: number;
-      if (metadata.expiredAtMs && !isNaN(Number(metadata.expiredAtMs))) {
-        expiredAtMs = Number(metadata.expiredAtMs);
-      } else if (signal.expiredAt) {
-        expiredAtMs = new Date(signal.expiredAt).getTime();
-      } else {
-        expiredAtMs = new Date(signal.queuedAt).getTime();
-      }
-      
-      // Guard against invalid dates
-      if (isNaN(expiredAtMs)) {
-        console.log(`[A3.R8.4][CLEANUP] Invalid expiredAtMs for ${signal.symbol}/${signal.strategy}, using now`);
-        expiredAtMs = now - DEFERRED_CLEANUP_MS; // Force cleanup of signals with invalid timestamps
-      }
-      
-      const ageMs = now - expiredAtMs;
-      
-      if (ageMs >= DEFERRED_CLEANUP_MS) {
-        await storage.deleteRtbSignals({ mode, id: signal.id });
-        console.log(`[A3.R8.4][CLEANUP] Deleted expired signal ${signal.symbol}/${signal.strategy} (age=${(ageMs/1000).toFixed(1)}s)`);
-        cleanedCount++;
-      }
+      await storage.deleteRtbSignals({ mode, id: signal.id });
+      console.log(`[A3.R8.4.A][CLEANUP] Deleted legacy expired signal ${signal.symbol}/${signal.strategy}`);
+      cleanedCount++;
     }
     
-    // Step 2: Legacy TTL-based expiry for 'queued' status
+    // TTL-based expiry for 'queued' status signals
     const queuedSignals = await storage.getRtbSignals({
       mode,
       status: 'queued',
@@ -962,13 +908,15 @@ class ReadyToBuyService {
 
     for (const signal of queuedSignals) {
       if (new Date(signal.expiresAt) <= new Date(now)) {
-        await this.expireSignal(signal.id, 'TTL exceeded');
+        // A3.R8.4.A: Delete immediately instead of marking expired
+        await storage.deleteRtbSignals({ mode, id: signal.id });
+        console.log(`[A3.R8.4.A][TTL] Deleted signal ${signal.symbol}/${signal.strategy} (TTL exceeded)`);
         cleanedCount++;
       }
     }
 
     if (cleanedCount > 0) {
-      console.log(`[A3.R8.4][RTB] Cleaned up ${cleanedCount} signals for ${mode} mode (deferred + TTL)`);
+      console.log(`[A3.R8.4.A][RTB] Cleaned up ${cleanedCount} signals for ${mode} mode`);
     }
 
     return cleanedCount;
