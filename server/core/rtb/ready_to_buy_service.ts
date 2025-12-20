@@ -181,6 +181,8 @@ class ReadyToBuyService {
   constructor() {
     console.log('[RTB] Ready-to-Buy Queue Service initialized');
     this.registerPromotionHandler();
+    // A3.R9.0: Start performance monitor for metrics collection
+    performanceMonitor.start();
   }
 
   /**
@@ -256,7 +258,8 @@ class ReadyToBuyService {
         status: 'promoted',
         promotedAt: new Date()
       });
-      console.log(`[8.8.4-A1][RTB] Removed signal ${symbol} (id=${matchingSignal.id}) from ${mode} queue`);
+      performanceMonitor.recordQueueRemove(1);
+      console.log(`[A3.R9.0][RTB] Removed signal ${symbol} (id=${matchingSignal.id}) from ${mode} queue`);
       return true;
     }
     
@@ -387,12 +390,13 @@ class ReadyToBuyService {
       `(${tclStatus.progressPercent.toFixed(1)}%), elapsed=${elapsedMs}ms`
     );
     
-    // Directive 8.8.4-A3.R8.5: Synchronize TCL promotion events with live query
+    // Directive 8.8.4-A3.R9.0: Synchronize TCL promotion events with live query
     // Check signal threshold AFTER executeRefreshCycle() and cleanupExpiredSignals()
     // Uses live database query instead of cached snapshot
-    if (tclStatus.poolSize > 0) {
-      await tclWatchdog.checkSignalThresholdLive(mode);
-      console.log(`[A3.R8.5][TCL_SYNC] TCL threshold check after refresh (live query): poolSize=${tclStatus.poolSize}`);
+    // Only check if refresh is complete (barrier respected)
+    if (tclStatus.poolSize > 0 && this.isRefreshComplete(mode)) {
+      await tclWatchdog.checkSignalThresholdLive(mode, true);
+      console.log(`[A3.R9.0][TCL_SYNC] TCL threshold check after refresh (live query): poolSize=${tclStatus.poolSize}`);
     }
   }
 
@@ -506,6 +510,7 @@ class ReadyToBuyService {
           
           // A3.R9.0: Immediately delete signal on SQE failure
           await storage.deleteRtbSignals({ mode, id: signal.id });
+          performanceMonitor.recordQueueRemove(1);
           
           console.log(`[A3.R9.0][SQE][DELETED] pair=${signal.symbol} reason=${sqeResult.reason}`);
           expiredCount++;
@@ -558,13 +563,15 @@ class ReadyToBuyService {
       // A3.R9.0: Set refresh complete flag to release TCL barrier
       this.setRefreshComplete(mode, true);
       
-      // A3.R9.0: Check TCL threshold now that refresh is complete
-      await tclWatchdog.checkSignalThresholdLive(mode, true);
+      // A3.R9.0: Check TCL threshold now that refresh is complete (barrier released)
+      await tclWatchdog.checkSignalThresholdLive(mode, this.isRefreshComplete(mode));
       
     } catch (error) {
       console.error(`[A3.R9.0][RTB_REFRESH][ERROR] mode=${mode}:`, error);
-      // A3.R9.0: Ensure barrier is released even on error
-      this.setRefreshComplete(mode, true);
+      // A3.R9.0: On error, keep barrier closed - TCL should NOT proceed during failed refresh
+      // The next refresh cycle will retry and properly complete
+      // This prevents TCL from activating on potentially corrupt/incomplete state
+      console.log(`[A3.R9.0][TCL_SYNC] Refresh failed for ${mode}, barrier remains CLOSED until next cycle`);
     }
   }
 
@@ -889,13 +896,14 @@ class ReadyToBuyService {
       return;
     }
     
-    // A3.R8.4.A: Immediately delete instead of marking expired
+    // A3.R9.0: Immediately delete instead of marking expired
     await storage.deleteRtbSignals({
       mode: signal.mode as 'live' | 'paper',
       id: signal.id
     });
+    performanceMonitor.recordQueueRemove(1);
     
-    console.log(`[A3.R8.4.A][RTB] Deleted signal ${signal.symbol}/${signal.strategy}: ${reason || 'expired'}`);
+    console.log(`[A3.R9.0][RTB] Deleted signal ${signal.symbol}/${signal.strategy}: ${reason || 'expired'}`);
   }
 
   /**
@@ -937,8 +945,9 @@ class ReadyToBuyService {
 
     // Directive 8.8.4-A3.R8: Delete signal from RTBQ after promotion
     await storage.deleteRtbSignals({ mode, symbol: signal.symbol, strategy: signal.strategy, status: 'promoted' });
+    performanceMonitor.recordQueueRemove(1);
 
-    console.log(`[A3.R8.5][RTB] Promoted signal ${signal.symbol}/${signal.strategy} to trade ${tradeId} and removed from RTBQ`);
+    console.log(`[A3.R9.0][RTB] Promoted signal ${signal.symbol}/${signal.strategy} to trade ${tradeId} and removed from RTBQ`);
   }
 
   /**
@@ -961,7 +970,8 @@ class ReadyToBuyService {
     
     for (const signal of expiredSignals) {
       await storage.deleteRtbSignals({ mode, id: signal.id });
-      console.log(`[A3.R8.4.A][CLEANUP] Deleted legacy expired signal ${signal.symbol}/${signal.strategy}`);
+      performanceMonitor.recordQueueRemove(1);
+      console.log(`[A3.R9.0][CLEANUP] Deleted legacy expired signal ${signal.symbol}/${signal.strategy}`);
       cleanedCount++;
     }
     
@@ -973,9 +983,10 @@ class ReadyToBuyService {
 
     for (const signal of queuedSignals) {
       if (new Date(signal.expiresAt) <= new Date(now)) {
-        // A3.R8.4.A: Delete immediately instead of marking expired
+        // A3.R9.0: Delete immediately instead of marking expired
         await storage.deleteRtbSignals({ mode, id: signal.id });
-        console.log(`[A3.R8.4.A][TTL] Deleted signal ${signal.symbol}/${signal.strategy} (TTL exceeded)`);
+        performanceMonitor.recordQueueRemove(1);
+        console.log(`[A3.R9.0][TTL] Deleted signal ${signal.symbol}/${signal.strategy} (TTL exceeded)`);
         cleanedCount++;
       }
     }
@@ -1071,7 +1082,12 @@ class ReadyToBuyService {
     // Delete ALL RTB signals for this mode (not just queued ones)
     const deleted = await storage.deleteRtbSignals({ mode });
     
-    console.log(`[8.8.4-C.14.D][RTB] Deleted ${deleted} signals from ${mode} queue`);
+    // A3.R9.0: Track queue clears in performance metrics
+    if (deleted > 0) {
+      performanceMonitor.recordQueueRemove(deleted);
+    }
+    
+    console.log(`[A3.R9.0][RTB] Deleted ${deleted} signals from ${mode} queue`);
     return deleted;
   }
 
@@ -1193,10 +1209,14 @@ class ReadyToBuyService {
 
     console.log(`[8.8.4-C.5][RTB_INSERT] ${normalizedSymbol}/${input.strategy}: CWQI=${input.cwqi.toFixed(4)}, NGC=${input.ngc.toFixed(4)}, poolSize=${poolSize}`);
     
-    // Directive 8.8.4-A3.R8.5: TCL threshold check on enqueue for prompt activation
-    // Uses live query to ensure accurate pool count
-    // Post-refresh sync in executeRefreshCycle() ensures accurate pool size
-    await tclWatchdog.checkSignalThresholdLive(input.mode);
+    // Directive 8.8.4-A3.R9.0: TCL threshold check on enqueue 
+    // Only check if refresh is complete (barrier respected)
+    const refreshComplete = this.isRefreshComplete(input.mode);
+    if (refreshComplete) {
+      await tclWatchdog.checkSignalThresholdLive(input.mode, refreshComplete);
+    } else {
+      console.log(`[A3.R9.0][TCL_SYNC] Skipping TCL check on enqueue - refresh in progress for ${input.mode}`);
+    }
     
     return signal;
   }

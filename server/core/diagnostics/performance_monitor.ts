@@ -28,9 +28,12 @@ interface PerformanceMetrics {
 class PerformanceMonitor {
   private metrics: PerformanceMetrics = this.createEmptyMetrics();
   private intervalId: NodeJS.Timeout | null = null;
+  private started: boolean = false;
 
   constructor() {
     console.log('[A3.R9.0][METRICS] PerformanceMonitor initialized');
+    // A3.R9.0: Auto-start on construction to ensure metrics are collected from first import
+    this.start();
   }
 
   private createEmptyMetrics(): PerformanceMetrics {
@@ -51,9 +54,10 @@ class PerformanceMonitor {
   }
 
   start(): void {
-    if (this.intervalId) {
+    if (this.started) {
       return;
     }
+    this.started = true;
 
     this.intervalId = setInterval(() => {
       this.emitSummary();

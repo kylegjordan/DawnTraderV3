@@ -46,9 +46,9 @@ Central Clock Architecture (Directive 8.8.4-A3.R7) introduces a synchronized tim
 System Harmonization (Directive 8.8.4-A3.R9.0) implements comprehensive RTB, TCL, and SQE alignment:
 - **SQE Calibration**: Restored thresholds (MIN_NGC=0.55, MIN_CWQI=0.45) targeting 35-50% pass rate. NGC formula: normalize→blend (0.4*NGC + 0.4*profitRate + 0.2*(1-risk)).
 - **RTB Refresh Realignment**: Per-signal rolling TTL with 30-second individual expiry, statusUpdatedAt tracking in metadata, and enhanced deduplication key (symbol:strategy:createdAtBucket).
-- **TCL Synchronization Barrier**: Atomic `refreshComplete` flag prevents TCL from querying RTB mid-refresh cycle.
+- **TCL Synchronization Barrier**: Atomic `refreshComplete` flag prevents TCL from querying RTB mid-refresh cycle. All `checkSignalThresholdLive()` calls require explicit barrier state (no default parameter). Error paths keep barrier closed; only successful refresh releases it.
 - **TradingScheduler**: Unified Central Clock consumer that fans out to FX5Scanner, RTB, and TCL, reducing CPU spikes ~10%.
-- **Performance Metrics**: Tracks sqe_evaluation_rate, rtb_refresh_latency, tcl_activation_delay, and queue_churn_rate with 60-second summary logs via `PerformanceMonitor`.
+- **Performance Metrics**: Auto-starting `PerformanceMonitor` tracks sqe_evaluation_rate, rtb_refresh_latency, tcl_activation_delay, and queue_churn_rate with 60-second summary logs. All queue removal paths (promotion, dedupe, SQE failure, expiry, TTL, bulk clear) call `recordQueueRemove()` exactly once per deletion.
 - All log tags standardized to `[A3.R9.0]` across SQE, RTB, and TCL modules.
 
 ## External Dependencies

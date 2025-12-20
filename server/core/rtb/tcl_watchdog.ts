@@ -160,7 +160,7 @@ class TCLWatchdog {
    * Directive A3.R9.0: TCL synchronization barrier - only query after refresh complete
    * Directive A3.R8.5: Uses live query for pool count, not cached snapshot
    */
-  async checkSignalThresholdLive(mode: TradingMode, rtbRefreshComplete: boolean = true): Promise<void> {
+  async checkSignalThresholdLive(mode: TradingMode, rtbRefreshComplete: boolean): Promise<void> {
     const state = this.getState(mode);
     const now = Date.now();
     const DEBOUNCE_MS = 5000; // 5 seconds debounce
