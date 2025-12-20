@@ -6297,5 +6297,41 @@
     "middlewares": [
       "anonymous"
     ]
+  },
+  {
+    "path": "/api/diagnostics/trace/start",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/diagnostics/trace/stop",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/diagnostics/trace/status",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/diagnostics/trace/entries",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
   }
 ]

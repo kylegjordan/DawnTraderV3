@@ -69,6 +69,12 @@ SQE Normalization, CWQI Correction & Symbol Resolution (Directive 8.8.4-A3.R9.0.
 - **R9C-5: Enhanced Observability**: Added `sqePassedCount`, `sqeRejectedCount`, and `symbolResolutionLatencyMs` metrics to PerformanceMonitor. Diagnostic log: `[A3.R9.0.C][METRICS]`.
 - Expected outcomes: SQE pass rate 40-55%, CWQI mean 0.63-0.70, symbol consistency unified under Tier 0/1 Kraken map.
 
+Diagnostic Signal Flow Tracing (Directive 8.8.4-A3.R9.0.D) implements:
+- **DiagnosticTraceService**: Buffered async logging with 2-second flush intervals and 200-entry buffer, auto-disabling after 10 minutes or 1 MB.
+- **Trace Probes**: Non-invasive probes in signal-orchestrator.ts (raw metrics), signal_quality_evaluator.ts (SQE evaluation), and ready_to_buy_service.ts (queue decisions).
+- **API Endpoints**: `/api/diagnostics/trace/start`, `/api/diagnostics/trace/stop`, `/api/diagnostics/trace/status`, `/api/diagnostics/trace/entries`.
+- **Output**: Trace entries written to `logs/diagnostic/trace_A3R9.log` with `[A3.R9.TRACE]` tag, capturing phase, symbol, strategy, NGC, CWQI, profit, risk, and pass/reject/insert status.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.
