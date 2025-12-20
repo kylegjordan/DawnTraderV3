@@ -4,7 +4,7 @@
  * Non-invasive diagnostic probes for tracing signal flow from creation → evaluation → queue.
  * 
  * Features:
- * - Buffered async logging with throttled writes (flush every 2s or 200 entries)
+ * - Truly async buffered logging with non-blocking writes (flush every 2s or 200 entries)
  * - Auto-disable after 10 minutes or 1 MB log size
  * - Zero mutation, zero delay impact on trading operations
  * - Uses [A3.R9.TRACE] tag for all diagnostic entries
@@ -14,6 +14,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { promises as fsPromises } from 'fs';
 
 export type TracePhase = 'orchestrator' | 'preprocessor' | 'sqe' | 'rtb' | 'queue';
 
@@ -48,6 +49,7 @@ class DiagnosticTraceService {
   private autoDisableTimer: NodeJS.Timeout | null = null;
   private totalBytesWritten: number = 0;
   private entryCount: number = 0;
+  private flushPending: boolean = false;
 
   constructor() {
     this.ensureLogDirectory();
@@ -74,14 +76,12 @@ class DiagnosticTraceService {
     this.buffer = [];
     this.totalBytesWritten = 0;
     this.entryCount = 0;
+    this.flushPending = false;
 
-    try {
-      fs.writeFileSync(LOG_FILE, `# Directive 8.8.4-A3.R9.0.D Trace Log\n# Started: ${new Date().toISOString()}\n`);
-    } catch (err) {
-      console.error('[A3.R9.TRACE][ERROR] Failed to initialize log file:', err);
-    }
+    fsPromises.writeFile(LOG_FILE, `# Directive 8.8.4-A3.R9.0.D Trace Log\n# Started: ${new Date().toISOString()}\n`)
+      .catch(err => console.error('[A3.R9.TRACE][ERROR] Failed to initialize log file:', err));
 
-    this.flushTimer = setInterval(() => this.flushBuffer(), BUFFER_FLUSH_INTERVAL_MS);
+    this.flushTimer = setInterval(() => this.flushBufferAsync(), BUFFER_FLUSH_INTERVAL_MS);
     
     this.autoDisableTimer = setTimeout(() => {
       console.log('[A3.R9.TRACE][AUTO_DISABLE] 10-minute limit reached, stopping trace');
@@ -97,7 +97,7 @@ class DiagnosticTraceService {
       return;
     }
 
-    this.flushBuffer();
+    this.isEnabled = false;
 
     if (this.flushTimer) {
       clearInterval(this.flushTimer);
@@ -112,13 +112,16 @@ class DiagnosticTraceService {
     const durationSec = Math.round((Date.now() - this.startTime) / 1000);
     const summary = `\n# Trace stopped: ${new Date().toISOString()}\n# Duration: ${durationSec}s, Entries: ${this.entryCount}, Bytes: ${this.totalBytesWritten}\n`;
     
-    try {
-      fs.appendFileSync(LOG_FILE, summary);
-    } catch (err) {
-      console.error('[A3.R9.TRACE][ERROR] Failed to write summary:', err);
-    }
+    const finalBuffer = [...this.buffer];
+    this.buffer = [];
+    
+    const finalContent = finalBuffer.join('') + summary;
+    fsPromises.appendFile(LOG_FILE, finalContent)
+      .then(() => {
+        this.totalBytesWritten += finalContent.length;
+      })
+      .catch(err => console.error('[A3.R9.TRACE][ERROR] Failed to write final buffer:', err));
 
-    this.isEnabled = false;
     console.log(`[A3.R9.TRACE][STOP] Tracing stopped after ${durationSec}s, ${this.entryCount} entries, ${this.totalBytesWritten} bytes`);
   }
 
@@ -150,8 +153,8 @@ class DiagnosticTraceService {
     this.buffer.push(logLine);
     this.entryCount++;
 
-    if (this.buffer.length >= BUFFER_MAX_ENTRIES) {
-      this.flushBuffer();
+    if (this.buffer.length >= BUFFER_MAX_ENTRIES && !this.flushPending) {
+      this.flushBufferAsync();
     }
   }
 
@@ -224,20 +227,24 @@ class DiagnosticTraceService {
     });
   }
 
-  private flushBuffer(): void {
-    if (this.buffer.length === 0) {
+  private flushBufferAsync(): void {
+    if (this.buffer.length === 0 || this.flushPending) {
       return;
     }
 
     const content = this.buffer.join('');
     this.buffer = [];
+    this.flushPending = true;
 
-    try {
-      fs.appendFileSync(LOG_FILE, content);
-      this.totalBytesWritten += content.length;
-    } catch (err) {
-      console.error('[A3.R9.TRACE][ERROR] Failed to flush buffer:', err);
-    }
+    fsPromises.appendFile(LOG_FILE, content)
+      .then(() => {
+        this.totalBytesWritten += content.length;
+        this.flushPending = false;
+      })
+      .catch(err => {
+        console.error('[A3.R9.TRACE][ERROR] Failed to flush buffer:', err);
+        this.flushPending = false;
+      });
   }
 }
 
