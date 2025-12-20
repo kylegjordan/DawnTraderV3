@@ -1,0 +1,91 @@
+🧭 Observational Protocol — Phase 8.8.4-A3.R9.0.B-OBS
+
+Objective:
+Validate engine startup stability and end-to-end signal lifecycle behavior under normal runtime conditions.
+
+🧱 Pre-Run Preparation
+
+Confirm the main application is running (npm run dev or via supervisor).
+
+Do not manually start trading — Replit will handle activation using the standardized API.
+
+Ensure log level is set to verbose:
+
+export LOG_LEVEL=verbose
+
+🧩 Execution Sequence
+
+Start Paper Trading Engine (Unified Path)
+
+./scripts/start-paper-sim.sh
+
+
+This will trigger:
+
+[A3.R9.0.B][ENGINE_START] Activated via API (PID=XXXX)
+
+Engine should remain stable in “Active” state.
+
+Verify Subscriptions (Central Clock Health)
+
+Show running background jobs for module=rtb
+Show next scheduled jobs for module=central_clock
+
+
+✅ Expect: Central Clock running, RTB and TCL subscribed on 30-second tick.
+
+Begin Observational Logging (15-minute window)
+
+Start observational logging phase=8.8.4-R9.0.B-OBS mode=paper duration=15m
+Log level: verbose
+
+
+Capture the following:
+
+[A3.R9.0.A][NGC_NORMALIZED] entries
+
+[A3.R9.0.A][RTB_REFRESH_STAGGER] entries
+
+[A3.R9.0][TCL_SYNC] entries
+
+[A3.R9.0.B][ENGINE_START] + [A3.R9.0.B][GUARD] (activation validation)
+
+After 15 minutes (or one RTB full cycle), stop trading:
+
+POST /api/paper-sim/stop
+
+
+Then stop logging:
+
+Stop observational logging phase=8.8.4-R9.0.B-OBS
+
+🧾 Expected Log Artifacts
+File	Purpose	Expected Activity
+/logs/validation/rtb_refresh_trace_dump.log	RTB stagger + refresh timing	~30 s stagger offsets visible
+/logs/validation/sqe_trace_dump.log	SQE pass/fail events	Mix of accepted/rejected signals
+/logs/validation/tcl_promotion_trace_dump.log	Promotions to trades	TCL activation count
+/logs/diagnostics/central_clock.log	Tick cadence & subscriber health	Steady 1 s ticks, avg drift < 0.5 ms
+✅ Validation Criteria
+
+Success is confirmed if:
+
+Engine remains Active (no toggling) throughout.
+
+[A3.R9.0.B][ENGINE_START_BLOCKED] never appears.
+
+RTB queue shows signals entering with proper staggered refresh times (not all synchronized).
+
+SQE log shows both accepted and rejected signals (no 100 % pass).
+
+TCL log shows promotions only when RTB pool ≥ threshold.
+
+Central Clock remains stable (drift ≤ 0.5 ms).
+
+🧩 Post-Run Action
+
+After the run, have Replit:
+
+Generate diagnostic summary for phase=8.8.4-R9.0.B-OBS
+
+
+Then share the summary here — I’ll analyze the logs and confirm whether the system is fully stable across all components.
