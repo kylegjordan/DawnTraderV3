@@ -17,9 +17,7 @@ The system incorporates a modern `guardrails_v2` schema, supporting dual-mode op
 
 Monitoring includes strategy usage summary, passive learning, cross-user mode synchronization, and a trade execution verifier. The system uses an authoritative trading state contract via `/api/trading/status` and `trading_state_changed` WebSocket events. A Service-Layer Non-Blocking Refactor eliminated blocking in paper and live trading, replaced by an In-Memory Operation Queue. A Unified Engine Health Monitor provides comprehensive health monitoring with auto-recovery, real-time telemetry, and anomaly detection.
 
-Dry-Run Mode introduces safe, non-mutating trade pipeline validation. An Active Filter Pool with TTL-based expiry and deduplication is implemented. The FX5 Scanner maintains a persistent pool of survivors, running independently.
-
-Execution Safety Alignment ensures `preComputedNotional` from P2 signals is used for `checkPositionSizeCap`. A Signal Creation & Sizing Pipeline Audit (`B5SizingAuditService`) provides a comprehensive audit trail for the entire signal-to-trade pipeline across all 9 strategies. A Unified Sizing Pipeline Refactor standardizes the signal-to-trade sizing pipeline, implementing exposure-budget-based sizing and centralizing sizing in the Signal Orchestrator.
+Dry-Run Mode introduces safe, non-mutating trade pipeline validation. An Active Filter Pool with TTL-based expiry and deduplication is implemented. The FX5 Scanner maintains a persistent pool of survivors, running independently. Execution Safety Alignment ensures `preComputedNotional` from P2 signals is used for `checkPositionSizeCap`. A Signal Creation & Sizing Pipeline Audit (`B5SizingAuditService`) provides a comprehensive audit trail for the entire signal-to-trade pipeline across all 9 strategies. A Unified Sizing Pipeline Refactor standardizes the signal-to-trade sizing pipeline, implementing exposure-budget-based sizing and centralizing sizing in the Signal Orchestrator.
 
 A Hard Reset Service provides a single authoritative path for complete paper simulation reset. Execution Engine Integrity ensures P&L calculations use only real market data. Kraken Canonical Symbol Mapping introduces a single authoritative symbol mapping layer for Kraken using a `BASE/QUOTE` internal format, with a Symbol Map and Symbol Resolver. WebSocket Subscription & Tick Flow Diagnostics implement tracing of the complete WebSocket subscription lifecycle and 8-stage price tracing. Tick Frequency Stabilization improves WebSocket tick reliability by detecting and correcting slow, irregular, or frozen tick streams with auto-resubscription.
 
@@ -41,39 +39,19 @@ SQE Integrity Enforcement implements pair-level duplicate validation and continu
 
 RTB Stabilization & Diagnostics includes conditional TTL expiry for missed refreshes, skip-self dedupe in `queueSQESignal()`, CWQI floor clamping, auto-reinitialize refresh/TCL timers on startup, TCL threshold adjustments, `cleanupExpiredSignals()` on engine start, and SQE rejection diagnostic logging. Paper Trade History Retention Fix extends paper trade retention to 30 days.
 
-Central Clock Architecture (Directive 8.8.4-A3.R7) introduces a synchronized timing system using `CentralClockService` that emits 1-second ticks to coordinate all timing-dependent subsystems. FX5 Scanner, RTB Refresh, and TCL Watchdog now subscribe to the Central Clock for deterministic 30-second aligned intervals. The TCL Watchdog uses tick-based failsafe timing (default 120 seconds) and emits SlotOpened, RTBThresholdMet, and FailsafeTrigger events via an enhanced EventBus with a 200ms event queue processor for reliable event handling. The startup sequence ensures Central Clock starts first, followed by event listeners, then services.
+Central Clock Architecture introduces a synchronized timing system using `CentralClockService` that emits 1-second ticks to coordinate all timing-dependent subsystems. FX5 Scanner, RTB Refresh, and TCL Watchdog now subscribe to the Central Clock for deterministic 30-second aligned intervals. The TCL Watchdog uses tick-based failsafe timing (default 120 seconds) and emits SlotOpened, RTBThresholdMet, and FailsafeTrigger events via an enhanced EventBus with a 200ms event queue processor for reliable event handling. The startup sequence ensures Central Clock starts first, followed by event listeners, then services.
 
-System Harmonization (Directive 8.8.4-A3.R9.0) implements comprehensive RTB, TCL, and SQE alignment:
-- **SQE Calibration**: Restored thresholds (MIN_NGC=0.55, MIN_CWQI=0.45) targeting 35-50% pass rate. NGC formula: normalize→blend (0.4*NGC + 0.4*profitRate + 0.2*(1-risk)).
-- **RTB Refresh Realignment**: Per-signal rolling TTL with 30-second individual expiry, statusUpdatedAt tracking in metadata, and enhanced deduplication key (symbol:strategy:createdAtBucket).
-- **TCL Synchronization Barrier**: Atomic `refreshComplete` flag prevents TCL from querying RTB mid-refresh cycle. All `checkSignalThresholdLive()` calls require explicit barrier state (no default parameter). Error paths keep barrier closed; only successful refresh releases it.
-- **TradingScheduler**: Unified Central Clock consumer that fans out to FX5Scanner, RTB, and TCL, reducing CPU spikes ~10%.
-- **Performance Metrics**: Auto-starting `PerformanceMonitor` tracks sqe_evaluation_rate, rtb_refresh_latency, tcl_activation_delay, and queue_churn_rate with 60-second summary logs. All queue removal paths (promotion, dedupe, SQE failure, expiry, TTL, bulk clear) call `recordQueueRemove()` exactly once per deletion.
-- All log tags standardized to `[A3.R9.0]` across SQE, RTB, and TCL modules.
+System Harmonization implements comprehensive RTB, TCL, and SQE alignment including SQE Calibration, RTB Refresh Realignment with per-signal rolling TTL, TCL Synchronization Barrier, and a `TradingScheduler` for unified Central Clock consumption. Performance monitoring tracks key metrics like `sqe_evaluation_rate` and `rtb_refresh_latency`.
 
-Normalization & Refresh Stagger Harmonization (Directive 8.8.4-A3.R9.0.A) implements:
-- **Pre-Blend Normalization (R9-D1)**: Explicit nBase/nProfit/nRisk variables before NGC blending, preventing double compression. Diagnostic log: `[A3.R9.0.A][NGC_NORMALIZED]`.
-- **Uniform Refresh Stagger (R9-D2)**: Hash-based signal distribution using djb2 algorithm. Signals sorted by offset and processed with staggered delays (scaled 0-5s window). Diagnostic log: `[A3.R9.0.A][RTB_REFRESH_STAGGER]`.
-- **Performance Monitor Consistency (R9-D3)**: Updated header and log tags to `[A3.R9.0.A][METRICS]`.
+Normalization & Refresh Stagger Harmonization implements pre-blend normalization for NGC calculation and a uniform hash-based refresh stagger for signals, distributing processing over time. Performance monitoring is consistently applied.
 
-Engine Activation Standardization (Directive 8.8.4-A3.R9.0.B) implements:
-- **Direct Execution Guard**: `server/paper-trading-start.ts` blocked via `ALLOW_DIRECT_ENGINE_START` guard. All engine starts must go through authenticated API endpoint `/api/paper-sim/start`. Diagnostic log: `[A3.R9.0.B][ENGINE_START_BLOCKED]`.
-- **Provenance Tracking**: `start(source: 'api' | 'internal' | 'unknown')` parameter flows through `PaperPortfolioManager` → `PaperExecutionEngine`. Diagnostic log: `[A3.R9.0.B][ENGINE_START]` with source and PID.
-- **Redundant Start Safeguard**: Engine blocks duplicate start calls when already running. Diagnostic log: `[A3.R9.0.B][GUARD]`.
-- **CLI Wrapper**: `scripts/start-paper-sim.sh` provides authenticated API access using `PAPER_SIM_TOKEN` environment variable.
+Engine Activation Standardization blocks direct engine starts, requiring authenticated API endpoint usage, and implements provenance tracking for engine start sources and safeguards against redundant start calls. A CLI wrapper provides authenticated API access.
 
-SQE Normalization, CWQI Correction & Symbol Resolution (Directive 8.8.4-A3.R9.0.C) implements:
-- **R9C-1: SQE Normalization Order**: Evaluate raw metrics against thresholds FIRST, then clamp for downstream consumers. Prevents over-normalization that caused 100% pass rate. Diagnostic log: `[A3.R9.0.C][SQE_FILTERED_OUT]` for rejected signals.
-- **R9C-3: Symbol Resolution Standardization**: All symbol comparisons use `normalizeInternal()` from Kraken Symbol Resolver (`server/markets/kraken-symbol-resolver.ts`). Eliminates fragmented symbol handling across SQE, RTB, and TCL modules.
-- **R9C-4: Reconfirmation During Refresh**: Signals are re-validated through SQE during refresh cycles even when `isRefreshing=true`. Already implemented in `refreshAndRank()`.
-- **R9C-5: Enhanced Observability**: Added `sqePassedCount`, `sqeRejectedCount`, and `symbolResolutionLatencyMs` metrics to PerformanceMonitor. Diagnostic log: `[A3.R9.0.C][METRICS]`.
-- Expected outcomes: SQE pass rate 40-55%, CWQI mean 0.63-0.70, symbol consistency unified under Tier 0/1 Kraken map.
+SQE Normalization, CWQI Correction & Symbol Resolution evaluates raw metrics against thresholds first, then clamps. It standardizes symbol resolution using a Kraken Symbol Resolver, re-validates signals through SQE during refresh cycles, and enhances observability with new metrics in PerformanceMonitor.
 
-Diagnostic Signal Flow Tracing (Directive 8.8.4-A3.R9.0.D) implements:
-- **DiagnosticTraceService**: Buffered async logging with 2-second flush intervals and 200-entry buffer, auto-disabling after 10 minutes or 1 MB.
-- **Trace Probes**: Non-invasive probes in signal-orchestrator.ts (raw metrics), signal_quality_evaluator.ts (SQE evaluation), and ready_to_buy_service.ts (queue decisions).
-- **API Endpoints**: `/api/diagnostics/trace/start`, `/api/diagnostics/trace/stop`, `/api/diagnostics/trace/status`, `/api/diagnostics/trace/entries`.
-- **Output**: Trace entries written to `logs/diagnostic/trace_A3R9.log` with `[A3.R9.TRACE]` tag, capturing phase, symbol, strategy, NGC, CWQI, profit, risk, and pass/reject/insert status.
+Diagnostic Signal Flow Tracing implements a `DiagnosticTraceService` with buffered async logging and trace probes in key signal processing modules (`signal-orchestrator.ts`, `signal_quality_evaluator.ts`, `ready_to_buy_service.ts`). API endpoints are provided for trace control and retrieval.
+
+Integrity Rebuild implements critical data integrity fixes, including decay order correction before normalization, live metric refresh for RTB, detailed SQE revalidation logging, atomic signal promotion, unique signal ID enforcement, and diagnostic confirmation hooks.
 
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
