@@ -1,0 +1,176 @@
+# Validation Protocol: 8.8.4-A3.R9.0.C-OBS2
+# Objective: Empirical verification of SQE normalization, RTB lifecycle behavior,
+#            reconfirmation logic, and Kraken symbol consistency.
+# Phase: 8.8.4-A3.R9.0.C Validation Run
+# Mode: Paper Trading (active)
+# Duration: 20 minutes
+# Architect: [Your Name]
+# Date: [Insert date/time]
+
+--------------------------------------------------------------------
+## 1️⃣  Session Setup
+
+1. Ensure paper trading engine is stopped:
+POST /api/paper-sim/stop
+
+bash
+Copy code
+Wait until `/api/paper-sim/status` returns `"state": "STOPPED"`.
+
+2. Clear all queues and caches:
+POST /api/rtb/clear
+POST /api/sqe/reset
+POST /api/metrics/reset
+
+markdown
+Copy code
+
+3. Confirm system health:
+GET /api/health
+
+sql
+Copy code
+Expected: CentralClock ✅ RUNNING, FX5Scanner ✅ Active, RTB ✅ Ready, TCL ✅ Idle.
+
+--------------------------------------------------------------------
+## 2️⃣  Start Observational Run
+
+Start trading from **UI Start button** (not CLI) to ensure single-engine activation:
+POST /api/paper-sim/start
+
+bash
+Copy code
+Expected log:
+[A3.R9.0.B][ENGINE_START] source=api mode=paper
+
+markdown
+Copy code
+
+Run for **20 minutes** to allow multiple refresh and reconfirmation cycles.
+
+--------------------------------------------------------------------
+## 3️⃣  During Session — Continuous Monitoring
+
+### A. SQE Validation Metrics
+Check every 2 minutes:
+GET /api/metrics
+
+css
+Copy code
+Expect to see:
+[A3.R9.0.C][METRICS] pass≈40–55%, reject≈45–60%
+
+pgsql
+Copy code
+If reject count remains at 0 after 5 min, flag for SQE regression.
+
+### B. RTB Table Snapshot
+GET /api/rtb/snapshot
+
+matlab
+Copy code
+Fields: id, symbol, strategy, status, createdAt, refreshedAt, ttlMs, cwqi, ngc
+
+Expected distribution:
+| Metric | Range | Target |
+|---------|--------|--------|
+| CWQI | 0.55 – 0.75 | mean ≈ 0.65 |
+| NGC  | 0.50 – 0.75 | mean ≈ 0.63 |
+| Status mix | active ≈ 60%, reconfirmed ≈ 25%, promoted ≈ 5–10% | |
+| Total queue size | 20 – 40 | stable fluctuation |
+
+Diagnostic log:
+[A3.R9.0.C][SQE_FILTERED_OUT] ...
+[A3.R9.0.C][RTB_REFRESH_STAGGER] ...
+
+mathematica
+Copy code
+
+### C. Symbol Consistency Test
+For any symbol shown in RTB and Open Trades tables:
+GET /api/open-trades
+
+markdown
+Copy code
+Verify `symbol` matches exactly (e.g., `ADA/USD` both places).  
+No variants like `ADAUSD` should appear.
+
+### D. Reconfirmation Cycle Test
+Observe one refresh cycle (~30 s):
+- `active` → `reconfirmed` transitions should appear.
+- TTL values reset.
+- No bulk flash-clearing or mass re-insertion.
+
+Log indicators:
+[A3.R9.0.C][RTB_REFRESH] cycle complete
+[A3.R9.0.C][SQE_FILTERED_OUT] ...
+
+arduino
+Copy code
+
+--------------------------------------------------------------------
+## 4️⃣  End of Session
+
+After ~20 min, stop trading:
+POST /api/paper-sim/stop
+
+r
+Copy code
+
+Then collect all log artifacts:
+/logs/validation/sqe_trace_dump.log
+/logs/validation/rtb_refresh_trace_dump.log
+/logs/validation/tcl_promotion_trace_dump.log
+/logs/validation/performance_monitor.log
+
+sql
+Copy code
+
+--------------------------------------------------------------------
+## 5️⃣  Validation Criteria
+
+| Component | Expected Outcome | Pass Condition |
+|------------|------------------|----------------|
+| SQE | ~45–55 % rejection rate | `sqeRejectedCount / total > 0.35` |
+| CWQI/NGC | Normal distribution, no saturation | mean 0.6–0.7, σ > 0.05 |
+| RTB | Signals persist & reconfirm correctly | ≥ 15 % marked reconfirmed |
+| Symbol Mapping | Kraken Resolver canonical form only | no mismatched pairs |
+| TCL Promotion | One or more valid promotions after threshold | `poolSize >= 15` triggers |
+| Performance | Interval ≤ 60 s, CPU overhead < 3 % | consistent logs |
+
+--------------------------------------------------------------------
+## 6️⃣  Post-Run Data Review
+
+After run, generate metrics summary:
+GET /api/metrics/summary?phase=A3.R9.0.C
+
+lua
+Copy code
+Confirm output:
+phase: "A3.R9.0.C"
+sqePassRate: 0.45–0.55
+avgCWQI: ~0.65
+avgNGC: ~0.63
+symbolResolutionLatencyMs: < 1.5
+
+sql
+Copy code
+
+--------------------------------------------------------------------
+## ✅  Completion
+
+If all criteria pass:
+→ System enters **Phase 8.8.4-A3.R9.0.D** (Long-Run Stability Validation).
+
+If any metric fails:
+→ Flag with `[A3.R9.0.C][REGRESSION]` and collect full trace dumps for targeted patch directive.
+
+# End of Validation Protocol A3.R9.0.C-OBS2
+🔍 Simplified Overview
+Run duration: 20 min
+
+What to watch: rejection rate (~50 %), reconfirmations appearing, CWQI/NGC spread (0.55–0.75).
+
+What’s fixed: SQE filtering logic, CWQI blending, Kraken symbol unification.
+
+Success signal: The system stops “accepting everything,” queues show healthy churn, and symbol formats are uniform.
