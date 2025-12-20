@@ -20,6 +20,7 @@
 
 import { eventBus, type TradingMode } from '../../lib/event-bus';
 import { centralClock, ClockTick } from '../../services/central-clock';
+import { storage } from '../../storage';
 
 const TCL_FAILSAFE_SECONDS = parseInt(process.env.TCL_FAILSAFE_SECONDS || '120', 10);
 const TCL_SIGNAL_THRESHOLD = parseInt(process.env.TCL_SIGNAL_THRESHOLD || '15', 10);
@@ -133,9 +134,65 @@ class TCLWatchdog {
   }
 
   /**
+   * Directive 8.8.4-A3.R8.5: Query live pool count from database
+   * Replaces cached snapshot approach with real-time query
+   * FIX: Includes only active pool statuses (queued, active, reconfirmed)
+   * Explicitly excludes promoted (already executed) and expired (pending cleanup)
+   */
+  private async getLivePoolCount(mode: TradingMode): Promise<number> {
+    // A3.R8.5: Active pool statuses that count toward TCL threshold
+    // Excluded: 'promoted' (already executed), 'expired' (pending cleanup)
+    const active = await storage.getRtbSignals({ mode, status: 'active' });
+    const reconfirmed = await storage.getRtbSignals({ mode, status: 'reconfirmed' });
+    const queued = await storage.getRtbSignals({ mode, status: 'queued' });
+    
+    const total = active.length + reconfirmed.length + queued.length;
+    console.log(`[A3.R8.5][TCL_LIVE_COUNT] mode=${mode} active=${active.length} reconfirmed=${reconfirmed.length} queued=${queued.length} total=${total}`);
+    
+    return total;
+  }
+
+  /**
    * Check if signal threshold is reached and activate TCL if needed
    * Directive A3.R7: Permanently disables failsafe after RTBThresholdMet
    * Directive A3.R8.4: Added 5-second debounce to prevent redundant activation attempts
+   * Directive A3.R8.5: Uses live query for pool count, not cached snapshot
+   */
+  async checkSignalThresholdLive(mode: TradingMode): Promise<void> {
+    const state = this.getState(mode);
+    const now = Date.now();
+    const DEBOUNCE_MS = 5000; // 5 seconds debounce
+
+    // Already active - skip
+    if (state.isActive) {
+      return;
+    }
+    
+    // A3.R8.4: Debounce threshold checks to prevent redundant activations
+    if (now - state.lastThresholdCheckMs < DEBOUNCE_MS) {
+      return; // Skip - too soon since last check
+    }
+    
+    state.lastThresholdCheckMs = now;
+
+    // A3.R8.5: Query live pool count from database
+    const currentPoolSize = await this.getLivePoolCount(mode);
+
+    if (currentPoolSize >= TCL_SIGNAL_THRESHOLD) {
+      console.log(`[TCL][Event] RTBThresholdMet received – ${currentPoolSize} signals active (live query)`);
+      this.activateTCL(mode, '100signals', currentPoolSize);
+      
+      state.failsafeDisabled = true;
+      console.log(`[A3.R7][TCL_WATCHDOG] Failsafe permanently disabled for ${mode} (RTBThresholdMet)`);
+    }
+  }
+
+  /**
+   * Check if signal threshold is reached and activate TCL if needed
+   * Directive A3.R7: Permanently disables failsafe after RTBThresholdMet
+   * Directive A3.R8.4: Added 5-second debounce to prevent redundant activation attempts
+   * 
+   * @deprecated Use checkSignalThresholdLive for A3.R8.5 compliance
    */
   checkSignalThreshold(mode: TradingMode, currentPoolSize: number): void {
     const state = this.getState(mode);

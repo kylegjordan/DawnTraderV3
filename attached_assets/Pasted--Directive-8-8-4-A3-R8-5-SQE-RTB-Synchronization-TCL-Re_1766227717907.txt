@@ -1,0 +1,110 @@
+🧭 Directive 8.8.4-A3.R8.5 — SQE-RTB Synchronization & TCL Realignment
+
+Classification: Corrective / Synchronization
+Target Modules:
+
+/server/core/sqe/signal_quality_engine.ts
+
+/server/core/rtb/ready_to_buy_service.ts
+
+/server/core/tcl/tcl_watchdog.ts
+
+/server/routes/api/rtb_signals.ts
+
+Issued By: Architect – DawnTrader Core Systems
+Date: 2025-12-20
+Authorized Tester: testuser123 / SecurePass123!
+
+🎯 Objective
+
+Eliminate asynchronous SQE bypass, restore NGC gating, re-enable proper RTB status lifecycles, enforce deduplication, and align TCL activation with live queue counts.
+
+This directive ensures that only validated signals enter the RTB, statuses transition visibly (active → reconfirmed → promoted/expired), and TCL promotes signals only after true queue thresholds are reached.
+
+🔧 Implementation Steps
+1. ready_to_buy_service.ts
+
+1.1 Enforce SQE Await Before Insert
+
+const result = await SQE.evaluateSignalQuality(signal);
+if (result?.passed) {
+  await this.insertSignal(signal);
+}
+
+
+1.2 Preserve and Advance Statuses
+
+if (result?.passed) {
+  signal.status = signal.status === "active" ? "reconfirmed" : signal.status;
+} else {
+  // remove immediately on failure
+  await this.deleteSignal(signal.id);
+}
+
+
+1.3 Deduplicate During Refresh
+
+if (!pool.find(p => p.symbol === s.symbol && p.strategy === s.strategy)) {
+  pool.push(s);
+}
+
+2. signal_quality_engine.ts
+
+2.1 Reinstate NGC Threshold
+
+if (ngc < MIN_NGC_THRESHOLD) {
+  return { passed: false, reason: "NGC below threshold" };
+}
+
+
+2.2 Maintain Additive Formula
+
+const ngc = (baseNGC * 0.4) + (profitRate * 0.4) + ((1 - risk) * 0.2);
+
+
+Ensure normalization is performed once and capped [0 , 1].
+
+3. tcl_watchdog.ts
+
+3.1 Replace Cached Snapshot Count with Live Query
+
+const activeCount = await rtbStorage.countActive();
+if (activeCount >= this.threshold) {
+  this.triggerPromotion();
+}
+
+
+3.2 Retain 5-second debounce window to prevent redundant triggers.
+
+4. api/rtb_signals.ts
+
+4.1 Correct UI Status Mapping
+
+switch (s.status) {
+  case "reconfirmed": uiStatus = "Reconfirmed"; break;
+  case "promoted":   uiStatus = "Promoted";    break;
+  case "expired":    uiStatus = "Expired";     break;
+  default:           uiStatus = "Active";
+}
+
+🧪 Validation Plan
+Check	Expected Outcome
+SQE pass rate	≈ 30 – 50 % of signals
+RTB queue size	10 – 20 signals steady, visible reconfirmed states
+TCL trigger	Only when ≥ threshold (15 signals)
+UI statuses	Active, Reconfirmed, Promoted, Expired displayed distinctly
+Duplicates	None in RTB table
+Trade open sequence	Always RTB → TCL → Trade execution (no direct FX5 → Trade)
+✅ Expected Result
+
+A synchronized signal-evaluation pipeline where:
+
+Only SQE-validated signals reach RTB.
+
+Signals visibly persist and evolve across lifecycles.
+
+TCL promotion is event-accurate and threshold-aware.
+
+RTB ranks and counts remain stable without inflation or flashing.
+
+End Directive 8.8.4-A3.R8.5

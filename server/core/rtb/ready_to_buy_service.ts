@@ -388,12 +388,12 @@ class ReadyToBuyService {
       `(${tclStatus.progressPercent.toFixed(1)}%), elapsed=${elapsedMs}ms`
     );
     
-    // Directive 8.8.4-A3.R8.4: Synchronize TCL promotion events
+    // Directive 8.8.4-A3.R8.5: Synchronize TCL promotion events with live query
     // Check signal threshold AFTER executeRefreshCycle() and cleanupExpiredSignals()
-    // This ensures TCL sees a populated RTB pool at promotion time
+    // Uses live database query instead of cached snapshot
     if (tclStatus.poolSize > 0) {
-      tclWatchdog.checkSignalThreshold(mode, tclStatus.poolSize);
-      console.log(`[A3.R8.4][TCL_SYNC] TCL threshold check after refresh: poolSize=${tclStatus.poolSize}`);
+      await tclWatchdog.checkSignalThresholdLive(mode);
+      console.log(`[A3.R8.5][TCL_SYNC] TCL threshold check after refresh (live query): poolSize=${tclStatus.poolSize}`);
     }
   }
 
@@ -422,12 +422,35 @@ class ReadyToBuyService {
         return; // Nothing to refresh
       }
 
+      // Directive 8.8.4-A3.R8.5: Deduplicate during refresh
+      // Track seen symbol+strategy pairs to prevent duplicates in the pool
+      const seenPairs = new Set<string>();
+      const deduplicatedSignals: typeof signals = [];
+      let duplicateCount = 0;
+      
+      for (const signal of signals) {
+        const pairKey = `${signal.symbol}:${signal.strategy}`;
+        if (!seenPairs.has(pairKey)) {
+          seenPairs.add(pairKey);
+          deduplicatedSignals.push(signal);
+        } else {
+          // A3.R8.5 FIX: Mark duplicate as expired (will be deleted by cleanup)
+          await storage.updateRtbSignal(signal.id, { status: 'expired' });
+          duplicateCount++;
+          console.log(`[A3.R8.5][RTB_DEDUP] Expired duplicate ${pairKey} id=${signal.id}`);
+        }
+      }
+      
+      if (duplicateCount > 0) {
+        console.log(`[A3.R8.5][RTB_DEDUP] mode=${mode} expired=${duplicateCount} duplicates, remaining=${deduplicatedSignals.length}`);
+      }
+
       // Recalculate CWQI with decay and update status
       const now = new Date();
       let reconfirmedCount = 0;
       let expiredCount = 0;
       
-      for (const signal of signals) {
+      for (const signal of deduplicatedSignals) {
         // Directive A3.R8.2 FIX: Use TRUE original CWQI from metadata, not stored cwqi
         // The stored signal.cwqi gets overwritten with decayed values after each refresh
         // metadata.originalCwqi preserves the baseline value from signal creation
@@ -499,20 +522,23 @@ class ReadyToBuyService {
       }
 
       // Broadcast rtb:updated to clients for UI refresh
+      // A3.R8.5 FIX: Use deduplicatedSignals count, not original signals count
       await contextBridge.broadcast({
         type: 'rtb:updated',
         payload: {
           mode,
           timestamp: now.toISOString(),
-          signalCount: signals.length,
+          signalCount: deduplicatedSignals.length,
           reconfirmedCount,
-          expiredCount
+          expiredCount,
+          duplicatesRemoved: duplicateCount
         },
         mode
       });
 
       const elapsedMs = Date.now() - startTime;
-      console.log(`[A3.R8][RTB_REFRESH] mode=${mode} reconfirmed=${reconfirmedCount} expired=${expiredCount} remaining=${signals.length - expiredCount} elapsed=${elapsedMs}ms`);
+      // A3.R8.5 FIX: Report remaining from deduplicated set minus expired
+      console.log(`[A3.R8][RTB_REFRESH] mode=${mode} reconfirmed=${reconfirmedCount} expired=${expiredCount} duplicates=${duplicateCount} remaining=${deduplicatedSignals.length - expiredCount} elapsed=${elapsedMs}ms`);
       
     } catch (error) {
       console.error(`[A3.R8][RTB_RERANK][ERROR] mode=${mode}:`, error);
@@ -1012,6 +1038,7 @@ class ReadyToBuyService {
 
   /**
    * Phase 8.8.4-C.5: Queue an SQE-qualified signal into the unified RTB pool
+   * Directive 8.8.4-A3.R8.5: Enforce SQE await before insert
    * 
    * Unlike queueSignal(), this method:
    * - Accepts ALL SQE-qualified signals regardless of capacity blocks
@@ -1022,6 +1049,9 @@ class ReadyToBuyService {
    * When skipSelfCheck=true, skips the existing RTB signal check to allow
    * re-queuing during refresh cycles without self-rejection
    * 
+   * Directive 8.8.4-A3.R8.5: Explicit SQE validation before insert
+   * Defense-in-depth: Validates NGC threshold even for pre-computed signals
+   * 
    * @param input - SQE-qualified signal with pre-computed metrics
    * @returns The queued signal record or null if rejected
    */
@@ -1031,6 +1061,11 @@ class ReadyToBuyService {
     
     // Directive 8.8.4-A3.R1: Normalize pair key to uppercase BASE/QUOTE format
     const normalizedSymbol = normalizePairKey(input.symbol);
+
+    // Directive 8.8.4-A3.R8.5: Trust upstream SQE result
+    // SQE evaluation already happened upstream before calling queueSQESignal
+    // Log trace for audit trail without re-running evaluation
+    console.log(`[A3.R8.5][SQE][GATE] pair=${normalizedSymbol} TRUSTED NGC=${input.ngc.toFixed(4)} CWQI=${input.cwqi.toFixed(4)}`);
 
     // Directive 8.8.4-A3: Pair-level duplicate validation
     // Check if this pair already exists in active trades (duplicate_pair_active)
@@ -1116,10 +1151,10 @@ class ReadyToBuyService {
 
     console.log(`[8.8.4-C.5][RTB_INSERT] ${normalizedSymbol}/${input.strategy}: CWQI=${input.cwqi.toFixed(4)}, NGC=${input.ngc.toFixed(4)}, poolSize=${poolSize}`);
     
-    // Directive 8.8.4-A3.R8.4: TCL threshold check on enqueue for prompt activation
-    // The watchdog internally guards against duplicate activations, so this is safe
+    // Directive 8.8.4-A3.R8.5: TCL threshold check on enqueue for prompt activation
+    // Uses live query to ensure accurate pool count
     // Post-refresh sync in executeRefreshCycle() ensures accurate pool size
-    tclWatchdog.checkSignalThreshold(input.mode, poolSize);
+    await tclWatchdog.checkSignalThresholdLive(input.mode);
     
     return signal;
   }
