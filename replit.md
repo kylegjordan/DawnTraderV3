@@ -56,6 +56,12 @@ Normalization & Refresh Stagger Harmonization (Directive 8.8.4-A3.R9.0.A) implem
 - **Uniform Refresh Stagger (R9-D2)**: Hash-based signal distribution using djb2 algorithm. Signals sorted by offset and processed with staggered delays (scaled 0-5s window). Diagnostic log: `[A3.R9.0.A][RTB_REFRESH_STAGGER]`.
 - **Performance Monitor Consistency (R9-D3)**: Updated header and log tags to `[A3.R9.0.A][METRICS]`.
 
+Engine Activation Standardization (Directive 8.8.4-A3.R9.0.B) implements:
+- **Direct Execution Guard**: `server/paper-trading-start.ts` blocked via `ALLOW_DIRECT_ENGINE_START` guard. All engine starts must go through authenticated API endpoint `/api/paper-sim/start`. Diagnostic log: `[A3.R9.0.B][ENGINE_START_BLOCKED]`.
+- **Provenance Tracking**: `start(source: 'api' | 'internal' | 'unknown')` parameter flows through `PaperPortfolioManager` → `PaperExecutionEngine`. Diagnostic log: `[A3.R9.0.B][ENGINE_START]` with source and PID.
+- **Redundant Start Safeguard**: Engine blocks duplicate start calls when already running. Diagnostic log: `[A3.R9.0.B][GUARD]`.
+- **CLI Wrapper**: `scripts/start-paper-sim.sh` provides authenticated API access using `PAPER_SIM_TOKEN` environment variable.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.
