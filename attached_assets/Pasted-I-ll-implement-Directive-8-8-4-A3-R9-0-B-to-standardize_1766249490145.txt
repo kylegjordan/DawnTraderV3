@@ -1,0 +1,51 @@
+I'll implement Directive 8.8.4-A3.R9.0.B to standardize engine activation and eliminate the dual-engine problem.
+
+Now I'll implement all four tasks:
+
+Checked code issues
+Let me verify the guard works and test the implementation:
+
+The guard isn't working correctly - the imports are being executed before the guard check. Let me fix this by moving the guard to the absolute top before any imports:
+
+I need to restructure the file to check the guard before loading any imports. Let me rewrite it with dynamic imports:
+
+The guard is now working correctly. Let me update the task list and verify everything:
+
+
+Reviewed engine activation standardization
+Good catch from the architect. The log message should accurately reflect the source. Let me fix this:
+
+Now let me update the call sites in paper-sim-service.ts to pass the correct source:
+
+Now I need to update the PaperPortfolioManager to pass the source parameter through to the engine:
+
+Checked code issues
+The LSP errors are pre-existing issues unrelated to my changes. Let me verify the application compiles and runs correctly, then check the logs to confirm the implementation:
+
+Checked console and system logs
+Application is running. Let me verify the guard still works and then complete the review:
+
+The guard is working correctly. Now let me call the architect for final review:
+
+
+Verified directive implementation and provenance tracking
+All tasks have been reviewed and approved. Let me complete the task list and update the documentation:
+
+Directive 8.8.4-A3.R9.0.B is now fully implemented and documented. Here's what was completed:
+
+Engine Activation Standardization:
+
+Direct Execution Guard - The standalone script paper-trading-start.ts is now blocked from direct execution. Attempting to run it via npx tsx will display a clear error message directing users to the proper API endpoint instead.
+
+Provenance Tracking - Engine start calls now track their activation source (api, internal, or unknown), flowing through the entire call chain from the API layer to the execution engine.
+
+Redundant Start Safeguard - The engine now blocks duplicate start calls when already running, preventing the dual-engine state conflicts we identified earlier.
+
+CLI Wrapper - A new scripts/start-paper-sim.sh script provides authenticated API access for command-line usage with PAPER_SIM_TOKEN.
+
+Log Signatures:
+
+[A3.R9.0.B][ENGINE_START_BLOCKED] - Direct execution blocked
+[A3.R9.0.B][ENGINE_START] - Activation with source and PID
+[A3.R9.0.B][GUARD] - Redundant start blocked
+This ensures all engine activations go through the single authoritative API endpoint, eliminating the isolated process conflicts that caused the engine state toggling issue observed during the earlier diagnostic session.
