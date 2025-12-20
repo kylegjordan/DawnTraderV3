@@ -1,0 +1,131 @@
+Directive 8.8.4-A3.R8.4 — RTB Lifecycle Persistence and TCL Event Realignment
+Objective
+
+Stabilize the Ready-to-Buy (RTB) queue so that signals remain visible until the Signal Quality Evaluator (SQE) explicitly accepts or rejects them, and synchronize TCL promotions with RTB refresh events.
+
+Context
+
+After implementation of A3.R8.3 (NGC calibration), all signals were passing the SQE, but RTB entries were appearing in short bursts and disappearing within seconds.
+The behavior traced to:
+
+Premature TTL expiry (queued_at misalignment)
+
+Immediate deletion of expired signals rather than status-update
+
+TCL threshold trigger firing before refreshed RTB data was visible
+
+This directive re-establishes consistent timing and visible persistence for RTB signals.
+
+Implementation Plan
+1. Modify RTB Lifecycle Behavior
+
+File: server/core/rtb/ready_to_buy_service.ts
+
+Persist signals through re-evaluation cycles
+
+// Before: expired signals deleted outright
+if (!passesSQE) {
+  await this.db.deleteRtbSignals({ mode, id: signal.id });
+}
+
+// After: mark as expired, visible until cleanup
+if (!passesSQE) {
+  await this.db.updateRtbSignal(signal.id, { status: 'expired' });
+}
+
+
+Refresh-pass behavior
+
+if (passesSQE) {
+  signal.status = signal.status === 'active' ? 'reconfirmed' : 'active';
+  signal.queued_at = new Date();   // reset TTL only on pass
+  await this.db.updateRtbSignal(signal.id, {
+    status: signal.status,
+    cwqi: newCWQI,
+    ngc: newNGC,
+    price: currentPrice
+  });
+}
+
+
+→ Signal rows remain visible; updated fields change live in UI.
+
+Deferred cleanup
+
+Add a cleanup job that purges expired signals only after one full refresh cycle (≈ 30 s × 2).
+
+Ensures users can observe status transitions before removal.
+
+2. Re-scale NGC for Balanced SQE Filtering
+
+File: server/core/sqe/signal_quality_engine.ts
+
+const ngcRaw =
+  (baseNGC * 0.4) + (profitRate * 0.4) + ((1 - risk) * 0.2);
+const ngc = Math.min(1, ngcRaw * 0.85); // clamp and scale
+
+
+→ Restores typical NGC values ≈ 0.4–0.6 and a 30–50 % SQE pass rate.
+
+3. Synchronize TCL Promotion Events
+
+Files:
+
+server/core/tcl/tcl_watchdog.ts
+
+server/lib/event-bus.ts
+
+Move RTBThresholdMet emission to occur after executeRefreshCycle() and cleanupExpiredSignals():
+
+await this.executeRefreshCycle(mode);
+await this.cleanupExpiredSignals(mode);
+eventBus.emit('RTBThresholdMet', { mode });
+
+
+→ TCL sees a populated RTB pool at promotion time.
+
+4. UI Enhancement
+
+Add status column rendering in the RTB table (if not already present):
+
+Status	Meaning
+active	Newly inserted signal
+reconfirmed	Re-validated successfully
+expired	Failed SQE re-evaluation; pending cleanup
+promoted	Passed to TCL for execution
+Validation Plan
+Test Account
+
+Use internal test account credentials (insert here securely; not shown in directive).
+
+Test Run Parameters
+Mode	Duration	Engine	Clock Tick	Expected Cycle
+Paper Trading	30 min	Active	1 s	RTB refresh every 30 s
+Expected Outcomes
+Metric	Expected Result
+SQE Pass Rate	≈ 40–70 %
+RTB Persistence	Signals visible ≥ 30 s, status updates in-place
+Expired Signals	Marked as expired → removed after next cycle
+Reconfirmed Signals	Remain visible with updated CWQI/NGC
+TCL Promotions	Triggered within first two RTB cycles
+Log Verification
+
+Check:
+
+logs/rtb_refresh_trace_<timestamp>.log
+logs/tcl_event_trace_<timestamp>.log
+logs/diagnostics/sqe_ngc_trace.log
+
+
+for sequences like:
+
+[A3.R8.4][RTB_REFRESH] refreshed=9 reconfirmed=6 expired=2 pool=18
+[A3.R8.4][TCL_PROMOTE] promoted=3 pool=15
+
+Directive Control
+Field	Value
+Directive ID	8.8.4-A3.R8.4
+Version	1.0
+Prepared By	System Architect Elizer
+Execution Target	Replit Agent for The Dawn Trader Repository
+Validation Lead	Test User 123 ( insert credentials securely )

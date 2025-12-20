@@ -678,9 +678,12 @@ export function calculateExtendedSignalMetrics(signal: {
   // A3.R8.3: Blend baseNGC with profitability metrics
   // This ensures NGC reflects both confidence AND profit potential
   const profitabilityInformedNGC = (baseNGC * 0.4) + (profitRate * 0.4) + ((1 - riskScore) * 0.2);
-  const ngc = clamp01(profitabilityInformedNGC);
   
-  console.log(`[A3.R8.3][NGC_BLEND] baseNGC=${baseNGC.toFixed(4)} profitRate=${profitRate.toFixed(4)} risk=${riskScore.toFixed(4)} → blendedNGC=${ngc.toFixed(4)}`);
+  // Directive 8.8.4-A3.R8.4: Apply 0.85 scaling factor to restore balanced SQE filtering
+  // This brings typical NGC values to ≈ 0.4–0.6 for a 30–50% SQE pass rate
+  const ngc = clamp01(profitabilityInformedNGC * 0.85);
+  
+  console.log(`[A3.R8.4][NGC_SCALE] baseNGC=${baseNGC.toFixed(4)} profitRate=${profitRate.toFixed(4)} risk=${riskScore.toFixed(4)} raw=${profitabilityInformedNGC.toFixed(4)} → scaledNGC=${ngc.toFixed(4)}`);
   
   // Step 3: Directive A3.R8.3 - Compute CWQI using the profitability-informed NGC
   // Using calculateCWQIWithPrecomputedMetrics ensures CWQI reflects profitability
