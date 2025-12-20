@@ -4512,6 +4512,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // [8.8.4-C.10] Map RTB signal fields to frontend expected format
       // RtbSignal has: quantity, notional (instead of estimatedValue)
+      // Directive 8.8.4-A3.R8.5.A: Add UI status mapping for reconfirmed signals
       const signalsWithQuantity = signals.map(signal => {
         const storedQuantity = signal.quantity ? parseFloat(String(signal.quantity)) : 0;
         const storedNotional = signal.notional ? parseFloat(String(signal.notional)) : 0;
@@ -4519,10 +4520,22 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         const quantity = Number.isFinite(storedQuantity) ? storedQuantity : 0;
         const estimatedValue = Number.isFinite(storedNotional) ? storedNotional : 0;
         
+        // A3.R8.5.A: Map internal status to UI display status
+        let uiStatus: string;
+        switch (signal.status) {
+          case 'active': uiStatus = 'Active'; break;
+          case 'reconfirmed': uiStatus = 'Reconfirmed'; break;
+          case 'promoted': uiStatus = 'Promoted'; break;
+          case 'expired': uiStatus = 'Expired'; break;
+          case 'queued': uiStatus = 'Queued'; break;
+          default: uiStatus = signal.status || 'Unknown'; break;
+        }
+        
         return {
           ...signal,
           estimatedQuantity: quantity,
-          estimatedValue: estimatedValue
+          estimatedValue: estimatedValue,
+          uiStatus
         };
       });
       

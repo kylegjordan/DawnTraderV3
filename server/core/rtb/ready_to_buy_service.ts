@@ -418,7 +418,7 @@ class ReadyToBuyService {
       const signals = await this.getQueuedSignals(mode);
       
       if (signals.length === 0) {
-        console.log(`[A3.R8][RTB_REFRESH] mode=${mode} no signals to refresh`);
+        console.log(`[A3.R8.5][RTB_REFRESH] mode=${mode} no signals to refresh`);
         return; // Nothing to refresh
       }
 
@@ -517,7 +517,7 @@ class ReadyToBuyService {
         });
         
         this.logRtbTrace(mode, signal.symbol, signal.strategy, oldStatus, 'reconfirmed', 'refresh');
-        console.log(`[A3.R8][RECONFIRM] pair=${signal.symbol} ${oldStatus}→reconfirmed CWQI=${decayedCWQI.toFixed(4)}`);
+        console.log(`[A3.R8.5][RECONFIRM] pair=${signal.symbol} ${oldStatus}→reconfirmed CWQI=${decayedCWQI.toFixed(4)}`);
         reconfirmedCount++;
       }
 
@@ -538,10 +538,10 @@ class ReadyToBuyService {
 
       const elapsedMs = Date.now() - startTime;
       // A3.R8.5 FIX: Report remaining from deduplicated set minus expired
-      console.log(`[A3.R8][RTB_REFRESH] mode=${mode} reconfirmed=${reconfirmedCount} expired=${expiredCount} duplicates=${duplicateCount} remaining=${deduplicatedSignals.length - expiredCount} elapsed=${elapsedMs}ms`);
+      console.log(`[A3.R8.5][RTB_REFRESH] mode=${mode} reconfirmed=${reconfirmedCount} expired=${expiredCount} duplicates=${duplicateCount} remaining=${deduplicatedSignals.length - expiredCount} elapsed=${elapsedMs}ms`);
       
     } catch (error) {
-      console.error(`[A3.R8][RTB_RERANK][ERROR] mode=${mode}:`, error);
+      console.error(`[A3.R8.5][RTB_RERANK][ERROR] mode=${mode}:`, error);
     }
   }
 
@@ -899,7 +899,7 @@ class ReadyToBuyService {
     // Directive 8.8.4-A3.R8: Delete signal from RTBQ after promotion
     await storage.deleteRtbSignals({ mode, symbol: signal.symbol, strategy: signal.strategy, status: 'promoted' });
 
-    console.log(`[A3.R8][RTB] Promoted signal ${signal.symbol}/${signal.strategy} to trade ${tradeId} and removed from RTBQ`);
+    console.log(`[A3.R8.5][RTB] Promoted signal ${signal.symbol}/${signal.strategy} to trade ${tradeId} and removed from RTBQ`);
   }
 
   /**
