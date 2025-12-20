@@ -669,18 +669,25 @@ export function calculateExtendedSignalMetrics(signal: {
   
   const profitRate = calculateProfitRate(expectedReturn, expectedDuration);
   
-  // Step 2: Directive A3.R9.0 - Compute NGC WITH profitability influence
+  // Step 2: Directive A3.R9.0.A (R9-D1) - Pre-Blend Normalization
+  // Move normalization into explicit pre-blend stage for variance transparency
   // baseNGC = traditional confidence-based calculation (not tracked to avoid double-sampling)
   const baseNGC = calculateNGC(signal.confidence, volatility, riskScore, false);
   
-  // A3.R9.0: Additive blending formula per System Harmonization directive
-  // NGC = 0.4 * NGC_normalized + 0.4 * profitRate + 0.2 * (1 - risk)
-  const profitabilityInformedNGC = (baseNGC * 0.4) + (profitRate * 0.4) + ((1 - riskScore) * 0.2);
+  // A3.R9.0.A: Explicit pre-blend normalization (prevents double compression)
+  const nBase = clamp01(baseNGC);      // baseNGC already normalized via calculateNGC
+  const nProfit = clamp01(profitRate); // profitRate already normalized via calculateProfitRate  
+  const nRisk = clamp01(1 - riskScore); // Risk inverted and clamped
   
-  // A3.R9.0: No scaling factor - formula already produces appropriate distribution
+  // A3.R9.0.A: Additive blending with pre-normalized components
+  // NGC = 0.4 * nBase + 0.4 * nProfit + 0.2 * nRisk
+  const profitabilityInformedNGC = (nBase * 0.4) + (nProfit * 0.4) + (nRisk * 0.2);
+  
+  // A3.R9.0.A: No scaling factor - formula already produces appropriate distribution
   const ngc = clamp01(profitabilityInformedNGC);
   
-  console.log(`[A3.R9.0][NGC_BLEND] baseNGC=${baseNGC.toFixed(4)} profitRate=${profitRate.toFixed(4)} risk=${riskScore.toFixed(4)} → blendedNGC=${ngc.toFixed(4)}`);
+  // A3.R9.0.A: Diagnostic visibility log with normalized components
+  console.log(`[A3.R9.0.A][NGC_NORMALIZED] base=${nBase.toFixed(3)} profit=${nProfit.toFixed(3)} risk=${nRisk.toFixed(3)} blended=${ngc.toFixed(3)}`);
   
   // Step 3: Directive A3.R8.3 - Compute CWQI using the profitability-informed NGC
   // Using calculateCWQIWithPrecomputedMetrics ensures CWQI reflects profitability

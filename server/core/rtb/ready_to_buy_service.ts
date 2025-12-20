@@ -169,6 +169,60 @@ export function normalizePairKey(symbol: string): string {
 // Directive 8.8.4-A3.R7: Central Clock tick interval for RTB refresh
 const RTB_REFRESH_INTERVAL_SECONDS = 30;
 
+/**
+ * Directive 8.8.4-A3.R9.0.A (R9-D2): Simple hash function for uniform refresh stagger
+ * Uses djb2 algorithm for fast, well-distributed hashing
+ * @param str - String to hash (signal id + symbol)
+ * @returns Positive integer hash value
+ */
+function simpleHash(str: string): number {
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash) + str.charCodeAt(i);
+    hash = hash >>> 0; // Convert to unsigned 32-bit integer
+  }
+  return hash;
+}
+
+/**
+ * Directive 8.8.4-A3.R9.0.A (R9-D2): Calculate stagger offset for uniform distribution
+ * Distributes signal refreshes evenly across the 30-second window
+ * @param signalId - Signal ID
+ * @param symbol - Signal symbol
+ * @returns Offset in milliseconds (0-30000)
+ */
+function calculateRefreshStaggerMs(signalId: string, symbol: string): number {
+  const hashKey = `${signalId}${symbol}`;
+  const offsetMs = Math.abs(simpleHash(hashKey)) % 30000; // 0-30s distribution
+  return offsetMs;
+}
+
+/**
+ * Directive 8.8.4-A3.R9.0.A (R9-D2): Create staggered delay based on hash offset
+ * Scales the 0-30s hash offset to a practical window (0-5s) to prevent overlapping
+ * with the next 30-second refresh cycle while still spreading load
+ * @param staggerOffset - Hash-derived offset (0-30000ms)
+ * @param index - Index in the signal array
+ * @param total - Total number of signals
+ * @returns Promise that resolves after scaled stagger delay
+ */
+function staggeredDelay(staggerOffset: number, index: number, total: number): Promise<void> {
+  if (total <= 3 || index === 0) {
+    return Promise.resolve(); // No delay for small batches or first signal
+  }
+  
+  // Scale 0-30s offset to 0-5s practical window to prevent cycle overlap
+  // This maintains relative ordering from hash while fitting within safe bounds
+  const scaleFactor = 5000 / 30000; // Scale to max 5 seconds
+  const scaledDelayMs = Math.round(staggerOffset * scaleFactor);
+  
+  // Add index-based micro-offset to prevent simultaneous signals with same hash
+  const microOffset = (index % 10) * 5; // 0-45ms additional offset per batch
+  const totalDelayMs = Math.min(scaledDelayMs + microOffset, 5000);
+  
+  return new Promise(resolve => setTimeout(resolve, totalDelayMs));
+}
+
 class ReadyToBuyService {
   private initialized = false;
   private refreshIntervals: Map<TradingMode, NodeJS.Timeout> = new Map();
@@ -460,12 +514,32 @@ class ReadyToBuyService {
         console.log(`[A3.R9.0][RTB_DEDUP] mode=${mode} deleted=${duplicateCount} duplicates, remaining=${deduplicatedSignals.length}`);
       }
 
-      // Recalculate CWQI with decay and update status
+      // A3.R9.0.A (R9-D2): Recalculate CWQI with decay and update status
+      // Apply uniform refresh stagger across 30-second window
       const now = new Date();
       let reconfirmedCount = 0;
       let expiredCount = 0;
       
-      for (const signal of deduplicatedSignals) {
+      // A3.R9.0.A: Sort signals by stagger offset for ordered processing
+      const signalsWithOffset = deduplicatedSignals.map(s => ({
+        signal: s,
+        offset: calculateRefreshStaggerMs(s.signalId, s.symbol)
+      })).sort((a, b) => a.offset - b.offset);
+      
+      // Log stagger distribution for diagnostics
+      const staggerOffsets = signalsWithOffset.map(s => s.offset);
+      const avgOffset = staggerOffsets.length > 0 
+        ? Math.round(staggerOffsets.reduce((a, b) => a + b, 0) / staggerOffsets.length) 
+        : 0;
+      const minOffset = staggerOffsets.length > 0 ? Math.min(...staggerOffsets) : 0;
+      const maxOffset = staggerOffsets.length > 0 ? Math.max(...staggerOffsets) : 0;
+      console.log(`[A3.R9.0.A][RTB_REFRESH_STAGGER] mode=${mode} signals=${signalsWithOffset.length} avgOffset=${avgOffset}ms range=[${minOffset}ms-${maxOffset}ms]`);
+      
+      for (let i = 0; i < signalsWithOffset.length; i++) {
+        const { signal, offset } = signalsWithOffset[i];
+        
+        // A3.R9.0.A (R9-D2): Apply staggered delay based on hash offset for uniform distribution
+        await staggeredDelay(offset, i, signalsWithOffset.length);
         // Directive A3.R8.2 FIX: Use TRUE original CWQI from metadata, not stored cwqi
         // The stored signal.cwqi gets overwritten with decayed values after each refresh
         // metadata.originalCwqi preserves the baseline value from signal creation

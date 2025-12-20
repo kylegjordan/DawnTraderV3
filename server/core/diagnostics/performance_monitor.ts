@@ -1,13 +1,14 @@
 /**
- * Directive 8.8.4-A3.R9.0: Performance & Diagnostic Metrics
+ * Phase 8.8.4-A3.R9.0.A — Performance Monitor
+ * Unified metrics sampler for RTB, SQE, and TCL event timing.
+ * Collects interval metrics every 60s.
+ * Logs: [A3.R9.0.A][METRICS]
  * 
  * Tracks key performance metrics for system harmonization:
  * - sqe_evaluation_rate: SQE evaluations per minute
  * - rtb_refresh_latency: Average RTB refresh cycle time
  * - tcl_activation_delay: Time from engine start to TCL activation
  * - queue_churn_rate: Signals added/removed per minute
- * 
- * Emits summary log every 60s with current averages.
  */
 
 interface PerformanceMetrics {
@@ -31,8 +32,8 @@ class PerformanceMonitor {
   private started: boolean = false;
 
   constructor() {
-    console.log('[A3.R9.0][METRICS] PerformanceMonitor initialized');
-    // A3.R9.0: Auto-start on construction to ensure metrics are collected from first import
+    console.log('[A3.R9.0.A][METRICS] PerformanceMonitor initialized');
+    // A3.R9.0.A: Auto-start on construction to ensure metrics are collected from first import
     this.start();
   }
 
@@ -63,7 +64,7 @@ class PerformanceMonitor {
       this.emitSummary();
     }, 60000);
 
-    console.log('[A3.R9.0][METRICS] Started - emitting summary every 60s');
+    console.log('[A3.R9.0.A][METRICS] Started - emitting summary every 60s');
   }
 
   stop(): void {
@@ -71,7 +72,7 @@ class PerformanceMonitor {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
-    console.log('[A3.R9.0][METRICS] Stopped');
+    console.log('[A3.R9.0.A][METRICS] Stopped');
   }
 
   recordSQEEvaluation(passed: boolean): void {
@@ -124,7 +125,7 @@ class PerformanceMonitor {
       : '0.0';
 
     console.log(
-      `[A3.R9.0][METRICS] SUMMARY | ` +
+      `[A3.R9.0.A][METRICS] SUMMARY | ` +
       `sqe_rate=${sqeRate}/min sqe_pass=${sqePassRate}% | ` +
       `rtb_latency=${avgRefreshLatency}ms rtb_reconfirmed=${this.metrics.rtb_signals_reconfirmed} rtb_expired=${this.metrics.rtb_signals_expired} | ` +
       `tcl_delay=${this.metrics.tcl_activation_delay_ms ?? 'N/A'}ms | ` +

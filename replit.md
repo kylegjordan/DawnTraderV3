@@ -51,6 +51,11 @@ System Harmonization (Directive 8.8.4-A3.R9.0) implements comprehensive RTB, TCL
 - **Performance Metrics**: Auto-starting `PerformanceMonitor` tracks sqe_evaluation_rate, rtb_refresh_latency, tcl_activation_delay, and queue_churn_rate with 60-second summary logs. All queue removal paths (promotion, dedupe, SQE failure, expiry, TTL, bulk clear) call `recordQueueRemove()` exactly once per deletion.
 - All log tags standardized to `[A3.R9.0]` across SQE, RTB, and TCL modules.
 
+Normalization & Refresh Stagger Harmonization (Directive 8.8.4-A3.R9.0.A) implements:
+- **Pre-Blend Normalization (R9-D1)**: Explicit nBase/nProfit/nRisk variables before NGC blending, preventing double compression. Diagnostic log: `[A3.R9.0.A][NGC_NORMALIZED]`.
+- **Uniform Refresh Stagger (R9-D2)**: Hash-based signal distribution using djb2 algorithm. Signals sorted by offset and processed with staggered delays (scaled 0-5s window). Diagnostic log: `[A3.R9.0.A][RTB_REFRESH_STAGGER]`.
+- **Performance Monitor Consistency (R9-D3)**: Updated header and log tags to `[A3.R9.0.A][METRICS]`.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.

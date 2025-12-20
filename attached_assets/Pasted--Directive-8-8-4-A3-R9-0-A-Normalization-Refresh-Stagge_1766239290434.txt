@@ -1,0 +1,123 @@
+🧭 Directive 8.8.4-A3.R9.0.A — Normalization & Refresh Stagger Harmonization
+
+Objective:
+To permanently align the NGC computation sequence, RTB refresh distribution, and documentation consistency with the DawnTrader architectural model.
+This directive enforces sustainable normalization ordering, uniform CPU load balancing, and consistent diagnostics across modules.
+
+1️⃣ Signal Quality Evaluator — Pre-Blend Normalization (R9-D1)
+
+File: server/core/filters/signal_quality_evaluator.ts
+
+Problem:
+Normalization currently occurs inside the additive blending function, compressing variance and obscuring diagnostic visibility.
+
+Required Change:
+Move normalization into its own explicit pre-blend stage, before computing the blended NGC.
+
+Implementation Spec:
+
+// Before (current)
+const ngc = (normalize(baseNGC) * 0.4) + (normalize(profitRate) * 0.4) + (normalize(1 - risk) * 0.2);
+
+// After (directive compliant)
+const nBase = normalize(baseNGC);
+const nProfit = normalize(profitRate);
+const nRisk = normalize(1 - risk);
+
+const ngc = (nBase * 0.4) + (nProfit * 0.4) + (nRisk * 0.2);
+
+log.debug(`[A3.R9.0.A][NGC_NORMALIZED] base=${nBase.toFixed(3)} profit=${nProfit.toFixed(3)} risk=${nRisk.toFixed(3)} blended=${ngc.toFixed(3)}`);
+
+
+Outcome:
+
+Prevents double compression of variance.
+
+Increases numerical transparency for performance logs.
+
+Produces stable confidence scaling over multi-cycle evaluation.
+
+2️⃣ Ready-to-Buy Service — Uniform Refresh Stagger (R9-D2)
+
+File: server/core/services/ready_to_buy_service.ts
+
+Problem:
+Current ID-hash staggering clusters ~60 % of signals in the first half of each 30 s cycle, creating uneven CPU bursts.
+
+Required Change:
+Replace static hash with modulo-based offset keyed to CentralClock ticks for evenly distributed refreshes.
+
+Implementation Spec:
+
+// Before
+const offsetMs = Math.abs(hash(signal.id)) % 15000; // 0–15s skew
+
+// After (uniform 0–30s distribution)
+const offsetMs = (Math.abs(hash(signal.id + signal.symbol)) % 30000); // 0–30s skew
+setTimeout(() => this.refreshSignal(signal), offsetMs);
+
+
+Outcome:
+
+Uniform workload distribution across the full 30-second refresh window.
+
+Prevents burst contention on RTB and SQE threads.
+
+Improves scalability up to 5× current signal volume without drift.
+
+3️⃣ Performance Monitor — Header & Trace Consistency (R9-D3)
+
+File: server/core/diagnostics/performance_monitor.ts
+
+Add Standard Header Block:
+
+/**
+ * Phase 8.8.4-A3.R9.0.A — Performance Monitor
+ * Unified metrics sampler for RTB, SQE, and TCL event timing.
+ * Collects interval metrics every 60 s.
+ * Logs: [A3.R9.0.A][METRICS]
+ */
+
+
+Outcome:
+Consistent code annotation and trace labeling across all diagnostics.
+
+4️⃣ Validation & Stability Targets
+
+Numerical Stability: NGC variance drift ≤ 0.002 per 1000 cycles.
+
+Timing Uniformity: Refresh batch deviation ≤ ± 1 s.
+
+CPU Load Balance: 30 s cycle peaks not exceeding 5 % above mean.
+
+Regression Check: No change to SQE thresholds or TCL barrier behavior.
+
+5️⃣ Testing Instructions
+
+After implementation:
+
+Run a 10-minute paper-trading session.
+
+Verify in logs:
+
+[A3.R9.0.A][NGC_NORMALIZED] entries every cycle.
+
+[A3.R9.0.A][RTB_REFRESH_STAGGER] entries showing even offsets (0–30 s range).
+
+Confirm CPU load curve remains flat (≤ ± 5 % oscillation).
+
+Verify pass/reject ratio ~40–55 %.
+
+6️⃣ Success Criteria
+
+Directive is successful when:
+
+NGC normalization and additive blending produce steady signal pass rates.
+
+Refresh events appear evenly spaced across 30 s cycles.
+
+No duplicate or skipped SQE evaluations occur.
+
+Performance Monitor metrics remain within target bands.
+
+End of Directive 8.8.4-A3.R9.0.A
