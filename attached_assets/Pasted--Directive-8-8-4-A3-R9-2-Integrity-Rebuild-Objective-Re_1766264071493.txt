@@ -1,0 +1,188 @@
+🧭 Directive 8.8.4-A3.R9.2 — Integrity Rebuild
+
+Objective:
+Resolve systemic inconsistencies in signal lifecycle management, metric computation, and queue synchronization.
+This directive corrects metric decay ordering, enforces real-time metric revalidation, ensures atomic promotion from RTB to Trades, and fixes ID reuse during signal refresh cycles.
+
+I. Context
+
+Following the validation of diagnostic tracing (Directive R9.0.D) and subsequent live runs, the trading engine exhibits:
+
+NGC/CWQI clustering at 0.75–0.8 (inflation)
+
+Zero SQE rejections
+
+Missing reconfirmations (all signals marked “Active”)
+
+Duplicates between RTB and OpenTrades
+
+Signal “reappearances” after expiry
+
+Analysis shows these stem from:
+
+Decay applied after normalization instead of before.
+
+SQE re-evaluation using stale metrics during refresh cycles.
+
+Non-atomic RTB → Trade promotion sequence.
+
+Signal ID reuse in orchestrator rehydration.
+
+II. Implementation Tasks
+R9.2-A — Metric Decay Order Correction
+
+File: server/core/metrics/signal_metrics_calculator.ts
+
+Change:
+Apply decay before normalization.
+
+Replace:
+
+const normalized = normalize(rawValue);
+const decayed = applyDecay(normalized, decayRate);
+
+
+With:
+
+const decayed = applyDecay(rawValue, decayRate);
+const normalized = normalize(decayed);
+
+
+Add log trace:
+
+this.log.debug(`[A3.R9.2][DECAY_ORDER_FIX] symbol=${symbol} preDecay=${rawValue.toFixed(4)} postDecay=${decayed.toFixed(4)}`);
+
+
+✅ Prevents upward bias in CWQI/NGC values.
+
+R9.2-B — Live Metric Fetch for Revalidation
+
+File: server/services/ready_to_buy_service.ts
+
+Change:
+During refreshAndRank() replace cached metrics with live fetch.
+
+Replace:
+
+const metrics = signal.metrics;
+
+
+With:
+
+const metrics = await orchestrator.fetchLatestMetrics(signal.symbol);
+
+
+Add validation log:
+
+this.log.debug(`[A3.R9.2][REFRESH_METRICS] symbol=${signal.symbol} refreshedMetricsFetched=true`);
+
+
+✅ Ensures SQE always evaluates current data instead of stale metrics.
+
+R9.2-C — Enforce SQE Revalidation on Refresh
+
+File: server/core/filters/signal_quality_evaluator.ts
+
+In the refresh cycle, explicitly call:
+
+const result = SQE.evaluateSignalQuality(metrics);
+if (!result.passed) {
+  await rtbService.removeSignal(signal.id);
+  this.log.debug(`[A3.R9.2][SQE_REVALIDATION_FAIL] symbol=${signal.symbol}`);
+}
+
+
+✅ Enables active rejection on revalidation.
+
+R9.2-D — Atomic Promotion to Trades
+
+File: server/services/tcl_watchdog.ts
+
+Wrap trade promotion + RTB removal in transaction:
+
+await db.transaction(async (tx) => {
+  await tx.createTrade(signal);
+  await tx.deleteRtbSignal(signal.id);
+});
+this.log.debug(`[A3.R9.2][PROMOTION_ATOMIC] symbol=${signal.symbol} tradePromoted=true rtbRemoved=true`);
+
+
+✅ Eliminates duplicate RTB entries and prevents overlap.
+
+R9.2-E — Unique ID Enforcement
+
+File: server/orchestrator/signal_orchestrator.ts
+
+Change:
+Force new UUID per refresh cycle.
+
+Replace:
+
+signal.id = existingId;
+
+
+With:
+
+signal.id = uuidv4();
+this.log.debug(`[A3.R9.2][NEW_SIGNAL_ID] symbol=${signal.symbol} newId=${signal.id}`);
+
+
+✅ Prevents rehydrated signals from appearing as new duplicates in RTB.
+
+R9.2-F — Diagnostic Confirmation Hooks
+
+All Modules:
+Maintain [A3.R9.TRACE] probes active for confirmation.
+Add phase marker to confirm decay-before-normalization order:
+
+[A3.R9.2][TRACE] phase="decayAppliedBeforeNormalization" symbol="ADA/USD" verified=true
+
+
+✅ Ensures non-invasive diagnostics remain active during validation.
+
+III. Expected Outcomes
+Behavior	Expected Result
+NGC / CWQI mean	0.63 – 0.69
+SQE pass rate	45 – 55 % (naturally derived)
+Reconfirmed signals	Present in RTB
+Duplicates	None
+RTB–OpenTrades overlap	None
+Diagnostic trace	decayAppliedBeforeNormalization=true
+Variance	σ ≥ 0.05
+IV. Validation Run Protocol
+
+After implementation:
+
+Start Diagnostic Tracing (POST /api/diagnostics/trace/start)
+
+Start Paper Trading (POST /api/paper-sim/start)
+
+Let it run for 10 minutes
+
+Stop trace and collect:
+
+/logs/diagnostic/trace_A3R9.log
+
+/logs/diagnostic/trace_A3R9_summary.json
+
+Expected in trace:
+
+Decay applied before normalization confirmed in all entries
+
+SQE revalidation logs show rejected signals
+
+Active ↔ Reconfirmed transitions in RTB visible
+
+V. Log Signatures
+Tag	Meaning
+[A3.R9.2][DECAY_ORDER_FIX]	Decay applied pre-normalization
+[A3.R9.2][REFRESH_METRICS]	Fresh metrics fetched for revalidation
+[A3.R9.2][SQE_REVALIDATION_FAIL]	Signal rejected post-refresh
+[A3.R9.2][PROMOTION_ATOMIC]	Atomic trade promotion confirmed
+[A3.R9.2][NEW_SIGNAL_ID]	New ID enforced per refresh cycle
+✅ Directive Status
+
+Directive 8.8.4-A3.R9.2 — Integrity Rebuild
+
+Full structural correction for metric computation, signal revalidation, and trade promotion integrity.
+Implements the foundational fix for consistent filtering, accurate decay, and reliable lifecycle transitions.

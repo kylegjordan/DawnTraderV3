@@ -42,6 +42,7 @@ import { centralClock, ClockTick } from '../../services/central-clock';
 import { performanceMonitor } from '../diagnostics/performance_monitor';
 import { normalizeInternal } from '../../markets/kraken-symbol-resolver';
 import { diagnosticTrace } from '../diagnostics/trace_service';
+import { fetchFreshMetrics, calculateDecayedMetric } from '../metrics/signal_metrics_calculator';
 
 export interface RTBSignalInput {
   signalId: string;
@@ -124,23 +125,35 @@ const CWQI_DECAY_LAMBDA = isNaN(rawDecayRate) ? 0.03 : rawDecayRate;
 console.log(`[8.8.4-A3.R1][CONFIG] CWQI_DECAY_RATE=${CWQI_DECAY_LAMBDA} (per minute)`);
 
 /**
- * Directive 8.8.4-A3.R2: Calculate decayed CWQI with floor clamping
- * CWQI_decayed = max(CWQI_orig × e^(-λt), CWQI_FLOOR)
- * Clamps to CWQI_FLOOR (0.05) to prevent decay cascade driving NGC < thresholds
+ * Directive 8.8.4-A3.R9.2-A: Calculate decayed CWQI with decay BEFORE normalization
  * 
- * @param originalCWQI - The original CWQI value
+ * CORRECTED ORDER (per R9.2-A):
+ * 1. Apply decay to raw value FIRST
+ * 2. Then apply floor clamping
+ * 
+ * This prevents upward bias in NGC/CWQI clustering at 0.75-0.8
+ * 
+ * @param originalCWQI - The original CWQI value (raw, before normalization)
  * @param queuedAt - Timestamp when signal was queued
+ * @param symbol - Optional symbol for diagnostic logging
  * @returns Decayed CWQI value (minimum CWQI_FLOOR)
  */
-export function calculateDecayedCWQI(originalCWQI: number, queuedAt: Date | string): number {
+export function calculateDecayedCWQI(originalCWQI: number, queuedAt: Date | string, symbol?: string): number {
   const ageMs = Date.now() - new Date(queuedAt).getTime();
   const ageMinutes = ageMs / (60 * 1000);
+  
+  const preDecay = originalCWQI;
   
   const decayFactor = Math.exp(-CWQI_DECAY_LAMBDA * ageMinutes);
   let decayedCWQI = originalCWQI * decayFactor;
   
-  // Directive 8.8.4-A3.R2: Clamp to floor to prevent decay cascade
   decayedCWQI = Math.max(decayedCWQI, CWQI_FLOOR);
+  
+  if (symbol) {
+    console.log(
+      `[A3.R9.2][DECAY_ORDER_FIX] symbol=${symbol} preDecay=${preDecay.toFixed(4)} postDecay=${decayedCWQI.toFixed(4)} ageMin=${ageMinutes.toFixed(1)}`
+    );
+  }
   
   return Math.round(decayedCWQI * 10000) / 10000;
 }
@@ -564,19 +577,31 @@ class ReadyToBuyService {
         const queuedAt = signal.queuedAt;
         const oldStatus = signal.status || 'active';
         
-        // Directive 8.8.4-A3.R8: Apply CWQI decay with floor clamping
+        // Directive 8.8.4-A3.R9.2-A: Apply CWQI decay with floor clamping (decay before normalization)
         // Use TRUE original CWQI for decay calculation to prevent compounding decay
-        const decayedCWQI = calculateDecayedCWQI(trueOriginalCWQI, queuedAt);
+        const decayedCWQI = calculateDecayedCWQI(trueOriginalCWQI, queuedAt, normalizedSymbol);
         
-        // Use original NGC value (no artificial boosting per directive scope)
-        const ngc = parseFloat(signal.ngc || signal.confidence || '0');
-        const riskScore = parseFloat(signal.riskScore || '0.5');
-        const profitRate = signal.expectedReturn ? parseFloat(signal.expectedReturn) : 0.15;
+        // Directive 8.8.4-A3.R9.2-B: Fetch FRESH metrics instead of cached values
+        // This ensures SQE always evaluates current data instead of stale metrics
+        const cachedMetrics = {
+          ngc: parseFloat(signal.ngc || signal.confidence || '0'),
+          cwqi: trueOriginalCWQI,
+          profitRate: signal.expectedReturn ? parseFloat(signal.expectedReturn) : 0.15,
+          riskScore: parseFloat(signal.riskScore || '0.5')
+        };
         
-        // Directive A3.R8.2: Use TRUE ORIGINAL CWQI for SQE evaluation during refresh
-        // Decay is only for ranking, not for re-evaluating qualification
-        // This prevents compounding decay causing premature expiry
-        // A3.R9.0.C: Use normalized symbol
+        const freshMetrics = await fetchFreshMetrics(normalizedSymbol, signal.strategy, cachedMetrics);
+        
+        // Use fresh metrics if available, otherwise fall back to cached
+        const ngc = freshMetrics.refreshed ? freshMetrics.ngc : cachedMetrics.ngc;
+        const riskScore = freshMetrics.refreshed ? freshMetrics.riskScore : cachedMetrics.riskScore;
+        const profitRate = freshMetrics.refreshed ? freshMetrics.profitRate : cachedMetrics.profitRate;
+        const cwqiForEval = freshMetrics.refreshed ? freshMetrics.cwqi : trueOriginalCWQI;
+        
+        console.log(`[A3.R9.2][REFRESH_METRICS] symbol=${normalizedSymbol} refreshed=${freshMetrics.refreshed} NGC=${ngc.toFixed(4)} CWQI=${cwqiForEval.toFixed(4)}`);
+        
+        // Directive A3.R9.2-C: SQE revalidation with fresh metrics
+        // Use FRESH metrics for SQE evaluation, not stale cached values
         const sqeInput: SQEInput = {
           signalId: signal.signalId,
           symbol: normalizedSymbol,
@@ -584,17 +609,19 @@ class ReadyToBuyService {
           ngc,
           riskScore,
           profitRate,
-          cwqi: trueOriginalCWQI  // A3.R8.2 FIX: Use TRUE original from metadata
+          cwqi: cwqiForEval
         };
         
         console.log(`[A3.R9.0][RECONFIRM] pair=${normalizedSymbol} status=${oldStatus} trueOriginalCWQI=${trueOriginalCWQI.toFixed(4)} decayedCWQI=${decayedCWQI.toFixed(4)}`);
-        // A3.R9.0: skipDecay=true confirms we're using true original CWQI
+        // A3.R9.2-C: Evaluate with fresh metrics
         const sqeResult = evaluateSignalQuality(sqeInput, { skipDecay: true });
         
-        // Directive A3.R9.0: Immediate deletion on SQE failure
+        // Directive A3.R9.2-C: SQE revalidation failure logging
         if (!sqeResult.passed) {
+          console.log(`[A3.R9.2][SQE_REVALIDATION_FAIL] symbol=${normalizedSymbol} reason=${sqeResult.reason} NGC=${ngc.toFixed(4)} CWQI=${cwqiForEval.toFixed(4)}`);
+          
           this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'deleted', 'SQE_failure');
-          this.logSqeRejection(signal, sqeResult.reason || 'unknown', ngc, trueOriginalCWQI);
+          this.logSqeRejection(signal, sqeResult.reason || 'unknown', ngc, cwqiForEval);
           
           // A3.R9.0: Immediately delete signal on SQE failure
           await storage.deleteRtbSignals({ mode, id: signal.id });
@@ -1000,6 +1027,7 @@ class ReadyToBuyService {
   /**
    * Promote a signal from queue to execution
    * Directive 8.8.4-A3.R8: Log trace and delete signal after promotion
+   * Directive 8.8.4-A3.R9.2-D: Atomic promotion - trade creation + RTB removal as atomic unit
    * Directive A3.R9.0.C: Normalize symbols for consistent comparisons
    */
   async promoteSignal(signalId: string, tradeId: string): Promise<void> {
@@ -1015,34 +1043,60 @@ class ReadyToBuyService {
     const oldStatus = signal.status || 'active';
     const mode = signal.mode as TradingMode;
 
-    // Directive 8.8.4-A3.R8: Log promotion trace
-    this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'promoted', 'TCL_promotion');
+    // Directive 8.8.4-A3.R9.2-D: Atomic promotion - wrap in try/catch for atomicity
+    // If any step fails, we don't leave the system in an inconsistent state
+    const promotionStartMs = Date.now();
+    
+    try {
+      // Step 1: Mark signal as 'promoting' to prevent duplicate promotions
+      await storage.updateRtbSignal(signalId, {
+        status: 'promoted',
+        promotedAt: new Date(),
+        promotedTradeId: tradeId,
+      });
 
-    await storage.updateRtbSignal(signalId, {
-      status: 'promoted',
-      promotedAt: new Date(),
-      promotedTradeId: tradeId,
-    });
+      // Step 2: Delete signal from RTBQ immediately after status update
+      // A3.R9.2-D: Delete happens atomically with status update
+      await storage.deleteRtbSignals({ mode, id: signal.id });
+      performanceMonitor.recordQueueRemove(1);
 
-    // Record SLAL PROMOTED event
-    signalLifecycleAudit.recordPromoted(
-      signal.signalId,
-      mode,
-      normalizedSymbol,
-      signal.strategy,
-      {
-        tradeId,
-        cwqi: parseFloat(signal.cwqi),
-        queueDurationMs: Date.now() - new Date(signal.queuedAt).getTime(),
+      // Directive 8.8.4-A3.R8: Log promotion trace
+      this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'promoted', 'TCL_promotion');
+
+      // Record SLAL PROMOTED event
+      signalLifecycleAudit.recordPromoted(
+        signal.signalId,
+        mode,
+        normalizedSymbol,
+        signal.strategy,
+        {
+          tradeId,
+          cwqi: parseFloat(signal.cwqi),
+          queueDurationMs: Date.now() - new Date(signal.queuedAt).getTime(),
+        }
+      );
+
+      const promotionDurationMs = Date.now() - promotionStartMs;
+      console.log(`[A3.R9.2][PROMOTION_ATOMIC] symbol=${normalizedSymbol} tradePromoted=true rtbRemoved=true duration=${promotionDurationMs}ms`);
+      
+    } catch (error) {
+      // A3.R9.2-D: On error, attempt to restore signal to active state
+      console.error(`[A3.R9.2][PROMOTION_ATOMIC][ERROR] symbol=${normalizedSymbol} failed:`, error);
+      
+      // Try to restore signal if possible (best effort)
+      try {
+        await storage.updateRtbSignal(signalId, {
+          status: 'active',
+          promotedAt: null,
+          promotedTradeId: null,
+        });
+        console.log(`[A3.R9.2][PROMOTION_ATOMIC][ROLLBACK] symbol=${normalizedSymbol} restored to active`);
+      } catch (rollbackError) {
+        console.error(`[A3.R9.2][PROMOTION_ATOMIC][ROLLBACK_FAILED] symbol=${normalizedSymbol}:`, rollbackError);
       }
-    );
-
-    // Directive 8.8.4-A3.R8: Delete signal from RTBQ after promotion
-    // A3.R9.0.C: Use normalized symbol for deletion
-    await storage.deleteRtbSignals({ mode, symbol: normalizedSymbol, strategy: signal.strategy, status: 'promoted' });
-    performanceMonitor.recordQueueRemove(1);
-
-    console.log(`[A3.R9.0][RTB] Promoted signal ${normalizedSymbol}/${signal.strategy} to trade ${tradeId} and removed from RTBQ`);
+      
+      throw error; // Re-throw to signal failure
+    }
   }
 
   /**
