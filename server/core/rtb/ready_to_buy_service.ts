@@ -845,9 +845,16 @@ class ReadyToBuyService {
       console.log(`[8.8.4-A3.R3][RTB_EXPIRE] Cleared ${deletedCount} prior expired entries for ${signal.symbol}/${signal.strategy}`);
     }
     
+    // Directive 8.8.4-A3.R8.4: Store expiredAtMs in metadata for deferred cleanup
+    const existingMetadata = signal.metadata as Record<string, any> || {};
     await storage.updateRtbSignal(signalId, {
       status: 'expired',
       expiredAt: new Date(),
+      metadata: {
+        ...existingMetadata,
+        expiredAtMs: Date.now(),
+        expiredReason: reason || 'TTL exceeded'
+      }
     });
     
     console.log(`[RTB] Expired signal ${signalId}: ${reason || 'TTL exceeded'}`);
@@ -920,7 +927,24 @@ class ReadyToBuyService {
     // A3.R8.4: Only delete expired signals after one refresh cycle
     for (const signal of expiredSignals) {
       const metadata = signal.metadata as Record<string, any> || {};
-      const expiredAtMs = metadata.expiredAtMs || new Date(signal.expiredAt || signal.queuedAt).getTime();
+      
+      // A3.R8.4 FIX: Safely derive expiredAtMs with proper fallback
+      // Priority: metadata.expiredAtMs > signal.expiredAt > signal.queuedAt
+      let expiredAtMs: number;
+      if (metadata.expiredAtMs && !isNaN(Number(metadata.expiredAtMs))) {
+        expiredAtMs = Number(metadata.expiredAtMs);
+      } else if (signal.expiredAt) {
+        expiredAtMs = new Date(signal.expiredAt).getTime();
+      } else {
+        expiredAtMs = new Date(signal.queuedAt).getTime();
+      }
+      
+      // Guard against invalid dates
+      if (isNaN(expiredAtMs)) {
+        console.log(`[A3.R8.4][CLEANUP] Invalid expiredAtMs for ${signal.symbol}/${signal.strategy}, using now`);
+        expiredAtMs = now - DEFERRED_CLEANUP_MS; // Force cleanup of signals with invalid timestamps
+      }
+      
       const ageMs = now - expiredAtMs;
       
       if (ageMs >= DEFERRED_CLEANUP_MS) {
@@ -1144,7 +1168,9 @@ class ReadyToBuyService {
 
     console.log(`[8.8.4-C.5][RTB_INSERT] ${normalizedSymbol}/${input.strategy}: CWQI=${input.cwqi.toFixed(4)}, NGC=${input.ngc.toFixed(4)}, poolSize=${poolSize}`);
     
-    // Phase 8.8.4-C.12: Check if 100-signal threshold reached for TCL activation
+    // Directive 8.8.4-A3.R8.4: TCL threshold check on enqueue for prompt activation
+    // The watchdog internally guards against duplicate activations, so this is safe
+    // Post-refresh sync in executeRefreshCycle() ensures accurate pool size
     tclWatchdog.checkSignalThreshold(input.mode, poolSize);
     
     return signal;

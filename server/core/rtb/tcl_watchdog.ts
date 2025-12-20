@@ -32,6 +32,7 @@ interface TCLState {
   startedAt: Date | null;
   failsafeDisabled: boolean;
   startTickNumber: number;
+  lastThresholdCheckMs: number; // Directive 8.8.4-A3.R8.4: Debounce for threshold checks
 }
 
 class TCLWatchdog {
@@ -51,6 +52,7 @@ class TCLWatchdog {
         startedAt: null,
         failsafeDisabled: false,
         startTickNumber: 0,
+        lastThresholdCheckMs: 0,
       });
     }
     return this.states.get(mode)!;
@@ -133,13 +135,24 @@ class TCLWatchdog {
   /**
    * Check if signal threshold is reached and activate TCL if needed
    * Directive A3.R7: Permanently disables failsafe after RTBThresholdMet
+   * Directive A3.R8.4: Added 5-second debounce to prevent redundant activation attempts
    */
   checkSignalThreshold(mode: TradingMode, currentPoolSize: number): void {
     const state = this.getState(mode);
+    const now = Date.now();
+    const DEBOUNCE_MS = 5000; // 5 seconds debounce
 
+    // Already active - skip
     if (state.isActive) {
       return;
     }
+    
+    // A3.R8.4: Debounce threshold checks to prevent redundant activations
+    if (now - state.lastThresholdCheckMs < DEBOUNCE_MS) {
+      return; // Skip - too soon since last check
+    }
+    
+    state.lastThresholdCheckMs = now;
 
     if (currentPoolSize >= TCL_SIGNAL_THRESHOLD) {
       console.log(`[TCL][Event] RTBThresholdMet received – ${currentPoolSize} signals active`);
