@@ -1,0 +1,144 @@
+# Directive 8.8.4-A3.R9.0.C — SQE Normalization, CWQI Correction, and Symbol Resolution Standardization
+# Architect: [Your Name]
+# Date: 2025-12-20
+# Phase: 8.8.4-A3.R9.0.C
+# Purpose: Correct over-normalization, restore proper signal filtering,
+#          and unify all symbol pair comparisons under Kraken Symbol Resolver.
+
+--------------------------------------------------------------------
+## 1️⃣  SQE Normalization and Threshold Evaluation
+
+### File: server/core/filters/signal_quality_evaluator.ts
+### Change Set: R9C-1
+
+- Move metric normalization *after* threshold checks.
+- Remove redundant CWQI normalization.
+- Correct strategy-specific profit-rate floor lookup.
+
+```ts
+// OLD (pre-fix)
+const ngc = normalize(signal.NGC);
+const risk = normalize(signal.Risk);
+const profit = normalize(signal.ProfitRate);
+const cwqi = normalize(signal.CWQI);
+if (ngc >= MIN_NGC && risk <= MAX_RISK && profit >= floor && cwqi >= MIN_CWQI)
+
+// NEW (R9C-1)
+const raw = signal;
+const floor = DEFAULT_PROFIT_RATE_FLOORS[signal.strategy.toUpperCase()] ?? MIN_PROFIT_RATE;
+const passed =
+    raw.NGC >= MIN_NGC &&
+    raw.Risk <= MAX_RISK &&
+    raw.ProfitRate >= floor &&
+    raw.CWQI >= MIN_CWQI;
+
+if (passed) {
+    // normalize only for downstream consumers
+    raw.NGC = clamp(raw.NGC, 0, 1);
+    raw.Risk = clamp(raw.Risk, 0, 1);
+    raw.ProfitRate = clamp(raw.ProfitRate, 0, 1);
+}
+Add diagnostic logging:
+
+ts
+Copy code
+log.info(`[A3.R9.0.C][SQE_FILTERED_OUT] ${symbol} reason=${failureReason}`);
+2️⃣ CWQI Calculation Correction
+File: server/core/helpers/cwqi_calculator.ts (or wherever defined)
+Change Set: R9C-2
+Remove post-blend normalization.
+
+Maintain weights summing to 1.0.
+
+ts
+Copy code
+// OLD
+const blended = normalize(ngc * 0.6 + (1 - risk) * 0.3 + profit * 0.1);
+
+// NEW
+const blended = (ngc * 0.6) + ((1 - risk) * 0.3) + (profit * 0.1);
+return clamp(blended, 0, 1);
+3️⃣ Symbol Resolution via Kraken Resolver
+Files Affected:
+server/core/filters/signal_quality_evaluator.ts
+
+server/core/services/ready_to_buy_service.ts
+
+server/core/orchestrators/signal_orchestrator.ts
+
+server/core/services/open_positions_service.ts
+
+Change Set: R9C-3
+Replace all manual string joins/comparisons ("ADAUSD", "ADA/USD") with the Kraken Symbol Resolver.
+
+Import:
+
+ts
+Copy code
+import { KrakenSymbolResolver } from "@/server/markets/kraken-symbol-resolver";
+Usage Standard:
+
+ts
+Copy code
+// Normalize incoming or generated symbol
+const canonical = KrakenSymbolResolver.normalizeInternal(rawSymbol);
+
+// Equality check anywhere in the engine
+if (KrakenSymbolResolver.resolveByInternalSymbol(signal.symbol)
+      === KrakenSymbolResolver.resolveByInternalSymbol(trade.symbol)) {
+    // Symbols match canonically
+}
+Remove any local formatters (formatSymbolPair, SymbolMapper, etc.).
+
+Ensure that:
+
+SQE, RTB, and TCL always use .normalizeInternal() before storing symbols.
+
+Display/UI layers continue using .resolveByInternalSymbol() for human-readable output.
+
+Goal:
+All modules reference Kraken Resolver Tier-0/Tier-1 verified mappings as the single source of truth.
+This guarantees that ADAUSD, ADA/USD, XADAZUSD, and ADAAUD resolve identically across contexts.
+
+4️⃣ Reconfirmation Trigger
+File: server/core/services/ready_to_buy_service.ts
+Change Set: R9C-4
+Ensure revalidateSignal() runs even when engine.refreshing = true.
+
+ts
+Copy code
+if (engine.refreshing) {
+    await revalidateSignal(signal); // still perform validation
+}
+5️⃣ Observability & Metrics
+File: server/metrics/performance_monitor.ts
+Change Set: R9C-5
+Add metric counters:
+
+sqeRejectedCount
+
+sqePassedCount
+
+symbolResolutionLatencyMs
+
+Log tag: [A3.R9.0.C][METRICS]
+
+✅ Expected Outcomes
+Metric	Before	After
+SQE Pass Rate	100 %	40–55 % realistic
+CWQI Mean	~0.80	0.63–0.70
+Reconfirmed Signals	0 %	15–30 %
+Duplicate Pairs	Present	Eliminated (via Kraken resolver)
+CPU Load Impact	< +3 %	Negligible
+Symbol Consistency	Fragmented	Unified under Tier 0/1 Kraken map
+
+🔒 Compliance & Stability Notes
+No new modules created — all symbol operations flow through existing KrakenSymbolResolver.
+
+All normalization conforms to existing architectural boundaries (post-filter, pre-ranking).
+
+Backward compatibility maintained for UI and database layers.
+
+Directive tagged for persistent sustainability: Stable / Scalable / Aligned to Core Architecture.
+
+End of Directive 8.8.4-A3.R9.0.C

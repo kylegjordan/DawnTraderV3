@@ -1,14 +1,17 @@
 /**
  * Phase 8.8.4-A3.R9.0.A — Performance Monitor
+ * Directive 8.8.4-A3.R9.0.C: Enhanced Observability & Metrics
  * Unified metrics sampler for RTB, SQE, and TCL event timing.
  * Collects interval metrics every 60s.
- * Logs: [A3.R9.0.A][METRICS]
+ * Logs: [A3.R9.0.C][METRICS]
  * 
  * Tracks key performance metrics for system harmonization:
  * - sqe_evaluation_rate: SQE evaluations per minute
+ * - sqe_pass_count / sqe_fail_count: R9C-5 explicit counters
  * - rtb_refresh_latency: Average RTB refresh cycle time
  * - tcl_activation_delay: Time from engine start to TCL activation
  * - queue_churn_rate: Signals added/removed per minute
+ * - symbol_resolution_latency_ms: R9C-5 Kraken symbol resolution time
  */
 
 interface PerformanceMetrics {
@@ -24,6 +27,8 @@ interface PerformanceMetrics {
   queue_adds: number;
   queue_removes: number;
   last_reset: number;
+  symbol_resolution_count: number;
+  symbol_resolution_total_ms: number;
 }
 
 class PerformanceMonitor {
@@ -51,6 +56,8 @@ class PerformanceMonitor {
       queue_adds: 0,
       queue_removes: 0,
       last_reset: Date.now(),
+      symbol_resolution_count: 0,
+      symbol_resolution_total_ms: 0,
     };
   }
 
@@ -104,6 +111,24 @@ class PerformanceMonitor {
     this.metrics.queue_removes += count;
   }
 
+  /**
+   * R9C-5: Track symbol resolution latency via Kraken Symbol Resolver
+   */
+  recordSymbolResolutionLatency(latencyMs: number): void {
+    this.metrics.symbol_resolution_count++;
+    this.metrics.symbol_resolution_total_ms += latencyMs;
+  }
+
+  /**
+   * R9C-5: Get explicit SQE passed/rejected counts
+   */
+  getSQECounts(): { passed: number; rejected: number } {
+    return {
+      passed: this.metrics.sqe_pass_count,
+      rejected: this.metrics.sqe_fail_count,
+    };
+  }
+
   private emitSummary(): void {
     const elapsedMs = Date.now() - this.metrics.last_reset;
     const elapsedMinutes = elapsedMs / 60000;
@@ -124,12 +149,18 @@ class PerformanceMonitor {
       ? ((this.metrics.queue_adds + this.metrics.queue_removes) / elapsedMinutes).toFixed(1)
       : '0.0';
 
+    // R9C-5: Symbol resolution latency
+    const avgSymbolLatency = this.metrics.symbol_resolution_count > 0
+      ? (this.metrics.symbol_resolution_total_ms / this.metrics.symbol_resolution_count).toFixed(2)
+      : '0.00';
+
     console.log(
-      `[A3.R9.0.A][METRICS] SUMMARY | ` +
-      `sqe_rate=${sqeRate}/min sqe_pass=${sqePassRate}% | ` +
+      `[A3.R9.0.C][METRICS] SUMMARY | ` +
+      `sqe_rate=${sqeRate}/min sqe_pass=${sqePassRate}% sqe_passed=${this.metrics.sqe_pass_count} sqe_rejected=${this.metrics.sqe_fail_count} | ` +
       `rtb_latency=${avgRefreshLatency}ms rtb_reconfirmed=${this.metrics.rtb_signals_reconfirmed} rtb_expired=${this.metrics.rtb_signals_expired} | ` +
       `tcl_delay=${this.metrics.tcl_activation_delay_ms ?? 'N/A'}ms | ` +
-      `queue_churn=${queueChurnRate}/min`
+      `queue_churn=${queueChurnRate}/min | ` +
+      `symbol_resolution_avg=${avgSymbolLatency}ms`
     );
 
     this.metrics = this.createEmptyMetrics();

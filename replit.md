@@ -62,6 +62,13 @@ Engine Activation Standardization (Directive 8.8.4-A3.R9.0.B) implements:
 - **Redundant Start Safeguard**: Engine blocks duplicate start calls when already running. Diagnostic log: `[A3.R9.0.B][GUARD]`.
 - **CLI Wrapper**: `scripts/start-paper-sim.sh` provides authenticated API access using `PAPER_SIM_TOKEN` environment variable.
 
+SQE Normalization, CWQI Correction & Symbol Resolution (Directive 8.8.4-A3.R9.0.C) implements:
+- **R9C-1: SQE Normalization Order**: Evaluate raw metrics against thresholds FIRST, then clamp for downstream consumers. Prevents over-normalization that caused 100% pass rate. Diagnostic log: `[A3.R9.0.C][SQE_FILTERED_OUT]` for rejected signals.
+- **R9C-3: Symbol Resolution Standardization**: All symbol comparisons use `normalizeInternal()` from Kraken Symbol Resolver (`server/markets/kraken-symbol-resolver.ts`). Eliminates fragmented symbol handling across SQE, RTB, and TCL modules.
+- **R9C-4: Reconfirmation During Refresh**: Signals are re-validated through SQE during refresh cycles even when `isRefreshing=true`. Already implemented in `refreshAndRank()`.
+- **R9C-5: Enhanced Observability**: Added `sqePassedCount`, `sqeRejectedCount`, and `symbolResolutionLatencyMs` metrics to PerformanceMonitor. Diagnostic log: `[A3.R9.0.C][METRICS]`.
+- Expected outcomes: SQE pass rate 40-55%, CWQI mean 0.63-0.70, symbol consistency unified under Tier 0/1 Kraken map.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.

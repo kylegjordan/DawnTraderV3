@@ -40,6 +40,7 @@ import { eventBus, type PromotionEvent } from '../../lib/event-bus';
 import { contextBridge } from '../../services/context-bridge';
 import { centralClock, ClockTick } from '../../services/central-clock';
 import { performanceMonitor } from '../diagnostics/performance_monitor';
+import { normalizeInternal } from '../../markets/kraken-symbol-resolver';
 
 export interface RTBSignalInput {
   signalId: string;
@@ -151,19 +152,24 @@ export function getCWQIDecayFactor(ageMinutes: number): number {
 }
 
 /**
- * Directive 8.8.4-A3.R1: Normalize pair key to uppercase BASE/QUOTE format
- * Ensures consistent comparison and storage of trading pairs
+ * Directive 8.8.4-A3.R9.0.C (R9C-3): Normalize pair key via Kraken Symbol Resolver
+ * Ensures consistent comparison and storage of trading pairs using canonical format
  * 
- * @param symbol - The trading pair (e.g., 'btc/usd', 'BTC/USD')
- * @returns Normalized uppercase pair key (e.g., 'BTC/USD')
+ * @param symbol - The trading pair (e.g., 'btc/usd', 'BTC/USD', 'XBTUSD')
+ * @returns Normalized BASE/QUOTE format (e.g., 'BTC/USD')
  */
 export function normalizePairKey(symbol: string): string {
-  const trimmed = symbol.trim();
-  if (trimmed.includes('/')) {
-    const [base, quote] = trimmed.split('/');
-    return `${base.toUpperCase()}/${quote.toUpperCase()}`;
+  // R9C-3: Use Kraken Symbol Resolver for canonical normalization
+  const startMs = Date.now();
+  const canonical = normalizeInternal(symbol);
+  const elapsedMs = Date.now() - startMs;
+  
+  // R9C-5: Track symbol resolution latency if > 1ms
+  if (elapsedMs > 1) {
+    performanceMonitor.recordSymbolResolutionLatency(elapsedMs);
   }
-  return trimmed.toUpperCase();
+  
+  return canonical;
 }
 
 // Directive 8.8.4-A3.R7: Central Clock tick interval for RTB refresh
@@ -495,7 +501,9 @@ class ReadyToBuyService {
         const createdAtBucket = signal.queuedAt 
           ? new Date(signal.queuedAt).toISOString().substring(0, 16) // YYYY-MM-DDTHH:MM
           : 'unknown';
-        const pairKey = `${signal.symbol}:${signal.strategy}`;
+        // Directive A3.R9.0.C: Normalize symbol via Kraken Resolver for consistent comparisons
+        const normalizedSymbol = normalizePairKey(signal.symbol);
+        const pairKey = `${normalizedSymbol}:${signal.strategy}`;
         const fullDedupKey = `${pairKey}:${createdAtBucket}`;
         
         if (!seenPairs.has(pairKey)) {
@@ -540,6 +548,10 @@ class ReadyToBuyService {
         
         // A3.R9.0.A (R9-D2): Apply staggered delay based on hash offset for uniform distribution
         await staggeredDelay(offset, i, signalsWithOffset.length);
+        
+        // Directive A3.R9.0.C: Normalize symbol for consistent comparisons
+        const normalizedSymbol = normalizePairKey(signal.symbol);
+        
         // Directive A3.R8.2 FIX: Use TRUE original CWQI from metadata, not stored cwqi
         // The stored signal.cwqi gets overwritten with decayed values after each refresh
         // metadata.originalCwqi preserves the baseline value from signal creation
@@ -563,9 +575,10 @@ class ReadyToBuyService {
         // Directive A3.R8.2: Use TRUE ORIGINAL CWQI for SQE evaluation during refresh
         // Decay is only for ranking, not for re-evaluating qualification
         // This prevents compounding decay causing premature expiry
+        // A3.R9.0.C: Use normalized symbol
         const sqeInput: SQEInput = {
           signalId: signal.signalId,
-          symbol: signal.symbol,
+          symbol: normalizedSymbol,
           strategy: signal.strategy,
           ngc,
           riskScore,
@@ -573,20 +586,20 @@ class ReadyToBuyService {
           cwqi: trueOriginalCWQI  // A3.R8.2 FIX: Use TRUE original from metadata
         };
         
-        console.log(`[A3.R9.0][RECONFIRM] pair=${signal.symbol} status=${oldStatus} trueOriginalCWQI=${trueOriginalCWQI.toFixed(4)} decayedCWQI=${decayedCWQI.toFixed(4)}`);
+        console.log(`[A3.R9.0][RECONFIRM] pair=${normalizedSymbol} status=${oldStatus} trueOriginalCWQI=${trueOriginalCWQI.toFixed(4)} decayedCWQI=${decayedCWQI.toFixed(4)}`);
         // A3.R9.0: skipDecay=true confirms we're using true original CWQI
         const sqeResult = evaluateSignalQuality(sqeInput, { skipDecay: true });
         
         // Directive A3.R9.0: Immediate deletion on SQE failure
         if (!sqeResult.passed) {
-          this.logRtbTrace(mode, signal.symbol, signal.strategy, oldStatus, 'deleted', 'SQE_failure');
+          this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'deleted', 'SQE_failure');
           this.logSqeRejection(signal, sqeResult.reason || 'unknown', ngc, trueOriginalCWQI);
           
           // A3.R9.0: Immediately delete signal on SQE failure
           await storage.deleteRtbSignals({ mode, id: signal.id });
           performanceMonitor.recordQueueRemove(1);
           
-          console.log(`[A3.R9.0][SQE][DELETED] pair=${signal.symbol} reason=${sqeResult.reason}`);
+          console.log(`[A3.R9.0.C][SQE][DELETED] pair=${normalizedSymbol} reason=${sqeResult.reason}`);
           expiredCount++;
           continue;
         }
@@ -607,8 +620,8 @@ class ReadyToBuyService {
           }
         });
         
-        this.logRtbTrace(mode, signal.symbol, signal.strategy, oldStatus, 'reconfirmed', 'refresh');
-        console.log(`[A3.R9.0][RECONFIRM] pair=${signal.symbol} ${oldStatus}→reconfirmed CWQI=${decayedCWQI.toFixed(4)}`);
+        this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'reconfirmed', 'refresh');
+        console.log(`[A3.R9.0][RECONFIRM] pair=${normalizedSymbol} ${oldStatus}→reconfirmed CWQI=${decayedCWQI.toFixed(4)}`);
         reconfirmedCount++;
       }
 
@@ -970,6 +983,9 @@ class ReadyToBuyService {
       return;
     }
     
+    // A3.R9.0.C: Normalize symbol for consistent logging
+    const normalizedSymbol = normalizePairKey(signal.symbol);
+    
     // A3.R9.0: Immediately delete instead of marking expired
     await storage.deleteRtbSignals({
       mode: signal.mode as 'live' | 'paper',
@@ -977,12 +993,13 @@ class ReadyToBuyService {
     });
     performanceMonitor.recordQueueRemove(1);
     
-    console.log(`[A3.R9.0][RTB] Deleted signal ${signal.symbol}/${signal.strategy}: ${reason || 'expired'}`);
+    console.log(`[A3.R9.0][RTB] Deleted signal ${normalizedSymbol}/${signal.strategy}: ${reason || 'expired'}`);
   }
 
   /**
    * Promote a signal from queue to execution
    * Directive 8.8.4-A3.R8: Log trace and delete signal after promotion
+   * Directive A3.R9.0.C: Normalize symbols for consistent comparisons
    */
   async promoteSignal(signalId: string, tradeId: string): Promise<void> {
     const signal = await storage.getRtbSignalById(signalId);
@@ -992,11 +1009,13 @@ class ReadyToBuyService {
       return;
     }
 
+    // A3.R9.0.C: Normalize symbol for consistent comparisons
+    const normalizedSymbol = normalizePairKey(signal.symbol);
     const oldStatus = signal.status || 'active';
     const mode = signal.mode as TradingMode;
 
     // Directive 8.8.4-A3.R8: Log promotion trace
-    this.logRtbTrace(mode, signal.symbol, signal.strategy, oldStatus, 'promoted', 'TCL_promotion');
+    this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'promoted', 'TCL_promotion');
 
     await storage.updateRtbSignal(signalId, {
       status: 'promoted',
@@ -1008,7 +1027,7 @@ class ReadyToBuyService {
     signalLifecycleAudit.recordPromoted(
       signal.signalId,
       mode,
-      signal.symbol,
+      normalizedSymbol,
       signal.strategy,
       {
         tradeId,
@@ -1018,10 +1037,11 @@ class ReadyToBuyService {
     );
 
     // Directive 8.8.4-A3.R8: Delete signal from RTBQ after promotion
-    await storage.deleteRtbSignals({ mode, symbol: signal.symbol, strategy: signal.strategy, status: 'promoted' });
+    // A3.R9.0.C: Use normalized symbol for deletion
+    await storage.deleteRtbSignals({ mode, symbol: normalizedSymbol, strategy: signal.strategy, status: 'promoted' });
     performanceMonitor.recordQueueRemove(1);
 
-    console.log(`[A3.R9.0][RTB] Promoted signal ${signal.symbol}/${signal.strategy} to trade ${tradeId} and removed from RTBQ`);
+    console.log(`[A3.R9.0][RTB] Promoted signal ${normalizedSymbol}/${signal.strategy} to trade ${tradeId} and removed from RTBQ`);
   }
 
   /**
@@ -1043,9 +1063,11 @@ class ReadyToBuyService {
     });
     
     for (const signal of expiredSignals) {
+      // A3.R9.0.C: Normalize symbol for consistent logging
+      const normalizedSymbol = normalizePairKey(signal.symbol);
       await storage.deleteRtbSignals({ mode, id: signal.id });
       performanceMonitor.recordQueueRemove(1);
-      console.log(`[A3.R9.0][CLEANUP] Deleted legacy expired signal ${signal.symbol}/${signal.strategy}`);
+      console.log(`[A3.R9.0][CLEANUP] Deleted legacy expired signal ${normalizedSymbol}/${signal.strategy}`);
       cleanedCount++;
     }
     
@@ -1058,9 +1080,11 @@ class ReadyToBuyService {
     for (const signal of queuedSignals) {
       if (new Date(signal.expiresAt) <= new Date(now)) {
         // A3.R9.0: Delete immediately instead of marking expired
+        // A3.R9.0.C: Normalize symbol for consistent logging
+        const normalizedSymbol = normalizePairKey(signal.symbol);
         await storage.deleteRtbSignals({ mode, id: signal.id });
         performanceMonitor.recordQueueRemove(1);
-        console.log(`[A3.R9.0][TTL] Deleted signal ${signal.symbol}/${signal.strategy} (TTL exceeded)`);
+        console.log(`[A3.R9.0][TTL] Deleted signal ${normalizedSymbol}/${signal.strategy} (TTL exceeded)`);
         cleanedCount++;
       }
     }

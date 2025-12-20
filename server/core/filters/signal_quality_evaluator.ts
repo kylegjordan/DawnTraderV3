@@ -1,8 +1,12 @@
 /**
  * Phase 8.8.4-B.1/C: Signal Quality Evaluator (SQE)
+ * Directive 8.8.4-A3.R9.0.C: SQE Normalization, CWQI Correction, Symbol Resolution
  * 
  * Pure filter that evaluates pre-computed signal quality metrics.
  * The SQE does NOT compute metrics - it only filters based on thresholds.
+ * 
+ * R9C-1: Evaluate raw metrics against thresholds first, then clamp for downstream.
+ * R9C-3: All symbol comparisons use Kraken Symbol Resolver.
  * 
  * Filtering Thresholds (relaxed):
  * - NGC >= 0.45 (Normalized Global Confidence)
@@ -19,6 +23,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { SQE_THRESHOLDS } from '../metrics/quality_index';
 import { performanceMonitor } from '../diagnostics/performance_monitor';
+import { normalizeInternal } from '../../markets/kraken-symbol-resolver';
 
 interface StrategyThresholdsConfig {
   profitRateFloors: Record<string, number>;
@@ -110,6 +115,7 @@ export interface SQEBatchResult {
  * Evaluate a single signal against SQE quality thresholds
  * Phase C: Uses strategy-specific ProfitRate floors
  * Directive A3.R9.0: Restored thresholds for ~35-50% pass rate
+ * Directive A3.R9.0.C: Evaluate raw metrics first, normalize only for downstream
  * 
  * @param input - Pre-computed signal metrics
  * @param options - Optional evaluation settings (skipDecay for refresh cycles)
@@ -117,6 +123,12 @@ export interface SQEBatchResult {
  */
 export function evaluateSignalQuality(input: SQEInput, options: SQEOptions = {}): SQEResult {
   const failures: string[] = [];
+  
+  // R9C-3: Normalize symbol via Kraken Resolver for consistent comparison
+  const canonicalSymbol = normalizeInternal(input.symbol);
+  
+  // R9C-1: Evaluate RAW metrics against thresholds (no pre-normalization)
+  const profitRateFloor = getProfitRateFloor(input.strategy);
   
   if (input.ngc < SQE_THRESHOLDS.MIN_NGC) {
     failures.push(`NGC ${input.ngc.toFixed(4)} < ${SQE_THRESHOLDS.MIN_NGC}`);
@@ -126,7 +138,6 @@ export function evaluateSignalQuality(input: SQEInput, options: SQEOptions = {})
     failures.push(`Risk ${input.riskScore.toFixed(4)} > ${SQE_THRESHOLDS.MAX_RISK}`);
   }
   
-  const profitRateFloor = getProfitRateFloor(input.strategy);
   if (input.profitRate < profitRateFloor) {
     failures.push(`ProfitRate ${input.profitRate.toFixed(4)} < Floor[${input.strategy}]=${profitRateFloor}`);
   }
@@ -137,25 +148,34 @@ export function evaluateSignalQuality(input: SQEInput, options: SQEOptions = {})
   
   const passed = failures.length === 0;
   
-  // Directive A3.R9.0: Unified SQE filter logging and metrics
+  // Directive A3.R9.0.C: Enhanced diagnostic logging for filtered-out signals
+  if (!passed) {
+    const failureReason = failures[0]?.split(' ')[0] || 'unknown';
+    console.log(`[A3.R9.0.C][SQE_FILTERED_OUT] ${canonicalSymbol} reason=${failureReason} NGC=${input.ngc.toFixed(4)} CWQI=${input.cwqi.toFixed(4)} Risk=${input.riskScore.toFixed(4)} ProfitRate=${input.profitRate.toFixed(4)}`);
+  }
+  
+  // Directive A3.R9.0: Unified SQE filter logging
   const status = passed ? 'PASS' : 'FAIL';
   const reason = passed ? 'all_thresholds_met' : failures[0]?.split(' ')[0] || 'unknown';
-  console.log(`[A3.R9.0][SQE_FILTER] ${status} symbol=${input.symbol} strategy=${input.strategy} NGC=${input.ngc.toFixed(4)} CWQI=${input.cwqi.toFixed(4)} reason=${reason}`);
+  console.log(`[A3.R9.0][SQE_FILTER] ${status} symbol=${canonicalSymbol} strategy=${input.strategy} NGC=${input.ngc.toFixed(4)} CWQI=${input.cwqi.toFixed(4)} reason=${reason}`);
   
   // A3.R9.0: Record metric for performance monitoring
   performanceMonitor.recordSQEEvaluation(passed);
   
+  // R9C-1: Clamp metrics only for downstream consumers (after threshold check)
+  const clampedMetrics = {
+    ngc: Math.max(0, Math.min(1, input.ngc)),
+    riskScore: Math.max(0, Math.min(1, input.riskScore)),
+    profitRate: Math.max(0, Math.min(1, input.profitRate)),
+    cwqi: Math.max(0, Math.min(1, input.cwqi)),
+  };
+  
   return {
     passed,
     signalId: input.signalId,
-    symbol: input.symbol,
+    symbol: canonicalSymbol,
     strategy: input.strategy,
-    metrics: {
-      ngc: input.ngc,
-      riskScore: input.riskScore,
-      profitRate: input.profitRate,
-      cwqi: input.cwqi,
-    },
+    metrics: clampedMetrics,
     failures,
     reason: passed ? undefined : failures.join('; '),
   };
