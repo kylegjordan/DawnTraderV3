@@ -47,13 +47,16 @@ export function calculateDecayedMetric(
 ): { decayed: number; normalized: number } {
   const preDecay = rawValue;
   
+  // Step 1: Apply decay to raw value FIRST (R9.2-A)
   const decayed = applyDecay(rawValue, ageMinutes);
   
-  const normalized = Math.max(CWQI_FLOOR, decayed);
+  // Step 2: THEN normalize the decayed value to [0,1] with floor (R9.2-A)
+  // This is the correct order: decay → normalize (not normalize → decay)
+  const normalized = normalize(Math.max(CWQI_FLOOR, decayed), 0, 1);
   
   console.log(
-    `[A3.R9.2][DECAY_ORDER_FIX] symbol=${symbol} ${metricName}: ` +
-    `preDecay=${preDecay.toFixed(4)} postDecay=${decayed.toFixed(4)} ageMin=${ageMinutes.toFixed(1)}`
+    `[A3.R9.2][DECAY_THEN_NORMALIZE] symbol=${symbol} ${metricName}: ` +
+    `raw=${preDecay.toFixed(4)} decayed=${decayed.toFixed(4)} normalized=${normalized.toFixed(4)} ageMin=${ageMinutes.toFixed(1)}`
   );
   
   if (diagnosticTrace.isActive()) {
@@ -74,6 +77,7 @@ export function calculateDecayedMetric(
         decayAppliedBeforeNormalization: true,
         preDecay,
         postDecay: decayed,
+        postNormalize: normalized,
         ageMinutes,
         phase: 'R9.2-A'
       }

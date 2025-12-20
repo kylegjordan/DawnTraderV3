@@ -144,18 +144,23 @@ export function calculateDecayedCWQI(originalCWQI: number, queuedAt: Date | stri
   
   const preDecay = originalCWQI;
   
+  // Step 1: Apply decay FIRST (R9.2-A)
   const decayFactor = Math.exp(-CWQI_DECAY_LAMBDA * ageMinutes);
   let decayedCWQI = originalCWQI * decayFactor;
   
+  // Step 2: Apply floor
   decayedCWQI = Math.max(decayedCWQI, CWQI_FLOOR);
+  
+  // Step 3: Normalize to [0,1] range AFTER decay (R9.2-A)
+  const normalizedCWQI = Math.max(0, Math.min(1, decayedCWQI));
   
   if (symbol) {
     console.log(
-      `[A3.R9.2][DECAY_ORDER_FIX] symbol=${symbol} preDecay=${preDecay.toFixed(4)} postDecay=${decayedCWQI.toFixed(4)} ageMin=${ageMinutes.toFixed(1)}`
+      `[A3.R9.2][DECAY_THEN_NORMALIZE] symbol=${symbol} raw=${preDecay.toFixed(4)} decayed=${decayedCWQI.toFixed(4)} normalized=${normalizedCWQI.toFixed(4)} ageMin=${ageMinutes.toFixed(1)}`
     );
   }
   
-  return Math.round(decayedCWQI * 10000) / 10000;
+  return Math.round(normalizedCWQI * 10000) / 10000;
 }
 
 /**
@@ -333,7 +338,7 @@ class ReadyToBuyService {
         promotedAt: new Date()
       });
       performanceMonitor.recordQueueRemove(1);
-      console.log(`[A3.R9.0][RTB] Removed signal ${symbol} (id=${matchingSignal.id}) from ${mode} queue`);
+      console.log(`[A3.R9.2][RTB] Removed signal ${symbol} (id=${matchingSignal.id}) from ${mode} queue`);
       return true;
     }
     
@@ -470,7 +475,7 @@ class ReadyToBuyService {
     // Only check if refresh is complete (barrier respected)
     if (tclStatus.poolSize > 0 && this.isRefreshComplete(mode)) {
       await tclWatchdog.checkSignalThresholdLive(mode, true);
-      console.log(`[A3.R9.0][TCL_SYNC] TCL threshold check after refresh (live query): poolSize=${tclStatus.poolSize}`);
+      console.log(`[A3.R9.2][TCL_SYNC] TCL threshold check after refresh (live query): poolSize=${tclStatus.poolSize}`);
     }
   }
 
@@ -499,7 +504,7 @@ class ReadyToBuyService {
       const signals = await this.getQueuedSignals(mode);
       
       if (signals.length === 0) {
-        console.log(`[A3.R9.0][RTB_REFRESH] mode=${mode} no signals to refresh`);
+        console.log(`[A3.R9.2][RTB_REFRESH] mode=${mode} no signals to refresh`);
         this.setRefreshComplete(mode, true);
         return;
       }
@@ -528,12 +533,12 @@ class ReadyToBuyService {
           await storage.deleteRtbSignals({ mode, id: signal.id });
           duplicateCount++;
           performanceMonitor.recordQueueRemove(1);
-          console.log(`[A3.R9.0][RTB_DEDUP] Deleted duplicate ${pairKey} id=${signal.id}`);
+          console.log(`[A3.R9.2][RTB_DEDUP] Deleted duplicate ${pairKey} id=${signal.id}`);
         }
       }
       
       if (duplicateCount > 0) {
-        console.log(`[A3.R9.0][RTB_DEDUP] mode=${mode} deleted=${duplicateCount} duplicates, remaining=${deduplicatedSignals.length}`);
+        console.log(`[A3.R9.2][RTB_DEDUP] mode=${mode} deleted=${duplicateCount} duplicates, remaining=${deduplicatedSignals.length}`);
       }
 
       // A3.R9.0.A (R9-D2): Recalculate CWQI with decay and update status
@@ -555,7 +560,7 @@ class ReadyToBuyService {
         : 0;
       const minOffset = staggerOffsets.length > 0 ? Math.min(...staggerOffsets) : 0;
       const maxOffset = staggerOffsets.length > 0 ? Math.max(...staggerOffsets) : 0;
-      console.log(`[A3.R9.0.A][RTB_REFRESH_STAGGER] mode=${mode} signals=${signalsWithOffset.length} avgOffset=${avgOffset}ms range=[${minOffset}ms-${maxOffset}ms]`);
+      console.log(`[A3.R9.2][RTB_REFRESH_STAGGER] mode=${mode} signals=${signalsWithOffset.length} avgOffset=${avgOffset}ms range=[${minOffset}ms-${maxOffset}ms]`);
       
       for (let i = 0; i < signalsWithOffset.length; i++) {
         const { signal, offset } = signalsWithOffset[i];
@@ -612,7 +617,7 @@ class ReadyToBuyService {
           cwqi: cwqiForEval
         };
         
-        console.log(`[A3.R9.0][RECONFIRM] pair=${normalizedSymbol} status=${oldStatus} trueOriginalCWQI=${trueOriginalCWQI.toFixed(4)} decayedCWQI=${decayedCWQI.toFixed(4)}`);
+        console.log(`[A3.R9.2][RECONFIRM_START] pair=${normalizedSymbol} status=${oldStatus} trueOriginalCWQI=${trueOriginalCWQI.toFixed(4)} decayedCWQI=${decayedCWQI.toFixed(4)}`);
         // A3.R9.2-C: Evaluate with fresh metrics
         const sqeResult = evaluateSignalQuality(sqeInput, { skipDecay: true });
         
@@ -623,33 +628,38 @@ class ReadyToBuyService {
           this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'deleted', 'SQE_failure');
           this.logSqeRejection(signal, sqeResult.reason || 'unknown', ngc, cwqiForEval);
           
-          // A3.R9.0: Immediately delete signal on SQE failure
+          // A3.R9.2: Immediately delete signal on SQE failure
           await storage.deleteRtbSignals({ mode, id: signal.id });
           performanceMonitor.recordQueueRemove(1);
           
-          console.log(`[A3.R9.0.C][SQE][DELETED] pair=${normalizedSymbol} reason=${sqeResult.reason}`);
+          console.log(`[A3.R9.2][SQE_DELETE] pair=${normalizedSymbol} reason=${sqeResult.reason}`);
           expiredCount++;
           continue;
         }
         
-        // Directive A3.R9.0: Update status to 'reconfirmed' with statusUpdatedAt
-        // Preserve trueOriginalCWQI in metadata to prevent compounding decay
+        // Directive A3.R9.2-B: Update signal with FRESH metrics (persist refreshed values)
+        // This ensures subsequent SQE evaluations use live data, not stale cached values
         const statusUpdatedAt = now.toISOString();
         await storage.updateRtbSignal(signal.id, {
           status: 'reconfirmed',
-          cwqi: decayedCWQI.toString(),  // Store decayed for ranking only
+          cwqi: decayedCWQI.toString(),  // Store decayed CWQI for ranking
+          ngc: ngc.toString(),            // R9.2-B: Persist fresh NGC
+          riskScore: riskScore.toString(), // R9.2-B: Persist fresh risk
+          expectedReturn: profitRate.toString(), // R9.2-B: Persist fresh profit rate
           lastRefreshedAt: now,
           metadata: {
             ...metadata,
             lastReconfirmedAt: statusUpdatedAt,
-            statusUpdatedAt,  // A3.R9.0: Track status transition time
+            statusUpdatedAt,  // Track status transition time
             originalCwqi: trueOriginalCWQI.toString(),
-            decayApplied: true
+            decayApplied: true,
+            freshMetricsApplied: freshMetrics.refreshed, // R9.2-B: Track if fresh metrics were used
+            refreshTimestamp: freshMetrics.timestamp     // R9.2-B: Timestamp of fresh metrics
           }
         });
         
         this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'reconfirmed', 'refresh');
-        console.log(`[A3.R9.0][RECONFIRM] pair=${normalizedSymbol} ${oldStatus}→reconfirmed CWQI=${decayedCWQI.toFixed(4)}`);
+        console.log(`[A3.R9.2][RECONFIRM_COMPLETE] pair=${normalizedSymbol} ${oldStatus}→reconfirmed CWQI=${decayedCWQI.toFixed(4)} freshMetrics=${freshMetrics.refreshed}`);
         reconfirmedCount++;
       }
 
@@ -669,24 +679,24 @@ class ReadyToBuyService {
       });
 
       const elapsedMs = Date.now() - startTime;
-      // A3.R9.0: Report remaining from deduplicated set minus expired
-      console.log(`[A3.R9.0][RTB_REFRESH] mode=${mode} reconfirmed=${reconfirmedCount} expired=${expiredCount} duplicates=${duplicateCount} remaining=${deduplicatedSignals.length - expiredCount} elapsed=${elapsedMs}ms`);
+      // A3.R9.2: Report remaining from deduplicated set minus expired
+      console.log(`[A3.R9.2][RTB_REFRESH] mode=${mode} reconfirmed=${reconfirmedCount} expired=${expiredCount} duplicates=${duplicateCount} remaining=${deduplicatedSignals.length - expiredCount} elapsed=${elapsedMs}ms`);
       
-      // A3.R9.0: Record metrics for performance monitoring
+      // A3.R9.2: Record metrics for performance monitoring
       performanceMonitor.recordRTBRefresh(elapsedMs, reconfirmedCount, expiredCount);
       
-      // A3.R9.0: Set refresh complete flag to release TCL barrier
+      // A3.R9.2: Set refresh complete flag to release TCL barrier
       this.setRefreshComplete(mode, true);
       
-      // A3.R9.0: Check TCL threshold now that refresh is complete (barrier released)
+      // A3.R9.2: Check TCL threshold now that refresh is complete (barrier released)
       await tclWatchdog.checkSignalThresholdLive(mode, this.isRefreshComplete(mode));
       
     } catch (error) {
-      console.error(`[A3.R9.0][RTB_REFRESH][ERROR] mode=${mode}:`, error);
-      // A3.R9.0: On error, keep barrier closed - TCL should NOT proceed during failed refresh
+      console.error(`[A3.R9.2][RTB_REFRESH][ERROR] mode=${mode}:`, error);
+      // A3.R9.2: On error, keep barrier closed - TCL should NOT proceed during failed refresh
       // The next refresh cycle will retry and properly complete
       // This prevents TCL from activating on potentially corrupt/incomplete state
-      console.log(`[A3.R9.0][TCL_SYNC] Refresh failed for ${mode}, barrier remains CLOSED until next cycle`);
+      console.log(`[A3.R9.2][TCL_SYNC] Refresh failed for ${mode}, barrier remains CLOSED until next cycle`);
     }
   }
 
@@ -702,7 +712,7 @@ class ReadyToBuyService {
   setRefreshComplete(mode: TradingMode, complete: boolean): void {
     this.refreshComplete.set(mode, complete);
     if (complete) {
-      console.log(`[A3.R9.0][TCL_SYNC] Refresh complete for ${mode}, TCL barrier released`);
+      console.log(`[A3.R9.2][TCL_SYNC] Refresh complete for ${mode}, TCL barrier released`);
     }
   }
 
@@ -1021,20 +1031,23 @@ class ReadyToBuyService {
     });
     performanceMonitor.recordQueueRemove(1);
     
-    console.log(`[A3.R9.0][RTB] Deleted signal ${normalizedSymbol}/${signal.strategy}: ${reason || 'expired'}`);
+    console.log(`[A3.R9.2][RTB] Deleted signal ${normalizedSymbol}/${signal.strategy}: ${reason || 'expired'}`);
   }
 
   /**
    * Promote a signal from queue to execution
    * Directive 8.8.4-A3.R8: Log trace and delete signal after promotion
-   * Directive 8.8.4-A3.R9.2-D: Atomic promotion - trade creation + RTB removal as atomic unit
+   * Directive 8.8.4-A3.R9.2-D: Atomic promotion - defer RTB removal until trade creation confirmed
    * Directive A3.R9.0.C: Normalize symbols for consistent comparisons
+   * 
+   * IMPORTANT: This method should ONLY be called AFTER trade creation succeeds.
+   * The tradeId parameter confirms the trade was already created.
    */
   async promoteSignal(signalId: string, tradeId: string): Promise<void> {
     const signal = await storage.getRtbSignalById(signalId);
     
     if (!signal) {
-      console.warn(`[RTB] Cannot promote - signal ${signalId} not found`);
+      console.warn(`[A3.R9.2][RTB] Cannot promote - signal ${signalId} not found`);
       return;
     }
 
@@ -1042,60 +1055,58 @@ class ReadyToBuyService {
     const normalizedSymbol = normalizePairKey(signal.symbol);
     const oldStatus = signal.status || 'active';
     const mode = signal.mode as TradingMode;
-
-    // Directive 8.8.4-A3.R9.2-D: Atomic promotion - wrap in try/catch for atomicity
-    // If any step fails, we don't leave the system in an inconsistent state
     const promotionStartMs = Date.now();
-    
-    try {
-      // Step 1: Mark signal as 'promoting' to prevent duplicate promotions
-      await storage.updateRtbSignal(signalId, {
-        status: 'promoted',
-        promotedAt: new Date(),
-        promotedTradeId: tradeId,
-      });
 
-      // Step 2: Delete signal from RTBQ immediately after status update
-      // A3.R9.2-D: Delete happens atomically with status update
+    // Directive 8.8.4-A3.R9.2-D: Verify trade exists before deleting signal
+    // This ensures we don't orphan signals if trade creation failed
+    if (!tradeId) {
+      console.error(`[A3.R9.2][PROMOTION_ABORT] symbol=${normalizedSymbol} no tradeId - trade creation may have failed`);
+      return;
+    }
+
+    console.log(`[A3.R9.2][PROMOTION_START] symbol=${normalizedSymbol} tradeId=${tradeId} starting atomic promotion`);
+    
+    // Step 1: Record SLAL PROMOTED event first (audit trail)
+    signalLifecycleAudit.recordPromoted(
+      signal.signalId,
+      mode,
+      normalizedSymbol,
+      signal.strategy,
+      {
+        tradeId,
+        cwqi: parseFloat(signal.cwqi),
+        queueDurationMs: Date.now() - new Date(signal.queuedAt).getTime(),
+      }
+    );
+
+    // Step 2: Log promotion trace
+    this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'promoted', 'TCL_promotion');
+
+    // Step 3: Delete signal from RTBQ (deferred until after trade creation confirmed)
+    // A3.R9.2-D: Deletion happens ONLY after trade creation is confirmed via tradeId
+    try {
       await storage.deleteRtbSignals({ mode, id: signal.id });
       performanceMonitor.recordQueueRemove(1);
-
-      // Directive 8.8.4-A3.R8: Log promotion trace
-      this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'promoted', 'TCL_promotion');
-
-      // Record SLAL PROMOTED event
-      signalLifecycleAudit.recordPromoted(
-        signal.signalId,
-        mode,
-        normalizedSymbol,
-        signal.strategy,
-        {
-          tradeId,
-          cwqi: parseFloat(signal.cwqi),
-          queueDurationMs: Date.now() - new Date(signal.queuedAt).getTime(),
-        }
-      );
-
+      
       const promotionDurationMs = Date.now() - promotionStartMs;
-      console.log(`[A3.R9.2][PROMOTION_ATOMIC] symbol=${normalizedSymbol} tradePromoted=true rtbRemoved=true duration=${promotionDurationMs}ms`);
+      console.log(`[A3.R9.2][PROMOTION_COMPLETE] symbol=${normalizedSymbol} tradeId=${tradeId} rtbRemoved=true duration=${promotionDurationMs}ms`);
       
     } catch (error) {
-      // A3.R9.2-D: On error, attempt to restore signal to active state
-      console.error(`[A3.R9.2][PROMOTION_ATOMIC][ERROR] symbol=${normalizedSymbol} failed:`, error);
+      // A3.R9.2-D: Deletion failed but trade was already created
+      // Signal may remain in queue as orphan - log for manual cleanup
+      console.error(`[A3.R9.2][PROMOTION_CLEANUP_FAILED] symbol=${normalizedSymbol} tradeId=${tradeId} - signal may be orphaned:`, error);
       
-      // Try to restore signal if possible (best effort)
+      // Attempt to mark as promoted to prevent re-promotion
       try {
         await storage.updateRtbSignal(signalId, {
-          status: 'active',
-          promotedAt: null,
-          promotedTradeId: null,
+          status: 'promoted',
+          promotedAt: new Date(),
+          promotedTradeId: tradeId,
         });
-        console.log(`[A3.R9.2][PROMOTION_ATOMIC][ROLLBACK] symbol=${normalizedSymbol} restored to active`);
-      } catch (rollbackError) {
-        console.error(`[A3.R9.2][PROMOTION_ATOMIC][ROLLBACK_FAILED] symbol=${normalizedSymbol}:`, rollbackError);
+        console.log(`[A3.R9.2][PROMOTION_MARKED] symbol=${normalizedSymbol} marked as promoted (delete failed)`);
+      } catch (markError) {
+        console.error(`[A3.R9.2][PROMOTION_MARK_FAILED] symbol=${normalizedSymbol}:`, markError);
       }
-      
-      throw error; // Re-throw to signal failure
     }
   }
 
@@ -1122,7 +1133,7 @@ class ReadyToBuyService {
       const normalizedSymbol = normalizePairKey(signal.symbol);
       await storage.deleteRtbSignals({ mode, id: signal.id });
       performanceMonitor.recordQueueRemove(1);
-      console.log(`[A3.R9.0][CLEANUP] Deleted legacy expired signal ${normalizedSymbol}/${signal.strategy}`);
+      console.log(`[A3.R9.2][CLEANUP] Deleted legacy expired signal ${normalizedSymbol}/${signal.strategy}`);
       cleanedCount++;
     }
     
@@ -1139,7 +1150,7 @@ class ReadyToBuyService {
         const normalizedSymbol = normalizePairKey(signal.symbol);
         await storage.deleteRtbSignals({ mode, id: signal.id });
         performanceMonitor.recordQueueRemove(1);
-        console.log(`[A3.R9.0][TTL] Deleted signal ${normalizedSymbol}/${signal.strategy} (TTL exceeded)`);
+        console.log(`[A3.R9.2][TTL] Deleted signal ${normalizedSymbol}/${signal.strategy} (TTL exceeded)`);
         cleanedCount++;
       }
     }
@@ -1240,7 +1251,7 @@ class ReadyToBuyService {
       performanceMonitor.recordQueueRemove(deleted);
     }
     
-    console.log(`[A3.R9.0][RTB] Deleted ${deleted} signals from ${mode} queue`);
+    console.log(`[A3.R9.2][RTB] Deleted ${deleted} signals from ${mode} queue`);
     return deleted;
   }
 
@@ -1377,7 +1388,7 @@ class ReadyToBuyService {
     if (refreshComplete) {
       await tclWatchdog.checkSignalThresholdLive(input.mode, refreshComplete);
     } else {
-      console.log(`[A3.R9.0][TCL_SYNC] Skipping TCL check on enqueue - refresh in progress for ${input.mode}`);
+      console.log(`[A3.R9.2][TCL_SYNC] Skipping TCL check on enqueue - refresh in progress for ${input.mode}`);
     }
     
     return signal;

@@ -149,18 +149,18 @@ export function evaluateSignalQuality(input: SQEInput, options: SQEOptions = {})
   
   const passed = failures.length === 0;
   
-  // Directive A3.R9.0.C: Enhanced diagnostic logging for filtered-out signals
+  // Directive A3.R9.2-C: Enhanced diagnostic logging for filtered-out signals
   if (!passed) {
     const failureReason = failures[0]?.split(' ')[0] || 'unknown';
-    console.log(`[A3.R9.0.C][SQE_FILTERED_OUT] ${canonicalSymbol} reason=${failureReason} NGC=${input.ngc.toFixed(4)} CWQI=${input.cwqi.toFixed(4)} Risk=${input.riskScore.toFixed(4)} ProfitRate=${input.profitRate.toFixed(4)}`);
+    console.log(`[A3.R9.2][SQE_FILTERED] ${canonicalSymbol} reason=${failureReason} NGC=${input.ngc.toFixed(4)} CWQI=${input.cwqi.toFixed(4)} Risk=${input.riskScore.toFixed(4)} ProfitRate=${input.profitRate.toFixed(4)}`);
   }
   
-  // Directive A3.R9.0: Unified SQE filter logging
+  // Directive A3.R9.2: Unified SQE filter logging
   const status = passed ? 'PASS' : 'FAIL';
   const reason = passed ? 'all_thresholds_met' : failures[0]?.split(' ')[0] || 'unknown';
-  console.log(`[A3.R9.0][SQE_FILTER] ${status} symbol=${canonicalSymbol} strategy=${input.strategy} NGC=${input.ngc.toFixed(4)} CWQI=${input.cwqi.toFixed(4)} reason=${reason}`);
+  console.log(`[A3.R9.2][SQE_EVAL] ${status} symbol=${canonicalSymbol} strategy=${input.strategy} NGC=${input.ngc.toFixed(4)} CWQI=${input.cwqi.toFixed(4)} reason=${reason}`);
   
-  // A3.R9.0: Record metric for performance monitoring
+  // A3.R9.2: Record metric for performance monitoring
   performanceMonitor.recordSQEEvaluation(passed);
   
   // Directive 8.8.4-A3.R9.0.D: Trace SQE evaluation result
