@@ -7040,6 +7040,105 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ==================== Directive 8.8.4-A3.R9.0.D: Signal Flow Trace Diagnostics ====================
+  
+  // Import the diagnostic trace service
+  const { diagnosticTrace } = await import('./core/diagnostics/trace_service.js');
+  
+  // POST /api/diagnostics/trace/start - Start diagnostic tracing
+  apiRouter.post('/diagnostics/trace/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      diagnosticTrace.start();
+      const stats = diagnosticTrace.getStats();
+      console.log('[A3.R9.0.D] Diagnostic tracing started via API');
+      res.json({
+        ok: true,
+        message: 'Diagnostic tracing started (auto-stops after 10 minutes or 1 MB)',
+        stats,
+      });
+    } catch (error: any) {
+      console.error('[A3.R9.0.D][API] Start failed:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // POST /api/diagnostics/trace/stop - Stop diagnostic tracing
+  apiRouter.post('/diagnostics/trace/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      diagnosticTrace.stop();
+      const stats = diagnosticTrace.getStats();
+      console.log('[A3.R9.0.D] Diagnostic tracing stopped via API');
+      res.json({
+        ok: true,
+        message: 'Diagnostic tracing stopped',
+        stats,
+      });
+    } catch (error: any) {
+      console.error('[A3.R9.0.D][API] Stop failed:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // GET /api/diagnostics/trace/status - Get tracing status
+  apiRouter.get('/diagnostics/trace/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const stats = diagnosticTrace.getStats();
+      res.json({
+        ok: true,
+        ...stats,
+        logFile: 'logs/diagnostic/trace_A3R9.log',
+      });
+    } catch (error: any) {
+      console.error('[A3.R9.0.D][API] Status check failed:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // GET /api/diagnostics/trace/entries - Read recent trace entries
+  apiRouter.get('/diagnostics/trace/entries', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const logPath = path.resolve(process.cwd(), 'logs/diagnostic/trace_A3R9.log');
+      
+      try {
+        const content = await fs.readFile(logPath, 'utf-8');
+        const lines = content.split('\n').filter(line => line.includes('[A3.R9.TRACE]'));
+        const recentLines = lines.slice(-limit);
+        
+        const entries = recentLines.map(line => {
+          try {
+            const jsonStart = line.indexOf('{');
+            if (jsonStart >= 0) {
+              return JSON.parse(line.substring(jsonStart));
+            }
+            return { raw: line };
+          } catch {
+            return { raw: line };
+          }
+        });
+        
+        res.json({
+          ok: true,
+          count: entries.length,
+          totalLines: lines.length,
+          entries,
+        });
+      } catch (fileErr: any) {
+        if (fileErr.code === 'ENOENT') {
+          return res.json({
+            ok: true,
+            entries: [],
+            message: 'No trace log file exists yet',
+          });
+        }
+        throw fileErr;
+      }
+    } catch (error: any) {
+      console.error('[A3.R9.0.D][API] Read entries failed:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   // ==================== Phase 8.8.3-B5: Full Signal Creation & Sizing Pipeline Audit ====================
   
   // GET /api/diagnostics/b5/sizing-log - Get B5 sizing audit log entries

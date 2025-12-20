@@ -274,10 +274,6 @@ app.use((req, res, next) => {
   const { provenanceDebug } = await import('./services/provenance-debug');
   provenanceDebug.enableVerboseMode();
 
-  // Directive 8.8.4-A3.R9.0.D: Register diagnostic trace routes
-  const { registerDiagnosticTraceRoutes } = await import('./routes/diagnostic-trace');
-  registerDiagnosticTraceRoutes(app);
-
   // Phase 8.4 Addendum E.1: Run file persistence self-test
   const { filePersistence } = await import('./services/file-persistence');
   const selfTestPassed = await filePersistence.runStartupSelfTest();

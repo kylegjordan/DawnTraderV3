@@ -1744,6 +1744,46 @@
     ]
   },
   {
+    "path": "/api/diagnostics/trace/start",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/diagnostics/trace/stop",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/diagnostics/trace/status",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/diagnostics/trace/entries",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/diagnostics/b5/sizing-log",
     "methods": [
       "GET"
@@ -6291,42 +6331,6 @@
   },
   {
     "path": "/api/provenance/debug/diagnostic",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/diagnostics/trace/start",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/diagnostics/trace/stop",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/diagnostics/trace/status",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/diagnostics/trace/entries",
     "methods": [
       "GET"
     ],
