@@ -24,6 +24,7 @@ import * as path from 'path';
 import { SQE_THRESHOLDS } from '../metrics/quality_index';
 import { performanceMonitor } from '../diagnostics/performance_monitor';
 import { normalizeInternal } from '../../markets/kraken-symbol-resolver';
+import { diagnosticTrace } from '../diagnostics/trace_service';
 
 interface StrategyThresholdsConfig {
   profitRateFloors: Record<string, number>;
@@ -161,6 +162,20 @@ export function evaluateSignalQuality(input: SQEInput, options: SQEOptions = {})
   
   // A3.R9.0: Record metric for performance monitoring
   performanceMonitor.recordSQEEvaluation(passed);
+  
+  // Directive 8.8.4-A3.R9.0.D: Trace SQE evaluation result
+  diagnosticTrace.traceSQE(
+    canonicalSymbol,
+    input.strategy,
+    {
+      ngc: input.ngc,
+      cwqi: input.cwqi,
+      profit: input.profitRate,
+      risk: input.riskScore,
+    },
+    passed,
+    true // metrics are clamped for downstream
+  );
   
   // R9C-1: Clamp metrics only for downstream consumers (after threshold check)
   const clampedMetrics = {

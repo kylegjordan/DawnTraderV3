@@ -49,6 +49,7 @@ import { calculateExtendedSignalMetrics, estimateVolatility } from '../core/metr
 import { signalQualityEvaluator, type SQEInput } from '../core/filters/signal_quality_evaluator.js';
 import { readyToBuyService, type SQESignalInput } from '../core/rtb/ready_to_buy_service.js';
 import { activeFilterPool } from './active-filter-pool.js';
+import { diagnosticTrace } from '../core/diagnostics/trace_service.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -331,6 +332,19 @@ export class SignalOrchestrator {
     });
 
     console.log(`[B.3][METRICS] ${rawSignal.symbol}/${strategyId}: NGC=${extendedMetrics.ngc.toFixed(4)}, CWQI=${extendedMetrics.cwqi.toFixed(4)}, ProfitRate=${extendedMetrics.profitRate.toFixed(4)}`);
+
+    // Directive 8.8.4-A3.R9.0.D: Trace raw metrics before SQE evaluation
+    diagnosticTrace.traceOrchestrator(
+      rawSignal.symbol,
+      strategyId,
+      {
+        ngc: extendedMetrics.ngc,
+        cwqi: extendedMetrics.cwqi,
+        profit: extendedMetrics.profitRate,
+        risk: extendedMetrics.riskScore,
+      },
+      false // not yet normalized by SQE
+    );
 
     // Phase 8.8.4-B.3: STEP 3 - Apply SQE quality filter AFTER metrics
     const sqeInput: SQEInput = {

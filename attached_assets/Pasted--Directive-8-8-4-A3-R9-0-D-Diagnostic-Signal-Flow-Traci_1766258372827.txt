@@ -1,0 +1,114 @@
+# Directive 8.8.4-A3.R9.0.D — Diagnostic Signal Flow Tracing Protocol
+# Objective:
+#   Identify the root causes of persistent SQE over-acceptance, metric clustering,
+#   and deduplication bypass by tracing every signal from creation → evaluation → queue.
+#
+# Mode: Diagnostic (non-invasive)
+# Impact: Read-only, zero mutation, zero delay
+# Duration: 10 minutes
+# Architect: [Your Name]
+# Date: [Insert Date/Time]
+
+--------------------------------------------------------------------
+## 1️⃣ Overview
+
+This directive adds low-impact diagnostic probes with the tag:
+   [A3.R9.TRACE]
+
+These probes:
+  - Capture *values only* (NGC, CWQI, Risk, ProfitRate, status)
+  - Never mutate, block, or re-evaluate data
+  - Use async, buffered logging with throttled writes
+  - Auto-disable after 10 minutes or 1 MB log size
+
+Logs are stored in:
+   /logs/diagnostic/trace_A3R9.log
+
+--------------------------------------------------------------------
+## 2️⃣ Implementation Scope
+
+### Target Modules and Injection Points
+
+| Module | Function | Purpose |
+|---------|-----------|----------|
+| `signal_orchestrator.ts` | `computeSignalQuality(signal)` | Capture *raw* metric inputs before normalization |
+| `signal_preprocessor.ts` | `preprocessSignal(signal)` | Capture metric state after pre-processing |
+| `signal_quality_evaluator.ts` | `evaluateSignalQuality(signal)` | Capture threshold logic and outcome |
+| `ready_to_buy_service.ts` | `queueSQESignal(signal)` + `refreshAndRank()` | Capture post-evaluation queue decisions |
+
+Each probe logs this standardized JSON line:
+```ts
+log.info(
+  "[A3.R9.TRACE]",
+  JSON.stringify({
+    phase,              // e.g., "orchestrator", "sqe", "rtb"
+    symbol: signal.symbol,
+    strategy: signal.strategy,
+    ngcRaw: signal.ngc,
+    cwqiRaw: signal.cwqi,
+    profit: signal.expectedProfit,
+    risk: signal.risk,
+    normalized: signal.__normalized ?? false,
+    passed: signal.__sqe_passed ?? null,
+    rejected: signal.__sqe_rejected ?? null,
+    inserted: signal.__queued ?? null,
+    timestamp: Date.now()
+  })
+);
+3️⃣ Safety & Isolation Design
+✅ All probes use non-blocking async writes via internal diagnostic buffer
+✅ Buffer flushes every 2 s or when 200 entries accumulate
+✅ Logging executes after each function returns
+✅ No imports, exports, or threshold constants modified
+✅ Auto-cleanup timer stops tracing after 10 minutes
+
+4️⃣ Runtime Execution
+Start the trading session as normal:
+
+bash
+Copy code
+POST /api/paper-sim/start
+Let it run for ~10 minutes with normal trading enabled.
+No API changes, thresholds, or signal flow are affected.
+
+5️⃣ Data Collection
+After run:
+
+bash
+Copy code
+/logs/diagnostic/trace_A3R9.log
+Each line will look like:
+
+csharp
+Copy code
+[A3.R9.TRACE] {"phase":"sqe","symbol":"ADA/USD","ngcRaw":0.721,"cwqiRaw":0.704,"normalized":true,"passed":true,"timestamp":1734736544123}
+Copy or compress this log and share for audit correlation.
+
+6️⃣ Validation Criteria
+Check	Expected Indicator
+Signal creation → evaluation sequence	sequential timestamps per symbol
+Normalization duplication	identical ngcRaw between orchestrator and SQE = ⚠️ pre-normalized
+Missing evaluations	orchestrator present, SQE absent = ⚠️ short-circuit
+Deduplication gaps	same symbol appears twice within 5 s window = ⚠️ duplicate entry
+Filtering inactivity	all passed:true = SQE bypass confirmed
+
+7️⃣ Completion
+When tracing completes, the system auto-removes probes.
+No restart or rollback required.
+
+If trace confirms bypass or pre-normalization:
+→ proceed to Directive 8.8.4-A3.R9.1 (Signal Path Refactoring).
+
+End of Directive 8.8.4-A3.R9.0.D
+yaml
+Copy code
+
+---
+
+### 🧠 In Plain Terms
+
+This directive:
+- Adds invisible sensors at key points in the pipeline  
+- Writes a compact trace log  
+- Does *not* touch live trading, risk, or queue behavior  
+- Turns itself off automatically  

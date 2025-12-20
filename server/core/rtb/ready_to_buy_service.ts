@@ -41,6 +41,7 @@ import { contextBridge } from '../../services/context-bridge';
 import { centralClock, ClockTick } from '../../services/central-clock';
 import { performanceMonitor } from '../diagnostics/performance_monitor';
 import { normalizeInternal } from '../../markets/kraken-symbol-resolver';
+import { diagnosticTrace } from '../diagnostics/trace_service';
 
 export interface RTBSignalInput {
   signalId: string;
@@ -1286,6 +1287,15 @@ class ReadyToBuyService {
     
     // A3.R9.0: Record queue add for performance metrics
     performanceMonitor.recordQueueAdd(1);
+    
+    // Directive 8.8.4-A3.R9.0.D: Trace RTB queue insertion
+    diagnosticTrace.traceRTB(
+      normalizedSymbol,
+      input.strategy,
+      { ngc: input.ngc, cwqi: input.cwqi },
+      true, // inserted
+      { mode: input.mode, signalId: input.signalId }
+    );
 
     // Record SLAL QUEUED event
     signalLifecycleAudit.recordQueued(

@@ -1,0 +1,244 @@
+/**
+ * Directive 8.8.4-A3.R9.0.D: Diagnostic Signal Flow Tracing Service
+ * 
+ * Non-invasive diagnostic probes for tracing signal flow from creation → evaluation → queue.
+ * 
+ * Features:
+ * - Buffered async logging with throttled writes (flush every 2s or 200 entries)
+ * - Auto-disable after 10 minutes or 1 MB log size
+ * - Zero mutation, zero delay impact on trading operations
+ * - Uses [A3.R9.TRACE] tag for all diagnostic entries
+ * 
+ * Log output: logs/diagnostic/trace_A3R9.log
+ */
+
+import * as fs from 'fs';
+import * as path from 'path';
+
+export type TracePhase = 'orchestrator' | 'preprocessor' | 'sqe' | 'rtb' | 'queue';
+
+export interface TraceEntry {
+  phase: TracePhase;
+  symbol: string;
+  strategy: string;
+  ngcRaw: number | null;
+  cwqiRaw: number | null;
+  profit: number | null;
+  risk: number | null;
+  normalized: boolean;
+  passed: boolean | null;
+  rejected: boolean | null;
+  inserted: boolean | null;
+  timestamp: number;
+  extra?: Record<string, unknown>;
+}
+
+const LOG_DIR = path.resolve(process.cwd(), 'logs/diagnostic');
+const LOG_FILE = path.join(LOG_DIR, 'trace_A3R9.log');
+const MAX_LOG_SIZE_BYTES = 1 * 1024 * 1024; // 1 MB
+const AUTO_DISABLE_MS = 10 * 60 * 1000; // 10 minutes
+const BUFFER_FLUSH_INTERVAL_MS = 2000; // 2 seconds
+const BUFFER_MAX_ENTRIES = 200;
+
+class DiagnosticTraceService {
+  private buffer: string[] = [];
+  private isEnabled: boolean = false;
+  private startTime: number = 0;
+  private flushTimer: NodeJS.Timeout | null = null;
+  private autoDisableTimer: NodeJS.Timeout | null = null;
+  private totalBytesWritten: number = 0;
+  private entryCount: number = 0;
+
+  constructor() {
+    this.ensureLogDirectory();
+  }
+
+  private ensureLogDirectory(): void {
+    try {
+      if (!fs.existsSync(LOG_DIR)) {
+        fs.mkdirSync(LOG_DIR, { recursive: true });
+      }
+    } catch (err) {
+      console.error('[A3.R9.TRACE][ERROR] Failed to create log directory:', err);
+    }
+  }
+
+  start(): void {
+    if (this.isEnabled) {
+      console.log('[A3.R9.TRACE][WARN] Tracing already enabled');
+      return;
+    }
+
+    this.isEnabled = true;
+    this.startTime = Date.now();
+    this.buffer = [];
+    this.totalBytesWritten = 0;
+    this.entryCount = 0;
+
+    try {
+      fs.writeFileSync(LOG_FILE, `# Directive 8.8.4-A3.R9.0.D Trace Log\n# Started: ${new Date().toISOString()}\n`);
+    } catch (err) {
+      console.error('[A3.R9.TRACE][ERROR] Failed to initialize log file:', err);
+    }
+
+    this.flushTimer = setInterval(() => this.flushBuffer(), BUFFER_FLUSH_INTERVAL_MS);
+    
+    this.autoDisableTimer = setTimeout(() => {
+      console.log('[A3.R9.TRACE][AUTO_DISABLE] 10-minute limit reached, stopping trace');
+      this.stop();
+    }, AUTO_DISABLE_MS);
+
+    console.log(`[A3.R9.TRACE][START] Signal flow tracing enabled (auto-disable in 10 min, max 1 MB)`);
+    console.log(`[A3.R9.TRACE][LOG_PATH] ${LOG_FILE}`);
+  }
+
+  stop(): void {
+    if (!this.isEnabled) {
+      return;
+    }
+
+    this.flushBuffer();
+
+    if (this.flushTimer) {
+      clearInterval(this.flushTimer);
+      this.flushTimer = null;
+    }
+
+    if (this.autoDisableTimer) {
+      clearTimeout(this.autoDisableTimer);
+      this.autoDisableTimer = null;
+    }
+
+    const durationSec = Math.round((Date.now() - this.startTime) / 1000);
+    const summary = `\n# Trace stopped: ${new Date().toISOString()}\n# Duration: ${durationSec}s, Entries: ${this.entryCount}, Bytes: ${this.totalBytesWritten}\n`;
+    
+    try {
+      fs.appendFileSync(LOG_FILE, summary);
+    } catch (err) {
+      console.error('[A3.R9.TRACE][ERROR] Failed to write summary:', err);
+    }
+
+    this.isEnabled = false;
+    console.log(`[A3.R9.TRACE][STOP] Tracing stopped after ${durationSec}s, ${this.entryCount} entries, ${this.totalBytesWritten} bytes`);
+  }
+
+  isActive(): boolean {
+    return this.isEnabled;
+  }
+
+  getStats(): { enabled: boolean; entries: number; bytes: number; elapsedMs: number } {
+    return {
+      enabled: this.isEnabled,
+      entries: this.entryCount,
+      bytes: this.totalBytesWritten,
+      elapsedMs: this.isEnabled ? Date.now() - this.startTime : 0
+    };
+  }
+
+  trace(entry: TraceEntry): void {
+    if (!this.isEnabled) {
+      return;
+    }
+
+    if (this.totalBytesWritten >= MAX_LOG_SIZE_BYTES) {
+      console.log('[A3.R9.TRACE][AUTO_DISABLE] 1 MB limit reached, stopping trace');
+      this.stop();
+      return;
+    }
+
+    const logLine = `[A3.R9.TRACE] ${JSON.stringify(entry)}\n`;
+    this.buffer.push(logLine);
+    this.entryCount++;
+
+    if (this.buffer.length >= BUFFER_MAX_ENTRIES) {
+      this.flushBuffer();
+    }
+  }
+
+  traceOrchestrator(
+    symbol: string, 
+    strategy: string, 
+    rawMetrics: { ngc?: number; cwqi?: number; profit?: number; risk?: number },
+    normalized: boolean = false
+  ): void {
+    this.trace({
+      phase: 'orchestrator',
+      symbol,
+      strategy,
+      ngcRaw: rawMetrics.ngc ?? null,
+      cwqiRaw: rawMetrics.cwqi ?? null,
+      profit: rawMetrics.profit ?? null,
+      risk: rawMetrics.risk ?? null,
+      normalized,
+      passed: null,
+      rejected: null,
+      inserted: null,
+      timestamp: Date.now()
+    });
+  }
+
+  traceSQE(
+    symbol: string,
+    strategy: string,
+    metrics: { ngc: number; cwqi: number; profit: number; risk: number },
+    passed: boolean,
+    normalized: boolean = true
+  ): void {
+    this.trace({
+      phase: 'sqe',
+      symbol,
+      strategy,
+      ngcRaw: metrics.ngc,
+      cwqiRaw: metrics.cwqi,
+      profit: metrics.profit,
+      risk: metrics.risk,
+      normalized,
+      passed,
+      rejected: !passed,
+      inserted: null,
+      timestamp: Date.now()
+    });
+  }
+
+  traceRTB(
+    symbol: string,
+    strategy: string,
+    metrics: { ngc?: number; cwqi?: number },
+    inserted: boolean,
+    extra?: Record<string, unknown>
+  ): void {
+    this.trace({
+      phase: 'rtb',
+      symbol,
+      strategy,
+      ngcRaw: metrics.ngc ?? null,
+      cwqiRaw: metrics.cwqi ?? null,
+      profit: null,
+      risk: null,
+      normalized: true,
+      passed: true,
+      rejected: false,
+      inserted,
+      timestamp: Date.now(),
+      extra
+    });
+  }
+
+  private flushBuffer(): void {
+    if (this.buffer.length === 0) {
+      return;
+    }
+
+    const content = this.buffer.join('');
+    this.buffer = [];
+
+    try {
+      fs.appendFileSync(LOG_FILE, content);
+      this.totalBytesWritten += content.length;
+    } catch (err) {
+      console.error('[A3.R9.TRACE][ERROR] Failed to flush buffer:', err);
+    }
+  }
+}
+
+export const diagnosticTrace = new DiagnosticTraceService();
