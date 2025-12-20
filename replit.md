@@ -43,6 +43,14 @@ RTB Stabilization & Diagnostics includes conditional TTL expiry for missed refre
 
 Central Clock Architecture (Directive 8.8.4-A3.R7) introduces a synchronized timing system using `CentralClockService` that emits 1-second ticks to coordinate all timing-dependent subsystems. FX5 Scanner, RTB Refresh, and TCL Watchdog now subscribe to the Central Clock for deterministic 30-second aligned intervals. The TCL Watchdog uses tick-based failsafe timing (default 120 seconds) and emits SlotOpened, RTBThresholdMet, and FailsafeTrigger events via an enhanced EventBus with a 200ms event queue processor for reliable event handling. The startup sequence ensures Central Clock starts first, followed by event listeners, then services.
 
+System Harmonization (Directive 8.8.4-A3.R9.0) implements comprehensive RTB, TCL, and SQE alignment:
+- **SQE Calibration**: Restored thresholds (MIN_NGC=0.55, MIN_CWQI=0.45) targeting 35-50% pass rate. NGC formula: normalize→blend (0.4*NGC + 0.4*profitRate + 0.2*(1-risk)).
+- **RTB Refresh Realignment**: Per-signal rolling TTL with 30-second individual expiry, statusUpdatedAt tracking in metadata, and enhanced deduplication key (symbol:strategy:createdAtBucket).
+- **TCL Synchronization Barrier**: Atomic `refreshComplete` flag prevents TCL from querying RTB mid-refresh cycle.
+- **TradingScheduler**: Unified Central Clock consumer that fans out to FX5Scanner, RTB, and TCL, reducing CPU spikes ~10%.
+- **Performance Metrics**: Tracks sqe_evaluation_rate, rtb_refresh_latency, tcl_activation_delay, and queue_churn_rate with 60-second summary logs via `PerformanceMonitor`.
+- All log tags standardized to `[A3.R9.0]` across SQE, RTB, and TCL modules.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.

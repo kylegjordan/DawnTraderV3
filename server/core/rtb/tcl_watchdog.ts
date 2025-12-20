@@ -1,6 +1,6 @@
 /**
  * Phase 8.8.4-C.12: TCL Watchdog Service
- * Directive 8.8.4-A3.R7: Central Clock Integration
+ * Directive 8.8.4-A3.R9.0: System Harmonization & Performance Alignment
  * 
  * Event-driven TCL (Trade Capacity Limit) activation system.
  * Uses Central Clock for synchronized timing and deterministic failsafe.
@@ -11,16 +11,19 @@
  * 3. Emit TCL_ACTIVATED when RTB queue reaches threshold signals
  * 4. Track activation state per mode (paper/live)
  * 5. Emit FailsafeTrigger event for diagnostic logging
+ * 6. A3.R9.0: TCL synchronization barrier - only query RTB after refresh complete
  * 
- * Event Model (Directive A3.R7 Section 3):
+ * Event Model (Directive A3.R9.0 Section 4):
  * - SlotOpened: Emitted by Trade Manager when a trade closes
  * - RTBThresholdMet: Emitted when 15 unexpired signals exist in RTB queue
  * - FailsafeTrigger: Internal timer after 120s of inactivity
+ * - TCL only activates after RTB.isRefreshComplete = true
  */
 
 import { eventBus, type TradingMode } from '../../lib/event-bus';
 import { centralClock, ClockTick } from '../../services/central-clock';
 import { storage } from '../../storage';
+import { performanceMonitor } from '../diagnostics/performance_monitor';
 
 const TCL_FAILSAFE_SECONDS = parseInt(process.env.TCL_FAILSAFE_SECONDS || '120', 10);
 const TCL_SIGNAL_THRESHOLD = parseInt(process.env.TCL_SIGNAL_THRESHOLD || '15', 10);
@@ -154,17 +157,22 @@ class TCLWatchdog {
 
   /**
    * Check if signal threshold is reached and activate TCL if needed
-   * Directive A3.R7: Permanently disables failsafe after RTBThresholdMet
-   * Directive A3.R8.4: Added 5-second debounce to prevent redundant activation attempts
+   * Directive A3.R9.0: TCL synchronization barrier - only query after refresh complete
    * Directive A3.R8.5: Uses live query for pool count, not cached snapshot
    */
-  async checkSignalThresholdLive(mode: TradingMode): Promise<void> {
+  async checkSignalThresholdLive(mode: TradingMode, rtbRefreshComplete: boolean = true): Promise<void> {
     const state = this.getState(mode);
     const now = Date.now();
     const DEBOUNCE_MS = 5000; // 5 seconds debounce
 
     // Already active - skip
     if (state.isActive) {
+      return;
+    }
+    
+    // A3.R9.0: TCL synchronization barrier
+    if (!rtbRefreshComplete) {
+      console.log(`[A3.R9.0][TCL_SYNC] Waiting for RTB refresh to complete before threshold check`);
       return;
     }
     
@@ -175,15 +183,16 @@ class TCLWatchdog {
     
     state.lastThresholdCheckMs = now;
 
-    // A3.R8.5: Query live pool count from database
+    // A3.R9.0: Query live pool count from database after barrier passes
     const currentPoolSize = await this.getLivePoolCount(mode);
+    console.log(`[A3.R9.0][TCL_SYNC] Barrier passed, pool count=${currentPoolSize}`);
 
     if (currentPoolSize >= TCL_SIGNAL_THRESHOLD) {
-      console.log(`[TCL][Event] RTBThresholdMet received – ${currentPoolSize} signals active (live query)`);
+      console.log(`[A3.R9.0][TCL][Event] RTBThresholdMet – ${currentPoolSize} signals (live query)`);
       this.activateTCL(mode, '100signals', currentPoolSize);
       
       state.failsafeDisabled = true;
-      console.log(`[A3.R7][TCL_WATCHDOG] Failsafe permanently disabled for ${mode} (RTBThresholdMet)`);
+      console.log(`[A3.R9.0][TCL_WATCHDOG] Failsafe permanently disabled for ${mode} (RTBThresholdMet)`);
     }
   }
 
@@ -238,7 +247,10 @@ class TCLWatchdog {
     const elapsedMs = state.startedAt ? Date.now() - state.startedAt.getTime() : 0;
     const elapsedSec = (elapsedMs / 1000).toFixed(1);
 
-    console.log(`[A3.R7][TCL_WATCHDOG] TCL ACTIVATED for ${mode} | reason=${reason} | elapsed=${elapsedSec}s | poolSize=${poolSize}`);
+    // A3.R9.0: Record TCL activation delay for performance monitoring
+    performanceMonitor.recordTCLActivation(elapsedMs);
+
+    console.log(`[A3.R9.0][TCL_WATCHDOG] TCL ACTIVATED for ${mode} | reason=${reason} | elapsed=${elapsedSec}s | poolSize=${poolSize}`);
 
     if (reason === '100signals') {
       console.log(`[TCL][Event] RTBThresholdMet triggered – promoting top signals`);

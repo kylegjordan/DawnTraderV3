@@ -1,0 +1,200 @@
+⚖️ Directive 8.8.4-A3.R9.0 — System Harmonization & Performance Alignment
+
+Issued by: Architect (testuser123)
+Execution Authority: Replit (System Operator)
+Authentication:
+
+username = testuser123
+password = SecurePass123!
+
+🎯 Objective
+
+Stabilize and harmonize all trading engine subsystems by restoring proper validation thresholds, realigning refresh timing, fixing synchronization between modules, and improving performance while maintaining full architectural integrity.
+
+🧩 Scope
+
+This directive covers:
+
+Signal Quality Evaluator (SQE)
+
+Ready-To-Buy (RTB) Queue
+
+Trade Control Logic (TCL)
+
+Central Clock / Scheduler
+
+Event Bus Interactions
+
+Logging & Diagnostics
+
+⚙️ Changes Required
+1. SQE Calibration & Enforcement
+
+Files:
+server/core/filters/signal_quality_evaluator.ts
+Action:
+
+Restore proper threshold enforcement:
+
+MIN_NGC = 0.55
+MIN_CWQI = 0.45
+MIN_PROFIT_RATE = 0.10 (strategy-specific floors remain)
+MAX_RISK = 0.85
+
+
+Apply normalization before additive blending of NGC:
+
+NGC_normalized = normalize(conf, vol, risk)
+NGC = 0.4 * NGC_normalized + 0.4 * profitRate + 0.2 * (1 - risk)
+
+
+Reinstate getPrimaryFailureReason() to evaluate post-normalization results.
+
+Add log tag [A3.R9.0][SQE_FILTER] with pass/fail, NGC, CWQI, and reason.
+
+Expected Result:
+SQE pass rate ~35–50%, restoring meaningful filtering.
+
+2. RTB Refresh Realignment
+
+Files:
+server/core/services/ready_to_buy_service.ts
+Action:
+
+Replace batch refresh logic with per-signal rolling TTL:
+
+Each signal gets expiresAt = createdAt + 30s
+
+Central Clock triggers refresh only for signals whose TTL has expired.
+
+Introduce individual refresh tasks to stagger load over each 30s window.
+
+Maintain continuous visibility in RTB queue during refresh.
+
+Expected Result:
+Smooth queue behavior, no visual flashing, balanced processing load.
+
+3. RTB Status Lifecycle
+
+Files:
+server/core/services/ready_to_buy_service.ts, server/api/routes/trading_signals.ts
+Action:
+
+Introduce explicit state transitions:
+
+active → reconfirmed → promoted → expired
+
+
+Update refreshAndRank() to:
+
+Update status to reconfirmed when SQE passes revalidation.
+
+Immediately delete if SQE fails revalidation.
+
+Add statusUpdatedAt field for traceability.
+
+API should include new field uiStatus for consistent display.
+
+Expected Result:
+Clear lifecycle transitions visible in RTB UI.
+
+4. TCL Synchronization Barrier
+
+Files:
+server/core/logic/trade_control_logic.ts, server/core/services/ready_to_buy_service.ts
+Action:
+
+Introduce atomic synchronization flag:
+
+if (!RTB.isRefreshComplete) return;
+
+
+TCL only queries RTB after refreshComplete event.
+
+Add log tag [A3.R9.0][TCL_SYNC] for barrier passes.
+
+Expected Result:
+No premature trade activations, consistent trade lifecycle.
+
+5. Deduplication Hardening
+
+Files:
+server/core/services/ready_to_buy_service.ts, server/core/db/storage.ts
+Action:
+
+Update deduplication key to (symbol, strategy, createdAt) to prevent ghost reinserts.
+
+Delete older duplicates within the same transaction before inserting new signals.
+
+Expected Result:
+No more ghost signals reappearing in the RTB queue.
+
+6. Central Clock Scheduler Unification
+
+Files:
+server/core/system/central_clock.ts, server/core/system/trading_scheduler.ts
+Action:
+
+Create TradingScheduler layer that consumes 1-second ticks once and fans out to:
+
+FX5Scanner
+
+RTB Refresh
+
+TCL Watchdog
+
+Remove direct multiple subscriptions.
+
+Expected Result:
+Perfect synchronization, reduced CPU spikes (~10% improvement).
+
+7. Performance & Diagnostic Metrics
+
+Files:
+server/core/diagnostics/performance_monitor.ts
+Action:
+
+Add metrics:
+
+sqe_evaluation_rate, rtb_refresh_latency, tcl_activation_delay, queue_churn_rate
+
+
+Emit logs under [A3.R9.0][METRICS].
+
+Append summary line every 60s with current averages.
+
+Expected Result:
+Continuous visibility of system efficiency and timing behavior.
+
+🧪 Validation Checklist
+
+After implementation:
+
+✅ SQE passes between 30–50% of signals
+
+✅ RTB signals refresh individually without mass expiration
+
+✅ Status transitions visible in UI (“Reconfirmed” appears regularly)
+
+✅ No ghost signals or duplicate reinserts
+
+✅ TCL triggers only after pool readiness confirmed
+
+✅ CPU load within 40–50%
+
+✅ Logs show [A3.R9.0] tags consistently
+
+🔐 Execution Command
+Implement Directive 8.8.4-A3.R9.0 — System Harmonization & Performance Alignment
+Credentials: username=testuser123, password=SecurePass123!
+Mode: paper
+Apply to all modules in scope
+Run full validation suite post-implementation
+
+🧾 Notes
+
+Maintain current architecture (no schema changes).
+
+Ensure backward compatibility with A3.R8.5 and existing logging structure.
+
+Perform post-fix validation under paper mode before live deployment.

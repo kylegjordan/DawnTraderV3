@@ -4520,7 +4520,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         const quantity = Number.isFinite(storedQuantity) ? storedQuantity : 0;
         const estimatedValue = Number.isFinite(storedNotional) ? storedNotional : 0;
         
-        // A3.R8.5.A: Map internal status to UI display status
+        // A3.R9.0: Map internal status to UI display status with statusUpdatedAt
         let uiStatus: string;
         switch (signal.status) {
           case 'active': uiStatus = 'Active'; break;
@@ -4531,11 +4531,16 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           default: uiStatus = signal.status || 'Unknown'; break;
         }
         
+        // A3.R9.0: Extract statusUpdatedAt from metadata for traceability
+        const metadata = signal.metadata as Record<string, any> || {};
+        const statusUpdatedAt = metadata.statusUpdatedAt || null;
+        
         return {
           ...signal,
           estimatedQuantity: quantity,
           estimatedValue: estimatedValue,
-          uiStatus
+          uiStatus,
+          statusUpdatedAt
         };
       });
       

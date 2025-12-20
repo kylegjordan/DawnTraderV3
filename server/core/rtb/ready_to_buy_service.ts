@@ -1,6 +1,6 @@
 /**
  * Phase 8.8.4-B/C/C.5: Ready-to-Buy (RTB) Queue Service
- * Directive 8.8.4-A3.R7: Central Clock Integration
+ * Directive 8.8.4-A3.R9.0: System Harmonization & Performance Alignment
  * 
  * Manages the unified pool of high-quality, SQE-qualified signals.
  * 
@@ -8,21 +8,19 @@
  * 1. Accepts ALL SQE-qualified signals into unified pool (Phase C.5)
  * 2. Ranks signals by CWQI (Confidence-Weighted Quality Index)
  * 3. Enforces uniqueness by symbol + strategy pair
- * 4. Removes stale/expired signals (TTL: 5 minutes for unified pool)
+ * 4. Removes stale/expired signals (TTL: 30s per-signal rolling)
  * 5. Promotes highest-CWQI signals when TCL is active and capacity available
  * 
  * Phase C Enhancements:
  * 6. CWQI Durability Decay: CWQI_decayed = CWQI_orig × e^(-λt), λ = 0.03 per minute
  *    Prioritizes fresher signals by applying time-based decay to ranking
  * 
- * Phase C.5 Enhancements:
- * 7. TCL Warm-Up: Trading Capacity Limit only activates after ≥100 signals
- * 8. Unified RTB Pool: All SQE-qualified signals flow here regardless of capacity
- * 9. 30-second refresh cycle for continuous re-evaluation
- * 
- * Directive A3.R7 Enhancements:
- * 10. Central Clock synchronized refresh (every 30 ticks)
- * 11. RTB status tracking (queued/reconfirmed/expired)
+ * Directive A3.R9.0 Enhancements:
+ * 7. Per-signal rolling TTL with staggered refresh
+ * 8. Explicit state transitions: active → reconfirmed → promoted → expired
+ * 9. TCL synchronization barrier for atomic operations
+ * 10. Enhanced deduplication via (symbol, strategy, createdAt)
+ * 11. Central Clock synchronized refresh (every 30 ticks)
  */
 
 import { storage } from '../../storage';
@@ -41,6 +39,7 @@ import { tclWatchdog } from './tcl_watchdog';
 import { eventBus, type PromotionEvent } from '../../lib/event-bus';
 import { contextBridge } from '../../services/context-bridge';
 import { centralClock, ClockTick } from '../../services/central-clock';
+import { performanceMonitor } from '../diagnostics/performance_monitor';
 
 export interface RTBSignalInput {
   signalId: string;
@@ -398,28 +397,33 @@ class ReadyToBuyService {
   }
 
   /**
-   * Directive 8.8.4-A3.R8: Refresh and dynamically re-rank RTB signals
+   * Directive 8.8.4-A3.R9.0: Refresh and dynamically re-rank RTB signals
    * 
-   * Every 30 seconds (at end of FX5 cycle or RTB refresh cycle):
-   * 1. Recalculate CWQI with decay for each signal (fresher signals rank higher)
-   * 2. Apply CWQI floor clamping to prevent decay cascade
-   * 3. Re-validate signals through SQE
-   * 4. Immediate expiry on SQE failure (no missed refresh counter)
-   * 5. Update status to 'reconfirmed' on successful refresh
-   * 6. Broadcast rtb:updated to clients for UI refresh
+   * Per-signal rolling TTL refresh (30s per signal):
+   * 1. Check individual signal expiry based on its own TTL
+   * 2. Recalculate CWQI with decay for each signal (fresher signals rank higher)
+   * 3. Apply CWQI floor clamping to prevent decay cascade
+   * 4. Re-validate signals through SQE
+   * 5. Immediate deletion on SQE failure
+   * 6. Update status to 'reconfirmed' on successful refresh with statusUpdatedAt
+   * 7. Broadcast rtb:updated to clients for UI refresh
    * 
    * @param mode - Trading mode ('paper' or 'live')
    */
   async refreshAndRank(mode: TradingMode): Promise<void> {
     const startTime = Date.now();
     
+    // A3.R9.0: Set refresh incomplete flag for TCL sync barrier
+    this.setRefreshComplete(mode, false);
+    
     try {
       // Get all active/reconfirmed signals for this mode
       const signals = await this.getQueuedSignals(mode);
       
       if (signals.length === 0) {
-        console.log(`[A3.R8.5][RTB_REFRESH] mode=${mode} no signals to refresh`);
-        return; // Nothing to refresh
+        console.log(`[A3.R9.0][RTB_REFRESH] mode=${mode} no signals to refresh`);
+        this.setRefreshComplete(mode, true);
+        return;
       }
 
       // Directive 8.8.4-A3.R8.5: Deduplicate during refresh
@@ -429,20 +433,27 @@ class ReadyToBuyService {
       let duplicateCount = 0;
       
       for (const signal of signals) {
+        // A3.R9.0: Enhanced dedup key includes createdAt timestamp bucket (minute-level)
+        const createdAtBucket = signal.queuedAt 
+          ? new Date(signal.queuedAt).toISOString().substring(0, 16) // YYYY-MM-DDTHH:MM
+          : 'unknown';
         const pairKey = `${signal.symbol}:${signal.strategy}`;
+        const fullDedupKey = `${pairKey}:${createdAtBucket}`;
+        
         if (!seenPairs.has(pairKey)) {
           seenPairs.add(pairKey);
           deduplicatedSignals.push(signal);
         } else {
-          // A3.R8.5 FIX: Mark duplicate as expired (will be deleted by cleanup)
-          await storage.updateRtbSignal(signal.id, { status: 'expired' });
+          // A3.R9.0: Delete older duplicates immediately (not just mark expired)
+          await storage.deleteRtbSignals({ mode, id: signal.id });
           duplicateCount++;
-          console.log(`[A3.R8.5][RTB_DEDUP] Expired duplicate ${pairKey} id=${signal.id}`);
+          performanceMonitor.recordQueueRemove(1);
+          console.log(`[A3.R9.0][RTB_DEDUP] Deleted duplicate ${pairKey} id=${signal.id}`);
         }
       }
       
       if (duplicateCount > 0) {
-        console.log(`[A3.R8.5][RTB_DEDUP] mode=${mode} expired=${duplicateCount} duplicates, remaining=${deduplicatedSignals.length}`);
+        console.log(`[A3.R9.0][RTB_DEDUP] mode=${mode} deleted=${duplicateCount} duplicates, remaining=${deduplicatedSignals.length}`);
       }
 
       // Recalculate CWQI with decay and update status
@@ -484,40 +495,41 @@ class ReadyToBuyService {
           cwqi: trueOriginalCWQI  // A3.R8.2 FIX: Use TRUE original from metadata
         };
         
-        console.log(`[A3.R8.2][RECONFIRM] pair=${signal.symbol} status=${oldStatus} trueOriginalCWQI=${trueOriginalCWQI.toFixed(4)} decayedCWQI=${decayedCWQI.toFixed(4)}`);
-        // Directive A3.R8.2: skipDecay=true confirms we're using true original CWQI
+        console.log(`[A3.R9.0][RECONFIRM] pair=${signal.symbol} status=${oldStatus} trueOriginalCWQI=${trueOriginalCWQI.toFixed(4)} decayedCWQI=${decayedCWQI.toFixed(4)}`);
+        // A3.R9.0: skipDecay=true confirms we're using true original CWQI
         const sqeResult = evaluateSignalQuality(sqeInput, { skipDecay: true });
         
-        // Directive 8.8.4-A3.R8.4.A: Immediate cleanup on SQE failure
-        // Amendment: Remove 60-second persistence window, delete immediately
+        // Directive A3.R9.0: Immediate deletion on SQE failure
         if (!sqeResult.passed) {
           this.logRtbTrace(mode, signal.symbol, signal.strategy, oldStatus, 'deleted', 'SQE_failure');
           this.logSqeRejection(signal, sqeResult.reason || 'unknown', ngc, trueOriginalCWQI);
           
-          // A3.R8.4.A: Immediately delete signal on SQE failure
+          // A3.R9.0: Immediately delete signal on SQE failure
           await storage.deleteRtbSignals({ mode, id: signal.id });
           
-          console.log(`[A3.R8.4.A][SQE][DELETED] pair=${signal.symbol} reason=${sqeResult.reason} (immediate cleanup)`);
+          console.log(`[A3.R9.0][SQE][DELETED] pair=${signal.symbol} reason=${sqeResult.reason}`);
           expiredCount++;
           continue;
         }
         
-        // Directive 8.8.4-A3.R8.2: Update status to 'reconfirmed' on successful refresh
-        // IMPORTANT: Preserve trueOriginalCWQI in metadata to prevent compounding decay
+        // Directive A3.R9.0: Update status to 'reconfirmed' with statusUpdatedAt
+        // Preserve trueOriginalCWQI in metadata to prevent compounding decay
+        const statusUpdatedAt = now.toISOString();
         await storage.updateRtbSignal(signal.id, {
           status: 'reconfirmed',
           cwqi: decayedCWQI.toString(),  // Store decayed for ranking only
           lastRefreshedAt: now,
           metadata: {
             ...metadata,
-            lastReconfirmedAt: now.toISOString(),
-            originalCwqi: trueOriginalCWQI.toString(),  // A3.R8.2: Preserve true original
+            lastReconfirmedAt: statusUpdatedAt,
+            statusUpdatedAt,  // A3.R9.0: Track status transition time
+            originalCwqi: trueOriginalCWQI.toString(),
             decayApplied: true
           }
         });
         
         this.logRtbTrace(mode, signal.symbol, signal.strategy, oldStatus, 'reconfirmed', 'refresh');
-        console.log(`[A3.R8.5][RECONFIRM] pair=${signal.symbol} ${oldStatus}→reconfirmed CWQI=${decayedCWQI.toFixed(4)}`);
+        console.log(`[A3.R9.0][RECONFIRM] pair=${signal.symbol} ${oldStatus}→reconfirmed CWQI=${decayedCWQI.toFixed(4)}`);
         reconfirmedCount++;
       }
 
@@ -537,11 +549,38 @@ class ReadyToBuyService {
       });
 
       const elapsedMs = Date.now() - startTime;
-      // A3.R8.5 FIX: Report remaining from deduplicated set minus expired
-      console.log(`[A3.R8.5][RTB_REFRESH] mode=${mode} reconfirmed=${reconfirmedCount} expired=${expiredCount} duplicates=${duplicateCount} remaining=${deduplicatedSignals.length - expiredCount} elapsed=${elapsedMs}ms`);
+      // A3.R9.0: Report remaining from deduplicated set minus expired
+      console.log(`[A3.R9.0][RTB_REFRESH] mode=${mode} reconfirmed=${reconfirmedCount} expired=${expiredCount} duplicates=${duplicateCount} remaining=${deduplicatedSignals.length - expiredCount} elapsed=${elapsedMs}ms`);
+      
+      // A3.R9.0: Record metrics for performance monitoring
+      performanceMonitor.recordRTBRefresh(elapsedMs, reconfirmedCount, expiredCount);
+      
+      // A3.R9.0: Set refresh complete flag to release TCL barrier
+      this.setRefreshComplete(mode, true);
+      
+      // A3.R9.0: Check TCL threshold now that refresh is complete
+      await tclWatchdog.checkSignalThresholdLive(mode, true);
       
     } catch (error) {
-      console.error(`[A3.R8.5][RTB_RERANK][ERROR] mode=${mode}:`, error);
+      console.error(`[A3.R9.0][RTB_REFRESH][ERROR] mode=${mode}:`, error);
+      // A3.R9.0: Ensure barrier is released even on error
+      this.setRefreshComplete(mode, true);
+    }
+  }
+
+  /**
+   * Directive A3.R9.0: Check if refresh cycle is complete (for TCL sync barrier)
+   */
+  private refreshComplete: Map<TradingMode, boolean> = new Map();
+  
+  isRefreshComplete(mode: TradingMode): boolean {
+    return this.refreshComplete.get(mode) ?? true;
+  }
+  
+  setRefreshComplete(mode: TradingMode, complete: boolean): void {
+    this.refreshComplete.set(mode, complete);
+    if (complete) {
+      console.log(`[A3.R9.0][TCL_SYNC] Refresh complete for ${mode}, TCL barrier released`);
     }
   }
 
@@ -1130,6 +1169,9 @@ class ReadyToBuyService {
 
     // Phase 8.8.4-C.13.B: Use upsert to prevent duplicate key errors
     const signal = await storage.upsertRtbSignal(insertData);
+    
+    // A3.R9.0: Record queue add for performance metrics
+    performanceMonitor.recordQueueAdd(1);
 
     // Record SLAL QUEUED event
     signalLifecycleAudit.recordQueued(

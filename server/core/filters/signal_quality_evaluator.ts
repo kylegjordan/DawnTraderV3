@@ -18,6 +18,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { SQE_THRESHOLDS } from '../metrics/quality_index';
+import { performanceMonitor } from '../diagnostics/performance_monitor';
 
 interface StrategyThresholdsConfig {
   profitRateFloors: Record<string, number>;
@@ -108,7 +109,7 @@ export interface SQEBatchResult {
 /**
  * Evaluate a single signal against SQE quality thresholds
  * Phase C: Uses strategy-specific ProfitRate floors
- * Directive A3.R8.2: Supports skipDecay option for refresh cycles
+ * Directive A3.R9.0: Restored thresholds for ~35-50% pass rate
  * 
  * @param input - Pre-computed signal metrics
  * @param options - Optional evaluation settings (skipDecay for refresh cycles)
@@ -116,9 +117,6 @@ export interface SQEBatchResult {
  */
 export function evaluateSignalQuality(input: SQEInput, options: SQEOptions = {}): SQEResult {
   const failures: string[] = [];
-  
-  // Directive A3.R8.2: Log NGC timing trace
-  console.log(`[A3.R8.2][NGC] symbol=${input.symbol} ngc=${input.ngc.toFixed(4)} cwqi=${input.cwqi.toFixed(4)} skipDecay=${options.skipDecay || false}`);
   
   if (input.ngc < SQE_THRESHOLDS.MIN_NGC) {
     failures.push(`NGC ${input.ngc.toFixed(4)} < ${SQE_THRESHOLDS.MIN_NGC}`);
@@ -131,7 +129,6 @@ export function evaluateSignalQuality(input: SQEInput, options: SQEOptions = {})
   const profitRateFloor = getProfitRateFloor(input.strategy);
   if (input.profitRate < profitRateFloor) {
     failures.push(`ProfitRate ${input.profitRate.toFixed(4)} < Floor[${input.strategy}]=${profitRateFloor}`);
-    console.log(`[C][PROFIT_FLOORS] Rejected ${input.symbol}/${input.strategy}: ProfitRate ${input.profitRate.toFixed(4)} < ${profitRateFloor}`);
   }
   
   if (input.cwqi < SQE_THRESHOLDS.MIN_CWQI) {
@@ -139,6 +136,14 @@ export function evaluateSignalQuality(input: SQEInput, options: SQEOptions = {})
   }
   
   const passed = failures.length === 0;
+  
+  // Directive A3.R9.0: Unified SQE filter logging and metrics
+  const status = passed ? 'PASS' : 'FAIL';
+  const reason = passed ? 'all_thresholds_met' : failures[0]?.split(' ')[0] || 'unknown';
+  console.log(`[A3.R9.0][SQE_FILTER] ${status} symbol=${input.symbol} strategy=${input.strategy} NGC=${input.ngc.toFixed(4)} CWQI=${input.cwqi.toFixed(4)} reason=${reason}`);
+  
+  // A3.R9.0: Record metric for performance monitoring
+  performanceMonitor.recordSQEEvaluation(passed);
   
   return {
     passed,

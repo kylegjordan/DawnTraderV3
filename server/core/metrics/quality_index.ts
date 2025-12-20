@@ -251,14 +251,13 @@ function clamp01(value: number): number {
  * NGC combines the base signal confidence with market conditions (volatility, risk)
  * to produce a more robust confidence measure that accounts for adverse conditions.
  * 
- * Directive A3.R8.3: Recalibrated NGC weighting
- * OLD Formula (multiplicative, caused compression):
- *   NGC = conf * (1 - vol) * (1 - risk)
+ * Directive A3.R9.0: System Harmonization NGC Formula
+ * Step 1: Normalize base components
+ *   NGC_normalized = normalize(conf, vol, risk)
+ * Step 2: Additive blending with profitRate influence
+ *   NGC = 0.4 * NGC_normalized + 0.4 * profitRate + 0.2 * (1 - risk)
  * 
- * NEW Formula (additive, prevents extreme compression):
- *   NGC = (conf * 0.5) + ((1 - vol) * 0.3) + ((1 - risk) * 0.2)
- * 
- * This yields NGC in typical range 0.25-0.70 instead of 0.10-0.12
+ * This yields NGC in typical range 0.40-0.75 for a ~35-50% SQE pass rate
  * 
  * @param baseConfidence - Raw signal confidence from strategy (0-1)
  * @param volatility - Market volatility factor (0-1, default 0.3)
@@ -276,17 +275,16 @@ export function calculateNGC(
   const vol = clamp01(volatility);
   const risk = clamp01(riskScore);
   
-  // Directive A3.R8.3: Additive weighting to prevent multiplicative compression
-  // conf=0.9, vol=0.3, risk=0.4 → OLD: 0.378, NEW: 0.78
+  // Directive A3.R9.0: Normalize then apply additive blending
+  // Step 1: Base NGC from confidence with volatility/risk dampening
   const rawNGC = (conf * 0.5) + ((1 - vol) * 0.3) + ((1 - risk) * 0.2);
   
   if (trackSample) {
     ngcNormalizer.addSample(rawNGC);
-    // A3.R8.3: Only log when this is a tracked sample (not when called as intermediate step)
-    console.log(`[A3.R8.3][NGC_BASE] conf=${conf.toFixed(3)} vol=${vol.toFixed(3)} risk=${risk.toFixed(3)} → rawNGC=${rawNGC.toFixed(4)}`);
+    console.log(`[A3.R9.0][NGC_BASE] conf=${conf.toFixed(3)} vol=${vol.toFixed(3)} risk=${risk.toFixed(3)} → rawNGC=${rawNGC.toFixed(4)}`);
   }
   
-  // A3.R8.3: With conditional normalization, already-bounded values pass through
+  // A3.R9.0: Normalize to ensure consistent scaling
   const ngc = ngcNormalizer.normalize(rawNGC);
   
   return Math.round(ngc * 10000) / 10000;
@@ -671,19 +669,18 @@ export function calculateExtendedSignalMetrics(signal: {
   
   const profitRate = calculateProfitRate(expectedReturn, expectedDuration);
   
-  // Step 2: Directive A3.R8.3 - Compute NGC WITH profitability influence
-  // baseNGC = traditional confidence-based calculation
+  // Step 2: Directive A3.R9.0 - Compute NGC WITH profitability influence
+  // baseNGC = traditional confidence-based calculation (not tracked to avoid double-sampling)
   const baseNGC = calculateNGC(signal.confidence, volatility, riskScore, false);
   
-  // A3.R8.3: Blend baseNGC with profitability metrics
-  // This ensures NGC reflects both confidence AND profit potential
+  // A3.R9.0: Additive blending formula per System Harmonization directive
+  // NGC = 0.4 * NGC_normalized + 0.4 * profitRate + 0.2 * (1 - risk)
   const profitabilityInformedNGC = (baseNGC * 0.4) + (profitRate * 0.4) + ((1 - riskScore) * 0.2);
   
-  // Directive 8.8.4-A3.R8.4: Apply 0.85 scaling factor to restore balanced SQE filtering
-  // This brings typical NGC values to ≈ 0.4–0.6 for a 30–50% SQE pass rate
-  const ngc = clamp01(profitabilityInformedNGC * 0.85);
+  // A3.R9.0: No scaling factor - formula already produces appropriate distribution
+  const ngc = clamp01(profitabilityInformedNGC);
   
-  console.log(`[A3.R8.4][NGC_SCALE] baseNGC=${baseNGC.toFixed(4)} profitRate=${profitRate.toFixed(4)} risk=${riskScore.toFixed(4)} raw=${profitabilityInformedNGC.toFixed(4)} → scaledNGC=${ngc.toFixed(4)}`);
+  console.log(`[A3.R9.0][NGC_BLEND] baseNGC=${baseNGC.toFixed(4)} profitRate=${profitRate.toFixed(4)} risk=${riskScore.toFixed(4)} → blendedNGC=${ngc.toFixed(4)}`);
   
   // Step 3: Directive A3.R8.3 - Compute CWQI using the profitability-informed NGC
   // Using calculateCWQIWithPrecomputedMetrics ensures CWQI reflects profitability
@@ -731,18 +728,20 @@ export function getCWQITier(cwqi: number): 'excellent' | 'good' | 'moderate' | '
  * These are the filtering thresholds for Signal Quality Evaluator
  * Parameterized via environment variables for runtime configuration
  * 
- * Directive A3.R8.2: Lowered MIN_NGC from 0.45 to 0.25 to align with
- * observed NGC distribution (avg ~0.30, most signals in 0.15-0.30 range)
+ * Directive A3.R9.0: System Harmonization & Performance Alignment
+ * - MIN_NGC: 0.55 (restored for meaningful filtering)
+ * - MIN_CWQI: 0.45 (restored for meaningful filtering)
+ * - Target SQE pass rate: 35-50%
  */
 export const SQE_THRESHOLDS = {
-  MIN_NGC: parseFloat(process.env.SQE_NGC_MIN || '0.25'),
+  MIN_NGC: parseFloat(process.env.SQE_NGC_MIN || '0.55'),
   MAX_RISK: parseFloat(process.env.SQE_MAX_RISK || '0.85'),
   MIN_PROFIT_RATE: parseFloat(process.env.SQE_PROFIT_MIN || '0.10'),
-  MIN_CWQI: parseFloat(process.env.SQE_CWQI_MIN || '0.30'),
+  MIN_CWQI: parseFloat(process.env.SQE_CWQI_MIN || '0.45'),
 };
 
-console.log(`[8.8.4-C.11][SQE_CONFIG] NGC=${SQE_THRESHOLDS.MIN_NGC} CWQI=${SQE_THRESHOLDS.MIN_CWQI} PROFIT=${SQE_THRESHOLDS.MIN_PROFIT_RATE} RISK=${SQE_THRESHOLDS.MAX_RISK}`);
-console.log('[A3.R8.3] NGC Formula Calibration and Metric Scaling active');
+console.log(`[A3.R9.0][SQE_CONFIG] NGC=${SQE_THRESHOLDS.MIN_NGC} CWQI=${SQE_THRESHOLDS.MIN_CWQI} PROFIT=${SQE_THRESHOLDS.MIN_PROFIT_RATE} RISK=${SQE_THRESHOLDS.MAX_RISK}`);
+console.log('[A3.R9.0] System Harmonization & Performance Alignment active');
 
 /**
  * Minimum CWQI threshold for queue eligibility (updated for C.11)
