@@ -1,0 +1,129 @@
+“Validation Run 2 — Post-Threshold Normalization and TCL Verification”
+
+Classification: Validation / Observation Cycle
+Phase: 8.8.4 (Post-Hotfix)
+Objective:
+Validate correct end-to-end behavior of the FX5 → SQE → RTB → TCL → Open Trades pipeline after threshold normalization (TCL = 15).
+Confirm that all core components are active, synchronized, and logging properly under real trading conditions.
+
+I. Context
+
+Directive R9.3.HF-1.P1 normalized the TCL signal threshold to 15, verified startup logging, and aligned runtime configuration across all environments.
+
+This validation cycle ensures:
+
+The threshold setting is respected in runtime behavior.
+
+FX5, SQE, RTB, and TCL subsystems function smoothly under continuous operation.
+
+Filter Insights records proper FX5 cycles and active pairs.
+
+No duplicate-key, stale-signal, or subscription anomalies persist.
+
+The Central Clock behaves normally through start → active → stop phases.
+
+II. Implementation Tasks
+🔹 R9.3.V2-A — Prepare Environment
+
+Ensure that the environment is clean:
+
+paper_sim_open_positions table = empty.
+
+No leftover records in rtb_signals with status='reconfirmed'.
+
+Confirm .env includes:
+
+TCL_SIGNAL_THRESHOLD=15
+MAX_OPEN_TRADES=15
+
+
+Login credentials for session (standard test user):
+
+username=testuser123
+password=SecurePass123!
+
+
+Start system logger before activating the paper engine:
+
+tail -f /var/log/workflow.log > /tmp/R9.3.V2_validation.log
+
+🔹 R9.3.V2-B — Run Validation Cycle
+
+Start the paper engine from the UI.
+Expected immediate logs:
+
+[A3.R9.3.HF-1.P1] TCL threshold loaded: 15
+[A3.R9.3.HF-1.P1] TCL Watchdog starting for mode=paper, threshold=15
+[A3.R7][TCL_WATCHDOG] ✅ Subscribed to Central Clock for paper mode
+[CentralClock][HEALTH] subscribers > 0
+
+
+Run for a minimum of 15 minutes, or until:
+
+RTB ≥ 15 signals (steady state).
+
+15 open trade slots filled.
+
+At least 3 TCL promotion events logged.
+
+4+ FX5 cycles recorded in Filter Insights.
+
+Monitor periodic logs (every 30 s):
+
+[FX5][paper] Cycle complete – signals generated=n
+[A3.R9.3][RTB_REFRESH] Refresh complete – reconfirmed=x, failed=y
+[A3.R7][TCL_PROMOTION][paper] Promoted pair=XYZ/USD
+[FilterInsights][paper] Recorded cycle, activePairs=z
+
+
+Observe Central Clock health:
+
+[CentralClock][HEALTH] tickNumber=..., subscribers>0
+
+🔹 R9.3.V2-C — End Session and Archive Logs
+
+After 15 minutes, stop the paper engine from the UI.
+
+Verify proper shutdown logs:
+
+[A3.R7][TCL_WATCHDOG] 🛑 Unsubscribed from Central Clock
+[CentralClock][HEALTH] subscribers=0
+[FX5][paper] Engine stopped gracefully
+
+
+Stop logging:
+
+pkill -f 'tail -f /var/log/workflow.log'
+
+
+Compress and deliver the validation log:
+
+gzip /tmp/R9.3.V2_validation.log
+
+
+Provide /tmp/R9.3.V2_validation.log.gz to the architect for review.
+
+III. Expected Outcomes
+Component	Expected Result
+FX5 Scanner	Executes 30 s cycles; Filter Insights shows 4+ cycles
+SQE	Accept/reject ratio ≈ 45-55 %
+RTB Queue	Steady ≥ 15 active/reconfirmed signals
+TCL Watchdog	Promotions triggered once RTB ≥ 15; all 15 open trades filled
+Open Trades Tab	Shows 15 active trades
+Central Clock	subscribers>0 when active, 0 after stop
+Logs	All [A3.R9.3.HF-1.P1] and [A3.R7] messages present
+IV. Completion Criteria
+
+✅ Validation run log provided and contains:
+
+TCL threshold = 15 confirmed.
+
+≥ 3 promotion events.
+
+≥ 4 FX5 cycles recorded.
+
+Graceful shutdown sequence.
+
+No errors related to duplicates, barriers, or missing subscribers.
+
+Once these are confirmed, R9.3 Validation Phase 2 is successfully completed and the system is cleared for continuous paper trading and subsequent live-mode readiness review.

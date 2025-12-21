@@ -53,3 +53,4 @@ SQE_MAX_RISK = "0.95"
 
 [userenv.shared]
 TCL_SIGNAL_THRESHOLD = "15"
+MAX_OPEN_TRADES = "15"
