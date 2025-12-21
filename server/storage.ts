@@ -4330,6 +4330,7 @@ export class DatabaseStorage implements IStorage {
 
   /**
    * Phase 8.8.4-C.13.B: Upsert RTB signal with ON CONFLICT UPDATE
+   * R9.3.HF-1: Updated to match new unique index on (mode, symbol, strategy) only
    * Prevents duplicate key errors by updating existing signals instead of failing
    */
   async upsertRtbSignal(data: InsertRtbSignal): Promise<RtbSignal> {
@@ -4337,7 +4338,7 @@ export class DatabaseStorage implements IStorage {
       .insert(rtbSignals)
       .values(data)
       .onConflictDoUpdate({
-        target: [rtbSignals.mode, rtbSignals.symbol, rtbSignals.strategy, rtbSignals.status],
+        target: [rtbSignals.mode, rtbSignals.symbol, rtbSignals.strategy],
         set: {
           entryPrice: data.entryPrice,
           stopPrice: data.stopPrice,
@@ -4348,6 +4349,7 @@ export class DatabaseStorage implements IStorage {
           riskScore: data.riskScore,
           expectedReturn: data.expectedReturn,
           cwqi: data.cwqi,
+          status: data.status,
           queuedAt: new Date(),
           expiresAt: data.expiresAt,
           metadata: data.metadata,
