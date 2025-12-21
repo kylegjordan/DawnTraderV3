@@ -1,0 +1,90 @@
+📜 Directive: 8.8.4-A3.R9.3.HF-1 — TCL/Clock Restoration & Schema Correction
+
+Objective:
+Restore TCL Watchdog and Filter Insights startup bindings, and correct RTB unique index to pair-level granularity.
+
+✅ Code Changes
+🔹 File: server/core/paper_engine.ts
+
+Insert these lines after Central Clock initialization (this.centralClock.start(this.mode);):
+
+// === R9.3.HF-1 STARTUP RESTORE ===
+import { TCLWatchdog } from "../services/tcl_watchdog";
+import { FilterInsights } from "../services/filter_insights";
+
+this.tclWatchdog = new TCLWatchdog(this.centralClock);
+this.filterInsights = new FilterInsights(this.centralClock);
+
+// Start TCL and Filter Insights after clock start
+this.tclWatchdog.start(this.mode);
+this.filterInsights.start(this.mode);
+
+console.log(`[A3.R9.3.HF-1] TCL and Filter Insights re-initialized for mode=${this.mode}`);
+
+
+✅ What this does
+
+Re-imports both classes.
+
+Instantiates them with the shared Central Clock reference.
+
+Calls their .start() methods after the clock begins ticking.
+
+Logs a confirmation message for runtime validation.
+
+🔹 File: db/migrations/2025_12_21_fix_rtb_unique_index.sql
+
+Replace the existing RTB index definition with:
+
+-- Drop old index if it exists
+DROP INDEX IF EXISTS rtb_signals_symbol_strategy_idx;
+
+-- Remove duplicates that block index creation
+DELETE FROM rtb_signals a
+USING rtb_signals b
+WHERE a.ctid < b.ctid
+  AND a.mode = b.mode
+  AND a.symbol = b.symbol
+  AND a.currency = b.currency
+  AND a.strategy = b.strategy;
+
+-- Recreate proper unique index at pair level
+CREATE UNIQUE INDEX rtb_signals_symbol_currency_strategy_idx
+ON public.rtb_signals (mode, symbol, currency, strategy);
+
+
+✅ What this does
+
+Enforces one unique signal per (mode, symbol, currency, strategy).
+
+Prevents duplication across different statuses.
+
+Fixes the refresh duplication errors.
+
+🧭 Implementation Order
+
+Stop the paper trading engine.
+
+Apply the schema migration.
+
+Apply the code edit in paper_engine.ts.
+
+Rebuild and restart the paper trading engine.
+
+Verify startup logs include:
+
+[A3.R9.3.HF-1] TCL and Filter Insights re-initialized for mode=paper
+[A3.R7][TCL_WATCHDOG] Service initialized
+
+
+Confirm Filter Insights dashboard populates cycle counts again.
+
+✅ Post-Validation Checkpoints
+
+[A3.R7][TCL_WATCHDOG] logs appear every 30 seconds.
+
+Filter Insights shows ≥ 1 active filtered pair within 1 cycle.
+
+RTB refresh errors for duplicate keys are gone.
+
+Signal generation continues uninterrupted.

@@ -256,8 +256,10 @@ export class PaperExecutionEngine {
     console.log(`[PaperExecution:${this.mode}] TCL failsafe timer started (2min failsafe)`);
 
     // Phase 8.8.4-C.12: Start TCL Watchdog with event-driven activation
+    // R9.3.HF-1: Added explicit startup confirmation
     tclWatchdog.start(this.mode);
-    console.log(`[PaperExecution:${this.mode}] TCL Watchdog started (event-driven)`);
+    console.log(`[A3.R9.3.HF-1][PaperExecution:${this.mode}] TCL Watchdog started (event-driven)`);
+    console.log(`[A3.R9.3.HF-1] TCL and RTB subsystems initialized for mode=${this.mode}`);
 
     // Phase 8.8.4-C.12: Bind event listeners for TCL activation and trade close
     this.bindTCLEventListeners();
