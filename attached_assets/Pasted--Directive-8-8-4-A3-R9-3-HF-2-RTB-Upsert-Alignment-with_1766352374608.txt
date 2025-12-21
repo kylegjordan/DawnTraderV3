@@ -1,0 +1,121 @@
+🧭 Directive 8.8.4-A3.R9.3.HF-2
+“RTB Upsert Alignment with 3-Column Unique Constraint”
+
+Classification: Hotfix / Schema-Logic Alignment
+Phase: 8.8.4 (Post-Threshold Validation)
+Objective:
+Align the RTB signal insertion logic in storage.ts with the current database constraint (mode, symbol, strategy), replacing the obsolete 4-column conflict target (mode, symbol, strategy, status) that is causing PostgreSQL error 42P10.
+
+I. Context
+
+During Validation Run 2 (R9.3.V2), the paper trading engine failed to insert new signals due to a constraint mismatch between the database schema and application code.
+
+Observed error:
+
+SQLSTATE 42P10: there is no unique or exclusion constraint matching the ON CONFLICT specification
+
+
+Root cause:
+
+Database index: rtb_signals(mode, symbol, strategy) ✅
+
+Code clause: ON CONFLICT (mode, symbol, strategy, status) ❌
+
+This mismatch blocks all RTB inserts, halting the trading pipeline.
+
+II. Implementation Tasks
+🔹 R9.3.HF-2-A — Update ON CONFLICT Clause
+
+File:
+server/services/storage.ts
+(or the equivalent file containing upsertRtbSignal() — line ~4340)
+
+Current code:
+
+ON CONFLICT (mode, symbol, strategy, status)
+DO UPDATE SET ...
+
+
+Replace with:
+
+ON CONFLICT (mode, symbol, strategy)
+DO UPDATE SET
+  updated_at = EXCLUDED.updated_at,
+  status = EXCLUDED.status,
+  expected_return = EXCLUDED.expected_return,
+  cwqi = EXCLUDED.cwqi,
+  ngc = EXCLUDED.ngc,
+  risk = EXCLUDED.risk,
+  profit_rate = EXCLUDED.profit_rate,
+  price_entry = EXCLUDED.price_entry,
+  price_stop = EXCLUDED.price_stop,
+  price_target = EXCLUDED.price_target;
+
+
+✅ Effect:
+
+Restores proper upsert functionality.
+
+Keeps a single row per (mode, symbol, strategy).
+
+Status changes (e.g., active → reconfirmed) now simply update the same record.
+
+Deletes still remove the same row cleanly without duplication.
+
+🔹 R9.3.HF-2-B — Add Trace Log for Insert Behavior
+
+Right before the insert statement, add:
+
+this.log.info(`[A3.R9.3.HF-2] Upserting RTB signal: ${signal.symbol}/${signal.strategy} (mode=${mode}, status=${signal.status})`);
+
+
+After the insert completes successfully:
+
+this.log.debug(`[A3.R9.3.HF-2] RTB signal upserted successfully`);
+
+
+✅ Effect:
+Confirms in logs that signals are being inserted or updated correctly once the fix is applied.
+
+🔹 R9.3.HF-2-C — Validation & Test
+
+After implementation:
+
+1️⃣ Restart paper engine
+Confirm startup logs appear as usual.
+
+2️⃣ Observe the logs:
+
+[A3.R9.3.HF-2] Upserting RTB signal: ETH/USD/sma_trend_ride (mode=paper, status=active)
+[A3.R9.3.HF-2] RTB signal upserted successfully
+
+
+3️⃣ Check for absence of error 42P10
+Ensure no “no unique or exclusion constraint” messages appear.
+
+4️⃣ Verify RTB population:
+Run:
+
+SELECT COUNT(*) FROM rtb_signals WHERE mode='paper';
+
+
+Expected: increasing count of active signals (~75–100 typical steady-state).
+
+5️⃣ Observe TCL promotions:
+Once RTB ≥ 15, TCL should begin promoting signals to open trades.
+
+III. Expected Outcomes
+Component	Expected Result
+RTB inserts	Succeed (no constraint errors)
+RTB updates	Update same record on revalidation
+TCL promotions	Resume normally
+SQE refresh	Stable revalidation
+Database schema	Unchanged
+Logs	Contain [A3.R9.3.HF-2] entries confirming upserts
+IV. Completion Criteria
+
+✅ RTB inserts succeed with no constraint errors.
+✅ [A3.R9.3.HF-2] logs visible in workflow output.
+✅ RTB queue fills with valid signals.
+✅ TCL promotions observed when threshold ≥ 15.
+✅ Open Trades tab shows 15 active trades.
