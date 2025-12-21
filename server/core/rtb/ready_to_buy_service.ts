@@ -1332,7 +1332,7 @@ class ReadyToBuyService {
       notional: input.notional?.toString(),
       confidence: input.ngc.toString(), // Use NGC as confidence
       riskScore: input.riskScore.toString(),
-      expectedReturn: input.expectedReturn?.toString() || '0',
+      expectedReturn: input.profitRate.toString(),
       cwqi: input.cwqi.toString(),
       ngc: input.ngc.toString(), // Directive 8.8.4-C.14.A
       currentPrice: input.currentPrice?.toString(), // Directive 8.8.4-C.14.A
