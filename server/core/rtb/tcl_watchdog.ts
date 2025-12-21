@@ -157,10 +157,10 @@ class TCLWatchdog {
 
   /**
    * Check if signal threshold is reached and activate TCL if needed
-   * Directive A3.R9.0: TCL synchronization barrier - only query after refresh complete
-   * Directive A3.R8.5: Uses live query for pool count, not cached snapshot
+   * Directive A3.R9.3-D: Simplified TCL - only checks capacity and threshold
+   * Barrier removed per R9.3-A (per-signal refresh model)
    */
-  async checkSignalThresholdLive(mode: TradingMode, rtbRefreshComplete: boolean): Promise<void> {
+  async checkSignalThresholdLive(mode: TradingMode, _rtbRefreshComplete?: boolean): Promise<void> {
     const state = this.getState(mode);
     const now = Date.now();
     const DEBOUNCE_MS = 5000; // 5 seconds debounce
@@ -170,11 +170,8 @@ class TCLWatchdog {
       return;
     }
     
-    // A3.R9.0: TCL synchronization barrier
-    if (!rtbRefreshComplete) {
-      console.log(`[A3.R9.0][TCL_SYNC] Waiting for RTB refresh to complete before threshold check`);
-      return;
-    }
+    // R9.3-D: Barrier removed - TCL can check anytime
+    // Per-signal isRefreshing flag prevents promoting signals mid-refresh
     
     // A3.R8.4: Debounce threshold checks to prevent redundant activations
     if (now - state.lastThresholdCheckMs < DEBOUNCE_MS) {
@@ -183,16 +180,16 @@ class TCLWatchdog {
     
     state.lastThresholdCheckMs = now;
 
-    // A3.R9.0: Query live pool count from database after barrier passes
+    // R9.3-D: Query live pool count - no barrier wait
     const currentPoolSize = await this.getLivePoolCount(mode);
-    console.log(`[A3.R9.0][TCL_SYNC] Barrier passed, pool count=${currentPoolSize}`);
+    console.log(`[A3.R9.3][TCL] Pool count=${currentPoolSize} threshold=${TCL_SIGNAL_THRESHOLD}`);
 
     if (currentPoolSize >= TCL_SIGNAL_THRESHOLD) {
-      console.log(`[A3.R9.0][TCL][Event] RTBThresholdMet – ${currentPoolSize} signals (live query)`);
+      console.log(`[A3.R9.3][TCL][Event] RTBThresholdMet – ${currentPoolSize} signals`);
       this.activateTCL(mode, '100signals', currentPoolSize);
       
       state.failsafeDisabled = true;
-      console.log(`[A3.R9.0][TCL_WATCHDOG] Failsafe permanently disabled for ${mode} (RTBThresholdMet)`);
+      console.log(`[A3.R9.3][TCL_WATCHDOG] Failsafe permanently disabled for ${mode} (RTBThresholdMet)`);
     }
   }
 

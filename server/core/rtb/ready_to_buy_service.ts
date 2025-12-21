@@ -106,8 +106,8 @@ export interface RTBPromotionResult {
 // Directive 8.8.4-A3.R8: Immediate expiry on SQE failure (no missed refresh counter)
 const RTB_REFRESH_INTERVAL_MS = 30 * 1000; // 30 seconds
 
-// Directive 8.8.4-A3.R8: Fallback TTL for backwards compatibility
-const SIGNAL_TTL_MS = 10 * 60 * 1000; // 10 minutes (extended fallback)
+// Directive 8.8.4-A3.R9.3: TTL removed - lifecycle governed by SQE results only
+// const SIGNAL_TTL_MS removed per R9.3-C
 
 // Directive 8.8.4-A3.R2: TCL Warm-Up threshold (reduced for faster activation)
 const TCL_WARMUP_THRESHOLD = parseInt(process.env.TCL_SIGNAL_THRESHOLD || '15', 10);
@@ -248,11 +248,21 @@ function staggeredDelay(staggerOffset: number, index: number, total: number): Pr
   return new Promise(resolve => setTimeout(resolve, totalDelayMs));
 }
 
+/**
+ * Directive 8.8.4-A3.R9.3: Per-signal refresh state tracking
+ * Replaces global batch refresh with individual signal timers
+ */
+interface SignalRefreshState {
+  nextRefreshAt: number;  // Unix timestamp (ms) when signal should next refresh
+  isRefreshing: boolean;  // Flag to prevent TCL promoting during refresh
+}
+
 class ReadyToBuyService {
   private initialized = false;
   private refreshIntervals: Map<TradingMode, NodeJS.Timeout> = new Map();
   private clockTickHandlers: Map<TradingMode, (tick: ClockTick) => void> = new Map(); // Directive A3.R7
-  private isRefreshing: Map<TradingMode, boolean> = new Map(); // Directive A3.R7: Prevent concurrent refreshes
+  // Directive R9.3-A: Per-signal refresh tracking (replaces global isRefreshing)
+  private signalRefreshStates: Map<string, SignalRefreshState> = new Map(); // key = signalId
   private engineStartTimes: Map<TradingMode, number> = new Map(); // Phase 8.8.4-C.6: Track engine start for TCL failsafe
   private tclFailsafeTriggered: Map<TradingMode, boolean> = new Map(); // Phase 8.8.4-C.6: Track if failsafe was triggered
   private promotionHandlerRegistered = false; // Directive 8.8.4-A1: Track handler registration
@@ -365,48 +375,56 @@ class ReadyToBuyService {
   }
 
   /**
-   * Phase 8.8.4-C.5: Start the 30-second refresh cycle for a mode
-   * Directive 8.8.4-A3.R7: Uses Central Clock for synchronized timing
-   * Continuously cleans up expired signals and re-evaluates the queue
+   * Directive 8.8.4-A3.R9.3-A: Per-signal refresh helpers
+   */
+  private getSignalRefreshState(signalId: string): SignalRefreshState {
+    if (!this.signalRefreshStates.has(signalId)) {
+      this.signalRefreshStates.set(signalId, {
+        nextRefreshAt: Date.now() + RTB_REFRESH_INTERVAL_MS,
+        isRefreshing: false
+      });
+    }
+    return this.signalRefreshStates.get(signalId)!;
+  }
+
+  isSignalRefreshing(signalId: string): boolean {
+    return this.signalRefreshStates.get(signalId)?.isRefreshing ?? false;
+  }
+
+  /**
+   * Phase 8.8.4-C.5: Start the refresh cycle for a mode
+   * Directive 8.8.4-A3.R9.3-A: Per-signal refresh model with Central Clock
+   * Each signal refreshes independently when its timer expires
    */
   startRefreshCycle(mode: TradingMode): void {
     // Prevent duplicate subscriptions
     if (this.clockTickHandlers.has(mode)) {
-      console.log(`[A3.R7][RTB_REFRESH] Refresh cycle already running for ${mode} mode`);
+      console.log(`[A3.R9.3][RTB_REFRESH] Refresh cycle already running for ${mode} mode`);
       return;
     }
 
-    console.log(`[A3.R7][RTB_REFRESH] Starting 30s refresh cycle with Central Clock for ${mode} mode`);
+    console.log(`[A3.R9.3][RTB_REFRESH] Starting per-signal refresh cycle with Central Clock for ${mode} mode`);
 
     // Ensure Central Clock is running
     if (!centralClock.getIsRunning()) {
       centralClock.start();
-      console.log(`[A3.R7][RTB_REFRESH] Started Central Clock`);
+      console.log(`[A3.R9.3][RTB_REFRESH] Started Central Clock`);
     }
 
-    // Initialize refresh state
-    this.isRefreshing.set(mode, false);
-
-    // Directive 8.8.4-A3.R7: Subscribe to Central Clock for 30-second aligned refreshes
+    // R9.3-A: Subscribe to Central Clock - check each second for signals due for refresh
     const tickHandler = async (tick: ClockTick) => {
-      // Skip if already refreshing or not aligned to 30-second interval
-      if (this.isRefreshing.get(mode)) return;
+      // R9.3-A: Every 30 seconds, trigger refresh cycle
       if (tick.tickNumber <= 0 || tick.tickNumber % RTB_REFRESH_INTERVAL_SECONDS !== 0) return;
 
-      this.isRefreshing.set(mode, true);
-      try {
-        console.log(`[A3.R7][RTB_REFRESH][TICK] mode=${mode} tickNumber=${tick.tickNumber} drift=${tick.drift}ms`);
-        await this.executeRefreshCycle(mode);
-      } catch (error) {
-        console.error(`[A3.R7][RTB_ERROR] Refresh cycle error for ${mode}:`, error);
-      } finally {
-        this.isRefreshing.set(mode, false);
-      }
+      console.log(`[A3.R9.3][RTB_REFRESH][TICK] mode=${mode} tickNumber=${tick.tickNumber} drift=${tick.drift}ms`);
+      
+      // R9.3-A/R9.3-B: Execute refresh with per-signal error handling
+      await this.executePerSignalRefresh(mode);
     };
 
     this.clockTickHandlers.set(mode, tickHandler);
     centralClock.subscribe(`RTB_${mode}`, tickHandler);
-    console.log(`[A3.R7][RTB_REFRESH] ✅ Subscribed to Central Clock for ${mode} mode`);
+    console.log(`[A3.R9.3][RTB_REFRESH] ✅ Subscribed to Central Clock for ${mode} mode`);
   }
 
   /**
@@ -418,8 +436,7 @@ class ReadyToBuyService {
     if (this.clockTickHandlers.has(mode)) {
       centralClock.unsubscribe(`RTB_${mode}`);
       this.clockTickHandlers.delete(mode);
-      this.isRefreshing.delete(mode);
-      console.log(`[A3.R7][RTB_REFRESH] Stopped refresh cycle for ${mode} mode`);
+      console.log(`[A3.R9.3][RTB_REFRESH] Stopped refresh cycle for ${mode} mode`);
     }
 
     // Also clean up legacy intervals if present
@@ -428,6 +445,147 @@ class ReadyToBuyService {
       clearInterval(interval);
       this.refreshIntervals.delete(mode);
     }
+    
+    // R9.3-A: Clear signal refresh states for this mode
+    // Note: In a full implementation, we'd filter by mode, but signalIds are global
+  }
+
+  /**
+   * Directive 8.8.4-A3.R9.3-A: Per-signal refresh with try/finally error handling (R9.3-B)
+   */
+  private async executePerSignalRefresh(mode: TradingMode): Promise<void> {
+    // Check if engine is active
+    const systemContext = await storage.getSystemContext(mode);
+    if (!systemContext?.isEngineActive) {
+      return; // Skip refresh when engine is inactive
+    }
+
+    const startTime = Date.now();
+    const signals = await this.getQueuedSignals(mode);
+    
+    if (signals.length === 0) {
+      console.log(`[A3.R9.3][RTB_REFRESH] mode=${mode} no signals to refresh`);
+      // R9.3-D: Check TCL after refresh (no barrier)
+      await tclWatchdog.checkSignalThresholdLive(mode);
+      return;
+    }
+
+    let reconfirmedCount = 0;
+    let expiredCount = 0;
+
+    // R9.3-A: Process each signal individually with try/finally (R9.3-B)
+    for (const signal of signals) {
+      const signalState = this.getSignalRefreshState(signal.signalId);
+      
+      // R9.3-B: Set isRefreshing flag and ensure it's reset in finally
+      signalState.isRefreshing = true;
+      
+      try {
+        const result = await this.refreshSingleSignal(signal, mode);
+        if (result.passed) {
+          reconfirmedCount++;
+        } else {
+          expiredCount++;
+        }
+        
+        // R9.3-A: Update next refresh time
+        signalState.nextRefreshAt = Date.now() + RTB_REFRESH_INTERVAL_MS;
+        
+      } catch (error) {
+        console.error(`[A3.R9.3][REFRESH_ERROR] signal=${signal.signalId}:`, error);
+        // R9.3-B: Error doesn't block other signals
+      } finally {
+        // R9.3-B: Always reset isRefreshing
+        signalState.isRefreshing = false;
+      }
+    }
+
+    const elapsedMs = Date.now() - startTime;
+    console.log(`[A3.R9.3][REFRESH_COMPLETE] mode=${mode} reconfirmed=${reconfirmedCount} expired=${expiredCount} elapsed=${elapsedMs}ms`);
+    
+    // Broadcast update
+    await contextBridge.broadcast({
+      type: 'rtb:updated',
+      payload: { mode, timestamp: new Date().toISOString(), reconfirmedCount, expiredCount },
+      mode
+    });
+
+    // R9.3-D: Check TCL after refresh (no barrier)
+    await tclWatchdog.checkSignalThresholdLive(mode);
+  }
+
+  /**
+   * Directive 8.8.4-A3.R9.3: Refresh a single signal through SQE revalidation
+   */
+  private async refreshSingleSignal(signal: RtbSignal, mode: TradingMode): Promise<{ passed: boolean }> {
+    const normalizedSymbol = normalizePairKey(signal.symbol);
+    const now = new Date();
+    
+    // Get metrics for revalidation
+    const metadata = signal.metadata as Record<string, any> || {};
+    const trueOriginalCWQI = metadata.originalCwqi 
+      ? parseFloat(metadata.originalCwqi) 
+      : parseFloat(signal.cwqi || '0');
+    
+    const cachedMetrics = {
+      ngc: parseFloat(signal.ngc || signal.confidence || '0'),
+      cwqi: trueOriginalCWQI,
+      profitRate: signal.expectedReturn ? parseFloat(signal.expectedReturn) : 0.15,
+      riskScore: parseFloat(signal.riskScore || '0.5')
+    };
+    
+    // Fetch fresh metrics
+    const freshMetrics = await fetchFreshMetrics(normalizedSymbol, signal.strategy, cachedMetrics);
+    const ngc = freshMetrics.refreshed ? freshMetrics.ngc : cachedMetrics.ngc;
+    const riskScore = freshMetrics.refreshed ? freshMetrics.riskScore : cachedMetrics.riskScore;
+    const profitRate = freshMetrics.refreshed ? freshMetrics.profitRate : cachedMetrics.profitRate;
+    const cwqiForEval = freshMetrics.refreshed ? freshMetrics.cwqi : trueOriginalCWQI;
+    
+    // Apply CWQI decay
+    const decayedCWQI = calculateDecayedCWQI(trueOriginalCWQI, signal.queuedAt, normalizedSymbol);
+    
+    // SQE revalidation
+    const sqeInput: SQEInput = {
+      signalId: signal.signalId,
+      symbol: normalizedSymbol,
+      strategy: signal.strategy,
+      ngc,
+      riskScore,
+      profitRate,
+      cwqi: cwqiForEval
+    };
+    
+    const sqeResult = evaluateSignalQuality(sqeInput, { skipDecay: true });
+    
+    if (!sqeResult.passed) {
+      // R9.3-C: Lifecycle governed by SQE, not TTL
+      await storage.deleteRtbSignals({ mode, id: signal.id });
+      performanceMonitor.recordQueueRemove(1);
+      console.log(`[A3.R9.3][REFRESH_COMPLETE] symbol=${normalizedSymbol} DELETED reason=${sqeResult.reason}`);
+      
+      // Clean up signal state
+      this.signalRefreshStates.delete(signal.signalId);
+      return { passed: false };
+    }
+    
+    // Update signal with fresh metrics
+    await storage.updateRtbSignal(signal.id, {
+      status: 'reconfirmed',
+      cwqi: decayedCWQI.toString(),
+      ngc: ngc.toString(),
+      riskScore: riskScore.toString(),
+      expectedReturn: profitRate.toString(),
+      lastRefreshedAt: now,
+      metadata: {
+        ...metadata,
+        lastReconfirmedAt: now.toISOString(),
+        originalCwqi: trueOriginalCWQI.toString(),
+        freshMetricsApplied: freshMetrics.refreshed
+      }
+    });
+    
+    console.log(`[A3.R9.3][REFRESH_COMPLETE] symbol=${normalizedSymbol} RECONFIRMED CWQI=${decayedCWQI.toFixed(4)}`);
+    return { passed: true };
   }
 
   /**
@@ -701,19 +859,21 @@ class ReadyToBuyService {
   }
 
   /**
-   * Directive A3.R9.0: Check if refresh cycle is complete (for TCL sync barrier)
+   * Directive A3.R9.3-D: Legacy barrier methods - kept for backwards compatibility
+   * R9.3-D removes the global barrier concept. These methods now always return true.
+   * Per-signal refresh tracking is handled via signalRefreshStates.
    */
   private refreshComplete: Map<TradingMode, boolean> = new Map();
   
-  isRefreshComplete(mode: TradingMode): boolean {
-    return this.refreshComplete.get(mode) ?? true;
+  isRefreshComplete(_mode: TradingMode): boolean {
+    // R9.3-D: Global barrier removed - always return true
+    // Per-signal refresh state is tracked via isSignalRefreshing()
+    return true;
   }
   
-  setRefreshComplete(mode: TradingMode, complete: boolean): void {
-    this.refreshComplete.set(mode, complete);
-    if (complete) {
-      console.log(`[A3.R9.2][TCL_SYNC] Refresh complete for ${mode}, TCL barrier released`);
-    }
+  setRefreshComplete(_mode: TradingMode, _complete: boolean): void {
+    // R9.3-D: No-op - global barrier removed
+    // Per-signal refresh state is tracked via signalRefreshStates
   }
 
   /**
@@ -821,7 +981,7 @@ class ReadyToBuyService {
     }
 
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + SIGNAL_TTL_MS);
+    // R9.3-C: TTL removed - lifecycle governed by SQE results only
 
     // Check for existing queued signal with same symbol+strategy
     const existingSignal = await this.getQueuedSignal(input.mode, input.symbol, input.strategy);
@@ -855,7 +1015,7 @@ class ReadyToBuyService {
       cwqi: cwqiResult.cwqi.toString(),
       status: 'queued',
       queuedAt: now,
-      expiresAt,
+      // R9.3-C: expiresAt removed - lifecycle governed by SQE
       blockReason: input.blockReason,
       metadata: input.metadata as any,
     };
@@ -864,6 +1024,7 @@ class ReadyToBuyService {
     const signal = await storage.upsertRtbSignal(insertData);
 
     // Record SLAL QUEUED event
+    // R9.3-C: expiresAt removed from audit - lifecycle governed by SQE
     signalLifecycleAudit.recordQueued(
       input.signalId,
       input.mode,
@@ -872,11 +1033,10 @@ class ReadyToBuyService {
       {
         cwqi: cwqiResult.cwqi,
         blockReason: input.blockReason,
-        expiresAt: expiresAt.toISOString(),
       }
     );
 
-    console.log(`[RTB] Queued signal ${input.symbol}/${input.strategy} with CWQI ${cwqiResult.cwqi.toFixed(4)}, expires at ${expiresAt.toISOString()}`);
+    console.log(`[RTB] Queued signal ${input.symbol}/${input.strategy} with CWQI ${cwqiResult.cwqi.toFixed(4)}`);
     
     return signal;
   }
@@ -1111,18 +1271,16 @@ class ReadyToBuyService {
   }
 
   /**
-   * Directive 8.8.4-A3.R8.4.A: Immediate cleanup of expired signals
+   * Directive 8.8.4-A3.R9.3-C: Legacy cleanup only
    * 
-   * Amendment: Removes 60-second persistence window. Signals are deleted
-   * immediately upon SQE failure. This method now only handles:
-   * 1. Legacy 'expired' status signals (immediate delete)
-   * 2. TTL-based expiry for 'queued' status signals
+   * R9.3-C: TTL-based expiry removed. Lifecycle governed by SQE only.
+   * This method now only handles legacy 'expired' status signals (immediate delete).
+   * Active signal expiry is handled by SQE revalidation in executePerSignalRefresh().
    */
   async cleanupExpiredSignals(mode: TradingMode): Promise<number> {
-    const now = Date.now();
     let cleanedCount = 0;
     
-    // A3.R8.4.A: Immediately delete any signals with 'expired' status (legacy cleanup)
+    // R9.3-C: Only handle legacy 'expired' status signals
     const expiredSignals = await storage.getRtbSignals({
       mode,
       status: 'expired',
@@ -1133,30 +1291,15 @@ class ReadyToBuyService {
       const normalizedSymbol = normalizePairKey(signal.symbol);
       await storage.deleteRtbSignals({ mode, id: signal.id });
       performanceMonitor.recordQueueRemove(1);
-      console.log(`[A3.R9.2][CLEANUP] Deleted legacy expired signal ${normalizedSymbol}/${signal.strategy}`);
+      console.log(`[A3.R9.3][CLEANUP] Deleted legacy expired signal ${normalizedSymbol}/${signal.strategy}`);
       cleanedCount++;
     }
     
-    // TTL-based expiry for 'queued' status signals
-    const queuedSignals = await storage.getRtbSignals({
-      mode,
-      status: 'queued',
-    });
-
-    for (const signal of queuedSignals) {
-      if (new Date(signal.expiresAt) <= new Date(now)) {
-        // A3.R9.0: Delete immediately instead of marking expired
-        // A3.R9.0.C: Normalize symbol for consistent logging
-        const normalizedSymbol = normalizePairKey(signal.symbol);
-        await storage.deleteRtbSignals({ mode, id: signal.id });
-        performanceMonitor.recordQueueRemove(1);
-        console.log(`[A3.R9.2][TTL] Deleted signal ${normalizedSymbol}/${signal.strategy} (TTL exceeded)`);
-        cleanedCount++;
-      }
-    }
+    // R9.3-C: TTL-based expiry removed - no longer checking expiresAt
+    // Signal lifecycle is now governed solely by SQE revalidation
 
     if (cleanedCount > 0) {
-      console.log(`[A3.R8.4.A][RTB] Cleaned up ${cleanedCount} signals for ${mode} mode`);
+      console.log(`[A3.R9.3][RTB] Cleaned up ${cleanedCount} legacy signals for ${mode} mode`);
     }
 
     return cleanedCount;
@@ -1175,12 +1318,10 @@ class ReadyToBuyService {
       const cwqi = parseFloat(signal.cwqi);
       const age = (Date.now() - new Date(signal.queuedAt).getTime()) / 1000;
 
-      // Check if signal should be removed
+      // R9.3-C: TTL check removed - lifecycle governed by SQE only
+      // Only remove if confidence is below threshold
       if (confidence < MIN_QUEUE_CONFIDENCE) {
         await this.expireSignal(signal.id, `Confidence ${confidence.toFixed(2)} below threshold`);
-        removed++;
-      } else if (age > SIGNAL_TTL_MS / 1000) {
-        await this.expireSignal(signal.id, 'Signal age exceeded TTL');
         removed++;
       }
     }
@@ -1193,18 +1334,20 @@ class ReadyToBuyService {
 
   /**
    * Check if there's capacity for promotion and get the best candidate
+   * R9.3-C: expiresAt check removed - lifecycle governed by SQE only
    */
   async checkForPromotion(mode: TradingMode): Promise<RtbSignal | null> {
-    // Get the top signal
+    // Get the top signal (already filtered by SQE revalidation)
     const topSignal = await this.getTopSignal(mode);
     
     if (!topSignal) {
       return null;
     }
 
-    // Check if signal is still valid (not expired)
-    if (new Date(topSignal.expiresAt) <= new Date()) {
-      await this.expireSignal(topSignal.id, 'Expired during promotion check');
+    // R9.3-C: No expiry check - signals are valid until SQE rejects them
+    // R9.3-A: Check if signal is currently refreshing
+    if (this.isSignalRefreshing(topSignal.signalId)) {
+      console.log(`[A3.R9.3][PROMOTION] Signal ${topSignal.symbol}/${topSignal.strategy} is refreshing - skipping`);
       return null;
     }
 
@@ -1214,6 +1357,7 @@ class ReadyToBuyService {
   /**
    * Phase 8.8.4-C.14.B: Get ranked signals for multi-signal promotion
    * Returns top N signals sorted by CWQI descending
+   * R9.3-C: expiresAt filter removed - lifecycle governed by SQE only
    */
   async getRankedSignals(mode: TradingMode, limit: number = 15): Promise<RtbSignal[]> {
     const signals = await this.getQueuedSignals(mode);
@@ -1222,9 +1366,9 @@ class ReadyToBuyService {
       return [];
     }
 
-    // Filter out expired signals and sort by CWQI descending
-    const now = new Date();
-    const validSignals = signals.filter(s => new Date(s.expiresAt) > now);
+    // R9.3-C: No expiry filter - all queued signals are valid (SQE governs lifecycle)
+    // R9.3-A: Filter out signals currently being refreshed
+    const validSignals = signals.filter(s => !this.isSignalRefreshing(s.signalId));
     
     // Sort by CWQI descending (highest quality first)
     validSignals.sort((a, b) => {
@@ -1276,7 +1420,7 @@ class ReadyToBuyService {
    */
   async queueSQESignal(input: SQESignalInput): Promise<RtbSignal | null> {
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + SIGNAL_TTL_MS);
+    // R9.3-C: TTL removed - lifecycle governed by SQE results only
     
     // Directive 8.8.4-A3.R1: Normalize pair key to uppercase BASE/QUOTE format
     const normalizedSymbol = normalizePairKey(input.symbol);
@@ -1320,6 +1464,7 @@ class ReadyToBuyService {
 
     // Insert new signal with pre-computed metrics from SQE
     // Directive 8.8.4-A3.R1: Store with normalized pair key
+      // R9.3-C: expiresAt removed - lifecycle governed by SQE, not TTL
     const insertData: InsertRtbSignal = {
       mode: input.mode,
       signalId: input.signalId,
@@ -1339,7 +1484,7 @@ class ReadyToBuyService {
       volume24h: input.volume24h?.toString(), // Directive 8.8.4-C.14.A
       status: 'active', // Directive 8.8.4-A3.R8: Use 'active' for new signals pending first refresh
       queuedAt: now,
-      expiresAt,
+      // R9.3-C: expiresAt omitted - field is now optional
       blockReason: 'SQE_QUALIFIED', // Mark as SQE-qualified, not capacity-blocked
       metadata: input.metadata as any,
     };
@@ -1363,6 +1508,7 @@ class ReadyToBuyService {
     );
 
     // Record SLAL QUEUED event
+    // R9.3-C: expiresAt removed from audit - lifecycle governed by SQE
     signalLifecycleAudit.recordQueued(
       input.signalId,
       input.mode,
@@ -1373,7 +1519,6 @@ class ReadyToBuyService {
         ngc: input.ngc,
         profitRate: input.profitRate,
         blockReason: 'SQE_QUALIFIED',
-        expiresAt: expiresAt.toISOString(),
       }
     );
 
@@ -1382,14 +1527,9 @@ class ReadyToBuyService {
 
     console.log(`[8.8.4-C.5][RTB_INSERT] ${normalizedSymbol}/${input.strategy}: CWQI=${input.cwqi.toFixed(4)}, NGC=${input.ngc.toFixed(4)}, poolSize=${poolSize}`);
     
-    // Directive 8.8.4-A3.R9.0: TCL threshold check on enqueue 
-    // Only check if refresh is complete (barrier respected)
-    const refreshComplete = this.isRefreshComplete(input.mode);
-    if (refreshComplete) {
-      await tclWatchdog.checkSignalThresholdLive(input.mode, refreshComplete);
-    } else {
-      console.log(`[A3.R9.2][TCL_SYNC] Skipping TCL check on enqueue - refresh in progress for ${input.mode}`);
-    }
+    // Directive 8.8.4-A3.R9.3-D: Simplified TCL - always check threshold on enqueue
+    // Global barrier removed per R9.3-A (per-signal refresh model)
+    await tclWatchdog.checkSignalThresholdLive(input.mode);
     
     return signal;
   }

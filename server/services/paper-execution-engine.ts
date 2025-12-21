@@ -546,9 +546,8 @@ export class PaperExecutionEngine {
       // Step 1: Check open positions for exit conditions
       await this.checkOpenPositions();
 
-      // Step 2: Scan for new trading opportunities (legacy - now disabled)
-      // Note: RTB promotion is now event-driven via TCLWatchdog (Phase 8.8.4-C.12)
-      await this.scanForSignals();
+      // Note: Signal scanning removed by Directive 8.8.4-A3.R9.3
+      // Trade creation flows through: FX5 → SignalOrchestrator → SQE → RTB → TCL
     } catch (error) {
       console.error(`[PaperExecution:${this.mode}] Monitoring cycle error:`, error);
       
@@ -1295,90 +1294,11 @@ export class PaperExecutionEngine {
     }
   }
 
-  /**
-   * @deprecated Phase 8.8.3-I7 legacy trade path
-   * Deprecated by Directive 8.8.4-C.3
-   * 
-   * This method bypasses Signal Orchestrator → SQE → RTB → TCL pipeline.
-   * All signal generation and trade execution now flows through SignalOrchestrator.
-   * 
-   * The legacy code has been archived to: server/legacy/paper-execution-engine.legacy.ts
-   * DO NOT RE-ENABLE without explicit approval.
-   */
-  private async scanForSignals(): Promise<void> {
-    console.log(`[8.8.4-C.3][DEPRECATED] scanForSignals() called - legacy path disabled. Signals now flow through SignalOrchestrator.`);
-    
-    // Directive 8.8.4-C.3: Legacy trade creation path disabled
-    // All trade creation must go through: FX5 → SignalOrchestrator → SQE → RTB → TCL → processSignal()
-    return;
-    
-    /* ========================================================================
-     * LEGACY CODE ARCHIVED - Directive 8.8.4-C.3
-     * The original implementation has been moved to:
-     * server/legacy/paper-execution-engine.legacy.ts
-     * ======================================================================== */
-    
-    // Original legacy code below - DO NOT UNCOMMENT
-    // [27.F.14.DIAG] Initialize default summary to prevent stale data on early exits
-    // const cycleTimestamp = new Date().toISOString();
-    
-  }
-
-  /**
-   * @deprecated Phase 8.8.3-I7 legacy trade path
-   * Deprecated by Directive 8.8.4-C.3
-   * 
-   * Phase 8.8.3-J7: Added cycleContext parameter for paper-mode sizing
-   * 
-   * WARNING: This function bypasses Signal Orchestrator, SQE, and RTB.
-   * All strategy evaluation now flows through SignalOrchestrator.evaluateSymbol().
-   * DO NOT RE-ENABLE without explicit approval.
-   */
-  private async checkSymbolForSignal(
-    _symbol: string, 
-    _settings: TradingSettings,
-    _cycleContext?: { portfolioValue: number; guardrails: GuardrailsV2 | null }
-  ): Promise<boolean> {
-    console.log(`[8.8.4-C.3][DEPRECATED] checkSymbolForSignal() called - legacy path disabled.`);
-    
-    // Directive 8.8.4-C.3: Legacy strategy evaluation path disabled
-    // All strategy evaluation must go through: SignalOrchestrator.evaluateSymbol()
-    return false;
-    
-    /* ========================================================================
-     * LEGACY CODE ARCHIVED - Directive 8.8.4-C.3
-     * Original implementation: server/legacy/paper-execution-engine.legacy.ts
-     * ======================================================================== */
-    
-    // Original legacy code below - DO NOT UNCOMMENT
-    // const cycleId = aj16Diagnostic.getCycleId();
-    
-  }
-
-  /**
-   * @deprecated Phase 8.8.3-I7 legacy trade path
-   * Deprecated by Directive 8.8.4-C.3
-   * 
-   * [27.F.14.B] Inject a forced trade for deterministic testing
-   * MSI Guard: Only callable in paper mode
-   * 
-   * WARNING: This function bypasses Signal Orchestrator, SQE, and RTB.
-   * The PAPER_FORCE_TRADE_SYMBOL env var is no longer honored.
-   * DO NOT RE-ENABLE without explicit approval.
-   */
-  private async injectForcedTrade(_symbol: string, _settings: TradingSettings): Promise<void> {
-    console.log(`[8.8.4-C.3][DEPRECATED] injectForcedTrade() called - legacy path disabled. PAPER_FORCE_TRADE_SYMBOL is no longer honored.`);
-    
-    // Directive 8.8.4-C.3: Legacy forced trade path disabled
-    // To re-enable for testing, set ENABLE_LEGACY_MODE=true (not recommended)
-    if (process.env.ENABLE_LEGACY_MODE !== 'true') {
-      return;
-    }
-    
-    console.warn(`[8.8.4-C.3][LEGACY_MODE_ENABLED] Running deprecated injectForcedTrade - this bypasses quality filters!`);
-    
-    // Original legacy code archived to: server/legacy/paper-execution-engine.legacy.ts
-  }
+  // Directive 8.8.4-A3.R9.3: Deprecated methods removed
+  // - scanForSignals() - removed
+  // - checkSymbolForSignal() - removed  
+  // - injectForcedTrade() - removed
+  // All signal generation now flows through: FX5 → SignalOrchestrator → SQE → RTB → TCL
 
   // Phase 8.8.3-J7: Added cycleContext parameter for paper-mode sizing
   // Phase 8.8.4-A: Added signalId for SLAL lifecycle tracking

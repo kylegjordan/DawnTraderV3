@@ -1,0 +1,88 @@
+🧭 Directive 8.8.4-A3.R9.3 — “Integrity Completion & Deprecation Sweep” (Final)
+
+Classification: Structural / Lifecycle / Synchronization
+Objective: Complete the integrity rebuild of the trading engine by replacing temporary synchronization logic with permanent, scalable, and architecture-aligned solutions.
+
+1️⃣ Background and Context
+
+The 8.8.4 Integrity Rebuild (R9.2) corrected metric ordering, SQE revalidation, and trade promotion consistency.
+However, operational testing revealed that the refresh/reconfirmation cycle and TCL activation were still inconsistent due to outdated synchronization and lifecycle logic.
+
+This directive permanently fixes those timing and lifecycle problems and removes obsolete logic (TTL, barriers, and legacy code) to restore a continuous, self-sustaining trading flow.
+
+2️⃣ Key Problems Identified
+ID	Problem	Description	Impact
+P1	Global refresh barrier blocks TCL	Batch-with-stagger model prevents trades during most of each cycle.	TCL appears “random” or “stuck.”
+P2	Fire-and-forget error handling	Missing finally reset leaves the barrier locked on error.	TCL permanently blocked after exceptions.
+P3	Hard TTL deletes viable signals	Signals expire after clock timeout instead of failing naturally via SQE.	Good signals removed prematurely.
+P4	TCL performing quality checks	Redundant filtering of NGC/CWQI within TCL.	Double evaluation and inconsistent logic.
+P5	Legacy code clutter	Deprecated functions still present in repo.	Maintenance risk and trace noise.
+3️⃣ Permanent Fix Directives
+ID	Directive	Description	Implementation Notes
+R9.3-A — Per-Signal Refresh Timers (Synced)	Replace batch-with-stagger refresh system with independent timers per signal. Each signal refreshes itself every 30 s (synced to central clock).	• Use nextRefreshAt timestamp per signal.
+• Hook to central clock tick; refresh when now >= nextRefreshAt.
+• Remove rtbRefreshComplete barrier entirely.
+• Add isRefreshing flag per signal to prevent TCL promoting signals mid-refresh.	
+R9.3-B — Robust Error Handling	Replace “fire-and-forget” pattern with explicit try/finally logic.	Ensure signal.isRefreshing = false is always restored even if refresh fails.	
+R9.3-C — Remove TTL and TTL-Cleanup Logic	Eliminate time-to-live expiry for signals. Lifecycle now governed solely by SQE results.	• Delete TTL constants and signal.expiresAt assignments.
+• Remove TTL branch in cleanupExpiredSignals().
+• Keep only SQE-driven deletions.
+• Optional: add daily orphan sweep via maintenance task.	
+R9.3-D — Simplify TCL Logic	Remove NGC/CWQI gating from TCL.	TCL should only check: (1) capacity slots, (2) RTB threshold (15).
+All quality evaluation remains in SQE.	
+R9.3-E — Deprecation Sweep	Delete obsolete modules confirmed unused.	Remove:
+• scanForSignals() (orphaned legacy)
+• legacy_trade_handler.ts
+• metrics_legacy.ts
+• Any DB references to paper_trades table.	
+4️⃣ Implementation Order
+
+R9.3-E – Deprecation Sweep
+Clean environment first.
+
+R9.3-B – Error Handling Fix
+Prevent stuck states.
+
+R9.3-A – Per-Signal Timers
+Replace batch refresh model.
+
+R9.3-C – Remove TTL & Cleanup Logic
+Simplify lifecycle management.
+
+R9.3-D – Simplify TCL Logic
+Reinstate pure division of responsibilities.
+
+5️⃣ Expected Behavior After Implementation
+Component	New Behavior
+Signal Lifecycle	Signals live indefinitely while passing SQE; they expire only when failing revalidation.
+Refresh Cycle	Each signal refreshes itself every 30 s, independent but clock-synchronized.
+TCL Activation	Continuous — runs every central-clock tick, skipping only signals currently refreshing.
+Error Recovery	Refresh errors never freeze system; each signal safely resets its own state.
+Diagnostics	Trace logs show [A3.R9.3][REFRESH_COMPLETE] symbol=XYZ per signal cycle.
+6️⃣ Verification Protocol (Validation Run 8.8.4-A3.R9.3.V)
+
+Duration: 15 minutes (paper mode)
+
+Success Criteria
+
+Continuous TCL activation (no idle gaps > 2 s).
+
+SQE pass rate between 45–55 %.
+
+No TTL deletions observed.
+
+All trace entries include [A3.R9.3][REFRESH_COMPLETE] within 30 s per signal.
+
+No [A3.R9.2][TCL_SYNC] or barrier-related messages in logs.
+
+Deprecation files absent from build.
+
+7️⃣ Architectural Integrity Notes
+
+No new services or helpers introduced.
+
+All logic confined to existing modules (ready_to_buy_service, tcl_watchdog, etc.).
+
+Central clock remains single source of timing truth.
+
+Fully compliant with DawnTrader architectural invariants and governance rules.

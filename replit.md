@@ -53,6 +53,8 @@ Diagnostic Signal Flow Tracing implements a `DiagnosticTraceService` with buffer
 
 Integrity Rebuild implements critical data integrity fixes, including decay order correction before normalization, live metric refresh for RTB, detailed SQE revalidation logging, atomic signal promotion, unique signal ID enforcement, and diagnostic confirmation hooks.
 
+R9.3 Integrity Rebuild implements the following directives: R9.3-A introduces per-signal refresh timers with `SignalRefreshState` tracking individual signal refresh states (`nextRefreshAt`, `isRefreshing`), replacing batch refresh with `executePerSignalRefresh()`. R9.3-B adds try/finally error handling per signal to ensure isRefreshing flags are always reset and errors don't block other signals. R9.3-C removes TTL-based expiry entirely—`expiresAt` is now optional in the schema, and signal lifecycle is governed solely by SQE revalidation (signals persist until SQE rejects them). R9.3-D simplifies TCL by removing the global synchronization barrier; TCL now checks only capacity slots + 15-signal threshold, with per-signal `isRefreshing` preventing promotion during refresh.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.

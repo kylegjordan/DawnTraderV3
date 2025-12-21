@@ -1784,7 +1784,7 @@ export const rtbSignals = pgTable("rtb_signals", {
   queuedAt: timestamp("queued_at", { withTimezone: true }).notNull().defaultNow(),
   promotedAt: timestamp("promoted_at", { withTimezone: true }),
   expiredAt: timestamp("expired_at", { withTimezone: true }),
-  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(), // TTL: queuedAt + 3 minutes
+  expiresAt: timestamp("expires_at", { withTimezone: true }), // R9.3-C: Made optional - lifecycle governed by SQE, not TTL
   // Directive 8.8.4-A3.R7: Refresh tracking for Central Clock integration
   lastRefreshedAt: timestamp("last_refreshed_at", { withTimezone: true }), // Last successful refresh timestamp
   missedRefreshes: integer("missed_refreshes").default(0), // Count of failed refresh attempts
