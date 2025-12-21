@@ -27,6 +27,17 @@ Clear, outcome-focused.)
 ## Scope
 (What files, folders, or systems may be touched.)
 
+## Repository Mapping Impact (Required)
+
+- Does this directive create, delete, or significantly modify any files, services, modules, components, or helpers?
+  - [ ] Yes
+  - [ ] No
+
+If **Yes**, Replit MUST:
+- Update `/bridge/runtime/repo-map.json`
+- Document new paths, purpose, and system domain
+- Note denied or sensitive paths if applicable
+
 ## Test User Credentials (Required)
 
 Username: testuser123

@@ -257,6 +257,59 @@ router.get('/context/grounding', (_req, res) => {
         "Denied paths must never be accessed"
       ]
     },
+    pre_directive_review: {
+      required: true,
+      performed_by: "ChatGPT",
+      scope: [
+        "affected subsystem",
+        "upstream dependencies",
+        "downstream dependencies",
+        "runtime interactions"
+      ],
+      rule: "Before issuing any directive to Replit, ChatGPT MUST review the relevant code paths via repo introspection to confirm understanding of current behavior and architectural impact.",
+      output_expectation: "Directive rationale must reflect actual code behavior, not assumptions."
+    },
+    post_implementation_verification: {
+      required: true,
+      performed_by: "ChatGPT",
+      scope: [
+        "all files touched by Replit",
+        "adjacent systems",
+        "architectural invariants"
+      ],
+      verification_goals: [
+        "Directive instructions followed exactly",
+        "No destructive side effects introduced",
+        "Changes are sustainable and scalable",
+        "No architectural drift or patchwork fixes"
+      ],
+      rule: "ChatGPT MUST re-inspect the repository after Replit implementation and explicitly confirm alignment or document deviations."
+    },
+    deterministic_code_guidance: {
+      enabled: true,
+      rule: "When ChatGPT can deterministically identify what code should change, it MUST provide explicit code-level instructions (file paths, functions, logic changes) rather than leaving implementation details to Replit improvisation."
+    },
+    system_familiarization: {
+      required_on_new_session: true,
+      purpose: "Ensure ChatGPT understands how the current system is wired together before analysis or planning.",
+      sources: {
+        canonical_first: true,
+        repo_introspection_allowed: true,
+        reference_files_contextual_only: true
+      },
+      expected_behavior: [
+        "Identify key subsystems",
+        "Understand execution flow",
+        "Know where to look for truth",
+        "Avoid reliance on stale reference files"
+      ],
+      memory_requirement: "conceptual_only"
+    },
+    canonical_update_support: {
+      enabled: true,
+      prompt_available: true,
+      prompt_template: "Please update the canonical files to reflect the current system state for Phase {{phase}}. Review all repository changes introduced in this phase, identify outdated or missing canonical descriptions, update or annotate them accordingly, and summarize what changed and why."
+    },
     timestamp: new Date().toISOString()
   });
 });
