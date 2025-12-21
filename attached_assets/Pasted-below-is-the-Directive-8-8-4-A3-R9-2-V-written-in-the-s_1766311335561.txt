@@ -1,0 +1,164 @@
+below is the Directive 8.8.4-A3.R9.2.V, written in the same format and tone as the previous operational directives you’ve given to Replit.
+
+It is ready to paste directly into Replit.
+When executed, it will conduct a 15-minute observational validation run of the fully patched system (post-R9.2 Integrity Rebuild), with all diagnostic instruments active and non-invasive.
+
+🧭 Directive 8.8.4-A3.R9.2.V — Integrity Validation Run (15-Minute Diagnostic Observation)
+
+Phase: 8.8.4 — Signal Integrity & Quality Normalization
+Directive ID: A3.R9.2.V
+Classification: Validation / Observational
+Objective: Confirm that all R9.2 Integrity Rebuild fixes are functioning as intended, that the SQE correctly rejects poor-quality signals, and that NGC/CWQI normalization is now producing realistic variance.
+
+🧩 1. Objectives
+
+Validate the full signal pipeline post-R9.2:
+Signal Orchestrator → SQE → RTB → TCL → Diagnostics
+
+Verify that:
+
+SQE rejection rate is within 40–55 %
+
+NGC and CWQI averages fall between 0.63 – 0.69
+
+Reconfirmation events appear in RTB logs
+
+No duplicates exist between RTB and Open Trades
+
+Atomic promotion removes RTB entries only after confirmed trade creation
+
+Diagnostic trace remains non-blocking (< 1 ms flush latency)
+
+🧠 2. Procedure
+Step 1 – Prepare System
+
+Ensure trading engine is in idle state.
+
+Clear any residual signal cache (if applicable).
+
+Confirm diagnostics are ready:
+
+GET /api/diagnostics/trace/status
+
+
+Should return "enabled": false.
+
+Step 2 – Start Diagnostic Tracing
+POST /api/diagnostics/trace/start
+{
+  "durationMinutes": 15,
+  "maxSizeMB": 2,
+  "phase": "8.8.4-A3.R9.2.V",
+  "autoDisable": true
+}
+
+
+Starts non-blocking trace with 2-second async flush interval.
+
+Target output: /logs/diagnostic/trace_A3R9_V.log
+
+Step 3 – Activate Paper Trading Session
+POST /api/paper-sim/start
+
+
+Runs full trading cycle in paper mode.
+
+Duration: 15 minutes (auto-stop optional, manual stop acceptable).
+
+All Central Clock subscribers (FX5Scanner, RTB, TCL) should become active.
+
+Step 4 – Observe & Log
+
+During the run, monitor console output for the following diagnostic tags:
+
+Tag	Meaning
+[A3.R9.2][DECAY_ORDER_FIX]	Decay applied before normalization
+[A3.R9.2][REFRESH_METRICS]	Fresh metric fetch confirmed
+[A3.R9.2][SQE_REVALIDATION_FAIL]	Signal rejected during revalidation
+[A3.R9.2][PROMOTION_ATOMIC]	Trade created & RTB removed atomically
+[A3.R9.2][METRICS]	Periodic performance snapshot
+
+No synchronous or blocking events should appear.
+
+Step 5 – Stop Tracing and Trading
+
+After 15 minutes (or auto-disable trigger):
+
+POST /api/diagnostics/trace/stop
+POST /api/paper-sim/stop
+
+Step 6 – Collect Artifacts
+
+Retrieve the following files from the server or repo:
+
+File	Description
+/logs/diagnostic/trace_A3R9_V.log	Full trace log (JSON entries)
+/logs/diagnostic/trace_A3R9_V_summary.json	Aggregated summary metrics
+/logs/validation/sqe_trace_dump.log	SQE pass/reject activity
+/logs/validation/rtb_refresh_trace_dump.log	RTB refresh cycle logs
+/logs/validation/tcl_promotion_trace_dump.log	Promotion and atomic deletion confirmations
+📊 3. Expected Diagnostic Outcomes
+Metric	Expected Range	Validation Criteria
+SQE Pass Rate	45 – 55 %	Confirms thresholds now discriminative
+NGC Mean	0.63 – 0.69	Normal variance restored
+CWQI Mean	0.61 – 0.68	Normal variance restored
+Active → Reconfirmed Signals	≥ 20 % of total	Indicates working refresh + revalidation
+Duplicates (RTB ↔ Trades)	0	Confirms atomic promotion
+Trace Overhead	< 1 ms average	Confirms non-blocking diagnostics
+🧩 4. Success Criteria
+
+The run will be considered successful if all of the following hold true:
+
+SQE rejects low-quality signals (observed [SQE_REVALIDATION_FAIL] entries).
+
+RTB queue shows reconfirmations instead of perpetual “Active.”
+
+NGC/CWQI values show healthy distribution and downward drift.
+
+Diagnostic log shows correct decay-before-normalize sequence.
+
+No signal ID reuse, duplicate trade, or reappearing signal detected.
+
+No performance degradation or scheduling drift.
+
+🧱 5. Deliverables
+
+Replit must provide:
+
+A compiled summary of:
+
+SQE pass/reject ratio
+
+NGC & CWQI averages
+
+RTB queue size variance over time
+
+TCL promotion events
+
+The raw and summarized trace logs:
+
+/logs/diagnostic/trace_A3R9_V.log
+/logs/diagnostic/trace_A3R9_V_summary.json
+
+
+Console excerpt (optional) confirming [A3.R9.2] tag activity.
+
+⚙️ 6. Follow-Up Directive (Conditional)
+
+If results show continued NGC/CWQI inflation or zero rejections:
+
+Prepare Directive 8.8.4-A3.R9.3 – Metric Recalibration Phase,
+focusing on:
+
+Decay constant fine-tuning (α ↑ 10 – 20 %)
+
+ProfitRate floor rebalance per strategy
+
+Re-evaluation of SQE normalization bounds
+
+✅ End of Directive 8.8.4-A3.R9.2.V
+
+Classification: Validation / Observation
+Duration: 15 minutes
+Impact: Non-blocking (diagnostic only)
+Output: Signal Flow Trace + Performance Summary
