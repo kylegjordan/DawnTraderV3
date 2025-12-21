@@ -4331,9 +4331,12 @@ export class DatabaseStorage implements IStorage {
   /**
    * Phase 8.8.4-C.13.B: Upsert RTB signal with ON CONFLICT UPDATE
    * R9.3.HF-1: Updated to match new unique index on (mode, symbol, strategy) only
+   * R9.3.HF-2: Added trace logging for audit and confirmation
    * Prevents duplicate key errors by updating existing signals instead of failing
    */
   async upsertRtbSignal(data: InsertRtbSignal): Promise<RtbSignal> {
+    console.log(`[A3.R9.3.HF-2] Upserting RTB signal: ${data.symbol}/${data.strategy} (mode=${data.mode}, status=${data.status})`);
+    
     const [result] = await db
       .insert(rtbSignals)
       .values(data)
@@ -4356,6 +4359,8 @@ export class DatabaseStorage implements IStorage {
         },
       })
       .returning();
+    
+    console.log(`[A3.R9.3.HF-2] RTB signal upserted successfully: ${data.symbol}/${data.strategy}`);
     return result;
   }
 
