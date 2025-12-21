@@ -1,0 +1,137 @@
+🧭 Directive 8.8.4-A3.R9.3.V — “Validation and Runtime Verification”
+
+Classification: Validation / Runtime Integrity
+Objective: Verify stability, timing integrity, and signal lifecycle correctness following implementation of Directive 8.8.4-A3.R9.3.
+Phase: 8.8.4 — Integrity Completion
+
+1️⃣ Execution Authorization
+
+Authorized by: DawnTrader Architect (Kyle + DawnTrader Architect)
+Authorized environment: Paper Trading Mode
+Authorized operator: Replit Runtime Agent
+
+Login Credentials
+
+username: testuser123
+password: SecurePass123!
+
+
+(Credentials are for temporary paper environment access only — no live key usage is permitted.)
+
+2️⃣ Validation Objectives
+
+The purpose of this session is to confirm that the new per-signal refresh model, TTL removal, and TCL simplification are functioning as designed.
+The run should prove that:
+
+TCL promotes trades continuously without idle gaps.
+
+Signals refresh individually on their 30-second clocks.
+
+SQE maintains natural pass/fail balance.
+
+No legacy TTL deletions or barrier logs appear.
+
+System logs confirm stability and completion of each signal’s refresh loop.
+
+3️⃣ Validation Procedure
+Step 1 — Startup and Environment Prep
+
+Log in to the paper-mode DawnTrader environment using the credentials above.
+
+Verify the build includes all R9.3 changes (commit tagged 8.8.4-A3.R9.3).
+
+Confirm database table paper_sim_open_positions is empty before starting.
+
+Start system diagnostics logging:
+
+npm run start:paper
+
+
+or equivalent service startup command.
+
+Enable full logging level:
+
+LOG_LEVEL=debug
+
+
+(This ensures all [A3.R9.3][...] trace entries are written.)
+
+Step 2 — Run the Validation Session
+
+Allow the trading engine to run for 15 minutes (900 seconds).
+
+Observe normal signal generation, reconfirmation, and trade promotions.
+
+Do not manually intervene or restart services during the run.
+
+At the 15-minute mark, stop the trading engine cleanly:
+
+npm run stop:paper
+
+
+Confirm shutdown message:
+
+[A3.R9.3][SYSTEM_SHUTDOWN_COMPLETE]
+
+Step 3 — Log Capture
+
+Collect and package the following logs:
+
+Engine runtime log (full debug level)
+
+/logs/runtime/paper_engine.log
+
+
+SQE evaluation log
+
+/logs/sqe_eval.log
+
+
+TCL activation log
+
+/logs/tcl_promotion.log
+
+
+RTB snapshot at shutdown
+
+SELECT * FROM rtb_signals WHERE mode='paper';
+
+
+Archive all logs into:
+
+/logs/validation/A3.R9.3.V.<timestamp>.zip
+
+
+Upload the archive to the secure shared location for the architect’s review.
+
+4️⃣ Validation Success Criteria
+Metric	Expected Result	Verification Source
+TCL activation interval	≤ 2 seconds between threshold checks	tcl_promotion.log
+SQE pass/fail ratio	45–55%	sqe_eval.log
+Refresh cadence	[A3.R9.3][REFRESH_COMPLETE] every ~30 s per signal	runtime.log
+TTL deletions	None	runtime.log
+Barrier logs	None	runtime.log
+Errors	0 uncaught exceptions	runtime.log
+System stability	No service restarts during run	Console output
+5️⃣ Post-Run Deliverables
+
+After the session:
+
+Stop the trading and logging services.
+
+Confirm all logs have flushed to disk.
+
+Provide the compressed archive:
+
+A3.R9.3.V.<timestamp>.zip
+
+
+back to the architect (Kyle + DawnTrader Architect) for validation audit.
+
+No further code modifications are authorized until the audit is complete.
+
+6️⃣ Acceptance Statement
+
+Upon successful verification of all criteria above,
+Phase 8.8.4 — Integrity Completion is formally closed.
+Subsequent work will begin under Phase 8.8.5 — Metric Integrity and Durability Reform.
