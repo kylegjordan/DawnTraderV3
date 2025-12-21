@@ -25,8 +25,9 @@ import { centralClock, ClockTick } from '../../services/central-clock';
 import { storage } from '../../storage';
 import { performanceMonitor } from '../diagnostics/performance_monitor';
 
-const TCL_FAILSAFE_SECONDS = parseInt(process.env.TCL_FAILSAFE_SECONDS || '120', 10);
-const TCL_SIGNAL_THRESHOLD = parseInt(process.env.TCL_SIGNAL_THRESHOLD || '15', 10);
+const TCL_FAILSAFE_SECONDS = Number(process.env.TCL_FAILSAFE_SECONDS ?? 120);
+const TCL_SIGNAL_THRESHOLD = Number(process.env.TCL_SIGNAL_THRESHOLD ?? 15);
+console.log(`[A3.R9.3.HF-1.P1] TCL threshold loaded: ${TCL_SIGNAL_THRESHOLD}`);
 console.log(`[A3.R7][TCL_CONFIG] FAILSAFE=${TCL_FAILSAFE_SECONDS}s THRESHOLD=${TCL_SIGNAL_THRESHOLD} signals`);
 
 interface TCLState {
@@ -86,6 +87,7 @@ class TCLWatchdog {
       console.log(`[A3.R7][TCL_WATCHDOG] Started Central Clock`);
     }
 
+    console.log(`[A3.R9.3.HF-1.P1] TCL Watchdog starting for mode=${mode}, threshold=${TCL_SIGNAL_THRESHOLD}`);
     console.log(`[A3.R7][TCL_WATCHDOG] Started for ${mode} mode at ${state.startedAt.toISOString()}`);
     console.log(`[A3.R7][TCL_WATCHDOG] Failsafe set for ${TCL_FAILSAFE_SECONDS}s (tick-aligned)`);
 

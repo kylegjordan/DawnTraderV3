@@ -1,0 +1,116 @@
+🧭 Directive 8.8.4-A3.R9.3.HF-1.P1
+“TCL Threshold Normalization & Startup Verification”
+
+Classification: Hotfix / Configuration Integrity
+Phase: 8.8.4 (Active)
+Scope: Environment variable enforcement, startup observability
+Objective:
+Normalize the TCL signal threshold to 15 across all environments, confirm correct startup configuration at runtime, and eliminate fallback inconsistencies caused by default value drift.
+
+I. Context
+
+During validation of R9.3.HF-1, discrepancies were observed between the intended trading signal threshold (15) and the default behavior (100).
+This misalignment results from the fallback constant defined in tcl_watchdog.ts:
+
+const threshold = parseInt(process.env.TCL_SIGNAL_THRESHOLD || "100", 10);
+
+
+If .env fails to load or the variable is undefined, TCL silently defaults to 100 — overriding intended configuration.
+This directive removes the ambiguity and enforces the canonical value.
+
+Additionally, to improve observability, TCL will now log its threshold value at startup to confirm correct configuration.
+
+II. Implementation Tasks
+🔹 R9.3.HF-1.P1-A — Threshold Constant Normalization
+
+File:
+server/services/tcl_watchdog.ts
+(or server/core/rtb/tcl_watchdog.ts if in legacy path)
+
+Change:
+Replace existing threshold definition:
+
+const threshold = parseInt(process.env.TCL_SIGNAL_THRESHOLD || "100", 10);
+
+
+With:
+
+const threshold = Number(process.env.TCL_SIGNAL_THRESHOLD ?? 15);
+this.log.info(`[A3.R9.3.HF-1.P1] TCL threshold loaded: ${threshold}`);
+
+
+✅ Effect:
+
+Removes fallback ambiguity.
+
+Ensures default value = 15 when environment variable not set.
+
+Adds startup visibility log confirming active threshold.
+
+🔹 R9.3.HF-1.P1-B — Environment Variable Enforcement
+
+File:
+.env or deployment configuration (depending on environment type)
+
+Add / update entry:
+
+TCL_SIGNAL_THRESHOLD=15
+
+
+✅ Effect:
+
+Guarantees consistent threshold across dev, paper, and live modes.
+
+Prevents future drift from incorrect fallback defaults.
+
+🔹 R9.3.HF-1.P1-C — TCL Startup Confirmation Log
+
+Add an additional startup log right after TCL subscription begins:
+
+In start(mode: string) (same file):
+
+this.log.info(`[A3.R9.3.HF-1.P1] TCL Watchdog starting for mode=${mode}, threshold=${threshold}`);
+
+
+✅ Effect:
+Provides explicit trace when TCL Watchdog successfully starts, showing threshold and mode values.
+
+III. Validation Steps
+
+1️⃣ Restart the paper engine.
+2️⃣ Observe the following logs during startup:
+
+[A3.R9.3.HF-1.P1] TCL threshold loaded: 15
+[A3.R9.3.HF-1.P1] TCL Watchdog starting for mode=paper, threshold=15
+[A3.R7][TCL_WATCHDOG] ✅ Subscribed to Central Clock for paper mode
+
+
+3️⃣ Confirm:
+
+Threshold is 15 in all logs.
+
+TCL logs appear normally when paper engine runs.
+
+No fallback to 100 in subsequent ticks.
+
+4️⃣ Run for 10 minutes under normal paper-sim load and ensure TCL promotions occur at expected intervals.
+
+IV. Expected Outcomes
+Behavior	Expected Result
+Threshold value	15 (verified in logs)
+TCL promotions	Triggered at RTB ≥ 15
+RTB capacity	Reaches ~15 before trade promotions
+Central Clock subscribers	> 0 after engine start
+Log output	Includes [A3.R9.3.HF-1.P1] confirmation lines
+No fallback defaults	“100” no longer appears anywhere
+✅ Directive Completion Criteria
+
+Verified [A3.R9.3.HF-1.P1] startup logs present.
+
+TCL Watchdog confirms threshold = 15.
+
+Trades are promoted once RTB ≥ 15 signals.
+
+No residual 100 threshold values in logs or configs.
+
+When complete, Replit should archive and provide the startup logs confirming proper configuration and promotion activity.
