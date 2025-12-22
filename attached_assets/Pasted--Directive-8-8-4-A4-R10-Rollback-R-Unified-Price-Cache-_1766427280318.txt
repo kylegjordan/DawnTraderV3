@@ -1,0 +1,273 @@
+⚠️ Directive 8.8.4-A4.R10-Rollback+R — Unified Price Cache Reintegration (Clean Implementation)
+Context
+
+This directive fully rolls back all changes introduced by the incorrect implementation of Directive 8.8.4-A4.R10 and re-implements the unified, rate-governed multi-bucket price cache directly within the canonical price-cache.ts file.
+No new files are to be created. No changes are permitted to the kraken-normalizer.ts or any other stable normalization utilities.
+
+The previous deviation introduced an unauthorized file (price-cache-v2.ts), modified a stable service (kraken-normalizer.ts), and left the repo in a dual-cache, dual-import state.
+This directive restores the repository to a clean baseline and performs the integration exactly as approved, without ambiguity or interpretation.
+
+Authorized Environment
+Key	Value
+Mode	Paper Trading Environment
+User	paper_trader@dawnai.io
+Password	TestPhase884!
+Branch	feature/8.8.4-A4.R10R
+Rollback Tag	rollback_8.8.4-A4.R10_pre-cacheRefactor
+Expected Run Duration	45 minutes
+🧩 SECTION 1 — Rollback Procedure
+
+1️⃣ Reset the repository to the verified pre-implementation checkpoint
+
+git reset --hard rollback_8.8.4-A4.R10_pre-cacheRefactor
+git clean -fd
+
+
+2️⃣ Remove unauthorized files
+
+rm -f server/services/price-cache-v2.ts
+
+
+3️⃣ Revert normalization file
+
+git checkout rollback_8.8.4-A4.R10_pre-cacheRefactor -- server/services/kraken-normalizer.ts
+
+
+4️⃣ Confirm canonical imports
+Ensure the following files import only price-cache.ts:
+
+server/services/trade-executor.ts
+
+server/services/ready-to-buy-service.ts
+
+server/services/fx5-scanner.ts
+
+server/services/system-health-service.ts
+
+5️⃣ Tag verification checkpoint
+
+git tag -a rollback_8.8.4-A4.R10_verified -m "Verified rollback of A4.R10 divergent implementation"
+
+🧱 SECTION 2 — Correct Re-Implementation (Directive 8.8.4-A4.R10R)
+
+This reimplementation must be done inside server/services/price-cache.ts (overwrite contents).
+All dependent files are to be updated as described below.
+No other code modifications are allowed.
+
+1️⃣ server/services/price-cache.ts — Replace Entire File
+/**
+ * Directive 8.8.4-A4.R10R — Unified, Rate-Governed Price Cache
+ * 
+ * This service consolidates all price retrieval logic for:
+ * - Open trades
+ * - Ready-to-Buy signals
+ * - FX5 snapshots
+ * 
+ * Responsibilities:
+ *  - Manage three priority buckets with distinct refresh intervals.
+ *  - Maintain Kraken API load below 10 weighted requests/second.
+ *  - Provide universal subscription/unsubscription API.
+ *  - Deliver cached prices to all consuming modules.
+ */
+
+import { delay } from '../utils/delay';
+import { logger } from '../utils/logger';
+import { fetchKrakenTickers } from '../connectors/kraken-api';
+
+interface CacheBucket {
+  type: 'openTrade' | 'readyToBuy' | 'fx5Snapshot';
+  symbols: Set<string>;
+  refreshIntervalMs: number;
+  lastRefresh: number;
+}
+
+const buckets: CacheBucket[] = [
+  { type: 'openTrade', symbols: new Set(), refreshIntervalMs: 2000, lastRefresh: 0 },
+  { type: 'readyToBuy', symbols: new Set(), refreshIntervalMs: 15000, lastRefresh: 0 },
+  { type: 'fx5Snapshot', symbols: new Set(), refreshIntervalMs: 30000, lastRefresh: 0 }
+];
+
+const cache: Map<string, any> = new Map();
+let currentWeight = 0;
+let refreshing = false;
+
+// Reset API weight counter every second
+setInterval(() => (currentWeight = 0), 1000);
+
+async function safeFetch(weight: number, fn: () => Promise<any>): Promise<any> {
+  if (currentWeight + weight > 10) {
+    await delay(250);
+    return safeFetch(weight, fn);
+  }
+  currentWeight += weight;
+  return fn();
+}
+
+async function refreshBuckets() {
+  if (refreshing) return;
+  refreshing = true;
+
+  const now = Date.now();
+
+  for (const bucket of buckets) {
+    if (now - bucket.lastRefresh >= bucket.refreshIntervalMs && bucket.symbols.size > 0) {
+      const symbols = Array.from(bucket.symbols);
+      const batchSize = 100;
+      for (let i = 0; i < symbols.length; i += batchSize) {
+        const batch = symbols.slice(i, i + batchSize);
+        await safeFetch(1, async () => {
+          const data = await fetchKrakenTickers(batch);
+          for (const [pair, ticker] of Object.entries(data)) {
+            cache.set(pair, { ...ticker, updated: now });
+          }
+          logger.info(`[A4.R10R][PriceCache][${bucket.type}] refreshed ${batch.length} symbols`);
+        });
+      }
+      bucket.lastRefresh = now;
+    }
+  }
+
+  refreshing = false;
+}
+
+setInterval(refreshBuckets, 1000);
+
+export function subscribe(symbol: string, bucketType: CacheBucket['type']) {
+  const bucket = buckets.find(b => b.type === bucketType);
+  if (!bucket) throw new Error(`Invalid bucket type: ${bucketType}`);
+  bucket.symbols.add(symbol);
+}
+
+export function unsubscribe(symbol: string) {
+  for (const b of buckets) b.symbols.delete(symbol);
+}
+
+export function getCachedPrice(symbol: string) {
+  return cache.get(symbol);
+}
+
+// Log health snapshot once per minute
+setInterval(() => {
+  const open = buckets[0].symbols.size;
+  const rtb = buckets[1].symbols.size;
+  const fx5 = buckets[2].symbols.size;
+  logger.info(`[A4.R10R][PriceCache][HEALTH] open=${open} rtb=${rtb} fx5=${fx5} weight=${currentWeight}/10`);
+}, 60000);
+
+2️⃣ server/services/ready-to-buy-service.ts
+
+Find and replace:
+
+const price = await getKrakenPrice(symbol);
+
+
+With:
+
+import { getCachedPrice, subscribe, unsubscribe } from './price-cache';
+
+const cached = getCachedPrice(symbol);
+if (!cached) return;
+const price = cached.c;
+
+// Subscribe when signal passes SQE
+subscribe(symbol, 'readyToBuy');
+
+// Unsubscribe when signal fails SQE or expires
+unsubscribe(symbol);
+
+3️⃣ server/services/trade-executor.ts
+
+Modify price retrieval and lifecycle handling:
+
+import { getCachedPrice, subscribe, unsubscribe } from './price-cache';
+
+// On trade open:
+subscribe(trade.symbol, 'openTrade');
+
+// Use cached price first
+const price = getCachedPrice(trade.symbol)?.c ?? await getKrakenPrice(trade.symbol);
+
+// On trade close:
+unsubscribe(trade.symbol);
+
+4️⃣ server/services/fx5-scanner.ts
+
+Replace Kraken call with cached data:
+
+import { getCachedPrice } from './price-cache';
+
+// Instead of fetching directly:
+const tickers = symbols.map(s => getCachedPrice(s)).filter(Boolean);
+
+5️⃣ server/services/system-health-service.ts
+
+Extend JSON output to include cache metrics:
+
+priceCache: {
+  open: buckets[0].symbols.size,
+  rtb: buckets[1].symbols.size,
+  fx5: buckets[2].symbols.size,
+  weight: currentWeight
+},
+
+6️⃣ server/index.ts
+
+Ensure price cache initializes before FX5 bootstrap:
+
+import './services/price-cache';
+console.log('[A4.R10R] Price Cache initialized before FX5 bootstrap');
+
+🧮 SECTION 3 — Operational Parameters
+Component	Refresh Interval	Batch Size	Weighted Cost	Notes
+Open Trades	2s	15	1	High-priority bucket
+Ready-to-Buy	15s	100	2	Mid-tier bucket
+FX5 Snapshot	30s	500	5	Low-priority bucket
+Total	—	—	≈8/10	Under Kraken budget
+🩺 SECTION 4 — Validation Protocol
+
+Duration: 45 minutes continuous paper trading run
+
+Check	Expected Result
+Cache Hit Rate	≥ 95%
+FX5 Scan Runtime	≤ 8s per 500 pairs
+RTB Refresh Frequency	≤ 15s
+Open Trade Price Lag	≤ 1s
+Kraken Rate Usage	≤ 10 weighted credits/sec
+Health Logs	Every 60s with non-zero open/rtb/fx5 values
+DB Consistency	No duplicate or missing price entries
+Expected Console Markers
+[A4.R10R][PriceCache][openTrade] refreshed N symbols
+[A4.R10R][PriceCache][readyToBuy] refreshed N symbols
+[A4.R10R][PriceCache][fx5Snapshot] refreshed N symbols
+[A4.R10R][PriceCache][HEALTH] open=xx rtb=xx fx5=xx weight=xx/10
+
+🧷 SECTION 5 — Rollback Safety Tag
+
+Before starting implementation:
+
+git tag -a rollback_8.8.4-A4.R10R_pre -m "Pre-implementation rollback point for clean A4.R10R"
+
+
+After successful validation:
+
+git tag -a impl_8.8.4-A4.R10R_verified -m "Verified clean implementation of unified price cache"
+
+✅ Expected Outcomes
+
+✅ Single canonical price cache file (price-cache.ts)
+
+✅ No new files created
+
+✅ No modifications to kraken-normalizer.ts
+
+✅ Full FX5, RTB, and open-trade integration
+
+✅ API load < 10 weighted req/sec
+
+✅ Stable 45-minute run without scan stalls or refresh lag
+
+End of Directive 8.8.4-A4.R10-Rollback+R
+Classification: Critical Core Architecture Integrity
+Priority: Immediate Execution
+Implementation Authority: Replit Automation Runtime
+Validation Authority: Dawn Trader System Operator
