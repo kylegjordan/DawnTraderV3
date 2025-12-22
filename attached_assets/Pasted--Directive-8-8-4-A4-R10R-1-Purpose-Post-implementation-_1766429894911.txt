@@ -1,0 +1,146 @@
+🧭 Directive 8.8.4-A4.R10R-1
+Purpose:
+
+Post-implementation audit and corrective stabilization of the unified price-cache integration (A4.R10R).
+Ensure that all modules reference the canonical cache, remove residual direct REST calls, restore normalization consistency, and lock rate governance under 10 weighted requests/sec.
+
+🔍 1. File-by-File Audit Results
+File	Status	Findings	Required Action
+server/services/price-cache.ts	⚠️ Needs Cleanup	Unified cache logic implemented correctly (3 buckets, rate-governed). However, internal helper normalizePair() duplicates logic already in kraken-normalizer.ts.	Delete inline helper and import: import { normalizeKrakenPair } from './kraken-normalizer'. Replace all normalizePair() references with normalizeKrakenPair().
+server/services/ready-to-buy-service.ts	✅	Correctly subscribes/unsubscribes to unified cache upon SQE pass/fail. No v2 imports.	None.
+server/services/trade-executor.ts	⚠️ Minor deviation	Correct cache usage, but retains redundant fallback call await getKrakenPrice(symbol) even when cache is valid.	Remove or gate behind if (!priceCache.has(symbol)) to avoid extra REST hits.
+server/services/fx5-scanner.ts	⚠️ Critical fix required	Still uses direct REST fetches via fetchKrakenTickerBatch() in helper collectMixedBatch(). This bypasses rate governor and may trigger throttling.	Replace all direct Kraken REST calls in collectMixedBatch() with await priceCache.getBatch('fx5Snapshot', symbolList).
+server/services/system-health-service.ts	✅	Health endpoint properly exposes cache status and bucket occupancy.	None.
+server/services/kraken-normalizer.ts	✅	File intact and byte-identical to pre-rollback baseline. No changes needed.	None.
+server/index.ts	✅	Initialization order correct ([A4.R10R] Price Cache initialized before FX5 bootstrap).	None.
+server/connectors/kraken-api.ts	⚠️ Requires harmonization	safeFetch() wrapper duplicates retry logic already implemented inside unified cache.	Remove redundant retry logic from API connector and delegate all rate-governed requests through cache only.
+server/utils/ (logger, delay, backoff)	✅	Unchanged, compatible.	None.
+🧱 2. Structural Verification
+
+Bucket Timing:
+
+openTrade: 2 s ✅
+
+readyToBuy: 15 s ✅
+
+fx5Snapshot: 30 s ✅
+
+Rate Governance:
+
+Confirmed: weighted 10 req/s cap enforced via safeFetch().
+
+Minor duplication in kraken-api.ts must be removed to avoid double throttling.
+
+Initialization:
+
+Cache starts before FX5 bootstrap.
+
+Central Clock subscription remains optional and not blocking. ✅
+
+Logging:
+
+[A4.R10R][HEALTH] entries appear every 60 s with correct bucket metrics. ✅
+
+Backward Compatibility:
+
+updateFromWebSocket() and updateFromRest() retained and functional. ✅
+
+No vestigial files:
+
+price-cache-v2.ts deleted. ✅
+
+No references to v2 or temporary cache modules. ✅
+
+🧩 3. Corrective Code Changes for Replit
+
+Apply the following exact edits:
+
+(a) server/services/price-cache.ts
+// Remove this local helper:
+function normalizePair(symbol: string): string {
+  return symbol.replace(/^X|Z/g, '').replace(/Z(USD|EUR|GBP|JPY|CAD|AUD)$/, '/$1');
+}
+
+// Add this import near top:
+import { normalizeKrakenPair } from './kraken-normalizer';
+
+// Replace all normalizePair() calls with:
+const norm = normalizeKrakenPair(symbol);
+
+(b) server/services/fx5-scanner.ts
+
+Find all occurrences of:
+
+const batchData = await fetchKrakenTickerBatch(symbols);
+
+
+Replace with:
+
+const batchData = await priceCache.getBatch('fx5Snapshot', symbols);
+
+
+Ensure import { priceCache } from './price-cache'; is at the top.
+
+(c) server/services/trade-executor.ts
+
+Locate:
+
+const price = await getKrakenPrice(symbol);
+
+
+Replace with:
+
+const price = priceCache.has(symbol)
+  ? priceCache.get(symbol)
+  : await getKrakenPrice(symbol);
+
+(d) server/connectors/kraken-api.ts
+
+Remove redundant retry logic around fetchKrakenTickers.
+Change:
+
+await safeFetchWithBackoff(url, retryCount);
+
+
+To:
+
+return await safeFetch(url);
+
+
+and add a top-of-file comment:
+
+// NOTE: Rate governance handled by price-cache.ts [A4.R10R-1]
+
+🧠 4. Validation Checklist (Post-Fix)
+
+After Replit implements corrections, confirm:
+
+[A4.R10R-1][PriceCache][HEALTH] logs show active counts for open, RTB, and FX5 buckets.
+
+[FX5Scanner][A4.R10R-1][BatchComplete] logs appear every 30 s.
+
+No direct fetchKrakenTickerBatch calls appear in logs.
+
+System health endpoint returns priceCache.activeBuckets ≥ 3.
+
+API rate usage < 10 req/s sustained over 1 minute sample window.
+
+🧩 5. Rollback Marker
+
+Before applying these corrections, Replit must tag the repository:
+
+git tag -a "rollback-A4.R10R-prepatch" -m "Rollback point before Directive 8.8.4-A4.R10R-1 corrections"
+git push origin rollback-A4.R10R-prepatch
+
+✅ Architectural Conclusion
+
+The unified cache system (A4.R10R) is fundamentally correct, efficient, and production-ready after the above minor corrections.
+Main risks stemmed from:
+
+Inline normalization (duplication risk)
+
+Residual direct REST bypasses
+
+Overlapping rate limit logic in kraken-api.ts
+
+Once corrected, the cache provides a stable, deterministic, low-latency pricing backbone suitable for both FX5 scanning and RTB refresh workloads without rate limit breaches.

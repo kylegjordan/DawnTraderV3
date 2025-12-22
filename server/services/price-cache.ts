@@ -318,6 +318,81 @@ class UnifiedPriceCache {
     return Array.from(this.cache.values());
   }
 
+  /**
+   * A4.R10R-1: Check if a symbol exists in the cache
+   */
+  has(symbol: string): boolean {
+    return this.cache.has(symbol);
+  }
+
+  /**
+   * A4.R10R-1: Batch retrieval for FX5 integration
+   * Returns cached prices for a list of symbols, fetching missing ones if needed
+   */
+  async getBatch(bucketType: CacheBucketType, symbols: string[]): Promise<Map<string, CachedPrice>> {
+    const result = new Map<string, CachedPrice>();
+    const bucket = this.buckets.find(b => b.type === bucketType);
+    const refreshInterval = bucket?.refreshIntervalMs ?? 30000;
+    const now = Date.now();
+    const missingSymbols: string[] = [];
+
+    for (const symbol of symbols) {
+      const cached = this.cache.get(symbol);
+      const isFresh = cached && (now - cached.lastUpdatedAt) < refreshInterval;
+      
+      if (isFresh) {
+        result.set(symbol, cached);
+      } else {
+        missingSymbols.push(symbol);
+        if (bucket && !bucket.symbols.has(symbol)) {
+          bucket.symbols.add(symbol);
+        }
+      }
+    }
+
+    if (missingSymbols.length > 0) {
+      try {
+        for (let i = 0; i < missingSymbols.length; i += this.BATCH_SIZE) {
+          const batch = missingSymbols.slice(i, i + this.BATCH_SIZE);
+          const pairString = batch.map(s => this.toKrakenSymbol(s)).join(',');
+          
+          await this.safeFetch(1, async () => {
+            const data = await this.krakenService.getTicker(pairString);
+            
+            for (const [pair, ticker] of Object.entries(data)) {
+              const normalizedSymbol = this.normalizeKrakenPair(pair);
+              const tickerData: CachedPrice = {
+                symbol: normalizedSymbol,
+                price: parseFloat(ticker.c?.[0] || '0'),
+                ask: parseFloat(ticker.a?.[0] || '0'),
+                bid: parseFloat(ticker.b?.[0] || '0'),
+                volume24h: parseFloat(ticker.v?.[1] || '0'),
+                high24h: parseFloat(ticker.h?.[1] || '0'),
+                low24h: parseFloat(ticker.l?.[1] || '0'),
+                lastSource: 'kraken_rest',
+                lastUpdatedAt: now,
+              };
+              
+              this.cache.set(normalizedSymbol, tickerData);
+              result.set(normalizedSymbol, tickerData);
+              
+              const requestedSymbol = batch.find(s => this.symbolsMatch(s, normalizedSymbol));
+              if (requestedSymbol && requestedSymbol !== normalizedSymbol) {
+                this.cache.set(requestedSymbol, tickerData);
+                result.set(requestedSymbol, tickerData);
+              }
+            }
+          });
+        }
+        console.log(`[A4.R10R-1][PriceCache][getBatch] Fetched ${missingSymbols.length} missing symbols for ${bucketType}`);
+      } catch (err: any) {
+        console.warn(`[A4.R10R-1][PriceCache][getBatch] Error fetching batch:`, err.message);
+      }
+    }
+
+    return result;
+  }
+
   getHealthMetrics(): {
     openTrade: number;
     readyToBuy: number;
