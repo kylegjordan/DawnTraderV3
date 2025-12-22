@@ -1,0 +1,68 @@
+🧩 1️⃣ File: server/core/central-clock.ts
+
+Add a global startup call that ensures the Central Clock’s internal loop always begins when the system boots.
+
+// ----------------------------
+// FILE: server/core/central-clock.ts
+// ----------------------------
+
+export class CentralClock {
+  private intervalId: NodeJS.Timer | null = null;
+  private subscribers = new Map<string, (tick: ClockTick) => void>();
+  private tickNumber = 0;
+
+  public start(): void {
+    if (this.intervalId) return; // prevent double start
+    console.log('[CentralClock][INIT] Starting central clock service...');
+    this.intervalId = setInterval(() => {
+      this.tickNumber++;
+      const tick = { tickNumber: this.tickNumber, timestamp: Date.now() };
+      for (const handler of this.subscribers.values()) {
+        try {
+          handler(tick);
+        } catch (err) {
+          console.error('[CentralClock][ERROR] Subscriber threw', err);
+        }
+      }
+
+      // Health log every 60 ticks (≈30s)
+      if (this.tickNumber % 60 === 0) {
+        console.log(
+          `[CentralClock][HEALTH] tickNumber=${this.tickNumber} subscribers=${this.subscribers.size}`
+        );
+      }
+    }, 500); // tick every 500ms (configurable)
+  }
+
+  public subscribe(name: string, handler: (tick: ClockTick) => void) {
+    this.subscribers.set(name, handler);
+    console.log(`[CentralClock][SUBSCRIBE] module=${name} totalSubscribers=${this.subscribers.size}`);
+
+    // ✅ ensure clock always running
+    if (!this.intervalId) {
+      this.start();
+    }
+  }
+
+  public stop(): void {
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+      console.log('[CentralClock][STOPPED]');
+    }
+  }
+}
+
+export const centralClock = new CentralClock();
+
+🧩 2️⃣ File: server/index.ts
+
+At the top of the main bootstrap (before FX5Scanner or PaperEngine start), add:
+
+import { centralClock } from './core/central-clock';
+
+console.log('[R9.3.HF-4] Explicitly starting Central Clock...');
+centralClock.start();
+
+
+This guarantees the clock loop is initialized before any module subscribes to it.

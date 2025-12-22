@@ -45,10 +45,12 @@ class CentralClockService extends EventEmitter {
 
   /**
    * Start the central clock
+   * R9.3.HF-4: Use intervalId check instead of isRunning for reliability
    */
   start(): void {
-    if (this.isRunning) {
-      console.log('[CentralClock] Already running');
+    // R9.3.HF-4: Check intervalId directly - more reliable than isRunning flag
+    if (this.intervalId) {
+      console.log('[CentralClock] Already running (intervalId exists)');
       return;
     }
 
@@ -57,13 +59,13 @@ class CentralClockService extends EventEmitter {
     this.lastTickTime = Date.now();
     this.driftHistory = [];
 
-    console.log('[CentralClock] Starting central clock service (interval=1s)');
+    console.log('[CentralClock][R9.3.HF-4] Starting central clock service (interval=1s)');
 
     this.intervalId = setInterval(() => {
       this.emitTick();
     }, this.INTERVAL_MS);
 
-    console.log('[CentralClock] ✅ Started successfully');
+    console.log(`[CentralClock][R9.3.HF-4] ✅ Started successfully (intervalId=${this.intervalId ? 'set' : 'null'})`);
   }
 
   /**
@@ -119,6 +121,7 @@ class CentralClockService extends EventEmitter {
 
   /**
    * Subscribe a module to clock ticks
+   * R9.3.HF-4: Auto-start clock if not running when subscribed
    */
   subscribe(moduleName: string, handler: (tick: ClockTick) => void): void {
     if (this.subscribers.has(moduleName)) {
@@ -129,6 +132,12 @@ class CentralClockService extends EventEmitter {
     this.subscribers.set(moduleName, handler);
     this.on('tick', handler);
     console.log(`[CentralClock][SUBSCRIBE] module=${moduleName} totalSubscribers=${this.subscribers.size}`);
+
+    // R9.3.HF-4: Failsafe - ensure clock is always running when subscribed
+    if (!this.intervalId) {
+      console.log(`[CentralClock][R9.3.HF-4] Auto-starting clock (triggered by ${moduleName} subscription)`);
+      this.start();
+    }
   }
 
   /**

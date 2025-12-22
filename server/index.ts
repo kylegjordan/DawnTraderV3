@@ -110,6 +110,12 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // R9.3.HF-4: Explicitly start Central Clock FIRST before any dependent modules
+  console.log('[R9.3.HF-4] Explicitly starting Central Clock...');
+  const { centralClock } = await import('./services/central-clock.js');
+  centralClock.start();
+  console.log('[R9.3.HF-4] Central Clock started');
+
   // REB 2.7: Bootstrap FX5 Scanner FIRST (fire-and-forget, independent of engine state)
   // Non-blocking to avoid waiting for slow registerRoutes completion
   console.log('[REB2.7] Starting FX5 scanner bootstrap import...');
