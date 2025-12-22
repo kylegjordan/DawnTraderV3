@@ -176,10 +176,15 @@ class MultiBucketPriceCache {
 
   /**
    * Normalize Kraken pair to internal BASE/QUOTE format
+   * 
+   * Kraken uses various formats:
+   * - "XXBTZUSD" → "BTC/USD" (X prefix on base, Z prefix on quote)
+   * - "XETHZUSD" → "ETH/USD"
+   * - "SOLUSD" → "SOL/USD" (no prefixes for newer pairs)
+   * - "BTCUSD" → "BTC/USD" (alternative format)
    */
   private normalizeKrakenPair(krakenPair: string): string {
-    const knownBases = ['XBT', 'ETH', 'SOL', 'XRP', 'ADA', 'DOT', 'LINK', 'LTC', 'BCH', 'AVAX', 'ATOM', 'UNI', 'MATIC', 'DOGE', 'SHIB'];
-    const knownQuotes = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'USDT', 'USDC'];
+    const knownQuotes = ['ZUSD', 'ZEUR', 'ZGBP', 'ZCAD', 'ZAUD', 'ZJPY', 'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'USDT', 'USDC'];
 
     let base = krakenPair;
     let quote = '';
@@ -192,15 +197,15 @@ class MultiBucketPriceCache {
       }
     }
 
-    if (base.startsWith('X') && base.length > 3) {
+    while (base.startsWith('X') || base.startsWith('Z')) {
+      if (base.length <= 3) break;
       base = base.slice(1);
     }
-    if (base.startsWith('Z') && base.length > 3) {
-      base = base.slice(1);
-    }
+
     if (base === 'XBT') {
       base = 'BTC';
     }
+
     if (quote.startsWith('Z') && quote.length > 3) {
       quote = quote.slice(1);
     }
@@ -272,13 +277,15 @@ class MultiBucketPriceCache {
     }
     
     try {
+      let fetchedData: CachedTickerData | null = null;
+      
       await this.safeFetch(1, async () => {
         const krakenSymbol = this.toKrakenSymbol(symbol);
         const data = await this.krakenService.getTicker(krakenSymbol);
         
         for (const [pair, ticker] of Object.entries(data)) {
           const normalizedSymbol = this.normalizeKrakenPair(pair);
-          this.cache.set(normalizedSymbol, {
+          const tickerData: CachedTickerData = {
             symbol: normalizedSymbol,
             price: parseFloat(ticker.c?.[0] || '0'),
             ask: parseFloat(ticker.a?.[0] || '0'),
@@ -288,15 +295,28 @@ class MultiBucketPriceCache {
             low24h: parseFloat(ticker.l?.[1] || '0'),
             updated: now,
             source: 'kraken_rest',
-          });
+          };
+          
+          this.cache.set(normalizedSymbol, tickerData);
+          
+          if (normalizedSymbol === symbol || this.symbolsMatch(normalizedSymbol, symbol)) {
+            this.cache.set(symbol, tickerData);
+            fetchedData = tickerData;
+          }
         }
       });
       
-      return this.cache.get(symbol) || null;
+      return fetchedData || this.cache.get(symbol) || null;
     } catch (err: any) {
       console.warn(`[A4.R10][PriceCache] getPrice error for ${symbol}:`, err.message);
       return cached || null;
     }
+  }
+
+  private symbolsMatch(a: string, b: string): boolean {
+    const normalizeA = this.normalizeKrakenPair(a);
+    const normalizeB = this.normalizeKrakenPair(b);
+    return normalizeA === normalizeB;
   }
 
   /**
