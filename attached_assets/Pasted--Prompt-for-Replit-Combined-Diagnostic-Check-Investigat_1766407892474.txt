@@ -1,0 +1,49 @@
+🟩 Prompt for Replit (Combined Diagnostic Check — Investigation Only)
+Please run the following combined diagnostics to check FX5 bootstrap state and RTB Refresh activity.
+This is a read-only investigation. Do not restart or modify any services.
+
+──────────────────────────────
+🧩 1️⃣ FX5 Bootstrap Flag Check
+──────────────────────────────
+# Check if FX5 scanner bootstrap flag is stuck (TypeScript runtime flag)
+node -e "import('./server/startup/fx5-scanner-bootstrap.js')
+  .then(m => console.log('FX5 Scanner → Bootstrapped flag =', m.bootstrapped))
+  .catch(e => console.error(e))"
+
+# Expected: 
+#   Bootstrapped flag = true  → scanner thinks it’s already running (bug confirmed)
+#   Bootstrapped flag = false → scanner never initialized (bootstrap skipped)
+
+──────────────────────────────
+🧩 2️⃣ RTB Refresh Service Health Check
+──────────────────────────────
+# Confirm per-signal refresh cycles are active
+grep \"\\[A3.R9.2\\]\\[REFRESH_METRICS\\]\" logs | tail -20
+
+# Confirm refresh loop completions
+grep \"\\[A3.R9.2\\]\\[REFRESH_COMPLETE\\]\" logs | tail -10
+
+# Check CWQI decay updates
+grep \"\\[A3.R9.2\\]\\[DECAY_THEN_NORMALIZE\\]\" logs | tail -10
+
+# Confirm SQE evaluation passes (refresh results reaching SQE)
+grep \"\\[A3.R9.2\\]\\[SQE_EVAL\\]\" logs | tail -10
+
+# Count total refresh metrics logged (overall activity indicator)
+grep -c \"\\[A3.R9.2\\]\\[REFRESH_METRICS\\]\" logs
+
+──────────────────────────────
+📋 Notes for Output Analysis
+──────────────────────────────
+✅ Healthy System:
+  - Bootstrapped flag = false (scanner ready to initialize)
+  - Frequent REFRESH_METRICS logs with recent timestamps
+  - CWQI decay entries showing new values
+  - SQE_EVAL lines appearing periodically
+⚠️ Unhealthy System:
+  - Bootstrapped flag = true (scanner skipped startup)
+  - No recent REFRESH_METRICS or CWQI logs (stalled refresh)
+  - SQE_EVAL missing or old timestamps
+
+Please report all console outputs verbatim (no truncation). 
+This is a live diagnostic only — no restarts, resets, or code changes.
