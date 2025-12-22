@@ -1,0 +1,60 @@
+🟩 Prompt for Replit (Investigation Only – No Fixes)
+Please run the following diagnostic commands and report the results here.
+This is for investigation only – do not modify or restart any services.
+
+1️⃣ Central Clock Subscriber & Health Check
+------------------------------------------------
+grep "\[CentralClock\]\[HEALTH\]" logs | tail -5
+
+# Check for current subscriber count (expect 3–5)
+# Also note avgDrift and tickNumber progression.
+
+grep "Subscribed to CentralClock" logs | tail -10
+
+# This lists which modules are actively subscribing.
+# Expected subscribers: RTB_paper, TradingScheduler, TCL_WATCHDOG, FX5Scanner.
+
+2️⃣ FX5 Scanner Bootstrap and Activity Check
+------------------------------------------------
+grep "\[FX5Bootstrap\]" logs | tail -10
+grep "\[FX5Scanner\]" logs | tail -10
+
+# This confirms whether the FX5 scanner initialized and is producing tick logs.
+
+3️⃣ TCL Activation History
+------------------------------------------------
+grep "\[TCL ACTIVATED\]" logs | tail -10
+grep "\[TCL_PROMOTE\]" logs | tail -10
+
+# This shows when the TCL last triggered and when the last promotions occurred.
+
+4️⃣ FX5 Scanner Runtime Flags (Live State)
+------------------------------------------------
+node -e "import('./server/services/fx5-scanner.js').then(m => console.log('FX5 Scanner State → isRunning:', m.fx5Scanner?.isRunning, 'isScanning:', m.fx5Scanner?.isScanning)).catch(e => console.error(e))"
+
+# Expected output: isRunning=true, isScanning=true or false (depending on tick timing).
+# If isRunning=true but isScanning=false for several minutes, scanner is stalled.
+
+5️⃣ System Health Snapshot
+------------------------------------------------
+curl -s http://localhost:3000/api/system/health | grep -E 'engine|lastUpdate'
+
+# Confirms whether the health monitor thread is advancing or stale.
+# Compare lastUpdate timestamp against current UTC time.
+
+
+🧠 Notes for Replit:
+
+This investigation is non-intrusive — no restarts, resets, or fixes.
+
+Collect output verbatim (no truncation).
+
+Focus on whether:
+
+FX5 scanner shows recent tick activity.
+
+Central Clock subscriber count is below 4–5.
+
+TCL activations have stopped entirely.
+
+Health monitor timestamp is stale.
