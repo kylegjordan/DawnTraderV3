@@ -117,12 +117,12 @@ app.use((req, res, next) => {
   console.log('[R9.3.HF-5] 🔁 Ensuring Central Clock & FX5 Scanner bootstrap sequence');
 
   /**
-   * A4.R10R: Initialize Unified Price Cache BEFORE FX5 bootstrap
+   * A4.R10R-1: Initialize Unified Price Cache BEFORE FX5 bootstrap
    * This ensures all services have access to cached pricing data
    */
   const { priceCache } = await import('./services/price-cache.js');
   priceCache.initialize();
-  console.log('[A4.R10R] Price Cache initialized before FX5 bootstrap');
+  console.log('[A4.R10R-1] Price Cache initialized before FX5 bootstrap');
 
   const { centralClock } = await import('./services/central-clock.js');
   

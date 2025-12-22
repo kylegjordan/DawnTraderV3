@@ -1,3 +1,4 @@
+// NOTE: Rate governance and caching handled by price-cache.ts [A4.R10R-1]
 import crypto from "crypto";
 import { canonicalFromPairInfo, normalizeSymbolArray } from './utils/symbol-canonicalizer.js';
 

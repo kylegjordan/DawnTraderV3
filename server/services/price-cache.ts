@@ -1,5 +1,5 @@
 /**
- * Directive 8.8.4-A4.R10R — Unified, Rate-Governed Price Cache
+ * Directive 8.8.4-A4.R10R-1 — Unified, Rate-Governed Price Cache
  * 
  * This service consolidates all price retrieval logic for:
  * - Open trades (2s refresh)
@@ -11,9 +11,12 @@
  *  - Maintain Kraken API load below 10 weighted requests/second.
  *  - Provide universal subscription/unsubscription API.
  *  - Deliver cached prices to all consuming modules.
+ * 
+ * A4.R10R-1: Uses canonical normalizeToInternalSymbol from kraken-symbol-resolver.
  */
 
 import { KrakenService } from './kraken';
+import { normalizeToInternalSymbol as normalizeKrakenPair } from '../markets/kraken-symbol-resolver';
 
 export type PriceSourceTag = 'kraken_ws' | 'kraken_rest';
 
@@ -63,7 +66,7 @@ class UnifiedPriceCache {
 
   initialize(): void {
     if (this.isInitialized) {
-      console.log('[A4.R10R][PriceCache] Already initialized');
+      console.log('[A4.R10R-1][PriceCache] Already initialized');
       return;
     }
 
@@ -73,7 +76,7 @@ class UnifiedPriceCache {
 
     this.refreshLoopInterval = setInterval(() => {
       this.refreshBuckets().catch(err => {
-        console.error('[A4.R10R][PriceCache] Refresh error:', err.message);
+        console.error('[A4.R10R-1][PriceCache] Refresh error:', err.message);
       });
     }, 1000);
 
@@ -81,11 +84,11 @@ class UnifiedPriceCache {
       const open = this.buckets[0].symbols.size;
       const rtb = this.buckets[1].symbols.size;
       const fx5 = this.buckets[2].symbols.size;
-      console.log(`[A4.R10R][PriceCache][HEALTH] open=${open} rtb=${rtb} fx5=${fx5} weight=${this.currentWeight}/${this.MAX_WEIGHT_PER_SECOND} cacheSize=${this.cache.size}`);
+      console.log(`[A4.R10R-1][PriceCache][HEALTH] open=${open} rtb=${rtb} fx5=${fx5} weight=${this.currentWeight}/${this.MAX_WEIGHT_PER_SECOND} cacheSize=${this.cache.size}`);
     }, 60000);
 
     this.isInitialized = true;
-    console.log('[A4.R10R][PriceCache] Initialized with 3 buckets (openTrade=2s, readyToBuy=15s, fx5Snapshot=30s)');
+    console.log('[A4.R10R-1][PriceCache] Initialized with 3 buckets (openTrade=2s, readyToBuy=15s, fx5Snapshot=30s)');
   }
 
   shutdown(): void {
@@ -102,7 +105,7 @@ class UnifiedPriceCache {
       this.healthLogInterval = null;
     }
     this.isInitialized = false;
-    console.log('[A4.R10R][PriceCache] Shutdown complete');
+    console.log('[A4.R10R-1][PriceCache] Shutdown complete');
   }
 
   private delay(ms: number): Promise<void> {
@@ -119,7 +122,7 @@ class UnifiedPriceCache {
     }
 
     if (retries >= maxRetries) {
-      throw new Error('[A4.R10R] Rate limit budget exhausted after max retries');
+      throw new Error('[A4.R10R-1] Rate limit budget exhausted after max retries');
     }
 
     this.currentWeight += weight;
@@ -155,7 +158,7 @@ class UnifiedPriceCache {
           const data = await this.krakenService.getTicker(pairString);
           
           for (const [pair, ticker] of Object.entries(data)) {
-            const normalizedSymbol = this.normalizeKrakenPair(pair);
+            const normalizedSymbol = normalizeKrakenPair(pair);
             const cachedPrice: CachedPrice = {
               symbol: normalizedSymbol,
               price: parseFloat(ticker.c?.[0] || '0'),
@@ -176,44 +179,14 @@ class UnifiedPriceCache {
             }
           }
           
-          console.log(`[A4.R10R][PriceCache][${bucket.type}] refreshed ${batch.length} symbols`);
+          console.log(`[A4.R10R-1][PriceCache][${bucket.type}] refreshed ${batch.length} symbols`);
         });
       } catch (err: any) {
-        console.warn(`[A4.R10R][PriceCache][${bucket.type}] Batch fetch error:`, err.message);
+        console.warn(`[A4.R10R-1][PriceCache][${bucket.type}] Batch fetch error:`, err.message);
       }
     }
 
     bucket.lastRefresh = now;
-  }
-
-  private normalizeKrakenPair(krakenPair: string): string {
-    const knownQuotes = ['ZUSD', 'ZEUR', 'ZGBP', 'ZCAD', 'ZAUD', 'ZJPY', 'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'USDT', 'USDC'];
-
-    let base = krakenPair;
-    let quote = '';
-
-    for (const q of knownQuotes) {
-      if (krakenPair.endsWith(q)) {
-        quote = q;
-        base = krakenPair.slice(0, -q.length);
-        break;
-      }
-    }
-
-    while (base.startsWith('X') || base.startsWith('Z')) {
-      if (base.length <= 3) break;
-      base = base.slice(1);
-    }
-
-    if (base === 'XBT') {
-      base = 'BTC';
-    }
-
-    if (quote.startsWith('Z') && quote.length > 3) {
-      quote = quote.slice(1);
-    }
-
-    return quote ? `${base}/${quote}` : base;
   }
 
   private toKrakenSymbol(symbol: string): string {
@@ -228,19 +201,19 @@ class UnifiedPriceCache {
   }
 
   private symbolsMatch(a: string, b: string): boolean {
-    const normalizeA = this.normalizeKrakenPair(a);
-    const normalizeB = this.normalizeKrakenPair(b);
+    const normalizeA = normalizeKrakenPair(a);
+    const normalizeB = normalizeKrakenPair(b);
     return normalizeA === normalizeB;
   }
 
   subscribe(symbol: string, bucketType: CacheBucketType): void {
     const bucket = this.buckets.find(b => b.type === bucketType);
     if (!bucket) {
-      console.warn(`[A4.R10R][PriceCache] Invalid bucket type: ${bucketType}`);
+      console.warn(`[A4.R10R-1][PriceCache] Invalid bucket type: ${bucketType}`);
       return;
     }
     bucket.symbols.add(symbol);
-    console.log(`[A4.R10R][PriceCache] Subscribed ${symbol} to ${bucketType} (total: ${bucket.symbols.size})`);
+    console.log(`[A4.R10R-1][PriceCache] Subscribed ${symbol} to ${bucketType} (total: ${bucket.symbols.size})`);
   }
 
   unsubscribe(symbol: string): void {
@@ -285,7 +258,7 @@ class UnifiedPriceCache {
         const data = await this.krakenService.getTicker(krakenSymbol);
         
         for (const [pair, ticker] of Object.entries(data)) {
-          const normalizedSymbol = this.normalizeKrakenPair(pair);
+          const normalizedSymbol = normalizeKrakenPair(pair);
           const tickerData: CachedPrice = {
             symbol: normalizedSymbol,
             price: parseFloat(ticker.c?.[0] || '0'),
@@ -309,7 +282,7 @@ class UnifiedPriceCache {
       
       return fetchedData || this.cache.get(symbol) || null;
     } catch (err: any) {
-      console.warn(`[A4.R10R][PriceCache] getPrice error for ${symbol}:`, err.message);
+      console.warn(`[A4.R10R-1][PriceCache] getPrice error for ${symbol}:`, err.message);
       return cached || null;
     }
   }
@@ -360,7 +333,7 @@ class UnifiedPriceCache {
             const data = await this.krakenService.getTicker(pairString);
             
             for (const [pair, ticker] of Object.entries(data)) {
-              const normalizedSymbol = this.normalizeKrakenPair(pair);
+              const normalizedSymbol = normalizeKrakenPair(pair);
               const tickerData: CachedPrice = {
                 symbol: normalizedSymbol,
                 price: parseFloat(ticker.c?.[0] || '0'),

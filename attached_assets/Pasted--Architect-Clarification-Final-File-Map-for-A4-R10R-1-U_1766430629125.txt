@@ -1,0 +1,99 @@
+🧩 Architect Clarification — Final File Map for A4.R10R-1 (Use Exactly These Paths)
+
+Thank you for pausing again before proceeding.
+For this specific codebase, use the actual files as they exist in the current repository.
+Please follow this mapping precisely — do not create any new files.
+
+🧠 1️⃣ Kraken API integration
+
+✅ Use: server/services/kraken.ts
+
+This file already contains the KrakenService class and all REST/WebSocket logic.
+
+Use its existing getTicker() method wherever the directive references getKrakenPrice() or getTickerPrice().
+
+If the directive mentions getKrakenTickers() or fetchKrakenTickerBatch(), interpret that as:
+
+await krakenService.getTicker(symbol);
+
+
+or for multiple pairs:
+
+await Promise.all(symbols.map(s => krakenService.getTicker(s)));
+
+
+Add this comment at the top of that file:
+
+// NOTE: Rate governance and caching handled by price-cache.ts [A4.R10R-1]
+
+🧠 2️⃣ Symbol Normalization
+
+✅ Use: server/markets/kraken-symbol-resolver.ts
+
+Function: normalizeToInternalSymbol()
+
+When the directive refers to normalizeKrakenPair(), replace with:
+
+import { normalizeToInternalSymbol as normalizeKrakenPair } from '../markets/kraken-symbol-resolver';
+
+
+Do not edit the internals of normalizeToInternalSymbol().
+
+🧠 3️⃣ Price Cache Corrections
+
+✅ File: server/services/price-cache.ts
+
+Remove any temporary has() or getBatch() methods you previously added.
+
+Implement the directive’s versions exactly as written in A4.R10R-1, using the imports specified above.
+
+Health log confirmation must show:
+[A4.R10R-1][PriceCache][HEALTH] after initialization.
+
+🧠 4️⃣ FX5 Scanner & Trade Executor
+
+✅ Files:
+
+server/services/fx5-scanner.ts
+
+server/services/trade-executor.ts
+
+In fx5-scanner.ts: replace all direct KrakenService calls for ticker data with:
+
+const batchData = await priceCache.getBatch('fx5Snapshot', symbols);
+
+
+In trade-executor.ts: replace any direct KrakenService calls for prices with:
+
+const price = priceCache.has(symbol)
+  ? priceCache.get(symbol)
+  : await krakenService.getTicker(symbol);
+
+🧠 5️⃣ No New Files or Functions
+
+Do not create /adapters, /connectors, or any new modules.
+
+Work strictly within the following five files:
+
+server/services/price-cache.ts
+
+server/services/fx5-scanner.ts
+
+server/services/trade-executor.ts
+
+server/services/kraken.ts
+
+server/markets/kraken-symbol-resolver.ts
+
+✅ Once complete:
+
+Confirm [A4.R10R-1][PriceCache][HEALTH] appears before FX5 bootstrap.
+
+Confirm that FX5 no longer calls Kraken directly.
+
+Confirm API call volume remains below 10 weighted requests per second.
+
+In short:
+Use server/services/kraken.ts (not /adapters) for all Kraken data fetches,
+server/markets/kraken-symbol-resolver.ts for normalization,
+and keep all other logic in price-cache.ts as defined in the directive.
