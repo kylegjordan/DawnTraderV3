@@ -1,0 +1,77 @@
+🧩 Architect Clarification — Canonical File Equivalents for A4.R10R-1
+
+Thank you for stopping and checking before proceeding.
+The directive was authored against the canonical Dawn Trader reference layout; some file names differ in this live repo.
+Please use the following mappings when applying A4.R10R-1:
+
+🧠 1️⃣ kraken-normalizer.ts → server/markets/kraken-symbol-resolver.ts
+
+Canonical equivalent confirmed.
+
+The functions normalizeInternal() and normalizeToInternalSymbol() correspond to the normalization layer used in place of normalizeKrakenPair().
+
+Wherever the directive instructs to import { normalizeKrakenPair } from './kraken-normalizer', instead use:
+
+import { normalizeToInternalSymbol as normalizeKrakenPair } from '../markets/kraken-symbol-resolver';
+
+
+Do not edit normalizeInternal() or its logic.
+
+Only replace any local normalization helpers inside price-cache.ts with the call above.
+
+🧠 2️⃣ connectors/kraken-api.ts → server/adapters/kraken.ts
+
+This file is the functional equivalent of the Kraken connector.
+
+All references to safeFetch() or REST ticker requests must delegate through this file.
+
+If the directive calls for “remove redundant retry logic,” apply that in server/adapters/kraken.ts instead.
+
+Add this comment at the top of that file once edits are done:
+
+// NOTE: Rate governance handled by price-cache.ts [A4.R10R-1]
+
+🧠 3️⃣ fetchKrakenTickerBatch() → server/adapters/kraken.ts → getKrakenTickers()
+
+The equivalent batch function is getKrakenTickers().
+
+Replace all getKrakenTickers(symbols) calls in fx5-scanner.ts with:
+
+const batchData = await priceCache.getBatch('fx5Snapshot', symbols);
+
+
+Ensure import { priceCache } from '../services/price-cache'; is present at the top.
+
+🧠 4️⃣ getKrakenPrice() (directive reference)
+
+Use getTickerPrice() inside server/adapters/kraken.ts.
+
+In trade-executor.ts, replace any call to that function with the priceCache access pattern specified in the directive:
+
+const price = priceCache.has(symbol)
+  ? priceCache.get(symbol)
+  : await getTickerPrice(symbol);
+
+🧩 5️⃣ Corrections to price-cache.ts
+
+Remove the temporary has() and getBatch() methods you added earlier.
+
+Re-implement the directive’s defined methods exactly as described in A4.R10R-1, using the correct imports above.
+
+Confirm the health log shows [A4.R10R-1][PriceCache][HEALTH] after initialization.
+
+✅ Final Rule:
+No new files, functions, or classes are to be created.
+All changes must be confined to:
+
+server/services/price-cache.ts
+
+server/services/fx5-scanner.ts
+
+server/services/trade-executor.ts
+
+server/adapters/kraken.ts
+
+server/markets/kraken-symbol-resolver.ts (import only)
+
+All other files remain untouched.
