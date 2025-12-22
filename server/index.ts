@@ -156,8 +156,12 @@ app.use((req, res, next) => {
 
   // Phase 27.F.8: Reset PaperSim service state FIRST (before any other services)
   try {
-    const { resetPaperSimService } = await import('./services/paper-sim-service');
+    const { resetPaperSimService, resumeActiveEngines } = await import('./services/paper-sim-service');
     resetPaperSimService();
+    
+    // R9.3.HF-4.FIX: Resume engines that should be running after server restart
+    // This ensures Central Clock subscribers (TCL watchdog, FX5 scanner, Stage3 emitter) are rehydrated
+    await resumeActiveEngines();
   } catch (error) {
     console.error('[PaperSimService] ⚠️ Reset failed:', error);
   }

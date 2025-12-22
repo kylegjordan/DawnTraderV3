@@ -1124,3 +1124,77 @@ export function resetPaperSimService(): void {
   console.log('[PaperSimService] Initialized - no active sessions');
   console.log('[PaperSimService] State: { hasManager: false, hasDbSession: false }');
 }
+
+/**
+ * R9.3.HF-4.FIX: Resume active engines after server restart
+ * Checks trading state and restarts engines that should be running
+ * This ensures Central Clock subscribers (TCL watchdog, FX5 scanner, Stage3 emitter) are rehydrated
+ */
+export async function resumeActiveEngines(): Promise<void> {
+  console.log('[R9.3.HF-4.FIX] Checking for engines that should be resumed...');
+  
+  try {
+    // Check if paper engine should be running
+    const paperContext = await storage.getSystemContext('paper');
+    const isPaperActive = paperContext?.isEngineActive === true;
+    
+    console.log(`[R9.3.HF-4.FIX] Paper engine state: isEngineActive=${isPaperActive}`);
+    
+    if (isPaperActive) {
+      console.log('[R9.3.HF-4.FIX] Paper engine should be running - resuming...');
+      
+      // Check if there's an existing session in the database
+      const existingSession = await storage.getActivePaperSimSession('paper');
+      
+      if (existingSession) {
+        console.log(`[R9.3.HF-4.FIX] Found active session: ${existingSession.sessionId}`);
+        
+        // Import and start the manager
+        const { PaperPortfolioManager } = await import('./paper-portfolio-manager.js');
+        const manager = new PaperPortfolioManager('paper', existingSession.startedBy || 'system-resume');
+        setGlobalPaperSimManager(manager);
+        await manager.start('internal');
+        
+        // Set trading mode for live pricing
+        livePricingAdapter.setTradingMode('paper');
+        
+        // Broadcast state change
+        const { clusterBus } = await import('./cluster-bus.js');
+        clusterBus.emit('trading_state_changed', {
+          type: 'trading_state_changed',
+          payload: {
+            mode: 'paper',
+            status: 'RUNNING',
+            isEngineActive: true,
+            isEngineActivePaper: true,
+            changeReason: 'Engine resumed after server restart',
+            timestamp: new Date().toISOString(),
+          },
+          mode: 'paper',
+          timestamp: new Date().toISOString(),
+        });
+        
+        console.log('[R9.3.HF-4.FIX] ✅ Paper engine resumed successfully');
+      } else {
+        console.log('[R9.3.HF-4.FIX] No active session found - resetting isEngineActive to false');
+        await storage.updateSystemContext('paper', { isEngineActive: false });
+      }
+    } else {
+      console.log('[R9.3.HF-4.FIX] Paper engine is not active - no resume needed');
+    }
+    
+    // Check live engine too (for completeness, though usually handled separately)
+    const liveContext = await storage.getSystemContext('live');
+    const isLiveActive = liveContext?.isEngineActive === true;
+    
+    if (isLiveActive) {
+      console.log('[R9.3.HF-4.FIX] Live engine marked active but not resuming (requires explicit start)');
+      // Live engine requires explicit user action to start for safety
+    }
+    
+    console.log('[R9.3.HF-4.FIX] Engine resume check complete');
+  } catch (error) {
+    console.error('[R9.3.HF-4.FIX] ❌ Error resuming engines:', error);
+    // Don't throw - allow server to continue starting
+  }
+}
