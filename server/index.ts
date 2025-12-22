@@ -110,22 +110,32 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // R9.3.HF-4: Explicitly start Central Clock FIRST before any dependent modules
-  console.log('[R9.3.HF-4] Explicitly starting Central Clock...');
-  const { centralClock } = await import('./services/central-clock.js');
-  centralClock.start();
-  console.log('[R9.3.HF-4] Central Clock started');
+  /**
+   * R9.3.HF-5: Central Clock & FX5 Scanner Startup Sequence
+   * Ensures both systems start deterministically and remain in sync.
+   */
+  console.log('[R9.3.HF-5] 🔁 Ensuring Central Clock & FX5 Scanner bootstrap sequence');
 
-  // REB 2.7: Bootstrap FX5 Scanner FIRST (fire-and-forget, independent of engine state)
-  // Non-blocking to avoid waiting for slow registerRoutes completion
-  console.log('[REB2.7] Starting FX5 scanner bootstrap import...');
+  const { centralClock } = await import('./services/central-clock.js');
+  
+  if (!centralClock.getIsRunning()) {
+    console.log('[R9.3.HF-5] Central Clock not running — starting manually...');
+    centralClock.start();
+  } else {
+    console.log('[R9.3.HF-5] Central Clock already running (tickNumber=%d)', centralClock.getTickNumber() ?? 0);
+  }
+
+  // R9.3.HF-5: Force FX5 Scanner reinitialization (non-blocking)
   import('./startup/fx5-scanner-bootstrap.js')
     .then(({ bootstrapFX5Scanner }) => {
-      console.log('[REB2.7] Bootstrap module loaded, calling function...');
-      return bootstrapFX5Scanner();
+      console.log('[R9.3.HF-5] Forcing FX5 Scanner reinitialization');
+      return bootstrapFX5Scanner(true); // Force reinit
     })
-    .catch((error) => {
-      console.error('[REB2.7] ❌ Scanner bootstrap failed:', error);
+    .then(() => {
+      console.log('[R9.3.HF-5] ✅ FX5 Scanner reinitialized successfully');
+    })
+    .catch((err) => {
+      console.error('[R9.3.HF-5] ❌ Failed to reinitialize FX5 Scanner:', err);
     });
 
   // Register routes and get the API router + HTTP server

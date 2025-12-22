@@ -1,0 +1,259 @@
+🧭 Directive R9.3.HF-5 — FX5 & TCL Bootstrap Reliability Fix
+📘 Purpose
+
+Directive R9.3.HF-5 addresses a persistent reliability issue where the FX5 Scanner and TCL Watchdog fail to initialize or silently stop receiving ticks from the Central Clock, while other subsystems (RTB Refresh, SQE Evaluation) continue running.
+
+The issue is caused by:
+
+A stale singleton bootstrap flag (bootstrapped = true) preventing the FX5 Scanner from reinitializing after workflow reloads or VM restarts.
+
+The TCL Watchdog not re-subscribing to the Central Clock when the scanner fails to start.
+
+The fix guarantees deterministic startup for FX5 Scanner, Central Clock, and TCL Watchdog in the correct order — ensuring continuous scan cycles, signal flow, and trade promotion events.
+
+⚙️ Implementation Scope
+🔧 Target Files
+
+server/startup/fx5-scanner-bootstrap.ts
+
+server/index.ts
+
+server/services/tcl_watchdog.ts
+
+🧩 1️⃣ server/startup/fx5-scanner-bootstrap.ts
+Before
+let bootstrapped = false;
+export async function bootstrapFX5Scanner(): Promise<void> {
+  if (bootstrapped) {
+    console.log('[FX5Bootstrap] Already bootstrapped, skipping');
+    return;
+  }
+  bootstrapped = true;
+  ...
+}
+
+Replace With
+/**
+ * R9.3.HF-5: Resilient FX5 Bootstrap
+ * Ensures the FX5 Scanner initializes deterministically after restarts or reloads.
+ */
+
+let bootstrapped = false;
+let lastBootstrapAttempt = 0;
+
+export async function bootstrapFX5Scanner(force = false): Promise<void> {
+  const now = Date.now();
+
+  // Prevent duplicate inits unless explicitly forced or last attempt > 60s ago
+  if (!force && bootstrapped && now - lastBootstrapAttempt < 60000) {
+    console.log('[FX5Bootstrap] Skipping reinit (already bootstrapped <60s ago)');
+    return;
+  }
+
+  try {
+    bootstrapped = true;
+    lastBootstrapAttempt = now;
+    console.log('[FX5Bootstrap] ⚙️ Initializing FX5 Scanner...');
+
+    const { startFX5Scanner } = await import('../services/fx5-scanner.js');
+    await startFX5Scanner();
+
+    console.log('[FX5Bootstrap] ✅ FX5 Scanner started successfully');
+  } catch (err) {
+    bootstrapped = false;
+    console.error('[FX5Bootstrap] ❌ Failed to start FX5 Scanner:', err);
+  }
+}
+
+
+✅ Purpose
+
+Ensures FX5 scanner initialization even after prior “bootstrapped” state.
+
+Adds explicit logging for each bootstrap cycle.
+
+Allows forced reinitialization via bootstrapFX5Scanner(true) from server startup.
+
+🧩 2️⃣ server/index.ts
+Replace existing FX5 bootstrap block (~lines 110–130)
+
+Before
+
+console.log('[REB2.7] Starting FX5 scanner bootstrap import...');
+import('./startup/fx5-scanner-bootstrap.js')
+  .then(({ bootstrapFX5Scanner }) => {
+    console.log('[REB2.7] Bootstrap module loaded, calling function...');
+    return bootstrapFX5Scanner();
+  })
+  .catch((error) => {
+    console.error('[REB2.7] ❌ Scanner bootstrap failed:', error);
+  });
+
+
+After
+
+/**
+ * R9.3.HF-5: Central Clock & FX5 Scanner Startup Sequence
+ * Ensures both systems start deterministically and remain in sync.
+ */
+console.log('[R9.3.HF-5] 🔁 Ensuring Central Clock & FX5 Scanner bootstrap sequence');
+
+import('./services/central-clock.js')
+  .then(({ centralClock }) => {
+    if (!centralClock.isRunning) {
+      console.log('[R9.3.HF-5] Central Clock not running — starting manually...');
+      centralClock.start();
+    } else {
+      console.log('[R9.3.HF-5] Central Clock already running (tickNumber=%d)', centralClock.tickNumber ?? 0);
+    }
+
+    return import('./startup/fx5-scanner-bootstrap.js');
+  })
+  .then(({ bootstrapFX5Scanner }) => {
+    console.log('[R9.3.HF-5] Forcing FX5 Scanner reinitialization');
+    return bootstrapFX5Scanner(true); // Force reinit
+  })
+  .then(() => {
+    console.log('[R9.3.HF-5] ✅ FX5 Scanner reinitialized successfully');
+  })
+  .catch((err) => {
+    console.error('[R9.3.HF-5] ❌ Failed to reinitialize FX5 Scanner:', err);
+  });
+
+
+✅ Purpose
+
+Guarantees Central Clock starts first.
+
+Forces FX5 Scanner to initialize regardless of stale flag.
+
+Adds distinct [R9.3.HF-5] audit markers for log validation.
+
+🧩 3️⃣ server/services/tcl_watchdog.ts
+
+Locate near the start() method or equivalent subscription section (≈ line 115):
+
+this.centralClock.subscribe(`TCL_${mode}`, tickHandler);
+
+
+Add immediately after:
+
+console.log(`[R9.3.HF-5] TCL Watchdog subscribed to Central Clock for mode=${mode}`);
+if (!this.centralClock.isRunning) {
+  console.warn('[R9.3.HF-5] ⚠️ Central Clock not running at TCL startup, forcing start()');
+  this.centralClock.start();
+}
+
+
+✅ Purpose
+
+Ensures TCL always binds to a live Central Clock.
+
+Prevents silent failure if subscription happens before the clock is active.
+
+Provides visible confirmation of TCL subscription state.
+
+🧠 Functional Intent
+
+After this patch:
+
+Central Clock always starts first and ticks continuously.
+
+FX5 Scanner always bootstraps, even if the prior flag remained true.
+
+TCL Watchdog always re-subscribes to Central Clock, maintaining active promotions.
+
+Filter Insights metrics remain continuously updated.
+
+RTB Refresh remains unaffected and continues normal operation.
+
+✅ Validation Criteria (R9.3.HF-5.V1)
+
+After applying the directive, perform a 30-minute validation run.
+
+1️⃣ FX5 Scanner Initialization
+
+Look for:
+
+[R9.3.HF-5] 🔁 Ensuring Central Clock & FX5 Scanner bootstrap sequence
+[R9.3.HF-5] Forcing FX5 Scanner reinitialization
+[FX5Bootstrap] ⚙️ Initializing FX5 Scanner...
+[FX5Bootstrap] ✅ FX5 Scanner started successfully
+[FX5Scanner][A3.R7][TICK] tickNumber=<n>
+
+
+Expected:
+FX5 scanner emits [A3.R7][TICK] every 30 seconds continuously.
+Filter Insights metrics update with each scan (no stalls).
+
+2️⃣ Central Clock Synchronization
+[CentralClock][HEALTH] tickNumber=<n> avgDrift=<x>ms subscribers=<count>
+
+
+Expected:
+
+Stable drift (<5ms)
+
+Subscribers count = 4–5
+
+FX5Scanner
+
+TCL_<mode>
+
+RTB Refresh
+
+Trading Scheduler
+
+(optional) Monitoring
+
+3️⃣ TCL Watchdog Activation
+[TCL_WATCHDOG] Subscribed to Central Clock for mode=paper
+[TCL ACTIVATED] reason=RTBThresholdMet poolSize=15 elapsed=<x>s
+
+
+Expected:
+
+TCL activates when either:
+
+RTB pool reaches threshold (15 signals), or
+
+Failsafe timer (120 seconds) expires without promotions.
+
+TCL remains continuously subscribed thereafter; no start/stop cycles.
+
+4️⃣ Promotion Events
+[TCL_PROMOTE] symbol=<pair> promoted to trade | reason=ready_to_buy
+
+
+Expected:
+
+Promotions triggered purely by readiness events (no time-driven cadence).
+
+Failsafe permanently disabled after first threshold activation.
+
+5️⃣ Stability
+
+During a 30-minute session:
+
+No restart or reinit logs for Central Clock, FX5, or TCL.
+
+RTB Refresh and SQE Evaluation continue normal cycles.
+
+Filter Insights metrics update every FX5 scan tick.
+
+📋 Summary of Expected Outcome
+Component	Expected State	Validation Indicator
+Central Clock	✅ Continuous	[CentralClock][HEALTH] every 60s
+FX5 Scanner	✅ Active	[FX5Scanner][A3.R7][TICK] every 30s
+Stage3 Emitter / Filter Insights	✅ Updating	UI metrics and [Stage3Cache] Updated
+TCL Watchdog	✅ Subscribed	[R9.3.HF-5] TCL Watchdog subscribed
+RTB Refresh	✅ Operational	[A3.R9.2][REFRESH_COMPLETE] logs
+Trade Promotions	✅ Event-Driven	[TCL_PROMOTE] logs
+🧩 Directive Summary
+
+Directive ID: R9.3.HF-5
+Title: FX5 & TCL Bootstrap Reliability Fix
+Purpose: Restore deterministic FX5 and TCL initialization; ensure continuous synchronization with Central Clock
+Implements: R9.3.HF-5-A, R9.3.HF-5-B, R9.3.HF-5-C
+Validation Run: R9.3.HF-5.V1
+Duration: 30 minutes continuous operation

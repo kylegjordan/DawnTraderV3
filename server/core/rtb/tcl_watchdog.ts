@@ -115,7 +115,13 @@ class TCLWatchdog {
 
     this.clockTickHandlers.set(mode, tickHandler);
     centralClock.subscribe(`TCL_${mode}`, tickHandler);
+    console.log(`[R9.3.HF-5] TCL Watchdog subscribed to Central Clock for mode=${mode}`);
     console.log(`[A3.R7][TCL_WATCHDOG] ✅ Subscribed to Central Clock for ${mode} mode`);
+    
+    if (!centralClock.getIsRunning()) {
+      console.warn('[R9.3.HF-5] ⚠️ Central Clock not running at TCL startup, forcing start()');
+      centralClock.start();
+    }
   }
 
   /**

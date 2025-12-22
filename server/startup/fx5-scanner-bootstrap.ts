@@ -1,34 +1,33 @@
 /**
- * REB 2.7: FX5 Scanner Bootstrap - Unconditional Startup
+ * R9.3.HF-5: Resilient FX5 Bootstrap
  * 
- * Idempotent helper to start FX5Scanner independent of:
- * - Trading engine state
- * - Route registration
- * - Any other async startup work
- * 
- * Called early from server/index.ts to ensure scanner starts
- * BEFORE complex route registration begins.
+ * Ensures the FX5 Scanner initializes deterministically after restarts or reloads.
+ * Replaces the stale singleton pattern that could block reinit.
  */
 
 let bootstrapped = false;
+let lastBootstrapAttempt = 0;
 
-export async function bootstrapFX5Scanner(): Promise<void> {
-  if (bootstrapped) {
-    console.log('[FX5Bootstrap] Already bootstrapped, skipping');
+export async function bootstrapFX5Scanner(force = false): Promise<void> {
+  const now = Date.now();
+
+  // Prevent duplicate inits unless explicitly forced or last attempt > 60s ago
+  if (!force && bootstrapped && now - lastBootstrapAttempt < 60000) {
+    console.log('[FX5Bootstrap] Skipping reinit (already bootstrapped <60s ago)');
     return;
   }
 
   try {
-    console.log('[FX5Bootstrap] Starting FX5 Scanner (unconditional)...');
-    
-    // Import and start scanner
+    bootstrapped = true;
+    lastBootstrapAttempt = now;
+    console.log('[FX5Bootstrap] ⚙️ Initializing FX5 Scanner...');
+
     const { fx5Scanner } = await import('../services/fx5-scanner.js');
     await fx5Scanner.start();
-    
+
     console.log('[FX5Bootstrap] ✅ FX5 Scanner started successfully');
-    bootstrapped = true;
-  } catch (error) {
-    console.error('[FX5Bootstrap] ❌ Failed to start FX5 Scanner:', error);
-    // Don't throw - allow server startup to continue even if scanner fails
+  } catch (err) {
+    bootstrapped = false;
+    console.error('[FX5Bootstrap] ❌ Failed to start FX5 Scanner:', err);
   }
 }
