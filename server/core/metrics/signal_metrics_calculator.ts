@@ -108,9 +108,11 @@ export async function fetchFreshMetrics(
 ): Promise<FreshMetrics> {
   try {
     const { calculateCWQI, calculateNGC, calculateRiskScore, estimateVolatility } = await import('./quality_index');
-    const { livePricingAdapter } = await import('../../services/live-pricing-adapter');
     
-    const priceData = await livePricingAdapter.getPrice(symbol);
+    // A4.R10: Use multi-bucket price cache for RTB refresh (15s TTL)
+    // This reduces API pressure by serving cached prices during signal revalidation
+    const { multiBucketPriceCache } = await import('../../services/price-cache-v2');
+    const priceData = await multiBucketPriceCache.getPrice(symbol, 'readyToBuy');
     
     if (!priceData || !priceData.price) {
       console.log(`[A3.R9.2][REFRESH_METRICS] symbol=${symbol} no price data, using cached`);

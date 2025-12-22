@@ -1,0 +1,229 @@
+📘 Directive 8.8.4-A4.R10 — Extended Price Cache Integration & Rate-Governed FX5 Scaling
+Context
+
+This directive addresses critical latency and service-dependency issues discovered in the 8.8.4-A3.R9.x chain, where:
+
+The FX5 Scanner stalled after three scans due to blocking calls from RTB Refresh.
+
+Filter Insights updates stalled because RTB Refresh was tied to FX5 cycle timing.
+
+The system issued redundant REST calls to Kraken, risking throttling.
+
+The purpose of 8.8.4-A4.R10 is to unify all price-data access under a single, rate-aware caching layer, shared across:
+
+Open trades (high-priority, 2 s updates)
+
+Ready-to-Buy signals (medium priority, 15 s updates)
+
+FX5 snapshots (low priority, 30 s updates)
+
+This design maintains full Kraken API compliance (< 10 weighted req/s), decouples RTB Refresh from FX5, and ensures sub-second accuracy for live trades.
+
+Test User & Environment
+Key	Value
+Mode	Paper Trading Environment
+User	testuser (paper_trader@dawnai.io)
+Password	TestPhase884!
+Session	PaperSim A4.R10
+Duration	45-minute validation run
+Kraken Keys	Paper API keys as in .env.stage
+Target Date/Time	UTC 2025-12-23 09:00 Z
+Directive Objectives
+
+1️⃣ Create a multi-bucket price cache service handling open-trades, RTB signals, and FX5 snapshots.
+2️⃣ Implement a rate-governed fetch function maintaining < 10 weighted Kraken requests per second.
+3️⃣ Ensure all services (FX5, RTB, TCL, Trade Executor) consume cached data only.
+4️⃣ Establish a subscription/unsubscription registry for symbols → cache buckets.
+5️⃣ Provide continuous health logging and rollback tagging.
+
+Code-Level Changes
+📄 server/services/price-cache.ts
+
+Replace entire file with:
+
+import { delay } from '../utils/delay';
+import { logger } from '../utils/logger';
+import { fetchKrakenTickers } from '../connectors/kraken-api';
+
+interface CacheBucket {
+  type: 'openTrade' | 'readyToBuy' | 'fx5Snapshot';
+  symbols: Set<string>;
+  refreshIntervalMs: number;
+  lastRefresh: number;
+}
+
+const buckets: CacheBucket[] = [
+  { type: 'openTrade', symbols: new Set(), refreshIntervalMs: 2000, lastRefresh: 0 },
+  { type: 'readyToBuy', symbols: new Set(), refreshIntervalMs: 15000, lastRefresh: 0 },
+  { type: 'fx5Snapshot', symbols: new Set(), refreshIntervalMs: 30000, lastRefresh: 0 },
+];
+
+const cache: Map<string, any> = new Map();
+let currentWeight = 0;
+setInterval(() => (currentWeight = 0), 1000);
+
+async function safeFetch(weight: number, fn: () => Promise<any>): Promise<any> {
+  if (currentWeight + weight > 10) {
+    await delay(250);
+    return safeFetch(weight, fn);
+  }
+  currentWeight += weight;
+  return fn();
+}
+
+async function refreshBuckets() {
+  const now = Date.now();
+  for (const bucket of buckets) {
+    if (now - bucket.lastRefresh >= bucket.refreshIntervalMs && bucket.symbols.size > 0) {
+      const symbols = Array.from(bucket.symbols);
+      const batchSize = 100;
+      for (let i = 0; i < symbols.length; i += batchSize) {
+        const batch = symbols.slice(i, i + batchSize);
+        await safeFetch(1, async () => {
+          const data = await fetchKrakenTickers(batch);
+          for (const [pair, ticker] of Object.entries(data)) {
+            cache.set(pair, { ...ticker, updated: now });
+          }
+          logger.info(`[PriceCache][${bucket.type}] refreshed ${batch.length} symbols`);
+        });
+      }
+      bucket.lastRefresh = now;
+    }
+  }
+}
+
+setInterval(refreshBuckets, 1000);
+
+export function subscribe(symbol: string, bucketType: CacheBucket['type']) {
+  const bucket = buckets.find(b => b.type === bucketType);
+  if (!bucket) throw new Error(`Invalid bucket type: ${bucketType}`);
+  bucket.symbols.add(symbol);
+}
+
+export function unsubscribe(symbol: string) {
+  for (const b of buckets) b.symbols.delete(symbol);
+}
+
+export function getCachedPrice(symbol: string) {
+  return cache.get(symbol);
+}
+
+setInterval(() => {
+  const open = buckets[0].symbols.size;
+  const rtb = buckets[1].symbols.size;
+  const fx5 = buckets[2].symbols.size;
+  logger.info(`[PriceCache][HEALTH] open=${open} rtb=${rtb} fx5=${fx5} weight=${currentWeight}/15`);
+}, 60000);
+
+📄 server/services/ready-to-buy-service.ts
+
+Replace direct price calls:
+
+// OLD
+const price = await getKrakenPrice(symbol);
+
+// NEW
+const cached = getCachedPrice(symbol);
+if (!cached) return;
+const price = cached.c;
+
+
+Add subscriptions:
+
+// On SQE PASS
+subscribe(symbol, 'readyToBuy');
+
+// On signal removal or failure
+unsubscribe(symbol);
+
+📄 server/services/trade-executor.ts
+
+Modify trade pricing and lifecycle:
+
+const price = getCachedPrice(trade.symbol)?.c ?? await getKrakenPrice(trade.symbol);
+
+// On trade open
+subscribe(trade.symbol, 'openTrade');
+
+// On trade close
+unsubscribe(trade.symbol);
+
+📄 server/services/fx5-scanner.ts
+
+Change data source:
+
+// OLD
+const tickers = await kraken.fetchTickerBatch(symbols);
+
+// NEW
+const tickers = symbols.map(s => getCachedPrice(s)).filter(Boolean);
+
+📄 server/services/system-health-service.ts
+
+Extend JSON output:
+
+priceCache: {
+  open: buckets[0].symbols.size,
+  rtb: buckets[1].symbols.size,
+  fx5: buckets[2].symbols.size,
+  weight: currentWeight
+},
+
+📄 server/index.ts
+
+Initialize cache before bootstrapping FX5:
+
+import './services/price-cache';
+console.log('[A4.R10] Price Cache initialized before FX5 bootstrap');
+
+Operational Parameters
+Component	Interval	Batch Size	Weighted Cost	Notes
+Open Trades	2 s	15	1 × 1 = 1	High-priority bucket
+RTB Signals	15 s	100	2 × 1 = 2	Mid-priority refresh
+FX5 Snapshot	30 s	500	5	Low-priority snapshot
+Total	—	—	≈ 8 / 15 credits max	Within safe budget
+Logging and Monitoring
+
+Monitor the following console markers:
+
+[PriceCache][openTrade] refreshed N symbols
+[PriceCache][readyToBuy] refreshed N symbols
+[PriceCache][fx5Snapshot] refreshed N symbols
+[PriceCache][HEALTH] open=xx rtb=xx fx5=xx weight=xx/15
+
+Validation Protocol
+
+Duration: 45 minutes continuous paper run
+
+Check	Expected Result
+Cache Hit Rate	≥ 95 %
+FX5 Scan Runtime	≤ 8 s (500 pairs)
+RTB Refresh	Every ≤ 15 s
+Open Trade Price Lag	≤ 1 s
+Exit Trigger Precision	± 0.1 %
+Kraken Rate Load	≤ 10 weighted credits per second
+Health Log	Appears every 60 s
+Rollback Point
+
+Before committing changes:
+
+git tag -a rollback_8.8.4-A4.R10_pre-cacheRefactor -m "Rollback before Extended Price Cache Integration"
+
+
+To revert if needed:
+
+git reset --hard rollback_8.8.4-A4.R10_pre-cacheRefactor
+
+Expected Outcome
+
+✅ Unified pricing layer serves FX5, RTB, and Trades synchronously
+✅ No FX5 or Filter Insights stalls
+✅ Stable performance with < 70 % Kraken load budget
+✅ Smooth scaling to 500 pairs per scan
+✅ Foundation for global pricing cache in Phase 8.8.5
+
+End of Directive 8.8.4-A4.R10
+Classification: Critical Core Integration
+Implementation Window: Immediately on Replit validation branch
+Engineer: Replit Automation Runtime
+Validator: Dawn Trader System Operator

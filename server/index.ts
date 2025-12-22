@@ -116,6 +116,14 @@ app.use((req, res, next) => {
    */
   console.log('[R9.3.HF-5] 🔁 Ensuring Central Clock & FX5 Scanner bootstrap sequence');
 
+  /**
+   * A4.R10: Initialize Multi-Bucket Price Cache BEFORE FX5 bootstrap
+   * This ensures all services have access to cached pricing data
+   */
+  const { multiBucketPriceCache } = await import('./services/price-cache-v2.js');
+  multiBucketPriceCache.initialize();
+  console.log('[A4.R10] Price Cache initialized before FX5 bootstrap');
+
   const { centralClock } = await import('./services/central-clock.js');
   
   if (!centralClock.getIsRunning()) {
