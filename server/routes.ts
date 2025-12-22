@@ -7139,6 +7139,36 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ==================== R9.3.HF-5: Central Clock & FX5 Scanner Diagnostics ====================
+  
+  // GET /api/diagnostics/central-clock - Get Central Clock health status
+  apiRouter.get('/diagnostics/central-clock', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { centralClock } = await import('./services/central-clock');
+      const { fx5Scanner } = await import('./services/fx5-scanner');
+      
+      const clockHealth = centralClock.getHealth();
+      const scannerState = fx5Scanner.getDiagnostics?.() ?? {
+        isRunning: fx5Scanner.getIsRunning?.() ?? 'unknown',
+        isScanning: 'unknown',
+      };
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        centralClock: {
+          ...clockHealth,
+          intervalRunning: clockHealth.isRunning,
+          lastTickAge: clockHealth.lastTickTime > 0 ? Date.now() - clockHealth.lastTickTime : null,
+        },
+        fx5Scanner: scannerState,
+      });
+    } catch (error: any) {
+      console.error('[R9.3.HF-5][API] Central Clock diagnostics failed:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   // ==================== Phase 8.8.3-B5: Full Signal Creation & Sizing Pipeline Audit ====================
   
   // GET /api/diagnostics/b5/sizing-log - Get B5 sizing audit log entries

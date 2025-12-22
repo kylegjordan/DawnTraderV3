@@ -1784,6 +1784,16 @@
     ]
   },
   {
+    "path": "/api/diagnostics/central-clock",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/diagnostics/b5/sizing-log",
     "methods": [
       "GET"

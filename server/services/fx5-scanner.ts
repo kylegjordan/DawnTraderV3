@@ -92,23 +92,45 @@ export class Fx5ScannerService {
     await new Promise(r => setTimeout(r, 30000));
     console.log('[FX5Scanner][A3.R8] Warm-up complete, starting first scan');
 
-    // Run initial scan for both modes
-    await this.scanMode('paper');
-    await this.scanMode('live');
-
+    // R9.3.HF-6: Subscribe to Central Clock FIRST before initial scan
+    // This ensures ticks are received even if initial scan takes time
+    console.log('[FX5Scanner][R9.3.HF-6] Subscribing to Central Clock BEFORE initial scan');
+    
     // Directive 8.8.4-A3.R7: Subscribe to Central Clock for 30-second aligned scans
+    // R9.3.HF-6: Added timeout protection to prevent hanging scans
+    const SCAN_TIMEOUT_MS = 25000; // 25 second timeout (less than 30s interval)
+    
     this.clockTickHandler = async (tick: ClockTick) => {
-      if (!this.isRunning || this.isScanning) return;
+      if (!this.isRunning || this.isScanning) {
+        if (this.isScanning) {
+          console.log(`[FX5Scanner][A3.R7][SKIP] tickNumber=${tick.tickNumber} reason=scan_in_progress`);
+        }
+        return;
+      }
       
       // Run every 30 ticks (30 seconds)
       if (tick.tickNumber > 0 && tick.tickNumber % SCAN_INTERVAL_SECONDS === 0) {
         this.isScanning = true;
+        const startTime = Date.now();
         try {
           console.log(`[FX5Scanner][A3.R7][TICK] tickNumber=${tick.tickNumber} drift=${tick.drift}ms`);
-          await Promise.all([
-            this.scanMode('paper').catch(err => console.error('[FX5Scanner] Paper scan error:', err)),
-            this.scanMode('live').catch(err => console.error('[FX5Scanner] Live scan error:', err))
-          ]);
+          
+          // R9.3.HF-6: Add timeout protection to prevent hanging scans
+          const timeoutPromise = new Promise<void>((_, reject) => 
+            setTimeout(() => reject(new Error('Scan timeout')), SCAN_TIMEOUT_MS)
+          );
+          
+          await Promise.race([
+            Promise.all([
+              this.scanMode('paper').catch(err => console.error('[FX5Scanner] Paper scan error:', err)),
+              this.scanMode('live').catch(err => console.error('[FX5Scanner] Live scan error:', err))
+            ]),
+            timeoutPromise
+          ]).catch(err => {
+            console.error(`[FX5Scanner][R9.3.HF-6][TIMEOUT] Scan aborted after ${Date.now() - startTime}ms:`, err.message);
+          });
+          
+          console.log(`[FX5Scanner][A3.R7][COMPLETE] tickNumber=${tick.tickNumber} duration=${Date.now() - startTime}ms`);
         } finally {
           this.isScanning = false;
         }
@@ -116,6 +138,24 @@ export class Fx5ScannerService {
     };
 
     centralClock.subscribe('FX5Scanner', this.clockTickHandler);
+    console.log('[FX5Scanner][R9.3.HF-6] ✅ Subscribed to Central Clock');
+    
+    // Run initial scan for both modes
+    console.log('[FX5Scanner][R9.3.HF-6] Running initial scans');
+    try {
+      await this.scanMode('paper');
+      console.log('[FX5Scanner][R9.3.HF-6] Paper initial scan complete');
+    } catch (err) {
+      console.error('[FX5Scanner][R9.3.HF-6] Paper initial scan error:', err);
+    }
+    
+    try {
+      await this.scanMode('live');
+      console.log('[FX5Scanner][R9.3.HF-6] Live initial scan complete');
+    } catch (err) {
+      console.error('[FX5Scanner][R9.3.HF-6] Live initial scan error:', err);
+    }
+
     console.log('[FX5Scanner][A3.R7] ✅ Started with Central Clock (interval=30s aligned)');
   }
 
@@ -193,9 +233,20 @@ export class Fx5ScannerService {
         tierBUniverseSize,
       } = metrics;
 
-      // Get active trades count
-      const activeTrades = await storage.getActiveTrades(mode);
+      // R9.3.HF-7: Add granular logging to identify bottlenecks
+      console.log(`[FX5Scanner][R9.3.HF-7][${mode}] Batch complete, getting active trades...`);
+
+      // Get active trades count with timeout protection
+      const activeTradesPromise = storage.getActiveTrades(mode);
+      const activeTradesTimeout = new Promise<any[]>((_, reject) => 
+        setTimeout(() => reject(new Error('getActiveTrades timeout')), 5000)
+      );
+      const activeTrades = await Promise.race([activeTradesPromise, activeTradesTimeout]).catch(err => {
+        console.error(`[FX5Scanner][R9.3.HF-7][${mode}] getActiveTrades failed: ${err.message}`);
+        return [];
+      }) as any[];
       const activePoolCount = activeTrades.length;
+      console.log(`[FX5Scanner][R9.3.HF-7][${mode}] Active trades: ${activePoolCount}`);
 
       const scanResult: ScanResult = {
         mode,
@@ -213,8 +264,18 @@ export class Fx5ScannerService {
       console.log(`[8.6.7][DEBUG] FX5 scan complete - survivors.length=${survivors.length}, eligibleCount=${eligibleCount}`);
       
       // Check if trading engine is active for this mode (from database, not aggregator)
-      const context = await storage.getSystemContext(mode);
+      // R9.3.HF-7: Add timeout protection for database call
+      console.log(`[FX5Scanner][R9.3.HF-7][${mode}] Getting system context...`);
+      const contextPromise = storage.getSystemContext(mode);
+      const contextTimeout = new Promise<any>((_, reject) => 
+        setTimeout(() => reject(new Error('getSystemContext timeout')), 5000)
+      );
+      const context = await Promise.race([contextPromise, contextTimeout]).catch(err => {
+        console.error(`[FX5Scanner][R9.3.HF-7][${mode}] getSystemContext failed: ${err.message}`);
+        return null;
+      });
       const isEngineActive = context?.isEngineActive || false;
+      console.log(`[FX5Scanner][R9.3.HF-7][${mode}] Engine active: ${isEngineActive}`);
 
       // REB 2.8.7: Enforce passive mode - clear pool if engine stopped
       activeFilterPool.enforcePassiveModeIfStopped(mode, isEngineActive);
@@ -342,10 +403,17 @@ export class Fx5ScannerService {
 
       // Directive 8.8.4-A1-Extended: Trigger RTB refresh and re-ranking at end of each FX5 cycle
       // This ensures RTB signals are reconfirmed and dynamically re-ranked every 30 seconds
+      // R9.3.HF-7: Add timeout protection for RTB refresh
+      console.log(`[FX5Scanner][R9.3.HF-7][${mode}] Starting RTB refresh...`);
       try {
-        await readyToBuyService.refreshAndRank(mode);
-      } catch (err) {
-        console.warn(`[FX5Scanner][${mode}] RTB refresh warning:`, err);
+        const rtbPromise = readyToBuyService.refreshAndRank(mode);
+        const rtbTimeout = new Promise<void>((_, reject) => 
+          setTimeout(() => reject(new Error('RTB refresh timeout')), 10000)
+        );
+        await Promise.race([rtbPromise, rtbTimeout]);
+        console.log(`[FX5Scanner][R9.3.HF-7][${mode}] RTB refresh complete`);
+      } catch (err: any) {
+        console.warn(`[FX5Scanner][${mode}] RTB refresh warning:`, err?.message || err);
       }
 
       return scanResult;
@@ -361,6 +429,26 @@ export class Fx5ScannerService {
    * Replaced with batch-first collectMixedBatch() from market-scanner.ts
    * See Phase 8.6.7 truth state for architecture details
    */
+
+  /**
+   * R9.3.HF-5: Get diagnostic information for debugging
+   */
+  getDiagnostics(): { isRunning: boolean; isScanning: boolean; paperCycles: number; liveCycles: number; hasClockHandler: boolean } {
+    return {
+      isRunning: this.isRunning,
+      isScanning: this.isScanning,
+      paperCycles: this.paperCycleCount,
+      liveCycles: this.liveCycleCount,
+      hasClockHandler: this.clockTickHandler !== null,
+    };
+  }
+
+  /**
+   * R9.3.HF-5: Get running state
+   */
+  getIsRunning(): boolean {
+    return this.isRunning;
+  }
 }
 
 // Singleton instance
