@@ -1,0 +1,110 @@
+🧩 Directive A4.R10R-2.T1 – RTB Refresh Service Isolation Validation
+Objective
+
+To verify that the Ready-To-Buy (RTB) Refresh Service, operating in its temporary isolated state (with an internal 15-second timer and no Central Clock dependency), performs all expected refresh, reconfirmation, and ranking operations correctly.
+
+This test validates that:
+
+The service runs autonomously on its own timer loop.
+
+Every micro-cycle completes within expected time bounds (<1 s typical).
+
+All signals in the RTB pool are refreshed and re-ranked within 120 s total coverage.
+
+PriceCache and FX5 remain unaffected during RTB refresh cycles.
+
+No drift, overlap, or resource contention occurs between RTB cycles and FX5 scan cycles.
+
+Test Scope
+
+This is an investigative validation only — no code changes are to be made.
+
+Step-by-Step Instructions for Replit
+1️⃣ Initialize Paper Trading Engine
+npm run start:paper
+
+
+Ensure the workflow fully starts. Wait for confirmation of:
+
+[A4.R10R-1][PriceCache][HEALTH]
+[A4.R10R-2][RTBRefresh][CYCLE_START]
+[A4.R10R-2][RTBRefresh][CYCLE_COMPLETE]
+
+2️⃣ Confirm RTB Refresh Autonomy
+
+Over a 5-minute observation window:
+
+Verify that [A4.R10R-2][RTBRefresh][CYCLE_START] appears every ≈ 15 seconds.
+
+Verify that [CYCLE_COMPLETE] logs always follow [CYCLE_START] within ≤ 1000 ms.
+
+Confirm that no CentralClock tick or FX5 scan event precedes these logs (proving timer independence).
+
+3️⃣ Verify Refresh Coverage
+
+Use RTB service diagnostics or database queries:
+
+readyToBuyService.count() → Number of active signals
+
+For each signal, check the lastRefreshed timestamp
+
+Confirm that no signal remains unrefreshed > 120 seconds
+
+4️⃣ Validate Price Cache Interaction
+
+Inspect logs for:
+
+[A4.R10R-1][PriceCache][BATCH_FETCH] source=readyToBuy
+
+
+Confirm:
+
+Batches correspond to each RTB refresh cycle
+
+weightedRequests per second never exceed 10
+
+source=readyToBuy indicates all refreshes are via the centralized cache (no Kraken API direct calls)
+
+5️⃣ Observe FX5 Scanner Independence
+
+Ensure [FX5Scanner][COMPLETE] continues every 30 s while RTB cycles run.
+Confirm that:
+
+FX5 logs do not show waiting or blocking between cycles.
+
+No shared log timestamp overlaps that would indicate sequencing dependency.
+
+6️⃣ Runtime Stability Checks
+
+CPU load: < 60 % average
+
+Memory: steady (no leak > 10 MB across 5 min window)
+
+Timer drift: < 500 ms after 5 minutes (compare CYCLE_START deltas)
+
+✅ Expected Outcomes
+Metric	Expected	Pass Criteria
+Cycle interval	15 s ± 0.5 s	≥ 90 % cycles on-time
+Cycle duration	< 1 s typical	No cycle > 2 s
+Refresh coverage	≤ 120 s full queue	No signal stale > 120 s
+FX5 independence	Continuous 30 s scans	No RTB-related pause
+Rate governance	< 10 weighted req/s	No Kraken throttle logs
+Price cache path	100 % cached reads	No direct REST calls
+Stability	No memory leak, no drift	All metrics steady
+🔍 Deliverables
+
+Replit should return:
+
+5-minute log capture (A4.R10R-2 and A4.R10R-1 markers)
+
+Summary table of RTB cycle intervals and durations
+
+Signal refresh coverage report (count + max age)
+
+Confirmation of FX5 continuity and rate governance adherence
+
+📦 Post-Test Handling
+
+Do not modify any code.
+If the validation passes, proceed to Directive A4.R10R-3 (Central Clock Synchronization).
+If it fails, provide logs and root-cause notes; no fixes are to be applied yet.
