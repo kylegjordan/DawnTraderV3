@@ -401,20 +401,8 @@ export class Fx5ScannerService {
 
       console.log(`[FX5Scanner][${mode}] ✅ Scan complete (evaluated=${evaluatedCount}, eligible=${eligibleCount})`);
 
-      // Directive 8.8.4-A1-Extended: Trigger RTB refresh and re-ranking at end of each FX5 cycle
-      // This ensures RTB signals are reconfirmed and dynamically re-ranked every 30 seconds
-      // R9.3.HF-7: Add timeout protection for RTB refresh
-      console.log(`[FX5Scanner][R9.3.HF-7][${mode}] Starting RTB refresh...`);
-      try {
-        const rtbPromise = readyToBuyService.refreshAndRank(mode);
-        const rtbTimeout = new Promise<void>((_, reject) => 
-          setTimeout(() => reject(new Error('RTB refresh timeout')), 10000)
-        );
-        await Promise.race([rtbPromise, rtbTimeout]);
-        console.log(`[FX5Scanner][R9.3.HF-7][${mode}] RTB refresh complete`);
-      } catch (err: any) {
-        console.warn(`[FX5Scanner][${mode}] RTB refresh warning:`, err?.message || err);
-      }
+      // A4.R10R-2: RTB refresh now handled by independent RTBRefreshService
+      // This decouples RTB lifecycle from FX5 scan timing
 
       return scanResult;
     } catch (error) {

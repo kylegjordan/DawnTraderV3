@@ -124,6 +124,14 @@ app.use((req, res, next) => {
   priceCache.initialize();
   console.log('[A4.R10R-1] Price Cache initialized before FX5 bootstrap');
 
+  /**
+   * A4.R10R-2: Initialize RTB Refresh Service BEFORE FX5 bootstrap
+   * Decouples RTB refresh from FX5 scan loop with independent 15s refresh
+   */
+  const { rtbRefreshService } = await import('./services/rtb-refresh-service.js');
+  rtbRefreshService.start();
+  console.log('[A4.R10R-2] RTB Refresh Service started before FX5 bootstrap');
+
   const { centralClock } = await import('./services/central-clock.js');
   
   if (!centralClock.getIsRunning()) {
