@@ -17,6 +17,12 @@
  * - Safe CPU threshold: <60%
  * - Pool range: 3-10 workers
  * 
+ * Directive A4.R10R-3.T5 — Dynamic Pool Broadcast & Load Balancing
+ * - Broadcasts POOL_SIZE changes to dependent services via poolBus
+ * - Smoothed CPU averaging (5-sample rolling)
+ * - Event-loop lag protection (>2ms triggers pool reduction)
+ * - Updated thresholds: Scale UP at <55% CPU, <5000ms; Scale DOWN at >60% CPU, >8000ms
+ * 
  * Previous: A4.R10R-2 (Internal setInterval, 15s refresh)
  * Current: A4.R10R-3 (Central Clock sync, bucket-based refresh)
  */
@@ -30,6 +36,7 @@ import {
   getAdaptivePoolSize, 
   setAdaptivePoolSize 
 } from './adaptive-pool-config';
+import { poolBus } from './pool-broadcast';
 
 // Re-export for server/index.ts compatibility
 export { getAdaptivePoolSize } from './adaptive-pool-config';
@@ -44,12 +51,29 @@ interface CycleMetrics {
 const recentCycles: CycleMetrics[] = [];
 const MAX_CYCLE_HISTORY = 5;
 
+// T5: Smoothed CPU averaging (5-sample rolling)
+const cpuSamples: number[] = [];
+const MAX_CPU_SAMPLES = 5;
+
+// T5: Event loop lag tracking
+let lastExpectedTick = 0;
+
+/**
+ * T5: Record CPU sample and return smoothed average
+ */
+function recordCpuSample(cpu: number): number {
+  cpuSamples.push(cpu);
+  if (cpuSamples.length > MAX_CPU_SAMPLES) {
+    cpuSamples.shift();
+  }
+  return cpuSamples.reduce((a, b) => a + b, 0) / cpuSamples.length;
+}
+
 /**
  * Calculate CPU load based on process.cpuUsage() and cycle duration
  */
 function calculateCpuLoad(startCpuUsage: NodeJS.CpuUsage, cycleDurationMs: number): number {
   const endCpuUsage = process.cpuUsage(startCpuUsage);
-  // Convert microseconds to percentage of cycle time
   const totalCpuMicros = endCpuUsage.user + endCpuUsage.system;
   const cycleDurationMicros = cycleDurationMs * 1000;
   const cpuPercent = (totalCpuMicros / cycleDurationMicros) * 100;
@@ -57,38 +81,65 @@ function calculateCpuLoad(startCpuUsage: NodeJS.CpuUsage, cycleDurationMs: numbe
 }
 
 /**
- * Adaptive Concurrency Tuner: Adjust pool size based on performance metrics
+ * T5: Broadcast pool size change to dependent services
  */
-function adaptPoolSize(avgDuration: number, cpuLoad: number): void {
+function broadcastPoolUpdate(newPoolSize: number): void {
+  poolBus.emit('POOL_UPDATE', newPoolSize);
+  console.log(`[8.8.4-A4.R10R-3.T5][ACT][BROADCAST] pool=${newPoolSize}`);
+}
+
+/**
+ * Adaptive Concurrency Tuner: Adjust pool size based on performance metrics
+ * 
+ * T5 Thresholds:
+ * - Scale UP: avgCpu < 55% AND avgDuration < 5000ms
+ * - Scale DOWN: avgCpu > 60% OR avgDuration > 8000ms
+ */
+function adaptPoolSize(avgDuration: number, avgCpu: number, eventLoopLag: number): void {
   const prevPoolSize = getAdaptivePoolSize();
   let newPoolSize = prevPoolSize;
+  let reason = '';
   
-  // Scale UP: Fast cycles with low CPU = room to increase concurrency
-  if (avgDuration < ACT_CONFIG.TARGET_DURATION_MS * 0.8 && 
-      cpuLoad < ACT_CONFIG.SAFE_CPU_THRESHOLD * 0.8 && 
-      prevPoolSize < ACT_CONFIG.MAX_POOL) {
-    newPoolSize = prevPoolSize + ACT_CONFIG.SCALE_STEP;
-    setAdaptivePoolSize(newPoolSize);
-    console.log(`[8.8.4-A4.R10R-3.T4][ACT][POOL_ADJUST] INCREASED poolSize=${newPoolSize} (was ${prevPoolSize}) duration=${avgDuration.toFixed(0)}ms cpu=${cpuLoad.toFixed(1)}%`);
-  }
-  // Scale DOWN: Slow cycles or high CPU = reduce concurrency
-  else if (avgDuration > ACT_CONFIG.TARGET_DURATION_MS * 1.5 || 
-           cpuLoad > ACT_CONFIG.SAFE_CPU_THRESHOLD) {
-    newPoolSize = Math.max(ACT_CONFIG.MIN_POOL, prevPoolSize - ACT_CONFIG.SCALE_STEP);
+  // T5: Event-loop lag protection - force reduction if lag > 2ms
+  if (eventLoopLag > 2) {
+    newPoolSize = Math.max(ACT_CONFIG.MIN_POOL, prevPoolSize - 1);
     if (newPoolSize !== prevPoolSize) {
       setAdaptivePoolSize(newPoolSize);
-      console.log(`[8.8.4-A4.R10R-3.T4][ACT][POOL_ADJUST] DECREASED poolSize=${newPoolSize} (was ${prevPoolSize}) duration=${avgDuration.toFixed(0)}ms cpu=${cpuLoad.toFixed(1)}%`);
+      broadcastPoolUpdate(newPoolSize);
+      console.log(`[8.8.4-A4.R10R-3.T5][ACT][POOL_ADJUST] DECREASED poolSize=${newPoolSize} (was ${prevPoolSize}) reason=lag_protection lag=${eventLoopLag.toFixed(2)}ms`);
     }
+    return;
+  }
+  
+  // T5: Scale UP - Fast cycles with low CPU
+  if (avgDuration < 5000 && avgCpu < 55 && prevPoolSize < ACT_CONFIG.MAX_POOL) {
+    newPoolSize = prevPoolSize + ACT_CONFIG.SCALE_STEP;
+    reason = 'fast_cycle_low_cpu';
+  }
+  // T5: Scale DOWN - Slow cycles or high CPU
+  else if (avgDuration > 8000 || avgCpu > 60) {
+    newPoolSize = Math.max(ACT_CONFIG.MIN_POOL, prevPoolSize - ACT_CONFIG.SCALE_STEP);
+    reason = avgCpu > 60 ? 'high_cpu' : 'slow_cycle';
+  }
+  
+  if (newPoolSize !== prevPoolSize) {
+    setAdaptivePoolSize(newPoolSize);
+    broadcastPoolUpdate(newPoolSize);
+    const action = newPoolSize > prevPoolSize ? 'INCREASED' : 'DECREASED';
+    console.log(`[8.8.4-A4.R10R-3.T5][ACT][POOL_ADJUST] ${action} poolSize=${newPoolSize} (was ${prevPoolSize}) duration=${avgDuration.toFixed(0)}ms avgCpu=${avgCpu.toFixed(1)}% reason=${reason}`);
   }
 }
 
 /**
  * Record cycle metrics and trigger adaptive tuning
  * 
- * T4 Requirement: Only adapt pool size after collecting exactly 5 cycles
+ * T4/T5 Requirement: Only adapt pool size after collecting exactly 5 cycles
  * to ensure smooth adaptation using a full rolling average.
  */
-function recordCycleMetrics(duration: number, cpuLoad: number): void {
+function recordCycleMetrics(duration: number, cpuLoad: number, eventLoopLag: number): void {
+  // T5: Use smoothed CPU average
+  const avgCpu = recordCpuSample(cpuLoad);
+  
   recentCycles.push({ duration, cpuLoad, timestamp: Date.now() });
   
   // Keep only recent history
@@ -96,12 +147,14 @@ function recordCycleMetrics(duration: number, cpuLoad: number): void {
     recentCycles.shift();
   }
   
-  // T4: Only adapt after collecting 5 full cycles (rolling average requirement)
+  // Log T5 load metrics every cycle
+  console.log(`[8.8.4-A4.R10R-3.T5][RTBRefresh][LOAD] duration=${duration}ms avgCpu=${avgCpu.toFixed(1)}% lag=${eventLoopLag.toFixed(2)}ms pool=${getAdaptivePoolSize()}`);
+  
+  // T4/T5: Only adapt after collecting 5 full cycles (rolling average requirement)
   if (recentCycles.length === MAX_CYCLE_HISTORY) {
     const avgDuration = recentCycles.reduce((sum, c) => sum + c.duration, 0) / recentCycles.length;
-    const avgCpu = recentCycles.reduce((sum, c) => sum + c.cpuLoad, 0) / recentCycles.length;
     
-    adaptPoolSize(avgDuration, avgCpu);
+    adaptPoolSize(avgDuration, avgCpu, eventLoopLag);
   }
 }
 
@@ -161,6 +214,11 @@ class RTBRefreshService {
     this.isRefreshing = true;
     const start = Date.now();
     const startCpuUsage = process.cpuUsage();
+    
+    // T5: Calculate event loop lag from expected tick timing
+    const expectedTickMs = tickNumber !== undefined ? tickNumber * 1000 : start;
+    const eventLoopLag = lastExpectedTick > 0 ? Math.max(0, start - lastExpectedTick - (this.MICRO_CYCLE_INTERVAL * 1000)) : 0;
+    lastExpectedTick = start;
 
     try {
       await this.assignSignalsToBuckets();
@@ -177,12 +235,12 @@ class RTBRefreshService {
       const duration = Date.now() - start;
       const cpuLoad = calculateCpuLoad(startCpuUsage, duration);
       
-      // T4 Metrics logging
+      // T4/T5 Metrics logging
       console.log(`[8.8.4-A4.R10R-3.T4][RTBRefresh][METRICS] duration=${duration}ms cpu=${cpuLoad.toFixed(1)}% poolSize=${getAdaptivePoolSize()}`);
       console.log(`[A4.R10R-3][RTBRefresh][CYCLE_COMPLETE] bucket=${bucketIndex} size=${bucketSize} duration=${duration}ms`);
       
-      // Trigger adaptive concurrency tuning
-      recordCycleMetrics(duration, cpuLoad);
+      // Trigger adaptive concurrency tuning with T5 lag tracking
+      recordCycleMetrics(duration, cpuLoad, eventLoopLag);
     } finally {
       this.isRefreshing = false;
     }

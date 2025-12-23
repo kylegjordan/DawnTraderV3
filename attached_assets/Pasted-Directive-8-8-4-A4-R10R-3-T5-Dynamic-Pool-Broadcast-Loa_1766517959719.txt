@@ -1,0 +1,173 @@
+Directive 8.8.4-A4.R10R-3.T5
+
+(Dynamic Pool Broadcast & Load Balancing)
+
+Objective
+
+Enhance the Adaptive Concurrency Tuner (ACT) by introducing:
+
+Dynamic Pool Broadcasting to synchronize live POOL_SIZE changes across dependent services (Ready-to-Buy Service, TCL Watchdog, FX5 Scanner interface).
+
+Smoothed CPU Averaging and Load Balancing to ensure safe system-wide resource utilization.
+
+This guarantees the RTB Refresh Service remains self-optimizing under variable signal loads while maintaining total CPU usage < 60 %.
+
+Pre-Execution Requirements
+
+Credentials
+
+username: testuser123
+password: SecurePass123!
+
+
+System Prep
+
+Clear RTB signals
+
+Close OpenTrades
+
+Reset paper engine
+
+Restart Central Clock and FX5
+
+Verify [A4.R10R-3.T4][INIT] log appears before start
+
+Implementation Plan
+1️⃣ Broadcast Mechanism
+
+Create a new lightweight module:
+
+server/services/pool-broadcast.ts
+
+
+Exports:
+
+import { EventEmitter } from 'events';
+export const poolBus = new EventEmitter();
+
+
+In rtb-refresh-service.ts (inside ACT adjustment block):
+
+import { poolBus } from './pool-broadcast';
+...
+poolBus.emit('POOL_UPDATE', POOL_SIZE);
+console.log(`[8.8.4-A4.R10R-3.T5][ACT][BROADCAST] pool=${POOL_SIZE}`);
+
+
+In ready_to_buy_service.ts and tcl-watchdog.ts:
+
+import { poolBus } from './pool-broadcast';
+poolBus.on('POOL_UPDATE', (size) => {
+  CURRENT_POOL_SIZE = size;
+  console.log(`[8.8.4-A4.R10R-3.T5][ACT][SYNC] Updated pool=${size}`);
+});
+
+2️⃣ Smoothed CPU Averaging
+
+Add rolling CPU array in rtb-refresh-service.ts:
+
+let cpuSamples = [];
+function recordCpuSample(cpu) {
+  cpuSamples.push(cpu);
+  if (cpuSamples.length > 5) cpuSamples.shift();
+  const avgCpu = cpuSamples.reduce((a,b)=>a+b,0)/cpuSamples.length;
+  return avgCpu;
+}
+
+
+Replace direct CPU use in ACT logic with averaged avgCpu.
+Scale only if:
+
+avgCpu < 55 && avgDuration < 5000
+
+
+Reduce if:
+
+avgCpu > 60 || avgDuration > 8000
+
+3️⃣ Event-Loop Lag Protection
+
+Add lightweight check:
+
+const lag = performance.now() - expectedTick;
+if (lag > 2) POOL_SIZE = Math.max(MIN_POOL, POOL_SIZE - 1);
+
+4️⃣ Enhanced Logging
+
+Add new log category:
+
+[8.8.4-A4.R10R-3.T5][RTBRefresh][LOAD]
+duration=... avgCpu=... lag=... pool=...
+
+
+All broadcast and adjustment events use unified [A4.R10R-3.T5] tag.
+
+5️⃣ Documentation Update
+
+In replit.md:
+
+Add “Dynamic Pool Broadcast and Load Balancing” section.
+
+Include formulas for CPU averaging and lag protection.
+
+Update architecture diagram to show pool-broadcast.ts linking RTB→ReadyToBuy→TCL.
+
+Testing Procedure
+
+Duration: 30 minutes under paper mode.
+
+Goals:
+
+Observe ACT broadcasting POOL_SIZE changes to dependent modules.
+
+Maintain cycle time ≤ 7 s.
+
+Maintain average CPU ≤ 60 %.
+
+No overlaps or lag > 2 ms.
+
+FX5 and TCL remain responsive.
+
+Expected Behavior
+
+Condition	Adaptive Response
+Avg CPU < 55 %, Duration < 5 s	Pool ↑ (+1)
+Avg CPU > 60 %, Duration > 8 s	Pool ↓ (−1)
+Lag > 2 ms	Force −1 Pool
+Broadcast Received	Ready-to-Buy & TCL update within 1 tick
+Logging and Metrics
+
+Collect logs for:
+
+[8.8.4-A4.R10R-3.T5][RTBRefresh][LOAD]
+
+[8.8.4-A4.R10R-3.T5][ACT][BROADCAST]
+
+[8.8.4-A4.R10R-3.T5][ACT][SYNC]
+
+[A4.R10R-3][RTBRefresh][CYCLE_COMPLETE]
+
+[FX5Scanner][COMPLETE]
+
+Success Criteria
+
+✅ Average RTB cycle < 7 s
+✅ Average CPU ≤ 60 % (5-cycle avg)
+✅ At least one broadcast event received by Ready-to-Buy and TCL
+✅ No overlaps or skipped cycles
+✅ FX5 and TCL operate without delay
+✅ Event-loop lag ≤ 2 ms
+
+Summary of Changes
+File	Action
+server/services/rtb-refresh-service.ts	Add ACT averaging and broadcast logic
+server/services/ready_to_buy_service.ts	Subscribe to POOL_UPDATE events
+server/services/tcl-watchdog.ts	Subscribe to POOL_UPDATE events
+server/services/pool-broadcast.ts	NEW – event bus for pool sync
+replit.md	Update with ACT broadcast docs
+✅ Directive Ready for Execution
+
+Directive ID: 8.8.4-A4.R10R-3.T5
+Directive Name: Dynamic Pool Broadcast & Load Balancing
+Execution Duration: 30 min paper run
+Status: Approved for implementation and validation

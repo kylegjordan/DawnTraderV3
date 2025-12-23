@@ -24,6 +24,14 @@ import { eventBus, type TradingMode } from '../../lib/event-bus';
 import { centralClock, ClockTick } from '../../services/central-clock';
 import { storage } from '../../storage';
 import { performanceMonitor } from '../diagnostics/performance_monitor';
+import { poolBus } from '../../services/pool-broadcast';
+
+// T5: Track pool size for load-aware TCL decisions
+let currentPoolSize = 5;
+poolBus.on('POOL_UPDATE', (size: number) => {
+  currentPoolSize = size;
+  console.log(`[8.8.4-A4.R10R-3.T5][ACT][SYNC] TCLWatchdog updated pool=${size}`);
+});
 
 const TCL_FAILSAFE_SECONDS = Number(process.env.TCL_FAILSAFE_SECONDS ?? 120);
 const TCL_SIGNAL_THRESHOLD = Number(process.env.TCL_SIGNAL_THRESHOLD ?? 15);

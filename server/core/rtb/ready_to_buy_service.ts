@@ -44,6 +44,14 @@ import { normalizeInternal } from '../../markets/kraken-symbol-resolver';
 import { diagnosticTrace } from '../diagnostics/trace_service';
 import { fetchFreshMetrics, calculateDecayedMetric } from '../metrics/signal_metrics_calculator';
 import { getAdaptivePoolSize } from '../../services/adaptive-pool-config';
+import { poolBus } from '../../services/pool-broadcast';
+
+// T5: Subscribe to pool size updates from RTB Refresh Service
+let currentPoolSize = getAdaptivePoolSize();
+poolBus.on('POOL_UPDATE', (size: number) => {
+  currentPoolSize = size;
+  console.log(`[8.8.4-A4.R10R-3.T5][ACT][SYNC] ReadyToBuyService updated pool=${size}`);
+});
 
 export interface RTBSignalInput {
   signalId: string;
