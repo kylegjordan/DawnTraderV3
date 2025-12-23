@@ -378,15 +378,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   // API Routes
 
-  // Health check endpoint
-  apiRouter.get('/health', (_req, res) => {
-    res.json({ 
-      status: 'ok', 
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-      env: process.env.NODE_ENV || 'development'
-    });
-  });
+  // Health check endpoint - redirects to healthRouter for full system health
+  // Directive 8.8.4-A4.R10R-4: System health is now handled by /api/health via healthRouter
 
   // Phase 5C: Observability endpoints
   // Metrics endpoint - Prometheus-style metrics with SLO tracking

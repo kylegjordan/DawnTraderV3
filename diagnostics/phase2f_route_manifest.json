@@ -1,14 +1,5 @@
 [
   {
-    "path": "/api/health",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
     "path": "/api/metrics",
     "methods": [
       "GET"
@@ -6055,6 +6046,15 @@
   },
   {
     "path": "/api/health/circuit-breaker",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/health",
     "methods": [
       "GET"
     ],
