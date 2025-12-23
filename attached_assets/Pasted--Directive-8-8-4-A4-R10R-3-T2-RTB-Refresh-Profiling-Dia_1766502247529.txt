@@ -1,0 +1,169 @@
+📋 Directive 8.8.4-A4.R10R-3.T2 — RTB Refresh Profiling Diagnostic
+🧩 Objective
+
+Profile the internal stages of the readyToBuyService.refreshAndRank() function to identify which operations cause refresh cycles to exceed the 15-second micro-cycle window.
+
+This diagnostic will gather high-precision timing data for:
+
+Database fetch (getActiveSignals)
+
+Metric recalculation (NGC, CWQI, etc.)
+
+Sorting/ranking phase
+
+Persistence/writeback
+
+Total per-bucket duration
+
+🧭 Pre-Test Setup
+
+Test User Credentials
+
+username: testuser123
+password: SecurePass123!
+mode: paper
+
+
+Environment Reset
+
+Stop all trading (paper/live).
+
+Clear RTB signals and close all open trades.
+
+Reset system via:
+
+POST /api/system/reset
+
+
+Confirm:
+
+[SystemReset] RTB cleared, trades closed, price cache flushed
+
+⚙️ Implementation Tasks
+1️⃣ Instrument readyToBuyService.refreshAndRank()
+
+Add timing points within server/core/rtb/ready_to_buy_service.ts (or equivalent file).
+
+Example instrumentation:
+
+async refreshAndRank(mode: string) {
+  const tStart = Date.now();
+  this.log(`[8.8.4-A4.R10R-3.T2][START] mode=${mode}`);
+
+  const tFetchStart = Date.now();
+  const activeSignals = await this.storage.getActiveSignals(mode);
+  const tFetch = Date.now() - tFetchStart;
+
+  const tRecalcStart = Date.now();
+  for (const s of activeSignals) {
+    await this.recalculateMetrics(s); // includes NGC, CWQI, etc.
+  }
+  const tRecalc = Date.now() - tRecalcStart;
+
+  const tSortStart = Date.now();
+  const sorted = this.rankSignals(activeSignals);
+  const tSort = Date.now() - tSortStart;
+
+  const tWriteStart = Date.now();
+  await this.storage.updateReadyToBuy(sorted);
+  const tWrite = Date.now() - tWriteStart;
+
+  const total = Date.now() - tStart;
+  this.log(`[8.8.4-A4.R10R-3.T2][TIMING] fetch=${tFetch}ms recalc=${tRecalc}ms sort=${tSort}ms write=${tWrite}ms total=${total}ms count=${activeSignals.length}`);
+
+  return sorted;
+}
+
+
+Note: Guard this instrumentation under if (mode === 'paper') to avoid clutter in production.
+
+2️⃣ Run 5-Minute Profiling Session
+
+After committing instrumentation:
+
+Start paper trading:
+
+POST /api/trading/start?mode=paper
+
+
+Confirm logs show:
+
+[8.8.4-A4.R10R-3.T2][START] ...
+
+
+Allow run for 5 minutes (≈20 micro-cycles).
+
+Stop trading:
+
+POST /api/trading/stop?mode=paper
+
+
+Collect logs containing [8.8.4-A4.R10R-3.T2].
+
+🧮 Analysis Targets
+
+Replit should extract and tabulate average and max timings:
+
+Phase	Avg (ms)	Max (ms)	% of Total	Notes
+Fetch				
+Recalc				
+Sort				
+Write				
+Total				
+
+Derived Metrics
+
+Per-signal refresh time: tₛ = total / signalCount
+
+Required micro-cycle: cycleRequired = ceil(total / 1000) s
+
+Recommendation if total > 15 000 ms: mark cycle as overflow.
+
+🧱 Locked Modules
+
+Do not edit:
+
+server/services/price-cache.ts
+server/services/kraken.ts
+server/markets/kraken-symbol-resolver.ts
+server/core/clock/central-clock.ts
+
+
+Only modify:
+
+server/core/rtb/ready_to_buy_service.ts
+
+
+and related RTB refresh integration points.
+
+✅ Success Criteria
+Metric	Target
+Timing logs emitted	≥20 entries
+No skipped or overlap cycles	≤1 per 20 cycles
+Avg total duration reported	✅
+Phase % distribution computed	✅
+No errors or DB timeouts	✅
+Central Clock ticks maintained	✅
+📤 Deliverables
+
+5-minute log capture with [8.8.4-A4.R10R-3.T2] markers.
+
+Summary timing table and phase distribution.
+
+Derived per-signal average refresh time.
+
+Recommendation whether to:
+
+Extend cycle duration,
+
+Split DB calls, or
+
+Optimize internal recalculation logic.
+
+🔐 Directive Scope
+
+Diagnostic only, no logic changes.
+
+After results are analyzed, instrumentation will be removed in Directive 8.8.4-A4.R10R-3.T3.
+
+Findings will inform the load-balancing design in Directive 8.8.4-A4.R10R-4.
