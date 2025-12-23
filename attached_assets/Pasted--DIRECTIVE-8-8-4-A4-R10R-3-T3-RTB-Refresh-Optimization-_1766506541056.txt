@@ -1,0 +1,172 @@
+🧭 DIRECTIVE 8.8.4-A4.R10R-3.T3
+
+RTB Refresh Optimization Implementation
+
+🎯 Objective
+
+Optimize the RTB refresh service to eliminate refresh cycle overlap and reduce total cycle time to < 10 s per micro-cycle, by introducing:
+
+Limited concurrency (controlled parallelism)
+
+Batched database writes
+
+Removal of obsolete staggered delays
+
+🧩 Pre-Test System Preparation
+
+Before implementing and running this directive, Replit must:
+
+Authenticate as test user:
+
+username: testuser123  
+password: SecurePass123!
+
+
+Reset system state
+
+Clear all Ready-to-Buy (RTB) signals
+
+Close and clear all OpenTrades
+
+Reset simulation clock, cache, and trade engine state
+
+Confirm engine stopped before modification.
+
+🧠 Implementation Steps
+1️⃣ Modify ready_to_buy_service.ts
+
+a. Remove legacy staggered delay
+
+// REMOVE this line inside refreshAndRank():
+await staggeredDelay(index * STAGGER_INTERVAL);
+
+
+b. Introduce concurrent processing pool
+Replace the sequential loop over activeSignals with a bounded concurrency pool:
+
+const poolSize = 5; // initial safe concurrency level
+const chunks = chunkArray(activeSignals, poolSize);
+
+for (const group of chunks) {
+  await Promise.all(
+    group.map(async (signal) => {
+      try {
+        const metrics = await this.fetchFreshMetrics(signal);
+        const updated = await this.recalculateAndPersist(signal, metrics);
+        if (updated) bulkUpdates.push(updated);
+      } catch (err) {
+        bulkDeletes.push(signal.id);
+      }
+    })
+  );
+}
+
+
+c. Batch database writes
+
+After the loop, replace per-signal storage calls with batched operations:
+
+if (bulkDeletes.length > 0)
+  await this.storage.deleteRtbSignals(bulkDeletes);
+
+if (bulkUpdates.length > 0)
+  await this.storage.updateRtbSignals(bulkUpdates);
+
+2️⃣ Modify or add helper function in storage/rtb-storage.ts
+
+(if not already present)
+
+Add batched DB operation support:
+
+async updateRtbSignals(signals: RtbSignal[]) {
+  return this.db.transaction(async (trx) => {
+    for (const s of signals) {
+      await trx('rtb_signals')
+        .where({ id: s.id })
+        .update(s);
+    }
+  });
+}
+
+
+(If a batch or transaction API already exists, reuse that instead.)
+
+3️⃣ Add lightweight concurrency metrics (temporary instrumentation)
+
+Inside refreshAndRank() before the for-loop:
+
+console.log(`[8.8.4-A4.R10R-3.T3][RTBRefresh][METRICS] start poolSize=${poolSize} signals=${activeSignals.length}`);
+const cycleStart = performance.now();
+
+
+After DB write section:
+
+const duration = performance.now() - cycleStart;
+console.log(`[8.8.4-A4.R10R-3.T3][RTBRefresh][METRICS] duration=${duration.toFixed(2)}ms`);
+
+
+This will allow us to verify real timing data in the logs.
+
+🧱 Validation Test Procedure
+
+After implementing the above:
+
+Restart the server.
+
+Run paper trading engine for 10 minutes.
+
+Observe and collect logs with markers:
+
+[8.8.4-A4.R10R-3.T3][RTBRefresh][METRICS]
+
+[A4.R10R-3][RTBRefresh][CYCLE_START]
+
+[A4.R10R-3][RTBRefresh][CYCLE_COMPLETE]
+
+Verify
+
+Each cycle completes before next Central Clock tick.
+
+No “Skipping – refresh in progress” overlaps.
+
+Cycle duration < 10 s consistently.
+
+CPU usage (via Replit monitor) ≤ 60 % average.
+
+RTB queue fully refreshed every 120 s.
+
+📈 Success Criteria
+Metric	Target	Result Expectation
+Avg micro-cycle duration	≤ 10 s	✅
+Overlap occurrences	0 – 1 per 10 min	✅
+Avg CPU utilization	≤ 60 % overall	✅
+RTB refresh coverage	100 % of signals every 120 s	✅
+Stability	No missed ticks or clock drift	✅
+🧹 Post-Test Cleanup
+
+Remove temporary [METRICS] instrumentation after validation.
+
+Commit changes under tag:
+8.8.4-A4.R10R-3.T3 — “RTB Refresh Optimization Implementation”.
+
+📦 Startup Order Confirmation
+
+1️⃣ Price Cache
+2️⃣ Central Clock
+3️⃣ RTB Refresh Service (now concurrent)
+4️⃣ FX5 Scanner
+5️⃣ TCL Watchdog
+
+🧭 Notes for Replit
+
+Do not alter locked modules (price-cache.ts, kraken.ts, kraken-symbol-resolver.ts).
+
+Only modify files explicitly listed above.
+
+Ensure the CentralClock.subscribe(RtbRefreshService) call remains idempotent.
+
+✅ Directive Summary
+
+Directive ID: 8.8.4-A4.R10R-3.T3
+Purpose: Introduce controlled concurrency & batch optimization to RTB Refresh.
+Expected Outcome: Eliminate overlap, reduce CPU load, stabilize full refresh within 120 s.
