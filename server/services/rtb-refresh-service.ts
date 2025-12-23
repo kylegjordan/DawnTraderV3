@@ -62,17 +62,18 @@ class RTBRefreshService {
 
     if (this.isRefreshing) {
       console.log('[A4.R10R-3][RTBRefresh] Skipping - refresh in progress');
+      console.log(`[8.8.4-A4.R10R-3.T1][OVERLAP] tick=${tickNumber} skipped=true reason=refresh_in_progress`);
       return;
     }
 
     const bucketIndex = Math.floor((tickNumber / this.MICRO_CYCLE_INTERVAL) % this.TOTAL_BUCKETS);
     
-    this.refreshBucket(bucketIndex).catch(err => {
+    this.refreshBucket(bucketIndex, tickNumber).catch(err => {
       console.error(`[A4.R10R-3][RTBRefresh] Bucket ${bucketIndex} error:`, err?.message || err);
     });
   }
 
-  private async refreshBucket(bucketIndex: number): Promise<void> {
+  private async refreshBucket(bucketIndex: number, tickNumber?: number): Promise<void> {
     this.isRefreshing = true;
     const start = Date.now();
 
@@ -83,6 +84,7 @@ class RTBRefreshService {
       const bucketSize = bucket.size;
       
       console.log(`[A4.R10R-3][RTBRefresh][CYCLE_START] bucket=${bucketIndex} size=${bucketSize}`);
+      console.log(`[8.8.4-A4.R10R-3.T1][CYCLE_START] tick=${tickNumber || 0} bucket=${bucketIndex} size=${bucketSize}`);
 
       for (const mode of ['paper', 'live'] as TradingMode[]) {
         await this.refreshModeSignals(mode, bucketIndex);
@@ -90,6 +92,7 @@ class RTBRefreshService {
 
       const duration = Date.now() - start;
       console.log(`[A4.R10R-3][RTBRefresh][CYCLE_COMPLETE] bucket=${bucketIndex} size=${bucketSize} duration=${duration}ms`);
+      console.log(`[8.8.4-A4.R10R-3.T1][CYCLE_COMPLETE] bucket=${bucketIndex} size=${bucketSize} duration=${duration}ms`);
     } finally {
       this.isRefreshing = false;
     }
@@ -167,8 +170,18 @@ class RTBRefreshService {
     }
 
     if (validPrices.size > 0) {
+      const refreshStart = Date.now();
       await readyToBuyService.refreshAndRank(mode);
+      const refreshDuration = Date.now() - refreshStart;
+      
       console.log(`[A4.R10R-3][RTBRefresh] mode=${mode} bucket=${bucketIndex} signals=${bucketSignals.length} priced=${validPrices.size}`);
+      
+      if (mode === 'paper') {
+        for (const signal of bucketSignals) {
+          const signalRefreshTime = Math.round(refreshDuration / bucketSignals.length);
+          console.log(`[8.8.4-A4.R10R-3.T1][SIGNAL_METRIC] id=${signal.symbol}:${signal.strategy} bucket=${bucketIndex} refreshTime=${signalRefreshTime}ms`);
+        }
+      }
     }
   }
 

@@ -1,0 +1,163 @@
+Directive 8.8.4-A4.R10R-3.T1 — RTB Refresh Metrics Collector & 10-Minute Validation Run
+🧩 Objective
+
+Collect live performance telemetry for the Central-Clock-synchronized Ready-To-Buy Refresh Service (RTBRefreshService).
+This test will measure:
+
+Average refresh time per signal (tₛ)
+
+Number of signals processed per 15-second micro-cycle (bucketSize)
+
+Cycle duration per bucket (cycleDuration)
+
+Derived capacity per bucket (xₘₐₓ)
+
+Frequency of overlaps or skipped cycles
+
+These results will feed into Directive 8.8.4-A4.R10R-4, defining RTB load balancing and queue capacity thresholds.
+
+🧭 Pre-Test Setup
+
+Test User Credentials
+
+username: testuser123
+password: SecurePass123!
+mode: paper
+
+
+Environment Reset (MANDATORY)
+Before beginning the test:
+
+Stop any active paper or live trading sessions.
+
+Clear all Ready-To-Buy (RTB) signals.
+
+Close all open trades (paper + live).
+
+Reset the full system:
+
+POST /api/system/reset
+
+
+Verify console log:
+
+[SystemReset] RTB cleared, trades closed, price cache flushed
+
+⚙️ Implementation Tasks
+1️⃣ Add Instrumentation
+
+Edit server/services/rtb-refresh-service.ts inside refreshBucket():
+
+const start = Date.now();
+const bucket = this.getBucket(bucketIndex);
+const bucketSize = bucket.length;
+
+this.log(`[8.8.4-A4.R10R-3.T1][CYCLE_START] tick=${tickNumber} bucket=${bucketIndex} size=${bucketSize}`);
+
+for (const signal of bucket) {
+  const sStart = Date.now();
+  await this.refreshSignal(signal);
+  const sDur = Date.now() - sStart;
+  this.log(`[8.8.4-A4.R10R-3.T1][SIGNAL_METRIC] id=${signal.id} bucket=${bucketIndex} refreshTime=${sDur}ms`);
+}
+
+const duration = Date.now() - start;
+this.log(`[8.8.4-A4.R10R-3.T1][CYCLE_COMPLETE] bucket=${bucketIndex} size=${bucketSize} duration=${duration}ms`);
+
+
+Requirements
+
+Active only in paper mode (if (mode === 'paper')).
+
+Do not modify logic beyond instrumentation.
+
+Will be removed after validation completes.
+
+2️⃣ Execute 10-Minute Validation Run
+
+Start paper trading:
+
+POST /api/trading/start?mode=paper
+
+
+Confirm logs:
+
+[8.8.4-A4.R10R-3.T1][RTBRefresh][SYNCED] via CentralClock
+[FX5Bootstrap][START]
+
+
+Allow to run 10 minutes (≈40 cycles).
+Expect every 15 s:
+
+[CYCLE_START] …
+[CYCLE_COMPLETE] …
+
+
+And [SIGNAL_METRIC] lines per refreshed signal.
+
+3️⃣ Data Capture & Analysis
+
+After the 10-minute run:
+
+Stop trading:
+
+POST /api/trading/stop?mode=paper
+
+
+Gather all logs with [8.8.4-A4.R10R-3.T1].
+
+Create summary table:
+
+bucketIndex	avgRefreshTime(ms)	avgCycleDuration(ms)	avgBucketSize	overlapEvents
+…	…	…	…	…
+
+Compute:
+
+tₛ = mean signal refresh time
+
+xₘₐₓ = floor(15 s / tₛ)
+
+Total capacity = 8 × xₘₐₓ
+
+Overlap count %
+
+🧱 Locked Modules
+
+Do not modify:
+
+server/services/price-cache.ts
+server/services/kraken.ts
+server/markets/kraken-symbol-resolver.ts
+server/core/clock/central-clock.ts
+
+
+Only server/services/rtb-refresh-service.ts may be instrumented.
+
+✅ Success Criteria
+Metric	Target
+Cycles logged every 15 s	≥ 40
+[SIGNAL_METRIC] logs present	Each refreshed signal
+Overlaps	< 5 % of cycles
+Mean tₛ computed	✅
+Derived xₘₐₓ + total capacity	✅
+No unhandled errors	✅
+Central Clock drift	< 1 ms avg
+📤 Deliverables
+
+10-minute full log capture.
+
+Summary table of per-bucket metrics.
+
+Derived tₛ, xₘₐₓ, total capacity.
+
+Notes on overlap frequency, if any.
+
+Confirmation system remained stable.
+
+🔐 Directive Scope
+
+Diagnostic only — no architectural changes.
+
+Results will guide the capacity-balancing logic in 8.8.4-A4.R10R-4.
+
+Remove this instrumentation once validated.
