@@ -1,0 +1,143 @@
+⚙️ 2️⃣ Directive A4.R10R-3 – Central Clock Synchronization
+Objective
+
+Transition the Ready-To-Buy Refresh Service from its internal setInterval() loop to synchronization with the Central Clock tick mechanism.
+This ensures deterministic refresh scheduling, eliminates drift and overlap, and enables precise measurement of cycle duration and coverage.
+
+🔧 Implementation Plan
+1️⃣ File Changes
+
+Files impacted:
+
+server/services/rtb-refresh-service.ts
+server/core/clock/central-clock.ts
+server/index.ts
+replit.md
+
+2️⃣ Remove Internal Timer
+
+In rtb-refresh-service.ts:
+
+Remove setInterval() or equivalent scheduling logic.
+
+Add a start() method that subscribes to the Central Clock:
+
+centralClock.on('tick', (tickNumber) => {
+  rtbRefreshService.onTick(tickNumber);
+});
+
+3️⃣ Implement Tick-Driven Logic
+
+Replace the 15-second interval logic with this:
+
+private readonly MICRO_CYCLE_INTERVAL = 15; // seconds
+private readonly MACRO_CYCLE_INTERVAL = 120; // seconds
+private readonly TOTAL_BUCKETS = this.MACRO_CYCLE_INTERVAL / this.MICRO_CYCLE_INTERVAL; // 8 buckets
+
+onTick(tickNumber: number) {
+  if (tickNumber % this.MICRO_CYCLE_INTERVAL !== 0) return;
+  const bucketIndex = (tickNumber / this.MICRO_CYCLE_INTERVAL) % this.TOTAL_BUCKETS;
+  this.refreshBucket(bucketIndex);
+}
+
+
+That means:
+
+every 15 s, one “bucket” refreshes;
+
+full coverage (8 buckets) = 120 s total.
+
+4️⃣ Add Load Instrumentation
+
+Inside refreshBucket(bucketIndex):
+
+const start = Date.now();
+const bucket = this.getBucket(bucketIndex);
+this.log(`[A4.R10R-3][RTBRefresh][CYCLE_START] bucket=${bucketIndex} size=${bucket.length}`);
+await this.refreshSignals(bucket);
+const duration = Date.now() - start;
+this.log(`[A4.R10R-3][RTBRefresh][CYCLE_COMPLETE] bucket=${bucketIndex} size=${bucket.length} duration=${duration}ms`);
+
+
+This will tell us exactly how long each refresh takes and how many signals were processed.
+
+5️⃣ Update Startup Order
+
+In server/index.ts, ensure:
+
+await priceCache.initialize();
+await centralClock.start();
+await rtbRefreshService.start();
+await fx5Scanner.bootstrap();
+await tclWatchdog.bootstrap();
+
+
+This guarantees RTB refresh has the clock available when it subscribes.
+
+6️⃣ Documentation
+
+Update replit.md to include:
+
+RTB Refresh Service now clock-synchronized
+
+Micro-cycle: 15 s (partial refresh)
+
+Macro-cycle: 120 s (full coverage)
+
+Overlap prevention handled by tick deduplication
+
+Instrumentation for cycle size/duration
+
+✅ Verification Steps for Replit
+
+After implementation, Replit should:
+
+Run the system and confirm startup order:
+
+[A4.R10R-3][PriceCache][HEALTH]
+[CentralClock][START]
+[A4.R10R-3][RTBRefresh][SYNCED]
+[FX5Bootstrap]
+
+
+Observe log cadence:
+
+[A4.R10R-3][RTBRefresh][CYCLE_START] bucket=0 ...
+[A4.R10R-3][RTBRefresh][CYCLE_COMPLETE] bucket=0 ...
+
+
+... every 15 seconds.
+
+Confirm:
+
+Each cycle duration < 1 s
+
+No “Skipping” logs appear
+
+Each of 8 buckets refreshed once every 120 s
+
+Return a 5-minute log capture with the bucket size/duration data.
+
+🔐 Locked Modules (no edits except as noted)
+server/services/price-cache.ts
+server/services/kraken.ts
+server/markets/kraken-symbol-resolver.ts
+
+🎯 Success Criteria
+Metric	Expected	Pass
+Tick Sync	RTB triggers via Central Clock	✅
+Overlaps	None observed	✅
+Coverage	All buckets refreshed within 120 s	✅
+Duration	< 1 s typical	✅
+Clock Drift	< 0.5 ms avg	✅
+🔍 Deliverables
+
+Replit should return:
+
+5-minute log capture (with [A4.R10R-3] markers)
+
+Summary table of bucketIndex, signal count, and duration
+
+Confirmation of no overlap events
+
+Updated replit.md excerpt with new synchronization description
