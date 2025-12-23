@@ -1,0 +1,205 @@
+🧾 Directive 8.8.4-A4.R10R-4 — Core System Hardening
+📘 Purpose
+
+This directive hardens the Dawn Trader server runtime and service infrastructure.
+It locks the system modules (Central Clock, Price Cache, RTB Refresh, FX5 Scanner, and Ready-to-Buy Service), ensures clean shutdown and startup behavior, introduces health monitoring, and enforces architectural integrity ahead of live-mode development.
+
+This is the final step of the A4.R10R cycle, transitioning the system from a “diagnostic/tuning state” to a production-ready, fault-tolerant state.
+
+🧠 Background
+
+Following the successful completion of directives R1–R3 and T1–T5:
+
+Directive	Purpose	Status
+A4.R10R-1	Unified Price Cache	✅
+A4.R10R-2	Decoupled RTB Refresh Service	✅
+A4.R10R-3 (T1–T5)	Central Clock synchronization, adaptive tuning, bucket optimization	✅
+A4.R10R-4	This directive: Core System Hardening	🔜
+
+All core services are now stable, efficient, and decoupled.
+Hardening ensures these modules cannot regress, leak memory, or desynchronize during extended runtime (target: continuous 48h+ uptime).
+
+🧩 Implementation Plan
+1️⃣ Pre-Hardening Repo Audit
+
+Before making any code changes:
+
+Review all files under /server/services/ and /server/core/
+
+Confirm no residual “T1–T5 instrumentation” or diagnostic logging remains
+
+Confirm no .tmp, .bak, .old, or .test suffix files exist in the repo
+
+Verify singleton import paths:
+
+price-cache.ts (one instance only)
+
+central-clock.ts (no duplicate import path variants)
+
+rtb-refresh-service.ts (subscribed once to CentralClock)
+
+Replit must log any findings as:
+[A4.R10R-4][AUDIT] <file> <status> <action_taken>
+
+2️⃣ Module Lockdown
+
+Add immutable headers to all finalized service modules to prevent unauthorized modification.
+
+Files:
+
+server/services/price-cache.ts
+server/services/central-clock.ts
+server/services/rtb-refresh-service.ts
+server/services/ready_to_buy_service.ts
+server/markets/kraken-symbol-resolver.ts
+server/services/kraken.ts
+
+
+Header Template:
+
+/**
+ * 🔒 LOCKED MODULE — DO NOT MODIFY
+ * Directive: 8.8.4-A4.R10R-4 (Core System Hardening)
+ * Owner: Dawn Trader Core
+ * Summary: This module is production-locked. Changes require a formal directive.
+ */
+
+3️⃣ Safe Shutdown / Startup Sequencing
+Add stop() and shutdown() handlers for each core service:
+
+price-cache.ts: gracefully clear intervals and WebSocket subscriptions
+
+central-clock.ts: remove all tick listeners and stop timers
+
+rtb-refresh-service.ts: unsubscribe from CentralClock and clear pending promises
+
+ready_to_buy_service.ts: abort any concurrent refresh cycles in progress
+
+In server/index.ts:
+Add unified shutdown signal handling:
+
+process.on('SIGINT', async () => {
+  log('[A4.R10R-4][SHUTDOWN] Graceful shutdown initiated...');
+  await rtbRefreshService.stop();
+  await centralClock.stop();
+  await priceCache.stop();
+  process.exit(0);
+});
+
+
+Verify clean shutdown (no “unhandled promise” or “timer leak” warnings).
+
+4️⃣ Introduce Health Monitor
+
+File: server/services/system-health.ts
+
+Create a lightweight health monitor with real-time metrics.
+
+import os from 'os';
+import { EventEmitter } from 'events';
+
+class SystemHealth extends EventEmitter {
+  metrics = { cpu: 0, memory: 0, lag: 0, uptime: 0 };
+
+  async sample() {
+    const load = os.loadavg()[0];
+    const mem = process.memoryUsage().rss / 1024 / 1024;
+    const uptime = process.uptime();
+    this.metrics = { cpu: load, memory: mem, lag: global.__eventLoopLag || 0, uptime };
+    this.emit('update', this.metrics);
+  }
+}
+
+export const systemHealth = new SystemHealth();
+setInterval(() => systemHealth.sample(), 10000);
+
+
+Expose via /api/health (GET) → returns {cpu, memory, lag, uptime}
+Purpose: allow real-time monitoring without external profilers.
+
+5️⃣ Security and Validation Enhancements
+
+Authentication Hardening
+
+Enforce test login (testuser123 / SecurePass123!) via proper bcrypt hash validation (even in dev mode).
+
+Mask credentials in logs (username: t***3, no plaintext passwords).
+
+Data Integrity
+
+Sanitize all incoming API parameters in /server/routes/
+
+Ensure deleteRtbSignalsByIds() and updateRtbSignalsBatch() validate IDs before DB writes.
+
+Rate Guard
+
+Keep global rate limit: 10 weighted Kraken API calls / second
+
+Confirm safeFetch() still applied to all market calls
+
+6️⃣ Observability and Linting
+
+Add runtime self-check:
+
+Each service logs [A4.R10R-4][INIT_OK] upon successful start
+
+Add ESLint pre-check for unsafe imports (.js vs .ts mix)
+
+Confirm all TS type definitions pass strict compilation
+
+⚙️ 7️⃣ Validation Plan
+
+Replit to perform a 30-minute stability validation after all changes.
+Before test:
+
+Clear RTB signals
+
+Clear OpenTrades
+
+Reset system
+
+Login with:
+
+username: testuser123
+password: SecurePass123!
+
+
+Start paper trading
+
+Metrics to Capture
+Metric	Target	Validation
+Cycle Duration	< 5000 ms	✅ 2–3 s average
+CPU Usage	< 40 %	✅ Maintain under load
+Event Loop Lag	< 2 ms	✅ No persistent lag
+Memory	< 350 MB	✅ Stable
+Health API Response	200 OK	✅ Returns valid JSON
+Shutdown	No pending async ops	✅ “Graceful shutdown complete”
+✅ Completion Criteria
+
+Directive 8.8.4-A4.R10R-4 is considered complete when:
+
+All locked headers are in place
+
+Health monitor active and /api/health returns valid JSON
+
+All core services start and stop cleanly
+
+CPU, lag, and memory remain stable for 30 minutes
+
+No overlapping refresh cycles occur
+
+Shutdown logs show [A4.R10R-4][SHUTDOWN] complete
+
+Once confirmed, Replit will log:
+
+[A4.R10R-4][COMPLETE] Core system hardening verified. System stable for production.
+
+🏁 Post-Hardening Notes
+
+After completion:
+
+Begin preparing the Live Execution Engine (A5 Series)
+
+Paper mode will serve as the foundation for live signal testing
+
+Ready-to-Buy, FX5, and TCL will be fully decoupled but orchestrated under CentralClock events

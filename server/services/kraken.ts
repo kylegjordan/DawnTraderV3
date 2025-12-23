@@ -1,5 +1,11 @@
-// LOCKED MODULE — A4.R10R-1 verified. Do not modify without new directive.
-// NOTE: Rate governance and caching handled by price-cache.ts [A4.R10R-1]
+/**
+ * 🔒 LOCKED MODULE — DO NOT MODIFY
+ * Directive: 8.8.4-A4.R10R-4 (Core System Hardening)
+ * Owner: Dawn Trader Core
+ * Summary: This module is production-locked. Changes require a formal directive.
+ * 
+ * Previous: A4.R10R-1. Rate governance and caching handled by price-cache.ts
+ */
 import crypto from "crypto";
 import { canonicalFromPairInfo, normalizeSymbolArray } from './utils/symbol-canonicalizer.js';
 

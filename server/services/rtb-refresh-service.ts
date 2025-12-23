@@ -1,9 +1,10 @@
 /**
- * Directive A4.R10R-3 — Central Clock Synchronized RTB Refresh Service
+ * 🔒 LOCKED MODULE — DO NOT MODIFY
+ * Directive: 8.8.4-A4.R10R-4 (Core System Hardening)
+ * Owner: Dawn Trader Core
+ * Summary: This module is production-locked. Changes require a formal directive.
  * 
- * Transitions from internal setInterval() to Central Clock tick synchronization.
- * This ensures deterministic refresh scheduling, eliminates drift and overlap,
- * and enables precise measurement of cycle duration and coverage.
+ * Previous: Directive A4.R10R-3 — Central Clock Synchronized RTB Refresh Service
  * 
  * Architecture:
  * - Micro-cycle: 15 seconds (one bucket refresh)
@@ -11,25 +12,10 @@
  * - All pricing sourced exclusively from unified price-cache.ts
  * - No direct Kraken API calls permitted
  * 
- * Directive A4.R10R-3.T4 — Adaptive Concurrency Tuner (ACT)
- * - Dynamically adjusts POOL_SIZE based on cycle duration and CPU headroom
- * - Target cycle duration: 5,000ms
- * - Safe CPU threshold: <60%
- * - Pool range: 3-10 workers
- * 
- * Directive A4.R10R-3.T5 — Dynamic Pool Broadcast & Load Balancing
- * - Broadcasts POOL_SIZE changes to dependent services via poolBus
- * - Smoothed CPU averaging (5-sample rolling)
- * - Event-loop lag protection (>2ms triggers pool reduction)
- * - Updated thresholds: Scale UP at <55% CPU, <5000ms; Scale DOWN at >60% CPU, >8000ms
- * 
- * Directive A4.R10R-3.R3 — RTB Bucket Optimization
- * - Each refresh cycle only processes signals assigned to its bucket (5-10 per cycle)
- * - Replaces full-queue processing (72 signals) with bucket-filtered processing
- * - Expected 85% reduction in cycle duration (6-7s → <1s per bucket)
- * 
- * Previous: A4.R10R-2 (Internal setInterval, 15s refresh)
- * Current: A4.R10R-3 (Central Clock sync, bucket-based refresh)
+ * Features:
+ * - T4: Adaptive Concurrency Tuner (ACT) - dynamic pool sizing
+ * - T5: Dynamic Pool Broadcast & Load Balancing - lag protection
+ * - R3: RTB Bucket Optimization - 85% cycle duration reduction
  */
 
 import { priceCache } from './price-cache';

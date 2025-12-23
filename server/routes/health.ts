@@ -1,11 +1,13 @@
 /**
  * Phase 41F-C: Health Monitoring API Routes
+ * Directive 8.8.4-A4.R10R-4: System Health Endpoint
  * 
  * Provides HTTP and WebSocket access to engine health metrics
  */
 
 import { Router } from 'express';
 import { healthMonitor } from '../services/health-monitor.js';
+import { systemHealth } from '../services/system-health.js';
 
 export const healthRouter = Router();
 
@@ -189,6 +191,36 @@ healthRouter.get('/circuit-breaker', async (req, res) => {
     });
   } catch (error: any) {
     console.error('[41F-G][API] Error fetching circuit breaker status:', error.message);
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+/**
+ * Directive 8.8.4-A4.R10R-4: GET /api/health
+ * Returns system health metrics (CPU, memory, lag, uptime)
+ */
+healthRouter.get('/', async (req, res) => {
+  try {
+    const metrics = systemHealth.getMetrics();
+    const status = systemHealth.getStatus();
+    
+    res.json({
+      ok: true,
+      healthy: status.healthy,
+      metrics: {
+        cpu: metrics.cpu,
+        memory: metrics.memory,
+        lag: metrics.lag,
+        uptime: metrics.uptime,
+        heapUsed: metrics.heapUsed,
+        heapTotal: metrics.heapTotal,
+        rss: metrics.rss,
+      },
+      issues: status.issues,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    console.error('[A4.R10R-4][API] Error fetching system health:', error.message);
     res.status(500).json({ ok: false, error: error.message });
   }
 });

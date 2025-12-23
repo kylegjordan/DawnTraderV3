@@ -1,5 +1,10 @@
 /**
- * Phase 8.8.4-B/C/C.5: Ready-to-Buy (RTB) Queue Service
+ * 🔒 LOCKED MODULE — DO NOT MODIFY
+ * Directive: 8.8.4-A4.R10R-4 (Core System Hardening)
+ * Owner: Dawn Trader Core
+ * Summary: This module is production-locked. Changes require a formal directive.
+ * 
+ * Previous: Phase 8.8.4-B/C/C.5: Ready-to-Buy (RTB) Queue Service
  * Directive 8.8.4-A3.R9.0: System Harmonization & Performance Alignment
  * 
  * Manages the unified pool of high-quality, SQE-qualified signals.

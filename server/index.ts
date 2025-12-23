@@ -119,12 +119,19 @@ app.use((req, res, next) => {
   console.log('[A4.R10R-3] 🔁 Starting synchronized service bootstrap sequence');
 
   /**
-   * A4.R10R-1: Initialize Unified Price Cache FIRST
+   * A4.R10R-4: Initialize System Health Monitor FIRST
+   * Tracks CPU, memory, event loop lag throughout runtime
+   */
+  const { systemHealth } = await import('./services/system-health.js');
+  systemHealth.start();
+
+  /**
+   * A4.R10R-1: Initialize Unified Price Cache
    * This ensures all services have access to cached pricing data
    */
   const { priceCache } = await import('./services/price-cache.js');
   priceCache.initialize();
-  console.log('[A4.R10R-1] Price Cache initialized');
+  console.log('[A4.R10R-4][INIT_OK] Price Cache initialized');
 
   /**
    * A4.R10R-3: Start Central Clock BEFORE RTB Refresh Service
@@ -133,10 +140,11 @@ app.use((req, res, next) => {
   const { centralClock } = await import('./services/central-clock.js');
   
   if (!centralClock.getIsRunning()) {
-    console.log('[A4.R10R-3] Central Clock not running — starting...');
+    console.log('[A4.R10R-4] Central Clock not running — starting...');
     centralClock.start();
+    console.log('[A4.R10R-4][INIT_OK] Central Clock started');
   } else {
-    console.log('[A4.R10R-3] Central Clock already running (tickNumber=%d)', centralClock.getTickNumber() ?? 0);
+    console.log('[A4.R10R-4][INIT_OK] Central Clock already running (tickNumber=%d)', centralClock.getTickNumber() ?? 0);
   }
 
   /**
@@ -150,8 +158,8 @@ app.use((req, res, next) => {
    */
   const { rtbRefreshService, getAdaptivePoolSize } = await import('./services/rtb-refresh-service.js');
   rtbRefreshService.start();
-  console.log('[A4.R10R-3] RTB Refresh Service started (clock-synchronized)');
-  console.log(`[A4.R10R-3.T4][INIT] Adaptive Concurrency Tuner active (pool=${getAdaptivePoolSize()}, range=3-10)`);
+  console.log('[A4.R10R-4][INIT_OK] RTB Refresh Service started (clock-synchronized)');
+  console.log(`[A4.R10R-4][INIT_OK] Adaptive Concurrency Tuner active (pool=${getAdaptivePoolSize()}, range=3-10)`);
 
   // R9.3.HF-5: Force FX5 Scanner reinitialization (non-blocking)
   import('./startup/fx5-scanner-bootstrap.js')
@@ -1150,16 +1158,30 @@ app.use((req, res, next) => {
     }
   });
 
-  // Phase 41F: Graceful shutdown for operation queues
+  // Directive 8.8.4-A4.R10R-4: Graceful shutdown for all core services
   const shutdownHandler = async (signal: string) => {
-    console.log(`[41F][QUEUE] Received ${signal}, shutting down gracefully...`);
+    console.log(`[A4.R10R-4][SHUTDOWN] Received ${signal}, initiating graceful shutdown...`);
     try {
+      // Phase 41F: Shutdown operation queues
       const { shutdownAllQueues } = await import('./utils/operation-queue.js');
       await shutdownAllQueues();
-      console.log('[41F][QUEUE] Graceful shutdown complete');
+      
+      // A4.R10R-4: Shutdown core services in order
+      const { rtbRefreshService } = await import('./services/rtb-refresh-service.js');
+      const { centralClock } = await import('./services/central-clock.js');
+      const { priceCache } = await import('./services/price-cache.js');
+      const { systemHealth } = await import('./services/system-health.js');
+      
+      rtbRefreshService.stop();
+      centralClock.stop();
+      priceCache.shutdown();
+      systemHealth.stop();
+      
+      console.log('[A4.R10R-4][SHUTDOWN] All core services stopped');
+      console.log('[A4.R10R-4][SHUTDOWN] Graceful shutdown complete');
       process.exit(0);
     } catch (error) {
-      console.error('[41F][QUEUE] Shutdown error:', error);
+      console.error('[A4.R10R-4][SHUTDOWN] Shutdown error:', error);
       process.exit(1);
     }
   };

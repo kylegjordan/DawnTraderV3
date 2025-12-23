@@ -1,7 +1,10 @@
 /**
- * LOCKED MODULE — A4.R10R-1 verified. Do not modify without new directive.
+ * 🔒 LOCKED MODULE — DO NOT MODIFY
+ * Directive: 8.8.4-A4.R10R-4 (Core System Hardening)
+ * Owner: Dawn Trader Core
+ * Summary: This module is production-locked. Changes require a formal directive.
  * 
- * Directive 8.8.4-A4.R10R-1 — Unified, Rate-Governed Price Cache
+ * Previous: A4.R10R-1 — Unified, Rate-Governed Price Cache
  * 
  * This service consolidates all price retrieval logic for:
  * - Open trades (2s refresh)

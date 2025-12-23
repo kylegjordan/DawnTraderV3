@@ -1,7 +1,10 @@
 /**
- * LOCKED MODULE — A4.R10R-1 verified. Do not modify without new directive.
+ * 🔒 LOCKED MODULE — DO NOT MODIFY
+ * Directive: 8.8.4-A4.R10R-4 (Core System Hardening)
+ * Owner: Dawn Trader Core
+ * Summary: This module is production-locked. Changes require a formal directive.
  * 
- * Phase 8.8.3-I7 / I7-MAP-FIX / I7-MAP-AUTO: Kraken Symbol Resolver
+ * Previous: A4.R10R-1, Phase 8.8.3-I7 / I7-MAP-FIX / I7-MAP-AUTO: Kraken Symbol Resolver
  * 
  * Single source of truth for symbol translation.
  * All components use this resolver - no custom formatting elsewhere.

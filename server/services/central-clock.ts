@@ -1,5 +1,10 @@
 /**
- * Directive 8.8.4-A3.R7: Central Clock Service
+ * 🔒 LOCKED MODULE — DO NOT MODIFY
+ * Directive: 8.8.4-A4.R10R-4 (Core System Hardening)
+ * Owner: Dawn Trader Core
+ * Summary: This module is production-locked. Changes require a formal directive.
+ * 
+ * Previous: Directive 8.8.4-A3.R7: Central Clock Service
  * 
  * Single shared timing source for all engine subsystems.
  * Emits 1-second ticks to synchronize time-dependent modules.
