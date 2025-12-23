@@ -654,32 +654,18 @@ class ReadyToBuyService {
   async refreshAndRank(mode: TradingMode): Promise<void> {
     const startTime = Date.now();
     
-    // [8.8.4-A4.R10R-3.T2] Profiling instrumentation (paper mode only)
-    const T2_ENABLED = mode === 'paper';
-    if (T2_ENABLED) {
-      console.log(`[8.8.4-A4.R10R-3.T2][START] mode=${mode} timestamp=${new Date().toISOString()}`);
-    }
-    
     // A3.R9.0: Set refresh incomplete flag for TCL sync barrier
     this.setRefreshComplete(mode, false);
     
     try {
-      // [T2] Phase 1: FETCH - Get all active/reconfirmed signals
-      const tFetchStart = Date.now();
       const signals = await this.getQueuedSignals(mode);
-      const tFetch = Date.now() - tFetchStart;
       
       if (signals.length === 0) {
         console.log(`[A3.R9.2][RTB_REFRESH] mode=${mode} no signals to refresh`);
-        if (T2_ENABLED) {
-          console.log(`[8.8.4-A4.R10R-3.T2][TIMING] fetch=${tFetch}ms recalc=0ms sort=0ms write=0ms total=${Date.now() - startTime}ms count=0`);
-        }
         this.setRefreshComplete(mode, true);
         return;
       }
 
-      // [T2] Phase 2: DEDUPE - Deduplicate during refresh
-      const tDedupeStart = Date.now();
       // Directive 8.8.4-A3.R8.5: Deduplicate during refresh
       // Track seen symbol+strategy pairs to prevent duplicates in the pool
       const seenPairs = new Set<string>();
@@ -711,10 +697,7 @@ class ReadyToBuyService {
       if (duplicateCount > 0) {
         console.log(`[A3.R9.2][RTB_DEDUP] mode=${mode} deleted=${duplicateCount} duplicates, remaining=${deduplicatedSignals.length}`);
       }
-      const tDedupe = Date.now() - tDedupeStart;
 
-      // [T2] Phase 3: RECALC - Recalculate CWQI with decay and update status
-      const tRecalcStart = Date.now();
       // A3.R9.0.A (R9-D2): Recalculate CWQI with decay and update status
       // Apply uniform refresh stagger across 30-second window
       const now = new Date();
@@ -836,10 +819,7 @@ class ReadyToBuyService {
         console.log(`[A3.R9.2][RECONFIRM_COMPLETE] pair=${normalizedSymbol} ${oldStatus}→reconfirmed CWQI=${decayedCWQI.toFixed(4)} freshMetrics=${freshMetrics.refreshed}`);
         reconfirmedCount++;
       }
-      const tRecalc = Date.now() - tRecalcStart;
 
-      // [T2] Phase 4: WRITE - Broadcast rtb:updated to clients for UI refresh
-      const tWriteStart = Date.now();
       // A3.R8.5 FIX: Use deduplicatedSignals count, not original signals count
       await contextBridge.broadcast({
         type: 'rtb:updated',
@@ -853,14 +833,8 @@ class ReadyToBuyService {
         },
         mode
       });
-      const tWrite = Date.now() - tWriteStart;
 
       const elapsedMs = Date.now() - startTime;
-      
-      // [8.8.4-A4.R10R-3.T2] Final timing log (paper mode only)
-      if (T2_ENABLED) {
-        console.log(`[8.8.4-A4.R10R-3.T2][TIMING] fetch=${tFetch}ms dedupe=${tDedupe}ms recalc=${tRecalc}ms write=${tWrite}ms total=${elapsedMs}ms count=${deduplicatedSignals.length}`);
-      }
       
       // A3.R9.2: Report remaining from deduplicated set minus expired
       console.log(`[A3.R9.2][RTB_REFRESH] mode=${mode} reconfirmed=${reconfirmedCount} expired=${expiredCount} duplicates=${duplicateCount} remaining=${deduplicatedSignals.length - expiredCount} elapsed=${elapsedMs}ms`);

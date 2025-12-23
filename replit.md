@@ -61,6 +61,8 @@ A4.R10R-2 RTB Refresh Service Extraction decouples RTB refresh and rank logic fr
 
 A4.R10R-3 Central Clock Synchronization transitions the RTB Refresh Service to synchronize with the Central Clock, ensuring deterministic refresh scheduling, eliminating drift, and enabling precise measurement. It uses a 15-second micro-cycle and 120-second macro-cycle with bucket-based distribution of signals.
 
+A4.R10R-3 RTB Performance Diagnostics (T1/T2) identified the root cause of RTB refresh cycles exceeding the 15-second micro-cycle interval. T1 metrics collection validated constant cycle overlap (0 CYCLE_START, 0 CYCLE_COMPLETE, 2 OVERLAP events). T2 code analysis identified the RECALC phase bottleneck in `refreshAndRank()`: (1) sequential per-signal processing with staggered delays spreading 70+ signals over ~5 seconds, (2) per-signal database operations (delete/update) adding ~7-14 seconds, and (3) per-signal `fetchFreshMetrics()` calls. The price cache integration (A4.R10R-1) helps but the sequential loop structure prevents completion within 15 seconds. Recommended T3 optimizations: batch database updates, parallelize signal processing where safe, and reduce/eliminate artificial staggering during refresh cycles.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.
