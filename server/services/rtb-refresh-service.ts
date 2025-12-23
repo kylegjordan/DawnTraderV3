@@ -29,7 +29,7 @@
 
 import { priceCache } from './price-cache';
 import { readyToBuyService } from '../core/rtb/ready_to_buy_service';
-import { centralClock, type ClockTick } from './central-clock';
+import { centralClock, type ClockTick } from './central-clock.js';
 import type { TradingMode } from './guardrail-policy';
 import { 
   ACT_CONFIG, 
@@ -285,6 +285,7 @@ class RTBRefreshService {
   }
 
   private async refreshModeSignals(mode: TradingMode, bucketIndex: number): Promise<void> {
+    const refreshStart = Date.now();
     const signals = await readyToBuyService.getQueuedSignals(mode);
 
     if (!signals || signals.length === 0) {
@@ -318,9 +319,11 @@ class RTBRefreshService {
     }
 
     if (validPrices.size > 0) {
+      const rankStart = Date.now();
       await readyToBuyService.refreshAndRank(mode);
+      const rankDuration = Date.now() - rankStart;
       
-      console.log(`[A4.R10R-3][RTBRefresh] mode=${mode} bucket=${bucketIndex} signals=${bucketSignals.length} priced=${validPrices.size}`);
+      console.log(`[A4.R10R-3][RTBRefresh] mode=${mode} bucket=${bucketIndex} signals=${bucketSignals.length} priced=${validPrices.size} rankDuration=${rankDuration}ms totalDuration=${Date.now() - refreshStart}ms`);
     }
   }
 
