@@ -1,0 +1,180 @@
+🧭 Directive 8.8.4-A4.R10R-3.T4 — Adaptive Concurrency Tuner
+Objective
+
+To implement, test, and validate an Adaptive Concurrency Tuner (ACT) for the RTB Refresh Service, allowing the system to dynamically adjust its signal-processing concurrency pool (POOL_SIZE) in real time, based on observed cycle duration and CPU headroom.
+
+This will allow the system to maintain consistent performance and prevent under- or over-utilization of resources as the number of signals in the Ready-to-Buy (RTB) queue fluctuates.
+
+Pre-Execution Requirements
+Test User Credentials
+username: testuser123
+password: SecurePass123!
+
+System Preparation
+
+Before starting the test, perform a full environment reset:
+
+Clear all RTB signals
+
+Close all OpenTrades
+
+Reset the paper trading engine
+
+Restart the central clock and all dependent services
+
+Confirm Trading Mode: PAPER and system clock in sync
+
+Implementation Plan
+1️⃣ Add Adaptive Concurrency Logic
+
+In server/services/rtb-refresh-service.ts:
+
+Introduce adaptive pool control parameters:
+
+let POOL_SIZE = 5;
+const MIN_POOL = 3;
+const MAX_POOL = 10;
+const TARGET_DURATION_MS = 5000;
+const SAFE_CPU_THRESHOLD = 60;  // %
+const SCALE_STEP = 1;
+
+
+After every completed refresh cycle (CYCLE_COMPLETE log event), sample:
+
+Average cycle duration (avgDuration)
+
+CPU utilization or event loop lag (use 1ms baseline = ~25–30% load)
+
+Adjust POOL_SIZE accordingly:
+
+if (avgDuration < TARGET_DURATION_MS * 0.8 && cpuLoad < SAFE_CPU_THRESHOLD * 0.8 && POOL_SIZE < MAX_POOL) {
+    POOL_SIZE += SCALE_STEP;
+    console.log(`[T4][ACT] Increased POOL_SIZE to ${POOL_SIZE}`);
+} else if (avgDuration > TARGET_DURATION_MS * 1.5 || cpuLoad > SAFE_CPU_THRESHOLD) {
+    POOL_SIZE = Math.max(MIN_POOL, POOL_SIZE - SCALE_STEP);
+    console.log(`[T4][ACT] Decreased POOL_SIZE to ${POOL_SIZE}`);
+}
+
+
+Log adaptive adjustments under the tag:
+
+[8.8.4-A4.R10R-3.T4][ACT][POOL_ADJUST] poolSize=..., duration=..., cpu=...
+
+2️⃣ Add CPU and Timing Metrics Collector
+
+Still in rtb-refresh-service.ts:
+
+Track timing per bucket:
+
+const cycleStart = performance.now();
+...
+const cycleDuration = performance.now() - cycleStart;
+
+
+Collect CPU metrics:
+
+const cpuUsage = process.cpuUsage();
+const cpuLoad = ((cpuUsage.user + cpuUsage.system) / 10000) / (cycleDuration / 1000);
+
+
+Log per cycle:
+
+[8.8.4-A4.R10R-3.T4][RTBRefresh][METRICS] duration=${cycleDuration}ms cpu=${cpuLoad}% poolSize=${POOL_SIZE}
+
+3️⃣ Update Documentation
+
+In replit.md:
+
+Add “Adaptive Concurrency Tuning” section
+
+Include baseline ranges:
+
+Target cycle duration: 5,000ms
+
+Safe CPU headroom: <60%
+
+Min pool: 3
+
+Max pool: 10
+
+4️⃣ Update Startup Logs
+
+In server/index.ts:
+
+Add startup log for ACT initialization:
+
+[A4.R10R-3.T4][INIT] Adaptive Concurrency Tuner active (pool=5, range=3-10)
+
+Testing Procedure
+Duration
+
+⏱️ Run paper trading for 10–15 minutes under normal signal load.
+
+Goal
+
+To confirm that:
+
+The RTB Refresh Service dynamically adjusts pool size
+
+Cycle durations remain below 7 seconds
+
+CPU remains under 60%
+
+No overlap or drift events occur
+
+Expected Behavior
+Condition	Expected Action
+Duration < 4 s, CPU < 45 %	Increase pool +1 (until max 10)
+Duration > 8 s, CPU > 60 %	Decrease pool −1 (until min 3)
+Duration 4–8 s, CPU < 60 %	Keep pool steady
+Overlap or “refresh in progress”	Force pool −1 to avoid contention
+Logging & Data Collection
+
+Replit should collect the following logs for analysis:
+
+Log Categories
+
+[8.8.4-A4.R10R-3.T4][RTBRefresh][METRICS]
+
+Contains per-cycle timing, CPU, pool size
+
+[8.8.4-A4.R10R-3.T4][ACT][POOL_ADJUST]
+
+Shows adaptive changes in concurrency
+
+[A4.R10R-3][RTBRefresh][CYCLE_COMPLETE]
+
+Confirms successful cycle completions
+
+[A4.R10R-3][RTBRefresh] Skipping
+
+Detects overlap or blocked cycles
+
+[FX5Scanner][COMPLETE]
+
+Verifies FX5 not impacted by RTB tuning
+
+Success Criteria
+
+✅ All cycles complete with <7 seconds average duration
+✅ CPU stays below 60 % for entire test
+✅ Adaptive tuner logs at least 1 pool increase and 1 decrease (demonstrating responsiveness)
+✅ No RTB overlaps or skipped cycles
+✅ FX5 scan timings unaffected
+✅ Event loop lag ≤ 2 ms
+
+If these conditions are met, Directive 8.8.4-A4.R10R-3.T4 is considered successfully validated, and the RTB Refresh subsystem will be officially classified as self-regulating and ready for Stage 4 full-engine concurrency integration testing (Directive 8.8.4-A4.R10R-4).
+
+Summary of Changes
+File	Purpose
+server/services/rtb-refresh-service.ts	Add adaptive concurrency logic and metrics logging
+server/index.ts	Log initialization sequence for ACT
+replit.md	Add documentation for Adaptive Concurrency Tuner
+(No other files modified)	—
+✅ Directive Ready for Execution
+
+Directive ID: 8.8.4-A4.R10R-3.T4
+Directive Name: Adaptive Concurrency Tuner
+Status: Approved for implementation and validation test
+Execution Duration: 10–15 minutes under paper trading mode
+Test User: testuser123 / SecurePass123!

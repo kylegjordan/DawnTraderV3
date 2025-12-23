@@ -1,34 +1,36 @@
 # Phase 30.FX.4–6 Report
-Generated: 2025-12-23T16:21:12.675Z
+Generated: 2025-12-23T19:02:05.318Z
 
 ## Overview
 This report summarizes the Lottie Oversight and Cross-Strategy Optimization activities.
 
 ## Lottie Oversight Log (Last 20 Events)
 
-- 2025-12-23T16:20:28.553Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2025-12-23T16:15:28.580Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2025-12-23T16:10:28.578Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2025-12-23T16:05:28.565Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2025-12-23T16:00:28.602Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2025-12-23T15:55:28.581Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2025-12-23T15:50:28.619Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2025-12-23T15:45:28.581Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2025-12-23T15:40:28.568Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2025-12-23T15:35:28.577Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2025-12-23T15:30:28.627Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2025-12-23T15:25:28.596Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2025-12-23T15:20:28.190Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2025-12-23T15:19:35.391Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2025-12-23T15:14:34.992Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2025-12-23T15:12:06.285Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2025-12-23T15:07:05.913Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2025-12-23T15:05:08.896Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 429)
-- 2025-12-23T15:00:09.203Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2025-12-23T14:55:09.208Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-12-23T19:00:05.547Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-12-23T18:58:44.313Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-12-23T18:54:44.352Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-12-23T18:51:13.141Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-12-23T18:46:13.128Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-12-23T18:41:13.151Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-12-23T18:36:13.137Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-12-23T18:31:13.141Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-12-23T18:26:13.140Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-12-23T18:21:13.157Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-12-23T18:16:13.134Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-12-23T18:11:13.138Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-12-23T18:06:13.140Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-12-23T18:01:13.131Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-12-23T17:56:13.157Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-12-23T17:51:13.136Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-12-23T17:46:13.139Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-12-23T17:41:13.125Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-12-23T17:36:13.157Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-12-23T17:31:13.149Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
 
 ## Strategy Mix Changes (Last 20)
 
+- 2025-12-23T18:21:12.693Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
+- 2025-12-23T17:21:12.692Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
 - 2025-12-23T16:20:27.285Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
 - 2025-12-23T14:55:06.642Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
 - 2025-12-23T13:00:26.327Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
@@ -47,8 +49,6 @@ This report summarizes the Lottie Oversight and Cross-Strategy Optimization acti
 - 2025-12-22T15:34:12.529Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
 - 2025-12-22T14:34:12.533Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
 - 2025-12-22T12:35:02.099Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
-- 2025-12-22T11:32:30.702Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
-- 2025-12-22T10:32:30.771Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
 
 ## Summary Statistics
 
@@ -56,8 +56,7 @@ This report summarizes the Lottie Oversight and Cross-Strategy Optimization acti
 - Total events: 20
 - Active strategies: 1
 - Status breakdown:
-  - suspended: 19
-  - error: 1
+  - suspended: 20
 
 ### Strategy Mix
 - Total changes: 20

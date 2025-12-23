@@ -143,10 +143,15 @@ app.use((req, res, next) => {
    * A4.R10R-3: Initialize RTB Refresh Service AFTER Central Clock
    * Now synchronized with Central Clock for deterministic 15s bucket refresh
    * Micro-cycle: 15s (one bucket), Macro-cycle: 120s (all 8 buckets)
+   * 
+   * A4.R10R-3.T4: Adaptive Concurrency Tuner (ACT) enabled
+   * - Dynamically adjusts pool size based on cycle duration and CPU headroom
+   * - Target: 5000ms, Safe CPU: <60%, Pool range: 3-10 workers
    */
-  const { rtbRefreshService } = await import('./services/rtb-refresh-service.js');
+  const { rtbRefreshService, getAdaptivePoolSize } = await import('./services/rtb-refresh-service.js');
   rtbRefreshService.start();
   console.log('[A4.R10R-3] RTB Refresh Service started (clock-synchronized)');
+  console.log(`[A4.R10R-3.T4][INIT] Adaptive Concurrency Tuner active (pool=${getAdaptivePoolSize()}, range=3-10)`);
 
   // R9.3.HF-5: Force FX5 Scanner reinitialization (non-blocking)
   import('./startup/fx5-scanner-bootstrap.js')

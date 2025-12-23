@@ -43,6 +43,7 @@ import { performanceMonitor } from '../diagnostics/performance_monitor';
 import { normalizeInternal } from '../../markets/kraken-symbol-resolver';
 import { diagnosticTrace } from '../diagnostics/trace_service';
 import { fetchFreshMetrics, calculateDecayedMetric } from '../metrics/signal_metrics_calculator';
+import { getAdaptivePoolSize } from '../../services/adaptive-pool-config';
 
 export interface RTBSignalInput {
   signalId: string;
@@ -697,13 +698,13 @@ class ReadyToBuyService {
         console.log(`[A3.R9.2][RTB_DEDUP] mode=${mode} deleted=${duplicateCount} duplicates, remaining=${deduplicatedSignals.length}`);
       }
 
-      // Directive 8.8.4-A4.R10R-3.T3: Concurrent processing with batched DB writes
+      // Directive 8.8.4-A4.R10R-3.T3/T4: Concurrent processing with batched DB writes and adaptive pool
       const now = new Date();
       const statusUpdatedAt = now.toISOString();
       
-      // T3 Metrics: Start timing
-      const POOL_SIZE = 5; // Concurrent processing pool size
-      console.log(`[8.8.4-A4.R10R-3.T3][RTBRefresh][METRICS] start poolSize=${POOL_SIZE} signals=${deduplicatedSignals.length}`);
+      // T4: Get adaptive pool size from RTB Refresh Service (static import at top of file)
+      const POOL_SIZE = getAdaptivePoolSize();
+      console.log(`[8.8.4-A4.R10R-3.T4][RTBRefresh][METRICS] start poolSize=${POOL_SIZE} signals=${deduplicatedSignals.length}`);
       const cycleStart = performance.now();
       
       // Collect batch operations for efficient DB writes
