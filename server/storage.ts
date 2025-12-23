@@ -706,6 +706,10 @@ export interface IStorage {
   getRtbSignalById(id: string): Promise<RtbSignal | undefined>;
   updateRtbSignal(id: string, updates: Partial<RtbSignal>): Promise<RtbSignal>;
   deleteRtbSignals(filters: { mode: 'live' | 'paper'; id?: string; symbol?: string; strategy?: string; status?: string }): Promise<number>;
+  
+  // Directive 8.8.4-A4.R10R-3.T3: Batch RTB operations for concurrent refresh
+  updateRtbSignalsBatch(updates: Array<{ id: string; updates: Partial<RtbSignal> }>): Promise<number>;
+  deleteRtbSignalsByIds(ids: string[]): Promise<number>;
 }
 
 // Phase 27.F: Canonical metric key generator for goals engine
@@ -4443,6 +4447,42 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .delete(rtbSignals)
       .where(and(...conditions))
+      .returning();
+    return result.length;
+  }
+
+  /**
+   * Directive 8.8.4-A4.R10R-3.T3: Batch update RTB signals
+   * Performs all updates in a single transaction for efficiency
+   */
+  async updateRtbSignalsBatch(updates: Array<{ id: string; updates: Partial<RtbSignal> }>): Promise<number> {
+    if (updates.length === 0) return 0;
+    
+    let updatedCount = 0;
+    for (const { id, updates: signalUpdates } of updates) {
+      try {
+        await db
+          .update(rtbSignals)
+          .set(signalUpdates)
+          .where(eq(rtbSignals.id, id));
+        updatedCount++;
+      } catch (error) {
+        console.error(`[T3][BATCH_UPDATE] Failed to update signal ${id}:`, error);
+      }
+    }
+    return updatedCount;
+  }
+
+  /**
+   * Directive 8.8.4-A4.R10R-3.T3: Batch delete RTB signals by IDs
+   * Deletes all specified signals in a single query
+   */
+  async deleteRtbSignalsByIds(ids: string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    
+    const result = await db
+      .delete(rtbSignals)
+      .where(inArray(rtbSignals.id, ids))
       .returning();
     return result.length;
   }

@@ -223,29 +223,28 @@ function calculateRefreshStaggerMs(signalId: string, symbol: string): number {
 }
 
 /**
- * Directive 8.8.4-A3.R9.0.A (R9-D2): Create staggered delay based on hash offset
- * Scales the 0-30s hash offset to a practical window (0-5s) to prevent overlapping
- * with the next 30-second refresh cycle while still spreading load
- * @param staggerOffset - Hash-derived offset (0-30000ms)
- * @param index - Index in the signal array
- * @param total - Total number of signals
- * @returns Promise that resolves after scaled stagger delay
+ * Directive 8.8.4-A4.R10R-3.T3: Chunk array into groups for concurrent processing
+ * @param array - Array to chunk
+ * @param size - Chunk size
+ * @returns Array of chunks
  */
-function staggeredDelay(staggerOffset: number, index: number, total: number): Promise<void> {
-  if (total <= 3 || index === 0) {
-    return Promise.resolve(); // No delay for small batches or first signal
+function chunkArray<T>(array: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < array.length; i += size) {
+    chunks.push(array.slice(i, i + size));
   }
-  
-  // Scale 0-30s offset to 0-5s practical window to prevent cycle overlap
-  // This maintains relative ordering from hash while fitting within safe bounds
-  const scaleFactor = 5000 / 30000; // Scale to max 5 seconds
-  const scaledDelayMs = Math.round(staggerOffset * scaleFactor);
-  
-  // Add index-based micro-offset to prevent simultaneous signals with same hash
-  const microOffset = (index % 10) * 5; // 0-45ms additional offset per batch
-  const totalDelayMs = Math.min(scaledDelayMs + microOffset, 5000);
-  
-  return new Promise(resolve => setTimeout(resolve, totalDelayMs));
+  return chunks;
+}
+
+/**
+ * Directive 8.8.4-A4.R10R-3.T3: Signal processing result for batch operations
+ */
+interface SignalProcessingResult {
+  type: 'update' | 'delete';
+  signalId: string;
+  symbol: string;
+  updates?: Partial<RtbSignal>;
+  reason?: string;
 }
 
 /**
@@ -698,127 +697,129 @@ class ReadyToBuyService {
         console.log(`[A3.R9.2][RTB_DEDUP] mode=${mode} deleted=${duplicateCount} duplicates, remaining=${deduplicatedSignals.length}`);
       }
 
-      // A3.R9.0.A (R9-D2): Recalculate CWQI with decay and update status
-      // Apply uniform refresh stagger across 30-second window
+      // Directive 8.8.4-A4.R10R-3.T3: Concurrent processing with batched DB writes
       const now = new Date();
+      const statusUpdatedAt = now.toISOString();
+      
+      // T3 Metrics: Start timing
+      const POOL_SIZE = 5; // Concurrent processing pool size
+      console.log(`[8.8.4-A4.R10R-3.T3][RTBRefresh][METRICS] start poolSize=${POOL_SIZE} signals=${deduplicatedSignals.length}`);
+      const cycleStart = performance.now();
+      
+      // Collect batch operations for efficient DB writes
+      const bulkUpdates: Array<{ id: string; updates: Partial<RtbSignal> }> = [];
+      const bulkDeletes: string[] = [];
       let reconfirmedCount = 0;
       let expiredCount = 0;
       
-      // A3.R9.0.A: Sort signals by stagger offset for ordered processing
-      const signalsWithOffset = deduplicatedSignals.map(s => ({
-        signal: s,
-        offset: calculateRefreshStaggerMs(s.signalId, s.symbol)
-      })).sort((a, b) => a.offset - b.offset);
+      // Process signals in concurrent chunks
+      const chunks = chunkArray(deduplicatedSignals, POOL_SIZE);
       
-      // Log stagger distribution for diagnostics
-      const staggerOffsets = signalsWithOffset.map(s => s.offset);
-      const avgOffset = staggerOffsets.length > 0 
-        ? Math.round(staggerOffsets.reduce((a, b) => a + b, 0) / staggerOffsets.length) 
-        : 0;
-      const minOffset = staggerOffsets.length > 0 ? Math.min(...staggerOffsets) : 0;
-      const maxOffset = staggerOffsets.length > 0 ? Math.max(...staggerOffsets) : 0;
-      console.log(`[A3.R9.2][RTB_REFRESH_STAGGER] mode=${mode} signals=${signalsWithOffset.length} avgOffset=${avgOffset}ms range=[${minOffset}ms-${maxOffset}ms]`);
-      
-      for (let i = 0; i < signalsWithOffset.length; i++) {
-        const { signal, offset } = signalsWithOffset[i];
-        
-        // A3.R9.0.A (R9-D2): Apply staggered delay based on hash offset for uniform distribution
-        await staggeredDelay(offset, i, signalsWithOffset.length);
-        
-        // Directive A3.R9.0.C: Normalize symbol for consistent comparisons
-        const normalizedSymbol = normalizePairKey(signal.symbol);
-        
-        // Directive A3.R8.2 FIX: Use TRUE original CWQI from metadata, not stored cwqi
-        // The stored signal.cwqi gets overwritten with decayed values after each refresh
-        // metadata.originalCwqi preserves the baseline value from signal creation
-        const metadata = signal.metadata as Record<string, any> || {};
-        const trueOriginalCWQI = metadata.originalCwqi 
-          ? parseFloat(metadata.originalCwqi) 
-          : parseFloat(signal.cwqi || '0');  // Fallback for signals without metadata
-        
-        const queuedAt = signal.queuedAt;
-        const oldStatus = signal.status || 'active';
-        
-        // Directive 8.8.4-A3.R9.2-A: Apply CWQI decay with floor clamping (decay before normalization)
-        // Use TRUE original CWQI for decay calculation to prevent compounding decay
-        const decayedCWQI = calculateDecayedCWQI(trueOriginalCWQI, queuedAt, normalizedSymbol);
-        
-        // Directive 8.8.4-A3.R9.2-B: Fetch FRESH metrics instead of cached values
-        // This ensures SQE always evaluates current data instead of stale metrics
-        const cachedMetrics = {
-          ngc: parseFloat(signal.ngc || signal.confidence || '0'),
-          cwqi: trueOriginalCWQI,
-          profitRate: signal.expectedReturn ? parseFloat(signal.expectedReturn) : 0.15,
-          riskScore: parseFloat(signal.riskScore || '0.5')
-        };
-        
-        const freshMetrics = await fetchFreshMetrics(normalizedSymbol, signal.strategy, cachedMetrics);
-        
-        // Use fresh metrics if available, otherwise fall back to cached
-        const ngc = freshMetrics.refreshed ? freshMetrics.ngc : cachedMetrics.ngc;
-        const riskScore = freshMetrics.refreshed ? freshMetrics.riskScore : cachedMetrics.riskScore;
-        const profitRate = freshMetrics.refreshed ? freshMetrics.profitRate : cachedMetrics.profitRate;
-        const cwqiForEval = freshMetrics.refreshed ? freshMetrics.cwqi : trueOriginalCWQI;
-        
-        console.log(`[A3.R9.2][REFRESH_METRICS] symbol=${normalizedSymbol} refreshed=${freshMetrics.refreshed} NGC=${ngc.toFixed(4)} CWQI=${cwqiForEval.toFixed(4)}`);
-        
-        // Directive A3.R9.2-C: SQE revalidation with fresh metrics
-        // Use FRESH metrics for SQE evaluation, not stale cached values
-        const sqeInput: SQEInput = {
-          signalId: signal.signalId,
-          symbol: normalizedSymbol,
-          strategy: signal.strategy,
-          ngc,
-          riskScore,
-          profitRate,
-          cwqi: cwqiForEval
-        };
-        
-        console.log(`[A3.R9.2][RECONFIRM_START] pair=${normalizedSymbol} status=${oldStatus} trueOriginalCWQI=${trueOriginalCWQI.toFixed(4)} decayedCWQI=${decayedCWQI.toFixed(4)}`);
-        // A3.R9.2-C: Evaluate with fresh metrics
-        const sqeResult = evaluateSignalQuality(sqeInput, { skipDecay: true });
-        
-        // Directive A3.R9.2-C: SQE revalidation failure logging
-        if (!sqeResult.passed) {
-          console.log(`[A3.R9.2][SQE_REVALIDATION_FAIL] symbol=${normalizedSymbol} reason=${sqeResult.reason} NGC=${ngc.toFixed(4)} CWQI=${cwqiForEval.toFixed(4)}`);
-          
-          this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'deleted', 'SQE_failure');
-          this.logSqeRejection(signal, sqeResult.reason || 'unknown', ngc, cwqiForEval);
-          
-          // A3.R9.2: Immediately delete signal on SQE failure
-          await storage.deleteRtbSignals({ mode, id: signal.id });
-          performanceMonitor.recordQueueRemove(1);
-          
-          console.log(`[A3.R9.2][SQE_DELETE] pair=${normalizedSymbol} reason=${sqeResult.reason}`);
-          expiredCount++;
-          continue;
-        }
-        
-        // Directive A3.R9.2-B: Update signal with FRESH metrics (persist refreshed values)
-        // This ensures subsequent SQE evaluations use live data, not stale cached values
-        const statusUpdatedAt = now.toISOString();
-        await storage.updateRtbSignal(signal.id, {
-          status: 'reconfirmed',
-          cwqi: decayedCWQI.toString(),  // Store decayed CWQI for ranking
-          ngc: ngc.toString(),            // R9.2-B: Persist fresh NGC
-          riskScore: riskScore.toString(), // R9.2-B: Persist fresh risk
-          expectedReturn: profitRate.toString(), // R9.2-B: Persist fresh profit rate
-          lastRefreshedAt: now,
-          metadata: {
-            ...metadata,
-            lastReconfirmedAt: statusUpdatedAt,
-            statusUpdatedAt,  // Track status transition time
-            originalCwqi: trueOriginalCWQI.toString(),
-            decayApplied: true,
-            freshMetricsApplied: freshMetrics.refreshed, // R9.2-B: Track if fresh metrics were used
-            refreshTimestamp: freshMetrics.timestamp     // R9.2-B: Timestamp of fresh metrics
-          }
-        });
-        
-        this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'reconfirmed', 'refresh');
-        console.log(`[A3.R9.2][RECONFIRM_COMPLETE] pair=${normalizedSymbol} ${oldStatus}→reconfirmed CWQI=${decayedCWQI.toFixed(4)} freshMetrics=${freshMetrics.refreshed}`);
-        reconfirmedCount++;
+      for (const group of chunks) {
+        await Promise.all(
+          group.map(async (signal) => {
+            try {
+              // Directive A3.R9.0.C: Normalize symbol for consistent comparisons
+              const normalizedSymbol = normalizePairKey(signal.symbol);
+              
+              // Directive A3.R8.2 FIX: Use TRUE original CWQI from metadata
+              const metadata = signal.metadata as Record<string, any> || {};
+              const trueOriginalCWQI = metadata.originalCwqi 
+                ? parseFloat(metadata.originalCwqi) 
+                : parseFloat(signal.cwqi || '0');
+              
+              const queuedAt = signal.queuedAt;
+              const oldStatus = signal.status || 'active';
+              
+              // Apply CWQI decay
+              const decayedCWQI = calculateDecayedCWQI(trueOriginalCWQI, queuedAt, normalizedSymbol);
+              
+              // Fetch fresh metrics
+              const cachedMetrics = {
+                ngc: parseFloat(signal.ngc || signal.confidence || '0'),
+                cwqi: trueOriginalCWQI,
+                profitRate: signal.expectedReturn ? parseFloat(signal.expectedReturn) : 0.15,
+                riskScore: parseFloat(signal.riskScore || '0.5')
+              };
+              
+              const freshMetrics = await fetchFreshMetrics(normalizedSymbol, signal.strategy, cachedMetrics);
+              
+              const ngc = freshMetrics.refreshed ? freshMetrics.ngc : cachedMetrics.ngc;
+              const riskScore = freshMetrics.refreshed ? freshMetrics.riskScore : cachedMetrics.riskScore;
+              const profitRate = freshMetrics.refreshed ? freshMetrics.profitRate : cachedMetrics.profitRate;
+              const cwqiForEval = freshMetrics.refreshed ? freshMetrics.cwqi : trueOriginalCWQI;
+              
+              // SQE revalidation
+              const sqeInput: SQEInput = {
+                signalId: signal.signalId,
+                symbol: normalizedSymbol,
+                strategy: signal.strategy,
+                ngc,
+                riskScore,
+                profitRate,
+                cwqi: cwqiForEval
+              };
+              
+              const sqeResult = evaluateSignalQuality(sqeInput, { skipDecay: true });
+              
+              if (!sqeResult.passed) {
+                console.log(`[A3.R9.2][SQE_REVALIDATION_FAIL] symbol=${normalizedSymbol} reason=${sqeResult.reason}`);
+                this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'deleted', 'SQE_failure');
+                this.logSqeRejection(signal, sqeResult.reason || 'unknown', ngc, cwqiForEval);
+                bulkDeletes.push(signal.id);
+                expiredCount++;
+                return;
+              }
+              
+              // Queue update for batch write
+              bulkUpdates.push({
+                id: signal.id,
+                updates: {
+                  status: 'reconfirmed',
+                  cwqi: decayedCWQI.toString(),
+                  ngc: ngc.toString(),
+                  riskScore: riskScore.toString(),
+                  expectedReturn: profitRate.toString(),
+                  lastRefreshedAt: now,
+                  metadata: {
+                    ...metadata,
+                    lastReconfirmedAt: statusUpdatedAt,
+                    statusUpdatedAt,
+                    originalCwqi: trueOriginalCWQI.toString(),
+                    decayApplied: true,
+                    freshMetricsApplied: freshMetrics.refreshed,
+                    refreshTimestamp: freshMetrics.timestamp
+                  }
+                }
+              });
+              
+              this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'reconfirmed', 'refresh');
+              console.log(`[A3.R9.2][RECONFIRM_COMPLETE] pair=${normalizedSymbol} ${oldStatus}→reconfirmed CWQI=${decayedCWQI.toFixed(4)}`);
+              reconfirmedCount++;
+            } catch (err) {
+              console.error(`[T3][SIGNAL_PROCESS_ERROR] signal=${signal.id}:`, err);
+              bulkDeletes.push(signal.id);
+              expiredCount++;
+            }
+          })
+        );
       }
+      
+      // T3: Batch database operations
+      if (bulkDeletes.length > 0) {
+        const deleted = await storage.deleteRtbSignalsByIds(bulkDeletes);
+        performanceMonitor.recordQueueRemove(deleted);
+        console.log(`[T3][BATCH_DELETE] deleted=${deleted} signals`);
+      }
+      
+      if (bulkUpdates.length > 0) {
+        const updated = await storage.updateRtbSignalsBatch(bulkUpdates);
+        console.log(`[T3][BATCH_UPDATE] updated=${updated} signals`);
+      }
+      
+      // T3 Metrics: End timing
+      const duration = performance.now() - cycleStart;
+      console.log(`[8.8.4-A4.R10R-3.T3][RTBRefresh][METRICS] duration=${duration.toFixed(2)}ms`)
 
       // A3.R8.5 FIX: Use deduplicatedSignals count, not original signals count
       await contextBridge.broadcast({
