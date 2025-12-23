@@ -47,6 +47,8 @@ RTB Refresh Service Extraction decouples RTB refresh and rank logic from the FX5
 
 RTB Performance Diagnostics & Optimization identified and resolved bottlenecks in the `refreshAndRank()` function through batch database operations, a concurrent processing pool, and removal of artificial staggering delays, reducing cycle duration significantly. An Adaptive Concurrency Tuner (ACT) dynamically adjusts the concurrent processing pool size based on observed cycle performance and CPU utilization. Dynamic Pool Broadcast & Load Balancing enhances the ACT with synchronized pool size propagation across dependent services, smoothed CPU averaging, and event-loop lag protection. RTB Bucket Optimization (R3) constrains each refresh cycle to only process its bucket-assigned signals (5-10 signals) instead of all 72 signals, achieving 69% cycle duration improvement (6-7s to ~2.2s).
 
+Core System Hardening (Directive 8.8.4-A4.R10R-4) implements production-readiness measures including: **Module Lockdown** - 6 core modules locked with headers (price-cache, central-clock, rtb-refresh-service, ready_to_buy_service, kraken-symbol-resolver, kraken); **System Health Monitor** - real-time CPU, memory, event loop lag monitoring with 10s sampling via `system-health.ts`; **Graceful Shutdown** - ordered service termination (operation queues → RTB refresh → Central Clock → Price Cache → System Health); **Health Endpoint** - `/api/health` exposes system metrics and health status; **INIT_OK Logging** - startup verification logs for all core services.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed for open trade price monitoring.
