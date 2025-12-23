@@ -1,0 +1,145 @@
+🧭 Directive 8.8.4-A4.R10R-2 — RTB Refresh Service Extraction and Cache Integration
+(Also closing A4.R10R-1)
+
+Issued: [Today’s Date]
+Architect: [You]
+Developer: Replit Agent
+Status: Open
+Previous Directive: A4.R10R-1 (Unified Price Cache) — Now officially closed
+
+🧩 Section 1 — Closure of A4.R10R-1
+
+✅ Verified completion (see verification report dated [date]):
+
+Unified price cache operational
+
+Single-source normalization via kraken-symbol-resolver.ts
+
+Rate governor active
+
+FX5 bootstrap sequence confirmed stable
+Action:
+
+Tag repository:
+
+git tag -a A4.R10R-1_PASS -m "Unified price cache verified and stable"
+git push origin A4.R10R-1_PASS
+
+
+Add header comment to the following locked modules:
+
+// LOCKED MODULE — A4.R10R-1 verified. Do not modify without new directive.
+
+
+server/services/price-cache.ts
+
+server/services/kraken.ts
+
+server/markets/kraken-symbol-resolver.ts
+
+🧩 Section 2 — Implementation of A4.R10R-2 (RTB Refresh Service Extraction)
+Objective:
+
+Decouple RTB refresh and rank logic from the FX5 scan loop, running it as an independent service governed by its own timer (or Central Clock subscription), using the unified price-cache.ts for all pricing data.
+
+Scope:
+
+server/services/rtb-refresh-service.ts → New service
+
+server/services/fx5-scanner.ts → Updated to remove RTB refresh dependency
+
+server/services/trade-executor.ts → Minor update to use cache subscription model
+
+server/index.ts → Initialize RTB refresh service before TCL bootstrap
+
+Implementation Plan:
+
+Create New File: server/services/rtb-refresh-service.ts
+
+import { priceCache } from './price-cache';
+import { readyToBuyService } from '../core/rtb/ready_to_buy_service';
+import { centralClock } from '../core/clock';
+export class RTBRefreshService {
+  private intervalMs = 15000;
+  private timer?: NodeJS.Timer;
+  start() {
+    console.log('[A4.R10R-2][RTBRefresh] Service started');
+    this.timer = setInterval(() => this.refreshCycle(), this.intervalMs);
+  }
+  private async refreshCycle() {
+    const signals = readyToBuyService.getAll();
+    if (!signals?.length) return;
+    const prices = await priceCache.getBatch('readyToBuy', signals.map(s => s.symbol));
+    await readyToBuyService.refreshAndRank(signals, prices);
+    console.log(`[A4.R10R-2][RTBRefresh] Cycle complete: ${signals.length} signals`);
+  }
+  stop() { if (this.timer) clearInterval(this.timer); }
+}
+export const rtbRefreshService = new RTBRefreshService();
+
+
+Update fx5-scanner.ts
+
+Remove any direct readyToBuyService.refreshAndRank() calls.
+
+After scan completion, push qualifying signals only:
+
+await readyToBuyService.enqueue(signal);
+
+
+Update server/index.ts
+
+import { rtbRefreshService } from './services/rtb-refresh-service';
+...
+priceCache.initialize();
+rtbRefreshService.start();
+FX5Bootstrap();
+TCLBootstrap();
+
+
+Rate Governance Alignment
+
+All refresh cycles must pull prices exclusively via:
+
+const prices = await priceCache.getBatch('readyToBuy', symbols);
+
+
+No direct KrakenService calls permitted.
+
+Logging
+
+New markers:
+
+[A4.R10R-2][RTBRefresh][CYCLE_START]
+[A4.R10R-2][RTBRefresh][CYCLE_COMPLETE]
+
+
+Documentation
+
+Update replit.md → Add RTBRefreshService structure and initialization sequence.
+
+🧪 Validation Plan for A4.R10R-2
+Checkpoint	Expected Log	Validation
+Startup	[A4.R10R-2][RTBRefresh] Service started before [FX5Bootstrap]	Confirms independent scheduling
+First Cycle	[A4.R10R-2][RTBRefresh] Cycle complete:	Confirms functional independence
+Rate Governance	No Kraken calls >10/s	Confirms compliance
+Cache Use	All refreshes sourced via price-cache.ts	Confirms architecture consistency
+📦 Directive Outcome
+
+RTB refresh decoupled from FX5 scanner.
+
+System now in mid-stage transition toward full modular independence.
+
+Once validated, proceed to A4.R10R-3 (FX5 decoupling).
+
+🧾 TL;DR
+
+❌ Don’t do live trading tests yet.
+
+✅ Validate runtime health only.
+
+✅ Officially close A4.R10R-1 and implement A4.R10R-2 as above.
+
+🔜 You’re 1 of 5 directives away from the full decoupled architecture.
+
+🧭 Testing and validation begin in earnest after A4.R10R-4, when all subsystems operate asynchronously.

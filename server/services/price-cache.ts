@@ -1,4 +1,6 @@
 /**
+ * LOCKED MODULE — A4.R10R-1 verified. Do not modify without new directive.
+ * 
  * Directive 8.8.4-A4.R10R-1 — Unified, Rate-Governed Price Cache
  * 
  * This service consolidates all price retrieval logic for:
