@@ -647,6 +647,7 @@ class ReadyToBuyService {
 
   /**
    * Directive 8.8.4-A3.R9.0: Refresh and dynamically re-rank RTB signals
+   * Directive 8.8.4-A4.R10R-3.R3: Bucket optimization - only process bucket signals
    * 
    * Per-signal rolling TTL refresh (30s per signal):
    * 1. Check individual signal expiry based on its own TTL
@@ -658,15 +659,27 @@ class ReadyToBuyService {
    * 7. Broadcast rtb:updated to clients for UI refresh
    * 
    * @param mode - Trading mode ('paper' or 'live')
+   * @param bucketSignalKeys - Optional set of signal keys (mode:symbol:strategy) to filter
+   *                           If provided, only processes signals matching these keys
    */
-  async refreshAndRank(mode: TradingMode): Promise<void> {
+  async refreshAndRank(mode: TradingMode, bucketSignalKeys?: Set<string>): Promise<void> {
     const startTime = Date.now();
     
     // A3.R9.0: Set refresh incomplete flag for TCL sync barrier
     this.setRefreshComplete(mode, false);
     
     try {
-      const signals = await this.getQueuedSignals(mode);
+      let signals = await this.getQueuedSignals(mode);
+      
+      // R3: Filter to bucket-specific signals if keys provided
+      if (bucketSignalKeys && bucketSignalKeys.size > 0) {
+        const originalCount = signals.length;
+        signals = signals.filter(s => {
+          const signalKey = `${mode}:${s.symbol}:${s.strategy}`;
+          return bucketSignalKeys.has(signalKey);
+        });
+        console.log(`[A4.R10R-3.R3][RTBRefresh][BUCKET_FILTER] mode=${mode} total=${originalCount} bucketFiltered=${signals.length}`);
+      }
       
       if (signals.length === 0) {
         console.log(`[A3.R9.2][RTB_REFRESH] mode=${mode} no signals to refresh`);

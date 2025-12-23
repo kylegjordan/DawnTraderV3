@@ -1,0 +1,121 @@
+🧾 Directive 8.8.4-A4.R10R-3.R3 — RTB Bucket Optimization
+📘 Purpose
+
+Optimize the Ready-To-Buy (RTB) Refresh Service to ensure each refresh cycle only processes the signals belonging to its assigned bucket, rather than reprocessing the full queue of signals each cycle.
+
+This change addresses the inefficiency observed in the T5 validation phase, where all 72 RTB signals were processed in every 15–30 second micro-cycle.
+
+This directive will finalize the performance tuning of the RTB Refresh Service prior to system hardening (Directive 8.8.4-A4.R10R-4).
+
+🧠 Background
+
+In the T5 adaptive concurrency validation, the system showed:
+
+Excellent CPU usage (7–12 %)
+
+Healthy event loop performance (2–13 ms lag)
+
+But slower-than-expected RTB refresh cycles (6–7.3 s, target < 5 s)
+
+Root cause:
+refreshAndRank() was iterating over all RTB signals instead of only the bucket subset for that cycle.
+
+🧩 Implementation Steps
+1️⃣ Modify bucket filtering logic
+
+File: server/services/rtb-refresh-service.ts
+
+Replace or update the portion of the code that retrieves and processes RTB signals in refreshBucket().
+
+Before (inefficient):
+
+const signals = await readyToBuyService.getActiveSignals();
+await readyToBuyService.refreshAndRank(signals);
+
+
+After (optimized):
+
+const allSignals = await readyToBuyService.getActiveSignals();
+const bucketSignals = allSignals.filter(s => s.bucketId === currentBucket);
+
+if (bucketSignals.length === 0) {
+  log(`[A4.R10R-3.R3][RTBRefresh][SKIP] bucket=${currentBucket} (empty)`);
+  return;
+}
+
+await readyToBuyService.refreshAndRank(bucketSignals);
+log(`[A4.R10R-3.R3][RTBRefresh][BUCKET] bucket=${currentBucket} size=${bucketSignals.length}`);
+
+
+This ensures only the bucket’s signals are processed during that micro-cycle.
+
+2️⃣ Add bucket assignment logic (if missing)
+
+File: ready_to_buy_service.ts
+
+Ensure that each signal has a deterministic bucketId assigned during insertion or revalidation.
+
+Add this helper where new or reconfirmed signals are inserted:
+
+signal.bucketId = Math.abs(hash(signal.symbol)) % 8;  // 8 buckets total
+
+
+This maintains even distribution across all buckets.
+
+3️⃣ Update logging
+
+Add bucket-aware logging for better observability:
+
+[A4.R10R-3.R3][RTBRefresh][BUCKET] for active cycles
+
+[A4.R10R-3.R3][RTBRefresh][SKIP] for empty buckets
+
+These logs confirm correct signal partitioning.
+
+4️⃣ Validation Plan (10-minute test)
+
+Before running this test, Replit must:
+
+Clear all RTB signals and open trades
+
+Reset the system
+
+Login with test credentials
+
+Username: testuser123
+
+Password: SecurePass123!
+
+Start paper trading
+
+Run for 10 minutes and collect the following metrics:
+
+[A4.R10R-3.R3][RTBRefresh][BUCKET] cycle logs
+
+[A4.R10R-3][RTBRefresh][CYCLE_COMPLETE] duration values
+
+CPU %, event loop lag, pool size
+
+Expected outcomes:
+
+Metric	Target	Pass Criteria
+Cycle duration	< 5000 ms	✅ 4–5 s average
+CPU usage	< 25 %	✅ under threshold
+Event loop lag	< 2 ms	✅ no spikes
+Overlap events	0	✅ no [OVERLAP] logs
+Bucket activity	evenly distributed	✅ [BUCKET] size=5–10 per cycle
+✅ Completion Criteria
+
+Directive 8.8.4-A4.R10R-3.R3 is considered complete when:
+
+Each RTB cycle processes only its assigned bucket.
+
+Logs show correct bucket-based distribution (size=5–10).
+
+Cycle durations consistently < 5 s.
+
+CPU and lag remain within target thresholds.
+
+No overlap or skipped cycles occur.
+
+Once these conditions are met, the system is ready for Directive 8.8.4-A4.R10R-4 (Core System Hardening).

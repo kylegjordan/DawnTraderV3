@@ -23,6 +23,11 @@
  * - Event-loop lag protection (>2ms triggers pool reduction)
  * - Updated thresholds: Scale UP at <55% CPU, <5000ms; Scale DOWN at >60% CPU, >8000ms
  * 
+ * Directive A4.R10R-3.R3 — RTB Bucket Optimization
+ * - Each refresh cycle only processes signals assigned to its bucket (5-10 per cycle)
+ * - Replaces full-queue processing (72 signals) with bucket-filtered processing
+ * - Expected 85% reduction in cycle duration (6-7s → <1s per bucket)
+ * 
  * Previous: A4.R10R-2 (Internal setInterval, 15s refresh)
  * Current: A4.R10R-3 (Central Clock sync, bucket-based refresh)
  */
@@ -284,11 +289,16 @@ class RTBRefreshService {
     return Math.abs(hash);
   }
 
+  /**
+   * Directive 8.8.4-A4.R10R-3.R3: Bucket-optimized signal refresh
+   * Only processes signals assigned to the current bucket instead of all signals
+   */
   private async refreshModeSignals(mode: TradingMode, bucketIndex: number): Promise<void> {
     const refreshStart = Date.now();
     const signals = await readyToBuyService.getQueuedSignals(mode);
 
     if (!signals || signals.length === 0) {
+      console.log(`[A4.R10R-3.R3][RTBRefresh][SKIP] bucket=${bucketIndex} mode=${mode} (no signals)`);
       return;
     }
 
@@ -299,8 +309,12 @@ class RTBRefreshService {
     });
 
     if (bucketSignals.length === 0) {
+      console.log(`[A4.R10R-3.R3][RTBRefresh][SKIP] bucket=${bucketIndex} mode=${mode} (empty bucket)`);
       return;
     }
+
+    // R3: Log bucket activity
+    console.log(`[A4.R10R-3.R3][RTBRefresh][BUCKET] bucket=${bucketIndex} size=${bucketSignals.length}`);
 
     const symbols = bucketSignals.map((s: { symbol: string }) => s.symbol);
 
@@ -320,7 +334,10 @@ class RTBRefreshService {
 
     if (validPrices.size > 0) {
       const rankStart = Date.now();
-      await readyToBuyService.refreshAndRank(mode);
+      
+      // R3: Pass bucket signal keys to refreshAndRank for optimized processing
+      await readyToBuyService.refreshAndRank(mode, bucket);
+      
       const rankDuration = Date.now() - rankStart;
       
       console.log(`[A4.R10R-3][RTBRefresh] mode=${mode} bucket=${bucketIndex} signals=${bucketSignals.length} priced=${validPrices.size} rankDuration=${rankDuration}ms totalDuration=${Date.now() - refreshStart}ms`);
