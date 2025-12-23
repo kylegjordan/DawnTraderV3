@@ -111,35 +111,42 @@ app.use((req, res, next) => {
 
 (async () => {
   /**
-   * R9.3.HF-5: Central Clock & FX5 Scanner Startup Sequence
-   * Ensures both systems start deterministically and remain in sync.
+   * A4.R10R-3: Central Clock Synchronized Startup Sequence
+   * Ensures deterministic startup order for all tick-synchronized services.
+   * 
+   * Order: Price Cache → Central Clock → RTB Refresh Service → FX5 Scanner
    */
-  console.log('[R9.3.HF-5] 🔁 Ensuring Central Clock & FX5 Scanner bootstrap sequence');
+  console.log('[A4.R10R-3] 🔁 Starting synchronized service bootstrap sequence');
 
   /**
-   * A4.R10R-1: Initialize Unified Price Cache BEFORE FX5 bootstrap
+   * A4.R10R-1: Initialize Unified Price Cache FIRST
    * This ensures all services have access to cached pricing data
    */
   const { priceCache } = await import('./services/price-cache.js');
   priceCache.initialize();
-  console.log('[A4.R10R-1] Price Cache initialized before FX5 bootstrap');
+  console.log('[A4.R10R-1] Price Cache initialized');
 
   /**
-   * A4.R10R-2: Initialize RTB Refresh Service BEFORE FX5 bootstrap
-   * Decouples RTB refresh from FX5 scan loop with independent 15s refresh
+   * A4.R10R-3: Start Central Clock BEFORE RTB Refresh Service
+   * RTB Refresh now subscribes to clock ticks for deterministic scheduling
    */
-  const { rtbRefreshService } = await import('./services/rtb-refresh-service.js');
-  rtbRefreshService.start();
-  console.log('[A4.R10R-2] RTB Refresh Service started before FX5 bootstrap');
-
   const { centralClock } = await import('./services/central-clock.js');
   
   if (!centralClock.getIsRunning()) {
-    console.log('[R9.3.HF-5] Central Clock not running — starting manually...');
+    console.log('[A4.R10R-3] Central Clock not running — starting...');
     centralClock.start();
   } else {
-    console.log('[R9.3.HF-5] Central Clock already running (tickNumber=%d)', centralClock.getTickNumber() ?? 0);
+    console.log('[A4.R10R-3] Central Clock already running (tickNumber=%d)', centralClock.getTickNumber() ?? 0);
   }
+
+  /**
+   * A4.R10R-3: Initialize RTB Refresh Service AFTER Central Clock
+   * Now synchronized with Central Clock for deterministic 15s bucket refresh
+   * Micro-cycle: 15s (one bucket), Macro-cycle: 120s (all 8 buckets)
+   */
+  const { rtbRefreshService } = await import('./services/rtb-refresh-service.js');
+  rtbRefreshService.start();
+  console.log('[A4.R10R-3] RTB Refresh Service started (clock-synchronized)');
 
   // R9.3.HF-5: Force FX5 Scanner reinitialization (non-blocking)
   import('./startup/fx5-scanner-bootstrap.js')
