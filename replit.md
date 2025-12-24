@@ -1,7 +1,7 @@
 # Crypto Day Trading Web App
 
 ## Overview
-This project is a long-only, spot-trading cryptocurrency day trading web application designed for the Kraken exchange. It automates advanced trading strategies, integrates real-time market scanning, and incorporates disciplined risk management. The application supports both live and paper trading, leveraging OpenAI's GPT models for AI analysis, trade tracking, performance analytics, error diagnosis, and an autonomous learning engine. Its core purpose is to deliver a comprehensive, resilient, and continuously self-optimizing trading platform, aiming for market potential through advanced automation and AI integration.
+This project is a long-only, spot-trading cryptocurrency day trading web application for the Kraken exchange. It automates advanced trading strategies, integrates real-time market scanning, and incorporates disciplined risk management. The application supports both live and paper trading, leveraging OpenAI's GPT models for AI analysis, trade tracking, performance analytics, error diagnosis, and an autonomous learning engine. Its core purpose is to deliver a comprehensive, resilient, and continuously self-optimizing trading platform, aiming for market potential through advanced automation and AI integration.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -47,7 +47,9 @@ RTB Refresh Service Extraction decouples RTB refresh and rank logic from the FX5
 
 RTB Performance Diagnostics & Optimization identified and resolved bottlenecks in the `refreshAndRank()` function through batch database operations, a concurrent processing pool, and removal of artificial staggering delays, reducing cycle duration significantly. An Adaptive Concurrency Tuner (ACT) dynamically adjusts the concurrent processing pool size based on observed cycle performance and CPU utilization. Dynamic Pool Broadcast & Load Balancing enhances the ACT with synchronized pool size propagation across dependent services, smoothed CPU averaging, and event-loop lag protection. RTB Bucket Optimization (R3) constrains each refresh cycle to only process its bucket-assigned signals (5-10 signals) instead of all 72 signals, achieving 69% cycle duration improvement (6-7s to ~2.2s).
 
-Core System Hardening (Directive 8.8.4-A4.R10R-4) implements production-readiness measures including: **Module Lockdown** - 6 core modules locked with headers (price-cache, central-clock, rtb-refresh-service, ready_to_buy_service, kraken-symbol-resolver, kraken); **System Health Monitor** - real-time CPU, memory, event loop lag monitoring with 10s sampling via `system-health.ts`; **Graceful Shutdown** - ordered service termination (operation queues → RTB refresh → Central Clock → Price Cache → System Health); **Health Endpoint** - `/api/health` exposes system metrics and health status; **INIT_OK Logging** - startup verification logs for all core services.
+Core System Hardening (Directive 8.8.4-A4.R10R-4) implements production-readiness measures including: Module Lockdown, System Health Monitor, Graceful Shutdown, Health Endpoint, and INIT_OK Logging.
+
+Passive & Active Learning Data Aggregator (Directive 8.8.4-L1) implements a non-blocking data capture and aggregation system for continuous learning. The `DataAggregator` service captures signal-level, strategy-level, and market-level metrics from 5 core services: FX5 Scanner, Signal Quality Evaluator, RTB Refresh Service, TCL Watchdog, and Paper Execution Engine. The service uses buffered async capture and writes to `logs/data_aggregates/{mode}_{date}.json` with hourly aggregation to `logs/data_aggregates/hourly/{mode}_{hour}.json`. Mode detection auto-classifies passive (engine stopped) vs active (engine running) trading. All capture hooks are non-blocking with error suppression to prevent any impact on trading operations.
 
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
