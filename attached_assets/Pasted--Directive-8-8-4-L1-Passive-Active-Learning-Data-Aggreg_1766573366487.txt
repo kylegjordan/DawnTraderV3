@@ -1,0 +1,200 @@
+✅ Directive 8.8.4-L1 — Passive & Active Learning Data Aggregator (with Global Roll-Up)
+
+Purpose:
+Establish a non-blocking data aggregation framework that captures signal-level, strategy-level, and market-level metrics during both passive and active trading, including the global roll-up for market context.
+
+📁 File Changes
+File	Action
+server/services/data-aggregator.ts	Create new module
+server/services/index.ts	Register Data Aggregator on startup
+server/orchestrator/signal-orchestrator.ts	Add capture hooks for entry/exit/stop calculations
+server/sqe/signal-quality-evaluator.ts	Add capture hooks for NGC, CWQI, and SQE scores
+server/services/rtb-refresh-service.ts	Add capture hooks for cycle results
+server/services/tcl-watchdog.ts	Add capture hooks for trade outcomes
+replit.md	Update documentation for 8.8.4-L1 aggregation architecture
+🧩 Implementation Details
+1️⃣ Create Data Aggregator Service
+
+File: server/services/data-aggregator.ts
+
+import { EventEmitter } from 'events';
+import fs from 'fs/promises';
+import path from 'path';
+
+export class DataAggregator extends EventEmitter {
+  private buffer: any[] = [];
+  private mode: 'passive' | 'active' = 'passive';
+  private lastFlush = 0;
+  private flushInterval = 30000; // 30s
+  private aggregateInterval = 900000; // 15m
+  private aggregateTimer: NodeJS.Timeout | null = null;
+
+  constructor() {
+    super();
+    this.aggregateTimer = setInterval(() => this.aggregate(), this.aggregateInterval);
+    setInterval(() => this.flush(), this.flushInterval);
+  }
+
+  setMode(mode: 'passive' | 'active') {
+    this.mode = mode;
+  }
+
+  async capture(eventType: string, payload: Record<string, any>) {
+    this.buffer.push({
+      timestamp: Date.now(),
+      mode: this.mode,
+      eventType,
+      ...payload
+    });
+  }
+
+  async flush() {
+    if (this.buffer.length === 0) return;
+    const day = new Date().toISOString().slice(0,10);
+    const dir = `./logs/data_aggregates`;
+    await fs.mkdir(dir, { recursive: true });
+    const filePath = path.join(dir, `${this.mode}_${day}.json`);
+    const data = this.buffer.map(d => JSON.stringify(d)).join('\n') + '\n';
+    await fs.appendFile(filePath, data);
+    this.buffer = [];
+    this.lastFlush = Date.now();
+  }
+
+  async aggregate() {
+    const now = new Date();
+    const periodKey = now.toISOString().slice(0,13);
+    const srcDir = `./logs/data_aggregates`;
+    const outDir = path.join(srcDir, 'hourly');
+    await fs.mkdir(outDir, { recursive: true });
+    const outFile = path.join(outDir, `${this.mode}_${periodKey}.json`);
+
+    // Read today’s capture file
+    const dayFile = path.join(srcDir, `${this.mode}_${now.toISOString().slice(0,10)}.json`);
+    try {
+      const content = await fs.readFile(dayFile, 'utf-8');
+      const lines = content.trim().split('\n').map(l => JSON.parse(l));
+      const byKey: Record<string, any[]> = {};
+      for (const rec of lines) {
+        const key = `${rec.symbol}_${rec.strategy}`;
+        if (!byKey[key]) byKey[key] = [];
+        byKey[key].push(rec);
+      }
+
+      const aggregates = Object.entries(byKey).map(([key, recs]) => {
+        const [symbol, strategy] = key.split('_');
+        const avg = (f: string) => recs.reduce((a, r) => a + (r[f] ?? 0), 0) / recs.length;
+        return {
+          timestamp: now.toISOString(),
+          symbol,
+          strategy,
+          period: periodKey,
+          avgNGC: avg('ngc'),
+          avgCWQI: avg('cwqi'),
+          avgRisk: avg('risk'),
+          avgProfitRate: avg('profitRate'),
+          reconfirmRate: avg('reconfirmed' as any),
+          tradePromotionRate: avg('tradeExecuted' as any),
+          sampleCount: recs.length
+        };
+      });
+
+      // Global roll-up
+      const global = {
+        timestamp: now.toISOString(),
+        avgNGC: this.avg(aggregates, 'avgNGC'),
+        avgCWQI: this.avg(aggregates, 'avgCWQI'),
+        avgRisk: this.avg(aggregates, 'avgRisk'),
+        avgProfitRate: this.avg(aggregates, 'avgProfitRate'),
+        totalSignals: aggregates.reduce((a, r) => a + r.sampleCount, 0)
+      };
+
+      await fs.writeFile(outFile, JSON.stringify({ aggregates, global }, null, 2));
+    } catch (err) {
+      console.error('[DataAggregator] aggregation failed', err);
+    }
+  }
+
+  private avg(arr: any[], key: string) {
+    if (arr.length === 0) return 0;
+    return arr.reduce((a, r) => a + (r[key] ?? 0), 0) / arr.length;
+  }
+}
+
+export const dataAggregator = new DataAggregator();
+
+2️⃣ Integration Hooks
+
+Add the following captures:
+
+FX5 Scanner:
+
+dataAggregator.capture('FX5_SCAN', { pairsScanned, survivors, avgVolatility });
+
+
+SQE Evaluator:
+
+dataAggregator.capture('SQE_EVAL', { symbol, cwqi, ngc, risk, sqeScore });
+
+
+Signal Orchestrator:
+
+dataAggregator.capture('PRICE_CALC', {
+  symbol, strategy, entry, exit, stop, spread, profitTarget, riskRatio
+});
+
+
+RTB Refresh Service:
+
+dataAggregator.capture('RTB_REFRESH', {
+  bucket, signalsProcessed, reconfirmed, duration
+});
+
+
+TCL Watchdog:
+
+dataAggregator.capture('TRADE_OUTCOME', {
+  symbol, profit, duration, stopLossHit, strategy
+});
+
+3️⃣ Startup Registration
+
+In server/index.ts:
+
+import { dataAggregator } from './services/data-aggregator';
+global.dataAggregator = dataAggregator;
+
+⚙️ Validation Plan
+
+Reset system and clear logs.
+
+Run 15-minute passive mode test: verify /logs/data_aggregates/passive_YYYYMMDD.json populates.
+
+Run 15-minute paper trading test: verify /logs/data_aggregates/active_YYYYMMDD.json.
+
+Confirm hourly/ folder contains aggregate + global roll-up JSON.
+
+Confirm no CPU increase > 2 %.
+
+Confirm log file size growth < 20 MB/day.
+
+📊 Scaling & Performance Notes
+
+The service automatically scales to all 9 strategies and any number of pairs.
+
+Aggregation groups dynamically by (symbol, strategy) — no configuration required.
+
+No symbol limit — the “50×6” figure was only for load estimation.
+
+Expected dev load (Replit sandbox): < 1 % CPU, < 15 MB/day disk.
+
+Production (AWS/Supabase): horizontally scalable.
+
+✅ Completion Criteria
+
+All capture hooks active.
+
+Aggregation & global roll-up logs verified for both modes.
+
+No performance degradation or tick lag.
+
+Memory stable and CPU < 5 %.
