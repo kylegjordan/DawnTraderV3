@@ -1,0 +1,158 @@
+⚙️ Directive 8.8.4-L2 – Predictive Modeling Initialization
+📘 Purpose
+
+Establish the first generation of DawnTrader’s predictive learning engine, using aggregated passive + active data to model:
+
+Expected Profit Rate (continuous) → LightGBM Regressor
+
+Trade Promotion Probability (binary) → Logistic Classifier
+
+These models will feed inference back into the Signal Quality Evaluator (SQE), Ready-to-Buy (RTB), and Signal Orchestrator for confidence and profit-based weighting.
+
+🧩 1️⃣ New Modules to Create
+File	Description
+server/services/model-trainer.ts	Builds, trains, and saves models from the aggregated dataset.
+server/services/model-predictor.ts	Loads models and performs inference in real time.
+server/services/feature-engineer.ts	Extracts and normalizes input features from captured data.
+models/ directory	Stores serialized models (profit_predictor.json, promotion_classifier.json).
+server/services/model-versioning.json	Tracks current model versions and training timestamps.
+🧮 2️⃣ Training Data Source
+
+Use aggregated hourly JSON files produced by data-aggregator.ts:
+
+/logs/data_aggregates/hourly/active_*.json
+/logs/data_aggregates/hourly/passive_*.json
+
+
+Each record contains:
+
+{
+  "symbol":"BTC/USD",
+  "strategy":"Breakout",
+  "ngc":0.66,
+  "cwqi":0.63,
+  "riskRatio":1.28,
+  "profitTarget":0.35,
+  "entry":43781.4,
+  "exit":43915.2,
+  "stop":43650.3,
+  "tradeExecuted":true,
+  "profitRate":0.14,
+  "signalAge":84
+}
+
+🧠 3️⃣ Feature Engineering (feature-engineer.ts)
+
+Implement an exported function:
+
+export function extractFeatures(sample) {
+  return {
+    ngc: sample.ngc,
+    cwqi: sample.cwqi,
+    riskRatio: sample.riskRatio,
+    profitTarget: sample.profitTarget,
+    signalAge: sample.signalAge,
+    priceRange: (sample.exit - sample.entry) / sample.entry,
+    stopDepth: (sample.entry - sample.stop) / sample.entry,
+    strategyCode: hashStrategy(sample.strategy),
+  };
+}
+
+
+Normalize all numeric inputs to 0-1 scale; categorical strategyCode as integer hash.
+
+🔬 4️⃣ Model Training (model-trainer.ts)
+
+Import LightGBM (JS binding via lightgbm or xgboost-js).
+
+Import Logistic Regression from scikitjs or similar library.
+
+Load aggregated data via fs glob.
+
+Split dataset 80/20 (train/test).
+
+Train two models:
+
+// Regressor – expected profit
+trainLightGBM(X, y_profitRate);
+
+// Classifier – promotion probability
+trainLogistic(X, y_tradeExecuted);
+
+
+Evaluate R² and F1 scores; log metrics.
+
+Save models under /models/ and record metadata in model-versioning.json.
+
+⚡ 5️⃣ Live Inference (model-predictor.ts)
+
+Expose async methods:
+
+export async function predictProfit(features) { ... }
+export async function predictPromotion(features) { ... }
+
+
+Cache loaded models in memory for fast use (<10 ms).
+
+🔗 6️⃣ Integration Points
+Module	Integration	Action
+signal-quality-evaluator.ts	Post-NGC calculation	Adjust final NGC → blend(ngc, predictedPromotion, 0.6)
+ready_to_buy_service.ts	During refresh and rank	Use predictedProfit as secondary ranking weight
+signal-orchestrator.ts	During price generation	Use predictedProfit to refine profit target and stop ratios
+
+All inference calls must be non-blocking (await … .catch(()=>{})).
+
+🧰 7️⃣ Scheduled Retraining Task
+
+Add a daily cron job (03:00 UTC):
+
+import { trainModels } from './model-trainer';
+schedule('0 3 * * *', trainModels);
+
+
+Rotates model versions automatically and keeps past ones for rollback.
+
+📈 8️⃣ Validation & Output
+
+Run initial training locally on captured data and log:
+
+[8.8.4-L2][MODEL_TRAIN][profitPredictor] R2=0.72
+[8.8.4-L2][MODEL_TRAIN][promotionClassifier] F1=0.81
+
+
+After deployment, confirm inference logs:
+
+[8.8.4-L2][MODEL_INFER][SQE] symbol=BTC/USD profit=0.13 promotion=0.78
+
+🧩 9️⃣ Safeguards & Performance Limits
+Metric	Target	Enforcement
+Inference Latency	< 10 ms per signal	Cached models + async execution
+CPU Load Increase	< 5 %	Sampling check in Health Monitor
+Memory Use	< +50 MB	Monitored via system-health service
+Retrain Interval	24 h	Cron enforced
+🧮 🔹 10️⃣ Global Roll-Up Data Aggregation
+
+Expand the aggregator to produce /logs/data_aggregates/global/summary.json with averaged metrics per symbol/strategy across all sessions.
+This enables global feature drift tracking and future cross-symbol modeling.
+
+🧠 11️⃣ Validation Procedure
+
+Run training on existing aggregates (≥ 1 day data).
+
+Confirm model files exist in /models/.
+
+Confirm training logs show R² > 0.6 and F1 > 0.75.
+
+Start paper mode → verify SQE and RTB emit [MODEL_INFER] logs.
+
+Verify no increase in event-loop lag or memory leak.
+
+✅ Expected Outcome
+
+Working LightGBM Regressor and Logistic Classifier trained from real aggregated data.
+
+Live inference integrated throughout trading pipeline.
+
+Automatic daily retraining + versioning.
+
+Data foundation for Phase 8.8.4-L3 (Advanced Reinforcement Integration).
