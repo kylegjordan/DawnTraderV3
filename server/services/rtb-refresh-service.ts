@@ -28,6 +28,7 @@ import {
   setAdaptivePoolSize 
 } from './adaptive-pool-config';
 import { poolBus } from './pool-broadcast';
+import { dataAggregator } from './data-aggregator.js';
 
 // Re-export for server/index.ts compatibility
 export { getAdaptivePoolSize } from './adaptive-pool-config';
@@ -229,6 +230,16 @@ class RTBRefreshService {
       // T4/T5 Metrics logging
       console.log(`[8.8.4-A4.R10R-3.T4][RTBRefresh][METRICS] duration=${duration}ms cpu=${cpuLoad.toFixed(1)}% poolSize=${getAdaptivePoolSize()}`);
       console.log(`[A4.R10R-3][RTBRefresh][CYCLE_COMPLETE] bucket=${bucketIndex} size=${bucketSize} duration=${duration}ms`);
+      
+      // Directive 8.8.4-L1: Capture RTB refresh data for learning aggregation
+      dataAggregator.capture('RTB_REFRESH', {
+        bucket: bucketIndex,
+        signalsProcessed: bucketSize,
+        duration,
+        cpuLoad,
+        eventLoopLag,
+        poolSize: getAdaptivePoolSize()
+      }).catch(() => {});
       
       // Trigger adaptive concurrency tuning with T5 lag tracking
       recordCycleMetrics(duration, cpuLoad, eventLoopLag);

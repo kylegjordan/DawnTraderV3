@@ -70,6 +70,7 @@ import { signalLifecycleAudit } from '../core/audit/signal_lifecycle_audit.js';
 import { readyToBuyService } from '../core/rtb/ready_to_buy_service.js';
 import { tclWatchdog } from '../core/rtb/tcl_watchdog.js';
 import { eventBus, type TCLActivatedEvent, type TradeClosedEvent } from '../lib/event-bus.js';
+import { dataAggregator } from './data-aggregator.js';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail' | 'manual_stop';
@@ -933,6 +934,22 @@ export class PaperExecutionEngine {
 
     // Phase 8.8.3-C5-5: Consolidated close log (reduced from verbose C2 debug logs)
     console.log(`[PaperExecution:${this.mode}] Position closed ${position.symbol}: Entry $${avgPrice.toFixed(2)} -> Exit $${actualExitPrice.toFixed(2)}, Net P/L: $${netPnl.toFixed(2)} (${netPnlPercent.toFixed(2)}%), Costs: $${totalCost.toFixed(2)}, Reason: ${exitCondition.type}`);
+    
+    // Directive 8.8.4-L1: Capture trade outcome data for learning aggregation
+    const holdDurationMs = position.openedAt ? Date.now() - new Date(position.openedAt).getTime() : 0;
+    dataAggregator.capture('TRADE_OUTCOME', {
+      symbol: position.symbol,
+      strategy: position.strategyName || 'unknown',
+      profit: netPnl,
+      profitPct: netPnlPercent,
+      duration: holdDurationMs,
+      stopLossHit: exitCondition.type === 'stop_hit',
+      takeProfitHit: exitCondition.type === 'target_hit',
+      closeReason: exitCondition.type,
+      entryPrice: avgPrice,
+      exitPrice: actualExitPrice,
+      quantity: quantity
+    }).catch(() => {});
 
     // Find the corresponding trade record
     const trades = await storage.getPaperSimTradesBySymbol(this.mode,  position.symbol);

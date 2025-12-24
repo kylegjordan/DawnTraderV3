@@ -29,6 +29,7 @@ import type { ScreenerFilters } from '@shared/schema';
 import { recordScanFor24h, recordScanCompletion, getCyclesPerHour, get24hSummary } from './fx5-24h-window.js';
 import { readyToBuyService } from '../core/rtb/ready_to_buy_service.js';
 import { centralClock, ClockTick } from './central-clock.js';
+import { dataAggregator } from './data-aggregator.js';
 
 const SCAN_INTERVAL_SECONDS = 30; // 30 seconds aligned with clock ticks
 const SCAN_INTERVAL_MS = SCAN_INTERVAL_SECONDS * 1000; // For backwards compatibility
@@ -295,6 +296,20 @@ export class Fx5ScannerService {
       
       const cycleStartTimestamp = new Date().toISOString();
       const cycleEndTimestamp = new Date().toISOString();
+      
+      // Directive 8.8.4-L1: Capture FX5 scan data for learning aggregation
+      dataAggregator.capture('FX5_SCAN', {
+        mode,
+        pairsScanned: evaluatedCount,
+        survivors: survivors.length,
+        eligibleCount,
+        topNCount,
+        tierBCount,
+        avgDailyRange: survivors.length > 0 
+          ? survivors.reduce((a, s) => a + (s.dailyRange || 0), 0) / survivors.length 
+          : 0,
+        isEngineActive
+      }).catch(() => {});
       
       // REB 2.8.4: Generate unique scan cycle ID (survives server restarts)
       const scanCycleId = `cycle_${mode}_${nanoid(12)}`;

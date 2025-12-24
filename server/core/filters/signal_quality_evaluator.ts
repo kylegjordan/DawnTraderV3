@@ -25,6 +25,7 @@ import { SQE_THRESHOLDS } from '../metrics/quality_index';
 import { performanceMonitor } from '../diagnostics/performance_monitor';
 import { normalizeInternal } from '../../markets/kraken-symbol-resolver';
 import { diagnosticTrace } from '../diagnostics/trace_service';
+import { dataAggregator } from '../../services/data-aggregator.js';
 
 interface StrategyThresholdsConfig {
   profitRateFloors: Record<string, number>;
@@ -162,6 +163,18 @@ export function evaluateSignalQuality(input: SQEInput, options: SQEOptions = {})
   
   // A3.R9.2: Record metric for performance monitoring
   performanceMonitor.recordSQEEvaluation(passed);
+  
+  // Directive 8.8.4-L1: Capture SQE evaluation data for learning aggregation
+  dataAggregator.capture('SQE_EVAL', {
+    symbol: canonicalSymbol,
+    strategy: input.strategy,
+    cwqi: input.cwqi,
+    ngc: input.ngc,
+    risk: input.riskScore,
+    profitRate: input.profitRate,
+    sqeScore: passed ? 1 : 0,
+    passed
+  }).catch(() => {});
   
   // Directive 8.8.4-A3.R9.0.D: Trace SQE evaluation result
   diagnosticTrace.traceSQE(

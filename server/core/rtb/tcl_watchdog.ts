@@ -25,6 +25,7 @@ import { centralClock, ClockTick } from '../../services/central-clock';
 import { storage } from '../../storage';
 import { performanceMonitor } from '../diagnostics/performance_monitor';
 import { poolBus } from '../../services/pool-broadcast';
+import { dataAggregator } from '../../services/data-aggregator.js';
 
 // T5: Track pool size for load-aware TCL decisions
 let currentPoolSize = 5;

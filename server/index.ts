@@ -160,6 +160,13 @@ app.use((req, res, next) => {
   rtbRefreshService.start();
   console.log('[A4.R10R-4][INIT_OK] RTB Refresh Service started (clock-synchronized)');
   console.log(`[A4.R10R-4][INIT_OK] Adaptive Concurrency Tuner active (pool=${getAdaptivePoolSize()}, range=3-10)`);
+  
+  /**
+   * 8.8.4-L1: Initialize Data Aggregator for learning data capture
+   * Non-blocking data aggregation for signal, strategy, and market metrics
+   */
+  const { dataAggregator } = await import('./services/data-aggregator.js');
+  console.log('[8.8.4-L1][INIT_OK] Data Aggregator initialized (flush=30s, aggregate=15m)');
 
   // R9.3.HF-5: Force FX5 Scanner reinitialization (non-blocking)
   import('./startup/fx5-scanner-bootstrap.js')
@@ -1171,8 +1178,10 @@ app.use((req, res, next) => {
       const { centralClock } = await import('./services/central-clock.js');
       const { priceCache } = await import('./services/price-cache.js');
       const { systemHealth } = await import('./services/system-health.js');
+      const { dataAggregator } = await import('./services/data-aggregator.js');
       
       rtbRefreshService.stop();
+      await dataAggregator.shutdown(); // 8.8.4-L1: Flush pending data before shutdown
       centralClock.stop();
       priceCache.shutdown();
       systemHealth.stop();
