@@ -50,6 +50,7 @@ import { signalQualityEvaluator, type SQEInput } from '../core/filters/signal_qu
 import { readyToBuyService, type SQESignalInput } from '../core/rtb/ready_to_buy_service.js';
 import { activeFilterPool } from './active-filter-pool.js';
 import { diagnosticTrace } from '../core/diagnostics/trace_service.js';
+import { dataAggregator } from './data-aggregator.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -420,6 +421,20 @@ export class SignalOrchestrator {
     };
 
     console.log(`[B.3][SIZED_SIGNAL] ${rawSignal.symbol}/${strategyId}: qty=${sizingResult.quantity.toFixed(8)}, value=$${sizingResult.estimatedValue.toFixed(2)}, NGC=${extendedMetrics.ngc.toFixed(4)}, CWQI=${extendedMetrics.cwqi.toFixed(4)}`);
+
+    // Directive 8.8.4-L1.R1: Capture pricing and risk metrics for learning dataset
+    dataAggregator.capture('PRICE_CALC', {
+      symbol: rawSignal.symbol,
+      strategy: strategyId,
+      entry: rawSignal.entryPrice,
+      exit: rawSignal.targetPrice,
+      stop: rawSignal.stopPrice,
+      spread: (rawSignal as any).spread ?? null,
+      profitTarget: extendedMetrics.profitRate ?? null,
+      riskRatio: extendedMetrics.riskScore ?? null,
+      ngc: extendedMetrics.ngc,
+      cwqi: extendedMetrics.cwqi,
+    }).catch(() => {});
 
     return sizedSignal;
   }
