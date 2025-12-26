@@ -122,16 +122,24 @@ export default function AdaptiveRiskAdvisor() {
 
     console.log('[L4][ARA][RETRAIN_START] Initiating model retraining');
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120000);
+
     try {
       const token = await ensureValidToken();
+      if (!token) {
+        throw new Error('Not authenticated');
+      }
+      
       const response = await fetch('/api/ara/retrain', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          'Authorization': `Bearer ${token}`
         },
         credentials: 'include',
-        body: JSON.stringify({ mode })
+        body: JSON.stringify({ mode }),
+        signal: controller.signal
       });
 
       if (!response.ok) {
@@ -170,8 +178,14 @@ export default function AdaptiveRiskAdvisor() {
         }
       }
     } catch (error) {
-      setRetrainError(error instanceof Error ? error.message : 'Retraining failed');
+      if (error instanceof Error && error.name === 'AbortError') {
+        setRetrainError('Retraining timed out');
+      } else {
+        setRetrainError(error instanceof Error ? error.message : 'Retraining failed');
+      }
       setIsRetraining(false);
+    } finally {
+      clearTimeout(timeout);
     }
   };
 
