@@ -2,12 +2,12 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useToast } from "@/hooks/use-toast";
 import { usePortfolioBalance } from "@/hooks/use-portfolio-balance";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { apiFetch } from "@/lib/api";
@@ -20,7 +20,8 @@ import {
   RefreshCw, 
   Sparkles, 
   DollarSign,
-  Loader2
+  Loader2,
+  Info
 } from "lucide-react";
 
 interface ARAData {
@@ -49,10 +50,24 @@ interface TradingStatus {
   mode: string;
 }
 
+const formatCurrency = (value: number): string => {
+  return new Intl.NumberFormat('en-US', { 
+    style: 'currency', 
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value);
+};
+
+const formatPercent = (value: number): string => {
+  return `${value.toFixed(2)} %`;
+};
+
 export default function AdaptiveRiskAdvisor() {
   const { balance: portfolioValue, isLoading: portfolioLoading } = usePortfolioBalance();
   const { mode } = useTradingMode();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const { data: tradingStatus } = useQuery<TradingStatus>({
     queryKey: ['/api/trading/status'],
@@ -60,35 +75,36 @@ export default function AdaptiveRiskAdvisor() {
   });
   const isEngineRunning = tradingStatus?.isRunning || false;
   
-  const [riskPerTrade, setRiskPerTrade] = useState<number>(2);
-  const [maxExposure, setMaxExposure] = useState<number>(20);
   const [isRetraining, setIsRetraining] = useState(false);
   const [retrainProgress, setRetrainProgress] = useState<RetrainProgress | null>(null);
   const [retrainError, setRetrainError] = useState<string | null>(null);
 
-  const { data: araData, isLoading: araLoading, refetch: refetchARA } = useQuery<ARAData>({
-    queryKey: ['/api/ara/calculate', mode, portfolioValue, riskPerTrade, maxExposure],
-    queryFn: async () => {
-      const params = new URLSearchParams({
-        mode,
-        portfolioValue: String(portfolioValue || 0),
-        riskPerTrade: String(riskPerTrade),
-        maxExposure: String(maxExposure)
-      });
-      return apiFetch(`/api/ara/calculate?${params}`);
-    },
-    enabled: !portfolioLoading && portfolioValue !== undefined,
-    refetchInterval: 30000,
-  });
-
-  const { data: suggestions } = useQuery<{ suggestedRisk: number; suggestedExposure: number }>({
+  const { data: suggestions, isLoading: suggestionsLoading } = useQuery<{ suggestedRisk: number; suggestedExposure: number }>({
     queryKey: [`/api/ara/suggestions?mode=${mode}`],
     refetchInterval: 60000,
   });
 
+  const suggestedRisk = suggestions?.suggestedRisk ?? 2.0;
+  const suggestedExposure = suggestions?.suggestedExposure ?? 20.0;
+
+  const { data: araData, isLoading: araLoading } = useQuery<ARAData>({
+    queryKey: ['/api/ara/calculate', mode, portfolioValue, suggestedRisk, suggestedExposure],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        mode,
+        portfolioValue: String(portfolioValue || 0),
+        riskPerTrade: String(suggestedRisk),
+        maxExposure: String(suggestedExposure)
+      });
+      return apiFetch(`/api/ara/calculate?${params}`);
+    },
+    enabled: !portfolioLoading && portfolioValue !== undefined && !suggestionsLoading,
+    refetchInterval: 30000,
+  });
+
   useEffect(() => {
     if (suggestions) {
-      console.log('[L4][ARA] Received suggestions:', suggestions);
+      console.log('[L4.1][ARA][UI_UPDATE] Received ML suggestions:', suggestions);
     }
   }, [suggestions]);
 
@@ -96,17 +112,26 @@ export default function AdaptiveRiskAdvisor() {
     mutationFn: async () => {
       return apiRequest('POST', '/api/ara/apply', {
         mode,
-        riskPerTrade: suggestions?.suggestedRisk || riskPerTrade,
-        maxExposure: suggestions?.suggestedExposure || maxExposure
+        riskPerTrade: suggestedRisk,
+        maxExposure: suggestedExposure
       });
     },
     onSuccess: () => {
-      console.log('[L4][ARA][SUGGEST_APPLY] Settings applied successfully');
-      if (suggestions) {
-        setRiskPerTrade(suggestions.suggestedRisk);
-        setMaxExposure(suggestions.suggestedExposure);
-      }
+      console.log('[L4.1][ARA][UI_UPDATE] Settings applied to Guardrails successfully');
       queryClient.invalidateQueries({ queryKey: ['/api/ara/calculate'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/guardrails'] });
+      toast({
+        title: "Settings Applied",
+        description: "Risk settings have been applied to Guardrails.",
+      });
+    },
+    onError: (error) => {
+      console.error('[L4.1][ARA][UI_UPDATE] Failed to apply settings:', error);
+      toast({
+        variant: "destructive",
+        title: "Failed to Apply Settings",
+        description: error instanceof Error ? error.message : "An error occurred",
+      });
     },
   });
 
@@ -120,7 +145,7 @@ export default function AdaptiveRiskAdvisor() {
     setRetrainProgress({ phase: 'Initializing', percent: 0 });
     setRetrainError(null);
 
-    console.log('[L4][ARA][RETRAIN_START] Initiating model retraining');
+    console.log('[L4.1][ARA][RETRAIN_START] Initiating model retraining');
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 120000);
@@ -171,6 +196,11 @@ export default function AdaptiveRiskAdvisor() {
               if (progress.phase === 'complete') {
                 setIsRetraining(false);
                 queryClient.invalidateQueries({ queryKey: ['/api/health'] });
+                queryClient.invalidateQueries({ queryKey: ['/api/ara/suggestions'] });
+                toast({
+                  title: "Retraining Complete",
+                  description: "ML model has been successfully retrained.",
+                });
               }
             } catch (e) {
             }
@@ -189,21 +219,15 @@ export default function AdaptiveRiskAdvisor() {
     }
   };
 
-  const numTrades = maxExposure > 0 && riskPerTrade > 0 
-    ? Math.floor(maxExposure / riskPerTrade) 
-    : 0;
-  
-  const avgValuePerTrade = portfolioValue && riskPerTrade > 0
-    ? (portfolioValue * riskPerTrade) / 100
-    : 0;
+  const numTrades = araData?.numTrades ?? (Math.floor(suggestedExposure / suggestedRisk) || 0);
+  const avgValuePerTrade = araData?.avgValuePerTrade ?? ((portfolioValue || 0) * suggestedRisk) / 100;
+  const estimatedGrossProfit = araData?.estimatedGrossProfit ?? avgValuePerTrade * 0.05;
+  const estimatedNetProfit = araData?.estimatedNetProfit ?? estimatedGrossProfit * 0.994;
+  const mlExpectedProfitRate = araData?.mlExpectedProfit ?? 0.05;
+  const expectedProfitPercent = mlExpectedProfitRate * 100;
+  const mlConfidence = araData?.confidenceLevel ?? 0.70;
 
-  const estimatedGrossProfit = araData?.mlExpectedProfit 
-    ? avgValuePerTrade * araData.mlExpectedProfit
-    : avgValuePerTrade * 0.05;
-
-  const estimatedNetProfit = estimatedGrossProfit * 0.994;
-
-  if (portfolioLoading) {
+  if (portfolioLoading || suggestionsLoading) {
     return (
       <Card>
         <CardHeader>
@@ -225,7 +249,6 @@ export default function AdaptiveRiskAdvisor() {
         <CardTitle className="flex items-center gap-2">
           <Brain className="w-5 h-5 text-purple-500" />
           Adaptive Risk Advisor
-          <Badge variant="outline" className="ml-2">L4</Badge>
         </CardTitle>
         <CardDescription>
           ML-powered risk optimization with real-time recommendations
@@ -239,95 +262,85 @@ export default function AdaptiveRiskAdvisor() {
           </Alert>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between py-2">
+            <div className="flex items-center gap-2 text-muted-foreground">
               <DollarSign className="w-4 h-4" />
               Portfolio Value
-            </Label>
-            <div className="text-2xl font-bold text-green-600">
-              ${portfolioValue?.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}
+            </div>
+            <div className="text-xl font-bold text-green-600">
+              {formatCurrency(portfolioValue || 0)}
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2">
-              Risk per Trade (%)
-              {suggestions && suggestions.suggestedRisk !== riskPerTrade && (
-                <Badge variant="secondary" className="text-xs">
-                  Suggested: {suggestions.suggestedRisk}%
-                </Badge>
-              )}
-            </Label>
-            <Input
-              type="number"
-              step="0.5"
-              min="0.5"
-              max="10"
-              value={riskPerTrade}
-              onChange={(e) => setRiskPerTrade(parseFloat(e.target.value) || 0)}
-              className="max-w-[120px]"
-            />
+          <Separator />
+
+          <div className="flex items-center justify-between py-2">
+            <span className="text-muted-foreground">Risk per Trade (%)</span>
+            <div className="text-lg font-semibold text-slate-800 dark:text-slate-200">
+              {formatPercent(suggestedRisk)}
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2">
-              Max Exposure (%)
-              {suggestions && suggestions.suggestedExposure !== maxExposure && (
-                <Badge variant="secondary" className="text-xs">
-                  Suggested: {suggestions.suggestedExposure}%
-                </Badge>
-              )}
-            </Label>
-            <Input
-              type="number"
-              step="5"
-              min="5"
-              max="100"
-              value={maxExposure}
-              onChange={(e) => setMaxExposure(parseFloat(e.target.value) || 0)}
-              className="max-w-[120px]"
-            />
+          <div className="flex items-center justify-between py-2">
+            <span className="text-muted-foreground">Max Exposure (%)</span>
+            <div className="text-lg font-semibold text-slate-800 dark:text-slate-200">
+              {formatPercent(suggestedExposure)}
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
-          <div className="text-center">
+        <Separator />
+
+        <div className="grid grid-cols-2 gap-4 py-2">
+          <div className="space-y-1">
             <div className="text-sm text-muted-foreground">Number of Trades</div>
             <div className="text-xl font-semibold">{numTrades}</div>
           </div>
-          <div className="text-center">
-            <div className="text-sm text-muted-foreground">Avg Value/Trade</div>
-            <div className="text-xl font-semibold">
-              ${avgValuePerTrade.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-            </div>
+          <div className="space-y-1">
+            <div className="text-sm text-muted-foreground">Avg Value per Trade</div>
+            <div className="text-xl font-semibold">{formatCurrency(avgValuePerTrade)}</div>
           </div>
-          <div className="text-center">
-            <div className="text-sm text-muted-foreground">Est. Gross Profit</div>
-            <div className="text-xl font-semibold text-green-600">
-              ${estimatedGrossProfit.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-            </div>
+          <div className="space-y-1">
+            <div className="text-sm text-muted-foreground">Est. Gross Profit (per trade)</div>
+            <div className="text-xl font-semibold text-green-600">{formatCurrency(estimatedGrossProfit)}</div>
           </div>
-          <div className="text-center">
-            <div className="text-sm text-muted-foreground">Est. Net Profit</div>
+          <div className="space-y-1">
+            <div className="text-sm text-muted-foreground">Est. Net Profit (per trade) / Expected Profit %</div>
             <div className="text-xl font-semibold text-emerald-600">
-              ${estimatedNetProfit.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              {formatCurrency(estimatedNetProfit)} / {expectedProfitPercent.toFixed(1)} %
             </div>
           </div>
         </div>
 
-        {araData && (
-          <div className="flex items-center gap-2 p-3 bg-purple-50 dark:bg-purple-950/30 rounded-lg">
-            <Sparkles className="w-4 h-4 text-purple-500" />
-            <span className="text-sm">
-              ML Confidence: <strong>{(araData.confidenceLevel * 100).toFixed(1)}%</strong>
-              {' · '}
-              Expected Profit: <strong>{(araData.mlExpectedProfit * 100).toFixed(2)}%</strong>
-            </span>
-          </div>
-        )}
+        <Separator />
 
-        <div className="flex flex-wrap gap-3">
+        <div className="p-4 bg-purple-50 dark:bg-purple-950/30 rounded-lg space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-purple-500" />
+              <span className="font-medium">ML Confidence</span>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info className="w-4 h-4 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p>Probability (based on predictive modeling) that current risk settings will result in profitable trades.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <div className="text-2xl font-bold text-purple-600">
+              {(mlConfidence * 100).toFixed(1)} %
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Estimated probability of profit under current settings
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-3 pt-2">
           <Button
             onClick={() => applySettingsMutation.mutate()}
             disabled={!suggestions || applySettingsMutation.isPending}

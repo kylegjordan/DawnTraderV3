@@ -1,0 +1,198 @@
+🧭 Directive 8.8.4-L4.1 — Adaptive Risk Advisor UI & Binding Refinement
+
+Phase: 8.8.4-L Series
+Parent Directive: 8.8.4-L4 (Adaptive Risk Advisor & SDPOE Integration)
+Purpose:
+Refine the Adaptive Risk Advisor user interface and logic for accuracy, clarity, and user experience consistency, without altering backend architecture or ML behavior.
+
+1️⃣ Objective
+
+This directive finalizes the Adaptive Risk Advisor presentation layer by:
+
+Removing temporary and developer-only elements,
+
+Aligning live data bindings with the portfolio engine,
+
+Refining numeric and currency formatting,
+
+Clarifying metric semantics (especially ML Confidence), and
+
+Ensuring that all actions route correctly to their intended backend endpoints.
+
+These refinements complete the ARA’s readiness for long-term production use and integration with Guardrails.
+
+2️⃣ Implementation Scope
+A. UI Component: AdaptiveRiskAdvisor
+
+File:
+/ui/pages/goals/AdaptiveRiskAdvisor.vue (or .tsx, depending on framework)
+
+1. Remove Developer Badge
+
+Delete the small “L4” bubble or badge shown beside the ARA header.
+
+// REMOVE or comment out
+<Badge variant="outline">L4</Badge>
+
+2. Convert Editable Inputs to Read-Only Display Fields
+
+The fields Risk per Trade % and Max Exposure % currently appear as editable boxes.
+They must instead display the ML-suggested values directly, with no user input.
+
+Replace:
+
+<input v-model="riskPerTrade" ... />
+<span class="text-muted">Suggested: 2.5%</span>
+
+
+With:
+
+<div class="text-lg font-semibold text-slate-800">
+  {{ suggestedRisk.toFixed(2) }} %
+</div>
+
+
+and similarly for Max Exposure %.
+
+These represent the current ML-suggested parameters, not editable values.
+
+3. Ensure Correct Portfolio Binding
+
+The displayed Portfolio Value must be dynamically linked to the current account balance (after closed trades and P/L).
+
+Bind to:
+portfolioStore.currentValue
+(or equivalent reactive variable used in the top-bar “Current” value).
+
+This guarantees real-time synchronization with the live portfolio display.
+
+4. Formatting for Currency Fields
+
+Apply standard U.S. currency formatting to all monetary values using:
+
+new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value)
+
+
+Apply to:
+
+Portfolio Value
+
+Avg Value per Trade
+
+Estimated Gross Profit (per trade)
+
+Estimated Net Profit (per trade)
+
+B. Field Label Adjustments
+
+Update field headers and value presentation for clarity and precision.
+
+Field	New Label	Example Display
+Estimated Gross Profit	Estimated Gross Profit (per trade)	$2.82
+Estimated Net Profit	Estimated Net Profit (per trade) / Expected Profit %	$2.80 / 17.6 %
+
+Each of these values should appear in the same visual row style as “Number of Trades” and “Avg Value per Trade.”
+
+C. ML Confidence Formatting and Explanation
+
+The ML Confidence metric should be visually elevated to the same layout hierarchy as other metrics.
+
+Presentation
+
+Use a full-width display element, bold and in standard text size.
+
+Add a brief description below or as a tooltip:
+
+ML Confidence: Probability (based on predictive modeling) that current risk settings will result in profitable trades.
+
+Example Layout
+ML Confidence: 70.0 %
+(Estimated probability of profit under current settings)
+
+D. Button Behavior
+1. Apply Suggested Settings
+
+Pressing this button should:
+
+Write the ML-suggested values for Risk per Trade % and Max Exposure % into the Guardrails configuration.
+
+Confirm success with a visible notification or toast (e.g., “Settings applied to Guardrails”).
+
+Verify that /api/ara/apply routes correctly to:
+
+guardrailsService.updateSettings({
+  riskPerTrade: suggestedRisk,
+  maxExposure: suggestedExposure
+})
+
+2. Retrain Model
+
+Maintain existing logic (alert if trading is active, progress bar until completion).
+No changes to backend required.
+
+3️⃣ RTB Table — Validation Only
+
+No structural changes required in this directive.
+Ensure that:
+
+The FinalRank formula is present and functioning,
+
+Both ML Confidence and Final Rank columns are sortable, and
+
+The values refresh each RTB cycle.
+
+4️⃣ Text and Layout Example
+
+Final Intended Layout:
+
+───────────────────────────────────────────────
+Adaptive Risk Advisor
+ML-powered risk optimization with real-time recommendations
+───────────────────────────────────────────────
+Portfolio Value             $800.00
+Risk per Trade (%)           2.50 %
+Max Exposure (%)            25.00 %
+
+───────────────────────────────────────────────
+Number of Trades            10
+Avg Value per Trade         $16.00
+Est. Gross Profit (per trade)  $2.82
+Est. Net Profit (per trade) / Expected Profit %  $2.80 / 17.6 %
+
+───────────────────────────────────────────────
+ML Confidence                70.0 %
+(Estimated probability of profit under current settings)
+
+[ Apply Suggested Settings ]   [ Retrain Model ▸ ]
+───────────────────────────────────────────────
+
+5️⃣ Validation Checklist
+Test	Expected Outcome
+Portfolio Value	Matches current dashboard total
+Suggested Values	Appear as non-editable text
+Currency Format	All values in US $x,xxx.xx format
+Apply Suggested	Guardrails fields updated instantly
+ML Confidence Tooltip	Displays explanatory text
+Retrain	Alerts if trading active; shows progress bar
+6️⃣ Deliverables
+Component	Deliverable
+UI	Updated ARA layout with read-only fields and proper formatting
+Logic	Guardrails update binding verified
+Portfolio	Live reactive portfolio value binding
+Documentation	/docs/architecture/8.8.4-L4.1_UI_Spec.md
+Logging	[L4.1][ARA][UI_UPDATE] tag added
+✅ Completion Criteria
+
+Directive 8.8.4-L4.1 is considered complete when:
+
+The “L4” badge is removed,
+
+Suggested values replace manual inputs,
+
+US currency formatting is applied,
+
+ML Confidence is clarified and promoted visually,
+
+Portfolio Value dynamically updates in sync with trading data, and
+
+Guardrails update successfully through /api/ara/apply.
