@@ -6,6 +6,7 @@ import StrategiesTab from "@/components/goals/strategies-tab";
 import CoherencyRulesTab from "@/components/goals/coherency-rules-tab";
 import WalterPurposeTab from "@/components/goals/walter-purpose-tab";
 import TuningTab from "@/components/goals/tuning-tab";
+import AdaptiveRiskAdvisor from "@/components/goals/adaptive-risk-advisor";
 import { CoreFourGuardrails } from "@/components/goals/core-four-guardrails";
 import { LowPricedProtectionCard } from "@/components/goals/low-priced-protection-card";
 import { FiltersWithOverride } from "@/components/goals/filters-with-override";
@@ -88,6 +89,7 @@ export default function GoalsEnginePage() {
 
         <TabsContent value="goals" className="mt-6">
           <div className="space-y-6">
+            <AdaptiveRiskAdvisor />
             <PresetsGrid />
             <GoalsEngineTab />
           </div>

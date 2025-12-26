@@ -15,6 +15,8 @@ interface TradingSignal {
   confidence: number;
   cwqi: number | null;
   ngc: number | null;
+  mlConfidence: number | null;
+  finalRank: number | null;
   entryPrice: number;
   currentPrice: number;
   stopPrice: number;
@@ -31,7 +33,7 @@ interface TradingSignalsResponse {
   timestamp: string;
 }
 
-type SortField = 'rank' | 'symbol' | 'cwqi' | 'ngc' | 'volume' | 'price' | 'strategy' | 'entry' | 'target' | 'stop' | 'quantity' | 'status';
+type SortField = 'rank' | 'symbol' | 'cwqi' | 'ngc' | 'mlConfidence' | 'finalRank' | 'volume' | 'price' | 'strategy' | 'entry' | 'target' | 'stop' | 'quantity' | 'status';
 type SortDirection = 'asc' | 'desc';
 
 export default function ReadyToBuyTable() {
@@ -90,6 +92,14 @@ export default function ReadyToBuyTable() {
       case 'ngc':
         aValue = a.ngc ?? 0;
         bValue = b.ngc ?? 0;
+        break;
+      case 'mlConfidence':
+        aValue = a.mlConfidence ?? 0;
+        bValue = b.mlConfidence ?? 0;
+        break;
+      case 'finalRank':
+        aValue = a.finalRank ?? 0;
+        bValue = b.finalRank ?? 0;
         break;
       case 'symbol':
         aValue = a.symbol;
@@ -223,10 +233,11 @@ export default function ReadyToBuyTable() {
             <table className="w-full" data-testid="table-trading-signals">
               <thead>
                 <tr className="border-b">
-                  <SortHeader field="rank" label="Rank" />
+                  <SortHeader field="finalRank" label="Rank" />
                   <SortHeader field="symbol" label="Symbol" />
                   <SortHeader field="cwqi" label="CWQI" />
                   <SortHeader field="ngc" label="NGC" />
+                  <SortHeader field="mlConfidence" label="ML Conf" />
                   <SortHeader field="price" label="Price" />
                   <SortHeader field="entry" label="Entry" />
                   <SortHeader field="target" label="Target" />
@@ -245,6 +256,8 @@ export default function ReadyToBuyTable() {
                   const currentPrice = Number(signal.currentPrice);
                   const cwqi = signal.cwqi !== null ? Number(signal.cwqi) : (signal.confidence ?? 0);
                   const ngc = signal.ngc !== null ? Number(signal.ngc) : null;
+                  const mlConfidence = signal.mlConfidence !== null ? Number(signal.mlConfidence) : null;
+                  const finalRank = signal.finalRank !== null ? Number(signal.finalRank) : null;
                   const volume24h = signal.volume24h !== null ? Number(signal.volume24h) : null;
                   
                   const profitPotential = ((targetPrice - entryPrice) / entryPrice) * 100;
@@ -282,6 +295,14 @@ export default function ReadyToBuyTable() {
                           (ngc ?? 0) >= 0.8 ? "text-success" : (ngc ?? 0) >= 0.5 ? "text-primary" : "text-muted-foreground"
                         )}>
                           {ngc !== null && !isNaN(ngc) ? ngc.toFixed(4) : '—'}
+                        </span>
+                      </td>
+                      <td className="text-right py-3 px-3" data-testid={`text-ml-confidence-${index}`}>
+                        <span className={cn(
+                          "font-semibold",
+                          (mlConfidence ?? 0) >= 0.8 ? "text-purple-600" : (mlConfidence ?? 0) >= 0.5 ? "text-purple-400" : "text-muted-foreground"
+                        )}>
+                          {mlConfidence !== null && !isNaN(mlConfidence) ? `${(mlConfidence * 100).toFixed(1)}%` : '—'}
                         </span>
                       </td>
                       <td className="text-right py-3 px-3 font-mono" data-testid={`text-price-${index}`}>

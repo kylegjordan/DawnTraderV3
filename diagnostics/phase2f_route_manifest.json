@@ -6063,6 +6063,46 @@
     ]
   },
   {
+    "path": "/api/ara/calculate",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/ara/suggestions",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/ara/apply",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/ara/retrain",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api*",
     "methods": [],
     "middlewares": [

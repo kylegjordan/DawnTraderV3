@@ -166,11 +166,28 @@ class MLModels:
         prediction = self.profit_model.predict(features)[0]
         return float(np.clip(prediction, -0.5, 0.5))
     
-    def train(self, dataset: list) -> Dict[str, Any]:
+    def _compute_sdpoe_weights(self, outcomes: list) -> np.ndarray:
+        rewards = []
+        for sample in outcomes:
+            profit_rate = float(sample.get('profitRate', 0.0))
+            accuracy = 1.0 if sample.get('tradeExecuted', False) else 0.0
+            stability = 1.0 - min(abs(profit_rate), 0.5) / 0.5
+            
+            reward = (profit_rate * 0.6) + (accuracy * 0.3) + (stability * 0.1)
+            rewards.append(max(reward, 0.01))
+        
+        rewards = np.array(rewards)
+        weights = rewards / rewards.sum() * len(rewards)
+        
+        logger.info(f"[SDPOE][REWARD_UPDATE] min={weights.min():.3f}, max={weights.max():.3f}, mean={weights.mean():.3f}")
+        
+        return weights
+
+    def train(self, dataset: list, use_sdpoe: bool = True) -> Dict[str, Any]:
         if len(dataset) < 10:
             return {"success": False, "error": "Insufficient training data (need >= 10 samples)"}
         
-        logger.info(f"[TRAIN] Starting training with {len(dataset)} samples")
+        logger.info(f"[TRAIN] Starting training with {len(dataset)} samples (SDPOE={use_sdpoe})")
         start_time = time.time()
         
         try:
@@ -188,14 +205,19 @@ class MLModels:
             y_prom = np.array(y_promotion)
             y_prof = np.array(y_profit)
             
+            if use_sdpoe:
+                sample_weights = self._compute_sdpoe_weights(dataset)
+            else:
+                sample_weights = np.ones(len(dataset))
+            
             self.scaler = StandardScaler()
             X_scaled = self.scaler.fit_transform(X)
             
             self.promotion_model = LogisticRegression(max_iter=500)
-            self.promotion_model.fit(X_scaled, y_prom)
+            self.promotion_model.fit(X_scaled, y_prom, sample_weight=sample_weights)
             
             self.profit_model = Ridge(alpha=1.0)
-            self.profit_model.fit(X_scaled, y_prof)
+            self.profit_model.fit(X_scaled, y_prof, sample_weight=sample_weights)
             
             self.promotion_version = f"v{int(self.promotion_version[1:].split('.')[0]) + 1}.0"
             self.profit_version = f"v{int(self.profit_version[1:].split('.')[0]) + 1}.0"

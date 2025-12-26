@@ -4506,6 +4506,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // [8.8.4-C.10] Map RTB signal fields to frontend expected format
       // RtbSignal has: quantity, notional (instead of estimatedValue)
       // Directive 8.8.4-A3.R8.5.A: Add UI status mapping for reconfirmed signals
+      // Directive 8.8.4-L4: Add mlConfidence and finalRank for RTB ranking
       const signalsWithQuantity = signals.map(signal => {
         const storedQuantity = signal.quantity ? parseFloat(String(signal.quantity)) : 0;
         const storedNotional = signal.notional ? parseFloat(String(signal.notional)) : 0;
@@ -4528,12 +4529,26 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         const metadata = signal.metadata as Record<string, any> || {};
         const statusUpdatedAt = metadata.statusUpdatedAt || null;
         
+        // L4: Compute mlConfidence and finalRank
+        // mlConfidence from metadata or estimate from NGC (ML predictions added async in signal orchestrator)
+        const mlConfidence = metadata.mlConfidence ?? (signal.ngc ? parseFloat(String(signal.ngc)) * 0.9 : null);
+        
+        // L4: FinalRank = (NGC × 0.4) + (CWQI × 0.3) + (MLConfidence × 0.3)
+        const ngcValue = signal.ngc ? parseFloat(String(signal.ngc)) : 0;
+        const cwqiValue = signal.cwqi ? parseFloat(String(signal.cwqi)) : 0;
+        const mlConfValue = mlConfidence ?? 0.5;
+        const finalRank = (ngcValue * 0.4) + (cwqiValue * 0.3) + (mlConfValue * 0.3);
+        
+        console.log(`[L4][RTB][FINAL_RANK] ${signal.symbol}: NGC=${ngcValue.toFixed(3)}, CWQI=${cwqiValue.toFixed(3)}, ML=${mlConfValue.toFixed(3)}, FinalRank=${finalRank.toFixed(4)}`);
+        
         return {
           ...signal,
           estimatedQuantity: quantity,
           estimatedValue: estimatedValue,
           uiStatus,
-          statusUpdatedAt
+          statusUpdatedAt,
+          mlConfidence,
+          finalRank
         };
       });
       
@@ -21949,6 +21964,11 @@ Important: Extract the exact field names and numeric values from the user's requ
   const { healthRouter } = await import('./routes/health.js');
   apiRouter.use('/health', healthRouter);
   console.log('[41F-D] Health routes mounted at /api/health');
+
+  // Directive 8.8.4-L4: Mount ARA (Adaptive Risk Advisor) routes
+  const araRouter = await import('./routes/ara.js');
+  apiRouter.use('/ara', araRouter.default);
+  console.log('[L4] ARA routes mounted at /api/ara');
 
   // Catch-all handler for unmatched /api/* routes
   // This prevents requests from falling through to Vite's HTML handler
