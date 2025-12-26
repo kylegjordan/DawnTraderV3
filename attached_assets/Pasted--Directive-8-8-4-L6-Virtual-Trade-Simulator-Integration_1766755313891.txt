@@ -1,0 +1,105 @@
+🧩 Directive 8.8.4-L6: Virtual Trade Simulator Integration
+
+Objective:
+Implement a passive-mode Virtual Trade Simulator that mirrors real trade outcomes to provide ground-truth data for ML calibration and expected-profit correction.
+
+Components to Add / Modify
+File	Purpose
+/server/services/vts-service.ts	Core simulator: builds, runs, and finalizes virtual trades.
+/server/tasks/vts-runner.ts	5-minute loop that checks open virtual trades and updates their P/L.
+/server/utils/calibration.ts	Learns α and β coefficients from virtual outcomes.
+/server/routes/vts.ts	API endpoints: /api/vts/status, /api/vts/export, /api/vts/retrain.
+/ui/pages/goals/AdaptiveRiskAdvisor.vue	Reads corrected coefficients to update profit estimates.
+Simulator Logic
+const feeRate = 0.0026;  // Kraken per side
+const avgSlippage = 0.0015;
+const tradeDuration = 3 * 60 * 60 * 1000; // 3 hours window
+
+simulateTrade(signal) {
+  const entry = signal.entryPrice;
+  const tp = signal.takeProfit;
+  const sl = signal.stopLoss;
+  const spread = signal.spread;
+  const outcome = getMarketOutcome(signal.symbol, tradeDuration);
+
+  let exitPrice;
+  let resultType;
+
+  if (outcome.high >= tp) {
+    exitPrice = tp;
+    resultType = "take_profit";
+  } else if (outcome.low <= sl) {
+    exitPrice = sl;
+    resultType = "stop_loss";
+  } else {
+    exitPrice = outcome.close;
+    resultType = "timeout";
+  }
+
+  const gross = (exitPrice - entry) / entry;
+  const fees = entry * (feeRate * 2) + entry * avgSlippage;
+  const net = gross - (fees / entry);
+
+  return { ...signal, resultType, gross, net };
+}
+
+Calibration Model
+function calibrate(predictions) {
+  // Linear regression on {predicted_profit, actual_net}
+  const { alpha, beta } = linearFit(predicted_profit, actual_net);
+  saveCalibration({ alpha, beta, updated: Date.now() });
+}
+
+
+Typical early result:
+
+alpha = 0.0018, beta = 0.19
+
+
+so a 17 % predicted profit becomes roughly 4.2 % expected.
+
+Nightly Job
+
+Runs:
+
+npm run calibrate:vts
+
+
+– retrains calibration coefficients.
+
+🧾 Output Example
+
+Virtual Trade Log
+
+{
+  "symbol": "ETH/USDT",
+  "predicted_profit": 0.17,
+  "actual_profit": 0.043,
+  "alpha": 0.0018,
+  "beta": 0.19,
+  "calibrated": true
+}
+
+
+Console Validation
+
+[L6][VTS] virtual=500 trades, α=0.0018 β=0.19 r²=0.91
+
+✅ Completion Criteria
+
+/logs/virtual_trades/*.json populated during passive mode.
+
+Calibration coefficients persisted and re-loaded by ARA.
+
+ARA profit numbers align (within ± 10 %) with average virtual results.
+
+Passive mode CPU impact < 5 %.
+
+Verified that no real orders are sent during VTS runs.
+
+🧭 Summary of What This Achieves
+Before	After L6
+ML predicts theoretical 17 % move	Virtual trades measure true realized 3–5 % profit
+Manual 0.25 scaling fudge	Data-driven α / β calibration
+Disconnected “guesses”	Continuous self-correcting realism
+Learning stalls in passive mode	Learning continues 24 / 7 without risk

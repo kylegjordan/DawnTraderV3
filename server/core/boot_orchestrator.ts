@@ -15,6 +15,7 @@
 
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
+import { initVTSRunner, stopVTSRunner } from '../services/vts-runner';
 
 const ML_SERVICE_HOST = process.env.ML_SERVICE_HOST || 'http://localhost:5001';
 const ML_SERVICE_AUTO_START = process.env.ML_SERVICE_AUTO_START !== 'false';
@@ -51,6 +52,10 @@ class BootOrchestrator extends EventEmitter {
       this.isShuttingDown = true;
       
       console.log(`[L3][BOOT_ORCHESTRATOR] Received ${signal}, initiating graceful shutdown...`);
+      
+      stopVTSRunner();
+      console.log('[L6][BOOT_ORCHESTRATOR] VTS Runner stopped');
+      
       await this.stopMLService();
       
       if (this.healthCheckInterval) {
@@ -81,11 +86,19 @@ class BootOrchestrator extends EventEmitter {
         console.log('[L3][BOOT_ORCHESTRATOR][INIT_OK] ML Service ready, proceeding with full initialization');
         this.startHealthMonitoring();
         this.emit('ml_ready');
+        
+        await initVTSRunner();
+        console.log('[L6][BOOT_ORCHESTRATOR] VTS Runner initialized for passive learning');
+        
         return true;
       } else {
         console.warn('[L3][BOOT_ORCHESTRATOR] ML Service failed to start, running in degraded mode');
         this.mlServiceStatus = { status: 'DEGRADED', error: 'Failed to start' };
         this.emit('ml_degraded');
+        
+        await initVTSRunner();
+        console.log('[L6][BOOT_ORCHESTRATOR] VTS Runner initialized (degraded mode)');
+        
         return true;
       }
     } catch (error) {

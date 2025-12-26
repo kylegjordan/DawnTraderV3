@@ -1,7 +1,12 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { loadCalibration, applyCalibration, type CalibrationCoefficients } from '../utils/calibration';
 
 const router = Router();
+
+let calibrationCache: CalibrationCoefficients | null = null;
+let calibrationCacheTime = 0;
+const CALIBRATION_CACHE_TTL = 60000;
 
 const JWT_SECRET = process.env.JWT_SECRET || 'jwt-development-secret-do-not-use-in-production';
 
@@ -129,8 +134,22 @@ router.get('/calculate', requireAuth, async (req: Request, res: Response) => {
 
     const mlPredictions = await getMLPredictions(portfolioValue, riskPerTrade);
     
-    const predictedProfitRate = mlPredictions.profit || 0.05;
-    const estimatedGrossProfit = avgValuePerTrade * predictedProfitRate;
+    const now = Date.now();
+    if (!calibrationCache || now - calibrationCacheTime > CALIBRATION_CACHE_TTL) {
+      try {
+        calibrationCache = await loadCalibration();
+        calibrationCacheTime = now;
+      } catch (e) {
+        calibrationCache = { alpha: 0.0018, beta: 0.19, rSquared: 0, sampleCount: 0, updated: now };
+      }
+    }
+    
+    const rawProfitRate = mlPredictions.profit || 0.05;
+    const calibratedProfitRate = calibrationCache 
+      ? applyCalibration(rawProfitRate, calibrationCache) 
+      : rawProfitRate * 0.25;
+    
+    const estimatedGrossProfit = avgValuePerTrade * calibratedProfitRate;
     const totalTradeCost = avgValuePerTrade * 0.007;
     const estimatedNetProfit = estimatedGrossProfit - totalTradeCost;
     const expectedProfitPercent = avgValuePerTrade > 0 
@@ -154,7 +173,7 @@ router.get('/calculate', requireAuth, async (req: Request, res: Response) => {
       confidenceLevel: mlPredictions.confidence
     };
 
-    console.log(`[L4.2][ARA_CALC] avgValuePerTrade=${avgValuePerTrade.toFixed(2)} gross=${estimatedGrossProfit.toFixed(2)} net=${estimatedNetProfit.toFixed(2)} expectedProfit=${expectedProfitPercent.toFixed(1)}%`);
+    console.log(`[L6][ARA_CALC] avgValue=${avgValuePerTrade.toFixed(2)} rawProfit=${(rawProfitRate*100).toFixed(1)}% calibrated=${(calibratedProfitRate*100).toFixed(1)}% gross=${estimatedGrossProfit.toFixed(2)} net=${estimatedNetProfit.toFixed(2)} expectedProfit=${expectedProfitPercent.toFixed(1)}%`);
     
     res.json(result);
   } catch (error) {

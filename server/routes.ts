@@ -21970,6 +21970,11 @@ Important: Extract the exact field names and numeric values from the user's requ
   apiRouter.use('/ara', araRouter.default);
   console.log('[L4] ARA routes mounted at /api/ara');
 
+  // Directive 8.8.4-L6: Mount VTS (Virtual Trade Simulator) routes
+  const vtsRouter = await import('./routes/vts.js');
+  apiRouter.use('/vts', vtsRouter.default);
+  console.log('[L6] VTS routes mounted at /api/vts');
+
   // Catch-all handler for unmatched /api/* routes
   // This prevents requests from falling through to Vite's HTML handler
   // and ensures all API routes return JSON (even 404s)
