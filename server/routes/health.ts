@@ -8,6 +8,7 @@
 import { Router } from 'express';
 import { healthMonitor } from '../services/health-monitor.js';
 import { systemHealth } from '../services/system-health.js';
+import { getMLServiceStatus } from '../services/ml-service-client.js';
 
 export const healthRouter = Router();
 
@@ -197,12 +198,15 @@ healthRouter.get('/circuit-breaker', async (req, res) => {
 
 /**
  * Directive 8.8.4-A4.R10R-4: GET /api/health
- * Returns system health metrics (CPU, memory, lag, uptime)
+ * Directive 8.8.4-L3: Extended with ML Service status
+ * Returns system health metrics (CPU, memory, lag, uptime) + ML service status
  */
 healthRouter.get('/', async (req, res) => {
   try {
     const metrics = systemHealth.getMetrics();
     const status = systemHealth.getStatus();
+    
+    const mlStatus = await getMLServiceStatus();
     
     res.json({
       ok: true,
@@ -215,6 +219,12 @@ healthRouter.get('/', async (req, res) => {
         heapUsed: metrics.heapUsed,
         heapTotal: metrics.heapTotal,
         rss: metrics.rss,
+      },
+      mlService: {
+        status: mlStatus.status,
+        cpu: mlStatus.cpuPercent,
+        memoryMB: mlStatus.memoryMB,
+        modelVersions: mlStatus.modelVersions,
       },
       issues: status.issues,
       timestamp: new Date().toISOString(),

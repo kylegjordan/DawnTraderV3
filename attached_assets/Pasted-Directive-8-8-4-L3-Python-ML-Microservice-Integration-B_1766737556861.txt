@@ -1,0 +1,221 @@
+Directive 8.8.4-L3 — Python ML Microservice Integration (Boot Orchestrator & Predictive Engine)
+Objective
+
+Deploy and integrate a Python-based machine learning microservice (LightGBM/XGBoost) with the existing Node.js trading engine to enable predictive modeling for SQE, RTB, and Signal Orchestrator.
+
+1. Core Implementation Tasks
+1.1 Create Python ML Microservice
+
+File: /services/ml_service.py
+
+Purpose:
+Serve model predictions and retraining via REST endpoints.
+
+Base Framework: Flask (or FastAPI if available in Replit)
+
+Endpoints:
+
+Endpoint	Method	Description
+/health	GET	Returns { "status": "READY" } when service initialized
+/predict/promotion	POST	Logistic Regression → Returns signal promotion probability
+/predict/profit	POST	LightGBM/XGBoost Regression → Returns expected profit %
+/train	POST	Accepts JSON dataset for retraining (disabled in dev mode)
+/version	GET	Returns model version metadata
+
+Model Storage: /models/{model_type}_v#.model
+Port: 5001
+Runtime Memory Target: ≤ 400 MB
+
+1.2 Add Node Boot Orchestrator
+
+File: server/core/boot_orchestrator.ts
+
+Purpose:
+Ensure automatic startup, health check, and synchronization between Node.js core and the Python microservice.
+
+Behavior:
+
+Spawn Python microservice:
+
+const py = spawn('python', ['services/ml_service.py'], { stdio: 'inherit' });
+
+
+Poll http://localhost:5001/health (10s timeout).
+
+Once "READY" is received → proceed with main service initialization:
+
+Price Cache
+
+Central Clock
+
+RTB Refresh Service
+
+FX5 Scanner
+
+On failure:
+
+Log [ML_SERVICE][INIT_FAIL] and run in degraded mode (default heuristic).
+
+On shutdown:
+
+Send termination signal to Python service for graceful exit.
+
+Startup Sequence (final):
+
+Node Boot →
+Boot Orchestrator →
+Python ML Service →
+Price Cache →
+Central Clock →
+RTB Refresh →
+FX5 Scanner
+
+1.3 Integration Points
+
+1️⃣ Signal Quality Evaluator (SQE)
+
+Calls /predict/promotion to refine NGC and CWQI weighting.
+
+Blends model output with internal calculations:
+
+signal.ngc = blend(signal.ngc, predictedConfidence, 0.6);
+
+
+2️⃣ Signal Orchestrator
+
+Calls /predict/profit to bias entry, exit, and stop pricing.
+
+Captures model-adjusted profit expectation into PRICE_CALC aggregator events.
+
+3️⃣ RTB Refresh Service
+
+Uses predicted profit and confidence scores to rank ready-to-buy signals dynamically.
+
+1.4 Continuous Learning Hooks
+
+The Node Data Aggregator (from L1) will:
+
+Aggregate passive and active learning data.
+
+Periodically (manual or nightly) send dataset to:
+
+POST http://localhost:5001/train
+
+
+On success, receive updated model version metadata and log:
+
+[L3][ML_SERVICE][MODEL_UPDATE] profit_v3.model promotion_v2.model
+
+2. Environment Configuration
+
+ENV Variables (add to .env):
+
+ML_SERVICE_HOST=http://localhost:5001
+ML_SERVICE_AUTO_START=true
+ML_SERVICE_TRAINING_ENABLED=false
+
+
+Dev Mode Rules (Replit IDE):
+
+Auto-start Python service via Boot Orchestrator.
+
+Training endpoint disabled to avoid memory spikes.
+
+Log predictions only (no auto-retrain).
+
+Prod Mode (Replit VPS / AWS):
+
+Separate container or PM2 process.
+
+Auto-retrain daily (via scheduler).
+
+Health Monitor tracks both Node and Python processes.
+
+3. Health & Monitoring
+
+New Endpoints:
+
+/api/health (extended) → includes:
+
+"mlService": {
+  "status": "READY",
+  "cpu": 8.2,
+  "memoryMB": 392,
+  "modelVersions": {
+    "promotion": "v2.1",
+    "profit": "v3.0"
+  }
+}
+
+
+Alerts:
+
+[ML_SERVICE][LAG_WARNING] → if prediction > 2000ms
+
+[ML_SERVICE][MEMORY_WARNING] → if memory > 500 MB
+
+4. Validation Criteria
+Metric	Target	Validation Method
+Startup Time	< 10s	INIT_OK logs confirm readiness
+Prediction Latency	< 2s	Logged per request
+Memory Usage	< 500MB	Health monitor
+Node Boot Success	100%	INIT_OK sequence completes
+Integration Success	SQE, RTB, Orchestrator log model use	
+No Manual Starts	✅	Both Node & Python auto-boot
+5. Expected Deliverables
+
+✅ services/ml_service.py – Flask-based model microservice
+
+✅ server/core/boot_orchestrator.ts – Manages Node ↔ Python lifecycle
+
+✅ Updated integration hooks in:
+
+signal_quality_evaluator.ts
+
+signal_orchestrator.ts
+
+ready_to_buy_service.ts
+
+✅ ENV config & updated /api/health endpoint
+
+✅ 10-minute test log verifying:
+
+[ML_SERVICE][INIT_OK]
+
+[ML_SERVICE][PREDICT_PROFIT]
+
+[ML_SERVICE][PREDICT_PROMOTION]
+
+[ML_SERVICE][LAG<2000ms]
+
+[ML_SERVICE][MEMORY<500MB]
+
+6. Validation Test Plan (10 min)
+
+Reset system and clear RTB signals / OpenTrades.
+
+Start paper trading engine.
+
+Observe logs for:
+
+[ML_SERVICE][INIT_OK]
+[ML_SERVICE][PREDICT_*]
+
+
+Verify Node startup latency <10s.
+
+Confirm predictions <2000ms latency.
+
+Confirm no manual Python startup required.
+
+Confirm both /api/health and /health endpoints return “READY”.
+
+7. Future Directives
+Directive	Focus
+L4	Adaptive Risk Advisor (optimal trade sizing & exposure recommendations)
+L5	Continuous Learning Scheduler (automated retraining & versioning)
+
+✅ Directive 8.8.4-L3 Approved for Implementation
+
+Goal: Add intelligent predictive modeling capability via an automatically orchestrated Python microservice.
+Outcome: Full model inference integration, continuous readiness on app start, and zero manual intervention required.

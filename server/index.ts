@@ -119,6 +119,15 @@ app.use((req, res, next) => {
   console.log('[A4.R10R-3] 🔁 Starting synchronized service bootstrap sequence');
 
   /**
+   * 8.8.4-L3: Initialize Boot Orchestrator FIRST
+   * Manages Python ML microservice lifecycle and health checks
+   */
+  const { bootOrchestrator } = await import('./core/boot_orchestrator.js');
+  await bootOrchestrator.initialize();
+  console.log('[8.8.4-L3][INIT_OK] Boot Orchestrator initialized (ML Service: ' + 
+    (bootOrchestrator.isMLReady() ? 'READY' : 'DEGRADED') + ')');
+
+  /**
    * A4.R10R-4: Initialize System Health Monitor FIRST
    * Tracks CPU, memory, event loop lag throughout runtime
    */

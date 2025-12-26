@@ -51,6 +51,7 @@ import { readyToBuyService, type SQESignalInput } from '../core/rtb/ready_to_buy
 import { activeFilterPool } from './active-filter-pool.js';
 import { diagnosticTrace } from '../core/diagnostics/trace_service.js';
 import { dataAggregator } from './data-aggregator.js';
+import { predictPromotion, predictProfit, blendConfidence, type PredictionInput } from './ml-service-client.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -333,6 +334,31 @@ export class SignalOrchestrator {
     });
 
     console.log(`[B.3][METRICS] ${rawSignal.symbol}/${strategyId}: NGC=${extendedMetrics.ngc.toFixed(4)}, CWQI=${extendedMetrics.cwqi.toFixed(4)}, ProfitRate=${extendedMetrics.profitRate.toFixed(4)}`);
+
+    // Directive 8.8.4-L3: ML-enhanced predictions (non-blocking fire-and-forget)
+    const mlInput: PredictionInput = {
+      symbol: rawSignal.symbol,
+      strategy: strategyId,
+      ngc: extendedMetrics.ngc,
+      cwqi: extendedMetrics.cwqi,
+      riskRatio: extendedMetrics.riskScore,
+      profitTarget: extendedMetrics.profitRate,
+      signalAge: 0,
+      entry: rawSignal.entryPrice,
+      exit: rawSignal.targetPrice,
+      stop: rawSignal.stopPrice,
+    };
+    
+    // Fire-and-forget ML predictions - results logged for learning, don't block pipeline
+    Promise.all([
+      predictPromotion(mlInput),
+      predictProfit(mlInput)
+    ]).then(([promotionResult, profitResult]) => {
+      if (promotionResult.success && profitResult.success) {
+        const blendedNGC = blendConfidence(extendedMetrics.ngc, promotionResult.probability, 0.6);
+        console.log(`[L3][MODEL_INFER] ${rawSignal.symbol}/${strategyId}: promotion=${promotionResult.probability.toFixed(4)}, profit=${profitResult.predicted_profit.toFixed(4)}, blendedNGC=${blendedNGC.toFixed(4)}`);
+      }
+    }).catch(() => {});
 
     // Directive 8.8.4-A3.R9.0.D: Trace raw metrics before SQE evaluation
     diagnosticTrace.traceOrchestrator(

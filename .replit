@@ -15,6 +15,10 @@ run = ["npm", "run", "start"]
 localPort = 5000
 externalPort = 80
 
+[[ports]]
+localPort = 5001
+externalPort = 3000
+
 [env]
 PORT = "5000"
 
@@ -54,3 +58,6 @@ SQE_MAX_RISK = "0.95"
 [userenv.shared]
 TCL_SIGNAL_THRESHOLD = "15"
 MAX_OPEN_TRADES = "15"
+ML_SERVICE_HOST = "http://localhost:5001"
+ML_SERVICE_AUTO_START = "true"
+ML_SERVICE_TRAINING_ENABLED = "false"
