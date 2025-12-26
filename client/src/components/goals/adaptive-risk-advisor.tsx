@@ -34,6 +34,7 @@ interface ARAData {
   avgValuePerTrade: number;
   estimatedGrossProfit: number;
   estimatedNetProfit: number;
+  expectedProfitPercent: number;
   mlExpectedProfit: number;
   confidenceLevel: number;
 }
@@ -222,9 +223,9 @@ export default function AdaptiveRiskAdvisor() {
   const numTrades = araData?.numTrades ?? (Math.floor(suggestedExposure / suggestedRisk) || 0);
   const avgValuePerTrade = araData?.avgValuePerTrade ?? ((portfolioValue || 0) * suggestedRisk) / 100;
   const estimatedGrossProfit = araData?.estimatedGrossProfit ?? avgValuePerTrade * 0.05;
-  const estimatedNetProfit = araData?.estimatedNetProfit ?? estimatedGrossProfit * 0.994;
-  const mlExpectedProfitRate = araData?.mlExpectedProfit ?? 0.05;
-  const expectedProfitPercent = mlExpectedProfitRate * 100;
+  const totalTradeCost = avgValuePerTrade * 0.007;
+  const estimatedNetProfit = araData?.estimatedNetProfit ?? (estimatedGrossProfit - totalTradeCost);
+  const expectedProfitPercent = araData?.expectedProfitPercent ?? (avgValuePerTrade > 0 ? (estimatedNetProfit / avgValuePerTrade) * 100 : 0);
   const mlConfidence = araData?.confidenceLevel ?? 0.70;
 
   if (portfolioLoading || suggestionsLoading) {
@@ -306,9 +307,9 @@ export default function AdaptiveRiskAdvisor() {
             <div className="text-xl font-semibold text-green-600">{formatCurrency(estimatedGrossProfit)}</div>
           </div>
           <div className="space-y-1">
-            <div className="text-sm text-muted-foreground">Est. Net Profit (per trade) / Expected Profit %</div>
+            <div className="text-sm text-muted-foreground">Est. Net Profit (per trade) / %</div>
             <div className="text-xl font-semibold text-emerald-600">
-              {formatCurrency(estimatedNetProfit)} / {expectedProfitPercent.toFixed(1)} %
+              {formatCurrency(estimatedNetProfit)} / {expectedProfitPercent.toFixed(1)}%
             </div>
           </div>
         </div>

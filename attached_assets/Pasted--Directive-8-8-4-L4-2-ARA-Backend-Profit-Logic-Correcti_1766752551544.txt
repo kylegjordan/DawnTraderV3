@@ -1,0 +1,113 @@
+🧩 Directive 8.8.4-L4.2 — ARA Backend Profit Logic Correction
+Phase: 8.8.4-L Series
+
+Parent Directive: L4.1
+Purpose: Correct backend ARA calculations for estimated gross and net profit per trade, ensuring realistic per-trade profitability and consistent percentage derivation.
+
+1️⃣ Files to Update
+File	Purpose
+/server/routes/ara.ts	Fix calculation endpoint response
+/server/services/ara-service.ts	Correct formulas for profit computation
+/ui/pages/goals/AdaptiveRiskAdvisor.vue	Adjust displayed field names and formatting for new backend schema
+2️⃣ Backend Fix
+In /server/services/ara-service.ts:
+
+Replace the current logic with:
+
+function calculateARAMetrics({ portfolioValue, riskPerTrade, maxExposure, mlExpectedProfit }) {
+  const avgValuePerTrade = (portfolioValue * riskPerTrade) / 100;
+  const numTrades = Math.floor(maxExposure / riskPerTrade);
+
+  // ML-predicted expected profit rate (e.g., 0.05 = 5%)
+  const predictedProfitRate = mlExpectedProfit || 0.05;
+
+  // Gross Profit
+  const estimatedGrossProfit = avgValuePerTrade * predictedProfitRate;
+
+  // Trading fees & slippage (both sides, ~0.7%)
+  const totalTradeCost = avgValuePerTrade * 0.007;
+
+  // Net Profit
+  const estimatedNetProfit = estimatedGrossProfit - totalTradeCost;
+
+  // Expected profit percent (net)
+  const expectedProfitPercent = (estimatedNetProfit / avgValuePerTrade) * 100;
+
+  return {
+    numTrades,
+    avgValuePerTrade,
+    estimatedGrossProfit,
+    estimatedNetProfit,
+    expectedProfitPercent
+  };
+}
+
+
+Then export through:
+
+export const ARAService = { calculateARAMetrics };
+
+3️⃣ API Response Format
+
+Ensure /api/ara/calculate returns:
+
+{
+  "numTrades": 10,
+  "avgValuePerTrade": 20.0,
+  "estimatedGrossProfit": 0.96,
+  "estimatedNetProfit": 0.82,
+  "expectedProfitPercent": 4.1
+}
+
+
+This ensures realistic and consistent per-trade metrics.
+
+4️⃣ UI Adjustment
+
+Update the display for Estimated Net Profit (per trade) / %:
+
+<div>
+  <label>Est. Net Profit (per trade) / %</label>
+  <div class="value">
+    {{ formatUSD(metrics.estimatedNetProfit) }} / {{ metrics.expectedProfitPercent.toFixed(1) }}%
+  </div>
+</div>
+
+
+Remove the redundant “Expected Profit” wording — the slash and percentage now express that.
+
+5️⃣ Validation Targets
+Metric	Expected Range
+Est. Gross Profit	3–6% of avgValuePerTrade
+Est. Net Profit	2.5–5.5% of avgValuePerTrade
+Expected Profit %	Matches (net ÷ avgValuePerTrade × 100)
+Difference between gross/net	0.3–0.7% of avgValuePerTrade
+6️⃣ Logging and Verification
+
+Add:
+
+console.log('[L4.2][ARA_CALC]', {
+  avgValuePerTrade,
+  estimatedGrossProfit,
+  estimatedNetProfit,
+  expectedProfitPercent
+});
+
+
+After 5 validation cycles, expected example output:
+
+[L4.2][ARA_CALC] avgValuePerTrade=20.00 gross=0.96 net=0.82 expectedProfit=4.1%
+
+✅ Completion Criteria
+
+Directive 8.8.4-L4.2 is considered complete when:
+
+Profit values in the ARA are realistic (gross ≈ 3–5% of trade size).
+
+Net profit shows meaningful deduction for fees/slippage (~0.3–0.7%).
+
+Percentage matches mathematical ratio of net/trade value.
+
+The ARA table updates dynamically on page load.
+
+API /api/ara/calculate logs reflect new per-trade math.

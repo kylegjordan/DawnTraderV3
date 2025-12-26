@@ -37,6 +37,7 @@ interface ARACalculation {
   avgValuePerTrade: number;
   estimatedGrossProfit: number;
   estimatedNetProfit: number;
+  expectedProfitPercent: number;
   mlExpectedProfit: number;
   confidenceLevel: number;
 }
@@ -127,8 +128,14 @@ router.get('/calculate', requireAuth, async (req: Request, res: Response) => {
       : 0;
 
     const mlPredictions = await getMLPredictions(portfolioValue, riskPerTrade);
-    const estimatedGrossProfit = avgValuePerTrade * mlPredictions.profit;
-    const estimatedNetProfit = estimatedGrossProfit * 0.994;
+    
+    const predictedProfitRate = mlPredictions.profit || 0.05;
+    const estimatedGrossProfit = avgValuePerTrade * predictedProfitRate;
+    const totalTradeCost = avgValuePerTrade * 0.007;
+    const estimatedNetProfit = estimatedGrossProfit - totalTradeCost;
+    const expectedProfitPercent = avgValuePerTrade > 0 
+      ? (estimatedNetProfit / avgValuePerTrade) * 100 
+      : 0;
 
     const suggestions = await generateSuggestions(mode);
 
@@ -142,11 +149,12 @@ router.get('/calculate', requireAuth, async (req: Request, res: Response) => {
       avgValuePerTrade,
       estimatedGrossProfit,
       estimatedNetProfit,
+      expectedProfitPercent,
       mlExpectedProfit: mlPredictions.profit,
       confidenceLevel: mlPredictions.confidence
     };
 
-    console.log(`[L4][ARA][CALCULATE] mode=${mode}, portfolio=$${portfolioValue.toFixed(2)}, risk=${riskPerTrade}%, exposure=${maxExposure}%`);
+    console.log(`[L4.2][ARA_CALC] avgValuePerTrade=${avgValuePerTrade.toFixed(2)} gross=${estimatedGrossProfit.toFixed(2)} net=${estimatedNetProfit.toFixed(2)} expectedProfit=${expectedProfitPercent.toFixed(1)}%`);
     
     res.json(result);
   } catch (error) {
