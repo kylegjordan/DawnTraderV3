@@ -12,6 +12,7 @@ import { getMLServiceStatus } from '../services/ml-service-client.js';
 import { loadFullCalibration } from '../utils/calibration.js';
 import { computeStrategyWeights, type StrategyWeightsBundle } from '../utils/strategyWeights.js';
 import { computeExposureBias, getOverbiasedStrategies, type ExposureBiasBundle } from '../utils/strategyBias.js';
+import { getDriftDetector, type StrategyDriftStatus } from '../services/drift-detector.js';
 
 export const healthRouter = Router();
 
@@ -315,6 +316,25 @@ healthRouter.get('/', async (req, res) => {
       console.log('[L10][HEALTH] Failed to compute exposure bias');
     }
     
+    // L11: Get strategy drift status
+    let strategyDriftData: Record<string, { score: number; status: string }> = {};
+    let driftingStrategies: string[] = [];
+    try {
+      const driftDetector = getDriftDetector();
+      const driftStatus = driftDetector.getStatus();
+      for (const [strategy, status] of Object.entries(driftStatus)) {
+        strategyDriftData[strategy] = {
+          score: status.score,
+          status: status.status
+        };
+        if (status.status === 'drifting' || status.status === 'recalibrating') {
+          driftingStrategies.push(strategy);
+        }
+      }
+    } catch (e) {
+      console.log('[L11][HEALTH] Failed to get drift status');
+    }
+    
     res.json({
       ok: true,
       healthy: status.healthy,
@@ -339,6 +359,11 @@ healthRouter.get('/', async (req, res) => {
         strategies: exposureBiasData,
         warnings: exposureBiasWarnings,
         total: Object.values(exposureBiasData).reduce((sum, b) => sum + b.allocPercent, 0).toFixed(1)
+      },
+      strategyDrift: {
+        strategies: strategyDriftData,
+        driftingStrategies,
+        driftingCount: driftingStrategies.length
       },
       issues: status.issues,
       timestamp: new Date().toISOString(),

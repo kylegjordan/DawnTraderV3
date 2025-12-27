@@ -18,6 +18,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { vtsService } from '../services/vts-service';
 import { loadCalibration, loadFullCalibration, applyCalibration } from '../utils/calibration';
+import { getDriftDetector } from '../services/drift-detector';
 
 const router = Router();
 
@@ -278,6 +279,83 @@ router.get('/internal/calibration', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('[L8][VTS][ERROR] Internal calibration fetch failed:', error);
     res.status(500).json({ error: 'Failed to get calibration' });
+  }
+});
+
+router.get('/drift/status', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const driftDetector = getDriftDetector();
+    const status = driftDetector.getStatus();
+    const config = driftDetector.getConfig();
+    
+    const driftingCount = Object.values(status).filter(s => 
+      s.status === 'drifting' || s.status === 'recalibrating'
+    ).length;
+    
+    res.json({
+      strategies: status,
+      driftingCount,
+      totalStrategies: Object.keys(status).length,
+      config: {
+        warningThreshold: config.warningThreshold,
+        recalibrationThreshold: config.recalibrationThreshold,
+        checkIntervalMs: config.checkIntervalMs
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[L11][VTS][ERROR] Drift status failed:', error);
+    res.status(500).json({ error: 'Failed to get drift status' });
+  }
+});
+
+router.post('/retrain/:strategy', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { strategy } = req.params;
+    
+    console.log(`[L11][VTS][RETRAIN_STRATEGY] Starting recalibration for ${strategy}`);
+    
+    const driftDetector = getDriftDetector();
+    const success = await driftDetector.forceRecalibration(strategy);
+    
+    if (!success) {
+      return res.status(409).json({ 
+        error: 'Recalibration already in progress',
+        strategy 
+      });
+    }
+    
+    const fullCalibration = await loadFullCalibration();
+    const strategyCalibration = fullCalibration.strategies[strategy] || fullCalibration.global;
+    
+    res.json({
+      success: true,
+      strategy,
+      calibration: strategyCalibration,
+      message: `Recalibration triggered for ${strategy}`,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[L11][VTS][ERROR] Strategy retrain failed:', error);
+    res.status(500).json({ error: 'Failed to retrain strategy' });
+  }
+});
+
+router.get('/drift/history/:strategy', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { strategy } = req.params;
+    const driftDetector = getDriftDetector();
+    const history = driftDetector.getHistory(strategy);
+    
+    res.json({
+      strategy,
+      history,
+      count: history.length,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[L11][VTS][ERROR] Drift history failed:', error);
+    res.status(500).json({ error: 'Failed to get drift history' });
   }
 });
 

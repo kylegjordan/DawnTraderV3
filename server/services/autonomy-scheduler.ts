@@ -10,9 +10,12 @@ import { collaborationManager } from './collaboration-manager';
 import { introspectionEngine } from './introspection-engine'; // Phase 15.0
 import { biasMitigation } from './bias-mitigation'; // Phase 15.0
 import { knowledgeRetrievalService } from './knowledge-retrieval'; // Phase 16.0
+import { startDriftDetector } from './drift-detector'; // L11
 import { db } from '../db';
 import { users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
+
+startDriftDetector();
 
 /**
  * Phase 8.9: Autonomy Layer Scheduler
