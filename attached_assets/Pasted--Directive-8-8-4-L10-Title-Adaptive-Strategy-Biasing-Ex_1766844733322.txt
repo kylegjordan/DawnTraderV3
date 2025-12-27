@@ -1,0 +1,334 @@
+🧭 Directive 8.8.4-L10
+Title: Adaptive Strategy Biasing & Exposure Optimization
+Phase: 8.8.4 (L-series)
+Status: Ready for Implementation
+1 | Objective
+
+Integrate strategy-weighted adaptive exposure control into the Signal Orchestrator, Risk Engine, and Adaptive Risk Advisor (ARA) so that strategies with higher real-world reliability and calibration confidence are automatically allocated proportionally larger portions of the trading budget — all while remaining inside guardrail constraints.
+
+This closes the learning loop:
+
+VTS ➜ ML Calibration ➜ Strategy Confidence Weighting ➜ Adaptive Risk & Exposure Control.
+
+2 | Design Goals
+Goal	Description
+1. Adaptive Exposure Scaling	Dynamically distribute total risk exposure based on per-strategy reliability weights.
+2. Guardrail Compliance	Always respect global max exposure, per-trade risk, and stop-loss thresholds.
+3. Transparency	Display how exposure and bias decisions are made in both ARA and the Health UI.
+4. Modularity	Biasing logic remains an optional layer (can be toggled or tuned).
+3 | Computation Model
+3.1 Weight-to-Exposure Mapping
+
+Each strategy s receives a bias multiplier:
+
+𝐸
+𝑠
+=
+𝑐
+𝑙
+𝑎
+𝑚
+𝑝
+ ⁣
+(
+𝑊
+𝑠
+𝑊
+𝑎
+𝑣
+𝑔
+,
+ 
+0.5
+,
+ 
+1.5
+)
+E
+s
+	​
+
+=clamp(
+W
+avg
+	​
+
+W
+s
+	​
+
+	​
+
+,0.5,1.5)
+
+Where:
+
+𝑊
+𝑠
+W
+s
+	​
+
+ = strategy confidence weight (from L9)
+
+𝑊
+𝑎
+𝑣
+𝑔
+W
+avg
+	​
+
+ = mean of all strategy weights
+
+Clamp ensures that no strategy receives < 50 % or > 150 % of its baseline exposure.
+
+3.2 Exposure Allocation
+
+For a portfolio with total max exposure 
+𝐸
+𝑡
+𝑜
+𝑡
+𝑎
+𝑙
+E
+total
+	​
+
+:
+
+𝐸
+𝑎
+𝑙
+𝑙
+𝑜
+𝑐
+,
+𝑠
+=
+𝐸
+𝑡
+𝑜
+𝑡
+𝑎
+𝑙
+×
+𝐸
+𝑠
+∑
+𝑖
+𝐸
+𝑖
+E
+alloc,s
+	​
+
+=E
+total
+	​
+
+×
+∑
+i
+	​
+
+E
+i
+	​
+
+E
+s
+	​
+
+	​
+
+
+This creates a proportional split of total allowable exposure among active strategies.
+
+3.3 Trade-Level Adjustment
+
+Per-trade risk percentage 
+𝑅
+𝑡
+𝑟
+𝑎
+𝑑
+𝑒
+,
+𝑠
+R
+trade,s
+	​
+
+:
+
+𝑅
+𝑡
+𝑟
+𝑎
+𝑑
+𝑒
+,
+𝑠
+=
+𝑅
+𝑏
+𝑎
+𝑠
+𝑒
+×
+𝐸
+𝑠
+R
+trade,s
+	​
+
+=R
+base
+	​
+
+×E
+s
+	​
+
+
+Ensuring that individual positions from higher-confidence strategies receive marginally larger trade sizes (while still constrained by guardrails).
+
+4 | Implementation Tasks
+4.1 Backend Services
+
+Files:
+server/utils/strategyBias.ts • server/services/signal-orchestrator.ts • server/services/rtb-refresh-service.ts • server/routes/health.ts • server/routes/ara.ts
+
+Tasks
+
+Create strategyBias.ts utility
+
+Imports latest strategy weights.
+
+Computes 
+𝐸
+𝑠
+E
+s
+	​
+
+ and 
+𝐸
+𝑎
+𝑙
+𝑙
+𝑜
+𝑐
+,
+𝑠
+E
+alloc,s
+	​
+
+ per strategy.
+
+Exposes getExposureMultiplier(strategy).
+
+Update signal-orchestrator.ts
+
+Before trade sizing, call getExposureMultiplier(strategy).
+
+Multiply tradeAmount or riskPerTrade by 
+𝐸
+𝑠
+E
+s
+	​
+
+.
+
+Append exposureBias to signal metadata.
+
+Update rtb-refresh-service.ts
+
+Include exposure multipliers in cycle logs.
+
+Display total exposure distribution table (strategy → % allocation).
+
+Update health.ts
+
+Add "exposureBias" object showing allocation ratios.
+
+Add warning if any single strategy exceeds 1.5× baseline.
+
+4.2 Adaptive Risk Advisor (ARA)
+
+Add “Strategy Exposure Bias” table below current metrics:
+| Strategy | Weight | Exposure Multiplier | Allocated Exposure % |
+
+Add tooltip: “Exposure allocation dynamically adjusted based on calibrated performance.”
+
+Display total across all strategies = 100 %.
+
+4.3 ML Service
+
+Adjust final prediction formula to incorporate exposure scaling:
+
+profit_prediction *= exposure_multiplier
+
+
+Log [L10][EXPOSURE_APPLY] Strategy=Breakout Multiplier=1.32.
+
+4.4 Guardrail Integration
+
+Ensure exposure scaling cannot exceed global limits:
+
+Hard cap: total ≤ maxExposure% in Guardrails tab.
+
+Any over-allocation auto-normalized.
+
+Implement fallback logic if weights unavailable: use 1.0 × baseline.
+
+4.5 Logging & Visualization
+
+Every 5 min, record:
+
+[L10][BIAS_UPDATE] DHMA=0.87 Breakout=1.34 Momentum=1.12 TotalExposure=98%
+
+
+Include chart visualization later (phase N).
+
+5 | Validation Checklist
+Test	Expected Result
+/api/ara/calculate	Returns per-strategy exposure multipliers and allocation %.
+/api/health	Shows "exposureBias" object with normalized totals.
+RTB refresh log	Lists per-strategy exposure distribution.
+ML service logs	Show [L10][EXPOSURE_APPLY] entries.
+Guardrails active	Total exposure never > configured maxExposure.
+6 | Example Output
+"exposureBias": {
+  "DHMA": {"weight":0.18,"multiplier":0.82,"alloc%":19.7},
+  "Breakout": {"weight":0.24,"multiplier":1.31,"alloc%":29.3},
+  "Momentum": {"weight":0.21,"multiplier":1.08,"alloc%":25.1},
+  "Reversal": {"weight":0.17,"multiplier":0.79,"alloc%":25.9},
+  "total": 100.0
+}
+
+7 | Expected Benefits
+Area	Improvement
+Profit Optimization	Shifts capital toward higher-confidence strategies.
+Risk Management	Maintains strict adherence to global limits.
+Learning Feedback	Reinforces data-driven allocation updates every calibration cycle.
+Transparency	Visual traceability through ARA and health endpoints.
+8 | Dependencies
+
+Requires L9 (Strategy Confidence Weighting Integration)
+
+Uses calibration data from L8 (Per-Strategy Calibration System)
+
+Requires operational ARA and Guardrails modules.
+
+9 | Directive Summary
+Field	Value
+Directive ID	8.8.4-L10
+Name	Adaptive Strategy Biasing & Exposure Optimization
+Scope	Orchestrator • ARA • ML Service • Guardrails • Health
+Outcome	Dynamic risk allocation per strategy based on live performance weights
+Success Criteria	Verified bias multipliers and exposure allocations visible in ARA and /api/health responses; total exposure ≤ global guardrail.
