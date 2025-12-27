@@ -50,6 +50,9 @@ class MLModels:
         self.profit_version = "v1.0"
         self.last_train_time: Optional[str] = None
         self.is_ready = False
+        self.calibration_alpha: float = 0.0018
+        self.calibration_beta: float = 0.19
+        self.calibration_loaded: bool = False
         
     def initialize(self):
         logger.info("[INIT] Initializing ML models...")
@@ -77,9 +80,58 @@ class MLModels:
             logger.info("[INIT] No existing models. Creating default models...")
             self._create_default_models()
         
+        self._fetch_vts_calibration()
+        
         self.is_ready = True
         elapsed = (time.time() - start_time) * 1000
         logger.info(f"[INIT_OK] Models initialized in {elapsed:.0f}ms")
+    
+    def _fetch_vts_calibration(self, is_deferred: bool = False):
+        """L7: Fetch VTS calibration coefficients from Node backend"""
+        import urllib.request
+        import urllib.error
+        
+        node_host = os.environ.get('NODE_BACKEND_HOST', 'http://localhost:5000')
+        internal_key = os.environ.get('INTERNAL_SERVICE_KEY', '')
+        vts_calibration_url = f"{node_host}/api/vts/internal/calibration"
+        
+        max_retries = 5 if is_deferred else 3
+        retry_delay = 3 if is_deferred else 2
+        
+        for attempt in range(max_retries):
+            try:
+                req = urllib.request.Request(vts_calibration_url)
+                req.add_header('Content-Type', 'application/json')
+                req.add_header('X-Internal-Key', internal_key)
+                
+                with urllib.request.urlopen(req, timeout=5) as response:
+                    data = json.loads(response.read().decode('utf-8'))
+                    
+                    if 'calibration' in data and data['calibration']:
+                        cal = data['calibration']
+                        self.calibration_alpha = float(cal.get('alpha', 0.0018))
+                        self.calibration_beta = float(cal.get('beta', 0.19))
+                        self.calibration_loaded = True
+                        logger.info(f"[L7][CALIB_APPLY] α={self.calibration_alpha:.4f} β={self.calibration_beta:.2f}")
+                        return True
+                        
+            except urllib.error.URLError as e:
+                logger.warning(f"[L7][CALIB_FETCH] Attempt {attempt+1}/{max_retries} failed: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay)
+            except Exception as e:
+                logger.warning(f"[L7][CALIB_FETCH] Error: {e}")
+                break
+        
+        logger.info(f"[L7][CALIB_FALLBACK] Using default α={self.calibration_alpha:.4f} β={self.calibration_beta:.2f}")
+        return False
+    
+    def retry_calibration_fetch(self):
+        """Retry fetching calibration if initial fetch failed"""
+        if not self.calibration_loaded:
+            logger.info("[L7][CALIB_RETRY] Retrying calibration fetch...")
+            return self._fetch_vts_calibration(is_deferred=True)
+        return True
         
     def _create_default_models(self):
         np.random.seed(42)
@@ -163,8 +215,11 @@ class MLModels:
         if self.scaler:
             features = self.scaler.transform(features)
         
-        prediction = self.profit_model.predict(features)[0]
-        return float(np.clip(prediction, -0.5, 0.5))
+        raw_prediction = self.profit_model.predict(features)[0]
+        
+        calibrated_prediction = self.calibration_alpha + self.calibration_beta * raw_prediction
+        
+        return float(np.clip(calibrated_prediction, -0.5, 0.5))
     
     def _compute_sdpoe_weights(self, outcomes: list) -> np.ndarray:
         rewards = []
@@ -254,7 +309,12 @@ models = MLModels()
 def health():
     return jsonify({
         "status": "READY" if models.is_ready else "INITIALIZING",
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.utcnow().isoformat(),
+        "calibration": {
+            "loaded": models.calibration_loaded,
+            "alpha": models.calibration_alpha,
+            "beta": models.calibration_beta
+        }
     })
 
 @app.route('/predict/promotion', methods=['POST'])
@@ -352,14 +412,47 @@ def metrics():
         "model_versions": {
             "promotion": models.promotion_version,
             "profit": models.profit_version
+        },
+        "calibration": {
+            "alpha": models.calibration_alpha,
+            "beta": models.calibration_beta,
+            "loaded": models.calibration_loaded
         }
     })
+
+@app.route('/calibration/refresh', methods=['POST'])
+def refresh_calibration():
+    """L7: Endpoint to trigger calibration refresh"""
+    success = models.retry_calibration_fetch()
+    return jsonify({
+        "success": success,
+        "calibration": {
+            "alpha": models.calibration_alpha,
+            "beta": models.calibration_beta,
+            "loaded": models.calibration_loaded
+        }
+    })
+
+def deferred_calibration_fetch():
+    """Wait for Node.js backend to be ready, then fetch calibration"""
+    import threading
+    
+    def fetch_after_delay():
+        time.sleep(10)
+        if not models.calibration_loaded:
+            logger.info("[L7][DEFERRED] Node backend should be ready, retrying calibration fetch...")
+            models.retry_calibration_fetch()
+    
+    thread = threading.Thread(target=fetch_after_delay, daemon=True)
+    thread.start()
 
 def main():
     port = int(os.environ.get('ML_SERVICE_PORT', 5001))
     logger.info(f"[STARTUP] Starting ML Service on port {port}")
     
     models.initialize()
+    
+    deferred_calibration_fetch()
     
     app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
 

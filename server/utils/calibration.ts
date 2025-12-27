@@ -22,6 +22,8 @@ export interface CalibrationCoefficients {
   rSquared: number;
   sampleCount: number;
   updated: number;
+  stdError?: number;
+  timestamp?: string;
 }
 
 const CALIBRATION_FILE = path.join(process.cwd(), 'logs', 'vts_calibration.json');
@@ -37,11 +39,11 @@ const DEFAULT_COEFFICIENTS: CalibrationCoefficients = {
 export function linearFit(
   predictedProfits: number[],
   actualProfits: number[]
-): { alpha: number; beta: number; rSquared: number } {
+): { alpha: number; beta: number; rSquared: number; stdError: number } {
   const n = predictedProfits.length;
   
   if (n < 10) {
-    return { alpha: DEFAULT_COEFFICIENTS.alpha, beta: DEFAULT_COEFFICIENTS.beta, rSquared: 0 };
+    return { alpha: DEFAULT_COEFFICIENTS.alpha, beta: DEFAULT_COEFFICIENTS.beta, rSquared: 0, stdError: 0 };
   }
 
   let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0, sumY2 = 0;
@@ -61,7 +63,7 @@ export function linearFit(
   
   const denominator = sumX2 - n * meanX * meanX;
   if (Math.abs(denominator) < 1e-10) {
-    return { alpha: DEFAULT_COEFFICIENTS.alpha, beta: DEFAULT_COEFFICIENTS.beta, rSquared: 0 };
+    return { alpha: DEFAULT_COEFFICIENTS.alpha, beta: DEFAULT_COEFFICIENTS.beta, rSquared: 0, stdError: 0 };
   }
 
   const beta = (sumXY - n * meanX * meanY) / denominator;
@@ -75,11 +77,15 @@ export function linearFit(
   }
 
   const rSquared = ssTot > 0 ? 1 - (ssRes / ssTot) : 0;
+  
+  const mse = ssRes / Math.max(1, n - 2);
+  const stdError = Math.sqrt(mse / Math.max(1, denominator));
 
   return { 
     alpha: Math.max(-0.01, Math.min(0.01, alpha)),
     beta: Math.max(0.05, Math.min(0.5, beta)),
-    rSquared: Math.max(0, Math.min(1, rSquared))
+    rSquared: Math.max(0, Math.min(1, rSquared)),
+    stdError: Math.max(0, stdError)
   };
 }
 
@@ -114,18 +120,25 @@ export async function calibrateFromTrades(
   const predictedProfits = trades.map(t => t.predictedProfit);
   const actualProfits = trades.map(t => t.actualProfit);
   
-  const { alpha, beta, rSquared } = linearFit(predictedProfits, actualProfits);
+  const { alpha, beta, rSquared, stdError } = linearFit(predictedProfits, actualProfits);
   
+  const now = Date.now();
   const coefficients: CalibrationCoefficients = {
     alpha,
     beta,
     rSquared,
     sampleCount: trades.length,
-    updated: Date.now()
+    updated: now,
+    stdError,
+    timestamp: new Date(now).toISOString()
   };
   
   await saveCalibration(coefficients);
-  console.log(`[L6][VTS] virtual=${trades.length} trades, α=${alpha.toFixed(4)} β=${beta.toFixed(2)} r²=${rSquared.toFixed(2)}`);
+  console.log(`[L7][CALIB_UPDATE] α=${alpha.toFixed(4)} β=${beta.toFixed(2)} sample_size=${trades.length} std_error=${stdError.toFixed(4)}`);
+  
+  if (Math.abs(beta - 1.0) > 0.3 || stdError > 0.05) {
+    console.warn(`[L7][CALIB_WARNING] Calibration anomaly detected: |β-1|=${Math.abs(beta - 1.0).toFixed(2)}, stdError=${stdError.toFixed(4)}`);
+  }
   
   return coefficients;
 }

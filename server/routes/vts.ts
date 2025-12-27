@@ -65,13 +65,84 @@ router.get('/status', requireAuth, async (req: Request, res: Response) => {
 
 router.get('/export', requireAuth, async (req: Request, res: Response) => {
   try {
+    const format = (req.query.format as string) || 'json';
+    const period = (req.query.period as string) || 'all';
+    
     const exportData = await vtsService.exportTrades();
+    let trades = exportData.trades;
     
-    console.log(`[L6][VTS][EXPORT] Exporting ${exportData.trades.length} trades`);
+    const now = Date.now();
+    if (period === '24h') {
+      trades = trades.filter(t => t.entryTime > now - 24 * 60 * 60 * 1000);
+    } else if (period === '7d') {
+      trades = trades.filter(t => t.entryTime > now - 7 * 24 * 60 * 60 * 1000);
+    } else if (period === '30d') {
+      trades = trades.filter(t => t.entryTime > now - 30 * 24 * 60 * 60 * 1000);
+    }
     
-    res.json(exportData);
+    console.log(`[L7][VTS][EXPORT] Exporting ${trades.length} trades (format=${format}, period=${period})`);
+    
+    if (format === 'csv') {
+      const wins = trades.filter(t => (t.netProfit || 0) > 0);
+      const winRate = trades.length > 0 ? (wins.length / trades.length * 100) : 0;
+      const avgGross = trades.length > 0 ? trades.reduce((s, t) => s + (t.grossProfit || 0), 0) / trades.length : 0;
+      const avgNet = trades.length > 0 ? trades.reduce((s, t) => s + (t.netProfit || 0), 0) / trades.length : 0;
+      
+      const csvHeader = 'Symbol,Strategy,Entry,Exit,Stop,Result,Duration,GrossProfit,NetProfit,Fees,Slippage,Outcome\n';
+      const csvRows = trades.map(t => {
+        const durationMs = (t.exitTime || t.entryTime) - t.entryTime;
+        const durationMin = Math.round(durationMs / 60000);
+        return [
+          t.signal.symbol,
+          t.signal.strategy,
+          t.signal.entryPrice.toFixed(6),
+          (t.exitPrice || 0).toFixed(6),
+          t.signal.stopLoss.toFixed(6),
+          t.resultType || 'open',
+          `${durationMin}m`,
+          ((t.grossProfit || 0) * 100).toFixed(4) + '%',
+          ((t.netProfit || 0) * 100).toFixed(4) + '%',
+          (t.fees || 0).toFixed(6),
+          t.signal.spread?.toFixed(6) || '0.001500',
+          t.status
+        ].join(',');
+      }).join('\n');
+      
+      const calibration = exportData.calibration;
+      const footer = `\n# Summary\n# Total Trades: ${trades.length}\n# Win Rate: ${winRate.toFixed(1)}%\n# Avg Gross Profit: ${(avgGross * 100).toFixed(4)}%\n# Avg Net Profit: ${(avgNet * 100).toFixed(4)}%\n# α: ${calibration?.alpha?.toFixed(4) || '0.0018'}, β: ${calibration?.beta?.toFixed(2) || '0.19'}\n`;
+      
+      const csvContent = csvHeader + csvRows + footer;
+      
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const date = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 16);
+      const exportDir = path.join(process.cwd(), 'logs', 'vts_exports');
+      await fs.mkdir(exportDir, { recursive: true });
+      const exportPath = path.join(exportDir, `${date}.csv`);
+      await fs.writeFile(exportPath, csvContent);
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename=vts_export_${date}.csv`);
+      res.send(csvContent);
+    } else {
+      const summary = {
+        totalTrades: trades.length,
+        winRate: trades.length > 0 ? trades.filter(t => (t.netProfit || 0) > 0).length / trades.length : 0,
+        avgGrossProfit: trades.length > 0 ? trades.reduce((s, t) => s + (t.grossProfit || 0), 0) / trades.length : 0,
+        avgNetProfit: trades.length > 0 ? trades.reduce((s, t) => s + (t.netProfit || 0), 0) / trades.length : 0
+      };
+      
+      res.json({
+        trades,
+        stats: exportData.stats,
+        calibration: exportData.calibration,
+        summary,
+        period,
+        exportedAt: new Date().toISOString()
+      });
+    }
   } catch (error) {
-    console.error('[L6][VTS][ERROR] Export failed:', error);
+    console.error('[L7][VTS][ERROR] Export failed:', error);
     res.status(500).json({ error: 'Failed to export VTS data' });
   }
 });
@@ -131,6 +202,28 @@ router.get('/calibration', requireAuth, async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('[L6][VTS][ERROR] Calibration lookup failed:', error);
+    res.status(500).json({ error: 'Failed to get calibration' });
+  }
+});
+
+router.get('/internal/calibration', async (req: Request, res: Response) => {
+  const internalKey = req.headers['x-internal-key'];
+  const expectedKey = process.env.INTERNAL_SERVICE_KEY;
+  
+  if (!expectedKey || internalKey !== expectedKey) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  
+  try {
+    const calibration = vtsService.getCalibration();
+    console.log('[L7][VTS][INTERNAL] ML service fetched calibration');
+    
+    res.json({
+      calibration,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[L7][VTS][ERROR] Internal calibration fetch failed:', error);
     res.status(500).json({ error: 'Failed to get calibration' });
   }
 });

@@ -6143,6 +6143,15 @@
     ]
   },
   {
+    "path": "/api/vts/internal/calibration",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api*",
     "methods": [],
     "middlewares": [

@@ -1,0 +1,161 @@
+Directive 8.8.4-L7 — VTS-Calibrated ARA Feedback Integration & Historical Export Validation
+Purpose
+
+To complete the integration of the Virtual Trade Simulator (VTS) feedback loop with the Adaptive Risk Advisor (ARA) and Machine Learning (ML) systems, ensuring that real-world-calibrated trade outcomes continuously refine predictive accuracy.
+
+This directive finalizes the profit calibration chain, enabling the system to produce realistic, data-driven trade profitability estimates based on continuous virtual simulation results.
+
+Scope
+
+This directive covers:
+
+ARA–VTS feedback integration (automatic calibration adoption)
+
+Historical export validation (aggregating VTS trade data into CSV/JSON for review)
+
+Model calibration verification (ensuring ARA and ML modules correctly apply α/β coefficients)
+
+Enhanced observability (logging and metrics visibility)
+
+System health check expansion for calibration stability tracking
+
+Implementation Objectives
+1. ARA ↔ VTS Feedback Loop Integration
+
+Update /api/ara/calculate to pull latest α/β coefficients from the VTS calibration store.
+
+Add fallback logic:
+
+if (!vtsCalibration.isValid()) use previous α/β from last successful cycle;
+
+
+Update profit prediction formula:
+
+calibratedProfit = alpha + beta * predictedProfit;
+
+
+Ensure ARA stores both raw and calibrated profit estimates for reference.
+
+2. Calibration Metadata Registry
+
+Create /server/data/vts_calibration.json to store:
+
+{
+  "timestamp": 1734892200,
+  "alpha": 0.12,
+  "beta": 0.84,
+  "sample_size": 1520,
+  "std_error": 0.03
+}
+
+
+Include automatic timestamping and persistence across reboots.
+
+Expose metadata via /api/vts/status.
+
+3. Historical Export Utility
+
+Implement /api/vts/export?format=csv:
+
+Generates a CSV file containing:
+| Symbol | Strategy | Entry | Exit | Stop | Result | Duration | GrossProfit | NetProfit | Fees | Slippage | Outcome |
+
+Stored at logs/vts_exports/YYYY-MM-DD_HHMM.csv
+
+Add aggregation summary footer:
+
+Total Trades: 1420
+Win Rate: 58.3%
+Avg Gross Profit: $0.82
+Avg Net Profit: $0.64
+α: 0.12, β: 0.84
+
+
+Include /api/vts/export?period=24h|7d|30d filtering.
+
+4. ML Model Calibration Adoption
+
+Modify the Python ML microservice:
+
+On startup, fetch alpha and beta from /api/vts/status.
+
+Adjust internal prediction scaling:
+
+calibrated_pred = alpha + beta * model_pred
+
+
+Log [L7][CALIB_APPLY] α=0.12 β=0.84 for traceability.
+
+Add retry logic for connection to Node backend at startup.
+
+5. Logging & Observability
+
+Extend replit.md and system logs:
+
+[L7][CALIB_UPDATE] α=... β=... sample_size=...
+
+[L7][ARA_FEEDBACK] applied calibrated profit values successfully
+
+Display current calibration parameters in the Adaptive Risk Advisor UI (small info bubble below net profit).
+
+6. Stability and Health Metrics
+
+Add new fields to /api/health:
+
+"vts": {
+  "status": "ok",
+  "lastCalibration": "2025-12-21T18:00:00Z",
+  "alpha": 0.12,
+  "beta": 0.84,
+  "sampleSize": 1520
+}
+
+
+Alert on anomalies:
+
+If |β - 1.0| > 0.3 or std_error > 0.05, trigger calibration warning in logs.
+
+Validation Tasks
+Test	Expectation
+ARA Calculate	Returns both rawProfit and calibratedProfit fields
+VTS Retrain	Updates α/β in /api/vts/status
+VTS Export	Generates CSV in correct format
+ML Service	Logs α/β coefficients applied at startup
+UI Display	Shows calibration info and updated profit metrics
+Expected Outcomes
+
+ARA’s per-trade profit estimates now accurately reflect real-world outcomes (using learned calibration, not fixed multipliers).
+
+VTS continuously refines ML accuracy by feeding empirical data.
+
+The system achieves self-correcting behavior: as simulation data improves, predictive modeling accuracy increases automatically.
+
+Historical data exports provide transparency for audit and model validation.
+
+Dependencies
+
+Directive 8.8.4-L6 (Virtual Trade Simulator)
+
+Directive 8.8.4-L4 (Adaptive Risk Advisor)
+
+Directive 8.8.4-L3 (ML Microservice Integration)
+
+Deployment & Test Plan
+
+Implement code updates in server/routes/ara.ts, server/routes/vts.ts, and ml_service/app.py.
+
+Restart backend and verify calibration sync logs.
+
+Run VTS for 24 hours (virtual mode) to build calibration dataset.
+
+Validate updated profit metrics via ARA UI.
+
+Confirm CSV export integrity and sample alignment.
+
+Directive Summary
+
+Directive ID: 8.8.4-L7
+Title: VTS-Calibrated ARA Feedback Integration & Historical Export Validation
+Objective: Close the feedback loop between simulated trade performance and real profit prediction accuracy.
+Deliverable: Fully self-calibrating ARA-ML-VTS ecosystem with historical traceability and validated profit metrics.
+Status: Pending implementation and testing.

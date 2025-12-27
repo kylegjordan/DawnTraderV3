@@ -37,6 +37,15 @@ interface ARAData {
   expectedProfitPercent: number;
   mlExpectedProfit: number;
   confidenceLevel: number;
+  rawProfitRate?: number;
+  calibratedProfitRate?: number;
+  calibration?: {
+    alpha: number;
+    beta: number;
+    sampleCount: number;
+    isValid: boolean;
+    lastUpdate: string;
+  };
 }
 
 interface RetrainProgress {
@@ -313,6 +322,31 @@ export default function AdaptiveRiskAdvisor() {
             </div>
           </div>
         </div>
+
+        {araData?.calibration && (
+          <div className="text-xs text-muted-foreground bg-slate-50 dark:bg-slate-900 rounded px-3 py-2 flex items-center gap-2">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <Info className="w-3 h-3" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p>VTS calibration adjusts profit predictions based on simulated trade outcomes.</p>
+                  <p className="mt-1">Formula: calibrated = α + β × predicted</p>
+                  <p className="mt-1">Sample size: {araData.calibration.sampleCount} trades</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <span>
+              Calibration: α={araData.calibration.alpha.toFixed(4)}, β={araData.calibration.beta.toFixed(2)}
+              {araData.calibration.isValid ? (
+                <span className="text-green-600 ml-1">(valid)</span>
+              ) : (
+                <span className="text-amber-600 ml-1">(limited data)</span>
+              )}
+            </span>
+          </div>
+        )}
 
         <Separator />
 

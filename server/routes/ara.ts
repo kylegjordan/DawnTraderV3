@@ -5,8 +5,10 @@ import { loadCalibration, applyCalibration, type CalibrationCoefficients } from 
 const router = Router();
 
 let calibrationCache: CalibrationCoefficients | null = null;
+let lastValidCalibration: CalibrationCoefficients | null = null;
 let calibrationCacheTime = 0;
 const CALIBRATION_CACHE_TTL = 60000;
+const MIN_SAMPLE_COUNT = 10;
 
 const JWT_SECRET = process.env.JWT_SECRET || 'jwt-development-secret-do-not-use-in-production';
 
@@ -45,6 +47,15 @@ interface ARACalculation {
   expectedProfitPercent: number;
   mlExpectedProfit: number;
   confidenceLevel: number;
+  rawProfitRate: number;
+  calibratedProfitRate: number;
+  calibration: {
+    alpha: number;
+    beta: number;
+    sampleCount: number;
+    isValid: boolean;
+    lastUpdate: string;
+  };
 }
 
 interface ARASuggestion {
@@ -135,13 +146,34 @@ router.get('/calculate', requireAuth, async (req: Request, res: Response) => {
     const mlPredictions = await getMLPredictions(portfolioValue, riskPerTrade);
     
     const now = Date.now();
+    let calibrationIsValid = false;
     if (!calibrationCache || now - calibrationCacheTime > CALIBRATION_CACHE_TTL) {
       try {
         calibrationCache = await loadCalibration();
         calibrationCacheTime = now;
+        
+        if (calibrationCache.sampleCount >= MIN_SAMPLE_COUNT) {
+          lastValidCalibration = { ...calibrationCache };
+          calibrationIsValid = true;
+          console.log(`[L7][CALIB_UPDATE] α=${calibrationCache.alpha.toFixed(4)} β=${calibrationCache.beta.toFixed(2)} sample_size=${calibrationCache.sampleCount}`);
+        } else {
+          console.log(`[L7][CALIB_FALLBACK] Using previous calibration (current sample_size=${calibrationCache.sampleCount} < ${MIN_SAMPLE_COUNT})`);
+          if (lastValidCalibration) {
+            calibrationCache = lastValidCalibration;
+            calibrationIsValid = true;
+          }
+        }
       } catch (e) {
-        calibrationCache = { alpha: 0.0018, beta: 0.19, rSquared: 0, sampleCount: 0, updated: now };
+        console.log('[L7][CALIB_ERROR] Using fallback calibration');
+        if (lastValidCalibration) {
+          calibrationCache = lastValidCalibration;
+          calibrationIsValid = true;
+        } else {
+          calibrationCache = { alpha: 0.0018, beta: 0.19, rSquared: 0, sampleCount: 0, updated: now };
+        }
       }
+    } else {
+      calibrationIsValid = calibrationCache.sampleCount >= MIN_SAMPLE_COUNT;
     }
     
     const rawProfitRate = mlPredictions.profit || 0.05;
@@ -170,10 +202,19 @@ router.get('/calculate', requireAuth, async (req: Request, res: Response) => {
       estimatedNetProfit,
       expectedProfitPercent,
       mlExpectedProfit: mlPredictions.profit,
-      confidenceLevel: mlPredictions.confidence
+      confidenceLevel: mlPredictions.confidence,
+      rawProfitRate,
+      calibratedProfitRate,
+      calibration: {
+        alpha: calibrationCache?.alpha || 0.0018,
+        beta: calibrationCache?.beta || 0.19,
+        sampleCount: calibrationCache?.sampleCount || 0,
+        isValid: calibrationIsValid,
+        lastUpdate: calibrationCache?.updated ? new Date(calibrationCache.updated).toISOString() : new Date().toISOString()
+      }
     };
 
-    console.log(`[L6][ARA_CALC] avgValue=${avgValuePerTrade.toFixed(2)} rawProfit=${(rawProfitRate*100).toFixed(1)}% calibrated=${(calibratedProfitRate*100).toFixed(1)}% gross=${estimatedGrossProfit.toFixed(2)} net=${estimatedNetProfit.toFixed(2)} expectedProfit=${expectedProfitPercent.toFixed(1)}%`);
+    console.log(`[L7][ARA_FEEDBACK] applied calibrated profit values successfully`);
     
     res.json(result);
   } catch (error) {

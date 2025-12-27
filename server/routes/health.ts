@@ -9,6 +9,7 @@ import { Router } from 'express';
 import { healthMonitor } from '../services/health-monitor.js';
 import { systemHealth } from '../services/system-health.js';
 import { getMLServiceStatus } from '../services/ml-service-client.js';
+import { loadCalibration } from '../utils/calibration.js';
 
 export const healthRouter = Router();
 
@@ -208,6 +209,49 @@ healthRouter.get('/', async (req, res) => {
     
     const mlStatus = await getMLServiceStatus();
     
+    let vtsHealth: {
+      status: string;
+      lastCalibration: string | null;
+      alpha: number;
+      beta: number;
+      sampleSize: number;
+      stdError: number;
+      warning: string | null;
+    } = {
+      status: 'unknown',
+      lastCalibration: null,
+      alpha: 0.0018,
+      beta: 0.19,
+      sampleSize: 0,
+      stdError: 0,
+      warning: null
+    };
+    
+    try {
+      const calibration = await loadCalibration();
+      const betaDeviation = Math.abs(calibration.beta - 1.0);
+      const stdError = calibration.stdError || 0;
+      
+      let warning: string | null = null;
+      if (betaDeviation > 0.3) {
+        warning = `β deviation high: |β-1|=${betaDeviation.toFixed(2)}`;
+      } else if (stdError > 0.05) {
+        warning = `Standard error high: ${stdError.toFixed(4)}`;
+      }
+      
+      vtsHealth = {
+        status: calibration.sampleCount >= 10 ? 'ok' : 'insufficient_data',
+        lastCalibration: calibration.timestamp || new Date(calibration.updated).toISOString(),
+        alpha: calibration.alpha,
+        beta: calibration.beta,
+        sampleSize: calibration.sampleCount,
+        stdError,
+        warning
+      };
+    } catch (e) {
+      vtsHealth.status = 'error';
+    }
+    
     res.json({
       ok: true,
       healthy: status.healthy,
@@ -226,6 +270,7 @@ healthRouter.get('/', async (req, res) => {
         memoryMB: mlStatus.memoryMB,
         modelVersions: mlStatus.modelVersions,
       },
+      vts: vtsHealth,
       issues: status.issues,
       timestamp: new Date().toISOString(),
     });
