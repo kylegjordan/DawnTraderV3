@@ -1,0 +1,229 @@
+🧭 Directive 8.8.4-L11
+Title: Strategy Drift Detection & Auto-Recalibration
+Phase: 8.8.4 (L-series finale)
+Status: Ready for Implementation
+1 | Objective
+
+Add a continuous background process that measures how each strategy’s calibration parameters (αₛ, βₛ, σₛ) and realized performance evolve over time.
+When deviations exceed configured thresholds, the system automatically triggers partial retraining of the VTS calibration and ML models for that strategy only.
+
+Result → the model self-corrects as market conditions change.
+
+2 | Why It Matters
+Problem	Solution
+Strategy performance decays as volatility regimes shift.	Detect drift in calibration coefficients and error variance.
+Manual retraining causes downtime.	Background auto-recalibration occurs without stopping trading.
+Uniform retraining wastes resources.	Per-strategy retraining focuses only on degraded models.
+3 | Drift Detection Model
+
+For each strategy s, we track its calibration history snapshot (from L8):
+
+DriftScore
+𝑠
+=
+𝑤
+1
+∣
+𝛽
+𝑠
+−
+𝛽
+𝑠
+−
+1
+∣
++
+𝑤
+2
+∣
+𝛼
+𝑠
+−
+𝛼
+𝑠
+−
+1
+∣
++
+𝑤
+3
+𝜎
+𝑠
+𝜎
+𝑏
+𝑎
+𝑠
+𝑒
+𝑙
+𝑖
+𝑛
+𝑒
+DriftScore
+s
+	​
+
+=w
+1
+	​
+
+∣β
+s
+	​
+
+−β
+s−1
+	​
+
+∣+w
+2
+	​
+
+∣α
+s
+	​
+
+−α
+s−1
+	​
+
+∣+w
+3
+	​
+
+σ
+baseline
+	​
+
+σ
+s
+	​
+
+	​
+
+
+Weights (default w₁ = 0.6, w₂ = 0.2, w₃ = 0.2).
+
+If DriftScore > 0.15, mark strategy as drifting.
+If DriftScore > 0.25, trigger auto-recalibration.
+
+4 | Implementation Tasks
+4.1 Backend – Node.js (L11 Watcher Service)
+
+📁 server/services/drift-detector.ts
+
+Responsibilities
+
+Poll /logs/vts_calibration_history/ every 15 min.
+
+Compute Δα, Δβ, Δσ for each strategy.
+
+Calculate DriftScoreₛ.
+
+Log and emit:
+
+[L11][DRIFT_WARN] Breakout βΔ=0.18 σΔ=0.07 score=0.21 → AUTO-RECALIBRATE
+
+
+Update /api/health with "strategyDrift" section.
+
+Call internal /api/vts/retrain?strategy=Breakout endpoint when threshold exceeded.
+
+4.2 Calibration History Updates
+
+Ensure each retraining appends a JSON snapshot:
+
+{"timestamp":"2025-12-22T14:30Z","strategy":"Breakout","alpha":0.0021,"beta":0.22,"sigma":0.034}
+
+
+Store last 10 entries per strategy (FIFO).
+
+4.3 Python ML Service Enhancements
+
+📁 services/ml_service.py
+
+New Endpoints
+
+/drift/status → Returns per-strategy drift scores and status.
+
+/drift/retrain/<strategy> → Runs focused retraining sequence for that strategy’s data only.
+
+Adds drift_detector.py helper module.
+
+New Methods
+
+compute_drift_score() mirrors Node logic for consistency.
+
+auto_retrain_strategy(strategy) → Retrains and writes updated αₛ, βₛ to calibration file.
+
+4.4 Adaptive Risk Advisor (UI)
+
+📁 client/src/components/goals/adaptive-risk-advisor.tsx
+
+Add a “Strategy Drift Monitor” section:
+
+Strategy	Drift Score	Status	Action
+Breakout	0.21	⚠️ Drifting	Auto-Recal Pending
+Momentum	0.08	✅ Stable	—
+
+Includes:
+
+Progress bar during retraining.
+
+Manual “Re-calibrate Now” button (visible only when drifting).
+
+4.5 Health Endpoint
+
+📁 server/routes/health.ts
+
+Add:
+
+"strategyDrift": {
+  "Breakout": {"score":0.21,"status":"recalibrating"},
+  "Momentum": {"score":0.08,"status":"stable"}
+}
+
+4.6 Notifications & Logging
+
+Send WebSocket and Toast notifications when:
+
+Strategy enters drifting state.
+
+Recalibration begins or completes.
+
+Log to /logs/drift_events/YYYYMMDD.log.
+
+5 | Key Formulas & Parameters
+Parameter	Default	Description
+Drift Window	15 min	Interval between checks.
+Drift Threshold 1	0.15	Warning – flag as drifting.
+Drift Threshold 2	0.25	Trigger auto-recalibration.
+History Depth	10	Calibration snapshots per strategy.
+w₁, w₂, w₃	0.6, 0.2, 0.2	Weights for β, α, σ variance.
+6 | Validation Checklist
+Test	Expected Result
+/api/health	Returns strategyDrift section with valid scores.
+/api/vts/retrain?strategy=X	Re-runs calibration for that strategy only.
+/drift/status (ML service)	Lists scores matching Node results.
+UI ARA Monitor	Displays live drift state + progress updates.
+Logs	[L11][DRIFT_WARN] and [L11][RECAL_DONE] entries appear.
+7 | Expected Benefits
+Area	Benefit
+Accuracy	Auto-corrects decaying model coefficients before major loss events.
+Resilience	Continuous calibration keeps ML system stable in changing volatility.
+Automation	Removes need for manual retrain triggers.
+Transparency	Real-time visibility of drift scores and recalibration status.
+8 | Dependencies
+
+Requires L8 (L9 weights + L10 bias) complete.
+
+Requires VTS active and logging calibration snapshots.
+
+Compatible with existing ARA and Health endpoints.
+
+9 | Directive Summary
+Field	Value
+Directive ID	8.8.4-L11
+Name	Strategy Drift Detection & Auto-Recalibration
+Scope	Drift Detector Service • ML Service • VTS • ARA UI • Health
+Outcome	Automatic detection of calibration drift and on-the-fly retraining per strategy.
+Success Criteria	Verified drift scores, automatic VTS retrain triggers, and visible UI feedback.

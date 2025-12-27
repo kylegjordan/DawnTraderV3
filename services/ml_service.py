@@ -624,6 +624,158 @@ def get_strategy_calibrations():
         "loaded": models.calibration_loaded
     })
 
+# L11: Drift Detection
+drift_history: Dict[str, list] = {}
+drift_baseline_sigma: Dict[str, float] = {}
+DRIFT_WEIGHTS = {'w1': 0.6, 'w2': 0.2, 'w3': 0.2}
+DRIFT_WARNING_THRESHOLD = 0.15
+DRIFT_RECAL_THRESHOLD = 0.25
+
+def compute_drift_score(strategy: str) -> Dict[str, Any]:
+    """L11: Compute drift score for a strategy"""
+    history = drift_history.get(strategy, [])
+    
+    if len(history) < 2:
+        return {
+            'strategy': strategy,
+            'score': 0,
+            'status': 'stable',
+            'deltaAlpha': 0,
+            'deltaBeta': 0,
+            'deltaSigma': 0
+        }
+    
+    current = history[-1]
+    previous = history[-2]
+    
+    delta_beta = abs(current.get('beta', 0) - previous.get('beta', 0))
+    delta_alpha = abs(current.get('alpha', 0) - previous.get('alpha', 0))
+    
+    baseline_sigma = drift_baseline_sigma.get(strategy, 0.01)
+    current_sigma = current.get('sigma', 0)
+    sigma_ratio = current_sigma / max(baseline_sigma, 0.001)
+    delta_sigma = abs(sigma_ratio - 1)
+    
+    score = (DRIFT_WEIGHTS['w1'] * delta_beta + 
+             DRIFT_WEIGHTS['w2'] * delta_alpha + 
+             DRIFT_WEIGHTS['w3'] * delta_sigma)
+    
+    status = 'stable'
+    if score > DRIFT_RECAL_THRESHOLD:
+        status = 'drifting'
+    elif score > DRIFT_WARNING_THRESHOLD:
+        status = 'drifting'
+    
+    return {
+        'strategy': strategy,
+        'score': round(score, 4),
+        'status': status,
+        'deltaAlpha': round(delta_alpha, 6),
+        'deltaBeta': round(delta_beta, 4),
+        'deltaSigma': round(delta_sigma, 4)
+    }
+
+def update_drift_history():
+    """L11: Update drift history from current calibrations"""
+    timestamp = datetime.utcnow().isoformat()
+    
+    for strategy, cal in models.strategy_calibrations.items():
+        if isinstance(cal, dict):
+            snapshot = {
+                'timestamp': timestamp,
+                'alpha': cal.get('alpha', 0),
+                'beta': cal.get('beta', 0.19),
+                'sigma': cal.get('stdError', 0)
+            }
+            
+            if strategy not in drift_history:
+                drift_history[strategy] = []
+            
+            drift_history[strategy].append(snapshot)
+            
+            if len(drift_history[strategy]) > 10:
+                drift_history[strategy] = drift_history[strategy][-10:]
+            
+            if strategy not in drift_baseline_sigma and snapshot['sigma'] > 0:
+                drift_baseline_sigma[strategy] = snapshot['sigma']
+
+@app.route('/drift/status', methods=['GET'])
+def get_drift_status():
+    """L11: Returns per-strategy drift scores and status"""
+    update_drift_history()
+    
+    result = {}
+    for strategy in models.strategy_calibrations.keys():
+        result[strategy] = compute_drift_score(strategy)
+    
+    global_drift = {
+        'strategy': 'global',
+        'score': 0,
+        'status': 'stable',
+        'deltaAlpha': 0,
+        'deltaBeta': 0,
+        'deltaSigma': 0
+    }
+    
+    if 'global' in drift_history and len(drift_history['global']) >= 2:
+        global_drift = compute_drift_score('global')
+    
+    result['global'] = global_drift
+    
+    drifting_count = sum(1 for s in result.values() if s['status'] == 'drifting')
+    
+    return jsonify({
+        "strategies": result,
+        "driftingCount": drifting_count,
+        "totalStrategies": len(result),
+        "timestamp": datetime.utcnow().isoformat()
+    })
+
+@app.route('/drift/retrain/<strategy>', methods=['POST'])
+def retrain_strategy(strategy: str):
+    """L11: Runs focused retraining sequence for a specific strategy"""
+    logger.info(f"[L11][DRIFT_RETRAIN] Starting recalibration for {strategy}")
+    
+    if strategy not in models.strategy_calibrations and strategy != 'global':
+        return jsonify({
+            "success": False,
+            "error": f"Strategy '{strategy}' not found"
+        }), 404
+    
+    try:
+        models.retry_calibration_fetch()
+        
+        new_cal = models.strategy_calibrations.get(strategy, {})
+        
+        if strategy in drift_history and drift_history[strategy]:
+            drift_history[strategy][-1]['recalibrated'] = True
+        
+        logger.info(f"[L11][RECAL_DONE] {strategy} α={new_cal.get('alpha', 0):.4f} β={new_cal.get('beta', 0.19):.2f}")
+        
+        return jsonify({
+            "success": True,
+            "strategy": strategy,
+            "calibration": new_cal,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+    except Exception as e:
+        logger.error(f"[L11][RECAL_FAIL] {strategy}: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/drift/history/<strategy>', methods=['GET'])
+def get_drift_history(strategy: str):
+    """L11: Get calibration history for a strategy"""
+    history = drift_history.get(strategy, [])
+    return jsonify({
+        "strategy": strategy,
+        "history": history,
+        "count": len(history),
+        "baselineSigma": drift_baseline_sigma.get(strategy, 0)
+    })
+
 def deferred_calibration_fetch():
     """Wait for Node.js backend to be ready, then fetch calibration"""
     import threading
