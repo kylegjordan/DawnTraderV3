@@ -229,9 +229,13 @@ class MLModels:
         prob = self.promotion_model.predict_proba(features)[0]
         return float(prob[1]) if len(prob) > 1 else float(prob[0])
     
-    def predict_profit(self, data: Dict[str, Any], strategy: str = '') -> float:
+    def predict_profit(self, data: Dict[str, Any], strategy: str = '') -> Dict[str, Any]:
+        """Returns dict with raw_profit, calibrated_profit, weighted_profit, and biased_profit"""
         if not self.is_ready or self.profit_model is None:
-            return 0.05
+            return {
+                'raw': 0.05, 'calibrated': 0.05, 'weighted': 0.05, 'biased': 0.05,
+                'strategy_weight': 1.0, 'exposure_multiplier': 1.0
+            }
         
         features = self.extract_features(data)
         if self.scaler:
@@ -246,7 +250,20 @@ class MLModels:
         strategy_weight = self.get_strategy_weight(strategy)
         weighted_prediction = calibrated_prediction * strategy_weight
         
-        return float(np.clip(weighted_prediction, -0.5, 0.5))
+        # L10: Apply exposure multiplier for final biased prediction
+        exposure_multiplier = self.get_exposure_multiplier(strategy)
+        biased_prediction = weighted_prediction * exposure_multiplier
+        
+        logger.info(f"[L10][EXPOSURE_APPLY] Strategy={strategy or 'global'} Multiplier={exposure_multiplier:.2f}")
+        
+        return {
+            'raw': float(np.clip(raw_prediction, -0.5, 0.5)),
+            'calibrated': float(np.clip(calibrated_prediction, -0.5, 0.5)),
+            'weighted': float(np.clip(weighted_prediction, -0.5, 0.5)),
+            'biased': float(np.clip(biased_prediction, -0.5, 0.5)),
+            'strategy_weight': strategy_weight,
+            'exposure_multiplier': exposure_multiplier
+        }
     
     def get_strategy_weight(self, strategy: str) -> float:
         """L9: Compute strategy weight from reliability score"""
@@ -284,6 +301,69 @@ class MLModels:
         
         weight = reliabilities.get(strategy, 0.5) / total_reliability * len(reliabilities)
         return max(0.1, min(2.0, weight))  # Clamp between 0.1x and 2.0x
+    
+    def get_exposure_multiplier(self, strategy: str) -> float:
+        """L10: Compute exposure multiplier Eₛ = clamp(Wₛ / Wavg, 0.5, 1.5)"""
+        if not strategy or not self.strategy_calibrations:
+            return 1.0  # No bias if no strategy data
+        
+        # First get all weights
+        all_weights = {}
+        for s in self.strategy_calibrations.keys():
+            all_weights[s] = self.get_strategy_weight(s)
+        
+        if not all_weights:
+            return 1.0
+        
+        # Calculate average weight
+        avg_weight = sum(all_weights.values()) / len(all_weights)
+        if avg_weight <= 0:
+            return 1.0
+        
+        # Get this strategy's weight
+        strategy_weight = all_weights.get(strategy, 1.0)
+        
+        # Compute exposure multiplier: Eₛ = clamp(Wₛ / Wavg, 0.5, 1.5)
+        raw_multiplier = strategy_weight / avg_weight
+        exposure_multiplier = max(0.5, min(1.5, raw_multiplier))
+        
+        return exposure_multiplier
+    
+    def get_all_exposure_multipliers(self) -> Dict[str, Dict[str, float]]:
+        """L10: Get exposure multipliers and allocations for all strategies"""
+        if not self.strategy_calibrations:
+            return {}
+        
+        # Get all weights
+        weights = {}
+        for s in self.strategy_calibrations.keys():
+            weights[s] = self.get_strategy_weight(s)
+        
+        if not weights:
+            return {}
+        
+        avg_weight = sum(weights.values()) / len(weights)
+        
+        # Compute multipliers
+        multipliers = {}
+        total_multiplier = 0
+        for s, w in weights.items():
+            raw_mult = w / avg_weight if avg_weight > 0 else 1.0
+            mult = max(0.5, min(1.5, raw_mult))
+            multipliers[s] = mult
+            total_multiplier += mult
+        
+        # Compute allocations
+        result = {}
+        for s, mult in multipliers.items():
+            alloc_pct = (mult / total_multiplier * 100) if total_multiplier > 0 else 100 / len(multipliers)
+            result[s] = {
+                'weight': weights[s],
+                'multiplier': mult,
+                'allocPercent': alloc_pct
+            }
+        
+        return result
     
     def _compute_sdpoe_weights(self, outcomes: list) -> np.ndarray:
         rewards = []
@@ -412,22 +492,29 @@ def predict_profit():
     try:
         data = request.get_json() or {}
         strategy = data.get('strategy', '')
-        profit = models.predict_profit(data, strategy)
-        strategy_weight = models.get_strategy_weight(strategy)
+        prediction = models.predict_profit(data, strategy)
         elapsed = (time.time() - start) * 1000
         
         symbol = data.get('symbol', 'UNKNOWN')
         alpha, beta = models.get_strategy_calibration(strategy)
-        logger.info(f"[L9][PREDICT_PROFIT] symbol={symbol} strategy={strategy or 'global'} profit={profit:.4f} α={alpha:.4f} β={beta:.2f} W={strategy_weight:.3f} latency={elapsed:.0f}ms")
+        logger.info(f"[L10][PREDICT_PROFIT] symbol={symbol} strategy={strategy or 'global'} "
+                   f"profit={prediction['biased']:.4f} α={alpha:.4f} β={beta:.2f} "
+                   f"W={prediction['strategy_weight']:.3f} E={prediction['exposure_multiplier']:.2f} "
+                   f"latency={elapsed:.0f}ms")
         
         if elapsed > 2000:
             logger.warning(f"[LAG_WARNING] Prediction took {elapsed:.0f}ms (>2000ms)")
         
         return jsonify({
             "success": True,
-            "predicted_profit": profit,
+            "predicted_profit": prediction['biased'],  # L10: Return exposure-biased profit
+            "raw_profit": prediction['raw'],
+            "calibrated_profit": prediction['calibrated'],
+            "weighted_profit": prediction['weighted'],
+            "biased_profit": prediction['biased'],
             "strategy": strategy or 'global',
-            "strategy_weight": strategy_weight,
+            "strategy_weight": prediction['strategy_weight'],
+            "exposure_multiplier": prediction['exposure_multiplier'],  # L10
             "calibration": {"alpha": alpha, "beta": beta},
             "latency_ms": elapsed
         })
@@ -477,6 +564,9 @@ def metrics():
     if memory_mb > 500:
         logger.warning(f"[MEMORY_WARNING] Memory usage {memory_mb:.0f}MB (>500MB)")
     
+    # L10: Get exposure bias data
+    exposure_bias = models.get_all_exposure_multipliers()
+    
     return jsonify({
         "memory_mb": memory_mb,
         "cpu_percent": cpu_percent,
@@ -491,7 +581,20 @@ def metrics():
             "loaded": models.calibration_loaded,
             "strategyCount": len(models.strategy_calibrations)
         },
-        "strategies": list(models.strategy_calibrations.keys())
+        "strategies": list(models.strategy_calibrations.keys()),
+        "exposureBias": exposure_bias  # L10
+    })
+
+@app.route('/exposure/multipliers', methods=['GET'])
+def get_exposure_multipliers():
+    """L10: Get all exposure multipliers and allocations"""
+    exposure_data = models.get_all_exposure_multipliers()
+    total_alloc = sum(v['allocPercent'] for v in exposure_data.values()) if exposure_data else 0
+    
+    return jsonify({
+        "strategies": exposure_data,
+        "total": round(total_alloc, 1),
+        "timestamp": datetime.utcnow().isoformat()
     })
 
 @app.route('/calibration/refresh', methods=['POST'])
