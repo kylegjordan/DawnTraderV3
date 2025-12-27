@@ -1,0 +1,169 @@
+🧭 Directive 8.8.4-L12
+Title: Market Condition Profiling & Adaptive Regime Switching
+Phase: L-Series Intelligence Tier III (Global Adaptive Layer)
+Status: Ready for Implementation
+1 | Objective
+
+To integrate a global market-state classifier and adaptive control layer that continuously profiles market conditions using live and historical data, identifies current “regimes,” and automatically adjusts:
+
+Active strategy mix
+
+Strategy weights (α bias × β exposure × confidence)
+
+Risk allocation and ARA guidance
+
+Result → The system trades differently in different markets instead of treating all volatility the same.
+
+2 | Core Concept
+Concept	Description
+Market Condition Profiler (MCP)	Collects multi-asset indicators to classify current regime.
+Adaptive Regime Engine (ARE)	Maps each regime → strategy mix matrix.
+Dynamic Allocator (DA)	Adjusts exposure multipliers & weights based on regime score.
+3 | Regime Categories
+Regime ID	Description	Typical Profile
+T1 – Trending Bull	Persistent uptrend, low volatility	Breakout ↑ Bias
+T2 – Trending Bear	Persistent downtrend	Reversal ↑ Bias
+R1 – Range-Bound	Mean-reverting sideways markets	Momentum ↓ Bias
+V1 – High Volatility Chop	Whipsaw, large swings	DHMA ↑ Bias
+C1 – Calm Consolidation	Low volatility, flat volume	Low exposure
+4 | Implementation Tasks
+4.1 Market Profiler Service
+
+📁 server/services/market-profiler.ts
+
+Inputs
+
+OHLC candles (multi-symbol aggregate)
+
+Realized volatility (σ)
+
+Average true range (ATR)
+
+Volume z-score (ζ)
+
+Trend slope + strength (via linear regression)
+
+Cross-asset correlation matrix
+
+Outputs
+
+{
+  "timestamp": "2025-12-22T17:00Z",
+  "regime": "T1",
+  "confidence": 0.82,
+  "metrics": {"volatility":0.14,"trend":0.87,"volume_z":0.5}
+}
+
+
+Runs every 15 minutes; publishes to in-memory cache and WebSocket bus.
+
+4.2 Adaptive Regime Engine (ARE)
+
+📁 server/services/adaptive-regime.ts
+
+Responsibilities
+
+Subscribe to MCP updates.
+
+Look up regime-strategy matrix:
+
+Regime	Strategy Mix (Target %)
+T1	Breakout 45
+T2	Reversal 50
+R1	Momentum 50
+V1	DHMA 60
+C1	All ≤ 10 (low exposure)
+
+Update live strategyWeight and exposureBias scalars used by signal orchestrator.
+
+Log transitions:
+
+[L12][REGIME_SWITCH] R1→T1 (confidence 0.82)
+
+4.3 Python ML Service Enhancements
+
+📁 services/ml_service.py
+
+Add /regime/current endpoint returning latest MCP output.
+
+Include regime in /predict/profit metadata.
+
+Store regime labels with training samples for conditional re-training (“context-aware ML”).
+
+When regime changes, temporarily increase learning rate for fast adaptation.
+
+4.4 Health & Monitoring
+
+📁 server/routes/health.ts
+
+Add section:
+
+"marketRegime": {
+  "current": "T1",
+  "confidence": 0.82,
+  "prev": "R1",
+  "last_switch": "2025-12-22T16:45Z"
+}
+
+4.5 Adaptive Risk Advisor (ARA UI)
+
+Add “Market Regime Profile” card above Strategy Drift Monitor:
+
+Metric	Current Value
+Regime	T1 – Trending Bull
+Confidence	82 %
+Avg Volatility (σ)	0.14
+Avg Volume z Score (ζ)	0.5
+Trend Slope	0.87
+Dominant Strategies	Breakout, Momentum
+
+Displays color-coded regime indicator (green = bull, red = bear, blue = range, orange = vol).
+
+4.6 Autonomy Scheduler
+
+Add MCP & ARE tasks to scheduler loop; 15 min intervals, async, non-blocking.
+
+5 | Formulas & Parameters
+Symbol	Meaning	Default
+σ	Realized volatility	20-period std dev
+ζ	Volume z-score	(Vol – mean) / σVol
+T	Trend strength	
+R_conf	Regime confidence	softmax over classifier outputs
+Switch Threshold	0.65	minimum confidence for regime change
+
+Classifier model: LightGBM (5 features → 5 regimes), trained on VTS synthetic history.
+
+6 | Data Flow
+Market Data → Profiler → Regime (Tx via WebSocket)
+                          ↓
+Adaptive Regime Engine → updates strategyWeights & exposureBias
+                          ↓
+Signal Orchestrator / ARA / ML Service
+
+7 | Validation Checklist
+Test	Expected Result
+/api/market/regime	Returns current regime + confidence
+Regime switch simulation	ARE updates strategy weights
+ARA UI	Displays current regime & dominant strategies
+ML predictions	Include regime context
+Logs	[L12][REGIME_SWITCH] entries
+8 | Stability & Architecture
+Aspect	Compliance
+Non-blocking async services	✅
+Memory footprint	≈ 10 MB (buffer + features)
+CPU usage	< 1 % (5 features × 5 regimes classifier)
+Security	Internal key for ML ↔ Node exchange
+Compatibility	Fully aligned with L9–L11 architecture
+9 | Expected Benefits
+Area	Improvement
+Accuracy	Models operate under correct market context.
+Efficiency	De-activates ineffective strategies automatically.
+Adaptability	Handles volatility regime shifts with zero manual input.
+Transparency	User sees why the system shifted strategy weights.
+10 | Directive Summary
+Field	Value
+Directive ID	8.8.4-L12
+Name	Market Condition Profiling & Adaptive Regime Switching
+Scope	MCP Service • ARE Service • ML Context Integration • ARA UI • Health
+Outcome	Global adaptive engine that detects market regime and auto-rebalances strategy portfolio.
+Success Criteria	Accurate regime classification, verified strategy mix adjustments, visible regime state in UI and health endpoints.

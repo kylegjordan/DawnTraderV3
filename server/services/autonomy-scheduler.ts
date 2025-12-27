@@ -11,11 +11,19 @@ import { introspectionEngine } from './introspection-engine'; // Phase 15.0
 import { biasMitigation } from './bias-mitigation'; // Phase 15.0
 import { knowledgeRetrievalService } from './knowledge-retrieval'; // Phase 16.0
 import { startDriftDetector } from './drift-detector'; // L11
+import { getMarketProfiler, initMarketProfiler } from './market-profiler'; // L12
+import { getAdaptiveRegime, initAdaptiveRegime } from './adaptive-regime'; // L12
 import { db } from '../db';
 import { users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 
 startDriftDetector();
+
+const marketProfiler = initMarketProfiler();
+const adaptiveRegime = initAdaptiveRegime();
+marketProfiler.start();
+adaptiveRegime.start();
+console.log('[L12][SCHEDULER] Market Profiler and Adaptive Regime Engine started');
 
 /**
  * Phase 8.9: Autonomy Layer Scheduler

@@ -21979,6 +21979,11 @@ Important: Extract the exact field names and numeric values from the user's requ
   apiRouter.use('/vts', vtsRouter.default);
   console.log('[L6] VTS routes mounted at /api/vts');
 
+  // Directive 8.8.4-L12: Mount Market Regime routes
+  const { marketRouter } = await import('./routes/market.js');
+  apiRouter.use('/market', marketRouter);
+  console.log('[L12] Market routes mounted at /api/market');
+
   // Catch-all handler for unmatched /api/* routes
   // This prevents requests from falling through to Vite's HTML handler
   // and ensures all API routes return JSON (even 404s)

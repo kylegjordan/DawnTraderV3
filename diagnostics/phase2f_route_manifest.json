@@ -6182,6 +6182,56 @@
     ]
   },
   {
+    "path": "/api/market/regime",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/market/regime/adjustments",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/market/regime/matrix",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/market/regime/refresh",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/market/regime/history",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api*",
     "methods": [],
     "middlewares": [

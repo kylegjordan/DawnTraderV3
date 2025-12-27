@@ -23,7 +23,8 @@ import {
   Loader2,
   Info,
   Activity,
-  TrendingUp
+  TrendingUp,
+  BarChart3
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -82,6 +83,35 @@ interface DriftStatus {
   };
 }
 
+interface MarketRegime {
+  regime: 'T1' | 'T2' | 'R1' | 'V1' | 'C1';
+  description: string;
+  color: string;
+  confidence: number;
+  metrics: {
+    volatility: number;
+    trend: number;
+    volume_z: number;
+    atr: number;
+    correlation: number;
+  };
+  dominantStrategies: string[];
+  exposureMultiplier: number;
+  riskMultiplier: number;
+  previousRegime: string | null;
+  lastSwitch: string | null;
+  profilerActive: boolean;
+  timestamp: string;
+}
+
+const REGIME_COLORS: Record<string, string> = {
+  T1: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-300',
+  T2: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-300',
+  R1: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-blue-300',
+  V1: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border-orange-300',
+  C1: 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400 border-gray-300'
+};
+
 const formatCurrency = (value: number): string => {
   return new Intl.NumberFormat('en-US', { 
     style: 'currency', 
@@ -109,6 +139,11 @@ export default function AdaptiveRiskAdvisor() {
 
   const { data: driftStatus } = useQuery<DriftStatus>({
     queryKey: ['/api/vts/drift/status'],
+    refetchInterval: 60000,
+  });
+
+  const { data: marketRegime } = useQuery<MarketRegime>({
+    queryKey: ['/api/market/regime'],
     refetchInterval: 60000,
   });
   
@@ -401,6 +436,68 @@ export default function AdaptiveRiskAdvisor() {
             Estimated probability of profit under current settings
           </p>
         </div>
+
+        {marketRegime && (
+          <>
+            <Separator />
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5 text-indigo-500" />
+                  <span className="font-medium">Market Regime Profile</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Info className="w-4 h-4 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>Classifies current market conditions and automatically adjusts strategy weights and exposure multipliers.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <Badge className={`gap-1 border ${REGIME_COLORS[marketRegime.regime] || REGIME_COLORS.R1}`}>
+                  {marketRegime.description}
+                </Badge>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="p-2 rounded bg-slate-50 dark:bg-slate-900/50">
+                  <div className="text-muted-foreground">Confidence</div>
+                  <div className="font-semibold">{(marketRegime.confidence * 100).toFixed(1)}%</div>
+                </div>
+                <div className="p-2 rounded bg-slate-50 dark:bg-slate-900/50">
+                  <div className="text-muted-foreground">Volatility (σ)</div>
+                  <div className="font-semibold">{(marketRegime.metrics.volatility * 100).toFixed(1)}%</div>
+                </div>
+                <div className="p-2 rounded bg-slate-50 dark:bg-slate-900/50">
+                  <div className="text-muted-foreground">Trend Slope</div>
+                  <div className="font-semibold">{marketRegime.metrics.trend.toFixed(2)}</div>
+                </div>
+                <div className="p-2 rounded bg-slate-50 dark:bg-slate-900/50">
+                  <div className="text-muted-foreground">Volume Z-Score (ζ)</div>
+                  <div className="font-semibold">{marketRegime.metrics.volume_z.toFixed(2)}</div>
+                </div>
+              </div>
+              
+              {marketRegime.dominantStrategies.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm text-muted-foreground">Dominant:</span>
+                  {marketRegime.dominantStrategies.map((strategy, i) => (
+                    <Badge key={i} variant="outline" className="text-xs">
+                      {strategy.replace(/_/g, ' ')}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              
+              <div className="flex gap-4 text-xs text-muted-foreground">
+                <span>Exposure: {marketRegime.exposureMultiplier.toFixed(2)}x</span>
+                <span>Risk: {marketRegime.riskMultiplier.toFixed(2)}x</span>
+              </div>
+            </div>
+          </>
+        )}
 
         {driftStatus && driftStatus.totalStrategies > 0 && (
           <>

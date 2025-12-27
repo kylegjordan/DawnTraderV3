@@ -776,6 +776,71 @@ def get_drift_history(strategy: str):
         "baselineSigma": drift_baseline_sigma.get(strategy, 0)
     })
 
+current_regime_cache = {
+    'regime': 'R1',
+    'confidence': 0.5,
+    'timestamp': None,
+    'metrics': {
+        'volatility': 0.15,
+        'trend': 0.1,
+        'volume_z': 0
+    }
+}
+
+@app.route('/regime/current', methods=['GET'])
+def get_current_regime():
+    """L12: Returns current market regime from Node backend cache or local default"""
+    import urllib.request
+    import urllib.error
+    
+    node_host = os.environ.get('NODE_BACKEND_HOST', 'http://localhost:5000')
+    regime_url = f"{node_host}/api/market/regime"
+    
+    try:
+        req = urllib.request.Request(regime_url)
+        req.add_header('Content-Type', 'application/json')
+        
+        with urllib.request.urlopen(req, timeout=2) as response:
+            data = json.loads(response.read().decode())
+            
+            current_regime_cache['regime'] = data.get('regime', 'R1')
+            current_regime_cache['confidence'] = data.get('confidence', 0.5)
+            current_regime_cache['timestamp'] = data.get('timestamp')
+            current_regime_cache['metrics'] = data.get('metrics', current_regime_cache['metrics'])
+            
+            logger.info(f"[L12][REGIME] Fetched regime: {current_regime_cache['regime']} (conf={current_regime_cache['confidence']:.2f})")
+    except Exception as e:
+        logger.debug(f"[L12][REGIME] Using cached regime, fetch failed: {e}")
+    
+    return jsonify({
+        "regime": current_regime_cache['regime'],
+        "confidence": current_regime_cache['confidence'],
+        "metrics": current_regime_cache['metrics'],
+        "timestamp": current_regime_cache['timestamp'] or datetime.utcnow().isoformat()
+    })
+
+@app.route('/regime/context', methods=['POST'])
+def update_regime_context():
+    """L12: Update regime context for ML predictions"""
+    data = request.json or {}
+    
+    regime = data.get('regime', current_regime_cache['regime'])
+    confidence = data.get('confidence', current_regime_cache['confidence'])
+    metrics = data.get('metrics', current_regime_cache['metrics'])
+    
+    current_regime_cache['regime'] = regime
+    current_regime_cache['confidence'] = confidence
+    current_regime_cache['metrics'] = metrics
+    current_regime_cache['timestamp'] = datetime.utcnow().isoformat()
+    
+    logger.info(f"[L12][REGIME_CONTEXT] Updated: {regime} (conf={confidence:.2f})")
+    
+    return jsonify({
+        "success": True,
+        "regime": regime,
+        "timestamp": current_regime_cache['timestamp']
+    })
+
 def deferred_calibration_fetch():
     """Wait for Node.js backend to be ready, then fetch calibration"""
     import threading

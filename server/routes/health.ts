@@ -13,6 +13,8 @@ import { loadFullCalibration } from '../utils/calibration.js';
 import { computeStrategyWeights, type StrategyWeightsBundle } from '../utils/strategyWeights.js';
 import { computeExposureBias, getOverbiasedStrategies, type ExposureBiasBundle } from '../utils/strategyBias.js';
 import { getDriftDetector, type StrategyDriftStatus } from '../services/drift-detector.js';
+import { getMarketProfiler } from '../services/market-profiler.js';
+import { getAdaptiveRegime } from '../services/adaptive-regime.js';
 
 export const healthRouter = Router();
 
@@ -335,6 +337,46 @@ healthRouter.get('/', async (req, res) => {
       console.log('[L11][HEALTH] Failed to get drift status');
     }
     
+    // L12: Get market regime status
+    let marketRegimeData: {
+      current: string;
+      confidence: number;
+      prev: string | null;
+      last_switch: string | null;
+      metrics: { volatility: number; trend: number; volume_z: number } | null;
+      dominantStrategies: string[];
+    } = {
+      current: 'R1',
+      confidence: 0,
+      prev: null,
+      last_switch: null,
+      metrics: null,
+      dominantStrategies: []
+    };
+    try {
+      const profiler = getMarketProfiler();
+      const profile = profiler.getCurrentProfile();
+      const regime = getAdaptiveRegime();
+      const adjustments = regime.getCurrentAdjustments();
+      
+      if (profile) {
+        marketRegimeData = {
+          current: profile.regime,
+          confidence: profile.confidence,
+          prev: profile.previousRegime,
+          last_switch: profile.lastSwitch,
+          metrics: {
+            volatility: profile.metrics.volatility,
+            trend: profile.metrics.trend,
+            volume_z: profile.metrics.volume_z
+          },
+          dominantStrategies: adjustments?.dominantStrategies || []
+        };
+      }
+    } catch (e) {
+      console.log('[L12][HEALTH] Failed to get market regime');
+    }
+    
     res.json({
       ok: true,
       healthy: status.healthy,
@@ -365,6 +407,7 @@ healthRouter.get('/', async (req, res) => {
         driftingStrategies,
         driftingCount: driftingStrategies.length
       },
+      marketRegime: marketRegimeData,
       issues: status.issues,
       timestamp: new Date().toISOString(),
     });
