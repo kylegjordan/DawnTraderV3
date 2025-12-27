@@ -45,6 +45,8 @@ A Per-Strategy Calibration System (L8) extends VTS calibration to compute separa
 
 Strategy Confidence Weighting (L9) introduces per-strategy reliability scoring and normalized weighting to dynamically influence trade selection. Reliability scores are based on calibration stability and normalized to create weights. The FinalRank formula is updated to incorporate Strategy Weight (0.20), along with NGC (0.30), CWQI (0.25), and MLConfidence (0.25). The Signal Orchestrator injects strategy weights into signal metadata, and the RTB table UI displays a new "S.Wgt" column.
 
+Adaptive Strategy Biasing (L10) uses exposure multipliers (E_s) to allocate risk proportionally across strategies. The formula E_s = clamp(W_s / W_avg, 0.5, 1.5) scales risk allocation based on strategy reliability. The ML profit prediction now follows a full progression: raw → calibrated (α_s + β_s × raw) → weighted (× W_s) → biased (× E_s). The ARA endpoint returns adjustedRiskPerTrade (R_base × E_s) and full exposure bias breakdown. The Python ML service `/predict/profit` endpoint returns all profit stages, `/exposure/multipliers` returns per-strategy allocations, and `/metrics` includes exposureBias data. Signal orchestrator pre-warms and refreshes exposure bias cache every 60 seconds.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.
