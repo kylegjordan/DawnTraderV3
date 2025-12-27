@@ -285,17 +285,39 @@ router.get('/internal/calibration', async (req: Request, res: Response) => {
 router.get('/drift/status', requireAuth, async (req: Request, res: Response) => {
   try {
     const driftDetector = getDriftDetector();
-    const status = driftDetector.getStatus();
+    const rawStatus = driftDetector.getStatus();
     const config = driftDetector.getConfig();
+    const fullCalibration = await loadFullCalibration();
     
-    const driftingCount = Object.values(status).filter(s => 
+    const strategies: Record<string, {
+      strategy: string;
+      driftScore: number;
+      status: 'stable' | 'drifting' | 'recalibrating';
+      lastCheck: string;
+      alpha: number;
+      beta: number;
+    }> = {};
+    
+    for (const [strategy, data] of Object.entries(rawStatus)) {
+      const calib = fullCalibration.strategies[strategy] || fullCalibration.global;
+      strategies[strategy] = {
+        strategy: data.strategy,
+        driftScore: data.score,
+        status: data.status,
+        lastCheck: data.lastCheck,
+        alpha: calib.alpha,
+        beta: calib.beta
+      };
+    }
+    
+    const driftingCount = Object.values(strategies).filter(s => 
       s.status === 'drifting' || s.status === 'recalibrating'
     ).length;
     
     res.json({
-      strategies: status,
+      strategies,
       driftingCount,
-      totalStrategies: Object.keys(status).length,
+      totalStrategies: Object.keys(strategies).length,
       config: {
         warningThreshold: config.warningThreshold,
         recalibrationThreshold: config.recalibrationThreshold,

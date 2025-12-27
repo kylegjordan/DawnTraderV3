@@ -21,6 +21,7 @@ import { EventEmitter } from 'events';
 import fs from 'fs/promises';
 import path from 'path';
 import { loadFullCalibration, type FullCalibration, type CalibrationCoefficients } from '../utils/calibration';
+import { contextBridge } from './context-bridge';
 
 export interface DriftSnapshot {
   timestamp: string;
@@ -145,9 +146,11 @@ export class DriftDetectorService extends EventEmitter {
               !this.recalibrationInProgress.has(strategy)) {
             console.log(`[L11][DRIFT_WARN] ${strategy} score=${driftStatus.score.toFixed(2)} → AUTO-RECALIBRATE`);
             this.emit('drift_recalibrate', { strategy, driftStatus });
+            this.broadcastDriftEvent('recalibrate', strategy, driftStatus);
             this.triggerRecalibration(strategy);
           } else if (driftStatus.score > this.config.warningThreshold) {
             this.emit('drift_warning', { strategy, driftStatus });
+            this.broadcastDriftEvent('warning', strategy, driftStatus);
           }
         }
       }
@@ -242,6 +245,36 @@ export class DriftDetectorService extends EventEmitter {
     };
   }
 
+  private broadcastDriftEvent(
+    eventType: 'warning' | 'recalibrate' | 'complete',
+    strategy: string,
+    driftStatus: StrategyDriftStatus
+  ) {
+    try {
+      const payload = {
+        type: 'strategy_drift',
+        subtype: eventType,
+        data: {
+          strategy,
+          score: driftStatus.score,
+          status: driftStatus.status,
+          deltaAlpha: driftStatus.deltaAlpha,
+          deltaBeta: driftStatus.deltaBeta,
+          deltaSigma: driftStatus.deltaSigma,
+          threshold: eventType === 'recalibrate' 
+            ? this.config.recalibrationThreshold 
+            : this.config.warningThreshold,
+          timestamp: new Date().toISOString()
+        }
+      };
+
+      contextBridge.broadcast(payload);
+      console.log(`[L11][DRIFT_WS] Broadcast ${eventType} for ${strategy}`);
+    } catch (error) {
+      console.error('[L11][DRIFT_WS] Broadcast failed:', error);
+    }
+  }
+
   private async triggerRecalibration(strategy: string) {
     if (this.recalibrationInProgress.has(strategy)) {
       console.log(`[L11][DRIFT] Recalibration already in progress for ${strategy}`);
@@ -268,11 +301,14 @@ export class DriftDetectorService extends EventEmitter {
         console.log(`[L11][RECAL_DONE] ${strategy} recalibration complete:`, result);
         this.emit('recalibration_complete', { strategy, result });
         
-        await this.logDriftEvent(strategy, { 
+        const completeStatus = { 
           ...status!, 
-          status: 'stable',
-          recalibrationPending: false 
-        }, 'recalibration_complete');
+          status: 'stable' as const,
+          recalibrationPending: false,
+          score: 0
+        };
+        await this.logDriftEvent(strategy, completeStatus, 'recalibration_complete');
+        this.broadcastDriftEvent('complete', strategy, completeStatus);
       } else {
         console.error(`[L11][RECAL_FAIL] ${strategy} recalibration failed: ${response.status}`);
         this.emit('recalibration_failed', { strategy, error: response.statusText });

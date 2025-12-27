@@ -21,8 +21,11 @@ import {
   Sparkles, 
   DollarSign,
   Loader2,
-  Info
+  Info,
+  Activity,
+  TrendingUp
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 interface ARAData {
   portfolioValue: number;
@@ -60,6 +63,25 @@ interface TradingStatus {
   mode: string;
 }
 
+interface DriftStrategyStatus {
+  strategy: string;
+  driftScore: number;
+  status: 'stable' | 'drifting' | 'recalibrating';
+  lastCheck: string;
+  alpha: number;
+  beta: number;
+}
+
+interface DriftStatus {
+  strategies: Record<string, DriftStrategyStatus>;
+  driftingCount: number;
+  totalStrategies: number;
+  config: {
+    warningThreshold: number;
+    recalibrationThreshold: number;
+  };
+}
+
 const formatCurrency = (value: number): string => {
   return new Intl.NumberFormat('en-US', { 
     style: 'currency', 
@@ -84,6 +106,11 @@ export default function AdaptiveRiskAdvisor() {
     refetchInterval: 5000,
   });
   const isEngineRunning = tradingStatus?.isRunning || false;
+
+  const { data: driftStatus } = useQuery<DriftStatus>({
+    queryKey: ['/api/vts/drift/status'],
+    refetchInterval: 60000,
+  });
   
   const [isRetraining, setIsRetraining] = useState(false);
   const [retrainProgress, setRetrainProgress] = useState<RetrainProgress | null>(null);
@@ -374,6 +401,80 @@ export default function AdaptiveRiskAdvisor() {
             Estimated probability of profit under current settings
           </p>
         </div>
+
+        {driftStatus && driftStatus.totalStrategies > 0 && (
+          <>
+            <Separator />
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-blue-500" />
+                  <span className="font-medium">Strategy Drift Monitor</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Info className="w-4 h-4 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>Monitors calibration parameter changes over time. When drift exceeds thresholds, auto-recalibration is triggered.</p>
+                        <p className="mt-1">Warning: &gt;{(driftStatus.config.warningThreshold * 100).toFixed(0)}%</p>
+                        <p>Auto-recalibrate: &gt;{(driftStatus.config.recalibrationThreshold * 100).toFixed(0)}%</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                {driftStatus.driftingCount > 0 ? (
+                  <Badge variant="destructive" className="gap-1">
+                    <AlertTriangle className="w-3 h-3" />
+                    {driftStatus.driftingCount} Drifting
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary" className="gap-1 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                    <CheckCircle className="w-3 h-3" />
+                    All Stable
+                  </Badge>
+                )}
+              </div>
+              
+              <div className="grid gap-2 max-h-40 overflow-y-auto">
+                {Object.entries(driftStatus.strategies).map(([strategy, data]) => (
+                  <div 
+                    key={strategy}
+                    className={`flex items-center justify-between p-2 rounded text-sm ${
+                      data.status === 'drifting' 
+                        ? 'bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800' 
+                        : data.status === 'recalibrating'
+                        ? 'bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800'
+                        : 'bg-slate-50 dark:bg-slate-900/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className={`w-4 h-4 ${
+                        data.status === 'drifting' ? 'text-amber-500' :
+                        data.status === 'recalibrating' ? 'text-blue-500' : 'text-green-500'
+                      }`} />
+                      <span className="font-medium">{strategy}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground">
+                        α={data.alpha.toFixed(3)} β={data.beta.toFixed(2)}
+                      </span>
+                      <div className={`text-xs font-medium ${
+                        data.driftScore > driftStatus.config.recalibrationThreshold 
+                          ? 'text-red-600' 
+                          : data.driftScore > driftStatus.config.warningThreshold 
+                          ? 'text-amber-600' 
+                          : 'text-green-600'
+                      }`}>
+                        {(data.driftScore * 100).toFixed(1)}%
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
 
         <div className="flex flex-wrap gap-3 pt-2">
           <Button
