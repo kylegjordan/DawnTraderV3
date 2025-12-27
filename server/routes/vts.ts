@@ -1,13 +1,14 @@
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * 🔒 LOCKED MODULE — Directive 8.8.4-L6
+ * 🔒 LOCKED MODULE — Directive 8.8.4-L8
  * ══════════════════════════════════════════════════════════════════════════════
  * VTS API Routes - Virtual Trade Simulator Endpoints
  * 
  * Endpoints:
- * - GET /api/vts/status: Current VTS status and stats
- * - GET /api/vts/export: Export all virtual trades and calibration data
- * - POST /api/vts/retrain: Trigger calibration coefficient retraining
+ * - GET /api/vts/status: Current VTS status and stats (L8: per-strategy data)
+ * - GET /api/vts/export: Export all virtual trades and calibration data (L8: per-strategy CSV)
+ * - POST /api/vts/retrain: Trigger calibration coefficient retraining (L8: per-strategy)
+ * - GET /api/vts/internal/calibration: Internal endpoint for ML service (L8: full calibration)
  * 
  * DO NOT MODIFY without architectural review.
  * ══════════════════════════════════════════════════════════════════════════════
@@ -16,7 +17,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { vtsService } from '../services/vts-service';
-import { loadCalibration, applyCalibration } from '../utils/calibration';
+import { loadCalibration, loadFullCalibration, applyCalibration } from '../utils/calibration';
 
 const router = Router();
 
@@ -48,17 +49,22 @@ router.get('/status', requireAuth, async (req: Request, res: Response) => {
   try {
     const stats = vtsService.getStats();
     const calibration = vtsService.getCalibration();
+    const fullCalibration = await vtsService.getFullCalibration();
+    const strategyStats = vtsService.getStrategyStats();
     
-    console.log(`[L6][VTS][STATUS] open=${stats.openTrades} closed=${stats.closedTrades} winRate=${(stats.winRate * 100).toFixed(1)}%`);
+    const strategyCount = Object.keys(fullCalibration.strategies).length;
+    console.log(`[L8][VTS][STATUS] open=${stats.openTrades} closed=${stats.closedTrades} winRate=${(stats.winRate * 100).toFixed(1)}% strategies=${strategyCount}`);
     
     res.json({
       isRunning: true,
       stats,
       calibration,
+      fullCalibration,
+      strategyStats,
       cpuImpact: '< 5%'
     });
   } catch (error) {
-    console.error('[L6][VTS][ERROR] Status failed:', error);
+    console.error('[L8][VTS][ERROR] Status failed:', error);
     res.status(500).json({ error: 'Failed to get VTS status' });
   }
 });
@@ -108,10 +114,33 @@ router.get('/export', requireAuth, async (req: Request, res: Response) => {
         ].join(',');
       }).join('\n');
       
-      const calibration = exportData.calibration;
-      const footer = `\n# Summary\n# Total Trades: ${trades.length}\n# Win Rate: ${winRate.toFixed(1)}%\n# Avg Gross Profit: ${(avgGross * 100).toFixed(4)}%\n# Avg Net Profit: ${(avgNet * 100).toFixed(4)}%\n# α: ${calibration?.alpha?.toFixed(4) || '0.0018'}, β: ${calibration?.beta?.toFixed(2) || '0.19'}\n`;
+      const strategyAggregates: Record<string, { trades: number; wins: number; totalGross: number; totalNet: number }> = {};
+      for (const trade of trades) {
+        const strategy = trade.signal.strategy || 'unknown';
+        if (!strategyAggregates[strategy]) {
+          strategyAggregates[strategy] = { trades: 0, wins: 0, totalGross: 0, totalNet: 0 };
+        }
+        strategyAggregates[strategy].trades++;
+        if ((trade.netProfit || 0) > 0) strategyAggregates[strategy].wins++;
+        strategyAggregates[strategy].totalGross += trade.grossProfit || 0;
+        strategyAggregates[strategy].totalNet += trade.netProfit || 0;
+      }
       
-      const csvContent = csvHeader + csvRows + footer;
+      const fullCalibration = await vtsService.getFullCalibration();
+      
+      let strategySection = '\n# Per-Strategy Aggregates\n# Strategy,Trades,WinRate,AvgGross,AvgNet,Alpha,Beta,StdError\n';
+      for (const [strategy, stats] of Object.entries(strategyAggregates)) {
+        const stratWinRate = stats.trades > 0 ? (stats.wins / stats.trades * 100) : 0;
+        const stratAvgGross = stats.trades > 0 ? stats.totalGross / stats.trades : 0;
+        const stratAvgNet = stats.trades > 0 ? stats.totalNet / stats.trades : 0;
+        const cal = fullCalibration.strategies[strategy] || fullCalibration.global;
+        strategySection += `# ${strategy},${stats.trades},${stratWinRate.toFixed(1)}%,${(stratAvgGross * 100).toFixed(4)}%,${(stratAvgNet * 100).toFixed(4)}%,${cal.alpha.toFixed(4)},${cal.beta.toFixed(2)},${(cal.stdError || 0).toFixed(4)}\n`;
+      }
+      
+      const calibration = exportData.calibration;
+      const footer = `\n# Overall Summary\n# Total Trades: ${trades.length}\n# Win Rate: ${winRate.toFixed(1)}%\n# Avg Gross Profit: ${(avgGross * 100).toFixed(4)}%\n# Avg Net Profit: ${(avgNet * 100).toFixed(4)}%\n# Global α: ${calibration?.alpha?.toFixed(4) || '0.0018'}, β: ${calibration?.beta?.toFixed(2) || '0.19'}\n`;
+      
+      const csvContent = csvHeader + csvRows + strategySection + footer;
       
       const fs = await import('fs/promises');
       const path = await import('path');
@@ -132,10 +161,29 @@ router.get('/export', requireAuth, async (req: Request, res: Response) => {
         avgNetProfit: trades.length > 0 ? trades.reduce((s, t) => s + (t.netProfit || 0), 0) / trades.length : 0
       };
       
+      const strategyAggregates: Record<string, { trades: number; wins: number; avgGross: number; avgNet: number }> = {};
+      for (const trade of trades) {
+        const strategy = trade.signal.strategy || 'unknown';
+        if (!strategyAggregates[strategy]) {
+          strategyAggregates[strategy] = { trades: 0, wins: 0, avgGross: 0, avgNet: 0 };
+        }
+        strategyAggregates[strategy].trades++;
+        if ((trade.netProfit || 0) > 0) strategyAggregates[strategy].wins++;
+      }
+      for (const [strategy, stats] of Object.entries(strategyAggregates)) {
+        const strategyTrades = trades.filter(t => t.signal.strategy === strategy);
+        stats.avgGross = strategyTrades.reduce((s, t) => s + (t.grossProfit || 0), 0) / strategyTrades.length;
+        stats.avgNet = strategyTrades.reduce((s, t) => s + (t.netProfit || 0), 0) / strategyTrades.length;
+      }
+      
+      const fullCalibration = await vtsService.getFullCalibration();
+      
       res.json({
         trades,
         stats: exportData.stats,
         calibration: exportData.calibration,
+        fullCalibration,
+        strategyAggregates,
         summary,
         period,
         exportedAt: new Date().toISOString()
@@ -149,7 +197,7 @@ router.get('/export', requireAuth, async (req: Request, res: Response) => {
 
 router.post('/retrain', requireAuth, async (req: Request, res: Response) => {
   try {
-    console.log('[L6][VTS][RETRAIN_START] Initiating calibration retraining');
+    console.log('[L8][VTS][RETRAIN_START] Initiating per-strategy calibration retraining');
     
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -162,25 +210,28 @@ router.post('/retrain', requireAuth, async (req: Request, res: Response) => {
     res.write(`data: ${JSON.stringify({ phase: `Loaded ${historicalTrades.length} trades`, percent: 30 })}\n\n`);
     await new Promise(resolve => setTimeout(resolve, 300));
 
-    res.write(`data: ${JSON.stringify({ phase: 'Computing linear regression', percent: 50 })}\n\n`);
+    res.write(`data: ${JSON.stringify({ phase: 'Computing per-strategy linear regression', percent: 50 })}\n\n`);
     await new Promise(resolve => setTimeout(resolve, 300));
 
-    const calibration = await vtsService.runCalibration();
+    const fullCalibration = await vtsService.runCalibration();
+    const global = fullCalibration.global;
+    const strategyCount = Object.keys(fullCalibration.strategies).length;
+    
     res.write(`data: ${JSON.stringify({ phase: 'Calibration complete', percent: 80 })}\n\n`);
     await new Promise(resolve => setTimeout(resolve, 300));
 
     res.write(`data: ${JSON.stringify({ 
       phase: 'complete', 
       percent: 100, 
-      message: `Calibration updated: α=${calibration.alpha.toFixed(4)} β=${calibration.beta.toFixed(2)} r²=${calibration.rSquared.toFixed(2)}`,
-      calibration
+      message: `Calibration updated: global α=${global.alpha.toFixed(4)} β=${global.beta.toFixed(2)} r²=${global.rSquared.toFixed(2)} + ${strategyCount} strategies`,
+      calibration: fullCalibration
     })}\n\n`);
 
-    console.log(`[L6][VTS][RETRAIN_COMPLETE] α=${calibration.alpha.toFixed(4)} β=${calibration.beta.toFixed(2)}`);
+    console.log(`[L8][VTS][RETRAIN_COMPLETE] Global: α=${global.alpha.toFixed(4)} β=${global.beta.toFixed(2)} + ${strategyCount} strategies`);
     
     res.end();
   } catch (error) {
-    console.error('[L6][VTS][ERROR] Retrain failed:', error);
+    console.error('[L8][VTS][ERROR] Retrain failed:', error);
     res.status(500).json({ error: 'Failed to retrain calibration' });
   }
 });
@@ -215,15 +266,17 @@ router.get('/internal/calibration', async (req: Request, res: Response) => {
   }
   
   try {
-    const calibration = vtsService.getCalibration();
-    console.log('[L7][VTS][INTERNAL] ML service fetched calibration');
+    const fullCalibration = await vtsService.getFullCalibration();
+    const strategyCount = Object.keys(fullCalibration.strategies).length;
+    console.log(`[L8][VTS][INTERNAL] ML service fetched full calibration (global + ${strategyCount} strategies)`);
     
     res.json({
-      calibration,
+      calibration: fullCalibration.global,
+      strategies: fullCalibration.strategies,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('[L7][VTS][ERROR] Internal calibration fetch failed:', error);
+    console.error('[L8][VTS][ERROR] Internal calibration fetch failed:', error);
     res.status(500).json({ error: 'Failed to get calibration' });
   }
 });

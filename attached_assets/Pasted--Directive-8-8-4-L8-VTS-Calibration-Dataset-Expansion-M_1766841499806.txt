@@ -1,0 +1,147 @@
+⚙️ Directive 8.8.4-L8 — VTS Calibration Dataset Expansion & Multi-Strategy Weighting
+Purpose
+
+Extend the Virtual Trade Simulator to learn and maintain separate calibration models for each trading strategy, allowing strategy-specific accuracy correction and richer training data for the ML system.
+
+This directive closes the loop between VTS data, ARA predictions, and per-strategy learning performance.
+
+Scope
+
+Introduce per-strategy calibration coefficients (αₛ, βₛ) in VTS.
+
+Expand dataset export and health metrics accordingly.
+
+Modify ARA and ML microservice to consume and apply strategy-specific calibration values.
+
+Implement aggregation and monitoring for long-term calibration trends.
+
+Implementation Objectives
+1. Per-Strategy Calibration
+
+Update server/utils/calibration.ts:
+
+Compute α and β per strategy instead of global average.
+
+Structure:
+
+{
+  "global": {"alpha":0.002,"beta":0.21},
+  "strategies": {
+    "DHMA":{"alpha":0.001,"beta":0.18},
+    "Breakout":{"alpha":0.005,"beta":0.26},
+    "Reversal":{"alpha":0.003,"beta":0.33}
+  }
+}
+
+
+Store in /server/data/vts_calibration.json.
+
+2. VTS Expansion
+
+Modify vts-service.ts to tag each simulated trade with its originating strategy.
+
+When calibration runs, group virtual trades by strategy key.
+
+Compute (αₛ, βₛ) per group using linear regression.
+
+Record sample size and std error for each.
+
+3. ARA Integration
+
+Update /api/ara/calculate:
+
+Identify the current strategy in context.
+
+Apply the correct (αₛ, βₛ) pair.
+
+If missing or invalid, fallback to global coefficients.
+
+Return both raw and calibrated profit:
+
+calibratedProfit = alpha_s + beta_s * predictedProfit;
+
+
+Include strategy calibration metadata in response:
+
+"strategyCalibration": {"alpha":0.005,"beta":0.26,"sampleSize":94}
+
+4. ML Microservice Integration
+
+Modify Python ML startup logic:
+
+Fetch full calibration table via /api/vts/internal/status.
+
+Cache (αₛ, βₛ) for each strategy.
+
+Apply calibration dynamically when predicting profit per strategy.
+
+Log:
+
+[L8][CALIB_APPLY] DHMA α=0.001 β=0.18 | Breakout α=0.005 β=0.26
+
+5. CSV & JSON Export Enhancement
+
+/api/vts/export now outputs per-strategy aggregates:
+
+Strategy, Trades, WinRate, AvgGross, AvgNet, α, β, StdError
+DHMA, 482, 56.2%, 0.84, 0.66, 0.001, 0.18, 0.04
+Breakout, 312, 61.5%, 0.91, 0.71, 0.005, 0.26, 0.03
+
+
+Append overall weighted totals.
+
+6. Health Endpoint Update
+
+Add section:
+
+"vts": {
+  "status":"ok",
+  "strategies":[
+    {"name":"DHMA","alpha":0.001,"beta":0.18,"sampleSize":482},
+    {"name":"Breakout","alpha":0.005,"beta":0.26,"sampleSize":312}
+  ]
+}
+
+
+Highlight anomalies where |βₛ−1.0|>0.3 or sampleSize<10.
+
+7. Data Aggregator & Storage
+
+Extend the aggregator (Directive L1 foundation) to store calibration history:
+
+/logs/vts_calibration_history/YYYY-MM-DD.json
+
+Enables temporal tracking for calibration drift analysis.
+
+Validation Tasks
+Test	Expected Outcome
+VTS retrain	Produces α/β per strategy
+ARA calculate	Uses matching strategy calibration
+ML logs	Show per-strategy calibration load
+Export CSV	Contains strategy-level α/β metrics
+Health endpoint	Lists calibration stats for all active strategies
+Expected Outcome
+
+Calibration precision increases significantly by isolating per-strategy learning curves.
+
+ARA profit estimates become more accurate for each strategy context.
+
+ML models benefit from stratified, cleaner training data.
+
+Future live calibration for strategy biasing becomes plug-and-play.
+
+Dependencies
+
+8.8.4-L7 (Global calibration)
+
+8.8.4-L6 (Virtual Trade Simulator)
+
+8.8.4-L4 (Adaptive Risk Advisor)
+
+Directive Summary
+
+Directive ID: 8.8.4-L8
+Title: VTS Calibration Dataset Expansion & Multi-Strategy Weighting
+Primary Application: Virtual Trade Simulator (foundation for later Strategy Engine integration)
+Objective: Learn and apply calibration coefficients per trading strategy for higher-resolution feedback and prediction accuracy.
+Status: Pending implementation and validation.

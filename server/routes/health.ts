@@ -9,7 +9,7 @@ import { Router } from 'express';
 import { healthMonitor } from '../services/health-monitor.js';
 import { systemHealth } from '../services/system-health.js';
 import { getMLServiceStatus } from '../services/ml-service-client.js';
-import { loadCalibration } from '../utils/calibration.js';
+import { loadFullCalibration, getStrategyAnomalies } from '../utils/calibration.js';
 
 export const healthRouter = Router();
 
@@ -199,8 +199,8 @@ healthRouter.get('/circuit-breaker', async (req, res) => {
 
 /**
  * Directive 8.8.4-A4.R10R-4: GET /api/health
- * Directive 8.8.4-L3: Extended with ML Service status
- * Returns system health metrics (CPU, memory, lag, uptime) + ML service status
+ * Directive 8.8.4-L8: Extended with per-strategy VTS calibration health
+ * Returns system health metrics (CPU, memory, lag, uptime) + ML service status + VTS per-strategy
  */
 healthRouter.get('/', async (req, res) => {
   try {
@@ -208,6 +208,14 @@ healthRouter.get('/', async (req, res) => {
     const status = systemHealth.getStatus();
     
     const mlStatus = await getMLServiceStatus();
+    
+    interface StrategyHealth {
+      name: string;
+      alpha: number;
+      beta: number;
+      sampleSize: number;
+      warning?: string;
+    }
     
     let vtsHealth: {
       status: string;
@@ -217,6 +225,7 @@ healthRouter.get('/', async (req, res) => {
       sampleSize: number;
       stdError: number;
       warning: string | null;
+      strategies: StrategyHealth[];
     } = {
       status: 'unknown',
       lastCalibration: null,
@@ -224,13 +233,15 @@ healthRouter.get('/', async (req, res) => {
       beta: 0.19,
       sampleSize: 0,
       stdError: 0,
-      warning: null
+      warning: null,
+      strategies: []
     };
     
     try {
-      const calibration = await loadCalibration();
-      const betaDeviation = Math.abs(calibration.beta - 1.0);
-      const stdError = calibration.stdError || 0;
+      const fullCalibration = await loadFullCalibration();
+      const global = fullCalibration.global;
+      const betaDeviation = Math.abs(global.beta - 1.0);
+      const stdError = global.stdError || 0;
       
       let warning: string | null = null;
       if (betaDeviation > 0.3) {
@@ -239,14 +250,38 @@ healthRouter.get('/', async (req, res) => {
         warning = `Standard error high: ${stdError.toFixed(4)}`;
       }
       
+      const strategies: StrategyHealth[] = [];
+      for (const [name, cal] of Object.entries(fullCalibration.strategies)) {
+        const stratBetaDev = Math.abs(cal.beta - 1.0);
+        const stratStdError = cal.stdError || 0;
+        let stratWarning: string | undefined;
+        
+        if (cal.sampleCount < 10) {
+          stratWarning = `Insufficient samples: ${cal.sampleCount}`;
+        } else if (stratBetaDev > 0.3) {
+          stratWarning = `β deviation high: |β-1|=${stratBetaDev.toFixed(2)}`;
+        } else if (stratStdError > 0.05) {
+          stratWarning = `Standard error high: ${stratStdError.toFixed(4)}`;
+        }
+        
+        strategies.push({
+          name,
+          alpha: cal.alpha,
+          beta: cal.beta,
+          sampleSize: cal.sampleCount,
+          warning: stratWarning
+        });
+      }
+      
       vtsHealth = {
-        status: calibration.sampleCount >= 10 ? 'ok' : 'insufficient_data',
-        lastCalibration: calibration.timestamp || new Date(calibration.updated).toISOString(),
-        alpha: calibration.alpha,
-        beta: calibration.beta,
-        sampleSize: calibration.sampleCount,
+        status: global.sampleCount >= 10 ? 'ok' : 'insufficient_data',
+        lastCalibration: global.timestamp || new Date(global.updated).toISOString(),
+        alpha: global.alpha,
+        beta: global.beta,
+        sampleSize: global.sampleCount,
         stdError,
-        warning
+        warning,
+        strategies
       };
     } catch (e) {
       vtsHealth.status = 'error';
@@ -275,7 +310,7 @@ healthRouter.get('/', async (req, res) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('[A4.R10R-4][API] Error fetching system health:', error.message);
+    console.error('[L8][API] Error fetching system health:', error.message);
     res.status(500).json({ ok: false, error: error.message });
   }
 });

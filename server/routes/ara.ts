@@ -1,10 +1,11 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { loadCalibration, applyCalibration, type CalibrationCoefficients } from '../utils/calibration';
+import { loadCalibration, loadFullCalibration, loadStrategyCalibration, applyCalibration, type CalibrationCoefficients, type FullCalibration } from '../utils/calibration';
 
 const router = Router();
 
 let calibrationCache: CalibrationCoefficients | null = null;
+let fullCalibrationCache: FullCalibration | null = null;
 let lastValidCalibration: CalibrationCoefficients | null = null;
 let calibrationCacheTime = 0;
 const CALIBRATION_CACHE_TTL = 60000;
@@ -55,6 +56,12 @@ interface ARACalculation {
     sampleCount: number;
     isValid: boolean;
     lastUpdate: string;
+  };
+  strategyCalibration?: {
+    strategy: string;
+    alpha: number;
+    beta: number;
+    sampleSize: number;
   };
 }
 
@@ -134,6 +141,7 @@ router.get('/calculate', requireAuth, async (req: Request, res: Response) => {
     const portfolioValue = parseFloat(req.query.portfolioValue as string) || 0;
     const riskPerTrade = parseFloat(req.query.riskPerTrade as string) || 2;
     const maxExposure = parseFloat(req.query.maxExposure as string) || 20;
+    const strategy = (req.query.strategy as string) || '';
 
     const numTrades = maxExposure > 0 && riskPerTrade > 0 
       ? Math.floor(maxExposure / riskPerTrade) 
@@ -147,24 +155,27 @@ router.get('/calculate', requireAuth, async (req: Request, res: Response) => {
     
     const now = Date.now();
     let calibrationIsValid = false;
-    if (!calibrationCache || now - calibrationCacheTime > CALIBRATION_CACHE_TTL) {
+    let strategyCalibrationData: { strategy: string; alpha: number; beta: number; sampleSize: number } | undefined;
+    
+    if (!calibrationCache || !fullCalibrationCache || now - calibrationCacheTime > CALIBRATION_CACHE_TTL) {
       try {
-        calibrationCache = await loadCalibration();
+        fullCalibrationCache = await loadFullCalibration();
+        calibrationCache = fullCalibrationCache.global;
         calibrationCacheTime = now;
         
         if (calibrationCache.sampleCount >= MIN_SAMPLE_COUNT) {
           lastValidCalibration = { ...calibrationCache };
           calibrationIsValid = true;
-          console.log(`[L7][CALIB_UPDATE] α=${calibrationCache.alpha.toFixed(4)} β=${calibrationCache.beta.toFixed(2)} sample_size=${calibrationCache.sampleCount}`);
+          console.log(`[L8][CALIB_UPDATE] Global: α=${calibrationCache.alpha.toFixed(4)} β=${calibrationCache.beta.toFixed(2)} sample_size=${calibrationCache.sampleCount}`);
         } else {
-          console.log(`[L7][CALIB_FALLBACK] Using previous calibration (current sample_size=${calibrationCache.sampleCount} < ${MIN_SAMPLE_COUNT})`);
+          console.log(`[L8][CALIB_FALLBACK] Using previous calibration (current sample_size=${calibrationCache.sampleCount} < ${MIN_SAMPLE_COUNT})`);
           if (lastValidCalibration) {
             calibrationCache = lastValidCalibration;
             calibrationIsValid = true;
           }
         }
       } catch (e) {
-        console.log('[L7][CALIB_ERROR] Using fallback calibration');
+        console.log('[L8][CALIB_ERROR] Using fallback calibration');
         if (lastValidCalibration) {
           calibrationCache = lastValidCalibration;
           calibrationIsValid = true;
@@ -176,9 +187,27 @@ router.get('/calculate', requireAuth, async (req: Request, res: Response) => {
       calibrationIsValid = calibrationCache.sampleCount >= MIN_SAMPLE_COUNT;
     }
     
+    let activeCalibration = calibrationCache;
+    
+    if (strategy && fullCalibrationCache?.strategies[strategy]) {
+      const stratCal = fullCalibrationCache.strategies[strategy];
+      if (stratCal.sampleCount >= MIN_SAMPLE_COUNT) {
+        activeCalibration = stratCal;
+        strategyCalibrationData = {
+          strategy,
+          alpha: stratCal.alpha,
+          beta: stratCal.beta,
+          sampleSize: stratCal.sampleCount
+        };
+        console.log(`[L8][CALIB_APPLY] Using ${strategy} calibration: α=${stratCal.alpha.toFixed(4)} β=${stratCal.beta.toFixed(2)}`);
+      } else {
+        console.log(`[L8][CALIB_APPLY] ${strategy} has insufficient samples (${stratCal.sampleCount}), using global`);
+      }
+    }
+    
     const rawProfitRate = mlPredictions.profit || 0.05;
-    const calibratedProfitRate = calibrationCache 
-      ? applyCalibration(rawProfitRate, calibrationCache) 
+    const calibratedProfitRate = activeCalibration 
+      ? applyCalibration(rawProfitRate, activeCalibration) 
       : rawProfitRate * 0.25;
     
     const estimatedGrossProfit = avgValuePerTrade * calibratedProfitRate;
@@ -211,14 +240,15 @@ router.get('/calculate', requireAuth, async (req: Request, res: Response) => {
         sampleCount: calibrationCache?.sampleCount || 0,
         isValid: calibrationIsValid,
         lastUpdate: calibrationCache?.updated ? new Date(calibrationCache.updated).toISOString() : new Date().toISOString()
-      }
+      },
+      strategyCalibration: strategyCalibrationData
     };
 
-    console.log(`[L7][ARA_FEEDBACK] applied calibrated profit values successfully`);
+    console.log(`[L8][ARA_FEEDBACK] Applied ${strategy ? `strategy=${strategy}` : 'global'} calibration`);
     
     res.json(result);
   } catch (error) {
-    console.error('[L4][ARA][ERROR] Calculate failed:', error);
+    console.error('[L8][ARA][ERROR] Calculate failed:', error);
     res.status(500).json({ error: 'Failed to calculate ARA metrics' });
   }
 });

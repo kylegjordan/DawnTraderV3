@@ -1,5 +1,5 @@
 """
-Directive 8.8.4-L3: Python ML Microservice
+Directive 8.8.4-L8: Python ML Microservice with Per-Strategy Calibration
 Serves model predictions via REST endpoints for SQE, RTB, and Signal Orchestrator.
 """
 
@@ -53,6 +53,7 @@ class MLModels:
         self.calibration_alpha: float = 0.0018
         self.calibration_beta: float = 0.19
         self.calibration_loaded: bool = False
+        self.strategy_calibrations: Dict[str, Dict[str, float]] = {}
         
     def initialize(self):
         logger.info("[INIT] Initializing ML models...")
@@ -87,7 +88,7 @@ class MLModels:
         logger.info(f"[INIT_OK] Models initialized in {elapsed:.0f}ms")
     
     def _fetch_vts_calibration(self, is_deferred: bool = False):
-        """L7: Fetch VTS calibration coefficients from Node backend"""
+        """L8: Fetch VTS calibration coefficients including per-strategy values from Node backend"""
         import urllib.request
         import urllib.error
         
@@ -112,26 +113,47 @@ class MLModels:
                         self.calibration_alpha = float(cal.get('alpha', 0.0018))
                         self.calibration_beta = float(cal.get('beta', 0.19))
                         self.calibration_loaded = True
-                        logger.info(f"[L7][CALIB_APPLY] α={self.calibration_alpha:.4f} β={self.calibration_beta:.2f}")
-                        return True
+                        logger.info(f"[L8][CALIB_APPLY] Global: α={self.calibration_alpha:.4f} β={self.calibration_beta:.2f}")
+                    
+                    if 'strategies' in data and data['strategies']:
+                        self.strategy_calibrations = {}
+                        for strategy, cal in data['strategies'].items():
+                            self.strategy_calibrations[strategy] = {
+                                'alpha': float(cal.get('alpha', 0.0018)),
+                                'beta': float(cal.get('beta', 0.19)),
+                                'sampleCount': int(cal.get('sampleCount', 0))
+                            }
+                            logger.info(f"[L8][CALIB_APPLY] {strategy} α={cal['alpha']:.4f} β={cal['beta']:.2f}")
+                        
+                        logger.info(f"[L8][CALIB_APPLY] Loaded {len(self.strategy_calibrations)} strategy calibrations")
+                    
+                    return True
                         
             except urllib.error.URLError as e:
-                logger.warning(f"[L7][CALIB_FETCH] Attempt {attempt+1}/{max_retries} failed: {e}")
+                logger.warning(f"[L8][CALIB_FETCH] Attempt {attempt+1}/{max_retries} failed: {e}")
                 if attempt < max_retries - 1:
                     time.sleep(retry_delay)
             except Exception as e:
-                logger.warning(f"[L7][CALIB_FETCH] Error: {e}")
+                logger.warning(f"[L8][CALIB_FETCH] Error: {e}")
                 break
         
-        logger.info(f"[L7][CALIB_FALLBACK] Using default α={self.calibration_alpha:.4f} β={self.calibration_beta:.2f}")
+        logger.info(f"[L8][CALIB_FALLBACK] Using default α={self.calibration_alpha:.4f} β={self.calibration_beta:.2f}")
         return False
     
     def retry_calibration_fetch(self):
         """Retry fetching calibration if initial fetch failed"""
         if not self.calibration_loaded:
-            logger.info("[L7][CALIB_RETRY] Retrying calibration fetch...")
+            logger.info("[L8][CALIB_RETRY] Retrying calibration fetch...")
             return self._fetch_vts_calibration(is_deferred=True)
         return True
+    
+    def get_strategy_calibration(self, strategy: str) -> tuple:
+        """Get calibration coefficients for a specific strategy, fallback to global"""
+        if strategy and strategy in self.strategy_calibrations:
+            cal = self.strategy_calibrations[strategy]
+            if cal.get('sampleCount', 0) >= 10:
+                return cal['alpha'], cal['beta']
+        return self.calibration_alpha, self.calibration_beta
         
     def _create_default_models(self):
         np.random.seed(42)
@@ -207,7 +229,7 @@ class MLModels:
         prob = self.promotion_model.predict_proba(features)[0]
         return float(prob[1]) if len(prob) > 1 else float(prob[0])
     
-    def predict_profit(self, data: Dict[str, Any]) -> float:
+    def predict_profit(self, data: Dict[str, Any], strategy: str = '') -> float:
         if not self.is_ready or self.profit_model is None:
             return 0.05
         
@@ -217,7 +239,8 @@ class MLModels:
         
         raw_prediction = self.profit_model.predict(features)[0]
         
-        calibrated_prediction = self.calibration_alpha + self.calibration_beta * raw_prediction
+        alpha, beta = self.get_strategy_calibration(strategy)
+        calibrated_prediction = alpha + beta * raw_prediction
         
         return float(np.clip(calibrated_prediction, -0.5, 0.5))
     
@@ -307,13 +330,15 @@ models = MLModels()
 
 @app.route('/health', methods=['GET'])
 def health():
+    strategy_count = len(models.strategy_calibrations)
     return jsonify({
         "status": "READY" if models.is_ready else "INITIALIZING",
         "timestamp": datetime.utcnow().isoformat(),
         "calibration": {
             "loaded": models.calibration_loaded,
             "alpha": models.calibration_alpha,
-            "beta": models.calibration_beta
+            "beta": models.calibration_beta,
+            "strategyCount": strategy_count
         }
     })
 
@@ -345,11 +370,13 @@ def predict_profit():
     start = time.time()
     try:
         data = request.get_json() or {}
-        profit = models.predict_profit(data)
+        strategy = data.get('strategy', '')
+        profit = models.predict_profit(data, strategy)
         elapsed = (time.time() - start) * 1000
         
         symbol = data.get('symbol', 'UNKNOWN')
-        logger.info(f"[PREDICT_PROFIT] symbol={symbol} profit={profit:.4f} latency={elapsed:.0f}ms")
+        alpha, beta = models.get_strategy_calibration(strategy)
+        logger.info(f"[L8][PREDICT_PROFIT] symbol={symbol} strategy={strategy or 'global'} profit={profit:.4f} α={alpha:.4f} β={beta:.2f} latency={elapsed:.0f}ms")
         
         if elapsed > 2000:
             logger.warning(f"[LAG_WARNING] Prediction took {elapsed:.0f}ms (>2000ms)")
@@ -357,6 +384,8 @@ def predict_profit():
         return jsonify({
             "success": True,
             "predicted_profit": profit,
+            "strategy": strategy or 'global',
+            "calibration": {"alpha": alpha, "beta": beta},
             "latency_ms": elapsed
         })
     except Exception as e:
@@ -416,21 +445,37 @@ def metrics():
         "calibration": {
             "alpha": models.calibration_alpha,
             "beta": models.calibration_beta,
-            "loaded": models.calibration_loaded
-        }
+            "loaded": models.calibration_loaded,
+            "strategyCount": len(models.strategy_calibrations)
+        },
+        "strategies": list(models.strategy_calibrations.keys())
     })
 
 @app.route('/calibration/refresh', methods=['POST'])
 def refresh_calibration():
-    """L7: Endpoint to trigger calibration refresh"""
+    """L8: Endpoint to trigger full calibration refresh including per-strategy"""
     success = models.retry_calibration_fetch()
     return jsonify({
         "success": success,
         "calibration": {
             "alpha": models.calibration_alpha,
             "beta": models.calibration_beta,
-            "loaded": models.calibration_loaded
-        }
+            "loaded": models.calibration_loaded,
+            "strategyCount": len(models.strategy_calibrations)
+        },
+        "strategies": models.strategy_calibrations
+    })
+
+@app.route('/calibration/strategies', methods=['GET'])
+def get_strategy_calibrations():
+    """L8: Get all per-strategy calibration coefficients"""
+    return jsonify({
+        "global": {
+            "alpha": models.calibration_alpha,
+            "beta": models.calibration_beta
+        },
+        "strategies": models.strategy_calibrations,
+        "loaded": models.calibration_loaded
     })
 
 def deferred_calibration_fetch():
@@ -440,7 +485,7 @@ def deferred_calibration_fetch():
     def fetch_after_delay():
         time.sleep(10)
         if not models.calibration_loaded:
-            logger.info("[L7][DEFERRED] Node backend should be ready, retrying calibration fetch...")
+            logger.info("[L8][DEFERRED] Node backend should be ready, retrying calibration fetch...")
             models.retry_calibration_fetch()
     
     thread = threading.Thread(target=fetch_after_delay, daemon=True)

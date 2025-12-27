@@ -1,6 +1,6 @@
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * 🔒 LOCKED MODULE — Directive 8.8.4-L6
+ * 🔒 LOCKED MODULE — Directive 8.8.4-L8
  * ══════════════════════════════════════════════════════════════════════════════
  * Virtual Trade Simulator Service - Passive Mode Trade Simulation
  * 
@@ -11,6 +11,7 @@
  * - Simulates trades with realistic fees (0.26% per side) and slippage (0.15%)
  * - 3-hour trade window with take-profit, stop-loss, and timeout outcomes
  * - Populates virtual trade logs for continuous learning
+ * - Per-strategy calibration coefficients (L8)
  * - Zero real order execution
  * 
  * DO NOT MODIFY without architectural review.
@@ -20,7 +21,7 @@
 import { EventEmitter } from 'events';
 import fs from 'fs/promises';
 import path from 'path';
-import { loadCalibration, calibrateFromTrades, type CalibrationCoefficients } from '../utils/calibration';
+import { loadCalibration, loadFullCalibration, calibrateFromTradesPerStrategy, type CalibrationCoefficients, type FullCalibration } from '../utils/calibration';
 
 export interface VirtualSignal {
   id: string;
@@ -76,6 +77,7 @@ export class VTSService extends EventEmitter {
   private virtualTrades: Map<string, VirtualTrade> = new Map();
   private closedTrades: VirtualTrade[] = [];
   private calibration: CalibrationCoefficients | null = null;
+  private fullCalibration: FullCalibration | null = null;
   private isRunning = false;
   private updateInterval: NodeJS.Timeout | null = null;
   private lastPrices: Map<string, { high: number; low: number; close: number }> = new Map();
@@ -88,10 +90,12 @@ export class VTSService extends EventEmitter {
   private async init() {
     try {
       await fs.mkdir(VTS_LOGS_DIR, { recursive: true });
-      this.calibration = await loadCalibration();
-      console.log('[L6][VTS] INIT_OK - calibration loaded');
+      this.fullCalibration = await loadFullCalibration();
+      this.calibration = this.fullCalibration.global;
+      const strategyCount = Object.keys(this.fullCalibration.strategies).length;
+      console.log(`[L8][VTS] INIT_OK - calibration loaded (global + ${strategyCount} strategies)`);
     } catch (error) {
-      console.error('[L6][VTS] Init failed:', error);
+      console.error('[L8][VTS] Init failed:', error);
     }
   }
 
@@ -244,21 +248,60 @@ export class VTSService extends EventEmitter {
     }
   }
 
-  async runCalibration(): Promise<CalibrationCoefficients> {
+  async runCalibration(): Promise<FullCalibration> {
     const calibrationData = this.closedTrades
       .filter(t => t.status === 'closed' && t.netProfit !== undefined)
       .map(t => ({
         predictedProfit: t.signal.predictedProfit,
-        actualProfit: t.netProfit!
+        actualProfit: t.netProfit!,
+        strategy: t.signal.strategy || 'unknown'
       }));
 
     if (calibrationData.length < 10) {
-      console.log(`[L6][VTS] Insufficient data for calibration: ${calibrationData.length} trades`);
-      return this.calibration || await loadCalibration();
+      console.log(`[L8][VTS] Insufficient data for calibration: ${calibrationData.length} trades`);
+      const fullCalibration = await loadFullCalibration();
+      this.calibration = fullCalibration.global;
+      this.fullCalibration = fullCalibration;
+      return fullCalibration;
     }
 
-    this.calibration = await calibrateFromTrades(calibrationData);
-    return this.calibration;
+    const fullCalibration = await calibrateFromTradesPerStrategy(calibrationData);
+    this.calibration = fullCalibration.global;
+    this.fullCalibration = fullCalibration;
+    return fullCalibration;
+  }
+
+  async getFullCalibration(): Promise<FullCalibration> {
+    if (this.fullCalibration) {
+      return this.fullCalibration;
+    }
+    return await loadFullCalibration();
+  }
+
+  getStrategyStats(): Record<string, { trades: number; winRate: number; avgGross: number; avgNet: number }> {
+    const strategyStats: Record<string, { trades: number; wins: number; totalGross: number; totalNet: number }> = {};
+    
+    for (const trade of this.closedTrades) {
+      const strategy = trade.signal.strategy || 'unknown';
+      if (!strategyStats[strategy]) {
+        strategyStats[strategy] = { trades: 0, wins: 0, totalGross: 0, totalNet: 0 };
+      }
+      strategyStats[strategy].trades++;
+      if ((trade.netProfit || 0) > 0) strategyStats[strategy].wins++;
+      strategyStats[strategy].totalGross += trade.grossProfit || 0;
+      strategyStats[strategy].totalNet += trade.netProfit || 0;
+    }
+    
+    const result: Record<string, { trades: number; winRate: number; avgGross: number; avgNet: number }> = {};
+    for (const [strategy, stats] of Object.entries(strategyStats)) {
+      result[strategy] = {
+        trades: stats.trades,
+        winRate: stats.trades > 0 ? stats.wins / stats.trades : 0,
+        avgGross: stats.trades > 0 ? stats.totalGross / stats.trades : 0,
+        avgNet: stats.trades > 0 ? stats.totalNet / stats.trades : 0
+      };
+    }
+    return result;
   }
 
   async loadHistoricalTrades(): Promise<VirtualTrade[]> {
