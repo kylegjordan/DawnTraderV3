@@ -53,6 +53,7 @@ import { diagnosticTrace } from '../core/diagnostics/trace_service.js';
 import { dataAggregator } from './data-aggregator.js';
 import { predictPromotion, predictProfit, blendConfidence, type PredictionInput } from './ml-service-client.js';
 import { getWeightSync as getStrategyWeight, computeStrategyWeights } from '../utils/strategyWeights.js';
+import { getExposureMultiplierSync, computeExposureBias, getBiasSummaryForLog } from '../utils/strategyBias.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -153,6 +154,15 @@ export class SignalOrchestrator {
       console.warn(`[L9][WEIGHTS_WARMUP] Failed to pre-warm strategy weights cache:`, err);
     }
     
+    // L10: Pre-warm exposure bias cache
+    try {
+      const biasBundle = await computeExposureBias();
+      const biasSummary = getBiasSummaryForLog();
+      console.log(`[L10][BIAS_WARMUP] Cache populated with ${Object.keys(biasBundle.strategies).length} strategies: ${biasSummary}`);
+    } catch (err) {
+      console.warn(`[L10][BIAS_WARMUP] Failed to pre-warm exposure bias cache:`, err);
+    }
+    
     console.log(`[37.A][SignalOrchestrator][${this.mode}] Starting with ${this.enabledStrategies.size} strategies, interval ${this.evaluationIntervalMs}ms`);
     console.log(`[B.3][FLOW_CORRECTED] Signal flow order: Sizing → Metrics → SQE → RTB → TCL`);
     console.log(`[WARMUP][DEBUG] SignalOrchestrator starting (non-blocking)`);
@@ -170,13 +180,17 @@ export class SignalOrchestrator {
       await this.evaluateMarket();
     }, this.evaluationIntervalMs);
     
-    // L9: Periodic background refresh of strategy weights cache (every 60s to match TTL)
+    // L9+L10: Periodic background refresh of strategy weights and exposure bias caches (every 60s to match TTL)
     this.weightsRefreshTimer = setInterval(async () => {
       try {
         const weightsBundle = await computeStrategyWeights();
         console.log(`[L9][WEIGHTS_REFRESH] Cache refreshed with ${weightsBundle.totalStrategies} strategies`);
+        
+        // L10: Refresh exposure bias alongside weights
+        const biasBundle = await computeExposureBias();
+        console.log(`[L10][BIAS_REFRESH] Cache refreshed: ${getBiasSummaryForLog()}`);
       } catch (err) {
-        console.warn(`[L9][WEIGHTS_REFRESH] Failed to refresh strategy weights cache:`, err);
+        console.warn(`[L9/L10][CACHE_REFRESH] Failed to refresh caches:`, err);
       }
     }, 60000); // 60s to match cache TTL
 
@@ -435,6 +449,8 @@ export class SignalOrchestrator {
     // All signals that pass SQE go into the unified pool regardless of capacity
     // L9: Fetch strategy weight for this signal's strategy (sync from cache)
     const strategyWeight = getStrategyWeight(strategyId);
+    // L10: Fetch exposure bias multiplier for this strategy
+    const exposureBias = getExposureMultiplierSync(strategyId);
     
     const sqeSignalInput: SQESignalInput = {
       signalId,
@@ -455,10 +471,12 @@ export class SignalOrchestrator {
       volume24h: activeFilterPool.getFX5DataForSymbol(rawSignal.symbol, sizingContext.mode)?.volume24h ?? null, // Directive 8.8.4-C.14.B: FX5 data only, NULL if not found
       metadata: {
         strategyWeight, // L9: Strategy reliability weight for finalRank computation
+        exposureBias, // L10: Exposure bias multiplier for risk allocation
       },
     };
     
     console.log(`[L9][SIGNAL_WEIGHT] ${rawSignal.symbol}/${strategyId}: strategyWeight=${strategyWeight.toFixed(4)}`);
+    console.log(`[L10][EXPOSURE_BIAS] ${rawSignal.symbol}/${strategyId}: exposureBias=${exposureBias.toFixed(4)}`);
 
     // Queue to RTB pool (fire-and-forget, non-blocking)
     readyToBuyService.queueSQESignal(sqeSignalInput).catch(err => {
