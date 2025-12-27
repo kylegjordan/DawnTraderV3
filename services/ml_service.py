@@ -242,7 +242,48 @@ class MLModels:
         alpha, beta = self.get_strategy_calibration(strategy)
         calibrated_prediction = alpha + beta * raw_prediction
         
-        return float(np.clip(calibrated_prediction, -0.5, 0.5))
+        # L9: Apply strategy weight to scale the prediction
+        strategy_weight = self.get_strategy_weight(strategy)
+        weighted_prediction = calibrated_prediction * strategy_weight
+        
+        return float(np.clip(weighted_prediction, -0.5, 0.5))
+    
+    def get_strategy_weight(self, strategy: str) -> float:
+        """L9: Compute strategy weight from reliability score"""
+        if not strategy or not self.strategy_calibrations:
+            return 1.0  # No weighting if no strategy data
+        
+        # Compute reliability scores for all strategies
+        reliabilities = {}
+        max_std_error = 0.001
+        
+        for s, cal in self.strategy_calibrations.items():
+            std_error = cal.get('stdError', 0) if isinstance(cal, dict) else 0
+            max_std_error = max(max_std_error, std_error)
+        
+        for s, cal in self.strategy_calibrations.items():
+            if isinstance(cal, dict):
+                beta = cal.get('beta', 0.19)
+                std_error = cal.get('stdError', 0)
+                sample_count = cal.get('sampleCount', 0)
+                
+                if sample_count < 10:
+                    reliabilities[s] = 0.5  # Default for insufficient samples
+                else:
+                    beta_deviation = abs(beta - 1.0)
+                    normalized_error = std_error / max_std_error if max_std_error > 0 else 0
+                    reliability = max(0, min(1, 1 - beta_deviation - normalized_error))
+                    reliabilities[s] = reliability
+        
+        if not reliabilities:
+            return 1.0
+        
+        total_reliability = sum(reliabilities.values())
+        if total_reliability == 0:
+            return 1.0 / len(reliabilities) if reliabilities else 1.0
+        
+        weight = reliabilities.get(strategy, 0.5) / total_reliability * len(reliabilities)
+        return max(0.1, min(2.0, weight))  # Clamp between 0.1x and 2.0x
     
     def _compute_sdpoe_weights(self, outcomes: list) -> np.ndarray:
         rewards = []
@@ -372,11 +413,12 @@ def predict_profit():
         data = request.get_json() or {}
         strategy = data.get('strategy', '')
         profit = models.predict_profit(data, strategy)
+        strategy_weight = models.get_strategy_weight(strategy)
         elapsed = (time.time() - start) * 1000
         
         symbol = data.get('symbol', 'UNKNOWN')
         alpha, beta = models.get_strategy_calibration(strategy)
-        logger.info(f"[L8][PREDICT_PROFIT] symbol={symbol} strategy={strategy or 'global'} profit={profit:.4f} α={alpha:.4f} β={beta:.2f} latency={elapsed:.0f}ms")
+        logger.info(f"[L9][PREDICT_PROFIT] symbol={symbol} strategy={strategy or 'global'} profit={profit:.4f} α={alpha:.4f} β={beta:.2f} W={strategy_weight:.3f} latency={elapsed:.0f}ms")
         
         if elapsed > 2000:
             logger.warning(f"[LAG_WARNING] Prediction took {elapsed:.0f}ms (>2000ms)")
@@ -385,6 +427,7 @@ def predict_profit():
             "success": True,
             "predicted_profit": profit,
             "strategy": strategy or 'global',
+            "strategy_weight": strategy_weight,
             "calibration": {"alpha": alpha, "beta": beta},
             "latency_ms": elapsed
         })

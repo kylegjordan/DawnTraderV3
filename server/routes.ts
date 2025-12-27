@@ -4529,17 +4529,20 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         const metadata = signal.metadata as Record<string, any> || {};
         const statusUpdatedAt = metadata.statusUpdatedAt || null;
         
-        // L4: Compute mlConfidence and finalRank
+        // L4/L9: Compute mlConfidence and finalRank with strategyWeight
         // mlConfidence from metadata or estimate from NGC (ML predictions added async in signal orchestrator)
         const mlConfidence = metadata.mlConfidence ?? (signal.ngc ? parseFloat(String(signal.ngc)) * 0.9 : null);
         
-        // L4: FinalRank = (NGC × 0.4) + (CWQI × 0.3) + (MLConfidence × 0.3)
+        // L9: Strategy weight from metadata (computed via strategyWeights.ts)
+        const strategyWeight = metadata.strategyWeight ?? 0.5;
+        
+        // L9: FinalRank = (NGC × 0.30) + (CWQI × 0.25) + (MLConfidence × 0.25) + (StrategyWeight × 0.20)
         const ngcValue = signal.ngc ? parseFloat(String(signal.ngc)) : 0;
         const cwqiValue = signal.cwqi ? parseFloat(String(signal.cwqi)) : 0;
         const mlConfValue = mlConfidence ?? 0.5;
-        const finalRank = (ngcValue * 0.4) + (cwqiValue * 0.3) + (mlConfValue * 0.3);
+        const finalRank = (ngcValue * 0.30) + (cwqiValue * 0.25) + (mlConfValue * 0.25) + (strategyWeight * 0.20);
         
-        console.log(`[L4][RTB][FINAL_RANK] ${signal.symbol}: NGC=${ngcValue.toFixed(3)}, CWQI=${cwqiValue.toFixed(3)}, ML=${mlConfValue.toFixed(3)}, FinalRank=${finalRank.toFixed(4)}`);
+        console.log(`[L9][RTB][FINAL_RANK] ${signal.symbol}: NGC=${ngcValue.toFixed(3)}, CWQI=${cwqiValue.toFixed(3)}, ML=${mlConfValue.toFixed(3)}, SW=${strategyWeight.toFixed(3)}, FinalRank=${finalRank.toFixed(4)}`);
         
         return {
           ...signal,
@@ -4548,6 +4551,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           uiStatus,
           statusUpdatedAt,
           mlConfidence,
+          strategyWeight,
           finalRank
         };
       });

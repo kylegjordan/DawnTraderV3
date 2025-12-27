@@ -29,6 +29,7 @@ import {
 } from './adaptive-pool-config';
 import { poolBus } from './pool-broadcast';
 import { dataAggregator } from './data-aggregator.js';
+import { computeStrategyWeights } from '../utils/strategyWeights.js';
 
 // Re-export for server/index.ts compatibility
 export { getAdaptivePoolSize } from './adaptive-pool-config';
@@ -230,6 +231,16 @@ class RTBRefreshService {
       // T4/T5 Metrics logging
       console.log(`[8.8.4-A4.R10R-3.T4][RTBRefresh][METRICS] duration=${duration}ms cpu=${cpuLoad.toFixed(1)}% poolSize=${getAdaptivePoolSize()}`);
       console.log(`[A4.R10R-3][RTBRefresh][CYCLE_COMPLETE] bucket=${bucketIndex} size=${bucketSize} duration=${duration}ms`);
+      
+      // L9: Log strategy weights for traceability
+      computeStrategyWeights().then(weightsBundle => {
+        if (weightsBundle.totalStrategies > 0) {
+          const weightEntries = Object.entries(weightsBundle.weights)
+            .map(([s, w]) => `${s}=${(w * 100).toFixed(1)}%`)
+            .join(' ');
+          console.log(`[L9][RTB_REFRESH][WEIGHTS] ${weightEntries}`);
+        }
+      }).catch(() => {});
       
       // Directive 8.8.4-L1: Capture RTB refresh data for learning aggregation
       dataAggregator.capture('RTB_REFRESH', {

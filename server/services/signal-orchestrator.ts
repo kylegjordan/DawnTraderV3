@@ -52,6 +52,7 @@ import { activeFilterPool } from './active-filter-pool.js';
 import { diagnosticTrace } from '../core/diagnostics/trace_service.js';
 import { dataAggregator } from './data-aggregator.js';
 import { predictPromotion, predictProfit, blendConfidence, type PredictionInput } from './ml-service-client.js';
+import { getWeightSync as getStrategyWeight, computeStrategyWeights } from '../utils/strategyWeights.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -96,6 +97,7 @@ export class SignalOrchestrator {
   private diagnosticService: PaperSimDiagnosticService;
   private isRunning: boolean = false;
   private evaluationTimer: NodeJS.Timeout | null = null;
+  private weightsRefreshTimer: NodeJS.Timeout | null = null; // L9: Timer for strategy weights cache refresh
   private readonly evaluationIntervalMs: number;
   private readonly enabledStrategies: Set<string>;
   private onSignalCallback: ((signal: StrategySignal) => Promise<void>) | null = null;
@@ -140,6 +142,17 @@ export class SignalOrchestrator {
     this.isRunning = true;
     this.onSignalCallback = onSignal;
     
+    // L9: Pre-warm strategy weights cache before processing signals
+    try {
+      const weightsBundle = await computeStrategyWeights();
+      const weightSummary = Object.entries(weightsBundle.weights)
+        .map(([s, w]) => `${s}=${(w * 100).toFixed(1)}%`)
+        .join(', ');
+      console.log(`[L9][WEIGHTS_WARMUP] Cache populated with ${weightsBundle.totalStrategies} strategies: ${weightSummary || 'none'}`);
+    } catch (err) {
+      console.warn(`[L9][WEIGHTS_WARMUP] Failed to pre-warm strategy weights cache:`, err);
+    }
+    
     console.log(`[37.A][SignalOrchestrator][${this.mode}] Starting with ${this.enabledStrategies.size} strategies, interval ${this.evaluationIntervalMs}ms`);
     console.log(`[B.3][FLOW_CORRECTED] Signal flow order: Sizing → Metrics → SQE → RTB → TCL`);
     console.log(`[WARMUP][DEBUG] SignalOrchestrator starting (non-blocking)`);
@@ -156,6 +169,16 @@ export class SignalOrchestrator {
     this.evaluationTimer = setInterval(async () => {
       await this.evaluateMarket();
     }, this.evaluationIntervalMs);
+    
+    // L9: Periodic background refresh of strategy weights cache (every 60s to match TTL)
+    this.weightsRefreshTimer = setInterval(async () => {
+      try {
+        const weightsBundle = await computeStrategyWeights();
+        console.log(`[L9][WEIGHTS_REFRESH] Cache refreshed with ${weightsBundle.totalStrategies} strategies`);
+      } catch (err) {
+        console.warn(`[L9][WEIGHTS_REFRESH] Failed to refresh strategy weights cache:`, err);
+      }
+    }, 60000); // 60s to match cache TTL
 
     console.log(`[37.A][SignalOrchestrator][${this.mode}] Started successfully (first evaluation running async)`);
     console.log(`[WARMUP][DEBUG] SignalOrchestrator started successfully`);
@@ -172,6 +195,12 @@ export class SignalOrchestrator {
     if (this.evaluationTimer) {
       clearInterval(this.evaluationTimer);
       this.evaluationTimer = null;
+    }
+    
+    // L9: Clean up weights refresh timer
+    if (this.weightsRefreshTimer) {
+      clearInterval(this.weightsRefreshTimer);
+      this.weightsRefreshTimer = null;
     }
 
     this.isRunning = false;
@@ -404,6 +433,9 @@ export class SignalOrchestrator {
 
     // Phase 8.8.4-C.5: Queue SQE-qualified signal to RTB pool
     // All signals that pass SQE go into the unified pool regardless of capacity
+    // L9: Fetch strategy weight for this signal's strategy (sync from cache)
+    const strategyWeight = getStrategyWeight(strategyId);
+    
     const sqeSignalInput: SQESignalInput = {
       signalId,
       mode: sizingContext.mode,
@@ -421,7 +453,12 @@ export class SignalOrchestrator {
       cwqi: extendedMetrics.cwqi,
       currentPrice: rawSignal.entryPrice, // Directive 8.8.4-C.14.B: Use entry price as current market price
       volume24h: activeFilterPool.getFX5DataForSymbol(rawSignal.symbol, sizingContext.mode)?.volume24h ?? null, // Directive 8.8.4-C.14.B: FX5 data only, NULL if not found
+      metadata: {
+        strategyWeight, // L9: Strategy reliability weight for finalRank computation
+      },
     };
+    
+    console.log(`[L9][SIGNAL_WEIGHT] ${rawSignal.symbol}/${strategyId}: strategyWeight=${strategyWeight.toFixed(4)}`);
 
     // Queue to RTB pool (fire-and-forget, non-blocking)
     readyToBuyService.queueSQESignal(sqeSignalInput).catch(err => {

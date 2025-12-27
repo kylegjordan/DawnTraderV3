@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { loadCalibration, loadFullCalibration, loadStrategyCalibration, applyCalibration, type CalibrationCoefficients, type FullCalibration } from '../utils/calibration';
+import { getWeight as getStrategyWeight, computeStrategyWeights } from '../utils/strategyWeights.js';
 
 const router = Router();
 
@@ -50,6 +51,7 @@ interface ARACalculation {
   confidenceLevel: number;
   rawProfitRate: number;
   calibratedProfitRate: number;
+  strategyWeight: number; // L9: Strategy reliability weight (Wₛ)
   calibration: {
     alpha: number;
     beta: number;
@@ -217,6 +219,10 @@ router.get('/calculate', requireAuth, async (req: Request, res: Response) => {
       ? (estimatedNetProfit / avgValuePerTrade) * 100 
       : 0;
 
+    // L9: Fetch strategy weight for this strategy
+    const strategyWeight = strategy ? await getStrategyWeight(strategy) : 0.5;
+    console.log(`[L9][ARA] Strategy weight for ${strategy || 'global'}: ${strategyWeight.toFixed(4)}`);
+
     const suggestions = await generateSuggestions(mode);
 
     const result: ARACalculation = {
@@ -234,6 +240,7 @@ router.get('/calculate', requireAuth, async (req: Request, res: Response) => {
       confidenceLevel: mlPredictions.confidence,
       rawProfitRate,
       calibratedProfitRate,
+      strategyWeight,
       calibration: {
         alpha: calibrationCache?.alpha || 0.0018,
         beta: calibrationCache?.beta || 0.19,
@@ -244,7 +251,7 @@ router.get('/calculate', requireAuth, async (req: Request, res: Response) => {
       strategyCalibration: strategyCalibrationData
     };
 
-    console.log(`[L8][ARA_FEEDBACK] Applied ${strategy ? `strategy=${strategy}` : 'global'} calibration`);
+    console.log(`[L9][ARA_FEEDBACK] Applied ${strategy ? `strategy=${strategy}` : 'global'} calibration, weight=${strategyWeight.toFixed(4)}`);
     
     res.json(result);
   } catch (error) {

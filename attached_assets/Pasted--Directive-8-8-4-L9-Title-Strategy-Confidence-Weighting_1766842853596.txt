@@ -1,0 +1,226 @@
+🧭 Directive 8.8.4-L9
+Title: Strategy Confidence Weighting Integration
+Phase: 8.8.4 (L-series)
+Status: Ready for Implementation
+Objective
+
+Leverage the per-strategy calibration coefficients introduced in L8 (αₛ, βₛ) to derive live strategy-confidence weights and inject those weights directly into the Ready-to-Buy (RTB) and Signal Orchestrator ranking logic.
+This creates a true data-adaptive prioritization layer where strategies that historically perform more accurately receive proportionally higher influence in trade selection.
+
+1 | Design Goals
+Goal	Description
+1. Dynamic Ranking Bias	Incorporate per-strategy reliability into every trade’s finalRank.
+2. Data Feedback Continuity	Continuously update weights from the most recent calibration dataset.
+3. Compatibility	Preserve existing NGC, CWQI, and MLConfidence blending logic.
+4. Transparency	Expose strategy weights via API + health endpoints for observability.
+2 | Computation Model
+2.1 Strategy Reliability Score
+
+Each strategy s receives a normalized reliability score (0–1):
+
+𝑅
+𝑠
+=
+𝑐
+𝑙
+𝑎
+𝑚
+𝑝
+ ⁣
+(
+1
+−
+∣
+𝛽
+𝑠
+−
+1
+∣
+−
+𝜎
+𝑠
+𝜎
+𝑚
+𝑎
+𝑥
+,
+ 
+0
+,
+ 
+1
+)
+R
+s
+	​
+
+=clamp(1−∣β
+s
+	​
+
+−1∣−
+σ
+max
+	​
+
+σ
+s
+	​
+
+	​
+
+,0,1)
+
+Where:
+
+βₛ = slope (calibration coefficient)
+
+σₛ = standard error for strategy s
+
+σₘₐₓ = largest σ observed across all strategies
+
+2.2 Confidence Weight
+
+Weights are derived as:
+
+𝑊
+𝑠
+=
+𝑅
+𝑠
+∑
+𝑖
+𝑅
+𝑖
+W
+s
+	​
+
+=
+∑
+i
+	​
+
+R
+i
+	​
+
+R
+s
+	​
+
+	​
+
+
+These weights represent the relative confidence contribution of each strategy.
+
+2.3 Final Ranking Formula
+finalRank =
+   (NGC * 0.30) +
+   (CWQI * 0.25) +
+   (MLConfidence * 0.25) +
+   (StrategyWeight * 0.20)
+
+
+Weights auto-normalize to 1.0 per cycle to preserve total influence balance.
+
+3 | Implementation Tasks
+3.1 Backend Services
+
+Files:
+server/services/rtb-refresh-service.ts, server/services/signal-orchestrator.ts, server/utils/strategyWeights.ts, server/routes/health.ts
+
+Tasks
+
+Create strategyWeights.ts utility:
+
+Load latest vts_calibration.json coefficients.
+
+Compute Rₛ and Wₛ for all strategies.
+
+Expose getWeight(strategy: string) API.
+
+In signal-orchestrator.ts:
+
+When building the sized signal, fetch strategyWeight.
+
+Include it in finalRank computation.
+
+Append strategyWeight to signal object for RTB display.
+
+In rtb-refresh-service.ts:
+
+Ensure ranker sorts by finalRank.
+
+Log each cycle’s strategy weights for traceability.
+
+3.2 Adaptive Risk Advisor (ARA)
+
+File: server/routes/ara.ts
+
+Add strategyWeight field to calculation response object.
+
+Display in UI with tooltip: “Relative reliability of this strategy based on recent calibration data.”
+
+3.3 ML Microservice
+
+File: ml_service/app.py
+
+When predicting profit, multiply output by Wₛ for the given strategy:
+predicted_profit *= Wₛ
+
+Log: [L9][WEIGHT_APPLY] DHMA=0.17 Breakout=0.22 …
+
+3.4 RTB Table Enhancement
+
+File: client/src/components/RTBTable.tsx
+
+Add column “Strategy Weight (%)”.
+
+Tooltips explain it represents relative confidence of strategy’s profit accuracy.
+
+Color-coded indicator (🟢 High > 0.75, 🟡 Medium 0.5–0.75, 🔴 Low < 0.5).
+
+3.5 Health Endpoint Enhancement
+
+Append strategyWeights object to /api/health response:
+
+"strategyWeights": {
+   "DHMA": 0.17,
+   "Breakout": 0.22,
+   "Reversal": 0.15,
+   ...
+}
+
+
+Flag if any strategy’s weight deviates > 50 % from previous cycle.
+
+4 | Validation Checklist
+Test	Expected Result
+/api/ara/calculate	Returns strategyWeight field and updated finalRank.
+/api/vts/export	Shows per-strategy α, β, σ, Rₛ, Wₛ.
+ML service log	[L9][WEIGHT_APPLY] entries with normalized weights.
+RTB table view	Displays Strategy Weight column + color indicator.
+Health endpoint	Reports strategyWeights object with status “ok”.
+5 | Expected Impact
+Area	Benefit
+Profit Prediction Accuracy	Improved due to per-strategy confidence scaling.
+Trade Selection	Higher priority for historically reliable strategies.
+Transparency	Clear visibility of which strategies drive decisions.
+Feedback Loop	Continuous re-weighting via VTS and ARA feedback.
+6 | Dependencies
+
+Requires L8 (Per-Strategy Calibration)
+
+Requires L7 (VTS-Calibrated ARA Feedback)
+
+Optional UI tie-in with L4 (Adaptive Risk Advisor)
+
+7 | Directive Summary
+Field	Value
+Directive ID	8.8.4-L9
+Name	Strategy Confidence Weighting Integration
+Type	System Learning Enhancement
+Scope	RTB / Signal Orchestrator / ARA / ML service / Health Monitor
+Outcome	Live data-driven ranking and strategy weight feedback
+Success Criteria	Strategy-weighted finalRank computed per cycle and visible in RTB UI and API responses

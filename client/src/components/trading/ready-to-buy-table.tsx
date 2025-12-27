@@ -17,6 +17,7 @@ interface TradingSignal {
   ngc: number | null;
   mlConfidence: number | null;
   finalRank: number | null;
+  strategyWeight: number | null; // L9: Strategy reliability weight (Wₛ)
   entryPrice: number;
   currentPrice: number;
   stopPrice: number;
@@ -33,7 +34,7 @@ interface TradingSignalsResponse {
   timestamp: string;
 }
 
-type SortField = 'rank' | 'symbol' | 'cwqi' | 'ngc' | 'mlConfidence' | 'finalRank' | 'volume' | 'price' | 'strategy' | 'entry' | 'target' | 'stop' | 'quantity' | 'status';
+type SortField = 'rank' | 'symbol' | 'cwqi' | 'ngc' | 'mlConfidence' | 'finalRank' | 'strategyWeight' | 'volume' | 'price' | 'strategy' | 'entry' | 'target' | 'stop' | 'quantity' | 'status';
 type SortDirection = 'asc' | 'desc';
 
 export default function ReadyToBuyTable() {
@@ -100,6 +101,10 @@ export default function ReadyToBuyTable() {
       case 'finalRank':
         aValue = a.finalRank ?? 0;
         bValue = b.finalRank ?? 0;
+        break;
+      case 'strategyWeight':
+        aValue = a.strategyWeight ?? 0;
+        bValue = b.strategyWeight ?? 0;
         break;
       case 'symbol':
         aValue = a.symbol;
@@ -238,6 +243,7 @@ export default function ReadyToBuyTable() {
                   <SortHeader field="cwqi" label="CWQI" />
                   <SortHeader field="ngc" label="NGC" />
                   <SortHeader field="mlConfidence" label="ML Conf" />
+                  <SortHeader field="strategyWeight" label="S.Wgt" />
                   <SortHeader field="price" label="Price" />
                   <SortHeader field="entry" label="Entry" />
                   <SortHeader field="target" label="Target" />
@@ -303,6 +309,14 @@ export default function ReadyToBuyTable() {
                           (mlConfidence ?? 0) >= 0.8 ? "text-purple-600" : (mlConfidence ?? 0) >= 0.5 ? "text-purple-400" : "text-muted-foreground"
                         )}>
                           {mlConfidence !== null && !isNaN(mlConfidence) ? `${(mlConfidence * 100).toFixed(1)}%` : '—'}
+                        </span>
+                      </td>
+                      <td className="text-right py-3 px-3" data-testid={`text-strategy-weight-${index}`}>
+                        <span className={cn(
+                          "font-semibold",
+                          (signal.strategyWeight ?? 0) >= 0.5 ? "text-amber-600" : (signal.strategyWeight ?? 0) >= 0.3 ? "text-amber-400" : "text-muted-foreground"
+                        )}>
+                          {signal.strategyWeight !== null && !isNaN(signal.strategyWeight) ? `${(signal.strategyWeight * 100).toFixed(1)}%` : '—'}
                         </span>
                       </td>
                       <td className="text-right py-3 px-3 font-mono" data-testid={`text-price-${index}`}>

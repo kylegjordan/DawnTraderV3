@@ -9,7 +9,8 @@ import { Router } from 'express';
 import { healthMonitor } from '../services/health-monitor.js';
 import { systemHealth } from '../services/system-health.js';
 import { getMLServiceStatus } from '../services/ml-service-client.js';
-import { loadFullCalibration, getStrategyAnomalies } from '../utils/calibration.js';
+import { loadFullCalibration } from '../utils/calibration.js';
+import { computeStrategyWeights, type StrategyWeightsBundle } from '../utils/strategyWeights.js';
 
 export const healthRouter = Router();
 
@@ -287,6 +288,15 @@ healthRouter.get('/', async (req, res) => {
       vtsHealth.status = 'error';
     }
     
+    // L9: Compute strategy weights for health display
+    let strategyWeightsData: Record<string, number> = {};
+    try {
+      const weightsBundle = await computeStrategyWeights();
+      strategyWeightsData = weightsBundle.weights;
+    } catch (e) {
+      console.log('[L9][HEALTH] Failed to compute strategy weights');
+    }
+    
     res.json({
       ok: true,
       healthy: status.healthy,
@@ -306,11 +316,12 @@ healthRouter.get('/', async (req, res) => {
         modelVersions: mlStatus.modelVersions,
       },
       vts: vtsHealth,
+      strategyWeights: strategyWeightsData,
       issues: status.issues,
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('[L8][API] Error fetching system health:', error.message);
+    console.error('[L9][API] Error fetching system health:', error.message);
     res.status(500).json({ ok: false, error: error.message });
   }
 });
