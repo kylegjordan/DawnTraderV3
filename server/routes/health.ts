@@ -11,6 +11,7 @@ import { systemHealth } from '../services/system-health.js';
 import { getMLServiceStatus } from '../services/ml-service-client.js';
 import { loadFullCalibration } from '../utils/calibration.js';
 import { computeStrategyWeights, type StrategyWeightsBundle } from '../utils/strategyWeights.js';
+import { computeExposureBias, getOverbiasedStrategies, type ExposureBiasBundle } from '../utils/strategyBias.js';
 
 export const healthRouter = Router();
 
@@ -297,6 +298,23 @@ healthRouter.get('/', async (req, res) => {
       console.log('[L9][HEALTH] Failed to compute strategy weights');
     }
     
+    // L10: Compute exposure bias for health display
+    let exposureBiasData: Record<string, { weight: number; multiplier: number; allocPercent: number }> = {};
+    let exposureBiasWarnings: string[] = [];
+    try {
+      const biasBundle = await computeExposureBias();
+      for (const [strategy, bias] of Object.entries(biasBundle.strategies)) {
+        exposureBiasData[strategy] = {
+          weight: bias.weight,
+          multiplier: bias.multiplier,
+          allocPercent: bias.allocPercent
+        };
+      }
+      exposureBiasWarnings = getOverbiasedStrategies();
+    } catch (e) {
+      console.log('[L10][HEALTH] Failed to compute exposure bias');
+    }
+    
     res.json({
       ok: true,
       healthy: status.healthy,
@@ -317,6 +335,11 @@ healthRouter.get('/', async (req, res) => {
       },
       vts: vtsHealth,
       strategyWeights: strategyWeightsData,
+      exposureBias: {
+        strategies: exposureBiasData,
+        warnings: exposureBiasWarnings,
+        total: Object.values(exposureBiasData).reduce((sum, b) => sum + b.allocPercent, 0).toFixed(1)
+      },
       issues: status.issues,
       timestamp: new Date().toISOString(),
     });

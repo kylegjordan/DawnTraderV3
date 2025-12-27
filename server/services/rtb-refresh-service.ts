@@ -30,6 +30,7 @@ import {
 import { poolBus } from './pool-broadcast';
 import { dataAggregator } from './data-aggregator.js';
 import { computeStrategyWeights } from '../utils/strategyWeights.js';
+import { computeExposureBias, getBiasSummaryForLog } from '../utils/strategyBias.js';
 
 // Re-export for server/index.ts compatibility
 export { getAdaptivePoolSize } from './adaptive-pool-config';
@@ -239,6 +240,17 @@ class RTBRefreshService {
             .map(([s, w]) => `${s}=${(w * 100).toFixed(1)}%`)
             .join(' ');
           console.log(`[L9][RTB_REFRESH][WEIGHTS] ${weightEntries}`);
+        }
+      }).catch(() => {});
+      
+      // L10: Log exposure bias distribution
+      computeExposureBias().then(biasBundle => {
+        const numStrategies = Object.keys(biasBundle.strategies).length;
+        if (numStrategies > 0) {
+          const biasEntries = Object.entries(biasBundle.strategies)
+            .map(([s, b]) => `${s}=${b.multiplier.toFixed(2)}x(${b.allocPercent.toFixed(1)}%)`)
+            .join(' ');
+          console.log(`[L10][RTB_REFRESH][EXPOSURE_DIST] ${biasEntries} TotalAlloc=${biasBundle.totalAllocPercent.toFixed(1)}%`);
         }
       }).catch(() => {});
       

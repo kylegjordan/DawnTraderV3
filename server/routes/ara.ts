@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { loadCalibration, loadFullCalibration, loadStrategyCalibration, applyCalibration, type CalibrationCoefficients, type FullCalibration } from '../utils/calibration';
 import { getWeight as getStrategyWeight, computeStrategyWeights } from '../utils/strategyWeights.js';
+import { getExposureMultiplier, computeExposureBias } from '../utils/strategyBias.js';
 
 const router = Router();
 
@@ -52,6 +53,8 @@ interface ARACalculation {
   rawProfitRate: number;
   calibratedProfitRate: number;
   strategyWeight: number; // L9: Strategy reliability weight (Wₛ)
+  exposureMultiplier: number; // L10: Exposure bias multiplier (Eₛ)
+  adjustedRiskPerTrade: number; // L10: Rbase × Eₛ
   calibration: {
     alpha: number;
     beta: number;
@@ -64,6 +67,10 @@ interface ARACalculation {
     alpha: number;
     beta: number;
     sampleSize: number;
+  };
+  exposureBias?: { // L10: Full exposure bias data per strategy
+    strategies: Record<string, { weight: number; multiplier: number; allocPercent: number }>;
+    total: number;
   };
 }
 
@@ -222,6 +229,31 @@ router.get('/calculate', requireAuth, async (req: Request, res: Response) => {
     // L9: Fetch strategy weight for this strategy
     const strategyWeight = strategy ? await getStrategyWeight(strategy) : 0.5;
     console.log(`[L9][ARA] Strategy weight for ${strategy || 'global'}: ${strategyWeight.toFixed(4)}`);
+    
+    // L10: Fetch exposure multiplier for this strategy
+    const exposureMultiplier = strategy ? await getExposureMultiplier(strategy) : 1.0;
+    const adjustedRiskPerTrade = riskPerTrade * exposureMultiplier;
+    console.log(`[L10][ARA] Exposure multiplier for ${strategy || 'global'}: ${exposureMultiplier.toFixed(4)}, adjustedRisk=${adjustedRiskPerTrade.toFixed(2)}%`);
+    
+    // L10: Compute full exposure bias data
+    let exposureBiasData: { strategies: Record<string, { weight: number; multiplier: number; allocPercent: number }>; total: number } | undefined;
+    try {
+      const biasBundle = await computeExposureBias();
+      const strategies: Record<string, { weight: number; multiplier: number; allocPercent: number }> = {};
+      for (const [s, b] of Object.entries(biasBundle.strategies)) {
+        strategies[s] = {
+          weight: b.weight,
+          multiplier: b.multiplier,
+          allocPercent: b.allocPercent
+        };
+      }
+      exposureBiasData = {
+        strategies,
+        total: biasBundle.totalAllocPercent
+      };
+    } catch (e) {
+      console.log('[L10][ARA] Failed to compute exposure bias');
+    }
 
     const suggestions = await generateSuggestions(mode);
 
@@ -241,6 +273,8 @@ router.get('/calculate', requireAuth, async (req: Request, res: Response) => {
       rawProfitRate,
       calibratedProfitRate,
       strategyWeight,
+      exposureMultiplier, // L10
+      adjustedRiskPerTrade, // L10
       calibration: {
         alpha: calibrationCache?.alpha || 0.0018,
         beta: calibrationCache?.beta || 0.19,
@@ -248,10 +282,12 @@ router.get('/calculate', requireAuth, async (req: Request, res: Response) => {
         isValid: calibrationIsValid,
         lastUpdate: calibrationCache?.updated ? new Date(calibrationCache.updated).toISOString() : new Date().toISOString()
       },
-      strategyCalibration: strategyCalibrationData
+      strategyCalibration: strategyCalibrationData,
+      exposureBias: exposureBiasData // L10
     };
 
     console.log(`[L9][ARA_FEEDBACK] Applied ${strategy ? `strategy=${strategy}` : 'global'} calibration, weight=${strategyWeight.toFixed(4)}`);
+    console.log(`[L10][ARA_FEEDBACK] Exposure multiplier=${exposureMultiplier.toFixed(4)}, adjustedRisk=${adjustedRiskPerTrade.toFixed(2)}%`);
     
     res.json(result);
   } catch (error) {
