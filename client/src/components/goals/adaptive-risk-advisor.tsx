@@ -365,11 +365,18 @@ export default function AdaptiveRiskAdvisor() {
   const [isRetraining, setIsRetraining] = useState(false);
   const [retrainProgress, setRetrainProgress] = useState<RetrainProgress | null>(null);
   const [retrainError, setRetrainError] = useState<string | null>(null);
+  const [lastTrainedAt, setLastTrainedAt] = useState<Date | null>(null);
 
-  const { data: suggestions, isLoading: suggestionsLoading } = useQuery<{ suggestedRisk: number; suggestedExposure: number }>({
+  const { data: suggestions, isLoading: suggestionsLoading } = useQuery<{ suggestedRisk: number; suggestedExposure: number; lastRetraining?: string }>({
     queryKey: [`/api/ara/suggestions?mode=${mode}`],
     refetchInterval: 60000,
   });
+
+  useEffect(() => {
+    if (suggestions?.lastRetraining) {
+      setLastTrainedAt(new Date(suggestions.lastRetraining));
+    }
+  }, [suggestions?.lastRetraining]);
 
   const suggestedRisk = suggestions?.suggestedRisk ?? 2.0;
   const suggestedExposure = suggestions?.suggestedExposure ?? 20.0;
@@ -542,6 +549,7 @@ export default function AdaptiveRiskAdvisor() {
               
               if (progress.phase === 'complete') {
                 setIsRetraining(false);
+                setLastTrainedAt(new Date());
                 queryClient.invalidateQueries({ queryKey: ['/api/health'] });
                 queryClient.invalidateQueries({ queryKey: ['/api/ara/suggestions'] });
                 toast({
@@ -592,30 +600,69 @@ export default function AdaptiveRiskAdvisor() {
 
   return (
     <Card data-testid="adaptive-risk-advisor">
-      <CardHeader>
-        <div className="flex items-center justify-between">
+      <CardHeader className="space-y-4">
+        <div>
           <CardTitle className="flex items-center gap-2">
             <Brain className="w-5 h-5 text-purple-500" />
             Adaptive Risk Advisor
           </CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRetrain}
-            disabled={isRetraining || isEngineRunning}
-            className="gap-2"
-          >
-            {isRetraining ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4" />
-            )}
-            Retrain Model
-          </Button>
+          <CardDescription>
+            ML-powered risk optimization with real-time recommendations
+          </CardDescription>
         </div>
-        <CardDescription>
-          ML-powered risk optimization with real-time recommendations
-        </CardDescription>
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRetrain}
+              disabled={isRetraining || isEngineRunning}
+              className="gap-2"
+            >
+              {isRetraining ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+              Retrain Model
+            </Button>
+            {lastTrainedAt && !isRetraining && !retrainProgress?.phase && (
+              <span className="text-xs text-muted-foreground">
+                Last trained: {lastTrainedAt.toLocaleDateString()} {lastTrainedAt.toLocaleTimeString()}
+              </span>
+            )}
+          </div>
+
+          {isRetraining && retrainProgress && (
+            <div className="space-y-2 p-3 bg-slate-50 dark:bg-slate-900 rounded-lg">
+              <div className="flex items-center justify-between text-sm">
+                <span>{retrainProgress.phase}</span>
+                <span>{retrainProgress.percent}%</span>
+              </div>
+              <Progress value={retrainProgress.percent} className="h-2" />
+              {retrainProgress.eta && (
+                <div className="text-xs text-muted-foreground">
+                  ETA: {Math.ceil(retrainProgress.eta / 1000)}s
+                </div>
+              )}
+            </div>
+          )}
+
+          {retrainProgress?.phase === 'complete' && !isRetraining && (
+            <Alert className="bg-green-50 dark:bg-green-950 border-green-200">
+              <CheckCircle className="h-4 w-4 text-green-600" />
+              <AlertDescription className="text-green-700 dark:text-green-300">
+                Retraining complete. Model {retrainProgress.message || 'deployed'}.
+                {lastTrainedAt && (
+                  <span className="block text-xs mt-1">
+                    Last trained at: {lastTrainedAt.toLocaleDateString()} {lastTrainedAt.toLocaleTimeString()}
+                  </span>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
         {retrainError && (
@@ -1545,29 +1592,6 @@ export default function AdaptiveRiskAdvisor() {
           </>
         )}
 
-        {isRetraining && retrainProgress && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <span>{retrainProgress.phase}</span>
-              <span>{retrainProgress.percent}%</span>
-            </div>
-            <Progress value={retrainProgress.percent} className="h-2" />
-            {retrainProgress.eta && (
-              <div className="text-xs text-muted-foreground">
-                ETA: {Math.ceil(retrainProgress.eta / 1000)}s
-              </div>
-            )}
-          </div>
-        )}
-
-        {retrainProgress?.phase === 'complete' && (
-          <Alert>
-            <CheckCircle className="h-4 w-4 text-green-600" />
-            <AlertDescription>
-              Retraining complete. Model {retrainProgress.message || 'deployed'}.
-            </AlertDescription>
-          </Alert>
-        )}
       </CardContent>
     </Card>
   );

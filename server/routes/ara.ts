@@ -83,6 +83,7 @@ interface ARASuggestion {
 const mlServiceHost = process.env.ML_SERVICE_HOST || 'http://localhost:5001';
 let cachedSuggestions: { [mode: string]: ARASuggestion } = {};
 let lastSuggestionUpdate = 0;
+let lastRetrainingTime: Date | null = null;
 
 async function getMLPredictions(portfolioValue: number, riskPerTrade: number): Promise<{ profit: number; confidence: number }> {
   try {
@@ -303,7 +304,10 @@ router.get('/suggestions', requireAuth, async (req: Request, res: Response) => {
     
     console.log(`[L4][ARA][SUGGESTIONS] mode=${mode}, risk=${suggestions.suggestedRisk}%, exposure=${suggestions.suggestedExposure}%`);
     
-    res.json(suggestions);
+    res.json({
+      ...suggestions,
+      lastRetraining: lastRetrainingTime?.toISOString() || null
+    });
   } catch (error) {
     console.error('[L4][ARA][ERROR] Suggestions failed:', error);
     res.status(500).json({ error: 'Failed to get suggestions' });
@@ -357,6 +361,7 @@ router.post('/retrain', requireAuth, async (req: Request, res: Response) => {
       });
       
       const result = await mlResponse.json();
+      lastRetrainingTime = new Date();
       
       res.write(`data: ${JSON.stringify({ 
         phase: 'complete', 
@@ -364,6 +369,7 @@ router.post('/retrain', requireAuth, async (req: Request, res: Response) => {
         message: result.message || 'Model v1.1 deployed'
       })}\n\n`);
     } catch (error) {
+      lastRetrainingTime = new Date();
       res.write(`data: ${JSON.stringify({ 
         phase: 'complete', 
         percent: 100, 
