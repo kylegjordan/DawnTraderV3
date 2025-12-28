@@ -1,0 +1,152 @@
+⚙️ Directive 8.8.4-M3A — Training Loop Validation Audit (TLVA)
+
+Purpose:
+Verify that the “Retrain Model” operation triggers an actual backend learning cycle, that the training pipeline runs end-to-end (VTS + DCE), that model parameters are updated and persisted, and that timestamps and logs reflect true retraining activity.
+
+🧩 Step 1 — Training Trigger Traceability
+
+Goal: confirm that the UI call from /goals-engine actually reaches and executes the backend training functions.
+
+Actions:
+
+Intercept the POST /api/vts/retrain and /api/dce/recalibrate routes in the backend router (server/routes/vts.ts).
+
+Add a lightweight audit wrapper:
+
+console.time("[VTS][TRAIN-AUDIT]");
+await vtsEngine.retrainModel();
+console.timeEnd("[VTS][TRAIN-AUDIT]");
+
+
+Log the start/stop times in /logs/training.log.
+
+Run one manual retrain from the UI and check that these entries appear:
+
+[VTS][TRAIN-AUDIT] started at ...
+[VTS][TRAIN-AUDIT] completed in Xs
+
+
+If no log entries appear, retraining isn’t being triggered and must be re-wired.
+
+🧠 Step 2 — Verify Core Training Execution
+
+Goal: ensure that actual learning iterations are being executed.
+
+Checks:
+
+Confirm presence of epochs, loss, or gradient messages in the console:
+
+[EPOCH 1/10] Loss=0.0132
+[EPOCH 10/10] Loss=0.0061 (Δ-53%)
+
+
+Check that model.parameters.json or equivalent file timestamps update in /models/ or /data/models/.
+
+Validate that the model checksum or size changes after retraining:
+
+ls -l models/
+md5sum models/*
+
+
+(Run before and after retraining.)
+
+If model parameters are static, the learning routine may only be simulating progress.
+
+🧩 Step 3 — Training Result Propagation
+
+Goal: confirm retrained weights and metadata are visible to runtime services.
+
+Actions:
+
+Call:
+
+/api/vts/status
+/api/dce/status
+
+
+Verify:
+
+"lastRetrain": "recent timestamp",
+"parametersUpdated": true,
+"epochCount": 10,
+"sampleCount": >100
+
+
+Restart the trading service and confirm these values persist (to prove that model weights are saved, not just in memory).
+
+⚙️ Step 4 — Timestamp and Progress Validation
+
+Goal: ensure the “Last trained at” timestamp shown in the UI reflects real backend data.
+
+Checks:
+
+Compare:
+
+lastTrainedAt in /api/suggestions (returned to the UI)
+
+lastRetrain in /api/vts/status
+They must match within ±5 s.
+
+Confirm progress bar animation duration roughly equals the backend loop’s elapsed time in logs.
+
+🧩 Step 5 — Performance and Completion Audit
+
+Goal: measure and record the performance of the retraining cycle.
+
+Metrics to record in /reports/TLVA_Report_<timestamp>.json:
+
+{
+  "trainingStarted": "2025-12-28T18:06:57Z",
+  "trainingDurationSec": 7.3,
+  "epochs": 10,
+  "lossInitial": 0.0134,
+  "lossFinal": 0.0065,
+  "parametersUpdated": true,
+  "modelChecksumChanged": true,
+  "uiTimestampMatch": true,
+  "backendStatusMatch": true,
+  "status": "PASS"
+}
+
+
+Pass criteria:
+
+parametersUpdated == true
+
+modelChecksumChanged == true
+
+lossFinal < lossInitial
+
+uiTimestampMatch == true
+
+🧩 Step 6 — Report Integration
+
+Save audit results to /reports/TLVA_Report_<timestamp>.json.
+
+Append a summary to replit.md:
+
+✅ Training loop verified. Backend retraining confirmed operational.
+Model parameters updated and persisted.
+
+
+Disable verbose training logs after completion (audit.verbose = false).
+
+✅ Expected Outcomes
+Check	Target	Pass Condition
+Training logs appear	Yes	[VTS][TRAIN-AUDIT] entries exist
+Epoch messages	≥ 1 epoch	Loss decreases
+Model file updated	Yes	Timestamp and checksum changed
+Status timestamp	Recent	Matches UI
+TLVA report	Generated	Saved with PASS status
+🚦 Execution Notes
+
+Run TLVA while trading is stopped.
+
+Retraining must complete fully before restarting the trading simulator.
+
+Use the UI button once; TLVA monitors the backend in real time.
+
+Directive Summary
+
+Directive 8.8.4-M3A — Training Loop Validation Audit (TLVA)
+Verifies that the “Retrain Model” button initiates a full backend retraining process, confirms parameter updates and persistence, and ensures timestamp and progress indicators represent real computation rather than simulation.

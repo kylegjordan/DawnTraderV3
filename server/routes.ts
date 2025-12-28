@@ -22029,6 +22029,11 @@ Important: Extract the exact field names and numeric values from the user's requ
   apiRouter.use('/signal-audit', signalAuditRouter.default);
   console.log('[M2] Signal Audit routes mounted at /api/signal-audit');
 
+  // Directive 8.8.4-M3A: Mount TLVA (Training Loop Validation Audit) routes
+  const tlvaRouter = await import('./routes/tlva.js');
+  apiRouter.use('/tlva', tlvaRouter.default);
+  console.log('[M3A] TLVA routes mounted at /api/tlva');
+
   // Catch-all handler for unmatched /api/* routes
   // This prevents requests from falling through to Vite's HTML handler
   // and ensures all API routes return JSON (even 404s)
