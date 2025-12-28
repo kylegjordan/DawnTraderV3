@@ -311,6 +311,22 @@ export default function AdaptiveRiskAdvisor() {
     refetchInterval: 30000,
   });
 
+  const { data: mofStatus } = useQuery<{
+    ok: boolean;
+    metaWeights: { ara: number; vts: number; maco: number; dce: number; pdc: number; ecs: number };
+    lambdaWeights: { profit: number; drawdown: number; variance: number; stability: number };
+    currentJ: number;
+    stabilityIndex: number;
+    weightEntropy: number;
+    subsystemVariance: number;
+    evolutionCount: number;
+    lastEvolution: string | null;
+    kpiCount: number;
+  }>({
+    queryKey: ['/api/mof/status'],
+    refetchInterval: 60000,
+  });
+
   const { data: marketRegime } = useQuery<MarketRegime>({
     queryKey: ['/api/market/regime'],
     refetchInterval: 60000,
@@ -1287,6 +1303,90 @@ export default function AdaptiveRiskAdvisor() {
               {pdcEcsStatus.lastRecalibration && (
                 <div className="text-xs text-muted-foreground">
                   Last recalibration: {new Date(pdcEcsStatus.lastRecalibration).toLocaleString()}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {mofStatus && mofStatus.ok && (
+          <>
+            <Separator />
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">Unified Policy</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Info className="w-3.5 h-3.5 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>MOF Engine (L19) - Meta-Optimization Framework continuously adjusts all subsystem weights to maximize profit while minimizing drawdown.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <Badge className={`gap-1 ${
+                  mofStatus.stabilityIndex >= 0.9 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                  mofStatus.stabilityIndex >= 0.7 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+                  'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                }`}>
+                  SI: {(mofStatus.stabilityIndex * 100).toFixed(0)}%
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-4 gap-3 text-sm">
+                <div>
+                  <div className="text-muted-foreground text-xs">Meta-Score J</div>
+                  <div className={`font-semibold ${mofStatus.currentJ >= 0.5 ? 'text-green-600' : 'text-amber-600'}`}>
+                    {mofStatus.currentJ.toFixed(3)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-xs">Entropy</div>
+                  <div className="font-semibold">{(mofStatus.weightEntropy * 100).toFixed(0)}%</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-xs">Variance</div>
+                  <div className="font-semibold">{(mofStatus.subsystemVariance * 100).toFixed(1)}%</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-xs">Evolutions</div>
+                  <div className="font-semibold">{mofStatus.evolutionCount}</div>
+                </div>
+              </div>
+
+              <div className="text-xs">
+                <div className="font-medium mb-1 text-muted-foreground">Subsystem Weights:</div>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(mofStatus.metaWeights).map(([key, value]) => (
+                    <div key={key} className="flex items-center gap-1">
+                      <span className="uppercase text-[10px] text-muted-foreground">{key}</span>
+                      <div 
+                        className="h-2 rounded bg-blue-500" 
+                        style={{ width: `${Math.min(40, value * 20)}px` }}
+                        title={`${key}: ${value.toFixed(2)}`}
+                      />
+                      <span className="text-[10px]">{value.toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="text-xs text-muted-foreground">
+                <div className="font-medium mb-1">Lambda Weights:</div>
+                <div className="flex flex-wrap gap-2">
+                  <span>λ₁(profit): {(mofStatus.lambdaWeights.profit * 100).toFixed(0)}%</span>
+                  <span>λ₂(drawdown): {(mofStatus.lambdaWeights.drawdown * 100).toFixed(0)}%</span>
+                  <span>λ₃(variance): {(mofStatus.lambdaWeights.variance * 100).toFixed(0)}%</span>
+                  <span>λ₄(stability): {(mofStatus.lambdaWeights.stability * 100).toFixed(0)}%</span>
+                </div>
+              </div>
+
+              {mofStatus.lastEvolution && (
+                <div className="text-xs text-muted-foreground">
+                  Last evolution: {new Date(mofStatus.lastEvolution).toLocaleString()} ({mofStatus.kpiCount} KPIs)
                 </div>
               )}
             </div>

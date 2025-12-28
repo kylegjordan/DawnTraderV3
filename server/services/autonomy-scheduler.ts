@@ -66,6 +66,12 @@ const pdcEngine = initPDCEngine();
 const ecsController = initECSController();
 console.log('[L18][SCHEDULER] PDC-ECS started (Predictive Drawdown Containment & Equity Curve Smoothing)');
 
+import { getMOFOrchestrator, initializeMOF } from './mof-orchestrator.js';
+import { aggregatePerformance, getRecentWindow, computeWindowStats } from '../utils/performance-aggregator.js';
+
+const mofOrchestrator = initializeMOF();
+console.log('[L19][SCHEDULER] MOF Orchestrator started (Meta-Optimization Framework)');
+
 /**
  * Phase 8.9: Autonomy Layer Scheduler
  * Registers autonomous self-check and optimization tasks
@@ -141,6 +147,83 @@ schedulerRegistry.registerTask({
       console.log(`[L17][SCHEDULER] ✅ APR-SLE recalibrated: α=${result.newAlpha.toFixed(3)}, β=${result.newBeta.toFixed(3)} (samples: ${result.samplesUsed})`);
     } catch (error) {
       console.error('[L17][SCHEDULER] ❌ APR-SLE recalibration failed:', error);
+      throw error;
+    }
+  },
+});
+
+// L19: MOF KPI aggregation every 1 hour
+schedulerRegistry.registerTask({
+  name: 'mof_kpi_aggregation',
+  description: 'L19: MOF hourly KPI aggregation',
+  frequency: 'hourly',
+  intervalMs: 60 * 60 * 1000, // 1 hour
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[L19][SCHEDULER] 📊 Running MOF KPI aggregation...');
+    
+    try {
+      const metrics = await aggregatePerformance();
+      const mof = getMOFOrchestrator();
+      await mof.aggregateKPIs();
+      
+      console.log(`[L19][SCHEDULER] ✅ MOF KPI aggregated: equityGrowth=${metrics.normalized.equityGrowth.toFixed(3)}, stability=${metrics.normalized.stability.toFixed(3)}`);
+    } catch (error) {
+      console.error('[L19][SCHEDULER] ❌ MOF KPI aggregation failed:', error);
+      throw error;
+    }
+  },
+});
+
+// L19: MOF weight evolution every 6 hours
+schedulerRegistry.registerTask({
+  name: 'mof_weight_evolution',
+  description: 'L19: MOF policy evolution cycle',
+  frequency: 'custom',
+  intervalMs: 6 * 60 * 60 * 1000, // 6 hours
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[L19][SCHEDULER] 📊 Running MOF weight evolution...');
+    
+    try {
+      const mof = getMOFOrchestrator();
+      const result = await mof.evolve();
+      
+      console.log(`[L19][SCHEDULER] ✅ MOF evolved: J=${result.newJ.toFixed(4)}, weights updated`);
+    } catch (error) {
+      console.error('[L19][SCHEDULER] ❌ MOF evolution failed:', error);
+      throw error;
+    }
+  },
+});
+
+// L19: MOF drift check every 24 hours
+schedulerRegistry.registerTask({
+  name: 'mof_drift_check',
+  description: 'L19: MOF daily drift check and lambda rebalancing',
+  frequency: 'daily',
+  intervalMs: 24 * 60 * 60 * 1000, // 24 hours
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[L19][SCHEDULER] 📊 Running MOF drift check...');
+    
+    try {
+      const mof = getMOFOrchestrator();
+      const result = await mof.checkDrift();
+      
+      if (result.driftDetected) {
+        console.log(`[L19][SCHEDULER] ⚠️ MOF drift detected: ${result.recommendations.join(', ')}`);
+      } else {
+        console.log('[L19][SCHEDULER] ✅ MOF drift check passed - no significant drift');
+      }
+    } catch (error) {
+      console.error('[L19][SCHEDULER] ❌ MOF drift check failed:', error);
       throw error;
     }
   },

@@ -1,0 +1,207 @@
+⚙️ Directive 8.8.4-L19 — Meta-Optimization Framework (MOF): Unified Policy Evolution
+
+Phase: Final Integration of the L-Series
+Predecessor: L18 (Predictive Drawdown Containment & Equity Curve Smoothing)
+Auth (for test verification):
+username: testuser123
+password: SecurePass123!
+
+1 | Purpose
+
+Directive L19 creates the Meta-Optimization Framework (MOF) — a high-level supervisory controller that continuously adjusts parameters, weights, and learning rates across all adaptive modules (ARA, VTS, MACO, DCE, PDC-ECS) to maintain global system optimality.
+
+The MOF’s goal:
+
+Maximize long-term equity growth while minimizing drawdown volatility through dynamic re-weighting of subsystems based on recent performance feedback.
+
+2 | Core Components
+Component	File	Description
+MOF Orchestrator	server/services/mof-orchestrator.ts	Central controller aggregating subsystem KPIs and computing updated meta-weights.
+Performance Aggregator	server/utils/performance-aggregator.ts	Collects data from ARA, VTS, MACO, PDC, ECS, DCE every hour; normalizes metrics to 0–1 scales.
+Policy Evolution Engine (PEE)	services/ml_service.py	Reinforcement layer performing multi-objective optimization (profit ↑, drawdown ↓, variance ↓).
+API Routes	server/routes/mof.ts	Provides /status, /evolve, /weights, /history, /reset.
+UI Integration	client/src/components/goals/adaptive-risk-advisor.tsx	Adds “Unified Policy” card under the Equity Protection section.
+3 | Mathematical Overview
+Meta-Objective Function
+𝐽
+=
+𝜆
+1
+⋅
+𝐸
+[
+Profit
+]
+−
+𝜆
+2
+⋅
+𝐸
+[
+Drawdown
+]
+−
+𝜆
+3
+⋅
+𝑉
+𝑎
+𝑟
+(
+Equity
+)
++
+𝜆
+4
+⋅
+𝑆
+J=λ
+1
+	​
+
+⋅E[Profit]−λ
+2
+	​
+
+⋅E[Drawdown]−λ
+3
+	​
+
+⋅Var(Equity)+λ
+4
+	​
+
+⋅S
+
+where S is strategy stability, and weights λᵢ ∈ [0, 1] sum to 1.
+
+Parameter Update Rule
+
+For each subsystem i:
+
+𝑤
+𝑖
+(
+𝑡
++
+1
+)
+=
+𝑤
+𝑖
+(
+𝑡
+)
++
+𝜂
+⋅
+∂
+𝐽
+∂
+𝑤
+𝑖
+w
+i
+(t+1)
+	​
+
+=w
+i
+(t)
+	​
+
++η⋅
+∂w
+i
+	​
+
+∂J
+	​
+
+
+Learning rate η = 0.03
+
+Gradient approximated via finite difference on rolling 24-hour performance windows.
+
+Weights are clamped to [0.1, 2.0] and renormalized.
+
+4 | Adaptive Equilibrium Logic
+
+The MOF runs an hourly meta-cycle:
+
+Collect KPIs: equity growth, win rate, drawdown, DI mean, volatility, DRS.
+
+Normalize to unified scales.
+
+Compute meta-gradients (finite-difference).
+
+Update subsystem multipliers.
+
+Broadcast to each module (ARA, MACO, etc.) via internal event bus.
+
+5 | API Endpoints
+Endpoint	Description	Auth
+/api/mof/status	Returns global meta-weights and current objective J	✅
+/api/mof/evolve	Manually trigger policy evolution cycle	✅
+/api/mof/weights	Get per-subsystem weights	✅
+/api/mof/history	Retrieve weight evolution logs	✅
+/api/mof/reset	Reset weights to equal distribution	✅
+6 | Health & UI
+
+Health Endpoint:
+Adds "metaOptimization" block with global score, weight entropy, and subsystem variance.
+
+UI – “Unified Policy” Card:
+
+Global Meta-Score J
+
+Weight distribution chart (ARA, MACO, DCE, PDC, ECS)
+
+Stability Index (SI) and Optimization Entropy
+
+“Evolve Now” and “Reset” buttons
+
+7 | Scheduler Integration
+Task	Frequency
+KPI Aggregation	every 1 h
+Weight Evolution Cycle	every 6 h
+Drift Check	every 24 h (re-baseline λ weights)
+8 | Expected Behavior
+Outcome	Target
+Average equity growth	↑ 5–8 %
+Drawdown variance	↓ 10–15 %
+Stability index	> 0.90
+Correlation (J ↔ actual returns)	≥ 0.85
+Average subsystem deviation	< 20 % (indicating equilibrium)
+9 | Verification Checklist
+
+[L19][MOF] logs appear each hourly cycle.
+
+/api/mof/status returns normalized weights.
+
+Health endpoint includes metaOptimization data.
+
+UI card displays current meta-score J and weight bars.
+
+Evolve/reset calls update the meta-weights in real-time.
+
+CPU load < 5 %, latency impact < 25 ms.
+
+10 | Resolution of L18 Regression
+
+The MOF dynamically balances risk protection (L18) with reward capture (L14–L17), preventing over-suppression of profitable signals.
+Specifically:
+
+It monitors expected return variance and profit dispersion.
+
+When protective modules dampen profits excessively, λ₁–λ₂ weights are auto-tilted to restore equilibrium.
+
+Thus, the efficiency lost under L18’s tighter containment will be recaptured dynamically under L19.
+
+11 | Summary
+Field	Value
+Directive ID	8.8.4-L19
+Title	Meta-Optimization Framework (MOF): Unified Policy Evolution
+Purpose	Integrate all adaptive layers into a self-optimizing equilibrium engine
+Outcome	Continuous performance balancing between protection and profit
+Test Auth	testuser123 / SecurePass123!

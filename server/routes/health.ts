@@ -27,6 +27,7 @@ import { getDecisionConfidenceEngine } from '../services/decision-confidence-eng
 import { getAPRSLEEngine } from '../services/apr-sle-engine.js';
 import { getPDCEngine } from '../services/pdc-engine.js';
 import { getECSController } from '../services/ecs-controller.js';
+import { getMOFOrchestrator } from '../services/mof-orchestrator.js';
 
 export const healthRouter = Router();
 
@@ -653,6 +654,38 @@ function getEquityProtectionHealth() {
       containmentActive: false,
       exposureMultiplier: 1.0,
       error: 'Equity Protection unavailable'
+    };
+  }
+}
+
+function getMetaOptimizationHealth() {
+  try {
+    const mof = getMOFOrchestrator();
+    const status = mof.getStatus();
+
+    return {
+      currentJ: status.currentJ,
+      stabilityIndex: status.stabilityIndex,
+      weightEntropy: status.weightEntropy,
+      subsystemVariance: status.subsystemVariance,
+      metaWeights: status.metaWeights,
+      lambdaWeights: status.lambdaWeights,
+      evolutionCount: status.evolutionCount,
+      lastEvolution: status.lastEvolution,
+      kpiCount: status.kpiCount
+    };
+  } catch (e) {
+    console.log('[L19][HEALTH] Failed to get MOF status');
+    return {
+      currentJ: 0,
+      stabilityIndex: 1.0,
+      weightEntropy: 1.0,
+      subsystemVariance: 0,
+      metaWeights: { ara: 1, vts: 1, maco: 1, dce: 1, pdc: 1, ecs: 1 },
+      lambdaWeights: { profit: 0.35, drawdown: 0.30, variance: 0.15, stability: 0.20 },
+      evolutionCount: 0,
+      lastEvolution: null,
+      error: 'MOF unavailable'
     };
   }
 }

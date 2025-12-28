@@ -22009,6 +22009,11 @@ Important: Extract the exact field names and numeric values from the user's requ
   apiRouter.use('/pdc-ecs', pdcEcsRouter.default);
   console.log('[L18] PDC-ECS routes mounted at /api/pdc-ecs');
 
+  // Directive 8.8.4-L19: Mount MOF (Meta-Optimization Framework) routes
+  const mofRouter = await import('./routes/mof.js');
+  apiRouter.use('/mof', mofRouter.default);
+  console.log('[L19] MOF routes mounted at /api/mof');
+
   // Catch-all handler for unmatched /api/* routes
   // This prevents requests from falling through to Vite's HTML handler
   // and ensures all API routes return JSON (even 404s)

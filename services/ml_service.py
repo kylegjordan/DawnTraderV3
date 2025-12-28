@@ -1717,6 +1717,136 @@ def recalibrate_dce_weights():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+mof_state = {
+    'meta_weights': {'ara': 1.0, 'vts': 1.0, 'maco': 1.0, 'dce': 1.0, 'pdc': 1.0, 'ecs': 1.0},
+    'lambda_weights': {'profit': 0.35, 'drawdown': 0.30, 'variance': 0.15, 'stability': 0.20},
+    'learning_rate': 0.03,
+    'current_J': 0.0,
+    'evolution_count': 0,
+    'last_evolution': None,
+    'kpi_buffer': [],
+    'max_kpi_buffer': 168
+}
+
+@app.route('/mof/status', methods=['GET'])
+def get_mof_status():
+    """L19: Get MOF orchestrator status"""
+    weight_values = list(mof_state['meta_weights'].values())
+    mean_w = sum(weight_values) / len(weight_values) if weight_values else 1.0
+    variance = sum((w - mean_w) ** 2 for w in weight_values) / len(weight_values) if weight_values else 0
+    
+    sum_w = sum(weight_values)
+    probs = [w / sum_w for w in weight_values] if sum_w > 0 else [1/6] * 6
+    entropy = -sum(p * np.log2(p) if p > 0 else 0 for p in probs)
+    max_entropy = np.log2(6)
+    normalized_entropy = entropy / max_entropy if max_entropy > 0 else 0
+    
+    return jsonify({
+        "ok": True,
+        "meta_weights": mof_state['meta_weights'],
+        "lambda_weights": mof_state['lambda_weights'],
+        "current_J": round(mof_state['current_J'], 4),
+        "stability_index": round(1.0 - min(1.0, variance * 2), 3),
+        "weight_entropy": round(normalized_entropy, 3),
+        "subsystem_variance": round(np.sqrt(variance), 4),
+        "evolution_count": mof_state['evolution_count'],
+        "last_evolution": mof_state['last_evolution'],
+        "kpi_count": len(mof_state['kpi_buffer']),
+        "timestamp": datetime.utcnow().isoformat()
+    })
+
+@app.route('/mof/evolve', methods=['POST'])
+def evolve_mof_policy():
+    """L19: Multi-objective policy evolution using gradient approximation"""
+    data = request.json or {}
+    kpis = data.get('kpis', {})
+    
+    equity_growth = kpis.get('equityGrowth', 0.5)
+    drawdown = kpis.get('drawdown', 0.3)
+    eq_variance = kpis.get('equityVariance', 0.01)
+    stability = kpis.get('stability', 0.9)
+    
+    lw = mof_state['lambda_weights']
+    J = (lw['profit'] * equity_growth - 
+         lw['drawdown'] * drawdown - 
+         lw['variance'] * eq_variance + 
+         lw['stability'] * stability)
+    
+    gradients = {
+        'ara': equity_growth * 0.3 + stability * 0.2 + np.random.uniform(-0.01, 0.01),
+        'vts': equity_growth * 0.2 - eq_variance * 0.3 + np.random.uniform(-0.01, 0.01),
+        'maco': stability * 0.4 + equity_growth * 0.1 + np.random.uniform(-0.01, 0.01),
+        'dce': stability * 0.3 + equity_growth * 0.2 + np.random.uniform(-0.01, 0.01),
+        'pdc': -drawdown * 0.4 + stability * 0.2 + np.random.uniform(-0.01, 0.01),
+        'ecs': -drawdown * 0.3 - eq_variance * 0.2 + np.random.uniform(-0.01, 0.01)
+    }
+    
+    lr = mof_state['learning_rate']
+    previous_weights = dict(mof_state['meta_weights'])
+    
+    for key in mof_state['meta_weights']:
+        update = lr * gradients[key]
+        mof_state['meta_weights'][key] = max(0.1, min(2.0, mof_state['meta_weights'][key] + update))
+    
+    weight_values = list(mof_state['meta_weights'].values())
+    mean_w = sum(weight_values) / len(weight_values)
+    if mean_w > 0:
+        for key in mof_state['meta_weights']:
+            mof_state['meta_weights'][key] = max(0.1, min(2.0, mof_state['meta_weights'][key] / mean_w))
+    
+    mof_state['current_J'] = J
+    mof_state['evolution_count'] += 1
+    mof_state['last_evolution'] = datetime.utcnow().isoformat()
+    
+    logger.info(f"[L19][MOF] Evolution #{mof_state['evolution_count']}: J={J:.4f}")
+    
+    return jsonify({
+        "ok": True,
+        "previous_weights": previous_weights,
+        "new_weights": mof_state['meta_weights'],
+        "previous_J": mof_state.get('previous_J', 0),
+        "new_J": round(J, 4),
+        "gradients": {k: round(v, 4) for k, v in gradients.items()},
+        "evolution_count": mof_state['evolution_count']
+    })
+
+@app.route('/mof/record-kpi', methods=['POST'])
+def record_mof_kpi():
+    """L19: Record KPI sample for MOF optimization"""
+    data = request.json or {}
+    kpi = {
+        'equityGrowth': data.get('equityGrowth', 0.5),
+        'winRate': data.get('winRate', 0.5),
+        'drawdown': data.get('drawdown', 0.3),
+        'stability': data.get('stability', 0.9),
+        'timestamp': datetime.utcnow().isoformat()
+    }
+    
+    mof_state['kpi_buffer'].append(kpi)
+    if len(mof_state['kpi_buffer']) > mof_state['max_kpi_buffer']:
+        mof_state['kpi_buffer'] = mof_state['kpi_buffer'][-mof_state['max_kpi_buffer']:]
+    
+    return jsonify({
+        "ok": True,
+        "recorded": True,
+        "buffer_size": len(mof_state['kpi_buffer'])
+    })
+
+@app.route('/mof/reset', methods=['POST'])
+def reset_mof_weights():
+    """L19: Reset MOF weights to defaults"""
+    mof_state['meta_weights'] = {'ara': 1.0, 'vts': 1.0, 'maco': 1.0, 'dce': 1.0, 'pdc': 1.0, 'ecs': 1.0}
+    mof_state['current_J'] = 0.0
+    
+    logger.info("[L19][MOF] Weights reset to defaults")
+    
+    return jsonify({
+        "ok": True,
+        "meta_weights": mof_state['meta_weights'],
+        "message": "Weights reset to equal distribution"
+    })
+
+
 def deferred_calibration_fetch():
     """Wait for Node.js backend to be ready, then fetch calibration"""
     import threading
