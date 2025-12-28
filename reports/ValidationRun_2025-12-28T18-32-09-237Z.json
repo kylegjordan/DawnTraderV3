@@ -1,0 +1,97 @@
+{
+  "timestamp": "2025-12-28T18:32:44.438Z",
+  "mode": "paper",
+  "sessionId": "VAL_1766946729237",
+  "startTime": "2025-12-28T18:32:09.237Z",
+  "endTime": "2025-12-28T18:32:44.438Z",
+  "durationMs": 35201,
+  "tradesExecuted": 0,
+  "averageFeedLatencyMs": 0,
+  "cacheWindow": 5,
+  "adaptiveRelevanceRange": [
+    0.207,
+    0.207
+  ],
+  "cwqiVariance": 0,
+  "ngcAvg": 0.5,
+  "diAvg": 0.5,
+  "vtsModeSwitches": {
+    "toObserver": 0,
+    "toSimulator": 0
+  },
+  "araUpdates": 0,
+  "metricSnapshots": [
+    {
+      "timestamp": "2025-12-28T18:32:09.238Z",
+      "cwqi": 0.65,
+      "ngc": 0.5,
+      "di": 0.5,
+      "adaptiveRelevance": 0.207,
+      "gsi": 1,
+      "riskPerTrade": 3.4,
+      "maxExposure": 37,
+      "feedLatency": 0,
+      "cacheSize": 5,
+      "vtsMode": "simulator"
+    },
+    {
+      "timestamp": "2025-12-28T18:32:24.240Z",
+      "cwqi": 0.65,
+      "ngc": 0.5,
+      "di": 0.5,
+      "adaptiveRelevance": 0.207,
+      "gsi": 1,
+      "riskPerTrade": 3.4,
+      "maxExposure": 37,
+      "feedLatency": 0,
+      "cacheSize": 5,
+      "vtsMode": "simulator"
+    },
+    {
+      "timestamp": "2025-12-28T18:32:39.242Z",
+      "cwqi": 0.65,
+      "ngc": 0.5,
+      "di": 0.5,
+      "adaptiveRelevance": 0.207,
+      "gsi": 1,
+      "riskPerTrade": 3.4,
+      "maxExposure": 37,
+      "feedLatency": 0,
+      "cacheSize": 5,
+      "vtsMode": "simulator"
+    }
+  ],
+  "failures": [],
+  "validationCriteria": {
+    "feedLatency": {
+      "threshold": 100,
+      "actual": 0,
+      "passed": true
+    },
+    "cacheWindow": {
+      "threshold": 200,
+      "actual": 5,
+      "passed": false
+    },
+    "araUpdates": {
+      "threshold": 3,
+      "actual": 0,
+      "passed": false
+    },
+    "adaptiveRelevanceVariance": {
+      "threshold": 0.01,
+      "actual": 0,
+      "passed": false
+    },
+    "cwqiNgcDrift": {
+      "threshold": 0.1,
+      "actual": 0,
+      "passed": true
+    },
+    "vtsModeSwitchDelay": {
+      "threshold": 1,
+      "actual": 0,
+      "passed": true
+    }
+  }
+}

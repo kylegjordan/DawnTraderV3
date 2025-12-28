@@ -6103,6 +6103,16 @@
     ]
   },
   {
+    "path": "/api/ara/status",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "auditOrAuth",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/vts/status",
     "methods": [
       "GET"
@@ -6944,6 +6954,96 @@
       "GET"
     ],
     "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/validation/run",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "auditOrAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/validation/status",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "auditOrAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/validation/latest",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "auditOrAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/validation/history",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "auditOrAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/validation/reset",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "auditOrAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/validation/stop",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "auditOrAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/pricing/latency",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "auditOrAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/pricing/cache-info",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "auditOrAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/pricing/status",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "auditOrAuth",
       "anonymous"
     ]
   },

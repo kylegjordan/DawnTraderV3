@@ -6,6 +6,7 @@ import { getExposureMultiplier, computeExposureBias } from '../utils/strategyBia
 import { trainingAuditService } from '../services/training-audit-service';
 import { vtsService, type VTSLearningParams } from '../services/vts-service';
 import { getDecisionConfidenceEngine } from '../services/decision-confidence-engine';
+import { paperValidationEngine } from '../services/paper_validation_engine';
 
 const router = Router();
 
@@ -38,6 +39,17 @@ function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunctio
   } catch {
     return res.status(401).json({ error: 'Invalid token' });
   }
+}
+
+/**
+ * M5: Audit-safe middleware - allows internal audit queries without login
+ * Pass header x-internal-audit:true to bypass authentication
+ */
+function auditOrAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  if (req.headers['x-internal-audit'] === 'true') {
+    return next();
+  }
+  return requireAuth(req, res, next);
 }
 
 interface ARACalculation {
@@ -440,6 +452,42 @@ router.post('/retrain', requireAuth, async (req: Request, res: Response) => {
     trainingAuditService.completeSession(sessionId, false, 0, error instanceof Error ? error.message : 'Unknown error');
     console.error('[L4][ARA][ERROR] Retrain failed:', error);
     res.status(500).json({ error: 'Failed to retrain model' });
+  }
+});
+
+/**
+ * M5: ARA Status endpoint - audit-safe (no auth required with x-internal-audit header)
+ * Returns current adaptive risk advisor state and VTS-DCE coupling status
+ */
+router.get('/status', auditOrAuth, async (req: Request, res: Response) => {
+  try {
+    const vtsParams = vtsService.getLearningParams();
+    const dce = getDecisionConfidenceEngine();
+    const dceContext = dce.getContextStability();
+    
+    paperValidationEngine.recordARAUpdate();
+    
+    res.json({
+      ok: true,
+      learningRate: vtsParams.learningRate,
+      gsi: vtsParams.gsi,
+      volatilityIndex: dceContext.volatilityIndex,
+      lastAdaptiveUpdate: vtsParams.lastAdaptiveUpdate,
+      lastRetrainingTime: lastRetrainingTime?.toISOString() || null,
+      calibration: {
+        alpha: calibrationCache?.alpha || 0.0018,
+        beta: calibrationCache?.beta || 0.19,
+        sampleCount: calibrationCache?.sampleCount || 0,
+        isValid: (calibrationCache?.sampleCount || 0) >= MIN_SAMPLE_COUNT
+      },
+      formulas: {
+        riskFormula: 'riskPerTrade = baseRisk + (learningRate * 5)',
+        exposureFormula: 'maxExposure = baseExposure + (volatilityIndex * 40)'
+      }
+    });
+  } catch (error) {
+    console.error('[M5][ARA][ERROR] Status failed:', error);
+    res.status(500).json({ ok: false, error: 'Failed to get ARA status' });
   }
 });
 

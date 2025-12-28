@@ -22049,6 +22049,16 @@ Important: Extract the exact field names and numeric values from the user's requ
   apiRouter.use('/back-audit', backAuditRouter.default);
   console.log('[M4] Back-Audit & System Integrity routes mounted at /api/back-audit');
 
+  // Directive 8.8.4-M5: Mount Paper Validation (Controlled Paper-Mode Validation) routes
+  const paperValidationRouter = await import('./routes/paper_validation.js');
+  apiRouter.use('/validation', paperValidationRouter.default);
+  console.log('[M5] Paper Validation routes mounted at /api/validation');
+
+  // Directive 8.8.4-M5: Mount Pricing (Feed Latency & Cache) routes
+  const pricingRouter = await import('./routes/pricing.js');
+  apiRouter.use('/pricing', pricingRouter.default);
+  console.log('[M5] Pricing routes mounted at /api/pricing');
+
   // Catch-all handler for unmatched /api/* routes
   // This prevents requests from falling through to Vite's HTML handler
   // and ensures all API routes return JSON (even 404s)

@@ -1,0 +1,84 @@
+{
+  "timestamp": "2025-12-28T18:41:47.940Z",
+  "mode": "paper",
+  "sessionId": "VAL_1766947292645",
+  "startTime": "2025-12-28T18:41:32.645Z",
+  "endTime": "2025-12-28T18:41:47.940Z",
+  "durationMs": 15295,
+  "tradesExecuted": 0,
+  "averageFeedLatencyMs": 0.5,
+  "cacheWindow": 5,
+  "adaptiveRelevanceRange": [
+    0.15,
+    0.15
+  ],
+  "cwqiVariance": 0,
+  "ngcAvg": 0.5,
+  "diAvg": 0.5,
+  "vtsModeSwitches": {
+    "toObserver": 0,
+    "toSimulator": 0
+  },
+  "araUpdates": 5,
+  "metricSnapshots": [
+    {
+      "timestamp": "2025-12-28T18:41:32.647Z",
+      "cwqi": 0.65,
+      "ngc": 0.5,
+      "di": 0.5,
+      "adaptiveRelevance": 0.15,
+      "gsi": 1,
+      "riskPerTrade": 3.4,
+      "maxExposure": 37,
+      "feedLatency": 1,
+      "cacheSize": 5,
+      "vtsMode": "simulator"
+    },
+    {
+      "timestamp": "2025-12-28T18:41:47.648Z",
+      "cwqi": 0.65,
+      "ngc": 0.5,
+      "di": 0.5,
+      "adaptiveRelevance": 0.15,
+      "gsi": 1,
+      "riskPerTrade": 3.4,
+      "maxExposure": 37,
+      "feedLatency": 0.5,
+      "cacheSize": 5,
+      "vtsMode": "simulator"
+    }
+  ],
+  "failures": [],
+  "validationCriteria": {
+    "feedLatency": {
+      "threshold": 100,
+      "actual": 0.5,
+      "passed": true
+    },
+    "cacheWindow": {
+      "threshold": 200,
+      "actual": 2,
+      "passed": false
+    },
+    "araUpdates": {
+      "threshold": 3,
+      "actual": 5,
+      "passed": true
+    },
+    "adaptiveRelevanceVariance": {
+      "threshold": 0.01,
+      "actual": 0,
+      "passed": false
+    },
+    "cwqiNgcDrift": {
+      "threshold": 0.1,
+      "actual": 0,
+      "passed": true
+    },
+    "vtsModeSwitchDelay": {
+      "threshold": 1,
+      "actual": 0,
+      "passed": true
+    }
+  }
+}

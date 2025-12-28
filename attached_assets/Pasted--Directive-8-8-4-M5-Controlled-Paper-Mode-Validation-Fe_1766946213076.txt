@@ -1,0 +1,143 @@
+⚙️ Directive 8.8.4-M5 — Controlled Paper-Mode Validation & Feed Optimization Audit
+Objective
+
+Run a controlled paper-trading session to:
+
+Validate that all adaptive metrics (CWQI, NGC, DI, ARA suggestions, adaptive relevance, etc.) update correctly in live flow.
+
+Measure feed latency, confirm proper use of the centralized price cache, and ensure the cache window length is sufficient.
+
+Verify dynamic switching between VTS ⇄ Observer Mode works during live and idle states.
+
+Remove the ARA authentication requirement to complete in-system audits without user login.
+
+🧩 Step 1 — Paper-Mode Validation Service
+
+File: server/services/paper_validation_engine.ts
+This service will:
+
+Start a supervised trading session in paper mode.
+
+Capture all major metrics at 15-second intervals:
+
+CWQI, NGC, DI, Adaptive Relevance, GSI, RiskPerTrade, MaxExposure
+
+Log every update event (pre-trade → in-trade → post-trade).
+
+Cross-validate metric changes against expected formula outputs.
+
+Store full telemetry at /reports/ValidationRun_<timestamp>.json.
+
+🧩 Step 2 — Feed Latency & Cache Window Extensions
+
+File: server/services/pricing_service.ts
+
+Latency Measurement
+
+Add continuous latency tracking:
+
+const start = performance.now();
+const price = await getPriceFromFeed(symbol);
+const latency = performance.now() - start;
+recordFeedLatency(latency);
+
+
+Store rolling averages (1 min / 5 min / 15 min) and expose via /api/pricing/latency.
+
+Cache Window Extension
+
+Expand price snapshot cache from 20 → 200 ticks to improve simulation realism.
+Expose via /api/pricing/cache-info returning:
+
+{"cache_length":200,"avg_latency_ms":37.4}
+
+🧩 Step 3 — ARA Auth Bypass for Audit Context
+
+File: server/routes/ara.ts
+
+Add audit-safe middleware:
+
+if (req.headers['x-internal-audit'] === 'true') next();
+else requireAuth(req, res, next);
+
+
+Allow audit and validation services to query /api/ara/status and /api/ara/suggestions without login by passing header x-internal-audit:true.
+
+Maintain full authentication for all user-initiated API calls.
+
+🧩 Step 4 — Validation Telemetry Schema
+
+Each validation run saves:
+
+{
+  "timestamp":"2025-12-30T04:20:00Z",
+  "mode":"paper",
+  "trades_executed":37,
+  "average_feed_latency_ms":34.2,
+  "cache_window":200,
+  "adaptive_relevance_range":[0.06,0.47],
+  "cwqi_variance":0.054,
+  "ngc_avg":0.63,
+  "vts_mode_switches":{"toObserver":3,"toSimulator":2},
+  "ara_updates":12,
+  "failures":[]
+}
+
+🧩 Step 5 — Validation API Routes
+
+File: server/routes/paper_validation.ts
+
+Endpoints:
+
+POST /api/validation/run – start supervised paper test
+
+GET /api/validation/status – session metrics
+
+GET /api/validation/latest – last run summary
+
+GET /api/validation/history – previous run records
+
+POST /api/validation/reset – clear validation buffer
+
+🧩 Step 6 — Validation Criteria
+Metric	Pass Condition
+Feed Latency	< 100 ms (avg)
+Cache Window	≥ 200 ticks
+ARA Suggestions	Update ≥ 3 times per session
+Adaptive Relevance	Variance > 0.01 between trades
+CWQI / NGC Drift	< 10 % deviation between epochs
+VTS ↔ Observer Switch	≤ 1 cycle delay
+Model Checksum Change	Yes (post-training)
+🧩 Step 7 — Execution Procedure
+
+Reset all RTB signals and open trades.
+
+Run POST /api/validation/run to start the 30-minute paper session.
+
+Monitor logs for:
+
+[M5][VALIDATION] session active, latency = 42 ms, relevance = 0.38, cwqi variance = 0.052
+
+
+After completion, view the report:
+/reports/ValidationRun_<timestamp>.json
+
+🧩 Step 8 — Deliverables
+
+/reports/ValidationRun_<timestamp>.json
+
+/docs/Validation_Summary.md (plain-language results)
+
+Updated replit.md with latency + cache window documentation
+
+✅ Expected Outcome
+
+Verified end-to-end metric responsiveness during live data flow.
+
+Confirmed latency < 100 ms and cache ≥ 200 ticks.
+
+Confirmed adaptive metrics respond to live conditions.
+
+Auth-safe ARA access for future audits.
+
+Foundation ready for transition to Phase 8.8.5 (Strategy Integrity and PSRS system).
