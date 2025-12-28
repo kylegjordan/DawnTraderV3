@@ -620,6 +620,35 @@ export default function AdaptiveRiskAdvisor() {
             </div>
           </div>
 
+          <div className="flex flex-wrap gap-3 py-2">
+            <Button
+              onClick={() => applySettingsMutation.mutate()}
+              disabled={!suggestions || applySettingsMutation.isPending}
+              className="gap-2"
+            >
+              {applySettingsMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <CheckCircle className="w-4 h-4" />
+              )}
+              Apply Suggested Settings
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={handleRetrain}
+              disabled={isRetraining || isEngineRunning}
+              className="gap-2"
+            >
+              {isRetraining ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+              Retrain Model
+            </Button>
+          </div>
+
           <Separator />
 
           <div className="flex items-center justify-between py-2">
@@ -650,7 +679,9 @@ export default function AdaptiveRiskAdvisor() {
           </div>
           <div className="space-y-1">
             <div className="text-sm text-muted-foreground">Est. Gross Profit (per trade)</div>
-            <div className="text-xl font-semibold text-green-600">{formatCurrency(estimatedGrossProfit)}</div>
+            <div className="text-xl font-semibold text-green-600">
+              {formatCurrency(estimatedGrossProfit)} / {avgValuePerTrade > 0 ? ((estimatedGrossProfit / avgValuePerTrade) * 100).toFixed(1) : '0.0'}%
+            </div>
           </div>
           <div className="space-y-1">
             <div className="text-sm text-muted-foreground">Est. Net Profit (per trade) / %</div>
@@ -1511,35 +1542,6 @@ export default function AdaptiveRiskAdvisor() {
             </div>
           </>
         )}
-
-        <div className="flex flex-wrap gap-3 pt-2">
-          <Button
-            onClick={() => applySettingsMutation.mutate()}
-            disabled={!suggestions || applySettingsMutation.isPending}
-            className="gap-2"
-          >
-            {applySettingsMutation.isPending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <CheckCircle className="w-4 h-4" />
-            )}
-            Apply Suggested Settings
-          </Button>
-
-          <Button
-            variant="outline"
-            onClick={handleRetrain}
-            disabled={isRetraining || isEngineRunning}
-            className="gap-2"
-          >
-            {isRetraining ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4" />
-            )}
-            Retrain Model
-          </Button>
-        </div>
 
         {isRetraining && retrainProgress && (
           <div className="space-y-2">
