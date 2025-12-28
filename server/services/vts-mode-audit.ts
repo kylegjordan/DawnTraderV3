@@ -9,6 +9,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import { contextBridge } from './context-bridge.js';
 
 const REPORTS_DIR = path.join(process.cwd(), 'reports');
 const VTS_LEARNING_BUFFER = path.join(process.cwd(), 'data', 'vts_learning_buffer.json');
@@ -17,6 +18,14 @@ const LIVE_LEARNING_BUFFER = path.join(process.cwd(), 'data', 'live_learning_buf
 export type VTSMode = 'simulator' | 'observer';
 export type VTSDataSource = 'pricing_service' | 'live_trades';
 export type SystemMode = 'IDLE' | 'PAPER' | 'LIVE';
+
+interface LearningBufferEntry {
+  id?: string;
+  tradeId?: string;
+  symbol?: string;
+  timestamp?: string;
+  source?: string;
+}
 
 export interface VTSModeAuditReport {
   timestamp: string;
@@ -27,6 +36,7 @@ export interface VTSModeAuditReport {
   averageConfidence: number;
   feedLatencyMs: number;
   crossContaminationDetected: boolean;
+  sharedEntryCount: number;
   validationChecks: {
     modeCorrect: boolean;
     dataSourceCorrect: boolean;
@@ -50,6 +60,7 @@ export interface VTSModeState {
   lastModeChange: string;
   simulatedTradesThisSession: number;
   isActive: boolean;
+  blockedSimulationsInObserverMode: number;
 }
 
 class VTSModeAuditService {
@@ -59,21 +70,52 @@ class VTSModeAuditService {
     systemMode: 'IDLE',
     lastModeChange: new Date().toISOString(),
     simulatedTradesThisSession: 0,
-    isActive: false
+    isActive: false,
+    blockedSimulationsInObserverMode: 0
   };
 
   private feedLatencies: number[] = [];
   private simulatedTradeConfidences: number[] = [];
   private lastPricingUpdate: number = Date.now();
+  private initialized = false;
 
   constructor() {
     this.init();
   }
 
   private async init() {
-    await fs.mkdir(REPORTS_DIR, { recursive: true });
-    await fs.mkdir(path.dirname(VTS_LEARNING_BUFFER), { recursive: true });
-    console.log('[M3B.2][VTS_AUDIT] Mode Audit Service initialized');
+    try {
+      await fs.mkdir(REPORTS_DIR, { recursive: true });
+      await fs.mkdir(path.dirname(VTS_LEARNING_BUFFER), { recursive: true });
+      
+      this.subscribeToTradingState();
+      this.initialized = true;
+      console.log('[M3B.2][VTS_AUDIT] Mode Audit Service initialized');
+    } catch (error) {
+      console.error('[M3B.2][VTS_AUDIT] Init error:', error);
+    }
+  }
+
+  private subscribeToTradingState(): void {
+    try {
+      if (contextBridge && typeof contextBridge.on === 'function') {
+        contextBridge.on('trading_state_changed', (data: any) => {
+          const isActive = data?.active || data?.isEngineActive || false;
+          const mode = data?.mode?.toUpperCase() || 'PAPER';
+          
+          let systemMode: SystemMode = 'IDLE';
+          if (isActive) {
+            systemMode = mode === 'LIVE' ? 'LIVE' : 'PAPER';
+          }
+          
+          this.updateMode(systemMode);
+          console.log(`[M3B.2][VTS_AUDIT] Trading state received: active=${isActive}, mode=${mode} → VTS: ${this.currentState.mode}`);
+        });
+        console.log('[M3B.2][VTS_AUDIT] Subscribed to trading_state_changed events');
+      }
+    } catch (error) {
+      console.warn('[M3B.2][VTS_AUDIT] Could not subscribe to context bridge:', error);
+    }
   }
 
   updateMode(systemMode: SystemMode): void {
@@ -103,12 +145,23 @@ class VTSModeAuditService {
     this.lastPricingUpdate = Date.now();
   }
 
-  recordSimulatedTrade(confidence: number): void {
+  recordSimulatedTrade(confidence: number): boolean {
+    if (this.currentState.mode === 'observer') {
+      this.currentState.blockedSimulationsInObserverMode++;
+      console.warn(`[M3B.2][VTS_AUDIT] Blocked simulated trade in observer mode (total blocked: ${this.currentState.blockedSimulationsInObserverMode})`);
+      return false;
+    }
+    
     this.currentState.simulatedTradesThisSession++;
     this.simulatedTradeConfidences.push(confidence);
     if (this.simulatedTradeConfidences.length > 100) {
       this.simulatedTradeConfidences = this.simulatedTradeConfidences.slice(-100);
     }
+    return true;
+  }
+
+  canSimulateTrade(): boolean {
+    return this.currentState.mode === 'simulator';
   }
 
   getState(): VTSModeState {
@@ -123,6 +176,41 @@ class VTSModeAuditService {
   getAverageConfidence(): number {
     if (this.simulatedTradeConfidences.length === 0) return 0;
     return this.simulatedTradeConfidences.reduce((a, b) => a + b, 0) / this.simulatedTradeConfidences.length;
+  }
+
+  private async loadBuffer(filePath: string): Promise<LearningBufferEntry[]> {
+    try {
+      const content = await fs.readFile(filePath, 'utf-8');
+      const data = JSON.parse(content);
+      return Array.isArray(data) ? data : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private async verifyBufferIsolation(): Promise<{ isolated: boolean; sharedCount: number }> {
+    const vtsEntries = await this.loadBuffer(VTS_LEARNING_BUFFER);
+    const liveEntries = await this.loadBuffer(LIVE_LEARNING_BUFFER);
+    
+    if (vtsEntries.length === 0 || liveEntries.length === 0) {
+      return { isolated: true, sharedCount: 0 };
+    }
+    
+    const vtsIds = new Set<string>();
+    for (const entry of vtsEntries) {
+      if (entry.id) vtsIds.add(entry.id);
+      if (entry.tradeId) vtsIds.add(entry.tradeId);
+    }
+    
+    let sharedCount = 0;
+    for (const entry of liveEntries) {
+      if ((entry.id && vtsIds.has(entry.id)) || 
+          (entry.tradeId && vtsIds.has(entry.tradeId))) {
+        sharedCount++;
+      }
+    }
+    
+    return { isolated: sharedCount === 0, sharedCount };
   }
 
   private async getBufferStats(): Promise<{
@@ -157,6 +245,7 @@ class VTSModeAuditService {
 
   async generateReport(): Promise<VTSModeAuditReport> {
     const bufferStats = await this.getBufferStats();
+    const { isolated: buffersIsolated, sharedCount } = await this.verifyBufferIsolation();
     
     const modeCorrect = 
       (this.currentState.systemMode === 'IDLE' && this.currentState.mode === 'simulator') ||
@@ -168,14 +257,14 @@ class VTSModeAuditService {
     
     const noSyntheticDuringLive = 
       this.currentState.mode !== 'observer' || 
-      this.currentState.simulatedTradesThisSession === 0;
+      (this.currentState.simulatedTradesThisSession === 0 && 
+       this.currentState.blockedSimulationsInObserverMode >= 0);
     
     const avgLatency = this.getAverageFeedLatency();
-    const timestampsConsistent = avgLatency <= 100;
+    const timestampsConsistent = avgLatency <= 100 || this.feedLatencies.length === 0;
     
-    const buffersIsolated = true;
-    
-    const crossContaminationDetected = !buffersIsolated || !noSyntheticDuringLive;
+    const crossContaminationDetected = !buffersIsolated || 
+      (this.currentState.mode === 'observer' && this.currentState.simulatedTradesThisSession > 0);
 
     const report: VTSModeAuditReport = {
       timestamp: new Date().toISOString(),
@@ -186,6 +275,7 @@ class VTSModeAuditService {
       averageConfidence: Math.round(this.getAverageConfidence() * 1000) / 1000,
       feedLatencyMs: Math.round(avgLatency),
       crossContaminationDetected,
+      sharedEntryCount: sharedCount,
       validationChecks: {
         modeCorrect,
         dataSourceCorrect,
@@ -194,7 +284,7 @@ class VTSModeAuditService {
         buffersIsolated
       },
       bufferStats,
-      summary: this.generateSummary(modeCorrect, dataSourceCorrect, crossContaminationDetected)
+      summary: this.generateSummary(modeCorrect, dataSourceCorrect, crossContaminationDetected, buffersIsolated, sharedCount)
     };
 
     const reportPath = path.join(
@@ -207,17 +297,32 @@ class VTSModeAuditService {
     return report;
   }
 
-  private generateSummary(modeCorrect: boolean, dataSourceCorrect: boolean, contaminated: boolean): string {
+  private generateSummary(
+    modeCorrect: boolean, 
+    dataSourceCorrect: boolean, 
+    contaminated: boolean,
+    buffersIsolated: boolean,
+    sharedCount: number
+  ): string {
+    const issues: string[] = [];
+    
     if (!modeCorrect) {
-      return 'FAIL: VTS mode does not match system state';
+      issues.push('VTS mode does not match system state');
     }
     if (!dataSourceCorrect) {
-      return 'FAIL: Data source mismatch for current mode';
+      issues.push('Data source mismatch for current mode');
     }
-    if (contaminated) {
-      return 'FAIL: Cross-contamination detected between learning buffers';
+    if (!buffersIsolated) {
+      issues.push(`Buffer cross-contamination: ${sharedCount} shared entries`);
     }
-    return 'PASS: All validation checks passed';
+    if (contaminated && buffersIsolated) {
+      issues.push('Synthetic trades detected during live/paper trading');
+    }
+    
+    if (issues.length === 0) {
+      return 'PASS: All validation checks passed';
+    }
+    return `FAIL: ${issues.join('; ')}`;
   }
 
   async getLatestReport(): Promise<VTSModeAuditReport | null> {
@@ -239,6 +344,7 @@ class VTSModeAuditService {
 
   resetSessionStats(): void {
     this.currentState.simulatedTradesThisSession = 0;
+    this.currentState.blockedSimulationsInObserverMode = 0;
     this.simulatedTradeConfidences = [];
     this.feedLatencies = [];
   }
