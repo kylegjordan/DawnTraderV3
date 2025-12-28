@@ -1,0 +1,157 @@
+🧭 Directive 8.8.4-M3B.2 — VTS Passive Feed Integration & Mode Audit
+Purpose
+
+To ensure the Virtual Trading Simulator (VTS) correctly uses live Kraken data via the centralized pricing service during idle (non-trading) periods, automatically switches modes when trading starts, and maintains clean data separation between simulated and real trade learning.
+
+This directive replaces the use of signal_cache with live data sourced through the Pricing Service (pricing_service.ts), guarantees mode synchronization, and introduces an audit to verify proper operation.
+
+🧩 Step 1 — Update VTS Data Source
+
+Files:
+server/services/vts_service.ts
+server/core/vts/virtual_trader.ts
+
+Changes:
+
+Inject Pricing Service
+
+import { PricingService } from "@/services/pricing_service";
+const pricing = new PricingService();
+
+
+Replace signal cache generation
+
+// OLD
+const signals = signal_cache.getRecent();
+// NEW
+const liveTicks = pricing.getRecentTicks(pairs);
+const signals = strategyEngine.evaluateLiveData(liveTicks);
+
+
+Ensure no separate Kraken API calls
+
+Remove any direct imports of kraken_adapter, kraken_feed, or REST/websocket calls within VTS.
+
+All market data must be consumed from the unified pricing stream.
+
+🧩 Step 2 — Mode Control and Switching Logic
+
+Goal:
+Automatically toggle between simulator and observer mode.
+
+In vts_service.ts, add:
+
+function updateMode(systemMode) {
+  if (systemMode === "IDLE") {
+    this.mode = "simulator";
+    this.source = "pricing_service";
+  } else if (systemMode === "PAPER" || systemMode === "LIVE") {
+    this.mode = "observer";
+    this.source = "live_trades";
+  }
+}
+
+
+Then, ensure that this is called by the central autonomy scheduler or boot orchestrator whenever trading starts or stops.
+
+🧩 Step 3 — Live Simulation Generation Loop
+
+Replace the static cache-based simulation with a live data generator:
+
+async function simulateFromFeed() {
+  if (this.mode !== "simulator") return;
+
+  const marketSnapshots = pricing.getRecentSnapshots(); // from pricing service
+  for (const pair of marketSnapshots) {
+    const signal = strategyEngine.evaluate(pair);
+    if (signal.confidence > MIN_CONFIDENCE) {
+      const result = tradeSimulator.run(signal, pair);
+      this.recordSimulatedTrade(result);
+    }
+  }
+}
+
+
+Run this loop at the existing VTS cycle interval (≈ every 60 s) when trading is off.
+
+🧩 Step 4 — Separate Learning Buffers
+
+Create distinct learning buffers to avoid cross-contamination:
+
+Buffer	Source	File
+vts_learning_buffer.json	simulated trades (idle mode)	/data/vts_learning_buffer.json
+live_learning_buffer.json	real trade data (active mode)	/data/live_learning_buffer.json
+
+VTS should write to only one buffer based on its mode.
+
+🧩 Step 5 — Mode Verification & Audit
+
+New file:
+server/services/vts_mode_audit.ts
+
+Responsibilities:
+
+Check active mode (simulator vs. observer).
+
+Verify data source (pricing_service vs. live_trades).
+
+Confirm no synthetic signals are being generated during live trading.
+
+Compare timestamps between simulated trades and pricing feed updates.
+
+Log summary metrics.
+
+Example Output:
+
+{
+  "timestamp": "2025-12-28T22:41:02Z",
+  "systemMode": "IDLE",
+  "vtsMode": "simulator",
+  "dataSource": "pricing_service",
+  "simulatedTrades": 42,
+  "averageConfidence": 0.68,
+  "feedLatencyMs": 23,
+  "crossContaminationDetected": false
+}
+
+
+Audit results saved to:
+/reports/VTS_PassiveFeedAudit_<timestamp>.json
+
+🧩 Step 6 — API Endpoints
+
+New route:
+server/routes/vts_audit.ts
+
+Endpoints:
+
+GET /api/vts/status — current mode, source, and buffer stats
+
+POST /api/vts/run-passive — run one simulation cycle manually
+
+POST /api/vts/audit — trigger full audit and generate report
+
+GET /api/vts/latest-report — fetch most recent audit output
+
+🧩 Step 7 — Validation Criteria
+Metric	Expected Behavior
+VTS Mode	simulator when trading stopped; observer when trading active
+Data Source	pricing_service (never Kraken directly)
+Feed latency	≤ 100 ms average
+Simulated trades	≥ 10 per hour in idle mode
+Cross contamination	None (simulated and live buffers separate)
+Audit report	Generated and saved with correct metrics
+🧩 Step 8 — Deliverables
+Output	Location
+Audit Report	/reports/VTS_PassiveFeedAudit_<timestamp>.json
+Implementation Notes	/docs/VTS_ModeAudit_Summary.md
+Updated Code	server/services/vts_service.ts, server/core/vts/virtual_trader.ts, server/services/vts_mode_audit.ts, server/routes/vts_audit.ts
+✅ Expected Outcome
+
+VTS now draws exclusively from the centralized Pricing Service, never from cached or external Kraken calls.
+
+When trading stops, VTS simulates trades continuously using real incoming market data.
+
+When trading starts, VTS automatically switches to observer mode and stops generating simulations.
+
+Clean audit record verifies no data source contamination and confirms healthy simulation rates.

@@ -22039,6 +22039,11 @@ Important: Extract the exact field names and numeric values from the user's requ
   apiRouter.use('/m3b', m3bRouter.default);
   console.log('[M3B] Live Validation & Adaptive Coupling routes mounted at /api/m3b');
 
+  // Directive 8.8.4-M3B.2: Mount VTS Audit (Passive Feed Integration & Mode Audit) routes
+  const vtsAuditRouter = await import('./routes/vts-audit.js');
+  apiRouter.use('/vts', vtsAuditRouter.default);
+  console.log('[M3B.2] VTS Passive Feed & Mode Audit routes mounted at /api/vts');
+
   // Catch-all handler for unmatched /api/* routes
   // This prevents requests from falling through to Vite's HTML handler
   // and ensures all API routes return JSON (even 404s)

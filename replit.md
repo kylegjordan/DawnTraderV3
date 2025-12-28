@@ -51,6 +51,8 @@ Training Loop Validation Audit (M3A) verifies that retraining operations trigger
 
 Live Validation & Adaptive Coupling Audit (M3B) replaces static decay factors with VTS-DCE derived adaptive relevance coefficients. The `quality_index.ts` SMOOTHING_ALPHA (0.15) is replaced with dynamic relevance computed as: `relevance = learningRate * (gsi + 0.15)`. ARA risk/exposure suggestions now derive from VTS+DCE live learning outputs: `riskPerTrade = baseRisk + learningRate*5`, `maxExposure = baseExposure + volatilityIndex*40`. The M3B validation service (`m3b-validation-service.ts`) generates reports verifying static decay removal, ARA-VTS-DCE linkage, and CWQI variance correlation. API endpoints at `/api/m3b/*` provide status, metrics, reports, and adaptive sync capabilities.
 
+VTS Passive Feed Integration & Mode Audit (M3B.2) ensures the Virtual Trading Simulator uses live Kraken data via the centralized pricing service (`price-cache.ts`) during idle periods. VTS automatically switches between `simulator` mode (when trading is stopped) and `observer` mode (when trading is active). The `vts-mode-audit.ts` service verifies correct mode operation, data source integrity, and ensures no cross-contamination between VTS learning buffer and live learning buffer. API endpoints at `/api/vts/*` provide status, passive simulation runs, audit reports, and mode updates.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.
