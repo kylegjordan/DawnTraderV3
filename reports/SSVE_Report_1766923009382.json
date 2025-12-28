@@ -1,0 +1,1627 @@
+{
+  "timestamp": "2025-12-28T11:56:49.002Z",
+  "mode": "paper",
+  "sampleSize": 191,
+  "mismatches": [
+    {
+      "symbol": "XXRPZ/CAD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7338,
+      "diff": 0.6838
+    },
+    {
+      "symbol": "XXRPZ/CAD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.8368,
+      "recomputed": 0,
+      "diff": 0.8368
+    },
+    {
+      "symbol": "CRV/EUR",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.71,
+      "diff": 0.66
+    },
+    {
+      "symbol": "CRV/EUR",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.6826,
+      "recomputed": 0,
+      "diff": 0.6826
+    },
+    {
+      "symbol": "WLD/EUR",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6964,
+      "diff": 0.6464
+    },
+    {
+      "symbol": "WLD/EUR",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.7636,
+      "recomputed": 0,
+      "diff": 0.7636
+    },
+    {
+      "symbol": "ZRO/USD",
+      "strategy": "sma_trend_ride",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6684,
+      "diff": 0.6184
+    },
+    {
+      "symbol": "ZRO/USD",
+      "strategy": "sma_trend_ride",
+      "metric": "ngc",
+      "original": 0.8465,
+      "recomputed": 0,
+      "diff": 0.8465
+    },
+    {
+      "symbol": "WLD/USD",
+      "strategy": "dhma",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6314,
+      "diff": 0.5814
+    },
+    {
+      "symbol": "WLD/USD",
+      "strategy": "dhma",
+      "metric": "ngc",
+      "original": 0.7351,
+      "recomputed": 0,
+      "diff": 0.7351
+    },
+    {
+      "symbol": "AUD/USD",
+      "strategy": "sma_trend_ride",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6697,
+      "diff": 0.6197
+    },
+    {
+      "symbol": "AUD/USD",
+      "strategy": "sma_trend_ride",
+      "metric": "ngc",
+      "original": 0.9122,
+      "recomputed": 0,
+      "diff": 0.9122
+    },
+    {
+      "symbol": "ATOM/EUR",
+      "strategy": "range_trading",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.672,
+      "diff": 0.622
+    },
+    {
+      "symbol": "ATOM/EUR",
+      "strategy": "range_trading",
+      "metric": "ngc",
+      "original": 0.765,
+      "recomputed": 0,
+      "diff": 0.765
+    },
+    {
+      "symbol": "WLD/USD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6961,
+      "diff": 0.6461
+    },
+    {
+      "symbol": "WLD/USD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.7544,
+      "recomputed": 0,
+      "diff": 0.7544
+    },
+    {
+      "symbol": "BCH/USDT",
+      "strategy": "vwap_pullback",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.712,
+      "diff": 0.662
+    },
+    {
+      "symbol": "BCH/USDT",
+      "strategy": "vwap_pullback",
+      "metric": "ngc",
+      "original": 0.8252,
+      "recomputed": 0,
+      "diff": 0.8252
+    },
+    {
+      "symbol": "BNB/EUR",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7063,
+      "diff": 0.6563
+    },
+    {
+      "symbol": "BNB/EUR",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.8341,
+      "recomputed": 0,
+      "diff": 0.8341
+    },
+    {
+      "symbol": "ETH/EUR",
+      "strategy": "sma_trend_ride",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6723,
+      "diff": 0.6223
+    },
+    {
+      "symbol": "ETH/EUR",
+      "strategy": "sma_trend_ride",
+      "metric": "ngc",
+      "original": 0.8749,
+      "recomputed": 0,
+      "diff": 0.8749
+    },
+    {
+      "symbol": "XRPRL/USD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7184,
+      "diff": 0.6684
+    },
+    {
+      "symbol": "XRPRL/USD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.846,
+      "recomputed": 0,
+      "diff": 0.846
+    },
+    {
+      "symbol": "ETHUSD1",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.683,
+      "diff": 0.633
+    },
+    {
+      "symbol": "ETHUSD1",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.8829,
+      "recomputed": 0,
+      "diff": 0.8829
+    },
+    {
+      "symbol": "USD/JPY",
+      "strategy": "vwap_bounce",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6801,
+      "diff": 0.6301
+    },
+    {
+      "symbol": "USD/JPY",
+      "strategy": "vwap_bounce",
+      "metric": "ngc",
+      "original": 0.922,
+      "recomputed": 0,
+      "diff": 0.922
+    },
+    {
+      "symbol": "ETH/USDC",
+      "strategy": "sma_trend_ride",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6743,
+      "diff": 0.6243
+    },
+    {
+      "symbol": "ETH/USDC",
+      "strategy": "sma_trend_ride",
+      "metric": "ngc",
+      "original": 0.8832,
+      "recomputed": 0,
+      "diff": 0.8832
+    },
+    {
+      "symbol": "AVAX/USDT",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7255,
+      "diff": 0.6755
+    },
+    {
+      "symbol": "AVAX/USDT",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.7767,
+      "recomputed": 0,
+      "diff": 0.7767
+    },
+    {
+      "symbol": "0G/USD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6915,
+      "diff": 0.6415
+    },
+    {
+      "symbol": "0G/USD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.6339,
+      "recomputed": 0,
+      "diff": 0.6339
+    },
+    {
+      "symbol": "LTC/EUR",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7243,
+      "diff": 0.6743
+    },
+    {
+      "symbol": "LTC/EUR",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.778,
+      "recomputed": 0,
+      "diff": 0.778
+    },
+    {
+      "symbol": "RENDER/EUR",
+      "strategy": "sma_trend_ride",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6442,
+      "diff": 0.5942
+    },
+    {
+      "symbol": "RENDER/EUR",
+      "strategy": "sma_trend_ride",
+      "metric": "ngc",
+      "original": 0.6462,
+      "recomputed": 0,
+      "diff": 0.6462
+    },
+    {
+      "symbol": "TON/EUR",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7183,
+      "diff": 0.6683
+    },
+    {
+      "symbol": "TON/EUR",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.6708,
+      "recomputed": 0,
+      "diff": 0.6708
+    },
+    {
+      "symbol": "BNB/USDT",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6948,
+      "diff": 0.6448
+    },
+    {
+      "symbol": "BNB/USDT",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.8337,
+      "recomputed": 0,
+      "diff": 0.8337
+    },
+    {
+      "symbol": "LINK/USDC",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7303,
+      "diff": 0.6803
+    },
+    {
+      "symbol": "LINK/USDC",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.8106,
+      "recomputed": 0,
+      "diff": 0.8106
+    },
+    {
+      "symbol": "NEAR/EUR",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6894,
+      "diff": 0.6394
+    },
+    {
+      "symbol": "NEAR/EUR",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.6961,
+      "recomputed": 0,
+      "diff": 0.6961
+    },
+    {
+      "symbol": "AVAX/USD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.733,
+      "diff": 0.683
+    },
+    {
+      "symbol": "AVAX/USD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.7734,
+      "recomputed": 0,
+      "diff": 0.7734
+    },
+    {
+      "symbol": "XMR/USD",
+      "strategy": "range_trading",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6877,
+      "diff": 0.6377
+    },
+    {
+      "symbol": "XMR/USD",
+      "strategy": "range_trading",
+      "metric": "ngc",
+      "original": 0.721,
+      "recomputed": 0,
+      "diff": 0.721
+    },
+    {
+      "symbol": "XTZ/EUR",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7326,
+      "diff": 0.6826
+    },
+    {
+      "symbol": "XTZ/EUR",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.7459,
+      "recomputed": 0,
+      "diff": 0.7459
+    },
+    {
+      "symbol": "DASH/EUR",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7037,
+      "diff": 0.6537
+    },
+    {
+      "symbol": "DASH/EUR",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.5255,
+      "recomputed": 0,
+      "diff": 0.5255
+    },
+    {
+      "symbol": "CAKE/USD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6968,
+      "diff": 0.6468
+    },
+    {
+      "symbol": "CAKE/USD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.8153,
+      "recomputed": 0,
+      "diff": 0.8153
+    },
+    {
+      "symbol": "ADA/USD",
+      "strategy": "dhma",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6203,
+      "diff": 0.5703
+    },
+    {
+      "symbol": "ADA/USD",
+      "strategy": "dhma",
+      "metric": "ngc",
+      "original": 0.6121,
+      "recomputed": 0,
+      "diff": 0.6121
+    },
+    {
+      "symbol": "XRP/GBP",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7325,
+      "diff": 0.6825
+    },
+    {
+      "symbol": "XRP/GBP",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.8307,
+      "recomputed": 0,
+      "diff": 0.8307
+    },
+    {
+      "symbol": "DOT/USDT",
+      "strategy": "sma_trend_ride",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6746,
+      "diff": 0.6246
+    },
+    {
+      "symbol": "DOT/USDT",
+      "strategy": "sma_trend_ride",
+      "metric": "ngc",
+      "original": 0.6118,
+      "recomputed": 0,
+      "diff": 0.6118
+    },
+    {
+      "symbol": "QNT/EUR",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6945,
+      "diff": 0.6445
+    },
+    {
+      "symbol": "QNT/EUR",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.7263,
+      "recomputed": 0,
+      "diff": 0.7263
+    },
+    {
+      "symbol": "EURC/USD",
+      "strategy": "vwap_pullback",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6753,
+      "diff": 0.6253
+    },
+    {
+      "symbol": "EURC/USD",
+      "strategy": "vwap_pullback",
+      "metric": "ngc",
+      "original": 0.8594,
+      "recomputed": 0,
+      "diff": 0.8594
+    },
+    {
+      "symbol": "EIGEN/USD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7012,
+      "diff": 0.6512
+    },
+    {
+      "symbol": "EIGEN/USD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.8096,
+      "recomputed": 0,
+      "diff": 0.8096
+    },
+    {
+      "symbol": "XRP/USD",
+      "strategy": "dhma",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6495,
+      "diff": 0.5995
+    },
+    {
+      "symbol": "XRP/USD",
+      "strategy": "dhma",
+      "metric": "ngc",
+      "original": 0.9411,
+      "recomputed": 0,
+      "diff": 0.9411
+    },
+    {
+      "symbol": "ETHEURC",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6896,
+      "diff": 0.6396
+    },
+    {
+      "symbol": "ETHEURC",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.8664,
+      "recomputed": 0,
+      "diff": 0.8664
+    },
+    {
+      "symbol": "BCH/USDC",
+      "strategy": "vwap_pullback",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7007,
+      "diff": 0.6507
+    },
+    {
+      "symbol": "BCH/USDC",
+      "strategy": "vwap_pullback",
+      "metric": "ngc",
+      "original": 0.8166,
+      "recomputed": 0,
+      "diff": 0.8166
+    },
+    {
+      "symbol": "EGLD/USD",
+      "strategy": "sma_trend_ride",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6559,
+      "diff": 0.6059
+    },
+    {
+      "symbol": "EGLD/USD",
+      "strategy": "sma_trend_ride",
+      "metric": "ngc",
+      "original": 0.7136,
+      "recomputed": 0,
+      "diff": 0.7136
+    },
+    {
+      "symbol": "LINK/EUR",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7324,
+      "diff": 0.6824
+    },
+    {
+      "symbol": "LINK/EUR",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.8153,
+      "recomputed": 0,
+      "diff": 0.8153
+    },
+    {
+      "symbol": "EUR/JPY",
+      "strategy": "sma_trend_ride",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6678,
+      "diff": 0.6178
+    },
+    {
+      "symbol": "EUR/JPY",
+      "strategy": "sma_trend_ride",
+      "metric": "ngc",
+      "original": 0.8163,
+      "recomputed": 0,
+      "diff": 0.8163
+    },
+    {
+      "symbol": "XETCZ/USD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7256,
+      "diff": 0.6756
+    },
+    {
+      "symbol": "XETCZ/USD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.7422,
+      "recomputed": 0,
+      "diff": 0.7422
+    },
+    {
+      "symbol": "ONDO/USD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.695,
+      "diff": 0.645
+    },
+    {
+      "symbol": "ONDO/USD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.7515,
+      "recomputed": 0,
+      "diff": 0.7515
+    },
+    {
+      "symbol": "XTZ/EUR",
+      "strategy": "sma_trend_ride",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6637,
+      "diff": 0.6137
+    },
+    {
+      "symbol": "XTZ/EUR",
+      "strategy": "sma_trend_ride",
+      "metric": "ngc",
+      "original": 0.7345,
+      "recomputed": 0,
+      "diff": 0.7345
+    },
+    {
+      "symbol": "SOLUSD1",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7203,
+      "diff": 0.6703
+    },
+    {
+      "symbol": "SOLUSD1",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.912,
+      "recomputed": 0,
+      "diff": 0.912
+    },
+    {
+      "symbol": "AAVE/EUR",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6966,
+      "diff": 0.6466
+    },
+    {
+      "symbol": "AAVE/EUR",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.8236,
+      "recomputed": 0,
+      "diff": 0.8236
+    },
+    {
+      "symbol": "KSM/EUR",
+      "strategy": "sma_trend_ride",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6601,
+      "diff": 0.6101
+    },
+    {
+      "symbol": "KSM/EUR",
+      "strategy": "sma_trend_ride",
+      "metric": "ngc",
+      "original": 0.4949,
+      "recomputed": 0,
+      "diff": 0.4949
+    },
+    {
+      "symbol": "LTC/GBP",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7238,
+      "diff": 0.6738
+    },
+    {
+      "symbol": "LTC/GBP",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.7861,
+      "recomputed": 0,
+      "diff": 0.7861
+    },
+    {
+      "symbol": "LINK/USDC",
+      "strategy": "sma_trend_ride",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6611,
+      "diff": 0.6111
+    },
+    {
+      "symbol": "LINK/USDC",
+      "strategy": "sma_trend_ride",
+      "metric": "ngc",
+      "original": 0.7892,
+      "recomputed": 0,
+      "diff": 0.7892
+    },
+    {
+      "symbol": "DOT/EUR",
+      "strategy": "dhma",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6461,
+      "diff": 0.5961
+    },
+    {
+      "symbol": "DOT/EUR",
+      "strategy": "dhma",
+      "metric": "ngc",
+      "original": 0.6111,
+      "recomputed": 0,
+      "diff": 0.6111
+    },
+    {
+      "symbol": "AKT/USD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6938,
+      "diff": 0.6438
+    },
+    {
+      "symbol": "AKT/USD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.7829,
+      "recomputed": 0,
+      "diff": 0.7829
+    },
+    {
+      "symbol": "SOL/EUR",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7285,
+      "diff": 0.6785
+    },
+    {
+      "symbol": "SOL/EUR",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.8409,
+      "recomputed": 0,
+      "diff": 0.8409
+    },
+    {
+      "symbol": "RENDER/EUR",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6979,
+      "diff": 0.6479
+    },
+    {
+      "symbol": "RENDER/EUR",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.7279,
+      "recomputed": 0,
+      "diff": 0.7279
+    },
+    {
+      "symbol": "ENS/USD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6966,
+      "diff": 0.6466
+    },
+    {
+      "symbol": "ENS/USD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.7327,
+      "recomputed": 0,
+      "diff": 0.7327
+    },
+    {
+      "symbol": "TRUMP/USD",
+      "strategy": "liquidity_trap",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6302,
+      "diff": 0.5802
+    },
+    {
+      "symbol": "TRUMP/USD",
+      "strategy": "liquidity_trap",
+      "metric": "ngc",
+      "original": 0.8601,
+      "recomputed": 0,
+      "diff": 0.8601
+    },
+    {
+      "symbol": "XRP/USDC",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7297,
+      "diff": 0.6797
+    },
+    {
+      "symbol": "XRP/USDC",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.8368,
+      "recomputed": 0,
+      "diff": 0.8368
+    },
+    {
+      "symbol": "XRP/EUR",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7334,
+      "diff": 0.6834
+    },
+    {
+      "symbol": "XRP/EUR",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.8753,
+      "recomputed": 0,
+      "diff": 0.8753
+    },
+    {
+      "symbol": "ETH/USD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6874,
+      "diff": 0.6374
+    },
+    {
+      "symbol": "ETH/USD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.8555,
+      "recomputed": 0,
+      "diff": 0.8555
+    },
+    {
+      "symbol": "EIGEN/USD",
+      "strategy": "dhma",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.5981,
+      "diff": 0.5481
+    },
+    {
+      "symbol": "EIGEN/USD",
+      "strategy": "dhma",
+      "metric": "ngc",
+      "original": 0.6686,
+      "recomputed": 0,
+      "diff": 0.6686
+    },
+    {
+      "symbol": "DASH/USD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7046,
+      "diff": 0.6546
+    },
+    {
+      "symbol": "DASH/USD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.5171,
+      "recomputed": 0,
+      "diff": 0.5171
+    },
+    {
+      "symbol": "AERO/USD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7004,
+      "diff": 0.6504
+    },
+    {
+      "symbol": "AERO/USD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.7957,
+      "recomputed": 0,
+      "diff": 0.7957
+    },
+    {
+      "symbol": "USD1/USD",
+      "strategy": "vwap_pullback",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7659,
+      "diff": 0.7159
+    },
+    {
+      "symbol": "USD1/USD",
+      "strategy": "vwap_pullback",
+      "metric": "ngc",
+      "original": 0.9427,
+      "recomputed": 0,
+      "diff": 0.9427
+    },
+    {
+      "symbol": "XRP/USD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.732,
+      "diff": 0.682
+    },
+    {
+      "symbol": "XRP/USD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.8351,
+      "recomputed": 0,
+      "diff": 0.8351
+    },
+    {
+      "symbol": "DOT/USD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6907,
+      "diff": 0.6407
+    },
+    {
+      "symbol": "DOT/USD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.5602,
+      "recomputed": 0,
+      "diff": 0.5602
+    },
+    {
+      "symbol": "AVAX/USDT",
+      "strategy": "dhma",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.66,
+      "diff": 0.61
+    },
+    {
+      "symbol": "AVAX/USDT",
+      "strategy": "dhma",
+      "metric": "ngc",
+      "original": 0.8512,
+      "recomputed": 0,
+      "diff": 0.8512
+    },
+    {
+      "symbol": "AVAX/EUR",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7329,
+      "diff": 0.6829
+    },
+    {
+      "symbol": "AVAX/EUR",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.7749,
+      "recomputed": 0,
+      "diff": 0.7749
+    },
+    {
+      "symbol": "AVAX/USDC",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7362,
+      "diff": 0.6862
+    },
+    {
+      "symbol": "AVAX/USDC",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.8674,
+      "recomputed": 0,
+      "diff": 0.8674
+    },
+    {
+      "symbol": "ATOM/USDC",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7315,
+      "diff": 0.6815
+    },
+    {
+      "symbol": "ATOM/USDC",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.7954,
+      "recomputed": 0,
+      "diff": 0.7954
+    },
+    {
+      "symbol": "OP/USD",
+      "strategy": "dhma",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.595,
+      "diff": 0.545
+    },
+    {
+      "symbol": "OP/USD",
+      "strategy": "dhma",
+      "metric": "ngc",
+      "original": 0.6371,
+      "recomputed": 0,
+      "diff": 0.6371
+    },
+    {
+      "symbol": "ATOM/EUR",
+      "strategy": "sma_trend_ride",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6483,
+      "diff": 0.5983
+    },
+    {
+      "symbol": "ATOM/EUR",
+      "strategy": "sma_trend_ride",
+      "metric": "ngc",
+      "original": 0.7115,
+      "recomputed": 0,
+      "diff": 0.7115
+    },
+    {
+      "symbol": "APT/USD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6895,
+      "diff": 0.6395
+    },
+    {
+      "symbol": "APT/USD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.7961,
+      "recomputed": 0,
+      "diff": 0.7961
+    },
+    {
+      "symbol": "TRUMP/USD",
+      "strategy": "sma_trend_ride",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.672,
+      "diff": 0.622
+    },
+    {
+      "symbol": "TRUMP/USD",
+      "strategy": "sma_trend_ride",
+      "metric": "ngc",
+      "original": 0.8831,
+      "recomputed": 0,
+      "diff": 0.8831
+    },
+    {
+      "symbol": "XRP/GBP",
+      "strategy": "dhma",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6498,
+      "diff": 0.5998
+    },
+    {
+      "symbol": "XRP/GBP",
+      "strategy": "dhma",
+      "metric": "ngc",
+      "original": 0.8807,
+      "recomputed": 0,
+      "diff": 0.8807
+    },
+    {
+      "symbol": "XRP/AUD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7344,
+      "diff": 0.6844
+    },
+    {
+      "symbol": "XRP/AUD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.839,
+      "recomputed": 0,
+      "diff": 0.839
+    },
+    {
+      "symbol": "WIF/EUR",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6945,
+      "diff": 0.6445
+    },
+    {
+      "symbol": "WIF/EUR",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.8067,
+      "recomputed": 0,
+      "diff": 0.8067
+    },
+    {
+      "symbol": "ATOM/USD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6886,
+      "diff": 0.6386
+    },
+    {
+      "symbol": "ATOM/USD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.7747,
+      "recomputed": 0,
+      "diff": 0.7747
+    },
+    {
+      "symbol": "LINK/USDT",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7194,
+      "diff": 0.6694
+    },
+    {
+      "symbol": "LINK/USDT",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.8178,
+      "recomputed": 0,
+      "diff": 0.8178
+    },
+    {
+      "symbol": "ETHFI/USD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7308,
+      "diff": 0.6808
+    },
+    {
+      "symbol": "ETHFI/USD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.828,
+      "recomputed": 0,
+      "diff": 0.828
+    },
+    {
+      "symbol": "FORTH/USD",
+      "strategy": "sma_trend_ride",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6328,
+      "diff": 0.5828
+    },
+    {
+      "symbol": "FORTH/USD",
+      "strategy": "sma_trend_ride",
+      "metric": "ngc",
+      "original": 0.6743,
+      "recomputed": 0,
+      "diff": 0.6743
+    },
+    {
+      "symbol": "QNT/USD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6943,
+      "diff": 0.6443
+    },
+    {
+      "symbol": "QNT/USD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.7215,
+      "recomputed": 0,
+      "diff": 0.7215
+    },
+    {
+      "symbol": "LINK/USD",
+      "strategy": "sma_trend_ride",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6717,
+      "diff": 0.6217
+    },
+    {
+      "symbol": "LINK/USD",
+      "strategy": "sma_trend_ride",
+      "metric": "ngc",
+      "original": 0.8309,
+      "recomputed": 0,
+      "diff": 0.8309
+    },
+    {
+      "symbol": "ADA/USDC",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.694,
+      "diff": 0.644
+    },
+    {
+      "symbol": "ADA/USDC",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.6866,
+      "recomputed": 0,
+      "diff": 0.6866
+    },
+    {
+      "symbol": "XAUT/USDT",
+      "strategy": "sma_trend_ride",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6723,
+      "diff": 0.6223
+    },
+    {
+      "symbol": "XAUT/USDT",
+      "strategy": "sma_trend_ride",
+      "metric": "ngc",
+      "original": 0.9203,
+      "recomputed": 0,
+      "diff": 0.9203
+    },
+    {
+      "symbol": "QNT/USD",
+      "strategy": "sma_trend_ride",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6614,
+      "diff": 0.6114
+    },
+    {
+      "symbol": "QNT/USD",
+      "strategy": "sma_trend_ride",
+      "metric": "ngc",
+      "original": 0.7011,
+      "recomputed": 0,
+      "diff": 0.7011
+    },
+    {
+      "symbol": "BNB/USD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7014,
+      "diff": 0.6514
+    },
+    {
+      "symbol": "BNB/USD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.8311,
+      "recomputed": 0,
+      "diff": 0.8311
+    },
+    {
+      "symbol": "TRUMP/EUR",
+      "strategy": "liquidity_trap",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6258,
+      "diff": 0.5758
+    },
+    {
+      "symbol": "TRUMP/EUR",
+      "strategy": "liquidity_trap",
+      "metric": "ngc",
+      "original": 0.855,
+      "recomputed": 0,
+      "diff": 0.855
+    },
+    {
+      "symbol": "HNT/USD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7022,
+      "diff": 0.6522
+    },
+    {
+      "symbol": "HNT/USD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.3121,
+      "recomputed": 0,
+      "diff": 0.3121
+    },
+    {
+      "symbol": "BCH/USD",
+      "strategy": "vwap_pullback",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6783,
+      "diff": 0.6283
+    },
+    {
+      "symbol": "BCH/USD",
+      "strategy": "vwap_pullback",
+      "metric": "ngc",
+      "original": 0.7668,
+      "recomputed": 0,
+      "diff": 0.7668
+    },
+    {
+      "symbol": "ETH/GBP",
+      "strategy": "sma_trend_ride",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6726,
+      "diff": 0.6226
+    },
+    {
+      "symbol": "ETH/GBP",
+      "strategy": "sma_trend_ride",
+      "metric": "ngc",
+      "original": 0.838,
+      "recomputed": 0,
+      "diff": 0.838
+    },
+    {
+      "symbol": "COMP/USD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.701,
+      "diff": 0.651
+    },
+    {
+      "symbol": "COMP/USD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.8161,
+      "recomputed": 0,
+      "diff": 0.8161
+    },
+    {
+      "symbol": "LTC/USDC",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7231,
+      "diff": 0.6731
+    },
+    {
+      "symbol": "LTC/USDC",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.7786,
+      "recomputed": 0,
+      "diff": 0.7786
+    },
+    {
+      "symbol": "SUI/USD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.727,
+      "diff": 0.677
+    },
+    {
+      "symbol": "SUI/USD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.7807,
+      "recomputed": 0,
+      "diff": 0.7807
+    },
+    {
+      "symbol": "LINK/EUR",
+      "strategy": "sma_trend_ride",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.672,
+      "diff": 0.622
+    },
+    {
+      "symbol": "LINK/EUR",
+      "strategy": "sma_trend_ride",
+      "metric": "ngc",
+      "original": 0.833,
+      "recomputed": 0,
+      "diff": 0.833
+    },
+    {
+      "symbol": "XMR/USDT",
+      "strategy": "vwap_pullback",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6742,
+      "diff": 0.6242
+    },
+    {
+      "symbol": "XMR/USDT",
+      "strategy": "vwap_pullback",
+      "metric": "ngc",
+      "original": 0.6653,
+      "recomputed": 0,
+      "diff": 0.6653
+    },
+    {
+      "symbol": "KSM/EUR",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7334,
+      "diff": 0.6834
+    },
+    {
+      "symbol": "KSM/EUR",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.5198,
+      "recomputed": 0,
+      "diff": 0.5198
+    },
+    {
+      "symbol": "RENDER/USD",
+      "strategy": "sma_trend_ride",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6638,
+      "diff": 0.6138
+    },
+    {
+      "symbol": "RENDER/USD",
+      "strategy": "sma_trend_ride",
+      "metric": "ngc",
+      "original": 0.6988,
+      "recomputed": 0,
+      "diff": 0.6988
+    },
+    {
+      "symbol": "AAVE/USD",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6967,
+      "diff": 0.6467
+    },
+    {
+      "symbol": "AAVE/USD",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.8207,
+      "recomputed": 0,
+      "diff": 0.8207
+    },
+    {
+      "symbol": "TRUMP/EUR",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7063,
+      "diff": 0.6563
+    },
+    {
+      "symbol": "TRUMP/EUR",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.8766,
+      "recomputed": 0,
+      "diff": 0.8766
+    },
+    {
+      "symbol": "ICP/EUR",
+      "strategy": "sma_trend_ride",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.6712,
+      "diff": 0.6212
+    },
+    {
+      "symbol": "ICP/EUR",
+      "strategy": "sma_trend_ride",
+      "metric": "ngc",
+      "original": 0.8174,
+      "recomputed": 0,
+      "diff": 0.8174
+    },
+    {
+      "symbol": "ETH/USDT",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.689,
+      "diff": 0.639
+    },
+    {
+      "symbol": "ETH/USDT",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.8545,
+      "recomputed": 0,
+      "diff": 0.8545
+    },
+    {
+      "symbol": "ETH/GBP",
+      "strategy": "mean_reversion",
+      "metric": "cwqi",
+      "original": 0.05,
+      "recomputed": 0.7112,
+      "diff": 0.6612
+    },
+    {
+      "symbol": "ETH/GBP",
+      "strategy": "mean_reversion",
+      "metric": "ngc",
+      "original": 0.8182,
+      "recomputed": 0,
+      "diff": 0.8182
+    }
+  ],
+  "summary": {
+    "total": 191,
+    "metricsChecked": 573,
+    "mismatches": 200,
+    "mismatchRate": "34.90%",
+    "ok": false,
+    "byMetric": {
+      "cwqi": 100,
+      "ngc": 100
+    },
+    "byStrategy": {
+      "mean_reversion": 120,
+      "sma_trend_ride": 42,
+      "dhma": 16,
+      "range_trading": 4,
+      "vwap_pullback": 12,
+      "vwap_bounce": 2,
+      "liquidity_trap": 4
+    }
+  }
+}

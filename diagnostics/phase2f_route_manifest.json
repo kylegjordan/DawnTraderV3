@@ -6696,6 +6696,33 @@
     ]
   },
   {
+    "path": "/api/signal-audit/run",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/signal-audit/reports",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/signal-audit/latest",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api*",
     "methods": [],
     "middlewares": [
