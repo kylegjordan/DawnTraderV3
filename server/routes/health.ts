@@ -24,6 +24,7 @@ import { getMACOCoordinator } from '../services/maco-coordinator.js';
 import { getExplorationManager } from '../services/exploration-manager.js';
 import { getPolicyConsensusEngine } from '../services/policy-consensus.js';
 import { getDecisionConfidenceEngine } from '../services/decision-confidence-engine.js';
+import { getAPRSLEEngine } from '../services/apr-sle-engine.js';
 
 export const healthRouter = Router();
 
@@ -421,6 +422,7 @@ healthRouter.get('/', async (req, res) => {
       reinforcementEngine: await getReinforcementEngineHealth(),
       maco: getMACOHealth(),
       decisionConfidence: getDCEHealth(),
+      apr_sle: getAPRSLEHealth(),
       issues: status.issues,
       timestamp: new Date().toISOString(),
     });
@@ -575,7 +577,7 @@ function getDCEHealth() {
         status.weights.macoConsensus
       ],
       top_signal: topSignal ? `${topSignal.symbol}_${topSignal.strategy}` : null,
-      liquidity_trap_agent: 'ACTIVE',
+      liquidity_trap_agent: status.isRunning ? 'ACTIVE' : 'INACTIVE',
       recalibration_count: status.recalibrationCount,
       last_recalibration: status.lastRecalibration,
       is_running: status.isRunning
@@ -588,6 +590,35 @@ function getDCEHealth() {
       top_signal: null,
       liquidity_trap_agent: 'UNKNOWN',
       error: 'DCE unavailable'
+    };
+  }
+}
+
+function getAPRSLEHealth() {
+  try {
+    const engine = getAPRSLEEngine();
+    const status = engine.getStatus();
+
+    return {
+      status: status.isRunning ? 'active' : 'inactive',
+      mean_DI: status.meanDI,
+      avg_tp_adj: `${status.avgTPAdjPct >= 0 ? '+' : ''}${status.avgTPAdjPct.toFixed(1)}%`,
+      avg_sl_adj: `${status.avgSLAdjPct >= 0 ? '+' : ''}${status.avgSLAdjPct.toFixed(1)}%`,
+      vol_comp: status.volCompensation,
+      current_regime: status.currentRegime,
+      di_slope: status.avgDISlope,
+      last_recalibration: status.lastRecalibration,
+      sample_count: status.sampleCount
+    };
+  } catch (e) {
+    console.log('[L17][HEALTH] Failed to get APR-SLE status');
+    return {
+      status: 'unknown',
+      mean_DI: 0.5,
+      avg_tp_adj: '+0.0%',
+      avg_sl_adj: '+0.0%',
+      vol_comp: 1.0,
+      error: 'APR-SLE unavailable'
     };
   }
 }

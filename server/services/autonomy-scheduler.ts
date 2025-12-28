@@ -22,6 +22,7 @@ import { getMACOCoordinator, initMACOCoordinator } from './maco-coordinator'; //
 import { getExplorationManager, initExplorationManager } from './exploration-manager'; // L15
 import { getPolicyConsensusEngine, initPolicyConsensusEngine } from './policy-consensus'; // L15
 import { getDecisionConfidenceEngine, initDecisionConfidenceEngine } from './decision-confidence-engine'; // L16
+import { getAPRSLEEngine, initAPRSLEEngine } from './apr-sle-engine'; // L17
 import { db } from '../db';
 import { users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
@@ -56,10 +57,37 @@ console.log('[L15][SCHEDULER] MACO Coordinator, Exploration Manager, and Policy 
 const decisionConfidenceEngine = initDecisionConfidenceEngine();
 console.log('[L16][SCHEDULER] Decision Confidence Engine started (9 agents incl. Liquidity Trap)');
 
+const aprSleEngine = initAPRSLEEngine();
+console.log('[L17][SCHEDULER] APR-SLE Engine started (Adaptive Profit Realization & Stop-Loss Evolution)');
+
 /**
  * Phase 8.9: Autonomy Layer Scheduler
  * Registers autonomous self-check and optimization tasks
  */
+
+// L17: APR-SLE recalibration every 12 hours
+schedulerRegistry.registerTask({
+  name: 'apr_sle_recalibration',
+  description: 'L17: APR-SLE adaptive parameter recalibration',
+  frequency: 'custom',
+  intervalMs: 12 * 60 * 60 * 1000, // 12 hours
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[L17][SCHEDULER] 📊 Running APR-SLE recalibration...');
+    
+    try {
+      const aprSle = getAPRSLEEngine();
+      const result = await aprSle.recalibrate();
+      
+      console.log(`[L17][SCHEDULER] ✅ APR-SLE recalibrated: α=${result.newAlpha.toFixed(3)}, β=${result.newBeta.toFixed(3)} (samples: ${result.samplesUsed})`);
+    } catch (error) {
+      console.error('[L17][SCHEDULER] ❌ APR-SLE recalibration failed:', error);
+      throw error;
+    }
+  },
+});
 
 // Hourly self-check task
 schedulerRegistry.registerTask({

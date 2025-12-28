@@ -21999,6 +21999,11 @@ Important: Extract the exact field names and numeric values from the user's requ
   apiRouter.use('/dce', dceRouter.default);
   console.log('[L16] DCE routes mounted at /api/dce');
 
+  // Directive 8.8.4-L17: Mount APR-SLE (Adaptive Profit Realization & Stop-Loss Evolution) routes
+  const aprSleRouter = await import('./routes/apr-sle.js');
+  apiRouter.use('/apr-sle', aprSleRouter.default);
+  console.log('[L17] APR-SLE routes mounted at /api/apr-sle');
+
   // Catch-all handler for unmatched /api/* routes
   // This prevents requests from falling through to Vite's HTML handler
   // and ensures all API routes return JSON (even 404s)

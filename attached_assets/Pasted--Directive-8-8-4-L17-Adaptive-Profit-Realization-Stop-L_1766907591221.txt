@@ -1,0 +1,227 @@
+⚙️ Directive 8.8.4-L17 — Adaptive Profit Realization & Stop-Loss Evolution (APR-SLE)
+
+Phase: L-Series Advanced Execution Layer
+Predecessor: L16 (Decision Confidence Engine + Liquidity Trap Agent)
+Auth (for testing):
+username: testuser123
+password: SecurePass123!
+
+1 | Purpose
+
+Directive L17 adds dynamic, intelligent trade exit optimization.
+It enables the system to adapt profit-taking and stop-loss thresholds in real time based on the Decision Index, volatility conditions, and regime-specific confidence levels.
+
+This module closes the intelligence feedback loop — linking predictive learning, regime awareness, and execution discipline.
+
+2 | Core Components
+Component	File	Description
+APR-SLE Engine	server/services/apr-sle-engine.ts	Calculates adaptive TP/SL levels using DI momentum, volatility, and regime context.
+Execution Interface	server/services/execution-optimizer.ts	Integrates APR-SLE output into trade orchestration before orders are placed.
+Backend API Routes	server/routes/apr-sle.ts	Exposes metrics, recalibration triggers, and policy state.
+Health Extension	server/routes/health.ts	Adds APR-SLE diagnostic section for transparency.
+UI Integration	client/src/components/goals/adaptive-risk-advisor.tsx	Adds new “Adaptive Execution” card under the DCE section.
+3 | Calculation Model
+3.1 Adaptive Take-Profit (TP) and Stop-Loss (SL)
+
+Base levels are dynamically adjusted using the Decision Index (DI) and volatility σ:
+
+𝑇
+𝑃
+=
+𝑇
+𝑃
+𝑏
+𝑎
+𝑠
+𝑒
+×
+[
+1
++
+𝛼
+(
+𝐷
+𝐼
+−
+0.5
+)
+]
+TP=TP
+base
+	​
+
+×[1+α(DI−0.5)]
+𝑆
+𝐿
+=
+𝑆
+𝐿
+𝑏
+𝑎
+𝑠
+𝑒
+×
+[
+1
+−
+𝛽
+(
+𝐷
+𝐼
+−
+0.5
+)
+]
+SL=SL
+base
+	​
+
+×[1−β(DI−0.5)]
+Parameter	Default	Description
+α	0.6	Multiplier sensitivity for take-profit widening
+β	0.4	Multiplier sensitivity for stop-loss tightening
+TP₍base₎	1.5× risk	Standard baseline
+SL₍base₎	1.0× risk	Standard baseline
+3.2 Volatility Compensation
+𝑎
+𝑑
+𝑗
+𝑣
+𝑜
+𝑙
+=
+𝑐
+𝑙
+𝑎
+𝑚
+𝑝
+(
+1
+−
+(
+𝜎
+/
+𝜎
+𝑏
+𝑎
+𝑠
+𝑒
+𝑙
+𝑖
+𝑛
+𝑒
+)
+×
+0.5
+,
+0.7
+,
+1.2
+)
+adj
+vol
+	​
+
+=clamp(1−(σ/σ
+baseline
+	​
+
+)×0.5,0.7,1.2)
+
+Both TP and SL are multiplied by adj_vol to avoid overly tight exits during turbulence.
+
+3.3 Regime-Based Overrides
+Regime	TP Mult	SL Mult	Notes
+T1 (Trending Bull)	+15 %	−10 %	Allow winners to run longer
+T2 (Trending Bear)	+10 %	+10 %	Use symmetric, faster exits
+R1 (Range-Bound)	0 %	0 %	Standard neutral
+V1 (High Volatility)	−20 %	+25 %	Tighten all exits
+C1 (Calm Consolidation)	+10 %	−5 %	Light bias toward patience
+4 | Dynamic Re-Optimization Logic
+
+Executed at each signal evaluation and order refresh:
+
+if (ΔDI > 0.1 && trendStable)
+    widenTP()
+else if (ΔDI < -0.1 || driftDetected)
+    tightenSL()
+
+
+The APR-SLE maintains rolling averages of DI slope (ΔDI) to capture momentum.
+
+5 | Integration Points
+
+Signal Orchestrator
+
+Injects adaptive TP/SL from APR-SLE before trade creation.
+
+Logs [L17][APR] Applied TP=…, SL=…, DI=…, σ=…, regime=….
+
+Virtual Trade Simulator (VTS)
+
+Simulates dynamic exits for model calibration.
+
+Adaptive Risk Advisor UI
+
+New “Adaptive Execution” card showing:
+
+Active regime
+
+Avg DI slope
+
+Mean TP/SL adjustment percentages
+
+Current volatility compensation factor
+
+Buttons: “Recalibrate APR” and “Reset to Baseline”
+
+6 | API Endpoints
+Endpoint	Description	Auth
+/api/apr-sle/status	Returns current parameters, DI slope, active regime	✅
+/api/apr-sle/recalibrate	Triggers recalibration using last 500 closed trades	✅
+/api/apr-sle/preview	Shows how TP/SL would adjust for a sample trade	✅
+/api/apr-sle/reset	Resets parameters to baseline defaults	✅
+7 | Scheduler & Health Integration
+
+📁 Autonomy Scheduler
+
+Add APR-SLE recalibration every 12 hours.
+📁 Health Endpoint Example Output
+
+"apr_sle": {
+  "status": "active",
+  "mean_DI": 0.71,
+  "avg_tp_adj": "+9.4%",
+  "avg_sl_adj": "-6.3%",
+  "vol_comp": 0.94,
+  "last_recalibration": "2025-12-22T14:00Z"
+}
+
+8 | Expected Outcomes
+Metric	Target
+Mean trade efficiency (net gain per risk unit)	+12 %
+Stop-out rate reduction	−18 %
+Avg profit per trade	+10–15 %
+Drawdown volatility	−8 %
+DI-P/L correlation	≥ 0.80
+9 | Verification Checklist
+
+Confirm [L17][APR] logs on each executed trade.
+
+Confirm /api/apr-sle/status returns dynamic TP/SL adjustments.
+
+Verify Adaptive Execution card appears in Goals → ARA.
+
+Ensure recalibration endpoint updates α, β values.
+
+Validate VTS simulation matches new TP/SL logic.
+
+Monitor CPU (< 6 %) and latency (< 15 ms added).
+
+10 | Summary
+Field	Value
+Directive ID	8.8.4-L17
+Title	Adaptive Profit Realization & Stop-Loss Evolution (APR-SLE)
+Purpose	Dynamically optimize exit logic based on DI momentum, regime confidence, and volatility
+Outcome	Smarter, context-aware trade exits with tighter risk control and improved efficiency
+Auth	testuser123 / SecurePass123!

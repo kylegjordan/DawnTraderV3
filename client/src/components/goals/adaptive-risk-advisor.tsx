@@ -142,6 +142,26 @@ interface DCEStatus {
   isRunning: boolean;
 }
 
+interface APRSLEStatus {
+  ok: boolean;
+  status: 'active' | 'inactive';
+  mean_DI: number;
+  avg_tp_adj: string;
+  avg_sl_adj: string;
+  vol_comp: number;
+  current_regime: string;
+  di_slope: number;
+  config: {
+    alpha: number;
+    beta: number;
+    tpBase: number;
+    slBase: number;
+  };
+  last_recalibration: string | null;
+  recalibration_count: number;
+  sample_count: number;
+}
+
 interface MarketRegime {
   regime: 'T1' | 'T2' | 'R1' | 'V1' | 'C1';
   description: string;
@@ -252,6 +272,11 @@ export default function AdaptiveRiskAdvisor() {
 
   const { data: dceStatus } = useQuery<DCEStatus>({
     queryKey: ['/api/dce/status'],
+    refetchInterval: 60000,
+  });
+
+  const { data: aprSleStatus } = useQuery<APRSLEStatus>({
+    queryKey: ['/api/apr-sle/status'],
     refetchInterval: 60000,
   });
 
@@ -1075,6 +1100,67 @@ export default function AdaptiveRiskAdvisor() {
               {dceStatus.lastRecalibration && (
                 <div className="text-xs text-muted-foreground">
                   Last recalibration: {new Date(dceStatus.lastRecalibration).toLocaleString()}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {aprSleStatus && aprSleStatus.ok && (
+          <>
+            <Separator />
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">Adaptive Execution</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Info className="w-3.5 h-3.5 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>APR-SLE Engine (L17) - Dynamically adjusts Take Profit and Stop Loss levels based on Decision Index momentum, volatility conditions, and regime-specific confidence.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <Badge className={`gap-1 ${aprSleStatus.status === 'active' ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400' : 'bg-gray-100 text-gray-700'}`}>
+                  {aprSleStatus.status.toUpperCase()}
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div>
+                  <div className="text-muted-foreground">TP Adjustment</div>
+                  <div className={`font-semibold ${aprSleStatus.avg_tp_adj.startsWith('+') ? 'text-green-600' : 'text-red-600'}`}>
+                    {aprSleStatus.avg_tp_adj}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">SL Adjustment</div>
+                  <div className={`font-semibold ${aprSleStatus.avg_sl_adj.startsWith('+') ? 'text-green-600' : aprSleStatus.avg_sl_adj.startsWith('-') ? 'text-amber-600' : 'text-gray-600'}`}>
+                    {aprSleStatus.avg_sl_adj}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Vol Comp</div>
+                  <div className="font-semibold">{(aprSleStatus.vol_comp * 100).toFixed(0)}%</div>
+                </div>
+              </div>
+
+              <div className="text-xs text-muted-foreground">
+                <div className="font-medium mb-1">Parameters:</div>
+                <div className="flex flex-wrap gap-2">
+                  <span>α: {aprSleStatus.config?.alpha?.toFixed(2) || '0.60'}</span>
+                  <span>β: {aprSleStatus.config?.beta?.toFixed(2) || '0.40'}</span>
+                  <span>DI Slope: {(aprSleStatus.di_slope * 100).toFixed(2)}%</span>
+                  <span>Regime: {aprSleStatus.current_regime}</span>
+                </div>
+              </div>
+
+              {aprSleStatus.last_recalibration && (
+                <div className="text-xs text-muted-foreground">
+                  Last recalibration: {new Date(aprSleStatus.last_recalibration).toLocaleString()} ({aprSleStatus.sample_count} samples)
                 </div>
               )}
             </div>
