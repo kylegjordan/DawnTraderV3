@@ -45,7 +45,65 @@ interface RollingDataPoint {
 
 const ROLLING_WINDOW_SIZE = 500;
 const ROLLING_WINDOW_MINUTES = 60;
-const SMOOTHING_ALPHA = 0.15;
+
+/**
+ * M3B: Adaptive relevance interface - replaces static SMOOTHING_ALPHA
+ * Values are sourced from VTS learning parameters in real-time
+ */
+interface AdaptiveRelevanceParams {
+  relevance: number;       // Replaces SMOOTHING_ALPHA
+  learningRate: number;    // From VTS
+  gsi: number;             // Global Stability Index
+  lastUpdate: string;
+}
+
+// M3B: Default fallback when VTS is not available
+let adaptiveRelevance: AdaptiveRelevanceParams = {
+  relevance: 0.15,         // Legacy SMOOTHING_ALPHA value as fallback
+  learningRate: 0.15,
+  gsi: 0.5,
+  lastUpdate: new Date().toISOString()
+};
+
+/**
+ * M3B: Update adaptive relevance from VTS learning parameters
+ * Called by VTS service when learning parameters change
+ * 
+ * Formula (per directive 8.8.4-M3B):
+ *   relevance = learningRate * (gsi + 0.15)
+ */
+export function updateAdaptiveRelevance(params: {
+  learningRate: number;
+  gsi: number;
+}): void {
+  const oldRelevance = adaptiveRelevance.relevance;
+  
+  // M3B: Compute relevance using the mandated formula
+  const computedRelevance = params.learningRate * (params.gsi + 0.15);
+  
+  // Clamp relevance to reasonable bounds [0.05, 0.50]
+  const clampedRelevance = Math.max(0.05, Math.min(0.50, computedRelevance));
+  
+  adaptiveRelevance = {
+    relevance: clampedRelevance,
+    learningRate: params.learningRate,
+    gsi: params.gsi,
+    lastUpdate: new Date().toISOString()
+  };
+  
+  // Log significant changes
+  const delta = Math.abs(clampedRelevance - oldRelevance);
+  if (delta > 0.02) {
+    console.log(`[M3B][ADAPTIVE_RELEVANCE] Computed: relevance=${clampedRelevance.toFixed(4)} = ${params.learningRate.toFixed(4)} * (${params.gsi.toFixed(4)} + 0.15) (Δ${(delta * 100).toFixed(1)}%)`);
+  }
+}
+
+/**
+ * M3B: Get current adaptive relevance parameters
+ */
+export function getAdaptiveRelevance(): AdaptiveRelevanceParams {
+  return { ...adaptiveRelevance };
+}
 
 class RollingNormalizer {
   private name: string;
@@ -80,8 +138,10 @@ class RollingNormalizer {
         this.smoothedMax = rawMax;
         this.initialized = true;
       } else {
-        this.smoothedMin = SMOOTHING_ALPHA * rawMin + (1 - SMOOTHING_ALPHA) * this.smoothedMin;
-        this.smoothedMax = SMOOTHING_ALPHA * rawMax + (1 - SMOOTHING_ALPHA) * this.smoothedMax;
+        // M3B: Use adaptive relevance from VTS instead of static SMOOTHING_ALPHA
+        const alpha = adaptiveRelevance.relevance;
+        this.smoothedMin = alpha * rawMin + (1 - alpha) * this.smoothedMin;
+        this.smoothedMax = alpha * rawMax + (1 - alpha) * this.smoothedMax;
       }
     }
   }

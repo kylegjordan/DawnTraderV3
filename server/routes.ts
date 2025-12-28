@@ -22034,6 +22034,11 @@ Important: Extract the exact field names and numeric values from the user's requ
   apiRouter.use('/tlva', tlvaRouter.default);
   console.log('[M3A] TLVA routes mounted at /api/tlva');
 
+  // Directive 8.8.4-M3B: Mount M3B (Live Validation & Adaptive Coupling Audit) routes
+  const m3bRouter = await import('./routes/m3b.js');
+  apiRouter.use('/m3b', m3bRouter.default);
+  console.log('[M3B] Live Validation & Adaptive Coupling routes mounted at /api/m3b');
+
   // Catch-all handler for unmatched /api/* routes
   // This prevents requests from falling through to Vite's HTML handler
   // and ensures all API routes return JSON (even 404s)

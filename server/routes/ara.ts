@@ -4,6 +4,8 @@ import { loadCalibration, loadFullCalibration, loadStrategyCalibration, applyCal
 import { getWeight as getStrategyWeight, computeStrategyWeights } from '../utils/strategyWeights.js';
 import { getExposureMultiplier, computeExposureBias } from '../utils/strategyBias.js';
 import { trainingAuditService } from '../services/training-audit-service';
+import { vtsService, type VTSLearningParams } from '../services/vts-service';
+import { getDecisionConfidenceEngine } from '../services/decision-confidence-engine';
 
 const router = Router();
 
@@ -117,33 +119,53 @@ async function getMLPredictions(portfolioValue: number, riskPerTrade: number): P
   return { profit: 0.05, confidence: 0.5 };
 }
 
-async function generateSuggestions(mode: string): Promise<ARASuggestion> {
-  const now = Date.now();
-  if (cachedSuggestions[mode] && now - lastSuggestionUpdate < 60000) {
-    return cachedSuggestions[mode];
-  }
-
-  const baseSuggestion: ARASuggestion = mode === 'live' 
-    ? { suggestedRisk: 1.5, suggestedExposure: 15, rationale: 'Conservative for live trading' }
-    : { suggestedRisk: 2.5, suggestedExposure: 25, rationale: 'Moderate risk for paper trading' };
-
-  try {
-    const response = await fetch(`${mlServiceHost}/metrics`);
-    if (response.ok) {
-      const metrics = await response.json();
-      if (metrics.prediction_count > 100) {
-        baseSuggestion.suggestedRisk = mode === 'live' ? 2.0 : 3.0;
-        baseSuggestion.suggestedExposure = mode === 'live' ? 20 : 30;
-        baseSuggestion.rationale = 'Optimized based on ML model performance';
-      }
-    }
-  } catch (error) {
-  }
-
-  cachedSuggestions[mode] = baseSuggestion;
-  lastSuggestionUpdate = now;
+/**
+ * M3B: Generate adaptive suggestions using VTS + DCE live learning outputs
+ * Replaces static risk/exposure with dynamically derived values
+ * 
+ * Formulas (per directive 8.8.4-M3B):
+ *   riskPerTrade = baseRisk + (learningRate * 5)
+ *   maxExposure = baseExposure + (volatilityIndex * 40)
+ */
+async function generateSuggestions(mode: string): Promise<ARASuggestion & { source: string; lastAdaptiveUpdate: string; formulas: { riskFormula: string; exposureFormula: string } }> {
+  // M3B: Get VTS learning parameters
+  const vtsParams = vtsService.getLearningParams();
   
-  return baseSuggestion;
+  // M3B: Get DCE context stability
+  const dce = getDecisionConfidenceEngine();
+  const dceContext = dce.getContextStability();
+  
+  // M3B: Derive risk from VTS learningRate
+  // Formula: riskPerTrade = baseRisk + (learningRate * 5)
+  const baseRisk = mode === 'live' ? 1.5 : 2.5;
+  const riskAdjustment = vtsParams.learningRate * 5;
+  const suggestedRisk = baseRisk + riskAdjustment;
+  
+  // M3B: Derive exposure from DCE volatilityIndex
+  // Formula: maxExposure = baseExposure + (volatilityIndex * 40)
+  const baseExposure = mode === 'live' ? 15 : 25;
+  const exposureAdjustment = dceContext.volatilityIndex * 40;
+  const suggestedExposure = baseExposure + exposureAdjustment;
+  
+  // Clamp to reasonable ranges
+  const clampedRisk = Math.round(Math.max(1.0, Math.min(5.0, suggestedRisk)) * 100) / 100;
+  const clampedExposure = Math.round(Math.max(10, Math.min(50, suggestedExposure)) * 100) / 100;
+  
+  const suggestion = {
+    suggestedRisk: clampedRisk,
+    suggestedExposure: clampedExposure,
+    rationale: `VTS-DCE Adaptive: risk=${baseRisk}+${riskAdjustment.toFixed(2)}, exposure=${baseExposure}+${exposureAdjustment.toFixed(2)}`,
+    source: 'VTS-DCE Adaptive Model',
+    lastAdaptiveUpdate: vtsParams.lastAdaptiveUpdate,
+    formulas: {
+      riskFormula: `${baseRisk} + (${vtsParams.learningRate.toFixed(4)} * 5) = ${suggestedRisk.toFixed(2)}`,
+      exposureFormula: `${baseExposure} + (${dceContext.volatilityIndex.toFixed(4)} * 40) = ${suggestedExposure.toFixed(2)}`
+    }
+  };
+  
+  console.log(`[M3B][ARA] Adaptive: risk=${clampedRisk}% (LR=${vtsParams.learningRate.toFixed(3)}), exposure=${clampedExposure}% (VI=${dceContext.volatilityIndex.toFixed(3)})`);
+  
+  return suggestion;
 }
 
 router.get('/calculate', requireAuth, async (req: Request, res: Response) => {

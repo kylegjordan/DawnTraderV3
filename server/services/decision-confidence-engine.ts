@@ -242,6 +242,59 @@ class DecisionConfidenceEngine extends EventEmitter {
     };
   }
 
+  /**
+   * M3B: Get context stability metrics for adaptive coupling
+   */
+  getContextStability(): {
+    contextStability: number;
+    volatilityIndex: number;
+    weightEntropy: number;
+    metaWeightScore: number;
+    lastUpdate: string;
+  } {
+    // Compute weight entropy (how evenly distributed the weights are)
+    // Higher entropy = more balanced = more stable
+    const w = this.state.weights;
+    const weights = [w.cwqi, w.ngc, w.mlConfidence, w.regimeConfidence, w.macoConsensus];
+    const total = weights.reduce((a, b) => a + b, 0);
+    const normalizedWeights = weights.map(x => x / total);
+    const entropy = -normalizedWeights
+      .filter(p => p > 0)
+      .reduce((sum, p) => sum + p * Math.log(p), 0);
+    const maxEntropy = Math.log(5); // log(n) for n weights
+    const weightEntropy = entropy / maxEntropy;
+    
+    // Context stability based on DI consistency
+    const diValues = this.state.topSignals.map(s => s.decisionIndex);
+    let diStability = 0.7; // default
+    if (diValues.length >= 3) {
+      const mean = diValues.reduce((a, b) => a + b, 0) / diValues.length;
+      const variance = diValues.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / diValues.length;
+      const stdDev = Math.sqrt(variance);
+      // Lower std dev = higher stability
+      diStability = Math.max(0.3, Math.min(0.95, 1 - stdDev * 2));
+    }
+    
+    // Volatility index from DI variance
+    const volatilityIndex = diValues.length >= 3 
+      ? Math.min(1, Math.sqrt(diValues.reduce((sum, v) => sum + Math.pow(v - this.state.meanDI, 2), 0) / diValues.length) * 3)
+      : 0.3;
+    
+    // Meta weight score: combination of entropy and stability
+    const metaWeightScore = (weightEntropy * 0.4) + (diStability * 0.6);
+    
+    // Context stability: overall measure
+    const contextStability = (diStability * 0.5) + (weightEntropy * 0.3) + ((1 - volatilityIndex) * 0.2);
+    
+    return {
+      contextStability: Math.round(contextStability * 10000) / 10000,
+      volatilityIndex: Math.round(volatilityIndex * 10000) / 10000,
+      weightEntropy: Math.round(weightEntropy * 10000) / 10000,
+      metaWeightScore: Math.round(metaWeightScore * 10000) / 10000,
+      lastUpdate: new Date().toISOString()
+    };
+  }
+
   getWeights(): DCEWeights {
     return { ...this.state.weights };
   }

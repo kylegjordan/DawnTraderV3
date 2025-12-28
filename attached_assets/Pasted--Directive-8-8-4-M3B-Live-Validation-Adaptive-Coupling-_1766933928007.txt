@@ -1,0 +1,147 @@
+⚙️ Directive 8.8.4-M3B — Live Validation & Adaptive Coupling Audit
+Purpose
+
+Finalize the L-series audit by connecting the Adaptive Risk Advisor (ARA) and the CWQI/NGC systems to the new live learning architecture (VTS + DCE).
+Remove legacy static decay factors and verify that risk/exposure metrics adapt dynamically during live trading.
+
+🧩 Step 1 — Stop Trading & Prepare Environment
+
+Stop any running paper-trading sessions.
+
+Backup current /data/aggregate_performance.json and /models/ directories.
+
+Confirm TLVA logs and reports are archived.
+
+🧩 Step 2 — Remove Static Decay (DK) Factors
+
+Files:
+
+core/metrics/cwqi_engine.ts
+
+core/metrics/ngc_engine.ts
+
+core/risk/adaptive_risk_engine.ts
+
+Actions:
+
+Replace any dk, decay, or smoothing constants in weighting formulas with adaptive relevance coefficients from VTS outputs.
+Example:
+
+// Before:
+cwqi = base * (1 - dk) + profitFactor * dk;
+
+// After:
+cwqi = base * (1 - relevance) + profitFactor * relevance;
+relevance = vts.learningRate * (vts.gsi + 0.15);
+
+
+Remove legacy decay variables and ensure no residual normalization calls reference dk.
+
+Validate that CWQI and NGC now pull real-time learning signals:
+
+vts.learningRate
+
+dce.contextStability
+
+mof.metaWeightScore
+
+🧩 Step 3 — Link Adaptive Risk Advisor (ARA) to Live Learning Outputs
+
+Files:
+
+services/ara_service.ts
+
+services/vts_service.ts
+
+Changes:
+
+Modify ARA’s update function to derive values from VTS learning parameters:
+
+riskPerTrade = 0.015 + (vts.learningRate * 0.05);
+maxExposure = 0.2 + (dce.volatilityIndex * 0.4);
+
+
+Update the /api/suggestions endpoint to surface these recalculated values in real time.
+
+Update the ARA UI to display:
+
+“Source: VTS-DCE Adaptive Model”
+
+“Updated: <timestamp>”
+
+🧩 Step 4 — Run Live-Paper Validation Audit
+
+Start a new paper-trading session using the retrained model.
+
+Enable continuous TLVA and CSAV logging during the session.
+
+Record:
+
+CWQI and NGC distributions
+
+Risk per trade (%) and exposure (%) over time
+
+Signal promotion and rejection rates
+
+Save results to /reports/M3B_LiveValidation_Report_<timestamp>.json.
+
+Expected:
+
+CWQI and NGC variance in healthy range (0.15–0.85).
+
+Risk per trade and exposure values fluctuate dynamically within ±15% per epoch.
+
+Correlation between CWQI↑ and exposure↑ verified.
+
+🧩 Step 5 — Persistence & Synchronization Validation
+
+Confirm /api/suggestions → /api/tlva/latest timestamps match (±5 s).
+
+Restart the system and ensure:
+
+Latest risk/exposure persist.
+
+Model checksum unchanged.
+
+Add “Last adaptive update” timestamp to ARA card header.
+
+🧩 Step 6 — Dashboard Link & TLVA Enhancements
+
+Add Training Loop Health card to dashboard:
+
+“Epochs”, “Loss Δ”, “Last Retrain”, “Adaptive Risk Delta %”.
+
+Extend TLVA report to include:
+
+riskDelta, exposureDelta, and cwqiCorrelation.
+
+✅ Expected Outcome
+Metric	Before	After	Target
+Risk per trade	Static 2.5 %	Adaptive ±15 %	2.1–2.9 %
+Max exposure	Static 25 %	Adaptive ±20 %	20–30 %
+CWQI variance	0.045	0.05–0.15	Healthy
+NGC average	0.57	0.6–0.75	Healthy
+Decay factor	Fixed	Removed	Dynamic relevance
+📁 Report Output
+
+Saved at:
+
+/reports/M3B_LiveValidation_Report_<timestamp>.json
+
+/reports/CWQI_NGC_PostDecayAudit_<timestamp>.json
+
+🧩 Step 7 — Audit Completion & Next Phase
+
+Append summary to replit.md:
+
+✅ Static decay removed
+✅ ARA linked to VTS + DCE outputs
+✅ Live-paper audit verified adaptive weighting
+
+
+Once confirmed stable, proceed to Directive 8.8.4-M3C (Adaptive Relevance Weighting Integration).
+
+Directive Summary
+
+Directive 8.8.4-M3B — Live Validation & Adaptive Coupling Audit
+Removes all legacy static decay from CWQI, NGC, and ARA; connects risk and exposure to VTS + DCE live learning; executes a live-paper audit to verify real-time adaptation; and completes the final validation of the L-series system.

@@ -71,6 +71,17 @@ interface VTSStats {
   lastUpdate: number;
 }
 
+/**
+ * M3B: Adaptive learning parameters exposed for real-time coupling
+ */
+export interface VTSLearningParams {
+  learningRate: number;      // Adaptive learning rate based on performance
+  gsi: number;               // Global Stability Index (0-1)
+  relevance: number;         // Computed relevance for decay replacement
+  volatilityIndex: number;   // Rolling volatility measure
+  lastAdaptiveUpdate: string;
+}
+
 const FEE_RATE = 0.0026;
 const AVG_SLIPPAGE = 0.0015;
 const TRADE_DURATION = 3 * 60 * 60 * 1000;
@@ -390,6 +401,61 @@ export class VTSService extends EventEmitter {
       stats: this.getStats(),
       calibration: this.calibration
     };
+  }
+
+  /**
+   * M3B: Get adaptive learning parameters for live coupling
+   * These replace static decay factors in CWQI/NGC engines
+   */
+  getLearningParams(): VTSLearningParams {
+    const stats = this.getStats();
+    
+    // Learning rate based on win rate and trade volume
+    // Higher win rate = higher confidence in current model = lower learning rate
+    // Base rate 0.15, adjusted by performance
+    const baseLearningRate = 0.15;
+    const performanceAdjustment = stats.winRate > 0.5 
+      ? 1 - ((stats.winRate - 0.5) * 0.4) // Lower rate when performing well
+      : 1 + ((0.5 - stats.winRate) * 0.4); // Higher rate when performing poorly
+    const learningRate = Math.max(0.05, Math.min(0.30, baseLearningRate * performanceAdjustment));
+    
+    // GSI (Global Stability Index) based on consistency of profits
+    // Higher consistency = higher stability
+    const avgNetProfit = stats.avgNetProfit || 0;
+    const profitStability = Math.abs(avgNetProfit) < 0.001 ? 0.5 : 
+      avgNetProfit > 0 ? Math.min(0.95, 0.6 + avgNetProfit * 2) : 
+      Math.max(0.3, 0.5 + avgNetProfit * 2);
+    const gsi = profitStability;
+    
+    // Relevance coefficient = learningRate * (gsi + 0.15)
+    // This replaces static decay factors
+    const relevance = Math.max(0.10, Math.min(0.40, learningRate * (gsi + 0.15)));
+    
+    // Volatility index from recent trade outcomes
+    const recentTrades = this.closedTrades.slice(-20);
+    const volatilityIndex = recentTrades.length > 5 
+      ? this.computeVolatilityIndex(recentTrades) 
+      : 0.3;
+    
+    return {
+      learningRate: Math.round(learningRate * 10000) / 10000,
+      gsi: Math.round(gsi * 10000) / 10000,
+      relevance: Math.round(relevance * 10000) / 10000,
+      volatilityIndex: Math.round(volatilityIndex * 10000) / 10000,
+      lastAdaptiveUpdate: new Date().toISOString()
+    };
+  }
+
+  private computeVolatilityIndex(trades: VirtualTrade[]): number {
+    if (trades.length < 2) return 0.3;
+    
+    const profits = trades.map(t => t.netProfit || 0);
+    const mean = profits.reduce((a, b) => a + b, 0) / profits.length;
+    const variance = profits.reduce((sum, p) => sum + Math.pow(p - mean, 2), 0) / profits.length;
+    const stdDev = Math.sqrt(variance);
+    
+    // Normalize to 0-1 range (assuming typical std dev < 0.05)
+    return Math.min(1, stdDev / 0.05);
   }
 }
 

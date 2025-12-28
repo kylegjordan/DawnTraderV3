@@ -49,6 +49,8 @@ Comprehensive System Audit & Validation (M1) validates correctness, consistency,
 
 Training Loop Validation Audit (M3A) verifies that retraining operations trigger actual backend learning cycles, monitoring training execution, parameter updates, and model checksums. API endpoints provide training status and audit reports.
 
+Live Validation & Adaptive Coupling Audit (M3B) replaces static decay factors with VTS-DCE derived adaptive relevance coefficients. The `quality_index.ts` SMOOTHING_ALPHA (0.15) is replaced with dynamic relevance computed as: `relevance = learningRate * (gsi + 0.15)`. ARA risk/exposure suggestions now derive from VTS+DCE live learning outputs: `riskPerTrade = baseRisk + learningRate*5`, `maxExposure = baseExposure + volatilityIndex*40`. The M3B validation service (`m3b-validation-service.ts`) generates reports verifying static decay removal, ARA-VTS-DCE linkage, and CWQI variance correlation. API endpoints at `/api/m3b/*` provide status, metrics, reports, and adaptive sync capabilities.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.
