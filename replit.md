@@ -37,6 +37,8 @@ Decision Confidence Engine (L16) unifies all confidence metrics into a single De
 
 Liquidity Trap Agent (Agent 9) is a specialized strategy agent with slower learning rate (η=0.008) and higher future discount (γ=0.92). Reward function: 0.7·profit_rate + 0.2·execution_speed - 0.1·slippage, optimizing for execution quality with slippage penalty.
 
+Adaptive Profit Realization & Stop-Loss Evolution (L17) dynamically optimizes trade exit logic. The APR-SLE Engine computes adaptive Take Profit and Stop Loss levels using: TP = TPbase × [1 + α(DI - 0.5)] × vol_comp × regime_mult, SL = SLbase × [1 - β(DI - 0.5)] × vol_comp × regime_mult. Default parameters: α=0.6 (TP widening), β=0.4 (SL tightening), TPbase=1.5%, SLbase=1.0%, σ_baseline=0.02. Volatility compensation: clamp(1 - (σ / σ_baseline) × 0.5, 0.7, 1.2). Regime-specific multipliers adjust TP/SL: T1(+15% TP, -10% SL), T2(+10% TP, +10% SL), R1(neutral), V1(-20% TP, +25% SL), C1(+10% TP, -5% SL). DI slope tracking uses linear regression over 20 recent samples to detect momentum. Recalibration (every 12 hours via autonomy scheduler) adjusts α/β based on trade performance, adapting exit parameters to evolving market conditions.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.
