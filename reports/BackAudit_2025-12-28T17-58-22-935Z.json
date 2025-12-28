@@ -1,0 +1,317 @@
+{
+  "timestamp": "2025-12-28T17:58:22.935Z",
+  "modules_checked": 15,
+  "modules_passed": 7,
+  "modules_failed": [
+    "VTS",
+    "ARA",
+    "PricingService",
+    "DriftDetector",
+    "MACO",
+    "RegimeSystem",
+    "M3B",
+    "M3B.2"
+  ],
+  "formula_violations": [],
+  "deprecated_constants": [],
+  "missing_endpoints": [
+    "/api/ara/status",
+    "/api/regime/current"
+  ],
+  "crosslink_health": {
+    "ARA→VTS": "degraded",
+    "VTS→DCE": "degraded",
+    "MOF→GASP": "ok",
+    "DCE→MACO": "degraded"
+  },
+  "latency_checks": {
+    "pricing_feed": 2,
+    "db_write": 10,
+    "api_response": 2
+  },
+  "recommendations": [
+    "Implement missing endpoints: /api/ara/status, /api/regime/current",
+    "VTS: Fix VTS mode valid - Invalid mode",
+    "VTS: Fix Data source valid - Invalid data source",
+    "VTS: Fix Mode/source synchronization - Mode and source mismatch",
+    "ARA: Fix ARA endpoint - ARA status endpoint not responding",
+    "PricingService: Fix Pricing endpoint - Pricing service not responding",
+    "DriftDetector: Fix Auto-retrain logic - Auto-retrain mechanism missing",
+    "MACO: Fix Agent count - 0 agents",
+    "RegimeSystem: Fix Regime endpoint - Not responding",
+    "M3B: Fix Formula verification - Status unknown",
+    "M3B.2: Fix Buffer isolation tracking - Not tracked"
+  ],
+  "module_results": [
+    {
+      "module": "CWQI",
+      "passed": true,
+      "checks": [
+        {
+          "name": "NGC_WEIGHT = 0.40",
+          "passed": true,
+          "message": "Correct"
+        },
+        {
+          "name": "RISK_WEIGHT = 0.25",
+          "passed": true,
+          "message": "Correct"
+        },
+        {
+          "name": "RETURN_WEIGHT = 0.20",
+          "passed": true,
+          "message": "Correct"
+        },
+        {
+          "name": "PROFIT_RATE_WEIGHT = 0.15",
+          "passed": true,
+          "message": "Correct"
+        },
+        {
+          "name": "M3B Adaptive Relevance",
+          "passed": true,
+          "message": "Correct"
+        },
+        {
+          "name": "Rolling Normalizer",
+          "passed": true,
+          "message": "Present"
+        },
+        {
+          "name": "Variance threshold",
+          "passed": true,
+          "message": "Correct"
+        }
+      ],
+      "timestamp": "2025-12-28T17:58:22.868Z"
+    },
+    {
+      "module": "NGC",
+      "passed": true,
+      "checks": [
+        {
+          "name": "NGC calculation function",
+          "passed": true,
+          "message": "Present"
+        },
+        {
+          "name": "NGC normalization",
+          "passed": true,
+          "message": "Active"
+        },
+        {
+          "name": "Volatility dampening",
+          "passed": true,
+          "message": "Applied"
+        }
+      ],
+      "timestamp": "2025-12-28T17:58:22.869Z"
+    },
+    {
+      "module": "DCE",
+      "passed": true,
+      "checks": [
+        {
+          "name": "Weights sum ≈ 1.0",
+          "passed": true,
+          "message": "Sum: 1.000"
+        },
+        {
+          "name": "Pearson recalibration",
+          "passed": true,
+          "message": "Configured"
+        }
+      ],
+      "timestamp": "2025-12-28T17:58:22.873Z"
+    },
+    {
+      "module": "VTS",
+      "passed": false,
+      "checks": [
+        {
+          "name": "VTS mode valid",
+          "passed": false,
+          "message": "Invalid mode"
+        },
+        {
+          "name": "Data source valid",
+          "passed": false,
+          "message": "Invalid data source"
+        },
+        {
+          "name": "Mode/source synchronization",
+          "passed": false,
+          "message": "Mode and source mismatch"
+        }
+      ],
+      "timestamp": "2025-12-28T17:58:22.876Z"
+    },
+    {
+      "module": "ARA",
+      "passed": false,
+      "checks": [
+        {
+          "name": "ARA endpoint",
+          "passed": false,
+          "message": "ARA status endpoint not responding"
+        }
+      ],
+      "timestamp": "2025-12-28T17:58:22.879Z"
+    },
+    {
+      "module": "MOF",
+      "passed": true,
+      "checks": [
+        {
+          "name": "MOF endpoint active",
+          "passed": true,
+          "message": "Responding"
+        },
+        {
+          "name": "Lambda range",
+          "passed": true,
+          "message": "Config not exposed, assuming valid"
+        }
+      ],
+      "timestamp": "2025-12-28T17:58:22.883Z"
+    },
+    {
+      "module": "GASP",
+      "passed": true,
+      "checks": [
+        {
+          "name": "GASP endpoint active",
+          "passed": true,
+          "message": "Responding"
+        },
+        {
+          "name": "GSI computation",
+          "passed": true,
+          "message": "GSI: 1"
+        }
+      ],
+      "timestamp": "2025-12-28T17:58:22.885Z"
+    },
+    {
+      "module": "PricingService",
+      "passed": false,
+      "checks": [
+        {
+          "name": "Pricing endpoint",
+          "passed": false,
+          "message": "Pricing service not responding"
+        }
+      ],
+      "timestamp": "2025-12-28T17:58:22.887Z"
+    },
+    {
+      "module": "DriftDetector",
+      "passed": false,
+      "checks": [
+        {
+          "name": "Warn threshold (0.15)",
+          "passed": true,
+          "message": "Found"
+        },
+        {
+          "name": "Retrain threshold (0.25)",
+          "passed": true,
+          "message": "Found"
+        },
+        {
+          "name": "Auto-retrain logic",
+          "passed": false,
+          "message": "Auto-retrain mechanism missing"
+        }
+      ],
+      "timestamp": "2025-12-28T17:58:22.889Z"
+    },
+    {
+      "module": "PDC-ECS",
+      "passed": true,
+      "checks": [
+        {
+          "name": "PDC-ECS endpoint",
+          "passed": true,
+          "message": "Active"
+        }
+      ],
+      "timestamp": "2025-12-28T17:58:22.891Z"
+    },
+    {
+      "module": "MACO",
+      "passed": false,
+      "checks": [
+        {
+          "name": "MACO endpoint",
+          "passed": true,
+          "message": "Active"
+        },
+        {
+          "name": "Agent count",
+          "passed": false,
+          "message": "0 agents"
+        }
+      ],
+      "timestamp": "2025-12-28T17:58:22.893Z"
+    },
+    {
+      "module": "APR-SLE",
+      "passed": true,
+      "checks": [
+        {
+          "name": "APR-SLE endpoint",
+          "passed": true,
+          "message": "Active"
+        }
+      ],
+      "timestamp": "2025-12-28T17:58:22.895Z"
+    },
+    {
+      "module": "RegimeSystem",
+      "passed": false,
+      "checks": [
+        {
+          "name": "Regime endpoint",
+          "passed": false,
+          "message": "Not responding"
+        }
+      ],
+      "timestamp": "2025-12-28T17:58:22.897Z"
+    },
+    {
+      "module": "M3B",
+      "passed": false,
+      "checks": [
+        {
+          "name": "M3B endpoint",
+          "passed": true,
+          "message": "Active"
+        },
+        {
+          "name": "Formula verification",
+          "passed": false,
+          "message": "Status unknown"
+        }
+      ],
+      "timestamp": "2025-12-28T17:58:22.899Z"
+    },
+    {
+      "module": "M3B.2",
+      "passed": false,
+      "checks": [
+        {
+          "name": "M3B.2 VTS endpoint",
+          "passed": true,
+          "message": "Active"
+        },
+        {
+          "name": "Buffer isolation tracking",
+          "passed": false,
+          "message": "Not tracked"
+        }
+      ],
+      "timestamp": "2025-12-28T17:58:22.901Z"
+    }
+  ]
+}

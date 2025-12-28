@@ -1,0 +1,48 @@
+I'll implement the M3B.2 VTS Passive Feed Integration directive. Let me first examine the existing VTS service and pricing service structure:
+
+Now I have a clear understanding. Let me implement M3B.2. I'll create the necessary files:
+
+Now let me register the VTS audit routes:
+
+Now let me update the replit.md and restart the workflow:
+
+Optimized Agent memory
+Let me update the task list to reflect the current progress and verify the routes are working:
+
+Searched for "Where are VTS audit routes registered and how does the console.log message appear when the routes are mounted?"
+Let me submit the M3B.2 implementation for review:
+
+
+Reviewing VTS Mode Audit implementation
+Let me address the architect's findings by improving the M3B.2 implementation:
+
+Checked code issues
+
+Reviewing VTS mode audit implementation
+The M3B.2 implementation has been reviewed and approved. Let me update the task list:
+
+I've successfully implemented M3B.2 (VTS Passive Feed Integration & Mode Audit). Here's what was added:
+
+VTS Mode Audit Service (server/services/vts-mode-audit.ts):
+
+Automatic mode switching between simulator (when IDLE) and observer (when trading is active)
+Subscribes to trading state changes via context bridge for real-time mode synchronization
+Blocks simulated trades in observer mode to prevent contamination
+Real buffer isolation verification that compares VTS and live learning buffer entries
+Tracks blocked simulation attempts for audit visibility
+VTS Audit API Routes (/api/vts/*):
+
+/api/vts/status - Get current VTS mode, data source, and statistics
+/api/vts/run-passive - Trigger passive simulation cycle using centralized price cache
+/api/vts/audit - Generate comprehensive audit report
+/api/vts/latest-report - Retrieve most recent audit report
+/api/vts/update-mode - Manually update VTS mode based on system state
+/api/vts/reset-session - Reset session statistics
+Audit Report Features:
+
+Mode correctness verification
+Data source validation
+Cross-contamination detection with shared entry count
+Buffer isolation verification
+Detailed summary with specific failure reasons
+The implementation ensures that when you're actively trading (paper or live), VTS switches to observer mode and blocks any simulated trades from contaminating live learning data. When trading is stopped, VTS can run passive simulations using the centralized price cache.

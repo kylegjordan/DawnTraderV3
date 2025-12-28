@@ -1,0 +1,140 @@
+🧭 Directive 8.8.4-M4 — Comprehensive Back-Audit & System Integrity Verification
+Purpose
+
+Perform a complete, repository-wide back-audit of all adaptive, predictive, and trading subsystems implemented from Series L (8.8.4-L1 through L20) and Series M (8.8.4-M1 through M3B.2).
+This ensures that:
+
+Every directive’s formulas are correctly reflected in code,
+
+Dependencies and data flows are synchronized,
+
+Historical bugs or stale constants (e.g., DK decay) are fully removed, and
+
+System metrics and learning loops produce valid, testable outputs before live simulation resumes.
+
+🧩 Step 1 — Scope Definition
+
+Modules under audit:
+
+Core: CWQI, NGC, DI, DCE, ARA, VTS, MACO, MOF, GASP, PDC-ECS
+
+Metrics & indices: relevance, stability, exposure, drawdown, context, drift, confidence
+
+Learning systems: passive learning, VTS, retraining loop, adaptive weighting
+
+UI/API coupling: ARA suggestions, Goals tab metrics, audit/report endpoints
+
+🧩 Step 2 — Create Back-Audit Engine
+
+File: server/services/back_audit_engine.ts
+
+Responsibilities:
+
+Traverse repository tree, verifying:
+
+Presence of all directive-mandated constants, functions, and formulas
+
+Absence of deprecated variables (e.g., SMOOTHING_ALPHA, DECAY_THEN_NORMALIZE)
+
+Cross-check function signatures against directive specs (e.g., CWQI = α × profit_conf + β × vol_conf …).
+
+Execute each module’s /status or /metrics endpoint to confirm active runtime consistency.
+
+Correlate calculated outputs to expected value ranges and distributions.
+
+Detect orphaned or circular dependencies (e.g., double-updates between DCE ↔ MOF).
+
+Generate standardized audit reports.
+
+🧩 Step 3 — Implement Audit Report Schema
+
+Reports stored at /reports/BackAudit_<timestamp>.json:
+
+{
+  "timestamp": "2025-12-29T00:15:00Z",
+  "modules_checked": 15,
+  "modules_passed": 13,
+  "modules_failed": ["VTS", "NGC"],
+  "formula_violations": [
+    {"module": "CWQI", "expected": "alpha*profit_conf + beta*vol_conf", "found": "alpha*profit_conf"}
+  ],
+  "deprecated_constants": ["SMOOTHING_ALPHA"],
+  "missing_endpoints": ["/api/pdc-ecs/status"],
+  "crosslink_health": {"ARA→VTS": "ok", "VTS→DCE": "ok", "MOF→GASP": "ok"},
+  "latency_checks": {"pricing_feed": 28, "db_write": 7},
+  "recommendations": ["Extend price cache window to 200 ticks", "Add feed latency monitor"]
+}
+
+🧩 Step 4 — Audit Sub-Modules
+
+Each subsystem gets its own method:
+
+Function	Checks
+checkCWQI()	Valid coefficients, removal of decay terms, variance ≥ 0.01
+checkNGC()	Proper normalization and correlation to actual returns
+checkDCE()	All weights sum ≈ 1.0, Pearson recalibration active
+checkVTS()	Mode ⇄ systemMode synchronization, buffer isolation
+checkARA()	Risk/exposure derived from adaptive inputs
+checkMOF()	Gradient descent parameters, clamped λ ranges
+checkGASP()	Stability damping equations intact
+checkPricingService()	Feed latency < 100 ms, cache ≥ 20 ticks
+checkDriftDetector()	Threshold logic working (warn > 0.15, retrain > 0.25)
+🧩 Step 5 — Create Audit Routes
+
+File: server/routes/back_audit.ts
+
+Endpoints:
+
+POST /api/back-audit/run — run full audit
+
+GET /api/back-audit/status — last audit summary
+
+GET /api/back-audit/reports — list reports
+
+GET /api/back-audit/latest — most recent JSON report
+
+🧩 Step 6 — Validation Criteria
+Metric	Pass Condition
+Directive Formula Match	≥ 95 % of formulas verified
+Deprecated Constants	None found
+Endpoint Health	≥ 95 % responsive
+Crosslink Integrity	All “ok”
+Latency & Cache Window	≤ 100 ms feed latency, ≥ 20 ticks cache
+Adaptive Relevance	Active in ARA + DCE
+CWQI/NGC Distributions	Non-flat; variance > 0.01
+Model Checksum Diffs	Yes (pre/post training)
+🧩 Step 7 — Audit Execution & Deliverables
+
+Run Command:
+POST /api/back-audit/run
+
+Verify console output:
+
+[M4][BACK_AUDIT] 15 modules checked, 0 critical failures
+
+
+Deliverables
+
+/reports/BackAudit_<timestamp>.json
+
+/docs/BackAudit_Summary.md (plain-language summary for you)
+
+🧩 Step 8 — Next Directive Dependencies
+
+Once M4 completes and findings are reviewed:
+
+Implement fixes (M4-R1 “Findings Remediation”).
+
+Then begin controlled paper-mode trading (M5).
+
+Include feed-latency metric and cache-window expansion at that stage.
+
+✅ Expected Outcome
+
+Verified correctness of all formulas and inter-module dependencies.
+
+Identification of any lingering legacy constants or unreferenced code.
+
+Complete confidence that learning, weighting, and signal-generation math is executing per design.
+
+Foundational assurance for the upcoming controlled paper-trading audit.

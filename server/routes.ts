@@ -22044,6 +22044,11 @@ Important: Extract the exact field names and numeric values from the user's requ
   apiRouter.use('/vts', vtsAuditRouter.default);
   console.log('[M3B.2] VTS Passive Feed & Mode Audit routes mounted at /api/vts');
 
+  // Directive 8.8.4-M4: Mount Back-Audit (Comprehensive Back-Audit & System Integrity) routes
+  const backAuditRouter = await import('./routes/back_audit.js');
+  apiRouter.use('/back-audit', backAuditRouter.default);
+  console.log('[M4] Back-Audit & System Integrity routes mounted at /api/back-audit');
+
   // Catch-all handler for unmatched /api/* routes
   // This prevents requests from falling through to Vite's HTML handler
   // and ensures all API routes return JSON (even 404s)

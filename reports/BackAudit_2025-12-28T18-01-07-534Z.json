@@ -1,0 +1,282 @@
+{
+  "timestamp": "2025-12-28T18:01:07.534Z",
+  "modules_checked": 15,
+  "modules_passed": 11,
+  "modules_failed": [
+    "ARA",
+    "PricingService",
+    "DriftDetector",
+    "RegimeSystem"
+  ],
+  "formula_violations": [],
+  "deprecated_constants": [],
+  "missing_endpoints": [
+    "/api/ara/status",
+    "/api/regime/current"
+  ],
+  "crosslink_health": {
+    "ARA→VTS": "degraded",
+    "VTS→DCE": "degraded",
+    "MOF→GASP": "ok",
+    "DCE→MACO": "degraded"
+  },
+  "latency_checks": {
+    "pricing_feed": 2,
+    "db_write": 10,
+    "api_response": 2
+  },
+  "recommendations": [
+    "Implement missing endpoints: /api/ara/status, /api/regime/current",
+    "ARA: Fix ARA endpoint - ARA status endpoint not responding",
+    "PricingService: Fix Pricing endpoint - Pricing service not responding",
+    "DriftDetector: Fix Auto-retrain logic - Auto-retrain mechanism missing",
+    "RegimeSystem: Fix Regime endpoint - Not responding"
+  ],
+  "module_results": [
+    {
+      "module": "CWQI",
+      "passed": true,
+      "checks": [
+        {
+          "name": "NGC_WEIGHT = 0.40",
+          "passed": true,
+          "message": "Correct"
+        },
+        {
+          "name": "RISK_WEIGHT = 0.25",
+          "passed": true,
+          "message": "Correct"
+        },
+        {
+          "name": "RETURN_WEIGHT = 0.20",
+          "passed": true,
+          "message": "Correct"
+        },
+        {
+          "name": "PROFIT_RATE_WEIGHT = 0.15",
+          "passed": true,
+          "message": "Correct"
+        },
+        {
+          "name": "M3B Adaptive Relevance",
+          "passed": true,
+          "message": "Correct"
+        },
+        {
+          "name": "Rolling Normalizer",
+          "passed": true,
+          "message": "Present"
+        },
+        {
+          "name": "Variance threshold",
+          "passed": true,
+          "message": "Correct"
+        }
+      ],
+      "timestamp": "2025-12-28T18:01:07.467Z"
+    },
+    {
+      "module": "NGC",
+      "passed": true,
+      "checks": [
+        {
+          "name": "NGC calculation function",
+          "passed": true,
+          "message": "Present"
+        },
+        {
+          "name": "NGC normalization",
+          "passed": true,
+          "message": "Active"
+        },
+        {
+          "name": "Volatility dampening",
+          "passed": true,
+          "message": "Applied"
+        }
+      ],
+      "timestamp": "2025-12-28T18:01:07.467Z"
+    },
+    {
+      "module": "DCE",
+      "passed": true,
+      "checks": [
+        {
+          "name": "Weights sum ≈ 1.0",
+          "passed": true,
+          "message": "Sum: 1.000"
+        },
+        {
+          "name": "Pearson recalibration",
+          "passed": true,
+          "message": "Configured"
+        }
+      ],
+      "timestamp": "2025-12-28T18:01:07.471Z"
+    },
+    {
+      "module": "VTS",
+      "passed": true,
+      "checks": [
+        {
+          "name": "VTS endpoint",
+          "passed": true,
+          "message": "Active (auth required)"
+        }
+      ],
+      "timestamp": "2025-12-28T18:01:07.474Z"
+    },
+    {
+      "module": "ARA",
+      "passed": false,
+      "checks": [
+        {
+          "name": "ARA endpoint",
+          "passed": false,
+          "message": "ARA status endpoint not responding"
+        }
+      ],
+      "timestamp": "2025-12-28T18:01:07.476Z"
+    },
+    {
+      "module": "MOF",
+      "passed": true,
+      "checks": [
+        {
+          "name": "MOF endpoint active",
+          "passed": true,
+          "message": "Responding"
+        },
+        {
+          "name": "Lambda range",
+          "passed": true,
+          "message": "Config not exposed, assuming valid"
+        }
+      ],
+      "timestamp": "2025-12-28T18:01:07.479Z"
+    },
+    {
+      "module": "GASP",
+      "passed": true,
+      "checks": [
+        {
+          "name": "GASP endpoint active",
+          "passed": true,
+          "message": "Responding"
+        },
+        {
+          "name": "GSI computation",
+          "passed": true,
+          "message": "GSI: 1"
+        }
+      ],
+      "timestamp": "2025-12-28T18:01:07.481Z"
+    },
+    {
+      "module": "PricingService",
+      "passed": false,
+      "checks": [
+        {
+          "name": "Pricing endpoint",
+          "passed": false,
+          "message": "Pricing service not responding"
+        }
+      ],
+      "timestamp": "2025-12-28T18:01:07.483Z"
+    },
+    {
+      "module": "DriftDetector",
+      "passed": false,
+      "checks": [
+        {
+          "name": "Warn threshold (0.15)",
+          "passed": true,
+          "message": "Found"
+        },
+        {
+          "name": "Retrain threshold (0.25)",
+          "passed": true,
+          "message": "Found"
+        },
+        {
+          "name": "Auto-retrain logic",
+          "passed": false,
+          "message": "Auto-retrain mechanism missing"
+        }
+      ],
+      "timestamp": "2025-12-28T18:01:07.484Z"
+    },
+    {
+      "module": "PDC-ECS",
+      "passed": true,
+      "checks": [
+        {
+          "name": "PDC-ECS endpoint",
+          "passed": true,
+          "message": "Active"
+        }
+      ],
+      "timestamp": "2025-12-28T18:01:07.486Z"
+    },
+    {
+      "module": "MACO",
+      "passed": true,
+      "checks": [
+        {
+          "name": "MACO endpoint",
+          "passed": true,
+          "message": "Active (auth required)"
+        }
+      ],
+      "timestamp": "2025-12-28T18:01:07.488Z"
+    },
+    {
+      "module": "APR-SLE",
+      "passed": true,
+      "checks": [
+        {
+          "name": "APR-SLE endpoint",
+          "passed": true,
+          "message": "Active"
+        }
+      ],
+      "timestamp": "2025-12-28T18:01:07.491Z"
+    },
+    {
+      "module": "RegimeSystem",
+      "passed": false,
+      "checks": [
+        {
+          "name": "Regime endpoint",
+          "passed": false,
+          "message": "Not responding"
+        }
+      ],
+      "timestamp": "2025-12-28T18:01:07.495Z"
+    },
+    {
+      "module": "M3B",
+      "passed": true,
+      "checks": [
+        {
+          "name": "M3B endpoint",
+          "passed": true,
+          "message": "Active (auth required)"
+        }
+      ],
+      "timestamp": "2025-12-28T18:01:07.497Z"
+    },
+    {
+      "module": "M3B.2",
+      "passed": true,
+      "checks": [
+        {
+          "name": "M3B.2 VTS endpoint",
+          "passed": true,
+          "message": "Active (auth required)"
+        }
+      ],
+      "timestamp": "2025-12-28T18:01:07.499Z"
+    }
+  ]
+}
