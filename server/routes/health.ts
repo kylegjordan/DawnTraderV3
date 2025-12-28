@@ -20,6 +20,9 @@ import { getProactiveAllocator } from '../services/proactive-allocator.js';
 import { getRewardEvaluator } from '../services/reward-evaluator.js';
 import { getExperienceBuffer } from '../services/experience-buffer.js';
 import { getActionExecutor } from '../services/action-executor.js';
+import { getMACOCoordinator } from '../services/maco-coordinator.js';
+import { getExplorationManager } from '../services/exploration-manager.js';
+import { getPolicyConsensusEngine } from '../services/policy-consensus.js';
 
 export const healthRouter = Router();
 
@@ -415,6 +418,7 @@ healthRouter.get('/', async (req, res) => {
       marketRegime: marketRegimeData,
       marketForecast: await getMarketForecastHealth(),
       reinforcementEngine: await getReinforcementEngineHealth(),
+      maco: getMACOHealth(),
       issues: status.issues,
       timestamp: new Date().toISOString(),
     });
@@ -512,6 +516,42 @@ async function getReinforcementEngineHealth() {
       dominant_strategy: 'breakout',
       last_update: null,
       error: 'RL engine unavailable'
+    };
+  }
+}
+
+function getMACOHealth() {
+  try {
+    const coordinator = getMACOCoordinator();
+    const exploration = getExplorationManager();
+    const consensus = getPolicyConsensusEngine();
+
+    const coordStatus = coordinator.getStatus();
+    const exploreStatus = exploration.getStatus();
+    const consensusStatus = consensus.getStatus();
+
+    return {
+      status: coordStatus.isRunning ? 'ACTIVE' : 'INACTIVE',
+      agents_active: coordStatus.agentCount,
+      global_reward: coordStatus.globalReward,
+      mean_variance: coordStatus.meanVariance,
+      exploration_rate: exploreStatus.epsilon,
+      consensus_score: consensusStatus.consensusScore,
+      last_sync: coordStatus.lastSync,
+      coordinator_running: coordStatus.isRunning,
+      exploration_running: exploreStatus.isRunning,
+      consensus_running: consensusStatus.isRunning
+    };
+  } catch (e) {
+    console.log('[L15][HEALTH] Failed to get MACO status');
+    return {
+      status: 'UNKNOWN',
+      agents_active: 0,
+      global_reward: 0,
+      mean_variance: 0,
+      exploration_rate: 0.15,
+      consensus_score: 0.5,
+      error: 'MACO unavailable'
     };
   }
 }

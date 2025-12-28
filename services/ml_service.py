@@ -1220,6 +1220,288 @@ def get_rl_status():
     })
 
 
+maco_state = {
+    'agents': {},
+    'global_reward': 0.0,
+    'mean_variance': 0.0,
+    'exploration_rate': 0.15,
+    'consensus_score': 0.5,
+    'last_sync': None,
+    'policy_consensus': {},
+    'initialized': False
+}
+
+MACO_EPSILON_MIN = 0.05
+MACO_EPSILON_MAX = 0.25
+MACO_EPSILON_SCALE = 0.15
+MACO_CONSENSUS_MU = 0.3
+MACO_SIGMA_BASELINE = 0.05
+
+def init_maco_agents():
+    """L15: Initialize per-strategy agents with individual Q-tables"""
+    for strategy in STRATEGIES:
+        maco_state['agents'][strategy] = {
+            'q_table': {},
+            'allocation': 1.0 / len(STRATEGIES),
+            'reward_history': [],
+            'total_reward': 0.0,
+            'confidence': 0.5,
+            'drift': 0.0,
+            'calibration_beta': 0.19,
+            'training_iterations': 0,
+            'last_update': None
+        }
+        for regime in REGIMES:
+            for action in [-0.10, -0.05, 0.0, 0.05, 0.10]:
+                key = f"{regime}:{action:.2f}"
+                maco_state['agents'][strategy]['q_table'][key] = 0.0
+    
+    maco_state['policy_consensus'] = {s: 1.0 / len(STRATEGIES) for s in STRATEGIES}
+    maco_state['last_sync'] = datetime.utcnow().isoformat()
+    maco_state['initialized'] = True
+    logger.info(f"[L15][MACO] Initialized {len(STRATEGIES)} strategy agents")
+
+init_maco_agents()
+
+@app.route('/maco/status', methods=['GET'])
+def get_maco_status():
+    """L15: Get MACO multi-agent status"""
+    agent_summaries = {}
+    for strategy, agent in maco_state['agents'].items():
+        agent_summaries[strategy] = {
+            'allocation': agent['allocation'],
+            'total_reward': agent['total_reward'],
+            'confidence': agent['confidence'],
+            'training_iterations': agent['training_iterations']
+        }
+    
+    return jsonify({
+        "ok": True,
+        "agents_active": len(maco_state['agents']),
+        "agents": agent_summaries,
+        "global_reward": maco_state['global_reward'],
+        "mean_variance": maco_state['mean_variance'],
+        "exploration_rate": maco_state['exploration_rate'],
+        "consensus_score": maco_state['consensus_score'],
+        "policy_consensus": maco_state['policy_consensus'],
+        "last_sync": maco_state['last_sync']
+    })
+
+@app.route('/maco/agent/update', methods=['POST'])
+def update_maco_agent():
+    """L15: Update individual agent Q-table"""
+    data = request.json or {}
+    strategy = data.get('strategy')
+    regime = data.get('regime', 'R1')
+    action = data.get('action', 0.0)
+    reward = data.get('reward', 0.0)
+    next_regime = data.get('next_regime', regime)
+    
+    if not strategy or strategy not in maco_state['agents']:
+        return jsonify({"success": False, "error": "Invalid strategy"}), 400
+    
+    agent = maco_state['agents'][strategy]
+    key = f"{regime}:{action:.2f}"
+    current_q = agent['q_table'].get(key, 0.0)
+    
+    next_max_q = max(agent['q_table'].get(f"{next_regime}:{a:.2f}", 0.0) for a in [-0.10, -0.05, 0.0, 0.05, 0.10])
+    
+    td_target = reward + RL_DISCOUNT * next_max_q
+    new_q = current_q + RL_LEARNING_RATE * (td_target - current_q)
+    agent['q_table'][key] = new_q
+    
+    agent['reward_history'].append(reward)
+    if len(agent['reward_history']) > 100:
+        agent['reward_history'] = agent['reward_history'][-100:]
+    
+    agent['total_reward'] += reward
+    agent['training_iterations'] += 1
+    agent['last_update'] = datetime.utcnow().isoformat()
+    agent['confidence'] = min(0.95, 0.5 + (agent['training_iterations'] * 0.01))
+    
+    logger.info(f"[L15][MACO][{strategy}] Q-update: regime={regime}, action={action:.2f}, reward={reward:.4f}")
+    
+    return jsonify({
+        "success": True,
+        "strategy": strategy,
+        "new_q": new_q,
+        "total_reward": agent['total_reward']
+    })
+
+@app.route('/maco/agent/action', methods=['GET'])
+def get_maco_agent_action():
+    """L15: Get action for agent using epsilon-greedy"""
+    strategy = request.args.get('strategy')
+    regime = request.args.get('regime', 'R1')
+    
+    if not strategy or strategy not in maco_state['agents']:
+        return jsonify({"error": "Invalid strategy"}), 400
+    
+    agent = maco_state['agents'][strategy]
+    epsilon = maco_state['exploration_rate']
+    
+    if np.random.random() < epsilon:
+        action = np.random.choice([-0.10, -0.05, 0.0, 0.05, 0.10])
+        source = 'exploration'
+    else:
+        best_action = 0.0
+        best_q = -float('inf')
+        for a in [-0.10, -0.05, 0.0, 0.05, 0.10]:
+            key = f"{regime}:{a:.2f}"
+            q_val = agent['q_table'].get(key, 0.0)
+            if q_val > best_q:
+                best_q = q_val
+                best_action = a
+        action = best_action
+        source = 'exploitation'
+    
+    return jsonify({
+        "strategy": strategy,
+        "regime": regime,
+        "action": action,
+        "source": source,
+        "epsilon": epsilon
+    })
+
+@app.route('/maco/exploration/update', methods=['POST'])
+def update_exploration():
+    """L15: Update exploration rate based on global variance"""
+    data = request.json or {}
+    global_variance = data.get('variance', 0.0)
+    
+    sigma_ratio = global_variance / MACO_SIGMA_BASELINE if MACO_SIGMA_BASELINE > 0 else 1.0
+    new_epsilon = MACO_EPSILON_MIN + sigma_ratio * MACO_EPSILON_SCALE
+    new_epsilon = max(MACO_EPSILON_MIN, min(MACO_EPSILON_MAX, new_epsilon))
+    
+    old_epsilon = maco_state['exploration_rate']
+    maco_state['exploration_rate'] = new_epsilon
+    maco_state['mean_variance'] = global_variance
+    
+    logger.info(f"[L15][EM] Exploration updated: {old_epsilon:.3f} -> {new_epsilon:.3f} (variance={global_variance:.4f})")
+    
+    return jsonify({
+        "success": True,
+        "old_epsilon": old_epsilon,
+        "new_epsilon": new_epsilon,
+        "variance": global_variance
+    })
+
+@app.route('/maco/consensus/sync', methods=['POST'])
+def sync_consensus():
+    """L15: Policy Consensus Engine - Federated Gradient Averaging"""
+    allocations = {}
+    for strategy, agent in maco_state['agents'].items():
+        allocations[strategy] = agent['allocation']
+    
+    total = sum(allocations.values())
+    if total > 0:
+        allocations = {s: v / total for s, v in allocations.items()}
+    
+    mean_allocation = 1.0 / len(STRATEGIES)
+    
+    alignment_scores = []
+    for strategy, agent in maco_state['agents'].items():
+        old_alloc = agent['allocation']
+        mean_alloc = allocations.get(strategy, mean_allocation)
+        
+        new_alloc = old_alloc + MACO_CONSENSUS_MU * (mean_alloc - old_alloc)
+        new_alloc = max(0.05, min(0.5, new_alloc))
+        agent['allocation'] = new_alloc
+        
+        alignment = 1.0 - abs(new_alloc - mean_alloc)
+        alignment_scores.append(alignment)
+    
+    total_alloc = sum(agent['allocation'] for agent in maco_state['agents'].values())
+    for strategy, agent in maco_state['agents'].items():
+        agent['allocation'] = agent['allocation'] / total_alloc if total_alloc > 0 else mean_allocation
+    
+    maco_state['consensus_score'] = sum(alignment_scores) / len(alignment_scores) if alignment_scores else 0.5
+    maco_state['policy_consensus'] = {s: agent['allocation'] for s, agent in maco_state['agents'].items()}
+    maco_state['last_sync'] = datetime.utcnow().isoformat()
+    
+    global_reward = sum(agent['total_reward'] for agent in maco_state['agents'].values())
+    maco_state['global_reward'] = global_reward
+    
+    logger.info(f"[L15][PCE] Consensus sync: score={maco_state['consensus_score']:.3f}, global_reward={global_reward:.4f}")
+    
+    return jsonify({
+        "success": True,
+        "consensus_score": maco_state['consensus_score'],
+        "policy_consensus": maco_state['policy_consensus'],
+        "global_reward": global_reward,
+        "timestamp": maco_state['last_sync']
+    })
+
+@app.route('/maco/retrain', methods=['POST'])
+def retrain_maco():
+    """L15: Full retrain of all agents"""
+    np.random.seed(int(time.time()) % 1000)
+    
+    for strategy in STRATEGIES:
+        agent = maco_state['agents'][strategy]
+        
+        for _ in range(50):
+            regime = np.random.choice(REGIMES)
+            action = np.random.choice([-0.10, -0.05, 0.0, 0.05, 0.10])
+            reward = np.random.uniform(-0.05, 0.1)
+            next_regime = np.random.choice(REGIMES)
+            
+            key = f"{regime}:{action:.2f}"
+            current_q = agent['q_table'].get(key, 0.0)
+            next_max_q = max(agent['q_table'].get(f"{next_regime}:{a:.2f}", 0.0) for a in [-0.10, -0.05, 0.0, 0.05, 0.10])
+            
+            td_target = reward + RL_DISCOUNT * next_max_q
+            new_q = current_q + RL_LEARNING_RATE * (td_target - current_q)
+            agent['q_table'][key] = new_q
+            
+            agent['total_reward'] += reward
+        
+        agent['training_iterations'] += 50
+        agent['confidence'] = min(0.95, 0.5 + (agent['training_iterations'] * 0.005))
+        agent['last_update'] = datetime.utcnow().isoformat()
+    
+    maco_state['global_reward'] = sum(agent['total_reward'] for agent in maco_state['agents'].values())
+    maco_state['last_sync'] = datetime.utcnow().isoformat()
+    
+    logger.info(f"[L15][MACO_RETRAIN] All {len(STRATEGIES)} agents retrained")
+    
+    return jsonify({
+        "success": True,
+        "agents_retrained": len(STRATEGIES),
+        "iterations_per_agent": 50,
+        "global_reward": maco_state['global_reward'],
+        "timestamp": maco_state['last_sync']
+    })
+
+@app.route('/maco/export', methods=['GET'])
+def export_maco():
+    """L15: Export full MACO state for diagnostics"""
+    export_data = {
+        "agents": {},
+        "global_state": {
+            "global_reward": maco_state['global_reward'],
+            "mean_variance": maco_state['mean_variance'],
+            "exploration_rate": maco_state['exploration_rate'],
+            "consensus_score": maco_state['consensus_score'],
+            "last_sync": maco_state['last_sync']
+        },
+        "policy_consensus": maco_state['policy_consensus'],
+        "exported_at": datetime.utcnow().isoformat()
+    }
+    
+    for strategy, agent in maco_state['agents'].items():
+        export_data['agents'][strategy] = {
+            'allocation': agent['allocation'],
+            'total_reward': agent['total_reward'],
+            'confidence': agent['confidence'],
+            'training_iterations': agent['training_iterations'],
+            'q_table_size': len(agent['q_table']),
+            'reward_history_length': len(agent['reward_history'])
+        }
+    
+    return jsonify(export_data)
+
+
 def deferred_calibration_fetch():
     """Wait for Node.js backend to be ready, then fetch calibration"""
     import threading

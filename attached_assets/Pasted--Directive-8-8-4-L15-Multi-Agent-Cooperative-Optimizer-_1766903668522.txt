@@ -1,0 +1,345 @@
+⚙️ Directive 8.8.4-L15 — Multi-Agent Cooperative Optimizer (MACO)
+
+Series: L-Series Intelligence Tier V
+Phase: 8.8.4-L15
+Predecessor: L14 (Cross-Regime Reinforcement Learning Engine)
+Authorized Test Account:
+Username: testuser123
+Password: SecurePass123!
+
+1 | Objective
+
+Evolve the single reinforcement learning policy from L14 into a multi-agent cooperative optimization framework, where each strategy becomes an independent learning agent.
+
+Each agent learns its own allocation policy while sharing reward and state feedback through a central Coordination Layer.
+The collective goal is to balance exploration (testing new strategy behaviors) and exploitation (reinforcing profitable ones) to maximize total portfolio reward.
+
+2 | System Overview
+Component	Purpose
+Strategy Agents (SA)	Individual reinforcement learners representing each active trading strategy.
+Coordinator (COORD)	Aggregates agent states and rewards; enforces shared learning signals.
+Exploration Manager (EM)	Dynamically modulates exploration probability (ε) based on global performance variance.
+Policy Consensus Engine (PCE)	Uses gradient averaging to align agent policies toward the global optimum.
+3 | Implementation Tasks
+3.1 Strategy Agent (SA)
+
+📁 services/ml_service.py
+
+Each agent maintains its own Q-table or policy weights:
+
+State: Regime vector (R1–C1) + strategy metrics (confidence, drift, calibration β)
+
+Actions: Allocation weight adjustments (±0.05, ±0.10)
+
+Reward: Strategy-specific reward Rₛ (from Reward Evaluator)
+
+Learning rule:
+
+𝑄
+𝑠
+(
+𝑠
+,
+𝑎
+)
+←
+𝑄
+𝑠
+(
+𝑠
+,
+𝑎
+)
++
+𝜂
+[
+𝑟
++
+𝛾
+max
+⁡
+𝑎
+′
+𝑄
+𝑠
+(
+𝑠
+′
+,
+𝑎
+′
+)
+−
+𝑄
+𝑠
+(
+𝑠
+,
+𝑎
+)
+]
+Q
+s
+	​
+
+(s,a)←Q
+s
+	​
+
+(s,a)+η[r+γ
+a
+max
+′
+	​
+
+Q
+s
+	​
+
+(s
+′
+,a
+′
+)−Q
+s
+	​
+
+(s,a)]
+
+η=0.01, γ=0.9 (same base as L14).
+
+Each agent runs independently in an asynchronous coroutine loop.
+
+3.2 Coordinator (COORD)
+
+📁 server/services/maco-coordinator.ts
+
+Central layer maintaining global statistics:
+
+{
+  "agents": {"momentum":{...},"meanreversion":{...}},
+  "global_reward": 0.142,
+  "mean_variance": 0.028,
+  "exploration_rate": 0.14
+}
+
+
+Functions:
+
+Broadcasts regime and market signals to all agents.
+
+Collects agent rewards.
+
+Computes global reward average and variance.
+
+Emits cooperative signals for synchronization.
+
+3.3 Exploration Manager (EM)
+
+📁 server/services/exploration-manager.ts
+
+Implements adaptive ε-greedy control:
+
+𝜀
+=
+𝑐
+𝑙
+𝑎
+𝑚
+𝑝
+(
+𝜀
+𝑚
+𝑖
+𝑛
++
+(
+𝜎
+𝑔
+𝑙
+𝑜
+𝑏
+𝑎
+𝑙
+/
+𝜎
+𝑏
+𝑎
+𝑠
+𝑒
+𝑙
+𝑖
+𝑛
+𝑒
+)
+⋅
+𝜀
+𝑠
+𝑐
+𝑎
+𝑙
+𝑒
+,
+𝜀
+𝑚
+𝑖
+𝑛
+,
+𝜀
+𝑚
+𝑎
+𝑥
+)
+ε=clamp(ε
+min
+	​
+
++(σ
+global
+	​
+
+/σ
+baseline
+	​
+
+)⋅ε
+scale
+	​
+
+,ε
+min
+	​
+
+,ε
+max
+	​
+
+)
+
+Typical: εₘᵢₙ=0.05, εₘₐₓ=0.25, εₛcₐₗₑ=0.15.
+Higher global variance ⇒ more exploration.
+
+3.4 Policy Consensus Engine (PCE)
+
+📁 server/services/policy-consensus.ts
+
+Aligns per-agent policies using Federated Gradient Averaging:
+
+𝜃
+𝑖
+′
+=
+𝜃
+𝑖
++
+𝜇
+(
+𝜃
+ˉ
+−
+𝜃
+𝑖
+)
+θ
+i
+′
+	​
+
+=θ
+i
+	​
+
++μ(
+θ
+ˉ
+−θ
+i
+	​
+
+)
+
+where μ = 0.3 and 
+𝜃
+ˉ
+θ
+ˉ
+ is the mean policy vector across all agents.
+
+4 | API Endpoints
+Endpoint	Description	Auth
+/api/maco/status	Returns active agents, exploration rate, global reward, consensus score	✅
+/api/maco/sync	Forces global consensus round	✅
+/api/maco/export	Exports agent policy histories	✅
+/api/maco/retrain	Triggers full re-initialization and cooperative retrain (testuser123 only)	✅
+5 | Front-End Enhancement
+
+📁 client/src/components/goals/adaptive-risk-advisor.tsx
+
+Add new section under Reinforcement Engine card:
+
+“Cooperative Optimizer” Card
+
+Displays:
+
+Active Agents: count + list of strategy names
+
+Global Reward: rolling average
+
+Exploration Rate: live ε value
+
+Consensus Confidence: derived from gradient alignment
+
+Buttons: [Sync Now], [Retrain Agents]
+
+6 | Data Flow
+Reward Evaluator → Strategy Agents
+     ↑                 ↓
+  Market Profiler ← Coordinator ← Exploration Manager
+                           ↓
+                     Policy Consensus Engine
+                           ↓
+                     Action Executor → Signal Orchestrator
+
+7 | Scheduler Tasks
+Process	Interval
+Coordinator sync	Every 15 min
+Exploration update	Every 30 min
+Policy consensus round	Hourly
+Manual retrain	On demand
+8 | Health Endpoint Extension
+
+Adds maco section:
+
+"maco": {
+  "agents_active": 7,
+  "global_reward": 0.146,
+  "exploration_rate": 0.13,
+  "consensus_score": 0.78,
+  "last_sync": "2025-12-22T21:15Z"
+}
+
+9 | Security & Performance
+
+All /api/maco/* routes use the same JWT authentication and test credentials.
+
+Inter-agent communication via in-process message queue (EventEmitter).
+
+Max CPU usage ≈ 4%; memory ≈ 35 MB.
+
+Thread-safe gradient averaging (mutex-guarded in consensus cycle).
+
+10 | Expected Outcomes
+Metric	Expected Improvement
+Allocation stability	+15–25 % smoother than L14
+Portfolio reward	+10–15 % gain due to cooperation
+Exploration-to-exploitation efficiency	+30 %
+Policy consensus convergence	< 6 hours steady-state
+11 | Directive Summary
+Field	Value
+Directive ID	8.8.4-L15
+Title	Multi-Agent Cooperative Optimizer (MACO)
+Purpose	Enable decentralized cooperative reinforcement between strategy agents
+Scope	Strategy Agents, Coordinator, Exploration Manager, Consensus Engine, UI
+Dependencies	L14 CRRLE, VTS, MCP, ARA
+Auth	testuser123 / SecurePass123!
+Outcome	Self-balancing, cooperative multi-agent reinforcement system for dynamic strategy allocation

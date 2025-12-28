@@ -21989,6 +21989,11 @@ Important: Extract the exact field names and numeric values from the user's requ
   apiRouter.use('/rl', rlRouter.default);
   console.log('[L14] RL routes mounted at /api/rl');
 
+  // Directive 8.8.4-L15: Mount MACO (Multi-Agent Cooperative Optimizer) routes
+  const macoRouter = await import('./routes/maco.js');
+  apiRouter.use('/maco', macoRouter.default);
+  console.log('[L15] MACO routes mounted at /api/maco');
+
   // Catch-all handler for unmatched /api/* routes
   // This prevents requests from falling through to Vite's HTML handler
   // and ensures all API routes return JSON (even 404s)

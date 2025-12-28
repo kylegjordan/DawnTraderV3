@@ -18,6 +18,9 @@ import { getProactiveAllocator } from './proactive-allocator'; // L13
 import { getRewardEvaluator } from './reward-evaluator'; // L14
 import { getExperienceBuffer } from './experience-buffer'; // L14
 import { getActionExecutor } from './action-executor'; // L14
+import { getMACOCoordinator, initMACOCoordinator } from './maco-coordinator'; // L15
+import { getExplorationManager, initExplorationManager } from './exploration-manager'; // L15
+import { getPolicyConsensusEngine, initPolicyConsensusEngine } from './policy-consensus'; // L15
 import { db } from '../db';
 import { users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
@@ -43,6 +46,11 @@ rewardEvaluator.start();
 experienceBuffer.start();
 actionExecutor.start();
 console.log('[L14][SCHEDULER] Reward Evaluator, Experience Buffer, and Action Executor started');
+
+const macoCoordinator = initMACOCoordinator();
+const explorationManager = initExplorationManager();
+const policyConsensus = initPolicyConsensusEngine();
+console.log('[L15][SCHEDULER] MACO Coordinator, Exploration Manager, and Policy Consensus Engine started');
 
 /**
  * Phase 8.9: Autonomy Layer Scheduler

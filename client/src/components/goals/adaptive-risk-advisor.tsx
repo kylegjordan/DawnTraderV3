@@ -24,7 +24,8 @@ import {
   Info,
   Activity,
   TrendingUp,
-  BarChart3
+  BarChart3,
+  Users
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -99,6 +100,25 @@ interface RLStatus {
   experienceBuffer: {
     bufferSize: number;
   };
+}
+
+interface MACOStatus {
+  ok: boolean;
+  agentsActive: number;
+  agents: Record<string, {
+    allocation: number;
+    totalReward: number;
+    confidence: number;
+    trainingIterations: number;
+  }>;
+  globalReward: number;
+  meanVariance: number;
+  explorationRate: number;
+  consensusScore: number;
+  lastSync: string | null;
+  coordinator: { isRunning: boolean };
+  exploration: { isRunning: boolean; updateCount: number };
+  consensus: { isRunning: boolean; syncCount: number };
 }
 
 interface MarketRegime {
@@ -201,6 +221,11 @@ export default function AdaptiveRiskAdvisor() {
 
   const { data: rlStatus } = useQuery<RLStatus>({
     queryKey: ['/api/rl/status'],
+    refetchInterval: 60000,
+  });
+
+  const { data: macoStatus } = useQuery<MACOStatus>({
+    queryKey: ['/api/maco/status'],
     refetchInterval: 60000,
   });
 
@@ -314,6 +339,26 @@ export default function AdaptiveRiskAdvisor() {
       toast({
         variant: "destructive",
         title: "Retrain Failed",
+        description: error instanceof Error ? error.message : "An error occurred",
+      });
+    },
+  });
+
+  const syncMACOMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest('POST', '/api/maco/sync', {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/maco/status'] });
+      toast({
+        title: "MACO Synchronized",
+        description: "Multi-agent cooperative optimizer synced successfully.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "MACO Sync Failed",
         description: error instanceof Error ? error.message : "An error occurred",
       });
     },
@@ -856,6 +901,80 @@ export default function AdaptiveRiskAdvisor() {
                     <RefreshCw className="w-3 h-3" />
                   )}
                   Retrain Engine
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {macoStatus && macoStatus.ok && (
+          <>
+            <Separator />
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Users className="w-5 h-5 text-indigo-500" />
+                  <span className="font-medium">Cooperative Optimizer</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Info className="w-4 h-4 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>Multi-Agent Cooperative Optimizer (MACO) - Each strategy runs as an independent learning agent, cooperating through federated gradient averaging to optimize allocations.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <Badge className={`gap-1 ${macoStatus.coordinator?.isRunning ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400' : 'bg-gray-100 text-gray-700'}`}>
+                  {macoStatus.coordinator?.isRunning ? 'ACTIVE' : 'INACTIVE'}
+                </Badge>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="p-2 rounded bg-slate-50 dark:bg-slate-900/50">
+                  <div className="text-muted-foreground">Active Agents</div>
+                  <div className="font-semibold">{macoStatus.agentsActive || 0}</div>
+                </div>
+                <div className="p-2 rounded bg-slate-50 dark:bg-slate-900/50">
+                  <div className="text-muted-foreground">Global Reward</div>
+                  <div className={`font-semibold ${macoStatus.globalReward >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {macoStatus.globalReward >= 0 ? '+' : ''}{macoStatus.globalReward.toFixed(4)}
+                  </div>
+                </div>
+                <div className="p-2 rounded bg-slate-50 dark:bg-slate-900/50">
+                  <div className="text-muted-foreground">Exploration Rate (ε)</div>
+                  <div className="font-semibold">{(macoStatus.explorationRate * 100).toFixed(1)}%</div>
+                </div>
+                <div className="p-2 rounded bg-slate-50 dark:bg-slate-900/50">
+                  <div className="text-muted-foreground">Consensus Score</div>
+                  <div className={`font-semibold ${macoStatus.consensusScore >= 0.7 ? 'text-green-600' : macoStatus.consensusScore >= 0.5 ? 'text-amber-600' : 'text-gray-600'}`}>
+                    {(macoStatus.consensusScore * 100).toFixed(1)}%
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-4 text-xs text-muted-foreground">
+                <span>Variance: {macoStatus.meanVariance.toFixed(4)}</span>
+                {macoStatus.lastSync && (
+                  <span>Last sync: {new Date(macoStatus.lastSync).toLocaleTimeString()}</span>
+                )}
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => syncMACOMutation.mutate()}
+                  disabled={syncMACOMutation.isPending}
+                  className="gap-1"
+                >
+                  {syncMACOMutation.isPending ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-3 h-3" />
+                  )}
+                  Sync Agents
                 </Button>
               </div>
             </div>
