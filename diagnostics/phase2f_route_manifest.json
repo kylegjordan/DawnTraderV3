@@ -6443,6 +6443,60 @@
     ]
   },
   {
+    "path": "/api/pdc-ecs/status",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/pdc-ecs/recalibrate",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/pdc-ecs/reset",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/pdc-ecs/preview",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/pdc-ecs/scan",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/pdc-ecs/record-equity",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api*",
     "methods": [],
     "middlewares": [

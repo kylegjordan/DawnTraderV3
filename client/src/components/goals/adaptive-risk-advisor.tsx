@@ -162,6 +162,32 @@ interface APRSLEStatus {
   sample_count: number;
 }
 
+interface PDCECSStatus {
+  ok: boolean;
+  drawdownRiskScore: number;
+  equitySlope: number;
+  volRatio: number;
+  DI_drift: number;
+  containmentActive: boolean;
+  warningActive: boolean;
+  exposureMultiplier: number;
+  riskMultiplier: number;
+  frequencyMultiplier: number;
+  dampingActive: boolean;
+  recoveryProgress: number;
+  drsHistory: number[];
+  pdcConfig: {
+    w1: number;
+    w2: number;
+    w3: number;
+    warningThreshold: number;
+    containmentThreshold: number;
+  };
+  lastRecalibration: string | null;
+  recalibrationCount: number;
+  equitySamples: number;
+}
+
 interface MarketRegime {
   regime: 'T1' | 'T2' | 'R1' | 'V1' | 'C1';
   description: string;
@@ -278,6 +304,11 @@ export default function AdaptiveRiskAdvisor() {
   const { data: aprSleStatus } = useQuery<APRSLEStatus>({
     queryKey: ['/api/apr-sle/status'],
     refetchInterval: 60000,
+  });
+
+  const { data: pdcEcsStatus } = useQuery<PDCECSStatus>({
+    queryKey: ['/api/pdc-ecs/status'],
+    refetchInterval: 30000,
   });
 
   const { data: marketRegime } = useQuery<MarketRegime>({
@@ -1161,6 +1192,101 @@ export default function AdaptiveRiskAdvisor() {
               {aprSleStatus.last_recalibration && (
                 <div className="text-xs text-muted-foreground">
                   Last recalibration: {new Date(aprSleStatus.last_recalibration).toLocaleString()} ({aprSleStatus.sample_count} samples)
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {pdcEcsStatus && pdcEcsStatus.ok && (
+          <>
+            <Separator />
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">Equity Protection</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Info className="w-3.5 h-3.5 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>PDC-ECS Engine (L18) - Predictive Drawdown Containment detects early-stage risk patterns, while Equity Curve Smoothing dynamically adjusts exposure to protect capital.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <Badge className={`gap-1 ${
+                  pdcEcsStatus.containmentActive ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                  pdcEcsStatus.warningActive ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+                  'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                }`}>
+                  {pdcEcsStatus.containmentActive ? 'CONTAINMENT' : pdcEcsStatus.warningActive ? 'WARNING' : 'NORMAL'}
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-4 gap-3 text-sm">
+                <div>
+                  <div className="text-muted-foreground text-xs">DRS</div>
+                  <div className={`font-semibold ${
+                    pdcEcsStatus.drawdownRiskScore > 0.8 ? 'text-red-600' :
+                    pdcEcsStatus.drawdownRiskScore > 0.6 ? 'text-amber-600' :
+                    'text-green-600'
+                  }`}>
+                    {(pdcEcsStatus.drawdownRiskScore * 100).toFixed(1)}%
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-xs">Exposure</div>
+                  <div className={`font-semibold ${pdcEcsStatus.exposureMultiplier < 0.9 ? 'text-amber-600' : 'text-gray-700'}`}>
+                    {(pdcEcsStatus.exposureMultiplier * 100).toFixed(0)}%
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-xs">Vol Ratio</div>
+                  <div className="font-semibold">{pdcEcsStatus.volRatio.toFixed(2)}x</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-xs">Eq Slope</div>
+                  <div className={`font-semibold ${pdcEcsStatus.equitySlope < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    {pdcEcsStatus.equitySlope >= 0 ? '+' : ''}{(pdcEcsStatus.equitySlope * 100).toFixed(2)}%
+                  </div>
+                </div>
+              </div>
+
+              {pdcEcsStatus.drsHistory && pdcEcsStatus.drsHistory.length > 5 && (
+                <div className="text-xs">
+                  <div className="font-medium mb-1 text-muted-foreground">DRS History (last 10):</div>
+                  <div className="flex items-center gap-1">
+                    {pdcEcsStatus.drsHistory.slice(-10).map((drs, i) => (
+                      <div
+                        key={i}
+                        className={`w-4 h-4 rounded-sm ${
+                          drs > 0.8 ? 'bg-red-500' :
+                          drs > 0.6 ? 'bg-amber-500' :
+                          drs > 0.4 ? 'bg-yellow-400' :
+                          'bg-green-500'
+                        }`}
+                        title={`${(drs * 100).toFixed(1)}%`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="text-xs text-muted-foreground">
+                <div className="font-medium mb-1">Weights:</div>
+                <div className="flex flex-wrap gap-2">
+                  <span>w₁: {pdcEcsStatus.pdcConfig?.w1?.toFixed(2) || '0.50'}</span>
+                  <span>w₂: {pdcEcsStatus.pdcConfig?.w2?.toFixed(2) || '0.30'}</span>
+                  <span>w₃: {pdcEcsStatus.pdcConfig?.w3?.toFixed(2) || '0.20'}</span>
+                  <span>Samples: {pdcEcsStatus.equitySamples || 0}</span>
+                </div>
+              </div>
+
+              {pdcEcsStatus.lastRecalibration && (
+                <div className="text-xs text-muted-foreground">
+                  Last recalibration: {new Date(pdcEcsStatus.lastRecalibration).toLocaleString()}
                 </div>
               )}
             </div>

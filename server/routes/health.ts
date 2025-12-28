@@ -25,6 +25,8 @@ import { getExplorationManager } from '../services/exploration-manager.js';
 import { getPolicyConsensusEngine } from '../services/policy-consensus.js';
 import { getDecisionConfidenceEngine } from '../services/decision-confidence-engine.js';
 import { getAPRSLEEngine } from '../services/apr-sle-engine.js';
+import { getPDCEngine } from '../services/pdc-engine.js';
+import { getECSController } from '../services/ecs-controller.js';
 
 export const healthRouter = Router();
 
@@ -423,6 +425,7 @@ healthRouter.get('/', async (req, res) => {
       maco: getMACOHealth(),
       decisionConfidence: getDCEHealth(),
       apr_sle: getAPRSLEHealth(),
+      equityProtection: getEquityProtectionHealth(),
       issues: status.issues,
       timestamp: new Date().toISOString(),
     });
@@ -619,6 +622,37 @@ function getAPRSLEHealth() {
       avg_sl_adj: '+0.0%',
       vol_comp: 1.0,
       error: 'APR-SLE unavailable'
+    };
+  }
+}
+
+function getEquityProtectionHealth() {
+  try {
+    const pdc = getPDCEngine();
+    const ecs = getECSController();
+    
+    const pdcStatus = pdc.getStatus();
+    const ecsStatus = ecs.getStatus();
+
+    return {
+      drawdownRiskScore: pdcStatus.metrics.drawdownRiskScore,
+      equitySlope: pdcStatus.metrics.equitySlope,
+      volRatio: pdcStatus.metrics.volRatio,
+      DI_drift: pdcStatus.metrics.diDrift,
+      containmentActive: pdcStatus.metrics.containmentActive,
+      exposureMultiplier: ecsStatus.currentOutput.exposureMultiplier,
+      lastRecalibration: pdcStatus.lastRecalibration
+    };
+  } catch (e) {
+    console.log('[L18][HEALTH] Failed to get Equity Protection status');
+    return {
+      drawdownRiskScore: 0,
+      equitySlope: 0,
+      volRatio: 1.0,
+      DI_drift: 0,
+      containmentActive: false,
+      exposureMultiplier: 1.0,
+      error: 'Equity Protection unavailable'
     };
   }
 }

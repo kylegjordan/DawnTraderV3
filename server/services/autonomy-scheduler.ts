@@ -23,6 +23,8 @@ import { getExplorationManager, initExplorationManager } from './exploration-man
 import { getPolicyConsensusEngine, initPolicyConsensusEngine } from './policy-consensus'; // L15
 import { getDecisionConfidenceEngine, initDecisionConfidenceEngine } from './decision-confidence-engine'; // L16
 import { getAPRSLEEngine, initAPRSLEEngine } from './apr-sle-engine'; // L17
+import { getPDCEngine, initPDCEngine } from './pdc-engine'; // L18
+import { getECSController, initECSController } from './ecs-controller'; // L18
 import { db } from '../db';
 import { users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
@@ -60,10 +62,65 @@ console.log('[L16][SCHEDULER] Decision Confidence Engine started (9 agents incl.
 const aprSleEngine = initAPRSLEEngine();
 console.log('[L17][SCHEDULER] APR-SLE Engine started (Adaptive Profit Realization & Stop-Loss Evolution)');
 
+const pdcEngine = initPDCEngine();
+const ecsController = initECSController();
+console.log('[L18][SCHEDULER] PDC-ECS started (Predictive Drawdown Containment & Equity Curve Smoothing)');
+
 /**
  * Phase 8.9: Autonomy Layer Scheduler
  * Registers autonomous self-check and optimization tasks
  */
+
+// L18: PDC predictive scan every 15 minutes
+schedulerRegistry.registerTask({
+  name: 'pdc_predictive_scan',
+  description: 'L18: PDC predictive drawdown scan',
+  frequency: 'custom',
+  intervalMs: 15 * 60 * 1000, // 15 minutes
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[L18][SCHEDULER] 📊 Running PDC predictive scan...');
+    
+    try {
+      const pdc = getPDCEngine();
+      const ecs = getECSController();
+      
+      const pdcMetrics = await pdc.runPredictiveScan();
+      const ecsOutput = ecs.computeAdjustment(pdcMetrics.drawdownRiskScore);
+      
+      console.log(`[L18][SCHEDULER] ✅ PDC scan complete: DRS=${pdcMetrics.drawdownRiskScore.toFixed(3)}, exposure=${ecsOutput.exposureMultiplier.toFixed(3)}`);
+    } catch (error) {
+      console.error('[L18][SCHEDULER] ❌ PDC scan failed:', error);
+      throw error;
+    }
+  },
+});
+
+// L18: PDC-ECS recalibration every 6 hours
+schedulerRegistry.registerTask({
+  name: 'pdc_ecs_recalibration',
+  description: 'L18: PDC-ECS weight recalibration',
+  frequency: 'custom',
+  intervalMs: 6 * 60 * 60 * 1000, // 6 hours
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[L18][SCHEDULER] 📊 Running PDC-ECS recalibration...');
+    
+    try {
+      const pdc = getPDCEngine();
+      const result = await pdc.recalibrate();
+      
+      console.log(`[L18][SCHEDULER] ✅ PDC recalibrated: w1=${result.newW1.toFixed(3)}, w2=${result.newW2.toFixed(3)}, w3=${result.newW3.toFixed(3)}`);
+    } catch (error) {
+      console.error('[L18][SCHEDULER] ❌ PDC recalibration failed:', error);
+      throw error;
+    }
+  },
+});
 
 // L17: APR-SLE recalibration every 12 hours
 schedulerRegistry.registerTask({

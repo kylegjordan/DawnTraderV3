@@ -1,0 +1,278 @@
+⚙️ Directive 8.8.4-L18 — Predictive Drawdown Containment & Equity Curve Smoothing (PDC-ECS)
+
+Phase: L-Series Finalization – Reinforcement Stability & Equity Protection
+Predecessor: L17 (Adaptive Profit Realization & Stop-Loss Evolution)
+Auth (for testing):
+username: testuser123
+password: SecurePass123!
+
+1 | Purpose
+
+Directive L18 adds an adaptive drawdown-control system and an equity-curve stabilizer that anticipate risk deterioration before it materializes.
+
+The Predictive Drawdown Containment (PDC) module learns patterns that historically precede equity declines, while the Equity Curve Smoothing (ECS) system dynamically moderates exposure to prevent volatile swings and protect capital during uncertain regimes.
+
+This directive makes the trading system self-regulating — learning from performance fluctuations to prevent extended loss streaks.
+
+2 | Core Components
+Component	File	Description
+PDC Engine	server/services/pdc-engine.ts	Detects early-stage drawdown precursors using equity slope, variance spikes, and DI decay.
+ECS Controller	server/services/ecs-controller.ts	Modulates exposure multiplier, trade frequency, and risk allocation to smooth equity.
+API Routes	server/routes/pdc-ecs.ts	Provides endpoints for monitoring, recalibration, and policy control.
+Scheduler Integration	server/services/autonomy-scheduler.ts	Runs predictive analysis every 15 minutes; recalibration every 6 hours.
+UI Integration	client/src/components/goals/adaptive-risk-advisor.tsx	Adds “Equity Protection” card under Adaptive Execution in the Goals tab.
+3 | Predictive Drawdown Containment Logic
+
+The PDC Engine maintains a rolling window of 250 equity samples and computes key metrics:
+
+equity_slope
+=
+Δ
+𝐸
+Δ
+𝑡
+,
+vol_ratio
+=
+𝜎
+𝑟
+𝑒
+𝑐
+𝑒
+𝑛
+𝑡
+𝜎
+𝑏
+𝑎
+𝑠
+𝑒
+𝑙
+𝑖
+𝑛
+𝑒
+,
+DI_drift
+=
+𝐷
+𝐼
+𝑡
+−
+5
+‾
+−
+𝐷
+𝐼
+𝑡
+equity_slope=
+Δt
+ΔE
+	​
+
+,vol_ratio=
+σ
+baseline
+	​
+
+σ
+recent
+	​
+
+	​
+
+,DI_drift=
+DI
+t−5
+	​
+
+	​
+
+−DI
+t
+	​
+
+
+Drawdown Risk Score (DRS):
+
+𝐷
+𝑅
+𝑆
+=
+𝑤
+1
+∣
+𝑒
+𝑞
+𝑢
+𝑖
+𝑡
+𝑦
+_
+𝑠
+𝑙
+𝑜
+𝑝
+𝑒
+∣
++
+𝑤
+2
+(
+𝑣
+𝑜
+𝑙
+_
+𝑟
+𝑎
+𝑡
+𝑖
+𝑜
+)
++
+𝑤
+3
+∣
+𝐷
+𝐼
+_
+𝑑
+𝑟
+𝑖
+𝑓
+𝑡
+∣
+DRS=w
+1
+	​
+
+∣equity_slope∣+w
+2
+	​
+
+(vol_ratio)+w
+3
+	​
+
+∣DI_drift∣
+
+Default weights: w₁ = 0.5, w₂ = 0.3, w₃ = 0.2
+
+DRS > 0.6 ⇒ warning
+
+DRS > 0.8 ⇒ containment triggered
+
+When containment is triggered, exposure and trade frequency are reduced.
+
+4 | Equity Curve Smoothing (ECS) Logic
+
+The ECS Controller adjusts global exposure and risk caps using the drawdown risk score:
+
+𝐸
+𝑛
+𝑒
+𝑤
+=
+𝐸
+𝑏
+𝑎
+𝑠
+𝑒
+×
+(
+1
+−
+𝛾
+×
+(
+𝐷
+𝑅
+𝑆
+−
+0.5
+)
+)
+E
+new
+	​
+
+=E
+base
+	​
+
+×(1−γ×(DRS−0.5))
+Parameter	Default	Meaning
+γ	0.7	Exposure damping factor
+Risk per Trade floor	0.3 × baseline	Never allow full shutdown, maintain learning continuity
+
+If stability resumes (DRS < 0.4 for 3 consecutive windows), exposure and risk gradually revert.
+
+5 | Integration Points
+
+Autonomy Scheduler – Runs predictive scan every 15 minutes; recalibrates weights every 6 hours.
+
+Signal Orchestrator – Receives updated exposure multipliers when PDC containment is active.
+
+Adaptive Risk Advisor (UI) – Displays current DRS, equity slope, volatility ratio, and containment state.
+
+Health Endpoint – Adds "equityProtection" section with full metrics.
+
+6 | API Endpoints
+Endpoint	Description	Auth
+/api/pdc-ecs/status	Current DRS, slope, vol_ratio, DI_drift, exposure multiplier	✅
+/api/pdc-ecs/recalibrate	Re-learns weights w₁-w₃ from recent trade results	✅
+/api/pdc-ecs/reset	Clears model to baseline values	✅
+/api/pdc-ecs/preview	Simulates next exposure adjustment based on live feed	✅
+7 | Health Example
+"equityProtection": {
+  "drawdownRiskScore": 0.47,
+  "equitySlope": 0.0023,
+  "volRatio": 1.08,
+  "DI_drift": 0.06,
+  "containmentActive": false,
+  "exposureMultiplier": 0.92,
+  "lastRecalibration": "2025-12-22T16:00Z"
+}
+
+8 | UI: Equity Protection Card
+
+Displays:
+
+Current DRS (color-coded: green < 0.6, yellow 0.6–0.8, red > 0.8)
+
+Equity slope & volatility ratio
+
+Exposure multiplier (Eₙₑw)
+
+Buttons: Recalibrate, Reset Baseline
+
+Historical sparkline of DRS for the last 50 intervals
+
+9 | Expected Outcomes
+Metric	Target
+Average drawdown depth	↓ 25–35 %
+Equity-curve variance	↓ 15 %
+Exposure recovery time	< 4 hours after normalization
+Strategy stability index	> 0.85
+Correlation (DRS ↔ actual losses)	≥ 0.8
+10 | Verification Checklist
+
+[L18][PDC] and [L18][ECS] logs appear every cycle.
+
+/api/pdc-ecs/status reports DRS and exposure multipliers.
+
+Health endpoint shows “equityProtection” data.
+
+Adaptive Risk Advisor UI shows Equity Protection card.
+
+Containment reduces exposure during simulated downturns.
+
+Recalibration adjusts w₁-w₃ dynamically.
+
+CPU usage < 6 %, latency impact < 20 ms.
+
+11 | Summary
+Field	Value
+Directive ID	8.8.4-L18
+Title	Predictive Drawdown Containment & Equity Curve Smoothing (PDC-ECS)
+Purpose	Predict, contain, and stabilize drawdowns using equity-based intelligence
+Outcome	Reduced volatility, smoother equity growth, proactive risk adaptation
+Auth (test)	testuser123 / SecurePass123!

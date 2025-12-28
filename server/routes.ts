@@ -22004,6 +22004,11 @@ Important: Extract the exact field names and numeric values from the user's requ
   apiRouter.use('/apr-sle', aprSleRouter.default);
   console.log('[L17] APR-SLE routes mounted at /api/apr-sle');
 
+  // Directive 8.8.4-L18: Mount PDC-ECS (Predictive Drawdown Containment & Equity Curve Smoothing) routes
+  const pdcEcsRouter = await import('./routes/pdc-ecs.js');
+  apiRouter.use('/pdc-ecs', pdcEcsRouter.default);
+  console.log('[L18] PDC-ECS routes mounted at /api/pdc-ecs');
+
   // Catch-all handler for unmatched /api/* routes
   // This prevents requests from falling through to Vite's HTML handler
   // and ensures all API routes return JSON (even 404s)
