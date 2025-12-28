@@ -24,6 +24,7 @@ import path from 'path';
 import { loadCalibration, loadFullCalibration, calibrateFromTradesPerStrategy, type CalibrationCoefficients, type FullCalibration } from '../utils/calibration';
 import { getMarketProfiler, RegimeId } from './market-profiler';
 import { getRegimePerformanceTracker } from './regime-performance';
+import { getRewardEvaluator } from './reward-evaluator';
 
 export interface VirtualSignal {
   id: string;
@@ -241,6 +242,17 @@ export class VTSService extends EventEmitter {
           strategy: trade.signal.strategy || 'unknown',
           duration,
           isWin: trade.netProfit > 0,
+          timestamp: new Date().toISOString()
+        });
+
+        const re = getRewardEvaluator();
+        re.recordTrade({
+          strategy: trade.signal.strategy || 'unknown',
+          regime: currentRegime,
+          pnl: trade.netProfit,
+          isWin: trade.netProfit > 0,
+          entryPrice: trade.signal.entryPrice,
+          exitPrice: trade.exitPrice || trade.signal.entryPrice,
           timestamp: new Date().toISOString()
         });
       }

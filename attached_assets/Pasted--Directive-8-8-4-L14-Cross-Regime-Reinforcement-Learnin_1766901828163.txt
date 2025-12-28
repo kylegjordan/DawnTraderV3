@@ -1,0 +1,248 @@
+⚙️ Directive 8.8.4-L14 — Cross-Regime Reinforcement Learning Engine (CRRLE)
+Series: L-Series Intelligence Tier IV
+Phase: 8.8.4-L14
+Predecessors: L13 (Regime Forecasting)
+Test Account:
+
+Username: testuser123
+Password: SecurePass123!
+
+1 | Objective
+
+Establish a reinforcement learning loop that continually adjusts strategy allocation and exposure bias based on long-term cumulative returns, across all market regimes.
+
+Where L13 predicts what regime is coming, L14 teaches the system how best to act in each regime to maximize portfolio growth over time.
+
+2 | Components
+Component	Purpose
+Reward Evaluator (RE)	Computes per-strategy, per-regime cumulative rewards (PnL, Sharpe ratio, drawdown).
+Policy Learner (PL)	Reinforcement model learning an optimal action policy: allocate exposure across strategies for given regime state.
+Experience Buffer (EB)	Stores recent (state, action, reward, next_state) tuples for offline learning.
+Action Executor (AE)	Applies updated allocation policy to orchestrator weighting tables.
+3 | Implementation Tasks
+3.1 Reward Evaluator (RE)
+
+📁 server/services/reward-evaluator.ts
+
+Inputs:
+
+Regime data from L12 MCP
+
+Strategy returns from RPT/VTS
+
+Outputs cumulative reward per (strategy, regime):
+
+R_{s,r} = α₁ × \text{profit_rate} + α₂ × \text{win_rate} − α₃ × \text{drawdown}
+
+with α₁=0.6, α₂=0.3, α₃=0.1.
+
+Stores rolling averages for last 1000 trades in /logs/rewards/.
+
+3.2 Policy Learner (PL)
+
+📁 services/ml_service.py
+
+Implements a Q-learning / actor-critic hybrid (simplified DDPG style) model:
+
+Input	Description
+Current Regime vector (R1–C1 one-hot)	Market condition
+Strategy metrics	Confidence, stability, calibration β
+Historical rewards	Rolling average returns per strategy
+
+Output: Allocation vector A_s (weights summing to 1).
+
+Learning target:
+
+𝑄
+(
+𝑠
+,
+𝑎
+)
+←
+𝑄
+(
+𝑠
+,
+𝑎
+)
++
+𝜂
+[
+𝑟
++
+𝛾
+𝑚
+𝑎
+𝑥
+𝑎
+′
+𝑄
+(
+𝑠
+′
+,
+𝑎
+′
+)
+−
+𝑄
+(
+𝑠
+,
+𝑎
+)
+]
+Q(s,a)←Q(s,a)+η[r+γmax
+a
+′
+	​
+
+Q(s
+′
+,a
+′
+)−Q(s,a)]
+
+η=0.01, γ=0.9.
+
+Trains incrementally from Experience Buffer (see 3.3).
+
+3.3 Experience Buffer (EB)
+
+📁 server/services/experience-buffer.ts
+
+Stores tuples:
+
+{
+  "state": {"regime":"T1","strategy_weights":{...}},
+  "action": {"allocations":{...}},
+  "reward": 0.045,
+  "next_state": {"regime":"R1"},
+  "timestamp": 1737505800
+}
+
+
+Max buffer size: 10 000 records (FIFO).
+
+Used by ML microservice for incremental Q-update.
+
+3.4 Action Executor (AE)
+
+📁 server/services/action-executor.ts
+
+Fetches updated allocations from PL.
+
+Smoothly adjusts exposure & weights:
+
+𝑊
+𝑠
+′
+=
+(
+1
+−
+𝜆
+)
+𝑊
+𝑠
++
+𝜆
+𝐴
+𝑠
+W
+s
+′
+	​
+
+=(1−λ)W
+s
+	​
+
++λA
+s
+	​
+
+
+λ=0.2 smoothing factor to prevent volatility spikes.
+
+Broadcasts via WebSocket: policyUpdated.
+
+4 | API Endpoints
+Endpoint	Description	Auth
+/api/rl/status	Returns current policy, total reward, last update time	✅
+/api/rl/retrain	Forces policy retraining from Experience Buffer	✅ testuser123
+/api/rl/export	Exports recent reward and policy history	✅
+/api/rl/apply	Manually apply learned allocations	✅
+5 | UI Enhancements
+
+📁 client/src/components/goals/adaptive-risk-advisor.tsx
+
+Add “Reinforcement Engine” card below “Regime Forecast & Performance”.
+
+Displays:
+
+Total Reward: cumulative 7-day PnL delta.
+
+Policy Confidence: 0–100 %.
+
+Dominant Strategy: highest-weighted strategy.
+
+[Apply Policy] button.
+
+[Retrain Engine] button with progress bar (streamed via SSE).
+
+6 | Data Flow
+VTS/Live Trades → Reward Evaluator
+                     ↓
+Experience Buffer → Policy Learner (Python ML)
+                     ↓
+Action Executor → Updated Strategy Allocations
+                     ↓
+Signal Orchestrator / ARA / UI
+
+7 | Scheduler & Frequency
+Process	Interval
+Reward Evaluator	Every 30 minutes
+Policy Learner Update	Every 2 hours
+Experience Buffer Cleanup	Daily
+Manual Retrain	On demand (via button)
+8 | Health Endpoint Extension
+
+Adds reinforcementEngine section:
+
+"reinforcementEngine": {
+  "status": "ACTIVE",
+  "reward_total": 0.187,
+  "policy_confidence": 0.81,
+  "dominant_strategy": "Breakout",
+  "last_update": "2025-12-22T16:45Z"
+}
+
+9 | Security & Performance
+
+All /api/rl/* routes secured (auth required).
+
+Internal Node↔Python communication uses signed service key.
+
+CPU < 3 % average (DDPG light variant).
+
+Memory ≈ 30 MB including buffer.
+
+Async tasks non-blocking, isolated thread for training.
+
+10 | Expected Results
+Metric	Expected Gain
+Allocation Efficiency	+15 – 25 % improvement
+Regime Transition Stability	Reduced equity drawdown
+Adaptive Responsiveness	~1 cycle faster regime alignment
+Long-Term ROI	+10 – 15 % monthly improvement (projected)
+11 | Directive Summary
+Field	Value
+Directive ID	8.8.4-L14
+Title	Cross-Regime Reinforcement Learning Engine (CRRLE)
+Goal	Learn optimal exposure allocation via reinforcement learning
+Scope	Reward Evaluator, Policy Learner, Experience Buffer, Executor, UI
+Dependencies	L13 (Regime Forecasting), VTS, RPT
+Auth	testuser123 / SecurePass123!
+Outcome	True self-optimizing trading engine that learns over time

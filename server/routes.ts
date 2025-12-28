@@ -21984,6 +21984,11 @@ Important: Extract the exact field names and numeric values from the user's requ
   apiRouter.use('/market', marketRouter);
   console.log('[L12] Market routes mounted at /api/market');
 
+  // Directive 8.8.4-L14: Mount RL (Reinforcement Learning) routes
+  const rlRouter = await import('./routes/rl.js');
+  apiRouter.use('/rl', rlRouter.default);
+  console.log('[L14] RL routes mounted at /api/rl');
+
   // Catch-all handler for unmatched /api/* routes
   // This prevents requests from falling through to Vite's HTML handler
   // and ensures all API routes return JSON (even 404s)

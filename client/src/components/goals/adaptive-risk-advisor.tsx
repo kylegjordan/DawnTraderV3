@@ -83,6 +83,24 @@ interface DriftStatus {
   };
 }
 
+interface RLStatus {
+  ok: boolean;
+  policy: {
+    allocations: Record<string, number>;
+    confidence: number;
+    dominantStrategy: string;
+    lastUpdate: string;
+    source: 'ml' | 'fallback';
+  };
+  totalReward: number;
+  rewardEvaluator: {
+    isRunning: boolean;
+  };
+  experienceBuffer: {
+    bufferSize: number;
+  };
+}
+
 interface MarketRegime {
   regime: 'T1' | 'T2' | 'R1' | 'V1' | 'C1';
   description: string;
@@ -181,6 +199,11 @@ export default function AdaptiveRiskAdvisor() {
     refetchInterval: 60000,
   });
 
+  const { data: rlStatus } = useQuery<RLStatus>({
+    queryKey: ['/api/rl/status'],
+    refetchInterval: 60000,
+  });
+
   const { data: marketRegime } = useQuery<MarketRegime>({
     queryKey: ['/api/market/regime'],
     refetchInterval: 60000,
@@ -251,6 +274,46 @@ export default function AdaptiveRiskAdvisor() {
       toast({
         variant: "destructive",
         title: "Failed to Apply Settings",
+        description: error instanceof Error ? error.message : "An error occurred",
+      });
+    },
+  });
+
+  const applyRLPolicyMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest('POST', '/api/rl/apply', {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/rl/status'] });
+      toast({
+        title: "Policy Applied",
+        description: "RL policy has been applied to strategy allocations.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Failed to Apply Policy",
+        description: error instanceof Error ? error.message : "An error occurred",
+      });
+    },
+  });
+
+  const retrainRLMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest('POST', '/api/rl/retrain', {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/rl/status'] });
+      toast({
+        title: "RL Engine Retrained",
+        description: "Reinforcement learning policy has been updated.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Retrain Failed",
         description: error instanceof Error ? error.message : "An error occurred",
       });
     },
@@ -706,6 +769,94 @@ export default function AdaptiveRiskAdvisor() {
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {rlStatus && rlStatus.ok && (
+          <>
+            <Separator />
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Brain className="w-5 h-5 text-purple-500" />
+                  <span className="font-medium">Reinforcement Engine</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Info className="w-4 h-4 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>Q-learning engine that continuously adjusts strategy allocations based on cumulative returns across market regimes.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <Badge className={`gap-1 ${rlStatus.rewardEvaluator?.isRunning ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-700'}`}>
+                  {rlStatus.rewardEvaluator?.isRunning ? 'ACTIVE' : 'INACTIVE'}
+                </Badge>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="p-2 rounded bg-slate-50 dark:bg-slate-900/50">
+                  <div className="text-muted-foreground">Total Reward</div>
+                  <div className={`font-semibold ${rlStatus.totalReward >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {rlStatus.totalReward >= 0 ? '+' : ''}{rlStatus.totalReward.toFixed(4)}
+                  </div>
+                </div>
+                <div className="p-2 rounded bg-slate-50 dark:bg-slate-900/50">
+                  <div className="text-muted-foreground">Policy Confidence</div>
+                  <div className={`font-semibold ${rlStatus.policy.confidence >= 0.7 ? 'text-green-600' : rlStatus.policy.confidence >= 0.5 ? 'text-amber-600' : 'text-gray-600'}`}>
+                    {(rlStatus.policy.confidence * 100).toFixed(1)}%
+                  </div>
+                </div>
+                <div className="p-2 rounded bg-slate-50 dark:bg-slate-900/50">
+                  <div className="text-muted-foreground">Dominant Strategy</div>
+                  <div className="font-semibold capitalize">{rlStatus.policy.dominantStrategy.replace(/_/g, ' ')}</div>
+                </div>
+                <div className="p-2 rounded bg-slate-50 dark:bg-slate-900/50">
+                  <div className="text-muted-foreground">Experience Buffer</div>
+                  <div className="font-semibold">{rlStatus.experienceBuffer?.bufferSize || 0} samples</div>
+                </div>
+              </div>
+
+              <div className="flex gap-4 text-xs text-muted-foreground">
+                <span>Source: {rlStatus.policy.source === 'ml' ? 'ML Model' : 'Fallback'}</span>
+                {rlStatus.policy.lastUpdate && (
+                  <span>Last update: {new Date(rlStatus.policy.lastUpdate).toLocaleTimeString()}</span>
+                )}
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => applyRLPolicyMutation.mutate()}
+                  disabled={applyRLPolicyMutation.isPending}
+                  className="gap-1"
+                >
+                  {applyRLPolicyMutation.isPending ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <CheckCircle className="w-3 h-3" />
+                  )}
+                  Apply Policy
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => retrainRLMutation.mutate()}
+                  disabled={retrainRLMutation.isPending}
+                  className="gap-1"
+                >
+                  {retrainRLMutation.isPending ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-3 h-3" />
+                  )}
+                  Retrain Engine
+                </Button>
               </div>
             </div>
           </>

@@ -17,6 +17,9 @@ import { getMarketProfiler } from '../services/market-profiler.js';
 import { getAdaptiveRegime } from '../services/adaptive-regime.js';
 import { getRegimePerformanceTracker } from '../services/regime-performance.js';
 import { getProactiveAllocator } from '../services/proactive-allocator.js';
+import { getRewardEvaluator } from '../services/reward-evaluator.js';
+import { getExperienceBuffer } from '../services/experience-buffer.js';
+import { getActionExecutor } from '../services/action-executor.js';
 
 export const healthRouter = Router();
 
@@ -411,6 +414,7 @@ healthRouter.get('/', async (req, res) => {
       },
       marketRegime: marketRegimeData,
       marketForecast: await getMarketForecastHealth(),
+      reinforcementEngine: await getReinforcementEngineHealth(),
       issues: status.issues,
       timestamp: new Date().toISOString(),
     });
@@ -469,6 +473,45 @@ async function getMarketForecastHealth() {
       forecast_horizon: '15m',
       transition_matrix: {},
       error: 'Forecast unavailable'
+    };
+  }
+}
+
+async function getReinforcementEngineHealth() {
+  try {
+    const rewardEvaluator = getRewardEvaluator();
+    const experienceBuffer = getExperienceBuffer();
+    const actionExecutor = getActionExecutor();
+
+    const policyState = actionExecutor.getPolicyState();
+    const reStatus = rewardEvaluator.getStatus() as {
+      isRunning: boolean;
+      totalReward: number;
+      averageReward: number;
+    };
+    const ebStatus = experienceBuffer.getStatus() as {
+      isRunning: boolean;
+      bufferSize: number;
+    };
+
+    return {
+      status: reStatus.isRunning ? 'ACTIVE' : 'INACTIVE',
+      reward_total: reStatus.totalReward,
+      policy_confidence: policyState.confidence,
+      dominant_strategy: policyState.dominantStrategy,
+      last_update: policyState.lastUpdate,
+      experience_buffer_size: ebStatus.bufferSize,
+      source: policyState.source
+    };
+  } catch (e) {
+    console.log('[L14][HEALTH] Failed to get reinforcement engine status');
+    return {
+      status: 'UNKNOWN',
+      reward_total: 0,
+      policy_confidence: 0.5,
+      dominant_strategy: 'breakout',
+      last_update: null,
+      error: 'RL engine unavailable'
     };
   }
 }
