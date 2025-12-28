@@ -22019,6 +22019,11 @@ Important: Extract the exact field names and numeric values from the user's requ
   apiRouter.use('/gasp', gaspRouter.default);
   console.log('[L20] GASP routes mounted at /api/gasp');
 
+  // Directive 8.8.4-M1: Mount Audit (Comprehensive System Audit & Validation) routes
+  const auditRouter = await import('./routes/audit.js');
+  apiRouter.use('/audit', auditRouter.default);
+  console.log('[M1] Audit routes mounted at /api/audit');
+
   // Catch-all handler for unmatched /api/* routes
   // This prevents requests from falling through to Vite's HTML handler
   // and ensures all API routes return JSON (even 404s)

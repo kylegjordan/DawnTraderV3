@@ -1,0 +1,194 @@
+⚙️ Directive 8.8.4-M1 — Comprehensive System Audit & Validation (CSAV)
+🔹 Purpose
+
+Validate the correctness, consistency, and data flow integrity of all quantitative modules introduced in Series L and related dependencies (CWQI, NGC, DCE, MACO, MOF, GASP, ARA, PDC-ECS, APR-SLE).
+
+🧩 Step 1 — Create Audit Service
+
+Create file:
+
+/server/services/system-audit-engine.ts
+
+
+Code:
+
+import fs from "fs";
+import path from "path";
+import axios from "axios";
+
+export class SystemAuditEngine {
+  private report: any = {
+    timestamp: new Date().toISOString(),
+    modules: {},
+    errors: [],
+  };
+
+  async run() {
+    try {
+      console.log("[CSAV] Starting Comprehensive System Audit...");
+
+      await this.auditModule("cwqi", "/api/calc/cwqi/check");
+      await this.auditModule("ngc", "/api/calc/ngc/check");
+      await this.auditModule("dce", "/api/dce/status");
+      await this.auditModule("maco", "/api/maco/status");
+      await this.auditModule("mof", "/api/mof/status");
+      await this.auditModule("gasp", "/api/gasp/status");
+      await this.auditModule("ara", "/api/ara/status");
+      await this.auditModule("pdc", "/api/pdc-ecs/status");
+      await this.auditModule("apr", "/api/apr-sle/status");
+
+      this.validateFormulas();
+      this.validateConsistency();
+
+      const outDir = path.join(process.cwd(), "reports");
+      if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+      const outPath = path.join(outDir, `CSAV_Report_${Date.now()}.json`);
+      fs.writeFileSync(outPath, JSON.stringify(this.report, null, 2));
+
+      console.log(`[CSAV] Audit completed. Report saved at ${outPath}`);
+      return this.report;
+    } catch (err) {
+      console.error("[CSAV] Critical Error:", err);
+      this.report.errors.push(err.toString());
+    }
+  }
+
+  private async auditModule(name: string, endpoint: string) {
+    try {
+      console.log(`[CSAV] Checking ${name.toUpperCase()}...`);
+      const res = await axios.get(endpoint);
+      this.report.modules[name] = {
+        status: "OK",
+        data: res.data,
+      };
+    } catch (err) {
+      this.report.modules[name] = {
+        status: "FAIL",
+        error: err.message,
+      };
+      this.report.errors.push(`[${name}] ${err.message}`);
+    }
+  }
+
+  private validateFormulas() {
+    console.log("[CSAV] Validating formula outputs...");
+    const cwqi = this.report.modules["cwqi"]?.data;
+    const ngc = this.report.modules["ngc"]?.data;
+
+    if (cwqi && Array.isArray(cwqi.values)) {
+      const variance =
+        cwqi.values.reduce((a: number, b: number) => a + Math.pow(b - 0.5, 2), 0) /
+        cwqi.values.length;
+      this.report.modules["cwqi"].variance = variance;
+      if (variance < 0.01)
+        this.report.errors.push("CWQI variance too low – potential normalization lock.");
+    }
+
+    if (ngc && Array.isArray(ngc.values)) {
+      const avg = ngc.values.reduce((a: number, b: number) => a + b, 0) / ngc.values.length;
+      if (avg > 0.85)
+        this.report.errors.push("NGC average too high – potential compression or bias.");
+    }
+  }
+
+  private validateConsistency() {
+    console.log("[CSAV] Checking consistency between indexes...");
+    const dce = this.report.modules["dce"]?.data;
+    const maco = this.report.modules["maco"]?.data;
+    const mof = this.report.modules["mof"]?.data;
+
+    if (dce?.meanDI === 0)
+      this.report.errors.push("DCE mean decision index is zero – no signal weighting applied.");
+    if (maco?.consensus === 0.5)
+      this.report.errors.push("MACO consensus flatlined at 50% – no agent differentiation.");
+    if (mof?.variance === 0)
+      this.report.errors.push("MOF variance = 0 – meta-optimization not updating.");
+  }
+}
+
+export const auditEngine = new SystemAuditEngine();
+
+if (require.main === module) {
+  auditEngine.run();
+}
+
+🧩 Step 2 — Add Audit API Endpoint
+
+Create file:
+
+/server/routes/audit.ts
+
+
+Code:
+
+import express from "express";
+import { auditEngine } from "../services/system-audit-engine";
+const router = express.Router();
+
+router.get("/run", async (_req, res) => {
+  try {
+    const report = await auditEngine.run();
+    res.json({ status: "OK", report });
+  } catch (err) {
+    res.status(500).json({ status: "FAIL", error: err.toString() });
+  }
+});
+
+export default router;
+
+
+Then register it in your main router index:
+
+import auditRoutes from "./audit";
+app.use("/api/audit", auditRoutes);
+
+🧩 Step 3 — Run the Audit
+
+Once implemented, in Replit’s console, run:
+
+npm run dev
+
+
+then open your project URL and go to:
+
+/api/audit/run
+
+
+It will generate a full report under /reports/ like:
+
+CSAV_Report_1735420818123.json
+
+🧩 Step 4 — Review Results
+
+After it completes, you’ll see results in your Replit console and a JSON report file.
+
+✅ What to look for
+
+status: "OK" for all modules
+
+No "variance too low" or "consensus flatlined" warnings
+
+Values like meanDI, variance, and entropy should be > 0
+
+CWQI variance ≈ 0.05 – 0.25
+
+NGC average ≈ 0.6 – 0.8
+
+If errors appear, save the JSON and share it — I’ll read it and tell you exactly what’s miscalculating or disconnected.
+
+🧩 Step 5 — Extended Tests (after base validation)
+
+After base audit passes, you’ll run:
+
+/api/audit/run?mode=deep
+
+
+(This will cross-check trade queue refresh, weighting updates, and data flow between strategy → signal orchestrator → ready-to-buy pool.)
+
+✅ Deliverables
+
+/reports/CSAV_Report_*.json
+
+Console log summary of module status
+
+Confirmation that formulas, indexes, and weightings are functioning correctly.

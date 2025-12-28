@@ -1,0 +1,323 @@
+{
+  "timestamp": "2025-12-28T11:31:02.427Z",
+  "mode": "standard",
+  "modules": {
+    "dce": {
+      "status": "OK",
+      "data": {
+        "ok": true,
+        "weights": {
+          "cwqi": 0.25,
+          "ngc": 0.2,
+          "mlConfidence": 0.2,
+          "regimeConfidence": 0.15,
+          "macoConsensus": 0.2
+        },
+        "meanDI": 0,
+        "topSignals": [],
+        "lastRecalibration": null,
+        "recalibrationCount": 0,
+        "isRunning": true,
+        "weightProfile": [
+          0.25,
+          0.2,
+          0.2,
+          0.15,
+          0.2
+        ]
+      }
+    },
+    "maco": {
+      "status": "FAIL",
+      "error": "Authentication required"
+    },
+    "mof": {
+      "status": "OK",
+      "data": {
+        "ok": true,
+        "metaWeights": {
+          "ara": 1,
+          "vts": 1,
+          "maco": 1,
+          "dce": 1,
+          "pdc": 1,
+          "ecs": 1
+        },
+        "lambdaWeights": {
+          "profit": 0.35,
+          "drawdown": 0.3,
+          "variance": 0.15,
+          "stability": 0.2
+        },
+        "currentJ": 0,
+        "stabilityIndex": 1,
+        "weightEntropy": 1,
+        "subsystemVariance": 0,
+        "lastEvolution": null,
+        "evolutionCount": 0,
+        "kpiCount": 0,
+        "config": {
+          "learningRate": 0.03,
+          "minWeight": 0.1,
+          "maxWeight": 2,
+          "evolutionWindowHours": 24,
+          "gradientEpsilon": 0.01
+        },
+        "timestamp": "2025-12-28T11:31:02.445Z"
+      }
+    },
+    "gasp": {
+      "status": "OK",
+      "data": {
+        "ok": true,
+        "gsi": 1,
+        "gsiGrade": "stable",
+        "mode": "normal",
+        "correlationMax": 0,
+        "correlationMatrix": {
+          "lambda_di": 0,
+          "lambda_drs": 0,
+          "di_drs": 0,
+          "regime_lambda": 0,
+          "regime_di": 0,
+          "regime_drs": 0
+        },
+        "dampedLearningRate": 1,
+        "dampedExposure": 1,
+        "metrics": {
+          "lambdaVariance": 0,
+          "diVariance": 0,
+          "alphaBetaVariance": 0,
+          "drsVariance": 0
+        },
+        "cooldownActive": false,
+        "cooldownStarted": null,
+        "recoveryProgress": 0,
+        "lastScan": null,
+        "scanCount": 0,
+        "equilibrium": {
+          "ok": true,
+          "currentPhase": null,
+          "isRecovering": false,
+          "recoveryAttempts": 0,
+          "lastRecovery": null,
+          "autoPauseCount": 0,
+          "reengagementCount": 0
+        },
+        "currentDamping": {
+          "learningRate": 1,
+          "exposure": 1,
+          "frequency": 1
+        },
+        "timestamp": "2025-12-28T11:31:02.448Z"
+      }
+    },
+    "ara": {
+      "status": "FAIL",
+      "error": "Authentication required"
+    },
+    "pdc": {
+      "status": "OK",
+      "data": {
+        "ok": true,
+        "drawdownRiskScore": 0,
+        "equitySlope": 0,
+        "volRatio": 1,
+        "DI_drift": 0,
+        "containmentActive": false,
+        "warningActive": false,
+        "exposureMultiplier": 1,
+        "riskMultiplier": 1,
+        "frequencyMultiplier": 1,
+        "dampingActive": false,
+        "recoveryProgress": 1,
+        "drsHistory": [
+          0
+        ],
+        "pdcConfig": {
+          "w1": 0.5,
+          "w2": 0.3,
+          "w3": 0.2,
+          "windowSize": 250,
+          "warningThreshold": 0.6,
+          "containmentThreshold": 0.8,
+          "recoveryThreshold": 0.4,
+          "recoveryWindows": 3
+        },
+        "ecsConfig": {
+          "gamma": 0.7,
+          "riskFloorMultiplier": 0.3,
+          "baseExposure": 1,
+          "baseRiskPerTrade": 1,
+          "recoverySpeed": 0.1
+        },
+        "lastRecalibration": null,
+        "recalibrationCount": 0,
+        "equitySamples": 0,
+        "timestamp": "2025-12-28T11:31:02.453Z"
+      }
+    },
+    "apr": {
+      "status": "OK",
+      "data": {
+        "ok": true,
+        "status": "active",
+        "mean_DI": 0.5,
+        "avg_tp_adj": "+0.0%",
+        "avg_sl_adj": "+0.0%",
+        "vol_comp": 1,
+        "current_regime": "R1",
+        "di_slope": 0,
+        "config": {
+          "alpha": 0.6,
+          "beta": 0.4,
+          "tpBase": 1.5,
+          "slBase": 1,
+          "sigmaBaseline": 0.02
+        },
+        "last_recalibration": null,
+        "recalibration_count": 0,
+        "sample_count": 0
+      }
+    },
+    "cwqi": {
+      "status": "OK",
+      "data": {
+        "sampleCount": 12,
+        "variance": 0.04571213520833334,
+        "average": 0.5402250000000001,
+        "min": 0.1505,
+        "max": 0.8663,
+        "thresholds": {
+          "minRequired": 0.2
+        }
+      },
+      "variance": 0.04571213520833334,
+      "average": 0.5402250000000001
+    },
+    "ngc": {
+      "status": "OK",
+      "data": {
+        "sampleCount": 12,
+        "variance": 0.04416666666666666,
+        "average": 0.57,
+        "min": 0.17,
+        "max": 0.87,
+        "thresholds": {
+          "minRequired": 0.3
+        }
+      },
+      "variance": 0.04416666666666666,
+      "average": 0.57
+    }
+  },
+  "metrics": {
+    "cwqi": {
+      "values": [
+        0.8663,
+        0.7339,
+        0.6368,
+        0.538,
+        0.4373,
+        0.3342,
+        0.228,
+        0.1505,
+        0.7994,
+        0.6845,
+        0.5867,
+        0.4871
+      ],
+      "variance": 0.04571213520833334,
+      "average": 0.5402250000000001,
+      "min": 0.1505,
+      "max": 0.8663
+    },
+    "ngc": {
+      "values": [
+        0.87,
+        0.77,
+        0.67,
+        0.57,
+        0.47,
+        0.37,
+        0.27,
+        0.17,
+        0.82,
+        0.72,
+        0.62,
+        0.52
+      ],
+      "variance": 0.04416666666666666,
+      "average": 0.57,
+      "min": 0.17,
+      "max": 0.87
+    }
+  },
+  "normalizerStats": {
+    "ngc": {
+      "min": 0.29202088655323,
+      "max": 0.9144671590585753,
+      "sampleCount": 67,
+      "initialized": true
+    },
+    "profitRate": {
+      "min": 0.20258001928199718,
+      "max": 1.4870506516605897,
+      "sampleCount": 67,
+      "initialized": true
+    },
+    "expectedReturn": {
+      "min": 0.1,
+      "max": 0.8,
+      "sampleCount": 0,
+      "initialized": false
+    }
+  },
+  "sqeStats": {
+    "evaluations": 0,
+    "passed": 0,
+    "rejected": 0,
+    "passRate": 0
+  },
+  "rtbStats": {
+    "paper": {
+      "mode": "paper",
+      "totalQueued": 191,
+      "avgCWQI": 0.05,
+      "oldestSignalAge": 392636,
+      "byStrategy": {
+        "sma_trend_ride": 41,
+        "vwap_bounce": 2,
+        "vwap_pullback": 13,
+        "mean_reversion": 109,
+        "range_trading": 5,
+        "dhma": 17,
+        "liquidity_trap": 4
+      },
+      "byBlockReason": {
+        "SQE_QUALIFIED": 191
+      }
+    },
+    "live": {
+      "mode": "live",
+      "totalQueued": 0,
+      "avgCWQI": 0,
+      "oldestSignalAge": 0,
+      "byStrategy": {},
+      "byBlockReason": {}
+    }
+  },
+  "errors": [
+    "[MACO] Authentication required",
+    "[ARA] Authentication required"
+  ],
+  "warnings": [
+    "DCE decision index is zero – no signal weighting applied yet."
+  ],
+  "summary": {
+    "totalModules": 9,
+    "passedModules": 7,
+    "failedModules": 2,
+    "overallStatus": "FAIL"
+  }
+}
