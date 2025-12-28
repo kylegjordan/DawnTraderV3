@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,22 @@ export default function ReadyToBuyTable() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const queryClient = useQueryClient();
   const { messages } = useWebSocket();
+  
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const bottomScrollRef = useRef<HTMLDivElement>(null);
+  const [scrollWidth, setScrollWidth] = useState(0);
+  
+  const syncScroll = useCallback((source: 'top' | 'bottom') => {
+    const topEl = topScrollRef.current;
+    const bottomEl = bottomScrollRef.current;
+    if (!topEl || !bottomEl) return;
+    
+    if (source === 'top') {
+      bottomEl.scrollLeft = topEl.scrollLeft;
+    } else {
+      topEl.scrollLeft = bottomEl.scrollLeft;
+    }
+  }, []);
 
   const { data, isLoading, error, refetch } = useQuery<TradingSignal[]>({
     queryKey: ['/api/trading-signals'],
@@ -54,6 +70,21 @@ export default function ReadyToBuyTable() {
     if (data) {
       setLastUpdated(new Date());
     }
+  }, [data]);
+
+  useEffect(() => {
+    const updateScrollWidth = () => {
+      if (bottomScrollRef.current) {
+        setScrollWidth(bottomScrollRef.current.scrollWidth);
+      }
+    };
+    updateScrollWidth();
+    const timeoutId = setTimeout(updateScrollWidth, 100);
+    window.addEventListener('resize', updateScrollWidth);
+    return () => {
+      window.removeEventListener('resize', updateScrollWidth);
+      clearTimeout(timeoutId);
+    };
   }, [data]);
 
   // Directive 8.8.4-C.14.D: Listen for rtb:cleared event directly
@@ -234,7 +265,20 @@ export default function ReadyToBuyTable() {
             <p className="text-muted-foreground">Loading trading signals...</p>
           </div>
         ) : sortedSignals.length > 0 ? (
-          <div className="overflow-x-auto">
+          <>
+            <div 
+              ref={topScrollRef}
+              className="overflow-x-auto mb-1"
+              onScroll={() => syncScroll('top')}
+              style={{ overflowY: 'hidden' }}
+            >
+              <div style={{ width: scrollWidth, height: 1 }} />
+            </div>
+            <div 
+              ref={bottomScrollRef}
+              className="overflow-x-auto"
+              onScroll={() => syncScroll('bottom')}
+            >
             <table className="w-full" data-testid="table-trading-signals">
               <thead>
                 <tr className="border-b">
@@ -405,7 +449,8 @@ export default function ReadyToBuyTable() {
                 })}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         ) : (
           <div className="text-center py-8">
             <TrendingUp className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
