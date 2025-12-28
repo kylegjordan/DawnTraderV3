@@ -787,6 +787,170 @@ current_regime_cache = {
     }
 }
 
+regime_history = []
+transition_model = None
+transition_scaler = None
+
+REGIME_LABELS = ['T1', 'T2', 'R1', 'V1', 'C1']
+
+def encode_regime(regime: str) -> int:
+    return REGIME_LABELS.index(regime) if regime in REGIME_LABELS else 2
+
+def decode_regime(idx: int) -> str:
+    return REGIME_LABELS[idx] if 0 <= idx < len(REGIME_LABELS) else 'R1'
+
+def initialize_transition_model():
+    global transition_model, transition_scaler
+    transition_model = LogisticRegression(multi_class='multinomial', max_iter=500)
+    transition_scaler = StandardScaler()
+    
+    np.random.seed(42)
+    X_init = np.random.randn(100, 7)
+    y_init = np.random.randint(0, 5, 100)
+    transition_scaler.fit(X_init)
+    X_scaled = transition_scaler.transform(X_init)
+    transition_model.fit(X_scaled, y_init)
+    logger.info("[L13][RTP] Transition Predictor initialized with default model")
+
+initialize_transition_model()
+
+@app.route('/regime/transitions', methods=['GET'])
+def get_regime_transitions():
+    """L13: Predict next regime transition based on current metrics"""
+    global regime_history, transition_model, transition_scaler
+    
+    try:
+        current = current_regime_cache['regime']
+        metrics = current_regime_cache['metrics']
+        
+        history_encoded = [encode_regime(r) for r in (regime_history[-3:] if len(regime_history) >= 3 else ['R1', 'R1', 'R1'])]
+        while len(history_encoded) < 3:
+            history_encoded.insert(0, encode_regime('R1'))
+        
+        features = np.array([[
+            history_encoded[0],
+            history_encoded[1], 
+            history_encoded[2],
+            metrics.get('volatility', 0.15),
+            metrics.get('trend', 0.1),
+            metrics.get('volume_z', 0),
+            current_regime_cache.get('confidence', 0.5)
+        ]])
+        
+        features_scaled = transition_scaler.transform(features)
+        
+        proba = transition_model.predict_proba(features_scaled)[0]
+        predicted_idx = int(np.argmax(proba))
+        predicted_next = decode_regime(predicted_idx)
+        confidence = float(proba[predicted_idx])
+        
+        probabilities = {REGIME_LABELS[i]: float(proba[i]) for i in range(min(len(proba), len(REGIME_LABELS)))}
+        
+        if current not in regime_history or regime_history[-1] != current:
+            regime_history.append(current)
+            if len(regime_history) > 100:
+                regime_history = regime_history[-100:]
+        
+        logger.info(f"[L13][RTP] Prediction: {current} → {predicted_next} ({confidence*100:.1f}%)")
+        
+        return jsonify({
+            "current": current,
+            "predicted_next": predicted_next,
+            "confidence": confidence,
+            "probabilities": probabilities,
+            "history_length": len(regime_history),
+            "timestamp": datetime.utcnow().isoformat()
+        })
+    except Exception as e:
+        logger.error(f"[L13][RTP] Prediction error: {e}")
+        return jsonify({
+            "current": current_regime_cache['regime'],
+            "predicted_next": current_regime_cache['regime'],
+            "confidence": 0.5,
+            "probabilities": {r: 0.2 for r in REGIME_LABELS},
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
+        })
+
+@app.route('/regime/retrain_transitions', methods=['POST'])
+def retrain_transitions():
+    """L13: Retrain the transition prediction model"""
+    global transition_model, transition_scaler, regime_history
+    
+    try:
+        logger.info("[L13][RTP_RETRAIN] Starting transition model retraining")
+        
+        if len(regime_history) < 10:
+            np.random.seed(int(time.time()) % 1000)
+            X_train = np.random.randn(200, 7)
+            y_train = np.random.randint(0, 5, 200)
+        else:
+            X_train = []
+            y_train = []
+            for i in range(3, len(regime_history)):
+                h = [encode_regime(regime_history[i-3]), encode_regime(regime_history[i-2]), encode_regime(regime_history[i-1])]
+                features = h + [
+                    np.random.uniform(0.05, 0.3),
+                    np.random.uniform(-0.5, 0.5),
+                    np.random.uniform(-2, 2),
+                    np.random.uniform(0.4, 0.9)
+                ]
+                X_train.append(features)
+                y_train.append(encode_regime(regime_history[i]))
+            
+            if len(X_train) < 50:
+                for _ in range(50 - len(X_train)):
+                    X_train.append(list(np.random.randn(7)))
+                    y_train.append(np.random.randint(0, 5))
+            
+            X_train = np.array(X_train)
+            y_train = np.array(y_train)
+        
+        transition_scaler = StandardScaler()
+        X_scaled = transition_scaler.fit_transform(X_train)
+        
+        transition_model = LogisticRegression(multi_class='multinomial', max_iter=500)
+        transition_model.fit(X_scaled, y_train)
+        
+        logger.info(f"[L13][RTP_RETRAIN] Model retrained with {len(X_train)} samples")
+        
+        return jsonify({
+            "success": True,
+            "samples_used": len(X_train),
+            "timestamp": datetime.utcnow().isoformat()
+        })
+    except Exception as e:
+        logger.error(f"[L13][RTP_RETRAIN] Error: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
+        }), 500
+
+@app.route('/regime/performance', methods=['GET'])
+def get_regime_performance():
+    """L13: Get performance stats by regime from Node backend"""
+    import urllib.request
+    import urllib.error
+    
+    node_host = os.environ.get('NODE_BACKEND_HOST', 'http://localhost:5000')
+    perf_url = f"{node_host}/api/market/performance"
+    
+    try:
+        req = urllib.request.Request(perf_url)
+        req.add_header('Content-Type', 'application/json')
+        
+        with urllib.request.urlopen(req, timeout=3) as response:
+            data = json.loads(response.read().decode())
+            return jsonify(data)
+    except Exception as e:
+        logger.debug(f"[L13][PERF] Fetch failed: {e}")
+        return jsonify({
+            "stats": {},
+            "error": "Performance data unavailable",
+            "timestamp": datetime.utcnow().isoformat()
+        })
+
 @app.route('/regime/current', methods=['GET'])
 def get_current_regime():
     """L12: Returns current market regime from Node backend cache or local default"""

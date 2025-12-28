@@ -22,6 +22,8 @@ import { EventEmitter } from 'events';
 import fs from 'fs/promises';
 import path from 'path';
 import { loadCalibration, loadFullCalibration, calibrateFromTradesPerStrategy, type CalibrationCoefficients, type FullCalibration } from '../utils/calibration';
+import { getMarketProfiler, RegimeId } from './market-profiler';
+import { getRegimePerformanceTracker } from './regime-performance';
 
 export interface VirtualSignal {
   id: string;
@@ -226,6 +228,25 @@ export class VTSService extends EventEmitter {
     this.virtualTrades.delete(trade.id);
     this.closedTrades.push(trade);
     this.emit('trade_closed', trade);
+
+    try {
+      const mcp = getMarketProfiler();
+      const currentRegime = mcp.getCurrentRegime();
+      if (currentRegime && trade.netProfit !== undefined) {
+        const rpt = getRegimePerformanceTracker();
+        const duration = trade.exitTime ? trade.exitTime - trade.entryTime : 0;
+        rpt.recordTradeOutcome({
+          regime: currentRegime,
+          pnl: trade.netProfit,
+          strategy: trade.signal.strategy || 'unknown',
+          duration,
+          isWin: trade.netProfit > 0,
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (error) {
+      console.error('[L13][VTS] Failed to record trade to RPT:', error);
+    }
 
     await this.logTrade(trade);
   }

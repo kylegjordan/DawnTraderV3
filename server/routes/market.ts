@@ -14,6 +14,8 @@ import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { getMarketProfiler, type RegimeId } from '../services/market-profiler';
 import { getAdaptiveRegime, type StrategyMix } from '../services/adaptive-regime';
+import { getRegimePerformanceTracker } from '../services/regime-performance';
+import { getProactiveAllocator } from '../services/proactive-allocator';
 
 export const marketRouter = Router();
 
@@ -189,5 +191,90 @@ marketRouter.get('/regime/history', requireAuth, async (req: Request, res: Respo
   } catch (error) {
     console.error('[L12][API][ERROR] Failed to get regime history:', error);
     res.status(500).json({ error: 'Failed to get regime history' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// L13: Regime Performance Attribution & Predictive Switch Forecasting
+// ══════════════════════════════════════════════════════════════════════════════
+
+marketRouter.get('/performance', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const rpt = getRegimePerformanceTracker();
+    const stats = rpt.getPerformanceSummary();
+    const topPerformer = rpt.getTopPerformer();
+    
+    res.json({
+      stats,
+      topPerformer: topPerformer ? {
+        regime: topPerformer.regime,
+        description: REGIME_DESCRIPTIONS[topPerformer.regime],
+        avgPnL: topPerformer.stats.pnl,
+        stability: topPerformer.stats.stability
+      } : null,
+      rptActive: rpt.isRunningStatus(),
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[L13][API][ERROR] Failed to get regime performance:', error);
+    res.status(500).json({ error: 'Failed to get regime performance' });
+  }
+});
+
+marketRouter.get('/transitions', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const pa = getProactiveAllocator();
+    const prediction = pa.getPrediction();
+    const adjustments = pa.getAdjustments();
+    
+    if (!prediction) {
+      return res.json({
+        current: 'R1',
+        predicted_next: 'R1',
+        confidence: 0.5,
+        probabilities: { T1: 0.2, T2: 0.2, R1: 0.2, V1: 0.2, C1: 0.2 },
+        forecastHorizon: '15m',
+        biases: [],
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    res.json({
+      current: prediction.current,
+      currentDescription: REGIME_DESCRIPTIONS[prediction.current],
+      predicted_next: prediction.predicted_next,
+      predictedDescription: REGIME_DESCRIPTIONS[prediction.predicted_next],
+      confidence: prediction.confidence,
+      probabilities: prediction.probabilities,
+      forecastHorizon: adjustments?.forecastHorizon || '15m',
+      biases: adjustments?.biases.filter(b => Math.abs(b.blendedBias - 1) > 0.05) || [],
+      exposureMultiplier: adjustments?.exposureMultiplier || 1.0,
+      riskMultiplier: adjustments?.riskMultiplier || 1.0,
+      paActive: pa.isRunningStatus(),
+      timestamp: prediction.timestamp
+    });
+  } catch (error) {
+    console.error('[L13][API][ERROR] Failed to get transitions:', error);
+    res.status(500).json({ error: 'Failed to get transitions' });
+  }
+});
+
+marketRouter.post('/retrain_transitions', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (req.user?.username !== 'testuser123') {
+      return res.status(403).json({ error: 'Only testuser123 can retrain the transition model' });
+    }
+    
+    const pa = getProactiveAllocator();
+    const result = await pa.triggerRetrain();
+    
+    res.json({
+      success: result.success,
+      message: result.message,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[L13][API][ERROR] Failed to retrain transitions:', error);
+    res.status(500).json({ error: 'Failed to retrain transitions' });
   }
 });

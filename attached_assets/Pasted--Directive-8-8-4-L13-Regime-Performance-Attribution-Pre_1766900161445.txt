@@ -1,0 +1,505 @@
+⚙️ Directive 8.8.4-L13 — Regime Performance Attribution & Predictive Switch Forecasting
+Series: L-Series Intelligence Tier IV
+Predecessors: L1–L12
+Test Account Credentials:
+
+Username: testuser123
+Password: SecurePass123!
+
+1 | Objective
+
+To enable forward-looking market adaptation, this directive builds on L12 (Market Condition Profiling) by:
+
+Measuring each regime’s historical and real-time impact on trading performance (PnL, win rate, drawdown, stability).
+
+Learning to predict regime transitions before they occur.
+
+Biasing strategy allocation pre-emptively based on regime forecasts, rather than reactively.
+
+The goal is to create a self-anticipating system that positions Dawn Trader ahead of market changes.
+
+2 | Core Components
+Component	Description
+Regime Performance Tracker (RPT)	Continuously aggregates performance stats by current regime.
+Transition Predictor (RTP)	ML model predicting probability of regime shifts (e.g., R1 → T1) within the next cycle.
+Proactive Allocator (PA)	Adjusts regime weights and exposures based on RTP probabilities.
+Performance Dashboard Extension	Adds historical regime performance & predicted next regime indicators to the Adaptive Risk Advisor (ARA).
+3 | Implementation Tasks
+3.1 Regime Performance Tracker (RPT)
+
+📁 server/services/regime-performance.ts
+
+Inputs:
+
+Regime data from MCP (L12).
+
+Trade outcomes from VTS & paper/live execution logs.
+
+Strategy identifiers and results (profit, duration, stop/hit ratios).
+
+Computations:
+For each regime 
+𝑅
+𝑖
+R
+i
+	​
+
+:
+
+Avg PnL per trade
+
+Win Rate 
+𝑊
+𝑖
+=
+𝑤
+𝑖
+𝑛
+𝑠
+/
+𝑡
+𝑜
+𝑡
+𝑎
+𝑙
+W
+i
+	​
+
+=wins/total
+
+Volatility of returns 
+𝜎
+𝑖
+σ
+i
+	​
+
+
+Stability Index 
+𝑆
+𝑖
+=
+(
+𝑊
+𝑖
+×
+𝜇
+𝑃
+𝑛
+𝐿
+)
+/
+𝜎
+𝑖
+S
+i
+	​
+
+=(W
+i
+	​
+
+×μ
+PnL
+	​
+
+)/σ
+i
+	​
+
+
+Weighted Confidence 
+𝐶
+𝑖
+=
+𝑛
+𝑜
+𝑟
+𝑚
+𝑎
+𝑙
+𝑖
+𝑧
+𝑒
+𝑑
+(
+𝑆
+𝑖
+)
+C
+i
+	​
+
+=normalized(S
+i
+	​
+
+)
+
+Outputs:
+JSON record (updated hourly):
+
+{
+  "R1": {"PnL":0.023,"WinRate":0.61,"Stability":0.74,"Confidence":0.83},
+  "T1": {"PnL":0.045,"WinRate":0.67,"Stability":0.79,"Confidence":0.87}
+}
+
+
+Stores rolling history in /logs/regime_performance_history/.
+
+3.2 Transition Predictor (RTP)
+
+📁 services/ml_service.py
+
+Purpose: Forecast probability of next regime using historical transitions and market metrics.
+
+Model:
+
+Type: Logistic Regression (multi-class)
+
+Inputs: last 3 regime states, volatility σ, trend slope, volume z-score, Sharpe ratio deltas
+
+Target: next regime in sequence
+
+Retrained nightly or on demand via /api/market/retrain_transitions
+
+Output Example:
+
+{
+  "current": "R1",
+  "predicted_next": "T1",
+  "probabilities": {
+    "T1": 0.63,
+    "R1": 0.22,
+    "T2": 0.08,
+    "V1": 0.05,
+    "C1": 0.02
+  }
+}
+
+3.3 Proactive Allocator (PA)
+
+📁 server/services/proactive-allocator.ts
+
+Logic:
+
+Compute expected-value bias for each regime:
+
+𝐸
+[
+𝑅
+𝑖
+]
+=
+𝐶
+𝑖
+×
+𝑃
+(
+𝑅
+𝑖
+)
+E[R
+i
+	​
+
+]=C
+i
+	​
+
+×P(R
+i
+	​
+
+)
+
+Blend with current MCP regime weights to form a probabilistic forward allocation matrix.
+
+Apply temporary pre-bias (±10–30%) to strategy weights and exposure multipliers.
+
+Example:
+If current regime = R1 but P(T1)=0.63, exposure for breakout/momentum strategies begins gradual ramp-up before full switch.
+
+3.4 API Endpoints
+Endpoint	Description	Auth
+/api/market/performance	Returns RPT summary and rolling stats	✅ Requires user auth
+/api/market/transitions	Returns latest RTP predictions	✅ Requires user auth
+/api/market/retrain_transitions	Retrains RTP model (manual trigger)	✅ Requires testuser123
+/api/health	Adds marketForecast section with predicted_next and probability map	✅
+3.5 ARA UI Enhancements
+
+📁 client/src/components/goals/adaptive-risk-advisor.tsx
+
+Add a new section below “Market Regime Profile” titled “Regime Forecast & Performance”, displaying:
+
+Field	Example
+Current Regime	R1 (Range-Bound)
+Predicted Next	T1 (Trending Bull)
+Transition Confidence	63 %
+Top Performing Regime	T1 (+4.5% avg PnL, 0.79 stability)
+Forecast Horizon	15 min
+Action Bias	+10% breakout, +8% momentum
+[Retrain Model] Button	Manual retrain trigger for RTP
+
+Color code:
+
+Green = Bullish forecast
+
+Red = Bearish forecast
+
+Blue = Range
+
+Amber = Volatile
+
+UI receives real-time forecast updates via WebSocket events (forecastUpdated).
+
+4 | Data Flow
+VTS / Trade Logs → RPT (Regime Performance)
+                       ↓
+MCP (Current Regime) → RTP (Forecast Model)
+                       ↓
+Proactive Allocator → Strategy Weight Bias
+                       ↓
+Signal Orchestrator / ARA Display / ML Context
+
+5 | Model & Formulas
+Performance Metrics
+𝑆
+𝑡
+𝑎
+𝑏
+𝑖
+𝑙
+𝑖
+𝑡
+𝑦
+=
+𝑊
+𝑖
+×
+𝜇
+𝑃
+𝑛
+𝐿
+𝜎
+𝑖
+Stability=
+σ
+i
+	​
+
+W
+i
+	​
+
+×μ
+PnL
+	​
+
+	​
+
+𝐶
+𝑜
+𝑛
+𝑓
+𝑖
+𝑑
+𝑒
+𝑛
+𝑐
+𝑒
+=
+𝑆
+𝑡
+𝑎
+𝑏
+𝑖
+𝑙
+𝑖
+𝑡
+𝑦
+𝑖
+Σ
+𝑆
+𝑡
+𝑎
+𝑏
+𝑖
+𝑙
+𝑖
+𝑡
+𝑦
+Confidence=
+ΣStability
+Stability
+i
+	​
+
+	​
+
+Transition Forecast
+𝑃
+(
+𝑅
+𝑛
+𝑒
+𝑥
+𝑡
+=
+𝑗
+∣
+𝑅
+𝑡
+=
+𝑖
+)
+=
+𝑠
+𝑜
+𝑓
+𝑡
+𝑚
+𝑎
+𝑥
+(
+𝑊
+⋅
+𝑋
+𝑡
+)
+P(R
+next
+	​
+
+=j∣R
+t
+	​
+
+=i)=softmax(W⋅X
+t
+	​
+
+)
+Proactive Bias
+𝐵
+𝑖
+𝑎
+𝑠
+𝑠
+=
+𝑐
+𝑙
+𝑎
+𝑚
+𝑝
+(
+1
++
+𝑘
+(
+𝐸
+[
+𝑅
+𝑛
+𝑒
+𝑥
+𝑡
+]
+−
+𝐸
+[
+𝑅
+𝑐
+𝑢
+𝑟
+𝑟
+𝑒
+𝑛
+𝑡
+]
+)
+,
+0.7
+,
+1.3
+)
+Bias
+s
+	​
+
+=clamp(1+k(E[R
+next
+	​
+
+]−E[R
+current
+	​
+
+]),0.7,1.3)
+
+where 
+𝑘
+k=0.5 by default.
+
+6 | Health Endpoint Output Example
+"marketForecast": {
+  "current": "R1",
+  "predicted_next": "T1",
+  "confidence": 0.63,
+  "top_performer": "T1",
+  "forecast_horizon": "15m",
+  "transition_matrix": {
+    "R1→T1": 0.63,
+    "R1→R1": 0.22,
+    "R1→T2": 0.08
+  }
+}
+
+7 | Autonomy Scheduler Integration
+
+RPT update cycle: every 60 minutes.
+
+RTP retrain cycle: every 24 hours.
+
+RTP inference: every 15 minutes (aligned with MCP cadence).
+
+Fully async, non-blocking, low CPU (<2%).
+
+All data persisted under /logs/regime_forecast/.
+
+8 | Testing & Verification
+Test	Expected Result
+/api/market/performance	Returns per-regime PnL stats
+/api/market/transitions	Returns forecast JSON
+/api/market/retrain_transitions (testuser123)	Retrains model, emits forecastRetrained event
+WebSocket Event	forecastUpdated fires every 15 min
+ARA UI	Updates with current + next regime display
+Health Endpoint	Includes new marketForecast section
+9 | Architecture & Security Review
+Check	Status	Notes
+Non-blocking async	✅	Uses Promise-based scheduling
+CPU load	✅	< 2 % (LogReg inference)
+Memory footprint	✅	20 MB (model + buffers)
+Auth control	✅	Test user required for retrain endpoint
+Logging	✅	Stored in /logs/regime_performance_history/ & /logs/regime_forecast/
+10 | Expected Outcomes
+Metric	Improvement
+Forecast lead time	1 cycle (≈15 min) pre-emptive detection
+Strategy allocation accuracy	+10–15 %
+Regime transition adaptation	Instant upon new cycle
+Profit stability	Reduced drawdown across regime shifts
+11 | Directive Summary
+Field	Value
+Directive ID	8.8.4-L13
+Name	Regime Performance Attribution & Predictive Switch Forecasting
+Goal	Anticipate regime shifts and pre-adjust strategy portfolio
+Scope	RPT, RTP, PA, UI extension, API, Scheduler
+Dependencies	L12 (Market Profiler & ARE)
+Outcome	Forecast-driven, self-calibrating trading adaptation
+Auth (Testing)	testuser123 / SecurePass123!
+12 | Next Directive Preview
+
+Directive 8.8.4-L14 — Cross-Regime Reinforcement Learning Engine (CRRLE)
+Will implement a reward-driven reinforcement loop that learns how to maximize long-term returns through simulated multi-regime scenarios.

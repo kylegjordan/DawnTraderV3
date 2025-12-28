@@ -15,6 +15,8 @@ import { computeExposureBias, getOverbiasedStrategies, type ExposureBiasBundle }
 import { getDriftDetector, type StrategyDriftStatus } from '../services/drift-detector.js';
 import { getMarketProfiler } from '../services/market-profiler.js';
 import { getAdaptiveRegime } from '../services/adaptive-regime.js';
+import { getRegimePerformanceTracker } from '../services/regime-performance.js';
+import { getProactiveAllocator } from '../services/proactive-allocator.js';
 
 export const healthRouter = Router();
 
@@ -408,6 +410,7 @@ healthRouter.get('/', async (req, res) => {
         driftingCount: driftingStrategies.length
       },
       marketRegime: marketRegimeData,
+      marketForecast: await getMarketForecastHealth(),
       issues: status.issues,
       timestamp: new Date().toISOString(),
     });
@@ -416,3 +419,56 @@ healthRouter.get('/', async (req, res) => {
     res.status(500).json({ ok: false, error: error.message });
   }
 });
+
+async function getMarketForecastHealth() {
+  try {
+    const pa = getProactiveAllocator();
+    const rpt = getRegimePerformanceTracker();
+    const prediction = pa.getPrediction();
+    const topPerformer = rpt.getTopPerformer();
+    
+    if (!prediction) {
+      return {
+        current: 'R1',
+        predicted_next: 'R1',
+        confidence: 0.5,
+        top_performer: null,
+        forecast_horizon: '15m',
+        transition_matrix: {},
+        rpt_active: rpt.isRunningStatus(),
+        pa_active: pa.isRunningStatus()
+      };
+    }
+    
+    const transitionMatrix: Record<string, number> = {};
+    if (prediction.probabilities) {
+      for (const [regime, prob] of Object.entries(prediction.probabilities)) {
+        if (prob > 0.05) {
+          transitionMatrix[`${prediction.current}→${regime}`] = prob;
+        }
+      }
+    }
+    
+    return {
+      current: prediction.current,
+      predicted_next: prediction.predicted_next,
+      confidence: prediction.confidence,
+      top_performer: topPerformer?.regime || null,
+      forecast_horizon: '15m',
+      transition_matrix: transitionMatrix,
+      rpt_active: rpt.isRunningStatus(),
+      pa_active: pa.isRunningStatus()
+    };
+  } catch (e) {
+    console.log('[L13][HEALTH] Failed to get market forecast');
+    return {
+      current: 'R1',
+      predicted_next: 'R1',
+      confidence: 0.5,
+      top_performer: null,
+      forecast_horizon: '15m',
+      transition_matrix: {},
+      error: 'Forecast unavailable'
+    };
+  }
+}

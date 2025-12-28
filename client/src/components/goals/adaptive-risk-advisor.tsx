@@ -104,6 +104,45 @@ interface MarketRegime {
   timestamp: string;
 }
 
+interface RegimeTransitions {
+  current: 'T1' | 'T2' | 'R1' | 'V1' | 'C1';
+  currentDescription: string;
+  predicted_next: 'T1' | 'T2' | 'R1' | 'V1' | 'C1';
+  predictedDescription: string;
+  confidence: number;
+  probabilities: Record<string, number>;
+  forecastHorizon: string;
+  biases: Array<{
+    strategy: string;
+    currentBias: number;
+    predictedBias: number;
+    blendedBias: number;
+  }>;
+  exposureMultiplier: number;
+  riskMultiplier: number;
+  paActive: boolean;
+  timestamp: string;
+}
+
+interface RegimePerformance {
+  stats: Record<string, {
+    pnl: number;
+    winRate: number;
+    volatility: number;
+    stability: number;
+    confidence: number;
+    tradeCount: number;
+  }>;
+  topPerformer: {
+    regime: string;
+    description: string;
+    avgPnL: number;
+    stability: number;
+  } | null;
+  rptActive: boolean;
+  timestamp: string;
+}
+
 const REGIME_COLORS: Record<string, string> = {
   T1: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-300',
   T2: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-300',
@@ -144,6 +183,16 @@ export default function AdaptiveRiskAdvisor() {
 
   const { data: marketRegime } = useQuery<MarketRegime>({
     queryKey: ['/api/market/regime'],
+    refetchInterval: 60000,
+  });
+
+  const { data: regimeTransitions } = useQuery<RegimeTransitions>({
+    queryKey: ['/api/market/transitions'],
+    refetchInterval: 60000,
+  });
+
+  const { data: regimePerformance } = useQuery<RegimePerformance>({
+    queryKey: ['/api/market/performance'],
     refetchInterval: 60000,
   });
   
@@ -494,6 +543,95 @@ export default function AdaptiveRiskAdvisor() {
               <div className="flex gap-4 text-xs text-muted-foreground">
                 <span>Exposure: {marketRegime.exposureMultiplier.toFixed(2)}x</span>
                 <span>Risk: {marketRegime.riskMultiplier.toFixed(2)}x</span>
+              </div>
+            </div>
+          </>
+        )}
+
+        {regimeTransitions && (
+          <>
+            <Separator />
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-cyan-500" />
+                  <span className="font-medium">Regime Forecast & Performance</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Info className="w-4 h-4 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>Predicts upcoming market regime transitions and pre-adjusts strategy weights to position ahead of changes.</p>
+                        <p className="mt-1">Forecast horizon: {regimeTransitions.forecastHorizon}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <Badge className={`gap-1 border ${REGIME_COLORS[regimeTransitions.predicted_next] || REGIME_COLORS.R1}`}>
+                  → {regimeTransitions.predictedDescription || regimeTransitions.predicted_next}
+                </Badge>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="p-2 rounded bg-slate-50 dark:bg-slate-900/50">
+                  <div className="text-muted-foreground">Current Regime</div>
+                  <div className="font-semibold">{regimeTransitions.currentDescription || regimeTransitions.current}</div>
+                </div>
+                <div className="p-2 rounded bg-slate-50 dark:bg-slate-900/50">
+                  <div className="text-muted-foreground">Predicted Next</div>
+                  <div className="font-semibold">{regimeTransitions.predictedDescription || regimeTransitions.predicted_next}</div>
+                </div>
+                <div className="p-2 rounded bg-slate-50 dark:bg-slate-900/50">
+                  <div className="text-muted-foreground">Transition Confidence</div>
+                  <div className={`font-semibold ${regimeTransitions.confidence >= 0.6 ? 'text-green-600' : regimeTransitions.confidence >= 0.4 ? 'text-amber-600' : 'text-gray-600'}`}>
+                    {(regimeTransitions.confidence * 100).toFixed(1)}%
+                  </div>
+                </div>
+                <div className="p-2 rounded bg-slate-50 dark:bg-slate-900/50">
+                  <div className="text-muted-foreground">Forecast Horizon</div>
+                  <div className="font-semibold">{regimeTransitions.forecastHorizon}</div>
+                </div>
+              </div>
+
+              {regimePerformance?.topPerformer && (
+                <div className="p-3 rounded-lg bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30 border border-emerald-200 dark:border-emerald-800">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-emerald-500" />
+                      <span className="text-sm font-medium">Top Performing Regime</span>
+                    </div>
+                    <Badge className={`gap-1 border ${REGIME_COLORS[regimePerformance.topPerformer.regime] || REGIME_COLORS.R1}`}>
+                      {regimePerformance.topPerformer.description}
+                    </Badge>
+                  </div>
+                  <div className="mt-2 flex gap-4 text-xs text-muted-foreground">
+                    <span>Avg PnL: {(regimePerformance.topPerformer.avgPnL * 100).toFixed(2)}%</span>
+                    <span>Stability: {regimePerformance.topPerformer.stability.toFixed(2)}</span>
+                  </div>
+                </div>
+              )}
+
+              {regimeTransitions.biases && regimeTransitions.biases.length > 0 && (
+                <div className="space-y-1">
+                  <span className="text-sm text-muted-foreground">Action Bias:</span>
+                  <div className="flex flex-wrap gap-2">
+                    {regimeTransitions.biases.map((bias, i) => (
+                      <Badge 
+                        key={i} 
+                        variant="outline" 
+                        className={`text-xs ${bias.blendedBias > 1 ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400' : 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400'}`}
+                      >
+                        {bias.blendedBias > 1 ? '+' : ''}{((bias.blendedBias - 1) * 100).toFixed(0)}% {bias.strategy.replace(/_/g, ' ')}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-4 text-xs text-muted-foreground">
+                <span>Blended Exposure: {regimeTransitions.exposureMultiplier?.toFixed(2) || '1.00'}x</span>
+                <span>Blended Risk: {regimeTransitions.riskMultiplier?.toFixed(2) || '1.00'}x</span>
               </div>
             </div>
           </>

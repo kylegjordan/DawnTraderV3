@@ -6232,6 +6232,36 @@
     ]
   },
   {
+    "path": "/api/market/performance",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/market/transitions",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/market/retrain_transitions",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api*",
     "methods": [],
     "middlewares": [

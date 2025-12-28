@@ -13,6 +13,8 @@ import { knowledgeRetrievalService } from './knowledge-retrieval'; // Phase 16.0
 import { startDriftDetector } from './drift-detector'; // L11
 import { getMarketProfiler, initMarketProfiler } from './market-profiler'; // L12
 import { getAdaptiveRegime, initAdaptiveRegime } from './adaptive-regime'; // L12
+import { getRegimePerformanceTracker } from './regime-performance'; // L13
+import { getProactiveAllocator } from './proactive-allocator'; // L13
 import { db } from '../db';
 import { users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
@@ -24,6 +26,12 @@ const adaptiveRegime = initAdaptiveRegime();
 marketProfiler.start();
 adaptiveRegime.start();
 console.log('[L12][SCHEDULER] Market Profiler and Adaptive Regime Engine started');
+
+const regimePerformanceTracker = getRegimePerformanceTracker();
+const proactiveAllocator = getProactiveAllocator();
+regimePerformanceTracker.start();
+proactiveAllocator.start();
+console.log('[L13][SCHEDULER] Regime Performance Tracker and Proactive Allocator started');
 
 /**
  * Phase 8.9: Autonomy Layer Scheduler
