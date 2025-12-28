@@ -31,6 +31,12 @@ Market Condition Profiling & Adaptive Regime Switching (L12) classifies current 
 
 Cross-Regime Reinforcement Learning Engine (L14) uses Q-learning to continuously optimize strategy allocations across market regimes based on cumulative rewards. A `RewardEvaluator` service computes per-strategy, per-regime rewards, and an `ExperienceBuffer` stores learning samples.
 
+Multi-Agent Cooperative Optimizer (L15) implements federated learning where each strategy operates as an independent agent with its own Q-table. Agents cooperate through gradient averaging coordinated by `MACOCoordinator`. Adaptive exploration via `ExplorationManager` and policy consensus through `PolicyConsensusEngine` ensure coordinated learning.
+
+Decision Confidence Engine (L16) unifies all confidence metrics into a single Decision Index (DI): DI = w₁·CWQI + w₂·NGC + w₃·ML_n + w₄·RC + w₅·MC. Default weights: CWQI=0.25, NGC=0.20, ML Confidence=0.20, Regime Confidence=0.15, MACO Consensus=0.20. Adaptive weight recalibration uses Pearson correlation on performance data. DI grades: strong (≥0.7), caution (≥0.4), avoid (<0.4).
+
+Liquidity Trap Agent (Agent 9) is a specialized strategy agent with slower learning rate (η=0.008) and higher future discount (γ=0.92). Reward function: 0.7·profit_rate + 0.2·execution_speed - 0.1·slippage, optimizing for execution quality with slippage penalty.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.

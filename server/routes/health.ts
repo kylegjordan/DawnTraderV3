@@ -23,6 +23,7 @@ import { getActionExecutor } from '../services/action-executor.js';
 import { getMACOCoordinator } from '../services/maco-coordinator.js';
 import { getExplorationManager } from '../services/exploration-manager.js';
 import { getPolicyConsensusEngine } from '../services/policy-consensus.js';
+import { getDecisionConfidenceEngine } from '../services/decision-confidence-engine.js';
 
 export const healthRouter = Router();
 
@@ -419,6 +420,7 @@ healthRouter.get('/', async (req, res) => {
       marketForecast: await getMarketForecastHealth(),
       reinforcementEngine: await getReinforcementEngineHealth(),
       maco: getMACOHealth(),
+      decisionConfidence: getDCEHealth(),
       issues: status.issues,
       timestamp: new Date().toISOString(),
     });
@@ -540,7 +542,8 @@ function getMACOHealth() {
       last_sync: coordStatus.lastSync,
       coordinator_running: coordStatus.isRunning,
       exploration_running: exploreStatus.isRunning,
-      consensus_running: consensusStatus.isRunning
+      consensus_running: consensusStatus.isRunning,
+      liquidity_trap_agent: coordStatus.agentCount >= 9 ? 'ACTIVE' : 'INACTIVE'
     };
   } catch (e) {
     console.log('[L15][HEALTH] Failed to get MACO status');
@@ -552,6 +555,39 @@ function getMACOHealth() {
       exploration_rate: 0.15,
       consensus_score: 0.5,
       error: 'MACO unavailable'
+    };
+  }
+}
+
+function getDCEHealth() {
+  try {
+    const dce = getDecisionConfidenceEngine();
+    const status = dce.getStatus();
+    const topSignal = dce.getTopSignal();
+
+    return {
+      mean_index: status.meanDI,
+      weight_profile: [
+        status.weights.cwqi,
+        status.weights.ngc,
+        status.weights.mlConfidence,
+        status.weights.regimeConfidence,
+        status.weights.macoConsensus
+      ],
+      top_signal: topSignal ? `${topSignal.symbol}_${topSignal.strategy}` : null,
+      liquidity_trap_agent: 'ACTIVE',
+      recalibration_count: status.recalibrationCount,
+      last_recalibration: status.lastRecalibration,
+      is_running: status.isRunning
+    };
+  } catch (e) {
+    console.log('[L16][HEALTH] Failed to get DCE status');
+    return {
+      mean_index: 0,
+      weight_profile: [0.25, 0.20, 0.20, 0.15, 0.20],
+      top_signal: null,
+      liquidity_trap_agent: 'UNKNOWN',
+      error: 'DCE unavailable'
     };
   }
 }

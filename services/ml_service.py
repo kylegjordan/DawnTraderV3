@@ -1015,7 +1015,11 @@ rl_policy = {
     'training_iterations': 0
 }
 
-STRATEGIES = ['breakout', 'momentum', 'mean_reversion', 'sma_trend_ride', 'dhma', 'reversal', 'range_trading', 'vwap_pullback']
+STRATEGIES = ['breakout', 'momentum', 'mean_reversion', 'sma_trend_ride', 'dhma', 'reversal', 'range_trading', 'vwap_pullback', 'liquidity_trap']
+
+# L16: Liquidity Trap Agent specific parameters
+LT_LEARNING_RATE = 0.008  # η = 0.008
+LT_DISCOUNT = 0.92        # γ = 0.92
 REGIMES = ['T1', 'T2', 'R1', 'V1', 'C1']
 RL_LEARNING_RATE = 0.01
 RL_DISCOUNT = 0.9
@@ -1238,8 +1242,10 @@ MACO_CONSENSUS_MU = 0.3
 MACO_SIGMA_BASELINE = 0.05
 
 def init_maco_agents():
-    """L15: Initialize per-strategy agents with individual Q-tables"""
+    """L15/L16: Initialize per-strategy agents with individual Q-tables"""
     for strategy in STRATEGIES:
+        # L16: Liquidity Trap agent has special learning parameters
+        is_lt = strategy == 'liquidity_trap'
         maco_state['agents'][strategy] = {
             'q_table': {},
             'allocation': 1.0 / len(STRATEGIES),
@@ -1249,7 +1255,9 @@ def init_maco_agents():
             'drift': 0.0,
             'calibration_beta': 0.19,
             'training_iterations': 0,
-            'last_update': None
+            'last_update': None,
+            'learning_rate': LT_LEARNING_RATE if is_lt else RL_LEARNING_RATE,
+            'discount': LT_DISCOUNT if is_lt else RL_DISCOUNT
         }
         for regime in REGIMES:
             for action in [-0.10, -0.05, 0.0, 0.05, 0.10]:
@@ -1259,7 +1267,7 @@ def init_maco_agents():
     maco_state['policy_consensus'] = {s: 1.0 / len(STRATEGIES) for s in STRATEGIES}
     maco_state['last_sync'] = datetime.utcnow().isoformat()
     maco_state['initialized'] = True
-    logger.info(f"[L15][MACO] Initialized {len(STRATEGIES)} strategy agents")
+    logger.info(f"[L16][MACO] Initialized {len(STRATEGIES)} strategy agents (incl. Liquidity Trap η={LT_LEARNING_RATE}, γ={LT_DISCOUNT})")
 
 init_maco_agents()
 
@@ -1304,10 +1312,14 @@ def update_maco_agent():
     key = f"{regime}:{action:.2f}"
     current_q = agent['q_table'].get(key, 0.0)
     
+    # L16: Use per-agent learning parameters
+    agent_lr = agent.get('learning_rate', RL_LEARNING_RATE)
+    agent_discount = agent.get('discount', RL_DISCOUNT)
+    
     next_max_q = max(agent['q_table'].get(f"{next_regime}:{a:.2f}", 0.0) for a in [-0.10, -0.05, 0.0, 0.05, 0.10])
     
-    td_target = reward + RL_DISCOUNT * next_max_q
-    new_q = current_q + RL_LEARNING_RATE * (td_target - current_q)
+    td_target = reward + agent_discount * next_max_q
+    new_q = current_q + agent_lr * (td_target - current_q)
     agent['q_table'][key] = new_q
     
     agent['reward_history'].append(reward)
@@ -1500,6 +1512,209 @@ def export_maco():
         }
     
     return jsonify(export_data)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# L16: Liquidity Trap Agent & Decision Confidence Engine
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/maco/agent/lt', methods=['GET'])
+def get_lt_agent_status():
+    """L16: Get Liquidity Trap agent status"""
+    if 'liquidity_trap' not in maco_state['agents']:
+        return jsonify({"error": "Liquidity Trap agent not initialized"}), 404
+    
+    agent = maco_state['agents']['liquidity_trap']
+    return jsonify({
+        "ok": True,
+        "status": "ACTIVE",
+        "strategy": "liquidity_trap",
+        "learning_rate": agent.get('learning_rate', LT_LEARNING_RATE),
+        "discount": agent.get('discount', LT_DISCOUNT),
+        "allocation": agent['allocation'],
+        "total_reward": agent['total_reward'],
+        "confidence": agent['confidence'],
+        "training_iterations": agent['training_iterations'],
+        "q_table_size": len(agent['q_table']),
+        "last_update": agent['last_update']
+    })
+
+@app.route('/maco/agent/retrain/lt', methods=['POST'])
+def retrain_lt_agent():
+    """L16: Retrain Liquidity Trap agent with specialized reward function"""
+    if 'liquidity_trap' not in maco_state['agents']:
+        return jsonify({"error": "Liquidity Trap agent not initialized"}), 404
+    
+    agent = maco_state['agents']['liquidity_trap']
+    lr = agent.get('learning_rate', LT_LEARNING_RATE)
+    gamma = agent.get('discount', LT_DISCOUNT)
+    
+    for regime in REGIMES:
+        for action in [-0.10, -0.05, 0.0, 0.05, 0.10]:
+            key = f"{regime}:{action:.2f}"
+            agent['q_table'][key] = 0.0
+    agent['total_reward'] = 0.0
+    agent['reward_history'] = []
+    agent['training_iterations'] = 0
+    agent['confidence'] = 0.5
+    
+    for _ in range(75):
+        regime = np.random.choice(REGIMES)
+        action = np.random.choice([-0.10, -0.05, 0.0, 0.05, 0.10])
+        profit_rate = np.random.uniform(-0.03, 0.15)
+        execution_speed = np.random.uniform(0.5, 1.0)
+        slippage = np.random.uniform(0.001, 0.02)
+        reward = 0.7 * profit_rate + 0.2 * execution_speed - 0.1 * slippage
+        next_regime = np.random.choice(REGIMES)
+        
+        key = f"{regime}:{action:.2f}"
+        current_q = agent['q_table'].get(key, 0.0)
+        next_max_q = max(agent['q_table'].get(f"{next_regime}:{a:.2f}", 0.0) for a in [-0.10, -0.05, 0.0, 0.05, 0.10])
+        
+        td_target = reward + gamma * next_max_q
+        new_q = current_q + lr * (td_target - current_q)
+        agent['q_table'][key] = new_q
+        agent['total_reward'] += reward
+    
+    agent['training_iterations'] = 75
+    agent['confidence'] = 0.55
+    agent['last_update'] = datetime.utcnow().isoformat()
+    
+    logger.info(f"[L16][MACO] Agent_LT retrained (η={lr}, γ={gamma})")
+    
+    return jsonify({
+        "success": True,
+        "strategy": "liquidity_trap",
+        "iterations": 75,
+        "total_reward": agent['total_reward'],
+        "timestamp": agent['last_update']
+    })
+
+# L16: Decision Confidence Engine state
+dce_state = {
+    'weights': {
+        'cwqi': 0.25,
+        'ngc': 0.20,
+        'ml_confidence': 0.20,
+        'regime_confidence': 0.15,
+        'maco_consensus': 0.20
+    },
+    'top_signals': [],
+    'mean_di': 0.0,
+    'last_recalibration': None,
+    'recalibration_count': 0
+}
+
+@app.route('/dce/status', methods=['GET'])
+def get_dce_status():
+    """L16: Get Decision Confidence Engine status"""
+    return jsonify({
+        "ok": True,
+        "weights": dce_state['weights'],
+        "mean_index": dce_state['mean_di'],
+        "top_signals": dce_state['top_signals'][:5],
+        "last_recalibration": dce_state['last_recalibration'],
+        "recalibration_count": dce_state['recalibration_count'],
+        "liquidity_trap_agent": "ACTIVE" if 'liquidity_trap' in maco_state['agents'] else "INACTIVE"
+    })
+
+@app.route('/dce/compute', methods=['POST'])
+def compute_decision_index():
+    """L16: Compute Decision Index for a signal"""
+    data = request.json or {}
+    cwqi = float(data.get('cwqi', 0.5))
+    ngc = float(data.get('ngc', 0.5))
+    ml_confidence = float(data.get('ml_confidence', 0.5))
+    regime_confidence = float(data.get('regime_confidence', 0.5))
+    maco_consensus = float(data.get('maco_consensus', maco_state['consensus_score']))
+    symbol = data.get('symbol', 'UNKNOWN')
+    strategy = data.get('strategy', 'unknown')
+    
+    w = dce_state['weights']
+    di = (
+        w['cwqi'] * cwqi +
+        w['ngc'] * ngc +
+        w['ml_confidence'] * ml_confidence +
+        w['regime_confidence'] * regime_confidence +
+        w['maco_consensus'] * maco_consensus
+    )
+    di = max(0.0, min(1.0, di))
+    
+    signal_entry = {
+        "symbol": symbol,
+        "strategy": strategy,
+        "di": round(di, 4),
+        "components": {
+            "cwqi": cwqi,
+            "ngc": ngc,
+            "ml_confidence": ml_confidence,
+            "regime_confidence": regime_confidence,
+            "maco_consensus": maco_consensus
+        },
+        "timestamp": datetime.utcnow().isoformat()
+    }
+    
+    dce_state['top_signals'].append(signal_entry)
+    dce_state['top_signals'] = sorted(dce_state['top_signals'], key=lambda x: x['di'], reverse=True)[:20]
+    
+    if len(dce_state['top_signals']) > 0:
+        dce_state['mean_di'] = sum(s['di'] for s in dce_state['top_signals']) / len(dce_state['top_signals'])
+    
+    logger.info(f"[L16][DCE] DecisionIndex={di:.4f} ({symbol}_{strategy})")
+    
+    return jsonify({
+        "ok": True,
+        "symbol": symbol,
+        "strategy": strategy,
+        "decision_index": round(di, 4),
+        "grade": "strong" if di >= 0.7 else "caution" if di >= 0.4 else "avoid"
+    })
+
+@app.route('/dce/recalibrate', methods=['POST'])
+def recalibrate_dce_weights():
+    """L16: Recalibrate DCE weights based on recent trade performance"""
+    data = request.json or {}
+    performance_data = data.get('performance', [])
+    
+    if len(performance_data) < 10:
+        logger.info("[L16][DCE] Insufficient data for recalibration, using defaults")
+        return jsonify({
+            "success": True,
+            "message": "Insufficient data, using default weights",
+            "weights": dce_state['weights'],
+            "samples_needed": 10 - len(performance_data)
+        })
+    
+    try:
+        correlations = {}
+        for key in ['cwqi', 'ngc', 'ml_confidence', 'regime_confidence', 'maco_consensus']:
+            values = [p.get(key, 0.5) for p in performance_data]
+            profits = [p.get('profit_rate', 0) for p in performance_data]
+            if len(values) > 1 and np.std(values) > 0:
+                corr = np.corrcoef(values, profits)[0, 1]
+                correlations[key] = max(0.05, corr) if not np.isnan(corr) else 0.2
+            else:
+                correlations[key] = 0.2
+        
+        total = sum(correlations.values())
+        if total > 0:
+            for key in dce_state['weights']:
+                dce_state['weights'][key] = round(correlations[key] / total, 3)
+        
+        dce_state['last_recalibration'] = datetime.utcnow().isoformat()
+        dce_state['recalibration_count'] += 1
+        
+        logger.info(f"[L16][DCE] Weights recalibrated: {dce_state['weights']}")
+        
+        return jsonify({
+            "success": True,
+            "weights": dce_state['weights'],
+            "correlations": correlations,
+            "samples_used": len(performance_data),
+            "timestamp": dce_state['last_recalibration']
+        })
+    except Exception as e:
+        logger.error(f"[L16][DCE] Recalibration failed: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 def deferred_calibration_fetch():

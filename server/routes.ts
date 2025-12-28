@@ -21994,6 +21994,11 @@ Important: Extract the exact field names and numeric values from the user's requ
   apiRouter.use('/maco', macoRouter.default);
   console.log('[L15] MACO routes mounted at /api/maco');
 
+  // Directive 8.8.4-L16: Mount DCE (Decision Confidence Engine) routes
+  const dceRouter = await import('./routes/dce.js');
+  apiRouter.use('/dce', dceRouter.default);
+  console.log('[L16] DCE routes mounted at /api/dce');
+
   // Catch-all handler for unmatched /api/* routes
   // This prevents requests from falling through to Vite's HTML handler
   // and ensures all API routes return JSON (even 404s)

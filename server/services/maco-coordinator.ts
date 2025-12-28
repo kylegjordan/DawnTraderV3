@@ -34,7 +34,7 @@ interface CoordinatorState {
   isRunning: boolean;
 }
 
-const STRATEGIES = ['breakout', 'momentum', 'mean_reversion', 'sma_trend_ride', 'dhma', 'reversal', 'range_trading', 'vwap_pullback'];
+const STRATEGIES = ['breakout', 'momentum', 'mean_reversion', 'sma_trend_ride', 'dhma', 'reversal', 'range_trading', 'vwap_pullback', 'liquidity_trap'];
 
 class MACOCoordinator extends EventEmitter {
   private state: CoordinatorState;

@@ -121,6 +121,27 @@ interface MACOStatus {
   consensus: { isRunning: boolean; syncCount: number };
 }
 
+interface DCEStatus {
+  ok: boolean;
+  weights: {
+    cwqi: number;
+    ngc: number;
+    mlConfidence: number;
+    regimeConfidence: number;
+    macoConsensus: number;
+  };
+  meanDI: number;
+  topSignals: Array<{
+    symbol: string;
+    strategy: string;
+    decisionIndex: number;
+    grade: 'strong' | 'caution' | 'avoid';
+  }>;
+  lastRecalibration: string | null;
+  recalibrationCount: number;
+  isRunning: boolean;
+}
+
 interface MarketRegime {
   regime: 'T1' | 'T2' | 'R1' | 'V1' | 'C1';
   description: string;
@@ -226,6 +247,11 @@ export default function AdaptiveRiskAdvisor() {
 
   const { data: macoStatus } = useQuery<MACOStatus>({
     queryKey: ['/api/maco/status'],
+    refetchInterval: 60000,
+  });
+
+  const { data: dceStatus } = useQuery<DCEStatus>({
+    queryKey: ['/api/dce/status'],
     refetchInterval: 60000,
   });
 
@@ -977,6 +1003,80 @@ export default function AdaptiveRiskAdvisor() {
                   Sync Agents
                 </Button>
               </div>
+            </div>
+          </>
+        )}
+
+        {dceStatus && dceStatus.ok && (
+          <>
+            <Separator />
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-purple-500" />
+                  <span className="font-medium">Decision Confidence</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Info className="w-4 h-4 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>Decision Confidence Engine (L16) - Unifies CWQI, NGC, ML Confidence, Regime Score, and MACO Consensus into a single Decision Index (DI) for optimal trade selection.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <Badge className={`gap-1 ${dceStatus.isRunning ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' : 'bg-gray-100 text-gray-700'}`}>
+                  {dceStatus.isRunning ? 'ACTIVE' : 'INACTIVE'}
+                </Badge>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="p-2 rounded bg-slate-50 dark:bg-slate-900/50">
+                  <div className="text-muted-foreground">Mean Decision Index</div>
+                  <div className={`font-semibold ${dceStatus.meanDI >= 0.7 ? 'text-green-600' : dceStatus.meanDI >= 0.4 ? 'text-amber-600' : 'text-red-600'}`}>
+                    {(dceStatus.meanDI * 100).toFixed(1)}%
+                  </div>
+                </div>
+                <div className="p-2 rounded bg-slate-50 dark:bg-slate-900/50">
+                  <div className="text-muted-foreground">Recalibrations</div>
+                  <div className="font-semibold">{dceStatus.recalibrationCount || 0}</div>
+                </div>
+              </div>
+
+              <div className="text-xs text-muted-foreground">
+                <div className="font-medium mb-1">Weight Profile:</div>
+                <div className="flex flex-wrap gap-2">
+                  <span>CWQI: {(dceStatus.weights.cwqi * 100).toFixed(0)}%</span>
+                  <span>NGC: {(dceStatus.weights.ngc * 100).toFixed(0)}%</span>
+                  <span>ML: {(dceStatus.weights.mlConfidence * 100).toFixed(0)}%</span>
+                  <span>Regime: {(dceStatus.weights.regimeConfidence * 100).toFixed(0)}%</span>
+                  <span>MACO: {(dceStatus.weights.macoConsensus * 100).toFixed(0)}%</span>
+                </div>
+              </div>
+
+              {dceStatus.topSignals && dceStatus.topSignals.length > 0 && (
+                <div className="text-xs">
+                  <div className="font-medium mb-1 text-muted-foreground">Top Signal:</div>
+                  <div className="flex items-center gap-2">
+                    <Badge className={`${
+                      dceStatus.topSignals[0].grade === 'strong' ? 'bg-green-100 text-green-700' :
+                      dceStatus.topSignals[0].grade === 'caution' ? 'bg-amber-100 text-amber-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      {dceStatus.topSignals[0].grade.toUpperCase()}
+                    </Badge>
+                    <span>{dceStatus.topSignals[0].symbol} ({dceStatus.topSignals[0].strategy})</span>
+                    <span className="text-muted-foreground">DI: {(dceStatus.topSignals[0].decisionIndex * 100).toFixed(1)}%</span>
+                  </div>
+                </div>
+              )}
+
+              {dceStatus.lastRecalibration && (
+                <div className="text-xs text-muted-foreground">
+                  Last recalibration: {new Date(dceStatus.lastRecalibration).toLocaleString()}
+                </div>
+              )}
             </div>
           </>
         )}

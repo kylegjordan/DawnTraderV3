@@ -21,6 +21,7 @@ import { getActionExecutor } from './action-executor'; // L14
 import { getMACOCoordinator, initMACOCoordinator } from './maco-coordinator'; // L15
 import { getExplorationManager, initExplorationManager } from './exploration-manager'; // L15
 import { getPolicyConsensusEngine, initPolicyConsensusEngine } from './policy-consensus'; // L15
+import { getDecisionConfidenceEngine, initDecisionConfidenceEngine } from './decision-confidence-engine'; // L16
 import { db } from '../db';
 import { users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
@@ -51,6 +52,9 @@ const macoCoordinator = initMACOCoordinator();
 const explorationManager = initExplorationManager();
 const policyConsensus = initPolicyConsensusEngine();
 console.log('[L15][SCHEDULER] MACO Coordinator, Exploration Manager, and Policy Consensus Engine started');
+
+const decisionConfidenceEngine = initDecisionConfidenceEngine();
+console.log('[L16][SCHEDULER] Decision Confidence Engine started (9 agents incl. Liquidity Trap)');
 
 /**
  * Phase 8.9: Autonomy Layer Scheduler
