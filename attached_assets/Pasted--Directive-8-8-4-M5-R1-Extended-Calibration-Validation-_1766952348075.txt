@@ -1,0 +1,134 @@
+⚙️ Directive 8.8.4-M5-R1 — Extended Calibration & Validation Run
+Objective
+
+Perform a full 60-minute paper-mode validation session that allows the Virtual Trade Simulator (VTS) to accumulate calibration data for each strategy, confirm adaptive weight diversification (S.Wgt ≠ 20 %), and validate end-to-end metric responsiveness under extended runtime conditions.
+
+🧩 Step 1 — Enable Persistent Calibration Storage
+
+File: server/services/vts-service.ts
+
+Ensure VTS does not clear its calibration buffer on session reset.
+
+Store calibration coefficients in:
+
+/data/vts_calibration.json
+
+
+Automatically append new completed virtual trades (up to 10 000) for rolling calibration.
+
+// Example addition
+const calibrationPath = path.join(DATA_DIR, "vts_calibration.json");
+await saveCalibrationData(calibrationPath, calibrationBuffer);
+
+🧩 Step 2 — Relax ARA Rate Limit During Validation
+
+File: server/routes/ara.ts
+
+Add conditional rate-limit bypass when the request header x-validation-session:true is present.
+
+if (req.headers['x-validation-session'] === 'true') {
+  next(); // skip rate limiting for validation runs
+} else {
+  applyRateLimit(req, res, next);
+}
+
+🧩 Step 3 — Extend Validation Duration & Sample Frequency
+
+File: server/services/paper_validation_engine.ts
+
+Extend runtime from 30 → 60 minutes (3 600 000 ms).
+
+Increase telemetry capture to every 10 seconds (was 15).
+
+Add rolling snapshot every 5 minutes for CWQI, NGC, DI, Adaptive Relevance, and S.Wgt.
+
+🧩 Step 4 — Calibration Report Generator
+
+File: server/services/calibration_report_service.ts
+
+Generate per-strategy calibration statistics:
+
+Field	Description
+αₛ	Mean return coefficient
+βₛ	Risk sensitivity
+σₛ	Standard deviation
+Rₛ	Reliability score (1 −
+Wₛ	Normalized weight
+
+Expose endpoint:
+
+GET /api/calibration/report
+
+
+→ returns current per-strategy reliability and weight distribution.
+
+🧩 Step 5 — Validation Run Configuration
+
+Use test credentials for this validation session:
+
+username: testuser123
+password: SecurePass123!
+
+
+Execution parameters
+
+Parameter	Value
+Mode	Paper (simulator)
+Duration	60 minutes
+Telemetry interval	10 s
+Target cache window	200 ticks
+Minimum strategy samples	10 per strategy
+Minimum ARA updates	5 per session
+🧩 Step 6 — API Endpoints
+Endpoint	Purpose
+POST /api/validation/run?duration=60m	Start extended validation session
+GET /api/validation/status	Live metrics every 10 s
+POST /api/validation/stop	End session and save report
+GET /api/calibration/report	Retrieve calibration results
+GET /api/vts/status	Check simulator mode and trade counts
+🧩 Step 7 — Pass Criteria
+Metric	Threshold	Target
+Feed Latency	< 100 ms	~ < 5 ms (cached)
+Cache Window	≥ 200 ticks	200+
+ARA Updates	≥ 5 per session	Expected ≥ 8
+CWQI/NGC Drift	< 10 %	Expected ≤ 5 %
+Adaptive Relevance Variance	> 0.01	Expected ≈ 0.03
+Strategy Weights	≠ uniform	Differentiation visible
+Calibration Samples	≥ 10 per strategy	Needed for valid S.Wgt
+🧩 Step 8 — Deliverables
+File	Description
+/reports/ValidationRun_2025-12-30_<timestamp>.json	Full 60-minute telemetry log
+/reports/CalibrationReport_<timestamp>.json	Per-strategy calibration summary
+/docs/Validation_Summary_Extended.md	Plain-language results
+replit.md	Updated with calibration logic and new endpoints
+✅ Expected Outcomes
+
+Verified real-time responsiveness under extended runtime.
+
+VTS calibration dataset populated → differentiated strategy weights (S.Wgt).
+
+Confirmed adaptive metrics (CWQI, NGC, DI, Relevance) vary dynamically.
+
+Feed latency & cache depth remain within target.
+
+Full calibration report documenting per-strategy performance metrics.
+
+Platform ready to transition to Phase 8.8.5 (PSRS).
+
+Implementation Note
+
+Replit should:
+
+Authenticate using the test credentials above.
+
+Clear no calibration data (keep VTS buffer intact).
+
+Start the extended validation session with:
+
+POST /api/validation/run?duration=60m
+Headers:
+  x-validation-session: true
+  x-internal-audit: true
+
+
+Allow the full hour to complete and produce all deliverables automatically.

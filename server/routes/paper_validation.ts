@@ -43,16 +43,40 @@ function auditOrAuth(req: AuthenticatedRequest, res: Response, next: NextFunctio
   }
 }
 
-router.post('/run', auditOrAuth, async (_req: Request, res: Response) => {
+/**
+ * M5-R1: Extended validation with configurable duration
+ * Query params:
+ *   - duration: duration in minutes (default: 60, format: "60m" or "60")
+ *   - interval: capture interval in seconds (default: 10)
+ */
+router.post('/run', auditOrAuth, async (req: Request, res: Response) => {
   try {
-    const result = await paperValidationEngine.startValidationSession();
-    console.log(`[M5][API] Validation session started: ${result.sessionId}`);
+    // Parse duration (supports "60m" or "60" format)
+    let durationMinutes = 60;
+    const durationParam = req.query.duration as string;
+    if (durationParam) {
+      const match = durationParam.match(/^(\d+)m?$/);
+      if (match) {
+        durationMinutes = parseInt(match[1], 10);
+      }
+    }
+    
+    // Parse capture interval
+    let captureIntervalSeconds = 10;
+    const intervalParam = req.query.interval as string;
+    if (intervalParam) {
+      captureIntervalSeconds = parseInt(intervalParam, 10) || 10;
+    }
+
+    console.log(`[M5-R1][API] Starting validation: duration=${durationMinutes}m, interval=${captureIntervalSeconds}s`);
+    const result = await paperValidationEngine.startValidationSession(durationMinutes, captureIntervalSeconds);
+    
     res.json({
       ok: true,
       ...result
     });
   } catch (error) {
-    console.error('[M5][API] Failed to start validation:', error);
+    console.error('[M5-R1][API] Failed to start validation:', error);
     res.status(500).json({ ok: false, error: 'Failed to start validation session' });
   }
 });

@@ -47,6 +47,19 @@ Global Autonomy Stabilization Protocol (L20) provides a supervisory feedback lay
 
 Comprehensive System Audit & Validation (M1) validates correctness, consistency, and data flow integrity of all quantitative modules via the `SystemAuditEngine`. Training Loop Validation Audit (M3A) verifies that retraining operations trigger actual backend learning cycles. Live Validation & Adaptive Coupling Audit (M3B) replaces static decay factors with VTS-DCE derived adaptive relevance coefficients, linking ARA risk/exposure suggestions to live learning outputs. VTS Passive Feed Integration & Mode Audit (M3B.2) ensures the Virtual Trading Simulator uses live Kraken data during idle periods and switches modes correctly. Comprehensive Back-Audit & System Integrity Verification (M4) performs a complete repository-wide audit of all adaptive, predictive, and trading subsystems to verify adherence to directives and check module integrity. Controlled Paper-Mode Validation & Feed Optimization Audit (M5) runs controlled paper-trading sessions to validate adaptive metrics update correctly in live flow, tracking feed latency, cache window, and key metric variances.
 
+Extended Calibration & Validation Run (M5-R1) implements a 60-minute extended validation session with 10-second capture intervals. Key enhancements include:
+- **Persistent Calibration Storage**: VTS calibration data persists to `/data/vts_calibration.json` with rolling buffer up to 10,000 samples
+- **Validation Session Rate Limit Bypass**: `x-validation-session:true` header bypasses ARA rate limiting during validation runs
+- **Calibration Report Generator**: `CalibrationReportService` generates per-strategy statistics (αₛ, βₛ, σₛ, Rₛ, Wₛ)
+- **Rolling Snapshots**: 5-minute rolling snapshots capture CWQI, NGC, DI, Adaptive Relevance, and S.Wgt trends
+- **API Endpoints**:
+  - `POST /api/validation/run?duration=60m` - Start extended validation session
+  - `GET /api/validation/status` - Live metrics every 10 seconds
+  - `POST /api/validation/stop` - End session and save report
+  - `GET /api/calibration/report` - Retrieve per-strategy calibration results
+  - `GET /api/calibration/weights` - Get current strategy weights
+  - `GET /api/vts/status` - Check VTS simulator mode and trade counts
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.

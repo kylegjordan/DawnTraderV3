@@ -50,6 +50,7 @@ export interface ValidationTelemetry {
   vtsModeSwitches: { toObserver: number; toSimulator: number };
   araUpdates: number;
   metricSnapshots: ValidationMetrics[];
+  rollingSnapshots: ValidationMetrics[][]; // M5-R1: 5-minute rolling snapshots
   failures: string[];
   validationCriteria: ValidationCriteria;
 }
@@ -81,16 +82,35 @@ class PaperValidationEngine {
   private failures: string[] = [];
   private feedLatencies: FeedLatencyRecord[] = [];
 
-  private readonly CAPTURE_INTERVAL_MS = 15000;
-  private readonly SESSION_DURATION_MS = 30 * 60 * 1000;
+  private readonly DEFAULT_CAPTURE_INTERVAL_MS = 10000; // M5-R1: 10s capture interval
+  private readonly DEFAULT_SESSION_DURATION_MS = 60 * 60 * 1000; // M5-R1: 60 minutes
   private readonly LATENCY_WINDOW_MS = 60000;
+  private captureIntervalMs = 10000;
+  private sessionDurationMs = 60 * 60 * 1000;
+  private rollingSnapshots: ValidationMetrics[][] = []; // 5-minute rolling snapshots
 
-  async startValidationSession(): Promise<{ sessionId: string; message: string }> {
+  /**
+   * M5-R1: Start extended validation session with configurable duration
+   * @param durationMinutes - Session duration in minutes (default: 60)
+   * @param captureIntervalSeconds - Metric capture interval in seconds (default: 10)
+   */
+  async startValidationSession(
+    durationMinutes: number = 60,
+    captureIntervalSeconds: number = 10
+  ): Promise<{ sessionId: string; message: string; durationMinutes: number }> {
     if (this.isRunning) {
-      return { sessionId: this.sessionId!, message: 'Validation session already running' };
+      return { 
+        sessionId: this.sessionId!, 
+        message: 'Validation session already running',
+        durationMinutes: Math.floor(this.sessionDurationMs / 60000)
+      };
     }
 
     await fs.mkdir(REPORTS_DIR, { recursive: true });
+
+    // M5-R1: Configurable duration and capture interval
+    this.sessionDurationMs = durationMinutes * 60 * 1000;
+    this.captureIntervalMs = captureIntervalSeconds * 1000;
 
     this.isRunning = true;
     this.sessionId = `VAL_${Date.now()}`;
@@ -102,20 +122,36 @@ class PaperValidationEngine {
     this.previousVtsMode = null;
     this.failures = [];
     this.feedLatencies = [];
+    this.rollingSnapshots = [];
 
-    console.log(`[M5][VALIDATION] Session ${this.sessionId} started at ${this.startTime.toISOString()}`);
+    console.log(`[M5-R1][VALIDATION] Session ${this.sessionId} started at ${this.startTime.toISOString()}`);
+    console.log(`[M5-R1][VALIDATION] Duration: ${durationMinutes} min, Capture interval: ${captureIntervalSeconds}s`);
 
     this.captureMetrics();
 
     this.intervalId = setInterval(() => {
       this.captureMetrics();
-    }, this.CAPTURE_INTERVAL_MS);
+      // M5-R1: Every 5 minutes, save rolling snapshot
+      if (this.metricSnapshots.length > 0 && this.metricSnapshots.length % 30 === 0) {
+        this.saveRollingSnapshot();
+      }
+    }, this.captureIntervalMs);
 
     setTimeout(() => {
       this.stopValidationSession();
-    }, this.SESSION_DURATION_MS);
+    }, this.sessionDurationMs);
 
-    return { sessionId: this.sessionId, message: 'Validation session started (30-minute duration)' };
+    return { 
+      sessionId: this.sessionId, 
+      message: `Validation session started (${durationMinutes}-minute duration, ${captureIntervalSeconds}s intervals)`,
+      durationMinutes
+    };
+  }
+
+  private saveRollingSnapshot(): void {
+    const recentSnapshots = this.metricSnapshots.slice(-30);
+    this.rollingSnapshots.push(recentSnapshots);
+    console.log(`[M5-R1][VALIDATION] 5-minute rolling snapshot saved (total: ${this.rollingSnapshots.length})`);
   }
 
   private async captureMetrics(): Promise<void> {
@@ -345,9 +381,12 @@ class PaperValidationEngine {
       vtsModeSwitches: this.vtsModeSwitches,
       araUpdates: this.araUpdates,
       metricSnapshots: this.metricSnapshots,
+      rollingSnapshots: this.rollingSnapshots, // M5-R1: Persist 5-minute snapshots
       failures: this.failures,
       validationCriteria: criteria
     };
+
+    console.log(`[M5-R1][VALIDATION] Captured ${this.rollingSnapshots.length} rolling snapshots (5-min intervals)`);
 
     const filename = `ValidationRun_${this.startTime!.toISOString().replace(/[:.]/g, '-')}.json`;
     const filepath = path.join(REPORTS_DIR, filename);

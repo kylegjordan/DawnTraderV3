@@ -52,6 +52,19 @@ function auditOrAuth(req: AuthenticatedRequest, res: Response, next: NextFunctio
   return requireAuth(req, res, next);
 }
 
+/**
+ * M5-R1: Validation session middleware - bypasses rate limiting during validation runs
+ * Pass header x-validation-session:true to skip rate limiting
+ */
+function validationSessionBypass(req: Request, res: Response, next: NextFunction) {
+  if (req.headers['x-validation-session'] === 'true') {
+    console.log('[M5-R1][ARA] Rate limit bypassed for validation session');
+    return next();
+  }
+  // Apply normal rate limiting (stub - actual rate limiter continues)
+  return next();
+}
+
 interface ARACalculation {
   portfolioValue: number;
   riskPerTrade: number;

@@ -7048,6 +7048,56 @@
     ]
   },
   {
+    "path": "/api/calibration/report",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "auditOrAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/calibration/latest",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "auditOrAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/calibration/generate",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "auditOrAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/calibration/weights",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "auditOrAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/calibration/raw",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "auditOrAuth",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api*",
     "methods": [],
     "middlewares": [

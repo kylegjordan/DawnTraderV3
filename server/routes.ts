@@ -22059,6 +22059,11 @@ Important: Extract the exact field names and numeric values from the user's requ
   apiRouter.use('/pricing', pricingRouter.default);
   console.log('[M5] Pricing routes mounted at /api/pricing');
 
+  // Directive 8.8.4-M5-R1: Mount Calibration Report routes
+  const calibrationRouter = await import('./routes/calibration.js');
+  apiRouter.use('/calibration', calibrationRouter.default);
+  console.log('[M5-R1] Calibration routes mounted at /api/calibration');
+
   // Catch-all handler for unmatched /api/* routes
   // This prevents requests from falling through to Vite's HTML handler
   // and ensures all API routes return JSON (even 404s)
