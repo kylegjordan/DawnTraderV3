@@ -327,6 +327,26 @@ export default function AdaptiveRiskAdvisor() {
     refetchInterval: 60000,
   });
 
+  const { data: gaspStatus } = useQuery<{
+    ok: boolean;
+    gsi: number;
+    gsiGrade: 'stable' | 'caution' | 'critical';
+    mode: 'normal' | 'caution' | 'containment' | 'recovery';
+    correlationMax: number;
+    correlationMatrix: { lambda_di: number; lambda_drs: number; di_drs: number; regime_lambda: number; regime_di: number; regime_drs: number };
+    dampedLearningRate: number;
+    dampedExposure: number;
+    metrics: { lambdaVariance: number; diVariance: number; alphaBetaVariance: number; drsVariance: number };
+    cooldownActive: boolean;
+    cooldownStarted: string | null;
+    recoveryProgress: number;
+    lastScan: string | null;
+    scanCount: number;
+  }>({
+    queryKey: ['/api/gasp/status'],
+    refetchInterval: 30000,
+  });
+
   const { data: marketRegime } = useQuery<MarketRegime>({
     queryKey: ['/api/market/regime'],
     refetchInterval: 60000,
@@ -1387,6 +1407,105 @@ export default function AdaptiveRiskAdvisor() {
               {mofStatus.lastEvolution && (
                 <div className="text-xs text-muted-foreground">
                   Last evolution: {new Date(mofStatus.lastEvolution).toLocaleString()} ({mofStatus.kpiCount} KPIs)
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {gaspStatus && gaspStatus.ok && (
+          <>
+            <Separator />
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">System Stability</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Info className="w-3.5 h-3.5 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>GASP Engine (L20) - Global Autonomy Stabilization Protocol prevents feedback oscillation and ensures all subsystems operate within stable limits.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge className={`gap-1 ${
+                    gaspStatus.gsiGrade === 'stable' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                    gaspStatus.gsiGrade === 'caution' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+                    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                  }`}>
+                    {gaspStatus.gsiGrade === 'stable' ? '🟢' : gaspStatus.gsiGrade === 'caution' ? '🟡' : '🔴'} GSI: {(gaspStatus.gsi * 100).toFixed(0)}%
+                  </Badge>
+                  <Badge variant="outline" className={`text-xs ${
+                    gaspStatus.mode === 'normal' ? 'border-emerald-300' :
+                    gaspStatus.mode === 'caution' ? 'border-amber-300' :
+                    gaspStatus.mode === 'recovery' ? 'border-blue-300' :
+                    'border-red-300'
+                  }`}>
+                    {gaspStatus.mode === 'recovery' ? '🔵' : ''}{gaspStatus.mode.toUpperCase()}
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4 gap-3 text-sm">
+                <div>
+                  <div className="text-muted-foreground text-xs">η′ (Learning)</div>
+                  <div className={`font-semibold ${gaspStatus.dampedLearningRate < 1 ? 'text-amber-600' : 'text-green-600'}`}>
+                    {(gaspStatus.dampedLearningRate * 100).toFixed(0)}%
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-xs">E′ (Exposure)</div>
+                  <div className={`font-semibold ${gaspStatus.dampedExposure < 1 ? 'text-amber-600' : 'text-green-600'}`}>
+                    {(gaspStatus.dampedExposure * 100).toFixed(0)}%
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-xs">ρ max</div>
+                  <div className={`font-semibold ${gaspStatus.correlationMax > 0.8 ? 'text-red-600' : gaspStatus.correlationMax > 0.6 ? 'text-amber-600' : 'text-green-600'}`}>
+                    {gaspStatus.correlationMax.toFixed(2)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-xs">Scans</div>
+                  <div className="font-semibold">{gaspStatus.scanCount}</div>
+                </div>
+              </div>
+
+              {gaspStatus.cooldownActive && (
+                <div className="flex items-center gap-2 text-sm text-amber-600">
+                  <span>⏸️ Cooldown active</span>
+                  {gaspStatus.recoveryProgress > 0 && (
+                    <span className="text-xs">Recovery: {(gaspStatus.recoveryProgress * 100).toFixed(0)}%</span>
+                  )}
+                </div>
+              )}
+
+              <div className="text-xs">
+                <div className="font-medium mb-1 text-muted-foreground">Correlation Heatmap:</div>
+                <div className="flex flex-wrap gap-1">
+                  {Object.entries(gaspStatus.correlationMatrix).map(([key, value]) => (
+                    <div 
+                      key={key} 
+                      className={`px-1.5 py-0.5 rounded text-[10px] ${
+                        value > 0.8 ? 'bg-red-100 text-red-700' :
+                        value > 0.5 ? 'bg-amber-100 text-amber-700' :
+                        'bg-emerald-100 text-emerald-700'
+                      }`}
+                      title={`${key}: ${value.toFixed(3)}`}
+                    >
+                      {key.replace(/_/g, '-')}: {value.toFixed(2)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {gaspStatus.lastScan && (
+                <div className="text-xs text-muted-foreground">
+                  Last scan: {new Date(gaspStatus.lastScan).toLocaleString()}
                 </div>
               )}
             </div>

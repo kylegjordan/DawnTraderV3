@@ -25,6 +25,11 @@ import { getDecisionConfidenceEngine, initDecisionConfidenceEngine } from './dec
 import { getAPRSLEEngine, initAPRSLEEngine } from './apr-sle-engine'; // L17
 import { getPDCEngine, initPDCEngine } from './pdc-engine'; // L18
 import { getECSController, initECSController } from './ecs-controller'; // L18
+import { getMOFOrchestrator, initializeMOF } from './mof-orchestrator'; // L19
+import { aggregatePerformance, getRecentWindow, computeWindowStats } from '../utils/performance-aggregator'; // L19
+import { getGASPCoordinator, initializeGASP } from './gasp-coordinator'; // L20
+import { getEquilibriumRestorer, initializeEquilibriumRestorer } from './equilibrium-restorer'; // L20
+import { applyStabilizationScaling } from '../utils/stabilization-controller'; // L20
 import { db } from '../db';
 import { users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
@@ -66,9 +71,7 @@ const pdcEngine = initPDCEngine();
 const ecsController = initECSController();
 console.log('[L18][SCHEDULER] PDC-ECS started (Predictive Drawdown Containment & Equity Curve Smoothing)');
 
-import { getMOFOrchestrator, initializeMOF } from './mof-orchestrator.js';
-import { aggregatePerformance, getRecentWindow, computeWindowStats } from '../utils/performance-aggregator.js';
-
+// L19: MOF initialization (imports at top of file)
 const mofOrchestrator = initializeMOF();
 console.log('[L19][SCHEDULER] MOF Orchestrator started (Meta-Optimization Framework)');
 
@@ -224,6 +227,112 @@ schedulerRegistry.registerTask({
       }
     } catch (error) {
       console.error('[L19][SCHEDULER] ❌ MOF drift check failed:', error);
+      throw error;
+    }
+  },
+});
+
+// L20: GASP initialization (imports at top of file)
+const gaspCoordinator = initializeGASP();
+const equilibriumRestorer = initializeEquilibriumRestorer();
+console.log('[L20][SCHEDULER] GASP Coordinator started (Global Autonomy Stabilization Protocol)');
+
+// L20: GASP global stability scan every 10 minutes
+schedulerRegistry.registerTask({
+  name: 'gasp_stability_scan',
+  description: 'L20: GASP global stability scan and GSI computation',
+  frequency: 'custom',
+  intervalMs: 10 * 60 * 1000, // 10 minutes
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[L20][SCHEDULER] 🔍 Running GASP stability scan...');
+    
+    try {
+      const gasp = getGASPCoordinator();
+      const status = await gasp.scan();
+      
+      console.log(`[L20][SCHEDULER] ✅ GASP scan: GSI=${status.gsi.toFixed(3)}, mode=${status.mode}, ρmax=${status.correlationMax.toFixed(3)}`);
+    } catch (error) {
+      console.error('[L20][SCHEDULER] ❌ GASP stability scan failed:', error);
+      throw error;
+    }
+  },
+});
+
+// L20: GASP auto-damping application every 30 minutes
+schedulerRegistry.registerTask({
+  name: 'gasp_auto_damping',
+  description: 'L20: GASP automatic damping coefficient application',
+  frequency: 'custom',
+  intervalMs: 30 * 60 * 1000, // 30 minutes
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[L20][SCHEDULER] ⚡ Running GASP auto-damping...');
+    
+    try {
+      const result = await applyStabilizationScaling();
+      
+      console.log(`[L20][SCHEDULER] ✅ GASP damping applied: η′=${result.newCoefficients.learningRate.toFixed(3)}, E′=${result.newCoefficients.exposure.toFixed(3)}, modules=${result.modulesAffected.join(',')}`);
+    } catch (error) {
+      console.error('[L20][SCHEDULER] ❌ GASP auto-damping failed:', error);
+      throw error;
+    }
+  },
+});
+
+// L20: GASP equilibrium check every hour
+schedulerRegistry.registerTask({
+  name: 'gasp_equilibrium_check',
+  description: 'L20: GASP system equilibrium verification',
+  frequency: 'hourly',
+  intervalMs: 60 * 60 * 1000, // 1 hour
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[L20][SCHEDULER] ⚖️ Running GASP equilibrium check...');
+    
+    try {
+      const gasp = getGASPCoordinator();
+      const status = gasp.getStatus();
+      
+      if (status.gsi >= 0.85) {
+        console.log('[L20][SCHEDULER] ✅ System in equilibrium - GSI stable');
+      } else if (status.gsi >= 0.70) {
+        console.log(`[L20][SCHEDULER] ⚠️ System in caution mode - GSI=${status.gsi.toFixed(3)}`);
+      } else {
+        console.log(`[L20][SCHEDULER] 🔴 System unstable - GSI=${status.gsi.toFixed(3)}, triggering recovery check`);
+      }
+    } catch (error) {
+      console.error('[L20][SCHEDULER] ❌ GASP equilibrium check failed:', error);
+      throw error;
+    }
+  },
+});
+
+// L20: GASP correlation snapshot daily
+schedulerRegistry.registerTask({
+  name: 'gasp_correlation_snapshot',
+  description: 'L20: GASP daily cross-module correlation snapshot',
+  frequency: 'daily',
+  intervalMs: 24 * 60 * 60 * 1000, // 24 hours
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[L20][SCHEDULER] 📊 Running GASP correlation snapshot...');
+    
+    try {
+      const gasp = getGASPCoordinator();
+      const status = gasp.getStatus();
+      
+      console.log(`[L20][SCHEDULER] ✅ Correlation snapshot: ρmax=${status.correlationMax.toFixed(3)}, matrix=${JSON.stringify(status.correlationMatrix)}`);
+    } catch (error) {
+      console.error('[L20][SCHEDULER] ❌ GASP correlation snapshot failed:', error);
       throw error;
     }
   },

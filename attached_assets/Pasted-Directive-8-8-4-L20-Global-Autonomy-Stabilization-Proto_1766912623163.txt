@@ -1,0 +1,322 @@
+Directive 8.8.4-L20 — Global Autonomy Stabilization Protocol (GASP)
+
+Phase: 8.8.4-L20
+Title: Global Autonomy Stabilization Protocol (GASP)
+Status: To Implement
+Authorized Test User:
+
+Username: testuser123
+
+Password: SecurePass123!
+
+Objective
+
+The Global Autonomy Stabilization Protocol (GASP) provides a supervisory feedback layer that ensures all adaptive subsystems — including the MOF, ARA, DCE, MACO, PDC-ECS, and APR-SLE — operate within stable dynamic limits.
+
+GASP acts as an adaptive damping system to prevent over-correction, cross-module resonance, or feedback oscillation. It enforces long-term equilibrium between profitability, exposure, and systemic risk.
+
+Core Goals
+
+Detect systemic instability early (via variance in KPIs, control loop feedback latency, and cross-module coupling).
+
+Apply corrective damping to adaptive weights, learning rates, and exposure multipliers when volatility exceeds thresholds.
+
+Coordinate global pause-and-recovery states to safely rebalance subsystems after extreme drift or correlation spikes.
+
+Preserve autonomy while guaranteeing safety — all subsystems continue learning, but within bounded ranges of adaptation.
+
+Architecture Overview
+Layer	Component	Function
+Supervisory	GASP Coordinator	Collects global metrics, computes stability index, issues control signals
+Analytical	System Variance Monitor	Tracks variance across λ (MOF), DI (DCE), and α/β (per-strategy)
+Corrective	Stabilization Controller	Adjusts learning rates and damping coefficients system-wide
+Recovery	Equilibrium Restorer	Handles auto-pause, controlled cooldown, and phased reactivation
+UI	Stabilization Monitor Card	Displays system stability, correlation, and recovery progress
+Key Computations
+1. Global Stability Index (GSI)
+
+Measures overall system equilibrium:
+
+𝐺
+𝑆
+𝐼
+=
+1
+−
+𝑤
+1
+𝜎
+𝜆
+2
++
+𝑤
+2
+𝜎
+𝐷
+𝐼
+2
++
+𝑤
+3
+𝜎
+𝛼
+𝛽
+2
++
+𝑤
+4
+𝜎
+𝐷
+𝑅
+𝑆
+2
+GSI=1−
+w
+1
+	​
+
+σ
+λ
+2
+	​
+
++w
+2
+	​
+
+σ
+DI
+2
+	​
+
++w
+3
+	​
+
+σ
+αβ
+2
+	​
+
++w
+4
+	​
+
+σ
+DRS
+2
+	​
+
+	​
+
+
+Weights default to:
+w₁ = 0.4, w₂ = 0.3, w₃ = 0.2, w₄ = 0.1
+
+Stable: GSI ≥ 0.85
+
+Caution: 0.70 ≤ GSI < 0.85
+
+Critical: GSI < 0.70 → triggers stabilization protocol
+
+2. Feedback Damping Function
+
+When GSI < 0.85, learning rates η and exposure multipliers E are scaled as:
+
+𝜂
+′
+=
+𝜂
+×
+(
+𝐺
+𝑆
+𝐼
++
+0.15
+)
+η
+′
+=η×(GSI+0.15)
+𝐸
+′
+=
+𝐸
+×
+(
+𝐺
+𝑆
+𝐼
++
+0.10
+)
+E
+′
+=E×(GSI+0.10)
+
+This prevents aggressive reallocation when the system is unstable.
+
+3. Correlation Sentinel
+
+Monitors cross-module correlations (λ, DI, DRS, regime bias):
+
+𝜌
+𝑚
+𝑎
+𝑥
+=
+max
+⁡
+(
+∣
+𝑐
+𝑜
+𝑟
+𝑟
+(
+𝑋
+𝑖
+,
+𝑋
+𝑗
+)
+∣
+)
+ρ
+max
+	​
+
+=max(∣corr(X
+i
+	​
+
+,X
+j
+	​
+
+)∣)
+
+If ρₘₐₓ > 0.8, global synchronization slowdown is triggered (rate halved).
+
+If sustained > 0.9 for 1h → controlled cooldown (reduced trading frequency).
+
+Implementation Tasks
+1. Core Services
+
+Create server/services/gasp-coordinator.ts
+
+Aggregates live metrics from MOF, DCE, PDC-ECS, MACO, and APR-SLE.
+
+Computes GSI, damping coefficients, and correlation matrix.
+
+Publishes global state via in-memory broadcast.
+
+Create server/utils/stabilization-controller.ts
+
+Applies dynamic scaling to:
+
+Learning rates (η)
+
+Exposure multipliers (E)
+
+ARA and MOF lambda weights
+
+Provides rollback and recovery utilities.
+
+Create server/services/equilibrium-restorer.ts
+
+Handles auto-pause, cooldown, and re-engagement phases:
+
+Cooldown if GSI < 0.65 for >10m.
+
+Resume once GSI > 0.80 for 15 consecutive minutes.
+
+Logs all events under /logs/gasp/.
+
+2. API Endpoints
+
+Create server/routes/gasp.ts
+
+Endpoint	Method	Description
+/api/gasp/status	GET	Returns GSI, correlation metrics, current mode
+/api/gasp/adjust	POST	Applies stabilization scaling to all modules
+/api/gasp/recover	POST	Initiates equilibrium recovery
+/api/gasp/history	GET	Returns stability and correlation history
+/api/gasp/recalibrate	POST	Re-weights GSI coefficients
+
+Authentication: required (testuser123 / SecurePass123!)
+
+3. Scheduler Integration
+
+Update autonomy-scheduler.ts to include:
+
+Task	Frequency	Function
+Global stability scan	Every 10 min	Compute GSI and ρₘₐₓ
+Auto-damping application	Every 30 min	Apply η′, E′ scaling
+System equilibrium check	Hourly	Trigger recovery if GSI ≥ 0.85
+Correlation snapshot	Daily	Log cross-module correlation map
+4. Frontend Integration
+
+Add “System Stability Monitor” card to the Adaptive Risk Advisor under the Goals tab.
+
+Displays:
+
+Global Stability Index (color-coded)
+
+Correlation Heatmap
+
+Current Control Mode (Normal / Caution / Containment / Recovery)
+
+Damping coefficients (η′, E′)
+
+Event Log of recent interventions
+
+Color Key:
+
+🟢 Stable
+
+🟡 Caution
+
+🔴 Containment
+
+🔵 Recovery
+
+Expected Outcomes
+Metric	Target
+Average GSI	≥ 0.85
+Peak correlation (ρₘₐₓ)	≤ 0.8
+Recovery time (critical → stable)	≤ 30 min
+Drawdown variance reduction	≥ 25 %
+False-positive stabilization triggers	< 5 %
+Validation Steps
+
+Simulate multi-module stress test (e.g., rapid regime changes + drawdown spikes).
+
+Confirm:
+
+GSI < 0.7 triggers containment.
+
+η and E scale down proportionally.
+
+GSI > 0.85 triggers auto-recovery.
+
+Review /api/gasp/history to confirm recorded stability cycles.
+
+Verify all logs under /logs/gasp/ are populated with timestamps and parameter snapshots.
+
+Completion Criteria
+
+✅ GASP Coordinator and Controller active and visible in health endpoint.
+
+✅ UI Stability Monitor displaying live GSI and damping state.
+
+✅ No circular dependencies or performance degradation in autonomy scheduler.
+
+✅ Confirmed end-to-end stabilization cycle in simulated stress test.
+
+Directive Summary
+
+Directive ID: 8.8.4-L20
+Directive Name: Global Autonomy Stabilization Protocol (GASP)
+Purpose: Enforce global equilibrium and adaptive damping across all subsystems.
+Expected Result: Self-balancing, non-oscillatory trading ecosystem capable of continuous autonomous adaptation within safe dynamic boundaries.
