@@ -10096,9 +10096,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Get open positions from paper_sim_open_positions
       const positions = await storage.getPaperSimOpenPositions('paper');
       
-      // Get guardrail settings for max open positions
-      const guardrails = await storage.getGuardrailsV2({ mode: 'paper' });
-      const maxOpenTrades = guardrails?.maxOpenPositions || 15;
+      // Get guardrail settings for max open positions using dynamic slot calculation
+      const { getDynamicSlots } = await import('./services/dynamic-slots.js');
+      const { slots: maxOpenTrades } = await getDynamicSlots('paper');
       
       // Phase 8.8.3-I6: Enrich positions with LIVE prices from LivePricingAdapter
       const enrichedPositions = await Promise.all(positions.map(async (pos, index) => {
@@ -10410,9 +10410,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const netPnl = realizedPnl + unrealizedPnl;
       const netPnlPercent = startingBalance > 0 ? (netPnl / startingBalance) * 100 : 0;
       
-      // Phase 8.8.3-I9: Get open trades count and max slots for TopBar metric
-      const guardrailsV2 = await storage.getGuardrailsV2({ mode: 'paper' });
-      const maxOpenTrades = guardrailsV2?.maxOpenPositions || 15;
+      // Phase 8.8.3-I9: Get open trades count and max slots for TopBar metric using dynamic calculation
+      const { getDynamicSlots } = await import('./services/dynamic-slots.js');
+      const { slots: maxOpenTrades } = await getDynamicSlots('paper');
       const openTradesCount = openPositions.length;
       const slotsAvailable = Math.max(0, maxOpenTrades - openTradesCount);
       
