@@ -1,0 +1,121 @@
+Directive 8.8.4-M5B (Revised) — Autonomous Virtual Trading Simulator Restoration
+
+Objective
+Restore the Virtual Trading Simulator (VTS) to full autonomy.
+It must generate and execute simulated trades entirely within its own subsystem, independent of the live trading engine, filter engine, or signal orchestrator.
+
+🔧 Implementation Tasks
+
+Restore Internal Signal Engine
+
+File: server/services/vts-runner.ts
+
+Add generateVirtualSignal(pairData):
+
+const signal = {
+  symbol,
+  strategyId: selectRandomStrategy(),   // or weighted selection
+  entryPrice: currentPrice,
+  cwqi: computeCWQI(priceHistory),
+  ngc: computeNGC(volatilityData),
+  timestamp: Date.now()
+};
+this.createVirtualTrade(signal);
+
+
+Source data exclusively from the pricing service cache.
+
+Enable Autonomous Simulation Loop
+
+File: server/services/vts-runner.ts
+
+Implement a loop (runAutonomousSimulation) that:
+
+Executes every 60 s while tradingActive === false
+
+Pulls 10–20 top-liquidity pairs from the pricing service
+
+Calls generateVirtualSignal() for each
+
+Updates calibration via updateCalibrationMetrics()
+
+Stop the loop automatically when tradingActive === true.
+
+Detach from Live Orchestrators
+
+Remove or disable all calls to captureSignalForVTS() originating from:
+
+server/services/signal-orchestrator.ts
+
+server/services/paper-portfolio-manager.ts
+
+Verify no VTS method is invoked by the live trading engine.
+
+Add Configuration Flags
+
+File: config/vts.json
+
+{
+  "autonomousMode": true,
+  "simulationIntervalSec": 60,
+  "pairsPerCycle": 20
+}
+
+
+Update Mode Audit
+
+File: server/services/vts-mode-audit.ts
+
+Ensure:
+
+if (!tradingActive) mode = 'simulator';
+
+
+and that source = 'pricing_service'.
+
+Logging & Metrics
+
+Every simulation cycle log:
+
+[M5B][VTS] Simulated trade: BTC/USD strategy=EMA_RSI cwqi=0.67 ngc=0.72
+
+
+Maintain counts:
+
+simulatedTradesThisSession
+
+averageCWQI
+
+averageReturn
+
+Verification
+
+Use test credentials:
+
+username: testuser123
+password: SecurePass123!
+
+
+After implementation, run:
+
+POST /api/vts/run-passive
+GET  /api/vts/status
+GET  /api/vts/audit
+
+
+Expected output:
+
+{
+  "mode": "simulator",
+  "tradingActive": false,
+  "simulatedTradesThisSession": >10,
+  "calibrationFileExists": true
+}
+
+✅ Expected Outcome
+
+VTS runs independently of live trading components.
+
+Simulated trades and calibration data populate continuously during passive learning.
+
+No dependency on the Filter Engine or Signal Orchestrator.
