@@ -69,6 +69,18 @@ VTS Mode Switching Correction (M5A) decouples VTS mode logic from systemMode (PA
 - **Enhanced Status Endpoint**: `/api/vts/status` now returns M5A fields (`tradingActive`, `passiveLearning`, `mode`, `source`)
 - **Signal Capture**: Signal orchestrator captures signals for VTS after passing SQE filter (fire-and-forget)
 
+Autonomous VTS Operation (M5B) implements fully autonomous virtual trading simulation:
+- **Autonomous Mode**: VTS runs independently with 60-second simulation cycles when `tradingActive=false`
+- **Data Sourcing**: Exclusively uses `FilteredPairsService.getValidPairs()` → `priceCache.subscribe('fx5Snapshot')` → `priceCache.getBatch()` pipeline
+- **Internal Signal Generation**: `generateVirtualSignal()` computes CWQI/NGC internally, no orchestrator dependency
+- **Session Metrics**: `simulatedTradesThisSession` tracked by vts-service and exposed in status endpoint
+- **Configuration**: `config/vts.json` defines simulation parameters (pairs per cycle, strategies, targets)
+- **API Endpoints**:
+  - `POST /api/vts/run-passive` - Start autonomous simulation
+  - `POST /api/vts/stop-passive` - Stop autonomous simulation
+  - `GET /api/vts/audit` - Generate validation report with session metrics
+  - `GET /api/vts/status` - Full VTS status with `simulatedTradesThisSession`
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.
