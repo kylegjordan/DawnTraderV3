@@ -18,6 +18,7 @@ import { priceCache } from './price-cache.js';
 import { vtsService } from './vts-service.js';
 import { startM5CValidationSession, getM5CSessionTrades, isAutonomousSimulationRunning } from './vts-runner.js';
 import { startPaperTradeRecording, savePaperSessionTrades, getPaperSessionTrades, compareLatestSessions, getLatestComparisonReport } from './vts-live-comparison-audit.js';
+import { systemConfigService } from './system-config.js';
 
 interface M5DMetricsSnapshot {
   timestamp: string;
@@ -46,6 +47,15 @@ interface M5DValidationSession {
 
 let activeSession: M5DValidationSession | null = null;
 
+async function restorePassiveLearning(): Promise<void> {
+  try {
+    await systemConfigService.updateConfig({ passiveLearning: true }, 'system');
+    console.log('[M5D][RESTORE] Passive learning restored');
+  } catch (err) {
+    console.error('[M5D][RESTORE] Failed to restore passive learning:', err);
+  }
+}
+
 function calculateAverage(values: number[]): number {
   if (values.length === 0) return 0;
   return values.reduce((a, b) => a + b, 0) / values.length;
@@ -58,12 +68,33 @@ function calculateVariance(values: number[]): number {
   return calculateAverage(squaredDiffs);
 }
 
+function computeRealFeedLatency(): number {
+  try {
+    const allPrices = priceCache.getAllPrices?.() || [];
+    if (allPrices.length === 0) {
+      const singlePrice = priceCache.get?.('BTC/USD');
+      if (singlePrice?.lastUpdatedAt) {
+        return Date.now() - singlePrice.lastUpdatedAt;
+      }
+      return 50;
+    }
+    const now = Date.now();
+    const latencies = allPrices
+      .filter((p: any) => p.lastUpdatedAt)
+      .map((p: any) => now - p.lastUpdatedAt);
+    if (latencies.length === 0) return 50;
+    return latencies.reduce((a: number, b: number) => a + b, 0) / latencies.length;
+  } catch {
+    return 50;
+  }
+}
+
 async function captureMetricsSnapshot(): Promise<M5DMetricsSnapshot | null> {
   if (!activeSession) return null;
   
   const elapsed = (Date.now() - activeSession.startTime) / 60000;
   
-  const feedLatency = Math.random() * 50 + 20;
+  const feedLatency = computeRealFeedLatency();
   
   const vtsTrades = getM5CSessionTrades();
   const paperTrades = getPaperSessionTrades();
@@ -131,13 +162,25 @@ export async function startM5DValidationRun(durationMinutes: number = 60): Promi
       return { success: false, message: `VTS start failed: ${vtsResult.message}`, sessionId };
     }
     
-    console.log('[M5D][PHASE_B] Starting paper trade recording...');
+    console.log('[M5D][PHASE_B] Starting paper trade recording and enabling paper trading...');
     startPaperTradeRecording();
     activeSession.paperSessionId = `paper_${Date.now()}`;
     activeSession.phase = 'B_PAPER';
     
+    try {
+      await systemConfigService.updateConfig({ passiveLearning: false }, 'system');
+      console.log('[M5D][PHASE_B] Paper trading enabled (passiveLearning=false)');
+    } catch (err) {
+      console.warn('[M5D][PHASE_B] Could not enable paper trading:', err);
+    }
+    
     setTimeout(async () => {
-      await completeM5DValidation();
+      try {
+        await completeM5DValidation();
+      } catch (err) {
+        console.error('[M5D][TIMEOUT_ERROR]', err);
+        await restorePassiveLearning();
+      }
     }, durationMinutes * 60 * 1000);
     
     return { 
@@ -148,6 +191,7 @@ export async function startM5DValidationRun(durationMinutes: number = 60): Promi
   } catch (error) {
     activeSession.phase = 'FAILED';
     if (activeSession.metricsInterval) clearInterval(activeSession.metricsInterval);
+    await restorePassiveLearning();
     console.error('[M5D][ERROR] Validation start failed:', error);
     return { success: false, message: `Validation start failed: ${error}`, sessionId };
   }
@@ -162,6 +206,8 @@ async function completeM5DValidation(): Promise<void> {
   if (activeSession.metricsInterval) {
     clearInterval(activeSession.metricsInterval);
   }
+  
+  await restorePassiveLearning();
   
   await captureMetricsSnapshot();
   
