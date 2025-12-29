@@ -1,0 +1,91 @@
+Let me investigate each question systematically:
+
+I've found the key information. Let me add the diagnostic logging and verify the behavior:
+
+Now I have all the answers. Here's the complete diagnostic report:
+
+Answers to VTS Investigation Questions
+1. What is the current value of VTS.mode when a validation session starts?
+From vts-mode-audit.ts line 67-75:
+
+private currentState: VTSModeState = {
+  mode: 'simulator',        // DEFAULT VALUE
+  source: 'pricing_service',
+  systemMode: 'IDLE',
+  ...
+}
+Answer: Default is 'simulator' when systemMode is 'IDLE'.
+
+2. Which system state triggers the mode assignment?
+From vts-mode-audit.ts lines 121-138:
+
+updateMode(systemMode: SystemMode): void {
+  if (systemMode === 'IDLE') {
+    this.currentState.mode = 'simulator';      // Can simulate
+    this.currentState.source = 'pricing_service';
+  } else {
+    this.currentState.mode = 'observer';       // Cannot simulate
+    this.currentState.source = 'live_trades';
+  }
+}
+Mode Transitions:
+
+System State	VTS Mode	Can Simulate?
+IDLE	simulator	Yes
+PAPER	observer	No
+LIVE	observer	No
+Issue Found: When paper trading engine is running (systemMode = PAPER), VTS switches to observer mode and blocks all simulations.
+
+3. Does validation engine call runPassiveSimulations()?
+Answer: NO - Grep shows no matches for runPassive or simulate in paper_validation_engine.ts.
+
+The validation engine only captures metrics - it does not trigger simulations.
+
+4. Is there an enabledSimulations or isSimulationActive flag?
+Answer: NO - Grep shows no matches for enabledSimulations or isSimulationActive in the services folder.
+
+However, VTSModeAuditService has:
+
+canSimulateTrade() method that returns this.currentState.mode === 'simulator'
+recordSimulatedTrade() that blocks in observer mode
+5. Is there a condition requiring systemState === 'IDLE' for simulations?
+Answer: YES - From the code analysis:
+
+if (systemMode === 'IDLE') {
+  this.currentState.mode = 'simulator';  // ONLY mode that allows simulation
+} else {
+  this.currentState.mode = 'observer';   // Blocks simulation
+}
+This is the root cause: VTS only simulates when the trading engine is completely stopped (IDLE). During validation with paper trading active, VTS is in observer mode.
+
+6. What does /api/vts/status show during validation?
+The endpoint requires authentication. However, VTS status would show:
+
+mode: "observer" (when paper trading is active)
+mode: "simulator" (when engine is stopped)
+7. Is VTS calibrationBuffer or /data/vts_calibration.json being written?
+Answer: NO - The file does not exist:
+
+File does not exist: data/vts_calibration.json
+This confirms recordSimulatedTrade() is never being called.
+
+8. Who calls createVirtualTrade()?
+From grep results:
+
+captureSignalForVTS() in vts-runner.ts calls vtsService.createVirtualTrade()
+BUT captureSignalForVTS() is never called anywhere else in the codebase
+The signal capture function exists but is not wired to the signal orchestrator.
+
+Root Cause Summary
+Issue	Status
+VTS initialized at startup	✅ Yes (via boot_orchestrator)
+VTS mode defaults to simulator	✅ Yes (when IDLE)
+VTS mode during paper trading	❌ observer (blocks simulations)
+captureSignalForVTS() called	❌ Never called by signal orchestrator
+vts_calibration.json exists	❌ No
+Simulated trades during validation	❌ 0 trades
+The problem is twofold:
+
+VTS goes to observer mode when paper trading is active
+captureSignalForVTS() is not wired to the signal orchestrator to capture signals
+Would you like me to wire the signal orchestrator to call captureSignalForVTS() when signals are generated, so VTS can record simulated trades?

@@ -121,10 +121,13 @@ class VTSModeAuditService {
   updateMode(systemMode: SystemMode): void {
     const previousMode = this.currentState.mode;
     
-    if (systemMode === 'IDLE') {
+    // M5-R1: VTS can simulate during IDLE or PAPER mode
+    // Only LIVE mode switches to observer (no simulation during real trading)
+    if (systemMode === 'IDLE' || systemMode === 'PAPER') {
       this.currentState.mode = 'simulator';
       this.currentState.source = 'pricing_service';
     } else {
+      // LIVE mode only - observe real trades, don't simulate
       this.currentState.mode = 'observer';
       this.currentState.source = 'live_trades';
     }

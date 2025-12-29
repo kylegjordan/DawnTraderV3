@@ -54,6 +54,7 @@ import { dataAggregator } from './data-aggregator.js';
 import { predictPromotion, predictProfit, blendConfidence, type PredictionInput } from './ml-service-client.js';
 import { getWeightSync as getStrategyWeight, computeStrategyWeights } from '../utils/strategyWeights.js';
 import { getExposureMultiplierSync, computeExposureBias, getBiasSummaryForLog } from '../utils/strategyBias.js';
+import { captureSignalForVTS } from './vts-runner.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -481,6 +482,22 @@ export class SignalOrchestrator {
     // Queue to RTB pool (fire-and-forget, non-blocking)
     readyToBuyService.queueSQESignal(sqeSignalInput).catch(err => {
       console.error(`[8.8.4-C.5][RTB_ERROR] Failed to queue ${rawSignal.symbol}/${strategyId}:`, err);
+    });
+
+    // M5-R1: Capture signal for VTS (Virtual Trade Simulator) calibration
+    // Fire-and-forget to avoid blocking signal pipeline
+    captureSignalForVTS(
+      rawSignal.symbol,
+      rawSignal.entryPrice,
+      rawSignal.targetPrice,
+      rawSignal.stopPrice,
+      extendedMetrics.profitRate,
+      strategyId,
+      (rawSignal as any).spread ?? 0.001
+    ).then(() => {
+      console.log(`[M5-R1][VTS_CAPTURE] ${rawSignal.symbol}/${strategyId} captured for virtual trading`);
+    }).catch(err => {
+      console.warn(`[M5-R1][VTS_CAPTURE_ERROR] ${rawSignal.symbol}/${strategyId}:`, err);
     });
 
     // Phase 8.8.4-B.3: Build sized signal with extended metrics
