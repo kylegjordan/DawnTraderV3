@@ -60,6 +60,15 @@ Extended Calibration & Validation Run (M5-R1) implements a 60-minute extended va
   - `GET /api/calibration/weights` - Get current strategy weights
   - `GET /api/vts/status` - Check VTS simulator mode and trade counts
 
+VTS Mode Switching Correction (M5A) decouples VTS mode logic from systemMode (PAPER/LIVE) and ties simulation enablement to the `tradingActive` boolean. Key changes:
+- **Primary Control**: VTS mode now controlled by `tradingActive` boolean, not `systemMode`
+- **Passive Learning Mirror**: VTS `passiveLearning` field mirrors the system's passive learning state
+- **Mode Behavior**:
+  - When `tradingActive=false` → VTS mode=`simulator`, source=`pricing_service` (simulates trades using live price data)
+  - When `tradingActive=true` → VTS mode=`observer`, source=`live_trades` (records real trades only)
+- **Enhanced Status Endpoint**: `/api/vts/status` now returns M5A fields (`tradingActive`, `passiveLearning`, `mode`, `source`)
+- **Signal Capture**: Signal orchestrator captures signals for VTS after passing SQE filter (fire-and-forget)
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.

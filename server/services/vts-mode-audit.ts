@@ -1,10 +1,17 @@
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * Directive 8.8.4-M3B.2 — VTS Mode Verification & Audit Service
+ * Directive 8.8.4-M5A — VTS Mode Switching Correction (Trading-State Integration)
  * ══════════════════════════════════════════════════════════════════════════════
  * 
  * Purpose: Verifies VTS mode correctness, data source integrity, and ensures
  * no cross-contamination between simulated and real trade learning buffers.
+ * 
+ * M5A Changes:
+ * - Decoupled VTS mode logic from systemMode (PAPER/LIVE)
+ * - VTS simulation enablement now tied to tradingActive boolean
+ * - Mirrors passive learning state trigger (shared source of truth)
+ * - When trading OFF → VTS simulates trades using live price data
+ * - When trading ON → VTS observes and records real trades only
  */
 
 import fs from 'fs/promises';
@@ -57,6 +64,8 @@ export interface VTSModeState {
   mode: VTSMode;
   source: VTSDataSource;
   systemMode: SystemMode;
+  tradingActive: boolean;  // M5A: Primary control for VTS mode
+  passiveLearning: boolean; // M5A: Mirror of passive learning state
   lastModeChange: string;
   simulatedTradesThisSession: number;
   isActive: boolean;
@@ -68,6 +77,8 @@ class VTSModeAuditService {
     mode: 'simulator',
     source: 'pricing_service',
     systemMode: 'IDLE',
+    tradingActive: false,  // M5A: Trading engine inactive by default
+    passiveLearning: true, // M5A: Passive learning enabled by default
     lastModeChange: new Date().toISOString(),
     simulatedTradesThisSession: 0,
     isActive: false,
@@ -100,44 +111,67 @@ class VTSModeAuditService {
     try {
       if (contextBridge && typeof contextBridge.on === 'function') {
         contextBridge.on('trading_state_changed', (data: any) => {
-          const isActive = data?.active || data?.isEngineActive || false;
+          // M5A: Extract tradingActive boolean directly
+          const tradingActive = data?.active || data?.isEngineActive || false;
+          const passiveLearning = data?.passiveLearning ?? !tradingActive;
           const mode = data?.mode?.toUpperCase() || 'PAPER';
           
+          // M5A: SystemMode is informational only, not the control variable
           let systemMode: SystemMode = 'IDLE';
-          if (isActive) {
+          if (tradingActive) {
             systemMode = mode === 'LIVE' ? 'LIVE' : 'PAPER';
           }
           
-          this.updateMode(systemMode);
-          console.log(`[M3B.2][VTS_AUDIT] Trading state received: active=${isActive}, mode=${mode} → VTS: ${this.currentState.mode}`);
+          // M5A: Pass tradingActive as the primary control
+          this.updateModeFromTradingState(tradingActive, passiveLearning, systemMode);
+          console.log(`[M5A][VTS_AUDIT] Trading state received: tradingActive=${tradingActive}, passiveLearning=${passiveLearning} → VTS: ${this.currentState.mode}`);
         });
-        console.log('[M3B.2][VTS_AUDIT] Subscribed to trading_state_changed events');
+        console.log('[M5A][VTS_AUDIT] Subscribed to trading_state_changed events');
       }
     } catch (error) {
-      console.warn('[M3B.2][VTS_AUDIT] Could not subscribe to context bridge:', error);
+      console.warn('[M5A][VTS_AUDIT] Could not subscribe to context bridge:', error);
     }
   }
 
-  updateMode(systemMode: SystemMode): void {
+  /**
+   * M5A: Primary mode update method - uses tradingActive boolean
+   * - tradingActive=false → VTS simulates (passive learning mode)
+   * - tradingActive=true → VTS observes (engine running, record real trades)
+   */
+  updateModeFromTradingState(tradingActive: boolean, passiveLearning: boolean, systemMode: SystemMode): void {
     const previousMode = this.currentState.mode;
     
-    // M5-R1: VTS can simulate during IDLE or PAPER mode
-    // Only LIVE mode switches to observer (no simulation during real trading)
-    if (systemMode === 'IDLE' || systemMode === 'PAPER') {
+    // M5A: VTS mode tied to tradingActive boolean, not systemMode
+    // When trading is OFF → VTS simulates trades using live price data
+    // When trading is ON → VTS observes and records real trades only
+    if (!tradingActive) {
       this.currentState.mode = 'simulator';
       this.currentState.source = 'pricing_service';
     } else {
-      // LIVE mode only - observe real trades, don't simulate
       this.currentState.mode = 'observer';
       this.currentState.source = 'live_trades';
     }
     
+    // M5A: Update all state fields
+    this.currentState.tradingActive = tradingActive;
+    this.currentState.passiveLearning = passiveLearning;
     this.currentState.systemMode = systemMode;
     
     if (previousMode !== this.currentState.mode) {
       this.currentState.lastModeChange = new Date().toISOString();
-      console.log(`[M3B.2][VTS_AUDIT] Mode switched: ${previousMode} → ${this.currentState.mode} (system: ${systemMode})`);
+      console.log(`[M5A][VTS_AUDIT] Mode switched: ${previousMode} → ${this.currentState.mode} (tradingActive=${tradingActive}, system: ${systemMode})`);
     }
+  }
+
+  /**
+   * Legacy method for backward compatibility - converts systemMode to tradingActive
+   * @deprecated Use updateModeFromTradingState() instead
+   */
+  updateMode(systemMode: SystemMode): void {
+    // M5A: Convert systemMode to tradingActive for backward compatibility
+    const tradingActive = systemMode !== 'IDLE';
+    const passiveLearning = !tradingActive;
+    this.updateModeFromTradingState(tradingActive, passiveLearning, systemMode);
   }
 
   recordFeedLatency(latencyMs: number): void {

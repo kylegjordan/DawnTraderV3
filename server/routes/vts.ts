@@ -20,6 +20,7 @@ import { vtsService } from '../services/vts-service';
 import { loadCalibration, loadFullCalibration, applyCalibration } from '../utils/calibration';
 import { getDriftDetector } from '../services/drift-detector';
 import { trainingAuditService } from '../services/training-audit-service';
+import { vtsModeAuditService } from '../services/vts-mode-audit';
 
 const router = Router();
 
@@ -55,11 +56,24 @@ router.get('/status', requireAuth, async (req: Request, res: Response) => {
     const strategyStats = vtsService.getStrategyStats();
     const auditStatus = trainingAuditService.getStatus('VTS');
     
+    // M5A: Get VTS mode state with tradingActive boolean
+    const modeState = vtsModeAuditService.getState();
+    
     const strategyCount = Object.keys(fullCalibration.strategies).length;
-    console.log(`[L8][VTS][STATUS] open=${stats.openTrades} closed=${stats.closedTrades} winRate=${(stats.winRate * 100).toFixed(1)}% strategies=${strategyCount}`);
+    console.log(`[M5A][VTS][STATUS] mode=${modeState.mode} tradingActive=${modeState.tradingActive} passiveLearning=${modeState.passiveLearning} open=${stats.openTrades} closed=${stats.closedTrades}`);
     
     res.json({
       isRunning: true,
+      // M5A: Primary mode control fields
+      mode: modeState.mode,
+      source: modeState.source,
+      tradingActive: modeState.tradingActive,
+      passiveLearning: modeState.passiveLearning,
+      systemMode: modeState.systemMode,
+      lastModeChange: modeState.lastModeChange,
+      simulatedTradesThisSession: modeState.simulatedTradesThisSession,
+      blockedSimulationsInObserverMode: modeState.blockedSimulationsInObserverMode,
+      // Existing fields
       stats,
       calibration,
       fullCalibration,
