@@ -6303,6 +6303,56 @@
     ]
   },
   {
+    "path": "/api/vts/validation/run-m5e-vts",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/vts/validation/run-m5e-paper",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/vts/validation/run-m5e-compare",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/vts/validation/run-m5e",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/vts/validation/m5e-status",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/market/regime",
     "methods": [
       "GET"

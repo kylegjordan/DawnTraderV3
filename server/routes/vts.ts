@@ -41,6 +41,14 @@ import {
   compareLatestSessions
 } from '../services/vts-live-comparison-audit';
 import { startM5DValidationRun, getM5DStatus, getLatestMetricsSnapshot } from '../services/m5d-validation-service';
+import { 
+  runVTSPhase, 
+  runPaperPhase, 
+  runComparisonPhase, 
+  startFullM5EValidation, 
+  getM5EStatus, 
+  getM5ELatestSnapshot 
+} from '../services/m5e-validation-service';
 
 const router = Router();
 
@@ -798,6 +806,147 @@ router.get('/validation/m5d-status', requireAuth, async (req: AuthenticatedReque
   } catch (error) {
     console.error('[M5D][API][ERROR] m5d-status failed:', error);
     res.status(500).json({ error: 'Failed to get M5D status' });
+  }
+});
+
+/**
+ * ══════════════════════════════════════════════════════════════════════════════
+ * M5E: Controlled 60-Minute Validation with Paper Trading Activation
+ * ══════════════════════════════════════════════════════════════════════════════
+ */
+
+/**
+ * M5E: Start VTS-only phase (Phase A)
+ * POST /api/vts/validation/run-m5e-vts
+ * 
+ * Starts 30-minute VTS simulation phase.
+ * Query params: duration (minutes, default 30)
+ */
+router.post('/validation/run-m5e-vts', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const duration = parseInt(req.query.duration as string) || 30;
+    const result = await runVTSPhase(duration);
+    
+    console.log(`[M5E][API] VTS phase ${result.success ? 'started' : 'failed'}: ${result.sessionId}`);
+    
+    res.json({
+      success: result.success,
+      message: result.message,
+      sessionId: result.sessionId,
+      durationMinutes: duration,
+      phase: 'A_VTS'
+    });
+  } catch (error) {
+    console.error('[M5E][API][ERROR] run-m5e-vts failed:', error);
+    res.status(500).json({ error: 'Failed to start M5E VTS phase' });
+  }
+});
+
+/**
+ * M5E: Start Paper-only phase (Phase B)
+ * POST /api/vts/validation/run-m5e-paper
+ * 
+ * Starts 30-minute paper trading phase with tradingActive=true.
+ * Query params: duration (minutes, default 30)
+ */
+router.post('/validation/run-m5e-paper', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const duration = parseInt(req.query.duration as string) || 30;
+    const result = await runPaperPhase(duration);
+    
+    console.log(`[M5E][API] Paper phase ${result.success ? 'started' : 'failed'}: ${result.sessionId}`);
+    
+    res.json({
+      success: result.success,
+      message: result.message,
+      sessionId: result.sessionId,
+      durationMinutes: duration,
+      phase: 'B_PAPER'
+    });
+  } catch (error) {
+    console.error('[M5E][API][ERROR] run-m5e-paper failed:', error);
+    res.status(500).json({ error: 'Failed to start M5E paper phase' });
+  }
+});
+
+/**
+ * M5E: Run comparison phase (Phase C)
+ * POST /api/vts/validation/run-m5e-compare
+ * 
+ * Runs comparison and generates reports.
+ */
+router.post('/validation/run-m5e-compare', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const result = await runComparisonPhase();
+    
+    console.log(`[M5E][API] Comparison phase ${result.success ? 'completed' : 'failed'}`);
+    
+    res.json({
+      success: result.success,
+      message: result.message,
+      report: result.report,
+      phase: 'C_COMPARISON'
+    });
+  } catch (error) {
+    console.error('[M5E][API][ERROR] run-m5e-compare failed:', error);
+    res.status(500).json({ error: 'Failed to run M5E comparison' });
+  }
+});
+
+/**
+ * M5E: Start full 60-minute validation (VTS 30min + Paper 30min)
+ * POST /api/vts/validation/run-m5e
+ * 
+ * Orchestrates complete M5E validation with automatic phase transitions.
+ * Query params: 
+ *   - vts_duration (minutes, default 30)
+ *   - paper_duration (minutes, default 30)
+ */
+router.post('/validation/run-m5e', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const vtsDuration = parseInt(req.query.vts_duration as string) || 30;
+    const paperDuration = parseInt(req.query.paper_duration as string) || 30;
+    const totalDuration = vtsDuration + paperDuration;
+    
+    const result = await startFullM5EValidation(vtsDuration, paperDuration);
+    
+    console.log(`[M5E][API] Full validation ${result.success ? 'started' : 'failed'}: ${result.sessionId}`);
+    
+    res.json({
+      success: result.success,
+      message: result.message,
+      sessionId: result.sessionId,
+      vtsDurationMinutes: vtsDuration,
+      paperDurationMinutes: paperDuration,
+      totalDurationMinutes: totalDuration
+    });
+  } catch (error) {
+    console.error('[M5E][API][ERROR] run-m5e failed:', error);
+    res.status(500).json({ error: 'Failed to start M5E validation' });
+  }
+});
+
+/**
+ * M5E: Get validation status
+ * GET /api/vts/validation/m5e-status
+ */
+router.get('/validation/m5e-status', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const status = getM5EStatus();
+    const latestMetrics = getM5ELatestSnapshot();
+    
+    res.json({
+      running: status.running,
+      phase: status.phase,
+      sessionId: status.sessionId,
+      startTime: status.startTime,
+      durationMinutes: status.durationMinutes,
+      snapshotCount: status.snapshotCount,
+      latestMetrics
+    });
+  } catch (error) {
+    console.error('[M5E][API][ERROR] m5e-status failed:', error);
+    res.status(500).json({ error: 'Failed to get M5E status' });
   }
 });
 

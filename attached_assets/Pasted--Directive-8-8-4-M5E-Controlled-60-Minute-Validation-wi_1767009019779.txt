@@ -1,0 +1,124 @@
+🧭 Directive 8.8.4-M5E
+Controlled 60-Minute Validation with Paper Trading Engine Activation
+🎯 Objective
+
+Execute a full 60-minute controlled validation where the paper trading engine is actively engaged during Phase B, allowing live signal generation, strategy evaluation, and trade execution to occur concurrently with the autonomous VTS simulation.
+This session will validate and benchmark the entire L + M series metric chain — including CWQI, NGC, DI, GSI, adaptive relevance, feed latency, cache behavior, and dynamic guardrail enforcement.
+
+🔧 Pre-Run Configuration
+Step	Action	Expected Result
+1. Reset System	POST /api/system/reset or manually clear RTB signals, open trades, and validation buffers.	Clean baseline – no residual sessions.
+2. Confirm VTS State	GET /api/vts/status → expect "mode":"simulator", "tradingActive":false.	VTS ready to simulate.
+3. Confirm Pricing Feed	GET /api/pricing/status → expect "source":"websocket", latency < 100 ms.	Healthy WebSocket + cache pipeline.
+4. Verify Config File	/config/vts.json → "simulationIntervalSec":60, "pairsPerCycle":20.	Correct cadence for simulation.
+5. Credentials		
+username: testuser123
+password: SecurePass123!
+``` | Authorized paper-mode session active. |
+
+---
+
+### **⚙️ Execution Phases**
+
+#### **Phase A – Autonomous VTS Simulation**
+1. Start session  
+   ```bash
+   POST /api/vts/validation/run-vts?duration=30
+
+
+VTS runs for 30 minutes (1 cycle/minute, ~20 signals per cycle).
+
+Results saved to /data/vts_trades_<timestamp>.json.
+
+Phase B – Paper Trading Activation
+
+Validation service sets tradingActive:true and passiveLearning:false.
+
+Run 30-minute paper session:
+
+POST /api/vts/validation/run-paper?duration=30
+
+
+Paper engine executes trades using real-time Kraken data.
+
+Each closed or active trade is recorded via recordPaperTrade().
+
+Trades saved to /data/paper_trades_<timestamp>.json.
+
+Phase C – Comparison and Report Generation
+
+Automatic comparison:
+
+POST /api/vts/validation/compare-vts-live
+
+
+Correlates entries/exits, CWQI, NGC, DI, GSI, position sizing.
+
+Produces:
+
+/reports/VTS_Paper_Comparison_<timestamp>.json
+
+/docs/Validation_Summary_<sessionId>.md
+
+Restores passiveLearning:true and tradingActive:false.
+
+🧮 Guardrail Dynamic Slot Calculation
+
+Replace hard-coded slot constant (MAX_SLOTS = 15) in
+server/core/guardrails.ts with dynamic computation:
+
+this.maxSlots = Math.floor(this.maxExposure / this.maxPosition);
+
+
+Example:
+If maxExposure = 100% and maxPosition = 12%, then maxSlots = 8.
+
+This ensures accurate capacity limits for every portfolio size and exposure profile.
+
+📊 Validation Metrics & Thresholds
+Metric	Threshold	Purpose
+Feed Latency	< 100 ms	Verify live WebSocket pricing
+Cache Window	≥ 200 ticks	Confirm price cache coverage
+CWQI / NGC Drift	< 10 %	Metric stability
+Adaptive Variance	> 0.01	Active learning response
+Risk Per Trade	≤ 3.5 %	Proper risk guardrail
+Max Exposure	≤ 40 %	Portfolio constraint integrity
+Match Rate (VTS ↔ Paper)	≥ 50 %	Signal alignment
+Calibration Error	< 0.15	Weight accuracy
+Correlation	> 0.5	Predictive coherence
+
+Pass Condition: validationPassed:true and all thresholds met.
+
+🪶 Logging Hook
+
+Add to m5e-validation-service.ts:
+
+console.log(`[M5E][STATE] tradingActive=${tradingActive}, openPositions=${positions.length}`);
+
+
+This records live engine state every 15 seconds in
+/tmp/logs/ValidationEngine.log.
+
+📂 Deliverables
+File	Purpose
+/data/vts_trades_<timestamp>.json	All simulated VTS trades
+/data/paper_trades_<timestamp>.json	All executed paper trades
+/reports/VTS_Paper_Comparison_<timestamp>.json	Combined audit report
+/docs/Validation_Summary_<sessionId>.md	Plain-language results
+/docs/Metrics_Trend_Correlation_<sessionId>.csv	Time-series metric capture
+/tmp/logs/ValidationEngine.log	Engine state trace
+✅ Expected Outcome
+
+Paper trading engine actively runs during Phase B.
+
+Signals, SQE, and strategy evaluation confirmed functional.
+
+CWQI, NGC, DI, GSI drift within < 10 %.
+
+Feed latency < 100 ms via WebSocket.
+
+Dynamic guardrail slot count ≈ 8 (for current settings).
+
+Validation report shows VTS ↔ Paper match rate ≥ 50 % and correlation > 0.5.
+
+System automatically restored to passive learning mode at completion.
