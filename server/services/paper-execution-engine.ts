@@ -71,6 +71,7 @@ import { readyToBuyService } from '../core/rtb/ready_to_buy_service.js';
 import { tclWatchdog } from '../core/rtb/tcl_watchdog.js';
 import { eventBus, type TCLActivatedEvent, type TradeClosedEvent } from '../lib/event-bus.js';
 import { dataAggregator } from './data-aggregator.js';
+import { recordPaperTrade, type PaperTradeRecord } from './vts-live-comparison-audit.js';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail' | 'manual_stop';
@@ -1004,6 +1005,28 @@ export class PaperExecutionEngine {
           totalCost
         }
       });
+      
+      // Directive 8.8.4-M5C.1: Record paper trade for VTS comparison audit
+      try {
+        const paperTradeRecord: PaperTradeRecord = {
+          symbol: position.symbol,
+          strategy: position.strategyName || 'unknown',
+          entryPrice: avgPrice,
+          exitPrice: actualExitPrice,
+          cwqi: parseFloat((trade as any).cwqi || '0'),
+          ngc: parseFloat((trade as any).ngc || '0'),
+          di: parseFloat((trade as any).di || '0'),
+          gsi: parseFloat((trade as any).gsi || '0.5'),
+          profit: netPnl > 0 ? netPnl : 0,
+          loss: netPnl < 0 ? Math.abs(netPnl) : 0,
+          positionSize: quantity * avgPrice,
+          timestamp: new Date().toISOString()
+        };
+        recordPaperTrade(paperTradeRecord);
+        console.log(`[M5C.1][PAPER_TRADE_RECORDED] ${position.symbol}/${position.strategyName} profit=${netPnl.toFixed(2)}`);
+      } catch (recordErr) {
+        console.warn(`[M5C.1][PAPER_RECORD_FAILED] ${position.symbol}:`, recordErr);
+      }
     }
 
     // [AJ19-B] Trade lifecycle CLOSE event - track slot counts before/after delete

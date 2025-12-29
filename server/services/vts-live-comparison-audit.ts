@@ -32,7 +32,7 @@ interface VTSTradeRecord {
   timestamp: string;
 }
 
-interface PaperTradeRecord {
+export interface PaperTradeRecord {
   symbol: string;
   strategy: string;
   entryPrice: number;

@@ -32,6 +32,7 @@ import { filteredPairsService } from './filtered-pairs-service.js';
 import { calculateCWQI, calculateNGC, estimateVolatility, calculateRiskScore, calculateExpectedReturn, getAdaptiveRelevance } from '../core/metrics/quality_index.js';
 import { computeStrategyWeights, getWeightSync } from '../utils/strategyWeights.js';
 import { computeExposureBias, getExposureMultiplierSync } from '../utils/strategyBias.js';
+import { compareLatestSessions, savePaperSessionTrades, getPaperSessionTrades } from './vts-live-comparison-audit.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -559,6 +560,32 @@ export async function startM5CValidationSession(durationMinutes: number = 60): P
     console.log(`[M5C][VTS] Session ${sessionId} duration reached - saving ${m5cSessionTrades.length} trades`);
     await saveM5CSessionTrades(sessionId);
     stopAutonomousSimulation();
+    
+    // Directive 8.8.4-M5C.1: Also save paper trades and auto-run comparison
+    const paperTrades = getPaperSessionTrades();
+    if (paperTrades.length > 0) {
+      console.log(`[M5C.1][AUTO] Saving ${paperTrades.length} paper trades`);
+      await savePaperSessionTrades(sessionId);
+    }
+    
+    // Auto-run comparison if both VTS and paper trades exist
+    console.log(`[M5C.1][AUTO] Running comparison audit`);
+    try {
+      const comparisonReport = await compareLatestSessions();
+      if (comparisonReport) {
+        // Save combined report to /reports/
+        const reportsDir = path.join(process.cwd(), 'reports');
+        await fs.mkdir(reportsDir, { recursive: true });
+        const combinedReportPath = path.join(reportsDir, `VTS_Paper_Comparison_${Date.now()}.json`);
+        await fs.writeFile(combinedReportPath, JSON.stringify(comparisonReport, null, 2));
+        console.log(`[M5C.1][AUTO] Combined audit report saved: ${combinedReportPath}`);
+        console.log(`[M5C.1][AUTO] Validation result: matchRate=${comparisonReport.matchRate}, calibrationError=${comparisonReport.calibrationError}, validationPassed=${comparisonReport.validationPassed}`);
+      } else {
+        console.log(`[M5C.1][AUTO] Comparison skipped - missing VTS or paper trades files`);
+      }
+    } catch (compErr) {
+      console.error(`[M5C.1][AUTO] Comparison audit failed:`, compErr);
+    }
   }, durationMinutes * 60 * 1000);
   
   return { success: true, message: `M5C validation session started for ${durationMinutes} minutes`, sessionId };
