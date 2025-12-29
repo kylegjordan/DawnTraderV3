@@ -1,0 +1,18 @@
+{
+  "timestamp": "2025-12-29T04:00:57.139Z",
+  "globalCalibration": {
+    "alpha": 0.0018,
+    "beta": 0.19,
+    "sampleCount": 0,
+    "isValid": false
+  },
+  "strategies": [],
+  "summary": {
+    "totalStrategies": 0,
+    "calibratedStrategies": 0,
+    "averageReliability": 0,
+    "weightDistribution": {},
+    "minSamplesRequired": 10,
+    "vtsTradeCount": 0
+  }
+}
