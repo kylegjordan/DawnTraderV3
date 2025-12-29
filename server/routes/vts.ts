@@ -26,8 +26,20 @@ import {
   stopAutonomousSimulation, 
   isAutonomousSimulationRunning,
   getAutonomousSessionInfo,
-  generateValidationReport
+  generateValidationReport,
+  startM5CValidationSession,
+  saveM5CSessionTrades,
+  getM5CSessionTrades,
+  getLatestVTSTradesFile
 } from '../services/vts-runner';
+import {
+  runComparisonAudit,
+  getLatestComparisonReport,
+  startPaperTradeRecording,
+  savePaperSessionTrades,
+  getLatestPaperTradesFile,
+  compareLatestSessions
+} from '../services/vts-live-comparison-audit';
 
 const router = Router();
 
@@ -565,6 +577,164 @@ router.get('/audit', requireAuth, async (req: AuthenticatedRequest, res: Respons
   } catch (error) {
     console.error('[M5B][VTS][ERROR] Audit failed:', error);
     res.status(500).json({ error: 'Failed to generate audit report' });
+  }
+});
+
+/**
+ * M5C: Start VTS validation session
+ * POST /api/validation/run-vts
+ * 
+ * Starts a timed VTS validation session that records all trades to file.
+ * Query params: duration (minutes, default 60)
+ */
+router.post('/validation/run-vts', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const duration = parseInt(req.query.duration as string) || 60;
+    const result = await startM5CValidationSession(duration);
+    
+    console.log(`[M5C][API] VTS validation started: duration=${duration}m`);
+    
+    res.json({
+      success: result.success,
+      message: result.message,
+      sessionId: result.sessionId,
+      durationMinutes: duration
+    });
+  } catch (error) {
+    console.error('[M5C][API][ERROR] run-vts failed:', error);
+    res.status(500).json({ error: 'Failed to start VTS validation session' });
+  }
+});
+
+/**
+ * M5C: Start paper trade recording session
+ * POST /api/validation/run-paper
+ * 
+ * Starts recording paper trades to file for comparison with VTS.
+ */
+router.post('/validation/run-paper', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    startPaperTradeRecording();
+    
+    console.log('[M5C][API] Paper trade recording started');
+    
+    res.json({
+      success: true,
+      message: 'Paper trade recording session started'
+    });
+  } catch (error) {
+    console.error('[M5C][API][ERROR] run-paper failed:', error);
+    res.status(500).json({ error: 'Failed to start paper trade recording' });
+  }
+});
+
+/**
+ * M5C: Compare VTS vs Live paper trades
+ * POST /api/validation/compare-vts-live
+ * 
+ * Runs comparison audit between most recent VTS and paper trade sessions.
+ */
+router.post('/validation/compare-vts-live', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const vtsFile = await getLatestVTSTradesFile();
+    const paperFile = await getLatestPaperTradesFile();
+    
+    if (!vtsFile) {
+      return res.status(400).json({ error: 'No VTS trades file found. Run VTS validation first.' });
+    }
+    
+    if (!paperFile) {
+      return res.status(400).json({ error: 'No paper trades file found. Run paper recording first.' });
+    }
+    
+    const report = await runComparisonAudit(vtsFile, paperFile);
+    
+    console.log(`[M5C][API] Comparison audit complete: matchRate=${report.matchRate} validationPassed=${report.validationPassed}`);
+    
+    res.json({
+      success: true,
+      report
+    });
+  } catch (error) {
+    console.error('[M5C][API][ERROR] compare-vts-live failed:', error);
+    res.status(500).json({ error: 'Failed to run comparison audit' });
+  }
+});
+
+/**
+ * M5C: Get latest comparison report
+ * GET /api/validation/latest-comparison
+ * 
+ * Returns the most recent VTS vs paper comparison results.
+ */
+router.get('/validation/latest-comparison', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const report = getLatestComparisonReport();
+    
+    if (!report) {
+      return res.json({
+        matchRate: 0,
+        calibrationError: 0,
+        avgCWQIDiff: 0,
+        avgNGCDiff: 0,
+        validationPassed: false,
+        message: 'No comparison report available. Run compare-vts-live first.'
+      });
+    }
+    
+    res.json({
+      matchRate: report.matchRate,
+      calibrationError: report.calibrationError,
+      avgCWQIDiff: report.avgCWQIDiff,
+      avgNGCDiff: report.avgNGCDiff,
+      validationPassed: report.validationPassed,
+      correlation: report.correlation,
+      vtsTradeCount: report.vtsTradeCount,
+      paperTradeCount: report.paperTradeCount,
+      matchedPairs: report.matchedPairs,
+      timestamp: report.timestamp
+    });
+  } catch (error) {
+    console.error('[M5C][API][ERROR] latest-comparison failed:', error);
+    res.status(500).json({ error: 'Failed to get comparison report' });
+  }
+});
+
+/**
+ * M5C: Save current VTS session trades
+ * POST /api/validation/save-vts-trades
+ */
+router.post('/validation/save-vts-trades', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const filePath = await saveM5CSessionTrades();
+    const trades = getM5CSessionTrades();
+    
+    res.json({
+      success: true,
+      filePath,
+      tradeCount: trades.length
+    });
+  } catch (error) {
+    console.error('[M5C][API][ERROR] save-vts-trades failed:', error);
+    res.status(500).json({ error: 'Failed to save VTS trades' });
+  }
+});
+
+/**
+ * M5C: Save current paper session trades
+ * POST /api/validation/save-paper-trades
+ */
+router.post('/validation/save-paper-trades', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const filePath = await savePaperSessionTrades();
+    
+    res.json({
+      success: true,
+      filePath
+    });
+  } catch (error) {
+    console.error('[M5C][API][ERROR] save-paper-trades failed:', error);
+    res.status(500).json({ error: 'Failed to save paper trades' });
   }
 });
 

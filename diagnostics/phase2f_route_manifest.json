@@ -6223,6 +6223,66 @@
     ]
   },
   {
+    "path": "/api/vts/validation/run-vts",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/vts/validation/run-paper",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/vts/validation/compare-vts-live",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/vts/validation/latest-comparison",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/vts/validation/save-vts-trades",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/vts/validation/save-paper-trades",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/market/regime",
     "methods": [
       "GET"

@@ -1,0 +1,105 @@
+✅ Directive 8.8.4-M5C — Controlled Validation & Calibration Integrity Test
+
+Objective
+Perform a two-phase validation comparing autonomous VTS simulated trades to live (paper) trading results under matched conditions, ensuring identical metric computations, position sizing, and adaptive weighting.
+
+🔧 Implementation Tasks
+1. Strategy & Metric Parity (VTS)
+
+Update vts-runner.ts → generateVirtualSignal() to:
+
+Import full strategy definitions from /server/strategies/ (same as live engine).
+
+Use actual position sizing formulas:
+
+const positionSize = riskPerTrade * portfolioValue * leverageFactor;
+
+
+where riskPerTrade comes from Adaptive Risk Advisor.
+
+Compute all L/M metrics using the same modules:
+
+CWQI from /server/core/metrics/quality_index.ts
+
+NGC from /server/core/metrics/ngc.ts
+
+DI, GSI, adaptiveRelevance from live system
+
+Ensure weights (S.Wgt) are retrieved from strategyWeights.ts.
+
+2. Passive Phase (VTS Simulation)
+
+When tradingActive = false:
+
+Run simulation for 60 minutes (configurable).
+
+Record trades in /data/vts_trades_<timestamp>.json.
+
+Include:
+
+{symbol, strategy, entry, exit, cwqi, ngc, di, gsi, profit, loss, positionSize}
+
+3. Active Phase (Paper Mode)
+
+When tradingActive = true:
+
+Run paper engine for 60 minutes with same config.
+
+Record all trades to /data/paper_trades_<timestamp>.json.
+
+4. Comparison Audit
+
+Create new file:
+server/services/vts-live-comparison-audit.ts
+
+Compare VTS vs Paper trades:
+
+Matching symbols
+
+Strategy overlap
+
+Entry/exit variance
+
+CWQI/NGC correlation
+
+Profit delta
+
+Produce report /reports/VTS_Live_Comparison_<timestamp>.json containing:
+
+symbol, strategy, vts_profit, live_profit, cwqi_diff, ngc_diff, position_diff
+calibration_error, match_rate, correlation
+
+5. API Endpoints
+
+Expose new endpoints:
+
+POST /api/validation/run-vts
+POST /api/validation/run-paper
+POST /api/validation/compare-vts-live
+GET  /api/validation/latest-comparison
+
+6. Verification
+
+Use test credentials:
+
+username: testuser123
+password: SecurePass123!
+
+
+Expected output for GET /api/validation/latest-comparison:
+
+{
+  "matchRate": 0.83,
+  "calibrationError": 0.07,
+  "avgCWQIDiff": 0.03,
+  "avgNGCDiff": 0.04,
+  "validationPassed": true
+}
+
+🧠 Expected Outcome
+
+VTS and live paper engine produce consistent signals, weights, and results.
+
+Calibration and adaptive weighting confirmed correct.
+
+VTS confirmed as a valid predictive training tool that mirrors the real engine.

@@ -47,39 +47,13 @@ Global Autonomy Stabilization Protocol (L20) provides a supervisory feedback lay
 
 Comprehensive System Audit & Validation (M1) validates correctness, consistency, and data flow integrity of all quantitative modules via the `SystemAuditEngine`. Training Loop Validation Audit (M3A) verifies that retraining operations trigger actual backend learning cycles. Live Validation & Adaptive Coupling Audit (M3B) replaces static decay factors with VTS-DCE derived adaptive relevance coefficients, linking ARA risk/exposure suggestions to live learning outputs. VTS Passive Feed Integration & Mode Audit (M3B.2) ensures the Virtual Trading Simulator uses live Kraken data during idle periods and switches modes correctly. Comprehensive Back-Audit & System Integrity Verification (M4) performs a complete repository-wide audit of all adaptive, predictive, and trading subsystems to verify adherence to directives and check module integrity. Controlled Paper-Mode Validation & Feed Optimization Audit (M5) runs controlled paper-trading sessions to validate adaptive metrics update correctly in live flow, tracking feed latency, cache window, and key metric variances.
 
-Extended Calibration & Validation Run (M5-R1) implements a 60-minute extended validation session with 10-second capture intervals. Key enhancements include:
-- **Persistent Calibration Storage**: VTS calibration data persists to `/data/vts_calibration.json` with rolling buffer up to 10,000 samples
-- **Validation Session Rate Limit Bypass**: `x-validation-session:true` header bypasses ARA rate limiting during validation runs
-- **Calibration Report Generator**: `CalibrationReportService` generates per-strategy statistics (αₛ, βₛ, σₛ, Rₛ, Wₛ)
-- **Rolling Snapshots**: 5-minute rolling snapshots capture CWQI, NGC, DI, Adaptive Relevance, and S.Wgt trends
-- **API Endpoints**:
-  - `POST /api/validation/run?duration=60m` - Start extended validation session
-  - `GET /api/validation/status` - Live metrics every 10 seconds
-  - `POST /api/validation/stop` - End session and save report
-  - `GET /api/calibration/report` - Retrieve per-strategy calibration results
-  - `GET /api/calibration/weights` - Get current strategy weights
-  - `GET /api/vts/status` - Check VTS simulator mode and trade counts
+Extended Calibration & Validation Run (M5-R1) implements a 60-minute extended validation session with 10-second capture intervals. Key enhancements include: Persistent Calibration Storage, Validation Session Rate Limit Bypass, Calibration Report Generator, Rolling Snapshots, and dedicated API Endpoints for validation management and reporting.
 
-VTS Mode Switching Correction (M5A) decouples VTS mode logic from systemMode (PAPER/LIVE) and ties simulation enablement to the `tradingActive` boolean. Key changes:
-- **Primary Control**: VTS mode now controlled by `tradingActive` boolean, not `systemMode`
-- **Passive Learning Mirror**: VTS `passiveLearning` field mirrors the system's passive learning state
-- **Mode Behavior**:
-  - When `tradingActive=false` → VTS mode=`simulator`, source=`pricing_service` (simulates trades using live price data)
-  - When `tradingActive=true` → VTS mode=`observer`, source=`live_trades` (records real trades only)
-- **Enhanced Status Endpoint**: `/api/vts/status` now returns M5A fields (`tradingActive`, `passiveLearning`, `mode`, `source`)
-- **Signal Capture**: Signal orchestrator captures signals for VTS after passing SQE filter (fire-and-forget)
+VTS Mode Switching Correction (M5A) decouples VTS mode logic from `systemMode` and ties simulation enablement to the `tradingActive` boolean, introducing a Passive Learning Mirror and enhanced status endpoints.
 
-Autonomous VTS Operation (M5B) implements fully autonomous virtual trading simulation:
-- **Autonomous Mode**: VTS runs independently with 60-second simulation cycles when `tradingActive=false`
-- **Data Sourcing**: Exclusively uses `FilteredPairsService.getValidPairs()` → `priceCache.subscribe('fx5Snapshot')` → `priceCache.getBatch()` pipeline
-- **Internal Signal Generation**: `generateVirtualSignal()` computes CWQI/NGC internally, no orchestrator dependency
-- **Session Metrics**: `simulatedTradesThisSession` tracked by vts-service and exposed in status endpoint
-- **Configuration**: `config/vts.json` defines simulation parameters (pairs per cycle, strategies, targets)
-- **API Endpoints**:
-  - `POST /api/vts/run-passive` - Start autonomous simulation
-  - `POST /api/vts/stop-passive` - Stop autonomous simulation
-  - `GET /api/vts/audit` - Generate validation report with session metrics
-  - `GET /api/vts/status` - Full VTS status with `simulatedTradesThisSession`
+Autonomous VTS Operation (M5B) implements fully autonomous virtual trading simulation with 60-second cycles when `tradingActive=false`, internal signal generation, session metrics, configuration via `config/vts.json`, and dedicated API endpoints for control and auditing.
+
+Controlled Validation & Calibration Integrity Test (M5C) compares VTS simulated trades to paper trades, ensuring Strategy & Metric Parity, accurate Position Sizing, Trade Recording, and a Comparison Audit Service (`vts-live-comparison-audit.ts`) for validation against defined criteria.
 
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
