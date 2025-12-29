@@ -40,6 +40,7 @@ import {
   getLatestPaperTradesFile,
   compareLatestSessions
 } from '../services/vts-live-comparison-audit';
+import { startM5DValidationRun, getM5DStatus, getLatestMetricsSnapshot } from '../services/m5d-validation-service';
 
 const router = Router();
 
@@ -607,20 +608,32 @@ router.post('/validation/run-vts', requireAuth, async (req: AuthenticatedRequest
 });
 
 /**
- * M5C: Start paper trade recording session
+ * M5C/M5D: Start paper trade recording session
  * POST /api/validation/run-paper
  * 
  * Starts recording paper trades to file for comparison with VTS.
+ * Query params: duration (minutes, optional - auto-saves at end)
  */
 router.post('/validation/run-paper', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const duration = parseInt(req.query.duration as string) || 0;
     startPaperTradeRecording();
     
-    console.log('[M5C][API] Paper trade recording started');
+    console.log(`[M5D][API] Paper trade recording started${duration > 0 ? ` for ${duration}m` : ''}`);
+    
+    if (duration > 0) {
+      setTimeout(async () => {
+        console.log(`[M5D][API] Paper session duration reached - auto-saving trades`);
+        await savePaperSessionTrades(`paper_${Date.now()}`);
+      }, duration * 60 * 1000);
+    }
     
     res.json({
       success: true,
-      message: 'Paper trade recording session started'
+      message: duration > 0 
+        ? `Paper trade recording session started for ${duration} minutes` 
+        : 'Paper trade recording session started',
+      durationMinutes: duration
     });
   } catch (error) {
     console.error('[M5C][API][ERROR] run-paper failed:', error);
@@ -735,6 +748,56 @@ router.post('/validation/save-paper-trades', requireAuth, async (req: Authentica
   } catch (error) {
     console.error('[M5C][API][ERROR] save-paper-trades failed:', error);
     res.status(500).json({ error: 'Failed to save paper trades' });
+  }
+});
+
+/**
+ * M5D: Start 60-minute controlled validation run
+ * POST /api/validation/run-m5d
+ * 
+ * Orchestrates complete validation with VTS + Paper trading + comparison.
+ * Query params: duration (minutes, default 60)
+ */
+router.post('/validation/run-m5d', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const duration = parseInt(req.query.duration as string) || 60;
+    const result = await startM5DValidationRun(duration);
+    
+    console.log(`[M5D][API] Validation run ${result.success ? 'started' : 'failed'}: ${result.sessionId}`);
+    
+    res.json({
+      success: result.success,
+      message: result.message,
+      sessionId: result.sessionId,
+      durationMinutes: duration
+    });
+  } catch (error) {
+    console.error('[M5D][API][ERROR] run-m5d failed:', error);
+    res.status(500).json({ error: 'Failed to start M5D validation run' });
+  }
+});
+
+/**
+ * M5D: Get validation run status
+ * GET /api/validation/m5d-status
+ */
+router.get('/validation/m5d-status', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const status = getM5DStatus();
+    const latestMetrics = getLatestMetricsSnapshot();
+    
+    res.json({
+      running: status.running,
+      phase: status.session?.phase || null,
+      sessionId: status.session?.sessionId || null,
+      startTime: status.session?.startTime ? new Date(status.session.startTime).toISOString() : null,
+      durationMinutes: status.session?.durationMinutes || 0,
+      snapshotCount: status.session?.metricsSnapshots.length || 0,
+      latestMetrics
+    });
+  } catch (error) {
+    console.error('[M5D][API][ERROR] m5d-status failed:', error);
+    res.status(500).json({ error: 'Failed to get M5D status' });
   }
 });
 

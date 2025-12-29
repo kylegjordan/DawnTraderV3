@@ -1,0 +1,110 @@
+Directive 8.8.4-M5D — 60-Minute Controlled Validation Run
+Objective
+
+To execute a 60-minute controlled validation run that measures real-time system coherence between:
+
+The autonomous VTS (simulation engine)
+
+The paper trading engine (execution engine)
+
+The adaptive weighting metrics (CWQI, NGC, DI, GSI)
+
+The calibration audit system (VTS ↔ Paper comparison)
+
+This run verifies that all subsystems are producing synchronized, correctly weighted results and that the data flow from Kraken → Pricing → Metrics → Trade/Simulation → Audit is functioning end-to-end.
+
+🧱 Pre-Run Setup
+Step	Action	Expected Result
+1. Clear State	Call POST /api/system/reset or manually clear: RTB signals, open trades, validation buffers.	All queues and validation logs emptied.
+2. Confirm Modes	Call GET /api/vts/status. Expected: mode: simulator, tradingActive: false.	VTS ready to simulate.
+3. Start Data Streams	Ensure Kraken WebSocket and Pricing Service caches are active (feedLatency < 100 ms).	Real-time prices confirmed.
+4. Confirm Config	Verify /config/vts.json → simulationIntervalSec: 60, pairsPerCycle: 20.	Proper simulation cadence.
+5. Credentials	Use test credentials for all authenticated endpoints:	
+username: testuser123
+password: SecurePass123!
+``` | Authenticated session established. |
+
+---
+
+### **⚙️ Execution Procedure**
+
+#### **Phase A — VTS Simulation**
+1. **Start Simulation**
+
+
+POST /api/vts/validation/run-vts?duration=60
+
+2. System runs in autonomous mode for 60 minutes:
+- 1 cycle / 60 seconds × 20 pairs ≈ 1 200 simulated signals potential.
+- Each trade saved to `/data/vts_trades_<timestamp>.json`.
+3. Metrics logged every 15 seconds:
+- CWQI, NGC, DI, GSI, adaptive relevance, feed latency.
+
+#### **Phase B — Paper Trading**
+1. Toggle paper trading **ON** (`tradingActive = true`).
+2. Run 60 minutes under identical portfolio/risk configuration:
+
+
+POST /api/vts/validation/run-paper?duration=60
+
+3. Paper trades recorded to `/data/paper_trades_<timestamp>.json` through `recordPaperTrade()` hook.
+
+#### **Phase C — Auto Comparison & Report Generation**
+1. At session end, system automatically triggers:
+
+
+/api/vts/validation/compare-vts-live
+
+2. Generates consolidated report:
+`/reports/VTS_Paper_Comparison_<timestamp>.json`
+3. Extract summary with:
+
+
+GET /api/vts/validation/latest-comparison
+
+
+---
+
+### **📊 Validation Criteria**
+| Metric | Threshold | Purpose |
+|---------|------------|----------|
+| **Feed Latency** | < 100 ms | Confirms Kraken WS + Cache health |
+| **CWQI/NGC Drift** | < 10 % | Metric stability |
+| **VTS ↔ Paper Match Rate** | ≥ 0.50 | Strategy alignment |
+| **Calibration Error** | < 0.15 | Weight accuracy |
+| **Correlation** | > 0.50 | Predictive consistency |
+| **Adaptive Relevance Variance** | > 0.01 | Learning responsiveness |
+
+**Pass Condition:**  
+_All metrics within threshold and `validationPassed: true` in latest comparison report._
+
+---
+
+### **🧮 Data Artifacts Generated**
+| File | Purpose |
+|-------|----------|
+| `/data/vts_trades_<timestamp>.json` | Simulated trades with full metrics |
+| `/data/paper_trades_<timestamp>.json` | Live paper trades captured via hook |
+| `/reports/VTS_Paper_Comparison_<timestamp>.json` | Consolidated comparison audit |
+| `/docs/Validation_Summary.md` | Human-readable summary of session |
+
+---
+
+### **🧠 Post-Run Analysis**
+1. Review `/reports/VTS_Paper_Comparison_*.json`:
+- Confirm `matchRate`, `calibrationError`, `correlation`.
+2. Inspect `/tmp/logs/Start_application_*.log` for anomalies.
+3. Ensure VTS automatically returns to `mode: observer` once trading resumes.
+4. Confirm no persistent modifications to trading engine or VTS logic remain (non-intrusive validation only).
+
+---
+
+### **✅ Expected Outcome**
+- Both engines (VTS & Paper) produce consistent signal/strategy patterns.  
+- CWQI/NGC/DI/GSI values within tolerance.  
+- Calibration correlation > 0.5 → proof that VTS predictions align with live trading outcomes.  
+- Full audit trail created for transition into **Phase 8.8.5 — Strategy Integrity & PSRS System**.
+
+---
+
+Would you like me to append a **visual correlation matrix generator** (e.g., `/docs/Calibration_Correlation.html`) as part of the deliverables, so you can quickly visualize the alignment between the VTS and pape
