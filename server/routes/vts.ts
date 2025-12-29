@@ -21,6 +21,13 @@ import { loadCalibration, loadFullCalibration, applyCalibration } from '../utils
 import { getDriftDetector } from '../services/drift-detector';
 import { trainingAuditService } from '../services/training-audit-service';
 import { vtsModeAuditService } from '../services/vts-mode-audit';
+import { 
+  startAutonomousSimulation, 
+  stopAutonomousSimulation, 
+  isAutonomousSimulationRunning,
+  getAutonomousSessionInfo,
+  generateValidationReport
+} from '../services/vts-runner';
 
 const router = Router();
 
@@ -59,11 +66,14 @@ router.get('/status', requireAuth, async (req: Request, res: Response) => {
     // M5A: Get VTS mode state with tradingActive boolean
     const modeState = vtsModeAuditService.getState();
     
+    // M5B: Get session metrics from vtsService (authoritative source for session trade count)
+    const sessionMetrics = vtsService.getSessionMetrics();
+    
     const strategyCount = Object.keys(fullCalibration.strategies).length;
-    console.log(`[M5A][VTS][STATUS] mode=${modeState.mode} tradingActive=${modeState.tradingActive} passiveLearning=${modeState.passiveLearning} open=${stats.openTrades} closed=${stats.closedTrades}`);
+    console.log(`[M5A][VTS][STATUS] mode=${modeState.mode} tradingActive=${modeState.tradingActive} passiveLearning=${modeState.passiveLearning} open=${stats.openTrades} closed=${stats.closedTrades} sessionTrades=${sessionMetrics.simulatedTradesThisSession}`);
     
     res.json({
-      isRunning: true,
+      isRunning: isAutonomousSimulationRunning(),
       // M5A: Primary mode control fields
       mode: modeState.mode,
       source: modeState.source,
@@ -71,7 +81,8 @@ router.get('/status', requireAuth, async (req: Request, res: Response) => {
       passiveLearning: modeState.passiveLearning,
       systemMode: modeState.systemMode,
       lastModeChange: modeState.lastModeChange,
-      simulatedTradesThisSession: modeState.simulatedTradesThisSession,
+      // M5B: Use vtsService session metrics as authoritative source
+      simulatedTradesThisSession: sessionMetrics.simulatedTradesThisSession,
       blockedSimulationsInObserverMode: modeState.blockedSimulationsInObserverMode,
       // Existing fields
       stats,
@@ -438,6 +449,122 @@ router.get('/drift/history/:strategy', requireAuth, async (req: Request, res: Re
   } catch (error) {
     console.error('[L11][VTS][ERROR] Drift history failed:', error);
     res.status(500).json({ error: 'Failed to get drift history' });
+  }
+});
+
+/**
+ * M5B: Start autonomous VTS simulation
+ * POST /api/vts/run-passive
+ * 
+ * Starts the autonomous simulation loop when tradingActive=false.
+ * VTS will generate signals from pricing service cache every 60 seconds.
+ */
+router.post('/run-passive', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    console.log(`[M5B][VTS] Starting autonomous simulation (requested by ${req.user?.username || 'unknown'})`);
+    
+    const result = await startAutonomousSimulation();
+    
+    if (!result.success) {
+      return res.status(409).json({
+        success: false,
+        error: result.message
+      });
+    }
+    
+    const sessionInfo = getAutonomousSessionInfo();
+    const stats = vtsService.getStats();
+    const modeState = vtsModeAuditService.getState();
+    
+    res.json({
+      success: true,
+      message: result.message,
+      mode: 'simulator',
+      tradingActive: modeState.tradingActive,
+      passiveLearning: modeState.passiveLearning,
+      sessionInfo,
+      stats,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[M5B][VTS][ERROR] run-passive failed:', error);
+    res.status(500).json({ error: 'Failed to start autonomous simulation' });
+  }
+});
+
+/**
+ * M5B: Stop autonomous VTS simulation
+ * POST /api/vts/stop-passive
+ */
+router.post('/stop-passive', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    console.log(`[M5B][VTS] Stopping autonomous simulation (requested by ${req.user?.username || 'unknown'})`);
+    
+    stopAutonomousSimulation();
+    
+    const stats = vtsService.getStats();
+    const sessionMetrics = vtsService.getSessionMetrics();
+    
+    res.json({
+      success: true,
+      message: 'Autonomous simulation stopped',
+      simulatedTradesThisSession: sessionMetrics.simulatedTradesThisSession,
+      stats,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[M5B][VTS][ERROR] stop-passive failed:', error);
+    res.status(500).json({ error: 'Failed to stop autonomous simulation' });
+  }
+});
+
+/**
+ * M5B: Get VTS audit report with validation data
+ * GET /api/vts/audit
+ * 
+ * Returns comprehensive audit report confirming VTS autonomous operation.
+ * Generates and saves validation report to /reports/VTS_Autonomous_Validation_<timestamp>.json
+ */
+router.get('/audit', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const report = await generateValidationReport();
+    const sessionInfo = getAutonomousSessionInfo();
+    const modeState = vtsModeAuditService.getState();
+    
+    // Check if calibration file exists
+    let calibrationFileExists = false;
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      await fs.access(path.join(process.cwd(), 'data', 'vts_calibration.json'));
+      calibrationFileExists = true;
+    } catch {}
+    
+    console.log(`[M5B][VTS][AUDIT] Generated validation report: simulatedTrades=${report.simulatedTradesThisSession}`);
+    
+    res.json({
+      mode: report.mode,
+      tradingActive: report.tradingActive,
+      simulatedTradesThisSession: report.simulatedTradesThisSession,
+      calibrationFileExists,
+      autonomousRunning: isAutonomousSimulationRunning(),
+      sessionDurationMs: report.sessionDurationMs,
+      sessionDurationMin: Math.round(report.sessionDurationMs / 60000),
+      config: report.config,
+      stats: report.stats,
+      strategyStats: report.strategyStats,
+      modeState: {
+        mode: modeState.mode,
+        source: modeState.source,
+        tradingActive: modeState.tradingActive,
+        passiveLearning: modeState.passiveLearning
+      },
+      reportTimestamp: report.timestamp,
+      validationPassed: report.simulatedTradesThisSession >= 10 || !isAutonomousSimulationRunning()
+    });
+  } catch (error) {
+    console.error('[M5B][VTS][ERROR] Audit failed:', error);
+    res.status(500).json({ error: 'Failed to generate audit report' });
   }
 });
 

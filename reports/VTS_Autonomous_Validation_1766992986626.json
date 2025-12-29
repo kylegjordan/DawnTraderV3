@@ -1,0 +1,41 @@
+{
+  "timestamp": "2025-12-29T07:23:06.612Z",
+  "mode": "simulator",
+  "tradingActive": false,
+  "simulatedTradesThisSession": 0,
+  "calibrationFileExists": false,
+  "sessionDurationMs": 58086,
+  "config": {
+    "autonomousMode": true,
+    "simulationIntervalSec": 60,
+    "pairsPerCycle": 20,
+    "strategies": [
+      "EMA_RSI",
+      "MACD_Crossover",
+      "Bollinger_Breakout",
+      "Momentum_Surge",
+      "Mean_Reversion",
+      "Volume_Spike",
+      "Trend_Follow",
+      "Range_Bound",
+      "Breakout_Confirm"
+    ],
+    "targetProfit": 0.015,
+    "stopLoss": 0.008,
+    "minVolume24h": 50000,
+    "minPrice": 0.5
+  },
+  "stats": {
+    "totalTrades": 0,
+    "openTrades": 0,
+    "closedTrades": 0,
+    "takeProfitCount": 0,
+    "stopLossCount": 0,
+    "timeoutCount": 0,
+    "avgGrossProfit": 0,
+    "avgNetProfit": 0,
+    "winRate": 0,
+    "lastUpdate": 1766992986540
+  },
+  "strategyStats": {}
+}

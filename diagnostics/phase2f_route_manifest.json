@@ -6192,6 +6192,37 @@
     ]
   },
   {
+    "path": "/api/vts/run-passive",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/vts/stop-passive",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/vts/audit",
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/market/regime",
     "methods": [
       "GET"
@@ -6856,26 +6887,6 @@
     "path": "/api/m3b/training-health",
     "methods": [
       "GET"
-    ],
-    "middlewares": [
-      "requireAuth",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/vts/run-passive",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "requireAuth",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/vts/audit",
-    "methods": [
-      "POST"
     ],
     "middlewares": [
       "requireAuth",

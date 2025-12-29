@@ -87,6 +87,17 @@ const AVG_SLIPPAGE = 0.0015;
 const TRADE_DURATION = 3 * 60 * 60 * 1000;
 const VTS_LOGS_DIR = path.join(process.cwd(), 'logs', 'virtual_trades');
 
+/**
+ * M5B: Session metrics for autonomous simulation tracking
+ */
+interface SessionMetrics {
+  simulatedTradesThisSession: number;
+  sessionStartTime: number | null;
+  averageCWQI: number;
+  averageNGC: number;
+  averageReturn: number;
+}
+
 export class VTSService extends EventEmitter {
   private virtualTrades: Map<string, VirtualTrade> = new Map();
   private closedTrades: VirtualTrade[] = [];
@@ -95,6 +106,15 @@ export class VTSService extends EventEmitter {
   private isRunning = false;
   private updateInterval: NodeJS.Timeout | null = null;
   private lastPrices: Map<string, { high: number; low: number; close: number }> = new Map();
+  
+  // M5B: Session tracking for autonomous simulation
+  private sessionMetrics: SessionMetrics = {
+    simulatedTradesThisSession: 0,
+    sessionStartTime: null,
+    averageCWQI: 0,
+    averageNGC: 0,
+    averageReturn: 0
+  };
 
   constructor() {
     super();
@@ -142,7 +162,10 @@ export class VTSService extends EventEmitter {
     this.virtualTrades.set(trade.id, trade);
     this.emit('trade_opened', trade);
     
-    console.log(`[L6][VTS] Opened virtual trade: ${signal.symbol} @ ${signal.entryPrice.toFixed(4)}`);
+    // M5B: Track session metrics
+    this.sessionMetrics.simulatedTradesThisSession++;
+    
+    console.log(`[M5B][VTS] Opened virtual trade: ${signal.symbol} @ ${signal.entryPrice.toFixed(4)}`);
     return trade;
   }
 
@@ -392,6 +415,32 @@ export class VTSService extends EventEmitter {
       winRate: closed.length > 0 ? wins.length / closed.length : 0,
       lastUpdate: Date.now()
     };
+  }
+
+  /**
+   * M5B: Reset session metrics for new autonomous simulation session
+   */
+  resetSessionMetrics(): void {
+    this.sessionMetrics = {
+      simulatedTradesThisSession: 0,
+      sessionStartTime: Date.now(),
+      averageCWQI: 0,
+      averageNGC: 0,
+      averageReturn: 0
+    };
+    console.log('[M5B][VTS] Session metrics reset');
+  }
+
+  /**
+   * M5B: Get current session metrics
+   */
+  getSessionMetrics(): SessionMetrics {
+    // Update average return if we have closed trades
+    if (this.closedTrades.length > 0) {
+      const avgReturn = this.closedTrades.reduce((sum, t) => sum + (t.netProfit || 0), 0) / this.closedTrades.length;
+      this.sessionMetrics.averageReturn = avgReturn;
+    }
+    return { ...this.sessionMetrics };
   }
 
   async exportTrades(): Promise<{ trades: VirtualTrade[]; stats: VTSStats; calibration: CalibrationCoefficients | null }> {
