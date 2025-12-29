@@ -70,20 +70,19 @@ function calculateVariance(values: number[]): number {
 
 function computeRealFeedLatency(): number {
   try {
-    const allPrices = priceCache.getAllPrices?.() || [];
-    if (allPrices.length === 0) {
-      const singlePrice = priceCache.get?.('BTC/USD');
-      if (singlePrice?.lastUpdatedAt) {
-        return Date.now() - singlePrice.lastUpdatedAt;
-      }
-      return 50;
-    }
     const now = Date.now();
-    const latencies = allPrices
-      .filter((p: any) => p.lastUpdatedAt)
-      .map((p: any) => now - p.lastUpdatedAt);
+    const testSymbols = ['BTC/USD', 'ETH/USD', 'XRP/USD', 'SOL/USD', 'DOGE/USD'];
+    const latencies: number[] = [];
+    
+    for (const symbol of testSymbols) {
+      const cached = priceCache.get(symbol);
+      if (cached?.lastUpdatedAt) {
+        latencies.push(now - cached.lastUpdatedAt);
+      }
+    }
+    
     if (latencies.length === 0) return 50;
-    return latencies.reduce((a: number, b: number) => a + b, 0) / latencies.length;
+    return latencies.reduce((a, b) => a + b, 0) / latencies.length;
   } catch {
     return 50;
   }
@@ -306,6 +305,7 @@ ${snapshots.slice(-10).map(s =>
 - Paper Trades: \`/data/paper_trades_*.json\` (latest session file)
 - Comparison Report: \`/reports/VTS_Paper_Comparison_*.json\`
 - Validation Summary: \`/docs/Validation_Summary_${activeSession.sessionId}.md\`
+- Metrics Trend Correlation: \`/docs/Metrics_Trend_Correlation_${activeSession.sessionId}.csv\`
 
 ## Conclusion
 ${allPassed 
@@ -322,6 +322,17 @@ ${allPassed
   const summaryPath = path.join(docsDir, `Validation_Summary_${activeSession.sessionId}.md`);
   await fs.writeFile(summaryPath, summary);
   console.log(`[M5D][SUMMARY] Validation summary saved: ${summaryPath}`);
+  
+  // Generate Metrics_Trend_Correlation CSV per Directive 8.8.4-M5D.1
+  const csvHeader = 'timestamp,elapsedMinutes,feedLatencyMs,vtsTradeCount,paperTradeCount,avgCWQI,avgNGC,avgDI,avgGSI,adaptiveRelevanceVariance,cacheHitRate';
+  const csvRows = snapshots.map(s => 
+    `${s.timestamp},${s.elapsedMinutes},${s.feedLatencyMs},${s.vtsTradeCount},${s.paperTradeCount},${s.avgCWQI},${s.avgNGC},${s.avgDI},${s.avgGSI},${s.adaptiveRelevanceVariance},${s.cacheHitRate}`
+  );
+  const csvContent = [csvHeader, ...csvRows].join('\n');
+  
+  const csvPath = path.join(docsDir, `Metrics_Trend_Correlation_${activeSession.sessionId}.csv`);
+  await fs.writeFile(csvPath, csvContent);
+  console.log(`[M5D][CSV] Metrics trend correlation saved: ${csvPath}`);
   
   return summaryPath;
 }
