@@ -55,6 +55,8 @@ Autonomous VTS Operation (M5B) implements fully autonomous virtual trading simul
 
 Controlled Validation & Calibration Integrity Test (M5C) compares VTS simulated trades to paper trades, ensuring Strategy & Metric Parity, accurate Position Sizing, Trade Recording, and a Comparison Audit Service (`vts-live-comparison-audit.ts`) for validation against defined criteria.
 
+Paper Trade Recording Integration (M5C.1) completes the validation loop with automatic paper trade capture via `recordPaperTrade()` in `paper-execution-engine.ts`, auto-comparison at session end, and combined report generation to `/reports/VTS_Paper_Comparison_<timestamp>.json`.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.
