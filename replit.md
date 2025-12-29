@@ -57,6 +57,8 @@ Controlled Validation & Calibration Integrity Test (M5C) compares VTS simulated 
 
 Paper Trade Recording Integration (M5C.1) completes the validation loop with automatic paper trade capture via `recordPaperTrade()` in `paper-execution-engine.ts`, auto-comparison at session end, and combined report generation to `/reports/VTS_Paper_Comparison_<timestamp>.json`.
 
+60-Minute Controlled Validation Run (M5D) orchestrates complete validation sessions with three phases: VTS simulation, paper trading, and automated comparison. The `M5DValidationService` captures metrics every 15 seconds including CWQI, NGC, DI, GSI, and real feed latency from price cache timestamps. Generates `Validation_Summary.md` at session end with all criteria results and metrics timeline. API endpoints: POST `/api/vts/validation/run-m5d?duration=N`, GET `/api/vts/validation/m5d-status`. Includes proper error handling with `restorePassiveLearning()` to ensure system state is always restored.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.
