@@ -1,0 +1,173 @@
+✅ Directive 8.9.4-VTP — Verification Test Trading Protocol
+
+Target System:
+Dawn Trader v3.1 (Infrastructure + Feed Validation)
+
+Purpose:
+To validate that the Mini-Book, Sentinel, WebSocket, and REST systems operate correctly and synchronously under live or paper-trading conditions.
+
+Controlled By:
+🧑 You (start / stop sessions manually)
+🤖 Replit (runs diagnostic logging and analysis)
+
+🧠 1. Test Overview
+Parameter	Value
+Duration	30 minutes minimum per run
+Mode	Paper Trading (recommended first)
+Data Sources	WebSocket v2 + Orderbook Mini-Book + REST Fallback
+Primary Pairs	Include a mix of high (BTC/USD, ETH/USD), mid (SOL/USD, ADA/USD), and low (ENSO/EUR, EIGEN/USD, OP/USD) volume pairs
+Objective	Verify price coherence, Sentinel activity, WS vs REST alignment, and stability of mid-price updates
+⚙️ 2. Replit Pre-Test Setup
+
+Replit should execute the following before trading begins:
+
+Flush All Logs
+
+Clear /tmp/logs/*.log
+
+Create new file:
+
+/tmp/logs/verification_8.9.4P_<timestamp>.log
+
+
+Enable Extended Logging
+
+Set environment flags:
+
+LOG_LEVEL=DEBUG
+LOG_WS_TICKS=true
+LOG_SENTINEL_EVENTS=true
+LOG_PRICE_COMPARISONS=true
+
+
+Confirm [VTP] Logging level: DEBUG on startup.
+
+Restart All Services
+
+Restart market-data-ws.ts and kraken-websocket-adapter.ts.
+
+Confirm:
+
+[VTP][INIT] WebSocket v2 connected
+[VTP][INIT] Mini-Book initialized for N pairs
+
+🎬 3. Manual Test Execution (Human-Initiated)
+
+You will perform:
+
+Start Trading Session
+
+Activate paper or live mode manually.
+
+Confirm [VTP][SESSION_START] is logged.
+
+Observe Active Feed
+
+For the first 10 minutes: leave trading idle (no manual trades).
+
+For the next 20 minutes: open at least 3 positions covering low/mid/high-volume pairs.
+
+Stop Session
+
+End session manually.
+
+Confirm [VTP][SESSION_END] logged.
+
+🔍 4. Replit Runtime Tasks
+
+While the session runs, Replit must automatically capture and log the following metrics every 30 seconds.
+
+4.1 — Feed Health Metrics
+[VTP][HEALTH]
+- Active WS Channels: <count>
+- REST Fallbacks (last 30s): <count>
+- Sentinel Resets: <count>
+- Avg Tick Latency: <ms>
+- Uptime: <min>
+
+4.2 — Mini-Book State Logs
+[VTP][BOOK_TICK] SYMBOL=ADA/USD bid=0.421 ask=0.423 mid=0.422
+
+
+Must appear continuously for all active pairs (every few seconds).
+
+Verify no flash crashes or 0 values.
+
+4.3 — REST vs WS Cross-Check
+
+Every 60 seconds:
+
+[VTP][MIDPOINT_CHECK] SYMBOL=EIGEN/USD WS=0.3175 REST=0.3174 Δ=0.03%
+
+
+Allowable Δ ≤ 0.2 %.
+
+4.4 — Sentinel Activity
+
+Whenever Sentinel triggers:
+
+[VTP][SENTINEL_RESET] SYMBOL=XXX/USD reason=NoTicks>Threshold
+
+
+Should be ≤ 1 per hour per symbol.
+
+4.5 — UI Sync Validation
+
+Each time the front-end price updates:
+
+[VTP][UI_SYNC] SYMBOL=ADA/USD UI=0.4220 BACKEND=0.4220 ✅
+
+
+Confirms front-end matches backend mark price.
+
+📊 5. Post-Run Data Summary
+
+When you stop the session, Replit must:
+
+Aggregate all [VTP] logs into /tmp/logs/verification_summary.json.
+ Example structure:
+
+{
+  "duration_min": 42,
+  "ws_channels": 14,
+  "sentinel_resets": 0,
+  "avg_tick_latency_ms": 18,
+  "max_price_divergence_pct": 0.11,
+  "avg_rest_fallbacks_per_min": 0.02,
+  "price_consistency_ok": true
+}
+
+
+Generate a human-readable summary:
+
+=== Verification Report (8.9.4-Patch) ===
+Total Runtime: 42 min
+Sentinel Resets: 0
+Avg Tick Latency: 18 ms
+Max Price Divergence: 0.11 %
+Feed Integrity: PASS ✅
+
+
+Save both JSON and TXT summaries under /tmp/logs/verification_8.9.4P/.
+
+✅ 6. Pass / Fail Criteria
+Metric	Pass Condition	Fail Trigger
+WS Feed Integrity	≥ 95 % updates via WebSocket	> 5 % REST fallback rate
+Sentinel Health	< 1 reset per hour	> 1 reset per hour
+Price Drift	Δ ≤ 0.2 % WS vs REST	Δ > 0.2 % for > 2 pairs
+UI Sync	100 % match with backend	Any persistent mismatch > 5 s
+Flash Crashes	None	Any midprice drop > 2 % without trade event
+CPU Load	< 70 % per core	> 85 % sustained > 5 min
+
+If all pass conditions hold for ≥ 30 minutes, Directive 8.9.4-Patch is production-verified.
+
+📘 7. Output Files to Archive
+
+After the test, Replit must zip and store:
+
+/tmp/logs/verification_8.9.4P_<timestamp>.log
+/tmp/logs/verification_summary.json
+/tmp/logs/verification_summary.txt
+
+
+These files become the permanent audit record for Phase 8.9.4-Patch validation.

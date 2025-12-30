@@ -70,6 +70,7 @@ import { krakenWebSocketAdapter } from './services/kraken-websocket-adapter.js';
 import { slippageFeeModel } from './services/slippage-fee-model.js';
 import { c5FinancialDiagnostics } from './services/c5-financial-diagnostics.js';
 import { clearReadyToBuy } from './utils/clear-routines.js';
+import { verificationTestProtocol } from './services/verification-test-protocol.js';
 import os from 'os';
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
@@ -697,6 +698,37 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     } catch (err: any) {
       console.error("[32.BS][SDPOE-HEALTH]", err);
       res.status(500).json({ error: "Failed to check SDPOE health" });
+    }
+  });
+
+  // Directive 8.9.4-VTP: Verification Test Protocol Routes
+  apiRouter.post('/vtp/start', async (_req, res) => {
+    try {
+      const result = await verificationTestProtocol.startSession();
+      res.json(result);
+    } catch (err: any) {
+      console.error("[VTP][START_ERROR]", err);
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  apiRouter.post('/vtp/stop', async (_req, res) => {
+    try {
+      const result = await verificationTestProtocol.stopSession();
+      res.json(result);
+    } catch (err: any) {
+      console.error("[VTP][STOP_ERROR]", err);
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  apiRouter.get('/vtp/status', async (_req, res) => {
+    try {
+      const status = verificationTestProtocol.getStatus();
+      res.json(status);
+    } catch (err: any) {
+      console.error("[VTP][STATUS_ERROR]", err);
+      res.status(500).json({ ok: false, error: err.message });
     }
   });
 
