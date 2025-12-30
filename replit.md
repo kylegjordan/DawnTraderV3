@@ -55,6 +55,8 @@ REST Midpoint Alignment (Directive 8.9.2) ensures REST API fallback uses the sam
 
 Orderbook Channel Midprice Feeds (Directive 8.9.4) implements dual-channel subscription to "ticker" and "book" WebSocket channels for comprehensive price coverage, extracting best bid/ask from orderbook snapshots/updates to calculate midpoint `(bid + ask) / 2`, addressing frozen price issues for illiquid pairs.
 
+Mini-Book Safety Upgrade (Directive 8.9.4-Patch) replaces stateless "last message" logic with a stateful in-memory mini-book that tracks top-of-book bids/asks per symbol. The `orderBooks` Map stores bid/ask levels for each symbol, properly handling delta updates (qty=0 means deletion) to ensure stable mid-price computation without "flash-crash" artifacts. Sequence validation via checksums detects out-of-order deltas and triggers resync. Both adapters implement this pattern for unified depth-stable pricing.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.

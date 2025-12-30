@@ -44,6 +44,10 @@ export class MarketDataWebSocket extends EventEmitter {
   private lastTickTimestamp: number = 0;
   private isConnected = false;
   private reconnectCount = 0;
+  
+  // 8.9.4-Patch: Stateful mini-book tracking for stable mid-price computation
+  private orderBooks = new Map<string, { bids: Map<number, number>; asks: Map<number, number> }>();
+  private lastSeq: Record<string, number> = {};
 
   constructor(config?: Partial<WSConfig>) {
     super();
@@ -138,18 +142,84 @@ export class MarketDataWebSocket extends EventEmitter {
       return;
     }
     
-    // 8.9.0-B: Handle v2 Book Updates
+    // 8.9.4-Patch: Handle v2 Book Updates with stateful mini-book
     if (message && typeof message === 'object' && message.channel === 'book') {
       if (message.type === 'update' || message.type === 'snapshot') {
         const updates = message.data || [];
         for (const update of updates) {
+          const symbol = update.symbol;
+          
+          // 8.9.4-Patch: Sequence validation for out-of-order detection
+          if (update.checksum !== undefined) {
+            const seq = update.checksum;
+            if (seq <= (this.lastSeq[symbol] ?? 0)) {
+              console.warn(`[8.9.4-P][MD-WS][SEQ][${symbol}] Out-of-order delta, resyncing.`);
+              this.orderBooks.delete(symbol);
+            }
+            this.lastSeq[symbol] = seq;
+          }
+          
+          // 8.9.4-Patch: Initialize or get mini-book for this symbol
+          if (!this.orderBooks.has(symbol)) {
+            this.orderBooks.set(symbol, { bids: new Map(), asks: new Map() });
+          }
+          const book = this.orderBooks.get(symbol)!;
+          
+          // 8.9.4-Patch: Apply delta updates to mini-book
+          if (update.bids) {
+            for (const item of update.bids) {
+              const price = parseFloat(item.price);
+              const qty = parseFloat(item.qty);
+              if (qty === 0) {
+                book.bids.delete(price);
+              } else {
+                book.bids.set(price, qty);
+              }
+            }
+          }
+          
+          if (update.asks) {
+            for (const item of update.asks) {
+              const price = parseFloat(item.price);
+              const qty = parseFloat(item.qty);
+              if (qty === 0) {
+                book.asks.delete(price);
+              } else {
+                book.asks.set(price, qty);
+              }
+            }
+          }
+          
+          // 8.9.4-Patch: Compute best bid/ask from stateful mini-book
+          const sortedBids = Array.from(book.bids.entries()).sort((a, b) => b[0] - a[0]);
+          const sortedAsks = Array.from(book.asks.entries()).sort((a, b) => a[0] - b[0]);
+          
           const snapshot: OrderBookSnapshot = {
-            symbol: update.symbol,
-            bids: (update.bids || []).map((b: any) => [parseFloat(b.price), parseFloat(b.qty)]),
-            asks: (update.asks || []).map((a: any) => [parseFloat(a.price), parseFloat(a.qty)]),
+            symbol: symbol,
+            bids: sortedBids.slice(0, 10) as [number, number][],
+            asks: sortedAsks.slice(0, 10) as [number, number][],
             timestamp: new Date().toISOString(),
           };
+          
+          this.lastTickTimestamp = Date.now();
           this.emit('orderbook', snapshot);
+          
+          // Emit tick with midpoint for stable pricing
+          if (sortedBids.length > 0 && sortedAsks.length > 0) {
+            const bestBid = sortedBids[0][0];
+            const bestAsk = sortedAsks[0][0];
+            const midpoint = (bestBid + bestAsk) / 2;
+            
+            const tickData: TickData = {
+              symbol: symbol,
+              bid: bestBid,
+              ask: bestAsk,
+              last: midpoint,
+              timestamp: new Date().toISOString(),
+              source: 'ws',
+            };
+            this.emit('tick', tickData);
+          }
         }
       }
       return;

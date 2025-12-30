@@ -1,0 +1,121 @@
+⚙️ 4. Directive 8.9.4-Patch — Mini-Book Safety Upgrade
+
+Target Files
+
+server/services/kraken-websocket-adapter.ts
+
+server/services/market-data-ws.ts
+
+Objective
+Replace stateless “last message” logic with a stateful in-memory mini-book that tracks top-of-book bids/asks and ensures stable mid-price computation.
+
+1. Add Book State
+
+At the top of each adapter class:
+
+// Track Top-10 depth per symbol
+private orderBooks = new Map<
+  string,
+  { bids: Map<number, number>; asks: Map<number, number> }
+>();
+
+2. Implement Stateful Handler
+
+Replace or extend the existing book handler with:
+
+private handleV2BookUpdate(internalSymbol: string, updates: any[]) {
+  if (!this.orderBooks.has(internalSymbol)) {
+    this.orderBooks.set(internalSymbol, { bids: new Map(), asks: new Map() });
+  }
+  const book = this.orderBooks.get(internalSymbol)!;
+
+  for (const update of updates) {
+    if (update.bids) {
+      for (const item of update.bids) {
+        const price = parseFloat(item.price);
+        const qty = parseFloat(item.qty);
+        if (qty === 0) book.bids.delete(price);
+        else book.bids.set(price, qty);
+      }
+    }
+    if (update.asks) {
+      for (const item of update.asks) {
+        const price = parseFloat(item.price);
+        const qty = parseFloat(item.qty);
+        if (qty === 0) book.asks.delete(price);
+        else book.asks.set(price, qty);
+      }
+    }
+  }
+
+  const bestBid = book.bids.size ? Math.max(...book.bids.keys()) : 0;
+  const bestAsk = book.asks.size ? Math.min(...book.asks.keys()) : 0;
+
+  if (bestBid > 0 && bestAsk > 0) {
+    const midpoint = (bestBid + bestAsk) / 2;
+
+    // Sentinel update
+    const stats = this.symbolStats.get(internalSymbol);
+    if (stats) {
+      stats.lastUpdate = Date.now();
+      stats.warningLogged = false;
+    }
+
+    // Push safe normalized data
+    const safeData = {
+      a: [String(bestAsk)],
+      b: [String(bestBid)],
+      c: [String(midpoint)]
+    };
+    livePricingAdapter.updateFromWebSocket(internalSymbol, safeData);
+  }
+}
+
+3. Apply to Secondary Adapter
+
+Mirror the same logic in market-data-ws.ts so that analytics (Cortex, StrategyBob) also read stable mid-prices.
+
+4. Optional Enhancement: Sequence Validation
+
+Add within the same handler:
+
+if (update.seq && update.seq <= (this.lastSeq?.[internalSymbol] ?? 0)) {
+  console.warn(`[SEQ][${internalSymbol}] Out-of-order delta, resyncing.`);
+  this.resubscribe(internalSymbol);
+}
+this.lastSeq = this.lastSeq || {};
+this.lastSeq[internalSymbol] = update.seq;
+
+
+Ensures automatic resnapshot on any out-of-order event.
+
+5. Verification Checklist
+
+Start live or paper trading.
+
+Observe logs:
+
+[8.9.4-P][WS_BOOK_TICK] ADA/USD bid=0.421 ask=0.423 mid=0.422
+
+
+Confirm no “flash-crash” artifacts in UI.
+
+Verify Sentinel resets remain rare (<1/hour).
+
+Compare midpoint with Kraken REST (b+a)/2 — should match within ±0.1%.
+
+6. Outcome
+Before	After
+Prone to Depth-Jumping	Depth-stable mid-prices
+Stateless deltas	Mini-book state per pair
+Inconsistent between Cortex & UI	Unified price source
+High false volatility	Smooth, continuous pricing
+✅ Final Assessment
+
+With this patch:
+
+You gain depth-stable mid-prices without losing the responsiveness of the book channel.
+
+The risk Gemini flagged (single-delta misinterpretation) is eliminated.
+
+Sentinel + Mini-Book + REST fallback = fault-tolerant market feed, safe for live deployment.

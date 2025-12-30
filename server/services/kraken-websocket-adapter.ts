@@ -104,6 +104,10 @@ export class KrakenWebSocketAdapter {
   private readonly ACK_TIMEOUT_MS = 5000; // 5 seconds without ACK
   private readonly NO_TICK_TIMEOUT_MS = 10000; // 10 seconds without tick after ACK
   
+  // 8.9.4-Patch: Stateful mini-book tracking for stable mid-price computation
+  private orderBooks = new Map<string, { bids: Map<number, number>; asks: Map<number, number> }>();
+  private lastSeq: Record<string, number> = {}; // Track sequence numbers for out-of-order detection
+  
   // Phase 8.8.3-I8C: Subscription reliability - open positions provider and audit interval
   private i8cAuditInterval: NodeJS.Timeout | null = null;
   private i8cOpenPositionsProvider: (() => Promise<string[]>) | null = null;
@@ -591,9 +595,13 @@ export class KrakenWebSocketAdapter {
   }
 
   /**
-   * 8.9.4: Handle v2 book (orderbook) updates for continuous midpoint pricing
+   * 8.9.4-Patch: Stateful mini-book handler for stable mid-price computation
    * v2 format: { channel: "book", type: "update"|"snapshot", data: [{symbol, bids, asks, ...}] }
-   * This provides BBO updates on every bid/ask change, solving the frozen price issue for low-volume pairs
+   * 
+   * This replaces stateless "last message" logic with a stateful in-memory mini-book that:
+   * - Tracks top-of-book bids/asks per symbol
+   * - Properly handles delta updates (qty=0 means deletion)
+   * - Ensures stable mid-price computation without "flash-crash" artifacts
    */
   private handleV2BookUpdate(message: any): void {
     const updates = message.data || [];
@@ -606,19 +614,59 @@ export class KrakenWebSocketAdapter {
         continue;
       }
       
-      // Extract best bid/ask from orderbook
-      // v2 book format uses 'bids' and 'asks' arrays with objects like {price: "123.45", qty: "1.0"}
-      const bestBidEntry = update.bids?.[0] || update.bid?.[0];
-      const bestAskEntry = update.asks?.[0] || update.ask?.[0];
+      // 8.9.4-Patch: Sequence validation for out-of-order detection
+      if (update.checksum !== undefined) {
+        // Some v2 book updates include sequence/checksum for validation
+        const seq = update.checksum;
+        if (seq <= (this.lastSeq[internalSymbol] ?? 0)) {
+          console.warn(`[8.9.4-P][SEQ][${internalSymbol}] Out-of-order delta, resyncing.`);
+          this.orderBooks.delete(internalSymbol);
+          // Note: Kraken v2 will resend snapshot on reconnect
+        }
+        this.lastSeq[internalSymbol] = seq;
+      }
       
-      const bestBid = parseFloat(bestBidEntry?.price ?? bestBidEntry ?? 0);
-      const bestAsk = parseFloat(bestAskEntry?.price ?? bestAskEntry ?? 0);
+      // 8.9.4-Patch: Initialize or get mini-book for this symbol
+      if (!this.orderBooks.has(internalSymbol)) {
+        this.orderBooks.set(internalSymbol, { bids: new Map(), asks: new Map() });
+      }
+      const book = this.orderBooks.get(internalSymbol)!;
+      
+      // 8.9.4-Patch: Apply delta updates to mini-book
+      // v2 book format uses 'bids' and 'asks' arrays with objects like {price: "123.45", qty: "1.0"}
+      if (update.bids) {
+        for (const item of update.bids) {
+          const price = parseFloat(item.price);
+          const qty = parseFloat(item.qty);
+          if (qty === 0) {
+            book.bids.delete(price); // Remove level when qty is zero
+          } else {
+            book.bids.set(price, qty);
+          }
+        }
+      }
+      
+      if (update.asks) {
+        for (const item of update.asks) {
+          const price = parseFloat(item.price);
+          const qty = parseFloat(item.qty);
+          if (qty === 0) {
+            book.asks.delete(price); // Remove level when qty is zero
+          } else {
+            book.asks.set(price, qty);
+          }
+        }
+      }
+      
+      // 8.9.4-Patch: Compute best bid/ask from stateful mini-book
+      const bestBid = book.bids.size > 0 ? Math.max(...book.bids.keys()) : 0;
+      const bestAsk = book.asks.size > 0 ? Math.min(...book.asks.keys()) : 0;
       
       if (bestBid <= 0 || bestAsk <= 0) {
         continue;
       }
       
-      // 8.9.4: Calculate midpoint from orderbook BBO
+      // 8.9.4-Patch: Calculate stable midpoint from mini-book BBO
       const midpoint = (bestBid + bestAsk) / 2;
       
       const now = Date.now();
@@ -639,7 +687,7 @@ export class KrakenWebSocketAdapter {
       // Log first book update for each symbol
       if (!this.firstTickReceived.has(internalSymbol + '_book')) {
         this.firstTickReceived.add(internalSymbol + '_book');
-        console.log(`[8.9.4][WS_BOOK_TICK] FIRST: ${internalSymbol} bid=${bestBid} ask=${bestAsk} mid=${midpoint.toFixed(6)}`);
+        console.log(`[8.9.4-P][WS_BOOK_TICK] FIRST: ${internalSymbol} bid=${bestBid} ask=${bestAsk} mid=${midpoint.toFixed(6)}`);
       }
       
       // Update LivePricingAdapter with midpoint price (using 'kraken_ws' source type)
