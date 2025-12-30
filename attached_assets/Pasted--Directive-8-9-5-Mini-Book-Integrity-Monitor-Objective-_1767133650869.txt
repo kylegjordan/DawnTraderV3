@@ -1,0 +1,198 @@
+🧭 Directive 8.9.5 — Mini-Book Integrity Monitor
+
+Objective:
+Implement a continuous background audit process that cross-checks WebSocket Mini-Book mid-prices against REST midpoint values every few minutes to detect silent drift, stale feeds, or book corruption.
+If deviation exceeds 0.2 %, automatically log a divergence warning and (optionally) trigger a soft resync.
+
+Target Files:
+
+server/services/kraken-websocket-adapter.ts
+
+server/services/market-data-ws.ts
+
+server/services/monitoring/mini-book-integrity-monitor.ts (new)
+
+Dependencies:
+
+REST client module (kraken-rest-client.ts)
+
+LivePricingAdapter for current price cache
+
+Sentinel (8.8.5) health metrics
+
+🧩 1. Architectural Overview
+
+The Mini-Book Integrity Monitor (MBIM) runs as a lightweight async task every 300 seconds (5 minutes).
+For each active symbol with WebSocket data:
+
+Fetch the latest REST ticker from Kraken.
+
+Compute both:
+
+mid_ws = (bestBid_ws + bestAsk_ws) / 2
+
+mid_rest = (bid_rest + ask_rest) / 2
+
+Compare for drift:
+
+Δ% = |mid_ws - mid_rest| / mid_rest × 100
+
+
+Log results to /tmp/logs/integrity_monitor.log.
+
+If Δ > 0.2 % → trigger warning, mark symbol “drifted”, and notify Sentinel to refresh the book snapshot.
+
+⚙️ 2. Implementation Steps
+2.1 Create New Service File
+
+server/services/monitoring/mini-book-integrity-monitor.ts
+
+import { getActiveSymbols } from "../market-data/active-symbol-registry.js";
+import { krakenRestClient } from "../market-data/kraken-rest-client.js";
+import { livePricingAdapter } from "../market-data/live-pricing-adapter.js";
+import { Sentinel } from "../sentinel/sentinel.js";
+
+export class MiniBookIntegrityMonitor {
+  private interval: NodeJS.Timeout | null = null;
+  private readonly CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+  private readonly MAX_DRIFT_PCT = 0.2;
+
+  start() {
+    if (this.interval) clearInterval(this.interval);
+    this.interval = setInterval(() => this.runAudit(), this.CHECK_INTERVAL_MS);
+    console.log("[8.9.5][MBIM] Integrity monitor started (5-min interval)");
+  }
+
+  async runAudit() {
+    const symbols = getActiveSymbols();
+    const results: any[] = [];
+
+    for (const symbol of symbols) {
+      try {
+        const wsMid = livePricingAdapter.getCurrentMid(symbol);
+        if (!wsMid) continue;
+
+        const restData = await krakenRestClient.getTicker(symbol);
+        const restBid = parseFloat(restData.b[0]);
+        const restAsk = parseFloat(restData.a[0]);
+        const restMid = (restBid + restAsk) / 2;
+        const driftPct = Math.abs((wsMid - restMid) / restMid) * 100;
+
+        const status = driftPct > this.MAX_DRIFT_PCT ? "⚠️ DRIFT" : "✅ OK";
+        results.push({ symbol, wsMid, restMid, driftPct, status });
+
+        console.log(`[8.9.5][MBIM] ${symbol} WS=${wsMid.toFixed(6)} REST=${restMid.toFixed(6)} Δ=${driftPct.toFixed(3)}% ${status}`);
+
+        // Auto-heal if excessive drift
+        if (driftPct > this.MAX_DRIFT_PCT) {
+          Sentinel.requestSoftResubscribe(symbol, "price divergence");
+        }
+      } catch (err) {
+        console.error(`[8.9.5][MBIM][ERROR] ${symbol}:`, err);
+      }
+    }
+
+    // Persist snapshot log
+    await this.logResults(results);
+  }
+
+  private async logResults(results: any[]) {
+    const fs = await import("fs");
+    const logPath = "/tmp/logs/integrity_monitor.log";
+    const timestamp = new Date().toISOString();
+    const lines = results.map(r =>
+      `[${timestamp}] ${r.symbol} WS=${r.wsMid} REST=${r.restMid} Δ=${r.driftPct.toFixed(3)}% ${r.status}`
+    );
+    fs.appendFileSync(logPath, lines.join("\n") + "\n");
+  }
+}
+
+export const miniBookIntegrityMonitor = new MiniBookIntegrityMonitor();
+
+2.2 Integrate Monitor Startup
+
+In both kraken-websocket-adapter.ts and market-data-ws.ts, after WebSocket initialization:
+
+import { miniBookIntegrityMonitor } from "./monitoring/mini-book-integrity-monitor.js";
+
+if (process.env.ENABLE_INTEGRITY_MONITOR === "true") {
+  miniBookIntegrityMonitor.start();
+}
+
+2.3 Sentinel Hook (Optional)
+
+Add helper in Sentinel to allow soft resubscribe when drift detected.
+
+// sentinel.ts
+public static requestSoftResubscribe(symbol: string, reason: string) {
+  console.warn(`[8.9.5][SENTINEL] Soft resubscribe triggered for ${symbol} (${reason})`);
+  // Implementation: unsubscribe -> re-subscribe WS channel
+}
+
+2.4 Configuration & Logging
+
+Add to .env:
+
+ENABLE_INTEGRITY_MONITOR=true
+INTEGRITY_MONITOR_INTERVAL=300000
+
+
+Logs:
+
+/tmp/logs/integrity_monitor.log
+
+[8.9.5][MBIM] entries
+
+Drift events trigger [8.9.5][SENTINEL] Soft resubscribe…
+
+🧪 3. Verification Protocol
+
+After implementation, Replit must perform:
+
+Controlled Test Run
+
+Duration: 20–30 min paper session
+
+Monitor /tmp/logs/integrity_monitor.log
+
+Expected Log Pattern
+
+[8.9.5][MBIM] ADA/USD WS=0.422 REST=0.4218 Δ=0.047% ✅ OK
+[8.9.5][MBIM] ENSO/EUR WS=0.612 REST=0.613 Δ=0.163% ✅ OK
+
+
+Drift Test Simulation
+
+Temporarily pause WS for one symbol (mock disconnection).
+
+Confirm:
+
+[8.9.5][MBIM] ENSO/EUR WS=0.612 REST=0.615 Δ=0.490% ⚠️ DRIFT
+[8.9.5][SENTINEL] Soft resubscribe triggered for ENSO/EUR
+
+
+Pass Criteria
+
+Δ ≤ 0.2 % for ≥ 95 % of symbols.
+
+Drift recovery (soft resubscribe) succeeds within 60 s.
+
+🧩 4. System Impact
+Component	Impact
+CPU / I/O	Minimal (5-min interval, REST only)
+Reliability	Increases long-term data consistency
+Safety	Automatic divergence recovery prevents silent feed corruption
+Maintenance	Log rotates daily, small size (< 500 KB/day)
+✅ 5. Deliverables
+
+Replit must produce:
+
+File	Description
+/tmp/logs/integrity_monitor.log	Rolling audit record of WS vs REST midpoints
+/docs/mini-book-integrity-monitor.md	Short documentation of audit cycle and auto-heal behavior
+✅ Directive 8.9.5 Summary
+Item	Description
+Purpose	Detect & correct silent drift between WebSocket and REST feeds
+Key Feature	Automatic 5-minute audits, < 0.2 % drift tolerance
+Recovery	Sentinel soft-resubscribe on drift
+Outcome	Fully self-auditing Mini-Book infrastructure

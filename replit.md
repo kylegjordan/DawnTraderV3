@@ -59,6 +59,8 @@ Mini-Book Safety Upgrade (Directive 8.9.4-Patch) replaces stateless "last messag
 
 Verification Test Protocol (Directive 8.9.4-VTP) provides comprehensive infrastructure validation for Mini-Book, Sentinel, WebSocket, and REST systems. The `verification-test-protocol.ts` service captures feed health metrics every 30 seconds, performs WS vs REST midpoint checks every 60 seconds, and logs sentinel events. API endpoints: POST `/api/vtp/start` to begin session, POST `/api/vtp/stop` to end and generate summary, GET `/api/vtp/status` for real-time metrics. Pass criteria: ≥95% WS feed integrity, <1 sentinel reset/hour, ≤0.2% price drift, 100% UI sync. Output files saved to `/tmp/logs/verification_8.9.4P/`.
 
+Mini-Book Integrity Monitor (Directive 8.9.5) implements continuous background audit that cross-checks WebSocket Mini-Book mid-prices against REST midpoint values every 5 minutes. If deviation exceeds 0.2%, automatically logs a divergence warning and triggers a soft resync via Sentinel. API endpoints: POST `/api/mbim/start`, POST `/api/mbim/stop`, GET `/api/mbim/status`, POST `/api/mbim/audit`. Logs saved to `/tmp/logs/integrity_monitor.log`. Documentation at `/docs/mini-book-integrity-monitor.md`.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.

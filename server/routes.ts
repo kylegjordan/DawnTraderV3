@@ -71,6 +71,7 @@ import { slippageFeeModel } from './services/slippage-fee-model.js';
 import { c5FinancialDiagnostics } from './services/c5-financial-diagnostics.js';
 import { clearReadyToBuy } from './utils/clear-routines.js';
 import { verificationTestProtocol } from './services/verification-test-protocol.js';
+import { miniBookIntegrityMonitor } from './services/monitoring/mini-book-integrity-monitor.js';
 import os from 'os';
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
@@ -728,6 +729,50 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       res.json(status);
     } catch (err: any) {
       console.error("[VTP][STATUS_ERROR]", err);
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // Directive 8.9.5: Mini-Book Integrity Monitor Routes
+  apiRouter.post('/mbim/start', async (_req, res) => {
+    try {
+      miniBookIntegrityMonitor.start();
+      res.json({ ok: true, message: 'MBIM started (5-min interval)' });
+    } catch (err: any) {
+      console.error("[8.9.5][MBIM][START_ERROR]", err);
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  apiRouter.post('/mbim/stop', async (_req, res) => {
+    try {
+      miniBookIntegrityMonitor.stop();
+      res.json({ ok: true, message: 'MBIM stopped' });
+    } catch (err: any) {
+      console.error("[8.9.5][MBIM][STOP_ERROR]", err);
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  apiRouter.get('/mbim/status', async (_req, res) => {
+    try {
+      const metrics = miniBookIntegrityMonitor.getMetrics();
+      res.json({
+        active: miniBookIntegrityMonitor.isActive(),
+        metrics
+      });
+    } catch (err: any) {
+      console.error("[8.9.5][MBIM][STATUS_ERROR]", err);
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  apiRouter.post('/mbim/audit', async (_req, res) => {
+    try {
+      const results = await miniBookIntegrityMonitor.runAudit();
+      res.json({ ok: true, results, count: results.length });
+    } catch (err: any) {
+      console.error("[8.9.5][MBIM][AUDIT_ERROR]", err);
       res.status(500).json({ ok: false, error: err.message });
     }
   });

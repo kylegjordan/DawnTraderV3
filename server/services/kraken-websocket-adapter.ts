@@ -2918,6 +2918,75 @@ export class KrakenWebSocketAdapter {
     this.startTime = Date.now();
     console.log('[8.8.5][HEALTH] Reset health metrics');
   }
+
+  /**
+   * Directive 8.9.5: Get latest bid/ask/mid from mini-book for integrity monitoring
+   */
+  getLatestPriceData(symbol: string): { bid: number; ask: number; mid: number } | null {
+    const book = this.orderBooks.get(symbol);
+    if (!book || book.bids.size === 0 || book.asks.size === 0) {
+      return null;
+    }
+    
+    const bestBid = Math.max(...book.bids.keys());
+    const bestAsk = Math.min(...book.asks.keys());
+    
+    if (bestBid <= 0 || bestAsk <= 0) {
+      return null;
+    }
+    
+    return {
+      bid: bestBid,
+      ask: bestAsk,
+      mid: (bestBid + bestAsk) / 2
+    };
+  }
+
+  /**
+   * Directive 8.9.5: Soft resubscribe for integrity monitor
+   * Clears all per-symbol state and resubscribes without disconnecting WebSocket
+   */
+  async softResubscribe(symbol: string): Promise<void> {
+    console.log(`[8.9.5][SOFT_RESUB] Starting soft resubscribe for ${symbol}`);
+    
+    // Clear ALL per-symbol state to ensure clean resync
+    this.orderBooks.delete(symbol);
+    this.symbolStats.delete(symbol);
+    this.pendingSubscriptions.delete(symbol);
+    this.subscriptionAcks.delete(symbol);
+    delete this.lastSeq[symbol];
+    this.firstTickReceived.delete(symbol);
+    this.firstTickReceived.delete(symbol + '_book');
+    this.tickFrequencyData.delete(symbol);
+    this.lastBroadcastTime.delete(symbol);
+    
+    console.log(`[8.9.5][SOFT_RESUB] Cleared all state for ${symbol}`);
+    
+    // Use the existing unsubscribe helper for proper handling
+    this.unsubscribeFromSymbols([symbol]);
+    
+    // Also unsubscribe from book channel (unsubscribeFromSymbols only does ticker)
+    const krakenSymbol = this.normalToKrakenSymbol(symbol);
+    if (krakenSymbol && this.isConnected) {
+      const bookUnsub = {
+        method: 'unsubscribe',
+        params: { channel: 'book', symbol: [krakenSymbol], depth: 10 }
+      };
+      try {
+        this.ws?.send(JSON.stringify(bookUnsub));
+        console.log(`[8.9.5][SOFT_RESUB] Unsubscribed ${symbol} from book channel`);
+      } catch (err: any) {
+        console.error(`[8.9.5][SOFT_RESUB] Book unsubscribe error:`, err?.message);
+      }
+    }
+    
+    // Wait before resubscribing to allow cleanup
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Resubscribe using the existing helper (subscribes to both ticker+book)
+    this.subscribeToSymbols([symbol]);
+    console.log(`[8.9.5][SOFT_RESUB] Resubscribed ${symbol}`);
+  }
 }
 
 export const krakenWebSocketAdapter = new KrakenWebSocketAdapter();
