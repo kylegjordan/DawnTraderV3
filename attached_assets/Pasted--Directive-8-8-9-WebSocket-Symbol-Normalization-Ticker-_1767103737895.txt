@@ -1,0 +1,154 @@
+⚙️ Directive 8.8.9 — WebSocket Symbol Normalization & Ticker Parsing Patch
+Target System
+
+Dawn Trader v3.1 Infrastructure
+
+Primary File:
+server/services/kraken-websocket-adapter.ts
+
+Objective:
+Fix the “Silent Failure” issue by:
+
+Parsing Kraken’s array-formatted ticker messages.
+
+Translating Kraken’s ISO-prefixed pair codes (e.g., XBT/USD) into internal symbols (BTC/USD) via your canonical resolver.
+
+Updating Sentinel channel-health timestamps on each tick to prevent false “connection lost” resets.
+
+1️⃣ Context & Root Cause
+Problem	Effect
+Kraken sends ticker updates as arrays like [42, data, "ticker", "XBT/USD"]	Your parser ignores them because it expects object messages ({ event: "ticker" })
+Kraken uses ISO symbols (XBT/USD, XETH/USD)	Your system expects normalized names (BTC/USD, ETH/USD)
+Sentinel watches symbolStats.lastUpdate	Never refreshed → Sentinel believes the feed is silent and forces REST fallback
+2️⃣ Implementation Instructions
+2.1 Imports — Use the Canonical Resolver Only
+
+❗ Do not create a new mapper.
+
+import {
+  mapKrakenPairToInternal,
+  toKrakenWS
+} from '../markets/kraken-symbol-resolver.js';
+
+2.2 Unified Message Handler
+
+Replace the existing this.ws.on('message', …) block completely.
+
+this.ws.on('message', (data) => {
+  let msg;
+  try {
+    msg = JSON.parse(data.toString());
+  } catch { return; }
+
+  // 🧭 1. Handle System Events (Object Form)
+  if (!Array.isArray(msg)) {
+    switch (msg.event) {
+      case 'heartbeat':
+        this.lastGlobalHeartbeat = Date.now();
+        return;
+      case 'pong':
+        this.handlePong?.(); // Phase 8.8.5 Keep-Alive
+        return;
+      case 'subscriptionStatus':
+        if (msg.status === 'error') {
+          console.error(`[8.8.9][WS] Sub Error: ${msg.errorMessage} (${msg.pair})`);
+        } else {
+          console.log(`[8.8.9][WS] Sub OK: ${msg.pair}`);
+        }
+        return;
+      default:
+        return;
+    }
+  }
+
+  // 🧮 2. Handle Data Arrays (Ticker Updates)
+  // Format: [channelID, payload, channelName, krakenPair]
+  const channelName = msg[2];
+  const krakenPair = msg[3];
+
+  if (channelName === 'ticker' && typeof krakenPair === 'string') {
+    // A. Translate Symbol (XBT → BTC)
+    const internalSymbol = mapKrakenPairToInternal(krakenPair);
+    if (!internalSymbol) return; // ignore untracked pairs
+
+    // B. Update Sentinel Health
+    const stats = this.symbolStats.get(internalSymbol);
+    if (stats) {
+      stats.lastUpdate = Date.now();
+      stats.warningLogged = false;
+    }
+
+    // C. Forward Data to Cache
+    const tickerData = msg[1];
+    try {
+      livePricingAdapter.updateFromWebSocket(internalSymbol, tickerData);
+      // Optional debug:
+      // console.log(`[8.8.9][WS_TICK] ${internalSymbol}`);
+    } catch (err) {
+      console.error(`[8.8.9][ERR] Processing tick for ${internalSymbol}`, err);
+    }
+  }
+});
+
+
+⚠️ Do not add a new “watchdog” loop here.
+The Phase 8.8.5 Tiered Sentinel already manages timeouts based on liquidity tiers (20 s / 60 s / 180 s).
+Adding a fixed 60 s watchdog would re-introduce the low-volume pair timeout bug.
+
+2.3 Subscription Translation Logic
+
+Ensure outbound subscriptions send Kraken’s expected symbols.
+
+public subscribe(internalSymbol: string) {
+  const krakenSymbol = toKrakenWS(internalSymbol);
+
+  const payload = {
+    event: 'subscribe',
+    pair: [krakenSymbol],
+    subscription: { name: 'ticker' }
+  };
+
+  if (this.isConnected) {
+    this.safeSend(payload);
+    this.subscribedSymbols.add(internalSymbol);
+    console.log(`[8.8.9][WS_SUB] Requesting: ${krakenSymbol} (Internal: ${internalSymbol})`);
+  }
+}
+
+3️⃣ Verification Protocol
+
+After deployment, Replit must log results to
+/logs/directive_8.8.9_validation.log and confirm:
+
+Verification Check	Expected Result
+[8.8.9][WS_SUB] + [8.8.9][WS] Sub OK logs for all open pairs	✅
+[8.8.9][WS_TICK] entries appear regularly for each active pair	✅
+Sentinel no longer prints [Sentinel] Resetting channel for those pairs	✅
+Open Trades → Source = WS or WS (cached) (not REST)	✅
+REST RateLimiter blocks ≈ 0 for active pairs	✅
+4️⃣ Expected Outcomes
+Metric	Before	After
+WebSocket ACKs	✅	✅
+Ticker Reception	❌	✅
+Sentinel Resets	Frequent	None
+REST Fallbacks	High	Minimal
+UI Data Latency	3-5 s	≤ 1 s
+5️⃣ Deliverables
+Artifact	Description
+logs/directive_8.8.9_validation.log	Tick + Sentinel health verification
+logs/directive_8.8.9_activity.log	Subscriptions + symbol translation records
+docs/directive_8.8.9_notes.md	Implementation summary for audit
+screenshots/ui_8.8.9_ws_status.png	UI showing WS sources for active trades
+✅ Directive 8.8.9 – Final Status
+
+This version:
+
+Uses your existing canonical resolver (kraken-symbol-resolver.ts).
+
+Integrates cleanly with the Tiered Sentinel from Phase 8.8.5.
+
+Avoids redundant watchdog loops.
+
+Fixes the core translation + parsing issue that caused WS silence.
+
+Keeps architecture consistent with all previous directives.

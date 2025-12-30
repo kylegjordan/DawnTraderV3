@@ -58,6 +58,7 @@ interface SymbolStats {
   updateCount: number;
   intervals: number[];
   firstUpdate: number; // Phase 8.8.3-I4: Track when first tick received
+  warningLogged?: boolean; // 8.8.9: Track if Sentinel warning was logged (reset on each tick)
 }
 
 /**
@@ -337,26 +338,53 @@ export class KrakenWebSocketAdapter {
     try {
       const message = JSON.parse(rawStr);
       
-      // Phase 8.8.5: Track heartbeat events for global connection health
-      if (message.event === 'heartbeat') {
-        const now = Date.now();
-        if (this.lastGlobalHeartbeat > 0) {
-          const latency = now - this.lastGlobalHeartbeat;
-          this.heartbeatLatencies.push(latency);
-          if (this.heartbeatLatencies.length > 60) {
-            this.heartbeatLatencies.shift();
-          }
+      // 8.8.9: Handle Data Arrays (Ticker Updates) FIRST
+      // Kraken format: [channelID, {payload}, "ticker", "PAIR"]
+      if (Array.isArray(message) && message.length >= 4) {
+        const channelName = message[2];
+        const krakenPair = message[3];
+        
+        if (channelName === 'ticker' && typeof krakenPair === 'string') {
+          this.handleTickerUpdate(message);
         }
-        this.lastGlobalHeartbeat = now;
-      }
-      
-      if (message.event) {
-        this.handleSystemMessage(message);
         return;
       }
       
-      if (Array.isArray(message) && message.length >= 4) {
-        this.handleTickerUpdate(message);
+      // 8.8.9: Handle System Events (Object Form) - only for recognized event types
+      const knownEvents = ['heartbeat', 'pong', 'subscriptionStatus', 'systemStatus', 'error', 'info'];
+      
+      if (message && typeof message === 'object' && message.event) {
+        // Phase 8.8.5: Track heartbeat events for global connection health
+        if (message.event === 'heartbeat') {
+          const now = Date.now();
+          if (this.lastGlobalHeartbeat > 0) {
+            const latency = now - this.lastGlobalHeartbeat;
+            this.heartbeatLatencies.push(latency);
+            if (this.heartbeatLatencies.length > 60) {
+              this.heartbeatLatencies.shift();
+            }
+          }
+          this.lastGlobalHeartbeat = now;
+        }
+        
+        // 8.8.9: Add logging for subscription events
+        if (message.event === 'subscriptionStatus') {
+          if (message.status === 'error') {
+            console.error(`[8.8.9][WS] Sub Error: ${message.errorMessage} (${message.pair})`);
+          } else if (message.status === 'subscribed') {
+            console.log(`[8.8.9][WS] Sub OK: ${message.pair}`);
+          }
+        }
+        
+        // Delegate to handleSystemMessage for all recognized events
+        if (knownEvents.includes(message.event)) {
+          this.handleSystemMessage(message);
+          return;
+        }
+        
+        // Log unrecognized event types but still process them
+        console.log(`[8.8.9][WS] Unknown event type: ${message.event}`);
+        this.handleSystemMessage(message);
       }
       
     } catch (error) {
@@ -418,11 +446,19 @@ export class KrakenWebSocketAdapter {
   }
 
   private handleTickerUpdate(message: any[]): void {
-    const [channelId, tickerData, channelName, pair] = message;
+    const [channelId, rawTickerData, channelName, pair] = message;
     
-    if (channelName !== 'ticker' || !tickerData) return;
+    if (channelName !== 'ticker' || !rawTickerData) return;
     
     try {
+      // 8.8.9: Normalize tickerData - handle both object and array forms
+      // Kraken sometimes batches updates as arrays
+      const tickerData = Array.isArray(rawTickerData) ? rawTickerData[0] : rawTickerData;
+      if (!tickerData || typeof tickerData !== 'object') {
+        console.warn(`[8.8.9][WS_TICK] Invalid tickerData format for ${pair}:`, typeof tickerData);
+        return;
+      }
+      
       const ticker = tickerData as KrakenTickerPayload;
       
       const lastPrice = parseFloat(ticker.c[0]);
@@ -463,11 +499,13 @@ export class KrakenWebSocketAdapter {
         return;
       }
       
+      // 8.8.9: Update Sentinel Health - get or create stats
       const stats = this.symbolStats.get(internalSymbol) || {
         lastUpdate: 0,
         updateCount: 0,
         intervals: [],
-        firstUpdate: now // Phase 8.8.3-I4: Track first tick time
+        firstUpdate: now, // Phase 8.8.3-I4: Track first tick time
+        warningLogged: false
       };
       
       const intervalMs = stats.lastUpdate > 0 ? now - stats.lastUpdate : 0;
@@ -475,9 +513,13 @@ export class KrakenWebSocketAdapter {
       if (stats.intervals.length > 100) stats.intervals.shift();
       stats.lastUpdate = now;
       stats.updateCount++;
+      stats.warningLogged = false; // 8.8.9: Reset warning flag on each tick to prevent false Sentinel resets
       // Phase 8.8.3-I4: Ensure firstUpdate is set on first tick
       if (stats.firstUpdate === 0) stats.firstUpdate = now;
       this.symbolStats.set(internalSymbol, stats);
+      
+      // 8.8.9: Log tick receipt for validation
+      console.log(`[8.8.9][WS_TICK] ${internalSymbol} price=${lastPrice}`);
       
       const logEntry: PriceTickLog = {
         symbol: internalSymbol,
@@ -664,11 +706,13 @@ export class KrakenWebSocketAdapter {
     // Phase 8.8.3-I6-FIX: Log symbol format mapping
     console.log(`[8.8.3-I6-FIX][WS_SUB_MAPPED] krakenSymbols=${JSON.stringify(krakenSymbols)} (mapped from ${symbols.length} internal symbols)`);
     
-    // Phase 8.8.3-I7-WS-A (A1): Log subscription request with resolver-normalized internal symbol
+    // 8.8.9 + Phase 8.8.3-I7-WS-A (A1): Log subscription request with resolver-normalized internal symbol
     for (let i = 0; i < symbols.length; i++) {
       const internalSymbol = symbols[i];
       const krakenWsPair = krakenSymbols[i] || 'unmapped';
       const normalizedInternal = normalizeToInternalSymbol(internalSymbol);
+      // 8.8.9: Log subscription request with Kraken symbol mapping
+      console.log(`[8.8.9][WS_SUB] Requesting: ${krakenWsPair} (Internal: ${normalizedInternal})`);
       console.log(`[I7-WS-A][SUB_REQ] kraken_ws_pair=${krakenWsPair} internal_symbol=${normalizedInternal}`);
       
       // Track subscription request for diagnostic endpoint
