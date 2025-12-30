@@ -1,0 +1,119 @@
+🚀 Directive 8.9.4 — “Orderbook Channel Midprice Feeds”
+Objective
+
+Switch low-volume pairs (and optionally all pairs) to Kraken’s "book" WebSocket channel to compute continuous midpoint prices directly from orderbook data.
+
+Target Files
+
+server/services/kraken-websocket-adapter.ts
+
+server/services/market-data-ws.ts
+
+server/services/market-data/kraken-v2-translator.ts (extend translator for "book" channel events)
+
+1. Connection
+
+Stay on the production v2 endpoint (the Beta variant gives no benefit here):
+
+this.ws = new WebSocket("wss://ws.kraken.com/v2");
+
+2. Subscription Payload
+const payload = {
+  method: "subscribe",
+  params: {
+    channel: "book",
+    symbol: [krakenSymbol],
+    depth: 10,        // optional: fetch top 10 levels for redundancy
+    snapshot: true
+  }
+};
+
+
+✅ This format is supported in v2 for "book".
+
+3. Message Handler
+
+Handle "book" updates in the main message loop:
+
+if (msg.channel === "book" && (msg.type === "update" || msg.type === "snapshot")) {
+  const updates = msg.data || [];
+  for (const update of updates) {
+    const krakenPair = update.symbol;
+    const internalSymbol = mapKrakenPairToInternal(krakenPair);
+    if (!internalSymbol) continue;
+
+    // Extract best bid/ask
+    const bestBid = parseFloat(update.bid?.[0]?.price ?? update.bids?.[0]?.price ?? 0);
+    const bestAsk = parseFloat(update.ask?.[0]?.price ?? update.asks?.[0]?.price ?? 0);
+    if (bestBid > 0 && bestAsk > 0) {
+      const midpoint = (bestBid + bestAsk) / 2;
+
+      // Update Sentinel health
+      const stats = this.symbolStats.get(internalSymbol);
+      if (stats) {
+        stats.lastUpdate = Date.now();
+        stats.warningLogged = false;
+      }
+
+      // Update the live pricing cache (v1-style format)
+      const safeData = { a: [String(bestAsk)], b: [String(bestBid)], c: [String(midpoint)] };
+      livePricingAdapter.updateFromWebSocket(internalSymbol, safeData);
+
+      // Optional: Logging
+      // console.log(`[8.9.4][WS_BOOK_TICK] ${internalSymbol} bid=${bestBid} ask=${bestAsk} mid=${midpoint}`);
+    }
+  }
+}
+
+4. Behavior Summary
+Pair Type	Feed Source	Update Trigger	Notes
+High-volume	"ticker"	Trade updates	Already fine
+Low-volume	"book"	BBO updates	Continuous
+Fallback	REST	(bid+ask)/2	Harmonized (8.9.2)
+
+Both "ticker" and "book" can coexist — you can:
+
+Subscribe high-liquidity pairs (BTC, ETH) to "ticker".
+
+Subscribe all others to "book".
+
+5. Verification Protocol
+
+Restart the trading engine.
+
+Observe logs for:
+
+[8.9.4][WS_BOOK_TICK] SYMBOL bid=... ask=... mid=...
+
+
+Confirm Active Trades UI updates for previously silent pairs (e.g., ONDO/EUR, SUSHI/USD).
+
+Confirm [Sentinel] Resetting channel warnings disappear.
+
+Ensure fallback REST calls drop by >80%.
+
+6. Benefits
+Advantage	Description
+Continuous data	Even illiquid pairs get constant midprice updates
+Lower latency	Orderbook feeds emit multiple times per second
+Unified price logic	(bid + ask)/2 consistent across WS and REST
+Future-safe	The "book" channel is part of Kraken’s core spec — no reliance on Beta
+7. Rollback Option
+
+If "book" causes excessive traffic (too many updates), limit it to:
+
+if (volumeTier !== "HIGH") subscribeToBook();
+else subscribeToTicker();
+
+
+That way, your Tiered Sentinel from 8.8.5 controls channel type automatically.
+
+✅ Outcome
+
+Once Directive 8.9.4 is implemented:
+
+You’ll have real-time continuous pricing for every pair.
+
+REST fallback will become nearly obsolete except during downtime.
+
+Sentinel and price cache stay fully in sync.

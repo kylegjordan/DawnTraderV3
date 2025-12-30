@@ -168,7 +168,7 @@ export class KrakenWebSocketAdapter {
   private readonly PING_INACTIVITY_MS = 20000; // Send ping if no message for 20s
   private readonly MAX_RECONNECT_DELAY_BACKOFF_MS = 60000; // Max 60s backoff
   
-  private readonly WS_URL = 'wss://beta-ws.kraken.com/v2'; // 8.9.3: Beta endpoint for event_trigger: 'bbo' support
+  private readonly WS_URL = 'wss://ws.kraken.com/v2'; // 8.9.4: Production v2 endpoint with book channel
   private readonly MAX_RECONNECT_ATTEMPTS = 10;
   private readonly BASE_RECONNECT_DELAY_MS = 1000;
   private readonly MAX_RECONNECT_DELAY_MS = 30000;
@@ -351,6 +351,15 @@ export class KrakenWebSocketAdapter {
       if (message && typeof message === 'object' && message.channel === 'ticker') {
         if (message.type === 'update' || message.type === 'snapshot') {
           this.handleV2TickerUpdate(message);
+        }
+        return;
+      }
+      
+      // 8.9.4: Handle v2 Book Updates for continuous midpoint pricing
+      // v2 format: { channel: "book", type: "update"|"snapshot", data: [{symbol, bids, asks, ...}] }
+      if (message && typeof message === 'object' && message.channel === 'book') {
+        if (message.type === 'update' || message.type === 'snapshot') {
+          this.handleV2BookUpdate(message);
         }
         return;
       }
@@ -574,6 +583,80 @@ export class KrakenWebSocketAdapter {
             bid,
             ask,
             source: 'ws_v2',
+            timestamp: new Date().toISOString()
+          }
+        }).catch(err => console.error(`[${this.MODULE_NAME}] Broadcast error:`, err));
+      }
+    }
+  }
+
+  /**
+   * 8.9.4: Handle v2 book (orderbook) updates for continuous midpoint pricing
+   * v2 format: { channel: "book", type: "update"|"snapshot", data: [{symbol, bids, asks, ...}] }
+   * This provides BBO updates on every bid/ask change, solving the frozen price issue for low-volume pairs
+   */
+  private handleV2BookUpdate(message: any): void {
+    const updates = message.data || [];
+    
+    for (const update of updates) {
+      const krakenPair = update.symbol;
+      const internalSymbol = this.mapKrakenPairToInternalSymbol(krakenPair);
+      
+      if (!internalSymbol) {
+        continue;
+      }
+      
+      // Extract best bid/ask from orderbook
+      // v2 book format uses 'bids' and 'asks' arrays with objects like {price: "123.45", qty: "1.0"}
+      const bestBidEntry = update.bids?.[0] || update.bid?.[0];
+      const bestAskEntry = update.asks?.[0] || update.ask?.[0];
+      
+      const bestBid = parseFloat(bestBidEntry?.price ?? bestBidEntry ?? 0);
+      const bestAsk = parseFloat(bestAskEntry?.price ?? bestAskEntry ?? 0);
+      
+      if (bestBid <= 0 || bestAsk <= 0) {
+        continue;
+      }
+      
+      // 8.9.4: Calculate midpoint from orderbook BBO
+      const midpoint = (bestBid + bestAsk) / 2;
+      
+      const now = Date.now();
+      
+      // Update Sentinel Health stats
+      const stats = this.symbolStats.get(internalSymbol) || {
+        lastUpdate: 0,
+        updateCount: 0,
+        intervals: [],
+        firstUpdate: now,
+        warningLogged: false
+      };
+      
+      stats.lastUpdate = now;
+      stats.warningLogged = false;
+      this.symbolStats.set(internalSymbol, stats);
+      
+      // Log first book update for each symbol
+      if (!this.firstTickReceived.has(internalSymbol + '_book')) {
+        this.firstTickReceived.add(internalSymbol + '_book');
+        console.log(`[8.9.4][WS_BOOK_TICK] FIRST: ${internalSymbol} bid=${bestBid} ask=${bestAsk} mid=${midpoint.toFixed(6)}`);
+      }
+      
+      // Update LivePricingAdapter with midpoint price (using 'kraken_ws' source type)
+      livePricingAdapter.updateFromWebSocket(internalSymbol, midpoint, 'kraken_ws');
+      
+      // Broadcast to connected clients (throttled - using separate throttle key for book updates)
+      const lastBroadcast = this.lastBroadcastTime.get(internalSymbol) || 0;
+      if (now - lastBroadcast >= this.BROADCAST_THROTTLE_MS) {
+        this.lastBroadcastTime.set(internalSymbol, now);
+        contextBridge.broadcast({
+          type: 'price_updated',
+          payload: {
+            symbol: internalSymbol,
+            price: midpoint,
+            bid: bestBid,
+            ask: bestAsk,
+            source: 'ws_book',
             timestamp: new Date().toISOString()
           }
         }).catch(err => console.error(`[${this.MODULE_NAME}] Broadcast error:`, err));
@@ -872,29 +955,42 @@ export class KrakenWebSocketAdapter {
       return;
     }
     
-    // 8.9.3: v2 subscription format with BBO trigger for continuous updates
-    // event_trigger: 'bbo' sends updates on any bid/offer change (not just trades)
-    // This is critical for low-volume pairs where trades are infrequent
-    const subscribeMessage = {
+    // 8.9.4: Subscribe to BOTH ticker and book channels
+    // - ticker: provides trade-based updates (fast for liquid pairs)
+    // - book: provides BBO updates (continuous for illiquid pairs)
+    const tickerSubscribe = {
       method: 'subscribe',
       params: {
         channel: 'ticker',
         symbol: krakenSymbols,
-        event_trigger: 'bbo',  // 8.9.3: Continuous updates on best-bid-offer changes
-        snapshot: true  // Get immediate price data
+        snapshot: true
       }
     };
     
-    // I7-WS-SUBSCRIBE: Log exact payload being sent
-    console.log("[I7-WS-SEND]", JSON.stringify(subscribeMessage));
+    const bookSubscribe = {
+      method: 'subscribe',
+      params: {
+        channel: 'book',
+        symbol: krakenSymbols,
+        depth: 10,  // Top 10 levels for redundancy
+        snapshot: true
+      }
+    };
+    
+    // I7-WS-SUBSCRIBE: Log exact payloads being sent
+    console.log("[I7-WS-SEND][ticker]", JSON.stringify(tickerSubscribe));
+    console.log("[I7-WS-SEND][book]", JSON.stringify(bookSubscribe));
     
     try {
-      this.ws?.send(JSON.stringify(subscribeMessage));
-      console.log(`[${this.MODULE_NAME}] Subscribing to ${krakenSymbols.length} symbols: ${krakenSymbols.slice(0, 5).join(', ')}${krakenSymbols.length > 5 ? '...' : ''}`);
+      // 8.9.4: Send both ticker and book subscriptions
+      this.ws?.send(JSON.stringify(tickerSubscribe));
+      this.ws?.send(JSON.stringify(bookSubscribe));
+      console.log(`[${this.MODULE_NAME}] Subscribing to ${krakenSymbols.length} symbols (ticker+book): ${krakenSymbols.slice(0, 5).join(', ')}${krakenSymbols.length > 5 ? '...' : ''}`);
       
       // Phase 8.8.3-I6-FIX: Enhanced diagnostic log after subscription update
       console.log('[8.8.3-I6-FIX][WS_SUB_SENT]', {
         sentSymbols: krakenSymbols,
+        channels: ['ticker', 'book'],
         currentSubscribed: Array.from(this.subscribedSymbols),
         pendingCount: this.pendingSubscriptions.size,
         totalAfterSend: this.subscribedSymbols.size + krakenSymbols.length,
