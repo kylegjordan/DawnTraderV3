@@ -237,14 +237,14 @@ function formatNumber(value: number, decimals: number = 2): string {
   });
 }
 
-// Phase 8.8.3-I9 A2: Format volume with units (M/K)
+// Phase 8.8.3-I9 A2: Format volume with units (M/K) - coin count, not dollar amount
 function formatVolume(volume: number): string {
   if (volume >= 1000000) {
-    return `$${(volume / 1000000).toFixed(1)}M`;
+    return `${(volume / 1000000).toFixed(1)}M`;
   } else if (volume >= 1000) {
-    return `$${(volume / 1000).toFixed(0)}K`;
+    return `${(volume / 1000).toFixed(0)}K`;
   }
-  return `$${volume.toFixed(0)}`;
+  return `${volume.toFixed(0)}`;
 }
 
 function HealthIndicator({ health }: { health: 'green' | 'yellow' | 'red' }) {

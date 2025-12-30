@@ -1002,7 +1002,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
             <span className="font-mono font-semibold">${portfolioData.totalPositionValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
           <div className="flex items-center gap-1 text-xs md:text-sm">
-            <span className="text-muted-foreground">Open/Slots:</span>
+            <span className="text-muted-foreground">Open Trades/Slots Available:</span>
             <span className="font-mono font-semibold">{portfolioData.openTradesCount ?? 0} / {portfolioData.slotsAvailable ?? 0}</span>
           </div>
         </div>
