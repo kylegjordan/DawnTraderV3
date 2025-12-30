@@ -1,0 +1,195 @@
+🚀 Directive 8.9.0 — Kraken WebSocket v2 Upgrade (Production Version)
+Target System
+
+Dawn Trader v3.1 Infrastructure
+
+Files Modified:
+
+server/services/kraken-websocket-adapter.ts
+
+server/markets/kraken-symbol-resolver.ts (reuse, no schema changes)
+
+server/services/live-pricing-adapter.ts (adapter compatibility)
+
+server/types/kraken-ws.d.ts (new v2 interface definitions)
+
+1️⃣ Objective
+
+Upgrade the market data pipeline from Kraken WebSocket v1 to WebSocket v2, enabling continuous ticker updates (Best Bid/Offer + Trade events) across all pairs — even low-volume assets — while maintaining backward compatibility with the existing LivePricingAdapter.
+
+2️⃣ Context
+Version	Endpoint	Trigger	Schema	Behavior
+v1	wss://ws.kraken.com	Trades only	Short keys (a, b, c, v)	Silent on illiquid pairs
+v2	wss://ws.kraken.com/v2	Trades + Bid/Ask changes	Verbose keys (ask, bid, close, volume)	Continuous feed for all pairs
+
+Kraken v2 requires no account tier upgrade and no API authentication for market data.
+
+3️⃣ Implementation Instructions
+3.1 Connection
+this.ws = new WebSocket("wss://ws.kraken.com/v2");
+
+3.2 Subscription Logic (v2 Format)
+public subscribe(internalSymbol: string) {
+  const krakenSymbol = toKrakenWS(internalSymbol); // Keep mapper for legacy safety
+
+  const payload = {
+    method: "subscribe",
+    params: {
+      channel: "ticker",
+      symbol: [krakenSymbol],
+      snapshot: true // Immediate ticker snapshot
+    }
+  };
+
+  if (this.isConnected) {
+    this.safeSend(payload);
+    this.subscribedSymbols.add(internalSymbol);
+    console.log(`[8.9.0][WS_SUB_V2] Requesting: ${krakenSymbol}`);
+  }
+}
+
+3.3 Message Parser (with Schema Translation Layer)
+this.ws.on("message", (data) => {
+  let msg;
+  try { msg = JSON.parse(data.toString()); } catch { return; }
+
+  // 1. Handle Heartbeats
+  if (msg.channel === "heartbeat") {
+    this.lastGlobalHeartbeat = Date.now();
+    return;
+  }
+
+  // 2. Handle Subscription Status
+  if (msg.method === "subscribe") {
+    if (msg.success) {
+      console.log(`[8.9.0][WS] Sub OK: ${msg.result?.symbol}`);
+    } else {
+      console.error(`[8.9.0][WS] Sub Error: ${msg.error}`);
+    }
+    return;
+  }
+
+  // 3. Handle Ticker Updates
+  if (msg.channel === "ticker" && (msg.type === "update" || msg.type === "snapshot")) {
+    const updates = msg.data || [];
+
+    for (const update of updates) {
+      const krakenPair = update.symbol;
+      const internalSymbol = mapKrakenPairToInternal(krakenPair);
+      if (!internalSymbol) continue;
+
+      // A. Update Sentinel Health
+      const stats = this.symbolStats.get(internalSymbol);
+      if (stats) {
+        stats.lastUpdate = Date.now();
+        stats.warningLogged = false;
+      }
+
+      // B. Translate Kraken v2 format to Dawn Trader’s expected v1 format
+      // v2 → v1 key mapping for compatibility
+      const safeData = {
+        a: [String(update.ask || update.a?.[0] || 0)],
+        b: [String(update.bid || update.b?.[0] || 0)],
+        c: [String(update.last || update.close || update.c?.[0] || 0)]
+      };
+
+      // C. Push to LivePricingAdapter
+      try {
+        livePricingAdapter.updateFromWebSocket(internalSymbol, safeData);
+        console.log(`[8.9.0][WS_TICK_V2] ${internalSymbol} ask=${safeData.a[0]} bid=${safeData.b[0]}`);
+      } catch (err) {
+        console.error(`[8.9.0][ERR_TICK_V2] ${internalSymbol}:`, err);
+      }
+    }
+  }
+});
+
+
+✅ Why this translation is critical:
+LivePricingAdapter still expects the v1 compact structure { a: [], b: [], c: [] }.
+Without this conversion, no price updates would propagate to pricing cache or open trades.
+
+3.4 Unsubscribe Logic (v2 Format)
+public unsubscribe(internalSymbol: string) {
+  const krakenSymbol = toKrakenWS(internalSymbol);
+  const payload = {
+    method: "unsubscribe",
+    params: {
+      channel: "ticker",
+      symbol: [krakenSymbol]
+    }
+  };
+
+  if (this.isConnected) {
+    this.safeSend(payload);
+    this.subscribedSymbols.delete(internalSymbol);
+    console.log(`[8.9.0][WS_UNSUB_V2] ${krakenSymbol}`);
+  }
+}
+
+3.5 Type Definitions
+
+Add under server/types/kraken-ws.d.ts:
+
+export interface KrakenV2Ticker {
+  channel: "ticker";
+  type: "update" | "snapshot";
+  data: Array<{
+    symbol: string;
+    ask?: string;
+    askQty?: string;
+    bid?: string;
+    bidQty?: string;
+    last?: string;
+    close?: string;
+    volume?: string;
+  }>;
+}
+
+4️⃣ Verification Protocol
+4.1 Expected Logs
+Type	Example
+Subscription	[8.9.0][WS_SUB_V2] Requesting: BTC/USD
+Confirmation	[8.9.0][WS] Sub OK: BTC/USD
+Data Stream	[8.9.0][WS_TICK_V2] BTC/USD ask=42987.2 bid=42987.1
+Error Handling	[8.9.0][ERR_TICK_V2] BTC/USD
+4.2 Live Validation
+Check	Expected Result
+All pairs show Source = WS in UI	✅
+No [Sentinel] Resetting channel logs	✅
+REST fallbacks drop >90%	✅
+/logs/directive_8.9.0_validation.log shows ≥1 tick/symbol every 10s	✅
+4.3 Verification Artifacts
+File	Purpose
+/logs/directive_8.9.0_validation.log	Tick stream + Sentinel health
+/logs/directive_8.9.0_activity.log	Sub/unsub actions
+/docs/directive_8.9.0_upgrade_notes.md	Technical overview
+/screenshots/ui_8.9.0_ws_v2.png	UI Source validation screenshot
+5️⃣ Rollback Plan
+
+Preserve legacy v1 adapter as:
+
+server/services/kraken-websocket-adapter.legacy.ts
+
+
+Revert WebSocket URL and payload schema if Kraken v2 becomes unstable.
+
+6️⃣ Expected Results
+Metric	Before	After
+WS Ticker Coverage	~10% (only high-volume pairs)	100% of pairs
+REST Fallbacks	Frequent	Rare (failover only)
+Tick Latency	3–5 seconds	≤1 second
+Sentinel Stability	Frequent resets	None
+✅ Summary
+
+This version:
+
+Correctly upgrades Dawn Trader to Kraken WS v2.
+
+Adds a schema translation layer ensuring LivePricingAdapter compatibility.
+
+Fully integrates with Sentinel health tracking.
+
+Requires no changes to trading credentials or strategy logic.
+
+Solves the “WebSocket → REST fallback” issue permanently.

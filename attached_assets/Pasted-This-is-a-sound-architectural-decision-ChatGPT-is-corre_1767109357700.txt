@@ -1,0 +1,126 @@
+This is a sound architectural decision.
+
+ChatGPT is correct: leaving the secondary feed (market-data-ws.ts) on v1 while upgrading the primary one would cause Data Drift. Your active trades would see one price, but your Strategy Engine (Cortex) would see a different (older) price. This causes "ghost signals" where the bot thinks a trade is valid when it isn't.
+
+I strongly support Option A (Dual Upgrade) with the Shared Utility for translation. This ensures both services speak the exact same language.
+
+Here is the Final, Executable Directive 8.9.0-B. It explicitly defines the code for the new shared utility to prevent any confusion during implementation.
+
+🚀 Directive 8.9.0-B — Dual Kraken WebSocket v2 Upgrade
+Target System: Dawn Trader v3.1 Infrastructure Objective: Upgrade BOTH WebSocket ingress points (Execution & Analytics) to Kraken v2 to ensure a unified, continuous data stream for all system components.
+
+1. Context
+Old (v1): wss://ws.kraken.com (Updates on trades only. Silent on low vol).
+
+New (v2): wss://ws.kraken.com/v2 (Updates on BBO/Trades. Continuous).
+
+Impact: Fixes data starvation for active trades AND ensures Cortex strategies utilize real-time data.
+
+2. Implementation Instructions
+2.1 Step 1: Create the Translation Utility
+File: server/services/market-data/kraken-v2-translator.ts (New File) Action: Create this utility to ensure both adapters translate data identically.
+
+TypeScript
+
+// server/services/market-data/kraken-v2-translator.ts
+
+export interface KrakenV2Update {
+  symbol: string;
+  ask?: number;
+  bid?: number;
+  last?: number;
+  close?: number; // v2 sometimes uses 'close' or 'last'
+  volume?: number;
+  // Fallback for hybrid/legacy fields
+  a?: string[]; 
+  b?: string[]; 
+  c?: string[];
+}
+
+/**
+ * Translates Kraken v2 verbose objects into the compact v1 format
+ * expected by Dawn Trader's internal pricing adapters.
+ * Output: { a: [ask], b: [bid], c: [close] }
+ */
+export function translateV2ToV1(update: KrakenV2Update) {
+  return {
+    a: [String(update.ask || update.a?.[0] || 0)],
+    b: [String(update.bid || update.b?.[0] || 0)],
+    c: [String(update.last || update.close || update.c?.[0] || 0)]
+  };
+}
+2.2 Step 2: Upgrade Primary Adapter (Execution)
+File: server/services/kraken-websocket-adapter.ts
+
+Connection: this.ws = new WebSocket("wss://ws.kraken.com/v2");
+
+Import: import { translateV2ToV1 } from './market-data/kraken-v2-translator';
+
+Subscription Payload:
+
+TypeScript
+
+const payload = {
+  method: "subscribe",
+  params: { channel: "ticker", symbol: [krakenSymbol], snapshot: true }
+};
+Message Parser:
+
+TypeScript
+
+// Inside ws.on('message')...
+if (msg.channel === "ticker" && (msg.type === "update" || msg.type === "snapshot")) {
+  const updates = msg.data || [];
+  for (const update of updates) {
+    const krakenPair = update.symbol;
+    const internalSymbol = mapKrakenPairToInternal(krakenPair);
+    if (!internalSymbol) continue;
+
+    // A. Sentinel Update
+    const stats = this.symbolStats.get(internalSymbol);
+    if (stats) { stats.lastUpdate = Date.now(); stats.warningLogged = false; }
+
+    // B. Translation & Update
+    const safeData = translateV2ToV1(update);
+    livePricingAdapter.updateFromWebSocket(internalSymbol, safeData);
+    // console.log(`[8.9.0][WS_TICK_V2] ${internalSymbol}`);
+  }
+}
+2.3 Step 3: Upgrade Secondary Adapter (Analytics)
+File: server/services/market-data/market-data-ws.ts
+
+Connection: this.ws = new WebSocket("wss://ws.kraken.com/v2");
+
+Import: import { translateV2ToV1 } from './kraken-v2-translator';
+
+Subscription Payload: Same v2 format as above.
+
+Message Parser:
+
+TypeScript
+
+// Inside ws.on('message')...
+if (msg.channel === "ticker" && (msg.type === "update" || msg.type === "snapshot")) {
+  const updates = msg.data || [];
+  for (const update of updates) {
+    // ... (Symbol mapping logic) ...
+
+    // B. Translation & Forwarding
+    // Ensure Coordinator receives the normalized v1 format
+    const safeData = translateV2ToV1(update);
+    this.coordinator.handleTickerUpdate(internalSymbol, safeData);
+
+    // console.log(`[8.9.0][WS_ANALYTICS_V2] ${internalSymbol}`);
+  }
+}
+3. Verification Protocol
+Execution Logs: Check for [WS_TICK_V2] (Primary Adapter).
+
+Analytics Logs: Check for [WS_ANALYTICS_V2] (Secondary Adapter).
+
+Integrity: Verify FeedIntegrityMonitor is silent (no "Stale Feed" alarms).
+
+Consistency: Ensure Active Trades UI matches Strategy dashboard.
+
+4. Rollback Plan
+Preserve both original files as *.legacy.ts before applying changes. If v2 fails, revert both files simultaneously.
