@@ -48,7 +48,7 @@ export class MarketDataWebSocket extends EventEmitter {
   constructor(config?: Partial<WSConfig>) {
     super();
     this.config = {
-      url: config?.url || 'wss://ws.kraken.com/v2', // 8.9.0-B: Upgraded to v2
+      url: config?.url || 'wss://beta-ws.kraken.com/v2', // 8.9.3: Beta endpoint for event_trigger: 'bbo' support
       heartbeatInterval: config?.heartbeatInterval || 30000,
       reconnectDelayBase: config?.reconnectDelayBase || 1000,
       reconnectDelayMax: config?.reconnectDelayMax || 30000,
@@ -183,13 +183,14 @@ export class MarketDataWebSocket extends EventEmitter {
 
     this.subscribedPairs.add(pair);
 
-    // 8.9.0-B/8.9.1: v2 subscription format for ticker
-    // Note: v2 ticker sends both trade and quote updates by default
+    // 8.9.3: v2 subscription format with BBO trigger for continuous updates
+    // event_trigger: 'bbo' sends updates on any bid/offer change (not just trades)
     const tickerSub = {
       method: 'subscribe',
       params: {
         channel: 'ticker',
         symbol: [pair],
+        event_trigger: 'bbo',  // 8.9.3: Continuous updates on best-bid-offer changes
         snapshot: true
       }
     };

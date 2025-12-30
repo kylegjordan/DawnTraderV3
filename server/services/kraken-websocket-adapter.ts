@@ -168,7 +168,7 @@ export class KrakenWebSocketAdapter {
   private readonly PING_INACTIVITY_MS = 20000; // Send ping if no message for 20s
   private readonly MAX_RECONNECT_DELAY_BACKOFF_MS = 60000; // Max 60s backoff
   
-  private readonly WS_URL = 'wss://ws.kraken.com/v2'; // 8.9.0-B: Upgraded to v2
+  private readonly WS_URL = 'wss://beta-ws.kraken.com/v2'; // 8.9.3: Beta endpoint for event_trigger: 'bbo' support
   private readonly MAX_RECONNECT_ATTEMPTS = 10;
   private readonly BASE_RECONNECT_DELAY_MS = 1000;
   private readonly MAX_RECONNECT_DELAY_MS = 30000;
@@ -872,13 +872,15 @@ export class KrakenWebSocketAdapter {
       return;
     }
     
-    // 8.9.0-B/8.9.1: v2 subscription format with snapshot
-    // Note: v2 ticker sends both trade and quote updates by default
+    // 8.9.3: v2 subscription format with BBO trigger for continuous updates
+    // event_trigger: 'bbo' sends updates on any bid/offer change (not just trades)
+    // This is critical for low-volume pairs where trades are infrequent
     const subscribeMessage = {
       method: 'subscribe',
       params: {
         channel: 'ticker',
         symbol: krakenSymbols,
+        event_trigger: 'bbo',  // 8.9.3: Continuous updates on best-bid-offer changes
         snapshot: true  // Get immediate price data
       }
     };
