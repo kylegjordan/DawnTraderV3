@@ -4,7 +4,8 @@
 
 **Target System:** Dawn Trader v3.1 Infrastructure  
 **Primary File:** `server/services/kraken-websocket-adapter.ts`  
-**Date:** 2025-12-30
+**Date:** 2025-12-30  
+**Status:** IMPLEMENTED (Architect Approved - 3rd Iteration)
 
 ## Objective
 
@@ -20,27 +21,28 @@ Fix the "Silent Failure" issue by:
 | Kraken sends ticker updates as arrays like `[42, data, "ticker", "XBT/USD"]` | Parser expected object messages |
 | Kraken uses ISO symbols (XBT/USD, XETH/USD) | System expects normalized names (BTC/USD, ETH/USD) |
 | Sentinel watches symbolStats.lastUpdate | Never refreshed → false "connection lost" resets |
+| tickerData can be array or object | Parser only handled object form |
+| warningLogged undefined in legacy entries | Sentinel issued false warnings |
 
-## Changes Implemented
+## Changes Implemented (Final Version)
 
-### 1. handleMessage() Refactored (Line 332-391)
-- Added explicit check for array vs object message format
-- System events (heartbeat, pong, subscriptionStatus) handled first
-- Array-formatted ticker data routed to handleTickerUpdate()
+### 1. handleMessage() Refactored - ARRAY-FIRST Processing
+- Process array ticker messages FIRST, before checking object events
+- Explicit event whitelist: `['heartbeat', 'pong', 'subscriptionStatus', 'systemStatus', 'error', 'info']`
+- Unrecognized events logged with `[8.8.9][WS] Unknown event type`
 - Added `[8.8.9][WS] Sub OK/Error` logging
 
-### 2. SymbolStats Interface Updated (Line 59-65)
-- Added `warningLogged?: boolean` property
-- Enables Sentinel to track warning state per symbol
-
-### 3. handleTickerUpdate() Enhanced (Line 493-513)
+### 2. handleTickerUpdate() Enhanced - tickerData Normalization
+- Normalizes rawTickerData to handle both object and array-batched forms:
+  ```typescript
+  const tickerData = Array.isArray(rawTickerData) ? rawTickerData[0] : rawTickerData;
+  ```
 - Reset `warningLogged = false` on each tick
 - Added `[8.8.9][WS_TICK]` logging for validation
-- Ensures Sentinel timestamps refresh correctly
 
-### 4. subscribeToSymbols() Updated (Line 700-715)
-- Added `[8.8.9][WS_SUB]` logging with Kraken symbol mapping
-- Shows both Kraken format and internal symbol for debugging
+### 3. SymbolStats Interface Updated
+- Added `warningLogged?: boolean` property with default `false`
+- Enables Sentinel to track warning state per symbol
 
 ## Log Tags
 
