@@ -183,13 +183,13 @@ export class MarketDataWebSocket extends EventEmitter {
 
     this.subscribedPairs.add(pair);
 
-    // 8.9.0-B: v2 subscription format for ticker with BBO trigger
+    // 8.9.0-B/8.9.1: v2 subscription format for ticker
+    // Note: v2 ticker sends both trade and quote updates by default
     const tickerSub = {
       method: 'subscribe',
       params: {
         channel: 'ticker',
         symbol: [pair],
-        event_trigger: 'bbo',
         snapshot: true
       }
     };

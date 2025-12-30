@@ -37,13 +37,33 @@ export interface V1TickerFormat {
 
 /**
  * Translates Kraken v2 verbose objects into the compact v1 format
- * Output: { a: [ask], b: [bid], c: [close], v: [volume] }
+ * Output: { a: [ask], b: [bid], c: [close/markPrice], v: [volume] }
+ * 
+ * Directive 8.9.1: Uses Midpoint ((Bid + Ask) / 2) as Mark Price instead of
+ * Last Trade price, ensuring continuous real-time updates from BBO feed
+ * even on low-volume pairs where trades are infrequent.
  */
 export function translateV2ToV1(update: KrakenV2TickerUpdate): V1TickerFormat {
+  // 1. Extract raw values as numbers (safely defaulting to 0)
+  const bid = Number(update.bid ?? update.b?.[0] ?? 0);
+  const ask = Number(update.ask ?? update.a?.[0] ?? 0);
+  const last = Number(update.last ?? update.close ?? update.c?.[0] ?? 0);
+  
+  // 2. Calculate Mark Price (Midpoint)
+  // We prioritize Midpoint because 'Last' is often stale on low-volume pairs.
+  // We only use 'Last' if the order book is empty (bid or ask is 0).
+  let markPrice = last;
+  
+  if (bid > 0 && ask > 0) {
+    markPrice = (bid + ask) / 2;
+  }
+
+  // 3. Return normalized v1 structure
+  // 'c' field carries the Mark Price to the UI/Engine
   return {
-    a: [String(update.ask ?? update.a?.[0] ?? 0), String(update.ask_qty ?? 0)],
-    b: [String(update.bid ?? update.b?.[0] ?? 0), String(update.bid_qty ?? 0)],
-    c: [String(update.last ?? update.close ?? update.c?.[0] ?? 0)],
+    a: [String(ask), String(update.ask_qty ?? 0)],
+    b: [String(bid), String(update.bid_qty ?? 0)],
+    c: [String(markPrice)],
     v: update.volume !== undefined ? [String(update.volume)] : update.v
   };
 }

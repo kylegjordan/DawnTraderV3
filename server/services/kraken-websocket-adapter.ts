@@ -872,14 +872,14 @@ export class KrakenWebSocketAdapter {
       return;
     }
     
-    // 8.9.0-B: v2 subscription format with BBO trigger and snapshot
+    // 8.9.0-B/8.9.1: v2 subscription format with snapshot
+    // Note: v2 ticker sends both trade and quote updates by default
     const subscribeMessage = {
       method: 'subscribe',
       params: {
         channel: 'ticker',
         symbol: krakenSymbols,
-        event_trigger: 'bbo', // Updates on any bid/offer change
-        snapshot: true        // Get immediate price data
+        snapshot: true  // Get immediate price data
       }
     };
     

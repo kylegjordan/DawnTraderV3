@@ -55,6 +55,10 @@ Tiered Sentinel Architecture (Phase 8.8.5) resolves systemic WebSocket subscript
 
 Filter Synchronization & Legacy Deprecation (Phase 8.8.7) fixes critical filter bypass where pairs failing FX5 filters were still generating trading signals. The Signal Orchestrator and VTS Runner now use `activeFilterPool.getActivePool()` instead of the deprecated `FilteredPairsService.getValidPairs()`. The `FilteredPairsService` is deprecated (renamed to `filtered-pairs.legacy.service.ts`) and retained only for UI analytics in `MarketEvaluationService`. The `ActiveFilterPool` service provides 5-minute telemetry logging and initialization verification on server startup. This ensures all signal generation uses only FX5-verified pairs, preventing the 88 signals vs 1-4 survivors discrepancy.
 
+Kraken WebSocket v2 Upgrade (Directive 8.9.0-B) migrates both WebSocket adapters from Kraken v1 API to v2 API (`wss://ws.kraken.com/v2`). This enables continuous real-time price updates using the v2 ticker channel which sends updates on any bid/offer change (not just trades). The v2 format uses object-based messages with `channel`, `type`, and `data` fields instead of v1's array format. A `kraken-v2-translator.ts` utility provides consistent data translation across both adapters.
+
+Mark Price Midpoint Valuation Fix (Directive 8.9.1) changes the "Current Price" calculation from Last Trade (which freezes on low-volume pairs) to Midpoint ((Bid + Ask) / 2). This ensures continuous real-time price updates for low-volume trading pairs (e.g., ENSO/EUR, ASTER, OP, EIGEN, ADA) where trades are infrequent but bid/ask quotes update constantly. The `translateV2ToV1` function calculates `markPrice = (bid + ask) / 2` when both values are available, falling back to `last` only when the order book is empty.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.

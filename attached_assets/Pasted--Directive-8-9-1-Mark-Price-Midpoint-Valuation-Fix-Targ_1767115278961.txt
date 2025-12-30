@@ -1,0 +1,50 @@
+🔧 Directive 8.9.1 — Mark Price (Midpoint) Valuation Fix
+Target System: server/services/market-data/kraken-v2-translator.ts Objective: Switch "Current Price" calculation from Last Trade (which freezes on low volume) to Midpoint ((Bid + Ask) / 2) to ensure continuous real-time updates from the BBO feed.
+
+1. Implementation Instructions
+File: server/services/market-data/kraken-v2-translator.ts
+
+Action: Update the translateV2ToV1 function logic.
+
+Current Logic: c: [last]
+
+New Logic: c: [midpoint || last]
+
+Replace the function with this optimized version:
+
+TypeScript
+
+export function translateV2ToV1(update: KrakenV2TickerUpdate): V1TickerFormat {
+  // 1. Extract raw values (safely defaulting to 0)
+  const bid = update.bid ?? update.b?.[0] ?? 0;
+  const ask = update.ask ?? update.a?.[0] ?? 0;
+  const last = update.last ?? update.close ?? update.c?.[0] ?? 0;
+  
+  // 2. Calculate Mark Price (Midpoint)
+  // We prioritize Midpoint because 'Last' is often stale on low-volume pairs.
+  // We only use 'Last' if the order book is empty (bid or ask is 0).
+  let markPrice = last;
+  
+  if (bid > 0 && ask > 0) {
+    markPrice = (Number(bid) + Number(ask)) / 2;
+  }
+
+  // 3. Return normalized v1 structure
+  // 'c' field carries the Mark Price to the UI/Engine
+  return {
+    a: [String(ask), String(update.ask_qty ?? 0)],
+    b: [String(bid), String(update.bid_qty ?? 0)],
+    c: [String(markPrice)], 
+    v: update.volume !== undefined ? [String(update.volume)] : update.v
+  };
+}
+2. Verification Steps
+After applying this fix:
+
+Check UI: Look at the Current price column for a low-volume pair (like ENSO/EUR).
+
+Expectation: It should be ticking constantly (matching the Bid/Ask moves), even if no trades are happening.
+
+Check PnL: Your Unrealized PnL will now fluctuate smoothly instead of jerking or freezing.
+
+Note to Replit: Ensure you cast bid and ask to Number() before adding them, otherwise you might concatenate strings (e.g., "0.612" + "0.613" = "0.6120.613"). The snippet above handles this correctly.
