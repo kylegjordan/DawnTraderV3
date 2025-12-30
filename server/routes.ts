@@ -8891,6 +8891,155 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ==========================================
+  // Phase 8.8.5: Tiered Sentinel Architecture API Endpoints
+  // ==========================================
+
+  // GET /api/diagnostics/8.8.5/health - Get WebSocket health metrics
+  apiRouter.get('/diagnostics/8.8.5/health', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const metrics = krakenWebSocketAdapter.getHealthMetrics();
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.5',
+        description: 'Tiered Sentinel WebSocket Health Metrics',
+        metrics
+      });
+    } catch (error: any) {
+      console.error('[8.8.5] Error fetching health metrics:', error);
+      res.status(500).json({ ok: false, error: 'Failed to fetch health metrics', message: error.message });
+    }
+  });
+
+  // GET /api/diagnostics/8.8.5/volume-tiers - Get VolumeClassifier tier assignments
+  apiRouter.get('/diagnostics/8.8.5/volume-tiers', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { volumeClassifier } = await import('./services/market-data/volume-classifier.js');
+      const stats = volumeClassifier.getStats();
+      const allTiers = volumeClassifier.getAllTiers();
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.5',
+        description: 'VolumeClassifier Tier Assignments',
+        stats,
+        tiers: allTiers
+      });
+    } catch (error: any) {
+      console.error('[8.8.5] Error fetching volume tiers:', error);
+      res.status(500).json({ ok: false, error: 'Failed to fetch volume tiers', message: error.message });
+    }
+  });
+
+  // POST /api/diagnostics/8.8.5/refresh-tiers - Refresh volume tier classifications
+  apiRouter.post('/diagnostics/8.8.5/refresh-tiers', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { volumeClassifier } = await import('./services/market-data/volume-classifier.js');
+      await volumeClassifier.refresh();
+      const stats = volumeClassifier.getStats();
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.5',
+        description: 'Volume tiers refreshed',
+        stats
+      });
+    } catch (error: any) {
+      console.error('[8.8.5] Error refreshing volume tiers:', error);
+      res.status(500).json({ ok: false, error: 'Failed to refresh volume tiers', message: error.message });
+    }
+  });
+
+  // GET /api/diagnostics/8.8.5/rate-limiter - Get REST rate limiter stats
+  apiRouter.get('/diagnostics/8.8.5/rate-limiter', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { restRateLimiter } = await import('./services/market-data/rest-rate-limiter.js');
+      const stats = restRateLimiter.getStats();
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.5',
+        description: 'REST Rate Limiter Statistics',
+        stats
+      });
+    } catch (error: any) {
+      console.error('[8.8.5] Error fetching rate limiter stats:', error);
+      res.status(500).json({ ok: false, error: 'Failed to fetch rate limiter stats', message: error.message });
+    }
+  });
+
+  // POST /api/diagnostics/8.8.5/reset-rate-limiter - Reset REST rate limiter
+  apiRouter.post('/diagnostics/8.8.5/reset-rate-limiter', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { restRateLimiter } = await import('./services/market-data/rest-rate-limiter.js');
+      restRateLimiter.reset();
+      const stats = restRateLimiter.getStats();
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.5',
+        description: 'REST rate limiter reset',
+        stats
+      });
+    } catch (error: any) {
+      console.error('[8.8.5] Error resetting rate limiter:', error);
+      res.status(500).json({ ok: false, error: 'Failed to reset rate limiter', message: error.message });
+    }
+  });
+
+  // POST /api/diagnostics/8.8.5/reset-health-metrics - Reset WebSocket health metrics
+  apiRouter.post('/diagnostics/8.8.5/reset-health-metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      krakenWebSocketAdapter.resetHealthMetrics();
+      const metrics = krakenWebSocketAdapter.getHealthMetrics();
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.5',
+        description: 'WebSocket health metrics reset',
+        metrics
+      });
+    } catch (error: any) {
+      console.error('[8.8.5] Error resetting health metrics:', error);
+      res.status(500).json({ ok: false, error: 'Failed to reset health metrics', message: error.message });
+    }
+  });
+
+  // GET /api/diagnostics/8.8.5/tier/:symbol - Get tier for a specific symbol
+  apiRouter.get('/diagnostics/8.8.5/tier/:symbol', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const symbol = req.params.symbol.replace('-', '/'); // Convert BTC-USD to BTC/USD
+      const { volumeClassifier, TIER_THRESHOLDS } = await import('./services/market-data/volume-classifier.js');
+      
+      const tier = volumeClassifier.getTier(symbol);
+      const thresholds = TIER_THRESHOLDS[tier];
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        phase: '8.8.5',
+        symbol,
+        tier,
+        thresholds: {
+          warnTimeoutMs: thresholds.warnTimeoutMs,
+          resetTimeoutMs: thresholds.resetTimeoutMs
+        }
+      });
+    } catch (error: any) {
+      console.error('[8.8.5] Error fetching symbol tier:', error);
+      res.status(500).json({ ok: false, error: 'Failed to fetch symbol tier', message: error.message });
+    }
+  });
+
   // POST /api/reb-2-12F/strategy-health - Run strategy health check (with mock data verification)
   apiRouter.post('/reb-2-12F/strategy-health', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {

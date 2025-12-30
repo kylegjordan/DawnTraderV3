@@ -2,6 +2,8 @@ import { contextBridge } from './context-bridge';
 import { normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver.js';
 import { priceTraceService } from './price-trace-service';
 import { priceCache } from './price-cache.js';
+import { restRateLimiter } from './market-data/rest-rate-limiter.js';
+import { krakenWebSocketAdapter } from './kraken-websocket-adapter.js';
 
 /**
  * Phase 27.F.15.D: Live Pricing Adapter
@@ -435,9 +437,21 @@ export class LivePricingAdapter {
   /**
    * Phase 8.8.3-I6: Fetch from Kraken public REST API
    * This is the PRIMARY fallback for Kraken-specific pairs when WebSocket is stale
+   * Phase 8.8.5: Integrated RestRateLimiter to prevent Kraken bans
    */
   private async fetchFromKrakenRest(symbol: string): Promise<number | null> {
     try {
+      // Phase 8.8.5: Check rate limiter before making REST call
+      if (!restRateLimiter.check(symbol)) {
+        const cached = this.priceCache.get(this.normalizeSymbol(symbol));
+        console.log(`[8.8.5][REST_BLOCKED] ${symbol}: Rate limited, using cached price=${cached?.price ?? 'none'}`);
+        krakenWebSocketAdapter.incrementRestFallbackBlocked();
+        return cached?.price ?? null;
+      }
+      
+      // Phase 8.8.5: REST call allowed
+      krakenWebSocketAdapter.incrementRestFallbackAllowed();
+      
       // Convert internal symbol to Kraken REST API format
       // Examples: XTZ/USD -> XTZUSD, XXRPZUSD -> XXRPZUSD, SUI/USD -> SUIUSD
       let krakenPair = symbol.replace('/', '');

@@ -696,6 +696,16 @@ app.use((req, res, next) => {
         livePricingAdapter.setWsSubscriptionChecker(() => krakenWebSocketAdapter.getSubscribedSymbols());
         console.log('[I7-WS-E] ✅ WebSocket subscription checker registered');
         
+        // Phase 8.8.5: Initialize VolumeClassifier before WebSocket starts
+        try {
+          const { volumeClassifier } = await import('./services/market-data/volume-classifier.js');
+          await volumeClassifier.init();
+          const stats = volumeClassifier.getStats();
+          console.log(`[8.8.5] ✅ VolumeClassifier initialized: ${stats.total} pairs (HIGH=${stats.high}, MID=${stats.mid}, LOW=${stats.low})`);
+        } catch (vcError) {
+          console.warn('[8.8.5] ⚠️ VolumeClassifier init failed (using fallback tiers):', vcError);
+        }
+        
         // Phase 8.8.3-I7-WS-STARTUP: Start WebSocket adapter during server boot
         // This enables real-time pricing for all clients immediately, not just when engine starts
         await krakenWebSocketAdapter.start();

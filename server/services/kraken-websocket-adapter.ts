@@ -13,6 +13,8 @@ import {
 import { priceTraceService } from './price-trace-service.js';
 import { krakenAssetPairsService } from '../markets/kraken-asset-pairs-service.js';
 import { priceCache } from './price-cache.js';
+import { volumeClassifier, VolumeTier, TIER_THRESHOLDS } from './market-data/volume-classifier.js';
+import * as fs from 'fs';
 
 /**
  * Phase 8.8.3-B3.6: Kraken WebSocket Price Engine
@@ -133,6 +135,29 @@ export class KrakenWebSocketAdapter {
   // Phase 8.8.3-I4 B4: Periodic price tick health logging
   private priceTickHealthInterval: NodeJS.Timeout | null = null;
   private openPositionSymbolsProvider: (() => string[] | Promise<string[]>) | null = null;
+  
+  // Phase 8.8.5: Tiered Sentinel Architecture
+  private lastGlobalHeartbeat: number = 0;
+  private lastMessageTime: number = 0;
+  private reconnectRetries: number = 0;
+  private globalHeartbeatMonitorInterval: NodeJS.Timeout | null = null;
+  private channelWatchdogTimers: Map<string, NodeJS.Timeout> = new Map();
+  private healthMetricsLoggerInterval: NodeJS.Timeout | null = null;
+  private startTime: number = Date.now();
+  
+  // Phase 8.8.5: Health metrics tracking
+  private sentinelResets: number = 0;
+  private heartbeatLatencies: number[] = [];
+  private restFallbacksBlocked: number = 0;
+  private restFallbacksAllowed: number = 0;
+  
+  // Phase 8.8.5: Configuration
+  // Note: Kraken sends heartbeats ~every 1-2s but only when there are active subscriptions
+  // We use lastMessageTime (any message) as the primary liveness check
+  private readonly GLOBAL_HEARTBEAT_CHECK_MS = 1000; // 1 Hz check
+  private readonly CONNECTION_LIVENESS_TIMEOUT_MS = 45000; // 45 seconds without ANY message = reconnect
+  private readonly PING_INACTIVITY_MS = 20000; // Send ping if no message for 20s
+  private readonly MAX_RECONNECT_DELAY_BACKOFF_MS = 60000; // Max 60s backoff
   
   private readonly WS_URL = 'wss://ws.kraken.com';
   private readonly MAX_RECONNECT_ATTEMPTS = 10;
@@ -266,6 +291,10 @@ export class KrakenWebSocketAdapter {
     
     this.startHeartbeat();
     
+    // Phase 8.8.5: Start global heartbeat monitor and health logger
+    this.startGlobalHeartbeatMonitor();
+    this.startHealthMetricsLogger();
+    
     if (this.pendingSubscriptions.size > 0) {
       console.log(`[${this.MODULE_NAME}] Subscribing to ${this.pendingSubscriptions.size} pending symbols`);
       this.subscribeToSymbols(Array.from(this.pendingSubscriptions));
@@ -298,12 +327,28 @@ export class KrakenWebSocketAdapter {
   }
 
   private handleMessage(data: WebSocket.Data): void {
+    // Phase 8.8.5: Update last message time for keep-alive logic
+    this.lastMessageTime = Date.now();
+    
     // I7-WS-RAW: Log raw incoming Kraken messages (first 200 chars)
     const rawStr = data.toString();
     console.log("[I7-WS-RAW]", rawStr.slice(0, 200));
     
     try {
       const message = JSON.parse(rawStr);
+      
+      // Phase 8.8.5: Track heartbeat events for global connection health
+      if (message.event === 'heartbeat') {
+        const now = Date.now();
+        if (this.lastGlobalHeartbeat > 0) {
+          const latency = now - this.lastGlobalHeartbeat;
+          this.heartbeatLatencies.push(latency);
+          if (this.heartbeatLatencies.length > 60) {
+            this.heartbeatLatencies.shift();
+          }
+        }
+        this.lastGlobalHeartbeat = now;
+      }
       
       if (message.event) {
         this.handleSystemMessage(message);
@@ -2236,6 +2281,312 @@ export class KrakenWebSocketAdapter {
       tickAges,
       summary
     };
+  }
+  // ==========================================
+  // Phase 8.8.5: Tiered Sentinel Architecture
+  // ==========================================
+
+  /**
+   * Phase 8.8.5: Start global heartbeat monitor (1 Hz)
+   * Monitors connection health and sends keep-alive pings
+   */
+  private startGlobalHeartbeatMonitor(): void {
+    if (this.globalHeartbeatMonitorInterval) {
+      clearInterval(this.globalHeartbeatMonitorInterval);
+    }
+
+    console.log('[8.8.5][HEARTBEAT] Starting global heartbeat monitor (1 Hz)');
+    this.lastGlobalHeartbeat = Date.now();
+    this.lastMessageTime = Date.now();
+
+    this.globalHeartbeatMonitorInterval = setInterval(() => {
+      const now = Date.now();
+      const messageAgeMs = now - this.lastMessageTime;
+      
+      // Phase 8.8.5: Check for stale connection (no messages in 45s)
+      // This is more lenient than checking heartbeat specifically because:
+      // 1. Kraken only sends heartbeats when there are active subscriptions
+      // 2. During idle periods, we rely on pings/pongs to keep connection alive
+      if (messageAgeMs > this.CONNECTION_LIVENESS_TIMEOUT_MS) {
+        console.warn(`[8.8.5][HEARTBEAT] No messages in ${messageAgeMs}ms (threshold: ${this.CONNECTION_LIVENESS_TIMEOUT_MS}ms), triggering reconnect`);
+        this.reconnectWithBackoff();
+        return;
+      }
+      
+      // Send keep-alive ping if no messages received in 20s
+      if (messageAgeMs > this.PING_INACTIVITY_MS) {
+        this.sendKeepalivePing();
+      }
+    }, this.GLOBAL_HEARTBEAT_CHECK_MS);
+  }
+
+  /**
+   * Phase 8.8.5: Stop global heartbeat monitor
+   */
+  private stopGlobalHeartbeatMonitor(): void {
+    if (this.globalHeartbeatMonitorInterval) {
+      clearInterval(this.globalHeartbeatMonitorInterval);
+      this.globalHeartbeatMonitorInterval = null;
+      console.log('[8.8.5][HEARTBEAT] Stopped global heartbeat monitor');
+    }
+  }
+
+  /**
+   * Phase 8.8.5: Send keep-alive ping to prevent proxy disconnection
+   */
+  private sendKeepalivePing(): void {
+    if (!this.ws || !this.isConnected) return;
+    
+    try {
+      const pingMessage = JSON.stringify({ event: 'ping' });
+      this.ws.send(pingMessage);
+      console.log('[8.8.5][PING] Sent keep-alive ping');
+    } catch (error) {
+      console.error('[8.8.5][PING] Failed to send keep-alive:', error);
+    }
+  }
+
+  /**
+   * Phase 8.8.5: Reconnect with exponential backoff
+   */
+  private reconnectWithBackoff(): void {
+    const delay = Math.min(
+      this.BASE_RECONNECT_DELAY_MS * Math.pow(2, this.reconnectRetries),
+      this.MAX_RECONNECT_DELAY_BACKOFF_MS
+    );
+    
+    console.warn(`[8.8.5][RECONNECT] Reconnecting in ${delay}ms (attempt ${this.reconnectRetries + 1})`);
+    
+    this.stopGlobalHeartbeatMonitor();
+    this.stopHealthMetricsLogger();
+    
+    if (this.ws) {
+      try {
+        this.ws.close(4001, 'Heartbeat timeout - reconnecting');
+      } catch (e) {
+        // Ignore close errors
+      }
+    }
+    
+    this.isConnected = false;
+    this.isConnecting = false;
+    this.i8cIsReconnecting = true;
+    this.reconnectRetries++;
+    
+    setTimeout(() => {
+      this.connect();
+    }, delay);
+  }
+
+  /**
+   * Phase 8.8.5: Start tier-aware channel watchdog for a symbol
+   * Uses VolumeClassifier to determine appropriate timeouts
+   */
+  startChannelWatchdog(symbol: string): void {
+    const normalizedSymbol = normalizeToInternalSymbol(symbol);
+    
+    // Clear existing watchdog for this symbol
+    this.stopChannelWatchdog(normalizedSymbol);
+    
+    const tier = volumeClassifier.getTier(normalizedSymbol);
+    const thresholds = TIER_THRESHOLDS[tier];
+    
+    console.log(`[8.8.5][WATCHDOG] Starting watchdog for ${normalizedSymbol} (tier=${tier}, reset=${thresholds.resetTimeoutMs}ms)`);
+    
+    const timer = setTimeout(() => {
+      this.handleChannelTimeout(normalizedSymbol, tier);
+    }, thresholds.resetTimeoutMs);
+    
+    this.channelWatchdogTimers.set(normalizedSymbol, timer);
+  }
+
+  /**
+   * Phase 8.8.5: Stop channel watchdog for a symbol
+   */
+  stopChannelWatchdog(symbol: string): void {
+    const timer = this.channelWatchdogTimers.get(symbol);
+    if (timer) {
+      clearTimeout(timer);
+      this.channelWatchdogTimers.delete(symbol);
+    }
+  }
+
+  /**
+   * Phase 8.8.5: Reset channel watchdog when tick is received
+   */
+  resetChannelWatchdog(symbol: string): void {
+    const normalizedSymbol = normalizeToInternalSymbol(symbol);
+    if (this.channelWatchdogTimers.has(normalizedSymbol)) {
+      this.startChannelWatchdog(normalizedSymbol);
+    }
+  }
+
+  /**
+   * Phase 8.8.5: Handle channel timeout - refresh single channel without full reconnect
+   */
+  private handleChannelTimeout(symbol: string, tier: VolumeTier): void {
+    console.log(`[8.8.5][WATCHDOG] Channel timeout for ${symbol} (tier=${tier}), refreshing subscription`);
+    this.sentinelResets++;
+    
+    // Refresh single channel
+    this.refreshChannel(symbol);
+  }
+
+  /**
+   * Phase 8.8.5: Refresh a single channel subscription without full reconnect
+   */
+  refreshChannel(symbol: string): void {
+    const normalizedSymbol = normalizeToInternalSymbol(symbol);
+    
+    console.log(`[8.8.5][REFRESH] Refreshing channel for ${normalizedSymbol}`);
+    
+    // Unsubscribe and resubscribe to refresh the channel
+    this.unsubscribeFromSymbols([normalizedSymbol]);
+    
+    setTimeout(() => {
+      this.subscribeToSymbols([normalizedSymbol]);
+      this.startChannelWatchdog(normalizedSymbol);
+    }, 500); // Small delay between unsub/sub
+  }
+
+  /**
+   * Phase 8.8.5: Start health metrics logger (60-second interval)
+   */
+  private startHealthMetricsLogger(): void {
+    if (this.healthMetricsLoggerInterval) {
+      clearInterval(this.healthMetricsLoggerInterval);
+    }
+
+    console.log('[8.8.5][HEALTH] Starting health metrics logger (60s interval)');
+    this.startTime = Date.now();
+
+    this.healthMetricsLoggerInterval = setInterval(() => {
+      this.logHealthMetrics();
+    }, 60000); // Every 60 seconds
+  }
+
+  /**
+   * Phase 8.8.5: Stop health metrics logger
+   */
+  private stopHealthMetricsLogger(): void {
+    if (this.healthMetricsLoggerInterval) {
+      clearInterval(this.healthMetricsLoggerInterval);
+      this.healthMetricsLoggerInterval = null;
+      console.log('[8.8.5][HEALTH] Stopped health metrics logger');
+    }
+  }
+
+  /**
+   * Phase 8.8.5: Log health metrics to file and console
+   */
+  private logHealthMetrics(): void {
+    const uptimeMs = Date.now() - this.startTime;
+    const uptimeMinutes = Math.floor(uptimeMs / 60000);
+    
+    const avgLatency = this.heartbeatLatencies.length > 0
+      ? Math.round(this.heartbeatLatencies.reduce((a, b) => a + b, 0) / this.heartbeatLatencies.length)
+      : 0;
+
+    const healthLog = `[Health Audit]
+- Uptime: ${uptimeMinutes} minutes
+- Sentinel Resets: ${this.sentinelResets}
+- Heartbeat Latency: ${avgLatency}ms
+- REST Fallbacks Blocked: ${this.restFallbacksBlocked}
+- REST Fallbacks Allowed: ${this.restFallbacksAllowed}
+- Subscribed Symbols: ${this.subscribedSymbols.size}
+- Connected: ${this.isConnected}
+- Timestamp: ${new Date().toISOString()}
+`;
+
+    console.log('[8.8.5]' + healthLog);
+
+    // Write to log file
+    this.appendToHealthLog(healthLog);
+  }
+
+  /**
+   * Phase 8.8.5: Append health metrics to rolling log file
+   */
+  private appendToHealthLog(content: string): void {
+    try {
+      const logDir = '/tmp/logs';
+      const logFile = `${logDir}/websocket_health.log`;
+      
+      // Ensure directory exists
+      if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true });
+      }
+      
+      // Check if log file needs rotation (>1MB)
+      if (fs.existsSync(logFile)) {
+        const stats = fs.statSync(logFile);
+        if (stats.size > 1024 * 1024) { // 1MB
+          const rotatedFile = `${logDir}/websocket_health_${Date.now()}.log`;
+          fs.renameSync(logFile, rotatedFile);
+          console.log(`[8.8.5][HEALTH] Rotated log file to ${rotatedFile}`);
+        }
+      }
+      
+      fs.appendFileSync(logFile, content + '\n---\n');
+    } catch (error) {
+      console.error('[8.8.5][HEALTH] Failed to write health log:', error);
+    }
+  }
+
+  /**
+   * Phase 8.8.5: Increment REST fallback blocked counter
+   */
+  incrementRestFallbackBlocked(): void {
+    this.restFallbacksBlocked++;
+  }
+
+  /**
+   * Phase 8.8.5: Increment REST fallback allowed counter
+   */
+  incrementRestFallbackAllowed(): void {
+    this.restFallbacksAllowed++;
+  }
+
+  /**
+   * Phase 8.8.5: Get current health metrics
+   */
+  getHealthMetrics(): {
+    uptimeMinutes: number;
+    sentinelResets: number;
+    avgHeartbeatLatency: number;
+    restFallbacksBlocked: number;
+    restFallbacksAllowed: number;
+    subscribedSymbols: number;
+    isConnected: boolean;
+    channelWatchdogs: number;
+  } {
+    const uptimeMs = Date.now() - this.startTime;
+    const avgLatency = this.heartbeatLatencies.length > 0
+      ? Math.round(this.heartbeatLatencies.reduce((a, b) => a + b, 0) / this.heartbeatLatencies.length)
+      : 0;
+
+    return {
+      uptimeMinutes: Math.floor(uptimeMs / 60000),
+      sentinelResets: this.sentinelResets,
+      avgHeartbeatLatency: avgLatency,
+      restFallbacksBlocked: this.restFallbacksBlocked,
+      restFallbacksAllowed: this.restFallbacksAllowed,
+      subscribedSymbols: this.subscribedSymbols.size,
+      isConnected: this.isConnected,
+      channelWatchdogs: this.channelWatchdogTimers.size
+    };
+  }
+
+  /**
+   * Phase 8.8.5: Reset health metrics (for testing)
+   */
+  resetHealthMetrics(): void {
+    this.sentinelResets = 0;
+    this.heartbeatLatencies = [];
+    this.restFallbacksBlocked = 0;
+    this.restFallbacksAllowed = 0;
+    this.startTime = Date.now();
+    console.log('[8.8.5][HEALTH] Reset health metrics');
   }
 }
 

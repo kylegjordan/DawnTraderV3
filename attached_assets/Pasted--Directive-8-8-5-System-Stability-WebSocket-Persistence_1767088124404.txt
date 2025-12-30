@@ -1,0 +1,194 @@
+📘 Directive 8.8.5 — System Stability & WebSocket Persistence (Tiered Sentinel Upgrade)
+
+Target Subsystem: Dawn Trader v3.1 Infrastructure Layer
+Objective: Permanently resolve the “WebSocket unsubscription / REST fallback storm” defect by replacing event-timeout logic with deterministic tier-based sentinels, global REST throttling, and persistent connection health monitoring.
+
+1️⃣ Purpose
+
+Establish deterministic WebSocket health management for Dawn Trader’s pricing feeds, ensuring that:
+
+Silence on low-liquidity pairs is treated as market quiet, not feed failure.
+
+The main WebSocket connection remains stable under Replit’s proxy.
+
+REST fallbacks are globally rate-limited to prevent Kraken bans.
+
+Per-channel refreshes occur gracefully without full reconnection.
+
+2️⃣ Scope & Dependencies
+File Path	Action	Description
+server/services/market-data/volume-classifier.ts	✨ New / Update	Tiered Sentinel service + boot fallback map
+server/services/kraken-websocket-adapter.ts	🔧 Update	Heartbeat monitor, tier-aware watchdogs, per-channel refresh, exponential backoff, ping keep-alive, health metrics logger
+server/services/live-pricing-adapter.ts	🔧 Update	REST throttling via RateLimiter
+server/services/market-data/rest-rate-limiter.ts	✨ New	Token-bucket global REST rate limiter utility
+3️⃣ Architectural Summary
+🧭 Core Concept: Tiered Sentinel Architecture
+
+Replaces fixed “last tick timeout” logic with deterministic, tier-based channel health management.
+
+Tier	Warn Timeout	Reset Timeout	Typical Pairs
+HIGH	10 s	20 s	BTC/USD, ETH/USD
+MID	30 s	60 s	ADA/USD, LTC/USD
+LOW	90 s	180 s	TIA/USD, PROVEEUR
+
+Each symbol’s tier is returned by VolumeClassifier.getTier(symbol).
+
+4️⃣ Implementation Details
+4.1 VolumeClassifier (boot-safe tier assignment)
+export class VolumeClassifier {
+  // NOTE: Please populate FALLBACK_MAP with at least the top 20 major crypto pairs by volume
+  // (BTC, ETH, SOL, XRP, ADA, DOGE, DOT, AVAX, LINK, etc.)
+  private static FALLBACK_MAP = {
+    'BTC/USD': 'HIGH', 'ETH/USD': 'HIGH', 'SOL/USD': 'HIGH',
+    // ...top 20+ pairs pre-classified as HIGH
+  };
+
+  private tiers: Record<string, 'HIGH'|'MID'|'LOW'> = {};
+
+  async init() {
+    try {
+      const data = await this.fetchKraken24h();
+      this.tiers = this.deriveTiers(data);
+    } catch {
+      console.warn('⚠ VolumeClassifier: Kraken unavailable – using fallback tiers.');
+      this.tiers = VolumeClassifier.FALLBACK_MAP;
+    }
+  }
+
+  public getTier(symbol: string): 'HIGH'|'MID'|'LOW' {
+    return this.tiers[symbol] ?? 'LOW';
+  }
+}
+
+
+✅ Ensures deterministic tiering at startup (never undefined).
+
+4.2 KrakenWebSocketAdapter
+
+Add:
+
+Global heartbeat monitor (1 Hz).
+
+Tier-specific channel watchdog timers.
+
+refreshChannel(symbol) method for single-pair resets.
+
+Exponential backoff for main connection reconnects.
+
+Keep-alive ping every 20 s of inactivity.
+
+private lastGlobalHeartbeat = 0;
+private lastMessageTime = 0;
+private reconnectRetries = 0;
+
+private setupHeartbeatMonitor() {
+  this.ws.on('message', data => {
+    const msg = JSON.parse(data.toString());
+    this.lastMessageTime = Date.now();
+    if (msg.event === 'heartbeat') this.lastGlobalHeartbeat = Date.now();
+  });
+
+  setInterval(() => {
+    const now = Date.now();
+    if (now - this.lastGlobalHeartbeat > 5000) this.reconnectWithBackoff();
+    if (now - this.lastMessageTime > 20000) this.sendPing();
+  }, 1000);
+}
+
+private reconnectWithBackoff() {
+  const delay = Math.min(5000 * Math.pow(2, this.reconnectRetries++), 60000);
+  console.warn(`⚠️ WS Reconnect in ${delay} ms`);
+  setTimeout(() => this.reconnect(), delay);
+}
+
+4.3 RestRateLimiter
+export class RestRateLimiter {
+  private tokens = 10;
+  private lastRefill = Date.now();
+  private lastFetchTime: Record<string, number> = {};
+
+  check(symbol: string): boolean {
+    const now = Date.now();
+    this.refill(now);
+
+    if (now - (this.lastFetchTime[symbol] ?? 0) < 60000) return false;
+    if (this.tokens < 1) return false;
+
+    this.tokens -= 1;
+    this.lastFetchTime[symbol] = now;
+    return true;
+  }
+
+  private refill(now: number) {
+    const delta = now - this.lastRefill;
+    const add = Math.floor(delta / 100);
+    if (add > 0) {
+      this.tokens = Math.min(this.tokens + add, 10);
+      this.lastRefill = now;
+    }
+  }
+}
+
+
+Integrate in LivePricingAdapter before fetchRestPrice(symbol):
+
+if (!this.restRateLimiter.check(symbol)) {
+  console.warn(`[Pricing] REST blocked for ${symbol}, using cached price.`);
+  return cache?.price ?? 0;
+}
+
+4.4 Replit Keep-Alive
+
+Send {"event":"ping"} when no messages have been received for > 20 s.
+Kraken replies with {"event":"pong"}, updating lastMessageTime.
+✅ Prevents Eval proxy idle disconnects.
+
+4.5 Observability: Health Metrics Logger
+
+File: server/services/kraken-websocket-adapter.ts
+Action: Implement a 60-second summary logger executed via setInterval.
+
+Purpose: Provide quantitative proof of stability improvements.
+
+Output Format (Plaintext):
+
+[Health Audit]
+- Uptime: <minutes>
+- Sentinel Resets: <count>          // how many per-channel refreshes occurred
+- Heartbeat Latency: <ms>           // avg delay between heartbeats
+- REST Fallbacks Blocked: <count>   // rate-limit protections triggered
+- REST Fallbacks Allowed: <count>   // legitimate REST calls made
+
+
+This log should append to a rolling file /tmp/logs/websocket_health.log and be rotated every 24 hours.
+
+✅ Enables measurable verification of the “Silence = Healthy” architecture.
+
+5️⃣ Testing & Verification Checklist
+Test	Target Metric	Expected Result
+Global Heartbeat Monitor	1 Hz event stream	Connection stays alive > 2 h
+Channel Watchdog	Tier-based timeouts	Low-vol pairs refresh only after 180 s
+REST Limiter	≤ 10 req/s, 1 per symbol per min	No rate-limit errors
+Keep-Alive Ping	20 s idle	No Eval proxy drops
+Reconnect Backoff	≤ 60 s max delay	Smooth recovery from outage
+Health Logger	1 entry/min	Accurate uptime & fallback counts
+6️⃣ Deliverables to Commit
+Deliverable	Description
+volume-classifier.ts	Tiered Sentinel service with populated fallback map
+kraken-websocket-adapter.ts	Heartbeat + ping + channel refresh + metrics logger
+rest-rate-limiter.ts	Token-bucket limiter utility
+live-pricing-adapter.ts	REST throttle integration
+/tmp/logs/websocket_health.log	Health metrics log (proof of stability)
+Validation Log	2-hour runtime showing zero unintended REST fallbacks
+7️⃣ Phase Transition
+
+After validation demonstrates:
+
+≤ 1 REST fallback per symbol per hour, and
+
+continuous uptime > 2 hours,
+
+mark Phase 8.8.5 complete and proceed to Phase 9.0 – Mathematical Audit & Refinement.
+
+✅ Directive 8.8.5 Outcome:
+Dawn Trader’s data infrastructure will achieve continuous WebSocket stability, deterministic channel health monitoring, REST traffic within Kraken’s safe limits, and auditable proof of uptime — establishing a solid foundation for Phase 9’s quantitative overhaul.
