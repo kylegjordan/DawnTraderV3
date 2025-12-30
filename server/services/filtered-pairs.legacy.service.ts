@@ -1,15 +1,20 @@
 /**
- * FilteredPairsService - Single Source of Truth for Filtered Pairs
+ * ⚠️ DEPRECATED — Phase 8.8.7
  * 
- * Phase 27.F.13.H - Architecture Realignment
+ * This service has been replaced by FX5 Active Filter Pool.
+ * Use activeFilterPool.getActivePool(mode) for all signal-related operations.
  * 
- * All filtered pair counts and lists must come from this service to ensure
- * consistency across:
+ * Only retained for UI summary & analytics widgets (MarketEvaluationService).
+ * DO NOT use for signal generation, VTS, or trading operations.
+ * 
+ * Original Purpose (Phase 27.F.13.H):
  * - Filter Insights tab
  * - Filtered Pairs tab
  * - Filter Health widget
  * - Trading status endpoint
  * - Dashboard widgets
+ * 
+ * Replacement: server/services/active-filter-pool.ts
  */
 
 import { KrakenService } from './kraken.js';

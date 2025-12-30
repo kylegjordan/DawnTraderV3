@@ -1,11 +1,11 @@
 /**
- * Phase 37/B6 + 8.8.4-B.1: Signal Orchestrator
+ * Phase 37/B6 + 8.8.4-B.1 + 8.8.7: Signal Orchestrator
  * 
  * Implements hybrid signal-orchestration loop for mode-aware market evaluation.
  * Periodically scans filtered symbols and evaluates trading strategies to generate signals.
  * 
  * Architecture:
- * - Loads filtered symbols from FilteredPairsService
+ * - Phase 8.8.7: Loads filtered symbols from activeFilterPool.getActivePool()
  * - Seeds immediate evaluation pass on start
  * - Timer-based evaluation (configurable interval)
  * - Calls all enabled strategies for each symbol
@@ -31,10 +31,15 @@
  * - Extended metrics (ExpectedDuration, ProfitRate) computed
  * - SQE used as pure filter with pre-computed metrics
  * - CWQI ranked signals forwarded to RTB queue
+ * 
+ * 8.8.7 Filter Synchronization:
+ * - Uses activeFilterPool.getActivePool() for FX5-verified pairs ONLY
+ * - FilteredPairsService DEPRECATED for signal generation
  */
 
 import { StrategyEngine, StrategySignal } from './strategy-engine';
-import { FilteredPairsService } from './filtered-pairs-service';
+// Phase 8.8.7: FilteredPairsService DEPRECATED - use activeFilterPool instead
+// import { FilteredPairsService } from './filtered-pairs-service';
 import { KrakenService } from './kraken';
 import { storage } from '../storage';
 import type { TradingSettings, ScreenerFilters, PriceData, GuardrailsV2 } from '@shared/schema';
@@ -95,7 +100,7 @@ interface SizingContext {
 export class SignalOrchestrator {
   private mode: 'live' | 'paper';
   private strategyEngine: StrategyEngine;
-  private filteredPairsService: FilteredPairsService;
+  // Phase 8.8.7: FilteredPairsService DEPRECATED - using activeFilterPool instead
   private kraken: KrakenService;
   private diagnosticService: PaperSimDiagnosticService;
   private isRunning: boolean = false;
@@ -130,7 +135,7 @@ export class SignalOrchestrator {
     ]);
     
     this.strategyEngine = new StrategyEngine();
-    this.filteredPairsService = new FilteredPairsService();
+    // Phase 8.8.7: FilteredPairsService DEPRECATED - using activeFilterPool instead
     this.kraken = new KrakenService();
     this.diagnosticService = new PaperSimDiagnosticService();
   }
@@ -551,13 +556,21 @@ export class SignalOrchestrator {
         return;
       }
 
-      const filteredPairsStats = await this.filteredPairsService.getValidPairs(this.mode, filters);
-      const eligibleSymbols = filteredPairsStats.filteredPairs.map(p => p.symbol);
-
+      // Phase 8.8.7: Use ONLY FX5 Active Filter Pool survivors for signal generation
+      // This fixes the filter bypass where FilteredPairsService returned pairs that hadn't passed FX5 filters
+      const fx5Survivors = activeFilterPool.getActivePool(this.mode);
+      if (!fx5Survivors || fx5Survivors.length < 1) {
+        console.warn(`[8.8.7][Orchestrator] Skipping signal generation – no FX5 survivors (mode=${this.mode})`);
+        return;
+      }
+      const eligibleSymbols = fx5Survivors.map(p => p.symbol);
+      
+      console.info(`[8.8.7][Orchestrator] Using FX5 Active Filter Pool – ${eligibleSymbols.length} eligible symbols.`);
       console.log(`[37.A][SIGNAL] Evaluating ${eligibleSymbols.length} eligible symbols`);
       telemetryTrace.trace('SignalOrchestrator', 'SYMBOLS_LOADED', 'INFO', { 
         mode: this.mode, 
-        count: eligibleSymbols.length 
+        count: eligibleSymbols.length,
+        source: 'FX5_ACTIVE_POOL'
       });
 
       if (!systemContext.lastStartedBy) {

@@ -18,7 +18,7 @@
  */
 
 import { storage } from '../storage.js';
-import { FilteredPairsService } from './filtered-pairs-service.js';
+// Phase 8.8.7: FilteredPairsService DEPRECATED - removed unused import
 import { KrakenService } from './kraken.js';
 import { updateStage3Cache } from './stage3-state-cache.js';
 import { emitStage3Events, FilterBreakdown } from './stage3-emitter.js';
@@ -47,7 +47,7 @@ interface ScanResult {
 }
 
 export class Fx5ScannerService {
-  private filteredPairsService: FilteredPairsService;
+  // Phase 8.8.7: FilteredPairsService DEPRECATED - removed unused member
   private krakenService: KrakenService;
   private isRunning = false;
   private startTime: number = 0; // REB 2.8.5B: Track actual scanner start time
@@ -57,7 +57,7 @@ export class Fx5ScannerService {
   private clockTickHandler: ((tick: ClockTick) => void) | null = null;
 
   constructor() {
-    this.filteredPairsService = new FilteredPairsService();
+    // Phase 8.8.7: FilteredPairsService DEPRECATED - removed
     this.krakenService = new KrakenService();
   }
 

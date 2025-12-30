@@ -1,19 +1,21 @@
 /**
- * Market Evaluation Service - Single Source of Truth (SSOT)
+ * Market Evaluation Service - UI Analytics Only
  * 
  * Phase 38.1 - Unified Filtering & Insights Refactor
+ * Phase 8.8.7 - DEPRECATED for signal generation, retained for UI only
  * 
- * This service provides the authoritative market evaluation used by:
- * - SignalOrchestrator (trading engine)
- * - Filtered Pairs tab
- * - Filtered Insights tab
- * - Walter analytics
+ * This service provides market evaluation for UI analytics ONLY:
+ * - Filtered Pairs tab (UI display)
+ * - Filtered Insights tab (UI display)
+ * - Walter analytics (AI analysis display)
+ * - Health monitor (diagnostics)
  * 
- * Eliminates discrepancy between FilteredPairsService (17 pairs) and
- * PaperSimDiagnosticService (662 pairs) by using one evaluation method.
+ * NOTE: Signal generation uses activeFilterPool.getActivePool() directly,
+ * NOT this service. See signal-orchestrator.ts and vts-runner.ts.
  */
 
-import { FilteredPairsService, type FilteredPairResult } from './filtered-pairs-service.js';
+// Phase 8.8.7: FilteredPairsService DEPRECATED for signal generation, but retained for UI analytics
+import { FilteredPairsService, type FilteredPairResult } from './filtered-pairs.legacy.service.js';
 import type { ScreenerFilters } from '@shared/schema';
 
 export interface MarketEvaluationResult {
@@ -73,8 +75,9 @@ export class MarketEvaluationService {
       return cached.data;
     }
 
-    // Fetch from FilteredPairsService (same logic as SignalOrchestrator)
-    console.log(`[MarketEval] Evaluating market for ${mode}...`);
+    // Phase 8.8.7: Fetch from FilteredPairsService for UI analytics ONLY
+    // Note: SignalOrchestrator uses activeFilterPool.getActivePool() for signal generation
+    console.log(`[MarketEval] Evaluating market for ${mode} (UI analytics only)...`);
     const stats = await this.filteredPairsService.getValidPairs(mode, filters, true);
 
     const result: MarketEvaluationResult = {

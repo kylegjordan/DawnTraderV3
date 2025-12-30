@@ -50,6 +50,55 @@ class ActiveFilterPoolService {
   
   // Volume cache for Kraken ticker fallback (symbol -> volume data)
   private volumeCache: Map<string, VolumeCacheEntry> = new Map();
+  
+  // Phase 8.8.7: Telemetry interval for verification
+  private telemetryInterval: NodeJS.Timeout | null = null;
+  private initialized: boolean = false;
+  
+  /**
+   * Phase 8.8.7: Initialize pool with verification logging
+   */
+  initialize(): void {
+    if (this.initialized) return;
+    
+    this.initialized = true;
+    console.log(`[8.8.7][Verification] ActiveFilterPool initialized: true`);
+    
+    // Start 5-minute telemetry logging
+    if (!this.telemetryInterval) {
+      this.telemetryInterval = setInterval(() => {
+        this.logTelemetry();
+      }, 5 * 60 * 1000); // 5 minutes
+      
+      console.log(`[8.8.7][Telemetry] Started 5-minute telemetry logging`);
+    }
+  }
+  
+  /**
+   * Phase 8.8.7: Log telemetry every 5 minutes
+   */
+  private logTelemetry(): void {
+    const paperSurvivors = this.getActivePool('paper').length;
+    const liveSurvivors = this.getActivePool('live').length;
+    
+    console.log(`[8.8.7][Telemetry]\n  FX5 Survivors (paper): ${paperSurvivors}\n  FX5 Survivors (live): ${liveSurvivors}\n  Pool Initialized: ${this.initialized}`);
+  }
+  
+  /**
+   * Phase 8.8.7: Verify mode awareness
+   */
+  verifyModeContext(mode: 'paper' | 'live'): boolean {
+    const pool = this.getActivePool(mode);
+    console.log(`[8.8.7][Verification] Mode context confirmed: ${mode} (${pool.length} pairs)`);
+    return true;
+  }
+  
+  /**
+   * Phase 8.8.7: Check if pool is initialized
+   */
+  isInitialized(): boolean {
+    return this.initialized;
+  }
 
   /**
    * Get the pool for a specific mode

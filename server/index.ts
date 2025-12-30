@@ -706,6 +706,15 @@ app.use((req, res, next) => {
           console.warn('[8.8.5] ⚠️ VolumeClassifier init failed (using fallback tiers):', vcError);
         }
         
+        // Phase 8.8.7: Initialize ActiveFilterPool for unified filter synchronization
+        try {
+          const { activeFilterPool } = await import('./services/active-filter-pool.js');
+          activeFilterPool.initialize();
+          console.log('[8.8.7] ✅ ActiveFilterPool initialized for FX5 synchronization');
+        } catch (afpError) {
+          console.warn('[8.8.7] ⚠️ ActiveFilterPool init failed:', afpError);
+        }
+        
         // Phase 8.8.3-I7-WS-STARTUP: Start WebSocket adapter during server boot
         // This enables real-time pricing for all clients immediately, not just when engine starts
         await krakenWebSocketAdapter.start();

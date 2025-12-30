@@ -28,7 +28,8 @@ import { vtsService, type VirtualSignal } from './vts-service.js';
 import { loadCalibration, applyCalibration, type CalibrationCoefficients } from '../utils/calibration.js';
 import { priceCache, type CachedPrice } from './price-cache.js';
 import { systemConfigService } from './system-config.js';
-import { filteredPairsService } from './filtered-pairs-service.js';
+// Phase 8.8.7: FilteredPairsService DEPRECATED - use activeFilterPool instead
+import { activeFilterPool } from './active-filter-pool.js';
 import { calculateCWQI, calculateNGC, estimateVolatility, calculateRiskScore, calculateExpectedReturn, getAdaptiveRelevance } from '../core/metrics/quality_index.js';
 import { computeStrategyWeights, getWeightSync } from '../utils/strategyWeights.js';
 import { computeExposureBias, getExposureMultiplierSync } from '../utils/strategyBias.js';
@@ -275,39 +276,29 @@ function generateVirtualSignal(symbol: string, priceData: CachedPrice): VirtualS
 }
 
 async function getTopLiquidityPairs(count: number): Promise<CachedPrice[]> {
-  const defaultFilters = {
-    minVolume: String(vtsConfig.minVolume24h),
-    minPrice: String(vtsConfig.minPrice),
-    maxPrice: "100000.00",
-    maxBidAskSpread: "2.00",
-    excludeStablecoins: true,
-    volatilityMin: "0.50",
-    volatilityMax: "5.00",
-    rsiMin: 30,
-    rsiMax: 70,
-    minLiquidity: "0",
-    universeSize: 100,
-    activeTimeframes: ["5m", "15m", "1h"]
-  };
+  // Phase 8.8.7: Use FX5 Active Filter Pool instead of deprecated FilteredPairsService
+  // VTS now uses the same filtering as production signal orchestrator
+  const fx5Survivors = activeFilterPool.getActivePool('paper');
   
-  const filteredResult = await filteredPairsService.getValidPairs('paper', defaultFilters as any);
-  
-  if (!filteredResult || !filteredResult.filteredPairs || filteredResult.filteredPairs.length === 0) {
-    console.log('[M5B][VTS] No filtered pairs from screener');
+  if (!fx5Survivors || fx5Survivors.length === 0) {
+    console.log('[8.8.7][VTS] No FX5 survivors in Active Filter Pool');
     return [];
   }
   
-  const symbols = filteredResult.filteredPairs
+  console.info(`[8.8.7][VTS] Running on FX5 Active Filter Pool (${fx5Survivors.length} pairs).`);
+  
+  // Filter and sort by volume from FX5 pool data
+  const symbols = fx5Survivors
     .filter(p => 
-      p.currentPrice >= vtsConfig.minPrice &&
-      p.volume24h >= vtsConfig.minVolume24h
+      (p.price ?? 0) >= vtsConfig.minPrice &&
+      (p.volume24h ?? 0) >= vtsConfig.minVolume24h
     )
-    .sort((a, b) => b.volume24h - a.volume24h)
+    .sort((a, b) => (b.volume24h ?? 0) - (a.volume24h ?? 0))
     .slice(0, count)
     .map(p => p.symbol);
   
   if (symbols.length === 0) {
-    console.log('[M5B][VTS] No pairs meet VTS criteria');
+    console.log('[8.8.7][VTS] No FX5 pairs meet VTS criteria');
     return [];
   }
   
@@ -325,7 +316,7 @@ async function getTopLiquidityPairs(count: number): Promise<CachedPrice[]> {
     }
   }
   
-  console.log(`[M5B][VTS] Got ${result.length}/${symbols.length} prices from cache`);
+  console.log(`[8.8.7][VTS] Got ${result.length}/${symbols.length} prices from cache`);
   return result;
 }
 

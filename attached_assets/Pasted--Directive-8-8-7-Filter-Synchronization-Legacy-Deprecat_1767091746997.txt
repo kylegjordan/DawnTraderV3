@@ -1,0 +1,193 @@
+⚙️ Directive 8.8.7 — Filter Synchronization & Legacy Deprecation Directive
+Objective
+
+Unify all systems to use the FX5 Active Filter Pool as the single authoritative source of eligible trading pairs.
+Deprecate FilteredPairsService to prevent future accidental use, synchronize the VTS and Orchestrator workflows, and align UI data feeds (Volume & Source columns) with the backend changes from Directive 8.8.5.
+
+1️⃣ Background
+
+The FilteredPairsService was introduced (Oct 2025) as a performance and cache optimization layer before the FX5 Scanner existed.
+When the FX5 filtering architecture was added in Phase 8.6.7, it became the canonical filtering system. However:
+
+The Signal Orchestrator still calls FilteredPairsService.getValidPairs().
+
+The VTS Runner uses the same call for simulation, bypassing FX5 survivors.
+
+The MarketEvaluationService references it for UI analytics, which is acceptable for visualization but not for signal generation.
+
+This has created a dual-filtering architecture, where some subsystems use outdated, weaker filtering logic.
+
+2️⃣ Required Actions
+A. Signal Orchestrator Correction
+
+File: server/services/signal-orchestrator.ts
+
+Action: Replace all calls to:
+
+const filteredPairsStats = await this.filteredPairsService.getValidPairs(this.mode, filters);
+const eligibleSymbols = filteredPairsStats.filteredPairs.map(p => p.symbol);
+
+
+With:
+
+const fx5Survivors = activeFilterPool.getActivePool(this.mode);
+if (!fx5Survivors || fx5Survivors.length < 1) {
+  console.warn('[8.8.7][Orchestrator] Skipping signal generation – no FX5 survivors.');
+  return [];
+}
+const eligibleSymbols = fx5Survivors.map(p => p.symbol);
+
+
+Logging:
+Add:
+
+console.info(`[8.8.7][Orchestrator] Using FX5 Active Filter Pool – ${eligibleSymbols.length} eligible symbols.`);
+
+B. VTS Runner Correction
+
+File: server/services/vts-runner.ts
+
+Action: Replace any usage of:
+
+this.filteredPairsService.getValidPairs()
+
+
+with:
+
+const fx5Survivors = activeFilterPool.getActivePool(this.mode);
+
+
+Note:
+If the VTS runs in backtest mode and no live pool exists, fallback to a cached copy of FX5’s last run:
+
+const fx5Survivors = activeFilterPool.getActivePool(this.mode) ?? cache.get('last_fx5_pool');
+
+
+Logging:
+
+console.info(`[8.8.7][VTS] Running on FX5 Active Filter Pool (${fx5Survivors.length} pairs).`);
+
+C. FilteredPairsService Deprecation
+
+File: server/services/filtered-pairs.service.ts
+
+Action:
+
+Add a deprecation banner at the top of the file:
+
+/**
+ * ⚠️ DEPRECATED — Phase 8.8.7
+ * This service has been replaced by FX5 Active Filter Pool.
+ * Use activeFilterPool.getActivePool() for all signal-related operations.
+ * Only retained for UI summary & analytics widgets.
+ */
+
+
+Rename file to:
+
+filtered-pairs.legacy.service.ts
+
+
+In package.json → add "deprecatedServices": ["filtered-pairs.legacy.service.ts"]
+
+Remove all imports in:
+
+signal-orchestrator.ts
+
+vts-runner.ts
+
+any other module using getValidPairs()
+Replace them with activeFilterPool imports.
+
+D. System Verification Checks
+
+Replit must verify and document the following findings in /tmp/logs/directive_8.8.7_validation.log:
+
+Global Initialization
+
+Confirm that activeFilterPool is globally available on system startup before the first Orchestrator/VTS run.
+
+Log:
+
+[8.8.7][Verification] ActiveFilterPool initialized: true
+
+
+Mode Awareness
+
+Ensure activeFilterPool.getActivePool(mode) correctly returns separate sets for live, paper, and backtest contexts.
+
+Log:
+
+[8.8.7][Verification] Mode context confirmed: <mode>
+
+
+Telemetry Update
+
+Add a periodic telemetry log every 5 minutes:
+
+[8.8.7][Telemetry]
+FX5 Survivors: <count>
+Orchestrator Eligible: <count>
+VTS Pairs: <count>
+
+
+This will confirm long-term synchronization between modules.
+
+E. UI Updates (From Directive 8.8.5)
+
+Files:
+client/components/trades/OpenTradesTable.tsx
+client/hooks/useLivePricing.ts
+
+Action:
+
+Column	Source	Change
+Volume	VolumeClassifier.getTier(symbol) + live volume feed	Replace current raw volume feed with VolumeClassifier output. Display format: HIGH (24hVol)
+Source	LivePricingAdapter.getFeedSource(symbol)	Update to display: WS, WS (cached), REST, or REST (blocked)
+Price	✅ Already current	No change needed
+Tooltip	Optional	Add hover tooltip for “Source” column explaining each state.
+
+Note:
+Confirm that both columns update dynamically every 30s using useEffect polling on /api/diagnostics/8.8.5/volume-tiers and /api/diagnostics/8.8.5/health.
+
+F. Post-Implementation Validation
+
+Replit should perform a 3-cycle validation (approx. 90 seconds total) to confirm:
+
+Ready-to-Buy signals count now matches or is less than active FX5 survivors × strategies.
+
+No signals are created for pairs not in the Active Filter Pool.
+
+VTS simulation reports identical eligible pairs as Orchestrator logs.
+
+/tmp/logs/directive_8.8.7_validation.log shows all verification flags as ✅.
+
+G. Output Artifacts
+
+Replit must produce:
+
+File	Purpose
+/tmp/logs/directive_8.8.7_validation.log	Shows all verification checks
+/tmp/logs/directive_8.8.7_activity.log	Orchestrator + VTS runtime alignment log
+/tmp/screenshots/ui_8.8.5_volume_source.png	Screenshot showing updated columns
+/docs/legacy-deprecation-notes.md	Summary of deprecated FilteredPairsService usage and replacement plan
+3️⃣ Expected Outcomes
+Metric	Before	After
+Signal Count (Ready-to-Buy)	60–90	≈ #FX5 survivors × #strategies
+Signal Quality (CWQI)	Moderate	↑ Higher consistency
+System Load	High	↓ Reduced (fewer strategy calculations)
+VTS Accuracy	Moderate	↑ Matches production signal logic
+UI Data Consistency	Partial	↑ Aligned with backend feed reality
+4️⃣ Summary
+
+Directive 8.8.7 will:
+
+✅ Fix the filter bypass in both Signal Orchestrator & VTS.
+
+✅ Deprecate and isolate the FilteredPairsService permanently.
+
+✅ Add verification of initialization, mode-awareness, and telemetry logging.
+
+✅ Update the Open Trades UI to display live Volume Tiers and Feed Sources.
+
+✅ Fully align all components to a single canonical filter source (FX5 Active Pool).
