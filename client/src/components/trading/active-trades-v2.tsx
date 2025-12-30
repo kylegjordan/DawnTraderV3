@@ -37,6 +37,40 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+// Phase 8.8.5-E: Volume tier data from VolumeClassifier
+interface VolumeTierData {
+  symbol: string;
+  tier: 'HIGH' | 'MID' | 'LOW';
+  volume24h: number;
+}
+
+// Phase 8.8.5-E: WebSocket health metrics for Source column
+interface WsHealthMetrics {
+  symbolHealth: Record<string, {
+    source: 'WS' | 'REST';
+    cached: boolean;
+    blocked: boolean;
+    lastTickMs: number;
+  }>;
+}
+
+// Phase 8.8.5-E: Source display states
+type SourceDisplayState = 'WS' | 'WS (cached)' | 'REST' | 'REST (blocked)';
+
+// Phase 8.8.5-E: Source state tooltips
+const SOURCE_TOOLTIPS: Record<SourceDisplayState, string> = {
+  'WS': 'Real-time WebSocket feed - prices update instantly',
+  'WS (cached)': 'WebSocket feed using cached data - no recent ticks received',
+  'REST': 'REST API fallback - polling for price updates',
+  'REST (blocked)': 'REST API blocked by rate limiter - cooldown active',
+};
 
 interface ActiveTrade {
   id: string;
@@ -262,11 +296,15 @@ function SortableHeader({
 function TradeRow({ 
   trade, 
   onClose, 
-  isClosing 
+  isClosing,
+  volumeTierDisplay,
+  sourceDisplayState 
 }: { 
   trade: ActiveTrade; 
   onClose: (id: string) => void;
   isClosing: boolean;
+  volumeTierDisplay: { tier: string; volume: string };
+  sourceDisplayState: SourceDisplayState;
 }) {
   const [baseCurrency, quoteCurrency] = trade.symbol.includes('/') 
     ? trade.symbol.split('/') 
@@ -456,48 +494,49 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 17. Volume (24h) */}
+      {/* 17. Volume (24h) - Phase 8.8.5-E: Format as "TIER (volume)" from VolumeClassifier */}
       <td className="px-3 py-3">
-        <div className="text-xs space-y-0.5">
-          <div className="font-mono text-sm">
-            {formatVolume(trade.volume24h || 0)}
-          </div>
-          <div className={cn(
-            "text-xs",
-            trade.volumeBucket === 'High' ? "text-green-600" :
-            trade.volumeBucket === 'Medium' ? "text-blue-600" :
-            trade.volumeBucket === 'Low' ? "text-orange-600" : "text-muted-foreground"
-          )}>
-            {trade.volumeBucket || 'Very Low'}
-          </div>
+        <div className={cn(
+          "font-mono text-sm font-medium",
+          volumeTierDisplay.tier === 'HIGH' ? "text-green-600" :
+          volumeTierDisplay.tier === 'MID' ? "text-blue-600" : "text-orange-600"
+        )}>
+          {volumeTierDisplay.tier} ({volumeTierDisplay.volume})
         </div>
       </td>
       
-      {/* 18. Source + Frequency (stacked) */}
+      {/* 18. Source - Phase 8.8.5-E: Display WS/WS (cached)/REST/REST (blocked) with tooltip */}
       <td className="px-3 py-3">
-        <div className="text-xs space-y-0.5">
-          <div className="flex items-center gap-1">
-            {trade.sourceLabel === 'WS' ? (
-              <Wifi className="w-3 h-3 text-green-500" />
-            ) : (
-              <WifiOff className="w-3 h-3 text-orange-500" />
-            )}
-            <span className={cn(
-              "font-medium",
-              trade.sourceLabel === 'WS' ? "text-green-600" : "text-orange-600"
-            )}>
-              {trade.sourceLabel || 'REST'}
-            </span>
-          </div>
-          <div className={cn(
-            "font-mono text-xs",
-            trade.frequency === 'High' ? "text-green-600" :
-            trade.frequency === 'Medium' ? "text-blue-600" :
-            trade.frequency === 'Low' ? "text-orange-600" : "text-muted-foreground"
-          )}>
-            {trade.frequency || 'Very Low'}
-          </div>
-        </div>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-1 cursor-help">
+                {sourceDisplayState.startsWith('WS') ? (
+                  <Wifi className={cn(
+                    "w-3 h-3",
+                    sourceDisplayState === 'WS' ? "text-green-500" : "text-yellow-500"
+                  )} />
+                ) : (
+                  <WifiOff className={cn(
+                    "w-3 h-3",
+                    sourceDisplayState === 'REST' ? "text-orange-500" : "text-red-500"
+                  )} />
+                )}
+                <span className={cn(
+                  "font-medium text-xs",
+                  sourceDisplayState === 'WS' ? "text-green-600" :
+                  sourceDisplayState === 'WS (cached)' ? "text-yellow-600" :
+                  sourceDisplayState === 'REST' ? "text-orange-600" : "text-red-600"
+                )}>
+                  {sourceDisplayState}
+                </span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs">
+              <p className="text-xs">{SOURCE_TOOLTIPS[sourceDisplayState]}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </td>
       
       {/* 19. Duration */}
@@ -709,6 +748,80 @@ export default function ActiveTradesV2() {
     staleTime: 5000, // Mark data as stale after 5 seconds
     refetchOnWindowFocus: true
   });
+  
+  // Phase 8.8.5-E: 30-second polling for VolumeClassifier tier assignments
+  const { data: volumeTiersData } = useQuery<{
+    ok: boolean;
+    tiers: Record<string, { tier: 'HIGH' | 'MID' | 'LOW'; volume24h: number }>;
+  }>({
+    queryKey: ['/api/diagnostics/8.8.5/volume-tiers'],
+    enabled: isPaper,
+    refetchInterval: 30000, // 30-second polling per directive
+    refetchIntervalInBackground: true,
+    staleTime: 25000,
+  });
+  
+  // Phase 8.8.5-E: 30-second polling for WebSocket health metrics
+  const { data: wsHealthData } = useQuery<{
+    ok: boolean;
+    metrics: {
+      symbolSources?: Record<string, { source: 'WS' | 'REST'; cached: boolean; blocked: boolean }>;
+    };
+  }>({
+    queryKey: ['/api/diagnostics/8.8.5/health'],
+    enabled: isPaper,
+    refetchInterval: 30000, // 30-second polling per directive
+    refetchIntervalInBackground: true,
+    staleTime: 25000,
+  });
+  
+  // Phase 8.8.5-E: Helper to get source display state for a symbol
+  const getSourceDisplayState = useCallback((symbol: string, tradeSourceLabel?: 'WS' | 'REST'): SourceDisplayState => {
+    const normalized = normalizeSymbol(symbol); // Use normalizeSymbol for consistent uppercase + slash removal
+    const healthInfo = wsHealthData?.metrics?.symbolSources?.[normalized];
+    
+    if (healthInfo) {
+      if (healthInfo.source === 'WS') {
+        return healthInfo.cached ? 'WS (cached)' : 'WS';
+      } else {
+        return healthInfo.blocked ? 'REST (blocked)' : 'REST';
+      }
+    }
+    
+    // Fallback to trade's sourceLabel if health data not available
+    return tradeSourceLabel === 'WS' ? 'WS' : 'REST';
+  }, [wsHealthData]);
+  
+  // Phase 8.8.5-E: Helper to get volume tier display for a symbol
+  // Uses VolumeClassifier API data, falls back to trade's own volumeBucket/volume24h
+  const getVolumeTierDisplay = useCallback((
+    symbol: string, 
+    fallbackVolume?: number, 
+    fallbackBucket?: 'High' | 'Medium' | 'Low' | 'Very Low'
+  ): { tier: string; volume: string } => {
+    const normalized = normalizeSymbol(symbol); // Use normalizeSymbol for consistent uppercase + slash removal
+    const tierInfo = volumeTiersData?.tiers?.[normalized];
+    
+    if (tierInfo) {
+      return {
+        tier: tierInfo.tier,
+        volume: formatVolume(tierInfo.volume24h),
+      };
+    }
+    
+    // Fallback to trade's own volume data per directive 8.8.5-E
+    const bucketToTier: Record<string, string> = {
+      'High': 'HIGH',
+      'Medium': 'MID',
+      'Low': 'LOW',
+      'Very Low': 'LOW',
+    };
+    
+    return {
+      tier: bucketToTier[fallbackBucket || 'Medium'] || 'MID',
+      volume: formatVolume(fallbackVolume || 0),
+    };
+  }, [volumeTiersData]);
   
   // Phase 8.8.3-I7-PRICE-FIX (C3): Log when data is refreshed
   useEffect(() => {
@@ -1071,6 +1184,8 @@ export default function ActiveTradesV2() {
                     trade={trade} 
                     onClose={(id) => closeTradeMutation.mutate(id)}
                     isClosing={closeTradeMutation.isPending}
+                    volumeTierDisplay={getVolumeTierDisplay(trade.symbol, trade.volume24h, trade.volumeBucket)}
+                    sourceDisplayState={getSourceDisplayState(trade.symbol, trade.sourceLabel)}
                   />
                 ))}
               </tbody>
