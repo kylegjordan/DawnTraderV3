@@ -2,9 +2,9 @@
 ## Paper Trading Engine Architecture, Strategies, Guardrails & System Components
 
 **Document Created:** December 12, 2025  
-**Last Updated:** December 29, 2025  
+**Last Updated:** December 30, 2025  
 **Purpose:** Comprehensive reference for the paper trading engine and all configurable components  
-**Current Status:** Phase 8.8.4 (Extended Calibration & Validation Framework Complete)
+**Current Status:** Phase 8 Complete (WebSocket v2, Mark Price Midpoint, Mini-Book Integrity Monitor)
 
 ---
 
@@ -515,17 +515,23 @@ The Live Pricing system provides **real-time price data** for open position moni
 - `server/services/live-pricing-adapter.ts` - Price caching and fallback logic
 - `server/services/kraken-websocket-adapter.ts` - WebSocket connection management
 
-## 9.3 Price Pipeline
+## 9.3 Price Pipeline (Phase 8.9.x - WebSocket v2 + Mini-Book)
 
 ```
-Kraken WebSocket (wss://ws.kraken.com)
+Kraken WebSocket v2 (wss://ws.kraken.com/v2)
     │
-    ▼
+    ├── ticker channel (last trade prices)
+    │
+    └── book channel (orderbook depth)
+          │
+          ▼
 ┌─────────────────────────────────────────┐
 │ KrakenWebSocketAdapter                   │
-│ • Subscribes to ticker channel           │
-│ • Handles reconnection                   │
-│ • Normalizes symbols (Kraken → internal) │
+│ • Dual-channel subscription (ticker+book)│
+│ • Stateful Mini-Book per symbol          │
+│ • Midpoint calculation: (bid + ask) / 2  │
+│ • Kraken v2 message translation          │
+│ • Checksum validation with resync        │
 └─────────────────┬───────────────────────┘
                   │
                   ▼
@@ -534,6 +540,7 @@ Kraken WebSocket (wss://ws.kraken.com)
 │ • Map<symbol, CachedPrice>               │
 │ • TTL: 1-2 seconds                       │
 │ • Sources: kraken_ws, kraken_rest        │
+│ • Midpoint prices from mini-book         │
 └─────────────────┬───────────────────────┘
                   │
                   ▼
@@ -541,16 +548,92 @@ Kraken WebSocket (wss://ws.kraken.com)
 │ getPriceWithFallback(symbol, timeout)    │
 │ • Check WebSocket cache first            │
 │ • If stale: call Kraken REST API         │
+│ • REST uses same midpoint model          │
 │ • Return: { price, source, timestamp }   │
+└─────────────────┬───────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────┐
+│ Mini-Book Integrity Monitor (MBIM)       │
+│ • 5-minute continuous audit cycle        │
+│ • Cross-checks WS vs REST midpoints      │
+│ • 0.2% drift threshold detection         │
+│ • Automatic soft resync on divergence    │
 └─────────────────────────────────────────┘
 ```
 
-## 9.4 Subscription Management
+## 9.4 Mark Price Midpoint Valuation (Directive 8.9.1)
 
-- **On Engine Start:** Subscribe all open position symbols
-- **On Trade Open:** Subscribe new symbol
+All "Current Price" calculations now use the midpoint formula:
+```
+markPrice = (bestBid + bestAsk) / 2
+```
+
+This provides:
+- **Continuous updates** even for low-volume pairs
+- **Fair valuation** between bid/ask spread
+- **Consistent pricing** across WebSocket and REST sources
+
+## 9.5 Mini-Book Architecture (Directive 8.9.4-Patch)
+
+The Mini-Book is a stateful in-memory structure that tracks top-of-book bids/asks:
+
+```typescript
+interface MiniBook {
+  bids: Map<number, number>;  // price → qty
+  asks: Map<number, number>;  // price → qty
+  lastChecksum: number;
+  lastUpdate: number;
+}
+
+// orderBooks: Map<symbol, MiniBook>
+```
+
+**Key behaviors:**
+- Delta updates: qty=0 means deletion from book
+- Checksum validation detects out-of-order deltas
+- Automatic resync triggered on sequence breaks
+- Stable mid-price computation without flash-crash artifacts
+
+## 9.6 Tiered Sentinel Architecture (Phase 8.8.5)
+
+Volume-based subscription management:
+- **HIGH tier:** Continuous ticker + book subscription
+- **MID tier:** Standard subscription with 30s staleness threshold
+- **LOW tier:** REST-fallback with rate limiting
+
+Components:
+- `VolumeClassifier`: Assigns HIGH/MID/LOW tier based on 24h volume
+- `RestRateLimiter`: Token-bucket limiter prevents API abuse
+- `ChannelWatchdog`: Per-symbol staleness monitoring with auto-resync
+
+## 9.7 Subscription Management
+
+- **On Engine Start:** Subscribe all open position symbols (ticker + book channels)
+- **On Trade Open:** Subscribe new symbol with dual-channel
 - **On Trade Close:** Unsubscribe symbol (if no other positions)
 - **Health Audit:** 5-second interval checks subscription coverage
+- **Staleness Detection:** 30-second threshold triggers soft resubscribe
+- **Sentinel Watchdog:** Tier-aware channel monitoring with auto-recovery
+
+## 9.8 Mini-Book Integrity Monitor (MBIM) - Directive 8.9.5
+
+Continuous background audit infrastructure:
+
+| Property | Value |
+|----------|-------|
+| **Audit Interval** | 5 minutes |
+| **Drift Threshold** | 0.2% |
+| **Scope** | All actively traded symbols |
+| **Action on Drift** | Log warning + trigger soft resync |
+
+**API Endpoints:**
+- `POST /api/mbim/start` - Start monitor
+- `POST /api/mbim/stop` - Stop monitor
+- `GET /api/mbim/status` - Get metrics
+- `POST /api/mbim/audit` - Trigger manual audit
+
+**File:** `server/services/monitoring/mini-book-integrity-monitor.ts`
 
 ---
 

@@ -729,6 +729,314 @@ Phase 8.8.4 implements the Extended Calibration & Validation framework, includin
 
 ---
 
-**Document Version:** 2.0  
-**Last Updated:** December 29, 2025  
-**Phase Status:** Phase 8.8.4 COMPLETE
+# 9. Phase 8.8.5: Tiered Sentinel Architecture
+
+## 9.1 Overview
+
+Phase 8.8.5 implements a tiered WebSocket subscription management system to resolve stability issues with low-volume pairs.
+
+**Date:** December 2025  
+**Status:** ✅ COMPLETE
+
+## 9.2 Problem Statement
+
+Low-volume trading pairs experienced:
+- Frozen prices due to infrequent ticker updates
+- WebSocket subscription instability
+- REST API rate limiting during fallback attempts
+
+## 9.3 Implementation
+
+### VolumeClassifier
+Categorizes symbols into tiers based on 24-hour volume:
+- **HIGH:** > $1M daily volume - continuous subscription
+- **MID:** $100K - $1M - standard subscription with monitoring
+- **LOW:** < $100K - REST-fallback preferred
+
+### RestRateLimiter
+Token-bucket rate limiter preventing REST API abuse:
+- Per-symbol cooldown tracking
+- Configurable refill rate
+- Blocked request logging
+
+### Channel Watchdog
+Tier-aware staleness monitoring:
+- 30-second staleness threshold
+- Automatic soft resubscribe on stale detection
+- Per-symbol tick frequency tracking
+
+## 9.4 UI Enhancements
+
+Active Trades table now displays:
+- **Volume column:** Shows "TIER (24hVol)" format
+- **Source column:** States like "WS", "WS (cached)", "REST", "REST (blocked)"
+
+---
+
+# 10. Phase 8.8.7: Filter Synchronization & Legacy Deprecation
+
+## 10.1 Overview
+
+Phase 8.8.7 fixes critical filter bypass issues by ensuring consistent filter pool usage across all components.
+
+**Date:** December 2025  
+**Status:** ✅ COMPLETE
+
+## 10.2 Problem Statement
+
+Filter bypass discovered:
+- Signal Orchestrator and VTS Runner were using different filter sources
+- `FilteredPairsService` (legacy) conflicted with `activeFilterPool.getActivePool()`
+- FX5-verified pairs were being bypassed
+
+## 10.3 Implementation
+
+### Filter Source Unification
+- Signal Orchestrator: Now uses `activeFilterPool.getActivePool()`
+- VTS Runner: Now uses `activeFilterPool.getActivePool()`
+- Legacy `FilteredPairsService`: Deprecated
+
+### Files Modified
+- `server/services/signal-orchestrator.ts`
+- `server/services/vts-runner.ts`
+
+---
+
+# 11. Phase 8.9.0-B: Kraken WebSocket v2 Upgrade
+
+## 11.1 Overview
+
+Complete migration from Kraken WebSocket v1 to v2 API for improved reliability and feature support.
+
+**Date:** December 2025  
+**Status:** ✅ COMPLETE
+
+## 11.2 Key Changes
+
+### Endpoint Migration
+- **v1:** `wss://ws.kraken.com`
+- **v2:** `wss://ws.kraken.com/v2`
+
+### Message Format
+- v2 uses structured JSON with `method`, `params`, `channel` fields
+- Subscription includes `snapshot: true` for initial state
+- Heartbeat channel for connection health
+
+### Translator Service
+New `kraken-v2-translator.ts` provides consistent data translation:
+- v2 message parsing
+- Symbol normalization
+- Price extraction from ticker/book data
+
+## 11.3 Files Created/Modified
+
+### New Files
+- `server/markets/kraken-v2-translator.ts`
+
+### Modified Files
+- `server/services/kraken-websocket-adapter.ts`
+- `server/services/kraken.ts` (secondary adapter)
+
+---
+
+# 12. Phase 8.9.1-8.9.4: Mark Price Midpoint Valuation
+
+## 12.1 Overview
+
+Series of directives implementing midpoint pricing model for accurate position valuation.
+
+**Date:** December 2025  
+**Status:** ✅ COMPLETE
+
+## 12.2 Directive 8.9.1: Mark Price Midpoint Valuation
+
+**Problem:** "Current Price" using last trade price was stale for low-volume pairs.
+
+**Solution:** Calculate Current Price as midpoint:
+```
+markPrice = (bestBid + bestAsk) / 2
+```
+
+## 12.3 Directive 8.9.2: REST Midpoint Alignment
+
+**Problem:** REST API fallback used different pricing model than WebSocket.
+
+**Solution:** REST API now also returns midpoint:
+```typescript
+const restMid = (ticker.bid + ticker.ask) / 2;
+```
+
+## 12.4 Directive 8.9.4: Orderbook Channel Midprice Feeds
+
+**Problem:** Ticker channel alone insufficient for continuous price updates.
+
+**Solution:** Dual-channel WebSocket subscription:
+- **ticker channel:** Last trade prices
+- **book channel:** Orderbook depth for bid/ask extraction
+
+Both channels feed into midpoint calculation.
+
+## 12.5 Directive 8.9.4-Patch: Mini-Book Safety Upgrade
+
+**Problem:** Stateless "last message" logic caused flash-crash artifacts when processing out-of-order deltas.
+
+**Solution:** Stateful in-memory Mini-Book per symbol:
+
+```typescript
+interface MiniBook {
+  bids: Map<number, number>;  // price → qty
+  asks: Map<number, number>;  // price → qty
+  lastChecksum: number;
+  lastUpdate: number;
+}
+
+const orderBooks: Map<string, MiniBook> = new Map();
+```
+
+**Key behaviors:**
+- Delta updates: qty=0 means deletion from book
+- Checksum validation detects out-of-order deltas
+- Automatic resync triggered on sequence breaks
+- Stable mid-price computation without artifacts
+
+## 12.6 Directive 8.9.4-VTP: Verification Test Protocol
+
+**Purpose:** Comprehensive infrastructure validation for Mini-Book, Sentinel, WebSocket, and REST systems.
+
+**Implementation:**
+- `verification-test-protocol.ts` service
+- Feed health metrics captured every 30 seconds
+- WS vs REST midpoint comparison every 60 seconds
+- Sentinel event logging
+
+**API Endpoints:**
+- `POST /api/vtp/start` - Begin validation session
+- `POST /api/vtp/stop` - End session and generate summary
+- `GET /api/vtp/status` - Real-time metrics
+
+**Pass Criteria:**
+- ≥95% WS feed integrity
+- <1 sentinel reset/hour
+- ≤0.2% price drift
+- 100% UI sync
+
+**Test Result:** 35-minute perfect session (0% drift, 0 sentinel resets, 100% feed integrity)
+
+---
+
+# 13. Phase 8.9.5: Mini-Book Integrity Monitor (MBIM)
+
+## 13.1 Overview
+
+Continuous background audit infrastructure that cross-checks WebSocket Mini-Book mid-prices against REST midpoint values.
+
+**Date:** December 2025  
+**Status:** ✅ COMPLETE
+
+## 13.2 Implementation
+
+### Core Service
+**File:** `server/services/monitoring/mini-book-integrity-monitor.ts`
+
+### Audit Cycle
+- **Interval:** 5 minutes
+- **Scope:** All symbols with active open positions
+- **Action:** Compare WS midpoint vs REST midpoint
+
+### Drift Detection
+- **Threshold:** 0.2%
+- **On divergence:** Log warning + trigger Sentinel soft resync
+
+## 13.3 Directive 8.9.5-Patch
+
+**Problem:** REST API calls failing with "EQuery:Unknown asset pair" for some symbols.
+
+**Solution:** Use canonical `toKrakenRest()` from `kraken-symbol-resolver.ts` for proper symbol translation:
+```typescript
+import { toKrakenRest } from '../../markets/kraken-symbol-resolver';
+
+const restSymbol = toKrakenRest(internalSymbol);
+```
+
+## 13.4 API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/mbim/start` | Start monitor (5-min interval) |
+| POST | `/api/mbim/stop` | Stop monitor |
+| GET | `/api/mbim/status` | Get metrics (totalChecks, passCount, driftCount, avgDriftPct) |
+| POST | `/api/mbim/audit` | Trigger manual audit |
+
+## 13.5 Validation Results
+
+**Session:** December 30, 2025  
+**Symbols Audited:** XRP/CAD, TRAC/USD  
+**Results:**
+- Total Checks: 2
+- Pass Count: 2
+- Drift Count: 0
+- Average Drift: 0.001%
+
+---
+
+# 14. Phase 8 Completion Summary
+
+## 14.1 All Directives Completed
+
+| Phase | Directive | Description | Status |
+|-------|-----------|-------------|--------|
+| 8.8.1 | Scanner Audit | FX5 output validation | ✅ |
+| 8.8.2 | Signal Audit | Signal generation validation | ✅ |
+| 8.8.3 | Pipeline | End-to-end trading pipeline | ✅ |
+| 8.8.4 | M5D/M5E | Extended validation framework | ✅ |
+| 8.8.5 | Sentinel | Tiered WebSocket management | ✅ |
+| 8.8.7 | Filters | Filter synchronization | ✅ |
+| 8.9.0-B | WS v2 | Kraken WebSocket v2 upgrade | ✅ |
+| 8.9.1 | Midpoint | Mark Price Midpoint Valuation | ✅ |
+| 8.9.2 | REST | REST Midpoint Alignment | ✅ |
+| 8.9.4 | Book | Orderbook channel integration | ✅ |
+| 8.9.4-P | Mini-Book | Stateful mini-book tracking | ✅ |
+| 8.9.4-VTP | VTP | Verification Test Protocol | ✅ |
+| 8.9.5 | MBIM | Mini-Book Integrity Monitor | ✅ |
+
+## 14.2 Key Files Added in Phase 8.8.5-8.9.5
+
+| File | Purpose |
+|------|---------|
+| `server/markets/kraken-v2-translator.ts` | Kraken v2 message translation |
+| `server/services/monitoring/mini-book-integrity-monitor.ts` | MBIM service |
+| `server/services/verification-test-protocol.ts` | VTP service |
+| `docs/mini-book-integrity-monitor.md` | MBIM documentation |
+
+## 14.3 Key Files Modified
+
+| File | Changes |
+|------|---------|
+| `server/services/kraken-websocket-adapter.ts` | v2 upgrade, dual-channel, mini-book |
+| `server/services/kraken.ts` | v2 upgrade, mini-book |
+| `server/services/live-pricing-adapter.ts` | Midpoint integration |
+| `server/markets/kraken-symbol-resolver.ts` | REST symbol resolution |
+| `server/routes.ts` | VTP and MBIM endpoints |
+
+---
+
+# Appendix C: Phase 8.8.5-8.9.5 Directive Tags
+
+| Tag | Purpose |
+|-----|---------|
+| `[8.8.5]` | Tiered Sentinel Architecture |
+| `[8.8.7]` | Filter synchronization |
+| `[8.9.0-B]` | WebSocket v2 upgrade |
+| `[8.9.1]` | Mark price midpoint |
+| `[8.9.2]` | REST midpoint alignment |
+| `[8.9.4]` | Orderbook channel |
+| `[8.9.4-P]` | Mini-book patch |
+| `[8.9.4-VTP]` | Verification test protocol |
+| `[8.9.5]` | Mini-Book Integrity Monitor |
+| `[8.9.5-P]` | MBIM symbol resolution patch |
+
+---
+
+**Document Version:** 3.0  
+**Last Updated:** December 30, 2025  
+**Phase Status:** PHASE 8 COMPLETE

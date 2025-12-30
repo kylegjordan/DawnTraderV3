@@ -42,8 +42,13 @@ DawnTrader is a **long-only, spot-trading cryptocurrency day trading platform** 
 | REB Program | November 22-30, 2025 | Emergency restoration (REB 1.0-2.12F) |
 | Phase 8.8.3 | December 2025 | End-to-end trading pipeline functional |
 | Phase 8.8.4 | December 2025 | Extended Calibration & Validation Framework |
+| Phase 8.8.5 | December 2025 | Tiered Sentinel Architecture for WebSocket stability |
+| Phase 8.8.7 | December 2025 | Filter Synchronization & Legacy Deprecation |
+| Phase 8.9.0-B | December 2025 | Kraken WebSocket v2 API Upgrade |
+| Phase 8.9.1-8.9.4 | December 2025 | Mark Price Midpoint Valuation & Mini-Book |
+| Phase 8.9.5 | December 2025 | Mini-Book Integrity Monitor (MBIM) |
 
-**Current State:** DawnTrader V3 is the most stable and feature-complete version ever built. The trading pipeline is fully functional from FX5 scanning through trade closure. Phase 8.8.4 adds comprehensive validation testing with M5D/M5E controlled runs, dynamic guardrail slot calculation, and VTS-Paper trade comparison auditing.
+**Current State:** DawnTrader V3 is the most stable and feature-complete version ever built. Phase 8 is now complete with comprehensive WebSocket v2 integration, mark price midpoint valuation, stateful mini-book tracking, and continuous integrity monitoring infrastructure. The trading pipeline is fully functional from FX5 scanning through trade closure. Phase 8.8.4 adds comprehensive validation testing with M5D/M5E controlled runs, dynamic guardrail slot calculation, and VTS-Paper trade comparison auditing.
 
 ---
 
@@ -763,7 +768,7 @@ tuned_by_latti                  -- LATTi optimization flag
 
 # Part 12: Roadmap Forward
 
-## 12.1 Phase 8.8 Completion
+## 12.1 Phase 8 Completion
 
 | Subphase | Description | Status |
 |----------|-------------|--------|
@@ -771,8 +776,15 @@ tuned_by_latti                  -- LATTi optimization flag
 | 8.8.2 | Signal Engine Audit | ✅ Complete |
 | 8.8.3 | Strategy Engine Audit | ✅ Complete |
 | 8.8.4 | Extended Calibration & Validation | ✅ Complete |
-| 8.8.5 | Trading Engine Audit | ⏳ Pending |
-| 8.8.9 | Green Path Test | ⏳ Pending |
+| 8.8.5 | Tiered Sentinel Architecture | ✅ Complete |
+| 8.8.7 | Filter Synchronization | ✅ Complete |
+| 8.9.0-B | WebSocket v2 Upgrade | ✅ Complete |
+| 8.9.1 | Mark Price Midpoint Valuation | ✅ Complete |
+| 8.9.2 | REST Midpoint Alignment | ✅ Complete |
+| 8.9.4 | Orderbook Channel Midprice Feeds | ✅ Complete |
+| 8.9.4-P | Mini-Book Safety Upgrade | ✅ Complete |
+| 8.9.4-VTP | Verification Test Protocol | ✅ Complete |
+| 8.9.5 | Mini-Book Integrity Monitor | ✅ Complete |
 
 ## 12.2 Future Phases
 
@@ -860,5 +872,5 @@ If (operation requires real-time response) + (operation will be called frequentl
 ---
 
 **Document Status:** Complete  
-**Last Updated:** December 12, 2025  
-**Next Review:** Upon Phase 8.8 completion
+**Last Updated:** December 30, 2025  
+**Next Review:** Upon Phase 9 initiation

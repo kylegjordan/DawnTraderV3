@@ -1,9 +1,9 @@
 # DawnTrader — System Architecture & Execution Flow Overview
 
 **Document Created:** December 12, 2025  
-**Last Updated:** December 29, 2025  
+**Last Updated:** December 30, 2025  
 **Purpose:** Complete factual reference for system architecture, data flows, and execution cadences  
-**Scope:** Paper trading pipeline (Phase 8.8.3 architecture) + Validation Framework (Phase 8.8.4)
+**Scope:** Paper trading pipeline (Phase 8.8.3 architecture) + Validation Framework (Phase 8.8.4) + WebSocket v2 & Monitoring (Phase 8.8.5-8.9.5)
 
 ---
 
