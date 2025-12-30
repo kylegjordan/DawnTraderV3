@@ -19,8 +19,9 @@
 8. [The GitHub Incident](#part-7-the-github-incident)
 9. [Rebuild of Lost Work: REB 1-2.12F](#part-8-rebuild-of-lost-work-reb-1-212f)
 10. [Phase 8.8.3: Making the Engine Work](#part-9-phase-883-making-the-engine-work)
-11. [Current Architecture & Components](#part-10-current-architecture--components)
-12. [Roadmap Forward](#part-11-roadmap-forward)
+11. [Phase 8.8.4: Extended Calibration & Validation](#part-10-phase-884-extended-calibration--validation)
+12. [Current Architecture & Components](#part-11-current-architecture--components)
+13. [Roadmap Forward](#part-12-roadmap-forward)
 
 ---
 
@@ -40,8 +41,9 @@ DawnTrader is a **long-only, spot-trading cryptocurrency day trading platform** 
 | GitHub Incident | November 20, 2025 | Sync event erased 10-14 days of work |
 | REB Program | November 22-30, 2025 | Emergency restoration (REB 1.0-2.12F) |
 | Phase 8.8.3 | December 2025 | End-to-end trading pipeline functional |
+| Phase 8.8.4 | December 2025 | Extended Calibration & Validation Framework |
 
-**Current State:** DawnTrader V3 is the most stable and feature-complete version ever built. The trading pipeline is fully functional from FX5 scanning through trade closure.
+**Current State:** DawnTrader V3 is the most stable and feature-complete version ever built. The trading pipeline is fully functional from FX5 scanning through trade closure. Phase 8.8.4 adds comprehensive validation testing with M5D/M5E controlled runs, dynamic guardrail slot calculation, and VTS-Paper trade comparison auditing.
 
 ---
 
@@ -589,9 +591,88 @@ Trade Closure (target/stop/trailing/manual)
 
 ---
 
-# Part 10: Current Architecture & Components
+# Part 10: Phase 8.8.4: Extended Calibration & Validation
 
-## 10.1 Core Services
+## 10.1 Overview
+
+Phase 8.8.4 implements the Extended Calibration & Validation framework, completing the M5 directive series with controlled validation runs, dynamic guardrail slot calculation, and comprehensive validation reporting.
+
+**Date Range:** December 2025  
+**Status:** COMPLETE
+
+## 10.2 Directive Summary
+
+| Directive | Description | Status |
+|-----------|-------------|--------|
+| M5-R1 | Extended Calibration & Validation Run (60-min) | ✅ Complete |
+| M5A | VTS Mode Switching Correction | ✅ Complete |
+| M5B | Autonomous VTS Operation | ✅ Complete |
+| M5C | Controlled Validation & Calibration Integrity Test | ✅ Complete |
+| M5C.1 | Paper Trade Recording Integration | ✅ Complete |
+| M5D | 60-Minute Controlled Validation Run | ✅ Complete |
+| M5E | Controlled 60-Minute Validation with Paper Trading Activation | ✅ Complete |
+
+## 10.3 Key Implementations
+
+### M5E: Controlled 60-Minute Validation with Paper Trading Activation
+
+The flagship directive of Phase 8.8.4, M5E implements a split-phase validation approach:
+
+**Phase Structure:**
+- **Phase A (30 min):** VTS simulation only - generates virtual trade signals
+- **Phase B (30 min):** Paper trading active - real paper trades executed
+- **Phase C:** Automated comparison and report generation
+
+**Dynamic Guardrail Slot Calculation:**
+```typescript
+maxSlots = floor(maxTotalExposurePct / maxPositionPercentPct)
+// Example: floor(100 / 12) = 8 slots
+```
+
+**Validation Criteria:**
+| Metric | Threshold |
+|--------|-----------|
+| Feed Latency | < 100ms |
+| Cache Window | >= 200 ticks |
+| CWQI/NGC Drift | < 10% |
+| Max Exposure | <= 40% |
+| Match Rate | >= 50% |
+
+## 10.4 Final Validation Test Results
+
+**Session:** `m5e_1767010953524`  
+**Duration:** 60 minutes (30 min VTS + 30 min Paper)  
+**Result:** 5/10 criteria passed
+
+| Trade Type | Count |
+|------------|-------|
+| VTS Trades | 600 |
+| Paper Trades | 9 |
+| Matched Pairs | 0 |
+
+**Quality Metrics:** CWQI: 0.659 | NGC: 0.736 | DI: 0.713 | GSI: 0.5
+
+## 10.5 Files Added
+
+- `server/services/m5d-validation-service.ts` - M5D validation orchestration
+- `server/services/m5e-validation-service.ts` - M5E split-phase validation
+- `server/services/dynamic-slots.ts` - Shared slot calculation utility
+- `server/services/vts-live-comparison-audit.ts` - VTS-Paper comparison
+- `docs/Phase_8.8.4_Consolidation_Detail_Report.md` - Detailed report
+
+## 10.6 API Endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /api/vts/validation/run-m5e` | Full 60-minute M5E validation |
+| `GET /api/vts/validation/m5e-status` | M5E status check |
+| `POST /api/vts/validation/run-m5d` | M5D validation run |
+
+---
+
+# Part 11: Current Architecture & Components
+
+## 11.1 Core Services
 
 | Service | File | Purpose |
 |---------|------|---------|
@@ -605,7 +686,7 @@ Trade Closure (target/stop/trailing/manual)
 | **Kraken WebSocket Adapter** | `kraken-websocket-adapter.ts` | Real-time price feed |
 | **Live Pricing Adapter** | `live-pricing-adapter.ts` | Price cache with fallbacks |
 
-## 10.2 Database Schema (Key Tables)
+## 11.2 Database Schema (Key Tables)
 
 | Table | Purpose |
 |-------|---------|
@@ -616,7 +697,7 @@ Trade Closure (target/stop/trailing/manual)
 | `screener_configs` | Filter configuration per user |
 | `fx5_24h_activity` | 24-hour scanner metrics |
 
-## 10.3 Guardrails v2 Schema
+## 11.3 Guardrails v2 Schema
 
 ```sql
 -- Key fields in guardrails_v2
@@ -631,7 +712,7 @@ is_manual_override              -- User override flag
 tuned_by_latti                  -- LATTi optimization flag
 ```
 
-## 10.4 WebSocket Architecture
+## 11.4 WebSocket Architecture
 
 ```
 ┌─────────────────────────────────────────┐
@@ -664,7 +745,7 @@ tuned_by_latti                  -- LATTi optimization flag
 └─────────────────────────────────────────┘
 ```
 
-## 10.5 AI Components
+## 11.5 AI Components
 
 ### LATTi/Lottie (Active - Passive Mode)
 - `latti-manager.ts` - Core optimization engine
@@ -680,20 +761,20 @@ tuned_by_latti                  -- LATTi optimization flag
 
 ---
 
-# Part 11: Roadmap Forward
+# Part 12: Roadmap Forward
 
-## 11.1 Phase 8.8 Completion
+## 12.1 Phase 8.8 Completion
 
 | Subphase | Description | Status |
 |----------|-------------|--------|
 | 8.8.1 | Scanner Output Audit | ✅ Complete |
 | 8.8.2 | Signal Engine Audit | ✅ Complete |
 | 8.8.3 | Strategy Engine Audit | ✅ Complete |
-| 8.8.4 | Ready-To-Buy Audit | ⏳ Pending |
+| 8.8.4 | Extended Calibration & Validation | ✅ Complete |
 | 8.8.5 | Trading Engine Audit | ⏳ Pending |
 | 8.8.9 | Green Path Test | ⏳ Pending |
 
-## 11.2 Future Phases
+## 12.2 Future Phases
 
 | Phase | Description |
 |-------|-------------|
@@ -703,7 +784,7 @@ tuned_by_latti                  -- LATTi optimization flag
 | **Phase 12** | AWS & Supabase Migration |
 | **Phase 13** | Restore Walter (strategic advisor role) |
 
-## 11.3 Walter's Future Role
+## 12.3 Walter's Future Role
 
 Walter returns in Phase 13 as:
 - Long-horizon advisor (not real-time)

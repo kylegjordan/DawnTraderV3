@@ -590,6 +590,145 @@ The following directive tags were used throughout Phase 8.8.3 implementation:
 
 ---
 
-**Document Version:** 1.0  
-**Last Updated:** December 13, 2025  
-**Phase Status:** Phase 8.8.3 COMPLETE
+# 8. Phase 8.8.4: Extended Calibration & Validation Framework
+
+## 8.1 Overview
+
+Phase 8.8.4 implements the Extended Calibration & Validation framework, including M5D and M5E controlled validation runs, dynamic guardrail slot calculation, VTS-Paper trade comparison auditing, and comprehensive validation reporting systems.
+
+**Date Range:** December 2025  
+**Status:** ✅ COMPLETE
+
+## 8.2 Directive Summary
+
+| Directive | Description | Status |
+|-----------|-------------|--------|
+| M5-R1 | Extended Calibration & Validation Run (60-min) | ✅ Completed |
+| M5A | VTS Mode Switching Correction | ✅ Completed |
+| M5B | Autonomous VTS Operation | ✅ Completed |
+| M5C | Controlled Validation & Calibration Integrity Test | ✅ Completed |
+| M5C.1 | Paper Trade Recording Integration | ✅ Completed |
+| M5D | 60-Minute Controlled Validation Run | ✅ Completed |
+| M5E | Controlled 60-Minute Validation with Paper Trading Activation | ✅ Completed |
+
+## 8.3 Key Implementations
+
+### M5-R1: Extended Calibration & Validation Run
+- 60-minute extended validation session with 10-second capture intervals
+- Persistent Calibration Storage
+- Validation Session Rate Limit Bypass
+- Calibration Report Generator
+- Rolling Snapshots
+
+### M5A: VTS Mode Switching Correction
+- Decoupled VTS mode logic from `systemMode`
+- Tied simulation enablement to `tradingActive` boolean
+- Passive Learning Mirror implementation
+
+### M5B: Autonomous VTS Operation
+- 60-second autonomous VTS cycles when `tradingActive=false`
+- Internal signal generation
+- Configuration via `config/vts.json`
+- Dedicated API endpoints for control
+
+### M5C/M5C.1: Validation & Calibration Integrity
+- VTS-to-Paper trade comparison
+- Strategy & Metric Parity validation
+- Automatic paper trade capture via `recordPaperTrade()`
+- Comparison Audit Service
+
+### M5D: 60-Minute Controlled Validation Run
+- Three-phase orchestration: VTS → Paper → Comparison
+- 15-second metrics capture (CWQI, NGC, DI, GSI)
+- Feed latency tracking from price cache
+- `Validation_Summary.md` generation
+
+### M5E: Controlled 60-Minute Validation with Paper Trading Activation
+- Split-phase approach: Phase A (30 min VTS) + Phase B (30 min Paper)
+- Dynamic guardrail slot calculation: `maxSlots = floor(maxExposure / maxPosition)`
+- Proper paper trading activation via `startPaperSimulation()`
+- Engine state logging every 15 seconds
+- Comprehensive reports: `Validation_Summary_<sessionId>.md` and `Metrics_Trend_Correlation_<sessionId>.csv`
+
+## 8.4 Validation Criteria
+
+| Metric | Threshold | Description |
+|--------|-----------|-------------|
+| Feed Latency | < 100ms | Real-time data freshness |
+| Cache Window | >= 200 ticks | Price cache depth |
+| CWQI/NGC Drift | < 10% | Quality metric stability |
+| Adaptive Variance | > 0.01 | Learning activity indicator |
+| Risk Per Trade | <= 3.5% | Risk management compliance |
+| Max Exposure | <= 40% | Portfolio exposure limit |
+| Match Rate | >= 50% | VTS-to-Paper trade matching |
+| Calibration Error | < 0.15 | Model accuracy |
+| Correlation | > 0.5 | VTS-Paper correlation |
+
+## 8.5 Final M5E Validation Test Results
+
+**Session ID:** `m5e_1767010953524`  
+**Duration:** 60 minutes (30 min VTS + 30 min Paper)  
+**Result:** 5/10 criteria passed
+
+| Metric | Value | Status |
+|--------|-------|--------|
+| Feed Latency | 6233 ms | ❌ |
+| Cache Window | 200 ticks | ✅ |
+| CWQI Drift | 0.30% | ✅ |
+| NGC Drift | 0.54% | ✅ |
+| Adaptive Variance | 0.0013 | ❌ |
+| Risk Per Trade | 3.5% | ✅ |
+| Max Exposure | 100% | ❌ |
+| Match Rate | 0% | ❌ |
+| Calibration Error | 0.000 | ✅ |
+| Correlation | 0.000 | ❌ |
+
+**Trade Statistics:** 600 VTS trades, 9 Paper trades, 0 matched pairs
+
+## 8.6 API Endpoints Added
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/vts/validation/run-m5d` | Run M5D validation |
+| GET | `/api/vts/validation/m5d-status` | M5D status |
+| POST | `/api/vts/validation/run-m5e` | Run full M5E validation |
+| POST | `/api/vts/validation/run-m5e-vts` | M5E VTS phase only |
+| POST | `/api/vts/validation/run-m5e-paper` | M5E Paper phase only |
+| POST | `/api/vts/validation/run-m5e-compare` | M5E comparison only |
+| GET | `/api/vts/validation/m5e-status` | M5E status |
+
+## 8.7 Files Created/Modified
+
+### New Files
+- `server/services/m5d-validation-service.ts`
+- `server/services/m5e-validation-service.ts`
+- `server/services/dynamic-slots.ts`
+- `server/services/vts-live-comparison-audit.ts`
+- `config/vts.json`
+- `docs/Phase_8.8.4_Consolidation_Detail_Report.md`
+
+### Modified Files
+- `server/routes.ts` - M5D/M5E validation endpoints
+- `server/services/vts-runner.ts` - Mode switching fixes
+- `server/services/paper-execution-engine.ts` - Trade recording, start/stop
+- `server/storage.ts` - Guardrail field access
+
+---
+
+# Appendix B: Phase 8.8.4 Directive Tags
+
+| Tag | Purpose |
+|-----|---------|
+| `[M5-R1]` | Extended calibration run |
+| `[M5A]` | VTS mode switching |
+| `[M5B]` | Autonomous VTS operation |
+| `[M5C]` | Validation integrity test |
+| `[M5C.1]` | Paper trade recording |
+| `[M5D]` | 60-minute validation run |
+| `[M5E]` | Split-phase validation with paper activation |
+
+---
+
+**Document Version:** 2.0  
+**Last Updated:** December 29, 2025  
+**Phase Status:** Phase 8.8.4 COMPLETE
