@@ -1,8 +1,9 @@
 # DawnTrader — System Architecture & Execution Flow Overview
 
 **Document Created:** December 12, 2025  
+**Last Updated:** December 29, 2025  
 **Purpose:** Complete factual reference for system architecture, data flows, and execution cadences  
-**Scope:** Paper trading pipeline (Phase 8.8.3 architecture)
+**Scope:** Paper trading pipeline (Phase 8.8.3 architecture) + Validation Framework (Phase 8.8.4)
 
 ---
 
@@ -19,6 +20,7 @@
 9. [WebSocket & UI Propagation](#9-websocket--ui-propagation)
 10. [Database Schema Summary](#10-database-schema-summary)
 11. [System Constants & Invariants](#11-system-constants--invariants)
+12. [Validation Framework (Phase 8.8.4)](#12-validation-framework-phase-884)
 
 ---
 
@@ -818,5 +820,109 @@ CREATE TABLE execution_attempt_audit (
 
 ---
 
-**Document Version:** 1.0  
-**Last Updated:** December 12, 2025
+# 12. Validation Framework (Phase 8.8.4)
+
+## 12.1 Overview
+
+Phase 8.8.4 introduces the Extended Calibration & Validation Framework for controlled testing and comparison of VTS (Virtual Trade Simulator) signals against actual paper trade execution.
+
+## 12.2 Validation Services Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                           VALIDATION FRAMEWORK (Phase 8.8.4)                          │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                      │
+│  ┌────────────────────────────────────────────────────────────────────────────┐    │
+│  │                       M5E VALIDATION SERVICE                                │    │
+│  │                    (60-minute Split-Phase Validation)                       │    │
+│  │                                                                             │    │
+│  │   ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐           │    │
+│  │   │   PHASE A       │  │   PHASE B       │  │   PHASE C       │           │    │
+│  │   │   (30 min)      │  │   (30 min)      │  │   (Auto)        │           │    │
+│  │   │                 │  │                 │  │                 │           │    │
+│  │   │ VTS Simulation  │─▶│ Paper Trading   │─▶│ Comparison &    │           │    │
+│  │   │ Only            │  │ Active          │  │ Report Gen      │           │    │
+│  │   │                 │  │                 │  │                 │           │    │
+│  │   │ tradingActive   │  │ tradingActive   │  │ Generate:       │           │    │
+│  │   │   = false       │  │   = true        │  │ • Summary.md    │           │    │
+│  │   │                 │  │                 │  │ • Metrics.csv   │           │    │
+│  │   └─────────────────┘  └─────────────────┘  └─────────────────┘           │    │
+│  └────────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                      │
+│  ┌────────────────────────────────────────────────────────────────────────────┐    │
+│  │                       METRICS CAPTURE (15-second intervals)                 │    │
+│  │                                                                             │    │
+│  │   • CWQI (Composite Weighted Quality Index)                                │    │
+│  │   • NGC (Normalized Global Confidence)                                     │    │
+│  │   • DI (Decision Index)                                                    │    │
+│  │   • GSI (Global Stability Index)                                           │    │
+│  │   • Feed Latency (from price cache timestamps)                             │    │
+│  │   • Dynamic Slots (computed from guardrails)                               │    │
+│  │   • VTS Trade Count / Paper Trade Count                                    │    │
+│  │   • Open Positions Count                                                   │    │
+│  └────────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                      │
+│  ┌────────────────────────────────────────────────────────────────────────────┐    │
+│  │                       DYNAMIC SLOT CALCULATION                              │    │
+│  │                                                                             │    │
+│  │   Formula: maxSlots = floor(maxTotalExposurePct / maxPositionPercentPct)   │    │
+│  │                                                                             │    │
+│  │   Example: floor(100 / 12) = 8 slots                                       │    │
+│  │                                                                             │    │
+│  │   File: server/services/dynamic-slots.ts                                   │    │
+│  └────────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                      │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+## 12.3 Validation Criteria
+
+| Metric | Threshold | Description |
+|--------|-----------|-------------|
+| Feed Latency | < 100ms | Real-time data freshness |
+| Cache Window | >= 200 ticks | Price cache depth |
+| CWQI/NGC Drift | < 10% | Quality metric stability |
+| Adaptive Variance | > 0.01 | Learning activity indicator |
+| Risk Per Trade | <= 3.5% | Risk management compliance |
+| Max Exposure | <= 40% | Portfolio exposure limit |
+| Match Rate | >= 50% | VTS-to-Paper trade matching |
+| Calibration Error | < 0.15 | Model accuracy |
+| Correlation | > 0.5 | VTS-Paper correlation |
+
+## 12.4 Validation API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/vts/validation/run-m5e` | Full 60-minute M5E validation |
+| POST | `/api/vts/validation/run-m5e-vts` | Phase A only (VTS) |
+| POST | `/api/vts/validation/run-m5e-paper` | Phase B only (Paper) |
+| POST | `/api/vts/validation/run-m5e-compare` | Phase C only (Comparison) |
+| GET | `/api/vts/validation/m5e-status` | M5E status check |
+| POST | `/api/vts/validation/run-m5d` | M5D validation run |
+| GET | `/api/vts/validation/m5d-status` | M5D status check |
+
+## 12.5 Validation Output Files
+
+| File | Location | Description |
+|------|----------|-------------|
+| Validation Summary | `/docs/Validation_Summary_<sessionId>.md` | Full validation report |
+| Metrics CSV | `/docs/Metrics_Trend_Correlation_<sessionId>.csv` | 15-second snapshots |
+| Engine Log | `/tmp/logs/ValidationEngine.log` | Engine state log |
+| VTS Trades | `/data/vts_trades_*.json` | Virtual trade records |
+| Paper Trades | `/data/paper_trades_*.json` | Paper trade records |
+
+## 12.6 Validation Service Files
+
+| File | Purpose |
+|------|---------|
+| `server/services/m5d-validation-service.ts` | M5D validation orchestration |
+| `server/services/m5e-validation-service.ts` | M5E split-phase validation |
+| `server/services/dynamic-slots.ts` | Dynamic slot calculation |
+| `server/services/vts-live-comparison-audit.ts` | VTS-Paper comparison |
+| `server/services/vts-runner.ts` | VTS simulation runner |
+
+---
+
+**Document Version:** 2.0  
+**Last Updated:** December 29, 2025
