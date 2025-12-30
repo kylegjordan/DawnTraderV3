@@ -680,9 +680,16 @@ export class PaperExecutionEngine {
               withoutPrice++;
               continue;
             }
-            currentPrice = parseFloat(tickerData.c[0]);
+            
+            // 8.9.2: Calculate midpoint from bid/ask, fallback to last trade
+            const ask = parseFloat(tickerData.a[0]);
+            const bid = parseFloat(tickerData.b[0]);
+            const lastTrade = parseFloat(tickerData.c[0]);
+            currentPrice = (ask > 0 && bid > 0) ? (ask + bid) / 2 : lastTrade;
             priceSource = 'kraken_rest';
             withRestPrice++;
+            
+            console.log(`[8.9.2][REST_TICK] ${position.symbol} bid=${bid} ask=${ask} mid=${currentPrice.toFixed(8)}`);
             
             // Phase 8.8.3-I7: Broadcast this REST price to frontend
             // Normalize to internal format for consistent cache keys

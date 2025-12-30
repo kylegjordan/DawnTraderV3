@@ -479,7 +479,11 @@ export class LivePricingAdapter {
 
       const data = await response.json() as { 
         error: string[];
-        result: Record<string, { c: [string, string] }> // c = last trade close [price, lot volume]
+        result: Record<string, { 
+          a: [string, string, string]; // ask [price, whole lot volume, lot volume]
+          b: [string, string, string]; // bid [price, whole lot volume, lot volume]
+          c: [string, string];         // last trade [price, lot volume]
+        }>
       };
       
       if (data.error && data.error.length > 0) {
@@ -495,20 +499,26 @@ export class LivePricingAdapter {
       }
       
       const tickerData = data.result[resultKey];
-      const lastPrice = parseFloat(tickerData?.c?.[0] || '0');
       
-      if (lastPrice <= 0 || isNaN(lastPrice)) {
-        console.log(`[8.8.3-I6][KRAKEN_REST_INVALID_PRICE] ${symbol}: price=${tickerData?.c?.[0]}`);
+      // 8.9.2: Calculate midpoint from bid/ask, fallback to last trade
+      const ask = parseFloat(tickerData?.a?.[0] || '0');
+      const bid = parseFloat(tickerData?.b?.[0] || '0');
+      const lastTrade = parseFloat(tickerData?.c?.[0] || '0');
+      const midpoint = (ask > 0 && bid > 0) ? (ask + bid) / 2 : lastTrade;
+      
+      if (midpoint <= 0 || isNaN(midpoint)) {
+        console.log(`[8.9.2][KRAKEN_REST_INVALID_PRICE] ${symbol}: bid=${bid} ask=${ask} last=${lastTrade}`);
         return null;
       }
       
-      console.log(`[8.8.3-I6][REST_FALLBACK] symbol=${symbol} price=${lastPrice} source=kraken_rest priceAgeMs=0`);
+      console.log(`[8.9.2][REST_TICK] ${symbol} bid=${bid} ask=${ask} mid=${midpoint.toFixed(8)}`);
+      console.log(`[8.8.3-I6][REST_FALLBACK] symbol=${symbol} price=${midpoint} source=kraken_rest priceAgeMs=0`);
       
       // Phase 8.8.4-IA-PRICE-CACHE: Update centralized price cache from REST
       const normalized = this.normalizeSymbol(symbol);
-      priceCache.updateFromRest(normalized, lastPrice);
+      priceCache.updateFromRest(normalized, midpoint);
       
-      return lastPrice;
+      return midpoint;
 
     } catch (error) {
       console.error(`[8.8.3-I6][KRAKEN_REST_EXCEPTION] ${symbol}:`, error);

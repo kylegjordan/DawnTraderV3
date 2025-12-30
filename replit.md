@@ -59,6 +59,8 @@ Kraken WebSocket v2 Upgrade (Directive 8.9.0-B) migrates both WebSocket adapters
 
 Mark Price Midpoint Valuation Fix (Directive 8.9.1) changes the "Current Price" calculation from Last Trade (which freezes on low-volume pairs) to Midpoint ((Bid + Ask) / 2). This ensures continuous real-time price updates for low-volume trading pairs (e.g., ENSO/EUR, ASTER, OP, EIGEN, ADA) where trades are infrequent but bid/ask quotes update constantly. The `translateV2ToV1` function calculates `markPrice = (bid + ask) / 2` when both values are available, falling back to `last` only when the order book is empty.
 
+REST Midpoint Alignment (Directive 8.9.2) ensures the REST API fallback uses the same midpoint pricing model as WebSocket. Both `fetchFromKrakenRest` in `live-pricing-adapter.ts` and the direct REST fallback in `paper-execution-engine.ts` now calculate `(bid + ask) / 2` instead of using last trade price. This harmonizes the mark-price model across all feeds (WS and REST), ensuring trades hit TP/SL consistently based on the same price shown in the UI.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.
