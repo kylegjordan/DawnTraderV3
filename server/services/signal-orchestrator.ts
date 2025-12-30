@@ -551,13 +551,19 @@ export class SignalOrchestrator {
         return;
       }
 
-      const filteredPairsStats = await this.filteredPairsService.getValidPairs(this.mode, filters);
-      const eligibleSymbols = filteredPairsStats.filteredPairs.map(p => p.symbol);
+      // Phase 8.8.6: Use ONLY FX5 Active Filter Pool survivors for signal generation
+      // This fixes the filter bypass where FilteredPairsService returned pairs that hadn't passed FX5 filters
+      const fx5Survivors = activeFilterPool.getActivePool(this.mode);
+      const eligibleSymbols = fx5Survivors.map(p => p.symbol);
+      
+      // Phase 8.8.6: Log source of symbols to confirm FX5 gate is active
+      console.log(`[8.8.6][FX5_GATE] Signal Orchestrator using ${eligibleSymbols.length} FX5 survivors only (mode=${this.mode})`);
 
       console.log(`[37.A][SIGNAL] Evaluating ${eligibleSymbols.length} eligible symbols`);
       telemetryTrace.trace('SignalOrchestrator', 'SYMBOLS_LOADED', 'INFO', { 
         mode: this.mode, 
-        count: eligibleSymbols.length 
+        count: eligibleSymbols.length,
+        source: 'FX5_ACTIVE_POOL'
       });
 
       if (!systemContext.lastStartedBy) {
