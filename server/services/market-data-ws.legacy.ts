@@ -1,12 +1,5 @@
-/**
- * Directive 8.9.0-B: Secondary WebSocket Adapter (Analytics)
- * 
- * Upgraded to Kraken WebSocket v2 for consistent data with primary adapter.
- * Used by FeedIntegrityMonitor, MarketDataCoordinator, and SlippageFeeModel.
- */
 import WebSocket from 'ws';
 import { EventEmitter } from 'events';
-import { translateV2ToV1, isValidV2TickerUpdate } from './market-data/kraken-v2-translator.js';
 
 export interface TickData {
   symbol: string;
@@ -48,7 +41,7 @@ export class MarketDataWebSocket extends EventEmitter {
   constructor(config?: Partial<WSConfig>) {
     super();
     this.config = {
-      url: config?.url || 'wss://ws.kraken.com/v2', // 8.9.0-B: Upgraded to v2
+      url: config?.url || 'wss://ws.kraken.com',
       heartbeatInterval: config?.heartbeatInterval || 30000,
       reconnectDelayBase: config?.reconnectDelayBase || 1000,
       reconnectDelayMax: config?.reconnectDelayMax || 30000,
@@ -110,67 +103,42 @@ export class MarketDataWebSocket extends EventEmitter {
   }
 
   private handleMessage(message: any): void {
-    // 8.9.0-B: Handle v2 Ticker Updates
-    // v2 format: { channel: "ticker", type: "update"|"snapshot", data: [{symbol, bid, ask, ...}] }
-    if (message && typeof message === 'object' && message.channel === 'ticker') {
-      if (message.type === 'update' || message.type === 'snapshot') {
-        const updates = message.data || [];
-        for (const update of updates) {
-          if (!isValidV2TickerUpdate(update)) continue;
-          
-          const safeData = translateV2ToV1(update);
-          const tickData: TickData = {
-            symbol: update.symbol,
-            bid: parseFloat(safeData.b[0]),
-            ask: parseFloat(safeData.a[0]),
-            last: parseFloat(safeData.c[0]),
-            timestamp: new Date().toISOString(),
-            source: 'ws',
-            bidVolume: update.bid_qty,
-            askVolume: update.ask_qty,
-          };
-          
-          this.lastTickTimestamp = Date.now();
-          this.emit('tick', tickData);
-          console.log(`[8.9.0-B][MD-WS_TICK] ${update.symbol} price=${tickData.last}`);
-        }
+    if (Array.isArray(message)) {
+      // Price update messages come as arrays
+      const [channelId, data, channelName, pair] = message;
+      
+      if (channelName === 'ticker' && data) {
+        const tickData: TickData = {
+          symbol: pair,
+          bid: parseFloat(data.b[0]), // Best bid
+          ask: parseFloat(data.a[0]), // Best ask
+          last: parseFloat(data.c[0]), // Last trade
+          timestamp: new Date().toISOString(),
+          source: 'ws',
+          bidVolume: parseFloat(data.b[1]),
+          askVolume: parseFloat(data.a[1]),
+        };
+        
+        this.lastTickTimestamp = Date.now();
+        this.emit('tick', tickData);
+      } else if (channelName === 'book' && data) {
+        // Order book update
+        const snapshot: OrderBookSnapshot = {
+          symbol: pair,
+          bids: data.bs || data.b || [],
+          asks: data.as || data.a || [],
+          timestamp: new Date().toISOString(),
+        };
+        
+        this.emit('orderbook', snapshot);
       }
-      return;
-    }
-    
-    // 8.9.0-B: Handle v2 Book Updates
-    if (message && typeof message === 'object' && message.channel === 'book') {
-      if (message.type === 'update' || message.type === 'snapshot') {
-        const updates = message.data || [];
-        for (const update of updates) {
-          const snapshot: OrderBookSnapshot = {
-            symbol: update.symbol,
-            bids: (update.bids || []).map((b: any) => [parseFloat(b.price), parseFloat(b.qty)]),
-            asks: (update.asks || []).map((a: any) => [parseFloat(a.price), parseFloat(a.qty)]),
-            timestamp: new Date().toISOString(),
-          };
-          this.emit('orderbook', snapshot);
-        }
+    } else if (message.event) {
+      // System events (subscribed, heartbeat, etc.)
+      if (message.event === 'heartbeat') {
+        this.lastTickTimestamp = Date.now();
+      } else if (message.event === 'subscriptionStatus') {
+        console.log(`[MD-WS] Subscription ${message.status}: ${message.pair} (${message.channelName})`);
       }
-      return;
-    }
-    
-    // 8.9.0-B: Handle v2 Subscription Responses
-    if (message && typeof message === 'object' && message.method) {
-      if (message.method === 'subscribe') {
-        if (message.success) {
-          console.log(`[8.9.0-B][MD-WS] Sub OK: ${message.result?.symbol}`);
-        } else {
-          console.error(`[8.9.0-B][MD-WS] Sub Error: ${message.error}`);
-        }
-      }
-      return;
-    }
-    
-    // 8.9.0-B: Handle v2 Heartbeat
-    if (message && typeof message === 'object' && message.channel === 'heartbeat') {
-      this.lastTickTimestamp = Date.now();
-      return;
     }
   }
 
@@ -183,32 +151,24 @@ export class MarketDataWebSocket extends EventEmitter {
 
     this.subscribedPairs.add(pair);
 
-    // 8.9.0-B: v2 subscription format for ticker with BBO trigger
+    // Subscribe to ticker (for prices)
     const tickerSub = {
-      method: 'subscribe',
-      params: {
-        channel: 'ticker',
-        symbol: [pair],
-        event_trigger: 'bbo',
-        snapshot: true
-      }
+      event: 'subscribe',
+      pair: [pair],
+      subscription: { name: 'ticker' }
     };
 
-    // 8.9.0-B: v2 subscription format for order book
+    // Subscribe to order book (for depth/slippage)
     const bookSub = {
-      method: 'subscribe',
-      params: {
-        channel: 'book',
-        symbol: [pair],
-        depth: 10,
-        snapshot: true
-      }
+      event: 'subscribe',
+      pair: [pair],
+      subscription: { name: 'book', depth: 10 }
     };
 
     this.ws.send(JSON.stringify(tickerSub));
     this.ws.send(JSON.stringify(bookSub));
     
-    console.log(`[8.9.0-B][MD-WS] Subscribed to ${pair}`);
+    console.log(`[MD-WS] Subscribed to ${pair}`);
   }
 
   public unsubscribeFromPair(pair: string): void {
@@ -217,28 +177,23 @@ export class MarketDataWebSocket extends EventEmitter {
       return;
     }
 
-    // 8.9.0-B: v2 unsubscribe format
     const tickerUnsub = {
-      method: 'unsubscribe',
-      params: {
-        channel: 'ticker',
-        symbol: [pair]
-      }
+      event: 'unsubscribe',
+      pair: [pair],
+      subscription: { name: 'ticker' }
     };
 
     const bookUnsub = {
-      method: 'unsubscribe',
-      params: {
-        channel: 'book',
-        symbol: [pair]
-      }
+      event: 'unsubscribe',
+      pair: [pair],
+      subscription: { name: 'book' }
     };
 
     this.ws.send(JSON.stringify(tickerUnsub));
     this.ws.send(JSON.stringify(bookUnsub));
     this.subscribedPairs.delete(pair);
     
-    console.log(`[8.9.0-B][MD-WS] Unsubscribed from ${pair}`);
+    console.log(`[MD-WS] Unsubscribed from ${pair}`);
   }
 
   private startHeartbeat(): void {

@@ -14,29 +14,21 @@ import { priceTraceService } from './price-trace-service.js';
 import { krakenAssetPairsService } from '../markets/kraken-asset-pairs-service.js';
 import { priceCache } from './price-cache.js';
 import { volumeClassifier, VolumeTier, TIER_THRESHOLDS } from './market-data/volume-classifier.js';
-import { translateV2ToV1, isValidV2TickerUpdate, KrakenV2TickerUpdate } from './market-data/kraken-v2-translator.js';
 import * as fs from 'fs';
 
 /**
- * Directive 8.9.0-B: Kraken WebSocket v2 Price Engine
+ * Phase 8.8.3-B3.6: Kraken WebSocket Price Engine
  * 
- * Connects to Kraken's Spot WebSocket v2 feed for real-time ticker updates.
+ * Connects to Kraken's Spot WebSocket feed for real-time ticker updates.
  * Replaces REST-based price fetching for open trade monitoring.
  * 
  * Features:
- * - Real-time ticker subscriptions via wss://ws.kraken.com/v2
- * - BBO (best-bid-offer) event trigger for continuous updates
- * - Snapshot on subscribe for immediate price data
+ * - Real-time ticker subscriptions via wss://ws.kraken.com
  * - Dynamic symbol subscription management
  * - Automatic reconnection with exponential backoff
  * - Price cache integration with LivePricingAdapter
  * - WebSocket broadcasts to connected clients
  * - Diagnostic logging for price cadence verification
- * 
- * v2 Upgrade Benefits:
- * - Updates on any bid/offer change, not just trades
- * - Immediate snapshot data on subscription
- * - Better coverage for low-volume pairs
  */
 
 interface KrakenTickerPayload {
@@ -168,7 +160,7 @@ export class KrakenWebSocketAdapter {
   private readonly PING_INACTIVITY_MS = 20000; // Send ping if no message for 20s
   private readonly MAX_RECONNECT_DELAY_BACKOFF_MS = 60000; // Max 60s backoff
   
-  private readonly WS_URL = 'wss://ws.kraken.com/v2'; // 8.9.0-B: Upgraded to v2
+  private readonly WS_URL = 'wss://ws.kraken.com';
   private readonly MAX_RECONNECT_ATTEMPTS = 10;
   private readonly BASE_RECONNECT_DELAY_MS = 1000;
   private readonly MAX_RECONNECT_DELAY_MS = 30000;
@@ -346,44 +338,54 @@ export class KrakenWebSocketAdapter {
     try {
       const message = JSON.parse(rawStr);
       
-      // 8.9.0-B: Handle v2 Ticker Updates (Object Form)
-      // v2 format: { channel: "ticker", type: "update"|"snapshot", data: [{symbol, bid, ask, ...}] }
-      if (message && typeof message === 'object' && message.channel === 'ticker') {
-        if (message.type === 'update' || message.type === 'snapshot') {
-          this.handleV2TickerUpdate(message);
+      // 8.8.9: Handle Data Arrays (Ticker Updates) FIRST
+      // Kraken format: [channelID, {payload}, "ticker", "PAIR"]
+      if (Array.isArray(message) && message.length >= 4) {
+        const channelName = message[2];
+        const krakenPair = message[3];
+        
+        if (channelName === 'ticker' && typeof krakenPair === 'string') {
+          this.handleTickerUpdate(message);
         }
         return;
       }
       
-      // 8.9.0-B: Handle v2 Subscription Responses
-      // v2 format: { method: "subscribe", result: {...}, success: true/false }
-      if (message && typeof message === 'object' && message.method) {
-        this.handleV2SystemMessage(message);
-        return;
-      }
+      // 8.8.9: Handle System Events (Object Form) - only for recognized event types
+      const knownEvents = ['heartbeat', 'pong', 'subscriptionStatus', 'systemStatus', 'error', 'info'];
       
-      // 8.9.0-B: Handle v2 Heartbeat
-      if (message && typeof message === 'object' && message.channel === 'heartbeat') {
-        const now = Date.now();
-        if (this.lastGlobalHeartbeat > 0) {
-          const latency = now - this.lastGlobalHeartbeat;
-          this.heartbeatLatencies.push(latency);
-          if (this.heartbeatLatencies.length > 60) {
-            this.heartbeatLatencies.shift();
+      if (message && typeof message === 'object' && message.event) {
+        // Phase 8.8.5: Track heartbeat events for global connection health
+        if (message.event === 'heartbeat') {
+          const now = Date.now();
+          if (this.lastGlobalHeartbeat > 0) {
+            const latency = now - this.lastGlobalHeartbeat;
+            this.heartbeatLatencies.push(latency);
+            if (this.heartbeatLatencies.length > 60) {
+              this.heartbeatLatencies.shift();
+            }
+          }
+          this.lastGlobalHeartbeat = now;
+        }
+        
+        // 8.8.9: Add logging for subscription events
+        if (message.event === 'subscriptionStatus') {
+          if (message.status === 'error') {
+            console.error(`[8.8.9][WS] Sub Error: ${message.errorMessage} (${message.pair})`);
+          } else if (message.status === 'subscribed') {
+            console.log(`[8.8.9][WS] Sub OK: ${message.pair}`);
           }
         }
-        this.lastGlobalHeartbeat = now;
-        return;
+        
+        // Delegate to handleSystemMessage for all recognized events
+        if (knownEvents.includes(message.event)) {
+          this.handleSystemMessage(message);
+          return;
+        }
+        
+        // Log unrecognized event types but still process them
+        console.log(`[8.8.9][WS] Unknown event type: ${message.event}`);
+        this.handleSystemMessage(message);
       }
-      
-      // 8.9.0-B: Handle v2 Status messages
-      if (message && typeof message === 'object' && message.channel === 'status') {
-        console.log(`[8.9.0-B][WS] Status: ${message.type}`, message.data);
-        return;
-      }
-      
-      // Log unrecognized message formats for debugging
-      console.log(`[8.9.0-B][WS] Unrecognized message format:`, rawStr.slice(0, 100));
       
     } catch (error) {
       console.error(`[${this.MODULE_NAME}] Error parsing message:`, error);
@@ -440,144 +442,6 @@ export class KrakenWebSocketAdapter {
         
       default:
         console.log(`[${this.MODULE_NAME}] Unknown event: ${event}`);
-    }
-  }
-
-  /**
-   * 8.9.0-B: Handle v2 system messages (subscription acks, errors, etc.)
-   */
-  private handleV2SystemMessage(message: any): void {
-    const { method, result, success, error } = message;
-    
-    if (method === 'subscribe') {
-      if (success && result) {
-        const symbol = result.symbol;
-        const internalSymbol = this.mapKrakenPairToInternalSymbol(symbol);
-        
-        if (internalSymbol) {
-          console.log(`[8.9.0-B][WS] Sub OK: ${symbol} -> ${internalSymbol}`);
-          this.subscribedSymbols.add(internalSymbol);
-          this.pendingSubscriptions.delete(internalSymbol);
-          this.subscriptionRequests.delete(internalSymbol);
-          this.subscriptionAcks.set(internalSymbol, { acked: true, timestamp: Date.now() });
-        } else {
-          console.warn(`[8.9.0-B][WS] Sub OK but unmapped: ${symbol}`);
-        }
-      } else if (!success) {
-        console.error(`[8.9.0-B][WS] Sub Error: ${error}`);
-      }
-    } else if (method === 'unsubscribe') {
-      if (success && result) {
-        console.log(`[8.9.0-B][WS] Unsub OK: ${result.symbol}`);
-      }
-    } else if (method === 'pong') {
-      this.lastPongTime = Date.now();
-    } else {
-      console.log(`[8.9.0-B][WS] System message: ${method}`, success ? 'success' : 'failed');
-    }
-  }
-
-  /**
-   * 8.9.0-B: Handle v2 ticker updates
-   * v2 format: { channel: "ticker", type: "update"|"snapshot", data: [{symbol, bid, ask, last, ...}] }
-   */
-  private handleV2TickerUpdate(message: any): void {
-    const updates = message.data || [];
-    
-    for (const update of updates) {
-      if (!isValidV2TickerUpdate(update)) {
-        console.warn(`[8.9.0-B][WS_TICK] Invalid v2 ticker update:`, update);
-        continue;
-      }
-      
-      const krakenPair = update.symbol;
-      const internalSymbol = this.mapKrakenPairToInternalSymbol(krakenPair);
-      
-      if (!internalSymbol) {
-        const existing = this.unmappedTicks.get(krakenPair) || { count: 0, lastSeen: 0 };
-        this.unmappedTicks.set(krakenPair, { count: existing.count + 1, lastSeen: Date.now() });
-        continue;
-      }
-      
-      const now = Date.now();
-      
-      // Update Sentinel Health stats
-      const stats = this.symbolStats.get(internalSymbol) || {
-        lastUpdate: 0,
-        updateCount: 0,
-        intervals: [],
-        firstUpdate: now,
-        warningLogged: false
-      };
-      
-      const intervalMs = stats.lastUpdate > 0 ? now - stats.lastUpdate : 0;
-      stats.intervals.push(intervalMs);
-      if (stats.intervals.length > 100) stats.intervals.shift();
-      stats.lastUpdate = now;
-      stats.updateCount++;
-      stats.warningLogged = false;
-      if (stats.firstUpdate === 0) stats.firstUpdate = now;
-      this.symbolStats.set(internalSymbol, stats);
-      
-      // Translate v2 to v1 format and update price cache
-      const safeData = translateV2ToV1(update);
-      const lastPrice = parseFloat(safeData.c[0]);
-      const bid = parseFloat(safeData.b[0]);
-      const ask = parseFloat(safeData.a[0]);
-      
-      if (isNaN(lastPrice) || lastPrice <= 0) {
-        console.warn(`[8.9.0-B][WS_TICK] Invalid price for ${internalSymbol}: ${lastPrice}`);
-        continue;
-      }
-      
-      // Log tick for debugging (first tick only for each symbol)
-      if (!this.firstTickReceived.has(internalSymbol)) {
-        this.firstTickReceived.add(internalSymbol);
-        console.log(`[8.9.0-B][WS_TICK_V2] FIRST: ${internalSymbol} price=${lastPrice} bid=${bid} ask=${ask}`);
-      }
-      
-      console.log(`[8.9.0-B][WS_TICK] ${internalSymbol} price=${lastPrice}`);
-      
-      // Update LivePricingAdapter with price
-      livePricingAdapter.updateFromWebSocket(internalSymbol, lastPrice, 'kraken_ws');
-      
-      // priceCache is already updated by livePricingAdapter.updateFromWebSocket
-      
-      // Update tick frequency tracking
-      this.updateTickFrequency(internalSymbol, intervalMs);
-      
-      // Log for price tick health
-      const logEntry: PriceTickLog = {
-        symbol: internalSymbol,
-        price: lastPrice,
-        bid,
-        ask,
-        timestamp: new Date().toISOString(),
-        receivedAt: now,
-        intervalMs
-      };
-      
-      this.priceTickLogs.push(logEntry);
-      if (this.priceTickLogs.length > this.MAX_PRICE_LOGS) {
-        this.priceTickLogs.shift();
-      }
-      
-      // Broadcast to connected clients (throttled)
-      const lastBroadcast = this.lastBroadcastTime.get(internalSymbol) || 0;
-      if (now - lastBroadcast >= this.BROADCAST_THROTTLE_MS) {
-        this.lastBroadcastTime.set(internalSymbol, now);
-        contextBridge.broadcast({
-          type: 'price_updated',
-          payload: {
-            symbol: internalSymbol,
-            price: lastPrice,
-            bid,
-            ask,
-            source: 'ws_v2',
-            timestamp: new Date().toISOString()
-          }
-        }).catch(err => console.error(`[${this.MODULE_NAME}] Broadcast error:`, err));
-      }
     }
   }
 
@@ -872,14 +736,11 @@ export class KrakenWebSocketAdapter {
       return;
     }
     
-    // 8.9.0-B: v2 subscription format with BBO trigger and snapshot
     const subscribeMessage = {
-      method: 'subscribe',
-      params: {
-        channel: 'ticker',
-        symbol: krakenSymbols,
-        event_trigger: 'bbo', // Updates on any bid/offer change
-        snapshot: true        // Get immediate price data
+      event: 'subscribe',
+      pair: krakenSymbols,
+      subscription: {
+        name: 'ticker'
       }
     };
     
@@ -925,12 +786,11 @@ export class KrakenWebSocketAdapter {
       return;
     }
     
-    // 8.9.0-B: v2 unsubscribe format
     const unsubscribeMessage = {
-      method: 'unsubscribe',
-      params: {
-        channel: 'ticker',
-        symbol: krakenSymbols
+      event: 'unsubscribe',
+      pair: krakenSymbols,
+      subscription: {
+        name: 'ticker'
       }
     };
     
