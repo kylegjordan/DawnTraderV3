@@ -1,0 +1,127 @@
+Objective
+
+Stabilize post-Directive 8.8.7 trading behavior by:
+
+Repairing the Trade Control Loop (TCL) so that promotion of Ready-to-Buy (RTB) signals continues while trades remain open.
+
+Correcting duplicate signal validation so open paper trades are excluded from RTB.
+
+Performing a brief repository verification pass and log correlation to confirm no other subsystems are affected.
+
+1️⃣ Issues Confirmed
+#	Issue	Severity	Evidence
+1	TCL stops promoting after initial activation	HIGH	[A3.R7][TCL_WATCHDOG] … skipping lines show state.isActive = true preventing checkRtbPromotion() calls
+2	Duplicate-pair check fails for paper mode	HIGH	hasActivePair() queries trades table only; paper positions live in paper_sim_positions → ADA/USD appears in RTB
+3	TTL clarification	INFO	TTL applies only to FX5 Active Filter Pool entries; RTB signals governed by SQE reconfirmation. Confirmed in directive_8.8.7_validation.log.
+2️⃣ Fix #1 — Continuous Promotion Loop for TCL
+
+File: server/services/tcl_watchdog.ts
+
+Problem: checkRtbPromotion() is only triggered by TCL_ACTIVATED or TRADE_CLOSED events.
+When TCL is active and no trades close, no new promotions occur.
+
+Solution:
+Add a 30-second fallback loop that runs promotion checks when TCL is active and slots available.
+
+// Add inside TCLWatchdog class initialization
+private startContinuousPromotionLoop() {
+  setInterval(async () => {
+    if (!this.state.isActive) return;
+    const openTrades = await storage.getOpenPositions(this.mode);
+    const rtbSignals = await rtbService.getSignals(this.mode);
+    const slotsAvailable = MAX_OPEN_TRADES - openTrades.length;
+
+    if (slotsAvailable > 0 && rtbSignals.length > 0) {
+      console.log(`[8.8.8][TCL_LOOP] ${slotsAvailable} slots free, checking ${rtbSignals.length} RTB signals`);
+      await this.checkRtbPromotion();
+    }
+  }, 30_000);
+}
+
+
+Invoke this.startContinuousPromotionLoop() after TCL initialization.
+
+Expected Behavior:
+
+TCL continues to promote eligible signals every 30 s until all slots are filled.
+
+Existing event-driven logic remains for instant responses on trade closures.
+
+3️⃣ Fix #2 — Accurate Duplicate-Pair Detection for Paper Mode
+
+File: server/services/storage.ts
+
+Problem: hasActivePair() queries trades table only.
+
+Solution: Extend logic to include paper_sim_positions when mode = 'paper'.
+
+export async function hasActivePair(symbol: string, mode: string): Promise<boolean> {
+  const normalizedSymbol = normalizeSymbol(symbol);
+
+  if (mode === 'paper') {
+    const paperResult = await db.select({ id: paper_sim_positions.id })
+      .from(paper_sim_positions)
+      .where(and(
+        eq(paper_sim_positions.symbol, normalizedSymbol),
+        eq(paper_sim_positions.status, 'open')
+      ));
+    if (paperResult.length > 0) return true;
+  }
+
+  const result = await db.select({ id: trades.id })
+    .from(trades)
+    .where(and(
+      eq(trades.symbol, normalizedSymbol),
+      eq(trades.status, 'open'),
+      eq(trades.mode, mode)
+    ));
+  return result.length > 0;
+}
+
+
+Expected Behavior:
+
+RTB no longer queues signals for pairs that have open paper positions.
+
+[8.8.4-A3][SQE][Validation] duplicate_pair_active log appears when blocked.
+
+4️⃣ Verification & Repository Checks
+
+Replit must perform and log the following to /logs/directive_8.8.8_validation.log:
+
+TCL Loop Activity
+Look for [8.8.8][TCL_LOOP] entries every 30 s.
+Confirm new promotions occur when slots are free.
+
+Duplicate Pair Prevention
+Open a paper trade → verify no new RTB signals for same pair.
+Expect duplicate_pair_active log.
+
+FX5 Pool TTL
+Confirm pool entries expire after 5 min only if FX5 has not refreshed them.
+
+UI Cross-Check
+Ensure Active Trades table shows consistent Volume/Source data per Directive 8.8.5-E.
+
+5️⃣ Artifacts to Produce
+File	Purpose
+logs/directive_8.8.8_validation.log	Runtime confirmation of loop & duplicate fixes
+logs/directive_8.8.8_activity.log	TCL promotion cycle records
+docs/directive_8.8.8_notes.md	Summary of changes + future refactor notes
+screenshots/ui_active_trades_8.8.8.png	UI snapshot after fix
+6️⃣ Expected Outcomes
+Metric	Before	After
+RTB signals stuck after first promotion	✅ Yes	❌ Resolved
+Duplicate signals for open paper trades	✅ Yes	❌ Resolved
+FX5 TTL scope	✅ Confirmed correct	No change
+Promotion cadence	Manual/event only	Event + 30 s continuous
+Trade slots utilization	Partial (1/6)	Full fill within few minutes
+7️⃣ Next Steps for Replit
+
+Implement Fix #1 and Fix #2 exactly as specified.
+
+Run a 30-minute paper-mode validation session.
+
+Populate and save all log artifacts.
+
+Report back with summary counts of TCL promotions and RTB duplicates blocked.

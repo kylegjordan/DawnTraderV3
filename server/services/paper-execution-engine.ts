@@ -125,6 +125,10 @@ export class PaperExecutionEngine {
   private tclActivatedHandler: ((event: TCLActivatedEvent) => void) | null = null;
   private tradeClosedHandler: ((event: TradeClosedEvent) => void) | null = null;
 
+  // Directive 8.8.8: Continuous promotion loop interval (30 seconds)
+  private continuousPromotionInterval: NodeJS.Timeout | null = null;
+  private readonly CONTINUOUS_PROMOTION_INTERVAL_MS = 30000; // 30 seconds
+
   constructor(mode: 'live' | 'paper') {
     this.mode = mode;
     this.krakenService = new KrakenService();
@@ -153,6 +157,52 @@ export class PaperExecutionEngine {
     eventBus.onTCLActivated(this.tclActivatedHandler);
     eventBus.onTradeClosed(this.tradeClosedHandler);
     console.log(`[8.8.4-C.12][EVENT_BIND] Bound TCL_ACTIVATED and TRADE_CLOSED listeners for ${this.mode}`);
+
+    // Directive 8.8.8: Start continuous promotion loop
+    this.startContinuousPromotionLoop();
+  }
+
+  /**
+   * Directive 8.8.8: Continuous Promotion Loop
+   * Runs every 30 seconds to check for RTB promotion when TCL is active
+   * Ensures signals are promoted even when no TRADE_CLOSED events occur
+   */
+  private startContinuousPromotionLoop(): void {
+    if (this.continuousPromotionInterval) {
+      clearInterval(this.continuousPromotionInterval);
+    }
+
+    this.continuousPromotionInterval = setInterval(async () => {
+      if (!this.isRunning) return;
+
+      const tclActive = tclWatchdog.isActive(this.mode);
+      if (!tclActive) return;
+
+      const openPositions = await storage.getPaperSimOpenPositions(this.mode);
+      const modeSettings = await buildSettingsFromGuardrails(this.mode);
+      const maxTrades = modeSettings.maxOpenTrades || 15;
+      const openSlots = maxTrades - openPositions.length;
+
+      const rtbCount = await readyToBuyService.getPoolSize(this.mode);
+
+      if (openSlots > 0 && rtbCount > 0) {
+        console.log(`[8.8.8][TCL_LOOP] ${openSlots} slots free, checking ${rtbCount} RTB signals for promotion`);
+        await this.checkRtbPromotion();
+      }
+    }, this.CONTINUOUS_PROMOTION_INTERVAL_MS);
+
+    console.log(`[8.8.8][TCL_LOOP] Started continuous promotion loop (${this.CONTINUOUS_PROMOTION_INTERVAL_MS / 1000}s interval) for ${this.mode}`);
+  }
+
+  /**
+   * Directive 8.8.8: Stop continuous promotion loop
+   */
+  private stopContinuousPromotionLoop(): void {
+    if (this.continuousPromotionInterval) {
+      clearInterval(this.continuousPromotionInterval);
+      this.continuousPromotionInterval = null;
+      console.log(`[8.8.8][TCL_LOOP] Stopped continuous promotion loop for ${this.mode}`);
+    }
   }
 
   /**
@@ -167,6 +217,8 @@ export class PaperExecutionEngine {
       eventBus.offTradeClosed(this.tradeClosedHandler);
       this.tradeClosedHandler = null;
     }
+    // Directive 8.8.8: Stop continuous promotion loop on engine stop
+    this.stopContinuousPromotionLoop();
     console.log(`[8.8.4-C.12][EVENT_UNBIND] Unbound TCL event listeners for ${this.mode}`);
   }
 

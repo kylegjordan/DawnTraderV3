@@ -1536,6 +1536,7 @@ export class DatabaseStorage implements IStorage {
 
   /**
    * Directive 8.8.4-A3: Check if an active trade exists for a given pair (symbol)
+   * Directive 8.8.8: Extended to check paper_sim_positions for paper mode
    * Used for pair-level duplicate validation across active trades
    * 
    * @param symbol - The trading pair in BASE/QUOTE format (e.g., 'BTC/USD')
@@ -1548,6 +1549,22 @@ export class DatabaseStorage implements IStorage {
       ? symbol.split('/').map(s => s.trim().toUpperCase()).join('/')
       : symbol.trim().toUpperCase();
     
+    // Directive 8.8.8: For paper mode, check paper_sim_positions table first
+    // Paper simulation positions are stored separately from the trades table
+    if (mode === 'paper') {
+      const paperResult = await db
+        .select({ id: paperSimOpenPositions.id })
+        .from(paperSimOpenPositions)
+        .where(eq(paperSimOpenPositions.symbol, normalizedSymbol))
+        .limit(1);
+      
+      if (paperResult.length > 0) {
+        console.log(`[8.8.8][hasActivePair] FOUND open paper position for ${normalizedSymbol}`);
+        return true;
+      }
+    }
+    
+    // Check trades table (used by live mode, and as fallback for paper mode)
     const result = await db
       .select({ id: trades.id })
       .from(trades)
