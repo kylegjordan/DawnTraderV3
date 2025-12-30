@@ -11,7 +11,7 @@
 
 import { krakenWebSocketAdapter } from '../kraken-websocket-adapter.js';
 import { KrakenService } from '../kraken.js';
-import { normalizeToInternalSymbol } from '../../markets/kraken-symbol-resolver.js';
+import { normalizeToInternalSymbol, toKrakenRest } from '../../markets/kraken-symbol-resolver.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -124,7 +124,14 @@ class MiniBookIntegrityMonitor {
         const wsMid = (wsData.bid + wsData.ask) / 2;
         if (wsMid <= 0) continue;
 
-        const krakenPair = this.toKrakenPair(symbol);
+        // Use canonical resolver with fallback safety (Directive 8.9.5-Patch)
+        let krakenPair = toKrakenRest(symbol);
+        if (!krakenPair) {
+          // Fallback to simple concatenation (ADA/USD → ADAUSD)
+          krakenPair = symbol.replace('/', '');
+        }
+        console.log(`[8.9.5-P][MBIM] Auditing ${symbol} as ${krakenPair} for REST cross-check`);
+        
         const restTickers = await this.krakenService.getTicker(krakenPair);
         
         if (!restTickers || Object.keys(restTickers).length === 0) {
@@ -195,23 +202,6 @@ class MiniBookIntegrityMonitor {
     } catch (err: any) {
       console.error(`[8.9.5][SENTINEL] Resubscribe failed for ${symbol}:`, err?.message || err);
     }
-  }
-
-  private toKrakenPair(symbol: string): string {
-    const [base, quote] = symbol.split('/');
-    let krakenQuote = quote;
-    if (quote === 'USD') krakenQuote = 'ZUSD';
-    if (quote === 'EUR') krakenQuote = 'ZEUR';
-    if (quote === 'GBP') krakenQuote = 'ZGBP';
-    if (quote === 'AUD') krakenQuote = 'ZAUD';
-    if (quote === 'CAD') krakenQuote = 'ZCAD';
-    if (quote === 'JPY') krakenQuote = 'ZJPY';
-    if (quote === 'CHF') krakenQuote = 'ZCHF';
-    
-    let krakenBase = base;
-    if (base === 'BTC') krakenBase = 'XBT';
-    
-    return `${krakenBase}${krakenQuote}`;
   }
 
   private async logResults(results: IntegrityResult[]): Promise<void> {

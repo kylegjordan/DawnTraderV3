@@ -1,0 +1,71 @@
+🔧 Directive 8.9.5-Patch — REST Pair Resolver Integration
+
+Objective:
+Fix REST symbol mismatches in the Mini-Book Integrity Monitor by routing all REST queries through the canonical resolver.
+This ensures the monitor correctly translates internal symbols (e.g., ADA/USD) into valid Kraken REST asset pairs (e.g., ADAUSD).
+
+Target File:
+server/services/monitoring/mini-book-integrity-monitor.ts
+
+1. Add Resolver Import
+
+At the top of the file:
+
+import { toKrakenREST } from "../../markets/kraken-symbol-resolver.js";
+
+2. Replace the Local toKrakenPair() Logic
+
+Delete or disable any internal toKrakenPair() or convertSymbolForREST() function currently in use.
+
+Replace calls to it with:
+
+const krakenPair = toKrakenREST(symbol);
+
+3. Add Fallback Safety (Optional but Recommended)
+
+In case the resolver doesn’t have a record for a newly listed asset (rare but possible):
+
+let krakenPair = toKrakenREST(symbol);
+if (!krakenPair) {
+  // Fallback to concatenation (ADA/USD → ADAUSD)
+  krakenPair = symbol.replace('/', '');
+}
+
+4. Enhance Logging
+
+Add improved visibility during audit runs:
+
+console.log(`[8.9.5-P][MBIM] Auditing ${symbol} as ${krakenPair} for REST cross-check`);
+
+
+Expected log output after patch:
+
+[8.9.5-P][MBIM] Auditing ADA/USD as ADAUSD for REST cross-check
+[8.9.5-P][MBIM] ADA/USD WS=0.422 REST=0.4219 Δ=0.024% ✅ OK
+
+5. Verify with a Manual Audit
+
+Once implemented:
+
+Ensure the monitor is running:
+POST /api/mbim/start
+
+Trigger an immediate audit:
+POST /api/mbim/audit
+
+Expect logs similar to:
+
+[8.9.5-P][MBIM] Auditing 3 symbols (XRP/EUR, ADA/EUR, ADA/USD)
+[8.9.5-P][MBIM] ADA/USD WS=0.422 REST=0.4219 Δ=0.024% ✅ OK
+[8.9.5-P][MBIM] XRP/EUR WS=1.862 REST=1.862 Δ=0.000% ✅ OK
+[8.9.5-P][MBIM] Audit complete: 3 checked, 0 drifted
+
+✅ Recommended Path Forward
+Option	Description	Recommended?
+A. Simple concatenation (ADA/USD → ADAUSD)	Works for 95 % of pairs. Low complexity.	👍 Acceptable short-term
+B. Use canonical resolver (toKrakenREST)	Ensures all exchanges (Kraken, Gemini, Binance) stay in sync.	✅ Best long-term approach
+C. Dual query (try both, cache success)	Adds redundancy but increases API load.	⚠️ Optional, use only if Kraken adds inconsistent listings
+
+👉 Recommendation:
+Implement Option B (canonical resolver integration) now as the definitive patch.
+This keeps symbol translation unified across all services and avoids future duplication.
