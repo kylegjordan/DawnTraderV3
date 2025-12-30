@@ -422,8 +422,8 @@ export default function ReadyToBuyTable() {
                       <td className="text-right py-3 px-3" data-testid={`text-volume-${index}`}>
                         {volume24h !== null && !isNaN(volume24h)
                           ? volume24h >= 1000000 
-                            ? `$${(volume24h / 1000000).toFixed(2)}M`
-                            : `$${(volume24h / 1000).toFixed(0)}K`
+                            ? `${(volume24h / 1000000).toFixed(2)}M`
+                            : `${(volume24h / 1000).toFixed(0)}K`
                           : '—'
                         }
                       </td>
