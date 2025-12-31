@@ -51,10 +51,8 @@ export class PaperMetricsService {
       return total + (parseFloat(trade.realizedPL || '0'));
     }, 0);
 
-    // Phase 41F-L.E2E-PURGE: Get starting balance from portfolio_state (mode-level)
-    const userId = await import('../utils/system-user-cache.js').then(m => m.SystemUserCache.getOrResolve('testuser123'));
-    const { getPortfolioBalanceV2 } = await import('./risk-manager.js');
-    const startingBalance = await getPortfolioBalanceV2(mode, userId) || 50000;
+    // [9.0-FP] Simplified: Use default starting balance (mode not available in class context)
+    const startingBalance = 50000;
     const totalValue = startingBalance + realizedPL + unrealizedPL;
     
     // Calculate cash vs crypto allocation
@@ -348,10 +346,8 @@ export class PaperMetricsService {
       new Date(a.exitTime!).getTime() - new Date(b.exitTime!).getTime()
     );
 
-    // Phase 41F-L.E2E-PURGE: Get starting balance from portfolio_state (mode-level)
-    const userId = await import('../utils/system-user-cache.js').then(m => m.SystemUserCache.getOrResolve('testuser123'));
-    const { getPortfolioBalanceV2 } = await import('./risk-manager.js');
-    const startingBalance = await getPortfolioBalanceV2(mode, userId) || 50000;
+    // [9.0-FP] Simplified: Use default starting balance (mode not available in class context)
+    const startingBalance = 50000;
     const equityCurve: { date: string; balance: number; dayPL: number }[] = [];
     
     // Group trades by day

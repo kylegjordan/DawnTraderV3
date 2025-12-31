@@ -1,8 +1,28 @@
 import type { TradingSettings } from '@shared/schema';
 import { storage } from '../storage';
-import { RiskManager } from './risk-manager';
+// [9.0-FP] RiskManager import removed - using inline stub
 
-const riskManager = new RiskManager();
+// [9.0-FP] Inline stub for portfolio metrics (replaces RiskManager.getPortfolioMetrics)
+async function getPortfolioMetricsStub(mode: 'live' | 'paper' = 'paper') {
+  const activeTrades = await storage.getActiveTrades(mode);
+  const closedTrades = await storage.getTrades(mode, { status: 'closed' });
+  
+  let currentExposure = 0;
+  for (const trade of activeTrades) {
+    currentExposure += parseFloat(trade.quantity) * parseFloat(trade.entryPrice);
+  }
+  
+  const realizedPL = closedTrades.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0);
+  const totalValue = 50000 + realizedPL;
+  
+  return {
+    totalValue,
+    unrealizedPL: 0,
+    realizedPL,
+    currentExposure,
+    openTradesCount: activeTrades.length
+  };
+}
 
 /**
  * Intent types based on Task 9 behavioral templates
@@ -160,12 +180,8 @@ export async function fetchUserContext(userId: string): Promise<UserTradingConte
     // [8.8.3-H11] Fixed: getActiveTrades requires mode parameter
     const activeTrades = await storage.getActiveTrades(mode);
     
-    // Phase 41F-L.E2E-PURGE: Settings are disabled, use defaults
-    const settings = null;
-
-    // Get portfolio metrics
-    // [8.8.3-H11] Fixed: getPortfolioMetrics expects mode, not userId
-    const metrics = await riskManager.getPortfolioMetrics(mode);
+    // [9.0-FP] Get portfolio metrics from stub (replaces RiskManager)
+    const metrics = await getPortfolioMetricsStub(mode);
 
     // Phase 8.5 Addendum I: Get portfolio value from portfolio_state table
     // Fallback to 0 (no hardcoded initial capital) to match live API behavior
@@ -174,17 +190,10 @@ export async function fetchUserContext(userId: string): Promise<UserTradingConte
       ? parseFloat(portfolioState.balance) 
       : 0;
     
-    const riskPerTrade = settings?.riskPerTrade 
-      ? parseFloat(settings.riskPerTrade) 
-      : 0;
-    
-    const dailyLossKillSwitch = settings?.dailyLossKillSwitch 
-      ? parseFloat(settings.dailyLossKillSwitch) 
-      : 7.0;
-    
-    const maxExposurePercent = settings?.maxExposurePercent 
-      ? parseFloat(settings.maxExposurePercent) 
-      : 100;
+    // [9.0-FP] Use default values (settings removed in E2E-PURGE)
+    const riskPerTrade = 0;
+    const dailyLossKillSwitch = 7.0;
+    const maxExposurePercent = 100;
 
     // Calculate daily loss
     const currentDailyLoss = Math.abs(metrics.realizedPL); // Simplified

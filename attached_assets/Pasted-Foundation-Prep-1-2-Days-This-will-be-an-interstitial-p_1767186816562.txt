@@ -1,0 +1,116 @@
+Foundation Prep (1–2 Days)
+
+This will be an interstitial “pre-math” sprint, officially called Directive 9.0-FP
+(Foundation Prep for Phase 9).
+
+It’s short, tactical, and completely focused on clearing blockers for the math core.
+
+1️⃣ Must-Act Immediately (Before Phase 9.1)
+1. RiskManager Neutralization (Critical Blocker)
+
+🔍 Issue: The legacy RiskManager still controls calculatePositionSize() and riskCapCheck() across 12 files.
+
+🔄 Conflict: Phase 9 introduces Covariance Guard, CWQI, and the new Sizing Helper.
+If RiskManager remains active, trades may apply two risk calculations (double-scaling position size or misapplying margin).
+
+✅ Action Plan:
+
+Remove or stub out RiskManager imports in:
+
+heuristic-trader.ts
+
+paper-execution-engine.ts
+
+routes.ts
+
+sizing-helper.ts
+
+and any others referencing calculatePositionSize()
+
+Replace calls with:
+
+import { checkGuardrailRisk } from '@/services/trade-safety';
+
+const size = sizingHelper.calculatePositionSize(signal);
+const safe = checkGuardrailRisk(size);
+if (!safe) return NO_TRADE;
+
+
+Ensure no trade execution can call RiskManager by accident (log if it does).
+
+🧩 Outcome:
+All future size/risk logic will use the new Covariance Guard & Sizing Helper introduced in 9.1.
+
+2. Legacy File Quarantine
+
+Move the following to server/_deprecated/:
+
+kraken-websocket-adapter.legacy.ts
+
+market-data-ws.legacy.ts
+
+rtb-queue-panel.legacy.tsx
+
+✅ Goal:
+Eliminate clutter and prevent accidental import by LSP/IDE autocompletion.
+
+3. LSP “Noise Reduction” — Quick Wins
+
+Focus only on Categories A–E, i.e.:
+
+Null guards
+
+Missing imports
+
+Type annotation corrections
+
+Interface fixes
+
+Argument type mismatches
+
+Do not chase structural or large dependency issues yet (e.g., routes.ts).
+
+✅ Goal:
+Reduce active TypeScript errors in /server/services/ and /server/engines/
+from ~638 → <100, making the upcoming math development tractable.
+
+2️⃣ Defer Until After Phase 10
+Component	Reason	Defer Until
+routes.ts	211 errors; non-blocking, high risk of breaking REST endpoints.	Phase 10.1 (after Hybrid engine rollout)
+FilteredPairsService	Only affects UI analytics; not connected to FX5/Trade core.	Phase 10.2
+Walter AI services	Reserved for later integration with autonomous meta-strategy system.	Phase 13
+3️⃣ Optional Mini-Audit (After Cleanup)
+
+Once this 1–2 day sprint completes:
+
+Run a post-cleanup LSP scan on /server/engines/ and /server/services/
+
+Validate RiskManager imports = 0
+
+Confirm no import RiskManager from ... exist across repo
+
+Log output to /tmp/logs/post-cleanup-lsp-audit.log
+
+🧩 Directive Summary (to send to Replit)
+Directive ID	Title	Objective
+9.0-FP	Foundation Prep	Pre-Phase 9 cleanup sprint to remove legacy blockers and stabilize type environment before math core.
+
+Deliverables
+
+Remove/Stub RiskManager references
+
+Move .legacy files to _deprecated/
+
+Fix TypeScript quick-win errors (A–E only)
+
+Verify checkGuardrailRisk used instead of RiskManager
+
+Generate post-cleanup-lsp-audit.log
+
+Expected Duration: 1–2 working days
+Verification Log Example:
+
+[9.0-FP][CLEANUP] Legacy files quarantined.
+[9.0-FP][LSP] Core errors reduced: 638 → 94.
+[9.0-FP][RISK] RiskManager references = 0.
+[9.0-FP][VALIDATION COMPLETE] Ready for Phase 9.1 Mathematical Core.

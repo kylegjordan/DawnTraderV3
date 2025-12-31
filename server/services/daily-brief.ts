@@ -1,10 +1,61 @@
 import { storage } from '../storage';
-import { RiskManager } from './risk-manager';
+// [9.0-FP] RiskManager removed - using inline storage-based metrics
 import OpenAI from "openai";
 import { estimateMessagesTokens, calculateCost } from '../utils/token-counter';
 import { OpenAIRateLimiter } from './openai-rate-limiter';
 
 const rateLimiter = OpenAIRateLimiter.getInstance();
+
+// [9.0-FP] Inline stub for portfolio metrics (replaces RiskManager.getPortfolioMetrics)
+async function getPortfolioMetricsStub(mode: 'live' | 'paper' = 'paper') {
+  const activeTrades = await storage.getActiveTrades(mode);
+  const closedTrades = await storage.getTrades(mode, { status: 'closed' });
+  
+  let currentExposure = 0;
+  for (const trade of activeTrades) {
+    currentExposure += parseFloat(trade.quantity) * parseFloat(trade.entryPrice);
+  }
+  
+  const realizedPL = closedTrades.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0);
+  const totalValue = 50000 + realizedPL; // Simplified starting balance assumption
+  
+  return {
+    totalValue,
+    unrealizedPL: 0,
+    realizedPL,
+    currentExposure,
+    openTradesCount: activeTrades.length,
+    cash: totalValue - currentExposure,
+    crypto: currentExposure,
+    cashPercent: totalValue > 0 ? ((totalValue - currentExposure) / totalValue) * 100 : 100,
+    cryptoPercent: totalValue > 0 ? (currentExposure / totalValue) * 100 : 0
+  };
+}
+
+// [9.0-FP] Inline stub for win rate (replaces RiskManager.getWinRate)
+async function getWinRateStub(mode: 'live' | 'paper' = 'paper', days: number = 30) {
+  const fromDate = new Date();
+  fromDate.setDate(fromDate.getDate() - days);
+  
+  const closedTrades = await storage.getTrades(mode, { status: 'closed' });
+  const recentTrades = closedTrades.filter(t => 
+    t.exitTime && new Date(t.exitTime) >= fromDate
+  );
+  
+  const wins = recentTrades.filter(t => parseFloat(t.realizedPL || '0') > 0);
+  const losses = recentTrades.filter(t => parseFloat(t.realizedPL || '0') < 0);
+  
+  const totalWins = wins.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0);
+  const totalLosses = Math.abs(losses.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0));
+  
+  return {
+    winRate: recentTrades.length > 0 ? (wins.length / recentTrades.length) * 100 : 0,
+    totalTrades: recentTrades.length,
+    wins: wins.length,
+    losses: losses.length,
+    profitFactor: totalLosses > 0 ? totalWins / totalLosses : 0
+  };
+}
 
 interface DailyBriefContent {
   headline: string;
@@ -36,10 +87,10 @@ export class DailyBriefService {
   private updateIntervalId: NodeJS.Timeout | null = null;
   private finalizationTimeoutId: NodeJS.Timeout | null = null;
   private creationTimeoutId: NodeJS.Timeout | null = null;
-  private riskManager: RiskManager;
+  // [9.0-FP] RiskManager instance removed - using stub functions
 
   constructor() {
-    this.riskManager = new RiskManager();
+    // [9.0-FP] No RiskManager instantiation needed
   }
 
   async startDailyBriefScheduler(): Promise<void> {
@@ -183,19 +234,19 @@ export class DailyBriefService {
     const todayStart = new Date(today + 'T00:00:00Z');
     
     // Get today's trades
-    // Phase 27.F.15.A: Global mode-based query (no userId)
-    const allTrades = await storage.getTrades({ status: 'closed' });
+    // [9.0-FP] Fixed: getTrades and getActiveTrades require mode parameter
+    const allTrades = await storage.getTrades('paper', { status: 'closed' });
     const todayTrades = allTrades.filter(trade => 
       trade.exitTime && new Date(trade.exitTime) >= todayStart
     );
     
-    // Phase 27.F.15.A: Global mode-based query (no userId)
-    const openTrades = await storage.getActiveTrades();
+    // [9.0-FP] Fixed: getActiveTrades requires mode parameter
+    const openTrades = await storage.getActiveTrades('paper');
     console.log('[Phase-27.F.15.B.2] Updated service daily-brief → mode-based only');
     
-    // Get metrics from risk manager
-    const portfolioMetrics = await this.riskManager.getPortfolioMetrics(userId);
-    const winRateData = await this.riskManager.getWinRate(userId, 1); // Today only
+    // [9.0-FP] Get metrics from stub functions (replaces RiskManager)
+    const portfolioMetrics = await getPortfolioMetricsStub('paper');
+    const winRateData = await getWinRateStub('paper', 1); // Today only
     
     // Calculate top winners/losers
     const sortedByPL = [...todayTrades].sort((a, b) => 

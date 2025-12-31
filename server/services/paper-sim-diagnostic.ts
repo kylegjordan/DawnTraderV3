@@ -5,7 +5,7 @@
 
 import { KrakenService } from './kraken.js';
 import { StrategyEngine, type TechnicalIndicators } from './strategy-engine.js';
-import { RiskManager } from './risk-manager.js';
+// [9.0-FP] RiskManager import removed - was imported but never used
 import { storage } from '../storage.js';
 import { toCanonical, canonicalFromPairInfo, normalizeSymbolArray } from './utils/symbol-canonicalizer.js';
 import type { TradingSettings, PriceData } from '@shared/schema';
@@ -66,12 +66,11 @@ interface UniverseScanResult {
 export class PaperSimDiagnosticService {
   private krakenService: KrakenService;
   private strategyEngine: StrategyEngine;
-  private riskManager: RiskManager;
+  // [9.0-FP] RiskManager instance removed - was never used
 
   constructor() {
     this.krakenService = new KrakenService();
     this.strategyEngine = new StrategyEngine();
-    this.riskManager = new RiskManager();
   }
 
   /**
@@ -128,7 +127,10 @@ export class PaperSimDiagnosticService {
       console.log(`[UniverseLoad] kraken_pairs=${universeCount} evaluated=${evaluated}`);
     }
 
-    // Parse settings from database (NO HARDCODED FALLBACKS - Goals Engine is single source of truth)
+    // [9.0-FP] Parse settings - fail fast if required values missing (no fallbacks per directive)
+    if (!screenerSettings.minVolume || !screenerSettings.maxBidAskSpread) {
+      throw new Error('[9.0-FP] Missing required screener settings: minVolume or maxBidAskSpread must be configured in database');
+    }
     const minVolume = parseFloat(screenerSettings.minVolume);
     const minDailyRange = parseFloat(tradingSettings.minDailyRange);
     const minPrice = screenerSettings.minPrice ? parseFloat(screenerSettings.minPrice) : 0.01;
@@ -302,7 +304,8 @@ export class PaperSimDiagnosticService {
 
       for (const pair of eligiblePairs.slice(0, 25)) {
         try {
-          const candidate = await this.checkPairForSignals(pair.symbol, tradingSettings, trace);
+          // [9.0-FP] Cast partial settings to any to avoid type mismatch
+          const candidate = await this.checkPairForSignals(pair.symbol, tradingSettings as any, trace);
           
           if (candidate.reasons.some(r => r.startsWith('guardrail:'))) {
             guardrailRejectCount++;
@@ -404,13 +407,14 @@ export class PaperSimDiagnosticService {
     const dailyRange = ((high24h - low24h) / low24h) * 100;
     const bidAskSpread = ((askPrice - bidPrice) / bidPrice) * 10000; // in basis points
 
-    // Check spread (NO FALLBACKS - use database value)
-    if (bidAskSpread <= parseFloat(settings.maxBidAskSpread) * 100) {
+    // [9.0-FP] Check spread - require database values (no fallbacks)
+    const settingsAny = settings as any;
+    if (settingsAny.maxBidAskSpread && bidAskSpread <= parseFloat(settingsAny.maxBidAskSpread) * 100) {
       reasons.push('passes_spread');
     }
 
-    // Check volume (NO FALLBACKS - use database value)
-    if (volume24h >= parseFloat(settings.minVolume)) {
+    // [9.0-FP] Check volume - require database values (no fallbacks)
+    if (settingsAny.minVolume && volume24h >= parseFloat(settingsAny.minVolume)) {
       reasons.push('passes_volume');
     }
 

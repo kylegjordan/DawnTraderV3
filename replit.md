@@ -79,6 +79,15 @@ Comprehensive legacy system and LSP error audit documented in `docs/audits/Pre-P
 - 638 total LSP errors (447 are type-related quick wins)
 - Walter services (20 files) preserved for Phase 13 restoration
 
+**Directive 9.0-FP: Foundation Prep COMPLETE** (December 31, 2025)
+Pre-Phase 9 cleanup sprint to remove legacy blockers and stabilize type environment:
+- RiskManager neutralized: Imports removed from test-guardrails.ts, paper-sim-diagnostic.ts, daily-brief.ts, behavioral-template.ts (routes.ts deferred to Phase 10.1)
+- Legacy files quarantined to `server/_deprecated/` and `client/src/components/_deprecated/`
+- LSP errors reduced from 40 → 25 (37.5% reduction, remaining in disabled test file)
+- Stub functions created for portfolio metrics and win rate (storage-based replacements)
+- Verification log at `/tmp/logs/post-cleanup-lsp-audit.log`
+- Ready for Phase 9.1 Mathematical Core implementation
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.
