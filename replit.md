@@ -71,6 +71,14 @@ Mini-Book Integrity Monitor (Directive 8.9.5) implements continuous background a
 **Phase 8 Status: COMPLETE** (December 30, 2025)
 All directives from 8.8.1 through 8.9.5 have been implemented and validated.
 
+**Pre-Phase 9 Audit: COMPLETE** (December 30, 2025)
+Comprehensive legacy system and LSP error audit documented in `docs/audits/Pre-Phase-9-Legacy-LSP-Audit.md`. Key findings:
+- 4 legacy files identified (2 safe for immediate deprecation)
+- RiskManager class deprecated but still referenced in 12 locations
+- FilteredPairsService deprecated but still used by MarketEvaluationService for UI analytics
+- 638 total LSP errors (447 are type-related quick wins)
+- Walter services (20 files) preserved for Phase 13 restoration
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.
