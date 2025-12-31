@@ -4,6 +4,7 @@ import { priceTraceService } from './price-trace-service';
 import { priceCache } from './price-cache.js';
 import { restRateLimiter } from './market-data/rest-rate-limiter.js';
 import { krakenWebSocketAdapter } from './kraken-websocket-adapter.js';
+import { trackPipelineTime } from './system-health-service.js';
 
 /**
  * Phase 27.F.15.D: Live Pricing Adapter
@@ -697,6 +698,7 @@ export class LivePricingAdapter {
    * Phase 8.8.3-I7-WS-D: Now broadcasts EVERY WebSocket tick (D2/D3)
    */
   updateFromWebSocket(symbol: string, price: number, source: 'kraken_ws' | 'binance_ws' = 'kraken_ws', traceId?: string): void {
+    const pipelineStart = Date.now(); // Directive 9.0.C: Track pipeline time
     const normalized = this.normalizeSymbol(symbol);
     const timestamp = new Date().toISOString();
     const now = Date.now();
@@ -742,6 +744,17 @@ export class LivePricingAdapter {
       timestamp,
       source: source === 'kraken_ws' ? 'kraken_ws' : 'binance'
     }, traceId);
+    
+    // Directive 9.0.C: Track pipeline processing time (WS receive → cache → broadcast complete)
+    // Note: broadcastFromWebSocket is fire-and-forget, so we track synchronous portion
+    const pipelineEnd = Date.now();
+    const pipelineDuration = pipelineEnd - pipelineStart;
+    trackPipelineTime(normalized, pipelineStart);
+    
+    // Additional logging for pipeline visibility
+    if (pipelineDuration > 50) {
+      console.log(`[9.0][PIPELINE] ${normalized} sync processing = ${pipelineDuration}ms`);
+    }
   }
 
   /**

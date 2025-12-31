@@ -7,6 +7,7 @@
 import { storage } from '../storage';
 import { db } from '../db';
 import { sql } from 'drizzle-orm';
+import * as fs from 'fs';
 
 export interface SystemHealthStatus {
   backend: string;
@@ -134,3 +135,100 @@ export class SystemHealthService {
 }
 
 export const systemHealthService = new SystemHealthService();
+
+// ==========================================
+// Directive 9.0.C: Pipeline Processing Time Guard
+// ==========================================
+
+interface PipelineMetric {
+  symbol: string;
+  procTimeMs: number;
+  timestamp: string;
+}
+
+class PipelineTimeGuard {
+  private metrics: Map<string, number[]> = new Map();
+  private readonly MAX_METRICS_PER_SYMBOL = 100;
+  private readonly WARNING_THRESHOLD_MS = 100;
+  private logPath = '/tmp/logs/pipeline_metrics_9.0.log';
+
+  constructor() {
+    try {
+      fs.mkdirSync('/tmp/logs', { recursive: true });
+    } catch (e) {
+      // Ignore if directory exists
+    }
+  }
+
+  /**
+   * Directive 9.0.C: Track pipeline processing time
+   * Logs warning if processing exceeds 100ms
+   */
+  trackPipelineTime(symbol: string, startTime: number): void {
+    const procTime = Date.now() - startTime;
+    
+    // Store for rolling average
+    if (!this.metrics.has(symbol)) {
+      this.metrics.set(symbol, []);
+    }
+    const symbolMetrics = this.metrics.get(symbol)!;
+    symbolMetrics.push(procTime);
+    
+    // Keep only last 100 entries
+    if (symbolMetrics.length > this.MAX_METRICS_PER_SYMBOL) {
+      symbolMetrics.shift();
+    }
+    
+    // Log warning if exceeds threshold
+    if (procTime > this.WARNING_THRESHOLD_MS) {
+      console.warn(`[9.0][PROC_TIME] ${symbol} pipeline delay = ${procTime}ms`);
+      this.writeLog({ symbol, procTimeMs: procTime, timestamp: new Date().toISOString() });
+    }
+  }
+
+  /**
+   * Get rolling average processing time for a symbol
+   */
+  getAverageTime(symbol: string): number {
+    const metrics = this.metrics.get(symbol);
+    if (!metrics || metrics.length === 0) return 0;
+    return metrics.reduce((a, b) => a + b, 0) / metrics.length;
+  }
+
+  /**
+   * Get all pipeline metrics summary
+   */
+  getSummary(): Record<string, { avg: number; max: number; count: number }> {
+    const summary: Record<string, { avg: number; max: number; count: number }> = {};
+    
+    this.metrics.forEach((times, symbol) => {
+      if (times.length > 0) {
+        summary[symbol] = {
+          avg: times.reduce((a, b) => a + b, 0) / times.length,
+          max: Math.max(...times),
+          count: times.length
+        };
+      }
+    });
+    
+    return summary;
+  }
+
+  private writeLog(metric: PipelineMetric): void {
+    try {
+      const line = JSON.stringify(metric) + '\n';
+      fs.appendFileSync(this.logPath, line);
+    } catch (e) {
+      // Ignore file write errors
+    }
+  }
+}
+
+export const pipelineTimeGuard = new PipelineTimeGuard();
+
+/**
+ * Directive 9.0.C: Convenience function for tracking pipeline time
+ */
+export function trackPipelineTime(symbol: string, startTime: number): void {
+  pipelineTimeGuard.trackPipelineTime(symbol, startTime);
+}

@@ -164,6 +164,14 @@ export class KrakenWebSocketAdapter {
   private restFallbacksBlocked: number = 0;
   private restFallbacksAllowed: number = 0;
   
+  // Directive 9.0.A: Safe Heartbeat Monitor tracking
+  private lastHeartbeat: number = Date.now();
+  private missedHeartbeats: number = 0;
+  private resubscribeEvents: number = 0;
+  private heartbeat90Interval: NodeJS.Timeout | null = null;
+  private readonly HEARTBEAT_90_CHECK_MS = 15000; // Check every 15s per directive
+  private readonly HEARTBEAT_90_TIMEOUT_MS = 60000; // 60s timeout per directive
+  
   // Phase 8.8.5: Configuration
   // Note: Kraken sends heartbeats ~every 1-2s but only when there are active subscriptions
   // We use lastMessageTime (any message) as the primary liveness check
@@ -308,6 +316,9 @@ export class KrakenWebSocketAdapter {
     this.startGlobalHeartbeatMonitor();
     this.startHealthMetricsLogger();
     
+    // Directive 9.0.A: Start 9.0 safe heartbeat monitor
+    this.start90HeartbeatMonitor();
+    
     if (this.pendingSubscriptions.size > 0) {
       console.log(`[${this.MODULE_NAME}] Subscribing to ${this.pendingSubscriptions.size} pending symbols`);
       this.subscribeToSymbols(Array.from(this.pendingSubscriptions));
@@ -342,6 +353,9 @@ export class KrakenWebSocketAdapter {
   private handleMessage(data: WebSocket.Data): void {
     // Phase 8.8.5: Update last message time for keep-alive logic
     this.lastMessageTime = Date.now();
+    
+    // Directive 9.0.A: Update heartbeat on any valid message
+    this.handleHeartbeatMessage();
     
     // I7-WS-RAW: Log raw incoming Kraken messages (first 200 chars)
     const rawStr = data.toString();
@@ -2986,6 +3000,118 @@ export class KrakenWebSocketAdapter {
     // Resubscribe using the existing helper (subscribes to both ticker+book)
     this.subscribeToSymbols([symbol]);
     console.log(`[8.9.5][SOFT_RESUB] Resubscribed ${symbol}`);
+  }
+
+  // ==========================================
+  // Directive 9.0.A: Safe Heartbeat Monitor
+  // ==========================================
+
+  /**
+   * Directive 9.0.A: Start 9.0 heartbeat monitor (15s check interval)
+   * Triggers safe resubscribe if feed stalls >60s
+   */
+  start90HeartbeatMonitor(): void {
+    if (this.heartbeat90Interval) {
+      clearInterval(this.heartbeat90Interval);
+    }
+
+    console.log('[9.0][HEARTBEAT] Starting 9.0 heartbeat monitor (15s interval, 60s timeout)');
+    this.lastHeartbeat = Date.now();
+
+    this.heartbeat90Interval = setInterval(() => {
+      const delta = Date.now() - this.lastHeartbeat;
+      
+      // Log heartbeat status
+      console.log(`[9.0][HEARTBEAT] WebSocket heartbeat received at ${new Date().toISOString()}`);
+      
+      if (delta > this.HEARTBEAT_90_TIMEOUT_MS) {
+        this.missedHeartbeats++;
+        console.warn(`[9.0][HEARTBEAT] Missed heartbeat (>${this.HEARTBEAT_90_TIMEOUT_MS / 1000}s). Triggering Safe Resubscribe...`);
+        console.log(`[9.0][HEALTH] Missed heartbeat detected (count: ${this.missedHeartbeats})`);
+        this.softResubscribeAll();
+      }
+    }, this.HEARTBEAT_90_CHECK_MS);
+  }
+
+  /**
+   * Directive 9.0.A: Stop 9.0 heartbeat monitor
+   */
+  stop90HeartbeatMonitor(): void {
+    if (this.heartbeat90Interval) {
+      clearInterval(this.heartbeat90Interval);
+      this.heartbeat90Interval = null;
+      console.log('[9.0][HEARTBEAT] Stopped 9.0 heartbeat monitor');
+    }
+  }
+
+  /**
+   * Directive 9.0.A: Handle heartbeat message (call on any valid message)
+   */
+  private handleHeartbeatMessage(): void {
+    this.lastHeartbeat = Date.now();
+  }
+
+  /**
+   * Directive 9.0.A: Safe Resubscribe All - clears volatile state before reconnecting
+   * Critical from Directive 8.9.5: includes state clearing
+   */
+  async softResubscribeAll(): Promise<void> {
+    console.warn('[9.0] Triggering Safe Resubscribe...');
+    this.resubscribeEvents++;
+
+    // 1. Force Close WebSocket
+    if (this.ws) {
+      try {
+        this.ws.close(4090, 'Safe resubscribe - heartbeat timeout');
+      } catch (e) {
+        // Ignore close errors
+      }
+    }
+
+    // 2. CLEAR ALL VOLATILE STATE (Critical from Directive 8.9.5)
+    this.orderBooks.clear();
+    this.symbolStats.clear();
+    this.lastSeq = {};
+    this.firstTickReceived.clear();
+    this.tickFrequencyData.clear();
+    this.lastBroadcastTime.clear();
+    this.subscriptionAcks.clear();
+    
+    console.log('[9.0][HEALTH] Cleared all volatile state for safe resubscribe');
+
+    // 3. Mark as reconnecting
+    this.isConnected = false;
+    this.isConnecting = false;
+    this.i8cIsReconnecting = true;
+
+    // 4. Reconnect after short delay (3s per directive)
+    const symbolsToResubscribe = Array.from(this.subscribedSymbols);
+    this.subscribedSymbols.clear();
+    this.pendingSubscriptions.clear();
+
+    setTimeout(async () => {
+      console.log(`[9.0][HEALTH] Reconnecting with ${symbolsToResubscribe.length} symbols...`);
+      await this.connect();
+      
+      // Wait for connection to establish
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      if (this.isConnected && symbolsToResubscribe.length > 0) {
+        this.subscribeToSymbols(symbolsToResubscribe);
+        console.log(`[9.0][HEALTH] Resubscribed to ${symbolsToResubscribe.length} symbols`);
+      }
+    }, 3000);
+  }
+
+  /**
+   * Directive 9.0.A: Get 9.0 health metrics
+   */
+  get90HealthMetrics(): { missedHeartbeats: number; resubscribeEvents: number; lastHeartbeat: Date } {
+    return {
+      missedHeartbeats: this.missedHeartbeats,
+      resubscribeEvents: this.resubscribeEvents,
+      lastHeartbeat: new Date(this.lastHeartbeat)
+    };
   }
 }
 

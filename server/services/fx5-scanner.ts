@@ -30,6 +30,7 @@ import { recordScanFor24h, recordScanCompletion, getCyclesPerHour, get24hSummary
 import { readyToBuyService } from '../core/rtb/ready_to_buy_service.js';
 import { centralClock, ClockTick } from './central-clock.js';
 import { dataAggregator } from './data-aggregator.js';
+import { classifyVolume, type VolumeClass } from '../utils/analysis-utils.js';
 
 const SCAN_INTERVAL_SECONDS = 30; // 30 seconds aligned with clock ticks
 const SCAN_INTERVAL_MS = SCAN_INTERVAL_SECONDS * 1000; // For backwards compatibility
@@ -260,9 +261,18 @@ export class Fx5ScannerService {
         activePoolCount,
       };
 
+      // Directive 9.0.B: Classify survivors by volume
+      // Handle undefined/null volume24h gracefully with safe defaults
+      const classifiedSurvivors = survivors.map(s => {
+        const volumeUSD = typeof s.volume24h === 'number' && !isNaN(s.volume24h) ? s.volume24h : 0;
+        const volumeClass = classifyVolume(volumeUSD);
+        console.log(`[9.0][FX5] ${s.symbol} classified as ${volumeClass} (Vol=$${volumeUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`);
+        return { ...s, volumeClass, volumeUSD };
+      });
+
       // REB 2.8.7: Add survivors to Active Filter Pool (deduped, TTL-managed)
       // Single-gate pattern: Check ONLY isEngineActive (passive learning = !isEngineActive)
-      console.log(`[8.6.7][DEBUG] FX5 scan complete - survivors.length=${survivors.length}, eligibleCount=${eligibleCount}`);
+      console.log(`[8.6.7][DEBUG] FX5 scan complete - survivors.length=${classifiedSurvivors.length}, eligibleCount=${eligibleCount}`);
       
       // Check if trading engine is active for this mode (from database, not aggregator)
       // R9.3.HF-7: Add timeout protection for database call
@@ -283,9 +293,9 @@ export class Fx5ScannerService {
 
       // REB 2.8.7: Single-gate pattern - populate pool ONLY when engine ACTIVE
       if (isEngineActive) {
-        // Engine ACTIVE: Add survivors to Active Filter Pool
-        const poolStats = activeFilterPool.addSurvivors(mode, survivors);
-        console.log(`[REB 2.8.7][ActivePool] Pool populated: added=${poolStats.added}, updated=${poolStats.updated}, skipped=${poolStats.skipped}, survivors=${survivors.length}`);
+        // Engine ACTIVE: Add survivors to Active Filter Pool (with volume classification)
+        const poolStats = activeFilterPool.addSurvivors(mode, classifiedSurvivors);
+        console.log(`[REB 2.8.7][ActivePool] Pool populated: added=${poolStats.added}, updated=${poolStats.updated}, skipped=${poolStats.skipped}, survivors=${classifiedSurvivors.length}`);
       } else {
         // Engine STOPPED: Pool cleared by enforcePassiveModeIfStopped (passive learning)
         console.log(`[REB 2.8.7][ActivePool] Engine stopped - pool cleared (passive learning mode)`);
@@ -298,17 +308,24 @@ export class Fx5ScannerService {
       const cycleEndTimestamp = new Date().toISOString();
       
       // Directive 8.8.4-L1: Capture FX5 scan data for learning aggregation
+      // Directive 9.0.B: Include volume classification stats
+      const volumeStats = {
+        SMALL: classifiedSurvivors.filter(s => s.volumeClass === 'SMALL').length,
+        MID: classifiedSurvivors.filter(s => s.volumeClass === 'MID').length,
+        LARGE: classifiedSurvivors.filter(s => s.volumeClass === 'LARGE').length
+      };
       dataAggregator.capture('FX5_SCAN', {
         mode,
         pairsScanned: evaluatedCount,
-        survivors: survivors.length,
+        survivors: classifiedSurvivors.length,
         eligibleCount,
         topNCount,
         tierBCount,
-        avgDailyRange: survivors.length > 0 
-          ? survivors.reduce((a, s) => a + (s.dailyRange || 0), 0) / survivors.length 
+        avgDailyRange: classifiedSurvivors.length > 0 
+          ? classifiedSurvivors.reduce((a, s) => a + (s.dailyRange || 0), 0) / classifiedSurvivors.length 
           : 0,
-        isEngineActive
+        isEngineActive,
+        volumeStats
       }).catch(() => {});
       
       // REB 2.8.4: Generate unique scan cycle ID (survives server restarts)

@@ -1,0 +1,192 @@
+⚙️ Directive 9.0 — Infrastructure Stability & Volume Classifier (Final)
+
+Version: 9.0 (Finalized Revision)
+Target System: Dawn Trader Infrastructure Layer
+Primary Files:
+
+server/services/kraken-websocket-adapter.ts
+
+server/utils/analysis-utils.ts
+
+server/services/system-health-service.ts
+
+server/engines/fx5-scanner.ts
+
+server/engines/filter-engine.ts
+
+1️⃣ Objective
+
+Strengthen Dawn Trader’s data infrastructure by:
+
+Maintaining resilient WebSocket connectivity with safe, state-cleared reconnections.
+
+Tracking system pipeline latency for performance diagnostics.
+
+Classifying trading pairs by liquidity tiers for improved scanning and filtering.
+
+This ensures a hardened foundation before Phase 9.1 introduces heavier mathematical computation.
+
+2️⃣ Deliverables Overview
+Deliverable	Description	File(s)
+9.0.A – Safe Heartbeat Monitor & Resubscribe	Monitors connection health, triggers full state-clearing resubscribe if the feed stalls >60s.	kraken-websocket-adapter.ts, system-health-service.ts
+9.0.B – Volume Classifier	Categorizes pairs into SMALL/MID/LARGE liquidity classes based on 24h volume (USD).	analysis-utils.ts, fx5-scanner.ts, filter-engine.ts
+9.0.C – Pipeline Processing Time Guard	Measures and logs time to process and broadcast each tick to identify slowdowns.	system-health-service.ts
+3️⃣ Implementation Details
+9.0.A — Safe Heartbeat Monitor & Resubscribe
+
+Goal:
+Ensure uninterrupted WebSocket connectivity by safely resetting all volatile state before reconnecting.
+
+Implementation Steps:
+
+Heartbeat Logic
+
+// server/services/kraken-websocket-adapter.ts
+private heartbeatInterval?: NodeJS.Timeout;
+private lastHeartbeat = Date.now();
+
+private startHeartbeatMonitor() {
+    this.heartbeatInterval = setInterval(() => {
+        const delta = Date.now() - this.lastHeartbeat;
+        if (delta > 60000) { // 60s timeout
+            console.warn(`[9.0][HEARTBEAT] Missed heartbeat (>60s). Triggering Safe Resubscribe...`);
+            this.softResubscribeAll();
+        }
+    }, 15000);
+}
+
+private handleHeartbeatMessage() {
+    this.lastHeartbeat = Date.now();
+    console.log(`[9.0][HEARTBEAT] WebSocket heartbeat received at ${new Date().toISOString()}`);
+}
+
+
+Safe Resubscribe Logic
+
+// ✅ Safe Version (includes state clearing, per Gemini’s correction)
+private async softResubscribeAll() {
+    console.warn('[9.0] Triggering Safe Resubscribe...');
+
+    // 1. Force Close
+    this.ws?.close();
+
+    // 2. CLEAR STATE (Critical from Directive 8.9.5)
+    this.orderBooks.clear();
+    this.symbolStats.clear();
+    if (this.sequenceTracker) this.sequenceTracker.clear();
+
+    // 3. Reconnect after short delay
+    setTimeout(async () => {
+        await this.connect(Array.from(this.subscribedSymbols));
+    }, 3000);
+}
+
+
+Health Integration
+
+system-health-service.ts logs [9.0][HEALTH] events for missed heartbeats and reconnections.
+
+Maintain counters:
+
+missedHeartbeats
+
+resubscribeEvents
+
+9.0.B — Volume Classifier
+
+Goal:
+Provide a standardized classification for liquidity tiers to enhance scan quality.
+
+Add Classifier
+
+// server/utils/analysis-utils.ts
+export function classifyVolume(volumeUSD: number): 'SMALL' | 'MID' | 'LARGE' {
+    if (volumeUSD < 1_000_000) return 'SMALL';
+    if (volumeUSD < 10_000_000) return 'MID';
+    return 'LARGE';
+}
+
+
+Integrate with FX5 Scanner
+
+// server/engines/fx5-scanner.ts
+import { classifyVolume } from '@/utils/analysis-utils';
+
+const volumeUSD = parseFloat(ticker.volumeQuote24h || '0');
+const volumeClass = classifyVolume(volumeUSD);
+
+this.results.push({
+    symbol,
+    volumeUSD,
+    volumeClass,
+    spread,
+    liquidity,
+});
+
+console.log(`[9.0][FX5] ${symbol} classified as ${volumeClass} (Vol=${volumeUSD.toFixed(2)})`);
+
+
+Integrate with Filter Engine
+
+// server/engines/filter-engine.ts
+if (pair.volumeClass === 'SMALL') {
+    console.log(`[9.0][FILTER] Excluding ${pair.symbol} - Low Liquidity (${pair.volumeClass})`);
+    continue;
+}
+
+9.0.C — Pipeline Processing Time Guard
+
+Goal:
+Track internal data pipeline efficiency from tick reception to broadcast.
+
+Implementation
+
+// server/services/system-health-service.ts
+export function trackPipelineTime(symbol: string, startTime: number) {
+    const procTime = Date.now() - startTime;
+    if (procTime > 100) {
+        console.warn(`[9.0][PROC_TIME] ${symbol} pipeline delay = ${procTime}ms`);
+    }
+}
+
+
+Integration
+
+const startTime = Date.now();
+livePricingAdapter.updateFromWebSocket(internalSymbol, safeData);
+trackPipelineTime(internalSymbol, startTime);
+
+
+Storage
+
+Log all entries to /tmp/logs/pipeline_metrics_9.0.log
+
+Maintain rolling average over last 100 ticks per symbol.
+
+4️⃣ Validation Protocol
+Step	Action	Expected Outcome
+1	Let WebSocket run for 10 minutes idle	[9.0][HEARTBEAT] logs every 15s
+2	Simulate WS failure	[9.0] Triggering Safe Resubscribe...
+3	Observe clean reconnect, no order book corruption	No “Sequence Error” or checksum mismatch
+4	Run FX5 Scanner	VolumeClass field populated correctly
+5	Observe [9.0][PROC_TIME] logs	Only on occasional spikes (>100ms)
+5️⃣ Logging Conventions (Final)
+Tag	Description	Example
+[9.0][HEARTBEAT]	Heartbeat received	[9.0][HEARTBEAT] WS alive at 16:21:10Z
+[9.0][HEALTH]	System health resubscribe events	[9.0][HEALTH] Missed heartbeat detected
+[9.0][FX5]	Volume classification logs	[9.0][FX5] ADA/USD classified as MID
+[9.0][FILTER]	Filter exclusion logs	[9.0][FILTER] Excluding OP/EUR - Low Liquidity
+[9.0][PROC_TIME]	Processing delay logs	[9.0][PROC_TIME] BTC/USD pipeline delay = 84ms
+6️⃣ Success Criteria
+
+✅ Heartbeat monitoring and safe resubscribe confirmed operational.
+✅ No sequence mismatch or mini-book corruption post-reconnect.
+✅ Average processing latency <100ms.
+✅ FX5 Scanner correctly classifies all pairs with volumeClass.
+✅ Filter Engine excludes low-liquidity pairs.
+✅ Verification log ends with:
+
+[9.0][VALIDATION COMPLETE] Infrastructure stable. Heartbeat and pipeline guards active.
+
+
+W
