@@ -1,4 +1,4 @@
-# ⚙️ Dawn Trader Phase 9 & 10 Directive Roadmap
+# ⚙️ Dawn Trader Phase 9 & 10 Directive Roadmap (Updated)
 
 This roadmap provides a structured sequence of directives for implementation across Phases 9 and 10 of the Dawn Trader Quantitative Trading System.  
 Each directive defines an atomic, testable milestone that builds upon the existing infrastructure validated through Directive 8.9.5.
@@ -17,7 +17,8 @@ Each directive defines an atomic, testable milestone that builds upon the existi
 | **Directive 9.4 – Covariance Guard / Risk Concentration Control** | Implement `calculateCovariancePenalty()` and integrate with the Sizing Helper to dynamically adjust position sizing based on inter-asset correlation risk. |
 | **Directive 9.5 – CWQI v4 Integration (Expected Value Model)** | Upgrade CWQI to v4 with Net Expected Value (Reward–Risk ratio) and link it to the Signal Quality Evaluator for universal signal ranking. |
 | **Directive 9.6 – Directional Integrity (DI) Computation** | Implement DI metric to quantify trend persistence versus volatility, integrate into the Orchestrator and SQE for entry timing alignment. |
-| **Directive 9.7 – Consolidation & Testing Suite (Phase 9 Validation)** | Combine all above modules into the Strategy Orchestrator → SQE → Sizing Helper chain, execute 1-hour VTS validation test for model stability, liquidity accuracy, and covariance safety. |
+| **Directive 9.7 – Dynamic Trade Management (Adaptive Trailing Exit System)** | Add a new trailing exit engine that dynamically adjusts stop losses based on Directional Integrity (DI), VolNoise, and ATR. Includes Redis persistence and the enhanced Break-Even Latch that promotes the stop to the most recent target exit price once achieved. |
+| **Directive 9.8 – Consolidation & Testing Suite (Phase 9 Validation)** | Combine all modules (DI, CWQI, Trailing Exit, Covariance) into a unified Strategy Orchestrator test suite. Execute 1-hour VTS validation for model stability, latency, and trade management accuracy. |
 
 ---
 
@@ -100,3 +101,4 @@ Ensure `FX5 Scanner` output correctly appends the `volumeClass` field to each sy
 ✅ Latency <100ms average per channel.  
 ✅ Volume Classifier integrated and functioning in all FX5 and Filter Engine outputs.  
 ✅ Replit verification log: `[9.0][VALIDATION COMPLETE] Infrastructure stable.`
+

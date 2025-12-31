@@ -1,6 +1,7 @@
 {
   "repo_root": "/",
   "purpose": "Authoritative navigation map for DawnTrader repository. ChatGPT MUST consult this file before accessing any repository files.",
+  "last_updated": "2025-12-31",
   "domains": {
     "bridge": {
       "path": "/bridge",
@@ -12,11 +13,47 @@
     },
     "server": {
       "path": "/server",
-      "description": "Backend services, trading engine, strategy engine, risk, data pipelines"
+      "description": "Backend services, trading engine, strategy engine, risk, data pipelines",
+      "subdomains": {
+        "_deprecated": {
+          "path": "/server/_deprecated",
+          "description": "Quarantined legacy files (9.0-FP cleanup)"
+        },
+        "services": {
+          "path": "/server/services",
+          "description": "Core trading services, adapters, and business logic"
+        },
+        "engines": {
+          "path": "/server/engines",
+          "description": "Trading engine, strategy engine, regime engine"
+        },
+        "routes": {
+          "path": "/server/routes",
+          "description": "API route definitions"
+        }
+      }
     },
     "client": {
       "path": "/client",
-      "description": "Frontend UI, UX, dashboards, visualizations"
+      "description": "Frontend UI, UX, dashboards, visualizations",
+      "subdomains": {
+        "_deprecated": {
+          "path": "/client/src/components/_deprecated",
+          "description": "Quarantined legacy UI components (9.0-FP cleanup)"
+        },
+        "components": {
+          "path": "/client/src/components",
+          "description": "React components organized by feature"
+        },
+        "hooks": {
+          "path": "/client/src/hooks",
+          "description": "Custom React hooks"
+        },
+        "pages": {
+          "path": "/client/src/pages",
+          "description": "Page-level components"
+        }
+      }
     },
     "shared": {
       "path": "/shared",
@@ -25,7 +62,34 @@
     "config": {
       "path": "/config",
       "description": "Application configuration (non-secret)"
+    },
+    "docs": {
+      "path": "/docs",
+      "description": "Documentation, audits, technical references",
+      "subdomains": {
+        "audits": {
+          "path": "/docs/audits",
+          "description": "System audits and validation reports"
+        }
+      }
+    },
+    "migrations": {
+      "path": "/migrations",
+      "description": "Database migration files"
+    },
+    "scripts": {
+      "path": "/scripts",
+      "description": "Utility and maintenance scripts"
+    },
+    "tests": {
+      "path": "/tests",
+      "description": "Test suites and test utilities"
     }
+  },
+  "deprecated_locations": {
+    "server": "/server/_deprecated",
+    "client": "/client/src/components/_deprecated",
+    "note": "Files moved here during 9.0-FP cleanup - pending permanent removal"
   },
   "denied_paths": [
     "/node_modules",
@@ -34,7 +98,8 @@
     "/build",
     "/out",
     "/.env",
-    "/.env.*"
+    "/.env.*",
+    "/tmp"
   ],
   "rules": {
     "always_use_repo_map": true,
@@ -45,6 +110,7 @@
   "maintenance": {
     "update_required_when_structure_changes": true,
     "owner": "Kyle",
-    "governed_by_bridge": true
+    "governed_by_bridge": true,
+    "last_updated_by": "9.0-FP Foundation Prep"
   }
 }
