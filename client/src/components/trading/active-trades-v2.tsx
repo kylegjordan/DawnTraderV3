@@ -371,25 +371,25 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 8. Distance (stacked: TP on top, SL on bottom) - % from Entry to TP/SL */}
+      {/* 8. Distance (stacked: TP on top, SL on bottom) - Per-coin $ difference from Entry */}
       <td className="px-3 py-3">
         <div className="text-xs space-y-0.5">
           {(() => {
             const entryPrice = trade.intendedEntryPrice || trade.entryPrice;
-            const tpDistancePercent = entryPrice > 0 ? ((trade.takeProfit - entryPrice) / entryPrice) * 100 : 0;
-            const slDistancePercent = entryPrice > 0 ? ((entryPrice - trade.stopLoss) / entryPrice) * 100 : 0;
+            const tpDistance = trade.takeProfit - entryPrice;
+            const slDistance = entryPrice - trade.stopLoss;
             return (
               <>
                 <div className="flex items-center gap-1">
                   <Target className="w-3 h-3 text-green-500" />
                   <span className="font-mono text-green-600">
-                    +{tpDistancePercent.toFixed(2)}%
+                    +${tpDistance.toFixed(6)}
                   </span>
                 </div>
                 <div className="flex items-center gap-1">
                   <Shield className="w-3 h-3 text-red-500" />
                   <span className="font-mono text-red-600">
-                    -{slDistancePercent.toFixed(2)}%
+                    -${slDistance.toFixed(6)}
                   </span>
                 </div>
               </>
