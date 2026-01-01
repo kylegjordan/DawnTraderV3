@@ -1,15 +1,15 @@
 # Crypto Day Trading Web App
 
 ## Overview
-This project is a long-only, spot-trading cryptocurrency day trading web application for the Kraken exchange. It automates advanced trading strategies, integrates real-time market scanning, and incorporates disciplined risk management. The application supports both live and paper trading, leveraging OpenAI's GPT models for AI analysis, trade tracking, performance analytics, error diagnosis, and an autonomous learning engine. Its core purpose is to deliver a comprehensive, resilient, and continuously self-optimizing trading platform, aiming for market potential through advanced automation and AI integration.
+This project is a long-only, spot-trading cryptocurrency day trading web application designed for the Kraken exchange. It automates advanced trading strategies, integrates real-time market scanning, and incorporates disciplined risk management. The application supports both live and paper trading, utilizing OpenAI's GPT models for AI analysis, trade tracking, performance analytics, error diagnosis, and an autonomous learning engine. Its core purpose is to deliver a comprehensive, resilient, and continuously self-optimizing trading platform, aiming for market potential through advanced automation and AI integration.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
 ## System Architecture
-The application features a mobile-first React, TypeScript, and Vite frontend, communicating with a Node.js/Express backend via a RESTful API and WebSocket. PostgreSQL, accessed via Neon serverless driver and Drizzle ORM, handles data persistence. Authentication uses username/password, bcrypt, JWT, and WebAuthn.
+The application uses a mobile-first React, TypeScript, and Vite frontend, communicating with a Node.js/Express backend via RESTful API and WebSocket. Data persistence is handled by PostgreSQL, accessed via Neon serverless driver and Drizzle ORM. Authentication uses username/password, bcrypt, JWT, and WebAuthn.
 
-Core services include `KrakenService`, `TradingEngine`, `StrategyEngine`, `MarketScanner`, `RiskManager`, `AIAnalyst`, and `AIOpportunitiesService`. An AI Orchestrator & Command Center, powered by GPT-4o, provides an AI SysAdmin Co-Pilot, Unified Command & Conversation Layer, Semantic Memory, and a Continuous Learning Pipeline. The system employs a Hybrid Cognitive-Operational design with an Intent Gateway, `SecureCoreService`, and an Autonomy Layer with Safety Guardrails.
+Core services include `KrakenService`, `TradingEngine`, `StrategyEngine`, `MarketScanner`, `AIAnalyst`, and `AIOpportunitiesService`. Risk management is managed by `guardrail-settings.ts` and `trade-safety.ts`. An AI Orchestrator & Command Center, powered by GPT-4o, provides an AI SysAdmin Co-Pilot, Unified Command & Conversation Layer, Semantic Memory, and a Continuous Learning Pipeline. The system employs a Hybrid Cognitive-Operational design with an Intent Gateway, `SecureCoreService`, and an Autonomy Layer with Safety Guardrails.
 
 A global mode-based engine with a `ModeRegistry` and `MetricsCore` manages live pricing via a `LivePricingAdapter` with dual-source integration and a `KrakenWebSocketAdapter`. A centralized price cache module ensures a single source of truth for active trade pricing. The Goals Engine UI offers advanced universe and signal controls, execution rhythm controls, and simplified daily target goals with a Goal Feasibility Validation & Audit System, and an adaptive learning system.
 
@@ -29,89 +29,7 @@ A Decision Confidence Engine unifies various confidence metrics into a single De
 
 System health is maintained through a Safe Heartbeat Monitor, a Volume Classifier for market liquidity, and a Pipeline Processing Time Guard to track latency. Comprehensive system audit and validation suites are regularly performed.
 
-**Directive 9.1 - Analysis Utils & Core Metrics**: The mathematical foundation layer (`server/utils/analysis-utils.ts`) provides core quantitative metrics used across Phase 9+:
-- **Log-Liquidity (LQ)**: 0-100 scale liquidity index based on volume, trade count, and spread
-- **Directional Integrity (DI)**: 0-100 trend persistence measure (≥65 = stable trend, <30 = choppy)
-- **Volatility Noise (VolNoise)**: 0-1 noise-to-trend smoothness (lower = smoother, max threshold 0.6)
-- **Sigma (σ)**: Standard deviation of price returns for 3σ spike detection
-
-Filter thresholds: LQ ≥ 40, VolNoise ≤ 0.6. FX5 Scanner computes and logs all metrics with `[9.1]` tags.
-
-**Directive 9.2 - Dynamic Trade Management (Adaptive Trailing Exit)**: Implements a full-spectrum adaptive trade management system (`server/services/trailing-exit-controller.ts`):
-- **Dynamic Stop Distance Formula**: K' = K_base × (1 + α×(1 - DI/100) + β×VolNoise) - adapts trailing stop based on market conditions
-- **Two-Stage Latching System**: Break-Even latch at 1×ATR gain (stop to entry), Target Lock latch at target price (stop to target)
-- **Trade Mode Tracking**: TARGET mode during pursuit, TRAILING_TAKE mode after target hit (MOONBAG mode)
-- **Persistence Layer**: File-based state persistence (`/tmp/trailing-states.json`) with debounced writes (5s), auto-loaded at server startup
-- **Database Sync**: Trade mode changes automatically propagate to database (paper_sim_open_positions.tradeMode column)
-- **API Integration**: `tradeMode` field exposed in positions API response for frontend consumption
-- **UI Enhancement**: Gold "MOONBAG" badge in Active Trades when trailing mode is active
-
-Logs with `[9.2][EXIT]`, `[9.2][LOCK]`, `[9.2][MODE]`, `[9.2][PERSIST]`, `[9.2][MODE_SYNC]` tags. Schema: `trade_mode` column on trades/paper_sim_open_positions.
-
-**Directive 9.3 - Adaptive Kalman Filter (Efficiency Ratio Model)**: Implements an adaptive filter that dynamically adjusts smoothing based on market conditions (`server/utils/adaptive-kalman.ts`):
-- **Efficiency Ratio (ER)**: ER = |Price_t - Price_{t-n}| / Σ|ΔPrice_i| — measures trend efficiency (0-1)
-- **Adaptive R Parameter**: R = clip(1 + (1 - ER) × 50, 1, 50) — low ER = high smoothing, high ER = fast response
-- **Adaptive Q Parameter**: Q = max(0.1, VolNoise × 0.5) — scales process noise with volatility
-- **Cold Start Handling**: Seeds immediately with first price, no initialization delay
-- **Filter Registry**: Per-symbol filter instances via getKalmanFilter(symbol)
-- **Orchestrator Integration**: Smoothed prices delivered to all strategy evaluations
-
-Logs with `[9.3][INIT]`, `[9.3][ER]`, `[9.3][KALMAN]` tags. 31 unit tests validate stability and responsiveness.
-
-**Directive 9.4 - Covariance Guard / Risk Concentration Control**: Portfolio-level correlation monitoring and position sizing (`server/utils/covariance-engine.ts`, `server/services/risk-concentration.ts`):
-- **Covariance Matrix**: Σ = (1/(n-1)) × (R - R̄)ᵀ(R - R̄) — rolling covariance from recent returns
-- **Correlation Matrix**: ρ_ij = Σ_ij / (σ_i × σ_j) — normalized correlations clamped to [-1, 1]
-- **Concentration Score**: C_i = Σ|ρ_ij| × w_j — correlation-weighted exposure per symbol
-- **Scaling Factor**: When C_i > C_max (2.5), scale position: ScalingFactor = min(1, C_max / C_i)
-- **Correlation Threshold**: ρ_th = 0.75 — high correlation warning/blocking threshold
-- **SizingHelper Integration**: Trade sizes dynamically scaled based on `getScalingFactor(symbol)`
-- **TradeSafety Integration**: CORRELATION_EXPOSURE check blocks trades exceeding threshold; always updates position weights (even when empty) to clear stale state
-- **Engine Startup Bootstrap**: On paper engine start, fetches OHLC data for top 20 symbols from activeFilterPool, converts to Kraken REST pairs, populates covarianceEngine, computes matrices, and calls `riskConcentrationAnalyzer.recalculateScores()`
-
-Logs with `[9.4][COV]`, `[9.4][RISK]`, `[9.4][SIZE]`, `[9.4][CONCENTRATION]`, `[9.4][RETURNS]` tags. 26 unit tests validate matrix symmetry, bounds, scaling, and telemetry.
-
-**Directive 9.5 - CWQI v4 (Net Expectancy Gate & Quality Score)**: Implements a two-stage trade evaluation system (`server/services/cwqi-service.ts`):
-- **The Gate (EV)**: Net Expectancy check - trades with EV ≤ 0 are rejected
-  - Formula: EV = (Pwin × DistTarget) - (Ploss × DistStop) - CostTotal
-  - Pwin = 0.40 + (DI / 200), capped at 0.60
-  - CostTotal = 0.5% of entry price (0.4% exchange fees + 0.1% slippage)
-- **The Score (CWQI)**: Quality ranking for tradeable candidates
-  - Formula: Score = (Reward/Risk) × DI × (1 - VolNoise) × (1 - ρ̄)
-  - Score clamped to 0-100 range
-- **System Guards (9.5.C)**: UI panel in Screeners Tab displaying:
-  - LQ ≥ 40 (Liquidity Guard)
-  - VolNoise ≤ 0.6 (Noise Guard)
-  - EV > 0 (CWQI Gate)
-  - ρ ≤ 0.75 (Correlation Guard)
-- **Filter Insights (9.5.D)**: REJECT_LQ, REJECT_NOISE, REJECT_CWQI codes added
-- **Batch Evaluation**: `evaluateCandidates()` filters non-tradeable, ranks by score (descending)
-- **Trade Metadata**: `cwqiScore` and `cwqiEV` fields for analytics
-
-Logs with `[9.5][CWQI]`, `[9.5][CWQI_BLOCK]`, `[9.5][CWQI_PASS]` tags. 13 unit tests validate expectancy calculations, scoring, and configuration.
-
-**Directive 9.6 - Sim-to-Live Parity & Configuration Lock**: Ensures Live and VTS (Paper) engines produce identical outputs under identical conditions (`server/config/system-guards.ts`):
-- **Configuration Lock**: Centralized `SYSTEM_GUARDS` object with all Phase 9 thresholds:
-  - MIN_LIQUIDITY_SCORE = 40 (LQ Gate)
-  - MAX_VOL_NOISE = 0.6 (Noise Gate)
-  - BASE_FEE_SLIPPAGE = 0.005 (0.5% total cost)
-  - MAX_CORRELATION = 0.75 (ρ threshold)
-  - PARITY_TOLERANCE = 0.000001 (determinism check)
-  - DI_LOW = 30, DI_HIGH = 65 (Directional Integrity bands)
-  - MIN_PWIN = 0.40, MAX_PWIN = 0.60 (Win probability bounds)
-  - VERSION = "Phase9_Final"
-- **Math Consolidation**: All Phase 9 modules import from SYSTEM_GUARDS to prevent configuration drift
-- **Parity Test Suite**: 5 integration tests (`server/tests/integration/parity.test.ts`) validating:
-  - CWQI determinism under identical inputs
-  - Entry/Stop/Target calculation consistency
-  - Cost calculation using centralized config
-  - pWin bounded by SYSTEM_GUARDS
-  - Configuration version match
-- **Diagnostics Tab**: New tab in Goals Engine (after Strategies, before Coherency) showing:
-  - Math Integrity status with verification badge
-  - Phase 9 module health (Directives 9.2-9.5)
-  - Guard configuration display
-
-Logs with `[9.6][PARITY]`, `[9.6][CONFIG]`, `[9.6][VALIDATION]` tags. 5 integration tests validate parity.
+Core quantitative metrics (`analysis-utils.ts`) include Log-Liquidity (LQ), Directional Integrity (DI), Volatility Noise (VolNoise), and Sigma (σ). Dynamic Trade Management is implemented via an Adaptive Trailing Exit (`trailing-exit-controller.ts`) with a dynamic stop distance formula and a two-stage latching system. An Adaptive Kalman Filter (`adaptive-kalman.ts`) dynamically adjusts smoothing based on an Efficiency Ratio (ER). Covariance Guard and Risk Concentration Control (`covariance-engine.ts`, `risk-concentration.ts`) manage portfolio-level correlation and position sizing. CWQI v4 (`cwqi-service.ts`) provides a two-stage trade evaluation system with an Expectancy Value (EV) gate and a Quality Score. Sim-to-Live Parity is ensured by a Configuration Lock (`system-guards.ts`) with a centralized `SYSTEM_GUARDS` object defining all key thresholds and parameters, and a dedicated parity test suite. The system has transitioned to a mode-based architecture (paper/live) with the removal of the deprecated `RiskManager` and userId-based queries. Live mode valuation uses Kraken API and price cache, while paper mode uses a portfolio_state table.
 
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
