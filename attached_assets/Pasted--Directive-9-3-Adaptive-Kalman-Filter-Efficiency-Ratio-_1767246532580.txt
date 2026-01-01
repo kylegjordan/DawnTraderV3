@@ -1,0 +1,390 @@
+⚙️ Directive 9.3 — Adaptive Kalman Filter (Efficiency Ratio Model)
+
+Version: 9.3 (Final — Gemini & Architect Approved)
+Phase: 9 – Institutional Math Core
+Dependencies: ✅ 9.1 (Core Metrics) · ✅ 9.2 (Dynamic Trade Management)
+Target System: Analysis Layer · Orchestrator · Diagnostics
+Repository: Dawn Trader (Main Replit Repo)
+
+🧭 Objective
+
+Integrate an Adaptive Kalman Filter that dynamically adjusts its smoothing responsiveness based on the Efficiency Ratio (ER) and Volatility Noise (VolNoise).
+
+The purpose of this directive is to:
+
+Suppress false signals during “chop” regimes.
+
+Amplify responsiveness during sustained directional integrity (DI).
+
+Provide smoothed, latency-controlled prices to the Orchestrator and CWQI evaluators.
+
+This completes the mathematical core of the Phase 9 institutional logic, turning the filter into a self-learning stabilizer for trend recognition and regime classification.
+
+🧩 Deliverables Overview
+Deliverable	Description	Target File(s)
+9.3.A – AdaptiveKalmanFilter Class	Core adaptive filter implementation	server/utils/adaptive-kalman.ts
+9.3.B – Efficiency Ratio (ER) Calculator	Compute directional efficiency	analysis-utils.ts
+9.3.C – Parameter Adaptation Logic	Dynamic scaling for R and Q	adaptive-kalman.ts
+9.3.D – Orchestrator Integration	Plug into the signal stream	server/engines/strategy-orchestrator.ts
+9.3.E – Diagnostics & Telemetry	Emit [9.3][KALMAN] logs	system-health-service.ts
+9.3.F – Unit Test Suite	Validate reactivity and stability	tests/unit/adaptive-kalman.test.ts
+🧮 Mathematical Specification
+A. Efficiency Ratio (ER)
+𝐸
+𝑅
+=
+∣
+Price
+𝑡
+−
+Price
+𝑡
+−
+𝑛
+∣
+∑
+𝑖
+=
+1
+𝑛
+∣
+Δ
+Price
+𝑖
+∣
+ER=
+∑
+i=1
+n
+	​
+
+∣ΔPrice
+i
+	​
+
+∣
+∣Price
+t
+	​
+
+−Price
+t−n
+	​
+
+∣
+	​
+
+
+ER → 1.0: Perfectly smooth trend
+
+ER → 0.0: Random, noisy chop
+
+Implementation:
+
+export function calculateEfficiencyRatio(prices: number[], window = 20): number {
+  if (prices.length < window + 1) return 0;
+  const change = Math.abs(prices[prices.length - 1] - prices[prices.length - window - 1]);
+  const volatility = prices.slice(-window).reduce((sum, p, i, arr) =>
+    i > 0 ? sum + Math.abs(p - arr[i - 1]) : sum, 0);
+  return volatility === 0 ? 0 : +(change / volatility).toFixed(4);
+}
+
+B. Adaptive Kalman Filter Logic (Final Implementation)
+
+Dynamic Parameters:
+
+𝑅
+𝑡
+=
+clip
+(
+1
++
+(
+1
+−
+𝐸
+𝑅
+)
+×
+50
+,
+1
+,
+50
+)
+R
+t
+	​
+
+=clip(1+(1−ER)×50,1,50)
+𝑄
+𝑡
+=
+max
+⁡
+(
+0.1
+,
+𝑉
+𝑜
+𝑙
+𝑁
+𝑜
+𝑖
+𝑠
+𝑒
+×
+0.5
+)
+Q
+t
+	​
+
+=max(0.1,VolNoise×0.5)
+
+Update Equations:
+
+𝐾
+𝑡
+=
+𝑃
+𝑡
+∣
+𝑡
+−
+1
+𝑃
+𝑡
+∣
+𝑡
+−
+1
++
+𝑅
+𝑡
+K
+t
+	​
+
+=
+P
+t∣t−1
+	​
+
++R
+t
+	​
+
+P
+t∣t−1
+	​
+
+	​
+
+𝑥
+𝑡
+=
+𝑥
+𝑡
+∣
+𝑡
+−
+1
++
+𝐾
+𝑡
+(
+𝑦
+𝑡
+−
+𝑥
+𝑡
+∣
+𝑡
+−
+1
+)
+x
+t
+	​
+
+=x
+t∣t−1
+	​
+
++K
+t
+	​
+
+(y
+t
+	​
+
+−x
+t∣t−1
+	​
+
+)
+𝑃
+𝑡
+=
+max
+⁡
+(
+10
+−
+8
+,
+(
+1
+−
+𝐾
+𝑡
+)
+𝑃
+𝑡
+∣
+𝑡
+−
+1
++
+𝑄
+𝑡
+)
+P
+t
+	​
+
+=max(10
+−8
+,(1−K
+t
+	​
+
+)P
+t∣t−1
+	​
+
++Q
+t
+	​
+
+)
+C. Example Implementation (Final Version)
+// server/utils/adaptive-kalman.ts
+export class AdaptiveKalmanFilter {
+  private x: number | null = null; // Detect first run
+  private P = 1;
+
+  update(price: number, ER: number, VolNoise: number): number {
+    // 1. Cold Start: Seed with first price
+    if (this.x === null) {
+      this.x = price;
+      console.log(`[9.3][INIT] Seeding Kalman with first price ${price}`);
+      return price;
+    }
+
+    // 2. Adaptive R (1–50 range)
+    const R = Math.max(1, Math.min(50, 1 + (1 - ER) * 50));
+
+    // 3. Adaptive Q (scaled by VolNoise)
+    const Q = Math.max(0.1, VolNoise * 0.5);
+
+    // 4. Kalman Update
+    const K = this.P / (this.P + R);
+    this.x = this.x + K * (price - this.x);
+    this.P = Math.max(1e-8, (1 - K) * this.P + Q);
+
+    console.log(`[9.3][KALMAN] ER=${ER.toFixed(2)} R=${R.toFixed(2)} Q=${Q.toFixed(3)} x=${this.x.toFixed(4)}`);
+    return this.x;
+  }
+
+  reset() {
+    this.x = null;
+    this.P = 1;
+  }
+
+  getState() {
+    return this.x;
+  }
+}
+
+
+✅ Includes Gemini’s Cold Start fix and expanded R-scaling.
+✅ Includes architect’s numerical stability guard for P.
+
+🧠 Integration Flow
+FX5 Scanner → Filter Engine → Analysis Utils (DI, VolNoise, ER)
+    ↓
+AdaptiveKalmanFilter.update(price, ER, VolNoise)
+    ↓
+Strategy Orchestrator (Quant + Hybrid)
+    ↓
+Signal Quality Evaluator (CWQI v4)
+
+
+Smoothed trend signals now dynamically adapt to real-time regime conditions.
+
+⚙️ Implementation Steps
+1️⃣ Create AdaptiveKalmanFilter Utility
+
+File: server/utils/adaptive-kalman.ts
+Implement class exactly as shown.
+
+2️⃣ Add ER Calculator
+
+Add to analysis-utils.ts if not already present.
+Emit log [9.3][ER] ${symbol}=${ER}.
+
+3️⃣ Integrate in Strategy Orchestrator
+
+Replace raw price feed with:
+
+const smoothedPrice = kalman.update(price, ER, VolNoise);
+
+4️⃣ Telemetry Logs
+Tag	Description	Example
+[9.3][INIT]	First price seed event	[9.3][INIT] BTC/USD = 50320.00
+[9.3][ER]	Efficiency ratio	[9.3][ER] BTC/USD=0.82
+[9.3][KALMAN]	Filter update telemetry	[9.3][KALMAN] BTC/USD R=5.4 Q=0.22 x=50280.45
+[9.3][DIAG]	Lag and stability diagnostics	[9.3][DIAG] Lag=82ms Stability=0.97
+🧪 Unit Test Suite
+
+File: tests/unit/adaptive-kalman.test.ts
+
+Tests to validate:
+
+Cold Start: Returns price immediately, no delay.
+
+High ER (trend) → fast responsiveness (small lag).
+
+Low ER (chop) → high smoothing, small noise amplitude.
+
+VolNoise interaction → higher Q increases volatility adaptation.
+
+Flat Market (ER≈0, VolNoise≈0) → no drift.
+
+Numerical Stability: P never negative, NaN, or zero.
+
+✅ 100% passing test coverage required.
+
+🔬 Validation Protocol
+Step	Action	Expected Result
+1	Run live uptrend feed	ER > 0.8, R ≈ 1–5
+2	Run chop feed	ER < 0.3, R ≈ 40–50
+3	Observe telemetry	[9.3][KALMAN] logs reflect adaptive R/Q
+4	Hit cold start	[9.3][INIT] log appears once
+5	Flat feed (constant price)	Filter remains stable (no oscillation)
+6	Validation log	[9.3][VALIDATION COMPLETE] Adaptive Kalman operational
+✅ Success Criteria
+
+Cold-start initialized correctly with zero lag.
+
+Adaptive R/Q scale correctly with ER and VolNoise.
+
+Smooth and responsive signal delivered to Orchestrator.
+
+Telemetry logs reflect real-time adaptation.
+
+All unit tests pass with stability verified.

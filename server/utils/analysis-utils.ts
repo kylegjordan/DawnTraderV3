@@ -138,6 +138,31 @@ export function calculateSigma(prices: number[], window: number = 20): number {
 }
 
 /**
+ * Directive 9.3.B: Efficiency Ratio (ER)
+ * Measures trend efficiency/directional strength.
+ * ER → 1.0: Perfectly smooth trend (net change equals total path)
+ * ER → 0.0: Random, noisy chop (net change is small vs total path)
+ * 
+ * Formula: ER = |Price_t - Price_{t-n}| / Σ|ΔPrice_i|
+ * 
+ * @param prices - Array of price points
+ * @param window - Lookback window (default: 20)
+ * @returns ER value between 0-1
+ */
+export function calculateEfficiencyRatio(prices: number[], window: number = 20): number {
+  if (prices.length < window + 1) return 0;
+  
+  const change = Math.abs(prices[prices.length - 1] - prices[prices.length - window - 1]);
+  const volatility = prices.slice(-window).reduce((sum, p, i, arr) =>
+    i > 0 ? sum + Math.abs(p - arr[i - 1]) : sum, 0);
+  
+  if (volatility === 0) return 0;
+  
+  const ER = +(change / volatility).toFixed(4);
+  return Math.min(1, Math.max(0, ER));
+}
+
+/**
  * Directive 9.1.F: Filter thresholds for core metrics
  */
 export const CORE_METRIC_THRESHOLDS = {
@@ -170,6 +195,7 @@ export interface CoreMetrics {
   DI: number;       // Directional Integrity (0-100)
   VolNoise: number; // Volatility Noise (0-1)
   Sigma: number;    // Price return volatility
+  ER: number;       // Efficiency Ratio (0-1) - Directive 9.3
   passesFilter: boolean;
 }
 
@@ -183,9 +209,10 @@ export function computeCoreMetrics(
   const DI = calculateDirectionalIntegrity(prices);
   const VolNoise = calculateVolNoise(prices);
   const Sigma = calculateSigma(prices);
+  const ER = calculateEfficiencyRatio(prices);
   const passesFilter = passesCoreMetricFilters(LQ, VolNoise);
   
-  return { LQ, DI, VolNoise, Sigma, passesFilter };
+  return { LQ, DI, VolNoise, Sigma, ER, passesFilter };
 }
 
 // ==========================================
