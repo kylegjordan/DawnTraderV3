@@ -24,6 +24,7 @@
 
 import type { GuardrailsV2 } from '@shared/schema';
 import { b5SizingAudit } from './b5-sizing-audit.js';
+import { getScalingFactor } from './risk-concentration.js';
 
 /**
  * AJ9: Buffer factor for max position sizing.
@@ -138,6 +139,13 @@ export function sizePaperPositionForSignal(params: PaperPositionSizingParams): P
     wasClamped = true;
     quantity = bufferedMaxNotional / entryPrice;
     estimatedValue = quantity * entryPrice;
+  }
+
+  const correlationScale = getScalingFactor(symbol);
+  if (correlationScale < 1) {
+    quantity = quantity * correlationScale;
+    estimatedValue = quantity * entryPrice;
+    console.log(`[9.4][SIZE] ${symbol} scaled ${correlationScale.toFixed(2)}× due to covariance`);
   }
   
   if (!Number.isFinite(quantity) || !Number.isFinite(estimatedValue)) {

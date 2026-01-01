@@ -26,6 +26,7 @@ import { i1RtbDiagnostics } from './i1-rtb-diagnostics-service.js';
 import { rtbMetricsService } from './rtb-metrics-service.js';
 import { getGlobalPaperSimManager } from './paper-sim-service.js';
 import { signalLifecycleAudit, type RejectionReason } from '../core/audit/signal_lifecycle_audit.js';
+import { isCorrelatedExposure } from './risk-concentration.js';
 
 export const buildSettingsFromGuardrails = _buildSettingsFromGuardrails;
 export const calculateRiskAmount = _calculateRiskAmount;
@@ -59,7 +60,8 @@ export type TradeSafetyResultCode =
   | 'MAX_EXPOSURE'
   | 'MAX_TOTAL_EXPOSURE'
   | 'MAX_TRADES'
-  | 'ENGINE_STOPPING'; // Phase 8.8.3-I2: Block during hard stop
+  | 'ENGINE_STOPPING' // Phase 8.8.3-I2: Block during hard stop
+  | 'CORRELATION_EXPOSURE'; // Directive 9.4: Covariance Guard
 
 export type TradeSafetyResult = 
   | { ok: true }
@@ -711,6 +713,7 @@ export async function checkGuardrailRisk(
       case 'MAX_TRADES': return 'MAX_TRADES'; // Max simultaneous open trades
       case 'MAX_TOTAL_EXPOSURE': return 'POSITION_CAP';
       case 'ENGINE_STOPPING': return 'OTHER';
+      case 'CORRELATION_EXPOSURE': return 'GUARDRAIL_BLOCKED';
       default: return 'GUARDRAIL_BLOCKED';
     }
   };
@@ -764,6 +767,18 @@ export async function checkGuardrailRisk(
   if (!totalExposureCheck.ok) {
     logGuardrailCheck('MAX_TOTAL_EXPOSURE', totalExposureCheck);
     return recordBlock(totalExposureCheck);
+  }
+  
+  // Directive 9.4: Check correlation exposure (Covariance Guard)
+  if (isCorrelatedExposure(trade.symbol)) {
+    const correlationResult: TradeSafetyResult = {
+      ok: false,
+      code: 'CORRELATION_EXPOSURE',
+      reason: `${trade.symbol} exceeds correlation threshold with existing positions`
+    };
+    console.warn(`[9.4][RISK] Blocking ${trade.symbol}: correlation exposure exceeded`);
+    logGuardrailCheck('CORRELATION_EXPOSURE', correlationResult);
+    return recordBlock(correlationResult);
   }
   
   // B5: Log successful guardrail pass

@@ -1,0 +1,432 @@
+⚙️ Directive 9.4 — Covariance Guard / Risk Concentration Control
+
+Version: 9.4 (Final Revision – Architect + Gemini Approved)
+Phase: 9 — Institutional Math Core (Portfolio Layer)
+Dependencies: ✅ 9.1 (Core Metrics) · ✅ 9.2 (Dynamic Trade Mgmt) · ✅ 9.3 (Adaptive Kalman Filter)
+Target System: Risk Engine · Sizing Helper · Telemetry · Market Data Layer
+Repository: Dawn Trader (Main Replit Repository)
+
+🧭 Objective
+
+Implement a portfolio-level covariance and correlation engine that monitors, limits, and dynamically adjusts exposure across correlated trading pairs.
+
+This Covariance Guard ensures that Dawn Trader trades not as a set of independent strategies, but as a single coherent portfolio with mathematically balanced exposure across assets and market regimes.
+
+🧩 Deliverables Overview
+Deliverable	Description	Target File(s)
+9.4.A – CovarianceMatrixEngine	Computes rolling covariance and correlation matrices from recent returns	server/utils/covariance-engine.ts
+9.4.B – RiskConcentrationAnalyzer	Evaluates total correlation-weighted exposure	server/services/risk-concentration.ts
+9.4.C – SizingHelper Integration	Dynamically scales trade sizes based on correlation score	server/services/sizing-helper.ts
+9.4.D – TradeSafety Integration	Blocks or warns when correlation thresholds are breached	server/services/trade-safety.ts
+9.4.E – Telemetry & Diagnostics	Adds [9.4][COV], [9.4][RISK], [9.4][SIZE] logs	server/services/system-health-service.ts
+9.4.F – Unit Test Suite	Tests covariance symmetry, scaling factors, and correlation enforcement	tests/unit/covariance-engine.test.ts
+🧮 Mathematical Specification
+A. Return Vector
+
+For each symbol i and window n:
+
+𝑟
+𝑖
+(
+𝑡
+)
+=
+𝑃
+𝑖
+(
+𝑡
+)
+−
+𝑃
+𝑖
+(
+𝑡
+−
+1
+)
+𝑃
+𝑖
+(
+𝑡
+−
+1
+)
+r
+i
+	​
+
+(t)=
+P
+i
+	​
+
+(t−1)
+P
+i
+	​
+
+(t)−P
+i
+	​
+
+(t−1)
+	​
+
+B. Covariance Matrix
+Σ
+=
+1
+𝑛
+−
+1
+(
+𝑅
+−
+𝑅
+ˉ
+)
+𝑇
+(
+𝑅
+−
+𝑅
+ˉ
+)
+Σ=
+n−1
+1
+	​
+
+(R−
+R
+ˉ
+)
+T
+(R−
+R
+ˉ
+)
+C. Correlation Matrix
+𝜌
+𝑖
+𝑗
+=
+Σ
+𝑖
+𝑗
+𝜎
+𝑖
+𝜎
+𝑗
+ρ
+ij
+	​
+
+=
+σ
+i
+	​
+
+σ
+j
+	​
+
+Σ
+ij
+	​
+
+	​
+
+
+where 
+𝜎
+𝑖
+=
+Σ
+𝑖
+𝑖
+σ
+i
+	​
+
+=
+Σ
+ii
+	​
+
+	​
+
+
+D. Portfolio Risk Exposure
+PortfolioVariance
+=
+𝑤
+𝑇
+Σ
+𝑤
+PortfolioVariance=w
+T
+Σw
+PortfolioVolatility
+=
+𝑤
+𝑇
+Σ
+𝑤
+PortfolioVolatility=
+w
+T
+Σw
+	​
+
+E. Concentration Rule
+
+Threshold: 
+𝜌
+𝑡
+ℎ
+=
+0.75
+ρ
+th
+	​
+
+=0.75
+
+𝐶
+𝑖
+=
+∑
+𝑗
+∣
+𝜌
+𝑖
+𝑗
+∣
+×
+𝑤
+𝑗
+C
+i
+	​
+
+=
+j
+∑
+	​
+
+∣ρ
+ij
+	​
+
+∣×w
+j
+	​
+
+
+If 
+𝐶
+𝑖
+>
+𝐶
+𝑚
+𝑎
+𝑥
+C
+i
+	​
+
+>C
+max
+	​
+
+ (default = 2.5), apply scaling:
+
+ScalingFactor
+𝑖
+=
+min
+⁡
+(
+1
+,
+𝐶
+𝑚
+𝑎
+𝑥
+𝐶
+𝑖
+)
+ScalingFactor
+i
+	​
+
+=min(1,
+C
+i
+	​
+
+C
+max
+	​
+
+	​
+
+)
+
+New position size = BaseSize × ScalingFactor
+
+💡 Data Source (Amended per Gemini Recommendation)
+
+Instead of accessing Kalman-smoothed price feeds directly,
+the CovarianceEngine will fetch raw OHLC close prices from the MarketDataService or FX5Scanner cache.
+
+This ensures:
+
+Simplicity and independence from the Orchestrator layer
+
+Robust data flow and no circular dependencies
+
+Minimal deviation in correlation accuracy (<2%)
+
+Implementation:
+
+// server/services/risk-concentration.ts
+const closes = await marketDataService.getRecentCloses(symbol, 50);
+const returns = calculateReturns(closes);
+covarianceEngine.addReturns(symbol, returns);
+
+
+Rationale: Pearson correlations are robust to micro-noise;
+using raw OHLC prices yields equivalent results without complexity.
+
+⚙️ Example Implementation (Condensed)
+server/utils/covariance-engine.ts
+export function calculateReturns(prices: number[]): number[] {
+  const returns: number[] = [];
+  for (let i = 1; i < prices.length; i++) {
+    const r = (prices[i] - prices[i - 1]) / prices[i - 1];
+    if (isFinite(r)) returns.push(r);
+  }
+  return returns;
+}
+
+export function computeCovarianceMatrix(returns: Record<string, number[]>): Record<string, Record<string, number>> {
+  const symbols = Object.keys(returns);
+  const mean: Record<string, number> = {};
+  symbols.forEach(s => mean[s] = returns[s].reduce((a,b) => a+b, 0) / returns[s].length);
+
+  const cov: Record<string, Record<string, number>> = {};
+  symbols.forEach(i => {
+    cov[i] = {};
+    symbols.forEach(j => {
+      const n = Math.min(returns[i].length, returns[j].length);
+      const cov_ij = returns[i].slice(-n).reduce((a, _, k) =>
+        a + (returns[i][k] - mean[i]) * (returns[j][k] - mean[j]), 0) / (n - 1);
+      cov[i][j] = cov_ij;
+    });
+  });
+  return cov;
+}
+
+export function computeCorrelationMatrix(cov: Record<string, Record<string, number>>): Record<string, Record<string, number>> {
+  const symbols = Object.keys(cov);
+  const corr: Record<string, Record<string, number>> = {};
+  symbols.forEach(i => {
+    corr[i] = {};
+    const sigma_i = Math.sqrt(cov[i][i]);
+    symbols.forEach(j => {
+      const sigma_j = Math.sqrt(cov[j][j]);
+      corr[i][j] = cov[i][j] / (sigma_i * sigma_j);
+    });
+  });
+  return corr;
+}
+
+🧠 Integration Flow
+FX5Scanner (OHLC cache)
+   ↓
+CovarianceEngine → Correlation Matrix (ρ)
+   ↓
+RiskConcentrationAnalyzer (C_i scores)
+   ↓
+SizingHelper → TradeSafety → Execution
+   ↓
+Telemetry [9.4][COV] / [9.4][RISK] / [9.4][SIZE]
+
+🔧 Implementation Steps
+1️⃣ Data Source
+
+Pull last 30–50 OHLC closes per symbol from MarketDataService.
+Convert to returns and store rolling history (max 100).
+
+2️⃣ CovarianceEngine
+
+Compute Σ and ρ matrices every 60 seconds (or N ticks).
+
+Cache result in Redis with timestamped hash key (cov:matrix:<timestamp>).
+
+3️⃣ RiskConcentrationAnalyzer
+
+File: server/services/risk-concentration.ts
+
+const corr = covarianceEngine.computeCorrelationMatrix(cov);
+for (const symbol of symbols) {
+  const C_i = Object.keys(corr[symbol])
+    .reduce((acc, j) => acc + Math.abs(corr[symbol][j]) * weights[j], 0);
+  if (C_i > 2.5) console.warn(`[9.4][RISK] ${symbol} overexposed: ${C_i.toFixed(2)}`);
+  scalingFactors[symbol] = Math.min(1, 2.5 / C_i);
+}
+
+4️⃣ SizingHelper Integration
+
+In server/services/sizing-helper.ts:
+
+const scale = riskAnalyzer.getScalingFactor(symbol);
+size = baseSize * scale;
+if (scale < 1) console.log(`[9.4][SIZE] ${symbol} scaled ${scale.toFixed(2)}× due to covariance`);
+
+5️⃣ TradeSafety Integration
+
+In trade-safety.ts:
+
+if (riskAnalyzer.isCorrelatedExposure(symbol)) {
+  throw new RiskGuardError(`Blocked: ${symbol} exceeds correlation threshold`);
+}
+
+6️⃣ Telemetry Tags
+Tag	Description	Example
+[9.4][COV]	Covariance matrix updated	[9.4][COV] Updated matrix for 12 symbols
+[9.4][RISK]	Concentration warning	[9.4][RISK] ETH/USD score=3.12 limit=2.5
+[9.4][SIZE]	Trade size scaled	[9.4][SIZE] SOL/USD scaled 0.74×
+7️⃣ Unit Tests
+
+File: tests/unit/covariance-engine.test.ts
+
+Validate Σ symmetry
+
+Validate ρ ∈ [–1, 1]
+
+Verify C_i scaling
+
+Ensure no NaN for near-constant assets
+
+Persistence reload test (Redis cache)
+
+🧪 Validation Protocol
+Step	Action	Expected Result
+1	Run 20 assets through CovarianceEngine	[9.4][COV] log appears
+2	High correlation pair (BTC/ETH)	[9.4][RISK] log triggered
+3	RiskAnalyzer scaling	[9.4][SIZE] < 1.0
+4	Uncorrelated pairs	No scaling applied
+5	Over-threshold	RiskGuardError raised
+6	Tests pass	[9.4][VALIDATION COMPLETE] Covariance Guard active
+✅ Success Criteria
+
+Covariance and correlation matrices computed & cached periodically
+
+Concentration scores logged and used in risk management
+
+Position sizes adaptively reduced when correlated exposure detected
+
+Full telemetry and test coverage operational
