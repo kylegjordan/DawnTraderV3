@@ -14298,12 +14298,11 @@ Provide specific, actionable recommendations.`,
   // Get portfolio adjustments
   apiRouter.get('/learning/portfolio-adjustments', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.user!.id;
       const mode = req.query.mode as 'live' | 'paper' | undefined;
       const hours = parseInt(req.query.hours as string) || 24;
       const limit = parseInt(req.query.limit as string) || 50;
       
-      const adjustments = await storage.getPortfolioAdjustments(userId, { mode, hours, limit });
+      const adjustments = await storage.getPortfolioAdjustments({ mode, hours, limit });
       
       res.json({ ok: true, adjustments });
     } catch (error: any) {
@@ -14361,7 +14360,7 @@ Provide specific, actionable recommendations.`,
       `)).rows[0];
       
       const portfolioCountResult = (await db.execute(sql`
-        SELECT COUNT(*) as count FROM portfolio_adjustments WHERE user_id = ${userId}
+        SELECT COUNT(*) as count FROM portfolio_adjustments
       `)).rows[0];
       
       const transparencyCountResult = (await db.execute(sql`
@@ -14385,7 +14384,7 @@ Provide specific, actionable recommendations.`,
         storage.getLatestCalibration({ userId, mode: 'paper', maxAgeHours: 168 }),
         storage.getIntradayAdjustments(userId, { hours: 168, limit: 3 }),
         storage.getAILessons(userId, { hours: 168, limit: 3 }),
-        storage.getPortfolioAdjustments(userId, { hours: 168, limit: 3 }),
+        storage.getPortfolioAdjustments({ hours: 168, limit: 3 }),
         // Fetch recent system-wide scheduler logs (userId IS NULL)
         storage.getSystemSchedulerLogs(10),
       ]);

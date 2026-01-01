@@ -450,7 +450,7 @@ export interface IStorage {
 
   // Portfolio adjustment methods
   createPortfolioAdjustment(adjustment: InsertPortfolioAdjustment): Promise<PortfolioAdjustment>;
-  getPortfolioAdjustments(userId: string, filters?: { mode?: string; hours?: number; limit?: number }): Promise<PortfolioAdjustment[]>;
+  getPortfolioAdjustments(filters?: { mode?: string; hours?: number; limit?: number }): Promise<PortfolioAdjustment[]>;
 
   // Feature snapshot methods
   createFeatureSnapshot(snapshot: InsertFeatureSnapshot): Promise<FeatureSnapshot>;
@@ -2735,8 +2735,8 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async getPortfolioAdjustments(userId: string, filters?: { mode?: string; hours?: number; limit?: number }): Promise<PortfolioAdjustment[]> {
-    const conditions = [eq(portfolioAdjustments.userId, userId)];
+  async getPortfolioAdjustments(filters?: { mode?: string; hours?: number; limit?: number }): Promise<PortfolioAdjustment[]> {
+    const conditions: any[] = [];
     
     if (filters?.mode) {
       conditions.push(eq(portfolioAdjustments.mode, filters.mode as any));
@@ -2750,7 +2750,7 @@ export class DatabaseStorage implements IStorage {
     const query = db
       .select()
       .from(portfolioAdjustments)
-      .where(and(...conditions))
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(portfolioAdjustments.timestamp));
     
     if (filters?.limit) {
@@ -2817,7 +2817,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createGoalLive(goal: InsertGoalLive): Promise<GoalLive> {
-    const [result] = await db.insert(goalsLive).values(goal).returning();
+    const metricKey = goal.metricKey || canonicalizeMetricName(goal.metricName);
+    const [result] = await db.insert(goalsLive).values({ ...goal, metricKey }).returning();
     return result;
   }
 
@@ -2868,7 +2869,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createGoalPaper(goal: InsertGoalPaper): Promise<GoalPaper> {
-    const [result] = await db.insert(goalsPaper).values(goal).returning();
+    const metricKey = goal.metricKey || canonicalizeMetricName(goal.metricName);
+    const [result] = await db.insert(goalsPaper).values({ ...goal, metricKey }).returning();
     return result;
   }
 
