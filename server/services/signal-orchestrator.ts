@@ -61,6 +61,9 @@ import { getWeightSync as getStrategyWeight, computeStrategyWeights } from '../u
 import { getExposureMultiplierSync, computeExposureBias, getBiasSummaryForLog } from '../utils/strategyBias.js';
 // M5B: Import disabled - VTS now runs autonomously, not from signal orchestrator
 // import { captureSignalForVTS } from './vts-runner.js';
+// Directive 9.3: Adaptive Kalman Filter integration
+import { getSmoothedPrice, getKalmanFilter } from '../utils/adaptive-kalman.js';
+import { calculateEfficiencyRatio, calculateVolNoise } from '../utils/analysis-utils.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -697,13 +700,24 @@ export class SignalOrchestrator {
       }
 
       const ticker = await this.kraken.getTicker(symbol);
-      const currentPrice = parseFloat(ticker[symbol]?.c[0] || '0');
+      const rawPrice = parseFloat(ticker[symbol]?.c[0] || '0');
       const currentVolume = parseFloat(ticker[symbol]?.v[1] || '0');
       
-      if (!currentPrice || currentPrice === 0) {
+      if (!rawPrice || rawPrice === 0) {
         console.log(`[37.A][SIGNAL] Invalid price for ${symbol}`);
         return signals;
       }
+
+      // Directive 9.3: Apply Adaptive Kalman Filter for smoothed price
+      const closePrices = ohlcData.map(c => parseFloat(c.close));
+      const ER = calculateEfficiencyRatio(closePrices, 20);
+      const VolNoise = calculateVolNoise(closePrices);
+      const smoothedPrice = getSmoothedPrice(symbol, rawPrice, ER, VolNoise);
+      
+      console.log(`[9.3][ER] ${symbol}=${ER.toFixed(4)} VolNoise=${VolNoise.toFixed(4)}`);
+      
+      // Use smoothed price for strategy evaluation
+      const currentPrice = smoothedPrice;
 
       const vwap = this.calculateVWAP(ohlcData);
       const sma = this.calculateSMA(ohlcData, settings.smaLength || 20);
