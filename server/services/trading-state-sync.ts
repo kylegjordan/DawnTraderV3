@@ -207,15 +207,35 @@ export class TradingStateSync {
           portfolioOverview = { totalValue, cash: totalValue, crypto: 0 };
         }
       } else {
-        // Import RiskManager dynamically for live mode
-        const { RiskManager } = await import('./risk-manager.js');
-        const riskManager = new RiskManager(storage);
-        const liveBalance = await riskManager.getLiveKrakenBalance(userId);
-        portfolioOverview = {
-          totalValue: liveBalance?.totalValueUSD || 0,
-          cash: liveBalance?.cashUSD || 0,
-          crypto: liveBalance?.cryptoUSD || 0,
-        };
+        // [9.6.3] Live mode - ALWAYS use Kraken valuation for consistency
+        try {
+          const { KrakenService } = await import('./kraken.js');
+          const { priceCache } = await import('./price-cache.js');
+          const krakenBalance = await new KrakenService().getAccountBalance();
+          const usdBalance = parseFloat(krakenBalance.ZUSD || krakenBalance.USD || '0');
+          
+          // Calculate crypto value using live prices from price cache
+          let cryptoUSD = 0;
+          const assetMap: Record<string, string> = {
+            'XXBT': 'BTC/USD', 'XBT': 'BTC/USD',
+            'XETH': 'ETH/USD', 'ETH': 'ETH/USD',
+            'XSOL': 'SOL/USD', 'SOL': 'SOL/USD',
+            'XXRP': 'XRP/USD', 'XRP': 'XRP/USD',
+          };
+          for (const [asset, amount] of Object.entries(krakenBalance)) {
+            if (asset === 'ZUSD' || asset === 'USD') continue;
+            const amountNum = parseFloat(String(amount) || '0');
+            if (amountNum <= 0) continue;
+            const symbol = assetMap[asset] || `${asset.replace(/^X/, '')}/USD`;
+            const livePrice = priceCache.getCachedPrice(symbol);
+            if (livePrice && livePrice.price > 0) cryptoUSD += amountNum * livePrice.price;
+          }
+          
+          portfolioOverview = { totalValue: usdBalance + cryptoUSD, cash: usdBalance, crypto: cryptoUSD };
+        } catch (krakenError: any) {
+          console.warn('[9.6.3] Kraken balance fetch failed:', krakenError.message);
+          portfolioOverview = { totalValue: 0, cash: 0, crypto: 0 };
+        }
       }
     } catch (error) {
       console.warn('[Phase-33.C] Failed to fetch portfolio overview for instant broadcast');

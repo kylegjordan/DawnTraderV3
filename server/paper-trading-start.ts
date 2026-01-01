@@ -28,7 +28,8 @@ async function startPaperTrading() {
     const mode = 'paper';
     
     // Get portfolio state for starting balance
-    let portfolioState = await storage.getPortfolioState({ userId, mode });
+    // [9.6.3] Use mode-only query (mode-based architecture)
+    let portfolioState = await storage.getPortfolioState({ mode });
     let STARTING_BALANCE: number;
     
     if (!portfolioState) {
@@ -45,7 +46,8 @@ async function startPaperTrading() {
       
       // Initialize paper trading (creates portfolio_state)
       await (storage as any).initializePaperTrading(userId, STARTING_BALANCE);
-      portfolioState = await storage.getPortfolioState({ userId, mode });
+      // [9.6.3] Use mode-only query (mode-based architecture)
+      portfolioState = await storage.getPortfolioState({ mode });
     } else {
       STARTING_BALANCE = parseFloat(portfolioState.balance);
     }

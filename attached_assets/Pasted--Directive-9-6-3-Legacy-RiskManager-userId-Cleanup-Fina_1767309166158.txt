@@ -1,0 +1,109 @@
+⚙️ Directive 9.6.3 — Legacy RiskManager & userId Cleanup (Final Pre–Phase 10 Sanitation)
+
+Version: 9.6.3 (Final)
+Target Systems: Core Services · Database Layer · Bridge Canonical
+Dependencies: ✅ 9.6 (Parity & Config Lock)
+Primary Files:
+server/services/risk-manager.ts,
+server/storage.ts,
+server/services/paper-portfolio-manager.ts,
+server/services/commitTradeAndUpdatePortfolio.ts,
+bridge/canonical/architecture.md
+
+🧭 Objective
+
+Perform the final Phase 9 cleanup by:
+
+Purging all legacy references to RiskManager (deprecated since Directive 8.8).
+
+Removing userId logic and parameters across the codebase while leaving DB columns intact.
+
+Verifying structural and invariant integrity ahead of Phase 10 (Goal Learning initialization).
+
+🔩 Deliverables Overview
+ID	Deliverable	Description
+9.6.3.A	Remove RiskManager File	Delete server/services/risk-manager.ts; verify no imports or references.
+9.6.3.B	Remove userId References (Code Only)	Clean all legacy userId parameters and interfaces from services and storage layer. Leave DB columns unchanged.
+9.6.3.C	Invariant Reinforcement	Add tests ensuring RiskManager is deleted and userId references are absent.
+9.6.3.D	Bridge Update	Document removal in architecture.md and history.md.
+🧮 Implementation Steps
+1️⃣ RiskManager Removal
+grep -r "RiskManager" server/
+rm server/services/risk-manager.ts
+
+
+Update Bridge:
+
+**Directive 9.6.3 — RiskManager Removal**
+Legacy RiskManager deleted. Risk and exposure control fully handled by TradeSafety and SizingHelper.
+
+2️⃣ userId Code Cleanup (Keep DB Columns)
+
+Targeted files:
+server/storage.ts, server/services/paper-portfolio-manager.ts, server/services/commitTradeAndUpdatePortfolio.ts, server/services/paper-execution-engine.ts
+
+grep -r "userId" server/ | grep -v "audit" | grep -v "log"
+
+
+Refactor:
+
+// OLD
+const portfolio = await recalculatePortfolio(trade.userId, mode);
+
+// NEW
+const portfolio = await recalculatePortfolio(mode);
+
+
+Leave DB schema untouched; mark deprecated fields:
+
+COMMENT ON COLUMN portfolio_state.user_id IS 'Deprecated – no longer used by system.';
+
+3️⃣ Invariant Tests
+
+Create server/tests/integration/invariant.test.ts:
+
+import fs from 'fs';
+
+test('[Invariant] RiskManager fully removed', () => {
+  expect(fs.existsSync('server/services/risk-manager.ts')).toBe(false);
+});
+
+test('[Invariant] No userId references remain in core engine', () => {
+  const files = [
+    'server/storage.ts',
+    'server/services/paper-portfolio-manager.ts',
+    'server/services/commitTradeAndUpdatePortfolio.ts',
+  ];
+  files.forEach(f => {
+    const content = fs.readFileSync(f, 'utf8');
+    expect(content.includes('userId')).toBe(false);
+  });
+});
+
+4️⃣ Validation Protocol
+Step	Action	Expected Outcome
+1	Run npx tsc --noEmit --skipLibCheck	✅ 0 errors
+2	Run npm test tests/integration/invariant.test.ts	✅ Both tests pass
+3	Run Parity Tests	✅ Phase 9 determinism intact
+4	Verify Bridge Updates	✅ Cleanup documented
+✅ Success Criteria
+
+No RiskManager file or references remain.
+
+No userId parameters exist in runtime code.
+
+Database untouched (columns deprecated, not dropped).
+
+Build passes cleanly.
+
+Parity tests unchanged.
+
+Invariants enforced in CI/CD.
+
+🧩 Resulting System Integrity
+
+✅ Risk & Exposure Handling – Unified under TradeSafety & SizingHelper.
+✅ Data Persistence – Mode-based architecture confirmed.
+✅ Schema Safety – No live DB mutations.
+✅ System Invariants – Guarded via tests.
+✅ Ready for Phase 10 initialization.

@@ -166,9 +166,9 @@ async function populateWatchlistAsync(userId: string, mode: 'paper' | 'live' = '
       return;
     }
     
-    // Import required helper from risk-manager
-    const { buildSettingsFromModeLevel } = await import('./risk-manager.js');
-    const tradingSettings = await buildSettingsFromModeLevel(mode);
+    // [9.6.3] Import helper from guardrail-settings instead of deprecated risk-manager
+    const { buildSettingsFromGuardrails } = await import('./guardrail-settings.js');
+    const tradingSettings = await buildSettingsFromGuardrails(mode) || {} as any;
     
     // Initialize KrakenService
     const krakenService = new KrakenService();

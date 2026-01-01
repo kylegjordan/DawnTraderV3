@@ -927,10 +927,10 @@ export class AIAnalyst {
   }
 
   private async calculateMonthlyGrowth(trades: Trade[], userId: string, mode: 'live' | 'paper' = 'paper'): Promise<number> {
-    // Phase 41F-L.E2E-PURGE: Get portfolio value from portfolio_state (mode-level)
+    // [9.6.3] Get portfolio value from guardrail-settings (mode-level)
     const totalPL = trades.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0);
-    const { getPortfolioBalanceV2 } = await import('./risk-manager.js');
-    const startingBalance = await getPortfolioBalanceV2(mode, userId) || 50000;
+    const { getPortfolioBalanceV2 } = await import('./guardrail-settings.js');
+    const startingBalance = await getPortfolioBalanceV2(mode) || 50000;
     return Math.round((totalPL / startingBalance) * 100 * 100) / 100;
   }
 

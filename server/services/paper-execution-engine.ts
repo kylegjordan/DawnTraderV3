@@ -2113,7 +2113,8 @@ export class PaperExecutionEngine {
       } else {
         console.log(`[B6][FALLBACK_SIZING] Signal missing sizing fields for ${signal.symbol}, will size in executeSimulatedTrade`);
         const guardrails = await storage.getGuardrailsV2({ mode: this.mode });
-        const portfolioState = await storage.getPortfolioState({ mode: this.mode, userId: systemContext.lastStartedBy });
+        // [9.6.3] Use mode-only query (mode-based architecture - userId not needed for storage lookup)
+        const portfolioState = await storage.getPortfolioState({ mode: this.mode });
         const portfolioValue = portfolioState ? parseFloat(String(portfolioState.balance)) : 0;
         
         if (portfolioValue > 0) {

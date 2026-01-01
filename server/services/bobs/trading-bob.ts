@@ -108,9 +108,9 @@ class TradingBob {
       // Phase 27.F.15.B.4-Prep: Use mode-based storage methods
       const activeTrades = await storage.getActiveTrades(mode);
       const openTrades = activeTrades;
-      // Phase 41F-L.E2E-PURGE: Use mode-level risk calculation (guardrails_v2)
+      // [9.6.3] Use mode-level risk calculation from guardrail-settings.ts
       const guardrails = await storage.getGuardrailsV2({ mode });
-      const { getRiskPercentageV2, calculateRiskAmount } = await import('../risk-manager.js');
+      const { getRiskPercentageV2, calculateRiskAmount } = await import('../guardrail-settings.js');
       const riskPct = guardrails ? getRiskPercentageV2(mode, guardrails) : 4.00;
       const riskPerTradeAmount = calculateRiskAmount(portfolioHealth.totalEquity, riskPct);
       

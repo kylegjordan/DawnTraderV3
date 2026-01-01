@@ -61,35 +61,43 @@ export function getRiskPercentageV2(
  * @returns Current Balance (starting + realized P/L) in USD, or 0 if not found
  */
 export async function getPortfolioBalanceV2(
-  mode: 'live' | 'paper',
-  userId?: string,
-  globalContextId?: string
+  mode: 'live' | 'paper'
 ): Promise<number> {
   try {
-    const state = await storage.getPortfolioState({ 
-      mode, 
-      userId, 
-      globalContextId 
-    });
+    // [9.6.3] Use mode-only query for portfolio state (mode-based architecture)
+    const state = await storage.getPortfolioState({ mode });
     
     if (!state) {
-      console.warn(`[8.8.3-H4][GuardrailSettings] No portfolio_state found for mode=${mode}, userId=${userId}`);
+      console.warn(`[8.8.3-H4][GuardrailSettings] No portfolio_state found for mode=${mode}`);
       return 0;
     }
 
     // Phase 8.8.3-C7-FIX: Get starting balance
     const startingBalance = Number((state as any).startingBalance || state.balance);
     if (startingBalance <= 0 || isNaN(startingBalance)) {
-      console.warn(`[8.8.3-H4][GuardrailSettings] Invalid startingBalance (${startingBalance}) for mode=${mode}, userId=${userId}`);
+      console.warn(`[8.8.3-H4][GuardrailSettings] Invalid startingBalance (${startingBalance}) for mode=${mode}`);
       return 0;
     }
 
-    // Phase 8.8.3-C7-FIX: Get realized P/L from closed trades
+    // [9.6.3] Get realized P/L from closed trades - mode-aware
     // Import dynamically to avoid circular dependency
     const { getEngineSessionStart } = await import('./paper-execution-engine.js');
     const sessionStart = getEngineSessionStart(mode);
     
-    const allTrades = await storage.getPaperSimTrades(mode, { closedOnly: true });
+    // [9.6.3] Mode-aware trade query: paper uses getPaperSimTrades, live uses getTrades
+    let allTrades: any[];
+    if (mode === 'paper') {
+      allTrades = await storage.getPaperSimTrades(mode, { closedOnly: true });
+    } else {
+      // Live mode: use getTrades with closed status filter
+      const liveTrades = await storage.getTrades(mode, { status: 'closed' });
+      allTrades = liveTrades.map(t => ({
+        ...t,
+        closedAt: t.exitTime,
+        pnl: t.realizedPL
+      }));
+    }
+    
     const sessionTrades = sessionStart 
       ? allTrades.filter(t => t.closedAt && new Date(t.closedAt) >= sessionStart)
       : allTrades;

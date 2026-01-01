@@ -185,7 +185,8 @@ export async function fetchUserContext(userId: string): Promise<UserTradingConte
 
     // Phase 8.5 Addendum I: Get portfolio value from portfolio_state table
     // Fallback to 0 (no hardcoded initial capital) to match live API behavior
-    const portfolioState = await storage.getPortfolioState({ userId, mode });
+    // [9.6.3] Use mode-only query (mode-based architecture)
+    const portfolioState = await storage.getPortfolioState({ mode });
     const portfolioValue = portfolioState 
       ? parseFloat(portfolioState.balance) 
       : 0;

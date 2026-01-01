@@ -126,7 +126,8 @@ class SystemTruthDiagnosticService {
    */
   private async getBackendSnapshot(mode: 'live' | 'paper'): Promise<TruthSnapshot> {
     // Get portfolio state - NO FALLBACK to 1000 (Phase 8.5 Addendum I)
-    const portfolioState = await storage.getPortfolioState({ userId: CANONICAL_USER_ID, mode });
+    // [9.6.3] Use mode-only query (mode-based architecture)
+    const portfolioState = await storage.getPortfolioState({ mode });
     const portfolioBalance = portfolioState ? parseFloat(portfolioState.balance) : 0;
 
     // Get active strategies

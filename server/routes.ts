@@ -10,7 +10,8 @@ import { KrakenService } from "./services/kraken";
 import { TradingEngine, EngineSettingsBus } from "./services/trading-engine";
 import { AIAnalyst } from "./services/ai-analyst";
 import { MarketScanner, getPassiveLearningBuffer, getREB211DriftBuffer, getREB211IntegrityBuffer, getREB211TimingBuffer, getREB211MismatchBuffer, getREB211StressBuffer, getActiveAuditBuffer, getReb211bSymbolTraces } from "./services/market-scanner";
-import { RiskManager } from "./services/risk-manager";
+// [9.6.3] RiskManager removed - use guardrail-settings.ts and trade-safety.ts instead
+import { getPortfolioBalanceV2, buildSettingsFromGuardrails as buildSettingsFromModeLevel } from "./services/guardrail-settings";
 import { buildSettingsFromGuardrails, checkGuardrailRisk, calculateRiskAmount, type TradeCandidate } from "./services/trade-safety";
 import { aiOpportunitiesService } from "./services/ai-opportunities";
 import { dailyBriefService } from "./services/daily-brief";
@@ -85,7 +86,7 @@ export const loginLimiter = rateLimit({
 
 const marketScanner = new MarketScanner();
 const aiAnalyst = new AIAnalyst();
-const riskManager = new RiskManager();
+// [9.6.3] RiskManager instance removed - risk control unified under TradeSafety & SizingHelper
 
 // [41F-L.2] Trade test request schema
 const TradeTestSchema = z.object({
@@ -1145,9 +1146,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const userId = req.user!.id;
       const mode = (req.query.mode as 'live' | 'paper') || 'paper';
       
-      // Source settings from mode-level guardrails_v2 + portfolio_state
-      const { buildSettingsFromModeLevel } = await import('./services/risk-manager.js');
-      const settings = await buildSettingsFromModeLevel(mode, userId);
+      // [9.6.3] Source settings from mode-level guardrails_v2 + portfolio_state
+      const { buildSettingsFromGuardrails } = await import('./services/guardrail-settings.js');
+      const settings = await buildSettingsFromGuardrails(mode, userId);
       
       // Check if environment secrets are configured
       const hasKrakenApiKey = !!process.env.KRAKEN_API_KEY;
@@ -4200,19 +4201,76 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           balanceSource = 'paper-sim';
           balanceError = undefined;
         } else {
-          // Live mode - get Kraken balance
-          const liveBalance = await riskManager.getLiveKrakenBalance(userId);
-          totalValue = liveBalance.totalValueUSD;
-          cash = liveBalance.cashUSD;
-          crypto = liveBalance.cryptoUSD;
-          syncTimestamp = liveBalance.syncTimestamp;
-          balanceSource = liveBalance.source;
-          balanceError = liveBalance.error;
+          // [9.6.3] Live mode - ALWAYS use Kraken valuation for consistency
+          try {
+            const krakenService = new KrakenService();
+            const krakenBalance = await krakenService.getAccountBalance();
+            const usdBalance = parseFloat(krakenBalance.ZUSD || krakenBalance.USD || '0');
+            
+            // Get live prices for crypto assets using price cache
+            const { priceCache } = await import('./services/price-cache.js');
+            let cryptoUSD = 0;
+            
+            // Calculate crypto value using live prices
+            for (const [asset, amount] of Object.entries(krakenBalance)) {
+              if (asset === 'ZUSD' || asset === 'USD') continue;
+              const amountNum = parseFloat(String(amount) || '0');
+              if (amountNum <= 0) continue;
+              
+              // Map Kraken asset to symbol (e.g., XXBT -> BTC/USD)
+              const assetMap: Record<string, string> = {
+                'XXBT': 'BTC/USD', 'XBT': 'BTC/USD',
+                'XETH': 'ETH/USD', 'ETH': 'ETH/USD',
+                'XSOL': 'SOL/USD', 'SOL': 'SOL/USD',
+                'XXRP': 'XRP/USD', 'XRP': 'XRP/USD',
+              };
+              const symbol = assetMap[asset] || `${asset.replace(/^X/, '')}/USD`;
+              const livePrice = priceCache.getCachedPrice(symbol);
+              if (livePrice && livePrice.price > 0) {
+                cryptoUSD += amountNum * livePrice.price;
+              }
+            }
+            
+            totalValue = usdBalance + cryptoUSD;
+            cash = usdBalance;
+            crypto = cryptoUSD;
+            syncTimestamp = new Date();
+            balanceSource = 'kraken-live';
+            balanceError = undefined;
+          } catch (krakenError: any) {
+            console.warn('[9.6.3] Kraken balance fetch failed:', krakenError.message);
+            totalValue = 0;
+            cash = 0;
+            crypto = 0;
+            syncTimestamp = undefined;
+            balanceSource = 'kraken-error';
+            balanceError = krakenError.message;
+          }
         }
         
-        // Get mode-specific metrics
-        const metrics = await riskManager.getPortfolioMetrics(mode);
-        const winRateData = await riskManager.getWinRate(mode, 30);
+        // [9.6.3] Get mode-specific metrics from storage queries
+        const openPositions = mode === 'paper' 
+          ? await storage.getPaperSimOpenPositions(mode)
+          : await storage.getActiveTrades(mode);
+        const closedTrades = mode === 'paper'
+          ? await storage.getPaperSimTrades(mode, { closedOnly: true })
+          : await storage.getTrades(mode, { status: 'closed' });
+        
+        const metrics = {
+          unrealizedPL: 0,
+          realizedPL: closedTrades.reduce((sum, t) => sum + parseFloat((t as any).pnl || t.realizedPL || '0'), 0),
+          currentExposure: 0,
+          openTradesCount: openPositions.length
+        };
+        
+        // [9.6.3] Calculate win rate from closed trades
+        const recentTrades = closedTrades.slice(-30);
+        const wins = recentTrades.filter(t => parseFloat((t as any).pnl || t.realizedPL || '0') > 0).length;
+        const winRateData = {
+          winRate: recentTrades.length > 0 ? (wins / recentTrades.length) * 100 : 0,
+          totalTrades: recentTrades.length,
+          winningTrades: wins
+        };
         
         return {
           totalValue,
@@ -4240,23 +4298,50 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // [9.6.3] Portfolio earnings endpoint - simplified using storage queries
   apiRouter.get('/portfolio/earnings', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.user!.id;
-      const earnings = await riskManager.getEarnings(userId);
-      res.json(earnings);
+      const mode = (req.query.mode as 'live' | 'paper') || 'paper';
+      const closedTrades = mode === 'paper'
+        ? await storage.getPaperSimTrades(mode, { closedOnly: true })
+        : await storage.getTrades(mode, { status: 'closed' });
+      
+      const totalEarnings = closedTrades.reduce((sum, t) => sum + parseFloat((t as any).pnl || t.realizedPL || '0'), 0);
+      res.json({ totalEarnings, tradeCount: closedTrades.length, mode });
     } catch (error) {
       console.error('Error fetching earnings:', error);
       res.status(500).json({ error: 'Failed to fetch earnings data' });
     }
   });
 
+  // [9.6.3] Portfolio earnings chart - simplified using storage queries
   apiRouter.get('/portfolio/earnings-chart', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.query.mode as 'live' | 'paper') || (req.headers['x-app-mode'] as 'live' | 'paper') || 'paper';
       const days = parseInt(req.query.days as string) || 30;
-      const chartData = await riskManager.getEarningsChartData(mode, days);
-      res.json(chartData);
+      
+      const closedTrades = mode === 'paper'
+        ? await storage.getPaperSimTrades(mode, { closedOnly: true })
+        : await storage.getTrades(mode, { status: 'closed' });
+      
+      // Group by date and calculate daily P/L
+      const dailyPL: Record<string, number> = {};
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - days);
+      
+      closedTrades
+        .filter(t => (t as any).closedAt || t.exitTime)
+        .filter(t => new Date((t as any).closedAt || t.exitTime!) >= cutoffDate)
+        .forEach(t => {
+          const date = new Date((t as any).closedAt || t.exitTime!).toISOString().split('T')[0];
+          dailyPL[date] = (dailyPL[date] || 0) + parseFloat((t as any).pnl || t.realizedPL || '0');
+        });
+      
+      const chartData = Object.entries(dailyPL)
+        .map(([date, pl]) => ({ date, pl }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+      
+      res.json({ chartData, days, mode });
     } catch (error) {
       console.error('Error fetching earnings chart data:', error);
       res.status(500).json({ error: 'Failed to fetch earnings chart data' });
@@ -4269,8 +4354,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const period = (req.query.period as string) || '1M';
       const mode = (req.query.mode as 'live' | 'paper') || 'live';
       
-      // Phase 41F-L.E2E-PURGE: Read portfolio balance from portfolio_state (mode-level)
-      const { getPortfolioBalanceV2 } = await import('./services/risk-manager.js');
+      // [9.6.3] Read portfolio balance from portfolio_state (mode-level)
+      const { getPortfolioBalanceV2 } = await import('./services/guardrail-settings.js');
       const initialBalance = await getPortfolioBalanceV2(mode, userId) || 50000;
       
       const now = new Date();
@@ -4355,8 +4440,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const period = (req.query.period as string) || '30d';
       const mode = (req.query.mode as 'live' | 'paper') || 'live';
       
-      // Phase 41F-L.E2E-PURGE: Read portfolio balance from portfolio_state (mode-level)
-      const { getPortfolioBalanceV2 } = await import('./services/risk-manager.js');
+      // [9.6.3] Read portfolio balance from portfolio_state (mode-level)
+      const { getPortfolioBalanceV2 } = await import('./services/guardrail-settings.js');
       const initialBalance = await getPortfolioBalanceV2(mode, userId) || 50000;
       
       const now = new Date();
@@ -4434,8 +4519,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const userId = req.user!.id;
       const mode = (req.query.mode as 'live' | 'paper') || 'live';
       
-      // Phase 41F-L.E2E-PURGE: Read portfolio balance from portfolio_state (mode-level)
-      const { getPortfolioBalanceV2 } = await import('./services/risk-manager.js');
+      // [9.6.3] Read portfolio balance from portfolio_state (mode-level)
+      const { getPortfolioBalanceV2 } = await import('./services/guardrail-settings.js');
       const initialBalance = await getPortfolioBalanceV2(mode, userId) || 50000;
       const allTrades = await storage.getTrades(mode, {});
       console.log('[Phase-27.F.15.B.1] Updated route /api/portfolio/stats → mode-based only');
@@ -5003,7 +5088,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       console.log('[Phase-27.F.15.B.1] Updated route /api/paper/metrics/history → mode-based only');
       
       // Get initial balance from portfolio_state
-      const portfolioState = await storage.getPortfolioState({ userId, mode: 'paper' });
+      // [9.6.3] Use mode-only query (mode-based architecture)
+      const portfolioState = await storage.getPortfolioState({ mode: 'paper' });
       const initialBalance = portfolioState?.balance ? parseFloat(portfolioState.balance as any) : 10000;
       
       // Calculate running balance over time
@@ -12792,11 +12878,11 @@ Provide specific, actionable recommendations.`,
         slippageMidcaps: `${settings.slippageToleranceMidcaps}%`
       });
 
-      const { RiskManager } = await import('./services/risk-manager');
+      // [9.6.3] RiskManager removed - using checkGuardrailRisk from trade-safety
+      const { checkGuardrailRisk } = await import('./services/trade-safety');
       const { TradingEngine } = await import('./services/trading-engine');
       
-      const riskManager = new RiskManager();
-      const tradingEngine = new TradingEngine(userId);
+      const tradingEngine = new TradingEngine(mode);
 
       // Simulate 5 different trading signals
       const testSignals = [
@@ -12854,15 +12940,24 @@ Provide specific, actionable recommendations.`,
         console.log(`\n📊 Signal ${i + 1}/${testSignals.length}: ${signal.symbol} (${signal.strategy})`);
         console.log(`   Entry: $${signal.entryPrice}, Stop: $${signal.stopPrice}, Target: $${signal.targetPrice}`);
 
-        // Check pre-trade risk
-        const riskCheck = await riskManager.checkPreTradeRisk(userId, signal, settings);
+        // [9.6.3] Check pre-trade risk using checkGuardrailRisk
+        const tradeCandidate = {
+          symbol: signal.symbol,
+          strategy: signal.strategy,
+          entryPrice: signal.entryPrice,
+          stopPrice: signal.stopPrice,
+          targetPrice: signal.targetPrice,
+          confidence: signal.confidence,
+          mode
+        };
+        const riskCheck = await checkGuardrailRisk(tradeCandidate, mode, settings);
         
         if (riskCheck.approved) {
-          // Phase 41F-L.E2E-FIX: Calculate position details using percentage-based risk
-          const { getRiskPercentage, calculateRiskAmount } = await import('./services/risk-manager.js');
-          const portfolioMetrics = await riskManager.getPortfolioMetrics(userId);
-          const portfolioValue = portfolioMetrics.totalValue || 50000;
-          const pct = getRiskPercentage(settings, portfolioValue);
+          // [9.6.3] Calculate position details using percentage-based risk from guardrail-settings
+          const { getRiskPercentageV2, calculateRiskAmount, getPortfolioBalanceV2 } = await import('./services/guardrail-settings.js');
+          const guardrails = await storage.getGuardrailsV2({ mode });
+          const portfolioValue = await getPortfolioBalanceV2(mode) || 50000;
+          const pct = getRiskPercentageV2(mode, guardrails);
           const riskAmount = calculateRiskAmount(portfolioValue, pct);
           const stopDistance = Math.abs(signal.entryPrice - signal.stopPrice);
           const quantity = riskAmount / stopDistance;
@@ -12892,13 +12987,22 @@ Provide specific, actionable recommendations.`,
         }
       }
 
-      // Get current portfolio metrics
-      const metrics = await riskManager.getPortfolioMetrics(userId);
+      // [9.6.3] Get portfolio metrics via mode-based storage queries
+      const { getPortfolioBalanceV2 } = await import('./services/guardrail-settings.js');
+      const currentBalance = await getPortfolioBalanceV2(mode) || 50000;
+      const openPositions = mode === 'paper' 
+        ? await storage.getPaperSimOpenPositions(mode)
+        : await storage.getActiveTrades(mode);
+      const metrics = {
+        openTradesCount: openPositions.length,
+        currentExposure: 0,
+        realizedPL: 0,
+        totalValue: currentBalance
+      };
       
       console.log('\n📈 Portfolio Metrics:');
       console.log(`   Open Trades: ${metrics.openTradesCount}/${settings.maxOpenTrades}`);
-      console.log(`   Current Exposure: $${metrics.currentExposure.toFixed(2)}`);
-      console.log(`   Realized P/L: $${metrics.realizedPL.toFixed(2)}`);
+      console.log(`   Portfolio Value: $${metrics.totalValue.toFixed(2)}`);
       console.log('='.repeat(60));
 
       res.json({
@@ -13009,11 +13113,11 @@ Provide specific, actionable recommendations.`,
         return res.status(400).json({ error: 'Invalid scenario. Use "warning", "kill", or provide lossPercent' });
       }
 
-      // Phase 41F-L.E2E-FIX: Create simulated trade using percentage-based risk
-      const { getRiskPercentage, calculateRiskAmount } = await import('./services/risk-manager.js');
-      const portfolioMetrics = await riskManager.getPortfolioMetrics(userId);
-      const portfolioValue = portfolioMetrics.totalValue || 50000;
-      const pct = getRiskPercentage(settings, portfolioValue);
+      // [9.6.3] Create simulated trade using percentage-based risk from guardrail-settings
+      const { getRiskPercentageV2, calculateRiskAmount, getPortfolioBalanceV2 } = await import('./services/guardrail-settings.js');
+      const guardrails = await storage.getGuardrailsV2({ mode: mode as 'live' | 'paper' });
+      const portfolioValue = await getPortfolioBalanceV2(mode as 'live' | 'paper') || 50000;
+      const pct = getRiskPercentageV2(mode as 'live' | 'paper', guardrails);
       const riskAmount = calculateRiskAmount(portfolioValue, pct);
       const lossAmount = (riskAmount / 0.01) * (targetLossPercent / 100); // Scale up the loss
       
@@ -13021,7 +13125,7 @@ Provide specific, actionable recommendations.`,
         userId,
         symbol: 'BTCUSD',
         strategy: 'vwap_pullback',
-        mode: 'paper',
+        mode: mode as 'live' | 'paper',
         entryPrice: '50000',
         quantity: (Math.abs(lossAmount) / 50000).toFixed(8),
         stopPrice: '49500',
@@ -13035,8 +13139,10 @@ Provide specific, actionable recommendations.`,
         metadata: { test: true, scenario }
       });
 
-      // Check kill switch after creating the losing trade
-      const result = await riskManager.checkKillSwitch(userId, settings);
+      // [9.6.3] Check kill switch using guardrail-policy instead of RiskManager
+      const { guardrailPolicy } = await import('./services/guardrail-policy.js');
+      const killSwitchTripped = await guardrailPolicy.isKillSwitchTripped(mode as 'live' | 'paper');
+      const result = { triggered: killSwitchTripped, reason: killSwitchTripped ? 'Kill switch tripped' : null };
       
       // Phase 41F-L.E2E-PURGE: Get updated settings from mode-level config
       const updatedSettings = await buildSettingsFromModeLevel(mode as 'live' | 'paper', userId);
@@ -13078,8 +13184,17 @@ Provide specific, actionable recommendations.`,
         metadata: { test: true }
       };
 
-      // Run through risk checks
-      const riskCheck = await riskManager.checkPreTradeRisk(userId, testSignal, settings);
+      // [9.6.3] Run through risk checks using checkGuardrailRisk
+      const tradeCandidate = {
+        symbol: testSignal.symbol,
+        strategy: testSignal.strategy,
+        entryPrice: testSignal.entryPrice,
+        stopPrice: testSignal.stopPrice,
+        targetPrice: testSignal.targetPrice,
+        confidence: testSignal.confidence,
+        mode
+      };
+      const riskCheck = await checkGuardrailRisk(tradeCandidate, mode, settings);
 
       res.json({
         killSwitchTripped: settings.killSwitchTripped,
@@ -23030,7 +23145,8 @@ export async function handleUpdateTradingPace(req: AuthenticatedRequest, res: Re
       // Fetch existing goals and portfolio balance for this mode
       const [existingGoals, portfolioState] = await Promise.all([
         mode === 'live' ? storage.getGoalsLive() : storage.getGoalsPaper(),
-        storage.getPortfolioState({ globalContextId: userId, mode })
+        // [9.6.3] Use mode-only query (mode-based architecture)
+        storage.getPortfolioState({ mode })
       ]);
       
       if (!portfolioState || !portfolioState.balance) {
@@ -23128,7 +23244,8 @@ export async function handleLATTITargets(req: AuthenticatedRequest, res: Respons
     const maxRiskPerTrade = guardrails ? parseFloat(guardrails.riskPerTrade) : 150;
     
     // Get portfolio balance
-    const portfolioState = await storage.getPortfolioState({ globalContextId: userId, mode });
+    // [9.6.3] Use mode-only query (mode-based architecture)
+    const portfolioState = await storage.getPortfolioState({ mode });
     
     if (!portfolioState || !portfolioState.balance) {
       console.error(`[LATTI-Targets] Portfolio state not found for ${mode} mode`);

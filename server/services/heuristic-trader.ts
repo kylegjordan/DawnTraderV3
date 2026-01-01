@@ -120,9 +120,7 @@ class MetricsCollector {
     try {
       console.log(`[${this.MODULE_NAME}] 🔍 Collecting metrics for ${mode} mode...`);
       
-      // Import services dynamically to avoid circular dependencies
-      const { RiskManager } = await import('./risk-manager');
-      const riskManager = new RiskManager();
+      // [9.6.3] RiskManager removed - using direct storage queries
       
       // Get recent trades (last 7 days)
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -193,7 +191,8 @@ class MetricsCollector {
       // Calculate drawdown (simplified - would need equity curve in reality)
 // Phase 41F-L.E2E-PURGE: DISABLED -       const settings = await storage.getTradingSettings(userId);
       // Phase 0: Use portfolio state as fallback for disabled getTradingSettings
-      const portfolioState = await storage.getPortfolioState({ userId, mode: this.mode });
+      // [9.6.3] Use mode-only query for portfolio state (userId optional for backward compat)
+      const portfolioState = await storage.getPortfolioState({ mode });
       const portfolioValue = parseFloat(portfolioState?.balance || '50000');
       
       // Calculate 24h P/L (simplified since settings disabled)
