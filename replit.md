@@ -48,6 +48,16 @@ Filter thresholds: LQ ≥ 40, VolNoise ≤ 0.6. FX5 Scanner computes and logs al
 
 Logs with `[9.2][EXIT]`, `[9.2][LOCK]`, `[9.2][MODE]`, `[9.2][PERSIST]`, `[9.2][MODE_SYNC]` tags. Schema: `trade_mode` column on trades/paper_sim_open_positions.
 
+**Directive 9.3 - Adaptive Kalman Filter (Efficiency Ratio Model)**: Implements an adaptive filter that dynamically adjusts smoothing based on market conditions (`server/utils/adaptive-kalman.ts`):
+- **Efficiency Ratio (ER)**: ER = |Price_t - Price_{t-n}| / Σ|ΔPrice_i| — measures trend efficiency (0-1)
+- **Adaptive R Parameter**: R = clip(1 + (1 - ER) × 50, 1, 50) — low ER = high smoothing, high ER = fast response
+- **Adaptive Q Parameter**: Q = max(0.1, VolNoise × 0.5) — scales process noise with volatility
+- **Cold Start Handling**: Seeds immediately with first price, no initialization delay
+- **Filter Registry**: Per-symbol filter instances via getKalmanFilter(symbol)
+- **Orchestrator Integration**: Smoothed prices delivered to all strategy evaluations
+
+Logs with `[9.3][INIT]`, `[9.3][ER]`, `[9.3][KALMAN]` tags. 31 unit tests validate stability and responsiveness.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.
