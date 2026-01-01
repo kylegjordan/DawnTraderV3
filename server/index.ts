@@ -715,6 +715,15 @@ app.use((req, res, next) => {
           console.warn('[8.8.7] ⚠️ ActiveFilterPool init failed:', afpError);
         }
         
+        // Directive 9.2: Load persisted trailing states from file
+        try {
+          const { loadTrailingStates } = await import('./services/trade-safety.js');
+          loadTrailingStates();
+          console.log('[9.2] ✅ Trailing exit states loaded from persistence');
+        } catch (trailingError) {
+          console.warn('[9.2] ⚠️ Failed to load trailing states:', trailingError);
+        }
+        
         // Phase 8.8.3-I7-WS-STARTUP: Start WebSocket adapter during server boot
         // This enables real-time pricing for all clients immediately, not just when engine starts
         await krakenWebSocketAdapter.start();

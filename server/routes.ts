@@ -10498,7 +10498,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           avgIntervalMs: frequencyInfo.avgIntervalMs,
           volume24h: volume24h, // Phase 8.8.3-I10: From DB, pool, or cache
           volumeBucket: volumeBucket, // 'High', 'Medium', 'Low', 'Very Low'
-          positionValue: quantity * currentPrice // Total value of position
+          positionValue: quantity * currentPrice, // Total value of position
+          // Directive 9.2: Trade mode for trailing exit system
+          tradeMode: (pos as any).tradeMode || 'TARGET' // TARGET or TRAILING_TAKE (MOONBAG)
         };
       }));
       

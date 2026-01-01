@@ -826,3 +826,63 @@ export function calculateRiskReward(
 
   return { risk, reward, ratio };
 }
+
+// ==========================================
+// Directive 9.2.D — Trailing State Persistence
+// In-memory cache with JSON file backup for trailing states
+// ==========================================
+
+import { 
+  exportAllStates, 
+  importStates, 
+  type TrailingState 
+} from './trailing-exit-controller.js';
+import * as fs from 'fs';
+import * as path from 'path';
+
+const TRAILING_STATE_FILE = '/tmp/trailing-states.json';
+
+/**
+ * Directive 9.2.D: Save trailing states to file for persistence
+ */
+export function persistTrailingStates(): void {
+  try {
+    const states = exportAllStates();
+    fs.writeFileSync(TRAILING_STATE_FILE, JSON.stringify(states, null, 2));
+    console.log(`[9.2][PERSIST] Saved ${states.length} trailing states to file`);
+  } catch (error) {
+    console.error(`[9.2][PERSIST] Failed to save trailing states:`, error);
+  }
+}
+
+/**
+ * Directive 9.2.D: Load trailing states from file on startup
+ */
+export function loadTrailingStates(): void {
+  try {
+    if (fs.existsSync(TRAILING_STATE_FILE)) {
+      const data = fs.readFileSync(TRAILING_STATE_FILE, 'utf-8');
+      const states: TrailingState[] = JSON.parse(data);
+      importStates(states);
+      console.log(`[9.2][PERSIST] Loaded ${states.length} trailing states from file`);
+    } else {
+      console.log(`[9.2][PERSIST] No trailing states file found, starting fresh`);
+    }
+  } catch (error) {
+    console.error(`[9.2][PERSIST] Failed to load trailing states:`, error);
+  }
+}
+
+/**
+ * Directive 9.2.D: Clear persisted trailing states
+ */
+export function clearPersistedStates(): void {
+  try {
+    if (fs.existsSync(TRAILING_STATE_FILE)) {
+      fs.unlinkSync(TRAILING_STATE_FILE);
+      console.log(`[9.2][PERSIST] Cleared trailing states file`);
+    }
+  } catch (error) {
+    console.error(`[9.2][PERSIST] Failed to clear trailing states:`, error);
+  }
+}

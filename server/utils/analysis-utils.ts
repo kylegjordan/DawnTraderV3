@@ -187,3 +187,98 @@ export function computeCoreMetrics(
   
   return { LQ, DI, VolNoise, Sigma, passesFilter };
 }
+
+// ==========================================
+// Directive 9.2 — Dynamic Trade Management
+// Adaptive trailing exit logic using DI and VolNoise
+// ==========================================
+
+/**
+ * Directive 9.2.B: Dynamic Stop Distance Formula
+ * Computes K' (adaptive trailing multiplier) from DI and VolNoise.
+ * 
+ * Formula: K' = K_base × (1 + α×(1 - DI/100) + β×VolNoise)
+ * 
+ * Where:
+ * - K_base: Base trailing multiplier (default: 1.0 ATR)
+ * - α: DI sensitivity coefficient (default: 0.5) - lower DI = wider stop
+ * - β: VolNoise sensitivity coefficient (default: 0.8) - higher noise = wider stop
+ * 
+ * @param DI - Directional Integrity (0-100)
+ * @param VolNoise - Volatility Noise (0-1)
+ * @param K_base - Base trailing multiplier (default: 1.0)
+ * @param alpha - DI sensitivity (default: 0.5)
+ * @param beta - VolNoise sensitivity (default: 0.8)
+ * @returns K' - Adaptive trailing multiplier
+ */
+export function calculateDynamicStopDistance(
+  DI: number,
+  VolNoise: number,
+  K_base: number = 1.0,
+  alpha: number = 0.5,
+  beta: number = 0.8
+): number {
+  const diAdjustment = alpha * (1 - DI / 100);
+  const noiseAdjustment = beta * VolNoise;
+  const Kprime = K_base * (1 + diAdjustment + noiseAdjustment);
+  return Math.max(0.5, Math.min(3.0, Kprime));
+}
+
+/**
+ * Directive 9.2.B: Calculate trailing stop price
+ * Uses adaptive K' multiplier with ATR to compute trailing stop distance.
+ * 
+ * @param currentPrice - Current market price
+ * @param ATR - Average True Range
+ * @param DI - Directional Integrity (0-100)
+ * @param VolNoise - Volatility Noise (0-1)
+ * @returns Trailing stop price
+ */
+export function calculateTrailingStopPrice(
+  currentPrice: number,
+  ATR: number,
+  DI: number,
+  VolNoise: number
+): number {
+  const Kprime = calculateDynamicStopDistance(DI, VolNoise);
+  const trailingDistance = ATR * Kprime;
+  return currentPrice - trailingDistance;
+}
+
+/**
+ * Directive 9.2: Trade mode types for trailing exit system
+ */
+export type TradeMode = 'TARGET' | 'TRAILING_TAKE';
+
+/**
+ * Directive 9.2.C: Break-Even trigger calculation
+ * Returns true if price has reached 1×ATR gain from entry.
+ * 
+ * @param currentPrice - Current market price
+ * @param entryPrice - Trade entry price
+ * @param ATR - Average True Range
+ * @returns true if break-even trigger is reached
+ */
+export function isBreakEvenTriggered(
+  currentPrice: number,
+  entryPrice: number,
+  ATR: number
+): boolean {
+  const gain = currentPrice - entryPrice;
+  return gain >= ATR;
+}
+
+/**
+ * Directive 9.2.C: Target Lock trigger calculation
+ * Returns true if price has reached the target price.
+ * 
+ * @param currentPrice - Current market price
+ * @param targetPrice - Trade target price
+ * @returns true if target lock trigger is reached
+ */
+export function isTargetLockTriggered(
+  currentPrice: number,
+  targetPrice: number
+): boolean {
+  return currentPrice >= targetPrice;
+}

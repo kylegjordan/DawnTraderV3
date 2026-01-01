@@ -37,6 +37,17 @@ System health is maintained through a Safe Heartbeat Monitor, a Volume Classifie
 
 Filter thresholds: LQ ≥ 40, VolNoise ≤ 0.6. FX5 Scanner computes and logs all metrics with `[9.1]` tags.
 
+**Directive 9.2 - Dynamic Trade Management (Adaptive Trailing Exit)**: Implements a full-spectrum adaptive trade management system (`server/services/trailing-exit-controller.ts`):
+- **Dynamic Stop Distance Formula**: K' = K_base × (1 + α×(1 - DI/100) + β×VolNoise) - adapts trailing stop based on market conditions
+- **Two-Stage Latching System**: Break-Even latch at 1×ATR gain (stop to entry), Target Lock latch at target price (stop to target)
+- **Trade Mode Tracking**: TARGET mode during pursuit, TRAILING_TAKE mode after target hit (MOONBAG mode)
+- **Persistence Layer**: File-based state persistence (`/tmp/trailing-states.json`) with debounced writes (5s), auto-loaded at server startup
+- **Database Sync**: Trade mode changes automatically propagate to database (paper_sim_open_positions.tradeMode column)
+- **API Integration**: `tradeMode` field exposed in positions API response for frontend consumption
+- **UI Enhancement**: Gold "MOONBAG" badge in Active Trades when trailing mode is active
+
+Logs with `[9.2][EXIT]`, `[9.2][LOCK]`, `[9.2][MODE]`, `[9.2][PERSIST]`, `[9.2][MODE_SYNC]` tags. Schema: `trade_mode` column on trades/paper_sim_open_positions.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.

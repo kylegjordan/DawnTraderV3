@@ -564,6 +564,7 @@ export const trades = pgTable("trades", {
   mae: decimal("mae", { precision: 10, scale: 2 }), // Maximum Adverse Excursion (max loss while open)
   entryTime: timestamp("entry_time", { withTimezone: true }).defaultNow(),
   exitTime: timestamp("exit_time", { withTimezone: true }),
+  tradeMode: varchar("trade_mode", { length: 20 }).default("TARGET"), // Directive 9.2: TARGET or TRAILING_TAKE
   metadata: jsonb("metadata"), // Additional strategy-specific data
 }, (table) => ({
   modeIdx: index("trades_mode_idx").on(table.mode),
@@ -1709,6 +1710,8 @@ export const paperSimOpenPositions = pgTable("paper_sim_open_positions", {
   // Phase 8.8.3-C4: Intended entry price for slippage tracking
   intendedEntryPrice: decimal("intended_entry_price", { precision: 20, scale: 8 }),
   entrySlippage: decimal("entry_slippage", { precision: 20, scale: 8 }).default("0"),
+  // Directive 9.2: Trade mode for trailing exit system
+  tradeMode: varchar("trade_mode", { length: 20 }).default("TARGET"), // TARGET or TRAILING_TAKE
   metadata: jsonb("metadata"), // Signal details, entry reasons, etc.
 }, (table) => ({
   symbolIdx: uniqueIndex("paper_sim_open_positions_symbol_idx").on(table.symbol),

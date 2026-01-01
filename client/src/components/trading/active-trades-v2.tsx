@@ -115,6 +115,8 @@ interface ActiveTrade {
   avgIntervalMs?: number;
   volume24h?: number;
   volumeBucket?: 'High' | 'Medium' | 'Low' | 'Very Low';
+  // Directive 9.2: Trade mode for trailing exit system
+  tradeMode?: 'TARGET' | 'TRAILING_TAKE';
 }
 
 interface PortfolioSummary {
@@ -334,9 +336,20 @@ function TradeRow({
       
       {/* 3. Strategy */}
       <td className="px-3 py-3">
-        <Badge className={cn("text-xs font-medium", strategyColors[trade.strategy] || "bg-gray-500/10 text-gray-600")}>
-          {strategyNames[trade.strategy] || trade.strategy}
-        </Badge>
+        <div className="flex flex-col gap-1">
+          <Badge className={cn("text-xs font-medium", strategyColors[trade.strategy] || "bg-gray-500/10 text-gray-600")}>
+            {strategyNames[trade.strategy] || trade.strategy}
+          </Badge>
+          {/* Directive 9.2: Trade Mode Indicator */}
+          <span className={cn(
+            "px-2 py-0.5 rounded text-xs font-bold",
+            trade.tradeMode === 'TRAILING_TAKE' 
+              ? 'bg-amber-100 text-amber-700 border border-amber-300' 
+              : 'text-gray-500'
+          )}>
+            {trade.tradeMode === 'TRAILING_TAKE' ? 'MOONBAG' : 'Targeting'}
+          </span>
+        </div>
       </td>
       
       {/* 4. Qty / Value (stacked) */}

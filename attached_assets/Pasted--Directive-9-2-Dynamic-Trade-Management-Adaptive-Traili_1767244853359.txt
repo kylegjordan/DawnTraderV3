@@ -1,0 +1,99 @@
+⚙️ Directive 9.2 — Dynamic Trade Management (Adaptive Trailing Exit)
+
+Version: 9.2 (Final + Target Lock + SQL Persist + Gold UI Revision)
+Phase: 9 — Institutional Math Core
+Dependencies: ✅ 9.0 · ✅ 9.1
+Target System: Trade Execution · Database · Frontend UI
+Repository: Dawn Trader (Main Replit Repo)
+
+🧭 Objective
+
+Implement a full-spectrum adaptive trade management system with:
+
+Dynamic Trailing Exit Logic powered by DI and VolNoise.
+
+Two-Stage Latching System: Break-Even and Target Lock.
+
+Persistent Mode Tracking: “Target” vs “Trailing Take” mode recorded in Redis and SQL.
+
+Enhanced UI Feedback: Gold-highlighted “MOONBAG 🚀” badge when trailing mode is active.
+
+🧩 Deliverables Overview
+Deliverable	Description	Target File(s)
+9.2.A – TrailingExitController	Core trailing-stop computation	server/services/trailing-exit-controller.ts
+9.2.B – Dynamic Stop Distance Formula	Compute K′ from DI and VolNoise	analysis-utils.ts
+9.2.C – Break-Even & Target Lock Latch	Two-stage latch system	trailing-exit-controller.ts
+9.2.D – Redis Persistence Layer	Cache current trailing states	trade-safety.ts
+9.2.E – TradeExecutor Integration	SQL + WebSocket update flow	trade-executor.ts
+9.2.F – Telemetry & Logging	[9.2][EXIT]/[LOCK]/[MODE] logs	system-health-service.ts
+9.2.G – UI & Database Enhancement	Mode indicator (Target vs MOONBAG 🚀)	shared/schema.ts, client/src/pages/active-trades.tsx
+9.2.H – Unit Test Suite	Verify latch and persistence logic	tests/unit/trailing-exit.test.ts
+🧠 Implementation Steps (Key Changes Included)
+2️⃣ TradeExecutor Integration (Revised)
+
+🔧 Critical Data Flow Update
+Ensure tradeMode transitions persist to both transient (Redis/UI) and permanent (Postgres) storage.
+
+2️⃣ TradeExecutor Integration
+Receive entry, targetPrice, tradeMode.
+Pass to TrailingExitController.updatePosition().
+If tradeMode transitions from TARGET → TRAILING_TAKE:
+    1. Update `trades` table in Postgres (set trade_mode = 'TRAILING_TAKE').
+    2. Emit UI update event via WebSocket.
+
+
+✅ This guarantees mode persistence through system restarts and UI reloads.
+
+4️⃣ UI Code (Revised with Gold “MOONBAG 🚀” Indicator)
+
+File: client/src/pages/active-trades.tsx
+
+// Use Amber/Gold for "Bonus Mode" distinction
+<span className={`px-2 py-1 rounded text-xs font-bold ${
+    row.original.tradeMode === 'TRAILING_TAKE' 
+    ? 'bg-amber-100 text-amber-700 border border-amber-300' // Gold/LATCHED
+    : 'text-gray-500' // Standard
+}`}>
+    {row.original.tradeMode === 'TRAILING_TAKE' ? 'MOONBAG 🚀' : 'Targeting'}
+</span>
+
+
+✅ The “MOONBAG 🚀” label activates the moment a target is hit and the trade enters Trailing Take mode.
+This color scheme (amber tones) creates a clear, emotionally rewarding distinction between in-progress and secured-profits trades.
+
+🔬 Validation Protocol (Updated)
+Step	Action	Expected Outcome
+1	Run paper session	Dynamic trailing in effect
+2	Hit +1×ATR gain	Stop moves to entry
+3	Hit target price	Stop locks to target, tradeMode → TRAILING_TAKE
+4	Refresh UI	Mode persists as "MOONBAG 🚀"
+5	Inspect DB (SELECT trade_mode FROM trades WHERE symbol='BTC/USD')	Returns 'TRAILING_TAKE'
+6	Restart system	Redis and SQL states reload consistently
+7	Validation log	[9.2][MODE] BTC/USD → TRAILING_TAKE persisted to SQL
+✅ Success Criteria
+
+SQL + Redis + UI synchronization verified.
+
+“MOONBAG 🚀” mode displays correctly and persists after reload.
+
+No state loss across sessions.
+
+Dual-latch logic (Break-Even + Target Lock) fully functional.
+
+Validation log ends with:
+
+[9.2][VALIDATION COMPLETE] Dynamic trailing, target lock, and mode persistence verified.
+
+🧭 Next Directive
+
+Proceed to Directive 9.3 – Adaptive Kalman Filter (Efficiency Ratio Model)
+for volatility-normalized trend detection.
+
+✅ Directive 9.2 — Final Canonical Specification
+Incorporating:
+
+SQL persistence for tradeMode transitions
+
+Gold “MOONBAG 🚀” visual mode
+
+Full audit compliance and state durability
