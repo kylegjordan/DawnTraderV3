@@ -89,6 +89,30 @@ Logs with `[9.4][COV]`, `[9.4][RISK]`, `[9.4][SIZE]`, `[9.4][CONCENTRATION]`, `[
 
 Logs with `[9.5][CWQI]`, `[9.5][CWQI_BLOCK]`, `[9.5][CWQI_PASS]` tags. 13 unit tests validate expectancy calculations, scoring, and configuration.
 
+**Directive 9.6 - Sim-to-Live Parity & Configuration Lock**: Ensures Live and VTS (Paper) engines produce identical outputs under identical conditions (`server/config/system-guards.ts`):
+- **Configuration Lock**: Centralized `SYSTEM_GUARDS` object with all Phase 9 thresholds:
+  - MIN_LIQUIDITY_SCORE = 40 (LQ Gate)
+  - MAX_VOL_NOISE = 0.6 (Noise Gate)
+  - BASE_FEE_SLIPPAGE = 0.005 (0.5% total cost)
+  - MAX_CORRELATION = 0.75 (ρ threshold)
+  - PARITY_TOLERANCE = 0.000001 (determinism check)
+  - DI_LOW = 30, DI_HIGH = 65 (Directional Integrity bands)
+  - MIN_PWIN = 0.40, MAX_PWIN = 0.60 (Win probability bounds)
+  - VERSION = "Phase9_Final"
+- **Math Consolidation**: All Phase 9 modules import from SYSTEM_GUARDS to prevent configuration drift
+- **Parity Test Suite**: 5 integration tests (`server/tests/integration/parity.test.ts`) validating:
+  - CWQI determinism under identical inputs
+  - Entry/Stop/Target calculation consistency
+  - Cost calculation using centralized config
+  - pWin bounded by SYSTEM_GUARDS
+  - Configuration version match
+- **Diagnostics Tab**: New tab in Goals Engine (after Strategies, before Coherency) showing:
+  - Math Integrity status with verification badge
+  - Phase 9 module health (Directives 9.2-9.5)
+  - Guard configuration display
+
+Logs with `[9.6][PARITY]`, `[9.6][CONFIG]`, `[9.6][VALIDATION]` tags. 5 integration tests validate parity.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.
