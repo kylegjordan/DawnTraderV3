@@ -58,6 +58,18 @@ Logs with `[9.2][EXIT]`, `[9.2][LOCK]`, `[9.2][MODE]`, `[9.2][PERSIST]`, `[9.2][
 
 Logs with `[9.3][INIT]`, `[9.3][ER]`, `[9.3][KALMAN]` tags. 31 unit tests validate stability and responsiveness.
 
+**Directive 9.4 - Covariance Guard / Risk Concentration Control**: Portfolio-level correlation monitoring and position sizing (`server/utils/covariance-engine.ts`, `server/services/risk-concentration.ts`):
+- **Covariance Matrix**: Σ = (1/(n-1)) × (R - R̄)ᵀ(R - R̄) — rolling covariance from recent returns
+- **Correlation Matrix**: ρ_ij = Σ_ij / (σ_i × σ_j) — normalized correlations clamped to [-1, 1]
+- **Concentration Score**: C_i = Σ|ρ_ij| × w_j — correlation-weighted exposure per symbol
+- **Scaling Factor**: When C_i > C_max (2.5), scale position: ScalingFactor = min(1, C_max / C_i)
+- **Correlation Threshold**: ρ_th = 0.75 — high correlation warning/blocking threshold
+- **SizingHelper Integration**: Trade sizes dynamically scaled based on `getScalingFactor(symbol)`
+- **TradeSafety Integration**: CORRELATION_EXPOSURE check blocks trades exceeding threshold; always updates position weights (even when empty) to clear stale state
+- **Engine Startup Bootstrap**: On paper engine start, fetches OHLC data for top 20 symbols from activeFilterPool, converts to Kraken REST pairs, populates covarianceEngine, computes matrices, and calls `riskConcentrationAnalyzer.recalculateScores()`
+
+Logs with `[9.4][COV]`, `[9.4][RISK]`, `[9.4][SIZE]`, `[9.4][CONCENTRATION]`, `[9.4][RETURNS]` tags. 26 unit tests validate matrix symmetry, bounds, scaling, and telemetry.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.

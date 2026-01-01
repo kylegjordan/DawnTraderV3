@@ -71,6 +71,7 @@ import { readyToBuyService } from '../core/rtb/ready_to_buy_service.js';
 import { tclWatchdog } from '../core/rtb/tcl_watchdog.js';
 import { eventBus, type TCLActivatedEvent, type TradeClosedEvent } from '../lib/event-bus.js';
 import { dataAggregator } from './data-aggregator.js';
+import { covarianceEngine } from '../utils/covariance-engine.js';
 import { recordPaperTrade, type PaperTradeRecord } from './vts-live-comparison-audit.js';
 
 interface ExitCondition {
@@ -317,6 +318,41 @@ export class PaperExecutionEngine {
 
     // Phase 8.8.4-C.12: Bind event listeners for TCL activation and trade close
     this.bindTCLEventListeners();
+
+    // Directive 9.4: Initialize covariance engine with OHLC data for active symbols
+    try {
+      const watchlist = activeFilterPool.getActivePool(this.mode);
+      const topSymbols = watchlist.slice(0, 20).map((p: ActiveFilteredPair) => p.symbol);
+      let loadedCount = 0;
+      if (topSymbols.length > 0) {
+        for (const symbol of topSymbols) {
+          try {
+            // Convert internal symbol to Kraken REST pair format
+            const krakenPair = getKrakenRestPair(symbol);
+            const ohlcResult = await this.krakenService.getOHLCData(krakenPair, 60);
+            if (ohlcResult?.ohlc?.length > 0) {
+              const closes = ohlcResult.ohlc.map((c: any) => parseFloat(c.close));
+              covarianceEngine.updateFromPrices(symbol, closes);
+              loadedCount++;
+            }
+          } catch (err) {
+            // Silently skip - individual symbol failures are not critical
+          }
+        }
+        if (loadedCount >= 2) {
+          covarianceEngine.computeCovarianceMatrix();
+          covarianceEngine.computeCorrelationMatrix();
+          // Import and call recalculateScores to update concentration metrics
+          const { riskConcentrationAnalyzer } = await import('./risk-concentration.js');
+          riskConcentrationAnalyzer.recalculateScores();
+          console.log(`[9.4][COV] Engine initialized with ${loadedCount}/${topSymbols.length} symbols`);
+        } else {
+          console.log(`[9.4][COV] Insufficient data (${loadedCount} symbols) - need >= 2 for correlation`);
+        }
+      }
+    } catch (covError) {
+      console.warn(`[9.4][COV] Engine initialization warning:`, covError);
+    }
 
     // Broadcast engine start
     contextBridge.broadcast({

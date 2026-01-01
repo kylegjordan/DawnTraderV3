@@ -26,7 +26,7 @@ import { i1RtbDiagnostics } from './i1-rtb-diagnostics-service.js';
 import { rtbMetricsService } from './rtb-metrics-service.js';
 import { getGlobalPaperSimManager } from './paper-sim-service.js';
 import { signalLifecycleAudit, type RejectionReason } from '../core/audit/signal_lifecycle_audit.js';
-import { isCorrelatedExposure } from './risk-concentration.js';
+import { isCorrelatedExposure, riskConcentrationAnalyzer } from './risk-concentration.js';
 
 export const buildSettingsFromGuardrails = _buildSettingsFromGuardrails;
 export const calculateRiskAmount = _calculateRiskAmount;
@@ -770,6 +770,16 @@ export async function checkGuardrailRisk(
   }
   
   // Directive 9.4: Check correlation exposure (Covariance Guard)
+  // Always update position weights from active positions (even if empty, to clear stale state)
+  const currentPositions = await getActivePositions(mode);
+  const weights: Record<string, number> = {};
+  for (const pos of currentPositions) {
+    const qty = parseFloat(pos.quantity) || 0;
+    const price = parseFloat(pos.entryPrice) || 0;
+    weights[pos.symbol] = qty * price;
+  }
+  riskConcentrationAnalyzer.updatePositionWeights(weights);
+  
   if (isCorrelatedExposure(trade.symbol)) {
     const correlationResult: TradeSafetyResult = {
       ok: false,
