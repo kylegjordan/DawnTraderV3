@@ -1,3 +1,25 @@
+/**
+ * @deprecated DEPRECATED - Directive 9.5.D (January 2026)
+ * 
+ * This component is deprecated and should NOT be used.
+ * All functionality has been migrated to FiltersWithOverride.
+ * 
+ * MIGRATION NOTES:
+ * - System Guards panel (LQ ≥ 40, VolNoise ≤ 0.6, EV > 0, ρ ≤ 0.75) → FiltersWithOverride
+ * - Filter Automation Control → FiltersWithOverride (with LATTi integration)
+ * - Both use the same database (screener_filters table via /api/filters-v2)
+ * 
+ * API ENDPOINTS PRESERVED (for backward compatibility):
+ * - GET /api/screeners - Still works, reads from screener_filters table
+ * - PUT /api/screeners - Still works, writes to screener_filters table
+ * - GET /api/screeners/calibration - Still works for AI Transparency page
+ * 
+ * DO NOT RE-IMPORT this component into goals-engine.tsx or any other page.
+ * This file is preserved for reference only and should be deleted in future cleanup.
+ * 
+ * @see FiltersWithOverride - The active replacement component
+ * @see /api/filters-v2 - The modern API endpoint used by FiltersWithOverride
+ */
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ModeIndicator } from "./mode-indicator";

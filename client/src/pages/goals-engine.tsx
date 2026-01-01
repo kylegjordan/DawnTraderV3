@@ -1,7 +1,6 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import GoalsEngineTab from "@/components/goals/goals-engine-tab";
 import GuardrailsTab from "@/components/goals/guardrails-tab";
-import ScreenerFiltersTab from "@/components/goals/screener-filters-tab";
 import StrategiesTab from "@/components/goals/strategies-tab";
 import CoherencyRulesTab from "@/components/goals/coherency-rules-tab";
 import WalterPurposeTab from "@/components/goals/walter-purpose-tab";
@@ -105,8 +104,6 @@ export default function GoalsEnginePage() {
         <TabsContent value="screener" className="mt-6">
           <div className="space-y-6">
             <FiltersWithOverride />
-            {/* Directive 9.5.C: Restored ScreenerFiltersTab for System Guards panel visibility */}
-            <ScreenerFiltersTab />
           </div>
         </TabsContent>
 
