@@ -105,9 +105,8 @@ export default function GoalsEnginePage() {
         <TabsContent value="screener" className="mt-6">
           <div className="space-y-6">
             <FiltersWithOverride />
-            {/* Phase 27.F.34: Screener Filters Configuration hidden - only Filter Automation Control visible */}
-            {/* REB 2.9 ROLLBACK: Component preserved intact for REB 2.9B restoration */}
-            {/* <ScreenerFiltersTab /> */}
+            {/* Directive 9.5.C: Restored ScreenerFiltersTab for System Guards panel visibility */}
+            <ScreenerFiltersTab />
           </div>
         </TabsContent>
 
