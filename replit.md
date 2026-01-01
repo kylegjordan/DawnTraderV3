@@ -70,6 +70,25 @@ Logs with `[9.3][INIT]`, `[9.3][ER]`, `[9.3][KALMAN]` tags. 31 unit tests valida
 
 Logs with `[9.4][COV]`, `[9.4][RISK]`, `[9.4][SIZE]`, `[9.4][CONCENTRATION]`, `[9.4][RETURNS]` tags. 26 unit tests validate matrix symmetry, bounds, scaling, and telemetry.
 
+**Directive 9.5 - CWQI v4 (Net Expectancy Gate & Quality Score)**: Implements a two-stage trade evaluation system (`server/services/cwqi-service.ts`):
+- **The Gate (EV)**: Net Expectancy check - trades with EV ≤ 0 are rejected
+  - Formula: EV = (Pwin × DistTarget) - (Ploss × DistStop) - CostTotal
+  - Pwin = 0.40 + (DI / 200), capped at 0.60
+  - CostTotal = 0.5% of entry price (0.4% exchange fees + 0.1% slippage)
+- **The Score (CWQI)**: Quality ranking for tradeable candidates
+  - Formula: Score = (Reward/Risk) × DI × (1 - VolNoise) × (1 - ρ̄)
+  - Score clamped to 0-100 range
+- **System Guards (9.5.C)**: UI panel in Screeners Tab displaying:
+  - LQ ≥ 40 (Liquidity Guard)
+  - VolNoise ≤ 0.6 (Noise Guard)
+  - EV > 0 (CWQI Gate)
+  - ρ ≤ 0.75 (Correlation Guard)
+- **Filter Insights (9.5.D)**: REJECT_LQ, REJECT_NOISE, REJECT_CWQI codes added
+- **Batch Evaluation**: `evaluateCandidates()` filters non-tradeable, ranks by score (descending)
+- **Trade Metadata**: `cwqiScore` and `cwqiEV` fields for analytics
+
+Logs with `[9.5][CWQI]`, `[9.5][CWQI_BLOCK]`, `[9.5][CWQI_PASS]` tags. 13 unit tests validate expectancy calculations, scoring, and configuration.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.

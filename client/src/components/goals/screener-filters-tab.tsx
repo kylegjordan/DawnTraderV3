@@ -286,6 +286,53 @@ export default function ScreenerFiltersTab() {
           </div>
         </div>
       )}
+
+      {/* Directive 9.5.C: System Guards Panel - Institutional Math Thresholds */}
+      <div className="px-6 py-4 border-b bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-900/10 dark:to-purple-900/10">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />
+          <span className="font-semibold text-sm text-violet-700 dark:text-violet-300">System Guards (Directive 9.1)</span>
+          <span className="text-xs bg-violet-200 dark:bg-violet-800 text-violet-700 dark:text-violet-300 px-2 py-0.5 rounded">Institutional Math</span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {/* Liquidity Guard */}
+          <div className="p-3 border rounded-lg bg-white dark:bg-gray-900/50">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-medium text-muted-foreground">Liquidity Guard</span>
+              <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded">Active</span>
+            </div>
+            <div className="text-xl font-bold text-violet-600 dark:text-violet-400">LQ &ge; 40</div>
+            <p className="text-xs text-muted-foreground mt-0.5">Log-Liquidity Index</p>
+          </div>
+          {/* Noise Guard */}
+          <div className="p-3 border rounded-lg bg-white dark:bg-gray-900/50">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-medium text-muted-foreground">Noise Guard</span>
+              <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded">Active</span>
+            </div>
+            <div className="text-xl font-bold text-amber-600 dark:text-amber-400">VolNoise &le; 0.6</div>
+            <p className="text-xs text-muted-foreground mt-0.5">Volatility Noise Limit</p>
+          </div>
+          {/* CWQI Gate */}
+          <div className="p-3 border rounded-lg bg-white dark:bg-gray-900/50">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-medium text-muted-foreground">CWQI Gate</span>
+              <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded">Active</span>
+            </div>
+            <div className="text-xl font-bold text-blue-600 dark:text-blue-400">EV &gt; 0</div>
+            <p className="text-xs text-muted-foreground mt-0.5">Net Expectancy (9.5)</p>
+          </div>
+          {/* Correlation Guard */}
+          <div className="p-3 border rounded-lg bg-white dark:bg-gray-900/50">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-medium text-muted-foreground">Correlation Guard</span>
+              <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded">Active</span>
+            </div>
+            <div className="text-xl font-bold text-rose-600 dark:text-rose-400">&rho; &le; 0.75</div>
+            <p className="text-xs text-muted-foreground mt-0.5">Covariance Guard (9.4)</p>
+          </div>
+        </div>
+      </div>
       
       <CardContent>
         <div className="space-y-8">

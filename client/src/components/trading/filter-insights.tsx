@@ -22,6 +22,9 @@ interface FilterBreakdown {
   failed_guardrail_risk: number;
   already_active: number;
   passed_all_filters: number;
+  failed_lq?: number;
+  failed_noise?: number;
+  failed_cwqi?: number;
 }
 
 interface ActiveFilteredPair {
@@ -142,6 +145,10 @@ const FILTER_DESCRIPTIONS: Record<string, string> = {
   // REB 2.8.1: Intentionally hidden - backend may still compute, but not shown in UI
   failed_market_cap: "Excludes pairs with market cap outside acceptable thresholds",
   failed_guardrail_risk: "Filters out pairs that exceed risk management guardrails",
+  // Directive 9.5.D: Institutional Math Guards
+  failed_lq: "Log-Liquidity Index below threshold (LQ < 40) - insufficient market depth",
+  failed_noise: "Volatility Noise exceeds threshold (VolNoise > 0.6) - too choppy for reliable trading",
+  failed_cwqi: "CWQI Net Expectancy negative (EV ≤ 0) - trade would not be profitable after fees",
 };
 
 const FILTER_DISPLAY_NAMES: Record<string, string> = {
@@ -157,6 +164,10 @@ const FILTER_DISPLAY_NAMES: Record<string, string> = {
   // REB 2.8.1: Intentionally hidden - not shown in Filter Insights UI
   failed_market_cap: "Market Cap Range",
   failed_guardrail_risk: "Risk Guardrails",
+  // Directive 9.5.D: Institutional Math Guards
+  failed_lq: "Liquidity Guard (LQ)",
+  failed_noise: "Noise Guard (VolNoise)",
+  failed_cwqi: "CWQI Gate (EV)",
 };
 
 // Threshold conceptual text for non-numeric filters
@@ -178,6 +189,10 @@ const ALLOWED_FILTER_CATEGORIES: (keyof FilterBreakdown)[] = [
   // 'failed_quote_currency', // REB 2.12A: Hidden from UI, backend still computes
   'already_active',
   'failed_history',
+  // Directive 9.5.D: Institutional Math Guards
+  'failed_lq',
+  'failed_noise',
+  'failed_cwqi',
 ];
 
 // REB 2.8.1: UTC timestamp formatter with fallback guards (no Stage-3 dependencies)

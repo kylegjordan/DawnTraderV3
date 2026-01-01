@@ -73,6 +73,7 @@ import { eventBus, type TCLActivatedEvent, type TradeClosedEvent } from '../lib/
 import { dataAggregator } from './data-aggregator.js';
 import { covarianceEngine } from '../utils/covariance-engine.js';
 import { recordPaperTrade, type PaperTradeRecord } from './vts-live-comparison-audit.js';
+import { cwqiService } from './cwqi-service.js';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail' | 'manual_stop';
@@ -1575,6 +1576,50 @@ export class PaperExecutionEngine {
       return;
     }
 
+    // Directive 9.5: CWQI v4 - Net Expectancy Gate
+    // Check if trade has positive mathematical expectancy after fees & slippage
+    const cwqiResult = cwqiService.calculateTradeExpectancy(signal.symbol, {
+      entryPrice: signal.entryPrice,
+      targetPrice: signal.targetPrice,
+      stopPrice: signal.stopPrice,
+      DI: signal.metadata?.DI,
+      VolNoise: signal.metadata?.VolNoise,
+      prices: signal.metadata?.prices
+    });
+    
+    if (!cwqiResult.isTradeable) {
+      // [B4] Log funnel attempt blocked by CWQI
+      b4Diagnostics.logFunnelEvent({
+        symbol: signal.symbol,
+        strategy: signal.strategy,
+        stage: 'attempt',
+        block_reason: 'CWQI_REJECT'
+      });
+      
+      console.log(`[9.5][CWQI_BLOCK] ${signal.symbol} rejected: ${cwqiResult.rejectionReason}`);
+      console.log(`[PaperExecution:${this.mode}] Paper trade rejected by CWQI: ${cwqiResult.rejectionReason}`);
+      
+      // Log rejection
+      await storage.createPaperSimTradeLog(this.mode, {
+        tradeId: null,
+        positionId: null,
+        eventType: 'trade_rejected',
+        message: `Trade rejected by CWQI: ${signal.symbol} - ${cwqiResult.rejectionReason}`,
+        metadata: {
+          signal: tradeCandidate,
+          rejectionReason: cwqiResult.rejectionReason,
+          code: 'CWQI_REJECT',
+          ev: cwqiResult.ev,
+          score: cwqiResult.score
+        }
+      });
+      
+      return;
+    }
+    
+    // Log CWQI pass with score for future analytics
+    console.log(`[9.5][CWQI_PASS] ${signal.symbol} EV=${cwqiResult.ev.toFixed(6)} Score=${cwqiResult.score.toFixed(1)}`);
+
     // [B4] Log funnel RTB - signal passed all guardrails, ready to buy
     b4Diagnostics.logFunnelEvent({
       symbol: signal.symbol,
@@ -1767,7 +1812,9 @@ export class PaperExecutionEngine {
         metadata: {
           ...signal.metadata,
           tradeId: trade.id,
-          highWaterMark: actualEntryPrice.toString() // For trailing stop tracking
+          highWaterMark: actualEntryPrice.toString(), // For trailing stop tracking
+          cwqiScore: cwqiResult.score, // Directive 9.5: CWQI quality score
+          cwqiEV: cwqiResult.ev // Directive 9.5: Net expectancy
         }
       });
 

@@ -1,0 +1,164 @@
+.
+
+# ⚙️ Directive 9.5 — CWQI v4 (Net Expectancy), VTS Parity & Filter UI
+**Version:** 9.5 (Final Unified Release)  
+**Target System:** Strategy Engine · Paper Simulator (VTS) · Frontend UI  
+**Phase:** 9 — Institutional Math Core  
+**Dependencies:** ✅ 9.3 (Kalman ER Filter) · ✅ 9.4 (Covariance Guard)  
+
+---
+
+## 🧠 Objective
+1. **Profitability Check (CWQI v4):** Implement “Net Expectancy” logic.  
+   Only trades with positive mathematical expectancy (after fees & slippage) may proceed.  
+2. **Sim-to-Live Parity:** Refactor the Virtual Trading Simulator (VTS) to use the shared math core — `AnalysisUtils`, `TrailingExitController`, `CWQIService` — ensuring identical behavior between simulation and live trading.  
+3. **Transparency & Insight:** Expose the Institutional Guard settings (Log-Liquidity & VolNoise) on the Screeners Tab and enhance Filter Insights visibility.  
+4. **Architectural Cleanup:** Standardize symbol resolution through `SymbolMappingService` across CWQI, Covariance Engine, and VTS.  
+5. **Ranking Integrity:** CWQI v4 replaces legacy Reward/Risk ratios as the primary strategy ranking metric.
+
+---
+
+## 🔩 Deliverables Overview
+
+| ID | Deliverable | Description |
+|:--|:--|:--|
+| **9.5.A – CWQI v4 Service** | New math module (`server/services/cwqi-service.ts`) computing Net Expectancy (The Gate) and Quality Score (The Rank). Reject trades where EV ≤ 0. |
+| **9.5.B – VTS Parity Refactor** | Update `paper-sim-service.ts` to use `TrailingExitController (9.2)` and `CWQI (9.5)` logic instead of legacy math. |
+| **9.5.C – UI: System Guards Panel** | Add "System Guards" card to the Screeners Tab displaying minimum LQ (40) and maximum Noise (0.6). |
+| **9.5.D – UI: Filter Insights Enhancement** | Map `REJECT_LQ` and `REJECT_NOISE` codes to the Filter Insights rejection chart. |
+| **9.5.E – Symbol Mapping Standardization** | Refactor `covariance-engine.ts` and `cwqi-service.ts` to use `SymbolMappingService.getKrakenPair(symbol)` for consistent pair translation. |
+
+---
+
+## 🧮 Mathematical Specification (CWQI v4)
+
+We evaluate each candidate trade in two stages — **The Gate** (Pass/Fail) and **The Score** (Ranking).
+
+### 1️⃣ The Gate — Net Expectancy (EV)
+Does the trade actually make money?
+
+\[
+EV = (P_{win} × Dist_{Target}) - (P_{loss} × Dist_{Stop}) - Cost_{Total}
+\]
+
+- \(P_{win} = 0.40 + (DI / 200)\) → Capped at 0.60  
+- \(P_{loss} = 1 − P_{win}\)  
+- \(Cost_{Total} = 0.5\%\) of price (0.4% fees + 0.1% slippage)  
+- **If EV ≤ 0 ⇒ Reject**
+
+**Distance Inputs:** Use Kalman-smoothed price series (Directive 9.3) to derive `Dist_Target` and `Dist_Stop`. This ensures trend-aware expectancy estimation.
+
+### 2️⃣ The Score — CWQI (0–100)
+Ranks trades that pass the Gate.
+
+\[
+Score = \left(\frac{Reward}{Risk}\right) × DI × (1 − VolNoise) × (1 − \bar{ρ})
+\]
+
+Where \(\bar{ρ}\) is the mean correlation from the Covariance Engine.
+
+---
+
+## 🧠 Implementation Steps
+
+### 1️⃣ CWQI Service (`server/services/cwqi-service.ts`)
+- Implement `calculateTradeExpectancy(symbol, tradeMeta)`.  
+- Returns:  
+  ```ts
+  { isTradeable: boolean, ev: number, score: number, rejectionReason?: string }
+
+
+Fetch average correlation via risk-concentration.ts using internal symbol key.
+
+All external pair lookups must go through SymbolMappingService.getKrakenPair(symbol).
+
+Log telemetry: [9.5][CWQI] symbol=XYZ EV=0.034 Score=72.1.
+
+2️⃣ VTS Parity Refactor (server/services/paper-sim-service.ts)
+
+Remove local exit and PnL math.
+
+Instantiate TrailingExitController (Directive 9.2) per paper trade.
+
+Call cwqiService.calculateTradeExpectancy before entry; reject if EV ≤ 0.
+
+On position update, mirror updatePosition() from live engine.
+
+VTS now respects Fees, Slippage, Correlation penalties identically to live mode.
+
+Log: [9.5][VTS_PARITY] Shared Brain active.
+
+3️⃣ UI Updates (Screeners & Filter Insights)
+
+Add “System Guards” card to Screeners Tab (client/src/pages/systems.tsx):
+
+Liquidity Guard LQ ≥ 40
+
+Noise Guard ≤ 0.6
+
+On Filter recalculation, emit [9.5][UI_GUARDS] WebSocket event to refresh values.
+
+Map REJECT_LQ and REJECT_NOISE codes to the Filter Insights chart with distinct colors (red/orange).
+
+4️⃣ Symbol Mapping Standardization
+
+In server/utils/covariance-engine.ts and server/services/cwqi-service.ts, replace any direct utility pair calls with SymbolMappingService.getKrakenPair(symbol).
+
+Ensure correlation, CWQI, and VTS modules share the same canonical symbol keys.
+
+Add unit test mocking inconsistent Kraken pairs to verify result stability.
+
+5️⃣ Shared Brain Parity (Enforcement)
+
+Both Live and VTS engines must use identical imports:
+AnalysisUtils, SizingHelper, TrailingExitController, CWQIService.
+
+Delete any duplicate math routines within VTS scope.
+
+Confirm telemetry shows both [9.2][EXIT] and [9.5][CWQI] for simulated trades.
+
+🔬 Validation Protocol
+Test	Input	Expected Outcome
+Fee Killer Test	Reward = Risk = 1, Pwin = 0.5	isTradeable = false (Fees make EV negative).
+VTS Parity Check	Run a paper trade cycle	Logs show both [9.5][CWQI] and [9.2][EXIT].
+UI Guards Panel	Open Screeners Tab	Displays Min LQ = 40, Max Noise = 0.6.
+Symbol Mapping Mock	Inject Kraken pair alias	CWQI returns identical results for canonical and alias.
+End-to-End Expectancy Flow	Simulated BTC/USD trade	[9.5][VALIDATION COMPLETE] CWQI Active. VTS Synced.
+✅ Success Criteria
+
+Trades with negative expectancy (after fees) are automatically rejected.
+
+VTS and Live Strategy Engine share identical math modules and outputs.
+
+The “System Guards” and “Filter Insights” UI elements display real-time data.
+
+CWQI Service and Covariance Engine use consistent symbol mapping.
+
+Validation log contains:
+
+[9.5][VALIDATION COMPLETE] CWQI Active. VTS Synced.
+
+📎 Notes for Developers (Replit)
+
+Ensure unit tests in tests/unit/cwqi.test.ts cover all branches (Gate fail, Score ranking, Mapping mock).
+
+Do not bypass SymbolMappingService in any module.
+
+Confirm database trade records store CWQI score and EV fields for future analytics.
+
+
+---
+
+### ✅ Summary of Improvements vs. Gemini’s Version
+| Area | Enhancement |
+|------|--------------|
+| **Kalman Consistency** | Distances explicitly derived from Kalman-smoothed prices. |
+| **Symbol Mapping Enforcement** | Required for both CWQI and Covariance Engine, with validation test. |
+| **UI Telemetry Event** | `[9.5][UI_GUARDS]` WebSocket event for live refresh. |
+| **Ranking Replacement Clause** | CWQI v4 replaces legacy Reward/Risk ranking. |
+| **Developer Notes** | Added test coverage & storage consistency guidance. |
+
+---
+
+✅ **This version is ready for immediate registration and Replit implementation.**  
+Would you like me to now prepare the follow-on Directive 9.6 — *Sim-to-Live Parity Refactor & Testing* — which will finalize Phase 9 validation and VTS consistency checks?
