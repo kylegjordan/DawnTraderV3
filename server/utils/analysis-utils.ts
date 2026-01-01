@@ -1,5 +1,6 @@
 /**
  * Directive 9.0.B - Volume Classifier Utility
+ * Directive 9.6.A - Now imports thresholds from centralized SYSTEM_GUARDS configuration
  * 
  * Provides standardized classification for liquidity tiers based on 24h volume (USD).
  * Used by FX5 Scanner and Filter Engine to categorize trading pairs.
@@ -9,6 +10,8 @@
  * - MID: $1M - $10M USD 24h volume (moderate liquidity)
  * - LARGE: > $10M USD 24h volume (high liquidity, tight spreads)
  */
+
+import { SYSTEM_GUARDS } from '../config/system-guards.js';
 
 export type VolumeClass = 'SMALL' | 'MID' | 'LARGE';
 
@@ -164,12 +167,13 @@ export function calculateEfficiencyRatio(prices: number[], window: number = 20):
 
 /**
  * Directive 9.1.F: Filter thresholds for core metrics
+ * Directive 9.6.A: Now imports from centralized SYSTEM_GUARDS configuration
  */
 export const CORE_METRIC_THRESHOLDS = {
-  LQ_MIN: 40,           // Minimum Log-Liquidity (exclude < 40)
-  VOL_NOISE_MAX: 0.6,   // Maximum Volatility Noise (exclude > 0.6)
-  DI_TRENDING: 65,      // DI threshold for trending market
-  DI_CHOPPY: 30,        // DI threshold for choppy market
+  LQ_MIN: SYSTEM_GUARDS.MIN_LIQUIDITY_SCORE,
+  VOL_NOISE_MAX: SYSTEM_GUARDS.MAX_VOL_NOISE,
+  DI_TRENDING: SYSTEM_GUARDS.DI_TRENDING,
+  DI_CHOPPY: SYSTEM_GUARDS.DI_CHOPPY,
 };
 
 /**

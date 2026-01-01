@@ -17,6 +17,7 @@
 import { calculateDirectionalIntegrity, calculateVolNoise } from '../utils/analysis-utils.js';
 import { getKrakenRestPair } from '../markets/kraken-symbol-resolver.js';
 import { covarianceEngine } from '../utils/covariance-engine.js';
+import { SYSTEM_GUARDS } from '../config/system-guards.js';
 
 export interface TradeMeta {
   entryPrice: number;
@@ -38,10 +39,10 @@ export interface CWQIResult {
   meanCorrelation: number;
 }
 
-const COST_PERCENT = 0.005;
-const MIN_PWIN = 0.40;
-const MAX_PWIN = 0.60;
-const DI_PWIN_FACTOR = 200;
+const COST_PERCENT = SYSTEM_GUARDS.BASE_FEE_SLIPPAGE;
+const MIN_PWIN = SYSTEM_GUARDS.MIN_PWIN;
+const MAX_PWIN = SYSTEM_GUARDS.MAX_PWIN;
+const DI_PWIN_FACTOR = SYSTEM_GUARDS.DI_PWIN_FACTOR;
 
 class CWQIService {
   

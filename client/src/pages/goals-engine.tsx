@@ -5,13 +5,14 @@ import StrategiesTab from "@/components/goals/strategies-tab";
 import CoherencyRulesTab from "@/components/goals/coherency-rules-tab";
 import WalterPurposeTab from "@/components/goals/walter-purpose-tab";
 import TuningTab from "@/components/goals/tuning-tab";
+import DiagnosticsTab from "@/components/goals/diagnostics-tab";
 import AdaptiveRiskAdvisor from "@/components/goals/adaptive-risk-advisor";
 import { CoreFourGuardrails } from "@/components/goals/core-four-guardrails";
 import { LowPricedProtectionCard } from "@/components/goals/low-priced-protection-card";
 import { FiltersWithOverride } from "@/components/goals/filters-with-override";
 import { PresetsGrid } from "@/components/goals/presets-grid";
 import ModeBanner from "@/components/mode-banner";
-import { Target, Shield, Filter, Layers, CheckSquare, Lightbulb, Settings } from "lucide-react";
+import { Target, Shield, Filter, Layers, CheckSquare, Lightbulb, Settings, Activity } from "lucide-react";
 
 export default function GoalsEnginePage() {
   return (
@@ -27,7 +28,7 @@ export default function GoalsEnginePage() {
       </div>
 
       <Tabs defaultValue="goals" className="w-full">
-        <TabsList className="grid w-full grid-cols-7 h-auto gap-1 bg-muted p-1">
+        <TabsList className="grid w-full grid-cols-8 h-auto gap-1 bg-muted p-1">
           <TabsTrigger 
             value="goals" 
             className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 py-2 data-[state=active]:bg-background"
@@ -59,6 +60,14 @@ export default function GoalsEnginePage() {
           >
             <Layers className="w-4 h-4" />
             <span className="text-xs sm:text-sm">Strategies</span>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="diagnostics" 
+            className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 py-2 data-[state=active]:bg-background"
+            data-testid="tab-diagnostics"
+          >
+            <Activity className="w-4 h-4" />
+            <span className="text-xs sm:text-sm">Diagnostics</span>
           </TabsTrigger>
           <TabsTrigger 
             value="coherency" 
@@ -109,6 +118,10 @@ export default function GoalsEnginePage() {
 
         <TabsContent value="strategies" className="mt-6">
           <StrategiesTab />
+        </TabsContent>
+
+        <TabsContent value="diagnostics" className="mt-6">
+          <DiagnosticsTab />
         </TabsContent>
 
         <TabsContent value="coherency" className="mt-6">

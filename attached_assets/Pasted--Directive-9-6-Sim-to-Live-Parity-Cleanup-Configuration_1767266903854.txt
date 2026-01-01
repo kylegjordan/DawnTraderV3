@@ -1,0 +1,196 @@
+⚙️ Directive 9.6 — Sim-to-Live Parity, Cleanup & Configuration Lock (vFinal UI-Amendment)
+
+Version: 9.6 (Phase 9 Final Unified)
+Target Systems: Testing Suite · Shared Core · Configuration · Goals Engine UI
+Phase: 9 — Institutional Math Core Finalization
+Dependencies: ✅ 9.2 (Trailing Exit) · ✅ 9.3 (Kalman) · ✅ 9.4 (Covariance) · ✅ 9.5 (CWQI & VTS Parity)
+Primary Files:
+
+server/config/system-guards.ts
+
+server/tests/integration/parity.test.ts
+
+client/src/pages/goals/GoalsEngine.tsx
+
+client/src/pages/goals/tabs/DiagnosticsTab.tsx
+
+🧭 Objective
+
+Twin Test (Parity Verification) — Ensure the Live Engine and VTS, given identical market input, produce identical results for Entry Price, Stop Loss, Position Size, and CWQI Score (to six decimals).
+
+Configuration Lock — Centralize all Phase 9 threshold constants (LQ, Noise, Fees, Correlation, Tolerance) in a single file to prevent drift.
+
+Math Cleanup — Remove legacy math utilities replaced by the Phase 9 core.
+
+UI Diagnostics — Expose a new Diagnostics tab in the Goals Engine showing math integrity status and guard configuration.
+
+🔩 Deliverables Overview
+ID	Deliverable	Description
+9.6.A	Configuration Lock	Create system-guards.ts; import in all guarded modules.
+9.6.B	Parity Test Suite	Integration test asserting zero delta between Live and VTS outputs.
+9.6.C	Math Consolidation	Audit and remove legacy math files after validation.
+9.6.D	UI Diagnostics Tab	Add a new “Diagnostics” tab to Goals Engine (after Strategies, before Coherency).
+🧮 The Parity Standard (Acceptance Criteria)
+Metric	Tolerance	Rule
+Entry Price	≤ 1e-6	Live.Entry == VTS.Entry
+Stop Loss	≤ 1e-6	Live.Stop == VTS.Stop
+Position Size	≤ 1e-6	Live.Qty == VTS.Qty
+Expectancy (EV)	≤ 1e-6	Live.EV == VTS.EV
+CWQI Score	≤ 1e-6	Live.Score ≈ VTS.Score
+
+Failure of any criterion invalidates the build. VTS must mirror Live math exactly.
+
+🧠 Implementation Steps
+1️⃣ Configuration Lock — server/config/system-guards.ts
+export const SYSTEM_GUARDS = {
+    VERSION: "Phase9_Final",
+    MIN_LIQUIDITY_SCORE: 40,   // Inclusive (>=)
+    MAX_VOL_NOISE: 0.6,        // Inclusive (<=)
+    BASE_FEE_SLIPPAGE: 0.005,  // 0.5%
+    CORRELATION_THRESHOLD: 0.75,
+    PARITY_TOLERANCE: 0.000001
+};
+
+
+Refactor: All Phase 9 modules (filter-engine.ts, cwqi-service.ts, analysis-utils.ts, etc.) must import from SYSTEM_GUARDS.
+Enforce: Use inclusive comparisons (≥ / ≤).
+
+2️⃣ Twin Test — server/tests/integration/parity.test.ts
+import { SYSTEM_GUARDS } from "@/config/system-guards";
+import { TradeExecutor } from "@/services/live-trade-executor";
+import { PaperExecutionEngine } from "@/services/paper-execution-engine";
+import { SymbolMappingService } from "@/utils/symbol-mapping";
+
+describe("Directive 9.6 — Sim-to-Live Parity", () => {
+  test("Live vs VTS identical under identical tick", async () => {
+    const symbol = SymbolMappingService.resolve("BTC/USD");
+    const tick = { price: 50000, DI: 80, Noise: 0.2, correlation: 0.1 };
+
+    const liveResult = await TradeExecutor.evaluate(symbol, tick);
+    const simResult  = await PaperExecutionEngine.evaluate(symbol, tick);
+
+    expect(Math.abs(liveResult.entry - simResult.entry))
+      .toBeLessThan(SYSTEM_GUARDS.PARITY_TOLERANCE);
+    expect(Math.abs(liveResult.stop - simResult.stop))
+      .toBeLessThan(SYSTEM_GUARDS.PARITY_TOLERANCE);
+    expect(Math.abs(liveResult.qty - simResult.qty))
+      .toBeLessThan(SYSTEM_GUARDS.PARITY_TOLERANCE);
+    expect(Math.abs(liveResult.ev - simResult.ev))
+      .toBeLessThan(SYSTEM_GUARDS.PARITY_TOLERANCE);
+    expect(liveResult.cwqiScore)
+      .toBeCloseTo(simResult.cwqiScore, 5);
+  });
+});
+
+
+Execution: npm test tests/integration/parity.test.ts
+Expected Result:
+
+[9.6][PARITY] Live vs VTS Delta: 0.000000
+[9.6][VALIDATION COMPLETE] Phase 9 Core Finalized
+
+3️⃣ Math Consolidation (Cleanup)
+
+Scan server/utils/ for unused or redundant files (e.g., simple-moving-average.ts, legacy-risk.ts).
+
+Move identified files to server/utils/legacy/ for one build cycle.
+
+Run npm run build and full tests to verify no broken imports.
+
+After validation, delete legacy files permanently.
+
+Log: [9.6][CLEANUP] Deleted N legacy files after validation.
+
+4️⃣ UI Diagnostics Tab — Goals Engine
+
+Change: Add a dedicated Diagnostics tab to the Goals Engine.
+This tab appears after Strategies and before Coherency in the tab bar.
+
+Files to Modify / Add
+
+client/src/pages/goals/GoalsEngine.tsx
+
+client/src/pages/goals/tabs/DiagnosticsTab.tsx
+
+Diagnostics Tab Component
+// client/src/pages/goals/tabs/DiagnosticsTab.tsx
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { SYSTEM_GUARDS } from "@/config/system-guards";
+
+export default function DiagnosticsTab() {
+  return (
+    <div className="space-y-4">
+      <Card className="p-4 bg-violet-50 border-violet-200">
+        <CardHeader>
+          <h3 className="text-sm font-bold text-violet-700">
+            Math Integrity
+          </h3>
+        </CardHeader>
+        <CardContent className="text-xs space-y-1">
+          <p>
+            Status:{" "}
+            <span className="text-green-700 font-semibold">
+              Synced ✓
+            </span>
+          </p>
+          <p>
+            Active Guards: LQ ≥ {SYSTEM_GUARDS.MIN_LIQUIDITY_SCORE} · 
+            Noise ≤ {SYSTEM_GUARDS.MAX_VOL_NOISE} · 
+            Fee = {(SYSTEM_GUARDS.BASE_FEE_SLIPPAGE * 100).toFixed(1)} %
+          </p>
+          <p>Config Version: {SYSTEM_GUARDS.VERSION}</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+Insert Tab into GoalsEngine
+// client/src/pages/goals/GoalsEngine.tsx
+import DiagnosticsTab from "./tabs/DiagnosticsTab";
+
+<Tabs>
+  <Tab title="Overview" component={<OverviewTab />} />
+  <Tab title="Strategies" component={<StrategiesTab />} />
+  <Tab title="Diagnostics" component={<DiagnosticsTab />} />   {/* NEW TAB */}
+  <Tab title="Coherency" component={<CoherencyTab />} />
+</Tabs>
+
+
+Result:
+Within the Goals Engine, users will see a new Diagnostics tab displaying:
+
+Math Integrity status (Synced ✓)
+
+Current guard constants (LQ, Noise, Fee)
+
+Active configuration version (Phase9_Final)
+
+🔬 Validation Protocol
+Step	Action	Expected Outcome
+1	Run Parity Tests	All assertions pass (Δ ≤ 1e-6).
+2	Confirm Imports	All Phase 9 modules import SYSTEM_GUARDS.
+3	Build + Test	npm run build succeeds; no legacy references.
+4	Legacy Purge	Validated files deleted safely.
+5	UI Check	Goals → Diagnostics tab shows “Synced ✓” and Phase9 version.
+
+Validation Log:
+
+[9.6][CONFIG] Guards Locked – LQ≥40, Noise≤0.6, Fee=0.5 %
+[9.6][CLEANUP] Deleted 3 legacy files after validation.
+[9.6][PARITY] Live vs VTS Delta: 0.000000
+[9.6][VALIDATION COMPLETE] Phase 9 Core Finalized.
+
+✅ Success Criteria
+
+Zero delta between Live and VTS outputs.
+
+Single source of truth (system-guards.ts) for all thresholds.
+
+Legacy math fully removed after safe staging.
+
+New Diagnostics tab visible and accurate in Goals Engine.
+
+System ready for Phase 10 (Goal Learning & Autonomy).
+
+End of Directive 9.6
