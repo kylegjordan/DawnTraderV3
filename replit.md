@@ -29,6 +29,14 @@ A Decision Confidence Engine unifies various confidence metrics into a single De
 
 System health is maintained through a Safe Heartbeat Monitor, a Volume Classifier for market liquidity, and a Pipeline Processing Time Guard to track latency. Comprehensive system audit and validation suites are regularly performed.
 
+**Directive 9.1 - Analysis Utils & Core Metrics**: The mathematical foundation layer (`server/utils/analysis-utils.ts`) provides core quantitative metrics used across Phase 9+:
+- **Log-Liquidity (LQ)**: 0-100 scale liquidity index based on volume, trade count, and spread
+- **Directional Integrity (DI)**: 0-100 trend persistence measure (≥65 = stable trend, <30 = choppy)
+- **Volatility Noise (VolNoise)**: 0-1 noise-to-trend smoothness (lower = smoother, max threshold 0.6)
+- **Sigma (σ)**: Standard deviation of price returns for 3σ spike detection
+
+Filter thresholds: LQ ≥ 40, VolNoise ≤ 0.6. FX5 Scanner computes and logs all metrics with `[9.1]` tags.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.

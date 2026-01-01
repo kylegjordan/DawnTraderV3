@@ -1,0 +1,192 @@
+⚙️ Directive 9.1 — Analysis Utils & Core Metrics (Final, Gemini + Architect Approved)
+
+Version: 9.1 (Final)
+Target System: Dawn Trader Quantitative Trading Engine
+Phase: 9 — Institutional Math Core
+Dependencies: ✅ Directive 9.0 (Infrastructure Stability & Volume Classifier)
+Repository: Dawn Trader (Replit Main Branch)
+
+🧠 Objective
+
+Establish the mathematical foundation layer for all Phase 9+ quantitative computations.
+Directive 9.1 introduces the unified analysis-utils.ts library containing the core mathematical metrics used across the system:
+
+Metric	Symbol	Description
+Log-Liquidity	LQ	Liquidity normalization on 0–100 scale
+Directional Integrity	DI	Trend straightness ratio (0–100)
+Volatility Noise	VolNoise	Noise-to-trend smoothness (0–1)
+Sigma	σ	Adaptive volatility (3σ detection basis)
+
+These metrics are used by:
+
+The Filter Engine (for pair qualification),
+
+The Strategy Engine (for regime scoring),
+
+And the DSS / Trailing Exit / Kalman modules in later directives.
+
+🔩 Deliverables Overview
+Deliverable	Description	File(s)
+9.1.A – Log-Liquidity Function	Normalized liquidity computation (LQ).	server/utils/analysis-utils.ts
+9.1.B – Directional Integrity (DI)	Trend persistence measure (0–100).	server/utils/analysis-utils.ts
+9.1.C – Volatility Noise (VolNoise)	Weighted volatility smoothness index (0–1).	server/utils/analysis-utils.ts
+9.1.D – Sigma Estimator (Corrected)	SD of returns, not raw prices.	server/utils/analysis-utils.ts
+9.1.E – FX5 Scanner Integration	Compute metrics for each pair.	server/engines/fx5-scanner.ts
+9.1.F – Filter Engine Integration	Apply LQ ≥ 40, VolNoise ≤ 0.6 filters.	server/engines/filter-engine.ts
+9.1.G – Logging & Telemetry	Unified logging of metric outputs.	server/services/system-health-service.ts
+9.1.H – Unit Test Suite	Add metric verification tests.	server/tests/unit/analysis-utils.test.ts
+🧮 Implementation Details
+A. Log-Liquidity (LQ)
+export function calculateLogLiquidity(V: number, C: number, S: number): number {
+  const spread = Math.max(S, 1e-8);
+  const count = Math.max(C, 1);
+  const raw = 10 * (Math.log(V * count) - Math.log(spread / count) - 10);
+  return Math.max(0, Math.min(100, raw));
+}
+
+
+Purpose: Logarithmic liquidity index on 0–100 scale.
+High = stable market depth, low = illiquid.
+
+B. Directional Integrity (DI)
+export function calculateDirectionalIntegrity(prices: number[]): number {
+  if (prices.length < 3) return 50;
+  const net = Math.abs(prices[prices.length - 1] - prices[0]);
+  const total = prices.slice(1).reduce((s, p, i) => s + Math.abs(p - prices[i]), 0);
+  const ratio = net / (total || 1);
+  return Math.min(100, Math.max(0, ratio * 100));
+}
+
+
+Purpose: Measures directional persistence.
+
+65 → stable trend
+
+<30 → choppy / non-directional
+
+C. Volatility Noise (VolNoise)
+export function calculateVolNoise(prices: number[]): number {
+  if (prices.length < 3) return 0.5;
+  const diffs = prices.slice(1).map((p, i) => Math.abs(p - prices[i]));
+  const mean = diffs.reduce((a, b) => a + b, 0) / diffs.length;
+  const variance = diffs.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / diffs.length;
+  const noise = Math.sqrt(variance) / (mean || 1);
+  return Math.min(1, Math.max(0, noise));
+}
+
+
+Purpose: Quantifies “market choppiness.”
+Lower = smoother trends, higher = instability.
+
+D. Sigma Estimator (Corrected)
+
+✅ Gemini Correction Applied
+Volatility is measured on price differences, not raw prices.
+
+export function calculateSigma(prices: number[], window: number = 20): number {
+  if (prices.length < window + 1) return 0;
+  
+  const diffs = prices.slice(1).map((p, i) => p - prices[i]);
+  const segment = diffs.slice(-window);
+
+  const mean = segment.reduce((a, b) => a + b, 0) / segment.length;
+  const variance = segment.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / segment.length;
+  return Math.sqrt(variance);
+}
+
+
+Purpose: Adaptive volatility estimator for 3σ spike detection.
+Smooth trends → low σ, erratic prices → high σ.
+
+E. FX5 Scanner Integration
+import { calculateLogLiquidity, calculateDirectionalIntegrity, calculateVolNoise, calculateSigma } from '@/utils/analysis-utils';
+
+const prices = ticker.history || [];
+const LQ = calculateLogLiquidity(volumeUSD, trades24h, spread);
+const DI = calculateDirectionalIntegrity(prices);
+const VolNoise = calculateVolNoise(prices);
+const Sigma = calculateSigma(prices);
+
+this.results.push({
+  symbol,
+  volumeUSD,
+  volumeClass,
+  LQ,
+  DI,
+  VolNoise,
+  Sigma,
+});
+
+console.log(`[9.1][FX5] ${symbol} LQ=${LQ.toFixed(1)} DI=${DI.toFixed(1)} VN=${VolNoise.toFixed(2)} σ=${Sigma.toFixed(4)}`);
+
+F. Filter Engine Integration
+if (pair.LQ < 40 || pair.VolNoise > 0.6) {
+  console.log(`[9.1][FILTER] Excluding ${pair.symbol} - LQ=${pair.LQ.toFixed(1)}, VN=${pair.VolNoise.toFixed(2)}`);
+  continue;
+}
+
+G. Logging & Telemetry
+Tag	Example	Purpose
+[9.1][LQ]	[9.1][LQ] BTC/USD = 87.3	Liquidity measure
+[9.1][DI]	[9.1][DI] ETH/USD = 74.5	Trend persistence
+[9.1][VN]	[9.1][VN] SOL/USD = 0.42	Noise ratio
+[9.1][Σ]	[9.1][Σ] ADA/USD = 0.0034	Volatility sigma
+H. Unit Test Suite
+
+New Deliverable (Gemini Recommendation)
+
+File: server/tests/unit/analysis-utils.test.ts
+
+import { calculateLogLiquidity, calculateDirectionalIntegrity, calculateVolNoise, calculateSigma } from '@/utils/analysis-utils';
+
+describe('Analysis Utils Core Tests', () => {
+  test('LQ within 0-100 range', () => {
+    expect(calculateLogLiquidity(10_000_000, 500, 0.1)).toBeLessThanOrEqual(100);
+    expect(calculateLogLiquidity(1000, 10, 10)).toBeGreaterThanOrEqual(0);
+  });
+
+  test('DI returns 100 for linear trend', () => {
+    const prices = [1, 2, 3, 4, 5];
+    expect(calculateDirectionalIntegrity(prices)).toBeGreaterThan(95);
+  });
+
+  test('VolNoise low for smooth series, high for choppy', () => {
+    expect(calculateVolNoise([1,2,3,4,5])).toBeLessThan(0.4);
+    expect(calculateVolNoise([1,5,1,5,1])).toBeGreaterThan(0.5);
+  });
+
+  test('Sigma low for smooth trend, high for oscillation', () => {
+    expect(calculateSigma([1,2,3,4,5])).toBeLessThan(1);
+    expect(calculateSigma([1,5,1,5,1])).toBeGreaterThan(1);
+  });
+});
+
+🔬 Validation Protocol
+Step	Action	Expected Result
+1	Run FX5 Scanner (10 pairs)	Metrics (LQ, DI, VolNoise, σ) present
+2	Check filter logs	Pairs failing thresholds excluded
+3	Run test suite	All unit tests pass (Jest/Node)
+4	Observe logs	[9.1][...] tags generated correctly
+5	Performance	Latency < 110 ms average
+✅ Success Criteria
+
+All metric functions produce valid outputs.
+
+Filter Engine applies LQ/VolNoise conditions.
+
+Logs conform to [9.1][...] schema.
+
+All unit tests pass.
+
+Verification log ends with:
+
+[9.1][VALIDATION COMPLETE] Core metrics integrated and verified.
+
+🧭 Next Directive
+
+Proceed to Directive 9.2 — Dynamic Trade Management (Adaptive Trailing Exit) after successful validation.
+Uses DI and VolNoise values from 9.1 for dynamic trailing-stop logic.
+
+✅ Directive 9.1 — Approved for Replit Implementation
+All mathematical logic verified by Gemini and Architect.
+No further revisions required.

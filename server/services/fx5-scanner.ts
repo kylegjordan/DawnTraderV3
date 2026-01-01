@@ -30,7 +30,16 @@ import { recordScanFor24h, recordScanCompletion, getCyclesPerHour, get24hSummary
 import { readyToBuyService } from '../core/rtb/ready_to_buy_service.js';
 import { centralClock, ClockTick } from './central-clock.js';
 import { dataAggregator } from './data-aggregator.js';
-import { classifyVolume, type VolumeClass } from '../utils/analysis-utils.js';
+import { 
+  classifyVolume, 
+  type VolumeClass,
+  calculateLogLiquidity,
+  calculateDirectionalIntegrity,
+  calculateVolNoise,
+  calculateSigma,
+  passesCoreMetricFilters,
+  CORE_METRIC_THRESHOLDS
+} from '../utils/analysis-utils.js';
 
 const SCAN_INTERVAL_SECONDS = 30; // 30 seconds aligned with clock ticks
 const SCAN_INTERVAL_MS = SCAN_INTERVAL_SECONDS * 1000; // For backwards compatibility
@@ -262,12 +271,41 @@ export class Fx5ScannerService {
       };
 
       // Directive 9.0.B: Classify survivors by volume
+      // Directive 9.1.E: Compute core metrics (LQ, DI, VolNoise, Sigma)
       // Handle undefined/null volume24h gracefully with safe defaults
       const classifiedSurvivors = survivors.map(s => {
         const volumeUSD = typeof s.volume24h === 'number' && !isNaN(s.volume24h) ? s.volume24h : 0;
         const volumeClass = classifyVolume(volumeUSD);
-        console.log(`[9.0][FX5] ${s.symbol} classified as ${volumeClass} (Vol=$${volumeUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`);
-        return { ...s, volumeClass, volumeUSD };
+        
+        // Directive 9.1.E: Compute core metrics
+        const prices = s.priceHistory || s.history || [];
+        const tradeCount = s.trades24h || s.tradeCount || 100; // Default trade count if unavailable
+        const spread = s.spread || s.bidAskSpread || 0.001; // Default spread if unavailable
+        
+        const LQ = calculateLogLiquidity(volumeUSD, tradeCount, spread);
+        const DI = calculateDirectionalIntegrity(prices);
+        const VolNoise = calculateVolNoise(prices);
+        const Sigma = calculateSigma(prices);
+        const passesMetricFilter = passesCoreMetricFilters(LQ, VolNoise);
+        
+        // Directive 9.1.G: Telemetry logging with [9.1] tags
+        console.log(`[9.1][FX5] ${s.symbol} LQ=${LQ.toFixed(1)} DI=${DI.toFixed(1)} VN=${VolNoise.toFixed(2)} σ=${Sigma.toFixed(4)}`);
+        
+        // Directive 9.1.F: Log if pair fails core metric filters
+        if (!passesMetricFilter) {
+          console.log(`[9.1][FILTER] Excluding ${s.symbol} - LQ=${LQ.toFixed(1)}, VN=${VolNoise.toFixed(2)} (threshold: LQ>=${CORE_METRIC_THRESHOLDS.LQ_MIN}, VN<=${CORE_METRIC_THRESHOLDS.VOL_NOISE_MAX})`);
+        }
+        
+        return { 
+          ...s, 
+          volumeClass, 
+          volumeUSD,
+          LQ,
+          DI,
+          VolNoise,
+          Sigma,
+          passesMetricFilter
+        };
       });
 
       // REB 2.8.7: Add survivors to Active Filter Pool (deduped, TTL-managed)
@@ -291,11 +329,18 @@ export class Fx5ScannerService {
       // REB 2.8.7: Enforce passive mode - clear pool if engine stopped
       activeFilterPool.enforcePassiveModeIfStopped(mode, isEngineActive);
 
+      // Directive 9.1.F: Filter out pairs that fail LQ/VolNoise thresholds
+      const metricFilteredSurvivors = classifiedSurvivors.filter(s => s.passesMetricFilter);
+      const metricFilteredCount = classifiedSurvivors.length - metricFilteredSurvivors.length;
+      if (metricFilteredCount > 0) {
+        console.log(`[9.1][FILTER] Removed ${metricFilteredCount}/${classifiedSurvivors.length} pairs failing LQ/VolNoise thresholds`);
+      }
+
       // REB 2.8.7: Single-gate pattern - populate pool ONLY when engine ACTIVE
       if (isEngineActive) {
-        // Engine ACTIVE: Add survivors to Active Filter Pool (with volume classification)
-        const poolStats = activeFilterPool.addSurvivors(mode, classifiedSurvivors);
-        console.log(`[REB 2.8.7][ActivePool] Pool populated: added=${poolStats.added}, updated=${poolStats.updated}, skipped=${poolStats.skipped}, survivors=${classifiedSurvivors.length}`);
+        // Engine ACTIVE: Add survivors to Active Filter Pool (with volume classification and metric filtering)
+        const poolStats = activeFilterPool.addSurvivors(mode, metricFilteredSurvivors);
+        console.log(`[REB 2.8.7][ActivePool] Pool populated: added=${poolStats.added}, updated=${poolStats.updated}, skipped=${poolStats.skipped}, survivors=${metricFilteredSurvivors.length} (${metricFilteredCount} filtered by 9.1)`);
       } else {
         // Engine STOPPED: Pool cleared by enforcePassiveModeIfStopped (passive learning)
         console.log(`[REB 2.8.7][ActivePool] Engine stopped - pool cleared (passive learning mode)`);
@@ -318,6 +363,8 @@ export class Fx5ScannerService {
         mode,
         pairsScanned: evaluatedCount,
         survivors: classifiedSurvivors.length,
+        metricFilteredSurvivors: metricFilteredSurvivors.length,
+        metricFilteredCount,
         eligibleCount,
         topNCount,
         tierBCount,
