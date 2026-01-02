@@ -185,6 +185,8 @@ async function checkMaxPositionsPerAsset(
  * Check 4: Symbol Cooldown Period
  * Guardrail: symbolCooldownMinutes (number)
  * Prevents trading the same symbol within specified cooldown period
+ * 
+ * [9.7] Migrated to guardrails_v2 – legacy dollar fields removed
  */
 async function checkSymbolCooldown(
   mode: 'live' | 'paper',
@@ -194,8 +196,9 @@ async function checkSymbolCooldown(
   const cycleId = aj16Diagnostic.getCycleId();
   
   try {
-    const guardrails = await storage.getGuardrails({ mode });
-    if (!guardrails || guardrails.cooldownMinutes === null || guardrails.cooldownMinutes === undefined) {
+    // [9.7] Use guardrails_v2 instead of legacy guardrails table
+    const guardrails = await storage.getGuardrailsV2({ mode });
+    if (!guardrails || guardrails.symbolCooldownMinutes === null || guardrails.symbolCooldownMinutes === undefined) {
       // [AJ16.2] Log cooldown check - no guardrail configured
       aj16Diagnostic.logCooldownCheck({
         cycleId,
@@ -207,7 +210,7 @@ async function checkSymbolCooldown(
       return { ok: true };
     }
 
-    const cooldownMinutes = guardrails.cooldownMinutes;
+    const cooldownMinutes = guardrails.symbolCooldownMinutes;
     if (cooldownMinutes === 0) {
       // [AJ16.2] Log cooldown check - cooldown disabled
       aj16Diagnostic.logCooldownCheck({

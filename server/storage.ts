@@ -232,9 +232,14 @@ export interface IStorage {
   // createTradingSettings(settings: InsertTradingSettings): Promise<TradingSettings>;
   // updateTradingSettings(userId: string, updates: Partial<TradingSettings>): Promise<TradingSettings>;
 
-  // Guardrails methods (global settings per mode)
+  // [9.7] Guardrails methods - DEPRECATED
+  // Legacy guardrails table is obsolete. Use getGuardrailsV2() instead.
+  /** @deprecated [9.7] Use getGuardrailsV2() instead. This method throws an error. */
   getGuardrails(params: { mode: 'live' | 'paper' }): Promise<Guardrails | null>;
+  /** @deprecated [9.7] Use upsertGuardrailsV2() instead. This method throws an error. */
   upsertGuardrails(data: Omit<InsertGuardrails, 'userId'> & { lastUpdatedBy?: string }): Promise<Guardrails>;
+  /** [9.7] Legacy read-only method for debugging/audit purposes only. */
+  getGuardrailsLegacy(params: { mode: 'live' | 'paper' }): Promise<Guardrails | null>;
   
   // Phase 2: Guardrails V2 methods (Core Four - Single Source of Truth)
   getGuardrailsV2(params: { mode: 'live' | 'paper' }): Promise<GuardrailsV2 | null>;
@@ -779,8 +784,23 @@ export class DatabaseStorage implements IStorage {
   //   throw new Error('Method removed');
   // }
 
-  // Guardrails methods (global settings per mode)
+  // [9.7] Guardrails methods - DEPRECATED
+  // Legacy guardrails table is obsolete. Use getGuardrailsV2() instead.
+  
+  /**
+   * @deprecated [9.7] Use getGuardrailsV2() instead. Legacy guardrails table is obsolete.
+   * This method now throws an error to prevent accidental usage.
+   */
   async getGuardrails(params: { mode: 'live' | 'paper' }): Promise<Guardrails | null> {
+    throw new Error('[9.7] Deprecated: guardrails table is obsolete. Use getGuardrailsV2() instead.');
+  }
+
+  /**
+   * [9.7] Legacy read-only method for debugging/audit purposes only.
+   * Do not use in production code paths.
+   */
+  async getGuardrailsLegacy(params: { mode: 'live' | 'paper' }): Promise<Guardrails | null> {
+    console.warn('[9.7][Deprecated] getGuardrailsLegacy called – for read-only debug/audit use only');
     const [result] = await db
       .select()
       .from(guardrails)
@@ -788,25 +808,12 @@ export class DatabaseStorage implements IStorage {
     return result || null;
   }
 
+  /**
+   * @deprecated [9.7] Use upsertGuardrailsV2() instead. Legacy guardrails table is obsolete.
+   * This method now throws an error to prevent accidental writes.
+   */
   async upsertGuardrails(data: Omit<InsertGuardrails, 'userId'> & { lastUpdatedBy?: string }): Promise<Guardrails> {
-    const existing = await this.getGuardrails({ mode: data.mode });
-    
-    const updateData = {
-      ...data,
-      updatedAt: new Date()
-    };
-    
-    if (existing) {
-      const [result] = await db
-        .update(guardrails)
-        .set(updateData)
-        .where(eq(guardrails.mode, data.mode))
-        .returning();
-      return result;
-    } else {
-      const [result] = await db.insert(guardrails).values(updateData).returning();
-      return result;
-    }
+    throw new Error('[9.7] Deprecated: Legacy guardrails update blocked – use guardrails_v2 instead.');
   }
 
   // Phase 2: Guardrails V2 methods (Core Four - Single Source of Truth)

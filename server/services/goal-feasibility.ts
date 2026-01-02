@@ -1,3 +1,10 @@
+/**
+ * Goal Feasibility Service
+ * 
+ * [9.7] Migrated to guardrails_v2 – legacy dollar fields removed
+ * Now uses percentage-based limits from guardrails_v2 table.
+ */
+
 import { IStorage } from '../storage';
 
 export type FeasibilityStatus = 'OK' | 'WARN' | 'BLOCK';
@@ -9,8 +16,8 @@ export interface FeasibilityResult {
   exceedsBy?: number;
   details?: {
     targetPerTrade: number;
-    maxRiskPerTradeLimit: number;
-    maxPositionSize: number;
+    maxPositionPercentPct: number;
+    portfolioRiskPerTradePct: number;
     portfolioBalance?: number;
   };
 }
@@ -30,112 +37,77 @@ export class GoalFeasibilityService {
     mode: 'live' | 'paper',
     context: FeasibilityContext
   ): Promise<FeasibilityResult> {
-    console.log(`[GoalFeasibility] Evaluating goal for user ${userId} in ${mode} mode:`, context);
+    console.log(`[GoalFeasibility][9.7] Evaluating goal for user ${userId} in ${mode} mode:`, context);
 
     const { targetPerTrade, portfolioBalance, exploratoryMode = false } = context;
 
-    // Get guardrails for the mode
-    const guardrails = await this.storage.getGuardrails({ mode });
+    // [9.7] Get guardrails_v2 for the mode (replaces legacy guardrails table)
+    const guardrails = await this.storage.getGuardrailsV2({ mode });
     if (!guardrails) {
-      console.warn(`[GoalFeasibility] No guardrails found for ${mode} mode, using conservative defaults`);
+      console.warn(`[GoalFeasibility][9.7] No guardrails_v2 found for ${mode} mode, using conservative defaults`);
       return {
         status: 'BLOCK',
         reason: 'Guardrails not configured for this mode',
       };
     }
 
-    const maxRiskPerTradeLimit = parseFloat(guardrails.maxRiskPerTradeLimit || '1000');
-    const maxPositionSize = parseFloat(guardrails.maxPositionSize || '5000');
+    // [9.7] Extract percentage-based limits from guardrails_v2
+    const portfolioRiskPerTradePct = parseFloat(String(guardrails.portfolioRiskPerTradePct || '3.00'));
+    const maxPositionPercentPct = parseFloat(String(guardrails.maxPositionPercentPct || '12.00'));
+    const maxTotalExposurePct = parseFloat(String(guardrails.maxTotalExposurePct || '100.00'));
 
-    console.log(`[GoalFeasibility] Guardrails loaded: maxRiskPerTradeLimit=$${maxRiskPerTradeLimit}, maxPositionSize=$${maxPositionSize}`);
+    console.log(`[GoalFeasibility][9.7] Guardrails loaded: portfolioRiskPerTradePct=${portfolioRiskPerTradePct}%, maxPositionPercentPct=${maxPositionPercentPct}%`);
 
-    // Check 1: Target per Trade vs Max Risk Per Trade Limit
-    // WARN at 1×, BLOCK at 2×
-    const riskRatio = targetPerTrade / maxRiskPerTradeLimit;
-    
-    if (riskRatio > 2.0 && !exploratoryMode) {
-      const exceedsBy = targetPerTrade - maxRiskPerTradeLimit;
-      console.log(`[GoalFeasibility] BLOCK - Target per Trade ($${targetPerTrade}) exceeds Max Risk Per Trade Limit by ${riskRatio.toFixed(2)}×`);
-      return {
-        status: 'BLOCK',
-        reason: `Target per Trade ($${targetPerTrade.toFixed(2)}) exceeds Max Risk Per Trade Limit by ${riskRatio.toFixed(2)}× (limit: $${maxRiskPerTradeLimit.toFixed(2)})`,
-        riskLimit: maxRiskPerTradeLimit,
-        exceedsBy,
-        details: {
-          targetPerTrade,
-          maxRiskPerTradeLimit,
-          maxPositionSize,
-          portfolioBalance,
-        },
-      };
-    }
-
-    if (riskRatio > 1.0) {
-      const exceedsBy = targetPerTrade - maxRiskPerTradeLimit;
-      console.log(`[GoalFeasibility] WARN - Target per Trade ($${targetPerTrade}) approaches Max Risk Per Trade Limit (${riskRatio.toFixed(2)}×)`);
-      return {
-        status: 'WARN',
-        reason: `Target per Trade ($${targetPerTrade.toFixed(2)}) approaches Max Risk Per Trade Limit (${riskRatio.toFixed(2)}× of $${maxRiskPerTradeLimit.toFixed(2)})`,
-        riskLimit: maxRiskPerTradeLimit,
-        exceedsBy,
-        details: {
-          targetPerTrade,
-          maxRiskPerTradeLimit,
-          maxPositionSize,
-          portfolioBalance,
-        },
-      };
-    }
-
-    // Check 2: Target per Trade vs Max Position Size
-    if (targetPerTrade > maxPositionSize && !exploratoryMode) {
-      const exceedsBy = targetPerTrade - maxPositionSize;
-      console.log(`[GoalFeasibility] BLOCK - Target per Trade ($${targetPerTrade}) exceeds Max Position Size ($${maxPositionSize})`);
-      return {
-        status: 'BLOCK',
-        reason: `Target per Trade ($${targetPerTrade.toFixed(2)}) exceeds Max Position Size limit of $${maxPositionSize.toFixed(2)}`,
-        riskLimit: maxPositionSize,
-        exceedsBy,
-        details: {
-          targetPerTrade,
-          maxRiskPerTradeLimit,
-          maxPositionSize,
-          portfolioBalance,
-        },
-      };
-    }
-
-    // Check 3: Target per Trade vs Portfolio Balance (if available)
+    // Check 1: Target per Trade vs Portfolio Balance (percentage-based)
     if (portfolioBalance && portfolioBalance > 0) {
-      const portfolioPercentage = (targetPerTrade / portfolioBalance) * 100;
-      // Conservative check: warn if target per trade is more than 10% of portfolio
-      if (portfolioPercentage > 20 && !exploratoryMode) {
-        console.log(`[GoalFeasibility] BLOCK - Target per Trade is ${portfolioPercentage.toFixed(1)}% of portfolio balance`);
+      const targetPercentage = (targetPerTrade / portfolioBalance) * 100;
+      
+      // Check against maxPositionPercentPct
+      if (targetPercentage > maxPositionPercentPct && !exploratoryMode) {
+        const maxAllowed = (portfolioBalance * maxPositionPercentPct) / 100;
+        console.log(`[GoalFeasibility][9.7] BLOCK - Target per Trade (${targetPercentage.toFixed(1)}%) exceeds Max Position Percent (${maxPositionPercentPct}%)`);
         return {
           status: 'BLOCK',
-          reason: `Target per Trade ($${targetPerTrade.toFixed(2)}) is ${portfolioPercentage.toFixed(1)}% of portfolio ($${portfolioBalance.toFixed(2)}). Maximum recommended: 20%`,
-          riskLimit: portfolioBalance * 0.2,
-          exceedsBy: targetPerTrade - (portfolioBalance * 0.2),
+          reason: `Target per Trade ($${targetPerTrade.toFixed(2)}) is ${targetPercentage.toFixed(1)}% of portfolio, exceeding ${maxPositionPercentPct}% limit ($${maxAllowed.toFixed(2)})`,
+          riskLimit: maxAllowed,
+          exceedsBy: targetPerTrade - maxAllowed,
           details: {
             targetPerTrade,
-            maxRiskPerTradeLimit,
-            maxPositionSize,
+            maxPositionPercentPct,
+            portfolioRiskPerTradePct,
             portfolioBalance,
           },
         };
       }
 
-      if (portfolioPercentage > 10) {
-        console.log(`[GoalFeasibility] WARN - Target per Trade is ${portfolioPercentage.toFixed(1)}% of portfolio balance`);
+      // Check against max total exposure (looser check)
+      if (targetPercentage > maxTotalExposurePct && !exploratoryMode) {
+        const maxAllowed = (portfolioBalance * maxTotalExposurePct) / 100;
+        console.log(`[GoalFeasibility][9.7] BLOCK - Target per Trade (${targetPercentage.toFixed(1)}%) exceeds Max Total Exposure (${maxTotalExposurePct}%)`);
         return {
-          status: 'WARN',
-          reason: `Target per Trade ($${targetPerTrade.toFixed(2)}) is ${portfolioPercentage.toFixed(1)}% of portfolio ($${portfolioBalance.toFixed(2)}). Recommended: <10%`,
-          riskLimit: portfolioBalance * 0.1,
-          exceedsBy: targetPerTrade - (portfolioBalance * 0.1),
+          status: 'BLOCK',
+          reason: `Target per Trade ($${targetPerTrade.toFixed(2)}) is ${targetPercentage.toFixed(1)}% of portfolio, exceeding ${maxTotalExposurePct}% max exposure`,
+          riskLimit: maxAllowed,
+          exceedsBy: targetPerTrade - maxAllowed,
           details: {
             targetPerTrade,
-            maxRiskPerTradeLimit,
-            maxPositionSize,
+            maxPositionPercentPct,
+            portfolioRiskPerTradePct,
+            portfolioBalance,
+          },
+        };
+      }
+
+      // WARN if approaching limit (> 80% of max position)
+      if (targetPercentage > maxPositionPercentPct * 0.8) {
+        console.log(`[GoalFeasibility][9.7] WARN - Target per Trade (${targetPercentage.toFixed(1)}%) approaching Max Position Percent (${maxPositionPercentPct}%)`);
+        return {
+          status: 'WARN',
+          reason: `Target per Trade ($${targetPerTrade.toFixed(2)}) is ${targetPercentage.toFixed(1)}% of portfolio, approaching ${maxPositionPercentPct}% limit`,
+          details: {
+            targetPerTrade,
+            maxPositionPercentPct,
+            portfolioRiskPerTradePct,
             portfolioBalance,
           },
         };
@@ -143,14 +115,14 @@ export class GoalFeasibilityService {
     }
 
     // All checks passed
-    console.log(`[GoalFeasibility] OK - Target per Trade ($${targetPerTrade}) is within guardrails`);
+    console.log(`[GoalFeasibility][9.7] OK - Target per Trade ($${targetPerTrade}) is within guardrails`);
     return {
       status: 'OK',
       reason: 'Goal is within all guardrails',
       details: {
         targetPerTrade,
-        maxRiskPerTradeLimit,
-        maxPositionSize,
+        maxPositionPercentPct,
+        portfolioRiskPerTradePct,
         portfolioBalance,
       },
     };

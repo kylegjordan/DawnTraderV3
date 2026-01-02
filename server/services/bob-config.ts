@@ -8,7 +8,7 @@
 
 import { bobCore, FetchContext } from './bob-core';
 import { db } from '../db';
-import { goalsLive, goalsPaper, guardrails, screenerFilters, strategySettings, walterPurpose } from '@shared/schema';
+import { goalsLive, goalsPaper, guardrailsV2, screenerFilters, strategySettings, walterPurpose } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { provenanceLogger } from './provenance-logger'; // Phase 8.6.4: BoB deep-trace
 import { nanoid } from 'nanoid'; // For generating traceIds
@@ -133,16 +133,17 @@ class ConfigBobModule {
   /**
    * Fetch guardrails settings for a specific mode
    * Mirrors /api/guardrails endpoint
+   * [9.7] Migrated to guardrails_v2 – legacy dollar fields removed
    */
   private async fetchGuardrails(context: FetchContext): Promise<any> {
     const startTime = Date.now();
     const { mode = 'live', userId } = context;
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching guardrails (mode: ${mode})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
+    console.log(`[${this.MODULE_NAME}][9.7] 🔍 Fetching guardrails_v2 (mode: ${mode})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
-      // Phase 27.F.15.B.1-POST: Global query (guardrails table no longer has user_id)
-      const guardrailsData = await db.query.guardrails.findFirst({
-        where: eq(guardrails.mode, mode)
+      // [9.7] Use guardrails_v2 instead of legacy guardrails table
+      const guardrailsData = await db.query.guardrailsV2.findFirst({
+        where: eq(guardrailsV2.mode, mode)
       });
 
       const duration = Date.now() - startTime;
@@ -153,7 +154,7 @@ class ConfigBobModule {
           traceId: context.traceId,
           bobModule: this.MODULE_NAME,
           operation: 'fetchGuardrails',
-          sourceTable: 'guardrails',
+          sourceTable: 'guardrails_v2',
           mode: context.mode,
           globalContextId: 'default',
           cacheHit: false,
@@ -167,13 +168,13 @@ class ConfigBobModule {
           traceId: context.traceId,
           originatingService: 'bob',
           targetService: 'cortex',
-          sourceTable: 'guardrails',
+          sourceTable: 'guardrails_v2',
           mode: context.mode,
           globalContextId: 'default',
           operation: 'read',
           data: guardrailsData,
           metadata: { 
-            note: `BoB → Cortex: guardrails (${mode})`,
+            note: `BoB → Cortex: guardrails_v2 (${mode})`,
             payload: guardrailsData // Store actual data for debugging
           }
         });
@@ -182,19 +183,19 @@ class ConfigBobModule {
           traceId: context.traceId,
           originatingService: 'cortex',
           targetService: 'walter',
-          sourceTable: 'guardrails',
+          sourceTable: 'guardrails_v2',
           mode: context.mode,
           globalContextId: 'default',
           operation: 'read',
           data: guardrailsData,
           metadata: { 
-            note: `Cortex → Walter: guardrails (${mode})`,
+            note: `Cortex → Walter: guardrails_v2 (${mode})`,
             payload: guardrailsData // Store actual data for debugging
           }
         });
       }
       
-      console.log(`[${this.MODULE_NAME}] ✅ Guardrails fetched in ${duration}ms`);
+      console.log(`[${this.MODULE_NAME}][9.7] ✅ Guardrails V2 fetched in ${duration}ms`);
       
       return guardrailsData || null;
     } catch (error: any) {
@@ -630,7 +631,7 @@ class ConfigBobModule {
   invalidateConfig(
     userId: string,
     mode: 'live' | 'paper',
-    configType: 'goals' | 'guardrails' | 'screeners' | 'strategies' | 'purpose'
+    configType: 'goals' | 'guardrails' | 'guardrails_v2' | 'screeners' | 'strategies' | 'purpose' | 'goals_preset'
   ) {
     const key = `config:${configType}:${mode}:${userId}`;
     console.log(`[${this.MODULE_NAME}] 🗑️ Invalidating ${configType} cache for ${mode} mode`);

@@ -117,20 +117,23 @@ export class MicroExecutionService {
   }
   
   /**
-   * Load configuration from guardrails table
+   * Load configuration from guardrails_v2 table
+   * [9.7] Migrated to guardrails_v2 – legacy dollar fields removed
+   * Note: microLoopInterval and priceDeltaTrigger are micro-execution specific
+   * and use hardcoded defaults since they are not in guardrails_v2
    */
   private async loadConfiguration(): Promise<void> {
     try {
-      const guardrails = await storage.getGuardrails({ mode: this.mode });
+      // [9.7] Use guardrails_v2 for any mode-level configuration
+      const guardrails = await storage.getGuardrailsV2({ mode: this.mode });
       
       if (guardrails) {
-        // Convert to milliseconds (stored as seconds)
-        this.intervalMs = (guardrails.microLoopInterval || 8) * 1000;
+        // [9.7] Use hardcoded defaults for micro-execution specific settings
+        // These are not stored in guardrails_v2, using sensible defaults
+        this.intervalMs = 8 * 1000; // 8 seconds default
+        this.priceDeltaTrigger = 0.30; // 0.30% default
         
-        // Parse decimal to number
-        this.priceDeltaTrigger = parseFloat(guardrails.priceDeltaTrigger || '0.30');
-        
-        console.log(`[MicroLoop:${this.mode}] Config loaded: interval=${this.intervalMs}ms, delta=${this.priceDeltaTrigger}%`);
+        console.log(`[MicroLoop:${this.mode}][9.7] Config loaded: interval=${this.intervalMs}ms, delta=${this.priceDeltaTrigger}%`);
       }
     } catch (error) {
       console.error(`[MicroLoop:${this.mode}] Failed to load configuration:`, error);

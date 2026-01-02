@@ -257,14 +257,17 @@ export class BaselineIndicator {
     // Get last 50 trades for metrics (trades already sorted newest-first from storage)
     const last50 = closedTrades.slice(0, this.STABILITY_WINDOW);
     
-    // Get current guardrails and portfolio
-    const guardrails = await storage.getGuardrails({ mode: 'paper' });
+    // [9.7] Get current guardrails_v2 and portfolio - legacy dollar fields removed
+    const guardrails = await storage.getGuardrailsV2({ mode: 'paper' });
     const portfolio = await storage.getPortfolioState({ mode: 'paper' });
     const filters = await storage.getScreenerFilters({ mode: 'paper' });
     
     const balance = parseFloat(portfolio?.balance || '0');
-    const riskPerTrade = parseFloat(guardrails?.riskPerTrade || '0');
-    const maxDailyLoss = parseFloat(guardrails?.maxDailyLoss || '0');
+    // [9.7] Convert percentage-based risk to dollar amount for snapshot compatibility
+    const riskPerTradePct = parseFloat(String(guardrails?.portfolioRiskPerTradePct || '3.00'));
+    const riskPerTrade = (balance * riskPerTradePct) / 100;
+    const dailyLossKillSwitchPct = parseFloat(String(guardrails?.dailyLossKillSwitchPct || '10.00'));
+    const maxDailyLoss = (balance * dailyLossKillSwitchPct) / 100;
     
     // Calculate performance metrics
     const winRate = this.calculateWinRate(last50);

@@ -633,6 +633,7 @@ class HeuristicEngine {
 
   /**
    * Enrich recommendation with current values and calculate recommended values
+   * [9.7] Migrated to guardrails_v2 – legacy dollar fields removed
    */
   private async enrichRecommendation(
     rec: AdjustmentRecommendation,
@@ -640,10 +641,11 @@ class HeuristicEngine {
   ): Promise<AdjustmentRecommendation | null> {
     try {
       if (rec.type === 'guardrail') {
-        const guardrails = await storage.getGuardrails({ mode });
+        // [9.7] Use guardrails_v2 instead of legacy guardrails table
+        const guardrails = await storage.getGuardrailsV2({ mode });
         if (!guardrails) return null;
         
-        const currentValue = parseFloat(guardrails[rec.parameter as keyof typeof guardrails]?.toString() || '0');
+        const currentValue = parseFloat((guardrails as any)[rec.parameter]?.toString() || '0');
         const recommendedValue = currentValue * (1 + rec.changePercent / 100);
         
         return {

@@ -1226,23 +1226,34 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         }
       }
 
-      let guardrailsData = await storage.getGuardrails({ mode });
+      // [9.7] Use guardrails_v2 instead of legacy guardrails table
+      let guardrailsData = await storage.getGuardrailsV2({ mode });
 
       if (!guardrailsData) {
-        // Return defaults if not found
+        const { nanoid } = await import('nanoid');
         guardrailsData = {
-          id: '',
-          userId,
+          id: nanoid(),
           mode,
-          maxDailyLoss: '1000.00',
-          maxDrawdown: '10.00',
-          maxPositionSize: '5000.00',
+          portfolioRiskPerTradePct: '1.50',
+          symbolCooldownMinutes: 15,
           maxOpenPositions: 5,
-          riskPerTrade: '1.5',
-          aiCanAdjust: false,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        };
+          dailyLossKillSwitchPct: '7.00',
+          maxPositionPercentPct: '30.00',
+          maxTotalExposurePct: '25.00',
+          lowPriceMinStopAtrMult: '3.000',
+          lowPriceMinPositionNotional: '25.00',
+          lowPriceThreshold: '0.5000',
+          isManualOverride: false,
+          tunedByLatti: true,
+          lockedByUser: {},
+          managedByLottie: true,
+          manualOverrideEnabled: false,
+          lastUpdatedBy: null,
+          killSwitchTripped: false,
+          killSwitchReason: null,
+          killSwitchTrippedAt: null,
+          lastUpdated: new Date()
+        } as any;
       }
 
       res.json(guardrailsData);
@@ -3483,9 +3494,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       try {
         // 1. Validate Goals Engine configuration exists (mode-level)
+        // [9.7] Use guardrails_v2 instead of legacy guardrails table
         const [filters, guardrails] = await Promise.all([
           storage.getScreenerFilters({ mode }),
-          storage.getGuardrails({ mode })
+          storage.getGuardrailsV2({ mode })
         ]);
         
         if (!filters) {
@@ -3497,7 +3509,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         if (!guardrails) {
           preflightErrors.push('Guardrails not configured - please configure risk limits before starting');
         } else {
-          console.log('[PREFLIGHT] ✅ Guardrails loaded (mode-level)');
+          console.log('[PREFLIGHT] ✅ Guardrails V2 loaded (mode-level)');
         }
         
         // 2. Validate database portfolio state exists
@@ -5525,9 +5537,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(400).json({ error: 'Invalid aggressiveness level' });
       }
       
-      // Phase 27.F.15.UI-SYNC.9: Read cooldownMinutes from Guardrails to keep in sync
-      const guardrails = await storage.getGuardrails(userId, mode);
-      const cooldownMinutes = guardrails?.cooldownMinutes ?? 15; // Default to 15 if not set
+      // [9.7] Read symbolCooldownMinutes from guardrails_v2 to keep in sync
+      const guardrails = await storage.getGuardrailsV2({ mode });
+      const cooldownMinutes = guardrails?.symbolCooldownMinutes ?? 15; // Default to 15 if not set
       
       const policy = await storage.upsertTuningPolicy({
         userId,
@@ -18834,8 +18846,8 @@ Summary:`;
 
       // Only execute if approved
       if (validated.approved) {
-        // Get current guardrails
-        const currentGuardrails = await storage.getGuardrails({ mode: validated.mode });
+        // [9.7] Use guardrails_v2 instead of legacy guardrails table
+        const currentGuardrails = await storage.getGuardrailsV2({ mode: validated.mode });
         
         if (!currentGuardrails) {
           return res.status(404).json({ error: 'Guardrails not found. Please initialize guardrails first.' });
@@ -18843,15 +18855,14 @@ Summary:`;
 
         // Update the specific field
         const updateData = {
-          ...currentGuardrails,
-          [validated.field]: validated.value,
           mode: validated.mode,
+          [validated.field]: validated.value,
           lastUpdatedBy: userId
         };
 
-        const result = await storage.upsertGuardrails(updateData);
+        const result = await storage.upsertGuardrailsV2(updateData);
 
-        console.info(`[Orchestrator] Guardrail updated: ${validated.field} = ${validated.value} (${validated.mode} mode)`);
+        console.info(`[Orchestrator][9.7] Guardrail V2 updated: ${validated.field} = ${validated.value} (${validated.mode} mode)`);
         
         // Phase 8.6.5: Invalidate caches and refresh context for Walter AI
         const { configChangeHandler } = await import('./services/config-change-handler');
@@ -19185,18 +19196,17 @@ Important: Extract the exact field names and numeric values from the user's requ
           switch (interpretation.actionType) {
             case 'guardrails':
             case 'risk':
-              // Update guardrails or risk parameters
+              // [9.7] Update guardrails_v2 or risk parameters
               if (interpretation.actionDetails?.field && interpretation.actionDetails?.value !== undefined) {
-                const currentGuardrails = await storage.getGuardrails({ mode });
+                const currentGuardrails = await storage.getGuardrailsV2({ mode });
                 if (currentGuardrails) {
                   const updateData = {
-                    ...currentGuardrails,
-                    [interpretation.actionDetails.field]: interpretation.actionDetails.value,
                     mode,
+                    [interpretation.actionDetails.field]: interpretation.actionDetails.value,
                     lastUpdatedBy: userId
                   };
-                  await storage.upsertGuardrails(updateData);
-                  console.info(`[Walter] Updated ${interpretation.actionType === 'risk' ? 'risk parameter' : 'guardrail'} ${interpretation.actionDetails.field} to ${interpretation.actionDetails.value} (${mode} mode)`);
+                  await storage.upsertGuardrailsV2(updateData);
+                  console.info(`[Walter][9.7] Updated ${interpretation.actionType === 'risk' ? 'risk parameter' : 'guardrail'} ${interpretation.actionDetails.field} to ${interpretation.actionDetails.value} (${mode} mode)`);
                   
                   // Phase 8.6.5: Invalidate caches and refresh context
                   const { configChangeHandler: guardrailsHandler } = await import('./services/config-change-handler');
@@ -23239,9 +23249,10 @@ export async function handleLATTITargets(req: AuthenticatedRequest, res: Respons
       });
     }
     
-    // Get guardrails for risk limits
-    const guardrails = await storage.getGuardrails({ mode });
-    const maxRiskPerTrade = guardrails ? parseFloat(guardrails.riskPerTrade) : 150;
+    // [9.7] Get guardrails_v2 for risk limits (percentage-based)
+    const guardrails = await storage.getGuardrailsV2({ mode });
+    // [9.7] portfolioRiskPerTradePct is percentage, will calculate actual $ amount later
+    const riskPerTradePct = guardrails ? parseFloat(String(guardrails.portfolioRiskPerTradePct)) : 3.00;
     
     // Get portfolio balance
     // [9.6.3] Use mode-only query (mode-based architecture)
@@ -23337,7 +23348,7 @@ export async function handleLATTITargets(req: AuthenticatedRequest, res: Respons
       daily_profit: parseFloat(metrics.daily_profit.toFixed(2)),
       target_daily_avg_earning_pct: metrics.target_daily_avg_earning_pct,
       // Additional metadata
-      max_risk_per_trade_limit: maxRiskPerTrade,
+      max_risk_per_trade_pct: riskPerTradePct,
       calculated_at: new Date().toISOString()
     });
   } catch (error: any) {

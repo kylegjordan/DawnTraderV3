@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { portfolioState, strategySettings, guardrails, screenerFilters, goalsLive, goalsPaper } from '@shared/schema';
+import { portfolioState, strategySettings, guardrailsV2, screenerFilters, goalsLive, goalsPaper } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { provenanceLogger } from './provenance-logger.js';
@@ -248,21 +248,23 @@ class StateAwarenessService {
 
   /**
    * Get guardrails settings for a specific mode
-   * Phase 27.F.13.M: userId kept for signature compatibility but settings are global
+   * [9.7] Migrated to guardrails_v2 – legacy dollar fields removed
    */
   private async getGuardrails(userId: string, mode: 'live' | 'paper', traceId: string): Promise<any> {
-    // Phase 27.F.13.M: Query by mode only (global settings)
-    const result = await db.query.guardrails.findFirst({
-      where: eq(guardrails.mode, mode),
+    // [9.7] Use guardrails_v2 instead of legacy guardrails table
+    const result = await db.query.guardrailsV2.findFirst({
+      where: eq(guardrailsV2.mode, mode),
     });
 
     return result ? {
-      maxDailyLoss: result.maxDailyLoss ? parseFloat(result.maxDailyLoss) : null,
-      maxDrawdown: result.maxDrawdown ? parseFloat(result.maxDrawdown) : null,
-      maxPositionSize: result.maxPositionSize ? parseFloat(result.maxPositionSize) : null,
+      // [9.7] Return percentage-based fields from guardrails_v2
+      portfolioRiskPerTradePct: result.portfolioRiskPerTradePct ? parseFloat(String(result.portfolioRiskPerTradePct)) : null,
+      symbolCooldownMinutes: result.symbolCooldownMinutes,
       maxOpenPositions: result.maxOpenPositions,
-      riskPerTrade: result.riskPerTrade ? parseFloat(result.riskPerTrade) : null,
-      aiCanAdjust: result.aiCanAdjust,
+      dailyLossKillSwitchPct: result.dailyLossKillSwitchPct ? parseFloat(String(result.dailyLossKillSwitchPct)) : null,
+      maxPositionPercentPct: result.maxPositionPercentPct ? parseFloat(String(result.maxPositionPercentPct)) : null,
+      maxTotalExposurePct: result.maxTotalExposurePct ? parseFloat(String(result.maxTotalExposurePct)) : null,
+      killSwitchTripped: result.killSwitchTripped,
     } : null;
   }
 

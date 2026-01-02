@@ -18,37 +18,69 @@ export interface ConfigUpdateResult {
 
 /**
  * Update guardrails (risk management settings)
+ * 
+ * [9.7] DEPRECATED: This function updates the legacy guardrails table.
+ * Use updateGuardrailsV2() for production code paths.
+ * This method now throws an error to prevent accidental usage.
  */
 export async function updateGuardrails(
   userId: string,
   mode: 'live' | 'paper',
   updates: Partial<z.infer<typeof insertGuardrailsSchema>>
 ): Promise<ConfigUpdateResult> {
+  // [9.7] Block legacy guardrails updates
+  console.error(`[ConfigUpdateService][9.7] BLOCKED: Legacy guardrails update attempted for user ${userId}, mode: ${mode}`);
+  return {
+    success: false,
+    message: '[9.7] Legacy guardrails update blocked – use guardrails_v2 instead.',
+    error: 'Deprecated: guardrails table is obsolete. Use updateGuardrailsV2() instead.',
+  };
+}
+
+/**
+ * [9.7] Update guardrails_v2 (modern percentage-based risk management settings)
+ */
+export async function updateGuardrailsV2(
+  userId: string,
+  mode: 'live' | 'paper',
+  updates: {
+    portfolioRiskPerTradePct?: string | number;
+    symbolCooldownMinutes?: number;
+    maxOpenPositions?: number;
+    dailyLossKillSwitchPct?: string | number;
+    maxPositionPercentPct?: string | number;
+    maxTotalExposurePct?: string | number;
+  }
+): Promise<ConfigUpdateResult> {
   try {
-    console.log(`[ConfigUpdateService] Updating guardrails for user ${userId}, mode: ${mode}`, updates);
+    console.log(`[ConfigUpdateService][9.7] Updating guardrails_v2 for user ${userId}, mode: ${mode}`, updates);
     
-    // Phase 27.F.13.M: Fetch global guardrails (mode-only, no userId)
-    const existing = await storage.getGuardrails({ mode });
-    
-    // Merge existing data with updates to ensure all required fields are present
-    const mergedData = {
-      userId,
-      mode,
-      maxDailyLoss: updates.maxDailyLoss ?? existing?.maxDailyLoss ?? '1000.00',
-      maxDrawdown: updates.maxDrawdown ?? existing?.maxDrawdown ?? '10.00',
-      maxPositionSize: updates.maxPositionSize ?? existing?.maxPositionSize ?? '5000.00',
-      maxOpenPositions: updates.maxOpenPositions ?? existing?.maxOpenPositions ?? 5,
-      riskPerTrade: updates.riskPerTrade ?? existing?.riskPerTrade ?? '1.5',
-      aiCanAdjust: updates.aiCanAdjust ?? existing?.aiCanAdjust ?? false,
-    };
-    
-    // Validate merged data
-    const validatedData = insertGuardrailsSchema.parse(mergedData);
+    // Build update payload
+    const updatePayload: any = { mode };
+    if (updates.portfolioRiskPerTradePct !== undefined) {
+      updatePayload.portfolioRiskPerTradePct = String(updates.portfolioRiskPerTradePct);
+    }
+    if (updates.symbolCooldownMinutes !== undefined) {
+      updatePayload.symbolCooldownMinutes = updates.symbolCooldownMinutes;
+    }
+    if (updates.maxOpenPositions !== undefined) {
+      updatePayload.maxOpenPositions = updates.maxOpenPositions;
+    }
+    if (updates.dailyLossKillSwitchPct !== undefined) {
+      updatePayload.dailyLossKillSwitchPct = String(updates.dailyLossKillSwitchPct);
+    }
+    if (updates.maxPositionPercentPct !== undefined) {
+      updatePayload.maxPositionPercentPct = String(updates.maxPositionPercentPct);
+    }
+    if (updates.maxTotalExposurePct !== undefined) {
+      updatePayload.maxTotalExposurePct = String(updates.maxTotalExposurePct);
+    }
+    updatePayload.lastUpdatedBy = userId;
     
     // Update database
-    const guardrailsData = await storage.upsertGuardrails(validatedData);
+    const guardrailsData = await storage.upsertGuardrailsV2(updatePayload);
     
-    console.info(`[ConfigUpdateService] User ${userId} updated guardrails for ${mode} mode`);
+    console.info(`[ConfigUpdateService][9.7] User ${userId} updated guardrails_v2 for ${mode} mode`);
     
     // Invalidate caches and refresh context for Walter AI
     const { configChangeHandler } = await import('./config-change-handler');
@@ -63,10 +95,10 @@ export async function updateGuardrails(
       success: true,
       message: `Guardrails updated successfully for ${mode} mode`,
       data: guardrailsData,
-      timestamp: guardrailsData.updatedAt?.toISOString() || new Date().toISOString(),
+      timestamp: guardrailsData.lastUpdated?.toISOString() || new Date().toISOString(),
     };
   } catch (error: any) {
-    console.error('[ConfigUpdateService] Error updating guardrails:', error);
+    console.error('[ConfigUpdateService][9.7] Error updating guardrails_v2:', error);
     return {
       success: false,
       message: `Failed to update guardrails: ${error.message}`,
@@ -241,14 +273,15 @@ export async function updateScreeners(
 
 /**
  * Get current guardrails
+ * [9.7] Migrated to guardrails_v2 – legacy dollar fields removed
  */
 export async function getGuardrails(userId: string, mode: 'live' | 'paper') {
   try {
-    // Phase 27.F.13.M: Get global guardrails (mode-only, no userId)
-    const guardrailsData = await storage.getGuardrails({ mode });
+    // [9.7] Use guardrails_v2 instead of legacy guardrails table
+    const guardrailsData = await storage.getGuardrailsV2({ mode });
     return guardrailsData;
   } catch (error: any) {
-    console.error('[ConfigUpdateService] Error fetching guardrails:', error);
+    console.error('[ConfigUpdateService][9.7] Error fetching guardrails_v2:', error);
     return null;
   }
 }

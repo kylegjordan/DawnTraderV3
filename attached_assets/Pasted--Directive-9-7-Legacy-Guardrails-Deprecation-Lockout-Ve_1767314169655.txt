@@ -1,0 +1,110 @@
+⚙️ Directive 9.7 — Legacy Guardrails Deprecation & Lockout
+
+Version: 9.7 (Pre–Phase 10 Finalization)
+Target Systems: Storage Layer · Config Services · Trade Safety
+Dependencies: ✅ 9.6.3 (RiskManager & userId Cleanup)
+
+🧭 Objective
+
+Deprecate and lock the old guardrails table and dollar-based guardrail fields to prevent accidental reintroduction or execution-side influence.
+
+🔩 Deliverables Overview
+ID	Deliverable	Description
+9.7.A	Deprecate Storage Interface	Mark getGuardrails() deprecated; block usage and writes.
+9.7.B	Migrate Cooldown Source	Switch all cooldown logic to use guardrails_v2.
+9.7.C	Remove Legacy Reads	Refactor heuristic-trader, goal-feasibility, baseline-indicator, config-update-service.
+9.7.D	Invariant Lock	Add tests ensuring no getGuardrails() calls exist.
+9.7.E	Canonical Bridge Update	Update architecture.md and invariants.md to reflect deprecation.
+🧮 Implementation Steps
+1️⃣ Deprecate Storage Interface
+// server/storage.ts
+/** @deprecated Use getGuardrailsV2() instead. */
+export const getGuardrails = async () => {
+  throw new Error("Deprecated: guardrails table is obsolete. Use getGuardrailsV2().");
+};
+
+// Alias for reference only
+export const getGuardrailsLegacy = async (params) => {
+  console.warn("[Deprecated] getGuardrailsLegacy called – for read-only debug use only");
+  return await db.guardrails.findFirst({ where: { mode: params.mode } });
+};
+
+
+Disable writes in config-update-service.ts:
+
+if (table === 'guardrails') {
+  throw new Error('Legacy guardrails update blocked – use guardrails_v2 instead.');
+}
+
+2️⃣ Migrate Cooldown Source
+
+Update trade-safety.ts to pull from guardrails_v2:
+
+const guardrails = await storage.getGuardrailsV2({ mode });
+const cooldownMinutes = guardrails.symbol_cooldown_minutes;
+
+
+✅ Ensures paper mode uses 5-minute cooldown as displayed in UI.
+
+3️⃣ Remove Legacy Reads
+
+Refactor the following files to use guardrails_v2 instead of guardrails:
+
+server/services/heuristic-trader.ts – AI recommendations
+
+server/services/goal-feasibility.ts – goal validation
+
+server/services/baseline-indicator.ts – snapshot metrics
+
+server/services/config-update-service.ts – legacy update paths
+
+Mark each refactored function with:
+
+// [9.7] Migrated to guardrails_v2 – legacy dollar fields removed
+
+4️⃣ Invariant Lock
+
+Create server/tests/integration/invariant.test.ts:
+
+import fs from 'fs';
+
+test('[Invariant] No references to guardrails table remain in core engine', () => {
+  const files = [
+    'server/services/paper-execution-engine.ts',
+    'server/services/trade-safety.ts',
+    'server/services/goal-feasibility.ts',
+  ];
+  files.forEach(f => {
+    const content = fs.readFileSync(f, 'utf8');
+    expect(content.includes('getGuardrails(')).toBe(false);
+  });
+});
+
+5️⃣ Canonical Bridge Update
+
+Update bridge/canonical/architecture.md and bridge/canonical/invariants.md to document the lockout:
+
+### Directive 9.7 — Legacy Guardrails Deprecation & Lockout
+All dollar-based guardrails are deprecated. Only `guardrails_v2` is canonical.
+The `guardrails` table remains read-only for historical audit purposes and must never be queried by runtime services.
+
+🔬 Validation Protocol
+Step	Action	Expected Outcome
+1	Run npx tsc --noEmit --skipLibCheck	✅ 0 errors
+2	Run npm test tests/integration/invariant.test.ts	✅ No legacy references found
+3	Run paper engine test cycle	✅ Trades open with 5-minute cooldown
+4	Run grep -r "getGuardrails(" server/	✅ No matches
+5	Verify Bridge Docs	✅ Deprecation documented
+✅ Success Criteria
+
+Only guardrails_v2 is used for all trading decisions.
+
+Legacy guardrails table is read-only and ignored by runtime code.
+
+No regression in paper or live trading.
+
+Cooldown periods and risk thresholds match UI values.
+
+Invariant tests enforce permanent lockout of legacy systems.
+
+Bridge documentation reflects canonical state.

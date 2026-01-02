@@ -31,6 +31,31 @@ System health is maintained through a Safe Heartbeat Monitor, a Volume Classifie
 
 Core quantitative metrics (`analysis-utils.ts`) include Log-Liquidity (LQ), Directional Integrity (DI), Volatility Noise (VolNoise), and Sigma (σ). Dynamic Trade Management is implemented via an Adaptive Trailing Exit (`trailing-exit-controller.ts`) with a dynamic stop distance formula and a two-stage latching system. An Adaptive Kalman Filter (`adaptive-kalman.ts`) dynamically adjusts smoothing based on an Efficiency Ratio (ER). Covariance Guard and Risk Concentration Control (`covariance-engine.ts`, `risk-concentration.ts`) manage portfolio-level correlation and position sizing. CWQI v4 (`cwqi-service.ts`) provides a two-stage trade evaluation system with an Expectancy Value (EV) gate and a Quality Score. Sim-to-Live Parity is ensured by a Configuration Lock (`system-guards.ts`) with a centralized `SYSTEM_GUARDS` object defining all key thresholds and parameters, and a dedicated parity test suite. The system has transitioned to a mode-based architecture (paper/live) with the removal of the deprecated `RiskManager` and userId-based queries. Live mode valuation uses Kraken API and price cache, while paper mode uses a portfolio_state table.
 
+## [9.7] Guardrails Migration - Legacy Deprecation
+
+**IMPORTANT:** The legacy `guardrails` table is deprecated. All guardrails access must use `guardrails_v2`.
+
+**Deprecated Methods (Throw Errors):**
+- `storage.getGuardrails()` - Use `storage.getGuardrailsV2()` instead
+- `storage.upsertGuardrails()` - Use `storage.upsertGuardrailsV2()` instead
+- `updateGuardrails()` in config-update-service.ts - Use `updateGuardrailsV2()` instead
+
+**Read-Only Legacy Access:**
+- `storage.getGuardrailsLegacy()` - For debugging/audit purposes only
+
+**Key Differences (guardrails_v2):**
+- Percentage-based risk: `portfolioRiskPerTradePct` (not dollar-based `riskPerTrade`)
+- Cooldown in v2: `symbolCooldownMinutes` (replaces `cooldownMinutes`)
+- Kill switch: `dailyLossKillSwitchPct` (percentage-based)
+- Position sizing: `maxPositionPercentPct`, `maxTotalExposurePct`
+
+**Migrated Files:**
+- server/storage.ts, server/services/trade-safety.ts, server/services/goal-feasibility.ts
+- server/services/heuristic-trader.ts, server/services/baseline-indicator.ts
+- server/services/config-update-service.ts, server/services/execution-policy-controller.ts
+- server/services/micro-execution-service.ts, server/services/state-awareness.ts
+- server/services/bob-config.ts, server/routes.ts
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.

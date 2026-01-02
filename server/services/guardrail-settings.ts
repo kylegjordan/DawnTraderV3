@@ -153,7 +153,8 @@ export async function buildSettingsFromGuardrails(
     throw new Error(`[8.8.3-H4] No guardrails_v2 configured for mode=${mode}`);
   }
 
-  const portfolioValue = await getPortfolioBalanceV2(mode, userId, globalContextId);
+  // [9.7] getPortfolioBalanceV2 now only takes mode (mode-based architecture)
+  const portfolioValue = await getPortfolioBalanceV2(mode);
   const riskPct = getRiskPercentageV2(mode, guardrails);
 
   const guardrailsAny = guardrails as any;

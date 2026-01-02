@@ -284,8 +284,8 @@ export class ExecutionPolicyController {
     
     // Live mode: calculate based on proposed changes
     if (mode === 'live') {
-      // Phase 27.F.13.M: Get global guardrails (mode-only, no userId)
-      const guardrails = await this.storage.getGuardrails({ mode });
+      // [9.7] Use guardrails_v2 instead of legacy guardrails table
+      const guardrails = await this.storage.getGuardrailsV2({ mode });
       
       if (actionType === 'update_risk_per_trade' && proposedChanges?.proposedValue) {
         const newRiskPerTrade = parseFloat(proposedChanges.proposedValue as string);
@@ -297,8 +297,8 @@ export class ExecutionPolicyController {
         return newDrawdown; // Projected risk = drawdown percentage
       }
       
-      // Default live mode risk calculation
-      const baseRisk = parseFloat(guardrails?.riskPerTrade || '2.0');
+      // [9.7] Default live mode risk calculation using percentage-based risk
+      const baseRisk = parseFloat(String(guardrails?.portfolioRiskPerTradePct || '4.0'));
       return baseRisk * 3; // 3x the base risk per trade for live changes
     }
     

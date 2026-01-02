@@ -14,7 +14,7 @@ import { bobCore } from './bob-core';
 import { cortexCore } from './cortex/cortex-core';
 import { contextRefreshCoordinator } from './context-refresh-coordinator';
 
-type ConfigType = 'strategies' | 'guardrails' | 'screeners' | 'goals' | 'purpose';
+type ConfigType = 'strategies' | 'guardrails' | 'guardrails_v2' | 'screeners' | 'goals' | 'purpose' | 'goals_preset';
 type RefreshSource = 'api' | 'direct' | 'resync';
 
 interface ConfigChangeParams {
