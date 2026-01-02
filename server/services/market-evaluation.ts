@@ -2,7 +2,7 @@
  * Market Evaluation Service - UI Analytics Only
  * 
  * Phase 38.1 - Unified Filtering & Insights Refactor
- * Phase 8.8.7 - DEPRECATED for signal generation, retained for UI only
+ * Phase 9.8.C - Migrated from FilteredPairsService to UnifiedFilterGateway
  * 
  * This service provides market evaluation for UI analytics ONLY:
  * - Filtered Pairs tab (UI display)
@@ -14,15 +14,25 @@
  * NOT this service. See signal-orchestrator.ts and vts-runner.ts.
  */
 
-// Phase 8.8.7: FilteredPairsService DEPRECATED for signal generation, but retained for UI analytics
-import { FilteredPairsService, type FilteredPairResult } from './filtered-pairs.legacy.service.js';
+import { unifiedFilterGateway, type UnifiedFilterResult } from './unified-filter-gateway.js';
 import type { ScreenerFilters } from '@shared/schema';
+
+export interface FilteredPairResult {
+  symbol: string;
+  baseCurrency: string;
+  quoteCurrency: string;
+  currentPrice: number;
+  volume24h: number;
+  dailyRange: number;
+  vwap: number | null;
+  lastUpdate: Date;
+}
 
 export interface MarketEvaluationResult {
   universeCount: number;
   eligiblePairs: FilteredPairResult[];
   ineligibleCount: number;
-  computedAt: string; // ISO date string
+  computedAt: string;
 }
 
 interface CachedEvaluation {
@@ -30,66 +40,62 @@ interface CachedEvaluation {
   timestamp: number;
 }
 
-const CACHE_TTL_MS = 15 * 1000; // 15 seconds as specified in directive
+const CACHE_TTL_MS = 15 * 1000;
 
 /**
  * Single Source of Truth for market evaluation
- * Uses FilteredPairsService internally to ensure identical filtering
- * as SignalOrchestrator
+ * Phase 9.8.C: Now uses UnifiedFilterGateway (backed by ActiveFilterPool)
  */
 export class MarketEvaluationService {
-  private filteredPairsService: FilteredPairsService;
   private cache: Map<string, CachedEvaluation> = new Map();
-
-  constructor() {
-    this.filteredPairsService = new FilteredPairsService();
-  }
 
   /**
    * Evaluate market once and return eligible pairs
    * Uses 15-second cache for stability between requests
    * 
+   * Phase 9.8.C: Filters parameter is kept for API compatibility but
+   * filtering is now done by FX5 Scanner -> ActiveFilterPool
+   * 
    * @param mode - Trading mode (live or paper)
-   * @param filters - Screener filters to apply
+   * @param _filters - Screener filters (for compatibility, not used)
    * @returns Market evaluation with eligible pairs
    */
   async evaluateMarketOnce(
     mode: 'live' | 'paper',
-    filters: ScreenerFilters
+    _filters: ScreenerFilters
   ): Promise<MarketEvaluationResult> {
-    // Include filter hash in cache key to prevent cross-user contamination
-    const filterHash = JSON.stringify({
-      quoteCurrencies: filters.quoteCurrencies || [],
-      minVolume: filters.minVolume || null,
-      minPrice: filters.minPrice || null,
-      maxBidAskSpread: filters.maxBidAskSpread || null,
-      excludeStablecoins: filters.excludeStablecoins || null
-    });
-    const cacheKey = `${mode}:${filterHash}`;
+    const cacheKey = mode;
     const now = Date.now();
 
-    // Check cache
     const cached = this.cache.get(cacheKey);
     if (cached && (now - cached.timestamp) < CACHE_TTL_MS) {
       console.log(`[MarketEval] Cache hit for ${mode} (age: ${now - cached.timestamp}ms)`);
       return cached.data;
     }
 
-    // Phase 8.8.7: Fetch from FilteredPairsService for UI analytics ONLY
-    // Note: SignalOrchestrator uses activeFilterPool.getActivePool() for signal generation
-    console.log(`[MarketEval] Evaluating market for ${mode} (UI analytics only)...`);
-    const stats = await this.filteredPairsService.getValidPairs(mode, filters, true);
+    console.log(`[MarketEval][9.8.C] Evaluating market for ${mode} via UnifiedFilterGateway...`);
+    const stats = await unifiedFilterGateway.getValidPairs(mode);
+
+    const eligiblePairs: FilteredPairResult[] = stats.filteredPairs.map(pair => ({
+      symbol: pair.symbol,
+      baseCurrency: pair.baseCurrency,
+      quoteCurrency: pair.quoteCurrency,
+      currentPrice: pair.currentPrice,
+      volume24h: pair.volume24h,
+      dailyRange: pair.dailyRange,
+      vwap: pair.vwap,
+      lastUpdate: pair.lastUpdate
+    }));
 
     const result: MarketEvaluationResult = {
       universeCount: stats.totalPairs,
-      eligiblePairs: stats.filteredPairs,
+      eligiblePairs,
       ineligibleCount: stats.totalPairs - stats.eligiblePairs,
       computedAt: new Date().toISOString()
     };
 
-    // Update cache
     this.cache.set(cacheKey, { data: result, timestamp: now });
-    console.log(`[MarketEval] Evaluated ${result.eligiblePairs.length}/${result.universeCount} eligible pairs for ${mode}`);
+    console.log(`[MarketEval][9.8.C] Evaluated ${result.eligiblePairs.length}/${result.universeCount} eligible pairs for ${mode}`);
 
     return result;
   }
@@ -99,15 +105,8 @@ export class MarketEvaluationService {
    */
   clearCache(mode?: 'live' | 'paper'): void {
     if (mode) {
-      // Clear all cache entries for this mode
-      const keysToDelete: string[] = [];
-      for (const key of this.cache.keys()) {
-        if (key.startsWith(`${mode}:`)) {
-          keysToDelete.push(key);
-        }
-      }
-      keysToDelete.forEach(key => this.cache.delete(key));
-      console.log(`[MarketEval] Cache cleared for ${mode} (${keysToDelete.length} entries)`);
+      this.cache.delete(mode);
+      console.log(`[MarketEval] Cache cleared for ${mode}`);
     } else {
       this.cache.clear();
       console.log(`[MarketEval] All caches cleared`);
@@ -126,7 +125,6 @@ export class MarketEvaluationService {
   }
 }
 
-// Singleton instance
 let instance: MarketEvaluationService | null = null;
 
 export function getMarketEvaluationService(): MarketEvaluationService {

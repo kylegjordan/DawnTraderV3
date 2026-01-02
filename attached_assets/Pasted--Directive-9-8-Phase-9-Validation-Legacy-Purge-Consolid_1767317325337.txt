@@ -1,0 +1,57 @@
+⚙️ Directive 9.8 — Phase 9 Validation & Legacy Purge (Consolidated Final Version)
+
+Version: 9.8 (Final Phase 9 Directive)
+Target System: Codebase Hygiene · Simulator Stability · UI Consistency
+Dependencies: ✅ 9.7 (Guardrails Migration)
+
+🧭 Objective
+
+Prove the system is stable after deep architecture surgery, remove unused legacy files, and unify the filter logic to eliminate “split brain” risks before Phase 10 (Goal Learning).
+
+🔩 Deliverables
+ID	Deliverable	Description
+9.8.A	Integrity Verification	Run verify-phase-9.ts to confirm guardrails_v2 active, legacy access blocked, and core systems healthy.
+9.8.B	Garbage Collection	Delete legacy .legacy.ts and .tsx files from services and UI.
+9.8.C	Unify Filtering	Replace FilteredPairsService with ActiveFilterPool via new UnifiedFilterGateway.
+9.8.D	Simulator Hardening	Fix null/undefined handling in paper-sim-service.ts.
+🧪 Validation Script (verify-phase-9.ts)
+import { storage } from './server/storage';
+import { SYSTEM_GUARDS } from './server/config/system-guards';
+
+async function verify() {
+  console.log("1. Checking Guardrails V2 Access...");
+  const v2 = await storage.getGuardrailsV2({ mode: 'paper' });
+  if (v2.symbolCooldownMinutes !== 5) throw new Error("Guardrails V2 mismatch!");
+
+  console.log("2. Checking Legacy Block...");
+  try {
+    // @ts-ignore
+    await storage.getGuardrails({ mode: 'paper' });
+    throw new Error("Legacy getGuardrails() did not throw!");
+  } catch {
+    console.log("   ✅ Legacy access correctly blocked.");
+  }
+
+  console.log("3. Checking SYSTEM_GUARDS Consistency...");
+  if (SYSTEM_GUARDS.MIN_LIQUIDITY_SCORE !== 40 || SYSTEM_GUARDS.MAX_VOL_NOISE !== 0.6)
+    throw new Error("SYSTEM_GUARDS mismatch!");
+
+  console.log("4. Checking ActiveFilterPool Consistency...");
+  const active = await storage.getActivePool('paper');
+  if (!Array.isArray(active)) throw new Error("Active Filter Pool missing or corrupt.");
+
+  console.log("✅ SYSTEM INTEGRITY CONFIRMED");
+}
+verify().catch(console.error);
+
+✅ Success Criteria
+
+Guardrails v2 verified as the sole configuration source.
+
+All legacy guardrail and filter services removed or blocked.
+
+Paper simulator null errors eliminated.
+
+UI and bot both pull from the same ActiveFilterPool data.
+
+System integrity confirmed by the validation script.

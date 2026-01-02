@@ -56,6 +56,32 @@ Core quantitative metrics (`analysis-utils.ts`) include Log-Liquidity (LQ), Dire
 - server/services/micro-execution-service.ts, server/services/state-awareness.ts
 - server/services/bob-config.ts, server/routes.ts
 
+## [9.8] Phase 9 Validation & Legacy Purge
+
+**Completed:** System stability confirmed after architecture surgery, legacy files removed, filter logic unified.
+
+**Deliverables:**
+- 9.8.A - Integrity Verification: Created `server/scripts/verify-phase-9.ts` confirming guardrails_v2 active, legacy blocked, SYSTEM_GUARDS consistent
+- 9.8.B - Garbage Collection: Deleted legacy files:
+  - `server/services/filtered-pairs.legacy.service.ts`
+  - `client/src/components/_deprecated/rtb-queue-panel.legacy.tsx`
+  - `server/_deprecated/market-data-ws.legacy.ts`
+  - `server/_deprecated/kraken-websocket-adapter.legacy.ts`
+- 9.8.C - Unified Filtering: Created `server/services/unified-filter-gateway.ts` to replace FilteredPairsService with ActiveFilterPool
+  - Updated `server/services/market-evaluation.ts` to use UnifiedFilterGateway
+- 9.8.D - Simulator Hardening: Fixed null handling in `server/services/paper-sim-service.ts` line 631
+
+**Filter Architecture (Post-9.8):**
+- `UnifiedFilterGateway` → Single source of truth for filtered pairs (UI + analytics)
+- `ActiveFilterPoolService` → TTL-based pool fed by FX5 Scanner (trading decisions)
+- `screener_filters` table → User-configurable filter settings in Screeners tab
+- Legacy `FilteredPairsService` → DELETED
+
+**Verification Script:**
+```bash
+npx tsx server/scripts/verify-phase-9.ts
+```
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.

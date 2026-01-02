@@ -624,6 +624,10 @@ export async function startPaperSimulation(
           // REB 2.8.11: Sync portfolioState.balance with new startingBalance AFTER manager starts
           // This ensures the session is fully live before touching canonical portfolio state
           // Moved here from before manager.start() to prevent partial initialization on failure
+          // 9.8.D: Guard against missing startingBalance - throw rather than silently using 0
+          if (!sessionData.startingBalance) {
+            throw new Error('[9.8.D] CRITICAL: startingBalance is missing from session data - cannot sync portfolio');
+          }
           const startBalance = parseFloat(sessionData.startingBalance);
           console.log(`[REB 2.8.11] Syncing portfolioState.balance = $${startBalance} for paper mode`);
           
