@@ -30,6 +30,33 @@ interface ClientMetadata {
   lastPing: string;
 }
 
+// Phase 9.10: Sampling configuration to reduce database write volume
+// High-frequency events are sampled (1 in N logged) to prevent DB bloat
+const EVENT_SAMPLING_CONFIG: Record<string, number> = {
+  'price_updated': 100,      // Log 1% of price updates
+  'health_engine': 10,       // Log 10% of health checks
+  'scan_tick': 50,           // Log 2% of scan ticks
+  'metrics_updated': 20,     // Log 5% of metrics
+  'trading_pipeline_event': 10, // Log 10% of pipeline events
+  'scanner:breakdown:paper': 20,
+  'scanner:breakdown:live': 20,
+  'rtb:updated': 10,
+  'trading_data_updated': 10,
+  'trading_state_changed': 5, // Log 20%
+};
+
+// Feature flag to completely disable DB logging (for maintenance)
+let DB_LOGGING_ENABLED = true;
+
+export function setDbLoggingEnabled(enabled: boolean): void {
+  DB_LOGGING_ENABLED = enabled;
+  console.log(`[ContextBridge] Database logging ${enabled ? 'ENABLED' : 'DISABLED'}`);
+}
+
+export function isDbLoggingEnabled(): boolean {
+  return DB_LOGGING_ENABLED;
+}
+
 class ContextBridge extends EventEmitter {
   private clients: Map<WebSocket, ClientMetadata> = new Map();
   private sessionContexts: Map<string, SessionContext> = new Map();
@@ -37,13 +64,39 @@ class ContextBridge extends EventEmitter {
   private retryBaseDelayMs = 1000;
   private cleanupIntervalMs = 60 * 60 * 1000; // 1 hour
   private sessionMaxAgeMs = 24 * 60 * 60 * 1000; // 24 hours
+  private samplingCounters: Map<string, number> = new Map();
 
   constructor() {
     super();
-    console.log('[ContextBridge] Service initialized');
+    console.log('[ContextBridge] Service initialized with sampling');
     
     // Start cleanup scheduler
     this.startCleanupScheduler();
+  }
+  
+  /**
+   * Phase 9.10: Check if this event should be logged (sampling)
+   */
+  private shouldLogEvent(eventType: string): boolean {
+    // If DB logging is disabled globally, skip all
+    if (!DB_LOGGING_ENABLED) return false;
+    
+    // Get sampling rate (1 = log all, 10 = log 1 in 10, etc.)
+    const sampleRate = EVENT_SAMPLING_CONFIG[eventType] || 1;
+    
+    if (sampleRate <= 1) return true; // No sampling
+    
+    // Increment counter and check if we should log
+    const currentCount = (this.samplingCounters.get(eventType) || 0) + 1;
+    this.samplingCounters.set(eventType, currentCount);
+    
+    // Log every Nth event
+    if (currentCount >= sampleRate) {
+      this.samplingCounters.set(eventType, 0);
+      return true;
+    }
+    
+    return false;
   }
 
   /**
@@ -149,11 +202,14 @@ class ContextBridge extends EventEmitter {
     // Success only if ALL deliveries succeeded (no failures)
     const allSuccess = failureCount === 0 && targetClients.length > 0;
     
-    await this.logBroadcast(fullUpdate, allSuccess, {
-      successCount,
-      failureCount,
-      totalTargets: targetClients.length
-    });
+    // Phase 9.10: Only log if sampling allows (reduces DB write volume)
+    if (this.shouldLogEvent(update.type)) {
+      await this.logBroadcast(fullUpdate, allSuccess, {
+        successCount,
+        failureCount,
+        totalTargets: targetClients.length
+      });
+    }
   }
 
   /**
