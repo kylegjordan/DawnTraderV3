@@ -1,6 +1,6 @@
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * 🔒 LOCKED MODULE — Directive 8.8.4-L8
+ * 🔒 LOCKED MODULE — Directive 10.0.A (Upgraded from 8.8.4-L8)
  * ══════════════════════════════════════════════════════════════════════════════
  * Virtual Trade Simulator Service - Passive Mode Trade Simulation
  * 
@@ -8,11 +8,12 @@
  * calibration and expected-profit correction without placing real orders.
  * 
  * Features:
- * - Simulates trades with realistic fees (0.26% per side) and slippage (0.15%)
+ * - Uses canonical SYSTEM_GUARDS.BASE_FEE_SLIPPAGE (0.5%) for friction
  * - 3-hour trade window with take-profit, stop-loss, and timeout outcomes
  * - Populates virtual trade logs for continuous learning
  * - Per-strategy calibration coefficients (L8)
  * - Zero real order execution
+ * - Phase 10.0: Eliminated Ghost Math, aligned with Phase 9 Math Core
  * 
  * DO NOT MODIFY without architectural review.
  * ══════════════════════════════════════════════════════════════════════════════
@@ -25,6 +26,8 @@ import { loadCalibration, loadFullCalibration, calibrateFromTradesPerStrategy, t
 import { getMarketProfiler, RegimeId } from './market-profiler';
 import { getRegimePerformanceTracker } from './regime-performance';
 import { getRewardEvaluator } from './reward-evaluator';
+import { SYSTEM_GUARDS } from '../config/system-guards.js';
+import { calculateFriction } from '../utils/analysis-utils.js';
 
 export interface VirtualSignal {
   id: string;
@@ -82,8 +85,6 @@ export interface VTSLearningParams {
   lastAdaptiveUpdate: string;
 }
 
-const FEE_RATE = 0.0026;
-const AVG_SLIPPAGE = 0.0015;
 const TRADE_DURATION = 3 * 60 * 60 * 1000;
 const VTS_LOGS_DIR = path.join(process.cwd(), 'logs', 'virtual_trades');
 
@@ -186,6 +187,10 @@ export class VTSService extends EventEmitter {
     return { high: 0, low: 0, close: 0 };
   }
 
+  /**
+   * Directive 10.0.A: Simulate trade using canonical friction from SYSTEM_GUARDS
+   * Ghost Math eliminated - no hardcoded fees
+   */
   simulateTrade(signal: VirtualSignal, outcome: MarketOutcome): Partial<VirtualTrade> {
     const entry = signal.entryPrice;
     const tp = signal.takeProfit;
@@ -205,17 +210,24 @@ export class VTSService extends EventEmitter {
       resultType = 'timeout';
     }
 
-    const gross = (exitPrice - entry) / entry;
-    const fees = entry * (FEE_RATE * 2) + entry * AVG_SLIPPAGE;
-    const net = gross - (fees / entry);
+    const grossProfit = (exitPrice - entry) / entry;
+    const friction = calculateFriction(entry, exitPrice, 1);
+    const frictionRate = friction / entry;
+    const netProfit = grossProfit - frictionRate;
+
+    const isLoss = netProfit <= 0;
+    
+    if (isLoss && grossProfit > 0) {
+      console.log(`[10.0.A][VTS] Friction-adjusted LOSS: ${signal.symbol} gross=${(grossProfit * 100).toFixed(3)}% net=${(netProfit * 100).toFixed(3)}% friction=${(frictionRate * 100).toFixed(3)}%`);
+    }
 
     return {
       resultType,
       exitPrice,
       exitTime: Date.now(),
-      grossProfit: gross,
-      netProfit: net,
-      fees,
+      grossProfit,
+      netProfit,
+      fees: friction,
       status: 'closed',
       calibrated: true
     };

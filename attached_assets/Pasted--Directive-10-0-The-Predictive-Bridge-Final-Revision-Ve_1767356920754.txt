@@ -1,0 +1,173 @@
+⚙️ Directive 10.0 — The Predictive Bridge (Final Revision)
+
+Version: 10.0 (Final Approved)
+Phase: 10 — Predictive System Integration / Strategy Orchestration Foundation
+Status: ✅ Approved for Implementation
+Authors: Strategist (ChatGPT) · Lead Architect (Gemini) · Reviewers (Jim / Kyle G. Jordan)
+
+🎯 Objective
+
+To align the Phase 8 Predictive Learning System with the Phase 9 Mathematical Core, eliminate all Ghost Math (optimistic, hardcoded simulation assumptions), and achieve true Sim-to-Live Parity.
+This directive upgrades the Virtual Trade Simulator (VTS), Data Aggregator, and Decision Confidence Engine (DCE) to use the canonical Net Expectancy (NetEV) and Friction standards introduced in Phase 9.9.
+
+🧭 Strategic Purpose
+
+Replace probabilistic (“hope-based”) simulations with deterministic, math-anchored modeling.
+
+Ensure predictive learning trains on real-world trade physics, not idealized profits.
+
+Enforce a “Physics First” rule—no machine-learning confidence can override negative expectancy.
+
+Prepare the data fabric for Phase 10.1 (Dynamic Strategy Selector) and Phase 11 (Full Closed-Loop Learning).
+
+🧠 Key Enhancements in This Revision
+Improvement	Purpose
+Retraining Freeze (Safety Catch)	Prevents “Model Shock” when fee constants increase from 0.26 % to 0.50 %. The predictive model pauses for one epoch to stabilize.
+trueFrictionDelta Field	Pre-allocates schema for Live/Shadow comparisons of expected vs. realized friction. Nullable in VTS (deterministic), becomes active in Sim-to-Live mode.
+Friction Sanity Invariant	Permanent guard to ensure VTS and SYSTEM_GUARDS remain synchronized.
+🧮 Mathematical Framework
+Metric	Formula	Source
+Friction	(entry + exit) × qty × SYSTEM_GUARDS.BASE_FEE_SLIPPAGE	analysis-utils.ts
+Raw EV	(Pwin × DistTarget) − (Ploss × DistStop)	cwqi-service.ts
+Net EV	RawEV − Friction	cwqi-service.ts
+CWQI Gate	NetEV > 0	Math Core
+Predictive Veto	if (netEV <= 0) score = 0	decision-confidence-engine.ts
+🔩 Implementation Tasks
+1️⃣ Refactor Virtual Trade Simulator (server/services/vts-service.ts)
+
+Goal: Remove hardcoded “Ghost Math” and use canonical friction.
+Steps
+
+import { SYSTEM_GUARDS } from '../config/system-guards';
+import { calculateFriction } from '../utils/analysis-utils';
+
+
+Delete: const FEE_RATE = 0.0026; and AVG_SLIPPAGE = 0.0015;
+
+Compute: const friction = calculateFriction(entry, exit, qty);
+
+Compute Net Profit: const netProfit = grossProfit − friction;
+
+If netProfit <= 0, record trade as LOSS for ML training, even if gross profit was positive.
+
+2️⃣ Patch Data Aggregator (server/services/data-aggregator.ts)
+
+Goal: Provide Predictive Learning with complete context.
+Steps
+
+interface AggregateRecord {
+  symbol: string;
+  strategy: string;
+  regimeId: string;
+  volNoise: number;
+  netEV: number;
+  frictionCost: number;
+  trueFrictionDelta?: number | null;
+}
+
+
+Populate netEV, frictionCost, and volNoise during flush cycle.
+
+Set trueFrictionDelta = Math.abs(expectedFriction − realizedFriction) or 0 / null in VTS.
+
+Future-proof for Sim-to-Live Shadow comparisons.
+
+3️⃣ Upgrade Decision Confidence Engine (server/services/decision-confidence-engine.ts)
+
+Goal: Implement the “Physics First” NetEV Veto.
+Steps
+
+if (metrics.netEV <= 0) {
+  return { score: 0, reason: "Negative Net Expectancy", veto: true };
+}
+
+
+Only apply ML weighting after passing this gate.
+
+4️⃣ Add Safety & Stabilization Mechanisms
+A. Friction Sanity Check (server/tests/integration/parity.test.ts)
+assert.strictEqual(
+  calculateFriction(entry, exit, qty),
+  vtsTrade.friction,
+  "Friction mismatch: VTS drifted from SYSTEM_GUARDS standard."
+);
+
+B. Retraining Freeze (inside Predictive Controller)
+if (epoch === currentEpoch + 1) {
+  console.log("Predictive retraining paused: friction correction stabilization window.");
+  return;
+}
+
+
+Skips training for one epoch after deployment to prevent model shock.
+
+5️⃣ Verification Protocol
+
+npx vitest run server/tests/integration/parity.test.ts → ✅ All tests pass.
+
+Run Sim-to-Live Match Test → NetEV delta ≤ 1e-6.
+
+Confirm Predictive Gate blocks micro-scalp ( RawEV = +0.05, Friction = 0.10 → NetEV = -0.05 ).
+
+📈 Expected Outcomes
+Result	Impact
+Predictive Learning trained on realistic physics	Removes profit hallucination bias.
+Simulator and Live engine aligned	≤ 1 ppm NetEV delta.
+ARA receives truthful NetEV/VolNoise inputs	Improves dynamic risk adaptation.
+ML reward function stabilized	Reduced variance in expected returns.
+Infrastructure ready for Phase 10.1 (DSS)	Full Bridge complete.
+🧩 Directive Summary
+ID	Deliverable	Description	Status
+10.0.A	VTS Refactor	Remove Ghost Math & apply canonical friction.	✅ Required
+10.0.B	Data Aggregator Upgrade	Inject NetEV, volNoise, frictionCost, trueFrictionDelta.	✅ Required
+10.0.C	Decision Veto	Hard NetEV Gate in Decision Engine.	✅ Required
+10.0.D	Friction Sanity Invariant	Parity test ensuring permanent consistency.	🔵 Recommended
+10.0.E	Retraining Freeze	Pause ML update 1 epoch to stabilize.	🔵 Recommended
+🔐 Dependencies
+
+Directive 9.9 (CWQI Net EV Standardization)
+
+Directive 9.8 (System Integrity & Validation)
+
+SYSTEM_GUARDS.BASE_FEE_SLIPPAGE = 0.005
+
+analysis-utils.ts (calculateFriction)
+
+guardrails_v2 active (Directive 9.7)
+
+🚀 Execution Prompt (for Replit Agent)
+@server/services/vts-service.ts @server/services/data-aggregator.ts @server/services/decision-confidence-engine.ts @server/utils/analysis-utils.ts @server/config/system-guards.ts @server/tests/integration/parity.test.ts
+
+We are initializing Phase 10. Execute Directive 10.0 (The Predictive Bridge) to align the Phase 8 Predictive System with Phase 9 Math.
+
+OBJECTIVE:
+Eliminate "Ghost Math" (optimistic fees) and establish Sim-to-Live Parity in the predictive pipeline.
+
+TASK LIST:
+1. REFACTOR VTS:
+   - Remove hardcoded FEE_RATE (0.0026) and AVG_SLIPPAGE.
+   - Import SYSTEM_GUARDS and calculateFriction from analysis-utils.
+   - Use calculateFriction(entry, exit, qty) to compute friction.
+   - Compute netProfit = grossProfit - friction.
+   - If netProfit <= 0, log trade as LOSS for ML training.
+
+2. PATCH DATA AGGREGATOR:
+   - Extend AggregateRecord with netEV, frictionCost, volNoise, trueFrictionDelta (nullable).
+   - Populate during data flush from activeFilterPool or SignalOrchestrator.
+
+3. UPGRADE DECISION ENGINE:
+   - Implement "Physics First" NetEV Veto.
+   - In evaluate(): if (metrics.netEV <= 0) return { score: 0, reason: "Negative Net Expectancy", veto: true }.
+
+4. SAFETY & STABILIZATION:
+   - Add Friction Sanity Check to parity.test.ts.
+   - Pause predictive retraining for 1 epoch after activation.
+
+5. VERIFICATION:
+   - Run vitest integration tests to confirm parity and NetEV consistency.
+
+✅ Directive 10.0 — Predictive Bridge (Final Revision)
+
+Approved by: Lead Architect (Gemini) · Strategist (ChatGPT)
+Validated by: Jim / Kyle G. Jordan
+Ready for Implementation in Replit

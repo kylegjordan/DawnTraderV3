@@ -22,6 +22,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { loadFullCalibration, type FullCalibration, type CalibrationCoefficients } from '../utils/calibration';
 import { contextBridge } from './context-bridge';
+import { getRetrainingFreezeController } from './retraining-freeze-controller.js';
 
 export interface DriftSnapshot {
   timestamp: string;
@@ -278,6 +279,13 @@ export class DriftDetectorService extends EventEmitter {
   private async triggerRecalibration(strategy: string) {
     if (this.recalibrationInProgress.has(strategy)) {
       console.log(`[L11][DRIFT] Recalibration already in progress for ${strategy}`);
+      return;
+    }
+
+    const freezeController = getRetrainingFreezeController();
+    if (!freezeController.isRetrainingAllowed()) {
+      console.log(`[L11][DRIFT] Recalibration blocked by freeze controller for ${strategy}`);
+      this.emit('recalibration_frozen', { strategy, reason: 'Retraining freeze active' });
       return;
     }
     

@@ -1,6 +1,6 @@
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * 🔒 LOCKED MODULE — Directive 8.8.4-L1
+ * 🔒 LOCKED MODULE — Directive 10.0.B (Upgraded from 8.8.4-L1)
  * ══════════════════════════════════════════════════════════════════════════════
  * Data Aggregator Service - Passive & Active Learning Data Aggregation
  * 
@@ -12,6 +12,7 @@
  * - 15-minute aggregation cycles with global roll-up
  * - Automatic mode detection (passive/active)
  * - Strategy-specific and symbol-specific grouping
+ * - Phase 10.0: Added netEV, frictionCost, volNoise, regimeId, trueFrictionDelta
  * 
  * DO NOT MODIFY without architectural review.
  * ══════════════════════════════════════════════════════════════════════════════
@@ -30,6 +31,9 @@ interface CaptureRecord {
   [key: string]: any;
 }
 
+/**
+ * Directive 10.0.B: Extended AggregateRecord with Phase 9 Math fields
+ */
 interface AggregateRecord {
   timestamp: string;
   symbol: string;
@@ -42,8 +46,16 @@ interface AggregateRecord {
   reconfirmRate: number;
   tradePromotionRate: number;
   sampleCount: number;
+  regimeId: string;
+  avgNetEV: number;
+  avgFrictionCost: number;
+  avgVolNoise: number;
+  trueFrictionDelta: number | null;
 }
 
+/**
+ * Directive 10.0.B: Extended GlobalRollup with Phase 9 Math fields
+ */
 interface GlobalRollup {
   timestamp: string;
   avgNGC: number;
@@ -51,6 +63,9 @@ interface GlobalRollup {
   avgRisk: number;
   avgProfitRate: number;
   totalSignals: number;
+  avgNetEV: number;
+  avgFrictionCost: number;
+  avgVolNoise: number;
 }
 
 export class DataAggregator extends EventEmitter {
@@ -180,6 +195,15 @@ export class DataAggregator extends EventEmitter {
           if (values.length === 0) return 0;
           return values.filter(r => r[field] === true).length / values.length;
         };
+        const mode = (field: string) => {
+          const values = recs.filter(r => r[field] !== undefined).map(r => r[field]);
+          if (values.length === 0) return 'UNKNOWN';
+          const counts: Record<string, number> = {};
+          values.forEach(v => { counts[v] = (counts[v] || 0) + 1; });
+          return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'UNKNOWN';
+        };
+        
+        const avgFrictionDelta = avg('trueFrictionDelta');
 
         return {
           timestamp: now.toISOString(),
@@ -192,18 +216,26 @@ export class DataAggregator extends EventEmitter {
           avgProfitRate: avg('profitRate'),
           reconfirmRate: rate('reconfirmed'),
           tradePromotionRate: rate('tradeExecuted'),
-          sampleCount: recs.length
+          sampleCount: recs.length,
+          regimeId: mode('regimeId'),
+          avgNetEV: avg('netEV'),
+          avgFrictionCost: avg('frictionCost'),
+          avgVolNoise: avg('volNoise'),
+          trueFrictionDelta: avgFrictionDelta > 0 ? avgFrictionDelta : null
         };
       });
 
-      // Global roll-up
+      // Global roll-up (Directive 10.0.B: Added Phase 9 Math fields)
       const global: GlobalRollup = {
         timestamp: now.toISOString(),
         avgNGC: this.arrayAvg(aggregates, 'avgNGC'),
         avgCWQI: this.arrayAvg(aggregates, 'avgCWQI'),
         avgRisk: this.arrayAvg(aggregates, 'avgRisk'),
         avgProfitRate: this.arrayAvg(aggregates, 'avgProfitRate'),
-        totalSignals: aggregates.reduce((a, r) => a + r.sampleCount, 0)
+        totalSignals: aggregates.reduce((a, r) => a + r.sampleCount, 0),
+        avgNetEV: this.arrayAvg(aggregates, 'avgNetEV'),
+        avgFrictionCost: this.arrayAvg(aggregates, 'avgFrictionCost'),
+        avgVolNoise: this.arrayAvg(aggregates, 'avgVolNoise')
       };
 
       await fs.writeFile(outFile, JSON.stringify({ aggregates, global }, null, 2));

@@ -1,6 +1,6 @@
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * 🔒 LOCKED MODULE — Directive 8.8.4-L16
+ * 🔒 LOCKED MODULE — Directive 10.0.C (Upgraded from 8.8.4-L16)
  * ══════════════════════════════════════════════════════════════════════════════
  * Decision Confidence Engine (DCE)
  * 
@@ -9,6 +9,10 @@
  * 
  * Formula: DI = w₁·CWQI + w₂·NGC + w₃·MLₙ + w₄·RC + w₅·MC
  * Default weights: w₁=0.25, w₂=0.20, w₃=0.20, w₄=0.15, w₅=0.20
+ * 
+ * Phase 10.0: Added "Physics First" NetEV Veto Gate
+ * - No ML confidence can override negative Net Expectancy
+ * - If netEV <= 0, score = 0 (hard gate)
  * 
  * DO NOT MODIFY without architectural review.
  * ══════════════════════════════════════════════════════════════════════════════
@@ -24,6 +28,9 @@ interface DCEWeights {
   macoConsensus: number;
 }
 
+/**
+ * Directive 10.0.C: Extended SignalMetrics with netEV for Physics First gate
+ */
 interface SignalMetrics {
   symbol: string;
   strategy: string;
@@ -32,8 +39,12 @@ interface SignalMetrics {
   mlConfidence: number;
   regimeConfidence: number;
   macoConsensus: number;
+  netEV?: number;
 }
 
+/**
+ * Directive 10.0.C: Extended DIResult with veto tracking
+ */
 interface DIResult {
   symbol: string;
   strategy: string;
@@ -47,6 +58,8 @@ interface DIResult {
     macoConsensus: number;
   };
   timestamp: string;
+  veto?: boolean;
+  vetoReason?: string;
 }
 
 interface DCEState {
@@ -105,8 +118,33 @@ class DecisionConfidenceEngine extends EventEmitter {
     this.emit('stopped');
   }
 
+  /**
+   * Directive 10.0.C: Compute Decision Index with Physics First NetEV Veto
+   * If netEV <= 0, returns score = 0 with veto flag (no ML can override physics)
+   */
   computeDecisionIndex(metrics: SignalMetrics): DIResult {
     const w = this.state.weights;
+    
+    if (metrics.netEV !== undefined && metrics.netEV <= 0) {
+      console.log(`[10.0.C][DCE][VETO] ${metrics.symbol}_${metrics.strategy}: netEV=${metrics.netEV.toFixed(6)} <= 0 → Physics First Veto`);
+      
+      return {
+        symbol: metrics.symbol,
+        strategy: metrics.strategy,
+        decisionIndex: 0,
+        grade: 'avoid',
+        components: {
+          cwqi: metrics.cwqi,
+          ngc: metrics.ngc,
+          mlConfidence: metrics.mlConfidence,
+          regimeConfidence: metrics.regimeConfidence,
+          macoConsensus: metrics.macoConsensus
+        },
+        timestamp: new Date().toISOString(),
+        veto: true,
+        vetoReason: 'Negative Net Expectancy'
+      };
+    }
     
     const di = 
       w.cwqi * metrics.cwqi +
@@ -133,7 +171,8 @@ class DecisionConfidenceEngine extends EventEmitter {
         regimeConfidence: metrics.regimeConfidence,
         macoConsensus: metrics.macoConsensus
       },
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      veto: false
     };
 
     this.updateTopSignals(result);

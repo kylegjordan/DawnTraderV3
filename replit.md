@@ -111,6 +111,47 @@ npx vitest run server/tests/unit/cwqi.test.ts
 npx vitest run server/tests/integration/parity.test.ts
 ```
 
+## [10.0] The Predictive Bridge - Phase 8/9 Alignment
+
+**Completed:** Aligned Phase 8 Predictive Learning System with Phase 9 Mathematical Core. Eliminated "Ghost Math" (optimistic hardcoded fees) and established Sim-to-Live Parity in the predictive pipeline.
+
+**Deliverables:**
+- 10.0.A - VTS Refactor: Removed hardcoded `FEE_RATE` (0.26%) and `AVG_SLIPPAGE` (0.15%)
+  - Now uses `calculateFriction()` from `analysis-utils.ts`
+  - Uses canonical `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE` (0.5%)
+  - Friction-adjusted losses logged for ML training
+- 10.0.B - Data Aggregator Upgrade: Extended `AggregateRecord` with Phase 9 Math fields
+  - Added: `netEV`, `frictionCost`, `volNoise`, `regimeId`, `trueFrictionDelta`
+  - Provides complete context for Predictive Learning
+- 10.0.C - DCE Physics First Veto: Implemented "Physics First" NetEV Veto Gate
+  - If `netEV <= 0`, returns `score = 0` with `veto = true`
+  - No ML confidence can override negative Net Expectancy
+- 10.0.D - Friction Sanity Invariant: Added 3 new parity tests
+  - Friction Sanity Check: VTS matches SYSTEM_GUARDS standard
+  - NetEV Gate blocks micro-scalp trades with negative expectancy
+  - Predictive Veto: score=0 when netEV <= 0
+- 10.0.E - Retraining Freeze: Created `retraining-freeze-controller.ts`
+  - Prevents "Model Shock" on fee constant changes
+  - 1 epoch (1 hour) pause for friction correction stabilization
+
+**Key Changes:**
+- VTS now uses identical friction as CWQI service
+- Ghost Math eliminated: no hardcoded fees in simulation
+- ML predictions cannot override physics (NetEV veto gate)
+- Data Aggregator captures netEV, volNoise, regimeId for ML training
+
+**Files Modified:**
+- `server/services/vts-service.ts` - Canonical friction
+- `server/services/data-aggregator.ts` - Extended fields
+- `server/services/decision-confidence-engine.ts` - NetEV veto
+- `server/tests/integration/parity.test.ts` - Friction sanity tests
+- `server/services/retraining-freeze-controller.ts` - New file
+
+**Test Commands:**
+```bash
+npx vitest run server/tests/integration/parity.test.ts
+```
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.

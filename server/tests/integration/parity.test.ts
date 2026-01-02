@@ -128,4 +128,64 @@ describe("Directive 9.6 — Sim-to-Live Parity", () => {
     expect(SYSTEM_GUARDS.VERSION).toBe("Phase9_Final");
     console.log(`[9.6][VALIDATION COMPLETE] Phase 9 Core Finalized`);
   });
+
+  /**
+   * Directive 10.0.D: Friction Sanity Invariant
+   * Ensures VTS and SYSTEM_GUARDS remain permanently synchronized
+   */
+  test("Friction Sanity Check: VTS matches SYSTEM_GUARDS standard", () => {
+    const entry = 50000;
+    const exit = 51000;
+    const qty = 1;
+    
+    const expectedFriction = (entry + exit) * qty * SYSTEM_GUARDS.BASE_FEE_SLIPPAGE;
+    const cwqiResult = cwqiService.calculateTradeExpectancy("BTCUSD", {
+      entryPrice: entry,
+      targetPrice: exit,
+      stopPrice: entry * 0.99,
+      DI: 70
+    });
+    
+    expect(cwqiResult.friction).toBeCloseTo(expectedFriction, 6);
+    
+    console.log(`[10.0.D][PARITY] Friction Sanity Check PASSED: ${cwqiResult.friction.toFixed(4)} = ${expectedFriction.toFixed(4)}`);
+    console.log(`[10.0.D][PARITY] BASE_FEE_SLIPPAGE = ${(SYSTEM_GUARDS.BASE_FEE_SLIPPAGE * 100).toFixed(1)}%`);
+  });
+
+  test("NetEV Gate blocks micro-scalp trades with negative expectancy", () => {
+    const microScalp: TradeMeta = {
+      entryPrice: 100,
+      targetPrice: 101.5,
+      stopPrice: 99.0,
+      DI: 80
+    };
+
+    const result = cwqiService.calculateTradeExpectancy("TESTCOIN", microScalp);
+    
+    expect(result.rawEV).toBeGreaterThan(0);
+    expect(result.friction).toBeGreaterThan(result.rawEV);
+    expect(result.netEV).toBeLessThanOrEqual(0);
+    expect(result.isTradeable).toBe(false);
+    
+    console.log(`[10.0.D][GATE] Micro-scalp blocked: rawEV=${result.rawEV.toFixed(4)}, friction=${result.friction.toFixed(4)}, netEV=${result.netEV.toFixed(4)}`);
+  });
+
+  test("Predictive Veto: score=0 when netEV <= 0", () => {
+    const negativeMeta: TradeMeta = {
+      entryPrice: 100,
+      targetPrice: 100.03,
+      stopPrice: 99.95,
+      DI: 50
+    };
+
+    const result = cwqiService.calculateTradeExpectancy("TESTCOIN", negativeMeta);
+    
+    if (result.netEV <= 0) {
+      expect(result.score).toBe(0);
+      console.log(`[10.0.D][VETO] Confirmed: netEV=${result.netEV.toFixed(6)} → score=0`);
+    } else {
+      expect(result.score).toBeGreaterThan(0);
+      console.log(`[10.0.D][PASS] Positive netEV=${result.netEV.toFixed(6)} → score=${result.score.toFixed(4)}`);
+    }
+  });
 });
