@@ -124,9 +124,9 @@ describe("Directive 9.6 — Sim-to-Live Parity", () => {
     console.log(`[9.6][PARITY] pWin range: ${lowResult.pWin} - ${highResult.pWin}`);
   });
 
-  test("Configuration version matches Phase9_Final", () => {
-    expect(SYSTEM_GUARDS.VERSION).toBe("Phase9_Final");
-    console.log(`[9.6][VALIDATION COMPLETE] Phase 9 Core Finalized`);
+  test("Configuration version matches Phase10_DSS", () => {
+    expect(SYSTEM_GUARDS.VERSION).toBe("Phase10_DSS");
+    console.log(`[10.1][VALIDATION COMPLETE] Phase 10 DSS Core Finalized`);
   });
 
   /**

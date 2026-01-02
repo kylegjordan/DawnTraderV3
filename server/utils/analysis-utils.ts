@@ -365,3 +365,24 @@ export function calculatePerUnitFriction(entry: number, exit: number): number {
 export function getFrictionRate(): number {
   return SYSTEM_GUARDS.BASE_FEE_SLIPPAGE;
 }
+
+/**
+ * Directive 10.1.B: Calculate Trend Slope
+ * Measures the normalized price change over a period.
+ * Positive = bullish trend, Negative = bearish trend, Near 0 = sideways.
+ * 
+ * Formula: (P_last - P_first) / P_first
+ * 
+ * @param prices - Array of price points (oldest to newest)
+ * @returns Trend slope as decimal (e.g., 0.05 = +5% bullish, -0.05 = -5% bearish)
+ */
+export function calculateTrendSlope(prices: number[]): number {
+  if (prices.length < 2) return 0;
+  
+  const first = prices[0];
+  const last = prices[prices.length - 1];
+  
+  if (first === 0) return 0;
+  
+  return (last - first) / first;
+}

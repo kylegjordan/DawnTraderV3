@@ -63,7 +63,9 @@ import { getExposureMultiplierSync, computeExposureBias, getBiasSummaryForLog } 
 // import { captureSignalForVTS } from './vts-runner.js';
 // Directive 9.3: Adaptive Kalman Filter integration
 import { getSmoothedPrice, getKalmanFilter } from '../utils/adaptive-kalman.js';
-import { calculateEfficiencyRatio, calculateVolNoise } from '../utils/analysis-utils.js';
+import { calculateEfficiencyRatio, calculateVolNoise, calculateTrendSlope } from '../utils/analysis-utils.js';
+// Directive 10.1: Dynamic Strategy Selector
+import { getDynamicStrategySelector, type DSSMetrics } from './dynamic-strategy-selector.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -592,7 +594,7 @@ export class SignalOrchestrator {
       } as any;
 
       const guardrails = await storage.getGuardrailsV2({ mode: this.mode });
-      const portfolioValue = await getPortfolioBalanceV2(this.mode, systemContext.lastStartedBy);
+      const portfolioValue = await getPortfolioBalanceV2(this.mode);
       
       if (portfolioValue <= 0) {
         console.error(`[B6][SIZING_ERROR] Invalid portfolio value: ${portfolioValue}`);
@@ -714,7 +716,36 @@ export class SignalOrchestrator {
       const VolNoise = calculateVolNoise(closePrices);
       const smoothedPrice = getSmoothedPrice(symbol, rawPrice, ER, VolNoise);
       
+      // Directive 10.1: Calculate trend slope for DSS regime detection
+      const trendSlope = calculateTrendSlope(closePrices);
+      
       console.log(`[9.3][ER] ${symbol}=${ER.toFixed(4)} VolNoise=${VolNoise.toFixed(4)}`);
+      
+      // Directive 10.1: DSS Regime Check
+      const dss = getDynamicStrategySelector();
+      const dssMetrics: DSSMetrics = { volNoise: VolNoise, trendSlope };
+      const regimeInfo = dss.getRegimeInfo(dssMetrics);
+      
+      console.log(`[10.1][DSS] ${symbol}: regime=${regimeInfo.regime}, trendSlope=${trendSlope.toFixed(4)}, volNoise=${VolNoise.toFixed(4)}`);
+      
+      // Veto on Extreme Noise - skip all strategy evaluation for this symbol
+      if (regimeInfo.isVeto) {
+        console.log(`[10.1][DSS] SKIP ${symbol}: Extreme Noise veto (volNoise=${VolNoise.toFixed(4)} > 0.6)`);
+        return signals;
+      }
+      
+      // Directive 10.1: Get regime-allowed strategies from DSS
+      const regimeStrategies = this.getRegimeAllowedStrategies(regimeInfo.regime);
+      const activeStrategies = new Set(
+        [...this.enabledStrategies].filter(s => regimeStrategies.has(s))
+      );
+      
+      if (activeStrategies.size === 0) {
+        console.log(`[10.1][DSS] SKIP ${symbol}: No enabled strategies for regime ${regimeInfo.regime}`);
+        return signals;
+      }
+      
+      console.log(`[10.1][DSS] ${symbol}: activeStrategies=[${[...activeStrategies].join(',')}] for regime=${regimeInfo.regime}`);
       
       // Use smoothed price for strategy evaluation
       const currentPrice = smoothedPrice;
@@ -735,7 +766,8 @@ export class SignalOrchestrator {
 
       const ohlcAsAny = ohlcData as any[];
       
-      if (this.enabledStrategies.has('vwap_pullback')) {
+      // Directive 10.1: Only run strategies allowed for current regime
+      if (activeStrategies.has('vwap_pullback')) {
         const rawSignal = this.strategyEngine.detectVWAPPullback(indicators, settings, ohlcAsAny);
         if (rawSignal) {
           rawSignal.symbol = symbol;
@@ -744,7 +776,7 @@ export class SignalOrchestrator {
         }
       }
 
-      if (this.enabledStrategies.has('abcd_long')) {
+      if (activeStrategies.has('abcd_long')) {
         const rawSignal = this.strategyEngine.detectABCDLong(ohlcAsAny, settings);
         if (rawSignal) {
           rawSignal.symbol = symbol;
@@ -753,7 +785,7 @@ export class SignalOrchestrator {
         }
       }
 
-      if (this.enabledStrategies.has('sma_trend_ride')) {
+      if (activeStrategies.has('sma_trend_ride')) {
         const rawSignal = this.strategyEngine.detectSMATrendRide(indicators, ohlcAsAny, settings);
         if (rawSignal) {
           rawSignal.symbol = symbol;
@@ -762,7 +794,7 @@ export class SignalOrchestrator {
         }
       }
 
-      if (this.enabledStrategies.has('breakout')) {
+      if (activeStrategies.has('breakout')) {
         const rawSignal = this.strategyEngine.detectBreakout(ohlcAsAny, {
           minConsolidationBars: 10,
           maxRangeWidth: 3,
@@ -777,7 +809,7 @@ export class SignalOrchestrator {
         }
       }
 
-      if (this.enabledStrategies.has('mean_reversion')) {
+      if (activeStrategies.has('mean_reversion')) {
         const rawSignal = this.strategyEngine.detectMeanReversion(indicators, ohlcAsAny, {
           meanType: 'vwap',
           smaLength: 20,
@@ -792,7 +824,7 @@ export class SignalOrchestrator {
         }
       }
 
-      if (this.enabledStrategies.has('range_trading')) {
+      if (activeStrategies.has('range_trading')) {
         const rawSignal = this.strategyEngine.detectRangeTrading(ohlcAsAny, {
           minRangeDurationHours: 12,
           minRangeWidth: 3,
@@ -807,7 +839,7 @@ export class SignalOrchestrator {
         }
       }
 
-      if (this.enabledStrategies.has('vwap_bounce')) {
+      if (activeStrategies.has('vwap_bounce')) {
         const rawSignal = this.strategyEngine.detectVWAPBounce(indicators, ohlcAsAny, {
           vwapProximity: 0.5,
           minVWAPSlope: 0.3,
@@ -822,7 +854,7 @@ export class SignalOrchestrator {
         }
       }
 
-      if (this.enabledStrategies.has('liquidity_trap')) {
+      if (activeStrategies.has('liquidity_trap')) {
         const rawSignal = this.strategyEngine.detectLiquidityTrap(ohlcAsAny, {
           maxTrapExtension: 1.2,
           trapReturnBars: 2,
@@ -837,7 +869,7 @@ export class SignalOrchestrator {
         }
       }
 
-      if (this.enabledStrategies.has('dhma')) {
+      if (activeStrategies.has('dhma')) {
         const rawSignal = this.strategyEngine.detectDHMA(indicators, ohlcAsAny, {
           theta_OBI: 0.3,
           epsilon_micro: 0.2,
@@ -855,8 +887,54 @@ export class SignalOrchestrator {
         }
       }
 
+      // Directive 10.1: Apply DSS.evaluate() for NetEV > 0 enforcement and strategy selection
       if (signals.length > 0) {
         console.log(`[37.A][SIGNAL] ${symbol}: Generated ${signals.length} sized signal(s) - ${signals.map(s => s.strategy).join(', ')}`);
+        
+        // Compute strategy metrics for DSS evaluation
+        const strategyMetrics: Record<string, { netEV: number; confidence: number }> = {};
+        for (const signal of signals) {
+          const entry = signal.entryPrice || 0;
+          const target = signal.targetPrice || 0;
+          const stop = signal.stopPrice || 0;
+          const positionSize = signal.positionSize || 1;
+          
+          // Calculate raw EV: (target - entry) * positionSize * pWin
+          // Note: confidence may be 0-1 (NGC) or 0-100 (raw) - normalize to 0-1 first
+          const rawConf = signal.confidence || 0;
+          const normalizedConf = rawConf > 1 ? rawConf / 100 : rawConf; // Handle both 0-100 and 0-1 scales
+          const pWin = Math.min(0.6, Math.max(0.4, normalizedConf)); // Bounded pWin per SYSTEM_GUARDS
+          const rawGain = (target - entry) * positionSize * pWin;
+          const rawLoss = (entry - stop) * positionSize * (1 - pWin);
+          const rawEV = rawGain - rawLoss;
+          
+          // Calculate friction: 2 * BASE_FEE_SLIPPAGE% * entry * positionSize
+          const frictionPct = SYSTEM_GUARDS.BASE_FEE_SLIPPAGE / 100;
+          const friction = 2 * frictionPct * entry * positionSize;
+          
+          // Net EV = Raw EV - Friction
+          const netEV = rawEV - friction;
+          
+          strategyMetrics[signal.strategy] = {
+            netEV,
+            confidence: signal.confidence || 0
+          };
+        }
+        
+        // Call DSS.evaluate() to select best strategy with NetEV > 0
+        const dssResult = dss.evaluate(dssMetrics, strategyMetrics);
+        
+        if (dssResult.veto) {
+          console.log(`[10.1][DSS] VETO ${symbol}: ${dssResult.reason}`);
+          signals.length = 0; // Clear all signals - Physics First enforcement
+        } else if (dssResult.strategy) {
+          // Only keep signals from the DSS-selected strategy
+          const selectedStrategy = dssResult.strategy;
+          const filteredSignals = signals.filter(s => s.strategy === selectedStrategy);
+          console.log(`[10.1][DSS] ${symbol}: Selected ${selectedStrategy}, filtered ${signals.length} → ${filteredSignals.length} signals`);
+          signals.length = 0;
+          signals.push(...filteredSignals);
+        }
       }
 
     } catch (error) {
@@ -866,6 +944,15 @@ export class SignalOrchestrator {
     return signals;
   }
 
+  /**
+   * Directive 10.1: Get strategies allowed for the current market regime
+   */
+  private getRegimeAllowedStrategies(regime: string): Set<string> {
+    const map = SYSTEM_GUARDS.STRATEGY_MAP as Record<string, readonly string[]>;
+    const strategies = map[regime] || [];
+    return new Set(strategies);
+  }
+  
   private calculateVWAP(data: any[]): number {
     if (data.length === 0) return 0;
 

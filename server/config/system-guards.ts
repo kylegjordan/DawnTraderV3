@@ -9,7 +9,7 @@
  */
 
 export const SYSTEM_GUARDS = {
-  VERSION: "Phase9_Final",
+  VERSION: "Phase10_DSS",
   
   MIN_LIQUIDITY_SCORE: 40,
   MAX_VOL_NOISE: 0.6,
@@ -23,6 +23,19 @@ export const SYSTEM_GUARDS = {
   MIN_PWIN: 0.40,
   MAX_PWIN: 0.60,
   DI_PWIN_FACTOR: 200,
+
+  REGIME_THRESHOLDS: {
+    VOL_LOW: 0.3,
+    TREND_POSITIVE: 0.05,
+  },
+
+  STRATEGY_MAP: {
+    BULL_STABLE: ['vwap_pullback', 'vwap_bounce', 'sma_trend_ride', 'abcd_long', 'dhma'],
+    BULL_VOLATILE: ['breakout', 'sma_trend_ride', 'liquidity_trap'],
+    BEAR_STABLE: ['mean_reversion', 'range_trading'],
+    BEAR_VOLATILE: ['mean_reversion', 'liquidity_trap'],
+    LOW_VOL_CHOP: ['mean_reversion', 'range_trading'],
+  },
 } as const;
 
 export type SystemGuardsType = typeof SYSTEM_GUARDS;

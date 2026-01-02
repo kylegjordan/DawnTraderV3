@@ -32,7 +32,7 @@ interface CaptureRecord {
 }
 
 /**
- * Directive 10.0.B: Extended AggregateRecord with Phase 9 Math fields
+ * Directive 10.0.B + 10.1.D: Extended AggregateRecord with Phase 9 Math fields
  */
 interface AggregateRecord {
   timestamp: string;
@@ -47,10 +47,12 @@ interface AggregateRecord {
   tradePromotionRate: number;
   sampleCount: number;
   regimeId: string;
+  strategySelected?: string;
   avgNetEV: number;
   avgFrictionCost: number;
   avgVolNoise: number;
   trueFrictionDelta: number | null;
+  confidenceScore?: number;
 }
 
 /**

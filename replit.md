@@ -1,17 +1,17 @@
 # Crypto Day Trading Web App
 
 ## Overview
-This project is a long-only, spot-trading cryptocurrency day trading web application designed for the Kraken exchange. It automates advanced trading strategies, integrates real-time market scanning, and incorporates disciplined risk management. The application supports both live and paper trading, utilizing OpenAI's GPT models for AI analysis, trade tracking, performance analytics, error diagnosis, and an autonomous learning engine. Its core purpose is to deliver a comprehensive, resilient, and continuously self-optimizing trading platform, aiming for market potential through advanced automation and AI integration.
+This project is a long-only, spot-trading cryptocurrency day trading web application for the Kraken exchange. It automates advanced trading strategies, integrates real-time market scanning, and incorporates disciplined risk management. Supporting both live and paper trading, the application utilizes OpenAI's GPT models for AI analysis, trade tracking, performance analytics, error diagnosis, and an autonomous learning engine. Its core purpose is to deliver a comprehensive, resilient, and continuously self-optimizing trading platform, aiming for market potential through advanced automation and AI integration.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
 ## System Architecture
-The application uses a mobile-first React, TypeScript, and Vite frontend, communicating with a Node.js/Express backend via RESTful API and WebSocket. Data persistence is handled by PostgreSQL, accessed via Neon serverless driver and Drizzle ORM. Authentication uses username/password, bcrypt, JWT, and WebAuthn.
+The application features a mobile-first React, TypeScript, and Vite frontend, communicating with a Node.js/Express backend via RESTful API and WebSocket. PostgreSQL, accessed via Neon serverless driver and Drizzle ORM, handles data persistence. Authentication uses username/password, bcrypt, JWT, and WebAuthn.
 
-Core services include `KrakenService`, `TradingEngine`, `StrategyEngine`, `MarketScanner`, `AIAnalyst`, and `AIOpportunitiesService`. Risk management is managed by `guardrail-settings.ts` and `trade-safety.ts`. An AI Orchestrator & Command Center, powered by GPT-4o, provides an AI SysAdmin Co-Pilot, Unified Command & Conversation Layer, Semantic Memory, and a Continuous Learning Pipeline. The system employs a Hybrid Cognitive-Operational design with an Intent Gateway, `SecureCoreService`, and an Autonomy Layer with Safety Guardrails.
+Core services include `KrakenService`, `TradingEngine`, `StrategyEngine`, `MarketScanner`, `AIAnalyst`, and `AIOpportunitiesService`. Risk management is handled by `guardrail-settings.ts` and `trade-safety.ts`. An AI Orchestrator & Command Center, powered by GPT-4o, provides an AI SysAdmin Co-Pilot, Unified Command & Conversation Layer, Semantic Memory, and a Continuous Learning Pipeline. The system employs a Hybrid Cognitive-Operational design with an Intent Gateway, `SecureCoreService`, and an Autonomy Layer with Safety Guardrails.
 
-A global mode-based engine with a `ModeRegistry` and `MetricsCore` manages live pricing via a `LivePricingAdapter` with dual-source integration and a `KrakenWebSocketAdapter`. A centralized price cache module ensures a single source of truth for active trade pricing. The Goals Engine UI offers advanced universe and signal controls, execution rhythm controls, and simplified daily target goals with a Goal Feasibility Validation & Audit System, and an adaptive learning system.
+A global mode-based engine with a `ModeRegistry` and `MetricsCore` manages live pricing via a `LivePricingAdapter` with dual-source integration and a `KrakenWebSocketAdapter`. A centralized price cache module ensures a single source of truth for active trade pricing. The Goals Engine UI offers advanced universe and signal controls, execution rhythm controls, simplified daily target goals with Goal Feasibility Validation & Audit System, and an adaptive learning system.
 
 Key architectural enhancements include a Service-Layer Non-Blocking Refactor using an In-Memory Operation Queue, a Unified Engine Health Monitor with auto-recovery and anomaly detection, and Dry-Run Mode for non-mutating trade pipeline validation. An Active Filter Pool with TTL-based expiry and deduplication is implemented. Kraken Canonical Symbol Mapping introduces a single authoritative symbol mapping layer. WebSocket Subscription & Tick Flow Diagnostics implement tracing of the complete WebSocket subscription lifecycle and 8-stage price tracing.
 
@@ -31,126 +31,7 @@ System health is maintained through a Safe Heartbeat Monitor, a Volume Classifie
 
 Core quantitative metrics (`analysis-utils.ts`) include Log-Liquidity (LQ), Directional Integrity (DI), Volatility Noise (VolNoise), and Sigma (σ). Dynamic Trade Management is implemented via an Adaptive Trailing Exit (`trailing-exit-controller.ts`) with a dynamic stop distance formula and a two-stage latching system. An Adaptive Kalman Filter (`adaptive-kalman.ts`) dynamically adjusts smoothing based on an Efficiency Ratio (ER). Covariance Guard and Risk Concentration Control (`covariance-engine.ts`, `risk-concentration.ts`) manage portfolio-level correlation and position sizing. CWQI v4 (`cwqi-service.ts`) provides a two-stage trade evaluation system with an Expectancy Value (EV) gate and a Quality Score. Sim-to-Live Parity is ensured by a Configuration Lock (`system-guards.ts`) with a centralized `SYSTEM_GUARDS` object defining all key thresholds and parameters, and a dedicated parity test suite. The system has transitioned to a mode-based architecture (paper/live) with the removal of the deprecated `RiskManager` and userId-based queries. Live mode valuation uses Kraken API and price cache, while paper mode uses a portfolio_state table.
 
-## [9.7] Guardrails Migration - Legacy Deprecation
-
-**IMPORTANT:** The legacy `guardrails` table is deprecated. All guardrails access must use `guardrails_v2`.
-
-**Deprecated Methods (Throw Errors):**
-- `storage.getGuardrails()` - Use `storage.getGuardrailsV2()` instead
-- `storage.upsertGuardrails()` - Use `storage.upsertGuardrailsV2()` instead
-- `updateGuardrails()` in config-update-service.ts - Use `updateGuardrailsV2()` instead
-
-**Read-Only Legacy Access:**
-- `storage.getGuardrailsLegacy()` - For debugging/audit purposes only
-
-**Key Differences (guardrails_v2):**
-- Percentage-based risk: `portfolioRiskPerTradePct` (not dollar-based `riskPerTrade`)
-- Cooldown in v2: `symbolCooldownMinutes` (replaces `cooldownMinutes`)
-- Kill switch: `dailyLossKillSwitchPct` (percentage-based)
-- Position sizing: `maxPositionPercentPct`, `maxTotalExposurePct`
-
-**Migrated Files:**
-- server/storage.ts, server/services/trade-safety.ts, server/services/goal-feasibility.ts
-- server/services/heuristic-trader.ts, server/services/baseline-indicator.ts
-- server/services/config-update-service.ts, server/services/execution-policy-controller.ts
-- server/services/micro-execution-service.ts, server/services/state-awareness.ts
-- server/services/bob-config.ts, server/routes.ts
-
-## [9.8] Phase 9 Validation & Legacy Purge
-
-**Completed:** System stability confirmed after architecture surgery, legacy files removed, filter logic unified.
-
-**Deliverables:**
-- 9.8.A - Integrity Verification: Created `server/scripts/verify-phase-9.ts` confirming guardrails_v2 active, legacy blocked, SYSTEM_GUARDS consistent
-- 9.8.B - Garbage Collection: Deleted legacy files:
-  - `server/services/filtered-pairs.legacy.service.ts`
-  - `client/src/components/_deprecated/rtb-queue-panel.legacy.tsx`
-  - `server/_deprecated/market-data-ws.legacy.ts`
-  - `server/_deprecated/kraken-websocket-adapter.legacy.ts`
-- 9.8.C - Unified Filtering: Created `server/services/unified-filter-gateway.ts` to replace FilteredPairsService with ActiveFilterPool
-  - Updated `server/services/market-evaluation.ts` to use UnifiedFilterGateway
-- 9.8.D - Simulator Hardening: Fixed null handling in `server/services/paper-sim-service.ts` line 631
-
-**Filter Architecture (Post-9.8):**
-- `UnifiedFilterGateway` → Single source of truth for filtered pairs (UI + analytics)
-- `ActiveFilterPoolService` → TTL-based pool fed by FX5 Scanner (trading decisions)
-- `screener_filters` table → User-configurable filter settings in Screeners tab
-- Legacy `FilteredPairsService` → DELETED
-
-**Verification Script:**
-```bash
-npx tsx server/scripts/verify-phase-9.ts
-```
-
-## [9.9] CWQI Net Expectancy & Friction Standardization
-
-**Completed:** Single Net Expectancy model enforced across all CWQI computations with standardized Friction.
-
-**Deliverables:**
-- 9.9.A - Friction Standardization: Added `calculateFriction(entry, exit, qty)` in `server/utils/analysis-utils.ts`
-  - Uses `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE` (0.5%)
-  - Formula: Friction = (entry + exit) × qty × BASE_FEE_SLIPPAGE
-- 9.9.B - CWQI Net EV Upgrade: Updated `server/services/cwqi-service.ts`
-  - RawEV = (Pwin × DistTarget) - (Ploss × DistStop)
-  - NetEV = RawEV - Friction
-  - CWQIResult now includes: netEV, rawEV, friction
-- 9.9.C - Gate & Score Alignment:
-  - Gate: isTradeable = netEV > 0
-  - Score: normalize(netEV / risk) × DI × (1 - VolNoise) × (1 - ρ̄)
-  - Enforced: if netEV ≤ 0, score = 0 (no exceptions)
-- 9.9.D - Regression Tests: 26 unit tests + 5 parity tests covering micro-scalp, normal, and swing trades
-
-**Key Changes:**
-- Removed `costTotal` from CWQIResult (replaced by `friction`, `rawEV`, `netEV`)
-- Gate and Score now use identical netEV computation
-- Debug mode available: `calculateTradeExpectancy(symbol, meta, true)` for diagnostic output
-
-**Test Commands:**
-```bash
-npx vitest run server/tests/unit/cwqi.test.ts
-npx vitest run server/tests/integration/parity.test.ts
-```
-
-## [10.0] The Predictive Bridge - Phase 8/9 Alignment
-
-**Completed:** Aligned Phase 8 Predictive Learning System with Phase 9 Mathematical Core. Eliminated "Ghost Math" (optimistic hardcoded fees) and established Sim-to-Live Parity in the predictive pipeline.
-
-**Deliverables:**
-- 10.0.A - VTS Refactor: Removed hardcoded `FEE_RATE` (0.26%) and `AVG_SLIPPAGE` (0.15%)
-  - Now uses `calculateFriction()` from `analysis-utils.ts`
-  - Uses canonical `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE` (0.5%)
-  - Friction-adjusted losses logged for ML training
-- 10.0.B - Data Aggregator Upgrade: Extended `AggregateRecord` with Phase 9 Math fields
-  - Added: `netEV`, `frictionCost`, `volNoise`, `regimeId`, `trueFrictionDelta`
-  - Provides complete context for Predictive Learning
-- 10.0.C - DCE Physics First Veto: Implemented "Physics First" NetEV Veto Gate
-  - If `netEV <= 0`, returns `score = 0` with `veto = true`
-  - No ML confidence can override negative Net Expectancy
-- 10.0.D - Friction Sanity Invariant: Added 3 new parity tests
-  - Friction Sanity Check: VTS matches SYSTEM_GUARDS standard
-  - NetEV Gate blocks micro-scalp trades with negative expectancy
-  - Predictive Veto: score=0 when netEV <= 0
-- 10.0.E - Retraining Freeze: Created `retraining-freeze-controller.ts`
-  - Prevents "Model Shock" on fee constant changes
-  - 1 epoch (1 hour) pause for friction correction stabilization
-
-**Key Changes:**
-- VTS now uses identical friction as CWQI service
-- Ghost Math eliminated: no hardcoded fees in simulation
-- ML predictions cannot override physics (NetEV veto gate)
-- Data Aggregator captures netEV, volNoise, regimeId for ML training
-
-**Files Modified:**
-- `server/services/vts-service.ts` - Canonical friction
-- `server/services/data-aggregator.ts` - Extended fields
-- `server/services/decision-confidence-engine.ts` - NetEV veto
-- `server/tests/integration/parity.test.ts` - Friction sanity tests
-- `server/services/retraining-freeze-controller.ts` - New file
-
-**Test Commands:**
-```bash
-npx vitest run server/tests/integration/parity.test.ts
-```
+The system enforces a "Physics First" approach, where no trade executes unless Net Expectancy Value (NetEV) > 0. It also incorporates an "Extreme Noise Stop" that auto-vetoes trading when `volNoise` exceeds 0.6. The Dynamic Strategy Selector (DSS) adaptively determines which strategy to deploy based on market regime (trend × volatility) and mathematical expectancy (Net EV). This includes a five-regime detection with veto system and strategy selection by confidence with NetEV > 0 filter, integrated into the `signal-orchestrator.ts`.
 
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.

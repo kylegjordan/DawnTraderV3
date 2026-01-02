@@ -1,0 +1,230 @@
+⚙️ Directive 10.1 — Dynamic Strategy Selector (DSS)
+
+Version: 10.1 (Final Approved Patch)
+Phase: 10 — Strategy Orchestration & Adaptive Execution
+Status: ✅ Finalized and Architect-Approved
+Authors: Lead Architect (Gemini) · Strategist (ChatGPT) · Reviewers (Jim / Kyle G. Jordan)
+
+🎯 Objective
+
+To implement the Dynamic Strategy Selector (DSS) — an adaptive orchestration layer that determines which strategy (if any) to deploy based on market regime (trend × volatility) and mathematical expectancy (Net EV).
+
+The DSS introduces intelligence and restraint to the system:
+it enforces physics-first logic, blocks trades in Extreme Noise markets, and routes execution dynamically to the best-fitting strategy for current conditions.
+
+🧭 Strategic Purpose
+
+Directive 10.0 established the Predictive Bridge, connecting the Phase 8 learning engine to the Phase 9 mathematical core.
+
+Directive 10.1 transforms that bridge into a living, adaptive controller — one that ensures every trade is consistent with both mathematical truth (NetEV > 0) and environmental context (market regime).
+
+🧠 Core Design Principles
+Concept	Description	Enforcement
+Physics First	No trade executes unless NetEV > 0.	Enforced in DSS.
+Extreme Noise Stop	Market chaos threshold at volNoise > 0.6.	Returns EXTREME_NOISE veto.
+Flat Market Awareness	Avoids trading during choppy, sideways regimes.	Introduces LOW_VOL_CHOP regime.
+Strategy Mapping	Aligns strategy families to regimes.	Configured in SYSTEM_GUARDS.
+🧩 Implementation Tasks
+1️⃣ Update System Guards (server/config/system-guards.ts)
+export const SYSTEM_GUARDS = {
+  BASE_FEE_SLIPPAGE: 0.005,
+  MAX_VOL_NOISE: 0.6,
+  REGIME_THRESHOLDS: {
+    VOL_LOW: 0.3,
+    TREND_POSITIVE: 0.05,
+  },
+  STRATEGY_MAP: {
+    BULL_STABLE: ['STRAT_VWAP', 'STRAT_MOMENTUM'],
+    BULL_VOLATILE: ['STRAT_SCALP', 'STRAT_MOMENTUM'],
+    BEAR_STABLE: ['STRAT_MEANREV', 'STRAT_HEDGE'],
+    BEAR_VOLATILE: ['STRAT_SHORTMOM', 'STRAT_SCALP'],
+    LOW_VOL_CHOP: ['STRAT_MEANREV', 'STRAT_SCALP'],
+  },
+};
+
+
+⚠️ Implementation Note:
+Map these string identifiers to actual registered strategy IDs in strategy-engine.ts or your Strategy Registry.
+
+2️⃣ Implement DSS Service (server/services/dynamic-strategy-selector.ts)
+import { SYSTEM_GUARDS } from '../config/system-guards';
+import { calculateVolNoise, calculateTrendSlope } from '../utils/analysis-utils';
+
+export class DynamicStrategySelector {
+  determineRegime(metrics) {
+    const vol = metrics.volNoise;
+    const trend = metrics.trendSlope;
+
+    // 1️⃣ Extreme Noise: Auto-Veto
+    if (vol > SYSTEM_GUARDS.MAX_VOL_NOISE) return 'EXTREME_NOISE';
+
+    // 2️⃣ Bull Regimes
+    if (trend > SYSTEM_GUARDS.REGIME_THRESHOLDS.TREND_POSITIVE) {
+      return vol < SYSTEM_GUARDS.REGIME_THRESHOLDS.VOL_LOW
+        ? 'BULL_STABLE'
+        : 'BULL_VOLATILE';
+    }
+
+    // 3️⃣ Bear Regimes
+    if (trend < -SYSTEM_GUARDS.REGIME_THRESHOLDS.TREND_POSITIVE) {
+      return vol < SYSTEM_GUARDS.REGIME_THRESHOLDS.VOL_LOW
+        ? 'BEAR_STABLE'
+        : 'BEAR_VOLATILE';
+    }
+
+    // 4️⃣ Flat / Sideways Regime
+    return 'LOW_VOL_CHOP';
+  }
+
+  evaluate(snapshot, strategyMetrics) {
+    const regime = this.determineRegime(snapshot);
+
+    if (regime === 'EXTREME_NOISE')
+      return { veto: true, reason: 'Extreme Volatility (>0.6)', regime };
+
+    const candidates = SYSTEM_GUARDS.STRATEGY_MAP[regime] || [];
+    const viable = candidates.filter(s => strategyMetrics[s]?.netEV > 0);
+
+    if (!viable.length)
+      return { veto: true, reason: 'No positive NetEV strategy', regime };
+
+    const best = viable.sort(
+      (a, b) =>
+        (strategyMetrics[b]?.confidence || 0) -
+        (strategyMetrics[a]?.confidence || 0)
+    )[0];
+
+    return { regime, strategy: best, confidence: strategyMetrics[best]?.confidence || 0 };
+  }
+}
+
+
+✅ Handles all five regimes including LOW_VOL_CHOP.
+✅ Returns explicit veto under EXTREME_NOISE and NetEV ≤ 0.
+
+3️⃣ Integrate DSS into Signal Orchestrator (server/services/signal-orchestrator.ts)
+import { DynamicStrategySelector } from './dynamic-strategy-selector';
+const dss = new DynamicStrategySelector();
+
+const result = dss.evaluate(snapshot, strategyMetrics);
+
+if (result.veto) {
+  log(`DSS Filter: ${symbol} rejected → ${result.reason} (Regime: ${result.regime})`);
+  return;
+}
+
+executeTrade(result.strategy, result.confidence);
+
+
+✅ Prevents executions under Extreme Noise or Flat Market vetoes.
+✅ Keeps execution logs transparent for traceability.
+
+4️⃣ Patch Data Aggregator (server/services/data-aggregator.ts)
+
+Extend the AggregateRecord schema for training and analysis continuity:
+
+interface AggregateRecord {
+  symbol: string;
+  regimeId: string;
+  strategySelected?: string;
+  netEV: number;
+  volNoise: number;
+  frictionCost: number;
+  confidenceScore?: number;
+}
+
+
+Populate these during flush cycles to enrich Predictive Learning and CWQI analysis.
+
+5️⃣ Verification Tests (server/tests/integration/dss.test.ts)
+
+Test all critical conditions:
+
+Scenario	Expected Result
+Vol > 0.6	Regime = EXTREME_NOISE → veto
+Trend ≈ 0.0	Regime = LOW_VOL_CHOP
+Trend > 0.05, Vol < 0.3	Regime = BULL_STABLE
+Trend > 0.05, Vol > 0.3	Regime = BULL_VOLATILE
+Trend < -0.05, Vol < 0.3	Regime = BEAR_STABLE
+Trend < -0.05, Vol > 0.3	Regime = BEAR_VOLATILE
+All NetEV ≤ 0	Veto: “No positive NetEV strategy”
+
+Run:
+
+npx vitest run dss.test.ts
+
+🧪 Verification Protocol
+
+vitest run parity.test.ts → No NetEV drift.
+
+vitest run dss.test.ts → Regime mapping and veto behavior verified.
+
+Sim-Live replay: DSS switch frequency ≤ 6 per day (stability check).
+
+Predictive feed confirmed in Aggregator output.
+
+📈 Expected Outcomes
+Outcome	Impact
+Adaptive strategy orchestration	Context-aware execution decisions
+Extreme Noise auto-veto	Prevents chaotic market exposure
+Flat Market detection	Avoids unproductive Trend-Following in chop
+Predictive Learning feedback loop	Richer training data for regime prediction
+NetEV enforcement	Only profitable strategies are allowed to trade
+Full Sim–Live parity maintained	Realistic and deterministic performance
+🧩 Directive Summary
+ID	Deliverable	Description	Status
+10.1.A	System Guards Update	Add MAX_VOL_NOISE, REGIME_THRESHOLDS, and LOW_VOL_CHOP	✅ Required
+10.1.B	DSS Core Logic	Implement five-regime detection with veto system	✅ Required
+10.1.C	Orchestrator Integration	Plug DSS into live execution path	✅ Required
+10.1.D	Data Aggregator Patch	Add regime & strategy tracking fields	🔵 Recommended
+10.1.E	Validation Tests	Add full DSS test suite	🔵 Recommended
+🔐 Dependencies
+
+Directive 10.0 (Predictive Bridge) ✅
+
+SYSTEM_GUARDS (Phase 9 friction constants active)
+
+analysis-utils (volNoise, trendSlope)
+
+decision-confidence-engine (NetEV veto)
+
+data-aggregator (context feed active)
+
+🚀 Final Execution Prompt (for Replit Agent)
+@server/services/dynamic-strategy-selector.ts @server/services/signal-orchestrator.ts @server/services/data-aggregator.ts @server/config/system-guards.ts @server/tests/integration/dss.test.ts @server/utils/analysis-utils.ts
+
+We are executing Directive 10.1: The Dynamic Strategy Selector (DSS).
+
+OBJECTIVE:
+Implement the adaptive controller that selects strategies based on Trend + Volatility while enforcing NetEV > 0, detecting Flat/Sideways regimes, and halting execution in Extreme Noise.
+
+TASK LIST:
+1. Update SYSTEM_GUARDS:
+   - Add REGIME_THRESHOLDS: VOL_LOW 0.3, TREND_POSITIVE 0.05.
+   - Add MAX_VOL_NOISE = 0.6.
+   - Add STRATEGY_MAP:
+       - BULL_STABLE: ['STRAT_VWAP', 'STRAT_MOMENTUM']
+       - BULL_VOLATILE: ['STRAT_SCALP', 'STRAT_MOMENTUM']
+       - BEAR_STABLE: ['STRAT_MEANREV', 'STRAT_HEDGE']
+       - BEAR_VOLATILE: ['STRAT_SHORTMOM', 'STRAT_SCALP']
+       - LOW_VOL_CHOP: ['STRAT_MEANREV', 'STRAT_SCALP']
+2. Implement DSS Service:
+   - If volNoise > 0.6 → EXTREME_NOISE (veto).
+   - If trend > +0.05 → Bull (Stable/Volatile).
+   - If trend < -0.05 → Bear (Stable/Volatile).
+   - Else → LOW_VOL_CHOP.
+   - Evaluate strategies → Filter NetEV > 0 → Sort by confidence → Select top.
+3. Integrate DSS into signal-orchestrator.ts.
+4. Patch data-aggregator.ts with regimeId and strategySelected fields.
+5. Add and run dss.test.ts verifying Extreme Noise, Flat Trend, and NetEV veto behavior.
+
+Run:
+npx vitest run parity.test.ts  
+npx vitest run dss.test.ts
+
+✅ Directive 10.1 — Dynamic Strategy Selector (Final Approved Patch)
+
+Approved by: Lead Architect (Gemini)
+Co-Authored by: Strategist (ChatGPT)
+Reviewed by: Jim / Kyle G. Jordan
+Ready for Implementation in Replit
