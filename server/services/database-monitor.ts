@@ -26,11 +26,12 @@ export class DatabaseMonitor {
       console.log(`[DatabaseMonitor] Database size: ${sizeMb.toFixed(2)} MB (${sizeGb.toFixed(4)} GB)`);
 
       // Determine alert level (10 GiB = 10240 MB limit)
+      // Phase 9.10: Adjusted thresholds - 65% warning, 80% critical (was 50%/70%)
       let alertLevel: 'normal' | 'warning' | 'critical' = 'normal';
-      if (sizeMb >= 7168) { // 7 GiB (70%)
+      if (sizeMb >= 8192) { // 8 GiB (80%)
         alertLevel = 'critical';
         console.warn(`[DatabaseMonitor] ⚠️ CRITICAL: Database is at ${(sizeGb / 10 * 100).toFixed(1)}% of 10 GiB limit`);
-      } else if (sizeMb >= 5120) { // 5 GiB (50%)
+      } else if (sizeMb >= 6656) { // 6.5 GiB (65%)
         alertLevel = 'warning';
         console.warn(`[DatabaseMonitor] ⚠️ WARNING: Database is at ${(sizeGb / 10 * 100).toFixed(1)}% of 10 GiB limit`);
       }
