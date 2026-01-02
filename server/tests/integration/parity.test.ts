@@ -39,9 +39,9 @@ describe("Directive 9.6 — Sim-to-Live Parity", () => {
     expect(Math.abs(result1.ev - result2.ev)).toBeLessThan(SYSTEM_GUARDS.PARITY_TOLERANCE);
     expect(Math.abs(result1.score - result2.score)).toBeLessThan(SYSTEM_GUARDS.PARITY_TOLERANCE);
     expect(Math.abs(result1.pWin - result2.pWin)).toBeLessThan(SYSTEM_GUARDS.PARITY_TOLERANCE);
-    expect(Math.abs(result1.costTotal - result2.costTotal)).toBeLessThan(SYSTEM_GUARDS.PARITY_TOLERANCE);
+    expect(Math.abs(result1.friction - result2.friction)).toBeLessThan(SYSTEM_GUARDS.PARITY_TOLERANCE);
     
-    console.log(`[9.6][PARITY] EV Delta: ${Math.abs(result1.ev - result2.ev).toFixed(10)}`);
+    console.log(`[9.6][PARITY] NetEV Delta: ${Math.abs(result1.netEV - result2.netEV).toFixed(10)}`);
     console.log(`[9.6][PARITY] Score Delta: ${Math.abs(result1.score - result2.score).toFixed(10)}`);
   });
 
@@ -82,21 +82,22 @@ describe("Directive 9.6 — Sim-to-Live Parity", () => {
     console.log(`[9.6][PARITY] Live vs VTS Delta: ${Math.abs(result1.ev - result2.ev).toFixed(6)}`);
   });
 
-  test("Cost calculation uses centralized SYSTEM_GUARDS.BASE_FEE_SLIPPAGE", () => {
+  test("Friction calculation uses centralized SYSTEM_GUARDS.BASE_FEE_SLIPPAGE", () => {
     const entryPrice = 50000;
-    const expectedCost = entryPrice * SYSTEM_GUARDS.BASE_FEE_SLIPPAGE;
+    const targetPrice = entryPrice * 1.02;
+    const expectedFriction = (entryPrice + targetPrice) * SYSTEM_GUARDS.BASE_FEE_SLIPPAGE;
 
     const tradeMeta: TradeMeta = {
       entryPrice,
-      targetPrice: entryPrice * 1.02,
+      targetPrice,
       stopPrice: entryPrice * 0.99,
       DI: 70,
     };
 
     const result = cwqiService.calculateTradeExpectancy("BTCUSD", tradeMeta);
     
-    expect(result.costTotal).toBe(expectedCost);
-    console.log(`[9.6][PARITY] Cost matches centralized config: ${result.costTotal} === ${expectedCost}`);
+    expect(result.friction).toBeCloseTo(expectedFriction, 4);
+    console.log(`[9.9][PARITY] Friction matches centralized config: ${result.friction.toFixed(4)} ≈ ${expectedFriction.toFixed(4)}`);
   });
 
   test("Win probability bounded by SYSTEM_GUARDS.MIN_PWIN and MAX_PWIN", () => {

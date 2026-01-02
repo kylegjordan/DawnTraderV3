@@ -1,20 +1,22 @@
 /**
  * Directive 9.5.A — CWQI v4 Service (Net Expectancy)
+ * Directive 9.9 — Net EV Upgrade with Friction Standardization
  * 
  * Implements the two-stage trade evaluation system:
- * 1. The Gate (Pass/Fail): Net Expectancy (EV) check - reject trades where EV ≤ 0
- * 2. The Score (Ranking): CWQI quality score for ranking tradeable candidates
+ * 1. The Gate (Pass/Fail): Net Expectancy (netEV) check - reject trades where netEV ≤ 0
+ * 2. The Score (Ranking): CWQI quality score using normalize(netEV / risk)
  * 
  * Mathematical Foundation:
- * - EV = (Pwin × DistTarget) - (Ploss × DistStop) - CostTotal
+ * - RawEV = (Pwin × DistTarget) - (Ploss × DistStop)
+ * - Friction = calculateFriction(entry, exit, qty) via canonical helper
+ * - NetEV = RawEV - Friction
  * - Pwin = 0.40 + (DI / 200), capped at 0.60
- * - CostTotal = 0.5% of price (0.4% fees + 0.1% slippage)
- * - Score = (Reward/Risk) × DI × (1 - VolNoise) × (1 - ρ̄)
+ * - Score = normalize(netEV / risk) × DI × (1 - VolNoise) × (1 - ρ̄)
  * 
- * Tags: [9.5][CWQI]
+ * Tags: [9.5][CWQI][9.9]
  */
 
-import { calculateDirectionalIntegrity, calculateVolNoise } from '../utils/analysis-utils.js';
+import { calculateDirectionalIntegrity, calculateVolNoise, calculateFriction } from '../utils/analysis-utils.js';
 import { getKrakenRestPair } from '../markets/kraken-symbol-resolver.js';
 import { covarianceEngine } from '../utils/covariance-engine.js';
 import { SYSTEM_GUARDS } from '../config/system-guards.js';
@@ -31,11 +33,13 @@ export interface TradeMeta {
 export interface CWQIResult {
   isTradeable: boolean;
   ev: number;
+  netEV: number;
+  rawEV: number;
+  friction: number;
   score: number;
   rejectionReason?: string;
   pWin: number;
   pLoss: number;
-  costTotal: number;
   meanCorrelation: number;
 }
 
@@ -85,17 +89,21 @@ class CWQIService {
   }
 
   /**
-   * Calculate Net Expectancy (EV) - The Gate
-   * EV = (Pwin × DistTarget) - (Ploss × DistStop) - CostTotal
+   * Directive 9.9.B: Calculate Net Expectancy (EV) - The Gate
+   * 
+   * RawEV = (Pwin × DistTarget) - (Ploss × DistStop)
+   * Friction = calculateFriction(entry, target, 1) via canonical helper
+   * NetEV = RawEV - Friction
    * 
    * @param tradeMeta - Trade metadata including entry, target, stop prices
-   * @returns EV value (positive = profitable, negative = unprofitable)
+   * @returns Net EV value (positive = profitable, negative = unprofitable)
    */
   calculateExpectancy(tradeMeta: TradeMeta): { 
-    ev: number; 
+    netEV: number;
+    rawEV: number;
+    friction: number;
     pWin: number; 
     pLoss: number; 
-    costTotal: number;
     distTarget: number;
     distStop: number;
   } {
@@ -107,27 +115,44 @@ class CWQIService {
     const pWin = this.calculateWinProbability(DI);
     const pLoss = 1 - pWin;
     
-    const costTotal = entryPrice * COST_PERCENT;
+    const friction = calculateFriction(entryPrice, targetPrice, 1);
     
-    const ev = (pWin * distTarget) - (pLoss * distStop) - costTotal;
+    const rawEV = (pWin * distTarget) - (pLoss * distStop);
+    const netEV = rawEV - friction;
     
-    return { ev, pWin, pLoss, costTotal, distTarget, distStop };
+    return { netEV, rawEV, friction, pWin, pLoss, distTarget, distStop };
   }
 
   /**
-   * Calculate CWQI Quality Score - The Rank
-   * Score = (Reward/Risk) × DI × (1 - VolNoise) × (1 - ρ̄)
+   * Directive 9.9.C: Calculate CWQI Quality Score - The Rank
+   * 
+   * Score = normalize(netEV / risk) × DI × (1 - VolNoise) × (1 - ρ̄)
+   * 
+   * Key changes in 9.9:
+   * - Uses netEV (after friction) instead of raw reward for score calculation
+   * - Ensures Gate and Score use identical netEV value
+   * - If netEV ≤ 0, score MUST be 0 (enforced constraint)
    * 
    * @param tradeMeta - Trade metadata
    * @param symbol - Trading symbol for correlation lookup
+   * @param netEV - Net Expectancy Value (from calculateExpectancy)
    * @returns Score between 0-100
    */
-  calculateQualityScore(tradeMeta: TradeMeta, symbol: string): { score: number; meanCorrelation: number } {
-    const { entryPrice, targetPrice, stopPrice, DI = 50, VolNoise = 0.3 } = tradeMeta;
+  calculateQualityScore(
+    tradeMeta: TradeMeta, 
+    symbol: string,
+    netEV: number
+  ): { score: number; meanCorrelation: number } {
+    const { entryPrice, stopPrice, DI = 50, VolNoise = 0.3 } = tradeMeta;
     
-    const reward = Math.abs(targetPrice - entryPrice);
     const risk = Math.abs(entryPrice - stopPrice);
-    const rewardRiskRatio = risk > 0 ? reward / risk : 0;
+    
+    if (netEV <= 0 || risk <= 0) {
+      const meanCorrelation = this.getMeanCorrelation(symbol);
+      return { score: 0, meanCorrelation };
+    }
+    
+    const netEVRiskRatio = netEV / risk;
     
     const diNormalized = DI / 100;
     
@@ -136,7 +161,7 @@ class CWQIService {
     const meanCorrelation = this.getMeanCorrelation(symbol);
     const correlationFactor = 1 - Math.min(1, Math.max(0, meanCorrelation));
     
-    const rawScore = rewardRiskRatio * diNormalized * volNoiseFactor * correlationFactor * 100;
+    const rawScore = netEVRiskRatio * diNormalized * volNoiseFactor * correlationFactor * 100;
     
     const score = Math.min(100, Math.max(0, rawScore));
     
@@ -144,14 +169,15 @@ class CWQIService {
   }
 
   /**
-   * Main entry point: Calculate trade expectancy and score
-   * Implements both The Gate (EV check) and The Score (ranking)
+   * Directive 9.9: Main entry point - Calculate trade expectancy and score
+   * Implements both The Gate (netEV check) and The Score (ranking)
    * 
    * @param symbol - Trading pair symbol (internal format)
    * @param tradeMeta - Trade metadata
-   * @returns CWQIResult with isTradeable, ev, score, and optional rejection reason
+   * @param debugMode - Enable diagnostic output (optional, default false)
+   * @returns CWQIResult with isTradeable, netEV, score, and optional rejection reason
    */
-  calculateTradeExpectancy(symbol: string, tradeMeta: TradeMeta): CWQIResult {
+  calculateTradeExpectancy(symbol: string, tradeMeta: TradeMeta, debugMode: boolean = false): CWQIResult {
     const krakenPair = getKrakenRestPair(symbol);
     
     let DI = tradeMeta.DI;
@@ -171,27 +197,33 @@ class CWQIService {
     
     const enrichedMeta = { ...tradeMeta, DI, VolNoise };
     
-    const { ev, pWin, pLoss, costTotal } = this.calculateExpectancy(enrichedMeta);
+    const { netEV, rawEV, friction, pWin, pLoss } = this.calculateExpectancy(enrichedMeta);
     
-    const { score, meanCorrelation } = this.calculateQualityScore(enrichedMeta, symbol);
+    const { score, meanCorrelation } = this.calculateQualityScore(enrichedMeta, symbol, netEV);
     
-    const isTradeable = ev > 0;
+    const isTradeable = netEV > 0;
     const rejectionReason = !isTradeable 
-      ? `EV=${ev.toFixed(6)} (negative expectancy after fees)` 
+      ? `NetEV=${netEV.toFixed(6)} (negative expectancy after friction)` 
       : undefined;
     
     const result: CWQIResult = {
       isTradeable,
-      ev,
+      ev: netEV,
+      netEV,
+      rawEV,
+      friction,
       score,
       pWin,
       pLoss,
-      costTotal,
       meanCorrelation,
       rejectionReason
     };
     
-    console.log(`[9.5][CWQI] symbol=${symbol} EV=${ev.toFixed(6)} Score=${score.toFixed(1)} pWin=${pWin.toFixed(2)} DI=${DI.toFixed(1)} VolNoise=${VolNoise.toFixed(3)} ρ̄=${meanCorrelation.toFixed(3)} tradeable=${isTradeable}`);
+    if (debugMode) {
+      console.log(`[CWQI] NetEV=${netEV.toFixed(4)}  Friction=${friction.toFixed(4)}  Score=${score.toFixed(2)}`);
+    }
+    
+    console.log(`[9.9][CWQI] symbol=${symbol} NetEV=${netEV.toFixed(6)} RawEV=${rawEV.toFixed(6)} Friction=${friction.toFixed(6)} Score=${score.toFixed(1)} pWin=${pWin.toFixed(2)} DI=${DI.toFixed(1)} VolNoise=${VolNoise.toFixed(3)} ρ̄=${meanCorrelation.toFixed(3)} tradeable=${isTradeable}`);
     
     return result;
   }

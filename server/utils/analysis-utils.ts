@@ -313,3 +313,55 @@ export function isTargetLockTriggered(
 ): boolean {
   return currentPrice >= targetPrice;
 }
+
+// ==========================================
+// Directive 9.9.A — Friction Standardization
+// Canonical friction calculation using SYSTEM_GUARDS.BASE_FEE_SLIPPAGE
+// ==========================================
+
+/**
+ * Directive 9.9.A: Calculate Total Trade Friction (Fees + Slippage)
+ * 
+ * Friction represents the total cost of executing a round-trip trade:
+ * - Entry side: fees + slippage to buy
+ * - Exit side: fees + slippage to sell
+ * 
+ * Formula: Friction = (entry + exit) × qty × BASE_FEE_SLIPPAGE
+ * 
+ * Uses SYSTEM_GUARDS.BASE_FEE_SLIPPAGE as the authoritative cost rate.
+ * This helper ensures all CWQI computations use identical friction logic.
+ * 
+ * @param entry - Entry price
+ * @param exit - Exit price (target or stop)
+ * @param qty - Position quantity (default: 1 for per-unit calculation)
+ * @returns Total friction cost in USD
+ */
+export function calculateFriction(
+  entry: number,
+  exit: number,
+  qty: number = 1
+): number {
+  const roundTripValue = (entry + exit) * qty;
+  const friction = roundTripValue * SYSTEM_GUARDS.BASE_FEE_SLIPPAGE;
+  return friction;
+}
+
+/**
+ * Directive 9.9.A: Calculate Per-Unit Friction
+ * Simplified helper for single-unit calculations (qty=1)
+ * 
+ * @param entry - Entry price
+ * @param exit - Exit price
+ * @returns Per-unit friction cost
+ */
+export function calculatePerUnitFriction(entry: number, exit: number): number {
+  return calculateFriction(entry, exit, 1);
+}
+
+/**
+ * Directive 9.9.A: Get current friction rate from SYSTEM_GUARDS
+ * @returns Friction rate as decimal (e.g., 0.005 = 0.5%)
+ */
+export function getFrictionRate(): number {
+  return SYSTEM_GUARDS.BASE_FEE_SLIPPAGE;
+}
