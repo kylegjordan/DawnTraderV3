@@ -82,6 +82,35 @@ Core quantitative metrics (`analysis-utils.ts`) include Log-Liquidity (LQ), Dire
 npx tsx server/scripts/verify-phase-9.ts
 ```
 
+## [9.9] CWQI Net Expectancy & Friction Standardization
+
+**Completed:** Single Net Expectancy model enforced across all CWQI computations with standardized Friction.
+
+**Deliverables:**
+- 9.9.A - Friction Standardization: Added `calculateFriction(entry, exit, qty)` in `server/utils/analysis-utils.ts`
+  - Uses `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE` (0.5%)
+  - Formula: Friction = (entry + exit) × qty × BASE_FEE_SLIPPAGE
+- 9.9.B - CWQI Net EV Upgrade: Updated `server/services/cwqi-service.ts`
+  - RawEV = (Pwin × DistTarget) - (Ploss × DistStop)
+  - NetEV = RawEV - Friction
+  - CWQIResult now includes: netEV, rawEV, friction
+- 9.9.C - Gate & Score Alignment:
+  - Gate: isTradeable = netEV > 0
+  - Score: normalize(netEV / risk) × DI × (1 - VolNoise) × (1 - ρ̄)
+  - Enforced: if netEV ≤ 0, score = 0 (no exceptions)
+- 9.9.D - Regression Tests: 26 unit tests + 5 parity tests covering micro-scalp, normal, and swing trades
+
+**Key Changes:**
+- Removed `costTotal` from CWQIResult (replaced by `friction`, `rawEV`, `netEV`)
+- Gate and Score now use identical netEV computation
+- Debug mode available: `calculateTradeExpectancy(symbol, meta, true)` for diagnostic output
+
+**Test Commands:**
+```bash
+npx vitest run server/tests/unit/cwqi.test.ts
+npx vitest run server/tests/integration/parity.test.ts
+```
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.
