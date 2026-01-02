@@ -20,8 +20,9 @@
 9. [Rebuild of Lost Work: REB 1-2.12F](#part-8-rebuild-of-lost-work-reb-1-212f)
 10. [Phase 8.8.3: Making the Engine Work](#part-9-phase-883-making-the-engine-work)
 11. [Phase 8.8.4: Extended Calibration & Validation](#part-10-phase-884-extended-calibration--validation)
-12. [Current Architecture & Components](#part-11-current-architecture--components)
-13. [Roadmap Forward](#part-12-roadmap-forward)
+12. [Phase 9: Math Core Finalization](#part-11-phase-9-math-core-finalization)
+13. [Current Architecture & Components](#part-12-current-architecture--components)
+14. [Roadmap Forward](#part-13-roadmap-forward)
 
 ---
 
@@ -42,8 +43,9 @@ DawnTrader is a **long-only, spot-trading cryptocurrency day trading platform** 
 | REB Program | November 22-30, 2025 | Emergency restoration (REB 1.0-2.12F) |
 | Phase 8.8.3 | December 2025 | End-to-end trading pipeline functional |
 | Phase 8.8.4 | December 2025 | Extended Calibration & Validation Framework |
+| Phase 9 | December 2025 - January 2026 | Math Core Finalization |
 
-**Current State:** DawnTrader V3 is the most stable and feature-complete version ever built. The trading pipeline is fully functional from FX5 scanning through trade closure. Phase 8.8.4 adds comprehensive validation testing with M5D/M5E controlled runs, dynamic guardrail slot calculation, and VTS-Paper trade comparison auditing.
+**Current State:** DawnTrader V3 has completed Phase 9 (Math Core Finalization). The system now has centralized mathematical constants via SYSTEM_GUARDS, standardized CWQI Net Expectancy calculations with friction, unified filter gateway, and comprehensive test coverage (31+ tests). Ready for Phase 10 ML training runs.
 
 ---
 
@@ -670,9 +672,86 @@ maxSlots = floor(maxTotalExposurePct / maxPositionPercentPct)
 
 ---
 
-# Part 11: Current Architecture & Components
+# Part 11: Phase 9: Math Core Finalization
 
-## 11.1 Core Services
+## 11.1 Overview
+
+Phase 9 established the mathematical foundation of DawnTrader V3, centralizing all quantitative constants, standardizing friction calculations, and ensuring Sim-to-Live parity.
+
+**Date Range:** December 2025 - January 2026  
+**Status:** COMPLETE
+
+## 11.2 Directive Summary
+
+| Directive | Description | Status |
+|-----------|-------------|--------|
+| 9.0-FP | Foundation Prep & Deprecated File Cleanup | ✅ Complete |
+| 9.1-9.5 | Core Math Standardization | ✅ Complete |
+| 9.6 | Sim-to-Live Parity Test Suite | ✅ Complete |
+| 9.7 | Guardrails v2 Migration (Percentage-Based) | ✅ Complete |
+| 9.8 | Validation & Legacy Purge | ✅ Complete |
+| 9.9 | CWQI Net Expectancy & Friction Standardization | ✅ Complete |
+
+## 11.3 Key Implementations
+
+### SYSTEM_GUARDS Configuration Lock
+Centralized all mathematical constants in `server/config/system-guards.ts`:
+- `BASE_FEE_SLIPPAGE`: 0.5% friction rate
+- `MIN_LIQUIDITY_SCORE`: 40 (minimum LQ for trading)
+- `MAX_VOL_NOISE`: 0.6 (maximum volatility noise)
+- `MIN_PWIN` / `MAX_PWIN`: 0.40 - 0.60 (bounded win probability)
+- `PARITY_TOLERANCE`: 0.000001 (Sim-to-Live tolerance)
+
+### Guardrails v2 Migration
+Migrated from dollar-based to percentage-based risk management:
+- `portfolioRiskPerTradePct` replaces `riskPerTrade`
+- `dailyLossKillSwitchPct` replaces `maxDailyLoss`
+- Legacy methods throw errors; must use V2 methods
+
+### CWQI Net Expectancy Model
+Standardized trade evaluation with friction:
+- **RawEV** = (Pwin × DistTarget) - (Ploss × DistStop)
+- **Friction** = (entry + exit) × BASE_FEE_SLIPPAGE
+- **NetEV** = RawEV - Friction
+- **Gate**: isTradeable = netEV > 0
+- **Score**: normalize(netEV / risk) × DI × (1 - VolNoise) × (1 - ρ̄)
+
+### Unified Filter Gateway
+Single source of truth for filtered pairs:
+- `UnifiedFilterGateway` wraps `ActiveFilterPoolService`
+- Legacy `FilteredPairsService` deleted
+- TTL hydration from Kraken on cold start
+
+## 11.4 Test Suite
+
+| Category | Count | Command |
+|----------|-------|---------|
+| CWQI Unit Tests | 26 | `npx vitest run server/tests/unit/cwqi.test.ts` |
+| Parity Tests | 5 | `npx vitest run server/tests/integration/parity.test.ts` |
+| Phase 9 Verification | 6 | `npx tsx server/scripts/verify-phase-9.ts` |
+
+**Total: 37 tests/checks all passing**
+
+## 11.5 Files Added/Modified
+
+**New Files:**
+- `server/config/system-guards.ts` - Centralized constants
+- `server/services/unified-filter-gateway.ts` - Filter gateway
+- `server/scripts/verify-phase-9.ts` - Verification script
+- `server/tests/unit/cwqi.test.ts` - CWQI unit tests
+- `bridge/canonical/Phase_9_Implementation_History.md` - Full history
+
+**Deleted Files:**
+- `server/services/filtered-pairs.legacy.service.ts`
+- `server/_deprecated/market-data-ws.legacy.ts`
+- `server/_deprecated/kraken-websocket-adapter.legacy.ts`
+- `client/src/components/_deprecated/rtb-queue-panel.legacy.tsx`
+
+---
+
+# Part 12: Current Architecture & Components
+
+## 12.1 Core Services
 
 | Service | File | Purpose |
 |---------|------|---------|
@@ -761,30 +840,29 @@ tuned_by_latti                  -- LATTi optimization flag
 
 ---
 
-# Part 12: Roadmap Forward
+# Part 13: Roadmap Forward
 
-## 12.1 Phase 8.8 Completion
+## 13.1 Phase Completion Summary
 
-| Subphase | Description | Status |
+| Phase | Description | Status |
 |----------|-------------|--------|
 | 8.8.1 | Scanner Output Audit | ✅ Complete |
 | 8.8.2 | Signal Engine Audit | ✅ Complete |
 | 8.8.3 | Strategy Engine Audit | ✅ Complete |
 | 8.8.4 | Extended Calibration & Validation | ✅ Complete |
-| 8.8.5 | Trading Engine Audit | ⏳ Pending |
-| 8.8.9 | Green Path Test | ⏳ Pending |
+| 9.0-9.9 | Math Core Finalization | ✅ Complete |
 
-## 12.2 Future Phases
+## 13.2 Future Phases
 
-| Phase | Description |
-|-------|-------------|
-| **Phase 9** | Full Strategy Engine Rebuild |
-| **Phase 10** | Full LATTi/Lottie Restore (active control) |
-| **Phase 11** | Live Execution Engine (real Kraken orders) |
-| **Phase 12** | AWS & Supabase Migration |
-| **Phase 13** | Restore Walter (strategic advisor role) |
+| Phase | Description | Status |
+|-------|-------------|--------|
+| **Phase 9** | Math Core Finalization | ✅ Complete |
+| **Phase 10** | ML Training Runs | ⏳ Pending |
+| **Phase 11** | Live Execution Engine (real Kraken orders) | ⏳ Pending |
+| **Phase 12** | AWS & Supabase Migration | ⏳ Pending |
+| **Phase 13** | Restore Walter (strategic advisor role) | ⏳ Pending |
 
-## 12.3 Walter's Future Role
+## 13.3 Walter's Future Role
 
 Walter returns in Phase 13 as:
 - Long-horizon advisor (not real-time)
@@ -860,5 +938,5 @@ If (operation requires real-time response) + (operation will be called frequentl
 ---
 
 **Document Status:** Complete  
-**Last Updated:** December 12, 2025  
-**Next Review:** Upon Phase 8.8 completion
+**Last Updated:** January 02, 2026  
+**Next Review:** Upon Phase 10 completion

@@ -1,11 +1,37 @@
 {
   "repo_root": "/",
   "purpose": "Authoritative navigation map for DawnTrader repository. ChatGPT MUST consult this file before accessing any repository files.",
-  "last_updated": "2025-12-31",
+  "last_updated": "2026-01-02",
+  "current_phase": "Phase 9 Complete (Math Core Finalization)",
   "domains": {
     "bridge": {
       "path": "/bridge",
-      "description": "Governance, canonical truth, directives, decisions, runtime rules"
+      "description": "Governance, canonical truth, directives, decisions, runtime rules",
+      "subdomains": {
+        "canonical": {
+          "path": "/bridge/canonical",
+          "description": "Canonical truth documents",
+          "key_files": [
+            "DawnTrader_Complete_Project_History.md",
+            "DawnTrader_Current_State_Reference.md",
+            "DawnTrader_System_Architecture_Execution_Flow.md",
+            "DawnTrader_System_Invariants_Design_Guarantees.md",
+            "Phase_8_Implementation_History.md",
+            "Phase_9_Implementation_History.md",
+            "Walter_and_LATTi_System_History.md",
+            "dawntrader-future-state-paper-engine.md"
+          ]
+        },
+        "runtime": {
+          "path": "/bridge/runtime",
+          "description": "Runtime rules and templates",
+          "key_files": [
+            "repo-map.json",
+            "assistant-rules.md",
+            "session-bootstrap.md"
+          ]
+        }
+      }
     },
     "chaplet": {
       "path": "/chaplet",
@@ -17,11 +43,35 @@
       "subdomains": {
         "_deprecated": {
           "path": "/server/_deprecated",
-          "description": "Quarantined legacy files (9.0-FP cleanup)"
+          "description": "Quarantined legacy files (9.0-FP cleanup) - most deleted in 9.8"
+        },
+        "config": {
+          "path": "/server/config",
+          "description": "Configuration files including SYSTEM_GUARDS",
+          "key_files": [
+            "system-guards.ts"
+          ]
         },
         "services": {
           "path": "/server/services",
-          "description": "Core trading services, adapters, and business logic"
+          "description": "Core trading services, adapters, and business logic",
+          "key_files": [
+            "cwqi-service.ts",
+            "unified-filter-gateway.ts",
+            "active-filter-pool.ts",
+            "fx5-scanner.ts",
+            "strategy-engine.ts",
+            "signal-orchestrator.ts",
+            "paper-execution-engine.ts",
+            "trade-safety.ts"
+          ]
+        },
+        "utils": {
+          "path": "/server/utils",
+          "description": "Utility functions including analysis-utils",
+          "key_files": [
+            "analysis-utils.ts"
+          ]
         },
         "engines": {
           "path": "/server/engines",
@@ -30,6 +80,31 @@
         "routes": {
           "path": "/server/routes",
           "description": "API route definitions"
+        },
+        "scripts": {
+          "path": "/server/scripts",
+          "description": "Utility and verification scripts",
+          "key_files": [
+            "verify-phase-9.ts"
+          ]
+        },
+        "tests": {
+          "path": "/server/tests",
+          "description": "Test suites",
+          "subdomains": {
+            "unit": {
+              "path": "/server/tests/unit",
+              "key_files": [
+                "cwqi.test.ts"
+              ]
+            },
+            "integration": {
+              "path": "/server/tests/integration",
+              "key_files": [
+                "parity.test.ts"
+              ]
+            }
+          }
         }
       }
     },
@@ -39,7 +114,7 @@
       "subdomains": {
         "_deprecated": {
           "path": "/client/src/components/_deprecated",
-          "description": "Quarantined legacy UI components (9.0-FP cleanup)"
+          "description": "Quarantined legacy UI components - most deleted in 9.8"
         },
         "components": {
           "path": "/client/src/components",
@@ -89,7 +164,17 @@
   "deprecated_locations": {
     "server": "/server/_deprecated",
     "client": "/client/src/components/_deprecated",
-    "note": "Files moved here during 9.0-FP cleanup - pending permanent removal"
+    "note": "Most legacy files deleted during 9.8 Legacy Purge. Remaining files pending permanent removal."
+  },
+  "phase_9_key_files": {
+    "system_guards": "server/config/system-guards.ts",
+    "cwqi_service": "server/services/cwqi-service.ts",
+    "analysis_utils": "server/utils/analysis-utils.ts",
+    "unified_filter_gateway": "server/services/unified-filter-gateway.ts",
+    "verification_script": "server/scripts/verify-phase-9.ts",
+    "cwqi_tests": "server/tests/unit/cwqi.test.ts",
+    "parity_tests": "server/tests/integration/parity.test.ts",
+    "implementation_history": "bridge/canonical/Phase_9_Implementation_History.md"
   },
   "denied_paths": [
     "/node_modules",
@@ -111,6 +196,6 @@
     "update_required_when_structure_changes": true,
     "owner": "Kyle",
     "governed_by_bridge": true,
-    "last_updated_by": "9.0-FP Foundation Prep"
+    "last_updated_by": "Phase 9 Math Core Finalization"
   }
 }
