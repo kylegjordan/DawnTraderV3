@@ -66,6 +66,7 @@ import { getSmoothedPrice, getKalmanFilter } from '../utils/adaptive-kalman.js';
 import { calculateEfficiencyRatio, calculateVolNoise, calculateTrendSlope } from '../utils/analysis-utils.js';
 // Directive 10.1: Dynamic Strategy Selector
 import { getDynamicStrategySelector, type DSSMetrics } from './dynamic-strategy-selector.js';
+import { SYSTEM_GUARDS } from '../config/system-guards.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -897,7 +898,7 @@ export class SignalOrchestrator {
           const entry = signal.entryPrice || 0;
           const target = signal.targetPrice || 0;
           const stop = signal.stopPrice || 0;
-          const positionSize = signal.positionSize || 1;
+          const positionSize = signal.quantity || 1;
           
           // Calculate raw EV: (target - entry) * positionSize * pWin
           // Note: confidence may be 0-1 (NGC) or 0-100 (raw) - normalize to 0-1 first
@@ -934,6 +935,30 @@ export class SignalOrchestrator {
           console.log(`[10.1][DSS] ${symbol}: Selected ${selectedStrategy}, filtered ${signals.length} → ${filteredSignals.length} signals`);
           signals.length = 0;
           signals.push(...filteredSignals);
+          
+          // Directive 10.2: Capture trade snapshot with DSS fields for Predictive Position Sizing
+          const selectedMetrics = strategyMetrics[selectedStrategy];
+          if (selectedMetrics && filteredSignals.length > 0) {
+            const signal = filteredSignals[0];
+            const entry = signal.entryPrice || 0;
+            const posSize = signal.quantity || 1;
+            const frictionPct = SYSTEM_GUARDS.BASE_FEE_SLIPPAGE / 100;
+            const frictionCost = 2 * frictionPct * entry * posSize;
+            
+            dataAggregator.capture('DSS_TRADE_SNAPSHOT', {
+              symbol,
+              regimeId: regimeInfo.regime,
+              strategySelected: selectedStrategy,
+              netEV: selectedMetrics.netEV,
+              confidenceScore: signal.ngc || signal.confidence || 0,
+              frictionCost,
+              volNoise: dssMetrics.volNoise,
+              trendSlope: dssMetrics.trendSlope,
+              strategy: selectedStrategy,
+            }).catch(() => {});
+            
+            console.log(`[10.2][CAPTURE] ${symbol}: regimeId=${regimeInfo.regime}, strategy=${selectedStrategy}, netEV=${selectedMetrics.netEV.toFixed(4)}, friction=${frictionCost.toFixed(4)}`);
+          }
         }
       }
 
