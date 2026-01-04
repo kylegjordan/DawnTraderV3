@@ -39,6 +39,10 @@ export interface VirtualSignal {
   predictedProfit: number;
   strategy: string;
   createdAt: number;
+  signalType?: 'QUANT' | 'PATTERN' | 'HYBRID';
+  patternType?: string;
+  patternStrength?: number;
+  predictiveConfidence?: number;
 }
 
 export interface VirtualTrade {
