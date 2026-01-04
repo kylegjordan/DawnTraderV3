@@ -13,6 +13,7 @@
  * - Automatic mode detection (passive/active)
  * - Strategy-specific and symbol-specific grouping
  * - Phase 10.0: Added netEV, frictionCost, volNoise, regimeId, trueFrictionDelta
+ * - Phase 10.2: Added signalType, patternType, patternStrength, predictiveConfidence
  * 
  * DO NOT MODIFY without architectural review.
  * ══════════════════════════════════════════════════════════════════════════════
@@ -32,7 +33,7 @@ interface CaptureRecord {
 }
 
 /**
- * Directive 10.0.B + 10.1.D: Extended AggregateRecord with Phase 9 Math fields
+ * Directive 10.0.B + 10.1.D + 10.2: Extended AggregateRecord with Pattern fields
  */
 interface AggregateRecord {
   timestamp: string;
@@ -53,6 +54,10 @@ interface AggregateRecord {
   avgVolNoise: number;
   trueFrictionDelta: number | null;
   confidenceScore?: number;
+  signalType?: 'QUANT' | 'PATTERN' | 'HYBRID';
+  patternType?: string;
+  patternStrength?: number;
+  predictiveConfidence?: number;
 }
 
 /**

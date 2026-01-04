@@ -67,6 +67,8 @@ import { calculateEfficiencyRatio, calculateVolNoise, calculateTrendSlope } from
 // Directive 10.1: Dynamic Strategy Selector
 import { getDynamicStrategySelector, type DSSMetrics } from './dynamic-strategy-selector.js';
 import { SYSTEM_GUARDS } from '../config/system-guards.js';
+// Directive 10.2: Pattern Recognizer
+import { getPatternRecognizer, type Candle, type PatternSignal, type SignalType } from './pattern-recognizer.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -885,6 +887,62 @@ export class SignalOrchestrator {
           rawSignal.symbol = symbol;
           const sizedSignal = this.buildSizedSignalForStrategy(rawSignal, 'dhma', sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
+        }
+      }
+
+      // Directive 10.2: Pattern Recognition - Scan for candlestick patterns
+      const patternRecognizer = getPatternRecognizer();
+      const candles: Candle[] = ohlcData.map((c: any) => ({
+        timestamp: parseInt(c.time || c[0]) * 1000,
+        open: parseFloat(c.open || c[1]),
+        high: parseFloat(c.high || c[2]),
+        low: parseFloat(c.low || c[3]),
+        close: parseFloat(c.close || c[4]),
+        volume: parseFloat(c.volume || c[6] || '0')
+      }));
+      
+      const patternSignals = patternRecognizer.scanPatterns(candles, symbol);
+      
+      // Calculate ATR for stop/target placement
+      const atrPeriod = Math.min(14, candles.length);
+      let atr = 0;
+      if (candles.length >= atrPeriod) {
+        const ranges = candles.slice(-atrPeriod).map(c => c.high - c.low);
+        atr = ranges.reduce((a, b) => a + b, 0) / atrPeriod;
+      }
+      
+      // Convert pattern signals to trade signals and add to queue
+      for (const patternSig of patternSignals) {
+        // Only process BUY patterns for long-only trading
+        if (patternSig.direction !== 'BUY') continue;
+        
+        const tradeSignal = patternRecognizer.patternToTradeSignal(patternSig, currentPrice, atr);
+        
+        // Build StrategySignal-compatible object
+        const rawPatternSignal = {
+          symbol,
+          strategy: tradeSignal.strategy as any,
+          entryPrice: tradeSignal.entryPrice,
+          stopPrice: tradeSignal.stopPrice,
+          targetPrice: tradeSignal.targetPrice,
+          confidence: tradeSignal.confidence,
+          metadata: {
+            ...tradeSignal.metadata,
+            signalType: 'PATTERN' as SignalType,
+            patternType: patternSig.pattern,
+            patternStrength: patternSig.strength
+          }
+        };
+        
+        // Size the pattern signal (use 'breakout' as base strategy type for sizing)
+        const sizedPatternSignal = this.buildSizedSignalForStrategy(rawPatternSignal as any, 'breakout' as StrategyType, sizingContext);
+        if (sizedPatternSignal) {
+          // Tag with PATTERN signalType
+          (sizedPatternSignal as any).signalType = 'PATTERN';
+          (sizedPatternSignal as any).patternType = patternSig.pattern;
+          (sizedPatternSignal as any).patternStrength = patternSig.strength;
+          signals.push(sizedPatternSignal);
+          console.log(`[10.2][PATTERN] ${symbol}: Added ${patternSig.pattern} signal with strength=${patternSig.strength.toFixed(2)}`);
         }
       }
 
