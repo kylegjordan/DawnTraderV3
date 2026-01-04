@@ -21,40 +21,46 @@ describe('Directive 10.2 — Pattern Recognizer', () => {
   
   describe('PINBAR Detection', () => {
     test('Detects bullish pinbar with long lower wick', () => {
+      // Bullish pinbar: Long lower wick (>2x body), small upper wick
+      // Candle 3: open=101, close=100.5 (body=0.5), high=101.5, low=80 (lowerWick=20.5)
       const candles: Candle[] = [
         { timestamp: 1000, open: 100, high: 101, low: 99, close: 100.5, volume: 1000 },
-        { timestamp: 2000, open: 101, high: 101.5, low: 80, close: 100.5, volume: 1200 }
+        { timestamp: 2000, open: 100, high: 101, low: 99, close: 100.5, volume: 1000 },
+        { timestamp: 3000, open: 101, high: 101.5, low: 80, close: 100.5, volume: 1200 }
       ];
       
       const signals = scanPatterns(candles, 'BTCUSD');
       const pinbar = signals.find(s => s.pattern === 'PINBAR');
       
-      if (pinbar) {
-        expect(pinbar.direction).toBe('BUY');
-        expect(pinbar.strength).toBeGreaterThanOrEqual(0.6);
-        console.log(`[10.2][TEST] Bullish Pinbar detected: strength=${pinbar.strength.toFixed(2)}`);
-      } else {
-        console.log(`[10.2][TEST] Pinbar detection validates wick ratio - test data may need adjustment`);
-        expect(signals).toBeDefined();
-      }
+      expect(pinbar).toBeDefined();
+      expect(pinbar?.direction).toBe('BUY');
+      expect(pinbar?.strength).toBeGreaterThanOrEqual(0.6);
+      console.log(`[10.2][TEST] Bullish Pinbar detected: strength=${pinbar?.strength.toFixed(2)}`);
     });
 
-    test('Pattern detection returns array for any candle input', () => {
+    test('Detects bearish pinbar with long upper wick', () => {
+      // Bearish pinbar: Long upper wick (>2x body), small lower wick
+      // Candle 3: open=100, close=100.5 (body=0.5), high=120, low=99.5 (upperWick=19.5)
       const candles: Candle[] = [
         { timestamp: 1000, open: 100, high: 101, low: 99, close: 100.5, volume: 1000 },
-        { timestamp: 2000, open: 100.2, high: 110, low: 99.8, close: 100, volume: 1200 }
+        { timestamp: 2000, open: 100, high: 101, low: 99, close: 100.5, volume: 1000 },
+        { timestamp: 3000, open: 100, high: 120, low: 99.5, close: 100.5, volume: 1200 }
       ];
       
       const signals = scanPatterns(candles, 'BTCUSD');
+      const pinbar = signals.find(s => s.pattern === 'PINBAR');
       
-      expect(Array.isArray(signals)).toBe(true);
-      console.log(`[10.2][TEST] Pattern scan returns array with ${signals.length} signals`);
+      expect(pinbar).toBeDefined();
+      expect(pinbar?.direction).toBe('SELL');
+      expect(pinbar?.strength).toBeGreaterThanOrEqual(0.6);
+      console.log(`[10.2][TEST] Bearish Pinbar detected: strength=${pinbar?.strength.toFixed(2)}`);
     });
 
     test('scanPatterns handles extreme candle data without errors', () => {
       const candles: Candle[] = [
         { timestamp: 1000, open: 100, high: 101, low: 99, close: 100, volume: 1000 },
-        { timestamp: 2000, open: 100, high: 100.1, low: 70, close: 99.9, volume: 1500 }
+        { timestamp: 2000, open: 100, high: 101, low: 99, close: 100, volume: 1000 },
+        { timestamp: 3000, open: 100, high: 100.1, low: 70, close: 99.9, volume: 1500 }
       ];
       
       expect(() => scanPatterns(candles, 'BTCUSD')).not.toThrow();
@@ -98,21 +104,21 @@ describe('Directive 10.2 — Pattern Recognizer', () => {
 
   describe('INSIDE_BAR Detection', () => {
     test('Detects inside bar compression setup', () => {
+      // Inside bar: Current range completely inside previous range
+      // Candle 2: high=150, low=60 (range=90)
+      // Candle 3: high=140 < 150, low=70 > 60 (inside)
       const candles: Candle[] = [
-        { timestamp: 1000, open: 80, high: 150, low: 60, close: 140, volume: 1000 },
-        { timestamp: 2000, open: 100, high: 140, low: 70, close: 120, volume: 800 }
+        { timestamp: 1000, open: 100, high: 101, low: 99, close: 100, volume: 1000 },
+        { timestamp: 2000, open: 80, high: 150, low: 60, close: 140, volume: 1000 },
+        { timestamp: 3000, open: 100, high: 140, low: 70, close: 120, volume: 800 }
       ];
       
       const signals = scanPatterns(candles, 'BTCUSD');
       const insideBar = signals.find(s => s.pattern === 'INSIDE_BAR');
       
-      if (insideBar) {
-        expect(insideBar?.strength).toBeGreaterThanOrEqual(0.6);
-        console.log(`[10.2][TEST] Inside Bar: strength=${insideBar?.strength.toFixed(2)}, direction=${insideBar?.direction}`);
-      } else {
-        console.log(`[10.2][TEST] Inside Bar pattern implementation validates other patterns first - skipping strict assertion`);
-        expect(signals.length).toBeGreaterThanOrEqual(0);
-      }
+      expect(insideBar).toBeDefined();
+      expect(insideBar?.strength).toBeGreaterThanOrEqual(0.6);
+      console.log(`[10.2][TEST] Inside Bar: strength=${insideBar?.strength.toFixed(2)}, direction=${insideBar?.direction}`);
     });
   });
 
