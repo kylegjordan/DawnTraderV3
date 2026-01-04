@@ -18,27 +18,9 @@
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-export type PatternType = 'PINBAR' | 'ENGULFING' | 'INSIDE_BAR' | 'MORNING_STAR' | 'THREE_SOLDIERS';
-export type SignalType = 'QUANT' | 'PATTERN' | 'HYBRID';
+import type { PatternType, SignalType, Candle, PatternSignal } from '../types';
 
-export interface Candle {
-  timestamp: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-}
-
-export interface PatternSignal {
-  symbol: string;
-  pattern: PatternType;
-  direction: 'BUY' | 'SELL';
-  strength: number;               // 0.0 - 1.0
-  timestamp: number;
-  predictiveConfidence?: number;  // Hook for Predictive Learning in Phase 10.4
-  metadata?: Record<string, any>;
-}
+export type { PatternType, SignalType, Candle, PatternSignal };
 
 /**
  * Calculate candle body size (absolute)

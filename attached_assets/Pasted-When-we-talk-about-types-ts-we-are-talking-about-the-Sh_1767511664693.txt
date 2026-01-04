@@ -1,0 +1,96 @@
+When we talk about types.ts, we are talking about the Shared Dictionary of the application.
+
+If server/services/pattern-recognizer.ts creates a "Pattern" object, and server/services/signal-orchestrator.ts needs to read that object, they both need to agree on exactly what that object looks like. If they define it separately, the code breaks.
+
+For Directive 10.2, server/types.ts needs to define the "Three Lanes" of our new Hybrid architecture.
+
+Here is exactly what should be in that file.
+
+📄 File Content: server/types.ts
+If this file already exists, append these definitions to it. If it doesn't exist, create it.
+
+TypeScript
+
+// --------------------------------------------------------------------------
+// PHASE 10: HYBRID SIGNAL TYPES
+// --------------------------------------------------------------------------
+
+/**
+ * The "Three Lanes" of the DawnTrader Engine.
+ * - QUANT: Pure math (Phase 9 standard).
+ * - PATTERN: Pure psychology/shape (Directive 10.2).
+ * - HYBRID: The intersection of Math + Pattern (Directive 10.4).
+ */
+export type SignalType = 'QUANT' | 'PATTERN' | 'HYBRID';
+
+/**
+ * The specific candlestick formations the "Eyes" of the system can see.
+ */
+export type PatternType = 
+  | 'PINBAR'           // Rejection (Wick > Body)
+  | 'ENGULFING'        // Momentum (Body engulfs previous)
+  | 'INSIDE_BAR'       // Compression (Coiling energy)
+  | 'MORNING_STAR'     // Reversal (Bear -> Doji -> Bull)
+  | 'THREE_SOLDIERS';  // Trend Birth (3 Strong Bulls)
+
+/**
+ * The Output of the Pattern Recognizer Service.
+ * This is the object that gets passed to the Orchestrator and VTS.
+ */
+export interface PatternSignal {
+  symbol: string;
+  pattern: PatternType;
+  direction: 'BUY' | 'SELL';
+  
+  /**
+   * Visual Clarity Score (0.0 - 1.0)
+   * How "perfect" is this pattern? 
+   * (e.g., a Pinbar with a massive wick is 0.9; a stubby one is 0.6)
+   */
+  strength: number;
+  
+  timestamp: number;
+
+  /**
+   * PREDICTIVE HOOK (Phase 10.6)
+   * This field will eventually hold the Machine Learning confidence score.
+   * We define it now so we don't have to refactor the database later.
+   */
+  predictiveConfidence?: number;
+  
+  /**
+   * Extra context for debugging (e.g., "wickSize": 1.2%)
+   */
+  metadata?: Record<string, any>;
+}
+
+// --------------------------------------------------------------------------
+// EXISTING INTERFACE EXTENSIONS
+// --------------------------------------------------------------------------
+
+/*
+ * Note to Builder:
+ * If you have an existing 'TradeSignal' or 'SignalResult' interface in this file,
+ * you must update it to include the optional signalType field:
+ *
+ * export interface TradeSignal {
+ * ... existing fields ...
+ * signalType?: SignalType; // Defaults to 'QUANT' if undefined
+ * }
+ */
+🧠 Why are we doing this?
+SignalType: This is the critical "Switch."
+
+When the Data Aggregator saves a trade log, it checks this field.
+
+If it says PATTERN, it knows to ask "Which Pattern?"
+
+If it says QUANT, it knows to ask "Which Algorithm?"
+
+predictiveConfidence: This is the "Future-Proofing" the Strategist asked for.
+
+Right now, this will be undefined.
+
+In Directive 10.6, we will plug the ML model into this slot without breaking a single line of code.
+
+Recommendation: Copy the code block above and provide it to Replit if it gets stuck on Step 1 of the task list.
