@@ -146,3 +146,31 @@ export interface HybridTradeFields {
   effectivePatternStrength?: number;       // Directive 10.5: Decayed pattern strength
   decayAge?: number;                       // Directive 10.5: Age in candle units (Δt)
 }
+
+// --------------------------------------------------------------------------
+// DIRECTIVE 10.6: ML CALIBRATION TYPES
+// --------------------------------------------------------------------------
+
+/**
+ * Individual calibration recommendation for a pattern type.
+ * Provides adjustment guidance based on historical performance.
+ */
+export interface CalibrationRecommendation {
+  pattern: PatternType | 'UNKNOWN';
+  winRate: number;                              // Percentage (0-100)
+  avgExpectancy: number;                        // Average P&L per trade
+  suggestion: 'INCREASE' | 'DECREASE' | 'HOLD';
+  adjustment: number;                           // Suggested weight adjustment (+/-0.05)
+}
+
+/**
+ * Complete calibration report from ML analysis.
+ * Returned by MLCalibrationService.analyzePerformance()
+ */
+export interface CalibrationReport {
+  success: boolean;
+  reason?: string;                              // Error message if success=false
+  recommendations?: CalibrationRecommendation[];
+  analyzedTrades?: number;                      // Number of trades analyzed
+  timestamp?: number;                           // Report generation time
+}

@@ -47,10 +47,10 @@ export const SYSTEM_GUARDS = {
 export const HYBRID_PARAMS = {
   MIN_SCORE: 0.65,              // Minimum ensemble score required for execution
   MAX_CONFLUENCE_WINDOW: 5,     // Maximum candle gap between Quant and Pattern signals
-  // Candle interval for hybrid decay calculation (1 minute = 60000ms)
-  // Aligned with pattern-recognizer's 1-minute candle timeframe.
-  // Ensures confluence window (5 min) and decay are temporally synchronized.
-  CANDLE_INTERVAL_MS: 60000,
+  // Candle interval for hybrid decay calculation (1 hour = 3600000ms)
+  // Directive 10.6: Aligned with Signal Orchestrator's 1H scan interval.
+  // Pattern signals persist appropriately between candle closes.
+  CANDLE_INTERVAL_MS: 3600000,
   WEIGHTS: {
     QUANT: 0.4,
     PATTERN: 0.4,

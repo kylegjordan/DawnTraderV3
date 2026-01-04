@@ -28,6 +28,7 @@ import { getRegimePerformanceTracker } from './regime-performance';
 import { getRewardEvaluator } from './reward-evaluator';
 import { SYSTEM_GUARDS } from '../config/system-guards.js';
 import { calculateFriction } from '../utils/analysis-utils.js';
+import { MLCalibrationService, setGetRecentTradesFn } from './ml-calibration';
 
 export interface VirtualSignal {
   id: string;
@@ -95,6 +96,7 @@ export interface VTSLearningParams {
 
 const TRADE_DURATION = 3 * 60 * 60 * 1000;
 const VTS_LOGS_DIR = path.join(process.cwd(), 'logs', 'virtual_trades');
+const CALIBRATION_TRIGGER_INTERVAL = 10; // Directive 10.6: Trigger calibration every N Hybrid trades
 
 /**
  * M5B: Session metrics for autonomous simulation tracking
@@ -125,6 +127,9 @@ export class VTSService extends EventEmitter {
     averageReturn: 0
   };
 
+  // Directive 10.6: Calibration trigger counter
+  private calibrationCounter = 0;
+
   constructor() {
     super();
     this.init();
@@ -137,6 +142,10 @@ export class VTSService extends EventEmitter {
       this.calibration = this.fullCalibration.global;
       const strategyCount = Object.keys(this.fullCalibration.strategies).length;
       console.log(`[L8][VTS] INIT_OK - calibration loaded (global + ${strategyCount} strategies)`);
+      
+      // Directive 10.6: Register trade retrieval function for ML calibration
+      setGetRecentTradesFn(this.getRecentTrades.bind(this));
+      console.log('[10.6][VTS] ML Calibration integration initialized');
     } catch (error) {
       console.error('[L8][VTS] Init failed:', error);
     }
@@ -315,6 +324,57 @@ export class VTSService extends EventEmitter {
     }
 
     await this.logTrade(trade);
+
+    // Directive 10.6: Trigger ML calibration every N Hybrid trades
+    if (trade.signal.signalType === 'HYBRID') {
+      this.calibrationCounter++;
+      if (this.calibrationCounter >= CALIBRATION_TRIGGER_INTERVAL) {
+        this.calibrationCounter = 0;
+        this.triggerMLCalibration();
+      }
+    }
+  }
+
+  /**
+   * Directive 10.6: Trigger ML calibration analysis
+   * Fire-and-forget to avoid blocking trade completion
+   */
+  private triggerMLCalibration(): void {
+    MLCalibrationService.analyzePerformance()
+      .then(report => {
+        if (report.success) {
+          MLCalibrationService.logRecommendations(report);
+        }
+      })
+      .catch(err => console.error('[10.6] ML Calibration error:', err));
+  }
+
+  /**
+   * Directive 10.6: Retrieve recent trades for ML calibration
+   * @param windowSize Number of trades to retrieve
+   * @param signalType Filter by signal type ('QUANT' | 'PATTERN' | 'HYBRID')
+   */
+  async getRecentTrades(windowSize: number, signalType: string): Promise<Array<{
+    signalType?: string;
+    patternType?: string;
+    pnl: number;
+  }>> {
+    const historical = await this.loadHistoricalTrades();
+    const allTrades = [...historical, ...this.closedTrades];
+    
+    // Filter by signal type if specified
+    const filtered = signalType 
+      ? allTrades.filter(t => t.signal.signalType === signalType)
+      : allTrades;
+    
+    // Get most recent trades up to windowSize
+    const recent = filtered.slice(-windowSize);
+    
+    return recent.map(t => ({
+      signalType: t.signal.signalType,
+      patternType: t.signal.patternType,
+      pnl: t.netProfit || 0,
+    }));
   }
 
   private async logTrade(trade: VirtualTrade): Promise<void> {

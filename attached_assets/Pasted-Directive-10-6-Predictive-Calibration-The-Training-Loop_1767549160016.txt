@@ -1,0 +1,247 @@
+Directive 10.6 — Predictive Calibration (The Training Loop)
+Objective
+
+Enable the DawnTrader engine to learn from its own trades by analyzing Virtual Trade Simulator (VTS) history and automatically optimizing Hybrid signal weights and decay parameters over time.
+
+This establishes Phase 10’s learning loop — connecting simulation output (VTS) back into strategy input (HYBRID_PARAMS).
+
+Dependencies
+
+✅ Directive 10.2: Pattern Recognizer (Pattern intelligence)
+
+✅ Directive 10.3: Signal Type Persistence (Database integration)
+
+✅ Directive 10.4: Hybrid Integration (Ensemble logic)
+
+✅ Directive 10.5: Pattern Decay (Temporal weighting)
+
+🔁 Data: data_aggregates and/or trades tables (via VTS service)
+
+1. Configuration Alignment (Critical)
+
+File: server/config/system-guards.ts
+
+Problem:
+
+Directive 10.5 introduced a CANDLE_INTERVAL_MS of 60000 (1 minute).
+However, our system fetches 1-hour candles, so the decay engine interprets a single 1H step as 60 candles, exponentially erasing signal strength.
+
+✅ Fix:
+
+Change:
+
+export const CANDLE_INTERVAL_MS = 60000; // ❌ Incorrect
+
+
+To:
+
+export const CANDLE_INTERVAL_MS = 3600000; // ✅ 1 Hour
+
+
+This aligns decay calculations with the Signal Orchestrator’s active scan interval (1H) and ensures pattern signals persist appropriately between candle closes.
+
+2. Create the ML Calibration Service
+
+File: server/services/ml-calibration.ts
+
+Purpose:
+
+This service acts as the system’s “self-tuning module”, analyzing VTS trade outcomes and suggesting incremental updates to Hybrid parameters.
+
+Implementation Outline:
+import { HYBRID_PARAMS } from '@/server/config/system-guards';
+import { getRecentTrades } from '@/server/services/vts-service';
+import type { CalibrationReport } from '@/server/types';
+
+export class MLCalibrationService {
+  /**
+   * Analyze recent Hybrid trades and generate learning recommendations.
+   * @param windowSize Number of trades to analyze (default: 50)
+   */
+  static async analyzePerformance(windowSize: number = 50): Promise<CalibrationReport> {
+    const trades = await getRecentTrades(windowSize, 'HYBRID');
+    if (!trades.length) return { success: false, reason: 'No trades found' };
+
+    const grouped: Record<string, { wins: number; losses: number; expectancy: number }> = {};
+
+    for (const t of trades) {
+      const pattern = t.patternType || 'UNKNOWN';
+      if (!grouped[pattern]) grouped[pattern] = { wins: 0, losses: 0, expectancy: 0 };
+      if (t.pnl > 0) grouped[pattern].wins++;
+      else grouped[pattern].losses++;
+      grouped[pattern].expectancy += t.pnl;
+    }
+
+    const report: CalibrationReport = {
+      success: true,
+      recommendations: [],
+    };
+
+    for (const [pattern, stats] of Object.entries(grouped)) {
+      const total = stats.wins + stats.losses;
+      if (total === 0) continue;
+      const winRate = (stats.wins / total) * 100;
+      const avgExpectancy = stats.expectancy / total;
+      let suggestion = 'HOLD';
+      let adjustment = 0;
+
+      if (winRate > 55) {
+        suggestion = 'INCREASE';
+        adjustment = +0.05;
+      } else if (winRate < 45) {
+        suggestion = 'DECREASE';
+        adjustment = -0.05;
+      }
+
+      report.recommendations.push({
+        pattern,
+        winRate,
+        avgExpectancy,
+        suggestion,
+        adjustment,
+      });
+    }
+
+    console.log('[10.6] ML Calibration Report:', JSON.stringify(report, null, 2));
+    return report;
+  }
+}
+
+3. Integration with VTS Service
+
+File: server/services/vts-service.ts
+
+Add a trigger inside the VTS trade completion pipeline:
+
+import { MLCalibrationService } from '@/server/services/ml-calibration';
+
+let calibrationCounter = 0;
+
+export async function recordCompletedTrade(trade) {
+  await saveTradeToDatabase(trade);
+  calibrationCounter++;
+
+  if (calibrationCounter >= 10 && trade.signalType === 'HYBRID') {
+    calibrationCounter = 0;
+    const report = await MLCalibrationService.analyzePerformance();
+    for (const rec of report.recommendations || []) {
+      console.log(`[10.6] ML Suggestion: ${rec.suggestion} ${rec.pattern} weight by ${rec.adjustment.toFixed(2)}`);
+    }
+  }
+}
+
+
+This ensures that the learning loop is triggered periodically — every 10 Hybrid trades.
+
+4. Type Definitions
+
+File: server/types.ts
+
+Add the CalibrationReport interface:
+
+export interface CalibrationRecommendation {
+  pattern: PatternType | 'UNKNOWN';
+  winRate: number;
+  avgExpectancy: number;
+  suggestion: 'INCREASE' | 'DECREASE' | 'HOLD';
+  adjustment: number;
+}
+
+export interface CalibrationReport {
+  success: boolean;
+  reason?: string;
+  recommendations?: CalibrationRecommendation[];
+}
+
+5. Verification and Unit Tests
+
+File: server/tests/unit/ml-calibration.test.ts
+
+Test suite: “ML Calibration Learning Logic”
+
+Scenarios:
+
+import { MLCalibrationService } from '@/server/services/ml-calibration';
+
+describe('MLCalibrationService', () => {
+  test('Increases weight for consistently winning pattern', async () => {
+    const trades = Array(10).fill({ patternType: 'PINBAR', pnl: 10 });
+    mockVTS(trades);
+    const report = await MLCalibrationService.analyzePerformance();
+    const pinbarRec = report.recommendations.find(r => r.pattern === 'PINBAR');
+    expect(pinbarRec.suggestion).toBe('INCREASE');
+  });
+
+  test('Decreases weight for consistently losing pattern', async () => {
+    const trades = Array(10).fill({ patternType: 'ENGULFING', pnl: -10 });
+    mockVTS(trades);
+    const report = await MLCalibrationService.analyzePerformance();
+    const engulfingRec = report.recommendations.find(r => r.pattern === 'ENGULFING');
+    expect(engulfingRec.suggestion).toBe('DECREASE');
+  });
+
+  test('Holds steady for mixed performance', async () => {
+    const trades = [
+      ...Array(5).fill({ patternType: 'INSIDE_BAR', pnl: 10 }),
+      ...Array(5).fill({ patternType: 'INSIDE_BAR', pnl: -10 }),
+    ];
+    mockVTS(trades);
+    const report = await MLCalibrationService.analyzePerformance();
+    const insideBarRec = report.recommendations.find(r => r.pattern === 'INSIDE_BAR');
+    expect(insideBarRec.suggestion).toBe('HOLD');
+  });
+});
+
+6. Future-Proofing (Optional Enhancements)
+
+Once the Python ML microservice is active (Phase 10.6b+), the calibration logic can:
+
+Use regression or Bayesian optimization to auto-tune Quant/Pattern weights.
+
+Learn λ (decay rate) dynamically based on historical performance.
+
+Update HYBRID_PARAMS.WEIGHTS and DECAY.LAMBDA automatically through a controlled update API.
+
+7. Expected Outcome
+
+After implementing Directive 10.6, DawnTrader will:
+
+✅ Analyze real VTS trade data autonomously.
+✅ Learn which patterns and hybrid combinations yield consistent profitability.
+✅ Provide structured adjustment recommendations for strategy weighting.
+✅ Prepare a training-ready dataset for integration with the predictive microservice.
+
+This closes the “feedback loop” between experience and strategy — enabling the engine to continuously evolve its behavior over time.
+
+8. Validation Checklist
+Step	Check	Status
+CANDLE_INTERVAL_MS set to 3600000	Prevents decay mis-scaling	☐
+MLCalibrationService created	Analyzes last N Hybrid trades	☐
+VTS trigger integrated	Auto-runs every 10 Hybrid trades	☐
+CalibrationReport type defined	Structured output verified	☐
+Tests pass	Logic verified against synthetic trades	☐
+Example Log Output
+[10.6] ML Calibration Report:
+{
+  "recommendations": [
+    { "pattern": "PINBAR", "winRate": 63.2, "avgExpectancy": 12.4, "suggestion": "INCREASE", "adjustment": 0.05 },
+    { "pattern": "ENGULFING", "winRate": 42.1, "avgExpectancy": -8.7, "suggestion": "DECREASE", "adjustment": -0.05 }
+  ]
+}
+[10.6] ML Suggestion: INCREASE PINBAR weight by 0.05
+[10.6] ML Suggestion: DECREASE ENGULFING weight by -0.05
+
+✅ Final Notes
+
+This directive completes the learning core of DawnTrader’s architecture:
+
+The Hybrid Engine now adapts based on outcomes.
+
+Pattern decay remains aligned to realistic time intervals.
+
+Future ML modules can plug directly into this structure without refactoring.
+
+🔜 Next Phase
+
+Directive 10.7 — Multi-Timeframe Expansion (Fractal Vision)
+Using the trained Hybrid weights and decay constants, we’ll extend the system to 15-minute and 5-minute confluence scans with full rate-limit protection and adaptive decay per interval.
