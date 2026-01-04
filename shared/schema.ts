@@ -91,6 +91,10 @@ export const memoryScopeEnum = pgEnum("memory_scope", ["short_term", "medium_ter
 export const optimizationTypeEnum = pgEnum("optimization_type", ["parameter_tuning", "architecture_adjustment", "policy_refinement"]);
 export const agentStateEnum = pgEnum("agent_state", ["active", "idle", "suspended", "terminated"]);
 
+// Phase 10.2 enums - Pattern Recognition
+export const signalTypeEnum = pgEnum("signal_type", ["QUANT", "PATTERN", "HYBRID"]);
+export const patternTypeEnum = pgEnum("pattern_type", ["PINBAR", "ENGULFING", "INSIDE_BAR", "MORNING_STAR", "THREE_SOLDIERS"]);
+
 // Phase 11.0 enums
 export const safetySeverityEnum = pgEnum("safety_severity", ["low", "medium", "high", "critical"]);
 export const safetyScopeEnum = pgEnum("safety_scope", ["global", "trading", "autonomy", "analysis"]);

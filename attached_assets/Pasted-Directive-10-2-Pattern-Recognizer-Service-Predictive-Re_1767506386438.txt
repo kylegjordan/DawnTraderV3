@@ -1,0 +1,123 @@
+Directive 10.2 — Pattern Recognizer Service (Predictive-Ready Integration)
+
+Objective:
+Create a predictive-ready service that analyzes OHLCV candle data to detect specific candlestick formations. Integrate it directly into the existing Signal Orchestrator and VTS pipeline so that both Pattern and Hybrid trades are fully captured and simulated.
+
+Dependencies:
+
+Completed Phase 9 Math Methodology
+
+Directive 10.1 (Dynamic Strategy Selector)
+
+Task List:
+
+Update Shared Types (server/types.ts or equivalent type definition file):
+
+Add the SignalType definition:
+
+export type SignalType = 'QUANT' | 'PATTERN' | 'HYBRID';
+
+
+Ensure all TradeSignal or SignalResult interfaces have an optional signalType field (default: 'QUANT').
+
+This allows the system to distinguish signal origin type across all orchestrator and aggregator layers.
+
+Create Pattern Recognizer Service (server/services/pattern-recognizer.ts):
+
+Define the following PatternType enumeration:
+
+export type PatternType = 'PINBAR' | 'ENGULFING' | 'INSIDE_BAR' | 'MORNING_STAR' | 'THREE_SOLDIERS';
+
+
+Define the predictive-ready PatternSignal interface:
+
+interface PatternSignal {
+  symbol: string;
+  pattern: PatternType;
+  direction: 'BUY' | 'SELL';
+  strength: number;               // 0.0 - 1.0
+  timestamp: number;
+  predictiveConfidence?: number;  // Hook for Predictive Learning in Phase 10.4
+  metadata?: Record<string, any>;
+}
+
+
+Implement pattern detection logic using precise OHLC relationships:
+
+Golden Pinbar → Wick > 2× Body; wick opposite trade direction.
+
+Momentum Engulfing → Candle body fully engulfs prior body; volume spike > 1.2× average.
+
+Inside Bar → High < PrevHigh AND Low > PrevLow (compression setup).
+
+Three White Soldiers → Three consecutive bullish candles, each closing higher.
+
+Morning Star → Bear → Doji/Small → Bull (closing > halfway into first candle).
+
+Export a single detection method:
+
+export function scanPatterns(candles: Candle[]): PatternSignal[];
+
+
+Integrate with Signal Orchestrator (server/services/signal-orchestrator.ts):
+
+Import the new PatternRecognizer.
+
+In the main signal evaluation loop (usually evaluateSignals or processSymbol):
+
+Retrieve recent candles for the symbol.
+
+Call PatternRecognizer.scanPatterns(candles).
+
+For each pattern found:
+
+Convert it into a standard TradeSignal object.
+
+Tag it with signalType: 'PATTERN'.
+
+Push it into the same evaluation queue used by Quant signals.
+
+Ensure the Dynamic Strategy Selector (DSS) can see these pattern-based signals so they are included in hybrid and regime evaluations.
+
+Enable VTS Logging (server/services/data-aggregator.ts and server/services/vts-service.ts):
+
+Update the AggregateRecord interface and VTS trade log schema to include:
+
+signalType
+
+patternType
+
+patternStrength
+
+predictiveConfidence (optional for Phase 10.4)
+
+Update the capture logic to ensure any trade derived from a PATTERN or HYBRID signal is passed into VTS.simulateTrade() with full contextual data.
+
+Verify that the new fields are being recorded to data_aggregates and logged into the simulation outputs.
+
+Verification and Unit Testing (server/tests/unit/pattern-recognizer.test.ts):
+
+Mock OHLCV data and validate the following scenarios:
+
+Perfect Pinbar → Expect detection with strength >= 0.8.
+
+Engulfing pattern → Detected and correctly classified.
+
+Random noise → No detections returned.
+
+Ensure signalType is properly logged as 'PATTERN' in VTS outputs.
+
+Run: npx vitest run pattern-recognizer.test.ts.
+
+Expected Outcome:
+After implementing Directive 10.2, the DawnTrader system will:
+
+Detect and classify key candlestick patterns in live candle feeds.
+
+Tag and queue Pattern-based signals for evaluation in the Signal Orchestrator.
+
+Fully integrate Pattern and Hybrid trades into the Virtual Trade Simulator for parity-calibrated simulations.
+
+Produce predictive-ready logs (with patternStrength, patternType, predictiveConfidence) to support learning in Phase 10.4 (VTS Calibration).
+
+This directive gives the trading system its first layer of visual intelligence — enabling the foundation for Hybrid trading strategies that combine quantitative precision with behavioral insight.
