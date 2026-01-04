@@ -1,0 +1,257 @@
+Directive 10.4 — Hybrid Integration (Ensemble Intelligence)
+Objective
+
+Establish the Hybrid Integration Layer, which merges Quantitative, Pattern, and (later) Predictive signals into Hybrid Trades through ensemble scoring.
+The Hybrid layer becomes the system’s “intelligent referee,” issuing trades only when multiple intelligence sources agree within time, direction, and confidence constraints.
+
+Dependencies
+
+Directive 10.1 — Dynamic Strategy Selector (Regime Logic)
+
+Directive 10.2 — Pattern Recognizer (Pattern Signals)
+
+Directive 10.3 — Signal Type Expansion (Persistent Schema)
+
+Phase 9 Math Core — CWQI / NetEV / Friction Logic
+
+server/types.ts, server/config/system-guards.ts
+
+VTS and Orchestrator infrastructure already operational
+
+Scope of Work
+1. Update System Guards
+
+File: server/config/system-guards.ts
+
+Add hybrid tuning constants under HYBRID_PARAMS:
+
+export const HYBRID_PARAMS = {
+  MIN_SCORE: 0.65,              // Minimum ensemble score required for execution
+  MAX_CONFLUENCE_WINDOW: 5,     // Maximum candle gap between Quant and Pattern signals
+  WEIGHTS: {
+    QUANT: 0.4,
+    PATTERN: 0.4,
+    PREDICTIVE: 0.2,            // ML confidence weight (active in 10.6)
+  },
+};
+
+
+These parameters are runtime-tunable.
+They must not be hardcoded inside Hybrid logic.
+All ensemble scoring and validation functions must import them dynamically.
+
+2. Update Type Definitions
+
+File: server/types.ts
+
+Add Hybrid type support and expanded TradeSignal metadata:
+
+export type HybridStrategyType =
+  | 'H1_TREND_SNIPER'
+  | 'H2_SLINGSHOT'
+  | 'H3_GATECRASHER'
+  | 'H4_MOMENTUM_LINK';
+
+export interface TradeSignal {
+  // existing fields...
+  signalType?: SignalType;
+  hybridScore?: number;
+  componentScores?: {
+    quant: number;
+    pattern: number;
+    ml: number;
+  };
+  hybridStrategy?: HybridStrategyType;
+}
+
+
+Purpose:
+
+componentScores improves explainability and debugging (e.g. Hybrid 0.72 = { quant: 0.80, pattern: 0.70, ml: 0.60 }).
+
+hybridStrategy ties Hybrid trades to named strategic playbooks in DSS.
+
+3. Create Hybrid Integration Service
+
+File: server/services/hybrid-integration.ts
+
+Create new class:
+
+import { HYBRID_PARAMS } from '@/server/config/system-guards';
+import { TradeSignal, PatternSignal, HybridStrategyType } from '@/server/types';
+
+export class HybridIntegrationService {
+  computeEnsembleScore(quantConf: number, patternStrength: number, mlConf?: number) {
+    const w = HYBRID_PARAMS.WEIGHTS;
+    return (
+      quantConf * w.QUANT +
+      patternStrength * w.PATTERN +
+      (mlConf ?? 0.5) * w.PREDICTIVE
+    );
+  }
+
+  detectConfluence(quantSignals: TradeSignal[], patternSignals: PatternSignal[]) {
+    const hybrids: TradeSignal[] = [];
+
+    for (const q of quantSignals) {
+      const match = patternSignals.find(
+        (p) =>
+          p.symbol === q.symbol &&
+          p.direction === q.direction && // Directional match required
+          Math.abs(p.timestamp - q.timestamp) <= HYBRID_PARAMS.MAX_CONFLUENCE_WINDOW
+      );
+
+      if (!match) continue;
+
+      const hybridScore = this.computeEnsembleScore(
+        q.expectancy ?? 0.5,
+        match.strength,
+        match.predictiveConfidence
+      );
+
+      if (hybridScore < HYBRID_PARAMS.MIN_SCORE) continue;
+
+      const hybridStrategy: HybridStrategyType =
+        q.direction === 'BUY' ? 'H1_TREND_SNIPER' : 'H4_MOMENTUM_LINK';
+
+      hybrids.push({
+        ...q,
+        signalType: 'HYBRID',
+        hybridScore,
+        hybridStrategy,
+        patternType: match.pattern,
+        patternStrength: match.strength,
+        predictiveConfidence: match.predictiveConfidence,
+        componentScores: {
+          quant: q.expectancy ?? 0.5,
+          pattern: match.strength,
+          ml: match.predictiveConfidence ?? 0.5,
+        },
+      });
+
+      console.log(
+        `[10.4] HybridIntegration: HYBRID signal generated for ${q.symbol} | Score=${hybridScore.toFixed(
+          3
+        )} | Strategy=${hybridStrategy}`
+      );
+    }
+
+    return hybrids;
+  }
+}
+
+4. Integrate with Signal Orchestrator
+
+File: server/services/signal-orchestrator.ts
+
+Within evaluateSignals():
+
+Import HybridIntegrationService.
+
+After generating Quant and Pattern signals:
+
+const hybridService = new HybridIntegrationService();
+const hybridSignals = hybridService.detectConfluence(quantSignals, patternSignals);
+signals.push(...hybridSignals);
+
+
+Ensure DSS receives all three lanes:
+
+QUANT
+
+PATTERN
+
+HYBRID
+
+Hybrid signals must not be filtered before DSS routing.
+
+5. Update Execution and VTS Layers
+
+Files:
+
+server/services/trading-engine.ts
+
+server/services/vts-service.ts
+
+Trading Engine:
+
+Ensure executeTrade() handles hybridScore, patternType, and patternStrength.
+
+Add log:
+
+console.log(`[10.4] Trade Executed [${symbol}] | Type=HYBRID | Score=${hybridScore?.toFixed(2)} | Pattern=${patternType}`);
+
+
+VTS Service:
+
+Extend record schema:
+
+hybridScore?: number;
+hybridStrategy?: HybridStrategyType;
+
+
+Persist these in data_aggregates for future ML training (Directive 10.6).
+
+6. Verification & Testing
+
+Files:
+
+server/tests/unit/hybrid-integration.test.ts
+
+Test Cases:
+
+Valid Confluence:
+Quant BUY + Pattern BUY within 3 candles → returns HYBRID.
+
+Directional Mismatch:
+Quant BUY + Pattern SELL → returns null.
+
+Time Mismatch:
+Quant timestamp too far from Pattern → returns null.
+
+Low Score:
+Ensemble score < MIN_SCORE → returns null.
+
+Logging:
+Ensure [10.4] HybridIntegration message appears on valid signal.
+
+Run:
+
+npx vitest run hybrid-integration.test.ts
+npm run db:push
+
+Expected Outcome
+
+After Directive 10.4:
+
+The system will only generate Hybrid signals when:
+
+Quant and Pattern directions align.
+
+They occur within the same short-term context (≤ 5 candles).
+
+Their ensemble score exceeds the minimum confidence threshold.
+
+Each Hybrid trade is fully logged, scored, and stored for ML calibration.
+
+Predictive hook (predictiveConfidence) ready for activation in 10.6.
+
+Validation Checklist
+Condition	Status
+HYBRID_PARAMS added to config	☐
+HybridIntegrationService created	☐
+Time window and direction validation enforced	☐
+Orchestrator integration complete	☐
+Execution + VTS record hybridScore	☐
+Tests pass	☐
+System Impact
+Layer	Enhancement	Benefit
+Core Intelligence	Hybrid Layer (Quant + Pattern)	High-confidence trade synthesis
+Data Layer	hybridScore persistence	Predictive model calibration
+Execution	Directional validation	Prevents false trades
+Governance	Tunable SYSTEM_GUARDS	Runtime safety, no redeploys
+Predictive Ready	ML confidence hook active	Future-proof for Phase 10.6
+Summary
+
+Directive 10.4 transforms DawnTrader into a true multi-intelligence ensemble system.
+By enforcing confluence in time, direction, and confidence, Hybrid trades now represent the highest conviction events in the system — statistically superior, behaviorally validated, and predictively tunable.

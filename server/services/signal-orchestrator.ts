@@ -69,6 +69,8 @@ import { getDynamicStrategySelector, type DSSMetrics } from './dynamic-strategy-
 import { SYSTEM_GUARDS } from '../config/system-guards.js';
 // Directive 10.2: Pattern Recognizer
 import { getPatternRecognizer, type Candle, type PatternSignal, type SignalType } from './pattern-recognizer.js';
+// Directive 10.4: Hybrid Integration
+import { getHybridIntegration, type QuantSignal, type HybridSignal } from './hybrid-integration.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -943,6 +945,62 @@ export class SignalOrchestrator {
           (sizedPatternSignal as any).patternStrength = patternSig.strength;
           signals.push(sizedPatternSignal);
           console.log(`[10.2][PATTERN] ${symbol}: Added ${patternSig.pattern} signal with strength=${patternSig.strength.toFixed(2)}`);
+        }
+      }
+
+      // Directive 10.4: Hybrid Integration - Detect confluence between Quant and Pattern signals
+      // Use the most recent candle timestamp for quant signal alignment (consistent clock source)
+      const latestCandleTimestamp = candles.length > 0 ? candles[candles.length - 1].timestamp : Date.now();
+      
+      const hybridIntegration = getHybridIntegration();
+      const quantSignals: QuantSignal[] = signals
+        .filter(s => !(s as any).signalType || (s as any).signalType === 'QUANT')
+        .map(s => ({
+          symbol: s.symbol || symbol,
+          strategy: s.strategy,
+          entryPrice: s.entryPrice || 0,
+          stopPrice: s.stopPrice || 0,
+          targetPrice: s.targetPrice || 0,
+          confidence: s.confidence || 0,
+          direction: 'BUY' as const, // Long-only trading system: all quant signals are BUY
+          timestamp: latestCandleTimestamp, // Use candle timestamp for clock-synchronized confluence
+          expectancy: s.ngc || (s.confidence && s.confidence <= 1 ? s.confidence : (s.confidence || 0) / 100),
+          metadata: s.metadata,
+        }));
+      
+      const buyPatternSignals = patternSignals.filter(p => p.direction === 'BUY');
+      
+      if (quantSignals.length > 0 && buyPatternSignals.length > 0) {
+        const hybridSignals = hybridIntegration.detectConfluence(quantSignals, buyPatternSignals);
+        
+        for (const hybrid of hybridSignals) {
+          const rawHybridSignal = {
+            symbol: hybrid.symbol,
+            strategy: hybrid.strategy as any,
+            entryPrice: hybrid.entryPrice,
+            stopPrice: hybrid.stopPrice,
+            targetPrice: hybrid.targetPrice,
+            confidence: hybrid.hybridScore,
+            metadata: {
+              signalType: 'HYBRID' as SignalType,
+              hybridScore: hybrid.hybridScore,
+              hybridStrategy: hybrid.hybridStrategy,
+              patternType: hybrid.patternType,
+              patternStrength: hybrid.patternStrength,
+              componentScores: hybrid.componentScores,
+            }
+          };
+          
+          const sizedHybridSignal = this.buildSizedSignalForStrategy(rawHybridSignal as any, hybrid.strategy as StrategyType, sizingContext);
+          if (sizedHybridSignal) {
+            (sizedHybridSignal as any).signalType = 'HYBRID';
+            (sizedHybridSignal as any).hybridScore = hybrid.hybridScore;
+            (sizedHybridSignal as any).hybridStrategy = hybrid.hybridStrategy;
+            (sizedHybridSignal as any).patternType = hybrid.patternType;
+            (sizedHybridSignal as any).patternStrength = hybrid.patternStrength;
+            (sizedHybridSignal as any).componentScores = hybrid.componentScores;
+            signals.push(sizedHybridSignal);
+          }
         }
       }
 

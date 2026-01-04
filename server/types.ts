@@ -103,3 +103,38 @@ export interface TradeSignalContext {
   patternType?: PatternType;        // Pattern category (if PATTERN/HYBRID)
   patternStrength?: number;         // 0.0-1.0 clarity rating (if PATTERN/HYBRID)
 }
+
+// --------------------------------------------------------------------------
+// DIRECTIVE 10.4: HYBRID INTEGRATION TYPES
+// --------------------------------------------------------------------------
+
+/**
+ * Named hybrid strategy playbooks for DSS routing.
+ * Each represents a distinct confluence pattern.
+ */
+export type HybridStrategyType =
+  | 'H1_TREND_SNIPER'     // Trend-following with pattern confirmation
+  | 'H2_SLINGSHOT'        // Momentum breakout with pattern setup
+  | 'H3_GATECRASHER'      // Mean-reversion with reversal pattern
+  | 'H4_MOMENTUM_LINK';   // Directional momentum with pattern alignment
+
+/**
+ * Component scores for hybrid signal explainability.
+ * Enables debugging and ML calibration by exposing individual contributions.
+ */
+export interface ComponentScores {
+  quant: number;      // Quant signal expectancy/confidence (0-1)
+  pattern: number;    // Pattern strength (0-1)
+  ml: number;         // ML predictive confidence (0-1), defaults to 0.5 when unavailable
+}
+
+/**
+ * Extended TradeSignal with Directive 10.4 hybrid fields.
+ * All hybrid trades carry these for full transparency and calibration.
+ */
+export interface HybridTradeFields {
+  hybridScore?: number;                    // Ensemble weighted score (0-1)
+  componentScores?: ComponentScores;       // Individual signal contributions
+  hybridStrategy?: HybridStrategyType;     // Named hybrid playbook
+  predictiveConfidence?: number;           // ML confidence hook (Phase 10.6)
+}

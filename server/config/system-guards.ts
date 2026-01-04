@@ -38,6 +38,24 @@ export const SYSTEM_GUARDS = {
   },
 } as const;
 
+/**
+ * Directive 10.4 — Hybrid Integration Parameters
+ * 
+ * Runtime-tunable constants for ensemble scoring and confluence detection.
+ * All hybrid logic MUST import these dynamically - no hardcoding.
+ */
+export const HYBRID_PARAMS = {
+  MIN_SCORE: 0.65,              // Minimum ensemble score required for execution
+  MAX_CONFLUENCE_WINDOW: 5,     // Maximum candle gap between Quant and Pattern signals
+  WEIGHTS: {
+    QUANT: 0.4,
+    PATTERN: 0.4,
+    PREDICTIVE: 0.2,            // ML confidence weight (active in 10.6)
+  },
+} as const;
+
+export type HybridParamsType = typeof HYBRID_PARAMS;
+
 export type SystemGuardsType = typeof SYSTEM_GUARDS;
 
 export function getSystemGuardsInfo(): string {

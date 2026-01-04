@@ -43,6 +43,8 @@ export interface VirtualSignal {
   patternType?: string;
   patternStrength?: number;
   predictiveConfidence?: number;
+  hybridScore?: number;
+  hybridStrategy?: string;
 }
 
 export interface VirtualTrade {
