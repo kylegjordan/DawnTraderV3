@@ -987,6 +987,8 @@ export class SignalOrchestrator {
               hybridStrategy: hybrid.hybridStrategy,
               patternType: hybrid.patternType,
               patternStrength: hybrid.patternStrength,
+              effectivePatternStrength: hybrid.effectivePatternStrength,  // Directive 10.5
+              decayAge: hybrid.decayAge,                                  // Directive 10.5
               componentScores: hybrid.componentScores,
             }
           };
@@ -998,6 +1000,8 @@ export class SignalOrchestrator {
             (sizedHybridSignal as any).hybridStrategy = hybrid.hybridStrategy;
             (sizedHybridSignal as any).patternType = hybrid.patternType;
             (sizedHybridSignal as any).patternStrength = hybrid.patternStrength;
+            (sizedHybridSignal as any).effectivePatternStrength = hybrid.effectivePatternStrength;  // Directive 10.5
+            (sizedHybridSignal as any).decayAge = hybrid.decayAge;                                  // Directive 10.5
             (sizedHybridSignal as any).componentScores = hybrid.componentScores;
             signals.push(sizedHybridSignal);
           }

@@ -67,6 +67,12 @@ export interface PatternSignal {
   predictiveConfidence?: number;
   
   /**
+   * Directive 10.5: Effective strength after temporal decay applied.
+   * This is the strength used in ensemble scoring after age-based decay.
+   */
+  effectiveStrength?: number;
+  
+  /**
    * Extra context for debugging (e.g., "wickSize": 1.2%)
    */
   metadata?: Record<string, any>;
@@ -137,4 +143,6 @@ export interface HybridTradeFields {
   componentScores?: ComponentScores;       // Individual signal contributions
   hybridStrategy?: HybridStrategyType;     // Named hybrid playbook
   predictiveConfidence?: number;           // ML confidence hook (Phase 10.6)
+  effectivePatternStrength?: number;       // Directive 10.5: Decayed pattern strength
+  decayAge?: number;                       // Directive 10.5: Age in candle units (Δt)
 }

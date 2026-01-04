@@ -45,6 +45,8 @@ export interface VirtualSignal {
   predictiveConfidence?: number;
   hybridScore?: number;
   hybridStrategy?: string;
+  effectivePatternStrength?: number;  // Directive 10.5: Decayed pattern strength
+  decayAge?: number;                   // Directive 10.5: Age in candle units
 }
 
 export interface VirtualTrade {

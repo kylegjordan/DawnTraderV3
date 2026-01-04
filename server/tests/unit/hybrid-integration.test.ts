@@ -174,4 +174,95 @@ describe('Directive 10.4 — Hybrid Integration', () => {
       expect(info).toContain(`WINDOW=${HYBRID_PARAMS.MAX_CONFLUENCE_WINDOW}`);
     });
   });
+
+  // Directive 10.5 — Pattern Decay Logic
+  describe('Pattern Decay Logic (Directive 10.5)', () => {
+    it('Fresh Pattern (Age 0) - no decay', () => {
+      const result = service.applyPatternDecay(1.0, 0);
+      expect(result).toBeCloseTo(1.0, 4);
+    });
+
+    it('Aged Pattern (3 candles) - approximately 65% of original', () => {
+      // e^(-0.15 * 3) = e^(-0.45) ≈ 0.6376
+      const result = service.applyPatternDecay(1.0, 3);
+      expect(result).toBeCloseTo(0.6376, 2);
+    });
+
+    it('Floor Enforcement (Age 50) - never below 30% of original', () => {
+      // e^(-0.15 * 50) = e^(-7.5) ≈ 0.00055 → floor kicks in at 0.3
+      const result = service.applyPatternDecay(1.0, 50);
+      expect(result).toBeGreaterThanOrEqual(0.3);
+      expect(result).toBeCloseTo(0.3, 4);
+    });
+
+    it('Floor scales with original strength', () => {
+      // For strength 0.8, floor is 0.8 * 0.3 = 0.24
+      const result = service.applyPatternDecay(0.8, 100);
+      expect(result).toBeCloseTo(0.24, 4);
+    });
+
+    it('decayAge and effectivePatternStrength are populated in hybrid signals', () => {
+      const now = Date.now();
+      const quant: QuantSignal = {
+        symbol: 'BTCUSD',
+        strategy: 'vwap_pullback',
+        entryPrice: 50000,
+        stopPrice: 49000,
+        targetPrice: 52000,
+        confidence: 0.8,
+        direction: 'BUY',
+        timestamp: now,
+        expectancy: 0.8,
+      };
+      
+      // Pattern is 3 minutes old (within 5-minute confluence window)
+      // deltaCandles = 180000ms / 3600000ms = 0.05 hours
+      const pattern: PatternSignal = {
+        symbol: 'BTCUSD',
+        pattern: 'PINBAR',
+        direction: 'BUY',
+        strength: 0.9,
+        timestamp: now - (3 * 60000), // 3 minutes ago
+      };
+
+      const hybrids = service.detectConfluence([quant], [pattern]);
+
+      expect(hybrids.length).toBe(1);
+      expect(hybrids[0].decayAge).toBeCloseTo(0.05, 2); // 3 min / 60 min = 0.05 candles
+      // With very small decay (age ~0.05), strength should be close to original (within 1 decimal)
+      expect(hybrids[0].effectivePatternStrength).toBeCloseTo(0.9, 1);
+      expect(hybrids[0].effectivePatternStrength).toBeDefined();
+      expect(hybrids[0].decayAge).toBeDefined();
+    });
+
+    it('componentScores.pattern uses decayed strength', () => {
+      const now = Date.now();
+      const quant: QuantSignal = {
+        symbol: 'BTCUSD',
+        strategy: 'vwap_pullback',
+        entryPrice: 50000,
+        stopPrice: 49000,
+        targetPrice: 52000,
+        confidence: 0.8,
+        direction: 'BUY',
+        timestamp: now,
+        expectancy: 0.8,
+      };
+      
+      // Pattern is 2 minutes old (within 5-minute confluence window)
+      const pattern: PatternSignal = {
+        symbol: 'BTCUSD',
+        pattern: 'PINBAR',
+        direction: 'BUY',
+        strength: 0.85,
+        timestamp: now - (2 * 60000), // 2 minutes ago
+      };
+
+      const hybrids = service.detectConfluence([quant], [pattern]);
+
+      expect(hybrids.length).toBe(1);
+      // componentScores.pattern should match effectivePatternStrength
+      expect(hybrids[0].componentScores.pattern).toBeCloseTo(hybrids[0].effectivePatternStrength, 4);
+    });
+  });
 });

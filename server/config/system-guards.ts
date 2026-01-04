@@ -52,6 +52,12 @@ export const HYBRID_PARAMS = {
     PATTERN: 0.4,
     PREDICTIVE: 0.2,            // ML confidence weight (active in 10.6)
   },
+  // Directive 10.5: Pattern Decay (Temporal Memory)
+  DECAY: {
+    ENABLED: true,              // Enable/disable pattern decay
+    LAMBDA: 0.15,               // Decay rate per candle interval
+    FLOOR: 0.3,                 // Minimum retained influence (30% of original)
+  },
 } as const;
 
 export type HybridParamsType = typeof HYBRID_PARAMS;

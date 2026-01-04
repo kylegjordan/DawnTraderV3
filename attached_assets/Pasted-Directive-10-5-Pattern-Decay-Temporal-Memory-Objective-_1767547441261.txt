@@ -1,0 +1,197 @@
+Directive 10.5 — Pattern Decay (Temporal Memory)
+Objective
+
+Implement Time Decay for Pattern Signals — pattern strength should decrease exponentially over time, with proper unit normalization (candles, not milliseconds).
+
+Dependencies
+
+Directive 10.4 — Hybrid Integration
+
+server/config/system-guards.ts
+
+server/services/hybrid-integration.ts
+
+server/services/vts-service.ts
+
+server/services/trading-engine.ts
+
+Unit test framework (Vitest)
+
+Scope of Work
+1. Update System Guards
+
+File: server/config/system-guards.ts
+
+export const HYBRID_PARAMS = {
+  // ... existing hybrid settings ...
+  DECAY: {
+    ENABLED: true,
+    LAMBDA: 0.15,  // Decay rate per candle
+    FLOOR: 0.3,    // Minimum retained influence (30%)
+  },
+};
+
+
+λ (LAMBDA) applies per candle interval — not per millisecond.
+
+2. Update Type Definitions
+
+File: server/types.ts
+
+Add new decay-related fields:
+
+export interface PatternSignal {
+  symbol: string;
+  pattern: PatternType;
+  direction: 'BUY' | 'SELL';
+  strength: number;
+  timestamp: number;
+  predictiveConfidence?: number;
+  metadata?: Record<string, any>;
+  effectiveStrength?: number; // after decay applied
+}
+
+export interface TradeSignal {
+  // existing fields…
+  effectivePatternStrength?: number;
+  decayAge?: number; // Δt in candle units
+}
+
+3. Implement Decay Logic
+
+File: server/services/hybrid-integration.ts
+
+Add the decay method inside HybridIntegrationService:
+
+import { HYBRID_PARAMS } from '@/server/config/system-guards';
+
+private applyPatternDecay(originalStrength: number, deltaCandles: number): number {
+  const { ENABLED, LAMBDA, FLOOR } = HYBRID_PARAMS.DECAY;
+  if (!ENABLED) return originalStrength;
+  const decayed = originalStrength * Math.exp(-LAMBDA * deltaCandles);
+  return Math.max(decayed, originalStrength * FLOOR);
+}
+
+
+Then, in detectConfluence():
+
+Critical fix — normalize timestamp difference:
+
+// Convert time delta from ms → candle units (assuming 1-hour candles)
+const deltaCandles = Math.abs(q.timestamp - p.timestamp) / 3600000;
+const effectiveStrength = this.applyPatternDecay(p.strength, deltaCandles);
+
+
+Use effectiveStrength in ensemble computation:
+
+const hybridScore = this.computeEnsembleScore(
+  q.expectancy ?? 0.5,
+  effectiveStrength,
+  p.predictiveConfidence
+);
+
+
+Attach results:
+
+hybrids.push({
+  ...q,
+  signalType: 'HYBRID',
+  patternType: p.pattern,
+  patternStrength: p.strength,
+  effectivePatternStrength: effectiveStrength,
+  decayAge: deltaCandles,
+  hybridScore,
+});
+
+
+Add logging for traceability:
+
+console.log(
+  `[10.5] HybridIntegration: ${q.symbol} | Raw=${p.strength.toFixed(2)} | Decayed=${effectiveStrength.toFixed(2)} | Age=${deltaCandles.toFixed(1)} candles | Score=${hybridScore.toFixed(3)}`
+);
+
+4. Update VTS & Trading Engine
+
+Files:
+
+server/services/trading-engine.ts
+
+server/services/vts-service.ts
+
+Trading Engine Logging:
+
+console.log(
+  `[10.5] Trade Executed [${symbol}] | Type=HYBRID | Pattern=${patternType} | DecayedStrength=${effectivePatternStrength?.toFixed(2)} | Age=${decayAge?.toFixed(1)} candles`
+);
+
+
+VTS Capture:
+Extend record schema:
+
+effectivePatternStrength?: number;
+decayAge?: number;
+
+
+Ensure these fields persist into data_aggregates for future ML model calibration.
+
+5. Verification – Unit Tests
+
+File: server/tests/unit/hybrid-integration.test.ts
+
+Add suite: Pattern Decay Logic
+
+describe('Pattern Decay Logic', () => {
+  test('Fresh Pattern (Age 0)', () => {
+    expect(applyPatternDecay(1.0, 0)).toBeCloseTo(1.0);
+  });
+
+  test('Aged Pattern (3 candles)', () => {
+    const result = applyPatternDecay(1.0, 3);
+    expect(result).toBeCloseTo(0.65, 1); // ~65% of original
+  });
+
+  test('Floor Enforcement (Age 50)', () => {
+    const result = applyPatternDecay(1.0, 50);
+    expect(result).toBeGreaterThanOrEqual(0.3);
+  });
+
+  test('Disabled Decay', () => {
+    HYBRID_PARAMS.DECAY.ENABLED = false;
+    expect(applyPatternDecay(1.0, 5)).toBe(1.0);
+  });
+});
+
+
+Run:
+
+npx vitest run hybrid-integration.test.ts
+
+✅ Expected Outcome
+
+After implementation:
+
+Pattern signals decay per candle, not per millisecond.
+
+Hybrid scores dynamically adapt to the recency of pattern formation.
+
+effectivePatternStrength and decayAge are logged, persisted, and available for predictive calibration.
+
+All tests (decay mechanics and floor enforcement) pass.
+
+✅ System-Level Impact
+Layer	Enhancement	Effect
+Pattern Lane	Time decay (normalized per candle)	Accurate temporal weighting
+Hybrid Engine	Recency-aware scoring	Prioritizes fresh confluences
+Data Layer	Logs effective strength & decay age	Enables predictive tuning
+VTS / ML	Reliable training data	Prevents unit distortion in λ calibration
+✅ Example Log Output
+[10.5] HybridIntegration: BTC/USDT | Raw=0.80 | Decayed=0.63 | Age=3.0 candles | Score=0.72
+[10.5] Trade Executed [BTC/USDT] | Type=HYBRID | DecayedStrength=0.63 | Age=3.0 candles
+
+✅ Next Steps
+
+Directive 10.6 – Predictive Calibration (ML Confidence Engine)
+
+Use decay-corrected pattern history to train adaptive λ and Hybrid weights.
+
+Introduce predictiveConfidence field populated by Python microservice.

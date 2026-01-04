@@ -47,11 +47,28 @@ export interface HybridSignal extends QuantSignal {
   hybridStrategy: HybridStrategyType;
   patternType: PatternType;
   patternStrength: number;
+  effectivePatternStrength: number;  // Directive 10.5: Decayed strength
+  decayAge: number;                   // Directive 10.5: Age in candle units
   predictiveConfidence?: number;
   componentScores: ComponentScores;
 }
 
 export class HybridIntegrationService {
+  /**
+   * Directive 10.5: Apply exponential time decay to pattern strength.
+   * Pattern signals lose influence as they age, normalized per candle interval.
+   * 
+   * Formula: effectiveStrength = originalStrength * e^(-λ * Δt)
+   * Subject to floor constraint: min(decayed, original * FLOOR)
+   */
+  applyPatternDecay(originalStrength: number, deltaCandles: number): number {
+    const { ENABLED, LAMBDA, FLOOR } = HYBRID_PARAMS.DECAY;
+    if (!ENABLED) return originalStrength;
+    
+    const decayed = originalStrength * Math.exp(-LAMBDA * deltaCandles);
+    return Math.max(decayed, originalStrength * FLOOR);
+  }
+
   computeEnsembleScore(
     quantConf: number, 
     patternStrength: number, 
@@ -81,17 +98,22 @@ export class HybridIntegrationService {
 
       if (!match) continue;
 
+      // Directive 10.5: Normalize time delta from ms → candle units (1-hour candles)
+      const deltaCandles = Math.abs(q.timestamp - match.timestamp) / 3600000;
+      const effectiveStrength = this.applyPatternDecay(match.strength, deltaCandles);
+
       const quantConfNormalized = q.expectancy ?? (q.confidence > 1 ? q.confidence / 100 : q.confidence);
       
+      // Use effectiveStrength (decayed) in ensemble computation
       const hybridScore = this.computeEnsembleScore(
         quantConfNormalized,
-        match.strength,
+        effectiveStrength,
         match.predictiveConfidence
       );
 
       if (hybridScore < HYBRID_PARAMS.MIN_SCORE) {
         console.log(
-          `[10.4] HybridIntegration: ${q.symbol} confluence found but score=${hybridScore.toFixed(3)} < MIN=${HYBRID_PARAMS.MIN_SCORE}`
+          `[10.5] HybridIntegration: ${q.symbol} confluence found but score=${hybridScore.toFixed(3)} < MIN=${HYBRID_PARAMS.MIN_SCORE} (Raw=${match.strength.toFixed(2)}, Decayed=${effectiveStrength.toFixed(2)}, Age=${deltaCandles.toFixed(1)})`
         );
         continue;
       }
@@ -105,10 +127,12 @@ export class HybridIntegrationService {
         hybridStrategy,
         patternType: match.pattern,
         patternStrength: match.strength,
+        effectivePatternStrength: effectiveStrength,
+        decayAge: deltaCandles,
         predictiveConfidence: match.predictiveConfidence,
         componentScores: {
           quant: quantConfNormalized,
-          pattern: match.strength,
+          pattern: effectiveStrength,  // Use decayed strength in component scores
           ml: match.predictiveConfidence ?? 0.5,
         },
       };
@@ -116,7 +140,7 @@ export class HybridIntegrationService {
       hybrids.push(hybrid);
 
       console.log(
-        `[10.4] HybridIntegration: HYBRID signal generated for ${q.symbol} | Score=${hybridScore.toFixed(3)} | Strategy=${hybridStrategy} | Pattern=${match.pattern}`
+        `[10.5] HybridIntegration: ${q.symbol} | Raw=${match.strength.toFixed(2)} | Decayed=${effectiveStrength.toFixed(2)} | Age=${deltaCandles.toFixed(1)} candles | Score=${hybridScore.toFixed(3)}`
       );
     }
 
