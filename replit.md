@@ -33,6 +33,8 @@ Core quantitative metrics (`analysis-utils.ts`) include Log-Liquidity (LQ), Dire
 
 The system enforces a "Physics First" approach, where no trade executes unless Net Expectancy Value (NetEV) > 0. It also incorporates an "Extreme Noise Stop" that auto-vetoes trading when `volNoise` exceeds 0.6. The Dynamic Strategy Selector (DSS) adaptively determines which strategy to deploy based on market regime (trend × volatility) and mathematical expectancy (Net EV). This includes a five-regime detection with veto system and strategy selection by confidence with NetEV > 0 filter, integrated into the `signal-orchestrator.ts`.
 
+Directive 10.4 introduces Hybrid Integration (Ensemble Intelligence), merging Quantitative and Pattern signals into Hybrid trades through ensemble scoring. The `HybridIntegrationService` (`hybrid-integration.ts`) acts as the "intelligent referee," issuing trades only when multiple intelligence sources agree within time, direction, and confidence constraints. Configuration via `HYBRID_PARAMS` in `system-guards.ts` defines MIN_SCORE (0.65), MAX_CONFLUENCE_WINDOW (5 candles), and WEIGHTS (Quant: 0.4, Pattern: 0.4, ML: 0.2). Hybrid strategies include H1_TREND_SNIPER (trend-following), H2_SLINGSHOT (momentum breakout), H3_GATECRASHER (mean-reversion), and H4_MOMENTUM_LINK (directional momentum). Note: The system is long-only; all quant signals are BUY direction by design, and pattern signals are filtered to BUY at line 917 of signal-orchestrator.ts.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.
