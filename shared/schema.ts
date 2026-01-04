@@ -569,6 +569,9 @@ export const trades = pgTable("trades", {
   entryTime: timestamp("entry_time", { withTimezone: true }).defaultNow(),
   exitTime: timestamp("exit_time", { withTimezone: true }),
   tradeMode: varchar("trade_mode", { length: 20 }).default("TARGET"), // Directive 9.2: TARGET or TRAILING_TAKE
+  signalType: signalTypeEnum("signal_type").default("QUANT").notNull(), // Directive 10.3: QUANT | PATTERN | HYBRID
+  patternType: patternTypeEnum("pattern_type"), // Directive 10.3: Candlestick pattern (if PATTERN/HYBRID)
+  patternStrength: decimal("pattern_strength", { precision: 4, scale: 3 }), // Directive 10.3: 0.000-1.000 clarity score
   metadata: jsonb("metadata"), // Additional strategy-specific data
 }, (table) => ({
   modeIdx: index("trades_mode_idx").on(table.mode),
@@ -1682,6 +1685,10 @@ export const paperSimTrades = pgTable("paper_sim_trades", {
   closedAt: timestamp("closed_at", { withTimezone: true }),
   closeReason: varchar("close_reason", { length: 50 }), // 'target_hit', 'stop_hit', 'strategy_exit', 'manual', 'guardrail'
   confidence: decimal("confidence", { precision: 5, scale: 2 }),
+  // Directive 10.3: Signal Type Expansion
+  signalType: signalTypeEnum("signal_type").default("QUANT").notNull(), // QUANT | PATTERN | HYBRID
+  patternType: patternTypeEnum("pattern_type"), // Candlestick pattern (if PATTERN/HYBRID)
+  patternStrength: decimal("pattern_strength", { precision: 4, scale: 3 }), // 0.000-1.000 clarity score
   metadata: jsonb("metadata"), // Signal details, market context, etc.
 }, (table) => ({
   symbolIdx: index("paper_sim_trades_symbol_idx").on(table.symbol),
@@ -1716,6 +1723,10 @@ export const paperSimOpenPositions = pgTable("paper_sim_open_positions", {
   entrySlippage: decimal("entry_slippage", { precision: 20, scale: 8 }).default("0"),
   // Directive 9.2: Trade mode for trailing exit system
   tradeMode: varchar("trade_mode", { length: 20 }).default("TARGET"), // TARGET or TRAILING_TAKE
+  // Directive 10.3: Signal Type Expansion
+  signalType: signalTypeEnum("signal_type").default("QUANT").notNull(), // QUANT | PATTERN | HYBRID
+  patternType: patternTypeEnum("pattern_type"), // Candlestick pattern (if PATTERN/HYBRID)
+  patternStrength: decimal("pattern_strength", { precision: 4, scale: 3 }), // 0.000-1.000 clarity score
   metadata: jsonb("metadata"), // Signal details, entry reasons, etc.
 }, (table) => ({
   symbolIdx: uniqueIndex("paper_sim_open_positions_symbol_idx").on(table.symbol),

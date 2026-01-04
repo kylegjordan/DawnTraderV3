@@ -173,6 +173,13 @@ export class PaperTradeExecutor extends BaseTradeExecutor {
 
       const tradeId = nanoid();
       const positionId = nanoid();
+      
+      // Directive 10.3: Extract signal type fields for persistence
+      const signalType = (signal as any).signalType || 'QUANT';
+      const patternType = (signal as any).patternType || null;
+      const patternStrength = (signal as any).patternStrength?.toString() || null;
+      
+      console.log(`[10.3] Trade Execute: ${signal.symbol} | Type=${signalType} | Pattern=${patternType || 'N/A'}`);
 
       const trade: InsertPaperSimTrade = {
         symbol: signal.symbol,
@@ -186,6 +193,9 @@ export class PaperTradeExecutor extends BaseTradeExecutor {
         slippage: slippage.toString(),
         confidence: signal.confidence.toString(),
         openedAt: new Date(),
+        signalType: signalType as 'QUANT' | 'PATTERN' | 'HYBRID',
+        patternType: patternType,
+        patternStrength: patternStrength,
         metadata: signal.metadata || {},
       };
 
@@ -202,6 +212,9 @@ export class PaperTradeExecutor extends BaseTradeExecutor {
         unrealizedPnl: '0',
         unrealizedPnlPercent: '0',
         confidence: signal.confidence.toString(),
+        signalType: signalType as 'QUANT' | 'PATTERN' | 'HYBRID',
+        patternType: patternType,
+        patternStrength: patternStrength,
         metadata: signal.metadata || {},
       };
 

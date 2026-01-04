@@ -1733,6 +1733,13 @@ export class PaperExecutionEngine {
     console.log(`[AJ10.3][TRADE_CREATE_START] symbol=${signal.symbol} | strategy=${signal.strategy} | qty=${quantity.toFixed(8)} | estimatedValue=$${(signal.estimatedValue || 0).toFixed(2)}`);
     
     try {
+      // Directive 10.3: Extract signal type fields for persistence
+      const signalType = signal.signalType || 'QUANT';
+      const patternType = signal.patternType || null;
+      const patternStrength = signal.patternStrength?.toString() || null;
+      
+      console.log(`[10.3] Trade Execute: ${signal.symbol} | Type=${signalType} | Pattern=${patternType || 'N/A'} | Strength=${patternStrength || 'N/A'}`);
+      
       const trade = await storage.createPaperSimTrade(this.mode, {
         symbol: signal.symbol,
         strategyName: signal.strategy,
@@ -1745,6 +1752,9 @@ export class PaperExecutionEngine {
         slippage: totalSlippage.toString(),
         confidence: (signal.confidence * 100).toString(),
         openedAt: new Date(),
+        signalType: signalType as 'QUANT' | 'PATTERN' | 'HYBRID',
+        patternType: patternType as any,
+        patternStrength: patternStrength,
         metadata: signal.metadata || {}
       });
 
@@ -1792,6 +1802,7 @@ export class PaperExecutionEngine {
       }
 
       // Create open position - Phase 8.8.3-C-FINAL: Include entryFee
+      // Directive 10.3: Include signal type fields
       const openPosition = await storage.createPaperSimOpenPosition(this.mode, {
         symbol: signal.symbol,
         strategyName: signal.strategy,
@@ -1809,6 +1820,9 @@ export class PaperExecutionEngine {
         entryFee: entryFee.toString(),
         intendedEntryPrice: signal.entryPrice.toString(),
         entrySlippage: totalSlippage.toString(),
+        signalType: signalType as 'QUANT' | 'PATTERN' | 'HYBRID',
+        patternType: patternType as any,
+        patternStrength: patternStrength,
         metadata: {
           ...signal.metadata,
           tradeId: trade.id,

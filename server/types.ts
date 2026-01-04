@@ -92,3 +92,14 @@ export interface HybridTradeSignal {
   patternStrength?: number;
   metadata?: Record<string, any>;
 }
+
+/**
+ * Directive 10.3: TradeSignal interface extension
+ * This interface extends the base trade signal with signal type fields
+ * for historical persistence and analytics segmentation.
+ */
+export interface TradeSignalContext {
+  signalType?: SignalType;          // 'QUANT' | 'PATTERN' | 'HYBRID' (defaults to 'QUANT')
+  patternType?: PatternType;        // Pattern category (if PATTERN/HYBRID)
+  patternStrength?: number;         // 0.0-1.0 clarity rating (if PATTERN/HYBRID)
+}

@@ -1,0 +1,219 @@
+✅ Revised Directive 10.3 — Signal Type Expansion (Database Persistence)
+Objective
+
+To extend the database schema, storage layer, and execution engines so that every trade — live or simulated — permanently stores its contextual identity:
+signalType, patternType, and patternStrength.
+
+This ensures all Quant, Pattern, and Hybrid trades retain their origin, enabling full historical analytics, model training, and hybrid performance visualization.
+
+Dependencies
+
+Phase 9: Math Core (NetEV, CWQI)
+
+Directive 10.1: Dynamic Strategy Selector (Regime Detection)
+
+Directive 10.2: Pattern Recognizer (Predictive-Ready)
+
+server/types.ts: Centralized Type Dictionary (SignalType, PatternType)
+
+Implementation Scope
+1. UPDATE DATABASE SCHEMA
+
+File: shared/schema.ts
+ORM: Drizzle (PostgreSQL adapter)
+
+Task:
+Locate:
+
+export const trades = pgTable("trades", { ... })
+export const paper_sim_trades = pgTable("paper_sim_trades", { ... })
+
+
+Add the following fields to both tables:
+
+signalType: text("signal_type").default('QUANT').notNull(),
+patternType: text("pattern_type"),
+patternStrength: real("pattern_strength"),
+
+
+Also:
+Ensure the inferred types (InsertTrade, Trade) correctly reflect these new fields.
+
+✅ Example:
+
+export type InsertTrade = typeof trades.$inferInsert;
+export type Trade = typeof trades.$inferSelect;
+
+
+If necessary, regenerate them after the column additions so TypeScript infers signalType, patternType, and patternStrength automatically.
+
+2. UPDATE TYPES
+
+File: server/types.ts
+
+Ensure TradeSignal interface includes:
+
+export interface TradeSignal {
+  // existing fields…
+  signalType?: SignalType;          // 'QUANT' | 'PATTERN' | 'HYBRID'
+  patternType?: PatternType;        // optional: pattern category
+  patternStrength?: number;         // 0.0–1.0 clarity rating
+}
+
+
+Confirm SignalType and PatternType are already defined from Directive 10.2.
+
+3. UPDATE STORAGE LAYER
+
+File: server/storage.ts
+
+Locate:
+
+createTrade() (live)
+
+createPaperTrade() (paper)
+
+Modify input interface:
+
+async function createTrade(data: {
+  symbol: string;
+  entryPrice: number;
+  exitPrice: number;
+  qty: number;
+  signalType?: SignalType;
+  patternType?: PatternType;
+  patternStrength?: number;
+  ...
+})
+
+
+Update the Drizzle insert logic:
+
+await db.insert(trades).values({
+  symbol: data.symbol,
+  entry_price: data.entryPrice,
+  exit_price: data.exitPrice,
+  qty: data.qty,
+  signal_type: data.signalType ?? 'QUANT',
+  pattern_type: data.patternType ?? null,
+  pattern_strength: data.patternStrength ?? null,
+  ...
+});
+
+
+Repeat for createPaperTrade() using paper_sim_trades.
+
+✅ Backward Compatibility:
+If signalType is missing, automatically default to 'QUANT'.
+
+4. UPDATE EXECUTION ENGINES
+
+Files:
+
+server/services/trading-engine.ts
+
+server/services/paper-execution-engine.ts
+
+Locate functions such as executeTrade() or createTradeRecord().
+
+Extract fields from incoming signal objects:
+
+const { signalType, patternType, patternStrength } = tradeSignal;
+
+
+Pass them forward to the storage function:
+
+await storage.createTrade({
+  ...tradeData,
+  signalType,
+  patternType,
+  patternStrength,
+});
+
+
+Log confirmation for runtime traceability:
+
+console.log(`[10.3] Trade Executed: ${symbol} | Type=${signalType} | Pattern=${patternType || 'N/A'}`);
+
+
+This ensures visual verification during live and paper-mode operation.
+
+5. VERIFICATION
+
+Commands:
+
+npm run db:push
+npx vitest run
+
+
+Validation Steps:
+
+Schema successfully migrates (signal_type, pattern_type, pattern_strength visible).
+
+Application builds without TypeScript inference errors.
+
+Run test suite; confirm all pass (≥34 tests).
+
+Manually inspect DB entries for the following cases:
+
+Quant trade → signal_type='QUANT', others NULL
+
+Pattern trade → signal_type='PATTERN', pattern_type populated
+
+Hybrid trade → signal_type='HYBRID', all pattern fields populated
+
+✅ All legacy trades default to signal_type='QUANT' for backward compatibility.
+
+Expected Outcome
+
+After Directive 10.3:
+
+Every trade record (live or paper) permanently includes:
+
+signalType (Quant / Pattern / Hybrid)
+
+patternType (specific formation)
+
+patternStrength (clarity measure)
+
+The Predictive Engine (10.6) can now segment training data by lane.
+
+The Analytics Dashboard (10.7) can visualize performance across signal categories.
+
+Historical data integrity preserved for all future calibrations.
+
+System Impact
+Layer	Change	Result
+Schema	Added signal context fields	Historical persistence
+Storage	Extended insert logic	Consistent trade metadata
+Execution	Added field extraction & logging	Traceable trade context
+Predictive	Future-ready	Supports calibration and analytics segmentation
+Validation Checklist
+
+ Database columns added successfully via db:push
+
+ Drizzle inferred types (InsertTrade, Trade) updated automatically
+
+ TradeSignal extended correctly in server/types.ts
+
+ Storage & engines pass type-checks
+
+ Logs show correct trade types during execution
+
+ All tests pass
+
+✅ Approval Summary
+
+Directive logic validated by Gemini (Lead Architect)
+
+Drizzle ORM syntax integrated (final revision)
+
+No architectural drift introduced
+
+Backward compatibility preserved
+
+Predictive readiness guaranteed for Phase 10.6
+
+Final Verdict:
+This revised directive is production-ready and aligned with the current Drizzle schema architecture.
+Once implemented, DawnTrader will have complete, lossless persistence of Quant, Pattern, and Hybrid trades — unlocking the next major milestone: Directive 10.4 – Hybrid Integration (Ensemble Intelligence).
