@@ -89,7 +89,7 @@ describe('Directive 10.4 — Hybrid Integration', () => {
       const quantSignals = [baseQuant];
       const patternSignals: PatternSignal[] = [{
         ...basePattern,
-        timestamp: baseQuant.timestamp + (HYBRID_PARAMS.MAX_CONFLUENCE_WINDOW + 1) * 60000 * 2,
+        timestamp: baseQuant.timestamp + (HYBRID_PARAMS.MAX_CONFLUENCE_WINDOW + 1) * HYBRID_PARAMS.CANDLE_INTERVAL_MS,
       }];
 
       const hybrids = service.detectConfluence(quantSignals, patternSignals);
@@ -123,7 +123,8 @@ describe('Directive 10.4 — Hybrid Integration', () => {
       expect(hybrids.length).toBe(1);
       expect(hybrids[0].componentScores).toBeDefined();
       expect(hybrids[0].componentScores.quant).toBe(0.8);
-      expect(hybrids[0].componentScores.pattern).toBe(0.85);
+      // componentScores.pattern uses effectivePatternStrength (decayed), which equals original for age=0
+      expect(hybrids[0].componentScores.pattern).toBe(hybrids[0].effectivePatternStrength);
       expect(hybrids[0].componentScores.ml).toBe(0.7);
     });
 
@@ -203,6 +204,8 @@ describe('Directive 10.4 — Hybrid Integration', () => {
 
     it('decayAge and effectivePatternStrength are populated in hybrid signals', () => {
       const now = Date.now();
+      const candleIntervalMs = HYBRID_PARAMS.CANDLE_INTERVAL_MS;
+      
       const quant: QuantSignal = {
         symbol: 'BTCUSD',
         strategy: 'vwap_pullback',
@@ -215,28 +218,30 @@ describe('Directive 10.4 — Hybrid Integration', () => {
         expectancy: 0.8,
       };
       
-      // Pattern is 3 minutes old (within 5-minute confluence window)
-      // deltaCandles = 180000ms / 3600000ms = 0.05 hours
+      // Pattern is 2 candles old (within 5-candle confluence window)
       const pattern: PatternSignal = {
         symbol: 'BTCUSD',
         pattern: 'PINBAR',
         direction: 'BUY',
         strength: 0.9,
-        timestamp: now - (3 * 60000), // 3 minutes ago
+        timestamp: now - (2 * candleIntervalMs), // 2 candles ago
       };
 
       const hybrids = service.detectConfluence([quant], [pattern]);
 
       expect(hybrids.length).toBe(1);
-      expect(hybrids[0].decayAge).toBeCloseTo(0.05, 2); // 3 min / 60 min = 0.05 candles
-      // With very small decay (age ~0.05), strength should be close to original (within 1 decimal)
-      expect(hybrids[0].effectivePatternStrength).toBeCloseTo(0.9, 1);
+      expect(hybrids[0].decayAge).toBeCloseTo(2.0, 1); // 2 candles
+      // e^(-0.15 * 2) ≈ 0.74, so 0.9 * 0.74 ≈ 0.67
+      expect(hybrids[0].effectivePatternStrength).toBeLessThan(0.9);
+      expect(hybrids[0].effectivePatternStrength).toBeGreaterThan(0.9 * 0.3);
       expect(hybrids[0].effectivePatternStrength).toBeDefined();
       expect(hybrids[0].decayAge).toBeDefined();
     });
 
     it('componentScores.pattern uses decayed strength', () => {
       const now = Date.now();
+      const candleIntervalMs = HYBRID_PARAMS.CANDLE_INTERVAL_MS;
+      
       const quant: QuantSignal = {
         symbol: 'BTCUSD',
         strategy: 'vwap_pullback',
@@ -249,13 +254,13 @@ describe('Directive 10.4 — Hybrid Integration', () => {
         expectancy: 0.8,
       };
       
-      // Pattern is 2 minutes old (within 5-minute confluence window)
+      // Pattern is 1 candle old (within 5-candle confluence window)
       const pattern: PatternSignal = {
         symbol: 'BTCUSD',
         pattern: 'PINBAR',
         direction: 'BUY',
         strength: 0.85,
-        timestamp: now - (2 * 60000), // 2 minutes ago
+        timestamp: now - candleIntervalMs, // 1 candle ago
       };
 
       const hybrids = service.detectConfluence([quant], [pattern]);
@@ -263,6 +268,36 @@ describe('Directive 10.4 — Hybrid Integration', () => {
       expect(hybrids.length).toBe(1);
       // componentScores.pattern should match effectivePatternStrength
       expect(hybrids[0].componentScores.pattern).toBeCloseTo(hybrids[0].effectivePatternStrength, 4);
+    });
+
+    it('decay rejects patterns outside confluence window', () => {
+      const now = Date.now();
+      const candleIntervalMs = HYBRID_PARAMS.CANDLE_INTERVAL_MS;
+      
+      const quant: QuantSignal = {
+        symbol: 'BTCUSD',
+        strategy: 'vwap_pullback',
+        entryPrice: 50000,
+        stopPrice: 49000,
+        targetPrice: 52000,
+        confidence: 0.8,
+        direction: 'BUY',
+        timestamp: now,
+        expectancy: 0.8,
+      };
+      
+      // Pattern is 6 candles old (outside 5-candle confluence window)
+      const pattern: PatternSignal = {
+        symbol: 'BTCUSD',
+        pattern: 'PINBAR',
+        direction: 'BUY',
+        strength: 0.9,
+        timestamp: now - (6 * candleIntervalMs), // 6 candles ago - outside window
+      };
+
+      const hybrids = service.detectConfluence([quant], [pattern]);
+
+      expect(hybrids.length).toBe(0); // Should not match - too old
     });
   });
 });

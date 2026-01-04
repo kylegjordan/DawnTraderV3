@@ -89,17 +89,20 @@ export class HybridIntegrationService {
     const hybrids: HybridSignal[] = [];
 
     for (const q of quantSignals) {
+      // Use CANDLE_INTERVAL_MS for both confluence window and decay calculation
+      const candleIntervalMs = HYBRID_PARAMS.CANDLE_INTERVAL_MS;
+      
       const match = patternSignals.find(
         (p) =>
           p.symbol === q.symbol &&
           p.direction === q.direction &&
-          Math.abs(p.timestamp - q.timestamp) <= HYBRID_PARAMS.MAX_CONFLUENCE_WINDOW * 60000
+          Math.abs(p.timestamp - q.timestamp) <= HYBRID_PARAMS.MAX_CONFLUENCE_WINDOW * candleIntervalMs
       );
 
       if (!match) continue;
 
-      // Directive 10.5: Normalize time delta from ms → candle units (1-hour candles)
-      const deltaCandles = Math.abs(q.timestamp - match.timestamp) / 3600000;
+      // Directive 10.5: Normalize time delta from ms → candle units
+      const deltaCandles = Math.abs(q.timestamp - match.timestamp) / candleIntervalMs;
       const effectiveStrength = this.applyPatternDecay(match.strength, deltaCandles);
 
       const quantConfNormalized = q.expectancy ?? (q.confidence > 1 ? q.confidence / 100 : q.confidence);
