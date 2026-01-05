@@ -79,17 +79,30 @@ function consumeToken(): boolean {
   return true;
 }
 
+/**
+ * Directive 10.7a: Exponential backoff with jitter for rate limiting
+ * Smooths scan bursts and provides graceful recovery during network stalls
+ */
 async function waitForToken(maxRetries: number = 20): Promise<boolean> {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     if (consumeToken()) {
       return true;
     }
+    // Exponential backoff: delay = min(100 * 2^attempt, 1000ms) + random jitter
+    const delay = Math.min(100 * Math.pow(2, attempt), 1000);
     const jitter = Math.random() * 50;
-    const backoffMs = Math.min(200, 100 + attempt * 20 + jitter);
-    await new Promise(res => setTimeout(res, backoffMs));
+    await new Promise(res => setTimeout(res, delay + jitter));
   }
-  console.warn(`[10.7][MTF] Token bucket exhausted after ${maxRetries} retries`);
+  console.warn(`[10.7a][MTF] Token bucket exhausted after ${maxRetries} retries (exponential backoff)`);
   return false;
+}
+
+/**
+ * Directive 10.7a: Calculate expected backoff delay for testing
+ */
+export function calculateBackoffDelay(attempt: number): { baseDelay: number; maxDelay: number } {
+  const baseDelay = Math.min(100 * Math.pow(2, attempt), 1000);
+  return { baseDelay, maxDelay: baseDelay + 50 };
 }
 
 export function getTokenBucketStatus(): { tokens: number; lastRefill: number } {
@@ -231,12 +244,48 @@ export async function cascadingScan(
 
   const precisionPairs = await scanTimeframe(krakenService, '5m', precisionCandidates);
 
-  console.log(`[10.7][MTF] Cascade complete: 1H=${globalPairs.length}, 15m=${tacticalPairs.length}, 5m=${precisionPairs.length}`);
+  // Directive 10.7a: Cascade Efficiency Telemetry
+  const cascadeSummary = {
+    global: globalPairs.length,
+    tactical: tacticalPairs.length,
+    precision: precisionPairs.length,
+    tacticalRatio: globalPairs.length > 0 ? (tacticalPairs.length / globalPairs.length).toFixed(2) : '0.00',
+    precisionRatio: tacticalPairs.length > 0 ? (precisionPairs.length / tacticalPairs.length).toFixed(2) : '0.00',
+  };
+  
+  console.log(
+    `[Cascade Summary] Global=${cascadeSummary.global} → Tactical=${cascadeSummary.tactical} (${cascadeSummary.tacticalRatio}) → Precision=${cascadeSummary.precision} (${cascadeSummary.precisionRatio})`
+  );
 
   return {
     globalPairs,
     tacticalPairs,
     precisionPairs,
+  };
+}
+
+/**
+ * Directive 10.7a: Get cascade telemetry for monitoring
+ */
+export interface CascadeTelemetry {
+  global: number;
+  tactical: number;
+  precision: number;
+  tacticalRatio: string;
+  precisionRatio: string;
+}
+
+export function computeCascadeTelemetry(result: CascadingScanResult): CascadeTelemetry {
+  return {
+    global: result.globalPairs.length,
+    tactical: result.tacticalPairs.length,
+    precision: result.precisionPairs.length,
+    tacticalRatio: result.globalPairs.length > 0 
+      ? (result.tacticalPairs.length / result.globalPairs.length).toFixed(2) 
+      : '0.00',
+    precisionRatio: result.tacticalPairs.length > 0 
+      ? (result.precisionPairs.length / result.tacticalPairs.length).toFixed(2) 
+      : '0.00',
   };
 }
 

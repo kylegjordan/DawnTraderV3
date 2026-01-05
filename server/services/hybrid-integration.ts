@@ -92,6 +92,40 @@ export class HybridIntegrationService {
     );
   }
 
+  /**
+   * Directive 10.7a: Valid timeframe pairs for hybrid confluence
+   * Prevents false hybrids from same-timeframe or invalid combinations
+   */
+  private static readonly VALID_TIMEFRAME_PAIRS: [Timeframe | undefined, Timeframe | undefined][] = [
+    ['1h', '15m'],
+    ['15m', '5m'],
+    ['1h', '5m'],
+    [undefined, undefined],  // Allow when timeframe not specified (legacy signals)
+    ['1h', undefined],
+    ['15m', undefined],
+    ['5m', undefined],
+    [undefined, '1h'],
+    [undefined, '15m'],
+    [undefined, '5m'],
+  ];
+
+  /**
+   * Directive 10.7a: Check if timeframe pair is valid for hybrid confluence
+   */
+  isValidTimeframePair(quantTimeframe: Timeframe | undefined, patternTimeframe: Timeframe | undefined): boolean {
+    // Allow if either is undefined (legacy signals without timeframe metadata)
+    if (!quantTimeframe || !patternTimeframe) return true;
+    
+    // Reject same-timeframe merges
+    if (quantTimeframe === patternTimeframe) return false;
+    
+    // Check against valid pairs
+    return HybridIntegrationService.VALID_TIMEFRAME_PAIRS.some(
+      ([a, b]) => (quantTimeframe === a && patternTimeframe === b) ||
+                  (quantTimeframe === b && patternTimeframe === a)
+    );
+  }
+
   detectConfluence(
     quantSignals: QuantSignal[], 
     patternSignals: PatternSignal[]
@@ -111,9 +145,19 @@ export class HybridIntegrationService {
 
       if (!match) continue;
 
+      // Directive 10.7a: Hybrid Timeframe Guard - prevent invalid timeframe combinations
+      const quantTimeframe = q.metadata?.timeframe as Timeframe | undefined;
+      const patternTimeframe = match.metadata?.timeframe as Timeframe | undefined;
+      
+      if (!this.isValidTimeframePair(quantTimeframe, patternTimeframe)) {
+        console.debug(
+          `[HybridIntegration] Skipping invalid confluence: Quant=${quantTimeframe || 'none'}, Pattern=${patternTimeframe || 'none'}`
+        );
+        continue;
+      }
+
       // Directive 10.5 + 10.7: Normalize time delta and apply timeframe-aware decay
       const deltaCandles = Math.abs(q.timestamp - match.timestamp) / candleIntervalMs;
-      const patternTimeframe = match.metadata?.timeframe as Timeframe | undefined;
       const effectiveStrength = this.applyPatternDecay(match.strength, deltaCandles, patternTimeframe);
 
       const quantConfNormalized = q.expectancy ?? (q.confidence > 1 ? q.confidence / 100 : q.confidence);

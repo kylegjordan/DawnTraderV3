@@ -300,4 +300,86 @@ describe('Directive 10.4 — Hybrid Integration', () => {
       expect(hybrids.length).toBe(0); // Should not match - too old
     });
   });
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // Directive 10.7a — Hybrid Timeframe Guard Tests
+  // ══════════════════════════════════════════════════════════════════════════════
+  describe('Directive 10.7a - Hybrid Timeframe Guard', () => {
+    it('isValidTimeframePair allows valid cross-timeframe pairs', () => {
+      expect(service.isValidTimeframePair('1h', '15m')).toBe(true);
+      expect(service.isValidTimeframePair('15m', '5m')).toBe(true);
+      expect(service.isValidTimeframePair('1h', '5m')).toBe(true);
+    });
+
+    it('isValidTimeframePair rejects same-timeframe merges', () => {
+      expect(service.isValidTimeframePair('1h', '1h')).toBe(false);
+      expect(service.isValidTimeframePair('15m', '15m')).toBe(false);
+      expect(service.isValidTimeframePair('5m', '5m')).toBe(false);
+    });
+
+    it('isValidTimeframePair allows undefined timeframes (legacy signals)', () => {
+      expect(service.isValidTimeframePair(undefined, '15m')).toBe(true);
+      expect(service.isValidTimeframePair('1h', undefined)).toBe(true);
+      expect(service.isValidTimeframePair(undefined, undefined)).toBe(true);
+    });
+
+    it('detectConfluence skips same-timeframe hybrids', () => {
+      const now = Date.now();
+      
+      const quant: QuantSignal = {
+        symbol: 'BTCUSD',
+        strategy: 'vwap_pullback',
+        entryPrice: 50000,
+        stopPrice: 49000,
+        targetPrice: 52000,
+        confidence: 0.8,
+        direction: 'BUY',
+        timestamp: now,
+        expectancy: 0.8,
+        metadata: { timeframe: '5m' },
+      };
+      
+      const pattern: PatternSignal = {
+        symbol: 'BTCUSD',
+        pattern: 'PINBAR',
+        direction: 'BUY',
+        strength: 0.9,
+        timestamp: now,
+        metadata: { timeframe: '5m' },  // Same timeframe as quant
+      };
+
+      const hybrids = service.detectConfluence([quant], [pattern]);
+      expect(hybrids.length).toBe(0);  // Should be skipped by guard
+    });
+
+    it('detectConfluence allows valid cross-timeframe hybrids', () => {
+      const now = Date.now();
+      
+      const quant: QuantSignal = {
+        symbol: 'BTCUSD',
+        strategy: 'vwap_pullback',
+        entryPrice: 50000,
+        stopPrice: 49000,
+        targetPrice: 52000,
+        confidence: 0.8,
+        direction: 'BUY',
+        timestamp: now,
+        expectancy: 0.8,
+        metadata: { timeframe: '1h' },
+      };
+      
+      const pattern: PatternSignal = {
+        symbol: 'BTCUSD',
+        pattern: 'PINBAR',
+        direction: 'BUY',
+        strength: 0.9,
+        timestamp: now,
+        metadata: { timeframe: '15m' },  // Valid cross-timeframe
+      };
+
+      const hybrids = service.detectConfluence([quant], [pattern]);
+      expect(hybrids.length).toBe(1);  // Should be accepted
+      expect(hybrids[0].signalType).toBe('HYBRID');
+    });
+  });
 });

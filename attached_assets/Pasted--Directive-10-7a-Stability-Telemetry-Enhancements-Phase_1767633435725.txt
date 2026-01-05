@@ -1,0 +1,179 @@
+⚙️ Directive 10.7a — Stability & Telemetry Enhancements
+
+Phase: 10.7a
+Objective:
+Improve the resilience, observability, and precision of the Multi-Timeframe Scanner (Directive 10.7) by adding exponential backoff, cascade telemetry, per-symbol fault isolation, and hybrid confluence guards.
+
+Rationale:
+Directive 10.7 successfully introduced hierarchical (1H → 15m → 5m) scanning and decay-aware hybrid detection.
+Before Adaptive Scanning (Directive 10.8), we must ensure the cascade system is robust under load, observable in production, and protected from false confluence events.
+
+📁 Target Files
+@server/services/scanner-service.ts  
+@server/services/hybrid-integration.ts  
+@server/config/system-guards.ts  
+@server/tests/unit/multi-timeframe.test.ts  
+@server/tests/unit/hybrid-integration.test.ts
+
+🧩 TASK LIST
+1️⃣ Exponential Backoff + Jitter (Rate Limiter Enhancement)
+
+File: server/services/scanner-service.ts
+
+Replace the flat await new Promise(res => setTimeout(res, 100)); throttle delay with exponential backoff and jitter logic:
+
+async function waitForToken(retryCount: number = 0) {
+  const delay = Math.min(100 * Math.pow(2, retryCount), 1000); // cap 1s
+  const jitter = Math.random() * 50;
+  await new Promise(res => setTimeout(res, delay + jitter));
+}
+
+
+Then modify the scanTimeframe() loop:
+
+for (const symbol of pairs) {
+  let retryCount = 0;
+  while (!consumeToken()) {
+    await waitForToken(retryCount++);
+  }
+  try {
+    const candles = await getOHLC(symbol, interval);
+    results.push({ symbol, candles, timeframe: interval });
+  } catch (err) {
+    logger.warn(`[Cascade] Skipping ${symbol}: ${err.message}`);
+  }
+}
+
+
+✅ Benefit:
+Smooths scan bursts, reduces Kraken 429 errors, and provides graceful recovery during temporary network stalls.
+
+2️⃣ Cascade Efficiency Telemetry
+
+File: server/services/scanner-service.ts
+
+Add cascade summary logs at the end of cascadingScan():
+
+logger.info(
+  `[Cascade Summary] Global=${globalPairs.length} → Tactical=${tacticalPairs.length} → Precision=${precisionPairs.length}`
+);
+
+metrics.record('cascade.filter.ratio', {
+  global: globalPairs.length,
+  tactical: tacticalPairs.length,
+  precision: precisionPairs.length,
+});
+
+
+✅ Benefit:
+Provides visibility into how many pairs survive each filter stage.
+This will be essential for AdaptiveScanManager (Directive 10.8) to balance the 60/40 Ideal vs Rotational pools.
+
+3️⃣ Error Isolation per Symbol
+
+File: server/services/scanner-service.ts
+
+Wrap each pair’s getOHLC() call in a try/catch (already shown above).
+Ensure that failed pairs do not break the scanning loop.
+
+✅ Benefit:
+Makes the cascade fault-tolerant — transient Kraken errors or a single bad pair will no longer halt the scan cycle.
+
+4️⃣ Hybrid Timeframe Guard (Prevent False Hybrids)
+
+File: server/services/hybrid-integration.ts
+
+Insert a new guard near the start of detectConfluence() to validate allowed timeframe combinations:
+
+const validPairs: [Timeframe, Timeframe][] = [
+  ['1h', '15m'],
+  ['15m', '5m'],
+];
+
+if (!validPairs.some(([a, b]) =>
+  (quant.timeframe === a && pattern.timeframe === b)
+)) {
+  logger.debug(
+    `[HybridIntegration] Skipping invalid confluence: Quant=${quant.timeframe}, Pattern=${pattern.timeframe}`
+  );
+  continue;
+}
+
+
+✅ Benefit:
+Prevents invalid 5m–5m merges or same-timeframe hybrids that would create noise signals and false confidence.
+
+5️⃣ Update Tests
+
+Files:
+
+server/tests/unit/multi-timeframe.test.ts
+
+server/tests/unit/hybrid-integration.test.ts
+
+Add/extend tests for:
+
+Rate Control: Ensure exponential backoff logic waits progressively longer.
+
+Telemetry: Validate cascade summary logging and correct ratio output.
+
+Fault Tolerance: Simulate a failed getOHLC() call and confirm it doesn’t stop the loop.
+
+Hybrid Guard: Confirm invalid timeframe merges are skipped.
+
+Example:
+
+expect(logger.info).toHaveBeenCalledWith(
+  expect.stringContaining('[Cascade Summary]')
+);
+
+expect(result.hybrids.find(h => h.quant.timeframe === '5m')).toBeUndefined();
+
+
+✅ Benefit:
+Prevents regression before Adaptive Scanning logic is added.
+
+⚖️ Safety & Impact
+Category	Change Type	Risk	Benefit
+Rate Limiter	Enhancement	Low	Prevents 429 rate errors
+Telemetry	Additive	None	Enables performance tuning
+Error Handling	Additive	None	Fault isolation
+Hybrid Guard	Restrictive	Low	Removes false hybrids
+
+No schema, type, or API contract changes — 100% backward-compatible with Directive 10.7.
+
+🧠 Verification
+
+Run full test suite:
+
+npx vitest run
+
+
+Expected outcome:
+
+All existing 224 tests pass.
+
+New 8–10 tests pass for exponential backoff, telemetry, and hybrid filtering.
+
+Logs show [Cascade Summary] and [HybridIntegration] entries.
+
+✅ Expected Results
+Function	Before	After
+Rate Limiting	Flat delay	Exponential backoff + jitter
+Cascade Insight	Silent	Logged ratios (Global→Tactical→Precision)
+Fault Tolerance	Single failure breaks loop	Isolated errors, resilient
+Hybrid Validation	Unrestricted	Strict timeframe confluence enforcement
+🏁 Directive Summary
+
+Directive 10.7a — Stability & Telemetry Enhancements fortifies the multi-timeframe cascade pipeline with:
+
+Smoothed, adaptive rate limiting.
+
+Fault isolation for per-symbol errors.
+
+Telemetry for cascade efficiency.
+
+Hybrid signal guards to prevent false triggers.
+
+These changes transform the Multi-Timeframe Scanner from “functional” to “production-grade resilient.”
+Once complete, the system will be ready for Directive 10.8 — Adaptive Scanning Intelligence (Dual-Pool Scheduler).
