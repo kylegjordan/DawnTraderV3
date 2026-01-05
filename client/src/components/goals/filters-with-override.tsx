@@ -83,6 +83,13 @@ const MARKET_UNIVERSE_OPTIONS = [
   { label: "Top 500", value: 500 },
 ];
 
+/**
+ * Directive 10.8: Feature flag to enable adaptive scanning
+ * When enabled, the Market Universe Size filter is hidden because
+ * pair selection is now driven by TelemetryAggregator and AdaptiveScanManager
+ */
+export const ADAPTIVE_SCANNING_ENABLED = true;
+
 // REB 2.9B Stage 3 Section 1: Number formatting helpers (from directive)
 const formatNumber = (value: number | string): string => {
   if (value === null || value === undefined || value === "") return "";
@@ -306,8 +313,11 @@ export function FiltersWithOverride() {
 
   // REB 2.9B Stage 3 Section 4: Filter out quoteCurrencies before grouping
   // Phase 8.8.4-B.3: Filter out confidenceThreshold (deprecated - NGC is now single confidence source)
+  // Directive 10.8: Filter out universeSize when adaptive scanning is enabled
   const visibleFilters = filtersData.data.filters.filter(f => 
-    f.name !== 'quoteCurrencies' && f.name !== 'confidenceThreshold'
+    f.name !== 'quoteCurrencies' && 
+    f.name !== 'confidenceThreshold' &&
+    !(ADAPTIVE_SCANNING_ENABLED && f.name === 'universeSize')
   );
 
   // Group filters by category

@@ -1,0 +1,245 @@
+⚙️ Directive 10.8 — Adaptive Scanning Intelligence (Dual-Pool Scheduler)
+Phase 10.8 | FX5 Integration + Safe Deprecation
+
+Objective:
+Replace the legacy FX5 “Market Universe Size” (Tier A/B) scanning logic with the new AdaptiveScanManager, while preserving build stability and preventing dangling import errors.
+This directive fully transitions DawnTrader’s scanning architecture into a learning-driven, adaptive system without creating UI or compilation regressions.
+
+📁 Target Files
+@server/services/adaptive-scan-manager.ts  
+@server/services/scanner-service.ts  
+@server/services/telemetry-aggregator.ts  
+@server/services/ready-to-buy-refresh.ts  
+@server/services/fx5-scanner.ts  
+@server/config/system-guards.ts  
+@server/types.ts  
+@client/components/tabs/screeners/filters/market-universe-size.tsx  
+@client/components/tabs/screeners/ScreenersTab.tsx  
+@server/tests/unit/adaptive-scan-manager.test.ts  
+@server/tests/unit/telemetry-aggregator.test.ts  
+@server/tests/unit/fx5-scanner.test.ts
+
+🧭 Context & Rationale
+
+The FX5 Scanner currently divides pairs into Tier A / Tier B using a marketUniverseSize setting in the Goals Engine’s Screeners Tab.
+
+This split is based on outdated metrics (CWQI, NGC, ProfitRate, RiskCalc).
+
+We are replacing this with the AdaptiveScanManager introduced in Directive 10.8.
+
+The new system dynamically selects pairs using performance telemetry, predictive learning, and time-decay metrics — removing the need for a user-configured “Top N” universe.
+
+🧩 Task List
+1️⃣ Safe UI Deprecation (Do Not Delete File)
+
+Files:
+
+/client/components/tabs/screeners/filters/market-universe-size.tsx
+
+/client/components/tabs/screeners/ScreenersTab.tsx
+
+Action:
+
+In ScreenersTab.tsx, locate where the MarketUniverseSize filter is imported and rendered:
+
+import MarketUniverseSize from './filters/market-universe-size';
+...
+<MarketUniverseSize ... />
+
+
+Comment out or conditionally disable the component:
+
+{process.env.ADAPTIVE_SCANNING_ENABLED ? null : <MarketUniverseSize />}
+
+
+Add a feature flag:
+
+export const ADAPTIVE_SCANNING_ENABLED = true;
+
+
+Leave the file /filters/market-universe-size.tsx in place but unused to prevent dangling import errors and preserve backward compatibility for any unmerged branches.
+
+✅ Outcome:
+No build errors. The filter disappears from the UI without deleting the component.
+
+2️⃣ Remove Tier A / Tier B Logic (FX5 Scanner)
+
+File: /server/services/fx5-scanner.ts
+
+Before:
+
+const tierA = rankedPairs.slice(0, marketUniverseSize);
+const tierB = rankedPairs.slice(marketUniverseSize);
+
+
+After:
+
+const adaptiveManager = new AdaptiveScanManager(telemetry, failureTracker);
+const pairsToScan = await adaptiveManager.getNextScanBatch();
+await scanTimeframe(pairsToScan, '1h');
+
+
+✅ Outcome:
+No more Tier A/B divisions — all pair selection is driven by AdaptiveScanManager.
+
+3️⃣ Adaptive Scan Manager Integration
+
+File: /server/services/adaptive-scan-manager.ts
+
+Core logic for the 60/40 pool system:
+
+const IDEAL_RATIO = SCANNER_PARAMS.DUAL_POOL.IDEAL_RATIO;  // 0.6
+const ROTATIONAL_RATIO = SCANNER_PARAMS.DUAL_POOL.ROTATIONAL_RATIO;  // 0.4
+
+export class AdaptiveScanManager {
+  constructor(private telemetry: TelemetryAggregator, private failureTracker: PairFailureTracker) {}
+
+  async getNextScanBatch(): Promise<string[]> {
+    const idealPairs = this.telemetry.getTopPairs(IDEAL_RATIO);
+    const rotationPairs = this.telemetry.getRotationalPairs(ROTATIONAL_RATIO);
+    const combined = [...idealPairs, ...rotationPairs];
+    return this.failureTracker.filterFailedPairs(combined);
+  }
+}
+
+
+✅ Outcome:
+Adaptive, learning-driven pair selection replaces static universe logic.
+
+4️⃣ Update Ready-to-Buy Refresh
+
+File: /server/services/ready-to-buy-refresh.ts
+
+Replace legacy metric dependencies (CWQI, NGC, ProfitRate) with:
+
+const rankScore = signal.finalScore ?? 0;
+
+
+Ensure bucket rotation and central tick cycle remain unchanged.
+
+Confirm adaptive thread scaling remains functional under load.
+
+✅ Outcome:
+Refresh Service now recalculates FinalScore and hybrid metrics every 60–90 seconds per signal bucket.
+
+5️⃣ Telemetry Aggregator & Timeframe Efficiency
+
+File: /server/services/telemetry-aggregator.ts
+
+Track FinalScore, HybridScore, RegimeWeight, PredictiveConfidence per pair.
+
+Compute timeframe efficiency report for ML calibration:
+
+getTimeframeEfficiencyReport() {
+  ...
+}
+
+
+✅ Outcome:
+Supports adaptive learning and performance-driven scanning.
+
+6️⃣ Pair Failure Tracker
+
+File: /server/services/adaptive-scan-manager.ts
+
+Add cooldown blacklist logic to skip failed pairs for 10 minutes:
+
+if (now - failTime < 600000) continue;
+
+
+✅ Outcome:
+Stabilizes scanning under transient Kraken errors.
+
+7️⃣ Remove Market Universe Filter from Backend
+
+Files:
+
+/server/services/scanner-service.ts
+
+/server/services/goals-engine.ts (if applicable)
+
+Action:
+
+Remove or ignore any backend handling of marketUniverseSize.
+
+Replace with a no-op or use ADAPTIVE_SCANNING_ENABLED flag for safety.
+
+✅ Outcome:
+No dual-control logic remains in backend or frontend.
+
+8️⃣ Add Telemetry Enhancements
+
+Integrate the three “mini-enhancements” from 10.7a:
+
+Telemetry Aggregator Service
+
+Collect cascade.filter.ratio, rate.backoff.count, and adaptive pool success metrics.
+
+Timeframe Efficiency Report
+
+Average decayed pattern strength per timeframe.
+
+Pair Failure Tracker
+
+Cooldown blacklist to avoid redundant Kraken fetches.
+
+✅ Outcome:
+The system learns and adjusts scan priorities continuously.
+
+9️⃣ Unit Tests
+
+Files:
+adaptive-scan-manager.test.ts, telemetry-aggregator.test.ts, fx5-scanner.test.ts
+
+Verify:
+
+Tier A/B logic removed.
+
+Adaptive scan batches respect 60/40 ratio.
+
+Filter removal doesn’t break build.
+
+Refresh service calculates FinalScore correctly.
+
+Kraken error isolation functions properly.
+
+✅ Expected Output:
+
+[AdaptiveScan] Ideal=60 | Rotational=40 | Total=100
+[Telemetry] Cascade: Global=120 → Tactical=15 → Precision=4
+[PairFailureTracker] Excluded 2 pairs (cooldown)
+
+🧠 Outcome Summary
+Subsystem	Old Behavior	New Behavior
+FX5 Scanner	Tier A/B static split	Adaptive 60/40 pool
+Screeners Tab	Market Universe filter	Hidden (feature-flag disabled)
+Refresh Service	CWQI/NGC ranking	FinalScore + HybridScore ranking
+Telemetry	Minimal logging	Full cascade + adaptive aggregation
+Fault Handling	Retry all	Cooldown blacklist (10 min)
+⚙️ Verification Commands
+npx vitest run adaptive-scan-manager.test.ts
+npx vitest run fx5-scanner.test.ts
+
+
+✅ Expected:
+All tests pass, with no build or import errors.
+No references remain to marketUniverseSize, TierA, or TierB.
+
+✅ Directive Summary
+
+Directive 10.8 — Adaptive Scanning Intelligence (Dual-Pool Scheduler)
+replaces the static FX5 scanning architecture with an adaptive, telemetry-driven scheduler.
+
+It:
+
+Disables (not deletes) legacy Market Universe UI components to prevent build errors.
+
+Removes Tier A/B logic.
+
+Integrates the AdaptiveScanManager (60/40 pool).
+
+Refactors the Refresh Service to use FinalScore ranking.
+
+Adds telemetry and failure-tracking enhancements.
+
+The system now dynamically selects pairs based on historical performance, predictive learning, and cascade efficiency — completing the foundation for Phase 10.9 and the upcoming adaptive trade execution loop.

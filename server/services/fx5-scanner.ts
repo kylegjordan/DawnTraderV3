@@ -40,6 +40,8 @@ import {
   passesCoreMetricFilters,
   CORE_METRIC_THRESHOLDS
 } from '../utils/analysis-utils.js';
+import { getTelemetryAggregator } from './telemetry-aggregator.js';
+import { SCANNER_PARAMS } from '../config/system-guards.js';
 
 const SCAN_INTERVAL_SECONDS = 30; // 30 seconds aligned with clock ticks
 const SCAN_INTERVAL_MS = SCAN_INTERVAL_SECONDS * 1000; // For backwards compatibility
@@ -374,6 +376,21 @@ export class Fx5ScannerService {
         isEngineActive,
         volumeStats
       }).catch(() => {});
+      
+      // Directive 10.8: Record scan results to TelemetryAggregator for adaptive scanning
+      // This feeds the dual-pool (Ideal/Rotational) pair selection system
+      if (SCANNER_PARAMS.ADAPTIVE_ENABLED) {
+        const telemetry = getTelemetryAggregator();
+        for (const survivor of metricFilteredSurvivors) {
+          telemetry.recordPairTelemetry(survivor.symbol, {
+            finalScore: 0.5, // Base score, will be enriched by signal orchestrator
+            hybridScore: 0,  // Populated when hybrid signals fire
+            regimeWeight: 0.5, // Default regime weight
+            predictiveConfidence: 0.5, // Default ML confidence
+          });
+        }
+        console.log(`[FX5][10.8] Recorded ${metricFilteredSurvivors.length} pairs to TelemetryAggregator`);
+      }
       
       // REB 2.8.4: Generate unique scan cycle ID (survives server restarts)
       const scanCycleId = `cycle_${mode}_${nanoid(12)}`;

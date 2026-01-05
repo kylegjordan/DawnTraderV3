@@ -120,6 +120,38 @@ export const TIMEFRAME_WEIGHTS = {
 
 export type TimeframeConfigType = typeof TIMEFRAME_CONFIG;
 
+/**
+ * Directive 10.8 — Adaptive Scanning Intelligence (Dual-Pool Scheduler)
+ * 
+ * Replaces static Tier A/B universe logic with a learning-driven,
+ * telemetry-based adaptive pair selection system.
+ */
+export const SCANNER_PARAMS = {
+  ADAPTIVE_ENABLED: true,           // Master feature flag for adaptive scanning
+  DUAL_POOL: {
+    IDEAL_RATIO: 0.6,               // 60% of pairs from "Ideal" (top performers)
+    ROTATIONAL_RATIO: 0.4,          // 40% of pairs from "Rotational" (exploration)
+  },
+  FAILURE_TRACKING: {
+    COOLDOWN_MS: 600000,            // 10-minute cooldown for failed pairs
+    MAX_FAILURES: 3,                // Max failures before extended cooldown
+    EXTENDED_COOLDOWN_MS: 1800000,  // 30-minute extended cooldown
+  },
+  TELEMETRY: {
+    SCORE_WEIGHTS: {
+      FINAL_SCORE: 0.4,             // Weight for FinalScore in ranking
+      HYBRID_SCORE: 0.3,            // Weight for HybridScore
+      REGIME_WEIGHT: 0.2,           // Weight for RegimeWeight
+      PREDICTIVE_CONF: 0.1,         // Weight for ML Predictive Confidence
+    },
+    HISTORY_WINDOW_MS: 86400000,    // 24-hour history for telemetry
+    MIN_SAMPLES: 3,                 // Minimum samples for reliable ranking
+  },
+  BATCH_SIZE: 100,                  // Total pairs per scan batch
+} as const;
+
+export type ScannerParamsType = typeof SCANNER_PARAMS;
+
 export type SystemGuardsType = typeof SYSTEM_GUARDS;
 
 export function getSystemGuardsInfo(): string {
