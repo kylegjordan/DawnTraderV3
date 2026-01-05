@@ -66,6 +66,60 @@ export const HYBRID_PARAMS = {
 
 export type HybridParamsType = typeof HYBRID_PARAMS;
 
+/**
+ * Directive 10.7 — Multi-Timeframe Expansion (Fractal Vision)
+ * 
+ * Enables cascading multi-timeframe scanning (1H → 15m → 5m)
+ * with token-bucket rate limiting for Kraken API safety.
+ */
+export const TIMEFRAME_CONFIG = {
+  INTERVALS: {
+    GLOBAL: '1h' as const,      // Trend context layer
+    TACTICAL: '15m' as const,   // Pattern setup layer
+    PRECISION: '5m' as const,   // Entry confirmation layer
+  },
+  ENABLED: {
+    GLOBAL: true,
+    TACTICAL: true,
+    PRECISION: true,
+  },
+  CASCADE: {
+    ENABLED: true,
+    MAX_CHILD_INTERVALS: 2,     // Restrict cascade depth
+    WINDOW_SYNC: true,          // Keep timeframe alignment
+  },
+  RATE_LIMITS: {
+    MAX_REQ_PER_SEC: 10,        // Kraken hard limit
+    SAFETY_MARGIN: 0.8,         // 80% utilization ceiling
+  },
+  CASCADE_CRITERIA: {
+    REGIME_WEIGHT_MIN: 0.5,     // 1H → 15m cascade threshold
+    PATTERN_STRENGTH_MIN: 0.6,  // 15m → 5m cascade threshold
+  },
+} as const;
+
+/**
+ * Directive 10.7: Candle interval durations in milliseconds
+ * Used for decay calculation and timeframe-aware operations.
+ */
+export const CANDLE_INTERVALS_MS = {
+  '1h': 3600000,
+  '15m': 900000,
+  '5m': 300000,
+} as const;
+
+/**
+ * Directive 10.7: Timeframe-specific pattern strength weights.
+ * Higher timeframes carry more weight in signal scoring.
+ */
+export const TIMEFRAME_WEIGHTS = {
+  '1h': 1.0,
+  '15m': 0.8,
+  '5m': 0.6,
+} as const;
+
+export type TimeframeConfigType = typeof TIMEFRAME_CONFIG;
+
 export type SystemGuardsType = typeof SYSTEM_GUARDS;
 
 export function getSystemGuardsInfo(): string {

@@ -18,9 +18,42 @@
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-import type { PatternType, SignalType, Candle, PatternSignal } from '../types';
+import type { PatternType, SignalType, Candle, PatternSignal, Timeframe } from '../types';
+import { CANDLE_INTERVALS_MS, TIMEFRAME_WEIGHTS, HYBRID_PARAMS } from '../config/system-guards.js';
 
-export type { PatternType, SignalType, Candle, PatternSignal };
+export type { PatternType, SignalType, Candle, PatternSignal, Timeframe };
+
+/**
+ * Directive 10.7: Get timeframe weight for strength adjustment.
+ * Higher timeframes (1h) carry more weight than lower ones (5m).
+ */
+export function getTimeframeWeight(timeframe: Timeframe | undefined): number {
+  if (!timeframe) return 1.0;
+  return TIMEFRAME_WEIGHTS[timeframe] || 1.0;
+}
+
+/**
+ * Directive 10.7: Calculate timeframe-adjusted decay lambda.
+ * Lower timeframes have faster decay to account for higher noise.
+ */
+export function getTimeframeAdjustedLambda(baseLambda: number, timeframe: Timeframe | undefined): number {
+  if (!timeframe) return baseLambda;
+  const baseInterval = CANDLE_INTERVALS_MS['1h'];
+  const targetInterval = CANDLE_INTERVALS_MS[timeframe];
+  return baseLambda * (baseInterval / targetInterval);
+}
+
+/**
+ * Directive 10.7: Apply timeframe-aware strength adjustment.
+ * Scales raw pattern strength by timeframe weight.
+ */
+export function applyTimeframeWeightedStrength(
+  rawStrength: number,
+  timeframe: Timeframe | undefined
+): number {
+  const weight = getTimeframeWeight(timeframe);
+  return rawStrength * weight;
+}
 
 /**
  * Calculate candle body size (absolute)
@@ -330,12 +363,17 @@ function calculateAvgVolume(candles: Candle[], lookback: number = 20): number {
 /**
  * Main pattern scanning function
  * Scans candle data for all supported patterns
+ * 
+ * Directive 10.7: Applies timeframe-aware strength weighting.
+ * Patterns from lower timeframes (5m) receive reduced weight compared to higher (1h).
  */
 export function scanPatterns(candles: Candle[], symbol: string = 'UNKNOWN'): PatternSignal[] {
   if (candles.length < 3) return [];
   
   const signals: PatternSignal[] = [];
   const avgVolume = calculateAvgVolume(candles);
+  
+  const timeframe = candles[candles.length - 1]?.timeframe;
   
   // Detect each pattern type
   const pinbar = detectPinbar(candles, symbol, avgVolume);
@@ -353,8 +391,21 @@ export function scanPatterns(candles: Candle[], symbol: string = 'UNKNOWN'): Pat
   const morningStar = detectMorningStar(candles, symbol);
   if (morningStar) signals.push(morningStar);
   
+  for (const signal of signals) {
+    const rawStrength = signal.strength;
+    signal.strength = applyTimeframeWeightedStrength(rawStrength, timeframe);
+    
+    if (!signal.metadata) {
+      signal.metadata = {};
+    }
+    signal.metadata.rawStrength = rawStrength;
+    signal.metadata.timeframe = timeframe;
+    signal.metadata.timeframeWeight = getTimeframeWeight(timeframe);
+  }
+  
   if (signals.length > 0) {
-    console.log(`[10.2][PATTERN] ${symbol}: Detected ${signals.length} pattern(s) - ${signals.map(s => `${s.pattern}(${s.direction})`).join(', ')}`);
+    const tfLabel = timeframe ? `@${timeframe}` : '';
+    console.log(`[10.2][PATTERN] ${symbol}${tfLabel}: Detected ${signals.length} pattern(s) - ${signals.map(s => `${s.pattern}(${s.direction},${s.strength.toFixed(2)})`).join(', ')}`);
   }
   
   return signals;

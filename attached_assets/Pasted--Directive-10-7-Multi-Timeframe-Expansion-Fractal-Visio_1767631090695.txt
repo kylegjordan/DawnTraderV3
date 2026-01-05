@@ -1,0 +1,201 @@
+🚀 Directive 10.7 — Multi-Timeframe Expansion (Fractal Vision)
+
+Phase: 10.7
+Objective:
+Enable multi-timeframe scanning (1H → 15m → 5m) using a cascading fetch model that leverages the predictive math framework and Kraken-safe rate limiting.
+
+🎯 Mission Summary
+
+Currently, the Signal Orchestrator and Pattern Recognizer only analyze 1-Hour candles.
+This directive expands the system to use 15-Minute (Tactical) and 5-Minute (Precision) frames when macro trends justify it — creating Fractal Vision.
+
+📁 Target Files
+@server/config/system-guards.ts  
+@server/services/signal-orchestrator.ts  
+@server/services/scanner-service.ts  
+@server/services/pattern-recognizer.ts  
+@server/types.ts  
+@server/tests/unit/multi-timeframe.test.ts
+
+🧩 TASK LIST
+1️⃣ Update Configuration – system-guards.ts
+
+Add the multi-timeframe and rate control configuration:
+
+export const TIMEFRAME_CONFIG = {
+  INTERVALS: {
+    GLOBAL: '1h',
+    TACTICAL: '15m',
+    PRECISION: '5m',
+  },
+  ENABLED: {
+    GLOBAL: true,
+    TACTICAL: true,
+    PRECISION: true,
+  },
+  CASCADE: {
+    ENABLED: true,
+    MAX_CHILD_INTERVALS: 2,
+    WINDOW_SYNC: true,
+  },
+  RATE_LIMITS: {
+    MAX_REQ_PER_SEC: 10,
+    SAFETY_MARGIN: 0.8,
+  },
+};
+
+export const CANDLE_INTERVALS_MS = {
+  '1h': 3600000,
+  '15m': 900000,
+  '5m': 300000,
+};
+
+2️⃣ Extend Shared Types – types.ts
+export type Timeframe = '1h' | '15m' | '5m';
+
+export interface Candle {
+  timestamp: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  timeframe: Timeframe;
+}
+
+export interface TradeSignal {
+  symbol: string;
+  timeframe: Timeframe;
+  signalType?: SignalType;
+  hybridScore?: number;
+  finalScore?: number;
+}
+
+3️⃣ Implement Cascading Logic – scanner-service.ts
+
+Create a token-bucket–guarded cascading scan system that builds on the existing getOHLC fetcher.
+
+🔧 Optimization Applied:
+
+✅ The scanTimeframe() function must be a wrapper/decorator around the existing getOHLC() fetch logic — not a rewrite.
+It should perform a token-bucket check before calling getOHLC() and throttle if the request velocity exceeds the safe rate.
+
+import { getOHLC } from './kraken-client'; // existing function
+
+const tokenBucket = {
+  tokens: TIMEFRAME_CONFIG.RATE_LIMITS.MAX_REQ_PER_SEC * TIMEFRAME_CONFIG.RATE_LIMITS.SAFETY_MARGIN,
+  refillInterval: 1000, // per second
+  lastRefill: Date.now(),
+};
+
+function consumeToken() {
+  const now = Date.now();
+  if (now - tokenBucket.lastRefill > tokenBucket.refillInterval) {
+    tokenBucket.tokens = TIMEFRAME_CONFIG.RATE_LIMITS.MAX_REQ_PER_SEC * TIMEFRAME_CONFIG.RATE_LIMITS.SAFETY_MARGIN;
+    tokenBucket.lastRefill = now;
+  }
+  if (tokenBucket.tokens <= 0) return false;
+  tokenBucket.tokens--;
+  return true;
+}
+
+export async function scanTimeframe(interval: Timeframe, pairs: string[] = ALL_PAIRS) {
+  const results = [];
+  for (const symbol of pairs) {
+    if (!consumeToken()) {
+      await new Promise(res => setTimeout(res, 100)); // throttle
+    }
+    const candles = await getOHLC(symbol, interval);
+    results.push({ symbol, candles, timeframe: interval });
+  }
+  return results;
+}
+
+export async function cascadingScan() {
+  const globalPairs = await scanTimeframe('1h');
+  const activePairs = globalPairs.filter(p => p.regimeWeight > 0.5);
+
+  const tacticalPairs = await scanTimeframe('15m', activePairs.map(p => p.symbol));
+  const precisionPairs = await scanTimeframe('5m', tacticalPairs.map(p => p.symbol));
+
+  return { globalPairs, tacticalPairs, precisionPairs };
+}
+
+4️⃣ Integrate Cascading Logic – signal-orchestrator.ts
+
+Import cascadingScan().
+
+In evaluateSignals():
+
+const { globalPairs, tacticalPairs, precisionPairs } = await cascadingScan();
+const allCandles = [...globalPairs, ...tacticalPairs, ...precisionPairs];
+
+
+Pass allCandles into PatternRecognizer.scanPatterns() and hybrid logic.
+
+Tag each TradeSignal with its timeframe before pushing to the queue.
+
+Hybrid Context:
+
+Quant	Pattern	Hybrid Signal
+1H	15m	H1_TREND_SNIPER
+15m	5m	H2_SLINGSHOT
+5m	—	Ignored (noise filter)
+5️⃣ Update Pattern Recognizer – pattern-recognizer.ts
+
+Implement scaling awareness per timeframe:
+
+const timeframeWeight = { '1h': 1.0, '15m': 0.8, '5m': 0.6 };
+const adjustedStrength = rawStrength * timeframeWeight[candle.timeframe];
+
+
+Ensure the decay λ adjusts by timeframe:
+
+const lambda = baseLambda * (3600000 / CANDLE_INTERVALS_MS[candle.timeframe]);
+
+6️⃣ Testing & Verification – multi-timeframe.test.ts
+
+Test Cases:
+
+✅ 1H signals cascade to 15m only when regimeWeight > 0.5.
+
+✅ 15m cascades to 5m only when patternStrength > 0.6.
+
+✅ Token-bucket rate limiter caps requests below Kraken’s 10/s limit.
+
+✅ Decay λ scales correctly per timeframe.
+
+✅ No duplicate or redundant fetch calls (verifies decorator logic).
+
+Command:
+
+npx vitest run multi-timeframe.test.ts
+
+🧠 System Behavior Summary
+Layer	Interval	Role	Cascade Criteria
+GLOBAL	1h	Trend context	—
+TACTICAL	15m	Pattern setup	1H regimeWeight > 0.5
+PRECISION	5m	Entry confirmation	15m patternStrength > 0.6
+⚖️ Safety Parameters
+Setting	Default	Purpose
+MAX_REQ_PER_SEC	10	Kraken hard limit
+SAFETY_MARGIN	0.8	80% utilization ceiling
+MAX_CHILD_INTERVALS	2	Restrict cascade depth
+CASCADE_WINDOW_SYNC	true	Keeps timeframe alignment
+✅ Expected Outcomes
+Category	Before	After
+Timeframes	1H only	1H + 15m + 5m
+Precision	Low	High, multi-layered
+API Usage	Flat	Token-bucket limited
+Cascade Control	None	Smart hierarchical fetch
+Pattern Quality	Single-layer	Timeframe-weighted
+Hybrid Insight	Static	Cross-timeframe confluence
+🏁 Directive Summary
+
+Directive 10.7 – Multi-Timeframe Expansion (Fractal Vision) transforms DawnTrader’s market perception from single-frame to multi-layered awareness, introducing:
+
+✅ Cascading multi-interval fetches.
+✅ Timeframe-aware decay, pattern strength, and weighting.
+✅ Safe token-bucket rate limiting built atop existing getOHLC.
+✅ Kraken-compliant precision scanning.
+✅ Foundation for 10.8 Adaptive Scanning Intelligence.

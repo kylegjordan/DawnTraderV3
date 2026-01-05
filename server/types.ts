@@ -8,6 +8,18 @@
  */
 
 // --------------------------------------------------------------------------
+// DIRECTIVE 10.7: MULTI-TIMEFRAME TYPES
+// --------------------------------------------------------------------------
+
+/**
+ * Supported timeframe intervals for multi-timeframe analysis.
+ * - 1h: Global trend context (macro layer)
+ * - 15m: Tactical pattern setup layer
+ * - 5m: Precision entry confirmation layer
+ */
+export type Timeframe = '1h' | '15m' | '5m';
+
+// --------------------------------------------------------------------------
 // PHASE 10: HYBRID SIGNAL TYPES
 // --------------------------------------------------------------------------
 
@@ -31,6 +43,7 @@ export type PatternType =
 
 /**
  * Raw candle data structure for pattern recognition.
+ * Directive 10.7: Optional timeframe field for multi-timeframe analysis.
  */
 export interface Candle {
   timestamp: number;
@@ -39,6 +52,7 @@ export interface Candle {
   low: number;
   close: number;
   volume: number;
+  timeframe?: Timeframe;
 }
 
 /**

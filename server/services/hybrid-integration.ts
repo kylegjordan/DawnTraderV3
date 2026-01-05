@@ -19,13 +19,14 @@
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-import { HYBRID_PARAMS } from '../config/system-guards.js';
+import { HYBRID_PARAMS, CANDLE_INTERVALS_MS } from '../config/system-guards.js';
 import type { 
   PatternSignal, 
   PatternType,
   SignalType,
   HybridStrategyType,
-  ComponentScores 
+  ComponentScores,
+  Timeframe
 } from '../types.js';
 
 export interface QuantSignal {
@@ -55,17 +56,26 @@ export interface HybridSignal extends QuantSignal {
 
 export class HybridIntegrationService {
   /**
-   * Directive 10.5: Apply exponential time decay to pattern strength.
+   * Directive 10.5 + 10.7: Apply exponential time decay to pattern strength.
    * Pattern signals lose influence as they age, normalized per candle interval.
    * 
    * Formula: effectiveStrength = originalStrength * e^(-λ * Δt)
    * Subject to floor constraint: min(decayed, original * FLOOR)
+   * 
+   * Directive 10.7: Lambda is scaled by timeframe - lower timeframes decay faster.
    */
-  applyPatternDecay(originalStrength: number, deltaCandles: number): number {
+  applyPatternDecay(originalStrength: number, deltaCandles: number, timeframe?: Timeframe): number {
     const { ENABLED, LAMBDA, FLOOR } = HYBRID_PARAMS.DECAY;
     if (!ENABLED) return originalStrength;
     
-    const decayed = originalStrength * Math.exp(-LAMBDA * deltaCandles);
+    let adjustedLambda = LAMBDA;
+    if (timeframe) {
+      const baseInterval = CANDLE_INTERVALS_MS['1h'];
+      const targetInterval = CANDLE_INTERVALS_MS[timeframe];
+      adjustedLambda = LAMBDA * (baseInterval / targetInterval);
+    }
+    
+    const decayed = originalStrength * Math.exp(-adjustedLambda * deltaCandles);
     return Math.max(decayed, originalStrength * FLOOR);
   }
 
@@ -101,9 +111,10 @@ export class HybridIntegrationService {
 
       if (!match) continue;
 
-      // Directive 10.5: Normalize time delta from ms → candle units
+      // Directive 10.5 + 10.7: Normalize time delta and apply timeframe-aware decay
       const deltaCandles = Math.abs(q.timestamp - match.timestamp) / candleIntervalMs;
-      const effectiveStrength = this.applyPatternDecay(match.strength, deltaCandles);
+      const patternTimeframe = match.metadata?.timeframe as Timeframe | undefined;
+      const effectiveStrength = this.applyPatternDecay(match.strength, deltaCandles, patternTimeframe);
 
       const quantConfNormalized = q.expectancy ?? (q.confidence > 1 ? q.confidence / 100 : q.confidence);
       

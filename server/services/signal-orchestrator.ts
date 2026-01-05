@@ -71,6 +71,9 @@ import { SYSTEM_GUARDS } from '../config/system-guards.js';
 import { getPatternRecognizer, type Candle, type PatternSignal, type SignalType } from './pattern-recognizer.js';
 // Directive 10.4: Hybrid Integration
 import { getHybridIntegration, type QuantSignal, type HybridSignal } from './hybrid-integration.js';
+// Directive 10.7: Multi-Timeframe Expansion
+import { cascadingScan } from './multi-timeframe-scanner.js';
+import { TIMEFRAME_CONFIG } from '../config/system-guards.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -900,10 +903,45 @@ export class SignalOrchestrator {
         high: parseFloat(c.high || c[2]),
         low: parseFloat(c.low || c[3]),
         close: parseFloat(c.close || c[4]),
-        volume: parseFloat(c.volume || c[6] || '0')
+        volume: parseFloat(c.volume || c[6] || '0'),
+        timeframe: '1h' as const  // Directive 10.7: Tag with source timeframe
       }));
       
-      const patternSignals = patternRecognizer.scanPatterns(candles, symbol);
+      let patternSignals = patternRecognizer.scanPatterns(candles, symbol);
+      
+      // Directive 10.7: Multi-Timeframe Cascade (when enabled)
+      // Cascade to lower timeframes for additional pattern confirmation
+      // Reuses already-fetched 1H candles to avoid duplicate Kraken requests
+      if (TIMEFRAME_CONFIG.CASCADE.ENABLED) {
+        try {
+          const preloadedGlobalData = [{
+            symbol,
+            timeframe: '1h' as const,
+            candles,
+            regimeWeight: undefined,
+            patternStrength: undefined
+          }];
+          
+          const { globalPairs, tacticalPairs, precisionPairs } = await cascadingScan(
+            this.krakenService, 
+            [symbol],
+            { preloadedGlobalData }
+          );
+          
+          const globalPatterns = globalPairs.flatMap(r => patternRecognizer.scanPatterns(r.candles, r.symbol));
+          const tacticalPatterns = tacticalPairs.flatMap(r => patternRecognizer.scanPatterns(r.candles, r.symbol));
+          const precisionPatterns = precisionPairs.flatMap(r => patternRecognizer.scanPatterns(r.candles, r.symbol));
+          
+          const cascadePatterns = [...globalPatterns, ...tacticalPatterns, ...precisionPatterns];
+          
+          if (cascadePatterns.length > 0) {
+            console.log(`[10.7][CASCADE] ${symbol}: Found ${cascadePatterns.length} pattern(s) (1H: ${globalPatterns.length}, 15m: ${tacticalPatterns.length}, 5m: ${precisionPatterns.length})`);
+            patternSignals = cascadePatterns;
+          }
+        } catch (cascadeError) {
+          console.log(`[10.7][CASCADE] ${symbol}: Cascade scan failed, using 1H patterns only`);
+        }
+      }
       
       // Calculate ATR for stop/target placement
       const atrPeriod = Math.min(14, candles.length);
