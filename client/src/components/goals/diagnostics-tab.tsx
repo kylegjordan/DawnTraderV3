@@ -1,21 +1,21 @@
 /**
- * Directive 10.9D - UI Diagnostics Tab with Dynamic Telemetry
+ * Directive 10.9E - UI Diagnostics Tab with Dynamic Telemetry & Filter Performance
  * 
  * Displays math integrity status, guard configuration, and dynamic backend telemetry.
- * Shows Phase 10 system guards and schema version synchronization.
+ * Shows Phase 10 system guards, schema version synchronization, and filter pass rates.
  * 
- * Tags: [10.9D][UI]
+ * Tags: [10.9E][UI]
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle, Shield, Activity, Settings, RefreshCw, AlertTriangle, Database } from "lucide-react";
+import { CheckCircle, Shield, Activity, Settings, RefreshCw, AlertTriangle, Database, Filter } from "lucide-react";
 import { useState, useEffect } from "react";
 
-const UI_SCHEMA_VERSION = "v1.2.1";
-const UI_PHASE_DIRECTIVE = "10.9D";
+const UI_SCHEMA_VERSION = "v1.2.2";
+const UI_PHASE_DIRECTIVE = "10.9E";
 
 const SYSTEM_GUARDS = {
   VERSION: "Phase10_Final",
@@ -41,6 +41,10 @@ interface TelemetrySummary {
   phaseDirective: string;
   filterSchemaVersion: string;
   timestamp: string;
+  fx5Evaluated24h?: number;
+  fx5Passed24h?: number;
+  passRate24h?: number;
+  failedByCategory?: Record<string, number>;
 }
 
 export default function DiagnosticsTab() {
@@ -104,7 +108,7 @@ export default function DiagnosticsTab() {
               <div className="p-3 border rounded-lg bg-muted/30">
                 <div className="text-xs text-muted-foreground mb-1">Filter Schema Version</div>
                 <Badge variant="outline" className="font-mono">
-                  {telemetry?.filterSchemaVersion || 'v1.2.0'}
+                  {telemetry?.filterSchemaVersion || 'v1.3.0'}
                 </Badge>
               </div>
 
@@ -153,6 +157,74 @@ export default function DiagnosticsTab() {
                   {new Date(lastUpdate).toLocaleTimeString()}
                 </span>
               </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Filter Performance Panel - Directive 10.9E */}
+      <Card className="border-2 border-emerald-200 dark:border-emerald-800">
+        <CardHeader className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20">
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="w-5 h-5 text-emerald-600" />
+            Filter Performance (Last 24h)
+            {telemetry?.passRate24h !== undefined && telemetry.passRate24h < 10 && (
+              <span title="Low pass rate">
+                <AlertTriangle className="w-4 h-4 text-amber-500 ml-2" />
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-4">
+          {isLoading ? (
+            <Skeleton className="h-24 w-full" />
+          ) : error ? (
+            <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <p className="text-sm text-amber-700 dark:text-amber-300">
+                Filter performance data unavailable.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="p-3 border rounded-lg bg-muted/30 text-center">
+                  <div className="text-xs text-muted-foreground mb-1">Total Evaluated</div>
+                  <span className="text-2xl font-bold">{(telemetry?.fx5Evaluated24h ?? 0).toLocaleString()}</span>
+                </div>
+                <div className="p-3 border rounded-lg bg-muted/30 text-center">
+                  <div className="text-xs text-muted-foreground mb-1">Total Passed</div>
+                  <span className="text-2xl font-bold text-emerald-600">{(telemetry?.fx5Passed24h ?? 0).toLocaleString()}</span>
+                </div>
+                <div className={`p-3 border rounded-lg text-center ${
+                  (telemetry?.passRate24h ?? 0) < 10 
+                    ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800' 
+                    : 'bg-muted/30'
+                }`}>
+                  <div className="text-xs text-muted-foreground mb-1">Pass Rate</div>
+                  <span className={`text-2xl font-bold ${
+                    (telemetry?.passRate24h ?? 0) < 10 ? 'text-amber-600' : 'text-blue-600'
+                  }`}>
+                    {telemetry?.passRate24h ?? 0}%
+                  </span>
+                </div>
+              </div>
+
+              {telemetry?.failedByCategory && Object.keys(telemetry.failedByCategory).length > 0 && (
+                <div className="p-3 border rounded-lg bg-muted/30">
+                  <div className="text-xs font-semibold text-muted-foreground mb-2">Top Failures by Filter</div>
+                  <div className="space-y-1">
+                    {Object.entries(telemetry.failedByCategory)
+                      .sort(([, a], [, b]) => b - a)
+                      .slice(0, 5)
+                      .map(([filter, count]) => (
+                        <div key={filter} className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">{filter}</span>
+                          <span className="font-mono font-semibold text-rose-600">{count}</span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
@@ -227,12 +299,13 @@ export default function DiagnosticsTab() {
           <CardTitle className="text-sm">Phase 10 Modules</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {[
               { name: "Directive 10.9A", desc: "Config Purification", status: "active" },
               { name: "Directive 10.9B", desc: "Filter Deconfliction", status: "active" },
               { name: "Directive 10.9C", desc: "Filter Modernization", status: "active" },
               { name: "Directive 10.9D", desc: "UI & Diagnostics", status: "active" },
+              { name: "Directive 10.9E", desc: "Telemetry Expansion", status: "active" },
             ].map((module) => (
               <div key={module.name} className="p-3 border rounded-lg text-center">
                 <div className="text-xs font-semibold text-violet-600 dark:text-violet-400">{module.name}</div>
@@ -248,9 +321,9 @@ export default function DiagnosticsTab() {
 
       <div className="p-4 bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 rounded-lg">
         <p className="text-xs text-violet-700 dark:text-violet-300">
-          <strong>Directive 10.9D:</strong> Phase 10 completes the UI modernization with dynamic telemetry, 
-          unified FinalScore + RegimeWeight filtering, and backend-frontend schema synchronization.
-          The system now displays live phase directive versions to detect partial deployments.
+          <strong>Directive 10.9E:</strong> Final deprecations complete - RSI, Risk, and Volatility filters removed from UI and backend.
+          Telemetry now includes filter pass rates, failure breakdowns, and real-time operational metrics.
+          Filter Schema v1.3.0 with full 24h rolling window analytics.
         </p>
       </div>
     </div>

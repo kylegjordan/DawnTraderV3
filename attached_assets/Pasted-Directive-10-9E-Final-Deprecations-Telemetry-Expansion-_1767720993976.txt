@@ -1,0 +1,157 @@
+Directive 10.9E — Final Deprecations & Telemetry Expansion
+Phase Context
+
+Preceded by: 10.9D
+Objective:
+Remove all remaining legacy filter artifacts (RSI, Risk, Volatility), ensure backend parity, and enhance Diagnostics telemetry to surface runtime health and filter performance data.
+
+🎯 Primary Goals
+
+Fully remove Risk/Volatility and RSI filters:
+
+From UI (Screeners tab)
+
+From backend logic (FX5 post-scan filters)
+
+Add filter performance telemetry to /api/telemetry/summary:
+
+Pass-rate (% of FX5 pairs surviving filters)
+
+Failed filters count (by category)
+
+Last 24h volume (signals evaluated)
+
+Expand the Diagnostics UI panel to display this live data.
+
+🧱 Task List
+Task 1 — Remove Deprecated Filters
+
+Files:
+client/components/tabs/screeners/screeners-tab.tsx
+server/core/filters/legacy_filters.ts (or equivalent)
+server/core/filter_chain.ts
+
+Actions:
+
+Remove UI sections:
+
+Entire “Risk & Volatility” block
+
+Entire “Technical Indicators (Min/Max RSI)” block
+
+Remove backend references:
+
+Delete or disable any remaining applyRiskFilter, applyVolatilityFilter, or applyRSIFilter calls.
+
+Ensure they are not invoked from evaluatePreSignalFilters() or the main FX5 filter chain.
+
+Deprecate constants:
+
+Remove or comment out RISK_FILTER_THRESHOLD, VOL_FILTER_THRESHOLD, and RSI constants.
+
+Schema update:
+
+Bump FILTER_SCHEMA_VERSION → v1.3.0
+
+Add deprecation log entry to replit.md.
+
+Task 2 — Backend Telemetry Expansion
+
+Files:
+server/services/telemetry-aggregator.ts
+server/routes/api/telemetry.ts
+
+Add fields to /api/telemetry/summary:
+
+{
+  "filterSchemaVersion": "v1.3.0",
+  "phaseDirective": "10.9D",
+  "uiSchemaVersion": "v1.2.1",
+  "scoreWeightsVersion": "v1.0.1",
+  "fx5Evaluated24h": 1426,
+  "fx5Passed24h": 327,
+  "passRate24h": 22.9,
+  "failedByCategory": {
+    "LiquidityGuard": 54,
+    "VolNoise": 89,
+    "CorrelationGuard": 34,
+    "MinVolume": 110,
+    "MinPrice": 12
+  },
+  "lastUpdate": "2026-01-07T09:00:00Z"
+}
+
+
+Notes:
+
+Pull counts from the Filter Insights Service (already tracks 24h rolling data).
+
+Add passRate24h = (fx5Passed24h / fx5Evaluated24h) × 100.
+
+Task 3 — Diagnostics UI Enhancements
+
+Files:
+client/components/tabs/diagnostics/diagnostics-tab.tsx
+
+Add section under Telemetry Snapshot:
+
+Filter Performance (Last 24h)
+───────────────────────────────
+Total Evaluated: 1,426
+Total Passed: 327
+Pass Rate: 22.9%
+Top Failures:
+ • VolNoise: 89
+ • LiquidityGuard: 54
+ • CorrelationGuard: 34
+
+
+Behavior:
+
+Data fetched from /api/telemetry/summary.
+
+Auto-refresh every 60s (same as existing telemetry).
+
+Add ⚠️ icon if passRate24h < 10%.
+
+Task 4 — Documentation & Testing
+
+Update replit.md to include:
+
+Risk/Volatility/RSI deprecation note
+
+Filter schema v1.3.0
+
+Sample /api/telemetry/summary payload
+
+Add integration tests verifying telemetry API returns all new fields.
+
+Run full suite (expected ~365 tests).
+
+✅ Expected Outcome
+Component	Result
+Screeners Tab	RSI and Risk/Vol removed completely
+Backend Filters	RSI, Risk, Volatility logic removed
+Filter Schema	v1.3.0
+Telemetry Snapshot	Includes pass rate, total counts, and failure reasons
+Tests	All pass (target ≥365)
+Diagnostics Panel	Displays live operational filter performance
+🧩 Directive Metadata
+
+Directive ID: 10.9E
+
+Name: Final Deprecations & Telemetry Expansion
+
+Phase: 10
+
+Version: v1.0
+
+Expected Duration: 1 day
+
+Success Criteria:
+
+RSI, Risk, and Volatility removed from UI and backend.
+
+New telemetry fields live and displayed in Diagnostics.
+
+All schema/test updates complete.

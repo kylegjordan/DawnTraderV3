@@ -23,18 +23,18 @@ describe('Directive 10.9C — Filter Insights Service', () => {
   });
 
   describe('Filter Schema Version', () => {
-    it('should have correct schema version v1.2.0', () => {
-      expect(FILTER_SCHEMA_VERSION).toBe('v1.2.0');
+    it('should have correct schema version v1.3.0', () => {
+      expect(FILTER_SCHEMA_VERSION).toBe('v1.3.0');
     });
 
     it('should include schema version in filter stats', () => {
       const stats = service.getFilterStats();
-      expect(stats.schemaVersion).toBe('v1.2.0');
+      expect(stats.schemaVersion).toBe('v1.3.0');
     });
 
-    it('should include phaseDirective 10.9C in stats', () => {
+    it('should include phaseDirective 10.9E in stats', () => {
       const stats = service.getFilterStats();
-      expect(stats.phaseDirective).toBe('10.9C');
+      expect(stats.phaseDirective).toBe('10.9E');
     });
   });
 
@@ -325,8 +325,8 @@ describe('Directive 10.9C — Filter Insights Service', () => {
 
       expect(result.payload.symbol).toBe('TEST/USD');
       expect(result.payload.mode).toBe('paper');
-      expect(result.payload.phaseDirective).toBe('10.9C');
-      expect(result.payload.schemaVersion).toBe('v1.2.0');
+      expect(result.payload.phaseDirective).toBe('10.9E');
+      expect(result.payload.schemaVersion).toBe('v1.3.0');
       expect(result.payload.timestamp).toBeDefined();
       expect(result.payload.outcomes.length).toBeGreaterThan(0);
     });
@@ -415,8 +415,8 @@ describe('Directive 10.9C — Filter Insights Service', () => {
 
       expect(metadata.legacyFiltersEnabled).toBe(false);
       expect(metadata.institutionalMathEnabled).toBe(true);
-      expect(metadata.schemaVersion).toBe('v1.2.0');
-      expect(metadata.phaseDirective).toBe('10.9C');
+      expect(metadata.schemaVersion).toBe('v1.3.0');
+      expect(metadata.phaseDirective).toBe('10.9E');
       expect(metadata.activeFilters).toEqual(ACTIVE_FILTER_NAMES);
       expect(metadata.deprecatedFilters).toContain('RSI');
       expect(metadata.deprecatedFilters).toContain('CWQI Gate');

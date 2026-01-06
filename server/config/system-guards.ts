@@ -138,13 +138,14 @@ export const FILTER_FLAGS = {
 } as const;
 
 /**
- * Directive 10.9C — Filter Schema Versioning
+ * Directive 10.9E — Filter Schema Versioning
  * 
  * Tracks filter telemetry schema for auditability.
  * v1.1.0 - Initial 10.9B release
  * v1.2.0 - 10.9C: Rolling 24h window, deprecated RSI/Risk/CWQI, added ρ guard
+ * v1.3.0 - 10.9E: Full RSI/Risk/Volatility removal, telemetry expansion
  */
-export const FILTER_SCHEMA_VERSION = "v1.2.0";
+export const FILTER_SCHEMA_VERSION = "v1.3.0";
 
 export const SCANNER_PARAMS = {
   ADAPTIVE_ENABLED: true,           // Master feature flag for adaptive scanning

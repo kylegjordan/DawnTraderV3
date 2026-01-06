@@ -278,6 +278,7 @@ export class TelemetryAggregatorService {
    * Directive 10.9A: Get telemetry summary with coefficient metadata and version
    * Directive 10.9B: Added phaseDirective and filterSchemaVersion
    * Directive 10.9C: Updated to v1.2.0 with rolling 24h window
+   * Directive 10.9E: Added filter performance telemetry (pass rate, failure breakdown)
    * This logs the coefficient set used during this session for auditability
    */
   getTelemetrySummaryWithCoefficients(): {
@@ -288,12 +289,46 @@ export class TelemetryAggregatorService {
     phaseDirective: string;
     filterSchemaVersion: string;
     timestamp: string;
+    fx5Evaluated24h?: number;
+    fx5Passed24h?: number;
+    passRate24h?: number;
+    failedByCategory?: Record<string, number>;
   } {
     const coefficients = getScoreWeightsMetadata();
     let totalSamples = 0;
     
     for (const entries of this.pairTelemetry.values()) {
       totalSamples += entries.length;
+    }
+
+    // 10.9E: Get filter performance data from FilterInsightsService
+    let filterPerformance: {
+      fx5Evaluated24h: number;
+      fx5Passed24h: number;
+      passRate24h: number;
+      failedByCategory: Record<string, number>;
+    } = {
+      fx5Evaluated24h: 0,
+      fx5Passed24h: 0,
+      passRate24h: 0,
+      failedByCategory: {},
+    };
+
+    try {
+      const { getFilterInsightsService } = require('./filter-insights.service.js');
+      const filterInsights = getFilterInsightsService();
+      const stats = filterInsights.getFilterStats();
+      
+      filterPerformance = {
+        fx5Evaluated24h: stats.totalEvaluated,
+        fx5Passed24h: stats.passed,
+        passRate24h: stats.totalEvaluated > 0 
+          ? parseFloat(((stats.passed / stats.totalEvaluated) * 100).toFixed(1))
+          : 0,
+        failedByCategory: stats.failuresByFilter,
+      };
+    } catch (error) {
+      console.warn('[10.9E][Telemetry] FilterInsights not available for summary:', error);
     }
     
     const summary = {
@@ -306,12 +341,13 @@ export class TelemetryAggregatorService {
         regime: coefficients.weights.REGIME,
         decay: coefficients.weights.DECAY,
       },
-      phaseDirective: '10.9D',
+      phaseDirective: '10.9E',
       filterSchemaVersion: FILTER_SCHEMA_VERSION,
       timestamp: new Date().toISOString(),
+      ...filterPerformance,
     };
     
-    console.log(`[10.9D][Telemetry] Summary with coefficients (${SCORE_WEIGHTS_VERSION}, filter=${FILTER_SCHEMA_VERSION}):`, JSON.stringify(summary));
+    console.log(`[10.9E][Telemetry] Summary with coefficients (${SCORE_WEIGHTS_VERSION}, filter=${FILTER_SCHEMA_VERSION}):`, JSON.stringify(summary));
     return summary;
   }
 }

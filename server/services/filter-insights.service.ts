@@ -294,7 +294,7 @@ class FilterInsightsService {
       outcomes,
       overallResult: failedFilters.length === 0 ? 'passed' : 'failed',
       failedFilters,
-      phaseDirective: '10.9C',
+      phaseDirective: '10.9E',
       schemaVersion: FILTER_SCHEMA_VERSION,
       timestamp: now,
     };
@@ -397,7 +397,7 @@ class FilterInsightsService {
       windowStart: windowStart.toISOString(),
       windowEnd: now.toISOString(),
       schemaVersion: FILTER_SCHEMA_VERSION,
-      phaseDirective: '10.9C',
+      phaseDirective: '10.9E',
     };
   }
 
@@ -427,7 +427,7 @@ class FilterInsightsService {
       failed: breakdown.failed,
       failuresByFilter,
       schemaVersion: FILTER_SCHEMA_VERSION,
-      phaseDirective: '10.9C',
+      phaseDirective: '10.9E',
     };
   }
 
@@ -467,7 +467,7 @@ class FilterInsightsService {
       legacyFiltersEnabled: FILTER_FLAGS.LEGACY_FILTERS_ENABLED,
       institutionalMathEnabled: FILTER_FLAGS.INSTITUTIONAL_MATH_ENABLED,
       schemaVersion: FILTER_SCHEMA_VERSION,
-      phaseDirective: '10.9C',
+      phaseDirective: '10.9E',
       activeFilters: ACTIVE_FILTER_NAMES,
       deprecatedFilters: ['RSI', 'Risk/Volatility', 'CWQI Gate'],
     };
