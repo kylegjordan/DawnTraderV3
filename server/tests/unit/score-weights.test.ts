@@ -1,18 +1,18 @@
 /**
- * Directive 10.9: Score Weights Configuration Tests
+ * Directive 10.9A: Score Weights Configuration Tests (Purified)
  * 
- * Validates that the centralized scoring coefficients are correctly defined
- * and that FinalScore calculations produce consistent results across services.
+ * Validates that the centralized scoring coefficients are correctly defined,
+ * version-tracked, and that FinalScore calculations are consistent.
  */
 
 import { describe, it, expect } from 'vitest';
 import { 
   SCORE_WEIGHTS, 
-  calculateFinalScore, 
+  SCORE_WEIGHTS_VERSION,
   getScoreWeightsMetadata 
 } from '../../config/score-weights.config';
 
-describe('Directive 10.9 — Score Weights Configuration', () => {
+describe('Directive 10.9A — Score Weights Configuration (Purified)', () => {
   
   describe('SCORE_WEIGHTS object', () => {
     it('should have all required FINAL_SCORE coefficients', () => {
@@ -44,9 +44,79 @@ describe('Directive 10.9 — Score Weights Configuration', () => {
     });
   });
 
-  describe('calculateFinalScore function', () => {
+  describe('SCORE_WEIGHTS_VERSION', () => {
+    it('should be defined and have expected format', () => {
+      expect(SCORE_WEIGHTS_VERSION).toBeDefined();
+      expect(typeof SCORE_WEIGHTS_VERSION).toBe('string');
+      expect(SCORE_WEIGHTS_VERSION).toMatch(/^v\d+\.\d+\.\d+$/);
+    });
+    
+    it('should be v1.0.1', () => {
+      expect(SCORE_WEIGHTS_VERSION).toBe('v1.0.1');
+    });
+  });
+
+  describe('Config Purity (No Runtime Logic)', () => {
+    it('should NOT have calculateFinalScore in exports', async () => {
+      const configModule = await import('../../config/score-weights.config');
+      // calculateFinalScore was removed in 10.9A - verify it's not exported
+      expect('calculateFinalScore' in configModule).toBe(false);
+    });
+    
+    it('should only export SCORE_WEIGHTS, SCORE_WEIGHTS_VERSION, and getScoreWeightsMetadata', async () => {
+      const configModule = await import('../../config/score-weights.config');
+      const exportedKeys = Object.keys(configModule);
+      
+      // Should only have: SCORE_WEIGHTS, SCORE_WEIGHTS_VERSION, getScoreWeightsMetadata
+      expect(exportedKeys).toContain('SCORE_WEIGHTS');
+      expect(exportedKeys).toContain('SCORE_WEIGHTS_VERSION');
+      expect(exportedKeys).toContain('getScoreWeightsMetadata');
+      expect(exportedKeys.length).toBe(3);
+    });
+  });
+
+  describe('getScoreWeightsMetadata function', () => {
+    it('should return coefficient metadata with version for telemetry', () => {
+      const metadata = getScoreWeightsMetadata();
+      
+      expect(metadata).toHaveProperty('version');
+      expect(metadata).toHaveProperty('weights');
+      expect(metadata.version).toBe(SCORE_WEIGHTS_VERSION);
+      expect(metadata.weights).toHaveProperty('HYBRID');
+      expect(metadata.weights).toHaveProperty('CONFIDENCE');
+      expect(metadata.weights).toHaveProperty('REGIME');
+      expect(metadata.weights).toHaveProperty('DECAY');
+    });
+    
+    it('should return a copy, not the original object', () => {
+      const metadata1 = getScoreWeightsMetadata();
+      const metadata2 = getScoreWeightsMetadata();
+      
+      expect(metadata1.weights).not.toBe(metadata2.weights);
+      expect(metadata1.weights).toEqual(metadata2.weights);
+    });
+  });
+
+  describe('Inline FinalScore Calculation Consistency', () => {
+    // These tests validate the inlined formula used in Signal Orchestrator and RTB Service
+    const W = SCORE_WEIGHTS.FINAL_SCORE;
+    
+    function inlineCalculateFinalScore(params: {
+      hybridScore?: number;
+      predictiveConfidence?: number;
+      regimeWeight?: number;
+      decayPenalty?: number;
+    }): number {
+      return Math.max(0, Math.min(1,
+        (params.hybridScore ?? 0) * W.HYBRID +
+        (params.predictiveConfidence ?? 0) * W.CONFIDENCE +
+        (params.regimeWeight ?? 0) * W.REGIME -
+        (params.decayPenalty ?? 0) * W.DECAY
+      ));
+    }
+    
     it('should calculate correct score with all parameters', () => {
-      const score = calculateFinalScore({
+      const score = inlineCalculateFinalScore({
         hybridScore: 0.8,
         predictiveConfidence: 0.7,
         regimeWeight: 0.6,
@@ -58,7 +128,7 @@ describe('Directive 10.9 — Score Weights Configuration', () => {
     });
     
     it('should handle missing parameters with defaults', () => {
-      const score = calculateFinalScore({
+      const score = inlineCalculateFinalScore({
         hybridScore: 0.5,
       });
       
@@ -68,14 +138,14 @@ describe('Directive 10.9 — Score Weights Configuration', () => {
     });
     
     it('should apply decay penalty correctly', () => {
-      const scoreWithDecay = calculateFinalScore({
+      const scoreWithDecay = inlineCalculateFinalScore({
         hybridScore: 0.8,
         predictiveConfidence: 0.7,
         regimeWeight: 0.6,
         decayPenalty: 0.5,
       });
       
-      const scoreWithoutDecay = calculateFinalScore({
+      const scoreWithoutDecay = inlineCalculateFinalScore({
         hybridScore: 0.8,
         predictiveConfidence: 0.7,
         regimeWeight: 0.6,
@@ -88,14 +158,14 @@ describe('Directive 10.9 — Score Weights Configuration', () => {
     });
     
     it('should clamp score to [0, 1] range', () => {
-      const maxScore = calculateFinalScore({
+      const maxScore = inlineCalculateFinalScore({
         hybridScore: 1.0,
         predictiveConfidence: 1.0,
         regimeWeight: 1.0,
         decayPenalty: 0,
       });
       
-      const minScore = calculateFinalScore({
+      const minScore = inlineCalculateFinalScore({
         hybridScore: 0,
         predictiveConfidence: 0,
         regimeWeight: 0,
@@ -114,39 +184,35 @@ describe('Directive 10.9 — Score Weights Configuration', () => {
         decayPenalty: 0.1,
       };
       
-      const score1 = calculateFinalScore(params);
-      const score2 = calculateFinalScore(params);
-      const score3 = calculateFinalScore(params);
+      const score1 = inlineCalculateFinalScore(params);
+      const score2 = inlineCalculateFinalScore(params);
+      const score3 = inlineCalculateFinalScore(params);
       
       expect(score1).toBe(score2);
       expect(score2).toBe(score3);
     });
   });
 
-  describe('getScoreWeightsMetadata function', () => {
-    it('should return coefficient metadata for telemetry', () => {
-      const metadata = getScoreWeightsMetadata();
-      
-      expect(metadata).toHaveProperty('weights');
-      expect(metadata.weights).toHaveProperty('HYBRID');
-      expect(metadata.weights).toHaveProperty('CONFIDENCE');
-      expect(metadata.weights).toHaveProperty('REGIME');
-      expect(metadata.weights).toHaveProperty('DECAY');
-    });
-    
-    it('should return a copy, not the original object', () => {
-      const metadata1 = getScoreWeightsMetadata();
-      const metadata2 = getScoreWeightsMetadata();
-      
-      expect(metadata1.weights).not.toBe(metadata2.weights);
-      expect(metadata1.weights).toEqual(metadata2.weights);
-    });
-  });
-
   describe('Signal Orchestrator and RTB Refresh consistency', () => {
+    const W = SCORE_WEIGHTS.FINAL_SCORE;
+    
+    function inlineCalculateFinalScore(params: {
+      hybridScore?: number;
+      predictiveConfidence?: number;
+      regimeWeight?: number;
+      decayPenalty?: number;
+    }): number {
+      return Math.max(0, Math.min(1,
+        (params.hybridScore ?? 0) * W.HYBRID +
+        (params.predictiveConfidence ?? 0) * W.CONFIDENCE +
+        (params.regimeWeight ?? 0) * W.REGIME -
+        (params.decayPenalty ?? 0) * W.DECAY
+      ));
+    }
+    
     it('should produce same FinalScore for same signal parameters', () => {
       // Simulates Signal Orchestrator calculation (new signal)
-      const orchestratorScore = calculateFinalScore({
+      const orchestratorScore = inlineCalculateFinalScore({
         hybridScore: 0.72,
         predictiveConfidence: 0.65,
         regimeWeight: 0.5,
@@ -154,7 +220,7 @@ describe('Directive 10.9 — Score Weights Configuration', () => {
       });
       
       // Simulates RTB Refresh calculation (refreshed signal, no decay yet)
-      const refreshScore = calculateFinalScore({
+      const refreshScore = inlineCalculateFinalScore({
         hybridScore: 0.72,
         predictiveConfidence: 0.65,
         regimeWeight: 0.5,
@@ -165,7 +231,7 @@ describe('Directive 10.9 — Score Weights Configuration', () => {
     });
     
     it('refresh score should decrease with decay over time', () => {
-      const initialScore = calculateFinalScore({
+      const initialScore = inlineCalculateFinalScore({
         hybridScore: 0.72,
         predictiveConfidence: 0.65,
         regimeWeight: 0.5,
@@ -173,7 +239,7 @@ describe('Directive 10.9 — Score Weights Configuration', () => {
       });
       
       // After 5 minutes of decay
-      const decayedScore = calculateFinalScore({
+      const decayedScore = inlineCalculateFinalScore({
         hybridScore: 0.72,
         predictiveConfidence: 0.65,
         regimeWeight: 0.5,

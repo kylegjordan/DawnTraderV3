@@ -45,6 +45,8 @@ Adaptive Scanning Intelligence (Dual-Pool Scheduler) replaces static Tier A/B lo
 
 Math Core Harmonization (Centralized Scoring Coefficients) unifies the FinalScore calculation formula across Signal Orchestrator and Ready-to-Buy Refresh Service. The `score-weights.config.ts` defines immutable scoring coefficients (Hybrid: 0.4, Confidence: 0.3, Regime: 0.2, Decay: 0.1). FinalScore formula: `hybridScore × 0.4 + predictiveConfidence × 0.3 + regimeWeight × 0.2 - decayPenalty × 0.1`.
 
+Directive 10.9A implements Verification & Config Purification. The `score-weights.config.ts` is now a pure declarative config with constants only - no runtime logic. Key changes: (1) Removed `calculateFinalScore()` function - all computation is now inlined in Signal Orchestrator and RTB Refresh Service; (2) Added `SCORE_WEIGHTS_VERSION = "v1.0.1"` for telemetry auditing; (3) `getScoreWeightsMetadata()` returns version plus weights for audit trail. SQE (Signal Quality Evaluator) now filters on FinalScore (MIN_FINAL_SCORE=0.35) and RegimeWeight (MIN_REGIME_WEIGHT=0.30) in addition to legacy thresholds. TelemetryAggregator includes version in all coefficient snapshots. 17 score-weights tests (282 total) validate config purity, version tracking, and cross-service calculation consistency.
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.

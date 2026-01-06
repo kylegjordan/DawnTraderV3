@@ -799,15 +799,22 @@ export function getCWQITier(cwqi: number): 'excellent' | 'good' | 'moderate' | '
  * - MIN_NGC: 0.55 (restored for meaningful filtering)
  * - MIN_CWQI: 0.45 (restored for meaningful filtering)
  * - Target SQE pass rate: 35-50%
+ * 
+ * Directive 10.9A: FinalScore-based filtering
+ * - MIN_FINAL_SCORE: 0.35 (minimum unified score threshold)
+ * - MIN_REGIME_WEIGHT: 0.30 (minimum regime alignment)
  */
 export const SQE_THRESHOLDS = {
   MIN_NGC: parseFloat(process.env.SQE_NGC_MIN || '0.55'),
   MAX_RISK: parseFloat(process.env.SQE_MAX_RISK || '0.85'),
   MIN_PROFIT_RATE: parseFloat(process.env.SQE_PROFIT_MIN || '0.10'),
   MIN_CWQI: parseFloat(process.env.SQE_CWQI_MIN || '0.45'),
+  // Directive 10.9A: FinalScore-based thresholds
+  MIN_FINAL_SCORE: parseFloat(process.env.SQE_FINAL_SCORE_MIN || '0.35'),
+  MIN_REGIME_WEIGHT: parseFloat(process.env.SQE_REGIME_MIN || '0.30'),
 };
 
-console.log(`[A3.R9.0][SQE_CONFIG] NGC=${SQE_THRESHOLDS.MIN_NGC} CWQI=${SQE_THRESHOLDS.MIN_CWQI} PROFIT=${SQE_THRESHOLDS.MIN_PROFIT_RATE} RISK=${SQE_THRESHOLDS.MAX_RISK}`);
+console.log(`[A3.R9.0][SQE_CONFIG] NGC=${SQE_THRESHOLDS.MIN_NGC} CWQI=${SQE_THRESHOLDS.MIN_CWQI} PROFIT=${SQE_THRESHOLDS.MIN_PROFIT_RATE} RISK=${SQE_THRESHOLDS.MAX_RISK} FinalScore=${SQE_THRESHOLDS.MIN_FINAL_SCORE} Regime=${SQE_THRESHOLDS.MIN_REGIME_WEIGHT}`);
 console.log('[A3.R9.0] System Harmonization & Performance Alignment active');
 
 /**

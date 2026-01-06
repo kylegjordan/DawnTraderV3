@@ -74,8 +74,8 @@ import { getHybridIntegration, type QuantSignal, type HybridSignal } from './hyb
 // Directive 10.7: Multi-Timeframe Expansion
 import { cascadingScan } from './multi-timeframe-scanner.js';
 import { TIMEFRAME_CONFIG } from '../config/system-guards.js';
-// Directive 10.9: Math Core Harmonization
-import { calculateFinalScore } from '../config/score-weights.config.js';
+// Directive 10.9A: Math Core Harmonization - Version-tracked weights
+import { SCORE_WEIGHTS, SCORE_WEIGHTS_VERSION } from '../config/score-weights.config.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -474,14 +474,20 @@ export class SignalOrchestrator {
     // L10: Fetch exposure bias multiplier for this strategy
     const exposureBias = getExposureMultiplierSync(strategyId);
     
-    // Directive 10.9: Calculate FinalScore using centralized weights
+    // Directive 10.9A: Inline FinalScore calculation using centralized weights
     // Formula: hybridScore × 0.4 + predictiveConfidence × 0.3 + regimeWeight × 0.2 - decayPenalty × 0.1
-    const signalFinalScore = calculateFinalScore({
-      hybridScore: (rawSignal as any).hybridScore ?? extendedMetrics.ngc,
-      predictiveConfidence: extendedMetrics.ngc,
-      regimeWeight: (rawSignal as any).regimeWeight ?? 0.5,
-      decayPenalty: 0, // New signals have no decay
-    });
+    const W = SCORE_WEIGHTS.FINAL_SCORE;
+    const hybridScore = (rawSignal as any).hybridScore ?? extendedMetrics.ngc;
+    const predictiveConfidence = extendedMetrics.ngc;
+    const regimeWeight = (rawSignal as any).regimeWeight ?? 0.5;
+    const decayPenalty = 0; // New signals have no decay
+    const signalFinalScore = Math.max(0, Math.min(1,
+      (hybridScore ?? 0) * W.HYBRID +
+      (predictiveConfidence ?? 0) * W.CONFIDENCE +
+      (regimeWeight ?? 0) * W.REGIME -
+      (decayPenalty ?? 0) * W.DECAY
+    ));
+    console.log(`[10.9A][FinalScore] symbol=${rawSignal.symbol} finalScore=${signalFinalScore.toFixed(4)} version=${SCORE_WEIGHTS_VERSION}`);
     
     const sqeSignalInput: SQESignalInput = {
       signalId,

@@ -18,7 +18,7 @@
  */
 
 import { SCANNER_PARAMS } from '../config/system-guards.js';
-import { getScoreWeightsMetadata } from '../config/score-weights.config.js';
+import { getScoreWeightsMetadata, SCORE_WEIGHTS_VERSION } from '../config/score-weights.config.js';
 
 export interface PairTelemetry {
   symbol: string;
@@ -275,10 +275,11 @@ export class TelemetryAggregatorService {
   }
 
   /**
-   * Directive 10.9: Get telemetry summary with coefficient metadata
+   * Directive 10.9A: Get telemetry summary with coefficient metadata and version
    * This logs the coefficient set used during this session for auditability
    */
   getTelemetrySummaryWithCoefficients(): {
+    version: string;
     pairCount: number;
     totalSamples: number;
     weights: { hybrid: number; confidence: number; regime: number; decay: number };
@@ -292,6 +293,7 @@ export class TelemetryAggregatorService {
     }
     
     const summary = {
+      version: SCORE_WEIGHTS_VERSION,
       pairCount: this.pairTelemetry.size,
       totalSamples,
       weights: {
@@ -303,7 +305,7 @@ export class TelemetryAggregatorService {
       timestamp: new Date().toISOString(),
     };
     
-    console.log(`[10.9][Telemetry] Summary with coefficients:`, JSON.stringify(summary));
+    console.log(`[10.9A][Telemetry] Summary with coefficients (${SCORE_WEIGHTS_VERSION}):`, JSON.stringify(summary));
     return summary;
   }
 }

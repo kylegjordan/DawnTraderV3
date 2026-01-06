@@ -1,0 +1,93 @@
+⚙️ 3️⃣ Directive 10.9A — Final Form (Confirmed)
+
+Title: Phase 10, Directive 10.9A — Verification & Config Purification
+
+Objective:
+Ensure configuration files are declarative, SQE uses FinalScore, and scoring weights are version-tracked for telemetry auditing.
+
+Tasks:
+
+Purify Config (server/config/score-weights.config.ts)
+
+Remove calculateFinalScore.
+
+Add:
+
+export const SCORE_WEIGHTS_VERSION = "v1.0.1";
+export const SCORE_WEIGHTS = Object.freeze({
+  FINAL_SCORE: { HYBRID: 0.4, CONFIDENCE: 0.3, REGIME: 0.2, DECAY: 0.1 },
+});
+
+
+Keep this file free of all runtime logic.
+
+Orchestrator Alignment (server/services/signal-orchestrator.ts)
+
+Inline computation:
+
+import { SCORE_WEIGHTS as W } from "@/server/config/score-weights.config";
+signal.finalScore =
+  (signal.hybridScore ?? 0) * W.FINAL_SCORE.HYBRID +
+  (signal.predictiveConfidence ?? 0) * W.FINAL_SCORE.CONFIDENCE +
+  (signal.regimeWeight ?? 0) * W.FINAL_SCORE.REGIME -
+  (signal.decayPenalty ?? 0) * W.FINAL_SCORE.DECAY;
+
+
+Import SCORE_WEIGHTS_VERSION for log metadata.
+
+SQE Verification (server/services/signal-quality-evaluator.ts)
+
+Delete any reference to CWQI, NGC, RiskCalc.
+
+Replace with:
+
+if (!signal.finalScore || signal.finalScore < SQE_THRESHOLDS.MIN_FINAL_SCORE) return false;
+if (signal.regimeWeight < SQE_THRESHOLDS.MIN_REGIME_WEIGHT) return false;
+return true;
+
+
+Telemetry Versioning (server/services/telemetry-aggregator.ts)
+
+Add version: SCORE_WEIGHTS_VERSION and weights: SCORE_WEIGHTS.FINAL_SCORE to persisted snapshot.
+
+Tests
+
+Confirm no calculateFinalScore export.
+
+Validate SCORE_WEIGHTS_VERSION exists.
+
+Verify SQE filters correctly by FinalScore.
+
+Run npx vitest run score-weights.test.ts signal-orchestrator.test.ts.
+
+✅ 4️⃣ Expected Outcomes
+
+Pure Config: score-weights.config.ts contains constants only.
+
+Single Math Source: All FinalScore computation happens inside Signal Orchestrator (and RTB Refresh).
+
+SQE Aligned: Filters on FinalScore and RegimeWeight only.
+
+Telemetry Audit: Logs include version v1.0.1.
+
+Test Verified: 278 + new tests pass.
+
+🧱 5️⃣ Recommendations (Full List)
+
+✅ Remove calculateFinalScore from config.
+
+✅ Add SCORE_WEIGHTS_VERSION.
+
+✅ Verify Signal Orchestrator inlines FinalScore calculation.
+
+✅ Verify SQE filters on FinalScore and RegimeWeight.
+
+✅ Add version metadata to TelemetryAggregator.
+
+✅ Add unit tests for version existence and SQE logic.
+
+✅ Maintain immutable SCORE_WEIGHTS.
+
+✅ Backward-compatibility (fallback for old signals optional).
+
+✅ Document scoring version in architecture.md.

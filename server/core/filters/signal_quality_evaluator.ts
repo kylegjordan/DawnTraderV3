@@ -82,6 +82,9 @@ export interface SQEInput {
   riskScore: number;
   profitRate: number;
   cwqi: number;
+  // Directive 10.9A: FinalScore-based filtering
+  finalScore?: number;
+  regimeWeight?: number;
 }
 
 /**
@@ -101,6 +104,8 @@ export interface SQEResult {
     riskScore: number;
     profitRate: number;
     cwqi: number;
+    finalScore?: number;
+    regimeWeight?: number;
   };
   failures: string[];
   reason?: string;
@@ -129,7 +134,22 @@ export function evaluateSignalQuality(input: SQEInput, options: SQEOptions = {})
   // R9C-3: Normalize symbol via Kraken Resolver for consistent comparison
   const canonicalSymbol = normalizeInternal(input.symbol);
   
+  // Directive 10.9A: Primary filtering on FinalScore and RegimeWeight
+  // When FinalScore is provided, use it as the primary quality gate
+  if (input.finalScore !== undefined) {
+    if (input.finalScore < SQE_THRESHOLDS.MIN_FINAL_SCORE) {
+      failures.push(`FinalScore ${input.finalScore.toFixed(4)} < ${SQE_THRESHOLDS.MIN_FINAL_SCORE}`);
+    }
+  }
+  
+  if (input.regimeWeight !== undefined) {
+    if (input.regimeWeight < SQE_THRESHOLDS.MIN_REGIME_WEIGHT) {
+      failures.push(`RegimeWeight ${input.regimeWeight.toFixed(4)} < ${SQE_THRESHOLDS.MIN_REGIME_WEIGHT}`);
+    }
+  }
+  
   // R9C-1: Evaluate RAW metrics against thresholds (no pre-normalization)
+  // Legacy thresholds kept for backward compatibility when FinalScore not provided
   const profitRateFloor = getProfitRateFloor(input.strategy);
   
   if (input.ngc < SQE_THRESHOLDS.MIN_NGC) {
@@ -150,16 +170,19 @@ export function evaluateSignalQuality(input: SQEInput, options: SQEOptions = {})
   
   const passed = failures.length === 0;
   
-  // Directive A3.R9.2-C: Enhanced diagnostic logging for filtered-out signals
+  // Directive 10.9A: Enhanced diagnostic logging with FinalScore
+  const finalScoreStr = input.finalScore !== undefined ? input.finalScore.toFixed(4) : 'N/A';
+  const regimeStr = input.regimeWeight !== undefined ? input.regimeWeight.toFixed(4) : 'N/A';
+  
   if (!passed) {
     const failureReason = failures[0]?.split(' ')[0] || 'unknown';
-    console.log(`[A3.R9.2][SQE_FILTERED] ${canonicalSymbol} reason=${failureReason} NGC=${input.ngc.toFixed(4)} CWQI=${input.cwqi.toFixed(4)} Risk=${input.riskScore.toFixed(4)} ProfitRate=${input.profitRate.toFixed(4)}`);
+    console.log(`[A3.R9.2][SQE_FILTERED] ${canonicalSymbol} reason=${failureReason} FinalScore=${finalScoreStr} NGC=${input.ngc.toFixed(4)} CWQI=${input.cwqi.toFixed(4)} Risk=${input.riskScore.toFixed(4)}`);
   }
   
   // Directive A3.R9.2: Unified SQE filter logging
   const status = passed ? 'PASS' : 'FAIL';
   const reason = passed ? 'all_thresholds_met' : failures[0]?.split(' ')[0] || 'unknown';
-  console.log(`[A3.R9.2][SQE_EVAL] ${status} symbol=${canonicalSymbol} strategy=${input.strategy} NGC=${input.ngc.toFixed(4)} CWQI=${input.cwqi.toFixed(4)} reason=${reason}`);
+  console.log(`[A3.R9.2][SQE_EVAL] ${status} symbol=${canonicalSymbol} strategy=${input.strategy} FinalScore=${finalScoreStr} NGC=${input.ngc.toFixed(4)} CWQI=${input.cwqi.toFixed(4)} reason=${reason}`);
   
   // A3.R9.2: Record metric for performance monitoring
   performanceMonitor.recordSQEEvaluation(passed);
@@ -191,11 +214,14 @@ export function evaluateSignalQuality(input: SQEInput, options: SQEOptions = {})
   );
   
   // R9C-1: Clamp metrics only for downstream consumers (after threshold check)
+  // Directive 10.9A: Include FinalScore and RegimeWeight in output
   const clampedMetrics = {
     ngc: Math.max(0, Math.min(1, input.ngc)),
     riskScore: Math.max(0, Math.min(1, input.riskScore)),
     profitRate: Math.max(0, Math.min(1, input.profitRate)),
     cwqi: Math.max(0, Math.min(1, input.cwqi)),
+    finalScore: input.finalScore !== undefined ? Math.max(0, Math.min(1, input.finalScore)) : undefined,
+    regimeWeight: input.regimeWeight !== undefined ? Math.max(0, Math.min(1, input.regimeWeight)) : undefined,
   };
   
   return {

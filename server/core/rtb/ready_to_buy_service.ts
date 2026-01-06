@@ -50,8 +50,8 @@ import { diagnosticTrace } from '../diagnostics/trace_service';
 import { fetchFreshMetrics, calculateDecayedMetric } from '../metrics/signal_metrics_calculator';
 import { getAdaptivePoolSize } from '../../services/adaptive-pool-config';
 import { poolBus } from '../../services/pool-broadcast';
-// Directive 10.9: Math Core Harmonization
-import { calculateFinalScore, SCORE_WEIGHTS } from '../../config/score-weights.config.js';
+// Directive 10.9A: Math Core Harmonization - Version-tracked weights (inlined calculation)
+import { SCORE_WEIGHTS, SCORE_WEIGHTS_VERSION } from '../../config/score-weights.config.js';
 
 // T5: Subscribe to pool size updates from RTB Refresh Service
 let currentPoolSize = getAdaptivePoolSize();
@@ -801,15 +801,18 @@ class ReadyToBuyService {
                 return;
               }
               
-              // Directive 10.9: Recalculate finalScore using centralized weights
+              // Directive 10.9A: Inline FinalScore calculation using centralized weights
               const ageMinutes = (now.getTime() - new Date(queuedAt).getTime()) / 60000;
               const decayPenalty = Math.max(0, 1 - Math.exp(-0.03 * ageMinutes)); // Same decay as CWQI
-              const refreshedFinalScore = calculateFinalScore({
-                hybridScore: metadata.hybridScore ?? ngc,
-                predictiveConfidence: ngc,
-                regimeWeight: metadata.regimeWeight ?? 0.5,
-                decayPenalty,
-              });
+              const W = SCORE_WEIGHTS.FINAL_SCORE;
+              const hybridScoreVal = metadata.hybridScore ?? ngc;
+              const regimeWeightVal = metadata.regimeWeight ?? 0.5;
+              const refreshedFinalScore = Math.max(0, Math.min(1,
+                (hybridScoreVal ?? 0) * W.HYBRID +
+                (ngc ?? 0) * W.CONFIDENCE +
+                (regimeWeightVal ?? 0) * W.REGIME -
+                (decayPenalty ?? 0) * W.DECAY
+              ));
               
               // Queue update for batch write
               bulkUpdates.push({
