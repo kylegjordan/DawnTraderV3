@@ -142,13 +142,10 @@ const FILTER_DESCRIPTIONS: Record<string, string> = {
   failed_quote_currency: "Filters out pairs that do not use an approved quote currency (e.g., USD, EUR)",
   already_active: "Filters out pairs that already have an active position to avoid duplicate exposure",
   failed_history: "Filters out pairs lacking the required minimum number of historical trading days",
-  // REB 2.8.1: Intentionally hidden - backend may still compute, but not shown in UI
-  failed_market_cap: "Excludes pairs with market cap outside acceptable thresholds",
-  failed_guardrail_risk: "Filters out pairs that exceed risk management guardrails",
-  // Directive 9.5.D: Institutional Math Guards
+  // Directive 10.9C: Institutional Math Guards (LQ, VolNoise active; CWQI deprecated)
   failed_lq: "Log-Liquidity Index below threshold (LQ < 40) - insufficient market depth",
   failed_noise: "Volatility Noise exceeds threshold (VolNoise > 0.6) - too choppy for reliable trading",
-  failed_cwqi: "CWQI Net Expectancy negative (EV ≤ 0) - trade would not be profitable after fees",
+  // failed_cwqi: deprecated in 10.9C - replaced by FinalScore/RegimeWeight at SQE level
 };
 
 const FILTER_DISPLAY_NAMES: Record<string, string> = {
@@ -160,14 +157,11 @@ const FILTER_DISPLAY_NAMES: Record<string, string> = {
   failed_stablecoin: "Exclude Stablecoins",
   failed_quote_currency: "Valid Quote Currency",
   already_active: "Already Active",
-  failed_history: "History", // REB 2.8.1: Renamed from "Min Data History"
-  // REB 2.8.1: Intentionally hidden - not shown in Filter Insights UI
-  failed_market_cap: "Market Cap Range",
-  failed_guardrail_risk: "Risk Guardrails",
-  // Directive 9.5.D: Institutional Math Guards
-  failed_lq: "Liquidity Guard (LQ)",
-  failed_noise: "Noise Guard (VolNoise)",
-  failed_cwqi: "CWQI Gate (EV)",
+  failed_history: "History",
+  // Directive 10.9C: Institutional Math Guards (LQ, VolNoise active; CWQI deprecated)
+  failed_lq: "Liquidity Guard (LQ ≥ 40)",
+  failed_noise: "Noise Guard (VolNoise ≤ 0.6)",
+  // failed_cwqi: deprecated - replaced by FinalScore at SQE level
 };
 
 // Threshold conceptual text for non-numeric filters
@@ -176,9 +170,9 @@ const THRESHOLD_CONCEPTUAL: Record<string, string> = {
   passed_all_filters: "No extra rules — count of pairs that passed every filter this scan",
 };
 
-// REB 2.8.1: Truth filter categories (ordered per truth screenshots)
-// Hidden from UI: failed_market_cap, failed_guardrail_risk, failed_quote_currency (REB 2.12A)
-// Backend still computes these values - only hidden from Filter Insights display
+// Directive 10.9C: Active filter categories (10 filters)
+// Deprecated: RSI, Risk/Volatility, CWQI Gate (replaced by FinalScore at SQE level)
+// Active Institutional Math Guards: LQ, VolNoise, Correlation (ρ)
 const ALLOWED_FILTER_CATEGORIES: (keyof FilterBreakdown)[] = [
   'passed_all_filters',
   'failed_min_price',
@@ -186,13 +180,12 @@ const ALLOWED_FILTER_CATEGORIES: (keyof FilterBreakdown)[] = [
   'failed_spread',
   'failed_daily_range',
   'failed_stablecoin',
-  // 'failed_quote_currency', // REB 2.12A: Hidden from UI, backend still computes
   'already_active',
   'failed_history',
-  // Directive 9.5.D: Institutional Math Guards
+  // Directive 10.9C: Institutional Math Guards (3 active)
   'failed_lq',
   'failed_noise',
-  'failed_cwqi',
+  // 'failed_cwqi', // 10.9C: Deprecated - replaced by FinalScore at SQE level
 ];
 
 // REB 2.8.1: UTC timestamp formatter with fallback guards (no Stage-3 dependencies)

@@ -1,0 +1,111 @@
+📘 3️⃣ Directive 10.9 C — Screeners & Filter Insights Modernization
+Directive 10.9 C
+
+Title: Screeners & Filter Insights Modernization — Institutional Math Integration
+
+Phase: 10.9
+Authorizing Directive: 10.9 B (Backend Filter Deconfliction & Deprecation)
+
+Objectives
+
+Finalize the pre-signal filter set displayed in the Filter Insights “24 h Filter Breakdown.”
+
+Deprecate and remove legacy filters (RSI, Risk/Volatility, CWQI Gate) from both backend and UI.
+
+Integrate Institutional Math guards (LQ, VolNoise, ρ) into the rolling 24-hour aggregation.
+
+Verify rolling-window aggregation accuracy (continuous 24-hour window, not daily reset).
+
+Preserve data integrity and avoid redundant telemetry feeds.
+
+Implementation Tasks
+Task 1 — Repository Tracing & Verification
+
+Locate filter-insights.service.ts (or filter_insights_aggregator.ts).
+
+Confirm that rolling 24-hour logic filters events using timestamp window.
+
+Confirm that counts decay naturally without reset (rolling window).
+
+Trace recordFilterOutcome() calls for:
+
+liquidity_guard
+
+noise_guard
+
+Confirm source modules (liquidity-guard.ts, noise-guard.ts).
+
+Add missing event for correlation_guard in covariance-guard.ts.
+
+Task 2 — Deprecations
+
+Remove from both backend and UI:
+
+RSI (Min/Max) filters — legacy technical indicators.
+
+Risk/Volatility filter group — replaced by Institutional Math guards.
+
+CWQI Gate (EV) — legacy composite index replaced by FinalScore (SQE-level).
+
+Ensure these entries are deleted from:
+
+screeners-tab.tsx component definitions.
+
+filter-insights.service.ts event mappings.
+
+Any filter configuration (filters-config.ts, default-filters.json).
+
+Task 3 — Add Institutional Math Filters
+
+Verify and retain:
+
+Liquidity Guard (LQ)
+
+Noise Guard (VolNoise)
+
+Add Correlation Guard (ρ) to the event map:
+
+recordFilterOutcome('correlation_guard', result, timestamp);
+
+
+Confirm each guard emits a timestamped event to the shared rolling aggregator.
+
+Update UI label map in Filter Insights to include “Correlation Guard (ρ ≤ 0.75)”.
+
+Task 4 — Validation & Testing
+
+Add unit tests to simulate event streams for LQ, VolNoise, and ρ.
+
+Ensure the rolling 24-hour window includes only events with timestamp > now – 24 h.
+
+Confirm counts increment and decay as expected when events age out.
+
+Full test suite (npm test --all) must pass with 302+ tests.
+
+Task 5 — Documentation & Release
+
+Update replit.md and release-notes.md:
+
+Show new Filter Breakdown composition (10 active filters).
+
+Add note: “Filter Insights aggregates over a rolling 24-hour period.”
+
+Mark RSI, Risk/Volatility, CWQI as removed.
+
+Increment FILTER_SCHEMA_VERSION → v1.2.0.
+
+Commit message: Directive 10.9 C – Screeners & Filter Insights Modernization (Phase 10 Final).
+
+Expected Outcome
+
+After Directive 10.9 C:
+
+Filter Insights 24 h Breakdown lists only 10 active pre-signal filters.
+
+LQ, VolNoise, and Correlation Guard appear with rolling counts.
+
+Legacy filters (RSI, Risk/Volatility, CWQI) fully removed from codebase.
+
+Aggregation is verified as continuous (rolling) and accurate.
+
+UI and backend remain in sync for all pre-signal filter metrics.

@@ -277,6 +277,7 @@ export class TelemetryAggregatorService {
   /**
    * Directive 10.9A: Get telemetry summary with coefficient metadata and version
    * Directive 10.9B: Added phaseDirective and filterSchemaVersion
+   * Directive 10.9C: Updated to v1.2.0 with rolling 24h window
    * This logs the coefficient set used during this session for auditability
    */
   getTelemetrySummaryWithCoefficients(): {
@@ -305,12 +306,12 @@ export class TelemetryAggregatorService {
         regime: coefficients.weights.REGIME,
         decay: coefficients.weights.DECAY,
       },
-      phaseDirective: '10.9B',
+      phaseDirective: '10.9C',
       filterSchemaVersion: FILTER_SCHEMA_VERSION,
       timestamp: new Date().toISOString(),
     };
     
-    console.log(`[10.9B][Telemetry] Summary with coefficients (${SCORE_WEIGHTS_VERSION}, filter=${FILTER_SCHEMA_VERSION}):`, JSON.stringify(summary));
+    console.log(`[10.9C][Telemetry] Summary with coefficients (${SCORE_WEIGHTS_VERSION}, filter=${FILTER_SCHEMA_VERSION}):`, JSON.stringify(summary));
     return summary;
   }
 }
