@@ -571,21 +571,17 @@ export function FiltersWithOverride() {
                 </Tooltip>
               </TooltipProvider>
             </CardTitle>
-            <p className="text-sm text-muted-foreground mt-2">
-              Toggle between LATTi autonomous optimization and manual control for each filter parameter
-            </p>
           </div>
         </div>
       </CardHeader>
 
-      {/* Directive 9.5.C: System Guards Panel - Institutional Math Thresholds */}
+      {/* Institutional Math Filters Panel */}
       <div className="px-6 py-4 border-b bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-900/10 dark:to-purple-900/10">
         <div className="flex items-center gap-2 mb-3">
           <div className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />
-          <span className="font-semibold text-sm text-violet-700 dark:text-violet-300">System Guards (Directive 9.1)</span>
-          <span className="text-xs bg-violet-200 dark:bg-violet-800 text-violet-700 dark:text-violet-300 px-2 py-0.5 rounded">Institutional Math</span>
+          <span className="font-semibold text-sm text-violet-700 dark:text-violet-300">Institutional Math Filters</span>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Liquidity Guard */}
           <div className="p-3 border rounded-lg bg-white dark:bg-gray-900/50">
             <div className="flex items-center justify-between mb-1">
@@ -604,15 +600,6 @@ export function FiltersWithOverride() {
             <div className="text-xl font-bold text-amber-600 dark:text-amber-400">VolNoise &le; 0.6</div>
             <p className="text-xs text-muted-foreground mt-0.5">Volatility Noise Limit</p>
           </div>
-          {/* FinalScore Gate (Directive 10.9) */}
-          <div className="p-3 border rounded-lg bg-white dark:bg-gray-900/50">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-medium text-muted-foreground">FinalScore Gate</span>
-              <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded">Active</span>
-            </div>
-            <div className="text-xl font-bold text-blue-600 dark:text-blue-400">FS &ge; {FINAL_SCORE_CONFIG.DEFAULT}</div>
-            <p className="text-xs text-muted-foreground mt-0.5">Unified Score (10.9)</p>
-          </div>
           {/* Correlation Guard */}
           <div className="p-3 border rounded-lg bg-white dark:bg-gray-900/50">
             <div className="flex items-center justify-between mb-1">
@@ -620,7 +607,7 @@ export function FiltersWithOverride() {
               <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded">Active</span>
             </div>
             <div className="text-xl font-bold text-rose-600 dark:text-rose-400">&rho; &le; 0.75</div>
-            <p className="text-xs text-muted-foreground mt-0.5">Covariance Guard (9.4)</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Covariance Guard</p>
           </div>
         </div>
       </div>
