@@ -1,0 +1,165 @@
+🚀 Directive 10.9 — Math Core Harmonization (FinalScore Integration & Scoring Coefficients Source of Truth)
+📘 Status
+
+Phase 10.9 — Active Directive
+Follows: 10.8 — Adaptive Scanning Intelligence
+Leads to: 11.0 — Trade Control Separation
+
+🎯 Objective
+
+Unify all FinalScore coefficient definitions under a single shared configuration file (score-weights.config.ts) that acts as the system-wide source of truth for scoring math.
+Refactor the Signal Orchestrator and Ready-to-Buy Refresh Service to reference these coefficients, ensuring mathematical consistency without introducing cross-service coupling.
+
+Legacy heuristic metrics (CWQI, NGC, ProfitRate, RiskCalc) will be removed from evaluation logic.
+The Signal Quality Evaluator (SQE) will remain evaluation-only — it will not perform any scoring math.
+
+🧩 Rationale
+
+Problem: FinalScore computation logic currently lives in multiple places (Signal Orchestrator and Refresh System) using hard-coded constants.
+
+Risk: If weights are tuned or adjusted independently (e.g., PredictiveConfidence weight changed in one file but not the other), it creates a formula drift.
+
+Solution: Centralize weights in a shared local config module, so both systems always use the same coefficients, without runtime dependencies.
+
+⚙️ Execution Tasks
+1️⃣ Create Scoring Coefficient Config
+
+File: server/config/score-weights.config.ts
+
+Purpose:
+Defines a central, immutable object representing all scoring weights used across DawnTrader’s math stack.
+
+// server/config/score-weights.config.ts
+export const SCORE_WEIGHTS = Object.freeze({
+  FINAL_SCORE: {
+    HYBRID: 0.4,
+    CONFIDENCE: 0.3,
+    REGIME: 0.2,
+    DECAY: 0.1
+  },
+});
+
+
+These values are immutable (Object.freeze) and cached in memory once imported.
+
+Any service can import:
+
+import { SCORE_WEIGHTS } from "@/server/config/score-weights.config";
+
+2️⃣ Refactor Signal Orchestrator
+
+File: server/services/signal-orchestrator.ts
+
+Changes:
+
+Replace any hard-coded coefficient math with imports from SCORE_WEIGHTS.
+
+Example:
+
+import { SCORE_WEIGHTS as W } from "@/server/config/score-weights.config";
+
+signal.finalScore =
+  (signal.hybridScore ?? 0) * W.FINAL_SCORE.HYBRID +
+  (signal.predictiveConfidence ?? 0) * W.FINAL_SCORE.CONFIDENCE +
+  (signal.regimeWeight ?? 0) * W.FINAL_SCORE.REGIME -
+  (signal.decayPenalty ?? 0) * W.FINAL_SCORE.DECAY;
+
+
+SQE does not calculate scores; it only evaluates them.
+
+✅ Purpose: Maintains single-source weighting logic, zero runtime coupling.
+
+3️⃣ Refactor Ready-to-Buy Refresh Service
+
+File: server/services/ready-to-buy-refresh.ts
+
+Changes:
+
+Use identical math with shared coefficients.
+
+Each bucket calculator computes scores locally using:
+
+import { SCORE_WEIGHTS as W } from "@/server/config/score-weights.config";
+
+
+All calculations stay within the bucket’s execution thread — no external function calls, ensuring refresh tick precision.
+
+Reconfirm signals against SQE filters after recalculation.
+
+Sorting logic: rank by finalScore DESC.
+
+✅ Purpose: Keeps Refresh performance deterministic and lightweight while enforcing coefficient consistency.
+
+4️⃣ Telemetry Integration
+
+File: server/services/telemetry-aggregator.ts
+
+Changes:
+
+When persisting telemetry summaries, log coefficient metadata:
+
+"weights": { "hybrid": 0.4, "confidence": 0.3, "regime": 0.2, "decay": 0.1 }
+
+
+Purpose: Ensures telemetry history aligns with the coefficient set used during that day’s trading.
+
+✅ Purpose: Maintains auditability when coefficients change in future updates.
+
+5️⃣ Goals Engine & UI Cleanup
+
+Files:
+client/tabs/screeners/filters/cwqi-filter.tsx
+client/tabs/screeners/filters/ngc-filter.tsx
+client/tabs/screeners/filters/riskcalc-filter.tsx
+
+Changes:
+
+Disable all legacy filters using conditional feature flags:
+
+{process.env.LEGACY_METRICS_ENABLED && <CwqiFilter />}
+
+
+Remove UI references to CWQI, NGC, and RiskCalc sliders.
+
+Replace with a FinalScore slider (min=0.5, max=1.0).
+
+✅ Purpose: Streamlines interface to align with predictive intelligence architecture.
+
+6️⃣ Verification & Testing
+
+Tests:
+
+signal-orchestrator.test.ts: Ensure finalScore computed correctly with imported weights.
+
+ready-to-buy-refresh.test.ts: Verify identical values between Orchestrator and Refresh.
+
+telemetry-aggregator.test.ts: Validate coefficient persistence.
+
+Test Case Examples:
+✅ FinalScore matches across services.
+✅ Refresh completes in <10ms per bucket (performance guard).
+✅ Legacy filters disabled in UI.
+
+🔐 Performance & Caching Notes
+
+SCORE_WEIGHTS is loaded once per runtime — no runtime I/O or cross-thread access.
+
+Each refresh bucket holds it in memory; there is no repeated read or config fetch.
+
+Optionally, add a hot-reload check (e.g., re-import every 30 minutes if the config file changes), but default behavior is static caching.
+
+✅ Result: No measurable performance impact or CPU cost; refresh timing remains precise.
+
+✅ Expected Outcomes
+
+After Directive 10.9:
+
+All scoring weights live in one shared file (score-weights.config.ts).
+
+Orchestrator and Refresh produce identical FinalScores.
+
+SQE continues as an evaluation-only layer.
+
+Legacy CWQI, NGC, and RiskCalc are fully removed from logic and UI.
+
+Telemetry records the coefficient set used each session.

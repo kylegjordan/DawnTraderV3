@@ -74,6 +74,8 @@ import { getHybridIntegration, type QuantSignal, type HybridSignal } from './hyb
 // Directive 10.7: Multi-Timeframe Expansion
 import { cascadingScan } from './multi-timeframe-scanner.js';
 import { TIMEFRAME_CONFIG } from '../config/system-guards.js';
+// Directive 10.9: Math Core Harmonization
+import { calculateFinalScore } from '../config/score-weights.config.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -472,6 +474,15 @@ export class SignalOrchestrator {
     // L10: Fetch exposure bias multiplier for this strategy
     const exposureBias = getExposureMultiplierSync(strategyId);
     
+    // Directive 10.9: Calculate FinalScore using centralized weights
+    // Formula: hybridScore × 0.4 + predictiveConfidence × 0.3 + regimeWeight × 0.2 - decayPenalty × 0.1
+    const signalFinalScore = calculateFinalScore({
+      hybridScore: (rawSignal as any).hybridScore ?? extendedMetrics.ngc,
+      predictiveConfidence: extendedMetrics.ngc,
+      regimeWeight: (rawSignal as any).regimeWeight ?? 0.5,
+      decayPenalty: 0, // New signals have no decay
+    });
+    
     const sqeSignalInput: SQESignalInput = {
       signalId,
       mode: sizingContext.mode,
@@ -487,6 +498,7 @@ export class SignalOrchestrator {
       riskScore: extendedMetrics.riskScore,
       profitRate: extendedMetrics.profitRate,
       cwqi: extendedMetrics.cwqi,
+      finalScore: signalFinalScore, // Directive 10.9: Unified scoring metric
       currentPrice: rawSignal.entryPrice, // Directive 8.8.4-C.14.B: Use entry price as current market price
       volume24h: activeFilterPool.getFX5DataForSymbol(rawSignal.symbol, sizingContext.mode)?.volume24h ?? null, // Directive 8.8.4-C.14.B: FX5 data only, NULL if not found
       metadata: {
@@ -497,6 +509,7 @@ export class SignalOrchestrator {
     
     console.log(`[L9][SIGNAL_WEIGHT] ${rawSignal.symbol}/${strategyId}: strategyWeight=${strategyWeight.toFixed(4)}`);
     console.log(`[L10][EXPOSURE_BIAS] ${rawSignal.symbol}/${strategyId}: exposureBias=${exposureBias.toFixed(4)}`);
+    console.log(`[10.9][FINAL_SCORE] ${rawSignal.symbol}/${strategyId}: finalScore=${signalFinalScore.toFixed(4)}`);
 
     // Queue to RTB pool (fire-and-forget, non-blocking)
     readyToBuyService.queueSQESignal(sqeSignalInput).catch(err => {

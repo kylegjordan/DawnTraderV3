@@ -50,6 +50,8 @@ import { diagnosticTrace } from '../diagnostics/trace_service';
 import { fetchFreshMetrics, calculateDecayedMetric } from '../metrics/signal_metrics_calculator';
 import { getAdaptivePoolSize } from '../../services/adaptive-pool-config';
 import { poolBus } from '../../services/pool-broadcast';
+// Directive 10.9: Math Core Harmonization
+import { calculateFinalScore, SCORE_WEIGHTS } from '../../config/score-weights.config.js';
 
 // T5: Subscribe to pool size updates from RTB Refresh Service
 let currentPoolSize = getAdaptivePoolSize();
@@ -94,6 +96,7 @@ export interface SQESignalInput {
   expectedReturn?: number;
   profitRate: number;
   cwqi: number;
+  finalScore?: number; // Directive 10.9: Unified scoring metric (replaces NGC/CWQI for ranking)
   atr?: number;
   currentPrice?: number; // Directive 8.8.4-C.14.B: Market price at queue time
   volume24h?: number | null; // Directive 8.8.4-C.14.B: 24h USD volume (NULL if not in FX5 pool)
@@ -798,6 +801,16 @@ class ReadyToBuyService {
                 return;
               }
               
+              // Directive 10.9: Recalculate finalScore using centralized weights
+              const ageMinutes = (now.getTime() - new Date(queuedAt).getTime()) / 60000;
+              const decayPenalty = Math.max(0, 1 - Math.exp(-0.03 * ageMinutes)); // Same decay as CWQI
+              const refreshedFinalScore = calculateFinalScore({
+                hybridScore: metadata.hybridScore ?? ngc,
+                predictiveConfidence: ngc,
+                regimeWeight: metadata.regimeWeight ?? 0.5,
+                decayPenalty,
+              });
+              
               // Queue update for batch write
               bulkUpdates.push({
                 id: signal.id,
@@ -815,13 +828,15 @@ class ReadyToBuyService {
                     originalCwqi: trueOriginalCWQI.toString(),
                     decayApplied: true,
                     freshMetricsApplied: freshMetrics.refreshed,
-                    refreshTimestamp: freshMetrics.timestamp
+                    refreshTimestamp: freshMetrics.timestamp,
+                    finalScore: refreshedFinalScore, // Directive 10.9: Store for ranking
+                    decayPenalty, // Track for debugging
                   }
                 }
               });
               
               this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'reconfirmed', 'refresh');
-              console.log(`[A3.R9.2][RECONFIRM_COMPLETE] pair=${normalizedSymbol} ${oldStatus}→reconfirmed CWQI=${decayedCWQI.toFixed(4)}`);
+              console.log(`[A3.R9.2][RECONFIRM_COMPLETE] pair=${normalizedSymbol} ${oldStatus}→reconfirmed CWQI=${decayedCWQI.toFixed(4)} finalScore=${refreshedFinalScore.toFixed(4)}`);
               reconfirmedCount++;
             } catch (err) {
               console.error(`[T3][SIGNAL_PROCESS_ERROR] signal=${signal.id}:`, err);
@@ -1152,9 +1167,15 @@ class ReadyToBuyService {
       orderDir: 'desc',
     });
     
-    // Combine and sort by CWQI descending
+    // Directive 10.9: Sort by finalScore (if available), fallback to CWQI
     const allSignals = [...activeSignals, ...reconfirmedSignals, ...queuedSignals];
-    allSignals.sort((a, b) => parseFloat(b.cwqi || '0') - parseFloat(a.cwqi || '0'));
+    allSignals.sort((a, b) => {
+      const aMetadata = (a.metadata as Record<string, any>) || {};
+      const bMetadata = (b.metadata as Record<string, any>) || {};
+      const aFinalScore = aMetadata.finalScore ?? parseFloat(a.cwqi || '0');
+      const bFinalScore = bMetadata.finalScore ?? parseFloat(b.cwqi || '0');
+      return bFinalScore - aFinalScore;
+    });
     
     return allSignals;
   }

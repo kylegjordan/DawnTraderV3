@@ -90,6 +90,24 @@ const MARKET_UNIVERSE_OPTIONS = [
  */
 export const ADAPTIVE_SCANNING_ENABLED = true;
 
+/**
+ * Directive 10.9: Feature flag to disable legacy metrics
+ * When enabled, legacy CWQI, NGC, and RiskCalc filters are hidden
+ * and replaced with unified FinalScore filtering
+ */
+export const LEGACY_METRICS_ENABLED = false;
+
+/**
+ * Directive 10.9: FinalScore filter configuration
+ * FinalScore = hybridScore × 0.4 + confidence × 0.3 + regimeWeight × 0.2 - decayPenalty × 0.1
+ */
+export const FINAL_SCORE_CONFIG = {
+  MIN: 0.5,
+  MAX: 1.0,
+  DEFAULT: 0.6,
+  STEP: 0.05,
+};
+
 // REB 2.9B Stage 3 Section 1: Number formatting helpers (from directive)
 const formatNumber = (value: number | string): string => {
   if (value === null || value === undefined || value === "") return "";
@@ -104,10 +122,11 @@ const unformatNumber = (value: string): string => {
 };
 
 // Determine if a filter is a numeric amount filter (needs comma formatting)
+// Directive 10.9: Added finalScoreThreshold, removed deprecated confidenceThreshold
 const isNumericAmountFilter = (filterName: string): boolean => {
   return ['minVolume', 'minLiquidity', 'minPrice', 'maxPrice', 'maxBidAskSpread',
           'minMarketCap', 'volatilityMin', 'volatilityMax', 'rsiMin', 'rsiMax',
-          'confidenceThreshold'].includes(filterName);
+          'finalScoreThreshold'].includes(filterName);
 };
 
 export function FiltersWithOverride() {
@@ -314,10 +333,13 @@ export function FiltersWithOverride() {
   // REB 2.9B Stage 3 Section 4: Filter out quoteCurrencies before grouping
   // Phase 8.8.4-B.3: Filter out confidenceThreshold (deprecated - NGC is now single confidence source)
   // Directive 10.8: Filter out universeSize when adaptive scanning is enabled
+  // Directive 10.9: Filter out legacy CWQI/NGC/RiskCalc when legacy metrics disabled
+  const legacyMetricFilters = ['cwqiThreshold', 'ngcThreshold', 'riskCalcThreshold'];
   const visibleFilters = filtersData.data.filters.filter(f => 
     f.name !== 'quoteCurrencies' && 
     f.name !== 'confidenceThreshold' &&
-    !(ADAPTIVE_SCANNING_ENABLED && f.name === 'universeSize')
+    !(ADAPTIVE_SCANNING_ENABLED && f.name === 'universeSize') &&
+    !(!LEGACY_METRICS_ENABLED && legacyMetricFilters.includes(f.name))
   );
 
   // Group filters by category
@@ -581,14 +603,14 @@ export function FiltersWithOverride() {
             <div className="text-xl font-bold text-amber-600 dark:text-amber-400">VolNoise &le; 0.6</div>
             <p className="text-xs text-muted-foreground mt-0.5">Volatility Noise Limit</p>
           </div>
-          {/* CWQI Gate */}
+          {/* FinalScore Gate (Directive 10.9) */}
           <div className="p-3 border rounded-lg bg-white dark:bg-gray-900/50">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-medium text-muted-foreground">CWQI Gate</span>
+              <span className="text-xs font-medium text-muted-foreground">FinalScore Gate</span>
               <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded">Active</span>
             </div>
-            <div className="text-xl font-bold text-blue-600 dark:text-blue-400">EV &gt; 0</div>
-            <p className="text-xs text-muted-foreground mt-0.5">Net Expectancy (9.5)</p>
+            <div className="text-xl font-bold text-blue-600 dark:text-blue-400">FS &ge; {FINAL_SCORE_CONFIG.DEFAULT}</div>
+            <p className="text-xs text-muted-foreground mt-0.5">Unified Score (10.9)</p>
           </div>
           {/* Correlation Guard */}
           <div className="p-3 border rounded-lg bg-white dark:bg-gray-900/50">
