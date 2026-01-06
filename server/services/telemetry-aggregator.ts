@@ -17,7 +17,7 @@
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-import { SCANNER_PARAMS } from '../config/system-guards.js';
+import { SCANNER_PARAMS, FILTER_SCHEMA_VERSION } from '../config/system-guards.js';
 import { getScoreWeightsMetadata, SCORE_WEIGHTS_VERSION } from '../config/score-weights.config.js';
 
 export interface PairTelemetry {
@@ -276,6 +276,7 @@ export class TelemetryAggregatorService {
 
   /**
    * Directive 10.9A: Get telemetry summary with coefficient metadata and version
+   * Directive 10.9B: Added phaseDirective and filterSchemaVersion
    * This logs the coefficient set used during this session for auditability
    */
   getTelemetrySummaryWithCoefficients(): {
@@ -283,6 +284,8 @@ export class TelemetryAggregatorService {
     pairCount: number;
     totalSamples: number;
     weights: { hybrid: number; confidence: number; regime: number; decay: number };
+    phaseDirective: string;
+    filterSchemaVersion: string;
     timestamp: string;
   } {
     const coefficients = getScoreWeightsMetadata();
@@ -302,10 +305,12 @@ export class TelemetryAggregatorService {
         regime: coefficients.weights.REGIME,
         decay: coefficients.weights.DECAY,
       },
+      phaseDirective: '10.9B',
+      filterSchemaVersion: FILTER_SCHEMA_VERSION,
       timestamp: new Date().toISOString(),
     };
     
-    console.log(`[10.9A][Telemetry] Summary with coefficients (${SCORE_WEIGHTS_VERSION}):`, JSON.stringify(summary));
+    console.log(`[10.9B][Telemetry] Summary with coefficients (${SCORE_WEIGHTS_VERSION}, filter=${FILTER_SCHEMA_VERSION}):`, JSON.stringify(summary));
     return summary;
   }
 }

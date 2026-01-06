@@ -1,9 +1,19 @@
 /**
  * Directive 9.0.B - Volume Classifier Utility
  * Directive 9.6.A - Now imports thresholds from centralized SYSTEM_GUARDS configuration
+ * Directive 10.9B - Verified Pre-Signal Math Guards (non-conflicting with SQE scoring)
  * 
  * Provides standardized classification for liquidity tiers based on 24h volume (USD).
  * Used by FX5 Scanner and Filter Engine to categorize trading pairs.
+ * 
+ * Pre-Signal Math Guards (Institutional Math):
+ * - Log-Liquidity (LQ): Logarithmic liquidity index (0-100)
+ * - Directional Integrity (DI): Trend straightness measure (0-100)
+ * - Volatility Noise (VolNoise): Market choppiness quantifier (0-1)
+ * - Sigma (σ): Standard deviation of returns
+ * 
+ * These guards execute BEFORE signal orchestration but AFTER FX5 universe selection.
+ * They do NOT conflict with SQE scoring which uses FinalScore/RegimeWeight.
  * 
  * Tiers:
  * - SMALL: < $1M USD 24h volume (low liquidity, higher spread risk)

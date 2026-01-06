@@ -126,6 +126,24 @@ export type TimeframeConfigType = typeof TIMEFRAME_CONFIG;
  * Replaces static Tier A/B universe logic with a learning-driven,
  * telemetry-based adaptive pair selection system.
  */
+/**
+ * Directive 10.9B — Filter Deconfliction Feature Flags
+ * 
+ * Controls deprecated filter visibility without deleting UI components.
+ * Set to false to disable deprecated Risk/Volatility and RSI filters.
+ */
+export const FILTER_FLAGS = {
+  LEGACY_FILTERS_ENABLED: false,    // Deprecated Risk/Volatility/RSI filters (backend removed, UI stubs only)
+  INSTITUTIONAL_MATH_ENABLED: true, // Pre-signal LQ, VolNoise, Correlation guards
+} as const;
+
+/**
+ * Directive 10.9B — Filter Schema Versioning
+ * 
+ * Tracks filter telemetry schema for auditability.
+ */
+export const FILTER_SCHEMA_VERSION = "v1.1.0";
+
 export const SCANNER_PARAMS = {
   ADAPTIVE_ENABLED: true,           // Master feature flag for adaptive scanning
   DUAL_POOL: {

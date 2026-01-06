@@ -1,0 +1,144 @@
+⚙️ Directive 10.9B — Backend Filter Deconfliction & Deprecation (Logic-Only)
+
+Phase 10 Continuation
+
+🎯 Objective
+
+To finalize backend filter logic by removing obsolete Risk/Volatility and Technical Indicator calculations, consolidating pre-signal Institutional Math filters, moving FinalScore logic exclusively into the SQE, and extending filter telemetry and insights.
+This directive does not touch or delete UI code — it only isolates or deactivates the backend logic while leaving the front-end visuals intact until 10.9C.
+
+🧱 Execution Tasks
+1️⃣ Risk & Volatility Filter Deprecation (Backend Only)
+Task	Details
+Remove backend logic and references to MaxBidAskSpread, MinVolatility, and MaxVolatility.	
+Keep frontend .tsx components temporarily but set them as inactive via feature flag LEGACY_FILTERS_ENABLED = false.	
+Update their service bindings (if present) to return { status: "deprecated", reason: "Directive 10.9B" } instead of performing calculations.	
+Add safety comment block:	
+/* Deprecated as of Directive 10.9B — retained temporarily to prevent UI breakage */
+``` |
+| Update configuration references (system-guards, filters-registry) to remove dependency calls but keep export placeholders if imported by UI. |
+
+---
+
+### **2️⃣ Technical Indicators Deprecation (Backend Only)**
+| Task | Details |
+|------|----------|
+| Remove backend logic for `MinRSI` and `MaxRSI` filters from FX5 processing. |
+| Keep the TSX components as inert placeholders (same LEGACY flag). |
+| Ensure exports remain intact to prevent React import errors. |
+
+---
+
+### **3️⃣ Institutional Math (Pre-Signal) Validation**
+| File(s) | `server/services/fx5/filter-institutional-math.ts` |
+| Task | Validate and retain **Liquidity Guard (LQ)**, **Volume Noise Guard (VolNoise)**, and **Correlation Guard (ρ)** as active **pre-signal filters**. |
+| Note | Add clear header comment:  
+```ts
+/* Directive 10.9B - Verified Pre-Signal Math Guards (non-conflicting with SQE scoring) */
+``` |
+| Telemetry | Add guard results (`passed` / `failed`) to telemetry stream with tag `category: "pre-signal"`. |
+
+---
+
+### **4️⃣ FinalScore Migration**
+| File(s) | `server/services/signal-quality-evaluator.ts` |
+| Task | Ensure **FinalScore** and **RegimeWeight** checks occur *only* within SQE logic, not pre-signal or math guards. |
+| Formula |  
+```ts
+if (signal.finalScore < SQE_THRESHOLDS.MIN_FINAL_SCORE) return false;
+if (signal.regimeWeight < SQE_THRESHOLDS.MIN_REGIME_WEIGHT) return false;
+``` |
+| Remove | Any mention of FinalScore in `filter-institutional-math.ts`. |
+
+---
+
+### **5️⃣ Telemetry & Filter Insights Expansion**
+| File(s) | `server/services/telemetry-aggregator.ts`, `server/services/filter-insights.service.ts` |
+| Additions |  
+- Capture all **pre-signal filter outcomes** (Volume, Liquidity, PriceRange, MarketCap, RegulatedOnly, InstitutionalMath).  
+- Emit JSON payloads `{ filterName, threshold, result, timestamp }`.  
+- Include `FILTER_SCHEMA_VERSION = "v1.1.0"`.  
+- Add field `phaseDirective: "10.9B"` to telemetry snapshots. |
+| Validation | Ensure parity between pre-signal logs and scoring logs (each filtered pair has traceable reason). |
+
+---
+
+### **6️⃣ Testing Suite Updates**
+| Area | Update |
+|------|---------|
+| Unit Tests | Remove tests for deprecated filters (Risk/Volatility/RSI). |
+| Add Tests |  
+- Institutional Math filters return expected telemetry results.  
+- SQE filters correctly apply FinalScore gating.  
+- Filter Insights telemetry emits new schema version and includes all filters. |
+| Run |  
+`npx vitest run fx5-filters.test.ts signal-quality-evaluator.test.ts telemetry-aggregator.test.ts` |
+
+---
+
+### **7️⃣ Documentation**
+| File | Update |
+|------|---------|
+| `architecture.md` | Add section “Directive 10.9B: Filter Deconfliction Hierarchy.” Document pre-signal vs. scoring pipeline order. |
+| `replit.md` | Note that legacy Risk/Volatility and RSI filters are now deprecated (backend removed, UI placeholders only). |
+
+---
+
+### ⚙️ **Implementation Guardrails**
+
+**Guardrail #1: No UI Deletions**  
+> Do not delete `.tsx` components or their imports in this directive.  
+> Instead, stub them with feature flag protection or return empty JSX fragments.  
+> Example:  
+```tsx
+{LEGACY_FILTERS_ENABLED && <RiskVolatilityFilter />}
+
+
+Guardrail #2: Telemetry First
+
+Deploy telemetry schema changes before any new filters are added to the UI in Directive 10.9C.
+
+Guardrail #3: Confirm Non-Conflict
+
+Verify that all active Institutional Math filters execute before signal orchestration but after FX5 universe selection.
+
+✅ Expected Outcomes
+
+Risk/Volatility and RSI backend logic fully removed, but UI components remain harmless placeholders.
+
+Institutional Math guards verified as compatible and retained.
+
+FinalScore moved exclusively to SQE.
+
+Telemetry expanded to capture all pre-signal filter outcomes.
+
+Full build passes with no UI import errors (protected by LEGACY flags).
+
+System ready for 10.9C visual cleanup.
+
+🧩 Execution Prompt for Replit
+@server/services/fx5/filter-risk-volatility.ts
+@server/services/fx5/filter-technical-indicators.ts
+@server/services/fx5/filter-institutional-math.ts
+@server/services/signal-quality-evaluator.ts
+@server/services/telemetry-aggregator.ts
+@server/services/filter-insights.service.ts
+@server/config/system-guards.ts
+@server/tests/unit/fx5-filters.test.ts
+@server/tests/unit/signal-quality-evaluator.test.ts
+@server/tests/unit/telemetry-aggregator.test.ts
+
+We are executing Phase 10, Directive 10.9B — Backend Filter Deconfliction & Deprecation (Logic-Only).
+
+Objective:
+Deactivate and remove backend logic for legacy filters while maintaining UI compatibility. Validate pre-signal guards, relocate FinalScore to SQE, and expand telemetry for filter insights.
+
+Guardrails:
+- Do not delete UI components (flag them as inactive).
+- Validate telemetry schema versioning.
+- Confirm Institutional Math filters execute pre-signal only.
+
+Expected Outcome:
+Build remains stable; deprecated filters return “inactive” responses; telemetry captures full pre-signal filtering; system ready for Directive 10.9C (UI cleanup).
+
+🧠
