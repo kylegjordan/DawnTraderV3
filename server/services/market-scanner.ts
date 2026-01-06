@@ -129,6 +129,7 @@ type HistoryFilterContext = {
 if (!(globalThis as any).__reb211_stressCycleCount) (globalThis as any).__reb211_stressCycleCount = { paper: 0, live: 0 };
 
 // REB 2.11 A1: Drift Snapshot Type (20-cycle rolling window)
+// Directive 10.9E: Removed range from failures (deprecated volatility filter)
 export interface REB211DriftSnapshot {
   cycle: number;
   mode: 'paper' | 'live';
@@ -139,7 +140,6 @@ export interface REB211DriftSnapshot {
     price: number;
     volume: number;
     spread: number;
-    range: number;
     stablecoin: number;
     history: number;
   };
@@ -1022,6 +1022,7 @@ const rotationState = {
   tierBIndex: 0,
 };
 
+// Directive 10.9E: Removed failed_daily_range from breakdown (deprecated volatility filter)
 export interface BatchResult {
   survivors: Array<{
     symbol: string;
@@ -1034,13 +1035,13 @@ export interface BatchResult {
   breakdown: {
     failed_min_volume: number;
     failed_spread: number;
-    failed_daily_range: number;
     failed_min_price: number;
     failed_stablecoin: number;
     failed_quote_currency: number;
     failed_history: number;
     failed_market_cap: number;
     failed_guardrail_risk: number;
+    failed_correlation: number; // 10.9C: Correlation Guard (ρ ≤ 0.75)
     already_active: number;
     passed_all_filters: number;
   };
@@ -1597,7 +1598,6 @@ export async function collectMixedBatch(
       price: breakdown.failed_min_price,
       volume: breakdown.failed_min_volume,
       spread: breakdown.failed_spread,
-      range: breakdown.failed_daily_range,
       stablecoin: breakdown.failed_stablecoin,
       history: breakdown.failed_history,
     },
@@ -1718,10 +1718,10 @@ export async function collectMixedBatch(
   // Calculate metrics
   const evaluatedCount = batch.length; // 60 (batch size)
   const eligibleCount = breakdown.passed_all_filters + breakdown.already_active;
+  // Directive 10.9E: Removed failed_daily_range from count
   const ineligibleCount = 
     breakdown.failed_min_volume +
     breakdown.failed_spread +
-    breakdown.failed_daily_range +
     breakdown.failed_min_price +
     breakdown.failed_stablecoin +
     breakdown.failed_quote_currency +
