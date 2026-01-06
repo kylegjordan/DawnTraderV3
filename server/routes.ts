@@ -650,6 +650,19 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Directive 10.9D: Telemetry Summary endpoint for Diagnostics UI
+  apiRouter.get('/telemetry/summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { getTelemetryAggregator } = await import('./services/telemetry-aggregator.js');
+      const aggregator = getTelemetryAggregator();
+      const summary = aggregator.getTelemetrySummaryWithCoefficients();
+      res.json(summary);
+    } catch (error: any) {
+      console.error('[10.9D] Error fetching telemetry summary:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Phase 31.K - LATTI Learning Insights Endpoint
   apiRouter.get('/system/latti-insights', async (_req, res) => {
     try {

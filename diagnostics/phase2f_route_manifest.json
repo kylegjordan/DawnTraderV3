@@ -94,6 +94,16 @@
     ]
   },
   {
+    "path": "/api/telemetry/summary",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/system/latti-insights",
     "methods": [
       "GET"

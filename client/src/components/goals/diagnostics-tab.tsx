@@ -1,28 +1,164 @@
 /**
- * Directive 9.6.D - UI Diagnostics Tab
+ * Directive 10.9D - UI Diagnostics Tab with Dynamic Telemetry
  * 
- * Displays math integrity status and guard configuration for the Goals Engine.
- * Shows Phase 9 system guards and configuration version.
+ * Displays math integrity status, guard configuration, and dynamic backend telemetry.
+ * Shows Phase 10 system guards and schema version synchronization.
  * 
- * Tags: [9.6][UI]
+ * Tags: [10.9D][UI]
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle, Shield, Activity, Settings } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useQuery } from "@tanstack/react-query";
+import { CheckCircle, Shield, Activity, Settings, RefreshCw, AlertTriangle, Database } from "lucide-react";
+import { useState, useEffect } from "react";
+
+const UI_SCHEMA_VERSION = "v1.2.1";
+const UI_PHASE_DIRECTIVE = "10.9D";
 
 const SYSTEM_GUARDS = {
-  VERSION: "Phase9_Final",
+  VERSION: "Phase10_Final",
   MIN_LIQUIDITY_SCORE: 40,
   MAX_VOL_NOISE: 0.6,
   BASE_FEE_SLIPPAGE: 0.005,
   CORRELATION_THRESHOLD: 0.75,
+  MIN_FINAL_SCORE: 0.35,
+  MIN_REGIME_WEIGHT: 0.30,
   PARITY_TOLERANCE: 0.000001,
 };
 
+interface TelemetrySummary {
+  version: string;
+  pairCount: number;
+  totalSamples: number;
+  weights: {
+    hybrid: number;
+    confidence: number;
+    regime: number;
+    decay: number;
+  };
+  phaseDirective: string;
+  filterSchemaVersion: string;
+  timestamp: string;
+}
+
 export default function DiagnosticsTab() {
+  const [lastUpdate, setLastUpdate] = useState<string>(new Date().toISOString());
+
+  const { data: telemetry, isLoading, error, refetch } = useQuery<TelemetrySummary>({
+    queryKey: ['/api/telemetry/summary'],
+    queryFn: async () => {
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+      const response = await fetch('/api/telemetry/summary', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch telemetry summary');
+      }
+      return response.json();
+    },
+    refetchInterval: 60000,
+  });
+
+  useEffect(() => {
+    if (telemetry) {
+      setLastUpdate(new Date().toISOString());
+    }
+  }, [telemetry]);
+
+  const backendPhase = telemetry?.phaseDirective || 'Unknown';
+  const hasVersionMismatch = backendPhase !== UI_PHASE_DIRECTIVE;
+
   return (
     <div className="space-y-6">
+      {/* Telemetry Snapshot Panel - Directive 10.9D */}
+      <Card className="border-2 border-blue-200 dark:border-blue-800">
+        <CardHeader className="bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20">
+          <CardTitle className="flex items-center gap-2">
+            <Database className="w-5 h-5 text-blue-600" />
+            Telemetry Snapshot (Phase 10.9)
+            <button 
+              onClick={() => refetch()} 
+              className="ml-auto p-1 hover:bg-blue-100 dark:hover:bg-blue-800 rounded"
+              title="Refresh telemetry"
+            >
+              <RefreshCw className="w-4 h-4 text-blue-600" />
+            </button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-4 space-y-4">
+          {isLoading ? (
+            <Skeleton className="h-32 w-full" />
+          ) : error ? (
+            <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <p className="text-sm text-amber-700 dark:text-amber-300">
+                Unable to fetch telemetry data. Backend may be starting up.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {/* Filter Schema Version */}
+              <div className="p-3 border rounded-lg bg-muted/30">
+                <div className="text-xs text-muted-foreground mb-1">Filter Schema Version</div>
+                <Badge variant="outline" className="font-mono">
+                  {telemetry?.filterSchemaVersion || 'v1.2.0'}
+                </Badge>
+              </div>
+
+              {/* UI Schema Version */}
+              <div className="p-3 border rounded-lg bg-muted/30">
+                <div className="text-xs text-muted-foreground mb-1">UI Schema Version</div>
+                <Badge variant="outline" className="font-mono">{UI_SCHEMA_VERSION}</Badge>
+              </div>
+
+              {/* Phase Directive with mismatch indicator */}
+              <div className={`p-3 border rounded-lg ${hasVersionMismatch ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800' : 'bg-muted/30'}`}>
+                <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                  Phase Directive
+                  {hasVersionMismatch && <AlertTriangle className="w-3 h-3 text-amber-500" />}
+                </div>
+                <div className="text-xs font-mono">
+                  <span className="font-semibold">Backend:</span> {backendPhase}
+                  {' | '}
+                  <span className="font-semibold">Frontend:</span> {UI_PHASE_DIRECTIVE}
+                </div>
+                {hasVersionMismatch && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                    Version mismatch - partial deployment
+                  </p>
+                )}
+              </div>
+
+              {/* Score Weights Version */}
+              <div className="p-3 border rounded-lg bg-muted/30">
+                <div className="text-xs text-muted-foreground mb-1">Score Weights Version</div>
+                <Badge variant="outline" className="font-mono">
+                  {telemetry?.version || 'v1.0.1'}
+                </Badge>
+              </div>
+
+              {/* 24h Pair Count */}
+              <div className="p-3 border rounded-lg bg-muted/30">
+                <div className="text-xs text-muted-foreground mb-1">Telemetry Pairs (24h)</div>
+                <span className="text-lg font-bold">{telemetry?.pairCount || 0}</span>
+              </div>
+
+              {/* Last Update */}
+              <div className="p-3 border rounded-lg bg-muted/30">
+                <div className="text-xs text-muted-foreground mb-1">Last Update</div>
+                <span className="text-xs font-mono">
+                  {new Date(lastUpdate).toLocaleTimeString()}
+                </span>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Math Integrity Panel */}
       <Card className="border-2 border-violet-200 dark:border-violet-800">
         <CardHeader className="bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20">
           <CardTitle className="flex items-center gap-2">
@@ -43,7 +179,7 @@ export default function DiagnosticsTab() {
             <div className="p-4 border rounded-lg bg-muted/30">
               <div className="flex items-center gap-2 mb-2">
                 <Shield className="w-4 h-4 text-violet-600" />
-                <span className="font-semibold text-sm">Active Guards</span>
+                <span className="font-semibold text-sm">Institutional Math Guards</span>
               </div>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
@@ -51,15 +187,11 @@ export default function DiagnosticsTab() {
                   <span className="font-mono font-semibold">≥ {SYSTEM_GUARDS.MIN_LIQUIDITY_SCORE}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Noise Limit</span>
+                  <span className="text-muted-foreground">Noise Limit (VolNoise)</span>
                   <span className="font-mono font-semibold">≤ {SYSTEM_GUARDS.MAX_VOL_NOISE}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Fee + Slippage</span>
-                  <span className="font-mono font-semibold">{(SYSTEM_GUARDS.BASE_FEE_SLIPPAGE * 100).toFixed(1)}%</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Correlation</span>
+                  <span className="text-muted-foreground">Correlation (ρ)</span>
                   <span className="font-mono font-semibold">≤ {SYSTEM_GUARDS.CORRELATION_THRESHOLD}</span>
                 </div>
               </div>
@@ -68,16 +200,20 @@ export default function DiagnosticsTab() {
             <div className="p-4 border rounded-lg bg-muted/30">
               <div className="flex items-center gap-2 mb-2">
                 <Settings className="w-4 h-4 text-violet-600" />
-                <span className="font-semibold text-sm">Configuration</span>
+                <span className="font-semibold text-sm">SQE Gates (10.9D)</span>
               </div>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Version</span>
-                  <Badge variant="outline" className="font-mono">{SYSTEM_GUARDS.VERSION}</Badge>
+                  <span className="text-muted-foreground">FinalScore Gate</span>
+                  <span className="font-mono font-semibold">≥ {SYSTEM_GUARDS.MIN_FINAL_SCORE}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Parity Tolerance</span>
-                  <span className="font-mono font-semibold">{SYSTEM_GUARDS.PARITY_TOLERANCE}</span>
+                  <span className="text-muted-foreground">RegimeWeight Gate</span>
+                  <span className="font-mono font-semibold">≥ {SYSTEM_GUARDS.MIN_REGIME_WEIGHT}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Fee + Slippage</span>
+                  <span className="font-mono font-semibold">{(SYSTEM_GUARDS.BASE_FEE_SLIPPAGE * 100).toFixed(1)}%</span>
                 </div>
               </div>
             </div>
@@ -85,17 +221,18 @@ export default function DiagnosticsTab() {
         </CardContent>
       </Card>
 
+      {/* Phase 10 Modules */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Phase 9 Modules</CardTitle>
+          <CardTitle className="text-sm">Phase 10 Modules</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
-              { name: "Directive 9.2", desc: "Trailing Exit", status: "active" },
-              { name: "Directive 9.3", desc: "Kalman Filter", status: "active" },
-              { name: "Directive 9.4", desc: "Covariance Guard", status: "active" },
-              { name: "Directive 9.5", desc: "CWQI Gate", status: "active" },
+              { name: "Directive 10.9A", desc: "Config Purification", status: "active" },
+              { name: "Directive 10.9B", desc: "Filter Deconfliction", status: "active" },
+              { name: "Directive 10.9C", desc: "Filter Modernization", status: "active" },
+              { name: "Directive 10.9D", desc: "UI & Diagnostics", status: "active" },
             ].map((module) => (
               <div key={module.name} className="p-3 border rounded-lg text-center">
                 <div className="text-xs font-semibold text-violet-600 dark:text-violet-400">{module.name}</div>
@@ -111,8 +248,9 @@ export default function DiagnosticsTab() {
 
       <div className="p-4 bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 rounded-lg">
         <p className="text-xs text-violet-700 dark:text-violet-300">
-          <strong>Directive 9.6:</strong> All Phase 9 modules import thresholds from a centralized configuration (system-guards.ts).
-          This ensures Live and VTS (simulation) engines produce identical outputs under identical market conditions.
+          <strong>Directive 10.9D:</strong> Phase 10 completes the UI modernization with dynamic telemetry, 
+          unified FinalScore + RegimeWeight filtering, and backend-frontend schema synchronization.
+          The system now displays live phase directive versions to detect partial deployments.
         </p>
       </div>
     </div>

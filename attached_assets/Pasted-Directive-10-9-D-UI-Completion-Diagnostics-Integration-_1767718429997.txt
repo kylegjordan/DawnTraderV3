@@ -1,0 +1,199 @@
+Directive 10.9 D — UI Completion & Diagnostics Integration (Final Version)
+Phase Context
+
+Preceded by:
+10.9A (Config Purification)
+10.9B (Backend Filter Deconfliction)
+10.9C (Filter Insights Modernization)
+
+Objective:
+Finalize all user-facing UI components and telemetry visualization to fully align the front-end experience with the backend’s unified math engine, filtering pipeline, and schema versioning.
+
+🧭 Architect’s Rationale (Why This Directive Matters)
+
+Directive 10.9D completes the modernization of the Screeners, Filter Insights, and Diagnostics UIs so that the frontend correctly reflects the backend’s Phase 10 intelligence layer.
+This ensures:
+
+The filters displayed match the actual logic being executed.
+
+The Signal Quality Evaluator (SQE) now visually mirrors its FinalScore + RegimeWeight filtering.
+
+System telemetry, schema versioning, and backend directive phase are transparent to operators.
+
+This directive transforms the UI from a “snapshot” view into a live reflection of system state — the last step before entering Phase 11’s trade control separation.
+
+🎯 Primary Goals
+
+Finalize Screeners Tab UI with correct active filters and section grouping.
+
+Move the Final Score Gate into the Signal Quality Evaluator (SQE) section.
+
+Clean up outdated notes, automation boxes, and legacy references.
+
+Verify Filter Insights shows the new rolling 24-hour Institutional Math metrics.
+
+Integrate a Diagnostics Telemetry Snapshot that reads from backend telemetry dynamically.
+
+Ensure full schema and phase version synchronization across backend and frontend.
+
+🧱 Task List
+Task 1 — Screeners Tab UI Cleanup
+
+Files:
+client/components/tabs/screeners/screeners-tab.tsx
+client/components/tabs/screeners/filters/
+
+Actions:
+
+Header Simplification
+
+Remove:
+
+“Toggle between LATTI autonomous optimization…”
+
+“System Guards Directive 9.1 Institutional Math”
+
+Remove “About Filter Automation” / Lottie box completely.
+
+Filter Grouping
+
+Create section “Institutional Math Guards” (after Market filters):
+
+Liquidity Guard (LQ ≥ 40)
+
+Noise Guard (VolNoise ≤ 0.6)
+
+Correlation Guard (ρ ≤ 0.75)
+
+SQE Filters (bottom section)
+
+Remove legacy filters: NGC, Risk, ProfitRate, CWQI.
+
+Add:
+
+FinalScore Gate ≥ 0.35 (moved here)
+
+RegimeWeight Gate ≥ 0.30
+
+Add info box:
+“Signals must meet both gates to pass the SQE review.”
+
+Update “How SQE Works” Text
+
+Replace CWQI/NGC description with FinalScore + RegimeWeight explanation.
+
+Add example thresholds and link to system-guards config.
+
+Styling & UX Polish
+
+Consistent card formatting, dividers, tooltips.
+
+Bold section headers: FX5 Filters, Institutional Math, SQE Filters.
+
+Task 2 — Filter Insights Verification
+
+Files:
+client/components/tabs/filter-insights/filter-insights.tsx
+
+Actions:
+
+Verify order:
+FX5 Filters → Market → Institutional Math (LQ, VolNoise, ρ).
+
+Confirm failed_correlation row appears with correct label and count.
+
+Remove any remaining CWQI / RSI / RiskVol rows.
+
+Check that the rolling 24-hour window data correctly aggregates and decays.
+
+Ensure tooltips reflect backend thresholds.
+
+Confirm consistency with backend schema version (v1.2.0).
+
+Task 3 — Diagnostics Tab: Dynamic Telemetry Snapshot
+
+Files:
+client/components/tabs/diagnostics/diagnostics-tab.tsx
+server/services/telemetry-aggregator.ts (data source only)
+
+Add section:
+
+Telemetry Snapshot (Phase 10.9)
+Displayed Fields
+Field	Source	Description
+filterSchemaVersion	backend telemetry	Current backend filter schema (e.g. v1.2.0)
+uiSchemaVersion	frontend constant	UI schema (v1.2.1)
+phaseDirective	backend telemetry (dynamic)	Live value returned from backend (phaseDirective field in telemetry API).
+⚙️ Do not hardcode. If backend=10.9C and frontend=10.9D, display both — mismatch indicates partial deployment.*
+24h Pass Rate	filter-insights service	% of pairs surviving all filters in last 24 h
+Last Update	system timestamp	Auto-refresh every 60 seconds
+Implementation Notes
+
+Use /api/telemetry/summary endpoint.
+
+Compare phaseDirective backend vs. UI and display as:
+
+“Backend: 10.9C | Frontend: 10.9D”
+with a ⚠️ icon if mismatched.
+
+Read-only panel (no controls).
+
+Task 4 — Documentation & Schema Sync
+
+Bump UI_SCHEMA_VERSION → v1.2.1.
+
+Update replit.md with screenshots showing new Screeners layout and Diagnostics telemetry panel.
+
+Confirm backend telemetry now includes:
+
+filterSchemaVersion: "v1.2.0"
+
+phaseDirective: "10.9C" (dynamic)
+
+SCORE_WEIGHTS_VERSION: "v1.0.1"
+
+Verify both schema versions and phaseDirective appear in Diagnostics panel.
+
+Task 5 — Testing
+
+UI snapshot tests for:
+
+Correct grouping and section order.
+
+Absence of legacy filters.
+
+FinalScore + RegimeWeight visible.
+
+Integration test verifying /api/telemetry/summary feeds Diagnostics correctly and dynamically.
+
+Full test suite: expect ~325 passing tests.
+
+✅ Expected Outcome
+Component	Result
+Screeners Tab	Modernized layout, correct grouping, SQE gates shown at bottom.
+Filter Insights Tab	Displays all 24-hour Institutional Math filters (LQ, VolNoise, ρ).
+Diagnostics Tab	Dynamic backend telemetry visible — shows phaseDirective mismatch if versions differ.
+Schemas	Backend v1.2.0 ↔ UI v1.2.1 synchronized.
+Legacy Elements	All removed: Lottie box, automation notes, CWQI/NGC filters.
+Tests	100 % pass, telemetry validated end-to-end.
+🧩 Directive Metadata
+
+Directive ID: 10.9 D
+
+Name: UI Completion & Diagnostics Integration
+
+Phase: 10
+
+Version: v1.0 Final
+
+Expected Duration: 2 days
+
+Success Criteria:
+
+Screeners tab clean and aligned.
+
+FinalScore correctly relocated.
+
+Telemetry panel dynamically reads backend phaseDirective.
+
+Backend ↔ Frontend schema versions visibly reconciled.

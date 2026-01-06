@@ -306,12 +306,12 @@ export class TelemetryAggregatorService {
         regime: coefficients.weights.REGIME,
         decay: coefficients.weights.DECAY,
       },
-      phaseDirective: '10.9C',
+      phaseDirective: '10.9D',
       filterSchemaVersion: FILTER_SCHEMA_VERSION,
       timestamp: new Date().toISOString(),
     };
     
-    console.log(`[10.9C][Telemetry] Summary with coefficients (${SCORE_WEIGHTS_VERSION}, filter=${FILTER_SCHEMA_VERSION}):`, JSON.stringify(summary));
+    console.log(`[10.9D][Telemetry] Summary with coefficients (${SCORE_WEIGHTS_VERSION}, filter=${FILTER_SCHEMA_VERSION}):`, JSON.stringify(summary));
     return summary;
   }
 }

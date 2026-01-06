@@ -701,79 +701,50 @@ export function FiltersWithOverride() {
           })}
         </div>
 
-        {/* Phase 8.8.4-B.2: Signal Quality Evaluator (SQE) Filters */}
+        {/* Directive 10.9D: Signal Quality Evaluator (SQE) Filters - Modernized */}
         <div className="mt-8 space-y-4">
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-emerald-500" />
             Signal Quality Evaluator (SQE) Filters
           </h3>
           <p className="text-sm text-muted-foreground">
-            These thresholds are applied automatically to filter trade signals before they enter the Ready-to-Buy queue.
-            Signals must pass all SQE criteria to be considered for execution.
+            Signals must meet both gates to pass the SQE review and enter the Ready-to-Buy queue.
           </p>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* NGC Filter */}
-            <div className="p-4 border rounded-lg bg-muted/30">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* FinalScore Gate */}
+            <div className="p-4 border-2 border-blue-200 dark:border-blue-800 rounded-lg bg-blue-50/50 dark:bg-blue-900/20">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">NGC</span>
+                <span className="text-sm font-semibold">FinalScore Gate</span>
                 <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded">Active</span>
               </div>
-              <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">&ge; 0.45</div>
-              <p className="text-xs text-muted-foreground mt-1">Normalized Global Confidence</p>
+              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">&ge; 0.35</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                FinalScore = hybridScore &times; 0.4 + confidence &times; 0.3 + regimeWeight &times; 0.2 - decayPenalty &times; 0.1
+              </p>
             </div>
 
-            {/* Risk Filter */}
-            <div className="p-4 border rounded-lg bg-muted/30">
+            {/* RegimeWeight Gate */}
+            <div className="p-4 border-2 border-purple-200 dark:border-purple-800 rounded-lg bg-purple-50/50 dark:bg-purple-900/20">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Risk</span>
+                <span className="text-sm font-semibold">RegimeWeight Gate</span>
                 <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded">Active</span>
               </div>
-              <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">&le; 0.85</div>
-              <p className="text-xs text-muted-foreground mt-1">Maximum risk score allowed</p>
-            </div>
-
-            {/* ProfitRate Filter */}
-            <div className="p-4 border rounded-lg bg-muted/30">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">ProfitRate</span>
-                <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded">Active</span>
-              </div>
-              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">&ge; 0.10</div>
-              <p className="text-xs text-muted-foreground mt-1">Minimum profit per time unit</p>
-            </div>
-
-            {/* CWQI Filter */}
-            <div className="p-4 border rounded-lg bg-muted/30">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">CWQI</span>
-                <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded">Active</span>
-              </div>
-              <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">&ge; 0.35</div>
-              <p className="text-xs text-muted-foreground mt-1">Confidence-Weighted Quality Index</p>
+              <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">&ge; 0.30</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Market regime alignment score based on trend and volatility conditions
+              </p>
             </div>
           </div>
 
           <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
             <p className="text-xs text-blue-700 dark:text-blue-300">
-              <strong>How SQE Works:</strong> Each trade signal is evaluated against these four metrics. 
-              NGC combines raw confidence with market volatility and risk conditions. 
-              ProfitRate measures expected return per time unit. 
-              CWQI is the overall quality score used for ranking signals in the queue.
+              <strong>How SQE Works:</strong> Each trade signal is evaluated against FinalScore and RegimeWeight thresholds. 
+              FinalScore combines hybrid ensemble scoring, predictive confidence, market regime alignment, and time decay. 
+              RegimeWeight ensures signals align with current market conditions. 
+              Both gates must pass for a signal to enter the Ready-to-Buy queue.
+              See system-guards.ts for threshold configuration.
             </p>
-          </div>
-        </div>
-
-        <div className="mt-6 p-4 bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-900/50 rounded-lg">
-          <div className="flex items-start gap-2">
-            <Info className="w-5 h-5 text-purple-600 dark:text-purple-400 mt-0.5" />
-            <div className="text-sm text-purple-900 dark:text-purple-100">
-              <p className="font-semibold mb-1">About Filter Automation</p>
-              <p className="text-purple-700 dark:text-purple-200/80">
-                LATTi continuously analyzes market conditions and adjusts filter parameters to maximize opportunity identification. 
-                Uncheck "Managed by LATTi" for any filter you want to control manually.
-              </p>
-            </div>
           </div>
         </div>
       </CardContent>
