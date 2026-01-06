@@ -1023,6 +1023,7 @@ const rotationState = {
 };
 
 // Directive 10.9E: Removed failed_daily_range from breakdown (deprecated volatility filter)
+// Directive 10.9F: Removed failed_quote_currency from breakdown (Quote Currency filter deprecated)
 export interface BatchResult {
   survivors: Array<{
     symbol: string;
@@ -1037,7 +1038,6 @@ export interface BatchResult {
     failed_spread: number;
     failed_min_price: number;
     failed_stablecoin: number;
-    failed_quote_currency: number;
     failed_history: number;
     failed_market_cap: number;
     failed_guardrail_risk: number;
@@ -1205,12 +1205,12 @@ export async function collectMixedBatch(
   // Initialize breakdown counters
   // 10.9C: Added failed_correlation for Correlation Guard (ρ ≤ 0.75)
   // Directive 10.9E: Removed failed_daily_range (deprecated volatility filter)
+  // Directive 10.9F: Removed failed_quote_currency (Quote Currency filter deprecated)
   const breakdown = {
     failed_min_volume: 0,
     failed_spread: 0,
     failed_min_price: 0,
     failed_stablecoin: 0,
-    failed_quote_currency: 0,
     failed_history: 0,
     failed_market_cap: 0,
     failed_guardrail_risk: 0,
@@ -1228,15 +1228,8 @@ export async function collectMixedBatch(
   const stablecoinPatterns = ['USDT', 'USDC', 'DAI', 'BUSD', 'UST'];
   const minHistoryDays = parsedFilters.minHistoryDays;
   
-  // Parse allowed quote currencies
-  let allowedQuotes: string[] = [];
-  try {
-    allowedQuotes = typeof filters.quoteCurrencies === 'string'
-      ? JSON.parse(filters.quoteCurrencies)
-      : (filters.quoteCurrencies ?? []);
-  } catch {
-    allowedQuotes = [];
-  }
+  // Directive 10.9F: Quote Currency filter REMOVED - all quote currencies now accepted
+  // Previously parsed allowedQuotes from filters.quoteCurrencies
   
   // REB 2.10: History filter context for passesHistoryFilter helper
   const historyFilterCtx: HistoryFilterContext = {
@@ -1719,12 +1712,12 @@ export async function collectMixedBatch(
   const evaluatedCount = batch.length; // 60 (batch size)
   const eligibleCount = breakdown.passed_all_filters + breakdown.already_active;
   // Directive 10.9E: Removed failed_daily_range from count
+  // Directive 10.9F: Removed failed_quote_currency from count
   const ineligibleCount = 
     breakdown.failed_min_volume +
     breakdown.failed_spread +
     breakdown.failed_min_price +
     breakdown.failed_stablecoin +
-    breakdown.failed_quote_currency +
     breakdown.failed_history +
     breakdown.failed_market_cap +
     breakdown.failed_guardrail_risk;

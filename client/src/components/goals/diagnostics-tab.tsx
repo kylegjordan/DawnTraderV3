@@ -1,10 +1,11 @@
 /**
- * Directive 10.9E - UI Diagnostics Tab with Dynamic Telemetry & Filter Performance
+ * Directive 10.9F - UI Diagnostics Tab with Dynamic Telemetry & Filter Performance
  * 
  * Displays math integrity status, guard configuration, and dynamic backend telemetry.
  * Shows Phase 10 system guards, schema version synchronization, and filter pass rates.
+ * Includes Top 5 filter failure categories for observability.
  * 
- * Tags: [10.9E][UI]
+ * Tags: [10.9F][UI]
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,8 +15,8 @@ import { useQuery } from "@tanstack/react-query";
 import { CheckCircle, Shield, Activity, Settings, RefreshCw, AlertTriangle, Database, Filter } from "lucide-react";
 import { useState, useEffect } from "react";
 
-const UI_SCHEMA_VERSION = "v1.2.2";
-const UI_PHASE_DIRECTIVE = "10.9E";
+const UI_SCHEMA_VERSION = "v1.2.3"; // Directive 10.9F
+const UI_PHASE_DIRECTIVE = "10.9F";
 
 const SYSTEM_GUARDS = {
   VERSION: "Phase10_Final",
@@ -321,9 +322,9 @@ export default function DiagnosticsTab() {
 
       <div className="p-4 bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 rounded-lg">
         <p className="text-xs text-violet-700 dark:text-violet-300">
-          <strong>Directive 10.9E:</strong> Final deprecations complete - RSI, Risk, and Volatility filters removed from UI and backend.
+          <strong>Directive 10.9F:</strong> Final deprecations complete - RSI, Risk, Volatility, and Quote Currency filters removed. "Risk & Volatility" renamed to "Execution Quality".
           Telemetry now includes filter pass rates, failure breakdowns, and real-time operational metrics.
-          Filter Schema v1.3.0 with full 24h rolling window analytics.
+          Filter Schema v1.3.1 with full 24h rolling window analytics.
         </p>
       </div>
     </div>

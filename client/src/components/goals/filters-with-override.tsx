@@ -60,8 +60,9 @@ interface FiltersV2Response {
 }
 
 /**
- * Directive 10.9E: Filter categories for UI display
- * DEPRECATED/REMOVED: 'Technical Indicators' (RSI), 'Volatility' (Min/Max Volatility)
+ * Directive 10.9F: Filter categories for UI display
+ * DEPRECATED/REMOVED: 'Technical Indicators' (RSI), 'Volatility' (Min/Max Volatility), 'Quote Currencies'
+ * RENAMED: 'Risk & Volatility' -> 'Execution Quality' (only Max Bid-Ask Spread remains)
  */
 const FILTER_CATEGORIES: Record<string, { icon: string; color: string }> = {
   'Volume & Liquidity': { icon: '💧', color: 'bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700' },
@@ -70,6 +71,7 @@ const FILTER_CATEGORIES: Record<string, { icon: string; color: string }> = {
   'Asset Type': { icon: '🏷️', color: 'bg-red-100 dark:bg-red-900/30 border-red-300 dark:border-red-700' },
   'Data Quality': { icon: '📋', color: 'bg-teal-100 dark:bg-teal-900/30 border-teal-300 dark:border-teal-700' },
   'Market Configuration': { icon: '🎯', color: 'bg-indigo-100 dark:bg-indigo-900/30 border-indigo-300 dark:border-indigo-700' },
+  'Execution Quality': { icon: '🎛️', color: 'bg-amber-100 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700' },
   'Other': { icon: '⚙️', color: 'bg-gray-100 dark:bg-gray-900/30 border-gray-300 dark:border-gray-700' },
 };
 

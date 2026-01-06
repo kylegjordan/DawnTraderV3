@@ -328,7 +328,7 @@ export class TelemetryAggregatorService {
         failedByCategory: stats.failuresByFilter,
       };
     } catch (error) {
-      console.warn('[10.9E][Telemetry] FilterInsights not available for summary:', error);
+      console.warn('[10.9F][Telemetry] FilterInsights not available for summary:', error);
     }
     
     const summary = {
@@ -341,13 +341,13 @@ export class TelemetryAggregatorService {
         regime: coefficients.weights.REGIME,
         decay: coefficients.weights.DECAY,
       },
-      phaseDirective: '10.9E',
+      phaseDirective: '10.9F',
       filterSchemaVersion: FILTER_SCHEMA_VERSION,
       timestamp: new Date().toISOString(),
       ...filterPerformance,
     };
     
-    console.log(`[10.9E][Telemetry] Summary with coefficients (${SCORE_WEIGHTS_VERSION}, filter=${FILTER_SCHEMA_VERSION}):`, JSON.stringify(summary));
+    console.log(`[10.9F][Telemetry] Summary with coefficients (${SCORE_WEIGHTS_VERSION}, filter=${FILTER_SCHEMA_VERSION}):`, JSON.stringify(summary));
     return summary;
   }
 }

@@ -52,8 +52,16 @@ The system incorporates Verification & Config Purification, Backend Filter Decon
 - REMOVED: `volatilityMin`, `volatilityMax` (Risk & Volatility) - No longer used in pre-signal filtering
 - REMOVED: Backend filter functions `applyRSIFilter`, `applyVolatilityFilter` invocations
 - REMOVED: UI sections for "Technical Indicators" and "Volatility" categories
-- SCHEMA: FILTER_SCHEMA_VERSION bumped to v1.3.0, UI_SCHEMA_VERSION bumped to v1.2.2
-- ACTIVE FILTERS (11): Volume, Liquidity (LQ), VolNoise, Correlation (ρ), PriceRange, MinPrice, MaxSpread, Stablecoin, QuoteCurrency, History, passed_all_filters
+- SCHEMA: FILTER_SCHEMA_VERSION v1.3.0, UI_SCHEMA_VERSION v1.2.2
+
+**Directive 10.9F Deprecation Log (January 2026):**
+- REMOVED: `quoteCurrencies` filter - All quote currencies now accepted by default
+- REMOVED: `failed_quote_currency` from breakdown counters and BatchResult interface
+- REMOVED: `allowedQuotes` parsing logic from market-scanner.ts
+- REMOVED: `QuoteCurrency` from ACTIVE_FILTER_NAMES (now 9 filters)
+- RENAMED: "Risk & Volatility" UI section -> "Execution Quality" (only Max Bid-Ask Spread remains)
+- SCHEMA: FILTER_SCHEMA_VERSION bumped to v1.3.1, UI_SCHEMA_VERSION bumped to v1.2.3
+- ACTIVE FILTERS (9): Volume, Liquidity (LQ), VolNoise, Correlation (ρ), PriceRange, MinPrice, MaxSpread, Stablecoin, History
 - INSTITUTIONAL MATH GUARDS: LQ ≥ 40, VolNoise ≤ 0.6, ρ ≤ 0.75 (remain active)
 
 ## External Dependencies

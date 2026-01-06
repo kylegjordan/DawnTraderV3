@@ -1,0 +1,192 @@
+⚙️ Directive 10.9F — Execution Quality & Telemetry Enhancement
+Phase Context
+
+Preceded by:
+10.9E — Final Deprecations & Telemetry Expansion
+
+Objective:
+Finalize cleanup of residual legacy filter scaffolding, rename outdated UI sections, and enhance the telemetry diagnostics with per-filter failure analytics for improved observability and system transparency.
+
+🎯 Primary Goals
+
+Remove all remaining backend logic for the deprecated Quote Currency filter.
+
+Rename Risk & Volatility → Execution Quality, retaining only Max Bid-Ask Spread (%) as an active execution-quality control.
+
+Extend Diagnostics Telemetry Snapshot to display real-time filter failure analytics.
+
+Synchronize schema and documentation for consistency.
+
+🧱 Task List
+Task 1 — Remove Quote Currency Filter (Backend Only)
+
+Files:
+server/core/filter_chain.ts
+server/config/filter-defaults.ts
+server/services/fx5-scanner.ts
+server/routes/api/filter-insights.ts
+
+Actions:
+
+Delete all references to quoteCurrencyFilter, allowedQuotes, or failed_quote_currency.
+
+Remove any conditions checking pair.quoteCurrency or related filter gating.
+
+Ensure no reference remains in:
+
+filterBreakdown objects
+
+filterResults maps
+
+FX5 24h filter insights service
+
+Confirm telemetry and filter breakdown aggregation remain valid after removal.
+
+Increment schema version:
+
+export const FILTER_SCHEMA_VERSION = "v1.3.1";
+
+
+Expected Result:
+The Quote Currency filter is no longer initialized, executed, or logged anywhere in the pipeline.
+All pairs pass this step by default.
+
+Task 2 — Rename UI Section “Risk & Volatility” → “Execution Quality”
+
+Files:
+client/components/tabs/screeners/screeners-tab.tsx
+
+Actions:
+
+Rename section header:
+
+From: "Risk & Volatility"
+
+To: "Execution Quality"
+
+Retain only:
+
+Max Bid-Ask Spread (%) ≤ 2.0
+
+
+Update help text to:
+
+“Controls execution quality by filtering pairs with wide bid-ask spreads that can increase trading costs.”
+
+Remove any icons or tooltips referencing “volatility” or “risk” to prevent confusion.
+
+Expected Result:
+The Screeners tab now accurately reflects current live filters and terminology.
+
+Task 3 — Telemetry Expansion: Top Filter Failures (24h)
+
+Files:
+server/services/telemetry-aggregator.ts
+client/components/tabs/diagnostics/diagnostics-tab.tsx
+
+Backend Changes:
+
+Extend /api/telemetry/summary response:
+
+{
+  "filterSchemaVersion": "v1.3.1",
+  "uiSchemaVersion": "v1.2.3",
+  "phaseDirective": "10.9F",
+  "scoreWeightsVersion": "v1.0.1",
+  "fx5Evaluated24h": 1286,
+  "fx5Passed24h": 294,
+  "passRate24h": 22.8,
+  "failedByCategory": {
+    "VolNoise": 148,
+    "Liquidity": 91,
+    "Correlation": 60,
+    "MinPrice": 45,
+    "Stablecoin": 22
+  },
+  "lastUpdate": "2026-01-07T09:00:00Z"
+}
+
+
+Pull failedByCategory from FilterInsightsService.getFilterStats()’s breakdown map.
+
+Limit to Top 5 categories by failure count.
+
+Add passRate24h = fx5Passed24h / fx5Evaluated24h * 100.
+
+Frontend Changes:
+
+In Diagnostics → Telemetry Snapshot, add a new subpanel below “Filter Performance (Last 24h):”
+
+Top Filter Failures (24h)
+• VolNoise — 148
+• Liquidity — 91
+• Correlation — 60
+• MinPrice — 45
+• Stablecoin — 22
+
+
+Include a ⚠️ warning icon if the top failure count exceeds 100 or if passRate24h < 10%.
+
+Auto-refresh this panel every 60 seconds (same interval as other telemetry data).
+
+Expected Result:
+The operator can now see not only system health but also which filters are causing the most rejections in real time.
+
+Task 4 — Documentation & Test Suite
+
+Files:
+replit.md, tests/integration/telemetry-summary.test.ts, tests/ui/screeners-snapshot.test.ts
+
+Actions:
+
+Document:
+
+Full removal of Quote Currency filter.
+
+UI section rename to “Execution Quality.”
+
+Addition of per-filter breakdown telemetry.
+
+Add tests verifying:
+
+failedByCategory is returned with valid structure.
+
+UI correctly renders top 5 failures.
+
+Update schema references:
+
+Backend: v1.3.1
+
+UI: v1.2.3
+
+✅ Expected Outcome
+Component	Result
+Backend Filters	Quote Currency fully removed
+Filter Schema	v1.3.1
+Screeners Tab	“Execution Quality” replaces “Risk & Volatility”
+Active Filters	Max Bid-Ask Spread (%) retained
+Telemetry Snapshot	Shows per-filter failure counts
+UI Schema	v1.2.3
+Tests	100% passing (~360 tests)
+Docs	Updated and version-synced
+🧩 Directive Metadata
+
+Directive ID: 10.9F
+
+Name: Execution Quality & Telemetry Enhancement
+
+Phase: 10
+
+Version: v1.0
+
+Expected Duration: 1 day
+
+Success Criteria:
+
+Quote Currency fully removed from backend and telemetry.
+
+“Execution Quality” section correctly labeled and active.
+
+Telemetry dashboard shows top 5 failure categories with 24h rolling data.
+
+Schema v1.3.1 synchronized and documented.

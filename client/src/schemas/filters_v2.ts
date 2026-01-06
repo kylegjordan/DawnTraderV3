@@ -20,7 +20,8 @@ export interface FilterParamV2 {
   description?: string;           // Tooltip description
 }
 
-// Filters V2 structure (all screener filters with metadata)
+// Filters V2 structure (active screener filters with metadata)
+// Directive 10.9F: Deprecated filters removed (volatility, RSI, quoteCurrencies)
 export interface FiltersV2 {
   mode: "paper" | "live";
   
@@ -32,23 +33,16 @@ export interface FiltersV2 {
   minPrice: FilterParamV2;
   maxPrice: FilterParamV2;
   
-  // Risk & Volatility
+  // Execution Quality (10.9F: renamed from Risk & Volatility)
   maxBidAskSpread: FilterParamV2;
-  volatilityMin: FilterParamV2;
-  volatilityMax: FilterParamV2;
   
   // Market Filters
   minMarketCap: FilterParamV2;
   excludeStablecoins: FilterParamV2;
   allowRegulatedOnly: FilterParamV2;
   
-  // RSI Range
-  rsiMin: FilterParamV2;
-  rsiMax: FilterParamV2;
-  
-  // Universe & Signal Controls (Phase 27.F.14)
+  // Universe & Signal Controls
   universeSize: FilterParamV2;
-  quoteCurrencies: FilterParamV2;
   activeTimeframes: FilterParamV2;
   confidenceThreshold: FilterParamV2;
   
@@ -57,13 +51,14 @@ export interface FiltersV2 {
 }
 
 // Filter categories for UI grouping
+// Directive 10.9F: RISK renamed to EXECUTION_QUALITY, TECHNICAL deprecated
 export const FILTER_CATEGORIES = {
   VOLUME: "Volume & Liquidity",
   PRICE: "Price Range",
-  RISK: "Risk & Volatility",
+  EXECUTION_QUALITY: "Execution Quality",  // 10.9F: Renamed from "Risk & Volatility"
   MARKET: "Market Filters",
-  TECHNICAL: "Technical Indicators",
-  UNIVERSE: "Universe & Signal Controls"
+  UNIVERSE: "Universe & Signal Controls",
+  DATA_QUALITY: "Data Quality"
 } as const;
 
 // Filter metadata definitions (used by UI to render controls)
@@ -95,21 +90,10 @@ export const FILTER_METADATA: Record<string, Omit<FilterParamV2, "value" | "mana
   maxBidAskSpread: {
     name: "maxBidAskSpread",
     displayName: "Max Bid-Ask Spread (%)",
-    category: FILTER_CATEGORIES.RISK,
-    description: "Maximum allowed spread percentage"
+    category: FILTER_CATEGORIES.EXECUTION_QUALITY, // 10.9F: Renamed from RISK
+    description: "Controls execution quality by filtering pairs with wide bid-ask spreads"
   },
-  volatilityMin: {
-    name: "volatilityMin",
-    displayName: "Min Volatility (%)",
-    category: FILTER_CATEGORIES.RISK,
-    description: "Minimum price volatility percentage"
-  },
-  volatilityMax: {
-    name: "volatilityMax",
-    displayName: "Max Volatility (%)",
-    category: FILTER_CATEGORIES.RISK,
-    description: "Maximum price volatility percentage"
-  },
+  // Directive 10.9F: volatilityMin/volatilityMax DEPRECATED - removed from active filters
   minMarketCap: {
     name: "minMarketCap",
     displayName: "Min Market Cap ($)",
@@ -128,30 +112,14 @@ export const FILTER_METADATA: Record<string, Omit<FilterParamV2, "value" | "mana
     category: FILTER_CATEGORIES.MARKET,
     description: "Only include regulated assets"
   },
-  rsiMin: {
-    name: "rsiMin",
-    displayName: "Min RSI",
-    category: FILTER_CATEGORIES.TECHNICAL,
-    description: "Minimum RSI indicator value"
-  },
-  rsiMax: {
-    name: "rsiMax",
-    displayName: "Max RSI",
-    category: FILTER_CATEGORIES.TECHNICAL,
-    description: "Maximum RSI indicator value"
-  },
+  // Directive 10.9E: rsiMin/rsiMax DEPRECATED - removed from active filters
   universeSize: {
     name: "universeSize",
     displayName: "Market Universe Size",
     category: FILTER_CATEGORIES.UNIVERSE,
     description: "Number of top pairs to evaluate (25-150)"
   },
-  quoteCurrencies: {
-    name: "quoteCurrencies",
-    displayName: "Quote Currencies",
-    category: FILTER_CATEGORIES.UNIVERSE,
-    description: "Allowed quote currencies (USD, EUR, USDT, etc.)"
-  },
+  // Directive 10.9F: quoteCurrencies DEPRECATED - all quote currencies now accepted
   activeTimeframes: {
     name: "activeTimeframes",
     displayName: "Active Timeframes",
@@ -190,6 +158,7 @@ export function toFiltersV2(dbRow: any): FiltersV2 {
     description: FILTER_METADATA[name]?.description
   });
 
+  // Directive 10.9F: Deprecated filters removed from output
   return {
     mode: dbRow.mode,
     minVolume: createParam("minVolume", parseFloat(dbRow.min_volume)),
@@ -197,15 +166,10 @@ export function toFiltersV2(dbRow: any): FiltersV2 {
     minPrice: createParam("minPrice", parseFloat(dbRow.min_price)),
     maxPrice: createParam("maxPrice", parseFloat(dbRow.max_price)),
     maxBidAskSpread: createParam("maxBidAskSpread", parseFloat(dbRow.max_bid_ask_spread)),
-    volatilityMin: createParam("volatilityMin", parseFloat(dbRow.volatility_min)),
-    volatilityMax: createParam("volatilityMax", parseFloat(dbRow.volatility_max)),
     minMarketCap: createParam("minMarketCap", parseFloat(dbRow.min_market_cap)),
     excludeStablecoins: createParam("excludeStablecoins", dbRow.exclude_stablecoins),
     allowRegulatedOnly: createParam("allowRegulatedOnly", dbRow.allow_regulated_only),
-    rsiMin: createParam("rsiMin", dbRow.rsi_min),
-    rsiMax: createParam("rsiMax", dbRow.rsi_max),
     universeSize: createParam("universeSize", dbRow.universe_size),
-    quoteCurrencies: createParam("quoteCurrencies", dbRow.quote_currencies),
     activeTimeframes: createParam("activeTimeframes", dbRow.active_timeframes),
     confidenceThreshold: createParam("confidenceThreshold", dbRow.confidence_threshold),
     lastUpdated: dbRow.updated_at

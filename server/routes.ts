@@ -2113,7 +2113,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             value: parseFloat(screenerData.maxBidAskSpread),
             ...getFilterOverride("maxBidAskSpread"),
             displayName: "Max Bid-Ask Spread (%)",
-            category: "Risk & Volatility"
+            category: "Execution Quality"  // Directive 10.9F: Renamed from "Risk & Volatility"
           },
           {
             name: "minMarketCap",
@@ -2143,13 +2143,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             displayName: "Market Universe Size",
             category: "Universe & Signal Controls"
           },
-          {
-            name: "quoteCurrencies",
-            value: screenerData.quoteCurrencies,
-            ...getFilterOverride("quoteCurrencies"),
-            displayName: "Quote Currencies",
-            category: "Universe & Signal Controls"
-          },
+          // Directive 10.9F: Quote Currency filter REMOVED - all quote currencies now accepted
           {
             name: "activeTimeframes",
             value: screenerData.activeTimeframes,

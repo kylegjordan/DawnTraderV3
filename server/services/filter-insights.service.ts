@@ -80,8 +80,8 @@ export interface PreSignalFilterInput {
 }
 
 /**
- * 10.9C: Active filter names (10 filters)
- * Deprecated: RSI, Risk/Volatility, CWQI Gate
+ * 10.9F: Active filter names (9 filters)
+ * Deprecated: RSI, Risk/Volatility, CWQI Gate, QuoteCurrency (10.9F)
  */
 export const ACTIVE_FILTER_NAMES = [
   'Volume',
@@ -92,7 +92,6 @@ export const ACTIVE_FILTER_NAMES = [
   'MinPrice',
   'MaxSpread',
   'Stablecoin',
-  'QuoteCurrency',
   'History',
 ] as const;
 
@@ -101,6 +100,7 @@ export type ActiveFilterName = typeof ACTIVE_FILTER_NAMES[number];
 /**
  * Filter display labels for UI
  */
+// Directive 10.9F: Removed QuoteCurrency label (filter deprecated)
 export const FILTER_LABELS: Record<string, string> = {
   'Volume': 'Min Volume',
   'Liquidity': 'Liquidity Guard (LQ ≥ 40)',
@@ -110,7 +110,6 @@ export const FILTER_LABELS: Record<string, string> = {
   'MinPrice': 'Min Price',
   'MaxSpread': 'Max Spread',
   'Stablecoin': 'Exclude Stablecoins',
-  'QuoteCurrency': 'Valid Quote Currency',
   'History': 'Min History Days',
 };
 
@@ -260,19 +259,7 @@ class FilterInsightsService {
       if (!passed) failedFilters.push('Stablecoin');
     }
 
-    // Quote Currency Filter
-    if (input.quoteCurrency !== undefined && input.allowedQuotes !== undefined) {
-      const passed = input.allowedQuotes.includes(input.quoteCurrency);
-      outcomes.push({
-        filterName: 'QuoteCurrency',
-        threshold: input.allowedQuotes.join(','),
-        actualValue: input.quoteCurrency,
-        result: passed ? 'passed' : 'failed',
-        timestamp: now,
-        category: 'pre-signal',
-      });
-      if (!passed) failedFilters.push('QuoteCurrency');
-    }
+    // Directive 10.9F: Quote Currency Filter REMOVED - all quote currencies now accepted
 
     // History Days Filter
     if (input.historyDays !== undefined && input.minHistoryDays !== undefined) {
@@ -294,7 +281,7 @@ class FilterInsightsService {
       outcomes,
       overallResult: failedFilters.length === 0 ? 'passed' : 'failed',
       failedFilters,
-      phaseDirective: '10.9E',
+      phaseDirective: '10.9F',
       schemaVersion: FILTER_SCHEMA_VERSION,
       timestamp: now,
     };
@@ -397,7 +384,7 @@ class FilterInsightsService {
       windowStart: windowStart.toISOString(),
       windowEnd: now.toISOString(),
       schemaVersion: FILTER_SCHEMA_VERSION,
-      phaseDirective: '10.9E',
+      phaseDirective: '10.9F',
     };
   }
 
@@ -427,7 +414,7 @@ class FilterInsightsService {
       failed: breakdown.failed,
       failuresByFilter,
       schemaVersion: FILTER_SCHEMA_VERSION,
-      phaseDirective: '10.9E',
+      phaseDirective: '10.9F',
     };
   }
 
@@ -467,7 +454,7 @@ class FilterInsightsService {
       legacyFiltersEnabled: FILTER_FLAGS.LEGACY_FILTERS_ENABLED,
       institutionalMathEnabled: FILTER_FLAGS.INSTITUTIONAL_MATH_ENABLED,
       schemaVersion: FILTER_SCHEMA_VERSION,
-      phaseDirective: '10.9E',
+      phaseDirective: '10.9F',
       activeFilters: ACTIVE_FILTER_NAMES,
       deprecatedFilters: ['RSI', 'Risk/Volatility', 'CWQI Gate'],
     };

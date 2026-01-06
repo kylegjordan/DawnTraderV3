@@ -23,24 +23,25 @@ describe('Directive 10.9C — Filter Insights Service', () => {
   });
 
   describe('Filter Schema Version', () => {
-    it('should have correct schema version v1.3.0', () => {
-      expect(FILTER_SCHEMA_VERSION).toBe('v1.3.0');
+    it('should have correct schema version v1.3.1', () => {
+      expect(FILTER_SCHEMA_VERSION).toBe('v1.3.1');
     });
 
     it('should include schema version in filter stats', () => {
       const stats = service.getFilterStats();
-      expect(stats.schemaVersion).toBe('v1.3.0');
+      expect(stats.schemaVersion).toBe('v1.3.1');
     });
 
-    it('should include phaseDirective 10.9E in stats', () => {
+    it('should include phaseDirective 10.9F in stats', () => {
       const stats = service.getFilterStats();
-      expect(stats.phaseDirective).toBe('10.9E');
+      expect(stats.phaseDirective).toBe('10.9F');
     });
   });
 
   describe('Active Filters Configuration', () => {
-    it('should have exactly 10 active filters', () => {
-      expect(ACTIVE_FILTER_NAMES.length).toBe(10);
+    it('should have exactly 9 active filters', () => {
+      // Directive 10.9F: QuoteCurrency removed, now 9 filters
+      expect(ACTIVE_FILTER_NAMES.length).toBe(9);
     });
 
     it('should include Liquidity Guard', () => {
@@ -171,7 +172,8 @@ describe('Directive 10.9C — Filter Insights Service', () => {
       expect(result.payload.failedFilters.length).toBe(3);
     });
 
-    it('should evaluate all 10 active filter types', () => {
+    it('should evaluate all 9 active filter types', () => {
+      // Directive 10.9F: QuoteCurrency removed, now 9 filters
       const result = service.evaluatePreSignalFilters({
         symbol: 'FULL/USD',
         mode: 'paper',
@@ -191,14 +193,12 @@ describe('Directive 10.9C — Filter Insights Service', () => {
         maxSpread: 2.0,
         isStablecoin: false,
         excludeStablecoins: true,
-        quoteCurrency: 'USD',
-        allowedQuotes: ['USD', 'EUR'],
         historyDays: 90,
         minHistoryDays: 30,
       });
 
       expect(result.passed).toBe(true);
-      expect(result.payload.outcomes.length).toBe(10);
+      expect(result.payload.outcomes.length).toBe(9);
     });
   });
 
@@ -325,8 +325,8 @@ describe('Directive 10.9C — Filter Insights Service', () => {
 
       expect(result.payload.symbol).toBe('TEST/USD');
       expect(result.payload.mode).toBe('paper');
-      expect(result.payload.phaseDirective).toBe('10.9E');
-      expect(result.payload.schemaVersion).toBe('v1.3.0');
+      expect(result.payload.phaseDirective).toBe('10.9F');
+      expect(result.payload.schemaVersion).toBe('v1.3.1');
       expect(result.payload.timestamp).toBeDefined();
       expect(result.payload.outcomes.length).toBeGreaterThan(0);
     });
@@ -415,8 +415,8 @@ describe('Directive 10.9C — Filter Insights Service', () => {
 
       expect(metadata.legacyFiltersEnabled).toBe(false);
       expect(metadata.institutionalMathEnabled).toBe(true);
-      expect(metadata.schemaVersion).toBe('v1.3.0');
-      expect(metadata.phaseDirective).toBe('10.9E');
+      expect(metadata.schemaVersion).toBe('v1.3.1');
+      expect(metadata.phaseDirective).toBe('10.9F');
       expect(metadata.activeFilters).toEqual(ACTIVE_FILTER_NAMES);
       expect(metadata.deprecatedFilters).toContain('RSI');
       expect(metadata.deprecatedFilters).toContain('CWQI Gate');
