@@ -98,13 +98,14 @@ export const ADAPTIVE_SCANNING_ENABLED = true;
 export const LEGACY_METRICS_ENABLED = false;
 
 /**
- * Directive 10.9: FinalScore filter configuration
+ * Directive 10.9D: FinalScore filter configuration (synchronized with SQE_THRESHOLDS)
  * FinalScore = hybridScore × 0.4 + confidence × 0.3 + regimeWeight × 0.2 - decayPenalty × 0.1
+ * Note: DEFAULT matches backend SQE_THRESHOLDS.MIN_FINAL_SCORE (0.35)
  */
 export const FINAL_SCORE_CONFIG = {
-  MIN: 0.5,
+  MIN: 0.2,
   MAX: 1.0,
-  DEFAULT: 0.6,
+  DEFAULT: 0.35,
   STEP: 0.05,
 };
 
