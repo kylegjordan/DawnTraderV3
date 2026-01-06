@@ -20,6 +20,7 @@ interface FilterBreakdown {
   failed_history: number;
   failed_market_cap: number;
   failed_guardrail_risk: number;
+  failed_correlation?: number; // 10.9C: Correlation Guard (ρ ≤ 0.75)
   already_active: number;
   passed_all_filters: number;
   failed_lq?: number;
@@ -142,9 +143,10 @@ const FILTER_DESCRIPTIONS: Record<string, string> = {
   failed_quote_currency: "Filters out pairs that do not use an approved quote currency (e.g., USD, EUR)",
   already_active: "Filters out pairs that already have an active position to avoid duplicate exposure",
   failed_history: "Filters out pairs lacking the required minimum number of historical trading days",
-  // Directive 10.9C: Institutional Math Guards (LQ, VolNoise active; CWQI deprecated)
+  // Directive 10.9C: Institutional Math Guards (LQ, VolNoise, Correlation active; CWQI deprecated)
   failed_lq: "Log-Liquidity Index below threshold (LQ < 40) - insufficient market depth",
   failed_noise: "Volatility Noise exceeds threshold (VolNoise > 0.6) - too choppy for reliable trading",
+  failed_correlation: "Portfolio correlation exceeds threshold (ρ > 0.75) - too correlated with existing positions",
   // failed_cwqi: deprecated in 10.9C - replaced by FinalScore/RegimeWeight at SQE level
 };
 
@@ -158,9 +160,10 @@ const FILTER_DISPLAY_NAMES: Record<string, string> = {
   failed_quote_currency: "Valid Quote Currency",
   already_active: "Already Active",
   failed_history: "History",
-  // Directive 10.9C: Institutional Math Guards (LQ, VolNoise active; CWQI deprecated)
+  // Directive 10.9C: Institutional Math Guards (LQ, VolNoise, Correlation active; CWQI deprecated)
   failed_lq: "Liquidity Guard (LQ ≥ 40)",
   failed_noise: "Noise Guard (VolNoise ≤ 0.6)",
+  failed_correlation: "Correlation Guard (ρ ≤ 0.75)",
   // failed_cwqi: deprecated - replaced by FinalScore at SQE level
 };
 
@@ -170,7 +173,7 @@ const THRESHOLD_CONCEPTUAL: Record<string, string> = {
   passed_all_filters: "No extra rules — count of pairs that passed every filter this scan",
 };
 
-// Directive 10.9C: Active filter categories (10 filters)
+// Directive 10.9C: Active filter categories (11 filters)
 // Deprecated: RSI, Risk/Volatility, CWQI Gate (replaced by FinalScore at SQE level)
 // Active Institutional Math Guards: LQ, VolNoise, Correlation (ρ)
 const ALLOWED_FILTER_CATEGORIES: (keyof FilterBreakdown)[] = [
@@ -185,6 +188,7 @@ const ALLOWED_FILTER_CATEGORIES: (keyof FilterBreakdown)[] = [
   // Directive 10.9C: Institutional Math Guards (3 active)
   'failed_lq',
   'failed_noise',
+  'failed_correlation', // 10.9C: Correlation Guard (ρ ≤ 0.75)
   // 'failed_cwqi', // 10.9C: Deprecated - replaced by FinalScore at SQE level
 ];
 
