@@ -4,6 +4,7 @@ import { stage3Cache, Stage3State, ActiveFilteredPair } from './stage3-state-cac
 // Phase 8.8.2B: Corrected FilterBreakdown schema (per future-state blueprint)
 // Removed: failed_blacklist, failed_whitelist, strategy_none_triggered
 // Added: failed_market_cap, already_active, passed_all_filters
+// 10.9C: Added failed_correlation for Correlation Guard (ρ ≤ 0.75)
 export type FilterBreakdown = {
   failed_min_volume: number;
   failed_spread: number;
@@ -14,6 +15,7 @@ export type FilterBreakdown = {
   failed_history: number;
   failed_market_cap: number;
   failed_guardrail_risk: number;
+  failed_correlation: number; // 10.9C: Correlation Guard (ρ ≤ 0.75)
   already_active: number;
   passed_all_filters: number;
 };

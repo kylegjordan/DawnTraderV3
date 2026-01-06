@@ -1214,6 +1214,7 @@ export async function collectMixedBatch(
   const alreadyActiveReportedList: string[] = [];
   
   // Initialize breakdown counters
+  // 10.9C: Added failed_correlation for Correlation Guard (ρ ≤ 0.75)
   const breakdown = {
     failed_min_volume: 0,
     failed_spread: 0,
@@ -1224,6 +1225,7 @@ export async function collectMixedBatch(
     failed_history: 0,
     failed_market_cap: 0,
     failed_guardrail_risk: 0,
+    failed_correlation: 0, // 10.9C: Correlation Guard (ρ ≤ 0.75)
     already_active: 0,
     passed_all_filters: 0,
   };

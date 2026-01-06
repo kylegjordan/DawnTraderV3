@@ -21,6 +21,7 @@ interface UniverseScanOptions {
   userId: string;
 }
 
+// 10.9C: Added failed_correlation for Correlation Guard (ρ ≤ 0.75)
 interface FilterBreakdown {
   failed_min_volume: number;
   failed_spread: number;
@@ -31,6 +32,7 @@ interface FilterBreakdown {
   failed_history: number;
   failed_market_cap: number;
   failed_guardrail_risk: number;
+  failed_correlation: number; // 10.9C: Correlation Guard (ρ ≤ 0.75)
   already_active: number;
   passed_all_filters: number;
 }
@@ -153,6 +155,7 @@ export class PaperSimDiagnosticService {
       failed_history: 0,
       failed_market_cap: 0,
       failed_guardrail_risk: 0,
+      failed_correlation: 0, // 10.9C
       already_active: 0,
       passed_all_filters: 0
     };

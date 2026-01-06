@@ -197,6 +197,7 @@ export function get24hSummary(mode: Mode): Scan24hResponse {
   const windowEnd = new Date(window[window.length - 1].completedAt).toISOString();
 
   // REB 2.8.8: Compute filter-level breakdown over 24h window
+  // 10.9C: Added failed_correlation for Correlation Guard (ρ ≤ 0.75)
   const filterNameMap: Record<string, string> = {
     failed_min_volume: 'Minimum Volume',
     failed_spread: 'Bid-Ask Spread',
@@ -207,6 +208,7 @@ export function get24hSummary(mode: Mode): Scan24hResponse {
     failed_history: 'Insufficient History',
     failed_market_cap: 'Market Cap',
     failed_guardrail_risk: 'Guardrail Risk',
+    failed_correlation: 'Correlation Guard (ρ ≤ 0.75)', // 10.9C
     already_active: 'Already Active',
     passed_all_filters: 'Passed All Filters',
   };

@@ -2469,6 +2469,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         { reason: 'History', count: breakdown.failed_history },
         { reason: 'Market Cap', count: breakdown.failed_market_cap },
         { reason: 'Risk Too High', count: breakdown.failed_guardrail_risk },
+        { reason: 'Correlation Guard', count: breakdown.failed_correlation ?? 0 }, // 10.9C
         { reason: 'Already Active', count: breakdown.already_active }
       ];
 

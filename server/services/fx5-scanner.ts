@@ -450,6 +450,7 @@ export class Fx5ScannerService {
         failed_history: breakdown.failed_history,
         failed_market_cap: breakdown.failed_market_cap,
         failed_guardrail_risk: breakdown.failed_guardrail_risk,
+        failed_correlation: breakdown.failed_correlation ?? 0, // 10.9C
         already_active: breakdown.already_active,
         passed_all_filters: breakdown.passed_all_filters,
       };
