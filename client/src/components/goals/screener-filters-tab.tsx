@@ -38,16 +38,16 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { ensureValidToken } from "@/lib/auth";
 import { formatNumberWithCommas, parseCommaFormattedNumber } from "@/lib/utils";
 
+/**
+ * Directive 10.9E: Deprecated filters removed
+ * REMOVED: rsiMin, rsiMax, volatilityMin, volatilityMax (no longer used)
+ */
 const DEFAULTS = {
   minVolume: 1000000,
   minPrice: 0.01,
   maxPrice: 100000,
   minMarketCap: 100000000,
   maxBidAskSpread: 1.00,
-  rsiMin: 30,
-  rsiMax: 70,
-  volatilityMin: 0.50,
-  volatilityMax: 5.00,
   minLiquidity: 500000,
   excludeStablecoins: true,
   allowRegulatedOnly: false,
@@ -59,16 +59,16 @@ const DEFAULTS = {
   minHistoryDays: 30,
 };
 
+/**
+ * Directive 10.9E: Deprecated filters removed from interface
+ * REMOVED: rsiMin, rsiMax, volatilityMin, volatilityMax
+ */
 interface ScreenerFilters {
   minVolume: number | string;
   minPrice: number | string;
   maxPrice: number | string;
   minMarketCap: number | string;
   maxBidAskSpread: number | string;
-  rsiMin: number;
-  rsiMax: number;
-  volatilityMin: number | string;
-  volatilityMax: number | string;
   minLiquidity: number | string;
   excludeStablecoins: boolean;
   allowRegulatedOnly: boolean;
@@ -151,10 +151,6 @@ export default function ScreenerFiltersTab() {
         maxPrice: parseValue(currentFilters.maxPrice, DEFAULTS.maxPrice),
         minMarketCap: parseValue(currentFilters.minMarketCap, DEFAULTS.minMarketCap),
         maxBidAskSpread: parseValue(currentFilters.maxBidAskSpread, DEFAULTS.maxBidAskSpread),
-        rsiMin: currentFilters.rsiMin ?? DEFAULTS.rsiMin,
-        rsiMax: currentFilters.rsiMax ?? DEFAULTS.rsiMax,
-        volatilityMin: parseValue(currentFilters.volatilityMin, DEFAULTS.volatilityMin),
-        volatilityMax: parseValue(currentFilters.volatilityMax, DEFAULTS.volatilityMax),
         minLiquidity: parseValue(currentFilters.minLiquidity, DEFAULTS.minLiquidity),
         excludeStablecoins: currentFilters.excludeStablecoins ?? DEFAULTS.excludeStablecoins,
         allowRegulatedOnly: currentFilters.allowRegulatedOnly ?? DEFAULTS.allowRegulatedOnly,

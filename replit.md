@@ -47,6 +47,15 @@ Math Core Harmonization (Centralized Scoring Coefficients) unifies the FinalScor
 
 The system incorporates Verification & Config Purification, Backend Filter Deconfliction & Deprecation, Screeners & Filter Insights Modernization, UI Completion & Diagnostics Integration, and Final Deprecations & Telemetry Expansion directives to refine and enhance its operational integrity, telemetry, and filtering mechanisms. These directives collectively ensure robust pre-signal filtering, clear UI representation of system status, and comprehensive performance monitoring.
 
+**Directive 10.9E Deprecation Log (January 2026):**
+- REMOVED: `rsiMin`, `rsiMax` (Technical Indicators) - No longer used in pre-signal filtering
+- REMOVED: `volatilityMin`, `volatilityMax` (Risk & Volatility) - No longer used in pre-signal filtering
+- REMOVED: Backend filter functions `applyRSIFilter`, `applyVolatilityFilter` invocations
+- REMOVED: UI sections for "Technical Indicators" and "Volatility" categories
+- SCHEMA: FILTER_SCHEMA_VERSION bumped to v1.3.0, UI_SCHEMA_VERSION bumped to v1.2.2
+- ACTIVE FILTERS (11): Volume, Liquidity (LQ), VolNoise, Correlation (ρ), PriceRange, MinPrice, MaxSpread, Stablecoin, QuoteCurrency, History, passed_all_filters
+- INSTITUTIONAL MATH GUARDS: LQ ≥ 40, VolNoise ≤ 0.6, ρ ≤ 0.75 (remain active)
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.

@@ -206,6 +206,7 @@ export class Fx5ScannerService {
       }
 
       // REB 2.9C Section 3: Log filter values at cycle start (first 20 cycles only)
+      // Directive 10.9E: Removed deprecated rsiMin, rsiMax, volatilityMin, volatilityMax
       const reb29cCycle = mode === 'paper' ? this.paperCycleCount + 1 : this.liveCycleCount + 1;
       if (reb29cCycle <= 20) {
         console.log(`[REB2.9C][FX5][CycleStart] Cycle ${reb29cCycle}/${mode}:`, {
@@ -213,10 +214,6 @@ export class Fx5ScannerService {
           minLiquidity: filters.minLiquidity,
           minPrice: filters.minPrice,
           maxPrice: filters.maxPrice,
-          rsiMin: filters.rsiMin,
-          rsiMax: filters.rsiMax,
-          volatilityMin: filters.volatilityMin,
-          volatilityMax: filters.volatilityMax,
           maxBidAskSpread: filters.maxBidAskSpread,
           universeSize: filters.universeSize,
           activeTimeframes: filters.activeTimeframes,

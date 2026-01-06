@@ -2116,20 +2116,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             category: "Risk & Volatility"
           },
           {
-            name: "volatilityMin",
-            value: parseFloat(screenerData.volatilityMin),
-            ...getFilterOverride("volatilityMin"),
-            displayName: "Min Volatility (%)",
-            category: "Risk & Volatility"
-          },
-          {
-            name: "volatilityMax",
-            value: parseFloat(screenerData.volatilityMax),
-            ...getFilterOverride("volatilityMax"),
-            displayName: "Max Volatility (%)",
-            category: "Risk & Volatility"
-          },
-          {
             name: "minMarketCap",
             value: parseFloat(screenerData.minMarketCap),
             ...getFilterOverride("minMarketCap"),
@@ -2149,20 +2135,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             ...getFilterOverride("allowRegulatedOnly"),
             displayName: "Regulated Only",
             category: "Market Filters"
-          },
-          {
-            name: "rsiMin",
-            value: screenerData.rsiMin,
-            ...getFilterOverride("rsiMin"),
-            displayName: "Min RSI",
-            category: "Technical Indicators"
-          },
-          {
-            name: "rsiMax",
-            value: screenerData.rsiMax,
-            ...getFilterOverride("rsiMax"),
-            displayName: "Max RSI",
-            category: "Technical Indicators"
           },
           {
             name: "universeSize",

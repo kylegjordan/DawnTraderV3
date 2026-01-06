@@ -22,6 +22,7 @@ let reb210PairSnapshotCount = 0;
 const REB_2_10_PAIR_LOG_LIMIT = 100; // Log first 100 pair snapshots per server lifetime
 
 // REB 2.10: CycleStart Snapshot Type
+// Directive 10.9E: Removed deprecated rsiMin, rsiMax, volatilityMin, volatilityMax
 export interface REB210CycleStartSnapshot {
   cycle: number;
   mode: 'paper' | 'live';
@@ -31,10 +32,6 @@ export interface REB210CycleStartSnapshot {
     minLiquidity: number;
     minPrice: number;
     maxPrice: number;
-    rsiMin: number;
-    rsiMax: number;
-    volatilityMin: number;
-    volatilityMax: number;
     maxBidAskSpread: number;
     universeSize: number;
     activeTimeframes: string[];
@@ -45,6 +42,7 @@ export interface REB210CycleStartSnapshot {
 }
 
 // REB 2.10: Per-Pair Evaluation Snapshot Type
+// Directive 10.9E: Removed deprecated failedRSI, failedVolatility, failedRange (no longer used in filtering)
 export interface REB210PairSnapshot {
   cycle: number;
   mode: string;
@@ -55,8 +53,6 @@ export interface REB210PairSnapshot {
     spreadPct: number;
     volume: number;
     liquidity: number;
-    rsi: number | null;
-    volatility: number | null;
     historyDays: number | null;
     quoteCurrency: string;
   };
@@ -64,9 +60,6 @@ export interface REB210PairSnapshot {
     failedVolume: boolean;
     failedLiquidity: boolean;
     failedPrice: boolean;
-    failedRange: boolean;
-    failedRSI: boolean;
-    failedVolatility: boolean;
     failedSpread: boolean;
     failedStablecoin: boolean;
     failedHistory: boolean;
@@ -75,6 +68,7 @@ export interface REB210PairSnapshot {
 }
 
 // REB 2.10: CycleSummary Snapshot Type
+// Directive 10.9E: Removed deprecated failedRSI, failedVolatility, failedRange
 export interface REB210CycleSummarySnapshot {
   cycle: number;
   mode: string;
@@ -87,9 +81,6 @@ export interface REB210CycleSummarySnapshot {
     failedVolume: number;
     failedLiquidity: number;
     failedPrice: number;
-    failedRange: number;
-    failedRSI: number;
-    failedVolatility: number;
     failedSpread: number;
     failedStablecoin: number;
     failedHistory: number;
@@ -1105,15 +1096,12 @@ export async function collectMixedBatch(
   const cycleTimestamp = new Date().toISOString();
   
   // REB 2.10: Parse filter values for snapshot
+  // Directive 10.9E: Removed deprecated rsiMin, rsiMax, volatilityMin, volatilityMax
   const parsedFilters = {
     minVolume: parseFloat(filters.minVolume ?? '1000000.00'),
     minLiquidity: parseFloat(filters.minLiquidity ?? '500000.00'),
     minPrice: parseFloat(filters.minPrice ?? '0.01000000'),
     maxPrice: parseFloat(filters.maxPrice ?? '100000.00'),
-    rsiMin: filters.rsiMin ?? 30,
-    rsiMax: filters.rsiMax ?? 70,
-    volatilityMin: parseFloat(filters.volatilityMin ?? '0.50'),
-    volatilityMax: parseFloat(filters.volatilityMax ?? '5.00'),
     maxBidAskSpread: parseFloat(filters.maxBidAskSpread ?? '1.00'),
     universeSize: filters.universeSize ?? 100,
     activeTimeframes: filters.activeTimeframes ?? ['5m', '15m', '1h'],
@@ -1215,10 +1203,10 @@ export async function collectMixedBatch(
   
   // Initialize breakdown counters
   // 10.9C: Added failed_correlation for Correlation Guard (ρ ≤ 0.75)
+  // Directive 10.9E: Removed failed_daily_range (deprecated volatility filter)
   const breakdown = {
     failed_min_volume: 0,
     failed_spread: 0,
-    failed_daily_range: 0,
     failed_min_price: 0,
     failed_stablecoin: 0,
     failed_quote_currency: 0,
@@ -1231,8 +1219,8 @@ export async function collectMixedBatch(
   };
   
   // REB 2.10: Extract filter criteria from parsedFilters
+  // Directive 10.9E: Removed minDailyRange/volatilityMin (deprecated)
   const minVolume = parsedFilters.minVolume;
-  const minDailyRange = parsedFilters.volatilityMin;
   const minPrice = parsedFilters.minPrice;
   const maxBidAskSpread = parsedFilters.maxBidAskSpread;
   const excludeStablecoins = parsedFilters.excludeStablecoins;
@@ -1280,13 +1268,11 @@ export async function collectMixedBatch(
     const bidAskSpread = ((askPrice - bidPrice) / bidPrice) * 100;
     
     // REB 2.10: Track individual filter results for this pair
+    // Directive 10.9E: Removed failedRange, failedRSI, failedVolatility (deprecated)
     const filterResults = {
       failedVolume: false,
       failedLiquidity: false,
       failedPrice: false,
-      failedRange: false,
-      failedRSI: false,
-      failedVolatility: false,
       failedSpread: false,
       failedStablecoin: false,
       failedHistory: false,
@@ -1312,13 +1298,9 @@ export async function collectMixedBatch(
       rejected = true;
     }
     
-    // Filter 4: Daily range (volatility)
-    if (!rejected && dailyRange < minDailyRange) {
-      filterResults.failedRange = true;
-      filterResults.passed = false;
-      breakdown.failed_daily_range++;
-      rejected = true;
-    }
+    // Directive 10.9E: Filter 4 (Daily range/volatility) REMOVED - deprecated volatilityMin filter
+    // This filter previously checked: if (!rejected && dailyRange < minDailyRange) {...}
+    // Volatility filtering is now handled by VolNoise Institutional Guard instead
     
     // Filter 5: Min price
     if (!rejected && currentPrice < minPrice) {
@@ -1349,6 +1331,7 @@ export async function collectMixedBatch(
     }
     
     // REB 2.10: Create Per-Pair Snapshot (all pairs, for buffer storage)
+    // Directive 10.9E: Removed deprecated rsi and volatility fields
     const pairSnapshot: REB210PairSnapshot = {
       cycle: cycleNum,
       mode,
@@ -1359,8 +1342,6 @@ export async function collectMixedBatch(
         spreadPct: bidAskSpread,
         volume: volume24h,
         liquidity: volume24h * currentPrice,
-        rsi: null,
-        volatility: dailyRange,
         historyDays,
         quoteCurrency: normalizedQuote || '',
       },
@@ -1423,6 +1404,7 @@ export async function collectMixedBatch(
   console.log(`[8.6.7][DEBUG] Survivors AFTER FX5 filters: ${survivorCount}/${batch.length}`);
   
   // REB 2.10: Create CycleSummary Snapshot
+  // Directive 10.9E: Removed deprecated failedRange, failedRSI, failedVolatility
   const cycleSummarySnapshot: REB210CycleSummarySnapshot = {
     cycle: cycleNum,
     mode,
@@ -1435,9 +1417,6 @@ export async function collectMixedBatch(
       failedVolume: breakdown.failed_min_volume,
       failedLiquidity: 0,
       failedPrice: breakdown.failed_min_price,
-      failedRange: breakdown.failed_daily_range,
-      failedRSI: 0,
-      failedVolatility: 0,
       failedSpread: breakdown.failed_spread,
       failedStablecoin: breakdown.failed_stablecoin,
       failedHistory: breakdown.failed_history,

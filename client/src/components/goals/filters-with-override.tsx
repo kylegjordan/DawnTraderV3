@@ -59,12 +59,14 @@ interface FiltersV2Response {
   };
 }
 
+/**
+ * Directive 10.9E: Filter categories for UI display
+ * DEPRECATED/REMOVED: 'Technical Indicators' (RSI), 'Volatility' (Min/Max Volatility)
+ */
 const FILTER_CATEGORIES: Record<string, { icon: string; color: string }> = {
   'Volume & Liquidity': { icon: '💧', color: 'bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700' },
   'Price Range': { icon: '💰', color: 'bg-green-100 dark:bg-green-900/30 border-green-300 dark:border-green-700' },
   'Market Quality': { icon: '⭐', color: 'bg-purple-100 dark:bg-purple-900/30 border-purple-300 dark:border-purple-700' },
-  'Technical Indicators': { icon: '📊', color: 'bg-orange-100 dark:bg-orange-900/30 border-orange-300 dark:border-orange-700' },
-  'Volatility': { icon: '📈', color: 'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-300 dark:border-yellow-700' },
   'Asset Type': { icon: '🏷️', color: 'bg-red-100 dark:bg-red-900/30 border-red-300 dark:border-red-700' },
   'Data Quality': { icon: '📋', color: 'bg-teal-100 dark:bg-teal-900/30 border-teal-300 dark:border-teal-700' },
   'Market Configuration': { icon: '🎯', color: 'bg-indigo-100 dark:bg-indigo-900/30 border-indigo-300 dark:border-indigo-700' },
@@ -123,11 +125,10 @@ const unformatNumber = (value: string): string => {
 };
 
 // Determine if a filter is a numeric amount filter (needs comma formatting)
-// Directive 10.9: Added finalScoreThreshold, removed deprecated confidenceThreshold
+// Directive 10.9E: Removed deprecated volatilityMin, volatilityMax, rsiMin, rsiMax
 const isNumericAmountFilter = (filterName: string): boolean => {
   return ['minVolume', 'minLiquidity', 'minPrice', 'maxPrice', 'maxBidAskSpread',
-          'minMarketCap', 'volatilityMin', 'volatilityMax', 'rsiMin', 'rsiMax',
-          'finalScoreThreshold'].includes(filterName);
+          'minMarketCap', 'finalScoreThreshold'].includes(filterName);
 };
 
 export function FiltersWithOverride() {
