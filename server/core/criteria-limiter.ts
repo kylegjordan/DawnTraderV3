@@ -1,5 +1,5 @@
 /**
- * Directive 11.0A — Trade Criteria Limiter (TCL)
+ * Directive 11.0B — Trade Criteria Limiter (TCL)
  * 
  * Event-based promotion controller. Reacts to trade slot availability
  * and RTB queue events to promote highest-ranked signals.
@@ -8,16 +8,15 @@
  * - Trigger on 2-minute failsafe timer (onFailsafeTimer)
  * - Trigger on 15-signal RTB accumulation (onReadyToBuyQueueFull)
  * - Monitor open trade slots
- * - Promote highest-ranked RTB signals when capacity available
+ * - Promote highest-ranked RTB signals by FinalScore (descending)
  * 
- * NOT ALLOWED (owned by SQE):
- * - Exposure/correlation/cooldown checks (SQE responsibility)
- * - Position sizing (Phase 11.3 will implement)
+ * NOT ALLOWED (owned by Signal Orchestrator/SQE):
+ * - Exposure/correlation/cooldown checks
  * - Exit logic (TEC responsibility)
  * - Volatility adjustments
  * 
- * The TCL is a pure event-driven promoter that reacts to queue and
- * slot events, promoting the top-ranked signals to active trades.
+ * Directive 11.0B: Ranking is exclusively by FinalScore.
+ * Legacy metrics (CWQI, NGC, profitRate, riskCalc) are NOT used.
  */
 
 import { storage } from '../storage.js';
@@ -91,23 +90,24 @@ export class CriteriaLimiter {
       return { promoted: 0, skipped: 0, reason: 'no_rtb_signals' };
     }
 
-    const sortedSignals = rtbSignals.sort((a, b) => {
-      const cwqiA = parseFloat(a.cwqi || '0');
-      const cwqiB = parseFloat(b.cwqi || '0');
-      return cwqiB - cwqiA;
+    // Directive 11.0B: Rank exclusively by FinalScore (descending)
+    const rankedSignals = rtbSignals.sort((a, b) => {
+      const finalScoreA = parseFloat(a.finalScore || '0');
+      const finalScoreB = parseFloat(b.finalScore || '0');
+      return finalScoreB - finalScoreA;
     });
 
-    const eligibleSignals = sortedSignals.slice(0, openSlots);
+    const topSignals = rankedSignals.slice(0, openSlots);
 
     let promotedCount = 0;
-    for (const signal of eligibleSignals) {
+    for (const signal of topSignals) {
       try {
         await storage.updateRtbSignal(signal.id, {
           status: 'promoted',
           promotedAt: new Date()
         });
         
-        console.log(`[TCL][PROMOTED] ${signal.symbol} (CWQI: ${signal.cwqi}) via ${trigger}`);
+        console.log(`[TCL][PROMOTED] ${signal.symbol} (FinalScore: ${signal.finalScore || 'N/A'}) via ${trigger}`);
         promotedCount++;
       } catch (err) {
         console.error(`[TCL][ERROR] Failed to promote ${signal.symbol}:`, err);
@@ -117,11 +117,11 @@ export class CriteriaLimiter {
     this.lastPromotionTime.set(mode, Date.now());
     this.resetFailsafeTimer(mode);
 
-    console.log(`[TCL][COMPLETE] Promoted ${promotedCount}/${eligibleSignals.length} signals for ${mode} mode`);
+    console.log(`[TCL] Promoted ${promotedCount} signals using FinalScore ranking for ${mode} mode`);
     
     return {
       promoted: promotedCount,
-      skipped: eligibleSignals.length - promotedCount
+      skipped: topSignals.length - promotedCount
     };
   }
 

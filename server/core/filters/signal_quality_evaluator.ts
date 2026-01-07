@@ -1,97 +1,58 @@
 /**
- * Phase 8.8.4-B.1/C: Signal Quality Evaluator (SQE)
- * Directive 8.8.4-A3.R9.0.C: SQE Normalization, CWQI Correction, Symbol Resolution
+ * Directive 11.0B — Signal Quality Evaluator (SQE)
  * 
- * Pure filter that evaluates pre-computed signal quality metrics.
- * The SQE does NOT compute metrics - it only filters based on thresholds.
+ * Final gatekeeper that evaluates signal quality.
  * 
- * R9C-1: Evaluate raw metrics against thresholds first, then clamp for downstream.
- * R9C-3: All symbol comparisons use Kraken Symbol Resolver.
+ * Directive 11.0B: PRIMARY filtering is on FinalScore and RegimeWeight.
+ * When FinalScore is provided, it takes precedence over legacy metrics.
+ * Legacy metrics (NGC, CWQI, Risk, ProfitRate) are used as fallback for backward compatibility.
  * 
- * Filtering Thresholds (relaxed):
- * - NGC >= 0.45 (Normalized Global Confidence)
- * - Risk <= 0.85 
- * - ProfitRate >= 0.10 (or strategy-specific floor if higher)
- * - CWQI >= 0.35
+ * Thresholds:
+ * - FinalScore >= MIN_FINAL_SCORE (0.35)
+ * - RegimeWeight >= MIN_REGIME_WEIGHT (0.30)
  * 
- * Phase C: Strategy-specific ProfitRate floors from config/strategy_thresholds.json
- * 
+ * Exposure, correlation, and cooldown checks are handled by the Signal Orchestrator.
  * All metrics must be computed upstream (Signal Orchestrator) and passed to SQE.
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
-import { SQE_THRESHOLDS } from '../metrics/quality_index';
 import { performanceMonitor } from '../diagnostics/performance_monitor';
 import { normalizeInternal } from '../../markets/kraken-symbol-resolver';
 import { diagnosticTrace } from '../diagnostics/trace_service';
 import { dataAggregator } from '../../services/data-aggregator.js';
 
-interface StrategyThresholdsConfig {
-  profitRateFloors: Record<string, number>;
-}
-
-const DEFAULT_PROFIT_RATE_FLOORS: Record<string, number> = {
-  DHMA: 0.22,
-  VWAP_Bounce: 0.25,
-  MeanReversion: 0.28,
-  Breakout: 0.30,
-  Scalper: 0.35,
+/**
+ * Directive 11.0B: SQE Thresholds
+ * Primary: FinalScore and RegimeWeight
+ * Legacy: NGC, CWQI, Risk, ProfitRate (for backward compatibility)
+ */
+export const SQE_THRESHOLDS = {
+  MIN_FINAL_SCORE: parseFloat(process.env.SQE_FINAL_SCORE_MIN || '0.35'),
+  MIN_REGIME_WEIGHT: parseFloat(process.env.SQE_REGIME_MIN || '0.30'),
+  // Legacy thresholds (for backward compatibility when FinalScore not provided)
+  MIN_NGC: parseFloat(process.env.SQE_NGC_MIN || '0.55'),
+  MAX_RISK: parseFloat(process.env.SQE_MAX_RISK || '0.85'),
+  MIN_PROFIT_RATE: parseFloat(process.env.SQE_PROFIT_MIN || '0.10'),
+  MIN_CWQI: parseFloat(process.env.SQE_CWQI_MIN || '0.45'),
 };
 
-let strategyThresholds: StrategyThresholdsConfig | null = null;
-
-function loadStrategyThresholds(): StrategyThresholdsConfig {
-  if (strategyThresholds) {
-    return strategyThresholds;
-  }
-  
-  try {
-    const configPath = path.resolve(process.cwd(), 'config/strategy_thresholds.json');
-    if (fs.existsSync(configPath)) {
-      const configData = fs.readFileSync(configPath, 'utf-8');
-      strategyThresholds = JSON.parse(configData);
-      console.log('[C][PROFIT_FLOORS] Loaded strategy thresholds:', strategyThresholds?.profitRateFloors);
-      return strategyThresholds!;
-    }
-  } catch (err) {
-    console.log('[C][PROFIT_FLOORS] Error loading config, using defaults:', err);
-  }
-  
-  strategyThresholds = { profitRateFloors: DEFAULT_PROFIT_RATE_FLOORS };
-  console.log('[C][PROFIT_FLOORS] Using default strategy thresholds');
-  return strategyThresholds;
-}
-
-export function getProfitRateFloor(strategy: string): number {
-  const config = loadStrategyThresholds();
-  const floor = config.profitRateFloors[strategy];
-  
-  if (floor !== undefined) {
-    return floor;
-  }
-  
-  return SQE_THRESHOLDS.MIN_PROFIT_RATE;
-}
+console.log(`[11.0B][SQE_CONFIG] FinalScore>=${SQE_THRESHOLDS.MIN_FINAL_SCORE} RegimeWeight>=${SQE_THRESHOLDS.MIN_REGIME_WEIGHT} (Legacy: NGC>=${SQE_THRESHOLDS.MIN_NGC} CWQI>=${SQE_THRESHOLDS.MIN_CWQI})`);
 
 export interface SQEInput {
   signalId: string;
   symbol: string;
   strategy: string;
-  ngc: number;
-  riskScore: number;
-  profitRate: number;
-  cwqi: number;
-  // Directive 10.9A: FinalScore-based filtering
+  // Primary metrics (11.0B)
   finalScore?: number;
   regimeWeight?: number;
+  // Legacy metrics (backward compatibility)
+  ngc?: number;
+  riskScore?: number;
+  profitRate?: number;
+  cwqi?: number;
 }
 
-/**
- * Directive A3.R8.2: SQE evaluation options
- */
 export interface SQEOptions {
-  skipDecay?: boolean;  // Skip decay when re-evaluating during refresh cycles
+  skipDecay?: boolean;
 }
 
 export interface SQEResult {
@@ -100,12 +61,12 @@ export interface SQEResult {
   symbol: string;
   strategy: string;
   metrics: {
-    ngc: number;
-    riskScore: number;
-    profitRate: number;
-    cwqi: number;
     finalScore?: number;
     regimeWeight?: number;
+    ngc?: number;
+    riskScore?: number;
+    profitRate?: number;
+    cwqi?: number;
   };
   failures: string[];
   reason?: string;
@@ -119,109 +80,96 @@ export interface SQEBatchResult {
 }
 
 /**
- * Evaluate a single signal against SQE quality thresholds
- * Phase C: Uses strategy-specific ProfitRate floors
- * Directive A3.R9.0: Restored thresholds for ~35-50% pass rate
- * Directive A3.R9.0.C: Evaluate raw metrics first, normalize only for downstream
+ * Directive 11.0B: Evaluate a single signal against SQE thresholds
+ * If FinalScore and RegimeWeight are provided, use ONLY those.
+ * Otherwise, fall back to legacy metrics for backward compatibility.
  * 
  * @param input - Pre-computed signal metrics
- * @param options - Optional evaluation settings (skipDecay for refresh cycles)
+ * @param options - Optional evaluation settings
  * @returns SQEResult with pass/fail status and any failures
  */
 export function evaluateSignalQuality(input: SQEInput, options: SQEOptions = {}): SQEResult {
   const failures: string[] = [];
   
-  // R9C-3: Normalize symbol via Kraken Resolver for consistent comparison
   const canonicalSymbol = normalizeInternal(input.symbol);
   
-  // Directive 10.9A: Primary filtering on FinalScore and RegimeWeight
-  // When FinalScore is provided, use it as the primary quality gate
-  if (input.finalScore !== undefined) {
-    if (input.finalScore < SQE_THRESHOLDS.MIN_FINAL_SCORE) {
-      failures.push(`FinalScore ${input.finalScore.toFixed(4)} < ${SQE_THRESHOLDS.MIN_FINAL_SCORE}`);
+  // Directive 11.0B: Use FinalScore-based filtering if available
+  const useFinalScoreMode = input.finalScore !== undefined && input.finalScore !== null;
+  
+  if (useFinalScoreMode) {
+    // PRIMARY: FinalScore-based filtering (11.0B)
+    if (input.finalScore! < SQE_THRESHOLDS.MIN_FINAL_SCORE) {
+      failures.push(`FinalScore ${input.finalScore!.toFixed(4)} < ${SQE_THRESHOLDS.MIN_FINAL_SCORE}`);
     }
-  }
-  
-  if (input.regimeWeight !== undefined) {
-    if (input.regimeWeight < SQE_THRESHOLDS.MIN_REGIME_WEIGHT) {
-      failures.push(`RegimeWeight ${input.regimeWeight.toFixed(4)} < ${SQE_THRESHOLDS.MIN_REGIME_WEIGHT}`);
+    
+    if (input.regimeWeight !== undefined && input.regimeWeight !== null) {
+      if (input.regimeWeight < SQE_THRESHOLDS.MIN_REGIME_WEIGHT) {
+        failures.push(`RegimeWeight ${input.regimeWeight.toFixed(4)} < ${SQE_THRESHOLDS.MIN_REGIME_WEIGHT}`);
+      }
     }
-  }
-  
-  // R9C-1: Evaluate RAW metrics against thresholds (no pre-normalization)
-  // Legacy thresholds kept for backward compatibility when FinalScore not provided
-  const profitRateFloor = getProfitRateFloor(input.strategy);
-  
-  if (input.ngc < SQE_THRESHOLDS.MIN_NGC) {
-    failures.push(`NGC ${input.ngc.toFixed(4)} < ${SQE_THRESHOLDS.MIN_NGC}`);
-  }
-  
-  if (input.riskScore > SQE_THRESHOLDS.MAX_RISK) {
-    failures.push(`Risk ${input.riskScore.toFixed(4)} > ${SQE_THRESHOLDS.MAX_RISK}`);
-  }
-  
-  if (input.profitRate < profitRateFloor) {
-    failures.push(`ProfitRate ${input.profitRate.toFixed(4)} < Floor[${input.strategy}]=${profitRateFloor}`);
-  }
-  
-  if (input.cwqi < SQE_THRESHOLDS.MIN_CWQI) {
-    failures.push(`CWQI ${input.cwqi.toFixed(4)} < ${SQE_THRESHOLDS.MIN_CWQI}`);
+  } else {
+    // LEGACY: NGC/CWQI/Risk/ProfitRate filtering (backward compatibility)
+    if (input.ngc !== undefined && input.ngc < SQE_THRESHOLDS.MIN_NGC) {
+      failures.push(`NGC ${input.ngc.toFixed(4)} < ${SQE_THRESHOLDS.MIN_NGC}`);
+    }
+    
+    if (input.riskScore !== undefined && input.riskScore > SQE_THRESHOLDS.MAX_RISK) {
+      failures.push(`Risk ${input.riskScore.toFixed(4)} > ${SQE_THRESHOLDS.MAX_RISK}`);
+    }
+    
+    if (input.profitRate !== undefined && input.profitRate < SQE_THRESHOLDS.MIN_PROFIT_RATE) {
+      failures.push(`ProfitRate ${input.profitRate.toFixed(4)} < ${SQE_THRESHOLDS.MIN_PROFIT_RATE}`);
+    }
+    
+    if (input.cwqi !== undefined && input.cwqi < SQE_THRESHOLDS.MIN_CWQI) {
+      failures.push(`CWQI ${input.cwqi.toFixed(4)} < ${SQE_THRESHOLDS.MIN_CWQI}`);
+    }
   }
   
   const passed = failures.length === 0;
   
-  // Directive 10.9A: Enhanced diagnostic logging with FinalScore
-  const finalScoreStr = input.finalScore !== undefined ? input.finalScore.toFixed(4) : 'N/A';
-  const regimeStr = input.regimeWeight !== undefined ? input.regimeWeight.toFixed(4) : 'N/A';
-  
-  if (!passed) {
-    const failureReason = failures[0]?.split(' ')[0] || 'unknown';
-    console.log(`[A3.R9.2][SQE_FILTERED] ${canonicalSymbol} reason=${failureReason} FinalScore=${finalScoreStr} NGC=${input.ngc.toFixed(4)} CWQI=${input.cwqi.toFixed(4)} Risk=${input.riskScore.toFixed(4)}`);
-  }
-  
-  // Directive A3.R9.2: Unified SQE filter logging
   const status = passed ? 'PASS' : 'FAIL';
-  const reason = passed ? 'all_thresholds_met' : failures[0]?.split(' ')[0] || 'unknown';
-  console.log(`[A3.R9.2][SQE_EVAL] ${status} symbol=${canonicalSymbol} strategy=${input.strategy} FinalScore=${finalScoreStr} NGC=${input.ngc.toFixed(4)} CWQI=${input.cwqi.toFixed(4)} reason=${reason}`);
+  const reason = passed ? 'thresholds_met' : failures[0]?.split(' ')[0] || 'unknown';
+  const mode = useFinalScoreMode ? 'FinalScore' : 'Legacy';
+  console.log(`[11.0B][SQE_EVAL] ${status} symbol=${canonicalSymbol} strategy=${input.strategy} mode=${mode} reason=${reason}`);
   
-  // A3.R9.2: Record metric for performance monitoring
   performanceMonitor.recordSQEEvaluation(passed);
   
-  // Directive 8.8.4-L1: Capture SQE evaluation data for learning aggregation
   dataAggregator.capture('SQE_EVAL', {
     symbol: canonicalSymbol,
     strategy: input.strategy,
-    cwqi: input.cwqi,
+    finalScore: input.finalScore,
+    regimeWeight: input.regimeWeight,
     ngc: input.ngc,
+    cwqi: input.cwqi,
     risk: input.riskScore,
     profitRate: input.profitRate,
     sqeScore: passed ? 1 : 0,
     passed
   }).catch(() => {});
   
-  // Directive 8.8.4-A3.R9.0.D: Trace SQE evaluation result
   diagnosticTrace.traceSQE(
     canonicalSymbol,
     input.strategy,
     {
+      finalScore: input.finalScore,
+      regimeWeight: input.regimeWeight,
       ngc: input.ngc,
       cwqi: input.cwqi,
       profit: input.profitRate,
       risk: input.riskScore,
     },
     passed,
-    true // metrics are clamped for downstream
+    true
   );
   
-  // R9C-1: Clamp metrics only for downstream consumers (after threshold check)
-  // Directive 10.9A: Include FinalScore and RegimeWeight in output
   const clampedMetrics = {
-    ngc: Math.max(0, Math.min(1, input.ngc)),
-    riskScore: Math.max(0, Math.min(1, input.riskScore)),
-    profitRate: Math.max(0, Math.min(1, input.profitRate)),
-    cwqi: Math.max(0, Math.min(1, input.cwqi)),
     finalScore: input.finalScore !== undefined ? Math.max(0, Math.min(1, input.finalScore)) : undefined,
     regimeWeight: input.regimeWeight !== undefined ? Math.max(0, Math.min(1, input.regimeWeight)) : undefined,
+    ngc: input.ngc !== undefined ? Math.max(0, Math.min(1, input.ngc)) : undefined,
+    riskScore: input.riskScore !== undefined ? Math.max(0, Math.min(1, input.riskScore)) : undefined,
+    profitRate: input.profitRate !== undefined ? Math.max(0, Math.min(1, input.profitRate)) : undefined,
+    cwqi: input.cwqi !== undefined ? Math.max(0, Math.min(1, input.cwqi)) : undefined,
   };
   
   return {
@@ -237,7 +185,6 @@ export function evaluateSignalQuality(input: SQEInput, options: SQEOptions = {})
 
 /**
  * Evaluate a batch of signals
- * Returns separate arrays for passed and rejected signals
  */
 export function evaluateSignalBatch(inputs: SQEInput[]): SQEBatchResult {
   const passed: SQEResult[] = [];
@@ -262,25 +209,33 @@ export function evaluateSignalBatch(inputs: SQEInput[]): SQEBatchResult {
 
 /**
  * Get the primary failure reason for a signal
- * Phase C: Uses strategy-specific ProfitRate floors for classification
  */
 export function getPrimaryFailureReason(result: SQEResult): string | null {
   if (result.passed || result.failures.length === 0) {
     return null;
   }
   
-  if (result.metrics.cwqi < SQE_THRESHOLDS.MIN_CWQI) {
-    return 'LOW_CWQI';
-  }
-  if (result.metrics.ngc < SQE_THRESHOLDS.MIN_NGC) {
-    return 'LOW_NGC';
-  }
-  if (result.metrics.riskScore > SQE_THRESHOLDS.MAX_RISK) {
-    return 'HIGH_RISK';
+  // Check FinalScore mode first
+  if (result.metrics.finalScore !== undefined) {
+    if (result.metrics.finalScore < SQE_THRESHOLDS.MIN_FINAL_SCORE) {
+      return 'LOW_FINAL_SCORE';
+    }
+    if (result.metrics.regimeWeight !== undefined && result.metrics.regimeWeight < SQE_THRESHOLDS.MIN_REGIME_WEIGHT) {
+      return 'LOW_REGIME_WEIGHT';
+    }
   }
   
-  const profitRateFloor = getProfitRateFloor(result.strategy);
-  if (result.metrics.profitRate < profitRateFloor) {
+  // Legacy mode
+  if (result.metrics.ngc !== undefined && result.metrics.ngc < SQE_THRESHOLDS.MIN_NGC) {
+    return 'LOW_NGC';
+  }
+  if (result.metrics.cwqi !== undefined && result.metrics.cwqi < SQE_THRESHOLDS.MIN_CWQI) {
+    return 'LOW_CWQI';
+  }
+  if (result.metrics.riskScore !== undefined && result.metrics.riskScore > SQE_THRESHOLDS.MAX_RISK) {
+    return 'HIGH_RISK';
+  }
+  if (result.metrics.profitRate !== undefined && result.metrics.profitRate < SQE_THRESHOLDS.MIN_PROFIT_RATE) {
     return 'LOW_PROFIT_RATE';
   }
   
@@ -288,29 +243,36 @@ export function getPrimaryFailureReason(result: SQEResult): string | null {
 }
 
 /**
- * Check if a signal should be soft-rejected (close to thresholds)
- * Phase C: Uses strategy-specific ProfitRate floors
+ * Check if a signal is marginally safe (close to thresholds)
  */
 export function isMarginallySafe(result: SQEResult): boolean {
   if (!result.passed) return false;
   
-  const { ngc, riskScore, profitRate, cwqi } = result.metrics;
-  
-  const profitRateFloor = getProfitRateFloor(result.strategy);
-  
-  const ngcMargin = ngc - SQE_THRESHOLDS.MIN_NGC;
-  const riskMargin = SQE_THRESHOLDS.MAX_RISK - riskScore;
-  const profitMargin = profitRate - profitRateFloor;
-  const cwqiMargin = cwqi - SQE_THRESHOLDS.MIN_CWQI;
-  
   const marginThreshold = 0.05;
   
-  return (
-    ngcMargin < marginThreshold ||
-    riskMargin < marginThreshold ||
-    profitMargin < marginThreshold ||
-    cwqiMargin < marginThreshold
-  );
+  // Check FinalScore mode
+  if (result.metrics.finalScore !== undefined) {
+    const finalScoreMargin = result.metrics.finalScore - SQE_THRESHOLDS.MIN_FINAL_SCORE;
+    if (finalScoreMargin < marginThreshold) return true;
+  }
+  
+  if (result.metrics.regimeWeight !== undefined) {
+    const regimeMargin = result.metrics.regimeWeight - SQE_THRESHOLDS.MIN_REGIME_WEIGHT;
+    if (regimeMargin < marginThreshold) return true;
+  }
+  
+  // Legacy mode
+  if (result.metrics.ngc !== undefined) {
+    const ngcMargin = result.metrics.ngc - SQE_THRESHOLDS.MIN_NGC;
+    if (ngcMargin < marginThreshold) return true;
+  }
+  
+  if (result.metrics.cwqi !== undefined) {
+    const cwqiMargin = result.metrics.cwqi - SQE_THRESHOLDS.MIN_CWQI;
+    if (cwqiMargin < marginThreshold) return true;
+  }
+  
+  return false;
 }
 
 /**
@@ -328,9 +290,6 @@ class SignalQualityEvaluatorService {
   private passCount = 0;
   private rejectCount = 0;
   
-  /**
-   * Directive A3.R8.2: Evaluate with optional skipDecay for refresh cycles
-   */
   evaluate(input: SQEInput, options: SQEOptions = {}): SQEResult {
     const result = evaluateSignalQuality(input, options);
     

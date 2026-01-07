@@ -1,16 +1,17 @@
 /**
- * Directive 11.0A — TCL/TEC Component Boundary Tests
+ * Directive 11.0B — TCL/TEC/SQE Component Boundary Tests
  * 
  * Verifies that:
- * - TCL handles event-based promotion (failsafe/RTB triggers)
- * - TEC only handles trailing exit updates and trade monitoring
- * - SQE owns exposure/correlation/cooldown checks
+ * - TCL ranks signals by FinalScore (descending) for promotion
+ * - SQE filters by FinalScore and RegimeWeight thresholds
+ * - TEC handles adaptive sizing based on trendline feedback
+ * - Exposure/correlation/cooldown are NOT in TCL or TEC
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-describe('Directive 11.0A: TCL/TEC Separation', () => {
-  describe('TCL (Trade Criteria Limiter) - Event-Based Promotion', () => {
+describe('Directive 11.0B: TCL/TEC/SQE Separation', () => {
+  describe('TCL (Trade Criteria Limiter) - FinalScore Ranking', () => {
     it('should have onFailsafeTimer method for 2-minute failsafe', async () => {
       const { CriteriaLimiter } = await import('../../core/criteria-limiter.js');
       const tcl = new CriteriaLimiter();
@@ -50,7 +51,7 @@ describe('Directive 11.0A: TCL/TEC Separation', () => {
       expect((tcl as any).calculatePositionSize).toBeUndefined();
     });
 
-    it('should NOT have exposure/correlation check methods (SQE owns these)', async () => {
+    it('should NOT have exposure/correlation check methods (Signal Orchestrator owns these)', async () => {
       const { CriteriaLimiter } = await import('../../core/criteria-limiter.js');
       const tcl = new CriteriaLimiter();
       
@@ -81,7 +82,79 @@ describe('Directive 11.0A: TCL/TEC Separation', () => {
     });
   });
 
-  describe('TEC (Trade Execution Controller) - Trailing Exits Only', () => {
+  describe('SQE (Signal Quality Evaluator) - FinalScore + RegimeWeight Filtering', () => {
+    it('should pass signals with FinalScore >= 0.35 and RegimeWeight >= 0.30', async () => {
+      const { evaluateSignalQuality } = await import('../../core/filters/signal_quality_evaluator.js');
+      
+      const result = evaluateSignalQuality({
+        signalId: 'test-signal-1',
+        symbol: 'BTC/USD',
+        strategy: 'sma_trend_ride',
+        finalScore: 0.50,
+        regimeWeight: 0.40
+      });
+      
+      expect(result.passed).toBe(true);
+      expect(result.failures).toHaveLength(0);
+    });
+
+    it('should reject signals with FinalScore < 0.35', async () => {
+      const { evaluateSignalQuality } = await import('../../core/filters/signal_quality_evaluator.js');
+      
+      const result = evaluateSignalQuality({
+        signalId: 'test-signal-2',
+        symbol: 'BTC/USD',
+        strategy: 'sma_trend_ride',
+        finalScore: 0.30,
+        regimeWeight: 0.40
+      });
+      
+      expect(result.passed).toBe(false);
+      expect(result.failures.length).toBeGreaterThan(0);
+      expect(result.failures[0]).toContain('FinalScore');
+    });
+
+    it('should reject signals with RegimeWeight < 0.30', async () => {
+      const { evaluateSignalQuality } = await import('../../core/filters/signal_quality_evaluator.js');
+      
+      const result = evaluateSignalQuality({
+        signalId: 'test-signal-3',
+        symbol: 'BTC/USD',
+        strategy: 'sma_trend_ride',
+        finalScore: 0.50,
+        regimeWeight: 0.20
+      });
+      
+      expect(result.passed).toBe(false);
+      expect(result.failures.length).toBeGreaterThan(0);
+      expect(result.failures[0]).toContain('RegimeWeight');
+    });
+
+    it('should support legacy metrics (NGC, CWQI, etc.) for backward compatibility', async () => {
+      const { evaluateSignalQuality } = await import('../../core/filters/signal_quality_evaluator.js');
+      
+      const result = evaluateSignalQuality({
+        signalId: 'test-signal-4',
+        symbol: 'BTC/USD',
+        strategy: 'sma_trend_ride',
+        ngc: 0.65,
+        riskScore: 0.20,
+        profitRate: 0.15,
+        cwqi: 0.55
+      });
+      
+      expect(result.passed).toBe(true);
+    });
+
+    it('should have correct SQE_THRESHOLDS', async () => {
+      const { SQE_THRESHOLDS } = await import('../../core/filters/signal_quality_evaluator.js');
+      
+      expect(SQE_THRESHOLDS.MIN_FINAL_SCORE).toBe(0.35);
+      expect(SQE_THRESHOLDS.MIN_REGIME_WEIGHT).toBe(0.30);
+    });
+  });
+
+  describe('TEC (Trade Execution Controller) - Adaptive Sizing + Trailing Exits', () => {
     it('should have monitor method for trade monitoring', async () => {
       const { ExecutionControllerImpl } = await import('../../services/execution-controller.js');
       const tec = new ExecutionControllerImpl();
@@ -98,6 +171,14 @@ describe('Directive 11.0A: TCL/TEC Separation', () => {
       expect(typeof tec.updateTrailingStop).toBe('function');
     });
 
+    it('should have updateAdaptiveSize method for trendline-based sizing', async () => {
+      const { ExecutionControllerImpl } = await import('../../services/execution-controller.js');
+      const tec = new ExecutionControllerImpl();
+      
+      expect(tec.updateAdaptiveSize).toBeDefined();
+      expect(typeof tec.updateAdaptiveSize).toBe('function');
+    });
+
     it('should have closeTrade method', async () => {
       const { ExecutionControllerImpl } = await import('../../services/execution-controller.js');
       const tec = new ExecutionControllerImpl();
@@ -106,18 +187,61 @@ describe('Directive 11.0A: TCL/TEC Separation', () => {
       expect(typeof tec.closeTrade).toBe('function');
     });
 
+    it('should expand size by 10% when trendline reinforced', async () => {
+      const { ExecutionControllerImpl } = await import('../../services/execution-controller.js');
+      const tec = new ExecutionControllerImpl();
+      
+      const trade = {
+        tradeId: 'trade-123',
+        signalId: 'signal-123',
+        symbol: 'BTC/USD',
+        strategy: 'sma_trend_ride' as const,
+        mode: 'paper' as const,
+        entryPrice: 50000,
+        quantity: 1.0,
+        stopPrice: 49000,
+        targetPrice: 52000,
+        openedAt: new Date().toISOString(),
+        trendline: { reinforced: true, weakened: false }
+      };
+      
+      const result = tec.updateAdaptiveSize(trade);
+      
+      expect(result.adjusted).toBe(true);
+      expect(result.adjustment).toBe('expand');
+      expect(result.newQuantity).toBe(1.1);
+    });
+
+    it('should contract size by 10% when trendline weakened', async () => {
+      const { ExecutionControllerImpl } = await import('../../services/execution-controller.js');
+      const tec = new ExecutionControllerImpl();
+      
+      const trade = {
+        tradeId: 'trade-123',
+        signalId: 'signal-123',
+        symbol: 'BTC/USD',
+        strategy: 'sma_trend_ride' as const,
+        mode: 'paper' as const,
+        entryPrice: 50000,
+        quantity: 1.0,
+        stopPrice: 49000,
+        targetPrice: 52000,
+        openedAt: new Date().toISOString(),
+        trendline: { reinforced: false, weakened: true }
+      };
+      
+      const result = tec.updateAdaptiveSize(trade);
+      
+      expect(result.adjusted).toBe(true);
+      expect(result.adjustment).toBe('contract');
+      expect(result.newQuantity).toBe(0.9);
+    });
+
     it('should NOT have enqueueExecution method (no queue logic)', async () => {
       const { ExecutionControllerImpl } = await import('../../services/execution-controller.js');
       const tec = new ExecutionControllerImpl();
       
       expect((tec as any).enqueueExecution).toBeUndefined();
-    });
-
-    it('should NOT have calculatePositionSize method (sizing removed)', async () => {
-      const { ExecutionControllerImpl } = await import('../../services/execution-controller.js');
-      const tec = new ExecutionControllerImpl();
-      
-      expect((tec as any).calculatePositionSize).toBeUndefined();
     });
 
     it('should detect stop loss exit condition', async () => {
@@ -192,7 +316,7 @@ describe('Directive 11.0A: TCL/TEC Separation', () => {
       expect(newTrailingStop).toBeLessThan(trade.currentPrice);
     });
 
-    it('should have trailing stop configuration options', async () => {
+    it('should have adaptive sizing configuration options', async () => {
       const { ExecutionControllerImpl } = await import('../../services/execution-controller.js');
       const tec = new ExecutionControllerImpl();
       const config = tec.getConfig();
@@ -200,6 +324,8 @@ describe('Directive 11.0A: TCL/TEC Separation', () => {
       expect(config).toHaveProperty('trailingStopActivationPct');
       expect(config).toHaveProperty('trailingStopDistancePct');
       expect(config).toHaveProperty('maxHoldingPeriodMs');
+      expect(config).toHaveProperty('adaptiveSizeExpandPct');
+      expect(config).toHaveProperty('adaptiveSizeContractPct');
     });
   });
 
@@ -216,10 +342,32 @@ describe('Directive 11.0A: TCL/TEC Separation', () => {
     });
   });
 
+  describe('Exposure/Correlation/Cooldown Ownership', () => {
+    it('TCL should NOT have exposure/correlation/cooldown checks', async () => {
+      const { CriteriaLimiter } = await import('../../core/criteria-limiter.js');
+      const tcl = new CriteriaLimiter();
+      
+      expect((tcl as any).checkExposure).toBeUndefined();
+      expect((tcl as any).checkCorrelation).toBeUndefined();
+      expect((tcl as any).checkCooldown).toBeUndefined();
+      expect((tcl as any).evaluateExposure).toBeUndefined();
+      expect((tcl as any).evaluateCorrelation).toBeUndefined();
+    });
+
+    it('TEC should NOT have exposure/correlation/cooldown checks', async () => {
+      const { ExecutionControllerImpl } = await import('../../services/execution-controller.js');
+      const tec = new ExecutionControllerImpl();
+      
+      expect((tec as any).checkExposure).toBeUndefined();
+      expect((tec as any).checkCorrelation).toBeUndefined();
+      expect((tec as any).checkCooldown).toBeUndefined();
+    });
+  });
+
   describe('Schema Version', () => {
-    it('should be at backend version 1.4.1 for Directive 11.0A', () => {
-      const BACKEND_SCHEMA_VERSION = '1.4.1';
-      expect(BACKEND_SCHEMA_VERSION).toBe('1.4.1');
+    it('should be at backend version 1.4.2 for Directive 11.0B', () => {
+      const BACKEND_SCHEMA_VERSION = '1.4.2';
+      expect(BACKEND_SCHEMA_VERSION).toBe('1.4.2');
     });
   });
 });

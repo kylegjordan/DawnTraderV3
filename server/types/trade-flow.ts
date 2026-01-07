@@ -1,10 +1,20 @@
 /**
- * Directive 11.0A — Trade Flow Type Definitions
+ * Directive 11.0B — Trade Flow Type Definitions
  * 
  * Defines the type contracts for trade lifecycle components.
  * 
  * Trade Lifecycle Flow:
- * [Signal Orchestrator] → [SQE] → [RTB Queue] → [TCL] → [TEC] → [Order Management]
+ * [Signal Orchestrator] (exposure, correlation, cooldown)
+ *      ↓
+ * [SQE] (FinalScore + RegimeWeight)
+ *      ↓
+ * [Ready-to-Buy Queue]
+ *      ↓ (2-min or 15-signal trigger)
+ * [TCL] (FinalScore ranking)
+ *      ↓
+ * [TEC] (adaptive sizing + trailing exits)
+ *      ↓
+ * [Order Management]
  */
 
 export type TradeMode = 'paper' | 'live';
@@ -60,6 +70,16 @@ export interface ExitDecision {
   holdingDurationMs?: number;
 }
 
+/**
+ * Directive 11.0B: Trendline feedback for adaptive sizing
+ */
+export interface Trendline {
+  reinforced: boolean;
+  weakened: boolean;
+  strength?: number;
+  lastUpdated?: string;
+}
+
 export interface ActiveTrade {
   tradeId: string;
   signalId: string;
@@ -74,6 +94,7 @@ export interface ActiveTrade {
   trailingStop?: number;
   openedAt: string;
   lastCheckedAt?: string;
+  trendline?: Trendline;
 }
 
 export interface TradeOrder {
@@ -87,8 +108,19 @@ export interface TradeOrder {
   fees?: number;
 }
 
+/**
+ * Directive 11.0B: Adaptive size adjustment result
+ */
+export interface AdaptiveSizeResult {
+  newQuantity: number;
+  adjusted: boolean;
+  adjustment: 'expand' | 'contract' | 'none';
+  reason?: string;
+}
+
 export interface TradeExecutionController {
   monitor(trade: ActiveTrade): ExitDecision;
   updateTrailingStop(trade: ActiveTrade): number | null;
+  updateAdaptiveSize(trade: ActiveTrade): AdaptiveSizeResult;
   closeTrade(trade: ActiveTrade, reason: ExitReason, exitPrice: number): Promise<void>;
 }

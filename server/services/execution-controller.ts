@@ -1,18 +1,20 @@
 /**
- * Directive 11.0A — Trade Execution Controller (TEC)
+ * Directive 11.0B — Trade Execution Controller (TEC)
  * 
- * Manages active trades with trendline-based adaptive trailing exits.
+ * Manages active trades with adaptive sizing and trailing exits.
  * 
  * RESPONSIBILITIES:
  * - Trade entry execution
  * - Active trade monitoring
  * - Adaptive trailing stop updates
+ * - Adaptive sizing based on trendline feedback
  * - Stop-loss and take-profit closures
  * 
- * NOT ALLOWED (per Directive 11.0A):
- * - Initial position sizing (Phase 11.3 will implement predictive sizing)
+ * NOT ALLOWED:
+ * - Initial position sizing (handled at entry)
  * - Queue-based trade scheduling (no FIFO logic)
  * - Re-evaluation or re-ranking of signals
+ * - Exposure/correlation/cooldown checks (Signal Orchestrator owns these)
  */
 
 import type {
@@ -26,13 +28,24 @@ export interface TECConfig {
   trailingStopActivationPct: number;
   trailingStopDistancePct: number;
   maxHoldingPeriodMs: number;
+  adaptiveSizeExpandPct: number;
+  adaptiveSizeContractPct: number;
 }
 
 const DEFAULT_CONFIG: TECConfig = {
   trailingStopActivationPct: 1.0,
   trailingStopDistancePct: 0.5,
-  maxHoldingPeriodMs: 24 * 60 * 60 * 1000
+  maxHoldingPeriodMs: 24 * 60 * 60 * 1000,
+  adaptiveSizeExpandPct: 10,
+  adaptiveSizeContractPct: 10
 };
+
+export interface AdaptiveSizeResult {
+  newQuantity: number;
+  adjusted: boolean;
+  adjustment: 'expand' | 'contract' | 'none';
+  reason?: string;
+}
 
 export class ExecutionControllerImpl implements TradeExecutionController {
   private config: TECConfig;
@@ -116,6 +129,53 @@ export class ExecutionControllerImpl implements TradeExecutionController {
     }
 
     return trade.trailingStop;
+  }
+
+  /**
+   * Directive 11.0B: Adaptive sizing based on trendline feedback
+   * 
+   * If trendline is reinforced: expand position size by 10%
+   * If trendline is weakened: contract position size by 10%
+   * 
+   * @param trade - Active trade with optional trendline feedback
+   * @returns AdaptiveSizeResult with new quantity and adjustment details
+   */
+  updateAdaptiveSize(trade: ActiveTrade): AdaptiveSizeResult {
+    const trendline = trade.trendline;
+    
+    if (!trendline) {
+      return {
+        newQuantity: trade.quantity,
+        adjusted: false,
+        adjustment: 'none',
+        reason: 'no_trendline_data'
+      };
+    }
+
+    let newQuantity = trade.quantity;
+    let adjustment: 'expand' | 'contract' | 'none' = 'none';
+    let reason: string | undefined;
+
+    if (trendline.reinforced) {
+      const expandMultiplier = 1 + (this.config.adaptiveSizeExpandPct / 100);
+      newQuantity = trade.quantity * expandMultiplier;
+      adjustment = 'expand';
+      reason = `trendline_reinforced (+${this.config.adaptiveSizeExpandPct}%)`;
+      console.log(`[TEC][ADAPTIVE_SIZE] ${trade.symbol} EXPAND: ${trade.quantity.toFixed(4)} → ${newQuantity.toFixed(4)} (${reason})`);
+    } else if (trendline.weakened) {
+      const contractMultiplier = 1 - (this.config.adaptiveSizeContractPct / 100);
+      newQuantity = trade.quantity * contractMultiplier;
+      adjustment = 'contract';
+      reason = `trendline_weakened (-${this.config.adaptiveSizeContractPct}%)`;
+      console.log(`[TEC][ADAPTIVE_SIZE] ${trade.symbol} CONTRACT: ${trade.quantity.toFixed(4)} → ${newQuantity.toFixed(4)} (${reason})`);
+    }
+
+    return {
+      newQuantity,
+      adjusted: adjustment !== 'none',
+      adjustment,
+      reason
+    };
   }
 
   async closeTrade(trade: ActiveTrade, reason: ExitReason, exitPrice: number): Promise<void> {

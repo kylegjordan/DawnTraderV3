@@ -183,7 +183,7 @@ class DiagnosticTraceService {
   traceSQE(
     symbol: string,
     strategy: string,
-    metrics: { ngc: number; cwqi: number; profit: number; risk: number },
+    metrics: { finalScore?: number; regimeWeight?: number; ngc?: number; cwqi?: number; profit?: number; risk?: number },
     passed: boolean,
     normalized: boolean = true
   ): void {
@@ -191,10 +191,10 @@ class DiagnosticTraceService {
       phase: 'sqe',
       symbol,
       strategy,
-      ngcRaw: metrics.ngc,
-      cwqiRaw: metrics.cwqi,
-      profit: metrics.profit,
-      risk: metrics.risk,
+      ngcRaw: metrics.ngc ?? metrics.finalScore ?? null,
+      cwqiRaw: metrics.cwqi ?? metrics.regimeWeight ?? null,
+      profit: metrics.profit ?? null,
+      risk: metrics.risk ?? null,
       normalized,
       passed,
       rejected: !passed,

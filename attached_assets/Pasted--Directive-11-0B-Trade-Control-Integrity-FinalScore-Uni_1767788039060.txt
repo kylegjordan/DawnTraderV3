@@ -1,0 +1,251 @@
+⚙️ Directive 11.0B — Trade Control Integrity & FinalScore Unification
+Phase: 11.0B
+
+Title: FinalScore Promotion Logic, SQE Purification, Adaptive Sizing Integration
+
+🎯 Objective
+
+To finalize the restoration of the Trade Control Layer by:
+
+Replacing legacy CWQI/NGC-based ranking with FinalScore-based promotion logic in the TCL.
+
+Purifying the SQE so it filters only by FinalScore and RegimeWeight.
+
+Migrating Adaptive Sizing (trendline-based) logic into the TEC.
+
+Verifying exposure, correlation, and cooldown checks exist only within the Signal Orchestrator/SQE and nowhere else.
+
+Reinforcing the Implementation Discipline policy to prevent unapproved architectural additions.
+
+🧱 Task 1 — Purify TCL: FinalScore Ranking Only
+Files:
+
+server/core/criteria-limiter.ts
+
+server/services/ready-to-buy-refresh.ts
+
+Actions:
+
+Remove all references to legacy ranking fields:
+
+cwqi, ngc, profitRate, riskCalc.
+
+Replace ranking function with:
+
+const rankedSignals = rtbQueue.sort((a, b) => b.finalScore - a.finalScore);
+
+
+In promoteTopSignals(), use:
+
+const openSlots = this.getOpenSlots();
+const topSignals = rankedSignals.slice(0, openSlots);
+for (const signal of topSignals) {
+    this.promoteToTrade(signal);
+}
+
+
+Verify triggers remain unchanged:
+
+onFailsafeTimer()
+
+onReadyToBuyQueueFull()
+
+Confirm promotion event logging:
+
+log.info(`[TCL] Promoted ${topSignals.length} signals using FinalScore ranking`);
+
+
+✅ Expected Outcome:
+TCL promotes signals exclusively by finalScore, ranked descending, when triggered by failsafe or RTB queue fullness.
+
+🧩 Task 2 — Purify SQE (Signal Quality Evaluator)
+Files:
+
+server/core/signal-quality-evaluator.ts
+
+server/config/system-guards.ts
+
+Actions:
+
+Remove evaluation of:
+
+signal.ngc
+
+signal.cwqi
+
+signal.risk
+
+signal.profitRate
+
+Retain only:
+
+if (!signal.finalScore || signal.finalScore < SQE_THRESHOLDS.MIN_FINAL_SCORE) return false;
+if (signal.regimeWeight < SQE_THRESHOLDS.MIN_REGIME_WEIGHT) return false;
+
+
+Update SQE_THRESHOLDS to reflect:
+
+export const SQE_THRESHOLDS = {
+    MIN_FINAL_SCORE: 0.35,
+    MIN_REGIME_WEIGHT: 0.30
+};
+
+
+Verify that exposure, correlation, and cooldown checks are referenced only as external inputs from the Signal Orchestrator — not directly evaluated here.
+
+✅ Expected Outcome:
+SQE becomes a pure final gatekeeper, checking only for FinalScore and RegimeWeight thresholds.
+
+⚙️ Task 3 — Migrate Adaptive Sizing into TEC
+Files:
+
+server/services/execution-controller.ts
+
+server/core/sizing-helper.ts
+
+server/services/trade-engine.ts
+
+Context:
+
+Adaptive sizing logic was originally implemented pre-TEC (Phase 9–10) inside trade-engine.ts and sizing-helper.ts.
+It must now reside under TEC, which owns all post-entry trade behavior.
+
+Actions:
+
+Move adaptive sizing logic into execution-controller.ts:
+
+updateAdaptiveSize(trade) {
+    const trend = trade.trendline;
+    if (!trend) return;
+
+    if (trend.reinforced) trade.positionSize *= 1.1;  // Expand by 10%
+    if (trend.weakened) trade.positionSize *= 0.9;   // Contract by 10%
+}
+
+
+Call this inside monitor(trade):
+
+monitor(trade) {
+    this.updateTrailingStop(trade);
+    this.updateAdaptiveSize(trade);
+    if (this.shouldExit(trade)) this.closeTrade(trade);
+}
+
+
+Remove adaptive sizing calls from:
+
+/server/services/trade-engine.ts
+
+/server/core/sizing-helper.ts (if they reference runtime trade adjustments)
+
+✅ Expected Outcome:
+TEC owns dynamic, runtime adaptive sizing — aligned with trailing exits and trendline feedback.
+
+🧠 Task 4 — Confirm Exposure/Correlation/Cooldown Ownership
+Files:
+
+server/core/signal-quality-evaluator.ts
+
+server/core/signal-orchestrator.ts
+
+Actions:
+
+Verify existence of:
+
+checkExposure(signal)
+
+checkCorrelation(signal)
+
+checkCooldown(signal)
+
+Confirm these are invoked only in:
+
+signal-orchestrator.ts
+
+not in criteria-limiter.ts or execution-controller.ts.
+
+If duplicated elsewhere, remove and add:
+
+// @note: Exposure, correlation, cooldown checks are owned by SQE and orchestrator only.
+
+
+✅ Expected Outcome:
+All exposure/correlation/cooldown logic exists only within the orchestrator/SQE, maintaining separation of duties.
+
+🧩 Task 5 — Validation & Governance Enforcement
+Files:
+
+replit.md
+
+architecture.md
+
+Actions:
+
+Add the following clause at the bottom of both files:
+
+Directive Compliance Policy (Phase 11+)
+
+Implementations must match directives exactly — no new modules, directories, or services without explicit written approval.
+
+If a developer or agent identifies a potential optimization or alternative design, they must document it and pause implementation pending architectural review.
+
+All deviations from architecture must be logged and corrected before directive sign-off.
+
+The project lead (Architect or Gemini) must verify that all file changes align with directive intent, not just functionality.
+
+✅ Expected Outcome:
+All contributors are contractually bound to the implementation discipline standard — no improvisation without pre-approval.
+
+🧩 Task 6 — Tests
+Files:
+
+server/tests/unit/criteria-limiter.test.ts
+
+server/tests/unit/signal-quality-evaluator.test.ts
+
+server/tests/unit/execution-controller.test.ts
+
+New Tests:
+Component	Test	Expected Result
+TCL	Promotes top FinalScore signals only	✅
+SQE	Rejects signals below FinalScore / RegimeWeight thresholds	✅
+TEC	Expands size when trend reinforced (+10%)	✅
+TEC	Contracts size when trend weakened (-10%)	✅
+SQE	Exposure/Correlation/Cooldown checks exist only in Orchestrator	✅
+
+✅ Run Command:
+
+npx vitest run criteria-limiter.test.ts signal-quality-evaluator.test.ts execution-controller.test.ts
+
+🧾 Documentation Updates
+
+architecture.md
+Update trade flow to:
+
+[Signal Orchestrator] (exposure, correlation, cooldown)
+     ↓
+[SQE] (FinalScore + RegimeWeight)
+     ↓
+[Ready-to-Buy Queue]
+     ↓ (2-min or 15-signal trigger)
+[TCL] (FinalScore ranking)
+     ↓
+[TEC] (adaptive sizing + trailing exits)
+     ↓
+[Order Management]
+
+
+replit.md
+Add:
+
+phaseDirective: "11.0B"
+schemaVersion: "v1.4.2"
+
+✅ Expected Outcome Summary
+Component	Role	Post-11.0B Behavior
+TCL	Promotes signals strictly by FinalScore	Event-driven (failsafe or RTB trigger)
+SQE	Filters by FinalScore + RegimeWeight only	Clean, legacy-free
+TEC	Manages adaptive sizing + trailing exits	Correctly scoped
+Orchestrator	Computes exposure/correlation/cooldown	No duplication
+Replit/Gemini	Bound by Directive Compliance Policy	Process discipline enforced
+System	Fully realigned with roadmap & architecture	✅ Stable and traceable
