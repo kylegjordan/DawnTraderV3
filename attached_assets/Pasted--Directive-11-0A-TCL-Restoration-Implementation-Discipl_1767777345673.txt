@@ -1,0 +1,147 @@
+⚙️ Directive 11.0A — TCL Restoration & Implementation Discipline Enforcement
+Phase: 11.0A
+Title: Trade Criteria Limiter Restoration, Redundant Service Rollback, and Governance Enforcement
+________________________________________
+🎯 Objective
+To reverse unintended architectural drift introduced in Directive 11.0 by:
+1.	Removing the unauthorized TCO (Trade Control Operator) layer.
+2.	Eliminating FIFO queue logic from TEC, restoring proper trade independence.
+3.	Confirming that exposure, correlation, and cooldown checks remain handled by SQE, not duplicated.
+4.	Restricting TEC’s role to trendline exit management and adaptive trailing logic only.
+5.	Reaffirming directive implementation protocol — Replit and Gemini may not create new services, files, or modules without explicit architectural approval.
+6.	Re-grounding all trade control logic in the existing TCL implementation structure.
+________________________________________
+🧱 Task 1 — Verify Current Logic Distribution
+Files to Review
+•	server/core/criteria-limiter.ts
+•	server/core/operators/trade-control-operator.ts (unauthorized TCO)
+•	server/services/execution-controller.ts
+•	server/core/signal-quality-evaluator.ts (SQE)
+•	server/core/interfaces/trade-flow.ts
+Verification Checklist
+Area	Expected Source	Action
+Exposure / Correlation / Cooldown checks	SQE	Confirm they remain here. If present in TCL or TCO, delete duplicates.
+TCL Event Triggers	criteria-limiter.ts	Ensure triggers: onFailsafe(2m) and onReadyToBuyQueueCount(>=15) are active.
+Slot Monitoring	criteria-limiter.ts	Ensure TCL promotes signals based on open trade slots becoming available.
+TEC Sizing	execution-controller.ts	Ensure TEC only performs trendline-based adaptive trailing logic. No static sizing, no base sizing formula.
+TCO Existence	operators directory	Delete trade-control-operator.ts and remove all references/imports.
+FIFO Queues	execution-controller.ts	Delete any queue logic for trade processing. TEC should manage trades individually.
+________________________________________
+⚙️ Task 2 — Restore the Canonical TCL Behavior
+The Trade Criteria Limiter (TCL) governs promotion of Ready-to-Buy (RTB) signals to open trades.
+It is not a filter and not an evaluator.
+It simply reacts to trade slot and queue events.
+✅ TCL Should:
+1.	Trigger conditions:
+o	2-minute failsafe (onFailsafeTimer())
+o	15-signal RTB accumulation (onReadyToBuyQueueFull())
+2.	Monitor open trade slots:
+o	If openSlots > 0, promote the highest-ranked RTB signals.
+3.	Promotion logic:
+4.	const openSlots = tradePool.maxOpen - tradePool.currentOpen;
+5.	const eligibleSignals = rtbQueue.getTopRanked(openSlots);
+6.	for (const signal of eligibleSignals) {
+7.	    promoteToTrade(signal);
+8.	}
+9.	Post-promotion behavior:
+o	Clear promoted signals from RTB.
+o	Reset the failsafe timer.
+o	Re-arm event listeners.
+10.	Prohibited actions:
+o	No exposure/correlation/cooldown checks.
+o	No position sizing.
+o	No prioritization beyond ranking.
+________________________________________
+🔧 Task 3 — Restrict TEC Responsibilities
+The Trade Execution Controller (TEC) should:
+✅ Handle only:
+•	Trade entry execution.
+•	Active trade monitoring.
+•	Trendline exit-based adaptive trailing.
+•	Stop-loss and take-profit closures.
+🚫 Should NOT handle:
+•	Initial position sizing (Phase 11.3 will implement predictive sizing).
+•	Queue-based trade scheduling (FIFO logic).
+•	Re-evaluation or re-ranking of signals.
+TEC Example:
+class TradeExecutionController {
+  monitor(trade) {
+    if (this.shouldExit(trade)) this.close(trade);
+    else this.updateTrailingStop(trade);
+  }
+
+  shouldExit(trade) {
+    return trade.price < trade.trailingStop || trade.price > trade.takeProfit;
+  }
+}
+________________________________________
+🧩 Task 4 — Confirm SQE Ownership of Checks
+Exposure, correlation, and cooldown are SQE-owned logic gates.
+Confirm that server/core/signal-quality-evaluator.ts includes:
+•	checkExposureLimit(signal)
+•	checkCorrelation(signal)
+•	checkCooldown(signal)
+And that each contributes to rejection reasons within:
+evaluateSignalQuality(signal) => {
+  if (violatesExposure()) return "EXPOSURE_LIMIT";
+  if (violatesCorrelation()) return "CORRELATED_PAIR";
+  if (violatesCooldown()) return "COOLDOWN_ACTIVE";
+}
+If these are already implemented, do not duplicate them elsewhere.
+If they were relocated into TCL or TEC, move them back and remove the duplicates.
+________________________________________
+📜 Task 5 — Delete Unauthorized or Redundant Modules
+File	Action
+/server/core/operators/trade-control-operator.ts	Delete. Not part of the approved architecture.
+/server/core/interfaces/trade-flow.ts	Rename → /server/types/trade-flow.ts (clarify as type definitions only).
+/server/services/execution-controller.ts	Remove FIFO logic, confirm TEC function scope matches this directive.
+________________________________________
+🧩 Task 6 — Governance and Process Enforcement
+Add a formal implementation protocol clause to replit.md and architecture.md:
+Directive Implementation Discipline
+Replit must not create new services, modules, or architectural layers without explicit written approval.
+Implementations must adhere strictly to the issued directive’s defined structure and scope.
+Recommendations for alternative approaches should be presented in a comment or pre-implementation discussion, not as code.
+Any new service or refactor requires prior architectural sign-off.
+________________________________________
+🧠 Task 7 — Validation & Tests
+Add new validation tests:
+File	Test	Expected
+criteria-limiter.spec.ts	TCL promotes signals on failsafe & RTB triggers	✅
+criteria-limiter.spec.ts	TCL skips promotion if no open slots	✅
+execution-controller.spec.ts	TEC executes only trailing exit updates	✅
+execution-controller.spec.ts	TEC does not modify sizing or queue signals	✅
+signal-quality-evaluator.spec.ts	Exposure/correlation/cooldown handled here	✅
+All previous Directive 11.0 tests that reference TCO should be removed or rewritten.
+________________________________________
+🧾 Documentation and Schema
+•	architecture.md — Update to remove TCO references.
+•	trade-lifecycle.md — Reflect true flow:
+[Signal Orchestrator] 
+     ↓
+[Signal Quality Evaluator (SQE)]
+     ↓
+[Ready-to-Buy Queue]
+     ↓ (failsafe or full queue event)
+[Trade Criteria Limiter (TCL)]
+     ↓
+[Trade Execution Controller (TEC)]
+     ↓
+[Order Management]
+•	Schema:
+o	Backend version: v1.4.1
+o	UI version: unchanged
+________________________________________
+✅ Expected Outcome
+Component	Role	Status After Directive 11.0A
+SQE	Filters signals (exposure, correlation, cooldown)	Unchanged, single source of truth
+TCL	Promotes RTB signals on event triggers	Restored, simplified
+TEC	Manages open trades and adaptive trailing exits	Correctly scoped
+TCO	Removed	Eliminated
+Queueing	None	Removed from TEC
+Process Control	Enforced	Documented in replit.md
+✅ TCL re-grounded in correct event logic.
+✅ No duplication of checks.
+✅ No unapproved architecture changes.
+✅ Governance reinforced across all implementation phases.
+

@@ -64,28 +64,32 @@ The system incorporates Verification & Config Purification, Backend Filter Decon
 - ACTIVE FILTERS (9): Volume, Liquidity (LQ), VolNoise, Correlation (ρ), PriceRange, MinPrice, MaxSpread, Stablecoin, History
 - INSTITUTIONAL MATH GUARDS: LQ ≥ 40, VolNoise ≤ 0.6, ρ ≤ 0.75 (remain active)
 
-**Directive 11.0 — TCO/TEC Separation (January 2026):**
-Trade Lifecycle Flow: [Signal Generator] → [TCL] → [TCO] → [TEC] → [Order Management]
+**Directive 11.0A — TCL Restoration & Architecture Correction (January 2026):**
+Trade Lifecycle Flow: [Signal Orchestrator] → [SQE] → [RTB Queue] → [TCL] → [TEC] → [Order Management]
+
+- **SQE (Signal Quality Evaluator)** — `server/core/filters/signal_quality_evaluator.ts`
+  - Single source of truth for: exposure limits, correlation checks, cooldowns
+  - Filters signals on NGC, CWQI, Risk, ProfitRate thresholds
+  - Interface: `evaluateSignalQuality(input) → SQEResult`
 
 - **TCL (Trade Criteria Limiter)** — `server/core/criteria-limiter.ts`
-  - Pure eligibility gate: exposure limits, position caps, market regime, correlation, cooldowns
-  - NO sizing, NO exit logic, NO volatility adjustments
-  - Interface: `evaluate(signal, mode) → EligibilityResult`
-
-- **TCO (Trade Control Operator)** — `server/core/operators/trade-control-operator.ts`
-  - Pure promoter: passes approved intents to TEC
-  - NO modification of size or risk parameters
-  - Interface: `promote(signal, mode) → boolean`
+  - Event-based promotion: 2-minute failsafe timer, 15-signal RTB queue threshold
+  - Monitors open trade slots, promotes highest-ranked RTB signals
+  - NO exposure/correlation/cooldown checks (SQE owns these)
+  - Interface: `onFailsafeTimer()`, `onReadyToBuyQueueFull()`, `promoteTopSignals()`
 
 - **TEC (Trade Execution Controller)** — `server/services/execution-controller.ts`
-  - Owns all sizing: risk-based, exposure-capped, volatility-adjusted
-  - Owns all exits: SL, TP, trailing stops, max holding period
-  - Owns order lifecycle management and execution queue
-  - Interface: `enqueueExecution(intent)`, `calculatePositionSize()`, `evaluateExitConditions()`, `closeTrade()`
+  - Manages active trades with adaptive trailing exits only
+  - NO position sizing (Phase 11.3), NO queue logic (removed)
+  - Interface: `monitor(trade)`, `updateTrailingStop(trade)`, `closeTrade()`
 
-- NEW: `server/core/interfaces/trade-flow.ts` — Shared type definitions
-- SCHEMA: Backend v1.4.0
-- TESTS: 20 new component boundary tests in `tco-tec-tcl.test.ts`
+- REMOVED: `server/core/operators/trade-control-operator.ts` — TCO layer was unauthorized
+- MOVED: `server/core/interfaces/trade-flow.ts` → `server/types/trade-flow.ts`
+- SCHEMA: Backend v1.4.1
+- TESTS: 19 component boundary tests in `tco-tec-tcl.test.ts`
+
+**Directive Implementation Discipline:**
+Replit must not create new services, modules, or architectural layers without explicit written approval. Implementations must adhere strictly to issued directive structure and scope. Recommendations for alternative approaches should be presented in pre-implementation discussion, not as code. Any new service or refactor requires prior architectural sign-off.
 
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.

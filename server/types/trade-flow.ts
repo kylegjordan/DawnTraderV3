@@ -1,10 +1,10 @@
 /**
- * Directive 11.0 — Trade Flow Interfaces
+ * Directive 11.0A — Trade Flow Type Definitions
  * 
- * Defines the contracts between TCL, TCO, and TEC components.
+ * Defines the type contracts for trade lifecycle components.
  * 
  * Trade Lifecycle Flow:
- * [Signal Generator] → [TCL] → [TCO] → [TEC] → [Order Management]
+ * [Signal Orchestrator] → [SQE] → [RTB Queue] → [TCL] → [TEC] → [Order Management]
  */
 
 export type TradeMode = 'paper' | 'live';
@@ -44,38 +44,6 @@ export interface ExecutionIntent {
   mode: TradeMode;
 }
 
-export type EligibilityRejectionCode =
-  | 'KILL_SWITCH'
-  | 'MAX_OPEN_POSITIONS'
-  | 'MAX_TOTAL_EXPOSURE'
-  | 'CORRELATION_EXPOSURE'
-  | 'MARKET_REGIME_VETO'
-  | 'COOLDOWN_ACTIVE'
-  | 'INSUFFICIENT_CONFIDENCE'
-  | 'INSTRUMENT_BLOCKED';
-
-export interface EligibilityResult {
-  passed: boolean;
-  rejectionCode?: EligibilityRejectionCode;
-  reason?: string;
-  checksPerformed: string[];
-  timestamp: string;
-}
-
-export interface PositionSizeResult {
-  quantity: number;
-  notionalValue: number;
-  riskAmount: number;
-  sizingMethod: 'risk_based' | 'exposure_capped' | 'volatility_adjusted';
-  inputs: {
-    portfolioValue: number;
-    riskPerTradePct: number;
-    stopDistance: number;
-    volatilityFactor?: number;
-    correlationScale?: number;
-  };
-}
-
 export type ExitReason =
   | 'stop_loss_hit'
   | 'take_profit_hit'
@@ -103,6 +71,7 @@ export interface ActiveTrade {
   stopPrice: number;
   targetPrice: number;
   currentPrice?: number;
+  trailingStop?: number;
   openedAt: string;
   lastCheckedAt?: string;
 }
@@ -110,7 +79,6 @@ export interface ActiveTrade {
 export interface TradeOrder {
   orderId: string;
   intent: ExecutionIntent;
-  size: PositionSizeResult;
   status: 'pending' | 'submitted' | 'filled' | 'rejected' | 'cancelled';
   createdAt: string;
   filledAt?: string;
@@ -119,17 +87,8 @@ export interface TradeOrder {
   fees?: number;
 }
 
-export interface TradeCriteriaLimiter {
-  evaluate(signal: TradeSignal, mode: TradeMode): Promise<EligibilityResult>;
-}
-
-export interface TradeControlOperator {
-  promote(signal: TradeSignal, mode: TradeMode): Promise<boolean>;
-}
-
 export interface TradeExecutionController {
-  enqueueExecution(intent: ExecutionIntent): Promise<TradeOrder>;
-  calculatePositionSize(intent: ExecutionIntent, portfolioValue: number): PositionSizeResult;
-  evaluateExitConditions(trade: ActiveTrade): ExitDecision;
+  monitor(trade: ActiveTrade): ExitDecision;
+  updateTrailingStop(trade: ActiveTrade): number | null;
   closeTrade(trade: ActiveTrade, reason: ExitReason, exitPrice: number): Promise<void>;
 }

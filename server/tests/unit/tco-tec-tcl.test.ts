@@ -1,16 +1,48 @@
 /**
- * Directive 11.0 — TCO/TEC/TCL Component Boundary Tests
+ * Directive 11.0A — TCL/TEC Component Boundary Tests
  * 
  * Verifies that:
- * - TCL only handles eligibility checks (no sizing)
- * - TCO only promotes (no modification)
- * - TEC owns sizing and exit logic
+ * - TCL handles event-based promotion (failsafe/RTB triggers)
+ * - TEC only handles trailing exit updates and trade monitoring
+ * - SQE owns exposure/correlation/cooldown checks
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-describe('Directive 11.0: TCO/TEC/TCL Separation', () => {
-  describe('TCL (Trade Criteria Limiter) - Eligibility Only', () => {
+describe('Directive 11.0A: TCL/TEC Separation', () => {
+  describe('TCL (Trade Criteria Limiter) - Event-Based Promotion', () => {
+    it('should have onFailsafeTimer method for 2-minute failsafe', async () => {
+      const { CriteriaLimiter } = await import('../../core/criteria-limiter.js');
+      const tcl = new CriteriaLimiter();
+      
+      expect(tcl.onFailsafeTimer).toBeDefined();
+      expect(typeof tcl.onFailsafeTimer).toBe('function');
+    });
+
+    it('should have onReadyToBuyQueueFull method for RTB threshold', async () => {
+      const { CriteriaLimiter } = await import('../../core/criteria-limiter.js');
+      const tcl = new CriteriaLimiter();
+      
+      expect(tcl.onReadyToBuyQueueFull).toBeDefined();
+      expect(typeof tcl.onReadyToBuyQueueFull).toBe('function');
+    });
+
+    it('should have promoteTopSignals method', async () => {
+      const { CriteriaLimiter } = await import('../../core/criteria-limiter.js');
+      const tcl = new CriteriaLimiter();
+      
+      expect(tcl.promoteTopSignals).toBeDefined();
+      expect(typeof tcl.promoteTopSignals).toBe('function');
+    });
+
+    it('should have getOpenSlots method for slot monitoring', async () => {
+      const { CriteriaLimiter } = await import('../../core/criteria-limiter.js');
+      const tcl = new CriteriaLimiter();
+      
+      expect(tcl.getOpenSlots).toBeDefined();
+      expect(typeof tcl.getOpenSlots).toBe('function');
+    });
+
     it('should NOT have calculatePositionSize method', async () => {
       const { CriteriaLimiter } = await import('../../core/criteria-limiter.js');
       const tcl = new CriteriaLimiter();
@@ -18,102 +50,52 @@ describe('Directive 11.0: TCO/TEC/TCL Separation', () => {
       expect((tcl as any).calculatePositionSize).toBeUndefined();
     });
 
-    it('should NOT have assignAdaptiveSize method', async () => {
+    it('should NOT have exposure/correlation check methods (SQE owns these)', async () => {
       const { CriteriaLimiter } = await import('../../core/criteria-limiter.js');
       const tcl = new CriteriaLimiter();
       
-      expect((tcl as any).assignAdaptiveSize).toBeUndefined();
+      expect((tcl as any).checkExposureLimit).toBeUndefined();
+      expect((tcl as any).checkCorrelation).toBeUndefined();
+      expect((tcl as any).checkCooldown).toBeUndefined();
     });
 
-    it('should NOT have volatility-based sizing methods', async () => {
+    it('should have failsafe timer management methods', async () => {
       const { CriteriaLimiter } = await import('../../core/criteria-limiter.js');
       const tcl = new CriteriaLimiter();
       
-      expect((tcl as any).volatilityAdjustedSize).toBeUndefined();
-      expect((tcl as any).sizingFactor).toBeUndefined();
+      expect(tcl.startFailsafeTimer).toBeDefined();
+      expect(tcl.stopFailsafeTimer).toBeDefined();
+      expect(tcl.resetFailsafeTimer).toBeDefined();
     });
 
-    it('should NOT have exit trigger methods', async () => {
-      const { CriteriaLimiter } = await import('../../core/criteria-limiter.js');
-      const tcl = new CriteriaLimiter();
-      
-      expect((tcl as any).calculateExitTrigger).toBeUndefined();
-      expect((tcl as any).closeOpenTrade).toBeUndefined();
-    });
-
-    it('should have evaluate method for eligibility checking', async () => {
-      const { CriteriaLimiter } = await import('../../core/criteria-limiter.js');
-      const tcl = new CriteriaLimiter();
-      
-      expect(tcl.evaluate).toBeDefined();
-      expect(typeof tcl.evaluate).toBe('function');
-    });
-
-    it('should export only eligibility-related configuration', async () => {
+    it('should export TCL config with correct defaults', async () => {
       const { CriteriaLimiter } = await import('../../core/criteria-limiter.js');
       const tcl = new CriteriaLimiter();
       const config = tcl.getConfig();
       
       expect(config).toHaveProperty('maxOpenPositions');
-      expect(config).toHaveProperty('maxTotalExposurePct');
-      expect(config).toHaveProperty('maxCorrelationThreshold');
-      expect(config).toHaveProperty('minConfidenceThreshold');
-      expect(config).toHaveProperty('cooldownPeriodMs');
-      
-      expect(config).not.toHaveProperty('positionSize');
-      expect(config).not.toHaveProperty('adaptiveSize');
+      expect(config).toHaveProperty('rtbQueueThreshold');
+      expect(config).toHaveProperty('failsafeTimerMs');
+      expect(config.rtbQueueThreshold).toBe(15);
+      expect(config.failsafeTimerMs).toBe(2 * 60 * 1000);
     });
   });
 
-  describe('TCO (Trade Control Operator) - Pure Promoter', () => {
-    it('should NOT have sizing methods', async () => {
-      const { TradeControlOperatorImpl } = await import('../../core/operators/trade-control-operator.js');
-      const tco = new TradeControlOperatorImpl();
-      
-      expect((tco as any).calculatePositionSize).toBeUndefined();
-      expect((tco as any).assignAdaptiveSize).toBeUndefined();
-    });
-
-    it('should NOT have exit logic methods', async () => {
-      const { TradeControlOperatorImpl } = await import('../../core/operators/trade-control-operator.js');
-      const tco = new TradeControlOperatorImpl();
-      
-      expect((tco as any).evaluateExitConditions).toBeUndefined();
-      expect((tco as any).closeTrade).toBeUndefined();
-    });
-
-    it('should have promote method', async () => {
-      const { TradeControlOperatorImpl } = await import('../../core/operators/trade-control-operator.js');
-      const tco = new TradeControlOperatorImpl();
-      
-      expect(tco.promote).toBeDefined();
-      expect(typeof tco.promote).toBe('function');
-    });
-
-    it('should have promotion history tracking', async () => {
-      const { TradeControlOperatorImpl } = await import('../../core/operators/trade-control-operator.js');
-      const tco = new TradeControlOperatorImpl();
-      
-      expect(tco.getPromotionHistory).toBeDefined();
-      expect(tco.getPromotionStats).toBeDefined();
-    });
-  });
-
-  describe('TEC (Trade Execution Controller) - Sizing & Exits', () => {
-    it('should have calculatePositionSize method', async () => {
+  describe('TEC (Trade Execution Controller) - Trailing Exits Only', () => {
+    it('should have monitor method for trade monitoring', async () => {
       const { ExecutionControllerImpl } = await import('../../services/execution-controller.js');
       const tec = new ExecutionControllerImpl();
       
-      expect(tec.calculatePositionSize).toBeDefined();
-      expect(typeof tec.calculatePositionSize).toBe('function');
+      expect(tec.monitor).toBeDefined();
+      expect(typeof tec.monitor).toBe('function');
     });
 
-    it('should have evaluateExitConditions method', async () => {
+    it('should have updateTrailingStop method', async () => {
       const { ExecutionControllerImpl } = await import('../../services/execution-controller.js');
       const tec = new ExecutionControllerImpl();
       
-      expect(tec.evaluateExitConditions).toBeDefined();
-      expect(typeof tec.evaluateExitConditions).toBe('function');
+      expect(tec.updateTrailingStop).toBeDefined();
+      expect(typeof tec.updateTrailingStop).toBe('function');
     });
 
     it('should have closeTrade method', async () => {
@@ -124,44 +106,25 @@ describe('Directive 11.0: TCO/TEC/TCL Separation', () => {
       expect(typeof tec.closeTrade).toBe('function');
     });
 
-    it('should have enqueueExecution method', async () => {
+    it('should NOT have enqueueExecution method (no queue logic)', async () => {
       const { ExecutionControllerImpl } = await import('../../services/execution-controller.js');
       const tec = new ExecutionControllerImpl();
       
-      expect(tec.enqueueExecution).toBeDefined();
-      expect(typeof tec.enqueueExecution).toBe('function');
+      expect((tec as any).enqueueExecution).toBeUndefined();
     });
 
-    it('should calculate position size with risk-based approach', async () => {
+    it('should NOT have calculatePositionSize method (sizing removed)', async () => {
       const { ExecutionControllerImpl } = await import('../../services/execution-controller.js');
       const tec = new ExecutionControllerImpl();
       
-      const intent = {
-        signalId: 'test-123',
-        instrument: 'BTC/USD',
-        entryPrice: 50000,
-        stopPrice: 49000,
-        targetPrice: 52000,
-        strategy: 'sma_trend_ride' as const,
-        confidence: 0.75,
-        timestamp: new Date().toISOString(),
-        mode: 'paper' as const
-      };
-      
-      const result = tec.calculatePositionSize(intent, 10000);
-      
-      expect(result.quantity).toBeGreaterThan(0);
-      expect(result.notionalValue).toBeGreaterThan(0);
-      expect(result.riskAmount).toBeGreaterThan(0);
-      expect(result.sizingMethod).toBeDefined();
-      expect(result.inputs).toBeDefined();
+      expect((tec as any).calculatePositionSize).toBeUndefined();
     });
 
-    it('should evaluate exit conditions correctly', async () => {
+    it('should detect stop loss exit condition', async () => {
       const { ExecutionControllerImpl } = await import('../../services/execution-controller.js');
       const tec = new ExecutionControllerImpl();
       
-      const activeTrade = {
+      const trade = {
         tradeId: 'trade-123',
         signalId: 'signal-123',
         symbol: 'BTC/USD',
@@ -175,72 +138,88 @@ describe('Directive 11.0: TCO/TEC/TCL Separation', () => {
         openedAt: new Date().toISOString()
       };
       
-      const decision = tec.evaluateExitConditions(activeTrade);
+      const decision = tec.monitor(trade);
       
       expect(decision.shouldExit).toBe(true);
       expect(decision.exitReason).toBe('stop_loss_hit');
     });
 
-    it('should have sizing configuration options', async () => {
+    it('should detect take profit exit condition', async () => {
+      const { ExecutionControllerImpl } = await import('../../services/execution-controller.js');
+      const tec = new ExecutionControllerImpl();
+      
+      const trade = {
+        tradeId: 'trade-123',
+        signalId: 'signal-123',
+        symbol: 'BTC/USD',
+        strategy: 'sma_trend_ride' as const,
+        mode: 'paper' as const,
+        entryPrice: 50000,
+        quantity: 0.1,
+        stopPrice: 49000,
+        targetPrice: 52000,
+        currentPrice: 53000,
+        openedAt: new Date().toISOString()
+      };
+      
+      const decision = tec.monitor(trade);
+      
+      expect(decision.shouldExit).toBe(true);
+      expect(decision.exitReason).toBe('take_profit_hit');
+    });
+
+    it('should update trailing stop when profit threshold met', async () => {
+      const { ExecutionControllerImpl } = await import('../../services/execution-controller.js');
+      const tec = new ExecutionControllerImpl();
+      
+      const trade = {
+        tradeId: 'trade-123',
+        signalId: 'signal-123',
+        symbol: 'BTC/USD',
+        strategy: 'sma_trend_ride' as const,
+        mode: 'paper' as const,
+        entryPrice: 50000,
+        quantity: 0.1,
+        stopPrice: 49000,
+        targetPrice: 55000,
+        currentPrice: 51000,
+        openedAt: new Date().toISOString()
+      };
+      
+      const newTrailingStop = tec.updateTrailingStop(trade);
+      
+      expect(newTrailingStop).toBeGreaterThan(0);
+      expect(newTrailingStop).toBeLessThan(trade.currentPrice);
+    });
+
+    it('should have trailing stop configuration options', async () => {
       const { ExecutionControllerImpl } = await import('../../services/execution-controller.js');
       const tec = new ExecutionControllerImpl();
       const config = tec.getConfig();
       
-      expect(config).toHaveProperty('defaultRiskPerTradePct');
-      expect(config).toHaveProperty('maxPositionPct');
-      expect(config).toHaveProperty('maxTotalExposurePct');
-      expect(config).toHaveProperty('slippagePct');
-      expect(config).toHaveProperty('feePct');
+      expect(config).toHaveProperty('trailingStopActivationPct');
+      expect(config).toHaveProperty('trailingStopDistancePct');
+      expect(config).toHaveProperty('maxHoldingPeriodMs');
     });
   });
 
-  describe('Interface Contracts', () => {
-    it('should define ExecutionIntent interface correctly', async () => {
-      const { executionController } = await import('../../services/execution-controller.js');
+  describe('TCO Removal Verification', () => {
+    it('should NOT have TradeControlOperator file', async () => {
+      let fileExists = true;
+      try {
+        await import('../../core/operators/trade-control-operator.js');
+      } catch (err) {
+        fileExists = false;
+      }
       
-      const validIntent = {
-        signalId: 'test-signal',
-        instrument: 'ETH/USD',
-        entryPrice: 3000,
-        stopPrice: 2900,
-        targetPrice: 3200,
-        strategy: 'breakout' as const,
-        confidence: 0.8,
-        timestamp: new Date().toISOString(),
-        mode: 'paper' as const
-      };
-      
-      expect(validIntent.signalId).toBeDefined();
-      expect(validIntent.instrument).toBeDefined();
-      expect(validIntent.entryPrice).toBeGreaterThan(0);
-    });
-
-    it('should define EligibilityResult interface correctly', async () => {
-      const { criteriaLimiter } = await import('../../core/criteria-limiter.js');
-      
-      const mockSignal = {
-        signalId: 'test-signal',
-        symbol: 'ETH/USD',
-        strategy: 'breakout' as const,
-        entryPrice: 3000,
-        stopPrice: 2900,
-        targetPrice: 3200,
-        confidence: 0.3,
-        timestamp: new Date().toISOString()
-      };
-      
-      const result = await criteriaLimiter.evaluate(mockSignal, 'paper');
-      
-      expect(result).toHaveProperty('passed');
-      expect(result).toHaveProperty('checksPerformed');
-      expect(result).toHaveProperty('timestamp');
+      expect(fileExists).toBe(false);
     });
   });
 
   describe('Schema Version', () => {
-    it('should be at backend version 1.4.0 for Directive 11.0', () => {
-      const BACKEND_SCHEMA_VERSION = '1.4.0';
-      expect(BACKEND_SCHEMA_VERSION).toBe('1.4.0');
+    it('should be at backend version 1.4.1 for Directive 11.0A', () => {
+      const BACKEND_SCHEMA_VERSION = '1.4.1';
+      expect(BACKEND_SCHEMA_VERSION).toBe('1.4.1');
     });
   });
 });

@@ -1,115 +1,56 @@
 /**
- * Directive 11.0 — Trade Criteria Limiter (TCL)
+ * Directive 11.0A — Trade Criteria Limiter (TCL)
  * 
- * Pure eligibility gating component. This module ONLY evaluates whether
- * a trade signal meets global criteria before promotion.
+ * Event-based promotion controller. Reacts to trade slot availability
+ * and RTB queue events to promote highest-ranked signals.
  * 
  * RESPONSIBILITIES (ALLOWED):
- * - Exposure limit checks
- * - Open position cap checks
- * - Market regime evaluation
- * - Portfolio correlation checks
- * - Instrument eligibility verification
- * - Cooldown period enforcement
+ * - Trigger on 2-minute failsafe timer (onFailsafeTimer)
+ * - Trigger on 15-signal RTB accumulation (onReadyToBuyQueueFull)
+ * - Monitor open trade slots
+ * - Promote highest-ranked RTB signals when capacity available
  * 
- * NOT ALLOWED (delegated to TEC):
- * - Position sizing
- * - Exit trigger calculation
- * - Volatility-based weighting
- * - ATR or liquidity adjustments
+ * NOT ALLOWED (owned by SQE):
+ * - Exposure/correlation/cooldown checks (SQE responsibility)
+ * - Position sizing (Phase 11.3 will implement)
+ * - Exit logic (TEC responsibility)
+ * - Volatility adjustments
+ * 
+ * The TCL is a pure event-driven promoter that reacts to queue and
+ * slot events, promoting the top-ranked signals to active trades.
  */
 
-import type {
-  TradeSignal,
-  TradeMode,
-  EligibilityResult,
-  EligibilityRejectionCode,
-  TradeCriteriaLimiter
-} from './interfaces/trade-flow.js';
 import { storage } from '../storage.js';
+import type { TradingMode } from '../services/guardrail-policy.js';
 
 export interface TCLConfig {
   maxOpenPositions: number;
-  maxTotalExposurePct: number;
-  maxCorrelationThreshold: number;
-  minConfidenceThreshold: number;
-  cooldownPeriodMs: number;
+  rtbQueueThreshold: number;
+  failsafeTimerMs: number;
 }
 
 const DEFAULT_CONFIG: TCLConfig = {
   maxOpenPositions: 10,
-  maxTotalExposurePct: 100,
-  maxCorrelationThreshold: 0.75,
-  minConfidenceThreshold: 0.50,
-  cooldownPeriodMs: 60000
+  rtbQueueThreshold: 15,
+  failsafeTimerMs: 2 * 60 * 1000
 };
 
-export class CriteriaLimiter implements TradeCriteriaLimiter {
+export interface PromotionResult {
+  promoted: number;
+  skipped: number;
+  reason?: string;
+}
+
+export class CriteriaLimiter {
   private config: TCLConfig;
-  private cooldownMap: Map<string, number> = new Map();
+  private failsafeTimers: Map<TradingMode, NodeJS.Timeout> = new Map();
+  private lastPromotionTime: Map<TradingMode, number> = new Map();
 
   constructor(config: Partial<TCLConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
 
-  async evaluate(signal: TradeSignal, mode: TradeMode): Promise<EligibilityResult> {
-    const checksPerformed: string[] = [];
-    const timestamp = new Date().toISOString();
-
-    const checks: Array<{
-      name: string;
-      check: () => Promise<{ passed: boolean; code?: EligibilityRejectionCode; reason?: string }>;
-    }> = [
-      { name: 'kill_switch', check: () => this.checkKillSwitch(mode) },
-      { name: 'position_limit', check: () => this.checkOpenPositionLimit(mode) },
-      { name: 'exposure_limit', check: () => this.checkExposureLimit(mode) },
-      { name: 'correlation', check: () => this.checkCorrelationExposure(signal.symbol, mode) },
-      { name: 'confidence', check: () => this.checkConfidence(signal.confidence) },
-      { name: 'cooldown', check: () => this.checkCooldown(signal.symbol) },
-      { name: 'instrument', check: () => this.checkInstrumentEligibility(signal.symbol) }
-    ];
-
-    for (const { name, check } of checks) {
-      checksPerformed.push(name);
-      const result = await check();
-      
-      if (!result.passed) {
-        console.log(`[TCL][REJECT] ${signal.symbol} failed ${name}: ${result.reason}`);
-        return {
-          passed: false,
-          rejectionCode: result.code,
-          reason: result.reason,
-          checksPerformed,
-          timestamp
-        };
-      }
-    }
-
-    console.log(`[TCL][PASS] ${signal.symbol} passed all ${checksPerformed.length} eligibility checks`);
-    return {
-      passed: true,
-      checksPerformed,
-      timestamp
-    };
-  }
-
-  private async checkKillSwitch(mode: TradeMode): Promise<{ passed: boolean; code?: EligibilityRejectionCode; reason?: string }> {
-    try {
-      const guardrails = await storage.getGuardrailsV2({ mode });
-      if (guardrails?.killSwitchTripped) {
-        return {
-          passed: false,
-          code: 'KILL_SWITCH',
-          reason: 'Kill switch is active - trading halted'
-        };
-      }
-    } catch (err) {
-      console.warn('[TCL] Error checking kill switch, allowing trade:', err);
-    }
-    return { passed: true };
-  }
-
-  private async checkOpenPositionLimit(mode: TradeMode): Promise<{ passed: boolean; code?: EligibilityRejectionCode; reason?: string }> {
+  async getOpenSlots(mode: TradingMode): Promise<number> {
     try {
       const positions = mode === 'paper' 
         ? await storage.getPaperSimOpenPositions(mode)
@@ -118,119 +59,106 @@ export class CriteriaLimiter implements TradeCriteriaLimiter {
       const guardrails = await storage.getGuardrailsV2({ mode });
       const maxPositions = guardrails?.maxOpenPositions ?? this.config.maxOpenPositions;
 
-      if (positions.length >= maxPositions) {
-        return {
-          passed: false,
-          code: 'MAX_OPEN_POSITIONS',
-          reason: `Max open positions reached (${positions.length}/${maxPositions})`
-        };
-      }
+      return Math.max(0, maxPositions - positions.length);
     } catch (err) {
-      console.warn('[TCL] Error checking position limit:', err);
+      console.warn('[TCL] Error checking open slots:', err);
+      return 0;
     }
-    return { passed: true };
   }
 
-  private async checkExposureLimit(mode: TradeMode): Promise<{ passed: boolean; code?: EligibilityRejectionCode; reason?: string }> {
-    try {
-      const guardrails = await storage.getGuardrailsV2({ mode });
-      const maxExposurePct = parseFloat(String(guardrails?.maxTotalExposurePct ?? this.config.maxTotalExposurePct));
-
-      const portfolioState = await storage.getPortfolioState({ mode });
-      if (!portfolioState) return { passed: true };
-
-      const balance = parseFloat(String(portfolioState.balance || 0));
-      
-      if (balance <= 0) return { passed: true };
-
-      const positions = mode === 'paper' 
-        ? await storage.getPaperSimOpenPositions(mode)
-        : await storage.getActiveTrades(mode);
-      
-      const exposedValue = positions.reduce((sum, p) => {
-        const qty = parseFloat(String((p as any).quantity || 0));
-        const price = parseFloat(String((p as any).avgPrice || (p as any).entryPrice || 0));
-        return sum + (qty * price);
-      }, 0);
-      
-      const totalValue = balance + exposedValue;
-      const currentExposurePct = totalValue > 0 ? (exposedValue / totalValue) * 100 : 0;
-
-      if (currentExposurePct >= maxExposurePct) {
-        return {
-          passed: false,
-          code: 'MAX_TOTAL_EXPOSURE',
-          reason: `Max exposure reached (${currentExposurePct.toFixed(1)}% >= ${maxExposurePct}%)`
-        };
-      }
-    } catch (err) {
-      console.warn('[TCL] Error checking exposure limit:', err);
-    }
-    return { passed: true };
+  async onFailsafeTimer(mode: TradingMode): Promise<PromotionResult> {
+    console.log(`[TCL][FAILSAFE] 2-minute failsafe triggered for ${mode} mode`);
+    return this.promoteTopSignals(mode, 'failsafe_timer');
   }
 
-  private async checkCorrelationExposure(symbol: string, mode: TradeMode): Promise<{ passed: boolean; code?: EligibilityRejectionCode; reason?: string }> {
-    try {
-      const { isCorrelatedExposure } = await import('../services/risk-concentration.js');
-      
-      if (isCorrelatedExposure(symbol)) {
-        return {
-          passed: false,
-          code: 'CORRELATION_EXPOSURE',
-          reason: `High correlation with existing positions detected for ${symbol}`
-        };
-      }
-    } catch (err) {
-      console.warn('[TCL] Error checking correlation:', err);
-    }
-    return { passed: true };
+  async onReadyToBuyQueueFull(mode: TradingMode): Promise<PromotionResult> {
+    console.log(`[TCL][RTB_FULL] RTB queue threshold (${this.config.rtbQueueThreshold}) reached for ${mode} mode`);
+    return this.promoteTopSignals(mode, 'rtb_queue_full');
   }
 
-  private async checkConfidence(confidence: number): Promise<{ passed: boolean; code?: EligibilityRejectionCode; reason?: string }> {
-    if (confidence < this.config.minConfidenceThreshold) {
-      return {
-        passed: false,
-        code: 'INSUFFICIENT_CONFIDENCE',
-        reason: `Confidence ${(confidence * 100).toFixed(1)}% below threshold ${(this.config.minConfidenceThreshold * 100).toFixed(1)}%`
-      };
+  async promoteTopSignals(mode: TradingMode, trigger: string): Promise<PromotionResult> {
+    const openSlots = await this.getOpenSlots(mode);
+    
+    if (openSlots <= 0) {
+      console.log(`[TCL][SKIP] No open slots available for ${mode} mode`);
+      return { promoted: 0, skipped: 0, reason: 'no_open_slots' };
     }
-    return { passed: true };
-  }
 
-  private async checkCooldown(symbol: string): Promise<{ passed: boolean; code?: EligibilityRejectionCode; reason?: string }> {
-    const lastTradeTime = this.cooldownMap.get(symbol);
-    if (lastTradeTime) {
-      const elapsed = Date.now() - lastTradeTime;
-      if (elapsed < this.config.cooldownPeriodMs) {
-        const remainingMs = this.config.cooldownPeriodMs - elapsed;
-        return {
-          passed: false,
-          code: 'COOLDOWN_ACTIVE',
-          reason: `Cooldown active for ${symbol} (${Math.ceil(remainingMs / 1000)}s remaining)`
-        };
+    const rtbSignals = await storage.getRtbSignals({ mode, status: 'queued' });
+    
+    if (rtbSignals.length === 0) {
+      console.log(`[TCL][SKIP] No RTB signals available for ${mode} mode`);
+      return { promoted: 0, skipped: 0, reason: 'no_rtb_signals' };
+    }
+
+    const sortedSignals = rtbSignals.sort((a, b) => {
+      const cwqiA = parseFloat(a.cwqi || '0');
+      const cwqiB = parseFloat(b.cwqi || '0');
+      return cwqiB - cwqiA;
+    });
+
+    const eligibleSignals = sortedSignals.slice(0, openSlots);
+
+    let promotedCount = 0;
+    for (const signal of eligibleSignals) {
+      try {
+        await storage.updateRtbSignal(signal.id, {
+          status: 'promoted',
+          promotedAt: new Date()
+        });
+        
+        console.log(`[TCL][PROMOTED] ${signal.symbol} (CWQI: ${signal.cwqi}) via ${trigger}`);
+        promotedCount++;
+      } catch (err) {
+        console.error(`[TCL][ERROR] Failed to promote ${signal.symbol}:`, err);
       }
     }
-    return { passed: true };
+
+    this.lastPromotionTime.set(mode, Date.now());
+    this.resetFailsafeTimer(mode);
+
+    console.log(`[TCL][COMPLETE] Promoted ${promotedCount}/${eligibleSignals.length} signals for ${mode} mode`);
+    
+    return {
+      promoted: promotedCount,
+      skipped: eligibleSignals.length - promotedCount
+    };
   }
 
-  private async checkInstrumentEligibility(symbol: string): Promise<{ passed: boolean; code?: EligibilityRejectionCode; reason?: string }> {
-    const blockedPatterns = ['USDT/USD', 'USDC/USD', 'DAI/USD', 'TUSD/USD'];
-    if (blockedPatterns.some(pattern => symbol.includes(pattern.replace('/USD', '')))) {
-      return {
-        passed: false,
-        code: 'INSTRUMENT_BLOCKED',
-        reason: `Stablecoin pairs are not eligible for trading: ${symbol}`
-      };
+  startFailsafeTimer(mode: TradingMode): void {
+    this.stopFailsafeTimer(mode);
+    
+    const timer = setTimeout(() => {
+      this.onFailsafeTimer(mode).catch(err => {
+        console.error(`[TCL][FAILSAFE_ERROR] ${mode}:`, err);
+      });
+    }, this.config.failsafeTimerMs);
+
+    this.failsafeTimers.set(mode, timer);
+    console.log(`[TCL][TIMER] Started ${this.config.failsafeTimerMs}ms failsafe timer for ${mode} mode`);
+  }
+
+  stopFailsafeTimer(mode: TradingMode): void {
+    const timer = this.failsafeTimers.get(mode);
+    if (timer) {
+      clearTimeout(timer);
+      this.failsafeTimers.delete(mode);
     }
-    return { passed: true };
   }
 
-  recordTrade(symbol: string): void {
-    this.cooldownMap.set(symbol, Date.now());
+  resetFailsafeTimer(mode: TradingMode): void {
+    this.startFailsafeTimer(mode);
   }
 
-  clearCooldown(symbol: string): void {
-    this.cooldownMap.delete(symbol);
+  async checkRtbThreshold(mode: TradingMode): Promise<boolean> {
+    const rtbSignals = await storage.getRtbSignals({ mode, status: 'queued' });
+    
+    if (rtbSignals.length >= this.config.rtbQueueThreshold) {
+      await this.onReadyToBuyQueueFull(mode);
+      return true;
+    }
+    
+    return false;
   }
 
   updateConfig(newConfig: Partial<TCLConfig>): void {
@@ -239,6 +167,10 @@ export class CriteriaLimiter implements TradeCriteriaLimiter {
 
   getConfig(): TCLConfig {
     return { ...this.config };
+  }
+
+  getLastPromotionTime(mode: TradingMode): number | undefined {
+    return this.lastPromotionTime.get(mode);
   }
 }
 
