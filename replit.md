@@ -64,6 +64,29 @@ The system incorporates Verification & Config Purification, Backend Filter Decon
 - ACTIVE FILTERS (9): Volume, Liquidity (LQ), VolNoise, Correlation (ρ), PriceRange, MinPrice, MaxSpread, Stablecoin, History
 - INSTITUTIONAL MATH GUARDS: LQ ≥ 40, VolNoise ≤ 0.6, ρ ≤ 0.75 (remain active)
 
+**Directive 11.0 — TCO/TEC Separation (January 2026):**
+Trade Lifecycle Flow: [Signal Generator] → [TCL] → [TCO] → [TEC] → [Order Management]
+
+- **TCL (Trade Criteria Limiter)** — `server/core/criteria-limiter.ts`
+  - Pure eligibility gate: exposure limits, position caps, market regime, correlation, cooldowns
+  - NO sizing, NO exit logic, NO volatility adjustments
+  - Interface: `evaluate(signal, mode) → EligibilityResult`
+
+- **TCO (Trade Control Operator)** — `server/core/operators/trade-control-operator.ts`
+  - Pure promoter: passes approved intents to TEC
+  - NO modification of size or risk parameters
+  - Interface: `promote(signal, mode) → boolean`
+
+- **TEC (Trade Execution Controller)** — `server/services/execution-controller.ts`
+  - Owns all sizing: risk-based, exposure-capped, volatility-adjusted
+  - Owns all exits: SL, TP, trailing stops, max holding period
+  - Owns order lifecycle management and execution queue
+  - Interface: `enqueueExecution(intent)`, `calculatePositionSize()`, `evaluateExitConditions()`, `closeTrade()`
+
+- NEW: `server/core/interfaces/trade-flow.ts` — Shared type definitions
+- SCHEMA: Backend v1.4.0
+- TESTS: 20 new component boundary tests in `tco-tec-tcl.test.ts`
+
 ## External Dependencies
 - **Kraken Exchange API**: Market data, trade execution, account management.
 - **Kraken WebSocket API**: Real-time ticker feed.

@@ -1,0 +1,229 @@
+⚙️ Directive 11.0 — TCO/TEC Separation & Trade Criteria Limiter Purification
+Phase: 11
+
+Title: Refactor the Trade Control Operator (TCO) and Trade Execution Controller (TEC) boundary; isolate the Trade Criteria Limiter (TCL) to eligibility gating only.
+
+🧠 Background
+
+The current architecture defines three major execution-adjacent layers:
+
+Component	Purpose	Current Issues
+TCL — Trade Criteria Limiter	Evaluates whether ready-to-buy pairs meet global criteria before being promoted to TCO.	Currently entangled with partial sizing logic and readiness checks that belong elsewhere.
+TCO — Trade Control Operator	Orchestrates promotion of approved trade intents into execution orders.	Sometimes initiates sizing or exit validation instead of delegating them.
+TEC — Trade Execution Controller	Handles actual trade execution, order sizing, lifecycle, and exits.	Some sizing and adaptive parameters are still being injected from TCL/TCO instead of being owned locally.
+
+The goal of this directive is to:
+
+Confine TCL strictly to trade eligibility logic only (no sizing, no execution).
+
+Ensure TCO acts purely as the promoter that transitions eligible trade intents to the TEC.
+
+Migrate all adaptive sizing, execution, and exit logic into TEC.
+
+🎯 Primary Goals
+
+Confirm and purge any adaptive sizing or risk logic still running in the TCL (Trade Criteria Limiter).
+
+Move all trade sizing and exit decision logic into the TEC (Trade Execution Controller).
+
+Validate that the TCO (Trade Control Operator) is the only intermediary allowed to promote trade intents to execution.
+
+Update documentation and tests to reflect these role boundaries.
+
+🧱 Task List
+Task 1 — Repository Audit: Confirm Component Boundaries
+
+Files to inspect:
+
+server/core/criteria-limiter.ts (TCL)
+
+server/core/operators/trade-control-operator.ts (TCO)
+
+server/services/execution-controller.ts (TEC)
+
+server/core/position-sizing.service.ts
+
+server/core/trade-exit.service.ts
+
+Verify the following:
+
+TCL: Only runs eligibility gating (e.g., exposure limits, open-position caps, market regime checks).
+
+TCO: Passes approved intents to TEC; does not alter size or exit criteria.
+
+TEC: Owns calculatePositionSize(), adaptive sizing logic, trade entry/exit management.
+
+If you find in criteria-limiter.ts any of these variables:
+
+adaptiveSize, positionSize, volatilityAdjustedSize, sizingFactor
+
+
+→ Move them to TEC.
+
+If you find any function like:
+
+calculateExitTrigger(), closeOpenTrade()
+
+
+→ Move them to TEC.
+
+Task 2 — Purify TCL (Trade Criteria Limiter)
+
+Keep only:
+
+checkExposureLimits();
+checkMarketRegime();
+checkInstrumentEligibility();
+checkPortfolioCorrelation();
+
+
+Remove or relocate:
+
+calculatePositionSize()
+
+assignAdaptiveSize()
+
+any reference to volatility, ATR, or liquidity-based weighting
+
+Ensure TCL exports only:
+
+export interface TradeCriteriaLimiter {
+  evaluate(signal: TradeSignal): EligibilityResult;
+}
+
+Task 3 — Strengthen TCO–TEC Interface
+
+In trade-control-operator.ts, enforce this strict transition:
+
+const eligible = tcl.evaluate(signal);
+if (eligible.passed) {
+  tec.enqueueExecution(signal);
+}
+
+
+The TCO must never compute or alter trade size.
+
+Introduce an interface contract in interfaces/trade-flow.ts:
+
+interface ExecutionIntent {
+  signalId: string;
+  instrument: string;
+  entryPrice: number;
+  timestamp: string;
+}
+
+
+TEC will enrich this intent with sizing and risk parameters internally.
+
+Task 4 — Consolidate Adaptive Sizing in TEC
+
+Move all dynamic sizing logic here.
+
+Files:
+server/services/execution-controller.ts
+server/core/position-sizing.service.ts
+
+Example structure:
+
+class TradeExecutionController {
+  async execute(intent: ExecutionIntent) {
+    const size = await this.calculatePositionSize(intent);
+    const order = this.createOrder(intent, size);
+    await this.routeOrder(order);
+  }
+
+  calculatePositionSize(intent) {
+    const volFactor = this.marketVolatility(intent.instrument);
+    const baseRisk = this.portfolioRiskBudget();
+    return baseRisk / volFactor;
+  }
+}
+
+
+Adaptive sizing inputs that must live here:
+
+Market volatility (VolNoise)
+
+Account equity or drawdown limits
+
+Regime sensitivity
+
+Slippage tolerance
+
+Task 5 — Migrate Exit Logic into TEC
+
+Move or confirm the presence of:
+
+Stop-Loss (hard risk cap)
+
+Take-Profit (target returns)
+
+Trailing Stops
+
+Time-based exits
+
+In execution-controller.ts, create:
+
+evaluateExitConditions(trade: ActiveTrade): ExitDecision;
+
+
+Ensure it runs under TEC’s control loop (not TCO/TCL).
+
+Task 6 — Update Tests
+
+Tests to add or refactor:
+
+File	Purpose
+criteria-limiter.spec.ts	Verify only eligibility checks exist.
+trade-control-operator.spec.ts	Ensure TCO only delegates; no sizing.
+execution-controller.spec.ts	Confirm sizing and exit logic function independently.
+
+Key assertions:
+
+expect(tcl.calculatePositionSize).toBeUndefined();
+expect(tco.assignAdaptiveSize).toBeUndefined();
+expect(tec.calculatePositionSize).toBeDefined();
+expect(tec.evaluateExitConditions).toBeDefined();
+
+Task 7 — Documentation Updates
+
+architecture.md: Update the “Trade Lifecycle” diagram:
+
+[Signal Generator]
+     ↓
+[Trade Criteria Limiter (TCL)]
+     ↓
+[Trade Control Operator (TCO)]
+     ↓
+[Trade Execution Controller (TEC)]
+     ↓
+[Order Management / Broker Interface]
+
+
+tcl.md: Replace “Trade Control Loop” references with “Trade Criteria Limiter.”
+
+tec.md: Expand section to include adaptive sizing and exit management.
+
+tco.md: Clarify promotion responsibilities and handoff rules.
+
+✅ Expected Outcome
+Component	Role	Description
+TCL (Trade Criteria Limiter)	Eligibility gate	Approves or rejects signals before trade creation; no sizing/execution.
+TCO (Trade Control Operator)	Promoter	Sends approved trade intents to TEC; no modification or logic.
+TEC (Trade Execution Controller)	Executor	Handles position sizing, trade placement, lifecycle, and exits.
+
+Schema Versions:
+
+Backend: v1.4.0
+
+UI (if telemetry expanded): v1.3.0
+
+Success Criteria:
+
+No sizing/exits remain in TCL or TCO.
+
+TEC owns all lifecycle management.
+
+Trade promotion flow documented and test-verified.
+
+System passes ≥ 360 tests with 0 new failures.
