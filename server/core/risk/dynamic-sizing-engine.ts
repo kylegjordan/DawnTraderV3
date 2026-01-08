@@ -26,6 +26,20 @@
 
 import { EXECUTION_CONFIG } from '../../config/execution-config.js';
 import { loadAdaptiveWeights, type AdaptiveWeights } from '../../services/adaptive-learning-repository.js';
+
+let mockAdaptiveWeights: Map<string, Map<string, AdaptiveWeights>> | null = null;
+
+export function setMockAdaptiveWeights(weights: Map<string, Map<string, AdaptiveWeights>> | null): void {
+  mockAdaptiveWeights = weights;
+}
+
+async function getAdaptiveWeights(regime: string, strategyId: string): Promise<AdaptiveWeights | undefined> {
+  if (mockAdaptiveWeights) {
+    return mockAdaptiveWeights.get(regime)?.get(strategyId);
+  }
+  const weights = await loadAdaptiveWeights(regime as any);
+  return weights.get(strategyId);
+}
 import type { MarketRegime } from '../../services/telemetry-repository.js';
 
 export interface DynamicSizeInput {
@@ -79,6 +93,69 @@ let lastSizeDecision: DSETelemetry | null = null;
 const sizeHistory: DSETelemetry[] = [];
 const MAX_HISTORY = 100;
 
+/**
+ * Extract expected edge from adaptive weights.
+ * Priority: expectedEdge > edge > winRate > profitRate > derived from avgWeight
+ * 
+ * DSE-Compatible Weight Keys:
+ * - expectedEdge: Direct expected edge value (0-0.15 typical)
+ * - edge: Alias for expectedEdge  
+ * - winRate: Win rate (0-1), converted to edge via ×0.1
+ * - profitRate: Profit rate, converted to edge via ×0.5
+ */
+function extractExpectedEdge(weights: AdaptiveWeights | undefined, strategyId: string): number {
+  if (!weights || Object.keys(weights).length === 0) return DSE_CONFIG.BASE_EDGE;
+  
+  if ('expectedEdge' in weights && typeof weights.expectedEdge === 'number') {
+    return Math.max(0, Math.min(0.2, weights.expectedEdge));
+  }
+  if ('edge' in weights && typeof weights.edge === 'number') {
+    return Math.max(0, Math.min(0.2, weights.edge));
+  }
+  if ('winRate' in weights && typeof weights.winRate === 'number') {
+    return Math.max(0, Math.min(0.15, weights.winRate * 0.1));
+  }
+  if ('profitRate' in weights && typeof weights.profitRate === 'number') {
+    return Math.max(0, Math.min(0.15, weights.profitRate * 0.5));
+  }
+  
+  const numericValues = Object.values(weights).filter(v => typeof v === 'number') as number[];
+  if (numericValues.length === 0) return DSE_CONFIG.BASE_EDGE;
+  
+  const avgWeight = numericValues.reduce((a, b) => a + b, 0) / numericValues.length;
+  return Math.max(0.01, Math.min(0.15, avgWeight * 0.08 + 0.03));
+}
+
+/**
+ * Extract confidence from adaptive weights.
+ * Priority: confidence > sampleCount > reliability > derived from weight density
+ * 
+ * DSE-Compatible Weight Keys:
+ * - confidence: Direct confidence value (0-1)
+ * - sampleCount: Number of samples, normalized to confidence via /100
+ * - reliability: Reliability score (0-1)
+ */
+function extractConfidence(weights: AdaptiveWeights | undefined, strategyId: string): number {
+  if (!weights || Object.keys(weights).length === 0) return 0.5;
+  
+  if ('confidence' in weights && typeof weights.confidence === 'number') {
+    return Math.max(0, Math.min(1, weights.confidence));
+  }
+  if ('sampleCount' in weights && typeof weights.sampleCount === 'number') {
+    return Math.max(0.1, Math.min(1, weights.sampleCount / 100));
+  }
+  if ('reliability' in weights && typeof weights.reliability === 'number') {
+    return Math.max(0, Math.min(1, weights.reliability));
+  }
+  
+  const numericValues = Object.values(weights).filter(v => typeof v === 'number') as number[];
+  if (numericValues.length === 0) return 0.5;
+  
+  const density = Math.min(1, numericValues.length / 5);
+  const avgMagnitude = numericValues.reduce((a, b) => a + Math.abs(b), 0) / numericValues.length;
+  return Math.max(0.2, Math.min(0.9, density * 0.4 + avgMagnitude * 0.3 + 0.2));
+}
+
 export async function computeDynamicSize(input: DynamicSizeInput): Promise<DynamicSizeResult> {
   const {
     strategyId,
@@ -93,11 +170,15 @@ export async function computeDynamicSize(input: DynamicSizeInput): Promise<Dynam
   const baseRiskPct = DSE_CONFIG.DEFAULT_RISK_PCT;
   const baseSize = balance * (baseRiskPct / 100);
 
-  const learningWeights = await loadAdaptiveWeights(regime);
-  const strategyWeights = learningWeights.get(strategyId);
+  const strategyWeights = await getAdaptiveWeights(regime, strategyId);
   
-  const baseEdge = strategyWeights?.expectedEdge ?? 0.05;
-  const confidence = strategyWeights?.confidence ?? 0.5;
+  const baseEdge = extractExpectedEdge(strategyWeights, strategyId);
+  const confidence = extractConfidence(strategyWeights, strategyId);
+  
+  const hasAdaptiveData = strategyWeights !== undefined && Object.keys(strategyWeights).length > 0;
+  if (hasAdaptiveData) {
+    console.log(`[11.3][DSE] Using adaptive weights for ${strategyId}@${regime}: edge=${baseEdge.toFixed(4)}, confidence=${confidence.toFixed(4)}`);
+  }
 
   const edgeFactor = 1 + (baseEdge - DSE_CONFIG.BASE_EDGE) * DSE_CONFIG.EDGE_SENSITIVITY;
   const volPenalty = Math.max(DSE_CONFIG.VOL_FLOOR, 1 - (volatility / DSE_CONFIG.VOL_THRESHOLD));

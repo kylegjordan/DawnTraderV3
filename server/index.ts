@@ -8,6 +8,7 @@ import { databaseMonitor } from "./services/database-monitor";
 import { marketDataHealthCheck } from "./services/market-data-health-check";
 import { healthRouter } from "./routes/health.js"; // Phase 41F-D/F: Health monitoring routes
 import { statusRouter } from "./routes/status.js"; // Phase 1: Status and version routes
+import dseRouter from "./routes/dse.js"; // Directive 11.3: Dynamic Sizing Engine routes
 import chapletRouter from "../chaplet/index.js"; // Phase M4: Chaplet Context Service
 import { env } from "./config/index.js"; // Phase 1: Typed environment config
 import version from "./version.json";
@@ -201,6 +202,9 @@ app.use((req, res, next) => {
   
   // Phase 41F-D/F: Mount health monitoring routes
   app.use('/api/health', healthRouter);
+  
+  // Directive 11.3: Mount Dynamic Sizing Engine routes
+  app.use('/api/diagnostics', dseRouter);
   
   // Phase M4: Mount Chaplet Context Service (read-only)
   app.use('/chaplet', chapletRouter);

@@ -221,3 +221,48 @@ export function validatePaperPortfolioValue(balance: string | number | null | un
   
   return parsed;
 }
+
+/**
+ * Directive 11.3 — Dynamic Sizing Engine Integration
+ * 
+ * Applies DSE multiplier to position sizing result.
+ * DSE multiplier range: 0.3 to 1.2
+ * 
+ * This wrapper function takes a standard position sizing result and applies
+ * the DSE multiplier to scale the position based on:
+ * - Strategy performance (expected edge)
+ * - Market volatility (normalized ATR)
+ * - Transaction costs (spread + slippage)
+ * - Adaptive learning confidence
+ */
+export interface DSEAdjustedResult extends PaperPositionSizingResult {
+  dseMultiplier?: number;
+  dseAdjusted?: boolean;
+  originalQuantity?: number;
+}
+
+export function applyDSEMultiplier(
+  result: PaperPositionSizingResult,
+  dseMultiplier: number,
+  symbol: string
+): DSEAdjustedResult {
+  if (result.quantity <= 0 || !Number.isFinite(dseMultiplier)) {
+    return { ...result, dseAdjusted: false };
+  }
+
+  const clampedMultiplier = Math.min(1.2, Math.max(0.3, dseMultiplier));
+  const originalQuantity = result.quantity;
+  const adjustedQuantity = result.quantity * clampedMultiplier;
+  const adjustedValue = adjustedQuantity * (result.estimatedValue / result.quantity);
+
+  console.log(`[11.3][DSE_SIZING] ${symbol} quantity=${originalQuantity.toFixed(8)} → ${adjustedQuantity.toFixed(8)} (×${clampedMultiplier.toFixed(3)})`);
+
+  return {
+    ...result,
+    quantity: adjustedQuantity,
+    estimatedValue: adjustedValue,
+    dseMultiplier: clampedMultiplier,
+    dseAdjusted: true,
+    originalQuantity,
+  };
+}
