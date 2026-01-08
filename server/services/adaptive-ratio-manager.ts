@@ -23,6 +23,7 @@ import {
   type PoolPerformance,
   type PoolComparison 
 } from './telemetry-repository.js';
+import { getTelemetryAggregator, type PoolPerformanceAggregate } from './telemetry-aggregator.js';
 import { SCHEMA_VERSION, SCHEMA_DIRECTIVE } from '../config/schema-version.js';
 
 export interface RatioConfig {
@@ -78,17 +79,37 @@ export class AdaptiveRatioManager {
   
   /**
    * Compute adaptive ratio based on pool performance data
+   * Directive 11.2 R1: Now uses both in-memory aggregates and SQL data
    */
   async computeAdaptiveRatio(
     regime: MarketRegime,
     mode: 'live' | 'paper' = 'live'
   ): Promise<AdaptiveRatio> {
     try {
-      const comparison = await getPoolComparison(regime, mode);
-      this.lastComparison = comparison;
+      // First, try in-memory pool performance from TelemetryAggregator
+      const telemetry = getTelemetryAggregator();
+      const inMemoryComparison = telemetry.getPoolPerformanceComparison();
       
-      const idealPerf = comparison.ideal;
-      const rotationalPerf = comparison.rotational;
+      // Check if we have sufficient in-memory data
+      const hasInMemoryData = 
+        inMemoryComparison.ideal.sampleCount >= this.config.minSamples ||
+        inMemoryComparison.rotational.sampleCount >= this.config.minSamples;
+      
+      let idealPerf: PoolPerformance | null = null;
+      let rotationalPerf: PoolPerformance | null = null;
+      
+      if (hasInMemoryData) {
+        // Use in-memory data (more recent)
+        idealPerf = this.aggregateToPoolPerformance(inMemoryComparison.ideal);
+        rotationalPerf = this.aggregateToPoolPerformance(inMemoryComparison.rotational);
+        console.log(`[11.2R1][RatioManager] Using in-memory pool data: ideal=${inMemoryComparison.ideal.sampleCount} samples, rotational=${inMemoryComparison.rotational.sampleCount} samples`);
+      } else {
+        // Fall back to SQL-backed data
+        const comparison = await getPoolComparison(regime, mode);
+        this.lastComparison = comparison;
+        idealPerf = comparison.ideal;
+        rotationalPerf = comparison.rotational;
+      }
       
       // Not enough data from either pool
       if (!idealPerf && !rotationalPerf) {
@@ -157,6 +178,21 @@ export class AdaptiveRatioManager {
     }
   }
   
+  /**
+   * Directive 11.2 R1: Convert in-memory aggregate to PoolPerformance format
+   */
+  private aggregateToPoolPerformance(aggregate: PoolPerformanceAggregate): PoolPerformance | null {
+    if (aggregate.sampleCount < this.config.minSamples) {
+      return null;
+    }
+    
+    return {
+      winRate: aggregate.winRate,
+      avgEdge: aggregate.avgFinalScore, // Map avgFinalScore to avgEdge
+      sampleCount: aggregate.sampleCount,
+    };
+  }
+
   /**
    * Compute pool score from performance metrics
    */

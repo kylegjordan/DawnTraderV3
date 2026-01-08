@@ -152,4 +152,57 @@ describe('Directive 11.2 R1: Adaptive Scanning Fairness', () => {
       expect(batch.ratioUsed).toBeUndefined();
     });
   });
+
+  describe('Pool-Level Performance Aggregation', () => {
+    it('should aggregate performance by pool', async () => {
+      const { TelemetryAggregatorService } = await import('../../services/telemetry-aggregator.js');
+      const aggregator = new TelemetryAggregatorService();
+      
+      // Record ideal pool telemetry
+      aggregator.recordPairTelemetry('BTC/USD', { finalScore: 0.8, success: true, pool: 'ideal' });
+      aggregator.recordPairTelemetry('ETH/USD', { finalScore: 0.7, success: true, pool: 'ideal' });
+      
+      // Record rotational pool telemetry  
+      aggregator.recordPairTelemetry('XRP/USD', { finalScore: 0.5, success: false, pool: 'rotational' });
+      
+      const comparison = aggregator.getPoolPerformanceComparison();
+      
+      expect(comparison.ideal.sampleCount).toBe(2);
+      expect(comparison.rotational.sampleCount).toBe(1);
+      expect(comparison.ideal.winRate).toBeGreaterThan(comparison.rotational.winRate);
+    });
+
+    it('should return explicit pool attribution from selectors', async () => {
+      const { TelemetryAggregatorService } = await import('../../services/telemetry-aggregator.js');
+      const aggregator = new TelemetryAggregatorService();
+      
+      // Seed some data
+      for (let i = 0; i < 5; i++) {
+        aggregator.recordPairTelemetry('BTC/USD', { finalScore: 0.8, pool: 'ideal' });
+      }
+      
+      const topPairs = aggregator.getTopPairsWithPool(0.7);
+      
+      for (const pair of topPairs) {
+        expect(pair).toHaveProperty('pool');
+        expect(pair.pool).toBe('ideal');
+        expect(pair).toHaveProperty('score');
+      }
+    });
+
+    it('should reset pool aggregates', async () => {
+      const { TelemetryAggregatorService } = await import('../../services/telemetry-aggregator.js');
+      const aggregator = new TelemetryAggregatorService();
+      
+      aggregator.recordPairTelemetry('BTC/USD', { finalScore: 0.8, success: true, pool: 'ideal' });
+      
+      const before = aggregator.getPoolPerformanceComparison();
+      expect(before.ideal.sampleCount).toBeGreaterThan(0);
+      
+      aggregator.resetPoolAggregates();
+      
+      const after = aggregator.getPoolPerformanceComparison();
+      expect(after.ideal.sampleCount).toBe(0);
+    });
+  });
 });
