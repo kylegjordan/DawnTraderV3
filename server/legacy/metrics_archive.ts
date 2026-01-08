@@ -1,6 +1,6 @@
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * ARCHIVE SEALED — Directive 11.0F
+ * ARCHIVE SEALED — Directive 11.0G
  * ══════════════════════════════════════════════════════════════════════════════
  * 
  * Legacy metric data retained for compliance only.
@@ -22,10 +22,14 @@
  *   - HybridScore: Hybrid strategy score component
  *   - DecayPenalty: Signal age decay factor
  * 
+ * Archive Integrity: SHA-256 checksum validation enabled (Directive 11.0G)
+ * 
  * See: server/core/utils/score-calculator.ts for current implementation
  * See: server/legacy/data/legacy_metrics_snapshot.json for archived data
  * ══════════════════════════════════════════════════════════════════════════════
  */
+
+import crypto from "crypto";
 
 /**
  * ARCHIVED: CWQI (Confidence-Weighted Quality Index)
@@ -95,7 +99,8 @@ export const ARCHIVED_PROFITRATE_FLOORS: Record<string, number> = {
  */
 export const ARCHIVE_METADATA = {
   archivedDate: "2026-01-08",
-  directive: "11.0E",
+  directive: "11.0G",
+  sealedBy: "Directive 11.0F",
   replacedBy: {
     CWQI: "FinalScore",
     NGC: "confidence (direct)",
@@ -104,3 +109,45 @@ export const ARCHIVE_METADATA = {
   },
   currentFormula: "FinalScore = (HybridScore × 0.4) + (Confidence × 0.3) + (RegimeWeight × 0.2) - (DecayPenalty × 0.1)",
 };
+
+/**
+ * Directive 11.0G — Archive Integrity Checksum
+ * 
+ * Creates a SHA-256 checksum for archive data to ensure immutability.
+ * @param data - The archive data object to seal
+ * @returns The data object with archiveChecksum field added
+ */
+export function sealLegacyArchive(data: Record<string, unknown>): Record<string, unknown> & { archiveChecksum: string } {
+  const dataCopy = { ...data };
+  delete (dataCopy as any).archiveChecksum;
+  
+  const serialized = JSON.stringify(dataCopy, null, 2);
+  const checksum = crypto.createHash("sha256").update(serialized).digest("hex");
+  
+  return {
+    ...data,
+    archiveChecksum: checksum,
+  };
+}
+
+/**
+ * Directive 11.0G — Verify Archive Integrity
+ * 
+ * Validates the SHA-256 checksum of archive data.
+ * @param data - The archive data object with checksum to verify
+ * @returns true if checksum matches, false otherwise
+ */
+export function verifyArchiveIntegrity(data: Record<string, unknown> & { archiveChecksum?: string }): boolean {
+  if (!data.archiveChecksum) {
+    return false;
+  }
+  
+  const storedChecksum = data.archiveChecksum;
+  const dataCopy = { ...data };
+  delete dataCopy.archiveChecksum;
+  
+  const serialized = JSON.stringify(dataCopy, null, 2);
+  const computedChecksum = crypto.createHash("sha256").update(serialized).digest("hex");
+  
+  return storedChecksum === computedChecksum;
+}

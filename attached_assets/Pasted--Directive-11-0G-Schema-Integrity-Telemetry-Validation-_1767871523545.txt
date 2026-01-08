@@ -1,0 +1,183 @@
+🧭 Directive 11.0G — Schema Integrity & Telemetry Validation Hardening
+Phase: Post–11.0F Finalization
+Schema Version Target: v1.5.1
+Issued: January 2026
+Objective: Close structural gaps in schema migration, telemetry validation, archive integrity, and configuration security prior to 11.1 rollout.
+🧱 1. Purpose
+
+To reinforce the DawnTrader system’s backend integrity by:
+
+Formalizing schema migration (instead of manual SQL patches),
+
+Adding verifiable checksums to archived metric data,
+
+Implementing self-validating telemetry schema checks, and
+
+Protecting runtime configuration parameters from unintended modification through the Diagnostics UI.
+
+This directive represents the final cleanup and validation stage before persistent intelligence (Directive 11.1).
+
+🧩 2. Scope of Work
+Area	Goal	Outcome
+Schema Migration	Replace manual SQL edits with a formal migration file	Stable, reproducible migrations under version control
+Archive Integrity	Add checksum validation to all metric archive files	Verifiable immutability of legacy data
+Telemetry Validation	Add runtime consistency checks between backend & frontend schema versions	Automatic detection of version mismatches
+Execution Config Security	Enforce read-only restrictions on ExecutionConfig telemetry	Prevents accidental modification of TEC parameters
+⚙️ 3. Technical Tasks
+Task 1 — Formal Schema Migration
+
+File: /drizzle/migrations/2026-11-0G-schema-hardening.sql
+Actions:
+
+Create migration to formally add hybrid_score and decay_penalty columns (if not yet recorded).
+
+Include deprecation markers for:
+
+-- Deprecated columns for historical reference
+ALTER TABLE rtb_signals
+  DROP COLUMN IF EXISTS cwqi,
+  DROP COLUMN IF EXISTS ngc,
+  DROP COLUMN IF EXISTS profit_rate;
+
+
+Update schema_version.ts:
+
+export const SCHEMA_VERSION = "v1.5.1";
+export const SCHEMA_DIRECTIVE = "11.0G";
+
+
+Push schema changes:
+
+npm run db:push
+
+Task 2 — Add Archive Integrity Checksum
+
+File: /server/legacy/metrics_archive.ts
+
+Add a checksum field to ensure immutability:
+
+import crypto from "crypto";
+
+export function sealLegacyArchive(data: any) {
+  const serialized = JSON.stringify(data);
+  const checksum = crypto.createHash("sha256").update(serialized).digest("hex");
+  data.archiveChecksum = checksum;
+  return data;
+}
+
+
+When creating a new archive snapshot (legacy_metrics_snapshot.json), the system will automatically add:
+
+"archiveChecksum": "<sha256-hash>"
+
+Task 3 — Telemetry Schema Validation
+
+Files:
+
+/server/services/telemetry-aggregator.ts
+
+/client/pages/diagnostics/telemetry_panel.tsx
+
+Add a runtime schema validation check:
+
+function validateTelemetrySchema(backendSchema, frontendSchema) {
+  if (backendSchema !== frontendSchema) {
+    console.warn(`[Telemetry] Schema mismatch detected: backend=${backendSchema}, frontend=${frontendSchema}`);
+    telemetryHealth = "yellow";
+  } else {
+    telemetryHealth = "green";
+  }
+}
+
+
+Expose validation result in telemetry:
+
+systemConfig: {
+  metricEngineVersion: "v1.0",
+  schemaVersion: "v1.5.1",
+  directive: "11.0G",
+  telemetryHealth: telemetryHealth
+}
+
+
+Diagnostics UI update:
+
+Add a small “Schema Sync” indicator (🟢 / 🟡 / 🔴).
+
+Tooltip: “Indicates synchronization between frontend and backend schema versions.”
+
+Task 4 — ExecutionConfig Read-Only Lock
+
+Files:
+
+/client/pages/diagnostics/execution_config_panel.tsx
+
+/server/services/execution-controller.ts
+
+Enforce read-only behavior:
+
+Remove any onChange bindings from UI components that display execution parameters.
+
+Add enforcement layer on backend:
+
+export function getExecutionConfig(req, res) {
+  res.status(200).json({ ...EXECUTION_CONFIG, readOnly: true });
+}
+
+
+Add runtime assertion:
+
+if (req.method === "POST") {
+  return res.status(403).json({ error: "ExecutionConfig is read-only." });
+}
+
+
+This guarantees immutable runtime configuration visibility without operational risk.
+
+🧪 4. Validation & Tests
+Test	File	Purpose
+schema_v1_5_1.test.ts	/server/tests/integration/	Confirms correct schema migration
+archive_checksum.test.ts	/server/tests/unit/	Ensures SHA-256 checksum integrity
+telemetry_sync.test.ts	/server/tests/unit/	Validates backend ↔ frontend version sync
+execution_config_readonly.test.ts	/server/tests/unit/	Confirms read-only enforcement
+
+All tests must pass with npm run test and schema pushed successfully to v1.5.1.
+
+📄 5. Deliverables
+Deliverable	Description
+Migration file	/drizzle/migrations/2026-11-0G-schema-hardening.sql
+Updated schema version	v1.5.1
+Archive checksum field	archiveChecksum in legacy_metrics_snapshot.json
+Telemetry validation	“Schema Sync” field in diagnostics telemetry
+Read-only execution config	Enforced in UI and backend
+Updated documentation	/replit.md and /docs/schema_reference_v1_5_1.md
+🔒 6. Success Criteria
+
+✅ No direct SQL changes required post-migration.
+
+✅ Telemetry panel shows “Schema Sync: 🟢”.
+
+✅ ExecutionConfig cannot be edited via Diagnostics UI.
+
+✅ Legacy archive displays checksum field.
+
+✅ All tests pass (0 failures).
+
+🧭 7. Post-Directive Next Step
+
+After 11.0G verification:
+
+Tag schema: v1.5.1-final
+
+Commit snapshot: 2026-11-0G-final-hardening
+
+Begin Directive 11.1 – Persistent Intelligence (warm-start telemetry & adaptive learning)
+
+Directive Summary
+
+Directive: 11.0G
+Title: Schema Integrity & Telemetry Validation Hardening
+Schema Target: v1.5.1
+Primary Engineer: Replit (under Gemini PM oversight)
+Verification Lead: ChatGPT (Architectural Oversight)
+Objective: Ensure complete structural stability and telemetry verifiability before intelligence retention rollout.

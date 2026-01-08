@@ -277,12 +277,57 @@ export class TelemetryAggregatorService {
   }
 
   /**
-   * Directive 11.0F: Get telemetry summary with Metric Engine v1.0 metadata
+   * Directive 11.0G: Validate telemetry schema between backend and frontend
+   * 
+   * Compares schema versions and returns validation result.
+   */
+  validateSchemaSync(frontendSchemaVersion?: string): {
+    isValid: boolean;
+    health: 'green' | 'yellow' | 'red';
+    backendVersion: string;
+    frontendVersion: string | null;
+    mismatchReason: string | null;
+  } {
+    const backendVersion = SCHEMA_VERSION;
+    
+    if (!frontendSchemaVersion) {
+      return {
+        isValid: false,
+        health: 'yellow',
+        backendVersion,
+        frontendVersion: null,
+        mismatchReason: 'Frontend schema version not provided',
+      };
+    }
+    
+    if (backendVersion !== frontendSchemaVersion) {
+      console.warn(`[Telemetry] Schema mismatch detected: backend=${backendVersion}, frontend=${frontendSchemaVersion}`);
+      return {
+        isValid: false,
+        health: 'yellow',
+        backendVersion,
+        frontendVersion: frontendSchemaVersion,
+        mismatchReason: `Version mismatch: backend=${backendVersion}, frontend=${frontendSchemaVersion}`,
+      };
+    }
+    
+    return {
+      isValid: true,
+      health: 'green',
+      backendVersion,
+      frontendVersion: frontendSchemaVersion,
+      mismatchReason: null,
+    };
+  }
+
+  /**
+   * Directive 11.0G: Get telemetry summary with Metric Engine v1.0 metadata
    * 
    * Returns system configuration with FinalScore-canonical metrics.
+   * Includes schema validation status for frontend sync checking.
    * Legacy configProvenance fields removed - replaced by systemConfig.
    */
-  getTelemetrySummaryWithCoefficients(): {
+  getTelemetrySummaryWithCoefficients(frontendSchemaVersion?: string): {
     version: string;
     pairCount: number;
     totalSamples: number;
@@ -294,6 +339,10 @@ export class TelemetryAggregatorService {
       directive: string;
       telemetryHealth: 'green' | 'yellow' | 'red';
     };
+    schemaSync?: {
+      isValid: boolean;
+      mismatchReason: string | null;
+    };
     tecConfig?: {
       expandFactor: number;
       contractFactor: number;
@@ -301,6 +350,7 @@ export class TelemetryAggregatorService {
       trailingAccel: number;
       maxRisk: number;
       version: string;
+      readOnly: boolean;
     };
     fx5Evaluated24h?: number;
     fx5Passed24h?: number;
@@ -344,6 +394,9 @@ export class TelemetryAggregatorService {
       console.warn('[10.9F][Telemetry] FilterInsights not available for summary:', error);
     }
     
+    // Directive 11.0G: Validate schema sync if frontend version provided
+    const schemaValidation = this.validateSchemaSync(frontendSchemaVersion);
+    
     const summary = {
       version: SCORE_WEIGHTS_VERSION,
       pairCount: this.pairTelemetry.size,
@@ -359,7 +412,11 @@ export class TelemetryAggregatorService {
         metricEngineVersion: METRIC_ENGINE_VERSION,
         schemaVersion: SCHEMA_VERSION,
         directive: SCHEMA_DIRECTIVE,
-        telemetryHealth: 'green' as const,
+        telemetryHealth: schemaValidation.health,
+      },
+      schemaSync: {
+        isValid: schemaValidation.isValid,
+        mismatchReason: schemaValidation.mismatchReason,
       },
       tecConfig: {
         expandFactor: EXECUTION_CONFIG.ADAPTIVE_EXPAND_FACTOR,
@@ -367,7 +424,8 @@ export class TelemetryAggregatorService {
         trailingBase: EXECUTION_CONFIG.TRAILING_STOP_BASE,
         trailingAccel: EXECUTION_CONFIG.TRAILING_STOP_ACCELERATION,
         maxRisk: EXECUTION_CONFIG.MAX_POSITION_RISK,
-        version: EXECUTION_CONFIG.VERSION
+        version: EXECUTION_CONFIG.VERSION,
+        readOnly: true,
       },
       ...filterPerformance,
     };
