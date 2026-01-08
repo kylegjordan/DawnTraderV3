@@ -1,8 +1,13 @@
 /**
- * Directive 11.2 R1 — Schema Version Tracking
+ * Directive 11.3 — Schema Version Tracking
  * 
  * Single source of truth for database schema version.
  * Used by telemetry and diagnostics for audit trail.
+ * 
+ * v1.5.6: Predictive Risk & Cost Modeling - Dynamic Sizing Engine (Directive 11.3)
+ * - Added position_size column to telemetry_history (actual trade size executed)
+ * - Added size_multiplier column to telemetry_history (DSE scaling multiplier 0.3-1.2)
+ * - Enables Dynamic Sizing Engine telemetry tracking
  * 
  * v1.5.5: Adaptive Scanning Fairness - Pool Tracking (Directive 11.2 R1)
  * - Added pool column to telemetry_history (ideal/rotational)
@@ -32,14 +37,15 @@
  * - Metric Engine v1.0 (Canonical)
  */
 
-export const SCHEMA_VERSION = "v1.5.5";
-export const SCHEMA_DIRECTIVE = "11.2R1";
+export const SCHEMA_VERSION = "v1.5.6";
+export const SCHEMA_DIRECTIVE = "11.3";
 export const METRIC_ENGINE_VERSION = "v1.0";
 
 /**
  * Schema version history for audit trail
  */
 export const SCHEMA_HISTORY = [
+  { version: "v1.5.6", directive: "11.3", date: "2026-01-08", description: "Predictive Risk & Cost Modeling - Dynamic Sizing Engine" },
   { version: "v1.5.5", directive: "11.2R1", date: "2026-01-08", description: "Adaptive Scanning Fairness - Pool Tracking (ideal/rotational)" },
   { version: "v1.5.3", directive: "11.1B", date: "2026-01-08", description: "Adaptive Learning Weight Persistence with Timestamp Propagation" },
   { version: "v1.5.2", directive: "11.1A", date: "2026-01-08", description: "Persistent Intelligence - SQL-based Telemetry Persistence" },

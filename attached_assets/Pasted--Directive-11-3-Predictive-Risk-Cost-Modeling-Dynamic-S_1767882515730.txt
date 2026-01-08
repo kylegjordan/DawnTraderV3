@@ -1,0 +1,240 @@
+⚙️ Directive 11.3 — Predictive Risk & Cost Modeling (Dynamic Sizing Engine)
+
+Schema Version: v1.5.6
+Parent Directive: 11.2 R1
+Issued: January 2026
+Objective:
+Implement a dynamic, predictive position sizing engine that adjusts trade exposure based on strategy performance, volatility, cost efficiency, and adaptive learning signals — with strict adherence to capital safety invariants and real-time portfolio scaling.
+
+🧭 1. Strategic Objective
+
+The purpose of this directive is to introduce the Dynamic Sizing Engine (DSE) — the final stage in the adaptive intelligence system — enabling each trade to automatically size itself based on predicted edge, market conditions, and risk constraints.
+
+The DSE links together:
+
+Adaptive Learning (11.1) — remembers what works.
+
+Adaptive Scanning (11.2) — identifies where to look.
+
+Predictive Risk Modeling (11.3) — decides how much to risk.
+
+By the end of this directive:
+
+Trade sizing becomes fully dynamic, self-adjusting by regime and strategy.
+
+Risk per trade is contextually optimized.
+
+All sizing actions are telemetry-tracked and bounded by global safety caps.
+
+🧩 2. Core Sizing Formula
+
+Each trade’s position size is determined by:
+
+size
+=
+baseSize
+×
+𝑓
+(
+expectedEdge
+,
+volatility
+,
+costFactor
+,
+confidence
+)
+size=baseSize×f(expectedEdge,volatility,costFactor,confidence)
+
+Where:
+
+baseSize = % of portfolio balance (dynamic, not static).
+
+expectedEdge = predicted strategy win rate × return.
+
+volatility = normalized ATR(14) / price.
+
+costFactor = spread + slippage / average return.
+
+confidence = adaptive weight from learning persistence.
+
+Bounded output:
+
+0.3
+≤
+𝑓
+≤
+1.2
+0.3≤f≤1.2
+
+and always subject to a hard maximum risk cap (Invariant T3) from TradeSafetyService.
+
+🧠 3. Components to Implement
+Task 1 — Dynamic Sizing Engine Module
+
+File: /server/core/risk/dynamic_sizing_engine.ts
+
+Implement the core function:
+
+import { PortfolioService } from "@/server/core/portfolio/portfolio_service";
+import { ExecutionConfig } from "@/server/config/execution_config";
+import { AdaptiveLearningRepository } from "@/server/core/learning/adaptive_learning_repository";
+import { TradeSafetyService } from "@/server/core/safety/trade_safety_service";
+
+export async function computeDynamicSize({
+  strategyId,
+  symbol,
+  regime,
+  pool,
+  volatility,
+  cost,
+}: DynamicSizeInput): Promise<number> {
+  // --- Dynamic Base Size (Scales with Portfolio Equity) ---
+  const balance = await PortfolioService.getCurrentBalance();
+  const baseRiskPct = ExecutionConfig.baseRiskPercent ?? 2; // e.g., 2% of balance
+  const basePositionSize = balance * (baseRiskPct / 100);
+
+  // --- Predictive Inputs ---
+  const learning = await AdaptiveLearningRepository.getWeights(strategyId, regime);
+  const baseEdge = learning?.expectedEdge ?? 0.05;
+  const confidence = learning?.confidence ?? 0.5;
+
+  // --- Predictive Risk Modifiers ---
+  const edgeFactor = 1 + (baseEdge - 0.05) * 4;
+  const volPenalty = Math.max(0.7, 1 - (volatility / 0.02));
+  const costPenalty = Math.max(0.6, 1 - (cost / 0.001));
+  const confFactor = 0.5 + confidence;
+
+  // --- Core Multiplier ---
+  let multiplier = edgeFactor * volPenalty * costPenalty * confFactor;
+  multiplier = Math.min(1.2, Math.max(0.3, multiplier));
+
+  // --- Hard Cap Enforcement (Invariant T3) ---
+  const maxAllowedSize = TradeSafetyService.getMaxPositionSize(balance);
+  let finalSize = basePositionSize * multiplier;
+  finalSize = Math.min(finalSize, maxAllowedSize);
+
+  return finalSize;
+}
+
+Task 2 — Volatility & Cost Normalization
+
+Files:
+
+/server/core/metrics/market_metrics.ts
+
+/server/core/metrics/cost_metrics.ts
+
+Add:
+
+export function getNormalizedVolatility(symbol) {
+  // ATR(14) normalized by current price
+}
+
+export function getTransactionCostFactor(symbol) {
+  // (spread + slippage) / average return
+}
+
+
+Store last computed values in memory for reuse.
+
+Task 3 — Integration with TEC (Trade Execution Controller)
+
+File: /server/core/execution/execution_controller.ts
+
+Replace static sizing logic with:
+
+import { computeDynamicSize } from "@/server/core/risk/dynamic_sizing_engine";
+import { TradeSafetyService } from "@/server/core/safety/trade_safety_service";
+import { PortfolioService } from "@/server/core/portfolio/portfolio_service";
+
+let dynamicSize = await computeDynamicSize({
+  strategyId: trade.strategyId,
+  symbol: trade.symbol,
+  regime: currentRegime,
+  pool: trade.pool,
+  volatility: getNormalizedVolatility(trade.symbol),
+  cost: getTransactionCostFactor(trade.symbol),
+});
+
+// --- Enforce Hard Cap ---
+const balance = await PortfolioService.getCurrentBalance();
+const maxAllowedSize = TradeSafetyService.getMaxPositionSize(balance);
+dynamicSize = Math.min(dynamicSize, maxAllowedSize);
+
+trade.positionSize = dynamicSize;
+
+Task 4 — Telemetry Schema Update
+
+Migration File: 2026-11-0J-telemetry-sizes.sql
+
+ALTER TABLE telemetry_history
+  ADD COLUMN IF NOT EXISTS position_size FLOAT,
+  ADD COLUMN IF NOT EXISTS size_multiplier FLOAT;
+
+
+Log both metrics during trade creation and update cycles.
+Include in TelemetryAggregator JSON outputs.
+
+Task 5 — Diagnostics UI Update
+
+Add Dynamic Sizing Telemetry to the Diagnostics tab under “Execution Intelligence”.
+
+Metric	Description
+avgSizeMultiplier	Mean multiplier per regime
+volatilityPenalty	ATR normalization factor
+costPenalty	Slippage/spread penalty
+lastSizeDecision	Last sizing decision with timestamp
+riskCap	Max allowable per-trade risk
+Task 6 — Testing & Validation
+
+Create /server/tests/integration/dynamic_sizing.test.ts with test cases:
+
+✅ Dynamic scaling proportional to equity
+
+✅ Multiplier bounds (0.3 ≤ × ≤ 1.2)
+
+✅ Hard Cap enforcement
+
+✅ Regime-specific variation
+
+✅ Telemetry log accuracy
+
+✅ No static base values allowed
+
+🧾 4. Schema Summary
+Table	Field	Type	Purpose
+telemetry_history	position_size	FLOAT	Actual trade size executed
+telemetry_history	size_multiplier	FLOAT	DSE scaling multiplier
+
+Schema version: v1.5.6
+
+🔒 5. Governance & Invariants
+Invariant	Description	Enforcement
+T3: Hard Cap	Trade size cannot exceed configured max risk	Enforced via TradeSafetyService
+T4: Dynamic Base Equity Scaling	Base size must scale with portfolio balance	Enforced in DSE via PortfolioService
+T5: Bounded Multiplier	Sizing multiplier 0.3–1.2	Enforced in DSE formula
+T6: Telemetry Provenance	Mode and regime recorded for every sizing event	Logged in telemetry aggregator
+📈 6. Expected Outcomes
+
+Smart position sizing tuned to predictive model performance
+
+Reduced volatility exposure in unstable regimes
+
+Adaptive sizing that scales naturally with account growth
+
+Zero risk of exceeding defined capital limits
+
+Complete telemetry trail for every sizing decision
+
+🧩 7. Directive Summary
+Field	Value
+Directive ID	11.3
+Title	Predictive Risk & Cost Modeling (Dynamic Sizing Engine)
+Schema Version	v1.5.6
+Primary Engineer	Replit
+Architectural Lead	ChatGPT
+Verification Lead	Gemini
+Governance Lead	Dawn
+Expected Duration	3–4 days
+Next Directive	11.4 — Predictive Regime Sizing Aggregation

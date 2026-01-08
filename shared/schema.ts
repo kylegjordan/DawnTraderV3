@@ -828,6 +828,8 @@ export const telemetryHistory = pgTable("telemetry_history", {
   predictiveConfidence: decimal("predictive_confidence", { precision: 5, scale: 4 }),
   successRate: decimal("success_rate", { precision: 5, scale: 4 }),
   sampleCount: integer("sample_count").default(1),
+  positionSize: doublePrecision("position_size"), // Directive 11.3: DSE computed trade size
+  sizeMultiplier: doublePrecision("size_multiplier"), // Directive 11.3: DSE scaling multiplier (0.3-1.2)
   timeframe: varchar("timeframe", { length: 10 }),
   checksum: varchar("checksum", { length: 64 }),
   metadata: jsonb("metadata"),
