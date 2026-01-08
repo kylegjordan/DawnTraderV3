@@ -1,5 +1,12 @@
 /**
- * Phase 8.8.3-I7-PRICE-FIX: Paper Execution Engine
+ * ══════════════════════════════════════════════════════════════════════════════
+ * Directive 11.0E — Paper Execution Engine
+ * ══════════════════════════════════════════════════════════════════════════════
+ * 
+ * DIRECTIVE 11.0E: FinalScore Unification
+ * - Signal quality checks now use FinalScore (replaces NGC/CWQI)
+ * - CWQI service retained for Net Expectancy (EV) calculation only
+ * - MIN_FINAL_SCORE threshold replaces MIN_NGC and MIN_CWQI
  * 
  * ============================================================================
  * PRICE PIPELINE DOCUMENTATION (Goal A1)
@@ -1318,18 +1325,16 @@ export class PaperExecutionEngine {
           break;
         }
 
-        // Check SQE thresholds
-        const ngc = parseFloat(signal.ngc || '0');
-        const cwqi = parseFloat(signal.cwqi || '0');
-        const MIN_NGC = 0.4;
-        const MIN_CWQI = 0.25;
+        // Directive 11.0E: Check FinalScore threshold (replaces CWQI/NGC)
+        const finalScore = parseFloat(signal.finalScore || signal.cwqi || '0');
+        const MIN_FINAL_SCORE = 0.35;
 
-        if (cwqi < MIN_CWQI || ngc < MIN_NGC) {
-          console.log(`[8.8.4-C.14.B][QUALITY_SKIP] ${signal.symbol}/${signal.strategy}: CWQI=${cwqi.toFixed(4)} (min=${MIN_CWQI}), NGC=${ngc.toFixed(4)} (min=${MIN_NGC})`);
+        if (finalScore < MIN_FINAL_SCORE) {
+          console.log(`[11.0E][QUALITY_SKIP] ${signal.symbol}/${signal.strategy}: FinalScore=${finalScore.toFixed(4)} (min=${MIN_FINAL_SCORE})`);
           continue;
         }
 
-        console.log(`[8.8.4-C.12][TCL_PROMOTE] ${signal.symbol}/${signal.strategy} with CWQI ${cwqi.toFixed(4)}, NGC ${ngc.toFixed(4)}`);
+        console.log(`[11.0E][TCL_PROMOTE] ${signal.symbol}/${signal.strategy} with FinalScore ${finalScore.toFixed(4)}`);
 
         // Directive 8.8.4-A3.R1: RTB removal must precede trade creation to prevent double-activation
         // Step 1: Remove signal from RTB queue BEFORE attempting trade execution
@@ -1350,7 +1355,7 @@ export class PaperExecutionEngine {
             strategy: signal.strategy,
             signalId: signal.signalId,
             tradeId: tradeResult.tradeId,
-            cwqi: cwqi,
+            cwqi: finalScore, // Directive 11.0E: FinalScore stored as cwqi for compatibility
             timestamp: new Date().toISOString(),
           });
           
@@ -1396,7 +1401,7 @@ export class PaperExecutionEngine {
         targetPrice: targetPrice,
         confidence: parseFloat(signal.confidence),
         timestamp: new Date(),
-        reason: `RTB Promoted (CWQI: ${signal.cwqi})`,
+        reason: `RTB Promoted (FinalScore: ${signal.finalScore || signal.cwqi})`,
         signalId: signal.signalId,
         quantity: quantity,
         estimatedValue: notional,
