@@ -1,18 +1,29 @@
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * LEGACY METRICS ARCHIVE — Directive 11.0E
+ * ARCHIVE SEALED — Directive 11.0F
  * ══════════════════════════════════════════════════════════════════════════════
+ * 
+ * Legacy metric data retained for compliance only.
+ * Purge Date: 2026-06-30 or upon 11.5 system audit completion.
  * 
  * This file preserves historical formulas for legacy metrics that were used
  * prior to the FinalScore unification in Phase 10/11.
  * 
  * STATUS: ARCHIVED - DO NOT USE IN PRODUCTION CODE
  * 
- * These metrics have been replaced by:
+ * These metrics have been PERMANENTLY REMOVED from the database schema (v1.5.0):
+ *   - cwqi: Removed from rtb_signals table
+ *   - ngc: Removed from rtb_signals table
+ *   - profitRate: Removed from all signal evaluation
+ * 
+ * Current canonical metrics (Metric Engine v1.0):
  *   - FinalScore: Unified signal quality score
  *   - RegimeWeight: Market regime alignment
+ *   - HybridScore: Hybrid strategy score component
+ *   - DecayPenalty: Signal age decay factor
  * 
  * See: server/core/utils/score-calculator.ts for current implementation
+ * See: server/legacy/data/legacy_metrics_snapshot.json for archived data
  * ══════════════════════════════════════════════════════════════════════════════
  */
 

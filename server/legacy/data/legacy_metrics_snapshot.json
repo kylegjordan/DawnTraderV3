@@ -1,0 +1,57 @@
+{
+  "archived_on": "2026-01-08",
+  "directive": "11.0F",
+  "schema_version": "v1.4.6",
+  "migrated_to": "v1.5.0",
+  "archived_metrics": {
+    "cwqi": {
+      "description": "Confidence-Weighted Quality Index",
+      "formula": "(NGC × 0.40) + ((1 - Risk) × 0.25) + (ExpectedReturn × 0.20) + (ProfitRate × 0.15)",
+      "replaced_by": "FinalScore",
+      "min_threshold": 0.35
+    },
+    "ngc": {
+      "description": "Normalized Global Confidence",
+      "formula": "normalize(base_confidence × (1 - volatility) × (1 - risk))",
+      "replaced_by": "confidence (direct)",
+      "min_threshold": 0.45
+    },
+    "profitRate": {
+      "description": "Expected profit rate over time",
+      "formula": "expectedReturn / expectedDuration",
+      "replaced_by": "removed",
+      "min_threshold": 0.002
+    }
+  },
+  "new_metrics": {
+    "finalScore": {
+      "description": "Unified signal quality score",
+      "formula": "(HybridScore × 0.4) + (Confidence × 0.3) + (RegimeWeight × 0.2) - (DecayPenalty × 0.1)",
+      "min_threshold": 0.35
+    },
+    "regimeWeight": {
+      "description": "Market regime alignment weight",
+      "range": "0.0 to 1.0"
+    },
+    "hybridScore": {
+      "description": "Hybrid strategy score component",
+      "range": "0.0 to 1.0"
+    },
+    "decayPenalty": {
+      "description": "Signal age decay factor",
+      "formula": "λ × ageMinutes (capped at 0.10)",
+      "range": "0.0 to 0.10"
+    }
+  },
+  "score_weights": {
+    "version": "v1.0",
+    "coefficients": {
+      "HYBRID": 0.4,
+      "CONFIDENCE": 0.3,
+      "REGIME": 0.2,
+      "DECAY": 0.1
+    }
+  },
+  "records": [],
+  "note": "Historical signal records were not exported as database was empty at migration time. Future systems can reference this structure for audit purposes."
+}

@@ -1,0 +1,281 @@
+🧩 Directive 11.0F — Legacy Data Purge & Schema Finalization
+
+Phase: 11.0F
+Series: Trade Control Separation & Math Modernization
+Date: [Insert Date]
+Authorizing Body: DawnTrader Project Management Office
+Approved by: Architecture Oversight Committee
+Target Schema Version: v1.5.0
+Dependencies: Completion of Directive 11.0E (Legacy Metric Purge & FinalScore Unification)
+
+🎯 Objective
+
+Directive 11.0F completes the modernization and purification of the DawnTrader math and trade architecture.
+It finalizes the removal of all legacy math data and transitional code, consolidates schema and telemetry fields, and establishes a clean, stable foundation for the next stage: Phase 11.1 – Persistent Intelligence.
+
+This directive formally closes the 11.0 series by:
+
+Dropping deprecated database columns (cwqi, ngc, profitRate).
+
+Cleaning up residual telemetry and diagnostic transitional flags.
+
+Freezing the FinalScore model as Metric Engine v1.0 (Canonical).
+
+Archiving all legacy metric data for future audit reference.
+
+Verifying a stable schema and telemetry alignment under v1.5.0.
+
+⚙️ Scope of Work
+
+This directive applies to:
+
+Database schemas
+
+Telemetry aggregation and diagnostics
+
+Legacy archival handling
+
+Documentation (technical + schema reference)
+
+Regression and validation testing
+
+🧩 Tasks and Implementation Details
+Task 1 — Schema Finalization (Database v1.5.0)
+
+Goal: Permanently remove deprecated fields and enforce schema integrity.
+
+Files Affected:
+
+server/db/schema/signals.ts
+
+server/db/schema/metrics.ts
+
+drizzle/migrations/2026-11-0F-final-schema.sql
+
+Actions:
+
+Drop columns:
+
+ALTER TABLE signals DROP COLUMN IF EXISTS cwqi;
+ALTER TABLE signals DROP COLUMN IF EXISTS ngc;
+ALTER TABLE signals DROP COLUMN IF EXISTS profitRate;
+
+
+Update schema version:
+
+export const SCHEMA_VERSION = "v1.5.0";
+export const SCHEMA_DIRECTIVE = "11.0F";
+
+
+Remove any residual @deprecated decorators from TypeScript models.
+
+Run npm run db:push and verify migration success with SELECT version();.
+
+Verification:
+
+No references to these fields in ORM models or telemetry payloads.
+
+Schema hash matches v1.5.0 signature.
+
+Task 2 — Legacy Archive Creation
+
+Goal: Preserve one-time historical dataset for analytics and audits.
+
+Files:
+
+server/legacy/metrics_archive.ts
+
+server/legacy/data/legacy_metrics_snapshot.json
+
+Actions:
+
+Extract all historical CWQI, NGC, and ProfitRate data (past 30 days).
+
+SELECT symbol, cwqi, ngc, profitRate, timestamp FROM signals_archive WHERE timestamp > NOW() - INTERVAL '30 days';
+
+
+Export data to JSON snapshot file:
+
+/server/legacy/data/legacy_metrics_snapshot.json
+
+
+Add metadata header:
+
+{
+  "archived_on": "2026-01-04",
+  "directive": "11.0F",
+  "schema_version": "v1.4.6",
+  "records": [...]
+}
+
+
+Update metrics_archive.ts header:
+
+// ARCHIVE SEALED — Legacy metric data retained for compliance only.
+// Purge Date: 2026-06-30 or upon 11.5 system audit completion.
+
+
+Verification:
+
+Archive file exists and matches schema checksum.
+
+No legacy metric calculations remain in runtime code.
+
+Task 3 — Telemetry & Diagnostics Purge
+
+Goal: Clean all transitional fields introduced under Directives 11.0C–11.0E.
+
+Files:
+
+server/services/telemetry-aggregator.ts
+
+ui/goals/diagnostics/telemetry_panel.tsx
+
+server/core/utils/score-calculator.ts
+
+Actions:
+
+Remove transitional fields:
+
+legacyMetricCount
+
+configProvenance.phaseDirective
+
+configProvenance.executionConfigVersion
+
+Replace with permanent structure:
+
+{
+  "metricEngineVersion": "v1.0",
+  "schemaVersion": "v1.5.0",
+  "directive": "11.0F",
+  "telemetryHealth": "green"
+}
+
+
+Diagnostics UI: rename “Configuration Provenance” → “System Configuration” and remove any “legacy metric” rows.
+
+Add static label:
+“Metric Engine v1.0 (FinalScore Canonical)”.
+
+Verification:
+
+Telemetry payloads match updated JSON schema.
+
+UI panel shows no transitional or deprecated fields.
+
+Task 4 — Codebase Sanitation
+
+Goal: Eliminate residual code or comments referencing legacy math.
+
+Actions:
+
+Full-text scan for cwqi, ngc, profitRate.
+
+Remove any commented imports such as:
+
+// import { calculateCWQIFromSignal } from '../metrics/quality_index';
+
+
+Run ESLint guard:
+
+npm run lint:legacy
+
+
+✅ Must report: No legacy metric imports found.
+
+Task 5 — Regression & Verification Tests
+
+Goal: Validate functional stability and telemetry integrity post-purge.
+
+Files:
+
+server/tests/integration/schema_v1_5.test.ts
+
+server/tests/integration/finalscore_persistence.test.ts
+
+Checks:
+
+Run migration test:
+
+npm run test:integration -- schema_v1_5
+
+
+✅ Expect “Schema version v1.5.0 active, 0 legacy fields detected.”
+
+Run RTB and SQE end-to-end test:
+
+Generate new signals → verify no CWQI/NGC fields.
+
+Confirm telemetry reports FinalScore and RegimeWeight only.
+
+Run paper execution test to ensure trades open/close successfully.
+
+Verification:
+
+All tests pass.
+
+No missing fields in signal persistence or telemetry logs.
+
+Task 6 — Documentation Finalization
+
+Goal: Synchronize schema and math references with production.
+
+Files:
+
+replit.md
+
+docs/math_reference.md
+
+docs/schema_reference_v1_5.md
+
+Actions:
+
+Update schema and math documentation to remove all CWQI/NGC/ProfitRate references.
+
+Include final summary section:
+
+“As of Directive 11.0F, all legacy metrics have been removed. FinalScore and RegimeWeight now serve as the unified scoring model across DawnTrader’s orchestration, ranking, and trade evaluation pipelines.”
+
+Archive previous schema references under /docs/legacy/.
+
+🧪 Validation Criteria
+
+Directive 11.0F will be considered complete and approved for closeout when:
+
+✅ No “cwqi”, “ngc”, or “profitRate” strings exist in /server/core or /server/services.
+✅ All telemetry payloads return metricEngineVersion = v1.0.
+✅ Schema migration successfully reports version v1.5.0.
+✅ Regression tests pass with no breaking changes.
+✅ Diagnostics UI matches the finalized telemetry structure.
+✅ legacy_metrics_snapshot.json exists and is checksum-verified.
+
+⚠️ Risk Controls
+Risk	Mitigation
+Data loss during column drop	Full JSON archive created prior to migration
+Breaking references in ORM	Run ESLint + TypeScript LSP validation before migration
+Schema mismatch in telemetry	Validate telemetry schema post-push
+Orphaned data in validation or analytics modules	Run repository-wide scan for legacy metric references
+🧱 Deliverables
+Deliverable	Description
+✅ Schema v1.5.0	No legacy metric columns
+✅ Legacy Archive	/server/legacy/data/legacy_metrics_snapshot.json
+✅ Clean Telemetry	metricEngineVersion = v1.0
+✅ Updated Diagnostics	New “System Configuration” panel
+✅ Updated Documentation	/docs/schema_reference_v1_5.md
+✅ Test Suite	All integration tests passing
+🧩 Post-Directive Transition
+
+After Directive 11.0F:
+
+The DawnTrader platform is declared FinalScore-stable.
+
+Math and scoring logic are fully unified and auditable.
+
+The system is ready for Phase 11.1 (Persistent Intelligence):
+
+Telemetry retention
+
+Warm-start capability
+
+Learning rehydration

@@ -20,7 +20,7 @@
 import { SCANNER_PARAMS, FILTER_SCHEMA_VERSION } from '../config/system-guards.js';
 import { getScoreWeightsMetadata, SCORE_WEIGHTS_VERSION } from '../config/score-weights.config.js';
 import { EXECUTION_CONFIG } from '../config/execution-config.js';
-import { SCHEMA_VERSION, SCHEMA_DIRECTIVE } from '../config/schema-version.js';
+import { SCHEMA_VERSION, SCHEMA_DIRECTIVE, METRIC_ENGINE_VERSION } from '../config/schema-version.js';
 
 export interface PairTelemetry {
   symbol: string;
@@ -277,20 +277,23 @@ export class TelemetryAggregatorService {
   }
 
   /**
-   * Directive 10.9A: Get telemetry summary with coefficient metadata and version
-   * Directive 10.9B: Added phaseDirective and filterSchemaVersion
-   * Directive 10.9C: Updated to v1.2.0 with rolling 24h window
-   * Directive 10.9E: Added filter performance telemetry (pass rate, failure breakdown)
-   * This logs the coefficient set used during this session for auditability
+   * Directive 11.0F: Get telemetry summary with Metric Engine v1.0 metadata
+   * 
+   * Returns system configuration with FinalScore-canonical metrics.
+   * Legacy configProvenance fields removed - replaced by systemConfig.
    */
   getTelemetrySummaryWithCoefficients(): {
     version: string;
     pairCount: number;
     totalSamples: number;
     weights: { hybrid: number; confidence: number; regime: number; decay: number };
-    phaseDirective: string;
-    filterSchemaVersion: string;
     timestamp: string;
+    systemConfig: {
+      metricEngineVersion: string;
+      schemaVersion: string;
+      directive: string;
+      telemetryHealth: 'green' | 'yellow' | 'red';
+    };
     tecConfig?: {
       expandFactor: number;
       contractFactor: number;
@@ -298,12 +301,6 @@ export class TelemetryAggregatorService {
       trailingAccel: number;
       maxRisk: number;
       version: string;
-    };
-    configProvenance?: {
-      phaseDirective: string;
-      backendSchema: string;
-      executionConfigVersion: string;
-      screenerConfigVersion: string;
     };
     fx5Evaluated24h?: number;
     fx5Passed24h?: number;
@@ -357,9 +354,13 @@ export class TelemetryAggregatorService {
         regime: coefficients.weights.REGIME,
         decay: coefficients.weights.DECAY,
       },
-      phaseDirective: SCHEMA_DIRECTIVE,
-      filterSchemaVersion: FILTER_SCHEMA_VERSION,
       timestamp: new Date().toISOString(),
+      systemConfig: {
+        metricEngineVersion: METRIC_ENGINE_VERSION,
+        schemaVersion: SCHEMA_VERSION,
+        directive: SCHEMA_DIRECTIVE,
+        telemetryHealth: 'green' as const,
+      },
       tecConfig: {
         expandFactor: EXECUTION_CONFIG.ADAPTIVE_EXPAND_FACTOR,
         contractFactor: EXECUTION_CONFIG.ADAPTIVE_CONTRACT_FACTOR,
@@ -367,12 +368,6 @@ export class TelemetryAggregatorService {
         trailingAccel: EXECUTION_CONFIG.TRAILING_STOP_ACCELERATION,
         maxRisk: EXECUTION_CONFIG.MAX_POSITION_RISK,
         version: EXECUTION_CONFIG.VERSION
-      },
-      configProvenance: {
-        phaseDirective: SCHEMA_DIRECTIVE,
-        backendSchema: SCHEMA_VERSION,
-        executionConfigVersion: EXECUTION_CONFIG.VERSION,
-        screenerConfigVersion: FILTER_SCHEMA_VERSION
       },
       ...filterPerformance,
     };

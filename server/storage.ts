@@ -4381,7 +4381,10 @@ export class DatabaseStorage implements IStorage {
           confidence: data.confidence,
           riskScore: data.riskScore,
           expectedReturn: data.expectedReturn,
-          cwqi: data.cwqi,
+          finalScore: data.finalScore,
+          regimeWeight: data.regimeWeight,
+          hybridScore: data.hybridScore,
+          decayPenalty: data.decayPenalty,
           status: data.status,
           queuedAt: new Date(),
           expiresAt: data.expiresAt,
@@ -4422,11 +4425,9 @@ export class DatabaseStorage implements IStorage {
       .from(rtbSignals)
       .where(and(...conditions));
     
-    // Apply ordering - Directive 11.0B: finalScore is primary sort
+    // Directive 11.0F: finalScore is the ONLY ranking metric (CWQI removed)
     if (orderBy === 'finalScore') {
       query = query.orderBy(orderDir === 'asc' ? asc(rtbSignals.finalScore) : desc(rtbSignals.finalScore)) as any;
-    } else if (orderBy === 'cwqi') {
-      query = query.orderBy(orderDir === 'asc' ? asc(rtbSignals.cwqi) : desc(rtbSignals.cwqi)) as any;
     } else {
       query = query.orderBy(orderDir === 'asc' ? asc(rtbSignals.queuedAt) : desc(rtbSignals.queuedAt)) as any;
     }

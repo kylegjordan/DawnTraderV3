@@ -1780,7 +1780,7 @@ export const rtbSignalStatusEnum = pgEnum("rtb_signal_status", ["queued", "promo
 
 // Phase 8.8.4-B: Ready-to-Buy (RTB) Signals Queue
 // Stores high-quality signals that pass quality guardrails but are blocked by capacity constraints
-// Directive 11.0B: Signals are ranked by FinalScore for promotion (legacy CWQI/NGC retained for reference)
+// Directive 11.0F: Signals ranked exclusively by FinalScore (legacy CWQI/NGC columns removed)
 export const rtbSignals = pgTable("rtb_signals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   mode: tradingModeEnum("mode").notNull(),
@@ -1792,15 +1792,15 @@ export const rtbSignals = pgTable("rtb_signals", {
   targetPrice: decimal("target_price", { precision: 20, scale: 8 }),
   quantity: decimal("quantity", { precision: 20, scale: 8 }),
   notional: decimal("notional", { precision: 20, scale: 2 }),
-  // Legacy quality metrics (retained for reference, not used for ranking per 11.0B)
+  // Directive 11.0F: Quality metrics (FinalScore-native)
   confidence: decimal("confidence", { precision: 5, scale: 4 }).notNull(), // 0.0000 to 1.0000
   riskScore: decimal("risk_score", { precision: 5, scale: 4 }).notNull(), // 0.0000 to 1.0000 (lower is better)
   expectedReturn: decimal("expected_return", { precision: 5, scale: 4 }).notNull(), // 0.0000 to 1.0000
-  cwqi: decimal("cwqi", { precision: 5, scale: 4 }).notNull(), // Legacy: Confidence-Weighted Quality Index
-  ngc: decimal("ngc", { precision: 5, scale: 4 }), // Legacy: Normalized Global Confidence
-  // Directive 11.0B: Primary ranking metrics
-  finalScore: decimal("final_score", { precision: 5, scale: 4 }), // Unified ranking score (FinalScore)
+  // Directive 11.0F: Primary ranking metrics (ONLY source of truth for signal ranking)
+  finalScore: decimal("final_score", { precision: 5, scale: 4 }).notNull(), // Unified ranking score (FinalScore)
   regimeWeight: decimal("regime_weight", { precision: 5, scale: 4 }), // Market regime alignment weight
+  hybridScore: decimal("hybrid_score", { precision: 5, scale: 4 }), // Hybrid strategy score component
+  decayPenalty: decimal("decay_penalty", { precision: 5, scale: 4 }), // Signal age decay factor
   // Market data for display (Directive 8.8.4-C.14.A)
   currentPrice: decimal("current_price", { precision: 20, scale: 8 }), // Current market price at queue time
   volume24h: decimal("volume_24h", { precision: 20, scale: 2 }), // 24h USD volume
@@ -1819,8 +1819,7 @@ export const rtbSignals = pgTable("rtb_signals", {
 }, (table) => ({
   modeStatusIdx: index("rtb_signals_mode_status_idx").on(table.mode, table.status),
   symbolStrategyIdx: uniqueIndex("rtb_signals_symbol_strategy_idx").on(table.mode, table.symbol, table.strategy, table.status),
-  cwqiIdx: index("rtb_signals_cwqi_idx").on(table.cwqi),
-  finalScoreIdx: index("rtb_signals_final_score_idx").on(table.finalScore), // Directive 11.0B: FinalScore ranking index
+  finalScoreIdx: index("rtb_signals_final_score_idx").on(table.finalScore), // Directive 11.0F: FinalScore is ONLY ranking metric
   queuedAtIdx: index("rtb_signals_queued_at_idx").on(table.queuedAt),
   expiresAtIdx: index("rtb_signals_expires_at_idx").on(table.expiresAt),
 }));
