@@ -1,60 +1,60 @@
 {
   "bob_snapshot": {
-    "timestamp": "2026-01-08T09:34:28.104Z",
+    "timestamp": "2026-01-08T09:47:21.405Z",
     "modules": {
       "MetricsBob": {
         "name": "MetricsBob",
-        "lastUpdate": "2026-01-08T09:34:28.103Z",
+        "lastUpdate": "2026-01-08T09:47:21.403Z",
         "stale": false,
-        "hitRate": "97.7%",
+        "hitRate": "96.8%",
         "cacheSize": 1,
         "ttl": 60
       },
       "DataBob": {
         "name": "DataBob",
-        "lastUpdate": "2026-01-08T09:34:28.103Z",
+        "lastUpdate": "2026-01-08T09:47:21.403Z",
         "stale": false,
-        "hitRate": "97.7%",
+        "hitRate": "96.8%",
         "cacheSize": 1,
         "ttl": 60
       },
       "ConfigBob": {
         "name": "ConfigBob",
-        "lastUpdate": "2026-01-08T09:34:28.103Z",
+        "lastUpdate": "2026-01-08T09:47:21.403Z",
         "stale": false,
-        "hitRate": "97.7%",
+        "hitRate": "96.8%",
         "cacheSize": 1,
         "ttl": 60
       },
       "StrategyBob": {
         "name": "StrategyBob",
-        "lastUpdate": "2026-01-08T09:34:28.103Z",
+        "lastUpdate": "2026-01-08T09:47:21.403Z",
         "stale": false,
-        "hitRate": "97.7%",
+        "hitRate": "96.8%",
         "cacheSize": 1,
         "ttl": 60
       },
       "TradeBob": {
         "name": "TradeBob",
-        "lastUpdate": "2026-01-08T09:34:28.103Z",
+        "lastUpdate": "2026-01-08T09:47:21.403Z",
         "stale": false,
-        "hitRate": "97.7%",
+        "hitRate": "96.8%",
         "cacheSize": 1,
         "ttl": 60
       },
       "InsightBob": {
         "name": "InsightBob",
-        "lastUpdate": "2026-01-08T09:34:28.103Z",
+        "lastUpdate": "2026-01-08T09:47:21.403Z",
         "stale": false,
-        "hitRate": "97.7%",
+        "hitRate": "96.8%",
         "cacheSize": 1,
         "ttl": 60
       },
       "UIBob": {
         "name": "UIBob",
-        "lastUpdate": "2026-01-08T09:34:28.103Z",
+        "lastUpdate": "2026-01-08T09:47:21.403Z",
         "stale": false,
-        "hitRate": "97.7%",
+        "hitRate": "96.8%",
         "cacheSize": 1,
         "ttl": 60
       }
@@ -62,36 +62,36 @@
     "overallStats": {
       "modulesActive": 7,
       "totalCacheSize": 1,
-      "overallHitRate": "97.7%",
-      "totalHits": 11129,
-      "totalMisses": 265
+      "overallHitRate": "96.8%",
+      "totalHits": 1195,
+      "totalMisses": 39
     },
     "recentChanges": [],
     "systemHealth": "healthy",
     "healthMetrics": {
       "status": "degraded",
       "warnings": [
-        "Analytics scheduler inactive: last run 5m ago"
+        "Analytics scheduler inactive: last run 8m ago"
       ],
       "criticalIssues": [],
       "metrics": {
-        "timestamp": "2026-01-08T09:34:28.104Z",
+        "timestamp": "2026-01-08T09:47:21.404Z",
         "system": {
-          "cpuUsage": 42,
+          "cpuUsage": 38.3,
           "memoryUsage": {
-            "total": 67428110336,
-            "used": 36691066880,
-            "free": 30737043456,
-            "percentUsed": 54
+            "total": 67428118528,
+            "used": 50423107584,
+            "free": 17005010944,
+            "percentUsed": 75
           },
-          "uptime": 4892
+          "uptime": 573
         },
         "cache": {
-          "hitRate": 98,
-          "missRate": 2,
-          "totalRequests": 11392,
-          "hits": 11129,
-          "misses": 263
+          "hitRate": 97,
+          "missRate": 3,
+          "totalRequests": 1232,
+          "hits": 1195,
+          "misses": 37
         },
         "latency": {
           "cortex": null,
@@ -100,19 +100,19 @@
         },
         "schedulers": {
           "cortexSync": {
-            "uptime": 4892,
-            "lastRun": "2026-01-08T09:33:58.107Z"
+            "uptime": 573,
+            "lastRun": "2026-01-08T09:46:51.405Z"
           },
           "analytics": {
-            "uptime": 4892,
-            "lastRun": "2026-01-08T09:28:28.776Z"
+            "uptime": 573,
+            "lastRun": "2026-01-08T09:38:21.733Z"
           }
         },
         "filePersistence": {
-          "successCount": 2,
+          "successCount": 1,
           "failureCount": 0,
           "timeoutCount": 0,
-          "avgLatencyMs": 319,
+          "avgLatencyMs": 261,
           "byCategory": {
             "report": {
               "success": 0,
@@ -120,9 +120,9 @@
               "avgLatencyMs": 0
             },
             "log": {
-              "success": 2,
+              "success": 1,
               "failed": 0,
-              "avgLatencyMs": 319
+              "avgLatencyMs": 261
             },
             "export": {
               "success": 0,
@@ -138,7 +138,7 @@
         },
         "execution": {
           "marketDataSource": "rest_fallback",
-          "lastTickAgeMs": 887,
+          "lastTickAgeMs": 1059,
           "avgSubmitAckMs": 0,
           "avgSlippageBps": 0,
           "avgFeesPerTrade": 0,
@@ -160,15 +160,15 @@
     "current": {
       "view": "Dashboard",
       "mode": "live",
-      "timestamp": "2026-01-08T09:34:28.103Z"
+      "timestamp": "2026-01-08T09:47:21.404Z"
     }
   },
-  "last_sync": "2026-01-08T09:34:28.104Z",
+  "last_sync": "2026-01-08T09:47:21.405Z",
   "memory": {
     "analytics_live_6c591801-3072-431d-b192-30aaf426f15e": {
       "value": {
         "strategy_analytics": {
-          "timestamp": "2026-01-08T09:28:28.449Z",
+          "timestamp": "2026-01-08T09:38:21.367Z",
           "strategies": [],
           "totalStrategies": 0,
           "averageSharpe": 0,
@@ -177,7 +177,7 @@
           "worstPerformer": null
         },
         "portfolio_summary": {
-          "timestamp": "2026-01-08T09:28:28.580Z",
+          "timestamp": "2026-01-08T09:38:21.525Z",
           "totalEquity": 834.11,
           "totalPL": 0,
           "totalPLPercent": 0,
@@ -189,20 +189,20 @@
           "strategyCount": 0,
           "activeStrategies": 0
         },
-        "computed_at": "2026-01-08T09:28:28.580Z",
+        "computed_at": "2026-01-08T09:38:21.525Z",
         "user_id": "6c591801-3072-431d-b192-30aaf426f15e",
         "mode": "live"
       },
       "ttl": 900,
-      "expires_at": 1767865408580,
-      "traceId": "trace_QCPYpDSYszN_QhGa",
+      "expires_at": 1767866001525,
+      "traceId": "trace_7ZuJy-CmvWvYNAvk",
       "mode": "live",
       "sourceTable": "strategy_settings"
     },
     "analytics_paper_6c591801-3072-431d-b192-30aaf426f15e": {
       "value": {
         "strategy_analytics": {
-          "timestamp": "2026-01-08T09:28:28.646Z",
+          "timestamp": "2026-01-08T09:38:21.602Z",
           "strategies": [],
           "totalStrategies": 0,
           "averageSharpe": 0,
@@ -211,7 +211,7 @@
           "worstPerformer": null
         },
         "portfolio_summary": {
-          "timestamp": "2026-01-08T09:28:28.775Z",
+          "timestamp": "2026-01-08T09:38:21.733Z",
           "totalEquity": 878,
           "totalPL": 0,
           "totalPLPercent": 0,
@@ -223,13 +223,13 @@
           "strategyCount": 0,
           "activeStrategies": 0
         },
-        "computed_at": "2026-01-08T09:28:28.775Z",
+        "computed_at": "2026-01-08T09:38:21.733Z",
         "user_id": "6c591801-3072-431d-b192-30aaf426f15e",
         "mode": "paper"
       },
       "ttl": 900,
-      "expires_at": 1767865408775,
-      "traceId": "trace_HzFcMKJq3847kjph",
+      "expires_at": 1767866001733,
+      "traceId": "trace_EtjPa2wKMjieOTDH",
       "mode": "paper",
       "sourceTable": "strategy_settings"
     }

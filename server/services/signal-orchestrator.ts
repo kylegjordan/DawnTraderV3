@@ -1,40 +1,29 @@
 /**
- * Phase 37/B6 + 8.8.4-B.1 + 8.8.7: Signal Orchestrator
+ * ══════════════════════════════════════════════════════════════════════════════
+ * Directive 11.0E — Signal Orchestrator
+ * ══════════════════════════════════════════════════════════════════════════════
  * 
  * Implements hybrid signal-orchestration loop for mode-aware market evaluation.
  * Periodically scans filtered symbols and evaluates trading strategies to generate signals.
+ * 
+ * DIRECTIVE 11.0E: FinalScore Unification
+ * - ALL legacy metrics (NGC, CWQI, ProfitRate) references preserved for backward compatibility
+ * - FinalScore is the PRIMARY ranking metric
+ * - SQE evaluates FinalScore + RegimeWeight only
  * 
  * Architecture:
  * - Phase 8.8.7: Loads filtered symbols from activeFilterPool.getActivePool()
  * - Seeds immediate evaluation pass on start
  * - Timer-based evaluation (configurable interval)
  * - Calls all enabled strategies for each symbol
- * - B6: All signals are sized via centralized sizing helper before forwarding
- * - B.1: Computes NGC, ExpectedDuration, ProfitRate, CWQI for each signal
- * - B.1: Routes signals through SQE filter before forwarding
- * - De-duplicates and scores signals
- * - Forwards winning signals to TradingEngine for processing
- * 
- * Separation of Concerns:
- * - MarketScanner: maintains universe of eligible symbols
- * - SignalOrchestrator: evaluates strategies, computes metrics, filters via SQE
- * - StrategyEngine: pure/deterministic strategy detection
- * - TradingEngine: executes trades and manages positions
- * 
- * B6 Refactor:
- * - All 9 strategies now route through buildSizedSignalForStrategy()
- * - Signals are pre-sized with quantity and estimatedValue before forwarding
- * - Uses centralized sizing helper from paper-position-sizing.ts
- * 
- * B.1 Enhancements:
- * - NGC (Normalized Global Confidence) computed upstream
- * - Extended metrics (ExpectedDuration, ProfitRate) computed
- * - SQE used as pure filter with pre-computed metrics
- * - CWQI ranked signals forwarded to RTB queue
+ * - Signals are sized via centralized sizing helper before forwarding
+ * - FinalScore computed for signal ranking
+ * - SQE used as filter with FinalScore/RegimeWeight thresholds
+ * - FinalScore ranked signals forwarded to RTB queue
  * 
  * 8.8.7 Filter Synchronization:
  * - Uses activeFilterPool.getActivePool() for FX5-verified pairs ONLY
- * - FilteredPairsService DEPRECATED for signal generation
+ * ══════════════════════════════════════════════════════════════════════════════
  */
 
 import { StrategyEngine, StrategySignal } from './strategy-engine';
@@ -438,21 +427,21 @@ export class SignalOrchestrator {
       false // not yet normalized by SQE
     );
 
-    // Phase 8.8.4-B.3: STEP 3 - Apply SQE quality filter AFTER metrics
+    // Directive 11.0E: Apply SQE quality filter with FinalScore and RegimeWeight only
     const sqeInput: SQEInput = {
       signalId,
       symbol: rawSignal.symbol,
       strategy: strategyId,
-      ngc: extendedMetrics.ngc,
-      riskScore: extendedMetrics.riskScore,
-      profitRate: extendedMetrics.profitRate,
-      cwqi: extendedMetrics.cwqi,
+      mode: sizingContext.mode,
+      confidence: extendedMetrics.ngc, // Directive 11.0E: Use confidence (formerly NGC)
+      trendStrength: 0.5, // Default for legacy signals
+      volatility: extendedMetrics.volatility ?? 0.3,
     };
 
-    const sqeResult = signalQualityEvaluator.evaluate(sqeInput);
+    const sqeResult = await signalQualityEvaluator.evaluate(sqeInput);
     
     if (!sqeResult.passed) {
-      console.log(`[B.3][SQE_REJECT] ${rawSignal.symbol}/${strategyId}: ${sqeResult.reason}`);
+      console.log(`[11.0E][SQE_REJECT] ${rawSignal.symbol}/${strategyId}: ${sqeResult.reason}`);
       signalLifecycleAudit.recordRejection(
         signalId,
         sizingContext.mode,
@@ -474,16 +463,17 @@ export class SignalOrchestrator {
     // L10: Fetch exposure bias multiplier for this strategy
     const exposureBias = getExposureMultiplierSync(strategyId);
     
-    // Directive 10.9A: Inline FinalScore calculation using centralized weights
-    // Formula: hybridScore × 0.4 + predictiveConfidence × 0.3 + regimeWeight × 0.2 - decayPenalty × 0.1
+    // Directive 11.0E: FinalScore calculation using centralized weights
+    // Formula: hybridScore × 0.4 + confidence × 0.3 + regimeWeight × 0.2 - decayPenalty × 0.1
+    // Note: confidence from extended metrics used directly (NGC deprecated as term, value preserved)
     const W = SCORE_WEIGHTS.FINAL_SCORE;
-    const hybridScore = (rawSignal as any).hybridScore ?? extendedMetrics.ngc;
-    const predictiveConfidence = extendedMetrics.ngc;
+    const confidence = extendedMetrics.ngc; // Directive 11.0E: ngc value preserved, renamed as confidence
+    const hybridScore = (rawSignal as any).hybridScore ?? confidence;
     const regimeWeight = (rawSignal as any).regimeWeight ?? 0.5;
     const decayPenalty = 0; // New signals have no decay
     const signalFinalScore = Math.max(0, Math.min(1,
       (hybridScore ?? 0) * W.HYBRID +
-      (predictiveConfidence ?? 0) * W.CONFIDENCE +
+      (confidence ?? 0) * W.CONFIDENCE +
       (regimeWeight ?? 0) * W.REGIME -
       (decayPenalty ?? 0) * W.DECAY
     ));

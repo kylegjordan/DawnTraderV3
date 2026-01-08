@@ -1,0 +1,171 @@
+🧩 Project Manager Approval Memo — Directive 11.0E Implementation Readiness
+
+To: Replit Development Team
+From: DawnTrader Project Management Office
+Cc: Architecture Oversight, Gemini, OpenAI Review
+Date: [Insert Date]
+Subject: Approval with Conditions — Implementation Plan for Directive 11.0E (“Legacy Metric Purge & FinalScore Unification”)
+
+Summary
+
+We’ve reviewed your proposed implementation plan for Directive 11.0E in full.
+The general structure and sequencing of your refactor plan are approved in principle, as it follows the intent of the directive and a logical phased order of operations.
+
+However, several critical guardrails and procedural modifications are required to protect system stability, prevent metric regression, and ensure architectural integrity during this large-scale cleanup.
+
+The following directives must be applied before you begin implementation.
+
+🧭 Required Adjustments Prior to Implementation
+1️⃣ Incremental Commit Sequencing — No Combined File Edits
+
+The Phase 2 RTB/Signal Flow refactor is the highest-risk part of this implementation.
+Each of the following files must be handled in isolation, committed, and verified independently before the next edit begins:
+
+signal-orchestrator.ts
+
+ready_to_buy_service.ts
+
+paper-execution-engine.ts
+
+After each file is refactored:
+
+Run the full unit + integration test suite.
+
+Resolve all TypeScript LSP issues.
+
+Ensure no ranking order or trade promotion regression.
+
+Do not refactor these files simultaneously.
+
+2️⃣ Shadow Mode Ranking Test Before CWQI Removal
+
+Before CWQI references are removed from ready_to_buy_service.ts, a temporary dual-metric comparison test must be implemented:
+
+const sortedFinal = signals.sort((a,b)=>b.finalScore - a.finalScore);
+const sortedCWQI = signals.sort((a,b)=>b.cwqi - a.cwqi);
+const rankCorrelation = pearsonCorrelation(sortedFinal, sortedCWQI);
+log.debug(`[11.0E] Rank correlation CWQI→FinalScore: ${rankCorrelation.toFixed(2)}`);
+
+
+If correlation falls below 0.9, pause implementation and report to architecture review for formula revalidation.
+This ensures continuity in trade selection and signal ranking.
+
+3️⃣ Post-SQE Safety Hook
+
+Add a validation check in score-calculator.ts:
+
+if (isNaN(finalScore) || finalScore < 0) {
+  throw new Error('[11.0E] Invalid FinalScore computation');
+}
+
+
+This ensures safe numeric integrity during transitional phases when legacy fields are being removed.
+
+4️⃣ Linter Guardrail for Legacy Metric Imports
+
+Create an ESLint rule to prevent accidental reintroduction of deprecated modules:
+
+Rule file: /eslint-rules/no-legacy-metrics.js
+
+"no-legacy-metrics": ["error", {
+  "forbiddenImports": ["cwqi-service", "quality_index"]
+}]
+
+
+Add this rule to CI validation under npm run lint:legacy.
+
+5️⃣ Schema and Telemetry Safeguards
+
+Schema changes are approved with modifications:
+
+Mark cwqi, ngc, and profitRate columns as deprecated, not dropped.
+
+Add SQL annotation:
+
+-- Directive 11.0E: CWQI/NGC/ProfitRate deprecated, data retained for 60 days.
+
+
+Implement a telemetry warning:
+
+if (schemaVersion >= 1.46 && signal.cwqi) {
+  log.warn("[11.0E] Legacy field accessed post-deprecation");
+}
+
+
+This ensures that any residual access of legacy data is logged and surfaced in diagnostics.
+
+6️⃣ FinalScore Verification Tests
+
+When removing cwqi.test.ts, replace it with finalscore_equivalence.test.ts to validate that the new ranking is statistically equivalent to CWQI ordering on archived data.
+
+Target correlation:
+Pearson coefficient ≥ 0.9 between legacy CWQI and FinalScore rankings over a 1-day telemetry sample.
+
+7️⃣ Documentation and Diagnostic Visibility
+
+In addition to updating replit.md, ensure:
+
+Diagnostics UI adds “Metric Engine Version: [FinalScore v1.0]” under the Configuration Provenance panel.
+
+Telemetry summary includes legacyMetricCount = 0 as a post-implementation audit field.
+
+8️⃣ Implementation and Testing Sequence (Revised)
+
+✅ Phase 1: Complete SQE cleanup (resolve LSP errors).
+
+🔶 Phase 2A: Refactor signal-orchestrator.ts.
+
+🔶 Phase 2B: Implement Shadow Mode ranking test in ready_to_buy_service.ts.
+
+🔶 Phase 2C: Refactor paper-execution-engine.ts.
+
+🔷 Phase 3: Archive legacy metric files and add ESLint guard.
+
+🔹 Phase 4: Update validations and create finalscore_equivalence.test.ts.
+
+⚙️ Phase 5: Apply schema and telemetry safety changes.
+
+🧩 Final: Confirm diagnostics and documentation update.
+
+Each stage should be independently tested and committed before proceeding.
+
+⚠️ Absolute Requirements Before Live Activation
+
+All automated tests must pass.
+
+No “cwqi”, “ngc”, or “profitRate” strings may exist anywhere in /server/core or /server/services.
+
+Telemetry summary must display:
+
+{
+  "activeMetrics": ["FinalScore", "RegimeWeight"],
+  "legacyMetricCount": 0,
+  "schemaVersion": "1.4.6",
+  "directive": "11.0E"
+}
+
+
+Confirm with the PMO before activating live trading after Phase 2 completion.
+
+Deliverables Expected Upon Completion
+
+✅ Clean repository: No active legacy metric code.
+
+✅ Schema v1.4.6 finalized with deprecated markers.
+
+✅ Full regression test suite passing.
+
+✅ ESLint rule active and enforced.
+
+✅ Diagnostic UI displaying Metric Engine Version.
+
+✅ Replit MD updated to Directive 11.0E compliance.
+
+✅ Log confirmation of FinalScore-only operation.
+
+Approval
+
+✅ Conditional Approval Granted
+You are authorized to proceed with Directive 11.0E implementation after integrating all required modifications listed above.
+
+Any deviation from the defined steps, file order, or guardrails requires written authorization from the Project Manager and Architectural Review Board.

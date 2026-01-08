@@ -40,6 +40,12 @@ export function calculateFinalScore(metrics: SignalMetrics): number {
     regimeWeight * W.REGIME -
     decayPenalty * W.DECAY;
   
+  // Directive 11.0E: Post-SQE Safety Hook - ensure numeric integrity
+  if (isNaN(finalScore) || finalScore < 0) {
+    console.error('[11.0E] Invalid FinalScore computation detected', { hybridScore, confidence, regimeWeight, decayPenalty, finalScore });
+    throw new Error('[11.0E] Invalid FinalScore computation');
+  }
+  
   return Math.max(0, Math.min(1, finalScore));
 }
 
