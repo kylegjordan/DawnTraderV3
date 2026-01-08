@@ -7,8 +7,60 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { calculateFinalScore, calculateRegimeWeight } from '../../core/utils/score-calculator';
+import { evaluateSignalQualitySync } from '../../core/filters/signal_quality_evaluator';
 
 describe('[11.0D] SQE Dynamic Configuration', () => {
+  describe('evaluateSignalQualitySync with dynamic backfill', () => {
+    it('dynamically calculates missing FinalScore', () => {
+      const input = {
+        signalId: 'test-123',
+        symbol: 'BTC/USD',
+        strategy: 'SCALP',
+        mode: 'paper' as const,
+        confidence: 0.7,
+        regimeWeight: 0.5,
+      };
+      
+      const result = evaluateSignalQualitySync(input);
+      
+      expect(result.metrics.finalScore).toBeGreaterThan(0);
+      expect(result.metrics.finalScore).toBeLessThanOrEqual(1);
+    });
+
+    it('dynamically calculates missing RegimeWeight', () => {
+      const input = {
+        signalId: 'test-456',
+        symbol: 'ETH/USD',
+        strategy: 'MOMENTUM',
+        mode: 'paper' as const,
+        finalScore: 0.5,
+        trendStrength: 0.6,
+        volatility: 0.2,
+      };
+      
+      const result = evaluateSignalQualitySync(input);
+      
+      expect(result.metrics.regimeWeight).toBeGreaterThan(0);
+      expect(result.metrics.regimeWeight).toBeLessThanOrEqual(1);
+    });
+
+    it('uses provided values when FinalScore and RegimeWeight exist', () => {
+      const input = {
+        signalId: 'test-789',
+        symbol: 'SOL/USD',
+        strategy: 'TREND',
+        mode: 'live' as const,
+        finalScore: 0.75,
+        regimeWeight: 0.65,
+      };
+      
+      const result = evaluateSignalQualitySync(input);
+      
+      expect(result.metrics.finalScore).toBeCloseTo(0.75, 2);
+      expect(result.metrics.regimeWeight).toBeCloseTo(0.65, 2);
+    });
+  });
+
   describe('calculateFinalScore', () => {
     it('calculates FinalScore using SCORE_WEIGHTS formula', () => {
       const metrics = {

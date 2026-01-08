@@ -33,8 +33,12 @@ export interface SQEInput {
   symbol: string;
   strategy: string;
   mode: 'paper' | 'live';
-  finalScore: number;
-  regimeWeight: number;
+  finalScore?: number;
+  regimeWeight?: number;
+  confidence?: number;
+  ngc?: number;
+  trendStrength?: number;
+  volatility?: number;
 }
 
 export interface SQEOptions {

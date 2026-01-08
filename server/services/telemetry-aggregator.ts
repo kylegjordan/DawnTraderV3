@@ -291,6 +291,20 @@ export class TelemetryAggregatorService {
     phaseDirective: string;
     filterSchemaVersion: string;
     timestamp: string;
+    tecConfig?: {
+      expandFactor: number;
+      contractFactor: number;
+      trailingBase: number;
+      trailingAccel: number;
+      maxRisk: number;
+      version: string;
+    };
+    configProvenance?: {
+      phaseDirective: string;
+      backendSchema: string;
+      executionConfigVersion: string;
+      screenerConfigVersion: string;
+    };
     fx5Evaluated24h?: number;
     fx5Passed24h?: number;
     passRate24h?: number;
