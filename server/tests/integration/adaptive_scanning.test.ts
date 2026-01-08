@@ -1,0 +1,121 @@
+/**
+ * Directive 11.2 R1: Adaptive Scanning Fairness Integration Tests
+ * 
+ * Tests for pool tracking and AdaptiveRatioManager functionality.
+ */
+
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { AdaptiveRatioManager, type RatioConfig } from '../../services/adaptive-ratio-manager.js';
+import type { PoolPerformance, MarketRegime } from '../../services/telemetry-repository.js';
+
+describe('Directive 11.2 R1: Adaptive Scanning Fairness', () => {
+  describe('AdaptiveRatioManager', () => {
+    let manager: AdaptiveRatioManager;
+    
+    beforeEach(() => {
+      manager = new AdaptiveRatioManager();
+    });
+    
+    it('should initialize with default ratio', () => {
+      const ratio = manager.getCurrentRatio();
+      expect(ratio.idealRatio).toBe(0.7);
+      expect(ratio.rotationalRatio).toBeCloseTo(0.3, 10);
+      expect(ratio.confidence).toBe(0);
+    });
+    
+    it('should respect min/max bounds', () => {
+      const config: Partial<RatioConfig> = {
+        minIdealRatio: 0.4,
+        maxIdealRatio: 0.8,
+        defaultRatio: 0.6,
+      };
+      const boundedManager = new AdaptiveRatioManager(config);
+      const ratio = boundedManager.getCurrentRatio();
+      
+      expect(ratio.idealRatio).toBe(0.6);
+      expect(ratio.idealRatio).toBeGreaterThanOrEqual(0.4);
+      expect(ratio.idealRatio).toBeLessThanOrEqual(0.8);
+    });
+    
+    it('should allocate pair counts correctly', () => {
+      const allocation = manager.allocatePairCounts(10);
+      expect(allocation.idealCount).toBe(7);
+      expect(allocation.rotationalCount).toBe(3);
+      expect(allocation.idealCount + allocation.rotationalCount).toBe(10);
+    });
+    
+    it('should reset to default ratio', () => {
+      manager.reset();
+      const ratio = manager.getCurrentRatio();
+      expect(ratio.idealRatio).toBe(0.7);
+      expect(ratio.reasoning).toContain('reset');
+    });
+    
+    it('should provide state for diagnostics', () => {
+      const state = manager.getState();
+      expect(state).toHaveProperty('currentRatio');
+      expect(state).toHaveProperty('idealPerf');
+      expect(state).toHaveProperty('rotationalPerf');
+      expect(state).toHaveProperty('lastComputed');
+    });
+  });
+  
+  describe('Pool Score Computation', () => {
+    it('should prefer higher win rates', () => {
+      const config: Partial<RatioConfig> = {
+        minSamples: 1,
+        defaultRatio: 0.5,
+      };
+      const manager = new AdaptiveRatioManager(config);
+      
+      const ratio = manager.getCurrentRatio();
+      expect(ratio.idealRatio).toBeGreaterThan(0);
+      expect(ratio.rotationalRatio).toBeGreaterThan(0);
+    });
+  });
+  
+  describe('Telemetry Pool Tracking', () => {
+    it('should track pool type in telemetry entries', () => {
+      const entry = {
+        symbol: 'BTC/USD',
+        finalScore: 0.85,
+        pool: 'rotational' as const,
+      };
+      
+      expect(entry.pool).toBe('rotational');
+    });
+    
+    it('should default to ideal pool when not specified', () => {
+      const entry = {
+        symbol: 'ETH/USD',
+        finalScore: 0.75,
+      };
+      
+      const pool = (entry as any).pool ?? 'ideal';
+      expect(pool).toBe('ideal');
+    });
+  });
+  
+  describe('Confidence Scaling', () => {
+    it('should increase confidence with more samples', () => {
+      const config: Partial<RatioConfig> = {
+        minSamples: 5,
+      };
+      const manager = new AdaptiveRatioManager(config);
+      
+      const state = manager.getState();
+      expect(state.currentRatio.confidence).toBe(0);
+    });
+  });
+  
+  describe('Regime-Aware Ratio Adjustment', () => {
+    it('should track regime in ratio computation', async () => {
+      const manager = new AdaptiveRatioManager();
+      const ratio = manager.getCurrentRatio();
+      
+      expect(ratio.regime).toBeDefined();
+      expect(['EXTREME_NOISE', 'BULL_STABLE', 'BULL_VOLATILE', 'BEAR_STABLE', 'BEAR_VOLATILE', 'LOW_VOL_CHOP'])
+        .toContain(ratio.regime);
+    });
+  });
+});

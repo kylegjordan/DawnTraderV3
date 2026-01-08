@@ -1,8 +1,13 @@
 /**
- * Directive 11.1B — Schema Version Tracking
+ * Directive 11.2 R1 — Schema Version Tracking
  * 
  * Single source of truth for database schema version.
  * Used by telemetry and diagnostics for audit trail.
+ * 
+ * v1.5.5: Adaptive Scanning Fairness - Pool Tracking (Directive 11.2 R1)
+ * - Added pool column to telemetry_history (ideal/rotational)
+ * - Index for regime/pool queries used by AdaptiveRatioManager
+ * - Enables Ideal vs Rotational performance segmentation
  * 
  * v1.5.3: Adaptive Learning Weight Persistence (Directive 11.1B)
  * - Added adaptive_learning table for strategy weight persistence
@@ -27,14 +32,15 @@
  * - Metric Engine v1.0 (Canonical)
  */
 
-export const SCHEMA_VERSION = "v1.5.3";
-export const SCHEMA_DIRECTIVE = "11.1B";
+export const SCHEMA_VERSION = "v1.5.5";
+export const SCHEMA_DIRECTIVE = "11.2R1";
 export const METRIC_ENGINE_VERSION = "v1.0";
 
 /**
  * Schema version history for audit trail
  */
 export const SCHEMA_HISTORY = [
+  { version: "v1.5.5", directive: "11.2R1", date: "2026-01-08", description: "Adaptive Scanning Fairness - Pool Tracking (ideal/rotational)" },
   { version: "v1.5.3", directive: "11.1B", date: "2026-01-08", description: "Adaptive Learning Weight Persistence with Timestamp Propagation" },
   { version: "v1.5.2", directive: "11.1A", date: "2026-01-08", description: "Persistent Intelligence - SQL-based Telemetry Persistence" },
   { version: "v1.5.1", directive: "11.0G", date: "2026-01-08", description: "Schema Integrity & Telemetry Validation Hardening" },

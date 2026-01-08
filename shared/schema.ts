@@ -821,6 +821,7 @@ export const telemetryHistory = pgTable("telemetry_history", {
   mode: tradingModeEnum("mode").notNull(),
   symbol: varchar("symbol", { length: 20 }).notNull(),
   regime: marketRegimeEnum("regime").notNull(),
+  pool: varchar("pool", { length: 20 }).default("ideal"), // Directive 11.2 R1: ideal or rotational
   finalScore: decimal("final_score", { precision: 5, scale: 4 }).notNull(),
   hybridScore: decimal("hybrid_score", { precision: 5, scale: 4 }),
   regimeWeight: decimal("regime_weight", { precision: 5, scale: 4 }),
@@ -836,6 +837,7 @@ export const telemetryHistory = pgTable("telemetry_history", {
   regimeIdx: index("telemetry_history_regime_idx").on(table.regime),
   symbolIdx: index("telemetry_history_symbol_idx").on(table.symbol),
   modeTimestampIdx: index("telemetry_history_mode_timestamp_idx").on(table.mode, table.timestamp),
+  regimePoolIdx: index("telemetry_history_regime_pool_idx").on(table.regime, table.pool), // Directive 11.2 R1
 }));
 
 export const insertTelemetryHistorySchema = createInsertSchema(telemetryHistory).omit({

@@ -36,10 +36,13 @@ export type MarketRegime =
   | 'BEAR_VOLATILE'
   | 'LOW_VOL_CHOP';
 
+export type PoolType = 'ideal' | 'rotational';
+
 export interface TelemetryEntry {
   symbol: string;
   mode: 'live' | 'paper';
   regime: MarketRegime;
+  pool?: PoolType; // Directive 11.2 R1: Source pool for segmented performance tracking
   finalScore: number;
   hybridScore?: number;
   regimeWeight?: number;
@@ -167,6 +170,7 @@ export async function loadTelemetryBySymbol(
 /**
  * Save a telemetry record with checksum
  * Directive 11.1A1: Uses getTrueMode() to preserve actual execution mode
+ * Directive 11.2 R1: Includes pool tracking for segmented performance
  * Note: DECIMAL columns in PostgreSQL accept string representation
  */
 export async function saveTelemetryRecord(entry: TelemetryEntry): Promise<boolean> {
@@ -179,11 +183,13 @@ export async function saveTelemetryRecord(entry: TelemetryEntry): Promise<boolea
     const trueMode = getTrueMode();
     const entryWithTrueMode = { ...entry, mode: trueMode };
     const checksum = computeTelemetryChecksum(entryWithTrueMode);
+    const pool = entry.pool ?? 'ideal';
     
     const record: InsertTelemetryHistory = {
       mode: trueMode,
       symbol: entry.symbol,
       regime: entry.regime,
+      pool,
       finalScore: entry.finalScore.toFixed(4),
       hybridScore: entry.hybridScore?.toFixed(4),
       regimeWeight: entry.regimeWeight?.toFixed(4),
@@ -198,8 +204,8 @@ export async function saveTelemetryRecord(entry: TelemetryEntry): Promise<boolea
     
     await db.insert(telemetryHistory).values(record);
     
-    // Directive 11.1A1: Provenance audit log
-    console.log(`[Telemetry] Saved ${entry.symbol} | mode=${trueMode} | regime=${entry.regime} | score=${entry.finalScore.toFixed(2)}`);
+    // Directive 11.2 R1: Enhanced provenance audit log with pool
+    console.log(`[Telemetry] Saved ${entry.symbol} (${pool}) | mode=${trueMode} | regime=${entry.regime} | score=${entry.finalScore.toFixed(2)}`);
     return true;
   } catch (error) {
     console.error('[11.1A][TelemetryRepo] Failed to save telemetry:', error);
@@ -210,6 +216,7 @@ export async function saveTelemetryRecord(entry: TelemetryEntry): Promise<boolea
 /**
  * Batch save telemetry records
  * Directive 11.1A1: Uses getTrueMode() to preserve actual execution mode
+ * Directive 11.2 R1: Includes pool tracking for segmented performance
  * Note: DECIMAL columns in PostgreSQL accept string representation
  */
 export async function saveTelemetryBatch(entries: TelemetryEntry[]): Promise<number> {
@@ -226,6 +233,7 @@ export async function saveTelemetryBatch(entries: TelemetryEntry[]): Promise<num
         mode: trueMode,
         symbol: entry.symbol,
         regime: entry.regime,
+        pool: entry.pool ?? 'ideal',
         finalScore: entry.finalScore.toFixed(4),
         hybridScore: entry.hybridScore?.toFixed(4),
         regimeWeight: entry.regimeWeight?.toFixed(4),
@@ -241,7 +249,7 @@ export async function saveTelemetryBatch(entries: TelemetryEntry[]): Promise<num
     
     await db.insert(telemetryHistory).values(records);
     
-    // Directive 11.1A1: Provenance audit log
+    // Directive 11.2 R1: Enhanced provenance audit log
     console.log(`[Telemetry] Batch saved ${records.length} records | mode=${trueMode}`);
     return records.length;
   } catch (error) {
@@ -293,4 +301,84 @@ export async function getTelemetryStatsByRegime(
     console.error('[11.1A][TelemetryRepo] Failed to get telemetry stats:', error);
     return stats;
   }
+}
+
+/**
+ * Directive 11.2 R1: Get performance metrics by pool type
+ * Used by AdaptiveRatioManager for dynamic ratio balancing
+ */
+export interface PoolPerformance {
+  winRate: number;
+  avgEdge: number;
+  sampleCount: number;
+}
+
+export async function getPerformanceByPool(
+  poolType: PoolType,
+  regime: MarketRegime,
+  mode: 'live' | 'paper' = 'live',
+  hoursBack: number = 24
+): Promise<PoolPerformance | null> {
+  const cutoff = new Date(Date.now() - hoursBack * 60 * 60 * 1000);
+  
+  try {
+    const records = await db
+      .select()
+      .from(telemetryHistory)
+      .where(
+        and(
+          eq(telemetryHistory.pool, poolType),
+          eq(telemetryHistory.regime, regime),
+          eq(telemetryHistory.mode, mode),
+          gte(telemetryHistory.timestamp, cutoff)
+        )
+      );
+    
+    if (records.length === 0) {
+      return null;
+    }
+    
+    let totalWinRate = 0;
+    let totalEdge = 0;
+    
+    for (const record of records) {
+      totalWinRate += parseFloat(record.successRate ?? '0');
+      totalEdge += parseFloat(record.finalScore);
+    }
+    
+    const result: PoolPerformance = {
+      winRate: totalWinRate / records.length,
+      avgEdge: totalEdge / records.length,
+      sampleCount: records.length,
+    };
+    
+    console.log(`[11.2R1][TelemetryRepo] Pool ${poolType} | regime=${regime} | winRate=${result.winRate.toFixed(3)} | edge=${result.avgEdge.toFixed(3)} | samples=${result.sampleCount}`);
+    return result;
+  } catch (error) {
+    console.error(`[11.2R1][TelemetryRepo] Failed to get pool performance for ${poolType}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Directive 11.2 R1: Get comparative pool performance
+ * Returns both pool performances for ratio computation
+ */
+export interface PoolComparison {
+  ideal: PoolPerformance | null;
+  rotational: PoolPerformance | null;
+  regime: MarketRegime;
+}
+
+export async function getPoolComparison(
+  regime: MarketRegime,
+  mode: 'live' | 'paper' = 'live',
+  hoursBack: number = 24
+): Promise<PoolComparison> {
+  const [ideal, rotational] = await Promise.all([
+    getPerformanceByPool('ideal', regime, mode, hoursBack),
+    getPerformanceByPool('rotational', regime, mode, hoursBack),
+  ]);
+  
+  return { ideal, rotational, regime };
 }

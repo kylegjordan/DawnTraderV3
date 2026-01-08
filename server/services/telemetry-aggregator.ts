@@ -36,6 +36,8 @@ import {
 import { adaptiveManager, type TimestampedWeightEntry } from '../core/adaptive-manager.js';
 import { DynamicStrategySelector, type DSSMetrics } from './dynamic-strategy-selector.js';
 
+export type PoolType = 'ideal' | 'rotational';
+
 export interface PairTelemetry {
   symbol: string;
   finalScore: number;
@@ -47,6 +49,7 @@ export interface PairTelemetry {
   successRate: number;
   avgDecayedStrength: number;
   timeframe?: '1h' | '15m' | '5m';
+  pool?: PoolType; // Directive 11.2 R1: Source pool for segmented tracking
 }
 
 export interface TimeframeEfficiency {
@@ -76,6 +79,7 @@ export class TelemetryAggregatorService {
 
   /**
    * Record telemetry for a pair
+   * Directive 11.2 R1: Added pool parameter for segmented performance tracking
    */
   recordPairTelemetry(
     symbol: string,
@@ -87,6 +91,7 @@ export class TelemetryAggregatorService {
       success?: boolean;
       decayedStrength?: number;
       timeframe?: '1h' | '15m' | '5m';
+      pool?: PoolType; // Directive 11.2 R1: ideal or rotational
     }
   ): void {
     const now = Date.now();
@@ -108,20 +113,23 @@ export class TelemetryAggregatorService {
         : recent.length > 0 ? recent[recent.length - 1].successRate : 0.5,
       avgDecayedStrength: data.decayedStrength ?? 0,
       timeframe: data.timeframe,
+      pool: data.pool ?? 'ideal', // Directive 11.2 R1: Track source pool
     };
     
     recent.push(entry);
     this.pairTelemetry.set(symbol, recent);
     
-    console.log(`[10.8][Telemetry] ${symbol} recorded: finalScore=${data.finalScore.toFixed(2)}, samples=${recent.length}`);
+    // Directive 11.2 R1: Include pool in telemetry log
+    console.log(`[10.8][Telemetry] ${symbol} (${entry.pool}) recorded: finalScore=${data.finalScore.toFixed(2)}, samples=${recent.length}`);
     
-    // Directive 11.1A: Persist to SQL if enabled
+    // Directive 11.1A + 11.2 R1: Persist to SQL with pool tracking
     if (shouldPersist()) {
       const mode = (process.env.MODE as 'live' | 'paper') || 'paper';
       this.persistTelemetryAsync({
         symbol,
         mode,
         regime: this.currentRegime,
+        pool: data.pool ?? 'ideal', // Directive 11.2 R1
         finalScore: data.finalScore,
         hybridScore: data.hybridScore,
         regimeWeight: data.regimeWeight,
