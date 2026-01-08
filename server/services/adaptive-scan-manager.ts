@@ -1,15 +1,16 @@
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * Directive 10.8 — Adaptive Scan Manager (Dual-Pool Scheduler)
+ * Directive 10.8 + 11.2 R1 — Adaptive Scan Manager (Dual-Pool Scheduler)
  * ══════════════════════════════════════════════════════════════════════════════
  * 
  * Replaces static Tier A/B scanning logic with a learning-driven, telemetry-based
- * adaptive pair selection system using a 60/40 Ideal/Rotational pool split.
+ * adaptive pair selection system using dynamic Ideal/Rotational pool split.
  * 
  * Features:
- * - Dual-pool selection: 60% Ideal (top performers) + 40% Rotational (exploration)
+ * - Dual-pool selection: Dynamic ratio based on pool performance (11.2 R1)
  * - Pair failure tracking with cooldown blacklist
  * - Integration with TelemetryAggregator for performance-based ranking
+ * - AdaptiveRatioManager for regime-aware ratio adjustment (11.2 R1)
  * - Graceful fallback to all available pairs if telemetry is insufficient
  * 
  * DO NOT MODIFY without architectural review.
@@ -17,7 +18,8 @@
  */
 
 import { SCANNER_PARAMS } from '../config/system-guards.js';
-import { getTelemetryAggregator, TelemetryAggregatorService } from './telemetry-aggregator.js';
+import { getTelemetryAggregator, TelemetryAggregatorService, type PoolType } from './telemetry-aggregator.js';
+import { adaptiveRatioManager, type AdaptiveRatio } from './adaptive-ratio-manager.js';
 
 export interface FailedPairEntry {
   symbol: string;
@@ -32,6 +34,7 @@ export interface AdaptiveScanBatch {
   excludedPairs: string[];
   totalBatch: string[];
   timestamp: number;
+  ratioUsed?: AdaptiveRatio; // Directive 11.2 R1: Track ratio used for this batch
 }
 
 /**
@@ -146,11 +149,13 @@ export class PairFailureTracker {
 
 /**
  * Adaptive Scan Manager - Dual-Pool Scheduler
+ * Directive 11.2 R1: Now uses AdaptiveRatioManager for dynamic ratio adjustment
  */
 export class AdaptiveScanManager {
   private telemetry: TelemetryAggregatorService;
   private failureTracker: PairFailureTracker;
   private lastBatch: AdaptiveScanBatch | null = null;
+  private useAdaptiveRatio: boolean = true; // Enable dynamic ratios by default
 
   constructor(telemetry?: TelemetryAggregatorService, failureTracker?: PairFailureTracker) {
     this.telemetry = telemetry || getTelemetryAggregator();
@@ -158,12 +163,28 @@ export class AdaptiveScanManager {
   }
 
   /**
-   * Get the next batch of pairs to scan using 60/40 Ideal/Rotational split
+   * Get the next batch of pairs to scan using dynamic Ideal/Rotational split
+   * Directive 11.2 R1: Ratios now computed by AdaptiveRatioManager based on pool performance
    */
   async getNextScanBatch(allAvailablePairs: string[]): Promise<AdaptiveScanBatch> {
     const batchSize = SCANNER_PARAMS.BATCH_SIZE;
-    const idealRatio = SCANNER_PARAMS.DUAL_POOL.IDEAL_RATIO;
-    const rotationalRatio = SCANNER_PARAMS.DUAL_POOL.ROTATIONAL_RATIO;
+    
+    // Directive 11.2 R1: Compute dynamic ratio based on pool performance
+    let idealRatio: number;
+    let rotationalRatio: number;
+    let currentRatio: AdaptiveRatio | undefined;
+    
+    if (this.useAdaptiveRatio) {
+      const regime = this.telemetry.getCurrentMarketRegime();
+      const mode = (process.env.MODE as 'live' | 'paper') || 'paper';
+      currentRatio = await adaptiveRatioManager.computeAdaptiveRatio(regime, mode);
+      idealRatio = currentRatio.idealRatio;
+      rotationalRatio = currentRatio.rotationalRatio;
+    } else {
+      // Fallback to static config
+      idealRatio = SCANNER_PARAMS.DUAL_POOL.IDEAL_RATIO;
+      rotationalRatio = SCANNER_PARAMS.DUAL_POOL.ROTATIONAL_RATIO;
+    }
     
     // Get ideal pairs from telemetry (top performers)
     const idealCount = Math.ceil(batchSize * idealRatio);
@@ -186,24 +207,27 @@ export class AdaptiveScanManager {
     const excludedPairs = combined.filter(p => this.failureTracker.isInCooldown(p));
     const filteredBatch = this.failureTracker.filterFailedPairs(combined);
     
-    // Create batch result
+    // Create batch result with ratio tracking (11.2 R1)
     const batch: AdaptiveScanBatch = {
       idealPairs: idealPairs.filter(p => !this.failureTracker.isInCooldown(p)),
       rotationalPairs: rotationalPairs.filter(p => !this.failureTracker.isInCooldown(p)),
       excludedPairs,
       totalBatch: filteredBatch,
       timestamp: Date.now(),
+      ratioUsed: currentRatio,
     };
     
     this.lastBatch = batch;
     
-    console.log(`[AdaptiveScan] Ideal=${batch.idealPairs.length} | Rotational=${batch.rotationalPairs.length} | Excluded=${batch.excludedPairs.length} | Total=${batch.totalBatch.length}`);
+    // Directive 11.2 R1: Enhanced logging with ratio info
+    console.log(`[AdaptiveScan] Ideal=${batch.idealPairs.length} (${(idealRatio * 100).toFixed(0)}%) | Rotational=${batch.rotationalPairs.length} (${(rotationalRatio * 100).toFixed(0)}%) | Excluded=${batch.excludedPairs.length} | Total=${batch.totalBatch.length}`);
     
     return batch;
   }
 
   /**
    * Record scan result for a pair
+   * Directive 11.2 R1: Now includes pool tracking for segmented performance
    */
   recordScanResult(symbol: string, success: boolean, data?: {
     finalScore?: number;
@@ -213,6 +237,7 @@ export class AdaptiveScanManager {
     decayedStrength?: number;
     timeframe?: '1h' | '15m' | '5m';
     failureReason?: string;
+    pool?: PoolType; // Directive 11.2 R1: Track source pool
   }): void {
     if (success && data) {
       this.failureTracker.recordSuccess(symbol);
@@ -224,10 +249,36 @@ export class AdaptiveScanManager {
         success: true,
         decayedStrength: data.decayedStrength,
         timeframe: data.timeframe,
+        pool: data.pool ?? this.inferPoolFromLastBatch(symbol), // Directive 11.2 R1
       });
     } else {
       this.failureTracker.recordFailure(symbol, data?.failureReason);
     }
+  }
+
+  /**
+   * Directive 11.2 R1: Infer pool from last batch for telemetry recording
+   */
+  private inferPoolFromLastBatch(symbol: string): PoolType {
+    if (!this.lastBatch) return 'ideal';
+    if (this.lastBatch.idealPairs.includes(symbol)) return 'ideal';
+    if (this.lastBatch.rotationalPairs.includes(symbol)) return 'rotational';
+    return 'ideal'; // Default fallback
+  }
+
+  /**
+   * Directive 11.2 R1: Enable or disable adaptive ratio computation
+   */
+  setAdaptiveRatioEnabled(enabled: boolean): void {
+    this.useAdaptiveRatio = enabled;
+    console.log(`[11.2R1][AdaptiveScan] Adaptive ratio ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Directive 11.2 R1: Get current adaptive ratio manager state
+   */
+  getAdaptiveRatioState() {
+    return adaptiveRatioManager.getState();
   }
 
   /**
@@ -260,9 +311,11 @@ export class AdaptiveScanManager {
 
   /**
    * Get scanning params info
+   * Directive 11.2 R1: Now includes adaptive ratio status
    */
   getParamsInfo(): string {
-    return `[10.8][CONFIG] AdaptiveScan: enabled=${SCANNER_PARAMS.ADAPTIVE_ENABLED}, ideal=${SCANNER_PARAMS.DUAL_POOL.IDEAL_RATIO * 100}%, rotational=${SCANNER_PARAMS.DUAL_POOL.ROTATIONAL_RATIO * 100}%, batch=${SCANNER_PARAMS.BATCH_SIZE}`;
+    const ratio = adaptiveRatioManager.getCurrentRatio();
+    return `[10.8+11.2R1][CONFIG] AdaptiveScan: enabled=${SCANNER_PARAMS.ADAPTIVE_ENABLED}, adaptiveRatio=${this.useAdaptiveRatio}, ideal=${(ratio.idealRatio * 100).toFixed(0)}%, rotational=${(ratio.rotationalRatio * 100).toFixed(0)}%, batch=${SCANNER_PARAMS.BATCH_SIZE}`;
   }
 }
 

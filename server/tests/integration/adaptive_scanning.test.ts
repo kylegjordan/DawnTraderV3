@@ -118,4 +118,38 @@ describe('Directive 11.2 R1: Adaptive Scanning Fairness', () => {
         .toContain(ratio.regime);
     });
   });
+
+  describe('AdaptiveScanManager Integration', () => {
+    it('should include ratioUsed in scan batch', async () => {
+      const { AdaptiveScanManager } = await import('../../services/adaptive-scan-manager.js');
+      const scanManager = new AdaptiveScanManager();
+      
+      const batch = await scanManager.getNextScanBatch(['BTC/USD', 'ETH/USD', 'XRP/USD']);
+      
+      expect(batch).toHaveProperty('idealPairs');
+      expect(batch).toHaveProperty('rotationalPairs');
+      expect(batch).toHaveProperty('totalBatch');
+      expect(batch).toHaveProperty('ratioUsed');
+    });
+
+    it('should provide adaptive ratio state for diagnostics', async () => {
+      const { AdaptiveScanManager } = await import('../../services/adaptive-scan-manager.js');
+      const scanManager = new AdaptiveScanManager();
+      
+      const state = scanManager.getAdaptiveRatioState();
+      
+      expect(state).toHaveProperty('currentRatio');
+      expect(state).toHaveProperty('lastComputed');
+    });
+
+    it('should toggle adaptive ratio enabled/disabled', async () => {
+      const { AdaptiveScanManager } = await import('../../services/adaptive-scan-manager.js');
+      const scanManager = new AdaptiveScanManager();
+      
+      scanManager.setAdaptiveRatioEnabled(false);
+      const batch = await scanManager.getNextScanBatch(['BTC/USD', 'ETH/USD']);
+      
+      expect(batch.ratioUsed).toBeUndefined();
+    });
+  });
 });

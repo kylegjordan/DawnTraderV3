@@ -170,9 +170,10 @@ export class TelemetryAggregatorService {
   }
 
   /**
-   * Directive 11.1A + 11.1A1: Rehydrate telemetry state from SQL on startup
+   * Directive 11.1A + 11.1A1 + 11.2 R1: Rehydrate telemetry state from SQL on startup
    * CRITICAL: Only loads live-mode records to prevent test data contamination
    * This ensures adaptive learning operates on verified production data only
+   * Directive 11.2 R1: Now includes pool tracking for segmented performance
    */
   async rehydrateTelemetryState(): Promise<number> {
     if (this.rehydrated) {
@@ -190,6 +191,7 @@ export class TelemetryAggregatorService {
       for (const record of records) {
         const existing = this.pairTelemetry.get(record.symbol) || [];
         
+        // Directive 11.2 R1: Include pool tracking
         const entry: PairTelemetry = {
           symbol: record.symbol,
           finalScore: parseFloat(record.finalScore),
@@ -201,6 +203,7 @@ export class TelemetryAggregatorService {
           successRate: record.successRate ? parseFloat(record.successRate) : 0.5,
           avgDecayedStrength: 0,
           timeframe: record.timeframe as '1h' | '15m' | '5m' | undefined,
+          pool: (record.pool as PoolType) ?? 'ideal', // Directive 11.2 R1: Restore pool tracking
         };
         
         existing.push(entry);
@@ -208,7 +211,7 @@ export class TelemetryAggregatorService {
       }
       
       this.rehydrated = true;
-      console.log(`[11.1A1][Telemetry] Rehydrated ${records.length} live entries for regime=${this.currentRegime}`);
+      console.log(`[11.2R1][Telemetry] Rehydrated ${records.length} live entries for regime=${this.currentRegime} with pool tracking`);
       return records.length;
     } catch (error) {
       console.error('[11.1A][Telemetry] Failed to rehydrate telemetry:', error);
