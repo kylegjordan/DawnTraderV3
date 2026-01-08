@@ -1,41 +1,37 @@
 /**
- * 🔒 LOCKED MODULE — DO NOT MODIFY
- * Directive: 8.8.4-A4.R10R-4 (Core System Hardening)
- * Owner: Dawn Trader Core
- * Summary: This module is production-locked. Changes require a formal directive.
- * 
- * Previous: Phase 8.8.4-B/C/C.5: Ready-to-Buy (RTB) Queue Service
- * Directive 8.8.4-A3.R9.0: System Harmonization & Performance Alignment
+ * ══════════════════════════════════════════════════════════════════════════════
+ * Directive 11.0E — Ready-to-Buy (RTB) Queue Service
+ * ══════════════════════════════════════════════════════════════════════════════
  * 
  * Manages the unified pool of high-quality, SQE-qualified signals.
  * 
+ * DIRECTIVE 11.0E: FinalScore Unification
+ * - ALL legacy metrics (CWQI, NGC, ProfitRate) have been PURGED
+ * - Signals are ranked by FinalScore only
+ * - FinalScore = (HybridScore × 0.4) + (Confidence × 0.3) + (RegimeWeight × 0.2) - (DecayPenalty × 0.1)
+ * 
  * Key Features:
- * 1. Accepts ALL SQE-qualified signals into unified pool (Phase C.5)
- * 2. Ranks signals by CWQI (Confidence-Weighted Quality Index)
+ * 1. Accepts ALL SQE-qualified signals into unified pool
+ * 2. Ranks signals by FinalScore (descending)
  * 3. Enforces uniqueness by symbol + strategy pair
  * 4. Removes stale/expired signals (TTL: 30s per-signal rolling)
- * 5. Promotes highest-CWQI signals when TCL is active and capacity available
- * 
- * Phase C Enhancements:
- * 6. CWQI Durability Decay: CWQI_decayed = CWQI_orig × e^(-λt), λ = 0.03 per minute
- *    Prioritizes fresher signals by applying time-based decay to ranking
- * 
- * Directive A3.R9.0 Enhancements:
+ * 5. Promotes highest-FinalScore signals when TCL is active and capacity available
+ * 6. FinalScore Decay: fresher signals prioritized via decayPenalty
  * 7. Per-signal rolling TTL with staggered refresh
  * 8. Explicit state transitions: active → reconfirmed → promoted → expired
  * 9. TCL synchronization barrier for atomic operations
  * 10. Enhanced deduplication via (symbol, strategy, createdAt)
  * 11. Central Clock synchronized refresh (every 30 ticks)
+ * 
+ * See: server/legacy/metrics_archive.ts for historical CWQI/NGC formulas
+ * ══════════════════════════════════════════════════════════════════════════════
  */
 
 import { storage } from '../../storage';
 import { 
-  calculateCWQIFromSignal, 
-  MIN_QUEUE_CWQI, 
   MIN_QUEUE_CONFIDENCE,
-  SQE_THRESHOLDS,
-  type CWQIResult 
 } from '../metrics/quality_index';
+import { calculateFinalScore, calculateRegimeWeight } from '../utils/score-calculator';
 import { evaluateSignalQuality, type SQEInput } from '../filters/signal_quality_evaluator';
 import { isCapacityBlock, type TradingMode, type CapacityGuardrailCode } from '../../services/guardrail-policy';
 import { signalLifecycleAudit } from '../audit/signal_lifecycle_audit';

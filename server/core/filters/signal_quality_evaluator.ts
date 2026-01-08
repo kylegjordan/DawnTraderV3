@@ -1,11 +1,11 @@
 /**
- * Directive 11.0B — Signal Quality Evaluator (SQE)
+ * Directive 11.0E — Signal Quality Evaluator (SQE)
  * 
  * Final gatekeeper that evaluates signal quality based on FinalScore and RegimeWeight.
  * Thresholds are read from the screener_filters table (configurable via UI screeners tab).
  * 
- * Directive 11.0B: ALL legacy metrics (NGC, CWQI, Risk, ProfitRate) are DEPRECATED and REMOVED.
- * Only FinalScore and RegimeWeight are evaluated.
+ * DIRECTIVE 11.0E: ALL legacy metrics (NGC, CWQI, Risk, ProfitRate) have been PURGED.
+ * FinalScore and RegimeWeight are the SOLE determinants for signal quality.
  * 
  * Exposure, correlation, and cooldown checks are handled by the Signal Orchestrator.
  */
@@ -36,7 +36,6 @@ export interface SQEInput {
   finalScore?: number;
   regimeWeight?: number;
   confidence?: number;
-  ngc?: number;
   trendStrength?: number;
   volatility?: number;
 }
@@ -105,16 +104,15 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
   
   const canonicalSymbol = normalizeInternal(input.symbol);
   
-  // Directive 11.0D: Dynamic backfill - recalculate missing metrics using score-calculator
-  // No more static 0.35 defaults - data-driven recalculation for accuracy
+  // Directive 11.0E: Dynamic backfill - recalculate missing metrics using score-calculator
+  // No legacy metrics (NGC, CWQI, ProfitRate) - FinalScore only
   let finalScore = input.finalScore;
   let regimeWeight = input.regimeWeight;
   let backfilled = false;
   
   if (finalScore === undefined || finalScore === null) {
     finalScore = calculateFinalScore({
-      confidence: (input as any).confidence ?? 0.5,
-      ngc: (input as any).ngc ?? (input as any).confidence ?? 0.5,
+      confidence: input.confidence ?? 0.5,
       regimeWeight: input.regimeWeight ?? 0.5,
     });
     backfilled = true;
@@ -204,14 +202,13 @@ export function evaluateSignalQualitySync(input: SQEInput, thresholds?: { finalS
     regimeWeightMin: SQE_DEFAULT_THRESHOLDS.MIN_REGIME_WEIGHT,
   };
   
-  // Directive 11.0D: Dynamic backfill for sync version
+  // Directive 11.0E: Dynamic backfill for sync version - no legacy metrics
   let finalScore = input.finalScore;
   let regimeWeight = input.regimeWeight;
   
   if (finalScore === undefined || finalScore === null) {
     finalScore = calculateFinalScore({
-      confidence: (input as any).confidence ?? 0.5,
-      ngc: (input as any).ngc ?? 0.5,
+      confidence: input.confidence ?? 0.5,
       regimeWeight: input.regimeWeight ?? 0.5,
     });
   }

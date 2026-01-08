@@ -1,0 +1,292 @@
+🧩 Directive 11.0E — Legacy Metric Purge & FinalScore Unification
+📘 Directive Summary
+
+Objective:
+Eliminate all dependencies, calculations, and references to CWQI, NGC, and ProfitRate throughout the active DawnTrader system, ensuring that the FinalScore model and RegimeWeight are the sole determinants for signal quality, ranking, and trade readiness.
+
+Scope:
+All backend core and service layers that touch signal evaluation, RTB queue management, quality scoring, orchestration, validation, or telemetry.
+
+Directive Phase Context:
+This directive concludes the “System Harmonization” phase that began in 10.9B and completes the full migration to the FinalScore model.
+
+🧠 Rationale
+
+Legacy metrics (CWQI, NGC, ProfitRate) were replaced by the hybrid-scoring model during the Phase 10 refactor (Directives 10.9A–10.9F).
+However, numerous references persist across core services and orchestration layers.
+These now:
+
+Create redundant logic paths,
+
+Introduce ranking inconsistency between SQE and RTB, and
+
+Risk runtime confusion if unused metric references are revived or queried.
+
+By removing these legacy elements completely, the system will:
+
+Simplify the codebase,
+
+Reduce computational overhead,
+
+Guarantee consistent signal evaluation, and
+
+Eliminate all ambiguity about how “signal quality” is defined.
+
+⚙️ Implementation Tasks
+Task 1 – SQE & Utility Cleanup
+
+Target Files:
+
+/server/core/filters/signal_quality_evaluator.ts
+
+/server/core/utils/score-calculator.ts
+
+Actions:
+
+Remove all NGC references and replace with confidence.
+
+Remove NGC fallback logic in score-calculator.ts:
+
+// Before
+const baseScore = signal.finalScore || signal.ngc || 0;
+// After
+const baseScore = signal.finalScore || 0;
+
+
+Confirm FinalScore and RegimeWeight thresholds are dynamically loaded from the ScreenerConfig (not hard-coded).
+
+Delete any remaining constants like SQE_THRESHOLDS.NGC_MIN, CWQI_MIN, ProfitRate_MIN.
+
+✅ Outcome: SQE fully dependent on FinalScore and RegimeWeight.
+
+Task 2 – RTB & Signal Flow Refactor
+
+Target Files:
+
+/server/core/rtb/ready_to_buy_service.ts
+
+/server/services/signal-orchestrator.ts
+
+/server/services/paper-execution-engine.ts
+
+Actions:
+
+Replace all CWQI sorting and filtering with finalScore:
+
+// Before
+.sort((a, b) => b.cwqi - a.cwqi)
+// After
+.sort((a, b) => b.finalScore - a.finalScore)
+
+
+Remove checks on:
+
+NGC >= 0.45
+
+ProfitRate >= strategyFloor
+
+CWQI >= 0.35
+
+Replace any downstream references to these metrics in trade promotion or evaluation logic with:
+
+const quality = signal.finalScore;
+
+
+In the Orchestrator, replace signal.ngc references with signal.confidence.
+
+✅ Outcome: RTB and orchestration layers unified under FinalScore scoring.
+
+Task 3 – Core Metric Calculator Decommission
+
+Target Files:
+
+/server/core/metrics/quality_index.ts
+
+/server/services/cwqi-service.ts
+
+Actions:
+
+Mark quality_index.ts as deprecated and move to:
+
+/server/legacy/metrics_archive.ts
+
+
+Delete cwqi-service.ts entirely — no longer required.
+
+Move any residual formula definitions to the new archive file for historical record:
+
+// metrics_archive.ts
+export const CWQI_FORMULA = "0.4*Hybrid + 0.3*Confidence + 0.2*Regime - 0.1*Decay";
+
+
+✅ Outcome: All CWQI/NGC computation modules eliminated from active code.
+
+Task 4 – Validation, Tests, and Audit Cleanup
+
+Target Files:
+
+/server/services/system-audit-engine.ts
+
+/server/services/validation-session-service.ts
+
+/server/tests/unit/cwqi.test.ts
+
+/server/services/vts-runner.ts
+
+Actions:
+
+Update audit and validation to log and verify finalScore instead of CWQI.
+
+Delete the cwqi.test.ts file entirely.
+
+Refactor validation services to exclude CWQI, NGC, or ProfitRate from schema snapshots.
+
+✅ Outcome: Testing and telemetry layers aligned with current scoring framework.
+
+Task 5 – Schema Cleanup
+
+Target Files:
+
+/server/db/schema/signals.ts
+
+/server/db/schema/metrics.ts
+
+Actions:
+
+Drop columns:
+
+cwqi
+
+ngc
+
+profitRate
+
+Update schema version to v1.4.6 and add migration file:
+
+drizzle/2026-11-0E-remove-legacy-metrics.sql
+
+
+Ensure database migrations preserve finalScore and regimeWeight columns only.
+
+✅ Outcome: Database fully normalized to current scoring metrics.
+
+🧩 Governance & Implementation Rules
+
+No new scoring services may be created under /server/services without architect approval.
+
+No deprecated metrics (CWQI, NGC, ProfitRate) may appear in import or require statements post-implementation.
+
+FinalScore + RegimeWeight remain the only metrics for signal evaluation and promotion.
+
+Adaptive sizing, trailing exits, and predictive scoring must read exclusively from these metrics.
+
+🧪 Validation Criteria
+Validation Step	Expected Outcome
+SQE Test Suite	Passes 100%, no “NGC”, “CWQI”, or “ProfitRate” references
+RTB Ranking	Signals ordered by descending FinalScore
+Database Migration Test	Schema updated to v1.4.6 with no legacy fields
+Diagnostics Panel	Only FinalScore and RegimeWeight visible
+Telemetry Check	No legacy metrics appear in /api/telemetry/summary
+🧮 Post-Directive System Math
+𝐹
+𝑖
+𝑛
+𝑎
+𝑙
+𝑆
+𝑐
+𝑜
+𝑟
+𝑒
+=
+(
+𝐻
+𝑦
+𝑏
+𝑟
+𝑖
+𝑑
+𝑆
+𝑐
+𝑜
+𝑟
+𝑒
+×
+0.4
+)
++
+(
+𝐶
+𝑜
+𝑛
+𝑓
+𝑖
+𝑑
+𝑒
+𝑛
+𝑐
+𝑒
+×
+0.3
+)
++
+(
+𝑅
+𝑒
+𝑔
+𝑖
+𝑚
+𝑒
+𝑊
+𝑒
+𝑖
+𝑔
+ℎ
+𝑡
+×
+0.2
+)
+−
+(
+𝐷
+𝑒
+𝑐
+𝑎
+𝑦
+𝑃
+𝑒
+𝑛
+𝑎
+𝑙
+𝑡
+𝑦
+×
+0.1
+)
+FinalScore=(HybridScore×0.4)+(Confidence×0.3)+(RegimeWeight×0.2)−(DecayPenalty×0.1)
+
+All trade quality, ranking, and filtering decisions must use this formula as the single source of truth.
+
+🧱 Deliverables
+
+✅ Legacy metrics (CWQI, NGC, ProfitRate) removed from codebase and database.
+
+✅ FinalScore and RegimeWeight become universal signal evaluation metrics.
+
+✅ Repository simplified and version bumped to Schema v1.4.6.
+
+✅ Documentation updated in replit.md and /docs/math_reference.md.
+
+✅ Validation report confirming zero residual legacy references.
+
+📅 Directive Metadata
+Field	Value
+Directive ID	11.0E
+Title	Legacy Metric Purge & FinalScore Unification
+Status	Ready for Implementation
+Schema Version	v1.4.6
+Phase Directive Tag	[11.0E]
+Dependencies	Completion of 11.0C & 11.0D
+Test Coverage Target	≥ 98% for core evaluation modules
+
+✅ End of Directive 11.0E — Legacy Metric Purge & FinalScore Unification

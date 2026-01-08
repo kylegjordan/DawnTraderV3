@@ -1,8 +1,11 @@
 /**
- * Directive 11.0D — Score Calculator Utilities
+ * Directive 11.0E — Score Calculator Utilities
  * 
  * Centralized FinalScore and RegimeWeight calculation functions.
  * Used by SQE backfill for dynamic recalculation when values are missing.
+ * 
+ * DIRECTIVE 11.0E: All legacy metrics (NGC, CWQI, ProfitRate) have been REMOVED.
+ * FinalScore and RegimeWeight are the sole determinants for signal quality.
  */
 
 import { SCORE_WEIGHTS } from '../../config/score-weights.config.js';
@@ -10,7 +13,6 @@ import { SCORE_WEIGHTS } from '../../config/score-weights.config.js';
 export interface SignalMetrics {
   hybridScore?: number;
   confidence?: number;
-  ngc?: number;
   regimeWeight?: number;
   decayPenalty?: number;
   volatility?: number;
@@ -21,12 +23,14 @@ export interface SignalMetrics {
 /**
  * Calculate FinalScore using centralized SCORE_WEIGHTS
  * Formula: hybridScore × 0.4 + confidence × 0.3 + regimeWeight × 0.2 - decayPenalty × 0.1
+ * 
+ * DIRECTIVE 11.0E: No NGC fallback - uses confidence directly
  */
 export function calculateFinalScore(metrics: SignalMetrics): number {
   const W = SCORE_WEIGHTS.FINAL_SCORE;
   
-  const hybridScore = metrics.hybridScore ?? metrics.ngc ?? metrics.confidence ?? 0.5;
-  const confidence = metrics.confidence ?? metrics.ngc ?? 0.5;
+  const hybridScore = metrics.hybridScore ?? metrics.confidence ?? 0.5;
+  const confidence = metrics.confidence ?? 0.5;
   const regimeWeight = metrics.regimeWeight ?? 0.5;
   const decayPenalty = metrics.decayPenalty ?? 0;
   
