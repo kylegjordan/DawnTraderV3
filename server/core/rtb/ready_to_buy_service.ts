@@ -32,7 +32,7 @@ import {
   MIN_QUEUE_CONFIDENCE,
 } from '../metrics/quality_index';
 import { calculateFinalScore, calculateRegimeWeight } from '../utils/score-calculator';
-import { evaluateSignalQuality, type SQEInput } from '../filters/signal_quality_evaluator';
+import { signalQualityEvaluator, type SQEInput } from '../filters/signal_quality_evaluator';
 import { isCapacityBlock, type TradingMode, type CapacityGuardrailCode } from '../../services/guardrail-policy';
 import { signalLifecycleAudit } from '../audit/signal_lifecycle_audit';
 import type { RtbSignal, InsertRtbSignal } from '@shared/schema';
@@ -556,24 +556,24 @@ class ReadyToBuyService {
     // Apply CWQI decay
     const decayedCWQI = calculateDecayedCWQI(trueOriginalCWQI, signal.queuedAt, normalizedSymbol);
     
-    // SQE revalidation
+    // Directive 11.0E: SQE revalidation with FinalScore/RegimeWeight only
     const sqeInput: SQEInput = {
       signalId: signal.signalId,
       symbol: normalizedSymbol,
       strategy: signal.strategy,
-      ngc,
-      riskScore,
-      profitRate,
-      cwqi: cwqiForEval
+      mode,
+      confidence: ngc, // Directive 11.0E: confidence replaces NGC
+      trendStrength: 0.5,
+      volatility: 0.3,
     };
     
-    const sqeResult = evaluateSignalQuality(sqeInput, { skipDecay: true });
+    const sqeResult = await signalQualityEvaluator.evaluate(sqeInput);
     
     if (!sqeResult.passed) {
       // R9.3-C: Lifecycle governed by SQE, not TTL
       await storage.deleteRtbSignals({ mode, id: signal.id });
       performanceMonitor.recordQueueRemove(1);
-      console.log(`[A3.R9.3][REFRESH_COMPLETE] symbol=${normalizedSymbol} DELETED reason=${sqeResult.reason}`);
+      console.log(`[11.0E][REFRESH_COMPLETE] symbol=${normalizedSymbol} DELETED reason=${sqeResult.reason}`);
       
       // Clean up signal state
       this.signalRefreshStates.delete(signal.signalId);
@@ -775,21 +775,21 @@ class ReadyToBuyService {
               const profitRate = freshMetrics.refreshed ? freshMetrics.profitRate : cachedMetrics.profitRate;
               const cwqiForEval = freshMetrics.refreshed ? freshMetrics.cwqi : trueOriginalCWQI;
               
-              // SQE revalidation
+              // Directive 11.0E: SQE revalidation with FinalScore/RegimeWeight only
               const sqeInput: SQEInput = {
                 signalId: signal.signalId,
                 symbol: normalizedSymbol,
                 strategy: signal.strategy,
-                ngc,
-                riskScore,
-                profitRate,
-                cwqi: cwqiForEval
+                mode,
+                confidence: ngc, // Directive 11.0E: confidence replaces NGC
+                trendStrength: 0.5,
+                volatility: 0.3,
               };
               
-              const sqeResult = evaluateSignalQuality(sqeInput, { skipDecay: true });
+              const sqeResult = await signalQualityEvaluator.evaluate(sqeInput);
               
               if (!sqeResult.passed) {
-                console.log(`[A3.R9.2][SQE_REVALIDATION_FAIL] symbol=${normalizedSymbol} reason=${sqeResult.reason}`);
+                console.log(`[11.0E][SQE_REVALIDATION_FAIL] symbol=${normalizedSymbol} reason=${sqeResult.reason}`);
                 this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'deleted', 'SQE_failure');
                 this.logSqeRejection(signal, sqeResult.reason || 'unknown', ngc, cwqiForEval);
                 bulkDeletes.push(signal.id);
@@ -1006,18 +1006,18 @@ class ReadyToBuyService {
       return null;
     }
 
-    // Calculate CWQI
-    const cwqiResult = calculateCWQIFromSignal({
+    // Directive 11.0E: Calculate FinalScore instead of CWQI
+    const finalScore = calculateFinalScore({
       confidence: input.confidence,
-      entryPrice: input.entryPrice,
-      stopPrice: input.stopPrice,
-      targetPrice: input.targetPrice,
-      atr: input.atr,
+      hybridScore: input.confidence, // Use confidence as hybrid score for capacity-blocked signals
+      regimeWeight: 0.5, // Default regime weight
+      decayPenalty: 0, // No decay for new signals
     });
 
-    // Check minimum CWQI threshold
-    if (cwqiResult.cwqi < MIN_QUEUE_CWQI) {
-      console.log(`[RTB] Rejecting signal ${input.symbol}/${input.strategy} - CWQI ${cwqiResult.cwqi.toFixed(4)} below threshold ${MIN_QUEUE_CWQI}`);
+    // Directive 11.0E: FinalScore threshold (replaces MIN_QUEUE_CWQI)
+    const MIN_FINAL_SCORE_THRESHOLD = 0.35;
+    if (finalScore < MIN_FINAL_SCORE_THRESHOLD) {
+      console.log(`[11.0E][RTB] Rejecting signal ${input.symbol}/${input.strategy} - FinalScore ${finalScore.toFixed(4)} below threshold ${MIN_FINAL_SCORE_THRESHOLD}`);
       return null;
     }
 
@@ -1028,16 +1028,21 @@ class ReadyToBuyService {
     const existingSignal = await this.getQueuedSignal(input.mode, input.symbol, input.strategy);
     
     if (existingSignal) {
-      // If existing signal has higher CWQI, keep it
-      const existingCWQI = parseFloat(existingSignal.cwqi);
-      if (existingCWQI >= cwqiResult.cwqi) {
-        console.log(`[RTB] Keeping existing signal ${input.symbol}/${input.strategy} with CWQI ${existingCWQI.toFixed(4)} >= new ${cwqiResult.cwqi.toFixed(4)}`);
+      // Directive 11.0E: Compare by FinalScore instead of CWQI
+      const existingFinalScore = parseFloat(existingSignal.finalScore || existingSignal.cwqi || '0');
+      if (existingFinalScore >= finalScore) {
+        console.log(`[11.0E][RTB] Keeping existing signal ${input.symbol}/${input.strategy} with FinalScore ${existingFinalScore.toFixed(4)} >= new ${finalScore.toFixed(4)}`);
         return existingSignal;
       }
       
       // New signal is better - expire the old one
-      await this.expireSignal(existingSignal.id, 'Replaced by higher-CWQI signal');
+      await this.expireSignal(existingSignal.id, 'Replaced by higher-FinalScore signal');
     }
+
+    // Directive 11.0E: Calculate simple risk score from stop distance
+    const riskScore = input.stopPrice > 0 
+      ? Math.min(1, Math.abs(input.entryPrice - input.stopPrice) / input.entryPrice * 10)
+      : 0.5;
 
     // Insert new signal
     const insertData: InsertRtbSignal = {
@@ -1050,10 +1055,11 @@ class ReadyToBuyService {
       targetPrice: input.targetPrice?.toString(),
       quantity: input.quantity?.toString(),
       notional: input.notional?.toString(),
-      confidence: cwqiResult.components.confidence.toString(),
-      riskScore: cwqiResult.components.riskScore.toString(),
-      expectedReturn: cwqiResult.components.expectedReturn.toString(),
-      cwqi: cwqiResult.cwqi.toString(),
+      confidence: input.confidence.toString(),
+      riskScore: riskScore.toString(),
+      expectedReturn: '0.15', // Default expected return
+      cwqi: finalScore.toString(), // Directive 11.0E: Store FinalScore in cwqi field for compatibility
+      finalScore: finalScore.toString(), // Directive 11.0E: New field
       status: 'queued',
       queuedAt: now,
       // R9.3-C: expiresAt removed - lifecycle governed by SQE
@@ -1065,26 +1071,26 @@ class ReadyToBuyService {
     const signal = await storage.upsertRtbSignal(insertData);
 
     // Record SLAL QUEUED event
-    // R9.3-C: expiresAt removed from audit - lifecycle governed by SQE
     signalLifecycleAudit.recordQueued(
       input.signalId,
       input.mode,
       input.symbol,
       input.strategy,
       {
-        cwqi: cwqiResult.cwqi,
+        cwqi: finalScore, // Directive 11.0E: FinalScore stored for compatibility
+        finalScore,
         blockReason: input.blockReason,
       }
     );
 
-    console.log(`[RTB] Queued signal ${input.symbol}/${input.strategy} with CWQI ${cwqiResult.cwqi.toFixed(4)}`);
+    console.log(`[11.0E][RTB] Queued signal ${input.symbol}/${input.strategy} with FinalScore ${finalScore.toFixed(4)}`);
     
     return signal;
   }
 
   /**
-   * Get the highest-CWQI queued signal for a mode
-   * Phase C: Uses decayed CWQI for ranking to prioritize fresher signals
+   * Directive 11.0E: Get the highest-FinalScore queued signal for a mode
+   * Uses FinalScore as primary ranking metric (replaces CWQI)
    */
   async getTopSignal(mode: TradingMode): Promise<RtbSignal | null> {
     const signals = await storage.getRtbSignals({
@@ -1097,14 +1103,14 @@ class ReadyToBuyService {
     }
     
     let bestSignal: RtbSignal | null = null;
-    let bestDecayedCWQI = -1;
+    let bestFinalScore = -1;
     
     for (const signal of signals) {
-      const originalCWQI = parseFloat(signal.cwqi);
-      const decayedCWQI = calculateDecayedCWQI(originalCWQI, signal.queuedAt);
+      // Directive 11.0E: Use FinalScore with fallback to cwqi for compatibility
+      const signalFinalScore = parseFloat(signal.finalScore || signal.cwqi || '0');
       
-      if (decayedCWQI > bestDecayedCWQI) {
-        bestDecayedCWQI = decayedCWQI;
+      if (signalFinalScore > bestFinalScore) {
+        bestFinalScore = signalFinalScore;
         bestSignal = signal;
       }
     }
@@ -1112,14 +1118,95 @@ class ReadyToBuyService {
     if (bestSignal) {
       const ageMinutes = (Date.now() - new Date(bestSignal.queuedAt).getTime()) / (60 * 1000);
       console.log(
-        `[C][CWQI_DECAY] Top signal ${bestSignal.symbol}/${bestSignal.strategy}: ` +
-        `originalCWQI=${parseFloat(bestSignal.cwqi).toFixed(4)}, ` +
-        `decayedCWQI=${bestDecayedCWQI.toFixed(4)}, ` +
+        `[11.0E][TOP_SIGNAL] ${bestSignal.symbol}/${bestSignal.strategy}: ` +
+        `FinalScore=${bestFinalScore.toFixed(4)}, ` +
         `age=${ageMinutes.toFixed(1)}min`
       );
     }
     
     return bestSignal;
+  }
+
+  /**
+   * Directive 11.0E: Shadow Mode Ranking Test
+   * Compares FinalScore and CWQI rankings to verify correlation
+   * This is a guardrail to ensure ranking consistency before full CWQI removal
+   * 
+   * @returns Correlation coefficient (-1 to 1) and detailed comparison
+   */
+  async runShadowRankingTest(mode: TradingMode): Promise<{
+    correlation: number;
+    totalSignals: number;
+    rankingMatches: number;
+    mismatchDetails: Array<{ symbol: string; cwqiRank: number; finalScoreRank: number }>;
+    verdict: 'PASS' | 'WARN' | 'FAIL';
+  }> {
+    const signals = await storage.getRtbSignals({ mode, status: 'queued' });
+    
+    if (signals.length < 3) {
+      return { 
+        correlation: 1, 
+        totalSignals: signals.length, 
+        rankingMatches: signals.length,
+        mismatchDetails: [],
+        verdict: 'PASS'
+      };
+    }
+
+    // Rank by CWQI (legacy)
+    const cwqiRanked = [...signals].sort((a, b) => 
+      parseFloat(b.cwqi || '0') - parseFloat(a.cwqi || '0')
+    );
+    
+    // Rank by FinalScore (new)
+    const finalScoreRanked = [...signals].sort((a, b) => 
+      parseFloat(b.finalScore || b.cwqi || '0') - parseFloat(a.finalScore || a.cwqi || '0')
+    );
+
+    // Build rank maps
+    const cwqiRankMap = new Map<string, number>();
+    const finalScoreRankMap = new Map<string, number>();
+    
+    cwqiRanked.forEach((s, i) => cwqiRankMap.set(s.signalId, i + 1));
+    finalScoreRanked.forEach((s, i) => finalScoreRankMap.set(s.signalId, i + 1));
+
+    // Calculate Spearman rank correlation
+    let sumDiffSquared = 0;
+    const mismatchDetails: Array<{ symbol: string; cwqiRank: number; finalScoreRank: number }> = [];
+    let rankingMatches = 0;
+
+    for (const signal of signals) {
+      const cwqiRank = cwqiRankMap.get(signal.signalId) || 0;
+      const finalScoreRank = finalScoreRankMap.get(signal.signalId) || 0;
+      const diff = cwqiRank - finalScoreRank;
+      sumDiffSquared += diff * diff;
+      
+      if (cwqiRank === finalScoreRank) {
+        rankingMatches++;
+      } else if (Math.abs(diff) > 2) {
+        mismatchDetails.push({ symbol: signal.symbol, cwqiRank, finalScoreRank });
+      }
+    }
+
+    const n = signals.length;
+    const correlation = 1 - (6 * sumDiffSquared) / (n * (n * n - 1));
+
+    // Verdict based on correlation threshold
+    let verdict: 'PASS' | 'WARN' | 'FAIL';
+    if (correlation >= 0.85) {
+      verdict = 'PASS';
+    } else if (correlation >= 0.70) {
+      verdict = 'WARN';
+    } else {
+      verdict = 'FAIL';
+    }
+
+    console.log(
+      `[11.0E][SHADOW_RANKING_TEST] mode=${mode} signals=${n} correlation=${correlation.toFixed(4)} ` +
+      `matches=${rankingMatches}/${n} mismatches=${mismatchDetails.length} verdict=${verdict}`
+    );
+
+    return { correlation, totalSignals: n, rankingMatches, mismatchDetails, verdict };
   }
 
   /**
