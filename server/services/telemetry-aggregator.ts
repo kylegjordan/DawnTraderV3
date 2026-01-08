@@ -21,6 +21,14 @@ import { SCANNER_PARAMS, FILTER_SCHEMA_VERSION } from '../config/system-guards.j
 import { getScoreWeightsMetadata, SCORE_WEIGHTS_VERSION } from '../config/score-weights.config.js';
 import { EXECUTION_CONFIG } from '../config/execution-config.js';
 import { SCHEMA_VERSION, SCHEMA_DIRECTIVE, METRIC_ENGINE_VERSION } from '../config/schema-version.js';
+import { 
+  loadRecentTelemetry, 
+  saveTelemetryRecord, 
+  shouldPersist,
+  type MarketRegime,
+  type TelemetryEntry 
+} from './telemetry-repository.js';
+import { DynamicStrategySelector, type DSSMetrics } from './dynamic-strategy-selector.js';
 
 export interface PairTelemetry {
   symbol: string;
@@ -56,6 +64,9 @@ export class TelemetryAggregatorService {
   private cascadeHistory: CascadeEfficiency[] = [];
   private readonly historyWindowMs = SCANNER_PARAMS.TELEMETRY.HISTORY_WINDOW_MS;
   private readonly minSamples = SCANNER_PARAMS.TELEMETRY.MIN_SAMPLES;
+  private dss = new DynamicStrategySelector();
+  private currentRegime: MarketRegime = 'LOW_VOL_CHOP';
+  private rehydrated = false;
 
   /**
    * Record telemetry for a pair
@@ -97,6 +108,95 @@ export class TelemetryAggregatorService {
     this.pairTelemetry.set(symbol, recent);
     
     console.log(`[10.8][Telemetry] ${symbol} recorded: finalScore=${data.finalScore.toFixed(2)}, samples=${recent.length}`);
+    
+    // Directive 11.1A: Persist to SQL if enabled
+    if (shouldPersist()) {
+      const mode = (process.env.MODE as 'live' | 'paper') || 'paper';
+      this.persistTelemetryAsync({
+        symbol,
+        mode,
+        regime: this.currentRegime,
+        finalScore: data.finalScore,
+        hybridScore: data.hybridScore,
+        regimeWeight: data.regimeWeight,
+        predictiveConfidence: data.predictiveConfidence,
+        successRate: entry.successRate,
+        sampleCount: entry.sampleCount,
+        timeframe: data.timeframe,
+      });
+    }
+  }
+
+  /**
+   * Directive 11.1A: Persist telemetry asynchronously
+   */
+  private async persistTelemetryAsync(entry: TelemetryEntry): Promise<void> {
+    try {
+      await saveTelemetryRecord(entry);
+    } catch (error) {
+      console.error('[11.1A][Telemetry] Failed to persist telemetry:', error);
+    }
+  }
+
+  /**
+   * Directive 11.1A: Update current market regime
+   * Call this when market conditions change
+   */
+  updateMarketRegime(metrics: DSSMetrics): MarketRegime {
+    this.currentRegime = this.dss.determineRegime(metrics);
+    console.log(`[11.1A][Telemetry] Market regime updated: ${this.currentRegime}`);
+    return this.currentRegime;
+  }
+
+  /**
+   * Directive 11.1A: Get current market regime
+   */
+  getCurrentMarketRegime(): MarketRegime {
+    return this.currentRegime;
+  }
+
+  /**
+   * Directive 11.1A: Rehydrate telemetry state from SQL on startup
+   * Loads recent telemetry records for the current market regime
+   */
+  async rehydrateTelemetryState(): Promise<number> {
+    if (this.rehydrated) {
+      console.log('[11.1A][Telemetry] Already rehydrated, skipping');
+      return 0;
+    }
+    
+    const mode = (process.env.MODE as 'live' | 'paper') || 'paper';
+    
+    try {
+      const records = await loadRecentTelemetry(this.currentRegime, mode, 100);
+      
+      for (const record of records) {
+        const existing = this.pairTelemetry.get(record.symbol) || [];
+        
+        const entry: PairTelemetry = {
+          symbol: record.symbol,
+          finalScore: parseFloat(record.finalScore),
+          hybridScore: record.hybridScore ? parseFloat(record.hybridScore) : 0,
+          regimeWeight: record.regimeWeight ? parseFloat(record.regimeWeight) : 0,
+          predictiveConfidence: record.predictiveConfidence ? parseFloat(record.predictiveConfidence) : 0.5,
+          lastUpdated: new Date(record.timestamp).getTime(),
+          sampleCount: record.sampleCount ?? 1,
+          successRate: record.successRate ? parseFloat(record.successRate) : 0.5,
+          avgDecayedStrength: 0,
+          timeframe: record.timeframe as '1h' | '15m' | '5m' | undefined,
+        };
+        
+        existing.push(entry);
+        this.pairTelemetry.set(record.symbol, existing);
+      }
+      
+      this.rehydrated = true;
+      console.log(`[11.1A][Telemetry] Rehydrated ${records.length} entries for regime=${this.currentRegime}, mode=${mode}`);
+      return records.length;
+    } catch (error) {
+      console.error('[11.1A][Telemetry] Failed to rehydrate telemetry:', error);
+      return 0;
+    }
   }
 
   /**

@@ -1,0 +1,208 @@
+🧠 Directive 11.1A — Persistent Intelligence: Contextual State Retention & Telemetry Resilience (Revised)
+Phase: 11.1A
+Schema Version Target: v1.5.2
+Issued: January 2026
+Objective:
+
+Establish durable, SQL-backed, context-aware persistence of telemetry and adaptive intelligence, ensuring continuity across restarts while preventing split-brain storage and maintaining full integrity via checksum validation.
+
+🧭 1. Purpose
+
+This directive implements Persistent Intelligence within the DawnTrader architecture, providing intelligent rehydration of adaptive telemetry state from the PostgreSQL telemetry_history table upon system restart.
+
+It also ensures that:
+
+All telemetry records are tagged by market regime (critical for the DSS phase).
+
+Telemetry is cryptographically verified for integrity.
+
+Persistence is enabled only in live mode, with a FORCE_PERSIST=true flag for testing.
+
+The previous JSON-based storage method is deprecated and removed to avoid split-brain scenarios.
+
+⚙️ 2. Scope
+Area	Objective	Outcome
+Contextual Telemetry	Store regime-tagged performance metrics in SQL	Enables regime-aware learning
+Unified Persistence	Replace JSON flat file with database-backed retention	Ensures ACID consistency
+Telemetry Integrity	Maintain checksum verification	Guarantees state integrity
+Schema Enhancement	Add new regime & checksum columns	Enables contextual telemetry
+Controlled Environment	Persist only in live mode unless FORCE_PERSIST=true	Safe testing and deploy control
+🧩 3. Technical Tasks
+Task 1 — Contextual SQL-Based Telemetry Storage
+
+Files:
+
+/server/services/telemetry-repository.ts (new)
+
+/server/services/telemetry-aggregator.ts
+
+/server/core/market-evaluation.ts
+
+Implementation Overview:
+
+Replace all file-based persistence logic with SQL persistence using the existing Drizzle ORM.
+
+New: /server/services/telemetry-repository.ts
+
+import { db } from "../config/database";
+import { telemetry_history } from "../schema/tables";
+
+export async function loadRecentTelemetry(regime: string, limit = 100) {
+  return await db
+    .select()
+    .from(telemetry_history)
+    .where(telemetry_history.regime.eq(regime))
+    .orderBy(telemetry_history.timestamp.desc())
+    .limit(limit);
+}
+
+export async function saveTelemetryRecord(entry) {
+  await db.insert(telemetry_history).values(entry);
+}
+
+
+Telemetry rehydration in aggregator:
+
+import { getCurrentMarketRegime } from "../core/market-evaluation";
+import { loadRecentTelemetry } from "./telemetry-repository";
+
+export async function rehydrateTelemetryState() {
+  const regime = getCurrentMarketRegime(); // e.g. "BULL_TREND"
+  const recent = await loadRecentTelemetry(regime);
+  telemetry.merge(recent);
+  console.log(`[Telemetry] Rehydrated ${recent.length} entries for ${regime}`);
+}
+
+
+✅ Outcome:
+Telemetry rehydration and persistence are fully SQL-based, eliminating drift and ensuring durability.
+
+Task 2 — Regime Context Tagging
+
+Files:
+
+/server/core/market-evaluation.ts
+
+Ensure getCurrentMarketRegime() returns canonical, uppercase string values:
+
+export type MarketRegime = "BULL_TREND" | "BEAR_TREND" | "NEUTRAL_CHOP";
+
+export function getCurrentMarketRegime(): MarketRegime {
+  // Example: based on moving averages and volatility signals
+  if (trendSlope > 0.03 && volatility < 0.4) return "BULL_TREND";
+  if (trendSlope < -0.03 && volatility < 0.4) return "BEAR_TREND";
+  return "NEUTRAL_CHOP";
+}
+
+
+✅ Outcome:
+All telemetry records use standardized ENUM-compatible regime labels.
+
+Task 3 — Telemetry Integrity Checksum
+
+Same as before, implemented in telemetry-aggregator.ts:
+
+import crypto from "crypto";
+function computeTelemetryChecksum() {
+  const input = `${metricEngineVersion}-${schemaVersion}-${directive}`;
+  return crypto.createHash("sha256").update(input).digest("hex");
+}
+
+Task 4 — Schema & Migration
+
+File: /drizzle/migrations/2026-11-1A-persistent-intelligence.sql
+
+-- Directive 11.1A: Persistent Intelligence (SQL-based)
+ALTER TABLE telemetry_history
+  ADD COLUMN IF NOT EXISTS regime TEXT,
+  ADD COLUMN IF NOT EXISTS checksum TEXT,
+  ADD COLUMN IF NOT EXISTS persisted_at TIMESTAMP DEFAULT NOW();
+
+
+✅ Outcome:
+Schema v1.5.2 supports contextual telemetry and checksum validation.
+
+Task 5 — Environment Guard and Testing Override
+
+Files:
+
+/server/services/telemetry-aggregator.ts
+
+Update persistence logic:
+
+function shouldPersist() {
+  const mode = process.env.MODE || "paper";
+  const force = process.env.FORCE_PERSIST === "true";
+  return (mode === "live" && process.env.PERSIST_TELEMETRY !== "false") || force;
+}
+
+
+✅ Outcome:
+Persistence is enabled for live mode and can be manually overridden in test mode using FORCE_PERSIST=true.
+
+Task 6 — Documentation
+
+Files:
+
+/docs/schema_reference_v1_5_2.md
+
+/replit.md
+
+Add sections:
+
+SQL-based persistence replacing JSON
+
+Market Regime tagging (ENUM standard)
+
+Environment guard behavior
+
+Checksum validation
+
+✅ Outcome:
+Single-source documentation across schema and runtime.
+
+🧪 4. Validation Plan
+Test File	Coverage
+telemetry_persistence_sql.test.ts	SQL-based rehydration verification
+telemetry_checksum.test.ts	Verifies checksum creation and validation
+telemetry_regime_tagging.test.ts	Ensures regime tags attach correctly
+schema_v1_5_2.test.ts	Validates migration
+persistence_env_guard.test.ts	Confirms FORCE_PERSIST override
+
+✅ Goal: 100% coverage for persistence and regime tagging flow.
+
+🧩 5. Governance and Compliance
+
+JSON file persistence (telemetry_history.json) is deprecated and must be deleted.
+
+All telemetry writes and reads now use the SQL repository layer.
+
+Market Regime tagging is mandatory for every telemetry record.
+
+The FORCE_PERSIST flag may only be used in non-production environments.
+
+🧮 6. Success Criteria
+Requirement	Validation
+Unified telemetry storage	Only one data source (PostgreSQL)
+Contextual tagging	All records include market regime
+Safe environment guard	Live-only by default; override via flag
+Schema integrity	v1.5.2 migration completed successfully
+Telemetry validation	Checksums match and desyncs reported correctly
+✅ 7. Directive Summary
+Field	Value
+Directive ID	11.1A
+Title	Persistent Intelligence: Contextual SQL Telemetry & Resilient Rehydration
+Schema Version	v1.5.2
+Primary Engineer	Replit
+Architectural Lead	ChatGPT
+Verification Lead	Gemini
+Objective	Introduce SQL-based contextual telemetry persistence with checksum validation and safe live-mode-only rehydration
+🚀 8. Next Steps
+
+Once Directive 11.1A is deployed and verified:
+
+Proceed to Directive 11.1B – Adaptive Weight Persistence, leveraging regime-tagged telemetry for predictive intelligence calibration.
+
+✅ Conclusion:
+Gemini’s recommendations are entirely correct and necessary.
+We should proceed with this revised version — it resolves the split-brain risk, improves reliability, simplifies architecture, and prepares the intelligence system for adaptive learning in 11.1B.

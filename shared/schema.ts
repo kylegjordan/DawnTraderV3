@@ -806,6 +806,46 @@ export const telemetryLineage = pgTable("telemetry_lineage", {
   timestampIdx: index("telemetry_lineage_timestamp_idx").on(table.timestamp),
 }));
 
+// Directive 11.1A: Persistent Intelligence - SQL-based Telemetry History
+export const marketRegimeEnum = pgEnum("market_regime", [
+  "EXTREME_NOISE",
+  "BULL_STABLE",
+  "BULL_VOLATILE",
+  "BEAR_STABLE",
+  "BEAR_VOLATILE",
+  "LOW_VOL_CHOP"
+]);
+
+export const telemetryHistory = pgTable("telemetry_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  mode: tradingModeEnum("mode").notNull(),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  regime: marketRegimeEnum("regime").notNull(),
+  finalScore: decimal("final_score", { precision: 5, scale: 4 }).notNull(),
+  hybridScore: decimal("hybrid_score", { precision: 5, scale: 4 }),
+  regimeWeight: decimal("regime_weight", { precision: 5, scale: 4 }),
+  predictiveConfidence: decimal("predictive_confidence", { precision: 5, scale: 4 }),
+  successRate: decimal("success_rate", { precision: 5, scale: 4 }),
+  sampleCount: integer("sample_count").default(1),
+  timeframe: varchar("timeframe", { length: 10 }),
+  checksum: varchar("checksum", { length: 64 }),
+  metadata: jsonb("metadata"),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
+  persistedAt: timestamp("persisted_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  regimeIdx: index("telemetry_history_regime_idx").on(table.regime),
+  symbolIdx: index("telemetry_history_symbol_idx").on(table.symbol),
+  modeTimestampIdx: index("telemetry_history_mode_timestamp_idx").on(table.mode, table.timestamp),
+}));
+
+export const insertTelemetryHistorySchema = createInsertSchema(telemetryHistory).omit({
+  id: true,
+  persistedAt: true,
+});
+
+export type InsertTelemetryHistory = z.infer<typeof insertTelemetryHistorySchema>;
+export type TelemetryHistory = typeof telemetryHistory.$inferSelect;
+
 // AI opportunity runs (hourly batch runs)
 export const aiOpportunityRuns = pgTable("ai_opportunity_runs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

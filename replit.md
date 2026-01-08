@@ -52,4 +52,5 @@ The trade lifecycle flow proceeds from `Signal Orchestrator` (exposure, correlat
 -   **CoinGecko API**: Fallback external market price feed.
 
 ## Directive History
+-   **Directive 11.1A**: Persistent Intelligence - SQL-based telemetry persistence with market regime tagging, checksum validation, and environment guards. See `docs/schema_reference_v1_5_2.md`.
 -   **Directive 11.0E-G Summary**: See `docs/directive_11_summary.md` for the complete Metric Engine Consolidation history (FinalScore transition, legacy purge, schema hardening).
