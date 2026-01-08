@@ -28,6 +28,12 @@ import {
   type MarketRegime,
   type TelemetryEntry 
 } from './telemetry-repository.js';
+import { 
+  loadAdaptiveWeightsWithTimestamps,
+  saveAdaptiveWeights,
+  type AdaptiveWeights 
+} from './adaptive-learning-repository.js';
+import { adaptiveManager, type TimestampedWeightEntry } from '../core/adaptive-manager.js';
 import { DynamicStrategySelector, type DSSMetrics } from './dynamic-strategy-selector.js';
 
 export interface PairTelemetry {
@@ -200,6 +206,63 @@ export class TelemetryAggregatorService {
       console.error('[11.1A][Telemetry] Failed to rehydrate telemetry:', error);
       return 0;
     }
+  }
+
+  /**
+   * Directive 11.1B: Rehydrate adaptive learning weights from SQL
+   * Loads weights with timestamps and applies time-based decay
+   */
+  async rehydrateAdaptiveLearning(): Promise<number> {
+    const regime = this.getCurrentMarketRegime();
+    
+    try {
+      const results = await loadAdaptiveWeightsWithTimestamps(regime);
+      
+      if (results.length === 0) {
+        console.log(`[11.1B][Learning] No adaptive weights found for regime=${regime}`);
+        return 0;
+      }
+      
+      const timestampedWeights = new Map<string, TimestampedWeightEntry>(
+        results.map(r => [
+          r.strategyId, 
+          { 
+            weights: JSON.parse(r.weights) as AdaptiveWeights, 
+            updatedAt: new Date(r.updatedAt) 
+          }
+        ])
+      );
+      
+      adaptiveManager.initializeWithTimestamps(timestampedWeights);
+      console.log(`[Learning] Rehydrated ${timestampedWeights.size} adaptive profiles for ${regime}`);
+      return timestampedWeights.size;
+    } catch (error) {
+      console.error('[11.1B][Learning] Failed to rehydrate adaptive weights:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Directive 11.1B: Persist current adaptive learning weights
+   * IMPORTANT: Preserves original timestamps for time-based decay on rehydration
+   */
+  async persistAdaptiveLearning(): Promise<number> {
+    if (!shouldPersist()) {
+      return 0;
+    }
+    
+    const regime = this.getCurrentMarketRegime();
+    const allWeights = adaptiveManager.getAllWeights();
+    let savedCount = 0;
+    
+    for (const [strategyId, weights] of allWeights.entries()) {
+      const originalTimestamp = adaptiveManager.getWeightTimestamp(strategyId);
+      const success = await saveAdaptiveWeights(strategyId, regime, weights, undefined, originalTimestamp);
+      if (success) savedCount++;
+    }
+    
+    console.log(`[Learning] Persisted ${savedCount} adaptive weight profiles with original timestamps`);
+    return savedCount;
   }
 
   /**

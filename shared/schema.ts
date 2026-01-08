@@ -846,6 +846,30 @@ export const insertTelemetryHistorySchema = createInsertSchema(telemetryHistory)
 export type InsertTelemetryHistory = z.infer<typeof insertTelemetryHistorySchema>;
 export type TelemetryHistory = typeof telemetryHistory.$inferSelect;
 
+// Directive 11.1B: Adaptive Learning Weight Persistence
+export const adaptiveLearning = pgTable("adaptive_learning", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  strategyId: varchar("strategy_id", { length: 50 }).notNull(),
+  mode: tradingModeEnum("mode").notNull(),
+  regime: marketRegimeEnum("regime").notNull(),
+  weights: jsonb("weights").notNull(), // AdaptiveWeights object
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  strategyModeIdx: index("adaptive_learning_strategy_mode_idx").on(table.strategyId, table.mode),
+  regimeIdx: index("adaptive_learning_regime_idx").on(table.regime),
+  updatedAtIdx: index("adaptive_learning_updated_at_idx").on(table.updatedAt),
+}));
+
+export const insertAdaptiveLearningSchema = createInsertSchema(adaptiveLearning).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertAdaptiveLearning = z.infer<typeof insertAdaptiveLearningSchema>;
+export type AdaptiveLearning = typeof adaptiveLearning.$inferSelect;
+
 // AI opportunity runs (hourly batch runs)
 export const aiOpportunityRuns = pgTable("ai_opportunity_runs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
