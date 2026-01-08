@@ -1,11 +1,11 @@
 /**
- * Directive 11.0C - UI Diagnostics Tab with Dynamic Telemetry, Filter Performance & TEC Config
+ * Directive 11.0D - UI Diagnostics Tab with Dynamic Telemetry, Filter Performance, TEC Config & Config Provenance
  * 
  * Displays math integrity status, guard configuration, and dynamic backend telemetry.
- * Shows Phase 11 system guards, schema version synchronization, filter pass rates, and TEC parameters.
- * Includes Top 5 filter failure categories for observability.
+ * Shows Phase 11 system guards, schema version synchronization, filter pass rates, TEC parameters,
+ * and configuration provenance for full audit trail visibility.
  * 
- * Tags: [11.0C][UI]
+ * Tags: [11.0D][UI]
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,8 +15,8 @@ import { useQuery } from "@tanstack/react-query";
 import { CheckCircle, Shield, Activity, Settings, RefreshCw, AlertTriangle, Database, Filter, TrendingUp } from "lucide-react";
 import { useState, useEffect } from "react";
 
-const UI_SCHEMA_VERSION = "v1.3.0"; // Directive 11.0C
-const UI_PHASE_DIRECTIVE = "11.0C";
+const UI_SCHEMA_VERSION = "v1.4.5"; // Directive 11.0D
+const UI_PHASE_DIRECTIVE = "11.0D";
 
 const SYSTEM_GUARDS = {
   VERSION: "Phase10_Final",
@@ -53,6 +53,12 @@ interface TelemetrySummary {
     trailingAccel: number;
     maxRisk: number;
     version: string;
+  };
+  configProvenance?: {
+    phaseDirective: string;
+    backendSchema: string;
+    executionConfigVersion: string;
+    screenerConfigVersion: string;
   };
 }
 
@@ -345,6 +351,55 @@ export default function DiagnosticsTab() {
               <div className="p-3 border rounded-lg bg-muted/30 text-center">
                 <div className="text-xs text-muted-foreground mb-1">Max Risk</div>
                 <span className="text-lg font-bold text-amber-600">{(telemetry.tecConfig.maxRisk * 100).toFixed(0)}%</span>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Configuration Provenance Panel - Directive 11.0D */}
+      <Card className="border-2 border-indigo-200 dark:border-indigo-800">
+        <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20">
+          <CardTitle className="flex items-center gap-2">
+            <Database className="w-5 h-5 text-indigo-600" />
+            Configuration Provenance (Directive 11.0D)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-4">
+          <p className="text-sm text-muted-foreground mb-3">Runtime sources and schema versions</p>
+          {isLoading ? (
+            <Skeleton className="h-16 w-full" />
+          ) : !telemetry?.configProvenance ? (
+            <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <p className="text-sm text-amber-700 dark:text-amber-300">
+                Config provenance not available. Backend may be on older version.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="p-3 border rounded-lg bg-muted/30">
+                <div className="text-xs text-muted-foreground mb-1">Phase Directive</div>
+                <Badge variant="outline" className="font-mono">
+                  {telemetry.configProvenance.phaseDirective}
+                </Badge>
+              </div>
+              <div className="p-3 border rounded-lg bg-muted/30">
+                <div className="text-xs text-muted-foreground mb-1">Backend Schema</div>
+                <Badge variant="outline" className="font-mono">
+                  {telemetry.configProvenance.backendSchema}
+                </Badge>
+              </div>
+              <div className="p-3 border rounded-lg bg-muted/30">
+                <div className="text-xs text-muted-foreground mb-1">Execution Config</div>
+                <Badge variant="outline" className="font-mono">
+                  {telemetry.configProvenance.executionConfigVersion}
+                </Badge>
+              </div>
+              <div className="p-3 border rounded-lg bg-muted/30">
+                <div className="text-xs text-muted-foreground mb-1">Screener Config</div>
+                <Badge variant="outline" className="font-mono">
+                  {telemetry.configProvenance.screenerConfigVersion}
+                </Badge>
               </div>
             </div>
           )}

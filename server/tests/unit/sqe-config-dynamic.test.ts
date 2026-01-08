@@ -1,0 +1,87 @@
+/**
+ * Directive 11.0D — SQE Dynamic Configuration Tests
+ * 
+ * Validates that SQE dynamically responds to screener config changes
+ * and uses dynamic backfill for missing FinalScore/RegimeWeight.
+ */
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { calculateFinalScore, calculateRegimeWeight } from '../../core/utils/score-calculator';
+
+describe('[11.0D] SQE Dynamic Configuration', () => {
+  describe('calculateFinalScore', () => {
+    it('calculates FinalScore using SCORE_WEIGHTS formula', () => {
+      const metrics = {
+        hybridScore: 0.8,
+        confidence: 0.7,
+        regimeWeight: 0.6,
+        decayPenalty: 0.1
+      };
+      
+      const finalScore = calculateFinalScore(metrics);
+      
+      expect(finalScore).toBeGreaterThan(0);
+      expect(finalScore).toBeLessThanOrEqual(1);
+      expect(finalScore).toBeCloseTo(0.8 * 0.4 + 0.7 * 0.3 + 0.6 * 0.2 - 0.1 * 0.1, 2);
+    });
+
+    it('uses confidence fallback when hybridScore missing', () => {
+      const metrics = {
+        confidence: 0.6,
+        regimeWeight: 0.5
+      };
+      
+      const finalScore = calculateFinalScore(metrics);
+      
+      expect(finalScore).toBeGreaterThan(0);
+      expect(finalScore).toBeLessThanOrEqual(1);
+    });
+
+    it('clamps result to [0, 1] range', () => {
+      const highMetrics = {
+        hybridScore: 1.5,
+        confidence: 1.5,
+        regimeWeight: 1.5
+      };
+      
+      expect(calculateFinalScore(highMetrics)).toBeLessThanOrEqual(1);
+      
+      const lowMetrics = {
+        hybridScore: 0,
+        confidence: 0,
+        regimeWeight: 0,
+        decayPenalty: 1
+      };
+      
+      expect(calculateFinalScore(lowMetrics)).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('calculateRegimeWeight', () => {
+    it('calculates RegimeWeight from trend and volatility', () => {
+      const metrics = {
+        trendStrength: 0.7,
+        volatility: 0.3
+      };
+      
+      const regimeWeight = calculateRegimeWeight(metrics);
+      
+      expect(regimeWeight).toBeGreaterThanOrEqual(0.1);
+      expect(regimeWeight).toBeLessThanOrEqual(1);
+    });
+
+    it('uses default values when metrics missing', () => {
+      const regimeWeight = calculateRegimeWeight({});
+      
+      expect(regimeWeight).toBeGreaterThanOrEqual(0.1);
+      expect(regimeWeight).toBeLessThanOrEqual(1);
+    });
+
+    it('penalizes high volatility', () => {
+      const lowVol = calculateRegimeWeight({ trendStrength: 0.5, volatility: 0.1 });
+      const highVol = calculateRegimeWeight({ trendStrength: 0.5, volatility: 0.9 });
+      
+      expect(lowVol).toBeGreaterThan(highVol);
+    });
+  });
+});

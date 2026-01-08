@@ -15,6 +15,7 @@ import { performanceMonitor } from '../diagnostics/performance_monitor';
 import { normalizeInternal } from '../../markets/kraken-symbol-resolver';
 import { diagnosticTrace } from '../diagnostics/trace_service';
 import { dataAggregator } from '../../services/data-aggregator.js';
+import { calculateFinalScore, calculateRegimeWeight } from '../utils/score-calculator.js';
 
 /**
  * Directive 11.0B: SQE Thresholds - Default values used when screener config is unavailable
@@ -100,10 +101,32 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
   
   const canonicalSymbol = normalizeInternal(input.symbol);
   
-  // Directive 11.0C: Auto-backfill missing metrics with defaults (no warnings)
-  // Signals without FinalScore get calculated from confidence, without RegimeWeight get 0.35 default
-  const finalScore = input.finalScore ?? 0.35;
-  const regimeWeight = input.regimeWeight ?? 0.35;
+  // Directive 11.0D: Dynamic backfill - recalculate missing metrics using score-calculator
+  // No more static 0.35 defaults - data-driven recalculation for accuracy
+  let finalScore = input.finalScore;
+  let regimeWeight = input.regimeWeight;
+  let backfilled = false;
+  
+  if (finalScore === undefined || finalScore === null) {
+    finalScore = calculateFinalScore({
+      confidence: (input as any).confidence ?? 0.5,
+      ngc: (input as any).ngc ?? (input as any).confidence ?? 0.5,
+      regimeWeight: input.regimeWeight ?? 0.5,
+    });
+    backfilled = true;
+  }
+  
+  if (regimeWeight === undefined || regimeWeight === null) {
+    regimeWeight = calculateRegimeWeight({
+      trendStrength: (input as any).trendStrength ?? 0.5,
+      volatility: (input as any).volatility ?? 0.3,
+    });
+    backfilled = true;
+  }
+  
+  if (backfilled) {
+    console.log(`[11.0D][SQE_BACKFILL] FinalScore=${finalScore.toFixed(3)}, RegimeWeight=${regimeWeight.toFixed(3)} for ${canonicalSymbol}`);
+  }
   
   // Load thresholds from screener config (configurable via UI)
   const thresholds = await getSQEThresholdsFromConfig(input.mode);
@@ -177,19 +200,38 @@ export function evaluateSignalQualitySync(input: SQEInput, thresholds?: { finalS
     regimeWeightMin: SQE_DEFAULT_THRESHOLDS.MIN_REGIME_WEIGHT,
   };
   
-  if (input.finalScore < config.finalScoreMin) {
-    failures.push(`FinalScore ${input.finalScore.toFixed(4)} < ${config.finalScoreMin}`);
+  // Directive 11.0D: Dynamic backfill for sync version
+  let finalScore = input.finalScore;
+  let regimeWeight = input.regimeWeight;
+  
+  if (finalScore === undefined || finalScore === null) {
+    finalScore = calculateFinalScore({
+      confidence: (input as any).confidence ?? 0.5,
+      ngc: (input as any).ngc ?? 0.5,
+      regimeWeight: input.regimeWeight ?? 0.5,
+    });
   }
   
-  if (input.regimeWeight < config.regimeWeightMin) {
-    failures.push(`RegimeWeight ${input.regimeWeight.toFixed(4)} < ${config.regimeWeightMin}`);
+  if (regimeWeight === undefined || regimeWeight === null) {
+    regimeWeight = calculateRegimeWeight({
+      trendStrength: (input as any).trendStrength ?? 0.5,
+      volatility: (input as any).volatility ?? 0.3,
+    });
+  }
+  
+  if (finalScore < config.finalScoreMin) {
+    failures.push(`FinalScore ${finalScore.toFixed(4)} < ${config.finalScoreMin}`);
+  }
+  
+  if (regimeWeight < config.regimeWeightMin) {
+    failures.push(`RegimeWeight ${regimeWeight.toFixed(4)} < ${config.regimeWeightMin}`);
   }
   
   const passed = failures.length === 0;
   
   const status = passed ? 'PASS' : 'FAIL';
   const reason = passed ? 'thresholds_met' : failures[0]?.split(' ')[0] || 'unknown';
-  console.log(`[11.0B][SQE_EVAL] ${status} symbol=${canonicalSymbol} strategy=${input.strategy} finalScore=${input.finalScore.toFixed(4)} regimeWeight=${input.regimeWeight.toFixed(4)} reason=${reason}`);
+  console.log(`[11.0D][SQE_EVAL] ${status} symbol=${canonicalSymbol} strategy=${input.strategy} finalScore=${finalScore.toFixed(4)} regimeWeight=${regimeWeight.toFixed(4)} reason=${reason}`);
   
   performanceMonitor.recordSQEEvaluation(passed);
   
@@ -199,8 +241,8 @@ export function evaluateSignalQualitySync(input: SQEInput, thresholds?: { finalS
     symbol: canonicalSymbol,
     strategy: input.strategy,
     metrics: {
-      finalScore: Math.max(0, Math.min(1, input.finalScore)),
-      regimeWeight: Math.max(0, Math.min(1, input.regimeWeight)),
+      finalScore: Math.max(0, Math.min(1, finalScore)),
+      regimeWeight: Math.max(0, Math.min(1, regimeWeight)),
     },
     thresholds: config,
     failures,

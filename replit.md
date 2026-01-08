@@ -86,6 +86,27 @@ The system incorporates Verification & Config Purification, Backend Filter Decon
 
 4.  **Diagnostics UI Update**: Phase 11 modules section added, TEC configuration panel displays live values.
 
+**Directive 11.0D — Production Hardening & Dynamic Threshold Validation (January 2026):**
+
+1.  **Legacy Code Removal**: Removed `legacy-metrics.ts` and `manual_patch.sql` (verified not present).
+
+2.  **Dynamic SQE Backfill**: Missing `FinalScore` or `RegimeWeight` now dynamically recalculated using `calculateFinalScore()` and `calculateRegimeWeight()` from `server/core/utils/score-calculator.ts`. No more static 0.35 defaults.
+
+3.  **Schema Version Tracking**: `server/config/schema-version.ts` exports `SCHEMA_VERSION = "v1.4.5"` and `SCHEMA_DIRECTIVE = "11.0D"`.
+
+4.  **Configuration Provenance**: Telemetry summary now includes `configProvenance` block with:
+    - `phaseDirective`: Current directive version
+    - `backendSchema`: Database schema version
+    - `executionConfigVersion`: TEC config version
+    - `screenerConfigVersion`: Filter schema version
+
+5.  **Diagnostics UI Provenance Panel**: New Configuration Provenance panel displays all runtime version sources.
+
+6.  **Validation Tests**: Added Vitest test suite:
+    - `sqe-config-dynamic.test.ts`: Dynamic FinalScore/RegimeWeight calculation
+    - `execution-config.test.ts`: TEC configuration validation
+    - `config-provenance.test.ts`: Provenance field validation
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed.

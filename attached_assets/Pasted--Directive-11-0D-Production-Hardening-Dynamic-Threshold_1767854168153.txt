@@ -1,0 +1,221 @@
+⚙️ Directive 11.0D — Production Hardening & Dynamic Threshold Validation (Final Revision)
+
+Phase: 11.0D
+Title: SQE Hardening • Adaptive Config Validation • Final Architecture Cleanup
+Parent Directive: 11.0C
+Schema Version: v1.4.5
+
+🎯 Objective
+
+This directive completes the stabilization and production-hardening of the Phase 11 architecture.
+It permanently removes residual legacy code, fixes the SQE metric backfill logic, enforces schema discipline, validates configuration propagation, and exposes provenance in the Diagnostics tab.
+
+🧱 Task 1 — Legacy Code & Manual SQL Removal
+Remove:
+server/core/legacy-metrics.ts
+server/setup/manual_patch.sql
+
+Clean up signal-orchestrator.ts:
+
+Delete:
+
+const legacyRisk = signal.metrics?.risk ?? 0;
+telemetry.log({ type: "legacyRisk", value: legacyRisk });
+
+Add CI check in .github/workflows/ci.yml:
+- name: Verify no manual SQL patches
+  run: |
+    if [ -f server/setup/manual_patch.sql ]; then
+      echo "❌ Manual SQL patch found. Remove before commit."
+      exit 1
+    fi
+
+
+✅ Prevents unauthorized schema edits forever.
+
+🧠 Task 2 — SQE Metric Backfill Recalculation
+
+File: /server/services/ready-to-buy-refresh.ts
+
+Replace:
+
+if (!signal.finalScore || !signal.regimeWeight) {
+    signal.finalScore = 0.35;
+    signal.regimeWeight = 0.30;
+}
+
+
+✅ With:
+
+import { calculateFinalScore, calculateRegimeWeight } from "../core/signal-orchestrator";
+
+if (!signal.finalScore || !signal.regimeWeight) {
+  signal.finalScore = calculateFinalScore(signal);
+  signal.regimeWeight = calculateRegimeWeight(signal);
+  log.info(`[11.0D][SQE_BACKFILL] FinalScore=${signal.finalScore.toFixed(3)}, RegimeWeight=${signal.regimeWeight.toFixed(3)} for ${signal.symbol}`);
+}
+
+
+✅ Ensures dynamic, data-driven recalculation.
+✅ Prevents false signal promotions.
+
+🧩 Task 3 — Schema & Migration Integrity (Drizzle)
+
+File: /server/db/migrations/2026-11-0D-cleanup.sql
+
+-- Directive 11.0D Cleanup Migration
+DROP TABLE IF EXISTS legacy_metrics;
+DELETE FROM migration_history WHERE version < 'v1.4.3';
+
+ALTER TABLE execution_settings
+  ADD COLUMN IF NOT EXISTS last_updated TIMESTAMP DEFAULT NOW();
+
+
+Schema version: /server/db/schema-version.ts
+
+export const SCHEMA_VERSION = "v1.4.5";
+
+
+✅ Confirms version tracking and normalizes migration history.
+
+Drizzle Migration JSON File
+
+File: /server/db/migrations/2026-11-0D-cleanup.json
+
+{
+  "id": "2026-11-0D-cleanup",
+  "file": "2026-11-0D-cleanup.sql",
+  "appliedAt": "CURRENT_TIMESTAMP",
+  "changes": [
+    { "type": "drop_table", "name": "legacy_metrics" },
+    { "type": "delete_rows", "table": "migration_history", "where": "version < 'v1.4.3'" },
+    { "type": "alter_table", "table": "execution_settings", "add_column": "last_updated TIMESTAMP DEFAULT NOW()" }
+  ],
+  "version": "v1.4.5"
+}
+
+
+✅ Used by Drizzle to track migration metadata in deployment logs.
+✅ Required for version audit trail.
+
+🧮 Task 4 — Validation Tests (Vitest)
+
+1️⃣ File: /server/tests/unit/sqe-config-dynamic.test.ts
+
+import { SQE } from "../../core/signal-quality-evaluator";
+import db from "../../db";
+
+test("[11.0D] SQE dynamically responds to screener config", async () => {
+  await db.screener_filters.update({ final_score_min: 0.50, regime_weight_min: 0.40 });
+  const result = await SQE.evaluate({ finalScore: 0.45, regimeWeight: 0.35 });
+  expect(result.passed).toBe(false);
+});
+
+
+2️⃣ File: /server/tests/unit/execution-config.test.ts
+
+import { EXECUTION_CONFIG } from "../../config/execution-config";
+import { TEC } from "../../services/execution-controller";
+
+test("[11.0D] TEC uses centralized EXECUTION_CONFIG", () => {
+  const trade = { trendline: { reinforced: true }, positionSize: 100 };
+  const updated = TEC.updateAdaptiveSize(trade);
+  expect(updated).toBeCloseTo(100 * EXECUTION_CONFIG.ADAPTIVE_EXPAND_FACTOR);
+});
+
+
+3️⃣ File: /server/tests/integration/config-provenance.test.ts
+
+import request from "supertest";
+import app from "../../app";
+
+test("[11.0D] Diagnostics exposes configuration provenance", async () => {
+  const res = await request(app).get("/api/telemetry/summary");
+  expect(res.body.configProvenance.phaseDirective).toBe("11.0D");
+  expect(res.body.configProvenance.executionConfigVersion).toBeDefined();
+});
+
+
+✅ Confirms configuration propagation, SQE linkage, and diagnostics exposure.
+
+📊 Task 5 — Diagnostics Provenance Block
+
+File: /server/services/telemetry-aggregator.ts
+
+import { EXECUTION_CONFIG } from "../config/execution-config";
+
+summary.configProvenance = {
+  phaseDirective: "11.0D",
+  backendSchema: "v1.4.5",
+  executionConfigVersion: EXECUTION_CONFIG.VERSION,
+  screenerConfig: await storage.getScreenerConfigVersion()
+};
+
+
+File: /client/src/pages/goals/diagnostics.tsx
+Add below TEC configuration card:
+
+<Card className="p-4 mt-2">
+  <h2 className="text-md font-semibold">Configuration Provenance</h2>
+  <p className="text-sm text-muted-foreground">Runtime sources and schema versions</p>
+  <div className="grid grid-cols-2 gap-2 mt-2">
+    <div>Phase Directive: {data.configProvenance.phaseDirective}</div>
+    <div>Schema: {data.configProvenance.backendSchema}</div>
+    <div>Execution Config: {data.configProvenance.executionConfigVersion}</div>
+    <div>Screener Config: {data.configProvenance.screenerConfig}</div>
+  </div>
+</Card>
+
+
+✅ Displays the full configuration lineage in the Diagnostics tab.
+
+📘 Task 6 — Documentation Update
+/docs/replit.md
+Directive 11.0D — Production Hardening & Dynamic Threshold Validation
+• Removed legacy-metrics.ts and manual SQL patch.
+• Added Drizzle JSON migration metadata for reproducibility.
+• SQE backfill recalculates FinalScore/RegimeWeight dynamically.
+• Exposed configuration provenance in Diagnostics tab.
+• Added Vitest validation suite for configuration linkage.
+• Schema version bumped to v1.4.5.
+
+/docs/architecture.md
+
+Update excerpt:
+
+SQE → dynamically thresholds by ScreenerConfig (live recalculation if missing)
+TEC → reads EXECUTION_CONFIG (adaptive/trailing/risk unified)
+Diagnostics → shows both TEC parameters and Config Provenance
+
+✅ Final Expected State
+Component	Purpose	Validation
+SQE	Pure dynamic filtering	Verified via [11.0D][SQE_BACKFILL] logs
+TEC	Config-based adaptive/trailing	Telemetry + Tests confirmed
+Diagnostics	Transparent configuration lineage	Live UI block visible
+Schema	Drizzle-managed only	JSON migration confirmed
+Legacy Code	Removed	Verified no matches
+CI/CD	Manual SQL prevention enforced	Workflow check active
+Tests	Dynamic threshold + TEC linkage verified	All 32 tests passing
+🧩 Directive Enforcement Clause
+
+Implementation Discipline — Non-Negotiable
+Replit is to implement this directive exactly as specified with no additional modules, services, or improvisations.
+Any uncertainty must be paused and escalated for architectural confirmation before proceeding.
+
+✅ Summary
+
+Directive 11.0D finalizes the transition from cleanup to hardening:
+
+Removes all legacy and manual code.
+
+Restores dynamic metric scoring logic.
+
+Introduces formal Drizzle migration metadata.
+
+Adds Vitest verification suite for dynamic configuration linkage.
+
+Makes configuration provenance visible in Diagnostics.
+
+Locks schema enforcement through CI.
+
+After 11.0D, the entire trade control pipeline (SQE → TCL → TEC) will be fully deterministic, dynamic, and version-auditable.
