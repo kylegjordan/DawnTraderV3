@@ -43,7 +43,7 @@ import { centralClock, ClockTick } from '../../services/central-clock';
 import { performanceMonitor } from '../diagnostics/performance_monitor';
 import { normalizeInternal } from '../../markets/kraken-symbol-resolver';
 import { diagnosticTrace } from '../diagnostics/trace_service';
-import { fetchFreshMetrics, calculateDecayedMetric } from '../metrics/signal_metrics_calculator';
+// Directive 11.0E: fetchFreshMetrics/calculateDecayedMetric removed - using FinalScore-native logic
 import { getAdaptivePoolSize } from '../../services/adaptive-pool-config';
 import { poolBus } from '../../services/pool-broadcast';
 // Directive 10.9A: Math Core Harmonization - Version-tracked weights (inlined calculation)
@@ -75,6 +75,9 @@ export interface RTBSignalInput {
 /**
  * Phase 8.8.4-C.5: SQE-qualified signal input for unified RTB pool
  * All signals that pass SQE go directly into the pool regardless of capacity
+ * 
+ * DIRECTIVE 11.0E: Legacy metrics (ngc, cwqi, profitRate) are DEPRECATED
+ * Use finalScore, confidence, regimeWeight, decayPenalty instead
  */
 export interface SQESignalInput {
   signalId: string;
@@ -87,12 +90,12 @@ export interface SQESignalInput {
   quantity?: number;
   notional?: number;
   confidence: number;
-  ngc: number;
-  riskScore: number;
-  expectedReturn?: number;
-  profitRate: number;
-  cwqi: number;
-  finalScore?: number; // Directive 10.9: Unified scoring metric (replaces NGC/CWQI for ranking)
+  finalScore: number; // Directive 11.0E: PRIMARY ranking metric
+  regimeWeight?: number; // Directive 11.0E: Market regime alignment
+  decayPenalty?: number; // Directive 11.0E: Freshness penalty (replaces CWQI decay)
+  hybridScore?: number; // Directive 11.0E: Combined quant+pattern score
+  trendStrength?: number; // Directive 11.0E: For regime calculation
+  volatility?: number; // Directive 11.0E: For regime calculation
   atr?: number;
   currentPrice?: number; // Directive 8.8.4-C.14.B: Market price at queue time
   volume24h?: number | null; // Directive 8.8.4-C.14.B: 24h USD volume (NULL if not in FX5 pool)
@@ -103,7 +106,7 @@ export interface SQESignalInput {
 export interface RTBQueueStats {
   mode: TradingMode;
   totalQueued: number;
-  avgCWQI: number;
+  avgFinalScore: number; // Directive 11.0E: Replaced avgCWQI
   oldestSignalAge: number; // seconds
   byStrategy: Record<string, number>;
   byBlockReason: Record<string, number>;
@@ -128,59 +131,49 @@ const TCL_WARMUP_THRESHOLD = parseInt(process.env.TCL_SIGNAL_THRESHOLD || '15', 
 // Directive 8.8.4-A3.R2: TCL failsafe (reduced to 2 minutes)
 const TCL_FAILSAFE_MS = 2 * 60 * 1000; // 2 minutes
 
-// Directive 8.8.4-A3.R2: CWQI floor to prevent decay cascade
-const CWQI_FLOOR = 0.05;
-
-// Directive 8.8.4-A3.R1: CWQI decay rate is configurable via environment variable
-// Default: 0.03 per minute (λ = 0.03/min)
-const rawDecayRate = parseFloat(process.env.CWQI_DECAY_RATE || '0.03');
-const CWQI_DECAY_LAMBDA = isNaN(rawDecayRate) ? 0.03 : rawDecayRate;
-console.log(`[8.8.4-A3.R1][CONFIG] CWQI_DECAY_RATE=${CWQI_DECAY_LAMBDA} (per minute)`);
+// Directive 11.0E: FinalScore decay configuration (replaces legacy CWQI decay)
+// Decay rate λ = 0.03/min means a signal loses ~3% of its freshness bonus per minute
+const FINALSCORE_DECAY_LAMBDA = parseFloat(process.env.FINALSCORE_DECAY_RATE || '0.03');
+console.log(`[11.0E][CONFIG] FINALSCORE_DECAY_LAMBDA=${FINALSCORE_DECAY_LAMBDA} (per minute)`);
 
 /**
- * Directive 8.8.4-A3.R9.2-A: Calculate decayed CWQI with decay BEFORE normalization
+ * Directive 11.0E: Calculate decay penalty for FinalScore
  * 
- * CORRECTED ORDER (per R9.2-A):
- * 1. Apply decay to raw value FIRST
- * 2. Then apply floor clamping
+ * Decay is applied as a penalty subtracted from FinalScore (not multiplicative)
+ * This creates a gentle aging effect that prioritizes fresher signals
  * 
- * This prevents upward bias in NGC/CWQI clustering at 0.75-0.8
+ * Formula: decayPenalty = λ × ageMinutes (linear, simple)
+ * Capped at 0.10 to prevent excessive freshness bias
  * 
- * @param originalCWQI - The original CWQI value (raw, before normalization)
  * @param queuedAt - Timestamp when signal was queued
  * @param symbol - Optional symbol for diagnostic logging
- * @returns Decayed CWQI value (minimum CWQI_FLOOR)
+ * @returns Decay penalty value [0, 0.10]
  */
-export function calculateDecayedCWQI(originalCWQI: number, queuedAt: Date | string, symbol?: string): number {
+export function calculateDecayPenalty(queuedAt: Date | string, symbol?: string): number {
   const ageMs = Date.now() - new Date(queuedAt).getTime();
   const ageMinutes = ageMs / (60 * 1000);
   
-  const preDecay = originalCWQI;
+  // Linear decay penalty: λ * ageMinutes, capped at 0.10
+  // This creates a gentle freshness preference without over-penalizing older signals
+  const rawPenalty = FINALSCORE_DECAY_LAMBDA * ageMinutes;
+  const cappedPenalty = Math.min(rawPenalty, 0.10);
   
-  // Step 1: Apply decay FIRST (R9.2-A)
-  const decayFactor = Math.exp(-CWQI_DECAY_LAMBDA * ageMinutes);
-  let decayedCWQI = originalCWQI * decayFactor;
-  
-  // Step 2: Apply floor
-  decayedCWQI = Math.max(decayedCWQI, CWQI_FLOOR);
-  
-  // Step 3: Normalize to [0,1] range AFTER decay (R9.2-A)
-  const normalizedCWQI = Math.max(0, Math.min(1, decayedCWQI));
-  
-  if (symbol) {
+  if (symbol && rawPenalty > 0.01) {
     console.log(
-      `[A3.R9.2][DECAY_THEN_NORMALIZE] symbol=${symbol} raw=${preDecay.toFixed(4)} decayed=${decayedCWQI.toFixed(4)} normalized=${normalizedCWQI.toFixed(4)} ageMin=${ageMinutes.toFixed(1)}`
+      `[11.0E][DECAY_PENALTY] symbol=${symbol} ageMin=${ageMinutes.toFixed(1)} rawPenalty=${rawPenalty.toFixed(4)} cappedPenalty=${cappedPenalty.toFixed(4)}`
     );
   }
   
-  return Math.round(normalizedCWQI * 10000) / 10000;
+  return Math.round(cappedPenalty * 10000) / 10000;
 }
 
 /**
- * Phase C: Get CWQI decay factor for a given age
+ * Directive 11.0E: Get FinalScore decay factor (for compatibility)
+ * Returns 1 - decayPenalty for cases where multiplicative decay is needed
  */
-export function getCWQIDecayFactor(ageMinutes: number): number {
-  return Math.exp(-CWQI_DECAY_LAMBDA * ageMinutes);
+export function getFinalScoreDecayFactor(ageMinutes: number): number {
+  const penalty = Math.min(FINALSCORE_DECAY_LAMBDA * ageMinutes, 0.10);
+  return 1 - penalty;
 }
 
 /**
@@ -527,34 +520,31 @@ class ReadyToBuyService {
   }
 
   /**
-   * Directive 8.8.4-A3.R9.3: Refresh a single signal through SQE revalidation
+   * Directive 11.0E: Refresh a single signal using FinalScore-native logic
+   * Legacy CWQI/NGC metrics removed, replaced with FinalScore/decayPenalty
    */
   private async refreshSingleSignal(signal: RtbSignal, mode: TradingMode): Promise<{ passed: boolean }> {
     const normalizedSymbol = normalizePairKey(signal.symbol);
     const now = new Date();
     
-    // Get metrics for revalidation
+    // Directive 11.0E: Extract FinalScore-native metrics from signal
     const metadata = signal.metadata as Record<string, any> || {};
-    const trueOriginalCWQI = metadata.originalCwqi 
-      ? parseFloat(metadata.originalCwqi) 
-      : parseFloat(signal.cwqi || '0');
+    const confidence = parseFloat(signal.confidence || '0.5');
+    const originalFinalScore = metadata.finalScore ?? parseFloat(signal.finalScore || '0.5');
+    const hybridScore = metadata.hybridScore ?? confidence;
+    const regimeWeight = metadata.regimeWeight ?? 0.5;
     
-    const cachedMetrics = {
-      ngc: parseFloat(signal.ngc || signal.confidence || '0'),
-      cwqi: trueOriginalCWQI,
-      profitRate: signal.expectedReturn ? parseFloat(signal.expectedReturn) : 0.15,
-      riskScore: parseFloat(signal.riskScore || '0.5')
-    };
+    // Directive 11.0E: Calculate decay penalty based on signal age
+    const decayPenalty = calculateDecayPenalty(signal.queuedAt, normalizedSymbol);
     
-    // Fetch fresh metrics
-    const freshMetrics = await fetchFreshMetrics(normalizedSymbol, signal.strategy, cachedMetrics);
-    const ngc = freshMetrics.refreshed ? freshMetrics.ngc : cachedMetrics.ngc;
-    const riskScore = freshMetrics.refreshed ? freshMetrics.riskScore : cachedMetrics.riskScore;
-    const profitRate = freshMetrics.refreshed ? freshMetrics.profitRate : cachedMetrics.profitRate;
-    const cwqiForEval = freshMetrics.refreshed ? freshMetrics.cwqi : trueOriginalCWQI;
-    
-    // Apply CWQI decay
-    const decayedCWQI = calculateDecayedCWQI(trueOriginalCWQI, signal.queuedAt, normalizedSymbol);
+    // Directive 11.0E: Recalculate FinalScore with decay applied
+    const W = SCORE_WEIGHTS.FINAL_SCORE;
+    const refreshedFinalScore = Math.max(0, Math.min(1,
+      (hybridScore ?? 0) * W.HYBRID +
+      (confidence ?? 0) * W.CONFIDENCE +
+      (regimeWeight ?? 0) * W.REGIME -
+      (decayPenalty ?? 0) * W.DECAY
+    ));
     
     // Directive 11.0E: SQE revalidation with FinalScore/RegimeWeight only
     const sqeInput: SQEInput = {
@@ -562,41 +552,39 @@ class ReadyToBuyService {
       symbol: normalizedSymbol,
       strategy: signal.strategy,
       mode,
-      confidence: ngc, // Directive 11.0E: confidence replaces NGC
-      trendStrength: 0.5,
-      volatility: 0.3,
+      confidence: confidence,
+      trendStrength: metadata.trendStrength ?? 0.5,
+      volatility: metadata.volatility ?? 0.3,
     };
     
     const sqeResult = await signalQualityEvaluator.evaluate(sqeInput);
     
     if (!sqeResult.passed) {
-      // R9.3-C: Lifecycle governed by SQE, not TTL
       await storage.deleteRtbSignals({ mode, id: signal.id });
       performanceMonitor.recordQueueRemove(1);
       console.log(`[11.0E][REFRESH_COMPLETE] symbol=${normalizedSymbol} DELETED reason=${sqeResult.reason}`);
       
-      // Clean up signal state
       this.signalRefreshStates.delete(signal.signalId);
       return { passed: false };
     }
     
-    // Update signal with fresh metrics
+    // Directive 11.0E: Update signal with FinalScore-native metrics
     await storage.updateRtbSignal(signal.id, {
       status: 'reconfirmed',
-      cwqi: decayedCWQI.toString(),
-      ngc: ngc.toString(),
-      riskScore: riskScore.toString(),
-      expectedReturn: profitRate.toString(),
+      confidence: confidence.toString(),
+      finalScore: refreshedFinalScore.toString(),
       lastRefreshedAt: now,
       metadata: {
         ...metadata,
         lastReconfirmedAt: now.toISOString(),
-        originalCwqi: trueOriginalCWQI.toString(),
-        freshMetricsApplied: freshMetrics.refreshed
+        originalFinalScore: originalFinalScore.toString(),
+        decayPenalty: decayPenalty,
+        hybridScore: hybridScore,
+        regimeWeight: regimeWeight,
       }
     });
     
-    console.log(`[A3.R9.3][REFRESH_COMPLETE] symbol=${normalizedSymbol} RECONFIRMED CWQI=${decayedCWQI.toFixed(4)}`);
+    console.log(`[11.0E][REFRESH_COMPLETE] symbol=${normalizedSymbol} RECONFIRMED FinalScore=${refreshedFinalScore.toFixed(4)} decayPenalty=${decayPenalty.toFixed(4)}`);
     return { passed: true };
   }
 
@@ -650,16 +638,15 @@ class ReadyToBuyService {
   }
 
   /**
-   * Directive 8.8.4-A3.R9.0: Refresh and dynamically re-rank RTB signals
-   * Directive 8.8.4-A4.R10R-3.R3: Bucket optimization - only process bucket signals
+   * Directive 11.0E: Refresh and dynamically re-rank RTB signals using FinalScore
    * 
    * Per-signal rolling TTL refresh (30s per signal):
    * 1. Check individual signal expiry based on its own TTL
-   * 2. Recalculate CWQI with decay for each signal (fresher signals rank higher)
-   * 3. Apply CWQI floor clamping to prevent decay cascade
-   * 4. Re-validate signals through SQE
+   * 2. Calculate decayPenalty based on signal age (fresher signals rank higher)
+   * 3. Recalculate FinalScore with decay applied
+   * 4. Re-validate signals through SQE (FinalScore/RegimeWeight only)
    * 5. Immediate deletion on SQE failure
-   * 6. Update status to 'reconfirmed' on successful refresh with statusUpdatedAt
+   * 6. Update status to 'reconfirmed' on successful refresh with FinalScore-native metrics
    * 7. Broadcast rtb:updated to clients for UI refresh
    * 
    * @param mode - Trading mode ('paper' or 'live')
@@ -745,35 +732,30 @@ class ReadyToBuyService {
         await Promise.all(
           group.map(async (signal) => {
             try {
-              // Directive A3.R9.0.C: Normalize symbol for consistent comparisons
+              // Directive 11.0E: Normalize symbol for consistent comparisons
               const normalizedSymbol = normalizePairKey(signal.symbol);
               
-              // Directive A3.R8.2 FIX: Use TRUE original CWQI from metadata
+              // Directive 11.0E: Extract FinalScore-native metrics
               const metadata = signal.metadata as Record<string, any> || {};
-              const trueOriginalCWQI = metadata.originalCwqi 
-                ? parseFloat(metadata.originalCwqi) 
-                : parseFloat(signal.cwqi || '0');
+              const confidence = parseFloat(signal.confidence || '0.5');
+              const originalFinalScore = metadata.finalScore ?? parseFloat(signal.finalScore || '0.5');
+              const hybridScore = metadata.hybridScore ?? confidence;
+              const regimeWeight = metadata.regimeWeight ?? 0.5;
               
               const queuedAt = signal.queuedAt;
               const oldStatus = signal.status || 'active';
               
-              // Apply CWQI decay
-              const decayedCWQI = calculateDecayedCWQI(trueOriginalCWQI, queuedAt, normalizedSymbol);
+              // Directive 11.0E: Calculate decay penalty (replaces CWQI decay)
+              const decayPenalty = calculateDecayPenalty(queuedAt, normalizedSymbol);
               
-              // Fetch fresh metrics
-              const cachedMetrics = {
-                ngc: parseFloat(signal.ngc || signal.confidence || '0'),
-                cwqi: trueOriginalCWQI,
-                profitRate: signal.expectedReturn ? parseFloat(signal.expectedReturn) : 0.15,
-                riskScore: parseFloat(signal.riskScore || '0.5')
-              };
-              
-              const freshMetrics = await fetchFreshMetrics(normalizedSymbol, signal.strategy, cachedMetrics);
-              
-              const ngc = freshMetrics.refreshed ? freshMetrics.ngc : cachedMetrics.ngc;
-              const riskScore = freshMetrics.refreshed ? freshMetrics.riskScore : cachedMetrics.riskScore;
-              const profitRate = freshMetrics.refreshed ? freshMetrics.profitRate : cachedMetrics.profitRate;
-              const cwqiForEval = freshMetrics.refreshed ? freshMetrics.cwqi : trueOriginalCWQI;
+              // Directive 11.0E: Recalculate FinalScore with decay applied
+              const W = SCORE_WEIGHTS.FINAL_SCORE;
+              const refreshedFinalScore = Math.max(0, Math.min(1,
+                (hybridScore ?? 0) * W.HYBRID +
+                (confidence ?? 0) * W.CONFIDENCE +
+                (regimeWeight ?? 0) * W.REGIME -
+                (decayPenalty ?? 0) * W.DECAY
+              ));
               
               // Directive 11.0E: SQE revalidation with FinalScore/RegimeWeight only
               const sqeInput: SQEInput = {
@@ -781,9 +763,9 @@ class ReadyToBuyService {
                 symbol: normalizedSymbol,
                 strategy: signal.strategy,
                 mode,
-                confidence: ngc, // Directive 11.0E: confidence replaces NGC
-                trendStrength: 0.5,
-                volatility: 0.3,
+                confidence: confidence,
+                trendStrength: metadata.trendStrength ?? 0.5,
+                volatility: metadata.volatility ?? 0.3,
               };
               
               const sqeResult = await signalQualityEvaluator.evaluate(sqeInput);
@@ -791,51 +773,34 @@ class ReadyToBuyService {
               if (!sqeResult.passed) {
                 console.log(`[11.0E][SQE_REVALIDATION_FAIL] symbol=${normalizedSymbol} reason=${sqeResult.reason}`);
                 this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'deleted', 'SQE_failure');
-                this.logSqeRejection(signal, sqeResult.reason || 'unknown', ngc, cwqiForEval);
+                this.logSqeRejection(signal, sqeResult.reason || 'unknown', confidence, refreshedFinalScore);
                 bulkDeletes.push(signal.id);
                 expiredCount++;
                 return;
               }
               
-              // Directive 10.9A: Inline FinalScore calculation using centralized weights
-              const ageMinutes = (now.getTime() - new Date(queuedAt).getTime()) / 60000;
-              const decayPenalty = Math.max(0, 1 - Math.exp(-0.03 * ageMinutes)); // Same decay as CWQI
-              const W = SCORE_WEIGHTS.FINAL_SCORE;
-              const hybridScoreVal = metadata.hybridScore ?? ngc;
-              const regimeWeightVal = metadata.regimeWeight ?? 0.5;
-              const refreshedFinalScore = Math.max(0, Math.min(1,
-                (hybridScoreVal ?? 0) * W.HYBRID +
-                (ngc ?? 0) * W.CONFIDENCE +
-                (regimeWeightVal ?? 0) * W.REGIME -
-                (decayPenalty ?? 0) * W.DECAY
-              ));
-              
-              // Queue update for batch write
+              // Directive 11.0E: Queue update with FinalScore-native metrics
               bulkUpdates.push({
                 id: signal.id,
                 updates: {
                   status: 'reconfirmed',
-                  cwqi: decayedCWQI.toString(),
-                  ngc: ngc.toString(),
-                  riskScore: riskScore.toString(),
-                  expectedReturn: profitRate.toString(),
+                  confidence: confidence.toString(),
+                  finalScore: refreshedFinalScore.toString(),
                   lastRefreshedAt: now,
                   metadata: {
                     ...metadata,
                     lastReconfirmedAt: statusUpdatedAt,
                     statusUpdatedAt,
-                    originalCwqi: trueOriginalCWQI.toString(),
-                    decayApplied: true,
-                    freshMetricsApplied: freshMetrics.refreshed,
-                    refreshTimestamp: freshMetrics.timestamp,
-                    finalScore: refreshedFinalScore, // Directive 10.9: Store for ranking
-                    decayPenalty, // Track for debugging
+                    originalFinalScore: originalFinalScore.toString(),
+                    hybridScore: hybridScore,
+                    regimeWeight: regimeWeight,
+                    decayPenalty: decayPenalty,
                   }
                 }
               });
               
               this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'reconfirmed', 'refresh');
-              console.log(`[A3.R9.2][RECONFIRM_COMPLETE] pair=${normalizedSymbol} ${oldStatus}→reconfirmed CWQI=${decayedCWQI.toFixed(4)} finalScore=${refreshedFinalScore.toFixed(4)}`);
+              console.log(`[11.0E][RECONFIRM_COMPLETE] pair=${normalizedSymbol} ${oldStatus}→reconfirmed FinalScore=${refreshedFinalScore.toFixed(4)} decayPenalty=${decayPenalty.toFixed(4)}`);
               reconfirmedCount++;
             } catch (err) {
               console.error(`[T3][SIGNAL_PROCESS_ERROR] signal=${signal.id}:`, err);

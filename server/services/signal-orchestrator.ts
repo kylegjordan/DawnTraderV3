@@ -296,12 +296,12 @@ export class SignalOrchestrator {
    * Phase 8.8.4-B.1: Apply SQE quality filter
    * Phase 8.8.4-B.3: Correct flow order - Sizing → Metrics → SQE
    */
-  private buildSizedSignalForStrategy(
+  private async buildSizedSignalForStrategy(
     rawSignal: StrategySignal | null,
     strategyId: StrategyType,
     sizingContext: SizingContext,
     marketContext?: { high24h?: number; low24h?: number; atr?: number }
-  ): SizedStrategySignal | null {
+  ): Promise<SizedStrategySignal | null> {
     if (!rawSignal) return null;
     
     // Phase 8.8.4-A: Generate unique signal ID for lifecycle tracking
@@ -387,14 +387,15 @@ export class SignalOrchestrator {
       low24h: marketContext?.low24h,
     });
 
-    console.log(`[B.3][METRICS] ${rawSignal.symbol}/${strategyId}: NGC=${extendedMetrics.ngc.toFixed(4)}, CWQI=${extendedMetrics.cwqi.toFixed(4)}, ProfitRate=${extendedMetrics.profitRate.toFixed(4)}`);
+    console.log(`[11.0E][METRICS] ${rawSignal.symbol}/${strategyId}: confidence=${extendedMetrics.ngc.toFixed(4)}, volatility=${(extendedMetrics.volatility ?? 0.3).toFixed(4)}`);
 
-    // Directive 8.8.4-L3: ML-enhanced predictions (non-blocking fire-and-forget)
+    // Directive 11.0E: ML-enhanced predictions (non-blocking fire-and-forget)
+    // Note: ML service still accepts ngc/cwqi for backward compatibility during transition
     const mlInput: PredictionInput = {
       symbol: rawSignal.symbol,
       strategy: strategyId,
-      ngc: extendedMetrics.ngc,
-      cwqi: extendedMetrics.cwqi,
+      ngc: extendedMetrics.ngc, // Directive 11.0E: transitional - confidence value
+      cwqi: extendedMetrics.cwqi, // Directive 11.0E: transitional - kept for ML backward compat
       riskRatio: extendedMetrics.riskScore,
       profitTarget: extendedMetrics.profitRate,
       signalAge: 0,
@@ -409,20 +410,20 @@ export class SignalOrchestrator {
       predictProfit(mlInput)
     ]).then(([promotionResult, profitResult]) => {
       if (promotionResult.success && profitResult.success) {
-        const blendedNGC = blendConfidence(extendedMetrics.ngc, promotionResult.probability, 0.6);
-        console.log(`[L3][MODEL_INFER] ${rawSignal.symbol}/${strategyId}: promotion=${promotionResult.probability.toFixed(4)}, profit=${profitResult.predicted_profit.toFixed(4)}, blendedNGC=${blendedNGC.toFixed(4)}`);
+        const blendedConfidence = blendConfidence(extendedMetrics.ngc, promotionResult.probability, 0.6);
+        console.log(`[L3][MODEL_INFER] ${rawSignal.symbol}/${strategyId}: promotion=${promotionResult.probability.toFixed(4)}, profit=${profitResult.predicted_profit.toFixed(4)}, blendedConfidence=${blendedConfidence.toFixed(4)}`);
       }
     }).catch(() => {});
 
-    // Directive 8.8.4-A3.R9.0.D: Trace raw metrics before SQE evaluation
+    // Directive 11.0E: Trace raw metrics before SQE evaluation (FinalScore-native)
     diagnosticTrace.traceOrchestrator(
       rawSignal.symbol,
       strategyId,
       {
-        ngc: extendedMetrics.ngc,
-        cwqi: extendedMetrics.cwqi,
-        profit: extendedMetrics.profitRate,
-        risk: extendedMetrics.riskScore,
+        confidence: extendedMetrics.ngc, // Directive 11.0E: renamed from ngc
+        volatility: extendedMetrics.volatility ?? 0.3,
+        trendStrength: 0.5, // Default for legacy signals
+        entryPrice: rawSignal.entryPrice,
       },
       false // not yet normalized by SQE
     );
@@ -479,6 +480,7 @@ export class SignalOrchestrator {
     ));
     console.log(`[10.9A][FinalScore] symbol=${rawSignal.symbol} finalScore=${signalFinalScore.toFixed(4)} version=${SCORE_WEIGHTS_VERSION}`);
     
+    // Directive 11.0E: Use FinalScore-native interface (legacy ngc/cwqi/profitRate removed)
     const sqeSignalInput: SQESignalInput = {
       signalId,
       mode: sizingContext.mode,
@@ -489,12 +491,13 @@ export class SignalOrchestrator {
       targetPrice: rawSignal.targetPrice,
       quantity: sizingResult.quantity,
       notional: sizingResult.estimatedValue,
-      confidence: extendedMetrics.ngc,
-      ngc: extendedMetrics.ngc,
-      riskScore: extendedMetrics.riskScore,
-      profitRate: extendedMetrics.profitRate,
-      cwqi: extendedMetrics.cwqi,
-      finalScore: signalFinalScore, // Directive 10.9: Unified scoring metric
+      confidence: confidence, // Directive 11.0E: Use calculated confidence (not NGC)
+      finalScore: signalFinalScore, // Directive 11.0E: PRIMARY ranking metric
+      regimeWeight: regimeWeight, // Directive 11.0E: Market regime alignment
+      hybridScore: hybridScore, // Directive 11.0E: Combined quant+pattern score
+      decayPenalty: decayPenalty, // Directive 11.0E: Freshness penalty (0 for new signals)
+      trendStrength: 0.5, // Directive 11.0E: Default for legacy signals, TODO: calculate from market data
+      volatility: extendedMetrics.volatility ?? 0.3, // Directive 11.0E: From market context
       currentPrice: rawSignal.entryPrice, // Directive 8.8.4-C.14.B: Use entry price as current market price
       volume24h: activeFilterPool.getFX5DataForSymbol(rawSignal.symbol, sizingContext.mode)?.volume24h ?? null, // Directive 8.8.4-C.14.B: FX5 data only, NULL if not found
       metadata: {
@@ -517,27 +520,25 @@ export class SignalOrchestrator {
     // See: server/services/vts-runner.ts → runAutonomousSimulation()
     // DEPRECATED: captureSignalForVTS() no longer called from signal orchestrator
 
-    // Phase 8.8.4-B.3: Build sized signal with extended metrics
-    // NGC replaces raw confidence as the single source of truth
+    // Directive 11.0E: Build sized signal with FinalScore-native metrics
     const sizedSignal: SizedStrategySignal = {
       ...rawSignal,
       quantity: sizingResult.quantity,
       estimatedValue: sizingResult.estimatedValue,
       preComputedNotional: sizingResult.estimatedValue,
       signalId,
-      // B.3: NGC is the SINGLE source of confidence (replaces raw confidence)
-      confidence: extendedMetrics.ngc,
-      ngc: extendedMetrics.ngc,
-      riskScore: extendedMetrics.riskScore,
+      // Directive 11.0E: Confidence is the primary quality metric
+      confidence: confidence,
+      finalScore: signalFinalScore,
+      regimeWeight: regimeWeight,
+      hybridScore: hybridScore,
       volatility: extendedMetrics.volatility,
       expectedDuration: extendedMetrics.expectedDuration,
-      profitRate: extendedMetrics.profitRate,
-      cwqi: extendedMetrics.cwqi,
     };
 
-    console.log(`[B.3][SIZED_SIGNAL] ${rawSignal.symbol}/${strategyId}: qty=${sizingResult.quantity.toFixed(8)}, value=$${sizingResult.estimatedValue.toFixed(2)}, NGC=${extendedMetrics.ngc.toFixed(4)}, CWQI=${extendedMetrics.cwqi.toFixed(4)}`);
+    console.log(`[11.0E][SIZED_SIGNAL] ${rawSignal.symbol}/${strategyId}: qty=${sizingResult.quantity.toFixed(8)}, value=$${sizingResult.estimatedValue.toFixed(2)}, FinalScore=${signalFinalScore.toFixed(4)}`);
 
-    // Directive 8.8.4-L1.R1: Capture pricing and risk metrics for learning dataset
+    // Directive 11.0E: Capture pricing and risk metrics for learning dataset (FinalScore-native)
     dataAggregator.capture('PRICE_CALC', {
       symbol: rawSignal.symbol,
       strategy: strategyId,
@@ -545,10 +546,10 @@ export class SignalOrchestrator {
       exit: rawSignal.targetPrice,
       stop: rawSignal.stopPrice,
       spread: (rawSignal as any).spread ?? null,
-      profitTarget: extendedMetrics.profitRate ?? null,
-      riskRatio: extendedMetrics.riskScore ?? null,
-      ngc: extendedMetrics.ngc,
-      cwqi: extendedMetrics.cwqi,
+      finalScore: signalFinalScore, // Directive 11.0E: PRIMARY metric
+      confidence: confidence,
+      regimeWeight: regimeWeight,
+      volatility: extendedMetrics.volatility,
     }).catch(() => {});
 
     return sizedSignal;
@@ -788,7 +789,7 @@ export class SignalOrchestrator {
         const rawSignal = this.strategyEngine.detectVWAPPullback(indicators, settings, ohlcAsAny);
         if (rawSignal) {
           rawSignal.symbol = symbol;
-          const sizedSignal = this.buildSizedSignalForStrategy(rawSignal, 'vwap_pullback', sizingContext);
+          const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'vwap_pullback', sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
         }
       }
@@ -797,7 +798,7 @@ export class SignalOrchestrator {
         const rawSignal = this.strategyEngine.detectABCDLong(ohlcAsAny, settings);
         if (rawSignal) {
           rawSignal.symbol = symbol;
-          const sizedSignal = this.buildSizedSignalForStrategy(rawSignal, 'abcd_long', sizingContext);
+          const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'abcd_long', sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
         }
       }
@@ -806,7 +807,7 @@ export class SignalOrchestrator {
         const rawSignal = this.strategyEngine.detectSMATrendRide(indicators, ohlcAsAny, settings);
         if (rawSignal) {
           rawSignal.symbol = symbol;
-          const sizedSignal = this.buildSizedSignalForStrategy(rawSignal, 'sma_trend_ride', sizingContext);
+          const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'sma_trend_ride', sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
         }
       }
@@ -821,7 +822,7 @@ export class SignalOrchestrator {
         });
         if (rawSignal) {
           rawSignal.symbol = symbol;
-          const sizedSignal = this.buildSizedSignalForStrategy(rawSignal, 'breakout', sizingContext);
+          const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'breakout', sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
         }
       }
@@ -836,7 +837,7 @@ export class SignalOrchestrator {
         });
         if (rawSignal) {
           rawSignal.symbol = symbol;
-          const sizedSignal = this.buildSizedSignalForStrategy(rawSignal, 'mean_reversion', sizingContext);
+          const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'mean_reversion', sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
         }
       }
@@ -851,7 +852,7 @@ export class SignalOrchestrator {
         });
         if (rawSignal) {
           rawSignal.symbol = symbol;
-          const sizedSignal = this.buildSizedSignalForStrategy(rawSignal, 'range_trading', sizingContext);
+          const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'range_trading', sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
         }
       }
@@ -866,7 +867,7 @@ export class SignalOrchestrator {
         });
         if (rawSignal) {
           rawSignal.symbol = symbol;
-          const sizedSignal = this.buildSizedSignalForStrategy(rawSignal, 'vwap_bounce', sizingContext);
+          const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'vwap_bounce', sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
         }
       }
@@ -881,7 +882,7 @@ export class SignalOrchestrator {
         });
         if (rawSignal) {
           rawSignal.symbol = symbol;
-          const sizedSignal = this.buildSizedSignalForStrategy(rawSignal, 'liquidity_trap', sizingContext);
+          const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'liquidity_trap', sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
         }
       }
@@ -899,7 +900,7 @@ export class SignalOrchestrator {
         });
         if (rawSignal) {
           rawSignal.symbol = symbol;
-          const sizedSignal = this.buildSizedSignalForStrategy(rawSignal, 'dhma', sizingContext);
+          const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'dhma', sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
         }
       }
@@ -984,7 +985,7 @@ export class SignalOrchestrator {
         };
         
         // Size the pattern signal (use 'breakout' as base strategy type for sizing)
-        const sizedPatternSignal = this.buildSizedSignalForStrategy(rawPatternSignal as any, 'breakout' as StrategyType, sizingContext);
+        const sizedPatternSignal = await this.buildSizedSignalForStrategy(rawPatternSignal as any, 'breakout' as StrategyType, sizingContext);
         if (sizedPatternSignal) {
           // Tag with PATTERN signalType
           (sizedPatternSignal as any).signalType = 'PATTERN';
@@ -1040,7 +1041,7 @@ export class SignalOrchestrator {
             }
           };
           
-          const sizedHybridSignal = this.buildSizedSignalForStrategy(rawHybridSignal as any, hybrid.strategy as StrategyType, sizingContext);
+          const sizedHybridSignal = await this.buildSizedSignalForStrategy(rawHybridSignal as any, hybrid.strategy as StrategyType, sizingContext);
           if (sizedHybridSignal) {
             (sizedHybridSignal as any).signalType = 'HYBRID';
             (sizedHybridSignal as any).hybridScore = hybrid.hybridScore;
