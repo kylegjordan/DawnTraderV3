@@ -65,6 +65,8 @@ import { cascadingScan } from './multi-timeframe-scanner.js';
 import { TIMEFRAME_CONFIG } from '../config/system-guards.js';
 // Directive 10.9A: Math Core Harmonization - Version-tracked weights
 import { SCORE_WEIGHTS, SCORE_WEIGHTS_VERSION } from '../config/score-weights.config.js';
+// Directive 11.3A: Net Expectancy Standardization - Canonical Cost Model
+import { getCachedCostMetrics, computeNetGeometry, computeTotalRoundTripCost } from '../core/math/cost-model.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -93,6 +95,10 @@ interface SizedStrategySignal extends StrategySignal {
   expectedDuration?: number; // Expected hold time in minutes
   profitRate?: number;    // Profit per time unit
   cwqi?: number;          // Confidence-Weighted Quality Index
+  // Directive 11.3A: Net Expectancy fields
+  netExpectedEdge?: number;    // Net profit after costs
+  netRewardToRisk?: number;    // Net R:R after costs
+  totalRoundTripCost?: number; // Total costs (fee + slippage + spread)
 }
 
 interface SizingContext {
@@ -520,6 +526,18 @@ export class SignalOrchestrator {
     // See: server/services/vts-runner.ts → runAutonomousSimulation()
     // DEPRECATED: captureSignalForVTS() no longer called from signal orchestrator
 
+    // Directive 11.3A: Compute net geometry with cost-aware adjustments
+    const costMetrics = getCachedCostMetrics(rawSignal.symbol);
+    const netGeometry = computeNetGeometry(
+      rawSignal.entryPrice,
+      rawSignal.stopPrice,
+      rawSignal.targetPrice ?? rawSignal.entryPrice * 1.015,
+      costMetrics
+    );
+    const totalCost = computeTotalRoundTripCost(costMetrics.fee, costMetrics.slippage, costMetrics.spread);
+    
+    console.log(`[11.3A][NET_GEOMETRY] ${rawSignal.symbol}/${strategyId}: netEdge=${(netGeometry.netExpectedEdge * 100).toFixed(3)}%, netRR=${netGeometry.netRewardToRisk.toFixed(2)}, totalCost=${(totalCost * 100).toFixed(3)}%`);
+
     // Directive 11.0E: Build sized signal with FinalScore-native metrics
     const sizedSignal: SizedStrategySignal = {
       ...rawSignal,
@@ -534,22 +552,31 @@ export class SignalOrchestrator {
       hybridScore: hybridScore,
       volatility: extendedMetrics.volatility,
       expectedDuration: extendedMetrics.expectedDuration,
+      // Directive 11.3A: Net expectancy fields
+      netExpectedEdge: netGeometry.netExpectedEdge,
+      netRewardToRisk: netGeometry.netRewardToRisk,
+      totalRoundTripCost: totalCost,
     };
 
     console.log(`[11.0E][SIZED_SIGNAL] ${rawSignal.symbol}/${strategyId}: qty=${sizingResult.quantity.toFixed(8)}, value=$${sizingResult.estimatedValue.toFixed(2)}, FinalScore=${signalFinalScore.toFixed(4)}`);
 
     // Directive 11.0E: Capture pricing and risk metrics for learning dataset (FinalScore-native)
+    // Directive 11.3A: Enhanced with net expectancy metrics
     dataAggregator.capture('PRICE_CALC', {
       symbol: rawSignal.symbol,
       strategy: strategyId,
       entry: rawSignal.entryPrice,
       exit: rawSignal.targetPrice,
       stop: rawSignal.stopPrice,
-      spread: (rawSignal as any).spread ?? null,
+      spread: costMetrics.spread,
       finalScore: signalFinalScore, // Directive 11.0E: PRIMARY metric
       confidence: confidence,
       regimeWeight: regimeWeight,
       volatility: extendedMetrics.volatility,
+      // Directive 11.3A: Net expectancy fields
+      netExpectedEdge: netGeometry.netExpectedEdge,
+      netRewardToRisk: netGeometry.netRewardToRisk,
+      totalRoundTripCost: totalCost,
     }).catch(() => {});
 
     return sizedSignal;

@@ -33,6 +33,8 @@ import { activeFilterPool } from './active-filter-pool.js';
 import { calculateCWQI, calculateNGC, estimateVolatility, calculateRiskScore, calculateExpectedReturn, getAdaptiveRelevance } from '../core/metrics/quality_index.js';
 import { computeStrategyWeights, getWeightSync } from '../utils/strategyWeights.js';
 import { computeExposureBias, getExposureMultiplierSync } from '../utils/strategyBias.js';
+// Directive 11.3A: Net Expectancy Standardization - Canonical Cost Model
+import { getCachedCostMetrics, computeTotalRoundTripCost, computeNetGeometry } from '../core/math/cost-model.js';
 import { compareLatestSessions, savePaperSessionTrades, getPaperSessionTrades } from './vts-live-comparison-audit.js';
 import fs from 'fs/promises';
 import path from 'path';
@@ -134,7 +136,10 @@ async function getRiskPerTrade(): Promise<number> {
   }
 }
 
-function computeActualCWQI(priceData: CachedPrice, entryPrice: number, targetPrice: number, stopPrice: number): { cwqi: number; ngc: number; riskScore: number; volatility: number; expectedReturn: number } {
+/**
+ * Directive 11.3A: Enhanced with net geometry computation
+ */
+function computeActualCWQI(symbol: string, priceData: CachedPrice, entryPrice: number, targetPrice: number, stopPrice: number): { cwqi: number; ngc: number; riskScore: number; volatility: number; expectedReturn: number; netExpectedEdge: number; netRewardToRisk: number } {
   const volatility = estimateVolatility(priceData.high24h, priceData.low24h, priceData.price);
   const riskScore = calculateRiskScore(entryPrice, stopPrice);
   const expectedReturn = calculateExpectedReturn(entryPrice, targetPrice, stopPrice, false);
@@ -148,12 +153,18 @@ function computeActualCWQI(priceData: CachedPrice, entryPrice: number, targetPri
     volatility
   });
   
+  // Directive 11.3A: Compute net geometry using canonical cost model
+  const costMetrics = getCachedCostMetrics(symbol);
+  const netGeometry = computeNetGeometry(entryPrice, stopPrice, targetPrice, costMetrics);
+  
   return {
     cwqi: cwqiResult.cwqi,
     ngc: cwqiResult.ngc,
     riskScore,
     volatility,
-    expectedReturn
+    expectedReturn,
+    netExpectedEdge: netGeometry.netExpectedEdge,
+    netRewardToRisk: netGeometry.netRewardToRisk
   };
 }
 
@@ -185,7 +196,8 @@ async function generateVirtualSignalM5C(symbol: string, priceData: CachedPrice):
     ? (priceData.ask - priceData.bid) / priceData.price
     : 0.001;
   
-  const metrics = computeActualCWQI(priceData, entryPrice, takeProfit, stopLoss);
+  // Directive 11.3A: Pass symbol for net geometry calculation
+  const metrics = computeActualCWQI(symbol, priceData, entryPrice, takeProfit, stopLoss);
   
   const portfolioValue = await getPortfolioValue();
   const riskPerTrade = await getRiskPerTrade();
@@ -203,7 +215,10 @@ async function generateVirtualSignalM5C(symbol: string, priceData: CachedPrice):
   const profit = priceChange > 0 ? (exitPrice - entryPrice) * (positionSize / entryPrice) : 0;
   const loss = priceChange < 0 ? Math.abs((exitPrice - entryPrice) * (positionSize / entryPrice)) : 0;
   
-  const predictedProfit = (metrics.cwqi * 0.4 + metrics.ngc * 0.6) * dynamicTarget;
+  // Directive 11.3A: Use net expected edge for predicted profit
+  const predictedProfit = metrics.netExpectedEdge > 0 
+    ? (metrics.cwqi * 0.4 + metrics.ngc * 0.6) * dynamicTarget 
+    : 0;
   
   const signal: VirtualSignal = {
     id: `vsig_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -233,7 +248,7 @@ async function generateVirtualSignalM5C(symbol: string, priceData: CachedPrice):
     timestamp: new Date().toISOString()
   };
   
-  console.log(`[M5C][VTS] Trade: ${symbol} strategy=${strategyId} cwqi=${metrics.cwqi.toFixed(3)} ngc=${metrics.ngc.toFixed(3)} di=${di.toFixed(3)} size=$${positionSize.toFixed(2)}`);
+  console.log(`[M5C][VTS] Trade: ${symbol} strategy=${strategyId} cwqi=${metrics.cwqi.toFixed(3)} ngc=${metrics.ngc.toFixed(3)} di=${di.toFixed(3)} netEdge=${(metrics.netExpectedEdge * 100).toFixed(2)}% size=$${positionSize.toFixed(2)}`);
   
   return { signal, tradeRecord };
 }

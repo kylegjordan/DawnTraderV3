@@ -1,0 +1,252 @@
+Directive 11.3A — Net Expectancy Standardization, Cost Integration & Geometry Integrity (Final)
+
+Issued by: Architectural Core
+Applies to: DawnTrader Core System (Signal Orchestrator, RTB Refresh, DSE, SQE, VTS, TEC)
+Schema Target: v1.5.7
+
+I. Objective
+
+Achieve full Net Expectancy alignment across all trade generation, evaluation, and execution systems — eliminating gross-profit bias, stale geometry, spread omission, and redundant sizing logic.
+
+This directive unifies all trade-related math under a single canonical cost model and enforces identical net geometry standards for signal generation, live trade execution, and simulation parity.
+
+II. Overview & Rationale
+
+The DawnTrader system previously relied on gross price geometry for Entry, Stop, and Target computations — excluding:
+
+Exchange fees (maker/taker)
+
+Slippage (execution drift)
+
+Spread (bid/ask liquidity cost)
+
+This inflated expected profit calculations and created conditions where signals that appeared profitable in theory resulted in zero or negative realized expectancy once executed.
+
+Directive 11.3A mandates:
+
+A unified, canonical round-trip cost model.
+
+Cost-aware geometry recalculation in Signal Orchestrator and RTB Refresh.
+
+Unified sizing logic across DSE, Orchestrator, and TEC.
+
+Spread awareness as a hard cost.
+
+Preservation of full simulation parity between VTS and production.
+
+Cost-aware ratchet integration for the TEC trailing exit system.
+
+III. Implementation Tasks
+Task 1 — Canonical Cost Model
+
+File: /server/core/math/cost-model.ts
+
+Defines and exports unified round-trip cost computation.
+
+export const computeTotalRoundTripCost = (exchangeFee: number, slippage: number, spread: number): number => {
+  return (exchangeFee * 2) + (slippage * 2) + spread;
+};
+
+
+Helper Function:
+
+export const getCachedCostMetrics = (symbol: string): { fee: number; slippage: number; spread: number } => {
+  // Returns last cached metrics from DSE/Telemetry cache (TTL = 60s)
+  return CostCache.get(symbol) || { fee: 0.0025, slippage: 0.0005, spread: 0.001 };
+};
+
+
+✅ Default fallback for unknown pairs uses median liquidity estimates.
+✅ Required import for Orchestrator, DSE, SQE, TEC, and VTS.
+✅ Reuses the same cached cost data (no new API hits).
+
+Task 2 — Clean Geometry Correction in Signal Orchestrator
+
+File: /server/services/signal-orchestrator.ts
+
+Implements Gemini’s clean geometry model (subtracting total cost once only) and aligns all downstream computations to net expectancy.
+
+const { fee, slippage, spread } = getCachedCostMetrics(signal.symbol);
+const totalCost = computeTotalRoundTripCost(fee, slippage, spread);
+
+// Execution Geometry
+const executionEntry = baseEntry * (1 + slippage + spread / 2);
+const executionStop  = baseStop;
+const executionTarget = baseTarget;
+
+// Profitability
+const grossPnlPct = (executionTarget - executionEntry) / executionEntry;
+const netExpectedEdge = grossPnlPct - totalCost;
+
+// Reward-to-Risk Ratio
+const rr = (executionTarget - executionEntry) / (executionEntry - executionStop);
+signal.netRewardToRisk = netExpectedEdge / rr;
+
+// Assignment
+signal.entryPrice = executionEntry;
+signal.stopPrice = executionStop;
+signal.targetPrice = executionTarget;
+signal.netExpectedEdge = netExpectedEdge;
+
+
+✅ Subtracts total cost once (no double-counting).
+✅ Clean geometry preserved for chart-based trading logic.
+✅ SQE ranks signals on net profitability, not gross.
+
+Task 3 — Conditional Geometry Refresh in RTB
+
+File: /server/core/rtb/ready_to_buy_service.ts
+
+Adds cost-aware geometry refresh with conditional gating.
+
+Recalculate Entry/Stop/Target only when:
+
+Volatility shift > 5%, OR
+
+Spread shift > 5%, OR
+
+Time since last refresh > 180 seconds.
+
+if (shouldRecalculateGeometry(signal, currentVol, currentSpread, lastUpdate)) {
+  const { fee, slippage, spread } = getCachedCostMetrics(signal.symbol);
+  const totalCost = computeTotalRoundTripCost(fee, slippage, spread);
+  const grossEdge = (signal.targetPrice - signal.entryPrice) / signal.entryPrice;
+  signal.netExpectedEdge = grossEdge - totalCost;
+  signal.lastCostRefresh = Date.now();
+}
+
+
+✅ Cached costs used (TTL = 60s).
+✅ Negligible CPU cost (<2% increase).
+✅ Ensures live RTB geometry never goes stale.
+
+Task 4 — Unified Sizing Logic (Orchestrator, DSE, TEC)
+
+Files:
+
+/server/core/dse/dynamic-sizing-engine.ts
+
+/server/services/signal-orchestrator.ts
+
+/server/services/execution-controller.ts
+
+Goal: prevent “split-brain” sizing logic between preview and execution.
+
+Implementation:
+
+Export computeDynamicSize(signal, previewMode?) from DSE.
+
+Replace any old sizing helper references with direct DSE import.
+
+✅ Both Orchestrator (preview) and TEC (execution) use identical formulas.
+✅ Dynamic sizing automatically incorporates totalCost normalization.
+
+Task 5 — Permanent Removal of Legacy Sizing Helper
+
+File: /server/core/utils/sizing-helper.ts
+
+✅ Delete file.
+✅ Remove all test references and imports.
+✅ Verify no dependency remains in execution or paper-trade modes.
+
+Task 6 — Spread Cost Integration
+
+File: /server/core/metrics/cost-metrics.ts
+
+export const getCurrentSpread = async (symbol: string): Promise<number> => {
+  const orderBook = await KrakenAPI.getOrderBook(symbol);
+  const spread = (orderBook.ask - orderBook.bid) / ((orderBook.ask + orderBook.bid) / 2);
+  return spread;
+};
+
+
+✅ Spread treated as a first-class trading cost.
+✅ Cached for 30–60 seconds.
+✅ Now included in all total cost calculations system-wide.
+
+Task 7 — TEC Integration (Cost-Aware Ratchet Enhancement)
+
+File: /server/services/execution-controller.ts
+
+Enhance existing ratchet logic from Directive 9.2 to be net-cost-aware.
+
+const { fee, slippage, spread } = getCachedCostMetrics(trade.symbol);
+const totalCost = computeTotalRoundTripCost(fee, slippage, spread);
+
+const netBreakeven = trade.entryPrice * (1 + totalCost);
+const targetFloor = trade.targetPrice * (1 - totalCost / 2);
+let activeFloor = netBreakeven;
+
+if (trade.highestPriceReached >= targetFloor) {
+  const ratchetBuffer = 0.001;
+  activeFloor = targetFloor * (1 - ratchetBuffer);
+}
+
+const trailBase = EXECUTION_CONFIG.TRAILING_STOP_BASE / 100;
+const potentialTrailStop = currentPrice * (1 - trailBase);
+
+trade.stopPrice = Math.max(trade.stopPrice, potentialTrailStop, activeFloor);
+
+
+✅ Ratcheting stop remains adaptive (high-water mark, ATR).
+✅ Floors now align with net breakeven and net target levels.
+✅ Preserves Directive 9.2 behavior but adds cost-awareness.
+
+Task 8 — VTS Geometry & Net Expectancy Alignment
+
+File: /server/services/vts-runner.ts
+
+Import computeTotalRoundTripCost() from cost-model.
+
+Replace internal fee/slippage constants with cost-model calls.
+
+Integration test ensures VTS = Production parity within ±0.1%.
+
+✅ Simulation parity guaranteed.
+
+Task 9 — Diagnostics & Schema Updates
+
+Schema: v1.5.7
+No new columns.
+Update telemetry provenance header.
+
+Endpoint: /api/diagnostics/tec/costs
+
+{
+  "symbol": "BTC/USD",
+  "exchangeFee": 0.25,
+  "slippage": 0.05,
+  "spread": 0.10,
+  "totalRoundTripCost": 0.60,
+  "ratchetActive": true,
+  "netBreakeven": 100.60
+}
+
+IV. Testing & Validation
+Test	Description
+signal_orchestrator_net_geometry.test.ts	Verifies cost-adjusted Entry/Stop/Target math
+rtb_refresh_conditional_geometry.test.ts	Validates refresh gating and performance
+vts_cost_model_parity.test.ts	Confirms VTS = production parity
+dse_sizing_consistency.test.ts	Ensures Orchestrator preview = TEC sizing
+tec_cost_ratchet.test.ts	Validates cost-aware ratchet logic and floor adherence
+Performance Benchmark	Expect ≤ 5% CPU increase in RTB refresh
+V. Governance & Invariant Enforcement
+Invariant	Requirement	Enforcement Location
+M1: Net Profit Standard	No module uses gross geometry	cost-model.ts
+M2: Single Sizing Source	DSE = sole sizing authority	dynamic-sizing-engine.ts
+M3: Refresh Sanity	Geometry recalculated under thresholds only	ready_to_buy_service.ts
+M4: Spread Accounting	Spread included in all cost math	cost-metrics.ts
+M5: Simulation Parity	VTS uses same net geometry as production	vts-runner.ts
+M6: Cost-Aware Ratchet	TEC trailing exit honors net breakeven	execution-controller.ts
+VI. Expected Outcomes
+
+✅ All trades and signals use net-profit geometry.
+✅ RTB refresh maintains live cost alignment without latency risk.
+✅ DSE, Orchestrator, and TEC share a unified cost and sizing model.
+✅ Spread fully integrated as a real-world trading cost.
+✅ Trailing exits (ratchet system) now protect net, not gross, profits.
+✅ VTS mirrors live mode — perfect simulation fidelity.
+✅ Zero residual dependency on legacy helpers.
+
+Directive 11.3A — Final Version Approved for Implementation
+This version supersedes all prior drafts and incorporates all architectural, computational, and governance enhancements discussed to date.

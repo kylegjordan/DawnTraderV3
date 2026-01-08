@@ -48,6 +48,10 @@ import { getAdaptivePoolSize } from '../../services/adaptive-pool-config';
 import { poolBus } from '../../services/pool-broadcast';
 // Directive 10.9A: Math Core Harmonization - Version-tracked weights (inlined calculation)
 import { SCORE_WEIGHTS, SCORE_WEIGHTS_VERSION } from '../../config/score-weights.config.js';
+// Directive 11.3A: Net Expectancy Standardization - Cost Model & Spread
+import { getCachedCostMetrics, computeTotalRoundTripCost, computeNetGeometry } from '../math/cost-model.js';
+import { getCachedSpread } from '../metrics/cost-metrics.js';
+import { getNormalizedVolatility as getVolatility } from '../metrics/market-metrics.js';
 
 // T5: Subscribe to pool size updates from RTB Refresh Service
 let currentPoolSize = getAdaptivePoolSize();
@@ -174,6 +178,46 @@ export function calculateDecayPenalty(queuedAt: Date | string, symbol?: string):
 export function getFinalScoreDecayFactor(ageMinutes: number): number {
   const penalty = Math.min(FINALSCORE_DECAY_LAMBDA * ageMinutes, 0.10);
   return 1 - penalty;
+}
+
+// Directive 11.3A: Geometry refresh thresholds
+const GEOMETRY_VOLATILITY_SHIFT_THRESHOLD = 0.05; // 5%
+const GEOMETRY_SPREAD_SHIFT_THRESHOLD = 0.05; // 5%
+const GEOMETRY_MAX_AGE_MS = 180 * 1000; // 180 seconds
+
+/**
+ * Directive 11.3A: Determine if geometry should be recalculated
+ * Recalculate when:
+ * - Volatility shift > 5%, OR
+ * - Spread shift > 5%, OR
+ * - Time since last refresh > 180 seconds
+ */
+export function shouldRecalculateGeometry(
+  signal: RtbSignal,
+  currentVol: number,
+  currentSpread: number
+): boolean {
+  const metadata = signal.metadata as Record<string, any> || {};
+  const lastCostRefresh = metadata.lastCostRefresh ?? 0;
+  const lastVol = metadata.volatility ?? 0.3;
+  const lastSpread = metadata.spread ?? 0.001;
+  
+  const timeSinceRefresh = Date.now() - lastCostRefresh;
+  if (timeSinceRefresh > GEOMETRY_MAX_AGE_MS) {
+    return true;
+  }
+  
+  const volShift = lastVol > 0 ? Math.abs(currentVol - lastVol) / lastVol : 0;
+  if (volShift > GEOMETRY_VOLATILITY_SHIFT_THRESHOLD) {
+    return true;
+  }
+  
+  const spreadShift = lastSpread > 0 ? Math.abs(currentSpread - lastSpread) / lastSpread : 0;
+  if (spreadShift > GEOMETRY_SPREAD_SHIFT_THRESHOLD) {
+    return true;
+  }
+  
+  return false;
 }
 
 /**
@@ -521,6 +565,7 @@ class ReadyToBuyService {
 
   /**
    * Directive 11.0E: Refresh a single signal using FinalScore-native logic
+   * Directive 11.3A: Enhanced with conditional geometry refresh
    * Legacy CWQI/NGC metrics removed, replaced with FinalScore/decayPenalty
    */
   private async refreshSingleSignal(signal: RtbSignal, mode: TradingMode): Promise<{ passed: boolean }> {
@@ -533,6 +578,26 @@ class ReadyToBuyService {
     const originalFinalScore = metadata.finalScore ?? parseFloat(signal.finalScore || '0.5');
     const hybridScore = metadata.hybridScore ?? confidence;
     const regimeWeight = metadata.regimeWeight ?? 0.5;
+    
+    // Directive 11.3A: Conditional geometry refresh
+    const currentSpread = getCachedSpread(normalizedSymbol);
+    const currentVol = getVolatility(normalizedSymbol);
+    let netExpectedEdge = metadata.netExpectedEdge;
+    let geometryRefreshed = false;
+    
+    if (shouldRecalculateGeometry(signal, currentVol, currentSpread)) {
+      const costMetrics = getCachedCostMetrics(normalizedSymbol);
+      const entryPrice = parseFloat(signal.entryPrice?.toString() || '0');
+      const stopPrice = parseFloat(signal.stopPrice?.toString() || '0');
+      const targetPrice = parseFloat(signal.targetPrice?.toString() || '0');
+      
+      if (entryPrice > 0 && stopPrice > 0 && targetPrice > 0) {
+        const geometry = computeNetGeometry(entryPrice, stopPrice, targetPrice, costMetrics);
+        netExpectedEdge = geometry.netExpectedEdge;
+        geometryRefreshed = true;
+        console.log(`[11.3A][GEOMETRY_REFRESH] ${normalizedSymbol}: netEdge=${(netExpectedEdge * 100).toFixed(3)}%`);
+      }
+    }
     
     // Directive 11.0E: Calculate decay penalty based on signal age
     const decayPenalty = calculateDecayPenalty(signal.queuedAt, normalizedSymbol);
@@ -554,7 +619,7 @@ class ReadyToBuyService {
       mode,
       confidence: confidence,
       trendStrength: metadata.trendStrength ?? 0.5,
-      volatility: metadata.volatility ?? 0.3,
+      volatility: currentVol,
     };
     
     const sqeResult = await signalQualityEvaluator.evaluate(sqeInput);
@@ -568,7 +633,7 @@ class ReadyToBuyService {
       return { passed: false };
     }
     
-    // Directive 11.0E: Update signal with FinalScore-native metrics
+    // Directive 11.0E + 11.3A: Update signal with FinalScore-native metrics + net geometry
     await storage.updateRtbSignal(signal.id, {
       status: 'reconfirmed',
       confidence: confidence.toString(),
@@ -581,10 +646,15 @@ class ReadyToBuyService {
         decayPenalty: decayPenalty,
         hybridScore: hybridScore,
         regimeWeight: regimeWeight,
+        // Directive 11.3A: Net geometry fields
+        netExpectedEdge: netExpectedEdge,
+        volatility: currentVol,
+        spread: currentSpread,
+        lastCostRefresh: geometryRefreshed ? Date.now() : (metadata.lastCostRefresh ?? 0),
       }
     });
     
-    console.log(`[11.0E][REFRESH_COMPLETE] symbol=${normalizedSymbol} RECONFIRMED FinalScore=${refreshedFinalScore.toFixed(4)} decayPenalty=${decayPenalty.toFixed(4)}`);
+    console.log(`[11.0E][REFRESH_COMPLETE] symbol=${normalizedSymbol} RECONFIRMED FinalScore=${refreshedFinalScore.toFixed(4)} decayPenalty=${decayPenalty.toFixed(4)}${geometryRefreshed ? ' (geometry refreshed)' : ''}`);
     return { passed: true };
   }
 

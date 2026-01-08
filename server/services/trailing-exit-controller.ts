@@ -1,11 +1,13 @@
 /**
  * Directive 9.2.A — TrailingExitController
+ * Directive 11.3A — Enhanced with Cost-Aware Ratchet Logic
  * 
  * Core trailing-stop computation with adaptive exit logic powered by DI and VolNoise.
  * Implements:
  * - Dynamic Trailing Exit Logic
  * - Two-Stage Latching System (Break-Even + Target Lock)
  * - Mode persistence (TARGET vs TRAILING_TAKE)
+ * - 11.3A: Cost-aware floors (netBreakeven, netTargetFloor)
  */
 
 import {
@@ -15,6 +17,7 @@ import {
   isTargetLockTriggered,
   type TradeMode
 } from '../utils/analysis-utils.js';
+import { getCachedCostMetrics, computeNetBreakeven, computeNetTargetFloor } from '../core/math/cost-model.js';
 
 // Debounce persistence writes to avoid excessive I/O
 let persistenceTimer: NodeJS.Timeout | null = null;
@@ -180,11 +183,17 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
     console.log(`[9.2][EXIT] ${update.symbol} new HWM=${state.highWaterMark.toFixed(4)}`);
   }
   
+  // Directive 11.3A: Get cost metrics for net-aware floor calculations
+  const costMetrics = getCachedCostMetrics(update.symbol);
+  const netBreakeven = computeNetBreakeven(state.entryPrice, costMetrics);
+  const netTargetFloor = computeNetTargetFloor(state.targetPrice, costMetrics);
+  
   if (!state.breakEvenLatched && state.ATR > 0) {
     if (isBreakEvenTriggered(update.currentPrice, state.entryPrice, state.ATR)) {
       state.breakEvenLatched = true;
-      newStopPrice = Math.max(newStopPrice, state.entryPrice);
-      console.log(`[9.2][LOCK] ${update.symbol} BREAK-EVEN latched @ ${state.entryPrice.toFixed(4)} (1×ATR gain)`);
+      // Directive 11.3A: Use net breakeven (accounts for costs) instead of gross entry
+      newStopPrice = Math.max(newStopPrice, netBreakeven);
+      console.log(`[9.2][LOCK] ${update.symbol} BREAK-EVEN latched @ ${netBreakeven.toFixed(4)} (net, 1×ATR gain)`);
     }
   }
   
@@ -193,8 +202,9 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
       state.targetLatched = true;
       state.tradeMode = 'TRAILING_TAKE';
       modeChanged = true;
-      newStopPrice = Math.max(newStopPrice, state.targetPrice);
-      console.log(`[9.2][LOCK] ${update.symbol} TARGET latched @ ${state.targetPrice.toFixed(4)}`);
+      // Directive 11.3A: Use net target floor (accounts for costs)
+      newStopPrice = Math.max(newStopPrice, netTargetFloor);
+      console.log(`[9.2][LOCK] ${update.symbol} TARGET latched @ ${netTargetFloor.toFixed(4)} (net)`);
       console.log(`[9.2][MODE] ${update.symbol} → TRAILING_TAKE (MOONBAG mode activated)`);
     }
   }
@@ -206,11 +216,12 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
       state.DI,
       state.VolNoise
     );
-    const floorStop = state.targetPrice;
+    // Directive 11.3A: Use net target floor instead of gross target
+    const floorStop = netTargetFloor;
     newStopPrice = Math.max(floorStop, dynamicStop);
     
     const Kprime = calculateDynamicStopDistance(state.DI, state.VolNoise);
-    console.log(`[9.2][EXIT] ${update.symbol} trailing: K'=${Kprime.toFixed(2)}, HWM=${state.highWaterMark.toFixed(4)}, stop=${newStopPrice.toFixed(4)}`);
+    console.log(`[9.2][EXIT] ${update.symbol} trailing: K'=${Kprime.toFixed(2)}, HWM=${state.highWaterMark.toFixed(4)}, stop=${newStopPrice.toFixed(4)} (netFloor=${floorStop.toFixed(4)})`);
   } else if (state.breakEvenLatched && !state.targetLatched && state.ATR > 0) {
     const dynamicStop = calculateTrailingStopPrice(
       state.highWaterMark,
@@ -218,11 +229,12 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
       state.DI,
       state.VolNoise
     );
-    const floorStop = state.entryPrice;
+    // Directive 11.3A: Use net breakeven instead of gross entry
+    const floorStop = netBreakeven;
     newStopPrice = Math.max(floorStop, dynamicStop);
     
     const Kprime = calculateDynamicStopDistance(state.DI, state.VolNoise);
-    console.log(`[9.2][EXIT] ${update.symbol} BE trailing: K'=${Kprime.toFixed(2)}, HWM=${state.highWaterMark.toFixed(4)}, stop=${newStopPrice.toFixed(4)}`);
+    console.log(`[9.2][EXIT] ${update.symbol} BE trailing: K'=${Kprime.toFixed(2)}, HWM=${state.highWaterMark.toFixed(4)}, stop=${newStopPrice.toFixed(4)} (netFloor=${floorStop.toFixed(4)})`);
   }
   
   state.currentStopPrice = newStopPrice;
