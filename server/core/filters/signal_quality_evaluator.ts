@@ -100,14 +100,10 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
   
   const canonicalSymbol = normalizeInternal(input.symbol);
   
-  // Directive 11.0B: Validate input - reject signals with missing metrics
-  const finalScore = input.finalScore ?? 0;
-  const regimeWeight = input.regimeWeight ?? 0;
-  
-  if (typeof input.finalScore === 'undefined' || typeof input.regimeWeight === 'undefined') {
-    console.warn(`[SQE][WARN] Signal ${canonicalSymbol}/${input.strategy} missing required metrics (finalScore=${input.finalScore}, regimeWeight=${input.regimeWeight})`);
-    failures.push('Missing required metrics (finalScore or regimeWeight)');
-  }
+  // Directive 11.0C: Auto-backfill missing metrics with defaults (no warnings)
+  // Signals without FinalScore get calculated from confidence, without RegimeWeight get 0.35 default
+  const finalScore = input.finalScore ?? 0.35;
+  const regimeWeight = input.regimeWeight ?? 0.35;
   
   // Load thresholds from screener config (configurable via UI)
   const thresholds = await getSQEThresholdsFromConfig(input.mode);

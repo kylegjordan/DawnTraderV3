@@ -1,7 +1,8 @@
 /**
- * Directive 11.0B — Trade Execution Controller (TEC)
+ * Directive 11.0C — Trade Execution Controller (TEC)
  * 
  * Manages active trades with adaptive sizing and trailing exits.
+ * Configuration is loaded from EXECUTION_CONFIG for single source of truth.
  * 
  * RESPONSIBILITIES:
  * - Trade entry execution
@@ -23,6 +24,7 @@ import type {
   ExitReason,
   TradeExecutionController
 } from '../types/trade-flow.js';
+import { EXECUTION_CONFIG } from '../config/execution-config.js';
 
 export interface TECConfig {
   trailingStopActivationPct: number;
@@ -30,14 +32,22 @@ export interface TECConfig {
   maxHoldingPeriodMs: number;
   adaptiveSizeExpandPct: number;
   adaptiveSizeContractPct: number;
+  trailingStopBase: number;
+  trailingStopAcceleration: number;
+  maxPositionRisk: number;
+  version: string;
 }
 
 const DEFAULT_CONFIG: TECConfig = {
-  trailingStopActivationPct: 1.0,
-  trailingStopDistancePct: 0.5,
-  maxHoldingPeriodMs: 24 * 60 * 60 * 1000,
-  adaptiveSizeExpandPct: 10,
-  adaptiveSizeContractPct: 10
+  trailingStopActivationPct: EXECUTION_CONFIG.TRAILING_STOP_ACTIVATION_PCT,
+  trailingStopDistancePct: EXECUTION_CONFIG.TRAILING_STOP_DISTANCE_PCT,
+  maxHoldingPeriodMs: EXECUTION_CONFIG.MAX_HOLDING_PERIOD_MS,
+  adaptiveSizeExpandPct: (EXECUTION_CONFIG.ADAPTIVE_EXPAND_FACTOR - 1) * 100,
+  adaptiveSizeContractPct: (1 - EXECUTION_CONFIG.ADAPTIVE_CONTRACT_FACTOR) * 100,
+  trailingStopBase: EXECUTION_CONFIG.TRAILING_STOP_BASE,
+  trailingStopAcceleration: EXECUTION_CONFIG.TRAILING_STOP_ACCELERATION,
+  maxPositionRisk: EXECUTION_CONFIG.MAX_POSITION_RISK,
+  version: EXECUTION_CONFIG.VERSION
 };
 
 export interface AdaptiveSizeResult {
@@ -132,10 +142,11 @@ export class ExecutionControllerImpl implements TradeExecutionController {
   }
 
   /**
-   * Directive 11.0B: Adaptive sizing based on trendline feedback
+   * Directive 11.0C: Adaptive sizing based on trendline feedback
+   * Uses EXECUTION_CONFIG for expand/contract factors
    * 
-   * If trendline is reinforced: expand position size by 10%
-   * If trendline is weakened: contract position size by 10%
+   * If trendline is reinforced: expand position size by ADAPTIVE_EXPAND_FACTOR
+   * If trendline is weakened: contract position size by ADAPTIVE_CONTRACT_FACTOR
    * 
    * @param trade - Active trade with optional trendline feedback
    * @returns AdaptiveSizeResult with new quantity and adjustment details
@@ -157,14 +168,12 @@ export class ExecutionControllerImpl implements TradeExecutionController {
     let reason: string | undefined;
 
     if (trendline.reinforced) {
-      const expandMultiplier = 1 + (this.config.adaptiveSizeExpandPct / 100);
-      newQuantity = trade.quantity * expandMultiplier;
+      newQuantity = trade.quantity * EXECUTION_CONFIG.ADAPTIVE_EXPAND_FACTOR;
       adjustment = 'expand';
       reason = `trendline_reinforced (+${this.config.adaptiveSizeExpandPct}%)`;
       console.log(`[TEC][ADAPTIVE_SIZE] ${trade.symbol} EXPAND: ${trade.quantity.toFixed(4)} → ${newQuantity.toFixed(4)} (${reason})`);
     } else if (trendline.weakened) {
-      const contractMultiplier = 1 - (this.config.adaptiveSizeContractPct / 100);
-      newQuantity = trade.quantity * contractMultiplier;
+      newQuantity = trade.quantity * EXECUTION_CONFIG.ADAPTIVE_CONTRACT_FACTOR;
       adjustment = 'contract';
       reason = `trendline_weakened (-${this.config.adaptiveSizeContractPct}%)`;
       console.log(`[TEC][ADAPTIVE_SIZE] ${trade.symbol} CONTRACT: ${trade.quantity.toFixed(4)} → ${newQuantity.toFixed(4)} (${reason})`);
@@ -189,6 +198,27 @@ export class ExecutionControllerImpl implements TradeExecutionController {
 
   getConfig(): TECConfig {
     return { ...this.config };
+  }
+
+  /**
+   * Directive 11.0C: Get TEC config for telemetry/diagnostics exposure
+   */
+  getTelemetryConfig(): {
+    expandFactor: number;
+    contractFactor: number;
+    trailingBase: number;
+    trailingAccel: number;
+    maxRisk: number;
+    version: string;
+  } {
+    return {
+      expandFactor: EXECUTION_CONFIG.ADAPTIVE_EXPAND_FACTOR,
+      contractFactor: EXECUTION_CONFIG.ADAPTIVE_CONTRACT_FACTOR,
+      trailingBase: EXECUTION_CONFIG.TRAILING_STOP_BASE,
+      trailingAccel: EXECUTION_CONFIG.TRAILING_STOP_ACCELERATION,
+      maxRisk: EXECUTION_CONFIG.MAX_POSITION_RISK,
+      version: EXECUTION_CONFIG.VERSION
+    };
   }
 }
 

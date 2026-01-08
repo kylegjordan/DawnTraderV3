@@ -1,22 +1,22 @@
 /**
- * Directive 10.9F - UI Diagnostics Tab with Dynamic Telemetry & Filter Performance
+ * Directive 11.0C - UI Diagnostics Tab with Dynamic Telemetry, Filter Performance & TEC Config
  * 
  * Displays math integrity status, guard configuration, and dynamic backend telemetry.
- * Shows Phase 10 system guards, schema version synchronization, and filter pass rates.
+ * Shows Phase 11 system guards, schema version synchronization, filter pass rates, and TEC parameters.
  * Includes Top 5 filter failure categories for observability.
  * 
- * Tags: [10.9F][UI]
+ * Tags: [11.0C][UI]
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle, Shield, Activity, Settings, RefreshCw, AlertTriangle, Database, Filter } from "lucide-react";
+import { CheckCircle, Shield, Activity, Settings, RefreshCw, AlertTriangle, Database, Filter, TrendingUp } from "lucide-react";
 import { useState, useEffect } from "react";
 
-const UI_SCHEMA_VERSION = "v1.2.3"; // Directive 10.9F
-const UI_PHASE_DIRECTIVE = "10.9F";
+const UI_SCHEMA_VERSION = "v1.3.0"; // Directive 11.0C
+const UI_PHASE_DIRECTIVE = "11.0C";
 
 const SYSTEM_GUARDS = {
   VERSION: "Phase10_Final",
@@ -46,6 +46,14 @@ interface TelemetrySummary {
   fx5Passed24h?: number;
   passRate24h?: number;
   failedByCategory?: Record<string, number>;
+  tecConfig?: {
+    expandFactor: number;
+    contractFactor: number;
+    trailingBase: number;
+    trailingAccel: number;
+    maxRisk: number;
+    version: string;
+  };
 }
 
 export default function DiagnosticsTab() {
@@ -294,24 +302,72 @@ export default function DiagnosticsTab() {
         </CardContent>
       </Card>
 
-      {/* Phase 10 Modules */}
+      {/* TEC Configuration Panel - Directive 11.0C */}
+      <Card className="border-2 border-orange-200 dark:border-orange-800">
+        <CardHeader className="bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20">
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-orange-600" />
+            TEC Configuration (Directive 11.0C)
+            {telemetry?.tecConfig?.version && (
+              <Badge variant="outline" className="ml-2 font-mono text-xs">
+                {telemetry.tecConfig.version}
+              </Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-4">
+          {isLoading ? (
+            <Skeleton className="h-24 w-full" />
+          ) : !telemetry?.tecConfig ? (
+            <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <p className="text-sm text-amber-700 dark:text-amber-300">
+                TEC configuration not available yet. Backend may need restart.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="p-3 border rounded-lg bg-muted/30 text-center">
+                <div className="text-xs text-muted-foreground mb-1">Expand Factor</div>
+                <span className="text-lg font-bold text-emerald-600">{telemetry.tecConfig.expandFactor}x</span>
+              </div>
+              <div className="p-3 border rounded-lg bg-muted/30 text-center">
+                <div className="text-xs text-muted-foreground mb-1">Contract Factor</div>
+                <span className="text-lg font-bold text-rose-600">{telemetry.tecConfig.contractFactor}x</span>
+              </div>
+              <div className="p-3 border rounded-lg bg-muted/30 text-center">
+                <div className="text-xs text-muted-foreground mb-1">Trailing Base</div>
+                <span className="text-lg font-bold">{(telemetry.tecConfig.trailingBase * 100).toFixed(1)}%</span>
+              </div>
+              <div className="p-3 border rounded-lg bg-muted/30 text-center">
+                <div className="text-xs text-muted-foreground mb-1">Trailing Accel</div>
+                <span className="text-lg font-bold">{(telemetry.tecConfig.trailingAccel * 100).toFixed(2)}%</span>
+              </div>
+              <div className="p-3 border rounded-lg bg-muted/30 text-center">
+                <div className="text-xs text-muted-foreground mb-1">Max Risk</div>
+                <span className="text-lg font-bold text-amber-600">{(telemetry.tecConfig.maxRisk * 100).toFixed(0)}%</span>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Phase 11 Modules */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Phase 10 Modules</CardTitle>
+          <CardTitle className="text-sm">Phase 11 Modules</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
-              { name: "Directive 10.9A", desc: "Config Purification", status: "active" },
-              { name: "Directive 10.9B", desc: "Filter Deconfliction", status: "active" },
-              { name: "Directive 10.9C", desc: "Filter Modernization", status: "active" },
-              { name: "Directive 10.9D", desc: "UI & Diagnostics", status: "active" },
-              { name: "Directive 10.9E", desc: "Telemetry Expansion", status: "active" },
+              { name: "Directive 11.0A", desc: "Trade Flow Integrity", status: "active" },
+              { name: "Directive 11.0B", desc: "Trade Control Integrity", status: "active" },
+              { name: "Directive 11.0C", desc: "SQE & TEC Stabilization", status: "active" },
+              { name: "Directive 11.0D", desc: "Production Hardening", status: "pending" },
             ].map((module) => (
               <div key={module.name} className="p-3 border rounded-lg text-center">
                 <div className="text-xs font-semibold text-violet-600 dark:text-violet-400">{module.name}</div>
                 <div className="text-xs text-muted-foreground">{module.desc}</div>
-                <Badge variant="outline" className="mt-2 text-xs bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300">
+                <Badge variant="outline" className={`mt-2 text-xs ${module.status === 'active' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300' : 'bg-slate-50 dark:bg-slate-900/20 text-slate-500'}`}>
                   {module.status}
                 </Badge>
               </div>
@@ -322,9 +378,8 @@ export default function DiagnosticsTab() {
 
       <div className="p-4 bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 rounded-lg">
         <p className="text-xs text-violet-700 dark:text-violet-300">
-          <strong>Directive 10.9F:</strong> Final deprecations complete - RSI, Risk, Volatility, and Quote Currency filters removed. "Risk & Volatility" renamed to "Execution Quality".
-          Telemetry now includes filter pass rates, failure breakdowns, and real-time operational metrics.
-          Filter Schema v1.3.1 with full 24h rolling window analytics.
+          <strong>Directive 11.0C:</strong> SQE & TEC Stabilization complete - EXECUTION_CONFIG centralized, adaptive sizing factors normalized (1.10x/0.90x), 
+          SQE backfill logic for missing FinalScore/RegimeWeight implemented, TEC config exposed in telemetry summary for diagnostics visibility.
         </p>
       </div>
     </div>

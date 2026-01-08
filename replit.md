@@ -70,6 +70,22 @@ The system incorporates Verification & Config Purification, Backend Filter Decon
 
 **Schema v1.4.3**: screener_filters table has `final_score_min`, `regime_weight_min` columns. storage.getRtbSignals supports `orderBy: 'finalScore'`. Tests: 29 passing.
 
+**Directive 11.0C — SQE & TEC Stabilization (January 2026):**
+
+1.  **EXECUTION_CONFIG** (`server/config/execution-config.ts`): Centralized TEC configuration with:
+    - `ADAPTIVE_EXPAND_FACTOR`: 1.10 (+10% on trendline reinforcement)
+    - `ADAPTIVE_CONTRACT_FACTOR`: 0.90 (-10% on trendline weakness)
+    - `TRAILING_STOP_BASE`: 0.015 (1.5% base trailing stop distance)
+    - `TRAILING_STOP_ACCELERATION`: 0.002 (acceleration factor)
+    - `MAX_POSITION_RISK`: 0.02 (2% max position risk)
+    - Version: v1.0.0
+
+2.  **SQE Backfill Logic**: Missing `FinalScore` or `RegimeWeight` now auto-defaults to 0.35 (no warnings/rejections).
+
+3.  **TEC Telemetry Integration**: TEC config exposed in `/api/telemetry/summary` for diagnostics visibility.
+
+4.  **Diagnostics UI Update**: Phase 11 modules section added, TEC configuration panel displays live values.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed.

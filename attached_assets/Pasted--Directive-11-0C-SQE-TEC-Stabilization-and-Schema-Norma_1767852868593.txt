@@ -1,0 +1,245 @@
+⚙️ Directive 11.0C — SQE & TEC Stabilization and Schema Normalization
+Phase: 11.0C
+
+Title: SQE Finalization • TEC Config Normalization • Diagnostics Exposure
+Parent Directive: 11.0B
+Schema Version: v1.4.4
+
+🎯 Objective
+
+This directive completes the cleanup and stabilization of the Phase 11 trade control layer.
+The goals are:
+
+Purge all residual legacy code (CWQI/NGC/Risk/ProfitRate).
+
+Normalize adaptive sizing configuration — move hard-coded 10 % adjustments to persistent config.
+
+Replace manual SQL with Drizzle migration files.
+
+Backfill missing FinalScore/RegimeWeight for existing RTB entries.
+
+Expose TEC tuning parameters in the Goals → Diagnostics tab for observability.
+
+Add regression tests ensuring dynamic configuration propagation.
+
+🧱 Task 1 — Remove All Legacy Metric References
+Files:
+server/core/signal-orchestrator.ts
+server/core/legacy-metrics.ts
+server/core/utils/metrics-helpers.ts
+
+Actions:
+
+Delete file /server/core/legacy-metrics.ts.
+
+In signal-orchestrator.ts, remove:
+
+const legacyRisk = signal.metrics?.risk ?? 0;
+
+
+and any references to cwqi, ngc, risk, or profitRate.
+
+Remove any telemetry event entries labeled CWQI, NGC, or Risk.
+
+Validation:
+
+Run:
+
+grep -R "cwqi\|ngc\|risk\|profitRate" server/core/
+
+
+✅ Expected: no matches
+
+⚙️ Task 2 — Normalize Adaptive Sizing Configuration (TEC)
+Files:
+server/services/execution-controller.ts
+server/config/execution-config.ts (new)
+server/db/migrations/2026-11-0C-schema-cleanup.sql
+
+Actions:
+1️⃣ Create new config file /server/config/execution-config.ts
+export const EXECUTION_CONFIG = Object.freeze({
+  ADAPTIVE_EXPAND_FACTOR: 1.10,
+  ADAPTIVE_CONTRACT_FACTOR: 0.90,
+  TRAILING_STOP_BASE: 0.015,       // 1.5 % base trailing distance
+  TRAILING_STOP_ACCELERATION: 0.002, // increment per positive candle
+  MAX_POSITION_RISK: 0.02,         // 2 % of equity cap
+  VERSION: "v1.0.0"
+});
+
+2️⃣ Update TEC adaptive sizing
+
+In /server/services/execution-controller.ts, replace:
+
+if (trade.trendline.reinforced) trade.positionSize *= 1.1;
+if (trade.trendline.weakened) trade.positionSize *= 0.9;
+
+
+with:
+
+import { EXECUTION_CONFIG } from "../config/execution-config";
+
+if (trade.trendline.reinforced)
+  trade.positionSize *= EXECUTION_CONFIG.ADAPTIVE_EXPAND_FACTOR;
+if (trade.trendline.weakened)
+  trade.positionSize *= EXECUTION_CONFIG.ADAPTIVE_CONTRACT_FACTOR;
+
+3️⃣ Update trailing exit logic
+
+Replace hard-coded trailing constants:
+
+const trailingStop = price * 0.015;
+
+
+with:
+
+const trailingStop = price * EXECUTION_CONFIG.TRAILING_STOP_BASE;
+
+4️⃣ Add migration file /server/db/migrations/2026-11-0C-schema-cleanup.sql
+-- Migration for execution configuration and cleanup
+ALTER TABLE screener_filters
+  ADD COLUMN IF NOT EXISTS final_score_min REAL DEFAULT 0.35,
+  ADD COLUMN IF NOT EXISTS regime_weight_min REAL DEFAULT 0.30;
+
+CREATE TABLE IF NOT EXISTS execution_settings (
+  id SERIAL PRIMARY KEY,
+  adaptive_expand_factor REAL DEFAULT 1.10,
+  adaptive_contract_factor REAL DEFAULT 0.90,
+  trailing_stop_base REAL DEFAULT 0.015,
+  trailing_stop_acceleration REAL DEFAULT 0.002,
+  max_position_risk REAL DEFAULT 0.02,
+  version TEXT DEFAULT 'v1.0.0'
+);
+
+
+✅ TEC now reads configuration from a single source of truth.
+
+🧩 Task 3 — SQE Backfill and Warning Removal
+Files:
+server/services/ready-to-buy-refresh.ts
+server/core/signal-quality-evaluator.ts
+
+Actions:
+
+Backfill missing metrics on load:
+
+// In ready-to-buy-refresh.ts before SQE evaluation
+if (!signal.finalScore || !signal.regimeWeight) {
+    signal.finalScore = calculateFinalScore(signal);
+    signal.regimeWeight = signal.metrics?.regimeWeight ?? 0;
+}
+
+
+(reuse calculateFinalScore from signal-orchestrator.ts)
+
+Remove warning log:
+
+log.warn("[SQE] Missing required metrics...");
+
+
+since metrics will now be auto-filled.
+
+✅ No more SQE “missing metrics” spam.
+
+🧮 Task 4 — Drizzle Migration Enforcement
+
+Remove /server/setup/manual_patch.sql.
+Add migration integrity check:
+
+File: /scripts/check-migrations.sh
+
+#!/bin/bash
+if grep -R "ALTER TABLE" server/setup/manual_patch.sql; then
+  echo "Manual SQL patches detected — remove before deploy."
+  exit 1
+fi
+
+
+Include this in CI workflow (.github/workflows/ci.yml) before build.
+
+✅ Prevents manual schema changes in the future.
+
+📊 Task 5 — Diagnostics Exposure for TEC Parameters
+Files:
+client/src/pages/goals/diagnostics.tsx
+server/routes/telemetry.ts
+server/services/telemetry-aggregator.ts
+
+Backend Changes
+
+In /server/services/telemetry-aggregator.ts, append to telemetry summary:
+
+import { EXECUTION_CONFIG } from "../config/execution-config";
+
+summary.tecConfig = {
+  expandFactor: EXECUTION_CONFIG.ADAPTIVE_EXPAND_FACTOR,
+  contractFactor: EXECUTION_CONFIG.ADAPTIVE_CONTRACT_FACTOR,
+  trailingBase: EXECUTION_CONFIG.TRAILING_STOP_BASE,
+  trailingAccel: EXECUTION_CONFIG.TRAILING_STOP_ACCELERATION,
+  maxRisk: EXECUTION_CONFIG.MAX_POSITION_RISK,
+  version: EXECUTION_CONFIG.VERSION
+};
+
+
+Expose via /api/telemetry/summary.
+
+Frontend Changes
+
+In /client/src/pages/goals/diagnostics.tsx, add new section:
+
+<Card className="p-4 mt-4">
+  <h2 className="text-lg font-semibold">Trade Execution Controller (TEC)</h2>
+  <p className="text-sm text-muted-foreground">Current Adaptive Sizing & Exit Parameters</p>
+  <div className="grid grid-cols-2 gap-2 mt-2">
+    <div>Expand Factor: {data.tecConfig.expandFactor}</div>
+    <div>Contract Factor: {data.tecConfig.contractFactor}</div>
+    <div>Trailing Stop Base: {data.tecConfig.trailingBase}</div>
+    <div>Trailing Accel: {data.tecConfig.trailingAccel}</div>
+    <div>Max Position Risk: {data.tecConfig.maxRisk}</div>
+    <div>Version: {data.tecConfig.version}</div>
+  </div>
+</Card>
+
+
+✅ Exposes live TEC config values for operator visibility.
+
+🧠 Task 6 — Validation Tests
+Files:
+server/tests/unit/execution-controller.test.ts
+server/tests/unit/signal-quality-evaluator.test.ts
+server/tests/integration/telemetry.test.ts
+
+Add Tests:
+Test	Expected Result
+TEC uses EXECUTION_CONFIG constants	Sizing and trailing exits reflect config values
+SQE thresholds update dynamically from screener_filters	Changing DB values updates filtering behavior
+No legacy metric references exist	grep validation passes
+Telemetry exposes TEC config	/api/telemetry/summary includes tecConfig object
+🧾 Task 7 — Documentation & Versioning
+/docs/replit.md
+
+Add entry:
+
+Phase 11.0C — SQE & TEC Stabilization
+• Removed all legacy metrics (CWQI/NGC/Risk/ProfitRate)
+• Normalized TEC configuration constants
+• Created execution_settings table
+• Exposed TEC parameters in Diagnostics
+• Replaced manual SQL patching with Drizzle migration
+
+/docs/architecture.md
+
+Update Trade Control diagram to reflect configuration linkage:
+
+[TEC] ← EXECUTION_CONFIG (v1.0.0)
+      ↳ Adaptive Sizing / Trailing Stops / Risk Cap
+      ↳ Exposed via Diagnostics
+
+✅ Expected Post-Implementation State
+Component	Function	Status After 11.0C
+SQE	Pure FinalScore + RegimeWeight filtering	✅ Dynamic via UI config
+TCL	Event-based promotion, no filtering	✅ Pulls pre-ordered RTB signals
+TEC	Adaptive sizing + trailing exits from config	✅ No hard-coded ratios
+Telemetry	Shows TEC parameters	✅ Diagnostics exposure live
+Schema	Managed via Drizzle	✅ v1.4.4 migration applied
+Legacy Code	All CWQI/NGC/Risk/ProfitRate removed	✅ Purged

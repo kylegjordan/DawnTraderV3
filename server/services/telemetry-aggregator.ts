@@ -19,6 +19,7 @@
 
 import { SCANNER_PARAMS, FILTER_SCHEMA_VERSION } from '../config/system-guards.js';
 import { getScoreWeightsMetadata, SCORE_WEIGHTS_VERSION } from '../config/score-weights.config.js';
+import { EXECUTION_CONFIG } from '../config/execution-config.js';
 
 export interface PairTelemetry {
   symbol: string;
@@ -341,13 +342,21 @@ export class TelemetryAggregatorService {
         regime: coefficients.weights.REGIME,
         decay: coefficients.weights.DECAY,
       },
-      phaseDirective: '10.9F',
+      phaseDirective: '11.0C',
       filterSchemaVersion: FILTER_SCHEMA_VERSION,
       timestamp: new Date().toISOString(),
+      tecConfig: {
+        expandFactor: EXECUTION_CONFIG.ADAPTIVE_EXPAND_FACTOR,
+        contractFactor: EXECUTION_CONFIG.ADAPTIVE_CONTRACT_FACTOR,
+        trailingBase: EXECUTION_CONFIG.TRAILING_STOP_BASE,
+        trailingAccel: EXECUTION_CONFIG.TRAILING_STOP_ACCELERATION,
+        maxRisk: EXECUTION_CONFIG.MAX_POSITION_RISK,
+        version: EXECUTION_CONFIG.VERSION
+      },
       ...filterPerformance,
     };
     
-    console.log(`[10.9F][Telemetry] Summary with coefficients (${SCORE_WEIGHTS_VERSION}, filter=${FILTER_SCHEMA_VERSION}):`, JSON.stringify(summary));
+    console.log(`[11.0C][Telemetry] Summary with coefficients (${SCORE_WEIGHTS_VERSION}, filter=${FILTER_SCHEMA_VERSION}):`, JSON.stringify(summary));
     return summary;
   }
 }
