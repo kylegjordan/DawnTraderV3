@@ -83,21 +83,23 @@ export class CriteriaLimiter {
       return { promoted: 0, skipped: 0, reason: 'no_open_slots' };
     }
 
-    const rtbSignals = await storage.getRtbSignals({ mode, status: 'queued' });
+    // Directive 11.0B: RTB controls ranking - request pre-ordered by FinalScore (descending)
+    // TCL does NOT sort locally - it picks from the top of the pre-ordered list
+    const rtbSignals = await storage.getRtbSignals({ 
+      mode, 
+      status: 'queued',
+      orderBy: 'finalScore',
+      orderDir: 'desc',
+      limit: openSlots
+    });
     
     if (rtbSignals.length === 0) {
       console.log(`[TCL][SKIP] No RTB signals available for ${mode} mode`);
       return { promoted: 0, skipped: 0, reason: 'no_rtb_signals' };
     }
 
-    // Directive 11.0B: Rank exclusively by FinalScore (descending)
-    const rankedSignals = rtbSignals.sort((a, b) => {
-      const finalScoreA = parseFloat(a.finalScore || '0');
-      const finalScoreB = parseFloat(b.finalScore || '0');
-      return finalScoreB - finalScoreA;
-    });
-
-    const topSignals = rankedSignals.slice(0, openSlots);
+    // Signals are already ranked by FinalScore from RTB - just take them
+    const topSignals = rtbSignals;
 
     let promotedCount = 0;
     for (const signal of topSignals) {

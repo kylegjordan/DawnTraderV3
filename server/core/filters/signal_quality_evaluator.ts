@@ -1,54 +1,39 @@
 /**
  * Directive 11.0B — Signal Quality Evaluator (SQE)
  * 
- * Final gatekeeper that evaluates signal quality.
+ * Final gatekeeper that evaluates signal quality based on FinalScore and RegimeWeight.
+ * Thresholds are read from the screener_filters table (configurable via UI screeners tab).
  * 
- * Directive 11.0B: PRIMARY filtering is on FinalScore and RegimeWeight.
- * When FinalScore is provided, it takes precedence over legacy metrics.
- * Legacy metrics (NGC, CWQI, Risk, ProfitRate) are used as fallback for backward compatibility.
- * 
- * Thresholds:
- * - FinalScore >= MIN_FINAL_SCORE (0.35)
- * - RegimeWeight >= MIN_REGIME_WEIGHT (0.30)
+ * Directive 11.0B: ALL legacy metrics (NGC, CWQI, Risk, ProfitRate) are DEPRECATED and REMOVED.
+ * Only FinalScore and RegimeWeight are evaluated.
  * 
  * Exposure, correlation, and cooldown checks are handled by the Signal Orchestrator.
- * All metrics must be computed upstream (Signal Orchestrator) and passed to SQE.
  */
 
+import { storage } from '../../storage.js';
 import { performanceMonitor } from '../diagnostics/performance_monitor';
 import { normalizeInternal } from '../../markets/kraken-symbol-resolver';
 import { diagnosticTrace } from '../diagnostics/trace_service';
 import { dataAggregator } from '../../services/data-aggregator.js';
 
 /**
- * Directive 11.0B: SQE Thresholds
- * Primary: FinalScore and RegimeWeight
- * Legacy: NGC, CWQI, Risk, ProfitRate (for backward compatibility)
+ * Directive 11.0B: SQE Thresholds - Default values used when screener config is unavailable
+ * Production values are loaded from screener_filters table
  */
-export const SQE_THRESHOLDS = {
-  MIN_FINAL_SCORE: parseFloat(process.env.SQE_FINAL_SCORE_MIN || '0.35'),
-  MIN_REGIME_WEIGHT: parseFloat(process.env.SQE_REGIME_MIN || '0.30'),
-  // Legacy thresholds (for backward compatibility when FinalScore not provided)
-  MIN_NGC: parseFloat(process.env.SQE_NGC_MIN || '0.55'),
-  MAX_RISK: parseFloat(process.env.SQE_MAX_RISK || '0.85'),
-  MIN_PROFIT_RATE: parseFloat(process.env.SQE_PROFIT_MIN || '0.10'),
-  MIN_CWQI: parseFloat(process.env.SQE_CWQI_MIN || '0.45'),
+export const SQE_DEFAULT_THRESHOLDS = {
+  MIN_FINAL_SCORE: 0.35,
+  MIN_REGIME_WEIGHT: 0.30,
 };
 
-console.log(`[11.0B][SQE_CONFIG] FinalScore>=${SQE_THRESHOLDS.MIN_FINAL_SCORE} RegimeWeight>=${SQE_THRESHOLDS.MIN_REGIME_WEIGHT} (Legacy: NGC>=${SQE_THRESHOLDS.MIN_NGC} CWQI>=${SQE_THRESHOLDS.MIN_CWQI})`);
+console.log(`[11.0B][SQE_CONFIG] Defaults: FinalScore>=${SQE_DEFAULT_THRESHOLDS.MIN_FINAL_SCORE} RegimeWeight>=${SQE_DEFAULT_THRESHOLDS.MIN_REGIME_WEIGHT}`);
 
 export interface SQEInput {
   signalId: string;
   symbol: string;
   strategy: string;
-  // Primary metrics (11.0B)
-  finalScore?: number;
-  regimeWeight?: number;
-  // Legacy metrics (backward compatibility)
-  ngc?: number;
-  riskScore?: number;
-  profitRate?: number;
-  cwqi?: number;
+  mode: 'paper' | 'live';
+  finalScore: number;
+  regimeWeight: number;
 }
 
 export interface SQEOptions {
@@ -61,12 +46,12 @@ export interface SQEResult {
   symbol: string;
   strategy: string;
   metrics: {
-    finalScore?: number;
-    regimeWeight?: number;
-    ngc?: number;
-    riskScore?: number;
-    profitRate?: number;
-    cwqi?: number;
+    finalScore: number;
+    regimeWeight: number;
+  };
+  thresholds: {
+    finalScoreMin: number;
+    regimeWeightMin: number;
   };
   failures: string[];
   reason?: string;
@@ -80,70 +65,76 @@ export interface SQEBatchResult {
 }
 
 /**
+ * Directive 11.0B: Get SQE thresholds from screener config
+ * Reads finalScoreMin and regimeWeightMin from screener_filters table
+ */
+async function getSQEThresholdsFromConfig(mode: 'paper' | 'live'): Promise<{ finalScoreMin: number; regimeWeightMin: number }> {
+  try {
+    const filters = await storage.getScreenerFilters({ mode });
+    if (filters) {
+      return {
+        finalScoreMin: parseFloat(filters.finalScoreMin || String(SQE_DEFAULT_THRESHOLDS.MIN_FINAL_SCORE)),
+        regimeWeightMin: parseFloat(filters.regimeWeightMin || String(SQE_DEFAULT_THRESHOLDS.MIN_REGIME_WEIGHT)),
+      };
+    }
+  } catch (err) {
+    console.warn(`[SQE][CONFIG] Failed to load screener config for ${mode}, using defaults:`, err);
+  }
+  
+  return {
+    finalScoreMin: SQE_DEFAULT_THRESHOLDS.MIN_FINAL_SCORE,
+    regimeWeightMin: SQE_DEFAULT_THRESHOLDS.MIN_REGIME_WEIGHT,
+  };
+}
+
+/**
  * Directive 11.0B: Evaluate a single signal against SQE thresholds
- * If FinalScore and RegimeWeight are provided, use ONLY those.
- * Otherwise, fall back to legacy metrics for backward compatibility.
+ * ONLY evaluates FinalScore and RegimeWeight - no legacy metrics
  * 
- * @param input - Pre-computed signal metrics
+ * @param input - Pre-computed signal metrics (must include finalScore and regimeWeight)
  * @param options - Optional evaluation settings
  * @returns SQEResult with pass/fail status and any failures
  */
-export function evaluateSignalQuality(input: SQEInput, options: SQEOptions = {}): SQEResult {
+export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions = {}): Promise<SQEResult> {
   const failures: string[] = [];
   
   const canonicalSymbol = normalizeInternal(input.symbol);
   
-  // Directive 11.0B: Use FinalScore-based filtering if available
-  const useFinalScoreMode = input.finalScore !== undefined && input.finalScore !== null;
+  // Directive 11.0B: Validate input - reject signals with missing metrics
+  const finalScore = input.finalScore ?? 0;
+  const regimeWeight = input.regimeWeight ?? 0;
   
-  if (useFinalScoreMode) {
-    // PRIMARY: FinalScore-based filtering (11.0B)
-    if (input.finalScore! < SQE_THRESHOLDS.MIN_FINAL_SCORE) {
-      failures.push(`FinalScore ${input.finalScore!.toFixed(4)} < ${SQE_THRESHOLDS.MIN_FINAL_SCORE}`);
-    }
-    
-    if (input.regimeWeight !== undefined && input.regimeWeight !== null) {
-      if (input.regimeWeight < SQE_THRESHOLDS.MIN_REGIME_WEIGHT) {
-        failures.push(`RegimeWeight ${input.regimeWeight.toFixed(4)} < ${SQE_THRESHOLDS.MIN_REGIME_WEIGHT}`);
-      }
-    }
-  } else {
-    // LEGACY: NGC/CWQI/Risk/ProfitRate filtering (backward compatibility)
-    if (input.ngc !== undefined && input.ngc < SQE_THRESHOLDS.MIN_NGC) {
-      failures.push(`NGC ${input.ngc.toFixed(4)} < ${SQE_THRESHOLDS.MIN_NGC}`);
-    }
-    
-    if (input.riskScore !== undefined && input.riskScore > SQE_THRESHOLDS.MAX_RISK) {
-      failures.push(`Risk ${input.riskScore.toFixed(4)} > ${SQE_THRESHOLDS.MAX_RISK}`);
-    }
-    
-    if (input.profitRate !== undefined && input.profitRate < SQE_THRESHOLDS.MIN_PROFIT_RATE) {
-      failures.push(`ProfitRate ${input.profitRate.toFixed(4)} < ${SQE_THRESHOLDS.MIN_PROFIT_RATE}`);
-    }
-    
-    if (input.cwqi !== undefined && input.cwqi < SQE_THRESHOLDS.MIN_CWQI) {
-      failures.push(`CWQI ${input.cwqi.toFixed(4)} < ${SQE_THRESHOLDS.MIN_CWQI}`);
-    }
+  if (typeof input.finalScore === 'undefined' || typeof input.regimeWeight === 'undefined') {
+    console.warn(`[SQE][WARN] Signal ${canonicalSymbol}/${input.strategy} missing required metrics (finalScore=${input.finalScore}, regimeWeight=${input.regimeWeight})`);
+    failures.push('Missing required metrics (finalScore or regimeWeight)');
+  }
+  
+  // Load thresholds from screener config (configurable via UI)
+  const thresholds = await getSQEThresholdsFromConfig(input.mode);
+  
+  // Directive 11.0B: FinalScore check
+  if (finalScore < thresholds.finalScoreMin) {
+    failures.push(`FinalScore ${finalScore.toFixed(4)} < ${thresholds.finalScoreMin}`);
+  }
+  
+  // Directive 11.0B: RegimeWeight check
+  if (regimeWeight < thresholds.regimeWeightMin) {
+    failures.push(`RegimeWeight ${regimeWeight.toFixed(4)} < ${thresholds.regimeWeightMin}`);
   }
   
   const passed = failures.length === 0;
   
   const status = passed ? 'PASS' : 'FAIL';
   const reason = passed ? 'thresholds_met' : failures[0]?.split(' ')[0] || 'unknown';
-  const mode = useFinalScoreMode ? 'FinalScore' : 'Legacy';
-  console.log(`[11.0B][SQE_EVAL] ${status} symbol=${canonicalSymbol} strategy=${input.strategy} mode=${mode} reason=${reason}`);
+  console.log(`[11.0B][SQE_EVAL] ${status} symbol=${canonicalSymbol} strategy=${input.strategy} finalScore=${finalScore.toFixed(4)} regimeWeight=${regimeWeight.toFixed(4)} reason=${reason}`);
   
   performanceMonitor.recordSQEEvaluation(passed);
   
   dataAggregator.capture('SQE_EVAL', {
     symbol: canonicalSymbol,
     strategy: input.strategy,
-    finalScore: input.finalScore,
-    regimeWeight: input.regimeWeight,
-    ngc: input.ngc,
-    cwqi: input.cwqi,
-    risk: input.riskScore,
-    profitRate: input.profitRate,
+    finalScore: finalScore,
+    regimeWeight: regimeWeight,
     sqeScore: passed ? 1 : 0,
     passed
   }).catch(() => {});
@@ -152,24 +143,16 @@ export function evaluateSignalQuality(input: SQEInput, options: SQEOptions = {})
     canonicalSymbol,
     input.strategy,
     {
-      finalScore: input.finalScore,
-      regimeWeight: input.regimeWeight,
-      ngc: input.ngc,
-      cwqi: input.cwqi,
-      profit: input.profitRate,
-      risk: input.riskScore,
+      finalScore: finalScore,
+      regimeWeight: regimeWeight,
     },
     passed,
     true
   );
   
   const clampedMetrics = {
-    finalScore: input.finalScore !== undefined ? Math.max(0, Math.min(1, input.finalScore)) : undefined,
-    regimeWeight: input.regimeWeight !== undefined ? Math.max(0, Math.min(1, input.regimeWeight)) : undefined,
-    ngc: input.ngc !== undefined ? Math.max(0, Math.min(1, input.ngc)) : undefined,
-    riskScore: input.riskScore !== undefined ? Math.max(0, Math.min(1, input.riskScore)) : undefined,
-    profitRate: input.profitRate !== undefined ? Math.max(0, Math.min(1, input.profitRate)) : undefined,
-    cwqi: input.cwqi !== undefined ? Math.max(0, Math.min(1, input.cwqi)) : undefined,
+    finalScore: Math.max(0, Math.min(1, finalScore)),
+    regimeWeight: Math.max(0, Math.min(1, regimeWeight)),
   };
   
   return {
@@ -178,6 +161,52 @@ export function evaluateSignalQuality(input: SQEInput, options: SQEOptions = {})
     symbol: canonicalSymbol,
     strategy: input.strategy,
     metrics: clampedMetrics,
+    thresholds,
+    failures,
+    reason: passed ? undefined : failures.join('; '),
+  };
+}
+
+/**
+ * Synchronous version for backward compatibility during transition
+ * Uses default thresholds - for full config support use async version
+ */
+export function evaluateSignalQualitySync(input: SQEInput, thresholds?: { finalScoreMin: number; regimeWeightMin: number }): SQEResult {
+  const failures: string[] = [];
+  
+  const canonicalSymbol = normalizeInternal(input.symbol);
+  
+  const config = thresholds || {
+    finalScoreMin: SQE_DEFAULT_THRESHOLDS.MIN_FINAL_SCORE,
+    regimeWeightMin: SQE_DEFAULT_THRESHOLDS.MIN_REGIME_WEIGHT,
+  };
+  
+  if (input.finalScore < config.finalScoreMin) {
+    failures.push(`FinalScore ${input.finalScore.toFixed(4)} < ${config.finalScoreMin}`);
+  }
+  
+  if (input.regimeWeight < config.regimeWeightMin) {
+    failures.push(`RegimeWeight ${input.regimeWeight.toFixed(4)} < ${config.regimeWeightMin}`);
+  }
+  
+  const passed = failures.length === 0;
+  
+  const status = passed ? 'PASS' : 'FAIL';
+  const reason = passed ? 'thresholds_met' : failures[0]?.split(' ')[0] || 'unknown';
+  console.log(`[11.0B][SQE_EVAL] ${status} symbol=${canonicalSymbol} strategy=${input.strategy} finalScore=${input.finalScore.toFixed(4)} regimeWeight=${input.regimeWeight.toFixed(4)} reason=${reason}`);
+  
+  performanceMonitor.recordSQEEvaluation(passed);
+  
+  return {
+    passed,
+    signalId: input.signalId,
+    symbol: canonicalSymbol,
+    strategy: input.strategy,
+    metrics: {
+      finalScore: Math.max(0, Math.min(1, input.finalScore)),
+      regimeWeight: Math.max(0, Math.min(1, input.regimeWeight)),
+    },
+    thresholds: config,
     failures,
     reason: passed ? undefined : failures.join('; '),
   };
@@ -186,12 +215,12 @@ export function evaluateSignalQuality(input: SQEInput, options: SQEOptions = {})
 /**
  * Evaluate a batch of signals
  */
-export function evaluateSignalBatch(inputs: SQEInput[]): SQEBatchResult {
+export async function evaluateSignalBatch(inputs: SQEInput[]): Promise<SQEBatchResult> {
   const passed: SQEResult[] = [];
   const rejected: SQEResult[] = [];
   
   for (const input of inputs) {
-    const result = evaluateSignalQuality(input);
+    const result = await evaluateSignalQuality(input);
     if (result.passed) {
       passed.push(result);
     } else {
@@ -215,28 +244,11 @@ export function getPrimaryFailureReason(result: SQEResult): string | null {
     return null;
   }
   
-  // Check FinalScore mode first
-  if (result.metrics.finalScore !== undefined) {
-    if (result.metrics.finalScore < SQE_THRESHOLDS.MIN_FINAL_SCORE) {
-      return 'LOW_FINAL_SCORE';
-    }
-    if (result.metrics.regimeWeight !== undefined && result.metrics.regimeWeight < SQE_THRESHOLDS.MIN_REGIME_WEIGHT) {
-      return 'LOW_REGIME_WEIGHT';
-    }
+  if (result.metrics.finalScore < result.thresholds.finalScoreMin) {
+    return 'LOW_FINAL_SCORE';
   }
-  
-  // Legacy mode
-  if (result.metrics.ngc !== undefined && result.metrics.ngc < SQE_THRESHOLDS.MIN_NGC) {
-    return 'LOW_NGC';
-  }
-  if (result.metrics.cwqi !== undefined && result.metrics.cwqi < SQE_THRESHOLDS.MIN_CWQI) {
-    return 'LOW_CWQI';
-  }
-  if (result.metrics.riskScore !== undefined && result.metrics.riskScore > SQE_THRESHOLDS.MAX_RISK) {
-    return 'HIGH_RISK';
-  }
-  if (result.metrics.profitRate !== undefined && result.metrics.profitRate < SQE_THRESHOLDS.MIN_PROFIT_RATE) {
-    return 'LOW_PROFIT_RATE';
+  if (result.metrics.regimeWeight < result.thresholds.regimeWeightMin) {
+    return 'LOW_REGIME_WEIGHT';
   }
   
   return 'UNKNOWN';
@@ -250,37 +262,26 @@ export function isMarginallySafe(result: SQEResult): boolean {
   
   const marginThreshold = 0.05;
   
-  // Check FinalScore mode
-  if (result.metrics.finalScore !== undefined) {
-    const finalScoreMargin = result.metrics.finalScore - SQE_THRESHOLDS.MIN_FINAL_SCORE;
-    if (finalScoreMargin < marginThreshold) return true;
-  }
+  const finalScoreMargin = result.metrics.finalScore - result.thresholds.finalScoreMin;
+  if (finalScoreMargin < marginThreshold) return true;
   
-  if (result.metrics.regimeWeight !== undefined) {
-    const regimeMargin = result.metrics.regimeWeight - SQE_THRESHOLDS.MIN_REGIME_WEIGHT;
-    if (regimeMargin < marginThreshold) return true;
-  }
-  
-  // Legacy mode
-  if (result.metrics.ngc !== undefined) {
-    const ngcMargin = result.metrics.ngc - SQE_THRESHOLDS.MIN_NGC;
-    if (ngcMargin < marginThreshold) return true;
-  }
-  
-  if (result.metrics.cwqi !== undefined) {
-    const cwqiMargin = result.metrics.cwqi - SQE_THRESHOLDS.MIN_CWQI;
-    if (cwqiMargin < marginThreshold) return true;
-  }
+  const regimeMargin = result.metrics.regimeWeight - result.thresholds.regimeWeightMin;
+  if (regimeMargin < marginThreshold) return true;
   
   return false;
 }
 
 /**
- * Get SQE threshold configuration for display/diagnostics
+ * Get SQE default thresholds for display/diagnostics
  */
-export function getSQEThresholds(): typeof SQE_THRESHOLDS {
-  return { ...SQE_THRESHOLDS };
+export function getSQEDefaultThresholds(): typeof SQE_DEFAULT_THRESHOLDS {
+  return { ...SQE_DEFAULT_THRESHOLDS };
 }
+
+/**
+ * Directive 11.0B: Export thresholds constant for tests
+ */
+export const SQE_THRESHOLDS = SQE_DEFAULT_THRESHOLDS;
 
 /**
  * Signal Quality Evaluator service instance
@@ -289,9 +290,22 @@ class SignalQualityEvaluatorService {
   private evaluationCount = 0;
   private passCount = 0;
   private rejectCount = 0;
+  private cachedThresholds: Map<string, { thresholds: { finalScoreMin: number; regimeWeightMin: number }; cachedAt: number }> = new Map();
+  private cacheTTL = 60000; // 1 minute cache
   
-  evaluate(input: SQEInput, options: SQEOptions = {}): SQEResult {
-    const result = evaluateSignalQuality(input, options);
+  async getThresholds(mode: 'paper' | 'live'): Promise<{ finalScoreMin: number; regimeWeightMin: number }> {
+    const cached = this.cachedThresholds.get(mode);
+    if (cached && Date.now() - cached.cachedAt < this.cacheTTL) {
+      return cached.thresholds;
+    }
+    
+    const thresholds = await getSQEThresholdsFromConfig(mode);
+    this.cachedThresholds.set(mode, { thresholds, cachedAt: Date.now() });
+    return thresholds;
+  }
+  
+  async evaluate(input: SQEInput, options: SQEOptions = {}): Promise<SQEResult> {
+    const result = await evaluateSignalQuality(input, options);
     
     this.evaluationCount++;
     if (result.passed) {
@@ -304,7 +318,7 @@ class SignalQualityEvaluatorService {
     return result;
   }
   
-  evaluateBatch(inputs: SQEInput[]): SQEBatchResult {
+  async evaluateBatch(inputs: SQEInput[]): Promise<SQEBatchResult> {
     return evaluateSignalBatch(inputs);
   }
   
@@ -321,7 +335,8 @@ class SignalQualityEvaluatorService {
     this.evaluationCount = 0;
     this.passCount = 0;
     this.rejectCount = 0;
-    console.log('[SQE] Stats reset');
+    this.cachedThresholds.clear();
+    console.log('[SQE] Stats and cache reset');
   }
 }
 

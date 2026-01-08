@@ -2,16 +2,17 @@
  * Directive 11.0B — TCL/TEC/SQE Component Boundary Tests
  * 
  * Verifies that:
- * - TCL ranks signals by FinalScore (descending) for promotion
- * - SQE filters by FinalScore and RegimeWeight thresholds
+ * - TCL picks top-ranked signals from pre-ordered RTB (by FinalScore)
+ * - SQE filters by FinalScore and RegimeWeight thresholds from screener config
  * - TEC handles adaptive sizing based on trendline feedback
  * - Exposure/correlation/cooldown are NOT in TCL or TEC
+ * - NO legacy metrics (NGC, CWQI, risk, profitRate) in SQE
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 describe('Directive 11.0B: TCL/TEC/SQE Separation', () => {
-  describe('TCL (Trade Criteria Limiter) - FinalScore Ranking', () => {
+  describe('TCL (Trade Criteria Limiter) - Picks from Pre-Ordered RTB', () => {
     it('should have onFailsafeTimer method for 2-minute failsafe', async () => {
       const { CriteriaLimiter } = await import('../../core/criteria-limiter.js');
       const tcl = new CriteriaLimiter();
@@ -82,14 +83,22 @@ describe('Directive 11.0B: TCL/TEC/SQE Separation', () => {
     });
   });
 
-  describe('SQE (Signal Quality Evaluator) - FinalScore + RegimeWeight Filtering', () => {
-    it('should pass signals with FinalScore >= 0.35 and RegimeWeight >= 0.30', async () => {
-      const { evaluateSignalQuality } = await import('../../core/filters/signal_quality_evaluator.js');
+  describe('SQE (Signal Quality Evaluator) - FinalScore + RegimeWeight Only', () => {
+    it('should have default thresholds for FinalScore and RegimeWeight', async () => {
+      const { SQE_DEFAULT_THRESHOLDS } = await import('../../core/filters/signal_quality_evaluator.js');
       
-      const result = evaluateSignalQuality({
+      expect(SQE_DEFAULT_THRESHOLDS.MIN_FINAL_SCORE).toBe(0.35);
+      expect(SQE_DEFAULT_THRESHOLDS.MIN_REGIME_WEIGHT).toBe(0.30);
+    });
+
+    it('should pass signals with FinalScore >= 0.35 and RegimeWeight >= 0.30', async () => {
+      const { evaluateSignalQualitySync } = await import('../../core/filters/signal_quality_evaluator.js');
+      
+      const result = evaluateSignalQualitySync({
         signalId: 'test-signal-1',
         symbol: 'BTC/USD',
         strategy: 'sma_trend_ride',
+        mode: 'paper',
         finalScore: 0.50,
         regimeWeight: 0.40
       });
@@ -99,12 +108,13 @@ describe('Directive 11.0B: TCL/TEC/SQE Separation', () => {
     });
 
     it('should reject signals with FinalScore < 0.35', async () => {
-      const { evaluateSignalQuality } = await import('../../core/filters/signal_quality_evaluator.js');
+      const { evaluateSignalQualitySync } = await import('../../core/filters/signal_quality_evaluator.js');
       
-      const result = evaluateSignalQuality({
+      const result = evaluateSignalQualitySync({
         signalId: 'test-signal-2',
         symbol: 'BTC/USD',
         strategy: 'sma_trend_ride',
+        mode: 'paper',
         finalScore: 0.30,
         regimeWeight: 0.40
       });
@@ -115,12 +125,13 @@ describe('Directive 11.0B: TCL/TEC/SQE Separation', () => {
     });
 
     it('should reject signals with RegimeWeight < 0.30', async () => {
-      const { evaluateSignalQuality } = await import('../../core/filters/signal_quality_evaluator.js');
+      const { evaluateSignalQualitySync } = await import('../../core/filters/signal_quality_evaluator.js');
       
-      const result = evaluateSignalQuality({
+      const result = evaluateSignalQualitySync({
         signalId: 'test-signal-3',
         symbol: 'BTC/USD',
         strategy: 'sma_trend_ride',
+        mode: 'paper',
         finalScore: 0.50,
         regimeWeight: 0.20
       });
@@ -130,27 +141,43 @@ describe('Directive 11.0B: TCL/TEC/SQE Separation', () => {
       expect(result.failures[0]).toContain('RegimeWeight');
     });
 
-    it('should support legacy metrics (NGC, CWQI, etc.) for backward compatibility', async () => {
-      const { evaluateSignalQuality } = await import('../../core/filters/signal_quality_evaluator.js');
+    it('should NOT have legacy metric support (NGC, CWQI, risk, profitRate)', async () => {
+      const { evaluateSignalQualitySync } = await import('../../core/filters/signal_quality_evaluator.js');
       
-      const result = evaluateSignalQuality({
+      // Verify the function signature only accepts FinalScore and RegimeWeight
+      const result = evaluateSignalQualitySync({
         signalId: 'test-signal-4',
         symbol: 'BTC/USD',
         strategy: 'sma_trend_ride',
-        ngc: 0.65,
-        riskScore: 0.20,
-        profitRate: 0.15,
-        cwqi: 0.55
+        mode: 'paper',
+        finalScore: 0.50,
+        regimeWeight: 0.40
       });
       
-      expect(result.passed).toBe(true);
+      // Result should only contain finalScore and regimeWeight metrics
+      expect(result.metrics).toHaveProperty('finalScore');
+      expect(result.metrics).toHaveProperty('regimeWeight');
+      expect(result.metrics).not.toHaveProperty('ngc');
+      expect(result.metrics).not.toHaveProperty('cwqi');
+      expect(result.metrics).not.toHaveProperty('riskScore');
+      expect(result.metrics).not.toHaveProperty('profitRate');
     });
 
-    it('should have correct SQE_THRESHOLDS', async () => {
-      const { SQE_THRESHOLDS } = await import('../../core/filters/signal_quality_evaluator.js');
+    it('should include thresholds in result for transparency', async () => {
+      const { evaluateSignalQualitySync } = await import('../../core/filters/signal_quality_evaluator.js');
       
-      expect(SQE_THRESHOLDS.MIN_FINAL_SCORE).toBe(0.35);
-      expect(SQE_THRESHOLDS.MIN_REGIME_WEIGHT).toBe(0.30);
+      const result = evaluateSignalQualitySync({
+        signalId: 'test-signal-5',
+        symbol: 'BTC/USD',
+        strategy: 'sma_trend_ride',
+        mode: 'paper',
+        finalScore: 0.50,
+        regimeWeight: 0.40
+      });
+      
+      expect(result.thresholds).toBeDefined();
+      expect(result.thresholds.finalScoreMin).toBe(0.35);
+      expect(result.thresholds.regimeWeightMin).toBe(0.30);
     });
   });
 
@@ -365,9 +392,9 @@ describe('Directive 11.0B: TCL/TEC/SQE Separation', () => {
   });
 
   describe('Schema Version', () => {
-    it('should be at backend version 1.4.2 for Directive 11.0B', () => {
-      const BACKEND_SCHEMA_VERSION = '1.4.2';
-      expect(BACKEND_SCHEMA_VERSION).toBe('1.4.2');
+    it('should be at backend version 1.4.3 for Directive 11.0B (with screener config)', () => {
+      const BACKEND_SCHEMA_VERSION = '1.4.3';
+      expect(BACKEND_SCHEMA_VERSION).toBe('1.4.3');
     });
   });
 });

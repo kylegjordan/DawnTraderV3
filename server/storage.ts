@@ -4422,8 +4422,10 @@ export class DatabaseStorage implements IStorage {
       .from(rtbSignals)
       .where(and(...conditions));
     
-    // Apply ordering
-    if (orderBy === 'cwqi') {
+    // Apply ordering - Directive 11.0B: finalScore is primary sort
+    if (orderBy === 'finalScore') {
+      query = query.orderBy(orderDir === 'asc' ? asc(rtbSignals.finalScore) : desc(rtbSignals.finalScore)) as any;
+    } else if (orderBy === 'cwqi') {
       query = query.orderBy(orderDir === 'asc' ? asc(rtbSignals.cwqi) : desc(rtbSignals.cwqi)) as any;
     } else {
       query = query.orderBy(orderDir === 'asc' ? asc(rtbSignals.queuedAt) : desc(rtbSignals.queuedAt)) as any;

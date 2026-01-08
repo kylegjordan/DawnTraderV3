@@ -45,13 +45,30 @@ Math Core Harmonization (Centralized Scoring Coefficients) unifies the FinalScor
 
 The system incorporates Verification & Config Purification, Backend Filter Deconfliction & Deprecation, Screeners & Filter Insights Modernization, UI Completion & Diagnostics Integration, and Final Deprecations & Telemetry Expansion directives to refine and enhance its operational integrity, telemetry, and filtering mechanisms.
 
-The Trade Lifecycle Flow involves:
+**Directive 11.0B — Trade Lifecycle Flow (January 2026):**
+
+```
+[Signal Orchestrator] (exposure, correlation, cooldown)
+     ↓
+[SQE] (FinalScore + RegimeWeight from screener config)
+     ↓
+[Ready-to-Buy Queue] (pre-ordered by FinalScore DESC)
+     ↓ (2-min or 15-signal trigger)
+[TCL] (picks top N from pre-ordered RTB)
+     ↓
+[TEC] (adaptive sizing + trailing exits)
+     ↓
+[Order Management]
+```
+
 1.  **Signal Orchestrator**: Handles exposure, correlation, and cooldown.
-2.  **SQE (Signal Quality Evaluator)** (`server/core/filters/signal_quality_evaluator.ts`): Filters by FinalScore >= 0.35 and RegimeWeight >= 0.30.
-3.  **Ready-to-Buy Queue**: Holds signals for promotion.
-4.  **TCL (Trade Criteria Limiter)** (`server/core/criteria-limiter.ts`): Ranks signals by FinalScore (descending) based on event-based promotion (2-minute failsafe timer, 15-signal RTB queue threshold).
-5.  **TEC (Trade Execution Controller)** (`server/services/execution-controller.ts`): Manages active trades with adaptive sizing and trailing exits.
+2.  **SQE (Signal Quality Evaluator)** (`server/core/filters/signal_quality_evaluator.ts`): Filters by FinalScore >= finalScoreMin and RegimeWeight >= regimeWeightMin. Thresholds read from screener_filters table (configurable via UI). Default: FinalScore >= 0.35, RegimeWeight >= 0.30. **DEPRECATED**: NGC, CWQI, Risk, ProfitRate filtering removed.
+3.  **Ready-to-Buy Queue**: Holds signals for promotion, pre-ordered by FinalScore DESC.
+4.  **TCL (Trade Criteria Limiter)** (`server/core/criteria-limiter.ts`): Picks top N signals from pre-ordered RTB (no local sorting). Event-based promotion: 2-minute failsafe timer, 15-signal RTB queue threshold.
+5.  **TEC (Trade Execution Controller)** (`server/services/execution-controller.ts`): Manages active trades with adaptive sizing (+10% trendline reinforced, -10% trendline weakened) and trailing exits.
 6.  **Order Management**: Executes trades.
+
+**Schema v1.4.3**: screener_filters table has `final_score_min`, `regime_weight_min` columns. storage.getRtbSignals supports `orderBy: 'finalScore'`. Tests: 29 passing.
 
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.

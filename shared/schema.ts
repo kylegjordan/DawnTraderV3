@@ -456,6 +456,10 @@ export const screenerFilters = pgTable("screener_filters", {
   filterOverrides: jsonb("filter_overrides").default(sql`'{}'::jsonb`),
   lastUpdatedBy: varchar("last_updated_by", { length: 255 }), // User ID or 'latti' or 'system'
   
+  // Directive 11.0B: SQE Thresholds (configurable via screeners tab)
+  finalScoreMin: decimal("final_score_min", { precision: 5, scale: 4 }).default("0.35"), // Minimum FinalScore for SQE (0.35 default)
+  regimeWeightMin: decimal("regime_weight_min", { precision: 5, scale: 4 }).default("0.30"), // Minimum RegimeWeight for SQE (0.30 default)
+  
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
@@ -2139,6 +2143,9 @@ export const insertScreenerFiltersSchema = createInsertSchema(screenerFilters).o
   volatilityMin: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
   volatilityMax: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
   minLiquidity: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  // Directive 11.0B: SQE Thresholds
+  finalScoreMin: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  regimeWeightMin: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
 });
 
 export const insertStrategySettingsSchema = createInsertSchema(strategySettings).omit({
