@@ -5,5 +5,5 @@
  * Used by telemetry and diagnostics for audit trail.
  */
 
-export const SCHEMA_VERSION = "v1.4.5";
-export const SCHEMA_DIRECTIVE = "11.0D";
+export const SCHEMA_VERSION = "v1.4.6";
+export const SCHEMA_DIRECTIVE = "11.0E";
