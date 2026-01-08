@@ -50,3 +50,6 @@ The trade lifecycle flow proceeds from `Signal Orchestrator` (exposure, correlat
 -   **Neon Database**: Serverless PostgreSQL database.
 -   **Binance Public API**: Primary external market price feed.
 -   **CoinGecko API**: Fallback external market price feed.
+
+## Directive History
+-   **Directive 11.0E-G Summary**: See `docs/directive_11_summary.md` for the complete Metric Engine Consolidation history (FinalScore transition, legacy purge, schema hardening).
