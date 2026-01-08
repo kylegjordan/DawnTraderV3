@@ -68,6 +68,28 @@ export interface CascadeEfficiency {
   timestamp: number;
 }
 
+/**
+ * Directive 11.2 R1: Pool-level performance aggregates for dynamic ratio balancing
+ */
+export interface PoolPerformanceAggregate {
+  pool: PoolType;
+  winRate: number;
+  sampleCount: number;
+  totalTrades: number;
+  successfulTrades: number;
+  avgFinalScore: number;
+  lastUpdated: number;
+}
+
+/**
+ * Directive 11.2 R1: Pair selection result with explicit pool attribution
+ */
+export interface PairWithPool {
+  symbol: string;
+  pool: PoolType;
+  score: number;
+}
+
 export class TelemetryAggregatorService {
   private pairTelemetry: Map<string, PairTelemetry[]> = new Map();
   private cascadeHistory: CascadeEfficiency[] = [];
@@ -76,6 +98,12 @@ export class TelemetryAggregatorService {
   private dss = new DynamicStrategySelector();
   private currentRegime: MarketRegime = 'LOW_VOL_CHOP';
   private rehydrated = false;
+  
+  // Directive 11.2 R1: Pool-level performance tracking
+  private poolAggregates: Map<PoolType, PoolPerformanceAggregate> = new Map([
+    ['ideal', { pool: 'ideal', winRate: 0.5, sampleCount: 0, totalTrades: 0, successfulTrades: 0, avgFinalScore: 0, lastUpdated: Date.now() }],
+    ['rotational', { pool: 'rotational', winRate: 0.5, sampleCount: 0, totalTrades: 0, successfulTrades: 0, avgFinalScore: 0, lastUpdated: Date.now() }],
+  ]);
 
   /**
    * Record telemetry for a pair
@@ -119,6 +147,11 @@ export class TelemetryAggregatorService {
     recent.push(entry);
     this.pairTelemetry.set(symbol, recent);
     
+    // Directive 11.2 R1: Update pool-level aggregates
+    if (data.pool) {
+      this.updatePoolAggregate(data.pool, data.finalScore, data.success);
+    }
+    
     // Directive 11.2 R1: Include pool in telemetry log
     console.log(`[10.8][Telemetry] ${symbol} (${entry.pool}) recorded: finalScore=${data.finalScore.toFixed(2)}, samples=${recent.length}`);
     
@@ -150,6 +183,59 @@ export class TelemetryAggregatorService {
     } catch (error) {
       console.error('[11.1A][Telemetry] Failed to persist telemetry:', error);
     }
+  }
+
+  /**
+   * Directive 11.2 R1: Update pool-level performance aggregates
+   * Tracks win rate and average scores per pool for dynamic ratio balancing
+   */
+  private updatePoolAggregate(pool: PoolType, finalScore: number, success?: boolean): void {
+    const aggregate = this.poolAggregates.get(pool);
+    if (!aggregate) return;
+
+    aggregate.sampleCount++;
+    aggregate.avgFinalScore = (
+      (aggregate.avgFinalScore * (aggregate.sampleCount - 1) + finalScore) / aggregate.sampleCount
+    );
+    
+    if (success !== undefined) {
+      aggregate.totalTrades++;
+      if (success) {
+        aggregate.successfulTrades++;
+      }
+      aggregate.winRate = aggregate.totalTrades > 0 
+        ? aggregate.successfulTrades / aggregate.totalTrades 
+        : 0.5;
+    }
+    
+    aggregate.lastUpdated = Date.now();
+    this.poolAggregates.set(pool, aggregate);
+    
+    console.log(`[11.2R1][Telemetry] Pool ${pool} updated: winRate=${(aggregate.winRate * 100).toFixed(1)}%, samples=${aggregate.sampleCount}`);
+  }
+
+  /**
+   * Directive 11.2 R1: Get pool performance comparison for AdaptiveRatioManager
+   * Returns aggregated performance metrics by pool
+   */
+  getPoolPerformanceComparison(): { ideal: PoolPerformanceAggregate; rotational: PoolPerformanceAggregate } {
+    return {
+      ideal: this.poolAggregates.get('ideal') || { 
+        pool: 'ideal', winRate: 0.5, sampleCount: 0, totalTrades: 0, successfulTrades: 0, avgFinalScore: 0, lastUpdated: Date.now() 
+      },
+      rotational: this.poolAggregates.get('rotational') || { 
+        pool: 'rotational', winRate: 0.5, sampleCount: 0, totalTrades: 0, successfulTrades: 0, avgFinalScore: 0, lastUpdated: Date.now() 
+      },
+    };
+  }
+
+  /**
+   * Directive 11.2 R1: Reset pool aggregates (for testing or regime change)
+   */
+  resetPoolAggregates(): void {
+    this.poolAggregates.set('ideal', { pool: 'ideal', winRate: 0.5, sampleCount: 0, totalTrades: 0, successfulTrades: 0, avgFinalScore: 0, lastUpdated: Date.now() });
+    this.poolAggregates.set('rotational', { pool: 'rotational', winRate: 0.5, sampleCount: 0, totalTrades: 0, successfulTrades: 0, avgFinalScore: 0, lastUpdated: Date.now() });
+    console.log('[11.2R1][Telemetry] Pool aggregates reset');
   }
 
   /**
@@ -300,8 +386,17 @@ export class TelemetryAggregatorService {
   /**
    * Get top-performing pairs (Ideal Pool)
    * Returns the top N% of pairs based on composite score
+   * Directive 11.2 R1: Returns explicit pool attribution
    */
   getTopPairs(ratio: number): string[] {
+    const pairs = this.getTopPairsWithPool(ratio);
+    return pairs.map(p => p.symbol);
+  }
+
+  /**
+   * Directive 11.2 R1: Get top pairs with explicit pool attribution
+   */
+  getTopPairsWithPool(ratio: number): PairWithPool[] {
     const now = Date.now();
     const scoredPairs: Array<{ symbol: string; score: number }> = [];
     
@@ -320,7 +415,11 @@ export class TelemetryAggregatorService {
     scoredPairs.sort((a, b) => b.score - a.score);
     
     const count = Math.ceil(scoredPairs.length * ratio);
-    const topPairs = scoredPairs.slice(0, count).map(p => p.symbol);
+    const topPairs = scoredPairs.slice(0, count).map(p => ({
+      symbol: p.symbol,
+      pool: 'ideal' as PoolType,
+      score: p.score,
+    }));
     
     console.log(`[10.8][Telemetry] getTopPairs(${ratio}): ${topPairs.length} pairs selected`);
     return topPairs;
@@ -329,8 +428,17 @@ export class TelemetryAggregatorService {
   /**
    * Get rotational pairs for exploration (pairs with limited samples)
    * These are pairs that haven't been scanned recently or have insufficient data
+   * Directive 11.2 R1: Returns explicit pool attribution
    */
   getRotationalPairs(ratio: number, allPairs: string[]): string[] {
+    const pairs = this.getRotationalPairsWithPool(ratio, allPairs);
+    return pairs.map(p => p.symbol);
+  }
+
+  /**
+   * Directive 11.2 R1: Get rotational pairs with explicit pool attribution
+   */
+  getRotationalPairsWithPool(ratio: number, allPairs: string[]): PairWithPool[] {
     const now = Date.now();
     const undersampled: string[] = [];
     
@@ -351,7 +459,11 @@ export class TelemetryAggregatorService {
     // Shuffle for random rotation
     const shuffled = undersampled.sort(() => Math.random() - 0.5);
     const count = Math.ceil(allPairs.length * ratio);
-    const rotationalPairs = shuffled.slice(0, count);
+    const rotationalPairs = shuffled.slice(0, count).map(symbol => ({
+      symbol,
+      pool: 'rotational' as PoolType,
+      score: 0, // Rotational pairs don't have established scores
+    }));
     
     console.log(`[10.8][Telemetry] getRotationalPairs(${ratio}): ${rotationalPairs.length} pairs selected`);
     return rotationalPairs;
