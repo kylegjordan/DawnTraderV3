@@ -1,8 +1,8 @@
 {
   "repo_root": "/",
   "purpose": "Authoritative navigation map for DawnTrader repository. ChatGPT MUST consult this file before accessing any repository files.",
-  "last_updated": "2026-01-02",
-  "current_phase": "Phase 9 Complete (Math Core Finalization)",
+  "last_updated": "2026-01-08",
+  "current_phase": "Phase 11 In Progress (Directive 11.0D Complete)",
   "domains": {
     "bridge": {
       "path": "/bridge",
@@ -16,8 +16,11 @@
             "DawnTrader_Current_State_Reference.md",
             "DawnTrader_System_Architecture_Execution_Flow.md",
             "DawnTrader_System_Invariants_Design_Guarantees.md",
+            "DawnTrader_Math_Methodology_Reference.md",
             "Phase_8_Implementation_History.md",
             "Phase_9_Implementation_History.md",
+            "Phase_10_Implementation_History.md",
+            "Phase_11_Implementation_History.md",
             "Walter_and_LATTi_System_History.md",
             "dawntrader-future-state-paper-engine.md"
           ]
@@ -43,14 +46,52 @@
       "subdomains": {
         "_deprecated": {
           "path": "/server/_deprecated",
-          "description": "Quarantined legacy files (9.0-FP cleanup) - most deleted in 9.8"
+          "description": "Quarantined legacy files - most deleted in Phase 9.8"
         },
         "config": {
           "path": "/server/config",
-          "description": "Configuration files including SYSTEM_GUARDS",
+          "description": "Configuration files including SYSTEM_GUARDS, EXECUTION_CONFIG, schema version",
           "key_files": [
-            "system-guards.ts"
+            "system-guards.ts",
+            "execution-config.ts",
+            "schema-version.ts",
+            "score-weights.config.ts"
           ]
+        },
+        "core": {
+          "path": "/server/core",
+          "description": "Core trading logic, filters, RTB management",
+          "subdomains": {
+            "filters": {
+              "path": "/server/core/filters",
+              "description": "Signal quality evaluation",
+              "key_files": [
+                "signal_quality_evaluator.ts"
+              ]
+            },
+            "rtb": {
+              "path": "/server/core/rtb",
+              "description": "Ready-to-Buy queue management",
+              "key_files": [
+                "ready_to_buy_service.ts"
+              ]
+            },
+            "utils": {
+              "path": "/server/core/utils",
+              "description": "Core utilities",
+              "key_files": [
+                "score-calculator.ts"
+              ]
+            },
+            "diagnostics": {
+              "path": "/server/core/diagnostics",
+              "description": "Diagnostic and tracing services",
+              "key_files": [
+                "trace_service.ts",
+                "performance_monitor.ts"
+              ]
+            }
+          }
         },
         "services": {
           "path": "/server/services",
@@ -63,7 +104,22 @@
             "strategy-engine.ts",
             "signal-orchestrator.ts",
             "paper-execution-engine.ts",
-            "trade-safety.ts"
+            "trade-safety.ts",
+            "hybrid-integration.ts",
+            "multi-timeframe-scanner.ts",
+            "adaptive-scan-manager.ts",
+            "telemetry-aggregator.ts",
+            "filter-insights.service.ts",
+            "ml-calibration.ts",
+            "execution-controller.ts"
+          ]
+        },
+        "engines": {
+          "path": "/server/engines",
+          "description": "Trading engine, strategy engine, regime engine, adaptive systems",
+          "key_files": [
+            "covariance-engine.ts",
+            "adaptive-kalman.ts"
           ]
         },
         "utils": {
@@ -72,10 +128,6 @@
           "key_files": [
             "analysis-utils.ts"
           ]
-        },
-        "engines": {
-          "path": "/server/engines",
-          "description": "Trading engine, strategy engine, regime engine"
         },
         "routes": {
           "path": "/server/routes",
@@ -95,13 +147,16 @@
             "unit": {
               "path": "/server/tests/unit",
               "key_files": [
-                "cwqi.test.ts"
+                "cwqi.test.ts",
+                "sqe-config-dynamic.test.ts",
+                "execution-config.test.ts"
               ]
             },
             "integration": {
               "path": "/server/tests/integration",
               "key_files": [
-                "parity.test.ts"
+                "parity.test.ts",
+                "config-provenance.test.ts"
               ]
             }
           }
@@ -114,11 +169,14 @@
       "subdomains": {
         "_deprecated": {
           "path": "/client/src/components/_deprecated",
-          "description": "Quarantined legacy UI components - most deleted in 9.8"
+          "description": "Quarantined legacy UI components - most deleted in Phase 9.8"
         },
         "components": {
           "path": "/client/src/components",
-          "description": "React components organized by feature"
+          "description": "React components organized by feature",
+          "key_files": [
+            "goals/diagnostics-tab.tsx"
+          ]
         },
         "hooks": {
           "path": "/client/src/hooks",
@@ -164,17 +222,43 @@
   "deprecated_locations": {
     "server": "/server/_deprecated",
     "client": "/client/src/components/_deprecated",
-    "note": "Most legacy files deleted during 9.8 Legacy Purge. Remaining files pending permanent removal."
+    "note": "Most legacy files deleted during Phase 9.8 Legacy Purge."
   },
-  "phase_9_key_files": {
-    "system_guards": "server/config/system-guards.ts",
-    "cwqi_service": "server/services/cwqi-service.ts",
-    "analysis_utils": "server/utils/analysis-utils.ts",
-    "unified_filter_gateway": "server/services/unified-filter-gateway.ts",
-    "verification_script": "server/scripts/verify-phase-9.ts",
-    "cwqi_tests": "server/tests/unit/cwqi.test.ts",
-    "parity_tests": "server/tests/integration/parity.test.ts",
-    "implementation_history": "bridge/canonical/Phase_9_Implementation_History.md"
+  "phase_10_key_files": {
+    "hybrid_integration": "server/services/hybrid-integration.ts",
+    "multi_timeframe_scanner": "server/services/multi-timeframe-scanner.ts",
+    "adaptive_scan_manager": "server/services/adaptive-scan-manager.ts",
+    "telemetry_aggregator": "server/services/telemetry-aggregator.ts",
+    "filter_insights": "server/services/filter-insights.service.ts",
+    "ml_calibration": "server/services/ml-calibration.ts",
+    "score_weights_config": "server/config/score-weights.config.ts",
+    "implementation_history": "bridge/canonical/Phase_10_Implementation_History.md"
+  },
+  "phase_11_key_files": {
+    "execution_config": "server/config/execution-config.ts",
+    "schema_version": "server/config/schema-version.ts",
+    "score_calculator": "server/core/utils/score-calculator.ts",
+    "signal_quality_evaluator": "server/core/filters/signal_quality_evaluator.ts",
+    "sqe_dynamic_tests": "server/tests/unit/sqe-config-dynamic.test.ts",
+    "execution_config_tests": "server/tests/unit/execution-config.test.ts",
+    "config_provenance_tests": "server/tests/integration/config-provenance.test.ts",
+    "diagnostics_tab": "client/src/components/goals/diagnostics-tab.tsx",
+    "implementation_history": "bridge/canonical/Phase_11_Implementation_History.md"
+  },
+  "math_methodology": {
+    "canonical_reference": "bridge/canonical/DawnTrader_Math_Methodology_Reference.md",
+    "core_implementations": [
+      "server/utils/analysis-utils.ts",
+      "server/services/cwqi-service.ts",
+      "server/core/utils/score-calculator.ts",
+      "server/engines/covariance-engine.ts",
+      "server/engines/adaptive-kalman.ts"
+    ],
+    "config_files": [
+      "server/config/system-guards.ts",
+      "server/config/score-weights.config.ts",
+      "server/config/execution-config.ts"
+    ]
   },
   "denied_paths": [
     "/node_modules",
@@ -196,6 +280,6 @@
     "update_required_when_structure_changes": true,
     "owner": "Kyle",
     "governed_by_bridge": true,
-    "last_updated_by": "Phase 9 Math Core Finalization"
+    "last_updated_by": "Phase 11 Directive 11.0D"
   }
 }

@@ -2,6 +2,7 @@
 ## For New Engineering Leadership
 
 **Document Created:** December 12, 2025  
+**Last Updated:** January 08, 2026  
 **Document Purpose:** Comprehensive onboarding document for incoming Sr. Engineer  
 **Document Status:** Living Reference Document
 
@@ -21,8 +22,10 @@
 10. [Phase 8.8.3: Making the Engine Work](#part-9-phase-883-making-the-engine-work)
 11. [Phase 8.8.4: Extended Calibration & Validation](#part-10-phase-884-extended-calibration--validation)
 12. [Phase 9: Math Core Finalization](#part-11-phase-9-math-core-finalization)
-13. [Current Architecture & Components](#part-12-current-architecture--components)
-14. [Roadmap Forward](#part-13-roadmap-forward)
+13. [Phase 10: Hybrid Alpha Pattern Engine](#part-12-phase-10-hybrid-alpha-pattern-engine)
+14. [Phase 11: Production Hardening (In Progress)](#part-13-phase-11-production-hardening-in-progress)
+15. [Current Architecture & Components](#part-14-current-architecture--components)
+16. [Roadmap Forward](#part-15-roadmap-forward)
 
 ---
 
@@ -44,8 +47,10 @@ DawnTrader is a **long-only, spot-trading cryptocurrency day trading platform** 
 | Phase 8.8.3 | December 2025 | End-to-end trading pipeline functional |
 | Phase 8.8.4 | December 2025 | Extended Calibration & Validation Framework |
 | Phase 9 | December 2025 - January 2026 | Math Core Finalization |
+| Phase 10 | January 2026 | Hybrid Alpha Pattern Engine & Trade Lifecycle Modernization |
+| Phase 11 | January 2026 (In Progress) | Production Hardening & Dynamic Validation |
 
-**Current State:** DawnTrader V3 has completed Phase 9 (Math Core Finalization). The system now has centralized mathematical constants via SYSTEM_GUARDS, standardized CWQI Net Expectancy calculations with friction, unified filter gateway, and comprehensive test coverage (31+ tests). Ready for Phase 10 ML training runs.
+**Current State:** DawnTrader V3 has completed Phase 10 (Hybrid Alpha Pattern Engine) and is in Phase 11 (Directive 11.0D complete). The system features hybrid intelligence combining Quant + Pattern + ML signals, centralized FinalScore calculation, modernized SQE with FinalScore/RegimeWeight filtering, dynamic threshold validation, and full configuration provenance tracking. Ready for live mode integration testing.
 
 ---
 
