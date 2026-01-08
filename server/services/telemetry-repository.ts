@@ -1,6 +1,6 @@
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * Directive 11.1A — Telemetry Repository (SQL-based Persistence)
+ * Directive 11.1A + 11.1A1 — Telemetry Repository (SQL-based Persistence)
  * ══════════════════════════════════════════════════════════════════════════════
  * 
  * Provides SQL-backed telemetry persistence using the telemetry_history table.
@@ -11,7 +11,12 @@
  * - Market regime-tagged telemetry records
  * - SHA-256 checksum validation for integrity
  * - Live mode-only persistence with FORCE_PERSIST override for testing
- * - Contextual rehydration by regime
+ * - Contextual rehydration by regime (live-mode only per 11.1A1)
+ * 
+ * DIRECTIVE 11.1A1 PROVENANCE FIX:
+ * - getTrueMode() always returns actual environment mode (never misrepresents)
+ * - FORCE_PERSIST enables writing, but never relabels data as 'live'
+ * - Rehydration loads only true live-mode records
  * 
  * DO NOT MODIFY without architectural review.
  * ══════════════════════════════════════════════════════════════════════════════
@@ -91,18 +96,12 @@ export function shouldPersist(): boolean {
 }
 
 /**
- * Get the effective mode for persistence
- * When FORCE_PERSIST is true in paper mode, records are stored as 'live' per governance rules
+ * Directive 11.1A1: Get the TRUE execution mode
+ * NEVER misrepresent mode - FORCE_PERSIST enables writing, not relabeling
+ * This ensures data provenance integrity for adaptive learning
  */
-export function getEffectivePersistMode(): 'live' | 'paper' {
-  const mode = process.env.MODE || 'paper';
-  const force = process.env.FORCE_PERSIST === 'true';
-  
-  // FORCE_PERSIST in paper mode stores as 'live' per governance
-  if (force && mode !== 'live') {
-    return 'live';
-  }
-  return mode as 'live' | 'paper';
+export function getTrueMode(): 'live' | 'paper' {
+  return (process.env.MODE as 'live' | 'paper') || 'paper';
 }
 
 /**
@@ -167,20 +166,22 @@ export async function loadTelemetryBySymbol(
 
 /**
  * Save a telemetry record with checksum
+ * Directive 11.1A1: Uses getTrueMode() to preserve actual execution mode
  * Note: DECIMAL columns in PostgreSQL accept string representation
  */
 export async function saveTelemetryRecord(entry: TelemetryEntry): Promise<boolean> {
   if (!shouldPersist()) {
-    console.log(`[11.1A][TelemetryRepo] Persistence disabled (mode=${process.env.MODE || 'paper'})`);
+    console.log(`[11.1A][TelemetryRepo] Persistence disabled (mode=${getTrueMode()})`);
     return false;
   }
   
   try {
-    const effectiveMode = getEffectivePersistMode();
-    const checksum = computeTelemetryChecksum({ ...entry, mode: effectiveMode });
+    const trueMode = getTrueMode();
+    const entryWithTrueMode = { ...entry, mode: trueMode };
+    const checksum = computeTelemetryChecksum(entryWithTrueMode);
     
     const record: InsertTelemetryHistory = {
-      mode: effectiveMode,
+      mode: trueMode,
       symbol: entry.symbol,
       regime: entry.regime,
       finalScore: entry.finalScore.toFixed(4),
@@ -197,7 +198,8 @@ export async function saveTelemetryRecord(entry: TelemetryEntry): Promise<boolea
     
     await db.insert(telemetryHistory).values(record);
     
-    console.log(`[11.1A][TelemetryRepo] Persisted telemetry: ${entry.symbol} (regime=${entry.regime}, mode=${effectiveMode}, score=${entry.finalScore.toFixed(2)})`);
+    // Directive 11.1A1: Provenance audit log
+    console.log(`[Telemetry] Saved ${entry.symbol} | mode=${trueMode} | regime=${entry.regime} | score=${entry.finalScore.toFixed(2)}`);
     return true;
   } catch (error) {
     console.error('[11.1A][TelemetryRepo] Failed to save telemetry:', error);
@@ -207,6 +209,7 @@ export async function saveTelemetryRecord(entry: TelemetryEntry): Promise<boolea
 
 /**
  * Batch save telemetry records
+ * Directive 11.1A1: Uses getTrueMode() to preserve actual execution mode
  * Note: DECIMAL columns in PostgreSQL accept string representation
  */
 export async function saveTelemetryBatch(entries: TelemetryEntry[]): Promise<number> {
@@ -215,27 +218,31 @@ export async function saveTelemetryBatch(entries: TelemetryEntry[]): Promise<num
   }
   
   try {
-    const effectiveMode = getEffectivePersistMode();
+    const trueMode = getTrueMode();
     
-    const records: InsertTelemetryHistory[] = entries.map(entry => ({
-      mode: effectiveMode,
-      symbol: entry.symbol,
-      regime: entry.regime,
-      finalScore: entry.finalScore.toFixed(4),
-      hybridScore: entry.hybridScore?.toFixed(4),
-      regimeWeight: entry.regimeWeight?.toFixed(4),
-      predictiveConfidence: entry.predictiveConfidence?.toFixed(4),
-      successRate: entry.successRate?.toFixed(4),
-      sampleCount: entry.sampleCount ?? 1,
-      timeframe: entry.timeframe,
-      checksum: computeTelemetryChecksum({ ...entry, mode: effectiveMode }),
-      metadata: entry.metadata,
-      timestamp: new Date(),
-    }));
+    const records: InsertTelemetryHistory[] = entries.map(entry => {
+      const entryWithTrueMode = { ...entry, mode: trueMode };
+      return {
+        mode: trueMode,
+        symbol: entry.symbol,
+        regime: entry.regime,
+        finalScore: entry.finalScore.toFixed(4),
+        hybridScore: entry.hybridScore?.toFixed(4),
+        regimeWeight: entry.regimeWeight?.toFixed(4),
+        predictiveConfidence: entry.predictiveConfidence?.toFixed(4),
+        successRate: entry.successRate?.toFixed(4),
+        sampleCount: entry.sampleCount ?? 1,
+        timeframe: entry.timeframe,
+        checksum: computeTelemetryChecksum(entryWithTrueMode),
+        metadata: entry.metadata,
+        timestamp: new Date(),
+      };
+    });
     
     await db.insert(telemetryHistory).values(records);
     
-    console.log(`[11.1A][TelemetryRepo] Batch persisted ${records.length} telemetry records (mode=${effectiveMode})`);
+    // Directive 11.1A1: Provenance audit log
+    console.log(`[Telemetry] Batch saved ${records.length} records | mode=${trueMode}`);
     return records.length;
   } catch (error) {
     console.error('[11.1A][TelemetryRepo] Failed to batch save telemetry:', error);

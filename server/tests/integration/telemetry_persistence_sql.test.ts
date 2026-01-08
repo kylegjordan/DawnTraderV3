@@ -1,12 +1,13 @@
 /**
- * Directive 11.1A — Telemetry Persistence SQL Tests
+ * Directive 11.1A + 11.1A1 — Telemetry Persistence SQL Tests
  * 
  * Validates:
  * 1. SQL-based telemetry persistence (loadRecentTelemetry, saveTelemetryRecord)
  * 2. Regime tagging for telemetry records
  * 3. Checksum computation and verification
  * 4. Environment guard (shouldPersist)
- * 5. Telemetry rehydration
+ * 5. True mode provenance (getTrueMode per 11.1A1)
+ * 6. Telemetry rehydration
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -15,7 +16,7 @@ import {
   computeTelemetryChecksum, 
   verifyTelemetryChecksum,
   shouldPersist,
-  getEffectivePersistMode,
+  getTrueMode,
   type MarketRegime,
   type TelemetryEntry
 } from '../../services/telemetry-repository.js';
@@ -135,7 +136,7 @@ describe('Directive 11.1A - Telemetry Persistence SQL', () => {
     });
   });
 
-  describe('Effective Persist Mode', () => {
+  describe('True Mode (Directive 11.1A1)', () => {
     const originalEnv = process.env;
 
     beforeEach(() => {
@@ -149,26 +150,32 @@ describe('Directive 11.1A - Telemetry Persistence SQL', () => {
 
     it('should return live mode when MODE=live', () => {
       process.env.MODE = 'live';
-      process.env.FORCE_PERSIST = undefined;
       
-      const result = getEffectivePersistMode();
+      const result = getTrueMode();
       expect(result).toBe('live');
     });
 
-    it('should return paper mode when MODE=paper without FORCE_PERSIST', () => {
+    it('should return paper mode when MODE=paper', () => {
       process.env.MODE = 'paper';
-      process.env.FORCE_PERSIST = undefined;
       
-      const result = getEffectivePersistMode();
+      const result = getTrueMode();
       expect(result).toBe('paper');
     });
 
-    it('should return live mode when FORCE_PERSIST=true in paper mode (governance rule)', () => {
+    it('should return paper mode even with FORCE_PERSIST=true (11.1A1 provenance fix)', () => {
       process.env.MODE = 'paper';
       process.env.FORCE_PERSIST = 'true';
       
-      const result = getEffectivePersistMode();
-      expect(result).toBe('live');
+      // FORCE_PERSIST enables writing but NEVER relabels mode
+      const result = getTrueMode();
+      expect(result).toBe('paper');
+    });
+
+    it('should default to paper when MODE is not set', () => {
+      delete process.env.MODE;
+      
+      const result = getTrueMode();
+      expect(result).toBe('paper');
     });
   });
 

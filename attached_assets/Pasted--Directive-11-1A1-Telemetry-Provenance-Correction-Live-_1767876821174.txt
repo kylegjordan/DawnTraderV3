@@ -1,0 +1,163 @@
+🧠 Directive 11.1A1 — Telemetry Provenance Correction & Live-Data Integrity
+Phase: 11.1A1 (Persistence Patch)
+Schema Version: v1.5.2 (no migration required)
+Issued: January 2026
+Parent Directive: 11.1A (Persistent Intelligence)
+🧭 1. Purpose
+
+This directive resolves a data-provenance flaw introduced in Directive 11.1A.
+It ensures that:
+
+Telemetry records preserve their true execution mode (paper, live, staging) regardless of persistence overrides.
+
+FORCE_PERSIST acts only as a gate to allow saving test data, never to mis-label it as live.
+
+The rehydration pipeline exclusively loads legitimate live-mode telemetry into runtime memory.
+
+Failure to correct this creates a “Fake Live Data” condition that pollutes production intelligence and corrupts adaptive learning in Phase 11.1B.
+
+⚙️ 2. Scope
+Area	Objective	Outcome
+Telemetry Repository	Ensure all records store true mode	Accurate provenance metadata
+Aggregator Persistence Guard	Separate persistence permission from labeling	No more forced “live” data
+Rehydration Query	Restrict load to live-mode data	Prevent test data contamination
+Testing	Add regression test for persistence behavior	Continuous integrity assurance
+🧩 3. Technical Tasks
+Task 1 — Refactor Mode Logic
+
+File: /server/services/telemetry-repository.ts
+
+Replace the misleading function:
+
+// ❌ Old
+export function getEffectivePersistMode() {
+  const mode = process.env.MODE || "paper";
+  const force = process.env.FORCE_PERSIST === "true";
+  return force ? "live" : mode;
+}
+
+
+with the corrected dual-function design:
+
+// ✅ New
+export function shouldPersist(): boolean {
+  const mode = process.env.MODE || "paper";
+  const force = process.env.FORCE_PERSIST === "true";
+  return (mode === "live" && process.env.PERSIST_TELEMETRY !== "false") || force;
+}
+
+export function getTrueMode(): string {
+  return process.env.MODE || "paper";
+}
+
+
+All telemetry writes must now use:
+
+if (shouldPersist()) {
+  await saveTelemetryRecord({
+    ...telemetryEntry,
+    mode: getTrueMode(), // preserve actual environment
+  });
+}
+
+Task 2 — Update Rehydration Logic
+
+File: /server/services/telemetry-aggregator.ts
+
+Restrict SQL query to live data:
+
+export async function rehydrateTelemetryState() {
+  const regime = getCurrentMarketRegime();
+  const records = await db
+    .select()
+    .from(telemetry_history)
+    .where(and(
+      telemetry_history.mode.eq("live"),
+      telemetry_history.regime.eq(regime)
+    ))
+    .orderBy(desc(telemetry_history.timestamp))
+    .limit(100);
+
+  telemetry.merge(records);
+  console.log(`[Telemetry] Rehydrated ${records.length} live entries for ${regime}`);
+}
+
+
+✅ Result: No paper/staging data can enter live runtime memory.
+
+Task 3 — Logging & Audit Enhancement
+
+Add a provenance confirmation log when persisting:
+
+console.log(
+  `[Telemetry] Saved ${entry.symbol} | mode=${getTrueMode()} | regime=${entry.regime}`
+);
+
+
+✅ Outcome: Every telemetry record now emits clear mode provenance for auditing.
+
+Task 4 — Regression Test Suite
+
+File: /server/tests/integration/telemetry_provenance_patch.test.ts
+
+Add unit and integration tests to confirm:
+
+FORCE_PERSIST=true in Paper Mode
+➜ record saved ✅ (mode = 'paper')
+
+FORCE_PERSIST=false in Paper Mode
+➜ record not saved 🚫
+
+MODE=live ➜ record saved ✅ (mode = 'live')
+
+rehydrateTelemetryState() loads only mode='live'.
+
+🧮 4. Governance Rules
+Rule	Enforcement
+Telemetry must never misrepresent mode	getTrueMode() ensures real mode labeling
+FORCE_PERSIST enables write, not relabel	shouldPersist() handles gate logic only
+Rehydration loads only live-mode records	SQL filter on mode='live'
+All mode changes logged	[Telemetry] Saved ... audit line
+Regression test required	telemetry_provenance_patch.test.ts
+🧪 5. Validation Plan
+
+Unit Tests – Verify mode labeling logic.
+
+Integration Tests – Simulate persistence in both modes; confirm behavior.
+
+Live Dry Run – Start engine in live mode, confirm rehydration restores only true live data.
+
+Telemetry Audit – Spot-check DB entries for accurate mode values.
+
+🧩 6. Success Criteria
+Requirement	Validation
+True mode stored for all telemetry	Pass
+FORCE_PERSIST enables but does not relabel	Pass
+Rehydration skips paper data	Pass
+Tests & logs confirm provenance	Pass
+No schema change required	Pass
+✅ 7. Directive Summary
+Field	Value
+Directive ID	11.1A1
+Title	Telemetry Provenance Correction & Live-Data Integrity
+Parent	Directive 11.1A
+Schema Version	v1.5.2
+Primary Engineer	Replit
+Architectural Lead	ChatGPT
+Verification Lead	Gemini
+Objective	Prevent test-mode telemetry from being mis-labeled as live; enforce provenance integrity
+Expected Duration	1 day implementation, 0.5 day QA
+🚀 8. Post-Directive Actions
+
+Run telemetry_provenance_patch.test.ts and verify logs show correct modes.
+
+Deploy to staging.
+
+Confirm rehydration restores only live records.
+
+Archive directive once tests pass.
+
+Proceed to Directive 11.1B – Adaptive Learning Weight Persistence once verified.
+
+✅ Directive 11.1A1 Final Statement:
+This patch restores full data provenance integrity, ensuring DawnTrader’s Persistent Intelligence operates on clean, verified live-mode telemetry only, and that all subsequent adaptive intelligence phases (11.1B onward) are trained on uncompromised production data.

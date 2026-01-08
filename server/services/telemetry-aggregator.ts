@@ -156,16 +156,19 @@ export class TelemetryAggregatorService {
   }
 
   /**
-   * Directive 11.1A: Rehydrate telemetry state from SQL on startup
-   * Loads recent telemetry records for the current market regime
+   * Directive 11.1A + 11.1A1: Rehydrate telemetry state from SQL on startup
+   * CRITICAL: Only loads live-mode records to prevent test data contamination
+   * This ensures adaptive learning operates on verified production data only
    */
   async rehydrateTelemetryState(): Promise<number> {
     if (this.rehydrated) {
-      console.log('[11.1A][Telemetry] Already rehydrated, skipping');
+      console.log('[11.1A1][Telemetry] Already rehydrated, skipping');
       return 0;
     }
     
-    const mode = (process.env.MODE as 'live' | 'paper') || 'paper';
+    // Directive 11.1A1: Always load from 'live' mode only
+    // Paper/staging data must never contaminate production intelligence
+    const mode: 'live' | 'paper' = 'live';
     
     try {
       const records = await loadRecentTelemetry(this.currentRegime, mode, 100);
@@ -191,7 +194,7 @@ export class TelemetryAggregatorService {
       }
       
       this.rehydrated = true;
-      console.log(`[11.1A][Telemetry] Rehydrated ${records.length} entries for regime=${this.currentRegime}, mode=${mode}`);
+      console.log(`[11.1A1][Telemetry] Rehydrated ${records.length} live entries for regime=${this.currentRegime}`);
       return records.length;
     } catch (error) {
       console.error('[11.1A][Telemetry] Failed to rehydrate telemetry:', error);
