@@ -232,3 +232,27 @@ export function formatFrictionDisplay(frictionScore: number): string {
   const { status, emoji } = describeFriction(frictionScore);
   return `${frictionScore}: ${status} ${emoji}`;
 }
+
+/**
+ * ══════════════════════════════════════════════════════════════════════════════
+ * Directive 11.4B — Friction Visual Mapping for Table Columns (M25 Governance)
+ * ══════════════════════════════════════════════════════════════════════════════
+ * 
+ * Maps friction score to label and color for UI column rendering.
+ * Called at serialization time for signals and trades before returning to client.
+ * 
+ * @param score - Friction score 0-100
+ * @returns Object with label (e.g., "25: Normal Liquidity") and color
+ * ══════════════════════════════════════════════════════════════════════════════
+ */
+export interface FrictionVisual {
+  label: string;
+  color: 'green' | 'yellow' | 'orange' | 'red';
+}
+
+export function mapFrictionVisual(score: number): FrictionVisual {
+  if (score <= 20) return { label: `${score}: High Liquidity`, color: 'green' };
+  if (score <= 50) return { label: `${score}: Normal Liquidity`, color: 'yellow' };
+  if (score <= 80) return { label: `${score}: Stressed Liquidity`, color: 'orange' };
+  return { label: `${score}: Frozen / Illiquid`, color: 'red' };
+}
