@@ -1,0 +1,203 @@
+Directive 11.4B — Unified Table Schema, Market Regime & Friction Visualization
+
+Issued by: Architectural Core
+Applies to: /client/src/components/tables/readyToBuyTable.tsx, /client/src/components/tables/openTradesTable.tsx, /client/src/components/tables/tradeHistoryTable.tsx, /server/core/schema/trade-model.ts, /server/core/metrics/cost-metrics.ts
+Schema Target: v1.6.2
+Status: Approved for Implementation
+
+I. Objective
+
+To standardize the structure, content, and order of all trading-related tables — making every column meaningful, educational, and operationally consistent — while integrating Market Regime and Market Friction as visual metrics directly tied to the Analytics & Diagnostics architecture.
+
+The new schema ensures that every signal, open trade, and closed trade presents a complete “story” of its lifecycle — from environment to outcome — with clear cost and risk context.
+
+II. Implementation Tasks
+Task 1 — Extend Trade Schema
+
+File: /server/core/schema/trade-model.ts
+
+Add new schema fields to all trade objects (signals, open trades, history exports):
+
+export interface TradeRecord {
+  symbol: string;
+  quantity: number;
+  entryPrice: number;
+  stopPrice: number;
+  targetPrice: number;
+  targetType: "Original" | "DSE" | "Trailing";
+  distancePct: number;
+  currentPrice: number;
+  grossProfitValue: number;
+  grossProfitPct: number;
+  totalCostPct: number;
+  netProfitValue: number;
+  netProfitPct: number;
+  finalScore: number;
+  hybridScore?: number;
+  predictiveConfidence?: number;
+  expectedEdge?: number;
+  rewardRisk?: number;
+  rewardRiskNet?: number;
+  signalType: string;
+  strategy: string;
+  patternType: string;
+  marketRegime: string;
+  marketFrictionScore: number;
+  marketFrictionLabel: string; // e.g. “25: Normal Liquidity”
+  marketFrictionColor: string; // for color-coded cell
+  volume?: number;
+  feedType?: "WebSocket" | "REST";
+  feedFrequency?: "High" | "Medium" | "Low";
+  tradeDuration?: string;
+  openedAt?: string;
+  updatedAt?: string;
+  closedAt?: string;
+  closedReason?: string;
+  activeStatus?: "Active" | "Reconfirmed";
+}
+
+Task 2 — Update Cost-Metrics Utility for Visual Mapping
+
+File: /server/core/metrics/cost-metrics.ts
+
+Add a helper to generate color + label values for friction columns:
+
+export function mapFrictionVisual(score: number): {
+  label: string;
+  color: string;
+} {
+  if (score <= 20) return { label: `${score}: High Liquidity`, color: "green" };
+  if (score <= 50) return { label: `${score}: Normal Liquidity`, color: "yellow" };
+  if (score <= 80) return { label: `${score}: Stressed Liquidity`, color: "orange" };
+  return { label: `${score}: Frozen / Illiquid`, color: "red" };
+}
+
+
+This is called at serialization time for signals and trades before returning them to the client.
+
+Task 3 — Table Column Definitions
+
+Below are the final canonical column sets and order for each table type.
+
+A. Ready-to-Buy Queue
+
+File: /client/src/components/tables/readyToBuyTable.tsx
+
+#	Column	Description
+1	Symbol	Trading pair (e.g., BTC/USDT)
+2	Final Score	Overall composite score determining rank
+3	Hybrid Score	Sub-score component feeding into Final Score
+4	Predictive Confidence	Model confidence in the signal
+5	Expected Edge	Projected return advantage (if included in Final Score)
+6	Reward–Risk	Base reward-to-risk ratio
+7	Signal Type	Quant, Pattern, or Hybrid
+8	Strategy	The specific strategy name (e.g., “Range Trade”)
+9	Pattern Type	Pattern name if applicable (else “N/A”)
+10	Entry Price	Signal entry price
+11	Stop Price	Stop loss price
+12	Target Price	Target profit price
+13	Market Regime	Current regime, labeled + color badge (e.g., “Low Vol Chop”)
+14	Market Friction	Score + label (color-coded)
+15	Age	Time since signal creation
+16	Last Updated	Last refresh timestamp
+17	Status	“Active” or “Reconfirmed”
+B. Open Trades Table
+
+File: /client/src/components/tables/openTradesTable.tsx
+
+#	Column	Description
+1	Symbol	Pair
+2	Final Score	Carried forward from signal
+3	Quantity	Number of units currently held
+4	Entry Price	Executed entry
+5	Target / Stop	Stacked: target above, stop below
+6	Target Type	“Original”, “DSE”, or “Trailing”
+7	Distance (%)	Distance between current and target/stop
+8	Current Price	Latest market price
+9	Gross P&L (value / %)	Shows raw profit before cost
+10	Total Cost (%)	Sum of all trading costs
+11	Net P&L (value / %)	After costs; final profitability
+12	Signal Type	Quant, Pattern, Hybrid
+13	Strategy	Strategy label
+14	Pattern Type	Applicable pattern or “N/A”
+15	Market Regime	With color badge
+16	Market Friction	Score + descriptive label, color-coded
+17	Feed Type / Frequency	Stacked: WebSocket or REST / High–Low
+18	Volume	Numeric + relative category (High/Medium/Low)
+19	Trade Duration	Time open
+20	Opened At	Timestamp
+21	Last Updated	Timestamp
+C. Trade History Table
+
+File: /client/src/components/tables/tradeHistoryTable.tsx
+
+#	Column	Description
+1	Symbol	Pair
+2	Entry Price	Entry
+3	Exit Price	Exit
+4	Close Reason	Stop hit / Target hit / Manual close
+5	Exit Type	“Original”, “Trailing”, or “Adapted”
+6	Gross P&L (value / %)	Before cost
+7	Total Cost (%)	Fees + Slippage + Spread
+8	Net P&L (value / %)	After costs
+9	Final Score	From signal
+10	Signal Type	Quant / Pattern / Hybrid
+11	Strategy	Strategy name
+12	Pattern Type	If applicable
+13	Market Regime	At time of trade
+14	Market Friction	Score + descriptive label, color-coded
+15	Reward–Risk Net	Post-cost reward-to-risk ratio
+16	Trade Duration	Open to close duration
+17	Opened At	Timestamp
+18	Closed At	Timestamp
+Task 4 — UI Rendering Logic for Color Coding
+
+Example Utility (shared across all tables):
+
+File: /client/src/utils/frictionColor.ts
+
+export function getFrictionColor(score: number): string {
+  if (score <= 20) return "text-green-600 bg-green-50";
+  if (score <= 50) return "text-yellow-700 bg-yellow-50";
+  if (score <= 80) return "text-orange-700 bg-orange-50";
+  return "text-red-700 bg-red-50";
+}
+
+
+Example Cell Renderer:
+
+<td className={`px-3 py-1 rounded ${getFrictionColor(row.marketFrictionScore)}`}>
+  {row.marketFrictionLabel}
+</td>
+
+Task 5 — Integration Tests
+
+Add tests covering column integrity and color mapping.
+
+Test File	Description
+ready_to_buy_columns.test.ts	Ensures all 17 columns render in correct order and contain required data keys
+open_trades_columns.test.ts	Validates extended schema and P&L computation fields
+trade_history_columns.test.ts	Checks reward–risk net and exit-type labeling
+friction_color_map.test.ts	Ensures friction scores map to correct colors
+III. Governance & Invariants
+ID	Invariant	Enforced In
+M23	Unified column order across environments	UI table tests
+M24	Market Regime and Friction always co-present in serialized objects	trade-model.ts
+M25	Friction visualization reflects canonical color mapping	friction_color_map.test.ts
+M26	Net P&L and Reward–Risk Net computed from canonical totalCost	trade-model.ts validation
+M27	UI column labels and schema keys consistent	table integration tests
+IV. Deliverables
+Deliverable	File	Description
+Updated trade schema	/server/core/schema/trade-model.ts	Adds MarketRegime & MarketFriction fields
+Updated cost metrics	/server/core/metrics/cost-metrics.ts	Adds mapFrictionVisual()
+Table render updates	/client/src/components/tables/*	Adds columns and order updates
+UI utility	/client/src/utils/frictionColor.ts	Color coding for friction
+4 Integration Tests	/server/tests/integration/	Column integrity and mapping
+Schema	v1.6.2	Incremented
+V. Expected Outcome
+
+✅ All trading tables now share a unified and educational visual structure.
+✅ Each trade and signal shows its environmental context (Regime + Friction) and economic reality (Total Cost + Net P&L).
+✅ Color-coded friction instantly communicates liquidity risk.
+✅ Column order reflects logical user reading flow — from what the system saw, to what it did, to how the trade performed.
+✅ Tables are now human-readable, consistent across the platform, and future-proof for adaptive metrics.
