@@ -37,27 +37,6 @@ interface ActiveFilteredPair {
   lastUpdated: string;
 }
 
-interface ScanTickPayload {
-  mode: 'paper' | 'live';
-  cycleId: number;
-  krakenUniverseSize: number;
-  evaluatedCount: number;
-  eligibleCount: number;
-  ineligibleCount: number;
-  cyclesPerHour: number;
-  cycleFrequencyMs: number;
-  nextScanInMs: number;
-  cycleStartTimestamp: string;
-  cycleEndTimestamp: string;
-  topNCount: number;
-  tierBCount: number;
-  rotation: {
-    topEndUniverseSize: number;
-    tierBUniverseSize: number;
-  };
-  activePoolCount: number;
-  activeFilteredPool: ActiveFilteredPair[];
-}
 
 interface ScannerBreakdownPayload {
   mode: 'paper' | 'live';
