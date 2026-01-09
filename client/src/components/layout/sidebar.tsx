@@ -36,6 +36,7 @@ const navigation = [
   { name: "Reports", href: "/reports", icon: FileText },
   { name: "Watch List", href: "/watchlist", icon: Eye },
   { name: "AI Transparency", href: "/ai-transparency", icon: Sparkles },
+  { name: "Analytics", href: "/analytics", icon: BarChart3 },
   { name: "System Monitoring", href: "/systems", icon: Activity },
   { name: "Settings", href: "/settings", icon: Settings },
 ];

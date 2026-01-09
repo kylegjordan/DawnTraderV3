@@ -1,8 +1,15 @@
 /**
- * Directive 11.3C — Schema Version Tracking
+ * Directive 11.4A — Schema Version Tracking
  * 
  * Single source of truth for database schema version.
  * Used by telemetry and diagnostics for audit trail.
+ * 
+ * v1.6.0: Market Indicators & Narrative Transparency Dashboard (Directive 11.4A)
+ * - Market Friction computation (0-100 normalization, M10 governance)
+ * - Market Indicators service (global regime + friction)
+ * - Narrative Feed service (7-day retention, M12 governance)
+ * - Analytics UI page with frozen header
+ * - API endpoints: /api/market-indicators, /api/narrative-feed
  * 
  * v1.5.9: Persistent Cost Telemetry & Drift Monitoring (Directive 11.3C)
  * - Cost telemetry persistence (5-min snapshots, 72h retention)
@@ -59,14 +66,15 @@
  * - Metric Engine v1.0 (Canonical)
  */
 
-export const SCHEMA_VERSION = "v1.5.9";
-export const SCHEMA_DIRECTIVE = "11.3C";
+export const SCHEMA_VERSION = "v1.6.0";
+export const SCHEMA_DIRECTIVE = "11.4A";
 export const METRIC_ENGINE_VERSION = "v1.0";
 
 /**
  * Schema version history for audit trail
  */
 export const SCHEMA_HISTORY = [
+  { version: "v1.6.0", directive: "11.4A", date: "2026-01-09", description: "Market Indicators & Narrative Transparency Dashboard" },
   { version: "v1.5.9", directive: "11.3C", date: "2026-01-09", description: "Persistent Cost Telemetry & Drift Monitoring" },
   { version: "v1.5.8", directive: "11.3B", date: "2026-01-09", description: "Cost Engine Consolidation & Diagnostics Finalization" },
   { version: "v1.5.7", directive: "11.3A", date: "2026-01-08", description: "Net Expectancy Standardization, Cost Integration & Geometry Integrity" },
