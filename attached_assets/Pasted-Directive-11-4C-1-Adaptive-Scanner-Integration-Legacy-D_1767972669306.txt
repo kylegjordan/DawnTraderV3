@@ -1,0 +1,149 @@
+Directive 11.4C.1 — Adaptive Scanner Integration & Legacy Deprecation
+Issued by: Architectural Core
+Applies to: DawnTrader Core (FX5 Scanner, AdaptiveScanManager, Market Scanner, Telemetry Aggregator)
+Schema Target: v1.6.3
+Objective: Replace the legacy 60-pair FX5 scanning system with the fully adaptive 100-pair Ideal/Rotational pool scanner and permanently deprecate collectMixedBatch() to ensure true adaptive pair selection and telemetry-driven rotation.
+
+I. Rationale & Background
+
+The FX5 scanner currently executes every 30 seconds, selecting 60 pairs (36 Top-N + 24 Tier-B) using the legacy collectMixedBatch() function from market-scanner.ts.
+The AdaptiveScanManager—built and tested during Phase 10 to support 100 pairs (60 % Ideal + 40 % Rotational)—is defined but never invoked.
+
+This results in:
+
+Incomplete exploitation/exploration balance.
+
+Unused telemetry feedback loops.
+
+Limited adaptability to changing market conditions.
+
+Directive 11.4C.1 mandates full activation of the Adaptive Scanning System and the retirement of the legacy collector.
+
+II. Implementation Tasks
+Task 1 — Integrate AdaptiveScanManager
+
+File: /server/services/fx5-scanner.ts
+
+Remove legacy import:
+
+import { collectMixedBatch } from "./market-scanner";
+
+
+Import adaptive manager:
+
+import { getAdaptiveScanManager } from "./adaptive-scan-manager";
+
+
+Instantiate and replace batch call:
+
+const adaptiveScanManager = getAdaptiveScanManager();
+const batch = await adaptiveScanManager.getNextScanBatch(allAvailablePairs);
+
+
+Ensure batch conforms to the AdaptiveScanBatch interface (pairs[], poolType, timestamp).
+
+Task 2 — Deprecate Legacy Collector
+
+File: /server/services/market-scanner.ts
+
+Mark collectMixedBatch() as deprecated with a clear JSDoc warning:
+
+/**
+ * @deprecated Replaced by AdaptiveScanManager (Directive 11.4C.1)
+ * Legacy 60-pair Top-N/Tier-B collector — do not use.
+ */
+
+
+Add runtime safeguard:
+
+console.warn("[Deprecated] collectMixedBatch() called — use AdaptiveScanManager instead.");
+
+
+Remove any unused export references.
+
+Task 3 — Validate Configuration Parameters
+
+File: /server/config/system-guards.ts
+Confirm and enforce:
+
+export const BATCH_SIZE = 100;
+export const IDEAL_RATIO = 0.6;
+export const ROTATIONAL_RATIO = 0.4;
+
+
+Add unit tests to verify ratios sum to 1.0.
+
+Task 4 — Telemetry Integration
+
+File: /server/services/telemetry-aggregator.ts
+
+Ensure telemetry metrics (FinalScore, HybridScore, PredictiveConfidence, SuccessRate) are used by AdaptiveScanManager’s Ideal Pool selector.
+Add a validation test confirming non-empty IdealPool and RotationalPool arrays on each cycle.
+
+Task 5 — Performance & Logging
+
+Add log event:
+
+console.info(`[AdaptiveScan] Cycle ${cycleId}: ${batch.pairs.length} pairs (${batch.poolType})`);
+
+
+Verify scanner loop time ≤ 30 s (use benchmark).
+
+Task 6 — Schema & Test Updates
+
+Schema v1.6.3
+No new database fields required.
+
+Integration Tests
+
+fx5_adaptive_scan_integration.test.ts
+
+Confirms collectMixedBatch is not called.
+
+Validates 100-pair adaptive batch generation.
+
+Ensures 60/40 Ideal/Rotational split within ± 1 pair tolerance.
+
+Confirms telemetry feedback loop repopulates Ideal Pool.
+
+market_scanner_deprecation.test.ts
+
+Triggers warning when legacy function invoked.
+
+III. Governance & Compliance
+Invariant	Enforcement	Description
+M27	fx5-scanner.ts	AdaptiveScanManager = sole batch generator
+M28	market-scanner.ts	collectMixedBatch deprecated & logged
+M29	system-guards.ts	BatchSize = 100; Ideal:Rotational = 60:40
+M30	telemetry-aggregator.ts	IdealPool data freshness ≤ 24 h
+M31	adaptive-scan-manager.ts	AdaptiveScan runtime ≤ 30 s per cycle
+IV. Deliverables
+
+✅ Updated fx5-scanner.ts using AdaptiveScanManager
+
+✅ Deprecated collectMixedBatch()
+
+✅ Verified configuration (BATCH_SIZE = 100)
+
+✅ Adaptive scanning integration tests
+
+✅ Schema bump → v1.6.3
+
+✅ Log telemetry for each adaptive scan cycle
+
+V. Expected Outcome
+
+After Directive 11.4C.1:
+
+FX5 scanner performs a true adaptive 100-pair scan every 30 seconds.
+
+60 pairs drawn from the Ideal Pool (top performers).
+
+40 pairs drawn from the Rotational Pool (exploration candidates).
+
+Legacy 60-pair Top-N/Tier-B logic permanently retired.
+
+Scanner performance and pool composition logged for diagnostics.
+
+Result:
+A single, unified, telemetry-driven adaptive scanning system — ensuring DawnTrader continuously optimizes its scanning universe based on live performance and market evolution.

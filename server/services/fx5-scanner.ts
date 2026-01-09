@@ -1,17 +1,21 @@
 /**
  * FX5 Scanner Service - Always-On 30-Second Market Scanner
- * REB 2.1 RESTORATION (Phase 8.6.7 Architecture)
+ * Directive 11.4C.1: Adaptive Scanning Integration
  * REB 2.6: Passive learning mode enforcement for Active Pool
  * Directive 8.8.4-A3.R7: Central Clock Integration
  * 
- * Restored to batch-first → FX5 filter architecture per Phase 8.6.7 truth state.
- * Uses collectMixedBatch() for 60-pair Top-N/Tier-B rotation instead of universe-scale filtering.
+ * Architecture (Directive 11.4C.1):
+ * - Uses collectAdaptiveBatch() for 100-pair Ideal/Rotational split
+ * - 60% Ideal Pool (telemetry top performers)
+ * - 40% Rotational Pool (exploration candidates)
+ * - Telemetry-driven selection with performance feedback
  * 
- * Architecture:
+ * Legacy Architecture (DEPRECATED):
+ * - collectMixedBatch() for 60-pair Top-N/Tier-B rotation
+ * 
+ * Runtime:
  * - Initializes at server startup
  * - Runs 30-second intervals aligned with Central Clock ticks
- * - Loads screener filters and executes batch-first FX5 filtering
- * - Uses collectMixedBatch() from market-scanner.ts (Phase 8.6.7)
  * - Updates Stage-3 cache and emits WebSocket events
  * - Operates independently of trading engine state
  * - REB 2.6: Respects passive learning flag - pool stays empty when passiveLearning=true
@@ -22,7 +26,7 @@ import { storage } from '../storage.js';
 import { KrakenService } from './kraken.js';
 import { updateStage3Cache } from './stage3-state-cache.js';
 import { emitStage3Events, FilterBreakdown } from './stage3-emitter.js';
-import { collectMixedBatch, BatchResult } from './market-scanner.js';
+import { collectAdaptiveBatch, BatchResult } from './market-scanner.js';
 import { activeFilterPool, type ActiveFilteredPair } from './active-filter-pool.js';
 import { nanoid } from 'nanoid';
 import type { ScreenerFilters } from '@shared/schema';
@@ -53,8 +57,10 @@ interface ScanResult {
   eligibleCount: number;
   ineligibleCount: number;
   breakdown: FilterBreakdown;
-  topNCount: number;
-  tierBCount: number;
+  topNCount: number; // Legacy: mapped from idealCount for backward compatibility
+  tierBCount: number; // Legacy: mapped from rotationalCount for backward compatibility
+  idealCount?: number; // Directive 11.4C.1: Ideal pool survivors
+  rotationalCount?: number; // Directive 11.4C.1: Rotational pool survivors
   activePoolCount: number;
 }
 
@@ -223,21 +229,24 @@ export class Fx5ScannerService {
         });
       }
 
-      // REB 2.1: Execute batch-first FX5 scanning (Phase 8.6.7 truth state)
-      const batchResult: BatchResult = await collectMixedBatch(
+      // Directive 11.4C.1: Execute adaptive batch scanning (100 pairs: 60% Ideal + 40% Rotational)
+      const batchResult: BatchResult = await collectAdaptiveBatch(
         this.krakenService,
         filters,
         mode
       );
       
       // Extract results from batch pipeline
+      // Directive 11.4C.1: Use new Ideal/Rotational metrics with legacy fallback
       const { survivors, evaluatedSymbols, breakdown, metrics } = batchResult;
       const {
         evaluatedCount,
         eligibleCount,
         ineligibleCount,
-        topNCount,
-        tierBCount,
+        topNCount, // Legacy: mapped from idealCount for backward compatibility
+        tierBCount, // Legacy: mapped from rotationalCount for backward compatibility
+        idealCount = topNCount, // Directive 11.4C.1: New metric (fallback to legacy)
+        rotationalCount = tierBCount, // Directive 11.4C.1: New metric (fallback to legacy)
         krakenUniverseSize,
         topEndUniverseSize,
         tierBUniverseSize,
@@ -258,14 +267,17 @@ export class Fx5ScannerService {
       const activePoolCount = activeTrades.length;
       console.log(`[FX5Scanner][R9.3.HF-7][${mode}] Active trades: ${activePoolCount}`);
 
+      // Directive 11.4C.1: Include both legacy and new metrics
       const scanResult: ScanResult = {
         mode,
         evaluatedCount,
         eligibleCount,
         ineligibleCount,
         breakdown,
-        topNCount,
-        tierBCount,
+        topNCount, // Legacy compatibility
+        tierBCount, // Legacy compatibility
+        idealCount, // Directive 11.4C.1
+        rotationalCount, // Directive 11.4C.1
         activePoolCount,
       };
 
@@ -477,7 +489,7 @@ export class Fx5ScannerService {
         console.log(`║ Cycle ID: ${scanCycleId}`);
         console.log(`║ Engine Active: ${isEngineActive}`);
         console.log(`╠═══ THIS CYCLE ═══`);
-        console.log(`║ Batch Composition: Top-N=${topNCount}, Tier-B=${tierBCount}`);
+        console.log(`║ Batch Composition: Ideal=${idealCount}, Rotational=${rotationalCount} (11.4C.1)`);
         console.log(`║ Evaluated: ${evaluatedCount}`);
         console.log(`║ Survivors (Eligible): ${eligibleCount}`);
         console.log(`╠═══ 24H CUMULATIVE ═══`);

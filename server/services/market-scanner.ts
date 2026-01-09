@@ -5,6 +5,8 @@ import { WatchlistPair } from '@shared/schema';
 import { strategyAlerts } from './strategy-alerts';
 import { PaperSimDiagnosticService } from './paper-sim-diagnostic.js';
 import { activeFilterPool } from './active-filter-pool.js';
+import { getAdaptiveScanManager, type AdaptiveScanBatch } from './adaptive-scan-manager.js';
+import { SCANNER_PARAMS } from '../config/system-guards.js';
 
 // ============================================================================
 // REB 2.10: Passive Learning Deep Tests - Types & Buffer
@@ -1024,6 +1026,7 @@ const rotationState = {
 
 // Directive 10.9E: Removed failed_daily_range from breakdown (deprecated volatility filter)
 // Directive 10.9F: Removed failed_quote_currency from breakdown (Quote Currency filter deprecated)
+// Directive 11.4C.1: Added poolType, extended with deprecated fields for backward compatibility
 export interface BatchResult {
   survivors: Array<{
     symbol: string;
@@ -1031,13 +1034,22 @@ export interface BatchResult {
     volume24h: number;
     dailyRange: number;
     fromTopN: boolean;
+    poolType?: 'ideal' | 'rotational'; // Directive 11.4C.1: Pool source tracking
+    priceHistory?: number[]; // Optional: For metric calculations
+    history?: number[]; // Optional: Alias for priceHistory
+    trades24h?: number; // Optional: For LQ calculation
+    tradeCount?: number; // Optional: Alias for trades24h
+    spread?: number; // Optional: For LQ calculation
+    bidAskSpread?: number; // Optional: Alias for spread
   }>;
-  evaluatedSymbols: string[]; // REB 2.8.5D: All 60 symbols evaluated in this batch (before filtering)
+  evaluatedSymbols: string[]; // REB 2.8.5D: All symbols evaluated in this batch (before filtering)
   breakdown: {
     failed_min_volume: number;
     failed_spread: number;
+    failed_daily_range: number; // Deprecated (11.4C.1) - kept for backward compatibility
     failed_min_price: number;
     failed_stablecoin: number;
+    failed_quote_currency: number; // Deprecated (11.4C.1) - kept for backward compatibility
     failed_history: number;
     failed_market_cap: number;
     failed_guardrail_risk: number;
@@ -1049,29 +1061,38 @@ export interface BatchResult {
     evaluatedCount: number;
     eligibleCount: number;
     ineligibleCount: number;
-    topNCount: number;
-    tierBCount: number;
+    topNCount: number; // Legacy: Top-N survivors (deprecated in 11.4C.1)
+    tierBCount: number; // Legacy: Tier-B survivors (deprecated in 11.4C.1)
+    idealCount?: number; // Directive 11.4C.1: Ideal pool survivors
+    rotationalCount?: number; // Directive 11.4C.1: Rotational pool survivors
     krakenUniverseSize: number;
-    topEndUniverseSize: number;
-    tierBUniverseSize: number;
+    topEndUniverseSize: number; // Legacy (deprecated in 11.4C.1)
+    tierBUniverseSize: number; // Legacy (deprecated in 11.4C.1)
   };
 }
 
 /**
- * Batch-First Scanner (Phase 8.6.7 Architecture)
+ * @deprecated Directive 11.4C.1 — DEPRECATED: Use collectAdaptiveBatch() instead.
  * 
- * 5-Step Pipeline:
- * 1. Fetch ALL 1,370 Kraken tickers (NO filtering)
- * 2. Sort by volume, identify Top-N (100) and Tier-B (1,270) universes
- * 3. Build 60-pair batch with rotation (36 Top-N + 24 Tier-B)
- * 4. Apply FX5 filters to ONLY those 60 symbols
- * 5. Return survivors with breakdown
+ * Legacy 60-pair Top-N/Tier-B collector.
+ * Replaced by AdaptiveScanManager with 100-pair Ideal/Rotational split.
+ * 
+ * Original Architecture (Phase 8.6.7 - now deprecated):
+ * - 36 Top-N + 24 Tier-B = 60 pairs per cycle
+ * - Static rotation without telemetry feedback
+ * 
+ * New Architecture (Directive 11.4C.1):
+ * - 60 Ideal + 40 Rotational = 100 pairs per cycle
+ * - Telemetry-driven selection with performance feedback
  */
 export async function collectMixedBatch(
   krakenService: KrakenService,
   filters: any,
   mode: 'paper' | 'live'
 ): Promise<BatchResult> {
+  // Directive 11.4C.1: Runtime deprecation warning
+  console.warn('[DEPRECATED] collectMixedBatch() called — use collectAdaptiveBatch() instead (Directive 11.4C.1)');
+  
   const startTime = Date.now();
   
   // REB 2.11: Timing capture points
@@ -1206,11 +1227,14 @@ export async function collectMixedBatch(
   // 10.9C: Added failed_correlation for Correlation Guard (ρ ≤ 0.75)
   // Directive 10.9E: Removed failed_daily_range (deprecated volatility filter)
   // Directive 10.9F: Removed failed_quote_currency (Quote Currency filter deprecated)
+  // Directive 11.4C.1: Added deprecated fields back for interface compatibility
   const breakdown = {
     failed_min_volume: 0,
     failed_spread: 0,
+    failed_daily_range: 0, // Deprecated (11.4C.1) - kept for backward compatibility
     failed_min_price: 0,
     failed_stablecoin: 0,
+    failed_quote_currency: 0, // Deprecated (11.4C.1) - kept for backward compatibility
     failed_history: 0,
     failed_market_cap: 0,
     failed_guardrail_risk: 0,
@@ -1735,6 +1759,249 @@ export async function collectMixedBatch(
       krakenUniverseSize,
       topEndUniverseSize: topNUniverse.length,
       tierBUniverseSize: tierBUniverse.length,
+    },
+  };
+}
+
+/**
+ * ══════════════════════════════════════════════════════════════════════════════
+ * Directive 11.4C.1 — Adaptive Batch Scanner (Replaces collectMixedBatch)
+ * ══════════════════════════════════════════════════════════════════════════════
+ * 
+ * New Architecture:
+ * - 100 pairs per scan cycle (vs legacy 60)
+ * - 60% Ideal Pool (telemetry top performers)
+ * - 40% Rotational Pool (exploration candidates)
+ * - Telemetry-driven selection with AdaptiveRatioManager
+ * - PairFailureTracker with cooldown blacklist
+ * 
+ * Invariants:
+ * M27: AdaptiveScanManager = sole batch generator
+ * M29: BatchSize = 100; Ideal:Rotational = 60:40
+ * M31: AdaptiveScan runtime ≤ 30s per cycle
+ * ══════════════════════════════════════════════════════════════════════════════
+ */
+export async function collectAdaptiveBatch(
+  krakenService: KrakenService,
+  filters: any,
+  mode: 'paper' | 'live'
+): Promise<BatchResult> {
+  const startTime = Date.now();
+  const cycleId = `adaptive_${mode}_${Date.now()}`;
+  
+  console.log(`[AdaptiveScan][11.4C.1] Starting adaptive batch scan (mode=${mode}, cycleId=${cycleId})`);
+  
+  // Parse filter values
+  const parsedFilters = {
+    minVolume: parseFloat(filters.minVolume ?? '1000000.00'),
+    minLiquidity: parseFloat(filters.minLiquidity ?? '500000.00'),
+    minPrice: parseFloat(filters.minPrice ?? '0.01000000'),
+    maxPrice: parseFloat(filters.maxPrice ?? '100000.00'),
+    maxBidAskSpread: parseFloat(filters.maxBidAskSpread ?? '1.00'),
+    universeSize: filters.universeSize ?? 100,
+    activeTimeframes: filters.activeTimeframes ?? ['5m', '15m', '1h'],
+    minHistoryDays: filters.minHistoryDays ?? 30,
+    excludeStablecoins: filters.excludeStablecoins ?? true,
+    allowRegulatedOnly: filters.allowRegulatedOnly ?? false,
+  };
+  
+  // STEP 1: Fetch ALL Kraken tickers for universe
+  const [tickers, pairsObj] = await Promise.all([
+    krakenService.getTicker(),
+    krakenService.getTradablePairs()
+  ]);
+  
+  const allPairs = Object.entries(tickers).map(([pairName, ticker]) => ({
+    pairName,
+    symbol: pairsObj[pairName]?.wsname || pairName,
+    volume24h: parseFloat((ticker as any).v[1]),
+    ticker,
+    pairInfo: pairsObj[pairName],
+  })).filter(p => p.pairInfo);
+  
+  const krakenUniverseSize = allPairs.length;
+  console.log(`[AdaptiveScan][11.4C.1] Kraken universe: ${krakenUniverseSize} pairs`);
+  
+  // STEP 2: Get adaptive batch from AdaptiveScanManager
+  const adaptiveScanManager = getAdaptiveScanManager();
+  const allSymbols = allPairs.map(p => p.symbol);
+  const adaptiveBatch: AdaptiveScanBatch = await adaptiveScanManager.getNextScanBatch(allSymbols);
+  
+  console.log(`[AdaptiveScan][11.4C.1] Batch selected: Ideal=${adaptiveBatch.idealPairs.length}, Rotational=${adaptiveBatch.rotationalPairs.length}, Excluded=${adaptiveBatch.excludedPairs.length}`);
+  
+  // Create lookup maps for pool type tracking
+  const idealSet = new Set(adaptiveBatch.idealPairs);
+  const rotationalSet = new Set(adaptiveBatch.rotationalPairs);
+  
+  // STEP 3: Build batch with pool type tracking
+  const batch = adaptiveBatch.totalBatch.map(symbol => {
+    const pair = allPairs.find(p => p.symbol === symbol);
+    return {
+      ...pair!,
+      poolType: idealSet.has(symbol) ? 'ideal' as const : 'rotational' as const,
+    };
+  }).filter(p => p.pairInfo);
+  
+  const evaluatedSymbols = batch.map(p => p.symbol);
+  
+  // STEP 4: Apply FX5 filters to the adaptive batch
+  const activeTrades = await storage.getActiveTrades(mode);
+  const activeTradeSymbols = new Set(activeTrades.map(t => t.symbol));
+  const poolSymbols = new Set(activeFilterPool.getSymbolsRaw(mode));
+  
+  const breakdown = {
+    failed_min_volume: 0,
+    failed_spread: 0,
+    failed_daily_range: 0, // Deprecated (11.4C.1) but kept for backward compatibility
+    failed_min_price: 0,
+    failed_stablecoin: 0,
+    failed_quote_currency: 0, // Deprecated (11.4C.1) but kept for backward compatibility
+    failed_history: 0,
+    failed_market_cap: 0,
+    failed_guardrail_risk: 0,
+    failed_correlation: 0,
+    already_active: 0,
+    passed_all_filters: 0,
+  };
+  
+  const minVolume = parsedFilters.minVolume;
+  const minPrice = parsedFilters.minPrice;
+  const maxBidAskSpread = parsedFilters.maxBidAskSpread;
+  const excludeStablecoins = parsedFilters.excludeStablecoins;
+  const stablecoinPatterns = ['USDT', 'USDC', 'DAI', 'BUSD', 'UST'];
+  const minHistoryDays = parsedFilters.minHistoryDays;
+  
+  const historyFilterCtx: HistoryFilterContext = {
+    minHistoryDays,
+    mode,
+    krakenService,
+  };
+  
+  const survivors: BatchResult['survivors'] = [];
+  let idealSurvivors = 0;
+  let rotationalSurvivors = 0;
+  
+  for (const pair of batch) {
+    const ticker = pair.ticker as any;
+    const pairInfo = pair.pairInfo;
+    const baseCurrency = pairInfo.base;
+    const currentPrice = parseFloat(ticker.c[0]);
+    const volume24h = parseFloat(ticker.v[1]);
+    const high24h = parseFloat(ticker.h[1]);
+    const low24h = parseFloat(ticker.l[1]);
+    const dailyRange = low24h > 0 ? ((high24h - low24h) / low24h) * 100 : 0;
+    const askPrice = parseFloat(ticker.a[0]);
+    const bidPrice = parseFloat(ticker.b[0]);
+    const bidAskSpread = bidPrice > 0 ? ((askPrice - bidPrice) / bidPrice) * 100 : 0;
+    
+    let rejected = false;
+    
+    // Already active check
+    if (poolSymbols.has(pair.symbol) || activeTradeSymbols.has(pair.symbol)) {
+      breakdown.already_active++;
+      continue;
+    }
+    
+    // Filter: Stablecoins
+    if (!rejected && excludeStablecoins && stablecoinPatterns.some(p => baseCurrency?.includes(p))) {
+      breakdown.failed_stablecoin++;
+      rejected = true;
+    }
+    
+    // Filter: Min volume
+    if (!rejected && volume24h < minVolume) {
+      breakdown.failed_min_volume++;
+      rejected = true;
+    }
+    
+    // Filter: Min price
+    if (!rejected && currentPrice < minPrice) {
+      breakdown.failed_min_price++;
+      rejected = true;
+    }
+    
+    // Filter: Bid-ask spread
+    if (!rejected && bidAskSpread > maxBidAskSpread) {
+      breakdown.failed_spread++;
+      rejected = true;
+    }
+    
+    // Filter: History (async)
+    if (!rejected && minHistoryDays > 0) {
+      const historyResult = await passesHistoryFilter(pair.symbol, historyFilterCtx);
+      if (!historyResult.passed) {
+        breakdown.failed_history++;
+        rejected = true;
+      }
+    }
+    
+    // Record result to AdaptiveScanManager for telemetry
+    if (!rejected) {
+      breakdown.passed_all_filters++;
+      
+      if (pair.poolType === 'ideal') {
+        idealSurvivors++;
+      } else {
+        rotationalSurvivors++;
+      }
+      
+      survivors.push({
+        symbol: pair.symbol,
+        currentPrice,
+        volume24h,
+        dailyRange,
+        fromTopN: pair.poolType === 'ideal', // Backwards compatibility
+        poolType: pair.poolType,
+      });
+      
+      // Record success to telemetry
+      adaptiveScanManager.recordScanResult(pair.symbol, true, {
+        finalScore: 0.5,
+        pool: pair.poolType,
+      });
+    } else {
+      // Record failure to telemetry
+      adaptiveScanManager.recordScanResult(pair.symbol, false, {
+        failureReason: 'filter_failed',
+        pool: pair.poolType,
+      });
+    }
+  }
+  
+  const elapsedMs = Date.now() - startTime;
+  console.log(`[AdaptiveScan][11.4C.1] Cycle complete in ${elapsedMs}ms: evaluated=${batch.length}, survivors=${survivors.length} (ideal=${idealSurvivors}, rotational=${rotationalSurvivors})`);
+  
+  // M31 Invariant: Check runtime
+  if (elapsedMs > 30000) {
+    console.warn(`[AdaptiveScan][M31] ⚠️ Cycle exceeded 30s limit: ${elapsedMs}ms`);
+  }
+  
+  const evaluatedCount = batch.length;
+  const eligibleCount = breakdown.passed_all_filters + breakdown.already_active;
+  const ineligibleCount = 
+    breakdown.failed_min_volume +
+    breakdown.failed_spread +
+    breakdown.failed_min_price +
+    breakdown.failed_stablecoin +
+    breakdown.failed_history +
+    breakdown.failed_market_cap +
+    breakdown.failed_guardrail_risk;
+  
+  return {
+    survivors,
+    evaluatedSymbols,
+    breakdown,
+    metrics: {
+      evaluatedCount,
+      eligibleCount,
+      ineligibleCount,
+      topNCount: idealSurvivors, // Legacy compatibility: map Ideal → TopN
+      tierBCount: rotationalSurvivors, // Legacy compatibility: map Rotational → TierB
+      idealCount: idealSurvivors,
+      rotationalCount: rotationalSurvivors,
+      krakenUniverseSize,
+      topEndUniverseSize: adaptiveBatch.idealPairs.length, // Legacy compatibility
+      tierBUniverseSize: adaptiveBatch.rotationalPairs.length, // Legacy compatibility
     },
   };
 }

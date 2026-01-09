@@ -1,8 +1,17 @@
 /**
- * Directive 11.4B — Schema Version Tracking
+ * Directive 11.4C.1 — Schema Version Tracking
  * 
  * Single source of truth for database schema version.
  * Used by telemetry and diagnostics for audit trail.
+ * 
+ * v1.6.3: Adaptive Scanner Integration & Legacy Deprecation (Directive 11.4C.1)
+ * - Replaced legacy 60-pair collectMixedBatch with 100-pair collectAdaptiveBatch
+ * - 60% Ideal Pool (telemetry top performers) + 40% Rotational Pool (exploration)
+ * - AdaptiveScanManager now sole batch generator (M27 governance)
+ * - collectMixedBatch deprecated with runtime warning (M28 governance)
+ * - BATCH_SIZE=100, Ideal:Rotational=60:40 (M29 governance)
+ * - Telemetry data freshness ≤24h (M30 governance)
+ * - AdaptiveScan runtime ≤30s per cycle (M31 governance)
  * 
  * v1.6.2: Unified Table Schema with Market Regime & Friction Visualization (Directive 11.4B)
  * - Extended TradeRecord with MarketRegimeType and FrictionColor (M24 governance)
@@ -80,14 +89,15 @@
  * - Metric Engine v1.0 (Canonical)
  */
 
-export const SCHEMA_VERSION = "v1.6.2";
-export const SCHEMA_DIRECTIVE = "11.4B";
+export const SCHEMA_VERSION = "v1.6.3";
+export const SCHEMA_DIRECTIVE = "11.4C.1";
 export const METRIC_ENGINE_VERSION = "v1.0";
 
 /**
  * Schema version history for audit trail
  */
 export const SCHEMA_HISTORY = [
+  { version: "v1.6.3", directive: "11.4C.1", date: "2026-01-09", description: "Adaptive Scanner Integration & Legacy Deprecation (100-pair Ideal/Rotational)" },
   { version: "v1.6.2", directive: "11.4B", date: "2026-01-09", description: "Unified Table Schema with Market Regime & Friction Visualization" },
   { version: "v1.6.1", directive: "11.4A.1", date: "2026-01-09", description: "Market Explanations, Layout Refinement & Navigation Reorganization" },
   { version: "v1.6.0", directive: "11.4A", date: "2026-01-09", description: "Market Indicators & Narrative Transparency Dashboard" },

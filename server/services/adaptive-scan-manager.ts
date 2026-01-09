@@ -187,8 +187,13 @@ export class AdaptiveScanManager {
     }
     
     // Get ideal pairs from telemetry (top performers)
+    // Directive 11.4C.1 FIX: Pass INTEGER COUNTS, not ratios to telemetry methods
     const idealCount = Math.ceil(batchSize * idealRatio);
-    let idealPairs = this.telemetry.getTopPairs(idealRatio);
+    const rotationalCount = Math.ceil(batchSize * rotationalRatio);
+    
+    console.log(`[AdaptiveScan][11.4C.1] Target counts: Ideal=${idealCount}, Rotational=${rotationalCount} (batchSize=${batchSize})`);
+    
+    let idealPairs = this.telemetry.getTopPairs(idealCount); // FIX: Pass count, not ratio
     
     // If not enough ideal pairs, fall back to available pairs
     if (idealPairs.length < idealCount) {
@@ -197,8 +202,8 @@ export class AdaptiveScanManager {
     }
     
     // Get rotational pairs for exploration
-    const rotationalCount = Math.ceil(batchSize * rotationalRatio);
-    const rotationalPairs = this.telemetry.getRotationalPairs(rotationalRatio, allAvailablePairs)
+    // Directive 11.4C.1 FIX: Pass count, not ratio to getRotationalPairs
+    const rotationalPairs = this.telemetry.getRotationalPairs(rotationalCount, allAvailablePairs)
       .filter(p => !idealPairs.includes(p)) // No duplicates
       .slice(0, rotationalCount);
     

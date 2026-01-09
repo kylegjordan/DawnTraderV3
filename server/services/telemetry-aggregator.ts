@@ -385,18 +385,19 @@ export class TelemetryAggregatorService {
 
   /**
    * Get top-performing pairs (Ideal Pool)
-   * Returns the top N% of pairs based on composite score
-   * Directive 11.2 R1: Returns explicit pool attribution
+   * Directive 11.4C.1: Now accepts explicit count instead of ratio
+   * @param count - Number of top pairs to return (e.g., 60 for 60 pairs)
    */
-  getTopPairs(ratio: number): string[] {
-    const pairs = this.getTopPairsWithPool(ratio);
+  getTopPairs(count: number): string[] {
+    const pairs = this.getTopPairsWithPool(count);
     return pairs.map(p => p.symbol);
   }
 
   /**
    * Directive 11.2 R1: Get top pairs with explicit pool attribution
+   * Directive 11.4C.1: Now accepts explicit count instead of ratio
    */
-  getTopPairsWithPool(ratio: number): PairWithPool[] {
+  getTopPairsWithPool(count: number): PairWithPool[] {
     const now = Date.now();
     const scoredPairs: Array<{ symbol: string; score: number }> = [];
     
@@ -414,31 +415,33 @@ export class TelemetryAggregatorService {
     // Sort by score descending
     scoredPairs.sort((a, b) => b.score - a.score);
     
-    const count = Math.ceil(scoredPairs.length * ratio);
+    // Directive 11.4C.1: Use explicit count directly
     const topPairs = scoredPairs.slice(0, count).map(p => ({
       symbol: p.symbol,
       pool: 'ideal' as PoolType,
       score: p.score,
     }));
     
-    console.log(`[10.8][Telemetry] getTopPairs(${ratio}): ${topPairs.length} pairs selected`);
+    console.log(`[10.8][Telemetry] getTopPairs(count=${count}): ${topPairs.length} pairs selected`);
     return topPairs;
   }
 
   /**
    * Get rotational pairs for exploration (pairs with limited samples)
    * These are pairs that haven't been scanned recently or have insufficient data
-   * Directive 11.2 R1: Returns explicit pool attribution
+   * Directive 11.4C.1: Now accepts explicit count instead of ratio
+   * @param count - Number of rotational pairs to return (e.g., 40 for 40 pairs)
    */
-  getRotationalPairs(ratio: number, allPairs: string[]): string[] {
-    const pairs = this.getRotationalPairsWithPool(ratio, allPairs);
+  getRotationalPairs(count: number, allPairs: string[]): string[] {
+    const pairs = this.getRotationalPairsWithPool(count, allPairs);
     return pairs.map(p => p.symbol);
   }
 
   /**
    * Directive 11.2 R1: Get rotational pairs with explicit pool attribution
+   * Directive 11.4C.1: Now accepts explicit count instead of ratio
    */
-  getRotationalPairsWithPool(ratio: number, allPairs: string[]): PairWithPool[] {
+  getRotationalPairsWithPool(count: number, allPairs: string[]): PairWithPool[] {
     const now = Date.now();
     const undersampled: string[] = [];
     
@@ -458,14 +461,14 @@ export class TelemetryAggregatorService {
     
     // Shuffle for random rotation
     const shuffled = undersampled.sort(() => Math.random() - 0.5);
-    const count = Math.ceil(allPairs.length * ratio);
+    // Directive 11.4C.1: Use explicit count directly
     const rotationalPairs = shuffled.slice(0, count).map(symbol => ({
       symbol,
       pool: 'rotational' as PoolType,
       score: 0, // Rotational pairs don't have established scores
     }));
     
-    console.log(`[10.8][Telemetry] getRotationalPairs(${ratio}): ${rotationalPairs.length} pairs selected`);
+    console.log(`[10.8][Telemetry] getRotationalPairs(count=${count}): ${rotationalPairs.length} pairs selected`);
     return rotationalPairs;
   }
 
