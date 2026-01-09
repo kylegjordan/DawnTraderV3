@@ -1,8 +1,16 @@
 /**
- * Directive 11.4A.1 — Schema Version Tracking
+ * Directive 11.4B — Schema Version Tracking
  * 
  * Single source of truth for database schema version.
  * Used by telemetry and diagnostics for audit trail.
+ * 
+ * v1.6.2: Unified Table Schema with Market Regime & Friction Visualization (Directive 11.4B)
+ * - Extended TradeRecord with MarketRegimeType and FrictionColor (M24 governance)
+ * - Added mapFrictionVisual() helper for 4-tier color coding (M25 governance)
+ * - Ready-to-Buy table: 17 columns with Regime/Friction before Status
+ * - Open Trades table: 21 columns with Regime/Friction before Duration
+ * - Trade History table: 18 columns with Regime/Friction before Opened/Closed
+ * - Net P/L computation from canonical totalCost (M26 governance)
  * 
  * v1.6.1: Market Explanations, Layout Refinement & Navigation Reorganization (Directive 11.4A.1)
  * - Expanded Market Regime Definitions with full descriptions (M19 governance)
@@ -72,14 +80,15 @@
  * - Metric Engine v1.0 (Canonical)
  */
 
-export const SCHEMA_VERSION = "v1.6.1";
-export const SCHEMA_DIRECTIVE = "11.4A.1";
+export const SCHEMA_VERSION = "v1.6.2";
+export const SCHEMA_DIRECTIVE = "11.4B";
 export const METRIC_ENGINE_VERSION = "v1.0";
 
 /**
  * Schema version history for audit trail
  */
 export const SCHEMA_HISTORY = [
+  { version: "v1.6.2", directive: "11.4B", date: "2026-01-09", description: "Unified Table Schema with Market Regime & Friction Visualization" },
   { version: "v1.6.1", directive: "11.4A.1", date: "2026-01-09", description: "Market Explanations, Layout Refinement & Navigation Reorganization" },
   { version: "v1.6.0", directive: "11.4A", date: "2026-01-09", description: "Market Indicators & Narrative Transparency Dashboard" },
   { version: "v1.5.9", directive: "11.3C", date: "2026-01-09", description: "Persistent Cost Telemetry & Drift Monitoring" },
