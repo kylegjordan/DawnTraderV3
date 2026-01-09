@@ -1,0 +1,135 @@
+Directive 11.4C — Top Batch Tab (FX5 Top 100 Exposure & Visibility)
+
+Issued by: Architectural Core
+Scope: Client UI + Analytics Integration + API Endpoint
+Schema Target: v1.6.3
+Status: Approved for Implementation
+
+I. Objective
+
+Expose the Top 100 pairs (“Top Batch”) tracked by the FX5 Scanner—those that represent the system’s highest-ranked trading opportunities under current global market conditions.
+This tab provides the operator with real-time transparency into which pairs the predictive engine is actively considering, why they rank where they do, and how this reflects the prevailing Market Regime.
+
+II. Implementation Tasks
+Task 1 — Backend Data Exposure
+
+File: /server/services/fx5-top-batch-service.ts ( new )
+
+Responsibilities
+
+Pull the current Top 100 pairs from the FX5 scanner cache or database (fx5_signal_cache or signal_orchestrator output).
+
+Enrich each record with the relevant predictive and environmental fields.
+Each entry will include:
+
+export interface TopBatchRecord {
+  symbol: string;
+  finalScore: number;
+  hybridScore: number;
+  predictiveConfidence: number;
+  regimeWeight: number;
+  marketRegime: string;
+  marketFrictionScore: number;
+  signalType: string;
+  strategy: string;
+  patternType: string;
+  updatedAt: string;
+}
+
+
+Provide a public endpoint for retrieval:
+
+File: /server/routes/top-batch.ts
+
+router.get("/api/top-batch", async (req, res) => {
+  const topBatch = await getTopBatchList();
+  res.json({ data: topBatch, timestamp: Date.now() });
+});
+
+Task 2 — Integration with Analytics & Diagnostics Page
+
+File: /client/src/pages/analytics.tsx
+
+Add a new tab called “Top Batch” to the Analytics & Diagnostics page tabs navigation.
+It will appear alongside the Market Overview / Trading Activities sections introduced in 11.4A and 11.4A.1.
+
+Tab Header Order:
+
+1️⃣ Market Overview
+2️⃣ Trading Activities
+3️⃣ Top Batch
+
+Task 3 — UI Table Definition for Top Batch Tab
+
+File: /client/src/components/tables/topBatchTable.tsx ( new )
+
+#	Column	Description
+1	Rank	Position 1 → 100 based on Final Score (descending)
+2	Symbol	Trading pair (e.g., BTC/USDT)
+3	Final Score	Composite signal score used for ranking
+4	Hybrid Score	Sub-component of Final Score
+5	Predictive Confidence	Model confidence value (0–1 or %)
+6	Regime Weight	Weight factor derived from current Market Regime alignment
+7	Market Regime	Active regime label (color-coded badge)
+8	Market Friction	Score + liquidity label (color-coded)
+9	Signal Type	Quant / Pattern / Hybrid
+10	Strategy	Name of associated strategy
+11	Pattern Type	Pattern name (if applicable)
+12	Last Updated	Timestamp of latest score update
+
+Behavior
+
+Table auto-refreshes every 60 seconds.
+
+Rows color-pulse briefly when updated (to signal live change).
+
+Hover tooltip for Market Regime and Friction shows full descriptions (using existing narratives from market-indicators service).
+
+Sorting by any numeric column is enabled; default sort is by Final Score descending.
+
+Task 4 — Visual Mapping & Color Consistency
+
+File: /client/src/utils/frictionColor.ts
+
+Re-use the existing friction color helpers from Directive 11.4B.
+Add a parallel utility for regime badge colors:
+
+export function getRegimeColor(regime: string): string {
+  switch (regime) {
+    case "BULL_STABLE": return "text-green-700 bg-green-50";
+    case "BEAR_VOLATILE": return "text-red-700 bg-red-50";
+    case "LOW_VOL_CHOP": return "text-yellow-700 bg-yellow-50";
+    default: return "text-gray-700 bg-gray-50";
+  }
+}
+
+
+Consistency Check:
+Regime and friction colors must match the Analytics page theme introduced in 11.4A.1.
+
+Task 5 — Integration Tests
+Test File	Description
+top_batch_endpoint.test.ts	Validates /api/top-batch returns ≤ 100 entries and properly typed fields.
+top_batch_table_render.test.ts	Ensures 12 columns appear in order and sortable logic works.
+color_consistency.test.ts	Confirms Regime and Friction colors match mapping in frictionColor.ts.
+schema_version.test.ts	Confirms version bump to v1.6.3.
+III. Governance Invariants
+ID	Invariant	Enforced In
+M28	Top Batch list never exceeds 100 entries.	Service response validator
+M29	Regime and Friction columns always present and color-mapped.	UI integration tests
+M30	Final Score descending as default sort order.	UI tests
+M31	Regime Weight computed using current global regime.	fx5-top-batch-service unit tests
+IV. Deliverables
+Deliverable	File	Description
+Top Batch Service	/server/services/fx5-top-batch-service.ts	Computes and exposes Top 100 list.
+API Endpoint	/server/routes/top-batch.ts	GET /api/top-batch for UI consumption.
+UI Tab	/client/src/components/tables/topBatchTable.tsx	Displays Top 100 with color-coded columns.
+Analytics Integration	/client/src/pages/analytics.tsx	Adds “Top Batch” tab to Diagnostics section.
+Schema Version	v1.6.3	Updated and recorded in schema-version.ts.
+Integration Tests	4 new tests	Validate API output and UI rendering.
+V. Expected Outcome
+
+✅ Operators can now view the Top 100 FX5-ranked pairs directly from the Analytics & Diagnostics page.
+✅ Each pair displays its Final Score and component metrics for transparency.
+✅ Color-coded Market Regime and Friction give immediate environmental context.
+✅ The table auto-refreshes as new scans complete, keeping the view live and trustworthy.
