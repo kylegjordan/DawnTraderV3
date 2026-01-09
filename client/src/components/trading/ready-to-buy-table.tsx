@@ -2,9 +2,11 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { RefreshCw, TrendingUp, ArrowUpDown, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useWebSocket } from "@/hooks/use-websocket";
+import { getFrictionColorClasses, getRegimeBadgeClassName, getFrictionLabel, formatRegimeTitle } from "@/utils/frictionColor";
 
 interface TradingSignal {
   id: string;
@@ -17,7 +19,7 @@ interface TradingSignal {
   ngc: number | null;
   mlConfidence: number | null;
   finalRank: number | null;
-  strategyWeight: number | null; // L9: Strategy reliability weight (Wₛ)
+  strategyWeight: number | null;
   entryPrice: number;
   currentPrice: number;
   stopPrice: number;
@@ -27,6 +29,9 @@ interface TradingSignal {
   detectedAt: string;
   estimatedQuantity?: number;
   estimatedValue?: number;
+  marketRegime?: string;
+  marketFrictionScore?: number;
+  marketFrictionLabel?: string;
 }
 
 interface TradingSignalsResponse {
@@ -34,7 +39,7 @@ interface TradingSignalsResponse {
   timestamp: string;
 }
 
-type SortField = 'rank' | 'symbol' | 'cwqi' | 'ngc' | 'mlConfidence' | 'finalRank' | 'strategyWeight' | 'volume' | 'price' | 'strategy' | 'entry' | 'target' | 'stop' | 'quantity' | 'status';
+type SortField = 'rank' | 'symbol' | 'cwqi' | 'ngc' | 'mlConfidence' | 'finalRank' | 'strategyWeight' | 'volume' | 'price' | 'strategy' | 'entry' | 'target' | 'stop' | 'quantity' | 'status' | 'marketRegime' | 'marketFriction';
 type SortDirection = 'asc' | 'desc';
 
 export default function ReadyToBuyTable() {
@@ -173,6 +178,14 @@ export default function ReadyToBuyTable() {
         aValue = a.status || '';
         bValue = b.status || '';
         break;
+      case 'marketRegime':
+        aValue = a.marketRegime || '';
+        bValue = b.marketRegime || '';
+        break;
+      case 'marketFriction':
+        aValue = a.marketFrictionScore ?? 0;
+        bValue = b.marketFrictionScore ?? 0;
+        break;
       default:
         aValue = 0;
         bValue = 0;
@@ -295,6 +308,8 @@ export default function ReadyToBuyTable() {
                   <SortHeader field="quantity" label="Qty" />
                   <SortHeader field="volume" label="24h Vol" />
                   <SortHeader field="strategy" label="Strategy" />
+                  <SortHeader field="marketRegime" label="Regime" />
+                  <SortHeader field="marketFriction" label="Friction" />
                   <SortHeader field="status" label="Status" />
                 </tr>
               </thead>
@@ -431,6 +446,27 @@ export default function ReadyToBuyTable() {
                         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
                           {formatStrategy(signal.strategy)}
                         </span>
+                      </td>
+                      <td className="py-3 px-3" data-testid={`text-regime-${index}`}>
+                        {signal.marketRegime ? (
+                          <Badge variant="outline" className={cn("text-xs", getRegimeBadgeClassName(signal.marketRegime))}>
+                            {formatRegimeTitle(signal.marketRegime)}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">—</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3" data-testid={`text-friction-${index}`}>
+                        {signal.marketFrictionScore !== undefined && signal.marketFrictionScore !== null ? (
+                          <span className={cn(
+                            "inline-flex items-center px-2 py-1 rounded text-xs font-medium",
+                            getFrictionColorClasses(signal.marketFrictionScore).badge
+                          )}>
+                            {getFrictionLabel(signal.marketFrictionScore)}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">—</span>
+                        )}
                       </td>
                       <td className="py-3 px-3" data-testid={`text-status-${index}`}>
                         <span className={cn(
