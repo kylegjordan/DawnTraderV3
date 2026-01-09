@@ -20,12 +20,11 @@ export type FilterBreakdown = {
   passed_all_filters: number;
 };
 
-// Phase 8.8.2-MAP-FINAL: Complete ScanTickPayload per directive
-// REB 2.4 Stage-1f: Added stateVersion for atomic snapshot tracking
+// Directive 11.4C.1: ScanTickPayload with Ideal/Rotational pool terminology
 export type ScanTickPayload = {
   mode: 'paper' | 'live';
   cycleId: number;
-  stateVersion: number; // REB 2.4 Stage-1f: Timestamp-based version for atomic snapshots
+  stateVersion: number;
   krakenUniverseSize: number;
   evaluatedCount: number;
   eligibleCount: number;
@@ -35,14 +34,17 @@ export type ScanTickPayload = {
   nextScanInMs: number;
   cycleStartTimestamp: string;
   cycleEndTimestamp: string;
-  topNCount: number;
-  tierBCount: number;
-  rotation: {
+  idealCount: number; // Directive 11.4C.1: Ideal pool survivors
+  rotationalCount: number; // Directive 11.4C.1: Rotational pool survivors
+  activePoolCount: number;
+  activeFilteredPool: ActiveFilteredPair[];
+  // @deprecated Legacy fields - for backward compatibility
+  topNCount?: number;
+  tierBCount?: number;
+  rotation?: {
     topEndUniverseSize: number;
     tierBUniverseSize: number;
   };
-  activePoolCount: number;
-  activeFilteredPool: ActiveFilteredPair[];
 };
 
 export type ScannerBreakdownPayload = {
@@ -104,10 +106,11 @@ class Stage3Emitter {
     const stateVersion = this.nextStateVersion(mode);
     stage3Cache.updateState(mode, { stateVersion });
 
+    // Directive 11.4C.1: Use Ideal/Rotational as primary metrics
     const payload: ScanTickPayload = {
       mode,
       cycleId: state.cycleId,
-      stateVersion, // REB 2.4 Stage-1f: Attach version to snapshot
+      stateVersion,
       krakenUniverseSize: state.krakenUniverseSize,
       evaluatedCount: state.evaluatedCount,
       eligibleCount: state.eligibleCount,
@@ -117,14 +120,14 @@ class Stage3Emitter {
       nextScanInMs: state.nextScanInMs,
       cycleStartTimestamp: state.cycleStartTimestamp,
       cycleEndTimestamp: state.cycleEndTimestamp,
-      topNCount: state.topNCount,
-      tierBCount: state.tierBCount,
-      rotation: {
-        topEndUniverseSize: state.rotation.topEndUniverseSize,
-        tierBUniverseSize: state.rotation.tierBUniverseSize,
-      },
+      idealCount: state.idealCount, // Directive 11.4C.1: Primary
+      rotationalCount: state.rotationalCount, // Directive 11.4C.1: Primary
       activePoolCount: state.activePoolCount,
       activeFilteredPool: state.activeFilteredPool,
+      // Legacy fields for backward compatibility
+      topNCount: state.topNCount ?? state.idealCount,
+      tierBCount: state.tierBCount ?? state.rotationalCount,
+      rotation: state.rotation,
     };
 
     // REB 2.4 Stage-1g: ACK broadcast with version tracking

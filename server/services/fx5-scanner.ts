@@ -51,17 +51,19 @@ const SCAN_INTERVAL_SECONDS = 30; // 30 seconds aligned with clock ticks
 const SCAN_INTERVAL_MS = SCAN_INTERVAL_SECONDS * 1000; // For backwards compatibility
 const CYCLES_PER_HOUR = Math.round(3600 / SCAN_INTERVAL_SECONDS); // 120 for 30s intervals
 
+// Directive 11.4C.1: ScanResult uses Ideal/Rotational pool terminology
 interface ScanResult {
   mode: 'paper' | 'live';
   evaluatedCount: number;
   eligibleCount: number;
   ineligibleCount: number;
   breakdown: FilterBreakdown;
-  topNCount: number; // Legacy: mapped from idealCount for backward compatibility
-  tierBCount: number; // Legacy: mapped from rotationalCount for backward compatibility
-  idealCount?: number; // Directive 11.4C.1: Ideal pool survivors
-  rotationalCount?: number; // Directive 11.4C.1: Rotational pool survivors
+  idealCount: number; // Directive 11.4C.1: Ideal pool survivors (primary)
+  rotationalCount: number; // Directive 11.4C.1: Rotational pool survivors (primary)
   activePoolCount: number;
+  // @deprecated Legacy fields - for backward compatibility only
+  topNCount?: number;
+  tierBCount?: number;
 }
 
 export class Fx5ScannerService {
@@ -237,19 +239,20 @@ export class Fx5ScannerService {
       );
       
       // Extract results from batch pipeline
-      // Directive 11.4C.1: Use new Ideal/Rotational metrics with legacy fallback
+      // Directive 11.4C.1: Use new Ideal/Rotational metrics (primary)
       const { survivors, evaluatedSymbols, breakdown, metrics } = batchResult;
       const {
         evaluatedCount,
         eligibleCount,
         ineligibleCount,
-        topNCount, // Legacy: mapped from idealCount for backward compatibility
-        tierBCount, // Legacy: mapped from rotationalCount for backward compatibility
-        idealCount = topNCount, // Directive 11.4C.1: New metric (fallback to legacy)
-        rotationalCount = tierBCount, // Directive 11.4C.1: New metric (fallback to legacy)
+        idealCount, // Directive 11.4C.1: Primary metric
+        rotationalCount, // Directive 11.4C.1: Primary metric
         krakenUniverseSize,
-        topEndUniverseSize,
-        tierBUniverseSize,
+        // Legacy fields (optional, with defaults)
+        topNCount = idealCount,
+        tierBCount = rotationalCount,
+        topEndUniverseSize = 0,
+        tierBUniverseSize = 0,
       } = metrics;
 
       // R9.3.HF-7: Add granular logging to identify bottlenecks
@@ -267,17 +270,15 @@ export class Fx5ScannerService {
       const activePoolCount = activeTrades.length;
       console.log(`[FX5Scanner][R9.3.HF-7][${mode}] Active trades: ${activePoolCount}`);
 
-      // Directive 11.4C.1: Include both legacy and new metrics
+      // Directive 11.4C.1: Use Ideal/Rotational as primary metrics
       const scanResult: ScanResult = {
         mode,
         evaluatedCount,
         eligibleCount,
         ineligibleCount,
         breakdown,
-        topNCount, // Legacy compatibility
-        tierBCount, // Legacy compatibility
-        idealCount, // Directive 11.4C.1
-        rotationalCount, // Directive 11.4C.1
+        idealCount, // Directive 11.4C.1: Primary
+        rotationalCount, // Directive 11.4C.1: Primary
         activePoolCount,
       };
 
@@ -407,27 +408,23 @@ export class Fx5ScannerService {
       // REB 2.8.5A: Get real cycles per hour from tracking (not hard-coded)
       const cyclesPerHour = getCyclesPerHour(mode);
 
-      // Update Stage-3 cache FIRST with Phase 8.6.7 metrics
+      // Update Stage-3 cache FIRST with Directive 11.4C.1 metrics
       // REB 2.2: Use persistent Active Filter Pool instead of fresh pool
       await updateStage3Cache(mode, {
-        scanCycleId, // REB 2.8.4: Unique string ID for this scan
+        scanCycleId,
         cycleStartTimestamp,
         cycleEndTimestamp,
         krakenUniverseSize,
-        evaluatedCount, // Now 60 (batch size) instead of 1,370
+        evaluatedCount,
         eligibleCount,
         ineligibleCount,
-        topNCount,  // Actual Top-N survivors (not stub value)
-        tierBCount, // Actual Tier-B survivors (not 0)
-        rotation: {
-          topEndUniverseSize,  // 100 (Top-N universe size)
-          tierBUniverseSize,   // 1,270 (Tier-B universe size)
-        },
-        cyclesPerHour, // REB 2.8.5A: Real cycles per hour from tracking
+        idealCount, // Directive 11.4C.1: Ideal pool survivors
+        rotationalCount, // Directive 11.4C.1: Rotational pool survivors
+        cyclesPerHour,
         cycleFrequencyMs: SCAN_INTERVAL_MS,
         nextScanInMs: SCAN_INTERVAL_MS,
-        activePoolCount: activeFilteredPoolEntries.length, // REB 2.2: Use actual pool size
-        activeFilteredPool: activeFilteredPoolEntries, // REB 2.2: Use persistent pool
+        activePoolCount: activeFilteredPoolEntries.length,
+        activeFilteredPool: activeFilteredPoolEntries,
         latestEligibleSymbols: survivors.slice(0, 10).map(s => s.symbol),
       });
 
