@@ -1,8 +1,16 @@
 /**
- * Directive 11.3A — Schema Version Tracking
+ * Directive 11.3B — Schema Version Tracking
  * 
  * Single source of truth for database schema version.
  * Used by telemetry and diagnostics for audit trail.
+ * 
+ * v1.5.8: Cost Engine Consolidation & Diagnostics Finalization (Directive 11.3B)
+ * - Centralized exchange defaults in /server/config/exchange-defaults.ts
+ * - In-memory cost cache in /server/core/cache/cost-cache.ts
+ * - Default taker fee raised to 0.26% (Kraken conservative)
+ * - TEC cost diagnostics endpoint (/api/diagnostics/tec/costs)
+ * - Observability loop logging every 60s
+ * - Max cost bounds clamped to 1%
  * 
  * v1.5.7: Net Expectancy Standardization, Cost Integration & Geometry Integrity (Directive 11.3A)
  * - No new columns (uses existing telemetry_history structure)
@@ -45,14 +53,15 @@
  * - Metric Engine v1.0 (Canonical)
  */
 
-export const SCHEMA_VERSION = "v1.5.7";
-export const SCHEMA_DIRECTIVE = "11.3A";
+export const SCHEMA_VERSION = "v1.5.8";
+export const SCHEMA_DIRECTIVE = "11.3B";
 export const METRIC_ENGINE_VERSION = "v1.0";
 
 /**
  * Schema version history for audit trail
  */
 export const SCHEMA_HISTORY = [
+  { version: "v1.5.8", directive: "11.3B", date: "2026-01-09", description: "Cost Engine Consolidation & Diagnostics Finalization" },
   { version: "v1.5.7", directive: "11.3A", date: "2026-01-08", description: "Net Expectancy Standardization, Cost Integration & Geometry Integrity" },
   { version: "v1.5.6", directive: "11.3", date: "2026-01-08", description: "Predictive Risk & Cost Modeling - Dynamic Sizing Engine" },
   { version: "v1.5.5", directive: "11.2R1", date: "2026-01-08", description: "Adaptive Scanning Fairness - Pool Tracking (ideal/rotational)" },

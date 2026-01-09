@@ -1,0 +1,201 @@
+⚙️ Directive 11.3B — Cost Engine Consolidation & Diagnostics Finalization
+
+Issued By: Architectural Core
+
+Applies To: Cost Model, DSE, RTB, TEC, VTS
+
+Schema Target: v 1.5.8
+
+Objective
+
+Finalize the Net Expectancy framework introduced in 11.3A by consolidating all cost parameters into a single canonical in-memory cache, raising Kraken’s default taker fee to 0.26 %, adding runtime diagnostics, and ensuring safe bounds and observability across all modules.
+
+I. Implementation Tasks
+
+Task 1 — Centralize Default Constants
+
+File: /server/config/exchange-defaults.ts
+
+
+
+
+
+export const DEFAULT_TAKER_FEE = 0.0026; // 0.26 %export const DEFAULT_MAKER_FEE = 0.0016; // 0.16 %export const DEFAULT_SLIPPAGE = 0.0005; // 0.05 %export const DEFAULT_SPREAD = 0.0010; // 0.10 %export const MAX_COST_BOUND = 0.01; // 1 %
+
+✅ Imported by all cost-sensitive modules.
+
+
+
+✅ Future exchange adapters will override here only.
+
+Task 2 — In-Memory Cost Cache
+
+File: /server/core/cache/cost-cache.ts
+
+
+
+
+
+const cache = new Map();export function getCostMetrics(symbol: string) {
+
+const item = cache.get(symbol);
+
+if (item && Date.now() - item.t < 60_000) return item.v;
+
+return null;
+
+}export function setCostMetrics(symbol: string, data) {
+
+const clamped = {
+
+fee: Math.min(data.fee, MAX_COST_BOUND),
+
+slippage: Math.min(data.slippage, MAX_COST_BOUND),
+
+spread: Math.min(data.spread, MAX_COST_BOUND)
+
+};
+
+cache.set(symbol, { v: clamped, t: Date.now() });
+
+return clamped;
+
+}
+
+✅ TTL = 60 s.
+
+
+
+✅ Pure in-memory (nanosecond lookups).
+
+
+
+✅ Clamps values to safe ranges.
+
+Task 3 — Integrate Cache Across All Modules
+
+Replace direct cost calls in:
+
+
+
+/server/core/math/cost-model.ts
+
+/server/services/signal-orchestrator.ts
+
+/server/core/rtb/ready_to_buy_service.ts
+
+/server/services/execution-controller.ts
+
+/server/services/vts-runner.ts
+
+Each now does:
+
+
+
+
+
+const cost = getCostMetrics(symbol)
+
+?? setCostMetrics(symbol, DEFAULT_COST_BUNDLE);
+
+✅ Single source of cost truth across entire runtime.
+
+
+
+✅ 0 network latency.
+
+Task 4 — Diagnostics Endpoint
+
+File: /server/api/diagnostics/tec-costs.ts
+
+
+
+
+
+{
+
+"symbol": "BTC/USD",
+
+"takerFee": 0.0026,
+
+"slippage": 0.0005,
+
+"spread": 0.001,
+
+"totalCost": 0.0072,
+
+"source": "memory",
+
+"ttlRemaining": 43}
+
+✅ Exposes live cost data for every symbol.
+
+
+
+✅ Used by monitoring dashboards.
+
+Task 5 — Observability Loop
+
+Log cost statistics every 60 s:
+
+
+
+
+
+[CostEngine] avgFee=0.26% avgSlip=0.05% avgSpread=0.09% (symbols=32)
+
+✅ Quickly highlights anomalies (e.g., spreads ballooning during illiquid hours).
+
+Task 6 — Testing & Governance
+
+Tests
+
+TestPurposecost_cache_latency.test.tsEnsures lookup < 0.1 mscost_clamping.test.tsValues never exceed 1 %diagnostics_output.test.tsConfirms endpoint correctnessintegration_cost_consistency.test.tsAll modules share same cached values
+
+Governance Invariants
+
+CodeRequirementLocationC1Single cache source for all modulescost-cache.tsC2Fee = 0.26 % (default taker)exchange-defaults.tsC3Max bounds ≤ 1 %cost-cache.tsC4Cache TTL ≤ 60 scost-cache.tsC5Diagnostics endpoint must respond < 50 msapi test
+
+II. Expected Outcomes
+
+✅ Conservative Net Expectancy baseline (0.26 % taker fee).
+
+
+
+✅ No external network hop (100 % in-process cache).
+
+
+
+✅ Identical cost values for Orchestrator, DSE, RTB, TEC, VTS.
+
+
+
+✅ Full transparency via diagnostics endpoint.
+
+
+
+✅ Automatic cost sanity checks and bounds.
+
+
+
+✅ Negligible performance impact (< 0.2 ms lookup).
+
+III. Directive Summary
+
+PropertyValueSchema Versionv 1.5.8Default Fee0.26 % TakerCache TypeIn-Memory TTL MapDiagnostics/api/diagnostics/tec/costsGovernance InvariantsC1 – C5Performance Budget< 0.2 ms avg cost fetchTesting Coverage4 integration + 2 governance tests
+
+✅ Conclusion
+
+Directive 11.3B consolidates and finalizes DawnTrader’s Cost Engine Layer under a unified, ultra-lightweight architecture:
+
+
+
+Simpler (no Redis, no tiers).
+
+Safer (fee pessimism + clamps).
+
+Transparent (diagnostics endpoint).
+
+Faster (nanosecond cache).
+
+This forms the stable mathematical substrate for the next evolution — Phase 11.4: Dynamic Market-Aware Execution — which will use this same cached cost engine to anticipate liquidity and adjust spread allowances in real time.

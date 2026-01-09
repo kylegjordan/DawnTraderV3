@@ -1,4 +1,8 @@
 import { OrderBookSnapshot } from './market-data-ws';
+import {
+  DEFAULT_MAKER_FEE,
+  DEFAULT_TAKER_FEE,
+} from '../config/exchange-defaults.js';
 
 export interface SlippageModel {
   intendedPrice: number;
@@ -23,9 +27,8 @@ export interface TradeRealism {
 }
 
 class SlippageFeeModelingService {
-  // Kraken fee tiers (can be configured per user)
-  private readonly DEFAULT_MAKER_FEE = 0.0016; // 0.16%
-  private readonly DEFAULT_TAKER_FEE = 0.0026; // 0.26%
+  private readonly DEFAULT_MAKER_FEE = DEFAULT_MAKER_FEE;
+  private readonly DEFAULT_TAKER_FEE = DEFAULT_TAKER_FEE;
   
   // Volatility estimation window
   private priceHistory: Map<string, number[]> = new Map();

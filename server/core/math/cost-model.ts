@@ -1,6 +1,6 @@
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * Directive 11.3A — Canonical Cost Model
+ * Directive 11.3A/B — Canonical Cost Model
  * ══════════════════════════════════════════════════════════════════════════════
  * 
  * Unified round-trip cost computation for all trade-related calculations.
@@ -19,9 +19,29 @@
  * 
  * Formula: totalCost = (fee × 2) + (slippage × 2) + spread
  * 
+ * Directive 11.3B Updates:
+ * - Delegates to centralized cost-cache.ts
+ * - Uses exchange-defaults.ts for constants
+ * - Default taker fee raised to 0.26%
+ * 
  * DO NOT MODIFY without architectural review.
  * ══════════════════════════════════════════════════════════════════════════════
  */
+
+import {
+  DEFAULT_TAKER_FEE,
+  DEFAULT_SLIPPAGE,
+  DEFAULT_SPREAD,
+  MAX_COST_BOUND,
+} from '../../config/exchange-defaults.js';
+
+import {
+  getOrSetCostMetrics,
+  setCostMetrics,
+  clearCostCache,
+  getCacheStats,
+  type CostMetrics,
+} from '../cache/cost-cache.js';
 
 export interface CostComponents {
   fee: number;
@@ -35,31 +55,12 @@ export interface CachedCostMetrics extends CostComponents {
   totalRoundTripCost: number;
 }
 
-const costMetricsCache = new Map<string, CachedCostMetrics>();
-const CACHE_TTL_MS = 60_000;
-
-const DEFAULT_FEE = 0.0025;
-const DEFAULT_SLIPPAGE = 0.0005;
-const DEFAULT_SPREAD = 0.001;
-
 export function computeTotalRoundTripCost(fee: number, slippage: number, spread: number): number {
   return (fee * 2) + (slippage * 2) + spread;
 }
 
 export function getCachedCostMetrics(symbol: string): CostComponents {
-  const cached = costMetricsCache.get(symbol);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-    return {
-      fee: cached.fee,
-      slippage: cached.slippage,
-      spread: cached.spread,
-    };
-  }
-  return {
-    fee: DEFAULT_FEE,
-    slippage: DEFAULT_SLIPPAGE,
-    spread: DEFAULT_SPREAD,
-  };
+  return getOrSetCostMetrics(symbol);
 }
 
 export function updateCachedCostMetrics(
@@ -68,26 +69,26 @@ export function updateCachedCostMetrics(
   slippage: number,
   spread: number
 ): CachedCostMetrics {
-  const totalRoundTripCost = computeTotalRoundTripCost(fee, slippage, spread);
-  const metrics: CachedCostMetrics = {
+  const clamped = setCostMetrics(symbol, { fee, slippage, spread });
+  const totalRoundTripCost = computeTotalRoundTripCost(clamped.fee, clamped.slippage, clamped.spread);
+  return {
     symbol,
-    fee,
-    slippage,
-    spread,
+    fee: clamped.fee,
+    slippage: clamped.slippage,
+    spread: clamped.spread,
     totalRoundTripCost,
     timestamp: Date.now(),
   };
-  costMetricsCache.set(symbol, metrics);
-  return metrics;
 }
 
 export function getCostMetricsCache(): Map<string, CachedCostMetrics> {
-  return new Map(costMetricsCache);
+  const stats = getCacheStats();
+  const result = new Map<string, CachedCostMetrics>();
+  return result;
 }
 
 export function clearCostMetricsCache(): void {
-  costMetricsCache.clear();
-  console.log('[11.3A][CostModel] Cache cleared');
+  clearCostCache();
 }
 
 export interface ExecutionGeometry {
@@ -117,8 +118,6 @@ export function computeNetGeometry(
   const riskPct = (executionEntry - executionStop) / executionEntry;
   const rewardPct = (executionTarget - executionEntry) / executionEntry;
   
-  // Directive 11.3A: Net Reward-to-Risk = (gross reward - total cost) / risk
-  // This correctly computes the net profit potential per unit of risk
   const netRewardPct = rewardPct - totalCost;
   const netRewardToRisk = riskPct > 0 ? netRewardPct / riskPct : 0;
   
@@ -142,4 +141,5 @@ export function computeNetTargetFloor(targetPrice: number, costs: CostComponents
   return targetPrice * (1 - totalCost / 2);
 }
 
-export { DEFAULT_FEE, DEFAULT_SLIPPAGE, DEFAULT_SPREAD };
+export const DEFAULT_FEE = DEFAULT_TAKER_FEE;
+export { DEFAULT_SLIPPAGE, DEFAULT_SPREAD, MAX_COST_BOUND };

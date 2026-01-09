@@ -7476,6 +7476,130 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ==================== Directive 11.3B: TEC Cost Diagnostics ====================
+  
+  // GET /api/diagnostics/tec/costs - Get all cached cost metrics
+  apiRouter.get('/diagnostics/tec/costs', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const startTime = performance.now();
+      const { getCostMetrics, getAllCachedSymbols, getCacheTTLRemaining, getOrSetCostMetrics } = await import('./core/cache/cost-cache.js');
+      const { computeTotalRoundTripCost } = await import('./core/math/cost-model.js');
+      
+      const symbols = getAllCachedSymbols();
+      const diagnostics = symbols.map(symbol => {
+        const metrics = getCostMetrics(symbol);
+        const ttl = getCacheTTLRemaining(symbol);
+        
+        if (metrics) {
+          return {
+            symbol,
+            takerFee: metrics.fee,
+            slippage: metrics.slippage,
+            spread: metrics.spread,
+            totalCost: computeTotalRoundTripCost(metrics.fee, metrics.slippage, metrics.spread),
+            source: 'memory',
+            ttlRemaining: ttl,
+          };
+        }
+        
+        const defaults = getOrSetCostMetrics(symbol);
+        return {
+          symbol,
+          takerFee: defaults.fee,
+          slippage: defaults.slippage,
+          spread: defaults.spread,
+          totalCost: computeTotalRoundTripCost(defaults.fee, defaults.slippage, defaults.spread),
+          source: 'default',
+          ttlRemaining: getCacheTTLRemaining(symbol),
+        };
+      });
+      
+      const duration = performance.now() - startTime;
+      
+      res.json({
+        ok: true,
+        data: diagnostics,
+        meta: {
+          symbolCount: diagnostics.length,
+          responseTimeMs: Number(duration.toFixed(2)),
+        },
+      });
+    } catch (error: any) {
+      console.error('[11.3B] Error fetching TEC costs:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+  
+  // GET /api/diagnostics/tec/costs/:symbol - Get cost metrics for specific symbol
+  apiRouter.get('/diagnostics/tec/costs/:symbol', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const startTime = performance.now();
+      const { symbol } = req.params;
+      const { getOrSetCostMetrics, getCacheTTLRemaining } = await import('./core/cache/cost-cache.js');
+      const { computeTotalRoundTripCost } = await import('./core/math/cost-model.js');
+      
+      const metrics = getOrSetCostMetrics(symbol);
+      const ttl = getCacheTTLRemaining(symbol);
+      const totalCost = computeTotalRoundTripCost(metrics.fee, metrics.slippage, metrics.spread);
+      
+      const duration = performance.now() - startTime;
+      
+      res.json({
+        ok: true,
+        data: {
+          symbol,
+          takerFee: metrics.fee,
+          slippage: metrics.slippage,
+          spread: metrics.spread,
+          totalCost,
+          source: 'memory',
+          ttlRemaining: ttl,
+        },
+        meta: {
+          responseTimeMs: Number(duration.toFixed(2)),
+        },
+      });
+    } catch (error: any) {
+      console.error('[11.3B] Error fetching TEC costs for symbol:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+  
+  // GET /api/diagnostics/tec/costs-summary - Get cost cache summary
+  apiRouter.get('/diagnostics/tec/costs-summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const startTime = performance.now();
+      const { getCacheStats, getCacheSize } = await import('./core/cache/cost-cache.js');
+      const { computeTotalRoundTripCost } = await import('./core/math/cost-model.js');
+      
+      const stats = getCacheStats();
+      const cacheSize = getCacheSize();
+      
+      const duration = performance.now() - startTime;
+      
+      res.json({
+        ok: true,
+        data: {
+          symbolCount: cacheSize,
+          avgFee: stats.avgFee,
+          avgFeePct: (stats.avgFee * 100).toFixed(2) + '%',
+          avgSlippage: stats.avgSlippage,
+          avgSlippagePct: (stats.avgSlippage * 100).toFixed(2) + '%',
+          avgSpread: stats.avgSpread,
+          avgSpreadPct: (stats.avgSpread * 100).toFixed(2) + '%',
+          avgTotalCost: computeTotalRoundTripCost(stats.avgFee, stats.avgSlippage, stats.avgSpread),
+          avgTotalCostPct: (computeTotalRoundTripCost(stats.avgFee, stats.avgSlippage, stats.avgSpread) * 100).toFixed(2) + '%',
+        },
+        meta: {
+          responseTimeMs: Number(duration.toFixed(2)),
+        },
+      });
+    } catch (error: any) {
+      console.error('[11.3B] Error fetching TEC costs summary:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   // ==================== Phase 8.8.3-I1: RTB Block Diagnostics ====================
   
   // GET /api/diagnostics/rtb-blocks - Get RTB block reason summary
