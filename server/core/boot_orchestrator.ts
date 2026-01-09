@@ -15,7 +15,9 @@
 
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
-import { initVTSRunner, stopVTSRunner } from '../services/vts-runner';
+import { initVTSRunner, stopVTSRunner, startAutonomousSimulation } from '../services/vts-runner';
+import { preloadPatternHistory } from './pattern-recognition';
+import { systemConfigService } from '../services/system-config';
 
 const ML_SERVICE_HOST = process.env.ML_SERVICE_HOST || 'http://localhost:5001';
 const ML_SERVICE_AUTO_START = process.env.ML_SERVICE_AUTO_START !== 'false';
@@ -87,8 +89,7 @@ class BootOrchestrator extends EventEmitter {
         this.startHealthMonitoring();
         this.emit('ml_ready');
         
-        await initVTSRunner();
-        console.log('[L6][BOOT_ORCHESTRATOR] VTS Runner initialized for passive learning');
+        await this.initializeVTSWithAutoStart();
         
         return true;
       } else {
@@ -96,8 +97,7 @@ class BootOrchestrator extends EventEmitter {
         this.mlServiceStatus = { status: 'DEGRADED', error: 'Failed to start' };
         this.emit('ml_degraded');
         
-        await initVTSRunner();
-        console.log('[L6][BOOT_ORCHESTRATOR] VTS Runner initialized (degraded mode)');
+        await this.initializeVTSWithAutoStart();
         
         return true;
       }
@@ -107,6 +107,32 @@ class BootOrchestrator extends EventEmitter {
       this.mlServiceStatus = { status: 'FAILED', error: errorMessage };
       this.emit('ml_failed', error);
       return true;
+    }
+  }
+
+  private async initializeVTSWithAutoStart(): Promise<void> {
+    await preloadPatternHistory(2000);
+    console.log('[BOOT][VTS] Pattern recognition engine warmed up');
+    
+    await initVTSRunner();
+    console.log('[L6][BOOT_ORCHESTRATOR] VTS Runner initialized');
+    
+    try {
+      const config = await systemConfigService.getConfig();
+      
+      if (config?.passiveLearning === true) {
+        console.log('[BOOT][VTS] Passive learning mode detected, starting autonomous simulation...');
+        const result = await startAutonomousSimulation();
+        if (result.success) {
+          console.log('[BOOT][VTS] Auto-start enabled (passive mode)');
+        } else {
+          console.warn('[BOOT][VTS] Auto-start failed:', result.message);
+        }
+      } else {
+        console.log('[BOOT][VTS] Trading active, VTS auto-start skipped');
+      }
+    } catch (error) {
+      console.warn('[BOOT][VTS] Could not determine passive learning state:', error);
     }
   }
 

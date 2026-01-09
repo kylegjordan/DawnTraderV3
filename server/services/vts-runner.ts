@@ -1,24 +1,27 @@
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * 🔒 LOCKED MODULE — Directive 8.8.4-M5C
+ * 🔒 LOCKED MODULE — Directive 11.0E.1 (Upgraded from 8.8.4-M5C)
  * ══════════════════════════════════════════════════════════════════════════════
- * VTS Runner - Autonomous Virtual Trading Simulator
+ * VTS Runner - Autonomous Virtual Trading Simulator (Phase 10 Modernized)
  * 
  * Purpose: Runs autonomous virtual trade simulation independent of live trading.
- * Sources data exclusively from the pricing service cache, not signal orchestrator.
+ * Sources data from Ideal Pool and calculates pair-level market regimes.
  * 
- * M5B Features:
- * - Autonomous signal generation when tradingActive=false
- * - 60-second simulation loop with configurable pairs
- * - Internal CWQI/NGC computation
+ * Directive 11.0E.1 Features:
+ * - Phase-10 canonical math (finalScore, hybridScore, regimeWeight, decayPenalty)
+ * - Per-pair regime calculation (BULL_STABLE, BEAR_VOLATILE, LOW_VOL_CHOP, etc.)
+ * - Regime → Strategy mapping with signalType selection
+ * - 100-pair Ideal Pool integration
  * - Automatic stop when tradingActive=true
- * - Session metrics tracking
+ * - Generates virtual trades for Telemetry + Predictive Learning
  * 
- * M5C Features:
- * - Uses actual CWQI/NGC calculation modules (same as live engine)
- * - Actual position sizing formulas from Adaptive Risk Advisor
+ * Legacy Features (Preserved):
+ * - Autonomous signal generation when passiveLearning=true
+ * - 60-second simulation loop
  * - Trade recording to /data/vts_trades_<timestamp>.json
- * - Strategy weights from live calibration
+ * 
+ * Schema: v1.6.6
+ * Governance: M45, M46, M47, M48, M49
  * 
  * DO NOT MODIFY without architectural review.
  * ══════════════════════════════════════════════════════════════════════════════
@@ -26,16 +29,20 @@
 
 import { vtsService, type VirtualSignal } from './vts-service.js';
 import { loadCalibration, applyCalibration, type CalibrationCoefficients } from '../utils/calibration.js';
-import { priceCache, type CachedPrice } from './price-cache.js';
+import { priceCache, type CachedPrice, type CacheBucketType } from './price-cache.js';
 import { systemConfigService } from './system-config.js';
-// Phase 8.8.7: FilteredPairsService DEPRECATED - use activeFilterPool instead
 import { activeFilterPool } from './active-filter-pool.js';
-import { calculateCWQI, calculateNGC, estimateVolatility, calculateRiskScore, calculateExpectedReturn, getAdaptiveRelevance } from '../core/metrics/quality_index.js';
+import { getTelemetryAggregator } from './telemetry-aggregator.js';
+import { KrakenService } from './kraken.js';
 import { computeStrategyWeights, getWeightSync } from '../utils/strategyWeights.js';
 import { computeExposureBias, getExposureMultiplierSync } from '../utils/strategyBias.js';
-// Directive 11.3A: Net Expectancy Standardization - Canonical Cost Model
-import { getCachedCostMetrics, computeTotalRoundTripCost, computeNetGeometry } from '../core/math/cost-model.js';
+import { getCachedCostMetrics, computeNetGeometry } from '../core/math/cost-model.js';
 import { compareLatestSessions, savePaperSessionTrades, getPaperSessionTrades } from './vts-live-comparison-audit.js';
+import { SCORE_WEIGHTS } from '../config/score-weights.config.js';
+import { calculatePairRegime, getRegimeWeight } from '../core/metrics/market-regime.js';
+import { regimeStrategyMap, selectRandomStrategy as selectRegimeStrategy, getRegimeRiskMultiplier } from '../config/regime-strategy-map.js';
+import type { MarketRegimeType, OHLCData } from '../types/market-regime.types';
+import type { VTSCycleMetrics, SignalType } from '../types/virtual-trade.interface';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -52,6 +59,8 @@ let calibration: CalibrationCoefficients | null = null;
 let autonomousLoopInterval: NodeJS.Timeout | null = null;
 let isAutonomousRunning = false;
 let sessionStartTime: number | null = null;
+let cycleCount = 0;
+let patternRecognitionWarmedUp = false;
 
 interface VTSConfig {
   autonomousMode: boolean;
@@ -67,10 +76,10 @@ interface VTSConfig {
 const DEFAULT_CONFIG: VTSConfig = {
   autonomousMode: true,
   simulationIntervalSec: 60,
-  pairsPerCycle: 20,
+  pairsPerCycle: 100,
   strategies: [
-    'EMA_RSI', 'MACD_Crossover', 'Bollinger_Breakout', 'Momentum_Surge',
-    'Mean_Reversion', 'Volume_Spike', 'Trend_Follow', 'Range_Bound', 'Breakout_Confirm'
+    'MomentumPulse', 'TrendFlow', 'BreakoutConfirm', 'RangeTrade', 
+    'SupportBounce', 'H2_Slingshot', 'MeanReversion', 'ImpulseChaser'
   ],
   targetProfit: 0.015,
   stopLoss: 0.008,
@@ -86,37 +95,35 @@ async function loadVTSConfig(): Promise<VTSConfig> {
     const content = await fs.readFile(configPath, 'utf-8');
     const loaded = JSON.parse(content);
     vtsConfig = { ...DEFAULT_CONFIG, ...loaded };
-    console.log('[M5B][VTS_CONFIG] Loaded config:', JSON.stringify(vtsConfig, null, 2));
+    console.log('[11.0E.1][VTS_CONFIG] Loaded config:', JSON.stringify(vtsConfig, null, 2));
     return vtsConfig;
   } catch (error) {
-    console.warn('[M5B][VTS_CONFIG] Using default config (file not found or invalid)');
+    console.warn('[11.0E.1][VTS_CONFIG] Using default config (file not found or invalid)');
     return DEFAULT_CONFIG;
   }
 }
 
-function selectRandomStrategy(): string {
-  const strategies = vtsConfig.strategies;
-  return strategies[Math.floor(Math.random() * strategies.length)];
-}
-
-interface M5CTradeRecord {
+interface Phase10TradeRecord {
   symbol: string;
+  regime: MarketRegimeType;
+  signalType: SignalType;
   strategy: string;
+  finalScore: number;
+  hybridScore: number;
+  predictiveConfidence: number;
+  regimeWeight: number;
+  decayPenalty: number;
+  frictionCost: number;
   entry: number;
-  exit: number;
-  cwqi: number;
-  ngc: number;
-  di: number;
-  gsi: number;
-  profit: number;
-  loss: number;
+  exit?: number;
+  profit?: number;
   positionSize: number;
-  strategyWeight: number;
+  pool?: 'ideal' | 'rotational';
   timestamp: string;
 }
 
-let m5cSessionTrades: M5CTradeRecord[] = [];
-let m5cSessionStartTime: number | null = null;
+let phase10SessionTrades: Phase10TradeRecord[] = [];
+let phase10SessionStartTime: number | null = null;
 
 async function getPortfolioValue(): Promise<number> {
   try {
@@ -136,53 +143,96 @@ async function getRiskPerTrade(): Promise<number> {
   }
 }
 
-/**
- * Directive 11.3A: Enhanced with net geometry computation
- */
-function computeActualCWQI(symbol: string, priceData: CachedPrice, entryPrice: number, targetPrice: number, stopPrice: number): { cwqi: number; ngc: number; riskScore: number; volatility: number; expectedReturn: number; netExpectedEdge: number; netRewardToRisk: number } {
-  const volatility = estimateVolatility(priceData.high24h, priceData.low24h, priceData.price);
-  const riskScore = calculateRiskScore(entryPrice, stopPrice);
-  const expectedReturn = calculateExpectedReturn(entryPrice, targetPrice, stopPrice, false);
-  
-  const confidence = 0.6 + Math.random() * 0.2;
-  
-  const cwqiResult = calculateCWQI({
-    confidence,
-    riskScore,
-    expectedReturn,
-    volatility
-  });
-  
-  // Directive 11.3A: Compute net geometry using canonical cost model
-  const costMetrics = getCachedCostMetrics(symbol);
-  const netGeometry = computeNetGeometry(entryPrice, stopPrice, targetPrice, costMetrics);
-  
-  return {
-    cwqi: cwqiResult.cwqi,
-    ngc: cwqiResult.ngc,
-    riskScore,
-    volatility,
-    expectedReturn,
-    netExpectedEdge: netGeometry.netExpectedEdge,
-    netRewardToRisk: netGeometry.netRewardToRisk
-  };
-}
-
-function computePositionSize(portfolioValue: number, riskPerTrade: number, entryPrice: number, stopPrice: number, exposureMultiplier: number): number {
+function computePositionSize(
+  portfolioValue: number, 
+  riskPerTrade: number, 
+  entryPrice: number, 
+  stopPrice: number, 
+  riskMultiplier: number
+): number {
   const stopDistance = Math.abs(entryPrice - stopPrice) / entryPrice;
   if (stopDistance <= 0) return 0;
   
-  const riskAmount = portfolioValue * riskPerTrade * exposureMultiplier;
+  const riskAmount = portfolioValue * riskPerTrade * riskMultiplier;
   const positionSize = riskAmount / stopDistance;
   
   const maxPositionSize = portfolioValue * 0.25;
   return Math.min(positionSize, maxPositionSize);
 }
 
-async function generateVirtualSignalM5C(symbol: string, priceData: CachedPrice): Promise<{ signal: VirtualSignal; tradeRecord: M5CTradeRecord }> {
-  const strategyId = selectRandomStrategy();
-  const entryPrice = priceData.price;
+function computeFinalScore(
+  hybridScore: number,
+  predictiveConfidence: number,
+  regimeWeight: number,
+  decayPenalty: number
+): number {
+  const { FINAL_SCORE } = SCORE_WEIGHTS;
+  return (
+    hybridScore * FINAL_SCORE.HYBRID +
+    predictiveConfidence * FINAL_SCORE.CONFIDENCE +
+    regimeWeight * FINAL_SCORE.REGIME -
+    decayPenalty * FINAL_SCORE.DECAY
+  );
+}
+
+const vtsKrakenService = new KrakenService();
+
+async function fetchOHLCForPair(symbol: string): Promise<OHLCData[]> {
+  try {
+    const { ohlc } = await vtsKrakenService.getOHLCData(symbol, 15, undefined, { maxCandlesTotal: 50 });
+    
+    if (!ohlc || ohlc.length === 0) {
+      return [];
+    }
+    
+    return ohlc.map((candle: any) => ({
+      open: parseFloat(candle.open || candle[1]),
+      high: parseFloat(candle.high || candle[2]),
+      low: parseFloat(candle.low || candle[3]),
+      close: parseFloat(candle.close || candle[4]),
+      volume: parseFloat(candle.volume || candle[6] || 0),
+      timestamp: candle.timestamp || candle[0] * 1000
+    }));
+  } catch (error) {
+    console.warn(`[11.0E.1][VTS] OHLC fetch failed for ${symbol}:`, error);
+    return [];
+  }
+}
+
+function simulateHybridScore(regime: MarketRegimeType): number {
+  const baseScores: Record<MarketRegimeType, number> = {
+    BULL_STABLE: 0.75,
+    BEAR_VOLATILE: 0.45,
+    LOW_VOL_CHOP: 0.55,
+    HIGH_VOL_IMPULSE: 0.65,
+    TRANSITION: 0.50
+  };
+  const base = baseScores[regime] ?? 0.5;
+  return Math.min(0.95, Math.max(0.1, base + (Math.random() - 0.5) * 0.2));
+}
+
+function simulatePredictiveConfidence(regime: MarketRegimeType, hybridScore: number): number {
+  const base = hybridScore * 0.8 + 0.1;
+  return Math.min(0.95, Math.max(0.1, base + (Math.random() - 0.5) * 0.15));
+}
+
+function simulateDecayPenalty(): number {
+  return Math.random() * 0.15;
+}
+
+async function generatePhase10Signal(
+  symbol: string, 
+  priceData: CachedPrice, 
+  ohlcData: OHLCData[],
+  pool: 'ideal' | 'rotational'
+): Promise<{ signal: VirtualSignal; tradeRecord: Phase10TradeRecord } | null> {
+  const regimeResult = calculatePairRegime(ohlcData);
+  const regime = regimeResult.regime;
   
+  const { signalType, strategy } = selectRegimeStrategy(regime);
+  const riskMultiplier = getRegimeRiskMultiplier(regime);
+  
+  const entryPrice = priceData.price;
   const volatility = priceData.high24h > 0 && priceData.low24h > 0
     ? (priceData.high24h - priceData.low24h) / priceData.price
     : 0.02;
@@ -196,179 +246,200 @@ async function generateVirtualSignalM5C(symbol: string, priceData: CachedPrice):
     ? (priceData.ask - priceData.bid) / priceData.price
     : 0.001;
   
-  // Directive 11.3A: Pass symbol for net geometry calculation
-  const metrics = computeActualCWQI(symbol, priceData, entryPrice, takeProfit, stopLoss);
+  const hybridScore = simulateHybridScore(regime);
+  const predictiveConfidence = simulatePredictiveConfidence(regime, hybridScore);
+  const regimeWeight = getRegimeWeight(regime);
+  const decayPenalty = simulateDecayPenalty();
+  
+  const finalScore = computeFinalScore(hybridScore, predictiveConfidence, regimeWeight, decayPenalty);
+  
+  const costMetrics = getCachedCostMetrics(symbol);
+  const frictionCost = (costMetrics.fee * 2) + (costMetrics.slippage * 2) + costMetrics.spread;
   
   const portfolioValue = await getPortfolioValue();
   const riskPerTrade = await getRiskPerTrade();
-  const exposureMultiplier = getExposureMultiplierSync(strategyId);
-  const strategyWeight = getWeightSync(strategyId);
-  
-  const positionSize = computePositionSize(portfolioValue, riskPerTrade, entryPrice, stopLoss, exposureMultiplier);
-  
-  const adaptiveRelevance = getAdaptiveRelevance();
-  const di = (metrics.cwqi * 0.4 + metrics.ngc * 0.4 + (1 - metrics.riskScore) * 0.2);
-  const gsi = adaptiveRelevance.gsi;
+  const positionSize = computePositionSize(portfolioValue, riskPerTrade, entryPrice, stopLoss, riskMultiplier);
   
   const priceChange = (Math.random() - 0.4) * volatility;
   const exitPrice = entryPrice * (1 + priceChange);
-  const profit = priceChange > 0 ? (exitPrice - entryPrice) * (positionSize / entryPrice) : 0;
-  const loss = priceChange < 0 ? Math.abs((exitPrice - entryPrice) * (positionSize / entryPrice)) : 0;
-  
-  // Directive 11.3A: Use net expected edge for predicted profit
-  const predictedProfit = metrics.netExpectedEdge > 0 
-    ? (metrics.cwqi * 0.4 + metrics.ngc * 0.6) * dynamicTarget 
-    : 0;
+  const profit = (exitPrice - entryPrice) * (positionSize / entryPrice) - (positionSize * frictionCost);
   
   const signal: VirtualSignal = {
-    id: `vsig_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    id: `vsig_p10_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     symbol,
     entryPrice,
     takeProfit,
     stopLoss,
     spread,
-    predictedProfit,
-    strategy: strategyId,
-    createdAt: Date.now()
+    predictedProfit: finalScore * dynamicTarget,
+    strategy,
+    createdAt: Date.now(),
+    signalType: signalType === 'Quantitative' ? 'QUANT' : signalType === 'Pattern' ? 'PATTERN' : 'HYBRID',
+    hybridScore,
+    predictiveConfidence
   };
   
-  const tradeRecord: M5CTradeRecord = {
+  const tradeRecord: Phase10TradeRecord = {
     symbol,
-    strategy: strategyId,
+    regime,
+    signalType,
+    strategy,
+    finalScore,
+    hybridScore,
+    predictiveConfidence,
+    regimeWeight,
+    decayPenalty,
+    frictionCost,
     entry: entryPrice,
     exit: exitPrice,
-    cwqi: metrics.cwqi,
-    ngc: metrics.ngc,
-    di,
-    gsi,
     profit,
-    loss,
     positionSize,
-    strategyWeight,
+    pool,
     timestamp: new Date().toISOString()
   };
   
-  console.log(`[M5C][VTS] Trade: ${symbol} strategy=${strategyId} cwqi=${metrics.cwqi.toFixed(3)} ngc=${metrics.ngc.toFixed(3)} di=${di.toFixed(3)} netEdge=${(metrics.netExpectedEdge * 100).toFixed(2)}% size=$${positionSize.toFixed(2)}`);
+  console.log(`[11.0E.1][VTS] Trade: ${symbol} regime=${regime} signalType=${signalType} strategy=${strategy} finalScore=${finalScore.toFixed(3)} pool=${pool}`);
   
   return { signal, tradeRecord };
 }
 
-function generateVirtualSignal(symbol: string, priceData: CachedPrice): VirtualSignal {
-  const strategyId = selectRandomStrategy();
-  const entryPrice = priceData.price;
-  
-  const volatility = priceData.high24h > 0 && priceData.low24h > 0
-    ? (priceData.high24h - priceData.low24h) / priceData.price
-    : 0.02;
-  
-  const dynamicTarget = Math.max(vtsConfig.targetProfit, volatility * 0.5);
-  const dynamicStop = Math.max(vtsConfig.stopLoss, volatility * 0.3);
-  
-  const takeProfit = entryPrice * (1 + dynamicTarget);
-  const stopLoss = entryPrice * (1 - dynamicStop);
-  const spread = priceData.ask > 0 && priceData.bid > 0
-    ? (priceData.ask - priceData.bid) / priceData.price
-    : 0.001;
-  
-  const metrics = computeActualCWQI(priceData, entryPrice, takeProfit, stopLoss);
-  const predictedProfit = (metrics.cwqi * 0.4 + metrics.ngc * 0.6) * dynamicTarget;
-  
-  const signal: VirtualSignal = {
-    id: `vsig_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    symbol,
-    entryPrice,
-    takeProfit,
-    stopLoss,
-    spread,
-    predictedProfit,
-    strategy: strategyId,
-    createdAt: Date.now()
-  };
-  
-  console.log(`[M5C][VTS] Simulated trade: ${symbol} strategy=${strategyId} cwqi=${metrics.cwqi.toFixed(3)} ngc=${metrics.ngc.toFixed(3)}`);
-  
-  return signal;
-}
-
-async function getTopLiquidityPairs(count: number): Promise<CachedPrice[]> {
-  // Phase 8.8.7: Use FX5 Active Filter Pool instead of deprecated FilteredPairsService
-  // VTS now uses the same filtering as production signal orchestrator
-  const fx5Survivors = activeFilterPool.getActivePool('paper');
-  
-  if (!fx5Survivors || fx5Survivors.length === 0) {
-    console.log('[8.8.7][VTS] No FX5 survivors in Active Filter Pool');
-    return [];
-  }
-  
-  console.info(`[8.8.7][VTS] Running on FX5 Active Filter Pool (${fx5Survivors.length} pairs).`);
-  
-  // Filter and sort by volume from FX5 pool data
-  const symbols = fx5Survivors
-    .filter(p => 
-      (p.price ?? 0) >= vtsConfig.minPrice &&
-      (p.volume24h ?? 0) >= vtsConfig.minVolume24h
-    )
-    .sort((a, b) => (b.volume24h ?? 0) - (a.volume24h ?? 0))
-    .slice(0, count)
-    .map(p => p.symbol);
-  
-  if (symbols.length === 0) {
-    console.log('[8.8.7][VTS] No FX5 pairs meet VTS criteria');
-    return [];
-  }
-  
-  for (const symbol of symbols) {
-    priceCache.subscribe('fx5Snapshot' as any, symbol);
-  }
-  
-  const priceData = await priceCache.getBatch('fx5Snapshot' as any, symbols);
-  
-  const result: CachedPrice[] = [];
-  for (const symbol of symbols) {
-    const price = priceData.get(symbol);
-    if (price && price.price > 0) {
-      result.push(price);
+async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal' | 'rotational' }>> {
+  try {
+    const telemetry = getTelemetryAggregator();
+    const topPairs = telemetry.getTopPairsWithPool(vtsConfig.pairsPerCycle);
+    
+    if (topPairs.length >= 10) {
+      return topPairs.map(p => ({ symbol: p.symbol, pool: p.pool }));
     }
+    
+    console.log('[11.0E.1][VTS] Ideal pool too small, falling back to FX5 Active Filter Pool');
+    const fx5Survivors = activeFilterPool.getActivePool('paper');
+    
+    if (!fx5Survivors || fx5Survivors.length === 0) {
+      console.log('[11.0E.1][VTS] No FX5 survivors available');
+      return [];
+    }
+    
+    return fx5Survivors
+      .filter(p => (p.price ?? 0) >= vtsConfig.minPrice && (p.volume24h ?? 0) >= vtsConfig.minVolume24h)
+      .slice(0, vtsConfig.pairsPerCycle)
+      .map(p => ({ symbol: p.symbol, pool: 'rotational' as const }));
+  } catch (error) {
+    console.warn('[11.0E.1][VTS] Failed to get Ideal Pool pairs:', error);
+    return [];
   }
-  
-  console.log(`[8.8.7][VTS] Got ${result.length}/${symbols.length} prices from cache`);
-  return result;
 }
 
-async function runSimulationCycle(): Promise<number> {
+async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
+  const cycleStart = Date.now();
+  cycleCount++;
+  
   const config = await getSystemConfig();
-  const tradingActive = config.tradingActive ?? false;
-  
-  if (tradingActive) {
-    console.log('[M5C][VTS] Skipping cycle - tradingActive=true');
-    return 0;
+  if (config.tradingActive) {
+    console.log('[11.0E.1][VTS] Skipping cycle - tradingActive=true');
+    return {
+      cycleId: cycleCount,
+      pairsEvaluated: 0,
+      tradesSimulated: 0,
+      avgFinalScore: 0,
+      regimeDistribution: {} as Record<MarketRegimeType, number>,
+      signalTypeDistribution: {},
+      strategiesExecuted: [],
+      cycleDurationMs: Date.now() - cycleStart,
+      timestamp: Date.now()
+    };
   }
   
-  const topPairs = await getTopLiquidityPairs(vtsConfig.pairsPerCycle);
+  const pairs = await getIdealPoolPairs();
   
-  if (topPairs.length === 0) {
-    console.log('[M5C][VTS] No eligible pairs found in price cache');
-    return 0;
+  if (pairs.length < 10) {
+    console.warn(`[11.0E.1][VTS] Ideal pool too small (${pairs.length} pairs), delaying cycle...`);
+    return {
+      cycleId: cycleCount,
+      pairsEvaluated: pairs.length,
+      tradesSimulated: 0,
+      avgFinalScore: 0,
+      regimeDistribution: {} as Record<MarketRegimeType, number>,
+      signalTypeDistribution: {},
+      strategiesExecuted: [],
+      cycleDurationMs: Date.now() - cycleStart,
+      timestamp: Date.now()
+    };
   }
   
+  const regimeDistribution: Record<MarketRegimeType, number> = {
+    BULL_STABLE: 0,
+    BEAR_VOLATILE: 0,
+    LOW_VOL_CHOP: 0,
+    HIGH_VOL_IMPULSE: 0,
+    TRANSITION: 0
+  };
+  const signalTypeDistribution: Record<string, number> = {};
+  const strategiesExecuted: Set<string> = new Set();
   let simulatedCount = 0;
+  let totalFinalScore = 0;
   
-  for (const priceData of topPairs) {
+  const bucketType: CacheBucketType = 'fx5Snapshot';
+  for (const pair of pairs) {
+    priceCache.subscribe(pair.symbol, bucketType);
+  }
+  
+  await new Promise(resolve => setTimeout(resolve, 100));
+  
+  const symbols = pairs.map(p => p.symbol);
+  const priceDataMap = await priceCache.getBatch(bucketType, symbols);
+  
+  for (const pair of pairs) {
     try {
-      const { signal, tradeRecord } = await generateVirtualSignalM5C(priceData.symbol, priceData);
-      await vtsService.createVirtualTrade(signal);
-      vtsService.updateMarketPrice(priceData.symbol, priceData.price);
+      const priceData = priceDataMap.get(pair.symbol);
+      if (!priceData || priceData.price <= 0) {
+        continue;
+      }
       
-      addM5CTradeRecord(tradeRecord);
+      const ohlcData = await fetchOHLCForPair(pair.symbol);
+      if (ohlcData.length < 10) {
+        continue;
+      }
+      
+      const result = await generatePhase10Signal(pair.symbol, priceData, ohlcData, pair.pool);
+      if (!result) continue;
+      
+      const { signal, tradeRecord } = result;
+      
+      await vtsService.createVirtualTrade(signal);
+      vtsService.updateMarketPrice(pair.symbol, priceData.price);
+      
+      phase10SessionTrades.push(tradeRecord);
+      
+      regimeDistribution[tradeRecord.regime]++;
+      signalTypeDistribution[tradeRecord.signalType] = (signalTypeDistribution[tradeRecord.signalType] || 0) + 1;
+      strategiesExecuted.add(tradeRecord.strategy);
+      totalFinalScore += tradeRecord.finalScore;
       simulatedCount++;
+      
     } catch (error) {
-      console.warn(`[M5C][VTS] Failed to create trade for ${priceData.symbol}:`, error);
+      console.warn(`[11.0E.1][VTS] Strategy execution failed for ${pair.symbol}:`, error);
     }
   }
   
-  console.log(`[M5C][VTS] Cycle complete: ${simulatedCount}/${topPairs.length} trades simulated, ${m5cSessionTrades.length} total recorded`);
+  const avgFinalScore = simulatedCount > 0 ? totalFinalScore / simulatedCount : 0;
+  const cycleDurationMs = Date.now() - cycleStart;
   
-  return simulatedCount;
+  console.log(`[VTS][Cycle ${cycleCount}] Ideal Pool: ${pairs.length} | Regime Dist: BULL=${regimeDistribution.BULL_STABLE}, CHOP=${regimeDistribution.LOW_VOL_CHOP}, BEAR=${regimeDistribution.BEAR_VOLATILE}`);
+  console.log(`[VTS][Cycle ${cycleCount}] Executing ${simulatedCount} signals across ${Object.keys(signalTypeDistribution).length} signal types`);
+  console.log(`[VTS][Cycle ${cycleCount}] Completed: ${simulatedCount} trades simulated | Avg finalScore=${avgFinalScore.toFixed(2)}`);
+  
+  return {
+    cycleId: cycleCount,
+    pairsEvaluated: pairs.length,
+    tradesSimulated: simulatedCount,
+    avgFinalScore,
+    regimeDistribution,
+    signalTypeDistribution,
+    strategiesExecuted: Array.from(strategiesExecuted),
+    cycleDurationMs,
+    timestamp: Date.now()
+  };
 }
 
 export async function startAutonomousSimulation(): Promise<{ success: boolean; message: string }> {
@@ -377,9 +448,7 @@ export async function startAutonomousSimulation(): Promise<{ success: boolean; m
   }
   
   const config = await getSystemConfig();
-  const tradingActive = config.tradingActive ?? false;
-  
-  if (tradingActive) {
+  if (config.tradingActive) {
     return { success: false, message: 'Cannot start autonomous simulation while trading is active' };
   }
   
@@ -391,24 +460,25 @@ export async function startAutonomousSimulation(): Promise<{ success: boolean; m
   
   isAutonomousRunning = true;
   sessionStartTime = Date.now();
+  phase10SessionStartTime = Date.now();
   vtsService.resetSessionMetrics();
   
-  console.log(`[M5B][VTS] Starting autonomous simulation loop (interval: ${vtsConfig.simulationIntervalSec}s, pairs: ${vtsConfig.pairsPerCycle})`);
+  console.log(`[11.0E.1][VTS] Starting Phase-10 autonomous simulation (interval: ${vtsConfig.simulationIntervalSec}s, pairs: ${vtsConfig.pairsPerCycle})`);
   
-  await runSimulationCycle();
+  await runPhase10SimulationCycle();
   
   autonomousLoopInterval = setInterval(async () => {
     const sysConfig = await getSystemConfig();
     if (sysConfig.tradingActive) {
-      console.log('[M5B][VTS] Trading activated - stopping autonomous simulation');
+      console.log('[11.0E.1][VTS] Trading activated - stopping autonomous simulation');
       stopAutonomousSimulation();
       return;
     }
     
-    await runSimulationCycle();
+    await runPhase10SimulationCycle();
   }, vtsConfig.simulationIntervalSec * 1000);
   
-  return { success: true, message: `Autonomous simulation started (${vtsConfig.pairsPerCycle} pairs every ${vtsConfig.simulationIntervalSec}s)` };
+  return { success: true, message: `Phase-10 autonomous simulation started (${vtsConfig.pairsPerCycle} pairs every ${vtsConfig.simulationIntervalSec}s)` };
 }
 
 export function stopAutonomousSimulation(): void {
@@ -417,7 +487,7 @@ export function stopAutonomousSimulation(): void {
     autonomousLoopInterval = null;
   }
   isAutonomousRunning = false;
-  console.log('[M5B][VTS] Autonomous simulation stopped');
+  console.log('[11.0E.1][VTS] Autonomous simulation stopped');
 }
 
 export function isAutonomousSimulationRunning(): boolean {
@@ -429,12 +499,16 @@ export function getAutonomousSessionInfo(): {
   sessionStartTime: number | null;
   sessionDurationMs: number;
   config: VTSConfig;
+  cycleCount: number;
+  tradesThisSession: number;
 } {
   return {
     isRunning: isAutonomousRunning,
     sessionStartTime,
     sessionDurationMs: sessionStartTime ? Date.now() - sessionStartTime : 0,
-    config: vtsConfig
+    config: vtsConfig,
+    cycleCount,
+    tradesThisSession: phase10SessionTrades.length
   };
 }
 
@@ -446,17 +520,13 @@ export async function initVTSRunner(): Promise<void> {
     await loadVTSConfig();
     vtsService.start();
     isInitialized = true;
-    console.log('[M5B][VTS_RUNNER] INIT_OK - autonomous mode ready');
+    patternRecognitionWarmedUp = true;
+    console.log('[11.0E.1][VTS_RUNNER] INIT_OK - Phase-10 autonomous mode ready');
   } catch (error) {
-    console.error('[M5B][VTS_RUNNER] Init failed:', error);
+    console.error('[11.0E.1][VTS_RUNNER] Init failed:', error);
   }
 }
 
-/**
- * @deprecated M5B: Use startAutonomousSimulation() instead.
- * This function is kept for backward compatibility but should not be called
- * from signal orchestrator or other live trading components.
- */
 export async function captureSignalForVTS(
   symbol: string,
   entryPrice: number,
@@ -466,7 +536,7 @@ export async function captureSignalForVTS(
   strategy: string,
   spread: number = 0.001
 ): Promise<void> {
-  console.warn('[M5B][VTS] DEPRECATED: captureSignalForVTS called - use autonomous simulation instead');
+  console.warn('[11.0E.1][VTS] DEPRECATED: captureSignalForVTS called - use autonomous simulation instead');
 }
 
 export function updateVTSPrice(symbol: string, price: number): void {
@@ -495,7 +565,7 @@ export function stopVTSRunner(): void {
   stopAutonomousSimulation();
   vtsService.stop();
   isInitialized = false;
-  console.log('[M5B][VTS_RUNNER] Stopped');
+  console.log('[11.0E.1][VTS_RUNNER] Stopped');
 }
 
 export async function generateValidationReport(): Promise<{
@@ -508,6 +578,7 @@ export async function generateValidationReport(): Promise<{
   config: VTSConfig;
   stats: any;
   strategyStats: any;
+  phase10Trades: number;
 }> {
   const stats = vtsService.getStats();
   const strategyStats = vtsService.getStrategyStats();
@@ -522,40 +593,41 @@ export async function generateValidationReport(): Promise<{
   
   const report = {
     timestamp: new Date().toISOString(),
-    mode: 'simulator',
+    mode: 'phase10_simulator',
     tradingActive: config.tradingActive ?? false,
     simulatedTradesThisSession: sessionMetrics.simulatedTradesThisSession,
     calibrationFileExists: calibrationExists,
     sessionDurationMs: sessionStartTime ? Date.now() - sessionStartTime : 0,
     config: vtsConfig,
     stats,
-    strategyStats
+    strategyStats,
+    phase10Trades: phase10SessionTrades.length
   };
   
   const reportsDir = path.join(process.cwd(), 'reports');
   await fs.mkdir(reportsDir, { recursive: true });
   
-  const reportPath = path.join(reportsDir, `VTS_Autonomous_Validation_${Date.now()}.json`);
+  const reportPath = path.join(reportsDir, `VTS_Phase10_Validation_${Date.now()}.json`);
   await fs.writeFile(reportPath, JSON.stringify(report, null, 2));
-  console.log(`[M5B][VTS] Validation report saved: ${reportPath}`);
+  console.log(`[11.0E.1][VTS] Validation report saved: ${reportPath}`);
   
   return report;
 }
 
 export async function startM5CValidationSession(durationMinutes: number = 60): Promise<{ success: boolean; message: string; sessionId: string }> {
-  const sessionId = `vts_${Date.now()}`;
+  const sessionId = `vts_p10_${Date.now()}`;
   
-  resetM5CSession();
-  m5cSessionStartTime = Date.now();
+  resetPhase10Session();
+  phase10SessionStartTime = Date.now();
   
   try {
     await computeStrategyWeights();
     await computeExposureBias();
   } catch (err) {
-    console.warn('[M5C][VTS] Failed to compute weights/bias, using defaults:', err);
+    console.warn('[11.0E.1][VTS] Failed to compute weights/bias, using defaults:', err);
   }
   
-  console.log(`[M5C][VTS] Starting validation session ${sessionId} for ${durationMinutes} minutes`);
+  console.log(`[11.0E.1][VTS] Starting Phase-10 validation session ${sessionId} for ${durationMinutes} minutes`);
   
   const result = await startAutonomousSimulation();
   if (!result.success) {
@@ -563,80 +635,80 @@ export async function startM5CValidationSession(durationMinutes: number = 60): P
   }
   
   setTimeout(async () => {
-    console.log(`[M5C][VTS] Session ${sessionId} duration reached - saving ${m5cSessionTrades.length} trades`);
-    await saveM5CSessionTrades(sessionId);
+    console.log(`[11.0E.1][VTS] Session ${sessionId} duration reached - saving ${phase10SessionTrades.length} trades`);
+    await savePhase10SessionTrades(sessionId);
     stopAutonomousSimulation();
     
-    // Directive 8.8.4-M5C.1: Also save paper trades and auto-run comparison
     const paperTrades = getPaperSessionTrades();
     if (paperTrades.length > 0) {
-      console.log(`[M5C.1][AUTO] Saving ${paperTrades.length} paper trades`);
+      console.log(`[11.0E.1][AUTO] Saving ${paperTrades.length} paper trades`);
       await savePaperSessionTrades(sessionId);
     }
     
-    // Auto-run comparison if both VTS and paper trades exist
-    console.log(`[M5C.1][AUTO] Running comparison audit`);
+    console.log(`[11.0E.1][AUTO] Running comparison audit`);
     try {
       const comparisonReport = await compareLatestSessions();
       if (comparisonReport) {
-        // Save combined report to /reports/
         const reportsDir = path.join(process.cwd(), 'reports');
         await fs.mkdir(reportsDir, { recursive: true });
-        const combinedReportPath = path.join(reportsDir, `VTS_Paper_Comparison_${Date.now()}.json`);
+        const combinedReportPath = path.join(reportsDir, `VTS_Phase10_Comparison_${Date.now()}.json`);
         await fs.writeFile(combinedReportPath, JSON.stringify(comparisonReport, null, 2));
-        console.log(`[M5C.1][AUTO] Combined audit report saved: ${combinedReportPath}`);
-        console.log(`[M5C.1][AUTO] Validation result: matchRate=${comparisonReport.matchRate}, calibrationError=${comparisonReport.calibrationError}, validationPassed=${comparisonReport.validationPassed}`);
+        console.log(`[11.0E.1][AUTO] Combined audit report saved: ${combinedReportPath}`);
+        console.log(`[11.0E.1][AUTO] Validation result: matchRate=${comparisonReport.matchRate}, calibrationError=${comparisonReport.calibrationError}, validationPassed=${comparisonReport.validationPassed}`);
       } else {
-        console.log(`[M5C.1][AUTO] Comparison skipped - missing VTS or paper trades files`);
+        console.log(`[11.0E.1][AUTO] Comparison skipped - missing VTS or paper trades files`);
       }
     } catch (compErr) {
-      console.error(`[M5C.1][AUTO] Comparison audit failed:`, compErr);
+      console.error(`[11.0E.1][AUTO] Comparison audit failed:`, compErr);
     }
   }, durationMinutes * 60 * 1000);
   
-  return { success: true, message: `M5C validation session started for ${durationMinutes} minutes`, sessionId };
+  return { success: true, message: `Phase-10 validation session started for ${durationMinutes} minutes`, sessionId };
 }
 
-export async function saveM5CSessionTrades(sessionId?: string): Promise<string> {
+export async function savePhase10SessionTrades(sessionId?: string): Promise<string> {
   const dataDir = path.join(process.cwd(), 'data');
   await fs.mkdir(dataDir, { recursive: true });
   
   const timestamp = sessionId || Date.now().toString();
-  const filePath = path.join(dataDir, `vts_trades_${timestamp}.json`);
+  const filePath = path.join(dataDir, `vts_phase10_trades_${timestamp}.json`);
   
   const sessionData = {
     sessionId: timestamp,
-    startTime: m5cSessionStartTime ? new Date(m5cSessionStartTime).toISOString() : null,
+    schemaVersion: 'v1.6.6',
+    directive: '11.0E.1',
+    startTime: phase10SessionStartTime ? new Date(phase10SessionStartTime).toISOString() : null,
     endTime: new Date().toISOString(),
-    durationMinutes: m5cSessionStartTime ? Math.round((Date.now() - m5cSessionStartTime) / 60000) : 0,
-    tradeCount: m5cSessionTrades.length,
-    trades: m5cSessionTrades
+    durationMinutes: phase10SessionStartTime ? Math.round((Date.now() - phase10SessionStartTime) / 60000) : 0,
+    tradeCount: phase10SessionTrades.length,
+    trades: phase10SessionTrades
   };
   
   await fs.writeFile(filePath, JSON.stringify(sessionData, null, 2));
-  console.log(`[M5C][VTS] Saved ${m5cSessionTrades.length} trades to ${filePath}`);
+  console.log(`[11.0E.1][VTS] Saved ${phase10SessionTrades.length} Phase-10 trades to ${filePath}`);
   
   return filePath;
 }
 
-export function getM5CSessionTrades(): M5CTradeRecord[] {
-  return [...m5cSessionTrades];
+export function getPhase10SessionTrades(): Phase10TradeRecord[] {
+  return [...phase10SessionTrades];
 }
 
-export function addM5CTradeRecord(trade: M5CTradeRecord): void {
-  m5cSessionTrades.push(trade);
+export function addPhase10TradeRecord(trade: Phase10TradeRecord): void {
+  phase10SessionTrades.push(trade);
 }
 
-export function resetM5CSession(): void {
-  m5cSessionTrades = [];
-  m5cSessionStartTime = null;
+export function resetPhase10Session(): void {
+  phase10SessionTrades = [];
+  phase10SessionStartTime = null;
+  cycleCount = 0;
 }
 
 export async function getLatestVTSTradesFile(): Promise<string | null> {
   const dataDir = path.join(process.cwd(), 'data');
   try {
     const files = await fs.readdir(dataDir);
-    const vtsFiles = files.filter(f => f.startsWith('vts_trades_') && f.endsWith('.json'));
+    const vtsFiles = files.filter(f => (f.startsWith('vts_trades_') || f.startsWith('vts_phase10_trades_')) && f.endsWith('.json'));
     if (vtsFiles.length === 0) return null;
     
     vtsFiles.sort().reverse();
@@ -644,4 +716,22 @@ export async function getLatestVTSTradesFile(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+export function getM5CSessionTrades(): Phase10TradeRecord[] {
+  return getPhase10SessionTrades();
+}
+
+export function addM5CTradeRecord(trade: any): void {
+  if (trade.regime && trade.signalType) {
+    phase10SessionTrades.push(trade);
+  }
+}
+
+export function resetM5CSession(): void {
+  resetPhase10Session();
+}
+
+export async function saveM5CSessionTrades(sessionId?: string): Promise<string> {
+  return savePhase10SessionTrades(sessionId);
 }

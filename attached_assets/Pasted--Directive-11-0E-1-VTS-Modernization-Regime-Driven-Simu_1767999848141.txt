@@ -1,0 +1,229 @@
+🧠 Directive 11.0E.1 – VTS Modernization & Regime-Driven Simulation
+
+Phase: 11
+Status: Approved for Implementation
+Scope Owner: DawnTrader Core Systems
+Systems Affected: VTS Runner, VTS Service, Boot Orchestrator, Market Regime, Pattern Recognition, Strategy Library
+Schema Target: v1.6.6
+Purpose: Replace legacy heuristic-based simulation with a full regime-aware, strategy-executing, Phase-10 compliant Virtual Trading Simulator that operates autonomously during passive learning.
+
+🔍 Overview
+
+This directive implements a regime-driven, strategy-executed VTS environment that mirrors the decision logic of live trading while operating in passive learning mode.
+
+The modernization replaces the outdated CWQI/NGC/DI/GSI scoring pipeline with Phase-10 canonical metrics and integrates market regime calculation, signal type mapping, and real strategy execution (Hybrid, Pattern, Quantitative).
+
+It ensures that the VTS:
+
+Runs autonomously when passiveLearning = true
+
+Simulates realistic trade decisions based on real strategy logic
+
+Generates high-quality data for Telemetry and Predictive Learning
+
+Maintains full isolation from live trading components
+
+⚙️ Functional Objectives
+Objective	Description
+1	Replace CWQI/NGC/DI/GSI with Phase-10 canonical math (finalScore, hybridScore, regimeWeight, predictiveConfidence, decayPenalty).
+2	Compute pair-level market regimes dynamically from OHLC data.
+3	Map regime → signalType → strategy set using canonical regimeStrategyMap.
+4	Execute real strategy logic inside VTS Runner (Hybrid, Pattern, Quantitative).
+5	Integrate Pattern Recognition engine for pattern-based strategies.
+6	Auto-start VTS during passive learning.
+7	Generate virtual trades to feed Telemetry + Predictive Learning.
+🧩 Implementation Tasks
+Task 1 — Update VirtualTrade Interface
+
+File: /server/types/virtual-trade.interface.ts
+
+export interface VirtualTrade {
+  symbol: string;
+  regime: string;
+  signalType: string;
+  strategy: string;
+  finalScore: number;
+  hybridScore: number;
+  predictiveConfidence: number;
+  regimeWeight: number;
+  decayPenalty: number;
+  frictionCost: number;
+  netProfit?: number;
+  timestamp: number;
+  pool?: 'ideal' | 'rotational';
+}
+
+
+✅ Removes all legacy CWQI/NGC/DI/GSI fields.
+
+Task 2 — Add Pair-Level Regime Calculator
+
+File: /server/core/metrics/market-regime.ts
+
+export function calculatePairRegime(ohlc) {
+  const vol = computeVolatility(ohlc);
+  const mom = computeMomentum(ohlc);
+  const adx = computeADX(ohlc);
+
+  if (vol < 0.015 && Math.abs(mom) < 0.002) return 'LOW_VOL_CHOP';
+  if (mom > 0.002 && adx > 25)              return 'BULL_STABLE';
+  if (mom < -0.002 && adx > 25)             return 'BEAR_VOLATILE';
+  if (vol > 0.025)                          return 'HIGH_VOL_IMPULSE';
+  return 'TRANSITION';
+}
+
+Task 3 — Define Regime → Strategy Mapping
+
+File: /server/config/regime-strategy-map.ts
+
+export const regimeStrategyMap = {
+  BULL_STABLE:     { signalType: 'Hybrid', strategies: ['MomentumPulse', 'TrendFlow'] },
+  BEAR_VOLATILE:   { signalType: 'Hybrid', strategies: ['BreakdownSniper', 'ReverseImpulse'] },
+  LOW_VOL_CHOP:    { signalType: 'Pattern', strategies: ['RangeTrade', 'SupportBounce', 'TriangleBreakout'] },
+  HIGH_VOL_IMPULSE:{ signalType: 'Quantitative', strategies: ['H2_Slingshot', 'ImpulseChaser'] },
+  TRANSITION:      { signalType: 'Hybrid', strategies: ['MeanReversion', 'PivotShift'] },
+};
+
+Task 4 — Refactor VTS Runner
+
+File: /server/services/vts-runner.ts
+New Responsibilities:
+
+Fetch top 100 pairs from the Ideal Pool
+
+Calculate per-pair regime
+
+Select signalType + strategy via regimeStrategyMap
+
+Dynamically import and execute the strategy
+
+Calculate Phase-10 finalScore
+
+Send resulting VirtualSignal to vtsService.createVirtualTrade()
+
+Implementation:
+
+async function runSimulationCycle() {
+  const pairs = await idealPoolService.getTopPairs(100);
+  if (pairs.length < 10) {
+    console.warn('[VTS] Ideal pool too small, delaying cycle...');
+    await sleep(30000);
+    return;
+  }
+
+  for (const pair of pairs) {
+    const ohlc = await marketDataService.getRecentOHLC(pair.symbol);
+    const regime = calculatePairRegime(ohlc);
+    const { signalType, strategies } = regimeStrategyMap[regime];
+    const strategy = randomChoice(strategies);
+
+    try {
+      const modulePath = `../strategies/${signalType}/${strategy}.ts`;
+      const { executeStrategy } = await import(modulePath);
+      const metrics = await executeStrategy(pair.symbol, '15m', { virtual: true });
+
+      const finalScore =
+        metrics.hybridScore * 0.4 +
+        metrics.predictiveConfidence * 0.3 +
+        metrics.regimeWeight * 0.2 -
+        metrics.decayPenalty * 0.1;
+
+      const signal = { symbol: pair.symbol, regime, signalType, strategy, ...metrics, finalScore, timestamp: Date.now() };
+      await vtsService.createVirtualTrade(signal);
+    } catch (err) {
+      console.warn(`[VTS] Strategy load failed (${signalType}/${strategy}): ${err.message}`);
+      continue; // skip pair, don't crash the loop
+    }
+  }
+}
+
+Task 5 — Initialize Pattern Recognition
+
+File: /server/core/pattern-recognition.ts
+
+At VTS startup:
+
+import { preloadPatternHistory } from '../core/pattern-recognition.ts';
+await preloadPatternHistory(2000);  // Pre-load 2,000 candles for warm-up
+
+
+This ensures the pattern-recognition engine is “warmed up” before simulation cycles begin.
+
+Task 6 — Auto-Start VTS During Passive Learning
+
+File: /server/services/boot_orchestrator.ts
+
+await initVTSRunner();
+const config = await systemConfigService.getConfig();
+
+if (config?.passiveLearning === true) {
+  const { startAutonomousSimulation } = await import('../services/vts-runner.js');
+  await startAutonomousSimulation();
+  console.log('[BOOT][VTS] Auto-start enabled (passive mode)');
+}
+
+
+Stops automatically when tradingActive = true.
+
+Task 7 — Risk Mitigation Controls
+Risk	Mitigation	Implementation
+1. Dependency Hell (Dynamic Imports)	Verify strategy files exist & implement executeStrategy. Log warning and skip pair if missing.	Try/catch in runSimulationCycle() with structured warning.
+2. Pattern Engine Memory	Preload pattern-recognition engine before first cycle to ensure full detection capability.	preloadPatternHistory() call during VTS initialization.
+3. Data Consistency (Ideal Pool)	Ensure AdaptiveScanManager has populated the pool before simulation begins.	Conditional delay if idealPool.length < 10.
+Task 8 — Integration Tests
+
+File: /server/tests/unit/vts-modernization.test.ts
+Checks:
+
+Sim cycle produces valid signals with finalScore.
+
+Missing strategy modules do not crash runner.
+
+Pattern recognition initialized before first cycle.
+
+Auto-start triggers correctly in passive mode.
+
+Telemetry receives new samples.
+
+🧱 Schema & Governance
+Version	v1.6.6
+M45	All VirtualTrades include regime, signalType, strategy.
+M46	Pair regime must be calculated each cycle.
+M47	CWQI/NGC/DI/GSI permanently removed.
+M48	VTS runs automatically in passive learning mode.
+M49	Strategy load failures must not halt the simulation loop.
+📈 Expected Runtime Behavior
+
+Cycle Interval: 60s
+Pairs per cycle: 100
+Warm-up: Pattern recognition preloaded
+Regime breakdown: 5-class model (Bull, Bear, LowVol, HighVol, Transition)
+Data destinations:
+
+TelemetryAggregator (pair performance)
+
+Predictive Learning Engine (model training)
+
+Example Log Output:
+
+[VTS][Cycle 105] Ideal Pool: 100 | Regime Dist: BULL=28, CHOP=31, BEAR=22
+[VTS][Cycle 105] Executing 100 signals across 3 signal types
+[VTS] Strategy load failed (Pattern/TriangleBreakout): module not found
+[VTS][Cycle 105] Completed: 97 trades simulated | Avg finalScore=0.73
+
+🧭 Deliverables
+
+Updated codebase (v1.6.6)
+
+Passing integration test suite (≥ 20 tests)
+
+Updated system documentation in replit.md
+
+Verified auto-start in passive learning mode
+
+✅ Summary
+
+Directive 11.0E.1 transforms the VTS from a “random math simulator” into a full virtual analog of the live trading decision system.
+It creates a safe, regime-aware, strategy-executed environment that learns continuously during passive learning and generates meaningful data for both telemetry (pair ranking) and predictive learning (ML calibration).
+
+By including the auto-start logic and the three risk mitigations, this implementation is resilient, modular, and production-ready.
