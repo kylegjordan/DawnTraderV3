@@ -1958,6 +1958,26 @@
     ]
   },
   {
+    "path": "/api/diagnostics/tec/costs-history",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/diagnostics/tec/costs-alerts",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/diagnostics/rtb-blocks",
     "methods": [
       "GET"

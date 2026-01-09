@@ -26,6 +26,7 @@
 
 import { EXECUTION_CONFIG } from '../../config/execution-config.js';
 import { loadAdaptiveWeights, type AdaptiveWeights } from '../../services/adaptive-learning-repository.js';
+import { getRecentCostDrift } from '../../services/monitoring/cost-drift-monitor.js';
 
 let mockAdaptiveWeights: Map<string, Map<string, AdaptiveWeights>> | null = null;
 
@@ -87,7 +88,21 @@ const DSE_CONFIG = {
   COST_FLOOR: 0.6,
   CONFIDENCE_BASE: 0.5,
   DEFAULT_RISK_PCT: 2,
+  COST_PRESSURE_DAMPENING: 0.2,
 };
+
+/**
+ * Directive 11.3C: Get cost pressure factor based on recent drift alerts.
+ * When spreads widen or slippage jumps, dampens position sizing up to 20%.
+ * 
+ * Formula: costPressure = 1 - (drift × 0.2)
+ * Range: 0.8 to 1.0
+ */
+export function getCostPressureFactor(): number {
+  const costDrift = getRecentCostDrift();
+  const costPressure = 1 - (costDrift * DSE_CONFIG.COST_PRESSURE_DAMPENING);
+  return Math.max(0.8, Math.min(1.0, costPressure));
+}
 
 let lastSizeDecision: DSETelemetry | null = null;
 const sizeHistory: DSETelemetry[] = [];
@@ -185,8 +200,13 @@ export async function computeDynamicSize(input: DynamicSizeInput): Promise<Dynam
   const costPenalty = Math.max(DSE_CONFIG.COST_FLOOR, 1 - (cost / DSE_CONFIG.COST_THRESHOLD));
   const confFactor = DSE_CONFIG.CONFIDENCE_BASE + confidence;
 
-  let multiplier = edgeFactor * volPenalty * costPenalty * confFactor;
+  const costPressure = getCostPressureFactor();
+  let multiplier = edgeFactor * volPenalty * costPenalty * confFactor * costPressure;
   multiplier = Math.min(DSE_CONFIG.MAX_MULTIPLIER, Math.max(DSE_CONFIG.MIN_MULTIPLIER, multiplier));
+  
+  if (costPressure < 1.0) {
+    console.log(`[11.3C][DSE] Cost pressure dampening applied: ×${costPressure.toFixed(3)}`);
+  }
 
   const maxPositionRisk = EXECUTION_CONFIG.MAX_POSITION_RISK ?? 0.1;
   const maxAllowedSize = balance * maxPositionRisk;

@@ -102,6 +102,34 @@ describe('Directive 11.3B: Cost Engine Consolidation', () => {
       
       expect(avgMs).toBeLessThan(0.1);
     });
+    
+    it('C4: should expire entries after TTL (60s)', async () => {
+      const { setCostMetrics, getCostMetrics, setEntryTimestamp, CACHE_TTL_MS } = await import('../../core/cache/cost-cache.js');
+      
+      setCostMetrics('TTL/USD', { fee: 0.003, slippage: 0.001, spread: 0.002 });
+      
+      const cachedBefore = getCostMetrics('TTL/USD');
+      expect(cachedBefore).not.toBeNull();
+      expect(cachedBefore!.fee).toBe(0.003);
+      
+      setEntryTimestamp('TTL/USD', Date.now() - CACHE_TTL_MS - 1);
+      
+      const cachedAfter = getCostMetrics('TTL/USD');
+      expect(cachedAfter).toBeNull();
+    });
+    
+    it('C4: should prune expired entries from getAllCachedSymbols', async () => {
+      const { setCostMetrics, getAllCachedSymbols, setEntryTimestamp, CACHE_TTL_MS } = await import('../../core/cache/cost-cache.js');
+      
+      setCostMetrics('VALID/USD', { fee: 0.002, slippage: 0.001, spread: 0.001 });
+      setCostMetrics('EXPIRED/USD', { fee: 0.003, slippage: 0.001, spread: 0.002 });
+      
+      setEntryTimestamp('EXPIRED/USD', Date.now() - CACHE_TTL_MS - 1);
+      
+      const symbols = getAllCachedSymbols();
+      expect(symbols).toContain('VALID/USD');
+      expect(symbols).not.toContain('EXPIRED/USD');
+    });
   });
   
   describe('Cost Model Integration (Task 3)', () => {

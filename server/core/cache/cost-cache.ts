@@ -8,11 +8,12 @@
  * - Pure in-memory (nanosecond lookups)
  * - Clamps values to safe ranges
  * - Single source of cost truth across entire runtime
+ * - Auto-prunes expired entries on enumeration
  * 
  * Governance Invariants:
  * - C1: Single cache source for all modules
  * - C3: Max bounds ≤ 1%
- * - C4: Cache TTL ≤ 60s
+ * - C4: Cache TTL ≤ 60s (with automatic pruning)
  * 
  * DO NOT MODIFY without architectural review.
  * ══════════════════════════════════════════════════════════════════════════════
@@ -42,10 +43,26 @@ const cache = new Map<string, CacheEntry>();
 
 let observabilityInterval: NodeJS.Timeout | null = null;
 
+function isExpired(entry: CacheEntry): boolean {
+  return Date.now() - entry.t >= CACHE_TTL_MS;
+}
+
+function pruneExpiredEntries(): void {
+  const now = Date.now();
+  for (const [key, entry] of cache.entries()) {
+    if (now - entry.t >= CACHE_TTL_MS) {
+      cache.delete(key);
+    }
+  }
+}
+
 export function getCostMetrics(symbol: string): CostMetrics | null {
   const item = cache.get(symbol);
-  if (item && Date.now() - item.t < CACHE_TTL_MS) {
+  if (item && !isExpired(item)) {
     return item.v;
+  }
+  if (item && isExpired(item)) {
+    cache.delete(symbol);
   }
   return null;
 }
@@ -69,15 +86,21 @@ export function getOrSetCostMetrics(symbol: string): CostMetrics {
 export function getCacheTTLRemaining(symbol: string): number {
   const item = cache.get(symbol);
   if (!item) return 0;
+  if (isExpired(item)) {
+    cache.delete(symbol);
+    return 0;
+  }
   const remaining = CACHE_TTL_MS - (Date.now() - item.t);
   return Math.max(0, Math.floor(remaining / 1000));
 }
 
 export function getCacheSize(): number {
+  pruneExpiredEntries();
   return cache.size;
 }
 
 export function getAllCachedSymbols(): string[] {
+  pruneExpiredEntries();
   return Array.from(cache.keys());
 }
 
@@ -87,6 +110,8 @@ export function getCacheStats(): {
   avgSlippage: number;
   avgSpread: number;
 } {
+  pruneExpiredEntries();
+  
   const entries = Array.from(cache.values());
   if (entries.length === 0) {
     return {
@@ -118,6 +143,7 @@ export function startObservabilityLoop(): void {
   if (observabilityInterval) return;
   
   observabilityInterval = setInterval(() => {
+    pruneExpiredEntries();
     const stats = getCacheStats();
     if (stats.symbolCount > 0) {
       console.log(
@@ -137,6 +163,13 @@ export function stopObservabilityLoop(): void {
     clearInterval(observabilityInterval);
     observabilityInterval = null;
     console.log('[11.3B][CostCache] Observability loop stopped');
+  }
+}
+
+export function setEntryTimestamp(symbol: string, timestamp: number): void {
+  const item = cache.get(symbol);
+  if (item) {
+    item.t = timestamp;
   }
 }
 

@@ -7599,6 +7599,73 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       res.status(500).json({ ok: false, error: error.message });
     }
   });
+  
+  // GET /api/diagnostics/tec/costs-history - Get persisted cost telemetry snapshots (past 24 hours)
+  apiRouter.get('/diagnostics/tec/costs-history', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const hours = parseInt(req.query.hours as string) || 24;
+      const { getCostHistory } = await import('./core/telemetry/cost-telemetry.js');
+      
+      const history = await getCostHistory(hours);
+      
+      res.json({
+        ok: true,
+        data: history.map(s => ({
+          avgFee: s.avgFee,
+          avgFeePct: (s.avgFee * 100).toFixed(3) + '%',
+          avgSlippage: s.avgSlippage,
+          avgSlippagePct: (s.avgSlippage * 100).toFixed(3) + '%',
+          avgSpread: s.avgSpread,
+          avgSpreadPct: (s.avgSpread * 100).toFixed(3) + '%',
+          totalCost: s.totalCost,
+          totalCostPct: (s.totalCost * 100).toFixed(3) + '%',
+          symbolCount: s.symbolCount,
+          timestamp: s.timestamp.toISOString(),
+        })),
+        meta: {
+          hours,
+          snapshotCount: history.length,
+        },
+      });
+    } catch (error: any) {
+      console.error('[11.3C] Error fetching TEC costs history:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+  
+  // GET /api/diagnostics/tec/costs-alerts - Get recent cost drift alerts
+  apiRouter.get('/diagnostics/tec/costs-alerts', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 20;
+      const { getRecentAlerts, DRIFT_THRESHOLD } = await import('./services/monitoring/cost-drift-monitor.js');
+      
+      const alerts = getRecentAlerts(limit);
+      
+      res.json({
+        ok: true,
+        data: alerts.map(a => ({
+          type: a.type,
+          severity: a.severity,
+          metric: a.metric,
+          baseline: a.baseline,
+          baselinePct: (a.baseline * 100).toFixed(3) + '%',
+          current: a.current,
+          currentPct: (a.current * 100).toFixed(3) + '%',
+          delta: a.delta,
+          deltaPct: (a.delta * 100).toFixed(0) + '%',
+          timestamp: a.timestamp.toISOString(),
+        })),
+        meta: {
+          alertCount: alerts.length,
+          driftThreshold: DRIFT_THRESHOLD,
+          driftThresholdPct: (DRIFT_THRESHOLD * 100).toFixed(0) + '%',
+        },
+      });
+    } catch (error: any) {
+      console.error('[11.3C] Error fetching TEC costs alerts:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
 
   // ==================== Phase 8.8.3-I1: RTB Block Diagnostics ====================
   

@@ -1,0 +1,147 @@
+📘 Directive 11.3C – Persistent Cost Telemetry & Drift Monitoring
+
+Issued by: Architectural Core
+Applies to: DawnTrader Core System (Telemetry, TEC, Cost Model, Diagnostics)
+Schema Target: v1.5.9
+
+I. Objective
+
+To extend the work from 11.3B by introducing persistent cost telemetry, drift detection, and audit hooks for live monitoring.
+
+While 11.3B provides accurate real-time cost data, those metrics currently exist only in memory and diagnostics endpoints.
+Directive 11.3C ensures these values are persisted, trended, and monitored, enabling the AI engine to:
+
+Detect when markets become more expensive to trade (spread widening, slippage spikes).
+
+Adjust adaptive scanning and position sizing dynamically.
+
+Preserve full cost audit trails for compliance and model retraining.
+
+II. Implementation Tasks
+Task 1 — Cost Telemetry Persistence
+
+File: /server/core/telemetry/cost-telemetry.ts (new)
+
+Purpose: Persist average trading cost metrics periodically into the telemetry system.
+
+Implementation:
+
+Every 5 minutes (configurable), capture the cost cache summary from /core/cache/cost-cache.ts:
+{ avgFee, avgSlippage, avgSpread, timestamp }
+
+Persist this snapshot into telemetry_history under mode = system and symbol = "COST_METRICS".
+
+Include a computed totalCost = (avgFee * 2) + (avgSlippage * 2) + avgSpread.
+
+Maintain a rolling retention of 72 hours for these telemetry entries (automatic cleanup job).
+
+✅ Outcome:
+Cost data is now stored and queryable, surviving restarts and enabling visual trend graphs.
+
+Task 2 — Drift Detection & Alerts
+
+File: /server/services/monitoring/cost-drift-monitor.ts (new)
+
+Purpose: Detect anomalies in cost metrics to alert the architect and protect trading logic.
+
+Logic:
+
+Compare the latest cost snapshot to a 1-hour moving average.
+
+If any metric changes by > 50 %, trigger a “drift alert”:
+
+if (Math.abs(current.avgSpread - baseline.avgSpread) / baseline.avgSpread > 0.5) {
+   logger.warn(`[CostDrift] Spread drifted >50% (${baseline.avgSpread} → ${current.avgSpread})`);
+}
+
+
+Send a structured telemetry event:
+{ type: "COST_DRIFT_ALERT", severity: "yellow", metric: "spread", delta: 0.52 }
+
+Optional: expose these alerts via /api/diagnostics/alerts.
+
+✅ Outcome:
+Automatic detection and logging of market condition changes before they impact performance.
+
+Task 3 — Adaptive Feedback Hook (DSE Integration)
+
+File: /server/core/dse/dynamic_sizing_engine.ts
+
+Purpose: Use drift signals to slightly dampen sizing confidence when market costs spike.
+
+Implementation:
+Add a getCostPressureFactor() helper:
+
+const costDrift = getRecentCostDrift(); // normalized 0.0–1.0
+const costPressure = 1 - (costDrift * 0.2); // dampen up to 20%
+dynamicSize *= costPressure;
+
+
+✅ Outcome:
+If spreads widen or slippage jumps, DSE slightly reduces position sizes, preserving profitability.
+
+Task 4 — Telemetry Schema & Integration Test
+
+Schema Version: v1.5.9
+Migration: none (uses existing telemetry_history)
+
+Tests:
+
+cost_telemetry_persistence.test.ts: Verifies 5-min snapshot writing and TTL cleanup.
+
+cost_drift_alerts.test.ts: Simulates cost volatility spikes and confirms warnings emitted.
+
+dse_cost_pressure.test.ts: Confirms DSE multiplier damping behavior under high costs.
+
+✅ Outcome:
+Full automated validation of persistence, alerting, and adaptive feedback.
+
+Task 5 — Diagnostics Endpoint Extension
+
+File: /server/services/diagnostics/tec-costs-controller.ts
+
+Add:
+
+GET /api/diagnostics/tec/costs-history → returns persisted telemetry snapshots for the past 24 hours.
+
+GET /api/diagnostics/tec/costs-alerts → returns last 20 drift alerts.
+
+✅ Outcome:
+Architect can visualize how the market’s trading cost environment evolves over time.
+
+III. Governance & Compliance
+Invariant	Description	Enforcement Location
+M6	Cost Persistence — Costs must be recorded historically	cost-telemetry.ts
+M7	Drift Awareness — Detect and flag large cost changes	cost-drift-monitor.ts
+M8	Adaptive Responsiveness — DSE responds to cost pressure	dynamic_sizing_engine.ts
+M9	Observability Parity — Diagnostics reflect all cost state	tec-costs-controller.ts
+IV. Expected Outcome
+
+After Directive 11.3C:
+
+🧠 Persistent Intelligence — Cost conditions become part of long-term system memory.
+
+⚖️ Dynamic Resilience — The DSE auto-adjusts to cost turbulence.
+
+🔍 Full Transparency — Architects can trace fee, slippage, and spread drift historically.
+
+🛡️ Risk Protection — Trading aggressiveness reduces automatically under poor liquidity.
+
+V. Deliverables
+
+cost-telemetry.ts — Persistent cost logging module.
+
+cost-drift-monitor.ts — Real-time anomaly detection.
+
+Updated DSE for cost-pressure integration.
+
+Extended diagnostics endpoints for costs history & alerts.
+
+3 new integration tests.
+
+Schema version → v1.5.9.
+
+✅ Summary
+
+Directive 11.3C closes the loop on cost observability and responsiveness.
+It ensures the DawnTrader engine is not just aware of trading costs, but learns from them dynamically — preserving net profitability in changing market conditions.

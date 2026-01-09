@@ -1,8 +1,14 @@
 /**
- * Directive 11.3B — Schema Version Tracking
+ * Directive 11.3C — Schema Version Tracking
  * 
  * Single source of truth for database schema version.
  * Used by telemetry and diagnostics for audit trail.
+ * 
+ * v1.5.9: Persistent Cost Telemetry & Drift Monitoring (Directive 11.3C)
+ * - Cost telemetry persistence (5-min snapshots, 72h retention)
+ * - Drift detection with 50% threshold alerting
+ * - DSE cost pressure integration (up to 20% dampening)
+ * - Extended diagnostics endpoints (/costs-history, /costs-alerts)
  * 
  * v1.5.8: Cost Engine Consolidation & Diagnostics Finalization (Directive 11.3B)
  * - Centralized exchange defaults in /server/config/exchange-defaults.ts
@@ -53,14 +59,15 @@
  * - Metric Engine v1.0 (Canonical)
  */
 
-export const SCHEMA_VERSION = "v1.5.8";
-export const SCHEMA_DIRECTIVE = "11.3B";
+export const SCHEMA_VERSION = "v1.5.9";
+export const SCHEMA_DIRECTIVE = "11.3C";
 export const METRIC_ENGINE_VERSION = "v1.0";
 
 /**
  * Schema version history for audit trail
  */
 export const SCHEMA_HISTORY = [
+  { version: "v1.5.9", directive: "11.3C", date: "2026-01-09", description: "Persistent Cost Telemetry & Drift Monitoring" },
   { version: "v1.5.8", directive: "11.3B", date: "2026-01-09", description: "Cost Engine Consolidation & Diagnostics Finalization" },
   { version: "v1.5.7", directive: "11.3A", date: "2026-01-08", description: "Net Expectancy Standardization, Cost Integration & Geometry Integrity" },
   { version: "v1.5.6", directive: "11.3", date: "2026-01-08", description: "Predictive Risk & Cost Modeling - Dynamic Sizing Engine" },
