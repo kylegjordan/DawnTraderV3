@@ -165,6 +165,7 @@ export class AdaptiveScanManager {
   /**
    * Get the next batch of pairs to scan using dynamic Ideal/Rotational split
    * Directive 11.2 R1: Ratios now computed by AdaptiveRatioManager based on pool performance
+   * Directive 11.4C.2: Dynamic Fill - always scan batchSize pairs, fill deficit from rotational
    */
   async getNextScanBatch(allAvailablePairs: string[]): Promise<AdaptiveScanBatch> {
     const batchSize = SCANNER_PARAMS.BATCH_SIZE;
@@ -186,26 +187,33 @@ export class AdaptiveScanManager {
       rotationalRatio = SCANNER_PARAMS.DUAL_POOL.ROTATIONAL_RATIO;
     }
     
-    // Get ideal pairs from telemetry (top performers)
-    // Directive 11.4C.1 FIX: Pass INTEGER COUNTS, not ratios to telemetry methods
-    const idealCount = Math.ceil(batchSize * idealRatio);
-    const rotationalCount = Math.ceil(batchSize * rotationalRatio);
+    // Directive 11.4C.2: Dynamic Fill Algorithm
+    // 1. Request ideal pairs based on computed ratio
+    // 2. If ideal < target, fill remaining with rotational (always hit batchSize)
+    // 3. When ideal is sufficient, maintain the normal ratio split
+    const targetIdealCount = Math.ceil(batchSize * idealRatio);
+    const baseRotationalCount = Math.ceil(batchSize * rotationalRatio);
     
-    console.log(`[AdaptiveScan][11.4C.1] Target counts: Ideal=${idealCount}, Rotational=${rotationalCount} (batchSize=${batchSize})`);
+    console.log(`[AdaptiveScan][11.4C.2] Target: Ideal=${targetIdealCount}, Rotational=${baseRotationalCount} (batchSize=${batchSize})`);
     
-    let idealPairs = this.telemetry.getTopPairs(idealCount); // FIX: Pass count, not ratio
+    // Get available ideal pairs from telemetry (top performers only - no fallback to random)
+    const availableIdealPairs = this.telemetry.getTopPairs(batchSize); // Request up to batchSize to see what's available
+    const actualIdealCount = Math.min(availableIdealPairs.length, targetIdealCount);
+    const idealPairs = availableIdealPairs.slice(0, actualIdealCount);
     
-    // If not enough ideal pairs, fall back to available pairs
-    if (idealPairs.length < idealCount) {
-      console.log(`[10.8][AdaptiveScan] Insufficient ideal pairs (${idealPairs.length}/${idealCount}), using fallback`);
-      idealPairs = allAvailablePairs.slice(0, idealCount);
+    // Directive 11.4C.2: Dynamic fill - calculate how many rotational pairs needed
+    const idealDeficit = targetIdealCount - actualIdealCount;
+    const dynamicRotationalCount = baseRotationalCount + idealDeficit;
+    const isDynamicFill = idealDeficit > 0;
+    
+    if (isDynamicFill) {
+      console.log(`[AdaptiveScan][11.4C.2] DYNAMIC FILL: Ideal deficit=${idealDeficit}, expanding rotational ${baseRotationalCount} → ${dynamicRotationalCount}`);
     }
     
-    // Get rotational pairs for exploration
-    // Directive 11.4C.1 FIX: Pass count, not ratio to getRotationalPairs
-    const rotationalPairs = this.telemetry.getRotationalPairs(rotationalCount, allAvailablePairs)
+    // Get rotational pairs for exploration (expanded if ideal was insufficient)
+    const rotationalPairs = this.telemetry.getRotationalPairs(dynamicRotationalCount, allAvailablePairs)
       .filter(p => !idealPairs.includes(p)) // No duplicates
-      .slice(0, rotationalCount);
+      .slice(0, dynamicRotationalCount);
     
     // Combine and filter out failed pairs
     const combined = [...idealPairs, ...rotationalPairs];
@@ -224,8 +232,10 @@ export class AdaptiveScanManager {
     
     this.lastBatch = batch;
     
-    // Directive 11.2 R1: Enhanced logging with ratio info
-    console.log(`[AdaptiveScan] Ideal=${batch.idealPairs.length} (${(idealRatio * 100).toFixed(0)}%) | Rotational=${batch.rotationalPairs.length} (${(rotationalRatio * 100).toFixed(0)}%) | Excluded=${batch.excludedPairs.length} | Total=${batch.totalBatch.length}`);
+    // Directive 11.4C.2: Log actual ratio achieved
+    const actualIdealRatio = batch.totalBatch.length > 0 ? batch.idealPairs.length / batch.totalBatch.length : 0;
+    const actualRotationalRatio = batch.totalBatch.length > 0 ? batch.rotationalPairs.length / batch.totalBatch.length : 0;
+    console.log(`[AdaptiveScan][11.4C.2] Actual: Ideal=${batch.idealPairs.length} (${(actualIdealRatio * 100).toFixed(0)}%) | Rotational=${batch.rotationalPairs.length} (${(actualRotationalRatio * 100).toFixed(0)}%) | Excluded=${batch.excludedPairs.length} | Total=${batch.totalBatch.length}${isDynamicFill ? ' [DYNAMIC FILL]' : ''}`);
     
     return batch;
   }
