@@ -180,19 +180,48 @@ export interface FrictionStatus {
   status: string;
   color: 'green' | 'yellow' | 'orange' | 'red';
   emoji: string;
+  narrative: string;
 }
 
+/**
+ * Directive 11.4A.1 — Expanded Market Friction Narratives (M20 Governance Invariant)
+ * Full 3-4 sentence explanations for each friction range.
+ */
 export function describeFriction(frictionScore: number): FrictionStatus {
   if (frictionScore <= 20) {
-    return { value: frictionScore, status: 'High Liquidity', color: 'green', emoji: '🟢' };
+    return { 
+      value: frictionScore, 
+      status: 'High Liquidity', 
+      color: 'green', 
+      emoji: '🟢',
+      narrative: 'High liquidity — trades are easy to enter and exit with very small price changes. Orders fill quickly, spreads are tight, and the system can use full position sizes safely. You can expect smoother performance and smaller differences between entry and exit prices.'
+    };
   }
   if (frictionScore <= 50) {
-    return { value: frictionScore, status: 'Normal Liquidity', color: 'yellow', emoji: '🟡' };
+    return { 
+      value: frictionScore, 
+      status: 'Normal Liquidity', 
+      color: 'yellow', 
+      emoji: '🟡',
+      narrative: 'Normal liquidity — conditions are average and stable. Most trades execute at expected prices, but small slippage may occur. The system operates normally with standard position sizes.'
+    };
   }
   if (frictionScore <= 80) {
-    return { value: frictionScore, status: 'Stressed Liquidity', color: 'orange', emoji: '🟠' };
+    return { 
+      value: frictionScore, 
+      status: 'Stressed Liquidity', 
+      color: 'orange', 
+      emoji: '🟠',
+      narrative: 'Stressed liquidity — spreads and slippage are starting to widen. Orders may take longer to fill or fill slightly off-target. The system will reduce position sizes or trail exits more tightly to protect capital.'
+    };
   }
-  return { value: frictionScore, status: 'Frozen / Illiquid', color: 'red', emoji: '🔴' };
+  return { 
+    value: frictionScore, 
+    status: 'Frozen / Illiquid', 
+    color: 'red', 
+    emoji: '🔴',
+    narrative: 'Frozen or illiquid — markets are difficult to trade safely. Price jumps and execution delays are common, and signals may be paused temporarily. The system minimizes new entries until conditions stabilize.'
+  };
 }
 
 /**

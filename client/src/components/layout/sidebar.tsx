@@ -29,14 +29,13 @@ interface SidebarProps {
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
-  { name: "Walter", href: "/walter", icon: Bot },
   { name: "Trading", href: "/active-trades", icon: BarChart3 },
-  { name: "Briefings", href: "/briefings", icon: Newspaper },
   { name: "Goals Engine", href: "/goals-engine", icon: Target },
+  { name: "Analytics & Diagnostics", href: "/analytics", icon: Activity },
+  { name: "Walter", href: "/walter", icon: Bot },
+  { name: "Briefings", href: "/briefings", icon: Newspaper },
   { name: "Reports", href: "/reports", icon: FileText },
-  { name: "Watch List", href: "/watchlist", icon: Eye },
   { name: "AI Transparency", href: "/ai-transparency", icon: Sparkles },
-  { name: "Analytics", href: "/analytics", icon: BarChart3 },
   { name: "System Monitoring", href: "/systems", icon: Activity },
   { name: "Settings", href: "/settings", icon: Settings },
 ];

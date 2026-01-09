@@ -1,0 +1,190 @@
+Directive 11.4A.1 — Market Explanations, Layout Refinement & Navigation Reorganization
+
+Issued by: Architectural Core
+Applies to: UI Layer (/client/src/pages/analytics-diagnostics.tsx, /client/src/components/layout/sidebar.tsx), Core Services (/server/services/market-indicators.ts)
+Schema Target: v1.6.1
+Status: Approved for Implementation
+
+I. Objective
+
+To make the Analytics & Diagnostics interface intuitive and educational for non-expert users by:
+
+Providing clear, beginner-friendly explanations for each Market Regime and Market Friction range.
+
+Merging the current fragmented tab system into a single, continuous Analytics & Diagnostics page.
+
+Renaming and re-positioning the Trading Activities section (formerly “Narrative Feed”).
+
+Re-ordering the left navigation bar for logical flow and user priority.
+
+II. Tasks
+Task 1 — Expanded Market Regime Definitions
+
+File: /server/services/market-indicators.ts
+
+Add a regimeDescriptions object defining each known regime in simplified, narrative language.
+
+Regime List
+
+There are currently five market regimes recognized in the system:
+
+BULL_STABLE – Uptrend, stable volatility.
+
+BEAR_VOLATILE – Downtrend, high volatility.
+
+LOW_VOL_CHOP – Sideways, quiet market.
+
+HIGH_VOL_CHOP – Sideways, but highly erratic.
+
+MIXED_TRANSITION – Regime change or indecisive conditions.
+
+Expanded Explanations
+export const regimeDescriptions = {
+  BULL_STABLE: {
+    title: "Bull Stable",
+    description: `The market is in a clear upward trend, moving steadily higher with moderate volatility.
+This usually means that confidence is high and most buyers are stepping in at pullbacks.
+Momentum-based or trend-following signals are more likely to succeed here because the overall direction is upward.
+You can expect trades to stay open longer, aiming for larger gains.`,
+    favoredSignalTypes: ["Quantitative", "Hybrid"],
+    favoredStrategies: ["Trend Breakout", "Momentum Continuation", "EMA Alignment"]
+  },
+  BEAR_VOLATILE: {
+    title: "Bear Volatile",
+    description: `The market is trending downward and swinging sharply from highs to lows.
+Prices often drop quickly and recover partially before continuing down.
+Short-term trades that favor quick exits or reversal signals may perform better.
+It's a defensive environment, so position sizes are often smaller and stops tighter.`,
+    favoredSignalTypes: ["Quantitative", "Pattern"],
+    favoredStrategies: ["Breakdown Pullback", "Counter-Reversal", "Fast Exit Short"]
+  },
+  LOW_VOL_CHOP: {
+    title: "Low Volatility Chop",
+    description: `The market is moving sideways with little clear direction and small price changes.
+Trends do not hold well, so breakout attempts usually fail or reverse quickly.
+Range-based or counter-trend signals tend to work best because prices often bounce between support and resistance levels.
+Trades will usually be smaller and shorter, focusing on quick gains.`,
+    favoredSignalTypes: ["Pattern", "Hybrid"],
+    favoredStrategies: ["RSI Overbought/Oversold", "Range Trade", "H2 Slingshot"]
+  },
+  HIGH_VOL_CHOP: {
+    title: "High Volatility Chop",
+    description: `The market has no clear direction and price movements are wide and unpredictable.
+Big swings up and down can trigger both stop losses and entries in quick succession.
+The system will generally trade less or use wider stops to avoid getting chopped up.
+Only high-confidence hybrid signals will activate in this kind of environment.`,
+    favoredSignalTypes: ["Hybrid"],
+    favoredStrategies: ["Volatility Compression", "Dynamic Range Play"]
+  },
+  MIXED_TRANSITION: {
+    title: "Mixed Transition",
+    description: `The market is shifting from one regime to another, often from bullish to bearish or vice versa.
+Conditions are unclear — volatility changes, trend indicators disagree, and signals can conflict.
+This is when the system becomes more selective and cautious, often reducing position sizes until a new regime stabilizes.`,
+    favoredSignalTypes: ["Hybrid"],
+    favoredStrategies: ["Confirmation Entry", "Directional Probe", "Adaptive Edge"]
+  }
+};
+
+Task 2 — Expanded Market Friction Narratives
+
+File: /server/core/metrics/cost-metrics.ts
+
+Enhance describeFriction(score) to produce full 3–4 sentence explanations:
+
+export function describeFriction(score: number) {
+  if (score <= 20) return `High liquidity — trades are easy to enter and exit with very small price changes.
+Orders fill quickly, spreads are tight, and the system can use full position sizes safely.
+You can expect smoother performance and smaller differences between entry and exit prices.`;
+  if (score <= 50) return `Normal liquidity — conditions are average and stable.
+Most trades execute at expected prices, but small slippage may occur.
+The system operates normally with standard position sizes.`;
+  if (score <= 80) return `Stressed liquidity — spreads and slippage are starting to widen.
+Orders may take longer to fill or fill slightly off-target.
+The system will reduce position sizes or trail exits more tightly to protect capital.`;
+  return `Frozen or illiquid — markets are difficult to trade safely.
+Price jumps and execution delays are common, and signals may be paused temporarily.
+The system minimizes new entries until conditions stabilize.`;
+}
+
+
+These appear directly under the Global Friction Score gauge.
+
+Task 3 — Merge Layout & Rename Trading Activities
+
+File: /client/src/pages/analytics-diagnostics.tsx
+
+Replace Tabs
+Remove the Overview, Narrative, and Cost Metrics tabs.
+Replace with a single continuous layout:
+
+Structure:
+
+Analytics & Diagnostics
+-------------------------------------
+[ Market Overview Section ]
+  - Global Market Regime
+  - Description
+  - Favored Signal Types
+  - Favored Strategies
+  - Global Friction Score
+  - Friction Narrative
+
+[ Trading Activities Section ]
+  - Scrollable activity log (7-day retention)
+  - Timestamp + Event Summary
+  - Full-width responsive container
+-------------------------------------
+
+
+Rename the feed label:
+
+<h2>Trading Activities</h2>
+
+
+Each activity should render as:
+
+[2026-01-09 13:25] DSE resized BTC/USDT position (-10%) due to friction 78.
+[2026-01-09 14:02] Trailing Exit moved stop to 41600 (ratchet trigger).
+
+Task 4 — Navigation Reordering
+
+File: /client/src/components/layout/sidebar.tsx
+
+Reorder the left navigation to:
+
+Dashboard
+Trading
+Goals Engine
+Analytics & Diagnostics
+Walter
+Briefings
+Reports
+AI Transparency
+System Monitoring
+Settings
+
+
+✅ Update sidebar icon: BarChart3 for Analytics & Diagnostics.
+✅ Route remains /analytics.
+
+III. Governance & Testing
+Invariant	Description	Test
+M19	All market regimes must return complete 3–4 sentence descriptions	market_regime_description.test.ts
+M20	Friction score ranges (0–100) map correctly to 4-tier narrative system	friction_description_mapping.test.ts
+M21	Analytics page contains single unified layout (no tabs)	analytics_layout_merge.test.ts
+M22	Sidebar ordering matches defined hierarchy	sidebar_order.test.ts
+IV. Deliverables
+Deliverable	File	Description
+regimeDescriptions map	/server/services/market-indicators.ts	Full-text regime definitions
+describeFriction()	/server/core/metrics/cost-metrics.ts	Narrative by range
+Unified layout	/client/src/pages/analytics-diagnostics.tsx	Single full-width Analytics page
+Navigation reorder	/client/src/components/layout/sidebar.tsx	Revised sidebar order
+4 New Integration Tests	/server/tests/integration/	Verify all UI and mapping logic
+Schema	v1.6.1	Incremented schema version
+V. Expected Outcome
+
+✅ Analytics & Diagnostics page now reads like a real-time operator briefing — not a developer dashboard.
+✅ Every user, regardless of trading experience, can understand what the system sees, what it’s doing, and why.
+✅ The layout becomes visually cohesive, logically ordered, and fully aligned with your mental model.
+✅ The narratives make the system self-explanatory — connecting metrics → meaning → system behavior.

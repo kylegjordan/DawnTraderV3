@@ -1,25 +1,26 @@
-import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Activity, TrendingUp, TrendingDown, AlertCircle, Gauge, MessageSquare, RefreshCw, BarChart3, Clock, DollarSign, Target, Zap } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { Activity, TrendingUp, TrendingDown, AlertCircle, Gauge, RefreshCw, Clock, DollarSign, Target, Zap, BarChart3, Layers } from "lucide-react";
+import { formatDistanceToNow, format } from "date-fns";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 
 interface MarketIndicatorsData {
   ok: boolean;
   data: {
     marketRegime: string;
+    regimeTitle: string;
     regimeDescription: string;
+    favoredSignalTypes: string[];
     favoredStrategies: string[];
     globalFrictionScore: number;
     frictionStatus: string;
     frictionColor: 'green' | 'yellow' | 'orange' | 'red';
     frictionEmoji: string;
+    frictionNarrative: string;
     frictionDisplay: string;
   };
   timestamp: string;
@@ -127,7 +128,7 @@ function FrozenHeader({ indicators, isLoading }: { indicators: MarketIndicatorsD
           <div className="flex items-center gap-2">
             {getRegimeIcon(data.marketRegime)}
             <Badge variant="outline" className={`font-semibold ${getRegimeBadgeColor(data.marketRegime)}`}>
-              {data.marketRegime.replace(/_/g, ' ')}
+              {data.regimeTitle || data.marketRegime.replace(/_/g, ' ')}
             </Badge>
           </div>
           
@@ -153,7 +154,7 @@ function FrozenHeader({ indicators, isLoading }: { indicators: MarketIndicatorsD
   );
 }
 
-function MarketOverviewCard({ indicators }: { indicators: MarketIndicatorsData | undefined }) {
+function MarketOverviewSection({ indicators }: { indicators: MarketIndicatorsData | undefined }) {
   if (!indicators?.data) return null;
   
   const { data } = indicators;
@@ -165,16 +166,57 @@ function MarketOverviewCard({ indicators }: { indicators: MarketIndicatorsData |
           <Activity className="w-5 h-5" />
           Market Overview
         </CardTitle>
-        <CardDescription>Current market conditions and strategy alignment</CardDescription>
+        <CardDescription>Current market conditions and what they mean for trading</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div>
-          <h4 className="text-sm font-medium mb-2">Market Regime</h4>
-          <div className="flex items-center gap-3">
-            {getRegimeIcon(data.marketRegime)}
-            <div>
-              <p className="font-semibold">{data.marketRegime.replace(/_/g, ' ')}</p>
-              <p className="text-sm text-muted-foreground">{data.regimeDescription}</p>
+          <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+            <Layers className="w-4 h-4" />
+            Global Market Regime
+          </h4>
+          <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50">
+            <div className="mt-1">
+              {getRegimeIcon(data.marketRegime)}
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-2">
+                <p className="font-semibold text-lg">{data.regimeTitle || data.marketRegime.replace(/_/g, ' ')}</p>
+                <Badge variant="outline" className={`text-xs ${getRegimeBadgeColor(data.marketRegime)}`}>
+                  Active
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
+                {data.regimeDescription}
+              </p>
+            </div>
+          </div>
+        </div>
+        
+        <Separator />
+        
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <h4 className="text-sm font-medium mb-2">Favored Signal Types</h4>
+            <div className="flex flex-wrap gap-2">
+              {(data.favoredSignalTypes || []).map((signalType) => (
+                <Badge key={signalType} variant="secondary" className="bg-blue-500/20 text-blue-400 border-blue-500/30">
+                  {signalType}
+                </Badge>
+              ))}
+              {(!data.favoredSignalTypes || data.favoredSignalTypes.length === 0) && (
+                <span className="text-sm text-muted-foreground">None recommended</span>
+              )}
+            </div>
+          </div>
+          
+          <div>
+            <h4 className="text-sm font-medium mb-2">Favored Strategies</h4>
+            <div className="flex flex-wrap gap-2">
+              {data.favoredStrategies.map((strategy) => (
+                <Badge key={strategy} variant="secondary">
+                  {strategy}
+                </Badge>
+              ))}
             </div>
           </div>
         </div>
@@ -182,33 +224,23 @@ function MarketOverviewCard({ indicators }: { indicators: MarketIndicatorsData |
         <Separator />
         
         <div>
-          <h4 className="text-sm font-medium mb-2">Favored Strategies</h4>
-          <div className="flex flex-wrap gap-2">
-            {data.favoredStrategies.map((strategy) => (
-              <Badge key={strategy} variant="secondary">
-                {strategy.replace(/_/g, ' ')}
-              </Badge>
-            ))}
-          </div>
-        </div>
-        
-        <Separator />
-        
-        <div>
-          <h4 className="text-sm font-medium mb-3">Global Friction Score</h4>
-          <div className="space-y-2">
+          <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+            <Gauge className="w-4 h-4" />
+            Global Friction Score
+          </h4>
+          <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <span className="text-2xl font-mono font-bold">{data.globalFrictionScore}</span>
-              <span className={`text-sm font-medium ${
-                data.frictionColor === 'green' ? 'text-green-500' :
-                data.frictionColor === 'yellow' ? 'text-yellow-500' :
-                data.frictionColor === 'orange' ? 'text-orange-500' :
-                'text-red-500'
+              <span className="text-3xl font-mono font-bold">{data.globalFrictionScore}</span>
+              <span className={`text-sm font-medium px-3 py-1 rounded-full ${
+                data.frictionColor === 'green' ? 'bg-green-500/20 text-green-400' :
+                data.frictionColor === 'yellow' ? 'bg-yellow-500/20 text-yellow-400' :
+                data.frictionColor === 'orange' ? 'bg-orange-500/20 text-orange-400' :
+                'bg-red-500/20 text-red-400'
               }`}>
                 {data.frictionStatus}
               </span>
             </div>
-            <div className="h-2 bg-muted rounded-full overflow-hidden">
+            <div className="h-3 bg-muted rounded-full overflow-hidden">
               <div 
                 className={`h-full transition-all ${getFrictionBgColor(data.frictionColor)}`}
                 style={{ width: `${data.globalFrictionScore}%` }}
@@ -216,7 +248,13 @@ function MarketOverviewCard({ indicators }: { indicators: MarketIndicatorsData |
             </div>
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>0 - High Liquidity</span>
+              <span>50 - Normal</span>
               <span>100 - Frozen</span>
+            </div>
+            <div className="p-4 rounded-lg bg-muted/50 mt-4">
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {data.frictionNarrative || 'Friction narrative not available.'}
+              </p>
             </div>
           </div>
         </div>
@@ -225,14 +263,14 @@ function MarketOverviewCard({ indicators }: { indicators: MarketIndicatorsData |
   );
 }
 
-function NarrativeFeedCard({ feedData, isLoading }: { feedData: NarrativeFeedData | undefined; isLoading: boolean }) {
+function TradingActivitiesSection({ feedData, isLoading }: { feedData: NarrativeFeedData | undefined; isLoading: boolean }) {
   if (isLoading) {
     return (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <MessageSquare className="w-5 h-5" />
-            Narrative Feed
+            <Activity className="w-5 h-5" />
+            Trading Activities
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -255,18 +293,18 @@ function NarrativeFeedCard({ feedData, isLoading }: { feedData: NarrativeFeedDat
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <CardTitle className="flex items-center gap-2">
-              <MessageSquare className="w-5 h-5" />
-              Narrative Feed
+              <Activity className="w-5 h-5" />
+              Trading Activities
             </CardTitle>
             <CardDescription>
               {stats?.total || 0} events logged (7-day retention)
             </CardDescription>
           </div>
-          {stats && (
-            <div className="flex gap-2">
+          {stats && Object.entries(stats.byType).filter(([_, count]) => count > 0).length > 0 && (
+            <div className="flex flex-wrap gap-2">
               {Object.entries(stats.byType).filter(([_, count]) => count > 0).map(([type, count]) => (
                 <Badge key={type} variant="outline" className="text-xs">
                   {type.replace(/_/g, ' ')}: {count}
@@ -277,30 +315,31 @@ function NarrativeFeedCard({ feedData, isLoading }: { feedData: NarrativeFeedDat
         </div>
       </CardHeader>
       <CardContent>
-        <ScrollArea className="h-[400px] pr-4">
+        <ScrollArea className="h-[500px] pr-4">
           {events.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
-              <MessageSquare className="w-8 h-8 mb-2 opacity-50" />
-              <p>No narrative events yet</p>
+              <Activity className="w-8 h-8 mb-2 opacity-50" />
+              <p>No trading activities yet</p>
+              <p className="text-xs mt-1">Activities will appear here as trades are executed</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {events.map((event) => (
                 <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
                   <div className="mt-0.5">
                     {getEventTypeIcon(event.type)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="text-xs font-mono text-muted-foreground">
+                        [{format(new Date(event.timestamp), 'yyyy-MM-dd HH:mm')}]
+                      </span>
                       {getEventTypeBadge(event.type)}
                       <Badge variant="outline" className="text-xs font-mono">
                         {event.symbol}
                       </Badge>
                     </div>
-                    <p className="text-sm font-mono break-all">{event.message}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {formatDistanceToNow(new Date(event.timestamp), { addSuffix: true })}
-                    </p>
+                    <p className="text-sm">{event.message}</p>
                   </div>
                 </div>
               ))}
@@ -314,7 +353,6 @@ function NarrativeFeedCard({ feedData, isLoading }: { feedData: NarrativeFeedDat
 
 export default function AnalyticsPage() {
   const { mode } = useTradingMode();
-  const [activeTab, setActiveTab] = useState("overview");
   
   const { data: indicatorsData, isLoading: indicatorsLoading, refetch: refetchIndicators } = useQuery<MarketIndicatorsData>({
     queryKey: ['/api/market-indicators'],
@@ -339,7 +377,7 @@ export default function AnalyticsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">Analytics & Diagnostics</h1>
-            <p className="text-muted-foreground">Market indicators, narrative transparency, and system metrics</p>
+            <p className="text-muted-foreground">Real-time market intelligence and trading activity log</p>
           </div>
           <Button variant="outline" size="sm" onClick={handleRefresh}>
             <RefreshCw className="w-4 h-4 mr-2" />
@@ -347,42 +385,9 @@ export default function AnalyticsPage() {
           </Button>
         </div>
         
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="narrative">Narrative</TabsTrigger>
-            <TabsTrigger value="costs">Cost Metrics</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="overview" className="mt-6">
-            <div className="grid gap-6 md:grid-cols-2">
-              <MarketOverviewCard indicators={indicatorsData} />
-              <NarrativeFeedCard feedData={narrativeData} isLoading={narrativeLoading} />
-            </div>
-          </TabsContent>
-          
-          <TabsContent value="narrative" className="mt-6">
-            <NarrativeFeedCard feedData={narrativeData} isLoading={narrativeLoading} />
-          </TabsContent>
-          
-          <TabsContent value="costs" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="w-5 h-5" />
-                  Cost Metrics
-                </CardTitle>
-                <CardDescription>Trading cost analysis and friction monitoring</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-8 text-muted-foreground">
-                  <BarChart3 className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                  <p>Detailed cost metrics coming in Directive 11.4B</p>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+        <MarketOverviewSection indicators={indicatorsData} />
+        
+        <TradingActivitiesSection feedData={narrativeData} isLoading={narrativeLoading} />
       </div>
     </div>
   );

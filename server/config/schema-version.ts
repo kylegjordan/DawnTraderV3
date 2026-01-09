@@ -1,8 +1,14 @@
 /**
- * Directive 11.4A — Schema Version Tracking
+ * Directive 11.4A.1 — Schema Version Tracking
  * 
  * Single source of truth for database schema version.
  * Used by telemetry and diagnostics for audit trail.
+ * 
+ * v1.6.1: Market Explanations, Layout Refinement & Navigation Reorganization (Directive 11.4A.1)
+ * - Expanded Market Regime Definitions with full descriptions (M19 governance)
+ * - Expanded Market Friction Narratives (M20 governance)
+ * - Single continuous Analytics layout (no tabs) (M21 governance)
+ * - Sidebar navigation reordering (M22 governance)
  * 
  * v1.6.0: Market Indicators & Narrative Transparency Dashboard (Directive 11.4A)
  * - Market Friction computation (0-100 normalization, M10 governance)
@@ -66,14 +72,15 @@
  * - Metric Engine v1.0 (Canonical)
  */
 
-export const SCHEMA_VERSION = "v1.6.0";
-export const SCHEMA_DIRECTIVE = "11.4A";
+export const SCHEMA_VERSION = "v1.6.1";
+export const SCHEMA_DIRECTIVE = "11.4A.1";
 export const METRIC_ENGINE_VERSION = "v1.0";
 
 /**
  * Schema version history for audit trail
  */
 export const SCHEMA_HISTORY = [
+  { version: "v1.6.1", directive: "11.4A.1", date: "2026-01-09", description: "Market Explanations, Layout Refinement & Navigation Reorganization" },
   { version: "v1.6.0", directive: "11.4A", date: "2026-01-09", description: "Market Indicators & Narrative Transparency Dashboard" },
   { version: "v1.5.9", directive: "11.3C", date: "2026-01-09", description: "Persistent Cost Telemetry & Drift Monitoring" },
   { version: "v1.5.8", directive: "11.3B", date: "2026-01-09", description: "Cost Engine Consolidation & Diagnostics Finalization" },

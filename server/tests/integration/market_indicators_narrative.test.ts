@@ -24,6 +24,8 @@ import {
   getCurrentRegime,
   getRegimeInfo,
   getMarketIndicators,
+  regimeDescriptions,
+  getExpandedRegimeDescription,
   type MarketIndicators,
 } from '../../services/market-indicators.js';
 import {
@@ -249,11 +251,92 @@ describe('Directive 11.4A: Narrative Feed Service (M12, M16 Governance)', () => 
   });
 });
 
-describe('Directive 11.4A: Schema Version Validation', () => {
+describe('Directive 11.4A.1: Expanded Market Regime Definitions (M19 Governance)', () => {
   
-  it('should be at version v1.6.0', async () => {
+  it('should have expanded descriptions for all regimes', () => {
+    const regimes = ['BULL_STABLE', 'BULL_VOLATILE', 'BEAR_STABLE', 'BEAR_VOLATILE', 'LOW_VOL_CHOP', 'HIGH_VOL_CHOP', 'MIXED_TRANSITION', 'EXTREME_NOISE'];
+    
+    for (const regime of regimes) {
+      const desc = regimeDescriptions[regime];
+      expect(desc).toBeDefined();
+      expect(desc.title).toBeDefined();
+      expect(desc.description.length).toBeGreaterThan(100);
+      expect(Array.isArray(desc.favoredSignalTypes)).toBe(true);
+      expect(Array.isArray(desc.favoredStrategies)).toBe(true);
+    }
+  });
+  
+  it('should return complete 3-4 sentence descriptions for each regime', () => {
+    const bullStable = regimeDescriptions['BULL_STABLE'];
+    expect(bullStable.description).toContain('upward trend');
+    expect(bullStable.description.split('.').length).toBeGreaterThanOrEqual(3);
+    
+    const bearVolatile = regimeDescriptions['BEAR_VOLATILE'];
+    expect(bearVolatile.description).toContain('downward');
+    expect(bearVolatile.description.split('.').length).toBeGreaterThanOrEqual(3);
+  });
+  
+  it('should return expanded regime via getExpandedRegimeDescription', () => {
+    const expanded = getExpandedRegimeDescription('BULL_STABLE');
+    expect(expanded).toBeDefined();
+    expect(expanded!.title).toBe('Bull Stable');
+    expect(expanded!.favoredSignalTypes).toContain('Quantitative');
+  });
+});
+
+describe('Directive 11.4A.1: Expanded Market Friction Narratives (M20 Governance)', () => {
+  
+  it('should return 3-4 sentence narratives for each friction range', () => {
+    const green = describeFriction(15);
+    expect(green.narrative).toContain('High liquidity');
+    expect(green.narrative.split('.').length).toBeGreaterThanOrEqual(3);
+    
+    const yellow = describeFriction(35);
+    expect(yellow.narrative).toContain('Normal liquidity');
+    expect(yellow.narrative.split('.').length).toBeGreaterThanOrEqual(2);
+    
+    const orange = describeFriction(65);
+    expect(orange.narrative).toContain('Stressed liquidity');
+    expect(orange.narrative.split('.').length).toBeGreaterThanOrEqual(2);
+    
+    const red = describeFriction(90);
+    expect(red.narrative).toContain('Frozen or illiquid');
+    expect(red.narrative.split('.').length).toBeGreaterThanOrEqual(2);
+  });
+  
+  it('should map friction scores correctly to 4-tier narrative system', () => {
+    expect(describeFriction(0).narrative).toContain('High liquidity');
+    expect(describeFriction(20).narrative).toContain('High liquidity');
+    expect(describeFriction(21).narrative).toContain('Normal liquidity');
+    expect(describeFriction(50).narrative).toContain('Normal liquidity');
+    expect(describeFriction(51).narrative).toContain('Stressed liquidity');
+    expect(describeFriction(80).narrative).toContain('Stressed liquidity');
+    expect(describeFriction(81).narrative).toContain('Frozen or illiquid');
+    expect(describeFriction(100).narrative).toContain('Frozen or illiquid');
+  });
+});
+
+describe('Directive 11.4A.1: Market Indicators with Expanded Fields', () => {
+  
+  it('should return indicators with regimeTitle and frictionNarrative', () => {
+    updateGlobalRegime('BULL_STABLE');
+    const indicators = getMarketIndicators();
+    
+    expect(indicators).toHaveProperty('regimeTitle');
+    expect(indicators).toHaveProperty('frictionNarrative');
+    expect(indicators).toHaveProperty('favoredSignalTypes');
+    
+    expect(indicators.regimeTitle).toBe('Bull Stable');
+    expect(typeof indicators.frictionNarrative).toBe('string');
+    expect(indicators.frictionNarrative.length).toBeGreaterThan(50);
+  });
+});
+
+describe('Directive 11.4A.1: Schema Version Validation', () => {
+  
+  it('should be at version v1.6.1', async () => {
     const { SCHEMA_VERSION, SCHEMA_DIRECTIVE } = await import('../../config/schema-version.js');
-    expect(SCHEMA_VERSION).toBe('v1.6.0');
-    expect(SCHEMA_DIRECTIVE).toBe('11.4A');
+    expect(SCHEMA_VERSION).toBe('v1.6.1');
+    expect(SCHEMA_DIRECTIVE).toBe('11.4A.1');
   });
 });
