@@ -9,6 +9,7 @@ import { useTradingMode } from "@/contexts/trading-mode-context";
 import { useToast } from "@/hooks/use-toast";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { apiFetch } from "@/lib/api";
+import { getFrictionColorClasses, getRegimeBadgeClassName, getFrictionLabel, formatRegimeTitle } from "@/utils/frictionColor";
 import { 
   ArrowUpDown, 
   ArrowUp, 
@@ -117,6 +118,10 @@ interface ActiveTrade {
   volumeBucket?: 'High' | 'Medium' | 'Low' | 'Very Low';
   // Directive 9.2: Trade mode for trailing exit system
   tradeMode?: 'TARGET' | 'TRAILING_TAKE';
+  // Directive 11.4B: Market context fields
+  marketRegime?: string;
+  marketFrictionScore?: number;
+  marketFrictionLabel?: string;
 }
 
 interface PortfolioSummary {
@@ -143,11 +148,13 @@ interface ActiveTradesResponse {
 }
 
 // Phase 8.8.3-C2: Updated sort fields for new P/L breakdown columns
+// Directive 11.4B: Added marketRegime and marketFriction
 type SortField = 'symbol' | 'strategy' | 'intendedEntryPrice' | 'entryPrice' | 'currentPrice' | 
                   'grossPnl' | 'grossPnlPercent' | 'netPnl' | 'netPnlPercent' | 
                   'entryFee' | 'entrySlippage' | 'estExitFee' | 'estExitSlippage' | 'estTotalCost' |
                   'holdingDurationMs' | 'distanceToTP' | 'distanceToSL' | 'distanceToTPDollars' | 'distanceToSLDollars' | 'slotNumber' | 
-                  'health' | 'confidence' | 'cwqi' | 'quantity' | 'volume24h' | 'takeProfit' | 'stopLoss' | 'positionValue';
+                  'health' | 'confidence' | 'cwqi' | 'quantity' | 'volume24h' | 'takeProfit' | 'stopLoss' | 'positionValue' |
+                  'marketRegime' | 'marketFriction';
 type SortDirection = 'asc' | 'desc';
 
 const strategyColors: Record<string, string> = {
@@ -555,7 +562,32 @@ function TradeRow({
         </TooltipProvider>
       </td>
       
-      {/* 19. Duration */}
+      {/* 19. Market Regime - Directive 11.4B */}
+      <td className="px-3 py-3">
+        {trade.marketRegime ? (
+          <Badge variant="outline" className={cn("text-xs", getRegimeBadgeClassName(trade.marketRegime))}>
+            {formatRegimeTitle(trade.marketRegime)}
+          </Badge>
+        ) : (
+          <span className="text-muted-foreground text-xs">—</span>
+        )}
+      </td>
+      
+      {/* 20. Market Friction - Directive 11.4B */}
+      <td className="px-3 py-3">
+        {trade.marketFrictionScore !== undefined && trade.marketFrictionScore !== null ? (
+          <span className={cn(
+            "inline-flex items-center px-2 py-1 rounded text-xs font-medium",
+            getFrictionColorClasses(trade.marketFrictionScore).badge
+          )}>
+            {getFrictionLabel(trade.marketFrictionScore)}
+          </span>
+        ) : (
+          <span className="text-muted-foreground text-xs">—</span>
+        )}
+      </td>
+      
+      {/* 21. Duration */}
       <td className="px-3 py-3">
         <div className="flex items-center gap-1 text-sm text-muted-foreground">
           <Clock className="w-3 h-3" />
@@ -563,7 +595,7 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 20. Actions */}
+      {/* 22. Actions */}
       <td className="px-3 py-3">
         <Button
           size="sm"
@@ -1189,6 +1221,8 @@ export default function ActiveTradesV2() {
                   <SortableHeader field="confidence" label="Conf" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="volume24h" label="Volume" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Source</th>
+                  <SortableHeader field="marketRegime" label="Regime" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortableHeader field="marketFriction" label="Friction" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="holdingDurationMs" label="Duration" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
                 </tr>

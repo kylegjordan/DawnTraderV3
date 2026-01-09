@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { apiFetch } from "@/lib/api";
+import { getFrictionColorClasses, getRegimeBadgeClassName, getFrictionLabel, formatRegimeTitle } from "@/utils/frictionColor";
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -723,6 +724,8 @@ export function TradeHistoryTab() {
                       <SortableHeader column="totalCost" label="Total Cost" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
                       <SortableHeader column="netPnl" label="Net P/L" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
                       <SortableHeader column="confidence" label="Conf" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
+                      <SortableHeader column="marketRegime" label="Regime" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
+                      <SortableHeader column="marketFrictionScore" label="Friction" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
                       <SortableHeader column="openedAt" label="Opened" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
                       <SortableHeader column="closedAt" label="Closed" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
                     </tr>
@@ -870,7 +873,32 @@ export function TradeHistoryTab() {
                             })()}
                           </td>
                           
-                          {/* 15. Opened - C2A */}
+                          {/* 15. Market Regime - 11.4B */}
+                          <td className="p-2">
+                            {trade.marketRegime ? (
+                              <Badge variant="outline" className={cn("text-xs", getRegimeBadgeClassName(trade.marketRegime))}>
+                                {formatRegimeTitle(trade.marketRegime)}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            )}
+                          </td>
+                          
+                          {/* 16. Market Friction - 11.4B */}
+                          <td className="p-2">
+                            {trade.marketFrictionScore !== undefined && trade.marketFrictionScore !== null ? (
+                              <span className={cn(
+                                "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
+                                getFrictionColorClasses(trade.marketFrictionScore).badge
+                              )}>
+                                {getFrictionLabel(trade.marketFrictionScore)}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            )}
+                          </td>
+                          
+                          {/* 17. Opened - C2A */}
                           <td className="p-2 text-xs font-mono whitespace-nowrap">
                             {formatTimestamp(trade.openedAt)}
                           </td>
