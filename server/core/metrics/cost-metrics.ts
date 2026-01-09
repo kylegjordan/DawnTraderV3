@@ -142,3 +142,64 @@ export function getCostClassification(costFactor: number): 'cheap' | 'moderate' 
   if (costFactor > 0.001) return 'expensive';
   return 'moderate';
 }
+
+/**
+ * ══════════════════════════════════════════════════════════════════════════════
+ * Directive 11.4A — Market Friction Computation (M10 Governance Invariant)
+ * ══════════════════════════════════════════════════════════════════════════════
+ * 
+ * Computes Market Friction score normalized to 0-100 scale.
+ * 
+ * Formula: base = (spread + slippage + fee) × 10000
+ *          normalized = min(base / 3, 100)
+ * 
+ * Thresholds:
+ * - 0-20:   High Liquidity (Green)
+ * - 21-50:  Normal Liquidity (Yellow)
+ * - 51-80:  Stressed Liquidity (Orange)
+ * - 81-100: Frozen/Illiquid (Red)
+ * 
+ * @param spread - Bid-ask spread as decimal (e.g., 0.001 = 0.1%)
+ * @param slippage - Execution slippage as decimal (e.g., 0.0005 = 0.05%)
+ * @param fee - Trading fee as decimal (e.g., 0.0026 = 0.26%)
+ * @returns Market friction score 0-100
+ * ══════════════════════════════════════════════════════════════════════════════
+ */
+export function computeMarketFriction(spread: number, slippage: number, fee: number): number {
+  const base = (spread + slippage + fee) * 10000;
+  const normalized = Math.min(base / 3, 100);
+  return Math.round(normalized);
+}
+
+/**
+ * Directive 11.4A — Market Friction Status Description
+ * Returns human-readable status and color indicator for friction score.
+ */
+export interface FrictionStatus {
+  value: number;
+  status: string;
+  color: 'green' | 'yellow' | 'orange' | 'red';
+  emoji: string;
+}
+
+export function describeFriction(frictionScore: number): FrictionStatus {
+  if (frictionScore <= 20) {
+    return { value: frictionScore, status: 'High Liquidity', color: 'green', emoji: '🟢' };
+  }
+  if (frictionScore <= 50) {
+    return { value: frictionScore, status: 'Normal Liquidity', color: 'yellow', emoji: '🟡' };
+  }
+  if (frictionScore <= 80) {
+    return { value: frictionScore, status: 'Stressed Liquidity', color: 'orange', emoji: '🟠' };
+  }
+  return { value: frictionScore, status: 'Frozen / Illiquid', color: 'red', emoji: '🔴' };
+}
+
+/**
+ * Directive 11.4A — Format friction for display
+ * Example output: "37: Normal Liquidity 🟡"
+ */
+export function formatFrictionDisplay(frictionScore: number): string {
+  const { status, emoji } = describeFriction(frictionScore);
+  return `${frictionScore}: ${status} ${emoji}`;
+}

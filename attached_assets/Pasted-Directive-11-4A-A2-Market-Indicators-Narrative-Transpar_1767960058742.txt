@@ -1,0 +1,246 @@
+Directive 11.4A (A2) — Market Indicators & Narrative Transparency Dashboard
+
+Issued by: Architectural Core
+Applies to: DawnTrader Core + UI Layer (Signal Orchestrator, Cost Metrics, RTB, VTS, TEC, Analytics UI)
+Schema Target: v1.6.0
+Status: Approved for Implementation
+
+I. Objective
+
+To establish a unified Market Indicators and Narrative Transparency Dashboard that provides both:
+
+Global Market Intelligence — Market Regime and Global Market Friction.
+
+Operational Transparency — Per-signal friction insights and a running narrative of trade activity.
+
+This ensures the operator always understands what the market is doing, how DawnTrader is responding, and why trades behave as they do.
+
+II. Core Goals
+#	Goal	Description
+1	Market Regime Transparency	Display the global regime with descriptive context and favored strategy guidance.
+2	Market Friction Awareness	Quantify liquidity and execution pressure per-signal and globally (Top-100 pool).
+3	Narrative Feed	Present a timestamped narrative of trading events and adaptive actions.
+4	Unified Analytics Hub	Centralize diagnostics, goals, and telemetry into one operator console.
+III. Implementation Tasks
+Task 1 — Compute Market Friction per Signal
+
+File: /server/core/metrics/cost-metrics.ts
+
+Add:
+
+export const computeMarketFriction = (spread: number, slippage: number, fee: number): number => {
+  // Normalize and scale 0–100
+  const base = (spread + slippage + fee) * 10000;
+  const normalized = Math.min(base / 3, 100);
+  return Math.round(normalized);
+};
+
+
+Usage Rules:
+
+Cached in CostCache with 60s TTL.
+
+Saved as marketFriction in all signal and trade objects.
+
+Used both per-signal and in globalFrictionScore computation.
+
+✅ Global Friction Calculation:
+
+// Derived from FX5 Top-100 Active Scan Pool
+globalFrictionScore = mean(
+  computeMarketFriction(spread, slippage, fee)
+  for symbol in FX5ActiveTop100Pool
+);
+
+
+If fewer than 50 pairs in FX5 pool → fallback to predefined Top-100 liquidity list.
+Exclude delisted or ultra-low volume pairs.
+
+Task 2 — Extend Signal and Trade Objects
+
+Files:
+
+/server/services/signal-orchestrator.ts
+
+/server/core/dse/dynamic_sizing_engine.ts
+
+/server/services/tec/execution-controller.ts
+
+Add field assignment:
+
+signal.marketFriction = computeMarketFriction(spread, slippage, fee);
+
+
+✅ Propagate through:
+
+Ready-to-Buy queue
+
+Open Trades
+
+Trade History
+
+Task 3 — Create Market Indicators & Narrative Feed Services
+
+Files:
+
+/server/services/market-indicators.ts
+
+/server/services/narrative-feed.ts
+
+Market Indicators
+export const getMarketIndicators = () => ({
+  marketRegime: currentRegime.name,
+  regimeDescription: currentRegime.description,
+  favoredStrategies: currentRegime.favoredStrategies,
+  globalFrictionScore,
+  frictionDescription: describeFriction(globalFrictionScore)
+});
+
+
+Market Regime: Calculated globally across all monitored pairs.
+
+Friction: Calculated from FX5 Top-100 scan pool.
+
+Narrative Feed
+export const appendNarrativeEvent = (eventType, payload) => {
+  const event = {
+    timestamp: Date.now(),
+    type: eventType,
+    message: generateNarrativeMessage(eventType, payload)
+  };
+  saveToNarrativeLog(event);
+};
+
+
+Trigger Events:
+
+Trade Opened
+
+DSE Resize
+
+Trailing Exit Update
+
+Trade Closed
+
+Manual Override
+
+(❌ Removed: Signal Reconfirmed — not operator-relevant.)
+
+Retention:
+
+Retain 7 days in memory for UI.
+
+Archive older records to telemetry_narrative.
+
+Task 4 — UI: Analytics & Diagnostics Page
+
+Path: /client/src/pages/analytics-diagnostics.tsx
+
+Header (Frozen)
+
+Displays:
+
+Market Regime: Bull Stable
+→ Description: Trending market with moderate volatility; trend-following strategies favored.
+Market Friction: 47: Normal Liquidity 🟡
+→ Description: Typical spreads and execution quality. Standard sizing active.
+
+Color Coding Thresholds
+Range	Color	Meaning
+0–20	🟢 Green	High Liquidity
+21–50	🟡 Yellow	Normal Liquidity
+51–80	🟠 Orange	Stressed Liquidity
+81–100	🔴 Red	Frozen / Illiquid
+Below Header
+
+Scrollable Narrative Feed:
+
+[2026-01-09 13:15] BTC/USDT opened LONG @ 41250 (EMA-Cross, Bull Stable)
+[2026-01-09 13:25] DSE resized position −10% due to friction 78
+[2026-01-09 14:02] Trailing Exit ratcheted stop @ 41600
+[2026-01-09 14:45] Trade closed @ 41850 (+1.5% net)
+
+
+✅ Pagination enabled, lazy-loaded, auto-refresh every 30 s.
+✅ Frozen header remains visible while scrolling feed.
+
+Task 5 — Table UI Updates
+Ready-to-Buy
+
+Add Column:
+Market Friction → displays {value}: {status} with color code (🟢/🟡/🟠/🔴).
+
+Open Trades
+
+Add Column:
+Market Friction → next to Market Regime.
+
+Trade History
+
+Add Column:
+Market Friction (Avg) → next to Market Regime.
+
+Example cell display:
+
+37: Normal Liquidity 🟡
+
+Task 6 — Schema Update
+
+Schema Version: v1.6.0
+
+Add Field:
+marketFriction → numeric, range 0–100.
+
+Tables Updated:
+
+signals
+
+trades_open
+
+trades_history
+
+telemetry_narrative
+
+IV. Testing & Validation
+Test	Description
+cost_metrics_friction.test.ts	Validates 0–100 scaling and clamping.
+orchestrator_friction_injection.test.ts	Confirms signals carry marketFriction.
+narrative_feed_events.test.ts	Ensures only 5 core triggers create feed entries.
+analytics_ui_render.test.ts	Validates frozen header, friction color thresholds.
+global_friction_scope.test.ts	Ensures friction averages Top-100 FX5 only.
+V. Governance Invariants
+ID	Invariant	Enforced Location
+M10	Market Friction normalized 0–100	cost-metrics.ts
+M11	Friction field present in all signals/trades	signal-orchestrator.ts
+M12	Narrative retention = 7 days	narrative-feed.ts
+M13	Frozen analytics header enforced	analytics-diagnostics.tsx
+M14	Global Friction derived only from Top-100 FX5 pool	market-indicators.ts
+M15	Market Regime remains globally calculated	market-indicators.ts
+M16	No reconfirmation events in narrative	narrative-feed.ts
+M17	Friction color map thresholds active in UI	analytics-diagnostics.tsx
+M18	Market Friction cells show {value}: {status}	table renderers
+VI. Deliverables
+
+/server/core/metrics/cost-metrics.ts → +computeMarketFriction()
+
+/server/services/market-indicators.ts
+
+/server/services/narrative-feed.ts
+
+/client/src/pages/analytics-diagnostics.tsx
+
+Table renderer updates for Ready-to-Buy, Open Trades, Trade History
+
+Schema migration → v1.6.0
+
+5 Integration Tests
+
+ui_reference_v1_6_0.md Documentation
+
+VII. Expected Outcome
+
+✅ Every signal and trade now exposes Market Friction (micro-liquidity).
+✅ Global header provides Market Regime (macro climate) + Global Friction (execution environment).
+✅ Narrative feed delivers an intelligible, time-anchored account of trade activity.
+✅ All friction values are human-readable, color-coded, and normalized.
+✅ Operators gain instant visual insight into both market conditions and system responses.

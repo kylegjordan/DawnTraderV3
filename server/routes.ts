@@ -7751,6 +7751,98 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ==================== Directive 11.4A: Market Indicators & Narrative Feed ====================
+  
+  // GET /api/market-indicators - Get global market intelligence
+  apiRouter.get('/market-indicators', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { getMarketIndicators } = await import('./services/market-indicators.js');
+      const indicators = getMarketIndicators();
+      
+      res.json({
+        ok: true,
+        data: {
+          marketRegime: indicators.marketRegime,
+          regimeDescription: indicators.regimeDescription,
+          favoredStrategies: indicators.favoredStrategies,
+          globalFrictionScore: indicators.globalFrictionScore,
+          frictionStatus: indicators.frictionDescription.status,
+          frictionColor: indicators.frictionDescription.color,
+          frictionEmoji: indicators.frictionDescription.emoji,
+          frictionDisplay: `${indicators.globalFrictionScore}: ${indicators.frictionDescription.status} ${indicators.frictionDescription.emoji}`,
+        },
+        timestamp: indicators.timestamp.toISOString(),
+      });
+    } catch (error: any) {
+      console.error('[11.4A] Error fetching market indicators:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+  
+  // GET /api/narrative-feed - Get narrative events
+  apiRouter.get('/narrative-feed', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const symbol = req.query.symbol as string | undefined;
+      const type = req.query.type as string | undefined;
+      
+      const { getNarrativeEvents, getNarrativeStats } = await import('./services/narrative-feed.js');
+      type NarrativeEventType = 'TRADE_OPENED' | 'DSE_RESIZE' | 'TRAILING_EXIT_UPDATE' | 'TRADE_CLOSED' | 'MANUAL_OVERRIDE';
+      
+      const events = getNarrativeEvents({
+        limit,
+        offset,
+        symbol,
+        type: type as NarrativeEventType | undefined,
+      });
+      
+      const stats = getNarrativeStats();
+      
+      res.json({
+        ok: true,
+        data: events.map(e => ({
+          id: e.id,
+          timestamp: e.timestamp.toISOString(),
+          type: e.type,
+          symbol: e.symbol,
+          message: e.message,
+          details: e.details,
+        })),
+        meta: {
+          total: stats.totalEvents,
+          limit,
+          offset,
+          byType: stats.byType,
+        },
+      });
+    } catch (error: any) {
+      console.error('[11.4A] Error fetching narrative feed:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+  
+  // GET /api/narrative-feed/stats - Get narrative feed statistics
+  apiRouter.get('/narrative-feed/stats', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { getNarrativeStats } = await import('./services/narrative-feed.js');
+      const stats = getNarrativeStats();
+      
+      res.json({
+        ok: true,
+        data: {
+          totalEvents: stats.totalEvents,
+          oldestEvent: stats.oldestEvent?.toISOString() ?? null,
+          newestEvent: stats.newestEvent?.toISOString() ?? null,
+          byType: stats.byType,
+        },
+      });
+    } catch (error: any) {
+      console.error('[11.4A] Error fetching narrative stats:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   // ==================== Phase 8.8.4-A: Signal Lifecycle Audit (SLAL) ====================
   
   // GET /api/diagnostics/signal-lifecycle - Get SLAL metrics and recent journeys
