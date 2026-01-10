@@ -35,13 +35,6 @@ export type Stage3State = {
   nextScanInMs: number;
   activeFilteredPool: ActiveFilteredPair[];
   latestEligibleSymbols?: string[];
-  // @deprecated Legacy fields (11.4C.1) - kept for backward compatibility
-  topNCount?: number;
-  tierBCount?: number;
-  rotation?: {
-    topEndUniverseSize: number;
-    tierBUniverseSize: number;
-  };
 };
 
 class Stage3StateCache {

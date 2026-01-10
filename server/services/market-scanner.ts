@@ -1059,11 +1059,6 @@ export interface BatchResult {
     idealCount: number; // Directive 11.4C.1: Ideal pool survivors
     rotationalCount: number; // Directive 11.4C.1: Rotational pool survivors
     krakenUniverseSize: number;
-    // @deprecated Legacy fields (11.4C.1) - mapped from Ideal/Rotational for backward compatibility
-    topNCount?: number;
-    tierBCount?: number;
-    topEndUniverseSize?: number;
-    tierBUniverseSize?: number;
   };
 }
 
@@ -1139,13 +1134,31 @@ export async function collectAdaptiveBatch(
   const rotationalSet = new Set(adaptiveBatch.rotationalPairs);
   
   // STEP 3: Build batch with pool type tracking
-  const batch = adaptiveBatch.totalBatch.map(symbol => {
+  let batch = adaptiveBatch.totalBatch.map(symbol => {
     const pair = allPairs.find(p => p.symbol === symbol);
     return {
       ...pair!,
       poolType: idealSet.has(symbol) ? 'ideal' as const : 'rotational' as const,
     };
   }).filter(p => p.pairInfo);
+  
+  // Directive 11.4C-R2: Guarantee 100-pair batch by refilling from Kraken universe
+  const targetBatchSize = 100;
+  if (batch.length < targetBatchSize) {
+    const usedSymbols = new Set(batch.map(p => p.symbol));
+    const fillCandidates = allPairs
+      .filter(p => !usedSymbols.has(p.symbol) && p.pairInfo)
+      .sort((a, b) => b.volume24h - a.volume24h)
+      .slice(0, targetBatchSize - batch.length);
+    
+    const fillPairs = fillCandidates.map(p => ({
+      ...p,
+      poolType: 'rotational' as const,
+    }));
+    
+    batch = [...batch, ...fillPairs];
+    console.log(`[11.4C-R2][AdaptiveScan] Refilled batch: +${fillPairs.length} pairs from Kraken (total=${batch.length})`);
+  }
   
   const evaluatedSymbols = batch.map(p => p.symbol);
   
@@ -1300,13 +1313,9 @@ export async function collectAdaptiveBatch(
       evaluatedCount,
       eligibleCount,
       ineligibleCount,
-      topNCount: idealSurvivors, // Legacy compatibility: map Ideal → TopN
-      tierBCount: rotationalSurvivors, // Legacy compatibility: map Rotational → TierB
       idealCount: idealSurvivors,
       rotationalCount: rotationalSurvivors,
       krakenUniverseSize,
-      topEndUniverseSize: adaptiveBatch.idealPairs.length, // Legacy compatibility
-      tierBUniverseSize: adaptiveBatch.rotationalPairs.length, // Legacy compatibility
     },
   };
 }

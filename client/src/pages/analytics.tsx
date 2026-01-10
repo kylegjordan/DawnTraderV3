@@ -1,12 +1,15 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Activity, TrendingUp, TrendingDown, AlertCircle, Gauge, RefreshCw, Clock, DollarSign, Target, Zap, BarChart3, Layers } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Activity, TrendingUp, TrendingDown, AlertCircle, Gauge, RefreshCw, Clock, DollarSign, Target, Zap, BarChart3, Layers, List } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { useTradingMode } from "@/contexts/trading-mode-context";
+import TopBatch from "@/components/trading/top-batch";
 
 interface MarketIndicatorsData {
   ok: boolean;
@@ -353,6 +356,7 @@ function TradingActivitiesSection({ feedData, isLoading }: { feedData: Narrative
 
 export default function AnalyticsPage() {
   const { mode } = useTradingMode();
+  const [activeTab, setActiveTab] = useState("overview");
   
   const { data: indicatorsData, isLoading: indicatorsLoading, refetch: refetchIndicators } = useQuery<MarketIndicatorsData>({
     queryKey: ['/api/market-indicators'],
@@ -385,9 +389,34 @@ export default function AnalyticsPage() {
           </Button>
         </div>
         
-        <MarketOverviewSection indicators={indicatorsData} />
-        
-        <TradingActivitiesSection feedData={narrativeData} isLoading={narrativeLoading} />
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-3 max-w-md">
+            <TabsTrigger value="overview" className="flex items-center gap-2">
+              <Activity className="w-4 h-4" />
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="top-batch" className="flex items-center gap-2">
+              <List className="w-4 h-4" />
+              Top Batch
+            </TabsTrigger>
+            <TabsTrigger value="activities" className="flex items-center gap-2">
+              <BarChart3 className="w-4 h-4" />
+              Activities
+            </TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="overview" className="space-y-6 mt-6">
+            <MarketOverviewSection indicators={indicatorsData} />
+          </TabsContent>
+          
+          <TabsContent value="top-batch" className="mt-6">
+            <TopBatch />
+          </TabsContent>
+          
+          <TabsContent value="activities" className="mt-6">
+            <TradingActivitiesSection feedData={narrativeData} isLoading={narrativeLoading} />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

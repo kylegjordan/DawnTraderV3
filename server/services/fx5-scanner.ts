@@ -61,9 +61,6 @@ interface ScanResult {
   idealCount: number; // Directive 11.4C.1: Ideal pool survivors (primary)
   rotationalCount: number; // Directive 11.4C.1: Rotational pool survivors (primary)
   activePoolCount: number;
-  // @deprecated Legacy fields - for backward compatibility only
-  topNCount?: number;
-  tierBCount?: number;
 }
 
 export class Fx5ScannerService {
@@ -248,22 +245,17 @@ export class Fx5ScannerService {
         idealCount, // Directive 11.4C.1: Primary metric
         rotationalCount, // Directive 11.4C.1: Primary metric
         krakenUniverseSize,
-        // Legacy fields (optional, with defaults)
-        topNCount = idealCount,
-        tierBCount = rotationalCount,
-        topEndUniverseSize = 0,
-        tierBUniverseSize = 0,
       } = metrics;
 
       // R9.3.HF-7: Add granular logging to identify bottlenecks
       console.log(`[FX5Scanner][R9.3.HF-7][${mode}] Batch complete, getting active trades...`);
       
-      // Directive 11.4C-R2: Enhanced logging with cycle summary
-      const retryCount = (batchResult as any).retryCount ?? 0;
+      // Directive 11.4C-R2: Enhanced logging with clear breakdown
+      // evaluatedCount = pairs sent to filters, eligibleCount = pairs that passed all filters (survivors)
       console.log(
         `[11.4C-R2][AdaptiveScan] Cycle Summary -> ` +
-        `Requested=100 | Actual=${evaluatedCount} ` +
-        `(Ideal=${idealCount}, Rotational=${rotationalCount}, Retry=${retryCount})`
+        `Scanned=${evaluatedCount} | Survivors=${eligibleCount} ` +
+        `(Ideal=${idealCount}, Rotational=${rotationalCount})`
       );
 
       // Get active trades count with timeout protection
@@ -386,8 +378,8 @@ export class Fx5ScannerService {
         metricFilteredSurvivors: metricFilteredSurvivors.length,
         metricFilteredCount,
         eligibleCount,
-        topNCount,
-        tierBCount,
+        idealCount,
+        rotationalCount,
         avgDailyRange: classifiedSurvivors.length > 0 
           ? classifiedSurvivors.reduce((a, s) => a + (s.dailyRange || 0), 0) / classifiedSurvivors.length 
           : 0,

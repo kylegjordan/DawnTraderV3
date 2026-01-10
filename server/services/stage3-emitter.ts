@@ -38,13 +38,6 @@ export type ScanTickPayload = {
   rotationalCount: number; // Directive 11.4C.1: Rotational pool survivors
   activePoolCount: number;
   activeFilteredPool: ActiveFilteredPair[];
-  // @deprecated Legacy fields - for backward compatibility
-  topNCount?: number;
-  tierBCount?: number;
-  rotation?: {
-    topEndUniverseSize: number;
-    tierBUniverseSize: number;
-  };
 };
 
 export type ScannerBreakdownPayload = {
@@ -124,10 +117,6 @@ class Stage3Emitter {
       rotationalCount: state.rotationalCount, // Directive 11.4C.1: Primary
       activePoolCount: state.activePoolCount,
       activeFilteredPool: state.activeFilteredPool,
-      // Legacy fields for backward compatibility
-      topNCount: state.topNCount ?? state.idealCount,
-      tierBCount: state.tierBCount ?? state.rotationalCount,
-      rotation: state.rotation,
     };
 
     // REB 2.4 Stage-1g: ACK broadcast with version tracking
