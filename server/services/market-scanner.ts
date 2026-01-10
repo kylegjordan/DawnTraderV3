@@ -1272,13 +1272,13 @@ export async function collectAdaptiveBatch(
         poolType: pair.poolType,
       });
       
-      // Record success to telemetry
+      // Directive 11.4C-R2: VTS is the single source of truth for telemetry
+      // Record only pool membership (pass/fail), not default scores
       adaptiveScanManager.recordScanResult(pair.symbol, true, {
-        finalScore: 0.5,
         pool: pair.poolType,
       });
     } else {
-      // Record failure to telemetry
+      // Record filter failure (no default scores)
       adaptiveScanManager.recordScanResult(pair.symbol, false, {
         failureReason: 'filter_failed',
         pool: pair.poolType,

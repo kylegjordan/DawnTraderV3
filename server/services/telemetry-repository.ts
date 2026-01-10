@@ -28,13 +28,28 @@ import { eq, desc, and, gte } from 'drizzle-orm';
 import crypto from 'crypto';
 import { SCHEMA_VERSION, SCHEMA_DIRECTIVE, METRIC_ENGINE_VERSION } from '../config/schema-version.js';
 
-export type MarketRegime = 
+// Database-compatible regime types (stored in PostgreSQL enum)
+export type MarketRegimeDB = 
   | 'EXTREME_NOISE'
   | 'BULL_STABLE'
   | 'BULL_VOLATILE'
   | 'BEAR_STABLE'
   | 'BEAR_VOLATILE'
   | 'LOW_VOL_CHOP';
+
+// Extended regime types for in-memory use (includes VTS types)
+export type MarketRegime = MarketRegimeDB
+  | 'HIGH_VOL_IMPULSE'
+  | 'TRANSITION';
+
+// Map extended regime types to database-compatible types
+export function toDBRegime(regime: MarketRegime): MarketRegimeDB {
+  switch (regime) {
+    case 'HIGH_VOL_IMPULSE': return 'BULL_VOLATILE'; // High volatility maps to bull volatile
+    case 'TRANSITION': return 'LOW_VOL_CHOP'; // Transition maps to chop
+    default: return regime as MarketRegimeDB;
+  }
+}
 
 export type PoolType = 'ideal' | 'rotational';
 
@@ -117,12 +132,13 @@ export async function loadRecentTelemetry(
   limit: number = 100
 ): Promise<TelemetryHistory[]> {
   try {
+    const dbRegime = toDBRegime(regime); // Map extended regime to DB-compatible
     const records = await db
       .select()
       .from(telemetryHistory)
       .where(
         and(
-          eq(telemetryHistory.regime, regime),
+          eq(telemetryHistory.regime, dbRegime),
           eq(telemetryHistory.mode, mode)
         )
       )
@@ -188,7 +204,7 @@ export async function saveTelemetryRecord(entry: TelemetryEntry): Promise<boolea
     const record: InsertTelemetryHistory = {
       mode: trueMode,
       symbol: entry.symbol,
-      regime: entry.regime,
+      regime: toDBRegime(entry.regime), // Map extended regime types to DB-compatible
       pool,
       finalScore: entry.finalScore.toFixed(4),
       hybridScore: entry.hybridScore?.toFixed(4),
@@ -232,7 +248,7 @@ export async function saveTelemetryBatch(entries: TelemetryEntry[]): Promise<num
       return {
         mode: trueMode,
         symbol: entry.symbol,
-        regime: entry.regime,
+        regime: toDBRegime(entry.regime), // Map extended regime types to DB-compatible
         pool: entry.pool ?? 'ideal',
         finalScore: entry.finalScore.toFixed(4),
         hybridScore: entry.hybridScore?.toFixed(4),
@@ -322,13 +338,14 @@ export async function getPerformanceByPool(
   const cutoff = new Date(Date.now() - hoursBack * 60 * 60 * 1000);
   
   try {
+    const dbRegime = toDBRegime(regime); // Map extended regime to DB-compatible
     const records = await db
       .select()
       .from(telemetryHistory)
       .where(
         and(
           eq(telemetryHistory.pool, poolType),
-          eq(telemetryHistory.regime, regime),
+          eq(telemetryHistory.regime, dbRegime),
           eq(telemetryHistory.mode, mode),
           gte(telemetryHistory.timestamp, cutoff)
         )

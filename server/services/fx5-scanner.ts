@@ -387,23 +387,11 @@ export class Fx5ScannerService {
         volumeStats
       }).catch(() => {});
       
-      // Directive 10.8: Record scan results to TelemetryAggregator for adaptive scanning
-      // This feeds the dual-pool (Ideal/Rotational) pair selection system
+      // Directive 11.4C-R2: FX5 no longer records telemetry with default values
+      // VTS is the single source of truth for telemetry data (signals, regime, scores)
+      // FX5 only identifies survivor pairs for VTS to process
       if (SCANNER_PARAMS.ADAPTIVE_ENABLED) {
-        const telemetry = getTelemetryAggregator();
-        // Directive 11.4C-R2: Use 'simulation' source when engine is inactive (passive learning)
-        // Only use 'live' source when engine is actively trading
-        const telemetrySource = isEngineActive ? 'live' : 'simulation';
-        for (const survivor of metricFilteredSurvivors) {
-          telemetry.recordPairTelemetry(survivor.symbol, {
-            finalScore: 0.5, // Base score, will be enriched by signal orchestrator
-            hybridScore: 0,  // Populated when hybrid signals fire
-            regimeWeight: 0.5, // Default regime weight
-            predictiveConfidence: 0.5, // Default ML confidence
-            source: telemetrySource, // Directive 11.4C-R2: Proper source attribution
-          });
-        }
-        console.log(`[FX5][10.8] Recorded ${metricFilteredSurvivors.length} pairs to TelemetryAggregator (source=${telemetrySource})`);
+        console.log(`[FX5][11.4C-R2] ${metricFilteredSurvivors.length} survivors passed to VTS for signal generation (no default telemetry recording)`);
       }
       
       // REB 2.8.4: Generate unique scan cycle ID (survives server restarts)

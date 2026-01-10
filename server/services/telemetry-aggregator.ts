@@ -140,6 +140,8 @@ export class TelemetryAggregatorService {
     // Prune old entries outside the history window
     const recent = existing.filter(t => now - t.lastUpdated < this.historyWindowMs);
     
+    // Directive 11.4C-R2: VTS is the single source of truth for telemetry
+    // All telemetry now comes from VTS with real calculated values (no defaults)
     const entry: PairTelemetry = {
       symbol,
       finalScore: data.finalScore,
@@ -154,9 +156,9 @@ export class TelemetryAggregatorService {
       avgDecayedStrength: data.decayedStrength ?? 0,
       timeframe: data.timeframe,
       pool: data.pool ?? 'ideal', // Directive 11.2 R1: Track source pool
-      source: data.source ?? 'live', // Directive 11.0E.2: Track source for segregation
+      source: data.source ?? 'simulation', // Directive 11.4C-R2: Default to simulation (VTS source)
       pairRegime: data.pairRegime ?? this.currentRegime, // Directive 11.4C-R2: Per-pair or fallback to global
-      pattern: data.pattern, // Directive 11.4C-R2: Pattern name
+      pattern: data.pattern, // Directive 11.4C-R2: Pattern/strategy name
     };
     
     recent.push(entry);
