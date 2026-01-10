@@ -45,6 +45,13 @@ VTS Modernization and Regime-Driven Simulation replaces legacy scoring pipelines
 
 Directive 11.4C.1 (Telemetry Purity Restoration) establishes VTS as the sole source of telemetry writes during passive learning. The FX5 Scanner now outputs raw data only via `getCurrentScanBatch()` without writing to telemetry (M70 compliance). VTS consumes pairs directly from FX5's current batch and writes calculated signal data to telemetry. A caller guard (`caller: 'vts'`) restricts telemetry write access. Stale in-memory telemetry is flushed on restart while preserving SQL history for rehydration. This ensures the Adaptive Ratio Manager operates only on real VTS-generated scores.
 
+Directive 11.4C.3 (Strategy & Regime Harmonization) unifies VTS and Signal Orchestrator onto a single canonical dictionary. Key changes include:
+- **Strategy Rosetta Stone**: `regime-strategy-map.ts` defines canonical snake_case strategy names (`vwap_pullback`, `sma_trend_ride`, `vwap_bounce`, `breakout`, `mean_reversion`, `range_trade`, `adaptive_flow`) with `REGIME_STRATEGY_MAP`, `STRATEGY_DISPLAY_NAMES`, and `LEGACY_TO_CANONICAL` mapping.
+- **Pattern Injection**: VTS detects patterns via `scanPatterns()` before creating trade records. HYBRID signals without patterns downgrade to QUANT; PATTERN signals without patterns are discarded.
+- **Regime Purity**: Only 5 canonical regimes exist (BULL_STABLE, BEAR_VOLATILE, LOW_VOL_CHOP, HIGH_VOL_IMPULSE, TRANSITION). Ghost regimes (BULL_VOLATILE, BEAR_STABLE, EXTREME_NOISE) are normalized to canonical equivalents.
+- **Type Canonization**: Signal types use uppercase canonical format (QUANT, PATTERN, HYBRID). MarketRegimeType and SignalType import from single canonical sources.
+- **Verification Tests**: 18 tests in `directive-11.4C.3-harmonization.test.ts` cover strategy naming, hybrid integrity, regime strictness, and type consistency.
+
 ML Calibration Service now uses Phase-10 metrics with a specific performance score formula and tracks edge delta for learning feedback.
 
 Math Core Harmonization centralizes and unifies the `FinalScore` calculation formula across Signal Orchestrator and Ready-to-Buy Refresh Service, using immutable scoring coefficients (Hybrid: 0.4, Confidence: 0.3, Regime: 0.2, Decay: 0.1).
