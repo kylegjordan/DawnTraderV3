@@ -315,7 +315,7 @@ async function generatePhase10Signal(
     createdAt: Date.now(),
     signalType, // Directive 11.4C.3: Canonical format 'QUANT' | 'PATTERN' | 'HYBRID'
     patternType, // Directive 11.4C.3: Attached pattern from detection (null if none)
-    patternStrength: detectedPattern?.strength ?? null, // Directive 11.4C.3: Explicit null for type safety
+    patternStrength: detectedPattern?.strength ?? undefined, // Directive 11.4C.3: Explicit undefined for type safety
     hybridScore,
     predictiveConfidence,
     // Phase-10 canonical fields (M50)

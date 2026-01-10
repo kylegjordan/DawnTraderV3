@@ -16,13 +16,9 @@
  */
 
 import type { SignalType, PatternType } from '../types';
+import type { MarketRegimeType } from '../types/market-regime.types';
 
-export type MarketRegimeType = 
-  | 'BULL_STABLE'
-  | 'BEAR_VOLATILE'
-  | 'LOW_VOL_CHOP'
-  | 'HIGH_VOL_IMPULSE'
-  | 'TRANSITION';
+export type { MarketRegimeType };
 
 export type CanonicalSignalType = 'QUANT' | 'PATTERN' | 'HYBRID';
 

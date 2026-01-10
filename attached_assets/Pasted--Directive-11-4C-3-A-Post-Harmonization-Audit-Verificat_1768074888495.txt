@@ -1,0 +1,138 @@
+⚙️ Directive 11.4C.3-A — Post-Harmonization Audit Verification
+
+Phase: 11.4C
+Objective:
+Confirm that all harmonization work from 11.4C.3 has been fully and correctly applied—no residual legacy names, ghost regimes, duplicate types, or invalid telemetry remain.
+This directive performs a comprehensive “Deep Clean” verification of both the repository and database before proceeding to Phase 12 (Predictive Learning).
+
+🧠 I. Implementation Tasks
+Task 1 — Codebase Residual Scan
+
+Target: /server/**
+
+Search the entire repository for forbidden legacy identifiers:
+
+MomentumPulse
+TrendFlow
+H2_Slingshot
+BULL_VOLATILE
+EXTREME_NOISE
+signalType = 'Hybrid'
+
+
+Allowable Exception:
+These strings may exist only inside LEGACY_TO_CANONICAL within /server/config/regime-strategy-map.ts.
+
+Success Criteria:
+✅ Zero matches found outside of the canonical mapping file.
+
+Task 2 — Database Integrity Audit
+
+Target Tables: telemetry, virtual_trades, session_metrics
+
+Execute the following SQL queries:
+
+-- 1️⃣ Hybrid signals missing patterns
+SELECT COUNT(*) AS invalid_hybrids
+FROM telemetry
+WHERE signal_type = 'HYBRID' AND pattern IS NULL;
+
+-- 2️⃣ Deprecated strategy names still present
+SELECT COUNT(*) AS legacy_adaptive
+FROM telemetry
+WHERE strategy = 'AdaptiveFlow';
+
+-- 3️⃣ Ghost regimes that should have been normalized
+SELECT COUNT(*) AS ghost_regimes
+FROM telemetry
+WHERE regime IN ('BULL_VOLATILE', 'EXTREME_NOISE');
+
+-- 4️⃣ ⚠ NEW Casing mismatch check (added per Gemini recommendation)
+SELECT COUNT(*) AS casing_errors
+FROM telemetry
+WHERE signal_type NOT IN ('QUANT', 'PATTERN', 'HYBRID');
+
+
+Expected Results:
+
+Check	Expected	Meaning
+invalid_hybrids	0	All HYBRID signals have patterns
+legacy_adaptive	0	No deprecated AdaptiveFlow entries
+ghost_regimes	0	Only canonical 5 regimes in use
+casing_errors	0	All SignalType values are uppercase
+
+If any count > 0, export offending records to
+/audit/reports/final_system_integrity_failed.csv for inspection.
+
+Task 3 — Type Definition Singularity
+
+Run:
+
+grep -R "type SignalType =" server/
+grep -R "type MarketRegimeType =" server/
+
+
+Criteria:
+✅ Exactly one definition each in /server/types.ts and zero local duplicates elsewhere.
+trade-model.ts and virtual-trade.interface.ts must import these definitions.
+
+Task 4 — Pattern Integrity Verification
+
+Extend scripts/test-regime-mapping-audit.ts to include:
+
+const hybrids = await telemetryRepo.find({ signalType: 'HYBRID' });
+const missing = hybrids.filter(t => !t.pattern);
+console.log(`HYBRID trades without pattern: ${missing.length}`);
+
+
+Expected Output:
+HYBRID trades without pattern: 0
+
+📊 II. Deliverable
+
+Output File: /audit/reports/final_system_integrity.md
+
+Template:
+
+# Final System Integrity Audit Report — Directive 11.4C.3-A
+
+**Date:** [YYYY-MM-DD]  
+**Auditor:** Replit Agent  
+**Scope:** DawnTrader Phase 11.4C Post-Harmonization Verification  
+
+| Check | Status | Notes |
+|:------|:--------|:------|
+| Forbidden Strings | ✅ | None found outside LEGACY_TO_CANONICAL |
+| Database Integrity | ✅ | All counts = 0 |
+| Casing Validation | ✅ | No mixed-case signal types |
+| Type Singularity | ✅ | One canonical definition each |
+| Pattern Integrity | ✅ | All HYBRID signals contain patterns |
+
+**Verdict:** PASS ✅  
+The system is fully clean and ready for Phase 12 (Predictive Learning).
+
+🧩 III. Governance & Execution
+
+Tests to Run:
+
+npx vitest run strategy_naming.test.ts
+npx vitest run hybrid_integrity.test.ts
+npx vitest run regime_strictness.test.ts
+node scripts/test-regime-mapping-audit.ts --deep
+
+
+Final Verification:
+
+Archive /audit/reports/final_system_integrity.md
+
+Push to /docs/audit/
+
+Notify architect and record result (✅ PASS or ❌ FAIL)
+
+🧠 IV. Expected Outcome
+Outcome	Description
+Repository Purity	No legacy names, ghost regimes, or mixed-case strings
+Telemetry Integrity	All records canonical and fully pattern-enriched
+Type Singularity	Single authoritative type definitions
+Casing Compliance	All SignalType values uppercase (QUANT/PATTERN/HYBRID)
+Predictive Readiness	System certified clean for Phase 12 integration

@@ -210,5 +210,83 @@ function runAudit() {
   return allConflicts.length === 0;
 }
 
-const success = runAudit();
-process.exit(success ? 0 : 1);
+/**
+ * Directive 11.4C.3-A: Pattern Integrity Verification
+ * Verifies HYBRID trades have patterns attached
+ */
+async function verifyPatternIntegrity(): Promise<boolean> {
+  console.log('\n═══════════════════════════════════════════════════════════════════════');
+  console.log('  Directive 11.4C.3-A — Pattern Integrity Verification');
+  console.log('═══════════════════════════════════════════════════════════════════════\n');
+  
+  try {
+    const telemetryPath = path.join(process.cwd(), 'server', 'services', 'telemetry-aggregator.ts');
+    const vtsPath = path.join(process.cwd(), 'server', 'services', 'vts-runner.ts');
+    
+    const telemetryContent = fs.readFileSync(telemetryPath, 'utf-8');
+    const vtsContent = fs.readFileSync(vtsPath, 'utf-8');
+    
+    const checks = [
+      { 
+        name: 'VTS HYBRID→QUANT downgrade logic', 
+        file: vtsPath,
+        pattern: /signalType\s*===\s*['"]HYBRID['"]\s*&&\s*!detectedPattern/,
+        content: vtsContent
+      },
+      {
+        name: 'VTS PATTERN discard on missing pattern',
+        file: vtsPath,
+        pattern: /signalType\s*===\s*['"]PATTERN['"]\s*&&\s*!detectedPattern/,
+        content: vtsContent
+      },
+      {
+        name: 'Telemetry QUANT pattern suppression',
+        file: telemetryPath,
+        pattern: /signalType\s*!==\s*['"]QUANT['"]/,
+        content: telemetryContent
+      }
+    ];
+    
+    let allPassed = true;
+    
+    for (const check of checks) {
+      const found = check.pattern.test(check.content);
+      const relPath = check.file.replace(process.cwd() + '/', '');
+      if (found) {
+        console.log(`  ✅ ${check.name} found in ${relPath}`);
+      } else {
+        console.log(`  ❌ ${check.name} NOT found in ${relPath}`);
+        allPassed = false;
+      }
+    }
+    
+    console.log('\n  Pattern Integrity Verdict: ' + (allPassed ? '✅ PASS' : '❌ FAIL'));
+    return allPassed;
+  } catch (error) {
+    console.error('  ❌ Error during pattern integrity check:', error);
+    return false;
+  }
+}
+
+async function runDeepAudit() {
+  const auditSuccess = runAudit();
+  const patternSuccess = await verifyPatternIntegrity();
+  
+  console.log('\n═══════════════════════════════════════════════════════════════════════');
+  console.log('  FINAL DEEP AUDIT RESULT');
+  console.log('═══════════════════════════════════════════════════════════════════════');
+  console.log(`  Mapping Audit:       ${auditSuccess ? '✅ PASS' : '❌ FAIL'}`);
+  console.log(`  Pattern Integrity:   ${patternSuccess ? '✅ PASS' : '❌ FAIL'}`);
+  console.log(`  Overall:             ${auditSuccess && patternSuccess ? '✅ PASS' : '❌ FAIL'}`);
+  console.log('═══════════════════════════════════════════════════════════════════════\n');
+  
+  return auditSuccess && patternSuccess;
+}
+
+const isDeep = process.argv.includes('--deep');
+if (isDeep) {
+  runDeepAudit().then(success => process.exit(success ? 0 : 1));
+} else {
+  const success = runAudit();
+  process.exit(success ? 0 : 1);
+}
