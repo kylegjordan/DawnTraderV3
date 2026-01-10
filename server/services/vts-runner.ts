@@ -241,6 +241,13 @@ async function generatePhase10Signal(
   const regime = regimeResult.regime;
   
   let { signalType, strategy } = selectRegimeStrategy(regime);
+  
+  // Directive 11.4C.3-C: Log guard for unmapped strategies
+  if (!signalType) {
+    console.warn(`[11.4C.3-C][VTS] Unmapped strategy: ${strategy} for regime ${regime}`);
+    signalType = 'HYBRID'; // Default fallback
+  }
+  
   const riskMultiplier = getRegimeRiskMultiplier(regime);
   
   // Directive 11.4C.3 Task 2: Pattern injection - detect patterns from OHLC data

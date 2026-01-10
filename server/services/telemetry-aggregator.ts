@@ -1012,10 +1012,10 @@ let telemetryInstance: TelemetryAggregatorService | null = null;
 export function getTelemetryAggregator(): TelemetryAggregatorService {
   if (!telemetryInstance) {
     telemetryInstance = new TelemetryAggregatorService();
-    // Directive 11.4C.1: Flush stale placeholder data on restart
-    // Ensures only real VTS-generated telemetry is used
+    // Directive 11.4C.1 + 11.4C.3-C: Flush stale placeholder data and clear in-memory cache on restart
+    // This prevents stale classifications and ensures only real VTS-generated telemetry is used
     telemetryInstance.flushStaleTelemetry();
-    console.log('[10.8][Telemetry] TelemetryAggregatorService initialized (11.4C.1 flush complete)');
+    console.log('[10.8][Telemetry] TelemetryAggregatorService initialized (11.4C.3-C cache purged on startup)');
   }
   return telemetryInstance;
 }

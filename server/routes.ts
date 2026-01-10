@@ -664,13 +664,22 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Directive 11.4C-R2: Top Batch API Endpoint (M66)
+  // Directive 11.4C.3-C: Normalize signalType at API level before UI serialization
   apiRouter.get('/pairs/ranked', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { getTelemetryAggregator } = await import('./services/telemetry-aggregator.js');
+      const { getTypeForStrategy } = await import('./config/regime-strategy-map.js');
       const telemetry = getTelemetryAggregator();
       
       const limit = parseInt(req.query.limit as string ?? '100');
-      const pairs = telemetry.getRankedPairs(limit);
+      const rawPairs = telemetry.getRankedPairs(limit);
+      
+      // Directive 11.4C.3-C: Enforce canonical signalType mapping before transmission
+      // This guarantees the UI always receives normalized classifications even if cached data is stale
+      const pairs = rawPairs.map(p => ({
+        ...p,
+        signalType: p.strategy && p.strategy !== '—' ? getTypeForStrategy(p.strategy) : p.signalType
+      }));
       
       res.json(pairs);
     } catch (error: any) {

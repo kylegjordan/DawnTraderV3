@@ -1,0 +1,122 @@
+⚙️ Directive 11.4C.3-C — Runtime SignalType Enforcement & Cache Purge
+Objective
+
+Ensure 100% runtime alignment between canonical mappings and all displayed data by:
+
+Forcing reclassification of all signals in memory before UI serialization.
+
+Purging stale telemetry caches.
+
+Correcting the hybrid promotion logic in the VTS runner.
+
+Implementation Tasks
+Task 1 — Remove Hybrid Promotion Override
+
+File: /server/services/vts-runner.ts
+
+Remove or replace this block:
+
+if (regime.isTrending && strategy.includes('breakout')) {
+  signalType = 'HYBRID';
+}
+
+
+Replace with:
+
+signalType = getTypeForStrategy(strategy);
+
+
+Add a log guard:
+
+if (!signalType) logger.warn(`[VTS] Unmapped strategy: ${strategy}`);
+
+Task 2 — Normalize SignalType at API Level
+
+File: /server/api/getRankedPairs.ts
+
+Before returning results to the UI, ensure canonical mapping:
+
+pairs = pairs.map(p => ({
+  ...p,
+  signalType: getTypeForStrategy(p.strategy)
+}));
+
+
+This guarantees the UI always receives normalized classifications even if cached data is stale.
+
+Task 3 — Purge In-Memory Telemetry Cache on Reset
+
+File: /server/services/telemetry-aggregator.ts
+
+Add at initialization:
+
+telemetryCache.clear();
+logger.info("[Telemetry] Cache cleared on startup to prevent stale classifications.");
+
+Task 4 — Add Test for End-to-End SignalType Validation
+
+Create /tests/runtime_signal_consistency.test.ts:
+
+import { getRankedPairs } from "@/server/api/getRankedPairs";
+import { getTypeForStrategy } from "@/server/config/regime-strategy-map";
+
+test("API returns canonical signalType for all pairs", async () => {
+  const pairs = await getRankedPairs();
+  pairs.forEach(p => {
+    expect(p.signalType).toBe(getTypeForStrategy(p.strategy));
+  });
+});
+
+Task 5 — Optional
+
+Add a debug overlay in Top Batch that can show source origin (cache vs. fresh).
+This will make it obvious when data is stale.
+
+<TableCell>{row.source === 'cache' ? 'Cached' : 'Fresh'}</TableCell>
+
+Expected Outcomes
+
+✅ 100% alignment between signalType and strategy
+✅ Hybrid signals only when their strategies belong to Hybrid group
+✅ No stale cached telemetry entries
+✅ UI refresh always reflects canonical classifications
+✅ Verified by new end-to-end test
+
+Deliverables
+File	Purpose
+/server/services/vts-runner.ts	Remove hybrid promotion logic
+/server/api/getRankedPairs.ts	Normalize signalType before UI serialization
+/server/services/telemetry-aggregator.ts	Clear in-memory cache on reset
+/tests/runtime_signal_consistency.test.ts	Validate canonical mappings at API level
+/client/src/components/trading/top-batch.tsx	(Optional) Add source indicator column
+Verification
+
+After implementation:
+
+Restart the workflow (which clears telemetry cache).
+
+Confirm the first scan rebuilds Top Batch from scratch.
+
+Check that:
+
+HYBRID signals only appear for canonical hybrid strategies (e.g., trend_flow, adaptive_flow).
+
+Quant and Pattern strategies display correct types.
+
+Timestamps reflect current cycle.
+
+Run:
+
+npx vitest run runtime_signal_consistency.test.ts
+
+Why This Will Fix It
+
+This approach addresses all three layers:
+
+Logical Layer: Removes incorrect hybrid promotion.
+
+Data Layer: Normalizes stale cache data.
+
+API Layer: Enforces canonical mapping before transmission.
+
+Together, these ensure that what you see in the Top Batch UI directly reflects the authoritative strategy-to-type relationships.
