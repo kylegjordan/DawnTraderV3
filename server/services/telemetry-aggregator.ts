@@ -55,9 +55,11 @@ export interface PairTelemetry {
   avgDecayedStrength: number;
   timeframe?: '1h' | '15m' | '5m';
   pairRegime?: MarketRegime; // Directive 11.4C-R2: Per-pair regime at scan time
-  pattern?: string; // Directive 11.4C-R2: Pattern name for hybrid signals
+  pattern?: string; // Directive 11.4C-R2: Pattern name for Hybrid/Pattern signals (empty for Quantitative)
   pool?: PoolType; // Directive 11.2 R1: Source pool for segmented tracking
   source?: TelemetrySource; // Directive 11.0E.2: simulation vs live segregation
+  signalType?: string; // Directive 11.4C-R2: Signal type from VTS (Hybrid/Quantitative/Pattern)
+  strategy?: string; // Directive 11.4C-R2: Strategy name from VTS
 }
 
 export interface TimeframeEfficiency {
@@ -131,7 +133,9 @@ export class TelemetryAggregatorService {
       pool?: PoolType; // Directive 11.2 R1: ideal or rotational
       source?: TelemetrySource; // Directive 11.0E.2: simulation or live
       pairRegime?: MarketRegime; // Directive 11.4C-R2: Per-pair regime
-      pattern?: string; // Directive 11.4C-R2: Pattern name for hybrid signals
+      pattern?: string; // Directive 11.4C-R2: Pattern name for Hybrid/Pattern signals (empty for Quantitative)
+      signalType?: string; // Directive 11.4C-R2: Signal type from VTS (Hybrid/Quantitative/Pattern)
+      strategy?: string; // Directive 11.4C-R2: Strategy name from VTS
     }
   ): void {
     const now = Date.now();
@@ -142,6 +146,10 @@ export class TelemetryAggregatorService {
     
     // Directive 11.4C-R2: VTS is the single source of truth for telemetry
     // All telemetry now comes from VTS with real calculated values (no defaults)
+    // Directive 11.4C-R2: Quantitative signals should NOT have a pattern (purely mathematical)
+    // Only Hybrid and Pattern signals should have pattern names
+    const shouldHavePattern = data.signalType !== 'Quantitative';
+    
     const entry: PairTelemetry = {
       symbol,
       finalScore: data.finalScore,
@@ -158,7 +166,9 @@ export class TelemetryAggregatorService {
       pool: data.pool ?? 'ideal', // Directive 11.2 R1: Track source pool
       source: data.source ?? 'simulation', // Directive 11.4C-R2: Default to simulation (VTS source)
       pairRegime: data.pairRegime ?? this.currentRegime, // Directive 11.4C-R2: Per-pair or fallback to global
-      pattern: data.pattern, // Directive 11.4C-R2: Pattern/strategy name
+      pattern: shouldHavePattern ? data.pattern : undefined, // Directive 11.4C-R2: No pattern for Quantitative
+      signalType: data.signalType, // Directive 11.4C-R2: Store signal type from VTS
+      strategy: data.strategy, // Directive 11.4C-R2: Store strategy name from VTS
     };
     
     recent.push(entry);
@@ -173,12 +183,13 @@ export class TelemetryAggregatorService {
     console.log(`[11.0E.2][Telemetry] ${symbol} (${entry.pool}/${entry.source}) recorded: finalScore=${data.finalScore.toFixed(2)}, samples=${recent.length}`);
     
     // Directive 11.1A + 11.2 R1: Persist to SQL with pool tracking
+    // Directive 11.4C-R2: Use per-pair regime (not global) for database persistence
     if (shouldPersist()) {
       const mode = (process.env.MODE as 'live' | 'paper') || 'paper';
       this.persistTelemetryAsync({
         symbol,
         mode,
-        regime: this.currentRegime,
+        regime: entry.pairRegime, // Use per-pair regime from VTS
         pool: data.pool ?? 'ideal', // Directive 11.2 R1
         finalScore: data.finalScore,
         hybridScore: data.hybridScore,
@@ -713,15 +724,23 @@ export class TelemetryAggregatorService {
     scoredPairs.sort((a, b) => b.score - a.score);
     
     // Map to ranked output with metadata
-    // Directive 11.4C-R2: Use per-pair regime and pattern from telemetry entry
+    // Directive 11.4C-R2: Use stored values from VTS instead of inferring
+    // Quantitative signals should NOT have a pattern (purely mathematical)
     const rankedPairs = scoredPairs.slice(0, limit).map((p, index) => {
+      // Use stored signalType/strategy from VTS, with inference as fallback for legacy data
+      const signalType = p.entry.signalType ?? this.inferSignalType(p.entry);
+      const strategy = p.entry.strategy ?? this.inferStrategy(p.entry);
+      
+      // Quantitative signals should never show pattern (they're purely mathematical)
+      const pattern = signalType === 'Quantitative' ? '—' : (p.entry.pattern ?? '—');
+      
       return {
         rank: index + 1,
         symbol: p.symbol,
         score: parseFloat(p.score.toFixed(4)),
-        signalType: this.inferSignalType(p.entry),
-        strategy: this.inferStrategy(p.entry),
-        pattern: p.entry.pattern ?? '—', // Directive 11.4C-R2: Use stored pattern or placeholder
+        signalType,
+        strategy,
+        pattern,
         regime: p.entry.pairRegime ?? this.currentRegime, // Directive 11.4C-R2: Use per-pair regime with fallback
         source: p.entry.source ?? 'simulation', // Directive 11.4C-R2: Default to simulation if not set
       };

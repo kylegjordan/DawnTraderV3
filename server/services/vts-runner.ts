@@ -421,7 +421,8 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       vtsService.updateMarketPrice(pair.symbol, priceData.price);
       
       // Directive 11.0E.2: Record telemetry with source='simulation' for segregation
-      // Directive 11.4C-R2: Include pairRegime and pattern for per-pair tracking
+      // Directive 11.4C-R2: Include pairRegime, signalType, and strategy for per-pair tracking
+      // Note: Quantitative signals should NOT have a pattern (purely mathematical)
       const telemetry = getTelemetryAggregator();
       telemetry.recordPairTelemetry(pair.symbol, {
         finalScore: tradeRecord.finalScore,
@@ -432,7 +433,9 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         pool: pair.pool,
         source: 'simulation', // M53: VTS-generated data marked as simulation
         pairRegime: tradeRecord.regime, // Directive 11.4C-R2: Per-pair regime
-        pattern: tradeRecord.strategy, // Directive 11.4C-R2: Strategy as pattern name
+        signalType: tradeRecord.signalType, // Directive 11.4C-R2: Hybrid/Quantitative/Pattern
+        strategy: tradeRecord.strategy, // Directive 11.4C-R2: Strategy name from regime map
+        pattern: tradeRecord.signalType !== 'Quantitative' ? tradeRecord.strategy : undefined, // Only for Hybrid/Pattern
       });
       
       phase10SessionTrades.push(tradeRecord);
