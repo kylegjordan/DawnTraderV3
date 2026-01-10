@@ -277,6 +277,8 @@ export class AdaptiveScanManager {
   /**
    * Record scan result for a pair
    * Directive 11.2 R1: Now includes pool tracking for segmented performance
+   * Directive 11.4C-R2: VTS is the single source of truth for telemetry
+   * Scanner only tracks pass/fail for failure cooldown - no telemetry recording
    */
   recordScanResult(symbol: string, success: boolean, data?: {
     finalScore?: number;
@@ -288,18 +290,10 @@ export class AdaptiveScanManager {
     failureReason?: string;
     pool?: PoolType; // Directive 11.2 R1: Track source pool
   }): void {
-    if (success && data) {
+    if (success) {
+      // Directive 11.4C-R2: Only track success for failure cooldown removal
+      // Do NOT record telemetry here - VTS is the single source of truth
       this.failureTracker.recordSuccess(symbol);
-      this.telemetry.recordPairTelemetry(symbol, {
-        finalScore: data.finalScore ?? 0,
-        hybridScore: data.hybridScore,
-        regimeWeight: data.regimeWeight,
-        predictiveConfidence: data.predictiveConfidence,
-        success: true,
-        decayedStrength: data.decayedStrength,
-        timeframe: data.timeframe,
-        pool: data.pool ?? this.inferPoolFromLastBatch(symbol), // Directive 11.2 R1
-      });
     } else {
       this.failureTracker.recordFailure(symbol, data?.failureReason);
     }
