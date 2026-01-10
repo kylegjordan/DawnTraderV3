@@ -1,0 +1,144 @@
+⚙️ Directive 11.4C.2 — Regime & Strategy Mapping Integrity Audit
+Objective
+
+Perform a full audit of every file, class, and function that:
+
+defines, calls, or references signal type, regime, strategy, or pattern mappings;
+
+consumes or displays those values in telemetry, ranking, or UI tables; and
+
+depends on those values for scoring, simulation, or analytics.
+
+This audit precedes any implementation changes. No renaming or mapping alterations are to be applied until the audit is complete and verified.
+
+Task 1 — Repository-Wide Mapping Discovery
+
+Files / Targets to Inspect
+
+/server/services/vts-runner.ts
+
+/server/services/signal-orchestrator.ts
+
+/server/core/regime-analyzer.ts
+
+/server/core/strategy-map.ts
+
+/server/core/pattern-recognition.ts
+
+/server/services/telemetry-aggregator.ts
+
+/server/types/telemetry.interface.ts
+
+/server/services/adaptive-scan-manager.ts
+
+/server/api/routes.ts
+
+/client/src/components/analytics/TopBatchTable.vue (or React equivalent)
+
+/client/src/components/shared/StrategyTable.*
+
+Required Output
+Produce a mapping inventory file named
+/audit/reports/strategy_regime_mapping_audit.json
+with the following structure:
+
+[
+  {
+    "file": "server/services/vts-runner.ts",
+    "definitions": [
+      {"type": "SignalTypeMap", "keys": ["HYBRID","QUANT","PATTERN"]},
+      {"type": "RegimeMap", "regimes": ["BULL_STABLE","BEAR_VOLATILE","LOW_VOL_CHOP","HIGH_VOL_IMPULSE","TRANSITION"]}
+    ],
+    "functionsUsingMappings": ["calculatePairRegime","assignStrategyByRegime"],
+    "outputsTo": ["telemetryAggregator.recordSample()"]
+  }
+]
+
+
+Each entry must list:
+
+all signal types, regimes, strategies, and patterns referenced;
+
+the functions or constants defining or using them;
+
+and all downstream consumers (e.g., telemetry, analytics tables).
+
+Task 2 — Cross-Module Linkage Diagram
+
+Generate a short markdown report (/audit/reports/mapping_linkage.md) showing:
+
+which module produces each field (signalType, strategy, pattern, regime);
+
+which module consumes it;
+
+whether that linkage is direct import, API call, or telemetry read.
+
+Use simple arrows, for example:
+
+fx5-scanner ──► vts-runner ──► telemetry-aggregator ──► topBatchTable
+
+Task 3 — Name Normalization Plan
+
+In the same report, Replit must:
+
+list all Quantitative strategy names currently in use;
+
+show their corresponding legacy names (e.g., ImpulseChaser → VWAPBounce);
+
+propose a renaming map to restore legacy titles system-wide.
+
+Example:
+
+{
+  "current": "ImpulseChaser",
+  "legacy": "VWAPBounce",
+  "filesAffected": [
+    "vts-runner.ts:231",
+    "signal-orchestrator.ts:178",
+    "telemetry-aggregator.ts:94",
+    "TopBatchTable.vue:62"
+  ]
+}
+
+Task 4 — Regime Metric Verification
+
+For each regime detected in calculatePairRegime() and regime-analyzer.ts, Replit must:
+
+show the exact thresholds currently implemented (volatility, momentum, ADX, etc.);
+
+confirm whether all five regimes exist;
+
+identify any missing or duplicated metric definitions.
+
+Output this as /audit/reports/regime_metric_verification.md.
+
+Task 5 — Audit Validation Tests
+
+Add a temporary script scripts/test-regime-mapping-audit.ts that:
+
+scans all .ts files under /server for the regexes
+SignalType\., strategyMap, regimeMap, patternMap;
+
+counts and lists occurrences per file;
+
+verifies that no file defines its own conflicting local copy.
+
+Task 6 — Implementation Summary Requirements
+
+When Replit submits the audit results, its summary must include:
+
+Total files scanned and total mapping definitions found.
+
+Locations of mismatched or duplicated definitions.
+
+The complete legacy-to-current strategy name map.
+
+Confirmation that both VTS Runner and Signal Orchestrator use identical regime logic (or explicit diff report if not).
+
+Expected Outcome
+
+After this directive:
+
+We will have a definitive picture of all mapping dependencies.
+
+We can safely issue Directive 11.4C.3 (Mapping Synchronization & Renaming) to unify the orchestrator and VTS mapping logic, restore legacy quant strategy names, and re-enable proper pattern population.

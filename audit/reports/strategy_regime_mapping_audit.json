@@ -1,0 +1,187 @@
+[
+  {
+    "file": "server/config/regime-strategy-map.ts",
+    "definitions": [
+      {
+        "type": "SignalTypeMap",
+        "keys": ["Hybrid", "Pattern", "Quantitative"]
+      },
+      {
+        "type": "RegimeMap",
+        "regimes": ["BULL_STABLE", "BEAR_VOLATILE", "LOW_VOL_CHOP", "HIGH_VOL_IMPULSE", "TRANSITION"]
+      },
+      {
+        "type": "StrategyMap",
+        "strategies": {
+          "BULL_STABLE": ["MomentumPulse", "TrendFlow", "BreakoutConfirm"],
+          "BEAR_VOLATILE": ["BreakdownSniper", "ReverseImpulse", "DefensiveHedge"],
+          "LOW_VOL_CHOP": ["RangeTrade", "SupportBounce", "TriangleBreakout", "DoubleBottom"],
+          "HIGH_VOL_IMPULSE": ["H2_Slingshot", "ImpulseChaser", "VolatilityEdge"],
+          "TRANSITION": ["MeanReversion", "PivotShift", "AdaptiveFlow"]
+        }
+      }
+    ],
+    "functionsUsingMappings": [
+      "regimeStrategyMap",
+      "getStrategyForRegime",
+      "selectRandomStrategy",
+      "getAllStrategiesForSignalType",
+      "getRegimeRiskMultiplier"
+    ],
+    "outputsTo": ["vts-runner.ts", "telemetry-aggregator.ts"]
+  },
+  {
+    "file": "server/core/metrics/market-regime.ts",
+    "definitions": [
+      {
+        "type": "RegimeCalculator",
+        "regimes": ["BULL_STABLE", "BEAR_VOLATILE", "LOW_VOL_CHOP", "HIGH_VOL_IMPULSE", "TRANSITION"]
+      }
+    ],
+    "functionsUsingMappings": [
+      "calculatePairRegime",
+      "computeVolatility",
+      "computeMomentum",
+      "computeADX",
+      "getRegimeWeight",
+      "isHighConfidenceRegime"
+    ],
+    "outputsTo": ["vts-runner.ts", "signal-orchestrator.ts"]
+  },
+  {
+    "file": "server/types/market-regime.types.ts",
+    "definitions": [
+      {
+        "type": "MarketRegimeType",
+        "regimes": ["BULL_STABLE", "BEAR_VOLATILE", "LOW_VOL_CHOP", "HIGH_VOL_IMPULSE", "TRANSITION"]
+      },
+      {
+        "type": "REGIME_WEIGHTS",
+        "weights": {
+          "BULL_STABLE": 0.85,
+          "BEAR_VOLATILE": 0.40,
+          "LOW_VOL_CHOP": 0.55,
+          "HIGH_VOL_IMPULSE": 0.70,
+          "TRANSITION": 0.50
+        }
+      }
+    ],
+    "functionsUsingMappings": [],
+    "outputsTo": ["market-regime.ts", "vts-runner.ts", "telemetry-aggregator.ts"]
+  },
+  {
+    "file": "server/types.ts",
+    "definitions": [
+      {
+        "type": "SignalType",
+        "keys": ["QUANT", "PATTERN", "HYBRID"]
+      },
+      {
+        "type": "PatternType",
+        "patterns": ["PINBAR", "ENGULFING", "INSIDE_BAR", "MORNING_STAR", "THREE_SOLDIERS"]
+      }
+    ],
+    "functionsUsingMappings": [],
+    "outputsTo": ["pattern-recognizer.ts", "hybrid-integration.ts", "vts-runner.ts"]
+  },
+  {
+    "file": "server/services/vts-runner.ts",
+    "definitions": [
+      {
+        "type": "VTSConfig.strategies",
+        "strategies": ["MomentumPulse", "TrendFlow", "BreakoutConfirm", "RangeTrade", "SupportBounce", "H2_Slingshot", "MeanReversion", "ImpulseChaser"]
+      }
+    ],
+    "functionsUsingMappings": [
+      "selectRegimeStrategy",
+      "calculatePairRegime",
+      "getRegimeWeight",
+      "getRegimeRiskMultiplier"
+    ],
+    "imports": [
+      "regimeStrategyMap from regime-strategy-map.ts",
+      "calculatePairRegime from market-regime.ts",
+      "MarketRegimeType from market-regime.types.ts",
+      "SignalType from virtual-trade.interface.ts"
+    ],
+    "outputsTo": ["telemetry-aggregator.recordPairTelemetry()"]
+  },
+  {
+    "file": "server/services/signal-orchestrator.ts",
+    "definitions": [
+      {
+        "type": "enabledStrategies",
+        "strategies": ["vwap_pullback", "abcd_long", "sma_trend_ride", "breakout", "mean_reversion", "range_trading", "vwap_bounce", "liquidity_trap", "dhma"]
+      }
+    ],
+    "functionsUsingMappings": [
+      "evaluateMarket",
+      "detectBreakout",
+      "detectMeanReversion"
+    ],
+    "imports": [
+      "StrategyType from types",
+      "StrategyEngine from strategy-engine.ts"
+    ],
+    "outputsTo": ["SQE", "ready-to-buy-queue", "trade-executor"]
+  },
+  {
+    "file": "server/services/telemetry-aggregator.ts",
+    "definitions": [
+      {
+        "type": "inferred_regimes",
+        "regimes": ["BULL_STABLE", "BULL_VOLATILE", "BEAR_STABLE", "BEAR_VOLATILE", "LOW_VOL_CHOP", "EXTREME_NOISE"]
+      },
+      {
+        "type": "inferred_strategies",
+        "strategies": ["TrendFlow", "MomentumPulse", "BreakoutCapture", "MeanReversion", "ExtremeNoisePause", "AdaptiveFlow"]
+      }
+    ],
+    "functionsUsingMappings": [
+      "inferSignalType",
+      "inferStrategy",
+      "getRankedPairs"
+    ],
+    "outputsTo": ["API /api/pairs/ranked", "TopBatch component"]
+  },
+  {
+    "file": "server/services/pattern-recognizer.ts",
+    "definitions": [
+      {
+        "type": "PatternDetection",
+        "patterns": ["PINBAR", "ENGULFING", "INSIDE_BAR", "THREE_SOLDIERS", "MORNING_STAR"]
+      }
+    ],
+    "functionsUsingMappings": [
+      "detectPinbar",
+      "detectEngulfing",
+      "detectInsideBar",
+      "detectThreeSoldiers",
+      "detectMorningStar",
+      "detectPatterns"
+    ],
+    "outputsTo": ["signal-orchestrator.ts", "hybrid-integration.ts"]
+  },
+  {
+    "file": "client/src/components/trading/top-batch.tsx",
+    "definitions": [
+      {
+        "type": "RankedPair",
+        "fields": ["signalType", "strategy", "pattern", "regime"]
+      },
+      {
+        "type": "SignalTypeIcons",
+        "keys": ["Hybrid", "Quantitative", "Pattern"]
+      },
+      {
+        "type": "RegimeBadgeClass",
+        "regimes": ["BULL_STABLE", "BULL_VOLATILE", "BEAR_STABLE", "BEAR_VOLATILE", "LOW_VOL_CHOP", "EXTREME_NOISE"]
+      }
+    ],
+    "functionsUsingMappings": [
+      "getSignalTypeIcon",
+      "getRegimeBadgeClass"
+    ],
+    "consumes": ["API /api/pairs/ranked from telemetry-aggregator.ts"]
+  }
+]
