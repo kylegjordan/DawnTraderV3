@@ -63,6 +63,21 @@ interface ScanResult {
   activePoolCount: number;
 }
 
+/**
+ * Directive 11.4C.1: Raw scan batch for VTS consumption
+ * Contains raw data without telemetry scores
+ */
+export interface ScanBatchPair {
+  symbol: string;
+  pool: 'ideal' | 'rotational';
+  price: number;
+  volume24h: number;
+  dailyRange: number;
+  spread?: number;
+  liquidity?: number;
+  volatility?: number;
+}
+
 export class Fx5ScannerService {
   // Phase 8.8.7: FilteredPairsService DEPRECATED - removed unused member
   private krakenService: KrakenService;
@@ -72,6 +87,12 @@ export class Fx5ScannerService {
   private liveCycleCount: number = 0;  // REB 2.8.15: Track cycle number for diagnostics
   private isScanning = false; // Directive 8.8.4-A3.R7: Prevent concurrent scans
   private clockTickHandler: ((tick: ClockTick) => void) | null = null;
+  
+  // Directive 11.4C.1: Store current scan batch for VTS consumption
+  private currentBatch: Map<'paper' | 'live', ScanBatchPair[]> = new Map([
+    ['paper', []],
+    ['live', []]
+  ]);
 
   constructor() {
     // Phase 8.8.7: FilteredPairsService DEPRECATED - removed
@@ -387,21 +408,10 @@ export class Fx5ScannerService {
         volumeStats
       }).catch(() => {});
       
-      // Directive 11.4C-R2: FX5 seeds minimal telemetry for survivors so VTS can find them
-      // VTS is the single source of truth for signal data (signalType, strategy, pattern)
-      // FX5 only records pool membership to enable VTS pair selection
-      if (SCANNER_PARAMS.ADAPTIVE_ENABLED) {
-        const telemetry = getTelemetryAggregator();
-        for (const survivor of metricFilteredSurvivors) {
-          // Seed minimal telemetry entry - VTS will update with real signal data
-          telemetry.recordPairTelemetry(survivor.symbol, {
-            finalScore: 0.5, // Neutral baseline - VTS will update with actual score
-            pool: survivor.poolType || 'ideal',
-            source: 'simulation',
-          });
-        }
-        console.log(`[FX5][11.4C-R2] ${metricFilteredSurvivors.length} survivors seeded to telemetry for VTS selection`);
-      }
+      // Directive 11.4C.1: FX5 does NOT write to telemetry (M70)
+      // VTS is the sole source of telemetry writes - FX5 outputs raw data only
+      // VTS gets pairs directly from FX5's current scan batch via getCurrentScanBatch()
+      this.updateCurrentBatch(mode, metricFilteredSurvivors);
       
       // REB 2.8.4: Generate unique scan cycle ID (survives server restarts)
       const scanCycleId = `cycle_${mode}_${nanoid(12)}`;
@@ -540,6 +550,43 @@ export class Fx5ScannerService {
    */
   getIsRunning(): boolean {
     return this.isRunning;
+  }
+
+  /**
+   * Directive 11.4C.1: Get current scan batch for VTS consumption
+   * Returns raw pair data without telemetry scores
+   * VTS uses this directly instead of querying telemetry
+   */
+  getCurrentScanBatch(mode: 'paper' | 'live' = 'paper'): ScanBatchPair[] {
+    return this.currentBatch.get(mode) || [];
+  }
+
+  /**
+   * Directive 11.4C.1: Update current batch after scan
+   * Called internally after each scan cycle
+   */
+  private updateCurrentBatch(mode: 'paper' | 'live', survivors: Array<{
+    symbol: string;
+    poolType?: 'ideal' | 'rotational';
+    currentPrice: number;
+    volume24h: number;
+    dailyRange: number;
+    spread?: number;
+    liquidity?: number;
+    volatility?: number;
+  }>): void {
+    const batch: ScanBatchPair[] = survivors.map(s => ({
+      symbol: s.symbol,
+      pool: s.poolType || 'ideal',
+      price: s.currentPrice,
+      volume24h: s.volume24h,
+      dailyRange: s.dailyRange,
+      spread: s.spread,
+      liquidity: s.liquidity,
+      volatility: s.volatility,
+    }));
+    this.currentBatch.set(mode, batch);
+    console.log(`[FX5][11.4C.1] Updated batch for ${mode}: ${batch.length} pairs (raw data only, no telemetry writes)`);
   }
 }
 

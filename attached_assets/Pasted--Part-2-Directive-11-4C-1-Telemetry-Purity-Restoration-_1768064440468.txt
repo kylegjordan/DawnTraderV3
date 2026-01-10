@@ -1,0 +1,131 @@
+⚙️ Part 2 — Directive 11.4C.1
+
+Telemetry Purity Restoration & Scanning Data Flow Correction
+
+🧩 Directive 11.4C.1 — Telemetry Purity Restoration
+
+Phase: 11.4C.1
+Objective:
+Eliminate default or placeholder telemetry writes from the FX5 Scanner, ensuring only true VTS-generated signals populate telemetry and the Ideal Pool. Restore a single-source-of-truth architecture for all scoring and pool population.
+
+Task 1 — Remove Telemetry Seeding from FX5 Scanner
+
+Files:
+/server/services/fx5-scanner.ts
+/server/services/adaptive-scan-manager.ts
+/server/services/market-scanner.ts
+
+Actions:
+
+Delete or comment out all calls to:
+
+telemetryAggregator.recordSample(...)
+
+
+within FX5 and adaptive scan logic.
+
+FX5 must output raw data only:
+
+{
+  symbol, ohlc, volume, spread, liquidity, volatility
+}
+
+
+No placeholder values (finalScore = 0.5, etc.) are to be written to telemetry.
+
+Task 2 — Redirect VTS Input Source
+
+File: /server/services/vts-runner.ts
+
+Actions:
+
+Replace:
+
+const pairs = await telemetry.getTopPairsWithPool('ideal');
+
+
+with:
+
+const pairs = await fx5Scanner.getCurrentScanBatch();
+
+
+If telemetry is empty (cold start):
+
+Run a single FX5 scan (rotationalOnly = true)
+
+Feed directly into the VTS Runner as input for first-cycle signals.
+
+Task 3 — Restrict Telemetry Write Access
+
+Files:
+/server/services/vts-service.ts
+/server/services/telemetry-aggregator.ts
+
+Actions:
+
+Telemetry may only accept writes when:
+
+source === 'simulation' && writer === 'VTS'
+
+
+Any write attempts from FX5, MarketScanner, or non-VTS contexts are rejected or logged as warnings.
+
+Task 4 — Flush Placeholder Data on Deployment
+
+File: /server/services/telemetry-aggregator.ts
+
+Actions:
+
+On system restart, purge any entries where:
+
+finalScore === 0.5 && hybridScore === 0
+
+
+This ensures all telemetry data post-deployment represents real signals.
+
+Task 5 — Refactor Adaptive Ratio Manager
+
+File: /server/services/adaptive-scan-manager.ts
+
+Actions:
+
+Continue using dynamic Ideal / Rotational ratio logic (≈ 60 / 40 baseline).
+
+Ensure ratio decisions use only telemetry entries with performanceScore != 0.5.
+
+Task 6 — Verification & Governance Tests
+ID	Description	Expected
+M70	FX5 does not write to telemetry	Pass
+M71	All telemetry entries sourced from VTS	Pass
+M72	No default (0.5) scores in Top Batch after 2 cycles	Pass
+M73	Per-pair regimes vary correctly (no global regime overwrite)	Pass
+M74	Ideal Pool builds exclusively from real signals	Pass
+Task 7 — Implementation Summary Requirements
+
+Replit must include in its final log:
+
+Files modified/created, with line counts of changes.
+
+Removed functions, specifically telemetry writes from FX5 and MarketScanner.
+
+Search results showing no remaining recordSample calls outside VTS.
+
+Sample logs demonstrating:
+
+FX5 scan output (raw data only)
+
+VTS trade creation with real finalScore, signalType, and strategy
+
+Telemetry entries reflecting only VTS sources
+
+Expected Outcome
+
+FX5 Scanner = Raw data discovery only.
+
+VTS Runner = Sole generator of signal intelligence.
+
+Telemetry = Historical record of true signals only.
+
+Ideal Pool = Ranked purely by real performance.
+
+No placeholder 0.35/0.5 values appear in the Top Batch table.

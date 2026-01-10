@@ -33,6 +33,7 @@ import { priceCache, type CachedPrice, type CacheBucketType } from './price-cach
 import { systemConfigService } from './system-config.js';
 import { activeFilterPool } from './active-filter-pool.js';
 import { getTelemetryAggregator } from './telemetry-aggregator.js';
+import { fx5Scanner, type ScanBatchPair } from './fx5-scanner.js';
 import { KrakenService } from './kraken.js';
 import { computeStrategyWeights, getWeightSync } from '../utils/strategyWeights.js';
 import { computeExposureBias, getExposureMultiplierSync } from '../utils/strategyBias.js';
@@ -313,29 +314,36 @@ async function generatePhase10Signal(
   return { signal, tradeRecord };
 }
 
+/**
+ * Directive 11.4C.1: Get pairs directly from FX5 Scanner (not telemetry)
+ * VTS is the sole source of telemetry writes - it gets raw pairs from FX5 and generates signal data
+ */
 async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal' | 'rotational' }>> {
   try {
-    const telemetry = getTelemetryAggregator();
-    const topPairs = telemetry.getTopPairsWithPool(vtsConfig.pairsPerCycle);
+    // Directive 11.4C.1: Get pairs directly from FX5 scanner's current batch
+    const scanBatch = fx5Scanner.getCurrentScanBatch('paper');
     
-    if (topPairs.length >= 10) {
-      return topPairs.map(p => ({ symbol: p.symbol, pool: p.pool }));
+    if (scanBatch.length >= 10) {
+      console.log(`[11.4C.1][VTS] Using FX5 scan batch: ${scanBatch.length} pairs (raw data, no telemetry query)`);
+      return scanBatch.map(p => ({ symbol: p.symbol, pool: p.pool }));
     }
     
-    console.log('[11.0E.1][VTS] Ideal pool too small, falling back to FX5 Active Filter Pool');
+    // Cold start fallback: If FX5 hasn't scanned yet, check active filter pool
+    console.log('[11.4C.1][VTS] Scan batch too small, checking Active Filter Pool...');
     const fx5Survivors = activeFilterPool.getActivePool('paper');
     
-    if (!fx5Survivors || fx5Survivors.length === 0) {
-      console.log('[11.0E.1][VTS] No FX5 survivors available');
-      return [];
+    if (fx5Survivors && fx5Survivors.length >= 10) {
+      console.log(`[11.4C.1][VTS] Using Active Filter Pool: ${fx5Survivors.length} pairs`);
+      return fx5Survivors
+        .filter(p => (p.price ?? 0) >= vtsConfig.minPrice && (p.volume24h ?? 0) >= vtsConfig.minVolume24h)
+        .slice(0, vtsConfig.pairsPerCycle)
+        .map(p => ({ symbol: p.symbol, pool: 'rotational' as const }));
     }
     
-    return fx5Survivors
-      .filter(p => (p.price ?? 0) >= vtsConfig.minPrice && (p.volume24h ?? 0) >= vtsConfig.minVolume24h)
-      .slice(0, vtsConfig.pairsPerCycle)
-      .map(p => ({ symbol: p.symbol, pool: 'rotational' as const }));
+    console.log('[11.4C.1][VTS] No pairs available (cold start) - waiting for FX5 scan');
+    return [];
   } catch (error) {
-    console.warn('[11.0E.1][VTS] Failed to get Ideal Pool pairs:', error);
+    console.warn('[11.4C.1][VTS] Failed to get pairs:', error);
     return [];
   }
 }
