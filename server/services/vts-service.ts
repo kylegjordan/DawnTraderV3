@@ -30,6 +30,11 @@ import { SYSTEM_GUARDS } from '../config/system-guards.js';
 import { calculateFriction } from '../utils/analysis-utils.js';
 import { MLCalibrationService, setGetRecentTradesFn } from './ml-calibration';
 
+/**
+ * Phase-10 VirtualSignal - Directive 11.0E.2
+ * All legacy CWQI/NGC/DI/GSI fields removed
+ * M50: Full Phase-10 field parity with VirtualTrade
+ */
 export interface VirtualSignal {
   id: string;
   symbol: string;
@@ -40,16 +45,33 @@ export interface VirtualSignal {
   predictedProfit: number;
   strategy: string;
   createdAt: number;
-  signalType?: 'QUANT' | 'PATTERN' | 'HYBRID';
+  signalType: 'Quantitative' | 'Pattern' | 'Hybrid';
   patternType?: string;
   patternStrength?: number;
-  predictiveConfidence?: number;
-  hybridScore?: number;
+  
+  // Phase-10 Canonical Metrics (M50 compliant)
+  finalScore: number;
+  hybridScore: number;
+  predictiveConfidence: number;
+  regimeWeight: number;
+  decayPenalty: number;
+  expectedEdge: number;
+  frictionCost: number; // M50: Added for schema parity
+  regime: string;
+  pool: 'ideal' | 'rotational';
+  source: 'simulation' | 'live'; // M50: Added for source tracking
+  
+  // Legacy fields preserved for backward compatibility during transition
   hybridStrategy?: string;
-  effectivePatternStrength?: number;  // Directive 10.5: Decayed pattern strength
-  decayAge?: number;                   // Directive 10.5: Age in candle units
+  effectivePatternStrength?: number;
+  decayAge?: number;
 }
 
+/**
+ * Phase-10 VirtualTrade - Directive 11.0E.2
+ * Complete Phase-10 metrics persisted for ML calibration
+ * Schema Version: 1.6.7
+ */
 export interface VirtualTrade {
   id: string;
   signal: VirtualSignal;
@@ -62,6 +84,23 @@ export interface VirtualTrade {
   netProfit?: number;
   fees?: number;
   calibrated: boolean;
+  
+  // Phase-10 Denormalized Fields (for efficient querying)
+  finalScore: number;
+  hybridScore: number;
+  predictiveConfidence: number;
+  regimeWeight: number;
+  decayPenalty: number;
+  expectedEdge: number;
+  frictionCost: number;
+  signalType: string;
+  strategy: string;
+  regime: string;
+  pool: 'ideal' | 'rotational';
+  
+  // Metadata
+  source: 'simulation' | 'live';
+  schemaVersion: '1.6.7';
 }
 
 export interface MarketOutcome {
@@ -85,13 +124,17 @@ interface VTSStats {
 
 /**
  * M3B: Adaptive learning parameters exposed for real-time coupling
+ * Directive 11.0E.2: Updated with Phase-10 metrics
  */
 export interface VTSLearningParams {
-  learningRate: number;      // Adaptive learning rate based on performance
-  gsi: number;               // Global Stability Index (0-1)
-  relevance: number;         // Computed relevance for decay replacement
-  volatilityIndex: number;   // Rolling volatility measure
+  learningRate: number;
+  relevance: number;
+  volatilityIndex: number;
   lastAdaptiveUpdate: string;
+  // Phase-10 rolling averages
+  avgFinalScore: number;
+  avgExpectedEdge: number;
+  avgRealizedPnL: number;
 }
 
 const TRADE_DURATION = 3 * 60 * 60 * 1000;
@@ -100,13 +143,17 @@ const CALIBRATION_TRIGGER_INTERVAL = 10; // Directive 10.6: Trigger calibration 
 
 /**
  * M5B: Session metrics for autonomous simulation tracking
+ * Directive 11.0E.2: Phase-10 metrics replace legacy CWQI/NGC
  */
 interface SessionMetrics {
   simulatedTradesThisSession: number;
   sessionStartTime: number | null;
-  averageCWQI: number;
-  averageNGC: number;
-  averageReturn: number;
+  // Phase-10 rolling averages (M51: Legacy CWQI/NGC removed)
+  avgFinalScore: number;
+  avgExpectedEdge: number;
+  avgRealizedPnL: number;
+  totalExpectedEdge: number;
+  totalRealizedPnL: number;
 }
 
 export class VTSService extends EventEmitter {
@@ -118,13 +165,15 @@ export class VTSService extends EventEmitter {
   private updateInterval: NodeJS.Timeout | null = null;
   private lastPrices: Map<string, { high: number; low: number; close: number }> = new Map();
   
-  // M5B: Session tracking for autonomous simulation
+  // M5B: Session tracking for autonomous simulation (Phase-10)
   private sessionMetrics: SessionMetrics = {
     simulatedTradesThisSession: 0,
     sessionStartTime: null,
-    averageCWQI: 0,
-    averageNGC: 0,
-    averageReturn: 0
+    avgFinalScore: 0,
+    avgExpectedEdge: 0,
+    avgRealizedPnL: 0,
+    totalExpectedEdge: 0,
+    totalRealizedPnL: 0
   };
 
   // Directive 10.6: Calibration trigger counter
@@ -168,23 +217,62 @@ export class VTSService extends EventEmitter {
     console.log('[L6][VTS] Stopped');
   }
 
+  /**
+   * Directive 11.0E.2: Create virtual trade with full Phase-10 metrics
+   */
   async createVirtualTrade(signal: VirtualSignal): Promise<VirtualTrade> {
     const trade: VirtualTrade = {
       id: `vt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       signal,
       status: 'open',
       entryTime: Date.now(),
-      calibrated: false
+      calibrated: false,
+      
+      // Phase-10 denormalized fields (M50: Complete Phase-10 persistence)
+      finalScore: signal.finalScore ?? 0,
+      hybridScore: signal.hybridScore ?? 0,
+      predictiveConfidence: signal.predictiveConfidence ?? 0,
+      regimeWeight: signal.regimeWeight ?? 0,
+      decayPenalty: signal.decayPenalty ?? 0,
+      expectedEdge: signal.expectedEdge ?? 0,
+      frictionCost: 0, // Computed at close time
+      signalType: signal.signalType ?? 'Hybrid',
+      strategy: signal.strategy ?? 'unknown',
+      regime: signal.regime ?? 'TRANSITION',
+      pool: signal.pool ?? 'rotational',
+      
+      // Metadata (M50)
+      source: 'simulation',
+      schemaVersion: '1.6.7'
     };
 
     this.virtualTrades.set(trade.id, trade);
     this.emit('trade_opened', trade);
     
-    // M5B: Track session metrics
+    // M5B: Track session metrics with Phase-10 aggregates
     this.sessionMetrics.simulatedTradesThisSession++;
+    this.sessionMetrics.totalExpectedEdge += trade.expectedEdge;
+    this.updateRollingAverages();
     
-    console.log(`[M5B][VTS] Opened virtual trade: ${signal.symbol} @ ${signal.entryPrice.toFixed(4)}`);
+    console.log(`[11.0E.2][VTS] Opened virtual trade: ${signal.symbol} @ ${signal.entryPrice.toFixed(4)} finalScore=${trade.finalScore.toFixed(3)} regime=${trade.regime}`);
     return trade;
+  }
+  
+  /**
+   * Directive 11.0E.2: Update rolling averages for Phase-10 metrics
+   */
+  private updateRollingAverages(): void {
+    const count = this.sessionMetrics.simulatedTradesThisSession;
+    if (count === 0) return;
+    
+    this.sessionMetrics.avgExpectedEdge = this.sessionMetrics.totalExpectedEdge / count;
+    this.sessionMetrics.avgRealizedPnL = this.sessionMetrics.totalRealizedPnL / count;
+    
+    // Calculate avgFinalScore from closed trades
+    if (this.closedTrades.length > 0) {
+      const totalFinalScore = this.closedTrades.reduce((sum, t) => sum + t.finalScore, 0);
+      this.sessionMetrics.avgFinalScore = totalFinalScore / this.closedTrades.length;
+    }
   }
 
   updateMarketPrice(symbol: string, price: number) {
@@ -278,6 +366,9 @@ export class VTSService extends EventEmitter {
     }
   }
 
+  /**
+   * Directive 11.0E.2: Close trade with Phase-10 metrics update
+   */
   private async closeTrade(trade: VirtualTrade): Promise<void> {
     const outcome = this.getMarketOutcome(trade.signal.symbol);
     if (outcome.close === 0) {
@@ -288,6 +379,15 @@ export class VTSService extends EventEmitter {
 
     const result = this.simulateTrade(trade.signal, outcome);
     Object.assign(trade, result);
+    
+    // M50: Update frictionCost from simulation result
+    trade.frictionCost = result.fees ?? 0;
+    
+    // Phase-10: Update session metrics with realized P&L
+    if (result.netProfit !== undefined) {
+      this.sessionMetrics.totalRealizedPnL += result.netProfit;
+      this.updateRollingAverages();
+    }
 
     this.virtualTrades.delete(trade.id);
     this.closedTrades.push(trade);
@@ -326,7 +426,7 @@ export class VTSService extends EventEmitter {
     await this.logTrade(trade);
 
     // Directive 10.6: Trigger ML calibration every N Hybrid trades
-    if (trade.signal.signalType === 'HYBRID') {
+    if (trade.signal.signalType === 'Hybrid') {
       this.calibrationCounter++;
       if (this.calibrationCounter >= CALIBRATION_TRIGGER_INTERVAL) {
         this.calibrationCounter = 0;
@@ -499,27 +599,27 @@ export class VTSService extends EventEmitter {
 
   /**
    * M5B: Reset session metrics for new autonomous simulation session
+   * Directive 11.0E.2: Phase-10 metrics
    */
   resetSessionMetrics(): void {
     this.sessionMetrics = {
       simulatedTradesThisSession: 0,
       sessionStartTime: Date.now(),
-      averageCWQI: 0,
-      averageNGC: 0,
-      averageReturn: 0
+      avgFinalScore: 0,
+      avgExpectedEdge: 0,
+      avgRealizedPnL: 0,
+      totalExpectedEdge: 0,
+      totalRealizedPnL: 0
     };
-    console.log('[M5B][VTS] Session metrics reset');
+    console.log('[11.0E.2][VTS] Session metrics reset (Phase-10)');
   }
 
   /**
    * M5B: Get current session metrics
+   * Directive 11.0E.2: Returns Phase-10 aggregates
    */
   getSessionMetrics(): SessionMetrics {
-    // Update average return if we have closed trades
-    if (this.closedTrades.length > 0) {
-      const avgReturn = this.closedTrades.reduce((sum, t) => sum + (t.netProfit || 0), 0) / this.closedTrades.length;
-      this.sessionMetrics.averageReturn = avgReturn;
-    }
+    this.updateRollingAverages();
     return { ...this.sessionMetrics };
   }
 
@@ -534,31 +634,25 @@ export class VTSService extends EventEmitter {
 
   /**
    * M3B: Get adaptive learning parameters for live coupling
-   * These replace static decay factors in CWQI/NGC engines
+   * Directive 11.0E.2: Phase-10 metrics replace legacy GSI
    */
   getLearningParams(): VTSLearningParams {
     const stats = this.getStats();
+    const sessionMetrics = this.getSessionMetrics();
     
     // Learning rate based on win rate and trade volume
-    // Higher win rate = higher confidence in current model = lower learning rate
-    // Base rate 0.15, adjusted by performance
     const baseLearningRate = 0.15;
     const performanceAdjustment = stats.winRate > 0.5 
-      ? 1 - ((stats.winRate - 0.5) * 0.4) // Lower rate when performing well
-      : 1 + ((0.5 - stats.winRate) * 0.4); // Higher rate when performing poorly
+      ? 1 - ((stats.winRate - 0.5) * 0.4)
+      : 1 + ((0.5 - stats.winRate) * 0.4);
     const learningRate = Math.max(0.05, Math.min(0.30, baseLearningRate * performanceAdjustment));
     
-    // GSI (Global Stability Index) based on consistency of profits
-    // Higher consistency = higher stability
+    // Relevance coefficient based on performance
     const avgNetProfit = stats.avgNetProfit || 0;
     const profitStability = Math.abs(avgNetProfit) < 0.001 ? 0.5 : 
       avgNetProfit > 0 ? Math.min(0.95, 0.6 + avgNetProfit * 2) : 
       Math.max(0.3, 0.5 + avgNetProfit * 2);
-    const gsi = profitStability;
-    
-    // Relevance coefficient = learningRate * (gsi + 0.15)
-    // This replaces static decay factors
-    const relevance = Math.max(0.10, Math.min(0.40, learningRate * (gsi + 0.15)));
+    const relevance = Math.max(0.10, Math.min(0.40, learningRate * (profitStability + 0.15)));
     
     // Volatility index from recent trade outcomes
     const recentTrades = this.closedTrades.slice(-20);
@@ -568,10 +662,13 @@ export class VTSService extends EventEmitter {
     
     return {
       learningRate: Math.round(learningRate * 10000) / 10000,
-      gsi: Math.round(gsi * 10000) / 10000,
       relevance: Math.round(relevance * 10000) / 10000,
       volatilityIndex: Math.round(volatilityIndex * 10000) / 10000,
-      lastAdaptiveUpdate: new Date().toISOString()
+      lastAdaptiveUpdate: new Date().toISOString(),
+      // Phase-10 rolling averages
+      avgFinalScore: Math.round(sessionMetrics.avgFinalScore * 10000) / 10000,
+      avgExpectedEdge: Math.round(sessionMetrics.avgExpectedEdge * 10000) / 10000,
+      avgRealizedPnL: Math.round(sessionMetrics.avgRealizedPnL * 10000) / 10000
     };
   }
 

@@ -38,6 +38,11 @@ import { DynamicStrategySelector, type DSSMetrics } from './dynamic-strategy-sel
 
 export type PoolType = 'ideal' | 'rotational';
 
+/**
+ * Directive 11.0E.2: Source type for data segregation
+ */
+export type TelemetrySource = 'simulation' | 'live';
+
 export interface PairTelemetry {
   symbol: string;
   finalScore: number;
@@ -50,6 +55,7 @@ export interface PairTelemetry {
   avgDecayedStrength: number;
   timeframe?: '1h' | '15m' | '5m';
   pool?: PoolType; // Directive 11.2 R1: Source pool for segmented tracking
+  source?: TelemetrySource; // Directive 11.0E.2: simulation vs live segregation
 }
 
 export interface TimeframeEfficiency {
@@ -108,6 +114,7 @@ export class TelemetryAggregatorService {
   /**
    * Record telemetry for a pair
    * Directive 11.2 R1: Added pool parameter for segmented performance tracking
+   * Directive 11.0E.2: Added source parameter for simulation/live segregation
    */
   recordPairTelemetry(
     symbol: string,
@@ -120,6 +127,7 @@ export class TelemetryAggregatorService {
       decayedStrength?: number;
       timeframe?: '1h' | '15m' | '5m';
       pool?: PoolType; // Directive 11.2 R1: ideal or rotational
+      source?: TelemetrySource; // Directive 11.0E.2: simulation or live
     }
   ): void {
     const now = Date.now();
@@ -142,6 +150,7 @@ export class TelemetryAggregatorService {
       avgDecayedStrength: data.decayedStrength ?? 0,
       timeframe: data.timeframe,
       pool: data.pool ?? 'ideal', // Directive 11.2 R1: Track source pool
+      source: data.source ?? 'live', // Directive 11.0E.2: Track source for segregation
     };
     
     recent.push(entry);
@@ -152,8 +161,8 @@ export class TelemetryAggregatorService {
       this.updatePoolAggregate(data.pool, data.finalScore, data.success);
     }
     
-    // Directive 11.2 R1: Include pool in telemetry log
-    console.log(`[10.8][Telemetry] ${symbol} (${entry.pool}) recorded: finalScore=${data.finalScore.toFixed(2)}, samples=${recent.length}`);
+    // Directive 11.0E.2: Include source in telemetry log
+    console.log(`[11.0E.2][Telemetry] ${symbol} (${entry.pool}/${entry.source}) recorded: finalScore=${data.finalScore.toFixed(2)}, samples=${recent.length}`);
     
     // Directive 11.1A + 11.2 R1: Persist to SQL with pool tracking
     if (shouldPersist()) {
@@ -470,6 +479,59 @@ export class TelemetryAggregatorService {
     
     console.log(`[10.8][Telemetry] getRotationalPairs(count=${count}): ${rotationalPairs.length} pairs selected`);
     return rotationalPairs;
+  }
+
+  /**
+   * Directive 11.0E.2: Get pairs filtered by source (simulation/live)
+   * Enables data segregation for ML training and analysis
+   */
+  getPairsBySource(source: TelemetrySource): PairWithPool[] {
+    const now = Date.now();
+    const result: PairWithPool[] = [];
+    
+    for (const [symbol, entries] of this.pairTelemetry.entries()) {
+      const sourceFiltered = entries.filter(t => 
+        t.source === source && 
+        now - t.lastUpdated < this.historyWindowMs
+      );
+      
+      if (sourceFiltered.length > 0) {
+        const lastEntry = sourceFiltered[sourceFiltered.length - 1];
+        result.push({
+          symbol,
+          pool: lastEntry.pool ?? 'ideal',
+          score: lastEntry.finalScore,
+        });
+      }
+    }
+    
+    return result;
+  }
+
+  /**
+   * Directive 11.0E.2: Get aggregate metrics filtered by source
+   */
+  getSourceMetrics(source: TelemetrySource): { count: number; avgFinalScore: number; sampleCount: number } {
+    const pairs = this.getPairsBySource(source);
+    if (pairs.length === 0) {
+      return { count: 0, avgFinalScore: 0, sampleCount: 0 };
+    }
+    
+    let totalScore = 0;
+    let totalSamples = 0;
+    
+    for (const pair of pairs) {
+      const entries = this.pairTelemetry.get(pair.symbol) || [];
+      const sourceFiltered = entries.filter(t => t.source === source);
+      totalScore += sourceFiltered.reduce((sum, e) => sum + e.finalScore, 0);
+      totalSamples += sourceFiltered.length;
+    }
+    
+    return {
+      count: pairs.length,
+      avgFinalScore: totalSamples > 0 ? totalScore / totalSamples : 0,
+      sampleCount: totalSamples,
+    };
   }
 
   /**

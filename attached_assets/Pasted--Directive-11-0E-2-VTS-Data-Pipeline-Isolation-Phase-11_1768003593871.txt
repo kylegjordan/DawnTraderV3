@@ -1,0 +1,182 @@
+⚙️ Directive 11.0E.2 — VTS Data Pipeline & Isolation
+
+Phase: 11
+Schema Version: v1.6.7
+Status: Active / Execution-Ready
+
+🎯 Objective
+
+Finalize modernization of the Virtual Trading Simulator (VTS) by:
+
+Upgrading the VTS Service to persist and process full Phase-10 metrics end-to-end.
+
+Aligning the ML Calibration and Telemetry layers to the same metric schema.
+
+Establishing airtight state isolation so simulated execution cannot affect live-trading caches or global singletons.
+
+🧩 Implementation Tasks
+Task 1 — VTS Service Modernization
+
+📁 /server/services/vts-service.ts
+
+Goal: Replace all legacy Phase-8 metrics and persist complete Phase-10 signal data.
+
+Actions
+
+Extend VirtualTrade schema
+Add:
+
+finalScore: number;
+hybridScore: number;
+predictiveConfidence: number;
+regimeWeight: number;
+decayPenalty: number;
+expectedEdge: number;
+frictionCost: number;
+signalType: string;
+strategy: string;
+regime: string;
+source: 'simulation' | 'live';
+schemaVersion: '1.6.7';
+
+
+Remove: cwqi, ngc, di, gsi.
+
+Update createVirtualTrade() and closeTrade()
+
+Persist all above fields.
+
+Write logs to logs/virtual_trades/virtual_trades_*.json.
+
+Ensure each record includes "source": "simulation" and "schemaVersion": "1.6.7".
+
+Deprecate SessionMetrics legacy fields
+
+Delete averageCWQI, averageNGC, etc.
+
+Replace with rolling averages for finalScore, expectedEdge, realizedPnL.
+
+Task 2 — ML Calibration Alignment
+
+📁 /server/services/ml-calibration.ts
+
+Goal: Consume and weight trades using Phase-10 metrics.
+
+Actions
+
+Modify recordTradeOutcome(trade: VirtualTrade) to compute:
+
+const performanceScore =
+  (trade.finalScore * 0.5) +
+  (trade.predictiveConfidence * 0.3) +
+  (trade.regimeWeight * 0.2);
+
+
+Use expectedEdge vs realizedPnL delta for learning weights.
+
+Store calibration entries under phase10Metrics.
+
+Remove any references to CWQI/NGC/DI/GSI.
+
+Task 3 — Strategy Execution Isolation
+
+📁 /server/services/vts-runner.ts, /server/core/strategy-execution.ts, /server/strategies/*
+
+Goal: Ensure virtual strategy execution cannot mutate live caches or shared memory.
+
+3A — Transitional Cache Sandboxing (New)
+
+In vts-runner.ts before executing strategies:
+
+const localCache = new LocalCache();
+globalThis.priceCache = new LocalCache();
+globalThis.indicatorCache = new LocalCache();
+globalThis.virtual = true;
+
+
+After each simulation cycle:
+
+delete globalThis.priceCache;
+delete globalThis.indicatorCache;
+delete globalThis.virtual;
+
+
+✅ Effect: existing strategies keep working, but any cache writes occur in isolated local memory.
+
+3B — Strategy Context Injection (Gradual Refactor)
+
+Over time, update strategies to accept:
+
+executeStrategy(symbol, timeframe, context: { virtual: boolean; cache: LocalCache });
+
+
+Replace direct imports of priceCache/indicatorCache with context.cache.
+
+3C — Worker Threads (Deferred)
+
+Omit for now; revisit under Phase 11.3 – Parallel Simulation Infrastructure if concurrency becomes a bottleneck.
+
+Task 4 — Telemetry Integration
+
+📁 /server/services/telemetry-aggregator.ts
+
+Goal: Record simulated trade data for learning while keeping it separate from live metrics.
+
+Actions
+
+Extend recordPairTelemetry() to accept source: 'live' | 'simulation'.
+
+When source === 'simulation':
+
+Write to telemetry.simulation namespace.
+
+Exclude from operational P&L dashboards and risk models.
+
+Retain for predictive learning datasets.
+
+Task 5 — Verification & Testing
+
+📁 /server/tests/unit/vts-data.test.ts
+
+Test ID	Description
+A – Phase-10 Persistence	Create a virtual trade → verify JSON log contains Phase-10 fields and no legacy fields.
+B – ML Calibration Input	Confirm recordTradeOutcome ingests finalScore, expectedEdge, regimeWeight.
+C – Strategy Isolation	Run a strategy with { virtual: true } → assert no writes to global PriceCache or TradeState.
+D – Telemetry Segregation	Ensure simulation data appears under telemetry.simulation only.
+
+Run tests via npx vitest run vts-data.test.ts.
+
+🧱 Governance Invariants (v1.6.7)
+ID	Rule	Description
+M50	Phase-10 Persistence	All VirtualTrades persist complete Phase-10 metrics.
+M51	No Legacy Fields	CWQI/NGC/DI/GSI fully deprecated from code and logs.
+M52	Schema Parity	ML Calibration and Telemetry share identical metric schema.
+M53	State Isolation	VTS execution may not mutate live caches or global state.
+M54	Telemetry Segregation	Simulation data stored separately from live stats.
+✅ Expected Outcomes
+Domain	Result
+Data Integrity	Full Phase-10 metrics flow through Runner → Service → Calibration → Telemetry.
+Learning Quality	Predictive models receive complete context for every simulated trade.
+Safety	Global state and live engine remain untouched by VTS operations.
+Auditability	All simulation records include explicit source and schemaVersion.
+Maintainability	Legacy math and fields removed; strategies can gradually adopt context-based execution.
+🚀 Action for Replit
+
+Proceed with Directive 11.0E.2 exactly as specified above.
+
+Execution Order Priority:
+
+Task 1 – VTS Service Modernization
+
+Task 2 – ML Calibration Alignment
+
+Task 3A – Transitional Cache Sandboxing (Immediate Isolation)
+
+Task 4 – Telemetry Integration
+
+Task 5 – Verification & Governance tests
+
+🧭 Summary
+
+Directive 11.0E.2 completes the Phase-10 transition of the VTS subsystem.
+It establishes a fully isolated, Phase-10-compliant data pipeline that records authentic signal and trade outcomes for predictive learning while guaranteeing zero interference with live operations.

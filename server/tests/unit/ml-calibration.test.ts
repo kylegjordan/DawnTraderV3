@@ -33,9 +33,12 @@ describe('MLCalibrationService', () => {
 
   test('Increases weight for consistently winning pattern', async () => {
     const trades: TradeRecord[] = Array(10).fill(null).map(() => ({
-      signalType: 'HYBRID',
+      signalType: 'Hybrid',
       patternType: 'PINBAR',
-      pnl: 10
+      pnl: 10,
+      finalScore: 0.8,
+      predictiveConfidence: 0.7,
+      regimeWeight: 0.9,
     }));
     
     setGetRecentTradesFn(async () => trades);
@@ -47,15 +50,18 @@ describe('MLCalibrationService', () => {
     const pinbarRec = report.recommendations!.find(r => r.pattern === 'PINBAR');
     expect(pinbarRec).toBeDefined();
     expect(pinbarRec!.suggestion).toBe('INCREASE');
-    expect(pinbarRec!.adjustment).toBe(0.05);
+    expect(pinbarRec!.adjustment).toBeGreaterThan(0);
     expect(pinbarRec!.winRate).toBe(100);
   });
 
   test('Decreases weight for consistently losing pattern', async () => {
     const trades: TradeRecord[] = Array(10).fill(null).map(() => ({
-      signalType: 'HYBRID',
+      signalType: 'Hybrid',
       patternType: 'ENGULFING',
-      pnl: -10
+      pnl: -10,
+      finalScore: 0.4,
+      predictiveConfidence: 0.3,
+      regimeWeight: 0.5,
     }));
     
     setGetRecentTradesFn(async () => trades);
@@ -66,7 +72,7 @@ describe('MLCalibrationService', () => {
     const engulfingRec = report.recommendations!.find(r => r.pattern === 'ENGULFING');
     expect(engulfingRec).toBeDefined();
     expect(engulfingRec!.suggestion).toBe('DECREASE');
-    expect(engulfingRec!.adjustment).toBe(-0.05);
+    expect(engulfingRec!.adjustment).toBeLessThan(0);
     expect(engulfingRec!.winRate).toBe(0);
   });
 

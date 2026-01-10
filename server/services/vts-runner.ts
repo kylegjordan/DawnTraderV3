@@ -264,6 +264,7 @@ async function generatePhase10Signal(
   const exitPrice = entryPrice * (1 + priceChange);
   const profit = (exitPrice - entryPrice) * (positionSize / entryPrice) - (positionSize * frictionCost);
   
+  // Directive 11.0E.2: VirtualSignal with full Phase-10 metrics (M50 compliant)
   const signal: VirtualSignal = {
     id: `vsig_p10_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     symbol,
@@ -274,9 +275,18 @@ async function generatePhase10Signal(
     predictedProfit: finalScore * dynamicTarget,
     strategy,
     createdAt: Date.now(),
-    signalType: signalType === 'Quantitative' ? 'QUANT' : signalType === 'Pattern' ? 'PATTERN' : 'HYBRID',
+    signalType, // Phase-10 format: 'Quantitative' | 'Pattern' | 'Hybrid'
     hybridScore,
-    predictiveConfidence
+    predictiveConfidence,
+    // Phase-10 canonical fields (M50)
+    finalScore,
+    regimeWeight,
+    decayPenalty,
+    expectedEdge: finalScore * dynamicTarget - frictionCost,
+    frictionCost, // M50: Schema parity with VirtualTrade
+    regime,
+    pool,
+    source: 'simulation', // M50/M53: VTS-generated signals marked as simulation
   };
   
   const tradeRecord: Phase10TradeRecord = {
@@ -379,7 +389,8 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   let simulatedCount = 0;
   let totalFinalScore = 0;
   
-  const bucketType: CacheBucketType = 'fx5Snapshot';
+  // Directive 11.0E.2: Use isolated VTS cache bucket for sandboxing
+  const bucketType: CacheBucketType = 'vtsSimulation';
   for (const pair of pairs) {
     priceCache.subscribe(pair.symbol, bucketType);
   }
@@ -408,6 +419,18 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       
       await vtsService.createVirtualTrade(signal);
       vtsService.updateMarketPrice(pair.symbol, priceData.price);
+      
+      // Directive 11.0E.2: Record telemetry with source='simulation' for segregation
+      const telemetry = getTelemetryAggregator();
+      telemetry.recordPairTelemetry(pair.symbol, {
+        finalScore: tradeRecord.finalScore,
+        hybridScore: tradeRecord.hybridScore,
+        regimeWeight: tradeRecord.regimeWeight,
+        predictiveConfidence: tradeRecord.predictiveConfidence,
+        success: tradeRecord.profit > 0,
+        pool: pair.pool,
+        source: 'simulation', // M53: VTS-generated data marked as simulation
+      });
       
       phase10SessionTrades.push(tradeRecord);
       

@@ -162,12 +162,22 @@ export interface HybridTradeFields {
 }
 
 // --------------------------------------------------------------------------
-// DIRECTIVE 10.6: ML CALIBRATION TYPES
+// DIRECTIVE 11.0E.2: ML CALIBRATION TYPES (Phase-10)
 // --------------------------------------------------------------------------
 
 /**
+ * Phase-10 extended metrics for calibration - Directive 11.0E.2
+ */
+export interface Phase10CalibrationMetrics {
+  avgFinalScore: number;
+  avgEdgeDelta: number;       // expectedEdge - realizedPnL average
+  performanceScore: number;   // Composite: 0.5*finalScore + 0.3*confidence + 0.2*regime
+  sampleCount: number;
+}
+
+/**
  * Individual calibration recommendation for a pattern type.
- * Provides adjustment guidance based on historical performance.
+ * Directive 11.0E.2: Extended with Phase-10 metrics
  */
 export interface CalibrationRecommendation {
   pattern: PatternType | 'UNKNOWN';
@@ -175,6 +185,7 @@ export interface CalibrationRecommendation {
   avgExpectancy: number;                        // Average P&L per trade
   suggestion: 'INCREASE' | 'DECREASE' | 'HOLD';
   adjustment: number;                           // Suggested weight adjustment (+/-0.05)
+  phase10Metrics?: Phase10CalibrationMetrics;   // Directive 11.0E.2: Extended metrics
 }
 
 /**

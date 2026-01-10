@@ -25,7 +25,11 @@ import { normalizeToInternalSymbol as normalizeKrakenPair } from '../markets/kra
 
 export type PriceSourceTag = 'kraken_ws' | 'kraken_rest';
 
-export type CacheBucketType = 'openTrade' | 'readyToBuy' | 'fx5Snapshot';
+/**
+ * Directive 11.0E.2: Added 'vtsSimulation' bucket for cache sandboxing
+ * VTS simulations use isolated cache to prevent pollution of live data
+ */
+export type CacheBucketType = 'openTrade' | 'readyToBuy' | 'fx5Snapshot' | 'vtsSimulation';
 
 interface CacheBucket {
   type: CacheBucketType;
@@ -47,10 +51,15 @@ export interface CachedPrice {
 }
 
 class UnifiedPriceCache {
+  /**
+   * Directive 11.0E.2: Added vtsSimulation bucket (60s refresh) for cache sandboxing
+   * VTS data isolation prevents simulation from affecting live trading cache
+   */
   private buckets: CacheBucket[] = [
     { type: 'openTrade', symbols: new Set(), refreshIntervalMs: 2000, lastRefresh: 0 },
     { type: 'readyToBuy', symbols: new Set(), refreshIntervalMs: 15000, lastRefresh: 0 },
-    { type: 'fx5Snapshot', symbols: new Set(), refreshIntervalMs: 30000, lastRefresh: 0 }
+    { type: 'fx5Snapshot', symbols: new Set(), refreshIntervalMs: 30000, lastRefresh: 0 },
+    { type: 'vtsSimulation', symbols: new Set(), refreshIntervalMs: 60000, lastRefresh: 0 }
   ];
 
   private cache: Map<string, CachedPrice> = new Map();
@@ -89,11 +98,12 @@ class UnifiedPriceCache {
       const open = this.buckets[0].symbols.size;
       const rtb = this.buckets[1].symbols.size;
       const fx5 = this.buckets[2].symbols.size;
-      console.log(`[A4.R10R-1][PriceCache][HEALTH] open=${open} rtb=${rtb} fx5=${fx5} weight=${this.currentWeight}/${this.MAX_WEIGHT_PER_SECOND} cacheSize=${this.cache.size}`);
+      const vts = this.buckets[3].symbols.size;
+      console.log(`[A4.R10R-1][PriceCache][HEALTH] open=${open} rtb=${rtb} fx5=${fx5} vts=${vts} weight=${this.currentWeight}/${this.MAX_WEIGHT_PER_SECOND} cacheSize=${this.cache.size}`);
     }, 60000);
 
     this.isInitialized = true;
-    console.log('[A4.R10R-1][PriceCache] Initialized with 3 buckets (openTrade=2s, readyToBuy=15s, fx5Snapshot=30s)');
+    console.log('[A4.R10R-1][PriceCache] Initialized with 4 buckets (openTrade=2s, readyToBuy=15s, fx5Snapshot=30s, vtsSimulation=60s)');
   }
 
   shutdown(): void {
