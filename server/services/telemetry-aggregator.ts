@@ -50,6 +50,7 @@ export interface PairTelemetry {
   regimeWeight: number;
   predictiveConfidence: number;
   lastUpdated: number;
+  lastUpdatedIso?: string; // Directive 11.4C.3-B: ISO 8601 timestamp for UI display
   sampleCount: number;
   successRate: number;
   avgDecayedStrength: number;
@@ -165,6 +166,7 @@ export class TelemetryAggregatorService {
       regimeWeight: data.regimeWeight ?? 0,
       predictiveConfidence: data.predictiveConfidence ?? 0.5,
       lastUpdated: now,
+      lastUpdatedIso: new Date(now).toISOString(), // Directive 11.4C.3-B: ISO 8601 timestamp
       sampleCount: recent.length + 1,
       successRate: data.success !== undefined 
         ? (recent.filter(t => t.successRate > 0.5).length + (data.success ? 1 : 0)) / (recent.length + 1)
@@ -723,6 +725,7 @@ export class TelemetryAggregatorService {
     pattern: string;
     regime: string;
     source: TelemetrySource;
+    lastUpdated: string; // Directive 11.4C.3-B: ISO 8601 timestamp
   }> {
     const now = Date.now();
     const scoredPairs: Array<{ 
@@ -767,10 +770,11 @@ export class TelemetryAggregatorService {
         pattern,
         regime: p.entry.pairRegime ?? this.currentRegime, // Directive 11.4C-R2: Use per-pair regime with fallback
         source: p.entry.source ?? 'simulation', // Directive 11.4C-R2: Default to simulation if not set
+        lastUpdated: p.entry.lastUpdatedIso ?? new Date(p.entry.lastUpdated).toISOString(), // Directive 11.4C.3-B
       };
     });
     
-    console.log(`[11.4C-R2][Telemetry] getRankedPairs(limit=${limit}): ${rankedPairs.length} pairs returned (M66)`);
+    console.log(`[11.4C.3-B][Telemetry] getRankedPairs(limit=${limit}): ${rankedPairs.length} pairs returned`);
     return rankedPairs;
   }
 

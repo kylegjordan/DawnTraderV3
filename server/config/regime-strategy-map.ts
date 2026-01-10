@@ -161,4 +161,36 @@ export function getRegimeRiskMultiplier(regime: MarketRegimeType): number {
   return REGIME_STRATEGY_MAP[regime]?.riskMultiplier ?? 1.0;
 }
 
+/**
+ * Directive 11.4C.3-B: Get canonical SignalType for a given strategy
+ * Derives signal type from REGIME_STRATEGY_MAP (single source of truth)
+ */
+export function getTypeForStrategy(strategy: string): CanonicalSignalType {
+  const normalized = normalizeStrategy(strategy);
+  
+  // Derive from REGIME_STRATEGY_MAP - the authoritative source
+  for (const mapping of Object.values(REGIME_STRATEGY_MAP)) {
+    if (mapping.strategies.includes(normalized)) {
+      return mapping.signalType;
+    }
+  }
+  
+  // Default to HYBRID for unknown strategies
+  return 'HYBRID';
+}
+
+/**
+ * Directive 11.4C.3-B: Build a static lookup map for strategy → signalType
+ * Useful for batch operations without repeated iteration
+ */
+export const STRATEGY_TO_SIGNAL_TYPE: Record<string, CanonicalSignalType> = (() => {
+  const lookup: Record<string, CanonicalSignalType> = {};
+  for (const mapping of Object.values(REGIME_STRATEGY_MAP)) {
+    for (const strategy of mapping.strategies) {
+      lookup[strategy] = mapping.signalType;
+    }
+  }
+  return lookup;
+})();
+
 export const regimeStrategyMap = REGIME_STRATEGY_MAP;

@@ -1,0 +1,167 @@
+⚙️ Directive 11.4C.3-B — Mapping Validation, UI Sync, and Top Batch Reset
+Phase
+
+11.4C — Final Synchronization Before Predictive Learning
+
+Objective
+
+Fully synchronize signalType → strategy → pattern mappings in all active systems (VTS, Telemetry, and UI).
+
+Introduce lastUpdated timestamps for telemetry records and UI display.
+
+Purge all legacy Top Batch data to ensure only newly classified, canonical-mapping records populate the list moving forward.
+
+🧠 I. Implementation Tasks
+Task 1 — Enforce Canonical SignalType Derivation
+
+File: /server/services/vts-runner.ts
+
+Replace any residual inferSignalType() logic with canonical mapping via getTypeForStrategy().
+
+import { getTypeForStrategy } from "@/server/config/regime-strategy-map";
+
+const canonicalType = getTypeForStrategy(tradeRecord.strategy);
+tradeRecord.signalType = canonicalType;
+
+
+Add helper in /server/config/regime-strategy-map.ts:
+
+export function getTypeForStrategy(strategy: string): SignalType {
+  const quant = ['vwap_pullback','sma_trend_ride','liquidity_trap','pivot_shift'];
+  const pattern = ['abcd_long','support_bounce','triangle_breakout','double_bottom'];
+  if (quant.includes(strategy)) return 'QUANT';
+  if (pattern.includes(strategy)) return 'PATTERN';
+  return 'HYBRID';
+}
+
+
+Remove any legacy or regime-based signal inference.
+
+Task 2 — Add Timestamp Tracking
+
+File: /server/services/telemetry-aggregator.ts
+
+Add timestamp property on each write:
+
+recordSample({
+  ...,
+  lastUpdated: new Date().toISOString(),
+});
+
+
+Ensure schema includes:
+
+lastUpdated: { type: 'string', format: 'date-time' }
+
+Task 3 — Normalize Existing Telemetry and Reset the Top Batch
+3.1 — Flush All Current Telemetry & Top Batch Data
+
+Execute:
+
+DELETE FROM telemetry;
+DELETE FROM telemetry_history;
+DELETE FROM ideal_pairs;
+DELETE FROM rotational_pairs;
+
+
+This clears out any pre-harmonization data and empty caches.
+
+3.2 — Run a Canonical Remap Migration (Post-Flush Validation)
+
+Ensure consistency for any future or rehydrated data:
+
+UPDATE telemetry
+SET signal_type = CASE
+  WHEN strategy IN ('vwap_pullback','sma_trend_ride','liquidity_trap','pivot_shift') THEN 'QUANT'
+  WHEN strategy IN ('abcd_long','support_bounce','triangle_breakout','double_bottom') THEN 'PATTERN'
+  ELSE 'HYBRID'
+END;
+
+Task 4 — UI Enhancement
+
+File: /client/src/components/trading/top-batch.tsx
+
+Add Last-Updated Column
+
+<TableHeaderCell>Last Updated</TableHeaderCell>
+<TableCell>{formatDate(row.lastUpdated)}</TableCell>
+
+
+Sorting Support
+
+Allow sorting by newest update:
+
+<TableHeaderCell onClick={() => sortBy('lastUpdated')}>Last Updated</TableHeaderCell>
+
+
+Empty-State Handling
+
+When Top Batch is empty (immediately after reset), show:
+
+“Top Batch is being rebuilt. Scanning will repopulate pairs as new signals are generated.”
+
+Task 5 — Verification Tests
+
+Create /tests/signal_mapping_integrity.test.ts:
+
+import { getTypeForStrategy } from "@/server/config/regime-strategy-map";
+
+describe("Signal mapping verification", () => {
+  const map = {
+    breakout: "QUANT",
+    abcd_long: "PATTERN",
+    trend_flow: "HYBRID"
+  };
+  for (const [strategy, expected] of Object.entries(map)) {
+    test(`${strategy} → ${expected}`, () => {
+      expect(getTypeForStrategy(strategy)).toBe(expected);
+    });
+  }
+});
+
+test("Telemetry timestamps exist", async () => {
+  const record = await telemetryRepo.latest();
+  expect(typeof record.lastUpdated).toBe("string");
+  expect(record.lastUpdated).toMatch(/\d{4}-\d{2}-\d{2}T/);
+});
+
+📊 II. Deliverables
+Output	Purpose
+/audit/reports/mapping_sync_verification.md	Post-reset mapping validation summary
+/client/src/components/trading/top-batch.tsx	Updated UI with Last Updated column
+/server/config/regime-strategy-map.ts	Extended canonical mapping
+/tests/signal_mapping_integrity.test.ts	Mapping + timestamp test coverage
+/scripts/reset-top-batch.ts	Optional helper to clear Top Batch cache
+✅ III. Success Criteria
+Check	Expected Result
+SignalType–Strategy mapping	100 % canonical alignment
+Legacy or mixed-case records	0
+Top Batch list	Repopulated from fresh VTS data
+Each record	Has valid ISO 8601 lastUpdated timestamp
+UI sorting	Functional and accurate
+🧩 IV. Governance and Execution Steps
+
+Run migration & flush commands (reset-top-batch.ts or SQL above).
+
+Restart adaptive scanning cycle.
+
+Monitor Top Batch:
+
+First scan will rebuild 100 pairs.
+
+All rows should display lastUpdated timestamps close to the scan time.
+
+Run tests:
+
+npx vitest run signal_mapping_integrity.test.ts
+npx vitest run hybrid_integrity.test.ts
+
+
+Archive Results under /docs/audit/post_reset_verification.md.
+
+🧠 V. Expected Outcome
+Area	Result
+Repository Purity	Fully synchronized signal/strategy/pattern logic
+Data Freshness	All Top Batch entries generated post-reset
+UI Transparency	“Last Updated” column tracks live refresh cycles
+System Readiness	✅ Verified clean baseline

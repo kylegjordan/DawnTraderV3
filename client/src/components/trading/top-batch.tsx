@@ -1,9 +1,21 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, TrendingUp, Activity, Zap } from "lucide-react";
+import { RefreshCw, TrendingUp, Activity, Zap, Clock, ChevronUp, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+type SortField = 'rank' | 'score' | 'lastUpdated';
+type SortDirection = 'asc' | 'desc';
+
+function formatTimestamp(isoString: string): string {
+  try {
+    const date = new Date(isoString);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  } catch {
+    return '—';
+  }
+}
 
 interface RankedPair {
   rank: number;
@@ -14,6 +26,7 @@ interface RankedPair {
   pattern: string;
   regime: string;
   source: 'simulation' | 'live';
+  lastUpdated: string; // Directive 11.4C.3-B: ISO 8601 timestamp
 }
 
 function getScoreColor(score: number): string {
@@ -75,7 +88,9 @@ function getRegimeBadgeClass(regime: string): string {
 }
 
 export default function TopBatch() {
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [componentLastUpdated, setComponentLastUpdated] = useState<Date | null>(null);
+  const [sortField, setSortField] = useState<SortField>('rank');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
   const { data, isLoading, error, refetch } = useQuery<RankedPair[]>({
     queryKey: ['/api/pairs/ranked'],
@@ -94,9 +109,42 @@ export default function TopBatch() {
 
   useEffect(() => {
     if (data) {
-      setLastUpdated(new Date());
+      setComponentLastUpdated(new Date());
     }
   }, [data]);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection(field === 'lastUpdated' ? 'desc' : 'asc');
+    }
+  };
+
+  const sortedPairs = useMemo(() => {
+    if (!data) return [];
+    return [...data].sort((a, b) => {
+      let comparison = 0;
+      switch (sortField) {
+        case 'rank':
+          comparison = a.rank - b.rank;
+          break;
+        case 'score':
+          comparison = a.score - b.score;
+          break;
+        case 'lastUpdated':
+          comparison = new Date(a.lastUpdated).getTime() - new Date(b.lastUpdated).getTime();
+          break;
+      }
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [data, sortField, sortDirection]);
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return null;
+    return sortDirection === 'asc' ? <ChevronUp className="h-3 w-3 inline" /> : <ChevronDown className="h-3 w-3 inline" />;
+  };
 
   if (isLoading) {
     return (
@@ -144,8 +192,8 @@ export default function TopBatch() {
             <Badge variant="secondary" className="ml-2">{pairs.length} pairs</Badge>
           </CardTitle>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            {lastUpdated && (
-              <span>Updated: {lastUpdated.toLocaleTimeString()}</span>
+            {componentLastUpdated && (
+              <span>Updated: {componentLastUpdated.toLocaleTimeString()}</span>
             )}
             <button 
               onClick={() => refetch()}
@@ -161,18 +209,26 @@ export default function TopBatch() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-left text-muted-foreground">
-                <th className="pb-2 pr-4 font-medium">Rank</th>
+                <th className="pb-2 pr-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('rank')}>
+                  Rank <SortIcon field="rank" />
+                </th>
                 <th className="pb-2 pr-4 font-medium">Symbol</th>
-                <th className="pb-2 pr-4 font-medium">Score</th>
+                <th className="pb-2 pr-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('score')}>
+                  Score <SortIcon field="score" />
+                </th>
                 <th className="pb-2 pr-4 font-medium">Signal Type</th>
                 <th className="pb-2 pr-4 font-medium">Strategy</th>
                 <th className="pb-2 pr-4 font-medium">Pattern</th>
                 <th className="pb-2 pr-4 font-medium">Regime</th>
                 <th className="pb-2 pr-4 font-medium">Source</th>
+                <th className="pb-2 pr-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('lastUpdated')}>
+                  <Clock className="h-3 w-3 inline mr-1" />
+                  Last Updated <SortIcon field="lastUpdated" />
+                </th>
               </tr>
             </thead>
             <tbody>
-              {pairs.map((pair) => (
+              {sortedPairs.map((pair) => (
                 <tr key={`${pair.rank}-${pair.symbol}`} className="border-b border-muted/50 hover:bg-muted/30">
                   <td className="py-2 pr-4">
                     <span className="font-mono text-muted-foreground">#{pair.rank}</span>
@@ -203,12 +259,18 @@ export default function TopBatch() {
                       {pair.source === 'live' ? 'Active Trading' : 'Simulation'}
                     </Badge>
                   </td>
+                  <td className="py-2 pr-4 text-xs text-muted-foreground font-mono">
+                    {formatTimestamp(pair.lastUpdated)}
+                  </td>
                 </tr>
               ))}
-              {pairs.length === 0 && (
+              {sortedPairs.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-muted-foreground">
-                    No ranked pairs available yet. Waiting for telemetry data...
+                  <td colSpan={9} className="py-8 text-center text-muted-foreground">
+                    <div className="flex flex-col items-center gap-2">
+                      <RefreshCw className="h-5 w-5 animate-spin" />
+                      <span>Top Batch is being rebuilt. Scanning will repopulate pairs as new signals are generated.</span>
+                    </div>
                   </td>
                 </tr>
               )}
