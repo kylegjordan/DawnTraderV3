@@ -11,7 +11,9 @@ type SortDirection = 'asc' | 'desc';
 function formatTimestamp(isoString: string): string {
   try {
     const date = new Date(isoString);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return `${dateStr} ${timeStr}`;
   } catch {
     return '—';
   }
