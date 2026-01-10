@@ -1,0 +1,133 @@
+{
+  "timestamp": "2026-01-10T18:48:06.104Z",
+  "filesScanned": 525,
+  "filesWithMappings": 6,
+  "patternCounts": {
+    "regimeStrategyMap": 1,
+    "SignalType": 3,
+    "MarketRegimeType": 3,
+    "regimeMap": 1,
+    "REGIME_WEIGHTS": 1,
+    "PatternType": 1
+  },
+  "conflicts": [
+    "SignalType defined in /home/runner/workspace/server/core/schema/trade-model.ts but canonical source is server/types.ts",
+    "MarketRegimeType defined in /home/runner/workspace/server/core/schema/trade-model.ts but canonical source is server/types/market-regime.types.ts",
+    "SignalType defined in /home/runner/workspace/server/types/virtual-trade.interface.ts but canonical source is server/types.ts",
+    "MarketRegimeType defined in /home/runner/workspace/server/types/virtual-trade.interface.ts but canonical source is server/types/market-regime.types.ts"
+  ],
+  "results": [
+    {
+      "file": "server/config/regime-strategy-map.ts",
+      "matches": [
+        {
+          "pattern": "regimeStrategyMap",
+          "count": 1,
+          "lines": [
+            26
+          ]
+        }
+      ],
+      "potentialConflicts": []
+    },
+    {
+      "file": "server/core/schema/trade-model.ts",
+      "matches": [
+        {
+          "pattern": "SignalType",
+          "count": 1,
+          "lines": [
+            30
+          ]
+        },
+        {
+          "pattern": "MarketRegimeType",
+          "count": 1,
+          "lines": [
+            19
+          ]
+        }
+      ],
+      "potentialConflicts": [
+        "SignalType defined in /home/runner/workspace/server/core/schema/trade-model.ts but canonical source is server/types.ts",
+        "MarketRegimeType defined in /home/runner/workspace/server/core/schema/trade-model.ts but canonical source is server/types/market-regime.types.ts"
+      ]
+    },
+    {
+      "file": "server/services/gasp-coordinator.ts",
+      "matches": [
+        {
+          "pattern": "regimeMap",
+          "count": 1,
+          "lines": [
+            346
+          ]
+        }
+      ],
+      "potentialConflicts": []
+    },
+    {
+      "file": "server/types/market-regime.types.ts",
+      "matches": [
+        {
+          "pattern": "MarketRegimeType",
+          "count": 1,
+          "lines": [
+            14
+          ]
+        },
+        {
+          "pattern": "REGIME_WEIGHTS",
+          "count": 1,
+          "lines": [
+            38
+          ]
+        }
+      ],
+      "potentialConflicts": []
+    },
+    {
+      "file": "server/types/virtual-trade.interface.ts",
+      "matches": [
+        {
+          "pattern": "SignalType",
+          "count": 1,
+          "lines": [
+            83
+          ]
+        },
+        {
+          "pattern": "MarketRegimeType",
+          "count": 1,
+          "lines": [
+            17
+          ]
+        }
+      ],
+      "potentialConflicts": [
+        "SignalType defined in /home/runner/workspace/server/types/virtual-trade.interface.ts but canonical source is server/types.ts",
+        "MarketRegimeType defined in /home/runner/workspace/server/types/virtual-trade.interface.ts but canonical source is server/types/market-regime.types.ts"
+      ]
+    },
+    {
+      "file": "server/types.ts",
+      "matches": [
+        {
+          "pattern": "SignalType",
+          "count": 1,
+          "lines": [
+            32
+          ]
+        },
+        {
+          "pattern": "PatternType",
+          "count": 1,
+          "lines": [
+            37
+          ]
+        }
+      ],
+      "potentialConflicts": []
+    }
+  ]
+}
