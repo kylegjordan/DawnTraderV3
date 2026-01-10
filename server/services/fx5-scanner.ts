@@ -391,15 +391,19 @@ export class Fx5ScannerService {
       // This feeds the dual-pool (Ideal/Rotational) pair selection system
       if (SCANNER_PARAMS.ADAPTIVE_ENABLED) {
         const telemetry = getTelemetryAggregator();
+        // Directive 11.4C-R2: Use 'simulation' source when engine is inactive (passive learning)
+        // Only use 'live' source when engine is actively trading
+        const telemetrySource = isEngineActive ? 'live' : 'simulation';
         for (const survivor of metricFilteredSurvivors) {
           telemetry.recordPairTelemetry(survivor.symbol, {
             finalScore: 0.5, // Base score, will be enriched by signal orchestrator
             hybridScore: 0,  // Populated when hybrid signals fire
             regimeWeight: 0.5, // Default regime weight
             predictiveConfidence: 0.5, // Default ML confidence
+            source: telemetrySource, // Directive 11.4C-R2: Proper source attribution
           });
         }
-        console.log(`[FX5][10.8] Recorded ${metricFilteredSurvivors.length} pairs to TelemetryAggregator`);
+        console.log(`[FX5][10.8] Recorded ${metricFilteredSurvivors.length} pairs to TelemetryAggregator (source=${telemetrySource})`);
       }
       
       // REB 2.8.4: Generate unique scan cycle ID (survives server restarts)

@@ -180,7 +180,7 @@ export default function TopBatch() {
                   </td>
                   <td className="py-2 pr-4">
                     <Badge variant={pair.source === 'live' ? 'default' : 'secondary'}>
-                      {pair.source}
+                      {pair.source === 'live' ? 'Active Trading' : 'Simulation'}
                     </Badge>
                   </td>
                 </tr>

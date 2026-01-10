@@ -54,6 +54,8 @@ export interface PairTelemetry {
   successRate: number;
   avgDecayedStrength: number;
   timeframe?: '1h' | '15m' | '5m';
+  pairRegime?: MarketRegime; // Directive 11.4C-R2: Per-pair regime at scan time
+  pattern?: string; // Directive 11.4C-R2: Pattern name for hybrid signals
   pool?: PoolType; // Directive 11.2 R1: Source pool for segmented tracking
   source?: TelemetrySource; // Directive 11.0E.2: simulation vs live segregation
 }
@@ -128,6 +130,8 @@ export class TelemetryAggregatorService {
       timeframe?: '1h' | '15m' | '5m';
       pool?: PoolType; // Directive 11.2 R1: ideal or rotational
       source?: TelemetrySource; // Directive 11.0E.2: simulation or live
+      pairRegime?: MarketRegime; // Directive 11.4C-R2: Per-pair regime
+      pattern?: string; // Directive 11.4C-R2: Pattern name for hybrid signals
     }
   ): void {
     const now = Date.now();
@@ -151,6 +155,8 @@ export class TelemetryAggregatorService {
       timeframe: data.timeframe,
       pool: data.pool ?? 'ideal', // Directive 11.2 R1: Track source pool
       source: data.source ?? 'live', // Directive 11.0E.2: Track source for segregation
+      pairRegime: data.pairRegime ?? this.currentRegime, // Directive 11.4C-R2: Per-pair or fallback to global
+      pattern: data.pattern, // Directive 11.4C-R2: Pattern name
     };
     
     recent.push(entry);
@@ -705,6 +711,7 @@ export class TelemetryAggregatorService {
     scoredPairs.sort((a, b) => b.score - a.score);
     
     // Map to ranked output with metadata
+    // Directive 11.4C-R2: Use per-pair regime and pattern from telemetry entry
     const rankedPairs = scoredPairs.slice(0, limit).map((p, index) => {
       return {
         rank: index + 1,
@@ -712,9 +719,9 @@ export class TelemetryAggregatorService {
         score: parseFloat(p.score.toFixed(4)),
         signalType: this.inferSignalType(p.entry),
         strategy: this.inferStrategy(p.entry),
-        pattern: '—', // Patterns populated by signal orchestrator
-        regime: this.currentRegime,
-        source: p.entry.source ?? 'live',
+        pattern: p.entry.pattern ?? '—', // Directive 11.4C-R2: Use stored pattern or placeholder
+        regime: p.entry.pairRegime ?? this.currentRegime, // Directive 11.4C-R2: Use per-pair regime with fallback
+        source: p.entry.source ?? 'simulation', // Directive 11.4C-R2: Default to simulation if not set
       };
     });
     
