@@ -387,11 +387,20 @@ export class Fx5ScannerService {
         volumeStats
       }).catch(() => {});
       
-      // Directive 11.4C-R2: FX5 no longer records telemetry with default values
-      // VTS is the single source of truth for telemetry data (signals, regime, scores)
-      // FX5 only identifies survivor pairs for VTS to process
+      // Directive 11.4C-R2: FX5 seeds minimal telemetry for survivors so VTS can find them
+      // VTS is the single source of truth for signal data (signalType, strategy, pattern)
+      // FX5 only records pool membership to enable VTS pair selection
       if (SCANNER_PARAMS.ADAPTIVE_ENABLED) {
-        console.log(`[FX5][11.4C-R2] ${metricFilteredSurvivors.length} survivors passed to VTS for signal generation (no default telemetry recording)`);
+        const telemetry = getTelemetryAggregator();
+        for (const survivor of metricFilteredSurvivors) {
+          // Seed minimal telemetry entry - VTS will update with real signal data
+          telemetry.recordPairTelemetry(survivor.symbol, {
+            finalScore: 0.5, // Neutral baseline - VTS will update with actual score
+            pool: survivor.poolType || 'ideal',
+            source: 'simulation',
+          });
+        }
+        console.log(`[FX5][11.4C-R2] ${metricFilteredSurvivors.length} survivors seeded to telemetry for VTS selection`);
       }
       
       // REB 2.8.4: Generate unique scan cycle ID (survives server restarts)
