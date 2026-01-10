@@ -724,12 +724,13 @@ export class TelemetryAggregatorService {
     scoredPairs.sort((a, b) => b.score - a.score);
     
     // Map to ranked output with metadata
-    // Directive 11.4C-R2: Use stored values from VTS instead of inferring
+    // Directive 11.4C-R2: Use stored values from VTS - NO legacy inference fallback
     // Quantitative signals should NOT have a pattern (purely mathematical)
     const rankedPairs = scoredPairs.slice(0, limit).map((p, index) => {
-      // Use stored signalType/strategy from VTS, with inference as fallback for legacy data
-      const signalType = p.entry.signalType ?? this.inferSignalType(p.entry);
-      const strategy = p.entry.strategy ?? this.inferStrategy(p.entry);
+      // Use stored signalType/strategy from VTS only - no inference fallback
+      // For legacy data without these fields, use placeholder to avoid misleading "AdaptiveFlow"
+      const signalType = p.entry.signalType ?? '—';
+      const strategy = p.entry.strategy ?? '—';
       
       // Quantitative signals should never show pattern (they're purely mathematical)
       const pattern = signalType === 'Quantitative' ? '—' : (p.entry.pattern ?? '—');
