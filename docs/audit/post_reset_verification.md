@@ -63,26 +63,17 @@ Directive 11.4C.3-B has been fully implemented to synchronize signalType → str
 | directive-11.4C.3-harmonization.test.ts | 18 | ✅ All Pass |
 | **Total** | **43** | **✅ All Pass** |
 
-## Strategy → SignalType Mapping Matrix
+## Strategy → SignalType Mapping Matrix (Derived from REGIME_STRATEGY_MAP)
 
-| Strategy | SignalType | Category |
-|:---------|:-----------|:---------|
-| vwap_pullback | QUANT | Mathematical |
-| sma_trend_ride | QUANT | Mathematical |
-| liquidity_trap | QUANT | Mathematical |
-| pivot_shift | QUANT | Mathematical |
-| vwap_bounce | QUANT | Mathematical |
-| volatility_edge | QUANT | Mathematical |
-| abcd_long | PATTERN | Visual Pattern |
-| support_bounce | PATTERN | Visual Pattern |
-| triangle_breakout | PATTERN | Visual Pattern |
-| double_bottom | PATTERN | Visual Pattern |
-| range_trade | PATTERN | Visual Pattern |
-| breakout | HYBRID | Ensemble |
-| mean_reversion | HYBRID | Ensemble |
-| adaptive_flow | HYBRID | Ensemble |
-| reverse_impulse | HYBRID | Ensemble |
-| defensive_hedge | HYBRID | Ensemble |
+| Regime | SignalType | Strategies |
+|:-------|:-----------|:-----------|
+| HIGH_VOL_IMPULSE | QUANT | vwap_bounce, liquidity_trap, volatility_edge |
+| LOW_VOL_CHOP | PATTERN | range_trade, support_bounce, abcd_long |
+| BULL_STABLE | HYBRID | vwap_pullback, sma_trend_ride, breakout |
+| BEAR_VOLATILE | HYBRID | reverse_impulse, defensive_hedge |
+| TRANSITION | HYBRID | mean_reversion, pivot_shift, adaptive_flow |
+
+Note: getTypeForStrategy() derives signal types directly from REGIME_STRATEGY_MAP to ensure canonical consistency.
 
 ## Success Criteria Verification
 
