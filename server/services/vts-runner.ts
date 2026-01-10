@@ -430,6 +430,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       
       // Directive 11.0E.2: Record telemetry with source='simulation' for segregation
       // Directive 11.4C-R2: Include pairRegime, signalType, and strategy for per-pair tracking
+      // Directive 11.4C.1: VTS is sole authorized telemetry writer (M70)
       // Note: Quantitative signals should NOT have a pattern (purely mathematical)
       const telemetry = getTelemetryAggregator();
       telemetry.recordPairTelemetry(pair.symbol, {
@@ -444,6 +445,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         signalType: tradeRecord.signalType, // Directive 11.4C-R2: Hybrid/Quantitative/Pattern
         strategy: tradeRecord.strategy, // Directive 11.4C-R2: Strategy name from regime map
         pattern: tradeRecord.signalType !== 'Quantitative' ? tradeRecord.strategy : undefined, // Only for Hybrid/Pattern
+        caller: 'vts', // Directive 11.4C.1: VTS caller identification for telemetry guard
       });
       
       phase10SessionTrades.push(tradeRecord);

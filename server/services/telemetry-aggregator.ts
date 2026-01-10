@@ -119,6 +119,7 @@ export class TelemetryAggregatorService {
    * Record telemetry for a pair
    * Directive 11.2 R1: Added pool parameter for segmented performance tracking
    * Directive 11.0E.2: Added source parameter for simulation/live segregation
+   * Directive 11.4C.1: Only VTS can write telemetry (caller must identify as 'vts')
    */
   recordPairTelemetry(
     symbol: string,
@@ -136,8 +137,15 @@ export class TelemetryAggregatorService {
       pattern?: string; // Directive 11.4C-R2: Pattern name for Hybrid/Pattern signals (empty for Quantitative)
       signalType?: string; // Directive 11.4C-R2: Signal type from VTS (Hybrid/Quantitative/Pattern)
       strategy?: string; // Directive 11.4C-R2: Strategy name from VTS
+      caller?: string; // Directive 11.4C.1: Caller identification (must be 'vts')
     }
   ): void {
+    // Directive 11.4C.1: Guard against non-VTS writers
+    // Only VTS is authorized to write telemetry data (M70 compliance)
+    if (data.caller !== 'vts') {
+      console.warn(`[11.4C.1][BLOCKED] Telemetry write blocked for ${symbol}: caller="${data.caller || 'unknown'}" (only 'vts' allowed)`);
+      return;
+    }
     const now = Date.now();
     const existing = this.pairTelemetry.get(symbol) || [];
     
@@ -264,6 +272,21 @@ export class TelemetryAggregatorService {
     this.poolAggregates.set('ideal', { pool: 'ideal', winRate: 0.5, sampleCount: 0, totalTrades: 0, successfulTrades: 0, avgFinalScore: 0, lastUpdated: Date.now() });
     this.poolAggregates.set('rotational', { pool: 'rotational', winRate: 0.5, sampleCount: 0, totalTrades: 0, successfulTrades: 0, avgFinalScore: 0, lastUpdated: Date.now() });
     console.log('[11.2R1][Telemetry] Pool aggregates reset');
+  }
+
+  /**
+   * Directive 11.4C.1: Flush placeholder/stale in-memory data on restart
+   * Called on service initialization to clear any cached data before rehydrating
+   * This clears in-memory cache only - SQL history remains intact for rehydration
+   * Note: rehydrated flag stays false to allow proper rehydration of live history
+   */
+  flushStaleTelemetry(): void {
+    const beforeCount = this.pairTelemetry.size;
+    this.pairTelemetry.clear();
+    this.resetPoolAggregates();
+    // Keep rehydrated=false to allow rehydrateTelemetryState() to run and restore live history
+    console.log(`[11.4C.1][FLUSH] Cleared ${beforeCount} in-memory entries on restart (SQL history preserved)`);
+    console.log(`[11.4C.1][FLUSH] Ready for rehydration from live telemetry + fresh VTS population`);
   }
 
   /**
@@ -974,7 +997,10 @@ let telemetryInstance: TelemetryAggregatorService | null = null;
 export function getTelemetryAggregator(): TelemetryAggregatorService {
   if (!telemetryInstance) {
     telemetryInstance = new TelemetryAggregatorService();
-    console.log('[10.8][Telemetry] TelemetryAggregatorService initialized');
+    // Directive 11.4C.1: Flush stale placeholder data on restart
+    // Ensures only real VTS-generated telemetry is used
+    telemetryInstance.flushStaleTelemetry();
+    console.log('[10.8][Telemetry] TelemetryAggregatorService initialized (11.4C.1 flush complete)');
   }
   return telemetryInstance;
 }

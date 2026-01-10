@@ -80,6 +80,7 @@ export class AdaptiveRatioManager {
   /**
    * Compute adaptive ratio based on pool performance data
    * Directive 11.2 R1: Now uses both in-memory aggregates and SQL data
+   * Directive 11.4C.1: Only uses real VTS-generated scores (telemetry guard + flush on restart)
    */
   async computeAdaptiveRatio(
     regime: MarketRegime,
@@ -87,6 +88,7 @@ export class AdaptiveRatioManager {
   ): Promise<AdaptiveRatio> {
     try {
       // First, try in-memory pool performance from TelemetryAggregator
+      // Directive 11.4C.1: Telemetry now only contains VTS-generated data (no FX5 seeding)
       const telemetry = getTelemetryAggregator();
       const inMemoryComparison = telemetry.getPoolPerformanceComparison();
       
