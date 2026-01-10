@@ -663,6 +663,22 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Directive 11.4C-R2: Top Batch API Endpoint (M66)
+  apiRouter.get('/pairs/ranked', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { getTelemetryAggregator } = await import('./services/telemetry-aggregator.js');
+      const telemetry = getTelemetryAggregator();
+      
+      const limit = parseInt(req.query.limit as string ?? '100');
+      const pairs = telemetry.getRankedPairs(limit);
+      
+      res.json(pairs);
+    } catch (error: any) {
+      console.error('[11.4C-R2][M66] Error fetching ranked pairs:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Phase 31.K - LATTI Learning Insights Endpoint
   apiRouter.get('/system/latti-insights', async (_req, res) => {
     try {

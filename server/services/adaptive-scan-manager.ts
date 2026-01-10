@@ -1,6 +1,6 @@
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * Directive 10.8 + 11.2 R1 — Adaptive Scan Manager (Dual-Pool Scheduler)
+ * Directive 10.8 + 11.2 R1 + 11.4C-R2 — Adaptive Scan Manager (Dual-Pool Scheduler)
  * ══════════════════════════════════════════════════════════════════════════════
  * 
  * Replaces static Tier A/B scanning logic with a learning-driven, telemetry-based
@@ -12,6 +12,7 @@
  * - Integration with TelemetryAggregator for performance-based ranking
  * - AdaptiveRatioManager for regime-aware ratio adjustment (11.2 R1)
  * - Graceful fallback to all available pairs if telemetry is insufficient
+ * - Directive 11.4C-R2: Initialization guard with retry logic for underflow protection
  * 
  * DO NOT MODIFY without architectural review.
  * ══════════════════════════════════════════════════════════════════════════════
@@ -35,6 +36,12 @@ export interface AdaptiveScanBatch {
   totalBatch: string[];
   timestamp: number;
   ratioUsed?: AdaptiveRatio; // Directive 11.2 R1: Track ratio used for this batch
+  retryCount?: number; // Directive 11.4C-R2: Track retry attempts
+}
+
+// Directive 11.4C-R2: Helper for async sleep
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 /**
@@ -167,9 +174,11 @@ export class AdaptiveScanManager {
    * Directive 11.2 R1: Ratios now computed by AdaptiveRatioManager based on pool performance
    * Directive 11.4C.2: Dynamic Fill - always scan batchSize pairs, fill deficit from rotational
    * Directive 11.4B.2-R1: Underflow protection guarantees 100-pair cycles (M64)
+   * Directive 11.4C-R2: Initialization guard with retry logic (M65)
    */
-  async getNextScanBatch(allAvailablePairs: string[]): Promise<AdaptiveScanBatch> {
+  async getNextScanBatch(allAvailablePairs: string[], retryAttempt: number = 0): Promise<AdaptiveScanBatch> {
     const batchSize = SCANNER_PARAMS.BATCH_SIZE; // Always 100 (M64)
+    const MAX_RETRIES = 1; // Directive 11.4C-R2: Maximum retry attempts
     
     // Directive 11.2 R1: Compute dynamic ratio based on pool performance
     let idealRatio: number;
@@ -221,6 +230,13 @@ export class AdaptiveScanManager {
     const excludedPairs = combined.filter(p => this.failureTracker.isInCooldown(p));
     const filteredBatch = this.failureTracker.filterFailedPairs(combined);
     
+    // Directive 11.4C-R2: Initialization guard - retry if batch is underfilled
+    if (filteredBatch.length < batchSize && retryAttempt < MAX_RETRIES) {
+      console.warn(`[11.4C-R2][AdaptiveScan] Underfilled batch: ${filteredBatch.length}/${batchSize}. Retrying in 5s...`);
+      await sleep(5000);
+      return this.getNextScanBatch(allAvailablePairs, retryAttempt + 1);
+    }
+    
     // Create batch result with ratio tracking (11.2 R1)
     const batch: AdaptiveScanBatch = {
       idealPairs: idealPairs.filter(p => !this.failureTracker.isInCooldown(p)),
@@ -229,6 +245,7 @@ export class AdaptiveScanManager {
       totalBatch: filteredBatch,
       timestamp: Date.now(),
       ratioUsed: currentRatio,
+      retryCount: retryAttempt, // Directive 11.4C-R2: Track retries
     };
     
     this.lastBatch = batch;
@@ -238,9 +255,9 @@ export class AdaptiveScanManager {
     const actualRotationalRatio = batch.totalBatch.length > 0 ? batch.rotationalPairs.length / batch.totalBatch.length : 0;
     console.log(`[11.4B.2-R1][AdaptiveScan] Cycle composed of ${batch.idealPairs.length} ideal + ${batch.rotationalPairs.length} rotational pairs (${(actualIdealRatio * 100).toFixed(0)}%/${(actualRotationalRatio * 100).toFixed(0)}%)${isDynamicFill ? ' [UNDERFLOW]' : ''}`);
     
-    // M64 Governance: Warn if total batch < 100 (should never happen with proper allAvailablePairs)
+    // M64/M65 Governance: Warn if total batch still < 100 after retry
     if (batch.totalBatch.length < batchSize) {
-      console.warn(`[11.4B.2-R1][M64] WARNING: Batch size ${batch.totalBatch.length} < ${batchSize}. Check allAvailablePairs source.`);
+      console.warn(`[11.4C-R2][M65] WARNING: Batch size ${batch.totalBatch.length} < ${batchSize} after ${retryAttempt} retry(s). Check allAvailablePairs source.`);
     }
     
     return batch;

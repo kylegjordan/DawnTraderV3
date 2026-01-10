@@ -1,0 +1,131 @@
+⚙️ PART 2 — Revised Directive 11.4C-R2
+
+(Top Batch UI Integration + Diagnostics + Implementation Summary Requirements)
+
+Directive 11.4C-R2 — Top Batch UI Integration & Initialization Diagnostics
+
+Phase: 11.4C-R2
+Objective:
+Finalize adaptive scanning integration by:
+
+Implementing the Top Batch UI with rank, regime, signal type, strategy, pattern, and source.
+
+Ensuring proper initialization backfill diagnostics (no more 25-pair underflows).
+
+Requiring complete, auditable implementation summaries from Replit.
+
+🧩 Task 1 — Add Initialization Guard for Underflow Protection
+
+File: server/services/adaptive-scan-manager.ts
+
+const batch = idealPairs.concat(rotationalPairs);
+if (batch.length < 100) {
+  console.warn(`[11.4C-R2][AdaptiveScan] Underfilled batch: ${batch.length}/100. Retrying in 5s...`);
+  await sleep(5000);
+  const retryBatch = this.rebuildBatch();
+  if (retryBatch.length < 100)
+    console.warn(`[11.4C-R2][AdaptiveScan] Still under 100 after retry (Available ${retryBatch.length})`);
+  return retryBatch;
+}
+return batch;
+
+
+✅ Ensures first cycles always try to reach full 100-pair scans after any load race.
+
+🧩 Task 2 — Enhanced Logging & Diagnostics
+
+File: server/services/fx5-scanner.ts
+
+console.log(
+  `[11.4C-R2][AdaptiveScan] Cycle Summary -> ` +
+  `Requested=100 | Actual=${batch.length} ` +
+  `(Ideal=${actualIdeal}, Rotational=${actualRotational}, Retry=${retryCount})`
+);
+
+
+✅ Produces explicit visibility into composition each cycle.
+
+🧩 Task 3 — Top Batch API Endpoint
+
+File: server/routes/api/pairs.ts
+
+router.get('/ranked', async (req, res) => {
+  const top = parseInt(req.query.limit ?? '100');
+  const pairs = await telemetry.getRankedPairs(top);
+  res.json(pairs.map((p, i) => ({
+    rank: i + 1,
+    symbol: p.symbol,
+    score: p.performanceScore,
+    signalType: p.signalType,
+    strategy: p.strategy,
+    pattern: p.pattern ?? '—',
+    regime: p.regime,
+    source: p.source // 'simulation' or 'live'
+  })));
+});
+
+
+✅ Simplifies client consumption and aligns with your specified columns.
+
+🧩 Task 4 — Front-End Top Batch UI
+
+File: client/src/components/tabs/top-batch.tsx
+
+Columns → Rank | Symbol | Score | Signal Type | Strategy | Pattern | Regime | Source
+
+Auto-refresh every 30 s via React Query.
+
+Scores color-coded (green > 0.7, yellow 0.5–0.7, red < 0.5).
+
+Ranks sorted descending by score.
+
+✅ Presents live meritocracy state and trading intelligence context.
+
+🧩 Task 5 — Implementation Summary & Audit Requirements for Replit
+
+At completion, Replit must include in its implementation log:
+
+Files Adjusted or Created:
+
+Explicit list (with full paths).
+
+Code Changes:
+
+Brief summary for each file: lines added/removed/modified; functions created or deprecated.
+
+Deprecations:
+
+Identify any deprecated functions/constants (e.g., pool references removed).
+
+Perform a full-repo search for references to each deprecated element.
+
+Confirm grep/AST search results show zero remaining calls.
+
+Tests & Governance:
+
+State number of new/updated tests and their result summary.
+
+Logs:
+
+Include one example Adaptive Scan cycle log line showing Ideal/Rotational composition.
+
+✅ Ensures full traceability and prevents hidden regressions.
+
+🧩 Governance Tests
+ID	Description	Expected
+M65	Retry logic fills ≤ 100 pairs even during load lag	Pass
+M66	/api/pairs/ranked returns ordered list of top N with new columns	Pass
+M67	No legacy "pool" references remain in codebase	Pass
+🧩 Expected Outcome
+
+After 11.4C-R2:
+
+The adaptive scanning engine always completes full 100-pair cycles.
+
+No redundant time-based flushes.
+
+The Ideal Pool remains self-maintaining through per-pair telemetry updates.
+
+The UI displays live, ranked pair intelligence with clear source attribution.
+
+Replit’s implementation logs become self-auditing and verifiable.

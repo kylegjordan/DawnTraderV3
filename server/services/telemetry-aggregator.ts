@@ -669,6 +669,95 @@ export class TelemetryAggregatorService {
   }
 
   /**
+   * Directive 11.4C-R2: Get ranked pairs with full metadata for Top Batch UI (M66)
+   * Returns ordered list with rank, symbol, score, signalType, strategy, pattern, regime, source
+   */
+  getRankedPairs(limit: number = 100): Array<{
+    rank: number;
+    symbol: string;
+    score: number;
+    signalType: string;
+    strategy: string;
+    pattern: string;
+    regime: string;
+    source: TelemetrySource;
+  }> {
+    const now = Date.now();
+    const scoredPairs: Array<{ 
+      symbol: string; 
+      score: number; 
+      entry: PairTelemetry;
+    }> = [];
+    
+    for (const [symbol, entries] of this.pairTelemetry.entries()) {
+      const recent = entries.filter(t => now - t.lastUpdated < this.historyWindowMs);
+      if (recent.length === 0) continue;
+      
+      const score = this.getCompositeScore(symbol);
+      const latest = recent[recent.length - 1];
+      
+      if (score > 0) {
+        scoredPairs.push({ symbol, score, entry: latest });
+      }
+    }
+    
+    // Sort by score descending
+    scoredPairs.sort((a, b) => b.score - a.score);
+    
+    // Map to ranked output with metadata
+    const rankedPairs = scoredPairs.slice(0, limit).map((p, index) => {
+      return {
+        rank: index + 1,
+        symbol: p.symbol,
+        score: parseFloat(p.score.toFixed(4)),
+        signalType: this.inferSignalType(p.entry),
+        strategy: this.inferStrategy(p.entry),
+        pattern: '—', // Patterns populated by signal orchestrator
+        regime: this.currentRegime,
+        source: p.entry.source ?? 'live',
+      };
+    });
+    
+    console.log(`[11.4C-R2][Telemetry] getRankedPairs(limit=${limit}): ${rankedPairs.length} pairs returned (M66)`);
+    return rankedPairs;
+  }
+
+  /**
+   * Directive 11.4C-R2: Infer signal type from telemetry entry
+   */
+  private inferSignalType(entry: PairTelemetry): string {
+    // Determine signal type based on score composition
+    if (entry.hybridScore > 0.5 && entry.predictiveConfidence > 0.5) {
+      return 'Hybrid';
+    } else if (entry.hybridScore > 0.3) {
+      return 'Quantitative';
+    } else if (entry.avgDecayedStrength > 0.3) {
+      return 'Pattern';
+    }
+    return 'Hybrid'; // Default
+  }
+
+  /**
+   * Directive 11.4C-R2: Infer strategy from telemetry entry based on regime
+   * MarketRegime types: EXTREME_NOISE, BULL_VOLATILE, BULL_STABLE, BEAR_STABLE, BEAR_VOLATILE, LOW_VOL_CHOP
+   */
+  private inferStrategy(entry: PairTelemetry): string {
+    // Strategy inference based on market regime and telemetry characteristics
+    const regime = this.currentRegime;
+    
+    if (regime === 'BULL_STABLE') {
+      return entry.hybridScore > 0.5 ? 'TrendFlow' : 'MomentumPulse';
+    } else if (regime === 'BULL_VOLATILE') {
+      return 'BreakoutCapture';
+    } else if (regime === 'BEAR_STABLE' || regime === 'BEAR_VOLATILE') {
+      return 'MeanReversion';
+    } else if (regime === 'EXTREME_NOISE') {
+      return 'ExtremeNoisePause';
+    }
+    return 'AdaptiveFlow'; // Default for LOW_VOL_CHOP
+  }
+
+  /**
    * Clear all telemetry data
    */
   clear(): void {
@@ -834,6 +923,20 @@ export class TelemetryAggregatorService {
     console.log(`[${SCHEMA_DIRECTIVE}][Telemetry] Summary with coefficients (${SCORE_WEIGHTS_VERSION}, filter=${FILTER_SCHEMA_VERSION}):`, JSON.stringify(summary));
     return summary;
   }
+}
+
+/**
+ * Directive 11.4C-R2: Ranked pair entry with full metadata for UI display
+ */
+export interface RankedPairEntry {
+  rank: number;
+  symbol: string;
+  score: number;
+  signalType: string;
+  strategy: string;
+  pattern: string;
+  regime: string;
+  source: TelemetrySource;
 }
 
 // Singleton instance

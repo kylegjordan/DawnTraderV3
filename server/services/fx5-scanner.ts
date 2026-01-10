@@ -257,6 +257,14 @@ export class Fx5ScannerService {
 
       // R9.3.HF-7: Add granular logging to identify bottlenecks
       console.log(`[FX5Scanner][R9.3.HF-7][${mode}] Batch complete, getting active trades...`);
+      
+      // Directive 11.4C-R2: Enhanced logging with cycle summary
+      const retryCount = (batchResult as any).retryCount ?? 0;
+      console.log(
+        `[11.4C-R2][AdaptiveScan] Cycle Summary -> ` +
+        `Requested=100 | Actual=${evaluatedCount} ` +
+        `(Ideal=${idealCount}, Rotational=${rotationalCount}, Retry=${retryCount})`
+      );
 
       // Get active trades count with timeout protection
       const activeTradesPromise = storage.getActiveTrades(mode);

@@ -104,6 +104,16 @@
     ]
   },
   {
+    "path": "/api/pairs/ranked",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/system/latti-insights",
     "methods": [
       "GET"
