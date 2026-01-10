@@ -1,0 +1,65 @@
+⚙️ Directive 11.4B.2-R1 — Adaptive Scanning Dynamic N & Ratio (Amended)
+
+Only the deltas from the previous directive are shown; all other content remains as in 11.4B.2.
+
+🔸 Task 1 — Flush & Reinitialize Ideal Pool (Amended)
+
+Old:
+
+if (!p.performanceScore || p.samples < 3)
+
+
+New:
+
+// Flush only pairs with no score or default 0.5 score
+if (!p.performanceScore || p.performanceScore === 0.5)
+
+
+✅ Rationale: Removes legacy “three-sample” requirement; immediate promotion for high-performers.
+
+🔸 Task 3 — Dynamic Ratio Logic (Amended with Underflow Protection)
+
+Old:
+
+const { ideal, rotational } = getScanDistribution();
+const idealPairs = adaptiveScanManager.selectPairs('ideal', ideal);
+const rotationalPairs = adaptiveScanManager.selectPairs('rotational', rotational);
+const batch = idealPairs.concat(rotationalPairs);
+
+
+New:
+
+const { ideal, rotational } = getScanDistribution();
+
+const availableIdealPairs = adaptiveScanManager.getAvailablePairs('ideal');
+const actualIdeal = Math.min(ideal, availableIdealPairs.length);
+const actualRotational = 100 - actualIdeal; // always total 100
+
+const idealPairs = adaptiveScanManager.selectPairs('ideal', actualIdeal);
+const rotationalPairs = adaptiveScanManager.selectPairs('rotational', actualRotational);
+const batch = idealPairs.concat(rotationalPairs);
+
+console.log(`[11.4B.2-R1][AdaptiveScan] Cycle composed of ${actualIdeal} ideal + ${actualRotational} rotational pairs`);
+
+
+✅ Rationale: Guarantees full 100-pair scan every cycle even when Ideal Pool < target.
+
+🔸 Governance Invariants Addendum
+ID	Description	Enforcement
+M63	The Ideal Pool flush removes only pairs with performanceScore == 0.5 or undefined.	telemetry-governance.test.ts
+M64	Each FX5 cycle must always scan 100 pairs (total = actualIdeal + actualRotational).	fx5-scanner.test.ts
+🔸 Expected Outcome After Deployment
+
+The Ideal Pool is rebuilt solely from scored pairs.
+
+The FX5 scanner always fills its 100-pair quota even in sparse markets.
+
+The meritocracy pipeline begins cleanly: no legacy survivors, no underflow cycles.
+
+Telemetry will immediately start re-ranking pairs as soon as VTS or live data provide new PerformanceScores.
+
+✅ Summary of Changes vs 11.4B.2
+Area	Change	Impact
+Flush logic	Removed samples < 3, added performanceScore == 0.5 filter	Eliminates tenure bias
+Scan logic	Added underflow protection (Math.min, backfill rotational)	Guarantees 100 pairs/cycle
+Governance	Added M63, M64	Regression-proof verification

@@ -154,8 +154,9 @@ describe('Directive 10.8 — Adaptive Scan Manager', () => {
       
       expect(info).toContain('10.8');
       expect(info).toContain('AdaptiveScan');
-      expect(info).toContain('60%');
-      expect(info).toContain('40%');
+      expect(info).toContain('ideal=');
+      expect(info).toContain('rotational=');
+      expect(info).toContain('batch=100');
     });
 
     it('stores last batch for retrieval', async () => {

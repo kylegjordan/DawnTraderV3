@@ -166,9 +166,10 @@ export class AdaptiveScanManager {
    * Get the next batch of pairs to scan using dynamic Ideal/Rotational split
    * Directive 11.2 R1: Ratios now computed by AdaptiveRatioManager based on pool performance
    * Directive 11.4C.2: Dynamic Fill - always scan batchSize pairs, fill deficit from rotational
+   * Directive 11.4B.2-R1: Underflow protection guarantees 100-pair cycles (M64)
    */
   async getNextScanBatch(allAvailablePairs: string[]): Promise<AdaptiveScanBatch> {
-    const batchSize = SCANNER_PARAMS.BATCH_SIZE;
+    const batchSize = SCANNER_PARAMS.BATCH_SIZE; // Always 100 (M64)
     
     // Directive 11.2 R1: Compute dynamic ratio based on pool performance
     let idealRatio: number;
@@ -187,33 +188,33 @@ export class AdaptiveScanManager {
       rotationalRatio = SCANNER_PARAMS.DUAL_POOL.ROTATIONAL_RATIO;
     }
     
-    // Directive 11.4C.2: Dynamic Fill Algorithm
-    // 1. Request ideal pairs based on computed ratio
-    // 2. If ideal < target, fill remaining with rotational (always hit batchSize)
-    // 3. When ideal is sufficient, maintain the normal ratio split
+    // Directive 11.4B.2-R1 (M64): Underflow Protection with guaranteed 100-pair cycles
+    // 1. Check available ideal pool pairs first
+    // 2. Calculate actualIdeal = min(target, available)
+    // 3. actualRotational = 100 - actualIdeal (guarantees full batch)
     const targetIdealCount = Math.ceil(batchSize * idealRatio);
-    const baseRotationalCount = Math.ceil(batchSize * rotationalRatio);
     
-    console.log(`[AdaptiveScan][11.4C.2] Target: Ideal=${targetIdealCount}, Rotational=${baseRotationalCount} (batchSize=${batchSize})`);
+    // M64: Get count of available ideal pairs BEFORE fetching
+    const availableIdealCount = this.telemetry.getAvailableIdealPoolCount();
+    const actualIdealCount = Math.min(targetIdealCount, availableIdealCount);
+    const actualRotationalCount = batchSize - actualIdealCount; // M64: Always total 100
     
-    // Get available ideal pairs from telemetry (top performers only - no fallback to random)
-    const availableIdealPairs = this.telemetry.getTopPairs(batchSize); // Request up to batchSize to see what's available
-    const actualIdealCount = Math.min(availableIdealPairs.length, targetIdealCount);
-    const idealPairs = availableIdealPairs.slice(0, actualIdealCount);
+    console.log(`[11.4B.2-R1][AdaptiveScan] Target: Ideal=${targetIdealCount}, Available=${availableIdealCount}, Actual=${actualIdealCount}+${actualRotationalCount}=${batchSize} (M64)`);
     
-    // Directive 11.4C.2: Dynamic fill - calculate how many rotational pairs needed
-    const idealDeficit = targetIdealCount - actualIdealCount;
-    const dynamicRotationalCount = baseRotationalCount + idealDeficit;
-    const isDynamicFill = idealDeficit > 0;
+    // Get ideal pairs from telemetry (top performers only)
+    const idealPairs = this.telemetry.getTopPairs(actualIdealCount);
+    
+    // Directive 11.4B.2-R1: Dynamic fill - remaining slots go to rotational
+    const isDynamicFill = actualIdealCount < targetIdealCount;
     
     if (isDynamicFill) {
-      console.log(`[AdaptiveScan][11.4C.2] DYNAMIC FILL: Ideal deficit=${idealDeficit}, expanding rotational ${baseRotationalCount} → ${dynamicRotationalCount}`);
+      console.log(`[11.4B.2-R1][AdaptiveScan] UNDERFLOW PROTECTION: Ideal deficit=${targetIdealCount - actualIdealCount}, rotational expanded to ${actualRotationalCount}`);
     }
     
     // Get rotational pairs for exploration (expanded if ideal was insufficient)
-    const rotationalPairs = this.telemetry.getRotationalPairs(dynamicRotationalCount, allAvailablePairs)
+    const rotationalPairs = this.telemetry.getRotationalPairs(actualRotationalCount, allAvailablePairs)
       .filter(p => !idealPairs.includes(p)) // No duplicates
-      .slice(0, dynamicRotationalCount);
+      .slice(0, actualRotationalCount);
     
     // Combine and filter out failed pairs
     const combined = [...idealPairs, ...rotationalPairs];
@@ -232,12 +233,28 @@ export class AdaptiveScanManager {
     
     this.lastBatch = batch;
     
-    // Directive 11.4C.2: Log actual ratio achieved
+    // Directive 11.4B.2-R1: Log actual composition achieved
     const actualIdealRatio = batch.totalBatch.length > 0 ? batch.idealPairs.length / batch.totalBatch.length : 0;
     const actualRotationalRatio = batch.totalBatch.length > 0 ? batch.rotationalPairs.length / batch.totalBatch.length : 0;
-    console.log(`[AdaptiveScan][11.4C.2] Actual: Ideal=${batch.idealPairs.length} (${(actualIdealRatio * 100).toFixed(0)}%) | Rotational=${batch.rotationalPairs.length} (${(actualRotationalRatio * 100).toFixed(0)}%) | Excluded=${batch.excludedPairs.length} | Total=${batch.totalBatch.length}${isDynamicFill ? ' [DYNAMIC FILL]' : ''}`);
+    console.log(`[11.4B.2-R1][AdaptiveScan] Cycle composed of ${batch.idealPairs.length} ideal + ${batch.rotationalPairs.length} rotational pairs (${(actualIdealRatio * 100).toFixed(0)}%/${(actualRotationalRatio * 100).toFixed(0)}%)${isDynamicFill ? ' [UNDERFLOW]' : ''}`);
+    
+    // M64 Governance: Warn if total batch < 100 (should never happen with proper allAvailablePairs)
+    if (batch.totalBatch.length < batchSize) {
+      console.warn(`[11.4B.2-R1][M64] WARNING: Batch size ${batch.totalBatch.length} < ${batchSize}. Check allAvailablePairs source.`);
+    }
     
     return batch;
+  }
+
+  /**
+   * Directive 11.4B.2-R1: Get available pairs in ideal pool
+   * Used for underflow protection calculation
+   */
+  getAvailablePairs(pool: 'ideal' | 'rotational'): string[] {
+    if (pool === 'ideal') {
+      return this.telemetry.getTopPairs(SCANNER_PARAMS.BATCH_SIZE);
+    }
+    return []; // Rotational is computed from allAvailablePairs
   }
 
   /**

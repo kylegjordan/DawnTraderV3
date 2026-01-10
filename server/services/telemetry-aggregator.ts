@@ -373,11 +373,12 @@ export class TelemetryAggregatorService {
 
   /**
    * Get composite score for a pair based on weighted telemetry
+   * Directive 11.4B.2-R1: Removes minSamples requirement for immediate high-performer promotion (M63)
    */
   getCompositeScore(symbol: string): number {
     const entries = this.pairTelemetry.get(symbol);
-    if (!entries || entries.length < this.minSamples) {
-      return 0; // Not enough data
+    if (!entries || entries.length === 0) {
+      return 0; // No data at all
     }
     
     const weights = SCANNER_PARAMS.TELEMETRY.SCORE_WEIGHTS;
@@ -405,19 +406,27 @@ export class TelemetryAggregatorService {
   /**
    * Directive 11.2 R1: Get top pairs with explicit pool attribution
    * Directive 11.4C.1: Now accepts explicit count instead of ratio
+   * Directive 11.4B.2-R1: Removes samples<3 requirement, filters performanceScore===0.5 (M63)
    */
   getTopPairsWithPool(count: number): PairWithPool[] {
     const now = Date.now();
     const scoredPairs: Array<{ symbol: string; score: number }> = [];
+    const DEFAULT_SCORE = 0.5; // M63: Default/unscored pairs are excluded from Ideal Pool
+    const SCORE_TOLERANCE = 0.001; // Floating point tolerance
     
     for (const [symbol, entries] of this.pairTelemetry.entries()) {
       // Filter to recent entries only
       const recent = entries.filter(t => now - t.lastUpdated < this.historyWindowMs);
-      if (recent.length >= this.minSamples) {
-        scoredPairs.push({
-          symbol,
-          score: this.getCompositeScore(symbol),
-        });
+      if (recent.length === 0) continue;
+      
+      const score = this.getCompositeScore(symbol);
+      
+      // Directive 11.4B.2-R1 (M63): Only include pairs with non-default performanceScore
+      // Removes legacy "three-sample" requirement for immediate promotion of high-performers
+      // Use tolerance for floating point comparison
+      const isDefaultScore = Math.abs(score - DEFAULT_SCORE) < SCORE_TOLERANCE;
+      if (score !== undefined && !isDefaultScore && score > SCORE_TOLERANCE) {
+        scoredPairs.push({ symbol, score });
       }
     }
     
@@ -431,8 +440,32 @@ export class TelemetryAggregatorService {
       score: p.score,
     }));
     
-    console.log(`[10.8][Telemetry] getTopPairs(count=${count}): ${topPairs.length} pairs selected`);
+    console.log(`[11.4B.2-R1][Telemetry] getTopPairs(count=${count}): ${topPairs.length} pairs selected (M63: score!=0.5 filter)`);
     return topPairs;
+  }
+
+  /**
+   * Directive 11.4B.2-R1: Get count of available ideal pool pairs
+   * Used for underflow protection calculation (M64)
+   */
+  getAvailableIdealPoolCount(): number {
+    const now = Date.now();
+    const DEFAULT_SCORE = 0.5;
+    const SCORE_TOLERANCE = 0.001;
+    let count = 0;
+    
+    for (const [symbol, entries] of this.pairTelemetry.entries()) {
+      const recent = entries.filter(t => now - t.lastUpdated < this.historyWindowMs);
+      if (recent.length === 0) continue;
+      
+      const score = this.getCompositeScore(symbol);
+      const isDefaultScore = Math.abs(score - DEFAULT_SCORE) < SCORE_TOLERANCE;
+      if (score !== undefined && !isDefaultScore && score > SCORE_TOLERANCE) {
+        count++;
+      }
+    }
+    
+    return count;
   }
 
   /**
@@ -449,27 +482,41 @@ export class TelemetryAggregatorService {
   /**
    * Directive 11.2 R1: Get rotational pairs with explicit pool attribution
    * Directive 11.4C.1: Now accepts explicit count instead of ratio
+   * Directive 11.4B.2-R1: Includes pairs with default score (0.5) or no score (M63)
    */
   getRotationalPairsWithPool(count: number, allPairs: string[]): PairWithPool[] {
     const now = Date.now();
-    const undersampled: string[] = [];
+    const DEFAULT_SCORE = 0.5;
+    const SCORE_TOLERANCE = 0.001;
+    const rotationalCandidates: string[] = [];
     
     for (const symbol of allPairs) {
       const entries = this.pairTelemetry.get(symbol);
-      if (!entries || entries.length < this.minSamples) {
-        undersampled.push(symbol);
+      
+      // Directive 11.4B.2-R1 (M63): Include pairs with no entries, default score, or stale data
+      if (!entries || entries.length === 0) {
+        rotationalCandidates.push(symbol);
         continue;
       }
       
-      // Also include pairs not scanned in the last hour
+      const score = this.getCompositeScore(symbol);
+      const isDefaultScore = Math.abs(score - DEFAULT_SCORE) < SCORE_TOLERANCE;
+      
+      // Include pairs with default/unscored performance (M63: performanceScore === 0.5)
+      if (isDefaultScore || score < SCORE_TOLERANCE) {
+        rotationalCandidates.push(symbol);
+        continue;
+      }
+      
+      // Also include pairs not scanned in the last hour (stale data)
       const lastEntry = entries[entries.length - 1];
       if (now - lastEntry.lastUpdated > 3600000) {
-        undersampled.push(symbol);
+        rotationalCandidates.push(symbol);
       }
     }
     
     // Shuffle for random rotation
-    const shuffled = undersampled.sort(() => Math.random() - 0.5);
+    const shuffled = rotationalCandidates.sort(() => Math.random() - 0.5);
     // Directive 11.4C.1: Use explicit count directly
     const rotationalPairs = shuffled.slice(0, count).map(symbol => ({
       symbol,
@@ -477,7 +524,7 @@ export class TelemetryAggregatorService {
       score: 0, // Rotational pairs don't have established scores
     }));
     
-    console.log(`[10.8][Telemetry] getRotationalPairs(count=${count}): ${rotationalPairs.length} pairs selected`);
+    console.log(`[11.4B.2-R1][Telemetry] getRotationalPairs(count=${count}): ${rotationalPairs.length} pairs selected`);
     return rotationalPairs;
   }
 
