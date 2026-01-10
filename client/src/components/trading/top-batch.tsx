@@ -22,33 +22,53 @@ function getScoreColor(score: number): string {
   return "text-red-500 bg-red-500/10";
 }
 
+function normalizeSignalType(signalType: string): string {
+  const legacyToCanonical: Record<string, string> = {
+    Hybrid: 'HYBRID',
+    Quantitative: 'QUANT',
+    Pattern: 'PATTERN'
+  };
+  return legacyToCanonical[signalType] ?? signalType.toUpperCase();
+}
+
 function getSignalTypeIcon(signalType: string) {
-  switch (signalType) {
-    case 'Hybrid':
+  const normalized = normalizeSignalType(signalType);
+  switch (normalized) {
+    case 'HYBRID':
       return <Zap className="h-3 w-3" />;
-    case 'Quantitative':
+    case 'QUANT':
       return <Activity className="h-3 w-3" />;
-    case 'Pattern':
+    case 'PATTERN':
       return <TrendingUp className="h-3 w-3" />;
     default:
       return <Activity className="h-3 w-3" />;
   }
 }
 
+function normalizeRegime(regime: string): string {
+  const ghostToCanonical: Record<string, string> = {
+    BULL_VOLATILE: 'HIGH_VOL_IMPULSE',
+    BEAR_STABLE: 'BEAR_VOLATILE',
+    EXTREME_NOISE: 'LOW_VOL_CHOP',
+    HIGH_VOL_CHOP: 'HIGH_VOL_IMPULSE',
+    MIXED_TRANSITION: 'TRANSITION'
+  };
+  return ghostToCanonical[regime] ?? regime;
+}
+
 function getRegimeBadgeClass(regime: string): string {
-  switch (regime) {
+  const normalizedRegime = normalizeRegime(regime);
+  switch (normalizedRegime) {
     case 'BULL_STABLE':
       return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
-    case 'BULL_VOLATILE':
+    case 'HIGH_VOL_IMPULSE':
       return "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300";
-    case 'BEAR_STABLE':
-      return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300";
     case 'BEAR_VOLATILE':
       return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300";
     case 'LOW_VOL_CHOP':
       return "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300";
-    case 'EXTREME_NOISE':
-      return "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300";
+    case 'TRANSITION':
+      return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
     default:
       return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
   }

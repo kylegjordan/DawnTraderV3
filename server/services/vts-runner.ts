@@ -41,9 +41,18 @@ import { getCachedCostMetrics, computeNetGeometry } from '../core/math/cost-mode
 import { compareLatestSessions, savePaperSessionTrades, getPaperSessionTrades } from './vts-live-comparison-audit.js';
 import { SCORE_WEIGHTS } from '../config/score-weights.config.js';
 import { calculatePairRegime, getRegimeWeight } from '../core/metrics/market-regime.js';
-import { regimeStrategyMap, selectRandomStrategy as selectRegimeStrategy, getRegimeRiskMultiplier } from '../config/regime-strategy-map.js';
-import type { MarketRegimeType, OHLCData } from '../types/market-regime.types';
-import type { VTSCycleMetrics, SignalType } from '../types/virtual-trade.interface';
+import { 
+  REGIME_STRATEGY_MAP, 
+  selectRandomStrategy as selectRegimeStrategy, 
+  getRegimeRiskMultiplier,
+  normalizeStrategy,
+  type MarketRegimeType,
+  type CanonicalSignalType
+} from '../config/regime-strategy-map.js';
+import type { OHLCData } from '../types/market-regime.types';
+import type { VTSCycleMetrics } from '../types/virtual-trade.interface';
+import { scanPatterns } from './pattern-recognizer.js';
+import type { PatternType } from '../types';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -79,8 +88,8 @@ const DEFAULT_CONFIG: VTSConfig = {
   simulationIntervalSec: 60,
   pairsPerCycle: 100,
   strategies: [
-    'MomentumPulse', 'TrendFlow', 'BreakoutConfirm', 'RangeTrade', 
-    'SupportBounce', 'H2_Slingshot', 'MeanReversion', 'ImpulseChaser'
+    'vwap_pullback', 'sma_trend_ride', 'breakout', 'range_trade', 
+    'support_bounce', 'vwap_bounce', 'mean_reversion', 'liquidity_trap'
   ],
   targetProfit: 0.015,
   stopLoss: 0.008,
@@ -107,8 +116,9 @@ async function loadVTSConfig(): Promise<VTSConfig> {
 interface Phase10TradeRecord {
   symbol: string;
   regime: MarketRegimeType;
-  signalType: SignalType;
+  signalType: CanonicalSignalType;
   strategy: string;
+  patternType?: PatternType | null;
   finalScore: number;
   hybridScore: number;
   predictiveConfidence: number;
@@ -230,8 +240,35 @@ async function generatePhase10Signal(
   const regimeResult = calculatePairRegime(ohlcData);
   const regime = regimeResult.regime;
   
-  const { signalType, strategy } = selectRegimeStrategy(regime);
+  let { signalType, strategy } = selectRegimeStrategy(regime);
   const riskMultiplier = getRegimeRiskMultiplier(regime);
+  
+  // Directive 11.4C.3 Task 2: Pattern injection - detect patterns from OHLC data
+  const candles = ohlcData.map(o => ({
+    timestamp: o.timestamp,
+    open: o.open,
+    high: o.high,
+    low: o.low,
+    close: o.close,
+    volume: o.volume
+  }));
+  
+  const detectedPatterns = scanPatterns(candles, symbol);
+  const detectedPattern = detectedPatterns.length > 0 ? detectedPatterns[0] : null;
+  
+  // Directive 11.4C.3: Enforce pattern requirement for HYBRID/PATTERN signals
+  // If signalType is HYBRID and no pattern detected, downgrade to QUANT
+  // If signalType is PATTERN and no pattern detected, discard signal
+  if (signalType === 'HYBRID' && !detectedPattern) {
+    signalType = 'QUANT';
+    console.log(`[11.4C.3][VTS] ${symbol}: Downgraded HYBRID→QUANT (no pattern detected)`);
+  }
+  if (signalType === 'PATTERN' && !detectedPattern) {
+    console.log(`[11.4C.3][VTS] ${symbol}: Discarded PATTERN signal (no pattern detected)`);
+    return null;
+  }
+  
+  const patternType: PatternType | null = detectedPattern?.pattern ?? null;
   
   const entryPrice = priceData.price;
   const volatility = priceData.high24h > 0 && priceData.low24h > 0
@@ -265,7 +302,7 @@ async function generatePhase10Signal(
   const exitPrice = entryPrice * (1 + priceChange);
   const profit = (exitPrice - entryPrice) * (positionSize / entryPrice) - (positionSize * frictionCost);
   
-  // Directive 11.0E.2: VirtualSignal with full Phase-10 metrics (M50 compliant)
+  // Directive 11.4C.3: VirtualSignal with full Phase-10 metrics and pattern (M50 compliant)
   const signal: VirtualSignal = {
     id: `vsig_p10_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     symbol,
@@ -276,7 +313,9 @@ async function generatePhase10Signal(
     predictedProfit: finalScore * dynamicTarget,
     strategy,
     createdAt: Date.now(),
-    signalType, // Phase-10 format: 'Quantitative' | 'Pattern' | 'Hybrid'
+    signalType, // Directive 11.4C.3: Canonical format 'QUANT' | 'PATTERN' | 'HYBRID'
+    patternType, // Directive 11.4C.3: Attached pattern from detection (null if none)
+    patternStrength: detectedPattern?.strength ?? null, // Directive 11.4C.3: Explicit null for type safety
     hybridScore,
     predictiveConfidence,
     // Phase-10 canonical fields (M50)
@@ -295,6 +334,7 @@ async function generatePhase10Signal(
     regime,
     signalType,
     strategy,
+    patternType, // Directive 11.4C.3: Attached pattern for telemetry
     finalScore,
     hybridScore,
     predictiveConfidence,
@@ -429,9 +469,9 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       vtsService.updateMarketPrice(pair.symbol, priceData.price);
       
       // Directive 11.0E.2: Record telemetry with source='simulation' for segregation
-      // Directive 11.4C-R2: Include pairRegime, signalType, and strategy for per-pair tracking
+      // Directive 11.4C.3: Include pairRegime, signalType, and strategy for per-pair tracking
       // Directive 11.4C.1: VTS is sole authorized telemetry writer (M70)
-      // Note: Quantitative signals should NOT have a pattern (purely mathematical)
+      // Note: QUANT signals should NOT have a pattern (purely mathematical)
       const telemetry = getTelemetryAggregator();
       telemetry.recordPairTelemetry(pair.symbol, {
         finalScore: tradeRecord.finalScore,
@@ -442,9 +482,9 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         pool: pair.pool,
         source: 'simulation', // M53: VTS-generated data marked as simulation
         pairRegime: tradeRecord.regime, // Directive 11.4C-R2: Per-pair regime
-        signalType: tradeRecord.signalType, // Directive 11.4C-R2: Hybrid/Quantitative/Pattern
-        strategy: tradeRecord.strategy, // Directive 11.4C-R2: Strategy name from regime map
-        pattern: tradeRecord.signalType !== 'Quantitative' ? tradeRecord.strategy : undefined, // Only for Hybrid/Pattern
+        signalType: tradeRecord.signalType, // Directive 11.4C.3: HYBRID/QUANT/PATTERN
+        strategy: tradeRecord.strategy, // Directive 11.4C.3: Canonical strategy name
+        pattern: tradeRecord.signalType !== 'QUANT' ? (tradeRecord.patternType ?? undefined) : undefined, // Only for HYBRID/PATTERN
         caller: 'vts', // Directive 11.4C.1: VTS caller identification for telemetry guard
       });
       

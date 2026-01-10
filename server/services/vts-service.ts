@@ -31,9 +31,10 @@ import { calculateFriction } from '../utils/analysis-utils.js';
 import { MLCalibrationService, setGetRecentTradesFn } from './ml-calibration';
 
 /**
- * Phase-10 VirtualSignal - Directive 11.0E.2
+ * Phase-10 VirtualSignal - Directive 11.4C.3
  * All legacy CWQI/NGC/DI/GSI fields removed
  * M50: Full Phase-10 field parity with VirtualTrade
+ * Signal types use uppercase canonical format: 'QUANT' | 'PATTERN' | 'HYBRID'
  */
 export interface VirtualSignal {
   id: string;
@@ -45,8 +46,8 @@ export interface VirtualSignal {
   predictedProfit: number;
   strategy: string;
   createdAt: number;
-  signalType: 'Quantitative' | 'Pattern' | 'Hybrid';
-  patternType?: string;
+  signalType: 'QUANT' | 'PATTERN' | 'HYBRID';
+  patternType?: string | null;
   patternStrength?: number;
   
   // Phase-10 Canonical Metrics (M50 compliant)
@@ -425,8 +426,8 @@ export class VTSService extends EventEmitter {
 
     await this.logTrade(trade);
 
-    // Directive 10.6: Trigger ML calibration every N Hybrid trades
-    if (trade.signal.signalType === 'Hybrid') {
+    // Directive 10.6: Trigger ML calibration every N HYBRID trades
+    if (trade.signal.signalType === 'HYBRID') {
       this.calibrationCounter++;
       if (this.calibrationCounter >= CALIBRATION_TRIGGER_INTERVAL) {
         this.calibrationCounter = 0;
@@ -472,7 +473,7 @@ export class VTSService extends EventEmitter {
     
     return recent.map(t => ({
       signalType: t.signal.signalType,
-      patternType: t.signal.patternType,
+      patternType: t.signal.patternType ?? undefined,
       pnl: t.netProfit || 0,
     }));
   }

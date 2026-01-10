@@ -55,10 +55,10 @@ export interface PairTelemetry {
   avgDecayedStrength: number;
   timeframe?: '1h' | '15m' | '5m';
   pairRegime?: MarketRegime; // Directive 11.4C-R2: Per-pair regime at scan time
-  pattern?: string; // Directive 11.4C-R2: Pattern name for Hybrid/Pattern signals (empty for Quantitative)
+  pattern?: string; // Directive 11.4C.3: Pattern name for HYBRID/PATTERN signals (empty for QUANT)
   pool?: PoolType; // Directive 11.2 R1: Source pool for segmented tracking
   source?: TelemetrySource; // Directive 11.0E.2: simulation vs live segregation
-  signalType?: string; // Directive 11.4C-R2: Signal type from VTS (Hybrid/Quantitative/Pattern)
+  signalType?: string; // Directive 11.4C.3: Signal type from VTS (HYBRID/QUANT/PATTERN)
   strategy?: string; // Directive 11.4C-R2: Strategy name from VTS
 }
 
@@ -134,8 +134,8 @@ export class TelemetryAggregatorService {
       pool?: PoolType; // Directive 11.2 R1: ideal or rotational
       source?: TelemetrySource; // Directive 11.0E.2: simulation or live
       pairRegime?: MarketRegime; // Directive 11.4C-R2: Per-pair regime
-      pattern?: string; // Directive 11.4C-R2: Pattern name for Hybrid/Pattern signals (empty for Quantitative)
-      signalType?: string; // Directive 11.4C-R2: Signal type from VTS (Hybrid/Quantitative/Pattern)
+      pattern?: string; // Directive 11.4C.3: Pattern name for HYBRID/PATTERN signals (empty for QUANT)
+      signalType?: string; // Directive 11.4C.3: Signal type from VTS (HYBRID/QUANT/PATTERN)
       strategy?: string; // Directive 11.4C-R2: Strategy name from VTS
       caller?: string; // Directive 11.4C.1: Caller identification (must be 'vts')
     }
@@ -154,9 +154,9 @@ export class TelemetryAggregatorService {
     
     // Directive 11.4C-R2: VTS is the single source of truth for telemetry
     // All telemetry now comes from VTS with real calculated values (no defaults)
-    // Directive 11.4C-R2: Quantitative signals should NOT have a pattern (purely mathematical)
-    // Only Hybrid and Pattern signals should have pattern names
-    const shouldHavePattern = data.signalType !== 'Quantitative';
+    // Directive 11.4C.3: QUANT signals should NOT have a pattern (purely mathematical)
+    // Only HYBRID and PATTERN signals should have pattern names
+    const shouldHavePattern = data.signalType !== 'QUANT';
     
     const entry: PairTelemetry = {
       symbol,
@@ -174,8 +174,8 @@ export class TelemetryAggregatorService {
       pool: data.pool ?? 'ideal', // Directive 11.2 R1: Track source pool
       source: data.source ?? 'simulation', // Directive 11.4C-R2: Default to simulation (VTS source)
       pairRegime: data.pairRegime ?? this.currentRegime, // Directive 11.4C-R2: Per-pair or fallback to global
-      pattern: shouldHavePattern ? data.pattern : undefined, // Directive 11.4C-R2: No pattern for Quantitative
-      signalType: data.signalType, // Directive 11.4C-R2: Store signal type from VTS
+      pattern: shouldHavePattern ? data.pattern : undefined, // Directive 11.4C.3: No pattern for QUANT
+      signalType: data.signalType, // Directive 11.4C.3: Store signal type from VTS (HYBRID/QUANT/PATTERN)
       strategy: data.strategy, // Directive 11.4C-R2: Store strategy name from VTS
     };
     
@@ -197,7 +197,7 @@ export class TelemetryAggregatorService {
       this.persistTelemetryAsync({
         symbol,
         mode,
-        regime: entry.pairRegime, // Use per-pair regime from VTS
+        regime: entry.pairRegime ?? 'TRANSITION', // Use per-pair regime from VTS with fallback
         pool: data.pool ?? 'ideal', // Directive 11.2 R1
         finalScore: data.finalScore,
         hybridScore: data.hybridScore,
@@ -747,16 +747,16 @@ export class TelemetryAggregatorService {
     scoredPairs.sort((a, b) => b.score - a.score);
     
     // Map to ranked output with metadata
-    // Directive 11.4C-R2: Use stored values from VTS - NO legacy inference fallback
-    // Quantitative signals should NOT have a pattern (purely mathematical)
+    // Directive 11.4C.3: Use stored values from VTS - NO legacy inference fallback
+    // QUANT signals should NOT have a pattern (purely mathematical)
     const rankedPairs = scoredPairs.slice(0, limit).map((p, index) => {
       // Use stored signalType/strategy from VTS only - no inference fallback
       // For legacy data without these fields, use placeholder to avoid misleading "AdaptiveFlow"
       const signalType = p.entry.signalType ?? '—';
       const strategy = p.entry.strategy ?? '—';
       
-      // Quantitative signals should never show pattern (they're purely mathematical)
-      const pattern = signalType === 'Quantitative' ? '—' : (p.entry.pattern ?? '—');
+      // Directive 11.4C.3: QUANT signals should never show pattern (purely mathematical)
+      const pattern = signalType === 'QUANT' ? '—' : (p.entry.pattern ?? '—');
       
       return {
         rank: index + 1,
@@ -778,35 +778,46 @@ export class TelemetryAggregatorService {
    * Directive 11.4C-R2: Infer signal type from telemetry entry
    */
   private inferSignalType(entry: PairTelemetry): string {
-    // Determine signal type based on score composition
+    // Directive 11.4C.3: Determine signal type using UPPERCASE canonical format
     if (entry.hybridScore > 0.5 && entry.predictiveConfidence > 0.5) {
-      return 'Hybrid';
+      return 'HYBRID';
     } else if (entry.hybridScore > 0.3) {
-      return 'Quantitative';
+      return 'QUANT';
     } else if (entry.avgDecayedStrength > 0.3) {
-      return 'Pattern';
+      return 'PATTERN';
     }
-    return 'Hybrid'; // Default
+    return 'HYBRID'; // Default
   }
 
   /**
-   * Directive 11.4C-R2: Infer strategy from telemetry entry based on regime
-   * MarketRegime types: EXTREME_NOISE, BULL_VOLATILE, BULL_STABLE, BEAR_STABLE, BEAR_VOLATILE, LOW_VOL_CHOP
+   * Directive 11.4C.3: Infer strategy from telemetry entry based on canonical regimes
+   * Canonical MarketRegime types: BULL_STABLE, BEAR_VOLATILE, LOW_VOL_CHOP, HIGH_VOL_IMPULSE, TRANSITION
    */
   private inferStrategy(entry: PairTelemetry): string {
-    // Strategy inference based on market regime and telemetry characteristics
-    const regime = this.currentRegime;
+    // Directive 11.4C.3: Normalize ghost regimes to canonical equivalents
+    const rawRegime = this.currentRegime;
+    const ghostToCanonical: Record<string, string> = {
+      BULL_VOLATILE: 'HIGH_VOL_IMPULSE',
+      BEAR_STABLE: 'BEAR_VOLATILE',
+      EXTREME_NOISE: 'LOW_VOL_CHOP',
+      HIGH_VOL_CHOP: 'HIGH_VOL_IMPULSE',
+      MIXED_TRANSITION: 'TRANSITION'
+    };
+    const regime = ghostToCanonical[rawRegime] ?? rawRegime;
     
+    // Directive 11.4C.3: Use canonical strategy names (snake_case)
     if (regime === 'BULL_STABLE') {
-      return entry.hybridScore > 0.5 ? 'TrendFlow' : 'MomentumPulse';
-    } else if (regime === 'BULL_VOLATILE') {
-      return 'BreakoutCapture';
-    } else if (regime === 'BEAR_STABLE' || regime === 'BEAR_VOLATILE') {
-      return 'MeanReversion';
-    } else if (regime === 'EXTREME_NOISE') {
-      return 'ExtremeNoisePause';
+      return entry.hybridScore > 0.5 ? 'sma_trend_ride' : 'vwap_pullback';
+    } else if (regime === 'HIGH_VOL_IMPULSE') {
+      return 'vwap_bounce';
+    } else if (regime === 'BEAR_VOLATILE') {
+      return 'mean_reversion';
+    } else if (regime === 'LOW_VOL_CHOP') {
+      return 'range_trade';
+    } else if (regime === 'TRANSITION') {
+      return 'adaptive_flow';
     }
-    return 'AdaptiveFlow'; // Default for LOW_VOL_CHOP
+    return 'adaptive_flow'; // Default fallback
   }
 
   /**

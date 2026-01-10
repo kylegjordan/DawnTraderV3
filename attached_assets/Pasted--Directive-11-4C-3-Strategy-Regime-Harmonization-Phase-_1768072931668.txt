@@ -1,0 +1,131 @@
+⚙️ Directive 11.4C.3 — Strategy & Regime Harmonization
+
+Phase: 11.4C
+Objective: Unify the VTS and Signal Orchestrator onto a single, canonical dictionary of strategy names, regimes, and signal types.
+Eliminate ghost regimes, enforce pattern detection for Hybrid signals, and standardize type definitions across the entire repository.
+
+🧩 I. Implementation Tasks
+Task 1 — Create the Strategy “Rosetta Stone”
+
+File: /server/config/regime-strategy-map.ts
+
+Replace all VTS “New” strategy names with their Legacy/Production titles to match the UI and Orchestrator.
+Use snake_case for canonical storage; UI renders human-readable titles.
+
+VTS (current)	Legacy / Production Name	Canonical Key
+MomentumPulse	VWAP Pullback	vwap_pullback
+TrendFlow	SMA Trend Ride	sma_trend_ride
+BreakoutConfirm	Breakout	breakout
+H2_Slingshot	VWAP Bounce	vwap_bounce
+ImpulseChaser	Liquidity Trap	liquidity_trap
+TriangleBreakout	ABCD Long	abcd_long
+VolatilityEdge	Volatility Edge	volatility_edge
+ReverseImpulse	Reverse Impulse	reverse_impulse
+DefensiveHedge	Defensive Hedge	defensive_hedge
+MeanReversion	Mean Reversion	mean_reversion
+PivotShift	Pivot Shift	pivot_shift
+AdaptiveFlow	Adaptive Flow	adaptive_flow
+
+Export this map as a single shared object and update:
+
+/server/services/vts-runner.ts
+
+/server/services/signal-orchestrator.ts
+so both import and use the same dictionary.
+
+Regime structure to enforce:
+
+export const REGIME_STRATEGY_MAP = {
+  HIGH_VOL_IMPULSE: ['vwap_bounce','liquidity_trap','thma_flow'],
+  LOW_VOL_CHOP: ['range_trade','support_bounce','abcd_long'],
+  BULL_STABLE: ['vwap_pullback','sma_trend_ride','breakout'],
+  BEAR_VOLATILE: ['reverse_impulse','defensive_hedge'],
+  TRANSITION: ['mean_reversion','pivot_shift','adaptive_flow']
+};
+
+Task 2 — Pattern Injection in VTS
+
+File: /server/services/vts-runner.ts
+
+Import the pattern detector:
+
+import { detectPatterns } from '@/core/pattern-recognizer';
+
+
+Before creating a trade record:
+
+const detectedPattern = detectPatterns(ohlc);
+
+if (signalType === 'HYBRID' && !detectedPattern) signalType = 'QUANT';
+if (signalType === 'PATTERN' && !detectedPattern) return; // discard invalid pattern
+
+
+Attach the pattern to telemetry:
+
+pattern: detectedPattern ?? null
+
+Task 3 — Regime Purity
+
+Files: /server/services/telemetry-aggregator.ts & /client/src/components/trading/top-batch.tsx
+
+Remove all references to non-canonical regimes:
+❌ BULL_VOLATILE, BEAR_STABLE, EXTREME_NOISE
+
+Allow fallback mapping for historical records:
+
+const canonicalRegime = {
+  BULL_VOLATILE: 'HIGH_VOL_IMPULSE',
+  BEAR_STABLE: 'BEAR_VOLATILE',
+  EXTREME_NOISE: 'LOW_VOL_CHOP'
+}[regime] ?? regime;
+
+
+Update UI badges to display only:
+BULL_STABLE, BEAR_VOLATILE, LOW_VOL_CHOP, HIGH_VOL_IMPULSE, TRANSITION.
+
+Task 4 — Type Canonization
+
+Files: /server/core/schema/trade-model.ts, /server/types/virtual-trade.interface.ts
+
+Delete local type definitions for:
+
+SignalType
+MarketRegimeType
+
+
+Import from the canonical source:
+
+import { SignalType, MarketRegimeType } from '@/types';
+
+
+Ensure all SignalType values are uppercase ('QUANT'|'PATTERN'|'HYBRID').
+
+🧪 II. Verification & Governance Tests
+Test	Purpose	Expected Result
+strategy_naming.test.ts	Ensure VTS and Telemetry output legacy names (vwap_pullback, breakout)	All VTS records show legacy names
+hybrid_integrity.test.ts	Validate Hybrid trades have pattern attached	100 % Hybrid records contain pattern ≠ null
+regime_strictness.test.ts	Confirm no ghost regimes exist in telemetry/UI	Only canonical 5 regimes found
+type_consistency.test.ts	Ensure SignalType and MarketRegimeType are single source imports	Zero duplicates across repository
+🎯 III. Expected Outcome
+
+UI Clarity: Top Batch table displays familiar strategy names (VWAP Pullback, Breakout) instead of MomentumPulse, etc.
+
+Data Integrity: All Hybrid signals include real patterns (Pinbar, Engulfing, etc.) or are reclassified as Quant.
+
+Code Health: Duplicate types and ghost regimes eliminated; VTS and Signal Orchestrator use identical mappings.
+
+Telemetry Purity: Only VTS writes signal data with canonical naming and regime logic.
+
+🧠 Implementation Summary Requirements (for Replit)
+
+When Replit completes this directive, its implementation log must include:
+
+List of files created/modified/deleted.
+
+Explicit name conversion table applied during migration.
+
+Any deprecated fields or enums removed.
+
+Results of all verification tests (run npx vitest run strategy_naming.test.ts hybrid_integrity.test.ts).
+
+Confirmation that REGIME_STRATEGY_MAP is now imported by both vts-runner.ts and signal-orchestrator.ts.

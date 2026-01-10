@@ -1,6 +1,6 @@
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * Directive 11.4B — Unified Trade Schema (M24 Governance Invariant)
+ * Directive 11.4C.3 — Unified Trade Schema (M24 Governance Invariant)
  * ══════════════════════════════════════════════════════════════════════════════
  * 
  * Extends trade records with Market Regime and Market Friction fields.
@@ -9,25 +9,20 @@
  * M24: Market Regime and Friction always co-present in serialized objects
  * M26: Net P&L and Reward–Risk Net computed from canonical totalCost
  * 
- * Schema Version: v1.6.2
+ * Schema Version: v1.6.7
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
 import { computeMarketFriction, describeFriction } from '../metrics/cost-metrics.js';
 import { getCurrentRegime, getExpandedRegimeDescription } from '../../services/market-indicators.js';
+import { MarketRegimeType, normalizeRegime, CanonicalSignalType } from '../../config/regime-strategy-map.js';
+import type { SignalType } from '../../types';
 
-export type MarketRegimeType = 
-  | 'BULL_STABLE' 
-  | 'BULL_VOLATILE' 
-  | 'BEAR_STABLE' 
-  | 'BEAR_VOLATILE' 
-  | 'LOW_VOL_CHOP' 
-  | 'HIGH_VOL_CHOP' 
-  | 'MIXED_TRANSITION' 
-  | 'EXTREME_NOISE';
+export type { MarketRegimeType, CanonicalSignalType };
+export { normalizeRegime };
 
 export type TargetType = 'Original' | 'DSE' | 'Trailing';
-export type SignalType = 'Quant' | 'Pattern' | 'Hybrid';
+export type TradeSignalType = CanonicalSignalType;
 export type FeedType = 'WebSocket' | 'REST';
 export type FeedFrequency = 'High' | 'Medium' | 'Low';
 export type ActiveStatus = 'Active' | 'Reconfirmed';
@@ -136,15 +131,15 @@ export function computeRewardRiskNet(
 }
 
 /**
- * Directive 11.4B — Determine signal type from source
+ * Directive 11.4C.3 — Determine signal type from source (uppercase canonical)
  */
 export function determineSignalType(
   hasQuantSignal: boolean,
   hasPatternSignal: boolean
 ): SignalType {
-  if (hasQuantSignal && hasPatternSignal) return 'Hybrid';
-  if (hasPatternSignal) return 'Pattern';
-  return 'Quant';
+  if (hasQuantSignal && hasPatternSignal) return 'HYBRID';
+  if (hasPatternSignal) return 'PATTERN';
+  return 'QUANT';
 }
 
 /**

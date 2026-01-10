@@ -1,12 +1,12 @@
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * Directive 11.0E.1 — Virtual Trade Interface (Phase 10 Canonical)
+ * Directive 11.4C.3 — Virtual Trade Interface (Phase 10 Canonical)
  * ══════════════════════════════════════════════════════════════════════════════
  * 
  * Purpose: Defines the canonical VirtualTrade interface for the modernized VTS.
  * Replaces all legacy CWQI/NGC/DI/GSI fields with Phase-10 metrics.
  * 
- * Schema: v1.6.6
+ * Schema: v1.6.7
  * Governance: M45 (All VirtualTrades include regime, signalType, strategy)
  *             M47 (CWQI/NGC/DI/GSI permanently removed)
  * 
@@ -14,19 +14,19 @@
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-export type MarketRegimeType = 
-  | 'BULL_STABLE'
-  | 'BEAR_VOLATILE'
-  | 'LOW_VOL_CHOP'
-  | 'HIGH_VOL_IMPULSE'
-  | 'TRANSITION';
+import type { SignalType, PatternType } from '../types';
+import { MarketRegimeType, CanonicalSignalType } from '../config/regime-strategy-map';
+
+export type { MarketRegimeType, CanonicalSignalType };
+export type { SignalType, PatternType };
 
 export interface VirtualTradePhase10 {
   id: string;
   symbol: string;
   regime: MarketRegimeType;
-  signalType: 'Hybrid' | 'Pattern' | 'Quantitative';
+  signalType: CanonicalSignalType;
   strategy: string;
+  patternType?: PatternType | null;
   finalScore: number;
   hybridScore: number;
   predictiveConfidence: number;
@@ -49,8 +49,9 @@ export interface VirtualSignalPhase10 {
   id: string;
   symbol: string;
   regime: MarketRegimeType;
-  signalType: 'Hybrid' | 'Pattern' | 'Quantitative';
+  signalType: CanonicalSignalType;
   strategy: string;
+  patternType?: PatternType | null;
   entryPrice: number;
   takeProfit: number;
   stopLoss: number;
@@ -60,7 +61,6 @@ export interface VirtualSignalPhase10 {
   predictiveConfidence: number;
   regimeWeight: number;
   decayPenalty: number;
-  patternType?: string;
   patternStrength?: number;
   effectivePatternStrength?: number;
   decayAge?: number;
@@ -79,5 +79,3 @@ export interface VTSCycleMetrics {
   cycleDurationMs: number;
   timestamp: number;
 }
-
-export type SignalType = 'Hybrid' | 'Pattern' | 'Quantitative';
