@@ -1,26 +1,60 @@
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * Directive 11.4C.3 — Strategy & Regime Harmonization (Rosetta Stone)
+ * Directive 11.4F.1 — Backward-Compatible Re-export from Canonical Source
  * ══════════════════════════════════════════════════════════════════════════════
  * 
- * Purpose: Single canonical source for regime-to-strategy mappings.
- * Both VTS and Signal Orchestrator import from this file.
+ * DEPRECATED: This file now re-exports from canonical-regime-strategy-map.ts
+ * All new code should import directly from canonical-regime-strategy-map.ts
  * 
- * Strategy names use snake_case for canonical storage; UI renders human-readable titles.
+ * This file exists only for backward compatibility with existing imports.
+ * It will be removed in a future version once all imports are migrated.
  * 
- * Governance: M45, M46, M47
- * Schema: v1.6.7
- * 
- * DO NOT MODIFY without architectural review.
+ * Schema: Directive 11.4F.1
+ * Last Updated: 2026-01-12
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-import type { SignalType, PatternType } from '../types';
 import type { MarketRegimeType } from '../types/market-regime.types';
 
 export type { MarketRegimeType };
 
-export type CanonicalSignalType = 'QUANT' | 'PATTERN' | 'HYBRID';
+export type {
+  CanonicalSignalType,
+  CanonicalRegimeType,
+  CanonicalPatternType,
+} from './canonical-regime-strategy-map';
+
+export {
+  CANONICAL_REGIME_STRATEGY_MAP,
+  CANONICAL_REGIMES,
+  CANONICAL_SIGNAL_TYPES,
+  CANONICAL_PATTERN_TYPES,
+  REGIME_METRICS,
+  STRATEGY_DISPLAY_NAMES,
+  LEGACY_TO_CANONICAL,
+  GHOST_REGIME_NORMALIZATION,
+  normalizeRegime,
+  normalizeStrategy,
+  getTypeForStrategy,
+  getPatternForStrategy,
+  getStrategiesForRegime,
+  getRegimeMinConfidence,
+  isValidCanonicalCombination,
+  getAllCanonicalStrategies,
+  getAllStrategiesForSignalType,
+  selectRandomStrategy,
+  CANONICAL_VERSION,
+  CANONICAL_SCHEMA_DATE,
+} from './canonical-regime-strategy-map';
+
+import {
+  CANONICAL_REGIME_STRATEGY_MAP,
+  CanonicalSignalType,
+  getStrategiesForRegime,
+  selectRandomStrategy as canonicalSelectRandomStrategy,
+  getRegimeRiskMultiplier as canonicalGetRegimeRiskMultiplier,
+  getPatternForStrategy as canonicalGetPatternForStrategy,
+} from './canonical-regime-strategy-map';
 
 export interface StrategyMapping {
   signalType: CanonicalSignalType;
@@ -30,167 +64,67 @@ export interface StrategyMapping {
 }
 
 export const REGIME_STRATEGY_MAP: Record<MarketRegimeType, StrategyMapping> = {
-  HIGH_VOL_IMPULSE: {
-    signalType: 'QUANT',
-    strategies: ['vwap_bounce', 'liquidity_trap', 'volatility_edge'],
-    riskMultiplier: 0.8,
-    minConfidence: 0.70
-  },
-  LOW_VOL_CHOP: {
-    signalType: 'PATTERN',
-    strategies: ['range_trade', 'support_bounce', 'abcd_long'],
-    riskMultiplier: 0.9,
-    minConfidence: 0.60
-  },
   BULL_STABLE: {
     signalType: 'HYBRID',
-    strategies: ['vwap_pullback', 'sma_trend_ride', 'breakout'],
-    riskMultiplier: 1.2,
-    minConfidence: 0.65
+    strategies: getStrategiesForRegime('BULL_STABLE').map(s => s.strategyKey),
+    riskMultiplier: CANONICAL_REGIME_STRATEGY_MAP.BULL_STABLE.riskMultiplier,
+    minConfidence: CANONICAL_REGIME_STRATEGY_MAP.BULL_STABLE.minConfidence,
   },
   BEAR_VOLATILE: {
     signalType: 'HYBRID',
-    strategies: ['reverse_impulse', 'defensive_hedge'],
-    riskMultiplier: 0.7,
-    minConfidence: 0.75
+    strategies: getStrategiesForRegime('BEAR_VOLATILE').map(s => s.strategyKey),
+    riskMultiplier: CANONICAL_REGIME_STRATEGY_MAP.BEAR_VOLATILE.riskMultiplier,
+    minConfidence: CANONICAL_REGIME_STRATEGY_MAP.BEAR_VOLATILE.minConfidence,
+  },
+  LOW_VOL_CHOP: {
+    signalType: 'PATTERN',
+    strategies: getStrategiesForRegime('LOW_VOL_CHOP').map(s => s.strategyKey),
+    riskMultiplier: CANONICAL_REGIME_STRATEGY_MAP.LOW_VOL_CHOP.riskMultiplier,
+    minConfidence: CANONICAL_REGIME_STRATEGY_MAP.LOW_VOL_CHOP.minConfidence,
+  },
+  HIGH_VOL_IMPULSE: {
+    signalType: 'QUANT',
+    strategies: getStrategiesForRegime('HIGH_VOL_IMPULSE').map(s => s.strategyKey),
+    riskMultiplier: CANONICAL_REGIME_STRATEGY_MAP.HIGH_VOL_IMPULSE.riskMultiplier,
+    minConfidence: CANONICAL_REGIME_STRATEGY_MAP.HIGH_VOL_IMPULSE.minConfidence,
   },
   TRANSITION: {
     signalType: 'HYBRID',
-    strategies: ['mean_reversion', 'pivot_shift', 'adaptive_flow'],
-    riskMultiplier: 0.85,
-    minConfidence: 0.55
-  }
+    strategies: getStrategiesForRegime('TRANSITION').map(s => s.strategyKey),
+    riskMultiplier: CANONICAL_REGIME_STRATEGY_MAP.TRANSITION.riskMultiplier,
+    minConfidence: CANONICAL_REGIME_STRATEGY_MAP.TRANSITION.minConfidence,
+  },
 };
-
-export const STRATEGY_DISPLAY_NAMES: Record<string, string> = {
-  vwap_pullback: 'VWAP Pullback',
-  sma_trend_ride: 'SMA Trend Ride',
-  breakout: 'Breakout',
-  vwap_bounce: 'VWAP Bounce',
-  liquidity_trap: 'Liquidity Trap',
-  abcd_long: 'ABCD Long',
-  volatility_edge: 'Volatility Edge',
-  reverse_impulse: 'Reverse Impulse',
-  defensive_hedge: 'Defensive Hedge',
-  mean_reversion: 'Mean Reversion',
-  pivot_shift: 'Pivot Shift',
-  adaptive_flow: 'Adaptive Flow',
-  range_trade: 'Range Trade',
-  support_bounce: 'Support Bounce',
-  dhma: 'DHMA'
-};
-
-export const LEGACY_TO_CANONICAL: Record<string, string> = {
-  MomentumPulse: 'vwap_pullback',
-  TrendFlow: 'sma_trend_ride',
-  BreakoutConfirm: 'breakout',
-  H2_Slingshot: 'vwap_bounce',
-  ImpulseChaser: 'liquidity_trap',
-  TriangleBreakout: 'abcd_long',
-  VolatilityEdge: 'volatility_edge',
-  ReverseImpulse: 'reverse_impulse',
-  DefensiveHedge: 'defensive_hedge',
-  MeanReversion: 'mean_reversion',
-  PivotShift: 'pivot_shift',
-  AdaptiveFlow: 'adaptive_flow',
-  RangeTrade: 'range_trade',
-  SupportBounce: 'support_bounce',
-  BreakdownSniper: 'reverse_impulse',
-  DoubleBottom: 'support_bounce'
-};
-
-export const CANONICAL_REGIMES: MarketRegimeType[] = [
-  'BULL_STABLE',
-  'BEAR_VOLATILE', 
-  'LOW_VOL_CHOP',
-  'HIGH_VOL_IMPULSE',
-  'TRANSITION'
-];
-
-export const GHOST_REGIME_FALLBACK: Record<string, MarketRegimeType> = {
-  BULL_VOLATILE: 'HIGH_VOL_IMPULSE',
-  BEAR_STABLE: 'BEAR_VOLATILE',
-  EXTREME_NOISE: 'LOW_VOL_CHOP',
-  HIGH_VOL_CHOP: 'HIGH_VOL_IMPULSE',
-  MIXED_TRANSITION: 'TRANSITION'
-};
-
-export function normalizeRegime(regime: string): MarketRegimeType {
-  if (CANONICAL_REGIMES.includes(regime as MarketRegimeType)) {
-    return regime as MarketRegimeType;
-  }
-  return GHOST_REGIME_FALLBACK[regime] ?? 'TRANSITION';
-}
-
-export function normalizeStrategy(strategy: string): string {
-  return LEGACY_TO_CANONICAL[strategy] ?? strategy;
-}
-
-export function getStrategyDisplayName(canonicalKey: string): string {
-  return STRATEGY_DISPLAY_NAMES[canonicalKey] ?? canonicalKey;
-}
 
 export function getStrategyForRegime(regime: MarketRegimeType): StrategyMapping {
   return REGIME_STRATEGY_MAP[regime] ?? REGIME_STRATEGY_MAP.TRANSITION;
 }
 
-export function selectRandomStrategy(regime: MarketRegimeType): { signalType: CanonicalSignalType; strategy: string } {
-  const mapping = getStrategyForRegime(regime);
-  const strategies = mapping.strategies;
-  const strategy = strategies[Math.floor(Math.random() * strategies.length)];
-  
+export function selectRegimeStrategy(regime: MarketRegimeType): { 
+  signalType: CanonicalSignalType; 
+  strategy: string;
+  patternType?: string | null;
+} {
+  const result = canonicalSelectRandomStrategy(regime as any);
   return {
-    signalType: mapping.signalType,
-    strategy
+    signalType: result.signalType,
+    strategy: result.strategy,
+    patternType: result.patternType
   };
 }
 
-export function getAllStrategiesForSignalType(signalType: CanonicalSignalType): string[] {
-  const strategies = new Set<string>();
-  
-  for (const mapping of Object.values(REGIME_STRATEGY_MAP)) {
-    if (mapping.signalType === signalType) {
-      mapping.strategies.forEach(s => strategies.add(s));
-    }
-  }
-  
-  return Array.from(strategies);
-}
-
 export function getRegimeRiskMultiplier(regime: MarketRegimeType): number {
-  return REGIME_STRATEGY_MAP[regime]?.riskMultiplier ?? 1.0;
+  return canonicalGetRegimeRiskMultiplier(regime as any);
 }
 
-/**
- * Directive 11.4C.3-B: Get canonical SignalType for a given strategy
- * Derives signal type from REGIME_STRATEGY_MAP (single source of truth)
- */
-export function getTypeForStrategy(strategy: string): CanonicalSignalType {
-  const normalized = normalizeStrategy(strategy);
-  
-  // Derive from REGIME_STRATEGY_MAP - the authoritative source
-  for (const mapping of Object.values(REGIME_STRATEGY_MAP)) {
-    if (mapping.strategies.includes(normalized)) {
-      return mapping.signalType;
-    }
-  }
-  
-  // Default to HYBRID for unknown strategies
-  return 'HYBRID';
-}
+export const regimeStrategyMap = REGIME_STRATEGY_MAP;
 
-/**
- * Directive 11.4C.3-B: Build a static lookup map for strategy → signalType
- * Useful for batch operations without repeated iteration
- */
 export const STRATEGY_TO_SIGNAL_TYPE: Record<string, CanonicalSignalType> = (() => {
   const lookup: Record<string, CanonicalSignalType> = {};
-  for (const mapping of Object.values(REGIME_STRATEGY_MAP)) {
-    for (const strategy of mapping.strategies) {
-      lookup[strategy] = mapping.signalType;
+  for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP)) {
+    for (const stratDef of mapping.strategies) {
+      lookup[stratDef.strategyKey] = stratDef.signalType;
     }
   }
   return lookup;
 })();
-
-export const regimeStrategyMap = REGIME_STRATEGY_MAP;

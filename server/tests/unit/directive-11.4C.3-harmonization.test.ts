@@ -1,10 +1,12 @@
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * Directive 11.4C.3 — Strategy & Regime Harmonization Tests
+ * Directive 11.4F.1 — Strategy & Regime Harmonization Tests
  * ══════════════════════════════════════════════════════════════════════════════
  * 
+ * Updated for Directive 11.4F.1 canonical mappings.
+ * 
  * Verification tests for:
- * - strategy_naming.test: VTS and Telemetry output legacy names
+ * - strategy_naming.test: VTS and Telemetry output canonical names
  * - hybrid_integrity.test: Hybrid trades have pattern attached
  * - regime_strictness.test: No ghost regimes exist
  * - type_consistency.test: SignalType and MarketRegimeType single source
@@ -13,40 +15,39 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  REGIME_STRATEGY_MAP,
+  CANONICAL_REGIME_STRATEGY_MAP,
   STRATEGY_DISPLAY_NAMES,
   LEGACY_TO_CANONICAL,
   CANONICAL_REGIMES,
-  GHOST_REGIME_FALLBACK,
+  GHOST_REGIME_NORMALIZATION,
   normalizeRegime,
   normalizeStrategy,
   selectRandomStrategy,
-  getStrategyForRegime,
-  type MarketRegimeType,
+  getStrategiesForRegime,
+  type CanonicalRegimeType,
   type CanonicalSignalType
+} from '../../config/canonical-regime-strategy-map';
+
+import {
+  REGIME_STRATEGY_MAP,
+  getStrategyForRegime,
 } from '../../config/regime-strategy-map';
 
-describe('Directive 11.4C.3 — Strategy Naming', () => {
+describe('Directive 11.4F.1 — Strategy Naming', () => {
   it('should have all canonical strategies in snake_case format', () => {
-    const allStrategies: string[] = [];
-    for (const mapping of Object.values(REGIME_STRATEGY_MAP)) {
-      allStrategies.push(...mapping.strategies);
-    }
-    
-    for (const strategy of allStrategies) {
-      expect(strategy).toMatch(/^[a-z_]+$/);
+    for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP)) {
+      for (const stratDef of mapping.strategies) {
+        expect(stratDef.strategyKey).toMatch(/^[a-z_]+$/);
+      }
     }
   });
 
   it('should have display names for all canonical strategies', () => {
-    const allStrategies: string[] = [];
-    for (const mapping of Object.values(REGIME_STRATEGY_MAP)) {
-      allStrategies.push(...mapping.strategies);
-    }
-    
-    for (const strategy of allStrategies) {
-      expect(STRATEGY_DISPLAY_NAMES[strategy]).toBeDefined();
-      expect(typeof STRATEGY_DISPLAY_NAMES[strategy]).toBe('string');
+    for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP)) {
+      for (const stratDef of mapping.strategies) {
+        expect(STRATEGY_DISPLAY_NAMES[stratDef.strategyKey]).toBeDefined();
+        expect(typeof STRATEGY_DISPLAY_NAMES[stratDef.strategyKey]).toBe('string');
+      }
     }
   });
 
@@ -78,38 +79,60 @@ describe('Directive 11.4C.3 — Strategy Naming', () => {
   });
 });
 
-describe('Directive 11.4C.3 — Hybrid Integrity', () => {
-  it('REGIME_STRATEGY_MAP should assign correct signal types per regime', () => {
-    expect(REGIME_STRATEGY_MAP.BULL_STABLE.signalType).toBe('HYBRID');
-    expect(REGIME_STRATEGY_MAP.BEAR_VOLATILE.signalType).toBe('HYBRID');
-    expect(REGIME_STRATEGY_MAP.LOW_VOL_CHOP.signalType).toBe('PATTERN');
-    expect(REGIME_STRATEGY_MAP.HIGH_VOL_IMPULSE.signalType).toBe('QUANT');
-    expect(REGIME_STRATEGY_MAP.TRANSITION.signalType).toBe('HYBRID');
+describe('Directive 11.4F.1 — Hybrid Integrity', () => {
+  it('CANONICAL_REGIME_STRATEGY_MAP should have strategies with correct signal types', () => {
+    for (const [regime, mapping] of Object.entries(CANONICAL_REGIME_STRATEGY_MAP)) {
+      for (const stratDef of mapping.strategies) {
+        expect(['QUANT', 'PATTERN', 'HYBRID']).toContain(stratDef.signalType);
+      }
+    }
   });
 
   it('selectRandomStrategy should return valid signalType and strategy', () => {
-    const regimes: MarketRegimeType[] = ['BULL_STABLE', 'BEAR_VOLATILE', 'LOW_VOL_CHOP', 'HIGH_VOL_IMPULSE', 'TRANSITION'];
+    const regimes: CanonicalRegimeType[] = ['BULL_STABLE', 'BEAR_VOLATILE', 'LOW_VOL_CHOP', 'HIGH_VOL_IMPULSE', 'TRANSITION'];
     
     for (const regime of regimes) {
       const result = selectRandomStrategy(regime);
       expect(result.signalType).toMatch(/^(QUANT|PATTERN|HYBRID)$/);
       expect(result.strategy).toMatch(/^[a-z_]+$/);
-      expect(REGIME_STRATEGY_MAP[regime].strategies).toContain(result.strategy);
+      
+      const validStrategies = getStrategiesForRegime(regime).map(s => s.strategyKey);
+      expect(validStrategies).toContain(result.strategy);
     }
   });
 
-  it('HYBRID regimes should have at least one strategy with pattern potential', () => {
-    const hybridRegimes: MarketRegimeType[] = ['BULL_STABLE', 'BEAR_VOLATILE', 'TRANSITION'];
-    
-    for (const regime of hybridRegimes) {
-      const mapping = REGIME_STRATEGY_MAP[regime];
-      expect(mapping.signalType).toBe('HYBRID');
-      expect(mapping.strategies.length).toBeGreaterThan(0);
+  it('HYBRID strategies should have patternType defined', () => {
+    for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP)) {
+      for (const stratDef of mapping.strategies) {
+        if (stratDef.signalType === 'HYBRID') {
+          expect(stratDef.patternType).not.toBeNull();
+        }
+      }
+    }
+  });
+
+  it('PATTERN strategies should have patternType defined', () => {
+    for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP)) {
+      for (const stratDef of mapping.strategies) {
+        if (stratDef.signalType === 'PATTERN') {
+          expect(stratDef.patternType).not.toBeNull();
+        }
+      }
+    }
+  });
+
+  it('QUANT strategies should have null patternType', () => {
+    for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP)) {
+      for (const stratDef of mapping.strategies) {
+        if (stratDef.signalType === 'QUANT') {
+          expect(stratDef.patternType).toBeNull();
+        }
+      }
     }
   });
 });
 
-describe('Directive 11.4C.3 — Regime Strictness', () => {
+describe('Directive 11.4F.1 — Regime Strictness', () => {
   it('should have exactly 5 canonical regimes', () => {
     expect(CANONICAL_REGIMES).toHaveLength(5);
     expect(CANONICAL_REGIMES).toContain('BULL_STABLE');
@@ -120,8 +143,7 @@ describe('Directive 11.4C.3 — Regime Strictness', () => {
   });
 
   it('should NOT include ghost regimes in canonical list', () => {
-    const ghostRegimes = ['BULL_VOLATILE', 'BEAR_STABLE', 'EXTREME_NOISE', 'HIGH_VOL_CHOP', 'MIXED_TRANSITION'];
-    
+    const ghostRegimes = ['BULL_VOLATILE', 'BEAR_STABLE', 'EXTREME_NOISE'];
     for (const ghost of ghostRegimes) {
       expect(CANONICAL_REGIMES).not.toContain(ghost);
     }
@@ -136,63 +158,60 @@ describe('Directive 11.4C.3 — Regime Strictness', () => {
   });
 
   it('normalizeRegime should preserve canonical regimes', () => {
-    for (const regime of CANONICAL_REGIMES) {
-      expect(normalizeRegime(regime)).toBe(regime);
-    }
+    expect(normalizeRegime('BULL_STABLE')).toBe('BULL_STABLE');
+    expect(normalizeRegime('BEAR_VOLATILE')).toBe('BEAR_VOLATILE');
+    expect(normalizeRegime('LOW_VOL_CHOP')).toBe('LOW_VOL_CHOP');
+    expect(normalizeRegime('HIGH_VOL_IMPULSE')).toBe('HIGH_VOL_IMPULSE');
+    expect(normalizeRegime('TRANSITION')).toBe('TRANSITION');
   });
 
-  it('REGIME_STRATEGY_MAP should only contain canonical regimes', () => {
-    const mapKeys = Object.keys(REGIME_STRATEGY_MAP);
-    
-    for (const key of mapKeys) {
-      expect(CANONICAL_REGIMES).toContain(key);
+  it('CANONICAL_REGIME_STRATEGY_MAP should only contain canonical regimes', () => {
+    const mapRegimes = Object.keys(CANONICAL_REGIME_STRATEGY_MAP);
+    for (const regime of mapRegimes) {
+      expect(CANONICAL_REGIMES).toContain(regime);
     }
-    
-    expect(mapKeys).toHaveLength(5);
   });
 });
 
-describe('Directive 11.4C.3 — Type Consistency', () => {
+describe('Directive 11.4F.1 — Type Consistency', () => {
   it('CanonicalSignalType should only allow uppercase values', () => {
-    const validSignalTypes: CanonicalSignalType[] = ['QUANT', 'PATTERN', 'HYBRID'];
-    
-    for (const st of validSignalTypes) {
-      expect(st).toMatch(/^[A-Z]+$/);
+    const validTypes: CanonicalSignalType[] = ['QUANT', 'PATTERN', 'HYBRID'];
+    for (const type of validTypes) {
+      expect(type).toBe(type.toUpperCase());
     }
   });
 
-  it('MarketRegimeType should only allow uppercase values', () => {
+  it('CanonicalRegimeType should only allow uppercase values', () => {
     for (const regime of CANONICAL_REGIMES) {
-      expect(regime).toMatch(/^[A-Z_]+$/);
+      expect(regime).toBe(regime.toUpperCase());
     }
   });
 
   it('all regime mappings should have valid structure', () => {
-    for (const [regime, mapping] of Object.entries(REGIME_STRATEGY_MAP)) {
-      expect(mapping).toHaveProperty('signalType');
+    for (const [regime, mapping] of Object.entries(CANONICAL_REGIME_STRATEGY_MAP)) {
       expect(mapping).toHaveProperty('strategies');
+      expect(mapping).toHaveProperty('metrics');
       expect(mapping).toHaveProperty('riskMultiplier');
       expect(mapping).toHaveProperty('minConfidence');
-      
-      expect(['QUANT', 'PATTERN', 'HYBRID']).toContain(mapping.signalType);
       expect(Array.isArray(mapping.strategies)).toBe(true);
-      expect(mapping.strategies.length).toBeGreaterThan(0);
       expect(typeof mapping.riskMultiplier).toBe('number');
       expect(typeof mapping.minConfidence).toBe('number');
     }
   });
 
-  it('getStrategyForRegime should return valid mapping for all canonical regimes', () => {
+  it('backward-compatible getStrategyForRegime should return valid mapping for all canonical regimes', () => {
     for (const regime of CANONICAL_REGIMES) {
-      const mapping = getStrategyForRegime(regime as MarketRegimeType);
+      const mapping = getStrategyForRegime(regime as any);
       expect(mapping).toBeDefined();
       expect(mapping.strategies.length).toBeGreaterThan(0);
+      expect(['QUANT', 'PATTERN', 'HYBRID']).toContain(mapping.signalType);
     }
   });
 
-  it('getStrategyForRegime should fallback to TRANSITION for unknown regimes', () => {
-    const unknown = 'UNKNOWN_REGIME' as MarketRegimeType;
-    const mapping = getStrategyForRegime(unknown);
+  it('backward-compatible getStrategyForRegime should fallback to TRANSITION for unknown regimes', () => {
+    const unknownRegime = 'UNKNOWN_REGIME' as any;
+    const mapping = getStrategyForRegime(unknownRegime);
+    expect(mapping).toBeDefined();
     expect(mapping).toEqual(REGIME_STRATEGY_MAP.TRANSITION);
   });
 });

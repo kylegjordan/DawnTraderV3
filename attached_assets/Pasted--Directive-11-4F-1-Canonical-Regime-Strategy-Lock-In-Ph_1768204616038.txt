@@ -1,0 +1,238 @@
+⚙️ Directive 11.4F.1 — Canonical Regime & Strategy Lock-In
+
+Phase: 11.4F.1
+Objective: Establish, enforce, and propagate the canonical regime–strategy–signal type–pattern mapping as the single source of truth across all DawnTrader systems.
+
+I. Background & Purpose
+
+Prior directives (11.4C through 11.4E) unified type definitions and naming conventions, but several subsystems—VTS, Signal Orchestrator, Telemetry Aggregator, and DSE—still infer regime and strategy logic locally.
+This caused data mismatches, “fake hybrids,” and inconsistent signal labeling.
+
+Directive 11.4F.1 corrects that permanently by:
+
+Defining the canonical regime, strategy, and metric schema (truth model).
+
+Building a single authoritative configuration file.
+
+Removing all legacy or redundant local logic.
+
+Auditing and enforcing usage across every system.
+
+II. Implementation Tasks
+Task 1 — Create Canonical Configuration File
+
+File: /server/config/canonical-regime-strategy-map.ts
+
+Action:
+Create this file as the only authoritative definition of:
+
+Regimes and regime metrics
+
+Strategies and their secondary metrics
+
+Signal type and pattern type associations
+
+Valid regime–strategy mappings
+
+III. Canonical Data Specification (to include verbatim in canonical file)
+1. Canonical Regime Definitions
+Regime	Metrics (Primary)	Threshold / Range	Notes
+BULL_STABLE	Momentum (mom)	> 0.005 (0.5%)	Sustained uptrend
+	ADX	> 25	Confirmed directional trend
+	Volatility (vol)	< 0.025 (2.5%)	Stable
+BEAR_VOLATILE	Momentum	< -0.005 (-0.5%)	Downward impulse
+	ADX	> 25	Strong bearish trend
+	Volatility	> 0.03 (3%)	High turbulence
+LOW_VOL_CHOP	Momentum	abs(mom) < 0.002 (0.2%)	Flat
+	ADX	< 20	No directionality
+	Volatility	< 0.015 (1.5%)	Narrow range
+HIGH_VOL_IMPULSE	Momentum	> 0.010 (1.0%)	Strong breakout
+	ADX	> 30	Trend acceleration
+	Volatility	> 0.03 (3%)	Violent expansion
+TRANSITION	Momentum	±0.004	Reversal zone
+	ADX	20–25	Weakening trend
+	Volatility	0.015–0.03	Volatility uplift
+2. Canonical Strategy Definitions
+🟦 QUANT Strategies (9)
+Strategy	Secondary Metrics (Core Logic)	Signal Type	Pattern Type
+VWAP Pullback	VWAP deviation < −1 σ • Momentum > 0	QUANT	—
+ABCD Long	AB:CD ≈ 1.0 • Volume > 1.2× avg	QUANT	—
+SMA Trend Ride	Price > SMA(50) by > 0.5 % • ADX > 25	QUANT	—
+Breakout	Momentum > +0.7 % • Volume > 2× avg	QUANT	—
+Mean Reversion	RSI < 30 or > 70 • Price deviation > 1 σ	QUANT	—
+Range Trading	Bollinger Bandwidth < 0.10 • ADX < 20	QUANT	—
+VWAP Bounce	VWAP deviation > +1 σ • Momentum −0.3–−0.6 %	QUANT	—
+Liquidity Trap	Wick/Body > 2 or Depth Imbalance > 1.4	QUANT	—
+DHMA	HMA(9) cross HMA(21) • ADX flat	QUANT	—
+🟨 PATTERN Strategies (3)
+Strategy	Pattern Type	Secondary Metrics	Signal Type
+Support Bounce	Pinbar	Price ≈ Local Min ± 1 σ • Volume > 1.2× avg	PATTERN
+Inside Bar Reversal	Engulfing / Inside Bar	Parent > Child × 1.3 • Breakout Volume > 1.5× avg	PATTERN
+Morning Star / Evening Star	Morning Star / Evening Star	3-bar sequence • Momentum flip > 0.3 %	PATTERN
+🟩 HYBRID Strategies (5)
+Strategy	Pattern Type	Quant Component & Secondary Metrics	Signal Type
+Adaptive Flow	Tri-Star / Three Soldiers	Momentum inversion ≥ 3 • Volatility percentile > 70%	HYBRID
+Pivot Shift	Morning Star / Evening Star	RSI 45–55 • ADX slope > 0.5	HYBRID
+Reverse Impulse	Pinbar	Volume > 1.5× avg • Momentum spike < −0.5 %	HYBRID
+Defensive Hedge	Engulfing / Inside Bar	BTC Corr < 0.3 • Vol Offset > 1 σ	HYBRID
+Volatility Edge	ABCD Geometric	Volatility Percentile > 80 • Regime mismatch = True	HYBRID
+3. Canonical Pattern Types
+Pattern Type	Structure	Recognition Rules
+Pinbar	Single-bar reversal	Wick > 2× body; close near midpoint
+Engulfing / Inside Bar	2-bar reversal	Full containment or overlap
+Morning Star / Evening Star	3-bar reversal	Middle bar = Doji; third bar confirms flip
+ABCD Geometric	4-leg harmonic	AB:CD ratio ≈ 1.0; pivot B/D symmetry
+Tri-Star / Three Soldiers	3-bar trend confirmation	Consecutive closes; ADX rising
+4. Canonical Regime → Strategy Mapping
+
+Each strategy appears once per regime where it’s valid.
+Each row = one strategy instance within one regime.
+
+Regime	Regime Metrics	Strategy	Secondary Metrics	Signal Type	Pattern Type
+BULL_STABLE	mom > 0.005 • ADX > 25 • vol < 0.025	SMA Trend Ride	Price > SMA50 by > 0.5 % • ADX > 25	QUANT	—
+BULL_STABLE	〃	VWAP Pullback	VWAP dev < −1 σ • Momentum > 0	QUANT	—
+BULL_STABLE	〃	Morning Star / Evening Star	3-bar seq; mom flip > 0.3 %	PATTERN	Morning Star / Evening Star
+BULL_STABLE	〃	Pivot Shift	RSI 45–55 • ADX slope > 0.5	HYBRID	Morning Star / Evening Star
+BEAR_VOLATILE	mom < −0.005 • ADX > 25 • vol > 0.03	Mean Reversion	RSI < 30 or > 70; dev > 1 σ	QUANT	—
+BEAR_VOLATILE	〃	Reverse Impulse	Vol > 1.5× • Mom < −0.5 %	HYBRID	Pinbar
+BEAR_VOLATILE	〃	Defensive Hedge	BTC Corr < 0.3; Vol Offset > 1 σ	HYBRID	Engulfing / Inside Bar
+BEAR_VOLATILE	〃	Inside Bar Reversal	Parent > Child × 1.3; Vol > 1.5×	PATTERN	Engulfing / Inside Bar
+LOW_VOL_CHOP	abs(mom) < 0.002 • ADX < 20 • vol < 0.015	Range Trading	BB Bandwidth < 0.10; ADX < 20	QUANT	—
+LOW_VOL_CHOP	〃	Support Bounce	Price ≈ Local Min ± 1 σ; Vol > 1.2× avg	PATTERN	Pinbar
+LOW_VOL_CHOP	〃	ABCD Long	AB:CD ≈ 1.0; Vol > 1.2× avg	QUANT	—
+LOW_VOL_CHOP	〃	Adaptive Flow	Mom Inv ≥ 3; VolPct > 70 %	HYBRID	Tri-Star / Three Soldiers
+HIGH_VOL_IMPULSE	mom > 0.010 • ADX > 30 • vol > 0.03	Breakout	Mom > +0.7 %; Vol > 2× avg	QUANT	—
+HIGH_VOL_IMPULSE	〃	VWAP Bounce	VWAP dev > +1 σ; Mom −0.3–−0.6 %	QUANT	—
+HIGH_VOL_IMPULSE	〃	Volatility Edge	VolPct > 80; RegimeMismatch = True	HYBRID	ABCD Geometric
+HIGH_VOL_IMPULSE	〃	DHMA	HMA(9) x HMA(21); ADX flat	QUANT	—
+TRANSITION	mom ± 0.004 • ADX 20–25 • vol 0.015–0.03	Liquidity Trap	Wick/Body > 2 • Depth Imb > 1.4	QUANT	—
+TRANSITION	〃	Pivot Shift	RSI 45–55 • ADX slope > 0.5	HYBRID	Morning Star / Evening Star
+TRANSITION	〃	Morning Star / Evening Star	3-bar seq; mom flip > 0.3 %	PATTERN	Morning Star / Evening Star
+5. Canonical Export (Embedded Example)
+export const CANONICAL_REGIME_STRATEGY_MAP = {
+  BULL_STABLE: [
+    { strategy: "SMA Trend Ride", signalType: "QUANT" },
+    { strategy: "VWAP Pullback", signalType: "QUANT" },
+    { strategy: "Morning Star / Evening Star", signalType: "PATTERN", patternType: "MORNING_STAR" },
+    { strategy: "Pivot Shift", signalType: "HYBRID", patternType: "MORNING_STAR" },
+  ],
+  BEAR_VOLATILE: [
+    { strategy: "Mean Reversion", signalType: "QUANT" },
+    { strategy: "Reverse Impulse", signalType: "HYBRID", patternType: "PINBAR" },
+    { strategy: "Defensive Hedge", signalType: "HYBRID", patternType: "ENGULFING" },
+    { strategy: "Inside Bar Reversal", signalType: "PATTERN", patternType: "ENGULFING" },
+  ],
+  LOW_VOL_CHOP: [
+    { strategy: "Range Trading", signalType: "QUANT" },
+    { strategy: "Support Bounce", signalType: "PATTERN", patternType: "PINBAR" },
+    { strategy: "ABCD Long", signalType: "QUANT" },
+    { strategy: "Adaptive Flow", signalType: "HYBRID", patternType: "TRI_STAR" },
+  ],
+  HIGH_VOL_IMPULSE: [
+    { strategy: "Breakout", signalType: "QUANT" },
+    { strategy: "VWAP Bounce", signalType: "QUANT" },
+    { strategy: "Volatility Edge", signalType: "HYBRID", patternType: "ABCD" },
+    { strategy: "DHMA", signalType: "QUANT" },
+  ],
+  TRANSITION: [
+    { strategy: "Liquidity Trap", signalType: "QUANT" },
+    { strategy: "Pivot Shift", signalType: "HYBRID", patternType: "MORNING_STAR" },
+    { strategy: "Morning Star / Evening Star", signalType: "PATTERN", patternType: "MORNING_STAR" },
+  ],
+};
+
+export const REGIME_METRICS = {
+  BULL_STABLE: { mom: ">0.005", adx: ">25", vol: "<0.025" },
+  BEAR_VOLATILE: { mom: "<-0.005", adx: ">25", vol: ">0.03" },
+  LOW_VOL_CHOP: { mom: "abs<0.002", adx: "<20", vol: "<0.015" },
+  HIGH_VOL_IMPULSE: { mom: ">0.010", adx: ">30", vol: ">0.03" },
+  TRANSITION: { mom: "±0.004", adx: "20-25", vol: "0.015-0.03" },
+};
+
+export const SIGNAL_TYPES = ["QUANT", "PATTERN", "HYBRID"];
+export const PATTERN_TYPES = ["PINBAR", "ENGULFING", "MORNING_STAR", "ABCD", "TRI_STAR"];
+
+IV. Task 2 — Deprecate Legacy Files
+
+Remove all legacy regime or strategy mapping logic and replace imports with canonical references.
+
+Target files:
+
+selectRegimeStrategy.ts
+
+regime-strategy-map.ts
+
+DynamicStrategySelector.ts
+
+TelemetryAggregator.ts
+
+SignalOrchestrator.ts
+
+VTS and DecisionEngine (DSE)
+
+ReadyToBuy, Refresh, Bridge (strategy/telemetry logic)
+
+V. Task 3 — Full Dependency Audit
+
+Run a deep repository-wide audit for:
+
+Regime inference logic (MarketRegimeType, getRegime, momentum, volatility, ADX)
+
+Strategy maps (assignStrategy, strategyMap)
+
+Signal type inference (SignalType, inferSignalType)
+
+Pattern recognition modules
+
+Systems to verify:
+
+Subsystem	Action
+VTS	Replace local mapping with canonical import
+Signal Orchestrator	Canonical regime selection only
+Telemetry Aggregator	Trust canonical, remove inference
+Decision Strategy Engine	Canonical mapping for decision flow
+RTB + Refresh	Canonical for score ranking
+Bridge	Align schema fields with canonical naming
+VI. Task 4 — Enforcement Layer
+
+Add runtime validation middleware to reject any non-canonical combinations.
+Violations logged to /audit/logs/canonical_violation.log.
+
+VII. Task 5 — Telemetry Cleanup
+
+Run one-time SQL cleanup:
+
+DELETE FROM telemetry
+WHERE signal_type NOT IN ('QUANT','PATTERN','HYBRID')
+   OR strategy NOT IN (SELECT strategy FROM canonical_map)
+   OR pattern_type NOT IN (SELECT name FROM canonical_patterns);
+
+
+Rebuild top_batch from canonical sources.
+
+VIII. Deliverables
+
+/server/config/canonical-regime-strategy-map.ts
+
+/audit/reports/canonical_integration_audit.json
+
+/audit/reports/canonical_integration_summary.md
+
+/scripts/test-canonical-sync.ts
+
+/audit/logs/canonical_violation.log
+
+Deprecation list of removed mapping files
+
+IX. Expected Outcome
+
+Single Source of Truth for all strategy logic.
+
+Eliminated Inference: Every system consumes canonical data only.
+
+Telemetry Purity: All signal and pattern classifications are canonicalized.
+
+Audit Ready: Continuous verification ensures all regimes, strategies, and patterns remain synchronized.
+
+✅ This is now the complete Directive 11.4F.1 — Canonical Regime & Strategy Lock-In,
+with all data, schema, metrics, and mappings explicitly defined.

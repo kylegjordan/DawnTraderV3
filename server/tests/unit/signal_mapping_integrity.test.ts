@@ -1,52 +1,45 @@
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * Directive 11.4C.3-B — Signal Mapping Integrity Tests
+ * Directive 11.4F.1 — Canonical Signal Mapping Integrity Tests
  * ══════════════════════════════════════════════════════════════════════════════
+ * 
+ * Updated to reflect Directive 11.4F.1 canonical mappings.
  * 
  * Verifies:
  * 1. getTypeForStrategy returns correct canonical SignalType
- * 2. Strategy → SignalType mappings are consistent
+ * 2. Strategy → SignalType mappings are consistent with CANONICAL_REGIME_STRATEGY_MAP
  * 3. Telemetry records include valid ISO 8601 timestamps
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
 import { describe, test, expect } from 'vitest';
-import { getTypeForStrategy, normalizeStrategy } from '../../config/regime-strategy-map';
+import { 
+  getTypeForStrategy, 
+  normalizeStrategy,
+  CANONICAL_REGIME_STRATEGY_MAP 
+} from '../../config/canonical-regime-strategy-map';
 
-describe('Directive 11.4C.3-B — Signal Mapping Integrity', () => {
+describe('Directive 11.4F.1 — Canonical Signal Mapping Integrity', () => {
   
-  describe('getTypeForStrategy - derived from REGIME_STRATEGY_MAP', () => {
-    // Mappings derived from REGIME_STRATEGY_MAP authoritative source:
-    // HIGH_VOL_IMPULSE (QUANT): vwap_bounce, liquidity_trap, volatility_edge
-    // LOW_VOL_CHOP (PATTERN): range_trade, support_bounce, abcd_long
-    // BULL_STABLE (HYBRID): vwap_pullback, sma_trend_ride, breakout
-    // BEAR_VOLATILE (HYBRID): reverse_impulse, defensive_hedge
-    // TRANSITION (HYBRID): mean_reversion, pivot_shift, adaptive_flow
-    
+  describe('getTypeForStrategy - derived from CANONICAL_REGIME_STRATEGY_MAP', () => {
     const strategyMappings: Record<string, string> = {
-      // HIGH_VOL_IMPULSE → QUANT strategies
-      vwap_bounce: 'QUANT',
-      liquidity_trap: 'QUANT',
-      volatility_edge: 'QUANT',
-      
-      // LOW_VOL_CHOP → PATTERN strategies
-      range_trade: 'PATTERN',
-      support_bounce: 'PATTERN',
-      abcd_long: 'PATTERN',
-      
-      // BULL_STABLE → HYBRID strategies
-      vwap_pullback: 'HYBRID',
-      sma_trend_ride: 'HYBRID',
-      breakout: 'HYBRID',
-      
-      // BEAR_VOLATILE → HYBRID strategies
+      sma_trend_ride: 'QUANT',
+      vwap_pullback: 'QUANT',
+      morning_star: 'PATTERN',
+      pivot_shift: 'HYBRID',
+      mean_reversion: 'QUANT',
       reverse_impulse: 'HYBRID',
       defensive_hedge: 'HYBRID',
-      
-      // TRANSITION → HYBRID strategies
-      mean_reversion: 'HYBRID',
-      pivot_shift: 'HYBRID',
+      inside_bar_reversal: 'PATTERN',
+      range_trade: 'QUANT',
+      support_bounce: 'PATTERN',
+      abcd_long: 'QUANT',
       adaptive_flow: 'HYBRID',
+      breakout: 'QUANT',
+      vwap_bounce: 'QUANT',
+      volatility_edge: 'HYBRID',
+      dhma: 'QUANT',
+      liquidity_trap: 'QUANT',
     };
 
     for (const [strategy, expected] of Object.entries(strategyMappings)) {
@@ -72,23 +65,23 @@ describe('Directive 11.4C.3-B — Signal Mapping Integrity', () => {
   });
 
   describe('Legacy strategy to SignalType chain', () => {
-    test('MomentumPulse → vwap_pullback → HYBRID (BULL_STABLE regime)', () => {
+    test('MomentumPulse → vwap_pullback → QUANT (BULL_STABLE regime)', () => {
       const normalized = normalizeStrategy('MomentumPulse');
       expect(normalized).toBe('vwap_pullback');
       const signalType = getTypeForStrategy(normalized);
-      expect(signalType).toBe('HYBRID');
+      expect(signalType).toBe('QUANT');
     });
 
-    test('TriangleBreakout → abcd_long → PATTERN (LOW_VOL_CHOP regime)', () => {
+    test('TriangleBreakout → abcd_long → QUANT (LOW_VOL_CHOP regime)', () => {
       const normalized = normalizeStrategy('TriangleBreakout');
       expect(normalized).toBe('abcd_long');
       const signalType = getTypeForStrategy(normalized);
-      expect(signalType).toBe('PATTERN');
+      expect(signalType).toBe('QUANT');
     });
 
-    test('H2_Slingshot → vwap_bounce → QUANT (HIGH_VOL_IMPULSE regime)', () => {
-      const normalized = normalizeStrategy('H2_Slingshot');
-      expect(normalized).toBe('vwap_bounce');
+    test('ImpulseChaser → liquidity_trap → QUANT (TRANSITION regime)', () => {
+      const normalized = normalizeStrategy('ImpulseChaser');
+      expect(normalized).toBe('liquidity_trap');
       const signalType = getTypeForStrategy(normalized);
       expect(signalType).toBe('QUANT');
     });
@@ -113,6 +106,33 @@ describe('Directive 11.4C.3-B — Signal Mapping Integrity', () => {
     test('Unknown strategy returns HYBRID as default', () => {
       expect(getTypeForStrategy('unknown_strategy')).toBe('HYBRID');
       expect(getTypeForStrategy('')).toBe('HYBRID');
+    });
+  });
+
+  describe('CANONICAL_REGIME_STRATEGY_MAP structure', () => {
+    test('All 5 canonical regimes exist', () => {
+      expect(Object.keys(CANONICAL_REGIME_STRATEGY_MAP)).toHaveLength(5);
+      expect(CANONICAL_REGIME_STRATEGY_MAP).toHaveProperty('BULL_STABLE');
+      expect(CANONICAL_REGIME_STRATEGY_MAP).toHaveProperty('BEAR_VOLATILE');
+      expect(CANONICAL_REGIME_STRATEGY_MAP).toHaveProperty('LOW_VOL_CHOP');
+      expect(CANONICAL_REGIME_STRATEGY_MAP).toHaveProperty('HIGH_VOL_IMPULSE');
+      expect(CANONICAL_REGIME_STRATEGY_MAP).toHaveProperty('TRANSITION');
+    });
+
+    test('Each regime has at least one strategy', () => {
+      for (const [regime, mapping] of Object.entries(CANONICAL_REGIME_STRATEGY_MAP)) {
+        expect(mapping.strategies.length).toBeGreaterThan(0);
+      }
+    });
+
+    test('Each strategy has signalType, strategyKey, and patternType', () => {
+      for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP)) {
+        for (const stratDef of mapping.strategies) {
+          expect(stratDef).toHaveProperty('signalType');
+          expect(stratDef).toHaveProperty('strategyKey');
+          expect(stratDef).toHaveProperty('patternType');
+        }
+      }
     });
   });
 });
