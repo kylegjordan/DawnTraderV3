@@ -1,0 +1,335 @@
+{
+  "timestamp": "2026-01-12T13:06:59.684Z",
+  "directive": "11.4G.2",
+  "summary": {
+    "totalPairs": 30,
+    "blueChipCount": 30,
+    "blueChipsExcluded": 11,
+    "exclusionReasons": [
+      {
+        "reason": "LOW_VOLUME",
+        "count": 6
+      },
+      {
+        "reason": "LOW_VOLATILITY",
+        "count": 3
+      },
+      {
+        "reason": "NO_DATA",
+        "count": 2
+      }
+    ],
+    "recommendations": [
+      "2 blue-chip pairs have NO_DATA - check API connectivity and symbol mapping"
+    ]
+  },
+  "excludedBlueChips": [
+    {
+      "symbol": "AB/USD",
+      "volumeRank": 1,
+      "volumeTier": "HIGH",
+      "volume24h": 22407424.70032,
+      "volatility": 0.010804727068092356,
+      "excluded": true,
+      "exclusionReason": "LOW_VOLATILITY",
+      "isBlueChip": true
+    },
+    {
+      "symbol": "AB/EUR",
+      "volumeRank": 3,
+      "volumeTier": "HIGH",
+      "volume24h": 16417634.5183,
+      "volatility": 0.016050519668464637,
+      "excluded": true,
+      "exclusionReason": "LOW_VOLATILITY",
+      "isBlueChip": true
+    },
+    {
+      "symbol": "ACX/USD",
+      "volumeRank": 22,
+      "volumeTier": "LOW",
+      "volume24h": 6077.10827,
+      "volatility": 0.12676056338028172,
+      "excluded": true,
+      "exclusionReason": "LOW_VOLUME",
+      "isBlueChip": true
+    },
+    {
+      "symbol": "AAVE/USD",
+      "volumeRank": 23,
+      "volumeTier": "MID",
+      "volume24h": 3403.01265541,
+      "volatility": 0.04950133787399669,
+      "excluded": true,
+      "exclusionReason": "LOW_VOLUME",
+      "isBlueChip": true
+    },
+    {
+      "symbol": "0G/EUR",
+      "volumeRank": 24,
+      "volumeTier": "LOW",
+      "volume24h": 2967.40106,
+      "volatility": 0.042465753424657575,
+      "excluded": true,
+      "exclusionReason": "LOW_VOLUME",
+      "isBlueChip": true
+    },
+    {
+      "symbol": "AAVE/EUR",
+      "volumeRank": 25,
+      "volumeTier": "LOW",
+      "volume24h": 977.9501026,
+      "volatility": 0.052433392539964443,
+      "excluded": true,
+      "exclusionReason": "LOW_VOLUME",
+      "isBlueChip": true
+    },
+    {
+      "symbol": "ACX/EUR",
+      "volumeRank": 26,
+      "volumeTier": "LOW",
+      "volume24h": 23.21,
+      "volatility": 0,
+      "excluded": true,
+      "exclusionReason": "LOW_VOLATILITY",
+      "isBlueChip": true
+    },
+    {
+      "symbol": "AAVE/ETH",
+      "volumeRank": 27,
+      "volumeTier": "LOW",
+      "volume24h": 14.09632689,
+      "volatility": 0.03393025447690863,
+      "excluded": true,
+      "exclusionReason": "LOW_VOLUME",
+      "isBlueChip": true
+    },
+    {
+      "symbol": "AAVE/GBP",
+      "volumeRank": 28,
+      "volumeTier": "LOW",
+      "volume24h": 9.50001914,
+      "volatility": 0.036199836199836216,
+      "excluded": true,
+      "exclusionReason": "LOW_VOLUME",
+      "isBlueChip": true
+    },
+    {
+      "symbol": "AAVE/XBT",
+      "volumeRank": 29,
+      "volumeTier": "LOW",
+      "volume24h": 0,
+      "volatility": null,
+      "excluded": true,
+      "exclusionReason": "NO_DATA",
+      "isBlueChip": true
+    },
+    {
+      "symbol": "ADA/XBT",
+      "volumeRank": 30,
+      "volumeTier": "LOW",
+      "volume24h": 0,
+      "volatility": null,
+      "excluded": true,
+      "exclusionReason": "NO_DATA",
+      "isBlueChip": true
+    }
+  ],
+  "includedBlueChips": [
+    {
+      "symbol": "ACH/USD",
+      "volumeRank": 2,
+      "volumeTier": "HIGH",
+      "volume24h": 20723700.58612551,
+      "volatility": 0.07710390220968495,
+      "excluded": false,
+      "exclusionReason": null,
+      "isBlueChip": true
+    },
+    {
+      "symbol": "ADA/USD",
+      "volumeRank": 4,
+      "volumeTier": "HIGH",
+      "volume24h": 10848092.58192354,
+      "volatility": 0.05094222083787566,
+      "excluded": false,
+      "exclusionReason": null,
+      "isBlueChip": true
+    },
+    {
+      "symbol": "ADA/EUR",
+      "volumeRank": 5,
+      "volumeTier": "MID",
+      "volume24h": 2606846.83891397,
+      "volatility": 0.04992491695360019,
+      "excluded": false,
+      "exclusionReason": null,
+      "isBlueChip": true
+    },
+    {
+      "symbol": "ACH/EUR",
+      "volumeRank": 6,
+      "volumeTier": "MID",
+      "volume24h": 1773531.9323498,
+      "volatility": 0.07248764415156497,
+      "excluded": false,
+      "exclusionReason": null,
+      "isBlueChip": true
+    },
+    {
+      "symbol": "2Z/USD",
+      "volumeRank": 7,
+      "volumeTier": "LOW",
+      "volume24h": 1093087.82056,
+      "volatility": 0.042839657282741625,
+      "excluded": false,
+      "exclusionReason": null,
+      "isBlueChip": true
+    },
+    {
+      "symbol": "ADA/USDT",
+      "volumeRank": 8,
+      "volumeTier": "MID",
+      "volume24h": 432233.890731,
+      "volatility": 0.049186406835479105,
+      "excluded": false,
+      "exclusionReason": null,
+      "isBlueChip": true
+    },
+    {
+      "symbol": "ADA/GBP",
+      "volumeRank": 9,
+      "volumeTier": "MID",
+      "volume24h": 349375.95494395,
+      "volatility": 0.05018974170645112,
+      "excluded": false,
+      "exclusionReason": null,
+      "isBlueChip": true
+    },
+    {
+      "symbol": "ADA/USDC",
+      "volumeRank": 10,
+      "volumeTier": "MID",
+      "volume24h": 336166.05362525,
+      "volatility": 0.04859003745882259,
+      "excluded": false,
+      "exclusionReason": null,
+      "isBlueChip": true
+    },
+    {
+      "symbol": "2Z/EUR",
+      "volumeRank": 11,
+      "volumeTier": "LOW",
+      "volume24h": 273103.96751,
+      "volatility": 0.04087471898630686,
+      "excluded": false,
+      "exclusionReason": null,
+      "isBlueChip": true
+    },
+    {
+      "symbol": "1INCH/EUR",
+      "volumeRank": 12,
+      "volumeTier": "MID",
+      "volume24h": 169880.26458142,
+      "volatility": 0.07713941341904389,
+      "excluded": false,
+      "exclusionReason": null,
+      "isBlueChip": true
+    },
+    {
+      "symbol": "ACA/USD",
+      "volumeRank": 13,
+      "volumeTier": "LOW",
+      "volume24h": 107892.98470669,
+      "volatility": 0.0474308300395257,
+      "excluded": false,
+      "exclusionReason": null,
+      "isBlueChip": true
+    },
+    {
+      "symbol": "ADA/ETH",
+      "volumeRank": 14,
+      "volumeTier": "LOW",
+      "volume24h": 102512.91022648,
+      "volatility": 0.029055690072639275,
+      "excluded": false,
+      "exclusionReason": null,
+      "isBlueChip": true
+    },
+    {
+      "symbol": "1INCH/USD",
+      "volumeRank": 15,
+      "volumeTier": "LOW",
+      "volume24h": 92585.7316212,
+      "volatility": 0.06256445513922308,
+      "excluded": false,
+      "exclusionReason": null,
+      "isBlueChip": true
+    },
+    {
+      "symbol": "ACT/EUR",
+      "volumeRank": 16,
+      "volumeTier": "LOW",
+      "volume24h": 88942.07726,
+      "volatility": 0.13687150837988818,
+      "excluded": false,
+      "exclusionReason": null,
+      "isBlueChip": true
+    },
+    {
+      "symbol": "ACT/USD",
+      "volumeRank": 17,
+      "volumeTier": "LOW",
+      "volume24h": 88492.87252,
+      "volatility": 0.04298874104401223,
+      "excluded": false,
+      "exclusionReason": null,
+      "isBlueChip": true
+    },
+    {
+      "symbol": "0G/USD",
+      "volumeRank": 18,
+      "volumeTier": "LOW",
+      "volume24h": 67803.06697,
+      "volatility": 0.05278592375366573,
+      "excluded": false,
+      "exclusionReason": null,
+      "isBlueChip": true
+    },
+    {
+      "symbol": "ACA/EUR",
+      "volumeRank": 19,
+      "volumeTier": "LOW",
+      "volume24h": 23591.45204413,
+      "volatility": 0.0629800307219663,
+      "excluded": false,
+      "exclusionReason": null,
+      "isBlueChip": true
+    },
+    {
+      "symbol": "ADA/AUD",
+      "volumeRank": 20,
+      "volumeTier": "LOW",
+      "volume24h": 22162.05510144,
+      "volatility": 0.04060180471802381,
+      "excluded": false,
+      "exclusionReason": null,
+      "isBlueChip": true
+    },
+    {
+      "symbol": "ADI/EUR",
+      "volumeRank": 21,
+      "volumeTier": "LOW",
+      "volume24h": 17991.73558,
+      "volatility": 0.05083559366523739,
+      "excluded": false,
+      "exclusionReason": null,
+      "isBlueChip": true
+    }
+  ],
+  "thresholds": {
+    "volatilityMin": 0.02,
+    "volatilityMax": 0.15,
+    "blueChipTopN": 50
+  }
+}

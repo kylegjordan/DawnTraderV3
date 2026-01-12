@@ -1,0 +1,63 @@
+{
+  "timestamp": "2026-01-12T13:09:47.835Z",
+  "directive": "11.4G.3",
+  "regimeEntropy": 0,
+  "regimeDistribution": [
+    {
+      "regime": "BULL_STABLE",
+      "count": 0,
+      "percentage": 0
+    },
+    {
+      "regime": "BEAR_VOLATILE",
+      "count": 0,
+      "percentage": 0
+    },
+    {
+      "regime": "LOW_VOL_CHOP",
+      "count": 0,
+      "percentage": 0
+    },
+    {
+      "regime": "HIGH_VOL_IMPULSE",
+      "count": 0,
+      "percentage": 0
+    },
+    {
+      "regime": "TRANSITION",
+      "count": 0,
+      "percentage": 0
+    }
+  ],
+  "frictionAnalysis": [
+    {
+      "tier": "green",
+      "count": 157,
+      "avgScore": 0.85
+    },
+    {
+      "tier": "yellow",
+      "count": 252,
+      "avgScore": 0.6
+    },
+    {
+      "tier": "orange",
+      "count": 168,
+      "avgScore": 0.4
+    },
+    {
+      "tier": "red",
+      "count": 814,
+      "avgScore": 0.2
+    }
+  ],
+  "recommendations": [
+    "Consider adjusting regime classification thresholds to improve distribution balance",
+    "Consider relaxing friction thresholds or focusing on higher-liquidity pairs"
+  ],
+  "warnings": [
+    "Low regime entropy (0.0%) - BULL_STABLE dominates at 0.0%",
+    "5 regimes have zero representation: BULL_STABLE, BEAR_VOLATILE, LOW_VOL_CHOP, HIGH_VOL_IMPULSE, TRANSITION",
+    "Only 11.3% of pairs have green (low friction) status"
+  ]
+}
