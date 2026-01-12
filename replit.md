@@ -57,7 +57,13 @@ Directive 11.4F.1 (Canonical Regime & Strategy Lock-In) establishes `canonical-r
 - **Backward-Compatible Re-export**: `regime-strategy-map.ts` re-exports from canonical source while maintaining existing imports.
 - **Validation Middleware**: `/server/middleware/canonical-validation.ts` validates and normalizes trade data, logging violations to `/audit/logs/canonical_violation.log` with WARN/ERROR/CRITICAL levels.
 - **Strict Mode**: `getTypeForStrategy(strategy, throwOnUnknown=true)` throws for unknown strategies; validation middleware rejects any ERROR or CRITICAL violations as hard failures.
-- **Test Suite**: 69 tests across 4 test files verify canonical mapping integrity, runtime consistency, and validation middleware behavior.
+- **Test Suite**: 71 tests across 4 test files verify canonical mapping integrity, runtime consistency, and validation middleware behavior.
+
+Directive 11.4F.1A (Canonical Enforcement & Validation Audit) extends canonical integration:
+- **Deterministic Strategy Selection**: `selectPrimaryStrategy()` returns the first/primary strategy for a regime (deterministic), replacing random selection for inference scenarios.
+- **Telemetry Integration**: `telemetry-aggregator.ts` uses canonical imports (`getTypeForStrategy`, `getPatternForStrategy`, `selectPrimaryStrategy`, `normalizeRegime`).
+- **Pattern Propagation**: `getRankedPairs()` invokes `getPatternTypeForEntry()` to derive canonical patternType for HYBRID/PATTERN signals.
+- **Audit Reports**: `/audit/reports/canonical_integrity_summary.json` and `/audit/reports/patterntype_population_audit.json` document compliance.
 
 ML Calibration Service now uses Phase-10 metrics with a specific performance score formula and tracks edge delta for learning feedback.
 
