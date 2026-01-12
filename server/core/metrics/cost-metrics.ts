@@ -64,11 +64,14 @@ export async function getCurrentSpread(symbol: string): Promise<number> {
   try {
     const { KrakenService } = await import('../../services/kraken.js');
     const kraken = new KrakenService();
-    const orderBook = await kraken.getOrderBook(symbol, 1);
+    const orderBookRecord = await kraken.getOrderBook(symbol, 1);
     
-    if (orderBook && orderBook.asks.length > 0 && orderBook.bids.length > 0) {
-      const bestAsk = orderBook.asks[0][0];
-      const bestBid = orderBook.bids[0][0];
+    // KrakenService.getOrderBook returns Record<string, KrakenOrderBook>
+    // where each entry has asks/bids arrays of {price: string, volume: string, timestamp: number}
+    const book = orderBookRecord?.[symbol];
+    if (book && book.asks && book.asks.length > 0 && book.bids && book.bids.length > 0) {
+      const bestAsk = parseFloat(book.asks[0].price);
+      const bestBid = parseFloat(book.bids[0].price);
       const midPrice = (bestAsk + bestBid) / 2;
       const spread = midPrice > 0 ? (bestAsk - bestBid) / midPrice : DEFAULT_SPREAD;
       
@@ -255,4 +258,109 @@ export function mapFrictionVisual(score: number): FrictionVisual {
   if (score <= 50) return { label: `${score}: Normal Liquidity`, color: 'yellow' };
   if (score <= 80) return { label: `${score}: Stressed Liquidity`, color: 'orange' };
   return { label: `${score}: Frozen / Illiquid`, color: 'red' };
+}
+
+/**
+ * ══════════════════════════════════════════════════════════════════════════════
+ * Directive 11.4H Task 2 — Adaptive Percentile Friction Tiers
+ * ══════════════════════════════════════════════════════════════════════════════
+ * 
+ * Replaces static friction thresholds with adaptive percentile-based scaling.
+ * Target distribution: GREEN ≈ 30%, ORANGE ≈ 40%, RED ≈ 30%
+ * 
+ * @param spreads - Array of spread values from all pairs
+ * @returns Percentile bands for friction tier assignment
+ * ══════════════════════════════════════════════════════════════════════════════
+ */
+export interface FrictionBands {
+  lowThreshold: number;  // 30th percentile
+  highThreshold: number; // 70th percentile
+  distribution: { green: number; orange: number; red: number };
+  sampleSize: number;
+  timestamp: number;
+}
+
+let cachedFrictionBands: FrictionBands | null = null;
+const FRICTION_BAND_TTL_MS = 60_000; // 1 minute cache
+
+function percentile(arr: number[], p: number): number {
+  if (arr.length === 0) return 0;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const index = Math.ceil((p / 100) * sorted.length) - 1;
+  return sorted[Math.max(0, index)];
+}
+
+/**
+ * Directive 11.4H Task 2: Compute adaptive friction bands from spread data
+ */
+export function computeAdaptiveFrictionBands(spreads: number[]): FrictionBands {
+  if (spreads.length === 0) {
+    return {
+      lowThreshold: DEFAULT_SPREAD * 0.5,
+      highThreshold: DEFAULT_SPREAD * 1.5,
+      distribution: { green: 0, orange: 0, red: 0 },
+      sampleSize: 0,
+      timestamp: Date.now()
+    };
+  }
+
+  const low = percentile(spreads, 30);
+  const high = percentile(spreads, 70);
+
+  // Count distribution
+  let green = 0, orange = 0, red = 0;
+  for (const spread of spreads) {
+    if (spread <= low) green++;
+    else if (spread <= high) orange++;
+    else red++;
+  }
+
+  const bands: FrictionBands = {
+    lowThreshold: low,
+    highThreshold: high,
+    distribution: { 
+      green: Math.round((green / spreads.length) * 100),
+      orange: Math.round((orange / spreads.length) * 100),
+      red: Math.round((red / spreads.length) * 100)
+    },
+    sampleSize: spreads.length,
+    timestamp: Date.now()
+  };
+
+  // Cache for reuse
+  cachedFrictionBands = bands;
+
+  console.log(`[11.4H][Friction] Adaptive bands computed: GREEN<=${(low * 100).toFixed(3)}%, ORANGE<=${(high * 100).toFixed(3)}%, distribution=${bands.distribution.green}/${bands.distribution.orange}/${bands.distribution.red}%`);
+
+  return bands;
+}
+
+/**
+ * Directive 11.4H Task 2: Get friction tier using adaptive percentile bands
+ */
+export type FrictionTier = 'GREEN' | 'ORANGE' | 'RED';
+
+export function getAdaptiveFrictionTier(spread: number, bands?: FrictionBands): FrictionTier {
+  const activeBands = bands || cachedFrictionBands;
+  
+  if (!activeBands) {
+    // Fallback to static thresholds if no bands computed yet
+    if (spread <= 0.001) return 'GREEN';
+    if (spread <= 0.003) return 'ORANGE';
+    return 'RED';
+  }
+
+  if (spread <= activeBands.lowThreshold) return 'GREEN';
+  if (spread <= activeBands.highThreshold) return 'ORANGE';
+  return 'RED';
+}
+
+/**
+ * Directive 11.4H Task 2: Get cached friction bands
+ */
+export function getCachedFrictionBands(): FrictionBands | null {
+  if (cachedFrictionBands && Date.now() - cachedFrictionBands.timestamp < FRICTION_BAND_TTL_MS) {
+    return cachedFrictionBands;
+  }
+  return null;
 }

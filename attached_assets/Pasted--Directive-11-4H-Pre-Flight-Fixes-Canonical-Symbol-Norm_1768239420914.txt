@@ -1,0 +1,226 @@
+🧭 Directive 11.4H — Pre-Flight Fixes & Canonical Symbol Normalization (Revised)
+Phase Context
+
+This directive follows completion of 11.4G (Diagnostics & Normalization) and 11.4F.1B (Canonical Hard Cut).
+Its purpose is to:
+
+Finalize symbol normalization across all systems.
+
+Correct the friction tier imbalance.
+
+Restore blue-chip and stablecoin visibility in the Ideal Pool.
+
+Begin adaptive weighting in the Goals Engine.
+
+Validate regime entropy behavior post-telemetry flush.
+
+🎯 Objectives
+
+Establish uniform canonical symbol resolution across all market data and trade subsystems.
+
+Rebalance friction thresholds dynamically via percentile logic.
+
+Re-introduce blue-chip and stablecoin pairs into adaptive scanning and ideal pool generation.
+
+Monitor regime entropy post-flush without manual resets.
+
+Introduce adaptive, volatility-sensitive weighting to the Goals Engine.
+
+🧱 Task 1 — Canonical Symbol Normalization Integration
+Purpose
+
+Eliminate all symbol mismatches (e.g., XBT, XXBTZUSD, AVAXUSDT) by leveraging the live Symbol Mapping System already implemented in /server/markets/.
+
+Actions
+
+Apply canonicalization at data ingress for all critical services.
+Replace any ad-hoc normalization or legacy regex mapping with:
+
+import { normalizeToInternalSymbol } from "@/server/services/utils/symbol-canonicalizer";
+const canonicalSymbol = normalizeToInternalSymbol(rawSymbol);
+
+
+Integrate this call in:
+
+/server/services/vts-runner.ts → before signal generation and trade routing
+
+/server/services/fx5-scanner.ts → before pair ranking and pool updates
+
+/server/services/signal-orchestrator.ts → at event ingestion
+
+/server/services/routes.ts and /server/models/trade-model.ts → during payload validation
+
+Audit canonicalization integrity
+
+Create script /scripts/audit_symbol_normalization.js:
+
+import { getSymbolMappingDetails, isMappable } from "@/server/markets/kraken-symbol-resolver";
+// iterate all active pairs → output tier, canonical, and mapping source
+
+
+Output results to /audit/reports/symbol_normalization_audit.json.
+
+Verification Criteria
+
+No unmatched Tier-3 symbols.
+
+All BTC/XBT and DOGE/XDG mappings resolve correctly.
+
+No “NO_DATA” exclusions for Bitcoin pairs.
+
+⚙️ Task 2 — Friction Rebalancing (Adaptive Percentile Scaling)
+Purpose
+
+Remove static spread thresholds that caused >50 % of pairs to fall into “Red” friction tier.
+
+Implementation
+
+File: /server/core/metrics/cost-metrics.ts
+
+Replace fixed thresholds with adaptive percentile scaling:
+
+const spreads = pairs.map(p => p.spread);
+const low = percentile(spreads, 30);
+const high = percentile(spreads, 70);
+
+if (spread <= low) friction = "GREEN";
+else if (spread <= high) friction = "ORANGE";
+else friction = "RED";
+
+
+Log friction tier counts and percentiles to:
+/audit/reports/friction_balance_validation.json.
+
+Target distribution:
+
+GREEN ≈ 30 %
+
+ORANGE ≈ 40 %
+
+RED ≈ 30 %.
+
+💠 Task 3 — Blue-Chip & Stablecoin Inclusion
+Purpose
+
+Guarantee benchmark and stablecoin assets remain represented in the Ideal Pool and adaptive scans.
+
+Implementation
+
+File: /server/services/fx5-scanner.ts
+
+Add forced inclusion logic:
+
+if (pair.volume24h > 50_000_000) pair.forceInclude = true; // Blue Chip
+if (pair.volatility > 0.0005 && /USDT|USDC|DAI/.test(pair.symbol)) pair.forceInclude = true; // Stablecoin
+
+
+Add telemetry flag:
+
+pair.benchmarkForceInclude = true;
+
+
+Maintain exclusion if pair has no valid price data or is frozen.
+
+Output verification report:
+/audit/reports/bluechip_stable_inclusion.json
+Include:
+
+Total forced inclusions by category
+
+Previously excluded pairs now restored
+
+Average volatility and spread stats
+
+🌐 Task 4 — Regime Entropy Monitoring
+Purpose
+
+Confirm that entropy normalization recovers naturally post-telemetry flush, without unnecessary refactors.
+
+Implementation
+
+File: /server/services/telemetry-aggregator.ts
+
+Add diagnostic block:
+
+if (entropy < 0.2 && totalPairs > 100) {
+  console.warn("[Regime Warning] Low entropy detected — possible normalization collapse");
+}
+
+
+Create report /audit/reports/regime_entropy_monitor.json capturing:
+
+Entropy values per 6 h window
+
+Regime frequency distribution
+
+Timestamp of last change
+
+Schedule follow-up after 24 h of runtime.
+If entropy remains <0.2, escalate to Directive 11.4H.1 “Entropy Repair.”
+
+🧮 Task 5 — Goals Engine Adaptive Weighting
+Purpose
+
+Balance AI confidence dominance with adaptive control based on volatility.
+
+Implementation
+
+File: /server/core/metrics/goals-engine.ts
+
+Maintain double weighting but cap total ML contribution:
+
+const aiWeightCap = 0.40;
+const baseWeight = config.weights.mlConfidence;
+const volatilityFactor = clamp(volatility, 0, 1);
+const aiWeight = Math.min(baseWeight * (1 - volatilityFactor), aiWeightCap);
+
+
+Add checksum test in /tests/goals_engine_integrity.test.ts:
+
+expect(totalWeight).toBeCloseTo(1.0, 2);
+
+
+Output report /audit/reports/goals_engine_adaptive_weights.json confirming:
+
+Final composite weights per factor
+
+Total ≤ 1.0
+
+ML influence ≤ 0.40
+
+🧾 Deliverables Summary
+Report File	Purpose
+/audit/reports/symbol_normalization_audit.json	Confirms universal canonicalization and tier mappings
+/audit/reports/friction_balance_validation.json	Verifies dynamic 30/40/30 friction distribution
+/audit/reports/bluechip_stable_inclusion.json	Validates forced inclusion logic for benchmarks & stablecoins
+/audit/reports/regime_entropy_monitor.json	Tracks entropy evolution post-reset
+/audit/reports/goals_engine_adaptive_weights.json	Confirms capped AI confidence weighting
+✅ Acceptance Criteria
+
+No residual XBT/BTC mapping errors; all exchanges report canonical symbols.
+
+Entropy > 0.2 within 24 h of live operation.
+
+Ideal Pool composition:
+
+≥ 10 % hybrid/pattern strategies visible
+
+≥ 3 benchmark assets (BTC, ETH, SOL) present
+
+Friction balance approximates 30/40/30 across tiers.
+
+Goals Engine total weights = 1.0 ± 0.01; ML ≤ 0.4.
+
+All new and modified tests pass (≥ 95 total).
+
+🧩 Summary of Expected Outcomes
+
+Canonical symbol resolution eliminates all NO_DATA and mismatched pair errors.
+
+Ideal Pool and telemetry reflect correct blue-chip and stablecoin presence.
+
+Friction and regime metrics become dynamically self-balancing.
+
+Goals Engine operates with controlled AI influence and verified weight integrity.
+
+The system enters a stable, pre-Predictive-Learning state ready for Phase 12 rollout.

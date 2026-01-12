@@ -284,6 +284,59 @@ export class TelemetryAggregatorService {
   }
 
   /**
+   * Directive 11.4H Task 4: Regime Entropy Monitoring
+   * Calculates Shannon entropy of regime distribution to detect normalization collapse.
+   * Low entropy (<0.2) indicates regime concentration (e.g., all pairs in same regime).
+   * @returns Entropy value 0-1 and regime distribution
+   */
+  computeRegimeEntropy(): { entropy: number; distribution: Record<string, number>; totalPairs: number } {
+    const regimeCounts: Record<string, number> = {
+      BULL_STABLE: 0,
+      BEAR_VOLATILE: 0,
+      LOW_VOL_CHOP: 0,
+      HIGH_VOL_IMPULSE: 0,
+      TRANSITION: 0
+    };
+    
+    let totalPairs = 0;
+    for (const [symbol, entries] of this.pairTelemetry.entries()) {
+      if (entries.length === 0) continue;
+      const latest = entries[entries.length - 1];
+      const regime = latest.pairRegime || 'TRANSITION';
+      if (regimeCounts[regime] !== undefined) {
+        regimeCounts[regime]++;
+        totalPairs++;
+      }
+    }
+    
+    if (totalPairs === 0) {
+      return { entropy: 0, distribution: regimeCounts, totalPairs: 0 };
+    }
+    
+    // Shannon entropy: -sum(p * log2(p))
+    let entropy = 0;
+    const numRegimes = Object.keys(regimeCounts).length;
+    for (const count of Object.values(regimeCounts)) {
+      if (count > 0) {
+        const p = count / totalPairs;
+        entropy -= p * Math.log2(p);
+      }
+    }
+    
+    // Normalize to 0-1 range (max entropy = log2(numRegimes))
+    const maxEntropy = Math.log2(numRegimes);
+    const normalizedEntropy = maxEntropy > 0 ? entropy / maxEntropy : 0;
+    
+    // Directive 11.4H Task 4: Emit warning if entropy is low
+    if (normalizedEntropy < 0.2 && totalPairs > 100) {
+      console.warn(`[11.4H][Regime Warning] Low entropy detected (${normalizedEntropy.toFixed(3)}) — possible normalization collapse`);
+      console.warn(`[11.4H][Regime] Distribution: ${JSON.stringify(regimeCounts)}`);
+    }
+    
+    return { entropy: normalizedEntropy, distribution: regimeCounts, totalPairs };
+  }
+
+  /**
    * Directive 11.4C.1: Flush placeholder/stale in-memory data on restart
    * Called on service initialization to clear any cached data before rehydrating
    * This clears in-memory cache only - SQL history remains intact for rehydration

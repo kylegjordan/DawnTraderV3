@@ -46,6 +46,7 @@ import {
 } from '../utils/analysis-utils.js';
 import { getTelemetryAggregator } from './telemetry-aggregator.js';
 import { SCANNER_PARAMS } from '../config/system-guards.js';
+import { normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver.js';
 
 const SCAN_INTERVAL_SECONDS = 30; // 30 seconds aligned with clock ticks
 const SCAN_INTERVAL_MS = SCAN_INTERVAL_SECONDS * 1000; // For backwards compatibility
@@ -305,9 +306,20 @@ export class Fx5ScannerService {
 
       // Directive 9.0.B: Classify survivors by volume
       // Directive 9.1.E: Compute core metrics (LQ, DI, VolNoise, Sigma)
+      // Directive 11.4H: Normalize symbols at ingress
       // Handle undefined/null volume24h gracefully with safe defaults
       const classifiedSurvivors = survivors.map(s => {
+        // Directive 11.4H Task 1: Normalize symbol at data ingress
+        const normalizedSymbol = normalizeToInternalSymbol(s.symbol);
         const volumeUSD = typeof s.volume24h === 'number' && !isNaN(s.volume24h) ? s.volume24h : 0;
+        
+        // Directive 11.4H Task 3: Blue-Chip & Stablecoin Forced Inclusion
+        // Use dailyRange as volatility proxy since high24h/low24h may not be available
+        const isBlueChip = volumeUSD > 50_000_000;
+        const volatility = s.dailyRange ?? 0;
+        const isStablecoin = volatility > 0.0005 && /USDT|USDC|DAI/.test(normalizedSymbol);
+        const forceInclude = isBlueChip || isStablecoin;
+        const benchmarkForceInclude = forceInclude;
         const volumeClass = classifyVolume(volumeUSD);
         
         // Directive 9.1.E: Compute core metrics
@@ -330,14 +342,20 @@ export class Fx5ScannerService {
         }
         
         return { 
-          ...s, 
+          ...s,
+          symbol: normalizedSymbol, // Directive 11.4H: Use normalized symbol
           volumeClass, 
           volumeUSD,
           LQ,
           DI,
           VolNoise,
           Sigma,
-          passesMetricFilter
+          passesMetricFilter,
+          forceInclude, // Directive 11.4H Task 3
+          benchmarkForceInclude, // Directive 11.4H Task 3
+          isBlueChip,
+          isStablecoin,
+          volatility
         };
       });
 
@@ -363,10 +381,15 @@ export class Fx5ScannerService {
       activeFilterPool.enforcePassiveModeIfStopped(mode, isEngineActive);
 
       // Directive 9.1.F: Filter out pairs that fail LQ/VolNoise thresholds
-      const metricFilteredSurvivors = classifiedSurvivors.filter(s => s.passesMetricFilter);
+      // Directive 11.4H Task 3: forceInclude bypasses metric filter for blue-chips/stablecoins
+      const metricFilteredSurvivors = classifiedSurvivors.filter(s => s.passesMetricFilter || s.forceInclude);
       const metricFilteredCount = classifiedSurvivors.length - metricFilteredSurvivors.length;
+      const forceIncludedCount = classifiedSurvivors.filter(s => !s.passesMetricFilter && s.forceInclude).length;
       if (metricFilteredCount > 0) {
         console.log(`[9.1][FILTER] Removed ${metricFilteredCount}/${classifiedSurvivors.length} pairs failing LQ/VolNoise thresholds`);
+      }
+      if (forceIncludedCount > 0) {
+        console.log(`[11.4H][FILTER] Force-included ${forceIncludedCount} blue-chip/stablecoin pairs despite metric filter failures`);
       }
 
       // REB 2.8.7: Single-gate pattern - populate pool ONLY when engine ACTIVE

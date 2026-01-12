@@ -54,6 +54,7 @@ import type { OHLCData } from '../types/market-regime.types';
 import type { VTSCycleMetrics } from '../types/virtual-trade.interface';
 import { scanPatterns } from './pattern-recognizer.js';
 import type { PatternType } from '../types';
+import { normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -392,7 +393,8 @@ async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal
     
     if (scanBatch.length >= 10) {
       console.log(`[11.4C.1][VTS] Using FX5 scan batch: ${scanBatch.length} pairs (raw data, no telemetry query)`);
-      return scanBatch.map(p => ({ symbol: p.symbol, pool: p.pool }));
+      // Directive 11.4H: Normalize symbols at ingress
+      return scanBatch.map(p => ({ symbol: normalizeToInternalSymbol(p.symbol), pool: p.pool }));
     }
     
     // Cold start fallback: If FX5 hasn't scanned yet, check active filter pool

@@ -82,6 +82,40 @@ Directive 11.4G implements comprehensive diagnostic tooling for regime distribut
 - **Frontend**: `client/src/components/goals/filters-with-override.tsx`
   - DEFAULT: 0.35, MIN: 0.2, MAX: 1.0, STEP: 0.05
 
+## Directive 11.4H: Pre-Flight Fixes
+
+Directive 11.4H implements pre-flight integrity fixes for production readiness:
+
+### H.1: Symbol Normalization Integration
+- `normalizeToInternalSymbol()` applied at all data ingress points
+- Files: `vts-runner.ts`, `fx5-scanner.ts`, `symbol-orchestrator.ts`
+- Ensures canonical BASE/QUOTE format (e.g., "BTC/USD") throughout system
+- Audit: `server/scripts/audit_symbol_normalization.ts`
+
+### H.2: Adaptive Friction Rebalancing
+- `computeAdaptiveFrictionBands()` in `cost-metrics.ts`
+- Percentile-based tiers (30th/70th) targeting GREEN≈30%, ORANGE≈40%, RED≈30%
+- 60-second TTL cache for computed bands
+- Audit: `server/scripts/audit_friction_balance.ts`
+
+### H.3: Blue-Chip & Stablecoin Forced Inclusion
+- `forceInclude` flag bypasses LQ/VolNoise metric filters in `fx5-scanner.ts`
+- Blue-chip threshold: volume24h > $50M
+- Stablecoin inclusion: volatility > 0.0005 AND symbol matches USDT/USDC/DAI
+- Audit: `server/scripts/audit_bluechip_inclusion.ts`
+
+### H.4: Regime Entropy Monitoring
+- `computeRegimeEntropy()` in `telemetry-aggregator.ts`
+- Shannon entropy normalized 0-1 (max entropy = log2(5 regimes))
+- Warning at entropy < 0.2 with >100 pairs (normalization collapse)
+- Audit: `server/scripts/audit_regime_entropy.ts`
+
+### H.5: Adaptive Goals Weighting
+- `adaptive-goals-weight.ts` with ML contribution cap at 40%
+- Volatility-sensitive adjustment: ML weight reduced in high volatility
+- Weight redistribution: 60% to hybrid, 40% to regime when ML capped
+- Audit: `server/scripts/audit_goals_weights.ts`
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed.
