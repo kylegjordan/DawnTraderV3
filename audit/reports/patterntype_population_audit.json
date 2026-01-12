@@ -1,0 +1,15 @@
+{
+  "directive": "11.4F.1A",
+  "auditDate": "2026-01-12",
+  "databaseTable": "telemetry_history",
+  "patternTypeColumn": "NOT_EXISTS",
+  "notes": [
+    "The telemetry_history table does not have a dedicated pattern_type column",
+    "Pattern data is stored in the metadata JSONB column or in-memory telemetry",
+    "VTS writes pattern data to in-memory telemetry with signalType and strategy fields",
+    "Canonical mapping provides patternType via getPatternForStrategy(strategy)",
+    "No database migration needed - pattern inference uses canonical source at runtime"
+  ],
+  "recommendation": "Pattern type is derived at runtime from canonical strategy mapping. No schema changes required.",
+  "status": "N/A (no pattern_type column)"
+}

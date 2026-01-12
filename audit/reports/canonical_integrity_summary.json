@@ -1,0 +1,30 @@
+{
+  "directive": "11.4F.1A",
+  "auditDate": "2026-01-12",
+  "status": "PASS",
+  "totalStrategiesVerified": 17,
+  "totalRegimesConfirmed": 5,
+  "totalSignalTypes": 3,
+  "totalPatternTypes": 6,
+  "missingPatternTypeCount": 0,
+  "deprecatedFileReferencesRemoved": 0,
+  "hybridStrategiesWithoutPattern": 0,
+  "testsTotal": 69,
+  "testsPassed": 69,
+  "testFiles": [
+    "directive-11.4C.3-harmonization.test.ts (20 tests)",
+    "signal_mapping_integrity.test.ts (30 tests)",
+    "runtime_signal_consistency.test.ts (8 tests)",
+    "canonical-validation.test.ts (11 tests)"
+  ],
+  "canonicalFile": "/server/config/canonical-regime-strategy-map.ts",
+  "validationMiddleware": "/server/middleware/canonical-validation.ts",
+  "violationLogPath": "/audit/logs/canonical_violation.log",
+  "notes": [
+    "All hybrid strategies include patternType in canonical mapping",
+    "regime-strategy-map.ts retained as re-export layer for backward compatibility",
+    "telemetry-aggregator.ts updated to use canonical imports",
+    "UI renders pattern from backend without frontend inference",
+    "Database telemetry_history does not have pattern_type column (pattern stored in metadata/jsonb)"
+  ]
+}

@@ -1,0 +1,208 @@
+⚙️ Directive 11.4F.1A — Canonical Enforcement & Validation Audit
+
+Phase: 11.4F.1A
+Objective:
+To verify, enforce, and propagate the canonical regime–strategy–signal–pattern mapping across all systems; to confirm correct inclusion of hybrid–pattern pairings; to deprecate all legacy mappings; and to validate total backend–frontend consistency with zero UI workarounds.
+
+I. Diagnostic Summary
+
+Following the implementation of Directive 11.4F.1, initial validation indicates:
+
+The canonical file was created successfully and referenced across multiple subsystems.
+
+Backward compatibility was maintained unintentionally via regime-strategy-map.ts, which should have been deprecated.
+
+UI displays (Top Batch, Analytics) reveal missing or inconsistent patternType fields, particularly for Hybrid strategies.
+
+These issues may stem from:
+
+Missing hybrid-to-pattern mappings in the canonical file, or
+
+Partial propagation (middleware timing issue or incomplete mapping ingestion).
+
+II. Task 1 — Confirm Canonical Hybrid–Pattern Mappings
+
+Before further propagation, confirm inclusion integrity within /server/config/canonical-regime-strategy-map.ts.
+
+Action:
+Run the following check within Replit or any TypeScript runtime:
+
+import { CANONICAL_REGIME_STRATEGY_MAP } from "@/server/config/canonical-regime-strategy-map";
+
+for (const [regime, entries] of Object.entries(CANONICAL_REGIME_STRATEGY_MAP)) {
+  for (const e of entries) {
+    if (e.signalType === "HYBRID" && !e.patternType) {
+      console.warn(`⚠️ Missing patternType for hybrid strategy: ${e.strategy} in ${regime}`);
+    }
+  }
+}
+
+
+Expected Output (no warnings):
+
+✅ All hybrid strategies include a patternType.
+
+
+If any hybrid strategy produces a warning, update the canonical file immediately to include:
+
+Hybrid Strategy	Pattern Type
+Adaptive Flow	TRI_STAR
+Pivot Shift	MORNING_STAR
+Reverse Impulse	PINBAR
+Defensive Hedge	ENGULFING
+Volatility Edge	ABCD
+III. Task 2 — Full Repository Audit for Legacy File References
+
+Perform a comprehensive dependency audit to locate any and all references to regime-strategy-map.ts, selectRegimeStrategy.ts, or legacy mapping functions.
+
+Replit Audit Prompt
+
+Use the following audit prompt inside the Replit project environment (root directory):
+
+grep -R "regime-strategy-map" ./server ./client ./core ./tests ./scripts --line-number --color=always > audit/reports/legacy_mapping_references.log
+grep -R "selectRegimeStrategy" ./server ./client ./core ./tests ./scripts --line-number --color=always >> audit/reports/legacy_mapping_references.log
+grep -R "assignStrategy" ./server ./client ./core ./tests ./scripts --line-number --color=always >> audit/reports/legacy_mapping_references.log
+grep -R "inferSignalType" ./server ./client ./core ./tests ./scripts --line-number --color=always >> audit/reports/legacy_mapping_references.log
+
+
+This produces a master list of every file and line number where legacy mapping or inference is being used.
+
+Deliverable:
+/audit/reports/legacy_mapping_references.log
+
+Acceptance Criteria:
+
+Zero remaining references to regime-strategy-map.ts or its re-exports.
+
+All mappings are imported from:
+@/server/config/canonical-regime-strategy-map.
+
+IV. Task 3 — Backend Propagation Audit
+A. Validate Middleware Order
+
+The canonical validation middleware must run before any telemetry writes.
+
+Check file: /server/middleware/canonical-validation.ts
+
+Expected import order in pipeline:
+
+import canonicalValidation from "./canonical-validation";
+import telemetryWriter from "./telemetry-writer";
+
+app.use(canonicalValidation);
+app.use(telemetryWriter);
+
+B. Enforce Canonical PatternType Injection
+
+Ensure patternType is applied to all records before insertion.
+
+In /server/services/telemetry-aggregator.ts:
+
+entry.patternType =
+  CANONICAL_REGIME_STRATEGY_MAP[entry.regime]?.find(s => s.strategy === entry.strategy)?.patternType || null;
+
+
+Test:
+Run:
+
+grep -R "patternType" ./server/services/telemetry-aggregator.ts
+
+
+Confirm the assignment above exists.
+
+V. Task 4 — Canonical File Enforcement & Cleanup
+A. Deprecate Legacy Map
+
+Delete /server/config/regime-strategy-map.ts.
+
+Remove all imports referencing:
+
+import { regimeStrategyMap } from "@/server/config/regime-strategy-map";
+
+
+Replace with:
+
+import { CANONICAL_REGIME_STRATEGY_MAP } from "@/server/config/canonical-regime-strategy-map";
+
+B. Validate Tests
+
+Run:
+
+npm run test | grep -i canonical
+
+
+Expected output:
+
+✓ canonical mapping integrity
+✓ patternType propagation
+✓ hybrid mapping consistency
+
+VI. Task 5 — Database Audit (PatternType Population)
+
+After canonical propagation, perform a live database audit:
+
+SELECT regime, signal_type, strategy,
+       COUNT(*) AS total_records,
+       SUM(CASE WHEN pattern_type IS NULL THEN 1 ELSE 0 END) AS missing_pattern
+FROM telemetry
+GROUP BY regime, signal_type, strategy
+ORDER BY missing_pattern DESC;
+
+
+Expected Result:
+All hybrid and pattern strategies should show missing_pattern = 0.
+
+Report:
+/audit/reports/patterntype_population_audit.json
+
+VII. Task 6 — Backend Validation Report
+
+After fixes and audit completion:
+
+Generate a JSON summary of all canonical compliance checks:
+/audit/reports/canonical_integrity_summary.json
+
+Include:
+
+total strategies verified
+
+total regimes confirmed
+
+missing patternType count (should be 0)
+
+deprecated file references removed (should be 0)
+
+VIII. Task 7 — UI Validation (No Patching)
+
+Principle: UI must render only from backend canonical data; no UI patches permitted.
+
+Check /client/pages/analytics/TopBatchTable.tsx:
+
+<TableCell>{row.patternType || '—'}</TableCell>
+
+
+Ensure no computed or UI-level inference of patternType exists.
+If it does, remove and rely solely on canonical API payload.
+
+IX. Deliverables
+
+/audit/reports/legacy_mapping_references.log
+
+/audit/reports/patterntype_population_audit.json
+
+/audit/reports/canonical_integrity_summary.json
+
+/server/config/canonical-regime-strategy-map.ts (validated and corrected)
+
+/server/middleware/canonical-validation.ts (middleware order confirmed)
+
+/server/services/telemetry-aggregator.ts (patternType injection added)
+
+X. Success Criteria
+
+✅ Canonical file verified to include all hybrid–pattern mappings.
+✅ All legacy files fully deprecated.
+✅ Middleware and telemetry validated for correct data injection.
+✅ Database clean (no missing patternType fields).
+✅ UI renders purely from canonical backend data.
+✅ All tests and validations pass with zero warnings.

@@ -35,6 +35,13 @@ import {
 } from './adaptive-learning-repository.js';
 import { adaptiveManager, type TimestampedWeightEntry } from '../core/adaptive-manager.js';
 import { DynamicStrategySelector, type DSSMetrics } from './dynamic-strategy-selector.js';
+import {
+  getTypeForStrategy,
+  getPatternForStrategy,
+  selectRandomStrategy,
+  normalizeRegime,
+  type CanonicalRegimeType
+} from '../config/canonical-regime-strategy-map.js';
 
 export type PoolType = 'ideal' | 'rotational';
 
@@ -779,10 +786,13 @@ export class TelemetryAggregatorService {
   }
 
   /**
-   * Directive 11.4C-R2: Infer signal type from telemetry entry
+   * Directive 11.4F.1A: Get signal type from canonical mapping
+   * Uses stored strategy to derive canonical signal type
    */
   private inferSignalType(entry: PairTelemetry): string {
-    // Directive 11.4C.3: Determine signal type using UPPERCASE canonical format
+    if (entry.strategy) {
+      return getTypeForStrategy(entry.strategy);
+    }
     if (entry.hybridScore > 0.5 && entry.predictiveConfidence > 0.5) {
       return 'HYBRID';
     } else if (entry.hybridScore > 0.3) {
@@ -790,38 +800,28 @@ export class TelemetryAggregatorService {
     } else if (entry.avgDecayedStrength > 0.3) {
       return 'PATTERN';
     }
-    return 'HYBRID'; // Default
+    return 'HYBRID';
   }
 
   /**
-   * Directive 11.4C.3: Infer strategy from telemetry entry based on canonical regimes
-   * Canonical MarketRegime types: BULL_STABLE, BEAR_VOLATILE, LOW_VOL_CHOP, HIGH_VOL_IMPULSE, TRANSITION
+   * Directive 11.4F.1A: Infer strategy from canonical regime-strategy map
+   * Uses normalizeRegime and selectRandomStrategy from canonical source
    */
   private inferStrategy(entry: PairTelemetry): string {
-    // Directive 11.4C.3: Normalize ghost regimes to canonical equivalents
-    const rawRegime = this.currentRegime;
-    const ghostToCanonical: Record<string, string> = {
-      BULL_VOLATILE: 'HIGH_VOL_IMPULSE',
-      BEAR_STABLE: 'BEAR_VOLATILE',
-      EXTREME_NOISE: 'LOW_VOL_CHOP',
-      HIGH_VOL_CHOP: 'HIGH_VOL_IMPULSE',
-      MIXED_TRANSITION: 'TRANSITION'
-    };
-    const regime = ghostToCanonical[rawRegime] ?? rawRegime;
-    
-    // Directive 11.4C.3: Use canonical strategy names (snake_case)
-    if (regime === 'BULL_STABLE') {
-      return entry.hybridScore > 0.5 ? 'sma_trend_ride' : 'vwap_pullback';
-    } else if (regime === 'HIGH_VOL_IMPULSE') {
-      return 'vwap_bounce';
-    } else if (regime === 'BEAR_VOLATILE') {
-      return 'mean_reversion';
-    } else if (regime === 'LOW_VOL_CHOP') {
-      return 'range_trade';
-    } else if (regime === 'TRANSITION') {
-      return 'adaptive_flow';
+    const rawRegime = entry.pairRegime ?? this.currentRegime;
+    const regime = normalizeRegime(rawRegime) as CanonicalRegimeType;
+    const { strategy } = selectRandomStrategy(regime);
+    return strategy;
+  }
+  
+  /**
+   * Directive 11.4F.1A: Get pattern type from canonical mapping
+   */
+  private getPatternTypeForEntry(entry: PairTelemetry): string | null {
+    if (entry.strategy) {
+      return getPatternForStrategy(entry.strategy);
     }
-    return 'adaptive_flow'; // Default fallback
+    return entry.pattern ?? null;
   }
 
   /**
