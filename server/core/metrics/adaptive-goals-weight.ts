@@ -75,11 +75,11 @@ export function computeAdaptiveGoalsWeights(
   let finalRegimeWeight = clamp(SCORE_WEIGHTS.FINAL_SCORE.REGIME + regimeBoost, 0, 1);
   const finalDecayWeight = SCORE_WEIGHTS.FINAL_SCORE.DECAY;
   
-  // Directive 11.4H.1 Task 5: Normalize redistributed weights to ensure total ≤ 1.0
+  // Directive 11.4H.2 Task 3: Normalize positive weights to 1.0 (not 0.9)
   const totalPositive = finalHybridWeight + cappedMlWeight + finalRegimeWeight;
-  if (totalPositive > 0.9) {
-    // Normalize positive weights to 0.9 total (leaving room for decay)
-    const normalizer = 0.9 / totalPositive;
+  if (totalPositive > 0 && totalPositive !== 1.0) {
+    // Normalize positive weights to exactly 1.0
+    const normalizer = 1.0 / totalPositive;
     finalHybridWeight *= normalizer;
     finalRegimeWeight *= normalizer;
   }
@@ -103,16 +103,17 @@ export function computeAdaptiveGoalsWeights(
 
 /**
  * Directive 11.4H Task 5: Validate that weights sum to expected total
- * @returns true if weights are valid (totalPositive ≈ 0.9)
+ * Directive 11.4H.2 Task 3: Updated to validate sum = 1.0
+ * @returns true if weights are valid (totalPositive ≈ 1.0)
  */
 export function validateWeightIntegrity(weights: AdaptiveWeightResult): boolean {
-  const expectedTotal = 0.9; // Positive weights should sum to 0.9
+  const expectedTotal = 1.0; // Directive 11.4H.2: Positive weights should sum to 1.0
   const tolerance = 0.01;
   
   const isValid = Math.abs(weights.totalPositive - expectedTotal) <= tolerance;
   
   if (!isValid) {
-    console.error(`[11.4H][Goals] Weight integrity check FAILED: total=${weights.totalPositive.toFixed(3)}, expected=${expectedTotal}`);
+    console.error(`[11.4H.2][Goals] Weight integrity check FAILED: total=${weights.totalPositive.toFixed(3)}, expected=${expectedTotal}`);
   }
   
   return isValid;

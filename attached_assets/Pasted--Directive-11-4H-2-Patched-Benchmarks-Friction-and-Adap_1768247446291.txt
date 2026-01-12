@@ -1,0 +1,159 @@
+⚙️ Directive 11.4H.2 (Patched) — Benchmarks, Friction, and Adaptive UI Integration
+
+Phase: 11.4H.2
+Objective: Whitelist benchmark pairs (BTC / ETH / SOL / Stablecoins) while keeping them tradeable, correct friction labeling globally, normalize adaptive goal weights to 1.0, and expose friction metrics in the UI.
+
+🧭 I. Implementation Tasks
+Task 1 — Benchmark Whitelist & Shared Pool Logic
+
+File: /server/services/fx5-scanner.ts
+
+Action:
+Implement explicit benchmark inclusion, and ensure additive pool assignment (Ideal + Benchmark).
+
+// Define benchmark symbols
+const BENCHMARK_SYMBOLS = [
+  'BTC/USD', 'BTC/USDT',
+  'ETH/USD', 'ETH/USDT',
+  'SOL/USD', 'SOL/USDT',
+  'USDT/USD', 'USDC/USD', 'DAI/USD'
+];
+
+// --- Force-Include Logic ---
+if (BENCHMARK_SYMBOLS.includes(symbol)) {
+  pair.forceInclude = true;
+  pair.benchmarkForceInclude = true;
+  pair.poolType = 'BENCHMARK'; // Tag for UI
+}
+
+// --- Pool Assignment (Additive, Not Exclusive) ---
+if (pair.benchmarkForceInclude) {
+  benchmarkPool.push(pair);  // For Benchmark UI visibility
+  idealPool.push(pair);      // Ensure VTS still scans & trades it
+} else {
+  idealPool.push(pair);
+}
+
+
+💡 Stablecoin nuance:
+Even though stablecoins enter the pool, trade logic (e.g., range / volatility filters) ensures they won’t trigger signals unless they deviate significantly (> 0.05 %).
+
+Task 2 — Friction Label Correction (Backend + UI)
+
+Files:
+
+/server/core/metrics/cost-metrics.ts
+
+/client/src/components/trading/top-batch.tsx
+
+/client/src/components/dashboard/global-regime-panel.tsx
+
+Action:
+
+Fix backend label mapping:
+
+export function describeFriction(friction: number): string {
+  if (friction <= 0.3) return "High Liquidity / Low Cost";
+  if (friction <= 0.7) return "Moderate Liquidity";
+  return "Low Liquidity / High Cost";
+}
+
+
+Ensure global regime display uses the same logic.
+
+Add Friction column to Top Batch table:
+
+<th>Friction</th>
+...
+<td>
+  <span className={`badge badge-${pair.frictionColor}`}>
+    {pair.frictionLabel}
+  </span>
+</td>
+
+
+Color rules: Green ≤ 0.3, Orange 0.3–0.7, Red > 0.7.
+No new computation — use the existing normalized frictionScore.
+
+Task 3 — Adaptive Goal Weight Normalization
+
+File: /server/core/metrics/adaptive-goals-weight.ts
+
+Action:
+Normalize positive weights to 1.0 (previously capped at 0.9).
+
+const totalPositive = hybridWeight + confidenceWeight + regimeWeight;
+if (totalPositive > 0) {
+  hybridWeight    /= totalPositive;
+  confidenceWeight /= totalPositive;
+  regimeWeight     /= totalPositive;
+}
+
+finalScore =
+  (hybridWeight    * hybridScore) +
+  (confidenceWeight * aiConfidence) +
+  (regimeWeight     * regimeStability) -
+  decayPenalty;
+
+
+Audit: Log totals to /audit/reports/goals_weight_normalization.json.
+
+Task 4 — Benchmark Pool UI Component
+
+File: /client/src/components/trading/benchmark-pool.tsx (new)
+
+Action:
+Create a compact table displaying benchmark pairs and Ideal Pool inclusion.
+
+Symbol	Pool	Volatility	Friction	In Ideal Pool
+BTC/USD	Benchmark	0.18%	High Liquidity	✅
+USDT/USD	Benchmark	0.03%	Moderate	❌
+
+Source data from /api/pairs/ranked?pool=benchmark or existing Ideal Pool endpoint filtered by poolType='BENCHMARK'.
+
+Task 5 — Audit & Verification
+
+Files:
+
+/server/routes/api/pairs.ts
+
+/server/scripts/audit_bluechip_inclusion.ts
+
+Actions:
+
+Add ?pool=benchmark query param for API filtering.
+
+Audit output example:
+
+{
+  "timestamp": "2026-01-05T00:00Z",
+  "benchmarks": ["BTC/USD", "ETH/USD", "SOL/USDT"],
+  "includedInIdeal": 3,
+  "missing": []
+}
+
+🧪 II. Verification Checklist
+Checkpoint	Expected Behavior
+BTC / ETH / SOL	Appear in both Ideal Pool & Benchmark UI
+Stablecoins	Visible in Benchmark Pool (UI)
+Friction Labels	Green = High Liquidity / Red = Low Liquidity
+Adaptive Weights	Sum = 1.0 ± 0.01
+UI	Top Batch shows Friction column + Benchmark table visible
+🧩 III. Post-Implementation Audits
+
+Re-run:
+
+audit_bluechip_inclusion.ts → Confirm BTC/ETH presence in Ideal Pool.
+
+audit_friction_balance.ts → Validate label alignment and color map.
+
+audit_goals_weights.ts → Verify weights sum to 1.0.
+
+✅ Summary of Expected Outcomes (Post-Directive 11.4H.2)
+Component	Result
+Benchmark Assets	Always included in Ideal Pool and visible in Benchmark table
+Stablecoins	Visible for monitoring, naturally filtered from trading
+Friction Labels	Correctly mapped (semantic alignment with scores)
+Adaptive Weights	Fully normalized to 1.0
+UI	Adds Friction column + Benchmark visibility
+Telemetry + VTS	Uninterrupted access to BTC/ETH/SOL pairs

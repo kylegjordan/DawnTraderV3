@@ -188,42 +188,42 @@ export interface FrictionStatus {
 
 /**
  * Directive 11.4A.1 — Expanded Market Friction Narratives (M20 Governance Invariant)
+ * Directive 11.4H.2 Task 2: Corrected friction label mapping (semantic alignment)
  * Full 3-4 sentence explanations for each friction range.
+ * 
+ * Friction score interpretation:
+ * - Low friction (0-30) = High Liquidity / Low Cost (GREEN)
+ * - Medium friction (30-70) = Moderate Liquidity (YELLOW/ORANGE)
+ * - High friction (70-100) = Low Liquidity / High Cost (RED)
  */
 export function describeFriction(frictionScore: number): FrictionStatus {
-  if (frictionScore <= 20) {
+  // Directive 11.4H.2: Normalize friction to 0-100 scale if needed
+  const normalizedScore = frictionScore > 1 ? frictionScore : frictionScore * 100;
+  
+  if (normalizedScore <= 30) {
     return { 
-      value: frictionScore, 
-      status: 'High Liquidity', 
+      value: normalizedScore, 
+      status: 'High Liquidity / Low Cost', 
       color: 'green', 
       emoji: '🟢',
       narrative: 'High liquidity — trades are easy to enter and exit with very small price changes. Orders fill quickly, spreads are tight, and the system can use full position sizes safely. You can expect smoother performance and smaller differences between entry and exit prices.'
     };
   }
-  if (frictionScore <= 50) {
+  if (normalizedScore <= 70) {
     return { 
-      value: frictionScore, 
-      status: 'Normal Liquidity', 
-      color: 'yellow', 
-      emoji: '🟡',
-      narrative: 'Normal liquidity — conditions are average and stable. Most trades execute at expected prices, but small slippage may occur. The system operates normally with standard position sizes.'
-    };
-  }
-  if (frictionScore <= 80) {
-    return { 
-      value: frictionScore, 
-      status: 'Stressed Liquidity', 
+      value: normalizedScore, 
+      status: 'Moderate Liquidity', 
       color: 'orange', 
       emoji: '🟠',
-      narrative: 'Stressed liquidity — spreads and slippage are starting to widen. Orders may take longer to fill or fill slightly off-target. The system will reduce position sizes or trail exits more tightly to protect capital.'
+      narrative: 'Moderate liquidity — conditions are average and stable. Most trades execute at expected prices, but small slippage may occur. The system operates normally with standard position sizes.'
     };
   }
   return { 
-    value: frictionScore, 
-    status: 'Frozen / Illiquid', 
+    value: normalizedScore, 
+    status: 'Low Liquidity / High Cost', 
     color: 'red', 
     emoji: '🔴',
-    narrative: 'Frozen or illiquid — markets are difficult to trade safely. Price jumps and execution delays are common, and signals may be paused temporarily. The system minimizes new entries until conditions stabilize.'
+    narrative: 'Low liquidity — markets are difficult to trade safely. Price jumps and execution delays are common, and signals may be paused temporarily. The system minimizes new entries until conditions stabilize.'
   };
 }
 
@@ -253,11 +253,17 @@ export interface FrictionVisual {
   color: 'green' | 'yellow' | 'orange' | 'red';
 }
 
+/**
+ * Directive 11.4H.2 Task 2: Updated friction visual mapping
+ * Color rules: Green ≤ 0.3 (30), Orange 0.3–0.7 (30-70), Red > 0.7 (70+)
+ */
 export function mapFrictionVisual(score: number): FrictionVisual {
-  if (score <= 20) return { label: `${score}: High Liquidity`, color: 'green' };
-  if (score <= 50) return { label: `${score}: Normal Liquidity`, color: 'yellow' };
-  if (score <= 80) return { label: `${score}: Stressed Liquidity`, color: 'orange' };
-  return { label: `${score}: Frozen / Illiquid`, color: 'red' };
+  // Directive 11.4H.2: Handle both 0-1 and 0-100 scales
+  const normalizedScore = score > 1 ? score : Math.round(score * 100);
+  
+  if (normalizedScore <= 30) return { label: `${normalizedScore}: High Liquidity / Low Cost`, color: 'green' };
+  if (normalizedScore <= 70) return { label: `${normalizedScore}: Moderate Liquidity`, color: 'orange' };
+  return { label: `${normalizedScore}: Low Liquidity / High Cost`, color: 'red' };
 }
 
 /**

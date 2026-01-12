@@ -52,6 +52,71 @@ const SCAN_INTERVAL_SECONDS = 30; // 30 seconds aligned with clock ticks
 const SCAN_INTERVAL_MS = SCAN_INTERVAL_SECONDS * 1000; // For backwards compatibility
 const CYCLES_PER_HOUR = Math.round(3600 / SCAN_INTERVAL_SECONDS); // 120 for 30s intervals
 
+/**
+ * Directive 11.4H.2 Task 1: Benchmark base assets for explicit inclusion
+ * These base currencies are always included in both Benchmark Pool (for UI visibility)
+ * and Ideal Pool (for VTS scanning and trading)
+ * Includes both standard (BTC) and Kraken native (XBT, ETHC, SOLC) formats
+ */
+export const BENCHMARK_BASES = [
+  'BTC', 'XBT',           // Bitcoin (standard and Kraken)
+  'ETH', 'XETH', 'ETHC',  // Ethereum (standard, Kraken prefixed, suffixed)
+  'SOL', 'SOLC',          // Solana (standard and Kraken suffixed)
+  'USDT', 'USDC', 'DAI'   // Stablecoins
+];
+
+/**
+ * Directive 11.4H.2: Check if a symbol is a benchmark asset
+ * Uses normalized symbol to handle Kraken's XBT→BTC conversion
+ * Unified detection logic used by both scanner and API routes
+ * 
+ * Detection strategy (in order):
+ * 1. Direct prefix match on raw Kraken symbols (XBTEUR, ETHGBP, etc.)
+ * 2. Legacy whitelist match for known symbol pairs
+ * 3. Normalized format check (only if normalization succeeds)
+ */
+export function isBenchmarkSymbol(symbol: string): boolean {
+  if (!symbol) return false;
+  
+  const upperSymbol = symbol.toUpperCase();
+  
+  // 1. Direct prefix match on raw symbol base (handles XBTEUR, ETHGBP, etc.)
+  for (const base of BENCHMARK_BASES) {
+    if (upperSymbol.startsWith(base)) {
+      return true;
+    }
+  }
+  
+  // 2. Legacy whitelist match - explicit pair matching
+  for (const legacyPair of BENCHMARK_SYMBOLS) {
+    const legacyBase = legacyPair.split('/')[0].toUpperCase();
+    if (upperSymbol.startsWith(legacyBase) || upperSymbol.includes(legacyBase)) {
+      return true;
+    }
+  }
+  
+  // 3. Normalized format check (only if normalization succeeds)
+  try {
+    const normalized = normalizeToInternalSymbol(symbol);
+    // Skip if normalization failed (returns UNKNOWN)
+    if (normalized.includes('UNKNOWN')) {
+      return false;
+    }
+    const normalizedBase = normalized.split('/')[0].toUpperCase();
+    return BENCHMARK_BASES.includes(normalizedBase);
+  } catch {
+    return false;
+  }
+}
+
+// Legacy export for backwards compatibility
+export const BENCHMARK_SYMBOLS = [
+  'BTC/USD', 'BTC/USDT', 'XBT/USD', 'XBT/USDT',
+  'ETH/USD', 'ETH/USDT',
+  'SOL/USD', 'SOL/USDT',
+  'USDT/USD', 'USDC/USD', 'DAI/USD'
+];
+
 // Directive 11.4C.1: ScanResult uses Ideal/Rotational pool terminology
 interface ScanResult {
   mode: 'paper' | 'live';
@@ -67,16 +132,22 @@ interface ScanResult {
 /**
  * Directive 11.4C.1: Raw scan batch for VTS consumption
  * Contains raw data without telemetry scores
+ * Directive 11.4H.2: Added poolType for benchmark tagging
  */
 export interface ScanBatchPair {
   symbol: string;
   pool: 'ideal' | 'rotational';
+  poolType?: 'BENCHMARK' | 'STANDARD'; // Directive 11.4H.2: Tag for UI
   price: number;
   volume24h: number;
   dailyRange: number;
   spread?: number;
   liquidity?: number;
   volatility?: number;
+  isBenchmark?: boolean; // Directive 11.4H.2: Benchmark flag
+  frictionScore?: number; // Directive 11.4H.2: Friction score for UI
+  frictionLabel?: string; // Directive 11.4H.2: Friction label for UI
+  frictionColor?: 'green' | 'yellow' | 'orange' | 'red'; // Directive 11.4H.2: Friction color
 }
 
 export class Fx5ScannerService {
@@ -329,9 +400,15 @@ export class Fx5ScannerService {
         const volatility = s.dailyRange ?? 0;
         const isStableVol = volatility > 0.0005;
         
-        // Directive 11.4H.1 Task 2: Force include blue-chips OR volatile stablecoins
-        const forceInclude = isBlueChip || (isStable && isStableVol);
+        // Directive 11.4H.2 Task 1: Check if symbol is a benchmark asset
+        const isBenchmark = isBenchmarkSymbol(normalizedSymbol);
+        
+        // Directive 11.4H.2: Force include benchmark symbols OR blue-chips OR volatile stablecoins
+        const forceInclude = isBenchmark || isBlueChip || (isStable && isStableVol);
         const benchmarkForceInclude = forceInclude;
+        
+        // Directive 11.4H.2: Tag pool type for UI visibility
+        const poolType = isBenchmark ? 'BENCHMARK' as const : 'STANDARD' as const;
         const volumeClass = classifyVolume(volumeUSD);
         
         // Directive 11.4H.1 Task 2: Log forced inclusions for audit
@@ -372,7 +449,9 @@ export class Fx5ScannerService {
           benchmarkForceInclude, // Directive 11.4H Task 3
           isBlueChip,
           isStablecoin: isStable && isStableVol, // Directive 11.4H.1: Use correctly named variable
-          volatility
+          volatility,
+          isBenchmark, // Directive 11.4H.2: Benchmark flag
+          poolType // Directive 11.4H.2: Pool type for UI
         };
       });
 
@@ -407,6 +486,13 @@ export class Fx5ScannerService {
       }
       if (forceIncludedCount > 0) {
         console.log(`[11.4H][FILTER] Force-included ${forceIncludedCount} blue-chip/stablecoin pairs despite metric filter failures`);
+      }
+      
+      // Directive 11.4H.2: Log benchmark pair count for diagnostics
+      const benchmarkCount = metricFilteredSurvivors.filter(s => s.isBenchmark).length;
+      if (benchmarkCount > 0) {
+        const benchmarkSymbols = metricFilteredSurvivors.filter(s => s.isBenchmark).map(s => s.symbol).slice(0, 5);
+        console.log(`[11.4H.2][BENCHMARK] ${benchmarkCount} benchmark pairs in survivors: ${benchmarkSymbols.join(', ')}${benchmarkCount > 5 ? '...' : ''}`);
       }
 
       // REB 2.8.7: Single-gate pattern - populate pool ONLY when engine ACTIVE

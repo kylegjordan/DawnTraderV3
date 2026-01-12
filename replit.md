@@ -43,6 +43,13 @@ The trade lifecycle flows from `Signal Orchestrator` to `SQE` (FinalScore + Regi
 
 Diagnostic tooling is implemented for regime distribution, friction calibration, and Goals Engine normalization. This includes context-aware strategy selection in VTS, blue-chip exclusion audits, regime flattening and friction diagnostics, fix application, and Goals Engine normalization. Pre-flight integrity fixes cover symbol normalization, adaptive friction rebalancing, forced inclusion of blue-chip and stablecoins, regime entropy monitoring, and adaptive goals weighting. Further precision corrections and validation enhancements address VTS symbol normalization, FX5 force-include order, friction cache TTL, regime entropy null filtering, adaptive goals weight normalization, and Signal Orchestrator event validation.
 
+**Directive 11.4H.2 Updates (January 2026):**
+- Benchmark Pool Visibility: Added `BENCHMARK_SYMBOLS` whitelist (BTC, ETH, SOL, stablecoins) with `poolType` tagging for UI filtering via `?pool=benchmark` API parameter.
+- Friction Label Corrections: Semantic alignment in `cost-metrics.ts` — low friction (0-30) = green (High Liquidity), moderate (30-70) = orange, high friction (70+) = red (Low Liquidity).
+- Adaptive Goal Weights: Normalized to sum to exactly 1.0 (updated from 0.9) in `adaptive-goals-weight.ts`.
+- Top Batch UI Enhancement: Added Friction column with color-coded badges displaying liquidity status.
+- Benchmark Pool Component: New `benchmark-pool.tsx` component for dedicated benchmark asset visibility.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed.

@@ -29,6 +29,11 @@ interface RankedPair {
   regime: string;
   source: 'simulation' | 'live';
   lastUpdated: string; // Directive 11.4C.3-B: ISO 8601 timestamp
+  frictionScore?: number; // Directive 11.4H.2: Friction score
+  frictionLabel?: string; // Directive 11.4H.2: Friction label
+  frictionColor?: 'green' | 'yellow' | 'orange' | 'red'; // Directive 11.4H.2: Friction color
+  isBenchmark?: boolean; // Directive 11.4H.2: Benchmark flag
+  poolType?: 'BENCHMARK' | 'STANDARD'; // Directive 11.4H.2: Pool type
 }
 
 function getScoreColor(score: number): string {
@@ -86,6 +91,20 @@ function getRegimeBadgeClass(regime: string): string {
       return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
     default:
       return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
+  }
+}
+
+// Directive 11.4H.2 Task 4: Friction color badge classes
+function getFrictionBadgeClass(color: string): string {
+  switch (color) {
+    case 'green':
+      return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+    case 'orange':
+      return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300";
+    case 'red':
+      return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300";
+    default:
+      return "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300";
   }
 }
 
@@ -222,6 +241,7 @@ export default function TopBatch() {
                 <th className="pb-2 pr-4 font-medium">Strategy</th>
                 <th className="pb-2 pr-4 font-medium">Pattern</th>
                 <th className="pb-2 pr-4 font-medium">Regime</th>
+                <th className="pb-2 pr-4 font-medium">Friction</th>
                 <th className="pb-2 pr-4 font-medium">Source</th>
                 <th className="pb-2 pr-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('lastUpdated')}>
                   <Clock className="h-3 w-3 inline mr-1" />
@@ -257,6 +277,15 @@ export default function TopBatch() {
                     </Badge>
                   </td>
                   <td className="py-2 pr-4">
+                    {pair.frictionLabel ? (
+                      <Badge className={cn("text-xs", getFrictionBadgeClass(pair.frictionColor || 'gray'))}>
+                        {pair.frictionLabel}
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">—</span>
+                    )}
+                  </td>
+                  <td className="py-2 pr-4">
                     <Badge variant={pair.source === 'live' ? 'default' : 'secondary'}>
                       {pair.source === 'live' ? 'Active Trading' : 'Simulation'}
                     </Badge>
@@ -268,7 +297,7 @@ export default function TopBatch() {
               ))}
               {sortedPairs.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="py-8 text-center text-muted-foreground">
+                  <td colSpan={10} className="py-8 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
                       <RefreshCw className="h-5 w-5 animate-spin" />
                       <span>Top Batch is being rebuilt. Scanning will repopulate pairs as new signals are generated.</span>
