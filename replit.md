@@ -88,7 +88,7 @@ Directive 11.4H implements pre-flight integrity fixes for production readiness:
 
 ### H.1: Symbol Normalization Integration
 - `normalizeToInternalSymbol()` applied at all data ingress points
-- Files: `vts-runner.ts`, `fx5-scanner.ts`, `symbol-orchestrator.ts`
+- Files: `vts-runner.ts`, `fx5-scanner.ts`, `signal-orchestrator.ts`
 - Ensures canonical BASE/QUOTE format (e.g., "BTC/USD") throughout system
 - Audit: `server/scripts/audit_symbol_normalization.ts`
 

@@ -74,6 +74,8 @@ import {
   normalizeStrategy,
   type CanonicalRegimeType as MarketRegimeType 
 } from '../config/canonical-regime-strategy-map.js';
+// Directive 11.4H Task 1: Symbol normalization at data ingress
+import { normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -620,7 +622,8 @@ export class SignalOrchestrator {
         console.warn(`[8.8.7][Orchestrator] Skipping signal generation – no FX5 survivors (mode=${this.mode})`);
         return;
       }
-      const eligibleSymbols = fx5Survivors.map(p => p.symbol);
+      // Directive 11.4H Task 1: Normalize symbols at data ingress
+      const eligibleSymbols = fx5Survivors.map(p => normalizeToInternalSymbol(p.symbol));
       
       console.info(`[8.8.7][Orchestrator] Using FX5 Active Filter Pool – ${eligibleSymbols.length} eligible symbols.`);
       console.log(`[37.A][SIGNAL] Evaluating ${eligibleSymbols.length} eligible symbols`);
