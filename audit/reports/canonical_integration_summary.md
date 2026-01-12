@@ -17,7 +17,7 @@ Directive 11.4F.1 establishes the canonical regime–strategy–signal type–pa
 | Validation Middleware | `/server/middleware/canonical-validation.ts` | ✅ Created |
 | Audit Reports | `/audit/reports/canonical_integration_summary.md` | ✅ Created |
 | Violation Log | `/audit/logs/canonical_violation.log` | ✅ Ready |
-| Test Suite | `server/tests/unit/` | ✅ 58 tests passing |
+| Test Suite | `server/tests/unit/` | ✅ 69 tests passing |
 
 ## Canonical Data Specification
 
@@ -78,7 +78,8 @@ Directive 11.4F.1 establishes the canonical regime–strategy–signal type–pa
 - Updated `directive-11.4C.3-harmonization.test.ts` (20 tests)
 - Updated `signal_mapping_integrity.test.ts` (30 tests)
 - Updated `runtime_signal_consistency.test.ts` (8 tests)
-- **Total: 58 tests passing**
+- Added `canonical-validation.test.ts` (11 tests)
+- **Total: 69 tests passing**
 
 ## API Normalization
 

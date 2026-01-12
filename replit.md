@@ -50,7 +50,14 @@ Directive 11.4C.3 (Strategy & Regime Harmonization) unifies VTS and Signal Orche
 - **Pattern Injection**: VTS detects patterns via `scanPatterns()` before creating trade records. HYBRID signals without patterns downgrade to QUANT; PATTERN signals without patterns are discarded.
 - **Regime Purity**: Only 5 canonical regimes exist (BULL_STABLE, BEAR_VOLATILE, LOW_VOL_CHOP, HIGH_VOL_IMPULSE, TRANSITION). Ghost regimes (BULL_VOLATILE, BEAR_STABLE, EXTREME_NOISE) are normalized to canonical equivalents.
 - **Type Canonization**: Signal types use uppercase canonical format (QUANT, PATTERN, HYBRID). MarketRegimeType and SignalType import from single canonical sources.
-- **Verification Tests**: 18 tests in `directive-11.4C.3-harmonization.test.ts` cover strategy naming, hybrid integrity, regime strictness, and type consistency.
+- **Verification Tests**: 20 tests in `directive-11.4C.3-harmonization.test.ts` cover strategy naming, hybrid integrity, regime strictness, and type consistency.
+
+Directive 11.4F.1 (Canonical Regime & Strategy Lock-In) establishes `canonical-regime-strategy-map.ts` as the single source of truth for all regime/strategy/signal type/pattern mappings. Key components:
+- **Canonical Configuration**: `/server/config/canonical-regime-strategy-map.ts` defines 5 regimes, 3 signal types, 5 pattern types (+null), and 17 strategies with explicit type assignments.
+- **Backward-Compatible Re-export**: `regime-strategy-map.ts` re-exports from canonical source while maintaining existing imports.
+- **Validation Middleware**: `/server/middleware/canonical-validation.ts` validates and normalizes trade data, logging violations to `/audit/logs/canonical_violation.log` with WARN/ERROR/CRITICAL levels.
+- **Strict Mode**: `getTypeForStrategy(strategy, throwOnUnknown=true)` throws for unknown strategies; validation middleware rejects any ERROR or CRITICAL violations as hard failures.
+- **Test Suite**: 69 tests across 4 test files verify canonical mapping integrity, runtime consistency, and validation middleware behavior.
 
 ML Calibration Service now uses Phase-10 metrics with a specific performance score formula and tracks edge delta for learning feedback.
 
