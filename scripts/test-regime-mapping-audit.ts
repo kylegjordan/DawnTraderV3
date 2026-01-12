@@ -47,7 +47,7 @@ const CANONICAL_SOURCES: Record<string, string> = {
   'PatternType': 'server/types.ts',
   'MarketRegimeType': 'server/types/market-regime.types.ts',
   'REGIME_WEIGHTS': 'server/types/market-regime.types.ts',
-  'regimeStrategyMap': 'server/config/regime-strategy-map.ts',
+  'regimeStrategyMap': 'server/config/canonical-regime-strategy-map.ts',
 };
 
 function getAllTsFiles(dir: string): string[] {

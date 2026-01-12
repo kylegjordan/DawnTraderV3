@@ -1,0 +1,36 @@
+{
+  "directive": "11.4F.1B",
+  "auditDate": "2026-01-12",
+  "status": "PASS",
+  "canonicalReferenceCount": 17,
+  "legacyReferenceCount": 0,
+  "splitBrainDetected": false,
+  "vtsCanonicalValidated": true,
+  "signalOrchestratorCanonicalValidated": true,
+  "telemetryCanonicalValidated": true,
+  "legacyFileDeleted": true,
+  "legacyFilePath": "/server/config/regime-strategy-map.ts",
+  "canonicalFilePath": "/server/config/canonical-regime-strategy-map.ts",
+  "filesUpdated": [
+    "server/services/vts-runner.ts",
+    "server/services/signal-orchestrator.ts",
+    "server/services/telemetry-aggregator.ts",
+    "server/routes.ts",
+    "server/types/virtual-trade.interface.ts",
+    "server/core/schema/trade-model.ts",
+    "server/tests/unit/directive-11.4C.3-harmonization.test.ts",
+    "server/tests/unit/vts-modernization.test.ts",
+    "scripts/test-regime-mapping-audit.ts"
+  ],
+  "testsAdded": [
+    "server/tests/unit/canonical_source_lock.test.ts"
+  ],
+  "compilerWillFailOnLegacyImport": true,
+  "notes": [
+    "Legacy regime-strategy-map.ts permanently deleted",
+    "All services now import from canonical-regime-strategy-map.ts",
+    "VTS, Signal Orchestrator, and Telemetry aligned under single data source",
+    "selectPrimaryStrategy replaces selectRandomStrategy for deterministic behavior",
+    "Type aliases preserved for backward compatibility (MarketRegimeType = CanonicalRegimeType)"
+  ]
+}

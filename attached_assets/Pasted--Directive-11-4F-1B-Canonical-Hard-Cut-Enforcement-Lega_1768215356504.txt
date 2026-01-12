@@ -1,0 +1,185 @@
+⚙️ Directive 11.4F.1B — Canonical “Hard Cut” Enforcement & Legacy Purge
+
+Phase: 11.4F.1B
+Objective:
+To permanently eliminate all non-canonical mapping definitions, rewire every service—including the VTS—to the canonical source, validate that no duplicate regime or strategy definitions exist anywhere in the repository, and force compilation to fail if any deprecated import remains.
+
+I. Diagnostic Summary
+
+Confirmed facts from Gemini’s audit and your provided repository data:
+
+✅ /server/config/canonical-regime-strategy-map.ts — correct, complete, all 17 strategies, 5 regimes, 3 signal types, and 6 pattern types.
+
+⚠️ /server/config/regime-strategy-map.ts — duplicate mapping object, not an import wrapper.
+
+❌ /server/services/vts-runner.ts — still importing the legacy map.
+
+✅ /server/services/telemetry-aggregator.ts — correctly uses canonical.
+
+⚠️ Potential risk in /server/services/signal-orchestrator.ts — likely still referencing the old file, based on file patterns from prior audits.
+
+This causes the following active threat:
+
+The VTS and Telemetry are referencing two independent strategy maps, producing split regime and signal type derivations, and leading to inconsistent classifications and rankings in the Ideal Pool.
+
+II. Implementation Tasks
+Task 1 — VTS Canonical Migration
+
+File: /server/services/vts-runner.ts
+Action: Replace the import statement and dependent references.
+
+- import { REGIME_STRATEGY_MAP } from '../config/regime-strategy-map.js';
++ import { CANONICAL_REGIME_STRATEGY_MAP as REGIME_STRATEGY_MAP } from '../config/canonical-regime-strategy-map.js';
+
+
+Also confirm that all helper calls (selectPrimaryStrategy, getTypeForStrategy, getPatternTypeForEntry) use canonical imports.
+
+Verification Step:
+Run:
+
+grep -R "regime-strategy-map" ./server/services/vts-runner.ts
+
+
+Expected: no matches.
+
+Task 2 — DELETE Legacy File (Non-Negotiable)
+
+File: /server/config/regime-strategy-map.ts
+Action:
+
+Delete the file completely.
+
+Do not rename or alias.
+
+Remove all export references in any barrel (index.ts) files that may re-export it.
+
+Rationale:
+We want the compiler to fail wherever the old map is referenced so that we can forcefully fix those imports.
+
+Verification:
+Run:
+
+grep -R "regime-strategy-map" ./server ./client ./tests ./core --color=always --line-number
+
+
+Expected: no matches after migration.
+
+Task 3 — Signal Orchestrator Canonical Verification
+
+File: /server/services/signal-orchestrator.ts
+Action:
+
+Confirm imports come from canonical-regime-strategy-map.ts.
+
+If not, apply:
+
+- import { REGIME_STRATEGY_MAP } from '../config/regime-strategy-map.js';
++ import { CANONICAL_REGIME_STRATEGY_MAP as REGIME_STRATEGY_MAP } from '../config/canonical-regime-strategy-map.js';
+
+
+Secondary Check:
+Ensure selectPrimaryStrategy() and getPatternTypeForEntry() are imported from canonical helpers.
+
+Task 4 — Repository-Wide Legacy Import Audit
+
+Run a hard grep to identify any file referencing the legacy map or helpers:
+
+grep -R "regime-strategy-map" ./server ./client ./core ./tests ./scripts --line-number --color=always > audit/reports/legacy_import_references.log
+grep -R "selectRegimeStrategy" ./server ./client ./core ./tests ./scripts --line-number --color=always >> audit/reports/legacy_import_references.log
+grep -R "assignStrategy" ./server ./client ./core ./tests ./scripts --line-number --color=always >> audit/reports/legacy_import_references.log
+
+
+Deliverable: /audit/reports/legacy_import_references.log
+Acceptance Criteria: 0 results.
+
+Task 5 — Canonical Enforcement Test Extension
+
+Add a new unit test suite: /tests/canonical_source_lock.test.ts
+
+Purpose: Ensure no service reverts to the old file.
+
+import fs from 'fs';
+import path from 'path';
+
+const ROOT = path.resolve(__dirname, '../server');
+
+test('All imports reference canonical-regime-strategy-map.ts only', () => {
+  const files = fs
+    .readdirSync(ROOT, { recursive: true })
+    .filter(f => f.endsWith('.ts'));
+
+  for (const file of files) {
+    const content = fs.readFileSync(path.join(ROOT, file), 'utf8');
+    expect(content.includes('regime-strategy-map.ts')).toBe(false);
+  }
+});
+
+
+Run:
+
+npm run test:canonical
+
+
+Expected Output:
+
+✓ All imports reference canonical-regime-strategy-map.ts only (0 legacy references)
+
+Task 6 — Integration Verification (VTS + Telemetry)
+
+After deletion of the old file, perform a controlled test:
+
+Run a VTS scan cycle (100 pairs).
+
+Inspect the telemetry logs.
+
+Confirm the following:
+
+All logged entries reference a single canonical strategy definition.
+
+No mismatched signalType/patternType between VTS and Telemetry.
+
+Run:
+
+grep "canonical" logs/vts_runtime.log | tail -n 20
+
+
+Expected confirmation:
+
+INFO: VTS -> Canonical Strategy Map in use (source=/server/config/canonical-regime-strategy-map.ts)
+
+Task 7 — Final Deliverables
+
+/audit/reports/legacy_import_references.log (should be empty)
+
+/tests/canonical_source_lock.test.ts (passing)
+
+/audit/reports/canonical_final_validation.json containing:
+
+canonicalReferenceCount: total files referencing canonical map
+
+legacyReferenceCount: should be 0
+
+splitBrainDetected: false
+
+vtsCanonicalValidated: true
+
+III. Expected Outcomes
+
+✅ VTS now references the canonical mapping only.
+✅ The legacy map is permanently deleted.
+✅ Signal Orchestrator confirmed canonical.
+✅ Telemetry, VTS, and Signal Orchestrator are aligned under one data source.
+✅ Compiler will immediately flag any regression.
+✅ Full canonical regime-strategy lock achieved (no split-brain).
+
+IV. Success Criteria
+Metric	Target	Validation
+Legacy imports remaining	0	grep audit log
+Canonical import references	≥5 (VTS, Telemetry, Signal Orchestrator, RTB, DSE)	Code scan
+Test pass count	72+	npm run test
+Split brain detected	false	canonical_final_validation.json
+Compiler on legacy import	FAIL	Manual build check
+✅ Conclusion
+
+Directive 11.4F.1B is the final hard enforcement pass for Canonical Mapping.
+After execution, the Dawn Trader system will have a single authoritative source for all regime, strategy, signal, and pattern logic, with no fallback compatibility layer and no duplicate definitions anywhere in the codebase.

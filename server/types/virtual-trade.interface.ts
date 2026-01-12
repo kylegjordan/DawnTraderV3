@@ -15,9 +15,10 @@
  */
 
 import type { SignalType, PatternType } from '../types';
-import { MarketRegimeType, CanonicalSignalType } from '../config/regime-strategy-map';
+import { CanonicalRegimeType, CanonicalSignalType } from '../config/canonical-regime-strategy-map';
 
-export type { MarketRegimeType, CanonicalSignalType };
+export type MarketRegimeType = CanonicalRegimeType;
+export type { CanonicalSignalType };
 export type { SignalType, PatternType };
 
 export interface VirtualTradePhase10 {

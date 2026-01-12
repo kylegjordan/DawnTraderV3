@@ -16,6 +16,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   CANONICAL_REGIME_STRATEGY_MAP,
+  CANONICAL_REGIME_STRATEGY_MAP as REGIME_STRATEGY_MAP,
   STRATEGY_DISPLAY_NAMES,
   LEGACY_TO_CANONICAL,
   CANONICAL_REGIMES,
@@ -23,15 +24,11 @@ import {
   normalizeRegime,
   normalizeStrategy,
   selectRandomStrategy,
+  selectPrimaryStrategy as getStrategyForRegime,
   getStrategiesForRegime,
   type CanonicalRegimeType,
   type CanonicalSignalType
 } from '../../config/canonical-regime-strategy-map';
-
-import {
-  REGIME_STRATEGY_MAP,
-  getStrategyForRegime,
-} from '../../config/regime-strategy-map';
 
 describe('Directive 11.4F.1 — Strategy Naming', () => {
   it('should have all canonical strategies in snake_case format', () => {
@@ -199,19 +196,21 @@ describe('Directive 11.4F.1 — Type Consistency', () => {
     }
   });
 
-  it('backward-compatible getStrategyForRegime should return valid mapping for all canonical regimes', () => {
+  it('selectPrimaryStrategy should return valid strategy for all canonical regimes', () => {
     for (const regime of CANONICAL_REGIMES) {
-      const mapping = getStrategyForRegime(regime as any);
-      expect(mapping).toBeDefined();
-      expect(mapping.strategies.length).toBeGreaterThan(0);
-      expect(['QUANT', 'PATTERN', 'HYBRID']).toContain(mapping.signalType);
+      const result = getStrategyForRegime(regime as any);
+      expect(result).toBeDefined();
+      expect(typeof result.strategy).toBe('string');
+      expect(['QUANT', 'PATTERN', 'HYBRID']).toContain(result.signalType);
     }
   });
 
-  it('backward-compatible getStrategyForRegime should fallback to TRANSITION for unknown regimes', () => {
+  it('selectPrimaryStrategy should fallback to TRANSITION strategy for unknown regimes', () => {
     const unknownRegime = 'UNKNOWN_REGIME' as any;
-    const mapping = getStrategyForRegime(unknownRegime);
-    expect(mapping).toBeDefined();
-    expect(mapping).toEqual(REGIME_STRATEGY_MAP.TRANSITION);
+    const result = getStrategyForRegime(unknownRegime);
+    expect(result).toBeDefined();
+    // Unknown regimes normalize to TRANSITION, first strategy is adaptive_flow
+    expect(result.strategy).toBe('adaptive_flow');
+    expect(result.signalType).toBe('HYBRID');
   });
 });

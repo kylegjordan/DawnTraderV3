@@ -668,7 +668,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.get('/pairs/ranked', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { getTelemetryAggregator } = await import('./services/telemetry-aggregator.js');
-      const { getTypeForStrategy } = await import('./config/regime-strategy-map.js');
+      const { getTypeForStrategy } = await import('./config/canonical-regime-strategy-map.js');
       const telemetry = getTelemetryAggregator();
       
       const limit = parseInt(req.query.limit as string ?? '100');

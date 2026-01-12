@@ -67,13 +67,13 @@ import { TIMEFRAME_CONFIG } from '../config/system-guards.js';
 import { SCORE_WEIGHTS, SCORE_WEIGHTS_VERSION } from '../config/score-weights.config.js';
 // Directive 11.3A: Net Expectancy Standardization - Canonical Cost Model
 import { getCachedCostMetrics, computeNetGeometry, computeTotalRoundTripCost } from '../core/math/cost-model.js';
-// Directive 11.4C.3: Shared regime-strategy mapping (Rosetta Stone)
+// Directive 11.4F.1B: Canonical regime-strategy mapping (single source of truth)
 import { 
-  REGIME_STRATEGY_MAP, 
+  CANONICAL_REGIME_STRATEGY_MAP as REGIME_STRATEGY_MAP, 
   STRATEGY_DISPLAY_NAMES,
   normalizeStrategy,
-  type MarketRegimeType 
-} from '../config/regime-strategy-map.js';
+  type CanonicalRegimeType as MarketRegimeType 
+} from '../config/canonical-regime-strategy-map.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';

@@ -13,7 +13,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { calculatePairRegime, computeVolatility, computeMomentum, computeADX, getRegimeWeight } from '../../core/metrics/market-regime';
-import { regimeStrategyMap, selectRandomStrategy, getRegimeRiskMultiplier } from '../../config/regime-strategy-map';
+import { CANONICAL_REGIME_STRATEGY_MAP as regimeStrategyMap, selectRandomStrategy, getRegimeRiskMultiplier } from '../../config/canonical-regime-strategy-map';
 import { preloadPatternHistory, isPatternRecognitionWarmedUp, getPatternHistoryStatus, resetPatternHistory } from '../../core/pattern-recognition';
 import { SCORE_WEIGHTS } from '../../config/score-weights.config';
 import type { OHLCData, MarketRegimeType } from '../../types/market-regime.types';
@@ -111,7 +111,6 @@ describe('Regime Strategy Mapping', () => {
       const mapping = regimeStrategyMap[regime];
       
       expect(mapping).toBeDefined();
-      expect(mapping.signalType).toBeDefined();
       expect(mapping.strategies).toBeInstanceOf(Array);
       expect(mapping.strategies.length).toBeGreaterThan(0);
       expect(mapping.riskMultiplier).toBeGreaterThan(0);
@@ -125,12 +124,13 @@ describe('Regime Strategy Mapping', () => {
     for (const regime of regimes) {
       const { signalType, strategy } = selectRandomStrategy(regime);
       
-      expect(['Hybrid', 'Pattern', 'Quantitative']).toContain(signalType);
+      expect(['HYBRID', 'PATTERN', 'QUANT']).toContain(signalType);
       expect(typeof strategy).toBe('string');
       expect(strategy.length).toBeGreaterThan(0);
       
       const mapping = regimeStrategyMap[regime];
-      expect(mapping.strategies).toContain(strategy);
+      const strategyKeys = mapping.strategies.map((s: any) => s.strategyKey);
+      expect(strategyKeys).toContain(strategy);
     }
   });
   

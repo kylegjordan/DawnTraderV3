@@ -42,13 +42,13 @@ import { compareLatestSessions, savePaperSessionTrades, getPaperSessionTrades } 
 import { SCORE_WEIGHTS } from '../config/score-weights.config.js';
 import { calculatePairRegime, getRegimeWeight } from '../core/metrics/market-regime.js';
 import { 
-  REGIME_STRATEGY_MAP, 
-  selectRandomStrategy as selectRegimeStrategy, 
+  CANONICAL_REGIME_STRATEGY_MAP as REGIME_STRATEGY_MAP, 
+  selectPrimaryStrategy as selectRegimeStrategy, 
   getRegimeRiskMultiplier,
   normalizeStrategy,
-  type MarketRegimeType,
+  type CanonicalRegimeType as MarketRegimeType,
   type CanonicalSignalType
-} from '../config/regime-strategy-map.js';
+} from '../config/canonical-regime-strategy-map.js';
 import type { OHLCData } from '../types/market-regime.types';
 import type { VTSCycleMetrics } from '../types/virtual-trade.interface';
 import { scanPatterns } from './pattern-recognizer.js';

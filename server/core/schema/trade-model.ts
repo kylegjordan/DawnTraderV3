@@ -15,10 +15,11 @@
 
 import { computeMarketFriction, describeFriction } from '../metrics/cost-metrics.js';
 import { getCurrentRegime, getExpandedRegimeDescription } from '../../services/market-indicators.js';
-import { MarketRegimeType, normalizeRegime, CanonicalSignalType } from '../../config/regime-strategy-map.js';
+import { CanonicalRegimeType, normalizeRegime, CanonicalSignalType } from '../../config/canonical-regime-strategy-map.js';
 import type { SignalType } from '../../types';
 
-export type { MarketRegimeType, CanonicalSignalType };
+export type MarketRegimeType = CanonicalRegimeType;
+export type { CanonicalSignalType };
 export { normalizeRegime };
 
 export type TargetType = 'Original' | 'DSE' | 'Trailing';
