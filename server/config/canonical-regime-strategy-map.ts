@@ -69,12 +69,13 @@ export const CANONICAL_SIGNAL_TYPES: readonly CanonicalSignalType[] = [
   'HYBRID'
 ] as const;
 
-export const CANONICAL_PATTERN_TYPES: readonly NonNullable<CanonicalPatternType>[] = [
+export const CANONICAL_PATTERN_TYPES: readonly CanonicalPatternType[] = [
   'PINBAR',
   'ENGULFING',
   'MORNING_STAR',
   'ABCD',
-  'TRI_STAR'
+  'TRI_STAR',
+  null
 ] as const;
 
 export const REGIME_METRICS: Record<CanonicalRegimeType, RegimeMetrics> = {
@@ -364,10 +365,18 @@ export function normalizeStrategy(strategy: string): string {
   return strategy;
 }
 
-export function getTypeForStrategy(strategy: string): CanonicalSignalType {
+export function getTypeForStrategy(strategy: string, throwOnUnknown: boolean = false): CanonicalSignalType {
   buildStrategyCache();
   const normalized = normalizeStrategy(strategy);
-  return strategyToSignalTypeCache!.get(normalized) ?? 'HYBRID';
+  const signalType = strategyToSignalTypeCache!.get(normalized);
+  if (!signalType) {
+    if (throwOnUnknown) {
+      throw new Error(`[11.4F.1] Unknown strategy: ${strategy} (normalized: ${normalized}). Non-canonical strategies are prohibited.`);
+    }
+    console.warn(`[11.4F.1][Canonical] Unknown strategy fallback: ${strategy} → HYBRID`);
+    return 'HYBRID';
+  }
+  return signalType;
 }
 
 export function getPatternForStrategy(strategy: string): CanonicalPatternType {

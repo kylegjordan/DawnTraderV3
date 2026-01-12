@@ -147,8 +147,11 @@ export function validateAndNormalizeTrade(
     logViolation(violation);
   }
   
+  const hasCritical = violations.some(v => v.level === 'CRITICAL');
+  const hasError = violations.some(v => v.level === 'ERROR');
+  
   return {
-    valid: violations.filter(v => v.level === 'CRITICAL' || v.level === 'ERROR').length === 0,
+    valid: !hasCritical && !hasError,
     normalized: {
       regime: normalizedRegime,
       strategy: normalizedStrategy,
