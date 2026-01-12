@@ -1,60 +1,60 @@
 {
   "bob_snapshot": {
-    "timestamp": "2026-01-12T18:55:19.562Z",
+    "timestamp": "2026-01-12T18:56:19.562Z",
     "modules": {
       "MetricsBob": {
         "name": "MetricsBob",
-        "lastUpdate": "2026-01-12T18:55:19.560Z",
+        "lastUpdate": "2026-01-12T18:56:19.560Z",
         "stale": false,
-        "hitRate": "93.9%",
+        "hitRate": "94.3%",
         "cacheSize": 1,
         "ttl": 60
       },
       "DataBob": {
         "name": "DataBob",
-        "lastUpdate": "2026-01-12T18:55:19.560Z",
+        "lastUpdate": "2026-01-12T18:56:19.560Z",
         "stale": false,
-        "hitRate": "93.9%",
+        "hitRate": "94.3%",
         "cacheSize": 1,
         "ttl": 60
       },
       "ConfigBob": {
         "name": "ConfigBob",
-        "lastUpdate": "2026-01-12T18:55:19.560Z",
+        "lastUpdate": "2026-01-12T18:56:19.560Z",
         "stale": false,
-        "hitRate": "93.9%",
+        "hitRate": "94.3%",
         "cacheSize": 1,
         "ttl": 60
       },
       "StrategyBob": {
         "name": "StrategyBob",
-        "lastUpdate": "2026-01-12T18:55:19.560Z",
+        "lastUpdate": "2026-01-12T18:56:19.560Z",
         "stale": false,
-        "hitRate": "93.9%",
+        "hitRate": "94.3%",
         "cacheSize": 1,
         "ttl": 60
       },
       "TradeBob": {
         "name": "TradeBob",
-        "lastUpdate": "2026-01-12T18:55:19.560Z",
+        "lastUpdate": "2026-01-12T18:56:19.560Z",
         "stale": false,
-        "hitRate": "93.9%",
+        "hitRate": "94.3%",
         "cacheSize": 1,
         "ttl": 60
       },
       "InsightBob": {
         "name": "InsightBob",
-        "lastUpdate": "2026-01-12T18:55:19.560Z",
+        "lastUpdate": "2026-01-12T18:56:19.560Z",
         "stale": false,
-        "hitRate": "93.9%",
+        "hitRate": "94.3%",
         "cacheSize": 1,
         "ttl": 60
       },
       "UIBob": {
         "name": "UIBob",
-        "lastUpdate": "2026-01-12T18:55:19.560Z",
+        "lastUpdate": "2026-01-12T18:56:19.560Z",
         "stale": false,
-        "hitRate": "93.9%",
+        "hitRate": "94.3%",
         "cacheSize": 1,
         "ttl": 60
       }
@@ -62,9 +62,9 @@
     "overallStats": {
       "modulesActive": 7,
       "totalCacheSize": 1,
-      "overallHitRate": "93.9%",
-      "totalHits": 231,
-      "totalMisses": 15
+      "overallHitRate": "94.3%",
+      "totalHits": 298,
+      "totalMisses": 18
     },
     "recentChanges": [],
     "systemHealth": "healthy",
@@ -73,23 +73,23 @@
       "warnings": [],
       "criticalIssues": [],
       "metrics": {
-        "timestamp": "2026-01-12T18:55:19.562Z",
+        "timestamp": "2026-01-12T18:56:19.562Z",
         "system": {
           "cpuUsage": 47.4,
           "memoryUsage": {
             "total": 67430191104,
-            "used": 48462118912,
-            "free": 18968072192,
-            "percentUsed": 72
+            "used": 50206515200,
+            "free": 17223675904,
+            "percentUsed": 74
           },
-          "uptime": 181
+          "uptime": 241
         },
         "cache": {
           "hitRate": 95,
           "missRate": 5,
-          "totalRequests": 244,
-          "hits": 231,
-          "misses": 13
+          "totalRequests": 314,
+          "hits": 298,
+          "misses": 16
         },
         "latency": {
           "cortex": null,
@@ -98,11 +98,11 @@
         },
         "schedulers": {
           "cortexSync": {
-            "uptime": 181,
-            "lastRun": "2026-01-12T18:54:49.565Z"
+            "uptime": 241,
+            "lastRun": "2026-01-12T18:55:49.563Z"
           },
           "analytics": {
-            "uptime": 181,
+            "uptime": 241,
             "lastRun": "2026-01-12T18:52:50.195Z"
           }
         },
@@ -158,10 +158,10 @@
     "current": {
       "view": "Dashboard",
       "mode": "live",
-      "timestamp": "2026-01-12T18:55:19.560Z"
+      "timestamp": "2026-01-12T18:56:19.561Z"
     }
   },
-  "last_sync": "2026-01-12T18:55:19.563Z",
+  "last_sync": "2026-01-12T18:56:19.562Z",
   "memory": {
     "analytics_live_6c591801-3072-431d-b192-30aaf426f15e": {
       "value": {
