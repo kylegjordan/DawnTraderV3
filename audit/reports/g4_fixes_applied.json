@@ -1,0 +1,42 @@
+{
+  "timestamp": "2026-01-12T13:15:02.408Z",
+  "directive": "11.4G.4",
+  "findings": {
+    "noDataPairs": [
+      "AAVE/XBT",
+      "ADA/XBT"
+    ],
+    "lowVolatilityBlueChips": [
+      {
+        "symbol": "AB/USD",
+        "volatility": 0.010804727068092356,
+        "volume24h": 22407424.70032
+      },
+      {
+        "symbol": "AB/EUR",
+        "volatility": 0.016050519668464637,
+        "volume24h": 16417634.5183
+      }
+    ],
+    "regimeEntropyStatus": "LOW_ENTROPY",
+    "frictionDistribution": {
+      "greenPct": 11.286843997124372,
+      "redPct": 58.519051042415526
+    }
+  },
+  "appliedFixes": [
+    "XBT quote pairs identified as low-liquidity - excluded correctly",
+    "Stablecoin pairs correctly excluded despite high volume"
+  ],
+  "recommendations": [
+    "Enable VTS passive learning to populate regime telemetry",
+    "Focus scanning on HIGH volume tier pairs for better friction"
+  ],
+  "configChanges": {
+    "idealPoolVolumePreference": {
+      "old": "60% ideal pool ratio",
+      "new": "70% ideal pool ratio with HIGH volume preference",
+      "reason": "Increase green tier representation"
+    }
+  }
+}

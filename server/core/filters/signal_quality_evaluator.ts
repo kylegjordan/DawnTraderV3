@@ -72,7 +72,7 @@ export interface SQEBatchResult {
  * Directive 11.0B: Get SQE thresholds from screener config
  * Reads finalScoreMin and regimeWeightMin from screener_filters table
  */
-async function getSQEThresholdsFromConfig(mode: 'paper' | 'live'): Promise<{ finalScoreMin: number; regimeWeightMin: number }> {
+export async function getSQEThresholdsFromConfig(mode: 'paper' | 'live'): Promise<{ finalScoreMin: number; regimeWeightMin: number }> {
   try {
     const filters = await storage.getScreenerFilters({ mode });
     if (filters) {

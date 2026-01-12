@@ -1,0 +1,111 @@
+{
+  "timestamp": "2026-01-12T13:26:54.965Z",
+  "directive": "11.4G.5",
+  "scoreWeightsVersion": "v1.0.1",
+  "weightValidation": {
+    "totalWeight": 0.8999999999999999,
+    "weights": [
+      {
+        "name": "hybridScore",
+        "weight": 0.4,
+        "source": "score-weights.config.ts"
+      },
+      {
+        "name": "confidence",
+        "weight": 0.3,
+        "source": "score-weights.config.ts"
+      },
+      {
+        "name": "regimeWeight",
+        "weight": 0.2,
+        "source": "score-weights.config.ts"
+      },
+      {
+        "name": "decayPenalty",
+        "weight": -0.1,
+        "source": "score-weights.config.ts"
+      }
+    ],
+    "normalized": true
+  },
+  "tierValidation": {
+    "thresholds": [
+      {
+        "name": "excellent",
+        "min": 0.8,
+        "max": 1,
+        "source": "screener_config(paper)"
+      },
+      {
+        "name": "good",
+        "min": 0.6,
+        "max": 0.8,
+        "source": "screener_config(paper)"
+      },
+      {
+        "name": "acceptable",
+        "min": 0.35,
+        "max": 0.6,
+        "source": "screener_config(paper) MIN_FINAL_SCORE=0.35"
+      },
+      {
+        "name": "rejected",
+        "min": 0,
+        "max": 0.35,
+        "source": "screener_config(paper)"
+      }
+    ],
+    "ordered": true,
+    "overlapping": false
+  },
+  "metricOverlapCheck": {
+    "components": [
+      "hybridScore",
+      "confidence",
+      "regimeWeight",
+      "decayPenalty"
+    ],
+    "overlaps": [
+      "hybridScore <-> confidence: ML confidence weighted 20% in hybridScore and 30% directly in FinalScore"
+    ]
+  },
+  "validationResults": [
+    {
+      "category": "Weight Normalization",
+      "status": "PASS",
+      "message": "Weights properly normalized (0.9 positive + 0.1 decay penalty)"
+    },
+    {
+      "category": "Tier Thresholds",
+      "status": "PASS",
+      "message": "Tiers are properly ordered and contiguous (from SQE config)"
+    },
+    {
+      "category": "Frontend Alignment",
+      "status": "PASS",
+      "message": "Default threshold aligns with acceptable tier minimum"
+    },
+    {
+      "category": "Metric Overlap",
+      "status": "WARN",
+      "message": "1 metric overlap(s) detected through formula analysis",
+      "details": {
+        "analysisResults": [
+          {
+            "check": "hybridScore <-> confidence",
+            "status": "OVERLAP",
+            "detail": "ML confidence weighted 20% in hybridScore and 30% directly in FinalScore"
+          },
+          {
+            "check": "regimeWeight <-> patternSignals",
+            "status": "CLEAR",
+            "detail": "RegimeWeight uses trend/volatility metrics, pattern signals use candle structure analysis"
+          }
+        ]
+      }
+    }
+  ],
+  "recommendations": [
+    "Consider reducing CONFIDENCE weight in FinalScore since ML predictive is already in hybridScore"
+  ]
+}

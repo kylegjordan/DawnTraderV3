@@ -41,6 +41,47 @@ The ML Calibration Service now uses Phase-10 metrics with a specific performance
 
 The trade lifecycle flows from `Signal Orchestrator` to `SQE` (FinalScore + RegimeWeight filtering), then to a `Ready-to-Buy Queue`. Signals are promoted by `TCL` (Trade Criteria Limiter), managed by `TEC` (Trade Execution Controller) for adaptive sizing and trailing exits, and finally proceed to `Order Management`.
 
+## Directive 11.4G: Regime/Friction/Goals Diagnostics
+
+Directive 11.4G implements comprehensive diagnostic tooling for regime distribution, friction calibration, and Goals Engine normalization:
+
+### G.1: Context-Aware Strategy Selection
+- VTS uses `selectContextAwareStrategy()` with deterministic diversity via symbol hash
+- Pattern-to-canonical mapping ensures INSIDE_BAR→ENGULFING, THREE_SOLDIERS→MORNING_STAR
+- Canonical patternType enforcement in VTS signal generation
+
+### G.2: Blue-Chip Exclusion Audit
+- `server/scripts/diagnostic-11.4G-2.ts` ranks pairs by actual 24h volume
+- Identifies high-volume pairs excluded for LOW_VOLATILITY (stablecoins), NO_DATA (XBT quote pairs)
+- Report: `/audit/reports/bluechip_exclusion_audit.json`
+
+### G.3: Regime Flattening & Friction Diagnostics
+- `server/scripts/diagnostic-11.4G-3.ts` calculates regime distribution entropy
+- Rehydrates telemetry from persisted state before analysis
+- Falls back to volume classifier when telemetry empty
+- Report: `/audit/reports/regime_friction_diagnostics.json`
+
+### G.4: Fix Application
+- `server/scripts/diagnostic-11.4G-4.ts` reads G.2/G.3 reports
+- Documents XBT pairs as zero-volume, stablecoins correctly excluded
+- Proposes ideal pool volume preference adjustments
+- Report: `/audit/reports/g4_fixes_applied.json`
+
+### G.5: Goals Engine Normalization
+- `server/scripts/diagnostic-11.4G-5.ts` validates FinalScore calculation
+- Imports weights from `server/config/score-weights.config.ts` (v1.0.1)
+- Loads live thresholds from `getSQEThresholdsFromConfig()` for paper/live modes
+- Detects configuration drift between defaults and screener config
+- Report: `/audit/reports/g5_normalization_diagnostics.json`
+
+### FinalScore Configuration (Authoritative Sources)
+- **Weights**: `server/config/score-weights.config.ts`
+  - hybridScore: 40%, confidence: 30%, regimeWeight: 20%, decayPenalty: -10%
+- **Thresholds**: `server/core/filters/signal_quality_evaluator.ts`
+  - MIN_FINAL_SCORE: 0.35, MIN_REGIME_WEIGHT: 0.30
+- **Frontend**: `client/src/components/goals/filters-with-override.tsx`
+  - DEFAULT: 0.35, MIN: 0.2, MAX: 1.0, STEP: 0.05
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed.
