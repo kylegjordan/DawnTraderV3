@@ -65,6 +65,14 @@ Directive 11.4F.1A (Canonical Enforcement & Validation Audit) extends canonical 
 - **Pattern Propagation**: `getRankedPairs()` invokes `getPatternTypeForEntry()` to derive canonical patternType for HYBRID/PATTERN signals.
 - **Audit Reports**: `/audit/reports/canonical_integrity_summary.json` and `/audit/reports/patterntype_population_audit.json` document compliance.
 
+Directive 11.4F.1B (Canonical Hard-Cut Enforcement & Legacy Purge) completes canonical migration:
+- **Legacy File Deleted**: `/server/config/regime-strategy-map.ts` permanently removed from codebase.
+- **All Services Migrated**: VTS, Signal Orchestrator, Telemetry, Routes, TradeModel, and VirtualTradeInterface now import from `canonical-regime-strategy-map.ts`.
+- **Compiler Enforcement**: Importing from deleted legacy file causes immediate build failure.
+- **Source Lock Test**: `/server/tests/unit/canonical_source_lock.test.ts` (4 tests) enforces no legacy imports.
+- **Split-Brain Eliminated**: VTS, Telemetry, and Signal Orchestrator aligned under single data source.
+- **Audit Reports**: `/audit/reports/canonical_final_validation.json` confirms 0 legacy references, 17+ canonical references.
+
 ML Calibration Service now uses Phase-10 metrics with a specific performance score formula and tracks edge delta for learning feedback.
 
 Math Core Harmonization centralizes and unifies the `FinalScore` calculation formula across Signal Orchestrator and Ready-to-Buy Refresh Service, using immutable scoring coefficients (Hybrid: 0.4, Confidence: 0.3, Regime: 0.2, Decay: 0.1).
