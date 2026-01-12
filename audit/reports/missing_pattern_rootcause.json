@@ -1,0 +1,32 @@
+{
+  "directive": "11.4G",
+  "runDate": "2026-01-12T12:51:35.626Z",
+  "rootCause": "UNKNOWN",
+  "totalPairsScanned": 30,
+  "pairsWithOHLC": 30,
+  "pairsWithPatterns": 5,
+  "uniquePatternsDetected": [
+    "INSIDE_BAR",
+    "PINBAR",
+    "ENGULFING"
+  ],
+  "assignedDistribution": {
+    "QUANT": 23,
+    "HYBRID": 5,
+    "PATTERN": 2
+  },
+  "finalDistribution": {
+    "QUANT": 23,
+    "HYBRID": 5,
+    "PATTERN": 0
+  },
+  "downgradeCount": 0,
+  "discardCount": 2,
+  "recommendation": "Manual investigation required - patterns detected but signals not surfacing.",
+  "regimeBreakdown": {
+    "TRANSITION": 5,
+    "BEAR_VOLATILE": 11,
+    "LOW_VOL_CHOP": 10,
+    "BULL_STABLE": 4
+  }
+}

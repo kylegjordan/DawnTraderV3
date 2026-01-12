@@ -43,7 +43,8 @@ import { SCORE_WEIGHTS } from '../config/score-weights.config.js';
 import { calculatePairRegime, getRegimeWeight } from '../core/metrics/market-regime.js';
 import { 
   CANONICAL_REGIME_STRATEGY_MAP as REGIME_STRATEGY_MAP, 
-  selectPrimaryStrategy as selectRegimeStrategy, 
+  selectContextAwareStrategy,
+  symbolToHash,
   getRegimeRiskMultiplier,
   normalizeStrategy,
   type CanonicalRegimeType as MarketRegimeType,
@@ -240,14 +241,6 @@ async function generatePhase10Signal(
   const regimeResult = calculatePairRegime(ohlcData);
   const regime = regimeResult.regime;
   
-  let { signalType, strategy } = selectRegimeStrategy(regime);
-  
-  // Directive 11.4C.3-C: Log guard for unmapped strategies
-  if (!signalType) {
-    console.warn(`[11.4C.3-C][VTS] Unmapped strategy: ${strategy} for regime ${regime}`);
-    signalType = 'HYBRID'; // Default fallback
-  }
-  
   const riskMultiplier = getRegimeRiskMultiplier(regime);
   
   // Directive 11.4C.3 Task 2: Pattern injection - detect patterns from OHLC data
@@ -263,19 +256,46 @@ async function generatePhase10Signal(
   const detectedPatterns = scanPatterns(candles, symbol);
   const detectedPattern = detectedPatterns.length > 0 ? detectedPatterns[0] : null;
   
-  // Directive 11.4C.3: Enforce pattern requirement for HYBRID/PATTERN signals
-  // If signalType is HYBRID and no pattern detected, downgrade to QUANT
-  // If signalType is PATTERN and no pattern detected, discard signal
-  if (signalType === 'HYBRID' && !detectedPattern) {
-    signalType = 'QUANT';
-    console.log(`[11.4C.3][VTS] ${symbol}: Downgraded HYBRID→QUANT (no pattern detected)`);
-  }
-  if (signalType === 'PATTERN' && !detectedPattern) {
-    console.log(`[11.4C.3][VTS] ${symbol}: Discarded PATTERN signal (no pattern detected)`);
-    return null;
+  // Directive 11.4G: Use context-aware strategy selection
+  // If pattern detected, this will select HYBRID/PATTERN strategies when available
+  const sHash = symbolToHash(symbol);
+  const strategySelection = selectContextAwareStrategy(
+    regime, 
+    detectedPattern?.pattern ?? null,
+    sHash
+  );
+  
+  let { signalType, strategy, patternType: canonicalPatternType } = strategySelection;
+  const selectionReason = strategySelection.selectionReason;
+  
+  // Directive 11.4C.3-C: Log guard for unmapped strategies
+  if (!signalType) {
+    console.warn(`[11.4C.3-C][VTS] Unmapped strategy: ${strategy} for regime ${regime}`);
+    signalType = 'HYBRID'; // Default fallback
   }
   
-  const patternType: PatternType | null = detectedPattern?.pattern ?? null;
+  // Log when non-primary strategy is selected (for diagnostic tracing)
+  if (selectionReason !== 'primary') {
+    console.log(`[11.4G][VTS] ${symbol}: ${signalType}/${strategy} selected via ${selectionReason}`);
+  }
+  
+  // Directive 11.4C.3 (Modified): Pattern validation for HYBRID/PATTERN signals
+  // HYBRID signals without pattern use strategy's canonical patternType
+  // PATTERN signals without detected pattern: still discard (maintains quality)
+  if (signalType === 'PATTERN' && !detectedPattern && selectionReason === 'diversity') {
+    console.log(`[11.4C.3][VTS] ${symbol}: PATTERN signal from diversity without pattern - reverting to QUANT`);
+    signalType = 'QUANT';
+  }
+  
+  // Directive 11.4G: ALWAYS use canonical patternType from strategy selection
+  // The canonicalPatternType is already normalized; detected pattern is only for logging
+  // This ensures downstream canonical validation never receives non-canonical pattern names
+  const patternType: PatternType | null = canonicalPatternType as PatternType | null;
+  
+  // Log detected pattern for diagnostics but don't use it in trade record
+  if (detectedPattern && detectedPattern.pattern !== canonicalPatternType) {
+    console.debug(`[11.4G][VTS] ${symbol}: Detected ${detectedPattern.pattern} → canonical ${canonicalPatternType}`);
+  }
   
   const entryPrice = priceData.price;
   const volatility = priceData.high24h > 0 && priceData.low24h > 0

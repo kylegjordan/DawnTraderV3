@@ -433,6 +433,141 @@ export function getRegimeRiskMultiplier(regime: CanonicalRegimeType): number {
   return CANONICAL_REGIME_STRATEGY_MAP[regime]?.riskMultiplier ?? 1.0;
 }
 
+/**
+ * Directive 11.4G: Pattern-to-Canonical Mapping
+ * Maps pattern recognizer outputs to canonical pattern types.
+ * Non-canonical patterns are mapped to their closest canonical equivalents.
+ */
+const PATTERN_TO_CANONICAL: Record<string, CanonicalPatternType> = {
+  'PINBAR': 'PINBAR',
+  'ENGULFING': 'ENGULFING',
+  'MORNING_STAR': 'MORNING_STAR',
+  'ABCD': 'ABCD',
+  'TRI_STAR': 'TRI_STAR',
+  'INSIDE_BAR': 'ENGULFING',     // Compression → Engulfing-like breakout
+  'THREE_SOLDIERS': 'MORNING_STAR', // Bullish continuation → Morning Star family
+  'EVENING_STAR': 'MORNING_STAR',   // Same pattern family
+  'DOJI': 'TRI_STAR',              // Indecision → TriStar family
+  'HAMMER': 'PINBAR',              // Wick-based reversal → Pinbar family
+  'SHOOTING_STAR': 'PINBAR',       // Wick-based reversal → Pinbar family
+};
+
+/**
+ * Normalize detected pattern to canonical type.
+ * Returns null for unrecognized patterns.
+ */
+export function normalizePatternToCanonical(pattern: string | null): CanonicalPatternType {
+  if (!pattern) return null;
+  const normalized = pattern.toUpperCase().replace(/[\s-]/g, '_');
+  return PATTERN_TO_CANONICAL[normalized] ?? null;
+}
+
+/**
+ * Directive 11.4G: Context-aware strategy selection
+ * Considers detected patterns when selecting strategy from regime mapping.
+ * If a pattern is detected and matches a HYBRID/PATTERN strategy, prefer that strategy.
+ * This ensures HYBRID/PATTERN signals appear when pattern recognition detects matches.
+ * 
+ * @param regime - Current market regime
+ * @param detectedPattern - Pattern detected by pattern recognizer (null if none)
+ * @param symbolHash - Optional hash for deterministic diversity (0-99)
+ * @returns Strategy definition matching the context, plus trace info
+ */
+export function selectContextAwareStrategy(
+  regime: CanonicalRegimeType, 
+  detectedPattern: string | null,
+  symbolHash?: number
+): { 
+  signalType: CanonicalSignalType; 
+  strategy: string;
+  patternType: CanonicalPatternType;
+  selectionReason: 'exact_match' | 'hybrid_fallback' | 'pattern_fallback' | 'diversity' | 'primary';
+} {
+  const mapping = CANONICAL_REGIME_STRATEGY_MAP[regime];
+  if (!mapping || mapping.strategies.length === 0) {
+    return { signalType: 'HYBRID', strategy: 'adaptive_flow', patternType: null, selectionReason: 'primary' };
+  }
+  
+  // Normalize detected pattern to canonical type
+  const canonicalPattern = normalizePatternToCanonical(detectedPattern);
+  
+  // If pattern detected and maps to canonical, find a matching HYBRID/PATTERN strategy
+  if (canonicalPattern) {
+    // First try: Find exact pattern match in HYBRID/PATTERN strategies
+    const patternMatch = mapping.strategies.find(s => 
+      (s.signalType === 'HYBRID' || s.signalType === 'PATTERN') &&
+      s.patternType === canonicalPattern
+    );
+    
+    if (patternMatch) {
+      return {
+        signalType: patternMatch.signalType,
+        strategy: patternMatch.strategyKey,
+        patternType: patternMatch.patternType,
+        selectionReason: 'exact_match'
+      };
+    }
+    
+    // Second try: Any HYBRID strategy for this regime (pattern provides confluence)
+    const hybridFallback = mapping.strategies.find(s => s.signalType === 'HYBRID');
+    if (hybridFallback) {
+      return {
+        signalType: 'HYBRID',
+        strategy: hybridFallback.strategyKey,
+        patternType: hybridFallback.patternType, // Use strategy's declared pattern, not detected
+        selectionReason: 'hybrid_fallback'
+      };
+    }
+    
+    // Third try: Any PATTERN strategy for this regime
+    const patternFallback = mapping.strategies.find(s => s.signalType === 'PATTERN');
+    if (patternFallback) {
+      return {
+        signalType: 'PATTERN',
+        strategy: patternFallback.strategyKey,
+        patternType: patternFallback.patternType, // Use strategy's declared pattern
+        selectionReason: 'pattern_fallback'
+      };
+    }
+  }
+  
+  // Deterministic diversity: use hash % 100 to select strategy index
+  // ~25% of symbols will get non-primary strategy for natural diversity
+  if (symbolHash !== undefined && mapping.strategies.length > 1) {
+    if (symbolHash % 4 === 0) { // Deterministic 25% selection
+      const stratIndex = symbolHash % mapping.strategies.length;
+      const stratDef = mapping.strategies[stratIndex];
+      return {
+        signalType: stratDef.signalType,
+        strategy: stratDef.strategyKey,
+        patternType: stratDef.patternType,
+        selectionReason: 'diversity'
+      };
+    }
+  }
+  
+  // Default: primary strategy
+  const stratDef = mapping.strategies[0];
+  return {
+    signalType: stratDef.signalType,
+    strategy: stratDef.strategyKey,
+    patternType: stratDef.patternType,
+    selectionReason: 'primary'
+  };
+}
+
+/**
+ * Compute a simple hash from symbol string for deterministic diversity.
+ */
+export function symbolToHash(symbol: string): number {
+  let hash = 0;
+  for (let i = 0; i < symbol.length; i++) {
+    hash = ((hash << 5) - hash) + symbol.charCodeAt(i);
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return Math.abs(hash) % 100;
+}
+
 export function getRegimeMinConfidence(regime: CanonicalRegimeType): number {
   return CANONICAL_REGIME_STRATEGY_MAP[regime]?.minConfidence ?? 0.55;
 }

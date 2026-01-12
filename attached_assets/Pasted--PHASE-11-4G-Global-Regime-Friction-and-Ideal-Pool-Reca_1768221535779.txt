@@ -1,0 +1,189 @@
+🧭 PHASE 11.4G — “Global Regime, Friction, and Ideal Pool Recalibration” (Refined Plan)
+
+We will not immediately patch the Hybrid/Pattern issue.
+Instead, we’ll diagnose with structured validation probes first.
+
+1️⃣ Diagnose Missing Hybrid/Pattern Signals
+
+Observed Behavior:
+
+The Top Batch (Ideal Pool) currently shows only QUANT signals.
+
+All 17 canonical strategies are available, but only QUANT are surfacing in runtime telemetry.
+
+Goal: Determine which layer is failing
+
+There are three possible failure points:
+
+Layer	Function	Possible Failure
+VTS Runner	Generates and filters trade candidates.	Filter logic may still exclude HYBRID/PATTERN signalTypes (hardcoded).
+Pattern Detector / Pattern Synthesizer	Confirms pattern match and populates patternType field.	Detector may not be executing post-canonicalization.
+Telemetry Aggregator	Receives the generated payload from VTS and emits to analytics layer.	PatternType or SignalType may be getting dropped in serialization (missing schema field).
+Diagnostic Procedure
+
+Step 1: Instrumentation Logging
+
+Insert temporary structured logs in these three files:
+
+/server/services/vts-runner.ts
+
+console.debug('[VTS] Candidate generated:', {
+  pair,
+  signalType,
+  strategy,
+  score,
+  patternDetected: patternType || 'none'
+});
+
+
+/server/core/pattern-detector.ts
+
+console.debug('[Pattern Detector]', { pair, patternType });
+
+
+/server/services/telemetry-aggregator.ts
+
+console.debug('[Telemetry] Emitted trade:', {
+  signalType,
+  strategy,
+  patternType,
+  regime
+});
+
+
+Step 2: Run Diagnostic Sweep
+Run:
+
+npm run vts:scan -- --pairs=100 --logLevel=debug > /audit/logs/pattern_signal_trace.log
+
+
+Step 3: Analyze Log Outputs
+
+Expected Finding	Interpretation
+Logs show hybrid/pattern strategies generated in VTS but missing at telemetry	Serialization issue in Telemetry Aggregator.
+No hybrid/pattern candidates generated at all in VTS	Filter logic issue (signalType filter).
+Pattern detector shows matches but patternType not attached to final output	Pattern-to-strategy binding missing in canonical linkage.
+
+Step 4: Generate Diagnostic Summary
+Output → /audit/reports/missing_pattern_rootcause.json
+
+Fields:
+
+{
+  "rootCause": "VTS_FilterLogic", 
+  "hybridCandidatesGenerated": 0,
+  "patternMatchesDetected": 12,
+  "telemetryEntriesReceived": 0,
+  "recommendation": "Enable hybrid/pattern filters in VTS and propagate patternType in payload"
+}
+
+
+Once confirmed, only then execute the appropriate fix directive (G3).
+
+2️⃣ Blue-Chip Inclusion Bias Investigation
+
+We will not assume it’s only BTC, ETH, SOL.
+
+Goal: Identify all benchmark coins being filtered out.
+
+Diagnostic Steps:
+
+Query historical trade telemetry (telemetry_archive.json) and find all symbols with:
+
+24h_volume_usd > 100M
+
+score < 0.70
+
+excluded_from_top100 = true
+
+Generate frequency table:
+
+node scripts/audit_bluechips.js > /audit/reports/bluechip_exclusion_audit.json
+
+
+Expected Output Example:
+
+{
+  "excluded_benchmarks": ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA"],
+  "reason": "score too stable (volatility < 0.02)",
+  "recommendation": "apply liquidityBoost for volume > $100M"
+}
+
+
+This ensures we update the canonical inclusion list dynamically rather than hardcoding.
+
+3️⃣ Global Regime & Friction Calibration
+
+These two are related and will be bundled together in one subphase.
+
+Global Regime Diagnosis Plan
+
+Log regime transitions over 24h in /audit/logs/regime_trace.log.
+
+Compute entropy of regime distribution:
+
+node scripts/check_regime_flattening.js
+
+
+If entropy < 0.8 → regime stuck (too flat).
+
+Friction Diagnosis Plan
+
+Print 200 friction values to /audit/logs/friction_distribution.csv.
+
+Validate mapping consistency:
+
+node scripts/check_friction_mapping.js
+
+
+Confirm that “High Liquidity” corresponds to low friction values.
+
+Deliverables
+
+/audit/reports/global_regime_flatness.json
+
+/audit/reports/friction_mapping_validation.json
+
+4️⃣ Goals Engine Tab Cleanup (Carryover from 11.4E)
+
+You’re right — we paused this just before canonical mapping.
+Here’s the recall of what we were doing:
+
+Task	Description	Status
+Goals Tab Normalization	Metrics like “Win Rate” and “Consistency” overlapped; we wanted a single “Performance” composite.	Pending
+Goals Weight Editing	The slider logic was reversed (higher = less weight).	Pending
+Goal Tier Summaries	“Growth”, “Stability”, and “Defense” tier thresholds to be standardized (e.g., Growth = +10%, Defense = drawdown <5%).	Pending
+
+We’ll fold this into the next directive bundle as a UI + backend sync fix.
+
+📦 Consolidated Directive Bundle Proposal
+Directive 11.4G — Market Dynamics Restoration & Validation
+
+This unified directive will:
+
+Diagnose and resolve missing Hybrid/Pattern signals.
+
+Audit and correct Blue-Chip inclusion rules.
+
+Recalibrate Global Regime + Friction scales.
+
+Normalize and clean Goals Engine tabs and backend tie-ins.
+
+Phase Breakdown
+Subphase	Objective	Output
+G.1	Diagnostic trace for hybrid/pattern issue	missing_pattern_rootcause.json
+G.2	Blue-chip exclusion audit	bluechip_exclusion_audit.json
+G.3	Regime flattening & friction calibration diagnostics	global_regime_flatness.json, friction_mapping_validation.json
+G.4	Fix applied (after confirmation)	market_dynamics_recalibration.json
+G.5	Goals Engine normalization	goals_tab_integrity_report.json
+✅ Outcome After 11.4G Completion
+
+Hybrid & Pattern signals reappear dynamically in Ideal Pool.
+
+Global regime transitions fluidly (no permanent LOW_VOL_CHOP).
+
+Friction values and labels accurate and dynamic.
+
+Blue-chip pairs consistently visible in top 100.
+
+Goals Engine tabs clean, weighted correctly, and fully in sync with canonical metrics.
