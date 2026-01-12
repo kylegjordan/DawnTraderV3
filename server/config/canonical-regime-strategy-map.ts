@@ -407,6 +407,28 @@ export function selectRandomStrategy(regime: CanonicalRegimeType): {
   };
 }
 
+/**
+ * Directive 11.4F.1A: Deterministic strategy selection
+ * Returns the primary (first) strategy for a regime - stable across calls
+ */
+export function selectPrimaryStrategy(regime: CanonicalRegimeType): { 
+  signalType: CanonicalSignalType; 
+  strategy: string;
+  patternType: CanonicalPatternType;
+} {
+  const mapping = CANONICAL_REGIME_STRATEGY_MAP[regime];
+  if (!mapping || mapping.strategies.length === 0) {
+    return { signalType: 'HYBRID', strategy: 'adaptive_flow', patternType: null };
+  }
+  
+  const stratDef = mapping.strategies[0]; // Always return first/primary strategy
+  return {
+    signalType: stratDef.signalType,
+    strategy: stratDef.strategyKey,
+    patternType: stratDef.patternType
+  };
+}
+
 export function getRegimeRiskMultiplier(regime: CanonicalRegimeType): number {
   return CANONICAL_REGIME_STRATEGY_MAP[regime]?.riskMultiplier ?? 1.0;
 }

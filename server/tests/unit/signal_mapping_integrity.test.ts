@@ -16,7 +16,9 @@ import { describe, test, expect } from 'vitest';
 import { 
   getTypeForStrategy, 
   normalizeStrategy,
-  CANONICAL_REGIME_STRATEGY_MAP 
+  selectPrimaryStrategy,
+  CANONICAL_REGIME_STRATEGY_MAP,
+  type CanonicalRegimeType
 } from '../../config/canonical-regime-strategy-map';
 
 describe('Directive 11.4F.1 — Canonical Signal Mapping Integrity', () => {
@@ -132,6 +134,34 @@ describe('Directive 11.4F.1 — Canonical Signal Mapping Integrity', () => {
           expect(stratDef).toHaveProperty('strategyKey');
           expect(stratDef).toHaveProperty('patternType');
         }
+      }
+    });
+  });
+
+  describe('selectPrimaryStrategy - Directive 11.4F.1A deterministic selection', () => {
+    const regimes: CanonicalRegimeType[] = [
+      'BULL_STABLE', 'BEAR_VOLATILE', 'LOW_VOL_CHOP', 'HIGH_VOL_IMPULSE', 'TRANSITION'
+    ];
+
+    test('Returns consistent (deterministic) strategy for same regime across calls', () => {
+      for (const regime of regimes) {
+        const result1 = selectPrimaryStrategy(regime);
+        const result2 = selectPrimaryStrategy(regime);
+        const result3 = selectPrimaryStrategy(regime);
+        
+        expect(result1.strategy).toBe(result2.strategy);
+        expect(result2.strategy).toBe(result3.strategy);
+      }
+    });
+
+    test('Returns first strategy from regime mapping (primary strategy)', () => {
+      for (const regime of regimes) {
+        const result = selectPrimaryStrategy(regime);
+        const expected = CANONICAL_REGIME_STRATEGY_MAP[regime].strategies[0];
+        
+        expect(result.strategy).toBe(expected.strategyKey);
+        expect(result.signalType).toBe(expected.signalType);
+        expect(result.patternType).toBe(expected.patternType);
       }
     });
   });

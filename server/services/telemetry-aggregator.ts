@@ -38,7 +38,7 @@ import { DynamicStrategySelector, type DSSMetrics } from './dynamic-strategy-sel
 import {
   getTypeForStrategy,
   getPatternForStrategy,
-  selectRandomStrategy,
+  selectPrimaryStrategy,
   normalizeRegime,
   type CanonicalRegimeType
 } from '../config/canonical-regime-strategy-map.js';
@@ -757,7 +757,7 @@ export class TelemetryAggregatorService {
     scoredPairs.sort((a, b) => b.score - a.score);
     
     // Map to ranked output with metadata
-    // Directive 11.4C.3: Use stored values from VTS - NO legacy inference fallback
+    // Directive 11.4F.1A: Use stored values from VTS, derive pattern from canonical mapping
     // QUANT signals should NOT have a pattern (purely mathematical)
     const rankedPairs = scoredPairs.slice(0, limit).map((p, index) => {
       // Use stored signalType/strategy from VTS only - no inference fallback
@@ -765,8 +765,12 @@ export class TelemetryAggregatorService {
       const signalType = p.entry.signalType ?? '—';
       const strategy = p.entry.strategy ?? '—';
       
-      // Directive 11.4C.3: QUANT signals should never show pattern (purely mathematical)
-      const pattern = signalType === 'QUANT' ? '—' : (p.entry.pattern ?? '—');
+      // Directive 11.4F.1A: Derive pattern from canonical mapping for HYBRID/PATTERN signals
+      let pattern = '—';
+      if (signalType !== 'QUANT' && signalType !== '—') {
+        const canonicalPattern = this.getPatternTypeForEntry(p.entry);
+        pattern = canonicalPattern ?? p.entry.pattern ?? '—';
+      }
       
       return {
         rank: index + 1,
@@ -805,12 +809,12 @@ export class TelemetryAggregatorService {
 
   /**
    * Directive 11.4F.1A: Infer strategy from canonical regime-strategy map
-   * Uses normalizeRegime and selectRandomStrategy from canonical source
+   * Uses normalizeRegime and selectPrimaryStrategy from canonical source (deterministic)
    */
   private inferStrategy(entry: PairTelemetry): string {
     const rawRegime = entry.pairRegime ?? this.currentRegime;
     const regime = normalizeRegime(rawRegime) as CanonicalRegimeType;
-    const { strategy } = selectRandomStrategy(regime);
+    const { strategy } = selectPrimaryStrategy(regime);
     return strategy;
   }
   

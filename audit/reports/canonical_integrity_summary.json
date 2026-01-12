@@ -9,21 +9,26 @@
   "missingPatternTypeCount": 0,
   "deprecatedFileReferencesRemoved": 0,
   "hybridStrategiesWithoutPattern": 0,
-  "testsTotal": 69,
-  "testsPassed": 69,
+  "testsTotal": 71,
+  "testsPassed": 71,
   "testFiles": [
     "directive-11.4C.3-harmonization.test.ts (20 tests)",
-    "signal_mapping_integrity.test.ts (30 tests)",
+    "signal_mapping_integrity.test.ts (32 tests)",
     "runtime_signal_consistency.test.ts (8 tests)",
     "canonical-validation.test.ts (11 tests)"
   ],
   "canonicalFile": "/server/config/canonical-regime-strategy-map.ts",
   "validationMiddleware": "/server/middleware/canonical-validation.ts",
   "violationLogPath": "/audit/logs/canonical_violation.log",
+  "fixes": [
+    "Added selectPrimaryStrategy for deterministic strategy selection",
+    "Updated inferStrategy to use selectPrimaryStrategy instead of selectRandomStrategy",
+    "Updated getRankedPairs to invoke getPatternTypeForEntry for canonical pattern derivation"
+  ],
   "notes": [
     "All hybrid strategies include patternType in canonical mapping",
     "regime-strategy-map.ts retained as re-export layer for backward compatibility",
-    "telemetry-aggregator.ts updated to use canonical imports",
+    "telemetry-aggregator.ts updated to use canonical imports with deterministic selection",
     "UI renders pattern from backend without frontend inference",
     "Database telemetry_history does not have pattern_type column (pattern stored in metadata/jsonb)"
   ]
