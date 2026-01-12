@@ -46,7 +46,7 @@ import {
 } from '../utils/analysis-utils.js';
 import { getTelemetryAggregator } from './telemetry-aggregator.js';
 import { SCANNER_PARAMS } from '../config/system-guards.js';
-import { normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver.js';
+import { normalizeToInternalSymbol, getSymbolMappingDetails } from '../markets/kraken-symbol-resolver.js';
 
 const SCAN_INTERVAL_SECONDS = 30; // 30 seconds aligned with clock ticks
 const SCAN_INTERVAL_MS = SCAN_INTERVAL_SECONDS * 1000; // For backwards compatibility
@@ -307,20 +307,37 @@ export class Fx5ScannerService {
       // Directive 9.0.B: Classify survivors by volume
       // Directive 9.1.E: Compute core metrics (LQ, DI, VolNoise, Sigma)
       // Directive 11.4H: Normalize symbols at ingress
+      // Directive 11.4H.1 Task 2: Validate metrics before processing
       // Handle undefined/null volume24h gracefully with safe defaults
-      const classifiedSurvivors = survivors.map(s => {
-        // Directive 11.4H Task 1: Normalize symbol at data ingress
+      const classifiedSurvivors = survivors
+        .filter(s => {
+          // Directive 11.4H.1 Task 2: Skip pairs with incomplete metrics
+          if (s.volume24h === undefined || s.volume24h === null || s.dailyRange === undefined || s.dailyRange === null) {
+            console.debug(`[11.4H.1][FX5] Skipping ${s.symbol}: incomplete metrics (vol=${s.volume24h}, range=${s.dailyRange})`);
+            return false;
+          }
+          return true;
+        })
+        .map(s => {
+        // Directive 11.4H.1 Task 2: Normalize FIRST, then check for stablecoin (correct order)
         const normalizedSymbol = normalizeToInternalSymbol(s.symbol);
         const volumeUSD = typeof s.volume24h === 'number' && !isNaN(s.volume24h) ? s.volume24h : 0;
         
-        // Directive 11.4H Task 3: Blue-Chip & Stablecoin Forced Inclusion
-        // Use dailyRange as volatility proxy since high24h/low24h may not be available
+        // Directive 11.4H.1 Task 2: Case-insensitive regex AFTER normalization
+        const isStable = /usdt|usdc|dai/i.test(normalizedSymbol);
         const isBlueChip = volumeUSD > 50_000_000;
         const volatility = s.dailyRange ?? 0;
-        const isStablecoin = volatility > 0.0005 && /USDT|USDC|DAI/.test(normalizedSymbol);
-        const forceInclude = isBlueChip || isStablecoin;
+        const isStableVol = volatility > 0.0005;
+        
+        // Directive 11.4H.1 Task 2: Force include blue-chips OR volatile stablecoins
+        const forceInclude = isBlueChip || (isStable && isStableVol);
         const benchmarkForceInclude = forceInclude;
         const volumeClass = classifyVolume(volumeUSD);
+        
+        // Directive 11.4H.1 Task 2: Log forced inclusions for audit
+        if (forceInclude) {
+          console.info(`[FX5-Scanner] Force-included benchmark: ${normalizedSymbol} (blueChip=${isBlueChip}, stablecoin=${isStable && isStableVol})`);
+        }
         
         // Directive 9.1.E: Compute core metrics
         const prices = s.priceHistory || s.history || [];
@@ -354,7 +371,7 @@ export class Fx5ScannerService {
           forceInclude, // Directive 11.4H Task 3
           benchmarkForceInclude, // Directive 11.4H Task 3
           isBlueChip,
-          isStablecoin,
+          isStablecoin: isStable && isStableVol, // Directive 11.4H.1: Use correctly named variable
           volatility
         };
       });

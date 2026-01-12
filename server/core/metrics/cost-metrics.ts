@@ -292,8 +292,23 @@ function percentile(arr: number[], p: number): number {
 
 /**
  * Directive 11.4H Task 2: Compute adaptive friction bands from spread data
+ * Directive 11.4H.1 Task 3: Handle small datasets and TTL invalidation
  */
+const DEFAULT_FRICTION_BANDS: FrictionBands = {
+  lowThreshold: 0.001, // 0.1%
+  highThreshold: 0.003, // 0.3%
+  distribution: { green: 30, orange: 40, red: 30 },
+  sampleSize: 0,
+  timestamp: 0
+};
+
 export function computeAdaptiveFrictionBands(spreads: number[]): FrictionBands {
+  // Directive 11.4H.1 Task 3: TTL invalidation - check if cache is stale
+  if (cachedFrictionBands && Date.now() - cachedFrictionBands.timestamp > FRICTION_BAND_TTL_MS) {
+    console.debug(`[11.4H.1][Friction] Cache expired (TTL=${FRICTION_BAND_TTL_MS}ms), recomputing...`);
+    cachedFrictionBands = null;
+  }
+  
   if (spreads.length === 0) {
     return {
       lowThreshold: DEFAULT_SPREAD * 0.5,
@@ -302,6 +317,12 @@ export function computeAdaptiveFrictionBands(spreads: number[]): FrictionBands {
       sampleSize: 0,
       timestamp: Date.now()
     };
+  }
+
+  // Directive 11.4H.1 Task 3: Skip adaptive calculation for small samples (<10 pairs)
+  if (spreads.length < 10) {
+    console.debug(`[11.4H.1][Friction] Small sample size (${spreads.length}<10), using default bands`);
+    return { ...DEFAULT_FRICTION_BANDS, sampleSize: spreads.length, timestamp: Date.now() };
   }
 
   const low = percentile(spreads, 30);
@@ -330,6 +351,8 @@ export function computeAdaptiveFrictionBands(spreads: number[]): FrictionBands {
   // Cache for reuse
   cachedFrictionBands = bands;
 
+  // Directive 11.4H.1 Task 3: Log percentile boundaries
+  console.debug(`[FrictionBands] Low=${low.toFixed(4)} High=${high.toFixed(4)} (Pairs=${spreads.length})`);
   console.log(`[11.4H][Friction] Adaptive bands computed: GREEN<=${(low * 100).toFixed(3)}%, ORANGE<=${(high * 100).toFixed(3)}%, distribution=${bands.distribution.green}/${bands.distribution.orange}/${bands.distribution.red}%`);
 
   return bands;

@@ -310,6 +310,7 @@ export class SignalOrchestrator {
    * Phase 8.8.4-B.1: Compute NGC, ExpectedDuration, ProfitRate, CWQI
    * Phase 8.8.4-B.1: Apply SQE quality filter
    * Phase 8.8.4-B.3: Correct flow order - Sizing → Metrics → SQE
+   * Directive 11.4H.1 Task 6: Symbol validation before event dispatch
    */
   private async buildSizedSignalForStrategy(
     rawSignal: StrategySignal | null,
@@ -318,6 +319,15 @@ export class SignalOrchestrator {
     marketContext?: { high24h?: number; low24h?: number; atr?: number }
   ): Promise<SizedStrategySignal | null> {
     if (!rawSignal) return null;
+    
+    // Directive 11.4H.1 Task 6: Validate and normalize symbol before event dispatch
+    const canonicalSymbol = normalizeToInternalSymbol(rawSignal.symbol);
+    if (!canonicalSymbol) {
+      console.warn(`[SignalOrchestrator] Dropped unmappable event: ${rawSignal.symbol}`);
+      return null;
+    }
+    // Ensure normalized symbol is used in signal
+    rawSignal.symbol = canonicalSymbol;
     
     // Phase 8.8.4-A: Generate unique signal ID for lifecycle tracking
     const signalId = signalLifecycleAudit.generateSignalId(rawSignal.symbol, strategyId);

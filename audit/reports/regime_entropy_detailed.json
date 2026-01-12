@@ -1,0 +1,39 @@
+{
+  "directive": "11.4H.1",
+  "task": "Regime Entropy Monitoring",
+  "description": "Full entropy distribution + timestamp series",
+  "generatedAt": "2026-01-12T00:00:00.000Z",
+  "status": "template",
+  "configuration": {
+    "warningThreshold": 0.2,
+    "minPairsForWarning": 100,
+    "numRegimes": 5,
+    "maxEntropyValue": "log2(5) ≈ 2.322"
+  },
+  "regimeCategories": [
+    "BULL_STABLE",
+    "BEAR_VOLATILE",
+    "LOW_VOL_CHOP",
+    "HIGH_VOL_IMPULSE",
+    "TRANSITION"
+  ],
+  "checks": [
+    {
+      "feature": "Null Regime Filtering",
+      "status": "implemented",
+      "description": "Null/undefined regimes filtered before entropy computation"
+    },
+    {
+      "feature": "Entropy Audit Persistence",
+      "status": "implemented",
+      "description": "Low entropy events persisted to audit/reports/regime_entropy_monitor.json"
+    },
+    {
+      "feature": "Enhanced Warning",
+      "status": "implemented",
+      "description": "Warning logged with validPairs count when entropy < 0.2 and validPairs > 100"
+    }
+  ],
+  "entropyHistory": [],
+  "notes": "Entropy history persisted to regime_entropy_monitor.json via persistEntropyAudit()"
+}

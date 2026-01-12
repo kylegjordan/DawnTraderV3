@@ -1,0 +1,42 @@
+{
+  "directive": "11.4H.1",
+  "task": "Blue-Chip Force Inclusion Verification",
+  "description": "Lists all forced inclusions and their source criteria",
+  "generatedAt": "2026-01-12T00:00:00.000Z",
+  "status": "template",
+  "criteria": {
+    "blueChipThreshold": {
+      "volume24h": "> $50,000,000",
+      "description": "Pairs with 24h volume exceeding $50M are force-included"
+    },
+    "stablecoinCriteria": {
+      "symbolPattern": "/usdt|usdc|dai/i",
+      "volatilityThreshold": "> 0.0005",
+      "description": "Stablecoins with volatility > 0.0005 are force-included"
+    }
+  },
+  "checks": [
+    {
+      "feature": "Normalize First",
+      "status": "implemented",
+      "description": "Symbol normalized before regex match for case-insensitive detection"
+    },
+    {
+      "feature": "Undefined Metric Validation",
+      "status": "implemented",
+      "description": "Pairs with undefined volume24h or dailyRange are filtered out"
+    },
+    {
+      "feature": "Force Inclusion Logging",
+      "status": "implemented",
+      "description": "Console logs for each force-included benchmark pair"
+    },
+    {
+      "feature": "Metric Filter Bypass",
+      "status": "implemented",
+      "description": "forceInclude bypasses LQ/VolNoise metric filters"
+    }
+  ],
+  "forcedInclusions": [],
+  "notes": "Populated dynamically during FX5 scan cycles via console logging"
+}

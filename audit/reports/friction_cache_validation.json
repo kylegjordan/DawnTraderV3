@@ -1,0 +1,44 @@
+{
+  "directive": "11.4H.1",
+  "task": "Friction Cache Validation",
+  "description": "Verifies TTL invalidation and spread distribution accuracy",
+  "generatedAt": "2026-01-12T00:00:00.000Z",
+  "status": "template",
+  "configuration": {
+    "frictionBandTtlMs": 60000,
+    "minSampleSize": 10,
+    "targetDistribution": {
+      "green": "~30%",
+      "orange": "~40%",
+      "red": "~30%"
+    },
+    "percentileBands": {
+      "lowThreshold": "30th percentile",
+      "highThreshold": "70th percentile"
+    }
+  },
+  "checks": [
+    {
+      "feature": "TTL Invalidation",
+      "status": "implemented",
+      "file": "server/core/metrics/cost-metrics.ts",
+      "line": "~310",
+      "description": "Cache invalidated when timestamp exceeds FRICTION_BAND_TTL_MS (60s)"
+    },
+    {
+      "feature": "Small Dataset Handling",
+      "status": "implemented",
+      "file": "server/core/metrics/cost-metrics.ts",
+      "line": "~326",
+      "description": "Returns default bands for samples < 10 pairs"
+    },
+    {
+      "feature": "Percentile Logging",
+      "status": "implemented",
+      "file": "server/core/metrics/cost-metrics.ts",
+      "line": "~358",
+      "description": "Logs percentile boundaries (Low/High) with pair count"
+    }
+  ],
+  "notes": "Spread distribution logged during computeAdaptiveFrictionBands() calls"
+}

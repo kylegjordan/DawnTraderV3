@@ -54,7 +54,7 @@ import type { OHLCData } from '../types/market-regime.types';
 import type { VTSCycleMetrics } from '../types/virtual-trade.interface';
 import { scanPatterns } from './pattern-recognizer.js';
 import type { PatternType } from '../types';
-import { normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver.js';
+import { normalizeToInternalSymbol, getSymbolMappingDetails } from '../markets/kraken-symbol-resolver.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -393,8 +393,30 @@ async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal
     
     if (scanBatch.length >= 10) {
       console.log(`[11.4C.1][VTS] Using FX5 scan batch: ${scanBatch.length} pairs (raw data, no telemetry query)`);
-      // Directive 11.4H: Normalize symbols at ingress
-      return scanBatch.map(p => ({ symbol: normalizeToInternalSymbol(p.symbol), pool: p.pool }));
+      // Directive 11.4H.1 Task 1: Normalize symbols at ingress with fallback and tier logging
+      const validPairs: Array<{ symbol: string; pool: 'ideal' | 'rotational' }> = [];
+      for (const p of scanBatch) {
+        const rawSymbol = p.symbol;
+        const canonicalSymbol = normalizeToInternalSymbol(rawSymbol);
+        
+        // Directive 11.4H.1: Fallback for unmappable symbols
+        if (!canonicalSymbol || canonicalSymbol === rawSymbol.toUpperCase()) {
+          const mappingDetails = getSymbolMappingDetails(rawSymbol);
+          if (!mappingDetails.mappable) {
+            console.warn(`[11.4H.1][Symbol Warning] Unmappable symbol detected: ${rawSymbol}`);
+            continue; // Skip processing this symbol
+          }
+        }
+        
+        // Directive 11.4H.1: Audit Tier-3 mappings
+        const mappingDetails = getSymbolMappingDetails(rawSymbol);
+        if (mappingDetails?.tier === 3) {
+          console.warn(`[11.4H.1][Mapping Tier 3] ${rawSymbol} → ${canonicalSymbol}`);
+        }
+        
+        validPairs.push({ symbol: canonicalSymbol, pool: p.pool });
+      }
+      return validPairs;
     }
     
     // Cold start fallback: If FX5 hasn't scanned yet, check active filter pool
@@ -403,10 +425,20 @@ async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal
     
     if (fx5Survivors && fx5Survivors.length >= 10) {
       console.log(`[11.4C.1][VTS] Using Active Filter Pool: ${fx5Survivors.length} pairs`);
-      return fx5Survivors
-        .filter(p => (p.price ?? 0) >= vtsConfig.minPrice && (p.volume24h ?? 0) >= vtsConfig.minVolume24h)
-        .slice(0, vtsConfig.pairsPerCycle)
-        .map(p => ({ symbol: p.symbol, pool: 'rotational' as const }));
+      const validPairs: Array<{ symbol: string; pool: 'ideal' | 'rotational' }> = [];
+      for (const p of fx5Survivors) {
+        if ((p.price ?? 0) < vtsConfig.minPrice || (p.volume24h ?? 0) < vtsConfig.minVolume24h) {
+          continue;
+        }
+        const canonicalSymbol = normalizeToInternalSymbol(p.symbol);
+        if (!canonicalSymbol) {
+          console.warn(`[11.4H.1][Symbol Warning] Unmappable symbol in fallback: ${p.symbol}`);
+          continue;
+        }
+        validPairs.push({ symbol: canonicalSymbol, pool: 'rotational' as const });
+        if (validPairs.length >= vtsConfig.pairsPerCycle) break;
+      }
+      return validPairs;
     }
     
     console.log('[11.4C.1][VTS] No pairs available (cold start) - waiting for FX5 scan');

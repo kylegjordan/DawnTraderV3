@@ -1,0 +1,36 @@
+{
+  "directive": "11.4H.1",
+  "task": "Symbol Normalization Verification",
+  "description": "Confirms proper normalization across all ingress + event flows",
+  "generatedAt": "2026-01-12T00:00:00.000Z",
+  "status": "template",
+  "checks": [
+    {
+      "file": "server/services/vts-runner.ts",
+      "location": "getIdealPoolPairs()",
+      "status": "implemented",
+      "description": "Symbol normalization with unmappable fallback and Tier-3 audit logging"
+    },
+    {
+      "file": "server/services/fx5-scanner.ts",
+      "location": "scanMode() classifiedSurvivors",
+      "status": "implemented",
+      "description": "Normalize first, then regex check for stablecoins; validate undefined metrics"
+    },
+    {
+      "file": "server/services/signal-orchestrator.ts",
+      "location": "evaluateMarket() eligibleSymbols",
+      "status": "implemented",
+      "description": "normalizeToInternalSymbol applied at Active Filter Pool ingress"
+    },
+    {
+      "file": "server/services/signal-orchestrator.ts",
+      "location": "buildSizedSignalForStrategy()",
+      "status": "implemented",
+      "description": "Symbol validation before event dispatch with unmappable logging"
+    }
+  ],
+  "tier3Symbols": [],
+  "unmappableSymbols": [],
+  "notes": "Report populated dynamically during VTS and FX5 scan cycles via console logging"
+}

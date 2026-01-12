@@ -1,0 +1,45 @@
+{
+  "directive": "11.4H.1",
+  "task": "Goals Weight Stability Verification",
+  "description": "Confirms normalized totals and capped ML share",
+  "generatedAt": "2026-01-12T00:00:00.000Z",
+  "status": "template",
+  "configuration": {
+    "mlWeightCap": 0.40,
+    "targetPositiveTotal": 0.9,
+    "redistribution": {
+      "toHybrid": "60%",
+      "toRegime": "40%"
+    }
+  },
+  "defaultWeights": {
+    "hybrid": 0.40,
+    "confidence": 0.30,
+    "regime": 0.20,
+    "decay": 0.10
+  },
+  "checks": [
+    {
+      "feature": "Volatility Clamping",
+      "status": "implemented",
+      "description": "Volatility input clamped to 0-1 range to prevent negative weights"
+    },
+    {
+      "feature": "ML Weight Clamping",
+      "status": "implemented",
+      "description": "ML weight clamped to 0-0.40 range"
+    },
+    {
+      "feature": "Weight Normalization",
+      "status": "implemented",
+      "description": "Positive weights normalized if total exceeds 0.9"
+    },
+    {
+      "feature": "Validation Logging",
+      "status": "implemented",
+      "description": "Console debug log with normalized weight values"
+    }
+  ],
+  "validationResults": [],
+  "notes": "Weight computations logged via console.debug with [GoalsEngine] prefix"
+}

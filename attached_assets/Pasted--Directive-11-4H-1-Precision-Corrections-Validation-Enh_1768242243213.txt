@@ -1,0 +1,208 @@
+🧭 Directive 11.4H.1 — Precision Corrections & Validation Enhancements
+Context
+
+Following completion of Directive 11.4H (Pre-Flight Fixes & Canonical Normalization), the implementation was verified as functionally complete but revealed several precision, coverage, and data integrity gaps.
+This directive closes those gaps.
+
+⚙️ 1️⃣ File: /server/services/vts-runner.ts
+Problem:
+
+Symbol normalization applied correctly at ingress but not enforced downstream (e.g., when symbols are passed to trade handlers or regime evaluators).
+
+Missing fallback for unmappable or Tier-3 symbols.
+
+Actions:
+
+Add fallback logic immediately after normalization (around existing line 35–40):
+
+const canonicalSymbol = normalizeToInternalSymbol(rawSymbol);
+if (!canonicalSymbol) {
+  console.warn(`[Symbol Warning] Unmappable symbol detected: ${rawSymbol}`);
+  continue; // Skip processing this symbol
+}
+
+
+Ensure normalized symbols are consistently passed to trade creation and telemetry ingestion (lines 110–130):
+Replace:
+
+executeVirtualTrade(rawSymbol, strategy, ...);
+
+
+With:
+
+executeVirtualTrade(canonicalSymbol, strategy, ...);
+
+
+Add audit log entry when Tier-3 mapping used (approx. line 80):
+
+if (getSymbolMappingDetails(rawSymbol)?.tier === 3) {
+  log.warn(`[Mapping Tier 3] ${rawSymbol} → ${canonicalSymbol}`);
+}
+
+🧩 2️⃣ File: /server/services/fx5-scanner.ts
+Problem:
+
+forceInclude logic for blue-chips and stablecoins is correct, but regex detection may be case-sensitive and normalization occurs after regex match (wrong order).
+
+Volume and volatility checks lack lower-bound validation.
+
+Actions:
+
+Normalize first, then check match (around line 45–55):
+
+const symbol = normalizeToInternalSymbol(pair.symbol);
+const isStable = /usdt|usdc|dai/i.test(symbol);
+const isBlueChip = pair.volume24h && pair.volume24h > 50_000_000;
+const isStableVol = pair.volatility && pair.volatility > 0.0005;
+
+if (isBlueChip || (isStable && isStableVol)) {
+  pair.forceInclude = true;
+  pair.benchmarkForceInclude = true;
+}
+
+
+Add validation for undefined metrics (around line 50):
+
+if (!pair.volume24h || !pair.volatility) continue; // skip incomplete metrics
+
+
+Add debug log entry for forced inclusions (approx. line 100):
+
+if (pair.forceInclude) {
+  console.info(`[FX5-Scanner] Force-included benchmark: ${symbol}`);
+}
+
+🧮 3️⃣ File: /server/core/metrics/cost-metrics.ts
+Problem:
+
+computeAdaptiveFrictionBands() correctly uses 30th/70th percentiles, but TTL caching lacks invalidation when new market data arrives.
+
+No handling for small datasets (<10 pairs).
+
+Actions:
+
+Add TTL invalidation based on timestamp delta (near line 75):
+
+if (Date.now() - cache.timestamp > 60_000) cache.invalidate();
+
+
+Skip adaptive calculation for small samples (line 65):
+
+if (pairs.length < 10) return defaultBands;
+
+
+Log percentile boundaries (after percentile calculation):
+
+console.debug(`[FrictionBands] Low=${low.toFixed(4)} High=${high.toFixed(4)} (Pairs=${pairs.length})`);
+
+
+Fix getCurrentSpread() edge case for Kraken order book (around line 130):
+Ensure:
+
+const spread = Math.abs(ask - bid) / ((ask + bid) / 2);
+
+
+not:
+
+const spread = ask - bid; // WRONG
+
+🌐 4️⃣ File: /server/services/telemetry-aggregator.ts
+Problem:
+
+computeRegimeEntropy() correctly uses log₂(5), but entropy warning not logged to persistent audit report.
+
+No handling for null or undefined regimes.
+
+Actions:
+
+Normalize and filter regimes before entropy computation (line 150–160):
+
+const validRegimes = pairs.map(p => p.regime).filter(Boolean);
+
+
+Persist entropy metrics to audit log (line 180):
+
+await writeAuditReport("regime_entropy_monitor", {
+  timestamp: new Date().toISOString(),
+  entropy,
+  validPairs: validRegimes.length,
+  regimeCounts: countBy(validRegimes)
+});
+
+
+Enhance warning trigger (line 170):
+
+if (entropy < 0.2 && validRegimes.length > 100) {
+  log.warn(`[Entropy Alert] Low entropy (${entropy.toFixed(3)}) — possible normalization collapse`);
+}
+
+🎯 5️⃣ File: /server/core/metrics/adaptive-goals-weight.ts
+Problem:
+
+ML weighting capped at 40%, but redistribution math can exceed total 1.0 in certain volatility cases.
+
+Missing clamp function to prevent negative weights.
+
+Actions:
+
+Add clamp() helper at top of file:
+
+const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
+
+
+Use clamp in volatility adjustment (line 25):
+
+const adjustedVol = clamp(volatility, 0, 1);
+
+
+Normalize redistributed weights (after ML capping, line 40):
+
+const total = aiWeight + hybridWeight + regimeWeight;
+hybridWeight /= total;
+regimeWeight /= total;
+
+
+Add validation log (end of file):
+
+console.debug(`[GoalsEngine] Weights normalized → ML=${aiWeight.toFixed(2)}, Hybrid=${hybridWeight.toFixed(2)}, Regime=${regimeWeight.toFixed(2)}`);
+
+🧩 6️⃣ File: /server/services/signal-orchestrator.ts
+Problem:
+
+Normalization applied at ingress, but symbol propagation to event bus and trade queue may still use raw symbols.
+
+Actions:
+
+Apply normalization before event dispatch (line 60–65):
+
+const canonicalSymbol = normalizeToInternalSymbol(event.symbol);
+event.symbol = canonicalSymbol;
+
+
+Ensure normalized symbol in emitted events (line 120):
+
+bus.emit("signal:generated", { ...event, symbol: canonicalSymbol });
+
+
+Log unresolvable events (after symbol normalization):
+
+if (!canonicalSymbol) log.warn(`[SignalOrchestrator] Dropped unmappable event: ${event.symbol}`);
+
+📊 Deliverables
+Report File	Purpose
+/audit/reports/symbol_normalization_recheck.json	Confirms proper normalization across all ingress + event flows
+/audit/reports/friction_cache_validation.json	Verifies TTL invalidation and spread distribution accuracy
+/audit/reports/bluechip_forceinclusion_check.json	Lists all forced inclusions and their source criteria
+/audit/reports/regime_entropy_detailed.json	Full entropy distribution + timestamp series
+/audit/reports/goals_weight_stability.json	Confirms normalized totals and capped ML share
+✅ Acceptance Criteria
+
+No unmappable Tier-3 symbols in Ideal Pool or signal logs.
+
+Friction distribution within 30/40/30 ± 5 % tolerance.
+
+Entropy warning correctly logged when < 0.2 for >100 pairs.
+
+ML weight total ≤ 1.0, contribution ≤ 40 %.
+
+All forced inclusions visible in Ideal Pool with correct symbols.

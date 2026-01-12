@@ -42,6 +42,7 @@ function clamp(value: number, min: number, max: number): number {
 
 /**
  * Directive 11.4H Task 5: Compute adaptive weights with volatility sensitivity
+ * Directive 11.4H.1 Task 5: Enhanced with proper weight normalization and validation
  * 
  * @param volatility - Current market volatility 0-1 (e.g., from dailyRange/price)
  * @param baseConfidenceWeight - Optional override for base ML confidence weight
@@ -52,12 +53,14 @@ export function computeAdaptiveGoalsWeights(
   baseConfidenceWeight?: number
 ): AdaptiveWeightResult {
   const baseWeight = baseConfidenceWeight ?? SCORE_WEIGHTS.FINAL_SCORE.CONFIDENCE;
+  
+  // Directive 11.4H.1 Task 5: Clamp volatility to prevent negative weights
   const volatilityFactor = clamp(volatility, 0, 1);
   
   // Reduce ML weight in high volatility conditions
   // High volatility = less predictable = lower ML reliance
   const adjustedMlWeight = baseWeight * (1 - volatilityFactor);
-  const cappedMlWeight = Math.min(adjustedMlWeight, AI_WEIGHT_CAP);
+  const cappedMlWeight = clamp(Math.min(adjustedMlWeight, AI_WEIGHT_CAP), 0, AI_WEIGHT_CAP);
   
   // Check if we had to cap
   const wasCapped = adjustedMlWeight > AI_WEIGHT_CAP;
@@ -68,18 +71,30 @@ export function computeAdaptiveGoalsWeights(
   const hybridBoost = mlReduction * 0.6; // 60% to hybrid
   const regimeBoost = mlReduction * 0.4; // 40% to regime
   
-  const finalHybridWeight = SCORE_WEIGHTS.FINAL_SCORE.HYBRID + hybridBoost;
-  const finalRegimeWeight = SCORE_WEIGHTS.FINAL_SCORE.REGIME + regimeBoost;
+  let finalHybridWeight = clamp(SCORE_WEIGHTS.FINAL_SCORE.HYBRID + hybridBoost, 0, 1);
+  let finalRegimeWeight = clamp(SCORE_WEIGHTS.FINAL_SCORE.REGIME + regimeBoost, 0, 1);
   const finalDecayWeight = SCORE_WEIGHTS.FINAL_SCORE.DECAY;
   
+  // Directive 11.4H.1 Task 5: Normalize redistributed weights to ensure total ≤ 1.0
   const totalPositive = finalHybridWeight + cappedMlWeight + finalRegimeWeight;
+  if (totalPositive > 0.9) {
+    // Normalize positive weights to 0.9 total (leaving room for decay)
+    const normalizer = 0.9 / totalPositive;
+    finalHybridWeight *= normalizer;
+    finalRegimeWeight *= normalizer;
+  }
+  
+  const normalizedTotal = finalHybridWeight + cappedMlWeight + finalRegimeWeight;
+  
+  // Directive 11.4H.1 Task 5: Validation log
+  console.debug(`[GoalsEngine] Weights normalized → ML=${cappedMlWeight.toFixed(2)}, Hybrid=${finalHybridWeight.toFixed(2)}, Regime=${finalRegimeWeight.toFixed(2)}`);
   
   return {
     hybridWeight: finalHybridWeight,
     confidenceWeight: cappedMlWeight,
     regimeWeight: finalRegimeWeight,
     decayPenalty: finalDecayWeight,
-    totalPositive,
+    totalPositive: normalizedTotal,
     mlContribution: cappedMlWeight,
     volatilityFactor,
     cappedMlWeight: wasCapped,

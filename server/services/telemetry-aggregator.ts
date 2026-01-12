@@ -285,11 +285,12 @@ export class TelemetryAggregatorService {
 
   /**
    * Directive 11.4H Task 4: Regime Entropy Monitoring
+   * Directive 11.4H.1 Task 4: Enhanced with null filtering and audit persistence
    * Calculates Shannon entropy of regime distribution to detect normalization collapse.
    * Low entropy (<0.2) indicates regime concentration (e.g., all pairs in same regime).
    * @returns Entropy value 0-1 and regime distribution
    */
-  computeRegimeEntropy(): { entropy: number; distribution: Record<string, number>; totalPairs: number } {
+  computeRegimeEntropy(): { entropy: number; distribution: Record<string, number>; totalPairs: number; validPairs: number } {
     const regimeCounts: Record<string, number> = {
       BULL_STABLE: 0,
       BEAR_VOLATILE: 0,
@@ -299,18 +300,28 @@ export class TelemetryAggregatorService {
     };
     
     let totalPairs = 0;
+    let validPairs = 0;
+    
+    // Directive 11.4H.1 Task 4: Filter null/undefined regimes before entropy computation
     for (const [symbol, entries] of this.pairTelemetry.entries()) {
       if (entries.length === 0) continue;
+      totalPairs++;
       const latest = entries[entries.length - 1];
-      const regime = latest.pairRegime || 'TRANSITION';
+      const regime = latest.pairRegime;
+      
+      // Directive 11.4H.1: Skip null/undefined regimes
+      if (!regime || regime === null || regime === undefined) {
+        continue;
+      }
+      
       if (regimeCounts[regime] !== undefined) {
         regimeCounts[regime]++;
-        totalPairs++;
+        validPairs++;
       }
     }
     
-    if (totalPairs === 0) {
-      return { entropy: 0, distribution: regimeCounts, totalPairs: 0 };
+    if (validPairs === 0) {
+      return { entropy: 0, distribution: regimeCounts, totalPairs, validPairs: 0 };
     }
     
     // Shannon entropy: -sum(p * log2(p))
@@ -318,7 +329,7 @@ export class TelemetryAggregatorService {
     const numRegimes = Object.keys(regimeCounts).length;
     for (const count of Object.values(regimeCounts)) {
       if (count > 0) {
-        const p = count / totalPairs;
+        const p = count / validPairs;
         entropy -= p * Math.log2(p);
       }
     }
@@ -327,13 +338,54 @@ export class TelemetryAggregatorService {
     const maxEntropy = Math.log2(numRegimes);
     const normalizedEntropy = maxEntropy > 0 ? entropy / maxEntropy : 0;
     
-    // Directive 11.4H Task 4: Emit warning if entropy is low
-    if (normalizedEntropy < 0.2 && totalPairs > 100) {
-      console.warn(`[11.4H][Regime Warning] Low entropy detected (${normalizedEntropy.toFixed(3)}) — possible normalization collapse`);
-      console.warn(`[11.4H][Regime] Distribution: ${JSON.stringify(regimeCounts)}`);
+    // Directive 11.4H.1 Task 4: Enhanced warning trigger with validPairs check
+    if (normalizedEntropy < 0.2 && validPairs > 100) {
+      console.warn(`[Entropy Alert] Low entropy (${normalizedEntropy.toFixed(3)}) — possible normalization collapse`);
+      console.warn(`[11.4H][Regime] Distribution: ${JSON.stringify(regimeCounts)} (validPairs=${validPairs})`);
+      
+      // Directive 11.4H.1 Task 4: Persist entropy metrics to audit log (async, non-blocking)
+      this.persistEntropyAudit(normalizedEntropy, validPairs, regimeCounts);
     }
     
-    return { entropy: normalizedEntropy, distribution: regimeCounts, totalPairs };
+    return { entropy: normalizedEntropy, distribution: regimeCounts, totalPairs, validPairs };
+  }
+  
+  /**
+   * Directive 11.4H.1 Task 4: Persist entropy metrics to audit log
+   */
+  private async persistEntropyAudit(entropy: number, validPairs: number, regimeCounts: Record<string, number>): Promise<void> {
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const auditDir = path.join(process.cwd(), 'audit', 'reports');
+      await fs.mkdir(auditDir, { recursive: true });
+      
+      const auditEntry = {
+        timestamp: new Date().toISOString(),
+        entropy: parseFloat(entropy.toFixed(4)),
+        validPairs,
+        regimeCounts,
+        warning: entropy < 0.2
+      };
+      
+      const auditPath = path.join(auditDir, 'regime_entropy_monitor.json');
+      let history: any[] = [];
+      try {
+        const existing = await fs.readFile(auditPath, 'utf-8');
+        history = JSON.parse(existing);
+      } catch {
+        // File doesn't exist yet
+      }
+      
+      history.push(auditEntry);
+      // Keep last 100 entries
+      if (history.length > 100) history = history.slice(-100);
+      
+      await fs.writeFile(auditPath, JSON.stringify(history, null, 2));
+      console.log(`[11.4H.1][Audit] Entropy persisted to ${auditPath}`);
+    } catch (err) {
+      console.warn('[11.4H.1][Audit] Failed to persist entropy:', err);
+    }
   }
 
   /**
