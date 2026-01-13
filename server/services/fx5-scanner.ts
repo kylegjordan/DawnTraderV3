@@ -47,6 +47,7 @@ import {
 import { getTelemetryAggregator } from './telemetry-aggregator.js';
 import { SCANNER_PARAMS } from '../config/system-guards.js';
 import { normalizeToInternalSymbol, getSymbolMappingDetails } from '../markets/kraken-symbol-resolver.js';
+import { setCostMetrics, getCostMetrics } from '../core/cache/cost-cache.js';
 
 const SCAN_INTERVAL_SECONDS = 30; // 30 seconds aligned with clock ticks
 const SCAN_INTERVAL_MS = SCAN_INTERVAL_SECONDS * 1000; // For backwards compatibility
@@ -419,7 +420,29 @@ export class Fx5ScannerService {
         // Directive 9.1.E: Compute core metrics
         const prices = s.priceHistory || s.history || [];
         const tradeCount = s.trades24h || s.tradeCount || 100; // Default trade count if unavailable
-        const spread = s.spread || s.bidAskSpread || 0.001; // Default spread if unavailable
+        
+        // Directive 11.4H.3: Compute spread from ask/bid prices if available
+        // Kraken returns ask/bid but not pre-calculated spread
+        let spread = 0.001; // Default fallback
+        const ask = (s as any).ask || (s as any).askPrice;
+        const bid = (s as any).bid || (s as any).bidPrice;
+        if (ask && bid && bid > 0) {
+          // Calculate spread as decimal (e.g., 0.1% = 0.001)
+          spread = (ask - bid) / bid;
+        } else if (s.spread) {
+          // If spread is provided in percentage form, convert to decimal
+          spread = s.spread > 1 ? s.spread / 100 : s.spread;
+        } else if ((s as any).bidAskSpread !== undefined) {
+          // Directive 11.4H.3: bidAskSpread from market-scanner is ALWAYS in percentage form
+          // (e.g., 0.1 means 0.1%, calculated as ((ask-bid)/bid)*100)
+          // Always divide by 100 to convert to decimal format
+          const bap = (s as any).bidAskSpread;
+          spread = bap / 100;
+        }
+        
+        // Directive 11.4H.3: Populate cost cache with spread data during scanning
+        // This ensures friction scores vary based on actual market data
+        setCostMetrics(normalizedSymbol, { spread });
         
         const LQ = calculateLogLiquidity(volumeUSD, tradeCount, spread);
         const DI = calculateDirectionalIntegrity(prices);
@@ -640,6 +663,17 @@ export class Fx5ScannerService {
       }
 
       console.log(`[FX5Scanner][${mode}] ✅ Scan complete (evaluated=${evaluatedCount}, eligible=${eligibleCount})`);
+      
+      // Directive 11.4H.3: Log spread audit for first 5 survivors to verify variance
+      if (cycleNumber <= 3 && classifiedSurvivors.length > 0) {
+        const sampleSurvivors = classifiedSurvivors.slice(0, 5);
+        console.log(`[11.4H.3][SpreadAudit][${mode}] Spread sample from ${eligibleCount} survivors:`);
+        for (const surv of sampleSurvivors) {
+          const cachedMetrics = getCostMetrics(surv.symbol);
+          const spread = cachedMetrics?.spread ?? 0.001;
+          console.log(`  ${surv.symbol}: spread=${(spread * 100).toFixed(4)}%`);
+        }
+      }
 
       // A4.R10R-2: RTB refresh now handled by independent RTBRefreshService
       // This decouples RTB lifecycle from FX5 scan timing

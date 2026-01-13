@@ -1270,6 +1270,8 @@ export async function collectAdaptiveBatch(
         dailyRange,
         fromTopN: pair.poolType === 'ideal', // Backwards compatibility
         poolType: pair.poolType,
+        // Directive 11.4H.3: Pass spread data through for friction calculation
+        bidAskSpread,
       });
       
       // Directive 11.4C-R2: VTS is the single source of truth for telemetry

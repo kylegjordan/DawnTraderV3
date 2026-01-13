@@ -50,6 +50,14 @@ Diagnostic tooling is implemented for regime distribution, friction calibration,
 - Top Batch UI Enhancement: Added Friction column with color-coded badges displaying liquidity status.
 - Benchmark Pool Component: New `benchmark-pool.tsx` component for dedicated benchmark asset visibility.
 
+**Directive 11.4H.3 Fix (January 2026):**
+- Fixed uniform friction score issue where all trading pairs showed identical friction scores of 50.
+- Root cause: Spread data from Kraken API was not being passed through the data pipeline to the FX5 scanner.
+- Fix applied in `market-scanner.ts`: Added `bidAskSpread` field to survivor objects returned from adaptive batch scan.
+- Fix applied in `fx5-scanner.ts`: Corrected percentage-to-decimal conversion for bidAskSpread values (always divide by 100).
+- Data flow now properly established: Kraken API → collectMixedBatch() → FX5 Scanner → Cost Cache → Global Friction.
+- Spread values now vary per trading pair (e.g., ADA/USD: 0.0257%, IP/USD: 0.5256%) instead of uniform 0.1% fallback.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed.

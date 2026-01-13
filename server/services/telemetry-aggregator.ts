@@ -42,6 +42,8 @@ import {
   normalizeRegime,
   type CanonicalRegimeType
 } from '../config/canonical-regime-strategy-map.js';
+import { getCostMetrics } from '../core/cache/cost-cache.js';
+import { computeMarketFriction } from '../core/metrics/cost-metrics.js';
 
 export type PoolType = 'ideal' | 'rotational';
 
@@ -961,7 +963,8 @@ export class TelemetryAggregatorService {
 
   /**
    * Directive 11.4C-R2: Get ranked pairs with full metadata for Top Batch UI (M66)
-   * Returns ordered list with rank, symbol, score, signalType, strategy, pattern, regime, source
+   * Directive 11.4H.3: Added frictionScore from cost cache
+   * Returns ordered list with rank, symbol, score, signalType, strategy, pattern, regime, source, frictionScore
    */
   getRankedPairs(limit: number = 100): Array<{
     rank: number;
@@ -973,6 +976,7 @@ export class TelemetryAggregatorService {
     regime: string;
     source: TelemetrySource;
     lastUpdated: string; // Directive 11.4C.3-B: ISO 8601 timestamp
+    frictionScore: number; // Directive 11.4H.3: Friction score from cost cache
   }> {
     const now = Date.now();
     const scoredPairs: Array<{ 
@@ -1012,6 +1016,13 @@ export class TelemetryAggregatorService {
         pattern = canonicalPattern ?? p.entry.pattern ?? '—';
       }
       
+      // Directive 11.4H.3: Compute friction from cost cache
+      const costMetrics = getCostMetrics(p.symbol);
+      let frictionScore = 50; // Default neutral value
+      if (costMetrics) {
+        frictionScore = computeMarketFriction(costMetrics.spread, costMetrics.slippage, costMetrics.fee);
+      }
+      
       return {
         rank: index + 1,
         symbol: p.symbol,
@@ -1022,6 +1033,7 @@ export class TelemetryAggregatorService {
         regime: p.entry.pairRegime ?? this.currentRegime, // Directive 11.4C-R2: Use per-pair regime with fallback
         source: p.entry.source ?? 'simulation', // Directive 11.4C-R2: Default to simulation if not set
         lastUpdated: p.entry.lastUpdatedIso ?? new Date(p.entry.lastUpdated).toISOString(), // Directive 11.4C.3-B
+        frictionScore, // Directive 11.4H.3: Friction from cost cache
       };
     });
     

@@ -835,6 +835,7 @@ export class KrakenService {
 
       // All pre-history filters passed - add to candidate pairs for history check
       // Directive 8.8.4-C.13.D: volume24h is now USD-denominated (volume24hCoins * currentPrice)
+      // Directive 11.4H.3: Include ask, bid, and spread for friction score calculation
       candidatePairs.push({
         symbol: pairName,
         baseCurrency: pairInfo.base,
@@ -843,7 +844,10 @@ export class KrakenService {
         volume24hUSD, // Explicit USD volume property for pipeline transparency
         currentPrice,
         dailyRange,
-        vwap: parseFloat(ticker.p[1]) // 24h VWAP
+        vwap: parseFloat(ticker.p[1]), // 24h VWAP
+        ask: askPrice, // Ask price for spread calculation
+        bid: bidPrice, // Bid price for spread calculation
+        spread: (askPrice - bidPrice) / bidPrice // Decimal spread (not percentage)
       });
     });
 
