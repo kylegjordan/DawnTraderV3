@@ -308,6 +308,9 @@ const DEFAULT_FRICTION_BANDS: FrictionBands = {
   timestamp: 0
 };
 
+// Directive 11.4H.3 Task 2: Pair-level friction audit cycle counter
+let frictionAuditCycleId = 0;
+
 export function computeAdaptiveFrictionBands(spreads: number[]): FrictionBands {
   // Directive 11.4H.1 Task 3: TTL invalidation - check if cache is stale
   if (cachedFrictionBands && Date.now() - cachedFrictionBands.timestamp > FRICTION_BAND_TTL_MS) {
@@ -362,6 +365,39 @@ export function computeAdaptiveFrictionBands(spreads: number[]): FrictionBands {
   console.log(`[11.4H][Friction] Adaptive bands computed: GREEN<=${(low * 100).toFixed(3)}%, ORANGE<=${(high * 100).toFixed(3)}%, distribution=${bands.distribution.green}/${bands.distribution.orange}/${bands.distribution.red}%`);
 
   return bands;
+}
+
+/**
+ * Directive 11.4H.3 Task 2: Pair-Level Friction Diagnostic Logging
+ * Logs detailed friction data for each pair in a scan cycle.
+ * 
+ * @param pairs - Array of pair data with spread, mid price, and symbol
+ * @param bands - Current friction bands for tier assignment
+ */
+export function logPairFrictionAudit(
+  pairs: Array<{ symbol: string; spread: number; mid: number }>,
+  bands?: FrictionBands
+): void {
+  frictionAuditCycleId++;
+  const activeBands = bands || cachedFrictionBands || DEFAULT_FRICTION_BANDS;
+  
+  console.log(`[FrictionAudit] Cycle ${frictionAuditCycleId} - Pair Count: ${pairs.length}`);
+  
+  // Log first 10 pairs for brevity (full log would be too verbose)
+  const sampleSize = Math.min(pairs.length, 10);
+  for (let i = 0; i < sampleSize; i++) {
+    const p = pairs[i];
+    const frictionScore = p.mid > 0 ? Math.round((p.spread / p.mid) * 10000 / 3) : 0;
+    const tier = getAdaptiveFrictionTier(p.spread, activeBands);
+    const label = mapFrictionVisual(frictionScore).label;
+    console.log(`[FrictionAudit] ${p.symbol} | spread=${(p.spread * 100).toFixed(4)}% | mid=${p.mid.toFixed(4)} | friction=${frictionScore} | tier=${tier} | label="${label}"`);
+  }
+  
+  if (pairs.length > sampleSize) {
+    console.log(`[FrictionAudit] ... and ${pairs.length - sampleSize} more pairs`);
+  }
+  
+  console.log(`[FrictionAudit] Band thresholds: Green<=${(activeBands.lowThreshold * 100).toFixed(4)}%, Orange<=${(activeBands.highThreshold * 100).toFixed(4)}%`);
 }
 
 /**

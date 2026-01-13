@@ -404,6 +404,141 @@ export class TelemetryAggregatorService {
   }
 
   /**
+   * Directive 11.4H.3 Task 3: Write telemetry snapshot to JSON file for entropy audits
+   * Creates a comprehensive snapshot of current telemetry state for regime distribution analysis.
+   * 
+   * Note: Friction/spread values are computed at scan-time from live market data and are
+   * logged separately via the [FrictionAudit] and [GlobalFriction][Audit] log entries.
+   * This snapshot captures telemetry-based metrics: regime, finalScore, pool assignment, etc.
+   * 
+   * Output file: /logs/telemetry_snapshot_<timestamp>.json
+   */
+  async writeTelemetrySnapshot(): Promise<string> {
+    const fs = await import('fs').then(m => m.promises);
+    const path = await import('path');
+    
+    const now = Date.now();
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    
+    interface PairSnapshot {
+      symbol: string;
+      regime: string;
+      finalScore: number;
+      hybridScore: number | null;
+      regimeWeight: number | null;
+      compositeScore: number;
+      pool: string;
+      source: string;
+      sampleCount: number;
+      lastUpdated: string;
+    }
+    
+    const snapshotData: PairSnapshot[] = [];
+    
+    // Collect data from ALL pairs (no truncation)
+    for (const [symbol, entries] of this.pairTelemetry.entries()) {
+      const recent = entries.filter(t => now - t.lastUpdated < this.historyWindowMs);
+      if (recent.length === 0) continue;
+      
+      const latest = recent[recent.length - 1];
+      const compositeScore = this.getCompositeScore(symbol);
+      
+      snapshotData.push({
+        symbol,
+        regime: latest.pairRegime ?? this.currentRegime,
+        finalScore: parseFloat((latest.finalScore ?? 0).toFixed(4)),
+        hybridScore: latest.hybridScore != null ? parseFloat(latest.hybridScore.toFixed(4)) : null,
+        regimeWeight: latest.regimeWeight != null ? parseFloat(latest.regimeWeight.toFixed(4)) : null,
+        compositeScore: parseFloat(compositeScore.toFixed(4)),
+        pool: latest.pool ?? 'ideal',
+        source: latest.source ?? 'simulation',
+        sampleCount: recent.length,
+        lastUpdated: new Date(latest.lastUpdated).toISOString()
+      });
+    }
+    
+    // Calculate regime distribution
+    const regimeDistribution: Record<string, number> = {};
+    for (const entry of snapshotData) {
+      regimeDistribution[entry.regime] = (regimeDistribution[entry.regime] || 0) + 1;
+    }
+    
+    // Calculate pool distribution
+    const poolDistribution: Record<string, number> = { ideal: 0, rotational: 0 };
+    for (const entry of snapshotData) {
+      poolDistribution[entry.pool] = (poolDistribution[entry.pool] || 0) + 1;
+    }
+    
+    // Calculate source distribution
+    const sourceDistribution: Record<string, number> = {};
+    for (const entry of snapshotData) {
+      sourceDistribution[entry.source] = (sourceDistribution[entry.source] || 0) + 1;
+    }
+    
+    // Calculate Shannon entropy for regime distribution
+    const totalPairs = snapshotData.length;
+    let entropy = 0;
+    if (totalPairs > 0) {
+      for (const count of Object.values(regimeDistribution)) {
+        const p = count / totalPairs;
+        if (p > 0) {
+          entropy -= p * Math.log2(p);
+        }
+      }
+    }
+    const regimeCount = Object.keys(regimeDistribution).length || 1;
+    const maxEntropy = Math.log2(regimeCount);
+    const normalizedEntropy = maxEntropy > 0 ? entropy / maxEntropy : 0;
+    
+    // Score statistics
+    const finalScores = snapshotData.map(p => p.finalScore).filter(s => s > 0);
+    const scoreStats = {
+      min: finalScores.length > 0 ? Math.min(...finalScores) : 0,
+      max: finalScores.length > 0 ? Math.max(...finalScores) : 0,
+      avg: finalScores.length > 0 ? parseFloat((finalScores.reduce((a, b) => a + b, 0) / finalScores.length).toFixed(4)) : 0,
+      nonZeroCount: finalScores.length
+    };
+    
+    const snapshot = {
+      timestamp: new Date().toISOString(),
+      directive: '11.4H.3',
+      description: 'Telemetry-based entropy and regime distribution snapshot. For friction/spread data, see [FrictionAudit] logs.',
+      pairCount: totalPairs,
+      entropy: {
+        shannon: parseFloat(entropy.toFixed(4)),
+        normalized: parseFloat(normalizedEntropy.toFixed(4)),
+        maxPossible: parseFloat(maxEntropy.toFixed(4)),
+        regimeCount
+      },
+      regimeDistribution,
+      regimeDistributionPercent: Object.fromEntries(
+        Object.entries(regimeDistribution).map(([k, v]) => [k, parseFloat(((v / Math.max(totalPairs, 1)) * 100).toFixed(1))])
+      ),
+      poolDistribution,
+      sourceDistribution,
+      scoreStats,
+      pairs: snapshotData, // ALL pairs - no truncation
+    };
+    
+    // Ensure logs directory exists
+    const logsDir = path.join(process.cwd(), 'logs');
+    try {
+      await fs.mkdir(logsDir, { recursive: true });
+    } catch (e) {
+      // Directory may already exist
+    }
+    
+    const filePath = path.join(logsDir, `telemetry_snapshot_${timestamp}.json`);
+    await fs.writeFile(filePath, JSON.stringify(snapshot, null, 2));
+    
+    console.log(`[11.4H.3][TelemetrySnapshot] Written ${totalPairs} pairs to ${filePath}`);
+    console.log(`[11.4H.3][TelemetrySnapshot] Entropy: ${normalizedEntropy.toFixed(4)}, Regimes: ${JSON.stringify(regimeDistribution)}`);
+    console.log(`[11.4H.3][TelemetrySnapshot] Pools: ${JSON.stringify(poolDistribution)}, Sources: ${JSON.stringify(sourceDistribution)}`);
+    
+    return filePath;
+  }
+
+  /**
    * Directive 11.1A: Update current market regime
    * Call this when market conditions change
    */

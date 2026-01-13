@@ -1,0 +1,270 @@
+⚙️ Directive 11.4H.3 — Market Integrity & Friction Diagnostics Before Fix
+Phase Objective
+
+Before making any architectural corrections, we will diagnose and verify the sources of:
+
+Global Friction Static Values (14 or 25)
+
+Pair-Level Friction Flattening (“Moderate Liquidity” everywhere)
+
+This directive adds auditing, tracking, and proof collection so that we can confirm the hypotheses before committing to code-level changes.
+
+🧭 Context & Theoretical Basis
+🧩 1️⃣ Global Friction — Hypothesis: Statistical Undersampling
+
+Observation:
+Global friction consistently returns 14 or 25, regardless of market conditions.
+
+Hypothesis A (Primary):
+The current calculation is based only on survivor pairs in each scan (≈17 pairs).
+That sample is too small and too homogeneous, causing a narrow variance in friction values.
+
+Expected Behavior:
+If friction were calculated over the full Ideal + Rotational pools, or as a rolling accumulation, it should vary dynamically with market liquidity.
+
+Evidence for Hypothesis A:
+
+Survivor count ≈ 17 per scan (from telemetry).
+
+Reported values are exact integers (14, 25) — suggests post-rounding from low-variance mean.
+
+Logs don’t show global friction variability across scans.
+
+Hypothesis B (Secondary):
+The calculation might be rounding or flooring too early (e.g., rounding before averaging).
+That would compress scores into the same rounded output repeatedly.
+
+Hypothesis C (Less likely):
+All spreads are being pulled from a cached data snapshot that’s not refreshing across cycles.
+
+🧮 Diagnostic Plan for Global Friction
+
+We’ll trace and log each step of the global friction computation — data source, sample size, variance, and result — to prove or disprove each hypothesis.
+
+Diagnostic Insert (cost-metrics.ts):
+
+logger.info(`[GlobalFriction][Audit] Sample size: ${pairs.length}`);
+logger.info(`[GlobalFriction][Audit] Raw spreads: ${pairs.map(p => p.spread).join(',')}`);
+logger.info(`[GlobalFriction][Audit] Mid prices: ${pairs.map(p => p.mid).join(',')}`);
+logger.info(`[GlobalFriction][Audit] Individual friction scores: ${pairs.map(p => (p.spread / p.mid) * 10000).join(',')}`);
+logger.info(`[GlobalFriction][Audit] Global friction value: ${computedGlobalFriction}`);
+
+
+Audit Output Analysis:
+
+Expected Finding	Meaning
+Sample size ≤ 20	Confirms undersampling → supports Hypothesis A
+Spread variance ≈ 0	Indicates cached snapshot issue → supports Hypothesis C
+Friction rounding early (integer array)	Supports Hypothesis B
+Varying raw spreads but static final friction	Confirms aggregation/rounding issue
+
+Goal:
+Produce a console/audit log confirming whether the global friction is truly static due to small-sample aggregation, stale data, or rounding errors.
+
+🧩 2️⃣ Pair-Level Friction Flattening — Hypothesis: Cached or Uniform Source
+
+Observation:
+All pairs show identical friction labels (“Moderate Liquidity”).
+
+Hypothesis 1 (Primary):
+The percentile bands (Green/Orange/Red cutoffs) are cached and not recomputed each cycle.
+If computeAdaptiveFrictionBands() is run once and cached, every cycle uses the same percentile thresholds → every score maps to the same label.
+
+Hypothesis 2 (Secondary):
+The friction scores themselves are constant because the spreads are being pulled from a static cache (e.g., a shared global ticker snapshot not updated per pair).
+If all pairs use the same spread and mid, they will naturally produce identical friction scores.
+
+Hypothesis 3 (Tertiary):
+Band computation is correct, but normalization to percentile rank is flawed (e.g., division by zero or fixed normalization window).
+
+🧮 Diagnostic Plan for Pair-Level Friction
+
+We’ll perform pair-level logging and introduce a one-time audit function that prints every pair’s friction components per scan.
+
+Diagnostic Insert (cost-metrics.ts):
+
+logger.info(`[FrictionAudit] Cycle ${cycleId} - Pair Count: ${pairs.length}`);
+pairs.forEach(p => {
+  logger.info(`[FrictionAudit] ${p.symbol} | spread=${p.bestAsk - p.bestBid} | mid=${(p.bestAsk + p.bestBid)/2} | friction=${(p.spread / p.mid) * 10000}`);
+});
+logger.info(`[FrictionAudit] Band thresholds: Green<${bands.green}, Orange<${bands.orange}, Red>${bands.red}`);
+
+
+Expected Diagnostic Findings:
+
+Finding	Interpretation
+All spreads identical	Supports Hypothesis 2 (shared cache)
+Spreads vary, but labels same	Supports Hypothesis 1 (cached percentile bands)
+Spreads vary, scores vary, labels vary	System working correctly
+Bands change each cycle, labels still same	Check normalization (Hypothesis 3)
+🔎 Diagnostic Phase Output Goal
+
+We want to see at least two consecutive scan cycles of audit output showing:
+
+Number of pairs used in global friction computation.
+
+Spread variance per cycle.
+
+Friction score variance per cycle.
+
+Pair-level friction and label mapping per pair.
+
+Once we have that data, we can prove which hypothesis is true and then proceed to targeted code correction.
+
+🧠 3️⃣ Entropy Diagnostic Context
+
+We already confirmed the reason entropy remains zero in audits:
+
+In-memory telemetry resets on restart.
+
+The audit script runs in isolation, not against live telemetry.
+
+This is confirmed behavior — not an actual classifier fault.
+We can safely say that entropy is “unknown,” not “zero.”
+
+✅ Diagnostic Next Step:
+
+Persist telemetry to a pair_telemetry table.
+
+Rerun the entropy audit against that persisted dataset.
+
+Confirm whether entropy rises as regimes diversify over runtime.
+
+No code fix to the entropy algorithm yet — this is diagnostic infrastructure setup only.
+
+🧮 Directive 11.4H.3 (Diagnostic Phase)
+Phase Objective
+
+Diagnose — do not fix — the causes of:
+
+Static Global Friction
+
+Flattened Pair-Level Friction
+
+Non-persistent Entropy Tracking
+
+I. Diagnostic Tasks
+Task 1 — Add Global Friction Audit Logging
+
+File: /server/core/metrics/cost-metrics.ts
+
+Action:
+Insert detailed audit logs before global friction computation showing:
+
+Number of pairs in sample
+
+Spread variance
+
+Midprice variance
+
+Individual friction scores
+
+Final global friction result
+
+Purpose:
+Confirm whether undersampling, rounding, or stale spread data causes static output.
+
+Task 2 — Add Pair-Level Friction Diagnostic Logging
+
+File: /server/core/metrics/cost-metrics.ts
+
+Action:
+Add per-cycle audit output of:
+
+Each pair’s spread, midprice, computed friction score
+
+Band thresholds and resulting label
+
+Purpose:
+Determine whether friction flattening is caused by cached percentile bands or constant spreads.
+
+Task 3 — Add Telemetry Snapshot for Entropy
+
+File: /server/services/telemetry-aggregator.ts
+
+Action:
+On telemetry flush, write current symbol, regime, friction, spread to a temporary JSON log file:
+/logs/telemetry_snapshot_<timestamp>.json
+
+Purpose:
+Enable offline entropy audits without requiring persistent DB yet.
+
+Task 4 — Audit Rotation Source
+
+File: /server/services/adaptive-scan-manager.ts
+
+Action:
+Add logging to confirm where rotation candidates originate:
+
+logger.info(`[RotationAudit] Source: ${sourceType} | Candidate count: ${rotationCandidates.length}`);
+logger.info(`[RotationAudit] First 10 candidates: ${rotationCandidates.map(p => p.symbol).join(', ')}`);
+
+
+Purpose:
+Prove whether the rotational pool is being drawn from telemetry or the full Kraken symbol list.
+
+Task 5 — Collect and Analyze Logs
+
+After two complete scan cycles:
+
+Capture logs for:
+
+[GlobalFriction][Audit]
+
+[FrictionAudit]
+
+[RotationAudit]
+
+Evaluate:
+
+Sample sizes
+
+Spread variance
+
+Band recomputation consistency
+
+Source confirmation for rotation
+
+II. Success Criteria (Proof Phase)
+Metric	Target Diagnostic Evidence
+Global friction sample size	≥100 pairs, variable spreads
+Pair friction values	Differ per pair, labels vary
+Rotation audit	Source = Kraken map, not telemetry
+Entropy	Snapshot log contains >0 regimes
+Audit repeatability	Two cycles produce consistent variance data
+III. Deferred Corrective Phase (To be 11.4H.4)
+
+Once diagnostic proof is complete, the following fixes can be safely implemented:
+
+Replace friction computation source (if undersampling proven).
+
+Recompute percentile bands dynamically (if flattening confirmed).
+
+Add persistent telemetry DB for entropy.
+
+Replace rotational pool source logic.
+
+IV. Deliverables
+
+/logs/global_friction_audit.log
+
+/logs/pair_friction_audit.log
+
+/logs/rotation_audit.log
+
+/logs/telemetry_snapshot_<timestamp>.json
+
+Summary analysis after two full scan cycles.
+
+✅ Summary
+
+Directive 11.4H.3 (Diagnostic Phase) focuses exclusively on data gathering and proof.
+No fixes will be made until:
+
+We confirm whether global friction is undersampling or stale.
+
+We confirm whether pair-level friction flattening is due to caching or uniform spreads.
+
+We have entropy snapshots confirming telemetry regime diversity.
+
+This diagnostic-first approach ensures that every change in Directive 11.4H.4 is backed by measurable evidence.

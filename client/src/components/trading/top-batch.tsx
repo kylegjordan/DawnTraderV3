@@ -277,7 +277,11 @@ export default function TopBatch() {
                     </Badge>
                   </td>
                   <td className="py-2 pr-4">
-                    {pair.frictionLabel ? (
+                    {pair.frictionScore !== undefined && pair.frictionLabel ? (
+                      <Badge className={cn("text-xs", getFrictionBadgeClass(pair.frictionColor || 'gray'))}>
+                        {pair.frictionScore} {pair.frictionLabel}
+                      </Badge>
+                    ) : pair.frictionLabel ? (
                       <Badge className={cn("text-xs", getFrictionBadgeClass(pair.frictionColor || 'gray'))}>
                         {pair.frictionLabel}
                       </Badge>

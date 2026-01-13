@@ -225,6 +225,11 @@ export class AdaptiveScanManager {
       .filter(p => !idealPairs.includes(p)) // No duplicates
       .slice(0, actualRotationalCount);
     
+    // Directive 11.4H.3 Task 4: Rotation Audit Logging
+    const rotationSource = allAvailablePairs.length > 0 ? 'Kraken symbol map' : 'telemetry fallback';
+    console.log(`[RotationAudit] Source: ${rotationSource} | allAvailablePairs: ${allAvailablePairs.length} | rotationalCandidates: ${rotationalPairs.length}`);
+    console.log(`[RotationAudit] First 10 rotational: ${rotationalPairs.slice(0, 10).join(', ')}`);
+    
     // Combine and filter out failed pairs
     const combined = [...idealPairs, ...rotationalPairs];
     const excludedPairs = combined.filter(p => this.failureTracker.isInCooldown(p));

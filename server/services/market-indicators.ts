@@ -150,7 +150,8 @@ export function updateGlobalRegime(regime: MarketRegime): void {
 
 export function computeGlobalFriction(): number {
   try {
-    const pool = activeFilterPool.getActivePool();
+    // Use paper mode for global friction calculation (default mode)
+    const pool = activeFilterPool.getActivePool('paper');
     const symbolsToSample = pool.length >= 50 
       ? pool.slice(0, 100).map(p => p.symbol)
       : TOP_100_FALLBACK_PAIRS;
@@ -158,22 +159,49 @@ export function computeGlobalFriction(): number {
     let totalFriction = 0;
     let count = 0;
     
+    // Directive 11.4H.3 Task 1: Collect raw data for audit logging
+    const auditData: { symbol: string; spread: number; mid: number; friction: number }[] = [];
+    
     for (const symbol of symbolsToSample) {
       const metrics = getCacheMetrics(symbol);
       if (metrics) {
         const friction = computeMarketFriction(metrics.spread, metrics.slippage, metrics.fee);
         totalFriction += friction;
         count++;
+        
+        // Directive 11.4H.3: Collect for audit (spread is in decimal form)
+        auditData.push({
+          symbol,
+          spread: metrics.spread,
+          mid: 0, // Mid price not available in cost cache, using spread directly
+          friction
+        });
       }
     }
     
     if (count === 0) {
+      console.log(`[GlobalFriction][Audit] Sample size: 0 (no metrics available)`);
       return 25;
     }
     
     const avgFriction = Math.round(totalFriction / count);
     cachedGlobalFriction = avgFriction;
     lastUpdate = new Date();
+    
+    // Directive 11.4H.3 Task 1: Global Friction Audit Logging
+    const spreads = auditData.map(d => d.spread);
+    const frictionScores = auditData.map(d => d.friction);
+    const spreadVariance = spreads.length > 1 
+      ? spreads.reduce((sum, s) => sum + Math.pow(s - (spreads.reduce((a, b) => a + b, 0) / spreads.length), 2), 0) / spreads.length 
+      : 0;
+    const frictionMin = Math.min(...frictionScores);
+    const frictionMax = Math.max(...frictionScores);
+    
+    console.log(`[GlobalFriction][Audit] Sample size: ${count}`);
+    console.log(`[GlobalFriction][Audit] Spread range: ${(Math.min(...spreads) * 100).toFixed(4)}% - ${(Math.max(...spreads) * 100).toFixed(4)}%`);
+    console.log(`[GlobalFriction][Audit] Spread variance: ${(spreadVariance * 10000).toFixed(6)}`);
+    console.log(`[GlobalFriction][Audit] Friction range: ${frictionMin} - ${frictionMax}`);
+    console.log(`[GlobalFriction][Audit] Global friction result: ${avgFriction}`);
     
     return avgFriction;
   } catch (err) {
