@@ -58,6 +58,13 @@ Diagnostic tooling is implemented for regime distribution, friction calibration,
 - Data flow now properly established: Kraken API → collectMixedBatch() → FX5 Scanner → Cost Cache → Global Friction.
 - Spread values now vary per trading pair (e.g., ADA/USD: 0.0257%, IP/USD: 0.5256%) instead of uniform 0.1% fallback.
 
+**Directive 11.4H.4 Implementation (January 2026):**
+- **Task 1 - Friction Cache Coverage**: Extended cost cache TTL from 60s to 300s. Cost metrics now populated for ALL evaluated pairs in `collectAdaptiveBatch` before filtering, eliminating the "50 Moderate Liquidity" artifact from cache-miss defaults.
+- **Task 2 - Deterministic Rotational Scanning**: Index-based rotation in `telemetry-aggregator.ts` with rotation index persistence and benchmark injection (BTC/ETH/SOL).
+- **Task 3 - Stablecoin Regex Repair**: Strict Base/Quote regex `/^(USDT|USDC|DAI|PYUSD|USDE)\/(USD|EUR|USDT|USDC|DAI)$/i` applied in both `fx5-scanner.ts` and `market-scanner.ts`, preventing false positives like FARTCOIN/USDC.
+- **Task 4 - Dynamic Regime Scoring**: New `calculateRegimeScore()` function in `market-regime.ts` computes scores dynamically from ADX + volatility metrics. Scores fluctuate with market strength (50-100 range for strong trends) instead of static weights.
+- **Task 5 - Passive Mode Filter Policy**: Benchmark pairs (BTC/ETH/SOL) bypass filters ONLY in passive learning mode for correlation tracking. Safe default: on context failure, filters apply to ALL pairs. Implementation: `passiveLearning` flag passed from FX5 scanner to `collectAdaptiveBatch`, with engine state checked before batch scan.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed.
