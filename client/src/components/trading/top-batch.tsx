@@ -157,6 +157,21 @@ export default function TopBatch() {
     }
   };
 
+  // Directive 11.4H.4: Calculate dominant regime from batch for global display
+  // NOTE: All hooks must be called before conditional returns
+  const dominantRegime = useMemo(() => {
+    if (!data || !data.length) return null;
+    const regimeCounts: Record<string, number> = {};
+    data.forEach(p => {
+      const normalized = normalizeRegime(p.regime);
+      regimeCounts[normalized] = (regimeCounts[normalized] || 0) + 1;
+    });
+    const sorted = Object.entries(regimeCounts).sort((a, b) => b[1] - a[1]);
+    if (sorted.length === 0) return null;
+    const [regime, count] = sorted[0];
+    return { regime, count, percentage: Math.round((count / data.length) * 100) };
+  }, [data]);
+
   const sortedPairs = useMemo(() => {
     if (!data) return [];
     return [...data].sort((a, b) => {
@@ -216,20 +231,6 @@ export default function TopBatch() {
   }
 
   const pairs = data ?? [];
-
-  // Directive 11.4H.4: Calculate dominant regime from batch for global display
-  const dominantRegime = useMemo(() => {
-    if (!pairs.length) return null;
-    const regimeCounts: Record<string, number> = {};
-    pairs.forEach(p => {
-      const normalized = normalizeRegime(p.regime);
-      regimeCounts[normalized] = (regimeCounts[normalized] || 0) + 1;
-    });
-    const sorted = Object.entries(regimeCounts).sort((a, b) => b[1] - a[1]);
-    if (sorted.length === 0) return null;
-    const [regime, count] = sorted[0];
-    return { regime, count, percentage: Math.round((count / pairs.length) * 100) };
-  }, [pairs]);
 
   return (
     <Card>
