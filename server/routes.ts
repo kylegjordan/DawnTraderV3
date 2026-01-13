@@ -686,13 +686,16 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Directive 11.4C.3-C: Enforce canonical signalType mapping before transmission
       // Directive 11.4H.2: Add friction and benchmark data to response
+      // Directive 11.4H.3: Include numeric frictionScore for UI display
       const pairs = rawPairs.map(p => {
-        const frictionVisual = mapFrictionVisual((p as any).frictionScore ?? 50);
+        const rawFrictionScore = (p as any).frictionScore ?? 50;
+        const frictionVisual = mapFrictionVisual(rawFrictionScore);
         const isBenchmark = isBenchmarkSymbol(p.symbol);
         
         return {
           ...p,
           signalType: p.strategy && p.strategy !== '—' ? getTypeForStrategy(p.strategy) : p.signalType,
+          frictionScore: Math.round(rawFrictionScore), // Directive 11.4H.3: Include numeric score for "score label" display
           frictionLabel: frictionVisual.label.split(':')[1]?.trim() || frictionVisual.label,
           frictionColor: frictionVisual.color,
           isBenchmark,
