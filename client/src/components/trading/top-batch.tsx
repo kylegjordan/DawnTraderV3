@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, TrendingUp, Activity, Zap, Clock, ChevronUp, ChevronDown } from "lucide-react";
+import { RefreshCw, TrendingUp, Activity, Zap, Clock, ChevronUp, ChevronDown, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type SortField = 'rank' | 'score' | 'lastUpdated';
@@ -74,6 +74,20 @@ function normalizeRegime(regime: string): string {
     MIXED_TRANSITION: 'TRANSITION'
   };
   return ghostToCanonical[regime] ?? regime;
+}
+
+// Directive 11.4H.4: Regime weight scores for display
+const REGIME_WEIGHTS: Record<string, number> = {
+  BULL_STABLE: 0.85,
+  BEAR_VOLATILE: 0.40,
+  LOW_VOL_CHOP: 0.55,
+  HIGH_VOL_IMPULSE: 0.70,
+  TRANSITION: 0.50
+};
+
+function getRegimeScore(regime: string): number {
+  const normalized = normalizeRegime(regime);
+  return REGIME_WEIGHTS[normalized] ?? 0.50;
 }
 
 function getRegimeBadgeClass(regime: string): string {
@@ -203,6 +217,20 @@ export default function TopBatch() {
 
   const pairs = data ?? [];
 
+  // Directive 11.4H.4: Calculate dominant regime from batch for global display
+  const dominantRegime = useMemo(() => {
+    if (!pairs.length) return null;
+    const regimeCounts: Record<string, number> = {};
+    pairs.forEach(p => {
+      const normalized = normalizeRegime(p.regime);
+      regimeCounts[normalized] = (regimeCounts[normalized] || 0) + 1;
+    });
+    const sorted = Object.entries(regimeCounts).sort((a, b) => b[1] - a[1]);
+    if (sorted.length === 0) return null;
+    const [regime, count] = sorted[0];
+    return { regime, count, percentage: Math.round((count / pairs.length) * 100) };
+  }, [pairs]);
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -224,6 +252,19 @@ export default function TopBatch() {
             </button>
           </div>
         </div>
+        {/* Directive 11.4H.4: Global Regime Display */}
+        {dominantRegime && (
+          <div className="flex items-center gap-3 mt-2 text-sm">
+            <div className="flex items-center gap-1.5">
+              <Target className="h-4 w-4 text-muted-foreground" />
+              <span className="text-muted-foreground">Global Regime:</span>
+              <Badge className={cn("text-xs", getRegimeBadgeClass(dominantRegime.regime))}>
+                {Math.round(getRegimeScore(dominantRegime.regime) * 100)} {dominantRegime.regime.replace(/_/g, ' ')}
+              </Badge>
+              <span className="text-muted-foreground">({dominantRegime.percentage}% of batch)</span>
+            </div>
+          </div>
+        )}
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
@@ -273,7 +314,7 @@ export default function TopBatch() {
                   <td className="py-2 pr-4 text-muted-foreground">{pair.pattern}</td>
                   <td className="py-2 pr-4">
                     <Badge className={cn("text-xs", getRegimeBadgeClass(pair.regime))}>
-                      {pair.regime.replace(/_/g, ' ')}
+                      {Math.round(getRegimeScore(pair.regime) * 100)} {pair.regime.replace(/_/g, ' ')}
                     </Badge>
                   </td>
                   <td className="py-2 pr-4">
