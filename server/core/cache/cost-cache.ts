@@ -1,10 +1,11 @@
 /**
  * ══════════════════════════════════════════════════════════════════════════════
  * Directive 11.3B — In-Memory Cost Cache
+ * Directive 11.4H.4 — Extended TTL for friction coverage
  * ══════════════════════════════════════════════════════════════════════════════
  * 
  * Ultra-lightweight in-memory cache for cost metrics.
- * - TTL: 60 seconds
+ * - TTL: 300 seconds (5 minutes) per Directive 11.4H.4
  * - Pure in-memory (nanosecond lookups)
  * - Clamps values to safe ranges
  * - Single source of cost truth across entire runtime
@@ -13,7 +14,7 @@
  * Governance Invariants:
  * - C1: Single cache source for all modules
  * - C3: Max bounds ≤ 1%
- * - C4: Cache TTL ≤ 60s (with automatic pruning)
+ * - C4: Cache TTL = 300s per 11.4H.4 (previously 60s)
  * 
  * DO NOT MODIFY without architectural review.
  * ══════════════════════════════════════════════════════════════════════════════
@@ -38,7 +39,7 @@ interface CacheEntry {
   t: number;
 }
 
-const CACHE_TTL_MS = 60_000;
+const CACHE_TTL_MS = 300_000; // Directive 11.4H.4: Extended to 5 minutes for full coverage
 const cache = new Map<string, CacheEntry>();
 
 let observabilityInterval: NodeJS.Timeout | null = null;

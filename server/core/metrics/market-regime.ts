@@ -131,6 +131,76 @@ export function getRegimeWeight(regime: MarketRegimeType): number {
   return REGIME_WEIGHTS[regime] ?? 0.5;
 }
 
+/**
+ * Directive 11.4H.4 Task 4: Dynamic Regime Scoring
+ * Computes regime scores dynamically from ADX + volatility metrics
+ * Scores now fluctuate with market strength (≈ 82–93 in strong trends)
+ * 
+ * @param regime - The market regime type
+ * @param metrics - Object containing adx and volatility values
+ * @returns Score between 0-100
+ */
+export function calculateRegimeScore(
+  regime: MarketRegimeType,
+  metrics: { adx: number; volatility: number }
+): number {
+  const { adx, volatility } = metrics;
+  
+  // Helper to clamp values between min and max
+  const clamp = (value: number, min: number, max: number): number => 
+    Math.min(Math.max(value, min), max);
+  
+  switch (regime) {
+    case 'BULL_STABLE':
+      // Strong uptrend: higher ADX = higher score (50-100)
+      return clamp(50 + adx / 2, 50, 100);
+      
+    case 'BEAR_VOLATILE':
+      // Downtrend: higher ADX = lower score (0-100)
+      return clamp(100 - adx / 2, 0, 100);
+      
+    case 'LOW_VOL_CHOP':
+      // Sideways: lower volatility = higher score (0-100)
+      return clamp(55 - volatility * 1000, 0, 100);
+      
+    case 'HIGH_VOL_IMPULSE':
+      // High volatility: score based on ADX strength
+      return clamp(50 + (adx - volatility * 500) / 2, 30, 90);
+      
+    case 'TRANSITION':
+      // Uncertainty: blend of ADX and volatility
+      return clamp(45 + (adx - volatility * 1000) / 2, 0, 100);
+      
+    default:
+      return 50;
+  }
+}
+
+/**
+ * Directive 11.4H.4: Get dynamic regime score from OHLC data
+ * Convenience function that calculates regime and then derives dynamic score
+ */
+export function getDynamicRegimeScore(ohlcData: OHLCData[]): {
+  regime: MarketRegimeType;
+  score: number;
+  metrics: { adx: number; volatility: number };
+} {
+  const result = calculatePairRegime(ohlcData);
+  const score = calculateRegimeScore(result.regime, {
+    adx: result.adx,
+    volatility: result.volatility
+  });
+  
+  return {
+    regime: result.regime,
+    score,
+    metrics: {
+      adx: result.adx,
+      volatility: result.volatility
+    }
+  };
+}
+
 export function isHighConfidenceRegime(result: RegimeCalculationResult): boolean {
   return result.confidence >= 0.70;
 }

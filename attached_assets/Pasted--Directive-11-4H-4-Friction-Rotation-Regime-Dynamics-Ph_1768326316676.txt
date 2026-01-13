@@ -1,0 +1,119 @@
+⚙️ Directive 11.4H.4 — Friction, Rotation & Regime Dynamics
+Phase Objective
+
+Eliminate the “50 Moderate Liquidity” cache-expiry artifact, implement deterministic rotation for full Kraken coverage, correct stable-pair detection, enable dynamic regime scoring, and formalize the passive-mode filter rule.
+
+🧭 I. Analysis of Findings (Consensus Summary)
+Issue	Root Cause	Confirmed Fix
+Friction = 50	Cost-cache TTL = 60 s; only “survivors” populate it	Update cache for all scanned pairs (Option 2) and extend TTL
+Static Regime Scores	Hard-coded constants (85/55/50/40)	Compute score dynamically from ADX + volatility
+BTC Missing	Random rotation skips pairs	Deterministic rotation with benchmark injection
+False Stablecoins	Regex matches substring “USDC” anywhere in symbol	Strict Base + Quote regex
+Passive-Mode Filters	Filters disabled → artificial profits	Run filters in both modes; benchmarks exempt
+⚙️ II. Implementation Tasks
+Task 1 — Friction Cache Coverage (Option 2)
+
+File: /server/services/fx5-scanner.ts
+
+// Before: setCostMetrics() called only for survivors
+for (const pair of rawBatch) {
+   const metrics = computeCostMetrics(pair);
+   costCache.set(pair.symbol, metrics);
+}
+
+
+Also update TTL
+
+// /server/core/cache/cost-cache.ts
+export const CACHE_TTL_MS = 300_000; // 5 minutes
+
+
+✅ All evaluated pairs populate the cache; no “50 default”.
+
+Task 2 — Deterministic Rotational Scanning
+
+File: /server/services/adaptive-scan-manager.ts
+
+let rotationIndex = cache.get('rotationIndex') || 0;
+const total = allPairs.length, batchSize = 100;
+
+const rotationalCandidates = allPairs.slice(rotationIndex, rotationIndex + batchSize);
+rotationIndex = (rotationIndex + batchSize) % total;
+cache.set('rotationIndex', rotationIndex);
+
+// Always include benchmarks
+for (const b of BENCHMARK_SYMBOLS)
+  if (!rotationalCandidates.includes(b)) rotationalCandidates.push(b);
+
+
+✅ Guarantees full pair coverage and BTC/ETH presence.
+
+Task 3 — Stablecoin Regex Repair
+
+File: /server/services/fx5-scanner.ts
+
+const isStablePair =
+  /^(USDT|USDC|DAI|PYUSD|USDE)\/(USD|EUR|USDT|USDC|DAI)$/i.test(symbol);
+
+
+✅ Prevents false stablecoin matches (e.g., FARTCOIN/USDC).
+
+Task 4 — Dynamic Regime Scoring
+
+File: /server/core/metrics/market-regime.ts
+
+export function calculateRegimeScore(regime, metrics) {
+  const { adx, volatility } = metrics;
+
+  switch (regime) {
+    case 'BULL_STABLE':     return clamp(50 + adx / 2, 50, 100);
+    case 'BEAR_VOLATILE':   return clamp(100 - adx / 2, 0, 100);
+    case 'LOW_VOL_CHOP':    return clamp(55 - volatility * 1000, 0, 100);
+    case 'TRANSITION':      return clamp(45 + (adx - volatility * 1000) / 2, 0, 100);
+    default:                return 50;
+  }
+}
+
+
+✅ Regime scores now fluctuate with market strength (≈ 82–93 in strong trends).
+
+Task 5 — Passive Mode Filter Policy
+
+File: /server/services/fx5-scanner.ts
+
+// ARCHITECTURAL RULE:
+// Filters run in both Passive and Live modes to ensure simulation ≈ live reality.
+// EXCEPTION: benchmarkForceInclude pairs (btc/eth) bypass filters for correlation tracking.
+if (mode === 'passive' && pair.benchmarkForceInclude) skipFilters = true;
+
+
+✅ Prevents “hallucinated success” while retaining benchmark telemetry.
+
+🔍 III. Verification
+Check	Expected Result
+FrictionAudit	Sample ≈ 100 pairs per cycle
+Top Batch Friction	Varied scores (12 – 90) not all 50
+Regime Scores	Fluctuate (≈ 82, 88, 91) not static 85
+Rotation Logs	BTC/ETH appear every cycle
+Stablecoin Test	FARTCOIN/USDC → Not Stable
+Passive Sim	Filters active except benchmarks
+📈 IV. Rationale
+
+Updating the cost cache for all pairs eradicates the 50-score artifact.
+
+Deterministic rotation stabilizes telemetry and global coverage.
+
+Dynamic regime scores unlock true market feedback for future adaptive-weight logic.
+
+Filter consistency protects AI training validity.
+
+Stablecoin regex and benchmark logic ensure data hygiene.
+
+🧩 V. Expected System State After 11.4H.4
+Metric	Target
+Friction range	≈ 10 – 90 (true spread variance)
+Global friction	≈ 30 – 60 (realistic average)
+Regime entropy	0.35 – 0.65 (dynamic)
+Regime scores	Continuous, not flat
+BTC coverage	100 % rotation guaranteed
+Passive filters	Active (benchmarks whitelisted)

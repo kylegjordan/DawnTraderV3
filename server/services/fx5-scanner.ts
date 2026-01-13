@@ -322,11 +322,33 @@ export class Fx5ScannerService {
         });
       }
 
+      // Directive 11.4H.4 Task 5: Get engine state BEFORE batch scan to determine passive learning mode
+      // When engine is stopped (!isEngineActive), we are in passive learning mode
+      // CRITICAL: On context failure, default to NOT passive (filters always apply) for safety
+      const earlyContextPromise = storage.getSystemContext(mode);
+      const earlyContextTimeout = new Promise<any>((_, reject) => 
+        setTimeout(() => reject(new Error('getSystemContext timeout')), 5000)
+      );
+      let earlyContext: any = null;
+      let contextFailed = false;
+      try {
+        earlyContext = await Promise.race([earlyContextPromise, earlyContextTimeout]);
+      } catch (err: any) {
+        console.error(`[FX5Scanner][11.4H.4][${mode}] Early getSystemContext failed: ${err.message}`);
+        contextFailed = true;
+      }
+      
+      // SAFE DEFAULT: On context failure, assume NOT passive (filters apply to all pairs including benchmarks)
+      // Only allow passive mode when we have confirmed engine is stopped
+      const isPassiveLearningMode = contextFailed ? false : !(earlyContext?.isEngineActive ?? true);
+      console.log(`[FX5Scanner][11.4H.4][${mode}] Passive learning mode: ${isPassiveLearningMode} (contextFailed=${contextFailed}, isEngineActive=${earlyContext?.isEngineActive})`);
+      
       // Directive 11.4C.1: Execute adaptive batch scanning (100 pairs: 60% Ideal + 40% Rotational)
       const batchResult: BatchResult = await collectAdaptiveBatch(
         this.krakenService,
         filters,
-        mode
+        mode,
+        { passiveLearning: isPassiveLearningMode } // Directive 11.4H.4 Task 5: Pass passive learning flag
       );
       
       // Extract results from batch pipeline
@@ -395,8 +417,10 @@ export class Fx5ScannerService {
         const normalizedSymbol = normalizeToInternalSymbol(s.symbol);
         const volumeUSD = typeof s.volume24h === 'number' && !isNaN(s.volume24h) ? s.volume24h : 0;
         
-        // Directive 11.4H.1 Task 2: Case-insensitive regex AFTER normalization
-        const isStable = /usdt|usdc|dai/i.test(normalizedSymbol);
+        // Directive 11.4H.4 Task 3: Strict Base/Quote regex for stablecoin detection
+        // Prevents false positives like FARTCOIN/USDC being marked as stable
+        const isStablePair = /^(USDT|USDC|DAI|PYUSD|USDE)\/(USD|EUR|USDT|USDC|DAI)$/i.test(normalizedSymbol);
+        const isStable = isStablePair;
         const isBlueChip = volumeUSD > 50_000_000;
         const volatility = s.dailyRange ?? 0;
         const isStableVol = volatility > 0.0005;
@@ -408,8 +432,8 @@ export class Fx5ScannerService {
         const forceInclude = isBenchmark || isBlueChip || (isStable && isStableVol);
         const benchmarkForceInclude = forceInclude;
         
-        // Directive 11.4H.2: Tag pool type for UI visibility
-        const poolType = isBenchmark ? 'BENCHMARK' as const : 'STANDARD' as const;
+        // Directive 11.4H.2: Tag asset type for UI visibility (separate from poolType)
+        const assetType = isBenchmark ? 'BENCHMARK' as const : 'STANDARD' as const;
         const volumeClass = classifyVolume(volumeUSD);
         
         // Directive 11.4H.1 Task 2: Log forced inclusions for audit
@@ -474,7 +498,7 @@ export class Fx5ScannerService {
           isStablecoin: isStable && isStableVol, // Directive 11.4H.1: Use correctly named variable
           volatility,
           isBenchmark, // Directive 11.4H.2: Benchmark flag
-          poolType // Directive 11.4H.2: Pool type for UI
+          assetType // Directive 11.4H.2: Asset type for UI (BENCHMARK/STANDARD)
         };
       });
 
@@ -482,19 +506,10 @@ export class Fx5ScannerService {
       // Single-gate pattern: Check ONLY isEngineActive (passive learning = !isEngineActive)
       console.log(`[8.6.7][DEBUG] FX5 scan complete - survivors.length=${classifiedSurvivors.length}, eligibleCount=${eligibleCount}`);
       
-      // Check if trading engine is active for this mode (from database, not aggregator)
-      // R9.3.HF-7: Add timeout protection for database call
-      console.log(`[FX5Scanner][R9.3.HF-7][${mode}] Getting system context...`);
-      const contextPromise = storage.getSystemContext(mode);
-      const contextTimeout = new Promise<any>((_, reject) => 
-        setTimeout(() => reject(new Error('getSystemContext timeout')), 5000)
-      );
-      const context = await Promise.race([contextPromise, contextTimeout]).catch(err => {
-        console.error(`[FX5Scanner][R9.3.HF-7][${mode}] getSystemContext failed: ${err.message}`);
-        return null;
-      });
-      const isEngineActive = context?.isEngineActive || false;
-      console.log(`[FX5Scanner][R9.3.HF-7][${mode}] Engine active: ${isEngineActive}`);
+      // Directive 11.4H.4: Reuse earlyContext instead of duplicate database fetch
+      // isEngineActive is derived from earlyContext (already fetched before collectAdaptiveBatch)
+      const isEngineActive = earlyContext?.isEngineActive || false;
+      console.log(`[FX5Scanner][11.4H.4][${mode}] Engine active: ${isEngineActive} (reused from earlyContext)`);
 
       // REB 2.8.7: Enforce passive mode - clear pool if engine stopped
       activeFilterPool.enforcePassiveModeIfStopped(mode, isEngineActive);

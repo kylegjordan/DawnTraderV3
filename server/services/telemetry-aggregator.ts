@@ -773,9 +773,16 @@ export class TelemetryAggregatorService {
   }
 
   /**
+   * Directive 11.4H.4 Task 2: Deterministic rotation index for full Kraken coverage
+   * Persists across cycles to ensure all pairs are eventually scanned
+   */
+  private rotationIndex: number = 0;
+  
+  /**
    * Directive 11.2 R1: Get rotational pairs with explicit pool attribution
    * Directive 11.4C.1: Now accepts explicit count instead of ratio
    * Directive 11.4B.2-R1: Includes pairs with default score (0.5) or no score (M63)
+   * Directive 11.4H.4 Task 2: Deterministic rotation with benchmark injection
    */
   getRotationalPairsWithPool(count: number, allPairs: string[]): PairWithPool[] {
     const now = Date.now();
@@ -808,15 +815,52 @@ export class TelemetryAggregatorService {
       }
     }
     
-    // Shuffle for random rotation
-    const shuffled = rotationalCandidates.sort(() => Math.random() - 0.5);
-    // Directive 11.4C.1: Use explicit count directly
-    const rotationalPairs = shuffled.slice(0, count).map(symbol => ({
+    // Directive 11.4H.4 Task 2: Deterministic rotation instead of random shuffling
+    // This ensures full Kraken coverage over time without skipping pairs
+    const total = rotationalCandidates.length;
+    if (total === 0) {
+      console.log(`[11.4H.4][Rotation] No rotational candidates available`);
+      return [];
+    }
+    
+    // Wrap rotation index if it exceeds available pairs
+    this.rotationIndex = this.rotationIndex % total;
+    
+    // Slice from rotation index, wrapping around if needed
+    const startIdx = this.rotationIndex;
+    const endIdx = startIdx + count;
+    let selected: string[];
+    
+    if (endIdx <= total) {
+      selected = rotationalCandidates.slice(startIdx, endIdx);
+    } else {
+      // Wrap around: take remainder from start
+      selected = [
+        ...rotationalCandidates.slice(startIdx),
+        ...rotationalCandidates.slice(0, endIdx - total)
+      ];
+    }
+    
+    // Advance rotation index for next cycle
+    this.rotationIndex = endIdx % total;
+    
+    // Directive 11.4H.4 Task 2: Benchmark injection - always include BTC/ETH
+    const selectedSet = new Set(selected);
+    const rotationBenchmarks = ['BTC/USD', 'XXBTZUSD', 'XBT/USD', 'ETH/USD', 'XETHZUSD', 'SOL/USD', 'SOLUSD'];
+    for (const benchmark of rotationBenchmarks) {
+      if (!selectedSet.has(benchmark) && allPairs.includes(benchmark)) {
+        selected.push(benchmark);
+        selectedSet.add(benchmark);
+      }
+    }
+    
+    const rotationalPairs = selected.slice(0, count).map(symbol => ({
       symbol,
       pool: 'rotational' as PoolType,
       score: 0, // Rotational pairs don't have established scores
     }));
     
+    console.log(`[11.4H.4][Rotation] Deterministic selection: idx=${startIdx}→${this.rotationIndex}, selected=${rotationalPairs.length}/${count}`);
     console.log(`[11.4B.2-R1][Telemetry] getRotationalPairs(count=${count}): ${rotationalPairs.length} pairs selected`);
     return rotationalPairs;
   }

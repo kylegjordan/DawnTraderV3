@@ -7,6 +7,7 @@ import { PaperSimDiagnosticService } from './paper-sim-diagnostic.js';
 import { activeFilterPool } from './active-filter-pool.js';
 import { getAdaptiveScanManager, type AdaptiveScanBatch } from './adaptive-scan-manager.js';
 import { SCANNER_PARAMS } from '../config/system-guards.js';
+import { setCostMetrics } from '../core/cache/cost-cache.js';
 
 // ============================================================================
 // REB 2.10: Passive Learning Deep Tests - Types & Buffer
@@ -1084,12 +1085,14 @@ export interface BatchResult {
 export async function collectAdaptiveBatch(
   krakenService: KrakenService,
   filters: any,
-  mode: 'paper' | 'live'
+  mode: 'paper' | 'live',
+  options?: { passiveLearning?: boolean } // Directive 11.4H.4 Task 5: Optional passive learning flag
 ): Promise<BatchResult> {
   const startTime = Date.now();
   const cycleId = `adaptive_${mode}_${Date.now()}`;
+  const isPassiveLearning = options?.passiveLearning ?? false;
   
-  console.log(`[AdaptiveScan][11.4C.1] Starting adaptive batch scan (mode=${mode}, cycleId=${cycleId})`);
+  console.log(`[AdaptiveScan][11.4C.1] Starting adaptive batch scan (mode=${mode}, passiveLearning=${isPassiveLearning}, cycleId=${cycleId})`);
   
   // Parse filter values
   const parsedFilters = {
@@ -1186,8 +1189,14 @@ export async function collectAdaptiveBatch(
   const minPrice = parsedFilters.minPrice;
   const maxBidAskSpread = parsedFilters.maxBidAskSpread;
   const excludeStablecoins = parsedFilters.excludeStablecoins;
-  const stablecoinPatterns = ['USDT', 'USDC', 'DAI', 'BUSD', 'UST'];
+  // Directive 11.4H.4 Task 3: Strict stablecoin regex for Base/Quote matching
+  const isStablePairRegex = /^(USDT|USDC|DAI|PYUSD|USDE)\/(USD|EUR|USDT|USDC|DAI)$/i;
   const minHistoryDays = parsedFilters.minHistoryDays;
+  
+  // Directive 11.4H.4 Task 5: Benchmark symbols for passive mode filter exemption
+  // These pairs bypass ALL filters for correlation tracking in passive learning
+  const BENCHMARK_SYMBOLS = ['BTC/USD', 'ETH/USD', 'SOL/USD', 'XBT/USD', 'BTC/EUR', 'ETH/EUR'];
+  const benchmarkSet = new Set(BENCHMARK_SYMBOLS.map(s => s.toUpperCase()));
   
   const historyFilterCtx: HistoryFilterContext = {
     minHistoryDays,
@@ -1198,8 +1207,11 @@ export async function collectAdaptiveBatch(
   const survivors: BatchResult['survivors'] = [];
   let idealSurvivors = 0;
   let rotationalSurvivors = 0;
+  let benchmarkExemptCount = 0;
   
   for (const pair of batch) {
+    // Directive 11.4H.4 Task 5: Check if this is a benchmark pair
+    const isBenchmarkPair = benchmarkSet.has(pair.symbol.toUpperCase());
     const ticker = pair.ticker as any;
     const pairInfo = pair.pairInfo;
     const baseCurrency = pairInfo.base;
@@ -1212,44 +1224,65 @@ export async function collectAdaptiveBatch(
     const bidPrice = parseFloat(ticker.b[0]);
     const bidAskSpread = bidPrice > 0 ? ((askPrice - bidPrice) / bidPrice) * 100 : 0;
     
+    // Directive 11.4H.4 Task 1: Populate cost cache for ALL evaluated pairs (not just survivors)
+    // This eliminates the "50 Moderate Liquidity" artifact caused by cache-miss defaults
+    setCostMetrics(pair.symbol, { spread: bidAskSpread / 100 }); // Convert percentage to decimal
+    
     let rejected = false;
     
-    // Already active check
-    if (poolSymbols.has(pair.symbol) || activeTradeSymbols.has(pair.symbol)) {
-      breakdown.already_active++;
-      continue;
-    }
-    
-    // Filter: Stablecoins
-    if (!rejected && excludeStablecoins && stablecoinPatterns.some(p => baseCurrency?.includes(p))) {
-      breakdown.failed_stablecoin++;
-      rejected = true;
-    }
-    
-    // Filter: Min volume
-    if (!rejected && volume24h < minVolume) {
-      breakdown.failed_min_volume++;
-      rejected = true;
-    }
-    
-    // Filter: Min price
-    if (!rejected && currentPrice < minPrice) {
-      breakdown.failed_min_price++;
-      rejected = true;
-    }
-    
-    // Filter: Bid-ask spread
-    if (!rejected && bidAskSpread > maxBidAskSpread) {
-      breakdown.failed_spread++;
-      rejected = true;
-    }
-    
-    // Filter: History (async)
-    if (!rejected && minHistoryDays > 0) {
-      const historyResult = await passesHistoryFilter(pair.symbol, historyFilterCtx);
-      if (!historyResult.passed) {
-        breakdown.failed_history++;
+    // Directive 11.4H.4 Task 5: Benchmark pairs bypass ALL filters ONLY in passive learning mode
+    // This ensures BTC/ETH/SOL are always included in passive learning for correlation tracking
+    // In live/paper mode, all pairs (including benchmarks) must pass filters normally
+    if (isPassiveLearning && isBenchmarkPair) {
+      benchmarkExemptCount++;
+      // Skip all filters - benchmark pairs are always included in passive mode
+      // Still check if already active to avoid duplicates
+      if (poolSymbols.has(pair.symbol) || activeTradeSymbols.has(pair.symbol)) {
+        breakdown.already_active++;
+        continue;
+      }
+      // Fall through to survivor recording without rejection
+    } else {
+      // Non-benchmark pairs: Apply all filters normally
+      
+      // Already active check
+      if (poolSymbols.has(pair.symbol) || activeTradeSymbols.has(pair.symbol)) {
+        breakdown.already_active++;
+        continue;
+      }
+      
+      // Filter: Stablecoins - Directive 11.4H.4 Task 3: Strict Base/Quote regex
+      // Only true stablecoin pairs like USDT/USD are excluded, not FARTCOIN/USDC
+      if (!rejected && excludeStablecoins && isStablePairRegex.test(pair.symbol)) {
+        breakdown.failed_stablecoin++;
         rejected = true;
+      }
+      
+      // Filter: Min volume
+      if (!rejected && volume24h < minVolume) {
+        breakdown.failed_min_volume++;
+        rejected = true;
+      }
+      
+      // Filter: Min price
+      if (!rejected && currentPrice < minPrice) {
+        breakdown.failed_min_price++;
+        rejected = true;
+      }
+      
+      // Filter: Bid-ask spread
+      if (!rejected && bidAskSpread > maxBidAskSpread) {
+        breakdown.failed_spread++;
+        rejected = true;
+      }
+      
+      // Filter: History (async)
+      if (!rejected && minHistoryDays > 0) {
+        const historyResult = await passesHistoryFilter(pair.symbol, historyFilterCtx);
+        if (!historyResult.passed) {
+          breakdown.failed_history++;
+          rejected = true;
+        }
       }
     }
     
@@ -1290,6 +1323,13 @@ export async function collectAdaptiveBatch(
   
   const elapsedMs = Date.now() - startTime;
   console.log(`[AdaptiveScan][11.4C.1] Cycle complete in ${elapsedMs}ms: evaluated=${batch.length}, survivors=${survivors.length} (ideal=${idealSurvivors}, rotational=${rotationalSurvivors})`);
+  
+  // Directive 11.4H.4 Task 5: Log benchmark exemption diagnostics (passive mode only)
+  if (benchmarkExemptCount > 0) {
+    console.log(`[11.4H.4][BENCHMARK] ${benchmarkExemptCount} benchmark pairs bypassed filters in passive learning mode for correlation tracking`);
+  } else if (isPassiveLearning) {
+    console.log(`[11.4H.4][BENCHMARK] No benchmark pairs found in batch (passiveLearning=${isPassiveLearning})`);
+  }
   
   // M31 Invariant: Check runtime
   if (elapsedMs > 30000) {
