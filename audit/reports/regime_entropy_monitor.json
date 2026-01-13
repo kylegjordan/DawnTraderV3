@@ -1,0 +1,38 @@
+{
+  "timestamp": "2026-01-13T11:11:56.912Z",
+  "directive": "11.4H Task 4",
+  "current_state": {
+    "entropy": 0,
+    "entropy_status": "critical",
+    "total_pairs": 0,
+    "distribution": {
+      "BULL_STABLE": 0,
+      "BEAR_VOLATILE": 0,
+      "LOW_VOL_CHOP": 0,
+      "HIGH_VOL_IMPULSE": 0,
+      "TRANSITION": 0
+    },
+    "distribution_percent": {
+      "BULL_STABLE": 0,
+      "BEAR_VOLATILE": 0,
+      "LOW_VOL_CHOP": 0,
+      "HIGH_VOL_IMPULSE": 0,
+      "TRANSITION": 0
+    }
+  },
+  "thresholds": {
+    "warning": 0.4,
+    "critical": 0.2
+  },
+  "regime_analysis": {
+    "dominant_regime": "TRANSITION",
+    "dominant_percent": 0,
+    "regime_count": 0,
+    "is_balanced": true
+  },
+  "recommendations": [
+    "CRITICAL: Regime entropy is too low - consider reviewing regime calculation logic",
+    "Check if telemetry data is being populated correctly",
+    "Review OHLC data quality for regime calculation"
+  ]
+}
