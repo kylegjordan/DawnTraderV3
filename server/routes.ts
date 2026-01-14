@@ -666,22 +666,44 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // Directive 11.4C-R2: Top Batch API Endpoint (M66)
   // Directive 11.4C.3-C: Normalize signalType at API level before UI serialization
   // Directive 11.4H.2: Added pool filter and friction data
+  // Directive 11.4H.5-Fix: Benchmark pool returns ALL benchmark symbols regardless of telemetry
   apiRouter.get('/pairs/ranked', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { getTelemetryAggregator } = await import('./services/telemetry-aggregator.js');
       const { getTypeForStrategy } = await import('./config/canonical-regime-strategy-map.js');
       const { mapFrictionVisual } = await import('./core/metrics/cost-metrics.js');
-      const { isBenchmarkSymbol } = await import('./services/fx5-scanner.js');
+      const { isBenchmarkSymbol, BENCHMARK_SYMBOLS } = await import('./services/fx5-scanner.js');
       const telemetry = getTelemetryAggregator();
       
       const limit = parseInt(req.query.limit as string ?? '100');
       const poolFilter = req.query.pool as string | undefined;
       let rawPairs = telemetry.getRankedPairs(limit);
       
-      // Directive 11.4H.2 Task 6: Filter by pool type if specified
-      // Uses the unified isBenchmarkSymbol() from fx5-scanner for consistent detection
+      // Directive 11.4H.5-Fix: For benchmark pool, return ALL benchmark symbols
+      // Force-include benchmark pairs even if they don't have telemetry yet
       if (poolFilter === 'benchmark') {
-        rawPairs = rawPairs.filter(p => isBenchmarkSymbol(p.symbol));
+        const benchmarkPairsFromTelemetry = rawPairs.filter(p => isBenchmarkSymbol(p.symbol));
+        const telemetrySymbols = new Set(benchmarkPairsFromTelemetry.map(p => p.symbol));
+        
+        // Add placeholder entries for benchmark symbols missing from telemetry
+        const missingBenchmarks = BENCHMARK_SYMBOLS.filter(s => !telemetrySymbols.has(s));
+        const now = new Date().toISOString();
+        const placeholders = missingBenchmarks.map((symbol, idx) => ({
+          rank: benchmarkPairsFromTelemetry.length + idx + 1,
+          symbol,
+          score: 0,
+          signalType: 'Pending',
+          strategy: 'Awaiting Scan',
+          pattern: '—',
+          regime: 'UNKNOWN',
+          regimeScore: 0,
+          source: 'placeholder' as const,
+          lastUpdated: now,
+          frictionScore: 50,
+        }));
+        
+        rawPairs = [...benchmarkPairsFromTelemetry, ...placeholders];
+        console.log(`[11.4H.5-Fix][Benchmark] Returning ${benchmarkPairsFromTelemetry.length} with telemetry + ${missingBenchmarks.length} placeholders`);
       }
       
       // Directive 11.4H.4A-Fix2: Get global dominant regime for UI consistency

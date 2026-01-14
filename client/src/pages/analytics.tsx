@@ -283,195 +283,301 @@ function MarketOverviewSection({ indicators }: { indicators: MarketIndicatorsDat
 }
 
 function DefinitionsReference() {
-  const [isOpen, setIsOpen] = useState(false);
-  
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger asChild>
-        <Button variant="outline" className="w-full flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <BookOpen className="w-4 h-4" />
-            <span>Definitions & Mapping Reference</span>
-          </div>
-          {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-        </Button>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="mt-4 space-y-6">
-        <div>
-          <h4 className="text-sm font-semibold mb-3">Global Metric Definitions</h4>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-2 pr-4 font-medium">Metric</th>
-                  <th className="text-left py-2 font-medium">Simple Explanation</th>
-                </tr>
-              </thead>
-              <tbody className="text-muted-foreground">
-                <tr className="border-b">
-                  <td className="py-2 pr-4 font-medium text-foreground">Global Regime</td>
-                  <td className="py-2">This tells you what kind of overall market environment we're in - for example, trending upward (bull), downward (bear), flat, or changing. It helps you understand how most markets are behaving.</td>
-                </tr>
-                <tr>
-                  <td className="py-2 pr-4 font-medium text-foreground">Global Friction</td>
-                  <td className="py-2">This shows how easy or difficult it is to trade across the markets. A low score means trades can happen quickly and cheaply. A high score means trading is slower or more expensive.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+    <div className="space-y-6">
+      <div className="flex items-center gap-2 mb-4">
+        <BookOpen className="w-5 h-5" />
+        <h3 className="text-lg font-semibold">Definitions & Mapping Reference</h3>
+      </div>
+      
+      <div>
+        <h4 className="text-sm font-semibold mb-3">Market Regime Definitions</h4>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left py-2 pr-4 font-medium">Regime</th>
+                <th className="text-left py-2 pr-4 font-medium">Regime Metrics & Ranges</th>
+                <th className="text-left py-2 font-medium">Description</th>
+              </tr>
+            </thead>
+            <tbody className="text-muted-foreground">
+              <tr className="border-b">
+                <td className="py-2 pr-4"><Badge variant="outline" className="bg-green-500/20 text-green-400 border-green-500/30">BULL_STABLE</Badge></td>
+                <td className="py-2 pr-4 font-mono text-xs">Mom &gt; +0.005 | ADX &gt; 25 | Vol &lt; 0.025</td>
+                <td className="py-2">Markets are trending upward steadily. Buyers are in control, and momentum strategies work best.</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 pr-4"><Badge variant="outline" className="bg-red-500/20 text-red-400 border-red-500/30">BEAR_VOLATILE</Badge></td>
+                <td className="py-2 pr-4 font-mono text-xs">Mom &lt; -0.005 | ADX &gt; 25 | Vol &gt; 0.03</td>
+                <td className="py-2">Markets are dropping sharply or swinging wildly. It's better to be cautious or trade defensive setups.</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 pr-4"><Badge variant="outline" className="bg-gray-500/20 text-gray-400 border-gray-500/30">LOW_VOL_CHOP</Badge></td>
+                <td className="py-2 pr-4 font-mono text-xs">Mom abs &lt; 0.002 | ADX &lt; 20 | Vol &lt; 0.015</td>
+                <td className="py-2">Prices move sideways without clear direction. Range trading works best here.</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 pr-4"><Badge variant="outline" className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">HIGH_VOL_IMPULSE</Badge></td>
+                <td className="py-2 pr-4 font-mono text-xs">Mom abs &gt; 0.010 | ADX &gt; 30 | Vol &gt; 0.030</td>
+                <td className="py-2">Prices move very fast and sharply. Short-term breakout and scalp trades work well.</td>
+              </tr>
+              <tr>
+                <td className="py-2 pr-4"><Badge variant="outline" className="bg-blue-500/20 text-blue-400 border-blue-500/30">TRANSITION</Badge></td>
+                <td className="py-2 pr-4 font-mono text-xs">Mom ± 0.004 | ADX 20-25 | Vol 0.015-0.030</td>
+                <td className="py-2">The market is changing direction or finding a new trend. Keep trades small and flexible.</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-        
-        <Separator />
-        
-        <div>
-          <h4 className="text-sm font-semibold mb-3">Regime Types</h4>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-2 pr-4 font-medium">Regime</th>
-                  <th className="text-left py-2 font-medium">Meaning in Simple Terms</th>
-                </tr>
-              </thead>
-              <tbody className="text-muted-foreground">
-                <tr className="border-b">
-                  <td className="py-2 pr-4"><Badge variant="outline" className="bg-green-500/20 text-green-400 border-green-500/30">Bull Stable</Badge></td>
-                  <td className="py-2">Markets are trending upward steadily. Buyers are in control, and momentum strategies work best.</td>
-                </tr>
-                <tr className="border-b">
-                  <td className="py-2 pr-4"><Badge variant="outline" className="bg-red-500/20 text-red-400 border-red-500/30">Bear Volatile</Badge></td>
-                  <td className="py-2">Markets are dropping sharply or swinging wildly. It's better to be cautious or trade short setups.</td>
-                </tr>
-                <tr className="border-b">
-                  <td className="py-2 pr-4"><Badge variant="outline" className="bg-gray-500/20 text-gray-400 border-gray-500/30">Low Vol Chop</Badge></td>
-                  <td className="py-2">Prices move sideways without clear direction. Range trading works best here.</td>
-                </tr>
-                <tr className="border-b">
-                  <td className="py-2 pr-4"><Badge variant="outline" className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">High Vol Impulse</Badge></td>
-                  <td className="py-2">Prices move very fast and sharply. Short-term breakout and scalp trades work well.</td>
-                </tr>
-                <tr>
-                  <td className="py-2 pr-4"><Badge variant="outline" className="bg-blue-500/20 text-blue-400 border-blue-500/30">Transition</Badge></td>
-                  <td className="py-2">The market is changing direction or finding a new trend. Keep trades small and flexible.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+      </div>
+      
+      <Separator />
+      
+      <div>
+        <h4 className="text-sm font-semibold mb-3">Market Friction Definitions</h4>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left py-2 pr-4 font-medium">Friction Type</th>
+                <th className="text-left py-2 pr-4 font-medium">Score Range</th>
+                <th className="text-left py-2 font-medium">Meaning</th>
+              </tr>
+            </thead>
+            <tbody className="text-muted-foreground">
+              <tr className="border-b">
+                <td className="py-2 pr-4"><Badge className="bg-green-500/20 text-green-400">High Liquidity</Badge></td>
+                <td className="py-2 pr-4 font-mono">0 - 30</td>
+                <td className="py-2">Trades are cheap and fast. Ideal environment for full position sizes.</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 pr-4"><Badge className="bg-orange-500/20 text-orange-400">Moderate Liquidity</Badge></td>
+                <td className="py-2 pr-4 font-mono">31 - 70</td>
+                <td className="py-2">Trading is normal. Most trades execute at expected prices with minor slippage.</td>
+              </tr>
+              <tr>
+                <td className="py-2 pr-4"><Badge className="bg-red-500/20 text-red-400">Low Liquidity</Badge></td>
+                <td className="py-2 pr-4 font-mono">71 - 100</td>
+                <td className="py-2">Markets are difficult to trade safely. Price jumps and delays are common.</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-        
-        <Separator />
-        
-        <div>
-          <h4 className="text-sm font-semibold mb-3">Friction Types</h4>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-2 pr-4 font-medium">Friction Type</th>
-                  <th className="text-left py-2 font-medium">Meaning in Simple Terms</th>
-                </tr>
-              </thead>
-              <tbody className="text-muted-foreground">
-                <tr className="border-b">
-                  <td className="py-2 pr-4"><Badge className="bg-green-500/20 text-green-400">High Liquidity (0-20)</Badge></td>
-                  <td className="py-2">Trades are cheap and fast. Ideal environment.</td>
-                </tr>
-                <tr className="border-b">
-                  <td className="py-2 pr-4"><Badge className="bg-yellow-500/20 text-yellow-400">Moderate (21-50)</Badge></td>
-                  <td className="py-2">Trading is normal and smooth.</td>
-                </tr>
-                <tr className="border-b">
-                  <td className="py-2 pr-4"><Badge className="bg-orange-500/20 text-orange-400">Limited (51-80)</Badge></td>
-                  <td className="py-2">Fewer buyers and sellers; trades take longer or move prices.</td>
-                </tr>
-                <tr>
-                  <td className="py-2 pr-4"><Badge className="bg-red-500/20 text-red-400">Low / Frozen (81-100)</Badge></td>
-                  <td className="py-2">Markets are expensive or paused. Best to wait.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+      </div>
+      
+      <Separator />
+      
+      <div>
+        <h4 className="text-sm font-semibold mb-3">Complete Regime to Strategy Mapping</h4>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b bg-muted/50">
+                <th className="text-left py-2 px-2 font-medium">Regime</th>
+                <th className="text-left py-2 px-2 font-medium">Strategy</th>
+                <th className="text-left py-2 px-2 font-medium">Secondary Metrics & Ranges</th>
+                <th className="text-left py-2 px-2 font-medium">Signal Type</th>
+                <th className="text-left py-2 px-2 font-medium">Pattern Type</th>
+              </tr>
+            </thead>
+            <tbody className="text-muted-foreground">
+              <tr className="border-b">
+                <td className="py-2 px-2 font-medium text-foreground" rowSpan={4}>BULL_STABLE</td>
+                <td className="py-2 px-2">SMA Trend Ride</td>
+                <td className="py-2 px-2 font-mono">Price &gt; SMA(50) by &gt; 0.5% | ADX &gt; 25</td>
+                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">QUANT</Badge></td>
+                <td className="py-2 px-2">—</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 px-2">VWAP Pullback</td>
+                <td className="py-2 px-2 font-mono">VWAP Deviation &lt; -1σ | Momentum &gt; 0</td>
+                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">QUANT</Badge></td>
+                <td className="py-2 px-2">—</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 px-2">Morning Star / Evening Star</td>
+                <td className="py-2 px-2 font-mono">3-Bar Sequence (Bear→Doji→Bull) | Mom Flip &gt; 0.3%</td>
+                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">PATTERN</Badge></td>
+                <td className="py-2 px-2">Morning Star / Evening Star</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 px-2">Pivot Shift</td>
+                <td className="py-2 px-2 font-mono">RSI 45-55 | ADX Slope &gt; 0.5</td>
+                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">HYBRID</Badge></td>
+                <td className="py-2 px-2">Morning / Evening Star</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 px-2 font-medium text-foreground" rowSpan={4}>BEAR_VOLATILE</td>
+                <td className="py-2 px-2">Mean Reversion</td>
+                <td className="py-2 px-2 font-mono">RSI &lt; 30 or &gt; 70 | Price Dev &gt; 1σ | Vol &lt; 0.025</td>
+                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">QUANT</Badge></td>
+                <td className="py-2 px-2">—</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 px-2">Reverse Impulse</td>
+                <td className="py-2 px-2 font-mono">Volume &gt; 1.5× avg | Mom Spike &lt; -0.5%</td>
+                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">HYBRID</Badge></td>
+                <td className="py-2 px-2">Pinbar (optional)</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 px-2">Defensive Hedge</td>
+                <td className="py-2 px-2 font-mono">BTC Correlation &lt; 0.3 | Vol Offset &gt; 1σ</td>
+                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">HYBRID</Badge></td>
+                <td className="py-2 px-2">Engulfing / Inside Bar</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 px-2">Inside Bar Reversal</td>
+                <td className="py-2 px-2 font-mono">Parent Range &gt; Child × 1.3 | Breakout Vol &gt; 1.5× avg</td>
+                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">PATTERN</Badge></td>
+                <td className="py-2 px-2">Inside Bar / Engulfing</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 px-2 font-medium text-foreground" rowSpan={4}>LOW_VOL_CHOP</td>
+                <td className="py-2 px-2">Range Trading</td>
+                <td className="py-2 px-2 font-mono">Bollinger Bandwidth &lt; 0.10 | ADX &lt; 20</td>
+                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">QUANT</Badge></td>
+                <td className="py-2 px-2">—</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 px-2">Support Bounce</td>
+                <td className="py-2 px-2 font-mono">Price = Local Min ± 1σ | Volume &gt; 1.2× avg</td>
+                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">PATTERN</Badge></td>
+                <td className="py-2 px-2">Pinbar / Rejection Wick</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 px-2">ABCD Long</td>
+                <td className="py-2 px-2 font-mono">AB:CD Ratio 0.95-1.05 | Volume &gt; 1.2× avg</td>
+                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">QUANT</Badge></td>
+                <td className="py-2 px-2">—</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 px-2">Adaptive Flow</td>
+                <td className="py-2 px-2 font-mono">Mom Inversion = 3 | Vol Percentile &gt; 70%</td>
+                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">HYBRID</Badge></td>
+                <td className="py-2 px-2">Tri-Star / Three Soldiers</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 px-2 font-medium text-foreground" rowSpan={4}>HIGH_VOL_IMPULSE</td>
+                <td className="py-2 px-2">Breakout</td>
+                <td className="py-2 px-2 font-mono">Momentum &gt; +0.7% | Volume &gt; 2× avg</td>
+                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">QUANT</Badge></td>
+                <td className="py-2 px-2">—</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 px-2">VWAP Bounce</td>
+                <td className="py-2 px-2 font-mono">VWAP Deviation &gt; +1σ | Momentum -0.3 to -0.6%</td>
+                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">QUANT</Badge></td>
+                <td className="py-2 px-2">—</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 px-2">Volatility Edge</td>
+                <td className="py-2 px-2 font-mono">Vol Percentile &gt; 80 | Regime Mismatch = True</td>
+                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">HYBRID</Badge></td>
+                <td className="py-2 px-2">ABCD Geometric</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 px-2">DHMA</td>
+                <td className="py-2 px-2 font-mono">HMA(9) cross HMA(21) | ADX Slope Flattening</td>
+                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">QUANT</Badge></td>
+                <td className="py-2 px-2">—</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 px-2 font-medium text-foreground" rowSpan={3}>TRANSITION</td>
+                <td className="py-2 px-2">Liquidity Trap</td>
+                <td className="py-2 px-2 font-mono">(Lower Wick / Body) &gt; 2 or Depth Imbalance &gt; 1.4</td>
+                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">QUANT</Badge></td>
+                <td className="py-2 px-2">Pinbar (proxy)</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 px-2">Pivot Shift</td>
+                <td className="py-2 px-2 font-mono">RSI 45-55 | ADX Slope &gt; 0.5</td>
+                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">HYBRID</Badge></td>
+                <td className="py-2 px-2">Morning / Evening Star</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 px-2">Morning Star / Evening Star</td>
+                <td className="py-2 px-2 font-mono">3-Bar Sequence (Bear→Doji→Bull) | Mom Flip &gt; 0.3%</td>
+                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">PATTERN</Badge></td>
+                <td className="py-2 px-2">Morning / Evening Star</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-        
-        <Separator />
-        
-        <div>
-          <h4 className="text-sm font-semibold mb-3">Canonical Regime to Strategy Mapping</h4>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-2 pr-2 font-medium">Regime</th>
-                  <th className="text-left py-2 pr-2 font-medium">Signal Type</th>
-                  <th className="text-left py-2 font-medium">Best Strategies</th>
-                </tr>
-              </thead>
-              <tbody className="text-muted-foreground">
-                <tr className="border-b">
-                  <td className="py-2 pr-2 font-medium text-foreground">Bull Stable</td>
-                  <td className="py-2 pr-2">Quantitative / Hybrid</td>
-                  <td className="py-2">Trend Breakout, Momentum Continuation, EMA Alignment</td>
-                </tr>
-                <tr className="border-b">
-                  <td className="py-2 pr-2 font-medium text-foreground">Bear Volatile</td>
-                  <td className="py-2 pr-2">Quantitative</td>
-                  <td className="py-2">Short Breakout, Risk Compression, Reversal Momentum</td>
-                </tr>
-                <tr className="border-b">
-                  <td className="py-2 pr-2 font-medium text-foreground">Low Vol Chop</td>
-                  <td className="py-2 pr-2">Hybrid / Pattern</td>
-                  <td className="py-2">Range Trade, Pullback Fade, Scalp Compression</td>
-                </tr>
-                <tr className="border-b">
-                  <td className="py-2 pr-2 font-medium text-foreground">High Vol Impulse</td>
-                  <td className="py-2 pr-2">Quantitative</td>
-                  <td className="py-2">Impulse Ride, Volatility Expansion, ADX Flow</td>
-                </tr>
-                <tr>
-                  <td className="py-2 pr-2 font-medium text-foreground">Transition</td>
-                  <td className="py-2 pr-2">Hybrid</td>
-                  <td className="py-2">Adaptive Flow, Liquidity Trap</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+      </div>
+      
+      <Separator />
+      
+      <div>
+        <h4 className="text-sm font-semibold mb-3">Signal Types</h4>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left py-2 pr-4 font-medium">Signal Type</th>
+                <th className="text-left py-2 font-medium">Description</th>
+              </tr>
+            </thead>
+            <tbody className="text-muted-foreground">
+              <tr className="border-b">
+                <td className="py-2 pr-4"><Badge variant="secondary">QUANT</Badge></td>
+                <td className="py-2">Quantitative signals based on mathematical indicators like RSI, VWAP, ADX, and momentum calculations. Purely data-driven.</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 pr-4"><Badge variant="secondary">HYBRID</Badge></td>
+                <td className="py-2">Combines quantitative metrics with price structure analysis. Uses both data and pattern recognition.</td>
+              </tr>
+              <tr>
+                <td className="py-2 pr-4"><Badge variant="secondary">PATTERN</Badge></td>
+                <td className="py-2">Based on candlestick patterns and price action formations like Morning Star, Engulfing, Inside Bar.</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-        
-        <Separator />
-        
-        <div>
-          <h4 className="text-sm font-semibold mb-3">Signal Types & Strategies</h4>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-2 pr-4 font-medium">Signal Type</th>
-                  <th className="text-left py-2 pr-4 font-medium">Strategies</th>
-                  <th className="text-left py-2 font-medium">When to Use</th>
-                </tr>
-              </thead>
-              <tbody className="text-muted-foreground">
-                <tr className="border-b">
-                  <td className="py-2 pr-4 font-medium text-foreground">Quantitative</td>
-                  <td className="py-2 pr-4">Trend Breakout, Momentum Continuation, Mean Reversion</td>
-                  <td className="py-2">When the system identifies strong directional data or mean reversion signals.</td>
-                </tr>
-                <tr className="border-b">
-                  <td className="py-2 pr-4 font-medium text-foreground">Hybrid</td>
-                  <td className="py-2 pr-4">Adaptive Flow, Pivot Shift, Liquidity Trap</td>
-                  <td className="py-2">Combines algorithmic signals with price structure for confirmation.</td>
-                </tr>
-                <tr>
-                  <td className="py-2 pr-4 font-medium text-foreground">Pattern</td>
-                  <td className="py-2 pr-4">Morning Star, Evening Star, Doji Reversal, Pin Bar</td>
-                  <td className="py-2">When price action patterns appear on charts, often confirming reversals.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+      </div>
+      
+      <Separator />
+      
+      <div>
+        <h4 className="text-sm font-semibold mb-3">Pattern Types</h4>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left py-2 pr-4 font-medium">Pattern</th>
+                <th className="text-left py-2 font-medium">Description</th>
+              </tr>
+            </thead>
+            <tbody className="text-muted-foreground">
+              <tr className="border-b">
+                <td className="py-2 pr-4 font-medium text-foreground">Morning Star / Evening Star</td>
+                <td className="py-2">3-candle reversal pattern. Morning Star signals bullish reversal, Evening Star signals bearish reversal.</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 pr-4 font-medium text-foreground">Pinbar / Rejection Wick</td>
+                <td className="py-2">Single candle with long wick showing price rejection at a level. Signals potential reversal.</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 pr-4 font-medium text-foreground">Engulfing</td>
+                <td className="py-2">2-candle pattern where the second candle completely engulfs the first. Strong reversal signal.</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 pr-4 font-medium text-foreground">Inside Bar</td>
+                <td className="py-2">Candle that trades within the range of the previous candle. Signals consolidation before breakout.</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 pr-4 font-medium text-foreground">ABCD Geometric</td>
+                <td className="py-2">Harmonic pattern with equal AB and CD legs. Used for measuring potential price targets.</td>
+              </tr>
+              <tr>
+                <td className="py-2 pr-4 font-medium text-foreground">Tri-Star / Three Soldiers</td>
+                <td className="py-2">3-candle continuation patterns. Three Soldiers shows strong bullish momentum.</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-      </CollapsibleContent>
-    </Collapsible>
+      </div>
+    </div>
   );
 }
 

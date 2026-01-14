@@ -206,7 +206,7 @@ export default function BenchmarkList() {
                     </td>
                     <td className="py-3 pr-4">
                       <Badge variant="outline" className={cn("text-xs", getRegimeBadgeClass(pair.regime))}>
-                        {pair.regimeScore ?? '-'} {pair.regime.replace(/_/g, ' ')}
+                        {pair.regimeScore !== undefined ? Math.round(pair.regimeScore) : '-'} {pair.regime.replace(/_/g, ' ')}
                       </Badge>
                     </td>
                     <td className="py-3 pr-4">
