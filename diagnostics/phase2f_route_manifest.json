@@ -512,6 +512,26 @@
     ]
   },
   {
+    "path": "/api/market-events",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/system/entropy",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/filters-v2",
     "methods": [
       "GET",

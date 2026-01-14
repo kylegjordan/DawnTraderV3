@@ -2098,6 +2098,82 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Directive 11.4H.5 Task 3: Market Events API
+  // GET /api/market-events - Get market transition events (regime/friction changes)
+  apiRouter.get('/market-events', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { getMarketEvents } = await import('./utils/market-events.js');
+      const limit = parseInt(req.query.limit as string) || 50;
+      const events = getMarketEvents(limit);
+      res.json({ ok: true, events });
+    } catch (error: any) {
+      console.error('[MarketEvents] GET error:', error.message);
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
+    }
+  });
+  
+  // Directive 11.4H.5 Task 7: Entropy Diagnostic API
+  // GET /api/system/entropy - Real-time entropy values of regime distributions
+  apiRouter.get('/system/entropy', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { getTelemetryAggregator } = await import('./services/telemetry-aggregator.js');
+      const telemetry = getTelemetryAggregator();
+      const rankedPairs = telemetry.getRankedPairs(1000);
+      
+      const regimeCounts: Record<string, number> = {};
+      let totalPairs = 0;
+      
+      for (const pair of rankedPairs) {
+        const regime = pair.regime || 'UNKNOWN';
+        regimeCounts[regime] = (regimeCounts[regime] || 0) + 1;
+        totalPairs++;
+      }
+      
+      if (totalPairs === 0) {
+        return res.json({
+          ok: true,
+          entropy: 0,
+          maxEntropy: 0,
+          normalizedEntropy: 0,
+          regimeDistribution: {},
+          totalPairs: 0,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      let entropy = 0;
+      const regimeDistribution: Record<string, { count: number; probability: number }> = {};
+      
+      for (const [regime, count] of Object.entries(regimeCounts)) {
+        const probability = count / totalPairs;
+        regimeDistribution[regime] = { count, probability };
+        if (probability > 0) {
+          entropy -= probability * Math.log2(probability);
+        }
+      }
+      
+      const regimeCount = Object.keys(regimeCounts).length;
+      const maxEntropy = Math.log2(regimeCount);
+      const normalizedEntropy = regimeCount > 1 ? entropy / maxEntropy : 0;
+      
+      res.json({
+        ok: true,
+        entropy: parseFloat(entropy.toFixed(4)),
+        maxEntropy: parseFloat(maxEntropy.toFixed(4)),
+        normalizedEntropy: parseFloat(normalizedEntropy.toFixed(4)),
+        regimeDistribution,
+        totalPairs,
+        interpretation: normalizedEntropy > 0.8 ? 'High diversity - market regimes are well distributed' :
+                       normalizedEntropy > 0.5 ? 'Moderate diversity - some regime concentration' :
+                       'Low diversity - market dominated by one regime',
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[Entropy] GET error:', error.message);
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
+    }
+  });
+
   // Phase 3: Filters V2 API Endpoints (with Manual Override metadata)
   // GET /api/filters-v2?mode=paper|live
   apiRouter.get('/filters-v2', authenticateToken, async (req: AuthenticatedRequest, res) => {

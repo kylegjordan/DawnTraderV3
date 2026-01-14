@@ -6,10 +6,12 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Activity, TrendingUp, TrendingDown, AlertCircle, Gauge, RefreshCw, Clock, DollarSign, Target, Zap, BarChart3, Layers, List } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Activity, TrendingUp, TrendingDown, AlertCircle, Gauge, RefreshCw, Clock, DollarSign, Target, Zap, BarChart3, Layers, List, BookOpen, ChevronDown, ChevronUp, Star } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import TopBatch from "@/components/trading/top-batch";
+import BenchmarkList from "@/components/analytics/benchmark-list";
 
 interface MarketIndicatorsData {
   ok: boolean;
@@ -271,8 +273,205 @@ function MarketOverviewSection({ indicators }: { indicators: MarketIndicatorsDat
             </div>
           </div>
         </div>
+        
+        <Separator />
+        
+        <DefinitionsReference />
       </CardContent>
     </Card>
+  );
+}
+
+function DefinitionsReference() {
+  const [isOpen, setIsOpen] = useState(false);
+  
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger asChild>
+        <Button variant="outline" className="w-full flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <BookOpen className="w-4 h-4" />
+            <span>Definitions & Mapping Reference</span>
+          </div>
+          {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-4 space-y-6">
+        <div>
+          <h4 className="text-sm font-semibold mb-3">Global Metric Definitions</h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-2 pr-4 font-medium">Metric</th>
+                  <th className="text-left py-2 font-medium">Simple Explanation</th>
+                </tr>
+              </thead>
+              <tbody className="text-muted-foreground">
+                <tr className="border-b">
+                  <td className="py-2 pr-4 font-medium text-foreground">Global Regime</td>
+                  <td className="py-2">This tells you what kind of overall market environment we're in - for example, trending upward (bull), downward (bear), flat, or changing. It helps you understand how most markets are behaving.</td>
+                </tr>
+                <tr>
+                  <td className="py-2 pr-4 font-medium text-foreground">Global Friction</td>
+                  <td className="py-2">This shows how easy or difficult it is to trade across the markets. A low score means trades can happen quickly and cheaply. A high score means trading is slower or more expensive.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        
+        <Separator />
+        
+        <div>
+          <h4 className="text-sm font-semibold mb-3">Regime Types</h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-2 pr-4 font-medium">Regime</th>
+                  <th className="text-left py-2 font-medium">Meaning in Simple Terms</th>
+                </tr>
+              </thead>
+              <tbody className="text-muted-foreground">
+                <tr className="border-b">
+                  <td className="py-2 pr-4"><Badge variant="outline" className="bg-green-500/20 text-green-400 border-green-500/30">Bull Stable</Badge></td>
+                  <td className="py-2">Markets are trending upward steadily. Buyers are in control, and momentum strategies work best.</td>
+                </tr>
+                <tr className="border-b">
+                  <td className="py-2 pr-4"><Badge variant="outline" className="bg-red-500/20 text-red-400 border-red-500/30">Bear Volatile</Badge></td>
+                  <td className="py-2">Markets are dropping sharply or swinging wildly. It's better to be cautious or trade short setups.</td>
+                </tr>
+                <tr className="border-b">
+                  <td className="py-2 pr-4"><Badge variant="outline" className="bg-gray-500/20 text-gray-400 border-gray-500/30">Low Vol Chop</Badge></td>
+                  <td className="py-2">Prices move sideways without clear direction. Range trading works best here.</td>
+                </tr>
+                <tr className="border-b">
+                  <td className="py-2 pr-4"><Badge variant="outline" className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">High Vol Impulse</Badge></td>
+                  <td className="py-2">Prices move very fast and sharply. Short-term breakout and scalp trades work well.</td>
+                </tr>
+                <tr>
+                  <td className="py-2 pr-4"><Badge variant="outline" className="bg-blue-500/20 text-blue-400 border-blue-500/30">Transition</Badge></td>
+                  <td className="py-2">The market is changing direction or finding a new trend. Keep trades small and flexible.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        
+        <Separator />
+        
+        <div>
+          <h4 className="text-sm font-semibold mb-3">Friction Types</h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-2 pr-4 font-medium">Friction Type</th>
+                  <th className="text-left py-2 font-medium">Meaning in Simple Terms</th>
+                </tr>
+              </thead>
+              <tbody className="text-muted-foreground">
+                <tr className="border-b">
+                  <td className="py-2 pr-4"><Badge className="bg-green-500/20 text-green-400">High Liquidity (0-20)</Badge></td>
+                  <td className="py-2">Trades are cheap and fast. Ideal environment.</td>
+                </tr>
+                <tr className="border-b">
+                  <td className="py-2 pr-4"><Badge className="bg-yellow-500/20 text-yellow-400">Moderate (21-50)</Badge></td>
+                  <td className="py-2">Trading is normal and smooth.</td>
+                </tr>
+                <tr className="border-b">
+                  <td className="py-2 pr-4"><Badge className="bg-orange-500/20 text-orange-400">Limited (51-80)</Badge></td>
+                  <td className="py-2">Fewer buyers and sellers; trades take longer or move prices.</td>
+                </tr>
+                <tr>
+                  <td className="py-2 pr-4"><Badge className="bg-red-500/20 text-red-400">Low / Frozen (81-100)</Badge></td>
+                  <td className="py-2">Markets are expensive or paused. Best to wait.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        
+        <Separator />
+        
+        <div>
+          <h4 className="text-sm font-semibold mb-3">Canonical Regime to Strategy Mapping</h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-2 pr-2 font-medium">Regime</th>
+                  <th className="text-left py-2 pr-2 font-medium">Signal Type</th>
+                  <th className="text-left py-2 font-medium">Best Strategies</th>
+                </tr>
+              </thead>
+              <tbody className="text-muted-foreground">
+                <tr className="border-b">
+                  <td className="py-2 pr-2 font-medium text-foreground">Bull Stable</td>
+                  <td className="py-2 pr-2">Quantitative / Hybrid</td>
+                  <td className="py-2">Trend Breakout, Momentum Continuation, EMA Alignment</td>
+                </tr>
+                <tr className="border-b">
+                  <td className="py-2 pr-2 font-medium text-foreground">Bear Volatile</td>
+                  <td className="py-2 pr-2">Quantitative</td>
+                  <td className="py-2">Short Breakout, Risk Compression, Reversal Momentum</td>
+                </tr>
+                <tr className="border-b">
+                  <td className="py-2 pr-2 font-medium text-foreground">Low Vol Chop</td>
+                  <td className="py-2 pr-2">Hybrid / Pattern</td>
+                  <td className="py-2">Range Trade, Pullback Fade, Scalp Compression</td>
+                </tr>
+                <tr className="border-b">
+                  <td className="py-2 pr-2 font-medium text-foreground">High Vol Impulse</td>
+                  <td className="py-2 pr-2">Quantitative</td>
+                  <td className="py-2">Impulse Ride, Volatility Expansion, ADX Flow</td>
+                </tr>
+                <tr>
+                  <td className="py-2 pr-2 font-medium text-foreground">Transition</td>
+                  <td className="py-2 pr-2">Hybrid</td>
+                  <td className="py-2">Adaptive Flow, Liquidity Trap</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        
+        <Separator />
+        
+        <div>
+          <h4 className="text-sm font-semibold mb-3">Signal Types & Strategies</h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-2 pr-4 font-medium">Signal Type</th>
+                  <th className="text-left py-2 pr-4 font-medium">Strategies</th>
+                  <th className="text-left py-2 font-medium">When to Use</th>
+                </tr>
+              </thead>
+              <tbody className="text-muted-foreground">
+                <tr className="border-b">
+                  <td className="py-2 pr-4 font-medium text-foreground">Quantitative</td>
+                  <td className="py-2 pr-4">Trend Breakout, Momentum Continuation, Mean Reversion</td>
+                  <td className="py-2">When the system identifies strong directional data or mean reversion signals.</td>
+                </tr>
+                <tr className="border-b">
+                  <td className="py-2 pr-4 font-medium text-foreground">Hybrid</td>
+                  <td className="py-2 pr-4">Adaptive Flow, Pivot Shift, Liquidity Trap</td>
+                  <td className="py-2">Combines algorithmic signals with price structure for confirmation.</td>
+                </tr>
+                <tr>
+                  <td className="py-2 pr-4 font-medium text-foreground">Pattern</td>
+                  <td className="py-2 pr-4">Morning Star, Evening Star, Doji Reversal, Pin Bar</td>
+                  <td className="py-2">When price action patterns appear on charts, often confirming reversals.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -400,7 +599,7 @@ export default function AnalyticsPage() {
         </div>
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 max-w-lg">
+          <TabsList className="grid w-full grid-cols-4 max-w-2xl">
             <TabsTrigger value="overview" className="flex items-center gap-2">
               <Activity className="w-4 h-4" />
               Overview
@@ -411,7 +610,11 @@ export default function AnalyticsPage() {
             </TabsTrigger>
             <TabsTrigger value="activities" className="flex items-center gap-2">
               <BarChart3 className="w-4 h-4" />
-              Trading & Market Events
+              Events
+            </TabsTrigger>
+            <TabsTrigger value="benchmark" className="flex items-center gap-2">
+              <Star className="w-4 h-4 text-yellow-500" />
+              Benchmark List
             </TabsTrigger>
           </TabsList>
           
@@ -425,6 +628,10 @@ export default function AnalyticsPage() {
           
           <TabsContent value="activities" className="mt-6">
             <TradingActivitiesSection feedData={narrativeData} isLoading={narrativeLoading} />
+          </TabsContent>
+          
+          <TabsContent value="benchmark" className="mt-6">
+            <BenchmarkList />
           </TabsContent>
         </Tabs>
       </div>

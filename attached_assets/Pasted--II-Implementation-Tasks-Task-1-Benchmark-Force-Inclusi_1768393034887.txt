@@ -1,0 +1,191 @@
+🔩 II. Implementation Tasks
+Task 1 — Benchmark Force-Inclusion and Rotational Telemetry Freedom
+
+Goal:
+Ensure that benchmark pairs (BTC, ETH, SOL, and major stablecoins) are always included in each scan batch, and confirm that the rotational pool does not depend on telemetry presence.
+
+Files: /server/services/adaptive-scan-manager.ts, /server/services/fx5-scanner.ts
+
+// Canonical Benchmark List
+const BENCHMARK_SYMBOLS = [
+  'BTC/USD', 'BTC/USDT',
+  'ETH/USD', 'ETH/USDT',
+  'SOL/USD', 'SOL/USDT',
+  'USDT/USD', 'USDC/USD', 'DAI/USD'
+];
+
+// Rotational pool: Telemetry independence enforced
+const eligiblePairs = allPairs; // No telemetry gating
+
+// Deterministic rotation (100-pair slices)
+const candidates = allPairs.slice(rotationIndex, rotationIndex + 100);
+rotationIndex = (rotationIndex + 100) % allPairs.length;
+
+// Always inject benchmark pairs
+const benchmarkPairs = allPairs.filter(p => BENCHMARK_SYMBOLS.includes(p.symbol));
+candidates.push(...benchmarkPairs);
+logger.info(`[11.4H.5][Benchmark] Injected ${benchmarkPairs.length} benchmark pairs`);
+
+
+✅ Outcome:
+
+Telemetry-free pairs can enter rotational scans.
+
+BTC, ETH, and SOL always appear in scan batches and accumulate telemetry.
+
+Task 2 — Institutional Math Filters Full Activation
+
+Goal:
+Ensure the Institutional Math Filters both calculate and apply metrics for every scanned pair, regardless of trading state.
+
+Files: /server/services/fx5-scanner.ts, /server/core/metrics/institutional-math.ts
+
+2A. Calculation Layer
+// Always calculate institutional math metrics for each pair
+const imfMetrics = computeInstitutionalMath(pair.marketData);
+pair.imfMetrics = imfMetrics;
+storeTelemetry(pair.symbol, { ...pair.telemetry, imf: imfMetrics });
+
+2B. Application Layer
+// Filters active for all scans
+const passedStandard = applyStandardFilters(pair);
+const passedInstitutional = applyInstitutionalMathFilters(pair);
+
+pair.isFiltered = passedStandard && passedInstitutional;
+
+
+✅ Outcome:
+IMF metrics populate telemetry and influence scoring in both live and paper modes, for both active and passive trading.
+
+Task 3 — Market Event Intelligence (Global Regime & Friction Transitions)
+
+Goal:
+Create system-generated “market events” when Global Regime or Global Friction shifts categories (e.g., from Bull Stable → Low Vol Chop, or from Moderate → High Liquidity).
+
+Files: /server/services/market-indicators.ts, /server/utils/market-events.ts
+
+if (prevGlobalRegime !== newGlobalRegime) {
+  logMarketEvent({
+    type: 'REGIME_TRANSITION',
+    message: `Global regime changed from ${prevGlobalRegime} to ${newGlobalRegime}`,
+    explanation: explainRegimeChange(prevGlobalRegime, newGlobalRegime)
+  });
+}
+
+if (prevFrictionBand !== newFrictionBand) {
+  logMarketEvent({
+    type: 'FRICTION_TRANSITION',
+    message: `Global friction moved from ${prevFrictionBand} to ${newFrictionBand}`,
+    explanation: explainFrictionChange(prevFrictionBand, newFrictionBand)
+  });
+}
+
+
+These events appear under the Trading & Market Events tab in the UI.
+
+✅ Outcome:
+Users are notified of meaningful global market shifts, not small fluctuations.
+
+Task 4 — Overview Tab Strategy/Signal Mapping Update
+
+Goal:
+Link the Overview tab’s “Favored Signal Types” and “Favored Strategies” dynamically to the current Global Regime using the canonical regime-strategy mapping table.
+
+✅ Outcome:
+These lists now update live, showing which strategies and signals perform best in the current environment.
+
+Task 5 — Comprehensive Definitions & Mapping Reference
+
+Goal:
+Provide a clear, beginner-friendly reference section below the Overview content.
+
+File: /client/src/components/analytics/overview.tsx
+
+Add a collapsible or scrollable section titled “Definitions & Mapping Reference.”
+
+5A. Global Metric Definitions
+Metric	Simple Explanation
+Global Regime	This tells you what kind of overall market environment we’re in — for example, trending upward (bull), downward (bear), flat, or changing. It helps you understand how most markets are behaving.
+Global Friction	This shows how easy or difficult it is to trade across the markets. A low score means trades can happen quickly and cheaply. A high score means trading is slower or more expensive.
+5B. Regime Types
+Regime	Meaning in Simple Terms
+Bull Stable	Markets are trending upward steadily. Buyers are in control, and momentum strategies work best.
+Bear Volatile	Markets are dropping sharply or swinging wildly. It’s better to be cautious or trade short setups.
+Low Vol Chop	Prices move sideways without clear direction. Range trading works best here.
+High Vol Impulse	Prices move very fast and sharply. Short-term breakout and scalp trades work well.
+Transition	The market is changing direction or finding a new trend. Keep trades small and flexible.
+5C. Friction Types
+Friction Type	Meaning in Simple Terms
+High Liquidity / Low Cost (0–20)	Trades are cheap and fast. Ideal environment.
+Moderate Liquidity (21–50)	Trading is normal and smooth.
+Limited Liquidity (51–80)	Fewer buyers and sellers; trades take longer or move prices.
+High Cost / Frozen (81–100)	Markets are expensive or paused. Best to wait.
+5D. Canonical Regime → Strategy Mapping
+Regime	Signal Type	Metrics (Typical)	Best Strategies
+Bull Stable	Quantitative / Hybrid	ADX > 25, Vol < 0.02	Trend Breakout · Momentum Continuation · EMA Alignment
+Bear Volatile	Quantitative	ADX > 30, Vol > 0.03	Short Breakout · Risk Compression · Reversal Momentum
+Low Vol Chop	Hybrid / Pattern	ADX < 20, Vol < 0.015	Range Trade · Pullback Fade · Scalp Compression
+High Vol Impulse	Quantitative	Vol > 0.04	Impulse Ride · Volatility Expansion · ADX Flow
+Transition	Hybrid	Mixed	Adaptive Flow · Liquidity Trap
+5E. Strategy & Pattern Lists
+Signal Type	Strategies	When to Use
+Quantitative	Trend Breakout, Momentum Continuation, Mean Reversion	When the system identifies strong directional data or mean reversion signals.
+Hybrid	Adaptive Flow, Pivot Shift, Liquidity Trap	Combines algorithmic signals with price structure for confirmation.
+Pattern	Morning Star, Evening Star, Doji Reversal, Pin Bar	When price action patterns appear on charts, often confirming reversals.
+
+✅ Fix:
+If a pattern strategy like Morning Star is selected, both the “Strategy” and “Pattern” fields must display Morning Star.
+
+Task 6 — Benchmark List Tab
+
+Goal:
+Add a new tab to the Analytics & Diagnostics section titled “Benchmark List.”
+
+Placement:
+It appears as the final tab, after “Trading & Market Events.”
+
+Content:
+Displays only benchmark pairs (BTC, ETH, SOL, and stablecoins) that are included in the Ideal Pool.
+
+Implementation Summary:
+
+Create new component: /client/src/components/analytics/benchmark-list.tsx
+
+Fetch pairs from /api/pairs?filter=benchmark
+
+Display the same columns as Top Scanned Pairs.
+
+✅ Outcome:
+Users can view benchmark pairs as a subset of the Ideal Pool for transparency.
+
+Task 7 — Entropy Diagnostic Hooks
+
+Ensure /api/system/entropy endpoint exists and provides real-time entropy values of regime distributions, confirming market diversity.
+
+✅ Allows monitoring of systemic bias or overconcentration.
+
+🧪 III. Verification Checklist
+Checkpoint	Expected Outcome
+BTC/ETH/SOL	Always visible in scans and benchmark tab.
+Rotational Pool	No telemetry gating.
+Institutional Math Filters	Active and calculating for all pairs.
+Market Events	Regime/friction transitions logged correctly.
+Overview Definitions	Simple, beginner-friendly explanations visible.
+Morning Star Fix	Pattern and strategy both display correctly.
+Benchmark List Tab	Appears after “Trading & Market Events.”
+Entropy API	Returns live entropy.
+🚀 IV. Outcome
+
+Directive 11.4H.5 completes the 11.4H branch with:
+
+✅ Fully inclusive benchmark logic
+
+✅ Always-active institutional math filters
+
+✅ Market condition change events
+
+✅ Beginner-friendly educational references
+
+✅ Canonical mapping integrated directly in the UI
+
+✅ Rotational pool freed from telemetry restrictions

@@ -21,6 +21,7 @@
 import { SCANNER_PARAMS } from '../config/system-guards.js';
 import { getTelemetryAggregator, TelemetryAggregatorService, type PoolType } from './telemetry-aggregator.js';
 import { adaptiveRatioManager, type AdaptiveRatio } from './adaptive-ratio-manager.js';
+import { BENCHMARK_SYMBOLS, isBenchmarkSymbol } from './fx5-scanner.js';
 
 export interface FailedPairEntry {
   symbol: string;
@@ -32,6 +33,7 @@ export interface FailedPairEntry {
 export interface AdaptiveScanBatch {
   idealPairs: string[];
   rotationalPairs: string[];
+  benchmarkPairs: string[]; // Directive 11.4H.5: Track injected benchmark pairs
   excludedPairs: string[];
   totalBatch: string[];
   timestamp: number;
@@ -230,10 +232,22 @@ export class AdaptiveScanManager {
     console.log(`[RotationAudit] Source: ${rotationSource} | allAvailablePairs: ${allAvailablePairs.length} | rotationalCandidates: ${rotationalPairs.length}`);
     console.log(`[RotationAudit] First 10 rotational: ${rotationalPairs.slice(0, 10).join(', ')}`);
     
-    // Combine and filter out failed pairs
-    const combined = [...idealPairs, ...rotationalPairs];
-    const excludedPairs = combined.filter(p => this.failureTracker.isInCooldown(p));
-    const filteredBatch = this.failureTracker.filterFailedPairs(combined);
+    // Directive 11.4H.5 Task 1: Benchmark Force-Inclusion
+    // Always inject benchmark pairs regardless of telemetry scores
+    const benchmarkPairs = allAvailablePairs.filter(p => isBenchmarkSymbol(p));
+    const injectedBenchmarks = benchmarkPairs.filter(p => 
+      !idealPairs.includes(p) && !rotationalPairs.includes(p)
+    );
+    
+    if (injectedBenchmarks.length > 0) {
+      console.log(`[11.4H.5][Benchmark] Injected ${injectedBenchmarks.length} benchmark pairs: ${injectedBenchmarks.slice(0, 5).join(', ')}${injectedBenchmarks.length > 5 ? '...' : ''}`);
+    }
+    
+    // Combine and filter out failed pairs (benchmarks included)
+    const combined = [...idealPairs, ...rotationalPairs, ...injectedBenchmarks];
+    const uniqueCombined = [...new Set(combined)]; // Deduplicate
+    const excludedPairs = uniqueCombined.filter(p => this.failureTracker.isInCooldown(p));
+    const filteredBatch = this.failureTracker.filterFailedPairs(uniqueCombined);
     
     // Directive 11.4C-R2: Initialization guard - retry if batch is underfilled
     if (filteredBatch.length < batchSize && retryAttempt < MAX_RETRIES) {
@@ -243,9 +257,11 @@ export class AdaptiveScanManager {
     }
     
     // Create batch result with ratio tracking (11.2 R1)
+    // Directive 11.4H.5: Include benchmark pairs in batch for tracking
     const batch: AdaptiveScanBatch = {
       idealPairs: idealPairs.filter(p => !this.failureTracker.isInCooldown(p)),
       rotationalPairs: rotationalPairs.filter(p => !this.failureTracker.isInCooldown(p)),
+      benchmarkPairs: injectedBenchmarks.filter(p => !this.failureTracker.isInCooldown(p)),
       excludedPairs,
       totalBatch: filteredBatch,
       timestamp: Date.now(),

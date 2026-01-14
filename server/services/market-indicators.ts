@@ -19,6 +19,7 @@ import { computeMarketFriction, describeFriction, type FrictionStatus } from '..
 import { getCostMetrics as getCacheMetrics, getCacheSize } from '../core/cache/cost-cache.js';
 import { activeFilterPool } from './active-filter-pool.js';
 import { getTelemetryAggregator } from './telemetry-aggregator.js';
+import { checkRegimeTransition, checkFrictionTransition } from '../utils/market-events.js';
 
 export interface RegimeInfo {
   name: MarketRegime;
@@ -248,6 +249,10 @@ export function getMarketIndicators(): MarketIndicators {
   const frictionStatus = describeFriction(frictionScore);
   
   console.log(`[11.4H.4A-Fix][MarketIndicators] regime=${effectiveRegime} score=${effectiveRegimeScore} percentage=${effectivePercentage}%`);
+  
+  // Directive 11.4H.5 Task 3: Check for market event transitions
+  checkRegimeTransition(effectiveRegime);
+  checkFrictionTransition(frictionStatus.status);
   
   return {
     marketRegime: effectiveRegime,

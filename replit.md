@@ -33,6 +33,17 @@ Strategy & Regime Harmonization unifies VTS and Signal Orchestrator onto a singl
 
 The trade lifecycle flows from `Signal Orchestrator` to `SQE` (FinalScore + RegimeWeight filtering), then to a `Ready-to-Buy Queue`. Signals are promoted by `TCL` (Trade Criteria Limiter), managed by `TEC` (Trade Execution Controller) for adaptive sizing and trailing exits, and finally proceed to `Order Management`. Diagnostic tooling is implemented for regime distribution, friction calibration, and Goals Engine normalization.
 
+## Recent Changes
+
+**Directive 11.4H.5 Implementation (January 2026):**
+- **Task 1 - Benchmark Force-Inclusion**: Modified `AdaptiveScanManager.getNextScanBatch()` to always inject benchmark pairs (BTC/ETH/SOL/stablecoins) into every scan batch, regardless of telemetry scores. Benchmark pairs now tracked separately in `AdaptiveScanBatch.benchmarkPairs`.
+- **Task 2 - Institutional Math Filters**: Already enabled via `INSTITUTIONAL_MATH_ENABLED: true` in `system-guards.ts`. LQ, VolNoise, and Correlation guards active for all pair scans.
+- **Task 3 - Market Event Intelligence**: Created `server/utils/market-events.ts` with `checkRegimeTransition()` and `checkFrictionTransition()` functions. Events logged when global regime or friction band changes. New `/api/market-events` endpoint returns transition history.
+- **Task 4 - Overview Strategy/Signal Mapping**: Already implemented - Overview tab dynamically displays `favoredSignalTypes` and `favoredStrategies` based on current regime from `market-indicators.ts`.
+- **Task 5 - Definitions & Mapping Reference UI**: Added collapsible `DefinitionsReference` component to Overview tab with beginner-friendly tables explaining Global Metric Definitions, Regime Types, Friction Types, Canonical Regime-Strategy Mapping, and Signal Types & Strategies.
+- **Task 6 - Benchmark List Tab**: Created `client/src/components/analytics/benchmark-list.tsx` component. Added new "Benchmark List" tab (4th tab) to Analytics page displaying BTC/ETH/SOL/stablecoin pairs from Ideal Pool.
+- **Task 7 - Entropy Diagnostic API**: New `/api/system/entropy` endpoint returns real-time Shannon entropy of regime distributions with normalized entropy score, regime distribution breakdown, and interpretation text.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed.
