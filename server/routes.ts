@@ -684,6 +684,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         rawPairs = rawPairs.filter(p => isBenchmarkSymbol(p.symbol));
       }
       
+      // Directive 11.4H.4A-Fix2: Get global dominant regime for UI consistency
+      // This ensures Top Scanned Pairs tab shows the SAME regime as Overview tab
+      const dominantRegime = telemetry.getDominantRegime();
+      
       // Directive 11.4C.3-C: Enforce canonical signalType mapping before transmission
       // Directive 11.4H.2: Add friction and benchmark data to response
       // Directive 11.4H.3: Include numeric frictionScore for UI display
@@ -703,7 +707,16 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         };
       });
       
-      res.json(pairs);
+      // Directive 11.4H.4A-Fix2: Return global regime with pairs for UI consistency
+      res.json({
+        pairs,
+        globalRegime: dominantRegime ? {
+          regime: dominantRegime.regime,
+          regimeScore: dominantRegime.avgRegimeScore,
+          pairCount: dominantRegime.pairCount,
+          percentage: dominantRegime.percentage
+        } : null
+      });
     } catch (error: any) {
       console.error('[11.4C-R2][M66] Error fetching ranked pairs:', error);
       res.status(500).json({ error: error.message });

@@ -127,12 +127,23 @@ function getFrictionBadgeClass(color: string): string {
   }
 }
 
+// Directive 11.4H.4A-Fix2: API response format with global regime
+interface RankedPairsResponse {
+  pairs: RankedPair[];
+  globalRegime: {
+    regime: string;
+    regimeScore: number;
+    pairCount: number;
+    percentage: number;
+  } | null;
+}
+
 export default function TopBatch() {
   const [componentLastUpdated, setComponentLastUpdated] = useState<Date | null>(null);
   const [sortField, setSortField] = useState<SortField>('rank');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
-  const { data, isLoading, error, refetch } = useQuery<RankedPair[]>({
+  const { data: responseData, isLoading, error, refetch } = useQuery<RankedPairsResponse>({
     queryKey: ['/api/pairs/ranked'],
     queryFn: async () => {
       const response = await fetch('/api/pairs/ranked?limit=100', {
@@ -147,11 +158,16 @@ export default function TopBatch() {
     refetchOnWindowFocus: true,
   });
 
+  // Directive 11.4H.4A-Fix2: Extract pairs array from response
+  const data = responseData?.pairs ?? [];
+  // Directive 11.4H.4A-Fix2: Use global regime from API for consistency with Overview tab
+  const globalRegime = responseData?.globalRegime;
+
   useEffect(() => {
-    if (data) {
+    if (responseData) {
       setComponentLastUpdated(new Date());
     }
-  }, [data]);
+  }, [responseData]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -162,9 +178,18 @@ export default function TopBatch() {
     }
   };
 
-  // Directive 11.4H.4A: Calculate dominant regime and average regime score from batch
-  // NOTE: All hooks must be called before conditional returns
+  // Directive 11.4H.4A-Fix2: Use global regime from API instead of calculating from batch
+  // This ensures consistency between Top Scanned Pairs and Overview tabs
   const dominantRegime = useMemo(() => {
+    if (globalRegime) {
+      return {
+        regime: globalRegime.regime,
+        count: globalRegime.pairCount,
+        percentage: globalRegime.percentage,
+        avgRegimeScore: globalRegime.regimeScore
+      };
+    }
+    // Fallback: Calculate from batch if globalRegime not available (backwards compatibility)
     if (!data || !data.length) return null;
     const regimeCounts: Record<string, { count: number; totalScore: number }> = {};
     data.forEach(p => {
@@ -173,7 +198,6 @@ export default function TopBatch() {
         regimeCounts[normalized] = { count: 0, totalScore: 0 };
       }
       regimeCounts[normalized].count += 1;
-      // Use dynamic regimeScore if available, otherwise fallback
       const score = p.regimeScore ?? REGIME_WEIGHTS_FALLBACK[normalized] ?? 50;
       regimeCounts[normalized].totalScore += score;
     });
@@ -182,10 +206,10 @@ export default function TopBatch() {
     const [regime, stats] = sorted[0];
     const avgRegimeScore = Math.round(stats.totalScore / stats.count);
     return { regime, count: stats.count, percentage: Math.round((stats.count / data.length) * 100), avgRegimeScore };
-  }, [data]);
+  }, [globalRegime, data]);
 
   const sortedPairs = useMemo(() => {
-    if (!data) return [];
+    if (!data || !data.length) return [];
     return [...data].sort((a, b) => {
       let comparison = 0;
       switch (sortField) {
