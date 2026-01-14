@@ -27,6 +27,7 @@ interface RankedPair {
   strategy: string;
   pattern: string;
   regime: string;
+  regimeScore?: number; // Directive 11.4H.4A: Dynamic 0-100 regime score
   source: 'simulation' | 'live';
   lastUpdated: string; // Directive 11.4C.3-B: ISO 8601 timestamp
   frictionScore?: number; // Directive 11.4H.2: Friction score
@@ -76,18 +77,22 @@ function normalizeRegime(regime: string): string {
   return ghostToCanonical[regime] ?? regime;
 }
 
-// Directive 11.4H.4: Regime weight scores for display
-const REGIME_WEIGHTS: Record<string, number> = {
-  BULL_STABLE: 0.85,
-  BEAR_VOLATILE: 0.40,
-  LOW_VOL_CHOP: 0.55,
-  HIGH_VOL_IMPULSE: 0.70,
-  TRANSITION: 0.50
+// Directive 11.4H.4A: Fallback static regime weights (used when dynamic score unavailable)
+const REGIME_WEIGHTS_FALLBACK: Record<string, number> = {
+  BULL_STABLE: 85,
+  BEAR_VOLATILE: 40,
+  LOW_VOL_CHOP: 55,
+  HIGH_VOL_IMPULSE: 70,
+  TRANSITION: 50
 };
 
-function getRegimeScore(regime: string): number {
+// Directive 11.4H.4A: Get regime score - prefer dynamic, fallback to static
+function getRegimeScoreDisplay(regimeScore: number | undefined, regime: string): number {
+  if (regimeScore !== undefined && regimeScore > 0) {
+    return Math.round(regimeScore);
+  }
   const normalized = normalizeRegime(regime);
-  return REGIME_WEIGHTS[normalized] ?? 0.50;
+  return REGIME_WEIGHTS_FALLBACK[normalized] ?? 50;
 }
 
 function getRegimeBadgeClass(regime: string): string {
@@ -157,19 +162,26 @@ export default function TopBatch() {
     }
   };
 
-  // Directive 11.4H.4: Calculate dominant regime from batch for global display
+  // Directive 11.4H.4A: Calculate dominant regime and average regime score from batch
   // NOTE: All hooks must be called before conditional returns
   const dominantRegime = useMemo(() => {
     if (!data || !data.length) return null;
-    const regimeCounts: Record<string, number> = {};
+    const regimeCounts: Record<string, { count: number; totalScore: number }> = {};
     data.forEach(p => {
       const normalized = normalizeRegime(p.regime);
-      regimeCounts[normalized] = (regimeCounts[normalized] || 0) + 1;
+      if (!regimeCounts[normalized]) {
+        regimeCounts[normalized] = { count: 0, totalScore: 0 };
+      }
+      regimeCounts[normalized].count += 1;
+      // Use dynamic regimeScore if available, otherwise fallback
+      const score = p.regimeScore ?? REGIME_WEIGHTS_FALLBACK[normalized] ?? 50;
+      regimeCounts[normalized].totalScore += score;
     });
-    const sorted = Object.entries(regimeCounts).sort((a, b) => b[1] - a[1]);
+    const sorted = Object.entries(regimeCounts).sort((a, b) => b[1].count - a[1].count);
     if (sorted.length === 0) return null;
-    const [regime, count] = sorted[0];
-    return { regime, count, percentage: Math.round((count / data.length) * 100) };
+    const [regime, stats] = sorted[0];
+    const avgRegimeScore = Math.round(stats.totalScore / stats.count);
+    return { regime, count: stats.count, percentage: Math.round((stats.count / data.length) * 100), avgRegimeScore };
   }, [data]);
 
   const sortedPairs = useMemo(() => {
@@ -260,7 +272,7 @@ export default function TopBatch() {
               <Target className="h-4 w-4 text-muted-foreground" />
               <span className="text-muted-foreground">Global Regime:</span>
               <Badge className={cn("text-xs", getRegimeBadgeClass(dominantRegime.regime))}>
-                {Math.round(getRegimeScore(dominantRegime.regime) * 100)} {dominantRegime.regime.replace(/_/g, ' ')}
+                {dominantRegime.avgRegimeScore ?? REGIME_WEIGHTS_FALLBACK[normalizeRegime(dominantRegime.regime)] ?? 50} {dominantRegime.regime.replace(/_/g, ' ')}
               </Badge>
               <span className="text-muted-foreground">({dominantRegime.percentage}% of batch)</span>
             </div>
@@ -315,7 +327,7 @@ export default function TopBatch() {
                   <td className="py-2 pr-4 text-muted-foreground">{pair.pattern}</td>
                   <td className="py-2 pr-4">
                     <Badge className={cn("text-xs", getRegimeBadgeClass(pair.regime))}>
-                      {Math.round(getRegimeScore(pair.regime) * 100)} {pair.regime.replace(/_/g, ' ')}
+                      {getRegimeScoreDisplay(pair.regimeScore, pair.regime)} {pair.regime.replace(/_/g, ' ')}
                     </Badge>
                   </td>
                   <td className="py-2 pr-4">

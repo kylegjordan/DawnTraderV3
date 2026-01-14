@@ -42,8 +42,9 @@ import {
   normalizeRegime,
   type CanonicalRegimeType
 } from '../config/canonical-regime-strategy-map.js';
-import { getCostMetrics } from '../core/cache/cost-cache.js';
+import { getCostMetrics, getOrSetCostMetrics } from '../core/cache/cost-cache.js';
 import { computeMarketFriction } from '../core/metrics/cost-metrics.js';
+import { toCanonical } from './utils/symbol-canonicalizer.js';
 
 export type PoolType = 'ideal' | 'rotational';
 
@@ -57,6 +58,7 @@ export interface PairTelemetry {
   finalScore: number;
   hybridScore: number;
   regimeWeight: number;
+  regimeScore?: number; // Directive 11.4H.4A: Dynamic 0-100 regime score
   predictiveConfidence: number;
   lastUpdated: number;
   lastUpdatedIso?: string; // Directive 11.4C.3-B: ISO 8601 timestamp for UI display
@@ -137,6 +139,7 @@ export class TelemetryAggregatorService {
       finalScore: number;
       hybridScore?: number;
       regimeWeight?: number;
+      regimeScore?: number; // Directive 11.4H.4A: Dynamic 0-100 regime score
       predictiveConfidence?: number;
       success?: boolean;
       decayedStrength?: number;
@@ -173,6 +176,7 @@ export class TelemetryAggregatorService {
       finalScore: data.finalScore,
       hybridScore: data.hybridScore ?? 0,
       regimeWeight: data.regimeWeight ?? 0,
+      regimeScore: data.regimeScore, // Directive 11.4H.4A: Store dynamic 0-100 regime score
       predictiveConfidence: data.predictiveConfidence ?? 0.5,
       lastUpdated: now,
       lastUpdatedIso: new Date(now).toISOString(), // Directive 11.4C.3-B: ISO 8601 timestamp
@@ -1060,12 +1064,18 @@ export class TelemetryAggregatorService {
         pattern = canonicalPattern ?? p.entry.pattern ?? '—';
       }
       
-      // Directive 11.4H.3: Compute friction from cost cache
-      const costMetrics = getCostMetrics(p.symbol);
-      let frictionScore = 50; // Default neutral value
-      if (costMetrics) {
-        frictionScore = computeMarketFriction(costMetrics.spread, costMetrics.slippage, costMetrics.fee);
+      // Directive 11.4H.4A Task 3: Friction synchronization with symbol normalization
+      // Try original symbol first, then canonical format, then fallback to defaults
+      let costMetrics = getCostMetrics(p.symbol);
+      if (!costMetrics) {
+        const canonicalSymbol = toCanonical(p.symbol);
+        if (canonicalSymbol !== p.symbol) {
+          costMetrics = getCostMetrics(canonicalSymbol);
+        }
       }
+      // Use getOrSetCostMetrics as final fallback (ensures non-null with defaults)
+      const finalCostMetrics = costMetrics ?? getOrSetCostMetrics(p.symbol);
+      const frictionScore = computeMarketFriction(finalCostMetrics.spread, finalCostMetrics.slippage, finalCostMetrics.fee);
       
       return {
         rank: index + 1,
@@ -1075,6 +1085,7 @@ export class TelemetryAggregatorService {
         strategy,
         pattern,
         regime: p.entry.pairRegime ?? this.currentRegime, // Directive 11.4C-R2: Use per-pair regime with fallback
+        regimeScore: p.entry.regimeScore, // Directive 11.4H.4A: Dynamic 0-100 regime score
         source: p.entry.source ?? 'simulation', // Directive 11.4C-R2: Default to simulation if not set
         lastUpdated: p.entry.lastUpdatedIso ?? new Date(p.entry.lastUpdated).toISOString(), // Directive 11.4C.3-B
         frictionScore, // Directive 11.4H.3: Friction from cost cache

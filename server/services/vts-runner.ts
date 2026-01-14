@@ -40,7 +40,7 @@ import { computeExposureBias, getExposureMultiplierSync } from '../utils/strateg
 import { getCachedCostMetrics, computeNetGeometry } from '../core/math/cost-model.js';
 import { compareLatestSessions, savePaperSessionTrades, getPaperSessionTrades } from './vts-live-comparison-audit.js';
 import { SCORE_WEIGHTS } from '../config/score-weights.config.js';
-import { calculatePairRegime, getRegimeWeight } from '../core/metrics/market-regime.js';
+import { calculatePairRegime, getRegimeWeight, calculateRegimeScore } from '../core/metrics/market-regime.js';
 import { 
   CANONICAL_REGIME_STRATEGY_MAP as REGIME_STRATEGY_MAP, 
   selectContextAwareStrategy,
@@ -118,6 +118,7 @@ async function loadVTSConfig(): Promise<VTSConfig> {
 interface Phase10TradeRecord {
   symbol: string;
   regime: MarketRegimeType;
+  regimeScore?: number; // Directive 11.4H.4A: Dynamic 0-100 score for telemetry
   signalType: CanonicalSignalType;
   strategy: string;
   patternType?: PatternType | null;
@@ -314,7 +315,12 @@ async function generatePhase10Signal(
   
   const hybridScore = simulateHybridScore(regime);
   const predictiveConfidence = simulatePredictiveConfidence(regime, hybridScore);
-  const regimeWeight = getRegimeWeight(regime);
+  // Directive 11.4H.4A Task 1: Use dynamic regime scoring based on ADX + volatility
+  const regimeScoreRaw = calculateRegimeScore(regime, {
+    adx: regimeResult.adx,
+    volatility: regimeResult.volatility
+  });
+  const regimeWeight = regimeScoreRaw / 100; // Normalize to 0-1 range for finalScore calculation
   const decayPenalty = simulateDecayPenalty();
   
   const finalScore = computeFinalScore(hybridScore, predictiveConfidence, regimeWeight, decayPenalty);
@@ -353,6 +359,7 @@ async function generatePhase10Signal(
     expectedEdge: finalScore * dynamicTarget - frictionCost,
     frictionCost, // M50: Schema parity with VirtualTrade
     regime,
+    regimeScore: regimeScoreRaw, // Directive 11.4H.4A: Raw 0-100 score for UI display
     pool,
     source: 'simulation', // M50/M53: VTS-generated signals marked as simulation
   };
@@ -360,6 +367,7 @@ async function generatePhase10Signal(
   const tradeRecord: Phase10TradeRecord = {
     symbol,
     regime,
+    regimeScore: regimeScoreRaw, // Directive 11.4H.4A: Raw 0-100 score for telemetry
     signalType,
     strategy,
     patternType, // Directive 11.4C.3: Attached pattern for telemetry
@@ -538,6 +546,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         finalScore: tradeRecord.finalScore,
         hybridScore: tradeRecord.hybridScore,
         regimeWeight: tradeRecord.regimeWeight,
+        regimeScore: tradeRecord.regimeScore, // Directive 11.4H.4A: Dynamic 0-100 score
         predictiveConfidence: tradeRecord.predictiveConfidence,
         success: (tradeRecord.profit ?? 0) > 0,
         pool: pair.pool,

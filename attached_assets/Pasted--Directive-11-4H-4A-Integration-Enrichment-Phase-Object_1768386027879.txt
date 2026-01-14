@@ -1,0 +1,245 @@
+⚙️ Directive 11.4H.4A — Integration & Enrichment
+
+Phase Objective:
+Integrate dynamic regime scoring into the runtime and UI layers, resolve friction cache–telemetry synchronization, remove telemetry gating from the rotational pool, and enable hybrid institutional filter logic.
+Restore the Global Regime Score at the Top Batch header.
+
+🧭 Overview
+
+Directive 11.4H.4 successfully introduced dynamic regime and friction logic, deterministic rotation, and benchmark bypass structure.
+However, post-implementation analysis (via Replit and Gemini) revealed that while the functions exist, they are not yet wired into the active data flow.
+
+Symptoms Identified
+
+Regime scores remain quantized (40, 50, 55, 70, 85) — static constants still used.
+
+Approximately 50% of pairs default to friction = 50 (cache miss or telemetry mismatch).
+
+Rotational pool still telemetry-gated — preventing cold-start pair discovery.
+
+Institutional filters are not yet active in passive simulations.
+
+Global regime header displays only the regime name (“Low Volatility Chop”), missing its numeric score (previously shown).
+
+This directive resolves all five.
+
+🔩 I. Implementation Tasks
+Task 1 — Integrate Dynamic Regime Scoring into the Active Pipeline
+
+Goal:
+Use the live dynamic formula (calculateRegimeScore) instead of static constants everywhere regime scores are referenced.
+
+1A. Backend Integration
+
+File: /server/services/vts-runner.ts
+Current:
+
+const regimeWeight = getRegimeWeight(pair.regime);
+
+
+Replace with:
+
+import { calculateRegimeScore } from "../core/metrics/market-regime";
+
+const regimeWeight = calculateRegimeScore(pair.regime, {
+  adx: pair.metrics?.adx ?? 0,
+  volatility: pair.metrics?.volatility ?? 0
+});
+
+pair.regimeScore = regimeWeight;
+
+
+✅ Ensures all regime scores (pair-level and global-level) are computed dynamically based on real market conditions.
+
+1B. API Propagation
+
+File: /server/routes.ts
+Expose the computed regime score in the rankedPairs and globalIndicators responses:
+
+res.json({
+   ...pair,
+   regimeScore: pair.regimeScore,
+});
+
+
+✅ The frontend will now receive dynamic regimeScore values in each response.
+
+1C. Frontend Integration
+
+File: /client/src/components/trading/top-batch.tsx
+
+Remove:
+Static constants:
+
+const REGIME_WEIGHTS = { ... };
+
+
+Use Dynamic Data:
+
+{pair.regimeScore
+  ? `${pair.regimeScore.toFixed(1)} ${pair.regime}`
+  : pair.regime}
+
+
+✅ This replaces the static mapping with the actual dynamic score from the backend.
+
+Task 2 — Restore and Display Global Regime Score
+
+Goal:
+Re-enable global regime scoring display at the top of the Top Batch page.
+
+2A. Backend Support
+
+Ensure the globalRegime object in /server/services/telemetry-aggregator.ts includes its score:
+
+const globalRegimeScore = calculateRegimeScore(globalRegimeName, {
+  adx: globalADX,
+  volatility: globalVolatility,
+});
+
+return {
+   name: globalRegimeName,
+   score: globalRegimeScore,
+};
+
+2B. Frontend Display
+
+File: /client/src/components/trading/top-batch.tsx
+At the header area (Global Regime:):
+
+<span className="text-md font-semibold">
+  Global Regime: {globalRegime.score?.toFixed(1) ?? '--'} {globalRegime.name}
+</span>
+
+
+✅ The Top Batch header now shows both numeric and textual regime classification again (e.g.
+Global Regime: 55 Low Volatility Chop).
+
+Task 3 — Friction Synchronization (Telemetry ↔ Cost Cache)
+
+Goal:
+Eliminate default “50 Moderate Liquidity” values by aligning cache and telemetry data at write time.
+
+3A. Symbol Normalization
+
+File: /server/services/telemetry-aggregator.ts
+Before cost retrieval:
+
+const normSymbol = pair.symbol.replace("/", "");
+const costMetrics = getCostMetrics(normSymbol) || getCostMetrics(pair.symbol);
+
+3B. Compute Friction at Write Time
+
+File: /server/services/fx5-scanner.ts
+
+const metrics = computeCostMetrics(pair);
+pairTelemetry.set(pair.symbol, {
+  ...pairTelemetry.get(pair.symbol),
+  frictionScore: metrics.frictionScore,
+});
+
+
+✅ Stores friction alongside telemetry, ensuring synchronized data reads.
+
+3C. Fallback Enrichment
+
+If cache or telemetry returns null:
+
+if (!frictionScore || frictionScore === 50) {
+  const spread = await computeBidAskSpread(pair.symbol);
+  frictionScore = spread ? normalizeSpread(spread) : 100;
+}
+
+
+✅ Guarantees a friction score for all pairs; missing data defaults to 100 (“Data Error / High Cost”) instead of 50.
+
+Task 4 — Remove Telemetry Requirement from Rotational Pool
+
+Goal:
+Allow rotational pool scans to include pairs with no prior telemetry (for cold start discovery).
+
+File: /server/services/adaptive-scan-manager.ts
+Change:
+
+// Before
+const eligiblePairs = allPairs.filter(p => p.hasTelemetry);
+
+// After
+const eligiblePairs = allPairs; // Allow telemetry-free pairs
+
+
+✅ Ensures every pair in Kraken’s universe will eventually accumulate telemetry data and participate in the ideal pool rotation.
+
+Task 5 — Enable Institutional Math Filters in Passive Mode
+
+Goal:
+Run both the standard and institutional filters simultaneously during passive mode and live simulations.
+
+File: /server/services/fx5-scanner.ts
+
+const standardPassed = applyStandardFilters(pair);
+const institutionalPassed = applyInstitutionalMathFilters(pair);
+
+pair.isFiltered = standardPassed && institutionalPassed;
+
+
+Add Mode Condition:
+
+const useInstitutionalFilters = (mode === 'passive' || mode === 'live');
+
+
+✅ Passive simulations now mirror production filter logic, ensuring full analytical parity.
+
+🧪 II. Verification Steps
+Checkpoint	Expected Outcome	Verification Method
+Regime Scores (Pair-Level)	Continuous (e.g., 82.7, 91.2) instead of multiples of 5	Check Top Batch UI & /rankedPairs API
+Global Regime Header	Shows numeric score (e.g., “55 Low Volatility Chop”)	Verify Top Batch header
+Friction Distribution	Diverse scores (10–90 typical, 100 for missing data)	Verify Analytics → Friction Audit
+Rotational Pool Coverage	Includes telemetry-free pairs	Check [Rotational] cold start logs
+Institutional Filters	Both active in passive mode	Check [FilterChain] standard+institutional logs
+Entropy Stability	Entropy 0.3–0.7 range	Confirm via entropy audit logs
+🧱 III. Structural Safety Checks
+
+calculateRegimeScore inputs (ADX, volatility) must never be undefined; fallback to zero.
+
+Cache TTL remains 300s, but friction computed at telemetry write guarantees continuity.
+
+Benchmark pairs remain excluded from filters in passive-learning mode per 11.4H.4.
+
+Default behavior: If mode detection fails, filters = ON (safety-first policy).
+
+🧠 IV. Post-Deployment Monitoring
+Metric	Expected Trend	Log Identifier
+Regime entropy	Gradually increasing to 0.5 average	[EntropyCalc]
+Friction sample coverage	~100 pairs per cycle	[GlobalFriction][Audit] sample=
+Rotational cold-start count	Decreasing over 24h	[Rotational][ColdStart]
+Regime distribution	Non-monotonic, adaptive	[RegimeScore]
+🚀 Outcome
+
+Directive 11.4H.4A transforms the system from “implemented but disconnected” into a fully integrated, telemetry-complete adaptive trading simulator.
+
+✅ Expected Improvements:
+
+Regime scores now fluctuate with market data.
+
+Friction data fully synchronized, no false 50s.
+
+All Kraken pairs gradually accumulate telemetry.
+
+Passive mode mirrors institutional-grade analysis.
+
+Global regime header restored (score + name).
+
+🧩 Directive Summary Table
+Task	Title	Description	Status Goal
+1	Dynamic Regime Integration	Connect backend + frontend to live regime scoring	🟩
+2	Global Regime Display	Restore numeric regime score at header	🟩
+3	Friction Sync	Align cache + telemetry	🟩
+4	Rotational Telemetry Liberation	Allow cold-start scanning	🟩
+5	Institutional Filter Enablement	Run hybrid filters in passive + live modes	🟩
+
+Directive Reference:
+11.4H.4A — Integration & Enrichment
+Effective: January 14, 2026
+Predecessor: Directive 11.4H.4 — Friction Stabilization, Rotation & Logic Repairs
+Successor (planned): 11.4H.5 — Persistence & Real-Time Entropy API

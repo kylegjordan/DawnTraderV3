@@ -59,6 +59,7 @@ export interface VirtualSignal {
   expectedEdge: number;
   frictionCost: number; // M50: Added for schema parity
   regime: string;
+  regimeScore?: number; // Directive 11.4H.4A: Dynamic 0-100 score for UI display
   pool: 'ideal' | 'rotational';
   source: 'simulation' | 'live'; // M50: Added for source tracking
   
