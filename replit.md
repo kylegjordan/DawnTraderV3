@@ -65,6 +65,13 @@ Diagnostic tooling is implemented for regime distribution, friction calibration,
 - **Task 4 - Dynamic Regime Scoring**: New `calculateRegimeScore()` function in `market-regime.ts` computes scores dynamically from ADX + volatility metrics. Scores fluctuate with market strength (50-100 range for strong trends) instead of static weights.
 - **Task 5 - Passive Mode Filter Policy**: Benchmark pairs (BTC/ETH/SOL) bypass filters ONLY in passive learning mode for correlation tracking. Safe default: on context failure, filters apply to ALL pairs. Implementation: `passiveLearning` flag passed from FX5 scanner to `collectAdaptiveBatch`, with engine state checked before batch scan.
 
+**Directive 11.4H.4A Implementation (January 2026):**
+- **Task 1 - Dynamic Regime Scoring Integration**: VTS now calls `calculateRegimeScore()` with ADX/volatility metrics from `regimeResult`. Dynamic `regimeScore` (0-100) stored in VirtualSignal, Phase10TradeRecord, and PairTelemetry interfaces. Score propagates through telemetry aggregator to ranked pairs API and frontend display.
+- **Task 2 - Global Regime Score Display**: Frontend `top-batch.tsx` computes `avgRegimeScore` from batch pairs. Displays dynamic regimeScore when available, falls back to `REGIME_WEIGHTS_FALLBACK` for legacy data without dynamic scores.
+- **Task 3 - Friction Synchronization**: Added `toCanonical` symbol normalization in `telemetry-aggregator.ts`. `getRankedPairs` tries original symbol, then canonical format, then uses `getOrSetCostMetrics` as fallback. Ensures friction data matches across different symbol formats.
+- **Task 4 - Rotational Pool Cold-Start**: Confirmed already implemented - `getRotationalPairsWithPool` includes pairs with no telemetry entries for cold-start discovery.
+- **Task 5 - Institutional Math Filters in Passive Mode**: Confirmed already implemented - `FILTER_FLAGS.INSTITUTIONAL_MATH_ENABLED = true` applies in both passive and live modes.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed.
