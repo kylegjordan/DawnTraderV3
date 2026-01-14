@@ -17,6 +17,8 @@ interface MarketIndicatorsData {
     marketRegime: string;
     regimeTitle: string;
     regimeDescription: string;
+    regimeScore: number; // Directive 11.4H.4A-Fix: Dynamic 0-100 regime score
+    regimePercentage: number; // Directive 11.4H.4A-Fix: Percentage of pairs in this regime
     favoredSignalTypes: string[];
     favoredStrategies: string[];
     globalFrictionScore: number;
@@ -131,8 +133,12 @@ function FrozenHeader({ indicators, isLoading }: { indicators: MarketIndicatorsD
           <div className="flex items-center gap-2">
             {getRegimeIcon(data.marketRegime)}
             <Badge variant="outline" className={`font-semibold ${getRegimeBadgeColor(data.marketRegime)}`}>
+              <span className="font-mono mr-1">{data.regimeScore ?? 50}</span>
               {data.regimeTitle || data.marketRegime.replace(/_/g, ' ')}
             </Badge>
+            {data.regimePercentage > 0 && (
+              <span className="text-xs text-muted-foreground">({data.regimePercentage}% of pairs)</span>
+            )}
           </div>
           
           <Separator orientation="vertical" className="h-6" />
@@ -183,10 +189,14 @@ function MarketOverviewSection({ indicators }: { indicators: MarketIndicatorsDat
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-2">
+                <span className="font-mono font-bold text-xl">{data.regimeScore ?? 50}</span>
                 <p className="font-semibold text-lg">{data.regimeTitle || data.marketRegime.replace(/_/g, ' ')}</p>
                 <Badge variant="outline" className={`text-xs ${getRegimeBadgeColor(data.marketRegime)}`}>
                   Active
                 </Badge>
+                {data.regimePercentage > 0 && (
+                  <span className="text-xs text-muted-foreground">({data.regimePercentage}% of pairs)</span>
+                )}
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
                 {data.regimeDescription}
@@ -273,7 +283,7 @@ function TradingActivitiesSection({ feedData, isLoading }: { feedData: Narrative
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Activity className="w-5 h-5" />
-            Trading Activities
+            Trading & Market Events
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -300,7 +310,7 @@ function TradingActivitiesSection({ feedData, isLoading }: { feedData: Narrative
           <div>
             <CardTitle className="flex items-center gap-2">
               <Activity className="w-5 h-5" />
-              Trading Activities
+              Trading & Market Events
             </CardTitle>
             <CardDescription>
               {stats?.total || 0} events logged (7-day retention)
@@ -390,18 +400,18 @@ export default function AnalyticsPage() {
         </div>
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 max-w-md">
+          <TabsList className="grid w-full grid-cols-3 max-w-lg">
             <TabsTrigger value="overview" className="flex items-center gap-2">
               <Activity className="w-4 h-4" />
               Overview
             </TabsTrigger>
             <TabsTrigger value="top-batch" className="flex items-center gap-2">
               <List className="w-4 h-4" />
-              Top Batch
+              Top Scanned Pairs
             </TabsTrigger>
             <TabsTrigger value="activities" className="flex items-center gap-2">
               <BarChart3 className="w-4 h-4" />
-              Activities
+              Trading & Market Events
             </TabsTrigger>
           </TabsList>
           

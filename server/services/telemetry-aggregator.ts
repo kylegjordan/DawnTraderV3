@@ -990,6 +990,51 @@ export class TelemetryAggregatorService {
   }
 
   /**
+   * Directive 11.4H.4A-Fix: Calculate dominant regime from current telemetry
+   * Returns the most common regime among active pairs with average regime score
+   * This replaces the stale static cache in market-indicators.ts
+   */
+  getDominantRegime(): { regime: MarketRegime; avgRegimeScore: number; pairCount: number; percentage: number } | null {
+    const now = Date.now();
+    const regimeCounts: Record<string, { count: number; totalScore: number }> = {};
+    let totalPairs = 0;
+    
+    for (const [, entries] of this.pairTelemetry.entries()) {
+      const recent = entries.filter(t => now - t.lastUpdated < this.historyWindowMs);
+      if (recent.length === 0) continue;
+      
+      const latest = recent[recent.length - 1];
+      const regime = latest.pairRegime ?? this.currentRegime;
+      
+      if (!regimeCounts[regime]) {
+        regimeCounts[regime] = { count: 0, totalScore: 0 };
+      }
+      regimeCounts[regime].count += 1;
+      regimeCounts[regime].totalScore += latest.regimeScore ?? 50;
+      totalPairs++;
+    }
+    
+    if (totalPairs === 0) {
+      return null;
+    }
+    
+    // Find dominant regime
+    const sorted = Object.entries(regimeCounts).sort((a, b) => b[1].count - a[1].count);
+    if (sorted.length === 0) return null;
+    
+    const [regime, stats] = sorted[0];
+    const avgRegimeScore = Math.round(stats.totalScore / stats.count);
+    const percentage = Math.round((stats.count / totalPairs) * 100);
+    
+    return {
+      regime: regime as MarketRegime,
+      avgRegimeScore,
+      pairCount: totalPairs,
+      percentage
+    };
+  }
+
+  /**
    * Get all pair statistics
    */
   getAllPairStats(): Map<string, { score: number; samples: number; lastUpdated: number }> {

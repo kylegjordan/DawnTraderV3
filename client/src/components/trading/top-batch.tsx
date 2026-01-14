@@ -214,7 +214,7 @@ export default function TopBatch() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5" />
-            Top Batch
+            Top Scanned Pairs
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -232,7 +232,7 @@ export default function TopBatch() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5" />
-            Top Batch
+            Top Scanned Pairs
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -250,7 +250,7 @@ export default function TopBatch() {
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5" />
-            Top Batch
+            Top Scanned Pairs
             <Badge variant="secondary" className="ml-2">{pairs.length} pairs</Badge>
           </CardTitle>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">

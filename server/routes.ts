@@ -7812,6 +7812,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           marketRegime: indicators.marketRegime,
           regimeTitle: indicators.regimeTitle,
           regimeDescription: indicators.regimeDescription,
+          regimeScore: indicators.regimeScore, // Directive 11.4H.4A-Fix: Dynamic 0-100 regime score
+          regimePercentage: indicators.regimePercentage, // Directive 11.4H.4A-Fix: Percentage of pairs
           favoredSignalTypes: indicators.favoredSignalTypes,
           favoredStrategies: indicators.favoredStrategies,
           globalFrictionScore: indicators.globalFrictionScore,

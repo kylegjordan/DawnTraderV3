@@ -18,6 +18,7 @@ import { type MarketRegime } from './dynamic-strategy-selector.js';
 import { computeMarketFriction, describeFriction, type FrictionStatus } from '../core/metrics/cost-metrics.js';
 import { getCostMetrics as getCacheMetrics, getCacheSize } from '../core/cache/cost-cache.js';
 import { activeFilterPool } from './active-filter-pool.js';
+import { getTelemetryAggregator } from './telemetry-aggregator.js';
 
 export interface RegimeInfo {
   name: MarketRegime;
@@ -36,6 +37,8 @@ export interface MarketIndicators {
   marketRegime: MarketRegime;
   regimeDescription: string;
   regimeTitle: string;
+  regimeScore: number; // Directive 11.4H.4A-Fix: Dynamic 0-100 regime score from telemetry
+  regimePercentage: number; // Directive 11.4H.4A-Fix: Percentage of pairs in this regime
   favoredSignalTypes: string[];
   favoredStrategies: string[];
   globalFrictionScore: number;
@@ -211,15 +214,47 @@ export function computeGlobalFriction(): number {
 }
 
 export function getMarketIndicators(): MarketIndicators {
-  const regimeKey = cachedGlobalRegime as string;
+  // Directive 11.4H.4A-Fix: Get dominant regime from live telemetry instead of stale cache
+  const telemetry = getTelemetryAggregator();
+  const dominantRegime = telemetry.getDominantRegime();
+  
+  // Map extended regime types to base MarketRegime (handle type differences)
+  const mapToBaseRegime = (regime: string): MarketRegime => {
+    const regimeMap: Record<string, MarketRegime> = {
+      'HIGH_VOL_IMPULSE': 'BULL_VOLATILE',
+      'TRANSITION': 'LOW_VOL_CHOP',
+      'HIGH_VOL_CHOP': 'BULL_VOLATILE',
+      'MIXED_TRANSITION': 'LOW_VOL_CHOP',
+    };
+    return (regimeMap[regime] ?? regime) as MarketRegime;
+  };
+  
+  // Use dynamic regime from telemetry if available, fallback to cached
+  const effectiveRegime: MarketRegime = dominantRegime 
+    ? mapToBaseRegime(dominantRegime.regime) 
+    : cachedGlobalRegime;
+  const effectiveRegimeScore = dominantRegime?.avgRegimeScore ?? 50;
+  const effectivePercentage = dominantRegime?.percentage ?? 0;
+  
+  // Update cache for consistency
+  if (dominantRegime) {
+    cachedGlobalRegime = effectiveRegime;
+    lastUpdate = new Date();
+  }
+  
+  const regimeKey = effectiveRegime as string;
   const expandedRegime = regimeDescriptions[regimeKey] || regimeDescriptions['LOW_VOL_CHOP'];
   const frictionScore = computeGlobalFriction();
   const frictionStatus = describeFriction(frictionScore);
   
+  console.log(`[11.4H.4A-Fix][MarketIndicators] regime=${effectiveRegime} score=${effectiveRegimeScore} percentage=${effectivePercentage}%`);
+  
   return {
-    marketRegime: cachedGlobalRegime,
+    marketRegime: effectiveRegime,
     regimeTitle: expandedRegime.title,
     regimeDescription: expandedRegime.description,
+    regimeScore: effectiveRegimeScore,
+    regimePercentage: effectivePercentage,
     favoredSignalTypes: expandedRegime.favoredSignalTypes,
     favoredStrategies: expandedRegime.favoredStrategies,
     globalFrictionScore: frictionScore,
