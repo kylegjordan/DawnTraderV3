@@ -33,6 +33,13 @@ Strategy & Regime Harmonization unifies VTS and Signal Orchestrator onto a singl
 
 The trade lifecycle flows from `Signal Orchestrator` to `SQE` (FinalScore + RegimeWeight filtering), then to a `Ready-to-Buy Queue`. Signals are promoted by `TCL` (Trade Criteria Limiter), managed by `TEC` (Trade Execution Controller) for adaptive sizing and trailing exits, and finally proceed to `Order Management`. Diagnostic tooling is implemented for regime distribution, friction calibration, and Goals Engine normalization.
 
+## Recent Changes
+
+**Directive 11.4H.6C Implementation (January 2026):**
+- **Task 1 - Overview Tab Binding**: Confirmed analytics.tsx correctly binds favoredStrategies and favoredSignalTypes from API response.
+- **Task 2 - Benchmark Rank Display Fix**: Enhanced `benchmark-list.tsx` rank validation to check: `signalType !== 'Awaiting Scan'`, `strategy !== 'Awaiting Scan'`, `regime !== 'UNKNOWN'`, `score > 0`, and valid numeric rank. Unscanned pairs show "—".
+- **Task 3 - Logging**: Updated market-indicators.ts logging tag to `[11.4H.6C]` showing serialized favoredStrategies and favoredSignalTypes.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed.
