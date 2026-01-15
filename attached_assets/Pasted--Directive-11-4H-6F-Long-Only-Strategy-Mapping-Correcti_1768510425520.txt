@@ -1,0 +1,81 @@
+⚙️ Directive 11.4H.6F — Long-Only Strategy Mapping Correction
+
+Effective Date: January 20, 2026
+Parent Directive: 11.4H.6E — Authenticated Query Restoration for Market Indicators
+Scope: Correct regime-to-strategy mapping logic to remove short-selling strategy references and enforce long-only compatibility.
+
+🧭 I. Root Cause Summary
+Component	Issue	File
+Strategy Mapper	BEAR_VOLATILE regime currently includes “Fast Exit Short,” a short-biased strategy inappropriate for DawnTrader’s long-only design.	server/core/strategy-mapper.ts (line 21–25)
+Effect	Causes the Overview tab to display “Fast Exit Short” in favored strategies, creating user confusion and strategic inconsistency.	
+Additional Note	Other regimes (e.g., HIGH_VOL_IMPULSE, TRANSITION) should be reviewed to ensure they contain no short-oriented logic or labeling.	
+🔩 II. Implementation Tasks
+Task 1 — Replace Short-Oriented Strategy Mapping
+
+File: /server/core/strategy-mapper.ts
+
+Locate:
+case "BEAR_VOLATILE":
+  return ["Breakdown Pullback", "Counter-Reversal", "Fast Exit Short"];
+
+Replace with:
+case "BEAR_VOLATILE":
+  // Long-only compatible defensive strategies
+  return ["Breakdown Pullback", "Counter-Reversal", "Defensive Exit"];
+
+
+✅ Result:
+Replaces the short-biased “Fast Exit Short” with “Defensive Exit,” a long-only exit management strategy consistent with platform philosophy.
+
+Task 2 — Audit All Regime Strategy Mappings
+
+Add a quick inline check in the file to ensure no other regimes contain “Short” or “Sell” in strategy names.
+At the end of the getFavoredStrategies() function, add:
+
+const invalids = favoredStrategies.filter(s => /short|sell/i.test(s));
+if (invalids.length) {
+  logger.warn(`[11.4H.6F][Audit] Found invalid short-biased strategies: ${invalids.join(", ")}`);
+}
+
+
+✅ This ensures that if any other regime still references a short or sell-related strategy, it will be logged and flagged for correction.
+
+Task 3 — Update Canonical Mapping Documentation
+
+File: /bridge/canonical/mapping-regime-strategy.json
+
+Locate the BEAR_VOLATILE entry and update it to reflect the new long-only strategy set:
+
+"BEAR_VOLATILE": {
+  "favoredStrategies": ["Breakdown Pullback", "Counter-Reversal", "Defensive Exit"],
+  "favoredSignalTypes": ["Quantitative", "Pattern"]
+}
+
+
+✅ Maintains canonical alignment with updated runtime mapping logic.
+
+Task 4 — Verification & Logging
+
+Add logging after the strategy selection within the backend service to confirm serialization:
+
+File: /server/services/market-indicators.ts
+
+logger.info(`[11.4H.6F][StrategyMapper] Regime=${liveRegime} | Strategies=${favoredStrategies.join(", ")}`);
+
+
+✅ Expected backend log example:
+
+[11.4H.6F][StrategyMapper] Regime=BEAR_VOLATILE | Strategies=Breakdown Pullback, Counter-Reversal, Defensive Exit
+
+🧪 III. Verification Checklist
+Checkpoint	Expected Result
+Overview Tab	Favored strategies for BEAR_VOLATILE show “Breakdown Pullback,” “Counter-Reversal,” and “Defensive Exit.”
+Logs	[11.4H.6F][StrategyMapper] entry shows updated mappings.
+Audit Check	No [11.4H.6F][Audit] warnings appear in logs.
+Regression	Other regimes retain their correct strategy associations.
+📊 IV. Summary of Outcomes
+
+✅ Removes short-biased strategy references.
+✅ Reinforces DawnTrader’s long-only design philosophy.
+✅ Adds automatic audit logging for future violations.
+✅ Keeps canonical mapping and backend logic synchronized.

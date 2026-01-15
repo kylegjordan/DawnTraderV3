@@ -76,7 +76,8 @@ export const regimeDescriptions: Record<string, ExpandedRegimeDescription> = {
     title: "Bear Volatile",
     description: `The market is trending downward and swinging sharply from highs to lows. Prices often drop quickly and recover partially before continuing down. Short-term trades that favor quick exits or reversal signals may perform better. It's a defensive environment, so position sizes are often smaller and stops tighter.`,
     favoredSignalTypes: ["Quantitative", "Pattern"],
-    favoredStrategies: ["Breakdown Pullback", "Counter-Reversal", "Fast Exit Short"]
+    // Directive 11.4H.6F: Long-only compatible defensive strategies
+    favoredStrategies: ["Breakdown Pullback", "Counter-Reversal", "Defensive Exit"]
   },
   LOW_VOL_CHOP: {
     title: "Low Volatility Chop",
@@ -257,6 +258,8 @@ export function getMarketIndicators(): MarketIndicators {
   
   console.log(`[11.4H.4A-Fix][MarketIndicators] regime=${effectiveRegime} score=${effectiveRegimeScore} percentage=${effectivePercentage}%`);
   console.log(`[11.4H.6D][MarketIndicators] Regime=${effectiveRegime} | Strategies=${favoredStrategies.join(", ")} | Signals=${favoredSignalTypes.join(", ")}`);
+  // Directive 11.4H.6F Task 4: Verification logging for strategy mapper
+  console.log(`[11.4H.6F][StrategyMapper] Regime=${effectiveRegime} | Strategies=${favoredStrategies.join(", ")}`);
   
   // Directive 11.4H.5 Task 3: Check for market event transitions
   checkRegimeTransition(effectiveRegime);

@@ -1,0 +1,46 @@
+{
+  "_directive": "11.4H.6F — Long-Only Strategy Mapping Canonical Reference",
+  "_lastUpdated": "2026-01-16",
+  "_description": "Canonical regime-to-strategy mapping for DawnTrader's long-only trading platform",
+
+  "BULL_STABLE": {
+    "favoredStrategies": ["SMA Trend Ride", "VWAP Pullback", "Morning Star / Evening Star"],
+    "favoredSignalTypes": ["Quantitative", "Hybrid"]
+  },
+  "BULL_VOLATILE": {
+    "favoredStrategies": ["Momentum Breakout", "Volatility Expansion", "Quick Scalp"],
+    "favoredSignalTypes": ["Quantitative", "Pattern"]
+  },
+  "BEAR_STABLE": {
+    "favoredStrategies": ["Support Bounce", "Oversold Reversal", "Counter-Trend"],
+    "favoredSignalTypes": ["Pattern", "Hybrid"]
+  },
+  "BEAR_VOLATILE": {
+    "favoredStrategies": ["Breakdown Pullback", "Counter-Reversal", "Defensive Exit"],
+    "favoredSignalTypes": ["Quantitative", "Pattern"]
+  },
+  "LOW_VOL_CHOP": {
+    "favoredStrategies": ["Range Trade", "Support Bounce", "Mean Reversion"],
+    "favoredSignalTypes": ["Quantitative", "Hybrid"]
+  },
+  "HIGH_VOL_CHOP": {
+    "favoredStrategies": ["Volatility Compression", "Dynamic Range Play"],
+    "favoredSignalTypes": ["Hybrid", "Pattern"]
+  },
+  "HIGH_VOL_IMPULSE": {
+    "favoredStrategies": ["Breakout", "Adaptive Flow", "VWAP Bounce"],
+    "favoredSignalTypes": ["Quantitative", "Hybrid"]
+  },
+  "TRANSITION": {
+    "favoredStrategies": ["Pivot Shift", "Morning Star / Evening Star"],
+    "favoredSignalTypes": ["Hybrid", "Pattern"]
+  },
+  "MIXED_TRANSITION": {
+    "favoredStrategies": ["Pivot Shift", "Morning Star / Evening Star"],
+    "favoredSignalTypes": ["Hybrid", "Pattern"]
+  },
+  "EXTREME_NOISE": {
+    "favoredStrategies": ["Cash", "Wait"],
+    "favoredSignalTypes": []
+  }
+}
