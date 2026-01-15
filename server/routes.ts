@@ -7917,6 +7917,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const { getMarketIndicators } = await import('./services/market-indicators.js');
       const indicators = getMarketIndicators();
       
+      // Directive 11.4H.6E Task 3: Diagnostic logging for authorized requests
+      console.log(`[11.4H.6E][MarketIndicators] Authorized request processed for ${req.user?.id ?? 'anonymous'}`);
+      
       res.json({
         ok: true,
         data: {

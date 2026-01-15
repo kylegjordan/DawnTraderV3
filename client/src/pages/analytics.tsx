@@ -12,6 +12,7 @@ import { formatDistanceToNow, format } from "date-fns";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import TopBatch from "@/components/trading/top-batch";
 import BenchmarkList from "@/components/analytics/benchmark-list";
+import { apiFetch } from "@/lib/api";
 
 interface MarketIndicatorsData {
   ok: boolean;
@@ -676,18 +677,33 @@ export default function AnalyticsPage() {
   const { mode } = useTradingMode();
   const [activeTab, setActiveTab] = useState("overview");
   
-  // Directive 11.4H.6D: Dynamic binding for favored strategies/signals
-  // staleTime: 0 ensures data is always refetched, refetchInterval polls every 60s
-  const { data: indicatorsData, isLoading: indicatorsLoading, refetch: refetchIndicators } = useQuery<MarketIndicatorsData>({
+  // Directive 11.4H.6E: Authenticated query with dynamic cache-bypass
+  // apiFetch() includes credentials, authorization, and x-app-mode headers
+  const { data: indicatorsData, isLoading: indicatorsLoading, error: indicatorsError, refetch: refetchIndicators } = useQuery<MarketIndicatorsData>({
     queryKey: ['/api/market-indicators'],
     queryFn: async () => {
-      const res = await fetch(`/api/market-indicators?t=${Date.now()}`);
-      return res.json();
+      return apiFetch(`/api/market-indicators?t=${Date.now()}`);
     },
     refetchInterval: 60 * 1000, // 60 seconds per Directive 11.4H.6
     refetchOnWindowFocus: true,
     staleTime: 0, // Always treat data as stale to force refetch
   });
+  
+  // Directive 11.4H.6E Task 2: Error boundary for unauthorized response
+  if (indicatorsError) {
+    console.error('[11.4H.6E][Overview] API error:', indicatorsError);
+    return (
+      <div className="flex flex-col h-full items-center justify-center p-6">
+        <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
+        <h2 className="text-xl font-semibold text-red-500 mb-2">Failed to load market indicators</h2>
+        <p className="text-muted-foreground text-center mb-4">Please verify authentication and try again.</p>
+        <Button variant="outline" onClick={() => refetchIndicators()}>
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Retry
+        </Button>
+      </div>
+    );
+  }
   
   // Directive 11.4H.6D Task 1B: Reactive effect to log updates when favored arrays change
   useEffect(() => {

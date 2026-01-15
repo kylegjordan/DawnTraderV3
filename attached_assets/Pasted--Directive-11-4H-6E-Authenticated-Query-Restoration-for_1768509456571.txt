@@ -1,0 +1,87 @@
+⚙️ Directive 11.4H.6E — Authenticated Query Restoration for Market Indicators
+
+Effective Date: January 20 2026
+Parent Directive: 11.4H.6D — Dynamic Favored Strategy & Signal Synchronization
+Scope: Restore authenticated API calls for the Overview tab while retaining dynamic cache-bypass behavior
+
+🧭 I. Root Cause
+Area	Description
+Frontend – Analytics Overview Query	In 11.4H.6D the query function was rewritten to use a raw fetch() call with a timestamp query parameter. Unlike apiFetch(), this bypassed authentication cookies, bearer token, and x-app-mode headers.
+Result	/api/market-indicators returned 401 Unauthorized, causing the React Query response to fail and the Overview tab to render blank.
+🔩 II. Implementation Tasks
+Task 1 — Replace Raw Fetch with Authenticated apiFetch()
+
+File: /client/src/pages/analytics.tsx (or whichever module contains the useQuery for market indicators)
+
+Locate:
+const { data: overview } = useQuery({
+  queryKey: ['/api/market-indicators'],
+  queryFn: async () => {
+    const res = await fetch(`/api/market-indicators?t=${Date.now()}`);
+    return res.json();
+  },
+  refetchInterval: 60000,
+});
+
+Replace with:
+import { apiFetch } from '@/lib/api';  // ensure this import exists
+
+const { data: overview } = useQuery({
+  queryKey: ['/api/market-indicators', Date.now()],   // keeps dynamic cache-bypass
+  queryFn: async () => {
+    return apiFetch(`/api/market-indicators?t=${Date.now()}`);
+  },
+  refetchInterval: 60000,
+  refetchOnWindowFocus: true,
+});
+
+
+✅ Result:
+
+apiFetch() re-adds credentials: 'include', authorization token, and x-app-mode.
+
+The Overview tab loads authenticated data again.
+
+Dynamic bypass (?t=) remains to prevent HTTP cache reuse.
+
+Task 2 — Add Error Boundary for Unauthorized Response
+
+Immediately below the query, add:
+
+if (overviewError) {
+  console.error('[11.4H.6E][Overview] API error:', overviewError);
+  return (
+    <div className="p-6 text-center text-red-500">
+      Failed to load market indicators. Please verify authentication.
+    </div>
+  );
+}
+
+
+✅ Prevents the UI from silently failing if an auth error recurs.
+
+Task 3 — Confirm Backend Availability
+
+File: /server/services/market-indicators.ts
+
+Add diagnostic logging for successful authorized calls:
+
+logger.info(
+  `[11.4H.6E][MarketIndicators] Authorized request processed for ${req.user?.id ?? 'anonymous'}`
+);
+
+
+✅ Verifies authorized requests arrive and respond normally.
+
+Task 4 — Verification
+Checkpoint	Expected Result
+API Call	/api/market-indicators returns 200 OK with live regime, favored arrays, and friction fields.
+UI Overview	Tab renders normally with regime data and favored signals/strategies.
+Logs	[11.4H.6E][MarketIndicators] entries confirm authenticated access.
+Regression	IMF filters, benchmark rank logic, and dual-scan control remain unchanged.
+📊 III. Outcome Summary
+
+✅ Restores authenticated data fetch for Overview tab.
+✅ Preserves dynamic cache-bypass functionality.
+✅ Adds robust error handling and logging.
+✅ No side effects on other 11.4H.6 subsystems.
