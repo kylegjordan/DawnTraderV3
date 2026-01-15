@@ -199,7 +199,7 @@ async function fetchOHLCForPair(symbol: string): Promise<OHLCData[]> {
       return [];
     }
     
-    return ohlc.map((candle: any) => ({
+    const ohlcData = ohlc.map((candle: any) => ({
       open: parseFloat(candle.open || candle[1]),
       high: parseFloat(candle.high || candle[2]),
       low: parseFloat(candle.low || candle[3]),
@@ -207,6 +207,12 @@ async function fetchOHLCForPair(symbol: string): Promise<OHLCData[]> {
       volume: parseFloat(candle.volume || candle[6] || 0),
       timestamp: candle.timestamp || candle[0] * 1000
     }));
+    
+    // Directive 11.4H.6A Task 3: Cache OHLC data for IMF passive learning calculations
+    const { cacheOHLCData } = await import('../core/metrics/imf-metrics.js');
+    cacheOHLCData(symbol, ohlcData);
+    
+    return ohlcData;
   } catch (error) {
     console.warn(`[11.0E.1][VTS] OHLC fetch failed for ${symbol}:`, error);
     return [];

@@ -441,6 +441,17 @@ export class Fx5ScannerService {
       // Directive 11.4H: Normalize symbols at ingress
       // Directive 11.4H.1 Task 2: Validate metrics before processing
       // Handle undefined/null volume24h gracefully with safe defaults
+      
+      // Directive 11.4H.6A Task 3: Pre-load IMF module for passive learning OHLC cache access
+      let imfModule: { getCachedOHLCData: (s: string) => any[] | null; calculateLogLiquidity: (d: any[]) => number; calculateVolNoise: (d: any[]) => number; getIMFThresholds: () => { LQ_MIN: number; VN_MAX: number; CORR_MAX: number } } | null = null;
+      if (isPassiveLearningMode) {
+        try {
+          imfModule = await import('../core/metrics/imf-metrics.js');
+        } catch (err) {
+          console.warn('[11.4H.6A] Failed to load IMF module:', err);
+        }
+      }
+      
       const classifiedSurvivors = survivors
         .filter(s => {
           // Directive 11.4H.1 Task 2: Skip pairs with incomplete metrics
@@ -511,14 +522,43 @@ export class Fx5ScannerService {
         // This ensures friction scores vary based on actual market data
         setCostMetrics(normalizedSymbol, { spread });
         
-        const LQ = calculateLogLiquidity(volumeUSD, tradeCount, spread);
+        // Directive 11.4H.6A Task 3: Use cached OHLC data for IMF during passive learning
+        let LQ: number;
+        let VolNoise: number;
+        let passesMetricFilter: boolean;
+        let imfSource = 'ticker';
+        
+        if (isPassiveLearningMode && imfModule) {
+          // Try to get cached OHLC data from VTS for better IMF calculation
+          const cachedOHLC = imfModule.getCachedOHLCData(normalizedSymbol);
+          
+          if (cachedOHLC && cachedOHLC.length >= 10) {
+            // Use OHLC-based calculation
+            LQ = imfModule.calculateLogLiquidity(cachedOHLC);
+            VolNoise = imfModule.calculateVolNoise(cachedOHLC);
+            const thresholds = imfModule.getIMFThresholds();
+            passesMetricFilter = LQ >= thresholds.LQ_MIN && VolNoise <= thresholds.VN_MAX;
+            imfSource = 'ohlc_cache';
+            console.log(`[11.4H.6A][IMF OHLC] ${normalizedSymbol} => LQ=${LQ.toFixed(2)} VN=${VolNoise.toFixed(3)} Filter=${passesMetricFilter} Candles=${cachedOHLC.length}`);
+          } else {
+            // Fallback to ticker-based calculation
+            LQ = calculateLogLiquidity(volumeUSD, tradeCount, spread);
+            VolNoise = calculateVolNoise(prices);
+            passesMetricFilter = passesCoreMetricFilters(LQ, VolNoise);
+            console.log(`[11.4H.6A][IMF Passive] ${normalizedSymbol} => LQ=${LQ.toFixed(2)} VN=${VolNoise.toFixed(3)} Filter=${passesMetricFilter} DataQuality=TICKER(${prices.length}pts)`);
+          }
+        } else {
+          // Active trading or no IMF module: use standard ticker-based calculation
+          LQ = calculateLogLiquidity(volumeUSD, tradeCount, spread);
+          VolNoise = calculateVolNoise(prices);
+          passesMetricFilter = passesCoreMetricFilters(LQ, VolNoise);
+        }
+        
         const DI = calculateDirectionalIntegrity(prices);
-        const VolNoise = calculateVolNoise(prices);
         const Sigma = calculateSigma(prices);
-        const passesMetricFilter = passesCoreMetricFilters(LQ, VolNoise);
         
         // Directive 9.1.G: Telemetry logging with [9.1] tags
-        console.log(`[9.1][FX5] ${s.symbol} LQ=${LQ.toFixed(1)} DI=${DI.toFixed(1)} VN=${VolNoise.toFixed(2)} σ=${Sigma.toFixed(4)}`);
+        console.log(`[9.1][FX5] ${s.symbol} LQ=${LQ.toFixed(1)} DI=${DI.toFixed(1)} VN=${VolNoise.toFixed(2)} σ=${Sigma.toFixed(4)} src=${imfSource}`);
         
         // Directive 9.1.F: Log if pair fails core metric filters
         if (!passesMetricFilter) {
