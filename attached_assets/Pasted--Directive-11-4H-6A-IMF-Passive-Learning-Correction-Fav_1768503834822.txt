@@ -1,0 +1,254 @@
+⚙️ Directive 11.4H.6A — IMF Passive Learning Correction, Favored Strategy & Signal Binding, Benchmark Rank Display Fix, and FX5 Dual-Scan Streamlining
+
+Effective Date: January 17 2026
+Parent Directive: 11.4H.6 — Benchmark Stabilization, Institutional Math Persistence, and Regex Correction
+Successor: 11.4H.7 — Telemetry Optimization and Friction Dynamics Forecasting
+
+🧭 I. Architectural Context
+
+Subsystems Affected:
+
+Analytics and Diagnostics UI (Overview, Benchmark List)
+
+FX5 Scanner (core market scanning and VTS data feed)
+
+IMF (Institutional Math Filters) (liquidity, volatility noise, correlation filters)
+
+Telemetry Aggregator (metric persistence during passive learning)
+
+Architectural Principles (from Canonical Bridge):
+
+Concept	Definition
+Mode (Live / Paper)	Defines the operational context. Only one mode can be active.
+Passive Learning	A behavioral state (tradingActive = false) where VTS runs but no trades execute. Occurs under either live or paper mode.
+FX5 Scanner	Executes adaptive batch scans, evaluates IMF metrics, and feeds telemetry and ideal pool data.
+IMF Filters	Institutional Math Filters: Liquidity Quality (LQ), Volatility Noise (VN), and Correlation metrics to assess pair quality.
+Global Regime / Friction	Aggregated metrics summarizing overall market conditions.
+Favored Strategies / Signals	Regime-based canonical mappings that recommend optimal trading approaches and signal types.
+Benchmark Pairs	BTC, ETH, SOL, and major stablecoins (USDT, USDC, DAI, BUSD, TUSD) that must always appear in the Ideal Pool and Benchmark List.
+🔩 II. Implementation Tasks
+Task 1 — Favored Strategy & Signal Binding
+
+Objective:
+Ensure /api/market-indicators dynamically returns favoredStrategies and favoredSignalTypes, and that these values are displayed correctly on the Overview tab.
+
+Files:
+
+/server/core/strategy-mapper.ts
+
+/server/services/market-indicators.ts
+
+/client/src/components/analytics/overview.tsx
+
+Step 1A — Extend Canonical Strategy Mapper
+// /server/core/strategy-mapper.ts
+export function getFavoredStrategiesForRegime(regime: string): string[] {
+  switch (regime) {
+    case "BULL_STABLE":
+      return ["SMA Trend Ride", "VWAP Pullback", "Morning Star / Evening Star"];
+    case "BEAR_VOLATILE":
+      return ["Breakdown Pullback", "Counter-Reversal", "Fast Exit Short"];
+    case "LOW_VOL_CHOP":
+      return ["Range Trade", "Support Bounce", "Mean Reversion"];
+    case "HIGH_VOL_IMPULSE":
+      return ["Breakout", "Adaptive Flow", "VWAP Bounce"];
+    case "TRANSITION":
+      return ["Pivot Shift", "Morning Star / Evening Star"];
+    default:
+      return ["Range Trade"];
+  }
+}
+
+export function getFavoredSignalTypesForRegime(regime: string): string[] {
+  switch (regime) {
+    case "BULL_STABLE":
+    case "BEAR_VOLATILE":
+      return ["Quantitative", "Pattern"];
+    case "LOW_VOL_CHOP":
+    case "HIGH_VOL_IMPULSE":
+      return ["Quantitative", "Hybrid"];
+    case "TRANSITION":
+      return ["Hybrid", "Pattern"];
+    default:
+      return ["Quantitative"];
+  }
+}
+
+Step 1B — Integrate Mappings in Market Indicators API
+// /server/services/market-indicators.ts
+import {
+  getFavoredStrategiesForRegime,
+  getFavoredSignalTypesForRegime,
+} from "../core/strategy-mapper";
+
+const globalRegime = effectiveRegime?.type || "UNKNOWN";
+const favoredStrategies = getFavoredStrategiesForRegime(globalRegime);
+const favoredSignalTypes = getFavoredSignalTypesForRegime(globalRegime);
+
+return {
+  regime: effectiveRegime,
+  regimeScore: effectiveRegimeScore,
+  regimePercentage: effectivePercentage,
+  globalFriction,
+  favoredStrategies,
+  favoredSignalTypes,
+};
+
+
+✅ Result:
+Overview tab dynamically reflects regime-based strategies and signals.
+
+Task 2 — Benchmark Rank Display Fix
+
+Objective:
+Ensure benchmark ranks only appear if they are part of the Top Scanned Pairs telemetry. If not, display “—”.
+
+File: /client/src/components/analytics/benchmark-list.tsx
+
+<td className="text-center">
+  {pair.rank && pair.rank > 0 ? pair.rank : "—"}
+</td>
+
+
+✅ Result:
+Only telemetry-linked benchmarks display a numeric rank.
+
+Task 3 — IMF Passive Learning Correction
+
+Objective:
+Fix IMF filters so that LQ and VolNoise are computed from cached OHLC data during passive learning instead of default placeholders.
+
+Files:
+
+/server/core/metrics/imf-metrics.ts
+
+/server/services/fx5-scanner.ts
+
+Step 3A — Create Historical Fallback for Passive Learning
+// /server/core/metrics/imf-metrics.ts
+export async function calculateIMFMetrics(symbol: string, context: any, isPassive: boolean) {
+  let ohlcData = [];
+
+  if (isPassive) {
+    ohlcData = await getHistoricalCache(symbol, { limit: 100 }) || [];
+  } else {
+    ohlcData = await getLiveOHLC(symbol, { limit: 100 });
+  }
+
+  if (!ohlcData.length) {
+    return { LQ: 0, VolNoise: 1.0, Correlation: 1.0, passesMetricFilter: false };
+  }
+
+  const LQ = calculateLogLiquidity(ohlcData);
+  const VolNoise = calculateVolNoise(ohlcData);
+  const Correlation = calculateCorrelation(ohlcData);
+  const passesMetricFilter = LQ >= LQ_MIN && VolNoise <= VN_MAX && Correlation <= CORR_MAX;
+
+  return { LQ, VolNoise, Correlation, passesMetricFilter };
+}
+
+Step 3B — Integrate Into FX5 Scanner
+// /server/services/fx5-scanner.ts
+import { calculateIMFMetrics } from "../core/metrics/imf-metrics";
+
+const imf = await calculateIMFMetrics(pair.symbol, context, !tradingActive);
+pair.imfMetrics = imf;
+telemetry.persistIMF(pair.symbol, imf);
+
+if (tradingActive) {
+  if (imf.passesMetricFilter || pair.isBenchmark) {
+    filteredSurvivors.push(pair);
+  }
+} else {
+  logger.info(`[11.4H.6A][IMF Passive] ${pair.symbol} => LQ=${imf.LQ.toFixed(2)} VN=${imf.VolNoise.toFixed(3)} Cor=${imf.Correlation.toFixed(3)} Filter=${imf.passesMetricFilter}`);
+}
+
+
+✅ Result:
+
+IMF metrics computed from cached OHLC data in passive learning.
+
+No more default (100, 0.50, 0.00) placeholder values.
+
+IMF filters actively applied even with tradingActive = false.
+
+Task 4 — FX5 Dual-Scan Streamlining
+
+Objective:
+Prevent dual execution of live and paper scans during passive learning.
+
+Files:
+
+/server/services/fx5-scanner.ts
+
+/server/services/telemetry-aggregator.ts
+
+Step 4A — Replace Dual Scan Invocation
+
+Locate around lines 240–250:
+
+this.scanMode('paper').catch(...)
+this.scanMode('live').catch(...)
+
+
+Replace with:
+
+const activeMode = context?.engine?.mode || 'paper';
+const tradingActive = context?.engine?.tradingActive ?? false;
+
+logger.info(`[11.4H.6A][ModeCheck] Mode=${activeMode} | TradingActive=${tradingActive}`);
+
+if (!tradingActive) {
+  logger.info(`[11.4H.6A][PassiveScan] Passive learning active — running single scan for mode=${activeMode}`);
+  await this.scanMode(activeMode).catch((err) =>
+    logger.error(`[11.4H.6A][PassiveScan][Error] ${err.message}`)
+  );
+} else {
+  if (activeMode === 'live') {
+    await this.scanMode('live').catch((err) =>
+      logger.error(`[11.4H.6A][LiveScan][Error] ${err.message}`)
+    );
+  } else if (activeMode === 'paper') {
+    await this.scanMode('paper').catch((err) =>
+      logger.error(`[11.4H.6A][PaperScan][Error] ${err.message}`)
+    );
+  }
+}
+
+Step 4B — Ensure Telemetry Aggregator Doesn’t Trigger Dual Scans
+// /server/services/telemetry-aggregator.ts
+if (context?.engine?.tradingActive === true) {
+  await fx5.scanMode(context.engine.mode);
+}
+
+
+✅ Result:
+
+Passive learning runs one scan per cycle, in the current mode.
+
+Active trading runs only the configured mode’s scan.
+
+No duplicate live/paper cycles.
+
+Task 5 — Logging Enhancements
+
+Add comprehensive logs for all major updates:
+
+logger.info(`[11.4H.6A][Indicators] Regime=${globalRegime} | Strategies=${favoredStrategies.join(", ")} | Signals=${favoredSignalTypes.join(", ")}`);
+logger.info(`[11.4H.6A][IMF Passive] Metrics persisted for passive learning.`);
+logger.info(`[11.4H.6A][Benchmark] Rank visibility corrected for non-scanned pairs.`);
+
+🧪 III. Verification Checklist
+Checkpoint	Expected Result
+Favored Strategies/Signals	Overview updates dynamically with regime.
+Benchmark Ranks	Display “—” for non-scanned benchmarks.
+IMF Passive Learning	IMF filters compute realistic LQ/VN metrics.
+Dual Scans	Only one scan runs during passive learning.
+Diagnostics Logs	[11.4H.6A] log entries confirm each operation.
+📊 IV. Summary of Outcomes
+
+✅ Favored strategy/signal mapping active and bound to global regime.
+✅ Benchmark ranks corrected for telemetry dependency.
+✅ IMF metrics correctly computed during passive learning (no defaults).
+✅ Dual-scan execution eliminated for passive mode.
+✅ Logs confirm correct operational context and telemetry flow.

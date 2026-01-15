@@ -237,18 +237,40 @@ export class Fx5ScannerService {
         try {
           console.log(`[FX5Scanner][A3.R7][TICK] tickNumber=${tick.tickNumber} drift=${tick.drift}ms`);
           
+          // Directive 11.4H.6A Task 4: Get engine state to determine scan mode
+          let activeMode: 'paper' | 'live' = 'paper';
+          let tradingActive = false;
+          try {
+            const paperContext = await storage.getSystemContext('paper');
+            const liveContext = await storage.getSystemContext('live');
+            tradingActive = paperContext?.isEngineActive || liveContext?.isEngineActive || false;
+            activeMode = liveContext?.isEngineActive ? 'live' : 'paper';
+          } catch (err) {
+            console.warn('[11.4H.6A][ModeCheck] Failed to get context, defaulting to paper');
+          }
+          
+          console.log(`[11.4H.6A][ModeCheck] Mode=${activeMode} | TradingActive=${tradingActive}`);
+          
           // R9.3.HF-6: Add timeout protection to prevent hanging scans
           const timeoutPromise = new Promise<void>((_, reject) => 
             setTimeout(() => reject(new Error('Scan timeout')), SCAN_TIMEOUT_MS)
           );
           
-          await Promise.race([
-            Promise.all([
-              this.scanMode('paper').catch(err => console.error('[FX5Scanner] Paper scan error:', err)),
-              this.scanMode('live').catch(err => console.error('[FX5Scanner] Live scan error:', err))
-            ]),
-            timeoutPromise
-          ]).catch(err => {
+          // Directive 11.4H.6A Task 4: Single scan during passive learning, mode-specific during active trading
+          let scanPromise: Promise<any>;
+          if (!tradingActive) {
+            console.log(`[11.4H.6A][PassiveScan] Passive learning active — running single scan for mode=${activeMode}`);
+            scanPromise = this.scanMode(activeMode).catch(err => 
+              console.error(`[11.4H.6A][PassiveScan][Error] ${err.message}`)
+            );
+          } else {
+            console.log(`[11.4H.6A][ActiveScan] Trading active — running scan for mode=${activeMode}`);
+            scanPromise = this.scanMode(activeMode).catch(err => 
+              console.error(`[11.4H.6A][${activeMode}Scan][Error] ${err.message}`)
+            );
+          }
+          
+          await Promise.race([scanPromise, timeoutPromise]).catch(err => {
             console.error(`[FX5Scanner][R9.3.HF-6][TIMEOUT] Scan aborted after ${Date.now() - startTime}ms:`, err.message);
           });
           
@@ -262,20 +284,26 @@ export class Fx5ScannerService {
     centralClock.subscribe('FX5Scanner', this.clockTickHandler);
     console.log('[FX5Scanner][R9.3.HF-6] ✅ Subscribed to Central Clock');
     
-    // Run initial scan for both modes
-    console.log('[FX5Scanner][R9.3.HF-6] Running initial scans');
+    // Directive 11.4H.6A Task 4: Determine mode for initial scan
+    let initialMode: 'paper' | 'live' = 'paper';
+    let initialTradingActive = false;
     try {
-      await this.scanMode('paper');
-      console.log('[FX5Scanner][R9.3.HF-6] Paper initial scan complete');
+      const paperContext = await storage.getSystemContext('paper');
+      const liveContext = await storage.getSystemContext('live');
+      initialTradingActive = paperContext?.isEngineActive || liveContext?.isEngineActive || false;
+      initialMode = liveContext?.isEngineActive ? 'live' : 'paper';
     } catch (err) {
-      console.error('[FX5Scanner][R9.3.HF-6] Paper initial scan error:', err);
+      console.warn('[11.4H.6A][InitialScan] Failed to get context, defaulting to paper');
     }
     
+    console.log(`[11.4H.6A][InitialScan] Mode=${initialMode} | TradingActive=${initialTradingActive}`);
+    console.log('[FX5Scanner][R9.3.HF-6] Running initial scan');
+    
     try {
-      await this.scanMode('live');
-      console.log('[FX5Scanner][R9.3.HF-6] Live initial scan complete');
+      await this.scanMode(initialMode);
+      console.log(`[FX5Scanner][R9.3.HF-6] ${initialMode} initial scan complete`);
     } catch (err) {
-      console.error('[FX5Scanner][R9.3.HF-6] Live initial scan error:', err);
+      console.error(`[FX5Scanner][R9.3.HF-6] ${initialMode} initial scan error:`, err);
     }
 
     console.log('[FX5Scanner][A3.R7] ✅ Started with Central Clock (interval=30s aligned)');

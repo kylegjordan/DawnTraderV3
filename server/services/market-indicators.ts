@@ -20,6 +20,7 @@ import { getCostMetrics as getCacheMetrics, getCacheSize } from '../core/cache/c
 import { activeFilterPool } from './active-filter-pool.js';
 import { getTelemetryAggregator } from './telemetry-aggregator.js';
 import { checkRegimeTransition, checkFrictionTransition } from '../utils/market-events.js';
+import { getFavoredStrategiesForRegime, getFavoredSignalTypesForRegime } from '../core/strategy-mapper.js';
 
 export interface RegimeInfo {
   name: MarketRegime;
@@ -250,7 +251,12 @@ export function getMarketIndicators(): MarketIndicators {
   const frictionScore = computeGlobalFriction();
   const frictionStatus = describeFriction(frictionScore);
   
+  // Directive 11.4H.6A Task 1: Use strategy mapper for dynamic regime-based strategies/signals
+  const favoredStrategies = getFavoredStrategiesForRegime(regimeKey);
+  const favoredSignalTypes = getFavoredSignalTypesForRegime(regimeKey);
+  
   console.log(`[11.4H.4A-Fix][MarketIndicators] regime=${effectiveRegime} score=${effectiveRegimeScore} percentage=${effectivePercentage}%`);
+  console.log(`[11.4H.6A][Indicators] Regime=${regimeKey} | Strategies=${favoredStrategies.join(", ")} | Signals=${favoredSignalTypes.join(", ")}`);
   
   // Directive 11.4H.5 Task 3: Check for market event transitions
   checkRegimeTransition(effectiveRegime);
@@ -262,8 +268,8 @@ export function getMarketIndicators(): MarketIndicators {
     regimeDescription: expandedRegime.description,
     regimeScore: effectiveRegimeScore,
     regimePercentage: effectivePercentage,
-    favoredSignalTypes: expandedRegime.favoredSignalTypes,
-    favoredStrategies: expandedRegime.favoredStrategies,
+    favoredSignalTypes,
+    favoredStrategies,
     globalFrictionScore: frictionScore,
     frictionDescription: frictionStatus,
     frictionNarrative: frictionStatus.narrative,
