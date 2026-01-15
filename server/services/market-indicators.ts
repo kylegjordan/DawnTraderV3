@@ -256,7 +256,7 @@ export function getMarketIndicators(): MarketIndicators {
   const favoredSignalTypes = getFavoredSignalTypesForRegime(regimeKey);
   
   console.log(`[11.4H.4A-Fix][MarketIndicators] regime=${effectiveRegime} score=${effectiveRegimeScore} percentage=${effectivePercentage}%`);
-  console.log(`[11.4H.6A][Indicators] Regime=${regimeKey} | Strategies=${favoredStrategies.join(", ")} | Signals=${favoredSignalTypes.join(", ")}`);
+  console.log(`[11.4H.6B][Indicators] Regime=${regimeKey} | Strategies=${favoredStrategies.join(", ")} | Signals=${favoredSignalTypes.join(", ")}`);
   
   // Directive 11.4H.5 Task 3: Check for market event transitions
   checkRegimeTransition(effectiveRegime);
