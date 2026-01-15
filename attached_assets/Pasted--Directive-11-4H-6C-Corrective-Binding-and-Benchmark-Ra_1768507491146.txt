@@ -1,0 +1,127 @@
+⚙️ Directive 11.4H.6C — Corrective Binding and Benchmark Rank Validation
+
+Effective Date: January 20, 2026
+Parent Directive: 11.4H.6B — Favored Strategy/Signal Binding & Benchmark Display
+Purpose: To correct incomplete data binding in overview.tsx and improperly validated rank rendering in benchmark-list.tsx.
+
+🧭 I. Root Cause Summary
+Issue	Root Cause
+Favored Strategies / Signals not showing	The API returns the fields, but overview.tsx is referencing data.overview or overviewResponse instead of the live overview state derived from the SWR hook (useSWR or useEffect + fetch). The data destructuring line omits favoredStrategies and favoredSignalTypes. As a result, React never re-renders when these values update.
+Benchmark Ranks still showing	The frontend validation uses loose checks that treat 0, "0.000", or even null as valid when evaluated with && and implicit coercion. The rank needs explicit numeric validation and rounding.
+🔩 II. Implementation Tasks
+Task 1 — Fix Favored Strategy/Signal Binding in Overview Tab
+
+File: /client/src/components/analytics/overview.tsx
+
+1A. Ensure Fields Are Extracted from API Response
+
+Locate:
+
+const { data: overview } = useSWR('/api/market-indicators', fetcher, { refreshInterval: 60000 });
+
+
+If this line exists, the problem is that overview does not automatically update the component due to destructuring later on. Replace subsequent variable declarations so they explicitly reference:
+
+const regime = overview?.regime?.type ?? "UNKNOWN";
+const regimeScore = overview?.regimeScore ?? 0;
+const favoredStrategies = overview?.favoredStrategies ?? [];
+const favoredSignalTypes = overview?.favoredSignalTypes ?? [];
+
+
+Then verify these values are used in JSX rendering — not nested incorrectly under another state (e.g., overview.data.favoredStrategies).
+
+1B. Add a Fallback Rendering Section
+
+Replace or confirm the section under “Favored Signal Types” and “Favored Strategies” reads:
+
+<section className="mt-6">
+  <h3 className="text-lg font-semibold">Favored Signal Types</h3>
+  <p className="text-sm text-gray-600">
+    {favoredSignalTypes.length
+      ? favoredSignalTypes.join(", ")
+      : "No active signal types for current regime."}
+  </p>
+
+  <h3 className="text-lg font-semibold mt-4">Favored Strategies</h3>
+  <p className="text-sm text-gray-600">
+    {favoredStrategies.length
+      ? favoredStrategies.join(", ")
+      : "No active strategies for current regime."}
+  </p>
+</section>
+
+
+✅ Expected Behavior:
+
+When the global regime updates (e.g., Bear Volatile → Bull Stable), the lists update immediately.
+
+If the API returns an empty array, the fallback text appears.
+
+React re-renders correctly on every 60-second poll.
+
+Task 2 — Enforce Strict Numeric Validation in Benchmark Rank Display
+
+File: /client/src/components/analytics/benchmark-list.tsx
+
+Replace the current rank rendering condition with:
+
+<td className="text-center">
+  {typeof pair.rank === "number" && Number.isFinite(pair.rank) && pair.rank > 0
+    ? Math.round(pair.rank)
+    : "—"}
+</td>
+
+
+Note:
+If pair.rank is coming as a string (common when parsed from telemetry), explicitly cast it:
+
+const rankValue = Number(pair.rank);
+<td className="text-center">
+  {Number.isFinite(rankValue) && rankValue > 0
+    ? Math.round(rankValue)
+    : "—"}
+</td>
+
+
+✅ Expected Behavior:
+
+Unscanned benchmark pairs display “—”.
+
+Only pairs ranked in Top Scanned Pairs display integer rank numbers.
+
+Task 3 — Verify API Response Serialization
+
+File: /server/services/market-indicators.ts
+
+Reconfirm the final return includes:
+
+return {
+  regime: effectiveRegime,
+  regimeScore: effectiveRegimeScore,
+  regimePercentage: effectivePercentage,
+  globalFriction,
+  favoredStrategies,
+  favoredSignalTypes,
+};
+
+
+Then add a log entry:
+
+logger.info(`[11.4H.6C][Indicators] Serialized favoredStrategies=${favoredStrategies?.join(", ")} | favoredSignalTypes=${favoredSignalTypes?.join(", ")}`);
+
+
+✅ Expected Behavior:
+Logs show serialized values on every refresh, confirming proper server-side generation.
+
+🧪 III. Verification Checklist
+Checkpoint	Expected Result
+Favored Strategy / Signal Display	Updates dynamically in Overview tab per regime.
+Benchmark Rank Display	Only valid integers appear; unranked show “—”.
+Logs	[11.4H.6C][Indicators] entries confirm serialization.
+Regression	IMF, dual-scan logic, and OHLC caching remain unaffected.
+📊 IV. Summary of Expected Outcomes
+
+✅ Favored strategy/signal binding fully functional and reactive.
+✅ Benchmark ranks validated and displayed correctly.
+✅ No regressions introduced.
+✅ 11.4H.6 series now complete and stable.

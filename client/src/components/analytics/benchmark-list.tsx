@@ -184,9 +184,15 @@ export default function BenchmarkList() {
                   <tr key={pair.symbol} className="border-b hover:bg-muted/50 transition-colors">
                     <td className="py-3 pr-4">
                       <span className="font-mono text-muted-foreground">
-                        {Number.isFinite(pair.rank) && pair.rank > 0 && Number.isInteger(pair.rank)
-                          ? `#${pair.rank}`
-                          : '—'}
+                        {(() => {
+                          const rankValue = Number(pair.rank);
+                          const hasValidScore = pair.score > 0;
+                          const isScanned = pair.signalType !== 'Awaiting Scan' && pair.signalType !== 'HYBRID';
+                          const hasValidRank = Number.isFinite(rankValue) && rankValue > 0;
+                          return hasValidRank && hasValidScore && isScanned
+                            ? `#${Math.round(rankValue)}`
+                            : '—';
+                        })()}
                       </span>
                     </td>
                     <td className="py-3 pr-4">
