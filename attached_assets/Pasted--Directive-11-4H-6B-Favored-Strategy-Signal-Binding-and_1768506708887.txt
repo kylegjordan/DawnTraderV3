@@ -1,0 +1,116 @@
+⚙️ Directive 11.4H.6B — Favored Strategy/Signal Binding and Benchmark Rank Display Correction
+
+Effective Date: January 19 2026
+Parent Directive: 11.4H.6A (Final Unified Revision)
+Scope: UI and API Data Binding Corrections Only
+Successor: 11.4H.7 — Telemetry Optimization and Friction Dynamics Forecasting
+
+🧭 I. Purpose
+
+This directive corrects two residual defects discovered after implementation of 11.4H.6A:
+
+Issue	Description
+A. Favored Strategy / Signal Binding	favoredStrategies and favoredSignalTypes are generated on the server but not included in the /api/market-indicators response, leaving the Overview tab blank.
+B. Benchmark Rank Display	Benchmark pairs (e.g., BTC, ETH, SOL, stablecoins) still display numeric rank values even when not part of Top Scanned Pairs telemetry.
+🔩 II. Implementation Tasks
+Task 1 — Serialize Favored Strategy and Signal Fields in API Response
+
+File: /server/services/market-indicators.ts
+
+Step 1A — Include Fields in Return Object
+
+Locate the function that builds the API response (near the bottom of the file) and add the two missing fields:
+
+return {
+  regime: effectiveRegime,
+  regimeScore: effectiveRegimeScore,
+  regimePercentage: effectivePercentage,
+  globalFriction,
+  favoredStrategies,
+  favoredSignalTypes,
+};
+
+Step 1B — Confirm Log Output
+
+Add a diagnostic entry immediately before the return statement:
+
+logger.info(
+  `[11.4H.6B][Indicators] Regime=${effectiveRegime?.type} | Strategies=${favoredStrategies?.join(", ")} | Signals=${favoredSignalTypes?.join(", ")}`
+);
+
+
+✅ Result:
+
+The API now returns the correct arrays.
+
+Logs verify values per regime.
+
+Frontend can consume the fields without further mapping.
+
+Task 2 — Update Overview Tab to Render Dynamic Values
+
+File: /client/src/components/analytics/overview.tsx
+
+Add or replace the section for favored signals and strategies as follows:
+
+<section className="mt-6">
+  <h3 className="text-lg font-semibold">Favored Signal Types</h3>
+  <p className="text-sm text-gray-600">
+    {overview.favoredSignalTypes?.length
+      ? overview.favoredSignalTypes.join(", ")
+      : "—"}
+  </p>
+
+  <h3 className="text-lg font-semibold mt-4">Favored Strategies</h3>
+  <p className="text-sm text-gray-600">
+    {overview.favoredStrategies?.length
+      ? overview.favoredStrategies.join(", ")
+      : "—"}
+  </p>
+</section>
+
+
+✅ Result:
+When the global regime updates, these fields refresh automatically within the 60-second polling interval and on window focus.
+
+Task 3 — Correct Benchmark Rank Display
+
+File: /client/src/components/analytics/benchmark-list.tsx
+
+Replace the existing rank cell render with this conditional check:
+
+<td className="text-center">
+  {Number.isFinite(pair.rank) && pair.rank > 0 && Number.isInteger(pair.rank)
+    ? pair.rank
+    : "—"}
+</td>
+
+
+✅ Result:
+
+Benchmarks without telemetry-linked rank show “—”.
+
+Only integer, positive ranks display numbers.
+
+Eliminates meaningless default values (e.g., 0.000 or NaN).
+
+Task 4 — Verification and Logging
+Checkpoint	Expected Behavior
+API Test	GET /api/market-indicators response includes favoredStrategies and favoredSignalTypes arrays.
+UI Check — Overview	Favored fields populate with canonical strategy/signal names based on regime.
+UI Check — Benchmark List	Unscanned benchmarks display “—” for rank.
+Logs	[11.4H.6B][Indicators] entries confirm serialization values.
+🧪 III. Regression Validation
+
+IMF filters, FX5 scanner streamlining, and OHLC integration remain unchanged.
+
+No impact to live/paper trading execution paths.
+
+Passive learning logic unaffected.
+
+📊 IV. Summary of Outcomes
+
+✅ Favored Strategies and Signals are now serialized and displayed correctly.
+✅ Benchmark Ranks show “—” unless telemetry-ranked.
+✅ No functional regressions introduced.
+✅ Directive 11.4H.6A is now fully closed and validated.
