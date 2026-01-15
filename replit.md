@@ -54,6 +54,13 @@ The trade lifecycle flows from `Signal Orchestrator` to `SQE` (FinalScore + Regi
 - **Task 6 - Global Friction Continuous Audit**: Added `[11.4H.6][FrictionAudit]` logging in `market-indicators.ts` with spread range and sample size.
 - **Task 7 - Overview Tab Dynamic Binding**: Updated `analytics.tsx` refetchInterval to 60 seconds with `refetchOnWindowFocus: true` for favored strategies/signals refresh.
 
+**Directive 11.4H.6A Implementation (January 2026):**
+- **Task 1 - Favored Strategy & Signal Binding**: Created `server/core/strategy-mapper.ts` with canonical strategy mapper providing regime-based strategy and signal type recommendations via `getStrategyMapperOutput()`.
+- **Task 2 - Benchmark Rank Display Fix**: Verified `benchmark-list.tsx` shows "—" for unranked pairs (already implemented).
+- **Task 3 - IMF Passive Learning Correction**: Implemented VTS → FX5 OHLC cache pipeline. VTS now caches OHLC data via `cacheOHLCData()` in `imf-metrics.ts`. FX5 scanner uses cached OHLC during passive learning for accurate LQ/VolNoise calculations instead of placeholders. Logs differentiate `[11.4H.6A][IMF OHLC]` (cached) vs `[11.4H.6A][IMF Passive]` (ticker fallback).
+- **Task 4 - FX5 Dual-Scan Streamlining**: Added `[11.4H.6A][ModeCheck]` logging and early mode detection in FX5 scanner. Single scan runs during passive learning based on mode detection.
+- **Task 5 - Logging Enhancements**: Added comprehensive `[11.4H.6A]` diagnostic logging including `[ModeCheck]`, `[PassiveScan]`, `[IMF OHLC]`, and `[IMF Passive]` tags.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed.
