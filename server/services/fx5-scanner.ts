@@ -54,44 +54,55 @@ const SCAN_INTERVAL_MS = SCAN_INTERVAL_SECONDS * 1000; // For backwards compatib
 const CYCLES_PER_HOUR = Math.round(3600 / SCAN_INTERVAL_SECONDS); // 120 for 30s intervals
 
 /**
+ * Directive 11.4H.6 Task 1A: Benchmark Symbol Regex Correction
+ * Strict regex prevents memecoins like FARTCOIN from being misclassified as benchmarks.
+ * 
  * Directive 11.4H.2 Task 1: Benchmark base assets for explicit inclusion
  * These base currencies are always included in both Benchmark Pool (for UI visibility)
  * and Ideal Pool (for VTS scanning and trading)
  * Includes both standard (BTC) and Kraken native (XBT, ETHC, SOLC) formats
  */
+import { 
+  BENCHMARK_REGEX, 
+  BENCHMARK_BASE_COINS, 
+  BENCHMARK_STABLECOINS,
+  VALID_QUOTE_CURRENCIES,
+  CANONICAL_BENCHMARK_SYMBOLS,
+  isBenchmarkSymbolStrict 
+} from '../config/benchmark-regex.js';
+
 export const BENCHMARK_BASES = [
   'BTC', 'XBT',           // Bitcoin (standard and Kraken)
   'ETH', 'XETH', 'ETHC',  // Ethereum (standard, Kraken prefixed, suffixed)
   'SOL', 'SOLC',          // Solana (standard and Kraken suffixed)
-  'USDT', 'USDC', 'DAI'   // Stablecoins
+  'USDT', 'USDC', 'DAI', 'BUSD', 'TUSD'   // Stablecoins (expanded per 11.4H.6)
 ];
 
 /**
- * Directive 11.4H.2: Check if a symbol is a benchmark asset
- * Uses normalized symbol to handle Kraken's XBT→BTC conversion
- * Unified detection logic used by both scanner and API routes
+ * Directive 11.4H.6 Task 1A: Check if a symbol is a benchmark asset
+ * Uses strict regex to prevent false positives (e.g., FARTCOIN/USDT)
  * 
  * Detection strategy (in order):
- * 1. Direct prefix match on raw Kraken symbols (XBTEUR, ETHGBP, etc.)
- * 2. Legacy whitelist match for known symbol pairs
+ * 1. Strict regex match using BENCHMARK_REGEX (primary)
+ * 2. Direct prefix match on raw Kraken symbols (XBTEUR, ETHGBP, etc.)
  * 3. Normalized format check (only if normalization succeeds)
  */
 export function isBenchmarkSymbol(symbol: string): boolean {
   if (!symbol) return false;
   
-  const upperSymbol = symbol.toUpperCase();
+  const upperSymbol = symbol.toUpperCase().trim();
   
-  // 1. Direct prefix match on raw symbol base (handles XBTEUR, ETHGBP, etc.)
-  for (const base of BENCHMARK_BASES) {
-    if (upperSymbol.startsWith(base)) {
-      return true;
-    }
+  // 1. Strict regex match (Directive 11.4H.6 primary method)
+  if (isBenchmarkSymbolStrict(upperSymbol)) {
+    return true;
   }
   
-  // 2. Legacy whitelist match - explicit pair matching
-  for (const legacyPair of BENCHMARK_SYMBOLS) {
-    const legacyBase = legacyPair.split('/')[0].toUpperCase();
-    if (upperSymbol.startsWith(legacyBase) || upperSymbol.includes(legacyBase)) {
+  // 2. Direct prefix match on raw symbol base (handles XBTEUR, ETHGBP, etc.)
+  // Only match exact benchmark base coins at start, not partial matches
+  for (const base of [...BENCHMARK_BASE_COINS, ...BENCHMARK_STABLECOINS]) {
+    // Must be exact base followed by quote separator or quote currency
+    const basePattern = new RegExp(`^${base}(?:[/_-]|USD|EUR|USDT|USDC)`, 'i');
+    if (basePattern.test(upperSymbol)) {
       return true;
     }
   }
@@ -99,23 +110,22 @@ export function isBenchmarkSymbol(symbol: string): boolean {
   // 3. Normalized format check (only if normalization succeeds)
   try {
     const normalized = normalizeToInternalSymbol(symbol);
-    // Skip if normalization failed (returns UNKNOWN)
     if (normalized.includes('UNKNOWN')) {
       return false;
     }
-    const normalizedBase = normalized.split('/')[0].toUpperCase();
-    return BENCHMARK_BASES.includes(normalizedBase);
+    return isBenchmarkSymbolStrict(normalized);
   } catch {
     return false;
   }
 }
 
-// Legacy export for backwards compatibility
+// Directive 11.4H.6: Canonical benchmark symbols list (expanded)
 export const BENCHMARK_SYMBOLS = [
-  'BTC/USD', 'BTC/USDT', 'XBT/USD', 'XBT/USDT',
+  'BTC/USD', 'BTC/USDT',
   'ETH/USD', 'ETH/USDT',
   'SOL/USD', 'SOL/USDT',
-  'USDT/USD', 'USDC/USD', 'DAI/USD'
+  'USDT/USD', 'USDC/USD',
+  'DAI/USD', 'BUSD/USD', 'TUSD/USD'
 ];
 
 // Directive 11.4C.1: ScanResult uses Ideal/Rotational pool terminology
@@ -428,8 +438,13 @@ export class Fx5ScannerService {
         // Directive 11.4H.2 Task 1: Check if symbol is a benchmark asset
         const isBenchmark = isBenchmarkSymbol(normalizedSymbol);
         
+        // Directive 11.4H.6 Task 4: Benchmark bypass flags for volatility/boring filters
+        // Benchmarks should never be rejected for low volatility or "boring" behavior
+        const bypassVolatilityReject = isBenchmark;
+        const bypassBoringReject = isBenchmark;
+        
         // Directive 11.4H.2: Force include benchmark symbols OR blue-chips OR volatile stablecoins
-        const forceInclude = isBenchmark || isBlueChip || (isStable && isStableVol);
+        const forceInclude = isBenchmark || isBlueChip || (isStable && isStableVol) || bypassVolatilityReject;
         const benchmarkForceInclude = forceInclude;
         
         // Directive 11.4H.2: Tag asset type for UI visibility (separate from poolType)
@@ -498,7 +513,9 @@ export class Fx5ScannerService {
           isStablecoin: isStable && isStableVol, // Directive 11.4H.1: Use correctly named variable
           volatility,
           isBenchmark, // Directive 11.4H.2: Benchmark flag
-          assetType // Directive 11.4H.2: Asset type for UI (BENCHMARK/STANDARD)
+          assetType, // Directive 11.4H.2: Asset type for UI (BENCHMARK/STANDARD)
+          bypassVolatilityReject, // Directive 11.4H.6 Task 4: Benchmark bypass flags
+          bypassBoringReject // Directive 11.4H.6 Task 4: Benchmark bypass flags
         };
       });
 
@@ -516,14 +533,24 @@ export class Fx5ScannerService {
 
       // Directive 9.1.F: Filter out pairs that fail LQ/VolNoise thresholds
       // Directive 11.4H Task 3: forceInclude bypasses metric filter for blue-chips/stablecoins
-      const metricFilteredSurvivors = classifiedSurvivors.filter(s => s.passesMetricFilter || s.forceInclude);
+      // Directive 11.4H.6 Task 4: Explicit benchmark bypass for volatility/boring filters
+      const metricFilteredSurvivors = classifiedSurvivors.filter(s => 
+        s.passesMetricFilter || 
+        s.forceInclude || 
+        s.bypassVolatilityReject || 
+        s.bypassBoringReject
+      );
       const metricFilteredCount = classifiedSurvivors.length - metricFilteredSurvivors.length;
       const forceIncludedCount = classifiedSurvivors.filter(s => !s.passesMetricFilter && s.forceInclude).length;
+      const benchmarkBypassedCount = classifiedSurvivors.filter(s => !s.passesMetricFilter && (s.bypassVolatilityReject || s.bypassBoringReject)).length;
       if (metricFilteredCount > 0) {
         console.log(`[9.1][FILTER] Removed ${metricFilteredCount}/${classifiedSurvivors.length} pairs failing LQ/VolNoise thresholds`);
       }
       if (forceIncludedCount > 0) {
         console.log(`[11.4H][FILTER] Force-included ${forceIncludedCount} blue-chip/stablecoin pairs despite metric filter failures`);
+      }
+      if (benchmarkBypassedCount > 0) {
+        console.log(`[11.4H.6][BYPASS] Benchmark bypass active: ${benchmarkBypassedCount} pairs bypassed volatility/boring filters`);
       }
       
       // Directive 11.4H.2: Log benchmark pair count for diagnostics
@@ -533,6 +560,16 @@ export class Fx5ScannerService {
         console.log(`[11.4H.2][BENCHMARK] ${benchmarkCount} benchmark pairs in survivors: ${benchmarkSymbols.join(', ')}${benchmarkCount > 5 ? '...' : ''}`);
       }
 
+      // Directive 11.4H.6 Task 3: IMF Telemetry Persistence during Passive Learning
+      // IMF metrics are always calculated and persisted, regardless of tradingActive state
+      const imfMetricsCount = metricFilteredSurvivors.filter(s => s.LQ !== undefined || s.VolNoise !== undefined).length;
+      console.log(`[11.4H.6][IMF] Persisted IMF metrics for ${imfMetricsCount} pairs (tradingActive=${isEngineActive})`);
+      
+      // Directive 11.4H.6 Task 5: Non-Benchmark Pair Flow Diagnostics
+      const nonBenchmarkCount = metricFilteredSurvivors.filter(s => !s.isBenchmark).length;
+      const passedFiltersCount = metricFilteredSurvivors.filter(s => s.passesMetricFilter && !s.isBenchmark).length;
+      console.log(`[11.4H.6][ScanFlow] Total: ${classifiedSurvivors.length} | Passed Filters: ${passedFiltersCount} | IMF persisted: ${imfMetricsCount} | Benchmarks: ${benchmarkCount} | Non-benchmarks: ${nonBenchmarkCount}`);
+
       // REB 2.8.7: Single-gate pattern - populate pool ONLY when engine ACTIVE
       if (isEngineActive) {
         // Engine ACTIVE: Add survivors to Active Filter Pool (with volume classification and metric filtering)
@@ -540,7 +577,8 @@ export class Fx5ScannerService {
         console.log(`[REB 2.8.7][ActivePool] Pool populated: added=${poolStats.added}, updated=${poolStats.updated}, skipped=${poolStats.skipped}, survivors=${metricFilteredSurvivors.length} (${metricFilteredCount} filtered by 9.1)`);
       } else {
         // Engine STOPPED: Pool cleared by enforcePassiveModeIfStopped (passive learning)
-        console.log(`[REB 2.8.7][ActivePool] Engine stopped - pool cleared (passive learning mode)`);
+        // Directive 11.4H.6 Task 3: IMF metrics still persisted above even in passive mode
+        console.log(`[REB 2.8.7][ActivePool] Engine stopped - pool cleared (passive learning mode). IMF metrics preserved.`);
       }
 
       // Get the current active pool (deduped, non-expired)

@@ -183,7 +183,9 @@ export default function BenchmarkList() {
                 {pairs.map((pair) => (
                   <tr key={pair.symbol} className="border-b hover:bg-muted/50 transition-colors">
                     <td className="py-3 pr-4">
-                      <span className="font-mono text-muted-foreground">#{pair.rank}</span>
+                      <span className="font-mono text-muted-foreground">
+                        {pair.rank && pair.rank > 0 ? `#${pair.rank}` : '—'}
+                      </span>
                     </td>
                     <td className="py-3 pr-4">
                       <div className="flex items-center gap-2">

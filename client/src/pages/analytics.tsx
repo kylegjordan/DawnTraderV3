@@ -673,9 +673,12 @@ export default function AnalyticsPage() {
   const { mode } = useTradingMode();
   const [activeTab, setActiveTab] = useState("overview");
   
+  // Directive 11.4H.6 Task 7: Dynamic binding for favored strategies/signals
+  // Refresh every 60 seconds to get live API data
   const { data: indicatorsData, isLoading: indicatorsLoading, refetch: refetchIndicators } = useQuery<MarketIndicatorsData>({
     queryKey: ['/api/market-indicators'],
-    refetchInterval: 15000,
+    refetchInterval: 60 * 1000, // 60 seconds per Directive 11.4H.6
+    refetchOnWindowFocus: true,
   });
   
   const { data: narrativeData, isLoading: narrativeLoading, refetch: refetchNarrative } = useQuery<NarrativeFeedData>({

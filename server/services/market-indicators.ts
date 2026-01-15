@@ -205,6 +205,8 @@ export function computeGlobalFriction(): number {
     console.log(`[GlobalFriction][Audit] Spread range: ${(Math.min(...spreads) * 100).toFixed(4)}% - ${(Math.max(...spreads) * 100).toFixed(4)}%`);
     console.log(`[GlobalFriction][Audit] Spread variance: ${(spreadVariance * 10000).toFixed(6)}`);
     console.log(`[GlobalFriction][Audit] Friction range: ${frictionMin} - ${frictionMax}`);
+    // Directive 11.4H.6 Task 6: Global Friction Continuous Audit Logging
+    console.log(`[11.4H.6][FrictionAudit] Global friction recalculated: ${avgFriction} | Spread range: ${(Math.min(...spreads) * 100).toFixed(4)}%-${(Math.max(...spreads) * 100).toFixed(4)}% | Sample size: ${count}`);
     console.log(`[GlobalFriction][Audit] Global friction result: ${avgFriction}`);
     
     return avgFriction;

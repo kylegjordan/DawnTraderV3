@@ -1,0 +1,259 @@
+⚙️ Directive 11.4H.6 — Benchmark Stabilization, Institutional Math Persistence, Telemetry Continuity, and Benchmark Regex Correction
+
+Effective Date: January 15 2026
+Applies to: Dawn Trader Core v11.4H Branch
+Predecessor: Directive 11.4H.5 — Benchmark Integration & Canonical Mapping Reference
+Successor: 11.4H.7 — Telemetry Optimization and Friction Dynamics Forecasting
+
+🧭 I. Architectural Context and Definitions
+Term	Definition
+Mode	The system’s operating environment: Live or Paper.
+TradingActive	Boolean flag determining whether real or paper trades are executing.
+true = Active Trading mode; false = Passive Learning (VTS).
+VTS (Virtual Trade Simulator)	Engine that runs during Passive Learning to simulate signals, filter pairs, and update telemetry.
+Institutional Math Filters (IMF)	Advanced filters for liquidity quality (LQ), volatility noise, correlation guards, and statistical market structure metrics. They must always calculate for every scanned pair — even in Passive Learning.
+Ideal Pool	The set of pairs that are continuously scanned and updated by the VTS or Trading Engine. Benchmark pairs are forced members of this pool.
+Benchmark Pairs	Blue-chip coins (BTC, ETH, SOL) and major stablecoins (USDT, USDC, DAI, BUSD, TUSD). They must always appear in the Ideal Pool and Benchmark List tabs.
+Telemetry	Aggregated data from scans and VTS runs that feeds friction and regime metrics to the UI.
+🔩 II. Implementation Tasks
+Task 1 — Benchmark Ideal Pool Persistence
+
+Objective:
+Guarantee that all benchmark symbols are added to the Ideal Pool at startup and remain there regardless of telemetry data availability.
+
+Files:
+
+/server/services/adaptive-scan-manager.ts
+
+/server/services/ideal-pool-manager.ts
+
+Implementation:
+
+// Define canonical benchmark symbols (Dawn Trader Phase 11.4H.6)
+const BENCHMARK_SYMBOLS = [
+  'BTC/USD', 'BTC/USDT',
+  'ETH/USD', 'ETH/USDT',
+  'SOL/USD', 'SOL/USDT',
+  'USDT/USD', 'USDC/USD',
+  'DAI/USD', 'BUSD/USD', 'TUSD/USD'
+];
+
+// Ensure benchmarks are always in the Ideal Pool at startup
+for (const symbol of BENCHMARK_SYMBOLS) {
+  idealPool.add(symbol, {
+    forceInclude: true,
+    source: 'benchmark',
+    timestamp: Date.now()
+  });
+}
+
+
+✅ Expected Result:
+All benchmark pairs appear in the Ideal Pool and Benchmark List tabs, even before telemetry data is present.
+
+Task 1A — Benchmark Symbol Regex Correction
+
+Objective:
+Prevent non-blue-chip coins (e.g., FARTCOIN/USDT) from being misclassified as benchmarks.
+
+Files:
+
+/server/config/benchmark-regex.ts (new file if missing)
+
+/server/services/adaptive-scan-manager.ts
+
+Implementation:
+
+// server/config/benchmark-regex.ts
+export const BENCHMARK_REGEX = /^(?:BTC|XBT|ETH|SOL|USDT|USDC|DAI|BUSD|TUSD)(?:[-_/]?(?:USD|USDT|USDC|DAI|BUSD|EUR))?$/i;
+
+// server/services/adaptive-scan-manager.ts
+import { BENCHMARK_REGEX } from "../config/benchmark-regex";
+
+const isBenchmarkSymbol = (symbol: string): boolean => BENCHMARK_REGEX.test(symbol);
+
+// Filter only valid benchmark symbols
+const BENCHMARK_SYMBOLS = allPairs
+  .map(p => p.symbol)
+  .filter(sym => isBenchmarkSymbol(sym));
+
+for (const symbol of BENCHMARK_SYMBOLS) {
+  idealPool.add(symbol, { forceInclude: true, source: "benchmark" });
+}
+
+
+✅ Expected Result:
+Only true benchmarks (BTC, ETH, SOL, stablecoins) are classified as benchmarks.
+No memecoins or low-liquidity tokens can enter the Benchmark List or Ideal Pool.
+
+Task 2 — Benchmark Ranking Display
+
+Objective:
+Ensure the ranking numbers in the Benchmark List tab only reflect actual Top Scanned Pairs ranks and display a dash when no rank exists.
+
+File:
+
+/client/src/components/analytics/benchmark-list.tsx
+
+Implementation:
+
+<td className="text-center">
+  {pair.rank ? pair.rank : '—'}
+</td>
+
+
+✅ Expected Result:
+Unscanned benchmarks show “—” for rank instead of a random index.
+
+Task 3 — Institutional Math Filters (IMF) Telemetry Persistence During Passive Learning
+
+Objective:
+Ensure IMF metrics are calculated and persisted in telemetry even when tradingActive = false.
+Do not activate the Active Filter Pool when trading is inactive.
+
+Files:
+
+/server/services/fx5-scanner.ts
+
+/server/services/vts-runner.ts
+
+Implementation:
+
+// Example snippet from fx5-scanner.ts
+const imfMetrics = computeInstitutionalMath(pair.marketData);
+pair.imfMetrics = imfMetrics;
+
+// Persist IMF metrics to telemetry always
+telemetry.persistIMF(pair.symbol, imfMetrics);
+
+// Apply IMF filters conditionally
+if (tradingActive) {
+  // Active trading → use survivors in Active Filter Pool
+  activeFilterPool.addSurvivors(mode, metricFilteredSurvivors);
+} else {
+  // Passive Learning → skip pool but store metrics
+  logger.info(`[IMF] Stored metrics for ${pair.symbol} during passive learning.`);
+}
+
+
+✅ Expected Result:
+IMF metrics are calculated for every scan and persisted to telemetry.
+The Active Filter Pool remains inactive in Passive Learning.
+
+Task 4 — Benchmark Scanning Behavior During Active Trading
+
+Objective:
+Ensure benchmarks are never rejected by filters for low volatility or “boring” behavior, but can still fail for legitimate data integrity issues.
+
+File:
+
+/server/services/fx5-scanner.ts
+
+Implementation:
+
+if (pair.isBenchmark) {
+  pair.bypassVolatilityReject = true;
+  pair.bypassBoringReject = true;
+}
+
+
+✅ Expected Result:
+Benchmarks always enter signal generation and VTS scans in Active Trading modes.
+
+Task 5 — Non-Benchmark Pair Flow Diagnostics
+
+Objective:
+Confirm and log that non-benchmark pairs follow the correct pipeline: filters → VTS → telemetry.
+
+File:
+
+/server/services/fx5-scanner.ts
+
+Implementation:
+
+logger.info(
+  `[Scan Summary] Total: ${allPairs.length} | Passed Filters: ${metricFilteredSurvivors.length} | IMF persisted: ${telemetryUpdateCount}`
+);
+
+
+✅ Expected Result:
+Every scan cycle logs how many pairs passed filters and had IMF data persisted.
+
+Task 6 — Global Friction Continuous Audit Logging
+
+Objective:
+Add continuous audit logging to verify that friction calculations update regularly and to trace stability over time.
+
+Files:
+
+/server/core/metrics/cost-metrics.ts
+
+/server/services/market-indicators.ts
+
+Implementation:
+
+logger.info(
+  `[FrictionAudit] Global friction recalculated: ${globalFriction.toFixed(2)} | Spread range: ${minSpread}-${maxSpread} | Sample size: ${sampleCount}`
+);
+
+
+✅ Expected Result:
+Console logs show periodic updates of friction metrics for debug and monitoring.
+
+Task 7 — Overview Tab Dynamic Binding for Favored Strategies and Signals
+
+Objective:
+Make the “Favored Strategies” and “Favored Signal Types” in the Overview tab dynamic, using live API data instead of static maps.
+
+Files:
+
+/client/src/components/analytics/overview.tsx
+
+/server/services/market-indicators.ts
+
+Implementation:
+
+const [favoredStrategies, setFavoredStrategies] = useState([]);
+const [favoredSignals, setFavoredSignals] = useState([]);
+
+useEffect(() => {
+  const fetchIndicators = async () => {
+    const res = await fetch('/api/market-indicators');
+    const data = await res.json();
+    setFavoredStrategies(data.favoredStrategies);
+    setFavoredSignals(data.favoredSignalTypes);
+  };
+  fetchIndicators();
+
+  // Refresh every 60 seconds
+  const interval = setInterval(fetchIndicators, 60000);
+  return () => clearInterval(interval);
+}, []);
+
+
+✅ Expected Result:
+Overview tab automatically refreshes favored strategies and signals each minute without overloading CPU.
+
+🧪 III. Verification Checklist
+Checkpoint	Expected Behavior
+Benchmark Regex	Only BTC, ETH, SOL, USDT, USDC, DAI, BUSD, TUSD match. No FARTCOIN or similar entries.
+Ideal Pool Population	All benchmarks present from startup.
+Benchmark Ranking	“—” shown for unranked pairs.
+IMF Persistence	Metrics stored even when tradingActive = false.
+Active Trading Benchmarks	Never blocked for stability or volatility reasons.
+Non-Benchmark Flow	Proper filter → VTS → telemetry chain.
+Global Friction Logs	Continuous audit entries showing spread and sample ranges.
+Overview Bindings	Favored Strategies and Signals update live from API.
+📊 IV. Summary of Outcomes
+
+✅ Benchmark regex corrected and canonicalized.
+
+✅ All benchmark pairs always appear in the Ideal Pool.
+
+✅ IMF metrics persist in Passive Learning.
+
+✅ Active Trading filters allow benchmarks through unless data invalid.
+
+✅ Friction auditing enabled for continuous validation.
+
+✅ Overview tab strategy/signal lists now dynamic and synchronized.
