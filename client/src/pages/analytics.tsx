@@ -676,10 +676,14 @@ export default function AnalyticsPage() {
   const { mode } = useTradingMode();
   const [activeTab, setActiveTab] = useState("overview");
   
-  // Directive 11.4H.6D: Dynamic binding for favored strategies/signals with cache bypass
-  // Uses timestamp in queryKey to ensure fresh data on each poll
+  // Directive 11.4H.6D: Dynamic binding for favored strategies/signals
+  // staleTime: 0 ensures data is always refetched, refetchInterval polls every 60s
   const { data: indicatorsData, isLoading: indicatorsLoading, refetch: refetchIndicators } = useQuery<MarketIndicatorsData>({
-    queryKey: ['/api/market-indicators', Date.now()],
+    queryKey: ['/api/market-indicators'],
+    queryFn: async () => {
+      const res = await fetch(`/api/market-indicators?t=${Date.now()}`);
+      return res.json();
+    },
     refetchInterval: 60 * 1000, // 60 seconds per Directive 11.4H.6
     refetchOnWindowFocus: true,
     staleTime: 0, // Always treat data as stale to force refetch
