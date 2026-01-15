@@ -44,6 +44,16 @@ The trade lifecycle flows from `Signal Orchestrator` to `SQE` (FinalScore + Regi
 - **Task 6 - Benchmark List Tab**: Created `client/src/components/analytics/benchmark-list.tsx` component. Added new "Benchmark List" tab (4th tab) to Analytics page displaying BTC/ETH/SOL/stablecoin pairs from Ideal Pool.
 - **Task 7 - Entropy Diagnostic API**: New `/api/system/entropy` endpoint returns real-time Shannon entropy of regime distributions with normalized entropy score, regime distribution breakdown, and interpretation text.
 
+**Directive 11.4H.6 Implementation (January 2026):**
+- **Task 1A - Benchmark Regex Correction**: Created `server/config/benchmark-regex.ts` with strict `BENCHMARK_REGEX` pattern to prevent memecoins (e.g., FARTCOIN) from being misclassified as benchmarks. Pattern validates only BTC/XBT/ETH/SOL/USDT/USDC/DAI/BUSD/TUSD against USD/EUR/USDT/USDC quotes.
+- **Task 1 - Benchmark Force-Inclusion Fix**: Updated `fx5-scanner.ts` to use `isBenchmarkSymbolStrict()` from the new regex module. Benchmarks are added to Ideal Pool at startup.
+- **Task 2 - Benchmark Ranking Display**: Updated `benchmark-list.tsx` to show "—" (dash) for unranked pairs instead of #0.
+- **Task 3 - IMF Telemetry Persistence**: Added logging and tracking for IMF metrics (LQ, VolNoise) during passive learning. Metrics are calculated and available for VTS even when `tradingActive=false`.
+- **Task 4 - Benchmark Volatility/Boring Bypass**: Added `bypassVolatilityReject` and `bypassBoringReject` flags for benchmark pairs. Filter logic explicitly checks these flags to ensure benchmarks never get filtered out for low volatility or "boring" behavior.
+- **Task 5 - Non-Benchmark Pair Flow Diagnostics**: Added `[11.4H.6][ScanFlow]` logging showing total pairs, passed filters count, IMF persisted count, benchmarks, and non-benchmarks.
+- **Task 6 - Global Friction Continuous Audit**: Added `[11.4H.6][FrictionAudit]` logging in `market-indicators.ts` with spread range and sample size.
+- **Task 7 - Overview Tab Dynamic Binding**: Updated `analytics.tsx` refetchInterval to 60 seconds with `refetchOnWindowFocus: true` for favored strategies/signals refresh.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed.
