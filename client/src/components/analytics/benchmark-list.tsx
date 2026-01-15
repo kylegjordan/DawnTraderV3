@@ -186,10 +186,12 @@ export default function BenchmarkList() {
                       <span className="font-mono text-muted-foreground">
                         {(() => {
                           const rankValue = Number(pair.rank);
+                          const isAwaitingScan = pair.signalType === 'Awaiting Scan' || 
+                                                 pair.strategy === 'Awaiting Scan' ||
+                                                 pair.regime === 'UNKNOWN';
                           const hasValidScore = pair.score > 0;
-                          const isScanned = pair.signalType !== 'Awaiting Scan' && pair.signalType !== 'HYBRID';
                           const hasValidRank = Number.isFinite(rankValue) && rankValue > 0;
-                          return hasValidRank && hasValidScore && isScanned
+                          return !isAwaitingScan && hasValidRank && hasValidScore
                             ? `#${Math.round(rankValue)}`
                             : '—';
                         })()}
