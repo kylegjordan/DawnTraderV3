@@ -35,6 +35,12 @@ The trade lifecycle flows from `Signal Orchestrator` to `SQE` (FinalScore + Regi
 
 ## Recent Changes
 
+**Directive 11.4H.6D Implementation (January 2026):**
+- **Task 1 - Dynamic Cache Bypass**: Updated analytics.tsx useQuery to use stable queryKey with timestamp in queryFn URL for HTTP cache bypass. staleTime: 0 + refetchInterval: 60s ensures proper refresh.
+- **Task 2 - Live Regime Serialization**: Confirmed API already uses live regime data from getGlobalRegimeSnapshot.
+- **Task 3 - Client Display Fallback**: Added fallback text for empty favoredStrategies array ("No active strategies for current regime").
+- **Task 4 - Diagnostic Logging**: Updated logging to [11.4H.6D] tag in both frontend (useEffect) and backend (market-indicators.ts).
+
 **Directive 11.4H.6C Implementation (January 2026):**
 - **Task 1 - Overview Tab Binding**: Confirmed analytics.tsx correctly binds favoredStrategies and favoredSignalTypes from API response.
 - **Task 2 - Benchmark Rank Display Fix**: Enhanced `benchmark-list.tsx` rank validation to check: `signalType !== 'Awaiting Scan'`, `strategy !== 'Awaiting Scan'`, `regime !== 'UNKNOWN'`, `score > 0`, and valid numeric rank. Unscanned pairs show "—".
