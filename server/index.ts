@@ -129,6 +129,13 @@ app.use((req, res, next) => {
     (bootOrchestrator.isMLReady() ? 'READY' : 'DEGRADED') + ')');
 
   /**
+   * Directive 11.4H.6G Task 4: Canonical Drift Detection
+   * Validates canonical mapping consistency at startup
+   */
+  const { validateCanonicalConsistency } = await import('./utils/validate-canonical.js');
+  validateCanonicalConsistency();
+
+  /**
    * A4.R10R-4: Initialize System Health Monitor FIRST
    * Tracks CPU, memory, event loop lag throughout runtime
    */

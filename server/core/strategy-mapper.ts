@@ -1,90 +1,49 @@
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * Directive 11.4H.6A Task 1 — Canonical Strategy Mapper
- * Directive 11.4H.6F — Long-Only Strategy Mapping Correction
+ * Directive 11.4H.6G — Canonical Regime-Strategy Enforcement
  * ══════════════════════════════════════════════════════════════════════════════
  * 
  * Purpose: Provides regime-based strategy and signal type recommendations.
- * This is the single source of truth for favored strategies/signals per regime.
+ * This module imports from the canonical JSON file - the SINGLE SOURCE OF TRUTH.
  * 
- * Governance: All strategies must be long-only compatible. No short-selling or 
- * sell-biased strategy names are permitted (enforced by audit check).
+ * Governance: 
+ * - All mappings MUST come from /bridge/canonical/mapping-regime-strategy.json
+ * - No hardcoded regime-strategy arrays permitted
+ * - Runtime validation prevents canonical drift
  * 
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-/**
- * Directive 11.4H.6F Task 2: Audit check for invalid short-biased strategies
- * Validates that no strategy names contain short or sell references
- */
-function auditStrategiesForLongOnly(strategies: string[], regime: string): void {
-  const invalids = strategies.filter(s => /short|sell/i.test(s));
-  if (invalids.length) {
-    console.warn(`[11.4H.6F][Audit] Found invalid short-biased strategies for ${regime}: ${invalids.join(", ")}`);
-  }
+import canonicalMap from '../../bridge/canonical/mapping-regime-strategy.json' with { type: 'json' };
+
+interface CanonicalEntry {
+  favoredStrategies: string[];
+  favoredSignalTypes: string[];
 }
 
+type CanonicalMapType = Record<string, CanonicalEntry | string>;
+
+const typedCanonicalMap = canonicalMap as CanonicalMapType;
+
 export function getFavoredStrategiesForRegime(regime: string): string[] {
-  let strategies: string[];
-  
-  switch (regime) {
-    case "BULL_STABLE":
-      strategies = ["SMA Trend Ride", "VWAP Pullback", "Morning Star / Evening Star"];
-      break;
-    case "BULL_VOLATILE":
-      strategies = ["Momentum Breakout", "Volatility Expansion", "Quick Scalp"];
-      break;
-    case "BEAR_STABLE":
-      strategies = ["Support Bounce", "Oversold Reversal", "Counter-Trend"];
-      break;
-    case "BEAR_VOLATILE":
-      // Long-only compatible defensive strategies
-      strategies = ["Breakdown Pullback", "Counter-Reversal", "Defensive Exit"];
-      break;
-    case "LOW_VOL_CHOP":
-      strategies = ["Range Trade", "Support Bounce", "Mean Reversion"];
-      break;
-    case "HIGH_VOL_CHOP":
-      strategies = ["Volatility Compression", "Dynamic Range Play"];
-      break;
-    case "HIGH_VOL_IMPULSE":
-      strategies = ["Breakout", "Adaptive Flow", "VWAP Bounce"];
-      break;
-    case "TRANSITION":
-    case "MIXED_TRANSITION":
-      strategies = ["Pivot Shift", "Morning Star / Evening Star"];
-      break;
-    case "EXTREME_NOISE":
-      strategies = ["Cash", "Wait"];
-      break;
-    default:
-      strategies = ["Range Trade"];
+  const canonical = typedCanonicalMap[regime] as CanonicalEntry | undefined;
+  if (!canonical || typeof canonical === 'string') {
+    console.warn(`[11.4H.6G][Mapper] Missing canonical regime entry: ${regime}`);
+    return ["Unknown Strategy"];
   }
-  
-  // Directive 11.4H.6F Task 2: Audit for invalid short-biased strategies
-  auditStrategiesForLongOnly(strategies, regime);
-  
-  return strategies;
+  console.log(`[11.4H.6G][Mapper] Regime=${regime} | Strategies=${canonical.favoredStrategies.join(", ")}`);
+  return canonical.favoredStrategies;
 }
 
 export function getFavoredSignalTypesForRegime(regime: string): string[] {
-  switch (regime) {
-    case "BULL_STABLE":
-    case "BEAR_VOLATILE":
-      return ["Quantitative", "Pattern"];
-    case "BULL_VOLATILE":
-    case "BEAR_STABLE":
-      return ["Pattern", "Hybrid"];
-    case "LOW_VOL_CHOP":
-    case "HIGH_VOL_IMPULSE":
-      return ["Quantitative", "Hybrid"];
-    case "HIGH_VOL_CHOP":
-    case "TRANSITION":
-    case "MIXED_TRANSITION":
-      return ["Hybrid", "Pattern"];
-    case "EXTREME_NOISE":
-      return [];
-    default:
-      return ["Quantitative"];
+  const canonical = typedCanonicalMap[regime] as CanonicalEntry | undefined;
+  if (!canonical || typeof canonical === 'string') {
+    console.warn(`[11.4H.6G][Mapper] Missing canonical regime entry for signals: ${regime}`);
+    return ["Quantitative"];
   }
+  return canonical.favoredSignalTypes;
+}
+
+export function getCanonicalRegimes(): string[] {
+  return Object.keys(typedCanonicalMap).filter(k => !k.startsWith('_'));
 }

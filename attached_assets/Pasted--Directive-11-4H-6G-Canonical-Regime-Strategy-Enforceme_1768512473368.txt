@@ -1,0 +1,193 @@
+🧭 Directive 11.4H.6G — Canonical Regime–Strategy Enforcement and Mapping Deprecation
+
+Issued by: Systems Architect
+Date: 16 Jan 2026
+Scope: DawnTrader Repository — Backend (Server Core, Services), Canonical Bridge, Analytics API, and UI Binding
+
+🎯 Objective
+
+To eliminate all redundant or non-canonical regime–strategy mappings from the DawnTrader codebase and ensure that every regime-based strategy, signal type, and pattern reference is drawn exclusively from the canonical mapping located in the bridge directory.
+
+This directive supersedes all prior mapping logic defined in:
+
+/server/core/strategy-mapper.ts
+
+/server/services/market-indicators.ts
+
+Any legacy mapping constants in telemetry or analytics logs
+
+And introduces runtime canonical validation to prevent future drift.
+
+🧩 Rationale
+
+During prior development phases (notably 11.3H–11.4F), temporary “runtime” mappings were introduced to decouple analytics from the canonical data model.
+These placeholders were never deprecated, resulting in:
+
+UI inconsistencies (non-canonical strategies displayed in the Overview tab),
+
+Training dataset contamination from incorrect regime-to-strategy associations, and
+
+Violations of the Principle of Canonical Singularity.
+
+Directive 11.4H.6G permanently resolves this issue by mandating canonical linkage for all runtime systems.
+
+🧱 Implementation Plan
+Task 1 — Canonical Mapping Source
+
+File: /bridge/canonical/mapping-regime-strategy.json
+
+Ensure this canonical JSON file is present and structured as follows:
+
+{
+  "BULL_STABLE": {
+    "favoredStrategies": ["SMA Trend Ride", "VWAP Pullback", "Morning Star / Evening Star", "Pivot Shift"],
+    "favoredSignalTypes": ["Quantitative", "Pattern"]
+  },
+  "BEAR_VOLATILE": {
+    "favoredStrategies": ["Reverse Impulse", "Defensive Hedge", "Inside Reversal"],
+    "favoredSignalTypes": ["Hybrid", "Pattern"]
+  },
+  "LOW_VOL_CHOP": {
+    "favoredStrategies": ["Range Trading", "Support Bounce", "ABCD Long", "Adaptive Flow"],
+    "favoredSignalTypes": ["Pattern", "Quantitative"]
+  },
+  "HIGH_VOL_IMPULSE": {
+    "favoredStrategies": ["Breakout", "VWAP Bounce", "Volatility Edge", "DEMA"],
+    "favoredSignalTypes": ["Quantitative", "Pattern"]
+  },
+  "TRANSITION": {
+    "favoredStrategies": ["Liquidity Trap", "Pivot Shift", "Morning Star / Evening Star"],
+    "favoredSignalTypes": ["Pattern", "Hybrid"]
+  }
+}
+
+
+✅ This file now serves as the single authoritative mapping reference for all systems.
+
+Task 2 — Refactor Backend Mapper
+
+File: /server/core/strategy-mapper.ts
+
+Replace existing hardcoded regime logic with a canonical import:
+
+import canonicalMap from '@/bridge/canonical/mapping-regime-strategy.json';
+import { logger } from '@/utils/logger';
+
+export function getFavoredStrategies(regime: string): string[] {
+  const canonical = canonicalMap[regime];
+  if (!canonical) {
+    logger.warn(`[11.4H.6G][Mapper] Missing canonical regime entry: ${regime}`);
+    return ["Unknown Strategy"];
+  }
+  return canonical.favoredStrategies;
+}
+
+export function getFavoredSignalTypes(regime: string): string[] {
+  const canonical = canonicalMap[regime];
+  if (!canonical) {
+    return ["Quantitative"];
+  }
+  return canonical.favoredSignalTypes;
+}
+
+
+✅ Removes all hardcoded arrays.
+✅ Ensures regime mappings are always pulled from canonical data.
+
+Task 3 — Integrate Canonical Mapper into API Layer
+
+File: /server/services/market-indicators.ts
+
+Locate the block (around line 240–270) that currently constructs favoredStrategies and favoredSignalTypes.
+Replace with canonical calls:
+
+import { getFavoredStrategies, getFavoredSignalTypes } from '@/server/core/strategy-mapper';
+
+const favoredStrategies = getFavoredStrategies(globalRegime.type);
+const favoredSignalTypes = getFavoredSignalTypes(globalRegime.type);
+
+logger.info(`[11.4H.6G][Canonical] Regime=${globalRegime.type} | Strategies=${favoredStrategies.join(", ")} | Signals=${favoredSignalTypes.join(", ")}`);
+
+
+✅ API now provides canonical data to the frontend.
+
+Task 4 — Canonical Drift Detection
+
+To prevent reintroducing non-canonical mappings in the future, add a runtime validation module:
+
+File: /server/utils/validate-canonical.ts
+
+import canonicalMap from '@/bridge/canonical/mapping-regime-strategy.json';
+import { getFavoredStrategies } from '@/server/core/strategy-mapper';
+import { logger } from '@/utils/logger';
+
+export function validateCanonicalConsistency() {
+  Object.keys(canonicalMap).forEach(regime => {
+    const canonical = canonicalMap[regime].favoredStrategies;
+    const local = getFavoredStrategies(regime);
+    const drift = local.filter(s => !canonical.includes(s));
+    if (drift.length > 0) {
+      logger.warn(`[11.4H.6G][Canonical Drift] Regime=${regime} → Non-canonical strategies: ${drift.join(", ")}`);
+    }
+  });
+  logger.info(`[11.4H.6G][Canonical Validation] ${Object.keys(canonicalMap).length} regimes verified.`);
+}
+
+
+Call this validation function once on system startup (e.g., in server/index.ts or the initialization sequence).
+
+✅ Detects and logs any divergence automatically.
+
+Task 5 — Update Frontend Overview Binding
+
+File: /client/src/pages/analytics.tsx
+
+Confirm the following section renders API-fed values:
+
+<Section title="Favored Strategies">
+  {overview?.favoredStrategies?.join(", ") ?? "—"}
+</Section>
+<Section title="Favored Signal Types">
+  {overview?.favoredSignalTypes?.join(", ") ?? "—"}
+</Section>
+
+
+No UI logic changes are needed — once the API provides canonical data, this will display correctly.
+
+Task 6 — Logging and Diagnostics
+
+Standardize all related logs to include the directive tag:
+
+[11.4H.6G][Canonical]
+[11.4H.6G][Mapper]
+[11.4H.6G][Canonical Drift]
+[11.4H.6G][Canonical Validation]
+
+
+✅ Ensures traceability in backend and analytics logs.
+
+Task 7 — Verification Checklist
+Layer	Expected Output
+API Response	/api/market-indicators returns canonical strategies and signal types
+Logs	`[11.4H.6G][Canonical] Regime=BEAR_VOLATILE
+UI	Overview tab shows canonical values for the active regime
+Canonical Drift Check	No warnings logged
+Canonical Validation	Logs “5 regimes verified” on startup
+🧮 Success Criteria
+
+✅ 100% elimination of hardcoded regime-strategy mappings.
+✅ Canonical JSON becomes sole authoritative mapping file.
+✅ Analytics Overview tab correctly mirrors canonical strategy lists.
+✅ Canonical validation runs automatically at runtime.
+✅ All logs and system diagnostics reflect canonical trace compliance.
+
+🏁 Completion Notes
+
+This directive marks the final unification phase of the regime–strategy mapping subsystem.
+Upon completion:
+
+The canonical bridge becomes the single source of truth for all downstream systems.
+
+No other mappings are permitted outside /bridge/canonical.
+
+Any local deviation triggers a [Canonical Drift] alert.

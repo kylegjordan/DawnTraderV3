@@ -52,58 +52,62 @@ export interface MarketIndicators {
 /**
  * Directive 11.4A.1 — Expanded Market Regime Definitions (M19 Governance Invariant)
  * Full-text regime definitions in simplified, narrative language for non-expert users.
+ * 
+ * Directive 11.4H.6G-Fix: Descriptions only - strategies/signals derived from canonical mapper at runtime.
  */
-export const regimeDescriptions: Record<string, ExpandedRegimeDescription> = {
+interface RegimeNarrative {
+  title: string;
+  description: string;
+}
+
+const regimeNarratives: Record<string, RegimeNarrative> = {
   BULL_STABLE: {
     title: "Bull Stable",
-    description: `The market is in a clear upward trend, moving steadily higher with moderate volatility. This usually means that confidence is high and most buyers are stepping in at pullbacks. Momentum-based or trend-following signals are more likely to succeed here because the overall direction is upward. You can expect trades to stay open longer, aiming for larger gains.`,
-    favoredSignalTypes: ["Quantitative", "Hybrid"],
-    favoredStrategies: ["Trend Breakout", "Momentum Continuation", "EMA Alignment"]
+    description: `The market is in a clear upward trend, moving steadily higher with moderate volatility. This usually means that confidence is high and most buyers are stepping in at pullbacks. Momentum-based or trend-following signals are more likely to succeed here because the overall direction is upward. You can expect trades to stay open longer, aiming for larger gains.`
   },
   BULL_VOLATILE: {
     title: "Bull Volatile",
-    description: `The market is trending upward but with larger price swings and higher volatility. Opportunities exist but require quicker decision-making and tighter risk management. Momentum strategies work well but position sizes are typically smaller to account for the wider swings. Expect faster trade cycles with more active trailing stop adjustments.`,
-    favoredSignalTypes: ["Quantitative", "Pattern"],
-    favoredStrategies: ["Momentum Breakout", "Volatility Expansion", "Quick Scalp"]
+    description: `The market is trending upward but with larger price swings and higher volatility. Opportunities exist but require quicker decision-making and tighter risk management. Momentum strategies work well but position sizes are typically smaller to account for the wider swings. Expect faster trade cycles with more active trailing stop adjustments.`
   },
   BEAR_STABLE: {
     title: "Bear Stable",
-    description: `The market is in a downward trend with moderate, predictable volatility. Prices are declining but doing so in an orderly fashion. Since this is a long-only system, trading is more selective, focusing on counter-trend bounces and oversold reversals. Position sizes are reduced and holding periods are shorter.`,
-    favoredSignalTypes: ["Pattern", "Hybrid"],
-    favoredStrategies: ["Support Bounce", "Oversold Reversal", "Counter-Trend"]
+    description: `The market is in a downward trend with moderate, predictable volatility. Prices are declining but doing so in an orderly fashion. Since this is a long-only system, trading is more selective, focusing on counter-trend bounces and oversold reversals. Position sizes are reduced and holding periods are shorter.`
   },
   BEAR_VOLATILE: {
     title: "Bear Volatile",
-    description: `The market is trending downward and swinging sharply from highs to lows. Prices often drop quickly and recover partially before continuing down. Short-term trades that favor quick exits or reversal signals may perform better. It's a defensive environment, so position sizes are often smaller and stops tighter.`,
-    favoredSignalTypes: ["Quantitative", "Pattern"],
-    // Directive 11.4H.6F: Long-only compatible defensive strategies
-    favoredStrategies: ["Breakdown Pullback", "Counter-Reversal", "Defensive Exit"]
+    description: `The market is trending downward and swinging sharply from highs to lows. Prices often drop quickly and recover partially before continuing down. Short-term trades that favor quick exits or reversal signals may perform better. It's a defensive environment, so position sizes are often smaller and stops tighter.`
   },
   LOW_VOL_CHOP: {
     title: "Low Volatility Chop",
-    description: `The market is moving sideways with little clear direction and small price changes. Trends do not hold well, so breakout attempts usually fail or reverse quickly. Range-based or counter-trend signals tend to work best because prices often bounce between support and resistance levels. Trades will usually be smaller and shorter, focusing on quick gains.`,
-    favoredSignalTypes: ["Pattern", "Hybrid"],
-    favoredStrategies: ["RSI Overbought/Oversold", "Range Trade", "H2 Slingshot"]
+    description: `The market is moving sideways with little clear direction and small price changes. Trends do not hold well, so breakout attempts usually fail or reverse quickly. Range-based or counter-trend signals tend to work best because prices often bounce between support and resistance levels. Trades will usually be smaller and shorter, focusing on quick gains.`
   },
   HIGH_VOL_CHOP: {
     title: "High Volatility Chop",
-    description: `The market has no clear direction and price movements are wide and unpredictable. Big swings up and down can trigger both stop losses and entries in quick succession. The system will generally trade less or use wider stops to avoid getting chopped up. Only high-confidence hybrid signals will activate in this kind of environment.`,
-    favoredSignalTypes: ["Hybrid"],
-    favoredStrategies: ["Volatility Compression", "Dynamic Range Play"]
+    description: `The market has no clear direction and price movements are wide and unpredictable. Big swings up and down can trigger both stop losses and entries in quick succession. The system will generally trade less or use wider stops to avoid getting chopped up. Only high-confidence hybrid signals will activate in this kind of environment.`
   },
   MIXED_TRANSITION: {
     title: "Mixed Transition",
-    description: `The market is shifting from one regime to another, often from bullish to bearish or vice versa. Conditions are unclear — volatility changes, trend indicators disagree, and signals can conflict. This is when the system becomes more selective and cautious, often reducing position sizes until a new regime stabilizes.`,
-    favoredSignalTypes: ["Hybrid"],
-    favoredStrategies: ["Confirmation Entry", "Directional Probe", "Adaptive Edge"]
+    description: `The market is shifting from one regime to another, often from bullish to bearish or vice versa. Conditions are unclear — volatility changes, trend indicators disagree, and signals can conflict. This is when the system becomes more selective and cautious, often reducing position sizes until a new regime stabilizes.`
   },
   EXTREME_NOISE: {
     title: "Extreme Noise",
-    description: `The market is in chaotic conditions with no discernible pattern or direction. Price action is erratic and unpredictable, making any trading extremely risky. The system enters capital preservation mode, avoiding new entries entirely. This is a time to wait on the sidelines until conditions stabilize.`,
-    favoredSignalTypes: [],
-    favoredStrategies: ["Cash", "Wait"]
+    description: `The market is in chaotic conditions with no discernible pattern or direction. Price action is erratic and unpredictable, making any trading extremely risky. The system enters capital preservation mode, avoiding new entries entirely. This is a time to wait on the sidelines until conditions stabilize.`
   }
 };
+
+function getExpandedRegimeDescriptionFromCanonical(regime: string): ExpandedRegimeDescription {
+  const narrative = regimeNarratives[regime] || regimeNarratives['LOW_VOL_CHOP'];
+  return {
+    title: narrative.title,
+    description: narrative.description,
+    favoredStrategies: getFavoredStrategiesForRegime(regime),
+    favoredSignalTypes: getFavoredSignalTypesForRegime(regime)
+  };
+}
+
+export const regimeDescriptions: Record<string, ExpandedRegimeDescription> = Object.fromEntries(
+  Object.keys(regimeNarratives).map(regime => [regime, getExpandedRegimeDescriptionFromCanonical(regime)])
+);
 
 const REGIME_DESCRIPTIONS: Record<MarketRegime, RegimeInfo> = {
   'BULL_STABLE': {
@@ -257,9 +261,8 @@ export function getMarketIndicators(): MarketIndicators {
   const favoredSignalTypes = getFavoredSignalTypesForRegime(regimeKey);
   
   console.log(`[11.4H.4A-Fix][MarketIndicators] regime=${effectiveRegime} score=${effectiveRegimeScore} percentage=${effectivePercentage}%`);
-  console.log(`[11.4H.6D][MarketIndicators] Regime=${effectiveRegime} | Strategies=${favoredStrategies.join(", ")} | Signals=${favoredSignalTypes.join(", ")}`);
-  // Directive 11.4H.6F Task 4: Verification logging for strategy mapper
-  console.log(`[11.4H.6F][StrategyMapper] Regime=${effectiveRegime} | Strategies=${favoredStrategies.join(", ")}`);
+  // Directive 11.4H.6G: Canonical logging for regime-strategy mapping
+  console.log(`[11.4H.6G][Canonical] Regime=${effectiveRegime} | Strategies=${favoredStrategies.join(", ")} | Signals=${favoredSignalTypes.join(", ")}`);
   
   // Directive 11.4H.5 Task 3: Check for market event transitions
   checkRegimeTransition(effectiveRegime);
