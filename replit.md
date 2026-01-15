@@ -33,34 +33,6 @@ Strategy & Regime Harmonization unifies VTS and Signal Orchestrator onto a singl
 
 The trade lifecycle flows from `Signal Orchestrator` to `SQE` (FinalScore + RegimeWeight filtering), then to a `Ready-to-Buy Queue`. Signals are promoted by `TCL` (Trade Criteria Limiter), managed by `TEC` (Trade Execution Controller) for adaptive sizing and trailing exits, and finally proceed to `Order Management`. Diagnostic tooling is implemented for regime distribution, friction calibration, and Goals Engine normalization.
 
-## Recent Changes
-
-**Directive 11.4H.5 Implementation (January 2026):**
-- **Task 1 - Benchmark Force-Inclusion**: Modified `AdaptiveScanManager.getNextScanBatch()` to always inject benchmark pairs (BTC/ETH/SOL/stablecoins) into every scan batch, regardless of telemetry scores. Benchmark pairs now tracked separately in `AdaptiveScanBatch.benchmarkPairs`.
-- **Task 2 - Institutional Math Filters**: Already enabled via `INSTITUTIONAL_MATH_ENABLED: true` in `system-guards.ts`. LQ, VolNoise, and Correlation guards active for all pair scans.
-- **Task 3 - Market Event Intelligence**: Created `server/utils/market-events.ts` with `checkRegimeTransition()` and `checkFrictionTransition()` functions. Events logged when global regime or friction band changes. New `/api/market-events` endpoint returns transition history.
-- **Task 4 - Overview Strategy/Signal Mapping**: Already implemented - Overview tab dynamically displays `favoredSignalTypes` and `favoredStrategies` based on current regime from `market-indicators.ts`.
-- **Task 5 - Definitions & Mapping Reference UI**: Added collapsible `DefinitionsReference` component to Overview tab with beginner-friendly tables explaining Global Metric Definitions, Regime Types, Friction Types, Canonical Regime-Strategy Mapping, and Signal Types & Strategies.
-- **Task 6 - Benchmark List Tab**: Created `client/src/components/analytics/benchmark-list.tsx` component. Added new "Benchmark List" tab (4th tab) to Analytics page displaying BTC/ETH/SOL/stablecoin pairs from Ideal Pool.
-- **Task 7 - Entropy Diagnostic API**: New `/api/system/entropy` endpoint returns real-time Shannon entropy of regime distributions with normalized entropy score, regime distribution breakdown, and interpretation text.
-
-**Directive 11.4H.6 Implementation (January 2026):**
-- **Task 1A - Benchmark Regex Correction**: Created `server/config/benchmark-regex.ts` with strict `BENCHMARK_REGEX` pattern to prevent memecoins (e.g., FARTCOIN) from being misclassified as benchmarks. Pattern validates only BTC/XBT/ETH/SOL/USDT/USDC/DAI/BUSD/TUSD against USD/EUR/USDT/USDC quotes.
-- **Task 1 - Benchmark Force-Inclusion Fix**: Updated `fx5-scanner.ts` to use `isBenchmarkSymbolStrict()` from the new regex module. Benchmarks are added to Ideal Pool at startup.
-- **Task 2 - Benchmark Ranking Display**: Updated `benchmark-list.tsx` to show "—" (dash) for unranked pairs instead of #0.
-- **Task 3 - IMF Telemetry Persistence**: Added logging and tracking for IMF metrics (LQ, VolNoise) during passive learning. Metrics are calculated and available for VTS even when `tradingActive=false`.
-- **Task 4 - Benchmark Volatility/Boring Bypass**: Added `bypassVolatilityReject` and `bypassBoringReject` flags for benchmark pairs. Filter logic explicitly checks these flags to ensure benchmarks never get filtered out for low volatility or "boring" behavior.
-- **Task 5 - Non-Benchmark Pair Flow Diagnostics**: Added `[11.4H.6][ScanFlow]` logging showing total pairs, passed filters count, IMF persisted count, benchmarks, and non-benchmarks.
-- **Task 6 - Global Friction Continuous Audit**: Added `[11.4H.6][FrictionAudit]` logging in `market-indicators.ts` with spread range and sample size.
-- **Task 7 - Overview Tab Dynamic Binding**: Updated `analytics.tsx` refetchInterval to 60 seconds with `refetchOnWindowFocus: true` for favored strategies/signals refresh.
-
-**Directive 11.4H.6A Implementation (January 2026):**
-- **Task 1 - Favored Strategy & Signal Binding**: Created `server/core/strategy-mapper.ts` with canonical strategy mapper providing regime-based strategy and signal type recommendations via `getStrategyMapperOutput()`.
-- **Task 2 - Benchmark Rank Display Fix**: Verified `benchmark-list.tsx` shows "—" for unranked pairs (already implemented).
-- **Task 3 - IMF Passive Learning Correction**: Implemented VTS → FX5 OHLC cache pipeline. VTS now caches OHLC data via `cacheOHLCData()` in `imf-metrics.ts`. FX5 scanner uses cached OHLC during passive learning for accurate LQ/VolNoise calculations instead of placeholders. Logs differentiate `[11.4H.6A][IMF OHLC]` (cached) vs `[11.4H.6A][IMF Passive]` (ticker fallback).
-- **Task 4 - FX5 Dual-Scan Streamlining**: Added `[11.4H.6A][ModeCheck]` logging and early mode detection in FX5 scanner. Single scan runs during passive learning based on mode detection.
-- **Task 5 - Logging Enhancements**: Added comprehensive `[11.4H.6A]` diagnostic logging including `[ModeCheck]`, `[PassiveScan]`, `[IMF OHLC]`, and `[IMF Passive]` tags.
-
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed.
