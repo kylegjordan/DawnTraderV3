@@ -35,6 +35,12 @@ The trade lifecycle flows from `Signal Orchestrator` to `SQE` (FinalScore + Regi
 
 ## Recent Changes
 
+**Directive 11.4H.6E Implementation (January 2026):**
+- **Task 1 - Authenticated Query Restoration**: Replaced raw fetch with apiFetch() in analytics.tsx for market indicators endpoint, ensuring credentials, JWT token, and x-app-mode headers are included.
+- **Task 2 - UI Error Boundary**: Added full error fallback UI with AlertCircle icon, error message, and Retry button when indicatorsError occurs. Prevents silent failures.
+- **Task 3 - Backend Diagnostic Logging**: Added [11.4H.6E] logging tag in routes.ts showing user ID on authorized requests.
+- **Task 4 - Verification**: API now returns 200 OK, data displays correctly in Overview tab.
+
 **Directive 11.4H.6D Implementation (January 2026):**
 - **Task 1 - Dynamic Cache Bypass**: Updated analytics.tsx useQuery to use stable queryKey with timestamp in queryFn URL for HTTP cache bypass. staleTime: 0 + refetchInterval: 60s ensures proper refresh.
 - **Task 2 - Live Regime Serialization**: Confirmed API already uses live regime data from getGlobalRegimeSnapshot.
