@@ -1,0 +1,146 @@
+⚙️ Directive 11.4H.6D — Dynamic Favored Strategy & Signal Synchronization
+
+Effective Date: January 20, 2026
+Parent Directive: 11.4H.6C — Corrective Binding and Benchmark Rank Validation
+Scope: Dynamic data binding for favored strategies and signals in Overview tab
+Objective: Ensure favoredStrategies and favoredSignalTypes update reactively from live regime data returned by /api/market-indicators.
+
+🧭 I. Root Cause
+
+Based on your screenshots and repository structure:
+
+Component	Root Cause
+Frontend (overview.tsx)	The overview object returned by useSWR('/api/market-indicators') references a static cache that only refreshes when the parent Analytics page reloads, not when the regime state updates in the backend. The favored arrays are bound to defaults set in market-overview.tsx, not the fetched JSON fields.
+Backend (market-indicators.ts)	While favoredStrategies and favoredSignalTypes are generated correctly, they are not being reserialized when the regime state updates, due to a missing subscription to the global regime watcher (getRegimeSnapshot()), causing stale responses.
+
+In short:
+
+The backend sends correct data only once at load.
+
+The frontend displays that initial value indefinitely, never updating with real-time regime changes.
+
+🔩 II. Implementation Tasks
+Task 1 — Rebind Dynamic Favored Strategy/Signal Data
+
+File: /client/src/components/analytics/overview.tsx
+
+Step 1A: Fix SWR Fetch Key
+
+Replace the current SWR declaration:
+
+const { data: overview } = useSWR('/api/market-indicators', fetcher, { refreshInterval: 60000 });
+
+
+with:
+
+const { data: overview } = useSWR(
+  () => `/api/market-indicators?timestamp=${Date.now()}`,
+  fetcher,
+  { refreshInterval: 60000, revalidateOnFocus: true }
+);
+
+
+✅ This ensures each poll (every 60s or window refocus) fetches fresh regime data rather than serving from SWR cache.
+
+Step 1B: Directly Bind the API Arrays
+
+Below your existing definitions:
+
+const favoredStrategies = overview?.favoredStrategies ?? [];
+const favoredSignalTypes = overview?.favoredSignalTypes ?? [];
+
+
+Insert a reactive effect to log and force state updates when the arrays change:
+
+useEffect(() => {
+  if (overview?.favoredStrategies || overview?.favoredSignalTypes) {
+    console.debug('[11.4H.6D][Overview] Updated favored strategies/signals:', {
+      strategies: overview.favoredStrategies,
+      signals: overview.favoredSignalTypes,
+    });
+  }
+}, [overview?.favoredStrategies, overview?.favoredSignalTypes]);
+
+
+✅ Confirms the frontend now re-renders whenever these arrays change.
+
+Task 2 — Ensure Live Regime Serialization in API
+
+File: /server/services/market-indicators.ts
+
+Locate the regime data section and modify the export to always derive these fields from the current regime snapshot.
+
+Replace:
+
+const favoredStrategies = getFavoredStrategies(effectiveRegime);
+const favoredSignalTypes = getFavoredSignals(effectiveRegime);
+
+
+with:
+
+const liveRegime = await getRegimeSnapshot();
+const favoredStrategies = getFavoredStrategies(liveRegime);
+const favoredSignalTypes = getFavoredSignals(liveRegime);
+
+
+And ensure these are serialized at return:
+
+return {
+  regime: liveRegime,
+  regimeScore: effectiveRegimeScore,
+  globalFriction,
+  favoredStrategies,
+  favoredSignalTypes,
+};
+
+
+✅ This guarantees each API call returns live regime-linked arrays, not cached values.
+
+Task 3 — Verify Client Display
+
+Under the “Favored Strategies” and “Favored Signal Types” JSX in the Overview tab, ensure both arrays are displayed as:
+
+<p className="text-sm text-gray-600">
+  {favoredSignalTypes?.length > 0
+    ? favoredSignalTypes.join(", ")
+    : "No active signal types for current regime."}
+</p>
+<p className="text-sm text-gray-600">
+  {favoredStrategies?.length > 0
+    ? favoredStrategies.join(", ")
+    : "No active strategies for current regime."}
+</p>
+
+
+✅ Expected Behavior:
+The lists now dynamically change as soon as the global regime changes, without requiring a manual page reload.
+
+Task 4 — Add Diagnostic Logging
+
+File: /server/services/market-indicators.ts
+
+Add:
+
+logger.info(
+  `[11.4H.6D][MarketIndicators] Regime=${liveRegime?.type} | Strategies=${favoredStrategies?.join(", ")} | Signals=${favoredSignalTypes?.join(", ")}`
+);
+
+
+✅ Expected Output Example:
+
+[11.4H.6D][MarketIndicators] Regime=Bear Volatile | Strategies=Breakdown Pullback, Counter-Reversal, Fast Exit Short | Signals=Quantitative, Pattern
+
+🧪 III. Verification Checklist
+Checkpoint	Expected Result
+Overview tab	Favored strategies/signals update dynamically when regime changes.
+Backend logs	[11.4H.6D][MarketIndicators] entries appear every regime recalculation.
+SWR debugging	Console logs confirm revalidation and array updates every 60 seconds.
+No cache artifacts	Refresh not required for UI to show updated lists.
+Regression	IMF, friction, and rank logic remain unaffected.
+📊 IV. Summary of Outcomes
+
+✅ API now returns real-time favored strategies/signals.
+✅ Overview dynamically updates every 60 seconds or focus event.
+✅ Logging confirms correct serialization and binding.
+✅ Benchmark rank logic remains stable.
+✅ Directive 11.4H.6D closes all open items in the 11.4H.6 branch.

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -227,11 +227,14 @@ function MarketOverviewSection({ indicators }: { indicators: MarketIndicatorsDat
           <div>
             <h4 className="text-sm font-medium mb-2">Favored Strategies</h4>
             <div className="flex flex-wrap gap-2">
-              {data.favoredStrategies.map((strategy) => (
+              {(data.favoredStrategies || []).map((strategy) => (
                 <Badge key={strategy} variant="secondary">
                   {strategy}
                 </Badge>
               ))}
+              {(!data.favoredStrategies || data.favoredStrategies.length === 0) && (
+                <span className="text-sm text-muted-foreground">No active strategies for current regime</span>
+              )}
             </div>
           </div>
         </div>
@@ -673,13 +676,24 @@ export default function AnalyticsPage() {
   const { mode } = useTradingMode();
   const [activeTab, setActiveTab] = useState("overview");
   
-  // Directive 11.4H.6 Task 7: Dynamic binding for favored strategies/signals
-  // Refresh every 60 seconds to get live API data
+  // Directive 11.4H.6D: Dynamic binding for favored strategies/signals with cache bypass
+  // Uses timestamp in queryKey to ensure fresh data on each poll
   const { data: indicatorsData, isLoading: indicatorsLoading, refetch: refetchIndicators } = useQuery<MarketIndicatorsData>({
-    queryKey: ['/api/market-indicators'],
+    queryKey: ['/api/market-indicators', Date.now()],
     refetchInterval: 60 * 1000, // 60 seconds per Directive 11.4H.6
     refetchOnWindowFocus: true,
+    staleTime: 0, // Always treat data as stale to force refetch
   });
+  
+  // Directive 11.4H.6D Task 1B: Reactive effect to log updates when favored arrays change
+  useEffect(() => {
+    if (indicatorsData?.data?.favoredStrategies || indicatorsData?.data?.favoredSignalTypes) {
+      console.debug('[11.4H.6D][Overview] Updated favored strategies/signals:', {
+        strategies: indicatorsData.data.favoredStrategies,
+        signals: indicatorsData.data.favoredSignalTypes,
+      });
+    }
+  }, [indicatorsData?.data?.favoredStrategies, indicatorsData?.data?.favoredSignalTypes]);
   
   const { data: narrativeData, isLoading: narrativeLoading, refetch: refetchNarrative } = useQuery<NarrativeFeedData>({
     queryKey: ['/api/narrative-feed?limit=50'],
