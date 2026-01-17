@@ -600,12 +600,13 @@ export class Fx5ScannerService {
       activeFilterPool.enforcePassiveModeIfStopped(mode, isEngineActive);
 
       // Directive 9.1.F: Filter out pairs that fail LQ/VolNoise thresholds
-      // Directive 11.4H Task 3: forceInclude bypasses metric filter for blue-chips/stablecoins
-      // Directive 11.4H.6 Task 4: Explicit benchmark bypass for volatility/boring filters
+      // Directive 11.5 Task 4: Blue chips & stablecoins are scanned but only tradable when filters pass
+      // forceInclude pairs are included in scan pool but must ALSO pass metric filter for trading
+      // bypassVolatilityReject/bypassBoringReject allow benchmarks to be scanned for data collection
       const metricFilteredSurvivors = classifiedSurvivors.filter(s => 
-        s.passesMetricFilter || 
-        s.forceInclude || 
-        s.bypassVolatilityReject || 
+        s.passesMetricFilter ||
+        (s.forceInclude && s.passesMetricFilter) ||
+        s.bypassVolatilityReject ||
         s.bypassBoringReject
       );
       const metricFilteredCount = classifiedSurvivors.length - metricFilteredSurvivors.length;

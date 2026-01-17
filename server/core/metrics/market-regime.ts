@@ -204,3 +204,134 @@ export function getDynamicRegimeScore(ohlcData: OHLCData[]): {
 export function isHighConfidenceRegime(result: RegimeCalculationResult): boolean {
   return result.confidence >= 0.70;
 }
+
+/**
+ * ══════════════════════════════════════════════════════════════════════════════
+ * Directive 11.5 Task 2 — Rolling Z-Score Normalization for Regimes
+ * ══════════════════════════════════════════════════════════════════════════════
+ * 
+ * Purpose: Replace static regime thresholds with rolling, adaptive normalization.
+ * Uses Z-Scores calculated over a 300-period window for ADX, volatility, and momentum.
+ * 
+ * This is the canonical regime function used by both VTS and DSS systems.
+ * ══════════════════════════════════════════════════════════════════════════════
+ */
+
+import { RollingStats } from '../../utils/rolling-stats.js';
+
+const rollingStats = {
+  ADX: new RollingStats(300),
+  VOL: new RollingStats(300),
+  MOM: new RollingStats(300)
+};
+
+export interface NormalizedMetrics {
+  adx: number;
+  vol: number;
+  momentum: number;
+}
+
+/**
+ * Directive 11.5 Task 2: Get Normalized Regime
+ * 
+ * Canonical export for Z-Score normalized regime classification.
+ * Used by both VTS (passive) and DSS (active) systems.
+ * 
+ * Classification logic:
+ * - BULL_VOLATILE: High volatility + moderate trend strength (volZ > 1, adxZ > 0.5)
+ * - BULL_STABLE: Moderate volatility + trend strength (volZ > 0.5, adxZ > 0.2)
+ * - LOW_VOL_CHOP: Low volatility, no trend (volZ < -0.5, adxZ > 0)
+ * - BEAR_STABLE: Low trend strength + negative momentum (adxZ < -0.5, momZ < 0)
+ * - BEAR_VOLATILE: Default fallback
+ * 
+ * @param metrics - Raw ADX, volatility, and momentum values
+ * @returns Normalized regime type
+ */
+export function getNormalizedRegime(metrics: NormalizedMetrics): MarketRegimeType {
+  const { adx, vol, momentum } = metrics;
+
+  rollingStats.ADX.push(adx);
+  rollingStats.VOL.push(vol);
+  rollingStats.MOM.push(momentum);
+
+  const adxZ = rollingStats.ADX.zScore(adx);
+  const volZ = rollingStats.VOL.zScore(vol);
+  const momZ = rollingStats.MOM.zScore(momentum);
+
+  if (volZ > 1 && adxZ > 0.5) {
+    return 'HIGH_VOL_IMPULSE';
+  }
+  
+  if (volZ > 0.5 && adxZ > 0.2 && momZ > 0) {
+    return 'BULL_STABLE';
+  }
+  
+  if (volZ < -0.5 && Math.abs(momZ) < 0.5) {
+    return 'LOW_VOL_CHOP';
+  }
+  
+  if (adxZ < -0.5 && momZ < 0) {
+    return 'TRANSITION';
+  }
+  
+  if (momZ < -0.5) {
+    return 'BEAR_VOLATILE';
+  }
+  
+  return 'TRANSITION';
+}
+
+/**
+ * Directive 11.5: Get normalized regime with Z-Score details
+ * Returns both the regime and the Z-scores used for classification
+ */
+export function getNormalizedRegimeWithDetails(metrics: NormalizedMetrics): {
+  regime: MarketRegimeType;
+  zScores: { adxZ: number; volZ: number; momZ: number };
+  isWarmedUp: boolean;
+} {
+  const { adx, vol, momentum } = metrics;
+
+  rollingStats.ADX.push(adx);
+  rollingStats.VOL.push(vol);
+  rollingStats.MOM.push(momentum);
+
+  const adxZ = rollingStats.ADX.zScore(adx);
+  const volZ = rollingStats.VOL.zScore(vol);
+  const momZ = rollingStats.MOM.zScore(momentum);
+
+  const isWarmedUp = rollingStats.ADX.isWarmedUp(30) && 
+                     rollingStats.VOL.isWarmedUp(30) && 
+                     rollingStats.MOM.isWarmedUp(30);
+
+  let regime: MarketRegimeType;
+
+  if (volZ > 1 && adxZ > 0.5) {
+    regime = 'HIGH_VOL_IMPULSE';
+  } else if (volZ > 0.5 && adxZ > 0.2 && momZ > 0) {
+    regime = 'BULL_STABLE';
+  } else if (volZ < -0.5 && Math.abs(momZ) < 0.5) {
+    regime = 'LOW_VOL_CHOP';
+  } else if (adxZ < -0.5 && momZ < 0) {
+    regime = 'TRANSITION';
+  } else if (momZ < -0.5) {
+    regime = 'BEAR_VOLATILE';
+  } else {
+    regime = 'TRANSITION';
+  }
+
+  return {
+    regime,
+    zScores: { adxZ, volZ, momZ },
+    isWarmedUp
+  };
+}
+
+/**
+ * Directive 11.5: Check if regime stats are warmed up
+ */
+export function isRegimeStatsWarmedUp(): boolean {
+  return rollingStats.ADX.isWarmedUp(30) && 
+         rollingStats.VOL.isWarmedUp(30) && 
+         rollingStats.MOM.isWarmedUp(30);
+}

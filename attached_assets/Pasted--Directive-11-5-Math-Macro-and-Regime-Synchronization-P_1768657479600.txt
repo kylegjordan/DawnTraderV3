@@ -1,0 +1,287 @@
+⚙️ Directive 11.5 — “Math, Macro, and Regime Synchronization”
+
+Phase: 11.5
+Objective:
+Stabilize DawnTrader’s mathematical framework across passive and active trading by:
+
+Normalizing regime calculations dynamically (Z-Scores).
+
+Making secondary metric thresholds adaptive to macro market conditions.
+
+Enforcing pre-trade profitability validation.
+
+Ensuring consistent canonical use across VTS and DSS.
+
+Respecting benchmark/stablecoin inclusion rules while avoiding false trades.
+
+🧩 I. CORE GOALS
+
+Dynamic Regime Normalization:
+All regime classifications use rolling statistical normalization (Z-Scores), not fixed cutoffs.
+
+Macro-Aware Secondary Metrics:
+Secondary metric ranges (momentum, volatility, liquidity, friction) adjust based on global market condition indices (“Macro States”).
+
+Profitability Validation (Net Expectancy Gate):
+No simulated or live trade proceeds if projected profit ≤ trading cost.
+
+Filter Integrity & Blue-Chip Respect:
+Stablecoins and blue chips are always scanned but only tradable when passing filters.
+
+Canonical Consistency:
+The same normalized regime and secondary metric logic is used by both VTS (passive) and DSS (active) systems.
+
+🧱 II. IMPLEMENTATION TASKS
+Task 1 — Profitability Validation (Net Expectancy Gate)
+
+File: /server/core/calculations/expectancy.ts
+Also Modify:
+
+/server/services/vts-runner.ts
+
+/server/orchestrator/sqe-filter.ts
+
+Purpose:
+Prevent low-expectancy (fee-negative) signals from entering simulation or live trade queues.
+
+Insert at Top of File:
+
+export function isMathematicallyProfitable(entry, target, spread, slippage, fee) {
+  const grossProfit = Math.abs(target - entry);
+  const totalCost = (fee * 2) + (spread * 1.1) + slippage;
+  return grossProfit > totalCost;
+}
+
+
+In vts-runner.ts (before trade simulation):
+
+import { isMathematicallyProfitable } from '@/core/calculations/expectancy';
+
+if (!isMathematicallyProfitable(entry, target, spread, slippage, fee)) {
+   log('[11.5][ProfitGate] Skipping trade: Net expectancy below 0');
+   continue; // skip trade simulation
+}
+
+
+In sqe-filter.ts (before adding to RTB queue):
+
+if (!isMathematicallyProfitable(entry, target, spread, slippage, fee)) {
+   log('[11.5][ProfitGate] Blocking signal: Expected profit < cost');
+   return false;
+}
+
+
+✅ Result: No trade—real or simulated—proceeds if its math doesn’t justify the risk.
+
+Task 2 — Rolling Z-Score Normalization for Regimes
+
+File: /server/core/metrics/market-regime.ts
+Canonical Export: getNormalizedRegime()
+Referenced By:
+
+vts-runner.ts
+
+dss/strategy-selector.ts
+
+market-indicators.ts
+
+fx5-scanner.ts
+
+Purpose:
+Replace static regime thresholds with rolling, adaptive normalization.
+
+Insert near top of file:
+
+import { RollingStats } from '@/utils/rolling-stats';
+
+// Rolling windows for last 300 periods
+const rollingStats = {
+  ADX: new RollingStats(300),
+  VOL: new RollingStats(300),
+  MOM: new RollingStats(300)
+};
+
+export function getNormalizedRegime(metrics) {
+  const { adx, vol, momentum } = metrics;
+
+  rollingStats.ADX.push(adx);
+  rollingStats.VOL.push(vol);
+  rollingStats.MOM.push(momentum);
+
+  const adxZ = (adx - rollingStats.ADX.mean()) / (rollingStats.ADX.std() || 1);
+  const volZ = (vol - rollingStats.VOL.mean()) / (rollingStats.VOL.std() || 1);
+  const momZ = (momentum - rollingStats.MOM.mean()) / (rollingStats.MOM.std() || 1);
+
+  if (volZ > 1 && adxZ > 0.5) return 'BULL_VOLATILE';
+  if (volZ > 0.5 && adxZ > 0.2) return 'BULL_STABLE';
+  if (volZ < -0.5 && adxZ > 0) return 'LOW_VOL_CHOP';
+  if (adxZ < -0.5 && momZ < 0) return 'BEAR_STABLE';
+  return 'BEAR_VOLATILE';
+}
+
+
+In vts-runner.ts and dss/strategy-selector.ts, replace:
+
+const regime = calculateRegimeScore(metrics);
+
+
+With:
+
+import { getNormalizedRegime } from '@/core/metrics/market-regime';
+const regime = getNormalizedRegime(metrics);
+
+
+✅ Result: Regime labeling adapts automatically to current volatility/momentum levels across both passive and active systems.
+
+Task 3 — Macro-State Secondary Metric Adjustment
+
+File: /server/core/metrics/secondary-metrics.ts
+Referenced by: fx5-scanner.ts, market-friction.ts, and market-indicators.ts
+
+Purpose:
+Adjust secondary metric thresholds dynamically based on macro conditions such as volatility expansion, liquidity compression, or speculative correlation.
+
+Insert near top of file:
+
+import { getGlobalMacroCondition } from '@/core/metrics/macro-state';
+
+
+Create a new file: /server/core/metrics/macro-state.ts
+
+export function getGlobalMacroCondition(globalStats) {
+  const { avgVolatilityZ, liquidityZ, correlationZ } = globalStats;
+
+  if (avgVolatilityZ > 2) return 'VOLATILITY_EXPANSION';
+  if (liquidityZ < -1) return 'LIQUIDITY_CRUNCH';
+  if (correlationZ > 1.5) return 'SPECULATIVE_SURGE';
+  return 'NORMAL';
+}
+
+
+Modify secondary-metrics.ts:
+
+export function adjustMetricRanges(baseRanges, globalStats) {
+  const condition = getGlobalMacroCondition(globalStats);
+
+  switch (condition) {
+    case 'VOLATILITY_EXPANSION':
+      baseRanges.VOL_HIGH *= 1.25;
+      baseRanges.MOM_HIGH *= 1.1;
+      break;
+    case 'LIQUIDITY_CRUNCH':
+      baseRanges.LQ_MIN += 10;
+      break;
+    case 'SPECULATIVE_SURGE':
+      baseRanges.ADX_MIN += 10;
+      baseRanges.VOL_HIGH *= 0.9;
+      break;
+  }
+
+  return baseRanges;
+}
+
+
+In fx5-scanner.ts, before metric application:
+
+const adjustedRanges = adjustMetricRanges(BASE_METRIC_RANGES, globalStats);
+const metrics = calculateMetrics(pairData, adjustedRanges);
+
+
+✅ Result: Secondary metrics (momentum, volatility, liquidity) now auto-adjust to global market “moods” — calm, panic, or mania.
+
+Task 4 — Filter & Benchmark Logic Corrections
+
+File: /server/services/fx5-scanner.ts
+
+Purpose:
+Ensure blue chips & stablecoins are scanned but not force-included for trading unless filters pass.
+
+Replace existing logic:
+
+s.passesMetricFilter || s.forceInclude || s.bypassVolatilityReject
+
+
+With:
+
+(s.passesMetricFilter) ||
+(s.forceInclude && s.passesMetricFilter)
+
+
+✅ Result:
+Blue chips remain in the ideal scan pool but must pass IMF & original filters to trade.
+Stablecoins are still scanned (data collected) but won’t create trades unless trading engine explicitly re-enables them.
+
+Task 5 — Strategy-Specific Guardrails
+
+File: /server/core/strategy-executor.ts
+
+Purpose:
+Require ADX > 25 for SMA-based trend strategies (only meaningful in trending markets).
+
+Inside trade logic (around strategy execution check):
+
+if (strategy === 'sma_trend_ride' && metrics.adx < 25) {
+   log('[11.5][Guard] Skipping SMA Trend: ADX < 25');
+   return; // not enough trend strength
+}
+
+
+✅ Result: Prevents false trend trades in low-strength or choppy markets.
+
+Task 6 — Range Trade Performance Audit
+
+File: /server/core/strategy-analyzer.ts
+
+Purpose:
+Before disabling any strategy (like Range Trade), audit its performance in each regime to determine whether failure is due to mapping or math.
+
+Add function:
+
+export function auditStrategyPerformance(results) {
+  const grouped = groupBy(results, 'strategy');
+  for (const [strategy, trades] of Object.entries(grouped)) {
+    const winRate = trades.filter(t => t.NetProfit > 0).length / trades.length;
+    log(`[11.5][Audit] ${strategy} Win Rate: ${(winRate * 100).toFixed(2)}%`);
+  }
+}
+
+
+Run post-simulation:
+
+auditStrategyPerformance(VTS_RESULTS);
+
+
+✅ Result: Range Trade stays enabled until data confirms underperformance across correctly classified regimes.
+
+✅ III. VERIFICATION CHECKLIST
+Verification	Expected Outcome
+Regime distribution	At least 4 regimes appear regularly
+Range trade	Only disabled if confirmed poor after audit
+Stablecoin / Blue Chip trades	Only appear if filters pass
+Net PnL	Breakeven or positive
+Win rate	≥ 20%
+Trade volume	↓ 70–80%
+Profit gate logs	[11.5][ProfitGate] visible in console
+Macro adjustments	[11.5][MacroState] Condition=VOLATILITY_EXPANSION logged periodically
+🧩 IV. CODE PLACEMENT SUMMARY
+Module	File	Function / Location	Change
+Profitability check	expectancy.ts	isMathematicallyProfitable()	Add + import into VTS + SQE
+Regime Z-Scores	market-regime.ts	getNormalizedRegime()	Canonical export
+Macro-state logic	macro-state.ts	New file	New global condition module
+Secondary metric scaling	secondary-metrics.ts	adjustMetricRanges()	Dynamic range scaling
+Filter logic	fx5-scanner.ts	Filter pipeline	Respect IMF + blue-chip logic
+Strategy guard	strategy-executor.ts	Pre-entry logic	ADX > 25 requirement
+Strategy audit	strategy-analyzer.ts	New function	Logs per-strategy win rates
+🧠 V. SUMMARY
+
+Directive 11.5 establishes:
+
+Mathematical sanity via profitability gate.
+
+Dynamic market intelligence via Z-scores and macro scaling.
+
+Architectural consistency — one canonical regime source used system-wide.
+
+Filter integrity for benchmarks and stablecoins.
+
+Empirical control — we measure performance before disabling strategies.

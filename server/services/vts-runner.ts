@@ -28,6 +28,7 @@
  */
 
 import { vtsService, type VirtualSignal } from './vts-service.js';
+import { isMathematicallyProfitable } from '../core/calculations/expectancy.js';
 import { loadCalibration, applyCalibration, type CalibrationCoefficients } from '../utils/calibration.js';
 import { priceCache, type CachedPrice, type CacheBucketType } from './price-cache.js';
 import { systemConfigService } from './system-config.js';
@@ -333,6 +334,21 @@ async function generatePhase10Signal(
   
   const costMetrics = getCachedCostMetrics(symbol);
   const frictionCost = (costMetrics.fee * 2) + (costMetrics.slippage * 2) + costMetrics.spread;
+  
+  // Directive 11.5 Task 1: Net Expectancy Gate - Profitability Validation
+  // Skip trade if gross profit would not exceed total costs
+  const estimatedSlippage = costMetrics.slippage || 0.001;
+  if (!isMathematicallyProfitable(entryPrice, takeProfit, spread, estimatedSlippage, costMetrics.fee)) {
+    console.log(`[11.5][ProfitGate] Skipping ${symbol}: Net expectancy below 0 (target=${dynamicTarget.toFixed(4)}, cost=${frictionCost.toFixed(4)})`);
+    return null;
+  }
+  
+  // Directive 11.5 Task 5: Strategy-Specific Guardrails
+  // Require ADX > 25 for SMA-based trend strategies (only meaningful in trending markets)
+  if (strategy === 'sma_trend_ride' && regimeResult.adx < 25) {
+    console.log(`[11.5][Guard] Skipping ${symbol}: SMA Trend requires ADX > 25, got ADX=${regimeResult.adx.toFixed(1)}`);
+    return null;
+  }
   
   const portfolioValue = await getPortfolioValue();
   const riskPerTrade = await getRiskPerTrade();

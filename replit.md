@@ -35,6 +35,15 @@ The trade lifecycle flows from `Signal Orchestrator` to `SQE` (FinalScore + Regi
 
 ## Recent Changes
 
+**Directive 11.5 Implementation — "Math, Macro, and Regime Synchronization" (January 2026):**
+- **Task 1 - Profitability Validation (Net Expectancy Gate)**: Created `server/core/calculations/expectancy.ts` with `isMathematicallyProfitable()` function. Integrated into VTS runner to skip trades where gross profit ≤ total cost.
+- **Task 2 - Rolling Z-Score Normalization**: Created `server/utils/rolling-stats.ts` for 300-period rolling statistics. Added `getNormalizedRegime()` to `market-regime.ts` for Z-Score based regime classification.
+- **Task 3 - Macro-State Module**: Created `server/core/metrics/macro-state.ts` with `getGlobalMacroCondition()` detecting VOLATILITY_EXPANSION, LIQUIDITY_CRUNCH, SPECULATIVE_SURGE, or NORMAL conditions.
+- **Task 4 - Secondary Metric Adjustment**: Created `server/core/metrics/secondary-metrics.ts` with `adjustMetricRanges()` for dynamic threshold adjustment based on macro conditions.
+- **Task 5 - Filter Logic Correction**: Updated `fx5-scanner.ts` so blue-chips/stablecoins are scanned but only tradable when passing IMF filters.
+- **Task 6 - Strategy-Specific Guardrails**: Added ADX > 25 requirement for `sma_trend_ride` strategy in VTS runner.
+- **Task 7 - Strategy Performance Audit**: Created `server/core/strategy-analyzer.ts` with `auditStrategyPerformance()` for per-strategy win rate analysis and keep/monitor/disable recommendations.
+
 **Directive 11.4H.6E Implementation (January 2026):**
 - **Task 1 - Authenticated Query Restoration**: Replaced raw fetch with apiFetch() in analytics.tsx for market indicators endpoint, ensuring credentials, JWT token, and x-app-mode headers are included.
 - **Task 2 - UI Error Boundary**: Added full error fallback UI with AlertCircle icon, error message, and Retry button when indicatorsError occurs. Prevents silent failures.
