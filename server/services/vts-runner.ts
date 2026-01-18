@@ -162,12 +162,11 @@ interface OpenVirtualTrade {
   decayPenalty: number;
   pool: 'ideal' | 'rotational';
   openedAt: number;
-  maxHoldMs: number; // Maximum hold time before timeout exit (default 5 minutes)
 }
 
 const openVirtualTrades: Map<string, OpenVirtualTrade> = new Map();
 const MAX_OPEN_TRADES = 50; // Limit concurrent open trades for memory management
-const DEFAULT_MAX_HOLD_MS = 5 * 60 * 1000; // 5 minutes max hold time
+const MAX_HOLD_MS = 24 * 60 * 60 * 1000; // Directive 11.6: 24 hours max hold time (configurable)
 
 let phase10SessionTrades: Phase10TradeRecord[] = [];
 let phase10SessionStartTime: number | null = null;
@@ -408,7 +407,7 @@ async function generatePhase10Signal(
     return null;
   }
   
-  // Create open virtual trade for real-price resolution
+  // Directive 11.6: Create open virtual trade for real-price resolution
   const openTrade: OpenVirtualTrade = {
     id: tradeId,
     symbol,
@@ -428,8 +427,7 @@ async function generatePhase10Signal(
     regimeWeight,
     decayPenalty,
     pool,
-    openedAt: Date.now(),
-    maxHoldMs: DEFAULT_MAX_HOLD_MS
+    openedAt: Date.now()
   };
   
   openVirtualTrades.set(tradeId, openTrade);
@@ -463,6 +461,7 @@ async function generatePhase10Signal(
     source: 'simulation', // M50/M53: VTS-generated signals marked as simulation
   };
   
+  // Directive 11.6: Trade record marked as pending - exit determined by resolveOpenVirtualTrades()
   const tradeRecord: Phase10TradeRecord = {
     symbol,
     regime,
@@ -477,11 +476,12 @@ async function generatePhase10Signal(
     decayPenalty,
     frictionCost,
     entry: entryPrice,
-    exit: exitPrice,
-    profit,
+    exit: undefined, // Directive 11.6: Exit determined by real price resolution
+    profit: undefined, // Directive 11.6: P&L calculated at exit
     positionSize,
     pool,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    exitType: 'pending' // Directive 11.6: Awaiting real-price resolution
   };
   
   console.log(`[11.0E.1][VTS] Trade: ${symbol} regime=${regime} signalType=${signalType} strategy=${strategy} finalScore=${finalScore.toFixed(3)} pool=${pool}`);

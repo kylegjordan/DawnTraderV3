@@ -1,0 +1,171 @@
+⚙️ Directive 11.6 — VTS Real-Price Simulation & Trade Resolution Synchronization (Revised)
+
+Objective:
+Replace the VTS random-exit price simulation with a real-price resolution system using the existing price cache (shared with TEC), ensuring all simulated trades resolve based on actual Kraken price data — not random outcomes — and that strategy hold times reflect realistic market behavior.
+
+I. Implementation Tasks
+Task 1 — Create Open Virtual Trades Registry
+
+File: /server/services/vts-runner.ts
+
+Create an in-memory registry to track active simulated trades:
+
+const openVirtualTrades = new Map<string, VirtualTrade>();
+
+
+Each trade should store:
+
+symbol, entryPrice, stopLoss, takeProfit, positionSize, entryTime, metrics
+
+
+Limit to 50 concurrent open trades to preserve performance.
+
+Task 2 — Integrate Price Cache for Exit Resolution
+
+File: /server/services/vts-runner.ts
+
+Replace random exit logic:
+
+const priceChange = (Math.random() - 0.4) * volatility;
+const exitPrice = entryPrice * (1 + priceChange);
+
+
+with cached real-price retrieval:
+
+const currentPrice = priceCache.get('vtsSimulation', symbol);
+
+
+Use price data from the existing vtsSimulation bucket in the Unified Price Cache.
+
+Task 3 — Trade Exit Conditions
+
+Replace the previous timeout-based closure with realistic exit conditions:
+
+if (currentPrice <= stopLoss) {
+  exitReason = 'stop_hit';
+} else if (currentPrice >= takeProfit) {
+  exitReason = 'target_hit';
+}
+
+
+✅ Do not close the trade automatically after 5 minutes.
+
+Instead, set a maximum hold duration of 24 hours (configurable constant):
+
+const MAX_HOLD_MS = 24 * 60 * 60 * 1000; // 24 hours
+if (Date.now() - entryTime > MAX_HOLD_MS) {
+  exitReason = 'timeout';
+}
+
+
+This ensures:
+
+Short-term strategies (e.g., scalps) still resolve quickly.
+
+Trend-based strategies (e.g., SMA ride, swing) can evolve over realistic market timescales.
+
+Task 4 — Resolution Loop
+
+Runs every 60 seconds (aligned with VTS simulation and price cache updates).
+
+For each open trade:
+
+Fetch latest cached price:
+
+const currentPrice = priceCache.get('vtsSimulation', symbol);
+
+
+Apply exit conditions above.
+
+When closed, record:
+
+exitPrice, exitReason, exitTime, elapsedMs, pnl
+
+
+Remove from open registry.
+
+Task 5 — Update CSV Export Logic
+
+File: /server/routes/vts.ts
+
+Replace the legacy hardcoded size:
+
+positionSize: 250
+
+
+with:
+
+positionSize: tradeRecord.positionSize
+
+
+Ensure export includes:
+exitPrice, exitReason, entryTime, exitTime, and elapsedMs.
+
+Task 6 — Add Verification Logging
+
+Add detailed trace logs for auditing and debugging:
+
+[11.6][Entry] Added VTS trade: ETH/USD @ 2360 | TP=2430 | SL=2300
+[11.6][Exit] ETH/USD closed via stop_hit @ 2298 after 3h 15m | PnL=-2.6%
+[11.6][Exit] BTC/USD closed via target_hit @ 42500 after 7h 50m | PnL=+3.2%
+
+II. Verification & Validation
+✅ Functional Verification
+
+Run VTS for 24 hours with real-price monitoring enabled.
+
+Confirm logs include:
+
+[11.6][Entry] entries for each opened trade.
+
+[11.6][Exit] entries with realistic timestamps and durations.
+
+Confirm exit prices are within real market ranges (verify against Kraken OHLC).
+
+✅ Performance Verification
+
+Confirm no additional Kraken API calls:
+
+Price data pulled exclusively from the vtsSimulation bucket.
+
+Monitor MAX_WEIGHT_PER_SECOND = 10 remains unchanged.
+
+Confirm loop latency remains under 1s per cycle.
+
+✅ Data Verification
+
+Export VTS trades:
+
+Verify exit prices match realistic daily price movement ranges.
+
+Verify hold times vary naturally — some short (<30m), others long (>4h).
+
+Ensure no Math.random() references remain in vts-runner.ts.
+
+✅ Safety Verification
+
+Confirm MAX_HOLD_MS constant = 24 hours (configurable).
+
+Verify timeout-based closures are <5% of total trades.
+
+Ensures most trades exit naturally by stop or target.
+
+III. Notes & Recommendations
+
+Trade Lifecycle Realism:
+This change allows strategies to play out naturally, preserving the integrity of performance analytics and ML calibration.
+
+No New Rate Load:
+All pricing comes from existing cache infrastructure — Kraken API load remains flat.
+
+Testing Approach:
+Run for 24 hours, then analyze trade durations. If nearly all are <10 minutes, your stop/target distances are likely too tight and should be recalibrated (not timeout-related).
+
+✅ Final Revision Summary
+Item	Old	New
+Exit logic	Randomized (Math.random())	Real Kraken pricing via cache
+Timeout	5 min (fixed)	24 hours (configurable)
+Data source	Simulated volatility	Real OHLC cache
+API impact	New calls	None (shared cache)
+Exit reasons	Random	stop_hit / target_hit / timeout
+Strategy realism	Scalper-only	All strategy types supported
