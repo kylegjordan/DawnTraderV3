@@ -1,0 +1,34 @@
+{
+  "version": "11.4F.1",
+  "lastUpdated": "2026-01-18",
+  "BULL_STABLE": {
+    "favoredStrategies": ["sma_trend_ride", "vwap_pullback", "morning_star", "pivot_shift"],
+    "favoredSignalTypes": ["QUANT", "PATTERN", "HYBRID"],
+    "riskMultiplier": 1.2,
+    "minConfidence": 0.65
+  },
+  "BEAR_VOLATILE": {
+    "favoredStrategies": ["mean_reversion", "reverse_impulse", "defensive_hedge", "inside_bar_reversal"],
+    "favoredSignalTypes": ["QUANT", "HYBRID", "PATTERN"],
+    "riskMultiplier": 0.7,
+    "minConfidence": 0.75
+  },
+  "LOW_VOL_CHOP": {
+    "favoredStrategies": ["range_trade", "support_bounce", "abcd_long", "adaptive_flow"],
+    "favoredSignalTypes": ["QUANT", "PATTERN", "HYBRID"],
+    "riskMultiplier": 0.9,
+    "minConfidence": 0.60
+  },
+  "HIGH_VOL_IMPULSE": {
+    "favoredStrategies": ["breakout", "vwap_bounce", "volatility_edge", "dhma"],
+    "favoredSignalTypes": ["QUANT", "HYBRID"],
+    "riskMultiplier": 0.8,
+    "minConfidence": 0.70
+  },
+  "TRANSITION": {
+    "favoredStrategies": ["liquidity_trap", "pivot_shift", "morning_star"],
+    "favoredSignalTypes": ["QUANT", "HYBRID", "PATTERN"],
+    "riskMultiplier": 0.85,
+    "minConfidence": 0.55
+  }
+}

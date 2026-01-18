@@ -54,6 +54,19 @@ const router = Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'jwt-development-secret-do-not-use-in-production';
 
+/**
+ * Directive 11.6 Task 5: Format duration in human-readable format for CSV export
+ */
+function formatDuration(ms: number): string {
+  const hours = Math.floor(ms / (1000 * 60 * 60));
+  const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+  
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m`;
+}
+
 interface AuthenticatedRequest extends Request {
   user?: { id: string; username: string };
 }
@@ -147,22 +160,33 @@ router.get('/export', requireAuth, async (req: Request, res: Response) => {
       const avgGross = trades.length > 0 ? trades.reduce((s, t) => s + (t.grossProfit || 0), 0) / trades.length : 0;
       const avgNet = trades.length > 0 ? trades.reduce((s, t) => s + (t.netProfit || 0), 0) / trades.length : 0;
       
-      const csvHeader = 'Symbol,Strategy,Entry,Exit,Stop,Result,Duration,GrossProfit,NetProfit,Fees,Slippage,Outcome\n';
+      // Directive 11.6 Task 5: Updated CSV export with positionSize, exitReason, entryTime, exitTime, elapsedMs
+      const csvHeader = 'Symbol,Strategy,Entry,Exit,Stop,Target,ExitReason,PositionSize,Duration,EntryTime,ExitTime,GrossProfit%,NetProfit%,Fees,Slippage,Regime,SignalType,Outcome\n';
       const csvRows = trades.map(t => {
         const durationMs = (t.exitTime || t.entryTime) - t.entryTime;
-        const durationMin = Math.round(durationMs / 60000);
+        const durationStr = formatDuration(durationMs);
+        const entryTimeStr = new Date(t.entryTime).toISOString();
+        const exitTimeStr = t.exitTime ? new Date(t.exitTime).toISOString() : '';
+        // Directive 11.6: Use actual position size from trade record, not hardcoded 250
+        const positionSize = (t as any).positionSize || (t.signal as any)?.positionSize || 0;
         return [
           t.signal.symbol,
           t.signal.strategy,
           t.signal.entryPrice.toFixed(6),
           (t.exitPrice || 0).toFixed(6),
           t.signal.stopLoss.toFixed(6),
+          t.signal.takeProfit?.toFixed(6) || '',
           t.resultType || 'open',
-          `${durationMin}m`,
-          ((t.grossProfit || 0) * 100).toFixed(4) + '%',
-          ((t.netProfit || 0) * 100).toFixed(4) + '%',
+          positionSize.toFixed(2),
+          durationStr,
+          entryTimeStr,
+          exitTimeStr,
+          ((t.grossProfit || 0) * 100).toFixed(4),
+          ((t.netProfit || 0) * 100).toFixed(4),
           (t.fees || 0).toFixed(6),
           t.signal.spread?.toFixed(6) || '0.001500',
+          t.signal.regime || '',
+          t.signal.signalType || '',
           t.status
         ].join(',');
       }).join('\n');

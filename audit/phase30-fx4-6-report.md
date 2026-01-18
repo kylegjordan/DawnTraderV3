@@ -1,54 +1,54 @@
 # Phase 30.FX.4–6 Report
-Generated: 2026-01-18T02:51:34.890Z
+Generated: 2026-01-18T18:55:18.619Z
 
 ## Overview
 This report summarizes the Lottie Oversight and Cross-Strategy Optimization activities.
 
 ## Lottie Oversight Log (Last 20 Events)
 
-- 2026-01-18T02:49:20.557Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2026-01-18T02:44:20.106Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2026-01-17T21:07:32.995Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2026-01-17T21:02:33.575Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2026-01-17T20:57:32.699Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2026-01-17T20:52:32.706Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2026-01-17T20:47:31.965Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2026-01-17T20:42:32.214Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2026-01-17T20:37:31.618Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2026-01-17T20:32:31.858Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2026-01-17T20:27:31.322Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2026-01-17T20:22:31.450Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2026-01-17T20:17:31.312Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2026-01-17T20:12:31.488Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2026-01-17T20:07:31.049Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2026-01-17T20:02:30.776Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2026-01-17T19:57:32.064Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2026-01-17T19:52:29.585Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2026-01-17T19:47:29.710Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
-- 2026-01-17T19:42:29.211Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2026-01-18T18:51:48.484Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2026-01-18T18:46:48.180Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2026-01-18T18:41:48.249Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2026-01-18T18:36:48.246Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2026-01-18T18:31:48.154Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2026-01-18T18:26:49.282Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2026-01-18T18:21:48.125Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2026-01-18T18:16:48.327Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2026-01-18T18:11:47.650Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2026-01-18T18:06:47.913Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2026-01-18T18:01:47.933Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2026-01-18T17:56:48.638Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2026-01-18T17:51:47.283Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2026-01-18T17:46:47.211Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2026-01-18T17:41:47.511Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2026-01-18T17:36:47.187Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2026-01-18T17:31:47.012Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2026-01-18T17:26:46.537Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2026-01-18T17:21:46.900Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2026-01-18T17:16:46.538Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
 
 ## Strategy Mix Changes (Last 20)
 
+- 2026-01-18T18:51:36.461Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
+- 2026-01-18T17:51:35.851Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
+- 2026-01-18T16:51:36.025Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
+- 2026-01-18T15:51:36.039Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
+- 2026-01-18T14:51:36.556Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
+- 2026-01-18T13:51:35.945Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
+- 2026-01-18T12:51:35.986Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
+- 2026-01-18T11:51:35.846Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
+- 2026-01-18T10:51:35.307Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
+- 2026-01-18T09:51:35.258Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
+- 2026-01-18T08:51:35.946Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
+- 2026-01-18T07:51:35.117Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
+- 2026-01-18T06:51:35.066Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
+- 2026-01-18T05:51:35.067Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
+- 2026-01-18T04:51:35.074Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
+- 2026-01-18T03:51:35.079Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
 - 2026-01-17T21:02:16.303Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
 - 2026-01-17T20:02:17.635Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
 - 2026-01-17T19:02:15.804Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
 - 2026-01-17T18:02:15.964Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
-- 2026-01-17T17:02:15.162Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
-- 2026-01-17T16:02:15.055Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
-- 2026-01-17T15:02:14.991Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
-- 2026-01-17T13:45:34.333Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
-- 2026-01-17T12:45:34.197Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
-- 2026-01-17T11:45:34.128Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
-- 2026-01-17T10:45:33.673Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
-- 2026-01-17T09:45:33.657Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
-- 2026-01-17T08:45:33.673Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
-- 2026-01-17T03:32:14.225Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
-- 2026-01-17T02:32:14.205Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
-- 2026-01-17T01:32:13.788Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
-- 2026-01-17T00:32:13.606Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
-- 2026-01-16T23:32:14.337Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
-- 2026-01-16T22:32:13.835Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
-- 2026-01-16T21:32:14.002Z: **dhma** → weight: 1.1 (from N/A) - Reason: top_performer
 
 ## Summary Statistics
 

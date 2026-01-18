@@ -801,7 +801,7 @@ def decode_regime(idx: int) -> str:
 
 def initialize_transition_model():
     global transition_model, transition_scaler
-    transition_model = LogisticRegression(multi_class='multinomial', max_iter=500)
+    transition_model = LogisticRegression(max_iter=500)
     transition_scaler = StandardScaler()
     
     np.random.seed(42)
@@ -909,7 +909,7 @@ def retrain_transitions():
         transition_scaler = StandardScaler()
         X_scaled = transition_scaler.fit_transform(X_train)
         
-        transition_model = LogisticRegression(multi_class='multinomial', max_iter=500)
+        transition_model = LogisticRegression(max_iter=500)
         transition_model.fit(X_scaled, y_train)
         
         logger.info(f"[L13][RTP_RETRAIN] Model retrained with {len(X_train)} samples")

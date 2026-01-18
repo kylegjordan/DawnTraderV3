@@ -431,7 +431,8 @@ async function generatePhase10Signal(
   };
   
   openVirtualTrades.set(tradeId, openTrade);
-  console.log(`[11.6][VTS] Opened virtual trade ${tradeId}: ${symbol} entry=${entryPrice.toFixed(6)} stop=${stopLoss.toFixed(6)} target=${takeProfit.toFixed(6)}`);
+  // Directive 11.6 Task 6: Entry verification logging
+  console.log(`[11.6][Entry] ${symbol} opened @ ${entryPrice.toFixed(6)} | stop=${stopLoss.toFixed(6)} target=${takeProfit.toFixed(6)} strategy=${strategy}`);
   
   // Directive 11.4C.3: VirtualSignal with full Phase-10 metrics and pattern (M50 compliant)
   const signal: VirtualSignal = {
