@@ -845,6 +845,118 @@ tuned_by_latti                  -- LATTi optimization flag
 
 ---
 
+# Part 12: Phase 11: Production Hardening & Math Synchronization
+
+## 12.1 Overview
+
+Phase 11 established the **production-grade mathematical foundation** of DawnTrader V3, implementing adaptive regime classification, Z-Score normalization, macro-state detection, and profitability validation gates.
+
+**Date Range:** January 2026  
+**Status:** ✅ COMPLETE
+
+## 12.2 Directive Summary
+
+| Directive | Description | Status |
+|-----------|-------------|--------|
+| 11.0 | Hybrid Alpha Foundation | ✅ Complete |
+| 11.1 | 5-Class Regime Model & VTS Modernization | ✅ Complete |
+| 11.2 | Strategy & Regime Harmonization | ✅ Complete |
+| 11.3 | Adaptive Scanning (Dual-Pool) | ✅ Complete |
+| 11.4 | Canonical Regime-Strategy Mapping | ✅ Complete |
+| 11.5 | Math, Macro & Regime Synchronization | ✅ Complete |
+
+## 12.3 Key Implementations
+
+### 5-Class Regime Model (Directive 11.1)
+
+Replaced legacy 10-regime model with streamlined 5-class system:
+
+| Regime | Description | Strategies |
+|--------|-------------|------------|
+| BULL_STABLE | Sustained uptrend, stable volatility | sma_trend_ride, vwap_pullback, morning_star, pivot_shift |
+| BEAR_VOLATILE | Downward impulse, high turbulence | mean_reversion, reverse_impulse, defensive_hedge, inside_bar_reversal |
+| LOW_VOL_CHOP | Flat market, no directionality | range_trade, support_bounce, abcd_long, adaptive_flow |
+| HIGH_VOL_IMPULSE | Strong breakout, volatility expansion | breakout, vwap_bounce, volatility_edge, dhma |
+| TRANSITION | Reversal zone, weakening trend | liquidity_trap, pivot_shift, morning_star |
+
+### Z-Score Normalization (Directive 11.5)
+
+Implemented rolling 300-period statistical normalization for adaptive regime classification:
+
+```typescript
+class RollingStats {
+  constructor(windowSize: number = 300);
+  push(value: number): void;
+  mean(): number;
+  stdDev(): number;
+  zScore(value: number): number;
+  isWarmedUp(minSamples: number = 30): boolean;
+}
+```
+
+**Key Files:**
+- `server/utils/rolling-stats.ts` - RollingStats class
+- `server/core/metrics/market-regime.ts` - getNormalizedRegimeWithDetails()
+
+### Macro-State Detection (Directive 11.5)
+
+Implemented global market condition detection with dynamic threshold adjustment:
+
+| Macro State | Detection | LQ Adjust | VolNoise Adjust |
+|-------------|-----------|-----------|-----------------|
+| NORMAL | Default | 1.0× | 1.0× |
+| VOLATILITY_EXPANSION | Global vol > 2σ | 1.2× | 0.8× |
+| LIQUIDITY_CRUNCH | Global liquidity < -1σ | 1.5× | 1.0× |
+| SPECULATIVE_SURGE | Mom + vol spike | 1.1× | 0.7× |
+
+**Key File:** `server/core/metrics/macro-state.ts`
+
+### Profitability Gate (Directive 11.5)
+
+Net Expectancy validation ensuring all trades are mathematically profitable:
+
+```
+grossProfit = (targetPrice - entryPrice) / entryPrice
+totalCost = (feeRate × 2) + (spread × 1.1) + slippage
+Gate: grossProfit > totalCost
+```
+
+**Key File:** `server/core/calculations/expectancy.ts`
+
+### Canonical Regime-Strategy Mapping (Directive 11.4)
+
+Single source of truth for all regime/strategy/signal/pattern mappings:
+
+**Key File:** `server/config/canonical-regime-strategy-map.ts`
+**Schema Version:** 11.4F.1
+
+### Strategy-Specific Guardrails (Directive 11.5)
+
+Per-strategy entry requirements beyond global filters:
+- `sma_trend_ride`: ADX > 25
+
+### Strategy Performance Audit (Directive 11.5)
+
+Per-strategy win rate analysis with keep/monitor/disable recommendations:
+
+**Key File:** `server/core/strategy-analyzer.ts`
+
+## 12.4 Files Added
+
+**New Core Files:**
+- `server/core/calculations/expectancy.ts` - Profitability validation
+- `server/utils/rolling-stats.ts` - Rolling statistics for Z-Score
+- `server/core/metrics/macro-state.ts` - Macro condition detection
+- `server/core/metrics/secondary-metrics.ts` - Dynamic threshold adjustment
+- `server/core/strategy-analyzer.ts` - Strategy performance audit
+- `server/config/canonical-regime-strategy-map.ts` - Canonical mappings
+
+**Documentation:**
+- `bridge/canonical/Phase_11_Implementation_History.md` - Full directive history
+- `bridge/canonical/DawnTrader_Regime_Strategy_Mapping.md` - Canonical reference
+
+---
+
 # Part 13: Roadmap Forward
 
 ## 13.1 Phase Completion Summary
@@ -856,16 +968,17 @@ tuned_by_latti                  -- LATTi optimization flag
 | 8.8.3 | Strategy Engine Audit | ✅ Complete |
 | 8.8.4 | Extended Calibration & Validation | ✅ Complete |
 | 9.0-9.9 | Math Core Finalization | ✅ Complete |
+| 11.0-11.5 | Production Hardening & Math Sync | ✅ Complete |
 
 ## 13.2 Future Phases
 
 | Phase | Description | Status |
 |-------|-------------|--------|
 | **Phase 9** | Math Core Finalization | ✅ Complete |
-| **Phase 10** | ML Training Runs | ⏳ Pending |
-| **Phase 11** | Live Execution Engine (real Kraken orders) | ⏳ Pending |
+| **Phase 11** | Production Hardening & Math Sync | ✅ Complete |
 | **Phase 12** | AWS & Supabase Migration | ⏳ Pending |
 | **Phase 13** | Restore Walter (strategic advisor role) | ⏳ Pending |
+| **Phase 14** | Live Execution Engine (real Kraken orders) | ⏳ Pending |
 
 ## 13.3 Walter's Future Role
 
@@ -943,5 +1056,5 @@ If (operation requires real-time response) + (operation will be called frequentl
 ---
 
 **Document Status:** Complete  
-**Last Updated:** January 02, 2026  
-**Next Review:** Upon Phase 10 completion
+**Last Updated:** January 18, 2026  
+**Next Review:** Upon Phase 12 completion

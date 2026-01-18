@@ -879,133 +879,56 @@ Adaptive Learning: Expands boundaries by 5% when 30-day performance ≥ 80% of t
 
 ---
 
-# PART V: PHASE 11 LIVE MODE TRANSITION
+# PART V: PHASE 11 PRODUCTION HARDENING (COMPLETED)
 
 ---
 
-# 22. Live Mode Implementation Plan
+# 22. Phase 11 Implementation Status
 
-## 22.1 Current State
+## 22.1 Overview
 
-The Paper Execution Engine is **fully functional for simulated trading**. In Phase 11, we will copy this engine and modify it to execute **real trades on Kraken**.
+Phase 11 (**Production Hardening & Math Synchronization**) is **✅ COMPLETE**.
 
-## 22.2 What Will Stay the Same
+This phase established the production-grade mathematical foundation with adaptive regime classification, Z-Score normalization, macro-state detection, and profitability validation.
+
+## 22.2 Completed Directives
+
+| Directive | Description | Status |
+|-----------|-------------|--------|
+| 11.0 | Hybrid Alpha Foundation | ✅ Complete |
+| 11.1 | 5-Class Regime Model | ✅ Complete |
+| 11.2 | Strategy & Regime Harmonization | ✅ Complete |
+| 11.3 | Adaptive Scanning (Dual-Pool) | ✅ Complete |
+| 11.4 | Canonical Regime-Strategy Mapping | ✅ Complete |
+| 11.5 | Math, Macro & Regime Synchronization | ✅ Complete |
+
+## 22.3 Key Files Added
+
+| Component | File |
+|-----------|------|
+| Profitability Gate | `server/core/calculations/expectancy.ts` |
+| Rolling Stats (Z-Score) | `server/utils/rolling-stats.ts` |
+| Macro-State Detection | `server/core/metrics/macro-state.ts` |
+| Secondary Metrics | `server/core/metrics/secondary-metrics.ts` |
+| Strategy Analyzer | `server/core/strategy-analyzer.ts` |
+| Canonical Mappings | `server/config/canonical-regime-strategy-map.ts` |
+
+## 22.4 Production-Ready Components
 
 | Component | Status |
 |-----------|--------|
-| FX5 Scanner | ✅ Reuse as-is |
-| Active Filter Pool | ✅ Reuse as-is |
-| Signal Orchestrator | ✅ Reuse as-is |
-| Strategy Engine | ✅ Reuse as-is |
-| Position Sizing Helper | ✅ Reuse as-is |
-| Trade Safety Checks | ✅ Reuse as-is |
-| Guardrails System | ✅ Reuse as-is |
-| WebSocket Price Feed | ✅ Reuse as-is |
+| 5-Class Regime Model | ✅ Active |
+| Z-Score Normalization (300-period rolling) | ✅ Active |
+| Macro-State Detection (4 conditions) | ✅ Active |
+| Profitability Gate (Net Expectancy > 0) | ✅ Active |
+| Dynamic Threshold Adjustment | ✅ Active |
+| Strategy-Specific Guardrails (ADX > 25 for sma_trend_ride) | ✅ Active |
 
-## 22.3 What Will Need to Change
+## 22.5 Future: Live Execution (Phase 14)
 
-| Component | Required Changes |
-|-----------|------------------|
-| **Trade Execution** | Replace simulated execution with Kraken API calls |
-| **Order Submission** | Implement `kraken.createOrder()` with proper parameters |
-| **Order Confirmation** | Wait for Kraken order confirmation before creating trade record |
-| **Slippage Handling** | Use actual fill price instead of simulated slippage |
-| **Fee Calculation** | Use actual Kraken fees instead of simulated 0.10% |
-| **Balance Tracking** | Query Kraken account balance instead of simulated balance |
-| **Position Management** | Sync with Kraken open orders/positions |
-| **Error Handling** | Handle Kraken API errors (rate limits, insufficient funds, etc.) |
-| **Order Types** | Implement limit orders, market orders, stop-loss orders |
-| **Partial Fills** | Handle partial order fills |
-
-## 22.4 Key Discussion Points
-
-### 22.4.1 Order Execution Strategy
-
-**Question:** Market orders vs. Limit orders?
-
-| Approach | Pros | Cons |
-|----------|------|------|
-| Market Order | Guaranteed fill | Slippage risk |
-| Limit Order | Price control | May not fill |
-| Hybrid | Best of both | Complexity |
-
-**Recommendation:** Start with market orders for simplicity, then add limit order support.
-
-### 22.4.2 Slippage Reality
-
-In paper mode, we simulate 0.15% slippage. In live mode:
-- **Actual slippage varies** based on liquidity and order size
-- **Large orders** may have significant price impact
-- **Solution:** Use Kraken's "leverage" order type or implement TWAP for large orders
-
-### 22.4.3 Fee Structure
-
-Kraken fees depend on:
-- Trading volume (tier-based)
-- Order type (maker vs. taker)
-- **Solution:** Query actual fees from Kraken API or use tier-based lookup
-
-### 22.4.4 Balance Synchronization
-
-| Approach | Description |
-|----------|-------------|
-| **Option A:** Query Kraken on each trade | Accurate but slow |
-| **Option B:** Cache balance, update on trade | Fast but may drift |
-| **Option C:** WebSocket balance updates | Real-time but complex |
-
-**Recommendation:** Option B with periodic reconciliation.
-
-### 22.4.5 Error Handling
-
-Live mode must handle:
-- Rate limiting (429 errors)
-- Insufficient funds
-- API timeouts
-- Order rejection
-- Partial fills
-- Network failures
-
-### 22.4.6 Safety Mechanisms
-
-| Mechanism | Paper Mode | Live Mode |
-|-----------|------------|-----------|
-| Kill Switch | Simulated | CRITICAL - must stop real orders |
-| Max Position | Simulated | CRITICAL - must prevent over-allocation |
-| Daily Loss Limit | Simulated | CRITICAL - must halt trading |
-
-**Live mode safety is non-negotiable.** All guardrails must work correctly.
-
-## 22.5 Implementation Phases
-
-### Phase 11.1: Live Execution Engine Scaffold
-- Copy `PaperExecutionEngine` to `LiveExecutionEngine`
-- Add Kraken API order methods
-- Implement order confirmation flow
-
-### Phase 11.2: Order Execution
-- Implement `submitMarketOrder()`
-- Handle order confirmations
-- Track actual fill prices and fees
-
-### Phase 11.3: Balance & Position Sync
-- Query Kraken balances
-- Sync open positions
-- Handle discrepancies
-
-### Phase 11.4: Error Handling
-- Rate limit backoff
-- Retry logic
-- Failure notifications
-
-### Phase 11.5: Safety Verification
-- Kill switch testing
-- Guardrail enforcement verification
-- Manual override testing
-
-### Phase 11.6: Parallel Running
-- Run paper + live side-by-side
-- Compare execution results
-- Validate P/L calculations
+Live execution with real Kraken orders is planned for Phase 14 after:
+- Phase 12: AWS & Supabase Migration
+- Phase 13: Walter Restoration
 
 ---
 
@@ -1024,6 +947,17 @@ Live mode must handle:
 | Live Pricing Adapter | `server/services/live-pricing-adapter.ts` |
 | Kraken WebSocket | `server/services/kraken-websocket-adapter.ts` |
 | Guardrail Policy | `server/services/guardrail-policy.ts` |
+
+## Phase 11 Core Files
+| Component | File |
+|-----------|------|
+| Profitability Gate | `server/core/calculations/expectancy.ts` |
+| Rolling Stats (Z-Score) | `server/utils/rolling-stats.ts` |
+| Macro-State Detection | `server/core/metrics/macro-state.ts` |
+| Secondary Metrics | `server/core/metrics/secondary-metrics.ts` |
+| Market Regime | `server/core/metrics/market-regime.ts` |
+| Strategy Analyzer | `server/core/strategy-analyzer.ts` |
+| Canonical Mappings | `server/config/canonical-regime-strategy-map.ts` |
 
 ## UI Files
 | Component | File |
@@ -1048,5 +982,5 @@ Live mode must handle:
 ---
 
 **Document Status:** Complete  
-**Last Updated:** December 12, 2025  
-**Version:** 2.0 (Expanded with Trading Engine Flow)
+**Last Updated:** January 18, 2026  
+**Version:** 3.0 (Phase 11 Production Hardening Complete)
