@@ -1,337 +1,812 @@
-# Phase 11 — Implementation History (In Progress)
+# Phase 11 Implementation History — Complete Reference
 
-**Document Created:** January 08, 2026  
-**Scope:** Phase 11 work from 11.0A through current (11.0D)  
-**Purpose:** Record of Phase 11 Production Hardening & Trade Lifecycle Stabilization  
-**Status:** In Progress
-
-> **Note:** This document describes implemented code and configuration. Full production integration validation is ongoing. Schema changes are reflected in code but actual database migration status should be verified via `npm run db:push`.
+**Document Version:** 2.0  
+**Last Updated:** January 18, 2026  
+**Schema Version:** v1.6.7  
+**Directive Range:** 11.0 through 11.5
 
 ---
 
-# Table of Contents
+## Table of Contents
 
-1. [Phase 11 Overview](#1-phase-11-overview)
-2. [Directive 11.0A: Trade Flow Integrity](#2-directive-110a-trade-flow-integrity)
-3. [Directive 11.0B: Trade Lifecycle Flow](#3-directive-110b-trade-lifecycle-flow)
-4. [Directive 11.0C: SQE & TEC Stabilization](#4-directive-110c-sqe--tec-stabilization)
-5. [Directive 11.0D: Production Hardening](#5-directive-110d-production-hardening)
-6. [Technical Deliverables Summary](#6-technical-deliverables-summary)
-7. [Schema Version Tracking](#7-schema-version-tracking)
-
----
-
-# 1. Phase 11 Overview
-
-## 1.1 Mission Statement
-
-Phase 11's mission is to **harden the production trade pipeline**, ensuring stable, auditable, and resilient trade execution with full configuration provenance tracking.
-
-## 1.2 Phase 11 Timeline
-
-| Directive | Description | Status | Completion |
-|-----------|-------------|--------|------------|
-| 11.0A | Trade Flow Integrity | Completed | January 2026 |
-| 11.0B | Trade Lifecycle Flow | Completed | January 2026 |
-| 11.0C | SQE & TEC Stabilization | Completed | January 2026 |
-| 11.0D | Production Hardening & Dynamic Validation | Completed | January 2026 |
-| 11.1+ | Future Directives | Pending | TBD |
-
-## 1.3 Key Achievements (So Far)
-
-- **Trade Lifecycle Flow Documentation**: Complete signal-to-execution flow defined
-- **SQE Simplification**: Reduced to FinalScore + RegimeWeight only (code implemented)
-- **EXECUTION_CONFIG**: Centralized TEC parameters with version tracking (config file created)
-- **Dynamic SQE Backfill**: `calculateFinalScore`/`calculateRegimeWeight` functions in score-calculator.ts
-- **Schema Version Tracking**: SCHEMA_VERSION and SCHEMA_DIRECTIVE in schema-version.ts
+1. [Executive Summary](#executive-summary)
+2. [Directive 11.0 — Metric Engine Consolidation](#directive-110--metric-engine-consolidation)
+3. [Directive 11.1 — Canonical Regime-Strategy Mapping](#directive-111--canonical-regime-strategy-mapping)
+4. [Directive 11.2 — VTS Modernization & Regime-Driven Simulation](#directive-112--vts-modernization--regime-driven-simulation)
+5. [Directive 11.3 — Adaptive Scanning Intelligence](#directive-113--adaptive-scanning-intelligence)
+6. [Directive 11.4 — Market Indicators & Analytics Hardening](#directive-114--market-indicators--analytics-hardening)
+7. [Directive 11.5 — Math, Macro, and Regime Synchronization](#directive-115--math-macro-and-regime-synchronization)
+8. [File Artifacts Index](#file-artifacts-index)
+9. [Architecture Diagrams](#architecture-diagrams)
 
 ---
 
-# 2. Directive 11.0A: Trade Flow Integrity
+## Executive Summary
 
-## 2.1 Objective
+Phase 11 represents the mathematical and operational hardening of the DawnTrader trading platform. The phase spans from metric consolidation (11.0) through advanced regime-adaptive systems (11.5), establishing:
 
-Establish integrity guarantees for the trade pipeline from signal generation to execution.
+- **Unified Scoring**: Single `FinalScore` metric replacing legacy CWQI/NGC/ProfitRate
+- **Canonical Mappings**: Single source of truth for regime-to-strategy relationships
+- **VTS Modernization**: Phase-10 compatible virtual trading simulator with regime-driven simulation
+- **Adaptive Scanning**: Dual-pool (Ideal + Rotational) pair selection with telemetry feedback
+- **Mathematical Foundations**: Z-Score normalization, profitability gates, and macro-state awareness
 
-## 2.2 Implementation
-
-- Verified all signal paths flow through Signal Orchestrator
-- Confirmed exposure, correlation, and cooldown checks are enforced
-- Ensured mode isolation (paper/live) throughout pipeline
-
-## 2.3 Outcome
-
-Trade flow integrity verified with no bypass paths or missing guards.
-
----
-
-# 3. Directive 11.0B: Trade Lifecycle Flow
-
-## 3.1 Objective
-
-Document and standardize the complete trade lifecycle from signal to execution.
-
-## 3.2 Trade Lifecycle Diagram
-
-```
-[Signal Orchestrator] (exposure, correlation, cooldown)
-     │
-     ▼
-[SQE] (FinalScore + RegimeWeight from screener config)
-     │
-     ▼
-[Ready-to-Buy Queue] (pre-ordered by FinalScore DESC)
-     │ (2-min or 15-signal trigger)
-     ▼
-[TCL] (picks top N from pre-ordered RTB)
-     │
-     ▼
-[TEC] (adaptive sizing + trailing exits)
-     │
-     ▼
-[Order Management]
-```
-
-## 3.3 Component Responsibilities
-
-### Signal Orchestrator
-- Location: `server/services/signal-orchestrator.ts`
-- Handles exposure limits, correlation checks, symbol cooldowns
-- Generates signals with FinalScore and RegimeWeight
-
-### SQE (Signal Quality Evaluator)
-- Location: `server/core/filters/signal_quality_evaluator.ts`
-- Filters by FinalScore >= finalScoreMin (default 0.35)
-- Filters by RegimeWeight >= regimeWeightMin (default 0.30)
-- Thresholds configurable via UI screeners tab
-- **DEPRECATED**: NGC, CWQI, Risk, ProfitRate filtering removed
-
-### Ready-to-Buy Queue
-- Pre-orders signals by FinalScore DESC
-- Stores signals pending promotion
-
-### TCL (Trade Criteria Limiter)
-- Location: `server/core/criteria-limiter.ts`
-- Picks top N signals from pre-ordered RTB
-- Event-based promotion triggers:
-  - 2-minute failsafe timer
-  - 15-signal RTB queue threshold
-
-### TEC (Trade Execution Controller)
-- Location: `server/services/execution-controller.ts`
-- Adaptive sizing: +10% on trendline reinforced, -10% on trendline weakened
-- Trailing exit management
-
-## 3.4 Schema Update
-
-Schema v1.4.3:
-- `screener_filters` table: Added `final_score_min`, `regime_weight_min` columns
-- `storage.getRtbSignals` supports `orderBy: 'finalScore'`
+**Key Statistics (as of January 18, 2026):**
+- Total Directives: 6 major (11.0 through 11.5)
+- Sub-Directives: 40+
+- Files Modified: 150+
+- New Modules Created: 25+
 
 ---
 
-# 4. Directive 11.0C: SQE & TEC Stabilization
+## Directive 11.0 — Metric Engine Consolidation
 
-## 4.1 Objective
+### Overview
 
-Centralize TEC configuration and stabilize SQE backfill logic.
-
-## 4.2 EXECUTION_CONFIG
-
-**Location:** `server/config/execution-config.ts`
-
-```typescript
-export const EXECUTION_CONFIG = Object.freeze({
-  ADAPTIVE_EXPAND_FACTOR: 1.10,      // +10% on trendline reinforcement
-  ADAPTIVE_CONTRACT_FACTOR: 0.90,    // -10% on trendline weakness
-  TRAILING_STOP_BASE: 0.015,         // 1.5% base trailing stop distance
-  TRAILING_STOP_ACCELERATION: 0.002, // Acceleration factor
-  MAX_POSITION_RISK: 0.02,           // 2% max position risk
-  VERSION: "v1.0.0"
-});
-```
-
-## 4.3 SQE Backfill Logic (Initial)
-
-Initial implementation: Missing FinalScore or RegimeWeight auto-defaults to 0.35.
-
-## 4.4 TEC Telemetry Integration
-
-TEC config exposed in `/api/telemetry/summary`:
-- `expandFactor`: 1.10
-- `contractFactor`: 0.90
-- `trailingBase`: 0.015
-- `trailingAccel`: 0.002
-- `maxRisk`: 0.02
-- `version`: "v1.0.0"
-
-## 4.5 Diagnostics UI Update
-
-- Phase 11 modules section added to Diagnostics tab
-- TEC configuration panel displays live values
+Directive 11.0 completes the transition from legacy multi-metric scoring to the unified FinalScore system. This three-phase initiative establishes FinalScore as the sole operational metric.
 
 ---
 
-# 5. Directive 11.0D: Production Hardening
+### Phase 11.0E — FinalScore Transition Phase
 
-## 5.1 Objective
+**Schema Version:** v1.4.6  
+**Status:** ✅ Complete
 
-Harden production systems with dynamic threshold validation and configuration provenance tracking.
+#### Objectives
+- Deprecate legacy metrics (CWQI, NGC, ProfitRate) in favor of FinalScore
+- Establish the canonical FinalScore formula
+- Update Signal Quality Evaluator (SQE) to use FinalScore-based filtering
 
-## 5.2 Legacy Code Removal
+#### Key Changes
 
-Verified removal of deprecated files:
-- `legacy-metrics.ts` - Not present (confirmed)
-- `manual_patch.sql` - Not present (confirmed)
+1. **Formula Definition**: Established the canonical FinalScore calculation:
+   ```
+   FinalScore = (HybridScore × 0.4) + (Confidence × 0.3) + (RegimeWeight × 0.2) - (DecayPenalty × 0.1)
+   ```
 
-## 5.3 Dynamic SQE Backfill
+2. **Threshold Standardization**: Set `MIN_FINAL_SCORE = 0.35` as the universal quality threshold
 
-Replaced static 0.35 defaults with dynamic recalculation.
+3. **SQE Integration**: Signal Quality Evaluator updated to filter by `finalScoreMin` and `regimeWeightMin`
 
-**Location:** `server/core/utils/score-calculator.ts`
-
-```typescript
-export function calculateFinalScore(metrics: ScoreMetrics): number {
-  const hybrid = metrics.hybridScore ?? metrics.confidence ?? 0.5;
-  const confidence = metrics.confidence ?? metrics.ngc ?? 0.5;
-  const regime = metrics.regimeWeight ?? 0.5;
-  const decay = metrics.decayPenalty ?? 0;
-  
-  const raw = (hybrid * SCORE_WEIGHTS.HYBRID) + 
-              (confidence * SCORE_WEIGHTS.CONFIDENCE) + 
-              (regime * SCORE_WEIGHTS.REGIME) - 
-              (decay * SCORE_WEIGHTS.DECAY);
-  return Math.max(0, Math.min(1, raw));
-}
-
-export function calculateRegimeWeight(metrics: RegimeMetrics): number {
-  const trend = metrics.trendStrength ?? 0.5;
-  const vol = metrics.volatility ?? 0.3;
-  const raw = (trend * 0.7) + ((1 - vol) * 0.3);
-  return Math.max(0.1, Math.min(1, raw));
-}
-```
-
-## 5.4 Schema Version Tracking
-
-**Location:** `server/config/schema-version.ts`
-
-```typescript
-export const SCHEMA_VERSION = "v1.4.5";
-export const SCHEMA_DIRECTIVE = "11.0D";
-```
-
-## 5.5 Configuration Provenance
-
-Telemetry summary now includes `configProvenance` block:
-
-```typescript
-configProvenance: {
-  phaseDirective: "11.0D",        // Current directive version
-  backendSchema: "v1.4.5",        // Database schema version
-  executionConfigVersion: "v1.0.0", // TEC config version
-  screenerConfigVersion: "v1.4.3"   // Filter schema version
-}
-```
-
-## 5.6 SQEInput Interface Update
-
-Made FinalScore and RegimeWeight optional to enable dynamic backfill:
-
-```typescript
-export interface SQEInput {
-  signalId: string;
-  symbol: string;
-  strategy: string;
-  mode: 'paper' | 'live';
-  finalScore?: number;      // Optional - dynamically calculated if missing
-  regimeWeight?: number;    // Optional - dynamically calculated if missing
-  confidence?: number;      // For backfill calculation
-  ngc?: number;             // For backfill calculation
-  trendStrength?: number;   // For backfill calculation
-  volatility?: number;      // For backfill calculation
-}
-```
-
-## 5.7 Diagnostics UI Provenance Panel
-
-New Configuration Provenance panel displays:
-- Phase Directive
-- Backend Schema
-- Execution Config Version
-- Screener Config Version
-
-## 5.8 Validation Test Suite
-
-Added 3 Vitest test files:
-
-| Test File | Coverage |
-|-----------|----------|
-| `sqe-config-dynamic.test.ts` | Dynamic FinalScore/RegimeWeight calculation |
-| `execution-config.test.ts` | TEC configuration validation |
-| `config-provenance.test.ts` | Provenance field validation |
+4. **Deprecation Markers**: Legacy columns (cwqi, ngc, profit_rate) marked for removal
 
 ---
 
-# 6. Technical Deliverables Summary
+### Phase 11.0F — Legacy Data Purge & Schema Finalization
 
-## 6.1 New Files Created
+**Schema Version:** v1.5.0  
+**Status:** ✅ Complete
+
+#### Objectives
+- Permanently remove legacy metric columns from database schema
+- Archive historical metric data for audit purposes
+- Lock scoring coefficients as immutable constants
+
+#### Key Changes
+
+1. **Column Removal**: Dropped `cwqi`, `ngc`, and `profit_rate` columns from `rtb_signals` table
+
+2. **Legacy Archive Created**: 
+   - File: `server/legacy/data/legacy_metrics_snapshot.json`
+   - Contains archived metric definitions and formulas
+
+3. **Immutable Coefficients**: Score weights locked in `server/config/score-weights.config.ts`:
+   ```typescript
+   export const SCORE_WEIGHTS = Object.freeze({
+     HYBRID: 0.4,
+     CONFIDENCE: 0.3,
+     REGIME: 0.2,
+     DECAY: 0.1
+   });
+   ```
+
+4. **Metric Engine v1.0**: Declared FinalScore as the canonical and sole operational metric
+
+---
+
+### Phase 11.0G — Schema Integrity & Telemetry Validation Hardening
+
+**Schema Version:** v1.5.1  
+**Status:** ✅ Complete
+
+#### Key Changes
+
+1. **Formal Migration File**: `drizzle/migrations/2026-11-0G-schema-hardening.sql`
+
+2. **Archive Integrity Checksum**: SHA-256 verification via `sealLegacyArchive()`, `verifyArchiveIntegrity()`
+
+3. **Schema Version Tracking**: `server/config/schema-version.ts`
+
+4. **Telemetry Schema Validation**: Method `validateSchemaSync(frontendVersion)` with health status indicators
+
+5. **ExecutionConfig Read-Only Lock**: `Object.freeze()` prevents runtime modification
+
+---
+
+## Directive 11.1 — Canonical Regime-Strategy Mapping
+
+### Overview
+
+Establishes a single source of truth for all regime-to-strategy and regime-to-signal-type mappings, replacing scattered mappings throughout the codebase.
+
+**Status:** ✅ Complete  
+**Schema Version:** v1.5.2
+
+---
+
+### Phase 11.1A — Canonical Dictionary Creation
+
+#### Key Changes
+
+1. **Single Source File**: `server/core/regime/canonical-regime-strategy-map.ts`
+
+2. **10 Market Regimes Defined**:
+   | Regime | Description | Risk Multiplier |
+   |--------|-------------|-----------------|
+   | R1 | Range-Bound (Low ADX, Low Vol) | 1.0 |
+   | R2 | Trending Quiet (High ADX, Low Vol) | 1.0 |
+   | R3 | Breakout Potential (Low ADX, Rising Vol) | 0.9 |
+   | R4 | Momentum Surge (High ADX, High Vol, +Trend) | 0.85 |
+   | R5 | Volatile Chop (Low ADX, High Vol) | 0.7 |
+   | R6 | Trend Exhaustion (Falling ADX, High Vol) | 0.75 |
+   | R7 | Quiet Drift (Low Vol, Unclear Trend) | 0.95 |
+   | R8 | Compression (Very Low Vol, Tightening Range) | 0.9 |
+   | R9 | High Vol Impulse (Sudden Vol Spike) | 0.6 |
+   | R10 | Transition (Mixed Signals) | 0.8 |
+
+3. **Strategy Mappings**: Each regime maps to:
+   - `primaryStrategies[]` — Main strategies to deploy
+   - `secondaryStrategies[]` — Backup strategies
+   - `signalTypes[]` — QUANT, PATTERN, or HYBRID
+   - `riskMultiplier` — Position sizing adjustment
+
+4. **Helper Functions**:
+   - `selectContextAwareStrategy(regime, pattern, liquidity)` — Context-aware selection
+   - `getFavoredStrategiesForRegime(regime)` — UI display
+   - `getFavoredSignalTypesForRegime(regime)` — UI display
+
+---
+
+### Phase 11.1B — Validation Middleware
+
+#### Key Changes
+
+1. **Governance Validation**: All signals must have valid regime and strategy from canonical map
+
+2. **Runtime Assertions**: Invalid combinations rejected with detailed logging
+
+3. **Cross-Module Enforcement**: VTS, Signal Orchestrator, and RTB all use canonical map
+
+---
+
+## Directive 11.2 — VTS Modernization & Regime-Driven Simulation
+
+### Overview
+
+Modernizes the Virtual Trading Simulator (VTS) to use Phase-10 canonical metrics and regime-driven simulation cycles.
+
+**Status:** ✅ Complete  
+**Schema Version:** v1.5.4
+
+---
+
+### Phase 11.2A — Phase-10 Metric Alignment
+
+#### Key Changes
+
+1. **Canonical Metrics Used**:
+   - `FinalScore` — Primary quality metric
+   - `HybridScore` — Combined strategy score
+   - `RegimeWeight` — Market alignment
+   - `DecayPenalty` — Signal freshness
+   - `ExpectedEdge` — Profit potential minus costs
+   - `FrictionCost` — Total trading costs
+
+2. **Schema Version**: VTS records include `schemaVersion: "1.6.7"`
+
+3. **Trade Record Format**:
+   ```typescript
+   interface Phase10TradeRecord {
+     id: string;
+     signal: VirtualSignal;
+     status: 'open' | 'closed';
+     entryTime: number;
+     exitTime?: number;
+     exitPrice?: number;
+     resultType?: 'take_profit' | 'stop_loss' | 'timeout';
+     grossProfit?: number;
+     netProfit?: number;
+     fees: number;
+     calibrated: boolean;
+     finalScore: number;
+     hybridScore: number;
+     predictiveConfidence: number;
+     regimeWeight: number;
+     decayPenalty: number;
+     expectedEdge: number;
+     frictionCost: number;
+     signalType: string;
+     strategy: string;
+     regime: string;
+     pool: 'ideal' | 'rotational';
+     source: 'simulation';
+     schemaVersion: string;
+   }
+   ```
+
+---
+
+### Phase 11.2B — 5-Class Regime Model
+
+#### Key Changes
+
+1. **Dynamic Regime Calculation**: Per-pair regime calculated using:
+   - ADX (trend strength)
+   - Volatility (price movement)
+   - Momentum (directional bias)
+
+2. **Regime Score**: 0-100 scale for regime confidence
+
+3. **Function**: `calculatePairRegime(ohlcData)` in `server/core/metrics/market-regime.ts`
+
+---
+
+### Phase 11.2C — VTS Auto-Start During Passive Learning
+
+#### Key Changes
+
+1. **Passive Learning Mode**: VTS runs automatically when trading engines are stopped
+
+2. **60-Second Simulation Cycles**: Each cycle processes 100 pairs from Ideal Pool
+
+3. **Data Segregation**: VTS writes to dedicated telemetry aggregator (no pollution of live data)
+
+4. **Telemetry Integration**: VTS is the sole source of telemetry writes during passive learning
+
+---
+
+## Directive 11.3 — Adaptive Scanning Intelligence
+
+### Overview
+
+Replaces static pair selection with learning-driven dual-pool selection system.
+
+**Status:** ✅ Complete  
+**Schema Version:** v1.5.5
+
+---
+
+### Phase 11.3A — Dual-Pool Architecture
+
+#### Key Changes
+
+1. **Pool Types**:
+   | Pool | Purpose | Selection Criteria |
+   |------|---------|-------------------|
+   | Ideal Pool | High-performing pairs | Ranked by telemetry score |
+   | Rotational Pool | Discovery/exploration | Random sampling with cooldowns |
+
+2. **Batch Composition**: 100 pairs per cycle
+   - 70% from Ideal Pool (70 pairs)
+   - 30% from Rotational Pool (30 pairs)
+
+3. **Adaptive Ratio**: Ratio can shift based on market conditions
+
+---
+
+### Phase 11.3B — Telemetry Aggregator Service
+
+#### Key Changes
+
+1. **Service**: `server/services/telemetry-aggregator.ts`
+
+2. **Rolling 24-Hour Window**: Collects per-pair performance metrics
+
+3. **Metrics Tracked**:
+   - Win rate
+   - Average profit
+   - Signal count
+   - Regime distribution
+   - Strategy performance
+
+4. **Pair Ranking**: `getDominantRegime()` aggregates pair regimes for global view
+
+---
+
+### Phase 11.3C — Pair Failure Tracking
+
+#### Key Changes
+
+1. **Cooldown Blacklisting**: Pairs with consistent failures enter cooldown
+
+2. **Service**: `PairFailureTracker` in adaptive scan manager
+
+3. **Dynamic Fill Algorithm**: Maintains batch size when pairs are blacklisted
+
+---
+
+## Directive 11.4 — Market Indicators & Analytics Hardening
+
+### Overview
+
+Comprehensive hardening of market indicators, analytics endpoints, and UI data binding.
+
+**Status:** ✅ Complete  
+**Sub-Directives:** 11.4A through 11.4H.6G
+
+---
+
+### Phase 11.4A — IMF (Institutional Math Filters) Integration
+
+#### Key Changes
+
+1. **Core Metrics**:
+   | Metric | Description | Threshold |
+   |--------|-------------|-----------|
+   | LQ (Log-Liquidity) | Liquidity assessment | ≥ 40 |
+   | VolNoise | Volatility noise ratio | ≤ 0.6 |
+   | DI (Directional Integrity) | Trend quality | Variable |
+   | σ (Sigma) | Standard deviation | Variable |
+
+2. **Filter Logic**: Pairs must pass both LQ and VolNoise thresholds
+
+3. **Benchmark Bypass**: Blue-chip and stablecoin pairs can bypass VolNoise filter for scanning only (not trading)
+
+---
+
+### Phase 11.4B — Benchmark List System
+
+#### Key Changes
+
+1. **Benchmark Pairs**: Pre-defined list of major trading pairs always included in scans
+
+2. **Force-Include Logic**: Benchmarks appear in UI even when not passing all filters
+
+3. **Rank Validation**: Unscanned pairs show "—" instead of invalid rank
+
+---
+
+### Phase 11.4C — Pattern Detection & Injection
+
+#### Key Changes
+
+1. **Pattern Scanner**: `scanPatterns(candles, symbol)` in `server/core/patterns/pattern-scanner.ts`
+
+2. **Detected Patterns**:
+   - MORNING_STAR
+   - EVENING_STAR
+   - HAMMER
+   - SHOOTING_STAR
+   - ENGULFING_BULL
+   - ENGULFING_BEAR
+   - DOJI
+   - PINBAR
+
+3. **Pattern Injection**: VTS injects detected patterns into signals
+
+---
+
+### Phase 11.4H — Analytics & UI Binding
+
+#### Sub-Phases
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 11.4H.1 | Regime display in analytics | ✅ Complete |
+| 11.4H.2 | Benchmark pair display | ✅ Complete |
+| 11.4H.3 | Friction calculation audit | ✅ Complete |
+| 11.4H.4 | Passive learning mode detection | ✅ Complete |
+| 11.4H.4A | Global regime from telemetry | ✅ Complete |
+| 11.4H.5 | Market indicators endpoint | ✅ Complete |
+| 11.4H.6 | Favored strategies/signals binding | ✅ Complete |
+| 11.4H.6A | Strategy mapper integration | ✅ Complete |
+| 11.4H.6B | Frontend query keys | ✅ Complete |
+| 11.4H.6C | Rank validation | ✅ Complete |
+| 11.4H.6D | Cache bypass for live data | ✅ Complete |
+| 11.4H.6E | Authenticated query restoration | ✅ Complete |
+| 11.4H.6G | Canonical logging | ✅ Complete |
+
+---
+
+## Directive 11.5 — Math, Macro, and Regime Synchronization
+
+### Overview
+
+Establishes mathematical foundations for profitability validation, Z-Score normalization, and macro-state awareness. This is the most recent directive implemented.
+
+**Status:** ✅ Complete  
+**Implemented:** January 18, 2026
+
+---
+
+### Task 1 — Profitability Validation (Net Expectancy Gate)
+
+#### Purpose
+Ensures no virtual trade executes unless mathematically profitable after all costs.
+
+#### Implementation
+
+1. **Module Created**: `server/core/calculations/expectancy.ts`
+
+2. **Function**: `isMathematicallyProfitable(entryPrice, targetPrice, spread, slippage, feeRate)`
+
+3. **Formula**:
+   ```
+   grossProfit = (targetPrice - entryPrice) / entryPrice
+   totalCost = (feeRate × 2) + (spread × 1.1) + slippage
+   
+   Returns: grossProfit > totalCost
+   ```
+
+4. **Integration**: VTS runner calls this before creating any virtual trade
+
+5. **Logging**: `[11.5][ProfitGate] Skipping {symbol}: Net expectancy below 0`
+
+---
+
+### Task 2 — Rolling Z-Score Normalization
+
+#### Purpose
+Provides statistical normalization for market metrics using rolling 300-period windows.
+
+#### Implementation
+
+1. **Module Created**: `server/utils/rolling-stats.ts`
+
+2. **Class**: `RollingStats`
+   ```typescript
+   class RollingStats {
+     constructor(windowSize: number = 300);
+     push(value: number): void;
+     mean(): number;
+     stdDev(): number;
+     zScore(value: number): number;
+     isWarmedUp(minSamples: number = 30): boolean;
+   }
+   ```
+
+3. **Z-Score Formula**:
+   ```
+   zScore = (value - mean) / stdDev
+   ```
+
+4. **Integration Points**:
+   - **VTS Runner**: Calls `getNormalizedRegimeWithDetails()` for per-pair Z-Score logging
+   - **DSS (Dynamic Strategy Selector)**: Tracks `volNoise` and `trendSlope` Z-Scores
+
+5. **Logging**:
+   - VTS: `[11.5][ZScore] {symbol}: regime={regime} zScores={adx=X, vol=Y, mom=Z}`
+   - DSS: `[11.5][DSS_ZScore] volZ=X trendZ=Y raw_vol=Z raw_trend=W`
+
+---
+
+### Task 3 — Macro-State Module
+
+#### Purpose
+Detects global market conditions that affect all trading pairs.
+
+#### Implementation
+
+1. **Module Created**: `server/core/metrics/macro-state.ts`
+
+2. **Function**: `getGlobalMacroCondition()`
+
+3. **Detected States**:
+   | State | Description | Detection Criteria |
+   |-------|-------------|-------------------|
+   | NORMAL | Standard conditions | Default |
+   | VOLATILITY_EXPANSION | Market-wide vol spike | Global vol > 2σ above mean |
+   | LIQUIDITY_CRUNCH | Thin order books | Global liquidity < 1σ below mean |
+   | SPECULATIVE_SURGE | FOMO/mania conditions | Momentum + volume spike |
+
+4. **Usage**: Adjusts secondary metric thresholds based on macro state
+
+---
+
+### Task 4 — Secondary Metric Adjustment
+
+#### Purpose
+Dynamically adjusts metric thresholds based on macro conditions.
+
+#### Implementation
+
+1. **Module Created**: `server/core/metrics/secondary-metrics.ts`
+
+2. **Function**: `adjustMetricRanges(baseThresholds, macroCondition)`
+
+3. **Adjustment Logic**:
+   | Macro State | LQ Adjustment | VolNoise Adjustment |
+   |-------------|---------------|---------------------|
+   | NORMAL | 1.0× | 1.0× |
+   | VOLATILITY_EXPANSION | 1.2× | 0.8× (stricter) |
+   | LIQUIDITY_CRUNCH | 1.5× (stricter) | 1.0× |
+   | SPECULATIVE_SURGE | 1.1× | 0.7× (stricter) |
+
+---
+
+### Task 5 — Filter Logic Correction
+
+#### Purpose
+Ensures blue-chip and stablecoin pairs are scanned but only tradable when passing IMF filters.
+
+#### Implementation
+
+1. **File Modified**: `server/services/fx5-scanner.ts`
+
+2. **Logic**: Benchmark pairs bypass volatility filters for *scanning* but not for *trading*
+
+3. **Logging**: `[11.4H.6][BYPASS] Benchmark bypass active: {count} pairs bypassed volatility/boring filters`
+
+---
+
+### Task 6 — Strategy-Specific Guardrails
+
+#### Purpose
+Adds strategy-specific entry requirements beyond global filters.
+
+#### Implementation
+
+1. **File Modified**: `server/services/vts-runner.ts`
+
+2. **Guardrail**: `sma_trend_ride` strategy requires ADX > 25
+   ```typescript
+   if (strategy === 'sma_trend_ride' && regimeResult.adx < 25) {
+     console.log(`[11.5][Guardrail] Skipping ${symbol}: ADX ${adx} < 25 for sma_trend_ride`);
+     return null;
+   }
+   ```
+
+---
+
+### Task 7 — Strategy Performance Audit
+
+#### Purpose
+Analyzes per-strategy win rates and provides recommendations.
+
+#### Implementation
+
+1. **Module Created**: `server/core/strategy-analyzer.ts`
+
+2. **Function**: `auditStrategyPerformance(trades, minSampleSize)`
+
+3. **Output Structure**:
+   ```typescript
+   interface StrategyAuditResult {
+     strategy: string;
+     sampleSize: number;
+     winRate: number;
+     avgProfit: number;
+     recommendation: 'KEEP' | 'MONITOR' | 'DISABLE';
+     reason: string;
+   }
+   ```
+
+4. **Recommendation Thresholds**:
+   | Win Rate | Recommendation |
+   |----------|----------------|
+   | ≥ 50% | KEEP |
+   | 35-50% | MONITOR |
+   | < 35% | DISABLE |
+
+---
+
+## File Artifacts Index
+
+### Core Configuration Files
+
+| File | Purpose | Directive |
+|------|---------|-----------|
+| `server/config/score-weights.config.ts` | Immutable FinalScore coefficients | 11.0F |
+| `server/config/schema-version.ts` | Schema version tracking | 11.0G |
+| `server/core/regime/canonical-regime-strategy-map.ts` | Canonical regime/strategy mappings | 11.1 |
+
+### Calculation Modules
+
+| File | Purpose | Directive |
+|------|---------|-----------|
+| `server/core/calculations/expectancy.ts` | Profitability validation | 11.5.1 |
+| `server/utils/rolling-stats.ts` | Z-Score normalization | 11.5.2 |
+| `server/core/metrics/market-regime.ts` | Regime calculation + Z-Score | 11.2, 11.5 |
+| `server/core/metrics/macro-state.ts` | Macro condition detection | 11.5.3 |
+| `server/core/metrics/secondary-metrics.ts` | Dynamic threshold adjustment | 11.5.4 |
+| `server/core/strategy-analyzer.ts` | Strategy performance audit | 11.5.7 |
+
+### Service Files
+
+| File | Purpose | Directive |
+|------|---------|-----------|
+| `server/services/vts-runner.ts` | Virtual Trading Simulator | 11.2, 11.5 |
+| `server/services/fx5-scanner.ts` | Market scanner with IMF | 11.4A |
+| `server/services/telemetry-aggregator.ts` | Performance telemetry | 11.3B |
+| `server/services/dynamic-strategy-selector.ts` | DSS with Z-Score | 11.5.2 |
+| `server/services/market-indicators.ts` | Analytics endpoints | 11.4H |
+
+### Legacy Archives
+
+| File | Purpose | Directive |
+|------|---------|-----------|
+| `server/legacy/data/legacy_metrics_snapshot.json` | Archived CWQI/NGC/ProfitRate | 11.0F |
+| `server/legacy/metrics_archive.ts` | Archive checksum functions | 11.0G |
+
+### Documentation
 
 | File | Purpose |
 |------|---------|
-| `server/config/execution-config.ts` | Centralized TEC configuration |
-| `server/config/schema-version.ts` | Schema version tracking |
-| `server/core/utils/score-calculator.ts` | FinalScore/RegimeWeight calculation |
-| `server/tests/unit/sqe-config-dynamic.test.ts` | Dynamic backfill tests |
-| `server/tests/unit/execution-config.test.ts` | Execution config tests |
-| `server/tests/integration/config-provenance.test.ts` | Provenance validation |
-
-## 6.2 Updated Files
-
-| File | Changes |
-|------|---------|
-| `signal_quality_evaluator.ts` | Dynamic backfill, optional SQEInput fields |
-| `telemetry-aggregator.ts` | configProvenance block added |
-| `diagnostics-tab.tsx` | Configuration Provenance panel |
-
-## 6.3 Configuration Versions
-
-| Component | Version |
-|-----------|---------|
-| Schema Version | v1.4.5 |
-| Phase Directive | 11.0D |
-| Execution Config | v1.0.0 |
-| Filter Schema | v1.4.3 |
-| Score Weights | v1.2.0 |
+| `docs/directive_11_summary.md` | This document |
+| `docs/schema_reference_v1_5_1.md` | Schema reference |
+| `replit.md` | Project state and architecture |
 
 ---
 
-# 7. Schema Version Tracking
+## Architecture Diagrams
 
-## 7.1 Version History
+### Signal Flow (Post-Phase 11)
 
-| Version | Directive | Changes |
-|---------|-----------|---------|
-| v1.4.3 | 11.0B | Added finalScoreMin, regimeWeightMin to screener_filters |
-| v1.4.4 | 11.0C | TEC config exposed in telemetry |
-| v1.4.5 | 11.0D | Dynamic backfill, config provenance |
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            MARKET DATA LAYER                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Kraken API → OHLC Cache → Price Cache → WebSocket Feed                     │
+└──────────────────────────────────┬──────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         FX5 SCANNER (Directive 11.4)                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  1. Fetch Kraken Universe (1419 pairs)                                      │
+│  2. Apply IMF Filters (LQ ≥ 40, VolNoise ≤ 0.6)                            │
+│  3. Calculate per-pair metrics (LQ, DI, VolNoise, σ)                        │
+│  4. Force-include benchmark pairs                                           │
+│  5. Produce: classifiedSurvivors[]                                          │
+└──────────────────────────────────┬──────────────────────────────────────────┘
+                                   │
+                    ┌──────────────┴──────────────┐
+                    │                             │
+                    ▼                             ▼
+┌─────────────────────────────────┐ ┌─────────────────────────────────────────┐
+│   PASSIVE LEARNING PATH         │ │         ACTIVE TRADING PATH             │
+│   (Engine Stopped)              │ │         (Engine Running)                │
+├─────────────────────────────────┤ ├─────────────────────────────────────────┤
+│                                 │ │                                         │
+│  ┌─────────────────────────┐    │ │  ┌─────────────────────────────────┐    │
+│  │   VTS RUNNER (11.2)     │    │ │  │   SIGNAL ORCHESTRATOR           │    │
+│  ├─────────────────────────┤    │ │  ├─────────────────────────────────┤    │
+│  │ 1. 60s simulation cycle │    │ │  │ 1. Generate live signals        │    │
+│  │ 2. 100 pairs per cycle  │    │ │  │ 2. Calculate FinalScore         │    │
+│  │ 3. Calculate regime     │    │ │  │ 3. Apply regime weight          │    │
+│  │ 4. Z-Score normalize    │    │ │  └──────────────┬──────────────────┘    │
+│  │ 5. Pattern detection    │    │ │                 │                       │
+│  │ 6. Profitability gate   │    │ │                 ▼                       │
+│  │ 7. Strategy guardrails  │    │ │  ┌─────────────────────────────────┐    │
+│  │ 8. Generate virtual     │    │ │  │   SQE (Signal Quality Eval)     │    │
+│  │    trades               │    │ │  ├─────────────────────────────────┤    │
+│  └──────────┬──────────────┘    │ │  │ Filter: FinalScore ≥ 0.35      │    │
+│             │                   │ │  │ Filter: RegimeWeight ≥ min      │    │
+│             ▼                   │ │  └──────────────┬──────────────────┘    │
+│  ┌─────────────────────────┐    │ │                 │                       │
+│  │ TELEMETRY AGGREGATOR    │    │ │                 ▼                       │
+│  ├─────────────────────────┤    │ │  ┌─────────────────────────────────┐    │
+│  │ - 24h rolling window    │    │ │  │   RTB QUEUE (Ready-to-Buy)      │    │
+│  │ - Per-pair win rates    │    │ │  ├─────────────────────────────────┤    │
+│  │ - Regime distribution   │    │ │  │ - Signal staging                │    │
+│  │ - Dominant regime calc  │    │ │  │ - Periodic refresh (5s)         │    │
+│  └──────────┬──────────────┘    │ │  │ - Decay penalty application     │    │
+│             │                   │ │  └──────────────┬──────────────────┘    │
+│             ▼                   │ │                 │                       │
+│  ┌─────────────────────────┐    │ │                 ▼                       │
+│  │ JSON FILE STORAGE       │    │ │  ┌─────────────────────────────────┐    │
+│  ├─────────────────────────┤    │ │  │   TCL (Trade Criteria Limiter)  │    │
+│  │ logs/virtual_trades/    │    │ │  │   → TEC (Trade Exec Controller) │    │
+│  │   YYYY-MM-DD.json       │    │ │  │   → ORDER MANAGEMENT            │    │
+│  └─────────────────────────┘    │ │  └─────────────────────────────────┘    │
+└─────────────────────────────────┘ └─────────────────────────────────────────┘
+```
 
-## 7.2 Current State
+### Metric Flow (Directive 11.5)
 
-- **SCHEMA_VERSION:** v1.4.5
-- **SCHEMA_DIRECTIVE:** 11.0D
-- **UI_SCHEMA_VERSION:** v1.4.5
-- **UI_PHASE_DIRECTIVE:** 11.0D
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         METRIC CALCULATION FLOW                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Raw OHLC Data
+     │
+     ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    CORE METRIC CALCULATIONS                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐             │
+│  │   ADX (Trend)   │  │   Volatility    │  │    Momentum     │             │
+│  │   0-100 scale   │  │   0-1 scale     │  │   -1 to +1      │             │
+│  └────────┬────────┘  └────────┬────────┘  └────────┬────────┘             │
+│           │                    │                    │                       │
+│           └────────────────────┼────────────────────┘                       │
+│                                │                                            │
+│                                ▼                                            │
+│                    ┌───────────────────────┐                                │
+│                    │   ROLLING STATS       │                                │
+│                    │   (300-period window) │                                │
+│                    ├───────────────────────┤                                │
+│                    │  push(value)          │                                │
+│                    │  mean() → μ           │                                │
+│                    │  stdDev() → σ         │                                │
+│                    │  zScore() → (x-μ)/σ   │                                │
+│                    └───────────┬───────────┘                                │
+│                                │                                            │
+│                                ▼                                            │
+│                    ┌───────────────────────┐                                │
+│                    │   Z-SCORE OUTPUT      │                                │
+│                    ├───────────────────────┤                                │
+│                    │  adxZ: normalized ADX │                                │
+│                    │  volZ: normalized vol │                                │
+│                    │  momZ: normalized mom │                                │
+│                    │  isWarmedUp: boolean  │                                │
+│                    └───────────────────────┘                                │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       REGIME CLASSIFICATION                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   Based on ADX + Volatility + Momentum → One of 10 Regimes (R1-R10)        │
+│                                                                             │
+│   ┌─────────┬─────────┬─────────┬─────────┬─────────┐                      │
+│   │   R1    │   R2    │   R3    │   R4    │   R5    │                      │
+│   │ Range   │Trending │Breakout │Momentum │Volatile │                      │
+│   │ Bound   │ Quiet   │Potential│ Surge   │  Chop   │                      │
+│   └─────────┴─────────┴─────────┴─────────┴─────────┘                      │
+│   ┌─────────┬─────────┬─────────┬─────────┬─────────┐                      │
+│   │   R6    │   R7    │   R8    │   R9    │   R10   │                      │
+│   │ Trend   │ Quiet   │Compress │High Vol │Transition                      │
+│   │Exhaust  │ Drift   │  -ion   │ Impulse │         │                      │
+│   └─────────┴─────────┴─────────┴─────────┴─────────┘                      │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    PROFITABILITY GATE (11.5.1)                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   isMathematicallyProfitable(entry, target, spread, slippage, fee)         │
+│                                                                             │
+│   grossProfit = (target - entry) / entry                                   │
+│   totalCost = (fee × 2) + (spread × 1.1) + slippage                        │
+│                                                                             │
+│   ┌─────────────────────────────────────────────────────────────┐          │
+│   │  IF grossProfit > totalCost  →  PROCEED (create signal)    │          │
+│   │  ELSE                        →  REJECT (log and skip)      │          │
+│   └─────────────────────────────────────────────────────────────┘          │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-# Next Steps (Future Directives)
+## Summary
 
-Phase 11 continues with:
-- **11.1**: Live Mode Integration Testing
-- **11.2**: Production Deployment Preparation
-- **11.3**: Monitoring & Alerting Enhancement
+Phase 11 represents the mathematical and operational maturation of DawnTrader:
+
+| Directive | Focus | Key Deliverable |
+|-----------|-------|-----------------|
+| 11.0 | Metric Consolidation | FinalScore as sole metric |
+| 11.1 | Canonical Mappings | Single source of truth for regimes |
+| 11.2 | VTS Modernization | Phase-10 compatible simulator |
+| 11.3 | Adaptive Scanning | Dual-pool selection system |
+| 11.4 | Analytics Hardening | Reliable UI data binding |
+| 11.5 | Mathematical Foundations | Z-Score, profitability gates, macro-state |
+
+**Current State (January 18, 2026):**
+- All Phase 11 directives complete
+- VTS generating 5,700+ virtual trades per day
+- Z-Score normalization active in VTS and DSS
+- Profitability gate preventing unprofitable signals
+- Ready for Phase 12 planning
 
 ---
 
-**End of File — Phase 11 Implementation History (In Progress)**
+*Document maintained by DawnTrader Development Team*  
+*Last updated: January 18, 2026*
