@@ -1,132 +1,77 @@
-# DawnTrader V3: Current State Reference Document
+# DawnTrader V3.1: Current State Reference Document
 ## Paper Trading Engine Architecture, Strategies, Guardrails & System Components
 
 **Document Created:** December 12, 2025  
-**Last Updated:** January 08, 2026  
+**Last Updated:** January 18, 2026  
 **Purpose:** Comprehensive reference for the paper trading engine and all configurable components  
-**Current Status:** Phase 11 In Progress (Directive 11.0D Complete)
+**Current Status:** Phase 11 Complete (Z-Score Normalization, Macro-State Detection, Profitability Gate)
 
 ---
 
 # Table of Contents
 
-**Part I: Paper Trading Engine Architecture**
-1. [Paper Trading Engine Overview](#1-paper-trading-engine-overview)
-2. [FX5 Scanner](#2-fx5-scanner)
-3. [Active Filter Pool](#3-active-filter-pool)
-4. [Signal Orchestrator](#4-signal-orchestrator)
-5. [Strategy Engine](#5-strategy-engine)
-6. [Position Sizing Helper](#6-position-sizing-helper)
-7. [Trade Safety & Guardrail Checks](#7-trade-safety--guardrail-checks)
-8. [Paper Execution Engine](#8-paper-execution-engine)
-9. [Live Pricing & WebSocket](#9-live-pricing--websocket)
-10. [Cycle Times & Cadences](#10-cycle-times--cadences)
+**Part I: Core Engine Architecture**
+1. [Trading Engine Overview](#1-trading-engine-overview)
+2. [Symbol Canonicalization](#2-symbol-canonicalization)
+3. [Price Cache & Market Data](#3-price-cache--market-data)
+4. [FX5 Scanner & Adaptive Scanning](#4-fx5-scanner--adaptive-scanning)
+5. [Market Regime Detection](#5-market-regime-detection)
+6. [Signal Orchestrator](#6-signal-orchestrator)
+7. [Virtual Trade Simulator (VTS)](#7-virtual-trade-simulator-vts)
+8. [RTB Refresh System](#8-rtb-refresh-system)
+9. [Paper Execution Engine](#9-paper-execution-engine)
 
-**Part II: UI Tabs & Tracking System**
-11. [Filter Insights Tab](#11-filter-insights-tab)
-12. [Ready to Buy Tab](#12-ready-to-buy-tab)
-13. [Open Trades Tab](#13-open-trades-tab)
-14. [Trade History Tab](#14-trade-history-tab)
+**Part II: Strategy & Regime System**
+10. [5-Class Regime Model](#10-5-class-regime-model)
+11. [17 Strategy Catalog](#11-17-strategy-catalog)
+12. [Signal Types & Patterns](#12-signal-types--patterns)
+13. [Dynamic Strategy Selector](#13-dynamic-strategy-selector)
 
-**Part III: Trading Strategies**
-15. [Strategy Catalog](#15-strategy-catalog)
+**Part III: Risk & Configuration**
+14. [Trade Safety Checks](#14-trade-safety-checks)
+15. [Guardrails System](#15-guardrails-system)
+16. [IMF Thresholds & Macro Adjustments](#16-imf-thresholds--macro-adjustments)
+17. [Screener Filters](#17-screener-filters)
 
-**Part IV: Configuration Components**
-16. [Guardrails System](#16-guardrails-system)
-17. [LPCP Module](#17-lpcp-module)
-18. [Screener Filters](#18-screener-filters)
-19. [Coherency Rules](#19-coherency-rules)
-20. [Goals Presets](#20-goals-presets)
-21. [LATTi vs Manual Control](#21-latti-vs-manual-control)
+**Part IV: Telemetry & Learning**
+18. [Telemetry Aggregator](#18-telemetry-aggregator)
+19. [Adaptive Pool Management](#19-adaptive-pool-management)
+20. [ML Calibration](#20-ml-calibration)
 
-**Part V: Phase 11 Live Mode Transition**
-22. [Live Mode Implementation Plan](#22-live-mode-implementation-plan)
-
----
-
-# PART I: PAPER TRADING ENGINE ARCHITECTURE
+**Part V: UI & Monitoring**
+21. [Dashboard Tabs](#21-dashboard-tabs)
+22. [Analytics & Diagnostics](#22-analytics--diagnostics)
 
 ---
 
-# 1. Paper Trading Engine Overview
+# PART I: CORE ENGINE ARCHITECTURE
 
-## 1.1 What Is Paper Trading?
+---
 
-The paper trading engine simulates real cryptocurrency trades **without using real money**. It:
-- Uses real-time market prices from Kraken
-- Simulates order execution with realistic slippage (0.15%) and fees (0.10%)
-- Tracks a simulated portfolio balance starting at a user-defined amount
-- Records all trades to a database for performance analysis
+# 1. Trading Engine Overview
 
-**Purpose:** Validate trading strategies and system behavior before risking real capital in Phase 11 (Live Mode).
+## 1.1 What Is DawnTrader?
 
-**Starting Balance:** User-configurable (set when initializing paper trading session).
+DawnTrader is a **long-only, spot-trading cryptocurrency day trading platform** for the Kraken exchange. It features:
 
-## 1.2 Engine Architecture Diagram
+- Real-time market scanning (1400+ pairs, 100 pairs/cycle)
+- 17 trading strategies across 3 signal types
+- 5-class market regime detection with Z-Score normalization
+- Dual-pool adaptive scanning (Ideal + Rotational)
+- Institutional Math Filters (IMF) with macro-state adjustments
+- Paper and live trading modes
+- AI-powered analysis and optimization
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                        PAPER TRADING ENGINE FLOW                             │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  ┌─────────────┐    ┌──────────────────┐    ┌─────────────────────┐         │
-│  │   KRAKEN    │───▶│   FX5 SCANNER    │───▶│  ACTIVE FILTER POOL │         │
-│  │  MARKET     │    │   (30s cycle)    │    │   (5-min TTL)       │         │
-│  │   DATA      │    │                  │    │                     │         │
-│  └─────────────┘    │  • Fetches 60    │    │  • Deduped pairs    │         │
-│                     │    pairs/batch   │    │  • Survivors only   │         │
-│                     │  • Applies all   │    │  • Mode-isolated    │         │
-│                     │    filters       │    │                     │         │
-│                     └──────────────────┘    └─────────┬───────────┘         │
-│                                                       │                      │
-│                                                       ▼                      │
-│  ┌──────────────────────────────────────────────────────────────────────┐   │
-│  │                      SIGNAL ORCHESTRATOR (30s cycle)                  │   │
-│  │                                                                       │   │
-│  │   For each symbol in Active Pool:                                     │   │
-│  │   ├── Fetch price history & indicators                                │   │
-│  │   ├── Evaluate ALL 9 strategies via Strategy Engine                  │   │
-│  │   ├── Filter by confidence threshold (default 60%)                   │   │
-│  │   ├── Size positions via Sizing Helper                               │   │
-│  │   └── Forward winning signals to Execution Engine                    │   │
-│  └───────────────────────────────────┬──────────────────────────────────┘   │
-│                                      │                                       │
-│                                      ▼                                       │
-│  ┌──────────────────────────────────────────────────────────────────────┐   │
-│  │                     TRADE SAFETY CHECKS (8-step sequence)             │   │
-│  │                                                                       │   │
-│  │   1. Kill Switch        5. Symbol Cooldown                           │   │
-│  │   2. Stop-Loss Required 6. Position Size Cap                         │   │
-│  │   3. Stop-Loss Valid    7. LPCP Protection (dormant)                 │   │
-│  │   4. Max Per Asset      8. Max Open Trades                           │   │
-│  │                                                                       │   │
-│  │   Result: ✅ PASS → Execute  |  ❌ BLOCK → Log reason, skip trade    │   │
-│  └───────────────────────────────┬──────────────────────────────────────┘   │
-│                                  │                                          │
-│                                  ▼                                          │
-│  ┌──────────────────────────────────────────────────────────────────────┐   │
-│  │                    PAPER EXECUTION ENGINE                             │   │
-│  │                                                                       │   │
-│  │   ENTRY:                          EXIT (1.5s monitoring cycle):      │   │
-│  │   • Apply 0.15% slippage          • Fetch live price via WebSocket   │   │
-│  │   • Apply 0.10% entry fee         • Check stop-loss trigger          │   │
-│  │   • Create trade record           • Check take-profit trigger        │   │
-│  │   • Create open position          • Apply exit slippage + fees       │   │
-│  │   • Subscribe to WebSocket        • Calculate P/L (gross, net)       │   │
-│  │                                   • Close position, update balance   │   │
-│  └──────────────────────────────────────────────────────────────────────┘   │
-│                                                                              │
-│  ┌──────────────────────────────────────────────────────────────────────┐   │
-│  │                         DATABASE TABLES                               │   │
-│  │                                                                       │   │
-│  │   paper_sim_trades        - All executed trades (open + closed)      │   │
-│  │   paper_sim_open_positions - Currently open positions                │   │
-│  │   paper_sim_portfolio     - Portfolio balance tracking               │   │
-│  │   execution_attempt_audit - All RTB attempts (success + blocked)     │   │
-│  └──────────────────────────────────────────────────────────────────────┘   │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+## 1.2 Current System Status
+
+| Component | Status | Version |
+|-----------|--------|---------|
+| **Paper Trading Engine** | ✅ Production Ready | Phase 11 |
+| **Live Trading Engine** | ✅ Ready for Testing | Phase 11 |
+| **VTS (Virtual Simulator)** | ✅ Active | Phase 11 |
+| **Z-Score Normalization** | ✅ Integrated | 11.5 |
+| **Macro-State Detection** | ✅ Active | 11.5 |
+| **Profitability Gate** | ✅ Enforced | 11.5 |
 
 ## 1.3 Key Constants
 
@@ -134,853 +79,570 @@ The paper trading engine simulates real cryptocurrency trades **without using re
 |----------|-------|----------|
 | `SLIPPAGE_PERCENT` | 0.15% | `paper-execution-engine.ts` |
 | `FEE_PERCENT` | 0.10% | `paper-execution-engine.ts` |
-| `STARTING_BALANCE` | User-defined | `paper-sim-service.ts` |
+| `PAIRS_PER_SCAN` | 100 | `adaptive-scan-manager.ts` |
+| `IDEAL_POOL_RATIO` | 60% | `adaptive-ratio-manager.ts` |
+| `ROTATIONAL_POOL_RATIO` | 40% | `adaptive-ratio-manager.ts` |
 | `FX5_SCAN_INTERVAL` | 30 seconds | `fx5-scanner.ts` |
-| `SIGNAL_EVAL_INTERVAL` | 30 seconds | `signal-orchestrator.ts` |
-| `MONITOR_INTERVAL` | 1.5 seconds | `paper-execution-engine.ts` |
-| `POOL_TTL` | 5 minutes | `active-filter-pool.ts` |
-| `RTB_TTL` | 30 seconds | `paper-execution-engine.ts` |
+| `RTB_BUCKET_INTERVAL` | 15 seconds | `rtb-refresh-service.ts` |
+| `POSITION_MONITOR_INTERVAL` | 1.5 seconds | `paper-execution-engine.ts` |
+| `VTS_CYCLE_INTERVAL` | 60 seconds | `vts-runner.ts` |
+| `Z_SCORE_WINDOW` | 300 periods | `rolling-stats.ts` |
+| `Z_SCORE_WARMUP` | 30 samples | `market-regime.ts` |
 
 ---
 
-# 2. FX5 Scanner
+# 2. Symbol Canonicalization
 
 ## 2.1 Purpose
 
-The FX5 Scanner is the **market data ingestion layer**. It runs continuously every 30 seconds, scanning the Kraken market for tradeable cryptocurrency pairs that meet the configured filter criteria.
+Ensures consistent symbol naming across all subsystems by translating between Kraken's exchange format and canonical BASE/QUOTE format.
 
-## 2.2 Architecture
+**File:** `server/services/utils/symbol-canonicalizer.ts`
+
+## 2.2 Format Translation
+
+| Kraken Format | Canonical Format |
+|---------------|------------------|
+| `XXBTZUSD` | `BTC/USD` |
+| `XETHZUSD` | `ETH/USD` |
+| `SOLUSD` | `SOL/USD` |
+| `XXDGZUSD` | `DOGE/USD` |
+
+## 2.3 Usage
+
+All subsystems must use canonical format. The canonicalizer is called at system boundaries (API ingestion, data storage, UI display).
+
+---
+
+# 3. Price Cache & Market Data
+
+## 3.1 Unified Price Cache
+
+**File:** `server/services/price-cache.ts`
+
+Single source of truth for all price data with rate limiting.
+
+### 3.1.1 Cache Buckets
+
+| Bucket | Refresh | Purpose |
+|--------|---------|---------|
+| `openTrade` | 2s | Active position monitoring |
+| `readyToBuy` | 15s | RTB signal refresh |
+| `fx5Snapshot` | 30s | Scanner price data |
+| `vtsSimulation` | 60s | VTS cache (isolated) |
+
+### 3.1.2 Rate Limiting
+
+- Max 10 weighted requests/second
+- Token-bucket per symbol
+- Automatic cooldown management
+
+## 3.2 OHLC Cache
+
+**File:** `server/core/cache/ohlc-cache.ts`
+
+- 721 candles per symbol (5-minute intervals)
+- Used for IMF and regime calculations
+- TTL-based refresh (5 minutes)
+
+---
+
+# 4. FX5 Scanner & Adaptive Scanning
+
+## 4.1 FX5 Scanner
 
 **File:** `server/services/fx5-scanner.ts`
 
-```
-FX5 Scanner (Always-On, 30-Second Interval)
-├── Independent of trading engine state
-├── Mode-isolated (paper + live run separately)
-├── Uses batch-first architecture (60 pairs per scan)
-│   ├── Top-N pairs (volume-ranked)
-│   └── Tier-B rotation (diversity sampling)
-├── Applies all screener filters
-├── Outputs "survivors" to Active Filter Pool
-└── Updates Stage-3 cache for UI consumption
-```
+Runs every 30 seconds, scanning 100 pairs per cycle.
 
-## 2.3 Scan Flow
+### 4.1.1 Scan Flow
 
-1. **Load Filters:** Fetch `screener_filters` for current mode
-2. **Collect Batch:** Call `collectMixedBatch()` from market-scanner.ts
-   - Fetches 60 pairs: Top-N by volume + Tier-B rotation
-3. **Apply Filters:** Each pair tested against all configured filters
-   - Price range, volume, liquidity, spread, volatility, RSI, etc.
-4. **Identify Survivors:** Pairs that pass ALL filters
-5. **Update Pool:** Add survivors to Active Filter Pool (5-min TTL)
-6. **Emit Events:** Broadcast results via WebSocket for UI updates
-7. **Track 24h Window:** Record scan metrics for historical analysis
+1. Get batch from Adaptive Scan Manager
+2. Calculate IMF metrics (LQ, VolNoise, DI, Sigma)
+3. Apply filter thresholds (with macro adjustments)
+4. Classify survivors vs filtered
+5. Update Stage-3 cache
+6. Trigger VTS if engine stopped
 
-## 2.4 Passive Learning Mode
+## 4.2 Adaptive Scan Manager
 
-When `passiveLearning = true` in screener filters:
-- FX5 Scanner still runs and evaluates pairs
-- BUT survivors are NOT added to Active Filter Pool
-- Pool stays empty → no signals generated → no trades executed
-- Purpose: Observe market data without trading
+**File:** `server/services/adaptive-scan-manager.ts`
+
+Manages dual-pool pair selection:
+
+| Pool | Allocation | Criteria |
+|------|------------|----------|
+| **Ideal** | 60% (54-60 pairs) | Top telemetry performers |
+| **Rotational** | 40% (40-46 pairs) | Diversity exploration |
+
+### 4.2.1 Pair Failure Tracking
+
+- Cooldown blacklist for failing pairs
+- TTL-based expiry
+- Automatic recovery
 
 ---
 
-# 3. Active Filter Pool
+# 5. Market Regime Detection
 
-## 3.1 Purpose
+## 5.1 5-Class Model
 
-The Active Filter Pool maintains a **deduped, non-expired list** of cryptocurrency pairs that passed FX5 filters. It serves as the "universe" of tradeable symbols for the Signal Orchestrator.
+**File:** `server/core/metrics/market-regime.ts`
 
-## 3.2 Architecture
+| Regime | Momentum | ADX | Volatility |
+|--------|----------|-----|------------|
+| `BULL_STABLE` | > 0.005 | > 25 | < 0.025 |
+| `BEAR_VOLATILE` | < -0.005 | > 25 | > 0.03 |
+| `LOW_VOL_CHOP` | |mom| < 0.002 | < 20 | < 0.015 |
+| `HIGH_VOL_IMPULSE` | > 0.010 | > 30 | > 0.03 |
+| `TRANSITION` | default | - | - |
 
-**File:** `server/services/active-filter-pool.ts`
+## 5.2 Z-Score Normalization
 
-| Property | Value |
-|----------|-------|
-| **Storage** | In-memory Map (per mode) |
-| **TTL** | 5 minutes |
-| **Deduplication** | Yes (skip if already in pool and not expired) |
-| **Mode Isolation** | Yes (separate pools for paper/live) |
+**File:** `server/utils/rolling-stats.ts`
 
-## 3.3 Pool Entry Structure
+- 300-period rolling window
+- Z-Score: `(value - mean) / stdDev`
+- 30-sample warmup requirement
+- Adaptive thresholds per pair
 
-```typescript
-interface ActiveFilteredPair {
-  symbol: string;           // e.g., "BTC/USD"
-  price: number;            // Current price when added
-  volume24h: number;        // 24-hour volume
-  dailyRange: number;       // Daily price range %
-  firstSeen: string;        // ISO timestamp when first added
-  lastUpdated: string;      // ISO timestamp when last seen
-  expiresAt: number;        // Unix timestamp for TTL expiry
-  source: 'paper' | 'live'; // Trading mode
-}
-```
+## 5.3 Macro-State Detection
 
-## 3.4 Pool Operations
+**File:** `server/core/metrics/macro-state.ts`
 
-| Operation | Description |
-|-----------|-------------|
-| `addSurvivors()` | Add new pairs from FX5 scan (respects TTL, dedupes) |
-| `getSurvivors()` | Get all non-expired pairs for signal evaluation |
-| `removeExpiredEntries()` | Cleanup expired entries (called on each add) |
-| `clearPool()` | Reset entire pool (used during hard reset) |
+Uses rolling Z-scores of aggregate market metrics (300-period window, 30-sample warmup):
+
+| Condition | Z-Score Detection | IMF Adjustments |
+|-----------|-------------------|-----------------|
+| `NORMAL` | Default (no thresholds exceeded) | Standard thresholds |
+| `VOLATILITY_EXPANSION` | avgVolatilityZ > 2 | LQ × 1.2, VolNoise × 0.8 |
+| `LIQUIDITY_CRUNCH` | liquidityZ < -1 | LQ × 1.5 |
+| `SPECULATIVE_SURGE` | correlationZ > 1.5 | LQ × 1.1, VolNoise × 0.7 |
 
 ---
 
-# 4. Signal Orchestrator
-
-## 4.1 Purpose
-
-The Signal Orchestrator is the **strategy evaluation layer**. It takes symbols from the Active Filter Pool and evaluates all 9 trading strategies to generate buy signals.
-
-## 4.2 Architecture
+# 6. Signal Orchestrator
 
 **File:** `server/services/signal-orchestrator.ts`
 
+Runs every 30 seconds, evaluating strategies for all pairs.
+
+## 6.1 Signal Flow
+
+1. Get pairs from scan batch
+2. Calculate regime (Z-Score normalized)
+3. Apply macro-state adjustments
+4. Select strategies via DSS
+5. Compute FinalScore
+6. Validate profitability gate
+7. Route to RTB queue
+
+## 6.2 FinalScore Formula
+
 ```
-Signal Orchestrator (30-Second Evaluation Cycle)
-├── Loads symbols from Active Filter Pool
-├── For each symbol:
-│   ├── Fetch price history from Kraken
-│   ├── Calculate technical indicators (VWAP, SMA, RSI)
-│   ├── Evaluate ALL 9 strategies via Strategy Engine
-│   └── Collect generated signals
-├── Filter signals by confidence threshold (default 60%)
-├── Pre-size signals via Sizing Helper
-└── Forward winning signals to Paper Execution Engine
-```
-
-## 4.3 Enabled Strategies (Default)
-
-All 9 strategies are enabled by default:
-1. `vwap_pullback`
-2. `abcd_long`
-3. `sma_trend_ride`
-4. `breakout`
-5. `mean_reversion`
-6. `range_trading`
-7. `vwap_bounce`
-8. `liquidity_trap`
-9. `dhma`
-
-## 4.4 Signal Flow
-
-1. **Fetch Pool:** Get all non-expired symbols from Active Filter Pool
-2. **Evaluate Strategies:** For each symbol, run all 9 strategies
-3. **Build Sized Signals:** Route through `buildSizedSignalForStrategy()`
-   - Pre-compute quantity and estimated value
-   - Use centralized sizing helper
-4. **Filter by Confidence:** Only pass signals ≥ confidence threshold
-5. **Forward to Engine:** Call `onSignalCallback()` for each winning signal
-6. **Track Statistics:** Update evaluation metrics
-
----
-
-# 5. Strategy Engine
-
-## 5.1 Purpose
-
-The Strategy Engine contains **pure, deterministic strategy detection functions**. Given price data and indicators, it returns a buy signal (or null).
-
-## 5.2 Architecture
-
-**File:** `server/services/strategy-engine.ts`
-
-| Property | Description |
-|----------|-------------|
-| **Strategy Count** | 9 active strategies |
-| **Input** | Price history, technical indicators, strategy params |
-| **Output** | `StrategySignal` or `null` |
-| **Side Effects** | None (pure function) |
-
-## 5.3 Strategy Signal Structure
-
-```typescript
-interface StrategySignal {
-  symbol: string;           // e.g., "BTC/USD"
-  strategy: StrategyName;   // e.g., "vwap_pullback"
-  entryPrice: number;       // Suggested entry price
-  stopPrice: number;        // Stop-loss price
-  targetPrice: number;      // Take-profit price
-  confidence: number;       // 0.0 - 1.0 (displayed as %)
-  metadata?: Record<string, any>; // Strategy-specific data
-}
+FinalScore = (
+  confidence × 0.35 +
+  regimeWeight × 0.25 +
+  liquidityScore × 0.20 +
+  momentumScore × 0.15 +
+  patternScore × 0.05
+) × riskAdjustment
 ```
 
-## 5.4 Strategy Detection Pattern
+## 6.3 Profitability Gate
 
-Each strategy follows this pattern:
+**File:** `server/core/calculations/expectancy.ts`
 
-```typescript
-detectStrategyName(indicators, priceHistory, params): StrategySignal | null {
-  // 1. Validate sufficient data
-  if (priceHistory.length < minBars) return null;
-  
-  // 2. Check entry conditions
-  const entryConditionsMet = /* ... */;
-  if (!entryConditionsMet) return null;
-  
-  // 3. Calculate entry, stop, target prices
-  const entryPrice = /* ... */;
-  const stopPrice = /* ... */;
-  const targetPrice = /* ... */;
-  
-  // 4. Return signal with metadata
-  return {
-    symbol: '',  // Filled in by orchestrator
-    strategy: 'strategy_name',
-    entryPrice,
-    stopPrice,
-    targetPrice,
-    confidence: 0.75,
-    metadata: { /* strategy-specific */ }
-  };
-}
+```
+grossProfit = (targetPrice - entryPrice) / entryPrice
+totalCost = (feeRate × 2) + (spread × 1.1) + slippage
+REQUIRED: grossProfit > totalCost
 ```
 
 ---
 
-# 6. Position Sizing Helper
+# 7. Virtual Trade Simulator (VTS)
 
-## 6.1 Purpose
-
-The Position Sizing Helper calculates **how much to buy** based on portfolio value, risk settings, and guardrail limits. It's a pure function with no database calls.
-
-## 6.2 Architecture
-
-**File:** `server/services/paper-position-sizing.ts`
-
-## 6.3 Sizing Formula (B6 Refactor)
-
-```
-1. riskAmount = portfolioValue × (portfolioRiskPerTradePct / 100)
-2. stopDistance = |entryPrice - stopPrice|
-3. rawQuantity = riskAmount / stopDistance
-4. exposureBudget = portfolioValue × (maxTotalExposurePct / 100)
-5. maxNotional = exposureBudget × (maxPositionPercentPct / 100)
-6. bufferedMaxNotional = maxNotional × 0.97  (3% buffer for price changes)
-7. IF (rawQuantity × entryPrice) > bufferedMaxNotional:
-      quantity = bufferedMaxNotional / entryPrice  (clamped)
-   ELSE:
-      quantity = rawQuantity
-8. estimatedValue = quantity × entryPrice
-```
-
-## 6.4 Input/Output
-
-**Input:**
-```typescript
-interface PaperPositionSizingParams {
-  portfolioValue: number;
-  guardrails: GuardrailsV2;
-  entryPrice: number;
-  stopPrice: number;
-  symbol: string;
-  strategy: StrategyType;
-}
-```
-
-**Output:**
-```typescript
-interface PaperPositionSizingResult {
-  quantity: number;
-  estimatedValue: number;
-  sizingDetails?: {
-    portfolioValue: number;
-    riskPerTradePct: number;
-    riskAmount: number;
-    stopDistance: number;
-    maxPositionPct: number;
-    maxTotalExposurePct: number;
-    exposureBudget: number;
-    maxNotional: number;
-    bufferedMaxNotional: number;
-    wasClamped: boolean;
-  };
-}
-```
-
----
-
-# 7. Trade Safety & Guardrail Checks
+**Files:** `server/services/vts-runner.ts`, `server/services/vts-service.ts`
 
 ## 7.1 Purpose
 
-Trade Safety is the **final gate** before execution. Every signal must pass an 8-step check sequence. Any failure blocks the trade.
+Generates virtual trades during passive learning, feeding telemetry without affecting real trading.
 
-## 7.2 Architecture
+## 7.2 VTS Cycle
 
-**File:** `server/services/trade-safety.ts`
+- Triggered when engine is STOPPED
+- 60-second simulation cycles
+- Uses isolated cache bucket
+- Writes to telemetry only
 
-## 7.3 Check Sequence
+## 7.3 Strategy-Specific Guardrails
 
-| Order | Check | Block Code | Description |
-|-------|-------|------------|-------------|
-| 1 | Kill Switch | `KILL_SWITCH` | Trading suspended? |
-| 2 | Stop-Loss Required | `NO_STOP_LOSS` | Stop-loss must be present |
-| 3 | Stop-Loss Valid | `INVALID_STOP_LOSS` | Stop must be below entry |
-| 4 | Max Positions Per Asset | `POSITION_LIMIT` | Max 1 position per symbol |
-| 5 | Symbol Cooldown | `COOLDOWN` | Respect cooldown period |
-| 6 | Position Size Cap | `MAX_POSITION` | Position within % limit |
-| 7 | LPCP Protection | `LPCP_*` | (Dormant - always passes) |
-| 8 | Max Open Trades | `MAX_TRADES` | Respect position limit |
-
-## 7.4 Result Codes
-
-| Result | Action |
-|--------|--------|
-| `OK` | Trade proceeds to execution |
-| `KILL_SWITCH` | Trade blocked - kill switch tripped |
-| `NO_STOP_LOSS` | Trade blocked - missing stop-loss |
-| `COOLDOWN` | Trade blocked - symbol in cooldown |
-| `MAX_TRADES` | Trade blocked - at position limit |
-| (etc.) | Trade blocked - see block reason |
+| Strategy | Guardrail |
+|----------|-----------|
+| `sma_trend_ride` | ADX > 25 required |
 
 ---
 
-# 8. Paper Execution Engine
+# 8. RTB Refresh System
 
-## 8.1 Purpose
+**File:** `server/services/rtb-refresh-service.ts`
 
-The Paper Execution Engine **simulates trade execution** and **monitors open positions** for exit conditions.
+## 8.1 Architecture
 
-## 8.2 Architecture
+| Property | Value |
+|----------|-------|
+| Micro-cycle | 15 seconds |
+| Macro-cycle | 120 seconds (8 buckets) |
+| Concurrency | Adaptive (3-10 workers) |
+
+## 8.2 Adaptive Concurrency Tuner (ACT)
+
+- Scale UP: avgCpu < 55% AND duration < 5000ms
+- Scale DOWN: avgCpu > 60% OR duration > 8000ms
+- Lag Protection: eventLoopLag > 2ms → force reduce
+
+---
+
+# 9. Paper Execution Engine
 
 **File:** `server/services/paper-execution-engine.ts`
 
+## 9.1 Entry Processing
+
+1. Receive signal from RTB
+2. Run 8-step safety checks
+3. Apply entry slippage (0.15%)
+4. Apply entry fee (0.10%)
+5. Create trade + position records
+6. Subscribe to price updates
+
+## 9.2 Exit Monitoring (1.5s cycle)
+
+1. Fetch live price
+2. Check adaptive trailing stop
+3. Check take-profit
+4. Apply exit costs
+5. Calculate P/L
+6. Update records
+
+---
+
+# PART II: STRATEGY & REGIME SYSTEM
+
+---
+
+# 10. 5-Class Regime Model
+
+## 10.1 Regime Definitions
+
+| Regime | Description | Risk Multiplier | Min Confidence |
+|--------|-------------|-----------------|----------------|
+| `BULL_STABLE` | Sustained uptrend, low vol | 1.0 | 0.60 |
+| `BEAR_VOLATILE` | Downtrend, high turbulence | 0.5 | 0.75 |
+| `LOW_VOL_CHOP` | Range-bound, no direction | 0.8 | 0.65 |
+| `HIGH_VOL_IMPULSE` | Breakout, violent expansion | 0.7 | 0.70 |
+| `TRANSITION` | Reversal zone, weakening trend | 0.6 | 0.70 |
+
+## 10.2 Regime Metrics
+
+| Regime | Momentum | ADX | Volatility |
+|--------|----------|-----|------------|
+| `BULL_STABLE` | > 0.005 | > 25 | < 0.025 |
+| `BEAR_VOLATILE` | < -0.005 | > 25 | > 0.03 |
+| `LOW_VOL_CHOP` | |mom| < 0.002 | < 20 | < 0.015 |
+| `HIGH_VOL_IMPULSE` | > 0.010 | > 30 | > 0.03 |
+| `TRANSITION` | ±0.004 | 20-25 | 0.015-0.03 |
+
+---
+
+# 11. 17 Strategy Catalog
+
+**File:** `server/config/canonical-regime-strategy-map.ts`
+
+## 11.1 QUANT Strategies (8)
+
+| Strategy | Key | Regime Affinity | Secondary Metrics |
+|----------|-----|-----------------|-------------------|
+| SMA Trend Ride | `sma_trend_ride` | BULL_STABLE, HIGH_VOL | ADX > 25 |
+| VWAP Pullback | `vwap_pullback` | BULL_STABLE | VWAP proximity |
+| Breakout | `breakout` | HIGH_VOL_IMPULSE | Volume confirm |
+| Mean Reversion | `mean_reversion` | LOW_VOL_CHOP | Bollinger width |
+| Range Trade | `range_trade` | LOW_VOL_CHOP | S/R levels |
+| Momentum Surge | `momentum_surge` | HIGH_VOL_IMPULSE | RSI, momentum |
+| Volatility Breakout | `volatility_breakout` | HIGH_VOL_IMPULSE | ATR expansion |
+| Trend Follow | `trend_follow` | BULL_STABLE | EMA alignment |
+
+## 11.2 PATTERN Strategies (5)
+
+| Strategy | Key | Pattern Types | Regime Affinity |
+|----------|-----|---------------|-----------------|
+| Support Bounce | `support_bounce` | PINBAR, ENGULFING | LOW_VOL_CHOP |
+| Resistance Break | `resistance_break` | ENGULFING | HIGH_VOL_IMPULSE |
+| Pivot Shift | `pivot_shift` | MORNING_STAR | TRANSITION |
+| Morning Star | `morning_star` | MORNING_STAR | BEAR_VOLATILE |
+| Engulfing Reversal | `engulfing_reversal` | ENGULFING | Any |
+
+## 11.3 HYBRID Strategies (4)
+
+| Strategy | Key | Description | Regime Affinity |
+|----------|-----|-------------|-----------------|
+| Adaptive Flow | `adaptive_flow` | Quant + Pattern | All |
+| Momentum Pattern | `momentum_pattern` | Momentum + pattern confirm | BULL_STABLE |
+| Volatility Pattern | `volatility_pattern` | Breakout + patterns | HIGH_VOL_IMPULSE |
+| Regime Switch | `regime_switch` | Cross-regime | TRANSITION |
+
+---
+
+# 12. Signal Types & Patterns
+
+## 12.1 Signal Types
+
+| Type | Description | Strategy Count |
+|------|-------------|----------------|
+| `QUANT` | Quantitative indicators | 8 |
+| `PATTERN` | Candlestick patterns | 5 |
+| `HYBRID` | Combined Quant + Pattern | 4 |
+
+## 12.2 Pattern Types
+
+| Pattern | Canonical Name | Description |
+|---------|----------------|-------------|
+| Pin Bar | `PINBAR` | Rejection wick |
+| Engulfing | `ENGULFING` | Full body engulf |
+| Morning Star | `MORNING_STAR` | 3-candle reversal |
+| ABCD | `ABCD` | Harmonic pattern |
+| Tri-Star | `TRI_STAR` | Doji sequence |
+
+## 12.3 Pattern Normalization
+
+Raw patterns are normalized to canonical types:
+- `INSIDE_BAR` → `MORNING_STAR` (consolidation)
+- Various reversal patterns → appropriate canonical
+
+---
+
+# 13. Dynamic Strategy Selector
+
+**File:** `server/services/dynamic-strategy-selector.ts`
+
+## 13.1 Selection Logic
+
+1. Get current market regime
+2. Filter strategies by regime affinity
+3. Check secondary metric requirements
+4. Apply Z-Score adjusted thresholds
+5. Return compatible strategies
+
+## 13.2 Regime-Strategy Mapping
+
+| Regime | Preferred Strategies |
+|--------|---------------------|
+| BULL_STABLE | sma_trend_ride, vwap_pullback, trend_follow, momentum_pattern |
+| BEAR_VOLATILE | morning_star (reversal only), defensive only |
+| LOW_VOL_CHOP | range_trade, mean_reversion, support_bounce |
+| HIGH_VOL_IMPULSE | breakout, momentum_surge, volatility_breakout, resistance_break |
+| TRANSITION | pivot_shift, regime_switch, adaptive_flow |
+
+---
+
+# PART III: RISK & CONFIGURATION
+
+---
+
+# 14. Trade Safety Checks
+
+**File:** `server/services/trade-safety.ts`
+
+## 14.1 8-Step Sequence
+
+| Step | Check | Blocking Condition |
+|------|-------|-------------------|
+| 1 | Kill Switch | `killSwitchTripped = true` |
+| 2 | Stop-Loss Required | Missing SL price |
+| 3 | Stop-Loss Valid | SL invalid range |
+| 4 | Max Per Asset | Already holding symbol |
+| 5 | Symbol Cooldown | Recent trade on symbol |
+| 6 | Position Size Cap | Exceeds max position % |
+| 7 | LPCP Protection | Low-probability override |
+| 8 | Max Open Trades | At max positions |
+
+---
+
+# 15. Guardrails System
+
+**Table:** `guardrails_v2`
+
+## 15.1 Configuration Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `portfolioRiskPerTradePct` | 2% | Max risk per trade |
+| `maxPositionPercentPct` | 10% | Max position size |
+| `maxOpenPositions` | 5 | Max concurrent trades |
+| `symbolCooldownMinutes` | 60 | Minutes between trades on same symbol |
+| `dailyLossKillSwitchPct` | 5% | Daily loss limit |
+| `maxTotalExposurePct` | 50% | Max portfolio exposure |
+
+---
+
+# 16. IMF Thresholds & Macro Adjustments
+
+## 16.1 Base IMF Thresholds
+
+| Metric | Threshold | Purpose |
+|--------|-----------|---------|
+| LQ (Log-Liquidity) | ≥ 40 | Minimum liquidity |
+| VolNoise | ≤ 0.6 | Maximum noise |
+| DI (Directional Integrity) | ≥ 45 | Trend strength |
+
+## 16.2 Macro-State Adjustments
+
+| Condition | LQ Multiplier | VolNoise Multiplier |
+|-----------|---------------|---------------------|
+| NORMAL | 1.0 | 1.0 |
+| VOLATILITY_EXPANSION | 1.2 | 0.8 |
+| LIQUIDITY_CRUNCH | 1.5 | 1.0 |
+| SPECULATIVE_SURGE | 1.1 | 0.7 |
+
+---
+
+# 17. Screener Filters
+
+**Table:** `screener_filters`
+
+| Filter | Type | Description |
+|--------|------|-------------|
+| `minPrice` | number | Minimum asset price |
+| `maxPrice` | number | Maximum asset price |
+| `minVolume24h` | number | Minimum 24h volume |
+| `maxSpread` | number | Maximum bid-ask spread |
+| `minDailyRange` | number | Minimum daily range % |
+| `excludeStablecoins` | boolean | Skip stablecoin pairs |
+| `passiveLearning` | boolean | Observe only, no trades |
+
+---
+
+# PART IV: TELEMETRY & LEARNING
+
+---
+
+# 18. Telemetry Aggregator
+
+**File:** `server/services/telemetry-aggregator.ts`
+
+## 18.1 Data Collection
+
+- 24-hour rolling window per pair
+- Win rate, avg P/L, trade count
+- Strategy-specific metrics
+- Regime-tagged outcomes
+
+## 18.2 Pool Metrics
+
+```typescript
+{
+  pool: 'ideal' | 'rotational',
+  winRate: number,
+  samples: number,
+  avgFinalScore: number
+}
 ```
-Paper Execution Engine
-├── Constructor: mode ('paper' or 'live')
-├── start(): Initialize engine, start monitoring loop
-├── stop(): Stop monitoring, cleanup
-├── processSignal(): Handle incoming signals from orchestrator
-├── monitoringCycle(): 1.5-second loop for exit evaluation
-├── checkOpenPositions(): Evaluate SL/TP for each position
-├── closePosition(): Execute exit with fees/slippage
-└── forceClosePosition(): Manual close by user
-```
-
-## 8.3 Trade Entry Flow
-
-1. **Receive Signal:** `processSignal(signal)` called by orchestrator
-2. **Run Safety Checks:** Call `checkGuardrailRisk()`
-3. **Apply Entry Slippage:** `actualEntry = entry × (1 + 0.0015)`
-4. **Apply Entry Fee:** `entryFee = actualEntry × quantity × 0.001`
-5. **Create Trade Record:** Insert into `paper_sim_trades`
-6. **Create Open Position:** Insert into `paper_sim_open_positions`
-7. **Subscribe WebSocket:** Add symbol to Kraken WebSocket for live prices
-8. **Log RTB Attempt:** Record in `execution_attempt_audit`
-
-## 8.4 Trade Exit Flow (Monitoring Cycle)
-
-1. **Fetch Positions:** Get all `paper_sim_open_positions`
-2. **For Each Position:**
-   - Fetch live price via `getPriceWithFallback()`
-   - Check: `currentPrice <= stopPrice`? → Stop-loss triggered
-   - Check: `currentPrice >= targetPrice`? → Take-profit triggered
-3. **If Exit Triggered:**
-   - Apply exit slippage: `actualExit = price × (1 - 0.0015)` for SL
-   - Apply exit fee: `exitFee = actualExit × quantity × 0.001`
-   - Calculate P/L: `grossPnl = (exit - entry) × quantity`
-   - Calculate costs: `totalCost = entryFee + exitFee + slippage`
-   - Calculate net: `netPnl = grossPnl - totalCost`
-   - Update trade record with exit data
-   - Delete from open positions
-   - Update portfolio balance
-
-## 8.5 Cost Model
-
-| Cost Component | Percentage | Calculation |
-|----------------|------------|-------------|
-| Entry Slippage | 0.15% | Added to entry price |
-| Exit Slippage | 0.15% | Subtracted from exit price |
-| Entry Fee | 0.10% | `entryPrice × quantity × 0.001` |
-| Exit Fee | 0.10% | `exitPrice × quantity × 0.001` |
-| **Total Round-Trip** | ~0.50% | Sum of all costs |
 
 ---
 
-# 9. Live Pricing & WebSocket
+# 19. Adaptive Pool Management
 
-## 9.1 Purpose
+## 19.1 Adaptive Ratio Manager
 
-The Live Pricing system provides **real-time price data** for open position monitoring. It uses Kraken WebSocket as primary source with REST API fallback.
+**File:** `server/services/adaptive-ratio-manager.ts`
 
-## 9.2 Architecture
+Dynamically adjusts Ideal/Rotational split:
 
-**Files:**
-- `server/services/live-pricing-adapter.ts` - Price caching and fallback logic
-- `server/services/kraken-websocket-adapter.ts` - WebSocket connection management
+- Default: 60% Ideal / 40% Rotational
+- Range: 50-70% Ideal / 30-50% Rotational
+- Based on: regime, win rates, confidence
 
-## 9.3 Price Pipeline
+## 19.2 Pool Selection
+
+| Pool | Selection Criteria |
+|------|-------------------|
+| Ideal | Top telemetry scores, proven performers |
+| Rotational | Diversity sampling, exploration |
+
+---
+
+# 20. ML Calibration
+
+**File:** `server/services/ml-calibration.ts`
+
+## 20.1 Performance Score
 
 ```
-Kraken WebSocket (wss://ws.kraken.com)
-    │
-    ▼
-┌─────────────────────────────────────────┐
-│ KrakenWebSocketAdapter                   │
-│ • Subscribes to ticker channel           │
-│ • Handles reconnection                   │
-│ • Normalizes symbols (Kraken → internal) │
-└─────────────────┬───────────────────────┘
-                  │
-                  ▼
-┌─────────────────────────────────────────┐
-│ LivePricingAdapter.priceCache            │
-│ • Map<symbol, CachedPrice>               │
-│ • TTL: 1-2 seconds                       │
-│ • Sources: kraken_ws, kraken_rest        │
-└─────────────────┬───────────────────────┘
-                  │
-                  ▼
-┌─────────────────────────────────────────┐
-│ getPriceWithFallback(symbol, timeout)    │
-│ • Check WebSocket cache first            │
-│ • If stale: call Kraken REST API         │
-│ • Return: { price, source, timestamp }   │
-└─────────────────────────────────────────┘
+score = winRate × 0.4 + avgNetPL × 0.3 + consistency × 0.2 + regimeAlign × 0.1
 ```
 
-## 9.4 Subscription Management
+## 20.2 Learning Feedback
 
-- **On Engine Start:** Subscribe all open position symbols
-- **On Trade Open:** Subscribe new symbol
-- **On Trade Close:** Unsubscribe symbol (if no other positions)
-- **Health Audit:** 5-second interval checks subscription coverage
-
----
-
-# 10. Cycle Times & Cadences
-
-## 10.1 System Timers
-
-| Component | Interval | Description |
-|-----------|----------|-------------|
-| **FX5 Scanner** | 30 seconds | Market scan and filter evaluation |
-| **Signal Orchestrator** | 30 seconds | Strategy evaluation cycle |
-| **Monitoring Cycle** | 1.5 seconds | Open position exit check |
-| **WebSocket Tick** | Real-time | Price updates as they arrive |
-| **UI Active Trades Poll** | 10 seconds | Frontend data refresh |
-| **Active Pool TTL** | 5 minutes | Pair expiry from pool |
-| **RTB Signal TTL** | 30 seconds | Signal expires after one FX5 cycle |
-| **Symbol Cooldown** | Configurable | Default 15 minutes |
-
-## 10.2 Timing Diagram
-
-```
-Time (seconds): 0    1.5   3    4.5   6    ...  28.5  30   31.5  ...
-                │     │     │     │     │         │     │     │
-FX5 Scanner     ├─────┼─────┼─────┼─────┼─────────┼─────┤     │
-                │scan │     │     │     │         │     │scan │
-                                                        │
-Signal Orch     ├─────┼─────┼─────┼─────┼─────────┼─────┤
-                │eval │     │     │     │         │     │eval
-                                                        │
-Monitor Loop    ├──┬──┼──┬──┼──┬──┼──┬──┼──┬──┬──┬┼──┬──┼──┬──┼
-                │SL│  │SL│  │SL│  │SL│  │SL│SL│SL││SL│  │SL│
-                │TP│  │TP│  │TP│  │TP│  │TP│TP│TP││TP│  │TP│
-                                                        │
-WebSocket       ──────────────────────────────────────────────
-                ▲ ▲ ▲ ▲ ▲ ▲ ▲ ▲ ▲ ▲ ▲ ▲ ▲ ▲ ▲ ▲ ▲ ▲ ▲ ▲ ▲
-                (price ticks arrive in real-time)
-```
+- Edge delta tracking (expected vs actual)
+- Adjustment recommendations
+- Per-strategy calibration
 
 ---
 
-# PART II: UI TABS & TRACKING SYSTEM
+# PART V: UI & MONITORING
 
 ---
 
-# 11. Filter Insights Tab
+# 21. Dashboard Tabs
 
-## 11.1 Purpose
-
-The Filter Insights tab shows **real-time FX5 scanner activity** and the current Active Filter Pool status.
-
-## 11.2 Location
-
-- **Page:** `client/src/pages/active-trades.tsx` (Tab 1)
-- **Component:** `client/src/components/trading/filter-insights.tsx`
-
-## 11.3 Data Displayed
-
-| Metric | Description |
-|--------|-------------|
-| **Evaluated Count** | Total pairs scanned in last cycle |
-| **Eligible Count** | Pairs that passed all filters |
-| **Ineligible Count** | Pairs that failed one or more filters |
-| **Active Pool Size** | Current non-expired pairs in pool |
-| **Filter Breakdown** | Count of failures per filter type |
-| **24h Window Stats** | Cycles per hour, total scans |
-| **Cycle Countdown** | Time until next FX5 scan |
-
-## 11.4 Update Cadence
-
-- **Data Source:** WebSocket events from FX5 Scanner
-- **Refresh:** Real-time on each 30-second scan cycle
+| Tab | Purpose |
+|-----|---------|
+| **Overview** | Market indicators, regime, favored strategies |
+| **Active Trades** | Open positions with live P/L |
+| **Trade History** | Closed trade records |
+| **Ready to Buy** | Pending signals in RTB queue |
+| **Filter Insights** | FX5 scan results and filtering |
+| **Analytics** | Performance charts and metrics |
+| **Diagnostics** | System health and regime breakdown |
 
 ---
 
-# 12. Ready to Buy Tab
+# 22. Analytics & Diagnostics
 
-## 12.1 Purpose
+## 22.1 Market Regime Display
 
-The Ready to Buy (RTB) tab shows **signals that passed all checks** and are ready for execution, as well as execution metrics.
+- Current global regime
+- Per-pair regime breakdown
+- Z-Score visualization
 
-## 12.2 Location
+## 22.2 Friction Tiers
 
-- **Page:** `client/src/pages/active-trades.tsx` (Tab 2)
-- **Component:** `client/src/components/trading/ready-to-buy-table.tsx`
+| Tier | Color | Description |
+|------|-------|-------------|
+| LOW | Green | < 0.3% total cost |
+| MODERATE | Yellow | 0.3-0.5% total cost |
+| HIGH | Orange | 0.5-0.8% total cost |
+| EXTREME | Red | > 0.8% total cost |
 
-## 12.3 Data Displayed
+## 22.3 Trading Activities Feed
 
-| Column | Description |
-|--------|-------------|
-| **Symbol** | Trading pair (e.g., BTC/USD) |
-| **Strategy** | Which strategy generated the signal |
-| **Entry Price** | Suggested entry price |
-| **Stop Price** | Stop-loss level |
-| **Target Price** | Take-profit level |
-| **Confidence** | Strategy confidence score (%) |
-| **Quantity** | Pre-sized position quantity |
-| **Estimated Value** | Position value in USD |
-
-## 12.4 Execution Metrics Panel
-
-Shows RTB pipeline statistics:
-- RTB Attempts (total)
-- RTB Blocks (by reason)
-- RTB Success Rate
-- Block breakdown chart
+Real-time log of:
+- Signal generation events
+- Trade entries/exits
+- Regime changes
+- System health updates
 
 ---
 
-# 13. Open Trades Tab
+# Document History
 
-## 13.1 Purpose
-
-The Open Trades tab displays **all currently open positions** with real-time P/L tracking.
-
-## 13.2 Location
-
-- **Page:** `client/src/pages/active-trades.tsx` (Tab 3)
-- **Component:** `client/src/components/trading/active-trades-v2.tsx`
-
-## 13.3 Data Displayed
-
-| Column | Description |
-|--------|-------------|
-| **Symbol** | Trading pair |
-| **Strategy** | Strategy that opened the trade |
-| **Entry Price** | Actual entry price (with slippage) |
-| **Current Price** | Live price from WebSocket/REST |
-| **Stop Loss** | Stop-loss level |
-| **Take Profit** | Take-profit level |
-| **Quantity** | Position size |
-| **Unrealized P/L** | Current profit/loss |
-| **% Change** | P/L as percentage |
-| **Source** | Price source (WS, REST) |
-| **Age** | Time since entry |
-
-## 13.4 Global Metrics Bar
-
-Shows aggregate portfolio metrics:
-- **Current Balance:** Starting + Realized P/L
-- **Open Trades Value:** Sum of all position values
-- **Total Equity:** Current Balance + Open Trades Value
-- **Unrealized P/L:** Sum of unrealized gains/losses
-
-## 13.5 Update Cadence
-
-- **API Poll:** 10 seconds via `useQuery`
-- **WebSocket:** Real-time price updates
+| Date | Version | Changes |
+|------|---------|---------|
+| 2025-12-12 | 1.0 | Initial creation |
+| 2026-01-08 | 1.5 | Phase 10 additions |
+| 2026-01-18 | 2.0 | Complete overhaul for Phase 11 |
 
 ---
 
-# 14. Trade History Tab
-
-## 14.1 Purpose
-
-The Trade History tab shows **all closed trades** with full P/L breakdown and filtering capabilities.
-
-## 14.2 Location
-
-- **Page:** `client/src/pages/active-trades.tsx` (Tab 4)
-- **Component:** `client/src/components/trading/trade-history-tab.tsx`
-
-## 14.3 Data Displayed
-
-| Column | Description |
-|--------|-------------|
-| **Symbol** | Trading pair |
-| **Strategy** | Strategy that opened the trade |
-| **Entry Price** | Actual entry price |
-| **Exit Price** | Actual exit price |
-| **Quantity** | Position size |
-| **Entry Fee** | Fee paid on entry |
-| **Exit Fee** | Fee paid on exit |
-| **Slippage** | Total slippage cost |
-| **Gross P/L** | P/L before costs |
-| **Net P/L** | P/L after all costs |
-| **Close Reason** | target_hit, stop_hit, manual |
-| **Duration** | How long trade was open |
-| **Opened At** | Entry timestamp |
-| **Closed At** | Exit timestamp |
-
-## 14.4 Filters Available
-
-- **Symbol Search:** Filter by trading pair
-- **Strategy Filter:** Filter by strategy type
-- **Date Range:** From/To date selection
-- **Close Reason:** Filter by exit type
-- **Pagination:** Server-side pagination
-
----
-
-# PART III: TRADING STRATEGIES
-
----
-
-# 15. Strategy Catalog
-
-## 15.1 Overview
-
-DawnTrader V3 implements **9 trading strategies**:
-
-| # | Strategy | Confidence | Status |
-|---|----------|------------|--------|
-| 1 | VWAP Pullback | 0.70-0.90 | ✅ Active |
-| 2 | ABCD Long | 0.75 | ✅ Active |
-| 3 | SMA Trend Ride | 0.65 | ✅ Active |
-| 4 | Breakout | 0.75 | ✅ Active |
-| 5 | Mean Reversion | 0.70 | ✅ Active |
-| 6 | Range Trading | 0.72 | ✅ Active |
-| 7 | VWAP Bounce | 0.73 | ✅ Active |
-| 8 | Liquidity Trap | 0.68 | ✅ Active |
-| 9 | DHMA | Variable | ✅ Active |
-
-## 15.2 Strategy Details
-
-### Strategy 1: VWAP Pullback
-- **Entry:** Price above VWAP, pullback to VWAP, bullish reversal, volume confirmation
-- **Exit:** Price closes below VWAP
-- **Best For:** Trending markets with clean pullbacks
-
-### Strategy 2: ABCD Long
-- **Entry:** A=spike, B=pullback, C=higher low, D=breakout above C
-- **Exit:** Fixed target or trailing stop
-- **Best For:** Harmonic pattern setups
-
-### Strategy 3: SMA Trend Ride
-- **Entry:** Price above SMA, crossover or bounce pattern
-- **Exit:** Price closes below SMA
-- **Best For:** Strong trend-following
-
-### Strategy 4: Breakout
-- **Entry:** Price breaks above consolidation resistance with volume
-- **Exit:** Price returns below breakout level
-- **Best For:** Range breakouts
-
-### Strategy 5: Mean Reversion
-- **Entry:** Price oversold (below mean by threshold), bullish reversal
-- **Exit:** Price returns to mean
-- **Best For:** Oversold bounces
-
-### Strategy 6: Range Trading
-- **Entry:** Price near support in established range
-- **Exit:** Price breaks resistance
-- **Best For:** Sideways markets
-
-### Strategy 7: VWAP Bounce
-- **Entry:** VWAP trending up, price bounced off VWAP, volume confirmation
-- **Exit:** Price closes below VWAP
-- **Best For:** Intraday VWAP plays
-
-### Strategy 8: Liquidity Trap
-- **Entry:** False breakout above resistance, quick return to range
-- **Exit:** Price returns above trap level
-- **Best For:** Contrarian false breakout plays
-
-### Strategy 9: DHMA (Dual-Horizon Microstructure Alpha)
-- **Entry:** OBI > threshold, low toxicity, VWAP confirmation
-- **Exit:** Microstructure conditions reverse
-- **Best For:** Advanced microstructure analysis
-
----
-
-# PART IV: CONFIGURATION COMPONENTS
-
----
-
-# 16. Guardrails System
-
-## 16.1 Core Four Guardrails
-
-| Guardrail | Default | Range | Description |
-|-----------|---------|-------|-------------|
-| Portfolio Risk per Trade % | 1.50% | 0.10-5.00% | Risk per trade |
-| Symbol Cooldown | 15 min | 0-90 min | Cooldown period |
-| Max Open Positions | 5 | 1-20 | Position limit |
-| Daily Loss Kill Switch % | 7.00% | 1.00-25.00% | Auto-shutdown threshold |
-
-## 16.2 Extended Guardrails
-
-| Guardrail | Default | Range | Description |
-|-----------|---------|-------|-------------|
-| Max Position % | 30.00% | 1-100% | Single position cap |
-| Max Total Exposure % | 25.00% | 10-100% | Total portfolio exposure |
-
----
-
-# 17. LPCP Module
-
-**Status:** DORMANT
-
-The Low-Priced Coin Protection module is structurally preserved but not active. The `checkLowPricedCoinProtection()` function immediately returns `{ ok: true }`.
-
----
-
-# 18. Screener Filters
-
-Filter categories:
-- **Price/Volume:** minVolume, minPrice, maxPrice, minLiquidity
-- **Technical:** maxBidAskSpread, rsiMin, rsiMax, volatilityMin, volatilityMax
-- **Data Quality:** minHistoryDays, excludeStablecoins
-- **Universe/Signal:** universeSize, confidenceThreshold, activeTimeframes
-
----
-
-# 19. Coherency Rules
-
-10 rules enforcing guardrail consistency. Key rules:
-- **RULE_001:** Risk ≤ 50% × KillSwitch
-- **RULE_002:** Total Exposure ≤ 50% Cap
-- **RULE_005:** Mutual exclusivity of LATTi and manual override
-
----
-
-# 20. Goals Presets
-
-5 presets: conservative, baseline, optimistic, maximum, custom
-
-Adaptive Learning: Expands boundaries by 5% when 30-day performance ≥ 80% of target.
-
----
-
-# 21. LATTi vs Manual Control
-
-- **LATTi-Managed:** System optimizes guardrails (current default)
-- **Manual Override:** User controls values directly
-- **Current LATTi State:** PASSIVE-ONLY (observes, doesn't control trades)
-
----
-
-# PART V: PHASE 11 PRODUCTION HARDENING (COMPLETED)
-
----
-
-# 22. Phase 11 Implementation Status
-
-## 22.1 Overview
-
-Phase 11 (**Production Hardening & Math Synchronization**) is **✅ COMPLETE**.
-
-This phase established the production-grade mathematical foundation with adaptive regime classification, Z-Score normalization, macro-state detection, and profitability validation.
-
-## 22.2 Completed Directives
-
-| Directive | Description | Status |
-|-----------|-------------|--------|
-| 11.0 | Hybrid Alpha Foundation | ✅ Complete |
-| 11.1 | 5-Class Regime Model | ✅ Complete |
-| 11.2 | Strategy & Regime Harmonization | ✅ Complete |
-| 11.3 | Adaptive Scanning (Dual-Pool) | ✅ Complete |
-| 11.4 | Canonical Regime-Strategy Mapping | ✅ Complete |
-| 11.5 | Math, Macro & Regime Synchronization | ✅ Complete |
-
-## 22.3 Key Files Added
-
-| Component | File |
-|-----------|------|
-| Profitability Gate | `server/core/calculations/expectancy.ts` |
-| Rolling Stats (Z-Score) | `server/utils/rolling-stats.ts` |
-| Macro-State Detection | `server/core/metrics/macro-state.ts` |
-| Secondary Metrics | `server/core/metrics/secondary-metrics.ts` |
-| Strategy Analyzer | `server/core/strategy-analyzer.ts` |
-| Canonical Mappings | `server/config/canonical-regime-strategy-map.ts` |
-
-## 22.4 Production-Ready Components
-
-| Component | Status |
-|-----------|--------|
-| 5-Class Regime Model | ✅ Active |
-| Z-Score Normalization (300-period rolling) | ✅ Active |
-| Macro-State Detection (4 conditions) | ✅ Active |
-| Profitability Gate (Net Expectancy > 0) | ✅ Active |
-| Dynamic Threshold Adjustment | ✅ Active |
-| Strategy-Specific Guardrails (ADX > 25 for sma_trend_ride) | ✅ Active |
-
-## 22.5 Future: Live Execution (Phase 14)
-
-Live execution with real Kraken orders is planned for Phase 14 after:
-- Phase 12: AWS & Supabase Migration
-- Phase 13: Walter Restoration
-
----
-
-# Appendix: Key File Locations
-
-## Trading Engine Files
-| Component | File |
-|-----------|------|
-| FX5 Scanner | `server/services/fx5-scanner.ts` |
-| Active Filter Pool | `server/services/active-filter-pool.ts` |
-| Signal Orchestrator | `server/services/signal-orchestrator.ts` |
-| Strategy Engine | `server/services/strategy-engine.ts` |
-| Position Sizing | `server/services/paper-position-sizing.ts` |
-| Trade Safety | `server/services/trade-safety.ts` |
-| Paper Execution Engine | `server/services/paper-execution-engine.ts` |
-| Live Pricing Adapter | `server/services/live-pricing-adapter.ts` |
-| Kraken WebSocket | `server/services/kraken-websocket-adapter.ts` |
-| Guardrail Policy | `server/services/guardrail-policy.ts` |
-
-## Phase 11 Core Files
-| Component | File |
-|-----------|------|
-| Profitability Gate | `server/core/calculations/expectancy.ts` |
-| Rolling Stats (Z-Score) | `server/utils/rolling-stats.ts` |
-| Macro-State Detection | `server/core/metrics/macro-state.ts` |
-| Secondary Metrics | `server/core/metrics/secondary-metrics.ts` |
-| Market Regime | `server/core/metrics/market-regime.ts` |
-| Strategy Analyzer | `server/core/strategy-analyzer.ts` |
-| Canonical Mappings | `server/config/canonical-regime-strategy-map.ts` |
-
-## UI Files
-| Component | File |
-|-----------|------|
-| Trading Page | `client/src/pages/active-trades.tsx` |
-| Filter Insights | `client/src/components/trading/filter-insights.tsx` |
-| Ready to Buy | `client/src/components/trading/ready-to-buy-table.tsx` |
-| Active Trades | `client/src/components/trading/active-trades-v2.tsx` |
-| Trade History | `client/src/components/trading/trade-history-tab.tsx` |
-
-## Database Tables
-| Table | Purpose |
-|-------|---------|
-| `paper_sim_trades` | All paper trades (open + closed) |
-| `paper_sim_open_positions` | Currently open positions |
-| `paper_sim_portfolio` | Portfolio balance tracking |
-| `execution_attempt_audit` | RTB attempt logging |
-| `guardrails_v2` | Guardrail configuration |
-| `screener_filters` | Filter configuration |
-| `goals_presets` | Risk profile presets |
-
----
-
-**Document Status:** Complete  
-**Last Updated:** January 18, 2026  
-**Version:** 3.0 (Phase 11 Production Hardening Complete)
+*This document serves as the current state reference for DawnTrader V3.1. Consult the System Architecture document for deeper technical details.*
