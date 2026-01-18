@@ -35,13 +35,13 @@ The trade lifecycle flows from `Signal Orchestrator` to `SQE` (FinalScore + Regi
 
 ## Recent Changes
 
-**Documentation Consolidation (January 18, 2026):**
-- Updated `bridge/canonical/DawnTrader_Complete_Project_History.md` with Phase 11 completion (Z-Score normalization, macro-state detection, profitability gate)
-- Updated `bridge/canonical/DawnTrader_Current_State_Reference.md` with Phase 11 production-ready components
-- Updated `bridge/canonical/DawnTrader_System_Architecture_Execution_Flow.md` scope and file references
-- Created `bridge/canonical/DawnTrader_Regime_Strategy_Mapping.md` - comprehensive canonical reference for 5 regimes, 17 strategies, 3 signal types, 5 pattern types, 4 friction tiers, and 4 macro conditions
-- Created `bridge/canonical/DawnTrader_Mathematical_Architecture_v1.5.0.md` - complete mathematical architecture including Z-Score normalization and macro-state adjustments
-- Replaced `bridge/canonical/Phase_11_Implementation_History.md` with full `docs/directive_11_summary.md` (812 lines)
+**Complete Canonical Documentation Overhaul (January 18, 2026):**
+- Complete rewrite of `bridge/canonical/DawnTrader_System_Architecture_Execution_Flow.md` - now covers all Phase 11 systems including Symbol Canonicalizer, Unified Price Cache (4 buckets), RTB Refresh Service with ACT, VTS subsystem, dual-pool architecture, 5-class regime model, 17 strategies, Central Clock architecture, and all timing cadences
+- Complete rewrite of `bridge/canonical/DawnTrader_Current_State_Reference.md` - now documents 17 strategies with regime affinities, 5-class regime model with detection metrics, IMF thresholds with macro adjustments, profitability gate (NetEV > 0), telemetry infrastructure
+- Complete rewrite of `bridge/canonical/DawnTrader_Complete_Project_History.md` - comprehensive history from V1 through Phase 11.5 including all directive implementations
+- Fixed macro-state detection to correctly document Z-score based thresholds (avgVolatilityZ > 2, liquidityZ < -1, correlationZ > 1.5) instead of incorrect VIX-based description
+- Fixed TRANSITION regime metrics to show explicit thresholds (momentum ±0.004, ADX 20-25, volatility 0.015-0.03) matching canonical-regime-strategy-map.ts
+- All three documents updated from outdated Phase 8 era (9 strategies, 60 pairs/scan) to current Phase 11 production state (17 strategies, 100 pairs/cycle)
 
 **Directive 11.5 Implementation — "Math, Macro, and Regime Synchronization" (January 2026):**
 - **Task 1 - Profitability Validation (Net Expectancy Gate)**: Created `server/core/calculations/expectancy.ts` with `isMathematicallyProfitable()` function. Integrated into VTS runner to skip trades where gross profit ≤ total cost.
