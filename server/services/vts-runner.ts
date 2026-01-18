@@ -135,7 +135,39 @@ interface Phase10TradeRecord {
   positionSize: number;
   pool?: 'ideal' | 'rotational';
   timestamp: string;
+  exitType?: 'stop_hit' | 'target_hit' | 'timeout' | 'pending';
 }
+
+/**
+ * Directive 11.6: Open Virtual Trades Tracking
+ * Tracks trades waiting for real Kraken price resolution instead of random simulation
+ */
+interface OpenVirtualTrade {
+  id: string;
+  symbol: string;
+  entryPrice: number;
+  stopLoss: number;
+  takeProfit: number;
+  positionSize: number;
+  frictionCost: number;
+  regime: MarketRegimeType;
+  regimeScore: number;
+  signalType: CanonicalSignalType;
+  strategy: string;
+  patternType?: PatternType | null;
+  finalScore: number;
+  hybridScore: number;
+  predictiveConfidence: number;
+  regimeWeight: number;
+  decayPenalty: number;
+  pool: 'ideal' | 'rotational';
+  openedAt: number;
+  maxHoldMs: number; // Maximum hold time before timeout exit (default 5 minutes)
+}
+
+const openVirtualTrades: Map<string, OpenVirtualTrade> = new Map();
+const MAX_OPEN_TRADES = 50; // Limit concurrent open trades for memory management
+const DEFAULT_MAX_HOLD_MS = 5 * 60 * 1000; // 5 minutes max hold time
 
 let phase10SessionTrades: Phase10TradeRecord[] = [];
 let phase10SessionStartTime: number | null = null;
@@ -365,9 +397,43 @@ async function generatePhase10Signal(
   const riskPerTrade = await getRiskPerTrade();
   const positionSize = computePositionSize(portfolioValue, riskPerTrade, entryPrice, stopLoss, riskMultiplier);
   
-  const priceChange = (Math.random() - 0.4) * volatility;
-  const exitPrice = entryPrice * (1 + priceChange);
-  const profit = (exitPrice - entryPrice) * (positionSize / entryPrice) - (positionSize * frictionCost);
+  // Directive 11.6: Create open virtual trade for real price resolution
+  // REMOVED: Random exit simulation (Math.random() - 0.4) * volatility
+  // Trade exit will be determined by real Kraken prices in resolveOpenVirtualTrades()
+  const tradeId = `vt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  
+  // Check if we can accept more open trades
+  if (openVirtualTrades.size >= MAX_OPEN_TRADES) {
+    console.log(`[11.6][VTS] Max open trades reached (${MAX_OPEN_TRADES}), skipping new trade for ${symbol}`);
+    return null;
+  }
+  
+  // Create open virtual trade for real-price resolution
+  const openTrade: OpenVirtualTrade = {
+    id: tradeId,
+    symbol,
+    entryPrice,
+    stopLoss,
+    takeProfit,
+    positionSize,
+    frictionCost,
+    regime,
+    regimeScore: regimeScoreRaw,
+    signalType,
+    strategy,
+    patternType,
+    finalScore,
+    hybridScore,
+    predictiveConfidence,
+    regimeWeight,
+    decayPenalty,
+    pool,
+    openedAt: Date.now(),
+    maxHoldMs: DEFAULT_MAX_HOLD_MS
+  };
+  
+  openVirtualTrades.set(tradeId, openTrade);
+  console.log(`[11.6][VTS] Opened virtual trade ${tradeId}: ${symbol} entry=${entryPrice.toFixed(6)} stop=${stopLoss.toFixed(6)} target=${takeProfit.toFixed(6)}`);
   
   // Directive 11.4C.3: VirtualSignal with full Phase-10 metrics and pattern (M50 compliant)
   const signal: VirtualSignal = {

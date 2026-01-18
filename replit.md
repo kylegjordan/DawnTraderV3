@@ -1,13 +1,13 @@
 # Crypto Day Trading Web App
 
 ## Overview
-This project is a long-only, spot-trading cryptocurrency day trading web application for the Kraken exchange. It automates advanced trading strategies, provides real-time market scanning, and enforces disciplined risk management. The application supports live and paper trading, integrates AI analysis via OpenAI's GPT models, and offers comprehensive trade tracking and performance analytics. The core vision is to create a resilient, continuously self-optimizing platform with an autonomous learning engine, aiming to capture significant market potential through sophisticated, automated trading capabilities.
+This project is a long-only, spot-trading cryptocurrency day trading web application designed for the Kraken exchange. It automates sophisticated trading strategies, offers real-time market scanning, and enforces stringent risk management. The application supports both live and paper trading, integrates AI analysis via OpenAI's GPT models, and provides comprehensive trade tracking and performance analytics. The core vision is to develop a resilient, continuously self-optimizing platform with an autonomous learning engine to capitalize on market opportunities through advanced, automated trading capabilities.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
 ## System Architecture
-The application features a mobile-first frontend built with React, TypeScript, and Vite, interacting with a Node.js/Express backend through RESTful API and WebSockets. Data is persisted using PostgreSQL with Drizzle ORM. Authentication is handled with username/password, bcrypt, JWT, and WebAuthn.
+The application features a mobile-first frontend built with React, TypeScript, and Vite, communicating with a Node.js/Express backend via RESTful APIs and WebSockets. Data persistence is managed using PostgreSQL with Drizzle ORM. Authentication is secured with username/password, bcrypt, JWT, and WebAuthn.
 
 Core services include `KrakenService`, `TradingEngine`, `StrategyEngine`, `MarketScanner`, `AIAnalyst`, and `AIOpportunitiesService`. Risk management is configurable with guardrail settings. An AI Orchestrator & Command Center, powered by GPT-4o, provides an AI SysAdmin Co-Pilot, Unified Command & Conversation Layer, Semantic Memory, and a Continuous Learning Pipeline, utilizing a Hybrid Cognitive-Operational design with an Intent Gateway, `SecureCoreService`, and an Autonomy Layer with Safety Guardrails.
 
@@ -32,44 +32,6 @@ VTS Modernization and Regime-Driven Simulation replaces legacy scoring pipelines
 Strategy & Regime Harmonization unifies VTS and Signal Orchestrator onto a single canonical dictionary, defining canonical snake_case strategy names and normalizing patterns and regimes. A `canonical-regime-strategy-map.ts` serves as the single source of truth for all regime/strategy/signal type/pattern mappings, enforced by validation middleware. The ML Calibration Service uses Phase-10 metrics with a specific performance score formula and tracks edge delta for learning feedback. Math Core Harmonization centralizes and unifies the `FinalScore` calculation formula across Signal Orchestrator and Ready-to-Buy Refresh Service, using immutable scoring coefficients.
 
 The trade lifecycle flows from `Signal Orchestrator` to `SQE` (FinalScore + RegimeWeight filtering), then to a `Ready-to-Buy Queue`. Signals are promoted by `TCL` (Trade Criteria Limiter), managed by `TEC` (Trade Execution Controller) for adaptive sizing and trailing exits, and finally proceed to `Order Management`. Diagnostic tooling is implemented for regime distribution, friction calibration, and Goals Engine normalization.
-
-## Recent Changes
-
-**Complete Canonical Documentation Overhaul (January 18, 2026):**
-- Complete rewrite of `bridge/canonical/DawnTrader_System_Architecture_Execution_Flow.md` - now covers all Phase 11 systems including Symbol Canonicalizer, Unified Price Cache (4 buckets), RTB Refresh Service with ACT, VTS subsystem, dual-pool architecture, 5-class regime model, 17 strategies, Central Clock architecture, and all timing cadences
-- Complete rewrite of `bridge/canonical/DawnTrader_Current_State_Reference.md` - now documents 17 strategies with regime affinities, 5-class regime model with detection metrics, IMF thresholds with macro adjustments, profitability gate (NetEV > 0), telemetry infrastructure
-- Complete rewrite of `bridge/canonical/DawnTrader_Complete_Project_History.md` - comprehensive history from V1 through Phase 11.5 including all directive implementations
-- Created `bridge/canonical/DawnTrader_Regime_Strategy_Signal_Pattern_Mapping.md` - comprehensive canonical mapping of 5 regimes, 17 strategies (9 QUANT, 3 PATTERN, 5 HYBRID), 5 pattern types, Z-Score normalization (300-period rolling window), and macro-state conditions with IMF adjustments
-- Fixed macro-state detection to correctly document Z-score based thresholds (avgVolatilityZ > 2, liquidityZ < -1, correlationZ > 1.5) instead of incorrect VIX-based description
-- Fixed TRANSITION regime metrics to show explicit thresholds (momentum ±0.004, ADX 20-25, volatility 0.015-0.03) matching canonical-regime-strategy-map.ts
-- All three documents updated from outdated Phase 8 era (9 strategies, 60 pairs/scan) to current Phase 11 production state (17 strategies, 100 pairs/cycle)
-
-**Directive 11.5 Implementation — "Math, Macro, and Regime Synchronization" (January 2026):**
-- **Task 1 - Profitability Validation (Net Expectancy Gate)**: Created `server/core/calculations/expectancy.ts` with `isMathematicallyProfitable()` function. Integrated into VTS runner to skip trades where gross profit ≤ total cost.
-- **Task 2 - Rolling Z-Score Normalization**: Created `server/utils/rolling-stats.ts` for 300-period rolling statistics. Added `getNormalizedRegime()` to `market-regime.ts` for Z-Score based regime classification.
-- **Task 3 - Macro-State Module**: Created `server/core/metrics/macro-state.ts` with `getGlobalMacroCondition()` detecting VOLATILITY_EXPANSION, LIQUIDITY_CRUNCH, SPECULATIVE_SURGE, or NORMAL conditions.
-- **Task 4 - Secondary Metric Adjustment**: Created `server/core/metrics/secondary-metrics.ts` with `adjustMetricRanges()` for dynamic threshold adjustment based on macro conditions.
-- **Task 5 - Filter Logic Correction**: Updated `fx5-scanner.ts` so blue-chips/stablecoins are scanned but only tradable when passing IMF filters.
-- **Task 6 - Strategy-Specific Guardrails**: Added ADX > 25 requirement for `sma_trend_ride` strategy in VTS runner.
-- **Task 7 - Strategy Performance Audit**: Created `server/core/strategy-analyzer.ts` with `auditStrategyPerformance()` for per-strategy win rate analysis and keep/monitor/disable recommendations.
-- **Z-Score Integration**: Integrated `getNormalizedRegimeWithDetails()` into VTS runner for per-pair Z-Score logging. Added Z-Score tracking to DSS (`dynamic-strategy-selector.ts`) for adaptive regime thresholds.
-
-**Directive 11.4H.6E Implementation (January 2026):**
-- **Task 1 - Authenticated Query Restoration**: Replaced raw fetch with apiFetch() in analytics.tsx for market indicators endpoint, ensuring credentials, JWT token, and x-app-mode headers are included.
-- **Task 2 - UI Error Boundary**: Added full error fallback UI with AlertCircle icon, error message, and Retry button when indicatorsError occurs. Prevents silent failures.
-- **Task 3 - Backend Diagnostic Logging**: Added [11.4H.6E] logging tag in routes.ts showing user ID on authorized requests.
-- **Task 4 - Verification**: API now returns 200 OK, data displays correctly in Overview tab.
-
-**Directive 11.4H.6D Implementation (January 2026):**
-- **Task 1 - Dynamic Cache Bypass**: Updated analytics.tsx useQuery to use stable queryKey with timestamp in queryFn URL for HTTP cache bypass. staleTime: 0 + refetchInterval: 60s ensures proper refresh.
-- **Task 2 - Live Regime Serialization**: Confirmed API already uses live regime data from getGlobalRegimeSnapshot.
-- **Task 3 - Client Display Fallback**: Added fallback text for empty favoredStrategies array ("No active strategies for current regime").
-- **Task 4 - Diagnostic Logging**: Updated logging to [11.4H.6D] tag in both frontend (useEffect) and backend (market-indicators.ts).
-
-**Directive 11.4H.6C Implementation (January 2026):**
-- **Task 1 - Overview Tab Binding**: Confirmed analytics.tsx correctly binds favoredStrategies and favoredSignalTypes from API response.
-- **Task 2 - Benchmark Rank Display Fix**: Enhanced `benchmark-list.tsx` rank validation to check: `signalType !== 'Awaiting Scan'`, `strategy !== 'Awaiting Scan'`, `regime !== 'UNKNOWN'`, `score > 0`, and valid numeric rank. Unscanned pairs show "—".
-- **Task 3 - Logging**: Updated market-indicators.ts logging tag to `[11.4H.6C]` showing serialized favoredStrategies and favoredSignalTypes.
 
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
