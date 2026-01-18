@@ -556,9 +556,205 @@ async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal
   }
 }
 
+/**
+ * Directive 11.6 Task 4: Resolution Loop
+ * Checks real Kraken prices against open virtual trades and closes them when stop/target is hit
+ * Runs aligned with VTS simulation cycle (every 60 seconds)
+ */
+async function resolveOpenVirtualTrades(): Promise<{
+  resolved: number;
+  stopHits: number;
+  targetHits: number;
+  timeouts: number;
+}> {
+  const now = Date.now();
+  let resolved = 0;
+  let stopHits = 0;
+  let targetHits = 0;
+  let timeouts = 0;
+  
+  if (openVirtualTrades.size === 0) {
+    return { resolved, stopHits, targetHits, timeouts };
+  }
+  
+  // Get all symbols from open trades
+  const symbols = Array.from(new Set([...openVirtualTrades.values()].map(t => t.symbol)));
+  
+  // Subscribe all symbols to vtsSimulation bucket and fetch prices
+  const bucketType: CacheBucketType = 'vtsSimulation';
+  for (const symbol of symbols) {
+    priceCache.subscribe(symbol, bucketType);
+  }
+  
+  // Wait for cache to refresh
+  await new Promise(resolve => setTimeout(resolve, 100));
+  
+  const priceDataMap = await priceCache.getBatch(bucketType, symbols);
+  
+  // Check each open trade against current prices
+  const tradesToClose: Array<{
+    id: string;
+    trade: OpenVirtualTrade;
+    exitPrice: number;
+    exitReason: 'stop_hit' | 'target_hit' | 'timeout';
+  }> = [];
+  
+  for (const [tradeId, trade] of openVirtualTrades) {
+    const priceData = priceDataMap.get(trade.symbol);
+    
+    if (!priceData || priceData.price <= 0) {
+      // No price data - skip this cycle
+      continue;
+    }
+    
+    const currentPrice = priceData.price;
+    const holdDurationMs = now - trade.openedAt;
+    
+    // Directive 11.6 Task 3: Trade Exit Conditions
+    let exitReason: 'stop_hit' | 'target_hit' | 'timeout' | null = null;
+    let exitPrice = currentPrice;
+    
+    if (currentPrice <= trade.stopLoss) {
+      exitReason = 'stop_hit';
+      exitPrice = trade.stopLoss; // Exit at stop level
+    } else if (currentPrice >= trade.takeProfit) {
+      exitReason = 'target_hit';
+      exitPrice = trade.takeProfit; // Exit at target level
+    } else if (holdDurationMs > MAX_HOLD_MS) {
+      exitReason = 'timeout';
+      exitPrice = currentPrice; // Exit at current market price
+    }
+    
+    if (exitReason) {
+      tradesToClose.push({ id: tradeId, trade, exitPrice, exitReason });
+    }
+  }
+  
+  // Process closed trades
+  for (const { id, trade, exitPrice, exitReason } of tradesToClose) {
+    const holdDurationMs = now - trade.openedAt;
+    const holdDurationStr = formatHoldDuration(holdDurationMs);
+    
+    // Calculate P&L
+    const grossPnl = (exitPrice - trade.entryPrice) / trade.entryPrice;
+    const netPnl = grossPnl - trade.frictionCost;
+    const pnlPercent = (netPnl * 100).toFixed(2);
+    
+    // Calculate dollar P&L based on position size
+    const dollarPnl = trade.positionSize * netPnl;
+    
+    // Create completed trade record
+    const closedTradeRecord: Phase10TradeRecord = {
+      symbol: trade.symbol,
+      regime: trade.regime,
+      regimeScore: trade.regimeScore,
+      signalType: trade.signalType,
+      strategy: trade.strategy,
+      patternType: trade.patternType,
+      finalScore: trade.finalScore,
+      hybridScore: trade.hybridScore,
+      predictiveConfidence: trade.predictiveConfidence,
+      regimeWeight: trade.regimeWeight,
+      decayPenalty: trade.decayPenalty,
+      frictionCost: trade.frictionCost,
+      entry: trade.entryPrice,
+      exit: exitPrice,
+      profit: dollarPnl,
+      positionSize: trade.positionSize,
+      pool: trade.pool,
+      timestamp: new Date(trade.openedAt).toISOString(),
+      exitType: exitReason
+    };
+    
+    // Add to session trades
+    phase10SessionTrades.push(closedTradeRecord);
+    
+    // Update telemetry with actual outcome
+    const telemetry = getTelemetryAggregator();
+    telemetry.recordPairTelemetry(trade.symbol, {
+      finalScore: trade.finalScore,
+      hybridScore: trade.hybridScore,
+      regimeWeight: trade.regimeWeight,
+      regimeScore: trade.regimeScore,
+      predictiveConfidence: trade.predictiveConfidence,
+      success: netPnl > 0,
+      pool: trade.pool,
+      source: 'simulation',
+      pairRegime: trade.regime,
+      signalType: trade.signalType,
+      strategy: trade.strategy,
+      pattern: trade.signalType !== 'QUANT' ? (trade.patternType ?? undefined) : undefined,
+      caller: 'vts'
+    });
+    
+    // Remove from open trades registry
+    openVirtualTrades.delete(id);
+    
+    // Directive 11.6 Task 6: Verification logging
+    const pnlSign = netPnl >= 0 ? '+' : '';
+    console.log(`[11.6][Exit] ${trade.symbol} closed via ${exitReason} @ ${exitPrice.toFixed(6)} after ${holdDurationStr} | PnL=${pnlSign}${pnlPercent}%`);
+    
+    resolved++;
+    if (exitReason === 'stop_hit') stopHits++;
+    if (exitReason === 'target_hit') targetHits++;
+    if (exitReason === 'timeout') timeouts++;
+  }
+  
+  if (resolved > 0) {
+    console.log(`[11.6][Resolution] Cycle complete: ${resolved} trades closed (stops=${stopHits}, targets=${targetHits}, timeouts=${timeouts}), ${openVirtualTrades.size} still open`);
+  }
+  
+  return { resolved, stopHits, targetHits, timeouts };
+}
+
+/**
+ * Helper function to format hold duration in human-readable format
+ */
+function formatHoldDuration(ms: number): string {
+  const hours = Math.floor(ms / (1000 * 60 * 60));
+  const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+  
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m`;
+}
+
+/**
+ * Get current open virtual trades count and status
+ */
+export function getOpenVirtualTradesStatus(): {
+  count: number;
+  trades: Array<{
+    symbol: string;
+    entryPrice: number;
+    stopLoss: number;
+    takeProfit: number;
+    holdDurationMs: number;
+    strategy: string;
+    regime: string;
+  }>;
+} {
+  const now = Date.now();
+  const trades = Array.from(openVirtualTrades.values()).map(t => ({
+    symbol: t.symbol,
+    entryPrice: t.entryPrice,
+    stopLoss: t.stopLoss,
+    takeProfit: t.takeProfit,
+    holdDurationMs: now - t.openedAt,
+    strategy: t.strategy,
+    regime: t.regime
+  }));
+  
+  return { count: openVirtualTrades.size, trades };
+}
+
 async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   const cycleStart = Date.now();
   cycleCount++;
+  
+  // Directive 11.6: First resolve any open trades before creating new ones
+  await resolveOpenVirtualTrades();
   
   const config = await getSystemConfig();
   if (config.tradingActive) {
