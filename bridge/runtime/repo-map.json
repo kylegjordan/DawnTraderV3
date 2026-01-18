@@ -1,8 +1,9 @@
 {
   "repo_root": "/",
   "purpose": "Authoritative navigation map for DawnTrader repository. ChatGPT MUST consult this file before accessing any repository files.",
-  "last_updated": "2026-01-08",
-  "current_phase": "Phase 11 In Progress (Directive 11.0D Complete)",
+  "last_updated": "2026-01-18",
+  "current_phase": "Phase 11 Complete (Directive 11.5 Complete)",
+  "schema_version": "v1.6.7",
   "domains": {
     "bridge": {
       "path": "/bridge",
@@ -60,13 +61,36 @@
         },
         "core": {
           "path": "/server/core",
-          "description": "Core trading logic, filters, RTB management",
+          "description": "Core trading logic, filters, RTB management, calculations, metrics",
           "subdomains": {
+            "calculations": {
+              "path": "/server/core/calculations",
+              "description": "Mathematical calculation modules (Directive 11.5)",
+              "key_files": [
+                "expectancy.ts"
+              ]
+            },
             "filters": {
               "path": "/server/core/filters",
               "description": "Signal quality evaluation",
               "key_files": [
                 "signal_quality_evaluator.ts"
+              ]
+            },
+            "metrics": {
+              "path": "/server/core/metrics",
+              "description": "Market regime and metric calculations (Directive 11.5)",
+              "key_files": [
+                "market-regime.ts",
+                "macro-state.ts",
+                "secondary-metrics.ts"
+              ]
+            },
+            "regime": {
+              "path": "/server/core/regime",
+              "description": "Canonical regime-strategy mappings (Directive 11.1)",
+              "key_files": [
+                "canonical-regime-strategy-map.ts"
               ]
             },
             "rtb": {
@@ -97,21 +121,34 @@
           "path": "/server/services",
           "description": "Core trading services, adapters, and business logic",
           "key_files": [
-            "cwqi-service.ts",
-            "unified-filter-gateway.ts",
-            "active-filter-pool.ts",
+            "vts-runner.ts",
+            "vts-service.ts",
             "fx5-scanner.ts",
-            "strategy-engine.ts",
+            "dynamic-strategy-selector.ts",
             "signal-orchestrator.ts",
+            "telemetry-aggregator.ts",
+            "adaptive-scan-manager.ts",
+            "market-indicators.ts",
+            "active-filter-pool.ts",
+            "unified-filter-gateway.ts",
+            "strategy-engine.ts",
             "paper-execution-engine.ts",
             "trade-safety.ts",
             "hybrid-integration.ts",
             "multi-timeframe-scanner.ts",
-            "adaptive-scan-manager.ts",
-            "telemetry-aggregator.ts",
             "filter-insights.service.ts",
             "ml-calibration.ts",
-            "execution-controller.ts"
+            "execution-controller.ts",
+            "price-cache.ts"
+          ]
+        },
+        "utils": {
+          "path": "/server/utils",
+          "description": "Utility functions including analysis-utils and rolling stats",
+          "key_files": [
+            "analysis-utils.ts",
+            "rolling-stats.ts",
+            "calibration.ts"
           ]
         },
         "engines": {
@@ -120,13 +157,6 @@
           "key_files": [
             "covariance-engine.ts",
             "adaptive-kalman.ts"
-          ]
-        },
-        "utils": {
-          "path": "/server/utils",
-          "description": "Utility functions including analysis-utils",
-          "key_files": [
-            "analysis-utils.ts"
           ]
         },
         "routes": {
@@ -156,7 +186,8 @@
               "path": "/server/tests/integration",
               "key_files": [
                 "parity.test.ts",
-                "config-provenance.test.ts"
+                "config-provenance.test.ts",
+                "schema_v1_5_1.test.ts"
               ]
             }
           }
@@ -175,7 +206,9 @@
           "path": "/client/src/components",
           "description": "React components organized by feature",
           "key_files": [
-            "goals/diagnostics-tab.tsx"
+            "goals/diagnostics-tab.tsx",
+            "analytics/analytics.tsx",
+            "analytics/benchmark-list.tsx"
           ]
         },
         "hooks": {
@@ -203,12 +236,50 @@
         "audits": {
           "path": "/docs/audits",
           "description": "System audits and validation reports"
+        },
+        "history_and_references": {
+          "path": "/docs/history and references",
+          "description": "Historical documentation and reference materials"
+        }
+      },
+      "key_files": [
+        "directive_11_summary.md",
+        "schema_reference_v1_5_1.md",
+        "schema_reference_v1_5_2.md"
+      ]
+    },
+    "logs": {
+      "path": "/logs",
+      "description": "Application logs and data exports",
+      "subdomains": {
+        "virtual_trades": {
+          "path": "/logs/virtual_trades",
+          "description": "VTS trade records (JSON by date)"
+        },
+        "vts_exports": {
+          "path": "/logs/vts_exports",
+          "description": "CSV exports of VTS trades"
+        },
+        "data_aggregates": {
+          "path": "/logs/data_aggregates",
+          "description": "Aggregated telemetry and learning data"
+        },
+        "rewards": {
+          "path": "/logs/rewards",
+          "description": "Reward history for learning systems"
         }
       }
     },
     "migrations": {
       "path": "/migrations",
       "description": "Database migration files"
+    },
+    "drizzle": {
+      "path": "/drizzle",
+      "description": "Drizzle ORM migrations and schema",
+      "key_files": [
+        "migrations/2026-11-0G-schema-hardening.sql"
+      ]
     },
     "scripts": {
       "path": "/scripts",
@@ -235,21 +306,58 @@
     "implementation_history": "bridge/canonical/Phase_10_Implementation_History.md"
   },
   "phase_11_key_files": {
-    "execution_config": "server/config/execution-config.ts",
-    "schema_version": "server/config/schema-version.ts",
-    "score_calculator": "server/core/utils/score-calculator.ts",
-    "signal_quality_evaluator": "server/core/filters/signal_quality_evaluator.ts",
-    "sqe_dynamic_tests": "server/tests/unit/sqe-config-dynamic.test.ts",
-    "execution_config_tests": "server/tests/unit/execution-config.test.ts",
-    "config_provenance_tests": "server/tests/integration/config-provenance.test.ts",
-    "diagnostics_tab": "client/src/components/goals/diagnostics-tab.tsx",
-    "implementation_history": "bridge/canonical/Phase_11_Implementation_History.md"
+    "directive_11_0": {
+      "execution_config": "server/config/execution-config.ts",
+      "schema_version": "server/config/schema-version.ts",
+      "score_calculator": "server/core/utils/score-calculator.ts",
+      "signal_quality_evaluator": "server/core/filters/signal_quality_evaluator.ts",
+      "score_weights_config": "server/config/score-weights.config.ts"
+    },
+    "directive_11_1": {
+      "canonical_regime_strategy_map": "server/core/regime/canonical-regime-strategy-map.ts"
+    },
+    "directive_11_2": {
+      "vts_runner": "server/services/vts-runner.ts",
+      "vts_service": "server/services/vts-service.ts",
+      "market_regime": "server/core/metrics/market-regime.ts"
+    },
+    "directive_11_3": {
+      "adaptive_scan_manager": "server/services/adaptive-scan-manager.ts",
+      "telemetry_aggregator": "server/services/telemetry-aggregator.ts"
+    },
+    "directive_11_4": {
+      "fx5_scanner": "server/services/fx5-scanner.ts",
+      "market_indicators": "server/services/market-indicators.ts",
+      "analytics_tsx": "client/src/components/analytics/analytics.tsx",
+      "benchmark_list": "client/src/components/analytics/benchmark-list.tsx"
+    },
+    "directive_11_5": {
+      "expectancy": "server/core/calculations/expectancy.ts",
+      "rolling_stats": "server/utils/rolling-stats.ts",
+      "macro_state": "server/core/metrics/macro-state.ts",
+      "secondary_metrics": "server/core/metrics/secondary-metrics.ts",
+      "strategy_analyzer": "server/core/strategy-analyzer.ts",
+      "dynamic_strategy_selector": "server/services/dynamic-strategy-selector.ts"
+    },
+    "documentation": {
+      "directive_summary": "docs/directive_11_summary.md",
+      "implementation_history": "bridge/canonical/Phase_11_Implementation_History.md"
+    },
+    "tests": {
+      "sqe_dynamic_tests": "server/tests/unit/sqe-config-dynamic.test.ts",
+      "execution_config_tests": "server/tests/unit/execution-config.test.ts",
+      "config_provenance_tests": "server/tests/integration/config-provenance.test.ts",
+      "schema_v1_5_1_tests": "server/tests/integration/schema_v1_5_1.test.ts"
+    }
   },
   "math_methodology": {
     "canonical_reference": "bridge/canonical/DawnTrader_Math_Methodology_Reference.md",
     "core_implementations": [
       "server/utils/analysis-utils.ts",
-      "server/services/cwqi-service.ts",
+      "server/utils/rolling-stats.ts",
+      "server/core/calculations/expectancy.ts",
+      "server/core/metrics/market-regime.ts",
+      "server/core/metrics/macro-state.ts",
       "server/core/utils/score-calculator.ts",
       "server/engines/covariance-engine.ts",
       "server/engines/adaptive-kalman.ts"
@@ -260,6 +368,12 @@
       "server/config/execution-config.ts"
     ]
   },
+  "vts_data_locations": {
+    "daily_trades": "logs/virtual_trades/YYYY-MM-DD.json",
+    "csv_exports": "logs/vts_exports/",
+    "passive_learning": "logs/data_aggregates/passive_YYYY-MM-DD.json",
+    "hourly_aggregates": "logs/data_aggregates/hourly/"
+  },
   "denied_paths": [
     "/node_modules",
     "/.git",
@@ -268,7 +382,8 @@
     "/out",
     "/.env",
     "/.env.*",
-    "/tmp"
+    "/tmp",
+    "/.pythonlibs"
   ],
   "rules": {
     "always_use_repo_map": true,
@@ -280,6 +395,6 @@
     "update_required_when_structure_changes": true,
     "owner": "Kyle",
     "governed_by_bridge": true,
-    "last_updated_by": "Phase 11 Directive 11.0D"
+    "last_updated_by": "Phase 11 Directive 11.5"
   }
 }
