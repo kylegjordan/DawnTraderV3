@@ -26,6 +26,13 @@
  */
 
 import { SYSTEM_GUARDS } from '../config/system-guards.js';
+import { RollingStats } from '../utils/rolling-stats.js';
+
+// Directive 11.5: Rolling stats for Z-Score normalization in DSS
+const dssRollingStats = {
+  volNoise: new RollingStats(300),
+  trendSlope: new RollingStats(300)
+};
 
 export type MarketRegime = 
   | 'EXTREME_NOISE'
@@ -56,10 +63,23 @@ export interface DSSResult {
 export class DynamicStrategySelector {
   /**
    * Determines the current market regime based on volatility and trend
+   * Directive 11.5: Now incorporates Z-Score normalization for adaptive thresholds
    */
   determineRegime(metrics: DSSMetrics): MarketRegime {
     const vol = metrics.volNoise;
     const trend = metrics.trendSlope;
+
+    // Directive 11.5: Push metrics into rolling stats for Z-Score calculation
+    dssRollingStats.volNoise.push(vol);
+    dssRollingStats.trendSlope.push(trend);
+    
+    const volZ = dssRollingStats.volNoise.zScore(vol);
+    const trendZ = dssRollingStats.trendSlope.zScore(trend);
+    
+    // Log Z-Scores periodically when warmed up
+    if (dssRollingStats.volNoise.isWarmedUp(30)) {
+      console.log(`[11.5][DSS_ZScore] volZ=${volZ.toFixed(2)} trendZ=${trendZ.toFixed(2)} raw_vol=${vol.toFixed(4)} raw_trend=${trend.toFixed(4)}`);
+    }
 
     // 1️⃣ Extreme Noise: Auto-Veto
     if (vol > SYSTEM_GUARDS.MAX_VOL_NOISE) {

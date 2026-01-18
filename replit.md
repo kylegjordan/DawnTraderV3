@@ -43,6 +43,7 @@ The trade lifecycle flows from `Signal Orchestrator` to `SQE` (FinalScore + Regi
 - **Task 5 - Filter Logic Correction**: Updated `fx5-scanner.ts` so blue-chips/stablecoins are scanned but only tradable when passing IMF filters.
 - **Task 6 - Strategy-Specific Guardrails**: Added ADX > 25 requirement for `sma_trend_ride` strategy in VTS runner.
 - **Task 7 - Strategy Performance Audit**: Created `server/core/strategy-analyzer.ts` with `auditStrategyPerformance()` for per-strategy win rate analysis and keep/monitor/disable recommendations.
+- **Z-Score Integration**: Integrated `getNormalizedRegimeWithDetails()` into VTS runner for per-pair Z-Score logging. Added Z-Score tracking to DSS (`dynamic-strategy-selector.ts`) for adaptive regime thresholds.
 
 **Directive 11.4H.6E Implementation (January 2026):**
 - **Task 1 - Authenticated Query Restoration**: Replaced raw fetch with apiFetch() in analytics.tsx for market indicators endpoint, ensuring credentials, JWT token, and x-app-mode headers are included.

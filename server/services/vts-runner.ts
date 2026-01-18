@@ -41,7 +41,7 @@ import { computeExposureBias, getExposureMultiplierSync } from '../utils/strateg
 import { getCachedCostMetrics, computeNetGeometry } from '../core/math/cost-model.js';
 import { compareLatestSessions, savePaperSessionTrades, getPaperSessionTrades } from './vts-live-comparison-audit.js';
 import { SCORE_WEIGHTS } from '../config/score-weights.config.js';
-import { calculatePairRegime, getRegimeWeight, calculateRegimeScore } from '../core/metrics/market-regime.js';
+import { calculatePairRegime, getRegimeWeight, calculateRegimeScore, getNormalizedRegimeWithDetails } from '../core/metrics/market-regime.js';
 import { 
   CANONICAL_REGIME_STRATEGY_MAP as REGIME_STRATEGY_MAP, 
   selectContextAwareStrategy,
@@ -249,6 +249,17 @@ async function generatePhase10Signal(
 ): Promise<{ signal: VirtualSignal; tradeRecord: Phase10TradeRecord } | null> {
   const regimeResult = calculatePairRegime(ohlcData);
   const regime = regimeResult.regime;
+  
+  // Directive 11.5 Task 2: Z-Score normalization for regime classification
+  const zScoreResult = getNormalizedRegimeWithDetails({
+    adx: regimeResult.adx,
+    vol: regimeResult.volatility,
+    momentum: regimeResult.momentum ?? 0
+  });
+  
+  if (zScoreResult.isWarmedUp && cycleCount % 10 === 0) {
+    console.log(`[11.5][ZScore] ${symbol}: regime=${regime} zScores={adx=${zScoreResult.zScores.adxZ.toFixed(2)}, vol=${zScoreResult.zScores.volZ.toFixed(2)}, mom=${zScoreResult.zScores.momZ.toFixed(2)}}`);
+  }
   
   const riskMultiplier = getRegimeRiskMultiplier(regime);
   
