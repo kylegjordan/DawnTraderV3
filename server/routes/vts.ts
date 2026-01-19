@@ -30,7 +30,8 @@ import {
   startM5CValidationSession,
   saveM5CSessionTrades,
   getM5CSessionTrades,
-  getLatestVTSTradesFile
+  getLatestVTSTradesFile,
+  getOpenVirtualTradesStatus
 } from '../services/vts-runner';
 import {
   runComparisonAudit,
@@ -88,6 +89,16 @@ function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunctio
     return res.status(401).json({ error: 'Invalid token' });
   }
 }
+
+router.get('/open-trades', async (req: Request, res: Response) => {
+  try {
+    const status = getOpenVirtualTradesStatus();
+    res.json(status);
+  } catch (error) {
+    console.error('[VTS][open-trades] Error:', error);
+    res.status(500).json({ error: 'Failed to get open trades status' });
+  }
+});
 
 router.get('/status', requireAuth, async (req: Request, res: Response) => {
   try {

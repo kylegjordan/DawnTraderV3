@@ -726,12 +726,15 @@ function formatHoldDuration(ms: number): string {
  */
 export function getOpenVirtualTradesStatus(): {
   count: number;
+  oldestOpenedAt: string | null;
+  newestOpenedAt: string | null;
   trades: Array<{
     symbol: string;
     entryPrice: number;
     stopLoss: number;
     takeProfit: number;
     holdDurationMs: number;
+    openedAt: string;
     strategy: string;
     regime: string;
   }>;
@@ -743,11 +746,19 @@ export function getOpenVirtualTradesStatus(): {
     stopLoss: t.stopLoss,
     takeProfit: t.takeProfit,
     holdDurationMs: now - t.openedAt,
+    openedAt: new Date(t.openedAt).toISOString(),
     strategy: t.strategy,
     regime: t.regime
   }));
   
-  return { count: openVirtualTrades.size, trades };
+  const sortedByTime = trades.slice().sort((a, b) => new Date(a.openedAt).getTime() - new Date(b.openedAt).getTime());
+  
+  return { 
+    count: openVirtualTrades.size,
+    oldestOpenedAt: sortedByTime.length > 0 ? sortedByTime[0].openedAt : null,
+    newestOpenedAt: sortedByTime.length > 0 ? sortedByTime[sortedByTime.length - 1].openedAt : null,
+    trades 
+  };
 }
 
 async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {

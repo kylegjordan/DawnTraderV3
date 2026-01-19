@@ -6366,6 +6366,15 @@
     ]
   },
   {
+    "path": "/api/vts/open-trades",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/vts/status",
     "methods": [
       "GET"
