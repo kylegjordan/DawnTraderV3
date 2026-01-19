@@ -694,7 +694,7 @@ async function resolveOpenVirtualTrades(): Promise<{
     
     // Directive 11.6C: Persist to legacy VTS storage and ML pipeline
     try {
-      await vtsService.persistRealPriceTrade({
+      const result = await vtsService.persistRealPriceTrade({
         symbol: trade.symbol,
         entryTime: trade.openedAt,
         exitTime: now,
@@ -718,8 +718,8 @@ async function resolveOpenVirtualTrades(): Promise<{
         frictionCost: trade.frictionCost,
         pool: trade.pool
       });
-      persisted++;
-      mlQueued++;
+      if (result.persisted) persisted++;
+      if (result.mlTriggered) mlQueued++;
     } catch (error) {
       console.error(`[11.6C][Error] Failed to persist ${trade.symbol}:`, error);
     }

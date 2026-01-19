@@ -690,6 +690,7 @@ export class VTSService extends EventEmitter {
    * Directive 11.6C: Persist trades from real-price resolution system
    * Reuses existing logTrade() persistence without creating new tables
    * Ensures ML pipeline receives VTS_REAL_PRICE trades
+   * @returns Object with persisted=true and mlTriggered=true if ML calibration was triggered
    */
   async persistRealPriceTrade(tradeData: {
     symbol: string;
@@ -714,7 +715,17 @@ export class VTSService extends EventEmitter {
     decayPenalty: number;
     frictionCost: number;
     pool: 'ideal' | 'rotational';
-  }): Promise<void> {
+  }): Promise<{ persisted: boolean; mlTriggered: boolean }> {
+    // Compute expected edge at entry time (predicted profit based on take profit distance)
+    const tpDistance = (tradeData.takeProfit - tradeData.entryPrice) / tradeData.entryPrice;
+    const expectedEdge = tpDistance - tradeData.frictionCost;
+    
+    // Normalize signalType to uppercase canonical format
+    const normalizedSignalType = (tradeData.signalType?.toUpperCase() as 'QUANT' | 'PATTERN' | 'HYBRID') || 'HYBRID';
+    
+    // Calculate fees using the same formula as VTSService.simulateTrade
+    const fees = tradeData.frictionCost * tradeData.positionSize;
+    
     // Convert to VirtualTrade format for legacy persistence compatibility
     const signal: VirtualSignal = {
       id: `vs_${tradeData.entryTime}_${Math.random().toString(36).substr(2, 9)}`,
@@ -723,10 +734,10 @@ export class VTSService extends EventEmitter {
       takeProfit: tradeData.takeProfit,
       stopLoss: tradeData.stopLoss,
       spread: 0,
-      predictedProfit: tradeData.pnl,
+      predictedProfit: expectedEdge, // Use expected edge at entry, not realized PnL
       strategy: tradeData.strategy,
       createdAt: tradeData.entryTime,
-      signalType: (tradeData.signalType as 'QUANT' | 'PATTERN' | 'HYBRID') || 'HYBRID',
+      signalType: normalizedSignalType,
       patternType: tradeData.patternType,
       patternStrength: 0,
       finalScore: tradeData.finalScore,
@@ -734,7 +745,7 @@ export class VTSService extends EventEmitter {
       predictiveConfidence: tradeData.predictiveConfidence,
       regimeWeight: tradeData.regimeWeight,
       decayPenalty: tradeData.decayPenalty,
-      expectedEdge: tradeData.pnl,
+      expectedEdge: expectedEdge,
       frictionCost: tradeData.frictionCost,
       regime: tradeData.regime,
       pool: tradeData.pool,
@@ -753,16 +764,16 @@ export class VTSService extends EventEmitter {
       exitPrice: tradeData.exitPrice,
       grossProfit: tradeData.grossPnl,
       netProfit: tradeData.pnl,
-      fees: tradeData.frictionCost * tradeData.entryPrice,
+      fees: fees,
       calibrated: true,
       finalScore: tradeData.finalScore,
       hybridScore: tradeData.hybridScore,
       predictiveConfidence: tradeData.predictiveConfidence,
       regimeWeight: tradeData.regimeWeight,
       decayPenalty: tradeData.decayPenalty,
-      expectedEdge: tradeData.pnl,
+      expectedEdge: expectedEdge,
       frictionCost: tradeData.frictionCost,
-      signalType: tradeData.signalType,
+      signalType: normalizedSignalType,
       strategy: tradeData.strategy,
       regime: tradeData.regime,
       pool: tradeData.pool,
@@ -783,15 +794,19 @@ export class VTSService extends EventEmitter {
     
     console.log(`[11.6C][Persist] ${tradeData.symbol} trade sent to recordVirtualTrade()`);
 
-    // Trigger ML calibration for HYBRID trades
-    if (signal.signalType === 'HYBRID') {
+    // Trigger ML calibration for HYBRID trades (return whether triggered)
+    let mlTriggered = false;
+    if (normalizedSignalType === 'HYBRID') {
       this.calibrationCounter++;
       if (this.calibrationCounter >= CALIBRATION_TRIGGER_INTERVAL) {
         this.calibrationCounter = 0;
         this.triggerMLCalibration();
+        mlTriggered = true;
         console.log(`[11.6C][ML] ${tradeData.symbol} queued for ML feature aggregation`);
       }
     }
+    
+    return { persisted: true, mlTriggered };
   }
 }
 
