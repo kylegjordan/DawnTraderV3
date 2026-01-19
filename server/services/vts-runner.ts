@@ -631,6 +631,10 @@ async function resolveOpenVirtualTrades(): Promise<{
     }
   }
   
+  // Directive 11.6C: Track persistence and ML queue counts
+  let persisted = 0;
+  let mlQueued = 0;
+  
   // Process closed trades
   for (const { id, trade, exitPrice, exitReason } of tradesToClose) {
     const holdDurationMs = now - trade.openedAt;
@@ -688,6 +692,38 @@ async function resolveOpenVirtualTrades(): Promise<{
       caller: 'vts'
     });
     
+    // Directive 11.6C: Persist to legacy VTS storage and ML pipeline
+    try {
+      await vtsService.persistRealPriceTrade({
+        symbol: trade.symbol,
+        entryTime: trade.openedAt,
+        exitTime: now,
+        entryPrice: trade.entryPrice,
+        exitPrice: exitPrice,
+        stopLoss: trade.stopLoss,
+        takeProfit: trade.takeProfit,
+        positionSize: trade.positionSize,
+        regime: trade.regime,
+        strategy: trade.strategy,
+        signalType: trade.signalType,
+        patternType: trade.patternType,
+        pnl: netPnl,
+        grossPnl: grossPnl,
+        exitReason: exitReason,
+        finalScore: trade.finalScore,
+        hybridScore: trade.hybridScore,
+        predictiveConfidence: trade.predictiveConfidence,
+        regimeWeight: trade.regimeWeight,
+        decayPenalty: trade.decayPenalty,
+        frictionCost: trade.frictionCost,
+        pool: trade.pool
+      });
+      persisted++;
+      mlQueued++;
+    } catch (error) {
+      console.error(`[11.6C][Error] Failed to persist ${trade.symbol}:`, error);
+    }
+    
     // Remove from open trades registry
     openVirtualTrades.delete(id);
     
@@ -703,6 +739,8 @@ async function resolveOpenVirtualTrades(): Promise<{
   
   if (resolved > 0) {
     console.log(`[11.6][Resolution] Cycle complete: ${resolved} trades closed (stops=${stopHits}, targets=${targetHits}, timeouts=${timeouts}), ${openVirtualTrades.size} still open`);
+    // Directive 11.6C Task 5: Verification hook - summary log
+    console.log(`[11.6C][Summary] Trades Closed: ${resolved} | Persisted: ${persisted} | ML Queued: ${mlQueued}`);
   }
   
   return { resolved, stopHits, targetHits, timeouts };
