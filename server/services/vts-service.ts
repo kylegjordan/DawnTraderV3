@@ -685,6 +685,114 @@ export class VTSService extends EventEmitter {
     // Normalize to 0-1 range (assuming typical std dev < 0.05)
     return Math.min(1, stdDev / 0.05);
   }
+
+  /**
+   * Directive 11.6C: Persist trades from real-price resolution system
+   * Reuses existing logTrade() persistence without creating new tables
+   * Ensures ML pipeline receives VTS_REAL_PRICE trades
+   */
+  async persistRealPriceTrade(tradeData: {
+    symbol: string;
+    entryTime: number;
+    exitTime: number;
+    entryPrice: number;
+    exitPrice: number;
+    stopLoss: number;
+    takeProfit: number;
+    positionSize: number;
+    regime: string;
+    strategy: string;
+    signalType: string;
+    patternType?: string | null;
+    pnl: number;
+    grossPnl: number;
+    exitReason: 'stop_hit' | 'target_hit' | 'timeout';
+    finalScore: number;
+    hybridScore: number;
+    predictiveConfidence: number;
+    regimeWeight: number;
+    decayPenalty: number;
+    frictionCost: number;
+    pool: 'ideal' | 'rotational';
+  }): Promise<void> {
+    // Convert to VirtualTrade format for legacy persistence compatibility
+    const signal: VirtualSignal = {
+      id: `vs_${tradeData.entryTime}_${Math.random().toString(36).substr(2, 9)}`,
+      symbol: tradeData.symbol,
+      entryPrice: tradeData.entryPrice,
+      takeProfit: tradeData.takeProfit,
+      stopLoss: tradeData.stopLoss,
+      spread: 0,
+      predictedProfit: tradeData.pnl,
+      strategy: tradeData.strategy,
+      createdAt: tradeData.entryTime,
+      signalType: (tradeData.signalType as 'QUANT' | 'PATTERN' | 'HYBRID') || 'HYBRID',
+      patternType: tradeData.patternType,
+      patternStrength: 0,
+      finalScore: tradeData.finalScore,
+      hybridScore: tradeData.hybridScore,
+      predictiveConfidence: tradeData.predictiveConfidence,
+      regimeWeight: tradeData.regimeWeight,
+      decayPenalty: tradeData.decayPenalty,
+      expectedEdge: tradeData.pnl,
+      frictionCost: tradeData.frictionCost,
+      regime: tradeData.regime,
+      pool: tradeData.pool,
+      source: 'simulation'
+    };
+
+    const trade: VirtualTrade = {
+      id: `vt_realp_${tradeData.exitTime}_${Math.random().toString(36).substr(2, 9)}`,
+      signal,
+      status: 'closed',
+      resultType: tradeData.exitReason === 'stop_hit' ? 'stop_loss' 
+        : tradeData.exitReason === 'target_hit' ? 'take_profit' 
+        : 'timeout',
+      entryTime: tradeData.entryTime,
+      exitTime: tradeData.exitTime,
+      exitPrice: tradeData.exitPrice,
+      grossProfit: tradeData.grossPnl,
+      netProfit: tradeData.pnl,
+      fees: tradeData.frictionCost * tradeData.entryPrice,
+      calibrated: true,
+      finalScore: tradeData.finalScore,
+      hybridScore: tradeData.hybridScore,
+      predictiveConfidence: tradeData.predictiveConfidence,
+      regimeWeight: tradeData.regimeWeight,
+      decayPenalty: tradeData.decayPenalty,
+      expectedEdge: tradeData.pnl,
+      frictionCost: tradeData.frictionCost,
+      signalType: tradeData.signalType,
+      strategy: tradeData.strategy,
+      regime: tradeData.regime,
+      pool: tradeData.pool,
+      source: 'simulation',
+      schemaVersion: '1.6.7'
+    };
+
+    // Add to closedTrades for ML calibration access
+    this.closedTrades.push(trade);
+    
+    // Update session metrics
+    this.sessionMetrics.simulatedTradesThisSession++;
+    this.sessionMetrics.totalRealizedPnL += tradeData.pnl;
+    this.updateRollingAverages();
+
+    // Persist to JSON file via legacy logTrade
+    await this.logTrade(trade);
+    
+    console.log(`[11.6C][Persist] ${tradeData.symbol} trade sent to recordVirtualTrade()`);
+
+    // Trigger ML calibration for HYBRID trades
+    if (signal.signalType === 'HYBRID') {
+      this.calibrationCounter++;
+      if (this.calibrationCounter >= CALIBRATION_TRIGGER_INTERVAL) {
+        this.calibrationCounter = 0;
+        this.triggerMLCalibration();
+        console.log(`[11.6C][ML] ${tradeData.symbol} queued for ML feature aggregation`);
+      }
+    }
+  }
 }
 
 export const vtsService = new VTSService();

@@ -1,0 +1,224 @@
+🧭 Directive 11.6C — “VTS Real-Price Persistence Integration (Legacy ML Pipeline Hook)”
+Phase:
+
+11.6C — Core Infrastructure Alignment
+
+Objective:
+
+Integrate the new real-price-based openVirtualTrades subsystem (Directive 11.6) directly into the existing VTS persistence and ML aggregation pipeline, ensuring all simulated trade outcomes persist automatically and flow into telemetry and machine learning systems as before.
+No new persistence tables or systems are to be created.
+
+I. Problem Summary
+
+Following Directive 11.6:
+
+Trade exits now use real Kraken price data via the priceCache (✅ correct).
+
+Trades remain in-memory in the openVirtualTrades registry until closed.
+
+Closed trades are only logged to console ([11.6][Exit]) and then lost.
+
+No persistence or ML ingestion occurs, unlike in pre-11.6 random simulation mode.
+
+As a result:
+
+The ML Feature Store and TelemetryAggregator receive no new data.
+
+All realistic trade outcomes vanish after server restart or log rotation.
+
+II. Directive Objective
+
+Restore the full data persistence and ML aggregation pipeline by reconnecting the new openVirtualTrades real-price exit logic to the existing VTS trade storage and telemetry ingestion pipeline that was used prior to Directive 11.6.
+
+This ensures:
+
+✅ Continuous ML data flow (no retraining gaps)
+
+✅ Proper persistence of all closed trades
+
+✅ Seamless continuity with historical schema and analytics tools
+
+III. Implementation Tasks
+Task 1 — Identify Existing Trade Persistence Function
+
+File:
+/server/services/vts-storage.ts
+or
+/server/services/telemetry-aggregator.ts
+
+Goal:
+Locate the legacy trade persistence function — one of the following forms:
+
+recordVirtualTrade(trade: VirtualTrade)
+
+
+or
+
+telemetryAggregator.addVtsTrade(trade)
+
+
+This function was previously called by the random-exit simulation engine to:
+
+Persist simulated trades
+
+Update telemetry history
+
+Feed trade data into the ML pipeline
+
+⚙️ Do not create new persistence logic.
+We will reuse this function exactly as before.
+
+Task 2 — Integrate with resolveOpenVirtualTrades()
+
+File:
+/server/services/vts-runner.ts
+
+Within the resolveOpenVirtualTrades() loop (lines 565–709):
+
+Locate where trades are closed (stop_hit, target_hit, or timeout):
+
+console.log(`[11.6][Exit] ${symbol} closed via ${exitReason} @ ${exitPrice}`);
+
+
+Immediately after this log, add:
+
+import { recordVirtualTrade } from "@/server/services/vts-storage"; 
+// adjust path to actual existing persistence function
+
+const closedTrade = {
+  symbol,
+  entryTime,
+  exitTime: Date.now(),
+  entryPrice,
+  exitPrice,
+  stopLoss,
+  takeProfit,
+  positionSize,
+  regime,
+  strategy,
+  pnl: ((exitPrice - entryPrice) / entryPrice) * 100,
+  exitReason,
+  source: "VTS_REAL_PRICE"
+};
+
+await recordVirtualTrade(closedTrade);
+console.log(`[11.6C][Persist] ${symbol} persisted via VTS_REAL_PRICE pipeline`);
+
+
+This guarantees the same trade schema and persistence format used previously.
+
+Task 3 — Ensure Data Flow to Telemetry & ML Feature Store
+
+Confirm that recordVirtualTrade() performs the following (do not modify if already present):
+
+Appends trade to VTS trade history storage (JSON, file, or DB).
+
+Passes trade object to telemetryAggregator:
+
+telemetryAggregator.addVtsTrade(trade);
+
+
+Ensures telemetryAggregator writes to FeatureStore or MLTrainingQueue.
+
+If recordVirtualTrade() bypasses telemetry, inject the call manually there.
+
+Task 4 — Validation Logs
+
+Add two directive-level log entries in vts-runner.ts:
+
+console.log(`[11.6C][Persist] ${symbol} trade sent to recordVirtualTrade()`);
+console.log(`[11.6C][ML] ${symbol} queued for ML feature aggregation`);
+
+
+Logs confirm persistence + ML integration are functioning.
+
+Task 5 — Verification Hook
+
+At the end of each VTS cycle:
+
+Add summary log:
+
+[11.6C][Summary] Trades Closed: X | Persisted: Y | ML Queued: Y
+
+
+Ensure count parity between closed and persisted trades.
+
+IV. Architectural Constraints
+
+No new DB tables.
+Reuse existing schema and storage layers (vts-storage.ts, telemetry-aggregator.ts, and downstream ML).
+
+No data duplication.
+A trade must exist only once — in the same structure as historical VTS trades.
+
+No schema drift.
+Use the same keys and types:
+symbol, entryTime, exitTime, entryPrice, exitPrice, pnl, regime, strategy, exitReason.
+
+No extra Kraken API calls.
+All price lookups remain from priceCache.
+
+In-memory registry remains for open trades only.
+Do not persist open trades yet — only closed ones.
+
+V. Verification & Validation Steps
+Step 1 — Unit Validation
+
+After implementation:
+
+Run VTS in passive mode for 60–90 minutes.
+
+Confirm [11.6C][Persist] logs appear for each trade closure.
+
+Verify identical data schema in persistence backend.
+
+Step 2 — Data Validation
+
+Query the existing VTS trade storage (or file export):
+
+Expected fields:
+
+source: "VTS_REAL_PRICE"
+exitReason: "target_hit" | "stop_hit"
+pnl: non-random distribution
+
+
+No new collection or table should appear.
+
+Step 3 — ML Verification
+
+Within 1 hour of trade persistence:
+
+Check ML service logs for ingestion lines such as:
+
+[ML][FeatureStore] New trade batch received (source=VTS_REAL_PRICE)
+
+
+Ensure the new data batch count matches [11.6C][Persist] logs.
+
+VI. Expected Outcome
+
+Closed trades from the openVirtualTrades registry now persist automatically.
+
+Machine learning retraining resumes seamlessly using real-price exits.
+
+No duplicate data or schema divergence.
+
+Audit and analytics tools retain full trade histories.
+
+Restart-safe operation (via persistence rehydration planned in 11.6B).
+
+VII. Success Criteria
+Metric	Target
+Trade persistence parity	100% of closed trades persisted
+ML ingestion parity	100% of persisted trades visible to Feature Store
+Schema consistency	Matches historical VTS trades
+API utilization	Zero new Kraken calls
+Log verification	[11.6C][Persist] and [11.6C][ML] appear for all exits
+VIII. Next Phase Alignment
+
+This directive completes the real-data persistence layer for VTS, allowing the system to transition into:
+
+Directive 11.6A/B (persistence reliability and analytics tabs)
+
+Phase 12.0 (Predictive Learning and Feature Store integration)
