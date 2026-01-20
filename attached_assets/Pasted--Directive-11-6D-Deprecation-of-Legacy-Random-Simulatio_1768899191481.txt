@@ -1,0 +1,256 @@
+🧭 Directive 11.6D — “Deprecation of Legacy Random Simulation Subsystem”
+Phase
+
+11.6D — System Sanitation and Architecture Unification
+
+Objective
+
+To completely remove the legacy Phase-10 random trade simulation logic (including any stochastic outcome generators, fake price exits, and Phase-10 persistence hooks) from the Virtual Trade Simulator (VTS) and related modules.
+All VTS activity shall henceforth exclusively use the real-price-based openVirtualTrades subsystem introduced in Directive 11.6C.
+
+This ensures all simulated trades represent genuine market movement, producing consistent data for learning, validation, and analytics.
+
+I. Problem Summary
+Current State
+
+Two parallel simulation systems exist:
+
+Legacy Random Simulation Path
+
+Uses random volatility-based price deltas to generate artificial exits.
+
+Writes directly to JSON logs and ML pipeline (vt_* records).
+
+Located in legacy functions such as simulateTradeOutcome() and generatePhase10Signal().
+
+Real-Price Simulation Path (Directive 11.6C)
+
+Uses live Kraken price data from priceCache.
+
+Trades persist when real prices hit stop-loss or take-profit.
+
+Logged as vt_realp_* records and correctly feed ML.
+
+Problem
+
+Both systems run concurrently.
+
+ML and analytics are receiving mixed data (real + random).
+
+The random simulation produces meaningless P&L results, corrupting feature learning.
+
+CPU and memory are wasted maintaining two pipelines.
+
+The presence of both systems creates schema confusion and data inconsistency.
+
+II. Directive Objectives
+
+Fully deprecate and remove all references to the legacy random trade simulation path.
+
+Ensure the VTS uses only the real-price monitoring and resolution loop for trade closure.
+
+Preserve full ML continuity through the persistence integration completed under Directive 11.6C.
+
+Confirm that no random or probability-based trade exits remain in the system.
+
+III. Implementation Tasks
+Task 1 — Identify and Remove Legacy Random Simulation Functions
+
+Files:
+
+/server/services/vts-runner.ts
+
+/server/services/vts-service.ts
+
+/server/core/simulation-utils.ts (if present)
+
+Actions:
+
+Locate and completely delete:
+
+simulateTradeOutcome()
+
+generatePhase10Signal()
+
+Any variable or block referencing:
+
+const priceChange = (Math.random() - 0.4) * volatility;
+const exitPrice = entryPrice * (1 + priceChange);
+
+
+Remove any dependency imports related to these functions.
+
+Delete associated helper functions (e.g., generateRandomExit, randomOutcomeProbability, etc.).
+
+Remove all calls that persist “instant trades” (trades closed at signal creation).
+
+Verification:
+No references to simulateTradeOutcome or any random outcome logic should remain in the repository.
+
+Task 2 — Disable Legacy Persistence Hooks
+
+Files:
+
+/server/services/vts-service.ts
+
+/server/services/telemetry-aggregator.ts
+
+Actions:
+
+Remove or comment out any direct calls to:
+
+vtsService.logTrade(tradeRecord);
+
+
+that occur immediately after trade creation.
+
+Ensure all persistence now routes exclusively through:
+
+persistRealPriceTrade()
+
+
+within the real-price resolution loop.
+
+Task 3 — Unify Naming and Schema
+
+Files:
+
+/server/services/vts-runner.ts
+
+/server/services/vts-service.ts
+
+Actions:
+
+Replace dual ID generation:
+
+Remove prefixes vt_* and vt_realp_*.
+
+Replace with unified format:
+
+const tradeId = `vts_${symbol}_${Date.now()}`;
+
+
+Normalize trade schema:
+
+{
+  id: tradeId,
+  source: "VTS_REAL_PRICE",
+  regime,
+  strategy,
+  signalType,
+  entryTime,
+  exitTime,
+  entryPrice,
+  exitPrice,
+  pnl,
+  exitReason,
+  positionSize,
+  stopLoss,
+  takeProfit
+}
+
+
+Confirm all persistence and ML ingestion systems use this unified schema.
+
+Task 4 — Purge Legacy JSON and Data Artifacts
+
+File Path: /logs/virtual_trades/
+
+Actions:
+
+Delete all files containing legacy IDs (vt_*) except those prefixed vts_.
+
+Retain post-Directive 11.6C files (vts_ or VTS_REAL_PRICE sources).
+
+Task 5 — Add Validation and Logging
+
+File: /server/services/vts-runner.ts
+
+After trade persistence (within the resolution loop):
+
+console.log(`[11.6D][SanityCheck] All trades resolved via real-price. No legacy random trades found.`);
+
+
+Add validation routine:
+
+if (tradeId.startsWith("vt_")) {
+  console.error(`[11.6D][Error] Legacy random simulation trade detected!`);
+}
+
+
+This will automatically detect and warn if legacy code still fires unexpectedly.
+
+Task 6 — Update Documentation
+
+File: /replit.md
+
+Add a section:
+
+Directive 11.6D — Legacy Simulation Deprecation
+
+The legacy random simulation subsystem (Phase 10 QuickSim) was fully removed in January 2026.
+All virtual trades are now resolved using real Kraken price data from the unified price cache.
+The system no longer supports random or time-based simulated exits.
+
+IV. Verification and Validation
+Step 1 — Repository Search
+
+Run:
+
+grep -r "simulateTradeOutcome" /server
+grep -r "Math.random" /server/services/vts*
+
+
+Expected: No results.
+
+Step 2 — Trade Log Validation
+
+Run the VTS for 12 hours.
+Inspect /logs/virtual_trades/.
+
+✅ Expected Results:
+
+Only trade IDs starting with vts_
+
+Only "source": "VTS_REAL_PRICE"
+
+No trade durations under 60 seconds
+
+No PnL distributions consistent with random noise
+
+Step 3 — ML Pipeline Validation
+
+Check ML ingestion logs for:
+
+[ML][FeatureStore] New VTS_REAL_PRICE trades received
+
+
+and confirm no ingestion of vt_* trades.
+
+Step 4 — Console Verification
+
+Console should display:
+
+[11.6D][SanityCheck] All trades resolved via real-price. No legacy random trades found.
+
+
+No [11.6D][Error] lines should appear.
+
+V. Success Criteria
+Metric	Target
+Legacy simulation functions removed	100%
+Legacy vt_* trades generated	0
+All trades resolved via real-price loop	100%
+ML ingestion of real-only data	Confirmed
+Schema consistency (vts_*, VTS_REAL_PRICE)	Verified
+VI. Expected Outcome
+
+Legacy stochastic simulation engine fully deprecated and deleted.
+
+All trades generated and closed based on actual Kraken prices.
+
+Machine learning and analytics receive clean, uniform data.
+
+Trade persistence unified under one schema and one pipeline.
+
+No duplicate workloads or data corruption.

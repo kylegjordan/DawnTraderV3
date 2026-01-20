@@ -205,8 +205,9 @@ export class VTSService extends EventEmitter {
   start() {
     if (this.isRunning) return;
     this.isRunning = true;
-    this.updateInterval = setInterval(() => this.updateOpenTrades(), 5 * 60 * 1000);
-    console.log('[L6][VTS] Started - 5min update cycle');
+    // Directive 11.6D: Legacy updateOpenTrades interval disabled
+    // All trade resolution now handled by real-price resolution in vts-runner.ts
+    console.log('[11.6D][VTS] Started - legacy updateOpenTrades disabled (real-price resolution active)');
   }
 
   stop() {
@@ -220,43 +221,37 @@ export class VTSService extends EventEmitter {
   }
 
   /**
-   * Directive 11.0E.2: Create virtual trade with full Phase-10 metrics
+   * DEPRECATED by Directive 11.6D - Legacy random simulation pathway
+   * All trades now created via openVirtualTrades in vts-runner.ts and resolved via real prices
+   * This method is kept for backward compatibility but logs a warning and no-ops
    */
   async createVirtualTrade(signal: VirtualSignal): Promise<VirtualTrade> {
+    console.error(`[11.6D][DEPRECATED] createVirtualTrade called - legacy random simulation is disabled`);
+    console.error(`[11.6D][DEPRECATED] Trades should flow through openVirtualTrades → persistRealPriceTrade`);
+    
+    // Return a minimal trade object for interface compatibility, but don't add to virtualTrades map
     const trade: VirtualTrade = {
-      id: `vt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: `deprecated_${Date.now()}`,
       signal,
-      status: 'open',
+      status: 'closed', // Mark as closed so it's never processed
       entryTime: Date.now(),
       calibrated: false,
-      
-      // Phase-10 denormalized fields (M50: Complete Phase-10 persistence)
       finalScore: signal.finalScore ?? 0,
       hybridScore: signal.hybridScore ?? 0,
       predictiveConfidence: signal.predictiveConfidence ?? 0,
       regimeWeight: signal.regimeWeight ?? 0,
       decayPenalty: signal.decayPenalty ?? 0,
       expectedEdge: signal.expectedEdge ?? 0,
-      frictionCost: 0, // Computed at close time
-      signalType: signal.signalType ?? 'Hybrid',
+      frictionCost: 0,
+      signalType: signal.signalType ?? 'HYBRID',
       strategy: signal.strategy ?? 'unknown',
       regime: signal.regime ?? 'TRANSITION',
       pool: signal.pool ?? 'rotational',
-      
-      // Metadata (M50)
       source: 'simulation',
       schemaVersion: '1.6.7'
     };
-
-    this.virtualTrades.set(trade.id, trade);
-    this.emit('trade_opened', trade);
     
-    // M5B: Track session metrics with Phase-10 aggregates
-    this.sessionMetrics.simulatedTradesThisSession++;
-    this.sessionMetrics.totalExpectedEdge += trade.expectedEdge;
-    this.updateRollingAverages();
-    
-    console.log(`[11.0E.2][VTS] Opened virtual trade: ${signal.symbol} @ ${signal.entryPrice.toFixed(4)} finalScore=${trade.finalScore.toFixed(3)} regime=${trade.regime}`);
+    // Do NOT add to virtualTrades map - this trade will not be processed
     return trade;
   }
   
@@ -369,72 +364,22 @@ export class VTSService extends EventEmitter {
   }
 
   /**
-   * Directive 11.0E.2: Close trade with Phase-10 metrics update
+   * DEPRECATED by Directive 11.6D - Legacy random simulation pathway
+   * This method used random fallback for price exits - no longer supported
+   * All trade closures now handled by resolveOpenVirtualTrades() in vts-runner.ts
    */
   private async closeTrade(trade: VirtualTrade): Promise<void> {
-    const outcome = this.getMarketOutcome(trade.signal.symbol);
-    if (outcome.close === 0) {
-      outcome.close = trade.signal.entryPrice * (1 + (Math.random() - 0.5) * 0.02);
-      outcome.high = trade.signal.entryPrice * (1 + Math.random() * 0.03);
-      outcome.low = trade.signal.entryPrice * (1 - Math.random() * 0.03);
-    }
-
-    const result = this.simulateTrade(trade.signal, outcome);
-    Object.assign(trade, result);
+    console.error(`[11.6D][DEPRECATED] closeTrade called for ${trade.signal?.symbol} - legacy random simulation is disabled`);
+    console.error(`[11.6D][DEPRECATED] Trade closures should use persistRealPriceTrade() with real Kraken prices`);
     
-    // M50: Update frictionCost from simulation result
-    trade.frictionCost = result.fees ?? 0;
-    
-    // Phase-10: Update session metrics with realized P&L
-    if (result.netProfit !== undefined) {
-      this.sessionMetrics.totalRealizedPnL += result.netProfit;
-      this.updateRollingAverages();
+    // Skip processing - legacy trades in virtualTrades map should not exist under 11.6D
+    // If this is called, it indicates a code path violation
+    if (trade.id.startsWith('vt_') && !trade.id.startsWith('vts_')) {
+      console.error(`[11.6D][Error] Legacy random simulation trade detected! ID: ${trade.id}`);
     }
-
+    
+    // Do not process - just remove from map to prevent infinite loops
     this.virtualTrades.delete(trade.id);
-    this.closedTrades.push(trade);
-    this.emit('trade_closed', trade);
-
-    try {
-      const mcp = getMarketProfiler();
-      const currentRegime = mcp.getCurrentRegime();
-      if (currentRegime && trade.netProfit !== undefined) {
-        const rpt = getRegimePerformanceTracker();
-        const duration = trade.exitTime ? trade.exitTime - trade.entryTime : 0;
-        rpt.recordTradeOutcome({
-          regime: currentRegime,
-          pnl: trade.netProfit,
-          strategy: trade.signal.strategy || 'unknown',
-          duration,
-          isWin: trade.netProfit > 0,
-          timestamp: new Date().toISOString()
-        });
-
-        const re = getRewardEvaluator();
-        re.recordTrade({
-          strategy: trade.signal.strategy || 'unknown',
-          regime: currentRegime,
-          pnl: trade.netProfit,
-          isWin: trade.netProfit > 0,
-          entryPrice: trade.signal.entryPrice,
-          exitPrice: trade.exitPrice || trade.signal.entryPrice,
-          timestamp: new Date().toISOString()
-        });
-      }
-    } catch (error) {
-      console.error('[L13][VTS] Failed to record trade to RPT:', error);
-    }
-
-    await this.logTrade(trade);
-
-    // Directive 10.6: Trigger ML calibration every N HYBRID trades
-    if (trade.signal.signalType === 'HYBRID') {
-      this.calibrationCounter++;
-      if (this.calibrationCounter >= CALIBRATION_TRIGGER_INTERVAL) {
-        this.calibrationCounter = 0;
-        this.triggerMLCalibration();
-      }
-    }
   }
 
   /**
@@ -752,8 +697,9 @@ export class VTSService extends EventEmitter {
       source: 'simulation'
     };
 
+    // Directive 11.6D: Unified trade ID format - vts_{symbol}_{timestamp}
     const trade: VirtualTrade = {
-      id: `vt_realp_${tradeData.exitTime}_${Math.random().toString(36).substr(2, 9)}`,
+      id: `vts_${tradeData.symbol.replace('/', '_')}_${tradeData.exitTime}`,
       signal,
       status: 'closed',
       resultType: tradeData.exitReason === 'stop_hit' ? 'stop_loss' 
@@ -777,7 +723,7 @@ export class VTSService extends EventEmitter {
       strategy: tradeData.strategy,
       regime: tradeData.regime,
       pool: tradeData.pool,
-      source: 'simulation',
+      source: 'simulation', // Directive 11.6D: VTS_REAL_PRICE trades marked via ID prefix
       schemaVersion: '1.6.7'
     };
 
@@ -789,10 +735,15 @@ export class VTSService extends EventEmitter {
     this.sessionMetrics.totalRealizedPnL += tradeData.pnl;
     this.updateRollingAverages();
 
-    // Persist to JSON file via legacy logTrade
+    // Persist to JSON file via logTrade
     await this.logTrade(trade);
     
-    console.log(`[11.6C][Persist] ${tradeData.symbol} trade sent to recordVirtualTrade()`);
+    // Directive 11.6D: Sanity check - validate unified ID format
+    if (trade.id.startsWith('vt_') && !trade.id.startsWith('vts_')) {
+      console.error(`[11.6D][Error] Legacy random simulation trade detected! ID: ${trade.id}`);
+    }
+    
+    console.log(`[11.6D][Persist] ${tradeData.symbol} VTS_REAL_PRICE trade persisted (id=${trade.id})`);
 
     // Trigger ML calibration for HYBRID trades (return whether triggered)
     let mlTriggered = false;

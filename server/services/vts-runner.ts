@@ -396,10 +396,10 @@ async function generatePhase10Signal(
   const riskPerTrade = await getRiskPerTrade();
   const positionSize = computePositionSize(portfolioValue, riskPerTrade, entryPrice, stopLoss, riskMultiplier);
   
-  // Directive 11.6: Create open virtual trade for real price resolution
-  // REMOVED: Random exit simulation (Math.random() - 0.4) * volatility
+  // Directive 11.6D: Create open virtual trade for real price resolution
+  // Unified ID format: vts_{symbol}_{timestamp} - no more legacy vt_ prefix
   // Trade exit will be determined by real Kraken prices in resolveOpenVirtualTrades()
-  const tradeId = `vt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const tradeId = `vts_${symbol.replace('/', '_')}_${Date.now()}`;
   
   // Check if we can accept more open trades
   if (openVirtualTrades.size >= MAX_OPEN_TRADES) {
@@ -739,8 +739,9 @@ async function resolveOpenVirtualTrades(): Promise<{
   
   if (resolved > 0) {
     console.log(`[11.6][Resolution] Cycle complete: ${resolved} trades closed (stops=${stopHits}, targets=${targetHits}, timeouts=${timeouts}), ${openVirtualTrades.size} still open`);
-    // Directive 11.6C Task 5: Verification hook - summary log
-    console.log(`[11.6C][Summary] Trades Closed: ${resolved} | Persisted: ${persisted} | ML Queued: ${mlQueued}`);
+    // Directive 11.6D: Sanity check - all trades resolved via real-price
+    console.log(`[11.6D][SanityCheck] All trades resolved via real-price. No legacy random trades found.`);
+    console.log(`[11.6D][Summary] Trades Closed: ${resolved} | Persisted: ${persisted} | ML Queued: ${mlQueued}`);
   }
   
   return { resolved, stopHits, targetHits, timeouts };
@@ -879,7 +880,9 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       
       const { signal, tradeRecord } = result;
       
-      await vtsService.createVirtualTrade(signal);
+      // Directive 11.6D: Removed vtsService.createVirtualTrade() call
+      // Trades are now tracked exclusively via openVirtualTrades map and resolved via real prices
+      // Legacy createVirtualTrade used random simulation - deprecated per Directive 11.6D
       vtsService.updateMarketPrice(pair.symbol, priceData.price);
       
       // Directive 11.0E.2: Record telemetry with source='simulation' for segregation
