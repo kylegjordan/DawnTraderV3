@@ -1269,19 +1269,30 @@ export function getOpenVirtualTradesForML(): Array<{
   
   for (const [_, trade] of openVirtualTrades) {
     const cachedPrice = priceCache.get(trade.symbol);
-    const currentPrice = cachedPrice?.price ?? trade.entryPrice;
+    const priceIsFresh = cachedPrice && (Date.now() - cachedPrice.lastUpdatedAt < 120000);
+    const currentPrice = priceIsFresh ? cachedPrice.price : null;
+    
+    const priceForCalc = currentPrice ?? trade.entryPrice;
     
     const distanceToTarget = trade.takeProfit > 0 
-      ? ((trade.takeProfit - currentPrice) / currentPrice * 100).toFixed(2) + '%'
+      ? ((trade.takeProfit - priceForCalc) / priceForCalc * 100).toFixed(2) + '%'
       : 'N/A';
     const distanceToStop = trade.stopLoss > 0 
-      ? ((trade.stopLoss - currentPrice) / currentPrice * 100).toFixed(2) + '%'
+      ? ((trade.stopLoss - priceForCalc) / priceForCalc * 100).toFixed(2) + '%'
       : 'N/A';
     
-    const grossProfitValue = (currentPrice - trade.entryPrice) * trade.positionSize;
-    const grossProfitPercent = ((currentPrice - trade.entryPrice) / trade.entryPrice * 100).toFixed(2);
-    const netProfitValue = grossProfitValue - trade.frictionCost;
-    const netProfitPercent = (netProfitValue / (trade.entryPrice * trade.positionSize) * 100).toFixed(2);
+    const grossProfitValue = currentPrice !== null 
+      ? (currentPrice - trade.entryPrice) * trade.positionSize 
+      : 0;
+    const grossProfitPercent = currentPrice !== null 
+      ? ((currentPrice - trade.entryPrice) / trade.entryPrice * 100).toFixed(2) 
+      : '0.00';
+    const netProfitValue = currentPrice !== null 
+      ? grossProfitValue - trade.frictionCost 
+      : 0;
+    const netProfitPercent = currentPrice !== null 
+      ? (netProfitValue / (trade.entryPrice * trade.positionSize) * 100).toFixed(2) 
+      : '0.00';
     
     const durationMs = now - trade.openedAt;
     const durationMinutes = Math.floor(durationMs / 60000);

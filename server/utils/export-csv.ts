@@ -80,6 +80,7 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
   const vtsDir = path.join(process.cwd(), 'logs', 'virtual_trades');
   const cutoffDate = Date.now() - (days * 24 * 60 * 60 * 1000);
   const trades: Array<any> = [];
+  let skippedIncomplete = 0;
   
   try {
     const files = await fs.readdir(vtsDir);
@@ -100,20 +101,21 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
           const exitTimestamp = new Date(exitTime).getTime();
           if (exitTimestamp < cutoffDate) continue;
           
-          const entryPrice = trade.entryPrice || trade.signal?.entryPrice || 0;
-          const exitPrice = trade.exitPrice || trade.resolvedPrice || 0;
-          const quantity = trade.positionSize || trade.quantity || 0;
+          const entryPrice = trade.entryPrice || trade.signal?.entryPrice;
+          const exitPrice = trade.exitPrice || trade.resolvedPrice;
+          const quantity = trade.positionSize || trade.quantity;
+          
+          if (!entryPrice || entryPrice <= 0 || !exitPrice || exitPrice <= 0 || !quantity || quantity <= 0) {
+            skippedIncomplete++;
+            continue;
+          }
           
           const grossProfitValue = (exitPrice - entryPrice) * quantity;
-          const grossProfitPercent = entryPrice > 0 
-            ? ((exitPrice - entryPrice) / entryPrice * 100).toFixed(2)
-            : '0.00';
+          const grossProfitPercent = ((exitPrice - entryPrice) / entryPrice * 100).toFixed(2);
           
           const costs = trade.frictionCost || trade.costs || 0;
           const netProfitValue = grossProfitValue - costs;
-          const netProfitPercent = entryPrice > 0 && quantity > 0
-            ? (netProfitValue / (entryPrice * quantity) * 100).toFixed(2)
-            : '0.00';
+          const netProfitPercent = (netProfitValue / (entryPrice * quantity) * 100).toFixed(2);
           
           const entryTimestamp = new Date(trade.entryTime || trade.openedAt || trade.signal?.createdAt || 0).getTime();
           const durationMinutes = Math.floor((exitTimestamp - entryTimestamp) / 60000);
@@ -162,6 +164,10 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
     }
   } catch (err) {
     console.warn('[11.6E][Export] Error reading virtual_trades directory:', err);
+  }
+  
+  if (skippedIncomplete > 0) {
+    console.log(`[11.6E][Export] Skipped ${skippedIncomplete} incomplete trades (missing entry/exit price or quantity)`);
   }
   
   return trades.sort((a, b) => new Date(b.exitTime).getTime() - new Date(a.exitTime).getTime());

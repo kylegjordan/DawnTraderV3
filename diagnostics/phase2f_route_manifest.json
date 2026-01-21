@@ -6635,6 +6635,46 @@
     ]
   },
   {
+    "path": "/api/vts/ml/open",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/vts/ml/closed",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/vts/ml/open/export",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/vts/ml/closed/export",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/market/regime",
     "methods": [
       "GET"

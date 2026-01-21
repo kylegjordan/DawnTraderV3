@@ -10,6 +10,12 @@
  * - POST /api/vts/retrain: Trigger calibration coefficient retraining (L8: per-strategy)
  * - GET /api/vts/internal/calibration: Internal endpoint for ML service (L8: full calibration)
  * 
+ * Directive 11.6E Extensions (Approved Modification):
+ * - GET /api/vts/ml/open: Machine Learning dashboard - open trades
+ * - GET /api/vts/ml/closed: Machine Learning dashboard - closed trades
+ * - GET /api/vts/ml/open/export: CSV export for open trades
+ * - GET /api/vts/ml/closed/export: CSV export for closed trades
+ * 
  * DO NOT MODIFY without architectural review.
  * ══════════════════════════════════════════════════════════════════════════════
  */
