@@ -856,6 +856,7 @@ export class Fx5ScannerService {
     spread?: number;
     liquidity?: number;
     volatility?: number;
+    isBenchmark?: boolean;
   }>): void {
     const batch: ScanBatchPair[] = survivors.map(s => ({
       symbol: s.symbol,
@@ -866,9 +867,11 @@ export class Fx5ScannerService {
       spread: s.spread,
       liquidity: s.liquidity,
       volatility: s.volatility,
+      isBenchmark: s.isBenchmark, // Directive 11.6F: Propagate benchmark flag for VTS filtering
     }));
     this.currentBatch.set(mode, batch);
-    console.log(`[FX5][11.4C.1] Updated batch for ${mode}: ${batch.length} pairs (raw data only, no telemetry writes)`);
+    const benchmarkCount = batch.filter(b => b.isBenchmark).length;
+    console.log(`[FX5][11.4C.1] Updated batch for ${mode}: ${batch.length} pairs (${benchmarkCount} benchmarks, raw data only, no telemetry writes)`);
   }
 }
 

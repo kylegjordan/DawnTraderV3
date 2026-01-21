@@ -1,0 +1,100 @@
+⚙️ Directive 11.6F — VTS Data Integrity Clarification and Benchmark Filtering Restoration
+Phase
+
+11.6F
+
+Objective
+
+Confirm VTS position sizing logic — Document exactly how quantity (or positionSize) is determined in the Virtual Trading Simulator (VTS).
+
+Restore proper benchmark filtering — Prevent benchmark pairs from opening simulated trades while keeping them in the ideal pool.
+
+🧱 Part I — Position Sizing Clarification (Request for Architectural Details)
+
+Please provide a detailed explanation of how position sizing currently works in the VTS simulation flow.
+
+Specifically:
+
+Identify which component or function determines quantity or positionSize for each simulated trade.
+
+File(s) and line numbers where position size is computed or assigned.
+
+Whether the value comes from:
+
+a fixed constant (250),
+
+a proportional formula (e.g., based on volatility or edge score),
+
+or an external service such as riskEngine.calculatePositionSize().
+
+Confirm dependencies:
+
+Is the risk engine imported or called anywhere in vts-runner.ts?
+
+Does VTS have its own lightweight risk-sizing logic (e.g., using static config, edge weighting, or capital allocation per regime)?
+
+Clarify system behavior across modes:
+
+In Passive Learning Mode (current state), how is position sizing determined?
+
+In Paper Trading / Active Mode, will position sizing automatically transition to using the TEC risk engine?
+
+Expected deliverable:
+
+Provide a concise architectural summary describing the position sizing process.
+
+Include example code excerpts (with line references) showing how the size is assigned to each trade record.
+
+Identify what changes would be required to replace the hardcoded constant with a dynamic value once risk sizing integration becomes available.
+
+🧩 Part II — Benchmark Filtering Fix (Implementation Instruction)
+
+Please restore benchmark exclusion behavior for simulated trades.
+
+Root Cause
+
+The isBenchmark flag is lost in fx5-scanner.ts when the updateCurrentBatch() function maps survivor pairs into the batch consumed by VTS.
+
+Required Fix
+
+In fx5-scanner.ts (≈ lines 860–869):
+Add the missing field in the batch map:
+
+const batch: ScanBatchPair[] = survivors.map(s => ({
+  symbol: s.symbol,
+  pool: s.poolType || 'ideal',
+  price: s.currentPrice,
+  volume24h: s.volume24h,
+  isBenchmark: s.isBenchmark, // ✅ restore benchmark flag propagation
+  // ... other fields
+}));
+
+
+In server/services/vts-runner.ts:
+Update the function getIdealPoolPairs() (or equivalent batch filter logic) to exclude benchmarks:
+
+const idealPairs = scanBatch.filter(p => !p.isBenchmark);
+
+
+Verification Steps:
+
+Benchmarks (e.g., BTC/USD, ETH/USD, or others marked as benchmark pairs) should:
+
+Appear in the “Ideal Pool” list.
+
+❌ Never appear in “Open Simulated Trades” or “Closed Simulated Trades.”
+
+Confirm in logs that isBenchmark now propagates through to VTS batch entries.
+
+Deliverable:
+
+A short verification log excerpt showing filtered output.
+
+Confirmation that no benchmarks are being simulated post-fix.
+
+✅ Success Criteria
+Metric	Expectation
+Position Sizing	Fully documented, including mode-based differences
+Benchmark Filtering	Benchmarks remain in pool but never open simulated trades
+Code Safety	No functional regressions in VTS trade generation
+Logging	Clear trace confirming fix behavior

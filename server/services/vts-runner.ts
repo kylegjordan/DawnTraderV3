@@ -501,10 +501,14 @@ async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal
     const scanBatch = fx5Scanner.getCurrentScanBatch('paper');
     
     if (scanBatch.length >= 10) {
-      console.log(`[11.4C.1][VTS] Using FX5 scan batch: ${scanBatch.length} pairs (raw data, no telemetry query)`);
+      // Directive 11.6F: Filter out benchmarks before processing - they stay in pool but don't trade
+      const tradablePairs = scanBatch.filter(p => !p.isBenchmark);
+      const benchmarkCount = scanBatch.length - tradablePairs.length;
+      console.log(`[11.4C.1][VTS] Using FX5 scan batch: ${scanBatch.length} pairs (${benchmarkCount} benchmarks excluded, ${tradablePairs.length} tradable)`);
+      
       // Directive 11.4H.1 Task 1: Normalize symbols at ingress with fallback and tier logging
       const validPairs: Array<{ symbol: string; pool: 'ideal' | 'rotational' }> = [];
-      for (const p of scanBatch) {
+      for (const p of tradablePairs) {
         const rawSymbol = p.symbol;
         const canonicalSymbol = normalizeToInternalSymbol(rawSymbol);
         
