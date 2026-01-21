@@ -51,6 +51,9 @@ export async function exportVtsDataToCsv(
   return `/logs/exports/${filename}`;
 }
 
+/**
+ * Directive 11.6H: Added dollarValue (fixed USD exposure) and quantity (variable coin units)
+ */
 export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Array<{
   symbol: string;
   regime: string;
@@ -58,7 +61,8 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
   signalType: string;
   patternType: string | null;
   pool: string;
-  quantity: number;
+  dollarValue: number;    // Directive 11.6H: Fixed USD exposure
+  quantity: number;       // Directive 11.6H: Variable coin units
   entryPrice: number;
   exitPrice: number;
   target: number;
@@ -103,19 +107,26 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
           
           const entryPrice = trade.entryPrice || trade.signal?.entryPrice;
           const exitPrice = trade.exitPrice || trade.resolvedPrice;
-          const quantity = trade.positionSize || trade.quantity;
           
-          if (!entryPrice || entryPrice <= 0 || !exitPrice || exitPrice <= 0 || !quantity || quantity <= 0) {
+          // Directive 11.6H: dollarValue is USD exposure, quantity is coin units
+          // For legacy trades: positionSize represents USD, so divide by entryPrice to get units
+          const tradeDollarValue = trade.dollarValue ?? trade.positionSize ?? 0;
+          const tradeQuantity = trade.quantity ?? (entryPrice > 0 ? tradeDollarValue / entryPrice : 0);
+          
+          if (!entryPrice || entryPrice <= 0 || !exitPrice || exitPrice <= 0 || !tradeQuantity || tradeQuantity <= 0) {
             skippedIncomplete++;
             continue;
           }
           
-          const grossProfitValue = (exitPrice - entryPrice) * quantity;
+          const grossProfitValue = (exitPrice - entryPrice) * tradeQuantity;
           const grossProfitPercent = ((exitPrice - entryPrice) / entryPrice * 100).toFixed(2);
           
           const costs = trade.frictionCost || trade.costs || 0;
           const netProfitValue = grossProfitValue - costs;
-          const netProfitPercent = (netProfitValue / (entryPrice * quantity) * 100).toFixed(2);
+          // Directive 11.6H: Use dollarValue for netProfitPercent denominator
+          const netProfitPercent = tradeDollarValue > 0 
+            ? (netProfitValue / tradeDollarValue * 100).toFixed(2) 
+            : '0.00';
           
           const entryTimestamp = new Date(trade.entryTime || trade.openedAt || trade.signal?.createdAt || 0).getTime();
           const durationMinutes = Math.floor((exitTimestamp - entryTimestamp) / 60000);
@@ -138,7 +149,8 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
             signalType: trade.signalType || trade.signal?.signalType || 'UNKNOWN',
             patternType: trade.patternType || trade.signal?.patternType || null,
             pool: (trade.pool || 'UNKNOWN').toUpperCase(),
-            quantity,
+            dollarValue: parseFloat(tradeDollarValue.toFixed(2)),  // Directive 11.6H: Fixed USD exposure
+            quantity: parseFloat(tradeQuantity.toFixed(6)),        // Directive 11.6H: Variable coin units
             entryPrice,
             exitPrice,
             target: trade.takeProfit || trade.target || 0,

@@ -15,7 +15,8 @@ interface OpenTrade {
   signalType: string;
   patternType: string | null;
   pool: string;
-  quantity: number;
+  dollarValue: number;    // Directive 11.6H: Fixed USD exposure
+  quantity: number;       // Directive 11.6H: Variable coin units
   entryPrice: number;
   exitPrice: null;
   target: number;
@@ -43,7 +44,8 @@ interface ClosedTrade {
   signalType: string;
   patternType: string | null;
   pool: string;
-  quantity: number;
+  dollarValue: number;    // Directive 11.6H: Fixed USD exposure
+  quantity: number;       // Directive 11.6H: Variable coin units
   entryPrice: number;
   exitPrice: number;
   target: number;
@@ -140,7 +142,7 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Strategy</th>
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Signal/Pattern</th>
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Pool</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Qty</th>
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground">$ Value / Qty</th>
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Entry/Current</th>
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Target/Stop</th>
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Dist. T/S</th>
@@ -182,7 +184,12 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
                       {trade.pool}
                     </Badge>
                   </td>
-                  <td className="px-3 py-2 text-right font-mono">{trade.quantity.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-right">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-mono text-xs text-blue-400">${trade.dollarValue?.toFixed(2) ?? '0.00'}</span>
+                      <span className="font-mono text-xs text-muted-foreground">{trade.quantity?.toFixed(4) ?? '0'} units</span>
+                    </div>
+                  </td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex flex-col gap-0.5">
                       <span className="font-mono text-xs">${trade.entryPrice.toFixed(4)}</span>
@@ -301,7 +308,7 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Strategy</th>
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Signal/Pattern</th>
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Pool</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Qty</th>
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground">$ Value / Qty</th>
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Entry/Exit</th>
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Target/Stop</th>
               <th className="px-3 py-2 text-center font-medium text-muted-foreground">Result</th>
@@ -343,7 +350,12 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
                       {trade.pool}
                     </Badge>
                   </td>
-                  <td className="px-3 py-2 text-right font-mono">{trade.quantity.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-right">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-mono text-xs text-blue-400">${trade.dollarValue?.toFixed(2) ?? '0.00'}</span>
+                      <span className="font-mono text-xs text-muted-foreground">{trade.quantity?.toFixed(4) ?? '0'} units</span>
+                    </div>
+                  </td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex flex-col gap-0.5">
                       <span className="font-mono text-xs">${trade.entryPrice.toFixed(4)}</span>

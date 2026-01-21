@@ -1,0 +1,119 @@
+⚙️ Directive 11.6 H — Correct Quantity & Dollar Value Calculation in VTS
+
+Phase: 11.6 H
+Author: Kyle Jordan
+Date: 2026-01-21
+Status: Approved for Implementation
+Scope: VTS → Machine Learning Dashboard → Simulated Trades Tables
+
+🎯 Objective
+
+Ensure all Virtual Trading Simulator (VTS) simulated trades reflect realistic capital allocation by separating:
+
+Dollar Value — fixed per-trade USD exposure (capped at 25 % of paper portfolio balance)
+
+Quantity — the variable number of asset units based on entry price
+
+This change removes the misleading “250 units” artifact and brings the passive-learning simulation into alignment with the real-world trade sizing logic used by TEC.
+
+🧱 I. Implementation Tasks
+🧩 1 — Backend: VTS Trade Record Computation
+
+File: /server/services/vts-runner.ts
+Approx. Location: Lines 395 – 415
+
+Replace the current assignment logic with:
+
+// === Compute capital allocation ===
+const tradeAllocation = Math.min(positionSize, maxPositionSize);   // USD exposure cap
+
+// === Convert to variable quantity ===
+const quantity = tradeAllocation / entryPrice;
+
+// === Record both ===
+tradeRecord.dollarValue = tradeAllocation;   // total USD exposure
+tradeRecord.quantity    = quantity;          // number of coin units
+
+
+Add verification log:
+
+console.log(`[VTS][Sizing] ${symbol}: $${tradeAllocation.toFixed(2)} exposure → ${quantity.toFixed(6)} units`);
+
+🧩 2 — API and Persistence Schema Updates
+
+Files:
+
+/server/routes/vts.ts
+
+/server/utils/export-csv.ts
+
+Ensure both open and closed trade JSON responses include:
+
+"dollarValue": 250,
+"quantity": 2.583
+
+
+Update CSV headers accordingly (DollarValue, Quantity).
+
+🧩 3 — Frontend Tables (ML Dashboard)
+
+File: /client/src/pages/machine-learning/index.tsx
+
+Add two new stacked columns to both tabs:
+
+Tab 1 — Open Simulated Trades
+New Column	Stack	Description
+Dollar Value / Quantity	✅ Dollar Value (top) / Quantity (bottom)	Displays total USD exposure and units held
+Tab 2 — Closed Simulated Trades
+New Column	Stack	Description
+Dollar Value / Quantity	✅ Dollar Value (top) / Quantity (bottom)	Displays trade size and units for closed positions
+
+Ensure:
+
+Both tables display rounded values (two decimals for dollarValue, four for quantity).
+
+CSV export includes these fields.
+
+Column order ≈ after “Pool” and before “Entry / Exit / Current Price”.
+
+🧩 4 — Verification Plan
+
+Unit Tests:
+Simulate trades across multiple entry prices (0.1 → 25 000).
+Verify:
+
+dollarValue ≈ 250
+
+quantity ≈ dollarValue / entryPrice
+
+UI Check:
+In Machine Learning → Open/Closed tabs, confirm:
+
+Dollar Value constant across trades
+
+Quantity inversely proportional to price
+
+Benchmark filter still active (no benchmark trades opened)
+
+CSV Export Check:
+Export both tabs; confirm DollarValue and Quantity columns present and accurate.
+
+✅ II. Success Criteria
+Metric	Target
+Exposure Consistency	All trades capped ≤ $250 (default)
+Quantity Accuracy	quantity = dollarValue / entryPrice
+UI Integration	Dollar Value / Quantity visible in both tables
+ML Data Integrity	Normalized exposures across assets
+Benchmark Filtering	Continues to exclude benchmark pairs
+🧠 III. Architectural Notes
+
+Keeps passive VTS independent of TEC risk engine.
+
+Maintains current 25 % cap logic for portfolio risk isolation.
+
+Future Phases (≥ 12) can swap tradeAllocation with riskEngine.getAllocation() for live mode consistency.
+
+Enhances ML feature quality by introducing cross-pair quantity variance while holding exposure constant.
+
+Directive 11.6 H Approved for Replit Implementation
+— All changes must be logged and verified against VTS simulation output and Machine Learning dashboard render.

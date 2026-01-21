@@ -141,6 +141,9 @@ interface Phase10TradeRecord {
 /**
  * Directive 11.6: Open Virtual Trades Tracking
  * Tracks trades waiting for real Kraken price resolution instead of random simulation
+ * 
+ * Directive 11.6H: dollarValue = fixed USD exposure (capped at 25% of portfolio)
+ *                  quantity = variable coin units (dollarValue / entryPrice)
  */
 interface OpenVirtualTrade {
   id: string;
@@ -149,6 +152,8 @@ interface OpenVirtualTrade {
   stopLoss: number;
   takeProfit: number;
   positionSize: number;
+  dollarValue: number;      // Directive 11.6H: Fixed USD exposure
+  quantity: number;         // Directive 11.6H: Variable coin units
   frictionCost: number;
   regime: MarketRegimeType;
   regimeScore: number;
@@ -397,6 +402,15 @@ async function generatePhase10Signal(
   const riskPerTrade = await getRiskPerTrade();
   const positionSize = computePositionSize(portfolioValue, riskPerTrade, entryPrice, stopLoss, riskMultiplier);
   
+  // Directive 11.6H: Compute capital allocation - fixed USD exposure capped at 25% of portfolio
+  const maxPositionSize = portfolioValue * 0.25;
+  const dollarValue = Math.min(positionSize, maxPositionSize);
+  
+  // Directive 11.6H: Convert to variable quantity based on entry price
+  const quantity = dollarValue / entryPrice;
+  
+  console.log(`[VTS][11.6H][Sizing] ${symbol}: $${dollarValue.toFixed(2)} exposure → ${quantity.toFixed(6)} units @ $${entryPrice.toFixed(4)}`);
+  
   // Directive 11.6D: Create open virtual trade for real price resolution
   // Unified ID format: vts_{symbol}_{timestamp} - no more legacy vt_ prefix
   // Trade exit will be determined by real Kraken prices in resolveOpenVirtualTrades()
@@ -416,6 +430,8 @@ async function generatePhase10Signal(
     stopLoss,
     takeProfit,
     positionSize,
+    dollarValue,      // Directive 11.6H: Fixed USD exposure
+    quantity,         // Directive 11.6H: Variable coin units
     frictionCost,
     regime,
     regimeScore: regimeScoreRaw,
@@ -1240,6 +1256,7 @@ export async function saveM5CSessionTrades(sessionId?: string): Promise<string> 
 
 /**
  * Directive 11.6E: Get all open virtual trades with full data for ML dashboard
+ * Directive 11.6H: Added dollarValue and quantity fields
  */
 export function getOpenVirtualTradesForML(): Array<{
   symbol: string;
@@ -1248,7 +1265,8 @@ export function getOpenVirtualTradesForML(): Array<{
   signalType: string;
   patternType: string | null;
   pool: string;
-  quantity: number;
+  dollarValue: number;    // Directive 11.6H: Fixed USD exposure
+  quantity: number;       // Directive 11.6H: Variable coin units
   entryPrice: number;
   exitPrice: null;
   target: number;
@@ -1285,8 +1303,13 @@ export function getOpenVirtualTradesForML(): Array<{
       ? ((trade.stopLoss - priceForCalc) / priceForCalc * 100).toFixed(2) + '%'
       : 'N/A';
     
+    // Directive 11.6H: Use quantity for P/L calculations, with fallback for legacy trades
+    // For legacy trades without dollarValue/quantity: positionSize represents USD, so divide by entryPrice to get units
+    const tradeDollarValue = trade.dollarValue ?? trade.positionSize;
+    const tradeQuantity = trade.quantity ?? (tradeDollarValue / trade.entryPrice);
+    
     const grossProfitValue = currentPrice !== null 
-      ? (currentPrice - trade.entryPrice) * trade.positionSize 
+      ? (currentPrice - trade.entryPrice) * tradeQuantity 
       : 0;
     const grossProfitPercent = currentPrice !== null 
       ? ((currentPrice - trade.entryPrice) / trade.entryPrice * 100).toFixed(2) 
@@ -1295,7 +1318,7 @@ export function getOpenVirtualTradesForML(): Array<{
       ? grossProfitValue - trade.frictionCost 
       : 0;
     const netProfitPercent = currentPrice !== null 
-      ? (netProfitValue / (trade.entryPrice * trade.positionSize) * 100).toFixed(2) 
+      ? (tradeDollarValue > 0 ? (netProfitValue / tradeDollarValue * 100).toFixed(2) : '0.00')
       : '0.00';
     
     const durationMs = now - trade.openedAt;
@@ -1308,7 +1331,8 @@ export function getOpenVirtualTradesForML(): Array<{
       signalType: trade.signalType,
       patternType: trade.patternType || null,
       pool: trade.pool.toUpperCase(),
-      quantity: trade.positionSize,
+      dollarValue: parseFloat(tradeDollarValue.toFixed(2)),  // Directive 11.6H: Fixed USD exposure
+      quantity: parseFloat(tradeQuantity.toFixed(6)),        // Directive 11.6H: Variable coin units
       entryPrice: trade.entryPrice,
       exitPrice: null,
       target: trade.takeProfit,
