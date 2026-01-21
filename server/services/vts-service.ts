@@ -85,6 +85,7 @@ export interface VirtualTrade {
   grossProfit?: number;
   netProfit?: number;
   fees?: number;
+  positionSize?: number; // Added for proper P&L calculation and export
   calibrated: boolean;
   
   // Phase-10 Denormalized Fields (for efficient querying)
@@ -711,6 +712,7 @@ export class VTSService extends EventEmitter {
       grossProfit: tradeData.grossPnl,
       netProfit: tradeData.pnl,
       fees: fees,
+      positionSize: tradeData.positionSize, // Bug fix: Now persisting positionSize
       calibrated: true,
       finalScore: tradeData.finalScore,
       hybridScore: tradeData.hybridScore,
