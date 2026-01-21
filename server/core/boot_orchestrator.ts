@@ -118,9 +118,17 @@ class BootOrchestrator extends EventEmitter {
     console.log('[L6][BOOT_ORCHESTRATOR] VTS Runner initialized');
     
     try {
-      const config = await systemConfigService.getConfig();
+      const config = await systemConfigService.getConfig() as Record<string, unknown>;
       
-      if (config?.passiveLearning === true) {
+      // Derive passiveLearning: true when neither paper nor live trading is active
+      // This matches the runtime derivation logic in REB 2.8.6B
+      const paperActive = config?.tradingActive === true || config?.paperTradingActive === true;
+      const liveActive = config?.liveTradingActive === true;
+      const isPassiveLearning = !paperActive && !liveActive;
+      
+      console.log(`[BOOT][VTS] State check: paperActive=${paperActive}, liveActive=${liveActive}, passiveLearning=${isPassiveLearning}`);
+      
+      if (isPassiveLearning) {
         console.log('[BOOT][VTS] Passive learning mode detected, starting autonomous simulation...');
         const result = await startAutonomousSimulation();
         if (result.success) {
