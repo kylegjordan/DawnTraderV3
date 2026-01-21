@@ -405,7 +405,7 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
                   </td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex flex-col gap-0.5">
-                      <span className="font-mono text-xs">{trade.finalScore.toFixed(1)}</span>
+                      <span className="font-mono text-xs">{(trade.finalScore * 100).toFixed(0)}%</span>
                       <span className="font-mono text-xs text-muted-foreground">{trade.hybridScore.toFixed(2)}</span>
                     </div>
                   </td>
