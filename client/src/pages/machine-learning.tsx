@@ -206,8 +206,8 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
                   </td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-xs text-green-400">{trade.distanceToTarget}</span>
-                      <span className="text-xs text-red-400">{trade.distanceToStop}</span>
+                      <span className="font-mono text-xs text-green-400">${(trade.target - trade.entryPrice).toFixed(4)}</span>
+                      <span className="font-mono text-xs text-red-400">${(trade.entryPrice - trade.stopLoss).toFixed(4)}</span>
                     </div>
                   </td>
                   <td className="px-3 py-2 text-right">
@@ -243,7 +243,7 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
                   </td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex flex-col gap-0.5">
-                      <span className="font-mono text-xs">{trade.finalScore.toFixed(1)}</span>
+                      <span className="font-mono text-xs">{(trade.finalScore * 100).toFixed(0)}%</span>
                       <span className="font-mono text-xs text-muted-foreground">{trade.hybridScore.toFixed(2)}</span>
                     </div>
                   </td>
