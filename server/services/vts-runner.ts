@@ -165,7 +165,8 @@ interface OpenVirtualTrade {
 }
 
 const openVirtualTrades: Map<string, OpenVirtualTrade> = new Map();
-const MAX_OPEN_TRADES = 50; // Limit concurrent open trades for memory management
+const MAX_OPEN_TRADES = 300; // Directive 11.6E: Increased from 50 for broader regime exposure
+console.log(`[11.6E][Registry] Max open trades set to ${MAX_OPEN_TRADES}`);
 const MAX_HOLD_MS = 24 * 60 * 60 * 1000; // Directive 11.6: 24 hours max hold time (configurable)
 
 let phase10SessionTrades: Phase10TradeRecord[] = [];

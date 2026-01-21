@@ -1,0 +1,273 @@
+⚙️ Directive 11.6E — Machine Learning Dashboard Visibility & VTS Data Expansion
+Phase: 11.6E
+Objective:
+
+Provide full UI visibility into the Machine Learning system’s inputs by creating a new “Machine Learning” sidebar page with two live dashboard tabs:
+
+Open Simulated Trades (Active VTS Registry)
+
+Closed Simulated Trades (Last 7 Days)
+
+In addition, increase the maximum concurrent open simulated trades from 50 → 300, ensuring more robust passive learning and broader regime exposure.
+
+🧱 I. Implementation Tasks
+Task 1 — Sidebar Integration
+
+File: /client/src/layout/sidebar.tsx
+
+Add new page entry:
+
+{
+  label: "Machine Learning",
+  icon: "Brain",
+  route: "/machine-learning",
+  subroutes: [
+    { label: "Open Simulated Trades", route: "/machine-learning/open" },
+    { label: "Closed Simulated Trades", route: "/machine-learning/closed" }
+  ]
+}
+
+
+Icon should use lucide-react’s <Brain />.
+
+Task 2 — Backend API Endpoints
+
+File: /server/routes/vts.ts
+
+Add two new endpoints:
+
+a. Open Trades Endpoint
+GET /api/ml/vts/open
+
+
+Returns all currently open simulated trades from the in-memory registry (openVirtualTrades Map).
+
+Schema:
+
+{
+  "symbol": "SOL/USDT",
+  "regime": "BULL_STABLE",
+  "strategy": "SMA_TREND_RIDE",
+  "signalType": "HYBRID",
+  "patternType": "CONTINUATION",
+  "pool": "ROTATIONAL",
+  "quantity": 250,
+  "entryPrice": 112.54,
+  "exitPrice": null,
+  "target": 118.00,
+  "stopLoss": 108.00,
+  "currentPrice": 113.24,
+  "distanceToTarget": "+5.46%",
+  "distanceToStop": "-4.65%",
+  "grossProfitValue": 175.50,
+  "grossProfitPercent": "+1.4%",
+  "costs": 0.0077,
+  "netProfitValue": 125.20,
+  "netProfitPercent": "+1.0%",
+  "finalScore": 78.4,
+  "hybridScore": 0.61,
+  "expectedEdge": 0.42,
+  "regimeWeight": 0.56,
+  "entryTime": "2026-01-21T18:23:42Z",
+  "durationOpenMinutes": 148
+}
+
+b. Closed Trades Endpoint
+GET /api/ml/vts/closed?days=7
+
+
+Returns all trades closed within the last N days (default 7).
+
+Fetched from /logs/virtual_trades/ JSON persistence layer.
+
+Schema (stacked fields supported by frontend renderers):
+
+{
+  "symbol": "ATOM/USDT",
+  "regime": "BEAR_VOLATILE",
+  "strategy": "QUANT_PIVOT",
+  "signalType": "PATTERN",
+  "patternType": "REVERSAL",
+  "pool": "IDEAL",
+  "quantity": 180,
+  "entryPrice": 9.83,
+  "exitPrice": 9.45,
+  "target": 10.35,
+  "stopLoss": 9.20,
+  "resultType": "STOP_HIT",
+  "grossProfitValue": -68.40,
+  "grossProfitPercent": "-3.9%",
+  "costs": 0.0071,
+  "netProfitValue": -82.10,
+  "netProfitPercent": "-4.8%",
+  "finalScore": 65.3,
+  "hybridScore": 0.52,
+  "expectedEdge": -0.11,
+  "regimeWeight": 0.48,
+  "entryTime": "2026-01-19T15:02:44Z",
+  "exitTime": "2026-01-20T07:17:28Z",
+  "durationMinutes": 992
+}
+
+Task 3 — Frontend Tabs
+
+File: /client/src/pages/machine-learning/index.tsx
+
+✅ Tab 1 — “Open Simulated Trades”
+
+Table Name: OpenSimulatedTradesTable
+
+Columns (stacked & optimized for width):
+
+Column	Stacked	Description
+Symbol	—	Pair symbol
+Regime	—	Active regime classification
+Strategy	—	Strategy name
+Signal Type / Pattern Type	✅	Upper: SignalType, Lower: PatternType
+Pool	—	Source pool (Ideal, Rotational, etc.)
+Quantity	—	Current quantity
+Entry / Exit / Current Price	✅	Entry (top), Exit (middle), Current (bottom)
+Target / StopLoss	✅	Target (top), StopLoss (bottom)
+Dist. Target / StopLoss	✅	Distance % to both
+GrossProfit / %	✅	Value and percent stacked
+Costs	—	Fees + slippage + spread
+NetProfit / %	✅	Value and percent stacked
+FinalScore / HybridScore	✅	Both scores stacked
+ExpectedEdge	—	Calculated at entry
+RegimeWeight	—	Regime factor weight
+Entry Time	—	UTC ISO timestamp
+Duration Open	—	Minutes since entry
+
+Features:
+
+✅ Horizontal scroll with top and bottom scrollbars
+
+✅ Real-time refresh every 60s
+
+✅ CSV export button at top-right corner (Export CSV → calls /api/ml/vts/open)
+
+✅ Tab 2 — “Closed Simulated Trades (Last 7 Days)”
+
+Table Name: ClosedSimulatedTradesTable
+
+Columns (stacked & optimized):
+
+Column	Stacked	Description
+Symbol	—	Pair symbol
+Regime	—	Regime classification
+Strategy	—	Strategy name
+Signal Type / Pattern Type	✅	As above
+Pool	—	Pool source
+Quantity	—	Trade size
+Entry / Exit	✅	Entry and exit stacked
+Target / StopLoss	✅	Both stacked
+ResultType	—	Target Hit / Stop Hit / Timeout
+GrossProfit / %	✅	Value + percent
+Costs	—	Total friction (fees + slippage + spread)
+NetProfit / %	✅	Value + percent
+FinalScore / HybridScore	✅	Both stacked
+ExpectedEdge	—	Entry-time expectation
+RegimeWeight	—	Weight factor
+Entry / Exit Time	✅	Entry (top), Exit (bottom)
+Duration	—	Minutes duration of trade
+
+Features:
+
+✅ Pulls data via /api/ml/vts/closed?days=7
+
+✅ CSV export button (exports current view)
+
+✅ Horizontal scroll top and bottom
+
+✅ Refresh every 5 minutes
+
+✅ Color-coded ResultType:
+
+🟢 Take Profit
+
+🔴 Stop Hit
+
+🟡 Timeout
+
+Task 4 — Backend Limit Increase
+
+File: /server/services/vts-runner.ts
+
+Increase open-trade cap:
+
+// OLD
+const MAX_OPEN_TRADES = 50;
+// NEW
+const MAX_OPEN_TRADES = 300;
+
+
+Add log verification:
+
+console.log(`[11.6E][Registry] Max open trades set to ${MAX_OPEN_TRADES}`);
+
+
+This ensures the new limit takes effect immediately on the next cycle.
+
+Task 5 — CSV Export Endpoint
+
+Add helper function:
+File: /server/utils/export-csv.ts
+
+export function exportVtsDataToCsv(trades, filenamePrefix) {
+  const csv = parse(trades, { header: true });
+  const filename = `${filenamePrefix}_${Date.now()}.csv`;
+  fs.writeFileSync(`logs/exports/${filename}`, csv);
+  return `/logs/exports/${filename}`;
+}
+
+
+Both /api/ml/vts/open/export and /api/ml/vts/closed/export should call this helper.
+
+🧾 II. Verification Plan
+Step 1: Boot Verification
+
+Restart DawnTrader → Confirm [VTS][Registry] Max open trades set to 300 appears.
+
+Step 2: UI Check
+
+Sidebar shows “Machine Learning” with two sub-tabs.
+
+Tabs load tables successfully with scrollbars at top/bottom.
+
+Step 3: API Check
+
+/api/ml/vts/open returns active registry trades.
+
+/api/ml/vts/closed?days=7 returns JSON with exitTime values within last 7 days.
+
+Step 4: CSV Export
+
+Click “Export CSV” → File appears in logs/exports/.
+
+Step 5: Performance
+
+Confirm CPU < 60% while maintaining 300 open trades.
+
+Cache updates continue within the 60s refresh loop.
+
+✅ III. Deliverables
+
+/client/src/pages/machine-learning/index.tsx (new dashboard page)
+
+/server/routes/vts.ts (new API routes)
+
+/server/services/vts-runner.ts (limit increased to 300)
+
+/server/utils/export-csv.ts (CSV helper)
+
+/client/src/layout/sidebar.tsx (sidebar entry)
+
+logs/exports/ folder auto-created for exports
+
+🔒 IV. Success Criteria
+
+✅ Both tabs load data within 1 second
+✅ Tables auto-refresh without manual reload
+✅ 300 trades actively tracked with no rate-limit or cache delay
+✅ CSV exports produce correctly formatted output
+✅ No residual references to legacy vt_ simulation schema

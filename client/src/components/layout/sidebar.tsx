@@ -13,7 +13,8 @@ import {
   Activity,
   Newspaper,
   Sparkles,
-  Bot
+  Bot,
+  Brain
 } from "lucide-react";
 import { useTrading } from "@/hooks/use-trading";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,7 @@ const navigation = [
   { name: "Trading", href: "/active-trades", icon: BarChart3 },
   { name: "Goals Engine", href: "/goals-engine", icon: Target },
   { name: "Analytics & Diagnostics", href: "/analytics", icon: Activity },
+  { name: "Machine Learning", href: "/machine-learning", icon: Brain },
   { name: "Walter", href: "/walter", icon: Bot },
   { name: "Briefings", href: "/briefings", icon: Newspaper },
   { name: "Reports", href: "/reports", icon: FileText },
