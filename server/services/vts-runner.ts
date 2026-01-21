@@ -1233,3 +1233,87 @@ export function resetM5CSession(): void {
 export async function saveM5CSessionTrades(sessionId?: string): Promise<string> {
   return savePhase10SessionTrades(sessionId);
 }
+
+/**
+ * Directive 11.6E: Get all open virtual trades with full data for ML dashboard
+ */
+export function getOpenVirtualTradesForML(): Array<{
+  symbol: string;
+  regime: string;
+  strategy: string;
+  signalType: string;
+  patternType: string | null;
+  pool: string;
+  quantity: number;
+  entryPrice: number;
+  exitPrice: null;
+  target: number;
+  stopLoss: number;
+  currentPrice: number | null;
+  distanceToTarget: string;
+  distanceToStop: string;
+  grossProfitValue: number;
+  grossProfitPercent: string;
+  costs: number;
+  netProfitValue: number;
+  netProfitPercent: string;
+  finalScore: number;
+  hybridScore: number;
+  expectedEdge: number;
+  regimeWeight: number;
+  entryTime: string;
+  durationOpenMinutes: number;
+}> {
+  const now = Date.now();
+  const trades: Array<any> = [];
+  
+  for (const [_, trade] of openVirtualTrades) {
+    const cachedPrice = priceCache.get(trade.symbol);
+    const currentPrice = cachedPrice?.price ?? trade.entryPrice;
+    
+    const distanceToTarget = trade.takeProfit > 0 
+      ? ((trade.takeProfit - currentPrice) / currentPrice * 100).toFixed(2) + '%'
+      : 'N/A';
+    const distanceToStop = trade.stopLoss > 0 
+      ? ((trade.stopLoss - currentPrice) / currentPrice * 100).toFixed(2) + '%'
+      : 'N/A';
+    
+    const grossProfitValue = (currentPrice - trade.entryPrice) * trade.positionSize;
+    const grossProfitPercent = ((currentPrice - trade.entryPrice) / trade.entryPrice * 100).toFixed(2);
+    const netProfitValue = grossProfitValue - trade.frictionCost;
+    const netProfitPercent = (netProfitValue / (trade.entryPrice * trade.positionSize) * 100).toFixed(2);
+    
+    const durationMs = now - trade.openedAt;
+    const durationMinutes = Math.floor(durationMs / 60000);
+    
+    trades.push({
+      symbol: trade.symbol,
+      regime: trade.regime,
+      strategy: trade.strategy,
+      signalType: trade.signalType,
+      patternType: trade.patternType || null,
+      pool: trade.pool.toUpperCase(),
+      quantity: trade.positionSize,
+      entryPrice: trade.entryPrice,
+      exitPrice: null,
+      target: trade.takeProfit,
+      stopLoss: trade.stopLoss,
+      currentPrice,
+      distanceToTarget: (parseFloat(distanceToTarget) >= 0 ? '+' : '') + distanceToTarget,
+      distanceToStop,
+      grossProfitValue: parseFloat(grossProfitValue.toFixed(2)),
+      grossProfitPercent: (parseFloat(grossProfitPercent) >= 0 ? '+' : '') + grossProfitPercent + '%',
+      costs: trade.frictionCost,
+      netProfitValue: parseFloat(netProfitValue.toFixed(2)),
+      netProfitPercent: (parseFloat(netProfitPercent) >= 0 ? '+' : '') + netProfitPercent + '%',
+      finalScore: trade.finalScore,
+      hybridScore: trade.hybridScore,
+      expectedEdge: trade.predictiveConfidence,
+      regimeWeight: trade.regimeWeight,
+      entryTime: new Date(trade.openedAt).toISOString(),
+      durationOpenMinutes: durationMinutes
+    });
+  }
+  
+  return trades.sort((a, b) => new Date(b.entryTime).getTime() - new Date(a.entryTime).getTime());
+}

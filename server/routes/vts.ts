@@ -58,6 +58,8 @@ import {
 import { resetRegimeRollingStats, logRegimeZScoreVerification, verifyRegimeInputIntegrity } from '../core/metrics/market-regime';
 import { resetMacroState, logMacroStateVerification } from '../core/metrics/macro-state';
 import { resetRollingStatsWithLogging } from '../utils/rolling-stats';
+import { getOpenVirtualTradesForML } from '../services/vts-runner';
+import { exportVtsDataToCsv, getClosedVTSTradesFromLogs } from '../utils/export-csv';
 
 const router = Router();
 
@@ -1061,6 +1063,98 @@ router.post('/enable-learning', requireAuth, async (req: AuthenticatedRequest, r
   } catch (error) {
     console.error('[11.6A][API][ERROR] enable-learning failed:', error);
     res.status(500).json({ error: 'Failed to enable learning' });
+  }
+});
+
+/**
+ * ══════════════════════════════════════════════════════════════════════════════
+ * Directive 11.6E: Machine Learning Dashboard API Endpoints
+ * ══════════════════════════════════════════════════════════════════════════════
+ */
+
+/**
+ * GET /api/ml/vts/open
+ * Returns all currently open simulated trades from the in-memory registry
+ */
+router.get('/ml/open', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const trades = getOpenVirtualTradesForML();
+    console.log(`[11.6E][API] GET /ml/open - ${trades.length} open trades`);
+    
+    res.json({
+      success: true,
+      count: trades.length,
+      trades
+    });
+  } catch (error) {
+    console.error('[11.6E][API][ERROR] GET /ml/open failed:', error);
+    res.status(500).json({ error: 'Failed to fetch open trades' });
+  }
+});
+
+/**
+ * GET /api/ml/vts/closed
+ * Returns all trades closed within the last N days (default 7)
+ */
+router.get('/ml/closed', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const days = parseInt(req.query.days as string) || 7;
+    const trades = await getClosedVTSTradesFromLogs(days);
+    console.log(`[11.6E][API] GET /ml/closed?days=${days} - ${trades.length} closed trades`);
+    
+    res.json({
+      success: true,
+      count: trades.length,
+      days,
+      trades
+    });
+  } catch (error) {
+    console.error('[11.6E][API][ERROR] GET /ml/closed failed:', error);
+    res.status(500).json({ error: 'Failed to fetch closed trades' });
+  }
+});
+
+/**
+ * GET /api/ml/vts/open/export
+ * Export open trades to CSV
+ */
+router.get('/ml/open/export', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const trades = getOpenVirtualTradesForML();
+    const filepath = await exportVtsDataToCsv(trades, 'vts_open_trades');
+    console.log(`[11.6E][API] Exported open trades to ${filepath}`);
+    
+    res.json({
+      success: true,
+      count: trades.length,
+      filepath
+    });
+  } catch (error) {
+    console.error('[11.6E][API][ERROR] Export open trades failed:', error);
+    res.status(500).json({ error: 'Failed to export open trades' });
+  }
+});
+
+/**
+ * GET /api/ml/vts/closed/export
+ * Export closed trades to CSV
+ */
+router.get('/ml/closed/export', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const days = parseInt(req.query.days as string) || 7;
+    const trades = await getClosedVTSTradesFromLogs(days);
+    const filepath = await exportVtsDataToCsv(trades, `vts_closed_trades_${days}d`);
+    console.log(`[11.6E][API] Exported closed trades (${days} days) to ${filepath}`);
+    
+    res.json({
+      success: true,
+      count: trades.length,
+      days,
+      filepath
+    });
+  } catch (error) {
+    console.error('[11.6E][API][ERROR] Export closed trades failed:', error);
+    res.status(500).json({ error: 'Failed to export closed trades' });
   }
 });
 
