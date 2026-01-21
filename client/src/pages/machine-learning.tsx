@@ -102,18 +102,34 @@ function formatDuration(minutes: number): string {
 
 function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [scrollLeft, setScrollLeft] = useState(0);
+  const topScrollRef = useRef<HTMLDivElement>(null);
 
-  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    setScrollLeft(e.currentTarget.scrollLeft);
+  const handleMainScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    if (topScrollRef.current) {
+      topScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
+    }
+  }, []);
+
+  const handleTopScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
+    }
   }, []);
 
   return (
     <div className="relative">
       <div 
+        ref={topScrollRef}
+        className="overflow-x-auto scrollbar-thin mb-1"
+        onScroll={handleTopScroll}
+        style={{ scrollbarWidth: 'thin' }}
+      >
+        <div style={{ width: '1800px', height: '1px' }} />
+      </div>
+      <div 
         ref={scrollRef}
         className="overflow-x-auto scrollbar-thin"
-        onScroll={handleScroll}
+        onScroll={handleMainScroll}
         style={{ scrollbarWidth: 'thin' }}
       >
         <table className="w-full min-w-[1800px] text-sm">
@@ -246,10 +262,35 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
 }
 
 function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const topScrollRef = useRef<HTMLDivElement>(null);
+
+  const handleMainScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    if (topScrollRef.current) {
+      topScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
+    }
+  }, []);
+
+  const handleTopScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
+    }
+  }, []);
+
   return (
     <div className="relative">
       <div 
+        ref={topScrollRef}
+        className="overflow-x-auto scrollbar-thin mb-1"
+        onScroll={handleTopScroll}
+        style={{ scrollbarWidth: 'thin' }}
+      >
+        <div style={{ width: '1800px', height: '1px' }} />
+      </div>
+      <div 
+        ref={scrollRef}
         className="overflow-x-auto scrollbar-thin"
+        onScroll={handleMainScroll}
         style={{ scrollbarWidth: 'thin' }}
       >
         <table className="w-full min-w-[1800px] text-sm">
