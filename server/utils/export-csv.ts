@@ -153,8 +153,8 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
             quantity: parseFloat(tradeQuantity.toFixed(6)),        // Directive 11.6H: Variable coin units
             entryPrice,
             exitPrice,
-            target: trade.takeProfit || trade.target || 0,
-            stopLoss: trade.stopLoss || 0,
+            target: trade.takeProfit || trade.target || trade.signal?.takeProfit || 0,
+            stopLoss: trade.stopLoss || trade.signal?.stopLoss || 0,
             resultType,
             grossProfitValue: parseFloat(grossProfitValue.toFixed(2)),
             grossProfitPercent: (parseFloat(grossProfitPercent) >= 0 ? '+' : '') + grossProfitPercent + '%',
