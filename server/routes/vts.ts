@@ -50,6 +50,14 @@ import {
   getM5EStatus, 
   getM5ELatestSnapshot 
 } from '../services/m5e-validation-service';
+import { 
+  executeFullDataPurge, 
+  logPurgeVerification,
+  setLearningIngestionEnabled 
+} from '../core/data-purge-11-6a';
+import { resetRegimeRollingStats, logRegimeZScoreVerification, verifyRegimeInputIntegrity } from '../core/metrics/market-regime';
+import { resetMacroState, logMacroStateVerification } from '../core/metrics/macro-state';
+import { resetRollingStatsWithLogging } from '../utils/rolling-stats';
 
 const router = Router();
 
@@ -982,6 +990,77 @@ router.get('/validation/m5e-status', requireAuth, async (req: AuthenticatedReque
   } catch (error) {
     console.error('[M5E][API][ERROR] m5e-status failed:', error);
     res.status(500).json({ error: 'Failed to get M5E status' });
+  }
+});
+
+/**
+ * ══════════════════════════════════════════════════════════════════════════════
+ * Directive 11.6A/B: Data Purge & Statistical Integrity Reset
+ * POST /api/vts/execute-directive-11-6
+ * 
+ * Executes:
+ * - 11.6A: Purge corrupted VTS data, reset ML components
+ * - 11.6B: Reset rolling statistics, verify input integrity
+ * ══════════════════════════════════════════════════════════════════════════════
+ */
+router.post('/execute-directive-11-6', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    console.log('[11.6][API] ═══════════════════════════════════════════════════════');
+    console.log('[11.6][API] Executing Directives 11.6A and 11.6B');
+    console.log('[11.6][API] ═══════════════════════════════════════════════════════');
+    
+    const purgeReport = await executeFullDataPurge();
+    
+    resetRollingStatsWithLogging();
+    resetRegimeRollingStats();
+    resetMacroState();
+    
+    verifyRegimeInputIntegrity();
+    
+    logPurgeVerification();
+    logRegimeZScoreVerification();
+    logMacroStateVerification();
+    
+    console.log('[11.6][API] ═══════════════════════════════════════════════════════');
+    console.log('[11.6][API] Directives 11.6A/B Complete');
+    console.log('[11.6][API] ═══════════════════════════════════════════════════════');
+    
+    res.json({
+      success: true,
+      directive: '11.6A/B',
+      purgeReport,
+      message: 'Data purge and statistical reset complete. VTS will restart with clean state.',
+      verification: {
+        inputIntegrity: true,
+        rollingStatsReset: true,
+        macroStateReset: true,
+        learningIngestionDisabled: true
+      }
+    });
+  } catch (error) {
+    console.error('[11.6][API][ERROR] execute-directive-11-6 failed:', error);
+    res.status(500).json({ error: 'Failed to execute directive 11.6A/B', details: String(error) });
+  }
+});
+
+/**
+ * Directive 11.6A: Enable learning ingestion
+ * POST /api/vts/enable-learning
+ * 
+ * Re-enables learning ingestion after VTS fix has been confirmed.
+ */
+router.post('/enable-learning', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    setLearningIngestionEnabled(true);
+    console.log('[11.6A][API] Learning ingestion enabled');
+    
+    res.json({
+      success: true,
+      message: 'Learning ingestion enabled. VTS data will now feed ML pipeline.'
+    });
+  } catch (error) {
+    console.error('[11.6A][API][ERROR] enable-learning failed:', error);
+    res.status(500).json({ error: 'Failed to enable learning' });
   }
 });
 

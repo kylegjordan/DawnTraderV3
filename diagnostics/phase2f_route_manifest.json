@@ -6615,6 +6615,26 @@
     ]
   },
   {
+    "path": "/api/vts/execute-directive-11-6",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/vts/enable-learning",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/market/regime",
     "methods": [
       "GET"

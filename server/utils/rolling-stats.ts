@@ -97,3 +97,48 @@ export function getOrCreateRollingStats(key: string, windowSize: number = 300): 
 export function clearRollingStatsCache(): void {
   rollingStatsCache.clear();
 }
+
+/**
+ * Directive 11.6B Task 2: Reset Rolling Statistics with Warm-up Logging
+ * Clears all rolling buffers and forces warm-up with fresh samples.
+ */
+export function resetRollingStatsWithLogging(): void {
+  const keysCleared = Array.from(rollingStatsCache.keys());
+  rollingStatsCache.clear();
+  
+  console.log('[11.6B][Reset] Rolling stats reset after data purge');
+  console.log(`[11.6B][Reset] Cleared buffers: ${keysCleared.length > 0 ? keysCleared.join(', ') : 'none active'}`);
+  console.log('[11.6B][Reset] Warm-up required: 300 fresh samples');
+}
+
+/**
+ * Directive 11.6B Task 4: Log Z-Score Statistics
+ * Logs current rolling stats for verification
+ */
+export function logRollingStatsVerification(key: string): void {
+  const stats = rollingStatsCache.get(key);
+  if (stats) {
+    const mean = stats.mean();
+    const std = stats.std();
+    const size = stats.getSize();
+    console.log(`[11.6B][ZScore] ${key} mean=${mean.toFixed(3)} σ=${std.toFixed(3)} samples=${size}`);
+  }
+}
+
+/**
+ * Directive 11.6B: Get all active rolling stats summary
+ */
+export function getAllRollingStatsSummary(): Record<string, { mean: number; std: number; size: number; isWarmedUp: boolean }> {
+  const summary: Record<string, { mean: number; std: number; size: number; isWarmedUp: boolean }> = {};
+  
+  for (const [key, stats] of rollingStatsCache.entries()) {
+    summary[key] = {
+      mean: stats.mean(),
+      std: stats.std(),
+      size: stats.getSize(),
+      isWarmedUp: stats.isWarmedUp(30)
+    };
+  }
+  
+  return summary;
+}

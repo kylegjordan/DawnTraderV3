@@ -1,0 +1,105 @@
+🧹 Directive 11.6A — Data Purge & Machine Learning Reset
+Objective:
+Purge all trade and machine learning data contaminated by random exit outcomes, reset dependent components, and prepare the system for clean data ingestion from the fixed VTS simulation.
+________________________________________
+I. Implementation Tasks
+Task 1 — Isolate and Tag Corrupted Data
+File: /server/services/feature-store.ts or /database/feature_store
+•	Identify all records with:
+•	simulationMode: 'random_exit'
+•	OR
+•	createdAt < [Directive 11.6 deployment timestamp]
+•	Update them to:
+•	status: 'invalid', usable: false
+or mark for deletion.
+________________________________________
+Task 2 — Purge Corrupted Data
+•	Delete or archive all VTS trades with invalid flag.
+•	Clear derived ML tables:
+o	strategy_performance
+o	bias_monitor_stats
+o	regime_success_rate
+o	Any dataset under /ml/feature_store tied to VTS trades.
+________________________________________
+Task 3 — Reset Adaptive Components
+Files:
+•	/server/services/strategy-analyzer.ts
+•	/server/services/bias-monitor.ts
+Actions:
+•	Reset internal state: clear all cached averages, counts, and accuracy scores.
+•	Reinitialize default static parameters.
+________________________________________
+Task 4 — Disable Learning Temporarily
+•	Until real exit patch is confirmed working:
+•	if (mode === 'passive') return; // Skip learning ingestion
+________________________________________
+II. Verification & Validation
+✅ Data Verification
+1.	Query feature store — should return 0 rows for simulationMode=random_exit.
+2.	Confirm that new VTS data (after fix) begins to populate again after re-enabling learning.
+✅ Functional Verification
+1.	Bias Monitor should report “Insufficient Data for Analysis” in logs.
+2.	Strategy Analyzer should show reset baseline counts (0 wins / 0 losses).
+✅ Integrity Verification
+1.	No random-exit records appear in ML database.
+2.	Training metrics reset to default initialization values.
+________________________________________
+📈 Directive 11.6B — Statistical Integrity & Market Conditioning Preservation
+Objective:
+Preserve and validate Z-Score normalization and market conditioning systems after data purge, ensuring they operate solely from clean, price-based data and not contaminated telemetry.
+________________________________________
+I. Implementation Tasks
+Task 1 — Verify Input Integrity
+Files:
+•	/server/core/metrics/market-regime.ts
+•	/server/core/metrics/secondary-metrics.ts
+Actions:
+•	Confirm these modules use only:
+o	priceCache.getOHLC(symbol)
+o	FX5 scanner data
+•	Ensure no dependency on trade-result telemetry (PnL, winRate, etc.).
+________________________________________
+Task 2 — Reset Rolling Statistics
+File: /server/core/metrics/rolling-stats.ts
+•	Clear all rolling buffers (ADX, VolNoise, Momentum).
+•	Force warm-up with 300 fresh samples.
+•	Add log when buffers are reinitialized:
+•	[11.6B][Reset] Rolling stats reset after data purge
+________________________________________
+Task 3 — Validate Macro-State Conditioning
+File: /server/core/macro-state.ts
+•	Confirm conditions trigger based on:
+o	Global volatility (σ of VolNoise)
+o	Liquidity score (mean LQ)
+o	Market trend skew (momentum)
+•	No reference to trade outcomes.
+•	Reinitialize baseline thresholds:
+•	DEFAULT_MACRO_THRESHOLDS = {
+•	  VOLATILITY_EXPANSION: 1.0,
+•	  LIQUIDITY_CRUNCH: -0.8,
+•	  SPECULATIVE_SURGE: 1.2
+•	};
+________________________________________
+Task 4 — Add Verification Logs
+Log entries:
+[11.6B][ZScore] ADX mean=21.3 σ=4.8 | volNoise mean=0.42 σ=0.10
+[11.6B][MacroState] VOLATILITY_EXPANSION active
+________________________________________
+II. Verification & Validation
+✅ Functional Verification
+1.	Confirm logs show Z-score values updating every cycle.
+2.	Confirm macro-states change in line with market volatility (e.g., after large BTC moves).
+✅ Data Verification
+1.	Run diagnostics: all Z-score inputs must be from priceCache or scanner metrics.
+2.	Confirm rolling buffers refill and maintain stable σ values (not 0 or NaN).
+✅ Integration Verification
+1.	DSS and VTS both log:
+2.	[11.6B][ZScore] regime=...
+3.	[11.6B][MacroState] condition=...
+4.	No dependency errors after reset.
+________________________________________
+✅ Summary of Directives
+Directive	Focus	Goal	Verification Type
+11.6	Replace random exits with real-price simulation	Ensure trades resolve via Kraken data	Price cache & log validation
+11.6A	Purge corrupted VTS/ML data	Reset learning & analytics	Data integrity & functional resets
+11.6B	Preserve Z-scoring & macro conditioning	Maintain statistical normalization	Input integrity & stability verification
