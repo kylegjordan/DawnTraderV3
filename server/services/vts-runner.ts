@@ -1314,8 +1314,10 @@ export function getOpenVirtualTradesForML(): Array<{
     const grossProfitPercent = currentPrice !== null 
       ? ((currentPrice - trade.entryPrice) / trade.entryPrice * 100).toFixed(2) 
       : '0.00';
+    // Fix: Convert frictionCost (percentage) to dollar amount
+    const costsDollar = tradeDollarValue * trade.frictionCost;
     const netProfitValue = currentPrice !== null 
-      ? grossProfitValue - trade.frictionCost 
+      ? grossProfitValue - costsDollar 
       : 0;
     const netProfitPercent = currentPrice !== null 
       ? (tradeDollarValue > 0 ? (netProfitValue / tradeDollarValue * 100).toFixed(2) : '0.00')
@@ -1342,7 +1344,7 @@ export function getOpenVirtualTradesForML(): Array<{
       distanceToStop,
       grossProfitValue: parseFloat(grossProfitValue.toFixed(2)),
       grossProfitPercent: (parseFloat(grossProfitPercent) >= 0 ? '+' : '') + grossProfitPercent + '%',
-      costs: trade.frictionCost,
+      costs: parseFloat(costsDollar.toFixed(4)),
       netProfitValue: parseFloat(netProfitValue.toFixed(2)),
       netProfitPercent: (parseFloat(netProfitPercent) >= 0 ? '+' : '') + netProfitPercent + '%',
       finalScore: trade.finalScore,

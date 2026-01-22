@@ -462,10 +462,20 @@ export default function MachineLearningPage() {
 
   const handleExportOpen = async () => {
     try {
-      const response = await apiFetch('/api/vts/ml/open/export');
-      if (response.success) {
-        alert(`Exported ${response.count} open trades to ${response.filepath}`);
-      }
+      const response = await fetch('/api/vts/ml/open/export', {
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error('Export failed');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `vts_open_trades_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Export failed:', error);
     }
@@ -473,10 +483,20 @@ export default function MachineLearningPage() {
 
   const handleExportClosed = async () => {
     try {
-      const response = await apiFetch('/api/vts/ml/closed/export?days=7');
-      if (response.success) {
-        alert(`Exported ${response.count} closed trades to ${response.filepath}`);
-      }
+      const response = await fetch('/api/vts/ml/closed/export?days=7', {
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error('Export failed');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `vts_closed_trades_7d_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Export failed:', error);
     }

@@ -65,7 +65,7 @@ import { resetRegimeRollingStats, logRegimeZScoreVerification, verifyRegimeInput
 import { resetMacroState, logMacroStateVerification } from '../core/metrics/macro-state';
 import { resetRollingStatsWithLogging } from '../utils/rolling-stats';
 import { getOpenVirtualTradesForML } from '../services/vts-runner';
-import { exportVtsDataToCsv, getClosedVTSTradesFromLogs } from '../utils/export-csv';
+import { exportVtsDataToCsv, getClosedVTSTradesFromLogs, generateCsvContent } from '../utils/export-csv';
 
 const router = Router();
 
@@ -1122,19 +1122,19 @@ router.get('/ml/closed', requireAuth, async (req: AuthenticatedRequest, res: Res
 
 /**
  * GET /api/ml/vts/open/export
- * Export open trades to CSV
+ * Export open trades to CSV - streams directly to browser for download
  */
 router.get('/ml/open/export', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const trades = getOpenVirtualTradesForML();
-    const filepath = await exportVtsDataToCsv(trades, 'vts_open_trades');
-    console.log(`[11.6E][API] Exported open trades to ${filepath}`);
+    const csv = generateCsvContent(trades);
+    const filename = `vts_open_trades_${new Date().toISOString().slice(0, 10)}.csv`;
     
-    res.json({
-      success: true,
-      count: trades.length,
-      filepath
-    });
+    console.log(`[11.6E][API] Streaming open trades CSV download (${trades.length} records)`);
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csv);
   } catch (error) {
     console.error('[11.6E][API][ERROR] Export open trades failed:', error);
     res.status(500).json({ error: 'Failed to export open trades' });
@@ -1143,21 +1143,20 @@ router.get('/ml/open/export', requireAuth, async (req: AuthenticatedRequest, res
 
 /**
  * GET /api/ml/vts/closed/export
- * Export closed trades to CSV
+ * Export closed trades to CSV - streams directly to browser for download
  */
 router.get('/ml/closed/export', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const days = parseInt(req.query.days as string) || 7;
     const trades = await getClosedVTSTradesFromLogs(days);
-    const filepath = await exportVtsDataToCsv(trades, `vts_closed_trades_${days}d`);
-    console.log(`[11.6E][API] Exported closed trades (${days} days) to ${filepath}`);
+    const csv = generateCsvContent(trades);
+    const filename = `vts_closed_trades_${days}d_${new Date().toISOString().slice(0, 10)}.csv`;
     
-    res.json({
-      success: true,
-      count: trades.length,
-      days,
-      filepath
-    });
+    console.log(`[11.6E][API] Streaming closed trades CSV download (${trades.length} records, ${days} days)`);
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csv);
   } catch (error) {
     console.error('[11.6E][API][ERROR] Export closed trades failed:', error);
     res.status(500).json({ error: 'Failed to export closed trades' });

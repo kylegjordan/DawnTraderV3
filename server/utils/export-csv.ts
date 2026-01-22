@@ -12,19 +12,12 @@ interface TradeRecord {
   [key: string]: string | number | null | undefined;
 }
 
-export async function exportVtsDataToCsv(
-  trades: TradeRecord[], 
-  filenamePrefix: string
-): Promise<string> {
-  const exportsDir = path.join(process.cwd(), 'logs', 'exports');
-  
-  await fs.mkdir(exportsDir, { recursive: true });
-  
+/**
+ * Generate CSV content string from trade records (for browser download)
+ */
+export function generateCsvContent(trades: TradeRecord[]): string {
   if (trades.length === 0) {
-    const filename = `${filenamePrefix}_${Date.now()}.csv`;
-    const filepath = path.join(exportsDir, filename);
-    await fs.writeFile(filepath, 'No data available');
-    return `/logs/exports/${filename}`;
+    return 'No data available';
   }
   
   const headers = Object.keys(trades[0]);
@@ -39,7 +32,21 @@ export async function exportVtsDataToCsv(
     }).join(',')
   );
   
-  const csv = [headers.join(','), ...rows].join('\n');
+  return [headers.join(','), ...rows].join('\n');
+}
+
+/**
+ * Legacy: Export to file (kept for backwards compatibility)
+ */
+export async function exportVtsDataToCsv(
+  trades: TradeRecord[], 
+  filenamePrefix: string
+): Promise<string> {
+  const exportsDir = path.join(process.cwd(), 'logs', 'exports');
+  
+  await fs.mkdir(exportsDir, { recursive: true });
+  
+  const csv = generateCsvContent(trades);
   
   const filename = `${filenamePrefix}_${Date.now()}.csv`;
   const filepath = path.join(exportsDir, filename);
@@ -121,8 +128,10 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
           const grossProfitValue = (exitPrice - entryPrice) * tradeQuantity;
           const grossProfitPercent = ((exitPrice - entryPrice) / entryPrice * 100).toFixed(2);
           
-          const costs = trade.frictionCost || trade.costs || 0;
-          const netProfitValue = grossProfitValue - costs;
+          // Fix: Convert frictionCost (percentage) to dollar amount
+          const frictionCostPercent = trade.frictionCost || trade.costs || 0;
+          const costsDollar = tradeDollarValue * frictionCostPercent;
+          const netProfitValue = grossProfitValue - costsDollar;
           // Directive 11.6H: Use dollarValue for netProfitPercent denominator
           const netProfitPercent = tradeDollarValue > 0 
             ? (netProfitValue / tradeDollarValue * 100).toFixed(2) 
@@ -158,7 +167,7 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
             resultType,
             grossProfitValue: parseFloat(grossProfitValue.toFixed(2)),
             grossProfitPercent: (parseFloat(grossProfitPercent) >= 0 ? '+' : '') + grossProfitPercent + '%',
-            costs,
+            costs: parseFloat(costsDollar.toFixed(4)),
             netProfitValue: parseFloat(netProfitValue.toFixed(2)),
             netProfitPercent: (parseFloat(netProfitPercent) >= 0 ? '+' : '') + netProfitPercent + '%',
             finalScore: trade.finalScore || trade.signal?.finalScore || 0,
