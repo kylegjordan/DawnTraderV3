@@ -24,6 +24,11 @@ import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { vtsService } from '../services/vts-service';
 import { loadCalibration, loadFullCalibration, applyCalibration } from '../utils/calibration';
+import { 
+  updateRegimePerformanceFromVTS, 
+  getVTSTelemetryStatus, 
+  getVTSTelemetry 
+} from '../core/logging/vts-telemetry';
 import { getDriftDetector } from '../services/drift-detector';
 import { trainingAuditService } from '../services/training-audit-service';
 import { vtsModeAuditService } from '../services/vts-mode-audit';
@@ -1243,6 +1248,68 @@ router.get('/skipped-signals/export', requireAuth, async (req: AuthenticatedRequ
   } catch (error) {
     console.error('[11.7A][API][ERROR] Export skipped signals failed:', error);
     res.status(500).json({ error: 'Failed to export skipped signals' });
+  }
+});
+
+/**
+ * ══════════════════════════════════════════════════════════════════════════════
+ * Directive 11.7B — VTS Telemetry Aggregation Endpoints
+ * ══════════════════════════════════════════════════════════════════════════════
+ */
+
+router.get('/telemetry/status', requireAuth, async (_req: Request, res: Response) => {
+  try {
+    const status = getVTSTelemetryStatus();
+    const telemetry = getVTSTelemetry();
+    
+    res.json({
+      ok: true,
+      status,
+      regimes: Object.keys(telemetry.regimePerformance),
+      source: telemetry.source
+    });
+  } catch (error) {
+    console.error('[11.7B][API][ERROR] Get telemetry status failed:', error);
+    res.status(500).json({ error: 'Failed to get telemetry status' });
+  }
+});
+
+router.get('/telemetry/data', requireAuth, async (_req: Request, res: Response) => {
+  try {
+    const telemetry = getVTSTelemetry();
+    
+    res.json({
+      ok: true,
+      telemetry
+    });
+  } catch (error) {
+    console.error('[11.7B][API][ERROR] Get telemetry data failed:', error);
+    res.status(500).json({ error: 'Failed to get telemetry data' });
+  }
+});
+
+router.post('/telemetry/aggregate', requireAuth, async (_req: Request, res: Response) => {
+  try {
+    console.log('[11.7B][API] Manual telemetry aggregation triggered');
+    
+    const result = await updateRegimePerformanceFromVTS();
+    
+    if (result.success) {
+      const status = getVTSTelemetryStatus();
+      res.json({
+        ok: true,
+        result,
+        status
+      });
+    } else {
+      res.json({
+        ok: false,
+        result
+      });
+    }
+  } catch (error) {
+    console.error('[11.7B][API][ERROR] Manual telemetry aggregation failed:', error);
+    res.status(500).json({ error: 'Failed to run telemetry aggregation' });
   }
 });
 

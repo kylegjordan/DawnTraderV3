@@ -30,6 +30,7 @@ import { aggregatePerformance, getRecentWindow, computeWindowStats } from '../ut
 import { getGASPCoordinator, initializeGASP } from './gasp-coordinator'; // L20
 import { getEquilibriumRestorer, initializeEquilibriumRestorer } from './equilibrium-restorer'; // L20
 import { applyStabilizationScaling } from '../utils/stabilization-controller'; // L20
+import { updateRegimePerformanceFromVTS, getVTSTelemetryStatus } from '../core/logging/vts-telemetry'; // 11.7B
 import { db } from '../db';
 import { users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
@@ -817,6 +818,39 @@ schedulerRegistry.registerTask({
       }
     } catch (error) {
       console.error('[AutonomyScheduler] ❌ Strategic calibration failed:', error);
+      throw error;
+    }
+  },
+});
+
+// Every 6 hours - VTS Telemetry Aggregation (Directive 11.7B)
+schedulerRegistry.registerTask({
+  name: 'vts_telemetry_aggregation',
+  description: '11.7B: VTS telemetry aggregation for predictive learning',
+  frequency: 'custom',
+  intervalMs: 6 * 60 * 60 * 1000, // 6 hours
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[11.7B][SCHEDULER] 📊 Running VTS telemetry aggregation...');
+    
+    try {
+      const result = await updateRegimePerformanceFromVTS();
+      
+      if (result.success) {
+        console.log(`[11.7B][SCHEDULER] ✅ VTS telemetry aggregation complete`);
+        console.log(`[11.7B][SCHEDULER] - Entries processed: ${result.totalProcessed}`);
+        console.log(`[11.7B][SCHEDULER] - Regimes updated: ${result.regimesUpdated}`);
+        
+        const status = getVTSTelemetryStatus();
+        console.log(`[11.7B][SCHEDULER] - Telemetry version: ${status.version}`);
+        console.log(`[11.7B][SCHEDULER] - Total strategies tracked: ${status.totalStrategies}`);
+      } else {
+        console.log(`[11.7B][SCHEDULER] ⚠️ VTS aggregation skipped: ${result.message}`);
+      }
+    } catch (error) {
+      console.error('[11.7B][SCHEDULER] ❌ VTS telemetry aggregation failed:', error);
       throw error;
     }
   },

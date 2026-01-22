@@ -2,6 +2,7 @@
  * ══════════════════════════════════════════════════════════════════════════════
  * Directive 11.5 — Net Expectancy Gate (Profitability Validation)
  * Directive 11.7A — Unified Signal Filter Integration (VTS + SQE Parity)
+ * Directive 11.7B — Predictive Learning Telemetry Enhancement
  * ══════════════════════════════════════════════════════════════════════════════
  * 
  * Purpose: Prevents low-expectancy (fee-negative) signals from entering 
@@ -10,12 +11,17 @@
  * Directive 11.7A adds regime-aware ROI thresholds that adjust dynamically
  * based on market conditions. Shared by both VTS and SQE for parity.
  * 
+ * Directive 11.7B integrates VTS telemetry for adaptive expectancy based on
+ * historical simulation performance per regime × strategy.
+ * 
  * No trade—real or simulated—proceeds if its math doesn't justify the risk.
  * 
- * Schema: v1.8.0
- * Governance: Directive 11.5 Task 1, Directive 11.7A Task 1
+ * Schema: v1.9.0
+ * Governance: Directive 11.5 Task 1, Directive 11.7A Task 1, Directive 11.7B Task 4
  * ══════════════════════════════════════════════════════════════════════════════
  */
+
+import { getRegimePerformance, checkConfidenceDrift } from '../logging/vts-telemetry';
 
 export interface ExpectancyParams {
   entry: number;
@@ -163,4 +169,80 @@ export function getROIDetails(entryPrice: number, targetPrice: number, regime: s
     roiPercent: (roi * 100).toFixed(2) + '%',
     minROIPercent: (minROI * 100).toFixed(2) + '%'
   };
+}
+
+/**
+ * Directive 11.7B Task 4: Get Adaptive Expectancy from VTS Telemetry
+ * 
+ * Retrieves historical performance metrics for a regime × strategy combination
+ * from VTS telemetry to inform adaptive expectancy calculations.
+ * 
+ * @param regime - Market regime (e.g., BULL_STABLE)
+ * @param strategy - Strategy name (e.g., momentum_breakout)
+ * @returns Performance metrics or null if not available
+ */
+export function getAdaptiveExpectancy(regime: string, strategy: string): {
+  winRate: number;
+  avgPnL: number;
+  skipRatio: number;
+  confidence: number;
+  source: 'VTS';
+} | null {
+  const perf = getRegimePerformance(regime, strategy);
+  if (!perf) {
+    console.debug(`[11.7B][Expectancy] No telemetry for ${regime}/${strategy}`);
+    return null;
+  }
+  
+  const confidence = Math.max(0, Math.min(1, perf.winRate * (1 - perf.skipRatio)));
+  
+  return {
+    winRate: perf.winRate,
+    avgPnL: perf.avgPnL,
+    skipRatio: perf.skipRatio,
+    confidence,
+    source: 'VTS'
+  };
+}
+
+/**
+ * Directive 11.7B Task 4: Adjusted ROI Threshold
+ * 
+ * Adjusts the base ROI threshold based on historical VTS performance.
+ * If a regime × strategy combination has poor historical performance,
+ * the threshold is increased to require higher expected returns.
+ * 
+ * @param regime - Market regime
+ * @param strategy - Strategy name
+ * @returns Adjusted minimum ROI threshold
+ */
+export function getAdjustedMinROI(regime: string, strategy: string): number {
+  const baseROI = getMinROIForRegime(regime);
+  const adaptive = getAdaptiveExpectancy(regime, strategy);
+  
+  if (!adaptive) {
+    return baseROI;
+  }
+  
+  if (adaptive.winRate < 0.4) {
+    return baseROI * 1.3;
+  }
+  if (adaptive.winRate < 0.5) {
+    return baseROI * 1.15;
+  }
+  if (adaptive.winRate > 0.6) {
+    return baseROI * 0.9;
+  }
+  
+  return baseROI;
+}
+
+/**
+ * Directive 11.7B Task 5: Check and log confidence drift
+ * 
+ * Wrapper for drift detection to be used by scoring systems.
+ * Returns true if drift exceeds ±0.05 threshold.
+ */
+export function checkExpectancyDrift(currentConfidence: number, baseline: number = 0.5): boolean {
+  return checkConfidenceDrift(currentConfidence, baseline);
 }

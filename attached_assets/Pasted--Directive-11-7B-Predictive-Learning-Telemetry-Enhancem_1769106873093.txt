@@ -1,0 +1,233 @@
+🧭 Directive 11.7B — Predictive Learning Telemetry Enhancement
+
+Phase: 11.7
+Series: Predictive Learning Bridge (9 → 12)
+Author: DawnTrader Quantitative Systems Architecture Team
+Last Updated: 2026-01-24
+Status: ✅ Approved for Immediate Replit Implementation
+
+1. Objective
+
+Bridge the deterministic Predictive Learning System (Phases 9–10) with real VTS outcome and skip data, enabling Adaptive Expectancy and Predictive Confidence to self-evolve continuously — even during passive simulation mode — while preserving strict live-data isolation.
+
+This directive closes the Phase 9 → 12 learning loop by feeding regime- and strategy-level results from simulated trades into the telemetry system used by the predictive scoring engine.
+
+2. Purpose & Scope
+
+Enhancements introduced:
+
+Extend telemetry ingestion to include:
+
+/logs/virtual_trades/ → executed simulated trades
+
+/logs/vts_skipped_signals/ → filtered/skipped signals
+
+Compute per-regime × strategy metrics:
+
+winRate, avgPnL %, skipRatio, and illiquidRatio
+
+Persist hourly snapshots and manifest entries for traceability.
+
+Increment telemetry version each cycle for downstream detection.
+
+Tag all telemetry from this process with source: "VTS" to prevent cross-contamination.
+
+Guarantee full read/write isolation from live or paper telemetry.
+
+Forward compatibility:
+Phase 12’s ML ingestion pipeline will use this same "VTS" source tag to differentiate simulated predictive telemetry from execution telemetry.
+
+3. Implementation Tasks
+🧩 Task 1 — Telemetry Aggregator Extension
+
+File: /server/core/logging/telemetry.ts
+
+export async function updateRegimePerformanceFromVTS() {
+  const executedDir = "/logs/virtual_trades";
+  const skippedDir  = "/logs/vts_skipped_signals";
+  const metrics = {};
+  const metricsSkipped = {};
+  let totalProcessed = 0;
+
+  if (!fs.existsSync(executedDir) || !fs.existsSync(skippedDir)) return;
+
+  // --- Executed Trades ---
+  for (const file of fs.readdirSync(executedDir)) {
+    const path = `${executedDir}/${file}`;
+    const stat = fs.statSync(path);
+    if (Date.now() - stat.mtimeMs > 7 * 24 * 60 * 60 * 1000) continue; // ignore >7 days old
+    try {
+      const data = JSON.parse(fs.readFileSync(path, "utf8"));
+      if (!Array.isArray(data)) continue;
+      for (const t of data) {
+        const { regime, strategy } = t;
+        const netProfitPercent = Number(t.netProfitPercent ?? 0);
+        if (!regime || !strategy) continue;
+        metrics[regime] ??= {};
+        metrics[regime][strategy] ??= { wins:0, total:0, pnl:0 };
+        metrics[regime][strategy].total++;
+        if (netProfitPercent > 0) metrics[regime][strategy].wins++;
+        metrics[regime][strategy].pnl += netProfitPercent * 100; // normalize %
+        totalProcessed++;
+      }
+    } catch {
+      logger.warn(`[11.7B][Telemetry] Skipping invalid JSON: ${file}`);
+      continue;
+    }
+  }
+
+  // --- Skipped Signals ---
+  for (const file of fs.readdirSync(skippedDir)) {
+    const path = `${skippedDir}/${file}`;
+    try {
+      const data = JSON.parse(fs.readFileSync(path, "utf8"));
+      if (!Array.isArray(data)) continue;
+      for (const s of data) {
+        const { regime, reason } = s;
+        if (!regime) continue;
+        metricsSkipped[regime] ??= { lowROI:0, illiquid:0, total:0 };
+        metricsSkipped[regime].total++;
+        if (reason === "Low_ROI") metricsSkipped[regime].lowROI++;
+        if (reason === "Illiquid_USD") metricsSkipped[regime].illiquid++;
+      }
+    } catch {
+      logger.warn(`[11.7B][Telemetry] Skipping invalid JSON: ${file}`);
+      continue;
+    }
+  }
+
+  if (totalProcessed === 0) {
+    logger.info("[11.7B][Telemetry] No new entries found, skipping snapshot.");
+    return;
+  }
+
+  if (telemetry.source && telemetry.source !== "VTS") {
+    logger.warn("[11.7B][Telemetry] Cross-source write attempt blocked.");
+    return;
+  }
+
+  await telemetryLock.runExclusive(() => {
+    for (const regime in metrics) {
+      telemetry.regimePerformance[regime] ??= {};
+      for (const strategy in metrics[regime]) {
+        const m = metrics[regime][strategy];
+        const s = metricsSkipped[regime] || {};
+        telemetry.regimePerformance[regime][strategy] = {
+          source: "VTS",
+          winRate: m.wins / (m.total || 1),
+          avgPnL:  m.pnl / (m.total || 1),
+          skipRatio: (s.lowROI || 0) / (s.total || 1),
+          illiquidRatio: (s.illiquid || 0) / (s.total || 1),
+          updatedAt: new Date().toISOString()
+        };
+      }
+    }
+
+    telemetry.version = (telemetry.version ?? 0) + 1; // version increment
+  });
+
+  saveTelemetrySnapshot(totalProcessed, metrics);
+}
+
+🧩 Task 2 — Snapshot Persistence & Manifest
+export function saveTelemetrySnapshot(totalProcessed, metrics) {
+  fs.mkdirSync("/logs/telemetry", { recursive: true });
+  const date = new Date().toISOString().slice(0,10);
+  const regimeCount = Object.keys(metrics).length;
+  const filename = `/logs/telemetry/regime_performance_${date}_VTS_${totalProcessed}.json`;
+
+  fs.writeFileSync(filename, JSON.stringify(telemetry.regimePerformance, null, 2));
+
+  const manifestPath = "/logs/telemetry/regime_performance_manifest.json";
+  const manifest = fs.existsSync(manifestPath)
+    ? JSON.parse(fs.readFileSync(manifestPath, "utf8")) : [];
+  manifest.push({
+    filename,
+    totalProcessed,
+    regimes: regimeCount,
+    version: telemetry.version ?? 1,
+    timestamp: new Date().toISOString()
+  });
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+
+  logger.info(`[11.7B][Telemetry] Snapshot saved (${totalProcessed} entries, ${regimeCount} regimes) → ${filename}`);
+}
+
+
+(Optional) compress snapshots older than 14 days to .gz to conserve disk space.
+
+🧩 Task 3 — Scheduler Integration
+
+File: /server/scheduler/jobs.ts
+
+// every 6 hours to limit I/O load
+scheduleJob("0 */6 * * *", updateRegimePerformanceFromVTS);
+
+🧩 Task 4 — Predictive System Linkage
+
+File: /server/core/scoring/final-score.ts
+
+const perf = telemetry.regimePerformance[regime]
+  ? (telemetry.regimePerformance[regime][strategy]
+     || telemetry.regimePerformance[regime].SKIPPED)
+  : null;
+
+if (!perf) logger.debug(`[11.7B][Predictive] No telemetry for ${regime}/${strategy}`);
+
+🧩 Task 5 — Regression Guard + Drift History
+
+File: /server/tests/telemetry_regression_check.ts
+
+const avgDiff = calculateAvgConfidenceDelta();
+logger.info(`[11.7B][Guard] Confidence Δ=${avgDiff.toFixed(3)}, baseline=${baselineConfidence.toFixed(3)}`);
+
+if (Math.abs(avgDiff) > 0.05) {
+  logger.warn("[11.7B][Guard] PredictiveConfidence drift detected: " + avgDiff.toFixed(3));
+  fs.appendFileSync("/logs/telemetry/confidence_drift.log",
+    `${new Date().toISOString()} Δ=${avgDiff.toFixed(3)} baseline=${baselineConfidence.toFixed(3)}\n`);
+}
+
+4. Verification Plan
+Step	Test	Expected Result
+1	Manual run of aggregator	[11.7B][Telemetry] Snapshot saved (...) logged
+2	Inspect /logs/telemetry/	Snapshot + manifest exist, version incremented
+3	Confirm scoring updates	PredictiveConfidence & ExpectedEdge reflect new metrics
+4	Validate SKIPPED data	Skip ratios update without biasing win rates
+5	Check scheduler	Job runs every 6 hours with no telemetry lock errors
+6	Regression guard	Confidence Δ < ± 0.05; drift log written if exceeded
+7	Isolation check	No changes in /logs/telemetry_live/ hash
+8	Cross-source test	Live telemetry write blocked with warning
+5. Success Criteria
+
+✅ VTS trade + skip data integrated into predictive telemetry
+✅ Hourly/six-hourly snapshots + manifest persisted
+✅ telemetry.version increments per snapshot
+✅ Predictive Confidence & Adaptive Expectancy respond to real performance
+✅ Stability: Δ PredictiveConfidence < ± 0.05
+✅ Live/paper telemetry remains untouched
+✅ System ready for Phase 12 ML consumption
+
+6. Deliverables
+File	Description
+/server/core/logging/telemetry.ts	Aggregator + snapshot writer + version tracking
+/server/scheduler/jobs.ts	6-hour telemetry refresh job
+/logs/telemetry/	Telemetry snapshots + manifest + drift log
+/server/tests/telemetry_regression_check.ts	Confidence stability guard
+7. Consumption Map
+Module	Action Required
+/server/core/scoring/final-score.ts	Already linked (PredictiveConfidence)
+/server/core/calculations/expectancy.ts	Reads adaptive metrics automatically
+/server/core/strategy-selector.ts	Confirms regime success alignment
+/server/core/dss-engine.ts	Reload telemetry each cycle (not cached)
+/server/core/refresh-ready-to-buy.ts	Same as above for signal refresh
+/server/core/position-manager.ts	Pull updated telemetry before adaptive sizing
+/server/core/tec-controller.ts	No change (required fields already ingested)
+/client/pages/diagnostics/overview.tsx	Add source toggle (“Live / VTS”) in Phase 11.7G UI
+8. Safety Guarantees
+
+🔒 Telemetry updates run under telemetryLock (async-mutex).
+🧩 Corrupt or old files skipped safely with warnings.
+⚙️ Isolation enforced (source:"VTS" + cross-source guard).
+📊 Confidence drift guarded ± 0.05 and logged historically.
+📦 I/O bounded (6-hour interval + ≤ 7-day window).
+🧱 Versioning enables auto-reload by DSS/RTB/TEC subsystems.
