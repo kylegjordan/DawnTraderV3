@@ -16,6 +16,8 @@ import { normalizeInternal } from '../../markets/kraken-symbol-resolver';
 import { diagnosticTrace } from '../diagnostics/trace_service';
 import { dataAggregator } from '../../services/data-aggregator.js';
 import { calculateFinalScore, calculateRegimeWeight } from '../utils/score-calculator.js';
+import { isSignalProfitable, getMinROIForRegime } from '../calculations/expectancy.js';
+import { logSkippedSignal } from '../logging/skipped-signals-logger.js';
 
 /**
  * Directive 11.0B: SQE Thresholds - Default values used when screener config is unavailable
@@ -38,6 +40,10 @@ export interface SQEInput {
   confidence?: number;
   trendStrength?: number;
   volatility?: number;
+  entryPrice?: number;
+  targetPrice?: number;
+  regime?: string;
+  signalType?: string;
 }
 
 export interface SQEOptions {
@@ -143,6 +149,29 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
     failures.push(`RegimeWeight ${regimeWeight.toFixed(4)} < ${thresholds.regimeWeightMin}`);
   }
   
+  // Directive 11.7A Task 3: Regime-Aware ROI Gate (SQE parity with VTS)
+  // Only apply if entry/target/regime are provided
+  if (input.entryPrice && input.targetPrice && input.regime) {
+    if (!isSignalProfitable(input.entryPrice, input.targetPrice, input.regime)) {
+      const expectedROI = (input.targetPrice - input.entryPrice) / input.entryPrice;
+      const minROI = getMinROIForRegime(input.regime);
+      failures.push(`ROI ${(expectedROI * 100).toFixed(2)}% < ${(minROI * 100).toFixed(2)}% for ${input.regime}`);
+      logSkippedSignal({
+        symbol: canonicalSymbol,
+        reason: 'Low_ROI',
+        regime: input.regime,
+        expectedROI,
+        minROI,
+        signalType: input.signalType,
+        strategy: input.strategy,
+        finalScore,
+        regimeWeight,
+        source: 'SQE'
+      });
+      console.log(`[11.7A][SQE][ROI_Gate] Skipping ${canonicalSymbol}: ROI ${(expectedROI * 100).toFixed(2)}% < min ${(minROI * 100).toFixed(2)}% for ${input.regime}`);
+    }
+  }
+  
   const passed = failures.length === 0;
   
   const status = passed ? 'PASS' : 'FAIL';
@@ -226,6 +255,27 @@ export function evaluateSignalQualitySync(input: SQEInput, thresholds?: { finalS
   
   if (regimeWeight < config.regimeWeightMin) {
     failures.push(`RegimeWeight ${regimeWeight.toFixed(4)} < ${config.regimeWeightMin}`);
+  }
+  
+  // Directive 11.7A Task 3: Regime-Aware ROI Gate (SQE parity with VTS) - Sync version
+  if (input.entryPrice && input.targetPrice && input.regime) {
+    if (!isSignalProfitable(input.entryPrice, input.targetPrice, input.regime)) {
+      const expectedROI = (input.targetPrice - input.entryPrice) / input.entryPrice;
+      const minROI = getMinROIForRegime(input.regime);
+      failures.push(`ROI ${(expectedROI * 100).toFixed(2)}% < ${(minROI * 100).toFixed(2)}% for ${input.regime}`);
+      logSkippedSignal({
+        symbol: canonicalSymbol,
+        reason: 'Low_ROI',
+        regime: input.regime,
+        expectedROI,
+        minROI,
+        signalType: input.signalType,
+        strategy: input.strategy,
+        finalScore,
+        regimeWeight,
+        source: 'SQE'
+      });
+    }
   }
   
   const passed = failures.length === 0;

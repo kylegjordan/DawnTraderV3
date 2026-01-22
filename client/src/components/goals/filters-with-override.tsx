@@ -738,6 +738,67 @@ export function FiltersWithOverride() {
             </p>
           </div>
         </div>
+
+        {/* Directive 11.7A: SQE Profitability (ROI) Thresholds */}
+        <div className="mt-8 space-y-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-amber-500" />
+            SQE Profitability (ROI) Gate
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Minimum ROI thresholds that adjust dynamically based on market regime. Signals below threshold are logged for ML but not traded.
+          </p>
+
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="p-3 border-2 border-green-200 dark:border-green-800 rounded-lg bg-green-50/50 dark:bg-green-900/20 text-center">
+              <div className="text-xs font-medium text-muted-foreground mb-1">BULL_STABLE</div>
+              <div className="text-lg font-bold text-green-600 dark:text-green-400">1.25%</div>
+            </div>
+            <div className="p-3 border-2 border-red-200 dark:border-red-800 rounded-lg bg-red-50/50 dark:bg-red-900/20 text-center">
+              <div className="text-xs font-medium text-muted-foreground mb-1">BEAR_VOLATILE</div>
+              <div className="text-lg font-bold text-red-600 dark:text-red-400">2.50%</div>
+            </div>
+            <div className="p-3 border-2 border-yellow-200 dark:border-yellow-800 rounded-lg bg-yellow-50/50 dark:bg-yellow-900/20 text-center">
+              <div className="text-xs font-medium text-muted-foreground mb-1">LOW_VOL_CHOP</div>
+              <div className="text-lg font-bold text-yellow-600 dark:text-yellow-400">1.75%</div>
+            </div>
+            <div className="p-3 border-2 border-orange-200 dark:border-orange-800 rounded-lg bg-orange-50/50 dark:bg-orange-900/20 text-center">
+              <div className="text-xs font-medium text-muted-foreground mb-1">HIGH_VOL_IMPULSE</div>
+              <div className="text-lg font-bold text-orange-600 dark:text-orange-400">3.00%</div>
+            </div>
+            <div className="p-3 border-2 border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50/50 dark:bg-gray-800/20 text-center">
+              <div className="text-xs font-medium text-muted-foreground mb-1">TRANSITION</div>
+              <div className="text-lg font-bold text-gray-600 dark:text-gray-400">2.00%</div>
+            </div>
+          </div>
+
+          <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              <strong>Regime-Aware ROI:</strong> Expected ROI must exceed the threshold for the current market regime. 
+              Volatile conditions require higher expected returns to justify increased risk.
+              Skipped signals are logged to /logs/vts_skipped_signals/ for ML training.
+            </p>
+          </div>
+        </div>
+
+        {/* Directive 11.7A: SQE Liquidity Filter */}
+        <div className="mt-6 space-y-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-cyan-500" />
+            SQE Liquidity Filter
+          </h3>
+
+          <div className="p-4 border-2 border-cyan-200 dark:border-cyan-800 rounded-lg bg-cyan-50/50 dark:bg-cyan-900/20">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-semibold">Minimum 24h Notional Volume (USD)</span>
+              <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded">Active</span>
+            </div>
+            <div className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">$2,000,000</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              All volumes normalized to USD equivalent for cross-quote currency comparison
+            </p>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

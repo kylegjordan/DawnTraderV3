@@ -66,6 +66,7 @@ import { resetMacroState, logMacroStateVerification } from '../core/metrics/macr
 import { resetRollingStatsWithLogging } from '../utils/rolling-stats';
 import { getOpenVirtualTradesForML } from '../services/vts-runner';
 import { exportVtsDataToCsv, getClosedVTSTradesFromLogs, generateCsvContent } from '../utils/export-csv';
+import { getSkippedSignalsForDate, getSkippedSignalsSummary, forceFlush, type SkippedSignalEntry } from '../core/logging/skipped-signals-logger';
 
 const router = Router();
 
@@ -1160,6 +1161,88 @@ router.get('/ml/closed/export', requireAuth, async (req: AuthenticatedRequest, r
   } catch (error) {
     console.error('[11.6E][API][ERROR] Export closed trades failed:', error);
     res.status(500).json({ error: 'Failed to export closed trades' });
+  }
+});
+
+/**
+ * Directive 11.7A Task 5: GET /api/vts/skipped-signals
+ * Returns skipped signals for a given date
+ */
+router.get('/skipped-signals', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const dateStr = req.query.date as string || new Date().toISOString().slice(0, 10);
+    const signals = await getSkippedSignalsForDate(dateStr);
+    
+    console.log(`[11.7A][API] GET /skipped-signals?date=${dateStr} - ${signals.length} skipped signals`);
+    
+    res.json({
+      success: true,
+      date: dateStr,
+      count: signals.length,
+      signals
+    });
+  } catch (error) {
+    console.error('[11.7A][API][ERROR] GET /skipped-signals failed:', error);
+    res.status(500).json({ error: 'Failed to fetch skipped signals' });
+  }
+});
+
+/**
+ * Directive 11.7A Task 5: GET /api/vts/skipped-signals/summary
+ * Returns summary of skipped signals over the last N days
+ */
+router.get('/skipped-signals/summary', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const days = parseInt(req.query.days as string) || 7;
+    const summary = await getSkippedSignalsSummary(days);
+    
+    console.log(`[11.7A][API] GET /skipped-signals/summary?days=${days} - ${summary.total} total skipped`);
+    
+    res.json({
+      success: true,
+      days,
+      ...summary
+    });
+  } catch (error) {
+    console.error('[11.7A][API][ERROR] GET /skipped-signals/summary failed:', error);
+    res.status(500).json({ error: 'Failed to fetch skipped signals summary' });
+  }
+});
+
+/**
+ * Directive 11.7A Task 5: GET /api/vts/skipped-signals/export
+ * Export skipped signals to CSV
+ */
+router.get('/skipped-signals/export', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    await forceFlush();
+    const dateStr = req.query.date as string || new Date().toISOString().slice(0, 10);
+    const signals = await getSkippedSignalsForDate(dateStr);
+    
+    const headers = ['timestamp', 'symbol', 'reason', 'regime', 'expectedROI', 'minROI', 'signalType', 'strategy', 'source'];
+    const rows = signals.map((s: SkippedSignalEntry) => [
+      s.timestamp,
+      s.symbol,
+      s.reason,
+      s.regime || '',
+      s.expectedROI?.toFixed(6) || '',
+      s.minROI?.toFixed(6) || '',
+      s.signalType || '',
+      s.strategy || '',
+      s.source || ''
+    ]);
+    
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const filename = `vts_skipped_signals_${dateStr}.csv`;
+    
+    console.log(`[11.7A][API] Streaming skipped signals CSV download (${signals.length} records)`);
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csv);
+  } catch (error) {
+    console.error('[11.7A][API][ERROR] Export skipped signals failed:', error);
+    res.status(500).json({ error: 'Failed to export skipped signals' });
   }
 });
 

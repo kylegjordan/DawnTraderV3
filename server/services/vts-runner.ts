@@ -28,7 +28,8 @@
  */
 
 import { vtsService, type VirtualSignal } from './vts-service.js';
-import { isMathematicallyProfitable } from '../core/calculations/expectancy.js';
+import { isMathematicallyProfitable, isSignalProfitable, getROIDetails } from '../core/calculations/expectancy.js';
+import { logSkippedSignal } from '../core/logging/skipped-signals-logger.js';
 import { loadCalibration, applyCalibration, type CalibrationCoefficients } from '../utils/calibration.js';
 import { priceCache, type CachedPrice, type CacheBucketType } from './price-cache.js';
 import { systemConfigService } from './system-config.js';
@@ -387,13 +388,47 @@ async function generatePhase10Signal(
   // Skip trade if gross profit would not exceed total costs
   const estimatedSlippage = costMetrics.slippage || 0.001;
   if (!isMathematicallyProfitable(entryPrice, takeProfit, spread, estimatedSlippage, costMetrics.fee)) {
+    logSkippedSignal({
+      symbol,
+      reason: 'Net_EV_Negative',
+      regime,
+      signalType,
+      strategy,
+      source: 'VTS'
+    });
     console.log(`[11.5][ProfitGate] Skipping ${symbol}: Net expectancy below 0 (target=${dynamicTarget.toFixed(4)}, cost=${frictionCost.toFixed(4)})`);
+    return null;
+  }
+  
+  // Directive 11.7A Task 2: Regime-Aware ROI Gate
+  // Skip trade if expected ROI doesn't meet regime-specific threshold
+  if (!isSignalProfitable(entryPrice, takeProfit, regime)) {
+    const roiDetails = getROIDetails(entryPrice, takeProfit, regime);
+    logSkippedSignal({
+      symbol,
+      reason: 'Low_ROI',
+      regime,
+      expectedROI: roiDetails.expectedROI,
+      minROI: roiDetails.minROI,
+      signalType,
+      strategy,
+      source: 'VTS'
+    });
+    console.log(`[11.7A][ROI_Gate] Skipping ${symbol}: ROI ${roiDetails.roiPercent} < min ${roiDetails.minROIPercent} for ${regime}`);
     return null;
   }
   
   // Directive 11.5 Task 5: Strategy-Specific Guardrails
   // Require ADX > 25 for SMA-based trend strategies (only meaningful in trending markets)
   if (strategy === 'sma_trend_ride' && regimeResult.adx < 25) {
+    logSkippedSignal({
+      symbol,
+      reason: 'ADX_Guard',
+      regime,
+      signalType,
+      strategy,
+      source: 'VTS'
+    });
     console.log(`[11.5][Guard] Skipping ${symbol}: SMA Trend requires ADX > 25, got ADX=${regimeResult.adx.toFixed(1)}`);
     return null;
   }

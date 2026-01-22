@@ -1,0 +1,208 @@
+🧭 Directive 11.7A — Unified Signal Filter Integration (VTS + SQE Parity)
+Dawn Trader Project — Phase 11.7 Series
+
+Objective: Synchronize profitability gating, liquidity normalization, and signal filtering across both the Virtual Trade Simulator (VTS) and Signal Quality Evaluator (SQE), using canonical market regimes and metrics.
+
+1. PURPOSE
+
+This directive ensures that:
+
+All simulated and live-mode signals use identical mathematical filters.
+
+Filters are regime-aware, adjusting dynamically based on the current pair-level market condition.
+
+Low-ROI or illiquid signals are logged (for ML) but not traded, preserving simulation capacity.
+
+All filtering parameters are visible in the UI (Goals Engine → Screeners tab, SQE section).
+
+2. SCOPE
+Component	Location	Purpose
+VTS Runner	/server/services/vts-runner.ts	Add dynamic ROI “log-and-block” gate, unified with SQE.
+Expectancy Core	/server/core/calculations/expectancy.ts	Introduce getMinROIForRegime() shared across SQE/VTS.
+SQE	/server/core/sqe/signal-quality-evaluator.ts	Implement identical ROI and liquidity gating logic for live/paper mode.
+Liquidity Filter	/server/core/filters/screener.ts + /server/config/filter-config.ts	Confirm normalization to USD notional and add cross-quote validation.
+Telemetry & Logs	/server/core/logging/telemetry.ts	Log skipped signals for ML completeness.
+UI Integration	/client/pages/goals-engine/screeners.tsx	Add ROI and Liquidity filters under SQE section for transparency.
+3. IMPLEMENTATION TASKS
+🧩 Task 1 — Regime-Aware ROI Threshold Function
+
+File: /server/core/calculations/expectancy.ts
+
+Add the following exported helper:
+
+// regime-aware ROI thresholds (pair-level)
+export function getMinROIForRegime(regime: string): number {
+  switch (regime) {
+    case "BULL_STABLE": return 0.0125;     // 1.25%
+    case "BEAR_VOLATILE": return 0.0250;   // 2.50%
+    case "LOW_VOL_CHOP": return 0.0175;    // 1.75%
+    case "HIGH_VOL_IMPULSE": return 0.0300; // 3.00%
+    case "TRANSITION": return 0.0200;      // 2.00%
+    default: return 0.0200;
+  }
+}
+
+
+Add a unified NetEV check method for both VTS and SQE:
+
+export function isSignalProfitable(entryPrice: number, targetPrice: number, regime: string): boolean {
+  const roi = (targetPrice - entryPrice) / entryPrice;
+  return roi >= getMinROIForRegime(regime);
+}
+
+💡 Task 2 — Integrate ROI Gate in VTS
+
+File: /server/services/vts-runner.ts
+
+Before creating a simulated trade (createTradeRecord() or equivalent):
+
+import { isSignalProfitable } from "../core/calculations/expectancy";
+import { telemetry } from "../core/logging/telemetry";
+
+...
+
+if (!isSignalProfitable(entryPrice, targetPrice, regime)) {
+  telemetry.logSkippedSignal({
+    symbol,
+    reason: "Low_ROI",
+    regime,
+    expectedROI: ((targetPrice - entryPrice) / entryPrice),
+    signalType,
+  });
+  return; // Skip creating the trade
+}
+
+
+This prevents low-ROI signals from filling the 300-slot VTS queue while preserving the data for ML ingestion.
+
+⚙️ Task 3 — Integrate ROI Gate in SQE
+
+File: /server/core/sqe/signal-quality-evaluator.ts
+
+Add identical logic to reject signals before passing to TEC or risk engine:
+
+import { isSignalProfitable } from "../calculations/expectancy";
+...
+if (!isSignalProfitable(entryPrice, targetPrice, regime)) {
+  logger.warn(`[SQE][Filter] Skipping ${symbol} — ROI below threshold for ${regime}`);
+  return false; // block signal from execution
+}
+
+
+This ensures that both simulation and live trading use the same profitability rules.
+
+💵 Task 4 — Liquidity Normalization Audit
+
+File: /server/core/filters/screener.ts
+
+Confirm normalization for non-USD quote pairs:
+
+// Normalize volume to USD equivalent
+const usdConversionRate = await getUsdConversionRate(pair.quoteAsset);
+const nominalVolumeUSD = pair.volume24h * usdConversionRate;
+if (nominalVolumeUSD < MIN_VOLUME_THRESHOLD) {
+  telemetry.logSkippedSignal({
+    symbol: pair.symbol,
+    reason: "Illiquid_USD",
+    volumeUSD: nominalVolumeUSD,
+  });
+  return false;
+}
+
+
+File: /server/config/filter-config.ts
+
+export const MIN_VOLUME_THRESHOLD = 2_000_000; // USD
+
+
+✅ This confirms your system uses USD-based normalization (already true, now verified for all quote assets).
+
+📊 Task 5 — Telemetry Logging for ML Completeness
+
+File: /server/core/logging/telemetry.ts
+
+Add helper:
+
+export function logSkippedSignal(entry: any) {
+  const path = `/logs/vts_skipped_signals/${new Date().toISOString().slice(0, 10)}.json`;
+  appendJSON(path, {
+    timestamp: new Date().toISOString(),
+    ...entry,
+  });
+}
+
+
+Output Example:
+
+{
+  "timestamp": "2026-01-23T14:02:05Z",
+  "symbol": "SOL/USDT",
+  "reason": "Low_ROI",
+  "expectedROI": 0.009,
+  "regime": "TRANSITION",
+  "signalType": "HYBRID"
+}
+
+🧮 Task 6 — Add SQE Filters to UI
+
+File: /client/pages/goals-engine/screeners.tsx
+
+Add new section under SQE Filters:
+
+SQE Profitability (ROI)
+-----------------------
+Minimum ROI thresholds (dynamic by regime):
+BULL_STABLE: 1.25%, BEAR_VOLATILE: 2.50%, LOW_VOL_CHOP: 1.75%, HIGH_VOL_IMPULSE: 3.00%, TRANSITION: 2.00%
+
+SQE Liquidity Filter
+--------------------
+Minimum 24h Notional Volume (USD): $2,000,000
+
+
+Add toggle in table header:
+
+✅ Show Skipped Signals
+
+🔁 Export CSV (for skipped signals log)
+
+4. VERIFICATION
+Step	Test	Expected Result
+1	Trigger 10 low-ROI signals manually	No simulated trades open; entries logged in /logs/vts_skipped_signals/
+2	Run VTS cycle for 2h	Open trades < 300; ROI gate respected
+3	Run SQE (paper mode)	SQE console logs [SQE][Filter] Skipping messages for low-ROI symbols
+4	Check liquidity normalization	Non-USD pairs show conversion ratio in audit log
+5	UI inspection	New SQE filter thresholds visible under Screeners tab
+6	CSV export	Skipped signals export successfully from the UI
+5. AUDIT & LOGGING
+
+New audit log file automatically generated nightly:
+
+/logs/filter_audit_YYYY-MM-DD.txt
+
+[SUMMARY]
+Low_ROI: 143 signals skipped
+Illiquid_USD: 27 signals skipped
+Regime: TRANSITION
+
+6. SUCCESS CRITERIA
+
+✅ All signals undergo profitability and liquidity checks before simulation or execution.
+✅ 100 % parity between VTS and SQE filter logic.
+✅ Skipped signals logged for ML ingestion.
+✅ UI shows all filter parameters transparently.
+✅ Liquidity normalization confirmed USD-based for all pairs.
+
+7. DEPENDENCIES / SEQUENCING
+Dependency	Directive	Relation
+Strategy–Regime Realignment	11.7B	Uses canonical regime mapping verified via Analytics tab
+UI Transparency Updates	11.7C	Extends filter visibility to UI and Diagnostics
+Existing ML ingestion pipeline	11.6C	Consumes skipped-signal logs for non-trade training data
+8. DELIVERABLES
+
+✅ Updated expectancy.ts, vts-runner.ts, sqe/signal-quality-evaluator.ts, screener.ts
+
+✅ New JSON logs under /logs/vts_skipped_signals/
+
+✅ Verified parity between simulation and execution filters
+
+✅ UI update under Goals Engine → Screeners (SQE section)
