@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Brain, RefreshCw, Download, TrendingUp, TrendingDown, Clock, Target, AlertTriangle } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { ensureValidToken } from "@/lib/auth";
 import { format } from "date-fns";
 
 interface OpenTrade {
@@ -462,8 +463,10 @@ export default function MachineLearningPage() {
 
   const handleExportOpen = async () => {
     try {
+      const token = await ensureValidToken();
       const response = await fetch('/api/vts/ml/open/export', {
         credentials: 'include',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
       });
       if (!response.ok) throw new Error('Export failed');
       
@@ -483,8 +486,10 @@ export default function MachineLearningPage() {
 
   const handleExportClosed = async () => {
     try {
+      const token = await ensureValidToken();
       const response = await fetch('/api/vts/ml/closed/export?days=7', {
         credentials: 'include',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
       });
       if (!response.ok) throw new Error('Export failed');
       
