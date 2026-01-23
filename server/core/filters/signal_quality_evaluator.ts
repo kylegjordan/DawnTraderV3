@@ -16,7 +16,8 @@ import { normalizeInternal } from '../../markets/kraken-symbol-resolver';
 import { diagnosticTrace } from '../diagnostics/trace_service';
 import { dataAggregator } from '../../services/data-aggregator.js';
 import { calculateFinalScore, calculateRegimeWeight } from '../utils/score-calculator.js';
-import { isSignalProfitable, getMinROIForRegime } from '../calculations/expectancy.js';
+import { isSignalProfitable, getMinROIForRegime, getDynamicROIThreshold } from '../calculations/expectancy.js';
+import { getPredictiveConfidence } from '../utils/score-calculator.js';
 import { logSkippedSignal } from '../logging/skipped-signals-logger.js';
 
 /**
@@ -149,26 +150,27 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
     failures.push(`RegimeWeight ${regimeWeight.toFixed(4)} < ${thresholds.regimeWeightMin}`);
   }
   
-  // Directive 11.7A Task 3: Regime-Aware ROI Gate (SQE parity with VTS)
+  // Directive 11.7C Task 5: Regime-Aware ROI Gate with PredictiveConfidence (SQE parity with VTS)
   // Only apply if entry/target/regime are provided
   if (input.entryPrice && input.targetPrice && input.regime) {
-    if (!isSignalProfitable(input.entryPrice, input.targetPrice, input.regime)) {
+    const predictiveConf = getPredictiveConfidence(canonicalSymbol, input.regime, input.strategy);
+    if (!isSignalProfitable(input.entryPrice, input.targetPrice, input.regime, predictiveConf)) {
       const expectedROI = (input.targetPrice - input.entryPrice) / input.entryPrice;
-      const minROI = getMinROIForRegime(input.regime);
-      failures.push(`ROI ${(expectedROI * 100).toFixed(2)}% < ${(minROI * 100).toFixed(2)}% for ${input.regime}`);
+      const dynamicROI = getDynamicROIThreshold(input.regime, predictiveConf);
+      failures.push(`ROI ${(expectedROI * 100).toFixed(2)}% < ${(dynamicROI * 100).toFixed(2)}% for ${input.regime} (conf=${predictiveConf.toFixed(2)})`);
       logSkippedSignal({
         symbol: canonicalSymbol,
         reason: 'Low_ROI',
         regime: input.regime,
         expectedROI,
-        minROI,
+        minROI: dynamicROI,
         signalType: input.signalType,
         strategy: input.strategy,
         finalScore,
         regimeWeight,
         source: 'SQE'
       });
-      console.log(`[11.7A][SQE][ROI_Gate] Skipping ${canonicalSymbol}: ROI ${(expectedROI * 100).toFixed(2)}% < min ${(minROI * 100).toFixed(2)}% for ${input.regime}`);
+      console.log(`[11.7C][SQE][ROI_Gate] Skipping ${canonicalSymbol}: ROI ${(expectedROI * 100).toFixed(2)}% < min ${(dynamicROI * 100).toFixed(2)}% (conf=${predictiveConf.toFixed(2)}) for ${input.regime}`);
     }
   }
   

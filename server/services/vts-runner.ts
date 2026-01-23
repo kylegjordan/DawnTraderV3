@@ -28,7 +28,8 @@
  */
 
 import { vtsService, type VirtualSignal } from './vts-service.js';
-import { isMathematicallyProfitable, isSignalProfitable, getROIDetails } from '../core/calculations/expectancy.js';
+import { isMathematicallyProfitable, isSignalProfitable, getROIDetails, getDynamicROIThreshold } from '../core/calculations/expectancy.js';
+import { getPredictiveConfidence } from '../core/utils/score-calculator.js';
 import { logSkippedSignal } from '../core/logging/skipped-signals-logger.js';
 import { loadCalibration, applyCalibration, type CalibrationCoefficients } from '../utils/calibration.js';
 import { priceCache, type CachedPrice, type CacheBucketType } from './price-cache.js';
@@ -400,21 +401,22 @@ async function generatePhase10Signal(
     return null;
   }
   
-  // Directive 11.7A Task 2: Regime-Aware ROI Gate
-  // Skip trade if expected ROI doesn't meet regime-specific threshold
-  if (!isSignalProfitable(entryPrice, takeProfit, regime)) {
-    const roiDetails = getROIDetails(entryPrice, takeProfit, regime);
+  // Directive 11.7C Task 5: Regime-Aware ROI Gate with PredictiveConfidence
+  // Skip trade if expected ROI doesn't meet dynamic confidence-adjusted threshold
+  // Use the previously computed predictiveConfidence from line 374
+  if (!isSignalProfitable(entryPrice, takeProfit, regime, predictiveConfidence)) {
+    const roiDetails = getROIDetails(entryPrice, takeProfit, regime, predictiveConfidence);
     logSkippedSignal({
       symbol,
       reason: 'Low_ROI',
       regime,
       expectedROI: roiDetails.expectedROI,
-      minROI: roiDetails.minROI,
+      minROI: roiDetails.requiredROI,
       signalType,
       strategy,
       source: 'VTS'
     });
-    console.log(`[11.7A][ROI_Gate] Skipping ${symbol}: ROI ${roiDetails.roiPercent} < min ${roiDetails.minROIPercent} for ${regime}`);
+    console.log(`[11.7C][ROI_Gate] Skipping ${symbol}: ROI ${roiDetails.roiPercent} < min ${roiDetails.minROIPercent} (conf=${predictiveConfidence.toFixed(2)}) for ${regime}`);
     return null;
   }
   
