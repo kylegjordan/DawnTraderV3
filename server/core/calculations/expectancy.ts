@@ -195,8 +195,9 @@ export function isSignalProfitable(
   
   const dynamicROI = getDynamicROIThreshold(regime, predictiveConfidence);
   
-  const estimatedFriction = (fee * 2) + estimatedSlippage;
-  const requiredROI = Math.max(dynamicROI, estimatedFriction * FRICTION_SAFETY_BUFFER);
+  // Directive 11.7C: Friction floor = (fee×2) + slippage×1.1 (apply buffer only to slippage)
+  const frictionFloor = (fee * 2) + (estimatedSlippage * FRICTION_SAFETY_BUFFER);
+  const requiredROI = Math.max(dynamicROI, frictionFloor);
   
   return roi >= requiredROI;
 }
@@ -225,8 +226,9 @@ export function getROIDetails(
   const roi = (targetPrice - entryPrice) / Math.max(entryPrice, 1e-8);
   const minROI = getMinROIForRegime(regime);
   const dynamicROI = getDynamicROIThreshold(regime, predictiveConfidence);
-  const frictionFloor = (fee * 2) + estimatedSlippage;
-  const requiredROI = Math.max(dynamicROI, frictionFloor * FRICTION_SAFETY_BUFFER);
+  // Directive 11.7C: Friction floor = (fee×2) + slippage×1.1 (apply buffer only to slippage)
+  const frictionFloor = (fee * 2) + (estimatedSlippage * FRICTION_SAFETY_BUFFER);
+  const requiredROI = Math.max(dynamicROI, frictionFloor);
   
   return {
     expectedROI: roi,
