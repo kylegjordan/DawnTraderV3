@@ -22825,6 +22825,11 @@ Important: Extract the exact field names and numeric values from the user's requ
   apiRouter.use('/vts', vtsAuditRouter.default);
   console.log('[M3B.2] VTS Passive Feed & Mode Audit routes mounted at /api/vts');
 
+  // Directive 11.7D.1: Mount Predictive Adjustments API routes
+  const predictiveAdjustmentsRouter = await import('./routes/vts-predictive-adjustments.js');
+  apiRouter.use('/vts/predictive-adjustments', predictiveAdjustmentsRouter.default);
+  console.log('[11.7D.1] Predictive Adjustments routes mounted at /api/vts/predictive-adjustments');
+
   // Directive 8.8.4-M4: Mount Back-Audit (Comprehensive Back-Audit & System Integrity) routes
   const backAuditRouter = await import('./routes/back_audit.js');
   apiRouter.use('/back-audit', backAuditRouter.default);

@@ -96,6 +96,24 @@ interface SkippedMetrics {
   total: number;
 }
 
+/**
+ * Directive 11.7D.1 Task 4: Validates telemetry integrity for a regime/strategy pair.
+ * Logs warnings for missing metrics or incomplete datasets.
+ */
+function validateTelemetryIntegrity(
+  regime: string, 
+  perf: Record<string, unknown>, 
+  strategyCount: number
+): void {
+  if (!('winRate' in perf) || !('avgPnL' in perf) || !('skipRatio' in perf)) {
+    console.warn(`[11.7D.1][Telemetry] Missing key metrics for ${regime}`);
+  }
+  
+  if (strategyCount < 2) {
+    console.warn(`[11.7D.1][Telemetry] Regime ${regime} has <2 strategies — incomplete dataset.`);
+  }
+}
+
 export async function updateRegimePerformanceFromVTS(): Promise<{
   success: boolean;
   totalProcessed: number;
@@ -179,10 +197,12 @@ export async function updateRegimePerformanceFromVTS(): Promise<{
     await telemetryLock.runExclusive(() => {
       for (const regime in metrics) {
         vtsTelemetry.regimePerformance[regime] = vtsTelemetry.regimePerformance[regime] ?? {};
+        const strategyCount = Object.keys(metrics[regime]).length;
+        
         for (const strategy in metrics[regime]) {
           const m = metrics[regime][strategy];
           const s = metricsSkipped[regime] || { lowROI: 0, illiquid: 0, total: 0 };
-          vtsTelemetry.regimePerformance[regime][strategy] = {
+          const perfEntry: RegimeStrategyMetrics = {
             source: 'VTS',
             winRate: m.wins / (m.total || 1),
             avgPnL: m.pnl / (m.total || 1),
@@ -191,6 +211,9 @@ export async function updateRegimePerformanceFromVTS(): Promise<{
             tradeCount: m.total,
             updatedAt: new Date().toISOString()
           };
+          
+          validateTelemetryIntegrity(regime, perfEntry as unknown as Record<string, unknown>, strategyCount);
+          vtsTelemetry.regimePerformance[regime][strategy] = perfEntry;
         }
       }
       vtsTelemetry.version = (vtsTelemetry.version ?? 0) + 1;
