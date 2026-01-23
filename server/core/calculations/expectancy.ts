@@ -386,11 +386,11 @@ export function runRegressionGuardSuite(): Array<{
   isValid: boolean;
   threshold: number;
 }> {
-  const REGIMES = ['BULL_STABLE', 'BEAR_VOLATILE', 'LOW_VOL_CHOP', 'HIGH_VOL_IMPULSE', 'TRANSITION'];
+  const ALL_REGIMES = [REGIMES.BULL_STABLE, REGIMES.BEAR_VOLATILE, REGIMES.LOW_VOL_CHOP, REGIMES.HIGH_VOL_IMPULSE, REGIMES.TRANSITION];
   const CONFIDENCE_LEVELS = [0.0, 0.25, 0.5, 0.75, 1.0];
   const results: Array<{ regime: string; confidence: number; isValid: boolean; threshold: number }> = [];
   
-  for (const regime of REGIMES) {
+  for (const regime of ALL_REGIMES) {
     for (const confidence of CONFIDENCE_LEVELS) {
       const validation = validateROIThresholdBounds(regime, confidence);
       results.push({

@@ -10,7 +10,7 @@
  * 4. Generate calibration recommendations
  */
 
-import { CANONICAL_REGIMES, CanonicalRegimeType } from '../config/canonical-regime-strategy-map';
+import { CANONICAL_REGIMES, CanonicalRegimeType, REGIMES } from '../config/canonical-regime-strategy-map';
 import { getTelemetryAggregator } from '../services/telemetry-aggregator';
 import { volumeClassifier, VolumeTier } from '../services/market-data/volume-classifier';
 
@@ -120,7 +120,7 @@ async function runRegimeDiagnostics(): Promise<DiagnosticResult> {
     symbol: p.symbol,
     regime: CANONICAL_REGIMES.includes(p.regime as CanonicalRegimeType) 
       ? p.regime as MarketRegimeType 
-      : 'TRANSITION',
+      : REGIMES.TRANSITION,
     score: p.score,
     signalType: p.signalType,
     strategy: p.strategy

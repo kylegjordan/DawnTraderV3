@@ -152,23 +152,23 @@ export function calculateRegimeScore(
     Math.min(Math.max(value, min), max);
   
   switch (regime) {
-    case 'BULL_STABLE':
+    case REGIMES.BULL_STABLE:
       // Strong uptrend: higher ADX = higher score (50-100)
       return clamp(50 + adx / 2, 50, 100);
       
-    case 'BEAR_VOLATILE':
+    case REGIMES.BEAR_VOLATILE:
       // Downtrend: higher ADX = lower score (0-100)
       return clamp(100 - adx / 2, 0, 100);
       
-    case 'LOW_VOL_CHOP':
+    case REGIMES.LOW_VOL_CHOP:
       // Sideways: lower volatility = higher score (0-100)
       return clamp(55 - volatility * 1000, 0, 100);
       
-    case 'HIGH_VOL_IMPULSE':
+    case REGIMES.HIGH_VOL_IMPULSE:
       // High volatility: score based on ADX strength
       return clamp(50 + (adx - volatility * 500) / 2, 30, 90);
       
-    case 'TRANSITION':
+    case REGIMES.TRANSITION:
       // Uncertainty: blend of ADX and volatility
       return clamp(45 + (adx - volatility * 1000) / 2, 0, 100);
       
@@ -260,26 +260,26 @@ export function getNormalizedRegime(metrics: NormalizedMetrics): MarketRegimeTyp
   const momZ = rollingStats.MOM.zScore(momentum);
 
   if (volZ > 1 && adxZ > 0.5) {
-    return 'HIGH_VOL_IMPULSE';
+    return REGIMES.HIGH_VOL_IMPULSE;
   }
   
   if (volZ > 0.5 && adxZ > 0.2 && momZ > 0) {
-    return 'BULL_STABLE';
+    return REGIMES.BULL_STABLE;
   }
   
   if (volZ < -0.5 && Math.abs(momZ) < 0.5) {
-    return 'LOW_VOL_CHOP';
+    return REGIMES.LOW_VOL_CHOP;
   }
   
   if (adxZ < -0.5 && momZ < 0) {
-    return 'TRANSITION';
+    return REGIMES.TRANSITION;
   }
   
   if (momZ < -0.5) {
-    return 'BEAR_VOLATILE';
+    return REGIMES.BEAR_VOLATILE;
   }
   
-  return 'TRANSITION';
+  return REGIMES.TRANSITION;
 }
 
 /**
@@ -308,17 +308,17 @@ export function getNormalizedRegimeWithDetails(metrics: NormalizedMetrics): {
   let regime: MarketRegimeType;
 
   if (volZ > 1 && adxZ > 0.5) {
-    regime = 'HIGH_VOL_IMPULSE';
+    regime = REGIMES.HIGH_VOL_IMPULSE;
   } else if (volZ > 0.5 && adxZ > 0.2 && momZ > 0) {
-    regime = 'BULL_STABLE';
+    regime = REGIMES.BULL_STABLE;
   } else if (volZ < -0.5 && Math.abs(momZ) < 0.5) {
-    regime = 'LOW_VOL_CHOP';
+    regime = REGIMES.LOW_VOL_CHOP;
   } else if (adxZ < -0.5 && momZ < 0) {
-    regime = 'TRANSITION';
+    regime = REGIMES.TRANSITION;
   } else if (momZ < -0.5) {
-    regime = 'BEAR_VOLATILE';
+    regime = REGIMES.BEAR_VOLATILE;
   } else {
-    regime = 'TRANSITION';
+    regime = REGIMES.TRANSITION;
   }
 
   return {

@@ -8,6 +8,7 @@
  */
 
 import { getTelemetryAggregator } from '../services/telemetry-aggregator.js';
+import { REGIMES } from '../config/canonical-regime-strategy-map.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -63,7 +64,7 @@ async function main() {
   }
   
   // Find dominant regime
-  let dominantRegime = 'TRANSITION';
+  let dominantRegime: string = REGIMES.TRANSITION;
   let maxCount = 0;
   for (const [regime, count] of Object.entries(distribution)) {
     if (count > maxCount) {
