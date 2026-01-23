@@ -1,0 +1,320 @@
+🧭 Directive 11.7F — Strategy–Regime Realignment Validation via Analytics & Canonical Synchronization (Schema v1.4b – Final, Corrected Version)
+
+Phase: 11.7
+Series: Predictive Learning Feedback Loop
+Dependencies: 11.7B – 11.7E
+Schema Version: regime-mapping/v1.4b
+Implements: Canonical regime–strategy realignment, canonical bridge synchronization, DSS cleanup, analytics integration, dynamic mapping visualization, and statistically grounded DriftScore computation with enhanced interpretability, stability, and schema validation safeguards.
+
+1 • Objective
+
+To finalize and unify DawnTrader’s canonical regime–strategy alignment system by:
+
+Realigning SMA Trend Ride and Range Trade under new canonical regimes
+
+Removing DSS extended regimes and enforcing canonical-only references
+
+Making the Overview Tab’s regime-strategy map dynamic, sourced from the canonical JSON
+
+Adding a new Mapping Drift Tab that visualizes and quantifies deviation from canonical regimes
+
+Introducing a mathematically rigorous DriftScore based on volatility/trend Z-distance
+
+Ensuring all telemetry, bridge, and archival layers remain synchronized and schema-verified
+
+This directive completes the Phase 11.7 Predictive Learning Feedback Loop, preparing for Phase 12 autonomous model retraining.
+
+2 • Scope
+Layer	File / Component	Purpose
+/server/config/canonical-regime-strategy-map.ts	Canonical strategy–regime definitions	
+/bridge/DawnTrader_Regime_Strategy_Mapping.md	Human-readable reference	
+/bridge/mapping-regime-strategy.json	Machine-readable source for UI and APIs	
+/bridge/DawnTrader_Regime_Strategy_Signal_Pattern_Mapping.md	Signal → strategy alignment	
+/server/core/dss-engine.ts	Clean up legacy regimes	
+/server/scripts/sync-canonical-bridge.ts	Auto-sync bridge documents	
+/client/pages/analytics/overview.tsx	Dynamic regime-strategy table	
+/client/pages/analytics/mapping-drift.tsx	Mapping drift analytics tab	
+/server/core/analytics/mapping-drift-calculator.ts	DriftScore computation	
+/server/config/drift-definitions.ts	Canonical Z-score ideals + weights	
+/server/config/drift-descriptions.ts	Human-readable drift messages	
+/server/core/telemetry/vts-telemetry.ts	Add DriftScore to telemetry	
+/server/routes/system.ts	API endpoints for drift + sync	
+/server/bootstrap/schema-validator.ts	Schema version validation	
+/server/tests/system/mapping_drift_integrity.test.ts	Integrity + boundary tests	
+3 • Implementation Tasks
+🧩 Task 1 — Canonical Mapping Realignment
+
+File: /server/config/canonical-regime-strategy-map.ts
+
+Strategy	Old Regime	New Regime	Secondary Metric Changes
+SMA Trend Ride	BULL_STABLE	HIGH_VOL_IMPULSE	SMA(50) > SMA(100), ADX > 25, RSI 55–70
+Range Trade	LOW_VOL_CHOP	LOW_VOL_CHOP (confirmed)	Bandwidth < 0.14, RSI 45–55
+
+Schema header:
+
+"_schema": "regime-mapping/v1.4b",
+"_metadata": {
+  "updatedAt": "2026-02-02T00:00:00Z",
+  "source": "VTS",
+  "canonical": true,
+  "includesDriftScore": true
+}
+
+🧩 Task 2 — Bridge Auto-Sync Utility
+
+File: /server/scripts/sync-canonical-bridge.ts
+
+Regenerates Markdown + JSON bridge files from canonical map:
+
+/bridge/DawnTrader_Regime_Strategy_Mapping.md
+
+/bridge/mapping-regime-strategy.json
+
+/bridge/DawnTrader_Regime_Strategy_Signal_Pattern_Mapping.md
+
+Atomic temp-write → rename to prevent partial writes.
+
+Deterministic key sorting for stable checksums.
+
+Logs every sync to /logs/system_events.log.
+
+Schedulable and callable via admin API (“Force Sync Canonical”).
+
+✅ Ensures all bridge docs mirror canonical truth.
+
+🧩 Task 3 — Human-Readable Drift Descriptions
+
+File: /server/config/drift-descriptions.ts
+
+Drift Range	Description
+0.0–0.8	“Strategy operating within expected regime characteristics — canonical alignment stable.”
+0.8–1.5	“Moderate drift detected — partial deviation from canonical regime features. Monitor for misalignment.”
+>1.5	“Significant drift — executing under conditions inconsistent with canonical design. Realignment or retraining recommended.”
+🧩 Task 4 — Drift Definition and Formula
+
+File: /server/config/drift-definitions.ts
+
+export const DRIFT_CANONICAL = {
+  BULL_STABLE:      { idealVolZ: -1.0, idealTrendZ: +1.5, weightVol: 0.4, weightTrend: 0.6 },
+  BEAR_VOLATILE:    { idealVolZ: +1.2, idealTrendZ: -0.8, weightVol: 0.6, weightTrend: 0.4 },
+  LOW_VOL_CHOP:     { idealVolZ: -0.8, idealTrendZ:  0.0, weightVol: 0.5, weightTrend: 0.5 },
+  HIGH_VOL_IMPULSE: { idealVolZ: +0.8, idealTrendZ: +1.2, weightVol: 0.5, weightTrend: 0.5 },
+  TRANSITION:       { idealVolZ:  0.0, idealTrendZ:  0.0, weightVol: 0.5, weightTrend: 0.5 }
+};
+
+
+Weighted and smoothed DriftScore formula:
+
+File: /server/core/analytics/mapping-drift-calculator.ts
+
+import { DRIFT_CANONICAL } from "../../config/drift-definitions";
+import { ema } from "../../utils/smoothing";
+
+export function computeDriftScore(actualVolZ: number[], actualTrendZ: number[], regime: string): number {
+  const ideal = DRIFT_CANONICAL[regime];
+  if (!ideal) return 0;
+
+  const smoothedVol = ema(actualVolZ, 0.4).at(-1) ?? actualVolZ.at(-1);
+  const smoothedTrend = ema(actualTrendZ, 0.4).at(-1) ?? actualTrendZ.at(-1);
+
+  const dVol = smoothedVol - ideal.idealVolZ;
+  const dTrend = smoothedTrend - ideal.idealTrendZ;
+
+  const score = Math.sqrt(
+    ideal.weightVol * (dVol ** 2) + ideal.weightTrend * (dTrend ** 2)
+  );
+
+  return Math.min(Math.max(score, 0), 3);
+}
+
+
+✅ Uses weighted Euclidean distance between actual and ideal regime conditions
+✅ Applies 3-window exponential smoothing to stabilize readings
+✅ Interpretable range 0–3 (low = aligned, high = drifted)
+
+🧩 Task 5 — Schema Version Check (Corrected)
+
+File: /server/bootstrap/schema-validator.ts
+
+import { readFileSync } from "fs";
+import { CANONICAL_REGIME_STRATEGY_MAP } from "../config/canonical-regime-strategy-map";
+
+export function validateSchemaVersions() {
+  // 1️⃣ Retrieve schema from imported canonical TypeScript object
+  const canonicalSchema = CANONICAL_REGIME_STRATEGY_MAP._schema;
+
+  // 2️⃣ Load and parse schema from bridge JSON file
+  const bridgeRaw = readFileSync("bridge/mapping-regime-strategy.json", "utf8");
+  const bridge = JSON.parse(bridgeRaw);
+
+  // 3️⃣ Compare
+  if (canonicalSchema !== bridge._schema) {
+    throw new Error(
+      `[11.7F] Schema mismatch: canonical=${canonicalSchema}, bridge=${bridge._schema}`
+    );
+  }
+}
+
+
+✅ Fixed per Gemini’s recommendation.
+No more invalid JSON.parse() calls on TypeScript files.
+Validated during system startup and CI/CD pipeline.
+
+🧩 Task 6 — DSS Cleanup and Runtime Assertions
+
+Files:
+
+/server/core/dss-engine.ts
+
+/server/core/market-regime.ts
+
+/server/core/dynamic-sizing-engine.ts
+
+Removed: EXTREME_NOISE, BULL_VOLATILE, BEAR_STABLE
+
+Replaced with canonical constants from REGIMES.*
+
+Added runtime guard:
+
+if (!Object.values(REGIMES).includes(currentRegime))
+  throw new Error(`[11.7F] Invalid regime reference: ${currentRegime}`);
+
+
+✅ Fully canonicalized DSS logic.
+
+🧩 Task 7 — Analytics Overview Tab (Dynamic Mapping Table)
+
+File: /client/pages/analytics/overview.tsx
+
+Static map replaced by dynamic data table
+
+Data source: /bridge/mapping-regime-strategy.json
+
+Same formatting and structure
+
+Displays banner:
+
+“Mapping below is sourced directly from the canonical regime-strategy file (schema v1.4b). Any realignment updates are reflected automatically.”
+
+✅ Auto-refreshes on canonical updates
+✅ Version and last-sync date displayed
+
+🧩 Task 8 — Mapping Drift Visualization Tab
+
+File: /client/pages/analytics/mapping-drift.tsx
+
+Trend line (last 4 telemetry windows)
+
+Hover tooltips: actual vs ideal Z, weighted contribution, schema version
+
+Color-coded DriftScore:
+
+🟩 0–0.5 Aligned
+
+🟨 0.5–1.5 Transitional
+
+🟥 >1.5 Drifted
+
+Sparkline per strategy
+
+“Last Synced” indicator from _metadata.updatedAt
+
+Admin-only “Force Sync Canonical” button
+
+Toggle for canonical target overlay
+
+CSV export via /api/system/mapping-drift/export
+
+✅ Real-time interpretability with drift trend context.
+
+🧩 Task 9 — Bridge Documentation Updates
+
+Files:
+
+/bridge/DawnTrader_Regime_Strategy_Mapping.md
+
+/bridge/DawnTrader_Regime_Strategy_Signal_Pattern_Mapping.md
+
+Adds:
+
+Updated SMA Trend Ride → HIGH_VOL_IMPULSE
+
+Range Trade verified LOW_VOL_CHOP
+
+New section:
+
+“DriftScore quantifies the statistical distance between a strategy’s operating environment and its canonical regime’s ideal volatility/trend profile.”
+
+✅ Clear human-readable reference for operators.
+
+🧩 Task 10 — Validation & Testing
+
+File: /server/tests/system/mapping_drift_integrity.test.ts
+
+Includes:
+
+test("DriftScore bounds", () => {
+  const sLow = computeDriftScore([-1, -0.9, -1.1], [1.4, 1.5, 1.6], "BULL_STABLE");
+  const sHigh = computeDriftScore([5,5,5], [5,5,5], "BULL_STABLE");
+  expect(sLow).toBeGreaterThanOrEqual(0);
+  expect(sHigh).toBeLessThanOrEqual(3);
+});
+
+test("Bridge Markdown column validation", () => {
+  const md = fs.readFileSync("bridge/DawnTrader_Regime_Strategy_Mapping.md", "utf8");
+  const headerCount = md.split("\n")[0].split("|").length;
+  expect(headerCount).toBeGreaterThan(3);
+});
+
+
+✅ Confirms value boundaries and Markdown structural integrity.
+
+4 • Verification Plan
+Step	Action	Expected Result
+1	Run sync-canonical-bridge.ts	Bridges updated, checksum logged
+2	Launch Analytics → Overview	Dynamic map loads canonical data
+3	Open Mapping Drift tab	Trend chart + color-coded drift visible
+4	Hover data point	Tooltip shows actual vs ideal Z-values
+5	Click “Force Sync Canonical”	Manual sync executed, logs event
+6	Run schema-validator	Confirms canonical/bridge schema match
+7	Run tests	100% pass with schema v1.4b
+5 • Governance & Safety
+Control	Enforcement
+Source Integrity	Canonical source locked & versioned
+Schema Validation	Enforced at startup (v1.4b)
+Temporal Stability	EMA smoothing applied
+Interpretability	Weighted DriftScore with tooltips
+Operator Visibility	Sparklines + “Last Synced”
+Regression Safety	Extended test coverage
+Forward Flexibility	Weight tuning for Phase 12 retraining
+6 • Success Criteria
+
+✅ Canonical mapping realigned (SMA Trend Ride, Range Trade)
+✅ DSS fully canonicalized
+✅ Overview tab dynamically populated
+✅ Mapping Drift tab operational
+✅ Weighted, smoothed DriftScore active
+✅ Schema version verified at startup
+✅ Markdown docs synchronized
+✅ All validation tests pass
+
+7 • Deliverables
+File	Purpose
+/server/config/canonical-regime-strategy-map.ts	Updated canonical mapping
+/server/core/analytics/mapping-drift-calculator.ts	DriftScore computation
+/server/bootstrap/schema-validator.ts	Fixed schema version validation
+/client/pages/analytics/mapping-drift.tsx	Drift UI tab
+/bridge/DawnTrader_Regime_Strategy_Mapping.md	Updated reference
+/bridge/mapping-regime-strategy.json	Dynamic data source
+/server/tests/system/mapping_drift_integrity.test.ts	Validation suite
+✅ Final Result
+
+Directive 11.7F (Schema v1.4b) establishes a fully canonical, quantitatively validated, dynamically synchronized regime–strategy mapping ecosystem.
+
+Real-time drift monitoring with quantitative + descriptive clarity
+
+Schema consistency enforced at startup
+
+Dynamic analytics dashboard with sparklines + last sync
+
+Deterministic canonical source of truth for all downstream systems

@@ -1,34 +1,41 @@
 {
-  "version": "11.4F.1",
-  "lastUpdated": "2026-01-18",
-  "BULL_STABLE": {
-    "favoredStrategies": ["sma_trend_ride", "vwap_pullback", "morning_star", "pivot_shift"],
-    "favoredSignalTypes": ["QUANT", "PATTERN", "HYBRID"],
-    "riskMultiplier": 1.2,
-    "minConfidence": 0.65
+  "_schema": "regime-mapping/v1.4b",
+  "_metadata": {
+    "updatedAt": "2026-02-02T00:00:00Z",
+    "source": "VTS",
+    "canonical": true,
+    "includesDriftScore": true,
+    "generatedAt": "2026-02-02T00:00:00Z",
+    "generator": "sync-canonical-bridge.ts"
   },
   "BEAR_VOLATILE": {
     "favoredStrategies": ["mean_reversion", "reverse_impulse", "defensive_hedge", "inside_bar_reversal"],
     "favoredSignalTypes": ["QUANT", "HYBRID", "PATTERN"],
-    "riskMultiplier": 0.7,
-    "minConfidence": 0.75
+    "minConfidence": 0.75,
+    "riskMultiplier": 0.7
+  },
+  "BULL_STABLE": {
+    "favoredStrategies": ["vwap_pullback", "morning_star", "pivot_shift"],
+    "favoredSignalTypes": ["QUANT", "PATTERN", "HYBRID"],
+    "minConfidence": 0.65,
+    "riskMultiplier": 1.2
+  },
+  "HIGH_VOL_IMPULSE": {
+    "favoredStrategies": ["sma_trend_ride", "breakout", "vwap_bounce", "volatility_edge", "dhma"],
+    "favoredSignalTypes": ["QUANT", "HYBRID"],
+    "minConfidence": 0.7,
+    "riskMultiplier": 0.8
   },
   "LOW_VOL_CHOP": {
     "favoredStrategies": ["range_trade", "support_bounce", "abcd_long", "adaptive_flow"],
     "favoredSignalTypes": ["QUANT", "PATTERN", "HYBRID"],
-    "riskMultiplier": 0.9,
-    "minConfidence": 0.60
-  },
-  "HIGH_VOL_IMPULSE": {
-    "favoredStrategies": ["breakout", "vwap_bounce", "volatility_edge", "dhma"],
-    "favoredSignalTypes": ["QUANT", "HYBRID"],
-    "riskMultiplier": 0.8,
-    "minConfidence": 0.70
+    "minConfidence": 0.6,
+    "riskMultiplier": 0.9
   },
   "TRANSITION": {
     "favoredStrategies": ["liquidity_trap", "pivot_shift", "morning_star"],
     "favoredSignalTypes": ["QUANT", "HYBRID", "PATTERN"],
-    "riskMultiplier": 0.85,
-    "minConfidence": 0.55
+    "minConfidence": 0.55,
+    "riskMultiplier": 0.85
   }
 }

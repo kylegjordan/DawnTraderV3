@@ -1,6 +1,6 @@
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * Directive 11.4F.1 — Canonical Regime & Strategy Lock-In
+ * Directive 11.7F — Canonical Regime & Strategy Lock-In
  * ══════════════════════════════════════════════════════════════════════════════
  * 
  * This file is the SINGLE SOURCE OF TRUTH for all regime, strategy, signal type,
@@ -9,12 +9,25 @@
  * ALL subsystems (VTS, Signal Orchestrator, Telemetry, DSE, RTB, Bridge) MUST
  * import from this file. Local inference or mapping logic is PROHIBITED.
  * 
- * Schema Version: 11.4F.1
- * Last Updated: 2026-01-12
+ * Schema Version: regime-mapping/v1.4b
+ * Last Updated: 2026-02-02
+ * 
+ * Changes in v1.4b:
+ *   - SMA Trend Ride realigned from BULL_STABLE → HIGH_VOL_IMPULSE
+ *   - Range Trade confirmed in LOW_VOL_CHOP with updated metrics
+ *   - DriftScore integration enabled
  * 
  * DO NOT MODIFY without architectural review and full system audit.
  * ══════════════════════════════════════════════════════════════════════════════
  */
+
+export const CANONICAL_SCHEMA_VERSION = 'regime-mapping/v1.4b';
+export const CANONICAL_SCHEMA_METADATA = {
+  updatedAt: '2026-02-02T00:00:00Z',
+  source: 'VTS',
+  canonical: true,
+  includesDriftScore: true
+};
 
 export type CanonicalRegimeType = 
   | 'BULL_STABLE'
@@ -116,13 +129,6 @@ export const CANONICAL_REGIME_STRATEGY_MAP: Record<CanonicalRegimeType, RegimeSt
     metrics: REGIME_METRICS.BULL_STABLE,
     strategies: [
       { 
-        strategy: 'SMA Trend Ride', 
-        strategyKey: 'sma_trend_ride',
-        signalType: 'QUANT', 
-        patternType: null,
-        secondaryMetrics: 'Price > SMA(50) by > 0.5% • ADX > 25'
-      },
-      { 
         strategy: 'VWAP Pullback', 
         strategyKey: 'vwap_pullback',
         signalType: 'QUANT', 
@@ -190,7 +196,7 @@ export const CANONICAL_REGIME_STRATEGY_MAP: Record<CanonicalRegimeType, RegimeSt
         strategyKey: 'range_trade',
         signalType: 'QUANT', 
         patternType: null,
-        secondaryMetrics: 'Bollinger Bandwidth < 0.10 • ADX < 20'
+        secondaryMetrics: 'Bollinger Bandwidth < 0.14 • RSI 45–55 • ADX < 20'
       },
       { 
         strategy: 'Support Bounce', 
@@ -220,6 +226,13 @@ export const CANONICAL_REGIME_STRATEGY_MAP: Record<CanonicalRegimeType, RegimeSt
   HIGH_VOL_IMPULSE: {
     metrics: REGIME_METRICS.HIGH_VOL_IMPULSE,
     strategies: [
+      { 
+        strategy: 'SMA Trend Ride', 
+        strategyKey: 'sma_trend_ride',
+        signalType: 'QUANT', 
+        patternType: null,
+        secondaryMetrics: 'SMA(50) > SMA(100) • ADX > 25 • RSI 55–70'
+      },
       { 
         strategy: 'Breakout', 
         strategyKey: 'breakout',

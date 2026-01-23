@@ -2212,6 +2212,67 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // GET /api/system/canonical-map - Directive 11.7F: Get canonical regime-strategy mapping for dynamic UI
+  apiRouter.get('/system/canonical-map', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const bridgePath = path.join(process.cwd(), 'bridge/canonical/mapping-regime-strategy.json');
+      
+      const content = await fs.readFile(bridgePath, 'utf8');
+      const bridge = JSON.parse(content);
+      
+      res.json({
+        ok: true,
+        ...bridge,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[CanonicalMap] GET error:', error.message);
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
+    }
+  });
+
+  // POST /api/system/force-sync-canonical - Directive 11.7F: Force sync bridge documents from canonical
+  apiRouter.post('/system/force-sync-canonical', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { syncCanonicalBridge } = await import('./scripts/sync-canonical-bridge');
+      const result = await syncCanonicalBridge();
+      
+      res.json({
+        ok: result.success,
+        filesUpdated: result.filesUpdated,
+        errors: result.errors,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[ForceSyncCanonical] POST error:', error.message);
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
+    }
+  });
+
+  // GET /api/system/mapping-drift/export - Directive 11.7F: Export drift data as CSV
+  apiRouter.get('/system/mapping-drift/export', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const driftAnalysis = telemetryService.computeMappingDrift();
+      
+      const csvLines = [
+        'Regime,Count,Percentage',
+        ...Object.entries(driftAnalysis.distribution).map(([regime, count]) => {
+          const pct = ((count / (driftAnalysis.validPairs || 1)) * 100).toFixed(2);
+          return `${regime},${count},${pct}%`;
+        })
+      ];
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="mapping-drift-export.csv"');
+      res.send(csvLines.join('\n'));
+    } catch (error: any) {
+      console.error('[MappingDriftExport] GET error:', error.message);
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
+    }
+  });
+
   // Phase 3: Filters V2 API Endpoints (with Manual Override metadata)
   // GET /api/filters-v2?mode=paper|live
   apiRouter.get('/filters-v2', authenticateToken, async (req: AuthenticatedRequest, res) => {

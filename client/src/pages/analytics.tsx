@@ -7,7 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Activity, TrendingUp, TrendingDown, AlertCircle, Gauge, RefreshCw, Clock, DollarSign, Target, Zap, BarChart3, Layers, List, BookOpen, ChevronDown, ChevronUp, Star } from "lucide-react";
+import { Activity, TrendingUp, TrendingDown, AlertCircle, Gauge, RefreshCw, Clock, DollarSign, Target, Zap, BarChart3, Layers, List, BookOpen, ChevronDown, ChevronUp, Star, GitBranch, Download } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import TopBatch from "@/components/trading/top-batch";
@@ -673,6 +673,256 @@ function TradingActivitiesSection({ feedData, isLoading }: { feedData: Narrative
   );
 }
 
+interface MappingDriftData {
+  ok: boolean;
+  isDrifted: boolean;
+  driftScore: number;
+  canonicalCoverage: number;
+  empiricalRegimes: string[];
+  missingCanonical: string[];
+  extraEmpirical: string[];
+  distribution: Record<string, number>;
+  normalizedDistribution: Record<string, number>;
+  recommendations: string[];
+  validPairs: number;
+  minSamplesMet: boolean;
+  timestamp: string;
+}
+
+interface CanonicalMapData {
+  ok: boolean;
+  _schema: string;
+  _metadata: {
+    updatedAt: string;
+    source: string;
+    canonical: boolean;
+    includesDriftScore: boolean;
+  };
+  [key: string]: any;
+}
+
+function MappingDriftSection() {
+  const [syncing, setSyncing] = useState(false);
+
+  const { data: driftData, isLoading: driftLoading, refetch: refetchDrift } = useQuery<MappingDriftData>({
+    queryKey: ['/api/system/mapping-drift'],
+    queryFn: () => apiFetch('/api/system/mapping-drift'),
+    refetchInterval: 30000,
+  });
+
+  const { data: canonicalData, isLoading: canonicalLoading } = useQuery<CanonicalMapData>({
+    queryKey: ['/api/system/canonical-map'],
+    queryFn: () => apiFetch('/api/system/canonical-map'),
+  });
+
+  const handleForceSync = async () => {
+    setSyncing(true);
+    try {
+      await apiFetch('/api/system/force-sync-canonical', { method: 'POST' });
+      await refetchDrift();
+    } catch (err) {
+      console.error('Force sync failed:', err);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const getDriftColor = (score: number) => {
+    if (score <= 0.5) return 'text-green-400';
+    if (score <= 0.8) return 'text-lime-400';
+    if (score <= 1.5) return 'text-yellow-400';
+    return 'text-red-400';
+  };
+
+  const getDriftBg = (score: number) => {
+    if (score <= 0.5) return 'bg-green-500/20';
+    if (score <= 0.8) return 'bg-lime-500/20';
+    if (score <= 1.5) return 'bg-yellow-500/20';
+    return 'bg-red-500/20';
+  };
+
+  const getDriftLabel = (score: number) => {
+    if (score <= 0.5) return 'Aligned';
+    if (score <= 0.8) return 'Minor Drift';
+    if (score <= 1.5) return 'Moderate Drift';
+    return 'Significant Drift';
+  };
+
+  if (driftLoading || canonicalLoading) {
+    return (
+      <Card>
+        <CardContent className="p-6 flex items-center justify-center">
+          <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const schemaVersion = canonicalData?._schema || 'Unknown';
+  const lastUpdated = canonicalData?._metadata?.updatedAt || 'Unknown';
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-muted-foreground">
+            Schema: <Badge variant="outline">{schemaVersion}</Badge>
+            <span className="ml-4">Last Sync: {lastUpdated}</span>
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.open('/api/system/mapping-drift/export', '_blank')}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export CSV
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleForceSync}
+            disabled={syncing}
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Syncing...' : 'Force Sync Canonical'}
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Drift Score</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className={`text-3xl font-bold ${getDriftColor(driftData?.driftScore || 0)}`}>
+              {driftData?.driftScore?.toFixed(3) || '0.000'}
+            </div>
+            <Badge className={`mt-2 ${getDriftBg(driftData?.driftScore || 0)}`}>
+              {getDriftLabel(driftData?.driftScore || 0)}
+            </Badge>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Canonical Coverage</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">
+              {((driftData?.canonicalCoverage || 0) * 100).toFixed(1)}%
+            </div>
+            <p className="text-sm text-muted-foreground mt-1">
+              {driftData?.validPairs || 0} pairs analyzed
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Status</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!driftData?.minSamplesMet ? (
+              <Badge variant="secondary">Insufficient Samples</Badge>
+            ) : driftData?.isDrifted ? (
+              <Badge variant="destructive">Drift Detected</Badge>
+            ) : (
+              <Badge className="bg-green-500/20 text-green-400">Aligned</Badge>
+            )}
+            {driftData?.extraEmpirical && driftData.extraEmpirical.length > 0 && (
+              <p className="text-xs text-red-400 mt-2">
+                Unknown regimes: {driftData.extraEmpirical.join(', ')}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Regime Distribution</CardTitle>
+          <CardDescription>Empirical regime distribution from active telemetry</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {Object.entries(driftData?.normalizedDistribution || {}).map(([regime, count]) => {
+              const total = driftData?.validPairs || 1;
+              const pct = (count / total) * 100;
+              return (
+                <div key={regime} className="flex items-center gap-4">
+                  <span className="w-32 text-sm font-medium">{regime}</span>
+                  <div className="flex-1 bg-muted rounded-full h-2">
+                    <div
+                      className="bg-primary rounded-full h-2"
+                      style={{ width: `${Math.min(pct, 100)}%` }}
+                    />
+                  </div>
+                  <span className="w-16 text-sm text-right">{pct.toFixed(1)}%</span>
+                  <span className="w-12 text-sm text-muted-foreground text-right">{count}</span>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {driftData?.recommendations && driftData.recommendations.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Recommendations</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2">
+              {driftData.recommendations.map((rec, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm">
+                  <AlertCircle className="w-4 h-4 text-yellow-500 mt-0.5 flex-shrink-0" />
+                  {rec}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Canonical Regime–Strategy Mapping</CardTitle>
+          <CardDescription>
+            Mapping below is sourced directly from the canonical regime-strategy file (schema {schemaVersion}). 
+            Any realignment updates are reflected automatically.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {canonicalData && Object.entries(canonicalData)
+              .filter(([key]) => !key.startsWith('_') && key !== 'ok' && key !== 'timestamp')
+              .map(([regime, data]: [string, any]) => (
+                <div key={regime} className="border rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <Badge className={getRegimeBadgeColor(regime)}>{regime}</Badge>
+                    <span className="text-sm text-muted-foreground">
+                      Risk: {data.riskMultiplier}× | Min Conf: {data.minConfidence}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {data.favoredStrategies?.map((strategy: string) => (
+                      <Badge key={strategy} variant="outline" className="text-xs">
+                        {strategy}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function AnalyticsPage() {
   const { mode } = useTradingMode();
   const [activeTab, setActiveTab] = useState("overview");
@@ -742,10 +992,14 @@ export default function AnalyticsPage() {
         </div>
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4 max-w-2xl">
+          <TabsList className="grid w-full grid-cols-5 max-w-3xl">
             <TabsTrigger value="overview" className="flex items-center gap-2">
               <Activity className="w-4 h-4" />
               Overview
+            </TabsTrigger>
+            <TabsTrigger value="mapping-drift" className="flex items-center gap-2">
+              <GitBranch className="w-4 h-4" />
+              Mapping Drift
             </TabsTrigger>
             <TabsTrigger value="top-batch" className="flex items-center gap-2">
               <List className="w-4 h-4" />
@@ -763,6 +1017,10 @@ export default function AnalyticsPage() {
           
           <TabsContent value="overview" className="space-y-6 mt-6">
             <MarketOverviewSection indicators={indicatorsData} />
+          </TabsContent>
+          
+          <TabsContent value="mapping-drift" className="mt-6">
+            <MappingDriftSection />
           </TabsContent>
           
           <TabsContent value="top-batch" className="mt-6">
