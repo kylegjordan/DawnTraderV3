@@ -1,0 +1,151 @@
+Directive 11.7H — VN Metric Normalization & Cross-Mode Parity
+
+Phase: 11.7 | Category: Metric Calibration & Consistency
+Schema: metrics-calibration/v1.2
+Status: Pending Implementation Approval
+
+1 Objective
+
+Eliminate the mathematically invalid returns-ratio VN formula used in passive learning mode and unify all Volatility Noise (VN) calculations under a single, validated function in analysis-utils.ts.
+This ensures that both active trading and passive learning use the same canonical computation and thresholds, restoring data consistency to the predictive learning pipeline.
+
+2 Scope & Affected Files
+Component	Path	Action
+IMF Metrics Module	/server/core/metrics/imf-metrics.ts	🔧 Replace VN formula with canonical version from analysis-utils.ts
+FX5 Scanner	/server/services/fx5-scanner.ts	🔧 Ensure calls use unified VN function and shared threshold
+System Guards Config	/server/config/system-guards.ts	🔧 Define global MAX_VOL_NOISE = 0.8 and import everywhere
+Analysis Utilities	/server/utils/analysis-utils.ts	✅ Confirm canonical VN export name (computeVolatilityNoise or calculateVN)
+Telemetry Aggregator	/server/services/telemetry-aggregator.ts	🔄 Verify VN field references canonical utility
+Predictive Learning	/server/scripts/recalibrate-predictive-weights.ts	🧩 Confirm VN normalization inputs match corrected math
+Bridge Documentation	/bridge/metric_definitions.md, /bridge/system-guards.md	📝 Update definitions and thresholds
+Unit Tests	/server/tests/unit/vn_parity.test.ts	🧪 Add parity verification test
+3 Implementation Tasks
+H-01 Replace Flawed Formula in imf-metrics.ts
+
+Old (flawed):
+
+const returns = (currClose - prevClose) / prevClose;
+const noiseRatio = stdDev(returns) / meanAbs(returns);
+
+
+New (canonical):
+
+// ⚠️ Verify exact export name in analysis-utils.ts before import
+// Some codebases use `calculateVN` instead of `computeVolatilityNoise`
+import { computeVolatilityNoise } from "@/server/utils/analysis-utils";
+
+export function calculateVolNoise(cachedOHLC) {
+  const closes = cachedOHLC.map(c => c.close);
+  return computeVolatilityNoise(closes);
+}
+
+
+✅ Uses the price-difference method (stable, empirically validated).
+
+H-02 Define Global Threshold and Align Imports
+// system-guards.ts
+export const MAX_VOL_NOISE = 0.8;
+
+
+Remove local constants like VN_MAX or MAX_VOL_NOISE_LOCAL.
+
+Import and use this shared constant in IMF, FX5, and DSS components.
+
+H-03 Add VN Parity Test
+
+/server/tests/unit/vn_parity.test.ts
+
+import { computeVolatilityNoise } from "@/server/utils/analysis-utils";
+import * as IMF from "@/server/core/metrics/imf-metrics";
+
+test("IMF VN parity with analysis-utils", () => {
+  const candles = [{close:100},{close:101},{close:102},{close:101.5}];
+  const vnA = IMF.calculateVolNoise(candles);
+  const vnB = computeVolatilityNoise(candles.map(c=>c.close));
+  expect(vnA).toBeCloseTo(vnB, 2);
+});
+
+
+✅ Guarantees formula parity in all future updates.
+
+H-04 Add Sanity Clamp in FX5 Scanner
+if (VolNoise > 2 || VolNoise < 0) {
+  logger.warn(`[VN] Out-of-range VN=${VolNoise} — defaulting to 0.6`);
+  VolNoise = 0.6;
+}
+
+
+Prevents rare division or empty-array anomalies from blocking scans.
+
+H-05 Schema & Bridge Documentation
+
+Increment metrics schema → metrics-calibration/v1.2
+
+Update /bridge/metric_definitions.md:
+
+Volatility Noise (VN) — Ratio of the standard deviation to the mean absolute deviation of sequential price differences.
+Typical range: 0.2 – 0.8. Used to assess market stability and filter excessive noise.
+
+Update /bridge/system-guards.md:
+
+MAX_VOL_NOISE = 0.8 (global constant, Phase 11.7H)
+
+H-06 Logging & Verification
+
+Log each calibration run to /logs/metrics/vn_parity.log:
+
+[11.7H][Calibration] VN parity validated | imf-metrics=OK | analysis-utils=OK | threshold=0.8
+
+4 Validation Plan
+Test	Description	Expected Result
+VN Parity	IMF and analysis-utils outputs identical	Δ ≤ 0.02
+FX5 Scanner Run	VN < 0.8 for typical pairs	Pairs pass filter
+Passive Learning Replay	Telemetry repopulates post-fix	≥ 95 % valid samples
+Predictive Learning	Normalized VN input stable	Feature variance < 0.05
+Schema Check	_schema = metrics-calibration/v1.2	✅
+5 Governance & Safety
+Control	Purpose	Status
+Canonical Function Source	Single VN computation utility	✅
+Cross-Mode Parity	Identical logic in active & passive modes	✅
+Threshold Governance	Centralized in system-guards.ts	✅
+Schema Traceability	Version bump with docs	✅
+Regression Protection	Parity test added	✅
+6 Deployment Verification
+
+Run one passive-learning cycle (OHLC available) — verify VN range 0.2–0.7.
+
+Confirm scanner logs show typical pairs passing filters.
+
+Validate parity log shows “imf-metrics=OK”.
+
+Confirm predictive weights recalibration (11.7D) executes without VN skips.
+
+7 Deliverables
+
+Updated imf-metrics.ts formula
+
+Unified threshold constant (MAX_VOL_NOISE)
+
+vn_parity.test.ts test file
+
+Schema update metrics-calibration/v1.2
+
+Bridge documentation updates
+
+VN parity log in /logs/metrics/vn_parity.log
+
+8 Summary
+
+Directive 11.7H ensures that:
+
+Both passive and active systems use a mathematically correct VN formula.
+
+The Predictive Learning loop receives valid, stable volatility inputs.
+
+Phase 12 ML training will be grounded on consistent, normalized metrics.
+
+✅ Final Implementation Note (Gemini Recommendation)
+
+Before import: Confirm whether analysis-utils.ts exports the function as
+computeVolatilityNoise or calculateVN.
+Adjust the import statement in imf-metrics.ts accordingly to prevent runtime import errors.
