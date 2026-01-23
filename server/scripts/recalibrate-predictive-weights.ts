@@ -338,7 +338,3 @@ export function getRecalibrationStatus(): {
     return { lastRun: null, version: 0, regimes: 0, checksum: null };
   }
 }
-
-if (require.main === module) {
-  recalibratePredictiveWeights();
-}
