@@ -3,6 +3,7 @@
  * Directive 11.5 — Net Expectancy Gate (Profitability Validation)
  * Directive 11.7A — Unified Signal Filter Integration (VTS + SQE Parity)
  * Directive 11.7B — Predictive Learning Telemetry Enhancement
+ * Directive 11.7C — Dynamic ROI Thresholding via PredictiveConfidence
  * ══════════════════════════════════════════════════════════════════════════════
  * 
  * Purpose: Prevents low-expectancy (fee-negative) signals from entering 
@@ -14,14 +15,27 @@
  * Directive 11.7B integrates VTS telemetry for adaptive expectancy based on
  * historical simulation performance per regime × strategy.
  * 
+ * Directive 11.7C adds:
+ * - Dynamic ROI scaling based on PredictiveConfidence (bounded 1-4%)
+ * - Friction-aware profitability validation (fees + slippage floor)
+ * - Unified logic for VTS, SQE, DSS, and RTB
+ * 
  * No trade—real or simulated—proceeds if its math doesn't justify the risk.
  * 
- * Schema: v1.9.0
- * Governance: Directive 11.5 Task 1, Directive 11.7A Task 1, Directive 11.7B Task 4
+ * Schema: v2.0.0
+ * Governance: Directive 11.5 Task 1, Directive 11.7A Task 1, Directive 11.7B Task 4, Directive 11.7C Tasks 2-3
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
 import { getRegimePerformance, checkConfidenceDrift } from '../logging/vts-telemetry';
+import { 
+  ROI_FLEX_MULTIPLIER, 
+  ROI_MIN, 
+  ROI_MAX, 
+  DEFAULT_FEE, 
+  DEFAULT_SLIPPAGE,
+  FRICTION_SAFETY_BUFFER 
+} from '../../config/adaptive-thresholds';
 
 export interface ExpectancyParams {
   entry: number;
@@ -134,40 +148,96 @@ export function getMinROIForRegime(regime: string): number {
 }
 
 /**
- * Directive 11.7A Task 1: Unified Signal Profitability Check
+ * Directive 11.7C Task 2: Dynamic ROI Helper
  * 
- * Validates that a signal's expected ROI exceeds the regime-specific threshold.
+ * Calculates dynamic ROI threshold based on regime baseline and PredictiveConfidence.
+ * Higher confidence = lower threshold (more permissive), bounded within [1%, 4%].
+ * 
+ * Formula: dynamicROI = base × (1 - (confidence - 0.5) × ROI_FLEX_MULTIPLIER)
+ * 
+ * @param regime - Market regime for baseline threshold
+ * @param predictiveConfidence - Confidence score from VTS telemetry [0.0, 1.0]
+ * @returns Dynamic ROI threshold bounded within ROI_MIN and ROI_MAX
+ */
+export function getDynamicROIThreshold(regime: string, predictiveConfidence: number): number {
+  const base = getMinROIForRegime(regime);
+  const boundedConfidence = Math.min(Math.max(predictiveConfidence, 0.0), 1.0);
+  const dynamicROI = base * (1 - (boundedConfidence - 0.5) * ROI_FLEX_MULTIPLIER);
+  return Math.min(Math.max(dynamicROI, ROI_MIN), ROI_MAX);
+}
+
+/**
+ * Directive 11.7C Task 3: Friction-Aware Profitability Gate
+ * 
+ * Validates that a signal's expected ROI exceeds both:
+ * 1. The dynamic confidence-adjusted threshold
+ * 2. The friction floor (fees + slippage) with safety buffer
+ * 
  * Used by both VTS and SQE for parity in signal filtering.
  * 
  * @param entryPrice - Entry price for the trade
  * @param targetPrice - Target/take-profit price
  * @param regime - Current market regime for the pair
- * @returns true if signal meets minimum ROI threshold for the regime
+ * @param predictiveConfidence - Optional confidence score [0.0, 1.0], defaults to 0.5
+ * @param fee - Trading fee per side (defaults to 0.1%)
+ * @param estimatedSlippage - Expected slippage (defaults to 0.15%)
+ * @returns true if signal meets required ROI threshold
  */
-export function isSignalProfitable(entryPrice: number, targetPrice: number, regime: string): boolean {
-  const roi = (targetPrice - entryPrice) / entryPrice;
-  const minROI = getMinROIForRegime(regime);
-  return roi >= minROI;
+export function isSignalProfitable(
+  entryPrice: number, 
+  targetPrice: number, 
+  regime: string,
+  predictiveConfidence: number = 0.5,
+  fee: number = DEFAULT_FEE,
+  estimatedSlippage: number = DEFAULT_SLIPPAGE
+): boolean {
+  const roi = (targetPrice - entryPrice) / Math.max(entryPrice, 1e-8);
+  
+  const dynamicROI = getDynamicROIThreshold(regime, predictiveConfidence);
+  
+  const estimatedFriction = (fee * 2) + estimatedSlippage;
+  const requiredROI = Math.max(dynamicROI, estimatedFriction * FRICTION_SAFETY_BUFFER);
+  
+  return roi >= requiredROI;
 }
 
 /**
- * Directive 11.7A: Get ROI details for logging
+ * Directive 11.7C: Get ROI details for logging (enhanced with friction awareness)
  */
-export function getROIDetails(entryPrice: number, targetPrice: number, regime: string): {
+export function getROIDetails(
+  entryPrice: number, 
+  targetPrice: number, 
+  regime: string,
+  predictiveConfidence: number = 0.5,
+  fee: number = DEFAULT_FEE,
+  estimatedSlippage: number = DEFAULT_SLIPPAGE
+): {
   expectedROI: number;
   minROI: number;
-  passedsThreshold: boolean;
+  dynamicROI: number;
+  frictionFloor: number;
+  requiredROI: number;
+  passesThreshold: boolean;
   roiPercent: string;
   minROIPercent: string;
+  predictiveConfidence: number;
 } {
-  const roi = (targetPrice - entryPrice) / entryPrice;
+  const roi = (targetPrice - entryPrice) / Math.max(entryPrice, 1e-8);
   const minROI = getMinROIForRegime(regime);
+  const dynamicROI = getDynamicROIThreshold(regime, predictiveConfidence);
+  const frictionFloor = (fee * 2) + estimatedSlippage;
+  const requiredROI = Math.max(dynamicROI, frictionFloor * FRICTION_SAFETY_BUFFER);
+  
   return {
     expectedROI: roi,
     minROI,
-    passedsThreshold: roi >= minROI,
+    dynamicROI,
+    frictionFloor,
+    requiredROI,
+    passesThreshold: roi >= requiredROI,
     roiPercent: (roi * 100).toFixed(2) + '%',
-    minROIPercent: (minROI * 100).toFixed(2) + '%'
+    minROIPercent: (requiredROI * 100).toFixed(2) + '%',
+    predictiveConfidence
   };
 }
 

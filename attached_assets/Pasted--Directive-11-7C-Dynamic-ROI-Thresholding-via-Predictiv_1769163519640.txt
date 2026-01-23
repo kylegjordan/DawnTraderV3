@@ -1,0 +1,222 @@
+🧭 Directive 11.7C — Dynamic ROI Thresholding via PredictiveConfidence (Final Integrated Revision – 2026-01-26)
+
+Phase: 11.7 | Series: Adaptive Predictive Telemetry System
+Dependencies: Directive 11.7B (Predictive Telemetry Integration)
+
+1 • Objective
+
+Enhance DawnTrader’s profitability gate and ROI thresholding by dynamically adjusting trade acceptance criteria based on PredictiveConfidence, while enforcing a friction-aware profitability floor and maintaining regime- and confidence-based adaptivity.
+
+This final revision integrates:
+
+Adaptive ROI scaling (bounded 1–4%)
+
+Fee/slippage-aware profitability validation
+
+Corrected regression correlation semantics
+
+Telemetry version tracking and cache refresh from 11.7B
+
+2 • Implementation Tasks
+🧩 Task 1 — Adaptive ROI Configuration
+
+File: /server/config/adaptive-thresholds.ts
+
+export const ROI_FLEX_MULTIPLIER = 0.6;   // ±30 % flex range around regime baseline
+export const ROI_MIN = 0.010;             // 1.0 % minimum threshold
+export const ROI_MAX = 0.040;             // 4.0 % maximum threshold
+
+// Friction baseline (default network-level estimates)
+export const DEFAULT_FEE = 0.001;         // 0.1 % per side
+export const DEFAULT_SLIPPAGE = 0.0015;   // 0.15 %
+
+
+✅ Centralized configuration allows calibration per exchange or regime.
+✅ Defaults derived from Kraken empirical averages.
+
+🧩 Task 2 — Dynamic ROI Helper
+
+File: /server/core/calculations/expectancy.ts
+
+import { ROI_FLEX_MULTIPLIER, ROI_MIN, ROI_MAX } from "../../config/adaptive-thresholds";
+
+export function getDynamicROIThreshold(regime: string, predictiveConfidence: number): number {
+  const base = getMinROIForRegime(regime);
+  const boundedConfidence = Math.min(Math.max(predictiveConfidence, 0.0), 1.0);
+  const dynamicROI = base * (1 - (boundedConfidence - 0.5) * ROI_FLEX_MULTIPLIER);
+  return Math.min(Math.max(dynamicROI, ROI_MIN), ROI_MAX);
+}
+
+
+✅ Confidence-driven thresholding.
+✅ Hard ROI bounds (1–4%) for deterministic safety.
+
+🧩 Task 3 — Profitability Gate (with Friction Awareness)
+
+File: /server/core/calculations/expectancy.ts
+
+import { DEFAULT_FEE, DEFAULT_SLIPPAGE } from "../../config/adaptive-thresholds";
+
+export function isSignalProfitable(
+  entryPrice: number,
+  targetPrice: number,
+  regime: string,
+  predictiveConfidence?: number,
+  fee: number = DEFAULT_FEE,
+  estimatedSlippage: number = DEFAULT_SLIPPAGE
+): boolean {
+  const roi = (targetPrice - entryPrice) / Math.max(entryPrice, 1e-8);
+
+  const dynamicROI = getDynamicROIThreshold(regime, predictiveConfidence ?? 0.5);
+
+  // NEW: Friction-aware floor
+  const estimatedFriction = (fee * 2) + estimatedSlippage;
+  const requiredROI = Math.max(dynamicROI, estimatedFriction * 1.1); // adds 10% safety buffer
+
+  return roi >= requiredROI;
+}
+
+
+✅ Prevents false positives in high-friction regimes.
+✅ Ensures every accepted signal clears total transaction costs plus buffer.
+
+🧩 Task 4 — PredictiveConfidence Source
+
+File: /server/core/scoring/final-score.ts
+
+export function getPredictiveConfidence(symbol: string, regime: string, strategy: string): number {
+  const perf = telemetry.regimePerformance?.[regime]?.[strategy];
+  if (!perf || perf.winRate == null) return 0.5; // neutral fallback
+
+  const confidence = sigmoid((perf.winRate - 0.5) * 6);
+  telemetry.regimePerformance[regime][strategy].predictiveConfidence = confidence;
+  return Math.min(Math.max(confidence, 0.0), 1.0);
+}
+
+
+✅ Exports to telemetry snapshot for transparency.
+✅ Confidence drives ROI scaling globally (VTS + SQE).
+
+🧩 Task 5 — Propagation to VTS + SQE
+
+Files:
+/server/services/vts-runner.ts
+/server/core/sqe/signal-quality-evaluator.ts
+
+import { getPredictiveConfidence } from "../core/scoring/final-score";
+import { isSignalProfitable } from "../core/calculations/expectancy";
+
+const confidence = getPredictiveConfidence(symbol, regime, strategy);
+if (!isSignalProfitable(entryPrice, targetPrice, regime, confidence)) {
+  telemetry.logSkippedSignal({
+    symbol,
+    reason: "Low_ROI",
+    regime,
+    expectedROI: (targetPrice - entryPrice) / entryPrice,
+    minROI: getDynamicROIThreshold(regime, confidence),
+    predictiveConfidence: confidence,
+    source: "VTS"
+  });
+  return;
+}
+
+
+✅ Shared logic across systems for unified behavior.
+✅ PredictiveConfidence logged for ML and diagnostics.
+
+🧩 Task 6 — Telemetry Manifest & Versioning
+
+File: /server/core/logging/vts-telemetry.ts
+
+telemetry.version = (telemetry.version ?? 0) + 1;
+manifest.push({
+  filename,
+  version: telemetry.version,
+  predictiveROIEnabled: true,
+  frictionAware: true, // NEW FLAG
+  timestamp: new Date().toISOString(),
+  regimes: Object.keys(metrics).length,
+  source: "VTS"
+});
+
+
+✅ Adds frictionAware:true to manifest.
+✅ Supports long-term ML compatibility.
+
+🧩 Task 7 — DSS / RTB Telemetry Refresh
+
+Files:
+/server/core/dss-engine.ts
+/server/core/refresh-ready-to-buy.ts
+
+delete require.cache[require.resolve("../core/logging/telemetry")];
+const { telemetry } = require("../core/logging/telemetry");
+refreshContext.telemetry = telemetry;
+
+
+✅ Ensures cache invalidation every 6-hour update cycle.
+
+🧩 Task 8 — Regression Guard (Corrected Correlation Semantics)
+
+File: /server/tests/telemetry_regression_check.ts
+
+const correlation = calculatePearson(predictiveConfidenceSeries, roiThresholdSeries);
+
+// CORRECTION: Negative correlation = expected
+if (correlation > 0) {
+  logger.warn("[11.7C][Guard] Abnormal positive correlation between Confidence and ROI threshold — expected inverse.");
+}
+
+appendFileSync("/logs/telemetry/confidence_drift.log",
+  `${new Date().toISOString()} correlation=${correlation.toFixed(3)}\n`
+);
+
+
+✅ Corrects inversion logic:
+
+Negative correlation → ✅ Healthy (high confidence = lower ROI)
+
+Positive correlation → ⚠️ Drift or regime misalignment
+
+3 • Verification Plan
+Step	Test	Expected Result
+1	Simulate HIGH_VOL_IMPULSE regime	ROI ≥ Friction × 1.1 verified
+2	PredictiveConfidence = 0.2 / 0.9	ROI adapts ±30 % around baseline
+3	Low confidence + high fees	Trade correctly rejected
+4	Manifest check	"frictionAware": true + "predictiveROIEnabled": true
+5	Correlation drift log	Correlation < 0 (expected)
+6	DSS / RTB telemetry refresh	Reflects updated thresholds
+7	6-hour update	Snapshot + manifest incremented successfully
+4 • Success Criteria
+
+✅ Dynamic ROI scaling (1–4%) active
+✅ Friction-aware profitability floor respected
+✅ PredictiveConfidence-driven adaptivity confirmed
+✅ Correct inverse correlation between confidence and ROI
+✅ Unified logic across VTS, SQE, DSS, RTB
+✅ Manifest versioning and telemetry stability verified
+
+5 • Deliverables
+File	Change
+/server/config/adaptive-thresholds.ts	Added friction constants
+/server/core/calculations/expectancy.ts	Friction-aware profitability logic
+/server/core/scoring/final-score.ts	PredictiveConfidence export
+/server/services/vts-runner.ts	Adaptive + friction-aware ROI logic
+/server/core/sqe/signal-quality-evaluator.ts	Matching logic for live/paper
+/server/core/logging/vts-telemetry.ts	Manifest flags and version increment
+/server/core/dss-engine.ts	Telemetry cache refresh
+/server/core/refresh-ready-to-buy.ts	Telemetry cache refresh
+/server/tests/telemetry_regression_check.ts	Corrected correlation guard
+6 • Safety & Governance
+
+🔒 Telemetry source isolation: "VTS"
+⚙️ ROI thresholds bounded (1–4%)
+🧮 Friction floor ensures all trades are net-positive after costs
+📈 Correct correlation semantics prevent feedback drift
+📊 Manifest versioning and transparency maintained
+🧠 Deterministic fallback: confidence defaults to 0.5
+🧾 Fully compatible with Phase 12 ML ingestion schema
+
+✅ Final Status: Approved for Replit Implementation
+Directive 11.7C (Final Integrated Revision – 2026-01-26)
+Combines 11.7B cleanup, Gemini’s refinements, and predictive confidence scaling into a single closed adaptive feedback system.
