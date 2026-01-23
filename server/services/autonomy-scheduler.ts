@@ -31,6 +31,7 @@ import { getGASPCoordinator, initializeGASP } from './gasp-coordinator'; // L20
 import { getEquilibriumRestorer, initializeEquilibriumRestorer } from './equilibrium-restorer'; // L20
 import { applyStabilizationScaling } from '../utils/stabilization-controller'; // L20
 import { updateRegimePerformanceFromVTS, getVTSTelemetryStatus } from '../core/logging/vts-telemetry'; // 11.7B
+import { recalibratePredictiveWeights, getRecalibrationStatus } from '../scripts/recalibrate-predictive-weights'; // 11.7D
 import { db } from '../db';
 import { users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
@@ -851,6 +852,37 @@ schedulerRegistry.registerTask({
       }
     } catch (error) {
       console.error('[11.7B][SCHEDULER] ❌ VTS telemetry aggregation failed:', error);
+      throw error;
+    }
+  },
+});
+
+// Weekly Sunday 00:30 UTC - Predictive Weight Recalibration (Directive 11.7D)
+schedulerRegistry.registerTask({
+  name: 'predictive_weight_recalibration',
+  description: '11.7D: Canonical predictive-weight recalibration using VTS telemetry',
+  frequency: 'custom',
+  intervalMs: 7 * 24 * 60 * 60 * 1000, // 7 days (weekly)
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[11.7D][SCHEDULER] 📊 Running canonical predictive weight recalibration...');
+    
+    try {
+      const success = recalibratePredictiveWeights();
+      
+      if (success) {
+        const status = getRecalibrationStatus();
+        console.log(`[11.7D][SCHEDULER] ✅ Recalibration complete`);
+        console.log(`[11.7D][SCHEDULER] - Version: ${status.version}`);
+        console.log(`[11.7D][SCHEDULER] - Regimes updated: ${status.regimes}`);
+        console.log(`[11.7D][SCHEDULER] - Checksum: ${status.checksum}`);
+      } else {
+        console.log('[11.7D][SCHEDULER] ⚠️ Recalibration skipped or no changes');
+      }
+    } catch (error) {
+      console.error('[11.7D][SCHEDULER] ❌ Predictive weight recalibration failed:', error);
       throw error;
     }
   },
