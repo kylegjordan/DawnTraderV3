@@ -13,6 +13,19 @@
  * - LOW_VOL_CHOP
  * - HIGH_VOL_IMPULSE
  * - TRANSITION
+ * 
+ * DSS (Dynamic Strategy Selector) Exclusions:
+ * ────────────────────────────────────────────
+ * The following files are EXCLUDED from this test because DSS uses an extended
+ * regime type system with additional regimes (EXTREME_NOISE, BULL_VOLATILE,
+ * BEAR_STABLE) beyond the 5 canonical regimes. These extended regimes are only
+ * used within the DSS subsystem and do not propagate to core trading logic:
+ * 
+ *   - dynamic-strategy-selector.ts  → Core DSS logic with extended regime types
+ *   - dynamic-sizing-engine.ts      → Uses DSS extended regime list
+ *   - market-indicators.ts          → Contains DSS regime mappings
+ *   - telemetry-repository.ts       → Normalizes canonical to DSS regimes
+ * 
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
