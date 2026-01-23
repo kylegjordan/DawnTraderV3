@@ -316,3 +316,95 @@ export function getAdjustedMinROI(regime: string, strategy: string): number {
 export function checkExpectancyDrift(currentConfidence: number, baseline: number = 0.5): boolean {
   return checkConfidenceDrift(currentConfidence, baseline);
 }
+
+/**
+ * Directive 11.7C Task 8: Regression Guard
+ * 
+ * Validates that dynamic ROI thresholds remain within expected bounds.
+ * Used for testing and runtime safety to ensure the adaptive system
+ * doesn't produce extreme values that would break trading logic.
+ * 
+ * @param regime - Market regime for threshold calculation
+ * @param confidence - PredictiveConfidence value (0-1)
+ * @returns Object with validation result and details
+ */
+export function validateROIThresholdBounds(
+  regime: string,
+  confidence: number
+): {
+  isValid: boolean;
+  threshold: number;
+  minBound: number;
+  maxBound: number;
+  error?: string;
+} {
+  const threshold = getDynamicROIThreshold(regime, confidence);
+  
+  const result = {
+    isValid: true,
+    threshold,
+    minBound: ROI_MIN,
+    maxBound: ROI_MAX,
+    error: undefined as string | undefined
+  };
+  
+  if (threshold < ROI_MIN) {
+    result.isValid = false;
+    result.error = `Threshold ${(threshold * 100).toFixed(2)}% below minimum ${(ROI_MIN * 100).toFixed(2)}%`;
+    console.warn(`[11.7C][RegressionGuard] VIOLATION: ${result.error}`);
+  }
+  
+  if (threshold > ROI_MAX) {
+    result.isValid = false;
+    result.error = `Threshold ${(threshold * 100).toFixed(2)}% above maximum ${(ROI_MAX * 100).toFixed(2)}%`;
+    console.warn(`[11.7C][RegressionGuard] VIOLATION: ${result.error}`);
+  }
+  
+  if (!isFinite(threshold) || isNaN(threshold)) {
+    result.isValid = false;
+    result.error = `Threshold is not a finite number: ${threshold}`;
+    console.error(`[11.7C][RegressionGuard] CRITICAL: ${result.error}`);
+  }
+  
+  return result;
+}
+
+/**
+ * Directive 11.7C Task 8: Batch validation for all regimes
+ * 
+ * Runs regression guard against all known regimes at varying confidence levels.
+ * Useful for startup verification and unit testing.
+ * 
+ * @returns Array of validation results for each regime/confidence combo
+ */
+export function runRegressionGuardSuite(): Array<{
+  regime: string;
+  confidence: number;
+  isValid: boolean;
+  threshold: number;
+}> {
+  const REGIMES = ['BULL_STABLE', 'BEAR_VOLATILE', 'LOW_VOL_CHOP', 'HIGH_VOL_IMPULSE', 'TRANSITION'];
+  const CONFIDENCE_LEVELS = [0.0, 0.25, 0.5, 0.75, 1.0];
+  const results: Array<{ regime: string; confidence: number; isValid: boolean; threshold: number }> = [];
+  
+  for (const regime of REGIMES) {
+    for (const confidence of CONFIDENCE_LEVELS) {
+      const validation = validateROIThresholdBounds(regime, confidence);
+      results.push({
+        regime,
+        confidence,
+        isValid: validation.isValid,
+        threshold: validation.threshold
+      });
+    }
+  }
+  
+  const failures = results.filter(r => !r.isValid);
+  if (failures.length > 0) {
+    console.warn(`[11.7C][RegressionGuard] Suite completed with ${failures.length} failures`);
+  } else {
+    console.log(`[11.7C][RegressionGuard] Suite passed - all ${results.length} combinations valid`);
+  }
+  
+  return results;
+}

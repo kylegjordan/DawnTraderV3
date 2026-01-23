@@ -53,6 +53,7 @@ export interface ManifestEntry {
   regimes: number;
   version: number;
   timestamp: string;
+  frictionAware?: boolean; // Directive 11.7C Task 6: Flag for friction-aware thresholds
 }
 
 const telemetryLock = new Mutex();
@@ -237,7 +238,8 @@ export function saveTelemetrySnapshot(totalProcessed: number, metrics: Record<st
     totalProcessed,
     regimes: regimeCount,
     version: vtsTelemetry.version ?? 1,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    frictionAware: true // Directive 11.7C Task 6: Enable friction-aware thresholds
   });
   
   fs.writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2));
@@ -288,4 +290,18 @@ export function getVTSTelemetryStatus(): {
     regimeCount: Object.keys(vtsTelemetry.regimePerformance).length,
     totalStrategies
   };
+}
+
+/**
+ * Directive 11.7C Task 7: Reset telemetry cache for DSS/RTB refresh
+ * Clears the in-memory telemetry data to force reload from disk
+ */
+export function resetTelemetryCache(): void {
+  vtsTelemetry = {
+    version: 0,
+    source: 'VTS',
+    regimePerformance: {},
+    lastAggregation: new Date().toISOString()
+  };
+  console.log('[11.7C][Telemetry] Cache reset - will reload from disk on next aggregation');
 }
