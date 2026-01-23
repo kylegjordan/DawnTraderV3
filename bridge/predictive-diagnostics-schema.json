@@ -1,0 +1,148 @@
+{
+  "_schema": "predictive-diagnostics/v1.0",
+  "_directive": "11.7G",
+  "_description": "Schema definition for Predictive Diagnostics & Filter Transparency",
+  "_lastUpdated": "2026-01-23T00:00:00Z",
+  "predictiveModels": {
+    "type": "object",
+    "description": "Model diagnostics keyed by model identifier",
+    "properties": {
+      "ensemble_primary": {
+        "type": "object",
+        "properties": {
+          "calibrationDrift": {
+            "type": "number",
+            "description": "Deviation between model confidence and realized outcomes",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "meanConfidence": {
+            "type": "number",
+            "description": "Average predictive confidence over recent window",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "accuracy7d": {
+            "type": "number",
+            "description": "7-day rolling prediction accuracy",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "weightContribution": {
+            "type": "object",
+            "description": "Feature weight contributions (must sum to ~1.0)",
+            "additionalProperties": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        },
+        "required": ["calibrationDrift", "meanConfidence", "accuracy7d", "weightContribution"]
+      }
+    }
+  },
+  "filters": {
+    "type": "object",
+    "description": "Filter states with status and reasoning",
+    "properties": {
+      "macroFilter": {
+        "$ref": "#/definitions/filterState"
+      },
+      "volatilityFilter": {
+        "$ref": "#/definitions/filterState"
+      },
+      "confidenceGate": {
+        "$ref": "#/definitions/filterStateWithThreshold"
+      },
+      "riskScreen": {
+        "$ref": "#/definitions/filterStateWithRatio"
+      }
+    }
+  },
+  "recentDecisions": {
+    "type": "array",
+    "description": "Recent trade decisions (capped at 100)",
+    "maxItems": 100,
+    "items": {
+      "$ref": "#/definitions/decision"
+    }
+  },
+  "definitions": {
+    "filterState": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["PASS", "BLOCKED", "SKIPPED", "DRIFT"]
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": ["status", "reason"]
+    },
+    "filterStateWithThreshold": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["PASS", "BLOCKED", "SKIPPED", "DRIFT"]
+        },
+        "threshold": {
+          "type": "number"
+        },
+        "confidence": {
+          "type": "number"
+        }
+      },
+      "required": ["status", "threshold", "confidence"]
+    },
+    "filterStateWithRatio": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["PASS", "BLOCKED", "SKIPPED", "DRIFT"]
+        },
+        "riskRatio": {
+          "type": "number"
+        }
+      },
+      "required": ["status", "riskRatio"]
+    },
+    "decision": {
+      "type": "object",
+      "properties": {
+        "pair": {
+          "type": "string"
+        },
+        "signalType": {
+          "type": "string",
+          "enum": ["HYBRID", "QUANT", "PATTERN"]
+        },
+        "predictedRegime": {
+          "type": "string"
+        },
+        "modelUsed": {
+          "type": "string"
+        },
+        "decision": {
+          "type": "string",
+          "enum": ["APPROVED", "BLOCKED", "SKIPPED"]
+        },
+        "tracePath": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["pair", "signalType", "predictedRegime", "modelUsed", "decision", "tracePath"]
+    }
+  }
+}

@@ -1,0 +1,186 @@
+⚙️ Directive 11.7G — UI Transparency Expansion for Filter + Predictive Diagnostics (Final, Revised)
+
+Parent Phase: 11 (Predictive Stability & Diagnostic Clarity)
+Schema Version: predictive-diagnostics/v1.0
+Predecessor Directives:
+
+11.7C — Predictive Confidence Normalization
+
+11.7E — Persistent Regime-Metric Archival
+
+11.7F — Strategy–Regime Realignment Validation
+
+1. Objective
+
+To expand DawnTrader’s Analytics & Diagnostics interface with a new Predictive Diagnostics & Filter Transparency Panel, giving operators full interpretability over:
+
+Filter logic and gating conditions
+
+Predictive model calibration and accuracy
+
+Signal confidence and attribution weighting
+
+End-to-end traceability for every model and trade decision
+
+This directive transforms the predictive system from a “black box” into a transparent, auditable decision engine.
+
+2. Core Deliverables
+Component	Description	Output
+Predictive Diagnostics Tab	New section under Analytics & Diagnostics. Displays model diagnostics, confidence, drift, and filter transparency.	Interactive UI panel
+Filter Transparency Layer	Visualizes macro/volatility/confidence/risk filter results per cycle.	Logic tree + tooltips
+Predictive Model Diagnostic Layer	Displays calibration drift, prediction accuracy, and predictive weight contributions.	Model-level charts
+Predictive Decision Traceback	Stepwise visual chain of data → model → decision.	Trace graph
+API + Telemetry Expansion	Adds predictive diagnostics and filter states to telemetry.	/api/system/predictive-diagnostics
+3. Implementation Scope
+ID	Task	Files / Modules	Target
+G-01	Create PredictiveDiagnosticsService – collects calibration, filter states, and weighting metrics.	/server/services/predictive-diagnostics.service.ts	✅
+G-02	Add /api/system/predictive-diagnostics endpoint – returns JSON diagnostics payload.	/server/routes/system.ts	✅
+G-03	Extend TelemetryAggregator – includes predictiveAccuracy, calibrationScore, and weightContributions.	/server/services/telemetry-aggregator.ts	✅
+G-04	Define predictive-filter-descriptions.ts – human-readable filter reasons and thresholds.	/server/config/predictive-filter-descriptions.ts	✅
+G-05	Build Predictive Diagnostics Tab in UI (Model Diagnostics, Filter Logic, Decision Traceback).	/client/pages/analytics/predictive-diagnostics.tsx	✅
+G-06	Implement Decision Traceback Visualization component.	/client/components/diagnostics/decision-trace.tsx	✅
+G-07	Implement Predictive Weight Heatmap (replaces “SHAP-style” for accuracy).	/client/components/diagnostics/predictive-weights.tsx	✅
+G-08	Add Model Drift Panel – visual calibration vs. outcome deviation.	/client/components/diagnostics/model-drift.tsx	✅
+G-09	Create bridge/predictive-diagnostics-schema.json	/bridge/predictive-diagnostics-schema.json	✅
+G-10	Add unit + integration tests for API and schema integrity.	/server/tests/system/predictive_diagnostics_integrity.test.ts	✅
+4. Data Structure & API Schema
+Endpoint:
+
+GET /api/system/predictive-diagnostics
+
+JSON Response:
+{
+  "schema": "predictive-diagnostics/v1.0",
+  "timestamp": "2026-01-24T00:00:00Z",
+  "predictiveModels": {
+    "ensemble_primary": {
+      "calibrationDrift": 0.12,
+      "meanConfidence": 0.78,
+      "accuracy7d": 0.82,
+      "weightContribution": { "volZ": 0.33, "trendZ": 0.29, "adx": 0.22, "momentum": 0.16 }
+    }
+  },
+  "filters": {
+    "macroFilter": { "status": "PASS", "reason": "Trend > threshold" },
+    "volatilityFilter": { "status": "BLOCKED", "reason": "VolZ > +1.5σ" },
+    "confidenceGate": { "status": "PASS", "threshold": 0.65, "confidence": 0.72 },
+    "riskScreen": { "status": "PASS", "riskRatio": 0.9 }
+  },
+  "recentDecisions": [
+    {
+      "pair": "BTCUSDT",
+      "signalType": "HYBRID",
+      "predictedRegime": "HIGH_VOL_IMPULSE",
+      "modelUsed": "ensemble_primary",
+      "decision": "APPROVED",
+      "tracePath": ["Signal", "Volatility Filter", "Confidence Gate", "Model", "Trade Execution"]
+    }
+  ]
+}
+
+🧩 Minor Technical Adjustments
+
+recentDecisions Cap:
+Limit to last 100 entries (slice(-100)) to prevent unbounded array growth or UI lag.
+
+WeightContribution Labeling:
+UI to show “Weight Contribution (%)” instead of “SHAP / Feature Attribution”.
+These values reflect Directive 11.7D Predictive Weights, not deep model SHAP outputs.
+
+5. UI Design & Behavior
+Predictive Diagnostics Tab
+
+Subtabs:
+
+Model Diagnostics
+
+Confidence and accuracy trends
+
+Calibration drift meter
+
+Weighted feature contribution bars (Momentum, Volatility, Trend)
+
+Filter Logic
+
+Pass/fail map with color coding
+
+Hover-to-explain tooltips using predictive-filter-descriptions.ts
+
+Decision Traceback
+
+Interactive flow from signal to execution with timestamps
+
+Node-level info for confidence, filter triggers, and outcome
+
+Color Legend:
+Status	Color	Meaning
+PASS	🟩 Green	Filter passed
+BLOCKED	🟥 Red	Filter failed
+SKIPPED	🟨 Yellow	Filter not evaluated
+DRIFT	🟧 Orange	Model calibration drift > 1σ
+6. Transparency Features
+Feature	Purpose	Output
+Filter Explainability	Human-readable reasoning for every filter decision	Logic table + tooltip
+Weight Contribution Visualization	Shows which indicators most affected model output	Horizontal bar chart
+Confidence Tracking	Tracks predictive confidence across time	Line graph
+Calibration Drift	Displays deviation between model confidence and realized outcomes	Drift gauge
+Decision Traceback	Reveals end-to-end logic flow	Expandable tree
+7. Governance & Validation
+
+Schema: predictive-diagnostics/v1.0
+
+Version check: Startup validation via schema-validator.ts
+
+Autosync: Included in sync-canonical-bridge.ts
+
+Logging: /logs/predictive_diagnostics.log (timestamped per decision)
+
+Tests:
+
+JSON schema validation
+
+API payload length enforcement (recentDecisions <= 100)
+
+WeightContribution type verification (numeric 0–1)
+
+8. Operator Interpretation Layer
+
+Defined in /server/config/predictive-filter-descriptions.ts:
+
+export const PREDICTIVE_FILTER_DESCRIPTIONS = {
+  macroFilter: "Blocks trades during macroeconomic instability (VIX > 30, BTC correlation > 0.8)",
+  volatilityFilter: "Pauses signals when realized volatility exceeds 1.5σ of regime baseline",
+  confidenceGate: "Requires predictive confidence ≥ configured threshold (default 0.65)",
+  riskScreen: "Blocks entries exceeding 1.2× mean risk ratio over 7-day rolling window"
+};
+
+9. Success Criteria
+
+✅ Predictive Diagnostics tab visible and dynamic
+✅ Filter states color-coded and updated each cycle
+✅ WeightContribution chart replaces SHAP label
+✅ API capped at 100 recentDecisions
+✅ Schema predictive-diagnostics/v1.0 validated
+✅ Zero test or schema violations
+
+10. Integration Notes for Phase 12
+
+Calibration drift and predictive weight telemetry will feed into Phase 12 adaptive model training (11.7E archives).
+
+Future Directive 12.1A will introduce confidence-threshold auto-tuning based on historical calibration drift trends.
+
+11. Summary
+
+Directive 11.7G completes Phase 11 by providing full transparency into predictive filters, decision reasoning, and model calibration.
+
+This upgrade ensures that every signal, filter, and model output is:
+
+Visible in real time
+
+Explained in natural language
+
+Auditable and traceable
+
+Bounded by schema integrity and capped telemetry
+
+It unifies interpretability across the predictive stack — setting the stage for Phase 12’s adaptive retraining and self-auditing predictive governance.

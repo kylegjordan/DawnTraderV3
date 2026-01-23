@@ -572,6 +572,26 @@
     ]
   },
   {
+    "path": "/api/system/predictive-diagnostics",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/system/predictive-diagnostics/filter-descriptions",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/filters-v2",
     "methods": [
       "GET",

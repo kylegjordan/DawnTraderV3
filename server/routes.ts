@@ -2273,6 +2273,41 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // GET /api/system/predictive-diagnostics - Directive 11.7G: Predictive diagnostics and filter transparency
+  apiRouter.get('/system/predictive-diagnostics', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { getPredictiveDiagnosticsService } = await import('./services/predictive-diagnostics.service.js');
+      const diagnosticsService = getPredictiveDiagnosticsService();
+      const diagnostics = diagnosticsService.getDiagnostics();
+      
+      res.json({
+        ok: true,
+        ...diagnostics
+      });
+    } catch (error: any) {
+      console.error('[PredictiveDiagnostics] GET error:', error.message);
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
+    }
+  });
+
+  // GET /api/system/predictive-diagnostics/filter-descriptions - Directive 11.7G: Get filter descriptions for tooltips
+  apiRouter.get('/system/predictive-diagnostics/filter-descriptions', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { PREDICTIVE_FILTER_DESCRIPTIONS, FILTER_STATUS_COLORS, FILTER_STATUS_LABELS } = await import('./config/predictive-filter-descriptions.js');
+      
+      res.json({
+        ok: true,
+        descriptions: PREDICTIVE_FILTER_DESCRIPTIONS,
+        statusColors: FILTER_STATUS_COLORS,
+        statusLabels: FILTER_STATUS_LABELS,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[PredictiveFilterDescriptions] GET error:', error.message);
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
+    }
+  });
+
   // Phase 3: Filters V2 API Endpoints (with Manual Override metadata)
   // GET /api/filters-v2?mode=paper|live
   apiRouter.get('/filters-v2', authenticateToken, async (req: AuthenticatedRequest, res) => {

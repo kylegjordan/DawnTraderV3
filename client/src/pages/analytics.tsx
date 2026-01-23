@@ -7,7 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Activity, TrendingUp, TrendingDown, AlertCircle, Gauge, RefreshCw, Clock, DollarSign, Target, Zap, BarChart3, Layers, List, BookOpen, ChevronDown, ChevronUp, Star, GitBranch, Download } from "lucide-react";
+import { Activity, TrendingUp, TrendingDown, AlertCircle, Gauge, RefreshCw, Clock, DollarSign, Target, Zap, BarChart3, Layers, List, BookOpen, ChevronDown, ChevronUp, Star, GitBranch, Download, Filter, Brain, CheckCircle, XCircle, AlertTriangle, Info } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import TopBatch from "@/components/trading/top-batch";
@@ -51,6 +51,56 @@ interface NarrativeFeedData {
     limit: number;
     offset: number;
     byType: Record<string, number>;
+  };
+}
+
+interface FilterState {
+  status: 'PASS' | 'BLOCKED' | 'SKIPPED' | 'DRIFT';
+  reason: string;
+  threshold?: number;
+  confidence?: number;
+  riskRatio?: number;
+}
+
+interface WeightContribution {
+  volZ: number;
+  trendZ: number;
+  adx: number;
+  momentum: number;
+  [key: string]: number;
+}
+
+interface ModelDiagnostics {
+  calibrationDrift: number;
+  meanConfidence: number;
+  accuracy7d: number;
+  weightContribution: WeightContribution;
+}
+
+interface TraceDecision {
+  pair: string;
+  signalType: string;
+  predictedRegime: string;
+  modelUsed: string;
+  decision: string;
+  tracePath: string[];
+  timestamp: string;
+  confidence?: number;
+  finalScore?: number;
+}
+
+interface PredictiveDiagnosticsData {
+  ok: boolean;
+  schema: string;
+  timestamp: string;
+  predictiveModels: Record<string, ModelDiagnostics>;
+  filters: Record<string, FilterState>;
+  recentDecisions: TraceDecision[];
+  telemetryStats: {
+    totalSignalsProcessed: number;
+    passRate: number;
+    avgConfidence: number;
+    driftWarnings: number;
   };
 }
 
@@ -1001,6 +1051,287 @@ function MappingDriftSection() {
   );
 }
 
+const FILTER_DESCRIPTIONS: Record<string, string> = {
+  macroFilter: "Blocks trades during macroeconomic instability (VIX > 30, BTC correlation > 0.8)",
+  volatilityFilter: "Pauses signals when realized volatility exceeds 1.5σ of regime baseline",
+  confidenceGate: "Requires predictive confidence ≥ configured threshold (default 0.65)",
+  riskScreen: "Blocks entries exceeding 1.2× mean risk ratio over 7-day rolling window",
+  liquidityFilter: "Ensures sufficient market depth for position sizing",
+  trendFilter: "Validates trend alignment with regime expectations",
+  momentumFilter: "Confirms momentum strength meets minimum thresholds",
+  regimeFilter: "Ensures market regime matches strategy requirements"
+};
+
+const WEIGHT_LABELS: Record<string, string> = {
+  volZ: 'Volatility Z-Score',
+  trendZ: 'Trend Z-Score',
+  adx: 'ADX Strength',
+  momentum: 'Momentum'
+};
+
+function getFilterStatusIcon(status: string) {
+  switch (status) {
+    case 'PASS': return <CheckCircle className="w-4 h-4 text-green-500" />;
+    case 'BLOCKED': return <XCircle className="w-4 h-4 text-red-500" />;
+    case 'SKIPPED': return <AlertTriangle className="w-4 h-4 text-yellow-500" />;
+    case 'DRIFT': return <AlertCircle className="w-4 h-4 text-orange-500" />;
+    default: return <Info className="w-4 h-4 text-muted-foreground" />;
+  }
+}
+
+function getFilterStatusColor(status: string) {
+  switch (status) {
+    case 'PASS': return 'bg-green-500/20 text-green-400 border-green-500/30';
+    case 'BLOCKED': return 'bg-red-500/20 text-red-400 border-red-500/30';
+    case 'SKIPPED': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+    case 'DRIFT': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
+    default: return 'bg-muted text-muted-foreground';
+  }
+}
+
+function getDriftGaugeColor(drift: number) {
+  if (drift <= 0.3) return 'bg-green-500';
+  if (drift <= 0.6) return 'bg-lime-500';
+  if (drift <= 1.0) return 'bg-yellow-500';
+  return 'bg-red-500';
+}
+
+function PredictiveDiagnosticsSection() {
+  const { data: diagnosticsData, isLoading, refetch } = useQuery<PredictiveDiagnosticsData>({
+    queryKey: ['/api/system/predictive-diagnostics'],
+    queryFn: () => apiFetch('/api/system/predictive-diagnostics'),
+    refetchInterval: 15000,
+  });
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="p-6 flex items-center justify-center">
+          <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const models = diagnosticsData?.predictiveModels || {};
+  const filters = diagnosticsData?.filters || {};
+  const decisions = diagnosticsData?.recentDecisions || [];
+  const stats = diagnosticsData?.telemetryStats || { totalSignalsProcessed: 0, passRate: 0, avgConfidence: 0, driftWarnings: 0 };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-muted-foreground">
+            Schema: <Badge variant="outline">{diagnosticsData?.schema || 'Unknown'}</Badge>
+            <span className="ml-4">Last Update: {diagnosticsData?.timestamp ? formatDistanceToNow(new Date(diagnosticsData.timestamp), { addSuffix: true }) : 'Unknown'}</span>
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => refetch()}>
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Refresh
+        </Button>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-sm text-muted-foreground">Signals Processed</div>
+            <div className="text-2xl font-bold">{stats.totalSignalsProcessed}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-sm text-muted-foreground">Pass Rate</div>
+            <div className="text-2xl font-bold text-green-500">{(stats.passRate * 100).toFixed(1)}%</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-sm text-muted-foreground">Avg Confidence</div>
+            <div className="text-2xl font-bold">{(stats.avgConfidence * 100).toFixed(1)}%</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-sm text-muted-foreground">Drift Warnings</div>
+            <div className={`text-2xl font-bold ${stats.driftWarnings > 0 ? 'text-orange-500' : 'text-green-500'}`}>{stats.driftWarnings}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Brain className="w-5 h-5" />
+            Model Diagnostics
+          </CardTitle>
+          <CardDescription>Calibration drift, accuracy, and weight contributions</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {Object.entries(models).map(([modelId, model]) => (
+            <div key={modelId} className="p-4 rounded-lg bg-muted/50 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">{modelId}</span>
+                <div className="flex items-center gap-4">
+                  <div className="text-sm">
+                    <span className="text-muted-foreground">7-Day Accuracy:</span>
+                    <span className="ml-2 font-mono font-bold text-green-500">{(model.accuracy7d * 100).toFixed(1)}%</span>
+                  </div>
+                  <div className="text-sm">
+                    <span className="text-muted-foreground">Mean Confidence:</span>
+                    <span className="ml-2 font-mono">{(model.meanConfidence * 100).toFixed(1)}%</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-muted-foreground">Calibration Drift</span>
+                  <span className={`font-mono text-sm ${model.calibrationDrift > 1 ? 'text-orange-500' : 'text-green-500'}`}>
+                    {model.calibrationDrift.toFixed(3)}
+                  </span>
+                </div>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full transition-all ${getDriftGaugeColor(model.calibrationDrift)}`}
+                    style={{ width: `${Math.min(model.calibrationDrift * 33.3, 100)}%` }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="text-sm text-muted-foreground mb-2">Weight Contribution (%)</div>
+                <div className="space-y-2">
+                  {Object.entries(model.weightContribution).map(([key, value]) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <span className="text-xs w-24 truncate">{WEIGHT_LABELS[key] || key}</span>
+                      <div className="flex-1 h-4 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-blue-500/70"
+                          style={{ width: `${value * 100}%` }}
+                        />
+                      </div>
+                      <span className="text-xs font-mono w-12 text-right">{(value * 100).toFixed(0)}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="w-5 h-5" />
+            Filter Logic
+          </CardTitle>
+          <CardDescription>Current filter states with pass/fail status and reasoning</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 md:grid-cols-2">
+            {Object.entries(filters).map(([filterName, filter]) => (
+              <div key={filterName} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
+                {getFilterStatusIcon(filter.status)}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm">{filterName.replace(/([A-Z])/g, ' $1').trim()}</span>
+                    <Badge variant="outline" className={`text-xs ${getFilterStatusColor(filter.status)}`}>
+                      {filter.status}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">{filter.reason}</p>
+                  {filter.confidence !== undefined && (
+                    <p className="text-xs text-muted-foreground">Confidence: {(filter.confidence * 100).toFixed(0)}% (threshold: {((filter.threshold || 0.65) * 100).toFixed(0)}%)</p>
+                  )}
+                  {filter.riskRatio !== undefined && (
+                    <p className="text-xs text-muted-foreground">Risk Ratio: {filter.riskRatio.toFixed(2)}</p>
+                  )}
+                </div>
+                <div className="group relative">
+                  <Info className="w-4 h-4 text-muted-foreground cursor-help" />
+                  <div className="absolute right-0 top-6 z-50 hidden group-hover:block w-64 p-2 text-xs bg-popover border rounded-md shadow-lg">
+                    {FILTER_DESCRIPTIONS[filterName] || 'No description available'}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <GitBranch className="w-5 h-5" />
+            Decision Traceback
+          </CardTitle>
+          <CardDescription>Recent trade decisions with full decision path ({decisions.length}/100 max)</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {decisions.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Brain className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No recent decisions recorded</p>
+              <p className="text-sm">Decisions will appear as signals are processed</p>
+            </div>
+          ) : (
+            <ScrollArea className="h-[300px]">
+              <div className="space-y-3">
+                {decisions.slice(-20).reverse().map((decision, idx) => (
+                  <Collapsible key={idx}>
+                    <CollapsibleTrigger className="w-full">
+                      <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <Badge variant="outline" className={decision.decision === 'APPROVED' ? 'bg-green-500/20 text-green-400' : decision.decision === 'BLOCKED' ? 'bg-red-500/20 text-red-400' : 'bg-yellow-500/20 text-yellow-400'}>
+                            {decision.decision}
+                          </Badge>
+                          <span className="font-mono font-medium">{decision.pair}</span>
+                          <Badge variant="secondary" className="text-xs">{decision.signalType}</Badge>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span>{decision.predictedRegime}</span>
+                          <ChevronDown className="w-4 h-4" />
+                        </div>
+                      </div>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="mt-2 p-3 bg-muted/30 rounded-lg space-y-2">
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="text-muted-foreground">Model:</span>
+                          <span className="font-mono">{decision.modelUsed}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="text-muted-foreground">Trace Path:</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {decision.tracePath.map((step, stepIdx) => (
+                            <div key={stepIdx} className="flex items-center">
+                              <Badge variant="outline" className="text-xs">{step}</Badge>
+                              {stepIdx < decision.tracePath.length - 1 && <span className="mx-1 text-muted-foreground">→</span>}
+                            </div>
+                          ))}
+                        </div>
+                        {decision.timestamp && (
+                          <div className="text-xs text-muted-foreground">
+                            {format(new Date(decision.timestamp), 'PPpp')}
+                          </div>
+                        )}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                ))}
+              </div>
+            </ScrollArea>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function AnalyticsPage() {
   const { mode } = useTradingMode();
   const [activeTab, setActiveTab] = useState("overview");
@@ -1070,10 +1401,14 @@ export default function AnalyticsPage() {
         </div>
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-5 max-w-3xl">
+          <TabsList className="grid w-full grid-cols-6 max-w-4xl">
             <TabsTrigger value="overview" className="flex items-center gap-2">
               <Activity className="w-4 h-4" />
               Overview
+            </TabsTrigger>
+            <TabsTrigger value="predictive" className="flex items-center gap-2">
+              <Brain className="w-4 h-4" />
+              Predictive
             </TabsTrigger>
             <TabsTrigger value="mapping-drift" className="flex items-center gap-2">
               <GitBranch className="w-4 h-4" />
@@ -1081,7 +1416,7 @@ export default function AnalyticsPage() {
             </TabsTrigger>
             <TabsTrigger value="top-batch" className="flex items-center gap-2">
               <List className="w-4 h-4" />
-              Top Scanned Pairs
+              Top Pairs
             </TabsTrigger>
             <TabsTrigger value="activities" className="flex items-center gap-2">
               <BarChart3 className="w-4 h-4" />
@@ -1089,12 +1424,16 @@ export default function AnalyticsPage() {
             </TabsTrigger>
             <TabsTrigger value="benchmark" className="flex items-center gap-2">
               <Star className="w-4 h-4 text-yellow-500" />
-              Benchmark List
+              Benchmark
             </TabsTrigger>
           </TabsList>
           
           <TabsContent value="overview" className="space-y-6 mt-6">
             <MarketOverviewSection indicators={indicatorsData} />
+          </TabsContent>
+
+          <TabsContent value="predictive" className="mt-6">
+            <PredictiveDiagnosticsSection />
           </TabsContent>
           
           <TabsContent value="mapping-drift" className="mt-6">
