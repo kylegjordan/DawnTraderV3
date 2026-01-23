@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Brain, RefreshCw, Download, TrendingUp, TrendingDown, Clock, Target, AlertTriangle } from "lucide-react";
+import { Brain, RefreshCw, Download, TrendingUp, TrendingDown, Clock, Target, AlertTriangle, Sliders, Activity } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { ensureValidToken } from "@/lib/auth";
 import { format } from "date-fns";
@@ -64,6 +64,36 @@ interface ClosedTrade {
   entryTime: string;
   exitTime: string;
   durationMinutes: number;
+}
+
+interface PredictiveAdjustment {
+  _schema: string;
+  timestamp: string;
+  category: string;
+  parameter: string;
+  oldValue: number;
+  newValue: number;
+  delta: number;
+  impact: number;
+  regime?: string;
+  strategy?: string;
+  reason: string;
+}
+
+interface AdjustmentSummary {
+  totalAdjustments: number;
+  byCategory: Record<string, number>;
+  byRegime: Record<string, number>;
+  avgImpact: number;
+  highImpactCount: number;
+  lastAdjustment: string | null;
+}
+
+interface CurrentValues {
+  dynamicROI: number | null;
+  confidence: number | null;
+  weights: Record<string, number>;
+  lastUpdated: string | null;
 }
 
 const getRegimeBadgeColor = (regime: string) => {
@@ -434,6 +464,224 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
   );
 }
 
+const getImpactColor = (impact: number) => {
+  if (impact >= 0.2) return 'bg-red-500/20 text-red-400 border-red-500/30';
+  if (impact >= 0.1) return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+  return 'bg-green-500/20 text-green-400 border-green-500/30';
+};
+
+const getCategoryBadgeColor = (category: string) => {
+  switch (category) {
+    case 'ROI': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+    case 'Expectancy': return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+    case 'Confidence': return 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30';
+    case 'Weight': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
+    case 'Scoring': return 'bg-pink-500/20 text-pink-400 border-pink-500/30';
+    default: return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+  }
+};
+
+function PredictiveAdjustmentsPanel({ 
+  adjustments, 
+  summary, 
+  currentValues,
+  isLoading 
+}: { 
+  adjustments: PredictiveAdjustment[];
+  summary: AdjustmentSummary | null;
+  currentValues: CurrentValues | null;
+  isLoading: boolean;
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardHeader className="py-3">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Activity className="w-4 h-4" />
+              Summary (7 days)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="py-2">
+            {summary ? (
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Total Adjustments:</span>
+                  <span className="font-mono">{summary.totalAdjustments}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">High Impact:</span>
+                  <span className="font-mono text-yellow-400">{summary.highImpactCount}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Avg Impact:</span>
+                  <span className="font-mono">{(summary.avgImpact * 100).toFixed(1)}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Last:</span>
+                  <span className="font-mono text-xs">
+                    {summary.lastAdjustment ? format(new Date(summary.lastAdjustment), 'MM/dd HH:mm') : '-'}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-sm">No data</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="py-3">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Sliders className="w-4 h-4" />
+              Current Values
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="py-2">
+            {currentValues ? (
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Dynamic ROI:</span>
+                  <span className="font-mono">
+                    {currentValues.dynamicROI !== null ? `${(currentValues.dynamicROI * 100).toFixed(2)}%` : '-'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Confidence:</span>
+                  <span className="font-mono">
+                    {currentValues.confidence !== null ? `${(currentValues.confidence * 100).toFixed(1)}%` : '-'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Weight Keys:</span>
+                  <span className="font-mono">{Object.keys(currentValues.weights).length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Updated:</span>
+                  <span className="font-mono text-xs">
+                    {currentValues.lastUpdated ? format(new Date(currentValues.lastUpdated), 'MM/dd HH:mm') : '-'}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-sm">No data</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="py-3">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Target className="w-4 h-4" />
+              By Category
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="py-2">
+            {summary ? (
+              <div className="space-y-1 text-sm">
+                {Object.entries(summary.byCategory).map(([cat, count]) => (
+                  count > 0 && (
+                    <div key={cat} className="flex justify-between">
+                      <Badge variant="outline" className={`text-xs ${getCategoryBadgeColor(cat)}`}>
+                        {cat}
+                      </Badge>
+                      <span className="font-mono">{count}</span>
+                    </div>
+                  )
+                ))}
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-sm">No data</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader className="py-3">
+          <CardTitle className="text-sm">Recent Adjustments</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-card z-10">
+                <tr className="border-b border-border">
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">Time</th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">Category</th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">Parameter</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">Old</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">New</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">Delta</th>
+                  <th className="px-3 py-2 text-center font-medium text-muted-foreground">Impact</th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">Regime</th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {adjustments.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
+                      No predictive adjustments recorded
+                    </td>
+                  </tr>
+                ) : (
+                  adjustments.map((adj, idx) => (
+                    <tr key={`${adj.timestamp}-${adj.parameter}-${idx}`} className="border-b border-border/50 hover:bg-muted/30">
+                      <td className="px-3 py-2 text-xs">
+                        {format(new Date(adj.timestamp), 'MM/dd HH:mm:ss')}
+                      </td>
+                      <td className="px-3 py-2">
+                        <Badge variant="outline" className={`text-xs ${getCategoryBadgeColor(adj.category)}`}>
+                          {adj.category}
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-2 text-xs font-mono">{adj.parameter}</td>
+                      <td className="px-3 py-2 text-right font-mono text-xs text-muted-foreground">
+                        {adj.oldValue.toFixed(4)}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono text-xs">
+                        {adj.newValue.toFixed(4)}
+                      </td>
+                      <td className={`px-3 py-2 text-right font-mono text-xs ${adj.delta > 0 ? 'text-green-400' : adj.delta < 0 ? 'text-red-400' : ''}`}>
+                        {adj.delta > 0 ? '+' : ''}{adj.delta.toFixed(4)}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <Badge variant="outline" className={`text-xs ${getImpactColor(adj.impact)}`}>
+                          {(adj.impact * 100).toFixed(1)}%
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-2">
+                        {adj.regime ? (
+                          <Badge variant="outline" className={`text-xs ${getRegimeBadgeColor(adj.regime)}`}>
+                            {adj.regime}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground max-w-[200px] truncate" title={adj.reason}>
+                        {adj.reason}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function MachineLearningPage() {
   const [activeTab, setActiveTab] = useState("open");
   const queryClient = useQueryClient();
@@ -458,6 +706,37 @@ export default function MachineLearningPage() {
     queryKey: ['/api/vts/ml/closed'],
     queryFn: () => apiFetch('/api/vts/ml/closed?days=7'),
     refetchInterval: 300000,
+    staleTime: 60000,
+  });
+
+  const { data: adjustmentsData, isLoading: adjustmentsLoading, refetch: refetchAdjustments } = useQuery<{
+    ok: boolean;
+    count: number;
+    adjustments: PredictiveAdjustment[];
+  }>({
+    queryKey: ['/api/vts/predictive-adjustments'],
+    queryFn: () => apiFetch('/api/vts/predictive-adjustments?limit=100'),
+    refetchInterval: 120000,
+    staleTime: 60000,
+  });
+
+  const { data: summaryData } = useQuery<{
+    ok: boolean;
+    summary: AdjustmentSummary;
+  }>({
+    queryKey: ['/api/vts/predictive-adjustments/summary'],
+    queryFn: () => apiFetch('/api/vts/predictive-adjustments/summary?days=7'),
+    refetchInterval: 300000,
+    staleTime: 120000,
+  });
+
+  const { data: currentData } = useQuery<{
+    ok: boolean;
+    values: CurrentValues;
+  }>({
+    queryKey: ['/api/vts/predictive-adjustments/current'],
+    queryFn: () => apiFetch('/api/vts/predictive-adjustments/current'),
+    refetchInterval: 120000,
     staleTime: 60000,
   });
 
@@ -507,8 +786,32 @@ export default function MachineLearningPage() {
     }
   };
 
+  const handleExportAdjustments = async () => {
+    try {
+      const token = await ensureValidToken();
+      const response = await fetch('/api/vts/predictive-adjustments/export', {
+        credentials: 'include',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
+      if (!response.ok) throw new Error('Export failed');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `predictive_adjustments_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Export failed:', error);
+    }
+  };
+
   const openTrades = openData?.trades || [];
   const closedTrades = closedData?.trades || [];
+  const adjustments = adjustmentsData?.adjustments || [];
 
   return (
     <div className="container mx-auto p-4 space-y-6">
@@ -535,10 +838,15 @@ export default function MachineLearningPage() {
               Closed Trades (7d)
               <Badge variant="secondary" className="ml-1">{closedTrades.length}</Badge>
             </TabsTrigger>
+            <TabsTrigger value="adjustments" className="flex items-center gap-2">
+              <Sliders className="w-4 h-4" />
+              Predictive Adjustments
+              <Badge variant="secondary" className="ml-1">{adjustments.length}</Badge>
+            </TabsTrigger>
           </TabsList>
 
           <div className="flex items-center gap-2">
-            {activeTab === 'open' ? (
+            {activeTab === 'open' && (
               <>
                 <Button variant="outline" size="sm" onClick={() => refetchOpen()}>
                   <RefreshCw className="w-4 h-4 mr-2" />
@@ -549,13 +857,26 @@ export default function MachineLearningPage() {
                   Export CSV
                 </Button>
               </>
-            ) : (
+            )}
+            {activeTab === 'closed' && (
               <>
                 <Button variant="outline" size="sm" onClick={() => refetchClosed()}>
                   <RefreshCw className="w-4 h-4 mr-2" />
                   Refresh
                 </Button>
                 <Button variant="outline" size="sm" onClick={handleExportClosed}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Export CSV
+                </Button>
+              </>
+            )}
+            {activeTab === 'adjustments' && (
+              <>
+                <Button variant="outline" size="sm" onClick={() => refetchAdjustments()}>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Refresh
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleExportAdjustments}>
                   <Download className="w-4 h-4 mr-2" />
                   Export CSV
                 </Button>
@@ -606,6 +927,15 @@ export default function MachineLearningPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="adjustments">
+          <PredictiveAdjustmentsPanel 
+            adjustments={adjustments}
+            summary={summaryData?.summary || null}
+            currentValues={currentData?.values || null}
+            isLoading={adjustmentsLoading}
+          />
         </TabsContent>
       </Tabs>
     </div>
