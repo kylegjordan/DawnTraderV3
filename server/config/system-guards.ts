@@ -40,6 +40,25 @@ export const SYSTEM_GUARDS = {
 } as const;
 
 /**
+ * Directive 11.7H — IMF (Institutional Math Filters) Thresholds
+ * 
+ * Schema: metrics-calibration/v1.2
+ * 
+ * Centralized thresholds for passive learning mode IMF filtering.
+ * Used by imf-metrics.ts for OHLC-based pair qualification.
+ * 
+ * VN_MAX = 0.8 allows broader passive learning data collection
+ * while active trading uses stricter SYSTEM_GUARDS.MAX_VOL_NOISE = 0.6
+ */
+export const IMF_THRESHOLDS = {
+  LQ_MIN: 40,           // Minimum log-liquidity score
+  VN_MAX: 0.80,         // Maximum volatility noise (passive learning)
+  CORR_MAX: 0.95,       // Maximum correlation with benchmark
+} as const;
+
+export type IMFThresholdsType = typeof IMF_THRESHOLDS;
+
+/**
  * Directive 10.4 — Hybrid Integration Parameters
  * 
  * Runtime-tunable constants for ensemble scoring and confluence detection.

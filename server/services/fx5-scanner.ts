@@ -554,6 +554,13 @@ export class Fx5ScannerService {
           passesMetricFilter = passesCoreMetricFilters(LQ, VolNoise);
         }
         
+        // Directive 11.7H Task H-04: Sanity clamp for out-of-range VN values
+        // Prevents rare division or empty-array anomalies from blocking scans
+        if (VolNoise > 2 || VolNoise < 0 || !Number.isFinite(VolNoise)) {
+          console.warn(`[11.7H][VN] Out-of-range VN=${VolNoise} for ${normalizedSymbol} — defaulting to 0.6`);
+          VolNoise = 0.6;
+        }
+        
         const DI = calculateDirectionalIntegrity(prices);
         const Sigma = calculateSigma(prices);
         
