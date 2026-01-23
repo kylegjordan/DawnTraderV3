@@ -1,0 +1,48 @@
+⚙️ Subdirective 11.7F-A — Canonical Mapping & Drift Diagnostics Review (Investigation Only)
+
+Phase: 11.7
+Parent Directive: 11.7F (Schema v1.4b)
+Status: Diagnostic / Non-Implementation
+Objective: Identify and document causes for data non-population and incomplete binding across the Canonical Mapping and Mapping Drift subsystems before implementing any code changes.
+
+1 • Purpose
+
+This subdirective instructs Replit to investigate and report (not fix) the following anomalies observed in the current Directive 11.7F implementation.
+All changes must be documented and reviewed before code modification or deployment.
+
+2 • Reported Issues
+ID	Area	Symptom	Expected Behavior
+F-A-01	Mapping Drift Calculation	Drift data missing in Mapping Drift tab; table remains empty even after telemetry refresh.	Each regime → strategy pair should display a computed DriftScore (0–3) updated in real time.
+F-A-02	Overview Mapping Table	The Overview tab mapping may not be dynamically reading from /bridge/mapping-regime-strategy.json.	The canonical regime–strategy table should automatically refresh after canonical or bridge updates.
+F-A-03	Regime Distribution Graph	“Regime distribution” placeholder shows no data despite telemetry activity.	Graph should show % of pairs per active regime (BULL_STABLE, BEAR_VOLATILE, etc.).
+F-A-04	Drift Computation Scope	DriftScore appears to be calculated per regime, not per regime-strategy combination.	Each regime–strategy pairing should have a distinct DriftScore derived from volZ/trendZ.
+F-A-05	Telemetry Feed	Possible missing telemetry keys (volZ, trendZ) in aggregator output.	Telemetry feed should emit per-strategy normalized metrics used in drift calculation.
+F-A-06	Data Binding in Mapping Drift Tab	UI refreshes every 40–60 s but shows no populated data rows.	API should deliver populated JSON containing drift results and regime coverage.
+F-A-07	Schema Data Source Audit	Need to verify which data source the overview and drift components actually consume.	Confirm both bind directly to canonical bridge JSON, not stale local memory.
+3 • Investigation Requirements
+
+Replit is to perform a full diagnostic trace across the following files and confirm each of the items below.
+Do not modify code unless explicitly approved after review.
+
+Area	File(s) to Inspect	Diagnostic Goal
+Canonical Feed	/client/pages/analytics/overview.tsx, /server/routes/system.ts, /server/scripts/sync-canonical-bridge.ts	Confirm the Overview tab reads canonical JSON, not static constants.
+Drift Calculation	/server/core/analytics/mapping-drift-calculator.ts, /server/core/telemetry/vts-telemetry.ts	Check for nested iteration per regime–strategy pair and verify DriftScore formula execution.
+Telemetry Aggregation	/server/core/telemetry/telemetry-aggregator.ts	Determine if volZ/trendZ are generated and pushed to the API payload.
+Mapping Drift API	/server/routes/system.ts, /server/controllers/analytics/mapping-drift-controller.ts	Verify endpoint returns drift data and canonical coverage fields.
+UI Binding	/client/pages/analytics/mapping-drift.tsx	Inspect how the tab fetches data, update intervals, and expected JSON format.
+Bridge Sync Validation	/server/bootstrap/schema-validator.ts, /server/scripts/sync-canonical-bridge.ts	Ensure canonical vs bridge schema version check executes correctly and passes logs.
+4 • Deliverables
+
+Replit must provide a diagnostic report that includes:
+
+Root cause summary for each issue (F-A-01 – F-A-07).
+
+Affected files and functions.
+
+Proposed solutions — short-term (minimal fix) and long-term (architectural) recommendations.
+
+Risk assessment — impact if left unresolved.
+
+Implementation complexity estimate (Low / Medium / High).
+
+No code changes or pull requests are to be made until this report is reviewed and approved.
