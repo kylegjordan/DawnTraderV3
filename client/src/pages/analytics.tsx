@@ -673,6 +673,19 @@ function TradingActivitiesSection({ feedData, isLoading }: { feedData: Narrative
   );
 }
 
+interface DriftScoreResult {
+  score: number;
+  regime: string;
+  actualVolZ: number;
+  actualTrendZ: number;
+  idealVolZ: number;
+  idealTrendZ: number;
+  volContribution: number;
+  trendContribution: number;
+  label: string;
+  color: string;
+}
+
 interface MappingDriftData {
   ok: boolean;
   isDrifted: boolean;
@@ -687,6 +700,9 @@ interface MappingDriftData {
   validPairs: number;
   minSamplesMet: boolean;
   timestamp: string;
+  driftScores?: Record<string, Record<string, DriftScoreResult>>; // Directive 11.7F-B
+  hasZScoreData?: boolean; // Directive 11.7F-B
+  schema?: string; // Directive 11.7F-B
 }
 
 interface CanonicalMapData {
@@ -886,6 +902,68 @@ function MappingDriftSection() {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Detailed Strategy Drift Scores</CardTitle>
+          <CardDescription>
+            Per-regime-strategy DriftScores computed using weighted Euclidean distance from ideal Z-score targets
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!driftData?.minSamplesMet ? (
+            <div className="flex items-center justify-center p-8 text-muted-foreground">
+              <Clock className="w-5 h-5 mr-2" />
+              Waiting for {'\u2265'}30 samples to populate drift data ({driftData?.validPairs || 0}/30)
+            </div>
+          ) : !driftData?.hasZScoreData ? (
+            <div className="flex items-center justify-center p-8 text-muted-foreground">
+              <RefreshCw className="w-5 h-5 mr-2" />
+              Collecting Z-score data for drift computation...
+            </div>
+          ) : driftData?.driftScores && Object.keys(driftData.driftScores).length > 0 ? (
+            <div className="space-y-4">
+              {Object.entries(driftData.driftScores).map(([regime, strategies]) => (
+                <div key={regime} className="border rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <Badge className={getRegimeBadgeColor(regime)}>{regime}</Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {Object.keys(strategies).length} strategies
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {Object.entries(strategies).map(([strategy, result]) => (
+                      <div 
+                        key={strategy} 
+                        className={`p-2 rounded border ${
+                          result.score <= 0.5 ? 'border-green-500/30 bg-green-500/5' :
+                          result.score <= 0.8 ? 'border-lime-500/30 bg-lime-500/5' :
+                          result.score <= 1.5 ? 'border-yellow-500/30 bg-yellow-500/5' :
+                          'border-red-500/30 bg-red-500/5'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium truncate">{strategy}</span>
+                          <span className={`text-xs font-bold ${getDriftColor(result.score)}`}>
+                            {result.score.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          volZ: {result.actualVolZ.toFixed(2)} | trendZ: {result.actualTrendZ.toFixed(2)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center p-8 text-muted-foreground">
+              No drift data available yet
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

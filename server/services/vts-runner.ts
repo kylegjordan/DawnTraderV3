@@ -138,6 +138,8 @@ interface Phase10TradeRecord {
   pool?: 'ideal' | 'rotational';
   timestamp: string;
   exitType?: 'stop_hit' | 'target_hit' | 'timeout' | 'pending';
+  volZ?: number; // Directive 11.7F-B: Volatility Z-score for drift calculation
+  trendZ?: number; // Directive 11.7F-B: Trend Z-score (momentum) for drift calculation
 }
 
 /**
@@ -536,7 +538,9 @@ async function generatePhase10Signal(
     positionSize,
     pool,
     timestamp: new Date().toISOString(),
-    exitType: 'pending' // Directive 11.6: Awaiting real-price resolution
+    exitType: 'pending', // Directive 11.6: Awaiting real-price resolution
+    volZ: zScoreResult.isWarmedUp ? zScoreResult.zScores.volZ : undefined, // Directive 11.7F-B
+    trendZ: zScoreResult.isWarmedUp ? zScoreResult.zScores.momZ : undefined, // Directive 11.7F-B (momentum as trend)
   };
   
   console.log(`[11.0E.1][VTS] Trade: ${symbol} regime=${regime} signalType=${signalType} strategy=${strategy} finalScore=${finalScore.toFixed(3)} pool=${pool}`);
@@ -962,6 +966,8 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         strategy: tradeRecord.strategy, // Directive 11.4C.3: Canonical strategy name
         pattern: tradeRecord.signalType !== 'QUANT' ? (tradeRecord.patternType ?? undefined) : undefined, // Only for HYBRID/PATTERN
         caller: 'vts', // Directive 11.4C.1: VTS caller identification for telemetry guard
+        volZ: tradeRecord.volZ, // Directive 11.7F-B: Volatility Z-score
+        trendZ: tradeRecord.trendZ, // Directive 11.7F-B: Trend Z-score
       });
       
       phase10SessionTrades.push(tradeRecord);

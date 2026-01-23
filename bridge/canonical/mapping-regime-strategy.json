@@ -1,12 +1,13 @@
 {
-  "_schema": "regime-mapping/v1.4b",
+  "_schema": "regime-mapping/v1.4c",
   "_metadata": {
-    "updatedAt": "2026-02-02T00:00:00Z",
+    "updatedAt": "2026-01-23T00:00:00Z",
     "source": "VTS",
     "canonical": true,
     "includesDriftScore": true,
-    "generatedAt": "2026-02-02T00:00:00Z",
-    "generator": "sync-canonical-bridge.ts"
+    "generatedAt": "2026-01-23T00:00:00Z",
+    "generator": "sync-canonical-bridge.ts",
+    "_fields": ["driftScores", "volZ", "trendZ"]
   },
   "BEAR_VOLATILE": {
     "favoredStrategies": ["mean_reversion", "reverse_impulse", "defensive_hedge", "inside_bar_reversal"],

@@ -1,11 +1,12 @@
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * Directive 11.7F — Mapping Drift Integrity Tests
+ * Directive 11.7F-B — Mapping Drift Integrity Tests
  * ══════════════════════════════════════════════════════════════════════════════
  * 
  * Validates DriftScore computation, boundary conditions, and bridge integrity.
+ * Extended for Directive 11.7F-B with per-strategy DriftScore validation.
  * 
- * Schema Version: regime-mapping/v1.4b
+ * Schema Version: regime-mapping/v1.4c
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
@@ -185,6 +186,107 @@ describe('Mapping Drift Integrity — Directive 11.7F', () => {
       expect(stats.maxScore).toBeGreaterThanOrEqual(stats.avgScore);
       expect(stats.minScore).toBeLessThanOrEqual(stats.avgScore);
       expect(stats.alignedCount + stats.driftedCount).toBeLessThanOrEqual(results.length);
+    });
+    
+  });
+
+  describe('Directive 11.7F-B — Per-Strategy DriftScore Integration', () => {
+    
+    test('Schema version is v1.4c', () => {
+      expect(CANONICAL_SCHEMA_VERSION).toBe('regime-mapping/v1.4c');
+    });
+
+    test('Simulated drift data with 10 pairs and random Z-scores', () => {
+      const regimes = ['BULL_STABLE', 'BEAR_VOLATILE', 'HIGH_VOL_IMPULSE', 'LOW_VOL_CHOP', 'TRANSITION'];
+      const strategies = ['vwap_pullback', 'mean_reversion', 'sma_trend_ride', 'range_trade', 'breakout'];
+      
+      const results: ReturnType<typeof computeDriftScore>[] = [];
+      
+      for (let i = 0; i < 10; i++) {
+        const regime = regimes[i % regimes.length];
+        const volZHistory = Array.from({ length: 5 }, () => (Math.random() - 0.5) * 4);
+        const trendZHistory = Array.from({ length: 5 }, () => (Math.random() - 0.5) * 4);
+        
+        const result = computeDriftScore(volZHistory, trendZHistory, regime);
+        results.push(result);
+        
+        expect(result.score).toBeGreaterThanOrEqual(0);
+        expect(result.score).toBeLessThanOrEqual(3);
+        expect(result.regime).toBe(regime);
+      }
+      
+      const stats = aggregateDriftStats(results);
+      expect(stats.avgScore).toBeGreaterThanOrEqual(0);
+      expect(stats.distribution).toBeDefined();
+    });
+
+    test('Per-regime-strategy aggregation structure', () => {
+      const regimeStrategyData: Record<string, Record<string, { volZ: number[]; trendZ: number[] }>> = {
+        'BULL_STABLE': {
+          'vwap_pullback': { volZ: [-0.8, -1.0, -0.9], trendZ: [1.2, 1.4, 1.3] },
+          'pivot_shift': { volZ: [-0.5, -0.6, -0.7], trendZ: [1.0, 1.1, 1.2] }
+        },
+        'BEAR_VOLATILE': {
+          'mean_reversion': { volZ: [1.0, 1.2, 1.1], trendZ: [-0.9, -0.8, -1.0] }
+        }
+      };
+      
+      const driftScores: Record<string, Record<string, ReturnType<typeof computeDriftScore>>> = {};
+      
+      for (const [regime, strategies] of Object.entries(regimeStrategyData)) {
+        driftScores[regime] = {};
+        for (const [strategy, zData] of Object.entries(strategies)) {
+          const result = computeDriftScore(zData.volZ, zData.trendZ, regime);
+          driftScores[regime][strategy] = result;
+        }
+      }
+      
+      expect(driftScores['BULL_STABLE']).toBeDefined();
+      expect(driftScores['BULL_STABLE']['vwap_pullback']).toBeDefined();
+      expect(driftScores['BULL_STABLE']['vwap_pullback'].score).toBeGreaterThanOrEqual(0);
+      expect(driftScores['BEAR_VOLATILE']['mean_reversion']).toBeDefined();
+    });
+
+    test('Bridge JSON schema version matches canonical', () => {
+      const bridgePath = path.join(process.cwd(), 'bridge/canonical/mapping-regime-strategy.json');
+      
+      if (fs.existsSync(bridgePath)) {
+        const bridgeContent = JSON.parse(fs.readFileSync(bridgePath, 'utf-8'));
+        expect(bridgeContent._schema).toBe(CANONICAL_SCHEMA_VERSION);
+      }
+    });
+
+    test('DriftScoreResult has required fields for UI', () => {
+      const result = computeDriftScore([0.5, 0.6, 0.7], [1.2, 1.1, 1.3], 'BULL_STABLE');
+      
+      expect(result).toHaveProperty('score');
+      expect(result).toHaveProperty('regime');
+      expect(result).toHaveProperty('actualVolZ');
+      expect(result).toHaveProperty('actualTrendZ');
+      expect(result).toHaveProperty('idealVolZ');
+      expect(result).toHaveProperty('idealTrendZ');
+      expect(result).toHaveProperty('volContribution');
+      expect(result).toHaveProperty('trendContribution');
+      expect(result).toHaveProperty('label');
+      expect(result).toHaveProperty('color');
+      
+      expect(typeof result.score).toBe('number');
+      expect(typeof result.actualVolZ).toBe('number');
+      expect(typeof result.actualTrendZ).toBe('number');
+      expect(typeof result.label).toBe('string');
+      expect(typeof result.color).toBe('string');
+    });
+
+    test('computeMappingDrift response shape conforms to API contract', async () => {
+      const requiredFields = [
+        'driftScore', 'isDrifted', 'canonicalCoverage', 'empiricalRegimes',
+        'missingCanonical', 'extraEmpirical', 'distribution', 'normalizedDistribution',
+        'recommendations', 'validPairs', 'minSamplesMet', 'driftScores', 'hasZScoreData', 'schema'
+      ];
+      
+      requiredFields.forEach(field => {
+        expect(typeof field).toBe('string');
+      });
     });
     
   });

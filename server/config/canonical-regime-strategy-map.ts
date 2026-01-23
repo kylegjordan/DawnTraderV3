@@ -9,8 +9,14 @@
  * ALL subsystems (VTS, Signal Orchestrator, Telemetry, DSE, RTB, Bridge) MUST
  * import from this file. Local inference or mapping logic is PROHIBITED.
  * 
- * Schema Version: regime-mapping/v1.4b
- * Last Updated: 2026-02-02
+ * Schema Version: regime-mapping/v1.4c
+ * Last Updated: 2026-01-23
+ * 
+ * Changes in v1.4c (Directive 11.7F-B):
+ *   - volZ/trendZ Z-score persistence in telemetry
+ *   - Per-regime-strategy DriftScore computation
+ *   - Rolling 50-sample Z-score history buffer
+ *   - Enhanced API with driftScores payload
  * 
  * Changes in v1.4b:
  *   - SMA Trend Ride realigned from BULL_STABLE → HIGH_VOL_IMPULSE
@@ -21,12 +27,13 @@
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-export const CANONICAL_SCHEMA_VERSION = 'regime-mapping/v1.4b';
+export const CANONICAL_SCHEMA_VERSION = 'regime-mapping/v1.4c';
 export const CANONICAL_SCHEMA_METADATA = {
-  updatedAt: '2026-02-02T00:00:00Z',
+  updatedAt: '2026-01-23T00:00:00Z',
   source: 'VTS',
   canonical: true,
-  includesDriftScore: true
+  includesDriftScore: true,
+  _fields: ['driftScores', 'volZ', 'trendZ']
 };
 
 export type CanonicalRegimeType = 

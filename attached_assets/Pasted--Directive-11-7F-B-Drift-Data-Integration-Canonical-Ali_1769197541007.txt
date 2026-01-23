@@ -1,0 +1,129 @@
+⚙️ Directive 11.7F-B — Drift Data Integration & Canonical Alignment Corrections
+
+Parent Directive: 11.7F (Schema v1.4b)
+Predecessor: Subdirective 11.7F-A (Diagnostics Review)
+Phase: Implementation Phase II
+Purpose: Implement verified fixes from diagnostic findings F-A-01 through F-A-07 to fully enable canonical DriftScore computation and telemetry synchronization.
+
+1 • Objectives
+
+Integrate real DriftScore computation into the API and telemetry pipeline.
+
+Persist and expose per-pair volatility and trend Z-scores.
+
+Extend telemetry aggregation to compute per-strategy DriftScores.
+
+Add UI support for displaying detailed Drift rows.
+
+Maintain schema integrity and backward compatibility (v1.4b → v1.4c).
+
+2 • Implementation Tasks
+ID	Description	File(s)	Status Target
+B-01	Add volZ and trendZ fields to PairTelemetry interface. Populate from VTS runner where Z-scores are computed.	/server/services/telemetry-aggregator.ts, /server/services/vts-runner.ts	✅ Required
+B-02	Persist rolling Z-score arrays (e.g., volZHistory and trendZHistory, length 50). Implement lightweight ring buffer or deque.	/server/core/telemetry/telemetry-aggregator.ts	✅ Required
+B-03	Wire mapping-drift-calculator.ts into computeMappingDrift() replacing the current coverage-based formula.	/server/services/telemetry-aggregator.ts (lines 405-530)	✅ Required
+B-04	Compute DriftScore per regime–strategy pair. Iterate over each strategy under each regime and store driftScore[regime][strategy].	/server/core/analytics/mapping-drift-calculator.ts	✅ Required
+B-05	Create DriftAnalysisService (optional Phase 12 bridge). Wrap drift aggregation logic for future ML ingestion.	/server/services/drift-analysis.service.ts	Optional
+B-06	Update Mapping Drift API to return { driftScores, normalizedDistribution, canonicalCoverage }	/server/routes/system.ts	✅ Required
+B-07	Add Detailed Drift Table UI below regime distribution graph.	/client/pages/analytics/mapping-drift.tsx	✅ Required
+B-08	Add Sample Threshold Indicator (“Waiting for ≥30 samples to populate drift data”).	/client/pages/analytics/mapping-drift.tsx	✅ Required
+B-09	Retain coverage-based score as fallback if Z-score data missing.	/server/services/telemetry-aggregator.ts	✅ Required
+B-10	Increment schema version to v1.4c in canonical and bridge files.	/server/config/canonical-regime-strategy-map.ts, /bridge/mapping-regime-strategy.json	✅ Required
+B-11	Add integration test verifying populated drift data. Simulate 10 pairs with random Z-scores.	/server/tests/system/mapping_drift_data.test.ts	✅ Required
+B-12	Confirm schema validation (v1.4b → v1.4c) still passes.	/server/bootstrap/schema-validator.ts	✅ Required
+3 • Technical Corrections
+✅ 1. Telemetry Z-Score Persistence
+// server/services/vts-runner.ts
+pairTelemetry[pair] = {
+  ...pairTelemetry[pair],
+  volZ: zScoreResult.zScores.volZ,
+  trendZ: zScoreResult.zScores.trendZ,
+  volZHistory: appendRolling(pairTelemetry[pair].volZHistory, zScoreResult.zScores.volZ, 50),
+  trendZHistory: appendRolling(pairTelemetry[pair].trendZHistory, zScoreResult.zScores.trendZ, 50)
+};
+
+✅ 2. Drift Computation Loop
+// server/services/telemetry-aggregator.ts
+import { computeDriftScore } from "../core/analytics/mapping-drift-calculator";
+
+for (const [regime, strategies] of Object.entries(canonicalMap)) {
+  driftScores[regime] = {};
+  for (const strategy of strategies) {
+    const z = aggregateZScores(pairTelemetry, regime, strategy);
+    driftScores[regime][strategy] = computeDriftScore(z.volZHistory, z.trendZHistory, regime);
+  }
+}
+
+✅ 3. API Output Shape
+{
+  "schema": "regime-mapping/v1.4c",
+  "canonicalCoverage": 0.91,
+  "normalizedDistribution": { "BULL_STABLE": 0.42, "BEAR_VOLATILE": 0.33, ... },
+  "driftScores": {
+    "BULL_STABLE": { "sma_trend_ride": 0.85, "vwap_pullback": 0.42 },
+    "BEAR_VOLATILE": { "mean_reversion": 1.2, "defensive_hedge": 0.67 }
+  }
+}
+
+4 • UI Enhancements
+
+Mapping Drift Tab
+
+Add sub-table listing each strategy with its DriftScore and color-coded status.
+
+Show “Waiting for telemetry data…” when sample count < 30.
+
+Include tooltip explanations of DriftScore interpretation.
+
+Overview Tab
+
+✅ No change required – already dynamically bound.
+
+5 • Schema & Version Control
+
+Schema bumped to v1.4c in canonical and bridge files.
+
+New metadata field added:
+
+"_fields": ["driftScores", "volZ", "trendZ"]
+
+
+Version check (11.7F Task 5) remains valid.
+
+6 • Validation Checklist
+Validation	Method	Expected Result
+Telemetry Z-score persistence	Run VTS simulation	volZ and trendZ keys appear in PairTelemetry
+Drift computation integration	Call /api/system/mapping-drift	Returns driftScores for ≥ 1 regime–strategy pair
+Schema validation	npm run validate-schema	✅ Pass – v1.4c matches bridge
+Overview sync	Reload Analytics Overview	Canonical map matches bridge JSON
+UI display	Observe Mapping Drift tab after 30 samples	Rows populate with color-coded DriftScores
+7 • Review & Approval Process
+
+Replit completes implementation per Directive 11.7F-B.
+
+Submit implementation log → /logs/11.7F-B-impl.md.
+
+Architect and Gemini review and sign off.
+
+Merge to Phase 12 branch after approval.
+
+8 • Success Criteria
+
+✅ Per-strategy DriftScores computed and visible.
+✅ volZ/trendZ persisted and streamed to API.
+✅ Canonical schema v1.4c validated.
+✅ Mapping Drift tab populates with complete data.
+✅ Overview tab dynamically synchronized.
+
+🧭 Summary
+
+Directive 11.7F-B converts the diagnostic findings of Subdirective 11.7F-A into a precise, bounded implementation roadmap.
+Once executed, it will:
+
+Replace the placeholder coverage metric with mathematically valid DriftScores
+
+Persist and expose volatility/trend Z-data for every strategy
+
+Complete the data flow from canonical definition → telemetry → analytics UI
+
+Achieve full regime–strategy alignment under schema v1.4c

@@ -46,6 +46,8 @@ import {
 import { getCostMetrics, getOrSetCostMetrics } from '../core/cache/cost-cache.js';
 import { computeMarketFriction } from '../core/metrics/cost-metrics.js';
 import { toCanonical } from './utils/symbol-canonicalizer.js';
+import { computeDriftScore, aggregateDriftStats, type DriftScoreResult } from '../core/analytics/mapping-drift-calculator.js';
+import { CANONICAL_REGIME_STRATEGY_MAP } from '../config/canonical-regime-strategy-map.js';
 
 export type PoolType = 'ideal' | 'rotational';
 
@@ -73,6 +75,10 @@ export interface PairTelemetry {
   source?: TelemetrySource; // Directive 11.0E.2: simulation vs live segregation
   signalType?: string; // Directive 11.4C.3: Signal type from VTS (HYBRID/QUANT/PATTERN)
   strategy?: string; // Directive 11.4C-R2: Strategy name from VTS
+  volZ?: number; // Directive 11.7F-B: Volatility Z-score for drift calculation
+  trendZ?: number; // Directive 11.7F-B: Trend Z-score (momentum) for drift calculation
+  volZHistory?: number[]; // Directive 11.7F-B: Rolling 50-sample volZ history
+  trendZHistory?: number[]; // Directive 11.7F-B: Rolling 50-sample trendZ history
 }
 
 export interface TimeframeEfficiency {
@@ -152,6 +158,8 @@ export class TelemetryAggregatorService {
       signalType?: string; // Directive 11.4C.3: Signal type from VTS (HYBRID/QUANT/PATTERN)
       strategy?: string; // Directive 11.4C-R2: Strategy name from VTS
       caller?: string; // Directive 11.4C.1: Caller identification (must be 'vts')
+      volZ?: number; // Directive 11.7F-B: Volatility Z-score
+      trendZ?: number; // Directive 11.7F-B: Trend Z-score (momentum)
     }
   ): void {
     // Directive 11.4C.1: Guard against non-VTS writers
@@ -172,6 +180,20 @@ export class TelemetryAggregatorService {
     // Only HYBRID and PATTERN signals should have pattern names
     const shouldHavePattern = data.signalType !== 'QUANT';
     
+    // Directive 11.7F-B: Build rolling Z-score history from previous entries
+    const MAX_ZSCORE_HISTORY = 50;
+    const prevEntry = recent.length > 0 ? recent[recent.length - 1] : null;
+    const prevVolZHistory = prevEntry?.volZHistory ?? [];
+    const prevTrendZHistory = prevEntry?.trendZHistory ?? [];
+    
+    // Directive 11.7F-B: Append new Z-scores to rolling history (ring buffer)
+    const newVolZHistory = data.volZ !== undefined 
+      ? [...prevVolZHistory.slice(-(MAX_ZSCORE_HISTORY - 1)), data.volZ]
+      : prevVolZHistory;
+    const newTrendZHistory = data.trendZ !== undefined
+      ? [...prevTrendZHistory.slice(-(MAX_ZSCORE_HISTORY - 1)), data.trendZ]
+      : prevTrendZHistory;
+
     const entry: PairTelemetry = {
       symbol,
       finalScore: data.finalScore,
@@ -193,6 +215,10 @@ export class TelemetryAggregatorService {
       pattern: shouldHavePattern ? data.pattern : undefined, // Directive 11.4C.3: No pattern for QUANT
       signalType: data.signalType, // Directive 11.4C.3: Store signal type from VTS (HYBRID/QUANT/PATTERN)
       strategy: data.strategy, // Directive 11.4C-R2: Store strategy name from VTS
+      volZ: data.volZ, // Directive 11.7F-B: Store current volatility Z-score
+      trendZ: data.trendZ, // Directive 11.7F-B: Store current trend Z-score
+      volZHistory: newVolZHistory, // Directive 11.7F-B: Rolling Z-score history
+      trendZHistory: newTrendZHistory, // Directive 11.7F-B: Rolling Z-score history
     };
     
     recent.push(entry);
@@ -396,11 +422,10 @@ export class TelemetryAggregatorService {
   }
 
   /**
-   * Directive 11.7F: Mapping Drift Check
+   * Directive 11.7F-B: Mapping Drift Check with Per-Strategy DriftScores
    * Compares canonical regimes against empirical telemetry distribution.
-   * Detects drift when observed regimes differ from canonical set or when
-   * regime distribution shows unexpected concentration.
-   * @returns Drift analysis with canonical vs empirical alignment metrics
+   * Computes DriftScore per regime-strategy pair using weighted Euclidean distance.
+   * @returns Drift analysis with per-strategy DriftScores and coverage metrics
    */
   computeMappingDrift(): {
     isDrifted: boolean;
@@ -414,8 +439,12 @@ export class TelemetryAggregatorService {
     recommendations: string[];
     validPairs: number;
     minSamplesMet: boolean;
+    driftScores: Record<string, Record<string, DriftScoreResult>>; // Directive 11.7F-B: Per-regime-strategy DriftScores
+    hasZScoreData: boolean; // Directive 11.7F-B: Indicates if real Z-score data available
+    schema: string; // Directive 11.7F-B: Current schema version
   } {
     const MIN_SAMPLES = 30; // Minimum pairs needed for reliable drift detection
+    const SCHEMA = 'regime-mapping/v1.4c';
     
     const CANONICAL_SET = new Set([
       REGIMES.BULL_STABLE,
@@ -440,12 +469,18 @@ export class TelemetryAggregatorService {
       [REGIMES.HIGH_VOL_IMPULSE]: 0,
       [REGIMES.TRANSITION]: 0
     };
+    
+    // Directive 11.7F-B: Aggregate Z-scores per regime-strategy pair
+    const regimeStrategyZScores: Record<string, Record<string, { volZ: number[]; trendZ: number[] }>> = {};
+    
     let validPairs = 0;
+    let pairsWithZScores = 0;
     
     for (const [, entries] of this.pairTelemetry.entries()) {
       if (entries.length === 0) continue;
       const latest = entries[entries.length - 1];
       const regime = latest.pairRegime;
+      const strategy = latest.strategy;
       if (!regime) continue;
       
       validPairs++;
@@ -456,9 +491,38 @@ export class TelemetryAggregatorService {
       if (normalizedCounts[normalizedRegime] !== undefined) {
         normalizedCounts[normalizedRegime]++;
       }
+      
+      // Directive 11.7F-B: Collect Z-scores per regime-strategy pair
+      if (strategy && latest.volZHistory && latest.trendZHistory && 
+          latest.volZHistory.length > 0 && latest.trendZHistory.length > 0) {
+        pairsWithZScores++;
+        if (!regimeStrategyZScores[normalizedRegime]) {
+          regimeStrategyZScores[normalizedRegime] = {};
+        }
+        if (!regimeStrategyZScores[normalizedRegime][strategy]) {
+          regimeStrategyZScores[normalizedRegime][strategy] = { volZ: [], trendZ: [] };
+        }
+        // Aggregate all Z-scores for this regime-strategy pair
+        regimeStrategyZScores[normalizedRegime][strategy].volZ.push(...latest.volZHistory);
+        regimeStrategyZScores[normalizedRegime][strategy].trendZ.push(...latest.trendZHistory);
+      }
     }
     
     const minSamplesMet = validPairs >= MIN_SAMPLES;
+    const hasZScoreData = pairsWithZScores >= 10; // Need at least 10 pairs with Z-scores
+    
+    // Directive 11.7F-B: Compute DriftScores per regime-strategy pair
+    const driftScores: Record<string, Record<string, DriftScoreResult>> = {};
+    const allDriftResults: DriftScoreResult[] = [];
+    
+    for (const [regime, strategies] of Object.entries(regimeStrategyZScores)) {
+      driftScores[regime] = {};
+      for (const [strategy, zData] of Object.entries(strategies)) {
+        const result = computeDriftScore(zData.volZ, zData.trendZ, regime);
+        driftScores[regime][strategy] = result;
+        allDriftResults.push(result);
+      }
+    }
     
     // If insufficient samples, return early with no drift detected
     if (!minSamplesMet) {
@@ -473,7 +537,10 @@ export class TelemetryAggregatorService {
         normalizedDistribution: normalizedCounts,
         recommendations: [`Insufficient samples (${validPairs}/${MIN_SAMPLES}) - drift check deferred`],
         validPairs,
-        minSamplesMet: false
+        minSamplesMet: false,
+        driftScores,
+        hasZScoreData,
+        schema: SCHEMA
       };
     }
     
@@ -492,26 +559,36 @@ export class TelemetryAggregatorService {
     const observedCanonical = canonicalArray.length - missingCanonical.length;
     const canonicalCoverage = observedCanonical / canonicalArray.length;
     
-    // Drift score: unknown regimes are serious (0.5), missing canonical less so (0.1)
-    const driftScore = (extraEmpirical.length * 0.5) + (missingCanonical.length * 0.1);
+    // Directive 11.7F-B: Use real DriftScore if Z-score data available, fallback to coverage-based
+    let driftScore: number;
+    if (hasZScoreData && allDriftResults.length > 0) {
+      const stats = aggregateDriftStats(allDriftResults);
+      driftScore = stats.avgScore;
+    } else {
+      // Fallback: coverage-based score (legacy formula)
+      driftScore = (extraEmpirical.length * 0.5) + (missingCanonical.length * 0.1);
+    }
     
-    // Only flag drift for truly unknown regimes, not DSS extended types
-    const isDrifted = extraEmpirical.length > 0 || driftScore > 0.4;
+    // Only flag drift for truly unknown regimes or high mathematical drift
+    const isDrifted = extraEmpirical.length > 0 || driftScore > 0.8;
     
     const recommendations: string[] = [];
+    if (!hasZScoreData) {
+      recommendations.push('Waiting for Z-score data to compute accurate DriftScores');
+    }
     if (extraEmpirical.length > 0) {
       recommendations.push(`Unknown regimes detected: ${extraEmpirical.join(', ')}`);
     }
     if (missingCanonical.length >= 3) {
       recommendations.push(`Low regime diversity: ${observedCanonical}/5 canonical regimes observed`);
     }
-    if (isDrifted) {
-      recommendations.push('Review VTS regime classification logic for alignment');
+    if (isDrifted && hasZScoreData) {
+      recommendations.push('Review strategy parameters for drifted regime-strategy pairs');
     }
     
     if (isDrifted && extraEmpirical.length > 0) {
-      console.warn(`[11.7F][Drift] Mapping drift detected (score=${driftScore.toFixed(3)})`);
-      console.warn(`[11.7F][Drift] Unknown regimes: ${JSON.stringify(extraEmpirical)}`);
+      console.warn(`[11.7F-B][Drift] Mapping drift detected (score=${driftScore.toFixed(3)})`);
+      console.warn(`[11.7F-B][Drift] Unknown regimes: ${JSON.stringify(extraEmpirical)}`);
     }
     
     return {
@@ -525,7 +602,10 @@ export class TelemetryAggregatorService {
       normalizedDistribution: normalizedCounts,
       recommendations,
       validPairs,
-      minSamplesMet: true
+      minSamplesMet: true,
+      driftScores,
+      hasZScoreData,
+      schema: SCHEMA
     };
   }
 
