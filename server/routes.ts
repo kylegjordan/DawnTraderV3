@@ -22850,6 +22850,11 @@ Important: Extract the exact field names and numeric values from the user's requ
   apiRouter.use('/calibration', calibrationRouter.default);
   console.log('[M5-R1] Calibration routes mounted at /api/calibration');
 
+  // Directive 11.7E: Mount Regime Archive API routes
+  const regimeArchiveRouter = await import('./routes/regime-archive.js');
+  apiRouter.use('', regimeArchiveRouter.default);
+  console.log('[11.7E] Regime Archive routes mounted at /api/vts/regime-archive');
+
   // Catch-all handler for unmatched /api/* routes
   // This prevents requests from falling through to Vite's HTML handler
   // and ensures all API routes return JSON (even 404s)

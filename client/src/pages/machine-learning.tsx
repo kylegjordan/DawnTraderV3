@@ -96,6 +96,52 @@ interface CurrentValues {
   lastUpdated: string | null;
 }
 
+interface RegimeArchiveRecord {
+  _schema: string;
+  timestamp: string;
+  source: string;
+  windowDays: number;
+  regime: string;
+  strategy: string;
+  metrics: {
+    winRate: number;
+    avgPnL: number;
+    skipRatio: number;
+    confidence: number;
+    dynamicROI: number;
+    momentumWeight: number;
+    volatilityWeight: number;
+    trendWeight: number;
+  };
+  checksum: string;
+  _metadata: {
+    telemetryVersion: number;
+    canonicalVersion: number;
+    recordCount: number;
+    avgConfidence: number;
+  };
+}
+
+interface ArchiveSummary {
+  totalEntries: number;
+  avgConfidence: number;
+  avgPnL: number;
+  regimeCount: number;
+  strategyCount: number;
+  oldestArchive: string | null;
+  newestArchive: string | null;
+}
+
+interface ManifestEntry {
+  filename: string;
+  entries: number;
+  checksum: string;
+  createdAt: string;
+  version: number;
+  compressed: boolean;
+  compressedAt?: string;
+}
+
 const getRegimeBadgeColor = (regime: string) => {
   if (regime.includes('BULL_STABLE')) return 'bg-green-500/20 text-green-400 border-green-500/30';
   if (regime.includes('BULL_VOLATILE')) return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
@@ -481,6 +527,200 @@ const getCategoryBadgeColor = (category: string) => {
   }
 };
 
+function RegimeArchivePanel({
+  records,
+  summary,
+  manifest,
+  isLoading,
+  onTriggerArchive
+}: {
+  records: RegimeArchiveRecord[];
+  summary: ArchiveSummary | null;
+  manifest: ManifestEntry[];
+  isLoading: boolean;
+  onTriggerArchive: () => void;
+}) {
+  const [selectedRegime, setSelectedRegime] = useState<string | null>(null);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const filteredRecords = selectedRegime 
+    ? records.filter(r => r.regime === selectedRegime)
+    : records;
+
+  const uniqueRegimes = [...new Set(records.map(r => r.regime))];
+
+  return (
+    <div className="space-y-6">
+      {summary && (
+        <Card>
+          <CardHeader className="py-3">
+            <CardTitle className="text-lg">Archive Summary</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-primary">{summary.totalEntries}</div>
+                <div className="text-xs text-muted-foreground">Total Entries</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-blue-400">{summary.regimeCount}</div>
+                <div className="text-xs text-muted-foreground">Regimes</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-purple-400">{summary.strategyCount}</div>
+                <div className="text-xs text-muted-foreground">Strategies</div>
+              </div>
+              <div className="text-center">
+                <div className={`text-2xl font-bold ${summary.avgPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  ${summary.avgPnL.toFixed(4)}
+                </div>
+                <div className="text-xs text-muted-foreground">Avg P&L</div>
+              </div>
+            </div>
+            {summary.oldestArchive && summary.newestArchive && (
+              <div className="mt-4 flex justify-between text-xs text-muted-foreground border-t pt-3">
+                <span>Oldest: {format(new Date(summary.oldestArchive), 'MMM dd, yyyy')}</span>
+                <span>Newest: {format(new Date(summary.newestArchive), 'MMM dd, yyyy')}</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader className="py-3">
+          <CardTitle className="text-lg flex items-center justify-between">
+            <span>Archived Regime Metrics</span>
+            <div className="flex items-center gap-2">
+              <select
+                className="text-sm bg-background border rounded px-2 py-1"
+                value={selectedRegime || ''}
+                onChange={(e) => setSelectedRegime(e.target.value || null)}
+              >
+                <option value="">All Regimes</option>
+                {uniqueRegimes.map(regime => (
+                  <option key={regime} value={regime}>{regime}</option>
+                ))}
+              </select>
+              <Button variant="outline" size="sm" onClick={onTriggerArchive}>
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Manual Archive
+              </Button>
+            </div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-card z-10">
+                <tr className="border-b border-border">
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">Timestamp</th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">Regime</th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">Strategy</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">Win Rate</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">Avg P&L</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">Confidence</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">Dynamic ROI</th>
+                  <th className="px-3 py-2 text-center font-medium text-muted-foreground">Window</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRecords.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
+                      No archived records found
+                    </td>
+                  </tr>
+                ) : (
+                  filteredRecords.slice(0, 100).map((record, idx) => (
+                    <tr key={`${record.regime}-${record.strategy}-${idx}`} className="border-b border-border/50 hover:bg-muted/30">
+                      <td className="px-3 py-2 text-xs">
+                        {format(new Date(record.timestamp), 'MMM dd HH:mm')}
+                      </td>
+                      <td className="px-3 py-2">
+                        <Badge variant="outline" className={`text-xs ${getRegimeBadgeColor(record.regime)}`}>
+                          {record.regime}
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-2 text-xs font-mono">{record.strategy}</td>
+                      <td className="px-3 py-2 text-right text-xs font-mono">
+                        {(record.metrics.winRate * 100).toFixed(1)}%
+                      </td>
+                      <td className={`px-3 py-2 text-right text-xs font-mono ${record.metrics.avgPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        ${record.metrics.avgPnL.toFixed(4)}
+                      </td>
+                      <td className="px-3 py-2 text-right text-xs font-mono">
+                        {(record.metrics.confidence * 100).toFixed(1)}%
+                      </td>
+                      <td className="px-3 py-2 text-right text-xs font-mono">
+                        {(record.metrics.dynamicROI * 100).toFixed(2)}%
+                      </td>
+                      <td className="px-3 py-2 text-center text-xs">
+                        {record.windowDays}d
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {manifest.length > 0 && (
+        <Card>
+          <CardHeader className="py-3">
+            <CardTitle className="text-lg">Archive Manifest</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-card z-10">
+                  <tr className="border-b border-border">
+                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Filename</th>
+                    <th className="px-3 py-2 text-right font-medium text-muted-foreground">Entries</th>
+                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Checksum</th>
+                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Created</th>
+                    <th className="px-3 py-2 text-center font-medium text-muted-foreground">Compressed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {manifest.map((entry, idx) => (
+                    <tr key={idx} className="border-b border-border/50 hover:bg-muted/30">
+                      <td className="px-3 py-2 text-xs font-mono">{entry.filename}</td>
+                      <td className="px-3 py-2 text-right text-xs">{entry.entries}</td>
+                      <td className="px-3 py-2 text-xs font-mono text-muted-foreground">
+                        {entry.checksum.substring(0, 12)}...
+                      </td>
+                      <td className="px-3 py-2 text-xs">
+                        {format(new Date(entry.createdAt), 'MMM dd, yyyy HH:mm')}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {entry.compressed ? (
+                          <Badge variant="outline" className="text-xs bg-green-500/20 text-green-400">Yes</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs bg-gray-500/20 text-gray-400">No</Badge>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 function PredictiveAdjustmentsPanel({ 
   adjustments, 
   summary, 
@@ -740,6 +980,45 @@ export default function MachineLearningPage() {
     staleTime: 60000,
   });
 
+  const { data: archiveData, isLoading: archiveLoading, refetch: refetchArchive } = useQuery<{
+    ok: boolean;
+    records: RegimeArchiveRecord[];
+  }>({
+    queryKey: ['/api/vts/regime-archive'],
+    queryFn: () => apiFetch('/api/vts/regime-archive?limit=100'),
+    refetchInterval: 300000,
+    staleTime: 120000,
+  });
+
+  const { data: archiveSummaryData } = useQuery<{
+    ok: boolean;
+    summary: ArchiveSummary;
+  }>({
+    queryKey: ['/api/vts/regime-archive/summary'],
+    queryFn: () => apiFetch('/api/vts/regime-archive/summary'),
+    refetchInterval: 300000,
+    staleTime: 120000,
+  });
+
+  const { data: manifestData } = useQuery<{
+    ok: boolean;
+    manifest: ManifestEntry[];
+  }>({
+    queryKey: ['/api/vts/regime-archive/manifest'],
+    queryFn: () => apiFetch('/api/vts/regime-archive/manifest'),
+    refetchInterval: 300000,
+    staleTime: 120000,
+  });
+
+  const handleTriggerArchive = async () => {
+    try {
+      await apiFetch('/api/vts/regime-archive', { method: 'POST' });
+      refetchArchive();
+    } catch (error) {
+      console.error('Manual archive trigger failed:', error);
+    }
+  };
+
   const handleExportOpen = async () => {
     try {
       const token = await ensureValidToken();
@@ -812,6 +1091,9 @@ export default function MachineLearningPage() {
   const openTrades = openData?.trades || [];
   const closedTrades = closedData?.trades || [];
   const adjustments = adjustmentsData?.adjustments || [];
+  const archiveRecords = archiveData?.records || [];
+  const archiveSummary = archiveSummaryData?.summary || null;
+  const archiveManifest = manifestData?.manifest || [];
 
   return (
     <div className="container mx-auto p-4 space-y-6">
@@ -842,6 +1124,11 @@ export default function MachineLearningPage() {
               <Sliders className="w-4 h-4" />
               Predictive Adjustments
               <Badge variant="secondary" className="ml-1">{adjustments.length}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="archive" className="flex items-center gap-2">
+              <Activity className="w-4 h-4" />
+              Regime Archive
+              <Badge variant="secondary" className="ml-1">{archiveRecords.length}</Badge>
             </TabsTrigger>
           </TabsList>
 
@@ -881,6 +1168,12 @@ export default function MachineLearningPage() {
                   Export CSV
                 </Button>
               </>
+            )}
+            {activeTab === 'archive' && (
+              <Button variant="outline" size="sm" onClick={() => refetchArchive()}>
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Refresh
+              </Button>
             )}
           </div>
         </div>
@@ -935,6 +1228,16 @@ export default function MachineLearningPage() {
             summary={summaryData?.summary || null}
             currentValues={currentData?.values || null}
             isLoading={adjustmentsLoading}
+          />
+        </TabsContent>
+
+        <TabsContent value="archive">
+          <RegimeArchivePanel
+            records={archiveRecords}
+            summary={archiveSummary}
+            manifest={archiveManifest}
+            isLoading={archiveLoading}
+            onTriggerArchive={handleTriggerArchive}
           />
         </TabsContent>
       </Tabs>

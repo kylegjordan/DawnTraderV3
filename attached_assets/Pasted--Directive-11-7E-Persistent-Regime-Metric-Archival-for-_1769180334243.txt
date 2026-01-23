@@ -1,0 +1,227 @@
+🧭 Directive 11.7E — Persistent Regime-Metric Archival for Phase 12 Seeding (Final Revision — 2026-02-02)
+
+Phase: 11.7
+Series: Predictive Learning Feedback Loop
+Dependencies: 11.7B (Telemetry Aggregation), 11.7C (Dynamic ROI), 11.7D (Recalibration), 11.7D.1 (Predictive Adjustments)
+Implements: Long-term archival of regime-level predictive metrics for ML retraining and drift analysis
+Source Isolation: "VTS" only
+Schema Version: regime-archive/v1.1
+
+1 • Objective
+
+Create a deterministic, auditable, and version-controlled archive of all regime × strategy performance summaries.
+This archive provides the persistent data layer required for:
+
+Phase 12 Machine-Learning retraining
+
+Drift and feature-evolution tracking
+
+Predictive performance auditing and reproducibility
+
+2 • Functional Scope
+Component	Purpose
+Archive Generator	Collect and persist regime metrics weekly.
+Manifest + Checksum	Guarantee reproducibility and detect corruption.
+Integrity Verifier	Nightly checksum validation and corruption detection.
+Compressor + Retention	Manage 30-day rotation with manifest sync.
+API + UI Tab	Query, inspect, and export archived data.
+3 • Implementation Tasks
+🧩 Task 1 — Archival Schema & Structure
+
+File: /server/core/archival/regime-archiver.ts
+Schema: regime-archive/v1.1
+
+Each record:
+
+{
+  "_schema": "regime-archive/v1.1",
+  "timestamp": "2026-02-02T00:45:00Z",
+  "source": "VTS",
+  "windowDays": 7,
+  "regime": "BULL_STABLE",
+  "strategy": "mean_reversion",
+  "metrics": {
+    "winRate": 0.64,
+    "avgPnL": 0.022,
+    "skipRatio": 0.18,
+    "confidence": 0.59,
+    "dynamicROI": 0.026,
+    "momentumWeight": 0.36,
+    "volatilityWeight": 0.33,
+    "trendWeight": 0.31
+  },
+  "checksum": "a9c34b1e",
+  "_metadata": {
+    "telemetryVersion": 6,
+    "canonicalVersion": 6,
+    "predictiveAdjustments": 4,
+    "recordCount": 65,
+    "avgConfidence": 0.58
+  }
+}
+
+
+✅ Extended metadata with recordCount, avgConfidence.
+
+🧩 Task 2 — Archival Collector & Checksum Logic
+
+File: /server/scripts/archive-regime-metrics.ts
+
+Process:
+
+Load latest telemetry + canonical weights.
+
+Merge into regime-strategy records.
+
+Deterministic Checksum:
+
+function canonicalStringify(obj) {
+  return JSON.stringify(obj, Object.keys(obj).sort(), 3);
+}
+const checksum = crypto
+  .createHash("sha1")
+  .update(canonicalStringify(record))
+  .digest("hex")
+  .slice(0, 8);
+
+
+✅ Ensures key order consistency, eliminating false mismatches.
+
+Validate schema → log warnings for missing metrics (<2 strategies).
+
+Retry + rollback if checksum verification fails after write.
+
+Append safely via safeAppendJSON with file lock.
+
+🧩 Task 3 — Scheduler Integration
+
+File: /server/core/autonomy-scheduler.ts
+
+scheduleJob("45 0 * * 0", async () => {
+  try { await archiveRegimeMetrics(); }
+  catch (err) { logger.error("[11.7E][Scheduler] Archival failed:", err); }
+});
+
+
+Runs weekly, 15 min after recalibration (Sunday 00:45 UTC).
+
+🧩 Task 4 — Manifest & Integrity Tracking
+
+File: /logs/telemetry/regime_archive_manifest.json
+
+[
+  {
+    "filename": "2026-02-02.json",
+    "entries": 65,
+    "checksum": "a9c34b1e",
+    "createdAt": "2026-02-02T00:45:00Z",
+    "version": 1,
+    "compressed": false
+  }
+]
+
+
+✅ Updated via safeAppendJSON to prevent concurrent manifest corruption.
+
+🧩 Task 5 — Integrity Verification Script
+
+File: /server/scripts/verify-archive-integrity.ts
+
+Recomputes deterministic checksums and compares to manifest.
+
+Alerts on mismatch → [11.7E][Verify] Checksum mismatch detected.
+
+Runs nightly: 0 2 * * *.
+
+🧩 Task 6 — Compression & Retention
+
+File: /server/scripts/compress-old-archives.ts
+
+Compresses .json → .json.gz after 30 days.
+
+Manifest fields updated:
+
+"compressed": true,
+"compressedAt": "2026-03-04T03:00:00Z"
+
+
+✅ Keeps storage lean and metadata truthful.
+
+🧩 Task 7 — API Endpoints
+
+File: /server/routes/regime-archive.ts
+
+Route	Description
+GET /api/vts/regime-archive?from=&to=&limit=	Paginated archive list (default = 100).
+GET /api/vts/regime-archive/latest	Fetch most recent.
+GET /api/vts/regime-archive/export	CSV / Parquet export.
+
+✅ All routes secured with requireAuth.
+
+🧩 Task 8 — UI Integration
+
+File: /client/pages/machine-learning/regime-archive.tsx
+
+Tab: “Regime Archive”
+
+Default sort: timestamp DESC
+
+Components:
+
+Summary cards (Entry Count, Avg Confidence, Avg PnL)
+
+Regime Drift Chart (Confidence, ROI, WinRate over time)
+
+DataGrid with sortable metrics
+
+Export CSV button
+
+✅ Matches all ML page layout conventions.
+
+4 • Verification Plan
+Step	Test	Expected Result
+1	Manual run of archive script	Creates archive + manifest entry
+2	Schema validation	_schema = regime-archive/v1.1
+3	Manifest consistency	Checksum + recordCount match
+4	verify-archive-integrity job	Detects corruption
+5	Compression job	Files > 30 days → .gz + manifest updated
+6	API pagination	Default limit 100
+7	UI sort check	Latest entries appear first
+8	Missing metric simulation	Logs warning, skips invalid record
+5 • Success Criteria
+
+✅ Deterministic checksums (ordered keys)
+✅ Manifest valid and checksum-verified nightly
+✅ Safe file writes with locks and retries
+✅ Compression metadata accurate
+✅ Phase 12 pipeline can query archives directly
+
+6 • Governance & Safety
+Control	Assurance
+Source Isolation	Only “VTS” data used
+Integrity Verification	Deterministic hash + nightly check
+Concurrency Protection	safeAppendJSON locks active
+Reproducibility	Schema + manifest + checksum
+Performance	Off-peak execution
+Explainability	Fields match predictive features
+Auditability	Manifest + metadata track history
+✅ Final Directive Summary
+
+Directive 11.7E — Persistent Regime-Metric Archival for Phase 12 Seeding (v1.1)
+is approved for implementation with these confirmed additions:
+
+Deterministic stringify for checksum (calibrated ordering).
+
+Integrity verification script & nightly job.
+
+safeAppendJSON for manifest writes.
+
+Extended metadata (recordCount, avgConfidence).
+
+Compression manifest sync.
+
+Retry + rollback on checksum failure.
+
+UI default sort DESC.
+
+Once deployed, this directive will finalize Dawn Trader’s Phase 11.7 Predictive Learning Feedback Loop, ensuring auditable, deterministic, long-term regime-metric storage — the foundational dataset for Phase 12 autonomous machine learning retraining.
