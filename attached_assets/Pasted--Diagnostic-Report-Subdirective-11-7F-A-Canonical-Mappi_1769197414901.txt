@@ -1,0 +1,126 @@
+📋 Diagnostic Report: Subdirective 11.7F-A — Canonical Mapping & Drift Diagnostics
+Status: Investigation Complete
+Date: 2026-01-23
+Schema Version: regime-mapping/v1.4b
+
+F-A-01: Drift Data Missing in Mapping Drift Tab
+Root Cause: The computeMappingDrift() function in telemetry-aggregator.ts (lines 405-530) calculates drift based on regime distribution but does NOT use the mapping-drift-calculator.ts functions which compute per-regime DriftScore using volZ/trendZ.
+
+Affected Files:
+
+server/routes.ts (lines 2200-2212) — Calls telemetryService.computeMappingDrift()
+server/services/telemetry-aggregator.ts (lines 405-530) — Current implementation
+server/core/analytics/mapping-drift-calculator.ts — Not wired to API
+Issue: The API endpoint returns regime distribution counts, NOT actual DriftScore computations from the calculator. The calculator functions (computeDriftScore, computeBatchDriftScores) exist but are never called.
+
+Proposed Solutions:
+
+Short-term: Wire mapping-drift-calculator.ts into the API route, passing volZ/trendZ arrays from telemetry
+Long-term: Create a dedicated DriftAnalysisService that aggregates Z-scores per regime and computes DriftScore
+Risk: Medium — UI shows partial data, misleading users about drift status
+Complexity: Medium
+
+F-A-02: Overview Mapping Table Not Reading from Bridge JSON
+Root Cause: Verified that /api/system/canonical-map (routes.ts lines 2215-2234) does correctly read from bridge/canonical/mapping-regime-strategy.json. The UI properly fetches this endpoint.
+
+Status: ✅ NO ISSUE FOUND — This is working correctly.
+
+F-A-03: Regime Distribution Graph Shows No Data
+Root Cause: The normalizedDistribution field IS populated by computeMappingDrift() but requires MIN_SAMPLES = 30 pairs with valid pairRegime data. The UI displays normalizedDistribution but may show empty if:
+
+VTS hasn't run enough cycles
+pairTelemetry map is empty at startup
+Affected Files:
+
+server/services/telemetry-aggregator.ts (lines 436-442, 461-478)
+client/src/pages/analytics.tsx (lines 859-875)
+Issue: The graph renders Object.entries(driftData?.normalizedDistribution || {}) — if telemetry is sparse or VTS just started, this is empty.
+
+Proposed Solutions:
+
+Short-term: Add logging to /api/system/mapping-drift to expose pairTelemetry.size count
+Long-term: Persist telemetry across restarts; seed with historical data
+Risk: Low — Data populates after VTS runs ~30+ pairs
+Complexity: Low
+
+F-A-04: DriftScore Calculated Per-Regime, Not Per Regime-Strategy Pair
+Root Cause: Confirmed — computeMappingDrift() computes a single aggregate driftScore using formula:
+
+const driftScore = (extraEmpirical.length * 0.5) + (missingCanonical.length * 0.1);
+This is a coverage-based score, NOT the weighted Euclidean DriftScore formula from mapping-drift-calculator.ts.
+
+Affected Files:
+
+server/services/telemetry-aggregator.ts (line 496) — Simple formula
+server/core/analytics/mapping-drift-calculator.ts — Per-regime DriftScore (unused)
+Issue: The calculator's computeDriftScore(actualVolZ[], actualTrendZ[], regime) function requires Z-score arrays per regime, but telemetry doesn't store volZHistory or trendZHistory arrays — only pairRegime strings.
+
+Proposed Solutions:
+
+Short-term: Extend PairTelemetry interface to store rolling volZ[] and trendZ[] arrays per pair
+Long-term: Create per-regime-strategy aggregation buckets with Z-score history
+Risk: High — Current DriftScore doesn't reflect mathematical drift
+Complexity: High
+
+F-A-05: Telemetry Missing volZ/trendZ Keys
+Root Cause: Confirmed — PairTelemetry interface (lines 62-75 of telemetry-aggregator.ts) does NOT include volZ or trendZ fields:
+
+interface PairTelemetry {
+  pairRegime?: MarketRegime;  // ✓ Exists
+  // volZ, trendZ NOT PRESENT
+}
+VTS calculates Z-scores in vts-runner.ts (line 300) but only logs them — doesn't persist to telemetry:
+
+console.log(`[11.5][ZScore] ${symbol}: zScores={adx=${...}, vol=${zScoreResult.zScores.volZ...}}`);
+Affected Files:
+
+server/services/telemetry-aggregator.ts — Missing Z-score storage
+server/services/vts-runner.ts (line 300) — Logs but doesn't persist
+Proposed Solutions:
+
+Short-term: Add volZ?: number and trendZ?: number to PairTelemetry interface; populate from VTS
+Long-term: Create ZScoreHistoryBuffer per symbol for rolling 50-sample window
+Risk: High — Core data required for DriftScore formula is missing
+Complexity: Medium
+
+F-A-06: UI Refreshes But Shows No Data Rows
+Root Cause: The UI correctly polls /api/system/mapping-drift every 30 seconds, but:
+
+API returns valid JSON with normalizedDistribution
+The UI's Regime Distribution section iterates over this correctly
+There is NO "rows" table — the UI shows bar charts for regime distribution, not tabular rows
+Issue: User expectation mismatch — the UI was designed to show regime distribution percentages (bars), not individual drift rows per strategy.
+
+Proposed Solutions:
+
+Short-term: Add explainer text clarifying what the section displays
+Long-term: Add a "Detailed Drift Rows" table showing per-strategy DriftScore once F-A-04/05 are fixed
+Risk: Low — UI works as designed
+Complexity: Low
+
+F-A-07: Schema Data Source Audit
+Verification Results:
+
+Component	Actual Data Source	Expected	Status
+Canonical Map Table	/api/system/canonical-map → bridge/canonical/mapping-regime-strategy.json	✓ Bridge JSON	✅ CORRECT
+Drift Score Value	telemetryService.computeMappingDrift()	Calculator	⚠️ Uses simplified formula
+Regime Distribution	pairTelemetry Map in memory	Telemetry	✅ CORRECT
+Schema Version	canonicalData?._schema from JSON	Bridge JSON	✅ CORRECT
+Issue: Only the DriftScore doesn't use the canonical calculator.
+
+Summary Matrix
+ID	Root Cause	Fix Effort	Risk Level
+F-A-01	Calculator not wired to API	Medium	Medium
+F-A-02	✅ No issue found	N/A	N/A
+F-A-03	Requires 30+ samples	Low	Low
+F-A-04	Wrong drift formula used	High	High
+F-A-05	volZ/trendZ not persisted	Medium	High
+F-A-06	UI design expectation	Low	Low
+F-A-07	Schema binding verified OK	N/A	N/A
+Recommended Priority Order
+F-A-05 — Add volZ/trendZ to telemetry (blocks all drift calculation)
+F-A-04 — Wire calculator to use stored Z-scores
+F-A-01 — Replace simplified formula with real DriftScore
+F-A-06 — Add detailed drift table to UI
+F-A-03 — Add startup sample indicator
+Report Status: Ready for review. No code changes made
