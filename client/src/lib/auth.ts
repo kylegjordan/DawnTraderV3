@@ -1,7 +1,14 @@
 /**
  * Session Management Utilities
  * Handles persistent JWT sessions with refresh token rotation
+ * 
+ * Token Refresh Lock Pattern:
+ * - Prevents race conditions when multiple parallel requests need token refresh
+ * - All concurrent requests wait for a single refresh operation to complete
  */
+
+// Singleton lock for token refresh to prevent race conditions
+let refreshPromise: Promise<string | null> | null = null;
 
 export function saveTokens(accessToken: string, refreshToken: string) {
   localStorage.setItem("accessToken", accessToken);
@@ -25,7 +32,11 @@ export function clearTokens() {
   localStorage.removeItem("user");
 }
 
-export async function refreshAccessToken(): Promise<string | null> {
+/**
+ * Internal refresh function - performs the actual token refresh
+ * This should only be called via refreshAccessTokenWithLock()
+ */
+async function performTokenRefresh(): Promise<string | null> {
   const refreshToken = getRefreshToken();
   if (!refreshToken) return null;
 
@@ -55,6 +66,26 @@ export async function refreshAccessToken(): Promise<string | null> {
   }
 
   return null;
+}
+
+/**
+ * Token refresh with singleton lock pattern
+ * Ensures only one refresh operation happens at a time
+ * All concurrent callers receive the same result
+ */
+export async function refreshAccessToken(): Promise<string | null> {
+  // If a refresh is already in progress, wait for it
+  if (refreshPromise) {
+    return refreshPromise;
+  }
+
+  // Start a new refresh and store the promise
+  refreshPromise = performTokenRefresh().finally(() => {
+    // Clear the lock after refresh completes (success or failure)
+    refreshPromise = null;
+  });
+
+  return refreshPromise;
 }
 
 function isTokenExpired(token: string): boolean {
