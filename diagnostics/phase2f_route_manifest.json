@@ -532,6 +532,16 @@
     ]
   },
   {
+    "path": "/api/system/mapping-drift",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/filters-v2",
     "methods": [
       "GET",

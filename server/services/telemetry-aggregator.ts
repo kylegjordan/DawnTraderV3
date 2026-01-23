@@ -396,6 +396,140 @@ export class TelemetryAggregatorService {
   }
 
   /**
+   * Directive 11.7F: Mapping Drift Check
+   * Compares canonical regimes against empirical telemetry distribution.
+   * Detects drift when observed regimes differ from canonical set or when
+   * regime distribution shows unexpected concentration.
+   * @returns Drift analysis with canonical vs empirical alignment metrics
+   */
+  computeMappingDrift(): {
+    isDrifted: boolean;
+    driftScore: number;
+    canonicalCoverage: number;
+    empiricalRegimes: string[];
+    missingCanonical: string[];
+    extraEmpirical: string[];
+    distribution: Record<string, number>;
+    normalizedDistribution: Record<string, number>;
+    recommendations: string[];
+    validPairs: number;
+    minSamplesMet: boolean;
+  } {
+    const MIN_SAMPLES = 30; // Minimum pairs needed for reliable drift detection
+    
+    const CANONICAL_SET = new Set([
+      REGIMES.BULL_STABLE,
+      REGIMES.BEAR_VOLATILE,
+      REGIMES.LOW_VOL_CHOP,
+      REGIMES.HIGH_VOL_IMPULSE,
+      REGIMES.TRANSITION
+    ]);
+    
+    // DSS extended regimes that map to canonical regimes
+    const DSS_TO_CANONICAL: Record<string, string> = {
+      'EXTREME_NOISE': REGIMES.TRANSITION,
+      'BULL_VOLATILE': REGIMES.HIGH_VOL_IMPULSE,
+      'BEAR_STABLE': REGIMES.LOW_VOL_CHOP,
+    };
+    
+    const empiricalCounts: Record<string, number> = {};
+    const normalizedCounts: Record<string, number> = {
+      [REGIMES.BULL_STABLE]: 0,
+      [REGIMES.BEAR_VOLATILE]: 0,
+      [REGIMES.LOW_VOL_CHOP]: 0,
+      [REGIMES.HIGH_VOL_IMPULSE]: 0,
+      [REGIMES.TRANSITION]: 0
+    };
+    let validPairs = 0;
+    
+    for (const [, entries] of this.pairTelemetry.entries()) {
+      if (entries.length === 0) continue;
+      const latest = entries[entries.length - 1];
+      const regime = latest.pairRegime;
+      if (!regime) continue;
+      
+      validPairs++;
+      empiricalCounts[regime] = (empiricalCounts[regime] || 0) + 1;
+      
+      // Normalize DSS extended regimes to canonical for alignment check
+      const normalizedRegime = DSS_TO_CANONICAL[regime] || regime;
+      if (normalizedCounts[normalizedRegime] !== undefined) {
+        normalizedCounts[normalizedRegime]++;
+      }
+    }
+    
+    const minSamplesMet = validPairs >= MIN_SAMPLES;
+    
+    // If insufficient samples, return early with no drift detected
+    if (!minSamplesMet) {
+      return {
+        isDrifted: false,
+        driftScore: 0,
+        canonicalCoverage: 0,
+        empiricalRegimes: Object.keys(empiricalCounts),
+        missingCanonical: [],
+        extraEmpirical: [],
+        distribution: empiricalCounts,
+        normalizedDistribution: normalizedCounts,
+        recommendations: [`Insufficient samples (${validPairs}/${MIN_SAMPLES}) - drift check deferred`],
+        validPairs,
+        minSamplesMet: false
+      };
+    }
+    
+    const empiricalRegimes = Object.keys(empiricalCounts);
+    const canonicalArray = [...CANONICAL_SET] as string[];
+    const dssExtendedRegimes = new Set(Object.keys(DSS_TO_CANONICAL));
+    
+    // Missing = canonical regimes with 0 counts in normalized distribution
+    const missingCanonical = canonicalArray.filter(r => normalizedCounts[r] === 0);
+    
+    // Extra = regimes that aren't canonical AND aren't known DSS extended types
+    const extraEmpirical = empiricalRegimes.filter(r => 
+      !canonicalArray.includes(r) && !dssExtendedRegimes.has(r)
+    );
+    
+    const observedCanonical = canonicalArray.length - missingCanonical.length;
+    const canonicalCoverage = observedCanonical / canonicalArray.length;
+    
+    // Drift score: unknown regimes are serious (0.5), missing canonical less so (0.1)
+    const driftScore = (extraEmpirical.length * 0.5) + (missingCanonical.length * 0.1);
+    
+    // Only flag drift for truly unknown regimes, not DSS extended types
+    const isDrifted = extraEmpirical.length > 0 || driftScore > 0.4;
+    
+    const recommendations: string[] = [];
+    if (extraEmpirical.length > 0) {
+      recommendations.push(`Unknown regimes detected: ${extraEmpirical.join(', ')}`);
+    }
+    if (missingCanonical.length >= 3) {
+      recommendations.push(`Low regime diversity: ${observedCanonical}/5 canonical regimes observed`);
+    }
+    if (isDrifted) {
+      recommendations.push('Review VTS regime classification logic for alignment');
+    }
+    
+    if (isDrifted && extraEmpirical.length > 0) {
+      console.warn(`[11.7F][Drift] Mapping drift detected (score=${driftScore.toFixed(3)})`);
+      console.warn(`[11.7F][Drift] Unknown regimes: ${JSON.stringify(extraEmpirical)}`);
+    }
+    
+    return {
+      isDrifted,
+      driftScore: parseFloat(driftScore.toFixed(4)),
+      canonicalCoverage: parseFloat(canonicalCoverage.toFixed(4)),
+      empiricalRegimes,
+      missingCanonical,
+      extraEmpirical,
+      distribution: empiricalCounts,
+      normalizedDistribution: normalizedCounts,
+      recommendations,
+      validPairs,
+      minSamplesMet: true
+    };
+  }
+
+  /**
    * Directive 11.4C.1: Flush placeholder/stale in-memory data on restart
    * Called on service initialization to clear any cached data before rehydrating
    * This clears in-memory cache only - SQL history remains intact for rehydration

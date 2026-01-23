@@ -2196,6 +2196,22 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // GET /api/system/mapping-drift - Directive 11.7F: Mapping drift check comparing canonical vs empirical regimes
+  apiRouter.get('/system/mapping-drift', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const driftAnalysis = telemetryService.computeMappingDrift();
+      
+      res.json({
+        ok: true,
+        ...driftAnalysis,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[MappingDrift] GET error:', error.message);
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
+    }
+  });
+
   // Phase 3: Filters V2 API Endpoints (with Manual Override metadata)
   // GET /api/filters-v2?mode=paper|live
   apiRouter.get('/filters-v2', authenticateToken, async (req: AuthenticatedRequest, res) => {
