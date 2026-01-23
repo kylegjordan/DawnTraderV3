@@ -15,6 +15,7 @@
 
 import type { OHLCData, MarketRegimeType, RegimeCalculationResult } from '../../types/market-regime.types';
 import { REGIME_WEIGHTS } from '../../types/market-regime.types';
+import { REGIMES } from '../../config/canonical-regime-strategy-map';
 
 export function computeVolatility(ohlcData: OHLCData[]): number {
   if (ohlcData.length < 2) return 0;
@@ -100,19 +101,19 @@ export function calculatePairRegime(ohlcData: OHLCData[]): RegimeCalculationResu
   let confidence: number;
   
   if (vol < 0.015 && Math.abs(mom) < 0.002) {
-    regime = 'LOW_VOL_CHOP';
+    regime = REGIMES.LOW_VOL_CHOP;
     confidence = 0.75 + (0.015 - vol) * 10;
   } else if (mom > 0.002 && adx > 25) {
-    regime = 'BULL_STABLE';
+    regime = REGIMES.BULL_STABLE;
     confidence = 0.70 + Math.min(mom * 10, 0.2) + (adx - 25) * 0.005;
   } else if (mom < -0.002 && adx > 25) {
-    regime = 'BEAR_VOLATILE';
+    regime = REGIMES.BEAR_VOLATILE;
     confidence = 0.65 + Math.min(Math.abs(mom) * 8, 0.2);
   } else if (vol > 0.025) {
-    regime = 'HIGH_VOL_IMPULSE';
+    regime = REGIMES.HIGH_VOL_IMPULSE;
     confidence = 0.60 + (vol - 0.025) * 8;
   } else {
-    regime = 'TRANSITION';
+    regime = REGIMES.TRANSITION;
     confidence = 0.50;
   }
   

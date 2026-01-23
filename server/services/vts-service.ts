@@ -29,6 +29,7 @@ import { getRewardEvaluator } from './reward-evaluator';
 import { SYSTEM_GUARDS } from '../config/system-guards.js';
 import { calculateFriction } from '../utils/analysis-utils.js';
 import { MLCalibrationService, setGetRecentTradesFn } from './ml-calibration';
+import { REGIMES } from '../config/canonical-regime-strategy-map.js';
 
 /**
  * Phase-10 VirtualSignal - Directive 11.4C.3
@@ -246,7 +247,7 @@ export class VTSService extends EventEmitter {
       frictionCost: 0,
       signalType: signal.signalType ?? 'HYBRID',
       strategy: signal.strategy ?? 'unknown',
-      regime: signal.regime ?? 'TRANSITION',
+      regime: signal.regime ?? REGIMES.TRANSITION,
       pool: signal.pool ?? 'rotational',
       source: 'simulation',
       schemaVersion: '1.6.7'

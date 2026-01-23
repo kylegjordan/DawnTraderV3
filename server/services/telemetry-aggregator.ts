@@ -20,6 +20,7 @@
 import { SCANNER_PARAMS, FILTER_SCHEMA_VERSION } from '../config/system-guards.js';
 import { getScoreWeightsMetadata, SCORE_WEIGHTS_VERSION } from '../config/score-weights.config.js';
 import { EXECUTION_CONFIG } from '../config/execution-config.js';
+import { REGIMES } from '../config/canonical-regime-strategy-map.js';
 import { SCHEMA_VERSION, SCHEMA_DIRECTIVE, METRIC_ENGINE_VERSION } from '../config/schema-version.js';
 import { 
   loadRecentTelemetry, 
@@ -118,7 +119,7 @@ export class TelemetryAggregatorService {
   private readonly historyWindowMs = SCANNER_PARAMS.TELEMETRY.HISTORY_WINDOW_MS;
   private readonly minSamples = SCANNER_PARAMS.TELEMETRY.MIN_SAMPLES;
   private dss = new DynamicStrategySelector();
-  private currentRegime: MarketRegime = 'LOW_VOL_CHOP';
+  private currentRegime: MarketRegime = REGIMES.LOW_VOL_CHOP as MarketRegime;
   private rehydrated = false;
   
   // Directive 11.2 R1: Pool-level performance tracking
@@ -212,7 +213,7 @@ export class TelemetryAggregatorService {
       this.persistTelemetryAsync({
         symbol,
         mode,
-        regime: entry.pairRegime ?? 'TRANSITION', // Use per-pair regime from VTS with fallback
+        regime: entry.pairRegime ?? REGIMES.TRANSITION, // Use per-pair regime from VTS with fallback
         pool: data.pool ?? 'ideal', // Directive 11.2 R1
         finalScore: data.finalScore,
         hybridScore: data.hybridScore,

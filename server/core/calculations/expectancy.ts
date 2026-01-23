@@ -36,6 +36,7 @@ import {
   DEFAULT_SLIPPAGE,
   FRICTION_SAFETY_BUFFER 
 } from '../../config/adaptive-thresholds';
+import { REGIMES } from '../../config/canonical-regime-strategy-map';
 
 export interface ExpectancyParams {
   entry: number;
@@ -132,15 +133,15 @@ export function getExpectancyBreakdown(params: ExpectancyParams): {
  */
 export function getMinROIForRegime(regime: string): number {
   switch (regime) {
-    case 'BULL_STABLE':
+    case REGIMES.BULL_STABLE:
       return 0.0125;      // 1.25% - Lower threshold in stable uptrend
-    case 'BEAR_VOLATILE':
+    case REGIMES.BEAR_VOLATILE:
       return 0.0250;      // 2.50% - Higher threshold due to elevated risk
-    case 'LOW_VOL_CHOP':
+    case REGIMES.LOW_VOL_CHOP:
       return 0.0175;      // 1.75% - Moderate threshold for choppy conditions
-    case 'HIGH_VOL_IMPULSE':
+    case REGIMES.HIGH_VOL_IMPULSE:
       return 0.0300;      // 3.00% - Highest threshold for volatile impulse moves
-    case 'TRANSITION':
+    case REGIMES.TRANSITION:
       return 0.0200;      // 2.00% - Default for transitional regimes
     default:
       return 0.0200;      // 2.00% - Safe default for unknown regimes

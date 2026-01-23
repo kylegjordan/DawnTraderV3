@@ -25,6 +25,7 @@ import {
 } from './telemetry-repository.js';
 import { getTelemetryAggregator, type PoolPerformanceAggregate } from './telemetry-aggregator.js';
 import { SCHEMA_VERSION, SCHEMA_DIRECTIVE } from '../config/schema-version.js';
+import { REGIMES } from '../config/canonical-regime-strategy-map.js';
 
 export interface RatioConfig {
   minIdealRatio: number;     // Minimum allocation to ideal pool (default 0.3)
@@ -68,7 +69,7 @@ export class AdaptiveRatioManager {
     this.currentRatio = {
       idealRatio: this.config.defaultRatio,
       rotationalRatio: 1 - this.config.defaultRatio,
-      regime: 'LOW_VOL_CHOP',
+      regime: REGIMES.LOW_VOL_CHOP,
       confidence: 0,
       adjustedAt: Date.now(),
       reasoning: 'Initial default ratio - no performance data yet',
@@ -283,7 +284,7 @@ export class AdaptiveRatioManager {
     this.currentRatio = {
       idealRatio: this.config.defaultRatio,
       rotationalRatio: 1 - this.config.defaultRatio,
-      regime: 'LOW_VOL_CHOP',
+      regime: REGIMES.LOW_VOL_CHOP,
       confidence: 0,
       adjustedAt: Date.now(),
       reasoning: 'Manual reset to default ratio',

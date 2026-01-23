@@ -282,6 +282,34 @@ export const CANONICAL_REGIME_STRATEGY_MAP: Record<CanonicalRegimeType, RegimeSt
   }
 };
 
+export const REGIMES = {
+  BULL_STABLE: 'BULL_STABLE' as const,
+  BEAR_VOLATILE: 'BEAR_VOLATILE' as const,
+  LOW_VOL_CHOP: 'LOW_VOL_CHOP' as const,
+  HIGH_VOL_IMPULSE: 'HIGH_VOL_IMPULSE' as const,
+  TRANSITION: 'TRANSITION' as const
+} as const;
+
+export const STRATEGIES = {
+  SMA_TREND_RIDE: 'sma_trend_ride' as const,
+  VWAP_PULLBACK: 'vwap_pullback' as const,
+  MORNING_STAR: 'morning_star' as const,
+  PIVOT_SHIFT: 'pivot_shift' as const,
+  MEAN_REVERSION: 'mean_reversion' as const,
+  REVERSE_IMPULSE: 'reverse_impulse' as const,
+  DEFENSIVE_HEDGE: 'defensive_hedge' as const,
+  INSIDE_BAR_REVERSAL: 'inside_bar_reversal' as const,
+  RANGE_TRADE: 'range_trade' as const,
+  SUPPORT_BOUNCE: 'support_bounce' as const,
+  ABCD_LONG: 'abcd_long' as const,
+  ADAPTIVE_FLOW: 'adaptive_flow' as const,
+  BREAKOUT: 'breakout' as const,
+  VWAP_BOUNCE: 'vwap_bounce' as const,
+  VOLATILITY_EDGE: 'volatility_edge' as const,
+  DHMA: 'dhma' as const,
+  LIQUIDITY_TRAP: 'liquidity_trap' as const
+} as const;
+
 export const STRATEGY_DISPLAY_NAMES: Record<string, string> = {
   sma_trend_ride: 'SMA Trend Ride',
   vwap_pullback: 'VWAP Pullback',

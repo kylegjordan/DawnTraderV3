@@ -22,6 +22,7 @@ import { computeTotalRoundTripCost } from '../math/cost-model.js';
 import { lt, and, eq, sql } from 'drizzle-orm';
 import crypto from 'crypto';
 import { SCHEMA_VERSION } from '../../config/schema-version.js';
+import { REGIMES } from '../../config/canonical-regime-strategy-map.js';
 
 const SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000;
 const RETENTION_HOURS = 72;
@@ -95,7 +96,7 @@ export async function persistCostSnapshot(): Promise<CostSnapshot | null> {
     await db.insert(telemetryHistory).values({
       symbol: COST_METRICS_SYMBOL,
       mode: COST_METRICS_MODE as 'paper' | 'live',
-      regime: 'BULL_STABLE',
+      regime: REGIMES.BULL_STABLE,
       finalScore: totalCost.toString(),
       hybridScore: stats.avgFee.toString(),
       regimeWeight: stats.avgSlippage.toString(),

@@ -11,12 +11,9 @@
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-export type MarketRegimeType = 
-  | 'BULL_STABLE'
-  | 'BEAR_VOLATILE'
-  | 'LOW_VOL_CHOP'
-  | 'HIGH_VOL_IMPULSE'
-  | 'TRANSITION';
+import { REGIMES, type CanonicalRegimeType } from '../config/canonical-regime-strategy-map';
+
+export type MarketRegimeType = CanonicalRegimeType;
 
 export interface OHLCData {
   open: number;
@@ -36,17 +33,17 @@ export interface RegimeCalculationResult {
 }
 
 export const REGIME_WEIGHTS: Record<MarketRegimeType, number> = {
-  BULL_STABLE: 0.85,
-  BEAR_VOLATILE: 0.40,
-  LOW_VOL_CHOP: 0.55,
-  HIGH_VOL_IMPULSE: 0.70,
-  TRANSITION: 0.50
+  [REGIMES.BULL_STABLE]: 0.85,
+  [REGIMES.BEAR_VOLATILE]: 0.40,
+  [REGIMES.LOW_VOL_CHOP]: 0.55,
+  [REGIMES.HIGH_VOL_IMPULSE]: 0.70,
+  [REGIMES.TRANSITION]: 0.50
 };
 
 export const REGIME_DESCRIPTIONS: Record<MarketRegimeType, string> = {
-  BULL_STABLE: 'Persistent uptrend with controlled volatility, ideal for momentum strategies',
-  BEAR_VOLATILE: 'Downtrend with high volatility, defensive positioning recommended',
-  LOW_VOL_CHOP: 'Sideways range-bound market, pattern-based strategies favored',
-  HIGH_VOL_IMPULSE: 'High volatility with impulsive moves, quantitative edge strategies',
-  TRANSITION: 'Market regime shifting, hybrid strategies for uncertainty'
+  [REGIMES.BULL_STABLE]: 'Persistent uptrend with controlled volatility, ideal for momentum strategies',
+  [REGIMES.BEAR_VOLATILE]: 'Downtrend with high volatility, defensive positioning recommended',
+  [REGIMES.LOW_VOL_CHOP]: 'Sideways range-bound market, pattern-based strategies favored',
+  [REGIMES.HIGH_VOL_IMPULSE]: 'High volatility with impulsive moves, quantitative edge strategies',
+  [REGIMES.TRANSITION]: 'Market regime shifting, hybrid strategies for uncertainty'
 };
