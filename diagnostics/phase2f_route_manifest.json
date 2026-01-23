@@ -7436,6 +7436,42 @@
     ]
   },
   {
+    "path": "/api/vts/predictive-adjustments",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/vts/predictive-adjustments/summary",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/vts/predictive-adjustments/current",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/vts/predictive-adjustments/export",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/back-audit/run",
     "methods": [
       "POST"
