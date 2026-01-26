@@ -1,4 +1,5 @@
 import { storage } from "../storage";
+import { logPredictiveAdjustment } from '../core/logging/predictive-adjustments';
 
 interface WeightAdjustment {
   sourceName: string;
@@ -50,6 +51,15 @@ export class CognitiveWeightAdjuster {
         const adjustment = await this.adjustSourceWeight(userId, source);
         if (adjustment) {
           weightAdjustments.push(adjustment);
+
+          // Wire to centralized predictive adjustment logger for unified observability
+          logPredictiveAdjustment({
+            category: 'Weight',
+            parameter: `cognitive.${adjustment.sourceName}`,
+            oldValue: adjustment.oldWeight,
+            newValue: adjustment.newWeight,
+            reason: `CognitiveWeightAdjuster: ${adjustment.sourceType} source (accuracy: ${adjustment.accuracyScore.toFixed(4)})`
+          });
         }
       }
 

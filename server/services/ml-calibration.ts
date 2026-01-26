@@ -18,6 +18,7 @@
 
 import { HYBRID_PARAMS } from '../config/system-guards';
 import type { CalibrationReport, CalibrationRecommendation, PatternType } from '../types';
+import { logPredictiveAdjustment, AdjustmentCategory } from '../core/logging/predictive-adjustments';
 
 /**
  * Phase-10 TradeRecord interface - Directive 11.0E.2 (M52: Schema Parity)
@@ -211,6 +212,20 @@ export class MLCalibrationService {
       console.log(
         `[11.0E.2] ML Suggestion: ${rec.suggestion} ${rec.pattern} weight by ${rec.adjustment.toFixed(4)}${phase10Info}`
       );
+
+      // Wire to centralized predictive adjustment logger for unified observability
+      const currentWeight = 1.0; // Default baseline weight
+      const newWeight = rec.suggestion === 'INCREASE' 
+        ? currentWeight + rec.adjustment 
+        : currentWeight - rec.adjustment;
+      logPredictiveAdjustment({
+        category: 'Weight',
+        parameter: `ml.${rec.pattern}_weight`,
+        oldValue: currentWeight,
+        newValue: newWeight,
+        strategy: rec.pattern,
+        reason: `MLCalibration: ${rec.suggestion} by ${rec.adjustment.toFixed(4)}${phase10Info}`
+      });
     }
   }
 }

@@ -15,6 +15,7 @@
 
 import { storage } from '../storage';
 import { contextBridge } from './context-bridge';
+import { logPredictiveAdjustment, AdjustmentCategory } from '../core/logging/predictive-adjustments';
 
 type TradingMode = 'paper' | 'live';
 
@@ -1073,6 +1074,16 @@ class AdjustmentExecutor {
         parameter: log.parameterName,
         change: `${log.oldValue.toFixed(2)} → ${log.newValue.toFixed(2)} (${log.changePercent > 0 ? '+' : ''}${log.changePercent}%)`,
         reason: log.reason
+      });
+
+      // Wire to centralized predictive adjustment logger for unified observability
+      const category: AdjustmentCategory = log.parameterType === 'filter' ? 'Scoring' : 'Other';
+      logPredictiveAdjustment({
+        category,
+        parameter: `latti.${log.parameterName}`,
+        oldValue: log.oldValue,
+        newValue: log.newValue,
+        reason: `LATTI[${log.ruleId}]: ${log.reason}`
       });
     } catch (error: any) {
       console.error(`[${this.MODULE_NAME}] ❌ Failed to save adjustment log:`, error.message);

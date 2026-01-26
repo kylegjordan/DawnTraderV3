@@ -37,6 +37,9 @@ Directive 11.7F implements Strategy-Regime Realignment Validation with: (1) SMA 
 
 The trade lifecycle flows from `Signal Orchestrator` to `SQE` (FinalScore + RegimeWeight filtering), then to a `Ready-to-Buy Queue`. Signals are promoted by `TCL` (Trade Criteria Limiter), managed by `TEC` (Trade Execution Controller) for adaptive sizing and trailing exits, and finally proceed to `Order Management`.
 
+## Recent Changes
+- **2026-01-26**: Wired centralized predictive adjustment logging into 5 adjustment-producing services (Heuristic Trader, Adaptive Guardrails, ML Calibration, Signal Weight Optimizer, Cognitive Weight Adjuster) for unified observability. All adjustments now log to `logs/predictive_adjustments/` with schema predictive-adjustments/v1.0. This enables audit of learning behavior before paper trading without modifying any adjustment logic.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed.

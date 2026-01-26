@@ -23,6 +23,7 @@ import {
 } from "@shared/schema";
 import { eq, and, desc, gte, sql } from "drizzle-orm";
 import { guardrailPolicy } from "./guardrail-policy";
+import { logPredictiveAdjustment, AdjustmentCategory } from '../core/logging/predictive-adjustments';
 
 type TradingMode = "paper" | "live";
 type BehavioralTriggerType = "adaptive_change" | "user_override" | "risk_trigger" | "performance_feedback" | "coherency_violation";
@@ -365,6 +366,18 @@ export class AdaptiveGuardrailsService {
         });
 
         console.log(`[AdaptiveGuardrails] ${mode}: ${adj.parameter} ${adj.oldValue} → ${adj.newValue} (${adj.adjustmentPercent.toFixed(1)}% change, confidence: ${(adj.confidence * 100).toFixed(0)}%)`);
+
+        // Wire to centralized predictive adjustment logger for unified observability
+        const category: AdjustmentCategory = adj.parameter.toLowerCase().includes('roi') ? 'ROI' 
+          : adj.parameter.toLowerCase().includes('confidence') ? 'Confidence'
+          : 'Other';
+        logPredictiveAdjustment({
+          category,
+          parameter: `guardrails.${adj.parameter}`,
+          oldValue: parseFloat(String(adj.oldValue)) || 0,
+          newValue: parseFloat(String(adj.newValue)) || 0,
+          reason: `AdaptiveGuardrails[${mode}]: ${adj.adjustmentPercent.toFixed(1)}% change, confidence ${(adj.confidence * 100).toFixed(0)}%`
+        });
       }
 
       // Create snapshot after changes

@@ -1,4 +1,5 @@
 import { storage } from '../storage';
+import { logPredictiveAdjustment } from '../core/logging/predictive-adjustments';
 
 interface SignalPerformance {
   signalName: string;
@@ -299,6 +300,17 @@ export async function adjustSignalWeightsByRegime(regime: string, mode: 'live' |
             adjustmentDate: new Date().toISOString(),
           },
         });
+
+        // Wire to centralized predictive adjustment logger for unified observability
+        logPredictiveAdjustment({
+          category: 'Weight',
+          parameter: `signal.${strategy}_long`,
+          oldValue: currentLong,
+          newValue: newLong,
+          regime,
+          strategy,
+          reason: `SignalWeightOptimizer: regime-based adjustment for ${regime}`
+        });
       }
       
       if (shortWeight) {
@@ -318,6 +330,17 @@ export async function adjustSignalWeightsByRegime(regime: string, mode: 'live' |
             regimeAdjustment: regime,
             adjustmentDate: new Date().toISOString(),
           },
+        });
+
+        // Wire to centralized predictive adjustment logger for unified observability
+        logPredictiveAdjustment({
+          category: 'Weight',
+          parameter: `signal.${strategy}_short`,
+          oldValue: currentShort,
+          newValue: newShort,
+          regime,
+          strategy,
+          reason: `SignalWeightOptimizer: regime-based adjustment for ${regime}`
         });
       }
     }
