@@ -2197,9 +2197,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // GET /api/system/mapping-drift - Directive 11.7F: Mapping drift check comparing canonical vs empirical regimes
+  // Directive 11.7I-01: Fixed telemetryService import
   apiRouter.get('/system/mapping-drift', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
+      const { getTelemetryAggregator } = await import('./services/telemetry-aggregator');
+      const telemetryService = getTelemetryAggregator();
       const driftAnalysis = telemetryService.computeMappingDrift();
+      
+      console.log(`[11.7I-01][MappingDrift] Computed drift: validPairs=${driftAnalysis.validPairs}, isDrifted=${driftAnalysis.isDrifted}`);
       
       res.json({
         ok: true,
@@ -2252,8 +2257,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // GET /api/system/mapping-drift/export - Directive 11.7F: Export drift data as CSV
+  // Directive 11.7I-01: Fixed telemetryService import
   apiRouter.get('/system/mapping-drift/export', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
+      const { getTelemetryAggregator } = await import('./services/telemetry-aggregator');
+      const telemetryService = getTelemetryAggregator();
       const driftAnalysis = telemetryService.computeMappingDrift();
       
       const csvLines = [
@@ -2263,6 +2271,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           return `${regime},${count},${pct}%`;
         })
       ];
+      
+      console.log(`[11.7I-01][MappingDriftExport] Exported ${driftAnalysis.validPairs} pairs`);
       
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename="mapping-drift-export.csv"');

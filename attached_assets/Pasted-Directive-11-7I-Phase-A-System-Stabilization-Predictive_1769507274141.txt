@@ -1,0 +1,223 @@
+Directive 11.7I — Phase A System Stabilization & Predictive Activation
+
+Phase: 11
+Directive: 11.7I
+Scope: Phase A only (System Repairs & Activation)
+Explicit Exclusions:
+
+❌ No LATTi logic changes
+
+❌ No guardrail ownership changes
+
+❌ No UI redesign
+
+❌ No Phase B work (LATTi removal/replacement)
+
+Objective
+
+Stabilize and activate the data plane, diagnostics plane, and predictive learning execution path implemented across Phase 11 by:
+
+Fixing broken APIs and schedulers
+
+Eliminating misleading or unstable UI behavior
+
+Ensuring predictive systems actually run, log, and surface outputs
+
+Requiring explicit proof that each subsystem is live and functioning
+
+This directive must be completed before any architectural refactor (Phase B).
+
+Global Acceptance Rule (MANDATORY)
+
+No task in this directive may be marked complete unless Replit provides concrete, verifiable proof that the system is running and producing real outputs.
+
+Proof must be provided in logs, API responses, timestamps, scheduler registrations, or UI evidence — not assertions.
+
+Task I-01 — Repair Mapping Drift API (CRITICAL BLOCKER)
+Problem
+
+/api/system/mapping-drift and /export endpoints return 500 errors
+
+telemetryService is referenced but never instantiated
+
+Mapping Drift tab shows stale data (last sync Jan 23)
+
+Required Implementation
+
+Import and instantiate telemetry aggregator in both endpoints:
+
+/api/system/mapping-drift
+
+/api/system/mapping-drift/export
+
+Use getTelemetryAggregator() correctly
+
+Ensure computeMappingDrift() executes on each request
+
+Proof Required
+
+Replit must provide all of the following:
+
+Server log excerpt showing successful Mapping Drift computation
+
+Sample API response JSON with:
+
+Current timestamp
+
+Non-null drift fields
+
+UI evidence (screenshot or log) showing:
+
+“Last Sync” updates to current time
+
+Confirmation that no 500 errors occur during polling
+
+Task I-02 — Fix ReconciliationGuard Broadcast Storm
+Problem
+
+TradingStateSync broadcasts every 30s regardless of state change
+
+Causes table flashing and masks real updates
+
+Makes diagnostics unreliable
+
+Required Implementation
+
+Add state-diff guard to ReconciliationGuard
+
+Broadcast only when trading state actually changes
+
+Persist last-broadcast state for comparison
+
+Proof Required
+
+Replit must provide:
+
+Before/after log comparison showing reduced broadcasts
+
+Log evidence that broadcasts only occur on real changes
+
+Confirmation that UI tables no longer flash when idle
+
+Task I-03 — Initialize Regime Archive Scheduler
+Problem
+
+Regime archival scheduler exists but is never initialized
+
+No regime history, weekly archives, or integrity checks run
+
+Required Implementation
+
+Import and invoke initArchivalScheduler() during server startup
+
+Ensure all defined schedules register successfully:
+
+Weekly archive
+
+Daily integrity check
+
+Monthly compression
+
+Proof Required
+
+Replit must provide:
+
+Startup log confirming scheduler initialization
+
+Registered job list (log or debug output)
+
+Dry-run or test archive log confirming execution path works
+
+Task I-04 — Activate ML Calibration Scheduling
+Clarification
+
+ML Calibration ≠ Regime Drift
+
+Calibration adjusts weights and coefficients
+
+Drift identifies structural misalignment
+
+Required Implementation
+
+Add a scheduled ML Calibration job (e.g., 6–12 hour cadence)
+
+Preconditions must include:
+
+Minimum closed VTS trades
+
+Valid telemetry availability
+
+Calibration must:
+
+Log adjustments via centralized predictive logging
+
+NOT directly modify guardrails yet
+
+Proof Required
+
+Replit must provide:
+
+Scheduler registration log
+
+Execution log showing calibration ran automatically
+
+Predictive Adjustments API response with non-test entries
+
+Evidence that adjustments appear in the UI without manual triggers
+
+Task I-05 — Phase A Verification Gate (MANDATORY STOP)
+Purpose
+
+Prevent Phase B from starting until the system is provably alive.
+
+Required Verification Checklist
+
+Replit must confirm and demonstrate:
+
+✅ Mapping Drift API working and updating live
+
+✅ No UI flashing from idle broadcasts
+
+✅ Regime Archive scheduler initialized and runnable
+
+✅ ML Calibration runs on schedule
+
+✅ Predictive Adjustments populate organically
+
+Proof Required
+
+A consolidated verification report including:
+
+Logs
+
+API outputs
+
+UI timestamps
+
+Explicit confirmation that no LATTi changes were made
+
+Explicit Non-Goals (DO NOT DO)
+
+❌ Do NOT auto-start LATTi
+
+❌ Do NOT wire Adaptive Guardrails yet
+
+❌ Do NOT change guardrail ownership
+
+❌ Do NOT refactor adjustment pipes
+
+❌ Do NOT remove any legacy systems yet
+
+Phase B will handle architectural cleanup.
+
+Completion Criteria
+
+Directive 11.7I is considered complete only when:
+
+All five tasks are implemented
+
+All required proof is provided
+
+No regressions are introduced
+
+Phase B remains untouched

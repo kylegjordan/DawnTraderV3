@@ -811,6 +811,24 @@ app.use((req, res, next) => {
       // Phase 4B: Start adaptive profiler after lazy loading
       const { startAdaptiveProfiler } = await import('./services/gemini-adaptive-profiler');
       startAdaptiveProfiler();
+      
+      // Directive 11.7I-03: Initialize Regime Archive Scheduler
+      try {
+        const { initArchivalScheduler } = await import('./core/archival/archival-scheduler');
+        initArchivalScheduler();
+        console.log('[11.7I-03] ✅ Archival scheduler initialized');
+      } catch (archiveError) {
+        console.error('[11.7I-03] ⚠️ Archival scheduler init failed:', archiveError);
+      }
+      
+      // Directive 11.7I-04: Initialize ML Calibration Scheduler (8-hour cadence)
+      try {
+        const { initMLCalibrationScheduler } = await import('./core/schedulers/ml-calibration-scheduler');
+        initMLCalibrationScheduler();
+        console.log('[11.7I-04] ✅ ML Calibration scheduler initialized');
+      } catch (mlError) {
+        console.error('[11.7I-04] ⚠️ ML Calibration scheduler init failed:', mlError);
+      }
     }, 1500);
 
     // Phase 27.G.F: Config Audit Telemetry (startup diagnostic)

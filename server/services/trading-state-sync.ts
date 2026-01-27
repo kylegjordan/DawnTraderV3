@@ -33,6 +33,9 @@ export class TradingStateSync {
   // Phase 33.B: Passive learning state debounce guard (2-second reset window)
   private lastPassiveState: boolean | null = null;
   private passiveStateResetTimer: NodeJS.Timeout | null = null;
+  
+  // Directive 11.7I-02: ReconciliationGuard state-diff tracking
+  private lastReconciliationState: string | null = null;
 
   constructor() {
     // Listen for cluster bus events to synchronize state across services
@@ -553,6 +556,7 @@ export class TradingStateSync {
   /**
    * Phase 27.F.2: Reconciliation Guard
    * Phase 27.F.13.O: Refactored to use mode-based global context
+   * Directive 11.7I-02: Only broadcast when state actually changes (state-diff guard)
    * Periodically checks for DB/cache mismatches and re-broadcasts state
    */
   private startReconciliationGuard(): void {
@@ -562,20 +566,34 @@ export class TradingStateSync {
         const paperContext = await storage.getSystemContext('paper');
         const liveContext = await storage.getSystemContext('live');
         
-        // Broadcast state for both modes if they exist
-        if (paperContext || liveContext) {
-          // Use a dummy userId for broadcast trigger (actual broadcast is global)
-          const triggerUserId = 'system-reconciliation';
-          await this.broadcastUserUpdate(triggerUserId);
-          
-          console.log(`[SYNC][Phase-27.F.13.O][ReconciliationGuard] Reconciliation broadcast sent (paper: ${paperContext?.isEngineActive || false}, live: ${liveContext?.isEngineActive || false})`);
+        // Directive 11.7I-02: Build state fingerprint for comparison
+        const currentStateFingerprint = JSON.stringify({
+          paperActive: paperContext?.isEngineActive || false,
+          liveActive: liveContext?.isEngineActive || false,
+          paperMode: paperContext?.tradingMode || null,
+          liveMode: liveContext?.tradingMode || null
+        });
+        
+        // Only broadcast if state actually changed
+        if (currentStateFingerprint !== this.lastReconciliationState) {
+          if (paperContext || liveContext) {
+            // Use a dummy userId for broadcast trigger (actual broadcast is global)
+            const triggerUserId = 'system-reconciliation';
+            await this.broadcastUserUpdate(triggerUserId);
+            
+            this.lastReconciliationState = currentStateFingerprint;
+            console.log(`[SYNC][11.7I-02][ReconciliationGuard] State changed - broadcast sent (paper: ${paperContext?.isEngineActive || false}, live: ${liveContext?.isEngineActive || false})`);
+          }
+        } else {
+          // Directive 11.7I-02: Skip broadcast when state unchanged (reduces UI flashing)
+          console.log('[SYNC][11.7I-02][ReconciliationGuard] State unchanged - broadcast skipped');
         }
       } catch (error) {
         console.error('[SYNC][Phase-27.F.3][ReconciliationGuard] Error during reconciliation:', error);
       }
     }, 30000); // Phase 35.3.B: Increased from 15s to 30s to reduce update volume
     
-    console.log('[35.3][SYNC] Reconciliation interval = 30s (reduced from 15s to optimize performance)');
+    console.log('[35.3][SYNC][11.7I-02] Reconciliation interval = 30s (with state-diff guard)');
   }
 
   /**
