@@ -450,6 +450,25 @@ async function generatePhase10Signal(
   
   console.log(`[VTS][11.6H][Sizing] ${symbol}: $${dollarValue.toFixed(2)} exposure → ${quantity.toFixed(6)} units @ $${entryPrice.toFixed(4)}`);
   
+  // Directive 11.7I.a Task I.a-08: Per-symbol duplicate guard
+  // Prevents multiple open trades for the same symbol, which causes:
+  // - Duplicate open positions with near-identical prices
+  // - Simultaneous stop-outs distorting performance data
+  // - Streaks of same-pair trades in closed history
+  const hasExistingTrade = Array.from(openVirtualTrades.values()).some(t => t.symbol === symbol);
+  if (hasExistingTrade) {
+    logSkippedSignal({
+      symbol,
+      reason: 'Duplicate_Position',
+      regime,
+      signalType,
+      strategy,
+      source: 'VTS'
+    });
+    console.log(`[11.7I.a-08][VTS][DUP_GUARD] Skipping ${symbol}: already has open VTS trade`);
+    return null;
+  }
+  
   // Directive 11.6D: Create open virtual trade for real price resolution
   // Unified ID format: vts_{symbol}_{timestamp} - no more legacy vt_ prefix
   // Trade exit will be determined by real Kraken prices in resolveOpenVirtualTrades()

@@ -19,7 +19,8 @@ export type SkipReason =
   | 'Net_EV_Negative'
   | 'FinalScore_Low'
   | 'RegimeWeight_Low'
-  | 'ADX_Guard';
+  | 'ADX_Guard'
+  | 'Duplicate_Position';
 
 export interface SkippedSignalEntry {
   timestamp: string;

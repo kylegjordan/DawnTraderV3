@@ -1,0 +1,324 @@
+Directive 11.7I.a — Predictive Learning & Observability Stabilization (Phase A)
+
+Phase: 11
+Sub-Phase: 11.7I.a
+Status: REQUIRED before Phase B (LATTi removal / replacement)
+Scope: Infrastructure correctness, observability, scheduling, diagnostics, and simulation integrity
+Non-Goals:
+
+No LATTi / Adaptive Guardrails refactor yet
+
+No new strategy logic
+
+No paper trading activation yet
+
+Purpose
+
+Phase 11 introduced multiple predictive learning, telemetry, and diagnostics systems.
+However, several critical services were not running, not wired, or not observable, resulting in misleading UI states and silent failures.
+
+This directive does not add new intelligence.
+It ensures that all Phase 11 systems are actually running, observable, auditable, and understandable before proceeding.
+
+Every task below MUST include verifiable proof of execution.
+
+MANDATORY RULE (Read First)
+
+For each task below, implementation is not considered complete until Replit provides concrete proof that the system is live, executing, and producing data.
+
+Acceptable proof includes:
+
+Logs (with timestamps)
+
+API responses (raw JSON)
+
+Screenshots of populated UI tabs
+
+Manual trigger output
+
+Before/after comparisons
+
+“No errors” or “code added” is not proof.
+
+Phase A Tasks (11.7I.a)
+Task I.a-01 — Predictive Adjustments: Semantic & UX Completion
+Problem
+
+Predictive Adjustments are now logging, but:
+
+All entries appear as Category = Other
+
+Reasons are truncated / unreadable
+
+Adjustments lack explanatory context
+
+Table cannot scroll horizontally or wrap content
+
+This makes the system opaque and unusable for validation.
+
+Required Fixes
+
+Reason field must be fully readable
+
+Enable horizontal scrolling or
+
+Wrap text to multiple lines
+
+Reason content must explain
+
+What was wrong with the old value
+
+Why the adjustment was needed
+
+Why the magnitude was chosen
+
+Category must be meaningful
+
+Use: weight, confidence, roi, filter, risk, lifecycle
+
+“Other” is allowed only for non-numerical lifecycle events
+
+Lifecycle events
+
+Must not display misleading % impact
+
+Should show neutral lifecycle indicators
+
+Proof Required
+
+Screenshot of Predictive Adjustments tab with:
+
+Multiple categories (not all “Other”)
+
+Fully readable Reason text
+
+Raw API response from:
+
+GET /api/vts/predictive-adjustments
+
+
+At least one example adjustment with clear explanation
+
+Task I.a-02 — Predictive Services Scheduling Verification
+Problem
+
+Several predictive services existed but were not actually running.
+
+Required State
+Service	Must Be
+ML Calibration	Scheduled & initialized
+Signal Weight Optimizer	Scheduled
+Cognitive Weight Adjuster	Scheduled
+Predictive logging	Centralized & active
+Required Fixes
+
+Ensure schedulers initialize at server startup
+
+Ensure skipped runs log why they were skipped
+
+Lifecycle events should log scheduler init + execution attempts
+
+Proof Required
+
+Predictive Adjustments showing:
+
+ml.scheduler_init
+
+ml.scheduler_run
+
+Logs confirming scheduled execution
+
+Confirmation that these are not test entries
+
+Task I.a-03 — Mapping Drift API Repair & Validation
+Problem
+
+Mapping Drift tab was broken due to missing service import:
+
+telemetryService is not defined
+
+Required Fixes
+
+Correctly import and initialize TelemetryAggregatorService
+
+Repair both endpoints:
+
+/api/system/mapping-drift
+
+/api/system/mapping-drift/export
+
+Ensure drift recalculates dynamically (not stale)
+
+Proof Required
+
+Successful API response (no 500 errors)
+
+Screenshot of Mapping Drift tab showing:
+
+Drift score
+
+Regime distribution
+
+Strategy drift scores (or “waiting for samples” if applicable)
+
+Log entry confirming drift computation execution
+
+Task I.a-04 — Mapping Drift UX & Interpretation Clarity
+Problem
+
+The Mapping Drift UI does not explain:
+
+What action drift implies
+
+Whether drift disables strategies or suggests remapping
+
+What “Force Sync Canonical” actually does
+
+Required Fixes
+
+Add explanatory panel clarifying:
+
+What drift means
+
+When drift is acceptable vs dangerous
+
+Whether drift affects trading or learning
+
+Explain Force Sync Canonical
+
+What it does
+
+When it should be used
+
+What happens after clicking it
+
+Proof Required
+
+Screenshot showing updated explanatory text
+
+Confirmation Force Sync button behavior is documented
+
+Task I.a-05 — Regime Archive Scheduler Initialization
+Problem
+
+Regime Archival Scheduler exists but was never initialized.
+
+Required Fixes
+
+Ensure initArchivalScheduler() is called at startup
+
+Enable:
+
+Weekly archive
+
+Daily integrity check
+
+Monthly compression
+
+Add manual archive trigger for testing
+
+Proof Required
+
+Log confirming scheduler initialization
+
+Manual archive trigger execution
+
+Entry visible in Regime Archive tab (even test entry)
+
+Task I.a-06 — Trading & Market Events Tab Wiring
+Problem
+
+Market events (regime transitions, friction changes) existed but were invisible.
+
+Required Fixes
+
+Merge narrative feed + market events into unified timeline
+
+Clearly tag:
+
+TRADE
+
+MARKET
+
+SYSTEM
+
+Ensure regime transitions and friction changes appear
+
+Proof Required
+
+Screenshot showing:
+
+At least one MARKET event
+
+Regime transition visible
+
+API response from merged feed endpoint
+
+Task I.a-07 — Global Friction Transparency Completion
+Problem
+
+Global Friction value appears static and unexplained.
+
+Required Fixes
+
+Display:
+
+Sample size (n)
+
+Accuracy warning if n < 20
+
+Hover tooltip must be readable
+
+Explain why friction may not move in passive mode
+
+Proof Required
+
+Screenshot showing:
+
+Friction score
+
+Sample size
+
+Visible tooltip explanation
+
+Task I.a-08 — VTS Per-Symbol Duplicate Trade Guard
+Problem
+
+VTS allows multiple open trades per symbol, causing:
+
+Duplicate open positions
+
+Simultaneous stop-outs
+
+Distorted performance data
+
+Required Fix
+
+Add per-symbol guard in:
+
+server/services/vts-runner.ts
+
+
+Before creating a trade:
+
+If symbol already has open VTS trade → skip
+
+Log skip with reason Duplicate_Position
+
+Proof Required
+
+Code diff showing guard
+
+Log entries showing skipped duplicate signals
+
+Screenshot showing no duplicate symbols in open simulated trades
+
+Completion Gate
+
+Phase 11.7I.a is NOT complete until:
+
+Every task above has visible, verifiable proof
+
+No predictive tab shows unexplained zeroes without explanation
+
+Mapping Drift, Events, Predictive Adjustments, and Friction are all understandable without reading code
