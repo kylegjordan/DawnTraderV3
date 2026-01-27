@@ -20,7 +20,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { safeAppendJSON, safeReadJSONArray } from '../../utils/logging';
 
-export const PREDICTIVE_ADJUSTMENTS_SCHEMA = "predictive-adjustments/v1.0";
+export const PREDICTIVE_ADJUSTMENTS_SCHEMA = "predictive-adjustments/v1.1";
 
 export type AdjustmentCategory =
   | "ROI"
@@ -30,28 +30,52 @@ export type AdjustmentCategory =
   | "Scoring"
   | "Other";
 
+/**
+ * Directive 11.7I.a Task I.a-01: Adjustment Type Classification
+ * Distinguishes lifecycle events from actual tuning actions
+ */
+export type AdjustmentType =
+  | "lifecycle"          // Init/run markers, scheduler events
+  | "model_calibration"  // ML model recalibration
+  | "weight_adjustment"  // Signal weight updates
+  | "risk_adjustment"    // Risk parameter changes
+  | "filter_adjustment"; // Filter threshold changes
+
+/**
+ * Directive 11.7I.a Task I.a-01: Reversibility indicator
+ */
+export type Reversibility = "automatic" | "manual" | "irreversible";
+
 export interface PredictiveAdjustmentEntry {
   _schema: string;
   timestamp: string;
   category: AdjustmentCategory;
+  adjustmentType: AdjustmentType;  // Directive 11.7I.a: Type classification
   parameter: string;
   oldValue: number;
   newValue: number;
   delta: number;
-  impact: number;
+  impact: number | null;           // Directive 11.7I.a: Null for lifecycle events
   regime?: string;
   strategy?: string;
   reason: string;
+  affectedSubsystem?: string;      // Directive 11.7I.a: Which subsystem is affected
+  expectedEffect?: string;          // Directive 11.7I.a: Expected behavior change
+  reversibility?: Reversibility;    // Directive 11.7I.a: How to reverse if needed
 }
 
 export interface AdjustmentInput {
   category: AdjustmentCategory;
+  adjustmentType?: AdjustmentType;  // Directive 11.7I.a: Optional, defaults to inferred type
   parameter: string;
   oldValue: number;
   newValue: number;
   regime?: string;
   strategy?: string;
   reason: string;
+  affectedSubsystem?: string;       // Directive 11.7I.a: Optional subsystem context
+  expectedEffect?: string;           // Directive 11.7I.a: Optional effect description
+  reversibility?: Reversibility;     // Directive 11.7I.a: Optional reversibility info
 }
 
 const ADJUSTMENTS_DIR = path.join(process.cwd(), 'logs', 'predictive_adjustments');
@@ -68,7 +92,88 @@ function ensureDirectories(): void {
 }
 
 /**
+ * Directive 11.7I.a: Infers adjustment type from category, parameter, and reason
+ */
+function inferAdjustmentType(entry: AdjustmentInput): AdjustmentType {
+  const paramLower = entry.parameter.toLowerCase();
+  const reasonLower = entry.reason.toLowerCase();
+  
+  if (reasonLower.includes('init') || 
+      reasonLower.includes('startup') || 
+      reasonLower.includes('scheduler') ||
+      reasonLower.includes('activated') ||
+      paramLower.includes('scheduler') ||
+      paramLower.includes('init')) {
+    return 'lifecycle';
+  }
+  
+  if (entry.category === 'Weight' || paramLower.includes('weight')) {
+    return 'weight_adjustment';
+  }
+  
+  if (entry.category === 'Confidence' || 
+      entry.category === 'ROI' ||
+      paramLower.includes('threshold') ||
+      paramLower.includes('risk')) {
+    return 'risk_adjustment';
+  }
+  
+  if (paramLower.includes('filter') || paramLower.includes('gate')) {
+    return 'filter_adjustment';
+  }
+  
+  if (paramLower.includes('calibrat') || reasonLower.includes('calibrat')) {
+    return 'model_calibration';
+  }
+  
+  return 'weight_adjustment';
+}
+
+/**
+ * Directive 11.7I.a: Determines if the adjustment has numeric impact
+ */
+function isLifecycleEvent(entry: AdjustmentInput): boolean {
+  const reasonLower = entry.reason.toLowerCase();
+  const paramLower = entry.parameter.toLowerCase();
+  
+  return (
+    reasonLower.includes('init') ||
+    reasonLower.includes('startup') ||
+    reasonLower.includes('scheduler') ||
+    reasonLower.includes('activated') ||
+    reasonLower.includes('enabled') ||
+    reasonLower.includes('disabled') ||
+    paramLower.includes('scheduler') ||
+    (entry.oldValue === 0 && entry.newValue === 1) ||
+    (entry.oldValue === 1 && entry.newValue === 0)
+  );
+}
+
+/**
+ * Directive 11.7I.a: Infers reversibility based on adjustment type
+ */
+function inferReversibility(adjustmentType: AdjustmentType): Reversibility {
+  switch (adjustmentType) {
+    case 'lifecycle':
+      return 'automatic';
+    case 'model_calibration':
+      return 'automatic';
+    case 'weight_adjustment':
+      return 'automatic';
+    case 'risk_adjustment':
+      return 'manual';
+    case 'filter_adjustment':
+      return 'manual';
+    default:
+      return 'automatic';
+  }
+}
+
+/**
  * Logs a predictive adjustment with impact scoring and schema versioning.
+ * 
+ * Directive 11.7I.a: Enhanced with adjustmentType, suppressed impact for lifecycle,
+ * and enriched explanation fields.
  * 
  * @param entry - The adjustment details to log
  * @returns The complete record that was logged
@@ -79,33 +184,43 @@ export function logPredictiveAdjustment(entry: AdjustmentInput): PredictiveAdjus
   const date = new Date().toISOString().slice(0, 10);
   const file = path.join(ADJUSTMENTS_DIR, `${date}.json`);
 
-  const impact = Math.abs(entry.newValue - entry.oldValue) / 
-    Math.max(Math.abs(entry.oldValue), 0.001);
+  const adjustmentType = entry.adjustmentType || inferAdjustmentType(entry);
+  const isLifecycle = isLifecycleEvent(entry);
+  
+  const impact = isLifecycle 
+    ? null 
+    : +(Math.abs(entry.newValue - entry.oldValue) / Math.max(Math.abs(entry.oldValue), 0.001)).toFixed(3);
 
   const record: PredictiveAdjustmentEntry = {
     _schema: PREDICTIVE_ADJUSTMENTS_SCHEMA,
     timestamp: new Date().toISOString(),
     category: entry.category,
+    adjustmentType,
     parameter: entry.parameter,
     oldValue: entry.oldValue,
     newValue: entry.newValue,
     delta: +(entry.newValue - entry.oldValue).toFixed(4),
-    impact: +impact.toFixed(3),
+    impact,
     regime: entry.regime,
     strategy: entry.strategy,
-    reason: entry.reason
+    reason: entry.reason,
+    affectedSubsystem: entry.affectedSubsystem,
+    expectedEffect: entry.expectedEffect,
+    reversibility: entry.reversibility || inferReversibility(adjustmentType)
   };
 
   safeAppendJSON(file, record as unknown as Record<string, unknown>);
 
-  const systemLogEntry = `[11.7D.1][Adjustment] ${entry.category}:${entry.parameter} ${entry.oldValue}→${entry.newValue} (${entry.reason})\n`;
+  const impactStr = impact !== null ? ` impact=${impact.toFixed(3)}` : ' [lifecycle]';
+  const systemLogEntry = `[11.7D.1][Adjustment] ${entry.category}:${entry.parameter} ${entry.oldValue}→${entry.newValue}${impactStr} (${entry.reason})\n`;
   try {
     fs.appendFileSync(SYSTEM_EVENTS_LOG, `${new Date().toISOString()} ${systemLogEntry}`);
   } catch (err) {
     console.warn(`[11.7D.1] Failed to append to system events log: ${err}`);
   }
 
-  console.log(`[11.7D.1][Adjustment] ${entry.category}:${entry.parameter} ${entry.oldValue.toFixed(4)}→${entry.newValue.toFixed(4)} impact=${impact.toFixed(3)} (${entry.reason})`);
+  const impactLog = impact !== null ? `impact=${impact.toFixed(3)}` : '[lifecycle event]';
+  console.log(`[11.7D.1][Adjustment] ${entry.category}:${entry.parameter} ${entry.oldValue.toFixed(4)}→${entry.newValue.toFixed(4)} ${impactLog} (${entry.reason})`);
 
   return record;
 }
@@ -209,9 +324,10 @@ export function getAdjustmentsSummary(days: number = 7): {
       byRegime[adj.regime] = (byRegime[adj.regime] || 0) + 1;
     }
     
-    totalImpact += adj.impact;
+    const impactValue = adj.impact ?? 0;
+    totalImpact += impactValue;
     
-    if (adj.impact > 0.1) {
+    if (impactValue > 0.1) {
       highImpactCount++;
     }
   }

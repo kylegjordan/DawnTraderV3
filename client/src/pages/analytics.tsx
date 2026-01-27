@@ -7,7 +7,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Activity, TrendingUp, TrendingDown, AlertCircle, Gauge, RefreshCw, Clock, DollarSign, Target, Zap, BarChart3, Layers, List, BookOpen, ChevronDown, ChevronUp, Star, GitBranch, Download, Filter, Brain, CheckCircle, XCircle, AlertTriangle, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Activity, TrendingUp, TrendingDown, AlertCircle, Gauge, RefreshCw, Clock, DollarSign, Target, Zap, BarChart3, Layers, List, BookOpen, ChevronDown, ChevronUp, Star, GitBranch, Download, Filter, Brain, CheckCircle, XCircle, AlertTriangle, Info, HelpCircle } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import TopBatch from "@/components/trading/top-batch";
@@ -25,6 +26,7 @@ interface MarketIndicatorsData {
     favoredSignalTypes: string[];
     favoredStrategies: string[];
     globalFrictionScore: number;
+    frictionSampleSize: number; // Directive 11.7I.a-03: Number of symbols used in calculation
     frictionStatus: string;
     frictionColor: 'green' | 'yellow' | 'orange' | 'red';
     frictionEmoji: string;
@@ -52,6 +54,36 @@ interface NarrativeFeedData {
     offset: number;
     byType: Record<string, number>;
   };
+}
+
+interface MarketEvent {
+  id: string;
+  type: 'REGIME_TRANSITION' | 'FRICTION_TRANSITION' | 'SYSTEM_ALERT';
+  message: string;
+  explanation: string;
+  previousValue?: string;
+  newValue?: string;
+  timestamp: string;
+  severity: 'info' | 'warning' | 'critical';
+}
+
+interface MarketEventsData {
+  ok: boolean;
+  events: MarketEvent[];
+}
+
+type UnifiedEventType = 'TRADE' | 'MARKET' | 'SYSTEM';
+
+interface UnifiedEvent {
+  id: string;
+  timestamp: string;
+  eventCategory: UnifiedEventType;
+  type: string;
+  symbol?: string;
+  message: string;
+  explanation?: string;
+  details?: Record<string, any>;
+  severity?: string;
 }
 
 interface FilterState {
@@ -137,17 +169,23 @@ const getEventTypeIcon = (type: string) => {
     case 'DSE_RESIZE': return <BarChart3 className="w-4 h-4 text-yellow-500" />;
     case 'TRAILING_EXIT_UPDATE': return <Zap className="w-4 h-4 text-purple-500" />;
     case 'MANUAL_OVERRIDE': return <AlertCircle className="w-4 h-4 text-orange-500" />;
+    case 'REGIME_TRANSITION': return <Layers className="w-4 h-4 text-cyan-500" />;
+    case 'FRICTION_TRANSITION': return <Gauge className="w-4 h-4 text-amber-500" />;
+    case 'SYSTEM_ALERT': return <AlertCircle className="w-4 h-4 text-red-500" />;
     default: return <Activity className="w-4 h-4 text-muted-foreground" />;
   }
 };
 
-const getEventTypeBadge = (type: string) => {
+const getEventTypeBadge = (type: string, eventCategory?: UnifiedEventType) => {
   const colors: Record<string, string> = {
     'TRADE_OPENED': 'bg-green-500/20 text-green-400',
     'TRADE_CLOSED': 'bg-blue-500/20 text-blue-400',
     'DSE_RESIZE': 'bg-yellow-500/20 text-yellow-400',
     'TRAILING_EXIT_UPDATE': 'bg-purple-500/20 text-purple-400',
     'MANUAL_OVERRIDE': 'bg-orange-500/20 text-orange-400',
+    'REGIME_TRANSITION': 'bg-cyan-500/20 text-cyan-400',
+    'FRICTION_TRANSITION': 'bg-amber-500/20 text-amber-400',
+    'SYSTEM_ALERT': 'bg-red-500/20 text-red-400',
   };
   const labels: Record<string, string> = {
     'TRADE_OPENED': 'Trade Open',
@@ -155,10 +193,26 @@ const getEventTypeBadge = (type: string) => {
     'DSE_RESIZE': 'DSE Resize',
     'TRAILING_EXIT_UPDATE': 'Trailing Exit',
     'MANUAL_OVERRIDE': 'Manual',
+    'REGIME_TRANSITION': 'Regime Change',
+    'FRICTION_TRANSITION': 'Friction Change',
+    'SYSTEM_ALERT': 'System Alert',
   };
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${colors[type] || 'bg-muted text-muted-foreground'}`}>
       {labels[type] || type}
+    </span>
+  );
+};
+
+const getEventCategoryBadge = (category: UnifiedEventType) => {
+  const styles: Record<UnifiedEventType, string> = {
+    'TRADE': 'bg-green-500/10 text-green-400 border border-green-500/30',
+    'MARKET': 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30',
+    'SYSTEM': 'bg-red-500/10 text-red-400 border border-red-500/30',
+  };
+  return (
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${styles[category]}`}>
+      {category}
     </span>
   );
 };
@@ -203,6 +257,27 @@ function FrozenHeader({ indicators, isLoading }: { indicators: MarketIndicatorsD
               <div className={`w-2.5 h-2.5 rounded-full ${getFrictionBgColor(data.frictionColor)}`}></div>
               <span className="font-mono font-medium">{data.globalFrictionScore}</span>
               <span className="text-sm text-muted-foreground">({data.frictionStatus})</span>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="text-xs text-muted-foreground cursor-help flex items-center gap-1">
+                      <HelpCircle className="w-3 h-3" />
+                      n={data.frictionSampleSize || 0}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p className="text-sm font-medium mb-1">Friction Sample Size</p>
+                    <p className="text-xs text-muted-foreground">
+                      Calculated from {data.frictionSampleSize || 0} cryptocurrency pairs with available spread data.
+                      {(data.frictionSampleSize || 0) < 20 && (
+                        <span className="block mt-1 text-yellow-400">
+                          Low sample size may affect accuracy. More pairs will be included as market data becomes available.
+                        </span>
+                      )}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </div>
         </div>
@@ -296,6 +371,31 @@ function MarketOverviewSection({ indicators }: { indicators: MarketIndicatorsDat
           <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
             <Gauge className="w-4 h-4" />
             Global Friction Score
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-xs text-muted-foreground cursor-help flex items-center gap-1 ml-auto">
+                    <HelpCircle className="w-3.5 h-3.5" />
+                    Sample: {data.frictionSampleSize || 0} pairs
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-sm">
+                  <p className="text-sm font-medium mb-1">How Friction is Calculated</p>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Global friction is computed from real-time spread, slippage, and fee data across actively traded pairs.
+                    The score (0-100) indicates overall market liquidity conditions.
+                  </p>
+                  <p className="text-xs">
+                    <span className="font-medium">Current sample:</span> {data.frictionSampleSize || 0} cryptocurrency pairs
+                    {(data.frictionSampleSize || 0) < 20 && (
+                      <span className="block mt-1 text-yellow-400">
+                        Low sample size during market initialization. Score accuracy improves as more pairs become active.
+                      </span>
+                    )}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </h4>
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -636,7 +736,15 @@ function DefinitionsReference() {
 }
 
 function TradingActivitiesSection({ feedData, isLoading }: { feedData: NarrativeFeedData | undefined; isLoading: boolean }) {
-  if (isLoading) {
+  const { data: marketEventsData, isLoading: marketLoading } = useQuery<MarketEventsData>({
+    queryKey: ['/api/market-events'],
+    queryFn: () => apiFetch('/api/market-events?limit=50'),
+    refetchInterval: 10000,
+  });
+
+  const combinedLoading = isLoading || marketLoading;
+
+  if (combinedLoading) {
     return (
       <Card>
         <CardHeader>
@@ -659,8 +767,38 @@ function TradingActivitiesSection({ feedData, isLoading }: { feedData: Narrative
     );
   }
   
-  const events = feedData?.data || [];
+  const tradeEvents: UnifiedEvent[] = (feedData?.data || []).map(event => ({
+    id: event.id,
+    timestamp: event.timestamp,
+    eventCategory: 'TRADE' as UnifiedEventType,
+    type: event.type,
+    symbol: event.symbol,
+    message: event.message,
+    details: event.details,
+  }));
+
+  const marketEvents: UnifiedEvent[] = (marketEventsData?.events || []).map(event => ({
+    id: event.id,
+    timestamp: event.timestamp,
+    eventCategory: 'MARKET' as UnifiedEventType,
+    type: event.type,
+    message: event.message,
+    explanation: event.explanation,
+    severity: event.severity,
+  }));
+
+  const allEvents = [...tradeEvents, ...marketEvents].sort((a, b) => 
+    new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  );
+
   const stats = feedData?.meta;
+  const marketEventCount = marketEventsData?.events?.length || 0;
+  const totalEvents = (stats?.total || 0) + marketEventCount;
+
+  const categoryStats: Record<string, number> = {
+    ...(stats?.byType || {}),
+    'MARKET_EVENTS': marketEventCount,
+  };
   
   return (
     <Card>
@@ -672,31 +810,31 @@ function TradingActivitiesSection({ feedData, isLoading }: { feedData: Narrative
               Trading & Market Events
             </CardTitle>
             <CardDescription>
-              {stats?.total || 0} events logged (7-day retention)
+              {totalEvents} events logged (7-day retention) — includes regime transitions and friction changes
             </CardDescription>
           </div>
-          {stats && Object.entries(stats.byType).filter(([_, count]) => count > 0).length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(stats.byType).filter(([_, count]) => count > 0).map(([type, count]) => (
-                <Badge key={type} variant="outline" className="text-xs">
-                  {type.replace(/_/g, ' ')}: {count}
-                </Badge>
-              ))}
-            </div>
-          )}
+          <div className="flex flex-wrap gap-2">
+            {getEventCategoryBadge('TRADE')}
+            {getEventCategoryBadge('MARKET')}
+            {Object.entries(categoryStats).filter(([_, count]) => count > 0).map(([type, count]) => (
+              <Badge key={type} variant="outline" className="text-xs">
+                {type.replace(/_/g, ' ')}: {count}
+              </Badge>
+            ))}
+          </div>
         </div>
       </CardHeader>
       <CardContent>
         <ScrollArea className="h-[500px] pr-4">
-          {events.length === 0 ? (
+          {allEvents.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
               <Activity className="w-8 h-8 mb-2 opacity-50" />
-              <p>No trading activities yet</p>
-              <p className="text-xs mt-1">Activities will appear here as trades are executed</p>
+              <p>No events yet</p>
+              <p className="text-xs mt-1">Events will appear here as trades are executed or market conditions change</p>
             </div>
           ) : (
             <div className="space-y-2">
-              {events.map((event) => (
+              {allEvents.map((event) => (
                 <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
                   <div className="mt-0.5">
                     {getEventTypeIcon(event.type)}
@@ -706,12 +844,18 @@ function TradingActivitiesSection({ feedData, isLoading }: { feedData: Narrative
                       <span className="text-xs font-mono text-muted-foreground">
                         [{format(new Date(event.timestamp), 'yyyy-MM-dd HH:mm')}]
                       </span>
-                      {getEventTypeBadge(event.type)}
-                      <Badge variant="outline" className="text-xs font-mono">
-                        {event.symbol}
-                      </Badge>
+                      {getEventCategoryBadge(event.eventCategory)}
+                      {getEventTypeBadge(event.type, event.eventCategory)}
+                      {event.symbol && (
+                        <Badge variant="outline" className="text-xs font-mono">
+                          {event.symbol}
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-sm">{event.message}</p>
+                    {event.explanation && (
+                      <p className="text-xs text-muted-foreground mt-1 italic">{event.explanation}</p>
+                    )}
                   </div>
                 </div>
               ))}
@@ -829,6 +973,24 @@ function MappingDriftSection() {
 
   return (
     <div className="space-y-6">
+      <Card className="bg-purple-500/10 border-purple-500/30">
+        <CardContent className="p-4">
+          <div className="flex items-start gap-3">
+            <GitBranch className="w-5 h-5 text-purple-400 mt-0.5 flex-shrink-0" />
+            <div className="text-sm">
+              <p className="font-medium text-purple-300 mb-1">About Mapping Drift</p>
+              <p className="text-muted-foreground">
+                This panel monitors how well each trading strategy aligns with its designated market regime. Each strategy 
+                is designed for specific market conditions (e.g., "Mean Reversion" for choppy markets). <strong>Drift Score</strong> 
+                measures deviation from ideal conditions — <span className="text-green-400">green</span> means the strategy 
+                is operating in its optimal environment, while <span className="text-red-400">red</span> suggests conditions 
+                have shifted and the strategy may underperform.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-muted-foreground">
@@ -1120,6 +1282,23 @@ function PredictiveDiagnosticsSection() {
 
   return (
     <div className="space-y-6">
+      <Card className="bg-blue-500/10 border-blue-500/30">
+        <CardContent className="p-4">
+          <div className="flex items-start gap-3">
+            <Info className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
+            <div className="text-sm">
+              <p className="font-medium text-blue-300 mb-1">About Predictive Diagnostics</p>
+              <p className="text-muted-foreground">
+                This panel shows how the system's machine learning models are performing. <strong>Calibration Drift</strong> measures 
+                how far the model's predictions have shifted from their training baseline — lower is better. <strong>Pass Rate</strong> 
+                shows what percentage of trading signals pass quality filters. <strong>Decision Traceback</strong> below lets you 
+                trace exactly why specific signals were approved or blocked.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-muted-foreground">

@@ -8053,6 +8053,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           favoredSignalTypes: indicators.favoredSignalTypes,
           favoredStrategies: indicators.favoredStrategies,
           globalFrictionScore: indicators.globalFrictionScore,
+          frictionSampleSize: indicators.frictionSampleSize, // Directive 11.7I.a-03: Transparency
           frictionStatus: indicators.frictionDescription.status,
           frictionColor: indicators.frictionDescription.color,
           frictionEmoji: indicators.frictionDescription.emoji,

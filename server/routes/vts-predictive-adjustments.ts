@@ -19,6 +19,8 @@ import {
   getAdjustmentsSummary, 
   getCurrentAdaptiveValues,
   AdjustmentCategory,
+  AdjustmentType,
+  Reversibility,
   PREDICTIVE_ADJUSTMENTS_SCHEMA
 } from '../core/logging/predictive-adjustments';
 

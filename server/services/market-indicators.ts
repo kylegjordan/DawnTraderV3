@@ -44,6 +44,7 @@ export interface MarketIndicators {
   favoredSignalTypes: string[];
   favoredStrategies: string[];
   globalFrictionScore: number;
+  frictionSampleSize: number; // Directive 11.7I.a-03: Transparency - number of symbols used in friction calculation
   frictionDescription: FrictionStatus;
   frictionNarrative: string;
   timestamp: Date;
@@ -158,7 +159,20 @@ export function updateGlobalRegime(regime: MarketRegime): void {
   console.log(`[11.4A][MarketIndicators] Global regime updated: ${regime}`);
 }
 
+export interface FrictionResult {
+  score: number;
+  sampleSize: number;
+  symbolCount: number;
+}
+
+let lastFrictionSampleSize = 0;
+
 export function computeGlobalFriction(): number {
+  const result = computeGlobalFrictionWithDetails();
+  return result.score;
+}
+
+export function computeGlobalFrictionWithDetails(): FrictionResult {
   try {
     // Use paper mode for global friction calculation (default mode)
     const pool = activeFilterPool.getActivePool('paper');
@@ -191,11 +205,13 @@ export function computeGlobalFriction(): number {
     
     if (count === 0) {
       console.log(`[GlobalFriction][Audit] Sample size: 0 (no metrics available)`);
-      return 25;
+      lastFrictionSampleSize = 0;
+      return { score: 25, sampleSize: 0, symbolCount: symbolsToSample.length };
     }
     
     const avgFriction = Math.round(totalFriction / count);
     cachedGlobalFriction = avgFriction;
+    lastFrictionSampleSize = count;
     lastUpdate = new Date();
     
     // Directive 11.4H.3 Task 1: Global Friction Audit Logging
@@ -215,11 +231,15 @@ export function computeGlobalFriction(): number {
     console.log(`[11.4H.6][FrictionAudit] Global friction recalculated: ${avgFriction} | Spread range: ${(Math.min(...spreads) * 100).toFixed(4)}%-${(Math.max(...spreads) * 100).toFixed(4)}% | Sample size: ${count}`);
     console.log(`[GlobalFriction][Audit] Global friction result: ${avgFriction}`);
     
-    return avgFriction;
+    return { score: avgFriction, sampleSize: count, symbolCount: symbolsToSample.length };
   } catch (err) {
     console.warn('[11.4A][MarketIndicators] Error computing global friction:', err);
-    return cachedGlobalFriction;
+    return { score: cachedGlobalFriction, sampleSize: lastFrictionSampleSize, symbolCount: 0 };
   }
+}
+
+export function getFrictionSampleSize(): number {
+  return lastFrictionSampleSize;
 }
 
 export function getMarketIndicators(): MarketIndicators {
@@ -253,8 +273,8 @@ export function getMarketIndicators(): MarketIndicators {
   
   const regimeKey = effectiveRegime as string;
   const expandedRegime = regimeDescriptions[regimeKey] || regimeDescriptions['LOW_VOL_CHOP'];
-  const frictionScore = computeGlobalFriction();
-  const frictionStatus = describeFriction(frictionScore);
+  const frictionResult = computeGlobalFrictionWithDetails();
+  const frictionStatus = describeFriction(frictionResult.score);
   
   // Directive 11.4H.6A Task 1: Use strategy mapper for dynamic regime-based strategies/signals
   const favoredStrategies = getFavoredStrategiesForRegime(regimeKey);
@@ -276,7 +296,8 @@ export function getMarketIndicators(): MarketIndicators {
     regimePercentage: effectivePercentage,
     favoredSignalTypes,
     favoredStrategies,
-    globalFrictionScore: frictionScore,
+    globalFrictionScore: frictionResult.score,
+    frictionSampleSize: frictionResult.sampleSize,
     frictionDescription: frictionStatus,
     frictionNarrative: frictionStatus.narrative,
     timestamp: lastUpdate,

@@ -1,0 +1,297 @@
+📘 Directive 11.7I.a
+Predictive Transparency, Events Wiring, and Friction Clarity
+
+(Phase A Extension — Blocking Item Before Phase B)
+
+Objective
+
+Directive 11.7I.a resolves remaining observability, semantic clarity, and UX correctness gaps discovered after Phase A stabilization.
+
+All changes in this directive are non-behavioral:
+
+No strategy logic changes
+
+No guardrail ownership changes
+
+No LATTi modifications
+
+No ML decision changes
+
+This directive strictly improves:
+
+Interpretability
+
+Event visibility
+
+Operator trust
+
+Correct data wiring
+
+Phase B must not begin until all tasks below are implemented and verified with evidence.
+
+🔹 Scope Summary (What This Directive Fixes)
+
+Predictive Adjustments tab is logging real activity but is semantically unusable
+
+Trading & Market Events tab is wired to the wrong backend source
+
+Global Friction value is correct but misleading without context
+
+Several ML / Analytics tabs lack operator guidance
+
+Certain controls (e.g. Force Sync Canonical) lack safety explanation
+
+🧩 Task I.a-01 — Predictive Adjustments Semantic Upgrade (REQUIRED)
+Problem
+
+The Predictive Adjustments tab currently:
+
+Treats lifecycle events as tuning actions
+
+Displays meaningless % impact (e.g. 10,000%)
+
+Uses vague categories like Other
+
+Provides insufficient explanation of why and what was adjusted
+
+Required Changes
+1. Introduce Adjustment Type Classification
+
+Each predictive adjustment must include a new field:
+
+adjustmentType:
+  | "lifecycle"
+  | "model_calibration"
+  | "weight_adjustment"
+  | "risk_adjustment"
+  | "filter_adjustment"
+
+
+Examples:
+
+ml.scheduler_init → lifecycle
+
+Confidence threshold change → risk_adjustment
+
+Signal weight update → weight_adjustment
+
+2. Suppress % Impact for Non-Numeric Adjustments
+
+For:
+
+Boolean flags
+
+Init/run markers
+
+Scheduler lifecycle events
+
+➡️ Do not compute or display % impact
+
+Display instead:
+
+“Lifecycle event — no quantitative impact”
+
+3. Enrich Explanation Fields
+
+Every adjustment must include:
+
+affectedSubsystem
+
+expectedEffect
+
+reversibility (automatic / manual / irreversible)
+
+Example (good):
+
+ML Calibration Scheduler initialized — enables periodic recalibration once sufficient trades exist. No trading behavior changed.
+
+4. Clarify Color Semantics
+
+Add a legend explaining:
+
+Green ≠ “good”
+
+Red ≠ “bad”
+
+Colors only reflect direction of change, not desirability
+
+Proof Required
+
+Screenshot showing:
+
+At least one lifecycle adjustment without % impact
+
+At least one adjustment with a detailed explanation
+
+Updated JSON log demonstrating new fields
+
+🧩 Task I.a-02 — Trading & Market Events Tab Fix (REQUIRED)
+Problem
+
+The UI currently fetches events only from:
+
+/api/narrative-feed
+
+
+This excludes:
+
+Regime transitions
+
+Global friction changes
+
+Macro market events
+
+These are being logged correctly in:
+
+/api/market-events
+
+
+…but never displayed.
+
+Required Fix (Choose One)
+✅ Preferred Option (Recommended)
+
+Merge both sources in the UI:
+
+Fetch from /api/narrative-feed
+
+Fetch from /api/market-events
+
+Combine into a unified, time-sorted event stream
+
+Each event must be tagged:
+
+TRADE
+
+MARKET
+
+SYSTEM
+
+Alternative Option
+
+Push market events into the narrative feed at emission time
+(acceptable, but less clean architecturally)
+
+Proof Required
+
+Screenshot showing:
+
+At least one REGIME_TRANSITION event
+
+Appearing in Trading & Market Events tab
+
+Timestamp matching backend log
+
+🧩 Task I.a-03 — Global Friction Transparency Upgrade (REQUIRED)
+Problem
+
+Global Friction = 11 is mathematically correct, but:
+
+Sample size is only 6
+
+UI gives no context
+
+Appears “stuck” or suspicious to operator
+
+Required Changes
+
+Display friction sample size
+
+Display contributing symbol count
+
+Add tooltip or inline note:
+
+“Friction score based on limited cost data. Value will normalize as more order book data is collected.”
+
+⚠️ Do NOT change the friction formula
+
+Proof Required
+
+Screenshot showing:
+
+Friction value
+
+Sample size
+
+Explanatory note
+
+🧩 Task I.a-04 — Analytics & Diagnostics UI Guidance (REQUIRED)
+Problem
+
+Several tabs show valid data but provide no guidance:
+
+Predictive (0 signals processed)
+
+Decision Traceback empty
+
+Mapping Drift controls unclear
+
+Required Changes
+
+Add static inline explanations (no logic changes):
+
+Predictive Tab
+
+Explain:
+
+Signals only appear during active signal evaluation
+
+Zero values are expected in passive mode
+
+Decision Traceback
+
+Explain:
+
+Populates only when trades are evaluated/executed
+
+Mapping Drift
+
+Explain:
+
+What Drift Score represents
+
+What “Aligned / Minor Drift” means
+
+When (and when not) to use Force Sync Canonical
+
+Proof Required
+
+Screenshot showing explanatory text visible in each section
+
+🧩 Task I.a-05 — Verification Gate (MANDATORY)
+
+Replit must provide explicit proof for each task, including:
+
+Task	Proof
+I.a-01	JSON log + UI screenshot
+I.a-02	Events tab screenshot showing market event
+I.a-03	Friction UI with sample size
+I.a-04	Screenshots with guidance text
+
+No task is considered complete without visible evidence.
+
+🚫 Explicit Exclusions (Do NOT Touch)
+
+❌ LATTi logic or ownership
+
+❌ Guardrail authority
+
+❌ Strategy logic
+
+❌ ML decision paths
+
+❌ Phase B work
+
+✅ Completion Criteria
+
+Directive 11.7I.a is complete when:
+
+Predictive Adjustments are interpretable by a human operator
+
+Market events are visible in the Events tab
+
+Global Friction is transparent and trustworthy
+
+Analytics pages explain themselves
+
+All fixes are proven with screenshots/logs

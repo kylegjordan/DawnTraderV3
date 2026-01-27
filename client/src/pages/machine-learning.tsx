@@ -66,18 +66,31 @@ interface ClosedTrade {
   durationMinutes: number;
 }
 
+type AdjustmentType = 
+  | "lifecycle"
+  | "model_calibration"
+  | "weight_adjustment"
+  | "risk_adjustment"
+  | "filter_adjustment";
+
+type Reversibility = "automatic" | "manual" | "irreversible";
+
 interface PredictiveAdjustment {
   _schema: string;
   timestamp: string;
   category: string;
+  adjustmentType?: AdjustmentType;
   parameter: string;
   oldValue: number;
   newValue: number;
   delta: number;
-  impact: number;
+  impact: number | null;
   regime?: string;
   strategy?: string;
   reason: string;
+  affectedSubsystem?: string;
+  expectedEffect?: string;
+  reversibility?: Reversibility;
 }
 
 interface AdjustmentSummary {
@@ -510,10 +523,39 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
   );
 }
 
-const getImpactColor = (impact: number) => {
+const getImpactColor = (impact: number | null) => {
+  if (impact === null) return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
   if (impact >= 0.2) return 'bg-red-500/20 text-red-400 border-red-500/30';
   if (impact >= 0.1) return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
   return 'bg-green-500/20 text-green-400 border-green-500/30';
+};
+
+const getAdjustmentTypeBadge = (adjustmentType?: AdjustmentType) => {
+  switch (adjustmentType) {
+    case 'lifecycle':
+      return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+    case 'model_calibration':
+      return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+    case 'weight_adjustment':
+      return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+    case 'risk_adjustment':
+      return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
+    case 'filter_adjustment':
+      return 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30';
+    default:
+      return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+  }
+};
+
+const formatAdjustmentType = (adjustmentType?: AdjustmentType) => {
+  switch (adjustmentType) {
+    case 'lifecycle': return 'Lifecycle';
+    case 'model_calibration': return 'Calibration';
+    case 'weight_adjustment': return 'Weight';
+    case 'risk_adjustment': return 'Risk';
+    case 'filter_adjustment': return 'Filter';
+    default: return 'Unknown';
+  }
 };
 
 const getCategoryBadgeColor = (category: string) => {
@@ -847,7 +889,26 @@ function PredictiveAdjustmentsPanel({
 
       <Card>
         <CardHeader className="py-3">
-          <CardTitle className="text-sm">Recent Adjustments</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm">Recent Adjustments</CardTitle>
+            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+              <span className="font-medium">Color Legend:</span>
+              <div className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                <span>Increase</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                <span>Decrease</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-gray-500"></span>
+                <span>Lifecycle</span>
+              </div>
+              <span className="text-muted-foreground/50">|</span>
+              <span className="italic">Colors reflect direction of change, not desirability</span>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -855,6 +916,7 @@ function PredictiveAdjustmentsPanel({
               <thead className="sticky top-0 bg-card z-10">
                 <tr className="border-b border-border">
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">Time</th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">Type</th>
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">Category</th>
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">Parameter</th>
                   <th className="px-3 py-2 text-right font-medium text-muted-foreground">Old</th>
@@ -868,7 +930,7 @@ function PredictiveAdjustmentsPanel({
               <tbody>
                 {adjustments.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
+                    <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">
                       No predictive adjustments recorded
                     </td>
                   </tr>
@@ -877,6 +939,11 @@ function PredictiveAdjustmentsPanel({
                     <tr key={`${adj.timestamp}-${adj.parameter}-${idx}`} className="border-b border-border/50 hover:bg-muted/30">
                       <td className="px-3 py-2 text-xs">
                         {format(new Date(adj.timestamp), 'MM/dd HH:mm:ss')}
+                      </td>
+                      <td className="px-3 py-2">
+                        <Badge variant="outline" className={`text-xs ${getAdjustmentTypeBadge(adj.adjustmentType)}`}>
+                          {formatAdjustmentType(adj.adjustmentType)}
+                        </Badge>
                       </td>
                       <td className="px-3 py-2">
                         <Badge variant="outline" className={`text-xs ${getCategoryBadgeColor(adj.category)}`}>
@@ -894,9 +961,13 @@ function PredictiveAdjustmentsPanel({
                         {adj.delta > 0 ? '+' : ''}{adj.delta.toFixed(4)}
                       </td>
                       <td className="px-3 py-2 text-center">
-                        <Badge variant="outline" className={`text-xs ${getImpactColor(adj.impact)}`}>
-                          {(adj.impact * 100).toFixed(1)}%
-                        </Badge>
+                        {adj.impact !== null ? (
+                          <Badge variant="outline" className={`text-xs ${getImpactColor(adj.impact)}`}>
+                            {(adj.impact * 100).toFixed(1)}%
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground italic">Lifecycle</span>
+                        )}
                       </td>
                       <td className="px-3 py-2">
                         {adj.regime ? (
