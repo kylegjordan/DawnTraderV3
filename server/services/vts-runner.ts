@@ -906,11 +906,11 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   
   const pairs = await getIdealPoolPairs();
   
-  if (pairs.length < 10) {
-    console.warn(`[11.0E.1][VTS] Ideal pool too small (${pairs.length} pairs), delaying cycle...`);
+  if (pairs.length === 0) {
+    console.warn(`[11.0E.1][VTS] No pairs available for simulation cycle`);
     return {
       cycleId: cycleCount,
-      pairsEvaluated: pairs.length,
+      pairsEvaluated: 0,
       tradesSimulated: 0,
       avgFinalScore: 0,
       regimeDistribution: {} as Record<MarketRegimeType, number>,
@@ -920,6 +920,8 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       timestamp: Date.now()
     };
   }
+  
+  console.log(`[11.0E.1][VTS] Running cycle with ${pairs.length} pairs`);
   
   const regimeDistribution: Record<MarketRegimeType, number> = {
     BULL_STABLE: 0,

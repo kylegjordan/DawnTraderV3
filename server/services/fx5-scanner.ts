@@ -535,7 +535,7 @@ export class Fx5ScannerService {
           if (cachedOHLC && cachedOHLC.length >= 10) {
             // Use OHLC-based calculation
             LQ = imfModule.calculateLogLiquidity(cachedOHLC);
-            VolNoise = imfModule.calculateVolNoise(cachedOHLC, normalizedSymbol);
+            VolNoise = imfModule.calculateVolNoise(cachedOHLC);
             const thresholds = imfModule.getIMFThresholds();
             passesMetricFilter = LQ >= thresholds.LQ_MIN && VolNoise <= thresholds.VN_MAX;
             imfSource = 'ohlc_cache';
