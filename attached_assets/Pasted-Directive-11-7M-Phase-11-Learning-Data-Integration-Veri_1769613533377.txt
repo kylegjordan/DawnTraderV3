@@ -1,0 +1,323 @@
+Directive 11.7M – Phase 11 Learning Data Integration & Verification
+Purpose
+
+The purpose of this directive is not to tune performance, adjust thresholds, or “make things move.”
+
+The purpose is to prove, with evidence, that:
+
+Passive learning data produced by VTS is being consumed by Phase 11 learning systems
+
+Each learning subsystem can see, process, and act on simulated trade outcomes
+
+The Analytics, Diagnostics, and Machine Learning UIs accurately reflect real system behavior
+
+Any system that is not learning is either:
+
+Correctly inactive by design, or
+
+Clearly identified as broken, with a precise reason
+
+No UI redesign, parameter tuning, or guardrail changes should be made unless explicitly justified by findings in this directive.
+
+Scope
+
+This directive applies to Phase 11 passive learning only.
+
+Explicitly excluded from scope (for now):
+
+Lottie removal or replacement
+
+Adaptive Guardrails behavior changes
+
+Threshold / filter tuning
+
+Strategy enablement or disablement
+
+Live or paper trading logic
+
+Phase A – Learning Data Path Verification (Read Before Implementing Anything)
+A1. Establish the Authoritative Learning Data Source
+
+Objective:
+Formally declare what constitutes ground truth for passive learning.
+
+Required Actions:
+
+Identify exactly one authoritative source for simulated trade outcomes during passive learning:
+
+logs/virtual_trades/
+
+database tables
+
+in-memory telemetry
+
+Document:
+
+Schema
+
+Fields required by learning systems
+
+Retention policy
+
+Confirm (with file samples) that this source contains:
+
+Trade entries
+
+Entry/exit
+
+P&L / netProfit
+
+Regime
+
+Strategy
+
+Signal type
+
+Deliverables:
+
+Data flow diagram (VTS → storage → learning consumers)
+
+One concrete example trade object used as reference
+
+A2. Learning System Intake Audit (No Fixes Yet)
+
+Objective:
+Prove whether each learning system can see passive learning data.
+
+Systems to audit:
+
+ML Calibration
+
+Heuristic Trader
+
+Signal Weight Optimizer
+
+Cognitive Weight Adjuster
+
+Adaptive Guardrails
+
+Telemetry Aggregator
+
+For each system, provide:
+
+Expected input source
+
+Actual input source (confirmed in code)
+
+Filtering logic applied
+
+Whether simulated VTS trades are:
+
+Fully visible
+
+Partially visible
+
+Completely invisible
+
+Exact reason if invisible (e.g. case mismatch, wrong table, lifecycle gating)
+
+Deliverables:
+
+Table mapping system → data source → visibility status
+
+Code references (file + line numbers)
+
+A3. Minimal Viability Fix Identification (Do Not Implement Yet)
+
+Objective:
+Identify the smallest possible changes required to enable learning.
+
+Rules:
+
+No behavioral changes
+
+No threshold changes
+
+No fallback logic
+
+No UI masking
+
+For each blocked learning system:
+
+Identify the minimal unblock condition
+
+State whether it is:
+
+Safe
+
+Reversible
+
+Isolated
+
+Example (acceptable):
+
+Case sensitivity mismatch preventing HYBRID trades from entering ML Calibration
+
+Example (not acceptable yet):
+
+Rewrite learning system to use different metrics
+
+Deliverables:
+
+Ordered list of unblock candidates
+
+Risk assessment for each (Low / Medium / High)
+
+Phase B – Controlled Learning Enablement (Single-Step Activation)
+
+Proceed only after Phase A is reviewed and approved
+
+B1. Enable ML Calibration Intake (Single Change Only)
+
+Objective:
+Prove learning can occur when data flows.
+
+Constraints:
+
+Implement only one fix: make ML Calibration consume existing VTS trades
+
+No other learning systems touched
+
+Required Proof:
+
+Before/after logs showing:
+
+“No trades found” → “Trades loaded”
+
+Evidence of:
+
+Calibration window populated
+
+Non-zero learning output
+
+One visible, meaningful predictive adjustment resulting from calibration
+
+Phase C – Observability & UI Truthfulness (No Cosmetic Changes)
+C1. Predictive Adjustments Definition Audit
+
+Objective:
+Ensure this tab displays only meaningful learning events.
+
+Required Actions:
+
+Define allowed adjustment types:
+
+Weight changes
+
+Confidence thresholds
+
+Risk modifiers
+
+Identify and suppress:
+
+Lifecycle noise
+
+Scheduler heartbeats
+
+Internal service bookkeeping
+
+Provide mapping:
+
+Adjustment → learning source → system impact
+
+Deliverables:
+
+Definition document for Predictive Adjustments tab
+
+Examples of valid vs suppressed entries
+
+C2. Decision Traceback Wiring Verification
+
+Objective:
+Confirm whether this feature is intended to function in passive learning.
+
+Required Actions:
+
+Define what constitutes a “decision”
+
+Confirm where decisions are logged
+
+Confirm whether simulated decisions should appear
+
+Wire only if conceptually correct
+
+Deliverables:
+
+Yes/No determination with justification
+
+If Yes: example trace displayed
+
+If No: mark feature as inactive in passive mode
+
+C3. Predictive Diagnostics Truth Test
+
+Objective:
+Ensure displayed metrics correspond to real computation.
+
+Required Actions:
+
+Verify whether signals processed = 0 is accurate
+
+If inaccurate:
+
+Identify missing call sites
+
+Provide evidence of signal volume
+
+Confirm which diagnostics require live trades vs simulated trades
+
+Deliverables:
+
+Corrected metric definitions
+
+Wiring plan or explicit deactivation decision
+
+Phase D – Regime Archive Verification
+
+Objective:
+Confirm archive behavior is correct and intentional.
+
+Required Actions:
+
+Verify archive scheduler:
+
+Frequency
+
+Trigger conditions
+
+Confirm whether passive learning qualifies
+
+Provide expected timeline for first archive
+
+Deliverables:
+
+Scheduler config proof
+
+Expected archive date
+
+Sample archive payload (dry run acceptable)
+
+Rules of Engagement
+
+No assumptions without proof
+
+No fixes without diagnosis
+
+No UI changes to hide missing data
+
+Every claim must reference logs, code, or artifacts
+
+If something is “working as designed,” that design must be documented
+
+Definition of Completion
+
+This directive is complete when:
+
+We can clearly answer:
+“Is Phase 11 learning actually learning from passive VTS data?”
+
+We know exactly why each system is active or inactive
+
+We can enable learning intentionally, not accidentally
+
+The UI reflects truth, not placeholders
