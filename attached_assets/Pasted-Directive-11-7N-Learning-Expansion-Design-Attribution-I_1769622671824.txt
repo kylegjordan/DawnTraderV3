@@ -1,0 +1,268 @@
+Directive 11.7N — Learning Expansion Design, Attribution Integrity, and UI Truthfulness
+
+Status: Design & Verification Only
+No implementation changes are authorized unless explicitly approved in a subsequent directive.
+
+Purpose
+
+Directive 11.7N exists to ensure that the Dawn Trader learning architecture:
+
+Learns only from valid data
+
+Learns only in ways we understand and agree with
+
+Produces adjustments that are interpretable, attributable, and trustworthy
+
+Uses VTS simulated trades effectively during passive learning
+
+Displays only meaningful information in the UI
+
+This directive is explicitly not about “turning on learning everywhere.”
+It is about deciding what should learn, how, and why — before wiring anything further.
+
+Context (Authoritative)
+
+The following facts are now considered verified and settled:
+
+VTS is actively creating simulated trades and writing them to:
+
+logs/virtual_trades/{date}.json
+
+
+ML Calibration is now successfully learning from HYBRID trades only
+
+Predictive Adjustments produced by ML Calibration are:
+
+Real
+
+Parameter-specific
+
+Non-lifecycle
+
+Correctly logged and displayed
+
+All other learning systems remain disconnected from VTS data by design
+
+This directive does not revisit Phase B and does not expand it implicitly.
+
+Scope Constraints (Mandatory)
+
+During Directive 11.7N:
+
+❌ No learning logic may be modified
+
+❌ No thresholds, formulas, or weights may be changed
+
+❌ No new data sources may be wired
+
+❌ No UI behavior may be altered
+
+❌ No learning systems may be activated beyond current state
+
+Only analysis, documentation, and recommendations are allowed.
+
+Phase C — QUANT Learning Design Audit (NO CODE)
+Objective
+
+Determine whether and how QUANT trades should be used for learning, without implementing anything.
+
+Required Deliverables
+C1. QUANT Trade Characterization
+
+Document, with examples from logs/virtual_trades, the following:
+
+What data fields QUANT trades contain
+
+What data fields they do not contain (relative to HYBRID)
+
+How QUANT trades differ in:
+
+Signal generation
+
+Scoring
+
+Regime attribution
+
+Profit evaluation
+
+C2. Learnability Assessment
+
+Answer explicitly:
+
+What could be learned from QUANT trades?
+
+What cannot be learned safely?
+
+Which learning objectives (if any) are valid:
+
+Entry timing?
+
+Risk sizing?
+
+Strategy enable/disable?
+
+Regime sensitivity?
+
+This must include arguments against learning, not just for it.
+
+C3. Separation Requirements
+
+Clearly state whether QUANT learning must be:
+
+Fully separate from HYBRID
+
+Partially shared
+
+Explicitly prohibited
+
+No assumptions — justify the conclusion.
+
+Phase D — Learning System Intake Mapping (Design Only)
+Objective
+
+Create a truth table of learning systems vs data sources vs suitability.
+
+Required Table
+Learning System	Current Data Source	VTS Compatible?	Should Learn from VTS?	Why / Why Not
+ML Calibration	VTS logs (HYBRID)	✅	✅	Proven
+Heuristic Trader	DB trades	❌	?	Design decision
+Signal Weight Optimizer	predictionOutcomes	❌	?	TBD
+Cognitive Weight Adjuster	learningSources	❌	?	TBD
+Adaptive Guardrails	behavioralLog	❌	?	TBD
+Telemetry Aggregator	In-memory	⚠️	?	Persistence question
+
+No wiring changes permitted — analysis only.
+
+Phase E — Predictive Adjustments UI Truthfulness Audit
+Objective
+
+Ensure the Predictive Adjustments tab displays only information that is meaningful to a human operator.
+
+Required Analysis
+
+For each category currently visible:
+
+Lifecycle
+
+Weight
+
+Scoring
+
+Other
+
+Document:
+
+What triggers entries in this category
+
+Whether the entry represents a real system behavior change
+
+Whether it should be:
+
+Displayed
+
+Suppressed
+
+Moved to a debug-only view
+
+Explicitly answer:
+
+Should lifecycle/scheduler events ever appear in Predictive Adjustments?
+
+No UI changes yet — recommendation only.
+
+Phase F — Decision Traceback Semantics Clarification
+Objective
+
+Clarify what the Decision Traceback panel is supposed to represent.
+
+Required Determinations
+
+What constitutes a “decision” in passive learning mode?
+
+Should VTS simulated trade accept/reject decisions appear?
+
+Should profitability filter rejections appear?
+
+Is Decision Traceback:
+
+Active-trading only?
+
+Passive-learning capable?
+
+Or currently mis-scoped?
+
+If it is mis-scoped, recommend one of:
+
+Redefinition
+
+Suppression during passive learning
+
+Redesign (future directive)
+
+Phase G — Global Friction & Aggregate Metrics Validity
+Objective
+
+Confirm whether aggregate metrics (e.g., Global Friction) are:
+
+Correctly computed from scanner-level data
+
+Overly dependent on live trading
+
+Misleading in passive mode
+
+Deliver:
+
+Exact data sources used
+
+Sample sizes
+
+Whether passive learning should influence these metrics
+
+No tuning or fixes — truth assessment only.
+
+Final Deliverable
+
+A single document:
+
+docs/directive-11-7N-learning-design-and-truthfulness-report.md
+
+
+Containing:
+
+Phase C–G findings
+
+Clear GO / NO-GO recommendations for each learning system
+
+Explicit identification of:
+
+What is working
+
+What is intentionally inactive
+
+What should never learn
+
+What is a candidate for a future directive
+
+Exit Criteria
+
+Directive 11.7N is complete when:
+
+All phases are documented
+
+No implementation changes have occurred
+
+The system’s learning behavior is fully understood and explainable
+
+A clear, confidence-based decision can be made about next steps
+
+Explicit Non-Goals
+
+“Make learning more active”
+
+“Improve performance”
+
+“Increase trade count”
+
+“Make charts move”
+
+Those come after understanding, not before.
