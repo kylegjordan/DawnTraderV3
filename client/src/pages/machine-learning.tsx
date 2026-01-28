@@ -1029,19 +1029,19 @@ function PredictiveAdjustmentsPanel({
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="text-sm min-w-max">
               <thead className="sticky top-0 bg-card z-10">
                 <tr className="border-b border-border">
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">Time</th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">Type</th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">Category</th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">Parameter</th>
-                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">Old</th>
-                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">New</th>
-                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">Delta</th>
-                  <th className="px-3 py-2 text-center font-medium text-muted-foreground">Impact</th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">Regime</th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">Reason</th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Time</th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Type</th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Category</th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Parameter</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground whitespace-nowrap">Old</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground whitespace-nowrap">New</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground whitespace-nowrap">Delta</th>
+                  <th className="px-3 py-2 text-center font-medium text-muted-foreground whitespace-nowrap">Impact</th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Regime</th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Reason</th>
                 </tr>
               </thead>
               <tbody>
@@ -1095,7 +1095,7 @@ function PredictiveAdjustmentsPanel({
                           <span className="text-muted-foreground">-</span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-xs text-muted-foreground max-w-[200px] truncate" title={adj.reason}>
+                      <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
                         {adj.reason}
                       </td>
                     </tr>
