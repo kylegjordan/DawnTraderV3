@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Brain, RefreshCw, Download, TrendingUp, TrendingDown, Clock, Target, AlertTriangle, Sliders, Activity } from "lucide-react";
+import { Brain, RefreshCw, Download, TrendingUp, TrendingDown, Clock, Target, AlertTriangle, Sliders, Activity, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { ensureValidToken } from "@/lib/auth";
 import { format } from "date-fns";
@@ -192,9 +192,85 @@ function formatDuration(minutes: number): string {
   return `${days}d ${remainingHours}h`;
 }
 
+type OpenSortField = 'symbol' | 'regime' | 'strategy' | 'pool' | 'dollarValue' | 'entryPrice' | 'grossProfitValue' | 'netProfitValue' | 'finalScore' | 'expectedEdge' | 'regimeWeight' | 'entryTime' | 'durationOpenMinutes';
+type SortDirection = 'asc' | 'desc';
+
+function SortableHeader({ 
+  label, 
+  field, 
+  currentSort, 
+  direction, 
+  onSort, 
+  align = 'left' 
+}: { 
+  label: string; 
+  field: string; 
+  currentSort: string | null; 
+  direction: SortDirection; 
+  onSort: (field: string) => void;
+  align?: 'left' | 'right' | 'center';
+}) {
+  const isActive = currentSort === field;
+  const alignClass = align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : 'justify-start';
+  
+  return (
+    <th 
+      className={`px-3 py-2 font-medium text-muted-foreground cursor-pointer hover:text-foreground transition-colors select-none`}
+      onClick={() => onSort(field)}
+    >
+      <div className={`flex items-center gap-1 ${alignClass}`}>
+        <span>{label}</span>
+        {isActive ? (
+          direction === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+        ) : (
+          <ArrowUpDown className="w-3 h-3 opacity-30" />
+        )}
+      </div>
+    </th>
+  );
+}
+
 function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const topScrollRef = useRef<HTMLDivElement>(null);
+  const [sortField, setSortField] = useState<OpenSortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  const handleSort = useCallback((field: string) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field as OpenSortField);
+      setSortDirection('desc');
+    }
+  }, [sortField]);
+
+  const sortedTrades = useMemo(() => {
+    if (!sortField) return trades;
+    return [...trades].sort((a, b) => {
+      let aVal: string | number = 0;
+      let bVal: string | number = 0;
+      switch (sortField) {
+        case 'symbol': aVal = a.symbol; bVal = b.symbol; break;
+        case 'regime': aVal = a.regime; bVal = b.regime; break;
+        case 'strategy': aVal = a.strategy; bVal = b.strategy; break;
+        case 'pool': aVal = a.pool; bVal = b.pool; break;
+        case 'dollarValue': aVal = a.dollarValue ?? 0; bVal = b.dollarValue ?? 0; break;
+        case 'entryPrice': aVal = a.entryPrice; bVal = b.entryPrice; break;
+        case 'grossProfitValue': aVal = a.grossProfitValue ?? 0; bVal = b.grossProfitValue ?? 0; break;
+        case 'netProfitValue': aVal = a.netProfitValue ?? 0; bVal = b.netProfitValue ?? 0; break;
+        case 'finalScore': aVal = a.finalScore; bVal = b.finalScore; break;
+        case 'expectedEdge': aVal = a.expectedEdge; bVal = b.expectedEdge; break;
+        case 'regimeWeight': aVal = a.regimeWeight; bVal = b.regimeWeight; break;
+        case 'entryTime': aVal = new Date(a.entryTime).getTime(); bVal = new Date(b.entryTime).getTime(); break;
+        case 'durationOpenMinutes': aVal = a.durationOpenMinutes; bVal = b.durationOpenMinutes; break;
+      }
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        return sortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      }
+      return sortDirection === 'asc' ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
+    });
+  }, [trades, sortField, sortDirection]);
 
   const handleMainScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     if (topScrollRef.current) {
@@ -227,34 +303,34 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
         <table className="w-full min-w-[1800px] text-sm">
           <thead className="sticky top-0 bg-card z-10">
             <tr className="border-b border-border">
-              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Symbol</th>
-              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Regime</th>
-              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Strategy</th>
+              <SortableHeader label="Symbol" field="symbol" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
+              <SortableHeader label="Regime" field="regime" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
+              <SortableHeader label="Strategy" field="strategy" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Signal/Pattern</th>
-              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Pool</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">$ Value / Qty</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Entry/Current</th>
+              <SortableHeader label="Pool" field="pool" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
+              <SortableHeader label="$ Value / Qty" field="dollarValue" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+              <SortableHeader label="Entry/Current" field="entryPrice" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Target/Stop</th>
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Dist. T/S</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Gross P/L</th>
+              <SortableHeader label="Gross P/L" field="grossProfitValue" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Costs</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Net P/L</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Final/Hybrid</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Edge</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Regime Wt</th>
-              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Entry Time</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Duration</th>
+              <SortableHeader label="Net P/L" field="netProfitValue" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+              <SortableHeader label="Final/Hybrid" field="finalScore" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+              <SortableHeader label="Edge" field="expectedEdge" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+              <SortableHeader label="Regime Wt" field="regimeWeight" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+              <SortableHeader label="Entry Time" field="entryTime" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
+              <SortableHeader label="Duration" field="durationOpenMinutes" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
             </tr>
           </thead>
           <tbody>
-            {trades.length === 0 ? (
+            {sortedTrades.length === 0 ? (
               <tr>
                 <td colSpan={17} className="px-3 py-8 text-center text-muted-foreground">
                   No open simulated trades
                 </td>
               </tr>
             ) : (
-              trades.map((trade, idx) => (
+              sortedTrades.map((trade, idx) => (
                 <tr key={`${trade.symbol}-${trade.entryTime}-${idx}`} className="border-b border-border/50 hover:bg-muted/30">
                   <td className="px-3 py-2 font-medium">{trade.symbol}</td>
                   <td className="px-3 py-2">
@@ -358,9 +434,50 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
   );
 }
 
+type ClosedSortField = 'symbol' | 'regime' | 'strategy' | 'pool' | 'dollarValue' | 'entryPrice' | 'resultType' | 'grossProfitValue' | 'netProfitValue' | 'finalScore' | 'expectedEdge' | 'regimeWeight' | 'exitTime' | 'durationMinutes';
+
 function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const topScrollRef = useRef<HTMLDivElement>(null);
+  const [sortField, setSortField] = useState<ClosedSortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  const handleSort = useCallback((field: string) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field as ClosedSortField);
+      setSortDirection('desc');
+    }
+  }, [sortField]);
+
+  const sortedTrades = useMemo(() => {
+    if (!sortField) return trades;
+    return [...trades].sort((a, b) => {
+      let aVal: string | number = 0;
+      let bVal: string | number = 0;
+      switch (sortField) {
+        case 'symbol': aVal = a.symbol; bVal = b.symbol; break;
+        case 'regime': aVal = a.regime; bVal = b.regime; break;
+        case 'strategy': aVal = a.strategy; bVal = b.strategy; break;
+        case 'pool': aVal = a.pool; bVal = b.pool; break;
+        case 'dollarValue': aVal = a.dollarValue ?? 0; bVal = b.dollarValue ?? 0; break;
+        case 'entryPrice': aVal = a.entryPrice; bVal = b.entryPrice; break;
+        case 'resultType': aVal = a.resultType; bVal = b.resultType; break;
+        case 'grossProfitValue': aVal = a.grossProfitValue ?? 0; bVal = b.grossProfitValue ?? 0; break;
+        case 'netProfitValue': aVal = a.netProfitValue ?? 0; bVal = b.netProfitValue ?? 0; break;
+        case 'finalScore': aVal = a.finalScore; bVal = b.finalScore; break;
+        case 'expectedEdge': aVal = a.expectedEdge; bVal = b.expectedEdge; break;
+        case 'regimeWeight': aVal = a.regimeWeight; bVal = b.regimeWeight; break;
+        case 'exitTime': aVal = new Date(a.exitTime).getTime(); bVal = new Date(b.exitTime).getTime(); break;
+        case 'durationMinutes': aVal = a.durationMinutes; bVal = b.durationMinutes; break;
+      }
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        return sortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      }
+      return sortDirection === 'asc' ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
+    });
+  }, [trades, sortField, sortDirection]);
 
   const handleMainScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     if (topScrollRef.current) {
@@ -393,34 +510,34 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
         <table className="w-full min-w-[1800px] text-sm">
           <thead className="sticky top-0 bg-card z-10">
             <tr className="border-b border-border">
-              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Symbol</th>
-              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Regime</th>
-              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Strategy</th>
+              <SortableHeader label="Symbol" field="symbol" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
+              <SortableHeader label="Regime" field="regime" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
+              <SortableHeader label="Strategy" field="strategy" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Signal/Pattern</th>
-              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Pool</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">$ Value / Qty</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Entry/Exit</th>
+              <SortableHeader label="Pool" field="pool" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
+              <SortableHeader label="$ Value / Qty" field="dollarValue" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+              <SortableHeader label="Entry/Exit" field="entryPrice" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Target/Stop</th>
-              <th className="px-3 py-2 text-center font-medium text-muted-foreground">Result</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Gross P/L</th>
+              <SortableHeader label="Result" field="resultType" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="center" />
+              <SortableHeader label="Gross P/L" field="grossProfitValue" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Costs</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Net P/L</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Final/Hybrid</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Edge</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Regime Wt</th>
-              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Entry/Exit Time</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Duration</th>
+              <SortableHeader label="Net P/L" field="netProfitValue" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+              <SortableHeader label="Final/Hybrid" field="finalScore" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+              <SortableHeader label="Edge" field="expectedEdge" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+              <SortableHeader label="Regime Wt" field="regimeWeight" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+              <SortableHeader label="Entry/Exit Time" field="exitTime" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
+              <SortableHeader label="Duration" field="durationMinutes" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
             </tr>
           </thead>
           <tbody>
-            {trades.length === 0 ? (
+            {sortedTrades.length === 0 ? (
               <tr>
                 <td colSpan={17} className="px-3 py-8 text-center text-muted-foreground">
                   No closed trades in the last 7 days
                 </td>
               </tr>
             ) : (
-              trades.map((trade, idx) => (
+              sortedTrades.map((trade, idx) => (
                 <tr key={`${trade.symbol}-${trade.exitTime}-${idx}`} className="border-b border-border/50 hover:bg-muted/30">
                   <td className="px-3 py-2 font-medium">{trade.symbol}</td>
                   <td className="px-3 py-2">
