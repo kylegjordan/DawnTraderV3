@@ -1,0 +1,262 @@
+Directive 11.7O — Learning Observability Truthfulness & Operator Signal Integrity
+
+Phase: 11
+Directive ID: 11.7O
+Precondition: Directives 11.7M and 11.7N completed and accepted
+Mode: Passive Learning (VTS Simulation)
+Scope Type: UI, Observability, and Semantic Accuracy
+Explicit Non-Goals:
+
+No new learning logic
+
+No new calibration services
+
+No QUANT learning
+
+No performance tuning
+
+No strategy, threshold, or formula changes
+
+Directive Intent
+
+The goal of Directive 11.7O is to ensure that every learning-related UI surface reflects reality, truthfully, and without noise, so that:
+
+The operator can trust what is shown
+
+Meaningful learning is never drowned out by lifecycle noise
+
+Inactive systems are not presented as broken
+
+Passive learning mode is explicitly respected
+
+This directive is about signal integrity, not expanding learning.
+
+Authoritative Conclusions (Locked In)
+
+These conclusions are not up for reinterpretation during this directive:
+
+ML Calibration (HYBRID)
+
+✅ Active
+
+✅ Correct
+
+✅ Producing valid pattern weight adjustments
+
+❌ Must not ingest QUANT trades
+
+QUANT Trades
+
+❌ Must not feed ML Calibration
+
+❌ Must not adjust pattern weights
+
+✅ Require a future, separate StrategyCalibrationService
+
+Inactive Learning Systems
+The following are correctly inactive by design and must not be “fixed”:
+
+Heuristic Trader
+
+Signal Weight Optimizer
+
+Cognitive Weight Adjuster
+
+Adaptive Guardrails
+
+Telemetry Aggregator
+
+✅ Active
+
+⚠️ In-memory only (persistence is a future concern, not part of this directive)
+
+Phase A — Predictive Adjustments UI Truthfulness
+Problem
+
+The Predictive Adjustments tab currently mixes:
+
+Real learning outputs
+
+Internal scheduler lifecycle events
+
+This makes actual learning indistinguishable from noise.
+
+Required Changes
+A1 — Filter Displayed Adjustments
+
+Only display adjustments that meet both criteria:
+
+impact !== null
+
+category ∈ { Weight, Risk }
+
+Explicitly Suppress
+
+Do not display the following in the Predictive Adjustments UI:
+
+adjustmentType = lifecycle
+
+Scheduler init / run / skip events
+
+Heartbeats
+
+Internal service state markers
+
+These may remain logged to files but must not appear in the operator UI.
+
+Acceptance Proof
+
+Replit must show:
+
+Before/after comparison of the Predictive Adjustments tab
+
+Confirmation that only pattern weight adjustments remain visible
+
+Phase B — Scoring & Calibration Visibility Clarification
+Problem
+
+“Scoring” events (e.g. ml.calibration_run) appear as adjustments but do not change system behavior.
+
+Required Changes
+B1 — Reclassify Calibration Runs
+
+Calibration run records must be:
+
+Removed from Predictive Adjustments OR
+
+Moved to a clearly labeled “Calibration Activity” section
+
+They must not appear alongside weight or risk adjustments.
+
+Acceptance Proof
+
+UI screenshot showing separation or suppression
+
+Confirmation that no “impact = null” entries appear in Predictive Adjustments
+
+Phase C — Decision Traceback Honesty
+Problem
+
+Decision Traceback currently:
+
+Exists
+
+Displays empty data
+
+Is not wired to production VTS decisions
+
+This creates false expectations.
+
+Required Changes
+C1 — Suppress Decision Traceback in Passive Mode
+
+When passiveLearning = true:
+
+Hide Decision Traceback entirely OR
+
+Replace with a static message:
+
+“Decision Traceback is unavailable in Passive Learning mode.
+VTS decisions are recorded but not yet wired for trace visualization.”
+
+No empty tables. No implied malfunction.
+
+Acceptance Proof
+
+Screenshot showing suppressed or explained state
+
+Confirmation no empty decision tables remain visible
+
+Phase D — Global Friction UI Integrity
+Problem
+
+Global Friction displays null or clipped values without explanation, creating confusion.
+
+Required Changes
+D1 — Explicit Data Sufficiency Messaging
+
+When friction data is unavailable:
+
+Display “Insufficient Data”
+
+Include a tooltip explaining:
+
+Requires active ticker feed
+
+Not a learning metric
+
+Not dependent on simulated trades
+
+D2 — Tooltip Clipping Fix
+
+Ensure friction tooltips:
+
+Render fully on screen
+
+Do not clip behind the top navigation bar
+
+Acceptance Proof
+
+Screenshot of Global Friction in insufficient-data state
+
+Screenshot showing readable tooltip
+
+Phase E — Learning System Status Clarity
+Problem
+
+Inactive learning systems appear broken rather than intentionally dormant.
+
+Required Changes
+E1 — Status Labeling
+
+For each learning system, explicitly label one of:
+
+Active (Learning)
+
+Inactive — By Design
+
+Future (Not Implemented)
+
+This applies to:
+
+Heuristic Trader
+
+Signal Weight Optimizer
+
+Cognitive Weight Adjuster
+
+Adaptive Guardrails
+
+Acceptance Proof
+
+Screenshot of Machine Learning page showing labeled system states
+
+Out of Scope (Do Not Implement)
+
+The following are explicitly prohibited in Directive 11.7O:
+
+❌ QUANT learning
+
+❌ New calibration services
+
+❌ Wiring new learning systems
+
+❌ Changing thresholds, weights, or formulas
+
+❌ “Making things move” for visibility
+
+Completion Criteria
+
+Directive 11.7O is complete only when:
+
+Predictive Adjustments shows only real learning
+
+Lifecycle noise is fully suppressed
+
+Inactive systems are clearly labeled
+
+Decision Traceback no longer appears broken
+
+Global Friction clearly communicates data availability
+
+All changes are UI / observability only

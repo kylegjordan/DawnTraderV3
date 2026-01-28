@@ -891,6 +891,15 @@ function PredictiveAdjustmentsPanel({
   currentValues: CurrentValues | null;
   isLoading: boolean;
 }) {
+  const filteredAdjustments = useMemo(() => {
+    return adjustments.filter(adj => 
+      adj.impact !== null && 
+      (adj.category === 'Weight' || adj.category === 'Risk')
+    );
+  }, [adjustments]);
+
+  const lifecycleCount = adjustments.length - filteredAdjustments.length;
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -1007,7 +1016,14 @@ function PredictiveAdjustmentsPanel({
       <Card>
         <CardHeader className="py-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-sm">Recent Adjustments</CardTitle>
+            <CardTitle className="text-sm">
+              Real Learning Adjustments
+              {lifecycleCount > 0 && (
+                <span className="ml-2 text-xs text-muted-foreground font-normal">
+                  ({lifecycleCount} lifecycle events hidden)
+                </span>
+              )}
+            </CardTitle>
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
               <span className="font-medium">Color Legend:</span>
               <div className="flex items-center gap-1">
@@ -1018,12 +1034,8 @@ function PredictiveAdjustmentsPanel({
                 <span className="w-2 h-2 rounded-full bg-red-500"></span>
                 <span>Decrease</span>
               </div>
-              <div className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-gray-500"></span>
-                <span>Lifecycle</span>
-              </div>
               <span className="text-muted-foreground/50">|</span>
-              <span className="italic">Colors reflect direction of change, not desirability</span>
+              <span className="italic">Only Weight and Risk adjustments with real impact shown</span>
             </div>
           </div>
         </CardHeader>
@@ -1045,14 +1057,16 @@ function PredictiveAdjustmentsPanel({
                 </tr>
               </thead>
               <tbody>
-                {adjustments.length === 0 ? (
+                {filteredAdjustments.length === 0 ? (
                   <tr>
                     <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">
-                      No predictive adjustments recorded
+                      {adjustments.length > 0 
+                        ? `No real learning adjustments yet (${adjustments.length} lifecycle events hidden)`
+                        : 'No predictive adjustments recorded'}
                     </td>
                   </tr>
                 ) : (
-                  adjustments.map((adj, idx) => (
+                  filteredAdjustments.map((adj, idx) => (
                     <tr key={`${adj.timestamp}-${adj.parameter}-${idx}`} className="border-b border-border/50 hover:bg-muted/30">
                       <td className="px-3 py-2 text-xs">
                         {format(new Date(adj.timestamp), 'MM/dd HH:mm:ss')}

@@ -253,32 +253,56 @@ function FrozenHeader({ indicators, isLoading }: { indicators: MarketIndicatorsD
           <div className="flex items-center gap-2">
             <Gauge className="w-5 h-5 text-muted-foreground" />
             <span className="text-sm text-muted-foreground">Friction:</span>
-            <div className="flex items-center gap-1.5">
-              <div className={`w-2.5 h-2.5 rounded-full ${getFrictionBgColor(data.frictionColor)}`}></div>
-              <span className="font-mono font-medium">{data.globalFrictionScore}</span>
-              <span className="text-sm text-muted-foreground">({data.frictionStatus})</span>
+            {data.globalFrictionScore !== null && data.globalFrictionScore !== undefined ? (
+              <div className="flex items-center gap-1.5">
+                <div className={`w-2.5 h-2.5 rounded-full ${getFrictionBgColor(data.frictionColor)}`}></div>
+                <span className="font-mono font-medium">{data.globalFrictionScore}</span>
+                <span className="text-sm text-muted-foreground">({data.frictionStatus})</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-xs text-muted-foreground cursor-help flex items-center gap-1">
+                        <HelpCircle className="w-3 h-3" />
+                        n={data.frictionSampleSize || 0}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs z-50" side="bottom" sideOffset={8}>
+                      <p className="text-sm font-medium mb-1">Friction Sample Size</p>
+                      <p className="text-xs text-muted-foreground">
+                        Calculated from {data.frictionSampleSize || 0} cryptocurrency pairs with available spread data.
+                        {(data.frictionSampleSize || 0) < 20 && (
+                          <span className="block mt-1 text-yellow-400">
+                            Low sample size may affect accuracy. More pairs will be included as market data becomes available.
+                          </span>
+                        )}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            ) : (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="text-xs text-muted-foreground cursor-help flex items-center gap-1">
-                      <HelpCircle className="w-3 h-3" />
-                      n={data.frictionSampleSize || 0}
-                    </span>
+                    <div className="flex items-center gap-1.5 cursor-help">
+                      <div className="w-2.5 h-2.5 rounded-full bg-gray-500 animate-pulse"></div>
+                      <span className="font-mono font-medium text-muted-foreground italic">Insufficient Data</span>
+                      <HelpCircle className="w-3 h-3 text-muted-foreground" />
+                    </div>
                   </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <p className="text-sm font-medium mb-1">Friction Sample Size</p>
+                  <TooltipContent className="max-w-xs z-50" side="bottom" sideOffset={8}>
+                    <p className="text-sm font-medium mb-1">Friction Data Unavailable</p>
                     <p className="text-xs text-muted-foreground">
-                      Calculated from {data.frictionSampleSize || 0} cryptocurrency pairs with available spread data.
-                      {(data.frictionSampleSize || 0) < 20 && (
-                        <span className="block mt-1 text-yellow-400">
-                          Low sample size may affect accuracy. More pairs will be included as market data becomes available.
-                        </span>
-                      )}
+                      Global friction requires an active ticker feed from the exchange.
+                      This is a market condition metric, not a learning metric — it does not depend on simulated trades.
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Friction will appear when live price feeds are connected.
                     </p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-            </div>
+            )}
           </div>
         </div>
         
@@ -1259,6 +1283,7 @@ function getDriftGaugeColor(drift: number) {
 }
 
 function PredictiveDiagnosticsSection() {
+  const { isPaper } = useTradingMode();
   const { data: diagnosticsData, isLoading, refetch } = useQuery<PredictiveDiagnosticsData>({
     queryKey: ['/api/system/predictive-diagnostics'],
     queryFn: () => apiFetch('/api/system/predictive-diagnostics'),
@@ -1446,11 +1471,35 @@ function PredictiveDiagnosticsSection() {
           <CardTitle className="flex items-center gap-2">
             <GitBranch className="w-5 h-5" />
             Decision Traceback
+            {isPaper && (
+              <Badge variant="outline" className="ml-2 text-xs bg-yellow-500/10 text-yellow-400 border-yellow-500/30">
+                Passive Mode
+              </Badge>
+            )}
           </CardTitle>
-          <CardDescription>Recent trade decisions with full decision path ({decisions.length}/100 max)</CardDescription>
+          <CardDescription>
+            {isPaper 
+              ? "Decision tracing is unavailable during passive learning simulation"
+              : `Recent trade decisions with full decision path (${decisions.length}/100 max)`
+            }
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          {decisions.length === 0 ? (
+          {isPaper ? (
+            <div className="text-center py-8">
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-6 max-w-md mx-auto">
+                <Brain className="w-12 h-12 mx-auto mb-3 text-yellow-400 opacity-70" />
+                <p className="font-medium text-yellow-300 mb-2">Decision Traceback Unavailable</p>
+                <p className="text-sm text-muted-foreground">
+                  Decision Traceback is unavailable in Passive Learning mode.
+                  VTS decisions are recorded but not yet wired for trace visualization.
+                </p>
+                <p className="text-xs text-muted-foreground mt-3">
+                  Switch to Live mode to enable real-time decision tracing.
+                </p>
+              </div>
+            </div>
+          ) : decisions.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <Brain className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>No recent decisions recorded</p>
@@ -1505,6 +1554,134 @@ function PredictiveDiagnosticsSection() {
               </div>
             </ScrollArea>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Brain className="w-5 h-5" />
+            Learning System Status
+          </CardTitle>
+          <CardDescription>Status of all machine learning subsystems</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-green-500" />
+                <span className="text-sm font-medium">ML Calibration</span>
+              </div>
+              <Badge variant="outline" className="text-xs bg-green-500/20 text-green-400 border-green-500/30">
+                Active (Learning)
+              </Badge>
+            </div>
+            
+            <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-green-500" />
+                <span className="text-sm font-medium">Telemetry Aggregator</span>
+              </div>
+              <Badge variant="outline" className="text-xs bg-green-500/20 text-green-400 border-green-500/30">
+                Active (Learning)
+              </Badge>
+            </div>
+            
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 cursor-help">
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-gray-500/50" />
+                      <span className="text-sm font-medium text-muted-foreground">Heuristic Trader</span>
+                    </div>
+                    <Badge variant="outline" className="text-xs bg-gray-500/20 text-gray-400 border-gray-500/30">
+                      Inactive — By Design
+                    </Badge>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs" side="bottom">
+                  <p className="text-xs">Designed for behavioral adaptation (UI patterns), not trade outcomes. Uses database behavioral logs which are separate from VTS simulation data.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 cursor-help">
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-gray-500/50" />
+                      <span className="text-sm font-medium text-muted-foreground">Signal Weight Optimizer</span>
+                    </div>
+                    <Badge variant="outline" className="text-xs bg-gray-500/20 text-gray-400 border-gray-500/30">
+                      Inactive — By Design
+                    </Badge>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs" side="bottom">
+                  <p className="text-xs">Designed for live prediction tracking. Uses database prediction outcomes which require live trading data, not VTS simulation.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 cursor-help">
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-gray-500/50" />
+                      <span className="text-sm font-medium text-muted-foreground">Cognitive Weight Adjuster</span>
+                    </div>
+                    <Badge variant="outline" className="text-xs bg-gray-500/20 text-gray-400 border-gray-500/30">
+                      Inactive — By Design
+                    </Badge>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs" side="bottom">
+                  <p className="text-xs">Requires user-curated learning sources from the database. VTS trades are not user-labeled and cannot drive this system.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 cursor-help">
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-gray-500/50" />
+                      <span className="text-sm font-medium text-muted-foreground">Adaptive Guardrails</span>
+                    </div>
+                    <Badge variant="outline" className="text-xs bg-gray-500/20 text-gray-400 border-gray-500/30">
+                      Inactive — By Design
+                    </Badge>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs" side="bottom">
+                  <p className="text-xs">Behavioral adaptation system that learns from UI actions and session patterns, not from trade outcomes or VTS data.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 cursor-help">
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-blue-500/50" />
+                      <span className="text-sm font-medium text-muted-foreground">QUANT Strategy Calibration</span>
+                    </div>
+                    <Badge variant="outline" className="text-xs bg-blue-500/20 text-blue-400 border-blue-500/30">
+                      Future (Not Implemented)
+                    </Badge>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs" side="bottom">
+                  <p className="text-xs">Planned separate calibration service for QUANT trades. QUANT trades lack pattern data and require different learning objectives than HYBRID trades.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </CardContent>
       </Card>
     </div>
