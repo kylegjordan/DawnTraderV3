@@ -1,0 +1,160 @@
+Directive 11.7L — Phase 11 Learning Verification & Diagnostic Audit
+Objective
+
+Determine, with evidence, whether the DawnTrader system is:
+
+Actively learning from FX5 + VTS simulated data
+
+Correctly aggregating and persisting that learning
+
+Correctly exposing that learning through diagnostics and archives
+
+No feature expansion or behavioral changes are permitted in this directive unless a defect is conclusively identified.
+
+Task L-01: Predictive Adjustments Audit
+
+Replit must:
+
+Enumerate all adjustment mechanisms that exist in the codebase:
+
+Weight updates
+
+Threshold tuning
+
+Risk parameter adaptation
+
+Filter calibration
+
+Regime-strategy realignment
+
+For each mechanism, answer:
+
+What input data triggers it?
+
+Has it ever triggered in Phase 11?
+
+If not, why not?
+
+Explicitly confirm whether:
+
+Phase 11 is expected to produce zero meaningful adjustments
+
+Or whether adjustments are expected but are not occurring
+
+Deliverable:
+
+A written table mapping each adaptive mechanism → observed activity (yes/no) → explanation.
+
+Task L-02: Regime Archive Execution Verification
+
+Replit must:
+
+Identify the archive scheduler:
+
+Trigger conditions
+
+Time window
+
+Minimum data requirements
+
+Confirm via logs or instrumentation:
+
+Whether the archive job has ever executed
+
+Whether it wrote records
+
+If not, exactly which gating condition blocked it
+
+State clearly:
+
+Whether an empty archive is expected
+
+Or incorrect
+
+Deliverable:
+
+A concrete explanation of why the archive is empty, backed by execution evidence.
+
+Task L-03: Global Friction Data Lineage Analysis
+
+Replit must:
+
+List all inputs contributing to Global Friction:
+
+Source
+
+Frequency
+
+Sample window
+
+Weight
+
+Confirm whether FX5 scan data contributes directly.
+
+Explain why the value remains constant:
+
+Stable inputs
+
+Static weighting
+
+No recalculation
+
+Or blocked update path
+
+Deliverable:
+
+A data-flow diagram or narrative showing how Global Friction is computed end-to-end.
+
+Task L-04: Predictive Diagnostics Population Review
+
+Replit must determine:
+
+What constitutes a “signal processed”
+
+Whether signals generated in passive learning mode qualify
+
+Why diagnostics remain zero despite active scanning
+
+Deliverable:
+
+A definitive statement: “Diagnostics are empty because X — this is / is not correct.”
+
+Task L-05: Decision Traceback Scope Definition
+
+Replit must answer:
+
+What a “decision” means in this system
+
+Whether simulated trade acceptance/rejection qualifies
+
+Whether decision objects are emitted anywhere in Phase 11
+
+Deliverable:
+
+A clear definition of what should appear in Decision Traceback during passive learning, or confirmation that it is intentionally empty.
+
+Task L-06: VN Filter Validation Report
+
+Replit must:
+
+Confirm that VN=1.0 behavior is mathematically correct
+
+Show distribution of VN values across symbols
+
+Explain operational intent:
+
+What market behavior VN is protecting against
+
+Why exclusion is desirable
+
+Deliverable:
+
+A confidence statement that VN behavior is either correct-by-design or flawed, with justification.
+
+Non-Goals (Explicit)
+
+No UI changes unless directly required to expose verified behavior
+
+No parameter tuning unless a defect is proven
+
+No “cosmetic” adjustments to create movement
