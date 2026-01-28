@@ -6795,6 +6795,16 @@
     ]
   },
   {
+    "path": "/api/vts/passive-decisions",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/market/regime",
     "methods": [
       "GET"

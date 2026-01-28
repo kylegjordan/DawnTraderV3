@@ -1357,7 +1357,7 @@ router.get('/passive-decisions', requireAuth, async (req: Request, res: Response
     } catch {
     }
     
-    const rejectedDecisions: PassiveDecision[] = skippedSignals.slice(-limit).map(s => ({
+    const allRejectedDecisions: PassiveDecision[] = skippedSignals.map(s => ({
       timestamp: s.timestamp,
       symbol: s.symbol,
       signalType: s.signalType || 'UNKNOWN',
@@ -1370,7 +1370,7 @@ router.get('/passive-decisions', requireAuth, async (req: Request, res: Response
       netEV: null
     }));
     
-    const acceptedDecisions: PassiveDecision[] = virtualTrades.slice(-limit).map(t => ({
+    const allAcceptedDecisions: PassiveDecision[] = virtualTrades.map(t => ({
       timestamp: new Date(t.entryTime).toISOString(),
       symbol: t.signal?.symbol || t.symbol || 'UNKNOWN',
       signalType: t.signalType || t.signal?.signalType || 'UNKNOWN',
@@ -1383,23 +1383,28 @@ router.get('/passive-decisions', requireAuth, async (req: Request, res: Response
       netEV: t.expectedEdge || null
     }));
     
-    const allDecisions = [...rejectedDecisions, ...acceptedDecisions]
+    const allDecisions = [...allRejectedDecisions, ...allAcceptedDecisions]
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       .slice(0, limit);
     
+    const returnedAccepted = allDecisions.filter(d => d.outcome === 'ACCEPTED').length;
+    const returnedRejected = allDecisions.filter(d => d.outcome === 'REJECTED').length;
+    
     const byReason: Record<string, number> = {};
-    for (const d of rejectedDecisions) {
-      byReason[d.reason] = (byReason[d.reason] || 0) + 1;
+    for (const d of allDecisions) {
+      if (d.outcome === 'REJECTED') {
+        byReason[d.reason] = (byReason[d.reason] || 0) + 1;
+      }
     }
     
     const summary = {
       total: allDecisions.length,
-      accepted: acceptedDecisions.length,
-      rejected: rejectedDecisions.length,
+      accepted: returnedAccepted,
+      rejected: returnedRejected,
       byReason
     };
     
-    console.log(`[11.7P][API] Returning ${allDecisions.length} decisions (${acceptedDecisions.length} accepted, ${rejectedDecisions.length} rejected)`);
+    console.log(`[11.7P][API] Returning ${allDecisions.length} decisions (${returnedAccepted} accepted, ${returnedRejected} rejected)`);
     
     res.json({
       decisions: allDecisions,
