@@ -93,12 +93,12 @@ export class MLCalibrationService {
       };
     }
 
-    const trades = await getRecentTradesFn(windowSize, 'Hybrid');
+    const trades = await getRecentTradesFn(windowSize, 'HYBRID');
     
     if (!trades.length) {
       return { 
         success: false, 
-        reason: 'No Hybrid trades found for calibration',
+        reason: 'No HYBRID trades found for calibration',
         timestamp: Date.now()
       };
     }
