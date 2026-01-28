@@ -1313,4 +1313,107 @@ router.post('/telemetry/aggregate', requireAuth, async (_req: Request, res: Resp
   }
 });
 
+/**
+ * ══════════════════════════════════════════════════════════════════════════════
+ * Directive 11.7P — Passive Decision Traceback API
+ * ══════════════════════════════════════════════════════════════════════════════
+ * Provides decision-level explainability during Passive Learning by exposing
+ * why VTS signals are accepted or rejected.
+ * 
+ * Schema: passive-decision/v1.0
+ * ══════════════════════════════════════════════════════════════════════════════
+ */
+
+interface PassiveDecision {
+  timestamp: string;
+  symbol: string;
+  signalType: string;
+  strategy: string;
+  regime: string;
+  outcome: 'ACCEPTED' | 'REJECTED';
+  reason: string;
+  expectedReturn: number | null;
+  finalScore: number | null;
+  netEV: number | null;
+}
+
+router.get('/passive-decisions', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+    const dateParam = req.query.date as string;
+    const dateStr = dateParam || new Date().toISOString().slice(0, 10);
+    
+    console.log(`[11.7P][API] Fetching passive decisions for ${dateStr} (limit=${limit})`);
+    
+    const skippedSignals = await getSkippedSignalsForDate(dateStr);
+    
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    const virtualTradesPath = path.join(process.cwd(), 'logs', 'virtual_trades', `${dateStr}.json`);
+    let virtualTrades: any[] = [];
+    try {
+      const content = await fs.readFile(virtualTradesPath, 'utf-8');
+      virtualTrades = JSON.parse(content);
+    } catch {
+    }
+    
+    const rejectedDecisions: PassiveDecision[] = skippedSignals.slice(-limit).map(s => ({
+      timestamp: s.timestamp,
+      symbol: s.symbol,
+      signalType: s.signalType || 'UNKNOWN',
+      strategy: s.strategy || 'unknown',
+      regime: s.regime || 'UNKNOWN',
+      outcome: 'REJECTED' as const,
+      reason: s.reason,
+      expectedReturn: s.expectedROI ?? null,
+      finalScore: s.finalScore ?? null,
+      netEV: null
+    }));
+    
+    const acceptedDecisions: PassiveDecision[] = virtualTrades.slice(-limit).map(t => ({
+      timestamp: new Date(t.entryTime).toISOString(),
+      symbol: t.signal?.symbol || t.symbol || 'UNKNOWN',
+      signalType: t.signalType || t.signal?.signalType || 'UNKNOWN',
+      strategy: t.strategy || t.signal?.strategy || 'unknown',
+      regime: t.regime || t.signal?.regime || 'UNKNOWN',
+      outcome: 'ACCEPTED' as const,
+      reason: 'Trade_Created',
+      expectedReturn: t.expectedEdge || t.signal?.expectedEdge || t.signal?.predictedProfit || null,
+      finalScore: t.finalScore || t.signal?.finalScore || null,
+      netEV: t.expectedEdge || null
+    }));
+    
+    const allDecisions = [...rejectedDecisions, ...acceptedDecisions]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, limit);
+    
+    const byReason: Record<string, number> = {};
+    for (const d of rejectedDecisions) {
+      byReason[d.reason] = (byReason[d.reason] || 0) + 1;
+    }
+    
+    const summary = {
+      total: allDecisions.length,
+      accepted: acceptedDecisions.length,
+      rejected: rejectedDecisions.length,
+      byReason
+    };
+    
+    console.log(`[11.7P][API] Returning ${allDecisions.length} decisions (${acceptedDecisions.length} accepted, ${rejectedDecisions.length} rejected)`);
+    
+    res.json({
+      decisions: allDecisions,
+      summary,
+      meta: {
+        date: dateStr,
+        isPassiveMode: true,
+        schema: 'passive-decision/v1.0'
+      }
+    });
+  } catch (error) {
+    console.error('[11.7P][API][ERROR] Get passive decisions failed:', error);
+    res.status(500).json({ error: 'Failed to get passive decisions' });
+  }
+});
+
 export default router;

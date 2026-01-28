@@ -1,0 +1,168 @@
+Directive 11.7P — Passive Decision Traceback (VTS Explainability v1)
+Purpose
+
+Enable decision-level explainability during Passive Learning by exposing why VTS signals are accepted or rejected — without requiring live or paper trading.
+
+This directive does not change trading behavior, learning logic, thresholds, or execution.
+It is observability only.
+
+Problem Statement (Confirmed)
+
+VTS processes thousands of signals per day in passive mode
+
+All decisions (accept/reject + reason) are already logged to:
+
+logs/vts_skipped_signals/{date}.json
+
+
+The Decision Traceback UI is currently suppressed, creating the false impression that:
+
+no decisions are happening, or
+
+explainability only exists in live mode
+
+This is a UI wiring gap, not a data or logic gap.
+
+Scope Constraints (Hard)
+
+The following are explicitly forbidden in this directive:
+
+❌ No trading logic changes
+
+❌ No learning logic changes
+
+❌ No filter threshold changes
+
+❌ No execution-path visualization
+
+❌ No new decision criteria
+
+This directive is read-only with respect to system behavior.
+
+Authoritative Data Source
+
+Passive Decision Traceback must use only:
+
+logs/vts_skipped_signals/{date}.json
+
+
+No database tables.
+No live trade streams.
+No inference from execution outcomes.
+
+Phase A — Decision Model Definition (Documentation First)
+A1. Define a “Passive Decision”
+
+A Passive Decision is defined as:
+
+A signal evaluated by VTS that results in either:
+
+Accepted → Simulated Trade Created
+
+Rejected → Skipped with explicit reason
+
+A2. Canonical Decision Fields
+
+Each decision record MUST expose:
+
+Field	Description
+timestamp	Evaluation time
+symbol	Trading pair
+signalType	QUANT / HYBRID / PATTERN
+strategy	Strategy evaluated
+regime	Market regime at decision
+outcome	ACCEPTED / REJECTED
+reason	Low_ROI / Duplicate_Position / Net_EV_Negative / Other
+expectedReturn	If available
+netEV	If available
+
+Deliverable:
+
+docs/directive-11-7P-decision-schema.md
+
+Phase B — Passive Decision Traceback UI (Read-Only)
+B1. Replace Suppression Logic
+
+When Passive Mode is active:
+
+❌ Do not suppress Decision Traceback
+
+✅ Render Passive Decision Traceback v1
+
+B2. UI Requirements
+
+The Decision Traceback panel must:
+
+Display last N decisions (configurable, default 100)
+
+Clearly label:
+
+“Passive Learning — Pre-Execution Decisions”
+
+Group decisions by:
+
+Accepted
+
+Rejected (with counts per reason)
+
+B3. Explicit Non-Goals (Must Be Shown in UI Copy)
+
+The UI must explicitly state:
+
+“These are pre-execution evaluations”
+
+“No trade was placed unless marked Accepted”
+
+“This does not represent live execution logic”
+
+Phase C — Verification & Proof
+C1. Verification Checklist
+
+Replit must demonstrate:
+
+✅ Decisions appear in passive mode
+
+✅ Rejected reasons match log counts
+
+✅ Accepted decisions correlate with VTS trades created
+
+✅ No dependency on live/paper mode
+
+C2. Proof Artifacts (Required)
+
+Screenshot of Decision Traceback populated in passive mode
+
+Sample mapping:
+
+log entry → UI row
+
+
+Confirmation that switching to Live/Paper does not change passive view
+
+Out of Scope (Explicitly Deferred)
+
+The following are future directives, not part of 11.7P:
+
+Execution-path tracing
+
+Filter-by-filter breakdown
+
+QUANT learning explainability
+
+Strategy optimization visualization
+
+Success Criteria
+
+Directive 11.7P is complete when:
+
+A user can open Analytics → Decision Traceback in Passive Mode and clearly understand why the system did or did not take a trade, using real VTS decision data — without activating trading.
+
+Why This Is the Right Next Step
+
+Learning is now working
+
+UI is now truthful
+
+The remaining blind spot is explainability
+
+This directive closes the loop without risk

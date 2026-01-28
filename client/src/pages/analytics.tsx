@@ -1282,12 +1282,47 @@ function getDriftGaugeColor(drift: number) {
   return 'bg-red-500';
 }
 
+interface PassiveDecision {
+  timestamp: string;
+  symbol: string;
+  signalType: string;
+  strategy: string;
+  regime: string;
+  outcome: 'ACCEPTED' | 'REJECTED';
+  reason: string;
+  expectedReturn: number | null;
+  finalScore: number | null;
+  netEV: number | null;
+}
+
+interface PassiveDecisionsData {
+  decisions: PassiveDecision[];
+  summary: {
+    total: number;
+    accepted: number;
+    rejected: number;
+    byReason: Record<string, number>;
+  };
+  meta: {
+    date: string;
+    isPassiveMode: boolean;
+    schema: string;
+  };
+}
+
 function PredictiveDiagnosticsSection() {
   const { isPaper } = useTradingMode();
   const { data: diagnosticsData, isLoading, refetch } = useQuery<PredictiveDiagnosticsData>({
     queryKey: ['/api/system/predictive-diagnostics'],
     queryFn: () => apiFetch('/api/system/predictive-diagnostics'),
     refetchInterval: 15000,
+  });
+  
+  const { data: passiveDecisions, isLoading: passiveLoading, refetch: refetchPassive } = useQuery<PassiveDecisionsData>({
+    queryKey: ['/api/vts/passive-decisions'],
+    queryFn: () => apiFetch('/api/vts/passive-decisions?limit=100'),
+    refetchInterval: 30000,
+    enabled: isPaper,
   });
 
   if (isLoading) {
@@ -1472,33 +1507,114 @@ function PredictiveDiagnosticsSection() {
             <GitBranch className="w-5 h-5" />
             Decision Traceback
             {isPaper && (
-              <Badge variant="outline" className="ml-2 text-xs bg-yellow-500/10 text-yellow-400 border-yellow-500/30">
-                Passive Mode
+              <Badge variant="outline" className="ml-2 text-xs bg-cyan-500/10 text-cyan-400 border-cyan-500/30">
+                Passive Learning
               </Badge>
             )}
           </CardTitle>
           <CardDescription>
             {isPaper 
-              ? "Decision tracing is unavailable during passive learning simulation"
+              ? `Passive Learning — Pre-Execution Decisions (${passiveDecisions?.decisions?.length || 0}/100)`
               : `Recent trade decisions with full decision path (${decisions.length}/100 max)`
             }
           </CardDescription>
         </CardHeader>
         <CardContent>
           {isPaper ? (
-            <div className="text-center py-8">
-              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-6 max-w-md mx-auto">
-                <Brain className="w-12 h-12 mx-auto mb-3 text-yellow-400 opacity-70" />
-                <p className="font-medium text-yellow-300 mb-2">Decision Traceback Unavailable</p>
-                <p className="text-sm text-muted-foreground">
-                  Decision Traceback is unavailable in Passive Learning mode.
-                  VTS decisions are recorded but not yet wired for trace visualization.
-                </p>
-                <p className="text-xs text-muted-foreground mt-3">
-                  Switch to Live mode to enable real-time decision tracing.
-                </p>
+            passiveLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
               </div>
-            </div>
+            ) : (passiveDecisions?.decisions?.length || 0) === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Brain className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>No passive decisions recorded today</p>
+                <p className="text-sm">VTS decisions will appear as signals are evaluated</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+                  <p className="text-xs text-blue-300">
+                    <strong>Note:</strong> These are pre-execution evaluations. No trade was placed unless marked Accepted. 
+                    This does not represent live execution logic.
+                  </p>
+                </div>
+                
+                <div className="flex flex-wrap gap-2 text-sm">
+                  <Badge variant="outline" className="bg-green-500/20 text-green-400 border-green-500/30">
+                    Accepted: {passiveDecisions?.summary?.accepted || 0}
+                  </Badge>
+                  <Badge variant="outline" className="bg-red-500/20 text-red-400 border-red-500/30">
+                    Rejected: {passiveDecisions?.summary?.rejected || 0}
+                  </Badge>
+                  {passiveDecisions?.summary?.byReason && Object.entries(passiveDecisions.summary.byReason).slice(0, 4).map(([reason, count]) => (
+                    <Badge key={reason} variant="outline" className="text-xs bg-muted/50 text-muted-foreground">
+                      {reason}: {count as number}
+                    </Badge>
+                  ))}
+                </div>
+                
+                <ScrollArea className="h-[280px]">
+                  <div className="space-y-2">
+                    {passiveDecisions?.decisions?.slice(0, 50).map((decision, idx) => (
+                      <Collapsible key={idx}>
+                        <CollapsibleTrigger className="w-full">
+                          <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors">
+                            <div className="flex items-center gap-3">
+                              <Badge variant="outline" className={decision.outcome === 'ACCEPTED' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}>
+                                {decision.outcome}
+                              </Badge>
+                              <span className="font-mono font-medium text-sm">{decision.symbol}</span>
+                              <Badge variant="secondary" className="text-xs">{decision.signalType}</Badge>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <span>{decision.regime}</span>
+                              <ChevronDown className="w-4 h-4" />
+                            </div>
+                          </div>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="mt-2 p-3 bg-muted/30 rounded-lg space-y-2 text-sm">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <span className="text-muted-foreground">Strategy:</span>
+                                <span className="ml-2 font-mono">{decision.strategy}</span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">Reason:</span>
+                                <span className="ml-2">{decision.reason}</span>
+                              </div>
+                              {decision.expectedReturn !== null && (
+                                <div>
+                                  <span className="text-muted-foreground">Expected ROI:</span>
+                                  <span className="ml-2">{(decision.expectedReturn * 100).toFixed(2)}%</span>
+                                </div>
+                              )}
+                              {decision.finalScore !== null && (
+                                <div>
+                                  <span className="text-muted-foreground">Final Score:</span>
+                                  <span className="ml-2">{decision.finalScore.toFixed(3)}</span>
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {format(new Date(decision.timestamp), 'PPpp')}
+                            </div>
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    ))}
+                  </div>
+                </ScrollArea>
+                
+                <div className="flex justify-end">
+                  <Button variant="outline" size="sm" onClick={() => refetchPassive()}>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Refresh
+                  </Button>
+                </div>
+              </div>
+            )
           ) : decisions.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <Brain className="w-12 h-12 mx-auto mb-3 opacity-50" />
