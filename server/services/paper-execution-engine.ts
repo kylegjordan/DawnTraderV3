@@ -81,6 +81,8 @@ import { dataAggregator } from './data-aggregator.js';
 import { covarianceEngine } from '../utils/covariance-engine.js';
 import { recordPaperTrade, type PaperTradeRecord } from './vts-live-comparison-audit.js';
 import { cwqiService } from './cwqi-service.js';
+import { applyGovernance, getGovernanceStateForUI } from '../core/governance/governance-engine.js';
+import { getCachedStability } from '../core/governance/regime-stability.js';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail' | 'manual_stop';
@@ -2159,6 +2161,34 @@ export class PaperExecutionEngine {
           console.error(`[B6][SIZING_ERROR] Invalid portfolio value for fallback sizing: ${portfolioValue}`);
           return;
         }
+      }
+
+      // Directive 11.7R: Regime Transition Governance
+      // Applied AFTER SQE pass, BEFORE sizing and execution intent creation
+      const signalMetadata = signalAny.metadata || {};
+      const regime = signalMetadata.regime || 'TRANSITION';
+      const finalScore = signalMetadata.finalScore || signal.confidence || 0.5;
+      
+      const governanceDecision = applyGovernance({
+        symbol: signal.symbol,
+        strategy: signal.strategy,
+        regime,
+        finalScore,
+        driftScore: signalMetadata.driftScore || 0.5,
+        volZ: signalMetadata.volZ || 0,
+        regimeConfidence: signalMetadata.regimeConfidence || signal.confidence || 0.5,
+        cycleId: `paper_${Date.now()}`,
+      });
+      
+      if (governanceDecision.resultType === 'BLOCKED_GOVERNANCE') {
+        console.log(`[11.7R][Paper] ${signal.symbol} blocked by governance: ${governanceDecision.blockedReason}`);
+        return;
+      }
+      
+      // Apply governance multiplier to signal confidence if throttled
+      if (governanceDecision.resultType === 'THROTTLED') {
+        signalAny.governanceMultiplier = governanceDecision.influenceMultiplier;
+        console.log(`[11.7R][Paper] ${signal.symbol} throttled: ${(governanceDecision.influenceMultiplier * 100).toFixed(0)}% weight in ${governanceDecision.stability}`);
       }
 
       console.log(`[8.8.3-F][PROCESS] Processing signal for ${signal.symbol} via guardrails_v2 path`);

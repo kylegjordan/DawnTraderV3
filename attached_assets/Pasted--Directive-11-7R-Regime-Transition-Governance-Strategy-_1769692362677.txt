@@ -1,0 +1,253 @@
+🧭 Directive 11.7R — Regime Transition Governance & Strategy Influence Control
+
+Phase: 11
+Series: Predictive Stability & Risk Governance
+Dependencies: 11.7B–11.7F
+Applies To: VTS · Paper Trading · Live Trading
+Status: Mandatory before paper trading resumes
+
+1. Purpose
+
+Introduce a deterministic governance layer that protects the system during regime transitions by:
+
+Reducing influence of regime-fragile strategies
+
+Preventing learning amplification during instability
+
+Preserving all data collection for learning and diagnostics
+
+Governance constrains influence, not data collection.
+
+2. Correct Execution Order (MANDATORY)
+
+Governance must not run on raw signal noise.
+
+Required order (repo-accurate):
+
+Signal generated
+
+Regime detected
+
+Global regime stability classified
+
+Core deterministic filters
+
+ROI / EV
+
+Duplicate / cooldown
+
+Governance applied
+
+Scoring & ranking
+
+Execution or skip
+
+Learning attribution
+
+Governance must execute after profitability filters and before scoring / execution.
+
+➕ ADDITION — Stability Evaluation Cadence
+Regime stability MUST be computed once per scan cycle and cached.
+All signals processed within the same FX5 / VTS cycle MUST reference the same stability state to prevent intra-cycle thrashing.
+
+3. Regime Stability Model
+3.1 Stability States
+type RegimeStability = "STABLE" | "TRANSITION" | "UNSTABLE";
+
+3.2 Stability Thresholds (Authoritative)
+Metric	STABLE	TRANSITION	UNSTABLE
+DriftScore	≤ 0.8	0.8–1.5	> 1.5
+VolZ	≤ 1.2	1.2–2.0	> 2.0
+Regime Confidence	≥ 0.65	0.45–0.65	< 0.45
+Regime Flip Rate (7d)	≤ 1	2–3	≥ 4
+3.3 Classification Logic
+if (driftScore > 1.5 || Math.abs(volZ) > 2.0 || flipRate >= 4 || confidence < 0.45)
+  UNSTABLE;
+else if (driftScore > 0.8 || Math.abs(volZ) > 1.2 || flipRate >= 2 || confidence < 0.65)
+  TRANSITION;
+else
+  STABLE;
+
+3.4 Regime Scope Resolution (MANDATORY)
+
+Governance decisions MUST use:
+
+Global regime → stability classification (authoritative)
+
+Local (symbol) regime → compatibility checks only
+
+Global instability ALWAYS overrides local alignment.
+
+This prevents strategies from trading “locally correct” patterns during systemic collapse.
+
+4. Strategy Governance Profiles
+4.1 Dependency Levels
+type StrategyDependency = "HIGH" | "MEDIUM" | "LOW";
+
+
+Safety Default:
+If governanceProfile is undefined → HIGH dependency (fail-safe).
+
+4.2 Influence Rules
+Stability	HIGH	MEDIUM	LOW
+STABLE	100%	100%	100%
+TRANSITION	30% weight	60% weight	100%
+UNSTABLE	0% execution	20% weight	60% weight
+
+➕ ADDITION — Weight Application Semantics (MANDATORY)
+Governance weight reductions MUST be applied as a multiplier to the strategy’s contribution to the final signal score, after ROI / EV filters and before cross-signal ranking.
+
+Governance MUST NOT:
+
+Alter raw signal generation
+
+Alter pattern detection
+
+Alter feature calculation
+
+Governance only constrains influence, not signal existence.
+
+4.3 Initial Strategy Governance Mapping (MANDATORY)
+
+File: /server/config/strategy-config.ts
+
+export const STRATEGY_GOVERNANCE = {
+  vwap_pullback:   "HIGH",
+  sma_trend_ride:  "HIGH",
+  range_trade:     "HIGH",
+  morning_star:    "HIGH",
+
+  mean_reversion:  "MEDIUM",
+  pivot_shift:     "MEDIUM",
+
+  defensive_hedge: "LOW",
+  volatility_edge: "LOW"
+};
+
+
+This mapping is hard-coded for Phase 11.
+No automated inference is allowed.
+
+5. Governance Blocking Semantics (Explicit)
+5.1 0% Execution Means
+
+If a signal is blocked by governance:
+
+❌ Must NOT be sent to:
+
+VTS execution
+
+Paper execution
+
+Live execution
+
+✅ Must be logged as:
+
+{
+  "resultType": "BLOCKED_GOVERNANCE",
+  "reason": "UNSTABLE_REGIME"
+}
+
+
+✅ Must be forwarded to learning as a Skipped Signal
+(Directive 11.7B)
+
+This preserves learning context:
+
+“Loss avoided due to instability.”
+
+6. Learning Cooldown Enforcement
+6.1 Cooldown Rules
+Stability	Positive Reinforcement	Negative Learning
+STABLE	Immediate	Immediate
+TRANSITION	Batched (≥5 samples)	Immediate
+UNSTABLE	Deferred & tagged	Immediate
+6.2 Enforcement Location (MANDATORY)
+
+File: /server/core/learning/learning-updater.ts
+
+Requirements:
+
+Deferred updates must be logged with:
+
+{
+  "learningState": "DEFERRED",
+  "reason": "REGIME_INSTABILITY"
+}
+
+
+Deferred updates must be:
+
+Stored
+
+Replayable
+
+Automatically applied when stability returns to STABLE
+
+7. Exact Hook Points (Repo-Accurate)
+VTS
+
+File: /server/services/vts-runner.ts
+Insert: After ROI / duplicate filters, before createVirtualTrade()
+
+Paper Trading
+
+File: /server/services/paper-execution-engine.ts
+Insert: After SQE pass, before sizing and execution intent creation
+
+Live Trading
+
+File: /server/services/live-trading-engine.ts
+Insert: Identical position as paper trading
+
+Governance must NOT be implemented in signal-orchestrator.ts.
+
+8. Verification & Proof Requirements
+
+Replit must provide:
+
+Automated Proof
+
+Unit tests validating STABLE / TRANSITION / UNSTABLE boundaries
+
+Deterministic tests for weight throttling and execution blocking
+
+Log Proof
+
+HIGH dependency strategies blocked in UNSTABLE
+
+Weight throttling applied in TRANSITION
+
+UI Proof
+
+Current global stability state
+
+Active governance multipliers per strategy
+
+Regression Replay Proof (MANDATORY)
+
+Replaying the last BEAR transition window must show:
+
+vwap_pullback execution reduced ≥ 80%
+
+No weight increases for HIGH dependency strategies during UNSTABLE
+
+Loss cluster observed previously does not recur
+
+No approval without this proof.
+
+9. Success Criteria
+
+✅ Loss clusters reduced during regime transitions
+✅ No learning amplification during crashes
+✅ VTS, paper, live behave identically
+✅ Governance state visible and auditable
+✅ Root cause of last failure prevented
+
+Final Note (Architectural Intent — Non-Optional)
+
+This governance layer is deterministic, immediate, and execution-facing.
+It is not learned, not inferred, and not optional.
+
+Learning reacts after governance.
+Governance protects before damage occurs.

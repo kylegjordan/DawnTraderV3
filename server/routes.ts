@@ -2318,6 +2318,42 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // GET /api/system/governance - Directive 11.7R: Regime transition governance state
+  apiRouter.get('/system/governance', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { getGovernanceStateForUI, getGovernanceStats } = await import('./core/governance/governance-engine.js');
+      const { getLearningCooldownState } = await import('./core/governance/learning-cooldown.js');
+      const { STRATEGY_GOVERNANCE, STRATEGY_GOVERNANCE_PROFILES, INFLUENCE_RULES } = await import('./config/strategy-governance.js');
+      
+      const governanceState = getGovernanceStateForUI();
+      const learningState = getLearningCooldownState();
+      
+      res.json({
+        ok: true,
+        schema: 'governance/v1.0',
+        stability: governanceState.stability,
+        metrics: governanceState.metrics,
+        reason: governanceState.reason,
+        stats: governanceState.stats,
+        strategyMultipliers: governanceState.strategyMultipliers,
+        learning: {
+          deferredCount: learningState.deferredCount,
+          batchPendingCount: learningState.batchPendingCount,
+          stats: learningState.stats,
+          canReplay: learningState.canReplay,
+        },
+        config: {
+          influenceRules: INFLUENCE_RULES,
+          strategyProfiles: STRATEGY_GOVERNANCE_PROFILES,
+        },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error('[Governance] GET error:', error.message);
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
+    }
+  });
+
   // Phase 3: Filters V2 API Endpoints (with Manual Override metadata)
   // GET /api/filters-v2?mode=paper|live
   apiRouter.get('/filters-v2', authenticateToken, async (req: AuthenticatedRequest, res) => {

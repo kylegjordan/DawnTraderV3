@@ -592,6 +592,16 @@
     ]
   },
   {
+    "path": "/api/system/governance",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/filters-v2",
     "methods": [
       "GET",

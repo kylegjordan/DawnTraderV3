@@ -8,11 +8,12 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Activity, TrendingUp, TrendingDown, AlertCircle, Gauge, RefreshCw, Clock, DollarSign, Target, Zap, BarChart3, Layers, List, BookOpen, ChevronDown, ChevronUp, Star, GitBranch, Download, Filter, Brain, CheckCircle, XCircle, AlertTriangle, Info, HelpCircle } from "lucide-react";
+import { Activity, TrendingUp, TrendingDown, AlertCircle, Gauge, RefreshCw, Clock, DollarSign, Target, Zap, BarChart3, Layers, List, BookOpen, ChevronDown, ChevronUp, Star, GitBranch, Download, Filter, Brain, CheckCircle, XCircle, AlertTriangle, Info, HelpCircle, Shield } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import TopBatch from "@/components/trading/top-batch";
 import BenchmarkList from "@/components/analytics/benchmark-list";
+import GovernanceSection from "@/components/analytics/governance-section";
 import { apiFetch } from "@/lib/api";
 
 interface MarketIndicatorsData {
@@ -1873,10 +1874,14 @@ export default function AnalyticsPage() {
         </div>
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-6 max-w-4xl">
+          <TabsList className="grid w-full grid-cols-7 max-w-5xl">
             <TabsTrigger value="overview" className="flex items-center gap-2">
               <Activity className="w-4 h-4" />
               Overview
+            </TabsTrigger>
+            <TabsTrigger value="governance" className="flex items-center gap-2">
+              <Shield className="w-4 h-4" />
+              Governance
             </TabsTrigger>
             <TabsTrigger value="predictive" className="flex items-center gap-2">
               <Brain className="w-4 h-4" />
@@ -1902,6 +1907,10 @@ export default function AnalyticsPage() {
           
           <TabsContent value="overview" className="space-y-6 mt-6">
             <MarketOverviewSection indicators={indicatorsData} />
+          </TabsContent>
+
+          <TabsContent value="governance" className="mt-6">
+            <GovernanceSection />
           </TabsContent>
 
           <TabsContent value="predictive" className="mt-6">

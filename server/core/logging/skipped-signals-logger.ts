@@ -20,7 +20,9 @@ export type SkipReason =
   | 'FinalScore_Low'
   | 'RegimeWeight_Low'
   | 'ADX_Guard'
-  | 'Duplicate_Position';
+  | 'Duplicate_Position'
+  | 'BLOCKED_GOVERNANCE'
+  | 'LEARNING_DEFERRED';
 
 export interface SkippedSignalEntry {
   timestamp: string;
@@ -35,6 +37,8 @@ export interface SkippedSignalEntry {
   finalScore?: number;
   regimeWeight?: number;
   source?: 'VTS' | 'SQE';
+  governanceReason?: string;
+  learningState?: 'DEFERRED' | 'IMMEDIATE';
 }
 
 const LOG_DIR = path.join(process.cwd(), 'logs', 'vts_skipped_signals');

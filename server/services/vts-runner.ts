@@ -58,6 +58,8 @@ import type { VTSCycleMetrics } from '../types/virtual-trade.interface';
 import { scanPatterns } from './pattern-recognizer.js';
 import type { PatternType } from '../types';
 import { normalizeToInternalSymbol, getSymbolMappingDetails } from '../markets/kraken-symbol-resolver.js';
+import { applyGovernance, type GovernanceDecision } from '../core/governance/governance-engine.js';
+import { logSkippedSignal as logGovernanceSkippedSignal } from '../core/logging/skipped-signals-logger.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -437,6 +439,39 @@ async function generatePhase10Signal(
     return null;
   }
   
+  // Directive 11.7R: Regime Transition Governance
+  // Applied AFTER profitability filters (ROI/EV, duplicate/cooldown) and BEFORE scoring/execution
+  // Governance constrains influence, not data collection
+  const governanceDecision = applyGovernance({
+    symbol,
+    strategy,
+    regime,
+    finalScore,
+    driftScore: zScoreResult.isWarmedUp ? Math.abs(zScoreResult.zScores.volZ) : 0.5,
+    volZ: zScoreResult.isWarmedUp ? zScoreResult.zScores.volZ : 0,
+    regimeConfidence: predictiveConfidence,
+    cycleId: `vts_cycle_${cycleCount}`,
+  });
+  
+  if (governanceDecision.resultType === 'BLOCKED_GOVERNANCE') {
+    logSkippedSignal({
+      symbol,
+      reason: 'BLOCKED_GOVERNANCE',
+      regime,
+      signalType,
+      strategy,
+      source: 'VTS',
+      governanceReason: governanceDecision.blockedReason,
+    });
+    console.log(`[11.7R][VTS] ${symbol} blocked by governance: ${governanceDecision.blockedReason}`);
+    return null;
+  }
+  
+  // Directive 11.7R: Apply governance weight multiplier to finalScore
+  const governedFinalScore = governanceDecision.resultType === 'THROTTLED' 
+    ? finalScore * governanceDecision.influenceMultiplier 
+    : finalScore;
+  
   const portfolioValue = await getPortfolioValue();
   const riskPerTrade = await getRiskPerTrade();
   const positionSize = computePositionSize(portfolioValue, riskPerTrade, entryPrice, stopLoss, riskMultiplier);
@@ -510,6 +545,7 @@ async function generatePhase10Signal(
   console.log(`[11.6][Entry] ${symbol} opened @ ${entryPrice.toFixed(6)} | stop=${stopLoss.toFixed(6)} target=${takeProfit.toFixed(6)} strategy=${strategy}`);
   
   // Directive 11.4C.3: VirtualSignal with full Phase-10 metrics and pattern (M50 compliant)
+  // Directive 11.7R: Use governedFinalScore which has governance multiplier applied
   const signal: VirtualSignal = {
     id: `vsig_p10_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     symbol,
@@ -517,7 +553,7 @@ async function generatePhase10Signal(
     takeProfit,
     stopLoss,
     spread,
-    predictedProfit: finalScore * dynamicTarget,
+    predictedProfit: governedFinalScore * dynamicTarget,
     strategy,
     createdAt: Date.now(),
     signalType, // Directive 11.4C.3: Canonical format 'QUANT' | 'PATTERN' | 'HYBRID'
@@ -526,10 +562,10 @@ async function generatePhase10Signal(
     hybridScore,
     predictiveConfidence,
     // Phase-10 canonical fields (M50)
-    finalScore,
+    finalScore: governedFinalScore, // Directive 11.7R: Governed score
     regimeWeight,
     decayPenalty,
-    expectedEdge: finalScore * dynamicTarget - frictionCost,
+    expectedEdge: governedFinalScore * dynamicTarget - frictionCost,
     frictionCost, // M50: Schema parity with VirtualTrade
     regime,
     regimeScore: regimeScoreRaw, // Directive 11.4H.4A: Raw 0-100 score for UI display
@@ -538,6 +574,7 @@ async function generatePhase10Signal(
   };
   
   // Directive 11.6: Trade record marked as pending - exit determined by resolveOpenVirtualTrades()
+  // Directive 11.7R: Uses governedFinalScore with governance multiplier
   const tradeRecord: Phase10TradeRecord = {
     symbol,
     regime,
@@ -545,7 +582,7 @@ async function generatePhase10Signal(
     signalType,
     strategy,
     patternType, // Directive 11.4C.3: Attached pattern for telemetry
-    finalScore,
+    finalScore: governedFinalScore, // Directive 11.7R: Governed score
     hybridScore,
     predictiveConfidence,
     regimeWeight,
