@@ -5,6 +5,7 @@
  * 
  * Generates system events when Global Regime or Global Friction shifts categories.
  * Events are displayed in the Trading & Market Events tab in the UI.
+ * Events persist for 7 days via file-based storage.
  * 
  * Event Types:
  * - REGIME_TRANSITION: Global regime changed (e.g., Bull Stable → Low Vol Chop)
@@ -14,6 +15,8 @@
  */
 
 import type { MarketRegime } from '../services/dynamic-strategy-selector.js';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export interface MarketEvent {
   id: string;
@@ -26,8 +29,23 @@ export interface MarketEvent {
   severity: 'info' | 'warning' | 'critical';
 }
 
-const MAX_EVENTS = 100;
-const events: MarketEvent[] = [];
+interface PersistedMarketEvent {
+  id: string;
+  type: 'REGIME_TRANSITION' | 'FRICTION_TRANSITION' | 'SYSTEM_ALERT';
+  message: string;
+  explanation: string;
+  previousValue?: string;
+  newValue?: string;
+  timestamp: string;
+  severity: 'info' | 'warning' | 'critical';
+}
+
+const MAX_EVENTS = 500;
+const RETENTION_DAYS = 7;
+const EVENTS_DIR = path.join(process.cwd(), 'logs', 'market_events');
+const EVENTS_FILE = path.join(EVENTS_DIR, 'events.json');
+
+let events: MarketEvent[] = [];
 let eventIdCounter = 0;
 
 let lastRegime: MarketRegime | null = null;
@@ -47,6 +65,81 @@ const REGIME_DISPLAY_NAMES: Record<string, string> = {
 };
 
 const FRICTION_BAND_ORDER = ['High Liquidity', 'Moderate Liquidity', 'Limited Liquidity', 'Low Liquidity'];
+
+function ensureEventsDir(): void {
+  if (!fs.existsSync(EVENTS_DIR)) {
+    fs.mkdirSync(EVENTS_DIR, { recursive: true });
+  }
+}
+
+function loadEventsFromFile(): void {
+  try {
+    ensureEventsDir();
+    
+    if (!fs.existsSync(EVENTS_FILE)) {
+      events = [];
+      return;
+    }
+    
+    const data = fs.readFileSync(EVENTS_FILE, 'utf-8');
+    const parsed: PersistedMarketEvent[] = JSON.parse(data);
+    
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - RETENTION_DAYS);
+    
+    events = parsed
+      .map(e => ({
+        ...e,
+        timestamp: new Date(e.timestamp),
+      }))
+      .filter(e => e.timestamp >= cutoffDate);
+    
+    if (events.length !== parsed.length) {
+      saveEventsToFile();
+      console.log(`[11.4H.5][MarketEvent] Pruned ${parsed.length - events.length} events older than ${RETENTION_DAYS} days`);
+    }
+    
+    if (events.length > 0) {
+      const lastEvent = events[events.length - 1];
+      const match = lastEvent.id.match(/_(\d+)$/);
+      if (match) {
+        eventIdCounter = parseInt(match[1], 10);
+      }
+      
+      const lastRegimeEvent = events.find(e => e.type === 'REGIME_TRANSITION' && e.newValue);
+      if (lastRegimeEvent && lastRegimeEvent.newValue) {
+        lastRegime = lastRegimeEvent.newValue as MarketRegime;
+      }
+      
+      const lastFrictionEvent = events.find(e => e.type === 'FRICTION_TRANSITION' && e.newValue);
+      if (lastFrictionEvent && lastFrictionEvent.newValue) {
+        lastFrictionBand = lastFrictionEvent.newValue;
+      }
+    }
+    
+    console.log(`[11.4H.5][MarketEvent] Loaded ${events.length} events from disk (7-day retention)`);
+  } catch (error: any) {
+    console.error('[11.4H.5][MarketEvent] Error loading events:', error.message);
+    events = [];
+  }
+}
+
+function saveEventsToFile(): void {
+  try {
+    ensureEventsDir();
+    
+    const toSave: PersistedMarketEvent[] = events.map(e => ({
+      ...e,
+      timestamp: e.timestamp.toISOString(),
+    }));
+    
+    fs.writeFileSync(EVENTS_FILE, JSON.stringify(toSave, null, 2), 'utf-8');
+  } catch (error: any) {
+    console.error('[11.4H.5][MarketEvent] Error saving events:', error.message);
+  }
+}
+
+loadEventsFromFile();
 
 function generateEventId(): string {
   return `mkt_evt_${Date.now()}_${++eventIdCounter}`;
@@ -107,6 +200,8 @@ export function logMarketEvent(event: Omit<MarketEvent, 'id' | 'timestamp'>): vo
     events.length = MAX_EVENTS;
   }
   
+  saveEventsToFile();
+  
   console.log(`[11.4H.5][MarketEvent] ${event.type}: ${event.message}`);
 }
 
@@ -148,6 +243,7 @@ export function clearMarketEvents(): void {
   events.length = 0;
   lastRegime = null;
   lastFrictionBand = null;
+  saveEventsToFile();
   console.log('[11.4H.5][MarketEvent] Events cleared');
 }
 

@@ -1382,7 +1382,7 @@ function PredictiveAdjustmentsPanel({
                           <td className="px-3 py-2 text-xs">
                             {adj.explanation?.triggerContext.learningSystem || 'Unknown'}
                           </td>
-                          <td className="px-3 py-2 text-xs text-muted-foreground max-w-[300px] truncate" title={adj.explanation?.intentSummary}>
+                          <td className="px-3 py-2 text-xs text-muted-foreground min-w-[400px] max-w-[500px] whitespace-normal break-words">
                             {adj.explanation?.intentSummary || adj.reason}
                           </td>
                           <td className="px-3 py-2 text-center">
