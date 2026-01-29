@@ -1,0 +1,226 @@
+Directive 11.7Q — Learning Explainability, Stability & Adjustment Governance
+Purpose
+
+Now that ML Calibration and Passive Decision Traceback are active and verified, the system has entered its first true learning phase. At this stage, the highest risk is not lack of learning, but opaque, uncontrolled, or misinterpreted learning behavior.
+
+Directive 11.7Q establishes explainability, stability visibility, and governance instrumentation for predictive adjustments without modifying any learning logic.
+
+This directive exists to ensure that:
+
+Every predictive adjustment is understandable
+
+Adjustment behavior is observable and auditable
+
+Potential over-adjustment or instability is detectable early
+
+Human operators can confidently distinguish:
+
+Healthy learning
+
+Expected exploration losses
+
+True learning pathologies
+
+No optimization, tuning, or suppression of learning is permitted under this directive.
+
+Scope Constraints (Non-Negotiable)
+
+The following are explicitly prohibited in Directive 11.7Q:
+
+❌ No changes to learning formulas
+
+❌ No changes to thresholds, scoring, or weight deltas
+
+❌ No disabling, pausing, or dampening of ML Calibration
+
+❌ No P&L-based intervention logic
+
+❌ No regime-specific biasing
+
+This directive is observability-only.
+
+Phase A — Predictive Adjustment Explainability Layer
+Objective
+
+Make every predictive adjustment human-interpretable.
+
+Requirements
+
+For each predictive adjustment displayed in the UI, attach a structured explanation containing:
+
+Trigger Context
+
+Learning system responsible (e.g., ML Calibration)
+
+Evaluation window (e.g., last N trades / time span)
+
+Sample size used in evaluation
+
+Performance Rationale
+
+Metric(s) that triggered the adjustment (e.g., avg netProfit, expectancy, win rate)
+
+Direction of signal degradation or improvement
+
+Regime(s) involved, if applicable
+
+Intent Summary (Human-Readable)
+
+Example:
+
+“ENGULFING weight decreased due to negative expectancy (−0.42R) over last 38 HYBRID trades in LOW_VOL_CHOP.”
+
+Acceptance Criteria
+
+Every visible adjustment must include an explanation block or expandable tooltip
+
+No “magic” or unexplained deltas remain in the UI
+
+Phase B — Adjustment Frequency & Stability Visibility
+Objective
+
+Expose how often and how aggressively the system is adjusting — without restricting it.
+
+Requirements
+
+Add read-only instrumentation showing:
+
+Adjustment Frequency Metrics
+
+Adjustments per hour
+
+Adjustments per day
+
+Per-parameter adjustment count over last 24h / 7d
+
+Parameter Touch History
+
+Last adjusted timestamp per parameter
+
+Count of consecutive adjustments to same parameter
+
+Cooldown Visibility (Informational Only)
+
+Display whether a parameter is within a nominal cooldown window
+
+No enforcement — visibility only
+
+Acceptance Criteria
+
+Operator can identify whether learning is:
+
+Gradual
+
+Bursty
+
+Concentrated on specific parameters
+
+Phase C — Outcome Correlation (Lagged, Read-Only)
+Objective
+
+Help distinguish exploration losses from learning failure.
+
+Requirements
+
+For each adjusted parameter, display post-adjustment outcome context:
+
+Trades evaluated after the adjustment
+
+Aggregate outcome summary:
+
+Trade count
+
+Avg R / netProfit
+
+Win rate
+
+Clear labeling:
+
+“Outcomes shown are lagged and non-causal”
+
+Acceptance Criteria
+
+No implication of real-time causality
+
+Purely informational correlation view
+
+Phase D — Adjustment Safety Signals (No Automation)
+Objective
+
+Surface risk patterns without intervening.
+
+Requirements
+
+Introduce visual flags / warnings only for:
+
+Multiple adjustments to same parameter within short time window
+
+Adjustments occurring during regime instability or transitions
+
+Adjustments while rolling win-rate or expectancy is below defined tolerance
+
+These signals must:
+
+Be non-blocking
+
+Be clearly labeled as advisory
+
+Trigger no automated behavior
+
+Acceptance Criteria
+
+Operator can identify early signs of potential learning instability
+
+No system behavior is altered as a result
+
+Phase E — Documentation & Proof
+Deliverables
+
+Documentation
+
+docs/directive-11-7Q-learning-explainability.md
+
+Includes:
+
+Adjustment explanation schema
+
+Examples from live system
+
+Explicit statement of non-intervention
+
+Proof of Implementation
+
+Screenshots showing:
+
+Explained adjustments
+
+Frequency metrics
+
+Safety signals (if present)
+
+Log excerpts confirming no learning logic was modified
+
+Success Definition
+
+Directive 11.7Q is complete when:
+
+Predictive adjustments are fully interpretable
+
+Learning behavior is transparent but untouched
+
+Operators can answer:
+
+“Why did the system do this, and is this still healthy?”
+
+The system continues learning uninterrupted
+
+Next Steps (Explicitly Out of Scope)
+
+Learning dampening or guardrails → Future directive
+
+QUANT learning activation → Separate directive
+
+Performance optimization → Later phase
+
+Proceed only with observability and explainability.
+Do not optimize, suppress, or tune learning in this directive.

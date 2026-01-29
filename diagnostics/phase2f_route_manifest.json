@@ -7533,6 +7533,33 @@
     ]
   },
   {
+    "path": "/api/vts/predictive-adjustments/explained",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/vts/predictive-adjustments/stability",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/vts/predictive-adjustments/safety-signals",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/vts/predictive-adjustments/export",
     "methods": [
       "GET"

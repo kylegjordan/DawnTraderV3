@@ -23,6 +23,15 @@ import {
   Reversibility,
   PREDICTIVE_ADJUSTMENTS_SCHEMA
 } from '../core/logging/predictive-adjustments';
+import { 
+  enrichWithExplanations, 
+  EXPLAINABILITY_SCHEMA 
+} from '../core/learning/adjustment-explainability';
+import { 
+  getAdjustmentFrequencyMetrics, 
+  generateSafetySignals,
+  STABILITY_SCHEMA 
+} from '../core/learning/adjustment-stability';
 
 const router = Router();
 
@@ -131,6 +140,90 @@ router.get('/current', (req: Request, res: Response) => {
     res.status(500).json({ 
       ok: false, 
       error: 'Failed to fetch current adaptive values' 
+    });
+  }
+});
+
+/**
+ * GET /api/vts/predictive-adjustments/explained
+ * Directive 11.7Q Phase A: Returns adjustments with full explanations
+ * 
+ * Query params:
+ * - limit: Max records (default: 50)
+ * - category: Filter by category (Weight, Risk, etc.)
+ */
+router.get('/explained', (req: Request, res: Response) => {
+  try {
+    const { limit: limitStr, category } = req.query;
+    
+    let limit = parseInt(limitStr as string) || 50;
+    limit = Math.min(Math.max(limit, 1), 200);
+    
+    const validCategories: AdjustmentCategory[] = ['ROI', 'Expectancy', 'Confidence', 'Weight', 'Scoring', 'Other'];
+    const categoryFilter = validCategories.includes(category as AdjustmentCategory) 
+      ? category as AdjustmentCategory 
+      : undefined;
+    
+    const adjustments = getAdjustments({ limit, category: categoryFilter });
+    const nonLifecycle = adjustments.filter(a => a.adjustmentType !== 'lifecycle');
+    const explained = enrichWithExplanations(nonLifecycle);
+    
+    res.json({
+      ok: true,
+      schema: EXPLAINABILITY_SCHEMA,
+      count: explained.length,
+      adjustments: explained
+    });
+  } catch (error) {
+    console.error('[11.7Q][API] Error fetching explained adjustments:', error);
+    res.status(500).json({ 
+      ok: false, 
+      error: 'Failed to fetch explained adjustments' 
+    });
+  }
+});
+
+/**
+ * GET /api/vts/predictive-adjustments/stability
+ * Directive 11.7Q Phase B: Returns adjustment frequency and stability metrics
+ */
+router.get('/stability', (req: Request, res: Response) => {
+  try {
+    const metrics = getAdjustmentFrequencyMetrics();
+    
+    res.json({
+      ok: true,
+      schema: STABILITY_SCHEMA,
+      metrics
+    });
+  } catch (error) {
+    console.error('[11.7Q][API] Error fetching stability metrics:', error);
+    res.status(500).json({ 
+      ok: false, 
+      error: 'Failed to fetch stability metrics' 
+    });
+  }
+});
+
+/**
+ * GET /api/vts/predictive-adjustments/safety-signals
+ * Directive 11.7Q Phase D: Returns advisory safety signals (non-blocking)
+ */
+router.get('/safety-signals', (req: Request, res: Response) => {
+  try {
+    const signals = generateSafetySignals();
+    
+    res.json({
+      ok: true,
+      schema: STABILITY_SCHEMA,
+      disclaimer: 'These signals are advisory only and do not block or alter learning behavior.',
+      signals
+    });
+  } catch (error) {
+    console.error('[11.7Q][API] Error fetching safety signals:', error);
+    res.status(500).json({ 
+      ok: false, 
+      error: 'Failed to fetch safety signals' 
     });
   }
 });

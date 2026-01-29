@@ -155,6 +155,69 @@ interface ManifestEntry {
   compressedAt?: string;
 }
 
+interface TriggerContext {
+  learningSystem: string;
+  evaluationWindow: string;
+  sampleSize: number;
+  evaluationPeriod?: string;
+}
+
+interface PerformanceRationale {
+  triggerMetric: string;
+  metricValue: number | string;
+  direction: 'improved' | 'degraded' | 'stable' | 'unknown';
+  regimesInvolved: string[];
+  additionalMetrics?: Record<string, number | string>;
+}
+
+interface AdjustmentExplanation {
+  triggerContext: TriggerContext;
+  performanceRationale: PerformanceRationale;
+  intentSummary: string;
+  confidenceLevel: 'high' | 'medium' | 'low';
+  isLifecycleEvent: boolean;
+}
+
+interface ExplainedAdjustment extends PredictiveAdjustment {
+  explanation?: AdjustmentExplanation;
+}
+
+interface ParameterTouchHistory {
+  parameter: string;
+  lastAdjusted: string;
+  adjustmentCount24h: number;
+  adjustmentCount7d: number;
+  consecutiveAdjustments: number;
+  totalDelta24h: number;
+  direction: 'increasing' | 'decreasing' | 'oscillating' | 'stable';
+  withinCooldown: boolean;
+  cooldownRemainingMs?: number;
+}
+
+interface BurstyPeriod {
+  startTime: string;
+  endTime: string;
+  adjustmentCount: number;
+  parameters: string[];
+}
+
+interface StabilityMetrics {
+  adjustmentsPerHour: number;
+  adjustmentsPerDay: number;
+  burstyPeriods: BurstyPeriod[];
+  parameterTouchHistory: ParameterTouchHistory[];
+  stabilityScore: number;
+}
+
+interface SafetySignal {
+  type: 'rapid_adjustment' | 'regime_instability' | 'poor_performance' | 'oscillation';
+  severity: 'info' | 'warning' | 'alert';
+  parameter: string;
+  description: string;
+  timestamp: string;
+  isAdvisoryOnly: true;
+}
+
 const getRegimeBadgeColor = (regime: string) => {
   if (regime.includes('BULL_STABLE')) return 'bg-green-500/20 text-green-400 border-green-500/30';
   if (regime.includes('BULL_VOLATILE')) return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
@@ -891,6 +954,43 @@ function PredictiveAdjustmentsPanel({
   currentValues: CurrentValues | null;
   isLoading: boolean;
 }) {
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
+
+  const { data: explainedData } = useQuery<{
+    ok: boolean;
+    adjustments: ExplainedAdjustment[];
+  }>({
+    queryKey: ['/api/vts/predictive-adjustments/explained'],
+    queryFn: () => apiFetch('/api/vts/predictive-adjustments/explained?limit=50'),
+    refetchInterval: 120000,
+    staleTime: 60000,
+  });
+
+  const { data: stabilityData } = useQuery<{
+    ok: boolean;
+    metrics: StabilityMetrics;
+  }>({
+    queryKey: ['/api/vts/predictive-adjustments/stability'],
+    queryFn: () => apiFetch('/api/vts/predictive-adjustments/stability'),
+    refetchInterval: 120000,
+    staleTime: 60000,
+  });
+
+  const { data: safetyData } = useQuery<{
+    ok: boolean;
+    signals: SafetySignal[];
+    disclaimer: string;
+  }>({
+    queryKey: ['/api/vts/predictive-adjustments/safety-signals'],
+    queryFn: () => apiFetch('/api/vts/predictive-adjustments/safety-signals'),
+    refetchInterval: 120000,
+    staleTime: 60000,
+  });
+
+  const explainedAdjustments = explainedData?.adjustments || [];
+  const stabilityMetrics = stabilityData?.metrics;
+  const safetySignals = safetyData?.signals || [];
+
   const filteredAdjustments = useMemo(() => {
     return adjustments.filter(adj => 
       adj.impact !== null && 
@@ -1120,6 +1220,221 @@ function PredictiveAdjustmentsPanel({
           </div>
         </CardContent>
       </Card>
+
+      {/* Directive 11.7Q Phase B: Learning Stability Visibility */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader className="py-3">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Activity className="w-4 h-4" />
+              Learning Stability (11.7Q)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="py-2">
+            {stabilityMetrics ? (
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Stability Score:</span>
+                  <Badge variant="outline" className={`font-mono ${
+                    stabilityMetrics.stabilityScore >= 80 ? 'text-green-400 border-green-500/30' :
+                    stabilityMetrics.stabilityScore >= 50 ? 'text-yellow-400 border-yellow-500/30' :
+                    'text-red-400 border-red-500/30'
+                  }`}>
+                    {stabilityMetrics.stabilityScore.toFixed(0)}%
+                  </Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Adjustments/Hour:</span>
+                  <span className="font-mono">{stabilityMetrics.adjustmentsPerHour.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Adjustments/Day:</span>
+                  <span className="font-mono">{stabilityMetrics.adjustmentsPerDay.toFixed(1)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Bursty Periods (7d):</span>
+                  <Badge variant="outline" className={`text-xs ${
+                    stabilityMetrics.burstyPeriods.length === 0 ? 'text-green-400' :
+                    stabilityMetrics.burstyPeriods.length < 3 ? 'text-yellow-400' : 'text-red-400'
+                  }`}>
+                    {stabilityMetrics.burstyPeriods.length}
+                  </Badge>
+                </div>
+                {stabilityMetrics.parameterTouchHistory.length > 0 && (
+                  <div className="pt-2 border-t border-border/50">
+                    <p className="text-xs text-muted-foreground mb-2">Recent Parameter Activity:</p>
+                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                      {stabilityMetrics.parameterTouchHistory.slice(0, 5).map((p, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs">
+                          <span className="font-mono truncate max-w-[150px]" title={p.parameter}>
+                            {p.parameter.replace('ml.', '').replace('_weight', '')}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className={`text-xs ${
+                              p.direction === 'increasing' ? 'text-green-400' :
+                              p.direction === 'decreasing' ? 'text-red-400' :
+                              p.direction === 'oscillating' ? 'text-yellow-400' : 'text-gray-400'
+                            }`}>
+                              {p.direction === 'increasing' ? '↑' : p.direction === 'decreasing' ? '↓' : p.direction === 'oscillating' ? '↕' : '→'}
+                            </Badge>
+                            <span className="text-muted-foreground">{p.adjustmentCount24h}/24h</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-sm">Loading stability metrics...</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Directive 11.7Q Phase D: Safety Signals */}
+        <Card>
+          <CardHeader className="py-3">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4" />
+              Safety Signals (Advisory Only)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="py-2">
+            <p className="text-xs text-muted-foreground italic mb-3">
+              These signals are advisory only and do not block or alter learning behavior.
+            </p>
+            {safetySignals.length === 0 ? (
+              <div className="flex items-center gap-2 text-green-400 text-sm">
+                <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                No safety concerns detected
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {safetySignals.slice(0, 10).map((signal, i) => (
+                  <div key={i} className={`p-2 rounded-md text-xs border ${
+                    signal.severity === 'alert' ? 'bg-red-500/10 border-red-500/30' :
+                    signal.severity === 'warning' ? 'bg-yellow-500/10 border-yellow-500/30' :
+                    'bg-blue-500/10 border-blue-500/30'
+                  }`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <Badge variant="outline" className={`text-xs ${
+                        signal.severity === 'alert' ? 'text-red-400 border-red-500/30' :
+                        signal.severity === 'warning' ? 'text-yellow-400 border-yellow-500/30' :
+                        'text-blue-400 border-blue-500/30'
+                      }`}>
+                        {signal.type.replace('_', ' ')}
+                      </Badge>
+                      <span className="text-muted-foreground">
+                        {format(new Date(signal.timestamp), 'MM/dd HH:mm')}
+                      </span>
+                    </div>
+                    <p className="text-muted-foreground">{signal.description}</p>
+                    <p className="font-mono text-xs mt-1">{signal.parameter}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Directive 11.7Q Phase A: Explained Adjustments */}
+      {explainedAdjustments.length > 0 && (
+        <Card>
+          <CardHeader className="py-3">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Brain className="w-4 h-4" />
+              Explained Learning Adjustments (11.7Q)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto max-h-96">
+              <table className="text-sm min-w-max">
+                <thead className="sticky top-0 bg-card z-10">
+                  <tr className="border-b border-border">
+                    <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Time</th>
+                    <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Parameter</th>
+                    <th className="px-3 py-2 text-center font-medium text-muted-foreground whitespace-nowrap">Delta</th>
+                    <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Learning System</th>
+                    <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Intent Summary</th>
+                    <th className="px-3 py-2 text-center font-medium text-muted-foreground whitespace-nowrap">Confidence</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {explainedAdjustments.map((adj, idx) => {
+                    const isExpanded = expandedRow === `${adj.timestamp}-${idx}`;
+                    return (
+                      <>
+                        <tr 
+                          key={`${adj.timestamp}-${adj.parameter}-${idx}`} 
+                          className="border-b border-border/50 hover:bg-muted/30 cursor-pointer"
+                          onClick={() => setExpandedRow(isExpanded ? null : `${adj.timestamp}-${idx}`)}
+                        >
+                          <td className="px-3 py-2 text-xs">
+                            {format(new Date(adj.timestamp), 'MM/dd HH:mm')}
+                          </td>
+                          <td className="px-3 py-2 text-xs font-mono">
+                            {adj.parameter.replace('ml.', '').replace('_weight', '')}
+                          </td>
+                          <td className={`px-3 py-2 text-center font-mono text-xs ${adj.delta > 0 ? 'text-green-400' : adj.delta < 0 ? 'text-red-400' : ''}`}>
+                            {adj.delta > 0 ? '+' : ''}{adj.delta.toFixed(4)}
+                          </td>
+                          <td className="px-3 py-2 text-xs">
+                            {adj.explanation?.triggerContext.learningSystem || 'Unknown'}
+                          </td>
+                          <td className="px-3 py-2 text-xs text-muted-foreground max-w-[300px] truncate" title={adj.explanation?.intentSummary}>
+                            {adj.explanation?.intentSummary || adj.reason}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <Badge variant="outline" className={`text-xs ${
+                              adj.explanation?.confidenceLevel === 'high' ? 'text-green-400 border-green-500/30' :
+                              adj.explanation?.confidenceLevel === 'medium' ? 'text-yellow-400 border-yellow-500/30' :
+                              'text-gray-400 border-gray-500/30'
+                            }`}>
+                              {adj.explanation?.confidenceLevel || 'low'}
+                            </Badge>
+                          </td>
+                        </tr>
+                        {isExpanded && adj.explanation && (
+                          <tr key={`${adj.timestamp}-${idx}-expanded`} className="bg-muted/20">
+                            <td colSpan={6} className="px-4 py-3">
+                              <div className="grid grid-cols-2 gap-4 text-xs">
+                                <div>
+                                  <p className="font-medium text-muted-foreground mb-1">Trigger Context</p>
+                                  <div className="space-y-1 pl-2 border-l-2 border-primary/30">
+                                    <p>System: {adj.explanation.triggerContext.learningSystem}</p>
+                                    <p>Window: {adj.explanation.triggerContext.evaluationWindow}</p>
+                                    <p>Sample Size: {adj.explanation.triggerContext.sampleSize}</p>
+                                  </div>
+                                </div>
+                                <div>
+                                  <p className="font-medium text-muted-foreground mb-1">Performance Rationale</p>
+                                  <div className="space-y-1 pl-2 border-l-2 border-primary/30">
+                                    <p>Trigger Metric: {adj.explanation.performanceRationale.triggerMetric}</p>
+                                    <p>Direction: <span className={
+                                      adj.explanation.performanceRationale.direction === 'improved' ? 'text-green-400' :
+                                      adj.explanation.performanceRationale.direction === 'degraded' ? 'text-red-400' : ''
+                                    }>{adj.explanation.performanceRationale.direction}</span></p>
+                                    <p>Regimes: {adj.explanation.performanceRationale.regimesInvolved.join(', ')}</p>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="mt-3 p-2 bg-muted/30 rounded text-xs">
+                                <p className="font-medium mb-1">Full Explanation:</p>
+                                <p className="text-muted-foreground">{adj.explanation.intentSummary}</p>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
