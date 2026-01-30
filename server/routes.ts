@@ -2318,24 +2318,27 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // GET /api/system/governance - Directive 11.7R: Regime transition governance state
+  // GET /api/system/governance - Directive 11.7R-E: Regime transition governance state with pre-score exclusions
   apiRouter.get('/system/governance', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
       const { getGovernanceStateForUI, getGovernanceStats } = await import('./core/governance/governance-engine.js');
       const { getLearningCooldownState } = await import('./core/governance/learning-cooldown.js');
       const { STRATEGY_GOVERNANCE, STRATEGY_GOVERNANCE_PROFILES, INFLUENCE_RULES } = await import('./config/strategy-governance.js');
+      const { getPreScoreExclusionStats } = await import('./core/governance/strategy-eligibility.js');
       
       const governanceState = getGovernanceStateForUI();
       const learningState = getLearningCooldownState();
+      const preScoreStats = getPreScoreExclusionStats();
       
       res.json({
         ok: true,
-        schema: 'governance/v1.0',
+        schema: 'governance/v1.1',
         stability: governanceState.stability,
         metrics: governanceState.metrics,
         reason: governanceState.reason,
         stats: governanceState.stats,
         strategyMultipliers: governanceState.strategyMultipliers,
+        preScoreExclusions: preScoreStats,
         learning: {
           deferredCount: learningState.deferredCount,
           batchPendingCount: learningState.batchPendingCount,

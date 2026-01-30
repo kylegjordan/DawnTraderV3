@@ -27,6 +27,11 @@ interface GovernanceData {
     lastReset: number;
   };
   strategyMultipliers: Record<string, number>;
+  preScoreExclusions: {
+    excluded: number;
+    since: number;
+    sinceFormatted: string;
+  };
   learning: {
     deferredCount: number;
     batchPendingCount: number;
@@ -112,7 +117,7 @@ export default function GovernanceSection() {
     );
   }
 
-  const { stability, metrics, reason, stats, strategyMultipliers, learning, config } = governanceData;
+  const { stability, metrics, reason, stats, strategyMultipliers, preScoreExclusions, learning, config } = governanceData;
 
   return (
     <div className="space-y-6">
@@ -203,6 +208,35 @@ export default function GovernanceSection() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="border-2 border-purple-500">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="w-5 h-5 text-purple-500" />
+            Strategies Excluded Pre-Scoring (11.7R-E)
+          </CardTitle>
+          <CardDescription>
+            Hard governance enforcement - strategies blocked BEFORE scoring
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-6">
+            <div className="text-center">
+              <div className="text-4xl font-bold text-purple-600">
+                {preScoreExclusions?.excluded || 0}
+              </div>
+              <div className="text-sm text-muted-foreground">Excluded</div>
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Since: {preScoreExclusions?.sinceFormatted || 'N/A'}
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground mt-4">
+            This counter tracks HIGH dependency strategies blocked during UNSTABLE regime BEFORE scoring. 
+            If this number increases during regime instability, governance is working correctly.
+          </p>
+        </CardContent>
+      </Card>
 
       {metrics && (
         <Card>

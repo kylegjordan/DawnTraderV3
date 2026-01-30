@@ -1,0 +1,276 @@
+🧭 Directive 11.7R-E (Enforcement Correction)
+Regime Governance Hard Enforcement at Scoring & Execution Gates
+
+Phase: 11
+Series: Predictive Stability & Risk Governance
+Supersedes: 11.7R (partial)
+Status: MANDATORY FIX — BLOCKING
+Applies To: VTS · Paper Trading
+Live Trading: Explicitly out of scope
+
+0. Why This Directive Exists (Non-Negotiable Context)
+
+Directive 11.7R was implemented correctly at the visibility layer
+but incorrectly at the control layer.
+
+Specifically:
+
+Governance is computed
+
+Governance is displayed
+
+Governance is NOT preventing strategy selection early enough
+
+As a result, regime-misaligned strategies are still being scored and selected, even when execution is later blocked or throttled.
+
+This directive corrects the execution order and enforcement semantics.
+
+1. Root Cause (Confirmed by Code Inspection)
+❌ What Is Currently Wrong
+
+Across VTS and Paper Execution paths:
+
+Governance is applied after scoring
+
+Governance acts as a multiplier, not a gate
+
+Scoring still evaluates HIGH-dependency strategies during UNSTABLE regimes
+
+“Least bad” strategies are still selected and executed
+
+This creates loss cascades during regime transitions, even though governance appears active.
+
+2. Correct Enforcement Principle (Authoritative)
+
+Governance must act as a HARD EXCLUSION FILTER, not a post-score modifier.
+
+If a strategy is not allowed to influence execution, it must:
+
+❌ Never be scored
+
+❌ Never be ranked
+
+❌ Never generate a virtual trade
+
+❌ Never create an execution intent
+
+3. Corrected Execution Order (FINAL, NON-NEGOTIABLE)
+
+This replaces the order used in 11.7R.
+
+Required Pipeline Order
+
+Signal generated
+
+Regime detected
+
+Global regime stability classified
+
+Core deterministic filters (ROI, duplicates, cooldown)
+
+Governance enforcement (HARD FILTER)
+
+Scoring & ranking (only allowed strategies)
+
+Execution or skip
+
+Learning attribution
+
+⚠️ Governance MUST run before scoring.
+
+4. Hard Governance Enforcement Logic
+4.1 Strategy Eligibility Function (NEW)
+
+Create a single authoritative function:
+
+File:
+/server/core/governance/strategy-eligibility.ts
+
+export function isStrategyEligible(
+  strategy: string,
+  stability: RegimeStability,
+  dependency: StrategyDependency
+): boolean {
+  if (stability === "UNSTABLE" && dependency === "HIGH") {
+    return false;
+  }
+  return true;
+}
+
+
+This function must be used everywhere strategy selection occurs.
+
+5. VTS — Critical Fix (Root Cause Location)
+File
+
+/server/services/vts-runner.ts
+
+❌ Current Problem
+
+Strategies are scored before governance eligibility is enforced.
+
+✅ Required Fix
+
+Immediately after deterministic filters
+and before any scoring logic, insert:
+
+signals = signals.filter(signal => {
+  const dependency = STRATEGY_GOVERNANCE[signal.strategy] ?? "HIGH";
+
+  const eligible = isStrategyEligible(
+    signal.strategy,
+    regimeStability,
+    dependency
+  );
+
+  if (!eligible) {
+    logGovernanceBlock(signal, regimeStability);
+  }
+
+  return eligible;
+});
+
+Required Logging
+
+Blocked signals must be logged as:
+
+{
+  "resultType": "BLOCKED_GOVERNANCE",
+  "reason": "UNSTABLE_REGIME",
+  "strategy": "vwap_pullback",
+  "stability": "UNSTABLE"
+}
+
+🚨 Absolute Rule
+
+If a signal reaches scoring, governance has failed.
+
+6. Paper Trading Engine — Execution Gate Fix
+File
+
+/server/services/paper-execution-engine.ts
+
+❌ Current Problem
+
+Execution intents may still be created for throttled strategies.
+
+✅ Required Fix
+
+Before any execution intent or sizing logic:
+
+if (!isStrategyEligible(strategy, regimeStability, dependency)) {
+  return {
+    status: "SKIPPED",
+    reason: "BLOCKED_GOVERNANCE"
+  };
+}
+
+🚨 Absolute Rule
+
+Blocked strategies must never create:
+
+position sizing
+
+execution intent
+
+simulated orders
+
+7. Scoring System Correction
+Required Change
+
+Scoring functions must only receive already-eligible signals.
+
+Governance must not be implemented as:
+
+score multipliers
+
+penalty weights
+
+rank dampening
+
+If governance is represented as a multiplier anywhere in scoring code, remove it.
+
+Governance is binary at UNSTABLE:
+
+Allowed → score
+
+Not allowed → invisible
+
+8. Learning Attribution (Confirmed Correct, No Change)
+
+Current learning behavior is correct only if:
+
+BLOCKED_GOVERNANCE signals are passed as:
+
+skipped
+
+non-loss
+
+non-reinforcing
+
+No changes required here unless Replit deviated from 11.7R spec.
+
+9. Mandatory Regression Test (Code-Level)
+
+Add test case:
+
+Scenario:
+UNSTABLE regime + vwap_pullback signal
+
+Expected Assertions
+
+signal generated ✅
+
+governance blocks it ✅
+
+scoring function NOT called ✅
+
+no virtual trade created ✅
+
+no execution intent created ✅
+
+learning logs skip reason ✅
+
+10. UI (Optional but Strongly Recommended)
+
+Add one metric to Governance tab:
+
+“Strategies Excluded Pre-Scoring”
+
+This must increment before scoring, not after execution.
+
+This is how we visually confirm the fix worked.
+
+11. Success Criteria (Objective)
+
+This directive is complete only when:
+
+HIGH dependency strategies produce zero executions in UNSTABLE
+
+Stop-loss clusters collapse during regime transitions
+
+VTS closed trades show:
+
+fewer trades
+
+not “weaker losses”
+
+absence of misaligned strategies
+
+Governance UI aligns with actual execution outcomes
+
+12. Explicit Non-Goals (So There Is No Drift)
+
+This directive does NOT:
+
+tune strategies
+
+change learning math
+
+optimize performance
+
+affect live trading
+
+reduce data collection
+
+This is pure enforcement correctness.

@@ -59,6 +59,9 @@ import { scanPatterns } from './pattern-recognizer.js';
 import type { PatternType } from '../types';
 import { normalizeToInternalSymbol, getSymbolMappingDetails } from '../markets/kraken-symbol-resolver.js';
 import { applyGovernance, type GovernanceDecision } from '../core/governance/governance-engine.js';
+import { isStrategyEligible, logGovernanceBlock, getPreScoreExclusionStats } from '../core/governance/strategy-eligibility.js';
+import { getStrategyDependency, type RegimeStability } from '../config/strategy-governance.js';
+import { computeGlobalStability } from '../core/governance/regime-stability.js';
 import { logSkippedSignal as logGovernanceSkippedSignal } from '../core/logging/skipped-signals-logger.js';
 import fs from 'fs/promises';
 import path from 'path';
@@ -376,6 +379,41 @@ async function generatePhase10Signal(
   
   const hybridScore = simulateHybridScore(regime);
   const predictiveConfidence = simulatePredictiveConfidence(regime, hybridScore);
+  
+  // ══════════════════════════════════════════════════════════════════════════════
+  // Directive 11.7R-E: HARD GOVERNANCE FILTER (BEFORE SCORING)
+  // ══════════════════════════════════════════════════════════════════════════════
+  // This is the authoritative enforcement point. If a strategy is not eligible:
+  // - ❌ Never scored
+  // - ❌ Never ranked  
+  // - ❌ Never generates a virtual trade
+  // ══════════════════════════════════════════════════════════════════════════════
+  const dependency = getStrategyDependency(strategy);
+  
+  // Compute global stability for this cycle
+  const stabilityResult = computeGlobalStability(
+    zScoreResult.isWarmedUp ? Math.abs(zScoreResult.zScores.volZ) : 0.5, // driftScore approximation
+    zScoreResult.isWarmedUp ? zScoreResult.zScores.volZ : 0,
+    predictiveConfidence
+  );
+  const regimeStability: RegimeStability = stabilityResult.stability;
+  
+  if (!isStrategyEligible(strategy, regimeStability, dependency)) {
+    logGovernanceBlock({ strategy, pair: symbol }, regimeStability);
+    logSkippedSignal({
+      symbol,
+      reason: 'BLOCKED_GOVERNANCE',
+      regime,
+      signalType,
+      strategy,
+      source: 'VTS',
+      governanceReason: `UNSTABLE_REGIME: ${dependency} dependency blocked in ${regimeStability}`,
+    });
+    console.log(`[11.7R-E][VTS] PRE-SCORE BLOCK: ${symbol} ${strategy} (${dependency} dep) blocked in ${regimeStability}`);
+    return null;
+  }
+  // ══════════════════════════════════════════════════════════════════════════════
+  
   // Directive 11.4H.4A Task 1: Use dynamic regime scoring based on ADX + volatility
   const regimeScoreRaw = calculateRegimeScore(regime, {
     adx: regimeResult.adx,
@@ -439,38 +477,8 @@ async function generatePhase10Signal(
     return null;
   }
   
-  // Directive 11.7R: Regime Transition Governance
-  // Applied AFTER profitability filters (ROI/EV, duplicate/cooldown) and BEFORE scoring/execution
-  // Governance constrains influence, not data collection
-  const governanceDecision = applyGovernance({
-    symbol,
-    strategy,
-    regime,
-    finalScore,
-    driftScore: zScoreResult.isWarmedUp ? Math.abs(zScoreResult.zScores.volZ) : 0.5,
-    volZ: zScoreResult.isWarmedUp ? zScoreResult.zScores.volZ : 0,
-    regimeConfidence: predictiveConfidence,
-    cycleId: `vts_cycle_${cycleCount}`,
-  });
-  
-  if (governanceDecision.resultType === 'BLOCKED_GOVERNANCE') {
-    logSkippedSignal({
-      symbol,
-      reason: 'BLOCKED_GOVERNANCE',
-      regime,
-      signalType,
-      strategy,
-      source: 'VTS',
-      governanceReason: governanceDecision.blockedReason,
-    });
-    console.log(`[11.7R][VTS] ${symbol} blocked by governance: ${governanceDecision.blockedReason}`);
-    return null;
-  }
-  
-  // Directive 11.7R: Apply governance weight multiplier to finalScore
-  const governedFinalScore = governanceDecision.resultType === 'THROTTLED' 
-    ? finalScore * governanceDecision.influenceMultiplier 
-    : finalScore;
+  // Note: Directive 11.7R-E hard governance filter applied before scoring (lines 386-418)
+  // If we reach here, strategy is eligible for execution
   
   const portfolioValue = await getPortfolioValue();
   const riskPerTrade = await getRiskPerTrade();
@@ -545,7 +553,7 @@ async function generatePhase10Signal(
   console.log(`[11.6][Entry] ${symbol} opened @ ${entryPrice.toFixed(6)} | stop=${stopLoss.toFixed(6)} target=${takeProfit.toFixed(6)} strategy=${strategy}`);
   
   // Directive 11.4C.3: VirtualSignal with full Phase-10 metrics and pattern (M50 compliant)
-  // Directive 11.7R: Use governedFinalScore which has governance multiplier applied
+  // Directive 11.7R: Use finalScore which has governance multiplier applied
   const signal: VirtualSignal = {
     id: `vsig_p10_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     symbol,
@@ -553,7 +561,7 @@ async function generatePhase10Signal(
     takeProfit,
     stopLoss,
     spread,
-    predictedProfit: governedFinalScore * dynamicTarget,
+    predictedProfit: finalScore * dynamicTarget,
     strategy,
     createdAt: Date.now(),
     signalType, // Directive 11.4C.3: Canonical format 'QUANT' | 'PATTERN' | 'HYBRID'
@@ -562,10 +570,10 @@ async function generatePhase10Signal(
     hybridScore,
     predictiveConfidence,
     // Phase-10 canonical fields (M50)
-    finalScore: governedFinalScore, // Directive 11.7R: Governed score
+    finalScore: finalScore, // Directive 11.7R: Governed score
     regimeWeight,
     decayPenalty,
-    expectedEdge: governedFinalScore * dynamicTarget - frictionCost,
+    expectedEdge: finalScore * dynamicTarget - frictionCost,
     frictionCost, // M50: Schema parity with VirtualTrade
     regime,
     regimeScore: regimeScoreRaw, // Directive 11.4H.4A: Raw 0-100 score for UI display
@@ -574,7 +582,7 @@ async function generatePhase10Signal(
   };
   
   // Directive 11.6: Trade record marked as pending - exit determined by resolveOpenVirtualTrades()
-  // Directive 11.7R: Uses governedFinalScore with governance multiplier
+  // Directive 11.7R: Uses finalScore with governance multiplier
   const tradeRecord: Phase10TradeRecord = {
     symbol,
     regime,
@@ -582,7 +590,7 @@ async function generatePhase10Signal(
     signalType,
     strategy,
     patternType, // Directive 11.4C.3: Attached pattern for telemetry
-    finalScore: governedFinalScore, // Directive 11.7R: Governed score
+    finalScore: finalScore, // Directive 11.7R: Governed score
     hybridScore,
     predictiveConfidence,
     regimeWeight,

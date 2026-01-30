@@ -82,7 +82,9 @@ import { covarianceEngine } from '../utils/covariance-engine.js';
 import { recordPaperTrade, type PaperTradeRecord } from './vts-live-comparison-audit.js';
 import { cwqiService } from './cwqi-service.js';
 import { applyGovernance, getGovernanceStateForUI } from '../core/governance/governance-engine.js';
-import { getCachedStability } from '../core/governance/regime-stability.js';
+import { getCachedStability, computeGlobalStability } from '../core/governance/regime-stability.js';
+import { isStrategyEligible, logGovernanceBlock } from '../core/governance/strategy-eligibility.js';
+import { getStrategyDependency, type RegimeStability } from '../config/strategy-governance.js';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail' | 'manual_stop';
@@ -2126,6 +2128,34 @@ export class PaperExecutionEngine {
         return;
       }
 
+      // ══════════════════════════════════════════════════════════════════════════════
+      // Directive 11.7R-E: HARD GOVERNANCE FILTER (BEFORE SIZING)
+      // ══════════════════════════════════════════════════════════════════════════════
+      // This is the authoritative enforcement point for Paper Execution.
+      // If a strategy is not eligible:
+      // - ❌ Never sized
+      // - ❌ Never creates execution intent
+      // - ❌ Never creates simulated order
+      // ══════════════════════════════════════════════════════════════════════════════
+      const signalMetadata = signalAny.metadata || {};
+      const regime = signalMetadata.regime || 'TRANSITION';
+      const dependency = getStrategyDependency(signal.strategy);
+      
+      // Compute global stability from available metrics
+      const stabilityResult = computeGlobalStability(
+        signalMetadata.driftScore || 0.5,
+        signalMetadata.volZ || 0,
+        signalMetadata.regimeConfidence || signal.confidence || 0.5
+      );
+      const regimeStability: RegimeStability = stabilityResult.stability;
+      
+      if (!isStrategyEligible(signal.strategy, regimeStability, dependency)) {
+        logGovernanceBlock({ strategy: signal.strategy, symbol: signal.symbol }, regimeStability);
+        console.log(`[11.7R-E][Paper] PRE-SIZE BLOCK: ${signal.symbol} ${signal.strategy} (${dependency} dep) blocked in ${regimeStability}`);
+        return;
+      }
+      // ══════════════════════════════════════════════════════════════════════════════
+
       const hasQuantity = signalAny.quantity != null && signalAny.quantity > 0;
       const hasEstimatedValue = signalAny.estimatedValue != null && signalAny.estimatedValue > 0;
       
@@ -2163,33 +2193,8 @@ export class PaperExecutionEngine {
         }
       }
 
-      // Directive 11.7R: Regime Transition Governance
-      // Applied AFTER SQE pass, BEFORE sizing and execution intent creation
-      const signalMetadata = signalAny.metadata || {};
-      const regime = signalMetadata.regime || 'TRANSITION';
-      const finalScore = signalMetadata.finalScore || signal.confidence || 0.5;
-      
-      const governanceDecision = applyGovernance({
-        symbol: signal.symbol,
-        strategy: signal.strategy,
-        regime,
-        finalScore,
-        driftScore: signalMetadata.driftScore || 0.5,
-        volZ: signalMetadata.volZ || 0,
-        regimeConfidence: signalMetadata.regimeConfidence || signal.confidence || 0.5,
-        cycleId: `paper_${Date.now()}`,
-      });
-      
-      if (governanceDecision.resultType === 'BLOCKED_GOVERNANCE') {
-        console.log(`[11.7R][Paper] ${signal.symbol} blocked by governance: ${governanceDecision.blockedReason}`);
-        return;
-      }
-      
-      // Apply governance multiplier to signal confidence if throttled
-      if (governanceDecision.resultType === 'THROTTLED') {
-        signalAny.governanceMultiplier = governanceDecision.influenceMultiplier;
-        console.log(`[11.7R][Paper] ${signal.symbol} throttled: ${(governanceDecision.influenceMultiplier * 100).toFixed(0)}% weight in ${governanceDecision.stability}`);
-      }
+      // Note: Directive 11.7R-E hard governance filter applied before sizing (lines 2134-2160)
+      // If we reach here, strategy is eligible for execution
 
       console.log(`[8.8.3-F][PROCESS] Processing signal for ${signal.symbol} via guardrails_v2 path`);
       await this.executeSimulatedTrade(signal, settings);
