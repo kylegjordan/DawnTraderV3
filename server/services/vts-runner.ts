@@ -63,6 +63,7 @@ import { isStrategyEligible, logGovernanceBlock, getPreScoreExclusionStats } fro
 import { getStrategyDependency, type RegimeStability } from '../config/strategy-governance.js';
 import { computeGlobalStability } from '../core/governance/regime-stability.js';
 import { logSkippedSignal as logGovernanceSkippedSignal } from '../core/logging/skipped-signals-logger.js';
+import { resolveStrategyMode, getModeOverlay, meetsConfidenceFloor, recordModeExecution, type StrategyMode, type StrategyModeOverlay } from '../core/governance/strategy-modes.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -176,6 +177,9 @@ interface OpenVirtualTrade {
   decayPenalty: number;
   pool: 'ideal' | 'rotational';
   openedAt: number;
+  strategyMode?: StrategyMode;         // 11.7S: Mode for observability
+  modeOverlay?: StrategyModeOverlay;   // 11.7S: Overlay values for observability
+  regimeStability?: RegimeStability;   // 11.7S: Regime stability for observability
 }
 
 const openVirtualTrades: Map<string, OpenVirtualTrade> = new Map();
@@ -414,6 +418,31 @@ async function generatePhase10Signal(
   }
   // ══════════════════════════════════════════════════════════════════════════════
   
+  // ══════════════════════════════════════════════════════════════════════════════
+  // Directive 11.7S — Strategy Mode Modulation
+  // ══════════════════════════════════════════════════════════════════════════════
+  // Assign mode based on global regime stability (after governance, before scoring)
+  const strategyMode: StrategyMode = resolveStrategyMode(regimeStability);
+  const modeOverlay: StrategyModeOverlay = getModeOverlay(strategyMode);
+  
+  // 11.7S: Check if signal meets confidence floor for current mode
+  if (!meetsConfidenceFloor(predictiveConfidence, regimeStability)) {
+    logSkippedSignal({
+      symbol,
+      reason: 'Confidence_Floor',
+      regime,
+      signalType,
+      strategy,
+      source: 'VTS',
+      modeSkipReason: `${strategyMode} mode requires confidence >= ${modeOverlay.confidenceFloor}, got ${predictiveConfidence.toFixed(2)}`,
+    });
+    console.log(`[11.7S][VTS] SKIP: ${symbol} ${strategy} - confidence ${predictiveConfidence.toFixed(2)} < floor ${modeOverlay.confidenceFloor} (mode=${strategyMode})`);
+    return null;
+  }
+  
+  console.log(`[11.7S][VTS] Mode: ${strategyMode} | Size×${modeOverlay.positionSizeMultiplier} | Stop×${modeOverlay.stopLossDistanceMultiplier} | TP×${modeOverlay.takeProfitDistanceMultiplier}`);
+  // ══════════════════════════════════════════════════════════════════════════════
+  
   // Directive 11.4H.4A Task 1: Use dynamic regime scoring based on ADX + volatility
   const regimeScoreRaw = calculateRegimeScore(regime, {
     adx: regimeResult.adx,
@@ -478,11 +507,15 @@ async function generatePhase10Signal(
   }
   
   // Note: Directive 11.7R-E hard governance filter applied before scoring (lines 386-418)
-  // If we reach here, strategy is eligible for execution
+  // Note: Directive 11.7S mode overlay assigned after governance (lines 421-444)
+  // If we reach here, strategy is eligible for execution with mode overlay applied
   
   const portfolioValue = await getPortfolioValue();
   const riskPerTrade = await getRiskPerTrade();
-  const positionSize = computePositionSize(portfolioValue, riskPerTrade, entryPrice, stopLoss, riskMultiplier);
+  const basePositionSize = computePositionSize(portfolioValue, riskPerTrade, entryPrice, stopLoss, riskMultiplier);
+  
+  // Directive 11.7S: Apply mode overlay to position size
+  const positionSize = basePositionSize * modeOverlay.positionSizeMultiplier;
   
   // Directive 11.6H: Compute capital allocation - fixed USD exposure capped at 25% of portfolio
   const maxPositionSize = portfolioValue * 0.25;
@@ -491,7 +524,16 @@ async function generatePhase10Signal(
   // Directive 11.6H: Convert to variable quantity based on entry price
   const quantity = dollarValue / entryPrice;
   
+  // Directive 11.7S: Apply mode overlay to stop loss and take profit distances
+  const stopDistance = entryPrice - stopLoss;
+  const targetDistance = takeProfit - entryPrice;
+  const adjustedStopDistance = stopDistance * modeOverlay.stopLossDistanceMultiplier;
+  const adjustedTargetDistance = targetDistance * modeOverlay.takeProfitDistanceMultiplier;
+  const adjustedStopLoss = entryPrice - adjustedStopDistance;
+  const adjustedTakeProfit = entryPrice + adjustedTargetDistance;
+  
   console.log(`[VTS][11.6H][Sizing] ${symbol}: $${dollarValue.toFixed(2)} exposure → ${quantity.toFixed(6)} units @ $${entryPrice.toFixed(4)}`);
+  console.log(`[11.7S][VTS] ${symbol}: Stop ${stopLoss.toFixed(4)}→${adjustedStopLoss.toFixed(4)} | TP ${takeProfit.toFixed(4)}→${adjustedTakeProfit.toFixed(4)} (mode=${strategyMode})`);
   
   // Directive 11.7I.a Task I.a-08: Per-symbol duplicate guard
   // Prevents multiple open trades for the same symbol, which causes:
@@ -524,12 +566,13 @@ async function generatePhase10Signal(
   }
   
   // Directive 11.6: Create open virtual trade for real-price resolution
+  // Directive 11.7S: Uses adjusted stop/target based on mode overlay
   const openTrade: OpenVirtualTrade = {
     id: tradeId,
     symbol,
     entryPrice,
-    stopLoss,
-    takeProfit,
+    stopLoss: adjustedStopLoss,       // 11.7S: Mode-adjusted stop loss
+    takeProfit: adjustedTakeProfit,   // 11.7S: Mode-adjusted take profit
     positionSize,
     dollarValue,      // Directive 11.6H: Fixed USD exposure
     quantity,         // Directive 11.6H: Variable coin units
@@ -545,7 +588,10 @@ async function generatePhase10Signal(
     regimeWeight,
     decayPenalty,
     pool,
-    openedAt: Date.now()
+    openedAt: Date.now(),
+    strategyMode,         // 11.7S: Mode for observability
+    modeOverlay,          // 11.7S: Overlay values for observability
+    regimeStability,      // 11.7S: Regime stability for observability
   };
   
   openVirtualTrades.set(tradeId, openTrade);

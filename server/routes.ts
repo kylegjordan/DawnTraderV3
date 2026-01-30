@@ -2318,27 +2318,40 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // GET /api/system/governance - Directive 11.7R-E: Regime transition governance state with pre-score exclusions
+  // GET /api/system/governance - Directive 11.7S: Regime transition governance state with mode stats
   apiRouter.get('/system/governance', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
       const { getGovernanceStateForUI, getGovernanceStats } = await import('./core/governance/governance-engine.js');
       const { getLearningCooldownState } = await import('./core/governance/learning-cooldown.js');
       const { STRATEGY_GOVERNANCE, STRATEGY_GOVERNANCE_PROFILES, INFLUENCE_RULES } = await import('./config/strategy-governance.js');
       const { getPreScoreExclusionStats } = await import('./core/governance/strategy-eligibility.js');
+      const { resolveStrategyMode, getModeOverlay, getModeStats, STRATEGY_MODE_OVERLAYS } = await import('./core/governance/strategy-modes.js');
       
       const governanceState = getGovernanceStateForUI();
       const learningState = getLearningCooldownState();
       const preScoreStats = getPreScoreExclusionStats();
+      const modeStats = getModeStats();
+      
+      // 11.7S: Derive current mode from stability
+      const currentStability = governanceState.stability || 'STABLE';
+      const currentMode = resolveStrategyMode(currentStability);
+      const currentOverlay = getModeOverlay(currentMode);
       
       res.json({
         ok: true,
-        schema: 'governance/v1.1',
+        schema: 'governance/v1.2',
         stability: governanceState.stability,
         metrics: governanceState.metrics,
         reason: governanceState.reason,
         stats: governanceState.stats,
         strategyMultipliers: governanceState.strategyMultipliers,
         preScoreExclusions: preScoreStats,
+        strategyMode: {
+          current: currentMode,
+          overlay: currentOverlay,
+          overlays: STRATEGY_MODE_OVERLAYS,
+          stats: modeStats,
+        },
         learning: {
           deferredCount: learningState.deferredCount,
           batchPendingCount: learningState.batchPendingCount,

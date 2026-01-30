@@ -6,6 +6,20 @@ import { Shield, AlertTriangle, CheckCircle, Clock, TrendingDown, Activity, Lock
 import { apiFetch } from "@/lib/api";
 import { formatDistanceToNow } from "date-fns";
 
+interface StrategyModeOverlay {
+  positionSizeMultiplier: number;
+  stopLossDistanceMultiplier: number;
+  takeProfitDistanceMultiplier: number;
+  confidenceFloor: number;
+  entryCooldownMultiplier: number;
+}
+
+interface ModeStats {
+  trades: number;
+  pnl: number;
+  stopOuts: number;
+}
+
 interface GovernanceData {
   ok: boolean;
   schema: string;
@@ -31,6 +45,12 @@ interface GovernanceData {
     excluded: number;
     since: number;
     sinceFormatted: string;
+  };
+  strategyMode?: {
+    current: 'NORMAL' | 'DEFENSIVE' | 'SURVIVAL';
+    overlay: StrategyModeOverlay;
+    overlays: Record<string, StrategyModeOverlay>;
+    stats: Record<string, ModeStats>;
   };
   learning: {
     deferredCount: number;
@@ -117,7 +137,7 @@ export default function GovernanceSection() {
     );
   }
 
-  const { stability, metrics, reason, stats, strategyMultipliers, preScoreExclusions, learning, config } = governanceData;
+  const { stability, metrics, reason, stats, strategyMultipliers, preScoreExclusions, strategyMode, learning, config } = governanceData;
 
   return (
     <div className="space-y-6">
@@ -237,6 +257,79 @@ export default function GovernanceSection() {
           </p>
         </CardContent>
       </Card>
+
+      {strategyMode && (
+        <Card className="border-2 border-blue-500">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="w-5 h-5 text-blue-500" />
+              Strategy Mode (11.7S)
+            </CardTitle>
+            <CardDescription>
+              Behavioral modulation based on regime stability - controls position sizing and exit distances
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <Badge className={`text-lg px-4 py-2 ${
+                    strategyMode.current === 'NORMAL' ? 'bg-green-500' :
+                    strategyMode.current === 'DEFENSIVE' ? 'bg-yellow-500' :
+                    'bg-red-500'
+                  }`}>
+                    {strategyMode.current}
+                  </Badge>
+                  <div className="text-sm text-muted-foreground">Current Mode</div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Position Size</span>
+                    <span className="font-mono">{(strategyMode.overlay.positionSizeMultiplier * 100).toFixed(0)}%</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Stop Distance</span>
+                    <span className="font-mono">×{strategyMode.overlay.stopLossDistanceMultiplier.toFixed(1)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Take Profit Distance</span>
+                    <span className="font-mono">×{strategyMode.overlay.takeProfitDistanceMultiplier.toFixed(1)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Confidence Floor</span>
+                    <span className="font-mono">{(strategyMode.overlay.confidenceFloor * 100).toFixed(0)}%</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Entry Cooldown</span>
+                    <span className="font-mono">×{strategyMode.overlay.entryCooldownMultiplier.toFixed(1)}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div className="text-sm font-medium">Trade Count by Mode</div>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <Badge variant="outline" className="bg-green-50">NORMAL</Badge>
+                    <span>{strategyMode.stats?.NORMAL?.trades || 0}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <Badge variant="outline" className="bg-yellow-50">DEFENSIVE</Badge>
+                    <span>{strategyMode.stats?.DEFENSIVE?.trades || 0}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <Badge variant="outline" className="bg-red-50">SURVIVAL</Badge>
+                    <span>{strategyMode.stats?.SURVIVAL?.trades || 0}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-4">
+              Stop distance multipliers &gt;1 WIDEN stops in DEFENSIVE/SURVIVAL modes. 
+              Risk is controlled by position size reduction, not tighter stops.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {metrics && (
         <Card>

@@ -22,7 +22,8 @@ export type SkipReason =
   | 'ADX_Guard'
   | 'Duplicate_Position'
   | 'BLOCKED_GOVERNANCE'
-  | 'LEARNING_DEFERRED';
+  | 'LEARNING_DEFERRED'
+  | 'Confidence_Floor';  // 11.7S: Mode-specific confidence threshold not met
 
 export interface SkippedSignalEntry {
   timestamp: string;
@@ -39,6 +40,7 @@ export interface SkippedSignalEntry {
   source?: 'VTS' | 'SQE';
   governanceReason?: string;
   learningState?: 'DEFERRED' | 'IMMEDIATE';
+  modeSkipReason?: string;  // 11.7S: Mode-specific skip explanation
 }
 
 const LOG_DIR = path.join(process.cwd(), 'logs', 'vts_skipped_signals');

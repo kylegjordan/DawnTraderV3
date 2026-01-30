@@ -1,0 +1,252 @@
+🧭 Directive 11.7S — Regime-Driven Strategy Mode Modulation (Deterministic, Phase-11 Safe)
+
+Phase: 11
+Series: Predictive Stability & Risk Governance
+Dependencies: 11.7R / 11.7R-E
+Applies To: VTS · Paper Trading · Live Trading
+Status: Mandatory before Phase 11 closeout and paper-trading re-enable
+
+1. Purpose (Unchanged, Clarified)
+
+Directive 11.7S introduces deterministic, observable strategy behavior modulation based on global regime stability, without:
+
+modifying internal strategy logic
+
+introducing learning or inference
+
+weakening governance or safety guarantees
+
+polluting attribution or analytics
+
+This directive controls how an allowed strategy behaves, not whether it is allowed.
+
+Governance (11.7R) remains the circuit breaker.
+11.7S is a behavioral damper.
+
+2. Architectural Boundary (Non-Negotiable)
+2.1 This directive DOES
+
+✅ Introduce explicit Strategy Modes
+✅ Apply parameter overlays, not logic branches
+✅ Operate deterministically (no ML, no tuning)
+✅ Preserve attribution and learning observability
+✅ Apply identically across VTS, Paper, Live
+
+2.2 This directive DOES NOT
+
+❌ Modify strategy entry / exit logic
+❌ Add if (regime === …) inside strategies
+❌ Allow per-strategy heuristics
+❌ Replace governance blocks
+❌ Introduce adaptive or probabilistic behavior
+
+3. Strategy Modes (Revised per Gemini)
+3.1 Mode Definition (UPDATED)
+
+CHANGE: AGGRESSIVE is intentionally removed in Phase 11.
+
+export type StrategyMode =
+  | "NORMAL"
+  | "DEFENSIVE"
+  | "SURVIVAL";
+
+
+Rationale:
+
+There is no Phase-11 condition that safely warrants elevated aggression.
+
+Leaving an unreachable mode creates ambiguity and future risk.
+
+Aggressive behavior is explicitly deferred to Phase 12+ (learning-mediated).
+
+3.2 Mode Selection (Authoritative Mapping)
+
+Mode selection is based only on global regime stability.
+
+Global Regime Stability	Assigned Strategy Mode
+STABLE	NORMAL
+TRANSITION	DEFENSIVE
+UNSTABLE	SURVIVAL
+
+❗ Local (symbol-level) regimes must not override global mode selection.
+❗ Governance blocks (11.7R-E) still supersede mode assignment.
+
+4. Strategy Mode Parameter Overlays (Critical Section)
+4.1 Overlay Interface (Explicit)
+export interface StrategyModeOverlay {
+  positionSizeMultiplier: number;
+  stopLossDistanceMultiplier: number;
+  takeProfitDistanceMultiplier: number;
+  confidenceFloor: number;
+  entryCooldownMultiplier: number;
+}
+
+
+IMPORTANT:
+stopLossDistanceMultiplier and takeProfitDistanceMultiplier apply to price distance, not dollar risk.
+
+4.2 Authoritative Overlay Table (UPDATED + COMMENTARY)
+export const STRATEGY_MODE_OVERLAYS: Record<StrategyMode, StrategyModeOverlay> = {
+  NORMAL: {
+    positionSizeMultiplier: 1.0,
+    stopLossDistanceMultiplier: 1.0,
+    takeProfitDistanceMultiplier: 1.0,
+    confidenceFloor: 0.60,
+    entryCooldownMultiplier: 1.0,
+  },
+
+  DEFENSIVE: {
+    positionSizeMultiplier: 0.6,
+    stopLossDistanceMultiplier: 1.2,
+    takeProfitDistanceMultiplier: 0.8,
+    confidenceFloor: 0.70,
+    entryCooldownMultiplier: 1.5,
+  },
+
+  SURVIVAL: {
+    positionSizeMultiplier: 0.25,
+    stopLossDistanceMultiplier: 1.5,
+    takeProfitDistanceMultiplier: 0.6,
+    confidenceFloor: 0.80,
+    entryCooldownMultiplier: 2.0,
+  },
+};
+
+4.3 Mandatory Implementation Comment (DO NOT OMIT)
+
+Replit must include the following comment directly above the overlay table:
+
+/**
+ * NOTE ON STOP LOSS MULTIPLIERS:
+ *
+ * In DEFENSIVE and SURVIVAL modes, stopLossDistanceMultiplier > 1 intentionally
+ * WIDENS the stop distance while position size is reduced.
+ *
+ * This reflects professional volatility handling:
+ *   - Smaller size
+ *   - Wider stops
+ *   - Reduced whipsaw in choppy / unstable regimes
+ *
+ * DO NOT "tighten stops" in volatile regimes — that causes near-100% stop-out rates.
+ * Risk is controlled by position size, not by shrinking stop distance.
+ */
+
+
+This is not optional.
+It prevents future “well-meaning” regressions.
+
+5. Execution Order (Re-stated, Mandatory)
+
+The execution pipeline must be:
+
+Signal Generated
+→ Regime Detected
+→ Global Regime Stability Classified
+→ Governance Eligibility Check (11.7R / 11.7R-E)
+→ Strategy Mode Assigned (11.7S)
+→ Mode Overlay Applied
+→ Scoring & Ranking
+→ Position Sizing (post-overlay)
+→ Execution or Skip
+→ Learning Attribution
+
+
+Mode overlays must never be applied before governance.
+
+6. Enforcement Points (Explicit, No Guessing)
+6.1 VTS
+
+Insert Strategy Mode Resolution + Overlay Application:
+
+After: Governance eligibility pass
+
+Before: Final score computation and virtual trade creation
+
+Blocked strategies must never reach mode assignment.
+
+6.2 Paper Trading
+
+Insert Strategy Mode Resolution + Overlay Application:
+
+After: Governance eligibility
+
+Before: Position sizing and execution intent creation
+
+Mode overlays must affect:
+
+size calculation
+
+stop / target distance
+
+confidence threshold
+
+entry cooldown
+
+6.3 Live Trading
+
+Live trading must mirror paper trading exactly.
+
+No conditional divergence is permitted.
+
+7. Observability & Logging (Mandatory Fields)
+
+Every evaluated signal must log:
+
+strategyMode: StrategyMode;
+modeOverlay: StrategyModeOverlay;
+regimeStability: RegimeStability;
+
+
+If blocked by governance:
+
+strategyMode: "SURVIVAL";
+resultType: "BLOCKED_GOVERNANCE";
+
+8. UI & Diagnostics (Explicit Requirements)
+8.1 Governance / Analytics UI
+
+Add the following non-optional elements:
+
+Current Global Strategy Mode
+
+Active Mode Overlay Values
+
+Trade count by Strategy Mode (1h / 24h)
+
+P/L by Strategy Mode
+
+Stop-out rate by Strategy Mode
+
+This data is required for Phase 12 learning.
+
+9. Learning Interaction (Hard Constraint)
+
+Learning systems:
+
+✅ May record (strategy, mode, regime, outcome)
+❌ May NOT change mode selection
+❌ May NOT tune overlay parameters
+
+Phase 11 learning is observational only.
+
+10. Phase Boundary Declaration (Explicit)
+
+Directive 11.7S closes Phase 11.
+
+Phase 12 begins only when:
+
+Paper trading is stable
+
+Mode-level analytics are populated
+
+No further math or regime refactors are pending
+
+AGGRESSIVE mode is intentionally deferred to Phase 12+.
+
+11. Final Status
+
+✅ Gemini feedback incorporated
+✅ Ambiguity removed
+✅ Unsafe aggression deferred
+✅ Volatility handling explicitly documented
+✅ Replit given zero room to guess

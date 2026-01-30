@@ -85,6 +85,7 @@ import { applyGovernance, getGovernanceStateForUI } from '../core/governance/gov
 import { getCachedStability, computeGlobalStability } from '../core/governance/regime-stability.js';
 import { isStrategyEligible, logGovernanceBlock } from '../core/governance/strategy-eligibility.js';
 import { getStrategyDependency, type RegimeStability } from '../config/strategy-governance.js';
+import { resolveStrategyMode, getModeOverlay, meetsConfidenceFloor, recordModeExecution, type StrategyMode, type StrategyModeOverlay } from '../core/governance/strategy-modes.js';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail' | 'manual_stop';
@@ -2155,12 +2156,50 @@ export class PaperExecutionEngine {
         return;
       }
       // ══════════════════════════════════════════════════════════════════════════════
+      
+      // ══════════════════════════════════════════════════════════════════════════════
+      // Directive 11.7S — Strategy Mode Modulation
+      // ══════════════════════════════════════════════════════════════════════════════
+      const strategyMode: StrategyMode = resolveStrategyMode(regimeStability);
+      const modeOverlay: StrategyModeOverlay = getModeOverlay(strategyMode);
+      
+      // 11.7S: Check if signal meets confidence floor for current mode
+      const signalConfidence = signalMetadata.regimeConfidence || signal.confidence || 0.5;
+      if (!meetsConfidenceFloor(signalConfidence, regimeStability)) {
+        console.log(`[11.7S][Paper] SKIP: ${signal.symbol} ${signal.strategy} - confidence ${signalConfidence.toFixed(2)} < floor ${modeOverlay.confidenceFloor} (mode=${strategyMode})`);
+        return;
+      }
+      
+      console.log(`[11.7S][Paper] Mode: ${strategyMode} | Size×${modeOverlay.positionSizeMultiplier} | Stop×${modeOverlay.stopLossDistanceMultiplier} | TP×${modeOverlay.takeProfitDistanceMultiplier}`);
+      
+      // 11.7S: Apply mode overlay to stop/target distances
+      if (signal.stopPrice && signal.targetPrice) {
+        const stopDistance = signal.entryPrice - signal.stopPrice;
+        const targetDistance = signal.targetPrice - signal.entryPrice;
+        const adjustedStopDistance = stopDistance * modeOverlay.stopLossDistanceMultiplier;
+        const adjustedTargetDistance = targetDistance * modeOverlay.takeProfitDistanceMultiplier;
+        signalAny.stopPrice = signal.entryPrice - adjustedStopDistance;
+        signalAny.targetPrice = signal.entryPrice + adjustedTargetDistance;
+        console.log(`[11.7S][Paper] ${signal.symbol}: Stop ${signal.stopPrice.toFixed(4)}→${signalAny.stopPrice.toFixed(4)} | TP ${signal.targetPrice.toFixed(4)}→${signalAny.targetPrice.toFixed(4)}`);
+      }
+      
+      // 11.7S: Store mode info on signal for downstream logging
+      signalAny.strategyMode = strategyMode;
+      signalAny.modeOverlay = modeOverlay;
+      signalAny.regimeStability = regimeStability;
+      // ══════════════════════════════════════════════════════════════════════════════
 
       const hasQuantity = signalAny.quantity != null && signalAny.quantity > 0;
       const hasEstimatedValue = signalAny.estimatedValue != null && signalAny.estimatedValue > 0;
       
       if (hasQuantity && hasEstimatedValue) {
-        console.log(`[B6][TRUST_SIZED] Using pre-sized signal for ${signal.symbol}: qty=${signalAny.quantity.toFixed(8)}, value=$${signalAny.estimatedValue.toFixed(2)}`);
+        // 11.7S: Apply mode overlay to pre-sized signals as well
+        const originalQty = signalAny.quantity;
+        const originalValue = signalAny.estimatedValue;
+        signalAny.quantity = originalQty * modeOverlay.positionSizeMultiplier;
+        signalAny.estimatedValue = originalValue * modeOverlay.positionSizeMultiplier;
+        signalAny.preComputedNotional = signalAny.estimatedValue;
+        console.log(`[B6][TRUST_SIZED] ${signal.symbol}: qty=${signalAny.quantity.toFixed(8)}, value=$${signalAny.estimatedValue.toFixed(2)} (mode=${strategyMode}, ×${modeOverlay.positionSizeMultiplier})`);
       } else {
         console.log(`[B6][FALLBACK_SIZING] Signal missing sizing fields for ${signal.symbol}, will size in executeSimulatedTrade`);
         const guardrails = await storage.getGuardrailsV2({ mode: this.mode });
@@ -2179,10 +2218,13 @@ export class PaperExecutionEngine {
           });
           
           if (sizingResult.quantity > 0 && sizingResult.estimatedValue > 0) {
-            signalAny.quantity = sizingResult.quantity;
-            signalAny.estimatedValue = sizingResult.estimatedValue;
-            signalAny.preComputedNotional = sizingResult.estimatedValue;
-            console.log(`[B6][FALLBACK_SIZED] ${signal.symbol}: qty=${sizingResult.quantity.toFixed(8)}, value=$${sizingResult.estimatedValue.toFixed(2)}`);
+            // 11.7S: Apply mode overlay to position size
+            const adjustedQuantity = sizingResult.quantity * modeOverlay.positionSizeMultiplier;
+            const adjustedValue = sizingResult.estimatedValue * modeOverlay.positionSizeMultiplier;
+            signalAny.quantity = adjustedQuantity;
+            signalAny.estimatedValue = adjustedValue;
+            signalAny.preComputedNotional = adjustedValue;
+            console.log(`[B6][FALLBACK_SIZED] ${signal.symbol}: qty=${adjustedQuantity.toFixed(8)}, value=$${adjustedValue.toFixed(2)} (mode=${strategyMode}, ×${modeOverlay.positionSizeMultiplier})`);
           } else {
             console.log(`[B6][SIZING_FAILED] Zero sizing result for ${signal.symbol} - skipping`);
             return;
@@ -2194,8 +2236,12 @@ export class PaperExecutionEngine {
       }
 
       // Note: Directive 11.7R-E hard governance filter applied before sizing (lines 2134-2160)
-      // If we reach here, strategy is eligible for execution
+      // Note: Directive 11.7S mode overlay applied after governance (lines 2163-2193)
+      // If we reach here, strategy is eligible for execution with mode overlay applied
 
+      // 11.7S: Record mode execution for analytics
+      recordModeExecution(strategyMode);
+      
       console.log(`[8.8.3-F][PROCESS] Processing signal for ${signal.symbol} via guardrails_v2 path`);
       await this.executeSimulatedTrade(signal, settings);
       
