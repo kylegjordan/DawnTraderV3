@@ -1,0 +1,203 @@
+📜 Directive 11.7S — Strategy Mode Modulation (Final)
+Purpose
+
+Introduce deterministic, regime-aware strategy behavior modulation without allowing strategies to self-mutate or learning systems to interfere.
+
+This directive explicitly does not introduce learning-driven adaptation.
+It establishes a controlled behavioral envelope for Phase 11.
+
+1. Scope & Constraints
+In Scope
+
+Deterministic strategy behavior overlays
+
+Regime-driven mode selection
+
+Position sizing, stop/target distances, confidence floors, cooldowns
+
+Paper Trading + VTS only
+
+Out of Scope (Explicitly Forbidden)
+
+Learning-driven parameter mutation
+
+Strategy-internal branching on regime
+
+Capital reallocation logic
+
+Aggressive risk expansion
+
+2. Strategy Modes (Final Set)
+❌ AGGRESSIVE MODE — REMOVED
+
+Not reachable
+
+Not allowed in Phase 11
+
+Reserved for Phase 12+
+
+✅ Allowed Modes
+export type StrategyMode =
+  | "NORMAL"
+  | "DEFENSIVE"
+  | "SURVIVAL";
+
+3. Regime → Mode Mapping
+STABLE       → NORMAL
+TRANSITION   → DEFENSIVE
+UNSTABLE     → SURVIVAL
+
+
+This mapping must be centralized and non-overridable.
+
+4. Mode Parameter Overlays
+4.1 Canonical Overlay Table
+Mode	Position Size	Stop Distance	Take Profit	Confidence Floor	Entry Cooldown
+NORMAL	1.00x	1.00x	1.00x	0.60	1.00x
+DEFENSIVE	0.60x	1.20x	0.80x	0.70	1.50x
+SURVIVAL	0.25x	1.50x	0.60x	0.80	2.00x
+4.2 Stop Distance Design Rationale (MANDATORY COMMENT)
+
+Important:
+Stop distance multipliers > 1.0 intentionally widen stops in DEFENSIVE and SURVIVAL modes.
+
+This is a professional volatility response:
+
+Risk is controlled via position size reduction
+
+Wider stops prevent whipsaw stop-outs in unstable markets
+
+Do not tighten stops in volatile regimes — that would increase loss frequency.
+
+This comment must exist in code near the overlay logic.
+
+5. Execution Order (Non-Negotiable)
+
+The following order must be enforced in both:
+
+VTSRunner
+
+PaperExecutionEngine
+
+Required Order
+
+Governance exclusions (11.7R)
+
+Regime resolution
+
+Strategy Mode resolution
+
+Confidence floor enforcement
+
+If signal.confidence < mode.confidenceFloor → skip
+
+Scoring
+
+Position sizing (with mode multiplier)
+
+Stop / take-profit distance application
+
+Cooldown enforcement
+
+Execution / simulation
+
+6. Implementation Requirements (Code-Level)
+
+Replit must verify modifications in:
+
+Required Files (examples — exact paths must be confirmed)
+
+server/trading/vtsRunner.ts
+
+server/trading/paperExecutionEngine.ts
+
+server/governance/strategyModeResolver.ts (or equivalent)
+
+server/types/governance.ts
+
+bridge/canonical/Phase_11_*.md
+
+Required Additions
+
+Central resolveStrategyMode(regimeStability)
+
+Immutable StrategyModeConfig map
+
+Mode stats accumulator:
+
+trades
+
+pnl
+
+stopOuts
+
+7. Observability Requirements
+
+The UI must display:
+
+Current active mode
+
+Overlay parameters
+
+Trade count by mode
+
+Explanation text for stop widening
+
+(Your screenshots confirm this is already present.)
+
+8. Learning System Interaction
+Explicit Rules
+
+Learning systems may observe
+
+Learning systems may not modify
+
+Mode logic is frozen and deterministic
+
+Any learning interaction with modes is deferred to Phase 12+.
+
+9. Phase Boundary Declaration
+
+Directive 11.7S concludes Phase 11 behavioral engineering.
+
+Next allowed actions:
+
+Paper trading validation
+
+Bug fixes only
+
+No new math
+
+No new strategy logic
+
+No adaptive learning
+
+4️⃣ Verification Prompt You Should Send Replit
+
+Since proof is incomplete, send this verbatim:
+
+Verification Request — Directive 11.7S
+
+Please provide explicit verification for the following:
+
+Exact file paths modified for Strategy Mode Modulation
+
+Code excerpts showing:
+
+Where StrategyMode is resolved
+
+Where confidence floors are enforced before scoring
+
+Where stop/TP multipliers are applied
+
+Confirmation that mode overlays are applied in:
+
+VTS Runner
+
+Paper Execution Engine
+
+Location of the inline comment explaining stop widening rationale
+
+Confirmation that no learning subsystem mutates strategy behavior
+
+Screenshots alone are not sufficient — please include code excerpts.
