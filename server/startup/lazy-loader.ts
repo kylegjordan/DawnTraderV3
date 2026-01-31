@@ -174,6 +174,18 @@ export async function lazyLoadServices() {
         console.error('[Lazy] SQEDistributionLogging (deferred) failed:', error);
       }
     }, 8000);
+
+    // Directive 11.4H.5-Fix: Market Event Scheduler - defer by 10s
+    // Subscribes to CentralClock for 30s regime/friction checks
+    setTimeout(async () => {
+      try {
+        const { startMarketEventScheduler } = await import('../utils/market-events.js');
+        await startMarketEventScheduler();
+        console.log('[Gemini-5A] ✅ Deferred service loaded: MarketEventScheduler (+10s)');
+      } catch (error) {
+        console.error('[Lazy] MarketEventScheduler (deferred) failed:', error);
+      }
+    }, 10000);
     
     const duration = Date.now() - start;
     const durationSeconds = (duration / 1000).toFixed(1);

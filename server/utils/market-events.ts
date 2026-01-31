@@ -250,3 +250,132 @@ export function clearMarketEvents(): void {
 export function getLastKnownState(): { regime: MarketRegime | null; frictionBand: string | null } {
   return { regime: lastRegime, frictionBand: lastFrictionBand };
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Directive 11.4H.5-Fix: Background Market Event Scheduler
+// ══════════════════════════════════════════════════════════════════════════════
+// 
+// Problem: Market events were only logged when UI called /api/market-indicators
+// Solution: 
+//   1. Initialize lastRegime/lastFrictionBand on startup (no event emitted)
+//   2. Subscribe to CentralClockService for periodic checks (every 30 ticks = 30s)
+//   3. Ensure events.json is created and persisted
+// 
+// ══════════════════════════════════════════════════════════════════════════════
+
+let isSchedulerInitialized = false;
+let ticksSinceLastCheck = 0;
+const CHECK_INTERVAL_TICKS = 30; // Check every 30 seconds (30 x 1s ticks)
+
+/**
+ * Initialize market state on startup WITHOUT emitting events.
+ * This ensures the first actual regime/friction change is logged.
+ */
+export async function initializeMarketState(): Promise<void> {
+  try {
+    // Dynamic import to avoid circular dependencies
+    const { getMarketIndicators } = await import('../services/market-indicators.js');
+    const indicators = getMarketIndicators();
+    
+    // Initialize lastRegime and lastFrictionBand without triggering events
+    // We set these directly rather than calling checkRegimeTransition/checkFrictionTransition
+    // to avoid logging a "transition" on startup
+    if (lastRegime === null) {
+      lastRegime = indicators.marketRegime;
+      console.log(`[11.4H.5][Init] Initialized lastRegime: ${lastRegime}`);
+    }
+    
+    if (lastFrictionBand === null && indicators.frictionDescription?.status) {
+      lastFrictionBand = indicators.frictionDescription.status;
+      console.log(`[11.4H.5][Init] Initialized lastFrictionBand: ${lastFrictionBand}`);
+    }
+    
+    // Ensure events file exists
+    ensureEventsDir();
+    if (!fs.existsSync(EVENTS_FILE)) {
+      fs.writeFileSync(EVENTS_FILE, '[]', 'utf-8');
+      console.log(`[11.4H.5][Init] Created empty events file: ${EVENTS_FILE}`);
+    }
+    
+    console.log(`[11.4H.5][Init] ✅ Market state initialized - regime=${lastRegime}, friction=${lastFrictionBand}`);
+  } catch (error: any) {
+    console.error('[11.4H.5][Init] Error initializing market state:', error.message);
+  }
+}
+
+/**
+ * Periodic check for regime/friction transitions.
+ * Called by CentralClockService subscriber.
+ */
+async function checkMarketTransitionsInternal(): Promise<void> {
+  try {
+    const { getMarketIndicators } = await import('../services/market-indicators.js');
+    
+    // This call will trigger checkRegimeTransition and checkFrictionTransition
+    // which compare against lastRegime/lastFrictionBand and log if changed
+    const indicators = getMarketIndicators();
+    
+    // Log only on significant tick intervals for debugging
+    if (ticksSinceLastCheck === 0) {
+      console.log(`[11.4H.5][Scheduler] Checked: regime=${indicators.marketRegime}, friction=${indicators.frictionDescription?.status || 'unknown'}`);
+    }
+  } catch (error: any) {
+    console.error('[11.4H.5][Scheduler] Error checking transitions:', error.message);
+  }
+}
+
+/**
+ * Start the market event scheduler by subscribing to CentralClockService.
+ * Runs every 30 ticks (30 seconds).
+ */
+export async function startMarketEventScheduler(): Promise<void> {
+  if (isSchedulerInitialized) {
+    console.log('[11.4H.5][Scheduler] Already initialized');
+    return;
+  }
+  
+  try {
+    // Initialize market state first (no events emitted)
+    await initializeMarketState();
+    
+    // Subscribe to CentralClockService
+    const { centralClock } = await import('../services/central-clock.js');
+    
+    centralClock.subscribe('MarketEventScheduler', (tick) => {
+      ticksSinceLastCheck++;
+      
+      // Check every 30 ticks (30 seconds)
+      if (ticksSinceLastCheck >= CHECK_INTERVAL_TICKS) {
+        ticksSinceLastCheck = 0;
+        checkMarketTransitionsInternal();
+      }
+    });
+    
+    isSchedulerInitialized = true;
+    console.log(`[11.4H.5][Scheduler] ✅ Started - checking every ${CHECK_INTERVAL_TICKS}s via CentralClock`);
+  } catch (error: any) {
+    console.error('[11.4H.5][Scheduler] Error starting scheduler:', error.message);
+  }
+}
+
+/**
+ * Stop the market event scheduler.
+ */
+export async function stopMarketEventScheduler(): Promise<void> {
+  if (!isSchedulerInitialized) {
+    return;
+  }
+  
+  try {
+    const { centralClock } = await import('../services/central-clock.js');
+    centralClock.unsubscribe('MarketEventScheduler');
+    isSchedulerInitialized = false;
+    console.log('[11.4H.5][Scheduler] Stopped');
+  } catch (error: any) {
+    console.error('[11.4H.5][Scheduler] Error stopping:', error.message);
+  }
+}
+
+export function isMarketEventSchedulerRunning(): boolean {
+  return isSchedulerInitialized;
+}
