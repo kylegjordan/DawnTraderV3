@@ -831,7 +831,11 @@ function RegimeArchivePanel({
                   <option key={regime} value={regime}>{regime}</option>
                 ))}
               </select>
-              <Button variant="outline" size="sm" onClick={onTriggerArchive}>
+              <Button variant="outline" size="sm" onClick={() => {
+                console.log('[11.7E][Archive][INLINE] Button clicked - BEFORE handler call');
+                onTriggerArchive();
+                console.log('[11.7E][Archive][INLINE] Button clicked - AFTER handler call');
+              }}>
                 <RefreshCw className="w-4 h-4 mr-2" />
                 Manual Archive
               </Button>
