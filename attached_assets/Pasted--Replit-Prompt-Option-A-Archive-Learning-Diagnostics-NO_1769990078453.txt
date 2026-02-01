@@ -1,0 +1,115 @@
+🔧 Replit Prompt — Option A: Archive & Learning Diagnostics (NO FIXES)
+
+Objective
+We are still diagnosing issues around regime archiving and learning calibration.
+Do not implement fixes or refactors. Diagnostics and evidence only.
+
+Part 1 — Archive Pipeline Verification
+
+Please provide explicit evidence for the following, with logs or file output:
+
+A. Runtime Invocation
+
+Confirm whether the following functions are being called at runtime:
+
+triggerRegimeArchive()
+
+runRegimeArchiver()
+
+archiveCanonicalWeights()
+
+For each function:
+
+Show the exact log lines emitted when invoked
+
+Include timestamps
+
+Include call origin (manual trigger vs scheduler)
+
+If any function is never invoked, state that explicitly.
+
+B. Data Availability Check
+
+When the archive trigger runs, log and report:
+
+Count of closed simulated trades available
+
+Presence/absence of:
+
+canonical weights
+
+regime metrics
+
+predictive adjustments
+
+Print the exact object keys being inspected before the function exits with:
+
+"No canonical weights available"
+
+C. File-System Evidence
+
+Please list:
+
+Exact directory path used for regime archives
+
+All files currently present in that directory
+
+File permissions
+
+If no file is written, show:
+
+The branch condition that exits early
+
+The reason code returned
+
+Part 2 — Scheduler Verification
+
+Without changing behavior, confirm:
+
+Whether archival-scheduler.ts is registered at startup
+
+Whether its interval callback has ever fired
+
+Provide:
+
+Startup log proving registration
+
+One runtime log proving scheduler execution
+
+If it never fires, state why (disabled flag, missing import, env guard, etc.).
+
+Part 3 — Learning Calibration Status
+
+Please answer explicitly:
+
+Is learning calibration currently:
+
+Disabled by design?
+
+Disabled due to missing data?
+
+Disabled due to a feature flag?
+
+Identify the exact gate that prevents calibration from running:
+
+File path
+
+Function name
+
+Condition check
+
+Provide the log line that would appear if calibration were active
+
+Part 4 — Evidence Required
+
+Do not summarize.
+
+Provide:
+
+Raw logs
+
+Code excerpts (minimal, relevant)
+
+File listings
+
+No fixes until this evidence is reviewed.
