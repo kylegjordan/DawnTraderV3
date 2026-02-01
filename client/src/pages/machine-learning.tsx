@@ -1529,7 +1529,7 @@ export default function MachineLearningPage() {
 
   const handleTriggerArchive = async () => {
     try {
-      await apiFetch('/api/vts/regime-archive', { method: 'POST' });
+      await apiFetch('/api/vts/regime-archive/trigger', { method: 'POST' });
       refetchArchive();
     } catch (error) {
       console.error('Manual archive trigger failed:', error);
