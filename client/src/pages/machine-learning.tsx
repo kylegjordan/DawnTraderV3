@@ -1581,26 +1581,28 @@ export default function MachineLearningPage() {
     staleTime: 120000,
   });
 
-  const handleTriggerArchive = () => {
-    console.log('[DIAG][handleTriggerArchive] ENTRY', { timestamp: Date.now() });
+  const handleTriggerArchive = async () => {
+    console.log('[Archive] Manual archive triggered');
     try {
-      const token = localStorage.getItem('accessToken');
-      console.log('[DIAG][handleTriggerArchive] TOKEN_CHECK', { hasToken: !!token });
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', '/api/vts/regime-archive/trigger', false);
-      xhr.setRequestHeader('Content-Type', 'application/json');
-      if (token) {
-        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-      }
-      console.log('[DIAG][handleTriggerArchive] XHR_SEND');
-      xhr.send(null);
-      console.log('[DIAG][handleTriggerArchive] XHR_COMPLETE', { status: xhr.status });
+      const token = await ensureValidToken();
+      console.log('[Archive] Sending POST request to /api/vts/regime-archive/trigger');
+      const response = await fetch('/api/vts/regime-archive/trigger', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+      });
+      console.log('[Archive] Response status:', response.status);
       
-      if (xhr.status >= 200 && xhr.status < 300) {
-        console.log('[DIAG][handleTriggerArchive] SUCCESS_REFETCH');
+      if (response.ok) {
+        const data = await response.json();
+        console.log('[Archive] Success:', data);
         refetchArchive();
       } else {
-        console.error('[Archive] HTTP Error:', xhr.status, xhr.statusText);
+        const errorText = await response.text();
+        console.error('[Archive] HTTP Error:', response.status, errorText);
       }
     } catch (error) {
       console.error('[Archive] Error:', error);
@@ -1827,10 +1829,10 @@ export default function MachineLearningPage() {
               type="button"
               className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white font-bold rounded cursor-pointer"
               style={{ pointerEvents: 'auto', position: 'relative', zIndex: 9999 }}
-              onClick={(e) => {
-                console.log('[DIAG][TEST_BUTTON] CLICK_EVENT', { type: e.type, target: (e.target as HTMLElement).tagName });
-                alert('Test button clicked - now calling archive handler');
-                handleTriggerArchive();
+              onClick={async () => {
+                console.log('[Archive] TEST_BUTTON clicked');
+                await handleTriggerArchive();
+                console.log('[Archive] TEST_BUTTON complete');
               }}
             >
               TEST: Trigger Archive (Click Me!)
