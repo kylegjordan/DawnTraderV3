@@ -11,6 +11,7 @@ import { statusRouter } from "./routes/status.js"; // Phase 1: Status and versio
 import dseRouter from "./routes/dse.js"; // Directive 11.3: Dynamic Sizing Engine routes
 import chapletRouter from "../chaplet/index.js"; // Phase M4: Chaplet Context Service
 import { env } from "./config/index.js"; // Phase 1: Typed environment config
+import regimeArchiveRouter from "./routes/regime-archive.js"; // Directive 11.7E: Regime Archive API
 import version from "./version.json";
 
 // Phase 3C: Performance profiling
@@ -197,6 +198,10 @@ app.use((req, res, next) => {
     .catch((err) => {
       console.error('[R9.3.HF-5] ❌ Failed to reinitialize FX5 Scanner:', err);
     });
+
+  // Directive 11.7E: Mount Regime Archive routes BEFORE registerRoutes to ensure availability
+  app.use('', regimeArchiveRouter);
+  console.log('[11.7E] Regime Archive routes mounted at /api/vts/regime-archive');
 
   // Register routes and get the API router + HTTP server
   const { httpServer: server, apiRouter } = await registerRoutes(app);
