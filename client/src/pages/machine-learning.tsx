@@ -1531,30 +1531,33 @@ export default function MachineLearningPage() {
     staleTime: 120000,
   });
 
-  const handleTriggerArchive = async () => {
-    console.log('[11.7E][Archive] Handler START');
-    alert('[11.7E] Handler started - about to enter try');
-    console.log('[11.7E][Archive] Step 1: Entering try block');
+  const handleTriggerArchive = () => {
+    console.log('[11.7E][Archive] Handler START - SYNC VERSION');
     try {
-      console.log('[11.7E][Archive] Step 2: About to get token');
-      const token = await ensureValidToken();
-      console.log('[11.7E][Archive] Step 3: Token obtained, making fetch');
-      const response = await fetch('/api/vts/regime-archive/trigger', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-        },
-      });
-      console.log('[11.7E][Archive] Step 4: Fetch complete, status:', response.status);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+      const token = localStorage.getItem('accessToken');
+      console.log('[11.7E][Archive] Token from localStorage:', token ? 'present' : 'missing');
+      
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/vts/regime-archive/trigger', false);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
       }
-      console.log('[11.7E][Archive] Step 5: Success, refetching archive');
-      refetchArchive();
+      console.log('[11.7E][Archive] Sending XHR request...');
+      xhr.send(null);
+      console.log('[11.7E][Archive] XHR complete, status:', xhr.status);
+      
+      if (xhr.status >= 200 && xhr.status < 300) {
+        console.log('[11.7E][Archive] SUCCESS! Refetching...');
+        alert('Archive triggered successfully!');
+        refetchArchive();
+      } else {
+        console.error('[11.7E][Archive] HTTP Error:', xhr.status, xhr.statusText);
+        alert(`Archive failed: ${xhr.status} ${xhr.statusText}`);
+      }
     } catch (error) {
-      console.error('[11.7E][Archive] ERROR:', error);
+      console.error('[11.7E][Archive] XHR ERROR:', error);
+      alert(`Archive error: ${error}`);
     }
     console.log('[11.7E][Archive] Handler END');
   };
