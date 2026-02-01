@@ -25,11 +25,31 @@ export async function apiFetch(input: string, init?: RequestInit) {
     const token = await ensureValidToken();
     console.log('[11.7E][apiFetch] ensureValidToken returned:', token ? 'TOKEN_PRESENT' : 'NO_TOKEN');
     
-    const headers = {
+    // Determine if this is a mutating request (POST, PUT, PATCH, DELETE)
+    const method = (init?.method || 'GET').toUpperCase();
+    const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
+    
+    // Build headers object
+    const headers: Record<string, string> = {
       'x-app-mode': getGlobalTradingMode(),
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-      ...(init?.headers || {}),
     };
+    
+    // For mutations, add Cache-Control headers to bypass all caching layers
+    // This ensures POST requests always reach the server (fixes regime-archive trigger issue)
+    if (isMutation) {
+      headers['Cache-Control'] = 'no-store, no-cache, must-revalidate';
+      headers['Pragma'] = 'no-cache';
+    }
+    
+    // Add auth token if present
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    // Merge with any custom headers from init
+    if (init?.headers) {
+      Object.assign(headers, init.headers);
+    }
     
     console.log('[11.7E][apiFetch] About to call fetch() - url:', input);
     const res = await fetch(input, {
