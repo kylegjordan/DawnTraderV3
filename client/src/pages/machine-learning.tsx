@@ -763,6 +763,36 @@ function RegimeArchivePanel({
   onTriggerArchive: () => void;
 }) {
   const [selectedRegime, setSelectedRegime] = useState<string | null>(null);
+  
+  // DIAGNOSTIC: Track mount/unmount lifecycle
+  useEffect(() => {
+    console.log('[DIAG][ArchivePanel] MOUNTED', {
+      timestamp: Date.now(),
+      onTriggerArchiveRef: onTriggerArchive?.toString?.()?.slice(0, 100),
+      hasHandler: typeof onTriggerArchive === 'function'
+    });
+    return () => {
+      console.log('[DIAG][ArchivePanel] UNMOUNTED', { timestamp: Date.now() });
+    };
+  }, []);
+  
+  // DIAGNOSTIC: Track handler reference changes
+  useEffect(() => {
+    console.log('[DIAG][ArchivePanel] HANDLER_REF_CHANGED', {
+      timestamp: Date.now(),
+      hasHandler: typeof onTriggerArchive === 'function',
+      handlerPreview: onTriggerArchive?.toString?.()?.slice(0, 80)
+    });
+  }, [onTriggerArchive]);
+  
+  // DIAGNOSTIC: Every render cycle
+  console.log('[DIAG][ArchivePanel] RENDER', {
+    timestamp: Date.now(),
+    isLoading,
+    recordCount: records?.length,
+    hasHandler: typeof onTriggerArchive === 'function',
+    handlerType: typeof onTriggerArchive
+  });
 
   if (isLoading) {
     return (
@@ -831,7 +861,22 @@ function RegimeArchivePanel({
                   <option key={regime} value={regime}>{regime}</option>
                 ))}
               </select>
-              <Button variant="outline" size="sm" onClick={onTriggerArchive}>
+              <Button variant="outline" size="sm" onClick={(e) => {
+                  console.log('[DIAG][ArchiveButton] CLICK_EVENT', {
+                    timestamp: Date.now(),
+                    eventType: e?.type,
+                    eventTarget: (e?.target as HTMLElement)?.tagName,
+                    hasHandler: typeof onTriggerArchive === 'function',
+                    handlerPreview: onTriggerArchive?.toString?.()?.slice(0, 60)
+                  });
+                  if (typeof onTriggerArchive === 'function') {
+                    console.log('[DIAG][ArchiveButton] INVOKING_HANDLER');
+                    onTriggerArchive();
+                    console.log('[DIAG][ArchiveButton] HANDLER_RETURNED');
+                  } else {
+                    console.error('[DIAG][ArchiveButton] NO_VALID_HANDLER', { received: onTriggerArchive });
+                  }
+                }}>
                 <RefreshCw className="w-4 h-4 mr-2" />
                 Manual Archive
               </Button>
@@ -1442,6 +1487,15 @@ function PredictiveAdjustmentsPanel({
 export default function MachineLearningPage() {
   const [activeTab, setActiveTab] = useState("open");
   const queryClient = useQueryClient();
+  
+  // DIAGNOSTIC: Track tab visibility changes
+  useEffect(() => {
+    console.log('[DIAG][MLPage] TAB_CHANGED', {
+      timestamp: Date.now(),
+      newActiveTab: activeTab,
+      isArchiveVisible: activeTab === 'archive'
+    });
+  }, [activeTab]);
 
   const { data: openData, isLoading: openLoading, refetch: refetchOpen } = useQuery<{
     success: boolean;
@@ -1528,17 +1582,22 @@ export default function MachineLearningPage() {
   });
 
   const handleTriggerArchive = () => {
+    console.log('[DIAG][handleTriggerArchive] ENTRY', { timestamp: Date.now() });
     try {
       const token = localStorage.getItem('accessToken');
+      console.log('[DIAG][handleTriggerArchive] TOKEN_CHECK', { hasToken: !!token });
       const xhr = new XMLHttpRequest();
       xhr.open('POST', '/api/vts/regime-archive/trigger', false);
       xhr.setRequestHeader('Content-Type', 'application/json');
       if (token) {
         xhr.setRequestHeader('Authorization', `Bearer ${token}`);
       }
+      console.log('[DIAG][handleTriggerArchive] XHR_SEND');
       xhr.send(null);
+      console.log('[DIAG][handleTriggerArchive] XHR_COMPLETE', { status: xhr.status });
       
       if (xhr.status >= 200 && xhr.status < 300) {
+        console.log('[DIAG][handleTriggerArchive] SUCCESS_REFETCH');
         refetchArchive();
       } else {
         console.error('[Archive] HTTP Error:', xhr.status, xhr.statusText);

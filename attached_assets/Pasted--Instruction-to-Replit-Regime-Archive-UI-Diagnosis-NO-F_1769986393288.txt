@@ -1,0 +1,141 @@
+📌 Instruction to Replit — Regime Archive UI Diagnosis (NO FIXES)
+
+Objective:
+Diagnose why the Manual Archive button in the Machine Learning → Regime Archive tab intermittently fails to invoke its handler, despite being visible and previously functioning.
+Do not fix anything yet. Diagnosis only.
+
+🚫 Hard Constraints (Must Follow)
+
+❌ Do not refactor
+
+❌ Do not clean up
+
+❌ Do not “simplify”
+
+❌ Do not change async logic
+
+❌ Do not replace handlers
+
+❌ Do not remove logging
+
+This task is observation only.
+
+✅ Required Diagnostic Actions
+1️⃣ Instrument Component Lifecycle (Identity Tracing)
+
+Add temporary diagnostic logs only to trace mounting, unmounting, and re-rendering of the Regime Archive UI.
+
+Specifically log:
+
+When RegimeArchivePanel mounts
+
+When it unmounts
+
+Every render cycle
+
+The reference identity of:
+
+onTriggerArchive
+
+the inline onClick handler bound to the button
+
+Example (illustrative only — do not refactor):
+
+useEffect(() => {
+  console.log('[DIAG][ArchivePanel] mounted');
+  return () => console.log('[DIAG][ArchivePanel] unmounted');
+}, []);
+
+console.log('[DIAG][ArchivePanel] render', {
+  onTriggerArchiveRef: onTriggerArchive,
+});
+
+
+And on the button:
+
+onClick={(e) => {
+  console.log('[DIAG][ArchiveButton] click', {
+    handlerRef: onTriggerArchive,
+  });
+  onTriggerArchive?.();
+}}
+
+
+The goal is to determine whether the rendered button instance still owns a valid handler reference at click time.
+
+2️⃣ Verify Conditional Rendering & Tab Lifecycle
+
+Log when:
+
+The Archive tab becomes active
+
+The Archive tab is hidden or re-mounted
+
+Any parent tab or panel re-renders
+
+We need to know whether:
+
+The Archive panel is being unmounted/remounted
+
+The handler reference changes between renders
+
+The DOM node persists while the handler does not
+
+3️⃣ Do NOT Touch Backend or API Code
+
+No changes to:
+
+/api/vts/regime-archive/*
+
+apiFetch
+
+auth
+
+cache headers
+
+async logic
+
+This issue is frontend lifecycle / binding only.
+
+📂 Files to Provide for External Review
+
+After diagnostics are added and reproduced once, please provide the exact files listed below so they can be reviewed independently:
+
+Frontend (Required)
+
+client/src/pages/machine-learning.tsx
+
+client/src/components/machine-learning/RegimeArchivePanel.tsx
+
+Any parent component that renders the ML tabs (if separate)
+
+client/src/lib/api.ts (read-only snapshot)
+
+Optional (If Involved)
+
+Any tab/navigation component controlling mount/unmount
+
+Any feature flag or conditional render wrapper around ML tabs
+
+📌 Please provide the raw files, not excerpts
+📌 Either as:
+
+individual downloads, or
+
+a zip containing only these files
+
+📋 Required Output From You
+
+Once diagnostics are in place and reproduced, respond with:
+
+A short summary answering:
+
+Is RegimeArchivePanel being unmounted?
+
+Does onTriggerArchive change identity across renders?
+
+Is the button rendered without a live handler reference?
+
+The list of files above for download
+
+No fixes, no recommendations yet
