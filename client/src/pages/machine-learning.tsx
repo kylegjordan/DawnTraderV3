@@ -749,6 +749,10 @@ const getCategoryBadgeColor = (category: string) => {
   }
 };
 
+// DIAGNOSTIC: Track handler identity via WeakMap
+const handlerIdMap = new WeakMap<Function, number>();
+let panelHandlerIdCounter = 0;
+
 function RegimeArchivePanel({
   records,
   summary,
@@ -763,12 +767,29 @@ function RegimeArchivePanel({
   onTriggerArchive: () => void;
 }) {
   const [selectedRegime, setSelectedRegime] = useState<string | null>(null);
+  const archiveButtonRef = useRef<HTMLButtonElement>(null);
+  const panelRenderCountRef = useRef(0);
+  panelRenderCountRef.current++;
   
-  // DIAGNOSTIC: Track mount/unmount lifecycle
+  // DIAGNOSTIC 2: Get or assign handler identity
+  let handlerIdentity: number | null = null;
+  if (typeof onTriggerArchive === 'function') {
+    if (!handlerIdMap.has(onTriggerArchive)) {
+      handlerIdMap.set(onTriggerArchive, ++panelHandlerIdCounter);
+      console.log('[DIAG][ArchivePanel] NEW_HANDLER_IDENTITY', {
+        timestamp: Date.now(),
+        handlerId: panelHandlerIdCounter,
+        renderCount: panelRenderCountRef.current
+      });
+    }
+    handlerIdentity = handlerIdMap.get(onTriggerArchive) || null;
+  }
+  
+  // DIAGNOSTIC 1: Track mount/unmount lifecycle
   useEffect(() => {
     console.log('[DIAG][ArchivePanel] MOUNTED', {
       timestamp: Date.now(),
-      onTriggerArchiveRef: onTriggerArchive?.toString?.()?.slice(0, 100),
+      handlerId: handlerIdentity,
       hasHandler: typeof onTriggerArchive === 'function'
     });
     return () => {
@@ -776,21 +797,67 @@ function RegimeArchivePanel({
     };
   }, []);
   
-  // DIAGNOSTIC: Track handler reference changes
+  // DIAGNOSTIC 2: Track handler reference changes
   useEffect(() => {
     console.log('[DIAG][ArchivePanel] HANDLER_REF_CHANGED', {
       timestamp: Date.now(),
+      handlerId: handlerIdentity,
       hasHandler: typeof onTriggerArchive === 'function',
-      handlerPreview: onTriggerArchive?.toString?.()?.slice(0, 80)
+      isStable: handlerIdentity === 1, // First handler = stable
+      renderCount: panelRenderCountRef.current
     });
   }, [onTriggerArchive]);
+  
+  // DIAGNOSTIC 3: DOM confirmation - check button state after render
+  useEffect(() => {
+    const checkButtonDOM = () => {
+      const btn = archiveButtonRef.current;
+      if (!btn) {
+        console.log('[DIAG][ArchiveButton] DOM_CHECK', {
+          timestamp: Date.now(),
+          buttonFound: false,
+          reason: 'ref is null'
+        });
+        return;
+      }
+      
+      const rect = btn.getBoundingClientRect();
+      const computedStyle = window.getComputedStyle(btn);
+      const elementAtPoint = document.elementFromPoint(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2
+      );
+      
+      console.log('[DIAG][ArchiveButton] DOM_CHECK', {
+        timestamp: Date.now(),
+        buttonFound: true,
+        disabled: btn.disabled,
+        pointerEvents: computedStyle.pointerEvents,
+        visibility: computedStyle.visibility,
+        display: computedStyle.display,
+        opacity: computedStyle.opacity,
+        zIndex: computedStyle.zIndex,
+        position: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+        isCovered: elementAtPoint !== btn,
+        elementAtCenter: elementAtPoint?.tagName || 'none',
+        elementAtCenterClass: (elementAtPoint as HTMLElement)?.className?.slice?.(0, 50) || 'none'
+      });
+    };
+    
+    // Check immediately and after a short delay (for animations)
+    checkButtonDOM();
+    const timeout = setTimeout(checkButtonDOM, 500);
+    return () => clearTimeout(timeout);
+  });
   
   // DIAGNOSTIC: Every render cycle
   console.log('[DIAG][ArchivePanel] RENDER', {
     timestamp: Date.now(),
+    renderCount: panelRenderCountRef.current,
     isLoading,
     recordCount: records?.length,
     hasHandler: typeof onTriggerArchive === 'function',
+    handlerId: handlerIdentity,
     handlerType: typeof onTriggerArchive
   });
 
@@ -861,20 +928,28 @@ function RegimeArchivePanel({
                   <option key={regime} value={regime}>{regime}</option>
                 ))}
               </select>
-              <Button variant="outline" size="sm" onClick={(e) => {
+              <Button 
+                ref={archiveButtonRef}
+                variant="outline" 
+                size="sm" 
+                onClick={(e) => {
                   console.log('[DIAG][ArchiveButton] CLICK_EVENT', {
                     timestamp: Date.now(),
                     eventType: e?.type,
                     eventTarget: (e?.target as HTMLElement)?.tagName,
+                    handlerId: handlerIdentity,
                     hasHandler: typeof onTriggerArchive === 'function',
-                    handlerPreview: onTriggerArchive?.toString?.()?.slice(0, 60)
+                    renderCount: panelRenderCountRef.current
                   });
                   if (typeof onTriggerArchive === 'function') {
-                    console.log('[DIAG][ArchiveButton] INVOKING_HANDLER');
+                    console.log('[DIAG][ArchiveButton] INVOKING_HANDLER', { handlerId: handlerIdentity });
                     onTriggerArchive();
-                    console.log('[DIAG][ArchiveButton] HANDLER_RETURNED');
+                    console.log('[DIAG][ArchiveButton] HANDLER_RETURNED', { handlerId: handlerIdentity });
                   } else {
-                    console.error('[DIAG][ArchiveButton] NO_VALID_HANDLER', { received: onTriggerArchive });
+                    console.error('[DIAG][ArchiveButton] NO_VALID_HANDLER', { 
+                      received: onTriggerArchive,
+                      handlerId: handlerIdentity 
+                    });
                   }
                 }}>
                 <RefreshCw className="w-4 h-4 mr-2" />
@@ -1484,9 +1559,43 @@ function PredictiveAdjustmentsPanel({
   );
 }
 
+// DIAGNOSTIC 1: Archive tab mount/unmount tracker
+function ArchiveTabTracker() {
+  useEffect(() => {
+    console.log('[DIAG][ArchiveTab] MOUNTED', { timestamp: Date.now() });
+    return () => {
+      console.log('[DIAG][ArchiveTab] UNMOUNTED', { timestamp: Date.now() });
+    };
+  }, []);
+  return null; // Invisible tracking component
+}
+
+// DIAGNOSTIC: Global render counter for handler identity tracking
+let globalHandlerIdCounter = 0;
+
 export default function MachineLearningPage() {
   const [activeTab, setActiveTab] = useState("open");
   const queryClient = useQueryClient();
+  
+  // DIAGNOSTIC: Track handler identity across renders
+  const handlerIdRef = useRef<number | null>(null);
+  const renderCountRef = useRef(0);
+  renderCountRef.current++;
+  
+  // DIAGNOSTIC 1: Render timeline - MachineLearningPage render
+  console.log('[DIAG][MLPage] RENDER', {
+    timestamp: Date.now(),
+    renderCount: renderCountRef.current,
+    activeTab
+  });
+  
+  // DIAGNOSTIC 1: Mount/unmount tracking
+  useEffect(() => {
+    console.log('[DIAG][MLPage] MOUNTED', { timestamp: Date.now() });
+    return () => {
+      console.log('[DIAG][MLPage] UNMOUNTED', { timestamp: Date.now() });
+    };
+  }, []);
   
   // DIAGNOSTIC: Track tab visibility changes
   useEffect(() => {
@@ -1581,7 +1690,24 @@ export default function MachineLearningPage() {
     staleTime: 120000,
   });
 
+  // DIAGNOSTIC 2: Assign handler a unique ID on creation
+  const currentHandlerId = useMemo(() => {
+    const id = ++globalHandlerIdCounter;
+    console.log('[DIAG][Handler] NEW_HANDLER_CREATED', {
+      timestamp: Date.now(),
+      handlerId: id,
+      previousHandlerId: handlerIdRef.current
+    });
+    handlerIdRef.current = id;
+    return id;
+  }, []); // Empty deps = created once per component mount
+  
   const handleTriggerArchive = async () => {
+    console.log('[DIAG][Handler] INVOKED', {
+      timestamp: Date.now(),
+      handlerId: currentHandlerId,
+      renderCount: renderCountRef.current
+    });
     console.log('[Archive] Manual archive triggered');
     try {
       const token = await ensureValidToken();
@@ -1822,17 +1948,24 @@ export default function MachineLearningPage() {
         </TabsContent>
 
         <TabsContent value="archive">
+          {/* DIAGNOSTIC 1: Archive tab mount/unmount tracker */}
+          <ArchiveTabTracker />
           {/* DIAGNOSTIC: Test button outside panel */}
           <div className="mb-4 p-4 bg-yellow-500/20 border border-yellow-500 rounded-lg">
-            <p className="text-sm text-yellow-400 mb-2">[DEBUG] Test button outside RegimeArchivePanel:</p>
+            <p className="text-sm text-yellow-400 mb-2">[DEBUG] Test button outside RegimeArchivePanel (handlerId: {currentHandlerId}):</p>
             <button 
+              id="diag-test-archive-btn"
               type="button"
               className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white font-bold rounded cursor-pointer"
               style={{ pointerEvents: 'auto', position: 'relative', zIndex: 9999 }}
               onClick={async () => {
-                console.log('[Archive] TEST_BUTTON clicked');
+                console.log('[DIAG][TestButton] CLICK_EVENT', {
+                  timestamp: Date.now(),
+                  handlerId: currentHandlerId,
+                  renderCount: renderCountRef.current
+                });
                 await handleTriggerArchive();
-                console.log('[Archive] TEST_BUTTON complete');
+                console.log('[DIAG][TestButton] HANDLER_COMPLETE', { timestamp: Date.now() });
               }}
             >
               TEST: Trigger Archive (Click Me!)
