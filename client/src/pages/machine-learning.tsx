@@ -1820,6 +1820,22 @@ export default function MachineLearningPage() {
         </TabsContent>
 
         <TabsContent value="archive">
+          {/* DIAGNOSTIC: Test button outside panel */}
+          <div className="mb-4 p-4 bg-yellow-500/20 border border-yellow-500 rounded-lg">
+            <p className="text-sm text-yellow-400 mb-2">[DEBUG] Test button outside RegimeArchivePanel:</p>
+            <button 
+              type="button"
+              className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white font-bold rounded cursor-pointer"
+              style={{ pointerEvents: 'auto', position: 'relative', zIndex: 9999 }}
+              onClick={(e) => {
+                console.log('[DIAG][TEST_BUTTON] CLICK_EVENT', { type: e.type, target: (e.target as HTMLElement).tagName });
+                alert('Test button clicked - now calling archive handler');
+                handleTriggerArchive();
+              }}
+            >
+              TEST: Trigger Archive (Click Me!)
+            </button>
+          </div>
           <RegimeArchivePanel
             records={archiveRecords}
             summary={archiveSummary}
