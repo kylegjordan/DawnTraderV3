@@ -1532,15 +1532,30 @@ export default function MachineLearningPage() {
   });
 
   const handleTriggerArchive = async () => {
-    console.log('[11.7E][Archive] Manual archive button clicked - handler invoked');
+    console.log('[11.7E][Archive] Handler START');
+    console.log('[11.7E][Archive] Step 1: Entering try block');
     try {
-      console.log('[11.7E][Archive] About to call apiFetch...');
-      await apiFetch('/api/vts/regime-archive/trigger', { method: 'POST' });
-      console.log('[11.7E][Archive] apiFetch completed successfully');
+      console.log('[11.7E][Archive] Step 2: About to get token');
+      const token = await ensureValidToken();
+      console.log('[11.7E][Archive] Step 3: Token obtained, making fetch');
+      const response = await fetch('/api/vts/regime-archive/trigger', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+      });
+      console.log('[11.7E][Archive] Step 4: Fetch complete, status:', response.status);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      console.log('[11.7E][Archive] Step 5: Success, refetching archive');
       refetchArchive();
     } catch (error) {
-      console.error('[11.7E][Archive] Manual archive trigger failed:', error);
+      console.error('[11.7E][Archive] ERROR:', error);
     }
+    console.log('[11.7E][Archive] Handler END');
   };
 
   const handleExportOpen = async () => {
