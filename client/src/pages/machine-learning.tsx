@@ -831,11 +831,7 @@ function RegimeArchivePanel({
                   <option key={regime} value={regime}>{regime}</option>
                 ))}
               </select>
-              <Button variant="outline" size="sm" onClick={() => {
-                console.log('[11.7E][Archive][INLINE] Button clicked - BEFORE handler call');
-                onTriggerArchive();
-                console.log('[11.7E][Archive][INLINE] Button clicked - AFTER handler call');
-              }}>
+              <Button variant="outline" size="sm" onClick={onTriggerArchive}>
                 <RefreshCw className="w-4 h-4 mr-2" />
                 Manual Archive
               </Button>
@@ -1532,34 +1528,24 @@ export default function MachineLearningPage() {
   });
 
   const handleTriggerArchive = () => {
-    console.log('[11.7E][Archive] Handler START - SYNC VERSION');
     try {
       const token = localStorage.getItem('accessToken');
-      console.log('[11.7E][Archive] Token from localStorage:', token ? 'present' : 'missing');
-      
       const xhr = new XMLHttpRequest();
       xhr.open('POST', '/api/vts/regime-archive/trigger', false);
       xhr.setRequestHeader('Content-Type', 'application/json');
       if (token) {
         xhr.setRequestHeader('Authorization', `Bearer ${token}`);
       }
-      console.log('[11.7E][Archive] Sending XHR request...');
       xhr.send(null);
-      console.log('[11.7E][Archive] XHR complete, status:', xhr.status);
       
       if (xhr.status >= 200 && xhr.status < 300) {
-        console.log('[11.7E][Archive] SUCCESS! Refetching...');
-        alert('Archive triggered successfully!');
         refetchArchive();
       } else {
-        console.error('[11.7E][Archive] HTTP Error:', xhr.status, xhr.statusText);
-        alert(`Archive failed: ${xhr.status} ${xhr.statusText}`);
+        console.error('[Archive] HTTP Error:', xhr.status, xhr.statusText);
       }
     } catch (error) {
-      console.error('[11.7E][Archive] XHR ERROR:', error);
-      alert(`Archive error: ${error}`);
+      console.error('[Archive] Error:', error);
     }
-    console.log('[11.7E][Archive] Handler END');
   };
 
   const handleExportOpen = async () => {
