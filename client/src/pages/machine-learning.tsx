@@ -1533,6 +1533,7 @@ export default function MachineLearningPage() {
 
   const handleTriggerArchive = async () => {
     console.log('[11.7E][Archive] Handler START');
+    alert('[11.7E] Handler started - about to enter try');
     console.log('[11.7E][Archive] Step 1: Entering try block');
     try {
       console.log('[11.7E][Archive] Step 2: About to get token');
