@@ -1528,11 +1528,14 @@ export default function MachineLearningPage() {
   });
 
   const handleTriggerArchive = async () => {
+    console.log('[11.7E][Archive] Manual archive button clicked - handler invoked');
     try {
+      console.log('[11.7E][Archive] About to call apiFetch...');
       await apiFetch('/api/vts/regime-archive/trigger', { method: 'POST' });
+      console.log('[11.7E][Archive] apiFetch completed successfully');
       refetchArchive();
     } catch (error) {
-      console.error('Manual archive trigger failed:', error);
+      console.error('[11.7E][Archive] Manual archive trigger failed:', error);
     }
   };
 
