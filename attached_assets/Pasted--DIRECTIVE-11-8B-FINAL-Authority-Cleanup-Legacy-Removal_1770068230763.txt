@@ -1,0 +1,555 @@
+📘 DIRECTIVE 11.8B (FINAL)
+Authority Cleanup, Legacy Removal & Control Reassignment
+
+With Deterministic Seeding, Execution Decoupling, and Phase-11 Safety Boundary
+
+🔒 GOVERNANCE STATEMENT (NON-NEGOTIABLE)
+
+This directive authorizes destructive refactoring.
+
+Replit is explicitly authorized to:
+
+Delete files
+
+Delete services
+
+Delete routes
+
+Delete background jobs
+
+Delete UI components
+
+Modify database schemas
+
+Modify server entry points
+
+Replit is NOT authorized to:
+
+Invent new logic
+
+Add heuristics
+
+Add fallback defaults
+
+Preserve deprecated systems “just in case”
+
+Remove or weaken any Phase 11 learning system
+
+If a system no longer has authority, it must not exist.
+If a system has Phase-11 authority, it must not be touched.
+
+If there is uncertainty, STOP and ask.
+
+🎯 OBJECTIVE
+
+Phase 11.8B exists to:
+
+Eliminate all legacy adaptive systems that conflict with modern predictive learning
+
+Establish a single, unambiguous authority model for execution-critical parameters
+
+Externalize hard-coded execution thresholds safely
+
+Guarantee clean-boot equivalence (identical math and behavior to pre-11.8B)
+
+Ensure execution engines have zero dependency on removed systems
+
+This phase does NOT activate predictive control.
+It prepares the system so Phase 11.8C (Predictive Baseline Authority) can be implemented safely.
+
+🧠 FINAL AUTHORITY MODEL (MUST MATCH EXACTLY)
+🔒 MANUAL-ONLY — USER RISK TOLERANCE
+
+These values are permanently user-controlled and must NEVER be auto-mutated:
+
+Max total portfolio exposure
+
+Max position percent
+
+Risk per trade
+
+Max concurrent positions
+
+Kill switches / drawdown stops
+
+Cooldowns
+
+Exclude stablecoins (toggle)
+
+Regulated-only (toggle)
+
+Active timeframes
+
+Minimum history
+
+Data quality toggles
+
+Learning systems may recommend only.
+They may never write these values.
+
+🤖 SYSTEM-RESERVED — FUTURE PREDICTIVE CONTROL
+
+These are execution-critical and must be read-only in Phase 11.8B:
+
+Screeners / Institutional Math Filters (IMF)
+
+Min volume
+
+Min liquidity
+
+Min price
+
+Max price (BTC-safe ceiling)
+
+Max bid-ask spread
+
+Min market cap
+
+Liquidity Guard (LQ)
+
+Volatility Noise Guard
+
+Directional Integrity thresholds
+
+Correlation guard
+
+Signal Quality Evaluator (SQE)
+
+Final score minimum
+
+Regime weight gate
+
+ROI thresholds
+
+SQE liquidity gate
+
+In 11.8B: frozen
+In 11.8C: predictive learning takes authority
+
+🧯 COHERENCY RULES
+
+Internal enforcement only
+
+UI visible
+
+Read-only
+
+Zero write authority
+
+Used strictly for invariants & diagnostics
+
+❌ SYSTEMS TO BE COMPLETELY REMOVED
+
+The following systems are architecturally obsolete and must be deleted, not disabled:
+
+❌ LATTi (Entire System)
+
+No screener control
+
+No guardrail control
+
+No auto toggles
+
+No services
+
+No jobs
+
+No routes
+
+No UI
+
+❌ Goals ML Engine
+
+Includes (non-exhaustive):
+
+CWQI
+
+NGC
+
+Composite legacy scores
+
+Reinforcement / cooperative optimizers
+
+Unified policy logic
+
+Decision confidence layers
+
+Any Goals-side learning or tuning
+
+❌ Adaptive Risk Advisor (ARA)
+
+All services
+
+All APIs
+
+All UI panels
+
+All database tables
+
+❌ Preset Learning / Auto-Expansion
+
+Presets may remain as static templates only
+
+All learning, mutation, or expansion logic must be removed
+
+❌ Tuning Subsystem
+
+Auto-tuning
+
+Rollback mutation logic
+
+Adaptive tuning jobs
+
+Any tuning that writes runtime state
+
+🔧 REQUIRED MIGRATIONS (MANDATORY)
+1️⃣ Institutional Math Filter (IMF) Externalization
+
+Current violation
+IMF thresholds are hard-coded in analysis-utils.ts.
+
+Required state
+
+IMF thresholds live in screener_filters.imf
+
+FX5 and IMF logic read exclusively from storage
+
+Math functions must NOT be altered.
+Only threshold sources change.
+
+2️⃣ Database Schema Migration & Deterministic Seeding (CRITICAL)
+
+Before removing any hard-coded IMF thresholds, Replit must:
+
+A. Schema Migration
+
+Ensure screener_filters includes:
+
+imf: {
+  lqMin: number
+  volNoiseMax: number
+  diTrending: number
+  diChoppy: number
+}
+
+B. Deterministic Seeding
+
+Seed the above fields with exact current values from:
+
+analysis-utils.ts
+
+SYSTEM_GUARDS.*
+
+C. Invariant
+
+System must boot with identical execution behavior to pre-11.8B.
+
+No nulls.
+No defaults.
+No silent fallbacks.
+
+3️⃣ Screener Filter Write Lockdown
+
+After 11.8B:
+
+Allowed writers
+
+Manual UI (manual-only fields)
+
+Predictive Authority Placeholder (inactive)
+
+Forbidden writers
+
+LATTi
+
+Goals ML
+
+ARA
+
+Presets
+
+Tuning
+
+Background jobs
+
+Unauthorized writes must:
+
+Throw
+
+Log
+
+Abort mutation
+
+4️⃣ Predictive Authority Placeholder (Inactive)
+
+Introduce a non-functional ownership placeholder:
+
+PredictiveScreenerAuthority {
+  mode: "inactive"
+  canWrite: false
+  telemetryOnly: true
+}
+
+
+Purpose:
+
+Establish future ownership
+
+Prevent ambiguity
+
+No behavior change
+
+5️⃣ Execution Engine Dependency Audit (MANDATORY)
+Scope
+
+vts-runner.ts
+
+live-trading.ts
+
+Any execution loop
+
+Any pre-trade risk evaluation
+
+Required Actions
+
+Identify any direct or indirect calls to:
+
+LATTi
+
+ARA
+
+Goals ML
+
+Remove these calls entirely
+
+Replace with:
+
+Local invariants, or
+
+Authority assertions (no-op)
+
+Invariant
+
+Execution engines must not import or reference any removed system.
+
+🗂️ FILE-BY-FILE DELETION & MIGRATION CHECKLIST
+❌ DELETE — Backend Services
+
+server/services/latti*
+
+server/services/adaptive-risk-advisor*
+
+server/services/goals-ml*
+
+server/services/goals-learning*
+
+server/services/reinforcement*
+
+server/services/cooperative*
+
+server/services/unified-policy*
+
+server/services/tuning*
+
+Any CWQI / NGC services
+
+❌ DELETE — Frontend
+
+Goals ML widgets
+
+Adaptive Risk Advisor panels
+
+Preset learning UI
+
+Tuning mutation UI
+
+Any “Auto (LATTi)” controls
+
+⚠️ MODIFY — Server Entry Points (CRITICAL)
+
+Including but not limited to:
+
+server.ts
+
+app.ts
+
+routes.ts
+
+Dependency injection containers
+
+Job registries
+
+Actions:
+
+Remove imports for deleted services
+
+Remove route registrations
+
+Remove service initialization blocks
+
+⚠️ MODIFY — Execution Engines
+
+Remove calls to removed systems
+
+Enforce authority purity
+
+Do NOT introduce replacement heuristics
+
+✅ PRESERVE (ROLE-ADJUSTED)
+
+analysis-utils.ts (math only)
+
+fx5-scanner.ts (IMF via storage)
+
+signal_quality_evaluator.ts
+
+Coherency rules (internal + visible)
+
+🛡️ STRICT SAFETY BOUNDARY — PHASE 11 SYSTEMS (DO NOT TOUCH)
+
+Replit must NOT delete, modify, or disable any component created or activated during Phase 11.7.
+
+This includes explicitly:
+
+🧠 Predictive Learning & Calibration (11.7D)
+
+server/core/calibration/*
+
+Any file managing ml.*_weight parameters
+
+Predictive recalibration, smoothing, promotion logic
+
+📊 Telemetry & Learning Inputs (11.7B)
+
+server/services/telemetry-aggregator.ts
+
+Any service aggregating outcomes for learning
+
+🛡️ Governance & Safety (11.7R / 11.7S)
+
+server/core/governance/*
+
+Regime, mode, and governance overlays
+
+🧩 Phase-11 Learning Artifacts
+
+Canonical learning archives
+
+Predictive baseline files
+
+Any runtime/persisted learning state
+
+⛔ SAFETY INVARIANT
+
+Phase 11.8B must not reduce learning capability below Phase 11.7 levels.
+
+If after cleanup:
+
+Predictive adjustments stop emitting
+
+ml.*_weight logs disappear
+
+Calibration jobs no longer run
+
+➡️ Directive has failed and must be rolled back.
+
+🧪 ACCEPTANCE CRITERIA (ALL REQUIRED)
+✅ 1. Deletion & Migration Manifest
+docs/phase_11.8B_authority_cleanup_manifest.md
+
+
+For each file:
+
+Path
+
+Action (deleted / modified / preserved)
+
+Reason
+
+Commit hash
+
+✅ 2. Ripgrep Proof
+
+Zero matches for:
+
+LATTi
+
+CWQI
+
+NGC
+
+AdaptiveRisk
+
+GoalsML
+
+✅ 3. Runtime Authority Assertions
+
+Startup logs must include:
+
+[11.8B][AUTHORITY] IMF thresholds: STORAGE-BACKED & SEEDED
+[11.8B][AUTHORITY] LATTi: NOT REGISTERED
+[11.8B][AUTHORITY] Goals ML: NOT REGISTERED
+[11.8B][AUTHORITY] ARA: NOT REGISTERED
+[11.8B][AUTHORITY] Execution engines: CLEAN
+
+
+Failure = hard stop.
+
+✅ 4. Write-Rejection Test
+
+Demonstrate:
+
+Unauthorized write attempt
+
+Explicit rejection
+
+Logged error
+
+✅ 5. UI Evidence
+
+Screenshots showing:
+
+No legacy controls
+
+Manual vs system-reserved clearly labeled
+
+Coherency tab visible, read-only
+
+✅ 6. Clean Boot Test
+
+Server boots without module errors
+
+No missing-import warnings
+
+/api/system/status returns 200 OK
+
+No “failed to load service” logs
+
+⛔ STOP CONDITION
+
+Phase 11.8B is NOT complete unless:
+
+System boots cleanly
+
+Execution behavior matches pre-11.8B
+
+No legacy adaptive systems exist
+
+No parallel authority paths remain
+
+➡️ NEXT PHASE
+
+Only after explicit acceptance:
+
+➡️ Phase 11.8C — Predictive Learning Baseline Authority
+
+FINAL NOTE TO REPLIT
+
+This directive is intentionally strict.
+
+If you are unsure about any deletion, migration, or preservation,
+STOP AND ASK.
+
+Do not improvise.
+Do not preserve “just in case.”
+If it isn’t authoritative, it must not exist.
