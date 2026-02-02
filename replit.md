@@ -35,6 +35,11 @@ VN Metric Normalization & Cross-Mode Parity ensures consistent Volatility Noise 
 
 The trade lifecycle flows from `Signal Orchestrator` to `SQE` (FinalScore + RegimeWeight filtering), then to a `Ready-to-Buy Queue`. Signals are promoted by `TCL` (Trade Criteria Limiter), managed by `TEC` (Trade Execution Controller) for adaptive sizing and trailing exits, and finally proceed to `Order Management`.
 
+## Recent Changes
+- **2026-02-02**: Phase 11.8A Predictive & Learning Authority Audit completed (`docs/audits/Phase_11.8A_Predictive_Learning_Authority_Audit.md`)
+- **2026-02-02**: Learning calibration pipeline enabled and verified (ML calibration scheduler, canonical weights generation, regime archival)
+- **2026-02-02**: Fixed checksum verification bug in regime archiver (recompute checksum after metadata update)
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **Kraken WebSocket API**: Real-time ticker feed.

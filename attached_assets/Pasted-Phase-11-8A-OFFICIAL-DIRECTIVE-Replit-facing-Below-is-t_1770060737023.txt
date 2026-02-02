@@ -1,0 +1,266 @@
+Phase 11.8A — OFFICIAL DIRECTIVE (Replit-facing)
+
+Below is the directive exactly as I recommend you hand to Replit.
+
+This is intentionally long, explicit, and restrictive.
+
+📘 Directive 11.8A — Predictive & Learning Authority Audit (READ-ONLY)
+🚫 Absolute Rules (Non-Negotiable)
+
+This directive is AUDIT ONLY.
+
+Replit is NOT allowed to:
+
+Modify logic
+
+Refactor code
+
+Rename files
+
+Remove LATTi
+
+Introduce new abstractions
+
+“Fix” bugs
+
+Normalize baselines
+
+Add chaining logic
+
+Add guards, locks, or precedence
+
+Change runtime behavior in any way
+
+❗ If a single behavior change is introduced, this directive is considered failed.
+
+🎯 Objective
+
+Produce a complete, verifiable, file-level audit of all predictive, learning, calibration, governance, and legacy (LATTi) write paths that influence:
+
+Strategy behavior
+
+Scoring
+
+Filters
+
+Risk
+
+Guardrails
+
+Position sizing
+
+Regime behavior
+
+This audit will be used to establish Predictive Baseline Authority in Phase 11.8B.
+
+🧠 Core Question This Audit Must Answer
+
+“When a trade executed, which value was actually in force — and which system had authority over it?”
+
+If the audit cannot answer that, it is incomplete.
+
+📂 Required Audit Deliverables (ALL REQUIRED)
+
+Replit must produce a written audit artifact, not just code comments.
+
+1️⃣ Predictive & Learning Adjustment Inventory
+
+For EACH adjustable parameter, Replit must document:
+
+Parameter Categories (minimum):
+
+Strategy weights
+
+Pattern / signal weights
+
+Regime confidence modifiers
+
+Risk multipliers
+
+Position sizing factors
+
+Filter thresholds
+
+Guardrails
+
+Execution modifiers
+
+For EACH parameter, list:
+
+File path(s)
+
+Function name(s)
+
+Whether it READS, WRITES, or BOTH
+
+Trigger mechanism:
+
+scheduler
+
+learning loop
+
+calibration job
+
+governance mode
+
+UI/manual
+
+Write cadence (event-based, periodic, startup, runtime)
+
+Read cadence
+
+Persistence location:
+
+in-memory
+
+config file
+
+canonical file
+
+log / archive
+
+Whether the value is:
+
+absolute
+
+delta
+
+derived
+
+UI surfaces that display it (if any)
+
+⚠️ If a parameter is written in more than one place, it must be flagged.
+
+2️⃣ Canonical vs Runtime Truth Map
+
+For every canonical file involved in learning or predictive output (including but not limited to):
+
+phase9_predictive-learning.json
+
+regime archives
+
+calibration outputs
+
+weight exports
+
+Replit must classify each as:
+
+Authoritative baseline
+
+Runtime input
+
+Historical artifact
+
+Learning-only output
+
+UI-only display
+
+❗ If a file is serving more than one role, it must be explicitly called out.
+
+3️⃣ LATTi Authority Audit (NO REMOVAL)
+
+LATTi must be audited separately.
+
+For LATTi, Replit must list:
+
+All files where LATTi logic exists
+
+Everything LATTi can:
+
+read
+
+write
+
+override
+
+block
+
+soften
+
+Explicit confirmation that LATTi:
+
+does NOT touch SQE filters
+
+does NOT gate execution
+
+does NOT directly alter scoring logic
+
+Exact overlap points with:
+
+FX5 scanner
+
+guardrails
+
+manual overrides
+
+governance modes
+
+🚫 Do not remove, refactor, or disable LATTi in this phase.
+
+4️⃣ Conflict & Overlap Report (Critical)
+
+Replit must explicitly identify:
+
+Parameters written by multiple systems
+
+Parameters displayed but not actually applied
+
+Parameters applied but not surfaced anywhere
+
+Parameters that are:
+
+recomputed from defaults
+
+overwritten without chaining
+
+recalculated without awareness of prior adjustments
+
+This section must directly explain the “snap-back / reversion” symptom observed in predictive exports.
+
+5️⃣ File Index Requirement (Explicit Request)
+
+Replit must include a master file index, listing:
+
+Every file that:
+
+computes predictive adjustments
+
+applies learning
+
+modifies strategy behavior
+
+alters filters or guardrails
+
+touches regime logic
+
+For each file:
+
+relative path
+
+high-level responsibility
+
+whether it is a candidate for:
+
+baseline authority
+
+delta application
+
+archival only
+
+UI only
+
+This file index is mandatory and will be used for verification.
+
+✅ Completion Criteria
+
+This directive is complete only when:
+
+A written audit artifact exists
+
+All write paths are enumerated
+
+Overlaps and conflicts are explicitly named
+
+No runtime behavior has changed
+
+Only after this audit may Phase 11.8B (Predictive Baseline Authority) be defined.
