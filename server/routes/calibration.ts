@@ -5,14 +5,19 @@
  * - GET /api/calibration/report – current per-strategy reliability and weight distribution
  * - GET /api/calibration/latest – most recent saved calibration report
  * - POST /api/calibration/generate – generate and save new calibration report
+ * - POST /api/ml/calibration/trigger – manual trigger for ML calibration (Directive 11.7I-04)
+ * - POST /api/ml/recalibration/trigger – produce canonical weights (Directive 11.7D)
  */
 
 import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import * as fs from 'fs';
 import { calibrationReportService } from '../services/calibration_report_service';
 import { loadFullCalibration } from '../utils/calibration';
 import { computeStrategyWeights } from '../utils/strategyWeights';
 import { vtsService } from '../services/vts-service';
+import { triggerManualCalibration, getMLCalibrationSchedulerStatus } from '../core/schedulers/ml-calibration-scheduler';
+import { recalibratePredictiveWeights, getRecalibrationStatus } from '../scripts/recalibrate-predictive-weights';
 
 const router = Router();
 
@@ -121,6 +126,113 @@ router.get('/raw', auditOrAuth, async (_req: Request, res: Response) => {
   } catch (error) {
     console.error('[M5-R1][CALIBRATION] Failed to get raw calibration:', error);
     res.status(500).json({ ok: false, error: 'Failed to get raw calibration data' });
+  }
+});
+
+/**
+ * Directive 11.7I-04 — Manual ML Calibration Trigger (Diagnostic)
+ * POST /api/ml/calibration/trigger
+ */
+router.post('/ml/trigger', auditOrAuth, async (_req: Request, res: Response) => {
+  try {
+    console.log('[11.7I-04][Manual] Calibration triggered via API');
+    
+    const schedulerStatus = getMLCalibrationSchedulerStatus();
+    const result = await triggerManualCalibration();
+    
+    res.json({
+      ok: result.success,
+      result,
+      schedulerStatus
+    });
+  } catch (error: any) {
+    console.error('[11.7I-04][Manual] Calibration trigger error:', error.message);
+    res.status(500).json({ 
+      ok: false, 
+      error: 'Failed to trigger ML calibration',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * Directive 11.7D — Manual Canonical Weight Recalibration Trigger
+ * POST /api/ml/recalibration/trigger
+ * 
+ * Produces canonical weights file: bridge/canonical/phase9_predictive-learning.json
+ */
+router.post('/ml/recalibration/trigger', auditOrAuth, async (_req: Request, res: Response) => {
+  try {
+    console.log('[11.7D][Manual] Canonical weight recalibration triggered via API');
+    
+    const canonicalPath = 'bridge/canonical/phase9_predictive-learning.json';
+    const beforeExists = fs.existsSync(canonicalPath);
+    
+    const success = recalibratePredictiveWeights();
+    
+    const afterExists = fs.existsSync(canonicalPath);
+    let fileInfo = null;
+    
+    if (afterExists) {
+      const stats = fs.statSync(canonicalPath);
+      fileInfo = {
+        path: canonicalPath,
+        size: stats.size,
+        created: stats.birthtime.toISOString(),
+        modified: stats.mtime.toISOString()
+      };
+      console.log(`[11.7D][Manual] ✅ Canonical weights file created: ${canonicalPath} (${stats.size} bytes)`);
+    }
+    
+    const recalibrationStatus = getRecalibrationStatus();
+    
+    res.json({
+      ok: success,
+      beforeExists,
+      afterExists,
+      fileInfo,
+      recalibrationStatus
+    });
+  } catch (error: any) {
+    console.error('[11.7D][Manual] Recalibration trigger error:', error.message);
+    res.status(500).json({ 
+      ok: false, 
+      error: 'Failed to trigger canonical weight recalibration',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/ml/calibration/status — Check scheduler status and canonical file state
+ */
+router.get('/ml/status', auditOrAuth, async (_req: Request, res: Response) => {
+  try {
+    const schedulerStatus = getMLCalibrationSchedulerStatus();
+    const recalibrationStatus = getRecalibrationStatus();
+    
+    const canonicalPath = 'bridge/canonical/phase9_predictive-learning.json';
+    const canonicalExists = fs.existsSync(canonicalPath);
+    let canonicalInfo = null;
+    
+    if (canonicalExists) {
+      const stats = fs.statSync(canonicalPath);
+      canonicalInfo = {
+        path: canonicalPath,
+        size: stats.size,
+        modified: stats.mtime.toISOString()
+      };
+    }
+    
+    res.json({
+      ok: true,
+      schedulerStatus,
+      recalibrationStatus,
+      canonicalFile: canonicalInfo
+    });
+  } catch (error: any) {
+    console.error('[11.7I-04] Status check error:', error.message);
+    res.status(500).json({ ok: false, error: error.message });
   }
 });
 

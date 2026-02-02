@@ -291,6 +291,8 @@ export async function archiveRegimeMetrics(): Promise<{
   
   for (const record of records) {
     record._metadata.avgConfidence = avgConfidence;
+    const { checksum, ...rest } = record;
+    record.checksum = computeChecksum(rest);
   }
   
   const date = new Date().toISOString().slice(0, 10);

@@ -36,36 +36,47 @@ export interface MLCalibrationSchedulerStatus {
   nextScheduledRun: string | null;
 }
 
-async function runCalibration(): Promise<void> {
+export interface CalibrationRunResult {
+  success: boolean;
+  reason: string;
+  analyzedTrades?: number;
+  recommendations?: number;
+  timestamp: string;
+}
+
+async function runCalibration(): Promise<CalibrationRunResult> {
   console.log('[11.7I-04][MLScheduler] Starting scheduled ML calibration run...');
+  const timestamp = new Date().toISOString();
   
   try {
     const report = await MLCalibrationService.analyzePerformance(50);
     
     if (!report.success) {
-      console.log(`[11.7I-04][MLScheduler] Calibration skipped: ${report.reason}`);
+      const reason = report.reason || 'Unknown failure';
+      console.log(`[11.7I-04][SKIP] Reason: ${reason}`);
       
       logPredictiveAdjustment({
         category: 'Other',
         parameter: 'ml.scheduler_run',
         oldValue: 0,
         newValue: 0,
-        reason: `Calibration skipped: ${report.reason}`
+        reason: `Calibration skipped: ${reason}`
       });
-      return;
+      return { success: false, reason, timestamp };
     }
     
     if ((report.analyzedTrades || 0) < MIN_TRADES_FOR_CALIBRATION) {
-      console.log(`[11.7I-04][MLScheduler] Insufficient trades for calibration: ${report.analyzedTrades}/${MIN_TRADES_FOR_CALIBRATION}`);
+      const reason = `insufficient trades (found ${report.analyzedTrades}, need ${MIN_TRADES_FOR_CALIBRATION})`;
+      console.log(`[11.7I-04][SKIP] Reason: ${reason}`);
       
       logPredictiveAdjustment({
         category: 'Other',
         parameter: 'ml.scheduler_precondition',
         oldValue: report.analyzedTrades || 0,
         newValue: MIN_TRADES_FOR_CALIBRATION,
-        reason: `Precondition not met: need ${MIN_TRADES_FOR_CALIBRATION} trades, have ${report.analyzedTrades}`
+        reason: `Precondition not met: ${reason}`
       });
-      return;
+      return { success: false, reason, analyzedTrades: report.analyzedTrades, timestamp };
     }
     
     MLCalibrationService.logRecommendations(report);
@@ -73,26 +84,39 @@ async function runCalibration(): Promise<void> {
     calibrationRunCount++;
     lastCalibrationTime = new Date();
     
-    console.log(`[11.7I-04][MLScheduler] ✅ Calibration complete: ${report.recommendations?.length || 0} recommendations from ${report.analyzedTrades} trades`);
+    const recCount = report.recommendations?.length || 0;
+    console.log(`[11.7I-04][MLScheduler] ✅ Calibration complete: ${recCount} recommendations from ${report.analyzedTrades} trades`);
     
     logPredictiveAdjustment({
       category: 'Scoring',
       parameter: 'ml.calibration_run',
       oldValue: calibrationRunCount - 1,
       newValue: calibrationRunCount,
-      reason: `Scheduled calibration #${calibrationRunCount}: ${report.recommendations?.length || 0} recommendations`
+      reason: `Scheduled calibration #${calibrationRunCount}: ${recCount} recommendations`
     });
     
+    return {
+      success: true,
+      reason: 'Calibration completed successfully',
+      analyzedTrades: report.analyzedTrades,
+      recommendations: recCount,
+      timestamp
+    };
+    
   } catch (error: any) {
-    console.error('[11.7I-04][MLScheduler] ❌ Calibration error:', error.message);
+    const reason = error.message || 'Unknown error';
+    console.error('[11.7I-04][MLScheduler] ❌ Calibration error:', reason);
+    console.log(`[11.7I-04][SKIP] Reason: error - ${reason}`);
     
     logPredictiveAdjustment({
       category: 'Other',
       parameter: 'ml.scheduler_error',
       oldValue: 0,
       newValue: 1,
-      reason: `Calibration error: ${error.message}`
+      reason: `Calibration error: ${reason}`
     });
+    
+    return { success: false, reason: `error: ${reason}`, timestamp };
   }
 }
 
@@ -137,9 +161,9 @@ export function stopMLCalibrationScheduler(): void {
   console.log('[11.7I-04][MLScheduler] ML Calibration scheduler stopped');
 }
 
-export async function triggerManualCalibration(): Promise<void> {
-  console.log('[11.7I-04][MLScheduler] Manual calibration triggered');
-  await runCalibration();
+export async function triggerManualCalibration(): Promise<CalibrationRunResult> {
+  console.log('[11.7I-04][Manual] Calibration triggered');
+  return await runCalibration();
 }
 
 export function getMLCalibrationSchedulerStatus(): MLCalibrationSchedulerStatus {

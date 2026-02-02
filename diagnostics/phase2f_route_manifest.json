@@ -7854,6 +7854,36 @@
     ]
   },
   {
+    "path": "/api/calibration/ml/trigger",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "auditOrAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/calibration/ml/recalibration/trigger",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "auditOrAuth",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/calibration/ml/status",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "auditOrAuth",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/api/vts/regime-archive",
     "methods": [
       "GET"

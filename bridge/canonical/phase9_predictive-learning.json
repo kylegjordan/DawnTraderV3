@@ -1,0 +1,41 @@
+{
+  "BULL_STABLE": {
+    "momentum": 0,
+    "volatility": 0,
+    "trend": 1
+  },
+  "TRANSITION": {
+    "momentum": 0,
+    "volatility": 0,
+    "trend": 1
+  },
+  "LOW_VOL_CHOP": {
+    "momentum": 0,
+    "volatility": 0,
+    "trend": 1
+  },
+  "BEAR_VOLATILE": {
+    "momentum": 0,
+    "volatility": 0,
+    "trend": 1
+  },
+  "HIGH_VOL_IMPULSE": {
+    "momentum": 0,
+    "volatility": 0,
+    "trend": 1
+  },
+  "_schema": "predictive-weights/v1.1",
+  "_metadata": {
+    "version": 1,
+    "source": "VTS",
+    "updatedAt": "2026-02-02T00:12:00.931Z",
+    "method": "empirical-recalibration",
+    "windowDays": 7,
+    "smoothingAlpha": 0.6,
+    "metricMapping": {
+      "momentum": "winRate",
+      "volatility": "abs(avgPnL)",
+      "trend": "1 - skipRatio"
+    }
+  }
+}
