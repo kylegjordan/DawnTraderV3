@@ -1,0 +1,338 @@
+DIRECTIVE 11.8B-B
+LATTi Decommission & Authority Cleanup (Phase 11)
+
+Phase: 11.8
+Sub-Phase: 11.8B-B
+Prerequisite: 11.8B-A + 11.8B-A2 complete and verified
+Type: Authority Removal & Control-Plane Cleanup
+Risk Level: HIGH (execution-adjacent)
+Improvisation: NOT PERMITTED
+
+11.8B-B.0 — PURPOSE (NON-NEGOTIABLE)
+
+This directive permanently removes LATTi as an authority from the DawnTrader system and cleans up all legacy adaptive control paths that can:
+
+Mutate filters
+
+Mutate guardrails
+
+Influence signal acceptance
+
+Create ambiguity about “who is in control”
+
+At the conclusion of this directive:
+
+LATTi does not exist as a runnable system
+
+No UI element references LATTi
+
+No backend code branches on LATTi state
+
+No filter or guardrail has multiple possible authorities
+
+The system is left in a clean, authority-neutral state, ready for future predictive control
+
+⚠️ This directive does NOT hand control to predictive learning yet.
+It removes legacy authority only.
+
+11.8B-B.1 — DEFINITIONS
+LATTi (Legacy Adaptive Tuning Interface)
+
+For the purposes of this directive, “LATTi” includes all of the following:
+
+Backend services or managers named:
+
+latti
+
+lotti
+
+latte
+
+or any variant
+
+Any logic that:
+
+Adjusts filters
+
+Adjusts guardrails
+
+Adjusts signal acceptance
+
+Based on adaptive / heuristic logic outside Phase 11 learning
+
+Any UI toggle offering:
+
+“Manual vs LATTi”
+
+“Adaptive”
+
+“Auto tune”
+
+Any persisted state associated with LATTi decisions
+
+11.8B-B.2 — REQUIRED FIRST STEP: READ-ONLY AUDIT (MANDATORY)
+
+Before any deletion, Replit must produce a written audit artifact.
+
+🔍 Audit Requirements
+
+Replit must identify and list:
+
+All files that reference LATTi
+
+Backend services
+
+Helpers
+
+Config files
+
+Schedulers
+
+All UI components
+
+Tabs
+
+Toggles
+
+Labels
+
+Tooltips
+
+All authority decisions
+
+Where LATTi can override manual values
+
+Where LATTi can override system defaults
+
+All persistence
+
+DB tables
+
+Columns
+
+JSON blobs
+
+Cached state
+
+📄 Audit Output (Required)
+
+A document at:
+
+docs/audits/Phase_11.8B_B_LATTi_Audit.md
+
+
+Must include:
+
+File paths
+
+Line numbers
+
+Description of authority
+
+Whether the authority is active, dormant, or UI-only
+
+🚫 No deletions may occur until this audit is delivered.
+
+11.8B-B.3 — AUTHORITY REASSIGNMENT RULES (CRITICAL)
+
+After LATTi removal, every affected control must land in exactly one of the following states:
+
+A. Manual-Only (User Controlled)
+
+These must remain manual:
+
+Core risk guardrails:
+
+Max total portfolio exposure
+
+Max position size %
+
+Max concurrent trades
+
+Daily loss limits
+
+Any control explicitly marked as “risk tolerance”
+
+These may show recommendations, but no auto-mutation.
+
+B. System-Locked (No Adaptive Control Yet)
+
+Until predictive baseline authority exists, the following must be locked:
+
+IMF filters
+
+Liquidity guard
+
+Noise guard
+
+Correlation guard
+
+Price range
+
+Spread limits
+
+SQE gates
+
+Profitability threshold
+
+Liquidity gate
+
+Regime weight gate
+
+They must:
+
+Have a single, deterministic value
+
+Not be adjustable by LATTi, ARA, or Goals ML
+
+Not be auto-tuned yet
+
+C. Removed Entirely
+
+The following must be removed, not hidden:
+
+LATTi adaptive logic
+
+LATTi heuristics
+
+LATTi “learning”
+
+Any shadow defaults tied to LATTi
+
+11.8B-B.4 — REQUIRED REMOVALS (BACKEND)
+
+After audit approval, Replit must:
+
+🔴 DELETE
+
+All LATTi services / managers
+
+Any scheduler invoking LATTi
+
+Any config files specific to LATTi
+
+Any database write paths owned by LATTi
+
+🔧 MODIFY
+
+Remove all imports of LATTi
+
+Remove all conditionals:
+
+if (lattiEnabled) { ... }
+
+
+Remove all fallback logic:
+
+else useLattiDefaults()
+
+
+🚫 No stubbing.
+🚫 No “disabled” flags.
+🚫 Code must be physically removed.
+
+11.8B-B.5 — REQUIRED REMOVALS (UI)
+
+Replit must remove:
+
+LATTi toggles in:
+
+Screeners tab
+
+Guardrails tab
+
+Goals tab
+
+Any text referencing:
+
+LATTi
+
+Adaptive tuning
+
+Auto filters (legacy)
+
+Any UI implying:
+
+“System is adjusting this automatically” (unless it truly is)
+
+Allowed UI State
+
+Manual inputs
+
+Disabled (read-only) fields for system-locked controls
+
+Clear labels explaining:
+
+“This control will be managed by predictive learning in a future phase.”
+
+11.8B-B.6 — DATABASE & STATE CLEANUP
+
+Replit must:
+
+Identify any DB fields used exclusively by LATTi
+
+Migrate or delete them explicitly
+
+Ensure:
+
+No NULL-driven fallbacks occur
+
+No orphaned records are read at runtime
+
+If deletion is unsafe:
+
+Freeze the field
+
+Remove all read/write access
+
+Document it
+
+11.8B-B.7 — FORBIDDEN ACTIONS
+
+Replit MUST NOT:
+
+Introduce predictive learning here
+
+Add new heuristics
+
+Replace LATTi with another adaptive system
+
+Change EV, ROI, or SQE logic
+
+Touch Phase 11.7 calibration systems
+
+Touch baseline authority
+
+This is cleanup only.
+
+11.8B-B.8 — ACCEPTANCE CRITERIA (STRICT)
+
+Replit must provide evidence that:
+
+✅ Codebase
+
+grep -R "latti" → zero results
+
+No backend service references LATTi
+
+No conditionals branch on adaptive tuning
+
+✅ UI
+
+No UI element references LATTi
+
+No toggle exists for “manual vs LATTi”
+
+✅ Runtime
+
+Application boots cleanly
+
+Paper trading runs normally
+
+No warnings about missing LATTi services
+
+✅ Documentation
+
+Audit document exists and matches removals
+
+Authority reassignment is explicitly documented
