@@ -36,6 +36,7 @@ VN Metric Normalization & Cross-Mode Parity ensures consistent Volatility Noise 
 The trade lifecycle flows from `Signal Orchestrator` to `SQE` (FinalScore + RegimeWeight filtering), then to a `Ready-to-Buy Queue`. Signals are promoted by `TCL` (Trade Criteria Limiter), managed by `TEC` (Trade Execution Controller) for adaptive sizing and trailing exits, and finally proceed to `Order Management`.
 
 ## Recent Changes
+- **2026-02-03**: Directive 11.8B-A Net Expectancy Authority Unification completed - single `computeNetExpectancyKernel()` function in `server/core/calculations/net-expectancy-kernel.ts` is now the sole authority for all Net EV math (pure synchronous function, no I/O or side effects)
 - **2026-02-02**: Phase 11.8B ARA & Goals Preset Audit completed (`docs/audits/Phase_11.8B_ARA_Goals_Preset_Audit.md`)
 - **2026-02-02**: Phase 11.8A Predictive & Learning Authority Audit completed (`docs/audits/Phase_11.8A_Predictive_Learning_Authority_Audit.md`)
 - **2026-02-02**: Learning calibration pipeline enabled and verified (ML calibration scheduler, canonical weights generation, regime archival)
