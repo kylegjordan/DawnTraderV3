@@ -1,0 +1,275 @@
+📜 DIRECTIVE 11.8B-A
+Net Expectancy Authority Unification & Final Phase 11.8B Completion
+
+Status: REQUIRED
+Type: Authority Cleanup & Math Unification
+Scope: Phase 11.8B (Final Sub-Phase)
+Execution Model: Deterministic, Read-Write
+No new learning logic permitted
+
+11.8B-A.0 — PURPOSE (NON-NEGOTIABLE)
+
+This directive completes Phase 11.8B by eliminating all remaining parallel Net EV (Expected Value) implementations and establishing a single canonical Net EV math authority, while preserving performance constraints in high-throughput systems.
+
+At the conclusion of this directive:
+
+There must be exactly one definition of Net EV math
+
+All systems must either:
+
+Call the canonical evaluator, or
+
+Call a pure kernel extracted from it
+
+No legacy, heuristic, or divergent EV calculations may remain
+
+This directive does not introduce predictive control, baseline authority, or Phase 12 ML.
+
+11.8B-A.1 — CANONICAL DECISION (LOCKED)
+✅ Canonical Net EV Authority
+
+The canonical definition of Net EV is the math currently implemented in:
+
+server/core/calculations/expectancy.ts
+
+
+Specifically, the logic embodied in:
+
+evaluateTradeExpectancy(...)
+
+
+This math has been verified to:
+
+Match execution reality
+
+Include friction (fees, spread, slippage)
+
+Align with ROI gating
+
+Be actively used by the Paper Execution Engine
+
+This definition supersedes all other Net EV calculations.
+
+11.8B-A.2 — PERFORMANCE CONSTRAINT (IMPORTANT)
+
+Certain systems (DSS inside the Signal Orchestrator, RTB bucket flows) cannot safely call full expectancy evaluation due to throughput and concurrency constraints.
+
+Therefore:
+
+A pure, side-effect-free Net EV kernel MUST be extracted from expectancy.ts for reuse.
+
+This kernel must:
+
+Be synchronous
+
+Perform pure math only
+
+Have no logging
+
+Have no I/O
+
+Have no async
+
+Have no database or telemetry access
+
+11.8B-A.3 — REQUIRED REFACTOR: NET EV KERNEL EXTRACTION
+🔧 CREATE (NEW)
+
+File:
+
+server/core/calculations/net-expectancy-kernel.ts
+
+Exported Function (REQUIRED)
+export function computeNetExpectancyKernel(input: {
+  entryPrice: number
+  stopPrice: number
+  targetPrice: number
+  fees: number
+  spread: number
+  slippage: number
+  DI?: number
+  volNoise?: number
+}): {
+  netEV: number
+  netRewardToRisk: number
+  totalCost: number
+}
+
+Rules
+
+This function must contain only the core math
+
+It must be extracted directly from existing logic in expectancy.ts
+
+No changes to formulas unless explicitly required for parity
+
+All callers must receive identical numerical results for identical inputs
+
+11.8B-A.4 — MODIFY: expectancy.ts
+🔁 REQUIRED CHANGES
+
+Refactor evaluateTradeExpectancy() to:
+
+Call computeNetExpectancyKernel()
+
+Apply decision logic (netEV > 0)
+
+Handle logging, reasons, and wrapping ONLY
+
+🚫 FORBIDDEN
+
+Do NOT duplicate math inside expectancy.ts
+
+Do NOT change tradeability criteria
+
+Do NOT alter thresholds
+
+11.8B-A.5 — MODIFY: SIGNAL ORCHESTRATOR (DSS)
+🔴 REMOVE (MANDATORY)
+
+Delete all local Net EV math, including but not limited to:
+
+rawEV = rawGain - rawLoss
+friction = ...
+netEV = ...
+
+
+These implementations are now illegal.
+
+✅ REPLACE WITH
+
+Import and call:
+
+computeNetExpectancyKernel()
+
+
+Use its netEV output for:
+
+DSS strategy ranking
+
+DSS veto logic
+
+❗ DSS RULE
+
+DSS may rank and compare, but must not redefine EV.
+
+11.8B-A.6 — MODIFY: VTS RUNNER
+🔴 REMOVE
+
+All local EV / ROI / friction math currently inside:
+
+server/services/vts-runner.ts
+
+✅ REPLACE WITH
+
+Direct call to:
+
+evaluateTradeExpectancy()
+
+
+Inputs must match Paper Execution semantics.
+
+🎯 GOAL
+
+Paper Execution and VTS must produce identical EV decisions for identical signals.
+
+11.8B-A.7 — PRESERVE (DO NOT TOUCH)
+
+Replit MUST NOT modify or delete:
+
+Phase 11.7 systems:
+
+server/core/calibration/*
+server/services/telemetry-aggregator.ts
+server/core/governance/*
+
+
+SQE logic:
+
+server/core/filters/signal_quality_evaluator.ts
+
+
+RTB refresh logic
+
+TEC (Trade Exit Controller)
+
+ROI gating in SQE
+
+Any ml.*_weight management
+
+11.8B-A.8 — FILE-BY-FILE CHECKLIST
+CREATE
+
+server/core/calculations/net-expectancy-kernel.ts
+
+MODIFY
+
+server/core/calculations/expectancy.ts
+
+server/services/signal-orchestrator.ts
+
+server/services/vts-runner.ts
+
+VERIFY (READ-ONLY)
+
+server/engines/paper-execution-engine.ts
+
+RTB service
+
+TEC service
+
+DELETE
+
+❌ Nothing new in this sub-phase
+
+11.8B-A.9 — ACCEPTANCE CRITERIA (STRICT)
+
+Replit must provide evidence of all items below.
+
+✅ Functional
+
+Zero parallel Net EV implementations
+
+Exactly one Net EV kernel
+
+Paper Execution, VTS, DSS all agree on EV for identical inputs
+
+No performance regressions in RTB or DSS
+
+✅ Codebase Integrity
+
+grep -R "CWQI" → zero results
+
+grep -R "rawEV" → zero results (outside kernel)
+
+No duplicated EV math anywhere
+
+✅ Runtime
+
+Application boots cleanly
+
+Paper trading runs without EV discrepancies
+
+VTS produces identical accept/reject decisions
+
+11.8B-A.10 — POST-IMPLEMENTATION AUDIT (REQUIRED)
+
+After Replit completes implementation:
+
+Replit must provide:
+
+Diff summary
+
+List of modified files
+
+Confirmation of kernel reuse
+
+Architect (you / me) will:
+
+Re-inspect modified files
+
+Verify parity
+
+Approve Phase 11.8B completion
+
+Only after this audit may Phase 11.8 be considered complete.
