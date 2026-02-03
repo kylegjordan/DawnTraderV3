@@ -1,0 +1,140 @@
+📜 DIRECTIVE 11.8B-A2
+VTS Net Expectancy Alignment (Final EV Unification Step)
+
+Phase: 11.8B
+Sub-Phase: A2
+Purpose: Finalize Net EV unification by aligning VTS with canonical expectancy math
+Scope: VTS only
+No other systems may be modified
+
+11.8B-A2.0 — PURPOSE
+
+This directive completes the Net Expectancy unification begun in 11.8B-A by ensuring that the Virtual Trading System (VTS) uses the same canonical Net EV math as:
+
+Paper Execution
+
+DSS (Signal Orchestrator)
+
+After this directive:
+
+There must be no EV or expectancy math unique to VTS
+
+All Net EV math must flow through the canonical kernel
+
+11.8B-A2.1 — CANONICAL AUTHORITY (LOCKED)
+
+The canonical Net EV math is defined in:
+
+server/core/calculations/net-expectancy-kernel.ts
+
+
+VTS must use this kernel directly.
+
+VTS must NOT:
+
+Re-implement EV math
+
+Use heuristic profitability checks as a substitute for EV
+
+Call evaluateTradeExpectancy() (execution semantics are not required here)
+
+11.8B-A2.2 — REQUIRED MODIFICATION
+🔧 MODIFY
+
+File:
+
+server/services/vts-runner.ts
+
+🔴 REMOVE / DEPRECATE
+
+All logic that attempts to infer trade viability via:
+
+isMathematicallyProfitable()
+
+Partial ROI-only profitability checks
+
+Any local EV or “expectancy-like” math
+
+These may remain only if they are:
+
+Pure ROI gates (pre-EV)
+
+Explicitly documented as ROI gates, not EV
+
+11.8B-A2.3 — REQUIRED REPLACEMENT
+✅ ADD / USE
+
+Import and call:
+
+import { computeNetExpectancyKernel } 
+from "@/core/calculations/net-expectancy-kernel"
+
+Usage Requirements
+
+Compute per-unit Net EV using the kernel
+
+Apply VTS-specific scaling (position size, confidence) outside the kernel
+
+Use netEV > 0 as the canonical profitability gate
+
+Preserve any existing ROI threshold logic as a pre-filter
+
+Explicit Rule
+
+VTS must make profitability decisions using the same Net EV math as DSS and execution.
+
+11.8B-A2.4 — FORBIDDEN ACTIONS
+
+Replit MUST NOT:
+
+Modify expectancy.ts
+
+Modify DSS / signal-orchestrator
+
+Modify RTB logic
+
+Modify TEC (exit logic)
+
+Introduce logging into the kernel
+
+Introduce async or I/O into EV math
+
+11.8B-A2.5 — ACCEPTANCE CRITERIA (STRICT)
+
+Replit must provide evidence that:
+
+✅ Codebase Integrity
+
+VTS contains no unique EV math
+
+grep -R "rawEV" server/services/vts-runner.ts → no results
+
+computeNetExpectancyKernel() is called in VTS
+
+✅ Behavioral Parity
+
+Identical signals produce identical EV sign (positive/negative) in:
+
+DSS
+
+VTS
+
+Paper Execution
+
+✅ Runtime
+
+Application boots cleanly
+
+VTS produces trades normally
+
+No performance regressions observed
+
+11.8B-A2.6 — COMPLETION CONDITION
+
+Once this directive is verified:
+
+All Net EV math in the system is unified
+
+Phase 11.8B-A is fully complete
+
+We may safely proceed to 11.8B-B (LATTi decommission)

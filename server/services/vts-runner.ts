@@ -28,7 +28,10 @@
  */
 
 import { vtsService, type VirtualSignal } from './vts-service.js';
-import { isMathematicallyProfitable, isSignalProfitable, getROIDetails, getDynamicROIThreshold } from '../core/calculations/expectancy.js';
+// Directive 11.8B-A2: Import canonical Net EV kernel for VTS profitability decisions
+import { computeNetExpectancyKernel } from '../core/calculations/net-expectancy-kernel.js';
+// Note: isSignalProfitable is retained as a regime-aware ROI pre-filter (not EV math)
+import { isSignalProfitable, getROIDetails, getDynamicROIThreshold } from '../core/calculations/expectancy.js';
 import { getPredictiveConfidence } from '../core/utils/score-calculator.js';
 import { logSkippedSignal } from '../core/logging/skipped-signals-logger.js';
 import { loadCalibration, applyCalibration, type CalibrationCoefficients } from '../utils/calibration.js';
@@ -456,10 +459,28 @@ async function generatePhase10Signal(
   const costMetrics = getCachedCostMetrics(symbol);
   const frictionCost = (costMetrics.fee * 2) + (costMetrics.slippage * 2) + costMetrics.spread;
   
-  // Directive 11.5 Task 1: Net Expectancy Gate - Profitability Validation
-  // Skip trade if gross profit would not exceed total costs
+  // ══════════════════════════════════════════════════════════════════════════════
+  // Directive 11.8B-A2: Canonical Net EV Gate using computeNetExpectancyKernel()
+  // VTS must use identical math as DSS and Paper Execution for EV decisions
+  // ══════════════════════════════════════════════════════════════════════════════
   const estimatedSlippage = costMetrics.slippage || 0.001;
-  if (!isMathematicallyProfitable(entryPrice, takeProfit, spread, estimatedSlippage, costMetrics.fee)) {
+  // Canonical friction formula: 2 × fee + 2 × slippage + spread (round-trip costs)
+  const totalFriction = (costMetrics.fee * 2) + (estimatedSlippage * 2) + spread;
+  
+  // Convert predictiveConfidence to DI scale (0-100) for kernel
+  // predictiveConfidence is typically 0-1, so scale to 0-100
+  const DI = Math.min(100, Math.max(0, predictiveConfidence * 100));
+  
+  const kernelResult = computeNetExpectancyKernel({
+    entryPrice,
+    stopPrice: stopLoss,
+    targetPrice: takeProfit,
+    totalFriction,
+    DI
+  });
+  
+  // Canonical profitability gate: netEV > 0
+  if (kernelResult.netEV <= 0) {
     logSkippedSignal({
       symbol,
       reason: 'Net_EV_Negative',
@@ -468,13 +489,15 @@ async function generatePhase10Signal(
       strategy,
       source: 'VTS'
     });
-    console.log(`[11.5][ProfitGate] Skipping ${symbol}: Net expectancy below 0 (target=${dynamicTarget.toFixed(4)}, cost=${frictionCost.toFixed(4)})`);
+    console.log(`[11.8B-A2][NetEV] Skipping ${symbol}: Net EV=${kernelResult.netEV.toFixed(6)} <= 0 (rawEV=${kernelResult.rawEV.toFixed(6)}, friction=${totalFriction.toFixed(6)})`);
     return null;
   }
   
-  // Directive 11.7C Task 5: Regime-Aware ROI Gate with PredictiveConfidence
-  // Skip trade if expected ROI doesn't meet dynamic confidence-adjusted threshold
-  // Use the previously computed predictiveConfidence from line 374
+  // ══════════════════════════════════════════════════════════════════════════════
+  // Directive 11.7C / 11.8B-A2: Regime-Aware ROI Pre-Filter (NOT EV math)
+  // This is a pure ROI threshold gate applied AFTER canonical Net EV validation
+  // Purpose: Regime-specific ROI minimums ensure trade quality matches market conditions
+  // ══════════════════════════════════════════════════════════════════════════════
   if (!isSignalProfitable(entryPrice, takeProfit, regime, predictiveConfidence)) {
     const roiDetails = getROIDetails(entryPrice, takeProfit, regime, predictiveConfidence);
     logSkippedSignal({
