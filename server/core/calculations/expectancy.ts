@@ -4,6 +4,7 @@
  * Directive 11.7A — Unified Signal Filter Integration (VTS + SQE Parity)
  * Directive 11.7B — Predictive Learning Telemetry Enhancement
  * Directive 11.7C — Dynamic ROI Thresholding via PredictiveConfidence
+ * Directive 11.8B — Trade Expectancy Gate (Migrated from CWQI Service)
  * ══════════════════════════════════════════════════════════════════════════════
  * 
  * Purpose: Prevents low-expectancy (fee-negative) signals from entering 
@@ -20,14 +21,21 @@
  * - Friction-aware profitability validation (fees + slippage floor)
  * - Unified logic for VTS, SQE, DSS, and RTB
  * 
+ * Directive 11.8B adds:
+ * - Trade Expectancy Gate (evaluateTradeExpectancy) - migrated from cwqi-service.ts
+ * - Single authority for EV > 0 trade blocking in execution engines
+ * 
  * No trade—real or simulated—proceeds if its math doesn't justify the risk.
  * 
- * Schema: v2.0.0
- * Governance: Directive 11.5 Task 1, Directive 11.7A Task 1, Directive 11.7B Task 4, Directive 11.7C Tasks 2-3
+ * Schema: v2.1.0
+ * Governance: Directive 11.5 Task 1, Directive 11.7A Task 1, Directive 11.7B Task 4, Directive 11.7C Tasks 2-3, Directive 11.8B
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
 import { getRegimePerformance, checkConfidenceDrift } from '../logging/vts-telemetry';
+import { calculateDirectionalIntegrity, calculateVolNoise, calculateFriction } from '../../utils/analysis-utils.js';
+import { covarianceEngine } from '../../utils/covariance-engine.js';
+import { SYSTEM_GUARDS } from '../../config/system-guards.js';
 import { 
   ROI_FLEX_MULTIPLIER, 
   ROI_MIN, 
@@ -44,6 +52,37 @@ export interface ExpectancyParams {
   spread: number;
   slippage: number;
   fee: number;
+}
+
+/**
+ * Directive 11.8B: Trade Metadata for expectancy calculation
+ * Migrated from cwqi-service.ts TradeMeta interface
+ */
+export interface TradeMeta {
+  entryPrice: number;
+  targetPrice: number;
+  stopPrice: number;
+  DI?: number;
+  VolNoise?: number;
+  prices?: number[];
+}
+
+/**
+ * Directive 11.8B: Trade Expectancy Result
+ * Migrated from cwqi-service.ts CWQIResult interface
+ * Renamed to neutral terminology (no CWQI references)
+ */
+export interface TradeExpectancyResult {
+  isTradeable: boolean;
+  ev: number;
+  netEV: number;
+  rawEV: number;
+  friction: number;
+  score: number;
+  rejectionReason?: string;
+  pWin: number;
+  pLoss: number;
+  meanCorrelation: number;
 }
 
 /**
@@ -368,6 +407,177 @@ export function validateROIThresholdBounds(
     result.error = `Threshold is not a finite number: ${threshold}`;
     console.error(`[11.7C][RegressionGuard] CRITICAL: ${result.error}`);
   }
+  
+  return result;
+}
+
+/**
+ * ══════════════════════════════════════════════════════════════════════════════
+ * Directive 11.8B — Trade Expectancy Gate (Migrated from CWQI Service)
+ * ══════════════════════════════════════════════════════════════════════════════
+ * 
+ * Mathematical Foundation:
+ * - RawEV = (Pwin × DistTarget) - (Ploss × DistStop)
+ * - Friction = calculateFriction(entry, exit, qty) via canonical helper
+ * - NetEV = RawEV - Friction
+ * - Pwin = 0.40 + (DI / 200), capped at 0.60
+ * - Score = normalize(netEV / risk) × DI × (1 - VolNoise) × (1 - ρ̄)
+ * 
+ * This replaces cwqi-service.ts as the single authority for EV > 0 trade blocking.
+ */
+
+const MIN_PWIN = SYSTEM_GUARDS.MIN_PWIN;
+const MAX_PWIN = SYSTEM_GUARDS.MAX_PWIN;
+const DI_PWIN_FACTOR = SYSTEM_GUARDS.DI_PWIN_FACTOR;
+
+/**
+ * Calculate win probability based on Directional Integrity
+ * Pwin = 0.40 + (DI / 200), capped at 0.60
+ */
+function calculateWinProbability(DI: number): number {
+  const pWin = MIN_PWIN + (DI / DI_PWIN_FACTOR);
+  return Math.min(MAX_PWIN, Math.max(MIN_PWIN, pWin));
+}
+
+/**
+ * Get mean correlation for a symbol from the covariance engine
+ * Returns average absolute correlation with all other tracked symbols
+ */
+function getMeanCorrelation(symbol: string): number {
+  try {
+    const correlationMatrix = covarianceEngine.getCorrelationMatrix();
+    if (!correlationMatrix || !correlationMatrix.matrix[symbol]) {
+      return 0;
+    }
+    
+    const symbolCorrelations = correlationMatrix.matrix[symbol];
+    const otherSymbols = Object.keys(symbolCorrelations).filter(s => s !== symbol);
+    
+    if (otherSymbols.length === 0) {
+      return 0;
+    }
+    
+    const totalAbsCorr = otherSymbols.reduce((sum, s) => {
+      return sum + Math.abs(symbolCorrelations[s] || 0);
+    }, 0);
+    
+    return totalAbsCorr / otherSymbols.length;
+  } catch (err) {
+    console.warn(`[11.8B][ExpectancyGate] Failed to get mean correlation for ${symbol}:`, err);
+    return 0;
+  }
+}
+
+/**
+ * Calculate raw and net expectancy values
+ */
+function calculateRawExpectancy(tradeMeta: TradeMeta): { 
+  netEV: number;
+  rawEV: number;
+  friction: number;
+  pWin: number; 
+  pLoss: number; 
+  distTarget: number;
+  distStop: number;
+} {
+  const { entryPrice, targetPrice, stopPrice, DI = 50 } = tradeMeta;
+  
+  const distTarget = Math.abs(targetPrice - entryPrice);
+  const distStop = Math.abs(entryPrice - stopPrice);
+  
+  const pWin = calculateWinProbability(DI);
+  const pLoss = 1 - pWin;
+  
+  const friction = calculateFriction(entryPrice, targetPrice, 1);
+  
+  const rawEV = (pWin * distTarget) - (pLoss * distStop);
+  const netEV = rawEV - friction;
+  
+  return { netEV, rawEV, friction, pWin, pLoss, distTarget, distStop };
+}
+
+/**
+ * Calculate quality score for trade ranking
+ * Score = normalize(netEV / risk) × DI × (1 - VolNoise) × (1 - ρ̄)
+ */
+function calculateQualityScore(
+  tradeMeta: TradeMeta, 
+  symbol: string,
+  netEV: number
+): { score: number; meanCorrelation: number } {
+  const { entryPrice, stopPrice, DI = 50, VolNoise = 0.3 } = tradeMeta;
+  
+  const risk = Math.abs(entryPrice - stopPrice);
+  
+  if (netEV <= 0 || risk <= 0) {
+    const meanCorrelation = getMeanCorrelation(symbol);
+    return { score: 0, meanCorrelation };
+  }
+  
+  const netEVRiskRatio = netEV / risk;
+  const diNormalized = DI / 100;
+  const volNoiseFactor = 1 - Math.min(1, Math.max(0, VolNoise));
+  const meanCorrelation = getMeanCorrelation(symbol);
+  const correlationFactor = 1 - Math.min(1, Math.max(0, meanCorrelation));
+  
+  const rawScore = netEVRiskRatio * diNormalized * volNoiseFactor * correlationFactor * 100;
+  const score = Math.min(100, Math.max(0, rawScore));
+  
+  return { score, meanCorrelation };
+}
+
+/**
+ * Directive 11.8B: Main Trade Expectancy Gate
+ * 
+ * Evaluates whether a trade has positive mathematical expectancy after fees & slippage.
+ * This is the single authority for EV > 0 trade blocking in execution engines.
+ * 
+ * Migrated from cwqi-service.ts calculateTradeExpectancy
+ * 
+ * @param symbol - Trading pair symbol (internal format)
+ * @param tradeMeta - Trade metadata (entry, target, stop prices + optional DI/VolNoise)
+ * @returns TradeExpectancyResult with isTradeable, netEV, score, and optional rejection reason
+ */
+export function evaluateTradeExpectancy(symbol: string, tradeMeta: TradeMeta): TradeExpectancyResult {
+  let DI = tradeMeta.DI;
+  let VolNoise = tradeMeta.VolNoise;
+  
+  if (tradeMeta.prices && tradeMeta.prices.length >= 3) {
+    if (DI === undefined) {
+      DI = calculateDirectionalIntegrity(tradeMeta.prices);
+    }
+    if (VolNoise === undefined) {
+      VolNoise = calculateVolNoise(tradeMeta.prices);
+    }
+  }
+  
+  DI = DI ?? 50;
+  VolNoise = VolNoise ?? 0.3;
+  
+  const enrichedMeta = { ...tradeMeta, DI, VolNoise };
+  
+  const { netEV, rawEV, friction, pWin, pLoss } = calculateRawExpectancy(enrichedMeta);
+  const { score, meanCorrelation } = calculateQualityScore(enrichedMeta, symbol, netEV);
+  
+  const isTradeable = netEV > 0;
+  const rejectionReason = !isTradeable 
+    ? `NetEV=${netEV.toFixed(6)} (negative expectancy after friction)` 
+    : undefined;
+  
+  const result: TradeExpectancyResult = {
+    isTradeable,
+    ev: netEV,
+    netEV,
+    rawEV,
+    friction,
+    score,
+    pWin,
+    pLoss,
+    meanCorrelation,
+    rejectionReason
+  };
+  
+  console.log(`[11.8B][ExpectancyGate] symbol=${symbol} NetEV=${netEV.toFixed(6)} RawEV=${rawEV.toFixed(6)} Friction=${friction.toFixed(6)} Score=${score.toFixed(1)} pWin=${pWin.toFixed(2)} DI=${DI.toFixed(1)} VolNoise=${VolNoise.toFixed(3)} ρ̄=${meanCorrelation.toFixed(3)} tradeable=${isTradeable}`);
   
   return result;
 }

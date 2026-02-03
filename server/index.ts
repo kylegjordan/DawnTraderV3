@@ -419,18 +419,9 @@ app.use((req, res, next) => {
     console.log('[Walter] Standby mode – AI adjustment disabled');
   }
 
-  // Phase 27.F.14.B: Start LATTI (Local Autonomous Trading Tuning Intelligence) - Dual Mode
-  const LATTI_ENABLED = process.env.LATTI_ENABLED !== 'false'; // Enabled by default
-  if (LATTI_ENABLED) {
-    import('./services/heuristic-trader').then(({ lattiManager }) => {
-      lattiManager.startBoth().catch((error) => {
-        console.error('[Server] Failed to start LATTI dual-mode operation:', error);
-      });
-      console.log('[LATTIManager] Both LATTI instances active (Paper, Live)');
-    });
-  } else {
-    console.log('[Server] ⚠️  LATTI DISABLED (LATTI_ENABLED=false)');
-  }
+  // Directive 11.8B: LATTI system removed - parallel adaptive systems eliminated
+  // Phase 11 Predictive Learning is the single authority for parameter adjustment
+  console.log('[11.8B] LATTI system removed - Predictive Learning is single authority');
 
   // Phase 8.8.2: Initialize Memory Lifecycle Manager (async, non-blocking)
   import('./services/memory-lifecycle').then(({ memoryLifecycle }) => {

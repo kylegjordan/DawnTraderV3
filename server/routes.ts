@@ -1277,16 +1277,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     });
   });
 
-  // Phase 27.F.14: Local Heuristic Trader Service API Endpoints
-  apiRouter.get('/heuristic-trader/health', authenticateToken, handleLHTSHealth);
-  apiRouter.post('/heuristic-trader/toggle', authenticateToken, handleLHTSToggle);
-  apiRouter.post('/heuristic-trader/emergency-stop', authenticateToken, handleLHTSEmergencyStop);
-  
-  // Phase 27.F.14.B Task 6: LATTI Safety Audit API Endpoints
-  apiRouter.get('/heuristic-trader/safety-summary', authenticateToken, handleLATTISafetySummary);
-  
-  // Phase 27.F.14.B Task 11: LATTI Adjustment Logs Export
-  apiRouter.get('/heuristic-trader/adjustment-logs', authenticateToken, handleLATTIAdjustmentLogs);
+  // Directive 11.8B: LATTI/Heuristic Trader routes removed - parallel adaptive systems eliminated
+  // Phase 11 Predictive Learning is the single authority for parameter adjustment
 
   // Phase 27.F.14.B: LATTI Baseline Indicator API Endpoint
   apiRouter.get('/baseline-indicator/status', authenticateToken, handleBaselineStatus);
@@ -2051,48 +2043,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // POST /api/goals-learning/trigger?mode=paper|live - Manually trigger learning engine
+  // Directive 11.8B: Goals Learning Engine route removed - parallel adaptive systems eliminated
+  // Phase 11 Predictive Learning is the single authority for parameter adjustment
   apiRouter.post('/goals-learning/trigger', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const mode = req.query.mode as 'live' | 'paper';
-
-      if (!mode || (mode !== 'live' && mode !== 'paper')) {
-        return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
-      }
-
-      const { goalsLearningEngine } = await import('./services/goals-learning-engine');
-      
-      // Check if already running
-      if (goalsLearningEngine.isRunning(mode)) {
-        return res.status(409).json({ 
-          ok: false, 
-          code: 'ALREADY_RUNNING', 
-          detail: `Learning engine is already running for ${mode}` 
-        });
-      }
-
-      console.log(`[GoalsLearning] Manual trigger for ${mode} by user ${userId}`);
-
-      // Run the learning engine
-      const results = await goalsLearningEngine.run(mode);
-
-      console.log(`[GoalsLearning] Learning cycle complete for ${mode} - ${results.length} presets evaluated`);
-
-      res.json({ 
-        ok: true, 
-        data: {
-          mode,
-          results,
-          adjustedCount: results.filter(r => r.adjusted).length,
-          totalPresets: results.length,
-          timestamp: new Date().toISOString()
-        }
-      });
-    } catch (error: any) {
-      console.error('[GoalsLearning] POST trigger error:', error.message);
-      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
-    }
+    res.status(410).json({ 
+      ok: false, 
+      code: 'DEPRECATED', 
+      detail: 'Goals Learning Engine removed in Directive 11.8B - Phase 11 Predictive Learning is now the single authority' 
+    });
   });
 
   // GET /api/analytics/guardrails-compliance?mode=paper|live - Get coherency status
@@ -22925,10 +22883,9 @@ Important: Extract the exact field names and numeric values from the user's requ
   apiRouter.use('/health', healthRouter);
   console.log('[41F-D] Health routes mounted at /api/health');
 
-  // Directive 8.8.4-L4: Mount ARA (Adaptive Risk Advisor) routes
-  const araRouter = await import('./routes/ara.js');
-  apiRouter.use('/ara', araRouter.default);
-  console.log('[L4] ARA routes mounted at /api/ara');
+  // Directive 11.8B: ARA routes removed - parallel adaptive systems eliminated
+  // Phase 11 Predictive Learning is the single authority for risk optimization
+  console.log('[11.8B] ARA routes removed - Predictive Learning is single authority');
 
   // Directive 8.8.4-L6: Mount VTS (Virtual Trade Simulator) routes
   const vtsRouter = await import('./routes/vts.js');

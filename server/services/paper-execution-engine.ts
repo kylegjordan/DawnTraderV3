@@ -80,7 +80,7 @@ import { eventBus, type TCLActivatedEvent, type TradeClosedEvent } from '../lib/
 import { dataAggregator } from './data-aggregator.js';
 import { covarianceEngine } from '../utils/covariance-engine.js';
 import { recordPaperTrade, type PaperTradeRecord } from './vts-live-comparison-audit.js';
-import { cwqiService } from './cwqi-service.js';
+import { evaluateTradeExpectancy } from '../core/calculations/expectancy.js';
 import { applyGovernance, getGovernanceStateForUI } from '../core/governance/governance-engine.js';
 import { getCachedStability, computeGlobalStability } from '../core/governance/regime-stability.js';
 import { isStrategyEligible, logGovernanceBlock } from '../core/governance/strategy-eligibility.js';
@@ -1586,9 +1586,9 @@ export class PaperExecutionEngine {
       return;
     }
 
-    // Directive 9.5: CWQI v4 - Net Expectancy Gate
+    // Directive 11.8B: Net Expectancy Gate (migrated from CWQI v4)
     // Check if trade has positive mathematical expectancy after fees & slippage
-    const cwqiResult = cwqiService.calculateTradeExpectancy(signal.symbol, {
+    const expectancyResult = evaluateTradeExpectancy(signal.symbol, {
       entryPrice: signal.entryPrice,
       targetPrice: signal.targetPrice,
       stopPrice: signal.stopPrice,
@@ -1597,38 +1597,38 @@ export class PaperExecutionEngine {
       prices: signal.metadata?.prices
     });
     
-    if (!cwqiResult.isTradeable) {
-      // [B4] Log funnel attempt blocked by CWQI
+    if (!expectancyResult.isTradeable) {
+      // [B4] Log funnel attempt blocked by Net Expectancy Gate
       b4Diagnostics.logFunnelEvent({
         symbol: signal.symbol,
         strategy: signal.strategy,
         stage: 'attempt',
-        block_reason: 'CWQI_REJECT'
+        block_reason: 'EV_REJECT'
       });
       
-      console.log(`[9.5][CWQI_BLOCK] ${signal.symbol} rejected: ${cwqiResult.rejectionReason}`);
-      console.log(`[PaperExecution:${this.mode}] Paper trade rejected by CWQI: ${cwqiResult.rejectionReason}`);
+      console.log(`[11.8B][EV_BLOCK] ${signal.symbol} rejected: ${expectancyResult.rejectionReason}`);
+      console.log(`[PaperExecution:${this.mode}] Paper trade rejected by Net Expectancy Gate: ${expectancyResult.rejectionReason}`);
       
       // Log rejection
       await storage.createPaperSimTradeLog(this.mode, {
         tradeId: null,
         positionId: null,
         eventType: 'trade_rejected',
-        message: `Trade rejected by CWQI: ${signal.symbol} - ${cwqiResult.rejectionReason}`,
+        message: `Trade rejected by Net Expectancy Gate: ${signal.symbol} - ${expectancyResult.rejectionReason}`,
         metadata: {
           signal: tradeCandidate,
-          rejectionReason: cwqiResult.rejectionReason,
-          code: 'CWQI_REJECT',
-          ev: cwqiResult.ev,
-          score: cwqiResult.score
+          rejectionReason: expectancyResult.rejectionReason,
+          code: 'EV_REJECT',
+          ev: expectancyResult.ev,
+          score: expectancyResult.score
         }
       });
       
       return;
     }
     
-    // Log CWQI pass with score for future analytics
-    console.log(`[9.5][CWQI_PASS] ${signal.symbol} EV=${cwqiResult.ev.toFixed(6)} Score=${cwqiResult.score.toFixed(1)}`);
+    // Log expectancy gate pass with score for future analytics
+    console.log(`[11.8B][EV_PASS] ${signal.symbol} EV=${expectancyResult.ev.toFixed(6)} Score=${expectancyResult.score.toFixed(1)}`);
 
     // [B4] Log funnel RTB - signal passed all guardrails, ready to buy
     b4Diagnostics.logFunnelEvent({
@@ -1837,8 +1837,8 @@ export class PaperExecutionEngine {
           ...signal.metadata,
           tradeId: trade.id,
           highWaterMark: actualEntryPrice.toString(), // For trailing stop tracking
-          cwqiScore: cwqiResult.score, // Directive 9.5: CWQI quality score
-          cwqiEV: cwqiResult.ev // Directive 9.5: Net expectancy
+          expectancyScore: expectancyResult.score, // Directive 11.8B: Trade quality score
+          expectancyEV: expectancyResult.ev // Directive 11.8B: Net expectancy
         }
       });
 

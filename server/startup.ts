@@ -13,17 +13,9 @@ export async function initializeServices() {
   const services: string[] = [];
 
   try {
-    // Initialize LATTI (Local Autonomous Trading Tuning Intelligence)
-    if (env.LATTI_ENABLED) {
-      const { lattiManager } = await import('./services/heuristic-trader');
-      await lattiManager.startBoth().catch((error) => {
-        console.error('[Startup] Failed to start LATTI:', error);
-      });
-      services.push('LATTI');
-      console.log('[Startup] ✅ LATTI initialized');
-    } else {
-      console.log('[Startup] ⚠️  LATTI disabled');
-    }
+    // Directive 11.8B: LATTI system removed - parallel adaptive systems eliminated
+    // Phase 11 Predictive Learning is the single authority for parameter adjustment
+    console.log('[Startup] [11.8B] LATTI removed - Predictive Learning is single authority');
 
     // Initialize Goals Engine
     try {
@@ -58,9 +50,11 @@ export async function initializeServices() {
 
 /**
  * Get list of initialized services for health checks
+ * Directive 11.8B: Removed LATTI and GoalsEngine (parallel adaptive systems)
+ * Phase 11 Predictive Learning is now the single authority
  */
 export function getInitializedServices(): string[] {
-  const services = ['LATTI', 'GoalsEngine', 'TradingEngine', 'MarketScanner'];
+  const services = ['PredictiveLearning', 'TradingEngine', 'MarketScanner'];
   
   if (env.WALTER_DISABLED) {
     return services;

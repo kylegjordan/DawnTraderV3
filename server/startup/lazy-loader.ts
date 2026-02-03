@@ -73,16 +73,10 @@ export async function lazyLoadServices() {
         }
       })(),
       
-      // LATTI Manager (30-min cycle)
+      // Directive 11.8B: LATTIManager removed - parallel adaptive systems eliminated
       (async () => {
-        try {
-          const { LATTIManager } = await import('../services/latti-manager');
-          LATTIManager.startPeriodicProcessing();
-          return 'LATTIManager';
-        } catch (error) {
-          console.error('[Lazy] LATTIManager failed:', error);
-          return null;
-        }
+        console.log('[Lazy] [11.8B] LATTIManager removed - Predictive Learning is single authority');
+        return null;
       })(),
       
       // Lottie Oversight (5-min checks)

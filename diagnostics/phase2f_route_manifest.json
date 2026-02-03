@@ -405,56 +405,6 @@
     ]
   },
   {
-    "path": "/api/heuristic-trader/health",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "handleLHTSHealth"
-    ]
-  },
-  {
-    "path": "/api/heuristic-trader/toggle",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "handleLHTSToggle"
-    ]
-  },
-  {
-    "path": "/api/heuristic-trader/emergency-stop",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "handleLHTSEmergencyStop"
-    ]
-  },
-  {
-    "path": "/api/heuristic-trader/safety-summary",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "handleLATTISafetySummary"
-    ]
-  },
-  {
-    "path": "/api/heuristic-trader/adjustment-logs",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "handleLATTIAdjustmentLogs"
-    ]
-  },
-  {
     "path": "/api/baseline-indicator/status",
     "methods": [
       "GET"
@@ -6472,56 +6422,6 @@
       "GET"
     ],
     "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/ara/calculate",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "requireAuth",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/ara/suggestions",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "requireAuth",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/ara/apply",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "requireAuth",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/ara/retrain",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "requireAuth",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/ara/status",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "auditOrAuth",
       "anonymous"
     ]
   },
