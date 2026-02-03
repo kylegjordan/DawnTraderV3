@@ -1,0 +1,123 @@
+🔎 REQUIRED VERIFICATION & MIGRATION — CWQI / NET EXPECTANCY
+
+Before proceeding with deletion of cwqi-service.ts, perform the following mandatory inspection:
+
+Step 1 — Exhaustive Discovery (No Changes Yet)
+
+Perform a full repo-wide search for all references to:
+
+CWQI
+
+cwqi
+
+calculateTradeExpectancy
+
+expectancy
+
+expectedValue
+
+netExpectancy
+
+Any logic that blocks trades when EV ≤ 0
+
+Search scope must include:
+
+signal_quality_evaluator.ts
+
+Signal orchestrator / pipeline
+
+Paper execution engine
+
+VTS runner
+
+Live trading engine
+
+Any shared utilities
+
+Produce a list with:
+
+File path
+
+Function name
+
+Purpose (gate vs metric vs logging)
+
+Do not change code yet.
+
+Step 2 — Authority Decision Based on Findings
+
+Based on the discovery:
+
+Case A — Net Expectancy Exists in SQE or Pipeline Already
+
+Do not duplicate logic
+
+Remove CWQI usage entirely
+
+Route execution engines to existing SQE gate
+
+Ensure single enforcement point
+
+Case B — CWQI Is the ONLY Net Expectancy Gate
+
+Extract the pure math from cwqi-service.ts
+
+Migrate it into signal_quality_evaluator.ts
+
+Rename concept to a neutral execution term:
+
+netExpectancyGate or expectedValueGate
+
+Integrate it into SQE’s gating flow
+
+Ensure identical math and thresholds
+
+In both cases:
+
+cwqi-service.ts must be deleted
+
+No CWQI symbols may remain in the codebase
+
+Step 3 — Execution Engine Refactor
+
+For all execution engines (paper, VTS, live):
+
+Remove any direct CWQI calls
+
+Replace with SQE-based tradeability evaluation
+
+Ensure engines do not implement their own EV logic
+
+Execution engines must:
+
+Ask “Is this trade allowed?”
+
+Not decide why independently
+
+Step 4 — Verification (Mandatory Evidence)
+
+Provide the following proof artifacts:
+
+Search Results
+
+Before/after grep output showing:
+
+Zero references to CWQI or cwqi
+
+Single Authority Proof
+
+Demonstrate exactly one place where EV > 0 is enforced
+
+Behavioral Equivalence Test
+
+A trade rejected pre-refactor must still be rejected
+
+A trade accepted pre-refactor must still be accepted
+
+Runtime Logs
+
+Log showing SQE rejecting a negative-EV trade
+
+No CWQI-related logs
+
+Only after these steps may you proceed with the rest of Directive 11.8B.
