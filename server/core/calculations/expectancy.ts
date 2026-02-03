@@ -516,15 +516,14 @@ export function evaluateTradeExpectancy(symbol: string, tradeMeta: TradeMeta): T
   DI = DI ?? 50;
   VolNoise = VolNoise ?? 0.3;
   
+  // Directive 11.8B-A: Use canonical friction from calculateFriction helper
   const friction = calculateFriction(tradeMeta.entryPrice, tradeMeta.targetPrice, 1);
   
   const kernelResult = computeNetExpectancyKernel({
     entryPrice: tradeMeta.entryPrice,
     stopPrice: tradeMeta.stopPrice,
     targetPrice: tradeMeta.targetPrice,
-    fees: friction * 0.4,
-    spread: friction * 0.2,
-    slippage: friction * 0.4,
+    totalFriction: friction,
     DI,
     volNoise: VolNoise,
   });

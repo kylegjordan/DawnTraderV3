@@ -1118,24 +1118,25 @@ export class SignalOrchestrator {
           const positionSize = signal.quantity || 1;
           
           // Directive 11.8B-A: Use canonical Net EV kernel for all calculations
+          // Friction formula: 2 × BASE_FEE_SLIPPAGE% × entry (round-trip cost per unit)
           const frictionPct = SYSTEM_GUARDS.BASE_FEE_SLIPPAGE / 100;
-          const totalFriction = 2 * frictionPct * entry * positionSize;
+          const frictionPerUnit = 2 * frictionPct * entry;
           
           // Note: confidence may be 0-1 (NGC) or 0-100 (raw) - normalize to 0-1 first
           const rawConf = signal.confidence || 0;
           const normalizedConf = rawConf > 1 ? rawConf / 100 : rawConf;
           const DI = normalizedConf * 100; // Convert to DI scale (0-100) for kernel
           
+          // Kernel computes per-unit EV (absolute price deltas)
           const kernelResult = computeNetExpectancyKernel({
             entryPrice: entry,
             stopPrice: stop,
             targetPrice: target,
-            fees: totalFriction * 0.4,
-            spread: totalFriction * 0.2,
-            slippage: totalFriction * 0.4,
+            totalFriction: frictionPerUnit,
             DI,
           });
           
+          // Scale kernel netEV by position size for total dollar EV
           strategyMetrics[signal.strategy] = {
             netEV: kernelResult.netEV * positionSize,
             confidence: signal.confidence || 0

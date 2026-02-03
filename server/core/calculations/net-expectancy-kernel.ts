@@ -33,9 +33,8 @@ export interface NetExpectancyKernelInput {
   entryPrice: number;
   stopPrice: number;
   targetPrice: number;
-  fees: number;
-  spread: number;
-  slippage: number;
+  /** Total friction cost (fees + spread + slippage) - single canonical value */
+  totalFriction: number;
   DI?: number;
   volNoise?: number;
 }
@@ -69,9 +68,7 @@ export function computeNetExpectancyKernel(input: NetExpectancyKernelInput): Net
     entryPrice,
     stopPrice,
     targetPrice,
-    fees,
-    spread,
-    slippage,
+    totalFriction,
     DI = 50,
   } = input;
 
@@ -81,10 +78,8 @@ export function computeNetExpectancyKernel(input: NetExpectancyKernelInput): Net
   const pWin = Math.min(MAX_PWIN, Math.max(MIN_PWIN, MIN_PWIN + (DI / DI_PWIN_FACTOR)));
   const pLoss = 1 - pWin;
 
-  const totalCost = fees + spread + slippage;
-
   const rawEV = (pWin * distTarget) - (pLoss * distStop);
-  const netEV = rawEV - totalCost;
+  const netEV = rawEV - totalFriction;
 
   const netRewardToRisk = distStop > 0 ? netEV / distStop : 0;
 
@@ -92,7 +87,7 @@ export function computeNetExpectancyKernel(input: NetExpectancyKernelInput): Net
     netEV,
     rawEV,
     netRewardToRisk,
-    totalCost,
+    totalCost: totalFriction,
     pWin,
     pLoss,
     distTarget,
