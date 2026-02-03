@@ -567,17 +567,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Phase 31.J - LATTI Tuning Metrics Endpoint
-  apiRouter.get('/system/latti-tuning', async (_req, res) => {
-    try {
-      const { LATTIManager } = await import('./services/latti-manager');
-      const data = await LATTIManager.getLatestMetrics();
-      res.json(data || { status: "no_data" });
-    } catch (err: any) {
-      console.error("[31.J][LATTI-TUNING]", err);
-      res.status(500).json({ error: "Failed to load tuning metrics" });
-    }
-  });
+  // Directive 11.8B-B: LATTI Tuning Metrics Endpoint removed
 
   // Phase 41C: Telemetry Trace API Endpoints
   apiRouter.post('/telemetry/trace/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
@@ -745,41 +735,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Phase 31.K - LATTI Learning Insights Endpoint
-  apiRouter.get('/system/latti-insights', async (_req, res) => {
-    try {
-      const { LATTIManager } = await import('./services/latti-manager');
-      const data = await LATTIManager.generateInsightSnapshot();
-      res.json(data);
-    } catch (err: any) {
-      console.error("[31.K][LATTI-INSIGHTS]", err);
-      res.status(500).json({ error: "Failed to load Lottie learning insights" });
-    }
-  });
-
-  // Phase 31.L - LATTI Cross-Strategy Learning Correlations
-  apiRouter.get('/system/latti-cross-strategy', async (_req, res) => {
-    try {
-      const { LATTIManager } = await import('./services/latti-manager');
-      const data = await LATTIManager.generateCrossStrategyInsights();
-      res.json(data);
-    } catch (err: any) {
-      console.error("[31.L][LATTI-CROSS-STRATEGY]", err);
-      res.status(500).json({ error: "Failed to load cross-strategy insights" });
-    }
-  });
-
-  // Phase 32.BS - LATTI Strategy Usage Summary
-  apiRouter.get('/system/latti-strategy-usage', async (_req, res) => {
-    try {
-      const { LATTIManager } = await import('./services/latti-manager');
-      const data = await LATTIManager.generateStrategyUsageSummary();
-      res.json(data);
-    } catch (err: any) {
-      console.error("[32.BS][LATTI-USAGE]", err);
-      res.status(500).json({ error: "Failed to load strategy usage summary" });
-    }
-  });
+  // Directive 11.8B-B: LATTI Learning Insights, Cross-Strategy, Strategy Usage endpoints removed
 
   // Phase 32.BS - SDPOE Health Check
   apiRouter.get('/system/health-sdpoe', async (_req, res) => {
@@ -1277,18 +1233,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     });
   });
 
-  // Directive 11.8B: LATTI/Heuristic Trader routes removed - parallel adaptive systems eliminated
+  // Directive 11.8B-B: LATTI/Heuristic Trader routes removed - parallel adaptive systems eliminated
   // Phase 11 Predictive Learning is the single authority for parameter adjustment
-
-  // Phase 27.F.14.B: LATTI Baseline Indicator API Endpoint
-  apiRouter.get('/baseline-indicator/status', authenticateToken, handleBaselineStatus);
+  // Removed: /baseline-indicator/status, /latti/targets
 
   // Phase 27.F.14.B: Trading Pace Control API Endpoints
   apiRouter.get('/system/trading-pace', authenticateToken, handleGetTradingPace);
   apiRouter.put('/system/trading-pace', authenticateToken, handleUpdateTradingPace);
-
-  // Phase 27.F.18: LATTI Targets API Endpoint (dynamic calculation)
-  apiRouter.get('/latti/targets', authenticateToken, handleLATTITargets);
 
   // Guardrails endpoints (mode-isolated)
   // Phase 7.4: ConfigBob transparent routing for guardrails endpoint
@@ -23491,178 +23442,10 @@ function generatePnLReport(trades: any[], period: 'monthly' | 'quarterly' | 'ann
 
 
 // ============================================================================
-// Phase 27.F.14: Local Heuristic Trader Service API Endpoints
+// Directive 11.8B-B: LHTS/LATTI handler functions removed
+// Phase 27.F.14 Local Heuristic Trader Service API Endpoints - REMOVED
+// Phase 27.F.14.B LATTI Baseline Indicator API Endpoints - REMOVED
 // ============================================================================
-
-/**
- * Get LHTS health status
- * GET /api/heuristic-trader/health
- */
-export async function handleLHTSHealth(req: Request, res: Response) {
-  try {
-    const { heuristicTrader } = await import('./services/heuristic-trader');
-    const health = await heuristicTrader.getHealth();
-    res.json(health);
-  } catch (error: any) {
-    console.error('[LHTS-API] Error getting health:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-}
-
-/**
- * Toggle LHTS on/off
- * POST /api/heuristic-trader/toggle
- * Body: { enabled: boolean, mode?: 'paper' | 'live' }
- */
-export async function handleLHTSToggle(req: Request, res: Response) {
-  try {
-    const { enabled, mode = 'paper' } = req.body;
-    const { heuristicTrader } = await import('./services/heuristic-trader');
-    
-    if (enabled) {
-      await heuristicTrader.start(mode);
-      res.json({ success: true, message: `LHTS started in ${mode} mode` });
-    } else {
-      await heuristicTrader.stop();
-      res.json({ success: true, message: 'LHTS stopped' });
-    }
-  } catch (error: any) {
-    console.error('[LHTS-API] Error toggling LHTS:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-}
-
-/**
- * Emergency stop - immediately halt LHTS
- * POST /api/heuristic-trader/emergency-stop
- */
-export async function handleLHTSEmergencyStop(req: Request, res: Response) {
-  try {
-    const { heuristicTrader } = await import('./services/heuristic-trader');
-    await heuristicTrader.emergencyStop();
-    res.json({ success: true, message: 'LHTS emergency stop executed' });
-  } catch (error: any) {
-    console.error('[LHTS-API] Error executing emergency stop:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-}
-
-// ============================================================================
-// Phase 27.F.14.B: LATTI Baseline Indicator API Endpoints
-// ============================================================================
-
-/**
- * Get baseline indicator status
- * GET /api/baseline-indicator/status
- */
-export async function handleBaselineStatus(req: AuthenticatedRequest, res: Response) {
-  try {
-    const userId = req.user!.id;
-    const { baselineIndicator } = await import('./services/baseline-indicator');
-    const status = await baselineIndicator.checkBaselineStatus(userId);
-    res.json(status);
-  } catch (error: any) {
-    console.error('[BaselineIndicator-API] Error getting baseline status:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-}
-
-/**
- * Get LATTI safety summary
- * Phase 27.F.14.B Task 6
- * GET /api/heuristic-trader/safety-summary
- */
-export async function handleLATTISafetySummary(req: AuthenticatedRequest, res: Response) {
-  try {
-    const { lattiPaper, lattiLive } = await import('./services/heuristic-trader');
-    
-    // Get safety summary for both modes
-    const paperSummary = await lattiPaper.getSafetySummary();
-    const liveSummary = await lattiLive.getSafetySummary();
-    
-    res.json({
-      paper: paperSummary,
-      live: liveSummary
-    });
-  } catch (error: any) {
-    console.error('[LATTI-Safety-API] Error getting safety summary:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-}
-
-/**
- * Get LATTI adjustment logs for export
- * Phase 27.F.14.B Task 11
- * GET /api/heuristic-trader/adjustment-logs?mode=paper&days=7&format=json
- */
-export async function handleLATTIAdjustmentLogs(req: AuthenticatedRequest, res: Response) {
-  try {
-    const mode = (req.query.mode as 'paper' | 'live') || 'paper';
-    const days = parseInt(req.query.days as string) || 7;
-    const format = (req.query.format as 'json' | 'csv') || 'json';
-    
-    // Validate mode
-    if (mode !== 'paper' && mode !== 'live') {
-      return res.status(400).json({ error: 'Mode must be "paper" or "live"' });
-    }
-    
-    // Fetch logs from database
-    const daysAgo = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-    const { db } = await import('./db');
-    const { tradingAuditLog } = await import('../shared/schema');
-    const { and, like, eq, gte } = await import('drizzle-orm');
-    
-    const logs = await db
-      .select()
-      .from(tradingAuditLog)
-      .where(
-        and(
-          like(tradingAuditLog.action, 'latti_adjustment_%'),
-          eq(tradingAuditLog.mode, mode),
-          gte(tradingAuditLog.createdAt, daysAgo)
-        )
-      )
-      .orderBy(tradingAuditLog.createdAt);
-    
-    // Transform logs for export
-    const exportData = logs.map(log => ({
-      timestamp: log.createdAt,
-      mode: log.mode,
-      parameterType: log.metadata?.parameterType || 'unknown',
-      parameterName: log.metadata?.parameterName || 'unknown',
-      oldValue: log.metadata?.oldValue || 0,
-      newValue: log.metadata?.newValue || 0,
-      changePercent: log.metadata?.changePercent || 0,
-      reason: log.metadata?.reason || '',
-      ruleId: log.metadata?.ruleId || '',
-      triggeredBy: log.triggeredBy || 'latti_heuristic'
-    }));
-    
-    // Return based on format
-    if (format === 'csv') {
-      // Generate CSV
-      const csvHeader = 'Timestamp,Mode,Parameter Type,Parameter Name,Old Value,New Value,Change %,Reason,Rule ID,Triggered By\n';
-      const csvRows = exportData.map(row => 
-        `${row.timestamp.toISOString()},${row.mode},${row.parameterType},${row.parameterName},${row.oldValue},${row.newValue},${row.changePercent},"${row.reason}",${row.ruleId},${row.triggeredBy}`
-      ).join('\n');
-      
-      res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', `attachment; filename=latti-adjustments-${mode}-${days}d.csv`);
-      res.send(csvHeader + csvRows);
-    } else {
-      // Return JSON
-      res.json({
-        mode,
-        days,
-        totalLogs: exportData.length,
-        logs: exportData
-      });
-    }
-  } catch (error: any) {
-    console.error('[LATTI-Logs-API] Error getting adjustment logs:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-}
 
 // ============================================================================
 // Phase 27.F.14.B: Trading Pace Control API Endpoints

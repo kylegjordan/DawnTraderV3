@@ -342,9 +342,8 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       console.log('[REB 2.8.10] Invalidating portfolio and goals queries after paper trading start');
       await queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
-      // REB 2.8.10: Add goals and LATTI invalidations
+      // REB 2.8.10: Add goals invalidations
       await queryClient.invalidateQueries({ queryKey: [`/api/goals/summary?mode=paper`] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/latti/targets'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/system/trading-pace'] });
       
       toast({
@@ -385,9 +384,8 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       console.log('[REB 2.8.10] Invalidating portfolio and goals queries after new simulation start');
       await queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
-      // REB 2.8.10: Add goals and LATTI invalidations
+      // REB 2.8.10: Add goals invalidations
       await queryClient.invalidateQueries({ queryKey: [`/api/goals/summary?mode=paper`] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/latti/targets'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/system/trading-pace'] });
       
       toast({

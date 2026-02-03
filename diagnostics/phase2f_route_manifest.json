@@ -145,15 +145,6 @@
     ]
   },
   {
-    "path": "/api/system/latti-tuning",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
     "path": "/api/telemetry/trace/start",
     "methods": [
       "POST"
@@ -200,33 +191,6 @@
     ],
     "middlewares": [
       "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/system/latti-insights",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/system/latti-cross-strategy",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/system/latti-strategy-usage",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
       "anonymous"
     ]
   },
@@ -405,16 +369,6 @@
     ]
   },
   {
-    "path": "/api/baseline-indicator/status",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "handleBaselineStatus"
-    ]
-  },
-  {
     "path": "/api/system/trading-pace",
     "methods": [
       "GET",
@@ -423,16 +377,6 @@
     "middlewares": [
       "authenticateToken",
       "handleGetTradingPace"
-    ]
-  },
-  {
-    "path": "/api/latti/targets",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "handleLATTITargets"
     ]
   },
   {

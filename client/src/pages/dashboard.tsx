@@ -13,7 +13,6 @@ import EarningsWidget from "@/components/goals/earnings-widget";
 import TradingActivityWidget from "@/components/goals/trading-activity-widget";
 import AveragesWidget from "@/components/goals/averages-widget";
 import { FilterHealthWidget } from "@/components/dashboard/filter-health-widget";
-import { BaselineStatusWidget } from "@/components/dashboard/baseline-status-widget";
 import AJ17DiagnosticCard from "@/components/goals/aj17-diagnostic-card";
 import AlertBanner from "@/components/alerts/alert-banner";
 import { useSystemHealth } from "@/hooks/use-system-health";
@@ -24,12 +23,7 @@ import { useEffect, useMemo, lazy, Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWebSocket } from "@/hooks/use-websocket";
 
-// Phase 4C: Lazy load LATTI widget for code splitting and bundle optimization
-const DashboardLATTiWidget = lazy(() => 
-  import("@/components/dashboard/dashboard-latti-widget").then(module => ({
-    default: module.DashboardLATTiWidget
-  }))
-);
+// Directive 11.8B-B: DashboardLATTiWidget removed - parallel adaptive systems eliminated
 
 export default function Dashboard() {
   // Enable auto-resync polling every 12s (detects backend changes and auto-refreshes widgets)
@@ -118,20 +112,7 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* Phase 4: Unified LATTi Goals & Guardrails Widget */}
-      {/* Phase 4C: Suspense wrapper for lazy-loaded LATTI widget */}
-      <Suspense fallback={
-        <div className="rounded-lg border bg-card p-6 animate-pulse">
-          <div className="h-6 w-48 bg-muted rounded mb-4"></div>
-          <div className="space-y-3">
-            <div className="h-4 w-full bg-muted rounded"></div>
-            <div className="h-4 w-3/4 bg-muted rounded"></div>
-            <div className="h-4 w-5/6 bg-muted rounded"></div>
-          </div>
-        </div>
-      }>
-        <DashboardLATTiWidget />
-      </Suspense>
+      {/* Directive 11.8B-B: LATTi Goals & Guardrails Widget removed */}
 
       {/* Daily Trading Brief (includes Market Insights) */}
       <DailyBriefCard />
@@ -159,9 +140,6 @@ export default function Dashboard() {
 
       {/* Phase 8.8.3-AJ17: Diagnostic Tools Card (paper mode only) */}
       <AJ17DiagnosticCard />
-
-      {/* Phase 27.F.31: LATTI Baseline Status Widget (moved from position 2) */}
-      <BaselineStatusWidget />
       </div>
     </PortfolioProvider>
   );

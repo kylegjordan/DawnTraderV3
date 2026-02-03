@@ -16,7 +16,6 @@ import { TradingModeProvider } from "@/contexts/trading-mode-context";
 import { RequestTraceProvider } from "@/hooks/use-request-trace";
 import { ensureValidToken } from "@/lib/auth";
 import WalterFloatingAssistant from "@/components/walter-floating-assistant";
-import { LATTIToastListener } from "@/components/latti-toast-listener";
 import { ProfiledRoute } from "@/components/profiled-route";
 import { AlertTriangle, X } from "lucide-react";
 
@@ -258,7 +257,6 @@ function App() {
           <TooltipProvider>
             <div className="min-h-screen bg-background text-foreground">
               <Toaster />
-              <LATTIToastListener />
               <Router />
             </div>
           </TooltipProvider>

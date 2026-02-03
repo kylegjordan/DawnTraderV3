@@ -73,22 +73,10 @@ export async function lazyLoadServices() {
         }
       })(),
       
-      // Directive 11.8B: LATTIManager removed - parallel adaptive systems eliminated
+      // Directive 11.8B-B: LATTIManager and LottieOversight removed - parallel adaptive systems eliminated
       (async () => {
-        console.log('[Lazy] [11.8B] LATTIManager removed - Predictive Learning is single authority');
+        console.log('[Lazy] [11.8B-B] LATTi system fully removed - Predictive Learning is single authority');
         return null;
-      })(),
-      
-      // Lottie Oversight (5-min checks)
-      (async () => {
-        try {
-          const { lottieOversightService } = await import('../services/lottie-oversight-service');
-          await lottieOversightService.start();
-          return 'LottieOversight';
-        } catch (error) {
-          console.error('[Lazy] LottieOversight failed:', error);
-          return null;
-        }
       })(),
       
       // Audit Report Generation (one-time task)
