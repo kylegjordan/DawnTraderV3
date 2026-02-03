@@ -48,6 +48,7 @@ import { dataAggregator } from './data-aggregator.js';
 import { predictPromotion, predictProfit, blendConfidence, type PredictionInput } from './ml-service-client.js';
 import { getWeightSync as getStrategyWeight, computeStrategyWeights } from '../utils/strategyWeights.js';
 import { getExposureMultiplierSync, computeExposureBias, getBiasSummaryForLog } from '../utils/strategyBias.js';
+import { computeNetExpectancyKernel } from '../core/calculations/net-expectancy-kernel.js';
 // M5B: Import disabled - VTS now runs autonomously, not from signal orchestrator
 // import { captureSignalForVTS } from './vts-runner.js';
 // Directive 9.3: Adaptive Kalman Filter integration
@@ -1103,11 +1104,12 @@ export class SignalOrchestrator {
         }
       }
 
-      // Directive 10.1: Apply DSS.evaluate() for NetEV > 0 enforcement and strategy selection
+      // Directive 10.1 + 11.8B-A: Apply DSS.evaluate() for NetEV > 0 enforcement and strategy selection
+      // All Net EV math now uses computeNetExpectancyKernel (single authority)
       if (signals.length > 0) {
         console.log(`[37.A][SIGNAL] ${symbol}: Generated ${signals.length} sized signal(s) - ${signals.map(s => s.strategy).join(', ')}`);
         
-        // Compute strategy metrics for DSS evaluation
+        // Compute strategy metrics for DSS evaluation using canonical kernel
         const strategyMetrics: Record<string, { netEV: number; confidence: number }> = {};
         for (const signal of signals) {
           const entry = signal.entryPrice || 0;
@@ -1115,24 +1117,27 @@ export class SignalOrchestrator {
           const stop = signal.stopPrice || 0;
           const positionSize = signal.quantity || 1;
           
-          // Calculate raw EV: (target - entry) * positionSize * pWin
+          // Directive 11.8B-A: Use canonical Net EV kernel for all calculations
+          const frictionPct = SYSTEM_GUARDS.BASE_FEE_SLIPPAGE / 100;
+          const totalFriction = 2 * frictionPct * entry * positionSize;
+          
           // Note: confidence may be 0-1 (NGC) or 0-100 (raw) - normalize to 0-1 first
           const rawConf = signal.confidence || 0;
-          const normalizedConf = rawConf > 1 ? rawConf / 100 : rawConf; // Handle both 0-100 and 0-1 scales
-          const pWin = Math.min(0.6, Math.max(0.4, normalizedConf)); // Bounded pWin per SYSTEM_GUARDS
-          const rawGain = (target - entry) * positionSize * pWin;
-          const rawLoss = (entry - stop) * positionSize * (1 - pWin);
-          const rawEV = rawGain - rawLoss;
+          const normalizedConf = rawConf > 1 ? rawConf / 100 : rawConf;
+          const DI = normalizedConf * 100; // Convert to DI scale (0-100) for kernel
           
-          // Calculate friction: 2 * BASE_FEE_SLIPPAGE% * entry * positionSize
-          const frictionPct = SYSTEM_GUARDS.BASE_FEE_SLIPPAGE / 100;
-          const friction = 2 * frictionPct * entry * positionSize;
-          
-          // Net EV = Raw EV - Friction
-          const netEV = rawEV - friction;
+          const kernelResult = computeNetExpectancyKernel({
+            entryPrice: entry,
+            stopPrice: stop,
+            targetPrice: target,
+            fees: totalFriction * 0.4,
+            spread: totalFriction * 0.2,
+            slippage: totalFriction * 0.4,
+            DI,
+          });
           
           strategyMetrics[signal.strategy] = {
-            netEV,
+            netEV: kernelResult.netEV * positionSize,
             confidence: signal.confidence || 0
           };
         }
@@ -1151,14 +1156,14 @@ export class SignalOrchestrator {
           signals.length = 0;
           signals.push(...filteredSignals);
           
-          // Directive 10.2: Capture trade snapshot with DSS fields for Predictive Position Sizing
+          // Directive 10.2 + 11.8B-A: Capture trade snapshot with DSS fields for Predictive Position Sizing
           const selectedMetrics = strategyMetrics[selectedStrategy];
           if (selectedMetrics && filteredSignals.length > 0) {
             const signal = filteredSignals[0];
             const entry = signal.entryPrice || 0;
             const posSize = signal.quantity || 1;
             const frictionPct = SYSTEM_GUARDS.BASE_FEE_SLIPPAGE / 100;
-            const frictionCost = 2 * frictionPct * entry * posSize;
+            const totalFriction = 2 * frictionPct * entry * posSize;
             
             dataAggregator.capture('DSS_TRADE_SNAPSHOT', {
               symbol,
@@ -1166,13 +1171,13 @@ export class SignalOrchestrator {
               strategySelected: selectedStrategy,
               netEV: selectedMetrics.netEV,
               confidenceScore: signal.ngc || signal.confidence || 0,
-              frictionCost,
+              frictionCost: totalFriction,
               volNoise: dssMetrics.volNoise,
               trendSlope: dssMetrics.trendSlope,
               strategy: selectedStrategy,
             }).catch(() => {});
             
-            console.log(`[10.2][CAPTURE] ${symbol}: regimeId=${regimeInfo.regime}, strategy=${selectedStrategy}, netEV=${selectedMetrics.netEV.toFixed(4)}, friction=${frictionCost.toFixed(4)}`);
+            console.log(`[11.8B-A][DSS_CAPTURE] ${symbol}: regimeId=${regimeInfo.regime}, strategy=${selectedStrategy}, netEV=${selectedMetrics.netEV.toFixed(4)}, friction=${totalFriction.toFixed(4)}`);
           }
         }
       }
