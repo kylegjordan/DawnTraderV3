@@ -1,0 +1,269 @@
+📜 Directive 11.8B-C — Goals ML & Preset System Decommission
+
+Phase: 11.8B-C
+Status: Mandatory cleanup before predictive baseline authority
+Nature: Destructive (explicit removals) + UI surface hardening
+Execution Authority: Replit (code changes only)
+Approval Authority: Kyle
+
+1️⃣ PURPOSE (NON-NEGOTIABLE)
+
+This directive permanently decommissions all remaining Goals ML, Preset, and Adaptive Risk / Auto-Tuning systems that:
+
+Operate as parallel learning loops
+
+Mutate parameters outside Phase 11 Predictive Learning
+
+Introduce rollback, snapshot, or preset authority
+
+Conflict with the Phase 11 single-authority model
+
+After this directive:
+
+There must be exactly ONE learning system capable of adjustment:
+Phase 11 Predictive Learning.
+
+No legacy “smart” systems may remain dormant, hidden, or partially wired.
+
+2️⃣ EXPLICITLY PRESERVE (DO NOT TOUCH)
+
+Replit must not modify, stub, or refactor the following:
+
+✅ Preserve — Coherency System (Read-Only)
+
+Files (examples — confirm paths in repo):
+
+coherency-rules-tab.tsx
+
+coherency-status-widget.tsx
+
+coherency_rules_reference.md
+
+Rules:
+
+Display-only
+
+No API mutations
+
+No parameter writes
+
+No learning hooks
+
+No scheduler interaction
+
+If any coherency code is found mutating state → STOP and report
+
+✅ Preserve — Phase 11 Systems
+
+Do NOT modify or delete:
+
+server/core/calibration/*
+
+server/core/governance/*
+
+server/services/telemetry-*
+
+server/core/calculations/net-expectancy-kernel.ts
+
+server/core/calculations/expectancy.ts
+
+Any ml.*_weight logic
+
+3️⃣ SYSTEMS TO BE FULLY REMOVED (HARD DECOMMISSION)
+❌ Goals ML Engine
+
+Remove entirely, not hidden.
+
+Includes (but not limited to):
+
+Auto-tuning enable/disable logic
+
+Snapshot creation / rollback
+
+Learning telemetry tied to goals
+
+Preset aggressiveness logic
+
+CWQI / NGC / legacy composite scoring
+
+Any API routes under:
+
+/api/tuning/*
+
+/api/learning/* (non-Phase-11)
+
+❌ Preset System
+
+Remove entirely:
+
+Preset selection (conservative → aggressive)
+
+Preset auto-expansion
+
+Preset persistence
+
+Preset-driven parameter mutation
+
+No presets should exist in:
+
+Backend
+
+UI
+
+Database write paths
+
+❌ Tuning Tab (Goals Engine)
+
+Files to delete (example — verify exact paths):
+
+tuning-tab.tsx
+
+Any components imported exclusively by Tuning Tab
+
+Any routes serving tuning UI
+
+Rules:
+
+Do NOT leave commented code
+
+Do NOT stub components
+
+Do NOT “disable” with flags
+
+Deletion must be absolute.
+
+4️⃣ UI-ONLY ACTIONS (NON-DESTRUCTIVE)
+👁️ Hide Low-Priced Coin Protection (LPCP)
+
+Intent:
+LPCP is not used operationally but may return in the future.
+
+Action:
+
+Remove LPCP section from Guardrails UI
+
+Do NOT delete backend logic
+
+Do NOT delete schema fields
+
+Implementation guidance (example):
+
+// In guardrails rendering logic
+// Remove or gate LPCP card behind a false feature flag
+{false && <LowPricedProtectionCard />}
+
+5️⃣ GOALS ENGINE TAB REGISTRATION UPDATE
+
+In goals-engine.tsx (or equivalent):
+
+❌ Remove Tabs
+
+Tuning
+
+Presets
+
+Adaptive Risk / ML
+
+Any learning / rollback / optimization tab
+
+✅ Keep Tabs
+
+Guardrails
+
+Screeners
+
+Coherency
+
+Analytics / display-only tabs
+
+No empty tabs.
+No placeholders.
+
+6️⃣ DATABASE & BACKEND HYGIENE
+Required actions:
+
+Remove any write paths tied to:
+
+Goals ML
+
+Presets
+
+Auto-tuning
+
+Leave read-only historical data untouched
+
+Do NOT migrate or transform legacy data yet
+
+If a table becomes unused:
+
+Leave it intact
+
+Mark unused in deletion manifest
+
+7️⃣ VERIFICATION & EVIDENCE (MANDATORY)
+
+Replit must provide the following artifacts:
+
+📄 A. Deletion Manifest
+
+For each removed file:
+
+File path
+
+Reason for deletion
+
+Replacement authority (if any)
+
+🔍 B. Search Evidence
+
+Provide output showing zero matches for:
+
+tuning
+
+preset
+
+autoTune
+
+adaptiveRisk
+
+cwqi
+
+ngc
+
+(excluding historical docs)
+
+🧪 C. UI Verification
+
+Provide screenshots of:
+
+Goals Engine tabs (no tuning / preset tabs)
+
+Guardrails tab (manual only)
+
+Coherency tab visible
+
+LPCP hidden
+
+🚦 D. Boot Validation
+
+App boots with no runtime errors
+
+No missing import errors
+
+No dead route warnings
+
+No console errors referencing removed systems
+
+8️⃣ ACCEPTANCE CRITERIA (PASS / FAIL)
+
+This directive is COMPLETE only if:
+
+✅ Goals ML cannot mutate anything
+✅ Presets do not exist anywhere
+✅ Tuning tab is gone
+✅ Coherency remains display-only
+✅ LPCP is hidden
+✅ Predictive Learning remains untouched
+✅ No legacy learning loop exists
+
+If any item fails → directive is NOT complete
