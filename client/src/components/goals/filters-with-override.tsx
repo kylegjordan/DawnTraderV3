@@ -2,15 +2,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { Filter, Info, Sparkles, CircleDot } from "lucide-react";
+import { Filter, Info, CircleDot } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { useTradingMode } from "@/contexts/trading-mode-context";
-import { useOverrideState } from "@/hooks/use-override-state";
 import { 
   Tooltip,
   TooltipContent,
@@ -36,7 +34,10 @@ import { ModeIndicator } from "./mode-indicator";
 /**
  * REB 2.9B Stage 3: Final Screener UI (11-20 Archive Phase 8.6/8.7)
  * 
- * Section 1: Always format numeric fields on blur (LATTI + Manual)
+ * Directive 11.8B-B1: Screeners are now explicitly MANUAL/SYSTEM-SET.
+ * All LATTi authority surfaces removed - filters are user-configurable.
+ * 
+ * Section 1: Always format numeric fields on blur
  * Section 2: Active Timeframes multi-select dropdown
  * Section 3: Market Universe Size dropdown
  * Section 4: Quote Currencies hidden from UI (but kept in API)
@@ -45,7 +46,7 @@ import { ModeIndicator } from "./mode-indicator";
 interface FilterV2 {
   name: string;
   value: number | string | boolean | string[];
-  managedByLottie: boolean;
+  managedByLottie: boolean; // FROZEN per 11.8B-B - preserved for future cleanup
   manualOverrideEnabled: boolean;
   displayName: string;
   category: string;
@@ -143,9 +144,6 @@ export function FiltersWithOverride() {
   
   // Local string state for number inputs (always formatted with commas)
   const [localValues, setLocalValues] = useState<Record<string, string>>({});
-  
-  // Phase 3b: WebSocket integration for real-time sync
-  useOverrideState();
 
   // Fetch Filters from filters_v2 endpoint
   const { data: filtersData, isLoading, error } = useQuery<FiltersV2Response>({
@@ -172,10 +170,9 @@ export function FiltersWithOverride() {
       const newLocalValues: Record<string, string> = {};
       
       filtersData.data.filters.forEach((f) => {
-        // REB 2.12C: Use per-filter manualOverrideEnabled from server (not global)
-        // overrides[name] = true means LATTi mode (managedByLottie AND NOT manualOverrideEnabled)
-        // overrides[name] = false means Manual mode (manualOverrideEnabled = true)
-        newOverrides[f.name] = f.managedByLottie && !f.manualOverrideEnabled;
+        // Directive 11.8B-B1: All filters are now manual - no LATTi authority
+        // overrides tracking preserved for future cleanup but no longer drives UI
+        newOverrides[f.name] = false; // All filters now manual
         
         // Stage 3: ALWAYS initialize with formatted value for numeric amount filters
         if (isNumericAmountFilter(f.name) && (typeof f.value === 'number' || typeof f.value === 'string')) {
@@ -270,7 +267,7 @@ export function FiltersWithOverride() {
       
       toast({
         title: "Filter automation updated",
-        description: `${filterName} is now ${newManualOverrideEnabled ? 'manually controlled' : 'managed by LATTi'}.`,
+        description: `${filterName} filter updated.`,
       });
     } catch (err) {
       // Error handled in mutation onError
@@ -558,7 +555,7 @@ export function FiltersWithOverride() {
           <div>
             <CardTitle className="flex items-center gap-2">
               <Filter className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-              Filter Automation Control
+              Screener Filters
               <ModeIndicator />
               <TooltipProvider>
                 <Tooltip>
@@ -567,8 +564,7 @@ export function FiltersWithOverride() {
                   </TooltipTrigger>
                   <TooltipContent>
                     <p className="max-w-xs">
-                      Control whether each filter is automatically managed by LATTi or manually controlled. 
-                      See docs/manual_override_behavior.md for details.
+                      Configure filter parameters to control which assets are included in market scanning.
                     </p>
                   </TooltipContent>
                 </Tooltip>
@@ -637,51 +633,17 @@ export function FiltersWithOverride() {
                             <Label className="text-sm font-medium">
                               {filter.displayName}
                             </Label>
-                            {overrides[filter.name] ? (
-                              <Badge variant="default" className="bg-green-600 text-xs" data-testid={`badge-auto-${filter.name}`}>
-                                <Sparkles className="w-3 h-3 mr-1" />
-                                Auto (LATTi)
-                              </Badge>
-                            ) : (
-                              <Badge variant="secondary" className="text-xs" data-testid={`badge-manual-${filter.name}`}>
-                                <CircleDot className="w-3 h-3 mr-1" />
-                                Manual
-                              </Badge>
-                            )}
+                            <Badge variant="secondary" className="text-xs" data-testid={`badge-manual-${filter.name}`}>
+                              <CircleDot className="w-3 h-3 mr-1" />
+                              Configured
+                            </Badge>
                           </div>
                           <div className="flex items-center gap-3">
                             {renderFilterInput(filter)}
                             <span className="text-xs text-muted-foreground">
-                              {!overrides[filter.name] ? 'Manual value' : 'Current value'}
+                              Configured value
                             </span>
                           </div>
-                        </div>
-                        
-                        <div className="flex items-center gap-2 ml-4">
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs text-muted-foreground">
-                                    Managed by LATTi
-                                  </span>
-                                  <Checkbox
-                                    checked={!!overrides[filter.name]}
-                                    onCheckedChange={() => handleToggleOverride(filter.name)}
-                                    disabled={updateOverrideMutation.isPending}
-                                    data-testid={`checkbox-managed-${filter.name}`}
-                                  />
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="max-w-xs">
-                                  {!overrides[filter.name]
-                                    ? 'Enable LATTi automatic optimization for this filter'
-                                    : 'Disable LATTi and switch to manual control for this filter'}
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
                         </div>
                       </div>
                     </div>

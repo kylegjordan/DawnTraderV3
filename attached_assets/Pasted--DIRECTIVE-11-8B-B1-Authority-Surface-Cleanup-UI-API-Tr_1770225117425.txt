@@ -1,0 +1,322 @@
+📘 DIRECTIVE 11.8B-B1
+Authority Surface Cleanup (UI + API Truth Alignment)
+
+Status: REQUIRED
+Blocking: YES (must complete before 11.8B-B2 / 11.8B-C)
+Scope: UI, API contracts, authority metadata, guardrails, screeners
+Goal: Remove all illusory authority controls that imply LATTi or auto-tuning where none exists.
+
+🎯 OBJECTIVE
+
+Phase 11.8B-B1 removes false authority surfaces that survived backend decommissioning of LATTi.
+
+After this directive:
+
+The UI must only expose real authority
+
+Guardrails must be explicitly manual
+
+Screeners must no longer reference LATTi
+
+No toggle, badge, label, or API field may imply:
+
+“Auto-tuned”
+
+“Managed by LATTi”
+
+Manual vs Auto switching
+
+Predictive Learning must not yet control filters (that is 11.8B-B2)
+
+This directive is pure cleanup and truth alignment — no new learning logic is added.
+
+🚫 ABSOLUTE CONSTRAINTS (DO NOT VIOLATE)
+
+❌ Do NOT introduce new authority systems
+
+❌ Do NOT infer or guess future predictive behavior
+
+❌ Do NOT delete execution logic
+
+❌ Do NOT modify Phase 11.7 systems
+
+❌ Do NOT silently keep toggles “for later”
+
+If authority is not implemented → it must not appear.
+
+🧭 AUTHORITY MODEL (POST-11.8B-B1)
+Area	Authority
+Core Guardrails	Manual (User-set)
+Screeners	Static (System-enforced)
+Predictive Learning	Read-only (analytics only)
+LATTi	NON-EXISTENT
+🔧 REQUIRED CHANGES (MANDATORY)
+1️⃣ UI — REMOVE AUTHORITY TOGGLES (CRITICAL)
+Target Areas
+
+Goals Engine → Guardrails tab
+
+Goals Engine → Screeners tab
+
+Any shared components rendering:
+
+“Auto (LATTi)”
+
+“Managed by LATTi”
+
+Manual / Auto toggle switches
+
+Files (examples — verify exact paths):
+client/components/goals/GuardrailControl.tsx
+client/components/goals/ScreenerControl.tsx
+client/components/goals/ControlModeToggle.tsx
+client/components/goals/AuthorityBadge.tsx
+
+REQUIRED ACTIONS
+
+❌ Delete toggle UI entirely
+
+❌ Remove conditional rendering based on:
+
+managedByLottie
+
+tunedByLatti
+
+❌ Remove icons, badges, labels referencing LATTi
+
+REQUIRED RESULT
+
+Each control must render as:
+
+Single value input
+
+Clearly labeled as Manual or System-Set
+
+No toggle
+
+No authority switching
+
+Example (BEFORE → AFTER)
+
+BEFORE
+
+<AuthorityToggle
+  mode={control.mode}
+  onChange={...}
+/>
+<span>Auto (LATTi)</span>
+
+
+AFTER
+
+<Label>Manual Control</Label>
+<Input value={value} onChange={onChange} />
+
+2️⃣ UI COPY — AUTHORITY LANGUAGE CLEANUP
+Remove ALL references to:
+
+“Auto-tuned by LATTi”
+
+“Managed by LATTi”
+
+“Switch to Manual”
+
+“Adaptive Control”
+
+Replace with:
+
+“Manual Control”
+
+“System Enforced”
+
+“Static Filter”
+
+“Configured Value”
+
+This applies to:
+
+Tooltips
+
+Help text
+
+Section headers
+
+Badges
+
+Status indicators
+
+3️⃣ API / DTO CLEANUP (NO SILENT FLAGS)
+Target
+
+Any API response used by Guardrails or Screeners that includes:
+
+managedByLottie
+
+tunedByLatti
+
+controlMode
+
+authoritySource
+
+REQUIRED ACTION
+
+Remove these fields from:
+
+DTOs
+
+Serializers
+
+API responses
+
+OR hard-code them to null with TODO removal note
+
+Example
+
+BEFORE
+
+return {
+  value,
+  managedByLottie: true,
+  controlMode: 'AUTO'
+}
+
+
+AFTER
+
+return {
+  value
+}
+
+4️⃣ GUARDRAILS — EXPLICIT MANUAL LOCK
+
+Guardrails must be unambiguously manual.
+
+Required Backend Assertion
+
+In guardrail validation or update service:
+
+assert(controlMode === 'MANUAL');
+
+
+OR remove controlMode entirely.
+
+Required UI Assertion
+
+Guardrails must not display any automation affordance
+
+User must clearly understand:
+
+“These are risk tolerance settings you control.”
+
+5️⃣ SCREENERS — SYSTEM-SET (NO USER AUTHORITY)
+
+Screeners must display as:
+
+“System-Enforced Filter”
+
+“Configured by Strategy Logic”
+
+NOT editable authority.
+
+If values are editable today → keep inputs, but no authority toggle.
+
+🧪 REQUIRED VERIFICATION & EVIDENCE
+
+Replit MUST provide all of the following.
+
+✅ 1. Screenshot Evidence (MANDATORY)
+
+Provide screenshots of:
+
+Guardrails tab
+
+Screeners tab
+
+Showing:
+
+❌ No LATTi references
+
+❌ No Auto / Manual toggles
+
+❌ No authority badges
+
+✅ 2. Code Evidence (MANDATORY)
+
+Provide:
+
+Git diff or file excerpts showing:
+
+Removal of toggle components
+
+Removal of authority flags
+
+Updated labels
+
+✅ 3. Runtime Evidence
+
+Provide logs or console output confirming:
+
+No warnings about missing LATTi
+
+No references to:
+
+managedByLottie
+
+tunedByLatti
+
+App boots cleanly
+
+✅ 4. Search Proof (MANDATORY)
+
+Run and paste results of:
+
+grep -R "LATTi" client/
+grep -R "managedByLottie" .
+grep -R "tunedByLatti" .
+
+
+Results must be:
+
+Empty OR commented TODOs only
+
+🚫 OUT OF SCOPE (DO NOT DO)
+
+❌ Do NOT wire Predictive Learning to filters
+
+❌ Do NOT invent filter decision logic
+
+❌ Do NOT delete database columns yet
+
+❌ Do NOT refactor execution logic
+
+Those belong to 11.8B-B2 and 11.8B-C.
+
+✅ ACCEPTANCE CRITERIA (ALL MUST PASS)
+
+ No LATTi references in UI
+
+ No authority toggles exist
+
+ Guardrails clearly manual
+
+ Screeners clearly system-set
+
+ API responses contain no legacy authority flags
+
+ Application boots without warnings
+
+ Screenshots confirm UI truth alignment
+
+🧱 RESULTING STATE
+
+After 11.8B-B1:
+
+Authority is honest
+
+UI matches reality
+
+No confusion
+
+No ghost systems
+
+This is the last cleanup step before authority reassignment.

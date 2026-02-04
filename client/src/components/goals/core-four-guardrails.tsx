@@ -3,15 +3,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { Shield, Save, Lock, Unlock, Info, Sparkles } from "lucide-react";
+import { Shield, Save, Lock, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { useTradingMode } from "@/contexts/trading-mode-context";
-import { useOverrideState } from "@/hooks/use-override-state";
 import { 
   Tooltip,
   TooltipContent,
@@ -23,8 +21,8 @@ import { ModeIndicator } from "./mode-indicator";
 /**
  * Phase 3b: Core Guardrails Component (now 5 guardrails as of REB 8.8.3-G)
  * 
- * Displays the modernized Core guardrails with Lottie/Manual override controls.
- * Integrates with guardrails_v2 backend and provides real-time WebSocket sync.
+ * Directive 11.8B-B1: Guardrails are now explicitly MANUAL controls.
+ * All LATTi authority surfaces removed - user has direct control.
  * 
  * REB 8.8.3-G: Added maxPositionPercentPct as 5th core guardrail
  */
@@ -38,7 +36,7 @@ interface GuardrailsV2 {
   maxPositionPercentPct: number; // REB 8.8.3-G: Max position size as % of portfolio
   maxTotalExposurePct: number; // Phase 8.8.3-B3: Max total portfolio exposure %
   isManualOverride: boolean;
-  tunedByLatti: boolean;
+  tunedByLatti: boolean; // FROZEN per 11.8B-B - preserved for future cleanup
   lockedByUser: Record<string, boolean>;
 }
 
@@ -142,9 +140,6 @@ export function CoreFourGuardrails() {
   const [hasChanges, setHasChanges] = useState(false);
   const [editedValues, setEditedValues] = useState<Partial<GuardrailsV2>>({});
   
-  // Phase 3b: WebSocket integration for real-time sync
-  useOverrideState();
-  
   // Phase 8.8.3-C7-FIX: Fetch portfolio summary to get Current Balance (same source as guardrail calculations)
   const { data: portfolioData } = useQuery<PortfolioSummaryResponse>({
     queryKey: ['/api/paper-sim/portfolio-summary'],
@@ -227,32 +222,6 @@ export function CoreFourGuardrails() {
     setHasChanges(true);
   };
 
-  const handleToggleLock = async (paramKey: string, currentLocked: boolean) => {
-    const newLockedState = !currentLocked;
-    const currentLockedByUser = guardrails?.data?.lockedByUser || {};
-    
-    const updates = {
-      lockedByUser: {
-        ...currentLockedByUser,
-        [paramKey]: newLockedState
-      }
-    };
-    
-    try {
-      await updateMutation.mutateAsync(updates);
-      toast({
-        title: "Saved",
-        description: `${CORE_FOUR_PARAMS_BASE.find(p => p.key === paramKey)?.label} is now ${newLockedState ? 'manually controlled' : 'managed by LATTi'}`,
-      });
-    } catch (error: any) {
-      toast({
-        title: "Save failed ❌",
-        description: error?.message || "Failed to save guardrail override",
-        variant: "destructive",
-      });
-    }
-  };
-
   const handleSave = () => {
     updateMutation.mutate(editedValues);
   };
@@ -261,7 +230,7 @@ export function CoreFourGuardrails() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Core Guardrails (LATTi-Managed)</CardTitle>
+          <CardTitle>Core Guardrails</CardTitle>
         </CardHeader>
         <CardContent>
           <Skeleton className="h-96 w-full" />
@@ -283,26 +252,18 @@ export function CoreFourGuardrails() {
           <div>
             <CardTitle className="flex items-center gap-2">
               <Shield className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              Core Guardrails (LATTi-Managed)
+              Core Guardrails
               <ModeIndicator />
             </CardTitle>
             <p className="text-sm text-muted-foreground mt-2">
-              Autonomous risk parameters optimized by LATTi. Toggle to manual control when needed.
+              Risk tolerance settings you control. These parameters govern position sizing and risk limits.
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {data.tunedByLatti && !data.isManualOverride && (
-              <Badge variant="default" className="bg-green-600" data-testid="badge-latti-managed">
-                <Sparkles className="w-3 h-3 mr-1" />
-                Auto-tuned by LATTi
-              </Badge>
-            )}
-            {data.isManualOverride && (
-              <Badge variant="secondary" data-testid="badge-manual-override">
-                <Lock className="w-3 h-3 mr-1" />
-                Manual Override Active
-              </Badge>
-            )}
+            <Badge variant="secondary" data-testid="badge-manual-control">
+              <Lock className="w-3 h-3 mr-1" />
+              Manual Control
+            </Badge>
           </div>
         </div>
       </CardHeader>
@@ -310,7 +271,6 @@ export function CoreFourGuardrails() {
       <CardContent className="mt-6">
         <div className="space-y-6">
           {CORE_FOUR_PARAMS_BASE.map((param) => {
-            const isLocked = data.lockedByUser?.[param.key] || false;
             const currentValue = editedValues[param.key] ?? data[param.key];
             // Phase 8.8.3-C7-FIX: Get dynamic description with Current Balance for applicable guardrails
             const description = getGuardrailDescription(param.key, currentBalance);
@@ -340,34 +300,10 @@ export function CoreFourGuardrails() {
                   </div>
                   
                   <div className="flex items-center gap-2">
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">
-                              {isLocked ? 'Manual' : 'LATTi'}
-                            </span>
-                            <Switch
-                              checked={isLocked}
-                              onCheckedChange={() => handleToggleLock(param.key, isLocked)}
-                              data-testid={`switch-lock-${param.key}`}
-                            />
-                            {isLocked ? (
-                              <Unlock className="w-4 h-4 text-amber-600" />
-                            ) : (
-                              <Lock className="w-4 h-4 text-green-600" />
-                            )}
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="max-w-xs">
-                            {isLocked 
-                              ? 'Switch to LATTi autotuning for this parameter'
-                              : 'Switch to manual override for this parameter'}
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                    <Badge variant="outline" className="text-xs">
+                      <Lock className="w-3 h-3 mr-1" />
+                      Manual
+                    </Badge>
                   </div>
                 </div>
                 
@@ -378,8 +314,7 @@ export function CoreFourGuardrails() {
                     step="0.1"
                     value={currentValue}
                     onChange={(e) => handleValueChange(param.key, e.target.value)}
-                    disabled={!isLocked}
-                    className={isLocked ? 'bg-white dark:bg-slate-950' : 'bg-muted'}
+                    className="bg-white dark:bg-slate-950"
                     data-testid={`input-${param.key}`}
                   />
                   <span className="text-sm text-muted-foreground min-w-[80px]">
@@ -408,10 +343,10 @@ export function CoreFourGuardrails() {
           <div className="flex items-start gap-2">
             <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
             <div className="text-sm text-blue-900 dark:text-blue-100">
-              <p className="font-semibold mb-1">About LATTi Autonomous Optimization</p>
+              <p className="font-semibold mb-1">About Core Guardrails</p>
               <p className="text-blue-700 dark:text-blue-200/80">
-                When parameters are managed by LATTi (toggle off), they are automatically optimized based on market conditions and performance data. 
-                Enable manual override (toggle on) to take direct control of specific parameters.
+                These are your risk tolerance settings. Adjust these parameters to control position sizing, 
+                exposure limits, and daily loss protection based on your trading preferences.
               </p>
             </div>
           </div>

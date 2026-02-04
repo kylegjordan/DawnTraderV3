@@ -1,8 +1,8 @@
 /**
  * Phase 3: Filters V2 Schema with Manual Override Support
  * 
- * This schema extends existing screener filters with control metadata
- * to support Lottie-managed vs Manual override modes.
+ * Directive 11.8B-B1: Filters are now explicitly manual/system-set.
+ * managedByLottie field is FROZEN - preserved for future cleanup but no longer drives UI.
  * 
  * NO ALGORITHMIC CHANGES - This is purely a metadata upgrade for control visibility.
  */
@@ -13,7 +13,7 @@ import { z } from "zod";
 export interface FilterParamV2 {
   name: string;
   value: number | string | boolean | string[];
-  managedByLottie: boolean;      // true = LATTI controls this filter
+  managedByLottie: boolean;      // FROZEN per 11.8B-B - preserved for future cleanup
   manualOverrideEnabled: boolean; // true = user has unlocked for manual editing
   displayName: string;            // Human-readable name for UI
   category: string;               // Group category (e.g., "volume", "price", "risk", "universe")
@@ -147,12 +147,13 @@ export const updateFiltersV2Schema = z.object({
 export type UpdateFiltersV2Input = z.infer<typeof updateFiltersV2Schema>;
 
 // Helper to convert screener_filters database row to FiltersV2 format
+// Directive 11.8B-B1: managedByLottie field is FROZEN - no longer drives UI authority
 export function toFiltersV2(dbRow: any): FiltersV2 {
   const createParam = (name: string, value: any): FilterParamV2 => ({
     name,
     value,
-    managedByLottie: true, // Default: LATTI manages
-    manualOverrideEnabled: false, // Default: locked
+    managedByLottie: false, // FROZEN per 11.8B-B - UI shows "Configured" regardless
+    manualOverrideEnabled: true, // All filters are manually editable
     displayName: FILTER_METADATA[name]?.displayName || name,
     category: FILTER_METADATA[name]?.category || "Other",
     description: FILTER_METADATA[name]?.description

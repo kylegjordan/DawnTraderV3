@@ -3,28 +3,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { Shield, Save, Lock, Unlock, Info, Sparkles, AlertTriangle } from "lucide-react";
+import { Shield, Save, Lock, Info, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { useTradingMode } from "@/contexts/trading-mode-context";
-import { useOverrideState } from "@/hooks/use-override-state";
-import { 
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { ModeIndicator } from "./mode-indicator";
 
 /**
  * REB 8.8.3-H: Low-Priced Coin Protection (LPCP) Card
  * 
- * Displays the three LPCP guardrails with LATTi/Manual override controls.
- * Placed below Core Guardrails on the Goals → Guardrails tab.
+ * Directive 11.8B-B1: LPCP settings are now explicitly MANUAL controls.
+ * All LATTi authority surfaces removed - user has direct control.
  */
 
 interface LPCPSettings {
@@ -32,7 +24,7 @@ interface LPCPSettings {
   lowPriceMinPositionNotional: number;
   lowPriceThreshold: number;
   isManualOverride: boolean;
-  tunedByLatti: boolean;
+  tunedByLatti: boolean; // FROZEN per 11.8B-B - preserved for future cleanup
   lockedByUser: Record<string, boolean>;
 }
 
@@ -73,8 +65,6 @@ export function LowPricedProtectionCard() {
   const { mode } = useTradingMode();
   const [hasChanges, setHasChanges] = useState(false);
   const [editedValues, setEditedValues] = useState<Partial<LPCPSettings>>({});
-  
-  useOverrideState();
 
   const { data: guardrails, isLoading } = useQuery<{ok: boolean; data: any}>({
     queryKey: ['/api/guardrails-v2', mode],
@@ -136,32 +126,6 @@ export function LowPricedProtectionCard() {
     setHasChanges(true);
   };
 
-  const handleToggleLock = async (paramKey: string, currentLocked: boolean) => {
-    const newLockedState = !currentLocked;
-    const currentLockedByUser = guardrails?.data?.lockedByUser || {};
-    
-    const updates = {
-      lockedByUser: {
-        ...currentLockedByUser,
-        [paramKey]: newLockedState
-      }
-    };
-    
-    try {
-      await updateMutation.mutateAsync(updates);
-      toast({
-        title: "Saved",
-        description: `${LPCP_PARAMS.find(p => p.key === paramKey)?.label} is now ${newLockedState ? 'manually controlled' : 'managed by LATTi'}`,
-      });
-    } catch (error: any) {
-      toast({
-        title: "Save failed",
-        description: error?.message || "Failed to save LPCP override",
-        variant: "destructive",
-      });
-    }
-  };
-
   const handleSave = () => {
     updateMutation.mutate(editedValues);
   };
@@ -200,18 +164,10 @@ export function LowPricedProtectionCard() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {data.tunedByLatti && !data.isManualOverride && (
-              <Badge variant="default" className="bg-green-600" data-testid="badge-lpcp-latti">
-                <Sparkles className="w-3 h-3 mr-1" />
-                Auto-tuned by LATTi
-              </Badge>
-            )}
-            {data.isManualOverride && (
-              <Badge variant="secondary" data-testid="badge-lpcp-manual">
-                <Lock className="w-3 h-3 mr-1" />
-                Manual Override Active
-              </Badge>
-            )}
+            <Badge variant="secondary" data-testid="badge-lpcp-manual">
+              <Lock className="w-3 h-3 mr-1" />
+              Manual Control
+            </Badge>
           </div>
         </div>
       </CardHeader>
@@ -219,7 +175,6 @@ export function LowPricedProtectionCard() {
       <CardContent className="mt-6">
         <div className="space-y-6">
           {LPCP_PARAMS.map((param) => {
-            const isLocked = data.lockedByUser?.[param.key] || false;
             const currentValue = editedValues[param.key] ?? data[param.key] ?? 
               (param.key === 'lowPriceThreshold' ? 0.50 : 
                param.key === 'lowPriceMinStopAtrMult' ? 3.0 : 25.00);
@@ -249,34 +204,10 @@ export function LowPricedProtectionCard() {
                   </div>
                   
                   <div className="flex items-center gap-2">
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">
-                              {isLocked ? 'Manual' : 'LATTi'}
-                            </span>
-                            <Switch
-                              checked={isLocked}
-                              onCheckedChange={() => handleToggleLock(param.key, isLocked)}
-                              data-testid={`switch-lock-${param.key}`}
-                            />
-                            {isLocked ? (
-                              <Unlock className="w-4 h-4 text-amber-600" />
-                            ) : (
-                              <Lock className="w-4 h-4 text-green-600" />
-                            )}
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="max-w-xs">
-                            {isLocked 
-                              ? 'Switch to LATTi autotuning for this parameter'
-                              : 'Switch to manual override for this parameter'}
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                    <Badge variant="outline" className="text-xs">
+                      <Lock className="w-3 h-3 mr-1" />
+                      Manual
+                    </Badge>
                   </div>
                 </div>
                 
@@ -287,8 +218,7 @@ export function LowPricedProtectionCard() {
                     step={param.step}
                     value={currentValue}
                     onChange={(e) => handleValueChange(param.key, e.target.value)}
-                    disabled={!isLocked}
-                    className={isLocked ? 'bg-white dark:bg-slate-950' : 'bg-muted'}
+                    className="bg-white dark:bg-slate-950"
                     data-testid={`input-${param.key}`}
                   />
                   <span className="text-sm text-muted-foreground min-w-[80px]">

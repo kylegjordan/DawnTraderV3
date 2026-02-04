@@ -6,7 +6,7 @@
  * 
  * MIGRATION NOTES:
  * - System Guards panel (LQ ≥ 40, VolNoise ≤ 0.6, EV > 0, ρ ≤ 0.75) → FiltersWithOverride
- * - Filter Automation Control → FiltersWithOverride (with LATTi integration)
+ * - Filter configuration → FiltersWithOverride (manual controls per 11.8B-B1)
  * - Both use the same database (screener_filters table via /api/filters-v2)
  * 
  * API ENDPOINTS PRESERVED (for backward compatibility):
