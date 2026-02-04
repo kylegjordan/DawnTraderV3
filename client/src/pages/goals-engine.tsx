@@ -1,5 +1,4 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import GoalsEngineTab from "@/components/goals/goals-engine-tab";
 import GuardrailsTab from "@/components/goals/guardrails-tab";
 import StrategiesTab from "@/components/goals/strategies-tab";
 import CoherencyRulesTab from "@/components/goals/coherency-rules-tab";
@@ -8,7 +7,7 @@ import DiagnosticsTab from "@/components/goals/diagnostics-tab";
 import { CoreFourGuardrails } from "@/components/goals/core-four-guardrails";
 import { FiltersWithOverride } from "@/components/goals/filters-with-override";
 import ModeBanner from "@/components/mode-banner";
-import { Target, Shield, Filter, Layers, CheckSquare, Lightbulb, Activity } from "lucide-react";
+import { Shield, Filter, Layers, CheckSquare, Lightbulb, Activity } from "lucide-react";
 
 export default function GoalsEnginePage() {
   return (
@@ -17,22 +16,15 @@ export default function GoalsEnginePage() {
       <ModeBanner />
       
       <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">Goals Engine</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">Guardrails & Filters</h1>
         <p className="text-muted-foreground text-sm">
-          Set and manage your trading goals with AI-assisted recommendations
+          Configure trading guardrails, filters, and strategy parameters
         </p>
       </div>
 
-      <Tabs defaultValue="goals" className="w-full">
-        <TabsList className="grid w-full grid-cols-7 h-auto gap-1 bg-muted p-1">
-          <TabsTrigger 
-            value="goals" 
-            className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 py-2 data-[state=active]:bg-background"
-            data-testid="tab-goals-engine"
-          >
-            <Target className="w-4 h-4" />
-            <span className="text-xs sm:text-sm">Goals</span>
-          </TabsTrigger>
+      {/* Directive 11.8B-C Follow-up: Goals tab removed - preset system decommissioned */}
+      <Tabs defaultValue="guardrails" className="w-full">
+        <TabsList className="grid w-full grid-cols-6 h-auto gap-1 bg-muted p-1">
           <TabsTrigger 
             value="guardrails" 
             className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 py-2 data-[state=active]:bg-background"
@@ -82,12 +74,6 @@ export default function GoalsEnginePage() {
             <span className="text-xs sm:text-sm">Purpose</span>
           </TabsTrigger>
         </TabsList>
-
-        <TabsContent value="goals" className="mt-6">
-          <div className="space-y-6">
-            <GoalsEngineTab />
-          </div>
-        </TabsContent>
 
         <TabsContent value="guardrails" className="mt-6">
           <div className="space-y-6">

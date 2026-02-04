@@ -125,7 +125,7 @@ function getPageContext(location: string): string {
     '/reports': 'Reports',
     '/daily-brief': 'Daily Brief',
     '/briefings': 'Briefings',
-    '/goals-engine': 'Goals Engine',
+    '/goals-engine': 'Guardrails & Filters',
     '/systems': 'System Monitoring',
     '/ai-transparency': 'AI Transparency',
     '/analytics': 'Analytics & Diagnostics',

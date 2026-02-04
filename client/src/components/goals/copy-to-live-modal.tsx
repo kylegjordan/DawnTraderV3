@@ -141,7 +141,7 @@ export function CopyToLiveModal({
             <p className="text-sm font-medium mb-2">Next Steps:</p>
             <ol className="list-decimal ml-4 text-sm space-y-1 text-muted-foreground">
               <li>Click "Copy Now" to populate Live mode fields with these values</li>
-              <li>Switch to Live mode in the Goals Engine</li>
+              <li>Switch to Live mode in Guardrails & Filters</li>
               <li>Review the copied parameters in the Guardrails tab</li>
               <li>Click "Save Changes" to persist them to the database</li>
             </ol>

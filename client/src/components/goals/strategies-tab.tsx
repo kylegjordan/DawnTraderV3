@@ -754,7 +754,7 @@ export default function StrategiesTab() {
           <div className="p-4 bg-muted/50 rounded-lg">
             <p className="text-sm text-muted-foreground">
               <Layers className="w-4 h-4 inline mr-2" />
-              Strategy parameters are isolated by mode (live/paper). The AI can propose changes through the Goals Engine,
+              Strategy parameters are isolated by mode (live/paper). The AI can propose changes through Guardrails & Filters,
               but all changes require your approval before being applied.
             </p>
           </div>

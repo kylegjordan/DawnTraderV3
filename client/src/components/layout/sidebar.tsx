@@ -8,7 +8,7 @@ import {
   TrendingUp,
   User,
   FileText,
-  Target,
+  Shield,
   LogOut,
   Activity,
   Newspaper,
@@ -31,7 +31,7 @@ interface SidebarProps {
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
   { name: "Trading", href: "/active-trades", icon: BarChart3 },
-  { name: "Goals Engine", href: "/goals-engine", icon: Target },
+  { name: "Guardrails & Filters", href: "/goals-engine", icon: Shield },
   { name: "Analytics & Diagnostics", href: "/analytics", icon: Activity },
   { name: "Machine Learning", href: "/machine-learning", icon: Brain },
   { name: "Walter", href: "/walter", icon: Bot },

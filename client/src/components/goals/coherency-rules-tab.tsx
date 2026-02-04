@@ -289,8 +289,8 @@ export default function CoherencyRulesTab() {
         </CardHeader>
         <CardContent className="space-y-4 text-sm">
           <p className="text-muted-foreground">
-            The Goals Engine supports flexible control over each Core Four parameter. 
-            You can choose between LATTI autonomous management and manual control for each parameter independently.
+            Guardrails & Filters supports flexible control over each Core Four parameter. 
+            You can manually configure each parameter independently.
           </p>
           
           <div className="space-y-3">
