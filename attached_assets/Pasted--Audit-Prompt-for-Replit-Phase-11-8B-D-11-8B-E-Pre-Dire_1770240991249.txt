@@ -1,0 +1,248 @@
+📌 Audit Prompt for Replit — Phase 11.8B-D & 11.8B-E (Pre-Directive Audit)
+⚠️ IMPORTANT: AUDIT ONLY — NO CODE CHANGES
+
+This task is STRICTLY an audit and discovery exercise.
+Do NOT modify, delete, refactor, rename, or “clean up” any files.
+Do NOT implement any new behavior.
+Do NOT add predictive logic.
+
+Your sole job is to map reality so we can write correct directives.
+
+🎯 Audit Objective
+
+We are preparing Directive 11.8B-D (Filter & Screener Authority Reassignment) and Directive 11.8B-E (Predictive Filter Decision Framework – design only).
+
+Before drafting those directives, we must fully understand:
+
+Which systems currently own filter authority
+
+Where filters are defined, enforced, overridden, or persisted
+
+What is UI-only vs execution-critical
+
+What predictive learning will touch vs what it must not yet touch
+
+🧠 Scope Definition
+Systems in Scope
+
+You must audit all layers that participate in filters and screening:
+
+Screener filters (UI + schema)
+
+Strategy-level filters
+
+SQE filters
+
+Signal Orchestrator gating
+
+Any override or “manual control” logic
+
+Any latent ML or learning hooks (even if inactive)
+
+Systems Explicitly OUT of Scope
+
+Live trading engine
+
+Predictive baseline authority (future phase)
+
+Actual predictive decision logic (future phase)
+
+Execution logic changes
+
+📂 Files You MUST Audit (Provided)
+
+You are required to inspect these files line-by-line and report findings:
+
+Frontend / UI
+
+client/src/pages/goals-engine.tsx
+
+client/src/components/goals/screener-filters-tab.tsx
+
+client/src/components/filters/filters-with-override.tsx
+
+Core Filter Definitions
+
+server/core/filters/filters_v2.ts
+
+server/core/filters/strategy-filters.ts
+
+Execution / Orchestration
+
+server/services/signal-orchestrator.ts
+
+🔍 Required Audit Tasks (DO NOT SKIP)
+
+For each file, explicitly document:
+
+1. Ownership
+
+Who currently owns the authority for each filter?
+
+UI only?
+
+Execution enforced?
+
+Hard-coded?
+
+Config-driven?
+
+Learned / adaptive (even if disabled)?
+
+2. Enforcement Path
+
+Where is the filter actually enforced?
+
+Screener stage
+
+SQE stage
+
+Signal Orchestrator
+
+Downstream execution
+
+Is it possible for a filter to be displayed but not enforced?
+
+3. Override Mechanisms
+
+Identify all override paths, including:
+
+Manual overrides
+
+Regime-based overrides
+
+Hard bypass flags
+
+Temporary / debug overrides
+
+4. Mutability
+
+For each filter:
+
+Is it mutable at runtime?
+
+Is it mutable per-regime?
+
+Is it persisted?
+
+Is it read-only?
+
+Is it intended to ever be ML-adjusted?
+
+5. Predictive Touchpoints (CRITICAL)
+
+Identify any location where predictive learning:
+
+Already reads filters
+
+Writes filters
+
+Logs filter outcomes
+
+Is expected to adjust filters in the future
+
+⚠️ This includes commented-out code, TODOs, or dormant logic.
+
+🧩 Cross-File Mapping (MANDATORY)
+
+You must produce a single consolidated map showing:
+
+Filter Name
+
+Defined In
+
+Displayed In
+
+Enforced In
+
+Override Source
+
+Persistence Layer
+
+Eligible for Predictive Control (Yes / No / Future)
+
+📎 Additional File Discovery (CRITICAL)
+
+After auditing the provided files:
+
+Identify ANY additional files that:
+
+Touch filters
+
+Reference screener thresholds
+
+Modify filter values
+
+Gate signals based on filter output
+
+Log filter pass/fail for ML
+
+For each additional file:
+
+Provide full relative path
+
+Explain why it is relevant
+
+State whether it must be reviewed before drafting 11.8B-D or 11.8B-E
+
+⚠️ Do NOT assume the provided list is complete.
+
+📄 Required Deliverables
+
+You must return only the following:
+
+1. Audit Summary
+
+What owns filter authority today
+
+What is clean
+
+What is fragile
+
+What is legacy
+
+What is ambiguous
+
+2. File-by-File Findings
+
+Bullet-point findings per file (concise, factual, no speculation).
+
+3. Additional Files List
+
+Explicit list of files we must review next before writing directives.
+
+4. Phase Boundary Recommendation
+
+Answer explicitly:
+
+Should 11.8B-D and 11.8B-E remain separate, or
+
+Is it safe to combine them?
+
+Justify based on blast radius and authority boundaries, not convenience.
+
+🚫 Forbidden Actions
+
+You are NOT allowed to:
+
+Implement changes
+
+Suggest refactors
+
+Add “small fixes”
+
+Improve naming
+
+Remove code
+
+Add predictive behavior
+
+This is audit and mapping only.
+
+✅ Confirmation Requirement
+
+Your response must begin with:
+
+“Audit complete. No code changes were made.”
+
+If this statement is not true, stop immediately.
