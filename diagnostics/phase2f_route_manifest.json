@@ -434,37 +434,6 @@
     ]
   },
   {
-    "path": "/api/goals-presets",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/goals-presets/active",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/goals-presets/select",
-    "methods": [
-      "PUT"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "requireEditor",
-      "anonymous"
-    ]
-  },
-  {
     "path": "/api/goals-learning/summary",
     "methods": [
       "GET"

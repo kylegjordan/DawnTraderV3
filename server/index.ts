@@ -448,13 +448,11 @@ app.use((req, res, next) => {
       const { tradingSignalsCleanupTask } = await import('./services/trading-signals-cleanup');
       const { auditAnomalyTask } = await import('./services/audit-anomaly-task');
       const { registerLearningFeedbackJob } = await import('./jobs/learning-feedback');
-      const { registerCognitiveTuningJob } = await import('./jobs/cognitive-tuning-job');
       const { registerFormulaAuditJob } = await import('./jobs/formula-auto-audit');
       const { registerFeedIntegrityJob } = await import('./jobs/feed-integrity-auto-check');
 
       // Register tasks
       registerLearningFeedbackJob();
-      registerCognitiveTuningJob();
       registerFormulaAuditJob();
       registerFeedIntegrityJob();
       schedulerRegistry.registerTask({

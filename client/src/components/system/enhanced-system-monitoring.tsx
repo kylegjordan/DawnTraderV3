@@ -43,7 +43,6 @@ import { LATTISafetyMonitor } from "./latti-safety-monitor";
 import { DataFlowTracePanel } from "@/components/dashboard/data-flow-trace-panel";
 import { SystemTruthPanel } from "@/components/dashboard/system-truth-panel";
 import SystemHealthSummary from "@/components/system-health-summary";
-import LottieTuningTab from "@/components/monitoring/lottie-tuning-tab";
 import EngineTelemetry from "@/components/monitoring/engine-telemetry";
 import SystemConfigTab from "./system-config-tab";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from "recharts";
@@ -154,7 +153,7 @@ interface ConfidenceDrift {
 }
 
 export default function EnhancedSystemMonitoring() {
-  const [activeTab, setActiveTab] = useState("lottie-tuning");
+  const [activeTab, setActiveTab] = useState("engine-telemetry");
   const { toast } = useToast();
   const logEndRef = useRef<HTMLDivElement>(null);
   
@@ -366,10 +365,6 @@ export default function EnhancedSystemMonitoring() {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="flex flex-wrap gap-2 justify-start w-full h-auto p-2" data-testid="tabs-system-monitoring">
-          <TabsTrigger value="lottie-tuning" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-lottie-tuning" title="LATTI Tuning">
-            <Gauge className="w-4 h-4 sm:mr-2" />
-            <span className="hidden sm:inline">LATTI Tuning</span>
-          </TabsTrigger>
           <TabsTrigger value="engine-telemetry" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-engine-telemetry" title="Engine Telemetry">
             <Server className="w-4 h-4 sm:mr-2" />
             <span className="hidden sm:inline">Engine Telemetry</span>
@@ -1135,11 +1130,6 @@ export default function EnhancedSystemMonitoring() {
             {/* System Health Summary - Walter Activity (Feed/Formula Monitoring) */}
             <SystemHealthSummary />
           </div>
-        </TabsContent>
-
-        {/* Phase 31.J: Lottie Tuning Tab */}
-        <TabsContent value="lottie-tuning" className="space-y-6 mt-6" data-testid="content-lottie-tuning">
-          <LottieTuningTab />
         </TabsContent>
 
         {/* Phase 41F-D: Engine Telemetry Tab */}

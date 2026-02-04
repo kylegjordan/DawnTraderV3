@@ -4,15 +4,11 @@ import GuardrailsTab from "@/components/goals/guardrails-tab";
 import StrategiesTab from "@/components/goals/strategies-tab";
 import CoherencyRulesTab from "@/components/goals/coherency-rules-tab";
 import WalterPurposeTab from "@/components/goals/walter-purpose-tab";
-import TuningTab from "@/components/goals/tuning-tab";
 import DiagnosticsTab from "@/components/goals/diagnostics-tab";
-import AdaptiveRiskAdvisor from "@/components/goals/adaptive-risk-advisor";
 import { CoreFourGuardrails } from "@/components/goals/core-four-guardrails";
-import { LowPricedProtectionCard } from "@/components/goals/low-priced-protection-card";
 import { FiltersWithOverride } from "@/components/goals/filters-with-override";
-import { PresetsGrid } from "@/components/goals/presets-grid";
 import ModeBanner from "@/components/mode-banner";
-import { Target, Shield, Filter, Layers, CheckSquare, Lightbulb, Settings, Activity } from "lucide-react";
+import { Target, Shield, Filter, Layers, CheckSquare, Lightbulb, Activity } from "lucide-react";
 
 export default function GoalsEnginePage() {
   return (
@@ -28,7 +24,7 @@ export default function GoalsEnginePage() {
       </div>
 
       <Tabs defaultValue="goals" className="w-full">
-        <TabsList className="grid w-full grid-cols-8 h-auto gap-1 bg-muted p-1">
+        <TabsList className="grid w-full grid-cols-7 h-auto gap-1 bg-muted p-1">
           <TabsTrigger 
             value="goals" 
             className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 py-2 data-[state=active]:bg-background"
@@ -85,20 +81,10 @@ export default function GoalsEnginePage() {
             <Lightbulb className="w-4 h-4" />
             <span className="text-xs sm:text-sm">Purpose</span>
           </TabsTrigger>
-          <TabsTrigger 
-            value="tuning" 
-            className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 py-2 data-[state=active]:bg-background"
-            data-testid="tab-tuning"
-          >
-            <Settings className="w-4 h-4" />
-            <span className="text-xs sm:text-sm">Tuning</span>
-          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="goals" className="mt-6">
           <div className="space-y-6">
-            <AdaptiveRiskAdvisor />
-            <PresetsGrid />
             <GoalsEngineTab />
           </div>
         </TabsContent>
@@ -106,7 +92,7 @@ export default function GoalsEnginePage() {
         <TabsContent value="guardrails" className="mt-6">
           <div className="space-y-6">
             <CoreFourGuardrails />
-            <LowPricedProtectionCard />
+            {/* Directive 11.8B-C: LPCP hidden (backend preserved) */}
           </div>
         </TabsContent>
 
@@ -130,10 +116,6 @@ export default function GoalsEnginePage() {
 
         <TabsContent value="purpose" className="mt-6">
           <WalterPurposeTab />
-        </TabsContent>
-
-        <TabsContent value="tuning" className="mt-6">
-          <TuningTab />
         </TabsContent>
       </Tabs>
     </div>

@@ -1859,148 +1859,25 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     });
   });
 
-  // Phase 4: Goals Presets API Endpoints
-  // GET /api/goals-presets?mode=paper|live - Fetch all presets for the mode
-  apiRouter.get('/goals-presets', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const mode = req.query.mode as 'live' | 'paper';
+  // Directive 11.8B-C: Goals Presets routes removed - preset system decommissioned
+  // Phase 11 Predictive Learning is now the single authority for parameter adjustment
+  console.log('[11.8B-C] Goals Presets routes removed - Predictive Learning is single authority');
 
-      if (!mode || (mode !== 'live' && mode !== 'paper')) {
-        return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
-      }
-
-      const presets = await storage.getGoalsPresets({ mode });
-      res.json({ ok: true, data: presets });
-    } catch (error: any) {
-      console.error('[GoalsPresets] GET error:', error.message);
-      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
-    }
-  });
-
-  // GET /api/goals-presets/active?mode=paper|live - Fetch the active preset
-  apiRouter.get('/goals-presets/active', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const mode = req.query.mode as 'live' | 'paper';
-      console.log(`[REB 2.8.14][/api/goals-presets/active] GET request - userId: ${userId}, mode: ${mode}`);
-
-      if (!mode || (mode !== 'live' && mode !== 'paper')) {
-        console.error(`[REB 2.8.14][/api/goals-presets/active] Invalid mode parameter: ${mode}`);
-        return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
-      }
-
-      const activePreset = await storage.getActiveGoalsPreset({ mode });
-      
-      if (!activePreset) {
-        return res.status(404).json({ ok: false, code: 'NOT_FOUND', detail: `No active preset found for mode: ${mode}` });
-      }
-
-      res.json({ ok: true, data: activePreset });
-    } catch (error: any) {
-      console.error('[GoalsPresets] GET active error:', error.message);
-      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
-    }
-  });
-
-  // PUT /api/goals-presets/select - Apply a preset
-  apiRouter.put('/goals-presets/select', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
-    const requestId = `gp-select-${Date.now()}`;
-    try {
-      const userId = req.user!.id;
-      const { mode, presetName } = req.body;
-
-      if (!mode || (mode !== 'live' && mode !== 'paper')) {
-        console.error(`[GoalsPresets:${requestId}] Invalid mode parameter`);
-        return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
-      }
-
-      if (!presetName) {
-        console.error(`[GoalsPresets:${requestId}] Missing presetName parameter`);
-        return res.status(400).json({ ok: false, code: 'MISSING_PRESET_NAME', detail: 'Preset name is required' });
-      }
-
-      const validPresetNames = ['conservative', 'baseline', 'optimistic', 'maximum', 'custom'];
-      if (!validPresetNames.includes(presetName)) {
-        console.error(`[GoalsPresets:${requestId}] Invalid preset name: ${presetName}`);
-        return res.status(400).json({ 
-          ok: false, 
-          code: 'INVALID_PRESET_NAME', 
-          detail: `Preset name must be one of: ${validPresetNames.join(', ')}` 
-        });
-      }
-
-      console.log(`[GoalsPresets:${requestId}] Selecting preset ${presetName} for mode ${mode}`);
-
-      // Apply the preset (sets is_active flag and updates guardrails_v2)
-      const result = await storage.selectGoalsPreset({ mode, presetName });
-
-      // Broadcast preset change event
-      contextBridge.broadcast({
-        type: 'goals_preset_changed',
-        mode,
-        payload: {
-          presetName,
-          preset: result.preset,
-          guardrails: result.guardrails,
-          changedBy: userId,
-          timestamp: new Date().toISOString()
-        }
-      });
-
-      // Also broadcast guardrails update
-      contextBridge.broadcast({
-        type: 'guardrails_v2_updated',
-        mode,
-        payload: result.guardrails
-      });
-
-      // Invalidate caches
-      const { configChangeHandler } = await import('./services/config-change-handler');
-      await configChangeHandler.handleConfigChange({
-        userId,
-        mode,
-        configType: 'goals_preset',
-        source: 'api'
-      });
-
-      console.log(`[GoalsPresets:${requestId}] Preset applied successfully + broadcasts sent`);
-      res.json({ ok: true, data: result });
-    } catch (error: any) {
-      console.error(`[GoalsPresets:${requestId}] Unexpected error:`, error.message, error.stack);
-      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message || 'Internal server error' });
-    }
-  });
-
-  // Phase 6: Goals Learning Engine API Endpoints
-  // GET /api/goals-learning/summary?mode=paper|live - Get 30-day learning metrics
-  apiRouter.get('/goals-learning/summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const mode = req.query.mode as 'live' | 'paper';
-
-      if (!mode || (mode !== 'live' && mode !== 'paper')) {
-        return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
-      }
-
-      const summary = await storage.getLearningSummary({ mode });
-      
-      if (!summary) {
-        return res.status(404).json({ ok: false, code: 'NOT_FOUND', detail: `No learning metrics found for mode: ${mode}` });
-      }
-
-      res.json({ ok: true, data: summary });
-    } catch (error: any) {
-      console.error('[GoalsLearning] GET summary error:', error.message);
-      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
-    }
-  });
-
-  // Directive 11.8B: Goals Learning Engine route removed - parallel adaptive systems eliminated
+  // Directive 11.8B-C: Goals Learning Engine routes removed - parallel adaptive systems eliminated
   // Phase 11 Predictive Learning is the single authority for parameter adjustment
+  apiRouter.get('/goals-learning/summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    res.status(410).json({ 
+      ok: false, 
+      code: 'DEPRECATED', 
+      detail: 'Goals Learning Engine removed in Directive 11.8B-C - Phase 11 Predictive Learning is now the single authority' 
+    });
+  });
+
   apiRouter.post('/goals-learning/trigger', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
     res.status(410).json({ 
       ok: false, 
       code: 'DEPRECATED', 
-      detail: 'Goals Learning Engine removed in Directive 11.8B - Phase 11 Predictive Learning is now the single authority' 
+      detail: 'Goals Learning Engine removed in Directive 11.8B-C - Phase 11 Predictive Learning is now the single authority' 
     });
   });
 
