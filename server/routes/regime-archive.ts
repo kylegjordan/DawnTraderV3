@@ -76,7 +76,7 @@ router.get('/api/vts/regime-archive', requireAuth, (req: Request, res: Response)
     
     res.json({
       ok: true,
-      data: records,
+      records,
       pagination: {
         limit,
         offset,
@@ -125,7 +125,7 @@ router.get('/api/vts/regime-archive/summary', requireAuth, (req: Request, res: R
     
     res.json({
       ok: true,
-      data: summary,
+      summary,
     });
   } catch (err) {
     console.error('[11.7E][API] Error fetching archive summary:', err);
@@ -146,8 +146,8 @@ router.get('/api/vts/regime-archive/manifest', requireAuth, (req: Request, res: 
     
     res.json({
       ok: true,
-      data: sortedManifest,
-      count: manifest.length,
+      manifest: sortedManifest,
+      count: sortedManifest.length,
     });
   } catch (err) {
     console.error('[11.7E][API] Error fetching manifest:', err);
