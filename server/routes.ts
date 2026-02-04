@@ -16921,40 +16921,9 @@ Please:
     }
   });
 
-  // GET list of presets for a strategy
-  apiRouter.get('/strategies/presets', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const { STRATEGY_PRESETS } = await import('./services/strategy-presets');
-      const strategy = String(req.query.strategy || '');
-      
-      if (!STRATEGY_PRESETS[strategy as keyof typeof STRATEGY_PRESETS]) {
-        return res.status(404).json({ ok: false, message: 'Strategy not found' });
-      }
-      
-      res.json({ ok: true, presets: STRATEGY_PRESETS[strategy as keyof typeof STRATEGY_PRESETS] });
-    } catch (error: any) {
-      console.error('Error fetching presets:', error);
-      res.status(500).json({ ok: false, error: error.message });
-    }
-  });
-
-  // GET a specific preset
-  apiRouter.get('/strategies/presets/:strategy/:presetName', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const { STRATEGY_PRESETS } = await import('./services/strategy-presets');
-      const { strategy, presetName } = req.params;
-      const presets = STRATEGY_PRESETS[strategy as keyof typeof STRATEGY_PRESETS];
-      
-      if (!presets || !presets[presetName as keyof typeof presets]) {
-        return res.status(404).json({ ok: false, message: 'Preset not found' });
-      }
-      
-      res.json({ ok: true, preset: presets[presetName as keyof typeof presets] });
-    } catch (error: any) {
-      console.error('Error fetching preset:', error);
-      res.status(500).json({ ok: false, error: error.message });
-    }
-  });
+  // Directive 11.8B-C2: Strategy presets routes removed - presets were UI-only artifacts
+  // Strategy behavior is governed by Guardrails, Filters, and Predictive Learning
+  console.log('[11.8B-C2] Strategy presets routes removed - behavior governed by Guardrails & Predictive Learning');
 
   // ==================== Walter AI Assistant API (Phase 5.4) ====================
   

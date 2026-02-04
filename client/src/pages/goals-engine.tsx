@@ -2,12 +2,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import GuardrailsTab from "@/components/goals/guardrails-tab";
 import StrategiesTab from "@/components/goals/strategies-tab";
 import CoherencyRulesTab from "@/components/goals/coherency-rules-tab";
-import WalterPurposeTab from "@/components/goals/walter-purpose-tab";
 import DiagnosticsTab from "@/components/goals/diagnostics-tab";
 import { CoreFourGuardrails } from "@/components/goals/core-four-guardrails";
 import { FiltersWithOverride } from "@/components/goals/filters-with-override";
 import ModeBanner from "@/components/mode-banner";
-import { Shield, Filter, Layers, CheckSquare, Lightbulb, Activity } from "lucide-react";
+import { Shield, Filter, Layers, CheckSquare, Activity } from "lucide-react";
 
 export default function GoalsEnginePage() {
   return (
@@ -22,9 +21,9 @@ export default function GoalsEnginePage() {
         </p>
       </div>
 
-      {/* Directive 11.8B-C Follow-up: Goals tab removed - preset system decommissioned */}
+      {/* Directive 11.8B-C2: Purpose tab removed; strategy presets decommissioned */}
       <Tabs defaultValue="guardrails" className="w-full">
-        <TabsList className="grid w-full grid-cols-6 h-auto gap-1 bg-muted p-1">
+        <TabsList className="grid w-full grid-cols-5 h-auto gap-1 bg-muted p-1">
           <TabsTrigger 
             value="guardrails" 
             className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 py-2 data-[state=active]:bg-background"
@@ -65,14 +64,6 @@ export default function GoalsEnginePage() {
             <CheckSquare className="w-4 h-4" />
             <span className="text-xs sm:text-sm">Coherency</span>
           </TabsTrigger>
-          <TabsTrigger 
-            value="purpose" 
-            className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 py-2 data-[state=active]:bg-background"
-            data-testid="tab-walter-purpose"
-          >
-            <Lightbulb className="w-4 h-4" />
-            <span className="text-xs sm:text-sm">Purpose</span>
-          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="guardrails" className="mt-6">
@@ -98,10 +89,6 @@ export default function GoalsEnginePage() {
 
         <TabsContent value="coherency" className="mt-6">
           <CoherencyRulesTab />
-        </TabsContent>
-
-        <TabsContent value="purpose" className="mt-6">
-          <WalterPurposeTab />
         </TabsContent>
       </Tabs>
     </div>

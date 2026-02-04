@@ -7,12 +7,12 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+// Directive 11.8B-C2: Select imports removed - preset selector decommissioned
 import { useToast } from "@/hooks/use-toast";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Layers, Save, RotateCcw, Check, X, Download, Loader2, Settings } from "lucide-react";
+import { Layers, Save, RotateCcw, Check, X, Loader2, Settings } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatNumberWithCommas, parseCommaFormattedNumber } from "@/lib/utils";
 
@@ -260,8 +260,6 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
   const [isSavingToggle, setIsSavingToggle] = useState(false);
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [validationErrors, setValidationErrors] = useState<Record<string, string[]>>({});
-  const [presets, setPresets] = useState<Record<string, any>>({});
-  const [selectedPreset, setSelectedPreset] = useState<string>("");
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [rawInputValues, setRawInputValues] = useState<Record<string, string>>({});
 
@@ -332,34 +330,7 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
     },
   });
 
-  // Fetch presets on mount and auto-load Balanced if no settings exist
-  useEffect(() => {
-    const fetchPresets = async () => {
-      try {
-        const { ensureValidToken } = await import('@/lib/auth');
-        const token = await ensureValidToken();
-        
-        const response = await fetch(`/api/strategies/presets?strategy=${strategy.id.toUpperCase()}`, {
-          headers: { 
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          credentials: 'include'
-        });
-        const data = await response.json();
-        if (data.ok) {
-          setPresets(data.presets);
-          // Auto-load Balanced preset if no settings exist
-          if (!settings?.params && data.presets.Balanced) {
-            setFormData(data.presets.Balanced);
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching presets:', error);
-      }
-    };
-    fetchPresets();
-  }, [strategy.id, settings]);
+  // Directive 11.8B-C2: Strategy presets removed - behavior governed by Guardrails & Predictive Learning
 
   // Sync enabled state from backend settings
   useEffect(() => {
@@ -405,29 +376,6 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
     toast({
       title: "Reset to Defaults",
       description: "Form has been reset. Click Save to apply default values.",
-    });
-  };
-
-  const handleLoadPreset = () => {
-    if (!selectedPreset || !presets[selectedPreset]) {
-      toast({
-        title: "No Preset Selected",
-        description: "Please select a preset first",
-        variant: "destructive",
-      });
-      return;
-    }
-    // Convert decimal fractions to percentages for UI display
-    const preset = { ...presets[selectedPreset] };
-    Object.keys(preset).forEach(key => {
-      if (PERCENTAGE_PARAMS.has(key) && typeof preset[key] === 'number') {
-        preset[key] = preset[key] * 100;
-      }
-    });
-    setFormData(preset);
-    toast({
-      title: "Preset Loaded",
-      description: `${selectedPreset} preset loaded for ${strategy.name}. Click Save to apply.`,
     });
   };
 
@@ -681,37 +629,10 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
 
         {editing && (
           <div className="mt-4 pt-4 border-t space-y-4">
-            {Object.keys(presets).length > 0 && (
-              <div className="flex items-end gap-2">
-                <div className="flex-1">
-                  <Label htmlFor={`preset-select-${strategy.id}`} className="text-sm mb-2 block">
-                    Load Preset
-                  </Label>
-                  <Select value={selectedPreset} onValueChange={setSelectedPreset}>
-                    <SelectTrigger id={`preset-select-${strategy.id}`} data-testid={`select-preset-${strategy.id}`}>
-                      <SelectValue placeholder="Select a preset" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.keys(presets).map((presetName) => (
-                        <SelectItem key={presetName} value={presetName} data-testid={`preset-option-${presetName}`}>
-                          {presetName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button
-                  onClick={handleLoadPreset}
-                  size="sm"
-                  variant="secondary"
-                  disabled={!selectedPreset}
-                  data-testid={`button-load-preset-${strategy.id}`}
-                >
-                  <Download className="w-4 h-4 mr-1" />
-                  Load Preset
-                </Button>
-              </div>
-            )}
+            {/* Directive 11.8B-C2: Preset selector removed */}
+            <p className="text-xs text-muted-foreground">
+              Strategy behavior is governed by Guardrails, Filters, and Predictive Learning.
+            </p>
             <Button
               onClick={handleReset}
               size="sm"

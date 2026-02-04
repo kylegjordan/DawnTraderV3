@@ -4337,26 +4337,6 @@
     ]
   },
   {
-    "path": "/api/strategies/presets",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/strategies/presets/:strategy/:presetName",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
     "path": "/api/walter/pending-approvals",
     "methods": [
       "GET"

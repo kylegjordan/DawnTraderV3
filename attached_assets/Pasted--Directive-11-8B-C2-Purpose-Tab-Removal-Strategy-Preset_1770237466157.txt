@@ -1,0 +1,238 @@
+📘 Directive 11.8B-C2 — Purpose Tab Removal & Strategy Preset Audit
+Objective
+
+Complete the final cleanup of legacy UX and API artifacts remaining after Goals ML & Preset decommission (11.8B-C), by:
+
+Removing the Purpose tab entirely from the Goals Engine UI and routing.
+
+Auditing and decommissioning /api/strategies/presets if confirmed to be a legacy, non-functional artifact.
+
+Ensuring no downstream strategy logic, execution logic, or UI paths depend on strategy presets.
+
+Providing verifiable evidence that nothing references the removed components.
+
+This directive does NOT introduce new functionality.
+It strictly removes dead or misleading surfaces.
+
+🔒 Scope Guardrails (Read Carefully)
+
+Replit MUST NOT:
+
+Modify any Phase 11 predictive learning systems
+
+Modify strategy execution logic
+
+Modify signal generation, SQE, DSS, VTS, or TEC
+
+Add new abstractions, defaults, or replacement logic
+
+Reinterpret “strategy presets” as something new
+
+If /api/strategies/presets is still required by live strategy execution, it must be preserved — but only if proven.
+
+1️⃣ Purpose Tab — Full Removal (UI + Routing)
+Files to Inspect (at minimum)
+client/src/pages/goals-engine.tsx
+client/src/components/goals/*
+client/src/components/layout/sidebar.tsx
+client/src/App.tsx
+
+Required Actions
+A. Remove Purpose tab from UI
+
+Remove <TabsTrigger value="purpose">
+
+Remove associated <TabsContent value="purpose">
+
+Remove any imports specific to the Purpose tab component
+
+Remove Purpose-related icons, labels, tooltips, or copy
+
+B. Remove Purpose component file(s)
+
+If present, delete:
+
+client/src/components/goals/purpose-tab.tsx
+
+
+(or equivalent)
+
+C. Remove routing / lazy imports
+
+Ensure there is no remaining import path for Purpose in:
+
+goals-engine page
+
+App route mapping
+
+sidebar metadata
+
+D. Verify UX integrity
+
+After removal:
+
+Tabs should render cleanly
+
+Tab grid column count should match remaining tabs
+
+No empty tab panels
+
+No console warnings or React key errors
+
+2️⃣ /api/strategies/presets — Mandatory Audit
+Goal
+
+Determine whether strategy presets (Conservative / Balanced / Aggressive) have any real effect on:
+
+Strategy configuration
+
+Signal scoring
+
+Position sizing
+
+Execution behavior
+
+Files to Inspect
+
+Backend:
+
+server/routes/strategies*.ts
+server/services/strategy*
+server/core/strategies*
+
+
+Frontend:
+
+client/src/components/goals/strategies-tab.tsx
+client/src/components/strategies/*
+
+
+Search patterns:
+
+strategies/presets
+getStrategyPresets
+applyPreset
+presetId
+
+Audit Questions (Must Be Answered in Log)
+
+Replit must explicitly answer:
+
+Does /api/strategies/presets modify:
+
+execution config?
+
+risk sizing?
+
+stop logic?
+
+entry logic?
+
+Are presets:
+
+applied automatically?
+
+purely UI-decorative?
+
+overridden immediately by guardrails?
+
+Are presets referenced anywhere downstream of UI selection?
+
+3️⃣ Conditional Decommission of /api/strategies/presets
+If NO functional impact is found (expected outcome):
+A. Backend
+
+Remove /api/strategies/presets route(s)
+
+Remove preset service/helpers
+
+Remove mock/static preset definitions
+
+B. Frontend
+
+Remove preset fetch calls
+
+Remove preset selectors or labels
+
+Replace UI copy with static explanation:
+
+“Strategy behavior is governed by Guardrails, Filters, and Predictive Learning.”
+
+If ANY functional impact is found (unlikely but allowed):
+
+STOP
+
+Do NOT remove
+
+Document exact dependency chain
+
+Provide recommendation instead of action
+
+4️⃣ Verification & Evidence (Required)
+
+Replit must provide all of the following:
+
+A. Grep Proof
+grep -R "purpose" client/src
+grep -R "strategies/presets" .
+grep -R "preset" client/src
+
+
+All must return NO MATCHES, unless explicitly justified.
+
+B. Execution Safety Check
+
+App boots successfully
+
+Guardrails & Filters page renders
+
+Strategies tab renders without presets
+
+No runtime errors
+
+No console warnings related to removed components
+
+C. Deletion Manifest
+
+Create:
+
+docs/audits/Phase_11.8B_C2_Deletion_Manifest.md
+
+
+Include:
+
+Files deleted
+
+Routes removed
+
+Confirmation of no remaining references
+
+Explicit statement:
+
+“Strategy presets do not affect execution and were safely removed.”
+
+✅ Completion Criteria
+
+Directive 11.8B-C2 is complete only when:
+
+Purpose tab is fully gone
+
+/api/strategies/presets is either:
+
+safely removed or
+
+explicitly preserved with justification
+
+No dead UI surfaces remain
+
+No misleading configuration options exist
+
+Evidence is provided, not implied
+
+🔜 Next Phase (Not Executed Here)
+
+After 11.8B-C2:
+
+11.8B-D — Filter & Screener Authority Reassignment to Predictive Learning
+
+11.8B-E — Predictive Filter Decision Framework
