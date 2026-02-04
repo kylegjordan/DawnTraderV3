@@ -64,7 +64,11 @@ const REGIME_DISPLAY_NAMES: Record<string, string> = {
   EXTREME_NOISE: 'Extreme Noise',
 };
 
-const FRICTION_BAND_ORDER = ['High Liquidity', 'Moderate Liquidity', 'Limited Liquidity', 'Low Liquidity'];
+const FRICTION_BAND_ORDER = [
+  'High Liquidity / Low Cost',   // best
+  'Moderate Liquidity',
+  'Low Liquidity / High Cost'    // worst
+];
 
 function ensureEventsDir(): void {
   if (!fs.existsSync(EVENTS_DIR)) {
