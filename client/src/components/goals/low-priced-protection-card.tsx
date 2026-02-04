@@ -10,6 +10,12 @@ import { Shield, Save, Lock, Info, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { useTradingMode } from "@/contexts/trading-mode-context";
+import { 
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ModeIndicator } from "./mode-indicator";
 
 /**
