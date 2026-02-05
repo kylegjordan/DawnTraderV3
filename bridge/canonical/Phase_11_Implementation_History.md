@@ -1,9 +1,9 @@
 # Phase 11 Implementation History — Complete Reference
 
-**Document Version:** 2.0  
-**Last Updated:** January 18, 2026  
-**Schema Version:** v1.6.7  
-**Directive Range:** 11.0 through 11.5
+**Document Version:** 3.0  
+**Last Updated:** February 5, 2026  
+**Schema Version:** v1.8.3  
+**Directive Range:** 11.0 through 11.8C
 
 ---
 
@@ -16,26 +16,32 @@
 5. [Directive 11.3 — Adaptive Scanning Intelligence](#directive-113--adaptive-scanning-intelligence)
 6. [Directive 11.4 — Market Indicators & Analytics Hardening](#directive-114--market-indicators--analytics-hardening)
 7. [Directive 11.5 — Math, Macro, and Regime Synchronization](#directive-115--math-macro-and-regime-synchronization)
-8. [File Artifacts Index](#file-artifacts-index)
-9. [Architecture Diagrams](#architecture-diagrams)
+8. [Directive 11.7 — Regime Archive & Telemetry Infrastructure](#directive-117--regime-archive--telemetry-infrastructure)
+9. [Directive 11.8 — Authority Unification & Legacy Decommission](#directive-118--authority-unification--legacy-decommission)
+10. [File Artifacts Index](#file-artifacts-index)
+11. [Architecture Diagrams](#architecture-diagrams)
 
 ---
 
 ## Executive Summary
 
-Phase 11 represents the mathematical and operational hardening of the DawnTrader trading platform. The phase spans from metric consolidation (11.0) through advanced regime-adaptive systems (11.5), establishing:
+Phase 11 represents the mathematical and operational hardening of the DawnTrader trading platform. The phase spans from metric consolidation (11.0) through authority unification and legacy decommission (11.8), establishing:
 
 - **Unified Scoring**: Single `FinalScore` metric replacing legacy CWQI/NGC/ProfitRate
 - **Canonical Mappings**: Single source of truth for regime-to-strategy relationships
 - **VTS Modernization**: Phase-10 compatible virtual trading simulator with regime-driven simulation
 - **Adaptive Scanning**: Dual-pool (Ideal + Rotational) pair selection with telemetry feedback
 - **Mathematical Foundations**: Z-Score normalization, profitability gates, and macro-state awareness
+- **Regime Archive**: Weekly regime metric archival with manifest tracking
+- **Authority Unification**: Single Net Expectancy Kernel, Phase 11 Predictive Learning as sole authority
+- **Legacy Decommission**: LATTi, Goals ML, ARA, Strategy Presets fully removed
 
-**Key Statistics (as of January 18, 2026):**
-- Total Directives: 6 major (11.0 through 11.5)
-- Sub-Directives: 40+
-- Files Modified: 150+
-- New Modules Created: 25+
+**Key Statistics (as of February 5, 2026):**
+- Total Directives: 8 major (11.0 through 11.8C)
+- Sub-Directives: 55+
+- Files Modified: 200+
+- Files Deleted: 15+ (legacy decommission)
+- New Modules Created: 30+
 
 ---
 
@@ -786,6 +792,269 @@ Raw OHLC Data
 
 ---
 
+## Directive 11.7 — Regime Archive & Telemetry Infrastructure
+
+### Overview
+
+Directive 11.7 establishes the regime archive system for historical regime metrics persistence and weekly archival with manifest tracking.
+
+**Status:** ✅ Complete  
+**Date Range:** January 2026
+
+### Phase 11.7E — Regime Archive System
+
+#### Objectives
+- Create weekly regime metric archival system
+- Implement manifest tracking for archive files
+- Provide API endpoints for archive retrieval
+
+#### Key Changes
+
+1. **Archive Scheduler**: Weekly archival runs Sunday 00:45 UTC via `archival-scheduler.ts`
+
+2. **Archive Storage**: JSON files in `logs/regime_archive/YYYY-MM-DD.json` format
+
+3. **Manifest System**: Tracks archive files with checksums and entry counts
+
+4. **API Endpoints**:
+   | Endpoint | Purpose |
+   |----------|---------|
+   | `GET /api/vts/regime-archive` | Retrieve archive records with pagination |
+   | `GET /api/vts/regime-archive/summary` | Get archive statistics summary |
+   | `GET /api/vts/regime-archive/manifest` | Get archive file manifest |
+   | `GET /api/vts/regime-archive/latest` | Get most recent archive |
+
+5. **UI Integration**: Machine Learning page Regime Archive tab displays historical data
+
+#### Key Files
+- `server/core/archival/regime-archiver.ts` — Core archive logic
+- `server/core/archival/archival-scheduler.ts` — Weekly scheduler
+- `server/routes/regime-archive.ts` — API endpoints
+- `client/src/pages/machine-learning.tsx` — UI integration
+
+---
+
+## Directive 11.8 — Authority Unification & Legacy Decommission
+
+### Overview
+
+Directive 11.8 is the culminating phase that establishes Phase 11 Predictive Learning as the **single authority** for all parameter adjustment. All parallel learning systems, legacy adaptive mechanisms, and decorative UI artifacts are decommissioned.
+
+**Status:** ✅ Complete  
+**Date Range:** February 2-4, 2026
+
+---
+
+### Phase 11.8A — Predictive & Learning Authority Audit
+
+**Date:** February 2, 2026  
+**Status:** ✅ COMPLETE (READ-ONLY AUDIT)
+
+#### Objectives
+- Complete file-level audit of all predictive/learning write paths
+- Map authority ownership for strategy behavior, scoring, filters, risk, guardrails
+- Identify dual-role conflicts and authority overlaps
+
+#### Key Findings
+
+1. **Canonical Authority Sources**:
+   | Resource | Role |
+   |----------|------|
+   | `bridge/canonical/phase9_predictive-learning.json` | Regime weight vectors (baseline) |
+   | `server/config/score-weights.config.ts` | FinalScore coefficients (immutable) |
+   | `server/config/system-guards.ts` | Threshold constants (immutable) |
+   | `server/config/strategy-governance.ts` | Strategy dependency levels |
+
+2. **Learning Systems Identified for Decommission**:
+   - LATTi/Heuristic Trader (parallel adaptive system)
+   - Goals ML Engine (preset-driven parameter mutation)
+   - Adaptive Risk Advisor (parallel risk system)
+   - DHMA Tuning Service (auto-tuning)
+
+3. **Database Fields Frozen**:
+   - `tunedByLatti` — preserved but no longer written
+   - `managedByLottie` — preserved but no longer written
+
+---
+
+### Phase 11.8B — Decommission Execution
+
+Directive 11.8B executes the decommission in a controlled sequence of sub-directives.
+
+---
+
+#### 11.8B-A: Net Expectancy Authority Unification
+
+**Date:** February 3, 2026  
+**Status:** ✅ COMPLETE
+
+**Objective:** Create single authoritative Net Expectancy calculation.
+
+**Key Changes:**
+- Created `server/core/calculations/net-expectancy-kernel.ts`
+- Pure synchronous function with no I/O or side effects
+- Single `computeNetExpectancyKernel()` for all Net EV math
+
+**Formula:**
+```typescript
+netEV = (pWin × avgWin) - (pLoss × avgLoss) - friction
+```
+
+---
+
+#### 11.8B-A2: VTS Net Expectancy Alignment
+
+**Date:** February 3, 2026  
+**Status:** ✅ COMPLETE
+
+**Objective:** Align VTS profitability decisions with canonical Net EV kernel.
+
+**Key Changes:**
+- VTS now uses `computeNetExpectancyKernel()` for profitability gate
+- Eliminated unique EV math in VTS
+- `netEV > 0` gate enforced consistently
+
+---
+
+#### 11.8B-B: LATTi Decommission & Authority Cleanup
+
+**Date:** February 3, 2026  
+**Status:** ✅ COMPLETE
+
+**Objective:** Remove all LATTi/Heuristic Trader parallel learning systems.
+
+**Files Deleted:**
+| File | Reason |
+|------|--------|
+| `server/services/heuristic-trader.ts` | Core LATTi service |
+| `server/services/lottie-oversight-service.ts` | DHMA health monitoring |
+| `server/services/baseline-indicator.ts` | LATTi baseline service |
+| `server/services/walter-standby.ts` | Walter/LATTi placeholder |
+| `server/services/walter-adaptive-heuristics.ts` | Adaptive heuristics |
+| `client/src/components/latti-toast-listener.tsx` | Toast notifications |
+| `client/src/components/monitoring/lottie-tuning-tab.tsx` | Tuning UI |
+| `client/src/components/dashboard/dashboard-latti-widget.tsx` | Dashboard widget |
+| `client/src/hooks/use-baseline-status.ts` | Baseline hook |
+
+**Routes Removed:**
+- `/api/system/latti-tuning`
+- `/api/system/latti-insights`
+- `/api/system/latti-cross-strategy`
+- `/api/system/latti-strategy-usage`
+- `/api/latti/targets`
+
+---
+
+#### 11.8B-B1: Authority Surface Cleanup
+
+**Date:** February 4, 2026  
+**Status:** ✅ COMPLETE
+
+**Objective:** Remove all LATTi authority toggles/badges from UI control surfaces.
+
+**Key Changes:**
+- Removed LATTi badges from core guardrails, filters, LPCP
+- UI now shows "Manual Control" / "Configured" badges
+- Schema defaults updated: `managedByLottie=false`, `manualOverrideEnabled=true`
+- Database fields FROZEN (not deleted) per directive
+
+---
+
+#### 11.8B-C: Goals ML & Preset System Decommission
+
+**Date:** February 4, 2026  
+**Status:** ✅ COMPLETE
+
+**Objective:** Remove Goals ML Engine, Preset Grid, and Adaptive Risk Advisor.
+
+**Files Deleted:**
+| File | Reason |
+|------|--------|
+| `client/src/components/goals/tuning-tab.tsx` | Goals ML UI |
+| `client/src/components/goals/presets-grid.tsx` | Preset System UI |
+| `client/src/components/goals/adaptive-risk-advisor.tsx` | ARA UI |
+| `server/services/dhma-tuning-service.ts` | DHMA auto-tuning |
+| `server/jobs/cognitive-tuning-job.ts` | Scheduled tuning job |
+
+**Routes Deprecated (410 Gone):**
+- `GET /api/goals-presets`
+- `GET /api/goals-presets/active`
+- `PUT /api/goals-presets/select`
+- `GET /api/goals-learning/summary`
+- `POST /api/goals-learning/trigger`
+
+**UI Changes:**
+- Tuning tab removed from Goals Engine
+- PresetsGrid removed from Goals tab
+- AdaptiveRiskAdvisor removed from Goals tab
+- LPCP hidden from Guardrails tab (backend preserved)
+
+---
+
+#### 11.8B-C2: Purpose Tab & Strategy Preset Decommission
+
+**Date:** February 4, 2026  
+**Status:** ✅ COMPLETE
+
+**Objective:** Remove dead UI surfaces (Purpose tab, Strategy Presets).
+
+**Files Deleted:**
+| File | Reason |
+|------|--------|
+| `client/src/components/goals/walter-purpose-tab.tsx` | Dead UI surface |
+| `server/services/strategy-presets.ts` | Static preset definitions |
+
+**Routes Removed:**
+- `GET /api/strategies/presets`
+- `GET /api/strategies/presets/:strategy/:presetName`
+
+**UI Changes:**
+- Purpose tab removed from Guardrails & Filters page
+- Strategy preset selector removed from Strategies tab
+- Tab count reduced from 6 to 5
+- Page renamed to "Guardrails & Filters" to reflect true purpose
+
+---
+
+### Phase 11.8 Preserved Systems
+
+The following systems were **NOT touched** (distinct from decommissioned systems):
+
+| System | Location | Purpose |
+|--------|----------|---------|
+| Trading Pace Presets | `goals-table.tsx` | Trading pace configuration |
+| Core Four Presets | `coherency-rules-tab.tsx` | Risk preset selection |
+| LATTI Targets Display | `target-daily-goals.tsx` | Display only (read-only) |
+| Coherency System | `coherency-rules-tab.tsx` | Rule validation display |
+| Phase 11 Predictive Learning | `server/core/calibration/*` | **SOLE AUTHORITY** |
+| Phase 11 Governance | `server/core/governance/*` | Regime governance |
+| Net Expectancy Kernel | `server/core/calculations/net-expectancy-kernel.ts` | **SOLE EV AUTHORITY** |
+
+---
+
+### Phase 11.8 Authority Model
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         PHASE 11.8 AUTHORITY MODEL                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────┐       ┌─────────────────────────┐
+│   SOLE AUTHORITIES      │       │   DECOMMISSIONED        │
+├─────────────────────────┤       ├─────────────────────────┤
+│ Phase 11 Predictive     │       │ ❌ LATTi/Heuristic      │
+│ Learning                │       │ ❌ Goals ML Engine      │
+│                         │       │ ❌ Adaptive Risk Advisor│
+│ Net Expectancy Kernel   │       │ ❌ DHMA Tuning Service  │
+│                         │       │ ❌ Cognitive Tuning Job │
+│ System Guards (immut.)  │       │ ❌ Strategy Presets     │
+│                         │       │ ❌ Goals Presets        │
+│ Score Weights (immut.)  │       │ ❌ Purpose Tab          │
+└─────────────────────────┘       └─────────────────────────┘
+```
+
+---
+
 ## Summary
 
 Phase 11 represents the mathematical and operational maturation of DawnTrader:
@@ -798,15 +1067,20 @@ Phase 11 represents the mathematical and operational maturation of DawnTrader:
 | 11.3 | Adaptive Scanning | Dual-pool selection system |
 | 11.4 | Analytics Hardening | Reliable UI data binding |
 | 11.5 | Mathematical Foundations | Z-Score, profitability gates, macro-state |
+| 11.7 | Regime Archive | Weekly archival with manifest tracking |
+| 11.8 | Authority Unification | Phase 11 Predictive Learning as sole authority |
 
-**Current State (January 18, 2026):**
-- All Phase 11 directives complete
-- VTS generating 5,700+ virtual trades per day
-- Z-Score normalization active in VTS and DSS
-- Profitability gate preventing unprofitable signals
+**Current State (February 5, 2026):**
+- All Phase 11 directives complete (11.0-11.8C)
+- Phase 11 Predictive Learning is **sole authority** for parameter adjustment
+- All parallel learning systems decommissioned (LATTi, Goals ML, ARA, DHMA Tuning)
+- Net Expectancy Kernel is **sole authority** for EV calculations
+- Regime Archive system operational with weekly archival
+- Database fields `tunedByLatti` and `managedByLottie` FROZEN
+- UI simplified: "Guardrails & Filters" page with 5 tabs
 - Ready for Phase 12 planning
 
 ---
 
 *Document maintained by DawnTrader Development Team*  
-*Last updated: January 18, 2026*
+*Last updated: February 5, 2026*

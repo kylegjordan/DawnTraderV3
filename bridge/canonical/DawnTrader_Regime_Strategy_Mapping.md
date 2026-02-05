@@ -1,9 +1,11 @@
 # DawnTrader Canonical Regime & Strategy Mapping Reference
 
-**Document Version:** 1.0  
-**Last Updated:** January 18, 2026  
-**Schema Version:** 11.4F.1  
+**Document Version:** 1.1  
+**Last Updated:** February 5, 2026  
+**Schema Version:** 11.8C  
 **Source File:** `server/config/canonical-regime-strategy-map.ts`
+
+> **Note (Phase 11.8):** All regime and strategy mappings remain unchanged. Phase 11 Predictive Learning is now the sole authority for parameter adjustment. LATTi and parallel learning systems have been decommissioned.
 
 ---
 
@@ -33,7 +35,7 @@ This document defines the **single source of truth** for all regime, strategy, s
 1. **Single Source**: All mappings originate from `canonical-regime-strategy-map.ts`
 2. **No Local Inference**: Subsystems cannot derive or guess mappings
 3. **Validation Required**: Invalid combinations are rejected with detailed logging
-4. **Version Tracked**: Schema version 11.4F.1 is enforced
+4. **Version Tracked**: Schema version 11.8C is enforced
 
 ---
 

@@ -2,9 +2,9 @@
 ## Paper Trading Engine Architecture, Strategies, Guardrails & System Components
 
 **Document Created:** December 12, 2025  
-**Last Updated:** January 18, 2026  
+**Last Updated:** February 5, 2026  
 **Purpose:** Comprehensive reference for the paper trading engine and all configurable components  
-**Current Status:** Phase 11 Complete (Z-Score Normalization, Macro-State Detection, Profitability Gate)
+**Current Status:** Phase 11.8C Complete (Authority Unification, Legacy Decommission, Single Learning Authority)
 
 ---
 
@@ -66,14 +66,39 @@ DawnTrader is a **long-only, spot-trading cryptocurrency day trading platform** 
 
 | Component | Status | Version |
 |-----------|--------|---------|
-| **Paper Trading Engine** | ✅ Production Ready | Phase 11 |
-| **Live Trading Engine** | ✅ Ready for Testing | Phase 11 |
-| **VTS (Virtual Simulator)** | ✅ Active | Phase 11 |
+| **Paper Trading Engine** | ✅ Production Ready | Phase 11.8C |
+| **Live Trading Engine** | ✅ Ready for Testing | Phase 11.8C |
+| **VTS (Virtual Simulator)** | ✅ Active | Phase 11.8C |
 | **Z-Score Normalization** | ✅ Integrated | 11.5 |
 | **Macro-State Detection** | ✅ Active | 11.5 |
 | **Profitability Gate** | ✅ Enforced | 11.5 |
+| **Net Expectancy Kernel** | ✅ Sole Authority | 11.8B-A |
+| **Phase 11 Predictive Learning** | ✅ Sole Authority | 11.8 |
+| **Regime Archive System** | ✅ Active | 11.7E |
 
-## 1.3 Key Constants
+## 1.3 Decommissioned Systems (Phase 11.8)
+
+| System | Removal Date | Replacement |
+|--------|--------------|-------------|
+| LATTi/Heuristic Trader | 2026-02-03 | Phase 11 Predictive Learning |
+| Goals ML Engine | 2026-02-04 | Phase 11 Predictive Learning |
+| Adaptive Risk Advisor | 2026-02-04 | Manual guardrail configuration |
+| DHMA Tuning Service | 2026-02-04 | Phase 11 ML Calibration |
+| Strategy Presets | 2026-02-04 | Guardrails & Filters |
+| Goals Presets | 2026-02-04 | Manual guardrail configuration |
+| Purpose Tab | 2026-02-04 | Removed (decorative only) |
+
+## 1.4 Authority Model
+
+| Authority | Location | Scope |
+|-----------|----------|-------|
+| **Net Expectancy Kernel** | `server/core/calculations/net-expectancy-kernel.ts` | All EV calculations |
+| **Phase 11 Predictive Learning** | `server/core/calibration/*` | All parameter adjustment |
+| **System Guards** | `server/config/system-guards.ts` | Immutable thresholds |
+| **Score Weights** | `server/config/score-weights.config.ts` | FinalScore coefficients |
+| **Strategy Governance** | `server/config/strategy-governance.ts` | Strategy dependencies |
+
+## 1.5 Key Constants
 
 | Constant | Value | Location |
 |----------|-------|----------|
@@ -642,6 +667,7 @@ Real-time log of:
 | 2025-12-12 | 1.0 | Initial creation |
 | 2026-01-08 | 1.5 | Phase 10 additions |
 | 2026-01-18 | 2.0 | Complete overhaul for Phase 11 |
+| 2026-02-05 | 3.0 | Phase 11.8C update: Authority unification, legacy decommission, decommissioned systems table, authority model |
 
 ---
 

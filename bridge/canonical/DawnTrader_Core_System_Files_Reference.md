@@ -2,6 +2,7 @@
 ## For Project Manager Review
 
 **Document Created:** January 18, 2026  
+**Last Updated:** February 5, 2026  
 **Purpose:** Curated list of core system files showing how the app is structured and components integrate
 
 ---
@@ -71,6 +72,7 @@ These files contain the mathematical foundation of the trading system.
 
 | File | Purpose |
 |------|---------|
+| `server/core/calculations/net-expectancy-kernel.ts` | **SOLE AUTHORITY** for Net EV math (Phase 11.8B-A) |
 | `server/core/calculations/expectancy.ts` | Net Expectancy Value (NetEV) profitability gate |
 | `server/core/math/cost-model.ts` | Fee, spread, slippage cost modeling |
 | `server/core/metrics/cost-metrics.ts` | Trade cost calculations |
@@ -182,6 +184,23 @@ Core services that power the trading engine.
 | `server/services/passive-data-aggregator.ts` | Passive learning data collection |
 | `server/core/strategy-analyzer.ts` | Per-strategy performance audit |
 
+## 8.3 Calibration & Governance (Phase 11 Predictive Learning)
+
+| File | Purpose |
+|------|---------|
+| `server/core/calibration/ml-calibration-scheduler.ts` | **SOLE AUTHORITY** for learning schedule (Phase 11.8) |
+| `server/core/calibration/canonical-weights-generator.ts` | Generates canonical regime weights |
+| `server/core/governance/governance-engine.ts` | Regime transition governance |
+| `server/core/governance/regime-stability.ts` | Stability classification (NORMAL/DEFENSIVE/SURVIVAL) |
+
+## 8.4 Regime Archive (Phase 11.7)
+
+| File | Purpose |
+|------|---------|
+| `server/core/archival/regime-archiver.ts` | Weekly regime metric archival |
+| `server/core/archival/archival-scheduler.ts` | Archive scheduler (Sunday 00:45 UTC) |
+| `server/routes/regime-archive.ts` | Archive API endpoints |
+
 ---
 
 # 9. API Routes & WebSocket
@@ -281,17 +300,52 @@ For a project manager wanting to understand the system, recommended reading orde
 |----------|------------|
 | Configuration | 8 |
 | Database | 3 |
-| Core Metrics | 12 |
+| Core Metrics | 13 |
 | Trading Services | 4 |
 | Market Scanning | 6 |
 | Price Infrastructure | 4 |
 | Trade Execution | 4 |
-| Learning & Telemetry | 6 |
+| Learning & Telemetry | 10 |
 | API & WebSocket | 4 |
 | Frontend Core | 12 |
 | Documentation | 5 |
-| **Total Core Files** | **~68** |
+| **Total Core Files** | **~73** |
+
+---
+
+# 12. Files Decommissioned (Phase 11.8B)
+
+The following files were removed in Phase 11.8 as part of the authority unification:
+
+## 12.1 Backend Services (Removed)
+
+| File | Reason |
+|------|--------|
+| `server/services/heuristic-trader.ts` | LATTi core service (parallel learning) |
+| `server/services/lottie-oversight-service.ts` | DHMA health monitoring |
+| `server/services/baseline-indicator.ts` | LATTi baseline service |
+| `server/services/walter-standby.ts` | Walter/LATTi placeholder |
+| `server/services/walter-adaptive-heuristics.ts` | Adaptive heuristics |
+| `server/services/dhma-tuning-service.ts` | DHMA auto-tuning |
+| `server/jobs/cognitive-tuning-job.ts` | Scheduled tuning job |
+| `server/services/strategy-presets.ts` | Static preset definitions |
+
+## 12.2 Frontend Components (Removed)
+
+| File | Reason |
+|------|--------|
+| `client/src/components/latti-toast-listener.tsx` | Toast notifications |
+| `client/src/components/monitoring/lottie-tuning-tab.tsx` | Tuning UI |
+| `client/src/components/dashboard/dashboard-latti-widget.tsx` | Dashboard widget |
+| `client/src/components/dashboard/latti-goals-mirror.tsx` | Goals mirror |
+| `client/src/hooks/use-baseline-status.ts` | Baseline hook |
+| `client/src/components/goals/tuning-tab.tsx` | Goals ML UI |
+| `client/src/components/goals/presets-grid.tsx` | Preset System UI |
+| `client/src/components/goals/adaptive-risk-advisor.tsx` | ARA UI |
+| `client/src/components/goals/walter-purpose-tab.tsx` | Purpose tab |
 
 ---
 
 *This document provides a curated view of the most important files for understanding DawnTrader's architecture. The full codebase contains additional utilities, tests, and specialized modules.*
+
+*Last Updated: February 5, 2026*

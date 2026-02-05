@@ -1,7 +1,9 @@
 # DawnTrader Mathematical Architecture Overview
-### *Version: Post-Directive 11.5 (Schema v1.6.7 — Metric Engine v1.0)*
+### *Version: Post-Directive 11.8C (Schema v1.8.3 — Metric Engine v1.0)*
 
-**Last Updated:** January 18, 2026
+**Last Updated:** February 5, 2026
+
+> **Note (Phase 11.8):** Net Expectancy calculations are now governed by a single authority: `server/core/calculations/net-expectancy-kernel.ts`. All parallel learning systems have been decommissioned.
 
 ---
 

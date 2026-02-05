@@ -2,7 +2,7 @@
 ## For New Engineering Leadership
 
 **Document Created:** December 12, 2025  
-**Last Updated:** January 18, 2026  
+**Last Updated:** February 5, 2026  
 **Document Purpose:** Comprehensive onboarding document for incoming Sr. Engineer  
 **Document Status:** Living Reference Document
 
@@ -49,8 +49,10 @@ DawnTrader is a **long-only, spot-trading cryptocurrency day trading platform** 
 | Phase 9 | December 2025 - January 2026 | Math Core Finalization (IMF, FinalScore) |
 | Phase 10 | January 2026 | Hybrid Alpha Pattern Engine & VTS Modernization |
 | Phase 11 | January 2026 | Production Hardening, Z-Score, Macro-State (COMPLETE) |
+| Phase 11.7 | January 2026 | Regime Archive System |
+| Phase 11.8 | February 2026 | Authority Unification & Legacy Decommission (COMPLETE) |
 
-**Current State:** DawnTrader V3.1 has completed Phase 11 with Z-Score normalization, macro-state detection, profitability gate enforcement, and 17 canonical strategies across 5 market regimes. The system features dual-pool adaptive scanning (100 pairs/cycle), institutional math filters with dynamic thresholds, and full telemetry-driven learning. Production-ready for live trading validation.
+**Current State:** DawnTrader V3.1 has completed Phase 11.8C with authority unification and legacy decommission. Phase 11 Predictive Learning is now the **sole authority** for all parameter adjustment. All parallel learning systems (LATTi, Goals ML, ARA, Strategy Presets) have been decommissioned. The Net Expectancy Kernel is the sole authority for EV calculations. The system features 17 canonical strategies across 5 market regimes, dual-pool adaptive scanning (100 pairs/cycle), and weekly regime archival. Production-ready for live trading validation.
 
 ---
 
@@ -512,6 +514,64 @@ Per-strategy win rate analysis with keep/monitor/disable recommendations.
 - 17 canonical strategies with regime mappings
 - Production-ready for live trading validation
 
+## 13.4 Directive 11.7: Regime Archive System
+
+**Date:** January 2026
+
+### Key Deliverables:
+- Weekly regime metric archival (Sunday 00:45 UTC)
+- Manifest tracking for archive files
+- API endpoints for archive retrieval
+- Machine Learning UI integration for historical data
+
+### Key Files:
+- `server/core/archival/regime-archiver.ts`
+- `server/core/archival/archival-scheduler.ts`
+- `server/routes/regime-archive.ts`
+
+## 13.5 Directive 11.8: Authority Unification & Legacy Decommission
+
+**Date:** February 2-4, 2026
+
+This culminating directive establishes Phase 11 Predictive Learning as the **sole authority** for all parameter adjustment.
+
+### Sub-Directives Executed:
+
+| Directive | Focus | Status |
+|-----------|-------|--------|
+| 11.8A | Predictive & Learning Authority Audit | ✅ COMPLETE |
+| 11.8B-A | Net Expectancy Authority Unification | ✅ COMPLETE |
+| 11.8B-A2 | VTS Net Expectancy Alignment | ✅ COMPLETE |
+| 11.8B-B | LATTi Decommission & Authority Cleanup | ✅ COMPLETE |
+| 11.8B-B1 | Authority Surface Cleanup (UI badges) | ✅ COMPLETE |
+| 11.8B-C | Goals ML & Preset System Decommission | ✅ COMPLETE |
+| 11.8B-C2 | Purpose Tab & Strategy Preset Decommission | ✅ COMPLETE |
+
+### Systems Decommissioned:
+
+| System | Replacement |
+|--------|-------------|
+| LATTi/Heuristic Trader | Phase 11 Predictive Learning |
+| Goals ML Engine | Phase 11 Predictive Learning |
+| Adaptive Risk Advisor | Manual guardrail configuration |
+| DHMA Tuning Service | Phase 11 ML Calibration |
+| Strategy Presets | Guardrails & Filters |
+| Goals Presets | Manual guardrail configuration |
+| Purpose Tab | Removed (decorative only) |
+
+### Authority Model Established:
+
+| Authority | Location | Scope |
+|-----------|----------|-------|
+| Net Expectancy Kernel | `server/core/calculations/net-expectancy-kernel.ts` | All EV calculations |
+| Phase 11 Predictive Learning | `server/core/calibration/*` | All parameter adjustment |
+| System Guards | `server/config/system-guards.ts` | Immutable thresholds |
+| Score Weights | `server/config/score-weights.config.ts` | FinalScore coefficients |
+
+### Database Fields Frozen:
+- `tunedByLatti` — preserved but no longer written
+- `managedByLottie` — preserved but no longer written
+
 ---
 
 # Part 14: Current Architecture & Components
@@ -583,9 +643,12 @@ Per-strategy win rate analysis with keep/monitor/disable recommendations.
 | Item | Priority | Notes |
 |------|----------|-------|
 | Walter integration | Low | Keep offline, advisory only |
-| Legacy strategy cleanup | Medium | Remove unused strategies |
+| ~~Legacy strategy cleanup~~ | ~~Medium~~ | ✅ RESOLVED (Phase 11.8B) |
+| ~~LATTi decommission~~ | ~~High~~ | ✅ RESOLVED (Phase 11.8B-B) |
+| ~~Parallel learning systems~~ | ~~High~~ | ✅ RESOLVED (Phase 11.8) |
 | Test coverage | High | Expand unit/integration tests |
 | Documentation | Ongoing | Keep canonical docs current |
+| Database field cleanup | Low | `tunedByLatti`, `managedByLottie` frozen (future cleanup) |
 
 ---
 
@@ -596,6 +659,7 @@ Per-strategy win rate analysis with keep/monitor/disable recommendations.
 | 2025-12-12 | 1.0 | Initial creation |
 | 2026-01-08 | 1.5 | Phase 10 additions |
 | 2026-01-18 | 2.0 | Complete overhaul for Phase 11 |
+| 2026-02-05 | 3.0 | Phase 11.7 & 11.8 additions: Regime Archive, Authority Unification, Legacy Decommission |
 
 ---
 
