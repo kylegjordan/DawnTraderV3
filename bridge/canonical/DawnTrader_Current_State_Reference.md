@@ -389,7 +389,7 @@ Generates virtual trades during passive learning, feeding telemetry without affe
 
 | Strategy | Key | Regime Affinity | Secondary Metrics |
 |----------|-----|-----------------|-------------------|
-| SMA Trend Ride | `sma_trend_ride` | BULL_STABLE, HIGH_VOL | ADX > 25 |
+| SMA Trend Ride | `sma_trend_ride` | HIGH_VOL_IMPULSE | ADX > 25, SMA(50) > SMA(100) |
 | VWAP Pullback | `vwap_pullback` | BULL_STABLE | VWAP proximity |
 | Breakout | `breakout` | HIGH_VOL_IMPULSE | Volume confirm |
 | Mean Reversion | `mean_reversion` | LOW_VOL_CHOP | Bollinger width |

@@ -81,7 +81,7 @@ The system supports **17 canonical strategies** mapped to specific regimes and s
 
 | Strategy Key | Display Name | Signal Type | Pattern Type | Primary Regimes |
 |--------------|--------------|-------------|--------------|-----------------|
-| `sma_trend_ride` | SMA Trend Ride | QUANT | — | BULL_STABLE |
+| `sma_trend_ride` | SMA Trend Ride | QUANT | — | HIGH_VOL_IMPULSE |
 | `vwap_pullback` | VWAP Pullback | QUANT | — | BULL_STABLE |
 | `morning_star` | Morning Star / Evening Star | PATTERN | MORNING_STAR | BULL_STABLE, TRANSITION |
 | `pivot_shift` | Pivot Shift | HYBRID | MORNING_STAR | BULL_STABLE, TRANSITION |

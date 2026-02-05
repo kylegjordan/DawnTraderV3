@@ -1,9 +1,11 @@
 # DawnTrader — System Architecture & Execution Flow Overview
 
 **Document Created:** December 12, 2025  
-**Last Updated:** January 18, 2026  
+**Last Updated:** February 5, 2026  
 **Purpose:** Complete factual reference for system architecture, data flows, and execution cadences  
-**Scope:** Phase 11 Production-Ready (Z-Score Normalization, Macro-State Detection, Profitability Gate)
+**Scope:** Phase 11 Production-Ready (through Directive 11.8C)
+
+> **Note (Phase 11.8):** Net Expectancy Kernel (`server/core/calculations/net-expectancy-kernel.ts`) is the sole authority for EV calculations. Phase 11 Predictive Learning is the sole authority for parameter adjustment. All parallel learning systems (LATTi, Goals ML, ARA, DHMA Tuning) have been decommissioned. Database fields `tunedByLatti` and `managedByLottie` are FROZEN.
 
 ---
 
@@ -898,6 +900,36 @@ Events are tagged with mode (paper/live) for client filtering.
 | 2025-12-20 | 1.1 | Phase 8.8.4 validation framework |
 | 2026-01-08 | 1.2 | Phase 9-10 additions |
 | 2026-01-18 | 2.0 | Complete overhaul for Phase 11 |
+| 2026-02-05 | 3.0 | Phase 11.6-11.8C: Data purge, regime archive, authority unification, legacy decommission |
+
+---
+
+# Recent Directives Summary (Phase 11.6-11.8)
+
+| Directive | Purpose | Status |
+|-----------|---------|--------|
+| 11.6A | Data Purge & ML Reset | ✅ Complete |
+| 11.6D | VTS Exit Logic Fix | ✅ Complete |
+| 11.7E | Regime Archive System | ✅ Complete |
+| 11.7F | Canonical Regime & Strategy Lock-In | ✅ Complete |
+| 11.8A | Predictive & Learning Authority Audit | ✅ Complete |
+| 11.8B | LATTi/Parallel Systems Decommission | ✅ Complete |
+| 11.8C | Purpose Tab & Preset Decommission | ✅ Complete |
+
+## Authority Model (Post-11.8)
+
+| Authority | Resource | Role |
+|-----------|----------|------|
+| Net Expectancy Kernel | `server/core/calculations/net-expectancy-kernel.ts` | Sole EV calculation authority |
+| Phase 11 Predictive Learning | `server/core/calibration/*` | Sole parameter adjustment authority |
+| Canonical Regime Map | `server/config/canonical-regime-strategy-map.ts` | Sole regime-strategy mapping source |
+
+## Strategy Realignment (Directive 11.7F)
+
+| Strategy | Previous Regime | New Regime |
+|----------|-----------------|------------|
+| SMA Trend Ride | BULL_STABLE | HIGH_VOL_IMPULSE |
+| Range Trading | (confirmed) | LOW_VOL_CHOP |
 
 ---
 

@@ -2,9 +2,11 @@
 ## Canonical Reference Document
 
 **Document Created:** January 18, 2026  
-**Last Updated:** January 18, 2026  
+**Last Updated:** February 5, 2026  
 **Purpose:** Comprehensive canonical mapping of regimes, strategies, signal types, and pattern types  
-**Schema Version:** v11.5.0
+**Schema Version:** v11.8C
+
+> **Note (Directive 11.7F):** SMA Trend Ride realigned from BULL_STABLE → HIGH_VOL_IMPULSE. Range Trading confirmed in LOW_VOL_CHOP.
 
 ---
 
@@ -183,7 +185,6 @@ adjustedVolNoise = baseVolNoise × macroVolNoiseMultiplier
 
 | Strategy | Secondary Metrics & Ranges | Signal Type | Pattern Type |
 |----------|---------------------------|-------------|--------------|
-| SMA Trend Ride | Price > SMA(50) by > 0.5% • ADX > 25 | QUANT | — |
 | VWAP Pullback | VWAP Deviation < −1σ • Momentum > 0 | QUANT | — |
 | Morning Star / Evening Star | 3-Bar Sequence (Bear→Doji→Bull) • Momentum Flip > 0.3% | PATTERN | Morning Star / Evening Star |
 | Pivot Shift | RSI 45–55 • ADX Slope > 0.5 | HYBRID | Morning / Evening Star |
@@ -216,6 +217,7 @@ adjustedVolNoise = baseVolNoise × macroVolNoiseMultiplier
 
 | Strategy | Secondary Metrics & Ranges | Signal Type | Pattern Type |
 |----------|---------------------------|-------------|--------------|
+| SMA Trend Ride | SMA(50) > SMA(100) • ADX > 25 • RSI 55–70 | QUANT | — |
 | Breakout | Momentum > +0.7% • Volume > 2× avg | QUANT | — |
 | VWAP Bounce | VWAP Deviation > +1σ • Momentum −0.3 to −0.6% | QUANT | — |
 | Volatility Edge | Volatility Percentile > 80 • Regime Mismatch = True | HYBRID | ABCD Geometric |

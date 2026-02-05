@@ -16,10 +16,11 @@
 5. [Directive 11.3 — Adaptive Scanning Intelligence](#directive-113--adaptive-scanning-intelligence)
 6. [Directive 11.4 — Market Indicators & Analytics Hardening](#directive-114--market-indicators--analytics-hardening)
 7. [Directive 11.5 — Math, Macro, and Regime Synchronization](#directive-115--math-macro-and-regime-synchronization)
-8. [Directive 11.7 — Regime Archive & Telemetry Infrastructure](#directive-117--regime-archive--telemetry-infrastructure)
-9. [Directive 11.8 — Authority Unification & Legacy Decommission](#directive-118--authority-unification--legacy-decommission)
-10. [File Artifacts Index](#file-artifacts-index)
-11. [Architecture Diagrams](#architecture-diagrams)
+8. [Directive 11.6 — Data Purge & Machine Learning Reset](#directive-116--data-purge--machine-learning-reset)
+9. [Directive 11.7 — Regime Archive & Telemetry Infrastructure](#directive-117--regime-archive--telemetry-infrastructure)
+10. [Directive 11.8 — Authority Unification & Legacy Decommission](#directive-118--authority-unification--legacy-decommission)
+11. [File Artifacts Index](#file-artifacts-index)
+12. [Architecture Diagrams](#architecture-diagrams)
 
 ---
 
@@ -792,6 +793,73 @@ Raw OHLC Data
 
 ---
 
+## Directive 11.6 — Data Purge & Machine Learning Reset
+
+### Overview
+
+Directive 11.6 addresses contaminated trade and ML data caused by the random exit bug in VTS simulation. This directive purges affected records, resets dependent adaptive components, and prepares the system for clean data ingestion.
+
+**Status:** ✅ Complete  
+**Implemented:** January 21, 2026  
+**Timestamp Reference:** `2026-01-21T00:00:00Z` (pre-11.6D trades purged)
+
+### Phase 11.6A — Data Purge Implementation
+
+#### Objectives
+- Purge all VTS trades contaminated by random exit outcomes
+- Reset ML data directories to clean state
+- Clear rolling statistics cache
+- Reset adaptive component defaults
+- Control learning ingestion until VTS fix confirmed
+
+#### Key Implementation
+
+1. **File Created**: `server/core/data-purge-11-6a.ts`
+
+2. **Purge Logic**:
+   - Identify trades before Directive 11.6D timestamp
+   - Archive affected VTS trade files
+   - Clear contaminated ML model data
+   - Reset adaptive component parameters
+
+3. **Learning Control**:
+   ```typescript
+   setLearningIngestionEnabled(enabled: boolean)
+   shouldSkipLearningIngestion(mode: string)
+   isLearningIngestionEnabled()
+   ```
+
+4. **Affected Directories**:
+   - `logs/vts_trades/*.json` — VTS trade records
+   - `logs/ml_data/` — Machine learning training data
+   - Rolling statistics cache (in-memory)
+
+5. **Logging Format**: `[11.6A][Component] Message`
+
+#### Purge Report Structure
+```typescript
+interface DataPurgeReport {
+  timestamp: string;
+  vtsTradesPurged: PurgeResult;
+  mlDataReset: boolean;
+  adaptiveComponentsReset: boolean;
+  rollingStatsReset: boolean;
+  learningDisabled: boolean;
+}
+```
+
+### Phase 11.6D — VTS Exit Logic Fix
+
+#### Objectives
+- Fix random exit logic in VTS simulation
+- Establish clean baseline timestamp for future trades
+
+#### Implementation
+- VTS trades after `2026-01-21T00:00:00Z` use fixed exit logic
+- Pre-11.6D trades flagged for purge
+
+---
+
 ## Directive 11.7 — Regime Archive & Telemetry Infrastructure
 
 ### Overview
@@ -831,6 +899,53 @@ Directive 11.7 establishes the regime archive system for historical regime metri
 - `server/core/archival/archival-scheduler.ts` — Weekly scheduler
 - `server/routes/regime-archive.ts` — API endpoints
 - `client/src/pages/machine-learning.tsx` — UI integration
+
+---
+
+### Phase 11.7F — Canonical Regime & Strategy Lock-In
+
+**Date:** January 23, 2026  
+**Status:** ✅ Complete
+
+#### Objectives
+- Establish single source of truth for regime-strategy mappings
+- Implement strategy realignment based on empirical performance
+- Add DriftScore computation and Z-Score persistence
+
+#### Strategy Realignment (v1.4b)
+
+| Strategy | Previous Regime | New Regime | Rationale |
+|----------|-----------------|------------|-----------|
+| SMA Trend Ride | BULL_STABLE | HIGH_VOL_IMPULSE | Better alignment with trend momentum patterns |
+| Range Trading | (confirmed) | LOW_VOL_CHOP | Confirmed as optimal regime with updated metrics |
+
+#### Key Implementation
+
+1. **Canonical Map Lock-In**: `server/config/canonical-regime-strategy-map.ts`
+   - Schema version: `regime-mapping/v1.4c`
+   - All subsystems MUST import from this file
+   - Local inference or mapping logic PROHIBITED
+
+2. **DriftScore Integration**:
+   - Per-regime-strategy DriftScore computation
+   - Rolling 50-sample Z-score history buffer
+   - volZ/trendZ persistence in telemetry
+
+3. **API Endpoints (Directive 11.7F)**:
+   | Endpoint | Purpose |
+   |----------|---------|
+   | `GET /api/system/mapping-drift` | Compare canonical vs empirical regimes |
+   | `GET /api/system/canonical-map` | Get canonical regime-strategy mapping |
+   | `POST /api/system/force-sync-canonical` | Force sync bridge documents |
+   | `GET /api/system/mapping-drift/export` | Export drift data as CSV |
+
+4. **Validation Middleware**: Rejects invalid regime-strategy combinations with detailed logging
+
+#### Key Files
+- `server/config/canonical-regime-strategy-map.ts` — Single source of truth
+- `server/core/analytics/mapping-drift-calculator.ts` — Drift analysis
+- `server/config/drift-descriptions.ts` — Drift category descriptions
+- `server/config/drift-definitions.ts` — Drift thresholds
 
 ---
 
