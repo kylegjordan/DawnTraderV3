@@ -348,9 +348,9 @@ export const guardrailsV2 = pgTable("guardrails_v2", {
   tunedByLatti: boolean("tuned_by_latti").notNull().default(true), // true = LATTI manages, false = manual
   lockedByUser: jsonb("locked_by_user").default(sql`'{}'::jsonb`), // Per-parameter lock status: {portfolioRisk: true, cooldown: false, ...}
   
-  // Phase 28: Enhanced Override Persistence
-  managedByLottie: boolean("managed_by_lottie").notNull().default(true), // true = LATTI manages entire guardrail set
-  manualOverrideEnabled: boolean("manual_override_enabled").notNull().default(false), // true = user has enabled manual control
+  // Phase 28: Enhanced Override Persistence — Directive 11.8B-D: defaults locked (managedByLottie=false, manualOverrideEnabled=true)
+  managedByLottie: boolean("managed_by_lottie").notNull().default(false),
+  manualOverrideEnabled: boolean("manual_override_enabled").notNull().default(true),
   lastUpdatedBy: varchar("last_updated_by", { length: 255 }), // User ID or 'latti' or 'system'
   
   // Phase 5: Kill Switch Persistence (Circuit Breaker State)
@@ -448,9 +448,9 @@ export const screenerFilters = pgTable("screener_filters", {
   activeTimeframes: jsonb("active_timeframes").default(sql`'["5m", "15m", "1h"]'::jsonb`), // Active timeframes (5m, 15m, 1h, 4h)
   confidenceThreshold: integer("confidence_threshold").default(60), // Minimum confidence % (40-90)
   
-  // Phase 28: Override Persistence
-  managedByLottie: boolean("managed_by_lottie").notNull().default(true), // true = LATTI manages filters (global fallback)
-  manualOverrideEnabled: boolean("manual_override_enabled").notNull().default(false), // true = user has manual control (global fallback)
+  // Phase 28: Override Persistence — Directive 11.8B-D: defaults locked (managedByLottie=false, manualOverrideEnabled=true)
+  managedByLottie: boolean("managed_by_lottie").notNull().default(false),
+  manualOverrideEnabled: boolean("manual_override_enabled").notNull().default(true),
   lockedByUser: jsonb("locked_by_user").default(sql`'{}'::jsonb`), // Per-filter lock status
   // REB 2.12C: Per-filter override modes - stores { filterName: { manualOverrideEnabled: boolean } }
   filterOverrides: jsonb("filter_overrides").default(sql`'{}'::jsonb`),

@@ -172,103 +172,21 @@ export async function updateGoals(
 /**
  * Update screener filters (market scanning criteria)
  * 
- * Phase 8.8.3-AJ10.4: Respects per-filter manualOverrideEnabled flags
- * Filters marked as manual (manualOverrideEnabled=true) are NOT overwritten
+ * Directive 11.8B-D: NEUTERED — screener writes are blocked here.
+ * All filter writes must go through /api/filters-v2 (sole write authority).
+ * This function is preserved for interface compatibility but always returns blocked.
  */
 export async function updateScreeners(
-  userId: string,
-  mode: 'live' | 'paper',
-  updates: Partial<z.infer<typeof insertScreenerFiltersSchema>>
+  _userId: string,
+  _mode: 'live' | 'paper',
+  _updates: Partial<z.infer<typeof insertScreenerFiltersSchema>>
 ): Promise<ConfigUpdateResult> {
-  try {
-    console.log(`[ConfigUpdateService] Updating screener filters for user ${userId}, mode: ${mode}`, updates);
-    
-    // Phase 27.F.13.M: Fetch global screener filters (mode-only, no userId)
-    const existing = await storage.getScreenerFilters({ mode });
-    
-    // AJ10.4: Check per-filter manual override flags
-    // Filters with manualOverrideEnabled=true should NOT be overwritten by LATTI/auto-tuning
-    const filterOverrides = (existing as any)?.filterOverrides as Record<string, { manualOverrideEnabled?: boolean }> ?? {};
-    
-    // Helper to check if a filter is in manual mode
-    const isManualFilter = (filterName: string): boolean => {
-      const override = filterOverrides[filterName];
-      return override?.manualOverrideEnabled === true;
-    };
-    
-    // AJ10.4: Protect manual overrides - only use update if filter is NOT manual
-    // Includes all tunable filter parameters (numeric and boolean)
-    const safeUpdates = {
-      minVolume: isManualFilter('minVolume') ? existing?.minVolume : updates.minVolume,
-      minPrice: isManualFilter('minPrice') ? existing?.minPrice : updates.minPrice,
-      maxPrice: isManualFilter('maxPrice') ? existing?.maxPrice : updates.maxPrice,
-      minMarketCap: isManualFilter('minMarketCap') ? existing?.minMarketCap : updates.minMarketCap,
-      maxBidAskSpread: isManualFilter('maxBidAskSpread') ? existing?.maxBidAskSpread : updates.maxBidAskSpread,
-      rsiMin: isManualFilter('rsiMin') ? existing?.rsiMin : updates.rsiMin,
-      rsiMax: isManualFilter('rsiMax') ? existing?.rsiMax : updates.rsiMax,
-      volatilityMin: isManualFilter('volatilityMin') ? existing?.volatilityMin : updates.volatilityMin,
-      volatilityMax: isManualFilter('volatilityMax') ? existing?.volatilityMax : updates.volatilityMax,
-      minLiquidity: isManualFilter('minLiquidity') ? existing?.minLiquidity : updates.minLiquidity,
-      // Boolean filters - also protected when in manual mode
-      excludeStablecoins: isManualFilter('excludeStablecoins') ? existing?.excludeStablecoins : updates.excludeStablecoins,
-      allowRegulatedOnly: isManualFilter('allowRegulatedOnly') ? existing?.allowRegulatedOnly : updates.allowRegulatedOnly,
-    };
-    
-    // Log if any manual filters were protected
-    const protectedFilters = Object.keys(updates).filter(k => isManualFilter(k));
-    if (protectedFilters.length > 0) {
-      console.log(`[AJ10.4][MANUAL_PROTECTED] Skipping update for manual filters: ${protectedFilters.join(', ')}`);
-    }
-    
-    // Merge existing data with safe updates to ensure all required fields are present
-    const mergedData = {
-      userId,
-      mode,
-      minVolume: safeUpdates.minVolume ?? existing?.minVolume ?? '500000.00',
-      minPrice: safeUpdates.minPrice ?? existing?.minPrice ?? '0.001',
-      maxPrice: safeUpdates.maxPrice ?? existing?.maxPrice ?? '50000.00',
-      minMarketCap: safeUpdates.minMarketCap ?? existing?.minMarketCap ?? '10000000.00',
-      maxBidAskSpread: safeUpdates.maxBidAskSpread ?? existing?.maxBidAskSpread ?? '2.50',
-      rsiMin: safeUpdates.rsiMin ?? existing?.rsiMin ?? 20,
-      rsiMax: safeUpdates.rsiMax ?? existing?.rsiMax ?? 80,
-      volatilityMin: safeUpdates.volatilityMin ?? existing?.volatilityMin ?? '0.20',
-      volatilityMax: safeUpdates.volatilityMax ?? existing?.volatilityMax ?? '10.00',
-      excludeStablecoins: safeUpdates.excludeStablecoins ?? existing?.excludeStablecoins ?? true,
-      minLiquidity: safeUpdates.minLiquidity ?? existing?.minLiquidity ?? '250000.00',
-      allowRegulatedOnly: safeUpdates.allowRegulatedOnly ?? existing?.allowRegulatedOnly ?? false,
-    };
-    
-    // Validate merged data
-    const validatedData = insertScreenerFiltersSchema.parse(mergedData);
-    
-    // Update database
-    const screenerData = await storage.upsertScreenerFilters(validatedData);
-    
-    console.info(`[ConfigUpdateService] User ${userId} updated screener filters for ${mode} mode`);
-    
-    // Invalidate caches and refresh context for Walter AI
-    const { configChangeHandler } = await import('./config-change-handler');
-    await configChangeHandler.handleConfigChange({
-      userId,
-      mode,
-      configType: 'screeners',
-      source: 'direct'
-    });
-    
-    return {
-      success: true,
-      message: `Screener filters updated successfully for ${mode} mode`,
-      data: screenerData,
-      timestamp: screenerData.updatedAt?.toISOString() || new Date().toISOString(),
-    };
-  } catch (error: any) {
-    console.error('[ConfigUpdateService] Error updating screener filters:', error);
-    return {
-      success: false,
-      message: `Failed to update screener filters: ${error.message}`,
-      error: error.message,
-    };
-  }
+  console.warn('[11.8B-D][BLOCKED] updateScreeners() called — write authority is /api/filters-v2 only');
+  return {
+    success: false,
+    message: 'Directive 11.8B-D: Screener writes blocked. Use /api/filters-v2 for filter updates.',
+    error: 'Write path neutered per Directive 11.8B-D',
+  };
 }
 
 /**

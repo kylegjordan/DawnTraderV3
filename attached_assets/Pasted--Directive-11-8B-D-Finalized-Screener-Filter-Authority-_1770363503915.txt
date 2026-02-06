@@ -1,0 +1,314 @@
+📘 Directive 11.8B-D (Finalized)
+Screener & Filter Authority Reassignment (Structural)
+
+Phase: 11.8
+Sub-Phase: B-D
+Risk Level: Low (Structural only)
+Behavior Change: ❌ None
+Learning Change: ❌ None
+Execution Change: ❌ None
+
+1️⃣ Purpose
+
+This directive cleans, consolidates, and formalizes filter authority surfaces so the system is structurally ready for predictive control in Phase 11.8B-E, without introducing any adaptive behavior.
+
+After this directive:
+
+There is exactly one UI surface for screener filters
+
+There is exactly one API authority surface for screener filters
+
+Filter authority is explicit, frozen, and boring
+
+All deprecated or parallel authority paths are removed or neutered
+
+No predictive or automated system may adjust filters
+
+This directive aligns the codebase with the canonical Phase 11 architecture, which already assumes these invariants.
+
+2️⃣ Explicit Non-Goals (Guardrails)
+
+Replit must not:
+
+Add predictive or adaptive logic
+
+Change filter values automatically
+
+Introduce ML-driven decisions
+
+Modify execution behavior
+
+Modify or weaken system guards
+
+Re-enable any dormant authority flags
+
+This is authority cleanup only.
+
+3️⃣ Current Authority Model (Pre-State)
+Layer	Status
+User-editable screener filters	Active
+Predictive learning control	❌ Not yet
+System guards (LQ, VN, ρ)	Hard-coded
+Legacy screener UI	Still present
+Dual API routes	Still present
+
+This directive resolves the final two issues.
+
+4️⃣ Target Authority Model (Post-State)
+Layer	Owner
+Screener Filters (DB-backed)	User (manual only)
+SQE Thresholds	DB-backed (manual only)
+System Guards	Code-level constants
+Predictive Control	❌ Disabled (future 11.8B-E / 11.8C)
+
+Important semantic clarification:
+
+The screener UI is structurally incapable of expressing non-manual authority.
+This is intentional and non-temporary.
+
+5️⃣ Required Changes (Mandatory)
+🔧 5.1 Remove Deprecated Screener UI
+
+Delete the following file entirely:
+
+client/src/components/goals/screener-filters-tab.tsx
+
+
+Justification:
+
+Marked @deprecated
+
+No longer routed
+
+Superseded by FiltersWithOverride
+
+Preserves a false and dangerous legacy authority surface
+
+Acceptance Check:
+
+No imports remain
+
+No runtime references
+
+App builds cleanly
+
+🔧 5.2 Enforce a Single UI Authority Surface
+
+The following file is locked as the only screener UI:
+
+client/src/components/goals/filters-with-override.tsx
+
+
+Required guarantees:
+
+All filters displayed as Manual Control
+
+No authority toggles
+
+No predictive or adaptive UI
+
+No LATTi / ARA / preset remnants
+
+Explicitly remove or hard-disable (UI-only):
+
+manualOverrideEnabled toggles
+
+Any future-looking ML switches
+
+Schema fields may exist, but must not drive UI or execution behavior.
+
+🔧 5.3 Consolidate API Authority (Hardened)
+
+Authoritative APIs (KEEP):
+
+GET /api/filters-v2
+PUT /api/filters-v2
+
+
+Legacy API (RESTRICT):
+
+/api/screeners
+
+
+Required behavior:
+
+/api/screeners must be READ-ONLY
+
+It must proxy internally to the same logic used by /api/filters-v2
+
+It must return the exact same JSON structure
+
+It must never write to screener_filters
+
+Important constraint:
+
+Do NOT return 410 Gone unless Replit confirms (via grep) that zero consumers exist
+
+If consumers exist, proxy safely and log a deprecation warning
+
+This avoids accidental UI crashes while eliminating parallel authority.
+
+🔧 5.4 Lock Authority Semantics in Schema & Services (Hardened)
+
+In:
+
+client/src/schemas/filters_v2.ts
+
+
+Enforce at serialization:
+
+managedByLottie = false
+
+manualOverrideEnabled = true
+
+These fields:
+
+Must never change dynamically
+
+Must never affect execution
+
+Must remain inert until explicitly re-authorized in a future phase
+
+🔒 Additional Mandatory Safeguard
+
+Explicitly inspect and neuter:
+
+server/services/config-update-service.ts
+
+
+Required action:
+
+Locate any logic that writes to:
+
+manualOverrideEnabled
+
+managedByLottie
+
+Delete it or hard-code these fields so they can never toggle
+
+These fields must be dead code at runtime.
+
+🔧 5.5 Preserve System Guards (Explicit)
+
+DO NOT MODIFY:
+
+server/config/system-guards.ts
+
+
+Including:
+
+MIN_LIQUIDITY_SCORE
+
+MAX_VOL_NOISE
+
+CORRELATION_THRESHOLD
+
+These are:
+
+Safety-critical
+
+Non-tunable
+
+Non-predictive
+
+Out of scope for Phase 11.8 entirely
+
+🔧 5.6 Execution Confirmation (No Behavior Change)
+
+Replit must confirm no behavioral changes to:
+
+server/services/fx5-scanner.ts
+
+server/services/market-scanner.ts
+
+server/services/active-filter-pool.ts
+
+server/services/signal-orchestrator.ts
+
+server/core/filters/signal_quality_evaluator.ts
+
+Other than route cleanup or source consolidation, execution must remain bit-for-bit identical.
+
+6️⃣ Files to Inspect & Confirm (Audit Evidence Required)
+
+Replit must inspect and report on:
+
+server/services/fx5-scanner.ts
+
+server/services/active-filter-pool.ts
+
+server/services/market-scanner.ts
+
+server/services/unified-filter-gateway.ts
+
+server/storage.ts
+
+server/routes.ts
+
+server/services/config-update-service.ts
+
+For each file:
+
+Confirm filter source
+
+Confirm no predictive logic
+
+Confirm no legacy authority writes
+
+7️⃣ Acceptance Criteria (Non-Negotiable)
+
+Replit must provide verifiable evidence of:
+
+✅ screener-filters-tab.tsx deleted
+
+✅ No references remain (grep proof)
+
+✅ Only filters-with-override.tsx renders screener UI
+
+✅ /api/filters-v2 is the sole write path
+
+✅ /api/screeners is read-only proxy or safely deprecated
+
+✅ All filters are manual-only
+
+✅ No config or service can toggle authority flags
+
+✅ Execution behavior unchanged
+
+✅ App boots cleanly with no warnings
+
+8️⃣ Deliverables
+
+Replit must provide:
+
+📄 Phase_11.8B_D_Deletion_Manifest.md
+
+🔍 Grep logs proving deletion and dead-code removal
+
+📋 File-by-file confirmation table
+
+🧪 Explicit confirmation that no filters auto-change
+
+9️⃣ What Comes Next (Explicit)
+
+This directive unblocks:
+
+➡ 11.8B-E — Predictive Filter Decision Framework
+
+Where:
+
+Predictive systems may propose adjustments
+
+Baseline authority still governs application
+
+No execution until predictive baseline authority exists (11.8C)
+
+✅ Final Statement
+
+Directive 11.8B-D is complete when authority is clean, explicit, and boring.
+
+No intelligence.
+No learning.
+No surprises.
+
+Once this lands cleanly, the system is finally safe to teach.

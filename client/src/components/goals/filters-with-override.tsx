@@ -138,10 +138,6 @@ export function FiltersWithOverride() {
   const { toast } = useToast();
   const { mode } = useTradingMode();
   
-  // REB 2.12C: Local override state derived from server per-filter data
-  // This state is synced with server on every fetch - no stale caching
-  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
-  
   // Local string state for number inputs (always formatted with commas)
   const [localValues, setLocalValues] = useState<Record<string, string>>({});
 
@@ -162,19 +158,12 @@ export function FiltersWithOverride() {
     },
   });
 
-  // REB 2.12C: Always sync local state with server per-filter data on every fetch
-  // This ensures navigation away and back always reflects the correct per-filter override modes
+  // Directive 11.8B-D: Sync local state with server filter data on every fetch
   useEffect(() => {
     if (filtersData?.data?.filters) {
-      const newOverrides: Record<string, boolean> = {};
       const newLocalValues: Record<string, string> = {};
       
       filtersData.data.filters.forEach((f) => {
-        // Directive 11.8B-B1: All filters are now manual - no LATTi authority
-        // overrides tracking preserved for future cleanup but no longer drives UI
-        newOverrides[f.name] = false; // All filters now manual
-        
-        // Stage 3: ALWAYS initialize with formatted value for numeric amount filters
         if (isNumericAmountFilter(f.name) && (typeof f.value === 'number' || typeof f.value === 'string')) {
           newLocalValues[f.name] = formatNumber(f.value);
         } else {
@@ -182,45 +171,11 @@ export function FiltersWithOverride() {
         }
       });
       
-      setOverrides(newOverrides);
       setLocalValues(newLocalValues);
     }
   }, [filtersData]);
 
-  // Override mutation
-  const updateOverrideMutation = useMutation({
-    mutationFn: async (updates: { filterName: string; manualOverrideEnabled: boolean }) => {
-      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
-      const response = await fetch(`/api/filters-v2?mode=${mode}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(updates)
-      });
-      const data = await response.json();
-      
-      if (!response.ok || data.ok === false) {
-        throw new Error(data.detail || data.error || 'Failed to update filter');
-      }
-      
-      return data;
-    },
-    onSuccess: () => {
-      // REB 2.12C: Invalidate cache to ensure per-filter overrides sync on navigation
-      queryClient.invalidateQueries({ queryKey: ['/api/filters-v2', mode] });
-    },
-    onError: (error: any, variables) => {
-      toast({
-        title: "Error",
-        description: error.message || `Failed to update override for ${variables.filterName}`,
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Value mutation
+  // Value mutation — sole write path for filter changes (Directive 11.8B-D)
   const updateValueMutation = useMutation({
     mutationFn: async (updates: { filterName: string; value: number | string | boolean | string[] }) => {
       const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
@@ -248,31 +203,6 @@ export function FiltersWithOverride() {
       });
     },
   });
-
-  // Toggle handler
-  const handleToggleOverride = async (filterName: string) => {
-    const currentOverride = overrides[filterName];
-    const newManualOverrideEnabled = currentOverride;
-    
-    try {
-      await updateOverrideMutation.mutateAsync({
-        filterName,
-        manualOverrideEnabled: newManualOverrideEnabled,
-      });
-      
-      setOverrides(prev => ({
-        ...prev,
-        [filterName]: !prev[filterName],
-      }));
-      
-      toast({
-        title: "Filter automation updated",
-        description: `${filterName} filter updated.`,
-      });
-    } catch (err) {
-      // Error handled in mutation onError
-    }
-  };
 
   if (isLoading) {
     return (
@@ -353,9 +283,8 @@ export function FiltersWithOverride() {
     return acc;
   }, {} as Record<string, FilterV2[]>);
 
-  // Render individual filter input
+  // Render individual filter input — Directive 11.8B-D: All filters are always editable (manual only)
   const renderFilterInput = (f: FilterV2) => {
-    const isDisabled = overrides[f.name];
     const localValue = localValues[f.name] ?? "";
     
     // Minimum History (Days) dropdown
@@ -363,7 +292,6 @@ export function FiltersWithOverride() {
       return (
         <Select
           value={String(f.value)}
-          disabled={isDisabled}
           onValueChange={(val) => {
             updateValueMutation.mutate(
               { filterName: 'minHistoryDays', value: Number(val) },
@@ -392,7 +320,6 @@ export function FiltersWithOverride() {
       return (
         <Select
           value={String(currentValue)}
-          disabled={isDisabled}
           onValueChange={(val) => {
             updateValueMutation.mutate(
               { filterName: 'universeSize', value: Number(val) },
@@ -420,7 +347,7 @@ export function FiltersWithOverride() {
       
       return (
         <DropdownMenu>
-          <DropdownMenuTrigger asChild disabled={isDisabled}>
+          <DropdownMenuTrigger asChild>
             <Button variant="outline" className="w-[200px] justify-between" data-testid={`select-${f.name}`}>
               <span className="truncate">
                 {currentValue.length > 0 ? currentValue.join(", ") : "Select timeframes..."}
@@ -455,7 +382,6 @@ export function FiltersWithOverride() {
       return (
         <Select
           value={String(f.value)}
-          disabled={isDisabled}
           onValueChange={(val) => {
             updateValueMutation.mutate(
               { filterName: f.name, value: val === "true" },
@@ -479,7 +405,6 @@ export function FiltersWithOverride() {
       return (
         <Input
           value={localValue}
-          disabled={isDisabled}
           onChange={(e) => {
             setLocalValues(prev => ({
               ...prev,
@@ -517,7 +442,7 @@ export function FiltersWithOverride() {
               );
             }
           }}
-          className={`max-w-[150px] ${isDisabled ? 'bg-muted' : ''}`}
+          className="max-w-[150px]"
           data-testid={`input-${f.name}`}
         />
       );
@@ -526,8 +451,7 @@ export function FiltersWithOverride() {
     // Default: Plain text input
     return (
       <Input
-        value={isDisabled ? String(f.value) : localValue}
-        disabled={isDisabled}
+        value={localValue}
         onChange={(e) => {
           setLocalValues(prev => ({
             ...prev,
@@ -542,7 +466,7 @@ export function FiltersWithOverride() {
             );
           }
         }}
-        className={`max-w-[150px] ${isDisabled ? 'bg-muted' : ''}`}
+        className="max-w-[150px]"
         data-testid={`input-${f.name}`}
       />
     );

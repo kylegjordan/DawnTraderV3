@@ -2403,14 +2403,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       console.log(`[FiltersV2:${requestId}] REB 2.12C: Updated filterOverrides = ${JSON.stringify(updatedFilterOverrides)}`);
       console.log(`[FiltersV2:${requestId}] REB 2.12C: Override count = ${Object.keys(updatedFilterOverrides).length}`);
       
-      // Update override flags and/or filter values while preserving all other filter values
-      // REB 2.12C: When filterName is specified, don't update global override flags
+      // Directive 11.8B-D: managedByLottie hard-coded false, manualOverrideEnabled hard-coded true
+      // All filter authority is manual; no automated system can toggle these flags
       const updatePayload = {
         mode: current.mode,
         ...updatedFilterValues,
-        // Only update global flags if no specific filter is being toggled
-        managedByLottie: filterName ? currentManagedByLottie : (managedByLottie ?? currentManagedByLottie),
-        manualOverrideEnabled: filterName ? currentManualOverrideEnabled : (manualOverrideEnabled ?? currentManualOverrideEnabled),
+        managedByLottie: false,
+        manualOverrideEnabled: true,
         filterOverrides: updatedFilterOverrides,
         lastUpdatedBy: userId
       };
@@ -2422,41 +2421,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Phase 28.C: Log changes to audit_log
       const auditPromises = [];
       
-      if (managedByLottie !== undefined && currentManagedByLottie !== managedByLottie) {
-        auditPromises.push(storage.addAuditLog({
-          entityType: 'filters',
-          field: 'managedByLottie',
-          oldValue: String(currentManagedByLottie),
-          newValue: String(managedByLottie),
-          changedBy: userId,
-          tradingMode: mode
-        }));
-      }
-      
-      // REB 2.12C: Log per-filter override changes instead of global when filterName is provided
-      if (filterName && manualOverrideEnabled !== undefined) {
-        const oldOverride = existingFilterOverrides[filterName]?.manualOverrideEnabled;
-        if (oldOverride !== manualOverrideEnabled) {
-          auditPromises.push(storage.addAuditLog({
-            entityType: 'filters',
-            field: `${filterName}.manualOverrideEnabled`,
-            oldValue: String(oldOverride ?? 'undefined'),
-            newValue: String(manualOverrideEnabled),
-            changedBy: userId,
-            tradingMode: mode
-          }));
-        }
-      } else if (manualOverrideEnabled !== undefined && currentManualOverrideEnabled !== manualOverrideEnabled) {
-        // Global override change (only when no filterName specified)
-        auditPromises.push(storage.addAuditLog({
-          entityType: 'filters',
-          field: 'manualOverrideEnabled',
-          oldValue: String(currentManualOverrideEnabled),
-          newValue: String(manualOverrideEnabled),
-          changedBy: userId,
-          tradingMode: mode
-        }));
-      }
+      // Directive 11.8B-D: managedByLottie=false and manualOverrideEnabled=true are hard-coded
+      // No toggle audit needed — authority flags are permanently locked
 
       // REB 2.9B Stage 1: Log filter value changes
       if (filterName !== undefined && value !== undefined) {
@@ -3465,28 +3431,17 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Screener filters endpoints (mode-isolated)
-  // Phase 7.4: ConfigBob transparent routing for screeners endpoint
+  // Directive 11.8B-D: /api/screeners is READ-ONLY proxy to same data as /api/filters-v2
+  // All writes must go through /api/filters-v2 (sole write authority)
   apiRouter.get('/screeners', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.user!.id;
+      console.log('[11.8B-D][DEPRECATED] GET /api/screeners called — use /api/filters-v2 instead');
       const mode = req.mode!;
-
-      // Phase 7.4: Try ConfigBob first if enabled
-      if (bobCore.isEnabled()) {
-        try {
-          console.log('[BobRouting] 🎯 Using ConfigBob for /api/screeners');
-          const screenerData = await configBob.getScreeners(userId, mode);
-          return res.json(screenerData);
-        } catch (bobError: any) {
-          console.error('[BobRouting] ⚠️ ConfigBob failed, using original handler:', bobError.message);
-          // Fall through to original implementation below
-        }
-      }
+      const userId = req.user!.id;
 
       let screenerData = await storage.getScreenerFilters({ mode });
 
       if (!screenerData) {
-        // Return defaults if not found
         screenerData = {
           id: '',
           userId,
@@ -3515,30 +3470,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Directive 11.8B-D: PUT /api/screeners is BLOCKED — sole write path is /api/filters-v2
   apiRouter.put('/screeners', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const mode = req.mode!;
-
-      const screenerPayload = { ...req.body, mode, lastUpdatedBy: userId };
-      const screenerData = await storage.upsertScreenerFilters(screenerPayload);
-
-      console.info(`[Screeners] User ${userId} updated screener filters for ${mode} mode`);
-
-      // Phase 8.6.5: Invalidate caches and refresh context for Walter AI
-      const { configChangeHandler } = await import('./services/config-change-handler');
-      await configChangeHandler.handleConfigChange({
-        userId,
-        mode,
-        configType: 'screeners',
-        source: 'api'
-      });
-
-      res.json(screenerData);
-    } catch (error) {
-      console.error('Error updating screener filters:', error);
-      res.status(500).json({ error: 'Failed to update screener filters' });
-    }
+    console.warn('[11.8B-D][BLOCKED] PUT /api/screeners write attempt blocked — use PUT /api/filters-v2');
+    res.status(405).json({
+      error: 'Write access disabled',
+      message: 'Directive 11.8B-D: /api/screeners is read-only. Use PUT /api/filters-v2 for filter updates.',
+      redirectTo: '/api/filters-v2'
+    });
   });
 
   // Phase 27.F.2: Trading Engine Control - Start with deterministic state broadcasting
@@ -19580,29 +19519,8 @@ Important: Extract the exact field names and numeric values from the user's requ
               break;
 
             case 'filters':
-              // Update screener filters
-              if (interpretation.actionDetails?.field && interpretation.actionDetails?.value !== undefined) {
-                const currentFilters = await storage.getScreenerFilters({ mode });
-                if (currentFilters) {
-                  const updateData = {
-                    ...currentFilters,
-                    [interpretation.actionDetails.field]: interpretation.actionDetails.value,
-                    mode,
-                    lastUpdatedBy: userId
-                  };
-                  await storage.upsertScreenerFilters(updateData);
-                  console.info(`[Walter] Updated filter ${interpretation.actionDetails.field} to ${interpretation.actionDetails.value} (${mode} mode)`);
-                  
-                  // Phase 8.6.5: Invalidate caches and refresh context
-                  const { configChangeHandler: filtersHandler } = await import('./services/config-change-handler');
-                  await filtersHandler.handleConfigChange({
-                    userId,
-                    mode,
-                    configType: 'screeners',
-                    source: 'direct'
-                  });
-                }
-              }
+              // Directive 11.8B-D: Walter AI screener writes blocked — sole write authority is /api/filters-v2
+              console.warn(`[11.8B-D][BLOCKED] Walter AI attempted screener filter write for ${interpretation.actionDetails?.field} — redirecting to /api/filters-v2`);
               break;
 
             case 'strategy':
