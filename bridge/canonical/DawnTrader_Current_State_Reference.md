@@ -2,9 +2,9 @@
 ## Paper Trading Engine Architecture, Strategies, Guardrails & System Components
 
 **Document Created:** December 12, 2025  
-**Last Updated:** February 5, 2026  
+**Last Updated:** February 6, 2026  
 **Purpose:** Comprehensive reference for the paper trading engine and all configurable components  
-**Current Status:** Phase 11.8C Complete (Authority Unification, Legacy Decommission, Single Learning Authority)
+**Current Status:** Phase 11.8D1 Complete (Filter Authority Cleanup)
 
 ---
 
@@ -87,6 +87,10 @@ DawnTrader is a **long-only, spot-trading cryptocurrency day trading platform** 
 | Strategy Presets | 2026-02-04 | Guardrails & Filters |
 | Goals Presets | 2026-02-04 | Manual guardrail configuration |
 | Purpose Tab | 2026-02-04 | Removed (decorative only) |
+| updateScreeners() | 2026-02-06 | /api/filters-v2 (sole write path) |
+| /api/screeners endpoints | 2026-02-06 | /api/filters-v2 (410 Gone) |
+| NLAI screener liquidity action | 2026-02-06 | Deleted (no replacement) |
+| Per-filter override system | 2026-02-06 | Removed (all filters manual) |
 
 ## 1.4 Authority Model
 
@@ -97,6 +101,7 @@ DawnTrader is a **long-only, spot-trading cryptocurrency day trading platform** 
 | **System Guards** | `server/config/system-guards.ts` | Immutable thresholds |
 | **Score Weights** | `server/config/score-weights.config.ts` | FinalScore coefficients |
 | **Strategy Governance** | `server/config/strategy-governance.ts` | Strategy dependencies |
+| **Filter Write Authority** | `PUT /api/filters-v2` | Sole screener filter write path |
 
 ## 1.5 Key Constants
 
@@ -534,17 +539,27 @@ Raw patterns are normalized to canonical types:
 
 # 17. Screener Filters
 
-**Table:** `screener_filters`
+**Table:** `screener_filters`  
+**Write Authority:** `PUT /api/filters-v2` (sole path)  
+**Read:** `GET /api/filters-v2` (returns `FilterParamV2[]` without authority flags)  
+**Deprecated:** `/api/screeners` returns 410 Gone
 
 | Filter | Type | Description |
 |--------|------|-------------|
 | `minPrice` | number | Minimum asset price |
 | `maxPrice` | number | Maximum asset price |
-| `minVolume24h` | number | Minimum 24h volume |
-| `maxSpread` | number | Maximum bid-ask spread |
-| `minDailyRange` | number | Minimum daily range % |
+| `minVolume` | number | Minimum 24h volume |
+| `minLiquidity` | number | Minimum liquidity |
+| `maxBidAskSpread` | number | Maximum bid-ask spread |
+| `minMarketCap` | number | Minimum market cap |
 | `excludeStablecoins` | boolean | Skip stablecoin pairs |
-| `passiveLearning` | boolean | Observe only, no trades |
+| `allowRegulatedOnly` | boolean | Regulated pairs only |
+| `universeSize` | number | Market universe size |
+| `activeTimeframes` | string[] | Active scanning timeframes |
+| `confidenceThreshold` | number | Signal confidence threshold |
+| `minHistoryDays` | number | Minimum trading history |
+
+DB columns `managedByLottie`, `manualOverrideEnabled`, `filterOverrides` are FROZEN (preserved but unused at runtime).
 
 ---
 

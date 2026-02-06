@@ -31,23 +31,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { ModeIndicator } from "./mode-indicator";
 
-/**
- * REB 2.9B Stage 3: Final Screener UI (11-20 Archive Phase 8.6/8.7)
- * 
- * Directive 11.8B-B1: Screeners are now explicitly MANUAL/SYSTEM-SET.
- * All LATTi authority surfaces removed - filters are user-configurable.
- * 
- * Section 1: Always format numeric fields on blur
- * Section 2: Active Timeframes multi-select dropdown
- * Section 3: Market Universe Size dropdown
- * Section 4: Quote Currencies hidden from UI (but kept in API)
- */
-
 interface FilterV2 {
   name: string;
   value: number | string | boolean | string[];
-  managedByLottie: boolean; // FROZEN per 11.8B-B - preserved for future cleanup
-  manualOverrideEnabled: boolean;
   displayName: string;
   category: string;
 }

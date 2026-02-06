@@ -219,7 +219,6 @@ export function getRequiredPermission(action: string): Permission | null {
     'update_max_drawdown': 'modify_risk_settings',
     'update_max_daily_loss': 'modify_risk_settings',
     'update_trading_goal': 'modify_goals',
-    'update_screener_liquidity': 'modify_filters',
   };
   
   return actionMap[action] || null;

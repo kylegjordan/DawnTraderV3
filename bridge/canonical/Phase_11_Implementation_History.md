@@ -1184,18 +1184,27 @@ Phase 11 represents the mathematical and operational maturation of DawnTrader:
 | 11.5 | Mathematical Foundations | Z-Score, profitability gates, macro-state |
 | 11.7 | Regime Archive | Weekly archival with manifest tracking |
 | 11.8 | Authority Unification | Phase 11 Predictive Learning as sole authority |
+| 11.8B-D1 | Filter Authority Cleanup | /api/filters-v2 sole write path, screener endpoints removed |
 
-**Current State (February 5, 2026):**
-- All Phase 11 directives complete (11.0-11.8C)
+**Current State (February 6, 2026):**
+- All Phase 11 directives complete (11.0-11.8D1)
 - Phase 11 Predictive Learning is **sole authority** for parameter adjustment
 - All parallel learning systems decommissioned (LATTi, Goals ML, ARA, DHMA Tuning)
 - Net Expectancy Kernel is **sole authority** for EV calculations
+- `/api/filters-v2` is **sole write path** for screener filters
+- `/api/screeners` returns 410 Gone (GET and PUT)
+- `updateScreeners()` function deleted from config-update-service
+- NLAI screener liquidity action handler deleted
+- Walter AI filter writes return error (no logging, no redirect)
+- `managedByLottie`/`manualOverrideEnabled` removed from runtime types (`FilterParamV2`, `updateFiltersV2Schema`)
+- `filterOverrides` per-filter override system removed from GET/PUT handlers
+- Database columns `managedByLottie`, `manualOverrideEnabled`, `filterOverrides` preserved (FROZEN)
 - Regime Archive system operational with weekly archival
-- Database fields `tunedByLatti` and `managedByLottie` FROZEN
+- Database fields `tunedByLatti` FROZEN
 - UI simplified: "Guardrails & Filters" page with 5 tabs
 - Ready for Phase 12 planning
 
 ---
 
 *Document maintained by DawnTrader Development Team*  
-*Last updated: February 5, 2026*
+*Last updated: February 6, 2026*

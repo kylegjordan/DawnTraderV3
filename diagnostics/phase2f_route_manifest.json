@@ -958,7 +958,6 @@
     ],
     "middlewares": [
       "authenticateToken",
-      "validateMode",
       "anonymous"
     ]
   },

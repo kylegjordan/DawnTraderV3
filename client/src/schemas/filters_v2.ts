@@ -1,23 +1,18 @@
 /**
- * Phase 3: Filters V2 Schema with Manual Override Support
+ * Filters V2 Schema
  * 
- * Directive 11.8B-B1: Filters are now explicitly manual/system-set.
- * managedByLottie field is FROZEN - preserved for future cleanup but no longer drives UI.
- * 
- * NO ALGORITHMIC CHANGES - This is purely a metadata upgrade for control visibility.
+ * Directive 11.8B-D1: All filters are user-controlled and manual-only.
+ * No AI or automated system may adjust filters prior to Phase 11.8C.
  */
 
 import { z } from "zod";
 
-// Filter parameter with control metadata
 export interface FilterParamV2 {
   name: string;
   value: number | string | boolean | string[];
-  managedByLottie: boolean;      // FROZEN per 11.8B-B - preserved for future cleanup
-  manualOverrideEnabled: boolean; // true = user has unlocked for manual editing
-  displayName: string;            // Human-readable name for UI
-  category: string;               // Group category (e.g., "volume", "price", "risk", "universe")
-  description?: string;           // Tooltip description
+  displayName: string;
+  category: string;
+  description?: string;
 }
 
 // Filters V2 structure (active screener filters with metadata)
@@ -61,8 +56,7 @@ export const FILTER_CATEGORIES = {
   DATA_QUALITY: "Data Quality"
 } as const;
 
-// Filter metadata definitions (used by UI to render controls)
-export const FILTER_METADATA: Record<string, Omit<FilterParamV2, "value" | "managedByLottie" | "manualOverrideEnabled">> = {
+export const FILTER_METADATA: Record<string, Omit<FilterParamV2, "value">> = {
   minVolume: {
     name: "minVolume",
     displayName: "Min Volume ($)",
@@ -134,26 +128,19 @@ export const FILTER_METADATA: Record<string, Omit<FilterParamV2, "value" | "mana
   }
 };
 
-// Zod schema for filter updates via API
 export const updateFiltersV2Schema = z.object({
   mode: z.enum(["paper", "live"]),
   filters: z.record(z.object({
-    value: z.union([z.number(), z.string(), z.boolean(), z.array(z.string())]).optional(),
-    managedByLottie: z.boolean().optional(),
-    manualOverrideEnabled: z.boolean().optional()
+    value: z.union([z.number(), z.string(), z.boolean(), z.array(z.string())]).optional()
   }))
 });
 
 export type UpdateFiltersV2Input = z.infer<typeof updateFiltersV2Schema>;
 
-// Helper to convert screener_filters database row to FiltersV2 format
-// Directive 11.8B-B1: managedByLottie field is FROZEN - no longer drives UI authority
 export function toFiltersV2(dbRow: any): FiltersV2 {
   const createParam = (name: string, value: any): FilterParamV2 => ({
     name,
     value,
-    managedByLottie: false, // FROZEN per 11.8B-B - UI shows "Configured" regardless
-    manualOverrideEnabled: true, // All filters are manually editable
     displayName: FILTER_METADATA[name]?.displayName || name,
     category: FILTER_METADATA[name]?.category || "Other",
     description: FILTER_METADATA[name]?.description

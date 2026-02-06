@@ -4,7 +4,6 @@ import { startLiveTrading, stopLiveTrading, checkLiveTradingStatus } from './liv
 import { 
   updateGuardrails, 
   updateGoals, 
-  updateScreeners,
   getGuardrails,
   getScreeners
 } from './config-update-service';
@@ -498,56 +497,6 @@ export class NLAIActionRegistry {
         }
       },
       description: 'Update maximum daily loss amount',
-      requiredAuth: true,
-    });
-
-    this.register({
-      id: 'update_screener_liquidity',
-      patterns: [
-        /(?:please\s+)?(?:set|change|update|adjust|modify|widen|tighten|increase|decrease)(?:\s+(?:the|my))?(?:\s+screener)?(?:\s+(?:min(?:imum)?)?(?:\s+liquidity)?(?:\s+filter)?)\s+to\s+\$?([\d,]+(?:\.\d{2})?)/i,
-        /(?:please\s+)?(?:make|put)(?:\s+the)?(?:\s+screener)?(?:\s+liquidity)\s+\$?([\d,]+(?:\.\d{2})?)/i,
-      ],
-      category: 'system',
-      handler: async (userId: string, intent: ActionIntent) => {
-        try {
-          const liquidityAmount = intent.extractedValue ? parseFloat(intent.extractedValue.replace(/,/g, '')) : null;
-
-          if (!liquidityAmount || liquidityAmount <= 0) {
-            return {
-              success: false,
-              message: 'Please provide a valid liquidity amount greater than 0.',
-              error: 'Invalid liquidity amount',
-            };
-          }
-
-          const mode = 'paper';
-          
-          const result = await updateScreeners(userId, mode, {
-            minLiquidity: liquidityAmount.toFixed(2),
-          });
-
-          if (result.success) {
-            return {
-              success: true,
-              message: `✅ Minimum liquidity filter adjusted to $${liquidityAmount.toFixed(2)} for ${mode} mode. Updated at ${result.timestamp}.`,
-              data: result.data,
-            };
-          } else {
-            return {
-              success: false,
-              message: `I attempted to change screener liquidity filter but the database did not confirm the update: ${result.error}`,
-              error: result.error,
-            };
-          }
-        } catch (error: any) {
-          return {
-            success: false,
-            message: `I attempted to change screener liquidity filter but encountered an error: ${error.message}`,
-            error: error.message,
-          };
-        }
-      },
-      description: 'Update screener minimum liquidity filter',
       requiredAuth: true,
     });
 

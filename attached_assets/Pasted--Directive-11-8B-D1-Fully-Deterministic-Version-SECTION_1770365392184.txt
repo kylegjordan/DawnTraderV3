@@ -1,0 +1,300 @@
+📘 Directive 11.8B-D1 — Fully Deterministic Version
+SECTION 1 — SERVER-SIDE CODE REMOVALS (NO BEHAVIOR CHANGE)
+🔧 1.1 config-update-service.ts
+
+File:
+
+server/services/config-update-service.ts
+
+DELETE COMPLETELY
+export async function updateScreeners(...)
+
+
+Rationale:
+
+Function is permanently blocked
+
+No longer part of any valid authority model
+
+Its existence falsely implies an alternative write path
+
+All callers were already neutered
+
+Required Follow-ups:
+
+Remove all imports of updateScreeners
+
+Remove all references in:
+
+nlai-action-registry.ts
+
+Any Walter / NLAI action handlers
+
+❗ If TypeScript interfaces require it:
+
+Replace with a throwing stub that immediately throws:
+
+throw new Error("updateScreeners removed in Phase 11.8B-D1");
+
+
+No logging. No fallback. No compatibility behavior.
+
+🔧 1.2 Walter / NLAI Filter Authority
+
+File (known from log):
+
+server/routes.ts   (Walter chat handler, case 'filters')
+
+DELETE COMPLETELY
+
+The case 'filters' branch that:
+
+Previously called storage.upsertScreenerFilters()
+
+Was later hard-blocked
+
+Rationale:
+
+AI must not even conceptually own filter authority
+
+This path is explicitly disallowed until 11.8C
+
+Leaving a blocked branch invites resurrection
+
+Replacement:
+
+If a switch requires exhaustiveness:
+
+Replace with a default error:
+
+return { ok: false, error: "Filter authority unavailable" }
+
+
+No proxying. No forwarding.
+
+🔧 1.3 /api/screeners ROUTE
+
+File:
+
+server/routes.ts
+
+REQUIRED ACTION
+
+If GET /api/screeners is still present:
+
+Delete the entire route handler, OR
+
+Replace with a single explicit error response:
+
+res.status(410).json({
+  ok: false,
+  error: "Deprecated. Use /api/filters-v2",
+});
+
+ABSOLUTELY FORBIDDEN
+
+Proxies
+
+Shared logic
+
+Compatibility layers
+
+Silent redirects
+
+Rationale:
+
+There is now exactly one filter API
+
+Any legacy consumer must fail loudly
+
+🔧 1.4 storage.ts (If Present)
+
+If storage.ts contains:
+
+upsertScreenerFilters(...)
+
+
+Then:
+
+KEEP the function
+
+BUT:
+
+Add a comment:
+
+// Sole write path: /api/filters-v2 only
+// Any other caller is a bug
+
+
+Confirm it is not exported anywhere else
+
+Do not delete storage primitives.
+
+SECTION 2 — SCHEMA & TYPE CLEANUP (NO DB MIGRATION)
+🔧 2.1 Remove Authority Flags from Runtime Types
+
+Files:
+
+client/src/schemas/filters_v2.ts
+shared/schema/*
+
+REMOVE FROM ALL INTERFACES
+managedByLottie
+manualOverrideEnabled
+
+
+Conditions satisfied (already verified):
+
+Hard-coded at write time
+
+Never toggled
+
+Never read by execution
+
+Never read by UI
+
+DO NOT:
+
+Drop DB columns
+
+Add migrations
+
+Touch historical data
+
+Result:
+
+Authority flags exist only in DB defaults
+
+Runtime code cannot see or reference them
+
+🔧 2.2 Remove Audit Logic for Authority Flags
+
+If any audit or telemetry code logs:
+
+managedByLottie changes
+
+manualOverrideEnabled toggles
+
+➡ Delete those logs entirely
+
+Rationale:
+
+Flags are dead
+
+Logging them implies mutability
+
+SECTION 3 — UI CLEANUP (FINAL PASS)
+🔧 3.1 Filters UI
+
+File:
+
+client/src/components/goals/filters-with-override.tsx
+
+
+Already verified clean.
+
+Final requirement:
+
+Remove any comments implying:
+
+“override”
+
+“future AI control”
+
+“managed by Lottie”
+
+UI language must be present-tense and literal.
+
+🔧 3.2 Remove Any Other Screener UI Files
+
+Search and delete:
+
+Any remaining files with names like:
+
+*screener*
+
+*override*
+
+*automation*
+
+If unused.
+
+No soft deprecation.
+
+SECTION 4 — CANONICAL DOCUMENTATION (EXACT TEXT REQUIRED)
+📘 4.1 Architecture File
+
+File:
+
+bridge/canonical/DawnTrader_System_Architecture_Execution_Flow.md
+
+
+Add verbatim statements:
+
+Filter Authority (Phase 11.8+)
+Screener filters are user-controlled and manual-only.
+No AI, predictive, or automated system may adjust filters prior to Phase 11.8C.
+
+Predictive systems may observe filter outcomes but have zero execution or configuration authority.
+
+📘 4.2 Phase 11 History
+
+File:
+
+bridge/canonical/Phase_11_Implementation_History.md
+
+
+Add section:
+
+11.8B-D1 — Authority Debris Removal
+
+Removed blocked screener write paths
+
+Removed AI filter authority stubs
+
+Removed legacy APIs and schema fields
+
+Canonical architecture updated
+
+Execution behavior unchanged
+
+📘 4.3 Current State Reference
+
+File:
+
+bridge/canonical/DawnTrader_Current_State_Reference.md
+
+
+Update:
+
+Filter authority model
+
+Remove references to:
+
+LATTi
+
+Managed overrides
+
+Parallel APIs
+
+Legacy ML tuning
+
+SECTION 5 — VERIFICATION (NO INTERPRETATION)
+
+Replit must provide:
+
+Deletion manifest (files + symbols)
+
+Grep proof:
+
+updateScreeners
+
+managedByLottie
+
+manualOverrideEnabled
+
+/api/screeners
+
+App boot confirmation
+
+Zero diff in execution behavior

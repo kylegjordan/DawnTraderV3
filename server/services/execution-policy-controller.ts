@@ -236,7 +236,6 @@ export class ExecutionPolicyController {
       'update_risk_per_trade': 'modifyGuardrails',
       'update_max_drawdown': 'modifyGuardrails',
       'update_max_daily_loss': 'modifyGuardrails',
-      'update_screener_liquidity': 'updateFilters',
       'update_trading_goal': 'adjustGoals',
       'start_paper_simulation': 'paperTradingActivation',
       'stop_paper_simulation': 'paperTradingActivation',

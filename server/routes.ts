@@ -2173,113 +2173,79 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(404).json({ ok: false, code: 'NOT_FOUND', detail: `No filters found for mode: ${mode}` });
       }
 
-      // Phase 28: Read actual override flags from database instead of hardcoding
-      // REB 2.12C: Read per-filter overrides from filterOverrides JSON
-      const globalManagedByLottie = screenerData.managedByLottie ?? true;
-      const globalManualOverrideEnabled = screenerData.manualOverrideEnabled ?? false;
-      const filterOverrides = (screenerData.filterOverrides as Record<string, { manualOverrideEnabled?: boolean }>) ?? {};
-      
-      // REB 2.12C: Helper to get per-filter override mode (falls back to global if not set)
-      const getFilterOverride = (filterName: string) => {
-        const perFilterOverride = filterOverrides[filterName];
-        if (perFilterOverride && typeof perFilterOverride.manualOverrideEnabled === 'boolean') {
-          return {
-            managedByLottie: globalManagedByLottie,
-            manualOverrideEnabled: perFilterOverride.manualOverrideEnabled
-          };
-        }
-        return {
-          managedByLottie: globalManagedByLottie,
-          manualOverrideEnabled: globalManualOverrideEnabled
-        };
-      };
-      
-      // Convert to FiltersV2 format with control metadata as ARRAY
+      // Directive 11.8B-D1: All filters are manual-only. No authority flags in response.
       const filtersV2 = {
         mode,
         filters: [
           {
             name: "minVolume",
             value: parseFloat(screenerData.minVolume),
-            ...getFilterOverride("minVolume"),
             displayName: "Min Volume ($)",
             category: "Volume & Liquidity"
           },
           {
             name: "minLiquidity",
             value: parseFloat(screenerData.minLiquidity),
-            ...getFilterOverride("minLiquidity"),
             displayName: "Min Liquidity ($)",
             category: "Volume & Liquidity"
           },
           {
             name: "minPrice",
             value: parseFloat(screenerData.minPrice),
-            ...getFilterOverride("minPrice"),
             displayName: "Min Price ($)",
             category: "Price Range"
           },
           {
             name: "maxPrice",
             value: parseFloat(screenerData.maxPrice),
-            ...getFilterOverride("maxPrice"),
             displayName: "Max Price ($)",
             category: "Price Range"
           },
           {
             name: "maxBidAskSpread",
             value: parseFloat(screenerData.maxBidAskSpread),
-            ...getFilterOverride("maxBidAskSpread"),
             displayName: "Max Bid-Ask Spread (%)",
-            category: "Execution Quality"  // Directive 10.9F: Renamed from "Risk & Volatility"
+            category: "Execution Quality"
           },
           {
             name: "minMarketCap",
             value: parseFloat(screenerData.minMarketCap),
-            ...getFilterOverride("minMarketCap"),
             displayName: "Min Market Cap ($)",
             category: "Market Filters"
           },
           {
             name: "excludeStablecoins",
             value: screenerData.excludeStablecoins,
-            ...getFilterOverride("excludeStablecoins"),
             displayName: "Exclude Stablecoins",
             category: "Market Filters"
           },
           {
             name: "allowRegulatedOnly",
             value: screenerData.allowRegulatedOnly,
-            ...getFilterOverride("allowRegulatedOnly"),
             displayName: "Regulated Only",
             category: "Market Filters"
           },
           {
             name: "universeSize",
             value: screenerData.universeSize,
-            ...getFilterOverride("universeSize"),
             displayName: "Market Universe Size",
             category: "Universe & Signal Controls"
           },
-          // Directive 10.9F: Quote Currency filter REMOVED - all quote currencies now accepted
           {
             name: "activeTimeframes",
             value: screenerData.activeTimeframes,
-            ...getFilterOverride("activeTimeframes"),
             displayName: "Active Timeframes",
             category: "Universe & Signal Controls"
           },
           {
             name: "confidenceThreshold",
             value: screenerData.confidenceThreshold,
-            ...getFilterOverride("confidenceThreshold"),
             displayName: "Confidence Threshold (%)",
             category: "Universe & Signal Controls"
           },
           {
             name: "minHistoryDays",
             value: screenerData.minHistoryDays ?? 30,
-            ...getFilterOverride("minHistoryDays"),
             displayName: "Minimum History (Days)",
             category: "Data Quality"
           }
@@ -2301,9 +2267,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // PUT /api/filters-v2?mode=paper|live
-  // Phase 28: Persist override flag changes to database
-  // REB 2.9B: Also handles filter value updates (minHistoryDays)
+  // PUT /api/filters-v2?mode=paper|live — sole write path for filter updates
   apiRouter.put('/filters-v2', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
     const requestId = `fltv2-${Date.now()}`;
     try {
@@ -2314,19 +2278,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
       }
 
-      const { managedByLottie, manualOverrideEnabled, filterName, value } = req.body;
-      
-      // Validate override flags
-      if (typeof managedByLottie !== 'boolean' && managedByLottie !== undefined) {
-        return res.status(400).json({ ok: false, code: 'INVALID_INPUT', detail: 'managedByLottie must be a boolean' });
-      }
-      
-      if (typeof manualOverrideEnabled !== 'boolean' && manualOverrideEnabled !== undefined) {
-        return res.status(400).json({ ok: false, code: 'INVALID_INPUT', detail: 'manualOverrideEnabled must be a boolean' });
-      }
+      const { filterName, value } = req.body;
 
-      // REB 2.9B Stage 1: Validate filter value updates only when value is provided
-      // Allow toggle-only requests (filterName + manualOverrideEnabled without value)
       if (filterName === 'minHistoryDays' && value !== undefined) {
         const allowedValues = [30, 60, 90, 180];
         const numValue = typeof value === 'string' ? parseInt(value, 10) : value;
@@ -2339,28 +2292,23 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         }
       }
       
-      console.log(`[FiltersV2:${requestId}] Updating - managedByLottie=${managedByLottie}, manualOverrideEnabled=${manualOverrideEnabled}, filterName=${filterName}, value=${value}`);
+      console.log(`[FiltersV2:${requestId}] Updating - filterName=${filterName}, value=${value}`);
       
-      // Get current filters
       const current = await storage.getScreenerFilters({ mode });
       
       if (!current) {
         return res.status(404).json({ ok: false, code: 'NOT_FOUND', detail: `No filters found for mode: ${mode}` });
       }
       
-      // Extract only the filter value fields (exclude id, createdAt, updatedAt, etc.)
       const {
         id, createdAt, updatedAt,
-        managedByLottie: currentManagedByLottie,
-        manualOverrideEnabled: currentManualOverrideEnabled,
-        lastUpdatedBy: currentLastUpdatedBy,
-        lockedByUser: currentLockedByUser,
-        filterOverrides: currentFilterOverrides,
+        managedByLottie: _mbl,
+        manualOverrideEnabled: _moe,
+        lastUpdatedBy: _lub,
+        lockedByUser: _lbu,
+        filterOverrides: _fo,
         ...filterValues
       } = current;
-
-      // REB 2.12C: Per-filter override storage
-      const existingFilterOverrides = (currentFilterOverrides as Record<string, { manualOverrideEnabled?: boolean }>) ?? {};
 
       // REB 2.9B Stage 1: Apply filter value updates if provided
       const updatedFilterValues: Record<string, any> = { ...filterValues };
@@ -2389,42 +2337,18 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         }
       }
       
-      // REB 2.12C: Build per-filter overrides when a specific filter is being toggled
-      // IMPORTANT: Always preserve existing overrides, only modify the specific filter being changed
-      let updatedFilterOverrides = { ...existingFilterOverrides };
-      console.log(`[FiltersV2:${requestId}] REB 2.12C: Existing filterOverrides = ${JSON.stringify(existingFilterOverrides)}`);
-      
-      if (filterName && manualOverrideEnabled !== undefined) {
-        // Store per-filter override mode
-        updatedFilterOverrides[filterName] = { manualOverrideEnabled };
-        console.log(`[FiltersV2:${requestId}] REB 2.12C: Set per-filter override for ${filterName} = { manualOverrideEnabled: ${manualOverrideEnabled} }`);
-      }
-      
-      console.log(`[FiltersV2:${requestId}] REB 2.12C: Updated filterOverrides = ${JSON.stringify(updatedFilterOverrides)}`);
-      console.log(`[FiltersV2:${requestId}] REB 2.12C: Override count = ${Object.keys(updatedFilterOverrides).length}`);
-      
-      // Directive 11.8B-D: managedByLottie hard-coded false, manualOverrideEnabled hard-coded true
-      // All filter authority is manual; no automated system can toggle these flags
       const updatePayload = {
         mode: current.mode,
         ...updatedFilterValues,
         managedByLottie: false,
         manualOverrideEnabled: true,
-        filterOverrides: updatedFilterOverrides,
         lastUpdatedBy: userId
       };
       
-      console.log(`[FiltersV2:${requestId}] REB 2.9B: Update payload minHistoryDays = ${updatePayload.minHistoryDays}`);
-      
       const updated = await storage.upsertScreenerFilters(updatePayload);
       
-      // Phase 28.C: Log changes to audit_log
       const auditPromises = [];
       
-      // Directive 11.8B-D: managedByLottie=false and manualOverrideEnabled=true are hard-coded
-      // No toggle audit needed — authority flags are permanently locked
-
-      // REB 2.9B Stage 1: Log filter value changes
       if (filterName !== undefined && value !== undefined) {
         const oldValue = (current as any)[filterName];
         const newValue = updatedFilterValues[filterName];
@@ -2450,14 +2374,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         console.log(`[REB 2.9B Stage 1][filters-v2] ${filterName} updated userId=${userId} mode=${mode} value=${updatedFilterValues[filterName]}`);
       }
       
-      // REB 2.9C Section 2B: Log filter updates from UI (first 20 only)
-      if (!globalThis.__reb29c_api_puts) globalThis.__reb29c_api_puts = 0;
-      globalThis.__reb29c_api_puts++;
-      if (globalThis.__reb29c_api_puts <= 20) {
-        console.log(`[REB2.9C][UI->API] Filter updated (put ${globalThis.__reb29c_api_puts}/20):`, { filterName, value, manualOverrideEnabled });
-      }
-      
-      console.log(`[FiltersV2:${requestId}] Override flags updated successfully`);
+      console.log(`[FiltersV2:${requestId}] Filter updated successfully`);
       
       // Broadcast config update via WebSocket
       const { contextBridge } = await import('./services/context-bridge.js');
@@ -3430,54 +3347,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Screener filters endpoints (mode-isolated)
-  // Directive 11.8B-D: /api/screeners is READ-ONLY proxy to same data as /api/filters-v2
-  // All writes must go through /api/filters-v2 (sole write authority)
-  apiRouter.get('/screeners', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
-    try {
-      console.log('[11.8B-D][DEPRECATED] GET /api/screeners called — use /api/filters-v2 instead');
-      const mode = req.mode!;
-      const userId = req.user!.id;
-
-      let screenerData = await storage.getScreenerFilters({ mode });
-
-      if (!screenerData) {
-        screenerData = {
-          id: '',
-          userId,
-          mode,
-          minVolume: '500000.00',
-          minPrice: '0.001',
-          maxPrice: '50000.00',
-          minMarketCap: '10000000.00',
-          maxBidAskSpread: '2.50',
-          rsiMin: 20,
-          rsiMax: 80,
-          volatilityMin: '0.20',
-          volatilityMax: '10.00',
-          excludeStablecoins: true,
-          minLiquidity: '250000.00',
-          allowRegulatedOnly: false,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        };
-      }
-
-      res.json(screenerData);
-    } catch (error) {
-      console.error('Error fetching screener filters:', error);
-      res.status(500).json({ error: 'Failed to fetch screener filters' });
-    }
+  // Directive 11.8B-D1: /api/screeners removed. Use /api/filters-v2.
+  apiRouter.get('/screeners', authenticateToken, (_req, res) => {
+    res.status(410).json({ ok: false, error: 'Deprecated. Use /api/filters-v2' });
   });
-
-  // Directive 11.8B-D: PUT /api/screeners is BLOCKED — sole write path is /api/filters-v2
-  apiRouter.put('/screeners', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
-    console.warn('[11.8B-D][BLOCKED] PUT /api/screeners write attempt blocked — use PUT /api/filters-v2');
-    res.status(405).json({
-      error: 'Write access disabled',
-      message: 'Directive 11.8B-D: /api/screeners is read-only. Use PUT /api/filters-v2 for filter updates.',
-      redirectTo: '/api/filters-v2'
-    });
+  apiRouter.put('/screeners', authenticateToken, (_req, res) => {
+    res.status(410).json({ ok: false, error: 'Deprecated. Use /api/filters-v2' });
   });
 
   // Phase 27.F.2: Trading Engine Control - Start with deterministic state broadcasting
@@ -19519,9 +19394,7 @@ Important: Extract the exact field names and numeric values from the user's requ
               break;
 
             case 'filters':
-              // Directive 11.8B-D: Walter AI screener writes blocked — sole write authority is /api/filters-v2
-              console.warn(`[11.8B-D][BLOCKED] Walter AI attempted screener filter write for ${interpretation.actionDetails?.field} — redirecting to /api/filters-v2`);
-              break;
+              return { ok: false, error: 'Filter authority unavailable' };
 
             case 'strategy':
               // Update strategy settings

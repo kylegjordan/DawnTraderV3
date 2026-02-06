@@ -5,7 +5,7 @@
  */
 
 import { storage } from '../storage';
-import { insertGuardrailsSchema, insertScreenerFiltersSchema } from '@shared/schema';
+import { insertGuardrailsSchema } from '@shared/schema';
 import type { z } from 'zod';
 
 export interface ConfigUpdateResult {
@@ -167,26 +167,6 @@ export async function updateGoals(
       error: error.message,
     };
   }
-}
-
-/**
- * Update screener filters (market scanning criteria)
- * 
- * Directive 11.8B-D: NEUTERED — screener writes are blocked here.
- * All filter writes must go through /api/filters-v2 (sole write authority).
- * This function is preserved for interface compatibility but always returns blocked.
- */
-export async function updateScreeners(
-  _userId: string,
-  _mode: 'live' | 'paper',
-  _updates: Partial<z.infer<typeof insertScreenerFiltersSchema>>
-): Promise<ConfigUpdateResult> {
-  console.warn('[11.8B-D][BLOCKED] updateScreeners() called — write authority is /api/filters-v2 only');
-  return {
-    success: false,
-    message: 'Directive 11.8B-D: Screener writes blocked. Use /api/filters-v2 for filter updates.',
-    error: 'Write path neutered per Directive 11.8B-D',
-  };
 }
 
 /**
