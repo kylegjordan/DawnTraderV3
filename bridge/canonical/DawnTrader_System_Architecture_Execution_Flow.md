@@ -3,9 +3,9 @@
 **Document Created:** December 12, 2025  
 **Last Updated:** February 6, 2026  
 **Purpose:** Complete factual reference for system architecture, data flows, and execution cadences  
-**Scope:** Phase 11 Production-Ready (through Directive 11.8D1)
+**Scope:** Phase 11 Production-Ready (through Directive 11.8B-D1)
 
-> **Note (Phase 11.8D1):** Net Expectancy Kernel (`server/core/calculations/net-expectancy-kernel.ts`) is the sole authority for EV calculations. Phase 11 Predictive Learning is the sole authority for parameter adjustment. All parallel learning systems (LATTi, Goals ML, ARA, DHMA Tuning) have been decommissioned. `/api/filters-v2` is the sole write path for screener filters; `/api/screeners` returns 410 Gone. Database fields `tunedByLatti`, `managedByLottie`, `manualOverrideEnabled`, `filterOverrides` are FROZEN.
+> **Note (Phase 11.8B-D1):** Net Expectancy Kernel (`server/core/calculations/net-expectancy-kernel.ts`) is the sole authority for EV calculations. Phase 11 Predictive Learning is the sole authority for parameter adjustment. All parallel learning systems (LATTi, Goals ML, ARA, DHMA Tuning) have been decommissioned. `/api/filters-v2` is the sole write path for screener filters; `/api/screeners` returns 410 Gone. Database fields `tunedByLatti`, `managedByLottie`, `manualOverrideEnabled`, `filterOverrides` are FROZEN.
 
 ---
 
