@@ -1,0 +1,36 @@
+I have one critical technical addition to ensure this doesn't accidentally flood your database or crash your memory, and one specific implementation guardrail for the UI.
+
+1. Critical Addition: The "Max-Concurrent" Guard
+The Risk: If you have 50 pairs in BULL_STABLE and 4 strategies mapped to that regime, the system will suddenly try to open 200 trades simultaneously.
+
+Consequence: This might hit your MAX_OPEN_POSITIONS global guardrail (likely set to 10 or 20), causing the system to randomly reject 90% of the simulations just because the "slots" are full.
+
+The Fix: You must explicitly instruct Replit to bypass the Global Position Count Limit for these specific "Shadow Mode" trades, OR create a separate "Virtual Allocation" for them.
+
+Recommendation: Add a specific instruction in "Implementation Details":
+
+"VTS-Multi trades must BYPASS the global MAX_OPEN_POSITIONS check. They are simulations, not capital commitments. They must be tracked separately from the 'Active Portfolio' limit."
+
+2. UI Guardrail: The "Shadow" Filter
+The Risk: Your main dashboard is about to get flooded with 5x the number of trades, many of which will be losing.
+
+Consequence: You will lose visibility into what the actual system (DSS) would have picked. The "Signal" will be lost in the "Noise."
+
+The Fix: Ensure these trades are tagged with executionMode: "SHADOW" (as you noted) and exclude them by default from the main PnL chart unless a "Show Shadow Trades" toggle is checked.
+
+Recommendation: Add to "Dashboard Expectations":
+
+"UI must distinguish between 'Primary' (DSS-selected) and 'Shadow' (Multi-strategy) trades. Shadow trades should not affect the primary PnL metric displayed on the Home Screen."
+
+🚀 Final Verdict & Recommendation
+Execute Directive 11.8C with the addition of the Position Limit Bypass.
+
+This is the correct move. It turns your VTS into a Parallel Universe Simulator.
+
+Universe A: What we actually did (DSS Selected).
+
+Universe B, C, D: What we could have done.
+
+This dataset is exactly what the Phase 12 Neural Network needs to calculate "Regret" (the difference between what we did and what was optimal).
+
+Action: Add the "Position Limit Bypass" clause to Section 3 ("Trade Identity Enhancements") or creating a new Section 5 ("Capacity Governance"), then send to Replit.

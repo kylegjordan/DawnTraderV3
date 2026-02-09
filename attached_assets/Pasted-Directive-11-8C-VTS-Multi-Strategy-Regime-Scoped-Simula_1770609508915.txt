@@ -1,0 +1,221 @@
+Directive 11.8C — VTS Multi-Strategy Regime-Scoped Simulation Expansion
+Objective
+
+Expand the Virtual Trading Simulator (VTS) to generate multiple simulated trades per pair, scoped only to strategies compatible with the detected structural regime, in order to:
+
+Dramatically increase labeled learning data
+
+Enable comparative strategy performance analysis
+
+Avoid DSS-style early selection bias
+
+Preserve production (Paper / Live) precision paths unchanged
+
+This directive does NOT introduce:
+
+Predictive decision logic
+
+Strategy ranking changes
+
+Short selling
+
+Filter authority reassignment
+
+This is a data-generation enhancement only.
+
+Core Principle
+
+VTS optimizes for learning (recall), not profitability (precision).
+Paper & Live engines remain precision-optimized.
+
+High-Level Behavior Change
+Before
+
+1 pair → 1 strategy selected → 1 simulated trade
+
+After
+
+1 pair → N regime-compatible strategies → N simulated trades
+
+Where N = number of strategies mapped to the detected structural regime.
+
+Explicit Constraints (Non-Negotiable)
+
+Regime compatibility enforced
+
+Only strategies mapped to the pair’s structural regime may be simulated
+
+No cross-regime execution
+
+VTS only
+
+No changes to:
+
+Paper execution engine
+
+Live trading engine
+
+DSS logic
+
+Signal Orchestrator selection logic (outside VTS mode)
+
+No new filters
+
+Existing IMF, global, and structural regime filters remain unchanged
+
+No strategy scoring changes
+
+Strategy logic remains identical
+
+Only execution multiplicity changes
+
+Implementation Details
+1. Identify Regime-Scoped Strategy Set
+
+Source of truth
+
+Canonical regime → strategy mapping
+(already defined and locked as of Phase 11.7F)
+
+Example:
+
+BULL_STABLE → [vwap_pullback, sma_trend_ride, pivot_shift]
+LOW_VOL_CHOP → [range_trade, support_bounce, adaptive_flow]
+
+2. Modify VTS Signal Generation Path
+
+Location (likely)
+
+server/services/vts-runner.ts
+
+
+Current (conceptual)
+
+const strategy = selectBestStrategy(pair, regime);
+simulateTrade(pair, strategy);
+
+
+Required Change
+
+const strategies = getStrategiesForRegime(regime);
+
+for (const strategy of strategies) {
+  simulateTrade({
+    pair,
+    strategy,
+    executionMode: "VTS_SHADOW",
+  });
+}
+
+
+⚠️ Do NOT reuse DSS selection logic
+VTS must bypass “best strategy” selection entirely.
+
+3. Trade Identity Enhancements
+
+Each simulated trade must be uniquely identifiable.
+
+Add or ensure presence of:
+
+{
+  pair,
+  strategyId,
+  structuralRegime,
+  executionContext: "VTS_MULTI",
+  simulatedAt,
+}
+
+
+This enables:
+
+Per-strategy comparison
+
+Regime-strategy learning
+
+Later pruning without ambiguity
+
+4. VTS Dashboard Expectations (Explicitly Acceptable)
+
+Replit must not attempt to “clean up” results.
+
+Expected outcomes:
+
+Lower win rate
+
+Higher stop-loss frequency
+
+Messier equity curve
+
+This is intended and approved.
+
+What Must NOT Change
+Component	Status
+DSS strategy selection	❌ untouched
+SQE thresholds	❌ untouched
+Paper trading	❌ untouched
+Live trading	❌ untouched
+Filters / Guardrails	❌ untouched
+Predictive learning logic	❌ untouched
+Verification Requirements (Mandatory)
+
+Replit must provide verifiable proof, not statements.
+
+Required Evidence
+
+Code Diff
+
+Show VTS runner before/after logic
+
+Highlight loop-based strategy spawning
+
+Runtime Log Sample
+
+[VTS] BTCUSDT | Regime=BULL_STABLE
+[VTS] Simulating strategy=vwap_pullback
+[VTS] Simulating strategy=sma_trend_ride
+[VTS] Simulating strategy=pivot_shift
+
+
+Database Evidence
+
+Same pair
+
+Same timestamp window
+
+Multiple strategy IDs present
+
+Negative Proof
+
+Confirm DSS still executes single strategy in paper mode
+
+Out-of-Scope (Explicitly Deferred)
+
+These are NOT part of 11.8C:
+
+Short selling
+
+Directional bias metrics
+
+Predictive filter adjustment
+
+Strategy ranking
+
+Strategy pruning
+
+Regime renaming
+
+They remain future phases.
+
+Risk Assessment
+Risk	Mitigation
+Data explosion	Regime-scoped strategies only
+Misinterpreting VTS PnL	Reframed as research data
+Performance	VTS async + bounded strategy count
+Cross-system bleed	ExecutionContext flag
+Success Criteria
+
+✅ One pair → multiple simulated trades
+✅ Only regime-compatible strategies
+✅ No DSS behavior change
+✅ No production behavior change
+✅ Data volume increases immediately
