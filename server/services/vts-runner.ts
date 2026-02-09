@@ -190,8 +190,8 @@ interface OpenVirtualTrade {
 }
 
 const openVirtualTrades: Map<string, OpenVirtualTrade> = new Map();
-const MAX_OPEN_TRADES = 500; // Directive 11.8C: Increased from 300 for multi-strategy regime-scoped simulation
-console.log(`[11.8C][Registry] Max open trades set to ${MAX_OPEN_TRADES}`);
+const MAX_OPEN_TRADES = 300; // Directive 11.6E: Capped at 300 to respect Kraken API rate limits
+console.log(`[11.6E][Registry] Max open trades set to ${MAX_OPEN_TRADES}`);
 const MAX_HOLD_MS = 24 * 60 * 60 * 1000; // Directive 11.6: 24 hours max hold time (configurable)
 
 let phase10SessionTrades: Phase10TradeRecord[] = [];
