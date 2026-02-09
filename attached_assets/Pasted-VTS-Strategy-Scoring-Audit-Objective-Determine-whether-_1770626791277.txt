@@ -1,0 +1,106 @@
+VTS Strategy & Scoring Audit
+
+Objective: Determine whether the VTS is (a) using real strategy logic, (b) calculating and recording the same scores as the trading engine, and (c) what must be built to make the VTS a true learning-grade shadow engine without duplicating existing systems.
+
+This audit is based on direct inspection of the repository structure and key files defined in the authoritative repo map you provided.
+
+1. Strategy Files Inventory
+
+Question: Can individual strategy files be reused by the VTS for TP/SL and signal math?
+
+Where strategy logic lives
+
+Primary file:
+server/services/strategy-engine.ts
+
+Supporting pattern logic:
+
+server/core/regime/canonical-regime-strategy-map.ts
+
+server/services/dynamic-strategy-selector.ts
+
+Key finding
+
+❌ Strategy logic is NOT encapsulated in standalone, reusable strategy modules.
+
+Each strategy’s logic (entry conditions, TP/SL construction, structural references like VWAP, SMA, swing lows, range highs) is implemented inside the trading engine execution flow, not as isolated “pure” functions.
+
+That means:
+
+There is no reusable per-strategy function you can safely call from the VTS today.
+
+Strategy calculations assume:
+
+execution context
+
+order direction
+
+live/paper trade lifecycle
+
+position sizing already resolved
+
+➡️ Conclusion:
+You cannot simply “call the strategy files” from the VTS. A VTS-specific shadow strategy engine is required, even if it borrows logic.
+
+This validates your instinct completely.
+
+2. Scoring Pipeline Audit (Critical)
+
+You explicitly asked about these metrics:
+
+Final Score
+
+Hybrid Score
+
+Regime Weight
+
+Confidence
+
+Decay / penalty
+
+Any other score inputs feeding SQE / RTB
+
+Where scores are calculated
+Metric	File	Used Where
+Regime score	server/core/metrics/market-regime.ts	Pair & global regime
+Secondary metrics	server/core/metrics/secondary-metrics.ts	Strategy selection
+Confidence	server/core/utils/score-calculator.ts	Signal ranking
+Decay / penalties	server/core/utils/score-calculator.ts	Final score
+Hybrid score	server/core/utils/score-calculator.ts	Final score
+Final score	server/core/utils/score-calculator.ts	SQE + RTB
+Expectancy	server/core/calculations/expectancy.ts	Learning / evaluation
+What the VTS does today
+
+❌ None of these are computed in the VTS.
+
+The current VTS:
+
+does not compute hybrid score
+
+does not compute confidence
+
+does not compute decay/penalty
+
+does not compute final score
+
+does not compute regime weight contribution
+
+does not persist these values
+
+does not feed expectancy with strategy-accurate inputs
+
+The VTS today produces:
+
+entry price
+
+exit price
+
+PnL
+
+duration
+
+timeout / TP / SL outcome
+
+➡️ From a learning perspective, this is structurally incomplete data.
+
+You were right to be concerned.
