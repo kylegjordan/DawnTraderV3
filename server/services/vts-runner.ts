@@ -52,9 +52,11 @@ import {
   selectContextAwareStrategy,
   symbolToHash,
   getRegimeRiskMultiplier,
+  getStrategiesForRegime,
   normalizeStrategy,
   type CanonicalRegimeType as MarketRegimeType,
-  type CanonicalSignalType
+  type CanonicalSignalType,
+  type StrategyDefinition
 } from '../config/canonical-regime-strategy-map.js';
 import type { OHLCData } from '../types/market-regime.types';
 import type { VTSCycleMetrics } from '../types/virtual-trade.interface';
@@ -149,6 +151,7 @@ interface Phase10TradeRecord {
   exitType?: 'stop_hit' | 'target_hit' | 'timeout' | 'pending';
   volZ?: number; // Directive 11.7F-B: Volatility Z-score for drift calculation
   trendZ?: number; // Directive 11.7F-B: Trend Z-score (momentum) for drift calculation
+  executionContext?: 'VTS' | 'VTS_MULTI'; // 11.8C: Multi-strategy identification
 }
 
 /**
@@ -183,11 +186,12 @@ interface OpenVirtualTrade {
   strategyMode?: StrategyMode;         // 11.7S: Mode for observability
   modeOverlay?: StrategyModeOverlay;   // 11.7S: Overlay values for observability
   regimeStability?: RegimeStability;   // 11.7S: Regime stability for observability
+  executionContext?: 'VTS' | 'VTS_MULTI'; // 11.8C: Identifies multi-strategy trades
 }
 
 const openVirtualTrades: Map<string, OpenVirtualTrade> = new Map();
-const MAX_OPEN_TRADES = 300; // Directive 11.6E: Increased from 50 for broader regime exposure
-console.log(`[11.6E][Registry] Max open trades set to ${MAX_OPEN_TRADES}`);
+const MAX_OPEN_TRADES = 500; // Directive 11.8C: Increased from 300 for multi-strategy regime-scoped simulation
+console.log(`[11.8C][Registry] Max open trades set to ${MAX_OPEN_TRADES}`);
 const MAX_HOLD_MS = 24 * 60 * 60 * 1000; // Directive 11.6: 24 hours max hold time (configurable)
 
 let phase10SessionTrades: Phase10TradeRecord[] = [];
@@ -298,7 +302,8 @@ async function generatePhase10Signal(
   symbol: string, 
   priceData: CachedPrice, 
   ohlcData: OHLCData[],
-  pool: 'ideal' | 'rotational'
+  pool: 'ideal' | 'rotational',
+  strategyOverride?: StrategyDefinition
 ): Promise<{ signal: VirtualSignal; tradeRecord: Phase10TradeRecord } | null> {
   const regimeResult = calculatePairRegime(ohlcData);
   const regime = regimeResult.regime;
@@ -329,43 +334,52 @@ async function generatePhase10Signal(
   const detectedPatterns = scanPatterns(candles, symbol);
   const detectedPattern = detectedPatterns.length > 0 ? detectedPatterns[0] : null;
   
-  // Directive 11.4G: Use context-aware strategy selection
-  // If pattern detected, this will select HYBRID/PATTERN strategies when available
-  const sHash = symbolToHash(symbol);
-  const strategySelection = selectContextAwareStrategy(
-    regime, 
-    detectedPattern?.pattern ?? null,
-    sHash
-  );
-  
-  let { signalType, strategy, patternType: canonicalPatternType } = strategySelection;
-  const selectionReason = strategySelection.selectionReason;
-  
-  // Directive 11.4C.3-C: Log guard for unmapped strategies
-  if (!signalType) {
-    console.warn(`[11.4C.3-C][VTS] Unmapped strategy: ${strategy} for regime ${regime}`);
-    signalType = 'HYBRID'; // Default fallback
+  // ══════════════════════════════════════════════════════════════════════════════
+  // Directive 11.8C: Multi-Strategy Regime-Scoped Simulation
+  // When strategyOverride is provided, use it directly (bypasses DSS-style selection).
+  // When not provided, fall back to context-aware selection (legacy single-strategy path).
+  // ══════════════════════════════════════════════════════════════════════════════
+  let signalType: CanonicalSignalType;
+  let strategy: string;
+  let canonicalPatternType: PatternType | null;
+  let selectionReason: string;
+  const isMultiStrategy = !!strategyOverride;
+
+  if (strategyOverride) {
+    signalType = strategyOverride.signalType;
+    strategy = strategyOverride.strategyKey;
+    canonicalPatternType = (strategyOverride.patternType as PatternType | null) ?? null;
+    selectionReason = 'regime_scoped';
+    console.log(`[11.8C][VTS] ${symbol}: Using regime-scoped strategy=${strategy} signalType=${signalType}`);
+  } else {
+    const sHash = symbolToHash(symbol);
+    const strategySelection = selectContextAwareStrategy(
+      regime, 
+      detectedPattern?.pattern ?? null,
+      sHash
+    );
+    signalType = strategySelection.signalType;
+    strategy = strategySelection.strategy;
+    canonicalPatternType = strategySelection.patternType as PatternType | null;
+    selectionReason = strategySelection.selectionReason;
+    
+    if (!signalType) {
+      console.warn(`[11.4C.3-C][VTS] Unmapped strategy: ${strategy} for regime ${regime}`);
+      signalType = 'HYBRID';
+    }
+    
+    if (selectionReason !== 'primary') {
+      console.log(`[11.4G][VTS] ${symbol}: ${signalType}/${strategy} selected via ${selectionReason}`);
+    }
+    
+    if (signalType === 'PATTERN' && !detectedPattern && selectionReason === 'diversity') {
+      console.log(`[11.4C.3][VTS] ${symbol}: PATTERN signal from diversity without pattern - reverting to QUANT`);
+      signalType = 'QUANT';
+    }
   }
+
+  const patternType: PatternType | null = canonicalPatternType;
   
-  // Log when non-primary strategy is selected (for diagnostic tracing)
-  if (selectionReason !== 'primary') {
-    console.log(`[11.4G][VTS] ${symbol}: ${signalType}/${strategy} selected via ${selectionReason}`);
-  }
-  
-  // Directive 11.4C.3 (Modified): Pattern validation for HYBRID/PATTERN signals
-  // HYBRID signals without pattern use strategy's canonical patternType
-  // PATTERN signals without detected pattern: still discard (maintains quality)
-  if (signalType === 'PATTERN' && !detectedPattern && selectionReason === 'diversity') {
-    console.log(`[11.4C.3][VTS] ${symbol}: PATTERN signal from diversity without pattern - reverting to QUANT`);
-    signalType = 'QUANT';
-  }
-  
-  // Directive 11.4G: ALWAYS use canonical patternType from strategy selection
-  // The canonicalPatternType is already normalized; detected pattern is only for logging
-  // This ensures downstream canonical validation never receives non-canonical pattern names
-  const patternType: PatternType | null = canonicalPatternType as PatternType | null;
-  
-  // Log detected pattern for diagnostics but don't use it in trade record
   if (detectedPattern && detectedPattern.pattern !== canonicalPatternType) {
     console.debug(`[11.4G][VTS] ${symbol}: Detected ${detectedPattern.pattern} → canonical ${canonicalPatternType}`);
   }
@@ -558,12 +572,12 @@ async function generatePhase10Signal(
   console.log(`[VTS][11.6H][Sizing] ${symbol}: $${dollarValue.toFixed(2)} exposure → ${quantity.toFixed(6)} units @ $${entryPrice.toFixed(4)}`);
   console.log(`[11.7S][VTS] ${symbol}: Stop ${stopLoss.toFixed(4)}→${adjustedStopLoss.toFixed(4)} | TP ${takeProfit.toFixed(4)}→${adjustedTakeProfit.toFixed(4)} (mode=${strategyMode})`);
   
-  // Directive 11.7I.a Task I.a-08: Per-symbol duplicate guard
-  // Prevents multiple open trades for the same symbol, which causes:
-  // - Duplicate open positions with near-identical prices
-  // - Simultaneous stop-outs distorting performance data
-  // - Streaks of same-pair trades in closed history
-  const hasExistingTrade = Array.from(openVirtualTrades.values()).some(t => t.symbol === symbol);
+  // Directive 11.8C: Per-symbol+strategy duplicate guard (upgraded from per-symbol only)
+  // In multi-strategy mode, allows multiple trades per symbol (one per strategy)
+  // In legacy mode, prevents duplicate trades per symbol entirely
+  const hasExistingTrade = Array.from(openVirtualTrades.values()).some(t => 
+    t.symbol === symbol && (isMultiStrategy ? t.strategy === strategy : true)
+  );
   if (hasExistingTrade) {
     logSkippedSignal({
       symbol,
@@ -573,14 +587,13 @@ async function generatePhase10Signal(
       strategy,
       source: 'VTS'
     });
-    console.log(`[11.7I.a-08][VTS][DUP_GUARD] Skipping ${symbol}: already has open VTS trade`);
+    console.log(`[11.8C][VTS][DUP_GUARD] Skipping ${symbol}/${strategy}: already has open VTS trade`);
     return null;
   }
   
-  // Directive 11.6D: Create open virtual trade for real price resolution
-  // Unified ID format: vts_{symbol}_{timestamp} - no more legacy vt_ prefix
-  // Trade exit will be determined by real Kraken prices in resolveOpenVirtualTrades()
-  const tradeId = `vts_${symbol.replace('/', '_')}_${Date.now()}`;
+  // Directive 11.8C: Trade ID includes strategy for unique identification
+  // Format: vts_{symbol}_{strategy}_{timestamp}
+  const tradeId = `vts_${symbol.replace('/', '_')}_${strategy}_${Date.now()}`;
   
   // Check if we can accept more open trades
   if (openVirtualTrades.size >= MAX_OPEN_TRADES) {
@@ -615,11 +628,12 @@ async function generatePhase10Signal(
     strategyMode,         // 11.7S: Mode for observability
     modeOverlay,          // 11.7S: Overlay values for observability
     regimeStability,      // 11.7S: Regime stability for observability
+    executionContext: isMultiStrategy ? 'VTS_MULTI' : 'VTS', // 11.8C: Multi-strategy identification
   };
   
   openVirtualTrades.set(tradeId, openTrade);
-  // Directive 11.6 Task 6: Entry verification logging
-  console.log(`[11.6][Entry] ${symbol} opened @ ${entryPrice.toFixed(6)} | stop=${stopLoss.toFixed(6)} target=${takeProfit.toFixed(6)} strategy=${strategy}`);
+  // Directive 11.8C: Enhanced entry logging with execution context
+  console.log(`[11.8C][Entry] ${symbol} opened @ ${entryPrice.toFixed(6)} | stop=${stopLoss.toFixed(6)} target=${takeProfit.toFixed(6)} strategy=${strategy} context=${isMultiStrategy ? 'VTS_MULTI' : 'VTS'}`);
   
   // Directive 11.4C.3: VirtualSignal with full Phase-10 metrics and pattern (M50 compliant)
   // Directive 11.7R: Use finalScore which has governance multiplier applied
@@ -674,9 +688,10 @@ async function generatePhase10Signal(
     exitType: 'pending', // Directive 11.6: Awaiting real-price resolution
     volZ: zScoreResult.isWarmedUp ? zScoreResult.zScores.volZ : undefined, // Directive 11.7F-B
     trendZ: zScoreResult.isWarmedUp ? zScoreResult.zScores.momZ : undefined, // Directive 11.7F-B (momentum as trend)
+    executionContext: isMultiStrategy ? 'VTS_MULTI' : 'VTS', // 11.8C
   };
   
-  console.log(`[11.0E.1][VTS] Trade: ${symbol} regime=${regime} signalType=${signalType} strategy=${strategy} finalScore=${finalScore.toFixed(3)} pool=${pool}`);
+  console.log(`[11.0E.1][VTS] Trade: ${symbol} regime=${regime} signalType=${signalType} strategy=${strategy} finalScore=${finalScore.toFixed(3)} pool=${pool} context=${isMultiStrategy ? 'VTS_MULTI' : 'VTS'}`);
   
   return { signal, tradeRecord };
 }
@@ -863,7 +878,8 @@ async function resolveOpenVirtualTrades(): Promise<{
       positionSize: trade.positionSize,
       pool: trade.pool,
       timestamp: new Date(trade.openedAt).toISOString(),
-      exitType: exitReason
+      exitType: exitReason,
+      executionContext: trade.executionContext, // 11.8C: Preserve multi-strategy context
     };
     
     // Add to session trades
@@ -1072,46 +1088,58 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         continue;
       }
       
-      const result = await generatePhase10Signal(pair.symbol, priceData, ohlcData, pair.pool);
-      if (!result) continue;
+      // ══════════════════════════════════════════════════════════════════════════════
+      // Directive 11.8C: Multi-Strategy Regime-Scoped Simulation
+      // Instead of selecting one "best" strategy per pair, compute the pair's regime
+      // and simulate trades for ALL strategies mapped to that regime.
+      // This generates N trades per pair (where N = regime-compatible strategy count).
+      // ══════════════════════════════════════════════════════════════════════════════
+      const pairRegimeResult = calculatePairRegime(ohlcData);
+      const pairRegime = pairRegimeResult.regime as MarketRegimeType;
+      const regimeStrategies = getStrategiesForRegime(pairRegime);
       
-      const { signal, tradeRecord } = result;
+      if (regimeStrategies.length === 0) {
+        console.warn(`[11.8C][VTS] No strategies mapped for regime ${pairRegime}, skipping ${pair.symbol}`);
+        continue;
+      }
       
-      // Directive 11.6D: Removed vtsService.createVirtualTrade() call
-      // Trades are now tracked exclusively via openVirtualTrades map and resolved via real prices
-      // Legacy createVirtualTrade used random simulation - deprecated per Directive 11.6D
+      console.log(`[11.8C][VTS] ${pair.symbol} | Regime=${pairRegime} | Simulating ${regimeStrategies.length} strategies: ${regimeStrategies.map(s => s.strategyKey).join(', ')}`);
+      
       vtsService.updateMarketPrice(pair.symbol, priceData.price);
       
-      // Directive 11.0E.2: Record telemetry with source='simulation' for segregation
-      // Directive 11.4C.3: Include pairRegime, signalType, and strategy for per-pair tracking
-      // Directive 11.4C.1: VTS is sole authorized telemetry writer (M70)
-      // Note: QUANT signals should NOT have a pattern (purely mathematical)
-      const telemetry = getTelemetryAggregator();
-      telemetry.recordPairTelemetry(pair.symbol, {
-        finalScore: tradeRecord.finalScore,
-        hybridScore: tradeRecord.hybridScore,
-        regimeWeight: tradeRecord.regimeWeight,
-        regimeScore: tradeRecord.regimeScore, // Directive 11.4H.4A: Dynamic 0-100 score
-        predictiveConfidence: tradeRecord.predictiveConfidence,
-        success: (tradeRecord.profit ?? 0) > 0,
-        pool: pair.pool,
-        source: 'simulation', // M53: VTS-generated data marked as simulation
-        pairRegime: tradeRecord.regime, // Directive 11.4C-R2: Per-pair regime
-        signalType: tradeRecord.signalType, // Directive 11.4C.3: HYBRID/QUANT/PATTERN
-        strategy: tradeRecord.strategy, // Directive 11.4C.3: Canonical strategy name
-        pattern: tradeRecord.signalType !== 'QUANT' ? (tradeRecord.patternType ?? undefined) : undefined, // Only for HYBRID/PATTERN
-        caller: 'vts', // Directive 11.4C.1: VTS caller identification for telemetry guard
-        volZ: tradeRecord.volZ, // Directive 11.7F-B: Volatility Z-score
-        trendZ: tradeRecord.trendZ, // Directive 11.7F-B: Trend Z-score
-      });
-      
-      phase10SessionTrades.push(tradeRecord);
-      
-      regimeDistribution[tradeRecord.regime]++;
-      signalTypeDistribution[tradeRecord.signalType] = (signalTypeDistribution[tradeRecord.signalType] || 0) + 1;
-      strategiesExecuted.add(tradeRecord.strategy);
-      totalFinalScore += tradeRecord.finalScore;
-      simulatedCount++;
+      for (const stratDef of regimeStrategies) {
+        const result = await generatePhase10Signal(pair.symbol, priceData, ohlcData, pair.pool, stratDef);
+        if (!result) continue;
+        
+        const { signal, tradeRecord } = result;
+        
+        const telemetry = getTelemetryAggregator();
+        telemetry.recordPairTelemetry(pair.symbol, {
+          finalScore: tradeRecord.finalScore,
+          hybridScore: tradeRecord.hybridScore,
+          regimeWeight: tradeRecord.regimeWeight,
+          regimeScore: tradeRecord.regimeScore,
+          predictiveConfidence: tradeRecord.predictiveConfidence,
+          success: (tradeRecord.profit ?? 0) > 0,
+          pool: pair.pool,
+          source: 'simulation',
+          pairRegime: tradeRecord.regime,
+          signalType: tradeRecord.signalType,
+          strategy: tradeRecord.strategy,
+          pattern: tradeRecord.signalType !== 'QUANT' ? (tradeRecord.patternType ?? undefined) : undefined,
+          caller: 'vts',
+          volZ: tradeRecord.volZ,
+          trendZ: tradeRecord.trendZ,
+        });
+        
+        phase10SessionTrades.push(tradeRecord);
+        
+        regimeDistribution[tradeRecord.regime]++;
+        signalTypeDistribution[tradeRecord.signalType] = (signalTypeDistribution[tradeRecord.signalType] || 0) + 1;
+        strategiesExecuted.add(tradeRecord.strategy);
+        totalFinalScore += tradeRecord.finalScore;
+        simulatedCount++;
+      }
       
     } catch (error) {
       console.warn(`[11.0E.1][VTS] Strategy execution failed for ${pair.symbol}:`, error);
