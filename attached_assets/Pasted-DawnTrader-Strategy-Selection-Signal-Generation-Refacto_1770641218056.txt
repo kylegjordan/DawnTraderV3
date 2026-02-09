@@ -1,0 +1,349 @@
+DawnTrader Strategy Selection & Signal Generation
+Refactor Design Plan (Pre-Directive)
+1. Regime System — Final Alignment
+1.1 Structural Regimes (Authoritative)
+
+We only use the canonical 5 structural regimes:
+
+Regime
+BULL_STABLE
+BEAR_VOLATILE
+LOW_VOL_CHOP
+HIGH_VOL_IMPULSE
+TRANSITION
+
+Explicitly removed / deprecated:
+
+EXTREME_NOISE
+
+BULL_VOLATILE
+
+BEAR_STABLE
+
+Any “veto regime” concept
+
+Rationale:
+
+These were pre-hybrid, pre-pattern artifacts
+
+They are not represented in the canonical regime–strategy map
+
+They introduce branching logic that is undocumented, ungoverned, and not learnable
+
+Noise handling should be done via confidence, EV, and SQE, not hidden regime states
+
+1.2 Regime Detection
+
+Regime detection logic remains exactly once per pair
+
+Uses existing indicators (VolNoise, TrendSlope, ER, etc.)
+
+Output:
+
+{
+  structuralRegime: CanonicalRegime,
+  regimeScore: number,        // 0–100
+  regimeWeight: number        // normalized 0–1
+}
+
+
+No strategy logic runs until this step is complete.
+
+2. Strategy Selection — How the System Should Work
+
+This is the core correction.
+
+Intended (Canonical) Flow
+
+Select strategy first → generate exactly one signal using that strategy
+
+Not:
+
+Generate many signals → filter them
+
+2.1 Inputs to Strategy Selection
+
+For each pair:
+
+Structural regime
+
+Regime score
+
+Secondary metrics (as defined by the regime → strategy mapping)
+
+Global constraints (friction, liquidity, cost, etc.)
+
+2.2 Strategy Selection Mechanism (DSS)
+
+The DSS should:
+
+Look up eligible strategies from
+CANONICAL_REGIME_STRATEGY_MAP[regime]
+
+Evaluate secondary metrics required by that regime
+
+Score each candidate strategy
+
+Select exactly one strategy
+
+Output:
+
+{
+  selectedStrategyKey: StrategyKey,
+  signalType: "QUANT" | "PATTERN" | "HYBRID"
+}
+
+
+At this point:
+
+No signal exists yet
+
+No TP/SL exists yet
+
+No pattern scan has run unless needed
+
+3. Signal Generation — By Strategy Type
+
+Once a strategy is selected, only then do we generate a signal.
+
+3.1 QUANT Strategy Execution
+Applies to:
+
+vwap_pullback
+
+sma_trend_ride
+
+breakout
+
+range_trade
+
+etc. (the 9 StrategyEngine strategies)
+
+Execution Path
+
+Instantiate StrategyEngine
+
+Call only the selected strategy’s detect method
+
+engine.detectVWAPPullback(...)
+
+
+If detection fails → no signal
+
+If detection succeeds → returns:
+
+entry
+
+stop
+
+target
+
+confidence (strategy-native)
+
+This is already implemented correctly in the trading engine — we just need to call it selectively instead of running all strategies.
+
+3.2 PATTERN Strategy Execution
+Applies to:
+
+morning_star
+
+inside_bar_reversal
+
+(any other actual pattern strategy)
+
+Execution Path
+
+Call PatternRecognizer.scanPatterns(...)
+
+Filter results to the specific pattern required by the selected strategy
+
+If pattern not present → no signal
+
+If present:
+
+Entry = current price
+
+TP/SL = ATR-based (existing logic)
+
+Confidence = pattern strength
+
+Pattern recognizer does not run unless a pattern strategy is selected.
+
+3.3 HYBRID Strategy Execution (Clarified & Simplified)
+
+This is where confusion crept in historically.
+
+Canonical Definition (Corrected)
+
+A hybrid strategy is not “confluence by coincidence.”
+
+A hybrid strategy explicitly defines:
+
+One quant strategy
+
+One pattern type
+
+This information already exists in the canonical map.
+
+Hybrid Execution Flow (Correct)
+
+Once a hybrid strategy is selected:
+
+Run the quant strategy detect method
+
+If it fails → no signal
+
+Run the required pattern detection
+
+If it fails → no signal
+
+If both succeed:
+
+Entry / TP / SL come from the quant strategy
+
+Pattern modifies:
+
+Confidence
+
+Optional score boost
+
+Optional risk adjustment
+
+No Confluence Window Needed
+
+The old “5-candle confluence window” existed because:
+
+Strategies were firing independently
+
+Hybrid logic was bolted on afterward
+
+Once the DSS selects a hybrid strategy explicitly, the window is unnecessary.
+
+Hybrid success/failure becomes deterministic.
+
+Hybrid Signal Output
+{
+  strategyKey: "pivot_shift",
+  baseStrategy: "vwap_pullback",
+  patternType: "MORNING_STAR",
+  entry,
+  stop,
+  target,
+  confidence,
+  hybridBoostApplied: true
+}
+
+4. Scoring Pipeline (Post-Signal)
+
+Once a signal exists (any type):
+
+Computed (Unified Across All Types)
+
+regimeWeight (already computed)
+
+hybridScore (real, not simulated)
+
+predictiveConfidence (real)
+
+decayPenalty (real, time-based)
+
+frictionCost (real)
+
+netExpectancy (canonical kernel)
+
+finalScore
+
+Important:
+
+These calculations are shared
+
+Strategy type does not change the scoring math
+
+Only the inputs differ
+
+5. SQE & RTB (No Behavioral Change)
+SQE
+
+Still filters
+
+No calculation logic added
+
+Uses scores provided by signal
+
+RTB Refresh
+
+No architectural change required
+
+Re-evaluates expectancy & decay as it already does
+
+Strategy selection does not re-run during refresh
+
+6. VTS Implications (Preview Only)
+
+Once live/paper is corrected:
+
+VTS should:
+
+Use the same DSS
+
+Use the same StrategyEngine / PatternRecognizer
+
+Generate shadow signals, not trades
+
+Record all scores and outcomes
+
+But that is a later directive, not part of this plan.
+
+7. File-Level Change Summary (High-Level)
+
+This is what you can hand to Replit / Gemini for feasibility review:
+
+Must Change
+
+dynamic-strategy-selector.ts
+
+Replace SYSTEM_GUARDS.STRATEGY_MAP
+
+Use canonical map
+
+signal-orchestrator.ts
+
+Stop running all strategies
+
+Generate signal only after DSS selection
+
+hybrid-integration.ts
+
+Simplify to explicit hybrid execution
+
+Remove confluence window logic
+
+system-guards.ts
+
+Remove strategy map responsibility
+
+Must NOT Change (Logic-Wise)
+
+StrategyEngine detect methods
+
+PatternRecognizer detection math
+
+Expectancy kernel
+
+SQE
+
+RTB refresh logic
+
+8. Why This Design Is Correct
+
+Matches original DSS intent
+
+Removes accidental complexity
+
+Makes hybrid strategies explicit and testable
+
+Eliminates phantom strategies and ghost signals
+
+Aligns VTS, paper, and live under one mental model
+
+Makes learning data meaningful
