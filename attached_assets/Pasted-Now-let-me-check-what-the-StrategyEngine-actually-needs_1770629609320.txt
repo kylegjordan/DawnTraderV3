@@ -1,0 +1,243 @@
+Now let me check what the StrategyEngine actually needs to run — does it depend on active trading state:
+
+Good question. You're right to think carefully about this. Here's the answer:
+
+Yes, the StrategyEngine could technically be called during passive learning — but the VTS doesn't use it today.
+
+Here's why it would work:
+
+The StrategyEngine is a stateless class. It's just export class StrategyEngine with pure detection methods like detectVWAPPullback(), detectSMATrendRide(), etc. It has no constructor dependencies, no connection to trading state, no awareness of whether trading is active or passive. It takes in data (indicators, settings, price history) and returns a signal or null. That's it.
+
+The VTS already does the heavy data-fetching work. It already calls Kraken for real OHLC data (fetchOHLCForPair), computes real regime via calculatePairRegime(ohlcData), and gets real prices from the price cache. The StrategyEngine methods need exactly this kind of data — indicators derived from OHLC candles and current prices.
+
+The guard is on trading execution, not signal detection. Line 1175-1176 of vts-runner.ts explicitly blocks VTS from starting when tradingActive is true — meaning VTS only runs during passive learning. The StrategyEngine just detects patterns; it doesn't place orders.
+
+The practical gap is that the VTS would need to compute the TechnicalIndicators object (VWAP, SMA, volume averages, etc.) from the OHLC data it already fetches. The Signal Orchestrator currently does this computation for Paper/Live, and the VTS would need to replicate that indicator preparation step. It's plumbing work, not an architectural barrier.
+
+So to directly answer your question: the StrategyEngine is just a pattern-detection toolkit — it doesn't know or care whether trading is active. It could absolutely be instantiated and called by the VTS during passive learning. The VTS simply doesn't do it today; it uses the simplified volatility-based formula instead.
+
+Are you sure that all 17 strategies use the strategy engine for their calculations?
+
+Good question — let me check exactly which strategies go through the StrategyEngine class versus being handled elsewhere.
+
+Now let me get the full list of 17 canonical strategies and cross-reference:
+
+Now I can see what's covered. Let me also check how pattern-based strategies (morning_star, pivot_shift, etc.) are handled:
+
+No, I'm not sure — and looking at the code, the answer is no, not all 17 use the StrategyEngine.
+
+Here's the breakdown:
+
+Strategies that go through StrategyEngine (9 strategies)
+These have dedicated detect*() methods in the StrategyEngine class and are called directly from the Signal Orchestrator:
+
+vwap_pullback → detectVWAPPullback()
+abcd_long → detectABCDLong()
+sma_trend_ride → detectSMATrendRide()
+breakout → detectBreakout()
+mean_reversion → detectMeanReversion()
+range_trade → detectRangeTrading()
+vwap_bounce → detectVWAPBounce()
+liquidity_trap → detectLiquidityTrap()
+dhma → detectDHMA()
+Strategies handled by the Pattern Recognizer (separate system, not StrategyEngine)
+These are candlestick pattern-based strategies detected by patternRecognizer.scanPatterns(), which is a completely separate module from the StrategyEngine. Their TP/SL is calculated using ATR (Average True Range) via patternToTradeSignal(), not the StrategyEngine's structural formulas:
+
+morning_star (PATTERN signal type)
+pivot_shift (PATTERN signal type)
+inside_bar_reversal (PATTERN signal type)
+adaptive_flow (TRI_STAR pattern)
+Strategies with no visible detection method in StrategyEngine
+These are defined in the canonical regime-strategy map but I don't see dedicated detect*() methods for them:
+
+support_bounce — the StrategyEngine has no detectSupportBounce(). It may be covered by mean_reversion or range_trade logic.
+reverse_impulse — no detectReverseImpulse() exists.
+defensive_hedge — no detectDefensiveHedge() exists.
+volatility_edge — no detectVolatilityEdge() exists.
+Bottom Line
+Only 9 out of 17 strategies use the StrategyEngine for entry detection and TP/SL calculations. Four more use the Pattern Recognizer (separate system with ATR-based TP/SL). And 4 strategies appear to be defined in the canonical map but don't have corresponding detection logic wired up in the Signal Orchestrator — meaning they may never actually generate signals in Paper/Live mode either.
+
+So my earlier statement about the StrategyEngine being "callable" by the VTS was technically true for those 9 strategies, but it would only cover about half the canonical strategy list. The pattern-based strategies would need the Pattern Recognizer wired in as well.
+
+Please provide the details for where all of the key calculations (entry price, target price, stop/loss, etc.) are calculated for each of the 17 strategies. This is incredibly important for us to understand if we are to simulate these calculations in the VTS. Please provide a full audit.
+
+Let me do a thorough audit of all 17 strategies. I'll need to read the strategy engine, pattern recognizer, and any other relevant files.
+
+Now let me find the pattern recognizer for the PATTERN-based strategies:
+
+Now let me check for the 4 strategies that don't have detection methods — support_bounce, reverse_impulse, defensive_hedge, volatility_edge:
+
+Now let me also check if these strategy names appear anywhere else — maybe they're mapped to pattern detections:
+
+Now let me check the canonical map to see how those 5 "missing" strategies are defined — specifically their signalType:
+
+Now let me check the VTS's selectStrategyForRegime function to see how it assigns strategy names:
+
+Now I have the complete picture. Here's the full audit:
+
+Full Strategy Calculations Audit — All 17 Canonical Strategies
+Category A: StrategyEngine Strategies (9 strategies — dedicated detect*() methods)
+These have full entry detection logic, structural TP/SL, and confidence values in server/services/strategy-engine.ts. They are called from server/services/signal-orchestrator.ts lines 836-953.
+
+1. vwap_pullback (BULL_STABLE — QUANT)
+File: strategy-engine.ts lines 29-126 → detectVWAPPullback()
+
+Field	Formula	Inputs Required
+Entry Conditions	Price above VWAP AND within pullback threshold AND bullish reversal pattern AND volume > avg × multiplier	VWAP, currentPrice, volume, 10+ OHLC candles
+Entry Price	currentPrice × 1.001	currentPrice
+Stop Loss	min(VWAP × 0.997, low24h × 1.001)	VWAP, low24h
+Take Profit	max(high24h × 0.995, entry + 2 × riskDistance)	high24h, entryPrice, stopPrice
+Confidence	0.7 + (hasReversal ? 0.2 : 0)	Reversal pattern detection
+2. abcd_long (LOW_VOL_CHOP — QUANT)
+File: strategy-engine.ts lines 129-235 → detectABCDLong()
+
+Field	Formula	Inputs Required
+Entry Conditions	Detect A-B-C-D pattern (spike→pullback→higherLow→breakout) AND C above VWAP AND volume confirmation	20+ OHLC candles, VWAP
+Entry Price	cHigh × (1 + breakoutThreshold + 0.003)	C-point high, settings
+Stop Loss	cPoint.low × 0.998	C-point low
+Take Profit (fixed)	entry × (1 + targetPercent) (default 3%)	entryPrice, settings
+Take Profit (trailing)	min(entry + AB_distance, entry + 2R)	A/B points, riskDistance
+Confidence	0.75 (fixed)	—
+3. sma_trend_ride (HIGH_VOL_IMPULSE — QUANT)
+File: strategy-engine.ts lines 238-338 → detectSMATrendRide()
+
+Field	Formula	Inputs Required
+Entry Conditions	Uptrend detected AND (price above SMA + near SMA + bounce pattern) OR (SMA crossover)	SMA, currentPrice, 10+ candles
+Entry Price	currentPrice × 1.002	currentPrice
+Stop Loss	min(priorSwingLow × 0.998, SMA × 0.995)	5-candle swing low, SMA
+Take Profit (trailing)	entry × (1 + trendStrength × 0.03)	trendStrength calculation
+Take Profit (break)	entry + 2 × riskDistance	entryPrice, stopPrice
+Confidence	0.65 (fixed)	—
+4. breakout (HIGH_VOL_IMPULSE — QUANT)
+File: strategy-engine.ts lines 341-416 → detectBreakout()
+
+Field	Formula	Inputs Required
+Entry Conditions	Range detected (via detectRange()) AND price > rangeHigh × (1 + buffer) AND volume spike > avg × multiplier	15+ OHLC candles
+Entry Price	breakoutLevel × 1.002	rangeHigh, buffer
+Stop Loss	rangeLow × 0.998	rangeLow from range detection
+Take Profit	entry + rangeHeight (measured move)	rangeHigh - rangeLow
+Confidence	0.75 (fixed)	—
+5. mean_reversion (BEAR_VOLATILE — QUANT)
+File: strategy-engine.ts lines 419-495 → detectMeanReversion()
+
+Field	Formula	Inputs Required
+Entry Conditions	Price oversold (deviation < −threshold from mean) AND bullish reversal pattern	VWAP or SMA or range midpoint, currentPrice
+Entry Price	currentPrice × 1.001	currentPrice
+Stop Loss	currentPrice × (1 - stopLossBuffer)	currentPrice, settings (default 1%)
+Take Profit	meanValue × 0.998 (target return to mean)	VWAP/SMA/midpoint
+Confidence	0.70 (fixed)	—
+6. range_trade (LOW_VOL_CHOP — QUANT)
+File: strategy-engine.ts lines 498-572 → detectRangeTrading()
+
+Field	Formula	Inputs Required
+Entry Conditions	Range detected AND range width > minimum AND price in entry zone near support	30+ OHLC candles
+Entry Price	currentPrice × 1.001	currentPrice
+Stop Loss	rangeLow × (1 - stopLossBeyond)	rangeLow, settings (default 1%)
+Take Profit	rangeHigh × 0.995	rangeHigh from range detection
+Confidence	0.72 (fixed)	—
+7. vwap_bounce (HIGH_VOL_IMPULSE — QUANT)
+File: strategy-engine.ts lines 575-655 → detectVWAPBounce()
+
+Field	Formula	Inputs Required
+Entry Conditions	VWAP trending up AND price near VWAP AND recently touched/crossed VWAP AND volume confirmation	VWAP, currentPrice, volume, 20+ candles
+Entry Price	currentPrice × 1.001	currentPrice
+Stop Loss	VWAP × 0.997	VWAP
+Take Profit	entry + 2 × riskDistance (2R target)	entryPrice, stopPrice
+Confidence	0.73 (fixed)	—
+8. liquidity_trap (TRANSITION — QUANT)
+File: strategy-engine.ts lines 658-738 → detectLiquidityTrap()
+
+Field	Formula	Inputs Required
+Entry Conditions	Range detected AND stop zone present AND false breakout above resistance AND price returned inside range AND reversal volume spike	30+ OHLC candles
+Entry Price	currentPrice × 0.999 (enter on return)	currentPrice
+Stop Loss	breakoutHigh × 1.005 (above trap high)	Breakout candle high
+Take Profit	rangeLow × 1.002 (target range support)	rangeLow from range detection
+Confidence	0.68 (fixed)	—
+9. dhma (HIGH_VOL_IMPULSE — QUANT)
+File: strategy-engine.ts lines 1001-1250 → detectDHMA()
+
+Field	Formula	Inputs Required
+Entry Conditions	Burst regime = long AND session regime = up AND OBI > threshold AND microprice tilt > threshold AND signed flow ratio > 0.2 AND toxicity < threshold AND spread < max	20+ OHLC candles, volume data
+Entry Price	currentPrice × 1.001 (long)	currentPrice
+Stop Loss	currentPrice - k_tp × realizedVol	currentPrice, realized volatility (10-candle)
+Take Profit	currentPrice + k_tp × realizedVol	currentPrice, realized volatility, k_tp param (default 1.5)
+Confidence	Dynamic: `0.6 +	OBI
+Category B: Pattern Recognizer Strategies (4 strategies)
+These are detected by server/services/pattern-recognizer.ts via scanPatterns(), not the StrategyEngine. Their TP/SL is calculated by patternToTradeSignal() at lines 417-454 using a single universal ATR-based formula. They are processed in signal-orchestrator.ts lines 956-1045.
+
+Universal TP/SL formula for ALL pattern strategies:
+
+Field	Formula	Inputs Required
+Entry Price	currentPrice (at detection)	currentPrice
+Stop Loss	currentPrice - ATR × 1.5 (or price × 0.01 fallback)	14-candle ATR
+Take Profit	currentPrice + ATR × 2.5 (or price × 0.02 fallback)	14-candle ATR
+Confidence	patternStrength × 100	Pattern detection strength score
+The strategies:
+
+10. morning_star (BULL_STABLE, TRANSITION — PATTERN)
+Detection: detectMorningStar() in pattern-recognizer.ts — 3-bar sequence: bearish → doji/small body → bullish (closing above halfway into first candle)
+Pattern: MORNING_STAR
+TP/SL: Universal ATR formula above
+11. pivot_shift (BULL_STABLE, TRANSITION — HYBRID)
+Detection: This is mapped to MORNING_STAR pattern type in the canonical map
+How it fires: When Pattern Recognizer detects a MORNING_STAR pattern AND the signal also has QUANT alignment, it becomes a HYBRID signal via the Hybrid Integration system (signal-orchestrator.ts lines 1047+)
+TP/SL: Universal ATR formula above
+12. inside_bar_reversal (BEAR_VOLATILE — PATTERN)
+Detection: detectInsideBar() in pattern-recognizer.ts — Current candle's high < previous high AND low > previous low (compression setup)
+Pattern: Mapped to ENGULFING in canonical map
+TP/SL: Universal ATR formula above
+13. adaptive_flow (LOW_VOL_CHOP — HYBRID)
+Detection: Mapped to TRI_STAR pattern type in canonical map
+How it fires: Pattern detection for TRI_STAR, then Hybrid Integration merges with any concurrent QUANT signal
+TP/SL: Universal ATR formula above
+Note: There is NO detectTriStar() in the pattern recognizer — the supported patterns are only PINBAR, ENGULFING, INSIDE_BAR, THREE_SOLDIERS, and MORNING_STAR. TRI_STAR is defined in the canonical map but has no detection implementation. This strategy likely never fires.
+Category C: Strategies With NO Detection Logic (4 strategies)
+These exist in the canonical regime-strategy map and have governance profiles, but no code anywhere generates signals for them. They have no detect*() method in the StrategyEngine, no matching pattern in the Pattern Recognizer, and no entry in the Signal Orchestrator's strategy loop.
+
+14. support_bounce (LOW_VOL_CHOP — PATTERN, patternType: PINBAR)
+Detection: NONE. No detectSupportBounce() exists anywhere.
+Canonical map says: PATTERN signal, PINBAR pattern
+What likely happens: When a PINBAR is detected by the Pattern Recognizer in LOW_VOL_CHOP regime, it could theoretically be mapped to this strategy name — but the Signal Orchestrator doesn't do this mapping. It tags the signal as pattern_pinbar, not support_bounce.
+TP/SL: Would use universal ATR formula IF it fired, but it doesn't fire under this name.
+15. reverse_impulse (BEAR_VOLATILE — HYBRID, patternType: PINBAR)
+Detection: NONE. No detectReverseImpulse() exists anywhere.
+Canonical map says: HYBRID signal, PINBAR pattern
+TP/SL: No calculation exists.
+16. defensive_hedge (BEAR_VOLATILE — HYBRID, patternType: ENGULFING)
+Detection: NONE. No detectDefensiveHedge() exists anywhere.
+Canonical map says: HYBRID signal, ENGULFING pattern
+TP/SL: No calculation exists.
+17. volatility_edge (HIGH_VOL_IMPULSE — HYBRID, patternType: ABCD)
+Detection: NONE. No detectVolatilityEdge() exists anywhere.
+Canonical map says: HYBRID signal, ABCD pattern. Note: ABCD is not a supported pattern in the Pattern Recognizer either.
+TP/SL: No calculation exists.
+Summary Table
+#	Strategy	Signal Type	Has Detection?	TP/SL Source	Can Fire in Paper/Live?
+1	vwap_pullback	QUANT	StrategyEngine	Structural (VWAP, high24h, 2R)	Yes
+2	abcd_long	QUANT	StrategyEngine	Structural (ABCD pattern points, 2R)	Yes
+3	sma_trend_ride	QUANT	StrategyEngine	Structural (SMA, swing low, 2R)	Yes
+4	breakout	QUANT	StrategyEngine	Structural (range boundaries, measured move)	Yes
+5	mean_reversion	QUANT	StrategyEngine	Structural (mean value, deviation)	Yes
+6	range_trade	QUANT	StrategyEngine	Structural (range high/low)	Yes
+7	vwap_bounce	QUANT	StrategyEngine	Structural (VWAP, 2R)	Yes
+8	liquidity_trap	QUANT	StrategyEngine	Structural (trap high, range low)	Yes
+9	dhma	QUANT	StrategyEngine	Volatility-based (k × realizedVol)	Yes
+10	morning_star	PATTERN	PatternRecognizer	ATR-based (1.5× ATR stop, 2.5× ATR target)	Yes
+11	pivot_shift	HYBRID	PatternRecognizer + Hybrid merge	ATR-based	Conditionally (needs QUANT+PATTERN confluence)
+12	inside_bar_reversal	PATTERN	PatternRecognizer	ATR-based	Yes
+13	adaptive_flow	HYBRID	PatternRecognizer (TRI_STAR)	ATR-based	No — TRI_STAR detection doesn't exist
+14	support_bounce	PATTERN	None	N/A	No
+15	reverse_impulse	HYBRID	None	N/A	No
+16	defensive_hedge	HYBRID	None	N/A	No
+17	volatility_edge	HYBRID	None	N/A	No
+Key Findings
+9 strategies have full, unique structural TP/SL formulas in the StrategyEngine
+3 strategies (morning_star, inside_bar_reversal, pivot_shift) use the Pattern Recognizer with a shared ATR-based TP/SL formula
+5 strategies (adaptive_flow, support_bounce, reverse_impulse, defensive_hedge, volatility_edge) are defined in the canonical map but have no detection logic — they exist as names but cannot generate signals in Paper/Live mode
+The VTS uses none of these formulas — it uses its own single volatility formula for all 17 strategy names
+This means effectively only 12 of the 17 strategies can actually produce a trade signal in Paper/Live. The remaining 5 are "phantom strategies" — defined in governance and regime mapping but never triggered.
+
+
+Scroll to latest
+
+Make, test, iterate…
