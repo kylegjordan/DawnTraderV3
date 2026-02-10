@@ -1,0 +1,487 @@
+Directive 11.9A — DSS Canonical Alignment & Strategy Selection Refactor
+
+Status
+
+Proposed Directive (Pre‑Implementation)
+
+
+
+Owner
+
+Kyle
+
+
+
+Executor
+
+Replit (implementation only; no architectural discretion)
+
+
+
+Advisor / Auditor
+
+DawnTrader Principal Architect (ChatGPT, Chaplet‑grounded)
+
+
+
+
+
+1. Problem Statement (What Is Broken and Why This Matters)
+
+Over the past several phases, DawnTrader was intended to migrate fully to a canonical regime → strategy → signal decision model. This model was designed so that:
+
+
+
+Market conditions determine a single canonical regime
+
+Regime‑specific secondary metrics select one best canonical strategy
+
+That strategy alone generates a signal, which then flows through SQE, RTB, and execution
+
+However, a code‑level audit has confirmed that this intent was never realized in Paper/Live trading.
+
+
+
+The Reality in the Current System
+
+The Dynamic Strategy Selector (DSS) never used the canonical regime–strategy map
+
+DSS still operates on a legacy 6‑regime model (EXTREME_NOISE, BULL_VOLATILE, BEAR_STABLE, etc.)
+
+Strategy selection is sourced from SYSTEM_GUARDS.STRATEGY_MAP, a legacy 5‑regime × 9‑strategy map
+
+The Signal Orchestrator imports the canonical map but never uses it
+
+All actual strategy gating is still driven by SYSTEM_GUARDS.STRATEGY_MAP
+
+A hardcoded enabledStrategies set further limits execution to legacy quant strategies only
+
+DSS is functioning as a post‑signal ranker, not a strategy selector
+
+Multiple strategies are executed per symbol
+
+Signals are generated first, then filtered by DSS using NetEV and confidence
+
+This is the opposite of the intended design
+
+Patterns and hybrids bypass DSS intent entirely
+
+Pattern strategies are generated independently of regime selection
+
+Hybrid strategies emerge accidentally via confluence windows
+
+DSS has no concept of selecting a hybrid strategy
+
+Normalization exists canonically but is never enforced at runtime
+
+Legacy strategy names (range_trading, pattern_morning_star, H1/H2 labels) persist
+
+Canonical names exist only in documentation and unused imports
+
+Consequences
+
+Paper/Live trading has effectively been limited to ~9 legacy quant strategies
+
+Canonical strategies, hybrids, and patterns are inconsistently or never reachable
+
+DSS behavior diverged silently from design intent for weeks or months
+
+VTS cannot be reliably aligned to Live/Paper because Live/Paper is architecturally inconsistent
+
+Telemetry and learning data are polluted with mixed, non‑canonical identities
+
+This directive corrects these failures at the authority and boundary level, without altering proven trading math.
+
+
+
+
+
+2. Design Principles (Non‑Negotiable)
+
+Canonical regime–strategy map is the single source of truth
+
+File: server/core/regime/canonical-regime-strategy-map.ts
+
+One regime → one strategy → one signal (per symbol, per cycle)
+
+DSS is a selector, not a signal ranker
+
+DSS selects which strategy to run
+
+Strategy engines generate signals
+
+No changes to trading math
+
+StrategyEngine detect logic is untouched
+
+PatternRecognizer detection math is untouched
+
+Expectancy, SQE, RTB logic is untouched
+
+No hidden or parallel authorities
+
+Legacy maps must be removed
+
+Hardcoded strategy lists must not gate execution
+
+Normalization happens once, at the DSS boundary
+
+Engines emit legacy identities
+
+DSS outputs canonical identities
+
+
+
+
+
+3. Summary of Fixes (What Will Change)
+
+At a high level, this directive will:
+
+
+
+Replace DSS legacy regime logic with canonical regimes only
+
+Make DSS select a single canonical strategy before any signal is generated
+
+Remove SYSTEM_GUARDS.STRATEGY_MAP entirely
+
+Remove hardcoded strategy gating in the Signal Orchestrator
+
+Make hybrid strategies explicit, first‑class selections
+
+Enforce canonical strategy identity before signals enter SQE/RTB
+
+
+
+
+
+4. Step‑by‑Step Implementation Plan
+
+Step 1 — Remove Legacy Strategy Authority
+
+Files affected
+
+
+
+server/config/system-guards.ts
+
+server/services/dynamic-strategy-selector.ts
+
+server/services/signal-orchestrator.ts
+
+Actions
+
+
+
+Delete SYSTEM_GUARDS.STRATEGY_MAP entirely
+
+It must not exist in the system after this directive
+
+No fallback or partial usage is permitted
+
+Remove all reads of SYSTEM_GUARDS.STRATEGY_MAP
+
+In DSS (getCandidatesForRegime)
+
+In Signal Orchestrator (getRegimeAllowedStrategies)
+
+Do not replace it with another hardcoded map
+
+The canonical map is the only replacement
+
+
+
+
+
+Step 2 — Canonical Regime System in DSS
+
+File affected
+
+
+
+server/services/dynamic-strategy-selector.ts
+
+Actions
+
+
+
+Delete the legacy DSS regime enum
+
+EXTREME_NOISE
+
+BULL_VOLATILE
+
+BEAR_STABLE
+
+etc.
+
+DSS must output only canonical regimes
+
+BULL_STABLE
+
+BEAR_VOLATILE
+
+LOW_VOL_CHOP
+
+HIGH_VOL_IMPULSE
+
+TRANSITION
+
+Regime calculation
+
+May reuse existing inputs (trendSlope, volNoise)
+
+May add lightweight indicators already implemented elsewhere (ADX, momentum)
+
+EXTREME_NOISE becomes a penalty factor, not a regime or veto
+
+Apply GHOST_REGIME_NORMALIZATION exactly once
+
+At the DSS output boundary only
+
+No downstream normalization
+
+
+
+
+
+Step 3 — DSS Strategy Selection (Correct Role)
+
+File affected
+
+
+
+server/services/dynamic-strategy-selector.ts
+
+Actions
+
+
+
+DSS selects strategy before signal execution
+
+DSS output shape
+
+{
+
+  regime: CanonicalRegime,
+
+  selectedStrategyKey: CanonicalStrategyKey,
+
+  signalType: 'QUANT' | 'PATTERN' | 'HYBRID'
+
+}
+
+
+
+Strategy selection inputs
+
+Regime
+
+Secondary metrics (indicator‑level only):
+
+RSI zone
+
+VWAP deviation
+
+Momentum strength
+
+Volatility percentile
+
+Range compression
+
+No EV, no TP/SL, no entry price at this stage
+
+Canonical strategy list source
+
+CANONICAL_REGIME_STRATEGY_MAP[regime]
+
+
+
+
+
+
+
+Step 4 — Signal Orchestrator Execution Refactor
+
+File affected
+
+
+
+server/services/signal-orchestrator.ts
+
+Actions
+
+
+
+Remove enabledStrategies as an execution authority
+
+It must not filter strategies selected by DSS
+
+New execution order (strict)
+
+Indicators
+
+  → DSS (regime + strategy selection)
+
+    → Execute selected strategy only
+
+      → Generate signal
+
+        → Score
+
+          → SQE
+
+            → RTB
+
+
+
+Quant strategy execution
+
+Call the specific StrategyEngine.detectX() for the selected strategy
+
+Pattern strategy execution
+
+Only run PatternRecognizer if DSS selected a pattern strategy
+
+Hybrid strategy execution
+
+Only run hybrid logic if DSS selected a hybrid strategy
+
+Execute declared quant + pattern dependencies
+
+If either dependency fails → no signal
+
+
+
+
+
+Step 5 — Hybrid Strategy Identity (Critical)
+
+Files affected
+
+
+
+server/services/hybrid-integration.ts
+
+server/services/signal-orchestrator.ts
+
+Actions
+
+
+
+Hybrids are explicitly selected by DSS
+
+Example: pivot_shift, reverse_impulse
+
+Signal identity
+
+signal.strategy must equal the canonical hybrid key
+
+Quant strategy names are dependencies, not identity
+
+Deprecate H1/H2/H3/H4 labels
+
+They must not appear in new signals or telemetry
+
+
+
+
+
+Step 6 — Strategy Naming Normalization
+
+Actions
+
+
+
+Canonical strategy identity is enforced before SQE
+
+Examples of normalization
+
+range_trading → range_trade
+
+pattern_morning_star → morning_star
+
+Normalization scope
+
+Write‑time: canonical only
+
+Read‑time: normalize legacy data for analytics/learning
+
+Do NOT rename inside StrategyEngine or PatternRecognizer
+
+
+
+
+
+Step 7 — Tests & Guardrails
+
+Actions
+
+
+
+Update integrity tests
+
+Remove DSS exclusions from regime_mapping_integrity.test.ts
+
+Add assertions
+
+DSS reads from canonical map
+
+SYSTEM_GUARDS.STRATEGY_MAP does not exist
+
+Every canonical strategy is reachable by exactly one execution path
+
+
+
+
+
+5. Explicit Non‑Goals (What This Directive Does NOT Do)
+
+❌ No VTS changes
+
+❌ No SQE changes
+
+❌ No expectancy or EV math changes
+
+❌ No StrategyEngine detect logic changes
+
+❌ No PatternRecognizer detection math changes
+
+
+
+
+
+6. Expected Outcome
+
+After this directive:
+
+
+
+Live/Paper trading uses the canonical regime–strategy model
+
+DSS functions as originally designed
+
+Exactly one strategy executes per symbol per cycle
+
+Hybrid strategies are explicit, testable, and learnable
+
+Naming normalization is enforced and future‑proof
+
+VTS can be aligned 1‑to‑1 with Live/Paper in a subsequent phase
+
+
+
+
+
+7. Final Note to Implementer (Replit)
+
+This directive is intentionally explicit.
+
+If any step appears ambiguous, do not improvise. Raise the question before implementing. Architectural discretion is not permitted in this change set.
+
+
+
+
+
+End of Directive 11.9A
