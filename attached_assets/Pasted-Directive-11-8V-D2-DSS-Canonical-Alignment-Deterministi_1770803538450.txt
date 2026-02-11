@@ -1,0 +1,325 @@
+Directive 11.8V-D2 — DSS Canonical Alignment & Deterministic Strategy Selection (Full Technical Specification)
+
+Status: APPROVED FOR IMPLEMENTATION Scope: Live/Paper Trading Engine Only Out of Scope: VTS, Expectancy Math, SQE Logic Changes, Indicator Redesign
+
+SECTION 1 — ROOT CAUSE & ARCHITECTURAL DRIFT
+1.1 Intended Architecture (Original Design)
+
+The intended canonical decision chain is:
+
+Indicators → Regime Detection → Strategy Selection → Signal Generation → SQE → RTB → Execution
+
+Core Principles:
+
+DSS selects ONE strategy before signal generation.
+
+Canonical regime–strategy map is the single authority.
+
+No post-signal ranking.
+
+No strategy pruning via hidden maps.
+
+1.2 Verified Drift (Code-Level Audit Findings)
+
+The following issues were confirmed:
+
+SYSTEM_GUARDS.STRATEGY_MAP was still controlling eligibility.
+
+dynamic-strategy-selector.ts still used legacy regime types.
+
+The canonical map was imported but not used in selection.
+
+DSS compared generated signals instead of selecting pre-generation.
+
+enabledStrategies restricted execution to legacy quant strategies.
+
+Hybrid strategies were category-based (H1–H4) instead of canonical.
+
+Impact:
+
+Canonical map not authoritative.
+
+DSS functionally reduced to signal filter.
+
+Hybrid logic implicit instead of explicit.
+
+Silent narrowing of strategy breadth.
+
+This directive eliminates those failures.
+
+SECTION 2 — FILE-LEVEL MODIFICATIONS (EXPLICIT)
+
+All paths are authoritative and must match exactly.
+
+Files affected:
+
+server/services/dynamic-strategy-selector.ts
+
+server/services/signal-orchestrator.ts
+
+server/config/system-guards.ts
+
+server/config/canonical-regime-strategy-map.ts
+
+server/services/hybrid-integration.ts
+
+No other files may be modified unless explicitly required.
+
+SECTION 3 — REMOVE LEGACY AUTHORITY
+3.1 Delete Strategy Map
+
+In: server/config/system-guards.ts
+
+REMOVE entirely:
+
+STRATEGY_MAP: Record<string, readonly string[]>
+
+Remove all exports and references.
+
+3.2 Remove All Reads of STRATEGY_MAP
+
+Search and remove all code blocks like:
+
+const map = SYSTEM_GUARDS.STRATEGY_MAP;
+
+Replace with canonical map lookup (see Section 5).
+
+SECTION 4 — CANONICAL REGIME SYSTEM
+
+File: server/services/dynamic-strategy-selector.ts
+
+4.1 Canonical Regime Enum (Replace Legacy)
+
+Define:
+
+export type CanonicalRegime =
+  | 'BULL_STABLE'
+  | 'BEAR_VOLATILE'
+  | 'LOW_VOL_CHOP'
+  | 'HIGH_VOL_IMPULSE';
+
+TRANSITION intentionally excluded in this phase.
+
+4.2 Legacy Normalization
+
+Immediately after legacy regime detection:
+
+function normalizeLegacyRegime(regime: string): CanonicalRegime {
+  switch (regime) {
+    case 'BULL_VOLATILE': return 'HIGH_VOL_IMPULSE';
+    case 'BEAR_STABLE': return 'BEAR_VOLATILE';
+    case 'EXTREME_NOISE': return 'LOW_VOL_CHOP';
+    default: return regime as CanonicalRegime;
+  }
+}
+4.3 EXTREME_NOISE Handling
+
+Remove veto behavior. Instead:
+
+if (legacyRegime === 'EXTREME_NOISE') {
+  confidenceMultiplier *= 0.5;
+}
+
+No early return allowed.
+
+SECTION 5 — STRATEGY SELECTION (DETERMINISTIC)
+5.1 Canonical Map Retrieval
+
+Import:
+
+import { CANONICAL_REGIME_STRATEGY_MAP } from '../config/canonical-regime-strategy-map';
+
+Retrieve ordered list:
+
+const strategyList = CANONICAL_REGIME_STRATEGY_MAP[regime];
+
+The list order MUST match directive priority order exactly.
+
+SECTION 6 — PRIORITY ORDER (AUTHORITATIVE)
+
+Hard-code canonical priority inside map file.
+
+Example structure:
+
+export const CANONICAL_REGIME_STRATEGY_MAP: Record<CanonicalRegime, CanonicalStrategyKey[]> = {
+  BULL_STABLE: [
+    'sma_trend_ride',
+    'vwap_pullback',
+    'abcd_long',
+    'dhma',
+    'pivot_shift'
+  ],
+  BEAR_VOLATILE: [
+    'mean_reversion',
+    'liquidity_trap',
+    'reverse_impulse'
+  ],
+  LOW_VOL_CHOP: [
+    'range_trade',
+    'support_bounce',
+    'inside_bar_reversal'
+  ],
+  HIGH_VOL_IMPULSE: [
+    'breakout',
+    'abcd_long'
+  ]
+};
+
+No dynamic reordering permitted.
+
+SECTION 7 — PRECONDITIONS (OPTION B, STRICTLY CONTROLLED)
+7.1 Preconditions Derived From detect() Gating
+
+Each strategy must define a precondition function:
+
+function isEligible_vwap_pullback(ctx: IndicatorContext): boolean {
+  return ctx.price < ctx.vwap && ctx.trendSlope > ctx.thresholds.bullTrend;
+}
+
+RULES:
+
+Boolean only
+
+Minimal necessary logic
+
+No TP/SL
+
+No EV
+
+No scoring
+
+Must not be stricter than detect()
+
+All preconditions must be declared in DSS and documented inline.
+
+7.2 Selection Loop
+for (const strategyKey of strategyList) {
+  if (isEligible(strategyKey, indicatorContext)) {
+    return {
+      regime,
+      selectedStrategyKey: strategyKey,
+      signalType: getSignalType(strategyKey)
+    };
+  }
+}
+
+
+return null; // No strategy selected
+
+Must stop immediately after first eligible strategy.
+
+SECTION 8 — ORCHESTRATOR EXECUTION FLOW
+
+File: server/services/signal-orchestrator.ts
+
+Replace multi-strategy execution with:
+
+const selection = dss.selectStrategy(indicatorContext);
+
+
+if (!selection) return;
+
+
+const signal = executeStrategy(selection);
+
+
+if (!signal) return;
+
+
+const scored = scoreSignal(signal);
+routeToSQE(scored);
+
+No fallback execution.
+
+SECTION 9 — HYBRID STRATEGIES (EXPLICIT DEPENDENCY)
+
+Extend canonical map entries:
+
+pivot_shift: {
+  baseQuantStrategy: 'vwap_pullback',
+  patternType: 'MORNING_STAR'
+}
+9.1 Hybrid Execution
+const quantSignal = executeQuant(baseQuantStrategy);
+if (!quantSignal) return null;
+
+
+const patternMatch = detectPattern(patternType);
+if (!patternMatch) return null;
+
+
+return buildHybridSignal(quantSignal, patternMatch);
+
+No category-based logic. Remove H1–H4 labels entirely.
+
+SECTION 10 — PATTERN HANDLING
+
+Pattern strategies have no DSS precondition.
+
+When reached in priority order:
+
+Execute pattern detection
+
+If no pattern → return null
+
+Cycle ends
+
+No pattern pre-scan inside DSS.
+
+SECTION 11 — REMOVE ENABLED STRATEGIES
+
+Delete backend support for strategy toggles. Remove API gating logic.
+
+UI should render canonical strategies informational only.
+
+SECTION 12 — NAMING NORMALIZATION
+
+Before SQE submission:
+
+signal.strategy = normalizeToCanonical(signal.strategy);
+
+Map legacy names explicitly.
+
+SECTION 13 — TEST REQUIREMENTS
+
+Add/Update tests to assert:
+
+Only one strategy selected per cycle.
+
+SYSTEM_GUARDS.STRATEGY_MAP does not exist.
+
+Canonical map order preserved.
+
+Hybrid signals use canonical key.
+
+EXTREME_NOISE does not veto.
+
+SECTION 14 — STRICT PROHIBITIONS
+
+Do NOT:
+
+Add scoring
+
+Add ranking
+
+Add regime persistence
+
+Add ADX/momentum inputs
+
+Add waterfall execution
+
+SECTION 15 — ACCEPTANCE CRITERIA
+
+Implementation is correct only if:
+
+Exactly one strategy is attempted per symbol per cycle.
+
+Canonical map is sole authority.
+
+Patterns and hybrids are reachable.
+
+No dynamic ranking exists.
+
+No legacy map remains.
+
+END DIRECTIVE 11.8V-D2
