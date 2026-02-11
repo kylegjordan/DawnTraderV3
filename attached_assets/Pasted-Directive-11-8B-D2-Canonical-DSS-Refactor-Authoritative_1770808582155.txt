@@ -1,0 +1,233 @@
+Directive 11.8B-D2 — Canonical DSS Refactor (Authoritative, Canonical-Map-Aligned)
+
+Status: APPROVED FOR IMPLEMENTATION
+Scope: Live / Paper Trading Engine Only
+Out of Scope: VTS, Expectancy Kernel Changes, SQE Logic Changes, Indicator Redesign
+
+This directive is strictly aligned to the existing canonical regime–strategy mapping provided below.
+No strategy may be moved across regimes.
+No secondary metric may be altered.
+No interpretation layer may be introduced.
+
+The canonical map is the system truth.
+
+SECTION 1 — CANONICAL REGIME → STRATEGY MAPPING (AUTHORITATIVE)
+
+The following mapping is the single source of truth and must be encoded exactly as defined here.
+
+BULL_STABLE
+Strategy	Secondary Metrics	Signal Type
+SMA Trend Ride	Price > SMA(50) by > 0.5% AND ADX > 25	QUANT
+VWAP Pullback	VWAP Deviation < -1σ AND Momentum > 0	QUANT
+Morning Star / Evening Star	3-Bar Sequence (Bear→Doji→Bull) AND Momentum Flip > 0.3%	PATTERN
+Pivot Shift	RSI 45-55 AND ADX Slope > 0.5	HYBRID
+BEAR_VOLATILE
+Strategy	Secondary Metrics	Signal Type
+Mean Reversion	RSI < 30 OR RSI > 70 AND Price Deviation > 1σ AND Vol < 0.025	QUANT
+Reverse Impulse	Volume > 1.5× avg AND Momentum Spike < -0.5%	HYBRID
+Defensive Hedge	BTC Correlation < 0.3 AND Vol Offset > 1σ	HYBRID
+Inside Bar Reversal	Parent Range > Child × 1.3 AND Breakout Vol > 1.5× avg	PATTERN
+LOW_VOL_CHOP
+Strategy	Secondary Metrics	Signal Type
+Range Trading	Bollinger Bandwidth < 0.10 AND ADX < 20	QUANT
+Support Bounce	Price = Local Min ± 1σ AND Volume > 1.2× avg	PATTERN
+ABCD Long	AB:CD Ratio 0.95-1.05 AND Volume > 1.2× avg	QUANT
+Adaptive Flow	Momentum Inversion = 3 AND Vol Percentile > 70%	HYBRID
+HIGH_VOL_IMPULSE
+Strategy	Secondary Metrics	Signal Type
+Breakout	Momentum > +0.7% AND Volume > 2× avg	QUANT
+VWAP Bounce	VWAP Deviation > +1σ AND Momentum between -0.3% and -0.6%	QUANT
+Volatility Edge	Vol Percentile > 80 AND Regime Mismatch = True	HYBRID
+DHMA	HMA(9) cross HMA(21) AND ADX Slope Flattening	QUANT
+TRANSITION (Deferred in 11.8B-D2)
+Strategy
+Liquidity Trap
+Pivot Shift
+Morning Star / Evening Star
+
+TRANSITION is not emitted in this phase.
+
+SECTION 2 — FILE-LEVEL MODIFICATIONS
+
+Files impacted:
+
+server/services/dynamic-strategy-selector.ts
+
+server/services/signal-orchestrator.ts
+
+server/config/system-guards.ts
+
+server/config/canonical-regime-strategy-map.ts
+
+server/services/hybrid-integration.ts
+
+No other files may be modified.
+
+SECTION 3 — REMOVE LEGACY STRATEGY AUTHORITY
+
+Delete from system-guards.ts:
+
+STRATEGY_MAP
+
+Remove all references.
+
+There must be no alternative eligibility map.
+
+SECTION 4 — CANONICAL REGIME ENUM
+
+In dynamic-strategy-selector.ts:
+
+export type CanonicalRegime =
+  | 'BULL_STABLE'
+  | 'BEAR_VOLATILE'
+  | 'LOW_VOL_CHOP'
+  | 'HIGH_VOL_IMPULSE';
+
+TRANSITION excluded.
+
+SECTION 5 — DSS SELECTION ALGORITHM
+5.1 Selection Flow
+const regime: CanonicalRegime = detectCanonicalRegime(indicatorContext);
+
+
+const strategies = CANONICAL_REGIME_STRATEGY_MAP[regime];
+
+
+for (const strategyKey of strategies) {
+  if (preconditions[strategyKey](indicatorContext)) {
+    return {
+      regime,
+      selectedStrategyKey: strategyKey,
+      signalType: getSignalType(strategyKey)
+    };
+  }
+}
+
+
+return null;
+
+No scoring. No ranking. No fallback.
+
+SECTION 6 — PRECONDITIONS (EXPLICIT, CANONICAL-METRIC-ALIGNED)
+
+Each strategy must implement a precondition function matching its canonical secondary metrics exactly.
+
+Examples:
+
+BULL_STABLE
+isEligible_sma_trend_ride(ctx) {
+  return ctx.price > ctx.sma50 * 1.005 && ctx.adx > 25;
+}
+
+
+isEligible_vwap_pullback(ctx) {
+  return ctx.vwapDeviation < -1 * ctx.stdDev && ctx.momentum > 0;
+}
+
+Pattern and Hybrid preconditions must reflect canonical table metrics only.
+
+No reinterpretation allowed.
+
+SECTION 7 — PRIORITY ORDER (WITHIN REGIME)
+
+Strategies must be evaluated in the exact order they appear in the canonical mapping above.
+
+The order is authoritative.
+
+No reordering permitted.
+
+SECTION 8 — HYBRID EXECUTION (AUTHORITATIVE MAPPING)
+
+Define explicitly in canonical map:
+
+pivot_shift: {
+  baseQuantStrategy: 'vwap_pullback',
+  patternType: 'MORNING_STAR'
+}
+
+
+reverse_impulse: {
+  baseQuantStrategy: 'mean_reversion',
+  patternType: 'PINBAR'
+}
+
+
+defensive_hedge: {
+  baseQuantStrategy: 'range_trade',
+  patternType: 'ENGULFING'
+}
+
+
+adaptive_flow: {
+  baseQuantStrategy: 'abcd_long',
+  patternType: 'THREE_SOLDIERS'
+}
+
+
+volatility_edge: {
+  baseQuantStrategy: 'vwap_bounce',
+  patternType: 'ABCD_GEOMETRIC'
+}
+
+Hybrid execution:
+
+const quantSignal = executeQuant(baseQuantStrategy);
+if (!quantSignal) return null;
+
+
+const patternMatch = detectPattern(patternType);
+if (!patternMatch) return null;
+
+
+return buildHybridSignal(quantSignal, patternMatch);
+SECTION 9 — ORCHESTRATOR EXECUTION FLOW
+const selection = dss.selectStrategy(ctx);
+if (!selection) return;
+
+
+const signal = executeStrategy(selection);
+if (!signal) return;
+
+
+const scored = scoreSignal(signal);
+routeToSQE(scored);
+
+Exactly one strategy attempted.
+
+SECTION 10 — REMOVE USER STRATEGY TOGGLES
+
+Remove backend support. UI becomes informational only.
+
+SECTION 11 — STRICT PROHIBITIONS
+
+Do NOT:
+
+Add scoring
+
+Add EV comparison
+
+Add regime persistence
+
+Add ADX slope enhancements
+
+Add fallback execution
+
+Modify canonical metric definitions
+
+SECTION 12 — ACCEPTANCE CRITERIA
+
+Implementation valid only if:
+
+Canonical map is sole authority.
+
+Exactly one strategy selected per cycle.
+
+Preconditions match canonical metric table.
+
+No strategy runs outside its regime.
+
+TRANSITION not emitted.
+
+No legacy map remains.
+
+END DIRECTIVE 11.8B-D2
