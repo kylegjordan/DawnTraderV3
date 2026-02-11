@@ -1,0 +1,426 @@
+What follows is a full architectural plan for the Market Context Engine (MCE) — including:
+
+System placement
+
+Data flow
+
+File structure
+
+Type contracts
+
+Refactor impact on DSS
+
+Refactor impact on strategies
+
+Refactor impact on orchestrator
+
+Bypass prevention
+
+Performance considerations
+
+Testing and enforcement model
+
+Migration sequencing
+
+This is not a directive yet.
+This is the architectural blueprint.
+
+1️⃣ High-Level System Architecture (Post-Refactor)
+Current (Simplified)
+FX5 Scanner
+  → Global Filter
+  → IMF Filter
+  → Active Filter Pool
+  → DSS
+  → Strategy.detect()
+  → Signal
+  → SQE
+
+Target Architecture
+FX5 Scanner
+  → Global Filter
+  → IMF Filter
+  → Active Filter Pool
+  → Market Context Engine (NEW)
+  → DSS (Pure Selector)
+  → Signal Orchestrator
+  → Strategy Execution (Context-fed)
+  → SQE
+
+
+The Market Context Engine becomes the single source of indicator truth.
+
+2️⃣ Market Context Engine (MCE) – Responsibility Boundaries
+
+The MCE is responsible for:
+
+Computing all canonical secondary metrics
+
+Producing a deterministic MarketContext
+
+Performing zero strategy logic
+
+Performing zero signal math
+
+Performing zero EV math
+
+No ranking
+
+No regime decision
+
+The DSS remains responsible for:
+
+Regime detection
+
+Strategy selection based on context
+
+Nothing else
+
+Strategies become responsible only for:
+
+Entry / Stop / Target logic
+
+Using context values
+
+Not computing indicators
+
+3️⃣ File Structure
+
+Create:
+
+server/core/context/market-context-engine.ts
+
+
+Create:
+
+server/core/context/types.ts
+
+
+Optional:
+
+server/core/context/context-cache.ts
+
+4️⃣ MarketContext Interface (Authoritative Contract)
+export interface MarketContext {
+  pair: string;
+  timeframe: string;
+
+  // Price
+  price: number;
+
+  // Trend & Structure
+  sma50: number;
+  sma100: number;
+  smaDistancePct: number;
+
+  hma9: number;
+  hma21: number;
+  hmaCross: 'BULL' | 'BEAR' | null;
+
+  // Volatility
+  bollingerUpper: number;
+  bollingerLower: number;
+  bollingerBandwidth: number;
+  volatilityPercentile: number;
+
+  // VWAP
+  vwap: number;
+  vwapStdDev: number;
+  vwapZ: number;
+
+  // Momentum
+  momentumPct: number;
+  momentumSlope: number;
+
+  // Oscillators
+  rsi: number;
+  adx: number;
+  adxSlope: number;
+
+  // Volume
+  avgVolume: number;
+  volumeRatio: number;
+
+  // Pattern Precursor Metrics
+  abcdRatio?: number;
+
+  // Cross-Asset
+  btcCorrelation?: number;
+
+  // Derived Flags
+  regimeMismatch?: boolean;
+}
+
+
+This is the only object DSS and strategies receive.
+
+5️⃣ Indicator Computation Scope
+
+All computations must be:
+
+Rolling window based
+
+Candle series based
+
+No API calls inside loop (BTC cached once per cycle)
+
+No DB writes
+
+Indicators Required (Canonical Map Coverage)
+Indicator	Required For
+SMA(50), SMA(100)	SMA Trend Ride
+HMA(9/21)	DHMA
+VWAP + σ	VWAP Pullback, VWAP Bounce
+RSI	Mean Reversion, Pivot Shift
+ADX + slope	Range Trading, Trend Ride
+Bollinger Bands	Range Trading
+Momentum %	Breakout, Reverse Impulse
+Volume ratio	Breakout, Support Bounce
+Vol percentile	Adaptive Flow, Vol Edge
+AB:CD ratio	ABCD Long
+BTC correlation	Defensive Hedge
+
+All are deterministic.
+
+6️⃣ Where It Hooks In
+
+The correct injection point is:
+
+Inside the pipeline that processes the Active Filter Pool.
+
+Pseudo-code:
+
+for (const pair of activeFilterPool) {
+
+  const candles = await getCandles(pair);
+
+  const context = marketContextEngine.compute(pair, candles, btcCandles);
+
+  const selection = dss.selectStrategy(regime, context);
+
+  if (!selection) continue;
+
+  const signal = strategyExecutor.execute(selection, context);
+
+  if (signal) submit(signal);
+}
+
+
+Important:
+
+BTC candles fetched once per cycle.
+
+Context computed once per pair.
+
+No strategy can compute its own indicators.
+
+7️⃣ Strategy Refactor Plan
+Current State (Problem)
+
+Each strategy:
+
+Computes its own RSI
+
+Computes its own VWAP
+
+Computes its own ADX
+
+Duplicates logic
+
+This causes:
+
+Inconsistent thresholds
+
+Drift
+
+Duplicate work
+
+Impossible DSS preconditions
+
+Refactor Target
+
+All strategies must change signature:
+
+BEFORE
+detect(candles: Candle[]): Signal | null
+
+AFTER
+detect(context: MarketContext, candles: Candle[]): Signal | null
+
+
+Rules:
+
+Strategies may use context values.
+
+Strategies may NOT recompute RSI, ADX, etc.
+
+If they attempt to compute indicators internally → build fails.
+
+8️⃣ DSS Refactor
+
+DSS now receives:
+
+selectStrategy(regime: Regime, context: MarketContext)
+
+
+It does:
+
+Canonical priority iteration
+
+Precondition evaluation using context
+
+Returns selected strategy key
+
+It does NOT:
+
+Run detect()
+
+Compute indicators
+
+Rank signals
+
+Use EV
+
+9️⃣ Preventing Bypass (Critical)
+
+This must be enforced structurally.
+
+Enforcement Layer 1 — Code Structure
+
+Remove:
+
+All internal indicator utilities from strategies
+
+All computeRSI(), computeADX() calls inside strategies
+
+Strategies must import only MarketContext.
+
+Enforcement Layer 2 — Type Contract
+
+Make MarketContext mandatory parameter.
+
+Remove candle-only detect signatures.
+
+Enforcement Layer 3 — Lint Rule (Optional but Strong)
+
+Search rule:
+
+Disallow:
+
+computeRSI(
+computeADX(
+calculateVWAP(
+calculateBollinger(
+
+
+inside /strategies/ directory.
+
+Enforcement Layer 4 — Unit Test
+
+Test that:
+
+Strategy files do not import indicator utilities.
+
+Indicator utilities only exist inside MCE.
+
+🔟 Performance & Scale
+
+You raised critical concern:
+
+It’s not 8 pairs — it could be 100 pairs per scan.
+
+Correct.
+
+Worst case:
+
+100 pairs × 15 indicators × 100 candles
+
+This is extremely manageable.
+
+To optimize:
+
+Cache BTC candles once per cycle.
+
+Use shared rolling window utility functions.
+
+Avoid recalculating SMA for both MCE and strategy.
+
+After refactor:
+
+Strategy layer becomes lighter than today.
+
+Total system load may decrease.
+
+1️⃣1️⃣ Database Consideration
+
+Do NOT store context in DB.
+
+Context is:
+
+Per-cycle
+
+Ephemeral
+
+Stateless
+
+Derived
+
+Store only:
+
+Final signals
+
+Execution results
+
+1️⃣2️⃣ Transition Regime
+
+Once MCE exists:
+
+Transition is trivial:
+
+if (
+  adx >= 20 && adx <= 25 &&
+  Math.abs(momentumPct) < 0.3 &&
+  rsi >= 45 && rsi <= 55
+) return TRANSITION;
+
+
+No persistence needed for Phase 1.
+
+1️⃣3️⃣ Migration Plan (Safe Execution Order)
+
+Implement MarketContextEngine
+
+Build tests for context outputs
+
+Refactor ONE strategy (e.g., VWAP Pullback)
+
+Validate no signal drift
+
+Refactor remaining strategies
+
+Remove internal indicator utilities
+
+Refactor DSS
+
+Enable canonical deterministic selection
+
+Never refactor everything at once.
+
+1️⃣4️⃣ Risks & Mitigation
+Risk	Mitigation
+Drift between canonical map and DSS	DSS reads directly from canonical file
+Strategy still computing indicators	Remove utilities + enforce signature
+Performance drop	Benchmark before/after
+BTC correlation overhead	Cache BTC series per cycle
+Devs bypass context	Build-time lint + test enforcement
+1️⃣5️⃣ What This Achieves
+
+✔ All 17 strategies viable
+✔ Transition regime viable
+✔ Defensive hedge viable
+✔ No strategy elimination
+✔ No fallback hacks
+✔ No waterfall complexity
+✔ No duplicated indicator math
+✔ No DSS signal comparison
+✔ Deterministic canonical alignment
