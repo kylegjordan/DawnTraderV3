@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================================================
-# DawnTrader — GitHub Push Script (One-Way, LFS-Enabled)
-# Pushes ALL tracked files to GitHub via Git LFS
+# DawnTrader — GitHub Push Script (Source Code Only)
+# Pushes source code to GitHub, excludes runtime data via .gitignore
 # Usage: bash scripts/github-push.sh "Your commit message"
 #   or:  bash scripts/github-push.sh  (auto-generates message)
 # ============================================================
@@ -21,7 +21,7 @@ else
 fi
 
 echo "=========================================="
-echo "  DawnTrader GitHub Push (LFS-Enabled)"
+echo "  DawnTrader GitHub Push (Source Code)"
 echo "=========================================="
 echo "Branch: $BRANCH"
 echo "Message: $COMMIT_MSG"
@@ -35,7 +35,7 @@ else
     echo "[1/5] Already on branch: $BRANCH"
 fi
 
-echo "[2/5] Staging files..."
+echo "[2/5] Staging source files..."
 git add -A
 
 if git diff --cached --quiet 2>/dev/null; then
@@ -45,12 +45,12 @@ if git diff --cached --quiet 2>/dev/null; then
 fi
 
 echo "[3/5] Changes to commit:"
-git diff --cached --stat | tail -5
+git diff --cached --stat | tail -10
 
 echo "[4/5] Committing..."
 git commit -m "$COMMIT_MSG" 2>/dev/null || true
 
-echo "[5/5] Pushing to GitHub (with LFS)..."
+echo "[5/5] Pushing to GitHub..."
 git push "$REMOTE" "$BRANCH" 2>&1
 
 echo ""
