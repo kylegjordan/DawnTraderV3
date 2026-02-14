@@ -22,32 +22,14 @@ echo ""
 REMOTE="$1"
 URL="$2"
 
-LFS_PATTERNS=""
-if [ -f ".gitattributes" ]; then
-    LFS_PATTERNS=$(grep "filter=lfs" .gitattributes | awk '{print $1}' | tr '\n' '|')
-fi
-
 is_lfs_tracked() {
     local filepath="$1"
-
-    if [ -n "$LFS_PATTERNS" ]; then
-        echo "$LFS_PATTERNS" | tr '|' '\n' | while read -r pattern; do
-            [ -z "$pattern" ] && continue
-            if [[ "$filepath" == $pattern ]]; then
-                echo "yes"
-                return
-            fi
-        done
+    local attr_result
+    attr_result=$(git check-attr filter -- "$filepath" 2>/dev/null)
+    if echo "$attr_result" | grep -q "filter: lfs"; then
+        return 0
     fi
-
-    if command -v git-lfs >/dev/null 2>&1; then
-        if git check-attr filter -- "$filepath" 2>/dev/null | grep -q "lfs"; then
-            echo "yes"
-            return
-        fi
-    fi
-
-    echo "no"
+    return 1
 }
 
 if git rev-parse --verify @{u} >/dev/null 2>&1; then
@@ -70,11 +52,10 @@ while IFS= read -r file; do
 
     if [ "$FILESIZE" -gt "$WARN_FILE_SIZE" ]; then
         SIZE_MB=$(( FILESIZE / 1024 / 1024 ))
-        LFS_STATUS=$(is_lfs_tracked "$file")
 
-        if [ "$LFS_STATUS" = "yes" ]; then
+        if is_lfs_tracked "$file"; then
             LFS_COUNT=$((LFS_COUNT + 1))
-            echo -e "${CYAN}📦 LFS: $file (${SIZE_MB} MB) — tracked by Git LFS${NC}"
+            echo -e "${CYAN}📦 LFS: $file (${SIZE_MB} MB) — handled by Git LFS${NC}"
             continue
         fi
 
@@ -95,7 +76,7 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 if [ $LFS_COUNT -gt 0 ]; then
-    echo -e "${CYAN}📦 $LFS_COUNT file(s) tracked by Git LFS${NC}"
+    echo -e "${CYAN}📦 $LFS_COUNT file(s) handled by Git LFS${NC}"
 fi
 
 if [ $FOUND_VIOLATIONS -eq 1 ]; then
@@ -103,14 +84,11 @@ if [ $FOUND_VIOLATIONS -eq 1 ]; then
     echo ""
     echo "Fix: Add these file patterns to .gitattributes for LFS tracking:"
     echo "  git lfs track \"path/to/pattern\""
-    echo "  git add .gitattributes"
-    echo "  git add <file>"
-    echo "  git commit --amend"
     echo ""
     exit 1
 elif [ $FOUND_WARNINGS -eq 1 ]; then
-    echo -e "${YELLOW}⚠️  Warnings found - Large files not tracked by LFS${NC}"
-    echo -e "${GREEN}✅ Proceeding with push (warnings only)...${NC}"
+    echo -e "${YELLOW}⚠️  Warnings found (non-blocking)${NC}"
+    echo -e "${GREEN}✅ Proceeding with push...${NC}"
 else
     echo -e "${GREEN}✅ All clear - Push allowed${NC}"
 fi
