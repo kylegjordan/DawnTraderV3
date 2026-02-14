@@ -1,0 +1,55 @@
+~/workspace$ cp scripts/git-push-filter.sh .git/hooks/pre-push && chmod +x .git/hooks/pre-push
+~/workspace$ bash scripts/github-push.sh "Directive 11.8B-D2 implementation"
+==========================================
+  DawnTrader GitHub Push (LFS-Enabled)
+==========================================
+Branch: dawntrader-v3
+Message: Directive 11.8B-D2 implementation
+
+[1/5] Already on branch: dawntrader-v3
+[2/5] Staging files...
+[3/5] Changes to commit:
+ diagnostic-reports/phase-41F-L-trace.ndjson  |    Bin 796231876 -> 134 bytes
+ logs/data_aggregates/passive_2026-02-14.json |   3281 +-
+ logs/vts_skipped_signals/2026-02-14.json     | 211921 +-----------------------
+ server/services/cortex/cortex-memory.json    |     68 +-
+ 4 files changed, 40 insertions(+), 215230 deletions(-)
+[4/5] Committing...
+[dawntrader-v3 0654b29b] Directive 11.8B-D2 implementation
+ 4 files changed, 40 insertions(+), 215230 deletions(-)
+[5/5] Pushing to GitHub (with LFS)...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔍 Git Push Filter - Scanning for large files...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📦 LFS: diagnostic-reports/phase-41F-L-trace.ndjson (759 MB) — handled by Git LFS
+📦 LFS: logs/data_aggregates/passive_2025-12-29.json (55 MB) — handled by Git LFS
+📦 LFS: logs/data_aggregates/passive_2025-12-30.json (56 MB) — handled by Git LFS
+📦 LFS: logs/data_aggregates/passive_2025-12-31.json (65 MB) — handled by Git LFS
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 4 file(s) handled by Git LFS
+✅ All clear - Push allowed
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Enumerating objects: 11574, done.
+Counting objects: 100% (11574/11574), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (5672/5672), done.
+Writing objects:   4% (533/11440), 200.00 KiB | 152.00 KiB/Writing objects:   4% (533/11440), 6.04 MiB | 2.67 MiB/s   Writing objects:  88% (10068/11440), 283.80 MiB | 5.67 MiB/Writing objects:  89% (10182/11440), 283.80 MiB | 5.67 MiB/Writing objects:  90% (10296/11440), 283.80 MiB | 5.67 MiB/Writing objects:  91% (10411/11440), 283.80 MiB | 5.67 MiB/Writing objects:  92% (10525/11440), 283.80 MiB | 5.67 MiB/Writing objects:  93% (10640/11440), 283.80 MiB | 5.67 MiB/Writing objects:  94% (10754/11440), 283.80 MiB | 5.67 MiB/Writing objects:  95% (10868/11440), 283.80 MiB | 5.67 MiB/Writing objects:  96% (10983/11440), 283.80 MiB | 5.67 MiB/Writing objects:  97% (11097/11440), 283.80 MiB | 5.67 MiB/Writing objects:  98% (11212/11440), 283.80 MiB | 5.67 MiB/Writing objects:  99% (11326/11440), 283.80 MiB | 5.67 MiB/Writing objects: 100% (11440/11440), 283.80 MiB | 5.67 MiB/Writing objects: 100% (11440/11440), 284.50 MiB | 5.23 MiB/s, done.
+Total 11440 (delta 9906), reused 6326 (delta 5441), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (9906/9906), completed with 105 local objects.
+remote: warning: File logs/data_aggregates/passive_2025-12-29.json is 55.76 MB; this is larger than GitHub's recommended maximum file size of 50.00 MB
+remote: warning: File logs/data_aggregates/passive_2025-12-30.json is 56.92 MB; this is larger than GitHub's recommended maximum file size of 50.00 MB
+remote: warning: File logs/data_aggregates/passive_2025-12-31.json is 65.48 MB; this is larger than GitHub's recommended maximum file size of 50.00 MB
+remote: error: Trace: 4cc7deb3601dbb078352dc36450637dd81512f91acf3e0157d6ffb0784a39b89
+remote: error: See https://gh.io/lfs for more information.
+remote: error: File diagnostic-reports/phase-41F-L-trace.ndjson is 759.05 MB; this exceeds GitHub's file size limit of 100.00 MB
+remote: error: File diagnostic-reports/phase-41F-L-trace.ndjson is 759.35 MB; this exceeds GitHub's file size limit of 100.00 MB
+remote: error: File diagnostic-reports/phase-41F-L-trace.ndjson is 759.27 MB; this exceeds GitHub's file size limit of 100.00 MB
+remote: error: File diagnostic-reports/phase-41F-L-trace.ndjson is 759.07 MB; this exceeds GitHub's file size limit of 100.00 MB
+remote: error: GH001: Large files detected. You may want to try Git Large File Storage - https://git-lfs.github.com.
+To https://github.com/kylegjordan/DawnTraderV3.git
+ ! [remote rejected]   dawntrader-v3 -> dawntrader-v3 (pre-receive hook declined)
+error: failed to push some refs to 'https://github.com/kylegjordan/DawnTraderV3.git'
+~/workspace$ 
