@@ -1,3 +1,26 @@
 version https://git-lfs.github.com/spec/v1
 oid sha256:475df9457472b53d898e67d221671189eb8dce7bc0edea5ba8d58809fef32ef1
 size 843501
+{"timestamp":1771098420379,"mode":"passive","eventType":"RTB_REFRESH","bucket":7,"signalsProcessed":0,"duration":26,"cpuLoad":37.85769230769231,"eventLoopLag":4,"poolSize":3}
+{"timestamp":1771098435384,"mode":"passive","eventType":"RTB_REFRESH","bucket":0,"signalsProcessed":0,"duration":28,"cpuLoad":56.08571428571428,"eventLoopLag":3,"poolSize":3}
+{"timestamp":1771098440816,"mode":"paper","eventType":"FX5_SCAN","pairsScanned":100,"survivors":75,"metricFilteredSurvivors":32,"metricFilteredCount":43,"eligibleCount":75,"idealCount":50,"rotationalCount":25,"avgDailyRange":7.955903247943447,"isEngineActive":false,"volumeStats":{"SMALL":63,"MID":7,"LARGE":5}}
+{"timestamp":1771098450390,"mode":"passive","eventType":"RTB_REFRESH","bucket":1,"signalsProcessed":0,"duration":32,"cpuLoad":40.253125,"eventLoopLag":2,"poolSize":3}
+{"timestamp":1771098465397,"mode":"passive","eventType":"RTB_REFRESH","bucket":2,"signalsProcessed":0,"duration":33,"cpuLoad":65.9060606060606,"eventLoopLag":5,"poolSize":4}
+{"timestamp":1771098471184,"mode":"paper","eventType":"FX5_SCAN","pairsScanned":100,"survivors":76,"metricFilteredSurvivors":32,"metricFilteredCount":44,"eligibleCount":76,"idealCount":50,"rotationalCount":26,"avgDailyRange":7.9848691941247525,"isEngineActive":false,"volumeStats":{"SMALL":64,"MID":7,"LARGE":5}}
+{"timestamp":1771098480394,"mode":"passive","eventType":"RTB_REFRESH","bucket":3,"signalsProcessed":0,"duration":28,"cpuLoad":62.44285714285714,"eventLoopLag":3,"poolSize":3}
+{"timestamp":1771098495421,"mode":"passive","eventType":"RTB_REFRESH","bucket":4,"signalsProcessed":0,"duration":47,"cpuLoad":78.44255319148937,"eventLoopLag":8,"poolSize":3}
+{"timestamp":1771098501301,"mode":"paper","eventType":"FX5_SCAN","pairsScanned":100,"survivors":79,"metricFilteredSurvivors":39,"metricFilteredCount":40,"eligibleCount":79,"idealCount":49,"rotationalCount":30,"avgDailyRange":7.512996642164703,"isEngineActive":false,"volumeStats":{"SMALL":64,"MID":10,"LARGE":5}}
+{"timestamp":1771098510457,"mode":"passive","eventType":"RTB_REFRESH","bucket":5,"signalsProcessed":0,"duration":56,"cpuLoad":13.826785714285714,"eventLoopLag":27,"poolSize":3}
+{"timestamp":1771098525491,"mode":"passive","eventType":"RTB_REFRESH","bucket":6,"signalsProcessed":0,"duration":89,"cpuLoad":47.09887640449438,"eventLoopLag":1,"poolSize":3}
+{"timestamp":1771098531389,"mode":"paper","eventType":"FX5_SCAN","pairsScanned":100,"survivors":75,"metricFilteredSurvivors":35,"metricFilteredCount":40,"eligibleCount":75,"idealCount":49,"rotationalCount":26,"avgDailyRange":8.676026343090959,"isEngineActive":false,"volumeStats":{"SMALL":63,"MID":7,"LARGE":5}}
+{"timestamp":1771098540532,"mode":"passive","eventType":"RTB_REFRESH","bucket":7,"signalsProcessed":0,"duration":127,"cpuLoad":30.214173228346457,"eventLoopLag":3,"poolSize":4}
+{"timestamp":1771098555515,"mode":"passive","eventType":"RTB_REFRESH","bucket":0,"signalsProcessed":0,"duration":108,"cpuLoad":24.785185185185185,"eventLoopLag":2,"poolSize":3}
+{"timestamp":1771098561414,"mode":"paper","eventType":"FX5_SCAN","pairsScanned":100,"survivors":77,"metricFilteredSurvivors":37,"metricFilteredCount":40,"eligibleCount":77,"idealCount":50,"rotationalCount":27,"avgDailyRange":8.149444107137173,"isEngineActive":false,"volumeStats":{"SMALL":65,"MID":7,"LARGE":5}}
+{"timestamp":1771098570456,"mode":"passive","eventType":"RTB_REFRESH","bucket":1,"signalsProcessed":0,"duration":40,"cpuLoad":37.330000000000005,"eventLoopLag":8,"poolSize":4}
+{"timestamp":1771098585461,"mode":"passive","eventType":"RTB_REFRESH","bucket":2,"signalsProcessed":0,"duration":42,"cpuLoad":44.088095238095235,"eventLoopLag":4,"poolSize":3}
+{"timestamp":1771098590833,"mode":"paper","eventType":"FX5_SCAN","pairsScanned":100,"survivors":76,"metricFilteredSurvivors":36,"metricFilteredCount":40,"eligibleCount":76,"idealCount":50,"rotationalCount":26,"avgDailyRange":8.214444211190804,"isEngineActive":false,"volumeStats":{"SMALL":64,"MID":7,"LARGE":5}}
+{"timestamp":1771098600440,"mode":"passive","eventType":"RTB_REFRESH","bucket":3,"signalsProcessed":0,"duration":21,"cpuLoad":30.8,"eventLoopLag":0,"poolSize":3}
+{"timestamp":1771098615459,"mode":"passive","eventType":"RTB_REFRESH","bucket":4,"signalsProcessed":0,"duration":38,"cpuLoad":43.213157894736845,"eventLoopLag":2,"poolSize":4}
+{"timestamp":1771098620923,"mode":"paper","eventType":"FX5_SCAN","pairsScanned":100,"survivors":77,"metricFilteredSurvivors":41,"metricFilteredCount":36,"eligibleCount":77,"idealCount":50,"rotationalCount":27,"avgDailyRange":8.46279266279175,"isEngineActive":false,"volumeStats":{"SMALL":64,"MID":8,"LARGE":5}}
+{"timestamp":1771098630450,"mode":"passive","eventType":"RTB_REFRESH","bucket":5,"signalsProcessed":0,"duration":26,"cpuLoad":30.538461538461537,"eventLoopLag":3,"poolSize":5}
+{"timestamp":1771098645463,"mode":"passive","eventType":"RTB_REFRESH","bucket":6,"signalsProcessed":0,"duration":34,"cpuLoad":87.33529411764705,"eventLoopLag":5,"poolSize":4}
