@@ -28258,5 +28258,151 @@
     "strategy": "pivot_shift",
     "source": "VTS",
     "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.61"
+  },
+  {
+    "timestamp": "2026-02-14T21:04:32.420Z",
+    "symbol": "FORTH/USD",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "QUANT",
+    "strategy": "vwap_pullback",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:04:32.424Z",
+    "symbol": "FORTH/USD",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "PATTERN",
+    "strategy": "morning_star",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:04:32.424Z",
+    "symbol": "FORTH/USD",
+    "reason": "Confidence_Floor",
+    "regime": "BULL_STABLE",
+    "signalType": "HYBRID",
+    "strategy": "pivot_shift",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.58"
+  },
+  {
+    "timestamp": "2026-02-14T21:04:32.673Z",
+    "symbol": "ICP/USD",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "QUANT",
+    "strategy": "vwap_pullback",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:04:32.678Z",
+    "symbol": "ICP/USD",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "PATTERN",
+    "strategy": "morning_star",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:04:32.923Z",
+    "symbol": "CAKE/EUR",
+    "reason": "Confidence_Floor",
+    "regime": "LOW_VOL_CHOP",
+    "signalType": "QUANT",
+    "strategy": "range_trade",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.50"
+  },
+  {
+    "timestamp": "2026-02-14T21:04:32.923Z",
+    "symbol": "CAKE/EUR",
+    "reason": "Confidence_Floor",
+    "regime": "LOW_VOL_CHOP",
+    "signalType": "PATTERN",
+    "strategy": "support_bounce",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.59"
+  },
+  {
+    "timestamp": "2026-02-14T21:04:32.924Z",
+    "symbol": "CAKE/EUR",
+    "reason": "Confidence_Floor",
+    "regime": "LOW_VOL_CHOP",
+    "signalType": "QUANT",
+    "strategy": "abcd_long",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.50"
+  },
+  {
+    "timestamp": "2026-02-14T21:04:32.924Z",
+    "symbol": "CAKE/EUR",
+    "reason": "Confidence_Floor",
+    "regime": "LOW_VOL_CHOP",
+    "signalType": "HYBRID",
+    "strategy": "adaptive_flow",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.54"
+  },
+  {
+    "timestamp": "2026-02-14T21:04:33.162Z",
+    "symbol": "CAKE/USD",
+    "reason": "Confidence_Floor",
+    "regime": "TRANSITION",
+    "signalType": "QUANT",
+    "strategy": "liquidity_trap",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.57"
+  },
+  {
+    "timestamp": "2026-02-14T21:04:33.163Z",
+    "symbol": "CAKE/USD",
+    "reason": "Confidence_Floor",
+    "regime": "TRANSITION",
+    "signalType": "HYBRID",
+    "strategy": "pivot_shift",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.53"
+  },
+  {
+    "timestamp": "2026-02-14T21:04:33.163Z",
+    "symbol": "CAKE/USD",
+    "reason": "BLOCKED_GOVERNANCE",
+    "regime": "TRANSITION",
+    "signalType": "PATTERN",
+    "strategy": "morning_star",
+    "source": "VTS",
+    "governanceReason": "UNSTABLE_REGIME: HIGH dependency blocked in UNSTABLE"
+  },
+  {
+    "timestamp": "2026-02-14T21:04:33.743Z",
+    "symbol": "COMP/EUR",
+    "reason": "BLOCKED_GOVERNANCE",
+    "regime": "TRANSITION",
+    "signalType": "QUANT",
+    "strategy": "liquidity_trap",
+    "source": "VTS",
+    "governanceReason": "UNSTABLE_REGIME: HIGH dependency blocked in UNSTABLE"
+  },
+  {
+    "timestamp": "2026-02-14T21:04:33.743Z",
+    "symbol": "COMP/EUR",
+    "reason": "Confidence_Floor",
+    "regime": "TRANSITION",
+    "signalType": "HYBRID",
+    "strategy": "pivot_shift",
+    "source": "VTS",
+    "modeSkipReason": "SURVIVAL mode requires confidence >= 0.8, got 0.40"
+  },
+  {
+    "timestamp": "2026-02-14T21:04:33.748Z",
+    "symbol": "COMP/EUR",
+    "reason": "Confidence_Floor",
+    "regime": "TRANSITION",
+    "signalType": "PATTERN",
+    "strategy": "morning_star",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.47"
   }
 ]
