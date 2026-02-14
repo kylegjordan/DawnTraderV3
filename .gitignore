@@ -1,6 +1,7 @@
 # ============================================================
 # DAWNTRADER PROJECT — CLEAN GITIGNORE (Phase 9+)
-# Prevents local artifacts, caches, logs, and large files
+# Prevents local artifacts, caches, and system files
+# NOTE: logs/, diagnostic-reports/, backups/ are tracked via Git LFS
 # ============================================================
 
 # ---- Core Node / Replit / System ----
@@ -13,7 +14,6 @@ npm-debug.log*
 *.swo
 .vscode/
 .idea/
-*.log
 
 # ---- Playwright / Cache / Browsers ----
 .cache/
@@ -31,35 +31,24 @@ out/
 *.tgz
 *.map
 
-# ---- Backups / Diagnostics / Dumps ----
-backups/
-backup_*/
-diagnostic-reports/
-*.ndjson
-*.dump
-*.bak
-*.zip
-*.tar.gz
-*.sql
-*.sqlite
-*.db
-
 # ---- Replit temporary bundles ----
 *.replit-run*
 *.bundle*
 workspace.tar.gz
 
 # ---- Phase Backups ----
-dawntrader-pre-*/ 
+dawntrader-pre-*/
 docs/backups/
 docs/backup/
-
-# ---- Logs / Artifacts / Traces ----
-*.trace
-*.trace.json
-*.trace.ndjson
-*.trace.zip
 
 # ---- OS / Misc ----
 Thumbs.db
 desktop.ini
+*.sqlite
+*.db
+
+# ---- Traces ----
+*.trace
+*.trace.json
+*.trace.ndjson
+*.trace.zip

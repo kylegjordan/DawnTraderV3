@@ -1,0 +1,62 @@
+#!/bin/bash
+# ============================================================
+# DawnTrader — GitHub Push Script (One-Way, LFS-Enabled)
+# Pushes ALL tracked files to GitHub via Git LFS
+# Usage: bash scripts/github-push.sh "Your commit message"
+#   or:  bash scripts/github-push.sh  (auto-generates message)
+# ============================================================
+
+set -e
+
+BRANCH="dawntrader-v3"
+REMOTE="origin"
+REPO_DIR="/home/runner/workspace"
+
+cd "$REPO_DIR"
+
+if [ -n "$1" ]; then
+    COMMIT_MSG="$1"
+else
+    COMMIT_MSG="DawnTrader update $(date '+%Y-%m-%d %H:%M:%S UTC')"
+fi
+
+echo "=========================================="
+echo "  DawnTrader GitHub Push (LFS-Enabled)"
+echo "=========================================="
+echo "Branch: $BRANCH"
+echo "Message: $COMMIT_MSG"
+echo ""
+
+CURRENT_BRANCH=$(git branch --show-current 2>/dev/null)
+if [ "$CURRENT_BRANCH" != "$BRANCH" ]; then
+    echo "[1/5] Switching to branch: $BRANCH"
+    git checkout "$BRANCH" 2>/dev/null || git checkout -b "$BRANCH"
+else
+    echo "[1/5] Already on branch: $BRANCH"
+fi
+
+echo "[2/5] Staging files..."
+git add -A
+
+if git diff --cached --quiet 2>/dev/null; then
+    echo ""
+    echo "No changes to push. Repository is up to date."
+    exit 0
+fi
+
+echo "[3/5] Changes to commit:"
+git diff --cached --stat | tail -5
+
+echo "[4/5] Committing..."
+git commit -m "$COMMIT_MSG" 2>/dev/null || true
+
+echo "[5/5] Pushing to GitHub (with LFS)..."
+git push "$REMOTE" "$BRANCH" 2>&1
+
+echo ""
+echo "=========================================="
+echo "  Push complete!"
+echo "=========================================="
+echo "Branch: $BRANCH"
+echo "Remote: $(git remote get-url $REMOTE)"
+echo "Time: $(date '+%Y-%m-%d %H:%M:%S UTC')"
