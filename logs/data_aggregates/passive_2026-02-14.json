@@ -3871,3 +3871,6 @@
 {"timestamp":1771102488370,"mode":"passive","eventType":"RTB_REFRESH","bucket":5,"signalsProcessed":0,"duration":56,"cpuLoad":21.885714285714286,"eventLoopLag":5,"poolSize":3}
 {"timestamp":1771102503348,"mode":"passive","eventType":"RTB_REFRESH","bucket":6,"signalsProcessed":0,"duration":28,"cpuLoad":57.76785714285714,"eventLoopLag":6,"poolSize":3}
 {"timestamp":1771102507682,"mode":"paper","eventType":"FX5_SCAN","pairsScanned":112,"survivors":45,"metricFilteredSurvivors":33,"metricFilteredCount":12,"eligibleCount":45,"idealCount":12,"rotationalCount":33,"avgDailyRange":5.20929218233042,"isEngineActive":false,"volumeStats":{"SMALL":33,"MID":7,"LARGE":5}}
+{"timestamp":1771102518347,"mode":"passive","eventType":"RTB_REFRESH","bucket":7,"signalsProcessed":0,"duration":25,"cpuLoad":31.328,"eventLoopLag":2,"poolSize":3}
+{"timestamp":1771102533357,"mode":"passive","eventType":"RTB_REFRESH","bucket":0,"signalsProcessed":0,"duration":29,"cpuLoad":80.35862068965517,"eventLoopLag":5,"poolSize":4}
+{"timestamp":1771102538281,"mode":"paper","eventType":"FX5_SCAN","pairsScanned":121,"survivors":49,"metricFilteredSurvivors":38,"metricFilteredCount":11,"eligibleCount":49,"idealCount":12,"rotationalCount":37,"avgDailyRange":5.385162001815706,"isEngineActive":false,"volumeStats":{"SMALL":38,"MID":6,"LARGE":5}}

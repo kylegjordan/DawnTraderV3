@@ -1,60 +1,60 @@
 {
   "bob_snapshot": {
-    "timestamp": "2026-02-14T20:55:11.470Z",
+    "timestamp": "2026-02-14T20:55:41.470Z",
     "modules": {
       "MetricsBob": {
         "name": "MetricsBob",
-        "lastUpdate": "2026-02-14T20:55:11.469Z",
+        "lastUpdate": "2026-02-14T20:55:41.469Z",
         "stale": false,
-        "hitRate": "67.2%",
+        "hitRate": "67.1%",
         "cacheSize": 2,
         "ttl": 60
       },
       "DataBob": {
         "name": "DataBob",
-        "lastUpdate": "2026-02-14T20:55:11.469Z",
+        "lastUpdate": "2026-02-14T20:55:41.469Z",
         "stale": false,
-        "hitRate": "67.2%",
+        "hitRate": "67.1%",
         "cacheSize": 2,
         "ttl": 60
       },
       "ConfigBob": {
         "name": "ConfigBob",
-        "lastUpdate": "2026-02-14T20:55:11.469Z",
+        "lastUpdate": "2026-02-14T20:55:41.469Z",
         "stale": false,
-        "hitRate": "67.2%",
+        "hitRate": "67.1%",
         "cacheSize": 2,
         "ttl": 60
       },
       "StrategyBob": {
         "name": "StrategyBob",
-        "lastUpdate": "2026-02-14T20:55:11.469Z",
+        "lastUpdate": "2026-02-14T20:55:41.469Z",
         "stale": false,
-        "hitRate": "67.2%",
+        "hitRate": "67.1%",
         "cacheSize": 2,
         "ttl": 60
       },
       "TradeBob": {
         "name": "TradeBob",
-        "lastUpdate": "2026-02-14T20:55:11.469Z",
+        "lastUpdate": "2026-02-14T20:55:41.469Z",
         "stale": false,
-        "hitRate": "67.2%",
+        "hitRate": "67.1%",
         "cacheSize": 2,
         "ttl": 60
       },
       "InsightBob": {
         "name": "InsightBob",
-        "lastUpdate": "2026-02-14T20:55:11.469Z",
+        "lastUpdate": "2026-02-14T20:55:41.469Z",
         "stale": false,
-        "hitRate": "67.2%",
+        "hitRate": "67.1%",
         "cacheSize": 2,
         "ttl": 60
       },
       "UIBob": {
         "name": "UIBob",
-        "lastUpdate": "2026-02-14T20:55:11.469Z",
+        "lastUpdate": "2026-02-14T20:55:41.469Z",
         "stale": false,
-        "hitRate": "67.2%",
+        "hitRate": "67.1%",
         "cacheSize": 2,
         "ttl": 60
       }
@@ -62,9 +62,9 @@
     "overallStats": {
       "modulesActive": 7,
       "totalCacheSize": 2,
-      "overallHitRate": "67.2%",
-      "totalHits": 43,
-      "totalMisses": 21
+      "overallHitRate": "67.1%",
+      "totalHits": 47,
+      "totalMisses": 23
     },
     "recentChanges": [],
     "systemHealth": "healthy",
@@ -75,23 +75,23 @@
       ],
       "criticalIssues": [],
       "metrics": {
-        "timestamp": "2026-02-14T20:55:11.470Z",
+        "timestamp": "2026-02-14T20:55:41.470Z",
         "system": {
           "cpuUsage": 38.9,
           "memoryUsage": {
             "total": 67428118528,
-            "used": 47967756288,
-            "free": 19460362240,
-            "percentUsed": 71
+            "used": 46111666176,
+            "free": 21316452352,
+            "percentUsed": 68
           },
-          "uptime": 353
+          "uptime": 383
         },
         "cache": {
           "hitRate": 69,
           "missRate": 31,
-          "totalRequests": 62,
-          "hits": 43,
-          "misses": 19
+          "totalRequests": 68,
+          "hits": 47,
+          "misses": 21
         },
         "latency": {
           "cortex": null,
@@ -100,11 +100,11 @@
         },
         "schedulers": {
           "cortexSync": {
-            "uptime": 353,
-            "lastRun": "2026-02-14T20:54:41.470Z"
+            "uptime": 383,
+            "lastRun": "2026-02-14T20:55:11.472Z"
           },
           "analytics": {
-            "uptime": 353,
+            "uptime": 383,
             "lastRun": "2026-02-14T20:49:41.484Z"
           }
         },
@@ -160,10 +160,10 @@
     "current": {
       "view": "Dashboard",
       "mode": "live",
-      "timestamp": "2026-02-14T20:55:11.469Z"
+      "timestamp": "2026-02-14T20:55:41.469Z"
     }
   },
-  "last_sync": "2026-02-14T20:55:11.470Z",
+  "last_sync": "2026-02-14T20:55:41.470Z",
   "memory": {
     "analytics_live_6c591801-3072-431d-b192-30aaf426f15e": {
       "value": {
