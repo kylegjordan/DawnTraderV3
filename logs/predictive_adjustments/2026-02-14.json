@@ -1,3 +1,30 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:5b82a380b486fda56eb6d816b721691cde38e1530667fecc23001ba3fb5f17eb
-size 7516
+[
+  {
+    "_schema": "predictive-adjustments/v1.1",
+    "timestamp": "2026-02-14T20:05:06.997Z",
+    "category": "Weight",
+    "adjustmentType": "weight_adjustment",
+    "parameter": "ml.MORNING_STAR_weight",
+    "oldValue": 1,
+    "newValue": 1.025,
+    "delta": 0.025,
+    "impact": 0.025,
+    "strategy": "MORNING_STAR",
+    "reason": "MLCalibration: INCREASE by 0.0250 perfScore=0 edgeDelta=-0.027814",
+    "reversibility": "automatic"
+  },
+  {
+    "_schema": "predictive-adjustments/v1.1",
+    "timestamp": "2026-02-14T20:05:07.083Z",
+    "category": "Weight",
+    "adjustmentType": "weight_adjustment",
+    "parameter": "ml.TRI_STAR_weight",
+    "oldValue": 1,
+    "newValue": 1.025,
+    "delta": 0.025,
+    "impact": 0.025,
+    "strategy": "TRI_STAR",
+    "reason": "MLCalibration: INCREASE by 0.0250 perfScore=0 edgeDelta=-0.020253",
+    "reversibility": "automatic"
+  }
+]
