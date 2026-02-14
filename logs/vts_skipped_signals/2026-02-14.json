@@ -27512,5 +27512,751 @@
     "strategy": "morning_star",
     "source": "VTS",
     "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.54"
+  },
+  {
+    "timestamp": "2026-02-14T21:02:32.982Z",
+    "symbol": "ADI/USD",
+    "reason": "Confidence_Floor",
+    "regime": "TRANSITION",
+    "signalType": "QUANT",
+    "strategy": "liquidity_trap",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.57"
+  },
+  {
+    "timestamp": "2026-02-14T21:02:32.983Z",
+    "symbol": "ADI/USD",
+    "reason": "Confidence_Floor",
+    "regime": "TRANSITION",
+    "signalType": "HYBRID",
+    "strategy": "pivot_shift",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.48"
+  },
+  {
+    "timestamp": "2026-02-14T21:02:32.984Z",
+    "symbol": "ADI/USD",
+    "reason": "Confidence_Floor",
+    "regime": "TRANSITION",
+    "signalType": "PATTERN",
+    "strategy": "morning_star",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.53"
+  },
+  {
+    "timestamp": "2026-02-14T21:02:33.336Z",
+    "symbol": "AAVE/USD",
+    "reason": "Confidence_Floor",
+    "regime": "BULL_STABLE",
+    "signalType": "PATTERN",
+    "strategy": "morning_star",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.64"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:33.103Z",
+    "symbol": "XRP/USD",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "QUANT",
+    "strategy": "vwap_pullback",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:33.107Z",
+    "symbol": "XRP/USD",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "PATTERN",
+    "strategy": "morning_star",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:33.108Z",
+    "symbol": "XRP/USD",
+    "reason": "Confidence_Floor",
+    "regime": "BULL_STABLE",
+    "signalType": "HYBRID",
+    "strategy": "pivot_shift",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.64"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:33.666Z",
+    "symbol": "CVX/USD",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "QUANT",
+    "strategy": "vwap_pullback",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:33.670Z",
+    "symbol": "CVX/USD",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "PATTERN",
+    "strategy": "morning_star",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:33.675Z",
+    "symbol": "CVX/USD",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "HYBRID",
+    "strategy": "pivot_shift",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:34.039Z",
+    "symbol": "DASH/EUR",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "QUANT",
+    "strategy": "vwap_pullback",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:34.043Z",
+    "symbol": "DASH/EUR",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "PATTERN",
+    "strategy": "morning_star",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:34.044Z",
+    "symbol": "DASH/EUR",
+    "reason": "Confidence_Floor",
+    "regime": "BULL_STABLE",
+    "signalType": "HYBRID",
+    "strategy": "pivot_shift",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.64"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:34.293Z",
+    "symbol": "XRP/GBP",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "QUANT",
+    "strategy": "vwap_pullback",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:34.294Z",
+    "symbol": "XRP/GBP",
+    "reason": "Confidence_Floor",
+    "regime": "BULL_STABLE",
+    "signalType": "PATTERN",
+    "strategy": "morning_star",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.63"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:34.299Z",
+    "symbol": "XRP/GBP",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "HYBRID",
+    "strategy": "pivot_shift",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:34.650Z",
+    "symbol": "XRP/EUR",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "QUANT",
+    "strategy": "vwap_pullback",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:34.650Z",
+    "symbol": "XRP/EUR",
+    "reason": "Confidence_Floor",
+    "regime": "BULL_STABLE",
+    "signalType": "PATTERN",
+    "strategy": "morning_star",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.64"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:35.011Z",
+    "symbol": "ZEC/USD",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "PATTERN",
+    "strategy": "morning_star",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:35.020Z",
+    "symbol": "ZEC/USD",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "HYBRID",
+    "strategy": "pivot_shift",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:35.367Z",
+    "symbol": "XRP/USDC",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "QUANT",
+    "strategy": "vwap_pullback",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:35.370Z",
+    "symbol": "XRP/USDC",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "PATTERN",
+    "strategy": "morning_star",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:35.375Z",
+    "symbol": "XRP/USDC",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "HYBRID",
+    "strategy": "pivot_shift",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:35.988Z",
+    "symbol": "XRP/AUD",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "QUANT",
+    "strategy": "vwap_pullback",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:35.992Z",
+    "symbol": "XRP/AUD",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "PATTERN",
+    "strategy": "morning_star",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:35.995Z",
+    "symbol": "XRP/AUD",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "HYBRID",
+    "strategy": "pivot_shift",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:36.239Z",
+    "symbol": "DOT/GBP",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "QUANT",
+    "strategy": "vwap_pullback",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:36.245Z",
+    "symbol": "DOT/GBP",
+    "reason": "Confidence_Floor",
+    "regime": "BULL_STABLE",
+    "signalType": "HYBRID",
+    "strategy": "pivot_shift",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.64"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:36.874Z",
+    "symbol": "DASH/USD",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "QUANT",
+    "strategy": "vwap_pullback",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:36.880Z",
+    "symbol": "DASH/USD",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "PATTERN",
+    "strategy": "morning_star",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:36.880Z",
+    "symbol": "DASH/USD",
+    "reason": "Confidence_Floor",
+    "regime": "BULL_STABLE",
+    "signalType": "HYBRID",
+    "strategy": "pivot_shift",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.60"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:37.125Z",
+    "symbol": "EGLD/USD",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "QUANT",
+    "strategy": "vwap_pullback",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:37.133Z",
+    "symbol": "EGLD/USD",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "HYBRID",
+    "strategy": "pivot_shift",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:37.742Z",
+    "symbol": "XMR/USD",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "QUANT",
+    "strategy": "vwap_pullback",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:37.747Z",
+    "symbol": "XMR/USD",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "PATTERN",
+    "strategy": "morning_star",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:37.752Z",
+    "symbol": "XMR/USD",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "HYBRID",
+    "strategy": "pivot_shift",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:38.374Z",
+    "symbol": "XRP/USDT",
+    "reason": "Confidence_Floor",
+    "regime": "BULL_STABLE",
+    "signalType": "QUANT",
+    "strategy": "vwap_pullback",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.64"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:38.375Z",
+    "symbol": "XRP/USDT",
+    "reason": "Confidence_Floor",
+    "regime": "BULL_STABLE",
+    "signalType": "PATTERN",
+    "strategy": "morning_star",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.63"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:38.385Z",
+    "symbol": "XRP/USDT",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "HYBRID",
+    "strategy": "pivot_shift",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:38.928Z",
+    "symbol": "XMR/USDT",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "QUANT",
+    "strategy": "vwap_pullback",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:38.931Z",
+    "symbol": "XMR/USDT",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "PATTERN",
+    "strategy": "morning_star",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:38.932Z",
+    "symbol": "XMR/USDT",
+    "reason": "Confidence_Floor",
+    "regime": "BULL_STABLE",
+    "signalType": "HYBRID",
+    "strategy": "pivot_shift",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.58"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:39.194Z",
+    "symbol": "DOT/USD",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "QUANT",
+    "strategy": "vwap_pullback",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:39.198Z",
+    "symbol": "DOT/USD",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "PATTERN",
+    "strategy": "morning_star",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:39.202Z",
+    "symbol": "DOT/USD",
+    "reason": "Duplicate_Position",
+    "regime": "BULL_STABLE",
+    "signalType": "HYBRID",
+    "strategy": "pivot_shift",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:39.533Z",
+    "symbol": "API3/EUR",
+    "reason": "Confidence_Floor",
+    "regime": "LOW_VOL_CHOP",
+    "signalType": "QUANT",
+    "strategy": "range_trade",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.57"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:39.533Z",
+    "symbol": "API3/EUR",
+    "reason": "BLOCKED_GOVERNANCE",
+    "regime": "LOW_VOL_CHOP",
+    "signalType": "PATTERN",
+    "strategy": "support_bounce",
+    "source": "VTS",
+    "governanceReason": "UNSTABLE_REGIME: HIGH dependency blocked in UNSTABLE"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:39.533Z",
+    "symbol": "API3/EUR",
+    "reason": "Confidence_Floor",
+    "regime": "LOW_VOL_CHOP",
+    "signalType": "QUANT",
+    "strategy": "abcd_long",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.64"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:39.533Z",
+    "symbol": "API3/EUR",
+    "reason": "Confidence_Floor",
+    "regime": "LOW_VOL_CHOP",
+    "signalType": "HYBRID",
+    "strategy": "adaptive_flow",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.61"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:40.044Z",
+    "symbol": "API3/USD",
+    "reason": "Confidence_Floor",
+    "regime": "LOW_VOL_CHOP",
+    "signalType": "QUANT",
+    "strategy": "range_trade",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.67"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:40.044Z",
+    "symbol": "API3/USD",
+    "reason": "Confidence_Floor",
+    "regime": "LOW_VOL_CHOP",
+    "signalType": "PATTERN",
+    "strategy": "support_bounce",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.55"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:40.044Z",
+    "symbol": "API3/USD",
+    "reason": "Confidence_Floor",
+    "regime": "LOW_VOL_CHOP",
+    "signalType": "QUANT",
+    "strategy": "abcd_long",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.51"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:40.044Z",
+    "symbol": "API3/USD",
+    "reason": "Confidence_Floor",
+    "regime": "LOW_VOL_CHOP",
+    "signalType": "HYBRID",
+    "strategy": "adaptive_flow",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.58"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:40.379Z",
+    "symbol": "APT/EUR",
+    "reason": "Confidence_Floor",
+    "regime": "TRANSITION",
+    "signalType": "QUANT",
+    "strategy": "liquidity_trap",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.50"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:40.380Z",
+    "symbol": "APT/EUR",
+    "reason": "Confidence_Floor",
+    "regime": "TRANSITION",
+    "signalType": "HYBRID",
+    "strategy": "pivot_shift",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.61"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:40.380Z",
+    "symbol": "APT/EUR",
+    "reason": "Confidence_Floor",
+    "regime": "TRANSITION",
+    "signalType": "PATTERN",
+    "strategy": "morning_star",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.46"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:41.234Z",
+    "symbol": "AR/USD",
+    "reason": "BLOCKED_GOVERNANCE",
+    "regime": "TRANSITION",
+    "signalType": "QUANT",
+    "strategy": "liquidity_trap",
+    "source": "VTS",
+    "governanceReason": "UNSTABLE_REGIME: HIGH dependency blocked in UNSTABLE"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:41.234Z",
+    "symbol": "AR/USD",
+    "reason": "Confidence_Floor",
+    "regime": "TRANSITION",
+    "signalType": "HYBRID",
+    "strategy": "pivot_shift",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.51"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:41.234Z",
+    "symbol": "AR/USD",
+    "reason": "Confidence_Floor",
+    "regime": "TRANSITION",
+    "signalType": "PATTERN",
+    "strategy": "morning_star",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.54"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:41.494Z",
+    "symbol": "ASTER/USD",
+    "reason": "Confidence_Floor",
+    "regime": "TRANSITION",
+    "signalType": "QUANT",
+    "strategy": "liquidity_trap",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.59"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:41.495Z",
+    "symbol": "ASTER/USD",
+    "reason": "Confidence_Floor",
+    "regime": "TRANSITION",
+    "signalType": "HYBRID",
+    "strategy": "pivot_shift",
+    "source": "VTS",
+    "modeSkipReason": "SURVIVAL mode requires confidence >= 0.8, got 0.38"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:41.495Z",
+    "symbol": "ASTER/USD",
+    "reason": "Confidence_Floor",
+    "regime": "TRANSITION",
+    "signalType": "PATTERN",
+    "strategy": "morning_star",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.58"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:42.380Z",
+    "symbol": "ATOM/GBP",
+    "reason": "Net_EV_Negative",
+    "regime": "BULL_STABLE",
+    "signalType": "QUANT",
+    "strategy": "vwap_pullback",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:42.380Z",
+    "symbol": "ATOM/GBP",
+    "reason": "Confidence_Floor",
+    "regime": "BULL_STABLE",
+    "signalType": "PATTERN",
+    "strategy": "morning_star",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.63"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:42.381Z",
+    "symbol": "ATOM/GBP",
+    "reason": "Net_EV_Negative",
+    "regime": "BULL_STABLE",
+    "signalType": "HYBRID",
+    "strategy": "pivot_shift",
+    "source": "VTS"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:43.663Z",
+    "symbol": "ATOM/USDC",
+    "reason": "Confidence_Floor",
+    "regime": "BULL_STABLE",
+    "signalType": "QUANT",
+    "strategy": "vwap_pullback",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.64"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:43.663Z",
+    "symbol": "ATOM/USDC",
+    "reason": "Confidence_Floor",
+    "regime": "BULL_STABLE",
+    "signalType": "PATTERN",
+    "strategy": "morning_star",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.63"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:44.514Z",
+    "symbol": "AUD/USD",
+    "reason": "BLOCKED_GOVERNANCE",
+    "regime": "LOW_VOL_CHOP",
+    "signalType": "QUANT",
+    "strategy": "range_trade",
+    "source": "VTS",
+    "governanceReason": "UNSTABLE_REGIME: HIGH dependency blocked in UNSTABLE"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:44.514Z",
+    "symbol": "AUD/USD",
+    "reason": "BLOCKED_GOVERNANCE",
+    "regime": "LOW_VOL_CHOP",
+    "signalType": "PATTERN",
+    "strategy": "support_bounce",
+    "source": "VTS",
+    "governanceReason": "UNSTABLE_REGIME: HIGH dependency blocked in UNSTABLE"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:44.514Z",
+    "symbol": "AUD/USD",
+    "reason": "BLOCKED_GOVERNANCE",
+    "regime": "LOW_VOL_CHOP",
+    "signalType": "QUANT",
+    "strategy": "abcd_long",
+    "source": "VTS",
+    "governanceReason": "UNSTABLE_REGIME: HIGH dependency blocked in UNSTABLE"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:44.515Z",
+    "symbol": "AUD/USD",
+    "reason": "BLOCKED_GOVERNANCE",
+    "regime": "LOW_VOL_CHOP",
+    "signalType": "HYBRID",
+    "strategy": "adaptive_flow",
+    "source": "VTS",
+    "governanceReason": "UNSTABLE_REGIME: HIGH dependency blocked in UNSTABLE"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:44.755Z",
+    "symbol": "AUSD/USD",
+    "reason": "BLOCKED_GOVERNANCE",
+    "regime": "LOW_VOL_CHOP",
+    "signalType": "QUANT",
+    "strategy": "range_trade",
+    "source": "VTS",
+    "governanceReason": "UNSTABLE_REGIME: HIGH dependency blocked in UNSTABLE"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:44.755Z",
+    "symbol": "AUSD/USD",
+    "reason": "BLOCKED_GOVERNANCE",
+    "regime": "LOW_VOL_CHOP",
+    "signalType": "PATTERN",
+    "strategy": "support_bounce",
+    "source": "VTS",
+    "governanceReason": "UNSTABLE_REGIME: HIGH dependency blocked in UNSTABLE"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:44.755Z",
+    "symbol": "AUSD/USD",
+    "reason": "BLOCKED_GOVERNANCE",
+    "regime": "LOW_VOL_CHOP",
+    "signalType": "QUANT",
+    "strategy": "abcd_long",
+    "source": "VTS",
+    "governanceReason": "UNSTABLE_REGIME: HIGH dependency blocked in UNSTABLE"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:44.756Z",
+    "symbol": "AUSD/USD",
+    "reason": "BLOCKED_GOVERNANCE",
+    "regime": "LOW_VOL_CHOP",
+    "signalType": "HYBRID",
+    "strategy": "adaptive_flow",
+    "source": "VTS",
+    "governanceReason": "UNSTABLE_REGIME: HIGH dependency blocked in UNSTABLE"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:45.262Z",
+    "symbol": "AVAX/EUR",
+    "reason": "Confidence_Floor",
+    "regime": "BULL_STABLE",
+    "signalType": "QUANT",
+    "strategy": "vwap_pullback",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.65"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:46.380Z",
+    "symbol": "AVAX/USDC",
+    "reason": "Confidence_Floor",
+    "regime": "BULL_STABLE",
+    "signalType": "QUANT",
+    "strategy": "vwap_pullback",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.60"
+  },
+  {
+    "timestamp": "2026-02-14T21:03:46.385Z",
+    "symbol": "AVAX/USDC",
+    "reason": "Confidence_Floor",
+    "regime": "BULL_STABLE",
+    "signalType": "HYBRID",
+    "strategy": "pivot_shift",
+    "source": "VTS",
+    "modeSkipReason": "DEFENSIVE mode requires confidence >= 0.7, got 0.61"
   }
 ]
