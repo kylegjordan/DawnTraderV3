@@ -1,3 +1,720 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:b1dde23a7a0ae67ceceab837306d7a46dddd18d6404bc21e1fdcaf23684f03c5
-size 11680
+{
+  "ts": "2025-11-02T19:44:47Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:45:03Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:45:18Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:45:34Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:45:50Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:46:05Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:46:21Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:46:36Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:46:52Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:47:08Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:47:23Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:47:39Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:47:55Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:48:11Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:48:26Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:48:42Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:48:58Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:49:14Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:49:29Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:49:45Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:50:01Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:50:16Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:50:32Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:50:47Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:51:03Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:51:19Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:51:34Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:51:50Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:52:05Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:52:21Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:52:37Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:52:52Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:53:08Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:53:23Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:53:39Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:53:55Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:54:11Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:54:26Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:54:42Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:54:58Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:55:14Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:55:29Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:55:45Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:56:01Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:56:16Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:56:32Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:56:48Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:57:03Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:57:19Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:57:35Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:57:50Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:58:06Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:58:22Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:58:37Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:58:53Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:59:09Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:59:24Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:59:40Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:59:55Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T20:00:11Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T20:00:27Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T20:00:43Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T20:00:58Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T20:01:14Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T20:01:30Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T20:01:45Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T20:02:01Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T20:02:17Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T20:02:33Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T20:02:48Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T20:03:04Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T20:03:20Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T20:03:36Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T20:03:51Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T20:04:07Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T20:04:24Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T20:04:40Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T20:04:56Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T20:05:12Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T20:05:28Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 106,
+  "memMB": 87
+}

@@ -1,3 +1,9 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:0e48ba7d3a393ec0e04bce408356526561ed7e3c09258308952fd6cbc1796e10
-size 180
+[
+  {
+    "filename": "regime_performance_2026-01-22_VTS_449.json",
+    "totalProcessed": 449,
+    "regimes": 5,
+    "version": 1,
+    "timestamp": "2026-01-22T18:44:54.159Z"
+  }
+]

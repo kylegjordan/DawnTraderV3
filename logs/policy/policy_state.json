@@ -1,3 +1,16 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:8868a0066820f4056cabaa122f6d56976af31671663ecc80fdf7bd0d4a54e119
-size 344
+{
+  "allocations": {
+    "breakout": 0.125,
+    "momentum": 0.125,
+    "mean_reversion": 0.125,
+    "sma_trend_ride": 0.125,
+    "dhma": 0.125,
+    "reversal": 0.125,
+    "range_trading": 0.125,
+    "vwap_pullback": 0.125
+  },
+  "confidence": 0.5,
+  "dominantStrategy": "breakout",
+  "lastUpdate": "2026-02-14T19:11:15.372Z",
+  "source": "ml"
+}

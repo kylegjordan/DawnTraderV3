@@ -1,3 +1,33 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:1782108e6648623d7fce3463fffa2193a3a3c942ac1293aaf0b499419d6e6de3
-size 709
+{
+  "aggregates": [
+    {
+      "timestamp": "2026-02-13T11:56:45.430Z",
+      "symbol": "UNKNOWN",
+      "strategy": "UNKNOWN",
+      "period": "2026-02-13T11",
+      "avgNGC": 0,
+      "avgCWQI": 0,
+      "avgRisk": 0,
+      "avgProfitRate": 0,
+      "reconfirmRate": 0,
+      "tradePromotionRate": 0,
+      "sampleCount": 4289,
+      "regimeId": "UNKNOWN",
+      "avgNetEV": 0,
+      "avgFrictionCost": 0,
+      "avgVolNoise": 0,
+      "trueFrictionDelta": null
+    }
+  ],
+  "global": {
+    "timestamp": "2026-02-13T11:56:45.430Z",
+    "avgNGC": 0,
+    "avgCWQI": 0,
+    "avgRisk": 0,
+    "avgProfitRate": 0,
+    "totalSignals": 4289,
+    "avgNetEV": 0,
+    "avgFrictionCost": 0,
+    "avgVolNoise": 0
+  }
+}

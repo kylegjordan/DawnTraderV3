@@ -1,3 +1,36 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:e8ec312107c9407120247cb729a77bf0ca425635276a7b6268be1fc9bb4542ad
-size 584
+{
+  "ts": "2025-11-02T19:35:48Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 111,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:36:03Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 111,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:36:19Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 111,
+  "memMB": 87
+}
+{
+  "ts": "2025-11-02T19:36:35Z",
+  "anomalies": 1,
+  "warnings": 1,
+  "criticals": 0,
+  "recoveries": 0,
+  "lastLatencyMs": 111,
+  "memMB": 87
+}

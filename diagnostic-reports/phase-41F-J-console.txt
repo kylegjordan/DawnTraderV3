@@ -1,3 +1,64 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:30889e7c345c51f9f3dac4a81d35e68e897481457dc3ebe294a360cf4f25c559
-size 1082
+Starting Phase 41F-J portfolio reconciliation test...
+
+Note: This test validates portfolio data integrity after manual trade execution.
+It skips paper-sim start/stop due to known engine timeout issues (separate from 41F-J scope).
+
+✓ Authentication successful
+
+=== Pre-Test Baseline ===
+Trading Status:
+{
+  "mode": "paper",
+  "active": false,
+  "portfolioOverview": null
+}
+
+Paper Trades Count:
+0 trades
+
+=== Trade 1: Buy 0.005 BTC/USD ===
+null
+null
+null
+
+=== Trade 2: Buy 0.05 ETH/USD ===
+null
+null
+null
+
+=== Trade 3: Sell 0.005 BTC/USD ===
+null
+null
+null
+
+=== Post-Test Data Snapshots ===
+
+Recent Trades (last 5):
+[]
+
+Open Positions:
+[]
+
+Portfolio Overview (Final):
+null
+
+System Health:
+{
+  "mode": "paper",
+  "engine": "stopped",
+  "alerts": 0
+}
+
+=== Data Integrity Summary ===
+Baseline trades: 0
+Final trades: 0
+New trades executed: 0
+Open positions: 0
+
+✓ Phase 41F-J Portfolio Test Complete
+
+Expected Results:
+  - 3 new trades in paper_sim_trades table
+  - 1 open position (ETH/USD) after BTC/USD closed
+  - portfolioOverview reflects all trade P/L
+  - No critical anomalies

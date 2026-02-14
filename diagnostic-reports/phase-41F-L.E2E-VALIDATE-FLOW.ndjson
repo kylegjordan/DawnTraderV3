@@ -1,3 +1,11 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:e9e43fb6a7a2c7676308f995f5c3de71a66964e2e8cdfda577485de806956eb6
-size 2209
+{"timestamp":"2025-11-03T20:13:09.361Z","phase":"AUTH","operation":"login","status":"success","details":{"username":"testuser123"},"duration_ms":264}
+{"timestamp":"2025-11-03T20:13:10.026Z","phase":"CONFIG","operation":"validate_mode_level_config","status":"success","details":{"guardrails_count":2,"portfolio_count":2},"duration_ms":658}
+{"timestamp":"2025-11-03T20:13:19.308Z","phase":"ENGINE","operation":"start_paper_engine","status":"success","details":{"success":true,"mode":"paper","active":true,"sessionId":"paper_LFfDkprrkZ","startTimeMs":8663,"lastStartedBy":"6c591801-3072-431d-b192-30aaf426f15e","lastHeartbeat":"2025-11-03T20:13:19.105Z"},"duration_ms":9279}
+{"timestamp":"2025-11-03T20:13:38.507Z","phase":"DATA_FLOW","operation":"fetch_filter_insights","status":"success","details":{"count":0,"path":"/api/filters/diagnostics"},"duration_ms":15918}
+{"timestamp":"2025-11-03T20:13:43.266Z","phase":"DATA_FLOW","operation":"fetch_diagnostic_scan","status":"success","details":{"count":0,"path":"/api/paper-sim/diagnostics/scan?mode=paper&limit=10"},"duration_ms":20677}
+{"timestamp":"2025-11-03T20:13:43.402Z","phase":"DATA_FLOW","operation":"fetch_trades","status":"success","details":{"count":0,"path":"/api/paper/trades?limit=50"},"duration_ms":20813}
+{"timestamp":"2025-11-03T20:13:43.808Z","phase":"DATA_FLOW","operation":"fetch_portfolio_overview","status":"success","details":{"count":0,"path":"/api/portfolio/overview?mode=paper"},"duration_ms":21219}
+{"timestamp":"2025-11-03T20:13:43.951Z","phase":"DATA_FLOW","operation":"fetch_earnings_chart","status":"success","details":{"count":0,"path":"/api/paper/metrics/earnings-chart?days=30"},"duration_ms":21362}
+{"timestamp":"2025-11-03T20:13:44.468Z","phase":"CONSISTENCY","operation":"validate_api_db_consistency","status":"warning","details":{"api_count":0,"db_count":84,"diff":-84},"duration_ms":514}
+{"timestamp":"2025-11-03T20:13:44.539Z","phase":"TELEMETRY","operation":"validate_lineage","status":"warning","details":{"reason":"table_not_found"},"duration_ms":69}
+{"timestamp":"2025-11-03T20:13:44.547Z","phase":"FINAL","operation":"generate_report","status":"success","details":{"duration_seconds":35.448,"errors":0,"warnings":1}}

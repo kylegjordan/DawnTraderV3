@@ -1,3 +1,9 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:28b3c2579be919706565718a6f3003cf4c167796c744c9a1f3293b81edb5f6b9
-size 172
+[
+  {
+    "timestamp": "2026-02-02T00:12:00.931Z",
+    "version": 1,
+    "regimes": 5,
+    "checksum": "e700fb85",
+    "lastSuccessfulRun": "2026-02-02T00:12:00.931Z"
+  }
+]

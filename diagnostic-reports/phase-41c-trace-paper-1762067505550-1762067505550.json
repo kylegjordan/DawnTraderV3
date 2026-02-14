@@ -1,3 +1,490 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:6494d62490ed009b83a25a76bb6e8b1b365096241d7abb4005c220f7dbc5f289
-size 11909
+{
+  "sessionId": "paper-1762067505550",
+  "startTime": "2025-11-02T07:11:45.550Z",
+  "events": [
+    {
+      "timestamp": "2025-11-02T07:11:45.550Z",
+      "timestampMs": 1762067505550,
+      "service": "TelemetryTrace",
+      "event": "SESSION_START",
+      "level": "INFO",
+      "data": {
+        "sessionId": "paper-1762067505550",
+        "metadata": {
+          "mode": "paper",
+          "portfolioValue": 810,
+          "userId": "6c591801-3072-431d-b192-30aaf426f15e"
+        }
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:12:37.102Z",
+      "timestampMs": 1762067557102,
+      "service": "SignalOrchestrator",
+      "event": "START",
+      "level": "INFO",
+      "data": {
+        "mode": "paper",
+        "strategies": 9,
+        "interval": 30000
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:12:37.102Z",
+      "timestampMs": 1762067557102,
+      "service": "SignalOrchestrator",
+      "event": "MARKET_EVALUATION_START",
+      "level": "INFO",
+      "data": {
+        "mode": "paper"
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:13:53.880Z",
+      "timestampMs": 1762067633880,
+      "service": "SignalOrchestrator",
+      "event": "SYMBOLS_LOADED",
+      "level": "INFO",
+      "data": {
+        "mode": "paper",
+        "count": 100
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:15:22.627Z",
+      "timestampMs": 1762067722627,
+      "service": "SignalOrchestrator",
+      "event": "START_SUCCESS",
+      "level": "INFO",
+      "data": {
+        "mode": "paper"
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:15:52.628Z",
+      "timestampMs": 1762067752628,
+      "service": "SignalOrchestrator",
+      "event": "MARKET_EVALUATION_START",
+      "level": "INFO",
+      "data": {
+        "mode": "paper"
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:16:22.629Z",
+      "timestampMs": 1762067782629,
+      "service": "SignalOrchestrator",
+      "event": "MARKET_EVALUATION_START",
+      "level": "INFO",
+      "data": {
+        "mode": "paper"
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:16:52.630Z",
+      "timestampMs": 1762067812630,
+      "service": "SignalOrchestrator",
+      "event": "MARKET_EVALUATION_START",
+      "level": "INFO",
+      "data": {
+        "mode": "paper"
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:17:15.899Z",
+      "timestampMs": 1762067835899,
+      "service": "SignalOrchestrator",
+      "event": "SYMBOLS_LOADED",
+      "level": "INFO",
+      "data": {
+        "mode": "paper",
+        "count": 100
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:17:22.629Z",
+      "timestampMs": 1762067842629,
+      "service": "SignalOrchestrator",
+      "event": "MARKET_EVALUATION_START",
+      "level": "INFO",
+      "data": {
+        "mode": "paper"
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:17:43.459Z",
+      "timestampMs": 1762067863460,
+      "service": "SignalOrchestrator",
+      "event": "SYMBOLS_LOADED",
+      "level": "INFO",
+      "data": {
+        "mode": "paper",
+        "count": 100
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:17:52.629Z",
+      "timestampMs": 1762067872629,
+      "service": "SignalOrchestrator",
+      "event": "MARKET_EVALUATION_START",
+      "level": "INFO",
+      "data": {
+        "mode": "paper"
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:18:14.555Z",
+      "timestampMs": 1762067894555,
+      "service": "SignalOrchestrator",
+      "event": "SYMBOLS_LOADED",
+      "level": "INFO",
+      "data": {
+        "mode": "paper",
+        "count": 100
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:18:22.630Z",
+      "timestampMs": 1762067902630,
+      "service": "SignalOrchestrator",
+      "event": "MARKET_EVALUATION_START",
+      "level": "INFO",
+      "data": {
+        "mode": "paper"
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:18:42.945Z",
+      "timestampMs": 1762067922945,
+      "service": "SignalOrchestrator",
+      "event": "SYMBOLS_LOADED",
+      "level": "INFO",
+      "data": {
+        "mode": "paper",
+        "count": 100
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:18:52.630Z",
+      "timestampMs": 1762067932630,
+      "service": "SignalOrchestrator",
+      "event": "MARKET_EVALUATION_START",
+      "level": "INFO",
+      "data": {
+        "mode": "paper"
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:19:14.720Z",
+      "timestampMs": 1762067954720,
+      "service": "SignalOrchestrator",
+      "event": "SYMBOLS_LOADED",
+      "level": "INFO",
+      "data": {
+        "mode": "paper",
+        "count": 100
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:19:22.631Z",
+      "timestampMs": 1762067962631,
+      "service": "SignalOrchestrator",
+      "event": "MARKET_EVALUATION_START",
+      "level": "INFO",
+      "data": {
+        "mode": "paper"
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:19:40.538Z",
+      "timestampMs": 1762067980538,
+      "service": "SignalOrchestrator",
+      "event": "SYMBOLS_LOADED",
+      "level": "INFO",
+      "data": {
+        "mode": "paper",
+        "count": 100
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:19:52.631Z",
+      "timestampMs": 1762067992631,
+      "service": "SignalOrchestrator",
+      "event": "MARKET_EVALUATION_START",
+      "level": "INFO",
+      "data": {
+        "mode": "paper"
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:20:16.889Z",
+      "timestampMs": 1762068016889,
+      "service": "SignalOrchestrator",
+      "event": "SYMBOLS_LOADED",
+      "level": "INFO",
+      "data": {
+        "mode": "paper",
+        "count": 100
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:20:22.632Z",
+      "timestampMs": 1762068022632,
+      "service": "SignalOrchestrator",
+      "event": "MARKET_EVALUATION_START",
+      "level": "INFO",
+      "data": {
+        "mode": "paper"
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:20:40.542Z",
+      "timestampMs": 1762068040543,
+      "service": "SignalOrchestrator",
+      "event": "SYMBOLS_LOADED",
+      "level": "INFO",
+      "data": {
+        "mode": "paper",
+        "count": 100
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:20:52.632Z",
+      "timestampMs": 1762068052632,
+      "service": "SignalOrchestrator",
+      "event": "MARKET_EVALUATION_START",
+      "level": "INFO",
+      "data": {
+        "mode": "paper"
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:21:08.778Z",
+      "timestampMs": 1762068068778,
+      "service": "SignalOrchestrator",
+      "event": "SYMBOLS_LOADED",
+      "level": "INFO",
+      "data": {
+        "mode": "paper",
+        "count": 100
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:21:22.632Z",
+      "timestampMs": 1762068082632,
+      "service": "SignalOrchestrator",
+      "event": "MARKET_EVALUATION_START",
+      "level": "INFO",
+      "data": {
+        "mode": "paper"
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:21:45.998Z",
+      "timestampMs": 1762068105998,
+      "service": "SignalOrchestrator",
+      "event": "SYMBOLS_LOADED",
+      "level": "INFO",
+      "data": {
+        "mode": "paper",
+        "count": 100
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:21:52.633Z",
+      "timestampMs": 1762068112633,
+      "service": "SignalOrchestrator",
+      "event": "MARKET_EVALUATION_START",
+      "level": "INFO",
+      "data": {
+        "mode": "paper"
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:22:11.944Z",
+      "timestampMs": 1762068131944,
+      "service": "SignalOrchestrator",
+      "event": "SYMBOLS_LOADED",
+      "level": "INFO",
+      "data": {
+        "mode": "paper",
+        "count": 100
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:22:22.632Z",
+      "timestampMs": 1762068142633,
+      "service": "SignalOrchestrator",
+      "event": "MARKET_EVALUATION_START",
+      "level": "INFO",
+      "data": {
+        "mode": "paper"
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:22:45.673Z",
+      "timestampMs": 1762068165673,
+      "service": "SignalOrchestrator",
+      "event": "SYMBOLS_LOADED",
+      "level": "INFO",
+      "data": {
+        "mode": "paper",
+        "count": 100
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:22:52.643Z",
+      "timestampMs": 1762068172643,
+      "service": "SignalOrchestrator",
+      "event": "MARKET_EVALUATION_START",
+      "level": "INFO",
+      "data": {
+        "mode": "paper"
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:23:12.355Z",
+      "timestampMs": 1762068192356,
+      "service": "SignalOrchestrator",
+      "event": "SYMBOLS_LOADED",
+      "level": "INFO",
+      "data": {
+        "mode": "paper",
+        "count": 100
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:23:22.642Z",
+      "timestampMs": 1762068202642,
+      "service": "SignalOrchestrator",
+      "event": "MARKET_EVALUATION_START",
+      "level": "INFO",
+      "data": {
+        "mode": "paper"
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:23:48.898Z",
+      "timestampMs": 1762068228898,
+      "service": "SignalOrchestrator",
+      "event": "SYMBOLS_LOADED",
+      "level": "INFO",
+      "data": {
+        "mode": "paper",
+        "count": 100
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:23:52.642Z",
+      "timestampMs": 1762068232642,
+      "service": "SignalOrchestrator",
+      "event": "MARKET_EVALUATION_START",
+      "level": "INFO",
+      "data": {
+        "mode": "paper"
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:24:17.636Z",
+      "timestampMs": 1762068257636,
+      "service": "SignalOrchestrator",
+      "event": "SYMBOLS_LOADED",
+      "level": "INFO",
+      "data": {
+        "mode": "paper",
+        "count": 100
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:24:22.645Z",
+      "timestampMs": 1762068262645,
+      "service": "SignalOrchestrator",
+      "event": "MARKET_EVALUATION_START",
+      "level": "INFO",
+      "data": {
+        "mode": "paper"
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:24:49.246Z",
+      "timestampMs": 1762068289246,
+      "service": "SignalOrchestrator",
+      "event": "SYMBOLS_LOADED",
+      "level": "INFO",
+      "data": {
+        "mode": "paper",
+        "count": 100
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:24:52.646Z",
+      "timestampMs": 1762068292646,
+      "service": "SignalOrchestrator",
+      "event": "MARKET_EVALUATION_START",
+      "level": "INFO",
+      "data": {
+        "mode": "paper"
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:25:13.157Z",
+      "timestampMs": 1762068313157,
+      "service": "SignalOrchestrator",
+      "event": "SYMBOLS_LOADED",
+      "level": "INFO",
+      "data": {
+        "mode": "paper",
+        "count": 100
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:25:22.646Z",
+      "timestampMs": 1762068322646,
+      "service": "SignalOrchestrator",
+      "event": "MARKET_EVALUATION_START",
+      "level": "INFO",
+      "data": {
+        "mode": "paper"
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:25:45.509Z",
+      "timestampMs": 1762068345509,
+      "service": "SignalOrchestrator",
+      "event": "SYMBOLS_LOADED",
+      "level": "INFO",
+      "data": {
+        "mode": "paper",
+        "count": 100
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:25:52.647Z",
+      "timestampMs": 1762068352647,
+      "service": "SignalOrchestrator",
+      "event": "MARKET_EVALUATION_START",
+      "level": "INFO",
+      "data": {
+        "mode": "paper"
+      }
+    },
+    {
+      "timestamp": "2025-11-02T07:26:05.559Z",
+      "timestampMs": 1762068365559,
+      "service": "TelemetryTrace",
+      "event": "SESSION_END",
+      "level": "INFO",
+      "data": {
+        "sessionId": "paper-1762067505550",
+        "duration": 860009,
+        "eventCount": 44
+      }
+    }
+  ],
+  "metadata": {
+    "mode": "paper",
+    "portfolioValue": 810,
+    "userId": "6c591801-3072-431d-b192-30aaf426f15e"
+  },
+  "endTime": "2025-11-02T07:26:05.559Z"
+}

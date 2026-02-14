@@ -1,3 +1,57 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:7ca4025cfe2aa267602d7e2050d75925b17bf73dea5a81649bf35ec2f9b3e41b
-size 1120
+{
+  "timestamp": "2026-01-21T23:33:02.446Z",
+  "stats": {
+    "T1": {
+      "pnl": 0,
+      "winRate": 0,
+      "volatility": 0,
+      "stability": 0,
+      "confidence": 0,
+      "tradeCount": 0,
+      "lastUpdated": "2026-01-21T19:33:02.441Z"
+    },
+    "T2": {
+      "pnl": 0,
+      "winRate": 0,
+      "volatility": 0,
+      "stability": 0,
+      "confidence": 0,
+      "tradeCount": 0,
+      "lastUpdated": "2026-01-21T19:33:02.441Z"
+    },
+    "R1": {
+      "pnl": 0,
+      "winRate": 0,
+      "volatility": 0,
+      "stability": 0,
+      "confidence": 0,
+      "tradeCount": 0,
+      "lastUpdated": "2026-01-21T19:33:02.441Z"
+    },
+    "V1": {
+      "pnl": 0,
+      "winRate": 0,
+      "volatility": 0,
+      "stability": 0,
+      "confidence": 0,
+      "tradeCount": 0,
+      "lastUpdated": "2026-01-21T19:33:02.441Z"
+    },
+    "C1": {
+      "pnl": 0,
+      "winRate": 0,
+      "volatility": 0,
+      "stability": 0,
+      "confidence": 0,
+      "tradeCount": 0,
+      "lastUpdated": "2026-01-21T19:33:02.441Z"
+    }
+  },
+  "historySize": {
+    "T1": 0,
+    "T2": 0,
+    "R1": 0,
+    "V1": 0,
+    "C1": 0
+  }
+}

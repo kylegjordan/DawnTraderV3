@@ -1,3 +1,48 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:a76847c7ae10fde81903f5858efd14941b23563d15c704b70500b7cb5526ca8c
-size 1158
+{
+  "sessionId": "paper-1762071639402",
+  "startTime": "2025-11-02T08:20:39.403Z",
+  "events": [
+    {
+      "timestamp": "2025-11-02T08:20:39.403Z",
+      "timestampMs": 1762071639403,
+      "service": "TelemetryTrace",
+      "event": "SESSION_START",
+      "level": "INFO",
+      "data": {
+        "sessionId": "paper-1762071639402",
+        "metadata": {
+          "mode": "paper",
+          "portfolioValue": 815,
+          "userId": "6c591801-3072-431d-b192-30aaf426f15e"
+        }
+      }
+    },
+    {
+      "timestamp": "2025-11-02T08:22:05.058Z",
+      "timestampMs": 1762071725058,
+      "service": "SignalOrchestrator",
+      "event": "START",
+      "level": "INFO",
+      "data": {
+        "mode": "paper",
+        "strategies": 9,
+        "interval": 30000
+      }
+    },
+    {
+      "timestamp": "2025-11-02T08:22:05.058Z",
+      "timestampMs": 1762071725058,
+      "service": "SignalOrchestrator",
+      "event": "MARKET_EVALUATION_START",
+      "level": "INFO",
+      "data": {
+        "mode": "paper"
+      }
+    }
+  ],
+  "metadata": {
+    "mode": "paper",
+    "portfolioValue": 815,
+    "userId": "6c591801-3072-431d-b192-30aaf426f15e"
+  }
+}

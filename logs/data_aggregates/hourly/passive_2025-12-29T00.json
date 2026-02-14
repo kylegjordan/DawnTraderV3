@@ -1,3 +1,25 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:3d32d5ae250e313fccbc189059bd73da764208ca8cc29b31b3d498f32488d617
-size 505
+{
+  "aggregates": [
+    {
+      "timestamp": "2025-12-29T00:57:13.274Z",
+      "symbol": "UNKNOWN",
+      "strategy": "UNKNOWN",
+      "period": "2025-12-29T00",
+      "avgNGC": 0,
+      "avgCWQI": 0,
+      "avgRisk": 0,
+      "avgProfitRate": 0,
+      "reconfirmRate": 0,
+      "tradePromotionRate": 0,
+      "sampleCount": 456
+    }
+  ],
+  "global": {
+    "timestamp": "2025-12-29T00:57:13.274Z",
+    "avgNGC": 0,
+    "avgCWQI": 0,
+    "avgRisk": 0,
+    "avgProfitRate": 0,
+    "totalSignals": 456
+  }
+}

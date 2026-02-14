@@ -1,3 +1,57 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:14f7af3079ab02aa66f636ca3816c3e1d4de162057b8816b610f3d8620ff7cee
-size 2045
+🚀 Phase 41F-L.E2E: End-to-End Paper-Mode Validation with Lineage Tracking
+==========================================================================
+
+Step 1: Authenticating as testuser123...
+  ✓ Authenticated successfully
+
+Step 2: Capturing initial portfolio state...
+  Initial portfolio value: $900
+
+Step 3: Executing 3 paper trades with lineage tracking...
+
+  Trade 1: buy 0.01 BTC/USD...
+    ✓ Trade executed: ID=test-1762171118370-yudct2pyq, TraceID=trace-1762171118208-WoxxzGa8
+    Portfolio: $900 (PL: $0)
+
+  Trade 2: buy 0.05 ETH/USD...
+    ✓ Trade executed: ID=test-1762171119403-ojlzrs584, TraceID=trace-1762171119122-bOY33f_Y
+    Portfolio: $900 (PL: $0)
+
+  Trade 3: sell 0.01 BTC/USD...
+    ✓ Trade executed: ID=test-1762171120328-lvlth0l2i, TraceID=trace-1762171120180-z2Ph6v35
+    Portfolio: $900 (PL: $0)
+
+Step 4: Verifying lineage completeness...
+
+  Checking lineage for trace 1: trace-1762171118208-WoxxzGa8
+    ⚠️  Lineage file not found: diagnostic-reports/phase-41F-L-e2e-lineage.ndjson
+
+  Checking lineage for trace 2: trace-1762171119122-bOY33f_Y
+    ⚠️  Lineage file not found: diagnostic-reports/phase-41F-L-e2e-lineage.ndjson
+
+  Checking lineage for trace 3: trace-1762171120180-z2Ph6v35
+    ⚠️  Lineage file not found: diagnostic-reports/phase-41F-L-e2e-lineage.ndjson
+
+Step 5: Verifying final portfolio state...
+  Final portfolio value: $900
+  Total P/L: $0
+  Open positions: 0
+
+Step 6: Checking trade history persistence...
+  Trade history count: 4
+
+==========================================================================
+📊 Test Summary
+==========================================================================
+  Trades executed: 3 / 3
+  Initial portfolio: $900
+  Final portfolio: $900
+phase-41F-L-e2e-scripted.sh: line 223: bc: command not found
+  Portfolio change: $
+  Trade history count: 4
+  Lineage complete: false
+
+  Results saved to: diagnostic-reports/phase-41F-L-e2e-results.json
+  Lineage events in: diagnostic-reports/phase-41F-L-e2e-lineage.ndjson
+
+❌ Phase 41F-L.E2E FAILED

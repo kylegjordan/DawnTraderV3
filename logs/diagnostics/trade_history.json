@@ -1,3 +1,1 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:53961485971f9d34ff0bd4ef015c93723c1e6d0caf2f6a01f60db9ec1c400584
-size 139
+{"error":"Not Found","message":"API endpoint not found: /api/paper-sim/trade-history","path":"/api/paper-sim/trade-history","method":"GET"}

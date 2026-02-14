@@ -1,3 +1,1 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:7b3cb39f0057ec03616e751a810466669b66872626b5dec42e56ca901555d700
-size 429
+{"timestamp":"2025-10-19T13:10:34.100Z","userId":"6c591801-3072-431d-b192-30aaf426f15e","username":"testuser123","intent":{"type":"analysis","action":"analyze","entity":"pair","parameters":{"pairs":["THE"]},"rawInput":"What is the system status?","confidence":0.85,"requiresConfirmation":false},"result":{"success":true,"message":"Analysis requested for THE","data":{"pair":"THE","analysisRequested":true}},"executionTimeMs":66}

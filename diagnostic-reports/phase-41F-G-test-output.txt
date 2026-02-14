@@ -1,3 +1,184 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:24651d7c9e865a4b6623af38fd8e0acb6110e918d4ccd86835d0cb5cf666b68a
-size 7692
+============================================
+Phase 41F-G: Auto-Recovery Validation Test
+============================================
+
+[1/8] Authenticating...
+✅ TOKEN acquired: 757 chars
+
+[2/8] Dry-run test: broadcast.latency.critical
+{
+  "ok": true,
+  "timestamp": "2025-11-02T19:13:54.130Z",
+  "component": "broadcast",
+  "issue": "broadcast.latency anomaly (critical)",
+  "action": "log_latency_spike_for_monitoring",
+  "success": false,
+  "result": "skipped",
+  "durationMs": 0,
+  "details": {
+    "dryRun": true,
+    "canExecute": true,
+    "circuitBreaker": {
+      "active": false
+    }
+  }
+}
+✅ Dry-run successful - Planned action: log_latency_spike_for_monitoring
+
+[3/8] Executing websocket.silence.critical recovery
+{
+  "ok": true,
+  "timestamp": "2025-11-02T19:13:54.314Z",
+  "component": "websocket",
+  "issue": "websocket.silence anomaly (critical)",
+  "action": "force_websocket_reconnect",
+  "success": true,
+  "result": "success",
+  "durationMs": 1,
+  "cooldownUntil": "2025-11-02T19:15:54.314Z",
+  "details": {
+    "metric": "silence",
+    "level": "critical",
+    "errorMessage": null
+  }
+}
+✅ Recovery executed successfully (duration: 1ms)
+
+[4/8] Testing cool-down (immediate repeat)
+{
+  "ok": true,
+  "timestamp": "2025-11-02T19:13:56.628Z",
+  "component": "websocket",
+  "issue": "websocket.silence anomaly (critical)",
+  "action": "none",
+  "success": false,
+  "result": "skipped",
+  "durationMs": 0,
+  "details": {
+    "reason": "Cool-down active (118s remaining)",
+    "cooldownRemaining": 117686
+  }
+}
+✅ Cool-down enforced - Reason: Cool-down active (118s remaining)
+
+[5/8] Circuit-breaker test (3 recoveries → suspend)
+Waiting 125 seconds for cool-down to expire...
+  (120s cool-down + 5s buffer)
+  Time remaining: 125s  Time remaining: 124s  Time remaining: 123s  Time remaining: 122s  Time remaining: 121s  Time remaining: 120s  Time remaining: 119s  Time remaining: 118s  Time remaining: 117s  Time remaining: 116s  Time remaining: 115s  Time remaining: 114s  Time remaining: 113s  Time remaining: 112s  Time remaining: 111s  Time remaining: 110s  Time remaining: 109s  Time remaining: 108s  Time remaining: 107s  Time remaining: 106s  Time remaining: 105s  Time remaining: 104s  Time remaining: 103s  Time remaining: 102s  Time remaining: 101s  Time remaining: 100s  Time remaining:  99s  Time remaining:  98s  Time remaining:  97s  Time remaining:  96s  Time remaining:  95s  Time remaining:  94s  Time remaining:  93s  Time remaining:  92s  Time remaining:  91s  Time remaining:  90s  Time remaining:  89s  Time remaining:  88s  Time remaining:  87s  Time remaining:  86s  Time remaining:  85s  Time remaining:  84s  Time remaining:  83s  Time remaining:  82s  Time remaining:  81s  Time remaining:  80s  Time remaining:  79s  Time remaining:  78s  Time remaining:  77s  Time remaining:  76s  Time remaining:  75s  Time remaining:  74s  Time remaining:  73s  Time remaining:  72s  Time remaining:  71s  Time remaining:  70s  Time remaining:  69s  Time remaining:  68s  Time remaining:  67s  Time remaining:  66s  Time remaining:  65s  Time remaining:  64s  Time remaining:  63s  Time remaining:  62s  Time remaining:  61s  Time remaining:  60s  Time remaining:  59s  Time remaining:  58s  Time remaining:  57s  Time remaining:  56s  Time remaining:  55s  Time remaining:  54s  Time remaining:  53s  Time remaining:  52s  Time remaining:  51s  Time remaining:  50s  Time remaining:  49s  Time remaining:  48s  Time remaining:  47s  Time remaining:  46s  Time remaining:  45s  Time remaining:  44s  Time remaining:  43s  Time remaining:  42s  Time remaining:  41s  Time remaining:  40s  Time remaining:  39s  Time remaining:  38s  Time remaining:  37s  Time remaining:  36s  Time remaining:  35s  Time remaining:  34s  Time remaining:  33s  Time remaining:  32s  Time remaining:  31s  Time remaining:  30s  Time remaining:  29s  Time remaining:  28s  Time remaining:  27s  Time remaining:  26s  Time remaining:  25s  Time remaining:  24s  Time remaining:  23s  Time remaining:  22s  Time remaining:  21s  Time remaining:  20s  Time remaining:  19s  Time remaining:  18s  Time remaining:  17s  Time remaining:  16s  Time remaining:  15s  Time remaining:  14s  Time remaining:  13s  Time remaining:  12s  Time remaining:  11s  Time remaining:  10s  Time remaining:   9s  Time remaining:   8s  Time remaining:   7s  Time remaining:   6s  Time remaining:   5s  Time remaining:   4s  Time remaining:   3s  Time remaining:   2s  Time remaining:   1s
+
+Cool-down expired, executing 3 unique critical recoveries...
+  [1/3] engine.stress.critical
+    Result: success
+  [2/3] marketData.stress.critical
+    Result: skipped
+  [3/3] queue.stress.critical
+    Result: skipped
+  [4/4] broadcast.latency.critical (should trigger circuit breaker)
+{
+  "ok": true,
+  "timestamp": "2025-11-02T19:16:07.615Z",
+  "component": "broadcast",
+  "issue": "broadcast.latency anomaly (critical)",
+  "action": "none",
+  "success": false,
+  "result": "skipped",
+  "durationMs": 0,
+  "details": {
+    "reason": "Cool-down active (117s remaining)",
+    "cooldownRemaining": 116681
+  }
+}
+✅ Circuit breaker activated - 4th recovery blocked
+
+[6/8] Checking recovery timeline
+[
+  {
+    "timestamp": "2025-11-02T19:13:54.313Z",
+    "component": "websocket",
+    "issue": "websocket.silence anomaly (critical)",
+    "action": "force_websocket_reconnect",
+    "success": true,
+    "result": "success",
+    "durationMs": 1,
+    "cooldownUntil": "2025-11-02T19:15:54.314Z",
+    "details": {
+      "metric": "silence",
+      "level": "critical",
+      "errorMessage": null
+    }
+  },
+  {
+    "timestamp": "2025-11-02T19:16:04.296Z",
+    "component": "engine",
+    "issue": "engine.stress anomaly (critical)",
+    "action": "restart_trading_engine",
+    "success": true,
+    "result": "success",
+    "durationMs": 0,
+    "cooldownUntil": "2025-11-02T19:18:04.296Z",
+    "details": {
+      "metric": "stress",
+      "level": "critical",
+      "errorMessage": null
+    }
+  }
+]
+
+Total recoveries logged: 2
+
+[7/8] Regression test: anomaly detection
+[
+  {
+    "timestamp": "2025-11-02T19:15:48.843Z",
+    "component": "health_monitor",
+    "metric": "heartbeat_latency",
+    "value": 346,
+    "threshold": 200,
+    "level": "warning",
+    "message": "Heartbeat cycle took 346ms (warning threshold: 200ms)",
+    "autoRecoveryAttempted": false
+  }
+]
+
+Anomalies detected: 1
+✅ Anomaly detection still operational
+
+[8/8] Checking circuit breaker status
+{
+  "ok": true,
+  "active": false,
+  "recentRecoveries": 2,
+  "threshold": 3,
+  "timestamp": "2025-11-02T19:16:07.991Z"
+}
+
+Circuit Breaker Status:
+  Active: false
+  Recent recoveries: 2
+  Threshold: 3
+
+============================================
+Test Summary
+============================================
+✅ Authentication successful
+✅ Dry-run planning operational
+✅ Recovery execution working
+✅ Cool-down enforcement validated
+✅ Circuit breaker activation confirmed
+✅ Recovery timeline updated
+✅ Anomaly detection regression passed
+✅ Circuit breaker status API functional
+
+Expected Observations:
+  - Dry-run returns planned action without execution
+  - Cool-down blocks repeated recovery for 120s
+  - Circuit breaker activates after 3 recoveries in 10min
+  - Recovery timeline shows component, action, result, durationMs
+  - Anomaly detection unchanged from Phase 41F-F
+
+Next Steps:
+  1. Review UI Telemetry panel for color-coded metrics
+  2. Verify 'Recovery Paused' badge appears during circuit breaker
+  3. Generate validation report in diagnostic-reports/
+
+Test completed at Sun Nov  2 07:16:08 PM UTC 2025

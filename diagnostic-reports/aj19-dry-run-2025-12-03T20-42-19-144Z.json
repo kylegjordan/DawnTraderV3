@@ -1,3 +1,16 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:e8b3942f5a4ac926905439b50bace2f83a4d7299c49c63095e4b04220d61e625
-size 430
+{
+  "exportTime": "2025-12-03T20:42:19.147Z",
+  "testType": "dryRunNoGuardrails",
+  "description": "Test to see if RTB signals continue generating when no trades are opened",
+  "summary": {
+    "isEnabled": false,
+    "sessionStart": null,
+    "signalsGenerated": 0,
+    "wouldBeTradesCount": 0,
+    "uniqueSymbols": [],
+    "byStrategy": {},
+    "recentWouldBeTrades": [],
+    "durationMinutes": 0
+  },
+  "allWouldBeTrades": []
+}

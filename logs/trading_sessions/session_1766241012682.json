@@ -1,3 +1,8 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:b180ea8b8f20154a0d4be11ee6c2fdac9e4add1b050e7ec09e5bb26473a1452d
-size 202
+{
+  "sessionId": "session_1766241012682",
+  "userId": "6c591801-3072-431d-b192-30aaf426f15e",
+  "startTime": "2025-12-20T14:30:12.682Z",
+  "startingBalance": 825,
+  "status": "running",
+  "trades": []
+}

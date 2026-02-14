@@ -1,3 +1,40 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:8b752863bc85f3036ca70e200ac5421830e402aea46fee9a60813eebd897d8f0
-size 866
+{
+  "summary": {
+    "sessionStart": "2025-12-03T20:42:19.107Z",
+    "totalChecks": 0,
+    "passed": 0,
+    "blockedMaxPosition": 0,
+    "blockedOther": 0,
+    "portfolioValueMismatches": 0,
+    "preComputedMissing": 0,
+    "wouldPassIfDisabled": 0,
+    "portfolioValueRange": {
+      "min": 0,
+      "max": 0
+    },
+    "positionPctRange": {
+      "min": 0,
+      "max": 0
+    },
+    "maxPositionPctUsed": 10,
+    "byStrategy": {},
+    "recentBlocked": []
+  },
+  "entries": [],
+  "metadata": {
+    "exportTime": "2025-12-03T20:42:19.148Z",
+    "isEnabled": false,
+    "isDryRunMode": false,
+    "totalEntries": 0
+  },
+  "dryRunNoGuardrailsSummary": {
+    "isEnabled": false,
+    "sessionStart": null,
+    "signalsGenerated": 0,
+    "wouldBeTradesCount": 0,
+    "uniqueSymbols": [],
+    "byStrategy": {},
+    "recentWouldBeTrades": [],
+    "durationMinutes": 0
+  }
+}

@@ -1,3 +1,72 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:113cd6759a9cc8f1f35a368c140ab07606791dca162505a10acc9c27d27621b8
-size 1730
+{
+  "testStart": "2025-11-03T11:59:11+00:00",
+  "steps": {
+    "auth": {"status": "success"},
+    "initialPortfolio": {"value": 900},
+    "trades": [
+      {
+        "tradeNumber": 1,
+        "symbol": "BTC/USD",
+        "action": "buy",
+        "amount": 0.01,
+        "tradeId": "test-1762171152280-v5gquauzn",
+        "traceId": "trace-1762171152147-XIWkzuh3",
+        "portfolioValue": 900,
+        "portfolioPL": 0,
+        "status": "success"
+      }
+      ,
+      {
+        "tradeNumber": 2,
+        "symbol": "ETH/USD",
+        "action": "buy",
+        "amount": 0.05,
+        "tradeId": "test-1762171153117-1hi9des3f",
+        "traceId": "trace-1762171152987-Ki7jZNCh",
+        "portfolioValue": 900,
+        "portfolioPL": 0,
+        "status": "success"
+      }
+      ,
+      {
+        "tradeNumber": 3,
+        "symbol": "BTC/USD",
+        "action": "sell",
+        "amount": 0.01,
+        "tradeId": "test-1762171154108-y4umvj1ns",
+        "traceId": "trace-1762171153974-w3DJcSYk",
+        "portfolioValue": 900,
+        "portfolioPL": 0,
+        "status": "success"
+      }
+    ],
+    "lineageValidation": {
+      "trace1": {
+        "traceId": "trace-1762171152147-XIWkzuh3",
+        "status": "complete",
+        "eventsFound": 5
+      }
+      ,
+      "trace2": {
+        "traceId": "trace-1762171152987-Ki7jZNCh",
+        "status": "complete",
+        "eventsFound": 5
+      }
+      ,
+      "trace3": {
+        "traceId": "trace-1762171153974-w3DJcSYk",
+        "status": "complete",
+        "eventsFound": 5
+      }
+    },
+    "finalPortfolio": {
+      "value": 900,
+      "totalPL": 0,
+      "openPositions": 0
+    },
+    "tradeHistory": {
+      "count": 4
+    }
+  },
+  "testEnd": "2025-11-03T11:59:15+00:00"
+}
