@@ -1057,8 +1057,514 @@
       },
       "timestamp": 1770532247109,
       "id": "exp_1770532247109_1ahq3d"
+    },
+    {
+      "state": {
+        "regime": "R1",
+        "strategy_weights": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        },
+        "volatility": 0.15,
+        "trend": 0.1,
+        "volume_z": 0
+      },
+      "action": {
+        "allocations": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        }
+      },
+      "reward": 0,
+      "next_state": {
+        "regime": "R1",
+        "strategy_weights": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        }
+      },
+      "timestamp": 1771109376852,
+      "id": "exp_1771109376852_0m8frz"
+    },
+    {
+      "state": {
+        "regime": "R1",
+        "strategy_weights": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        },
+        "volatility": 0.15,
+        "trend": 0.1,
+        "volume_z": 0
+      },
+      "action": {
+        "allocations": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        }
+      },
+      "reward": 0,
+      "next_state": {
+        "regime": "R1",
+        "strategy_weights": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        }
+      },
+      "timestamp": 1771116576852,
+      "id": "exp_1771116576852_g5m0rx"
+    },
+    {
+      "state": {
+        "regime": "R1",
+        "strategy_weights": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        },
+        "volatility": 0.15,
+        "trend": 0.1,
+        "volume_z": 0
+      },
+      "action": {
+        "allocations": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        }
+      },
+      "reward": 0,
+      "next_state": {
+        "regime": "R1",
+        "strategy_weights": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        }
+      },
+      "timestamp": 1771123777100,
+      "id": "exp_1771123777100_o1rdkb"
+    },
+    {
+      "state": {
+        "regime": "R1",
+        "strategy_weights": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        },
+        "volatility": 0.15,
+        "trend": 0.1,
+        "volume_z": 0
+      },
+      "action": {
+        "allocations": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        }
+      },
+      "reward": 0,
+      "next_state": {
+        "regime": "R1",
+        "strategy_weights": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        }
+      },
+      "timestamp": 1771130976851,
+      "id": "exp_1771130976851_urrxey"
+    },
+    {
+      "state": {
+        "regime": "R1",
+        "strategy_weights": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        },
+        "volatility": 0.15,
+        "trend": 0.1,
+        "volume_z": 0
+      },
+      "action": {
+        "allocations": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        }
+      },
+      "reward": 0,
+      "next_state": {
+        "regime": "R1",
+        "strategy_weights": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        }
+      },
+      "timestamp": 1771138176851,
+      "id": "exp_1771138176851_9djcj1"
+    },
+    {
+      "state": {
+        "regime": "R1",
+        "strategy_weights": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        },
+        "volatility": 0.15,
+        "trend": 0.1,
+        "volume_z": 0
+      },
+      "action": {
+        "allocations": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        }
+      },
+      "reward": 0,
+      "next_state": {
+        "regime": "R1",
+        "strategy_weights": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        }
+      },
+      "timestamp": 1771145376851,
+      "id": "exp_1771145376852_o4clq1"
+    },
+    {
+      "state": {
+        "regime": "R1",
+        "strategy_weights": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        },
+        "volatility": 0.15,
+        "trend": 0.1,
+        "volume_z": 0
+      },
+      "action": {
+        "allocations": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        }
+      },
+      "reward": 0,
+      "next_state": {
+        "regime": "R1",
+        "strategy_weights": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        }
+      },
+      "timestamp": 1771152576850,
+      "id": "exp_1771152576850_fwqtwh"
+    },
+    {
+      "state": {
+        "regime": "R1",
+        "strategy_weights": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        },
+        "volatility": 0.15,
+        "trend": 0.1,
+        "volume_z": 0
+      },
+      "action": {
+        "allocations": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        }
+      },
+      "reward": 0,
+      "next_state": {
+        "regime": "R1",
+        "strategy_weights": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        }
+      },
+      "timestamp": 1771159776852,
+      "id": "exp_1771159776852_trsy0s"
+    },
+    {
+      "state": {
+        "regime": "R1",
+        "strategy_weights": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        },
+        "volatility": 0.15,
+        "trend": 0.1,
+        "volume_z": 0
+      },
+      "action": {
+        "allocations": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        }
+      },
+      "reward": 0,
+      "next_state": {
+        "regime": "R1",
+        "strategy_weights": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        }
+      },
+      "timestamp": 1771166976855,
+      "id": "exp_1771166976855_vsp8tj"
+    },
+    {
+      "state": {
+        "regime": "R1",
+        "strategy_weights": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        },
+        "volatility": 0.15,
+        "trend": 0.1,
+        "volume_z": 0
+      },
+      "action": {
+        "allocations": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        }
+      },
+      "reward": 0,
+      "next_state": {
+        "regime": "R1",
+        "strategy_weights": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        }
+      },
+      "timestamp": 1771174176902,
+      "id": "exp_1771174176902_l1jvik"
+    },
+    {
+      "state": {
+        "regime": "R1",
+        "strategy_weights": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        },
+        "volatility": 0.15,
+        "trend": 0.1,
+        "volume_z": 0
+      },
+      "action": {
+        "allocations": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        }
+      },
+      "reward": 0,
+      "next_state": {
+        "regime": "R1",
+        "strategy_weights": {
+          "breakout": 0.125,
+          "momentum": 0.125,
+          "mean_reversion": 0.125,
+          "sma_trend_ride": 0.125,
+          "dhma": 0.125,
+          "reversal": 0.125,
+          "range_trading": 0.125,
+          "vwap_pullback": 0.125
+        }
+      },
+      "timestamp": 1771181377024,
+      "id": "exp_1771181377024_v4dh0s"
     }
   ],
-  "size": 23,
-  "lastUpdated": "2026-02-08T08:30:46.974Z"
+  "size": 34,
+  "lastUpdated": "2026-02-15T20:49:36.847Z"
 }
