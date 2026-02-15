@@ -8,7 +8,7 @@
 
 set -e
 
-BRANCH="dawntrader-v3-clean"
+BRANCH="dawntrader-v4"
 REMOTE="origin"
 REPO_DIR="/home/runner/workspace"
 
