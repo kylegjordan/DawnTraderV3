@@ -28,9 +28,13 @@ echo "Message: $COMMIT_MSG"
 echo ""
 
 CURRENT_BRANCH=$(git branch --show-current 2>/dev/null)
+SWITCHED=false
 if [ "$CURRENT_BRANCH" != "$BRANCH" ]; then
-    echo "[1/5] Switching to branch: $BRANCH"
+    echo "[1/5] Stashing changes and switching to branch: $BRANCH"
+    git stash --include-untracked -q 2>/dev/null || true
     git checkout "$BRANCH"
+    git stash pop -q 2>/dev/null || true
+    SWITCHED=true
 else
     echo "[1/5] Already on branch: $BRANCH"
 fi
