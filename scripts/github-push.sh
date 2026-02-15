@@ -30,7 +30,7 @@ echo ""
 CURRENT_BRANCH=$(git branch --show-current 2>/dev/null)
 if [ "$CURRENT_BRANCH" != "$BRANCH" ]; then
     echo "[1/5] Switching to branch: $BRANCH"
-    git checkout "$BRANCH" 2>/dev/null || git checkout -b "$BRANCH"
+    git checkout "$BRANCH"
 else
     echo "[1/5] Already on branch: $BRANCH"
 fi
