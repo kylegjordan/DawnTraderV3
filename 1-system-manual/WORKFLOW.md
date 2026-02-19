@@ -33,6 +33,7 @@ The script fetches from GitHub, fast-forwards `dawntrader-v4`, and merges into t
 | Before Claude writes a directive | Kyle runs sync | Claude needs current code to write accurate directives |
 | After Replit implements a directive | Kyle runs sync | Claude needs updated code to review the implementation |
 | After Replit makes corrections | Kyle runs sync | Claude needs corrected code to re-review |
+| After Replit applies Document Update Package | Kyle runs sync | Claude needs to confirm doc updates are in place before next directive |
 
 ---
 
@@ -67,8 +68,10 @@ The script fetches from GitHub, fast-forwards `dawntrader-v4`, and merges into t
 │   Claude: write COMPLETION_X.Y.Z.md                         │
 ├─────────────────────────────────────────────────────────────┤
 │ Step 7: DOCUMENT UPDATES                                    │
-│   Claude: update System Manual, registries, index           │
-│   Kyle: push updated docs to GitHub                         │
+│   Claude: write DOC_UPDATE_X.Y.Z.md (Document Update Pkg)   │
+│   Kyle: send package to Replit                               │
+│   Replit: apply updates verbatim, push to GitHub             │
+│   Kyle: run sync-repo.bat                                    │
 │   → READY FOR NEXT DIRECTIVE                                │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -85,6 +88,29 @@ When review finds issues:
 6. Repeat until APPROVED
 
 For small corrections (1-2 tweaks): corrections go directly in the REVIEW document. For larger issues: a follow-up sub-directive is written (e.g., DIRECTIVE_12.1.1-FIX.md).
+
+### Step 7: Document Update Package
+
+**Why this step exists**: Claude Code maintains all governance documents (`1-system-manual/` files), but the only path to GitHub is through Replit (push-only). To bridge this gap, Claude Code produces a **Document Update Package** — a structured document containing every file edit needed, in the same REMOVE/REPLACE format used in directives. Kyle sends the package to Replit, Replit applies it verbatim, and pushes.
+
+**How it works**:
+
+1. Claude Code writes `DOC_UPDATE_X.Y.Z.md` in the directive folder (e.g., `directives/12.1.1/DOC_UPDATE_12.1.1.md`)
+2. The package contains exact edits for each affected file — same format as directive implementation steps (file path, REMOVE block, REPLACE WITH block)
+3. Kyle sends the package to Replit
+4. Replit applies every edit **exactly as written** — no interpretation, no additions, no reformatting
+5. Replit pushes to GitHub
+6. Kyle runs `sync-repo.bat` to pull the updated docs into the local clone
+
+**What a Document Update Package typically contains**:
+- SYSTEM_MANUAL.md section updates (reflecting what the directive changed)
+- CHANGES_AND_FIXES.md status updates (marking bugs/risks as RESOLVED)
+- DIRECTIVE_INDEX.md status change (marking the directive COMPLETE)
+- LEGACY_DEPRECATION_PLAN.md updates (if removal waves were completed)
+- SYSTEM_IMPACT_MAP.md updates (if component dependencies changed)
+- The COMPLETION_X.Y.Z.md file itself (new file creation)
+
+**Replit's rule for Document Update Packages**: This is the **one exception** to the "never modify `1-system-manual/` files" rule. When Kyle provides a Document Update Package authored by Claude Code, Replit applies it character-for-character and pushes. Replit does not interpret, improve, or add to the package. If something looks wrong, Replit asks Kyle — it does not fix it independently.
 
 ---
 
@@ -376,6 +402,92 @@ In `[file]`, line [N]:
 
 ---
 
+### Document Update Package Template
+
+```markdown
+# Document Update Package: Directive [X.Y.Z] — [Title]
+
+> **Author**: Claude Code
+> **Date**: [Date]
+> **Directive**: [X.Y.Z] — [Title]
+> **Purpose**: Apply post-directive document updates to governance files.
+> **Instructions for Replit**: Apply every edit below exactly as written. Do not interpret, improve, or add anything. If something looks wrong, ask Kyle.
+
+---
+
+## New Files to Create
+
+### File 1: `1-system-manual/directives/[X.Y.Z]/COMPLETION_[X.Y.Z].md`
+
+Create this file with the following content:
+
+```
+[Full content of the completion report]
+```
+
+---
+
+## Edits to Existing Files
+
+### Edit 1: SYSTEM_MANUAL.md — [Section description]
+
+In `1-system-manual/SYSTEM_MANUAL.md`, locate this text:
+
+**FIND**:
+```
+[Existing text to locate]
+```
+
+**REPLACE WITH**:
+```
+[Updated text]
+```
+
+### Edit 2: CHANGES_AND_FIXES.md — Mark [BUG/RISK] resolved
+
+In `1-system-manual/CHANGES_AND_FIXES.md`, locate this text:
+
+**FIND**:
+```
+[Existing bug/risk entry]
+```
+
+**REPLACE WITH**:
+```
+[Updated entry with RESOLVED status]
+```
+
+### Edit 3: DIRECTIVE_INDEX.md — Update status
+
+In `1-system-manual/directives/DIRECTIVE_INDEX.md`, locate this text:
+
+**FIND**:
+```
+| [X.Y.Z] | [Title] | IN REVIEW | [date] | — | — | — |
+```
+
+**REPLACE WITH**:
+```
+| [X.Y.Z] | [Title] | COMPLETE | [date] | [date] | [N] | — |
+```
+
+### Edit 4: [Additional files if needed]
+
+[Same FIND/REPLACE format]
+
+---
+
+## Verification
+
+After applying all edits, confirm:
+- [ ] All FIND blocks were located successfully
+- [ ] All REPLACE blocks were applied
+- [ ] No other changes were made to any files
+- [ ] Push to GitHub
+```
+
+---
+
 ## Key Principles
 
 ### Directive Quality
@@ -398,7 +510,8 @@ In `[file]`, line [N]:
 ### Document Discipline
 - **System Manual updates after every directive.** It always reflects the system as it IS today, not yesterday.
 - **Registry updates are immediate.** Resolved bugs/risks are marked the moment the directive is complete.
-- **The chain is the audit trail.** Directive → Review → Completion. No gaps.
+- **The chain is the audit trail.** Directive → Review → Completion → Document Update Package. No gaps.
+- **Document updates go through Replit.** Claude Code writes the Document Update Package, Kyle sends it to Replit, Replit applies it verbatim and pushes. This is the only path for governance doc updates to reach GitHub.
 
 ---
 

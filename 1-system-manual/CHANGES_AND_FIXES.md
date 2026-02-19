@@ -1309,6 +1309,20 @@ Total: **22 bugs, 85 architectural risks**.
 - POST_AUDIT_ROADMAP.md revised to v2 — formal phase numbering (12-22), incorporated Kyle's Next Steps, Phase 11.8 final steps, Directional Bias, Short Trading, and ML planning documents (~43 week timeline)
 - No new bugs or risks. Registry unchanged: **22 bugs, 85 architectural risks**.
 
+**Replit onboarding & governance embedding** (2026-02-19):
+- Created `REPLIT_ONBOARDING_PROMPT.md` — conversational prompt for onboarding Replit Agent to the directive workflow, covering role definition, Three Rules, directive protocol, prohibited/required actions, and review cycle expectations
+- Updated `replit.md` (project root) — replaced Walter-era general overview with streamlined architecture reference + embedded Development Governance section (Three Rules, role definition, directive protocol, prohibited/required actions, reference document table). This file is read by Replit Agent at the start of every conversation, making the governance rules persistent.
+- No new bugs or risks. Registry unchanged: **22 bugs, 85 architectural risks**.
+
+**Document Update Package workflow — Step 7 revision** (2026-02-19):
+- **Problem**: Step 7 originally said "Kyle: push updated docs to GitHub" but Replit is the only push path to GitHub. Claude Code writes doc updates locally, but those files need to reach GitHub through Replit.
+- **Solution**: Introduced Document Update Packages (`DOC_UPDATE_X.Y.Z.md`) — Claude Code writes exact FIND/REPLACE edits for governance documents, Kyle sends the package to Replit, Replit applies verbatim and pushes.
+- Updated `WORKFLOW.md` — revised Step 7 diagram, added When to Sync entry for doc update pushes, added full Step 7 explanation section, added Document Update Package template, updated Document Discipline principles
+- Updated `replit.md` — added Document Update Packages section, updated prohibited actions with carve-out for packages provided by Kyle
+- Updated `REPLIT_ONBOARDING_PROMPT.md` — added Document Update Packages section, updated review cycle description, updated prohibited/required actions, updated confirm understanding checklist
+- Updated `SYSTEM_MANUAL_OVERVIEW.md` — revised directive flow diagram, updated "What Replit Must Do" list, revised "What Happens After Implementation" description
+- No new bugs or risks. Registry unchanged: **22 bugs, 85 architectural risks**.
+
 ---
 
 **AUDIT COMPLETE**: All 11 phases of the systematic repository audit are now finished. Post-audit addenda applied: ChatGPT Phase 11 feedback, Cortex investigation, frontend tab catalog, Replit LSP audit cross-reference, ChatGPT System Manual review, and directive workflow establishment. Final registry: **22 bugs, 85 architectural risks** across the full DawnTrader codebase.

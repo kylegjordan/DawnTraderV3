@@ -78,7 +78,7 @@ When you receive a directive:
 
 ### Prohibited Actions
 
-- ❌ Modify any file in `1-system-manual/` (maintained by Claude Code only)
+- ❌ Modify any file in `1-system-manual/` **on your own** (see Document Update Packages below for the one exception)
 - ❌ Add features not specified in the directive
 - ❌ Refactor code adjacent to your changes
 - ❌ Rename variables or restructure files unless directed
@@ -101,6 +101,20 @@ After you push, Claude Code reviews your implementation and produces:
 - **APPROVED WITH CORRECTIONS** — Fix specific items. Correction steps provided.
 - **REJECTED** — Significant deviations. Re-implementation required.
 
+### Document Update Packages
+
+After a directive is APPROVED, Claude Code writes a **Document Update Package** (`DOC_UPDATE_X.Y.Z.md`) containing governance document edits (System Manual updates, registry status changes, completion reports, etc.). Kyle will send you this package.
+
+**This is the ONE exception to the `1-system-manual/` read-only rule.** When Kyle provides a Document Update Package:
+
+1. Apply every edit **exactly as written** — same FIND/REPLACE format as directives
+2. Create any new files specified in the package (e.g., completion reports)
+3. Do NOT interpret, improve, reformat, or add anything beyond what the package specifies
+4. If something looks wrong, ask Kyle — do not fix it yourself
+5. Push to GitHub when all edits are applied
+
+**This exception applies ONLY to Document Update Packages provided by Kyle.** You still never modify `1-system-manual/` files on your own initiative.
+
 ### Reference Documents
 
 All governance documents are in `1-system-manual/`:
@@ -122,8 +136,8 @@ All governance documents are in `1-system-manual/`:
 ## Recent Changes
 
 - **2026-02-19**: Development governance system established. Directive Implementation Workflow, System Impact Map, and Directive Index created. Phase 12 directives pre-loaded (18 PENDING). All changes from this point forward governed by directive lifecycle.
-- **2026-02-09**: Directive 11.8C VTS Multi-Strategy Regime-Scoped Simulation — VTS now generates N trades per pair (one per regime-compatible strategy) instead of selecting one "best" strategy; uses getStrategiesForRegime() from canonical map; duplicate guard upgraded to per-symbol+strategy; trade ID includes strategy name; executionContext: VTS_MULTI field added to OpenVirtualTrade, Phase10TradeRecord; MAX_OPEN_TRADES increased 300→500; DSS/Paper/Live paths untouched; data-g ...[Truncated]
-- **2026-02-06**: Directive 11.8B-D1 Complete Filter Authority Cleanup — updateScreeners() deleted; NLAI screener liquidity action deleted; /api/screeners GET+PUT return 410 Gone; Walter AI filters case returns error; managedByLottie/manualOverrideEnabled removed from FilterParamV2 interface and updateFiltersV2Schema; filterOverrides per-filter override system removed from GET/PUT handlers; toFiltersV2() cleaned; filters-with-override.tsx FilterV2 interface cleaned; permissions. ...[Truncated]
+- **2026-02-09**: Directive 11.8C VTS Multi-Strategy Regime-Scoped Simulation — VTS now generates N trades per pair (one per regime-compatible strategy) instead of selecting one "best" strategy; uses getStrategiesForRegime() from canonical map; duplicate guard upgraded to per-symbol+strategy; trade ID includes strategy name; executionContext: VTS_MULTI field added to OpenVirtualTrade, Phase10TradeRecord; MAX_OPEN_TRADES increased 300→500; DSS/Paper/Live paths untouched; data-generation enhancement only
+- **2026-02-06**: Directive 11.8B-D1 Complete Filter Authority Cleanup — updateScreeners() deleted; NLAI screener liquidity action deleted; /api/screeners GET+PUT return 410 Gone; Walter AI filters case returns error; managedByLottie/manualOverrideEnabled removed from FilterParamV2 interface and updateFiltersV2Schema; filterOverrides per-filter override system removed from GET/PUT handlers; toFiltersV2() cleaned; filters-with-override.tsx FilterV2 interface cleaned; permissions.ts and execution-policy-controller.ts screener refs removed; DB columns preserved FROZEN; canonical docs updated
 - **2026-02-04**: Directive 11.8B-C2 Purpose Tab & Strategy Preset Decommission completed
 - **2026-02-04**: Directive 11.8B-C Goals ML & Preset System Decommission completed
 - **2026-02-04**: Directive 11.8B-B1 Authority Surface Cleanup completed

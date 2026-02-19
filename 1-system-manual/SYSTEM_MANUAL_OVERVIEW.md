@@ -219,8 +219,10 @@ Kyle syncs repo → Claude Code reads updated code
                 → If corrections needed: correction cycle
                 → If approved: Claude Code writes COMPLETION_X.Y.Z.md
 
-Claude Code updates System Manual + registries
-Kyle pushes updated docs to GitHub
+Claude Code writes DOC_UPDATE_X.Y.Z.md (Document Update Package)
+Kyle sends package to Replit
+Replit applies doc updates verbatim → pushes to GitHub
+Kyle syncs repo
 → READY FOR NEXT DIRECTIVE
 ```
 
@@ -243,6 +245,7 @@ The directive's job is to make it impossible for the implementer to misunderstan
 2. **If the directive is unclear, STOP and ask Kyle** — do not guess
 3. **Provide the validation evidence specified in the directive** — "done" is not evidence
 4. **Push to GitHub when implementation is complete**
+5. **Apply Document Update Packages verbatim** when provided by Kyle after directive approval — this is the one exception to the `1-system-manual/` read-only rule
 
 ### What Happens After Implementation
 
@@ -252,7 +255,7 @@ Claude Code reviews the implementation against the directive and produces one of
 - **APPROVED WITH CORRECTIONS** — Mostly correct but needs specific fixes. Correction steps provided.
 - **REJECTED** — Significant deviations. Requires re-implementation.
 
-After approval, a Completion Report is written documenting exactly what changed, and the System Manual is updated to reflect the new state of the system.
+After approval, Claude Code writes a **Document Update Package** containing all governance document edits (completion report, System Manual updates, registry status changes). Kyle sends the package to Replit, Replit applies the edits verbatim and pushes to GitHub. This ensures the System Manual always reflects the current state of the system, and the only path to GitHub remains through Replit.
 
 ---
 
