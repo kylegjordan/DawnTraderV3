@@ -1,0 +1,10018 @@
+# DawnTrader System Manual — Unified Reference
+
+> **Author**: Claude Code (System Cartographer)
+> **Consolidated**: 2026-02-17
+> **Source**: Systematic 11-phase repository audit
+> **Companion Documents**: CHANGES_AND_FIXES.md (22 bugs, 85 risks), LEGACY_DEPRECATION_PLAN.md (removal waves), POST_AUDIT_ROADMAP.md (implementation roadmap)
+> **Status**: Complete (all 11 phases consolidated)
+
+---
+
+## About This Document
+
+This is the unified DawnTrader System Manual, consolidating all 11 phases of the systematic repository audit into a single reference document. It describes **what the active system IS** — its architecture, components, data flows, and configuration.
+
+This document does NOT contain:
+- **Bugs or risks** — see CHANGES_AND_FIXES.md (22 bugs, 85 architectural risks)
+- **Removal plans** — see LEGACY_DEPRECATION_PLAN.md (10 removal waves, ~71 legacy tables, ~96 legacy files)
+- **Implementation roadmap** — see POST_AUDIT_ROADMAP.md (Phases 12-22, from current state to live trading)
+
+### Reading This Document: Current State vs Intended State
+
+This manual documents both **what the system currently does** and **what it is designed to do**. These are not always the same — in several areas, canonical components have been built but are not yet wired into the active trading path. Where current behavior differs from intended architecture, the manual uses explicit labels:
+
+- **⚠️ CRITICAL** blocks at the top of chapters flag where the active trading path diverges from the canonical architecture
+- Components are labeled with their status: **ACTIVE**, **LEGACY**, **CANONICAL CANDIDATE**, **DEPRECATED**, **LOCKED**, etc.
+- The phrase "defined but not wired" or "implemented but not actively selected" indicates a component that exists in code but is not in the live execution path
+
+**When in doubt**: The active trading path uses what the DSS selects. As of 2026-02, that is the legacy 6-regime / 9-quant-only map. The canonical 5-regime / 17-strategy map exists and is correct but is not yet wired to the DSS. See Chapter 2 for the full regime architecture breakdown.
+
+### System Overview
+
+DawnTrader is an algorithmic cryptocurrency trading platform for the Kraken exchange. It supports paper and live trading modes, operating as a single-tenant, single-user system with mode isolation at the database row level. The system implements a full trading pipeline: market scanning → signal generation → scoring → risk management → execution → monitoring.
+
+The codebase is a TypeScript monorepo with a React frontend, Express API server, PostgreSQL database (Neon Serverless), and Drizzle ORM. It comprises approximately 160 database tables (of which ~71 are legacy), ~750 API endpoints (of which ~460 have no frontend consumer), and 60 test files.
+
+### Audit Summary
+
+| Metric | Value |
+|--------|-------|
+| Bugs Found | 22 (7 CRITICAL, 2 HIGH, 4 MEDIUM, 7 LOW, 2 Informational) |
+| Architectural Risks | 85 |
+| Legacy Database Tables | ~71 (~44% of ~160 total) |
+| Legacy Files (Walter/Bob/Cortex) | ~96 |
+| Server API Endpoints | ~750 |
+| Frontend-Consumed Endpoints | ~291 |
+| Unused Server Endpoints | ~460 |
+| Test Files | 60 (~13,735 lines) |
+| Frontend Pages | 25 (14 active routed, 7 dead/unrouted, 4 other) |
+| Frontend Tab Sub-Pages | 91 |
+
+---
+
+## Table of Contents
+
+### Part I: Core Trading Engine
+- **Chapter 1**: Core Math & Scoring (Phase 1) — FinalScore kernel, Expectancy Gate, cost model, quality metrics
+- **Chapter 2**: Strategy Deep Dives (Phase 2) — 17 canonical strategies, regime classification, DSS analysis
+- **Chapter 3**: Market Scanning & Pair Management (Phase 3) — FX5 Scanner, watchlist, screener filters
+
+### Part II: Risk & Execution
+- **Chapter 4**: Risk Management, Guardrails & Portfolio (Phase 4) — Guardrails V2, pre-execution validation, kill switch
+- **Chapter 5**: Trade Execution & Lifecycle (Phase 5) — Paper execution engine, order lifecycle, RTB signals
+
+### Part III: Intelligence & Learning
+- **Chapter 6**: ML Pipeline, Learning & Calibration (Phase 6) — VTS, ML calibration, drift detection, strategy drive
+
+### Part IV: Infrastructure & Platform
+- **Chapter 7**: System Lifecycle & Infrastructure (Phase 7) — Boot sequence, shutdown, health monitoring
+- **Chapter 8**: API & Communication Layer (Phase 8) — REST API, WebSocket, middleware, authentication
+- **Chapter 9**: Frontend & UI Layer (Phase 9) — React pages, components, tab catalog, Walter integration
+
+### Part V: Quality & Data
+- **Chapter 10**: Testing & Quality Assurance (Phase 10) — Test frameworks, coverage, runtime validation
+- **Chapter 11**: Database Schema & Migrations (Phase 11) — Schema inventory, migration infrastructure, data access
+
+---
+
+## System Authority Hierarchy
+
+Quick reference: which components are authoritative, which are contaminated, and which are the development path.
+
+### Authoritative Components (Trust These)
+| Component | File(s) | Authority |
+|-----------|---------|-----------|
+| **Net Expectancy Kernel** | `signal-orchestrator.ts`, `paper-execution-engine.ts` | Sole EV authority. Mathematically correct. |
+| **cost-model.ts** | `server/core/cost-model.ts` | Cost-of-trade authority. Real spread + slippage + fees. |
+| **calculatePairRegime()** | `server/core/metrics/market-regime.ts` | Canonical pair-level regime classification. 5 regimes. |
+| **Canonical Regime Strategy Map** | `server/config/canonical-regime-strategy-map.ts` | SSOT: 5 regimes, 17 strategies. Defined, correct, **not yet wired to DSS**. |
+| **Guardrails V2** | `guardrails-v2.ts` | Risk gate authority. 10 named guardrails + kill switch. |
+| **Pre-Execution Validator** | `pre-execution-validator.ts` | Final gate before trade execution. Two-gate system (post goal-alignment removal). |
+| **FinalScore Kernel** | `signal-orchestrator.ts` | Score authority. Adaptive weighting with volatility adjustment. |
+
+### Contaminated / Legacy (Do Not Build On)
+| Component | Status | Problem |
+|-----------|--------|---------|
+| **quality_index.ts (NGC)** | LEGACY | Confidence carrier throughout pipeline. Must be replaced, not extended. |
+| **SYSTEM_GUARDS friction** | LEGACY | Flat 0.5% fee — bypasses real cost model. |
+| **DSS volNoise/trendSlope classifier** | LEGACY | 6-regime / 9-quant-only. Must be replaced with canonical map. |
+| **MCP/ARE ecosystem** | LEGACY (Kyle confirmed) | High-Impact Legacy Cluster. 14+ consumers, own strategy matrix, own regime taxonomy. Remove in Wave 6. |
+| **NLAI system** | LEGACY | 5 files + routes. Pending removal (Wave 4.7). |
+| **Goal Alignment system** | LEGACY | Daily/weekly targets in pre-execution validator. Remove in Wave 4.5. |
+| **Walter/Bob/Cortex** | LEGACY (Kyle confirmed) | ~96 files. Entire AI assistant ecosystem. Remove in Wave 3. |
+| **RiskManager class** | DEPRECATED | Replaced by `checkGuardrailRisk()`. 12 import locations still referencing it. |
+| **VTS signal generation** | CONTAMINATED | Uses `simulateHybridScore()` / `simulatePredictiveConfidence()` — generic random noise, not strategy-specific. BUG-001 (CRITICAL). |
+
+### Development Authority
+| Component | Status | Notes |
+|-----------|--------|-------|
+| **PaperExecutionEngine** | PRIMARY, AUTHORITATIVE | ~2,308 lines. The active development and execution authority. |
+| **TradingEngine (live)** | SECONDARY, DORMANT | ~766 lines. Contains placeholder code, simulated fills (Math.random), goal alignment. Defer rebuild until paper mode is fully stable. Strategic fork pending: refactor to mirror paper core, or delete and rebuild from paper core. |
+| **VTS Runner** | ACTIVE (needs signal fix) | Real price data, real regime, real governance — but simulated scoring inputs. BUG-001 must be fixed before VTS output is trustworthy for calibration. |
+
+---
+
+## Legacy Clusters (Removal Groupings)
+
+Legacy systems are not isolated files — they form interconnected clusters that must be removed together. Full removal details are in LEGACY_DEPRECATION_PLAN.md.
+
+### Cluster 1: NGC / CWQI / Rolling Normalization
+- **Core files**: `quality_index.ts`, rolling normalization infrastructure
+- **Contamination**: NGC flows as confidence carrier → DI → kernel. Affects entire signal pipeline.
+- **Removal**: Phase 12.3.3 (Pipeline Unification — replace with interim deterministic confidence)
+- **Risk level**: HIGH — must be replaced, not just removed
+
+### Cluster 2: MCP/ARE + Autonomy Layer (High-Impact)
+- **Core files**: `market-profiler.ts`, `adaptive-regime.ts`, autonomy-scheduler, action-executor, MOF/MACO/ECS/GASP coordinators
+- **Contamination**: Exposure multipliers, strategy mix matrix, regime classifications flowing to 14+ services on 15-minute timer
+- **Removal**: Wave 6 (Phase 16, during/after MCE — MCE must absorb portfolio-risk responsibilities first)
+- **Risk level**: DANGEROUS — largest consumer dependency count of any legacy system
+
+### Cluster 3: Walter / Bob / Cortex / NLAI / Goal Alignment
+- **Core files**: ~96 walter-*.ts, bob-*.ts, bobs/*.ts, cortex/*.ts, 5 NLAI files, goal alignment in pre-execution-validator
+- **Contamination**: Cortex is ACTIVE at runtime (in-memory cache, 15-min analytics cycle). Walter lazy-loaded at startup. NLAI event handlers active.
+- **Removal**: Waves 3, 3.1, 4.5, 4.7 (Phase 12.2 — pre-MCE cleanup)
+- **Risk level**: MODERATE — large surface area but mostly disconnected from trading pipeline
+
+### Cluster 4: DSS Legacy Regime Engine
+- **Core files**: `dynamic-strategy-selector.ts` (214 lines)
+- **Contamination**: Active trading path routes through legacy 6-regime / 9-quant map instead of canonical 5-regime / 17-strategy map
+- **Removal**: Phase 12.3.1 (Pipeline Unification — rewire to canonical map)
+- **Risk level**: HIGH — this IS the active trading path
+
+### Cluster 5: L-Series Systems
+- **Core files**: ~13 L-Series modules + ~52 route endpoints + ~57 database tables + ~40 enums
+- **Contamination**: 14+ MCP/ARE importers, 12+ DCE importers depend on L-Series infrastructure
+- **Removal**: Wave 6 (Phase 16 — requires MCE to absorb responsibilities first)
+- **Risk level**: DANGEROUS — deep dependency web, largest table removal batch
+
+### Cluster 6: Walter-Era Learning Services
+- **Core files**: continuous-learning.ts, learning-cycle-service.ts, learning-coordinator.ts, learning-bridge.ts, learning-gate-validator.ts, learning-bob.ts
+- **Contamination**: Some files are lazy-loaded. learning.ts route file is mounted but orphaned.
+- **Removal**: Wave 8 (Phase 12.2.8 — pre-MCE cleanup)
+- **Risk level**: MODERATE — verify no active initialization side effects
+
+---
+
+*Individual chapter contents follow. Each chapter preserves the full detail of its corresponding audit phase.*
+
+---
+
+
+---
+
+# Part I: Core Trading Engine
+
+
+---
+
+# Chapter 1: Core Math & Scoring
+
+## Overview
+
+This section documents the mathematical foundation of DawnTrader — every formula, threshold, scoring mechanism, and cost model that underpins trade decisions. This is the "physics layer" of the system: the raw math that determines whether a signal is good enough to trade.
+
+**Key principle**: No trade — real or simulated — proceeds unless the math justifies the risk.
+
+---
+
+## 1. Score Weights Configuration (Single Source of Truth)
+
+**File**: `server/config/score-weights.config.ts`
+**Directive**: 10.9A
+**Status**: ACTIVE — LOCKED (Object.freeze, DO NOT MODIFY without review)
+
+The FinalScore formula is the system's primary signal ranking mechanism:
+
+```
+FinalScore = (HybridScore × 0.4) + (Confidence × 0.3) + (RegimeWeight × 0.2) - (DecayPenalty × 0.1)
+```
+
+| Weight | Name | Value | Component |
+|--------|------|-------|-----------|
+| W1 | HYBRID | 0.40 | HybridScore — QUANT + PATTERN ensemble |
+| W2 | CONFIDENCE | 0.30 | Predictive confidence |
+| W3 | REGIME | 0.20 | Regime alignment |
+| W4 | DECAY | 0.10 | Signal age penalty (subtracted) |
+
+- **Version**: v1.0.1 (telemetry auditing tag)
+- **Sum of positive weights**: 0.9
+- **Max theoretical FinalScore**: 0.9 (all components = 1.0, DecayPenalty = 0)
+- **Minimum viable FinalScore**: 0.35 (SQE gate)
+
+**Consumers**: SQE, RTB Refresh, VTS scoring, adaptive-goals-weight.ts, all signal ranking.
+
+---
+
+## 2. Adaptive Goals Weight System
+
+**File**: `server/core/metrics/adaptive-goals-weight.ts`
+**Directive**: 11.4H
+**Status**: ACTIVE — LOCKED
+
+Dynamically adjusts FinalScore weights during high-volatility conditions to reduce ML/AI reliance when markets are less predictable.
+
+### How It Works
+
+```
+adjustedMlWeight = baseConfidenceWeight × (1 - volatilityFactor)
+cappedMlWeight   = min(adjustedMlWeight, 0.40)   // AI_WEIGHT_CAP = 40% max ML contribution
+
+mlReduction   = baseWeight - cappedMlWeight
+hybridBoost   = mlReduction × 0.6   // 60% of reduction goes to hybrid weight
+regimeBoost   = mlReduction × 0.4   // 40% of reduction goes to regime weight
+```
+
+After adjustment, positive weights are renormalized to sum to 1.0 (before applying the subtracted decay penalty).
+
+### Adaptive FinalScore
+
+```
+AdaptiveFinalScore = (hybridScore × adjustedHybridWeight)
+                   + (predictiveConfidence × adjustedConfidenceWeight)
+                   + (regimeWeight × adjustedRegimeWeight)
+                   - (decayPenalty × decayWeight)
+                   clamped to [0, 1]
+```
+
+### Effect
+
+- **Normal volatility**: Weights stay close to base (0.4/0.3/0.2/0.1)
+- **High volatility**: ML confidence weight decreases, hybrid + regime weights increase
+- **Purpose**: In unpredictable markets, rely more on direct signal quality (hybrid) and regime alignment, less on ML predictions
+
+---
+
+## 3. Net Expectancy Kernel (Sole EV Authority)
+
+**File**: `server/core/calculations/net-expectancy-kernel.ts`
+**Directive**: 11.8B-A
+**Status**: ACTIVE — PURE MATH (no side effects, no I/O, no logging, synchronous)
+
+This is the core EV calculation. Every trade decision in the system ultimately passes through this kernel.
+
+### The Formula
+
+```
+Pwin = 0.40 + (DI / 200)              // clamped to [0.40, 0.60]
+Ploss = 1 - Pwin
+
+DistTarget = |targetPrice - entryPrice|
+DistStop   = |entryPrice - stopPrice|
+
+RawEV  = (Pwin × DistTarget) - (Ploss × DistStop)
+NetEV  = RawEV - TotalFriction
+
+NetRewardToRisk = NetEV / DistStop     // (if DistStop > 0)
+```
+
+### Key Parameters
+
+| Parameter | Source | Default |
+|-----------|--------|---------|
+| DI (Directional Integrity) | `analysis-utils.ts` | 50 |
+| TotalFriction | `cost-model.computeTotalRoundTripCost()` | Per-trade calculation |
+| Pwin bounds | Hardcoded constants | [0.40, 0.60] |
+| DI_PWIN_FACTOR | Hardcoded constant | 200 |
+
+### Invariant
+
+**No trade proceeds if NetEV ≤ 0.** This is enforced at every entry point:
+- Signal Orchestrator (active trading)
+- VTS Runner (simulation)
+- Trade Expectancy Gate (execution)
+
+---
+
+## 4. Trade Expectancy Gate (Decision Layer)
+
+**File**: `server/core/calculations/expectancy.ts`
+**Directive**: 11.5, 11.7A-C, 11.8B
+**Status**: ACTIVE
+
+Wraps the Net Expectancy Kernel with decision logic, logging, correlation penalties, and quality scoring.
+
+### Quality Score Formula
+
+```
+Score = normalize(NetEV / Risk) × (DI/100) × (1 - VolNoise) × (1 - ρ̄) × 100
+        clamped to [0, 100]
+
+Where:
+  Risk = |entryPrice - stopPrice|
+  DI   = Directional Integrity (0-100)
+  VolNoise = Volatility Noise (0-1)
+  ρ̄    = Mean absolute correlation with all other tracked symbols (from CovarianceEngine)
+```
+
+### Regime-Aware ROI Thresholds
+
+| Regime | Min ROI | Rationale |
+|--------|---------|-----------|
+| BULL_STABLE | 1.25% | Low risk = lower return bar |
+| LOW_VOL_CHOP | 1.75% | Moderate |
+| TRANSITION | 2.00% | Uncertain |
+| BEAR_VOLATILE | 2.50% | Higher risk |
+| HIGH_VOL_IMPULSE | 3.00% | Highest risk = highest bar |
+
+### Dynamic ROI Scaling
+
+```
+dynamicROI = baseROI × (1 - (predictiveConfidence - 0.5) × ROI_FLEX_MULTIPLIER)
+             clamped to [ROI_MIN, ROI_MAX]
+
+// Higher confidence = lower threshold (more permissive)
+// Bounded between 1% and 4%
+```
+
+### Friction-Aware Profitability Gate
+
+```
+frictionFloor = (fee × 2) + (slippage × FRICTION_SAFETY_BUFFER)
+requiredROI   = max(dynamicROI, frictionFloor)
+
+Signal passes if: expectedROI ≥ requiredROI
+```
+
+This ensures no trade proceeds where costs eat the expected return.
+
+---
+
+## 5. Cost Model (Single Source of Truth)
+
+**File**: `server/core/math/cost-model.ts`
+**Directive**: 11.3A/B
+**Status**: ACTIVE — LOCKED
+
+### Round-Trip Cost
+
+```
+TotalRoundTripCost = (fee × 2) + (slippage × 2) + spread
+```
+
+### Default Values (from exchange-defaults.ts)
+
+| Component | Default | Notes |
+|-----------|---------|-------|
+| Taker Fee | 0.26% | Per side (Directive 11.3B raised from 0.25%) |
+| Slippage | 0.15% | Estimated execution slippage |
+| Spread | 0.10% | Bid-ask spread |
+
+### Net Execution Geometry
+
+The cost model computes adjusted prices accounting for friction:
+
+```
+executionEntry  = baseEntry  × (1 + slippage + spread/2)
+executionStop   = baseStop   × (1 - slippage)
+executionTarget = baseTarget × (1 - slippage)
+
+grossPnlPct     = (executionTarget - executionEntry) / executionEntry
+netExpectedEdge = grossPnlPct - totalRoundTripCost
+
+riskPct   = (executionEntry - executionStop) / executionEntry
+rewardPct = (executionTarget - executionEntry) / executionEntry
+netRewardToRisk = (rewardPct - totalRoundTripCost) / riskPct
+```
+
+### Break-Even and Target Floor
+
+```
+breakeven   = entryPrice  × (1 + totalRoundTripCost)
+targetFloor = targetPrice × (1 - totalRoundTripCost / 2)
+```
+
+**Consumers**: Signal Orchestrator, RTB Refresh, Dynamic Sizing Engine, SQE, TEC, VTS.
+
+### Known Bug
+
+`getCostMetricsCache()` calls `getCacheStats()` but then returns an empty Map — appears to be an incomplete implementation. Does not affect runtime cost calculations, but breaks any cache introspection tooling.
+
+---
+
+## 6. Cost Metrics Service
+
+**File**: `server/core/metrics/cost-metrics.ts`
+**Directive**: 11.3A, 11.4A, 11.4B, 11.4H
+**Status**: ACTIVE
+
+### Cost Factor
+
+```
+costFactor = (spread + slippage) / avgReturn
+
+Where:
+  spread   = live from Kraken order book (or DEFAULT_SPREAD = 0.10%)
+  slippage = DEFAULT_SLIPPAGE = 0.05%
+  avgReturn = DEFAULT_AVG_RETURN = 0.50%
+```
+
+| Classification | Cost Factor Range |
+|---------------|-------------------|
+| cheap | < 0.0003 |
+| moderate | 0.0003 - 0.001 |
+| expensive | > 0.001 |
+
+### Market Friction Score (0-100)
+
+```
+base = (spread + slippage + fee) × 10000
+frictionScore = min(base / 3, 100)
+```
+
+| Score Range | Status | Color |
+|-------------|--------|-------|
+| 0-30 | High Liquidity / Low Cost | Green |
+| 30-70 | Moderate Liquidity | Orange |
+| 70-100 | Low Liquidity / High Cost | Red |
+
+### Adaptive Friction Bands
+
+Replaces static thresholds with percentile-based adaptive tiers:
+
+```
+lowThreshold  = 30th percentile of all pair spreads
+highThreshold = 70th percentile of all pair spreads
+
+Target distribution: GREEN ≈ 30% | ORANGE ≈ 40% | RED ≈ 30%
+```
+
+- Requires minimum 10 pairs for adaptive calculation
+- Falls back to static thresholds (0.1%/0.3%) if < 10 pairs
+- Cache TTL: 60 seconds
+
+### Spread Sourcing
+
+Live spread fetched from Kraken order book:
+```
+bestAsk, bestBid = orderBook top level
+midPrice = (bestAsk + bestBid) / 2
+spread = (bestAsk - bestBid) / midPrice
+```
+Cached for 30 seconds. Falls back to DEFAULT_SPREAD (0.1%) on failure.
+
+---
+
+## 7. Slippage & Fee Model (Paper Trading Realism)
+
+**File**: `server/services/slippage-fee-model.ts`
+**Status**: ACTIVE
+
+Models realistic trade execution for paper trading and performance attribution.
+
+### Price Impact (Order Book Walk)
+
+```
+For each level in order book:
+  Fill quantity at level price until total quantity met
+  avgFillPrice = totalCost / filledQuantity
+  priceImpact = |avgFillPrice - intendedPrice| / intendedPrice
+```
+
+### Conservative Impact (No Order Book Available)
+
+| Order Size | Impact |
+|-----------|--------|
+| < $1K | 1 bp (0.01%) |
+| < $10K | 2 bps (0.02%) |
+| < $50K | 5 bps (0.05%) |
+| ≥ $50K | 10 bps (0.10%) |
+
+### Micro-Move Simulation (Stochastic)
+
+```
+z = sqrt(-2 × ln(u1)) × cos(2π × u2)     // Box-Muller normal
+microMove = z × recentVolatility
+            capped at ±20 bps (±0.002)
+```
+
+**Note**: This introduces non-determinism. Paper trading results cannot be exactly reproduced.
+
+### Total Execution Model
+
+```
+totalSlippage = priceImpact + microMoveComponent
+modeledFillPrice = intendedPrice × (1 + totalSlippage)   // buy
+modeledFillPrice = intendedPrice × (1 - totalSlippage)   // sell
+```
+
+### Fee Model
+
+```
+totalFees = grossAmount × feeRate
+netAmount = grossAmount - totalFees
+```
+
+---
+
+## 8. IMF (Integrated Market Filters) Metrics
+
+**File**: `server/core/metrics/imf-metrics.ts`
+**Directive**: 11.7H
+**Status**: ACTIVE
+
+Three metrics computed from OHLC data to filter pairs before signal generation.
+
+### Log-Liquidity (LQ)
+
+```
+avgVolumeUSD = Σ(typicalPrice × volume) / candleCount
+    where typicalPrice = (high + low + close) / 3
+LQ = log10(avgVolumeUSD + 1) × 10
+     clamped to [0, 100]
+```
+
+Minimum 5 candles required. Returns 0 if insufficient data.
+
+### VolNoise (Volatility Noise)
+
+Delegates to canonical function in `analysis-utils.ts`:
+```
+diffs = [|close_i - close_{i-1}|]
+VolNoise = stddev(diffs) / mean(diffs)
+```
+Returns 0.5 if insufficient data (< 3 candles).
+
+### Correlation
+
+Pearson correlation between pair returns and benchmark returns:
+```
+pairReturns_i  = (close_i - close_{i-1}) / close_{i-1}
+benchReturns_i = (benchClose_i - benchClose_{i-1}) / benchClose_{i-1}
+
+correlation = |Σ((p_i - meanP)(b_i - meanB)) / sqrt(Σ(p_i - meanP)² × Σ(b_i - meanB)²)|
+```
+Returns abs(correlation). Returns 0.5 if < 5 data points or no benchmark.
+
+### Filter Gate
+
+```
+passesMetricFilter = (LQ ≥ LQ_MIN) AND (VolNoise ≤ VN_MAX) AND (Correlation ≤ CORR_MAX)
+```
+
+Thresholds imported from `SYSTEM_GUARDS.IMF_THRESHOLDS`.
+
+### OHLC Cache
+
+5-minute TTL cache for OHLC data per symbol. During passive learning, uses cached data if live data unavailable. Active trading mode caches after computation.
+
+---
+
+## 9. Pre-Signal Math (analysis-utils.ts)
+
+**File**: `server/utils/analysis-utils.ts`
+**Directives**: 9.x, 10.x series
+**Status**: ACTIVE — Core mathematical foundation
+
+These metrics are computed BEFORE signal generation, AFTER FX5 universe selection.
+
+### Log-Liquidity (LQ, 0-100)
+
+```
+LQ = 10 × (log(Volume × Close) - log(Spread / Close) - 10)
+     clamped to [0, 100]
+```
+
+### Directional Integrity (DI, 0-100)
+
+Measures how "direct" a price path is vs. total distance traveled:
+```
+netDistance  = |prices[last] - prices[first]|
+totalPath   = Σ|prices[i] - prices[i-1]|
+DI = (netDistance / totalPath) × 100
+```
+- DI = 100: Perfect straight-line movement
+- DI = 0: Price went nowhere despite large movements (choppy)
+
+### Volatility Noise (VolNoise, 0-1)
+
+Coefficient of variation of absolute price changes:
+```
+diffs = [|price_i - price_{i-1}|]
+VolNoise = stddev(diffs) / mean(diffs)
+```
+- VolNoise > 0.6 triggers EXTREME_NOISE pre-filter veto
+- Returns 0.5 if < 3 data points
+
+### Sigma (Standard Deviation of Returns)
+
+```
+returns_i = price_i - price_{i-1}
+sigma = sqrt(Σ(r_i - meanR)² / N)      // population variance
+```
+Default window: 20 periods. Returns 0 if < 3 data points.
+
+### Efficiency Ratio (ER, 0-1)
+
+```
+ER = |Price_last - Price_first| / Σ|ΔPrice_i|
+```
+- ER = 1.0: Perfect trend (all movement in one direction)
+- ER = 0.0: All movement cancels out (pure noise)
+- Used by Adaptive Kalman Filter for tuning
+
+### Core Metric Filters
+
+```
+passesCoreMetricFilters = (LQ ≥ LQ_MIN) AND (VolNoise ≤ VN_MAX)
+```
+Thresholds from `SYSTEM_GUARDS`.
+
+### Dynamic Stop Distance
+
+```
+K' = K_base × (1 + α×(1 - DI/100) + β×VolNoise)
+     clamped to [0.5, 3.0]
+
+Defaults: K_base=1.0, α=0.5, β=0.8
+
+trailingStopPrice = currentPrice - (ATR × K')
+```
+- Higher DI = tighter stops (trend is consistent, don't give back gains)
+- Higher VolNoise = wider stops (market is noisy, avoid whipsaws)
+
+### Break-Even and Target Lock
+
+```
+breakEvenTriggered = (currentPrice - entryPrice) ≥ ATR
+targetLockTriggered = currentPrice ≥ targetPrice
+```
+
+### Trade Friction — ⚠️ INCORRECT MODEL (Legacy)
+
+```
+friction = (entryPrice + exitPrice) × quantity × BASE_FEE_SLIPPAGE
+perUnitFriction = (entry + exit) × 1 × BASE_FEE_SLIPPAGE
+```
+Where `BASE_FEE_SLIPPAGE = 0.005` (0.5%) from `SYSTEM_GUARDS`.
+
+**This is the WRONG friction model.** It uses a flat percentage instead of component-separated costs. The correct friction model is in `cost-model.ts`:
+```
+TotalRoundTripCost = (fee × 2) + (slippage × 2) + spread
+```
+
+The `calculateFriction()` function in analysis-utils.ts and all uses of `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE` for friction calculations should be replaced with `computeTotalRoundTripCost()` from cost-model.ts. **See RISK-009 and UNIFY-001 in CHANGES_AND_FIXES.md.**
+
+### Trend Slope
+
+```
+trendSlope = (prices[last] - prices[first]) / prices[first]
+```
+Used by DSS for regime classification.
+
+---
+
+## 10. Rolling Statistics Engine
+
+**File**: `server/utils/rolling-stats.ts`
+**Directive**: 11.5, 11.6B
+**Status**: ACTIVE
+
+Fixed-size sliding window for streaming statistical calculations.
+
+### Configuration
+
+| Parameter | Value |
+|-----------|-------|
+| Default window size | 300 |
+| Warm-up threshold | 30 samples minimum |
+| Variance type | **Population** (÷N, not ÷(N-1)) |
+| Cache invalidation | On every push() |
+
+### Formulas
+
+```
+mean = Σ(values) / N
+variance = Σ(v_i - mean)² / N       // population variance
+std = sqrt(variance)                 // returns 1 if N < 2 (safe sentinel)
+Z-score = (value - mean) / std
+```
+
+### Module-Level Cache
+
+Named instances via `getOrCreateRollingStats(key, windowSize?)`. This is the mechanism by which DSS, market-regime.ts, and macro-state.ts each maintain their own independent RollingStats instances.
+
+**MCE Impact**: When MCE centralizes Z-Score computation, these separate instances will be replaced by a single set managed by MCE.
+
+---
+
+## 11. Secondary Metric Adjustments (Macro-Aware)
+
+**File**: `server/core/metrics/secondary-metrics.ts`
+**Directive**: 11.5
+**Status**: ACTIVE
+
+Dynamically adjusts metric thresholds based on macro market conditions.
+
+### Base Ranges
+
+| Metric | Base Value |
+|--------|-----------|
+| VOL_HIGH | 0.04 |
+| VOL_LOW | 0.005 |
+| MOM_HIGH | 0.05 |
+| MOM_LOW | -0.05 |
+| LQ_MIN | 40 |
+| ADX_MIN | 20 |
+| ADX_HIGH | 50 |
+| VOLNOISE_MAX | 0.6 |
+
+### Condition-Based Adjustments
+
+| Condition | VOL_HIGH | MOM_HIGH/LOW | LQ_MIN | ADX_MIN | VOLNOISE_MAX |
+|-----------|----------|--------------|--------|---------|--------------|
+| NORMAL | × 1.0 | × 1.0 | +0 | +0 | × 1.0 |
+| VOLATILITY_EXPANSION | × 1.25 | × 1.1 | +0 | +0 | × 1.15 |
+| LIQUIDITY_CRUNCH | × 0.85 | — | +10 | — | — |
+| SPECULATIVE_SURGE | × 0.9 | — | — | +10 | × 0.85 |
+
+**Effect**: During volatile or stressed conditions, thresholds automatically widen (permissive on vol) or tighten (restrictive on liquidity) to adapt signal generation to market conditions.
+
+---
+
+## 12. Signal Quality Evaluator (SQE) — Deep Dive
+
+**File**: `server/core/filters/signal_quality_evaluator.ts`
+**Directive**: 11.0E (legacy purge), 11.7C
+**Status**: ACTIVE
+
+### What It Does
+
+SQE is the final signal gatekeeper before signals enter the RTB queue. It evaluates signals on two primary dimensions plus a regime-aware ROI check.
+
+### Evaluation Criteria (Post-Directive 11.0E)
+
+| Gate | Threshold | Source |
+|------|-----------|--------|
+| FinalScore | ≥ 0.35 | Computed or backfilled |
+| RegimeWeight | ≥ 0.30 | Computed or backfilled |
+| ROI Gate | ≥ dynamic threshold | Regime + PredictiveConfidence |
+
+**All legacy metrics purged**: NGC, CWQI, ProfitRate, and Risk are no longer gating factors. The interface still carries `ngc` as a field name (it's the confidence carrier), but it is NOT independently gated.
+
+### Threshold Loading
+
+Thresholds can be configured via the `screener_filters` database table (UI-accessible) or fall back to hardcoded defaults. The system loads thresholds async from the DB.
+
+### Backfill Logic
+
+If a signal arrives without FinalScore or RegimeWeight computed, SQE attempts to compute them from constituent fields:
+- Calls `calculateFinalScore()` from `score-calculator.ts`
+- Calls `calculateRegimeWeight()` from `score-calculator.ts`
+- If computation fails, the signal fails SQE
+
+### Marginal Safety
+
+```
+isMarginallySafe = signal passes AND (FinalScore - threshold) < 0.05
+```
+Signals in the "margin safety zone" (0.05 above threshold) are flagged — useful for monitoring filter sensitivity.
+
+### Batch Evaluation
+
+`evaluateSignalBatch()` processes multiple signals, returning:
+- `passed[]`: Signals that cleared all gates
+- `rejected[]`: Signals that failed with reasons
+- `passRate`: Percentage cleared
+
+### SQE Statistics
+
+The singleton `signalQualityEvaluator` tracks:
+- Total signals evaluated
+- Pass count / Fail count
+- Running pass rate
+- Resetable counters
+
+---
+
+## 13. Quality Index (NGC & CWQI) — LEGACY (Still Active in Error)
+
+**File**: `server/core/metrics/quality_index.ts`
+**Directive**: 8.8.4-B/C, A3.R8/R9
+**Status**: **LEGACY — should have been removed but was not. Still actively flowing through the pipeline in error.**
+
+### Why This File Is A Problem
+
+NGC is a legacy metric that was not fully removed when it should have been. Anywhere NGC appears in the codebase is incorrect — it is not a calculation DawnTrader should be using anymore. Despite this, the file remains deeply wired into the active pipeline:
+1. **Computes NGC** which incorrectly flows as the `confidence` carrier in signal-orchestrator.ts (line 497: `confidence = extendedMetrics.ngc`) — this legacy value directly enters FinalScore where it should not
+2. **NGC-derived DI feeds the kernel** — signal-orchestrator.ts line 1128 converts NGC to DI (`DI = normalizedConf * 100`) before calling `computeNetExpectancyKernel()`. This means a legacy blended metric directly influences Pwin and therefore NetEV. **See BUG-004 in CHANGES_AND_FIXES.md.**
+3. **Provides `calculateExtendedSignalMetrics()`** called during signal generation — this function should be replaced with MCE-provided metrics
+4. **Contains rolling normalization** infrastructure that introduces stateful temporal drift (also legacy — see Rolling Normalization section below)
+5. **Adaptive relevance** links to VTS learning parameters in real-time — unnecessary coupling from legacy architecture
+
+### NGC Formula (Profitability-Informed)
+
+```
+Step 1: baseNGC = (confidence × 0.5) + ((1 - volatility) × 0.3) + ((1 - risk) × 0.2)
+Step 2: normalize(baseNGC) via RollingNormalizer
+
+Step 3: Profitability blend (Directive A3.R9.0.A):
+  NGC = (baseNGC_normalized × 0.4) + (profitRate × 0.4) + ((1-risk) × 0.2)
+  clamped to [0, 1]
+```
+
+### CWQI Formula (Legacy, Not Gating)
+
+```
+CWQI = (NGC × 0.40) + ((1 - Risk) × 0.25) + (ExpectedReturn × 0.20) + (ProfitRate × 0.15)
+```
+
+### Expected Return
+
+```
+rrRatio = (target - entry) / (entry - stop)
+rawReturn = rrRatio / (rrRatio + 2)
+normalizedReturn = normalize(rawReturn) via RollingNormalizer
+```
+
+### ProfitRate
+
+```
+rawRate = (expectedReturn × 60) / expectedDuration
+normalizedRate = normalize(rawRate) via RollingNormalizer
+floor = max(normalizedRate, 0.15)   // Directive A3.R8.3
+```
+
+### Expected Duration
+
+```
+baseDuration = historicalHoldTime (default 60 min)
+             × (1 - volatility × 0.5)
+             × ATR factor (max 0.5, derived from ATR%)
+clamped to [5, 240] minutes
+```
+
+### Risk Score
+
+```
+stopPercent = |entry - stop| / entry × 100
+baseRisk = min(1, stopPercent / 5)
+
+With ATR:
+  atrMultiple = |entry - stop| / ATR
+  atrRisk = min(1, atrMultiple / 3)
+  risk = (baseRisk × 0.4) + (atrRisk × 0.6)
+```
+
+### Rolling Normalization — What It Is, Where It Lives, Why It Matters
+
+**Location**: `server/core/metrics/quality_index.ts`, lines 108-205 (class), lines 207-209 (instances)
+
+**What it does**: Rolling normalization is a technique for adaptively scaling raw metric values into the 0-1 range based on recently observed data. Instead of using fixed min/max boundaries, it tracks a sliding window of recent values and uses the observed min/max (smoothed exponentially) as the normalization boundaries. This means the same raw input value can produce different normalized outputs at different times as the boundaries drift.
+
+**Three instances exist** (all in quality_index.ts):
+1. **NGC Normalizer** — normalizes raw NGC base scores (defaults: [0.15, 0.70])
+2. **ProfitRate Normalizer** — normalizes raw profit-per-time values (defaults: [0.002, 0.80])
+3. **ExpectedReturn Normalizer** — normalizes raw R:R ratio values (defaults: [0.1, 0.8])
+
+**How it works**:
+- Keeps up to 500 data points within a 60-minute sliding window
+- After 10+ samples, computes raw min/max of the window
+- Smooths boundaries: `smoothedMin = α × rawMin + (1-α) × smoothedMin` (same for max)
+- The smoothing factor `α` comes from VTS adaptive relevance: `α = learningRate × (gsi + 0.15)`, clamped [0.05, 0.50]
+- **Conditional normalization** (Directive A3.R8.3): If a value is already in [0,1], it is returned as-is (prevents double-compression)
+
+**Why it exists**: The original design (Phase 8.8.4-C) intended NGC, ProfitRate, and ExpectedReturn to scale dynamically with market conditions. Rather than hardcoding min/max, the system would "learn" what normal ranges look like and adjust.
+
+**Why it's problematic**: Since NGC itself is legacy, the rolling normalization infrastructure serving NGC is also legacy. Additionally:
+- **Temporal drift**: Boundaries shift over time, so the same raw inputs produce different outputs at different times
+- **Distribution compression**: Exponential smoothing can compress score ranges as extremes decay
+- **Reproducibility**: Makes it impossible to reproduce scores from historical data (backtesting vs forward testing divergence)
+- **VTS coupling**: Smoothing rate is driven by VTS learning parameters — unnecessary coupling between validation simulator and scoring
+
+**Status**: Legacy — should be removed when NGC is removed. If ProfitRate or ExpectedReturn normalization is still needed post-NGC, it should use deterministic (fixed) normalization boundaries rather than rolling/stateful ones.
+
+### SQE Thresholds (Exported from this file)
+
+```
+MIN_NGC: 0.55          (env: SQE_NGC_MIN)
+MAX_RISK: 0.85         (env: SQE_MAX_RISK)
+MIN_PROFIT_RATE: 0.10  (env: SQE_PROFIT_MIN)
+MIN_CWQI: 0.45         (env: SQE_CWQI_MIN)
+MIN_FINAL_SCORE: 0.35  (env: SQE_FINAL_SCORE_MIN)
+MIN_REGIME_WEIGHT: 0.30 (env: SQE_REGIME_MIN)
+```
+
+**Note**: Only MIN_FINAL_SCORE and MIN_REGIME_WEIGHT are actually enforced by SQE post-Directive 11.0E. The NGC/CWQI thresholds are exported but not used for gating.
+
+---
+
+## 14. Enhanced Risk Index
+
+**File**: `server/core/metrics/risk_index.ts`
+**Directive**: 8.8.4-C
+**Status**: ACTIVE
+
+### Formula
+
+```
+Risk = (StopDistance / ATR) × CorrelationPenalty
+
+StopDistance = |entry - stop| / entry (as %)
+ATR Ratio = stopDistance / ATR  (or stopPercent/2.0 if no ATR)
+
+CorrelationPenalty = 1 + max(0, adjustedCorrelation - 0.8)
+```
+
+### Correlation Tracking
+
+Maintains an internal `CorrelationMatrix` between pairs using Pearson correlation with exponential time-decay:
+
+```
+correlation_adjusted = correlation_prev × e^(-0.05 × ageMinutes)
+```
+
+- Tier A symbols (BTC, ETH, SOL, XRP): Updated every 30 seconds
+- Max data age: 10 minutes
+- Minimum 5 price points required for correlation calculation
+- Correlation > 0.8 between held positions triggers the penalty multiplier
+
+---
+
+## 15. Market Metrics (Normalized Volatility)
+
+**File**: `server/core/metrics/market-metrics.ts`
+**Directive**: 11.3
+**Status**: ACTIVE — LOCKED
+
+```
+normalizedVol = ATR14 / currentPrice
+```
+
+| Classification | Range |
+|---------------|-------|
+| low | < 0.01 |
+| medium | 0.01 - 0.03 |
+| high | > 0.03 |
+
+Cache TTL: 60 seconds. Default fallback: 0.015 (cache miss) or 0.02 (bad price).
+
+**Consumer**: Dynamic Sizing Engine.
+
+---
+
+## 16. Signal Metrics Calculator
+
+**File**: `server/core/metrics/signal_metrics_calculator.ts`
+**Directive**: A3.R9.2-A
+**Status**: ACTIVE
+
+Enforces correct order of operations: **Decay THEN Normalize** (prevents upward bias).
+
+### Decay
+
+```
+decayed = rawValue × e^(-λ × ageMinutes)
+λ = CWQI_DECAY_RATE (env var, default 0.03)
+floor = max(CWQI_FLOOR=0.05, decayed)
+```
+
+### Normalization (After Decay)
+
+```
+normalized = clamp((decayedValue - min) / (max - min), 0, 1)
+```
+
+### Fresh Metrics
+
+`fetchFreshMetrics()` hydrates live market data (price from cache, volatility from 24h range) for signal re-validation during RTB refresh cycles.
+
+---
+
+## 17. Unified Filter Gateway
+
+**File**: `server/services/unified-filter-gateway.ts`
+**Directive**: 9.8.C
+**Status**: ACTIVE
+
+Single source of truth for filtered pair data, serving both UI (Filtered Pairs tab) and signal generation.
+
+### Architecture
+
+- Primary source: `ActiveFilterPool` (populated by FX5 Scanner)
+- Fallback: Direct Kraken API call (cold-start only)
+- Fallback cache TTL: 60 seconds
+
+### Freshness
+
+| State | Age |
+|-------|-----|
+| Fresh | < 5 minutes |
+| Stale | 5-10 minutes |
+| Expired | > 10 minutes |
+
+### Default Screener Filters
+
+| Filter | Default |
+|--------|---------|
+| Min Volume | $1M |
+| Volatility Min | 0.5% |
+| Volatility Max | 5% |
+| RSI Min | 30 |
+| RSI Max | 70 |
+| Universe Size | 100 |
+
+---
+
+## 18. Math Module Dependency Map
+
+```
+score-weights.config.ts (FROZEN)
+    |
+    v
+adaptive-goals-weight.ts ──── adjusts weights per volatility
+    |
+    v
+quality_index.ts ──── computes NGC, CWQI, RiskScore, ProfitRate
+    |                  (NGC used as confidence carrier)
+    v
+signal_quality_evaluator.ts ──── FinalScore ≥ 0.35, RegimeWeight ≥ 0.30
+    |                             + ROI gate via expectancy.ts
+    v
+expectancy.ts ──── ROI thresholds, profitability gate
+    |
+    v
+net-expectancy-kernel.ts ──── Pure EV math (NetEV > 0 required)
+    |
+    v
+cost-model.ts ──── Round-trip costs, net geometry
+    |
+    v
+cost-metrics.ts ──── Live spread, friction scoring
+    |
+    v
+slippage-fee-model.ts ──── Paper trade execution realism
+
+analysis-utils.ts ──── LQ, DI, VolNoise, Sigma, ER, Friction
+    |
+    v
+rolling-stats.ts ──── Z-Scores, sliding window stats
+
+imf-metrics.ts ──── LQ, VolNoise, Correlation (OHLC-based)
+    |
+    v
+secondary-metrics.ts ──── Macro-state threshold adjustments
+```
+
+---
+
+## 19. Phase 1 Findings
+
+### Active Files Documented (16)
+
+| File | Purpose | Status |
+|------|---------|--------|
+| score-weights.config.ts | FinalScore weights | ACTIVE-LOCKED |
+| adaptive-goals-weight.ts | Volatility-adaptive weights | ACTIVE-LOCKED |
+| net-expectancy-kernel.ts | Pure EV math | ACTIVE |
+| expectancy.ts | Trade expectancy gate + ROI | ACTIVE |
+| cost-model.ts | Round-trip cost math | ACTIVE-LOCKED |
+| cost-metrics.ts | Live spread, friction scoring | ACTIVE |
+| slippage-fee-model.ts | Paper trade realism | ACTIVE |
+| imf-metrics.ts | IMF filters (LQ, VN, Corr) | ACTIVE |
+| secondary-metrics.ts | Macro-state threshold adjustment | ACTIVE |
+| signal_quality_evaluator.ts | SQE gate | ACTIVE |
+| quality_index.ts | NGC/CWQI computation | LEGACY (still active in error) |
+| risk_index.ts | Enhanced risk w/ correlation | ACTIVE |
+| market-metrics.ts | Normalized vol for sizing | ACTIVE-LOCKED |
+| signal_metrics_calculator.ts | Decay-then-normalize | ACTIVE |
+| analysis-utils.ts | Core pre-signal math | ACTIVE |
+| rolling-stats.ts | Sliding window statistics | ACTIVE |
+
+### Legacy/Ambiguous Files
+
+| File | Purpose | Status | Notes |
+|------|---------|--------|-------|
+| adaptive-goals-weight.ts | Goals weight | POSSIBLY LEGACY | "Goals Engine" context — may be superseded |
+| index.ts (metrics) | Barrel export | ACTIVE | Just re-exports market-metrics + cost-metrics |
+
+### Bugs Found
+
+1. **cost-model.ts `getCostMetricsCache()`**: Returns empty Map unconditionally — cache stats fetched but discarded. Does not affect runtime cost calculations.
+2. **Population variance in rolling-stats.ts**: Uses ÷N instead of ÷(N-1). For 300-sample windows this is negligible, but documented for precision.
+
+### Critical Findings (Verified with ChatGPT, Code-Confirmed)
+
+**All findings below have been independently verified against source code.**
+
+#### FINDING-P1-01: DI Probability Divergence (CRITICAL)
+
+**signal-orchestrator.ts line 1128**: `const DI = normalizedConf * 100`
+
+The DSS kernel call site converts NGC (blended confidence) into DI before passing it to `computeNetExpectancyKernel()`. But the kernel was designed to compute `Pwin = 0.40 + DI/200` where DI is Directional Integrity (geometric price path consistency, 0-100).
+
+- **Expectancy gate** (expectancy.ts line 509): Uses `calculateDirectionalIntegrity(prices)` — correct geometric DI
+- **DSS kernel call** (signal-orchestrator.ts line 1128): Uses NGC × 100 — incorrect, means Pwin is driven by blended confidence, not price geometry
+
+These are fundamentally different probability inputs feeding the same kernel. **Logged as BUG-004.**
+
+#### FINDING-P1-02: Dual Friction Models in Same File (One Is Incorrect)
+
+In signal-orchestrator.ts, two different friction calculations coexist:
+- **Line 557**: `computeTotalRoundTripCost(fee, slippage, spread)` from cost-model.ts — **CORRECT**: `(fee × 2) + (slippage × 2) + spread`
+- **Line 1122**: `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE / 100` — **INCORRECT**: flat 0.005% approximation that does not account for component separation
+
+**Kyle confirmed**: `computeTotalRoundTripCost` is the correct friction model. The formula `(fee × 2) + (slippage × 2) + spread` correctly accounts for fees and slippage being incurred on both entry AND exit legs of the trade, while spread is incurred once at entry. `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE` is incorrect and should be replaced everywhere it is used for friction. **Logged as RISK-009 and UNIFY-001.**
+
+#### FINDING-P1-03: NGC Is Legacy That Was Not Fully Removed
+
+NGC is a legacy metric that should have been removed but was not. Anywhere NGC appears in the codebase is incorrect — it is not a calculation DawnTrader should be using anymore. Despite this, NGC remains deeply wired into the active pipeline:
+- Computes NGC which incorrectly flows as the `confidence` carrier through the entire pipeline
+- NGC directly feeds FinalScore via `hybridScore ?? confidence` fallback — meaning FinalScore is contaminated by a legacy metric
+- NGC-derived DI feeds the kernel (FINDING-P1-01) — meaning Pwin/NetEV are contaminated by a legacy metric
+- Includes stateful rolling normalization that also becomes legacy infrastructure
+- Links to VTS learning parameters via adaptive relevance — unnecessary coupling
+
+**The entire quality_index.ts file is legacy infrastructure that should be replaced.** When MCE is implemented, PredictiveConfidence should replace NGC as the sole confidence authority. **Logged in LEGACY_DEPRECATION_PLAN.md and CHANGES_AND_FIXES.md.**
+
+#### FINDING-P1-04: Rolling Normalization Is Legacy Infrastructure
+
+The RollingNormalizer in quality_index.ts (500 samples, 60-min window) is part of the NGC legacy system and should be removed alongside NGC. See Section 13 "Rolling Normalization — What It Is, Where It Lives, Why It Matters" for the full explanation of what it does, where it lives, and its specific problems (temporal drift, distribution compression, reproducibility, VTS coupling).
+
+**Since NGC is legacy, the rolling normalization serving it is also legacy.** If any normalization is still needed post-NGC (e.g., for ProfitRate or ExpectedReturn), it should use deterministic fixed boundaries. **Logged in LEGACY_DEPRECATION_PLAN.md.**
+
+#### FINDING-P1-05: Two Competing Worldviews
+
+The system contains two partially overlapping mathematical models:
+
+| Aspect | Phase 11 Authority Model | Phase 8.8 CWQI Model |
+|--------|--------------------------|---------------------|
+| EV Math | Kernel (sole authority) | CWQI + NGC blend |
+| DI Source | Geometric (price-based) | NGC-derived (confidence-based) |
+| Confidence | PredictiveConfidence (planned) | NGC (blended, stateful) |
+| Cost | cost-model.ts (component-separated) | SYSTEM_GUARDS (flat %) |
+| Normalization | None (deterministic) | RollingNormalizer (stateful) |
+
+Both are sophisticated but they are not mathematically unified. The target architecture should consolidate to the Phase 11 model during MCE implementation. **Logged in CHANGES_AND_FIXES.md as a unification recommendation.**
+
+---
+
+### Cross-Phase Dependency: VTS Coupling to Scoring (Phase 6 Required)
+
+Phase 1 has revealed that VTS (Virtual Trading Simulator) influences the scoring system indirectly through a multi-hop chain:
+
+```
+VTS → adaptive relevance (α) → rolling normalization → NGC → confidence → DSS DI → kernel Pwin
+```
+
+This means the learning system has **architectural coupling to the scoring system** audited here in Phase 1. VTS math itself (learning rate dynamics, reward modeling, GSI, adaptive relevance, calibration loops) is explicitly scoped for **Phase 6: ML Pipeline, Learning & Calibration**.
+
+**Before finalizing any structural recommendations** regarding NGC removal, RollingNormalizer deprecation, confidence consolidation, or DSS DI sourcing, Phase 6 must explicitly validate:
+
+1. VTS reward function math
+2. Learning rate update equations
+3. GSI (Global Stability Index) calculation logic
+4. Stability bounds on adaptive relevance
+5. Drift controls and convergence properties
+6. Statistical reproducibility characteristics
+7. Whether VTS-derived adjustments materially improve trade expectancy
+
+**Phase 1 does not need to expand in scope**, but Phase 6 must be treated as mathematically authoritative before any final consolidation decisions are made.
+
+---
+
+### Revision History
+
+| Date | Version | Change | Trigger |
+|------|---------|--------|---------|
+| 2026-02-15 | v1 | Initial draft | Phase 1 deep-read |
+| 2026-02-15 | v1.1 | ChatGPT corrections | DI divergence, NGC status, dual friction, rolling normalization risk |
+| 2026-02-15 | v2 | Kyle corrections | NGC confirmed legacy (not active), friction model clarified (cost-model correct, SYSTEM_GUARDS incorrect), rolling normalization explained in detail, version numbering added |
+
+---
+
+*End of Phase 1: Core Math & Scoring Engine*
+
+
+---
+
+# Chapter 2: Strategy Deep Dives
+
+## ⚠️ CRITICAL: Current State vs Intended State
+
+**The DSS is currently broken.** It imports `SYSTEM_GUARDS.STRATEGY_MAP` — a legacy 6-regime / 9-quant-only map that does not include pattern or hybrid strategies. This means:
+
+- Only QUANT signals are generated and routed to trades
+- Pattern strategies and Hybrid strategies are never selected
+- The regime classification uses 6 legacy regimes instead of 5 canonical regimes
+
+**The canonical source of truth** is `server/config/canonical-regime-strategy-map.ts` (Directive 11.7F), which defines 5 regimes and 17 strategies (9 quant + 3 pattern + 5 hybrid). The file exists, is comprehensive, and includes all the infrastructure needed (normalization, context-aware selection, validation) — but the DSS does not import or use it.
+
+This section documents **the intended system** based on the canonical map, with the current (legacy) state clearly flagged where it differs. The transition from legacy to canonical is logged in CHANGES_AND_FIXES.md and LEGACY_DEPRECATION_PLAN.md.
+
+---
+
+## ⚠️ CRITICAL: Four Parallel Regime Classification Systems (BUG-008)
+
+DawnTrader contains **four** independent regime classification systems operating simultaneously with **three different naming conventions** and **zero cross-referencing**. This is the deepest architectural fragmentation in the system.
+
+### The Four Engines
+
+#### Engine 1: DSS Legacy (Active Trading Path) — DEPRECATED
+- **File**: `server/services/dynamic-strategy-selector.ts` (214 lines)
+- **Input**: `volNoise` + `trendSlope` from analysis-utils (raw thresholds)
+- **Output**: 6 legacy regimes (EXTREME_NOISE, BULL_STABLE, BULL_VOLATILE, BEAR_STABLE, BEAR_VOLATILE, LOW_VOL_CHOP)
+- **Consumers**: Signal Orchestrator → active trades
+- **Strategy Map**: `SYSTEM_GUARDS.STRATEGY_MAP` → 9 quant strategies only
+- **Z-Scores**: Computed via RollingStats(300) but **IGNORED** for classification — raw thresholds used
+- **Status**: LEGACY — must be replaced (BUG-006)
+
+#### Engine 2: calculatePairRegime (VTS / Pair-Level) — CANONICAL CANDIDATE
+- **File**: `server/core/metrics/market-regime.ts`
+- **Input**: OHLC data → volatility (stddev returns), momentum (14-period % change), ADX (14-period)
+- **Output**: 5 canonical regimes (BULL_STABLE, BEAR_VOLATILE, LOW_VOL_CHOP, HIGH_VOL_IMPULSE, TRANSITION)
+- **Consumers**: VTS Runner (heavy use), Diagnostic 11.4G
+- **Thresholds**: Static, closely aligned with canonical map thresholds
+- **Status**: ACTIVE — recommended as sole pair-level regime authority
+
+#### Engine 3: getNormalizedRegime (Z-Score Advisory) — PRESERVE FOR ML
+- **File**: `server/core/metrics/market-regime.ts` (same file as Engine 2)
+- **Input**: Same as Engine 2, but Z-Score normalized through 300-period RollingStats buffers
+- **Output**: 5 canonical regimes (same names as Engine 2)
+- **Consumers**: VTS Runner (advisory logging only, Directive 11.5 Task 2)
+- **Status**: ACTIVE — advisory only, not used for routing decisions. Preserve for Phase 12 ML retraining.
+
+#### Engine 4: Market Condition Profiler / Adaptive Regime Engine (Market-Level) — HIGH-IMPACT LEGACY CLUSTER, REMOVE (Kyle Confirmed)
+- **Files**: `server/services/market-profiler.ts` + `server/services/adaptive-regime.ts`
+- **Directive**: 8.8.4-L12 (LOCKED — predecessor system, lock made it invisible during canonical evolution)
+- **Built**: Dec 27, 2025. Immediately locked. The canonical regime map (Directive 11.7F) and DSS were built starting Jan 2026 to replace it, but MCP/ARE was never decommissioned.
+- **Input**: Live price history + volume history → volatility (20-period std dev), trend strength (-1 to 1), volume z-score, ATR, cross-asset correlation
+- **Output**: 5 regimes with **different taxonomy**: T1 (Trending Bull), T2 (Trending Bear), R1 (Range-Bound), V1 (High Volatility Chop), C1 (Calm Consolidation)
+- **Consumers**: **14+ services** — market routes, health routes, autonomy-scheduler, action-executor, APR-SLE engine, MACO coordinator, GASP coordinator, experience-buffer, reward-evaluator, proactive-allocator, regime-performance tracker, regime archiver, regime-stability governance
+- **Strategy Mix**: Own hardcoded `REGIME_STRATEGY_MATRIX` with percentage-weighted allocations (e.g., T1: breakout 45%, momentum 30%, DHMA 10%). Does NOT reference canonical map.
+- **Exposure/Risk Multipliers**: `REGIME_EXPOSURE_MULTIPLIERS` (T1: 1.2×, T2: 0.7×) and `REGIME_RISK_MULTIPLIERS`
+- **Stubbed Metrics** (RISK-019): `volume_z` hardcoded to `0`, `correlation` hardcoded to `0.5` — never computed from market data. Further evidence this system was never fully completed before being locked.
+- **Timer**: Runs every 15 minutes via `checkInterval`
+- **Status**: **LEGACY — Kyle confirmed 2026-02-16.** MCP/ARE was the predecessor regime system. The canonical map and DSS were built to replace it. It was never the intention to have two systems creating signals and making adjustments to signal generation. Must be removed entirely. 14+ consumer services must be migrated during removal.
+
+### Why This Matters
+
+| Problem | Impact |
+|---------|--------|
+| VTS learns from Engine #2, active trading uses Engine #1 | Any ML calibration from VTS data is computed against a different regime model than production. VTS predictions are suspect. |
+| Engine #4 is a legacy predecessor still running | MCP/ARE was built before canonical map existed, was locked, then ignored. It continues applying its own strategy weights and exposure modifiers to 14+ services using a completely different regime model (RISK-016, RISK-020) |
+| Three naming conventions (legacy 6 / canonical 5 / T1-C1) | No cross-reference mapping exists between any pair of taxonomies |
+| Engine #4 uses stubbed metrics | `volume_z = 0` and `correlation = 0.5` are hardcoded — never computed from market data. System was locked before implementation was finished (RISK-019) |
+| Two systems generating signals and adjustments simultaneously | Kyle confirmed this was never the intention. Canonical map and DSS were built to replace MCP/ARE, not coexist with it |
+
+### Recommended Regime Architecture (Post-Fix)
+
+**Layer 1 — Pair-Level Regime Authority (Strategy Routing):**
+`calculatePairRegime()` from `market-regime.ts` → 5 canonical regime names → canonical strategy map lookup. This replaces DSS Engine #1. Both VTS and active trading call the same function. This is the **BUG-006 fix**.
+
+**Layer 2 — Z-Score Normalized Regime (ML Advisory):**
+`getNormalizedRegime()` from `market-regime.ts`. Advisory only. Preserved for Phase 12 ML retraining. Not used for routing.
+
+**Layer 3 — Portfolio-Level Risk/Exposure Modulation (Post-MCP):**
+When MCP/ARE is removed, any portfolio-level exposure/risk modulation it was providing must be absorbed by MCE or rebuilt as a lightweight module that consumes `calculatePairRegime()` canonical regime output. This is NOT a new parallel regime engine — it is a downstream consumer of the canonical regime, applying exposure multipliers and risk adjustments at the portfolio level.
+
+**REMOVE — Two Systems:**
+1. DSS volNoise/trendSlope classification → `SYSTEM_GUARDS.STRATEGY_MAP`. Remove in Wave 2 (pre-MCE).
+2. MCP/ARE (`market-profiler.ts` + `adaptive-regime.ts`). Remove in Wave 6 (during/after MCE). 14+ consumer services must be migrated. Kyle confirmed legacy 2026-02-16.
+
+---
+
+## Overview: The Intended Strategy Architecture
+
+```
+Market Data → Regime Classifier (Canonical 5-Regime Model)
+                ↓
+            Canonical Strategy Map → Candidate Strategies (up to 5 per regime)
+                ↓
+    ┌───────────────────────────────┐
+    │  QUANT Strategies (9)         │ → StrategySignal
+    │  PATTERN Strategies (3)       │ → PatternSignal
+    │  HYBRID Strategies (5)        │ → HybridSignal
+    └───────────────────────────────┘
+                ↓
+    Context-Aware Selection (pattern detection → strategy preference)
+                ↓
+    Signal Orchestrator (Phase 3) → SQE Gate → Kernel → Trade Decision
+```
+
+**Three signal types, equal citizens:**
+- **QUANT** (9 strategies): Technical indicator-based signals from OHLCV candle analysis
+- **PATTERN** (3 strategies): Candlestick pattern-based signals using the 5 canonical patterns
+- **HYBRID** (5 strategies): Confluence of quant indicators + pattern recognition
+
+---
+
+## 1. Canonical Regime-Strategy Map (Single Source of Truth)
+
+**File**: `server/config/canonical-regime-strategy-map.ts` (680 lines)
+**Directive**: 11.7F
+**Schema Version**: regime-mapping/v1.4c (2026-01-23)
+**Status**: DEFINED but NOT wired to DSS runtime
+
+### 5 Canonical Regimes
+
+| Regime | Momentum | ADX | Volatility | Description |
+|--------|----------|-----|------------|-------------|
+| **BULL_STABLE** | > 0.005 | > 25 | < 0.025 | Sustained uptrend, confirmed directional trend, stable volatility |
+| **BEAR_VOLATILE** | < -0.005 | > 25 | > 0.03 | Downward impulse, strong bearish trend, high turbulence |
+| **LOW_VOL_CHOP** | abs < 0.002 | < 20 | < 0.015 | Flat market, no directionality, narrow range |
+| **HIGH_VOL_IMPULSE** | > 0.010 | > 30 | > 0.03 | Strong breakout, trend acceleration, violent expansion |
+| **TRANSITION** | ±0.004 | 20-25 | 0.015-0.03 | Reversal zone, weakening trend, volatility uplift |
+
+### Full Canonical Strategy Map (17 Strategies)
+
+#### BULL_STABLE (3 strategies, riskMultiplier: 1.2, minConfidence: 0.65)
+
+| Strategy | Key | Signal Type | Pattern | Secondary Metrics |
+|----------|-----|-------------|---------|-------------------|
+| VWAP Pullback | vwap_pullback | QUANT | — | VWAP deviation < −1σ, Momentum > 0 |
+| Morning Star / Evening Star | morning_star | PATTERN | MORNING_STAR | 3-bar sequence, momentum flip > 0.3% |
+| Pivot Shift | pivot_shift | HYBRID | MORNING_STAR | RSI 45–55, ADX slope > 0.5 |
+
+#### BEAR_VOLATILE (4 strategies, riskMultiplier: 0.7, minConfidence: 0.75)
+
+| Strategy | Key | Signal Type | Pattern | Secondary Metrics |
+|----------|-----|-------------|---------|-------------------|
+| Mean Reversion | mean_reversion | QUANT | — | RSI < 30 or > 70, Price deviation > 1σ |
+| Reverse Impulse | reverse_impulse | HYBRID | PINBAR | Volume > 1.5× avg, Momentum spike < −0.5% |
+| Defensive Hedge | defensive_hedge | HYBRID | ENGULFING | BTC Corr < 0.3, Vol Offset > 1σ |
+| Inside Bar Reversal | inside_bar_reversal | PATTERN | ENGULFING | Parent > Child × 1.3, Breakout Volume > 1.5× avg |
+
+#### LOW_VOL_CHOP (4 strategies, riskMultiplier: 0.9, minConfidence: 0.60)
+
+| Strategy | Key | Signal Type | Pattern | Secondary Metrics |
+|----------|-----|-------------|---------|-------------------|
+| Range Trading | range_trade | QUANT | — | Bollinger Bandwidth < 0.14, RSI 45–55, ADX < 20 |
+| Support Bounce | support_bounce | PATTERN | PINBAR | Price ≈ Local Min ± 1σ, Volume > 1.2× avg |
+| ABCD Long | abcd_long | QUANT | — | AB:CD ≈ 1.0, Volume > 1.2× avg |
+| Adaptive Flow | adaptive_flow | HYBRID | TRI_STAR | Momentum inversion ≥ 3, Volatility percentile > 70% |
+
+#### HIGH_VOL_IMPULSE (5 strategies, riskMultiplier: 0.8, minConfidence: 0.70)
+
+| Strategy | Key | Signal Type | Pattern | Secondary Metrics |
+|----------|-----|-------------|---------|-------------------|
+| SMA Trend Ride | sma_trend_ride | QUANT | — | SMA(50) > SMA(100), ADX > 25, RSI 55–70 |
+| Breakout | breakout | QUANT | — | Momentum > +0.7%, Volume > 2× avg |
+| VWAP Bounce | vwap_bounce | QUANT | — | VWAP deviation > +1σ, Momentum −0.3–−0.6% |
+| Volatility Edge | volatility_edge | HYBRID | ABCD | Volatility Percentile > 80, Regime mismatch = True |
+| DHMA | dhma | QUANT | — | HMA(9) cross HMA(21), ADX flat |
+
+#### TRANSITION (3 strategies, riskMultiplier: 0.85, minConfidence: 0.55)
+
+| Strategy | Key | Signal Type | Pattern | Secondary Metrics |
+|----------|-----|-------------|---------|-------------------|
+| Liquidity Trap | liquidity_trap | QUANT | — | Wick/Body > 2 or Depth Imbalance > 1.4 |
+| Pivot Shift | pivot_shift | HYBRID | MORNING_STAR | RSI 45–55, ADX slope > 0.5 |
+| Morning Star / Evening Star | morning_star | PATTERN | MORNING_STAR | 3-bar sequence, momentum flip > 0.3% |
+
+**Note**: Pivot Shift and Morning Star appear in both BULL_STABLE and TRANSITION — they are cross-regime strategies.
+
+### Ghost Regime Normalization (Legacy Bridge)
+
+The canonical map includes a normalization layer for legacy regime names:
+
+| Legacy Regime | Canonical Equivalent |
+|---------------|---------------------|
+| BULL_VOLATILE | HIGH_VOL_IMPULSE |
+| BEAR_STABLE | BEAR_VOLATILE |
+| EXTREME_NOISE | LOW_VOL_CHOP |
+| HIGH_VOL_CHOP | HIGH_VOL_IMPULSE |
+| MIXED_TRANSITION | TRANSITION |
+
+### Context-Aware Strategy Selection (Directive 11.4G)
+
+The canonical map provides `selectContextAwareStrategy()` which considers detected patterns when selecting strategies:
+
+1. **Exact match**: If pattern recognizer detects a pattern that matches a HYBRID/PATTERN strategy in the current regime → select that strategy
+2. **Hybrid fallback**: If pattern detected but no exact match → select any HYBRID strategy for the regime
+3. **Pattern fallback**: If no HYBRID available → select any PATTERN strategy
+4. **Diversity**: 25% of symbols (via symbol hash) get a non-primary strategy for natural diversity
+5. **Primary**: Default to the first strategy in the regime's list
+
+This selection logic ensures pattern and hybrid strategies are actively chosen when conditions warrant — but **only if the DSS is wired to use it**.
+
+### Pattern-to-Canonical Mapping (Directive 11.4G)
+
+The 5 pattern recognizer outputs are mapped to canonical pattern types:
+
+| Detected Pattern | Canonical Type | Strategy Family |
+|-----------------|----------------|-----------------|
+| PINBAR | PINBAR | Reverse Impulse, Support Bounce |
+| ENGULFING | ENGULFING | Defensive Hedge, Inside Bar Reversal |
+| MORNING_STAR | MORNING_STAR | Morning Star, Pivot Shift |
+| INSIDE_BAR | ENGULFING | (mapped to Engulfing family) |
+| THREE_SOLDIERS | MORNING_STAR | (mapped to Morning Star family) |
+| ABCD | ABCD | Volatility Edge |
+| TRI_STAR | TRI_STAR | Adaptive Flow |
+
+---
+
+## 2. The Current DSS (Legacy — Must Be Replaced)
+
+**File**: `server/services/dynamic-strategy-selector.ts` (214 lines)
+**Directive**: 10.1
+**Status**: ACTIVE but using **legacy regime/strategy mapping**
+
+### What's Wrong
+
+DSS currently imports `SYSTEM_GUARDS.STRATEGY_MAP` which defines:
+- 6 legacy regimes (EXTREME_NOISE, BULL_STABLE, BULL_VOLATILE, BEAR_STABLE, BEAR_VOLATILE, LOW_VOL_CHOP)
+- Only 9 QUANT strategies (no pattern, no hybrid)
+- Different regime thresholds (volNoise/trendSlope) than the canonical model (momentum/ADX/volatility)
+
+**Consequences**:
+- Pattern strategies (morning_star, support_bounce, inside_bar_reversal) are never selected
+- Hybrid strategies (pivot_shift, reverse_impulse, defensive_hedge, adaptive_flow, volatility_edge) are never selected
+- Regime classification misaligns with the canonical model
+- The canonical map's risk multipliers and min confidence thresholds are not applied
+
+### What Needs to Change
+
+DSS must be rewired to:
+1. **Call `calculatePairRegime()` from `market-regime.ts`** instead of computing volNoise/trendSlope locally — this is the same function VTS already uses, which unifies regime classification between active trading and VTS
+2. Import from `canonical-regime-strategy-map.ts` instead of `SYSTEM_GUARDS.STRATEGY_MAP`
+3. Use `selectContextAwareStrategy()` for pattern-aware routing
+4. Apply per-regime `riskMultiplier` and `minConfidence` from canonical map
+5. Remove EXTREME_NOISE as a regime — the canonical model handles high volatility via HIGH_VOL_IMPULSE (not as an auto-veto)
+
+**Note**: This is a short-term fix achievable pre-MCE. The Signal Orchestrator can call `calculatePairRegime()` directly for regime classification, then look up strategies via the canonical map. MCE will eventually centralize this, but the fix doesn't need to wait.
+
+**Logged as BUG-006 in CHANGES_AND_FIXES.md.**
+
+---
+
+## 3. QUANT Strategies (9)
+
+**File**: `server/services/strategy-engine.ts` (999 lines)
+**Directive**: 8.8.3-B
+**Status**: ACTIVE — strategy detection logic is correct, but regime routing is wrong
+
+The 9 quant strategy implementations exist and are functional. Their detection logic, entry/exit rules, and signal generation are independent of the regime routing. The problem is only that DSS routes them via the wrong map.
+
+### Strategy Parameters
+
+All strategy parameters (pullback thresholds, volume multipliers, etc.) are backend-configured. No UI exposure for user editing was found in the client code. If any route previously exposed parameter editing, it has been removed or is inactive.
+
+### 3.1 VWAP Pullback
+**Canonical Regime**: BULL_STABLE
+**Method**: `detectVWAPPullback(indicators, settings, priceHistory)`
+
+Entry: Price above VWAP, within pullback threshold (2%), bullish reversal detected, volume ≥ 1.5× average.
+Stop: min(VWAP × 0.997, low24h × 1.001). Target: max(high24h × 0.995, entry + 2R).
+Confidence: 0.7–0.9 (variable based on reversal confirmation).
+Strategy-Specific Exit: Price closes below current VWAP.
+
+### 3.2 ABCD Long
+**Canonical Regime**: LOW_VOL_CHOP
+**Method**: `detectABCDLong(priceHistory, settings)`
+
+Entry: 4-point pattern (Spike → Pullback → Higher Low → Breakout). Requires volume confirmation ≥ 1.5× spike volume.
+Stop: C-low × 0.998. Target: entry × (1 + targetPercent, default 3%) or trailing 2R.
+Confidence: 0.75 (static).
+Strategy-Specific Exit: Price drops 0.5% below entry.
+
+### 3.3 SMA Trend Ride
+**Canonical Regime**: HIGH_VOL_IMPULSE
+**Method**: `detectSMATrendRide(indicators, priceHistory, settings)`
+
+Entry: Price above SMA + near SMA + bounce pattern + uptrend confirmed (above mode), or price crosses above SMA + uptrend (crossover mode).
+Stop: min(5-bar swing low × 0.998, SMA × 0.995). Target: entry + trendStrength × 3% or 2R.
+Confidence: 0.65 (static).
+Strategy-Specific Exit: Price closes below current SMA.
+
+### 3.4 Breakout
+**Canonical Regime**: HIGH_VOL_IMPULSE
+**Method**: `detectBreakout(priceHistory, params)`
+
+Entry: Price breaks above consolidated range high × (1 + buffer, 1%), volume ≥ 2× average.
+Stop: rangeLow × 0.998. Target: entry + rangeHeight (measured move).
+Confidence: 0.75 (static).
+Strategy-Specific Exit: Price closes below breakout level × 0.995.
+
+### 3.5 Mean Reversion
+**Canonical Regime**: BEAR_VOLATILE
+**Method**: `detectMeanReversion(indicators, priceHistory, params)`
+
+Entry: Price below mean (VWAP/SMA/range midpoint) by deviation threshold (2.5%), bullish reversal detected.
+Stop: entry × (1 - 1%). Target: meanValue × 0.998.
+Confidence: 0.70 (static).
+Strategy-Specific Exit: None (stop/target only).
+
+### 3.6 Range Trading
+**Canonical Regime**: LOW_VOL_CHOP
+**Key**: `range_trade` (note: canonical map uses `range_trade`, strategy engine uses `range_trading`)
+**Method**: `detectRangeTrading(priceHistory, params)`
+
+Entry: Price in entry zone near range support (between rangeLow and rangeLow + 0.5%).
+Stop: rangeLow × (1 - 1%). Target: rangeHigh × 0.995.
+Confidence: 0.72 (static).
+Strategy-Specific Exit: Price breaks above resistance × 1.002.
+
+### 3.7 VWAP Bounce
+**Canonical Regime**: HIGH_VOL_IMPULSE
+**Method**: `detectVWAPBounce(indicators, priceHistory, params)`
+
+Entry: VWAP trending up (slope ≥ 0.3%), price near VWAP (within 0.5%), recently touched/went below, now above, volume ≥ 1.3× average.
+Stop: VWAP × 0.997. Target: entry + 2R.
+Confidence: 0.73 (static).
+Strategy-Specific Exit: Price closes below current VWAP.
+
+### 3.8 Liquidity Trap
+**Canonical Regime**: TRANSITION
+**Method**: `detectLiquidityTrap(priceHistory, params)`
+
+Entry: False breakout above range detected (broke above, returned), trap extension ≤ 1.2%, volume reversal ≥ 1.5× breakout volume.
+Stop: breakoutHigh × 1.005. Target: rangeLow × 1.002.
+Confidence: 0.68 (static).
+Strategy-Specific Exit: Price goes above trap level × 1.002.
+
+### 3.9 DHMA (Dual-Horizon Microstructure Alpha)
+**Canonical Regime**: HIGH_VOL_IMPULSE
+**File**: `server/strategies/dhma.ts` (657 lines)
+
+The most sophisticated strategy — uses Level-2 order book data, not OHLCV candles.
+
+**Features**: OBI (Order Book Imbalance), Microprice Tilt, Signed Flow Ratio, Toxicity (VPIN), Arrival Rate.
+**Dual Regime**: Burst (5-20 min signed flow) + Session (15 min+ VWAP slope).
+**Entry**: Both regimes must agree + OBI/tilt thresholds + toxicity/spread filters.
+**Sizing**: Risk-based with spread × toxicity deweighting.
+**Coherency**: Calls `guardrailPolicy.validate()` before any signal.
+**Note**: DHMA generates both long AND short signals. Short signals are forward-looking architecture — DawnTrader currently operates long-only on Kraken.
+
+---
+
+## 4. PATTERN Strategies (3)
+
+**Pattern Recognition Service**: `server/services/pattern-recognizer.ts` (481 lines, Directive 10.2)
+
+Pattern recognition is the **detection service** — it identifies candlestick formations in OHLCV data. The 3 pattern **strategies** are specific trading strategies that USE pattern detection as their primary entry signal.
+
+### 5 Canonical Patterns (Detection Layer)
+
+| Pattern | Detection Logic | Direction | Base Strength |
+|---------|----------------|-----------|---------------|
+| **PINBAR** | Wick > 2× body, wick opposite direction | BUY or SELL | 0.6 + wick ratio |
+| **ENGULFING** | Body fully engulfs prior body | BUY or SELL | 0.65 + engulf ratio + volume bonus |
+| **MORNING_STAR** | Bear → Doji → Bull, close > midpoint of bear | BUY only | 0.7 + recovery + gap bonus |
+| **INSIDE_BAR** → mapped to ENGULFING | High < prevHigh AND Low > prevLow | Based on parent | 0.6 + compression |
+| **THREE_SOLDIERS** → mapped to MORNING_STAR | 3 consecutive bullish, each closing higher | BUY only | 0.75 + total gain |
+
+Timeframe weighting: 1h = 1.0, 15m = 0.8, 5m = 0.6.
+
+### 4.1 Morning Star / Evening Star
+**Canonical Regime**: BULL_STABLE, TRANSITION
+**Key**: `morning_star`
+**Signal Type**: PATTERN
+**Pattern**: MORNING_STAR
+**Secondary Metrics**: 3-bar sequence, momentum flip > 0.3%
+
+Uses the Morning Star detection from pattern-recognizer.ts. Entry on completion of the 3-bar reversal sequence. Stop/target calculated from ATR (1.5× ATR stop, 2.5× ATR target).
+
+### 4.2 Support Bounce
+**Canonical Regime**: LOW_VOL_CHOP
+**Key**: `support_bounce`
+**Signal Type**: PATTERN
+**Pattern**: PINBAR
+**Secondary Metrics**: Price ≈ Local Min ± 1σ, Volume > 1.2× avg
+
+Uses Pinbar detection near identified support levels. Requires price to be at or near a local minimum with volume confirmation.
+
+### 4.3 Inside Bar Reversal
+**Canonical Regime**: BEAR_VOLATILE
+**Key**: `inside_bar_reversal`
+**Signal Type**: PATTERN
+**Pattern**: ENGULFING (canonical mapping)
+**Secondary Metrics**: Parent > Child × 1.3, Breakout Volume > 1.5× avg
+
+Uses Inside Bar / Engulfing detection in bearish volatile conditions. Looks for compression setups that break out with volume.
+
+---
+
+## 5. HYBRID Strategies (5)
+
+**Hybrid Integration Service**: `server/services/hybrid-integration.ts` (239 lines, Directive 10.4)
+
+Hybrid strategies are the confluence layer — they require BOTH a quant indicator condition AND a pattern formation to trigger. The Hybrid Integration Service is the "Intelligent Referee" that merges these signals.
+
+### Ensemble Score Formula
+
+```
+HybridScore = quantConf × 0.4 + patternStrength × 0.4 + mlConf × 0.2
+```
+
+Minimum score: 0.65. Pattern decay: `effectiveStrength = strength × e^(-0.15 × Δt_candles)` with floor at 30%.
+
+### 5.1 Pivot Shift
+**Canonical Regime**: BULL_STABLE, TRANSITION
+**Key**: `pivot_shift`
+**Pattern**: MORNING_STAR
+**Secondary Metrics**: RSI 45–55, ADX slope > 0.5
+
+Quant confluence + Morning Star pattern at regime pivot points. Cross-regime strategy.
+
+### 5.2 Reverse Impulse
+**Canonical Regime**: BEAR_VOLATILE
+**Key**: `reverse_impulse`
+**Pattern**: PINBAR
+**Secondary Metrics**: Volume > 1.5× avg, Momentum spike < −0.5%
+
+Quant momentum reversal + Pinbar formation in bearish conditions.
+
+### 5.3 Defensive Hedge
+**Canonical Regime**: BEAR_VOLATILE
+**Key**: `defensive_hedge`
+**Pattern**: ENGULFING
+**Secondary Metrics**: BTC Corr < 0.3, Vol Offset > 1σ
+
+Quant decorrelation signal + Engulfing pattern. Defensive positioning when asset is decoupled from BTC.
+
+### 5.4 Adaptive Flow
+**Canonical Regime**: LOW_VOL_CHOP
+**Key**: `adaptive_flow`
+**Pattern**: TRI_STAR
+**Secondary Metrics**: Momentum inversion ≥ 3, Volatility percentile > 70%
+
+Quant flow analysis + Tri-Star/Doji pattern in sideways markets.
+
+### 5.5 Volatility Edge
+**Canonical Regime**: HIGH_VOL_IMPULSE
+**Key**: `volatility_edge`
+**Pattern**: ABCD
+**Secondary Metrics**: Volatility Percentile > 80, Regime mismatch = True
+
+Quant volatility breakout + ABCD pattern confirmation. Exploits volatility expansion.
+
+### ⚠️ Current State: Hybrid Strategy Types in hybrid-integration.ts Are Legacy
+
+The `selectHybridStrategy()` method in hybrid-integration.ts currently maps to legacy types: H1_TREND_SNIPER, H2_SLINGSHOT, H3_GATECRASHER, H4_MOMENTUM_LINK. These do NOT match the canonical hybrid strategies (pivot_shift, reverse_impulse, defensive_hedge, adaptive_flow, volatility_edge). This mapping must be updated when DSS is rewired to the canonical map.
+
+---
+
+## 6. Strategy Filters (Shared Detection Library)
+
+**File**: `server/services/strategy-filters.ts` (406 lines)
+**Status**: ACTIVE — used by multiple strategies
+
+| Filter | Used By | Purpose |
+|--------|---------|---------|
+| `detectRange()` | Breakout, Range Trading, Liquidity Trap | Find bounded price movements |
+| `detectStopZone()` | Liquidity Trap | Identify stop-loss cluster levels |
+| `isNearRoundNumber()` | General | Psychological price level proximity |
+| `isConsolidating()` | Range Trading, Mean Reversion | Distinguish trending from ranging |
+
+---
+
+## 7. Drift Detection & Auto-Recalibration
+
+**File**: `server/services/drift-detector.ts` (457 lines)
+**Directive**: 8.8.4-L11
+**Status**: ACTIVE-LOCKED
+
+Monitors calibration parameter drift (α, β, σ) per strategy:
+
+```
+DriftScore = 0.6 × |Δβ| + 0.2 × |Δα| + 0.2 × |σ/σ_baseline - 1|
+```
+
+| Score | Status | Action |
+|-------|--------|--------|
+| < 0.15 | Stable | No action |
+| 0.15 - 0.25 | Drifting | Warning + event log |
+| > 0.25 | Recalibrating | Auto-recalibration via POST to localhost:5001 |
+
+Check cycle: every 15 minutes. History: 10-snapshot rolling window. Persistence: disk-based JSON + event logs. Respects `retrainingFreezeController`.
+
+---
+
+## 8. Strategy Features (Enhancement Layer)
+
+**File**: `server/services/strategy-features.ts` (371 lines)
+**Directive**: REB 2.12D Part C
+**Status**: ACTIVE
+
+Three confidence adjustments applied to signals:
+
+| Feature | Adjustment | Source |
+|---------|-----------|--------|
+| Multi-Timeframe Confirmation | ±10% | SMA5/SMA10 on 15m, 1h timeframes |
+| Liquidity Factor | 0.8× penalty if score < 0.3 | Volume 24h, spread bps, depth |
+| Volatility Weight | −10% to +5% | Realized vol regime (low/normal/high/extreme) |
+
+---
+
+## 9. Support Infrastructure
+
+### Strategy Validator (509 lines)
+Synthetic testing engine — generates test price patterns and validates strategy signal generation.
+
+### Strategy Validators (149 lines)
+Zod schema definitions for all 8 core strategy parameter sets with runtime bounds validation.
+
+### Strategy Analytics (263 lines)
+Per-strategy performance metrics: cumulative P/L, rolling Sharpe (7-day), max drawdown, win rate, trade frequency.
+
+### Strategy Alerts (188 lines)
+Event logging with severity levels (INFO/WARNING/CRITICAL). In-memory buffer, max 1000 alerts.
+
+### Strategy Sync (111 lines)
+Ensures all core strategies exist in strategy_settings on startup. **Note**: Currently syncs only the 8 quant strategies — does NOT include pattern or hybrid strategies. Must be updated when canonical map is wired.
+
+### Strategy Signal Audit Engine (160 lines)
+**⚠️ LEGACY**: Recomputes NGC/CWQI/DI using stale formulas that don't match the pipeline. Since NGC is legacy (Kyle-confirmed), this engine's purpose is questionable. See CHANGES_AND_FIXES.md RISK-011.
+
+### Provenance Governance (564 lines)
+Daily governance reporting: data freshness, provenance coverage, schema binding validation, learning alignment metrics.
+
+### Pattern Recognition Preloader (66 lines)
+VTS warm-up preloader — ensures pattern detection is initialized with ≥2000 candles before simulation.
+
+---
+
+## 10. Exit Condition Engine
+
+**File**: `server/services/strategy-engine.ts`, `checkExitConditions()` method
+
+| Strategy | Additional Exit Condition |
+|----------|--------------------------|
+| vwap_pullback | Price closes below current VWAP |
+| abcd_long | Price drops 0.5% below entry |
+| sma_trend_ride | Price closes below current SMA |
+| breakout | Price closes below breakout level × 0.995 |
+| mean_reversion | None (stop/target only) |
+| range_trading | Price breaks above resistance × 1.002 |
+| vwap_bounce | Price closes below current VWAP |
+| liquidity_trap | Price goes above trap level × 1.002 |
+
+**Note**: Exit logic currently only covers the 8 quant strategies. Pattern and hybrid strategies do not have strategy-specific exit conditions — they rely on stop/target only.
+
+---
+
+## Critical Findings
+
+### BUG-006: DSS Uses Legacy SYSTEM_GUARDS.STRATEGY_MAP Instead of Canonical Map
+
+**Location**: `server/services/dynamic-strategy-selector.ts` (line 180)
+**Severity**: CRITICAL
+**Problem**: DSS imports `SYSTEM_GUARDS.STRATEGY_MAP` — a legacy 6-regime / 9-quant-only map. The canonical source of truth (`canonical-regime-strategy-map.ts`, Directive 11.7F) defines 5 regimes and 17 strategies (9 quant + 3 pattern + 5 hybrid) but is NOT wired to DSS runtime.
+
+**Consequences**:
+- Pattern strategies (morning_star, support_bounce, inside_bar_reversal) are never generated
+- Hybrid strategies (pivot_shift, reverse_impulse, defensive_hedge, adaptive_flow, volatility_edge) are never generated
+- Only QUANT signals flow through the trading pipeline
+- Regime classification uses wrong model (6 legacy regimes vs 5 canonical)
+- Per-regime riskMultiplier and minConfidence from canonical map are not applied
+
+**Fix**: Rewire DSS to import from `canonical-regime-strategy-map.ts`:
+1. Replace `SYSTEM_GUARDS.STRATEGY_MAP` import with `CANONICAL_REGIME_STRATEGY_MAP`
+2. Update regime classification to use canonical thresholds (momentum + ADX + volatility)
+3. Use `selectContextAwareStrategy()` for pattern-aware routing
+4. Apply canonical `riskMultiplier` and `minConfidence` per regime
+5. Remove EXTREME_NOISE as a regime — canonical model uses HIGH_VOL_IMPULSE for high volatility
+
+**Timing**: Pre-MCE — this is a foundational routing fix, not dependent on MCE.
+
+### BUG-007: Hybrid Strategy Types in hybrid-integration.ts Are Legacy
+
+**Location**: `server/services/hybrid-integration.ts`, `selectHybridStrategy()` method
+**Severity**: HIGH
+**Problem**: The method maps to legacy types (H1_TREND_SNIPER, H2_SLINGSHOT, H3_GATECRASHER, H4_MOMENTUM_LINK) that don't exist in the canonical map. The canonical hybrids are: pivot_shift, reverse_impulse, defensive_hedge, adaptive_flow, volatility_edge.
+**Fix**: Replace `selectHybridStrategy()` with canonical hybrid selection logic.
+**Timing**: Concurrent with BUG-006 fix.
+
+### RISK-011: Strategy Signal Audit Engine Uses Stale Metric Definitions
+
+**Severity**: MEDIUM
+**Problem**: Recomputes NGC/CWQI/DI using simplified formulas that don't match pipeline. NGC is legacy.
+**Timing**: During MCE — remove or rebuild.
+
+### RISK-012: Static Confidence Values Reduce FinalScore Discrimination
+
+**Severity**: LOW
+**Problem**: 7 of 9 quant strategies return hardcoded confidence (0.65–0.75). Only VWAP Pullback and DHMA produce variable confidence.
+**Timing**: Post-MCE enhancement.
+
+### RISK-013: Oversimplified Bullish Reversal Detection
+
+**Severity**: LOW
+**Problem**: Volume check is `volume > 0` — trivially true.
+**Fix**: Compare volume to 1.5× average.
+**Timing**: Pre-MCE (simple fix).
+
+### RISK-014: Strategy Sync Only Covers 8 Quant Strategies
+
+**Severity**: MEDIUM
+**Problem**: `strategy-sync.ts` CORE_STRATEGIES list only includes 8 quant strategies. When canonical map is wired, the sync must include all 17 strategies (9 quant + 3 pattern + 5 hybrid).
+**Fix**: Update CORE_STRATEGIES to match `getAllCanonicalStrategies()` from canonical map.
+**Timing**: Concurrent with BUG-006 fix.
+
+### RISK-015: strategy_key Mismatch: `range_trading` vs `range_trade`
+
+**Severity**: LOW
+**Problem**: Strategy engine uses `range_trading` as the strategy key, but canonical map uses `range_trade`. This mismatch could cause routing failures when canonical map is wired.
+**Fix**: Reconcile naming — either update strategy engine or canonical map to use consistent key.
+**Timing**: Concurrent with BUG-006 fix.
+
+### BUG-008: Four Parallel Regime Classification Systems With No Cross-Reference
+
+**Severity**: CRITICAL
+**Locations**: `dynamic-strategy-selector.ts` (Engine 1), `market-regime.ts` (Engines 2 & 3), `market-profiler.ts` + `adaptive-regime.ts` (Engine 4)
+**Problem**: Four independent regime classification systems use three naming conventions (legacy 6-regime, canonical 5-regime, T1-C1 taxonomy) with zero cross-referencing. VTS learns from Engine #2 while active trading uses Engine #1. Engine #4 (MCP/ARE) feeds 14+ services with its own strategy mix matrix that doesn't reference the canonical map. The system cannot agree on what market conditions it's trading in.
+**Fix**: See "Recommended Regime Architecture" section above. Engine #2 (`calculatePairRegime`) becomes pair-level authority. Engine #4 (MCP) continues at market-level scope. Engine #1 (DSS legacy) is removed. Engine #3 (Z-Score) preserved for ML. A formal cross-reference mapping between T1-C1 and canonical 5-regime names should be created.
+**Timing**: Pre-MCE — resolve regime authority BEFORE wiring canonical map.
+
+### RISK-016: MCP/ARE Legacy System Creates Parallel Strategy Authority (Kyle Confirmed Legacy)
+
+**Severity**: HIGH
+**Location**: `server/services/market-profiler.ts`, `server/services/adaptive-regime.ts`
+**Problem**: MCP/ARE operates as a parallel regime-to-strategy system — a predecessor that was never decommissioned when the canonical map and DSS were built to replace it. Its strategy mix matrix, exposure/risk multipliers, and regime classifications all operate independently of and unaligned with the canonical system.
+**Kyle Decision (2026-02-16)**: MCP/ARE is LEGACY. Must be removed entirely. 14+ consumer services must be migrated.
+**Timing**: During/after MCE (Wave 6).
+
+### RISK-019: MCP Uses Stubbed Metrics (Further Evidence of Legacy Status)
+
+**Severity**: HIGH
+**Location**: `server/services/market-profiler.ts`, `classifyRegime()` method
+**Problem**: `volume_z = 0` and `correlation = 0.5` are hardcoded stubs — never computed from market data. The system was locked before implementation was finished. 2 of 5 input dimensions carry phantom values, creating false regime confidence for 14+ downstream services.
+**Fix**: Remove MCP/ARE entirely (Kyle-confirmed legacy). Do NOT invest in fixing stubbed metrics for a system being removed.
+**Timing**: During Wave 6 (MCP/ARE removal).
+
+### RISK-020: MCP/ARE Is Legacy Predecessor, Never Decommissioned (Kyle Confirmed)
+
+**Severity**: HIGH
+**Location**: `server/services/market-profiler.ts`, `server/services/adaptive-regime.ts`
+**Historical Context**: Built Dec 27, 2025 under Directive 8.8.4-L12. Immediately locked. Canonical regime map (Jan 2026, Directive 11.7F) and DSS built to replace it. Lock made MCP/ARE invisible during architectural discussions. Left running in background feeding 14+ services while newer systems were built alongside it.
+**Kyle Decision (2026-02-16)**: It was never the intention to have two systems creating signals and making adjustments to signal generation. MCP/ARE must be removed.
+**Timing**: During/after MCE (Wave 6) — DANGEROUS due to 14+ active importers.
+
+### RISK-017: Bridge JSON Staleness Risk
+
+**Severity**: MEDIUM
+**Location**: `bridge/canonical/mapping-regime-strategy.json` + `server/core/strategy-mapper.ts`
+**Problem**: `mapping-regime-strategy.json` is generated by `sync-canonical-bridge.ts` from the canonical TS map. If the TS map is updated but the bridge sync script is not re-run, `strategy-mapper.ts` (which imports the JSON) serves stale data at runtime. No automated staleness check exists.
+**Fix**: Either (a) add a hash/version comparison check at startup that warns if JSON is stale, or (b) have `strategy-mapper.ts` import directly from the TS file instead of JSON.
+**Timing**: Concurrent with BUG-006 fix.
+
+### RISK-018: Drift Detector Has No Calibration Baselines for Pattern/Hybrid Strategies
+
+**Severity**: MEDIUM
+**Location**: `server/services/drift-detector.ts`
+**Problem**: Drift detector monitors α/β/σ calibration drift per strategy using a 10-snapshot rolling window. When canonical map is wired and 8 new strategies (3 pattern + 5 hybrid) start generating signals, the drift detector will have no historical baselines for these strategies. First drift check will either error, skip them, or report all as drifted (depending on null handling).
+**Fix**: Initialize baseline snapshots for new strategies during the canonical wiring deployment. Consider a warm-up period where drift detection is advisory-only for newly added strategies.
+**Timing**: Concurrent with BUG-006 fix.
+
+---
+
+## Active Files Documented
+
+| File | Lines | Purpose | Status |
+|------|-------|---------|--------|
+| canonical-regime-strategy-map.ts | 680 | SSOT: 5 regimes, 17 strategies | DEFINED (not wired to DSS) |
+| market-regime.ts | — | Engines #2 & #3: calculatePairRegime + getNormalizedRegime | ACTIVE (VTS only) |
+| market-profiler.ts | — | Engine #4: MCP Market Condition Profiler (T1-C1) | LEGACY — Kyle confirmed, remove (Wave 6) |
+| adaptive-regime.ts | — | Engine #4: ARE strategy mix + exposure multipliers | LEGACY — Kyle confirmed, remove (Wave 6) |
+| mapping-regime-strategy.json | 42 | Bridge copy of canonical map | ACTIVE (staleness risk) |
+| strategy-mapper.ts | 50 | Canonical enforcement layer | ACTIVE |
+| dynamic-strategy-selector.ts | 214 | Engine #1: legacy regime classification + routing | LEGACY (must replace) |
+| strategy-engine.ts | 999 | 8 core quant strategies | ACTIVE |
+| dhma.ts | 657 | DHMA microstructure strategy | ACTIVE |
+| pattern-recognizer.ts | 481 | 5 candlestick pattern detectors | ACTIVE-LOCKED |
+| pattern-recognition.ts | 66 | Pattern preloader for VTS | ACTIVE |
+| hybrid-integration.ts | 239 | Quant+Pattern confluence scoring | ACTIVE (legacy hybrid types) |
+| strategy-filters.ts | 406 | Reusable detection filters | ACTIVE |
+| drift-detector.ts | 457 | Calibration drift monitoring | ACTIVE-LOCKED |
+| strategy-features.ts | 371 | MTF/liquidity/volatility enhancement | ACTIVE |
+| strategy-validator.ts | 509 | Synthetic testing engine | ACTIVE |
+| strategy-validators.ts | 149 | Zod parameter schema validation | ACTIVE |
+| strategy-analytics.ts | 263 | Performance metrics | ACTIVE |
+| strategy-alerts.ts | 188 | Event logging | ACTIVE |
+| strategy-sync.ts | 111 | Strategy initialization (quant only) | ACTIVE (incomplete) |
+| strategy-signal-audit-engine.ts | 160 | Signal metric verification | LEGACY |
+| provenance-governance.ts | 564 | Governance reporting | ACTIVE |
+
+**Total**: 22 files (~6,606+ lines for strategy files, plus regime engine files)
+
+---
+
+### Revision History
+
+| Date | Version | Change | Trigger |
+|------|---------|--------|---------|
+| 2026-02-15 | v1 | Initial deep-dive | Phase 2 audit |
+| 2026-02-16 | v2 | Complete rewrite: canonical map as SSOT, legacy DSS flagged as BUG-006, pattern/hybrid strategies documented as first-class, legacy hybrid types flagged as BUG-007 | Kyle review corrections |
+| 2026-02-16 | v3 | Regime authority expansion: identified 4th regime engine (MCP/ARE), documented all 4 engines with consumers, added regime authority recommendation, added BUG-008/RISK-016/RISK-017/RISK-018, clarified BUG-006 fix path (use calculatePairRegime directly), verified ChatGPT's mlConf/NGC claim was incorrect | ChatGPT/Replit feedback incorporation |
+| 2026-02-16 | v3.1 | MCP/ARE identified as legacy predecessor: stubbed metrics (RISK-019), pre-canonical design (RISK-020), parallel strategy authority (RISK-016). Initial decision was surgical re-scope. | ChatGPT MCP/ARE deep analysis |
+| 2026-02-16 | v3.2 | MCP/ARE reclassified as LEGACY for full removal (Kyle confirmed). Engine 4 status changed from RE-SCOPE to REMOVE. Recommended architecture updated: Layer 2 changed from MCP re-scope to MCP removal + portfolio modulation absorbed by MCE. All RISK-016/019/020 updated to reflect removal not re-scope. Wave 6 in deprecation plan updated to full removal. | Kyle decision + Replit historical analysis |
+
+---
+
+*End of Phase 2: Strategy Deep-Dives — Version 3*
+
+
+---
+
+# Chapter 3: Market Scanning & Pair Management
+
+## Overview
+
+This section documents how trading pairs enter the DawnTrader system — from the initial scan of Kraken's full asset universe, through multi-stage filtering, into the Active Filter Pool, and ultimately to the Signal Orchestrator for strategy evaluation. The scanning pipeline is the system's "intake valve": it determines which pairs are eligible for signal generation on every 30-second cycle.
+
+**Key principle**: The scanner runs continuously, but the Active Filter Pool is only populated when the trading engine is active. In passive learning mode, pairs are scanned for data collection (IMF metrics, cost cache) but never enter the pool.
+
+---
+
+## 1. Architecture Overview: The Scanning Pipeline
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     MARKET SCANNING PIPELINE (30-second cycle)              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+CENTRAL CLOCK (1-second ticks)
+    │ (every 30 ticks = 30 seconds)
+    ▼
+FX5 SCANNER (fx5-scanner.ts)
+    │ Calls ──▶ collectAdaptiveBatch() (market-scanner.ts)
+    │              │
+    │              ├─ STEP 1: Fetch Kraken Universe
+    │              │   └─ getTicker() + getTradablePairs() → all pairs
+    │              │
+    │              ├─ STEP 2: Adaptive Batch Selection
+    │              │   └─ AdaptiveScanManager.getNextScanBatch()
+    │              │       ├─ TelemetryAggregator → top performers (Ideal pool)
+    │              │       ├─ Kraken universe remainder → exploration (Rotational pool)
+    │              │       ├─ AdaptiveRatioManager → dynamic Ideal/Rotational split
+    │              │       └─ PairFailureTracker → cooldown exclusions
+    │              │
+    │              ├─ STEP 3: Build 100-Pair Batch
+    │              │   ├─ Pool type tracking (ideal/rotational)
+    │              │   ├─ Benchmark injection (BTC/ETH/SOL)
+    │              │   ├─ Cost cache population (spread data for ALL pairs)
+    │              │   └─ M64 underflow protection (if ideal < target, expand rotational)
+    │              │
+    │              └─ STEP 4: FX5 Filter Pipeline
+    │                  ├─ Already active check (dedup with pool + open trades)
+    │                  ├─ Stablecoin filter (strict Base/Quote regex)
+    │                  ├─ Volume filter (min volume threshold)
+    │                  ├─ Price filter (min price threshold)
+    │                  ├─ Spread filter (max bid-ask spread)
+    │                  ├─ History filter (min trading days, async Kraken OHLC)
+    │                  └─ Benchmark exemption (passive learning mode only)
+    │
+    ▼ Survivors (passed all filters)
+FX5 SCANNER POST-PROCESSING
+    ├─ Classify survivors: volume class (SMALL/MID/LARGE)
+    ├─ Compute core metrics: LQ, DI, VolNoise, Sigma
+    ├─ Apply IMF metric filter (LQ ≥ threshold, VN ≤ threshold)
+    ├─ Benchmark bypass (volatility/boring filters)
+    │
+    ├─── IF Engine ACTIVE ──▶ Active Filter Pool (5-min TTL, deduped)
+    │                            └─ Survivors available for Signal Orchestrator
+    │
+    ├─── IF Engine STOPPED ─▶ Pool cleared (passive learning mode)
+    │                            └─ IMF metrics still persisted
+    │
+    ├─ Update Stage-3 Cache (cycle metrics, pool snapshot)
+    ├─ Emit WebSocket events (scan_tick, scanner_breakdown)
+    ├─ Record 24h window metrics (FX5-24h-window.ts)
+    ├─ Update current scan batch (for VTS consumption)
+    └─ Capture to DataAggregator (async, non-blocking)
+
+FEEDBACK LOOP
+    TelemetryAggregator ◀── VTS trade outcomes (M70: only VTS writes)
+        │
+        ▼
+    AdaptiveRatioManager → adjusts Ideal/Rotational ratio for next cycle
+        │
+        ▼
+    AdaptiveScanManager → uses new ratio for next batch construction
+```
+
+### System Invariants
+
+| ID | Invariant | Enforced By |
+|----|-----------|-------------|
+| M27 | AdaptiveScanManager is the sole batch generator | Code structure — `collectAdaptiveBatch()` is the only batch function |
+| M29 | Batch size = 100 pairs; default split = 60% Ideal / 40% Rotational | `SCANNER_PARAMS.BATCH_SIZE = 100` + `AdaptiveRatioManager` |
+| M31 | Scan cycle runtime ≤ 30 seconds | 25-second timeout + runtime warning |
+| M64 | Underflow protection — batch always totals 100 | If Ideal < target, Rotational expands to compensate |
+| M65 | Initialization guard with retry | `getNextScanBatch()` retries if batch < 100 |
+| M70 | Only VTS writes telemetry | Guard in TelemetryAggregator rejects non-VTS callers |
+
+---
+
+## 2. Central Clock
+
+**File**: `server/services/central-clock.ts`
+**Directive**: 8.8.4-A4.R10R-4 (LOCKED MODULE)
+**Status**: ACTIVE
+
+The Central Clock is a 1-second tick source that synchronizes all time-dependent subsystems. It emits `ClockTick` events with a monotonic tick counter, timestamp, and measured drift.
+
+### Tick Model
+
+```typescript
+interface ClockTick {
+  timestamp: number;      // Unix milliseconds
+  tickNumber: number;     // Monotonic counter
+  drift: number;          // Actual vs expected (ms)
+}
+```
+
+### Subscribers
+
+| Subscriber | Interval | Purpose |
+|-----------|----------|---------|
+| FX5 Scanner | Every 30 ticks (30s) | Trigger scan cycle |
+| RTB Refresh | Every tick (1s) | Check signal TTL expiration |
+| TCL (Temporal Coherence Layer) | Every tick (1s) | Check promotion timing |
+
+### Health Monitoring
+
+- Tracks last 60 ticks of drift history
+- Reports average and max drift
+- Alerts if drift exceeds 100ms
+
+**Cross-reference**: FX5 Scanner (Section 3) subscribes to the Central Clock as its timing source. The 30-second interval is not configurable at runtime.
+
+---
+
+## 3. FX5 Scanner
+
+**File**: `server/services/fx5-scanner.ts` (887 lines)
+**Status**: ACTIVE — LOCKED (core scanning service)
+**Singleton**: `fx5Scanner`
+
+The FX5 Scanner is the always-on 30-second market scanner that drives pair selection. It subscribes to the Central Clock and triggers `collectAdaptiveBatch()` from `market-scanner.ts` on every 30-tick interval.
+
+### Lifecycle
+
+1. **Start**: Subscribes to Central Clock with 30-tick interval handler
+2. **Each cycle**: Calls `this.runScanCycle(mode)` → `collectAdaptiveBatch()` → post-processing
+3. **Timeout**: 25-second safety timeout per scan — if exceeded, cycle is aborted
+4. **Stop**: Unsubscribes from Central Clock
+
+### Post-Processing Pipeline (After collectAdaptiveBatch Returns)
+
+After receiving survivors from `collectAdaptiveBatch()`, FX5 Scanner applies additional processing:
+
+1. **Volume Classification**: Assigns each survivor to SMALL, MID, or LARGE volume class
+2. **Core Metric Computation**:
+   - `LQ` = Log Liquidity (from volumeUSD, tradeCount, spread)
+   - `DI` = Directional Integrity (from price history)
+   - `VolNoise` = Volatility Noise (from price data, clamped: VN > 2 or VN < 0 defaults to 0.6)
+   - `Sigma` = Standard deviation of returns
+3. **IMF Source Selection** (Directive 11.4H.6A):
+   - In passive learning mode: prefer cached OHLC data from VTS (if ≥ 10 candles available)
+   - Otherwise: use ticker-based calculation
+   - Source is tagged (`ohlc_cache` vs `ticker`) for telemetry
+4. **IMF Metric Filter**: Survivors must pass `LQ ≥ LQ_MIN` AND `VolNoise ≤ VN_MAX`
+5. **Benchmark Bypass** (Directive 11.4H.6 Task 4): Benchmark symbols bypass volatility/boring rejection
+6. **Active Pool Gate** (REB 2.8.7):
+   - Engine ACTIVE → add to Active Filter Pool
+   - Engine STOPPED → pool cleared (passive learning enforcement)
+
+### Cost Cache Population
+
+**Critical detail**: `setCostMetrics(symbol, { spread })` is called for every evaluated pair — not just survivors. This ensures friction scores in the cost model vary based on actual market spread data rather than cache-miss defaults (which previously caused a "50 Moderate Liquidity" artifact — Directive 11.4H.3).
+
+### Spread Calculation Logic
+
+```typescript
+// Priority 1: Compute from ask/bid directly
+spread = (ask - bid) / bid;
+
+// Priority 2: Use pre-calculated spread (convert if percentage)
+spread = s.spread > 1 ? s.spread / 100 : s.spread;
+
+// Priority 3: Use bidAskSpread (ALWAYS percentage, divide by 100)
+spread = bidAskSpread / 100;
+
+// Default fallback: 0.001 (0.1%)
+```
+
+### VTS Integration (Directive 11.4C.1)
+
+FX5 Scanner does NOT write to the TelemetryAggregator (M70 compliance — only VTS writes pair performance telemetry). FX5 does produce persistent data via other channels: DataAggregator captures (`FX5_SCAN`), cost cache writes, Stage-3 state cache, and WebSocket emissions. The distinction is that telemetry (pair performance scores that drive adaptive ratio) is VTS-only.
+
+FX5 exposes `getCurrentScanBatch(mode)` which returns raw pair data:
+
+```typescript
+interface ScanBatchPair {
+  symbol: string;
+  pool: 'ideal' | 'rotational';
+  price: number;
+  volume24h: number;
+  dailyRange: number;
+  spread?: number;
+  liquidity?: number;
+  volatility?: number;
+  isBenchmark?: boolean;  // Directive 11.6F: propagated for VTS filtering
+}
+```
+
+VTS consumes this batch directly for signal evaluation — no telemetry intermediary.
+
+### Diagnostic Output (Early Cycles)
+
+The first 20 cycles produce detailed diagnostic logging including:
+- Batch composition (Ideal vs Rotational counts)
+- 24h cumulative metrics (unique evaluated/survived)
+- Active Pool size vs Unique Survived validation
+- Spread audit (first 3 cycles, 5 sample survivors)
+
+---
+
+## 4. Adaptive Batch Construction (collectAdaptiveBatch)
+
+**File**: `server/services/market-scanner.ts` — `collectAdaptiveBatch()` function (lines 1085-1363)
+**Directive**: 11.4C.1
+**Status**: ACTIVE
+
+This is the core batch construction function called by FX5 Scanner every 30 seconds. It replaces the legacy `collectMixedBatch()` architecture.
+
+### 4-Step Pipeline
+
+#### Step 1: Fetch Kraken Universe
+```
+Promise.all([krakenService.getTicker(), krakenService.getTradablePairs()])
+→ Map each ticker to { pairName, symbol (wsname), volume24h, ticker, pairInfo }
+→ Filter: only pairs with valid pairInfo
+→ Result: krakenUniverseSize (typically 500+ pairs)
+```
+
+#### Step 2: Adaptive Batch from AdaptiveScanManager
+```
+adaptiveScanManager.getNextScanBatch(allSymbols)
+→ Returns: { idealPairs[], rotationalPairs[], benchmarkPairs[], excludedPairs[], totalBatch[] }
+```
+
+#### Step 3: Build 100-Pair Batch with Pool Tracking
+- Each pair tagged with `poolType: 'ideal' | 'rotational'`
+- **Directive 11.4C-R2**: If batch < 100, refill from Kraken universe sorted by volume (tagged as rotational)
+- **Directive 11.4H.4 Task 1**: Populate cost cache with spread data for ALL evaluated pairs (not just survivors)
+
+#### Step 4: Apply FX5 Filter Pipeline
+
+For each pair in the 100-pair batch:
+
+| Filter | Check | Rejection Counter |
+|--------|-------|-------------------|
+| Already active | In pool or open trade? | `already_active` |
+| Stablecoin | Base/Quote regex match? | `failed_stablecoin` |
+| Min volume | `volume24h < minVolume`? | `failed_min_volume` |
+| Min price | `currentPrice < minPrice`? | `failed_min_price` |
+| Bid-ask spread | `bidAskSpread > maxBidAskSpread`? | `failed_spread` |
+| History | `days < minHistoryDays`? (async) | `failed_history` |
+
+**Stablecoin Regex** (Directive 11.4H.4 Task 3):
+```
+/^(USDT|USDC|DAI|PYUSD|USDE)\/(USD|EUR|USDT|USDC|DAI)$/i
+```
+This is strict Base/Quote matching — only excludes true stablecoin-to-stablecoin pairs. A pair like `FARTCOIN/USDC` does NOT match (correctly kept).
+
+**Benchmark Exemption** (Directive 11.4H.4 Task 5):
+In passive learning mode, benchmark pairs (BTC/USD, ETH/USD, SOL/USD, XBT/USD, BTC/EUR, ETH/EUR) bypass ALL filters for correlation tracking. They still check for already-active duplicates.
+
+### Filter Configuration (Default Values)
+
+```typescript
+minVolume:         1,000,000 USD
+minPrice:          0.01
+maxBidAskSpread:   1.00%
+minHistoryDays:    30
+excludeStablecoins: true
+universeSize:      100
+```
+
+These values come from the screener filters stored in the database, fetched before each scan cycle.
+
+### Return Value: BatchResult
+
+```typescript
+interface BatchResult {
+  survivors: Array<{
+    symbol: string;
+    currentPrice: number;
+    volume24h: number;
+    dailyRange: number;
+    fromTopN: boolean;        // Legacy compat (= poolType === 'ideal')
+    poolType: 'ideal' | 'rotational';
+    bidAskSpread: number;     // Directive 11.4H.3
+  }>;
+  evaluatedSymbols: string[];
+  breakdown: { /* per-filter rejection counts */ };
+  metrics: {
+    evaluatedCount: number;
+    eligibleCount: number;
+    ineligibleCount: number;
+    idealCount: number;
+    rotationalCount: number;
+    krakenUniverseSize: number;
+  };
+}
+```
+
+---
+
+## 5. Adaptive Scan Manager
+
+**File**: `server/services/adaptive-scan-manager.ts` (405 lines)
+**Directive**: 11.4B.2-R1, 11.2 R1
+**Status**: ACTIVE
+**Singleton**: `getAdaptiveScanManager()` (lazy-initialized)
+
+The Adaptive Scan Manager controls HOW the 100-pair batch is composed — how many pairs come from the Ideal pool (top performers) vs the Rotational pool (exploration candidates).
+
+### Components
+
+#### PairFailureTracker
+
+Maintains a cooldown blacklist of pairs that failed filters. After a pair fails, it enters cooldown and is excluded from the next batch.
+
+```typescript
+interface FailedPairEntry {
+  symbol: string;
+  lastFailure: number;        // Timestamp
+  consecutiveFailures: number;
+  failureReason?: string;
+  cooldownUntil: number;      // When cooldown expires
+}
+```
+
+- **Normal cooldown**: After 1 failure
+- **Extended cooldown**: After repeated consecutive failures
+- **Success clears**: `recordSuccess(symbol)` removes from tracker
+
+#### AdaptiveScanManager.getNextScanBatch()
+
+This method builds the 100-pair batch:
+
+1. **Get current ratio** from `AdaptiveRatioManager.getCurrentRatio()`
+   - Defaults to 70/30 (Ideal/Rotational) when adaptive ratio is disabled
+   - When enabled, ratio is dynamically computed from pool performance telemetry
+
+2. **M64 Underflow Protection**:
+   ```
+   targetIdealCount = ceil(100 × idealRatio)
+   availableIdealCount = telemetry.getAvailableIdealPoolCount()
+   actualIdealCount = min(targetIdealCount, availableIdealCount)
+   actualRotationalCount = 100 - actualIdealCount  // Always totals 100
+   ```
+   If not enough pairs exist in the Ideal pool, Rotational expands to fill.
+
+3. **Fetch pools**:
+   - Ideal: `telemetry.getTopPairs(actualIdealCount)` — ranked by performance
+   - Rotational: `telemetry.getRotationalPairs(actualRotationalCount, allPairs)` — deduplicated against Ideal
+
+4. **Benchmark injection** (Directive 11.4H.5):
+   Benchmark pairs (BTC/ETH/SOL) are force-included regardless of telemetry scores.
+
+5. **Failure filtering**: Remove any pairs in cooldown via PairFailureTracker
+
+6. **Retry guard** (Directive 11.4C-R2, M65):
+   If `filteredBatch.length < 100` and retries < MAX_RETRIES, wait 5 seconds and retry.
+
+#### AdaptiveScanBatch Return
+
+```typescript
+interface AdaptiveScanBatch {
+  idealPairs: string[];
+  rotationalPairs: string[];
+  benchmarkPairs: string[];
+  excludedPairs: string[];      // In cooldown
+  totalBatch: string[];
+  timestamp: number;
+  ratioUsed: number;
+  retryCount: number;
+}
+```
+
+### Scan Result Recording
+
+`recordScanResult(symbol, success, data)` — ONLY tracks pass/fail for failure cooldown management. Does NOT record telemetry (Directive 11.4C-R2: VTS is the single source of truth for telemetry).
+
+---
+
+## 6. Adaptive Ratio Manager
+
+**File**: `server/services/adaptive-ratio-manager.ts` (298 lines)
+**Directive**: 11.2 R1
+**Status**: ACTIVE
+
+The Adaptive Ratio Manager dynamically adjusts the Ideal/Rotational split based on which pool is producing better trade outcomes.
+
+### Ratio Computation Algorithm
+
+```
+STEP 1: Fetch pool performance from TelemetryAggregator
+        Fallback: SQL-backed telemetry-repository if insufficient in-memory data
+
+STEP 2: Compute pool scores
+        score = (winRate × 0.6) + (avgEdge × 0.4)
+        where avgEdge = avgFinalScore
+
+STEP 3: Calculate target ratio (performance-weighted)
+        IF both scores zero → defaultRatio (0.7)
+        IF rotational zero → maximize ideal (0.9)
+        IF ideal zero → minimize ideal (0.3)
+        ELSE → targetRatio = idealScore / (idealScore + rotationalScore)
+
+STEP 4: Apply confidence adjustment
+        confidence = min(1.0, totalSamples / 100)
+        adjustedTarget = (targetRatio × confidence) + (defaultRatio × (1 - confidence))
+        Low confidence biases toward default; high confidence trusts the data.
+
+STEP 5: Enforce bounds [0.3, 0.9]
+        Never less than 30% Ideal, never more than 90% Ideal
+
+STEP 6: Smooth adjustment (max 0.1 per cycle)
+        Prevents oscillation — ratio can only change by ±10% per scan cycle
+```
+
+### Configuration
+
+| Parameter | Value | Meaning |
+|-----------|-------|---------|
+| `minIdealRatio` | 0.3 | Minimum 30% Ideal |
+| `maxIdealRatio` | 0.9 | Maximum 90% Ideal |
+| `defaultRatio` | 0.7 | Starting/fallback (70% Ideal) |
+| `adjustmentRate` | 0.1 | Max change per cycle |
+| `minSamples` | 10 | Minimum before ratio adjustment |
+
+### Why This Matters
+
+Without the ratio manager, the system would always use a fixed 70/30 split regardless of performance. If Ideal pool pairs consistently outperform Rotational pool pairs, the ratio manager shifts allocation toward Ideal — concentrating on what works. Conversely, if Rotational pool discovers high-performing new pairs, their representation increases.
+
+**Cross-reference**: The pool scores (winRate, avgEdge) are computed by TelemetryAggregator (Section 10), which receives data exclusively from VTS (M70).
+
+---
+
+## 7. Active Filter Pool
+
+**File**: `server/services/active-filter-pool.ts` (413 lines)
+**Status**: ACTIVE
+**Singleton**: `activeFilterPool`
+
+The Active Filter Pool is the in-memory holding area for pairs that passed all filters. The Signal Orchestrator pulls from this pool when evaluating which pairs to generate signals for.
+
+### Key Properties
+
+| Property | Value | Purpose |
+|----------|-------|---------|
+| TTL | 5 minutes | Pairs expire after 5 min without refresh |
+| Dedup | Strict | Non-expired symbols are SKIPPED, not refreshed |
+| Modes | Separate paper/live pools | Complete data isolation |
+| Gate | Engine status | Pool only populated when engine ACTIVE |
+
+### Entry Structure
+
+```typescript
+interface ActiveFilteredPair {
+  symbol: string;
+  price: number;
+  volume24h: number;
+  dailyRange: number;
+  firstSeen: string;      // ISO timestamp
+  lastUpdated: string;     // ISO timestamp
+  expiresAt: number;       // Unix timestamp (TTL = 5 min)
+  source: 'paper' | 'live';
+  fx5Snapshot?: {
+    volume24h: number;
+    dailyRange: number;
+    price: number;
+  };
+}
+```
+
+### Deduplication Logic (REB 2.2)
+
+When `addSurvivors()` is called with a new batch of survivors:
+
+```
+FOR each survivor:
+  IF symbol exists in pool AND NOT expired → SKIP (do NOT refresh TTL)
+  IF symbol exists in pool AND IS expired  → REPLACE with new entry (reset TTL)
+  IF symbol NOT in pool                    → ADD with new TTL
+```
+
+**Design decision**: Non-expired symbols are intentionally NOT refreshed. This prevents pool churn where the same pair constantly resets its TTL. A pair enters the pool, has 5 minutes to be evaluated for signals, then must re-qualify in a future scan cycle.
+
+**Temporal windowing effect**: Because TTL is not refreshed, a pair that continuously passes filters every 30 seconds will still expire after 5 minutes. It then re-enters on the next cycle with a fresh TTL. This creates intentional evaluation windows — a pair is eligible for exactly one 5-minute window per pool entry, regardless of how many scan cycles it survives during that window. This is by design, not a bug.
+
+### Passive Mode Enforcement (REB 2.2)
+
+```typescript
+enforcePassiveModeIfStopped(mode, isEngineRunning):
+  IF engine is stopped AND pool is not empty → clear pool
+```
+
+Called by FX5 Scanner before adding survivors. Ensures the pool is empty when the engine is not actively trading — passive learning does NOT populate the pool.
+
+### Volume Bucketing (Phase 8.8.3-I9)
+
+The pool provides volume classification for downstream consumers:
+
+| Bucket | Threshold |
+|--------|-----------|
+| High | > $50M |
+| Medium | ≥ $10M |
+| Low | ≥ $1M |
+| Very Low | < $1M |
+
+**Symbol normalization**: Handles both `AVAX/USD` and `AVAXUSD` formats via quote-currency suffix detection (longest-first to prevent `USD` matching before `USDT`).
+
+---
+
+## 8. Benchmark Symbol Handling
+
+**File**: `server/config/benchmark-regex.ts` (48 lines)
+**Status**: ACTIVE — LOCKED
+
+Benchmark symbols (BTC, ETH, SOL, and major stablecoins) receive special treatment throughout the scanning pipeline. The strict regex prevents misclassification (e.g., FARTCOIN being matched by a naive "contains COIN" check).
+
+### Benchmark Assets
+
+**Base coins**: BTC, XBT, ETH, SOL
+**Stablecoins**: USDT, USDC, DAI, BUSD, TUSD
+**Valid quote currencies**: USD, USDT, USDC, DAI, BUSD, EUR
+
+### Validation
+
+Two-tier check:
+1. Regex match against the full symbol
+2. Explicit Base + Quote combination validation
+
+### Where Benchmarks Are Special
+
+| Stage | Behavior | Directive |
+|-------|----------|-----------|
+| Adaptive Scan Manager | Force-included in batch regardless of telemetry scores | 11.4H.5 Task 1 |
+| collectAdaptiveBatch (passive mode) | Bypass ALL filters for correlation tracking | 11.4H.4 Task 5 |
+| FX5 Scanner (active mode) | Bypass volatility/boring rejection, but must still pass metric filters | 11.4H.6 Task 4 |
+| VTS | Benchmark flag propagated for filtering decisions | 11.6F |
+
+---
+
+## 9. Kraken Symbol Resolution
+
+**File**: `server/markets/kraken-symbol-resolver.ts`
+**Directive**: 8.8.4-A4.R10R-4 (LOCKED MODULE)
+**Status**: ACTIVE
+
+Single source of truth for symbol translation between DawnTrader's internal format and Kraken's various formats.
+
+### Symbol Formats
+
+| Format | Example | Used By |
+|--------|---------|---------|
+| Internal | `AVAX/USD` | DawnTrader everywhere |
+| Kraken REST | `XAVAXZUSD` | Kraken REST API |
+| Kraken WebSocket | `AVAX/USD` | Kraken WS feeds |
+| Compact | `AVAXUSD` | Some legacy code |
+
+### Resolution Tiers
+
+| Tier | Source | Trust Level |
+|------|--------|-------------|
+| 0 | Static map (KRAKEN_SYMBOL_MAP) | Highest — manually verified |
+| 1 | Auto-map verified (matches static) | High |
+| 2 | Auto-map derived (Kraken API normalization) | Medium |
+| 3 | Auto-map uncertain (not safe for auto-use) | Low |
+
+### Kraken-Specific Translations
+
+```
+BTC ↔ XBT   (Kraken uses XBT in WebSocket for Bitcoin)
+```
+
+**Cross-reference**: Used by `collectAdaptiveBatch()` for survivor symbol normalization, by `cost-cache.ts` for friction lookups, and by `market-volume-cache.ts` for Kraken REST ticker calls.
+
+---
+
+## 10. Telemetry Aggregator
+
+**File**: `server/services/telemetry-aggregator.ts`
+**Status**: ACTIVE
+
+The Telemetry Aggregator collects per-pair and per-pool performance data that drives the adaptive scanning feedback loop. It provides ranked pair lists (for Ideal pool selection) and pool-level performance comparisons (for ratio adjustment).
+
+### Per-Pair Telemetry
+
+```typescript
+{
+  finalScore: number;           // Composite performance
+  hybridScore: number;          // Strategy-weighted
+  regimeScore: number;          // 0-100 regime-adjusted (Directive 11.4H.4A)
+  regimeWeight: number;         // Market regime contribution
+  predictiveConfidence: number; // Signal confidence
+  successRate: number;          // Win rate
+  avgDecayedStrength: number;   // Time-weighted strength
+  volZ: number;                 // Volatility Z-score (50-sample rolling)
+  trendZ: number;               // Momentum Z-score (50-sample rolling)
+}
+```
+
+### Pool-Level Aggregates (Directive 11.2 R1)
+
+Per pool (Ideal vs Rotational):
+- `winRate` — success rate
+- `sampleCount` — number of completed trades
+- `avgFinalScore` — mean final score (= "avgEdge" in ratio computation)
+- `lastUpdated` — timestamp
+
+### Key Methods
+
+| Method | Purpose | Consumer |
+|--------|---------|----------|
+| `getTopPairs(n)` | Return top n pairs ranked by score | AdaptiveScanManager (Ideal pool) |
+| `getRotationalPairs(n, all)` | Return n exploration pairs | AdaptiveScanManager (Rotational pool) |
+| `getPoolPerformanceComparison()` | Ideal vs Rotational performance | AdaptiveRatioManager |
+| `getAvailableIdealPoolCount()` | Count of available Ideal pairs | M64 underflow protection |
+
+### Write Guard (M70)
+
+Only calls from `caller='vts'` are accepted. All other callers are rejected. This prevents FX5 Scanner, market-scanner, or any other component from contaminating telemetry data.
+
+### Data Segregation (Directive 11.0E.2)
+
+Simulation (paper) telemetry is kept separate from live telemetry. Source is tracked per record.
+
+### Rolling Window
+
+24-hour window controlled by `SCANNER_PARAMS.historyWindowMs`. Records outside the window are auto-trimmed.
+
+---
+
+## 11. FX5 24-Hour Window
+
+**File**: `server/services/fx5-24h-window.ts` (343 lines)
+**Status**: ACTIVE
+
+Maintains a rolling 24-hour record of scan cycles — but ONLY for active trading cycles (not passive learning). This provides:
+
+1. **Cycles per hour** computation (used in scan_tick WebSocket payload)
+2. **Filter-level breakdown** aggregated over 24 hours
+3. **Unique pair tracking** (evaluated and survived)
+
+### Tracked Filter Types
+
+```
+volume, spread, daily_range, price, stablecoin, history,
+correlation_guard, market_cap, guardrail_risk, quote_currency
+```
+
+### Key Functions
+
+| Function | Purpose |
+|----------|---------|
+| `recordScanCompletion(mode, isActive)` | Only records when engine is ACTIVE (REB 2.8.5C) |
+| `recordScanFor24h(mode, data, isActive)` | Records cycle metrics + filter breakdown |
+| `getCyclesPerHour(mode)` | Computes from active-only recorded cycles |
+| `get24hSummary(mode)` | Returns aggregate metrics for 24h window |
+
+**Design decision**: Cycles-per-hour measures "trading activity" not "FX5 health." When the engine is stopped, cycles are not counted even though FX5 continues scanning for data collection.
+
+---
+
+## 12. Market Volume Cache
+
+**File**: `server/services/market-volume-cache.ts` (241 lines)
+**Status**: ACTIVE
+**Singleton**: `marketVolumeCache`
+
+Lightweight volume lookup cache used as a fallback when FX5 metadata is unavailable at order creation time.
+
+### Cache Properties
+
+| Property | Value |
+|----------|-------|
+| TTL | 5 minutes |
+| Source | Kraken REST ticker (on cache miss) |
+| Scope | Volume is a trade-time attribute, NOT live |
+
+### Volume Bucketing (Phase 8.8.3-I10)
+
+| Bucket | Threshold |
+|--------|-----------|
+| High | ≥ $5M |
+| Medium | ≥ $500K |
+| Low | ≥ $50K |
+| Very Low | < $50K |
+
+**Note**: These thresholds differ from Active Filter Pool's volume buckets ($50M/$10M/$1M). The market-volume-cache uses smaller thresholds because it's classifying individual trade-time volumes, while the Active Filter Pool classifies 24h aggregates.
+
+---
+
+## 13. Stage-3 State Cache and Emitter
+
+**Files**: `server/services/stage3-state-cache.ts` (151 lines), `server/services/stage3-emitter.ts`
+**Status**: ACTIVE
+
+### Stage-3 State Cache
+
+In-memory snapshot of the current scan cycle, providing atomic reads for the WebSocket layer and diagnostics.
+
+```typescript
+type Stage3State = {
+  cycleId: number;
+  scanCycleId: string;
+  stateVersion?: number;        // REB 2.4: timestamp-based atomicity
+  krakenUniverseSize: number;
+  evaluatedCount: number;
+  eligibleCount: number;
+  ineligibleCount: number;
+  activePoolCount: number;
+  idealCount: number;
+  rotationalCount: number;
+  cyclesPerHour: number;
+  cycleFrequencyMs: number;     // Default: 30,000ms
+  nextScanInMs: number;
+  activeFilteredPool: ActiveFilteredPair[];
+  latestEligibleSymbols?: string[];
+}
+```
+
+**Update Logic (REB 2.4)**: Shallow merge — metadata-only updates don't wipe scan data. Cycle counter only increments on full scan updates.
+
+### Stage-3 Emitter
+
+Emits two WebSocket event types:
+
+1. **`scan_tick`**: Real-time cycle summary (cycle ID, universe size, evaluated/eligible counts, pool composition, timestamps)
+2. **`scanner_breakdown`**: Filter diagnostic breakdown (per-filter counts for the Filter Insights widget)
+
+Both events include a `stateVersion` for consistency tracking.
+
+---
+
+## 14. Data Aggregator
+
+**File**: `server/services/data-aggregator.ts`
+**Directive**: 10.0.B (LOCKED MODULE)
+**Status**: ACTIVE
+
+Non-blocking async framework for capturing signal-level, strategy-level, and market-level metrics during scanning and trading.
+
+### Properties
+
+| Property | Value |
+|----------|-------|
+| Flush interval | 30 seconds |
+| Aggregate interval | 15 minutes |
+| Mode detection | Auto-detects passive vs active |
+
+### What It Captures From Scanning
+
+```typescript
+dataAggregator.capture('FX5_SCAN', {
+  mode,
+  pairsScanned,
+  survivors,
+  metricFilteredSurvivors,
+  eligibleCount,
+  idealCount,
+  rotationalCount,
+  avgDailyRange,
+  isEngineActive,
+  volumeStats: { SMALL, MID, LARGE }
+});
+```
+
+This capture is fire-and-forget (`.catch(() => {})`) — scanning never blocks on aggregation.
+
+---
+
+## 15. Adaptive Pool Config (ACT)
+
+**File**: `server/services/adaptive-pool-config.ts` (40 lines)
+**Status**: ACTIVE
+
+⚠️ **Naming clarification**: Despite the file name suggesting scanning pool configuration, this file configures the **Adaptive Concurrency Tuner (ACT)** — which controls how many signals are processed concurrently, NOT the scanning pool composition.
+
+### Configuration
+
+| Parameter | Value | Meaning |
+|-----------|-------|---------|
+| `MIN_POOL` | 3 | Minimum concurrent signal processing slots |
+| `MAX_POOL` | 10 | Maximum concurrent signal processing slots |
+| `TARGET_DURATION` | 5,000ms | Target processing time per signal |
+| `INITIAL` | 5 | Starting concurrency level |
+
+**Cross-reference**: The scanning pool composition (Ideal/Rotational ratio, batch size) is configured in `SCANNER_PARAMS` within `adaptive-scan-manager.ts`, NOT in this file. See Section 5.
+
+---
+
+## 16. ⚠️ CRITICAL: MarketScanner Class — NOT Dead, Runs In Parallel With FX5
+
+**File**: `server/services/market-scanner.ts` — class `MarketScanner` (lines 385-1013)
+**Status**: LEGACY — but **ACTIVELY RUNNING IN PRODUCTION** (BUG-009)
+
+**ChatGPT review correction**: The initial Phase 3 audit stated this class was "believed to be disconnected from boot sequence." Code verification proves this wrong:
+
+1. `server/routes.ts` line 87: `const marketScanner = new MarketScanner();` — **instantiated at module scope**
+2. `server/routes.ts` line 371: `marketScanner.startHourlyScanning()` — **actively started during boot**
+3. `server/startup.ts` lines 36, 57: Listed as core initialized service in health checks
+
+**This means DawnTrader is running TWO parallel scanning systems simultaneously:**
+- **FX5 Scanner**: 30-second cycles via `collectAdaptiveBatch()` → Active Filter Pool → Signal Orchestrator
+- **MarketScanner class**: 10-minute cycles → per-user watchlists → direct StrategyEngine signal generation → database signal storage
+
+These two scanners:
+- Both call Kraken APIs (doubling API load)
+- Both generate trading signals (through completely different pipelines)
+- Both perform cleanup operations (potentially conflicting)
+- Have no cross-referencing or coordination
+
+**Key legacy patterns in the running MarketScanner**:
+- Fetches OHLC data per-pair sequentially (vs FX5's batch approach)
+- Only evaluates 8 quant strategies (not 17 canonical)
+- Uses `StrategyEngine` directly instead of Signal Orchestrator pipeline
+- Has its own cleanup routines (expire signals, clean stale pairs, archive old trades)
+- Per-user watchlist management (legacy multi-user architecture, but still executing)
+- Auto-start paper simulation (disabled: Phase 41F-L.E2E-PURGE, but class still runs)
+- Conflict resolution: BEST SCORE WINS (weight × confidence ranking, 1 signal per asset)
+
+**Removal note**: File comments state "TODO: Remove in Phase 8.12" — but removal has never been executed. This is now BUG-009.
+
+### Diagnostic Infrastructure (REB 2.10/2.11) — API-Exposed
+
+The same `market-scanner.ts` file also hosts extensive diagnostic buffers. These are NOT dead — they are **actively served via API routes**:
+
+**Verified API exposure** (from `server/routes.ts`):
+- `getPassiveLearningBuffer()` → served at API endpoint (line 6463)
+- `getREB211DriftBuffer()` → served at API endpoint (line 6508)
+- `getREB211IntegrityBuffer()` → served at API endpoint (line 6509)
+- `getREB211TimingBuffer()` → served at API endpoint (line 6510)
+- `getREB211MismatchBuffer()` → served at API endpoint (line 6511)
+- `getREB211StressBuffer()` → served at API endpoint (line 6512)
+- `getActiveAuditBuffer()` → served at API endpoint (line 6587)
+- `getReb211bSymbolTraces()` → served at API endpoint (line 6607)
+
+Additionally imported by:
+- `reb-2-12-test-harness.ts` (test infrastructure)
+- `reb-2-15-certification.ts` (certification suite)
+
+**Memory consideration**: Buffers are FIFO-capped (20 entries for most, 100 for mismatches, 400 for symbol traces). Memory growth is bounded. However, the stress test mode (`REB_2_11_STRESS` env var) should never be active in production — it injects artificial latency into scan cycles.
+
+**Decision**: These diagnostics are development/validation tools with API exposure. If the MarketScanner class is removed, these diagnostic buffers and their API routes must be evaluated for retention or migration.
+
+---
+
+## Active Files Summary
+
+| File | Lines | Status | Role |
+|------|-------|--------|------|
+| `server/services/central-clock.ts` | ~100+ | ACTIVE (LOCKED) | 1-second tick source for all timing |
+| `server/services/fx5-scanner.ts` | 887 | ACTIVE (LOCKED) | 30-second scanner, post-processing, pool gate |
+| `server/services/market-scanner.ts` | 1,364 | MIXED | `collectAdaptiveBatch()` = ACTIVE; `MarketScanner` class = LEGACY |
+| `server/services/adaptive-scan-manager.ts` | 405 | ACTIVE | Batch composition: Ideal/Rotational pools, failure tracker |
+| `server/services/adaptive-ratio-manager.ts` | 298 | ACTIVE | Dynamic pool ratio based on performance telemetry |
+| `server/services/active-filter-pool.ts` | 413 | ACTIVE | In-memory 5-min TTL holding pool |
+| `server/services/telemetry-aggregator.ts` | 200+ | ACTIVE | Per-pair/per-pool performance tracking, VTS-only writes |
+| `server/services/fx5-24h-window.ts` | 343 | ACTIVE | 24h rolling scan metrics (active cycles only) |
+| `server/services/market-volume-cache.ts` | 241 | ACTIVE | 5-min volume fallback cache |
+| `server/services/stage3-state-cache.ts` | 151 | ACTIVE | In-memory scan cycle snapshot |
+| `server/services/stage3-emitter.ts` | 100+ | ACTIVE | WebSocket events (scan_tick, scanner_breakdown) |
+| `server/services/data-aggregator.ts` | 100+ | ACTIVE (LOCKED) | Non-blocking metric aggregation |
+| `server/services/adaptive-pool-config.ts` | 40 | ACTIVE | ACT concurrency config (NOT scanning pool) |
+| `server/config/benchmark-regex.ts` | 48 | ACTIVE (LOCKED) | Benchmark symbol validation |
+| `server/markets/kraken-symbol-resolver.ts` | 100+ | ACTIVE (LOCKED) | Symbol format translation (SSOT) |
+
+---
+
+## Critical Findings (Phase 3)
+
+### BUG-009: Two Parallel Scanning Systems Running Simultaneously
+- **Severity**: CRITICAL
+- **Locations**:
+  - `server/services/market-scanner.ts` — `MarketScanner` class (lines 385-1013)
+  - `server/routes.ts` — line 87: `const marketScanner = new MarketScanner();` (instantiated at boot)
+  - `server/routes.ts` — line 371: `marketScanner.startHourlyScanning()` (actively started)
+  - `server/startup.ts` — lines 36, 57: Listed as core initialized service
+- **Problem**: DawnTrader runs TWO independent scanning systems simultaneously:
+  1. **FX5 Scanner** (30-second cycles): `collectAdaptiveBatch()` → Active Filter Pool → Signal Orchestrator. This is the modern, adaptive, telemetry-driven pipeline.
+  2. **MarketScanner class** (10-minute cycles): Kraken OHLC → direct StrategyEngine → database signal storage. This is the legacy pipeline with per-user watchlists and only 8 quant strategies.
+- **Impact**:
+  - **Double Kraken API load**: Both scanners call `getTicker()`, `getOHLCData()`, and other Kraken endpoints independently
+  - **Conflicting signal generation**: MarketScanner generates signals through a completely different pipeline (StrategyEngine direct) than FX5/Signal Orchestrator. Signals from both systems may coexist in the database with no deconfliction.
+  - **Conflicting cleanup**: MarketScanner runs its own cleanup (expire signals, clean stale pairs, archive trades). This could interfere with cleanup operations performed by the modern pipeline.
+  - **Wasted computation**: 10-minute scanner evaluates pairs that FX5 already evaluates every 30 seconds, but with less sophisticated filtering (no adaptive ratio, no failure tracking, no IMF metrics)
+- **Verified**: Yes — code-confirmed 2026-02-16 (ChatGPT review prompted verification)
+- **Fix**: Stop instantiating MarketScanner class in `server/routes.ts`. Remove `startHourlyScanning()` call. Remove from `startup.ts` service list. The `collectAdaptiveBatch()` function in the same file must NOT be removed.
+- **Timing**: Pre-MCE — this is a standalone fix. The legacy scanner adds API load and potential signal conflicts with zero benefit.
+- **Phase Found**: Phase 3 (ChatGPT review correction)
+
+### RISK-021: Volume Bucket Threshold Inconsistency Between Modules
+- **Severity**: LOW-MEDIUM (context-dependent — LOW today if buckets are never cross-compared, but MEDIUM if risk guardrails, position sizing, UI dashboards, drift detector, or ML features ever reference bucket labels)
+- **Location**: `active-filter-pool.ts` vs `market-volume-cache.ts`
+- **Problem**: Two different volume bucketing schemes:
+  - Active Filter Pool: High > $50M, Medium ≥ $10M, Low ≥ $1M, Very Low < $1M
+  - Market Volume Cache: High ≥ $5M, Medium ≥ $500K, Low ≥ $50K, Very Low < $50K
+- **Impact**: A pair classified as "High" by market-volume-cache ($5M+) would be classified as "Low" by the Active Filter Pool (which requires $50M+ for "High"). If any downstream consumer compares volume buckets across these sources, it will get inconsistent results.
+- **Fix**: Consolidate to a single volume bucketing function with explicit scope parameters, or document that these serve intentionally different scopes (24h aggregate vs trade-time volume).
+
+### RISK-022: adaptive-pool-config.ts Name Misleads About Its Purpose
+- **Severity**: LOW
+- **Location**: `server/services/adaptive-pool-config.ts`
+- **Problem**: File name suggests scanning pool configuration (Ideal/Rotational ratio, batch size). Actual content is ACT (Adaptive Concurrency Tuner) — controls concurrent signal processing slots (3-10), completely unrelated to scanning. A developer looking for scanning pool config will find the wrong file.
+- **Fix**: Rename to `act-concurrency-config.ts` or `signal-processing-pool-config.ts`. The actual scanning pool configuration is in `SCANNER_PARAMS` within `adaptive-scan-manager.ts`.
+
+### RISK-023: Adaptive Scanning Pipeline Depends on VTS Telemetry Integrity
+- **Severity**: MEDIUM
+- **Location**: `adaptive-ratio-manager.ts` → `telemetry-aggregator.ts` → VTS
+- **Problem**: The entire adaptive scanning feedback loop depends on VTS telemetry health. If VTS is paused, misconfigured, or data-lagged:
+  - Ideal pool quality degrades (no fresh performance data to rank pairs)
+  - Ratio manager biases toward `defaultRatio` (0.7) due to low confidence
+  - Batch composition becomes stale — system effectively runs on fixed 70/30 split
+- **Impact**: Adaptive scanning degrades gracefully (falls back to defaults), but the adaptive benefit is silently lost. There is no health check or alert when VTS telemetry stops flowing.
+- **Fix**: Add telemetry freshness check — if `getPoolPerformanceComparison()` returns data older than X cycles, emit a warning. Consider adding VTS telemetry health to the system health endpoint.
+- **Timing**: Pre-MCE or during MCE
+
+### RISK-024: Cost Cache Synchronization Coupling
+- **Severity**: LOW-MEDIUM
+- **Location**: FX5 Scanner → `cost-cache.ts` (TTL: 5 minutes) → `cost-model.ts`
+- **Problem**: FX5 writes spread data to cost cache every 30-second scan cycle. Cost cache has a 5-minute TTL. Cost model friction calculations depend on fresh cache entries. If:
+  - Cost cache TTL expires between scan cycles (shouldn't happen with 30s refresh, but possible during scan errors/restarts)
+  - Symbol normalization between FX5's `setCostMetrics(symbol, ...)` and cost-model's `getCostMetrics(symbol)` diverges
+  Then friction scores revert to defaults, producing incorrect cost estimates.
+- **Current mitigations**: 30-second scan refresh rate is much faster than 5-minute TTL, and `setCostMetrics` is called for ALL evaluated pairs (not just survivors), so cache is well-populated.
+- **Fix**: Verify symbol normalization consistency between FX5's cost cache writes and cost-model's reads. Consider adding a "cache miss" metric to detect silent fallback to defaults.
+
+### RISK-025: History Filter Sequential Async Risk
+- **Severity**: LOW
+- **Location**: `market-scanner.ts` `collectAdaptiveBatch()` lines 1280-1286, `kraken.ts` `getPairHistoryDays()`
+- **Problem**: The history filter calls `passesHistoryFilter()` inside a sequential `for` loop over 100 pairs. Each call potentially hits Kraken's REST API for daily OHLC data. While results are cached for 24 hours (`HISTORY_CACHE_TTL_MS`), the first scan cycle after restart (cold cache) makes up to 100 sequential Kraken API calls.
+- **Mitigations**: Results are cached per-pair for 24 hours. On cache hit, the filter is instant. On cache miss with Kraken error, the pair conservatively fails (null = fail). After the first cycle, nearly all pairs are cached.
+- **Fix**: Consider batching history checks or pre-warming the cache during boot. The M31 invariant (30-second runtime limit) already protects against unbounded latency.
+
+### RISK-026: Symbol Resolver Tier 3 Handling
+- **Severity**: LOW
+- **Location**: `server/markets/kraken-symbol-resolver.ts` lines 147-152
+- **Problem**: When resolving symbols for Kraken REST format, Tier 3 (uncertain) symbols are explicitly rejected: `if (entry && entry.tier <= 2)` — only Tiers 0-2 produce a mapping. Tier 3 symbols return `null`, triggering a WARN log and fallback to compact format (`symbol.replace("/","").toUpperCase()`). For WebSocket resolution, same logic applies.
+- **Impact**: Tier 3 symbols are NOT silently allowed — they are rejected from precise resolution and fall back to string manipulation. This is correct behavior but means some legitimate new pairs may fail to resolve until added to the static map.
+- **Risk level**: LOW — the fallback is reasonable and logged. The symbol is not silently corrupted.
+
+---
+
+## Cross-References to Other Phases
+
+| This Phase | Connects To | Relationship |
+|-----------|-------------|--------------|
+| FX5 Scanner → Cost Cache | Phase 1: Cost Model | Spread data from scanning populates cost-model's cache for friction calculations |
+| FX5 Scanner → IMF | Phase 1: IMF Metrics | LQ, VolNoise computed during scanning using IMF formulas |
+| Active Filter Pool → Signal Orchestrator | Phase 4 (upcoming) | Signal Orchestrator pulls pairs from the pool for strategy evaluation |
+| collectAdaptiveBatch → Screener Filters | Phase 5 (upcoming) | Filter thresholds come from database (screener_filters table) |
+| TelemetryAggregator → VTS | Phase 6 (upcoming) | VTS writes telemetry; scanning reads it for adaptive ratio |
+| Central Clock → Boot Sequence | Phase 7 (upcoming) | Clock starts during boot; FX5 subscribes during initialization |
+| Stage-3 Emitter → WebSocket | Phase 8/9 (upcoming) | scan_tick and scanner_breakdown events drive Filter Insights widget |
+| MCP/ARE consumers | Phase 2: BUG-008 | 14+ services still consume MCP regime output — none involve scanning pipeline |
+
+---
+
+## Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1 | 2026-02-16 | Initial Phase 3 audit: all scanning pipeline files deep-read, architecture documented, 2 risks + 2 legacy items identified |
+| 1.1 | 2026-02-16 | ChatGPT review corrections: BUG-009 (two parallel scanners — CRITICAL, verified), RISK-023 (VTS telemetry dependency — MEDIUM), RISK-024 (cost cache coupling — LOW-MEDIUM), RISK-025 (history filter async — LOW), RISK-026 (Tier 3 symbol handling — LOW). RISK-021 upgraded LOW→LOW-MEDIUM. MarketScanner reclassified from "dead code" to "actively running." M70 wording clarified. Active Filter TTL windowing documented. REB diagnostics confirmed API-exposed. |
+
+---
+
+*Phase 3 complete. Next: Phase 4 — Guardrails, Risk, Portfolio, & Trade Safety.*
+
+
+---
+
+# Part II: Risk & Execution
+
+
+---
+
+# Chapter 4: Risk Management, Guardrails & Portfolio
+
+## Table of Contents
+
+1. [Architecture Overview](#1-architecture-overview)
+2. [Guardrails V2 Database Layer](#2-guardrails-v2-database-layer)
+3. [Coherency Rules Engine](#3-coherency-rules-engine)
+4. [GuardrailPolicy Service](#4-guardrailpolicy-service)
+5. [Guardrail Settings Helper](#5-guardrail-settings-helper)
+6. [Trade Safety Service](#6-trade-safety-service)
+7. [Pre-Execution Validator](#7-pre-execution-validator)
+8. [Dynamic Sizing Engine (DSE)](#8-dynamic-sizing-engine-dse)
+9. [Kill Switch Architecture](#9-kill-switch-architecture)
+10. [Adaptive Guardrails Engine](#10-adaptive-guardrails-engine)
+11. [Circuit Breaker](#11-circuit-breaker)
+12. [GASP Coordinator](#12-gasp-coordinator)
+13. [PDC Engine](#13-pdc-engine)
+14. [Risk Concentration Analyzer](#14-risk-concentration-analyzer)
+15. [Covariance Engine](#15-covariance-engine)
+16. [Paper Portfolio Manager](#16-paper-portfolio-manager)
+17. [Portfolio Aggregator](#17-portfolio-aggregator)
+18. [Kraken Service](#18-kraken-service)
+19. [Legacy Classification: SafetyGuardrails Service](#19-legacy-classification-safetyguardrails-service)
+20. [Legacy Classification: L-Series Autonomy Cluster](#20-legacy-classification-l-series-autonomy-cluster)
+21. [Cross-References](#21-cross-references)
+22. [Critical Findings](#22-critical-findings)
+23. [Forward Audit Standard: Parallel System Detection](#23-forward-audit-standard-parallel-system-detection)
+24. [File Catalog](#24-file-catalog)
+
+---
+
+## 1. Architecture Overview
+
+DawnTrader's risk management operates as a **layered defense system** with five distinct tiers:
+
+```
+TIER 1 — PRE-TRADE GUARDRAILS (prevents bad trades from executing)
+  ┌─────────────────────────────────────────────────────────┐
+  │  Trade Safety Service (checkGuardrailRisk)              │
+  │  8 sequential checks + correlation exposure             │
+  │  Pre-Execution Validator (goal alignment + fee-aware)   │
+  └──────────────────────────┬──────────────────────────────┘
+                             │
+TIER 2 — POSITION SIZING (right-sizes trades that pass Tier 1)
+  ┌──────────────────────────┴──────────────────────────────┐
+  │  Dynamic Sizing Engine (DSE)                            │
+  │  size = baseSize x f(edge, vol, cost, conf, pressure)  │
+  │  Bounded: 0.3 <= multiplier <= 1.2                     │
+  │  Risk Concentration scaling factor (0.25-1.0)          │
+  └──────────────────────────┬──────────────────────────────┘
+                             │
+TIER 3 — PORTFOLIO PROTECTION (protects running portfolio)
+  ┌──────────────────────────┴──────────────────────────────┐
+  │  Kill Switch (daily loss threshold auto-shutdown)       │
+  │  Covariance Guard (correlation exposure prevention)     │
+  │  Paper Portfolio Manager (drawdown/exposure monitoring) │
+  └──────────────────────────┬──────────────────────────────┘
+                             │
+TIER 4 — SYSTEM STABILITY (meta-level protection)
+  ┌──────────────────────────┴──────────────────────────────┐
+  │  GASP — LEGACY (L-Series Autonomy Cluster)              │
+  │  PDC  — LEGACY (if autonomy-bound, L-Series Cluster)    │
+  │  Circuit Breaker (fault tolerance for external APIs)    │
+  │  ⚠ GASP/PDC do NOT touch active trade flow.             │
+  │  ⚠ Confirmed architecturally inert — closed loop.       │
+  └──────────────────────────┬──────────────────────────────┘
+                             │
+TIER 5 — ADAPTIVE LEARNING (tuning protection parameters)
+  ┌──────────────────────────┴──────────────────────────────┐
+  │  Adaptive Guardrails (micro-adjustments +/- 1-3%)      │
+  │  Coherency Rules (validates all changes stay sane)      │
+  │  Learning throttle (max 3 changes / 24h in normal)     │
+  └─────────────────────────────────────────────────────────┘
+```
+
+**Key Design Principles:**
+- **guardrails_v2 table** is the single source of truth for all risk parameters
+- **GuardrailPolicy** is the authoritative runtime resolver (no hidden defaults)
+- **checkGuardrailRisk()** is the sole runtime pre-trade enforcer
+- **Coherency rules** (YAML-driven) validate all parameter changes before persistence
+- **Fail-safe defaults**: Kill switch checks fail-safe to TRIPPED on error; sizing fails-safe to minimum
+
+---
+
+## 2. Guardrails V2 Database Layer
+
+**Table**: `guardrails_v2` (one row per mode: paper, live)
+
+**Core Four Parameters** (user-visible in Guardrails tab):
+
+| Parameter | Range | Purpose |
+|-----------|-------|---------|
+| `portfolioRiskPerTradePct` | 0.10%-5.00% | Percentage of portfolio risked per trade |
+| `symbolCooldownMinutes` | >= 0 (warn > 90) | Minutes before re-trading same symbol |
+| `maxOpenPositions` | 1-20 | Maximum concurrent open positions |
+| `dailyLossKillSwitchPct` | 1.00%-25.00% | Portfolio loss % triggering auto-shutdown |
+
+**Extended Parameters**:
+
+| Parameter | Default (paper/live) | Purpose |
+|-----------|---------------------|---------|
+| `maxPositionPercentPct` | 30%/10% | Max single position as % of portfolio |
+| `maxTotalExposurePct` | 25% | Max total portfolio exposure |
+| `lowPriceThreshold` | $0.50 | LPCP: price below which special rules apply |
+| `lowPriceMinStopAtrMult` | 3.0 | LPCP: minimum stop distance as ATR multiple |
+| `lowPriceMinPositionNotional` | $25.00 | LPCP: minimum trade notional in USD |
+
+**Kill Switch State** (persisted for restart resilience):
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `killSwitchTripped` | boolean | Whether kill switch is currently active |
+| `killSwitchReason` | string | Reason for trip (human-readable) |
+| `killSwitchTrippedAt` | timestamp | When kill switch was activated |
+
+**Management Flags**:
+
+| Field | Purpose |
+|-------|---------|
+| `isManualOverride` | User manually controls all parameters |
+| `tunedByLatti` | LATTI adaptive system manages parameters |
+| `lockedByUser` | JSONB: per-parameter lock status |
+| `lastUpdatedBy` | Audit trail: who last changed values |
+
+**Invariant**: `isManualOverride` and `tunedByLatti` cannot both be `true` (RULE_005).
+
+---
+
+## 3. Coherency Rules Engine
+
+**File**: `audit/coherency_rules.yaml` (v2.2-phase28efinal)
+**Consumer**: `guardrail-policy.ts` — loaded at service initialization, validated on every guardrail change
+
+**10 Rules enforced**:
+
+| Rule | Name | Severity | Condition |
+|------|------|----------|-----------|
+| RULE_001 | Risk <= 50% x KillSwitch | error | `risk <= killSwitch * 0.5` |
+| RULE_002 | Total Exposure <= 50% Cap | error | `positions * risk <= 50` |
+| RULE_003 | Cooldown >= 0 minutes | error | `cooldown >= 0` |
+| RULE_004 | Cooldown Maximum | warn | `cooldown <= 90` |
+| RULE_005 | Manual Override Exclusivity | error | NOT (manual AND latti) |
+| RULE_006 | Portfolio Risk Range | error | `0.10 <= risk <= 5.00` |
+| RULE_007 | Kill Switch Range | error | `1.00 <= killSwitch <= 25.00` |
+| RULE_008 | Max Positions Range | error | `1 <= positions <= 20` |
+| RULE_009 | Mode Isolation | error | Exactly 1 record per mode |
+| RULE_010 | Learning Expansion Caps | error | Values stay within global safety caps |
+
+**Enforcement points**:
+- Backend: `PUT /api/guardrails` (pre-commit validation)
+- Backend: `POST /api/tuning/enable` (LATTI field bounds check)
+- Database: CHECK constraints on core columns
+- Adaptive Guardrails: validates proposed changes before applying
+
+**Hot-reload**: `guardrailPolicy.reloadRules()` allows runtime YAML updates without restart.
+
+---
+
+## 4. GuardrailPolicy Service
+
+**File**: `server/services/guardrail-policy.ts` (Phase 5)
+**Pattern**: Singleton class, exported as `guardrailPolicy`
+
+### Responsibilities
+
+1. **Effective value resolution**: `getEffective(guardrail)` — structures raw DB row into typed `EffectiveGuardrails` with resolved management flags and LPCP parameters
+2. **Coherency validation**: `validate(guardrail)` — runs all 8 implemented rules, returns `{ status: PASS|WARN|FAIL, failures[] }`
+3. **Kill switch management**: `tripKillSwitch()`, `resetKillSwitch()`, `isKillSwitchTripped()` — all persisted to DB
+4. **Override conflict detection**: `detectOverrideConflict()` — detects LATTI-managed fields being manually changed without lock
+5. **Metrics tracking**: Rule failure counts, kill switch trip counts, override conflict counts
+6. **Event emission**: Broadcasts to ContextBridge for frontend updates
+
+### Guardrail Category Classification (Phase 8.8.4-B)
+
+The service defines two guardrail categories that determine what happens when a signal is blocked:
+
+**CAPACITY_GUARDRAILS** (signal can be queued for later):
+- MAX_TRADES, MAX_TOTAL_EXPOSURE, POSITION_LIMIT, SLOT_CONFLICT
+
+**QUALITY_GUARDRAILS** (signal is rejected outright):
+- KILL_SWITCH, NO_STOP_LOSS, INVALID_STOP_LOSS, COOLDOWN, MAX_POSITION, INSUFFICIENT_BALANCE, PORTFOLIO_RISK, LPCP_LOW_PRICE, LPCP_MIN_NOTIONAL, FX_CONVERSION_FAILED, EXPIRED_SIGNAL, NO_PRICE
+
+**Helper functions**: `isCapacityBlock(code)`, `isQualityBlock(code)` enable downstream routing decisions.
+
+### Kill Switch Trip Sequence (REB 8.8.3-KS-B)
+
+When `tripKillSwitch(mode, reason)` is called:
+1. Set `killSwitchTripped = true` in guardrails_v2
+2. Set `isEngineActive = false` via `storage.updateSystemContext()`
+3. Clear Active Filter Pool via `activeFilterPool.enforcePassiveModeIfStopped()`
+4. Stop the appropriate engine (paper sim or live engine)
+5. Broadcast `system:killswitch_tripped` event via ContextBridge
+6. Broadcast state change via `tradingStateSync`
+
+**Fail-safe**: `isKillSwitchTripped()` returns `true` on error — system assumes tripped for safety.
+
+---
+
+## 5. Guardrail Settings Helper
+
+**File**: `server/services/guardrail-settings.ts` (Phase 8.8.3-H4)
+
+Provides helper functions for building settings from guardrails_v2:
+
+### Key Functions
+
+**`calculateRiskAmount(portfolioValue, riskPerTradePct)`**: Converts percentage risk to USD amount.
+
+**`getRiskPercentageV2(mode, guardrails)`**: Reads `portfolioRiskPerTradePct` from guardrails. Falls back to 4% default if missing/invalid.
+
+**`getPortfolioBalanceV2(mode)`** (Phase 8.8.3-C7-FIX):
+- Formula: `Current Balance = Starting Balance + Realized P/L`
+- Sources realized P/L from closed trades within current engine session
+- Mode-aware: paper uses `getPaperSimTrades()`, live uses `getTrades()`
+- Returns cash balance (excludes unrealized P/L)
+
+**`buildSettingsFromGuardrails(mode)`**: Master builder that assembles a complete TradingSettings object from guardrails_v2 + portfolio_state. All values sourced from guardrails_v2 (visible in UI).
+
+**Deprecated**: `buildSettingsFromModeLevel()`, `getRiskPercentage()` — backward compatibility aliases.
+
+---
+
+## 6. Trade Safety Service
+
+**File**: `server/services/trade-safety.ts` (Phase 8.8.3-H4)
+**Main Entry**: `checkGuardrailRisk(mode, trade, userId?, cycleId?)`
+
+### 8 Sequential Pre-Trade Checks
+
+| # | Check | Pass Condition | Block Code |
+|---|-------|---------------|------------|
+| 1 | Kill Switch | Not tripped for mode | KILL_SWITCH |
+| 2 | Stop-Loss Required | stopPrice present AND below entryPrice | NO_STOP_LOSS / INVALID_STOP_LOSS |
+| 3 | Max 1 Position Per Asset | No existing open position for normalized symbol | POSITION_LIMIT |
+| 4 | Symbol Cooldown | No trade in same symbol within cooldown period | COOLDOWN |
+| 5 | Position Size Cap | `preComputedNotional / portfolioValue <= maxPositionPercentPct` | MAX_POSITION |
+| 6 | LPCP | **DORMANT** — always returns `ok: true` | (LPCP_LOW_PRICE / LPCP_MIN_NOTIONAL) |
+| 7 | Max Open Trades | Open positions < maxOpenPositions | MAX_TRADES |
+| 8 | Max Total Exposure | Total exposure < maxTotalExposurePct | MAX_TOTAL_EXPOSURE |
+
+**Plus**: Correlation Exposure check via `riskConcentrationAnalyzer.isCorrelatedExposure()`
+
+### Key Design Details
+
+- **Sequential short-circuit**: Checks run in order; first failure returns immediately
+- **LPCP is DORMANT**: Check #6 always passes. Code preserved for future activation when low-priced coin rules are needed. Comments state dormancy is intentional.
+- **Position Size uses preComputedNotional**: The notional value is computed upstream in P2 stage and passed in via `trade.preComputedNotional`, preventing drift between sizing and execution.
+- **AJ19 dry-run mode**: For MAX_POSITION blocks, logs the block but allows the trade through (development diagnostic mode)
+- **RTB metrics tracking**: Passes/blocks are recorded via `rtbMetricsService` as source of truth
+- **Diagnostic integration**: Heavy logging through AJ16, AJ19, B4, B5, I1, I5 diagnostic tags and SLAL (Signal Lifecycle Audit Log)
+
+---
+
+## 7. Pre-Execution Validator
+
+**File**: `server/services/pre-execution-validator.ts` (Phase 8.8.3-H4)
+**Pattern**: Singleton, exported as `preExecutionValidator`
+
+### Three-Gate Validation
+
+The Pre-Execution Validator runs AFTER Trade Safety and adds two additional gates:
+
+1. **Risk checks**: Delegates to `checkGuardrailRisk()` from trade-safety.ts
+2. **Goal alignment**: ⚠️ **FORMALLY DEPRECATED — Kyle directive 2026-02-16. Must be REMOVED entirely, not defaulted.** See deprecation note below.
+3. **Fee-aware profitability** (Phase 27.F.14.B): Calculates whether the trade's expected gain minus round-trip fees exceeds `minNetProfitThreshold` (from system_context).
+
+### Fee-Aware Profitability Check
+
+```
+expectedGainPct = |targetPrice - entryPrice| / entryPrice * 100
+roundTripFeePct = feeRate * 2 * 100  (entry + exit)
+netExpectedGainPct = expectedGainPct - roundTripFeePct
+PASS if netExpectedGainPct >= minNetProfitThreshold * 100
+```
+
+Fee rates sourced from `system_context.makerFeePct` / `takerFeePct` (default: 0.16% maker, 0.26% taker).
+
+### Goal Alignment Scoring — FORMALLY DEPRECATED
+
+> **⚠️ DEPRECATION DIRECTIVE (Kyle, 2026-02-16)**: Goal alignment logic is legacy from the Walter-era Goals system. The Goals tab has already been removed from the UI. This entire gate must be **REMOVED** from `pre-execution-validator.ts` — not defaulted to neutral, not skipped, but deleted. The Pre-Execution Validator should become a two-gate system (risk checks + fee-aware profitability).
+
+Combines three factors (all to be removed):
+- Risk/reward ratio alignment with profitability vs consistency preference (40%)
+- Strategy risk profile matching (30%)
+- Signal confidence alignment (30%)
+
+Only 3 strategies have explicit risk profiles (`vwap_pullback`, `abcd_long`, `sma_trend_ride`); others default to `{risk: 0.5, consistency: 0.5}`.
+
+**Removal scope**: Delete `computeGoalAlignmentScore()`, `strategyRiskProfile` map, goal alignment gate logic, and all related Walter/Bob provenance references. The `profitability_vs_consistency` field in system_context can be removed if no other consumers exist.
+
+### Provenance Logging
+
+Every validation result is logged via `provenanceLogger.logLineage()` with full trace ID, enabling end-to-end audit from signal through validation to execution.
+
+---
+
+## 8. Dynamic Sizing Engine (DSE)
+
+**File**: `server/core/risk/dynamic-sizing-engine.ts` (Directive 11.3)
+**Export**: `computeDynamicSize(input)`, plus diagnostics getters
+
+### Core Formula
+
+```
+positionSize = baseSize x multiplier
+
+Where:
+  baseSize = balance x (DEFAULT_RISK_PCT / 100)     [DEFAULT_RISK_PCT = 2]
+
+  multiplier = edgeFactor x volPenalty x costPenalty x confFactor x costPressure
+  multiplier = clamp(multiplier, 0.3, 1.2)
+
+  edgeFactor  = 1 + (expectedEdge - 0.05) x 4
+  volPenalty   = max(0.7, 1 - volatility / 0.02)
+  costPenalty  = max(0.6, 1 - cost / 0.001)
+  confFactor   = 0.5 + confidence
+  costPressure = max(0.8, 1 - costDrift x 0.2)      [Directive 11.3C]
+```
+
+### Configuration Constants (DSE_CONFIG)
+
+| Parameter | Value | Purpose |
+|-----------|-------|---------|
+| MIN_MULTIPLIER | 0.3 | Floor for sizing multiplier |
+| MAX_MULTIPLIER | 1.2 | Ceiling for sizing multiplier |
+| BASE_EDGE | 0.05 | Neutral edge assumption |
+| EDGE_SENSITIVITY | 4 | How strongly edge deviations affect sizing |
+| VOL_THRESHOLD | 0.02 | Volatility level at which penalty begins |
+| VOL_FLOOR | 0.7 | Minimum volatility penalty factor |
+| COST_THRESHOLD | 0.001 | Cost level at which penalty begins |
+| COST_FLOOR | 0.6 | Minimum cost penalty factor |
+| CONFIDENCE_BASE | 0.5 | Base confidence contribution |
+| DEFAULT_RISK_PCT | 2 | Base risk as % of balance |
+| COST_PRESSURE_DAMPENING | 0.2 | Max dampening from cost drift |
+
+### Adaptive Weight Extraction
+
+DSE extracts edge and confidence from adaptive weights (VTS learning repository):
+
+**Edge priority**: `expectedEdge` > `edge` > `winRate x 0.1` > `profitRate x 0.5` > derived from avg weight
+
+**Confidence priority**: `confidence` > `sampleCount / 100` > `reliability` > derived from weight density
+
+### Hard Cap
+
+Final position size is capped at `balance x MAX_POSITION_RISK` where `MAX_POSITION_RISK = 0.02` (2%) from `EXECUTION_CONFIG`.
+
+### Invariants
+
+- T3: Hard Cap — Trade size cannot exceed TradeSafetyService max
+- T4: Dynamic Base — Base size scales with portfolio balance
+- T5: Bounded Multiplier — Sizing multiplier 0.3-1.2
+- T6: Telemetry Provenance — All sizing decisions logged
+
+### Telemetry
+
+Maintains rolling history (max 100 entries) of all sizing decisions. Provides:
+- `getLastSizeDecision()` — most recent sizing telemetry
+- `getSizeHistory()` — full history
+- `getAverageSizeMultiplier()` — overall average
+- `getAverageSizeMultiplierByRegime(regime)` — per-regime average
+- `getDSEDiagnostics()` — comprehensive diagnostic snapshot
+
+---
+
+## 9. Kill Switch Architecture
+
+The kill switch is DawnTrader's emergency shutdown mechanism. Understanding its architecture requires tracing through multiple files:
+
+### Data Flow
+
+```
+                    guardrails_v2.killSwitchTripped
+                              │
+              ┌───────────────┴───────────────┐
+              │                               │
+    guardrailPolicy.tripKillSwitch()   guardrailPolicy.isKillSwitchTripped()
+    (6-step shutdown sequence)         (DB read, fail-safe: true on error)
+              │                               │
+              ├── safetyGuardrails.getKillSwitchStatus()  [LEGACY WRAPPER]
+              │   (delegates to guardrailPolicy)
+              │                               │
+              └── trade-safety.ts check #1 ───┘
+                  (reads guardrails_v2 directly)
+```
+
+### Triggers
+
+1. **Manual**: User clicks stop button → API route → `guardrailPolicy.tripKillSwitch()`
+2. **Automatic**: Daily P&L loss exceeds `dailyLossKillSwitchPct` threshold
+3. **SafetyGuardrails toggle**: Legacy wrapper delegates to `guardrailPolicy`
+4. **Cluster bus**: `kill_switch_activated` event for multi-node awareness
+
+### State Persistence
+
+Kill switch state is persisted to `guardrails_v2` table — survives restarts. Both `killSwitchTripped`, `killSwitchReason`, and `killSwitchTrippedAt` are stored.
+
+---
+
+## 10. Adaptive Guardrails Engine
+
+**File**: `server/services/adaptive-guardrails.ts` (Phase 29)
+**Pattern**: Singleton via `AdaptiveGuardrailsService.getInstance()`
+
+### Purpose
+
+Enables LATTI to learn from trade outcomes and user behavior, dynamically tuning guardrails within coherency limits.
+
+### Learning Modes
+
+| Mode | Max Changes/Day | Min Confidence | Max Adjustment % |
+|------|----------------|----------------|-----------------|
+| slow | 1 | 0.80 | 1% |
+| normal | 3 | 0.60 | 3% |
+| aggressive | 5 | 0.40 | 5% |
+| disabled | 0 | 1.00 | 0% |
+
+**Defaults**: Paper mode starts in `normal`, live mode starts in `slow`.
+
+### Adjustment Pipeline
+
+1. **Throttle check**: Count adaptive changes in last 24h; abort if at limit
+2. **Behavioral analysis**: Query `behavioralLog` for each parameter (needs >= 5 samples)
+3. **Statistical calculation**: Compute mean delta, variance, confidence from recent behavioral entries
+4. **Micro-adjustment**: Direction from mean delta sign; magnitude capped at `maxAdjustmentPercent`
+5. **Coherency validation**: Proposed values run through `guardrailPolicy.validate()` — **all adjustments abort if any rule fails**
+6. **Persist**: Write to `guardrailsV2` table with `lastUpdatedBy = 'LATTI_ADAPTIVE'`
+7. **Audit**: Log to `behavioralLog`, `learningHistory`, and `predictive-adjustments` logger
+8. **Snapshot**: Create versioned snapshot of current state for rollback capability
+
+### Currently Adjustable Parameters
+
+- `portfolioRiskPerTradePct`
+- `maxOpenPositions`
+
+### Safety Bounds
+
+All adjustments bounded: `0.1 <= value <= 20` (hard safety clamp independent of coherency rules).
+
+**Coherency threshold**: Fixed at 5% for all modes — max deviation from preset value.
+
+---
+
+## 11. Circuit Breaker
+
+**File**: `server/services/circuit-breaker.ts` (Phase 17.5)
+**Pattern**: Singleton, exported as `circuitBreaker`
+**Scope**: Infrastructure fault tolerance (NOT trade safety — this is for external API/service failures)
+
+### State Machine
+
+```
+        ┌──────────┐   5 failures    ┌──────────┐
+        │  CLOSED  │ ───────────────> │   OPEN   │
+        │ (normal) │ <─────┐         │ (blocked)│
+        └──────────┘       │         └────┬─────┘
+              ^            │              │
+              │      3 successes    retry window
+              │            │         elapsed
+              │         ┌──┴─────┐        │
+              └─────────│HALF_OPEN│<───────┘
+                        │(testing)│
+                        └─────────┘
+```
+
+### Configuration
+
+| Parameter | Value | Purpose |
+|-----------|-------|---------|
+| failureThreshold | 5 | Failures before OPEN |
+| successThreshold | 3 | Successes to recover from HALF_OPEN |
+| baseRetryDelayMs | 5,000 | Initial retry delay |
+| maxRetryDelayMs | 300,000 | Maximum retry delay (5 min) |
+
+### Backoff Strategy
+
+Exponential with jitter: `delay = min(5000 * 2^retryCount, 300000) +/- 25%`
+
+### Persistence
+
+State persisted to `cluster_circuit_breaker` table — survives restarts. State transitions published to `clusterBus` for multi-node awareness.
+
+---
+
+## 12. GASP Coordinator — LEGACY (L-Series Autonomy Cluster)
+
+**File**: `server/services/gasp-coordinator.ts` (Phase L20)
+**Pattern**: Lazy singleton via `getGASPCoordinator()`
+**Status**: ⚠️ **LEGACY** — Kyle confirmed 2026-02-16. Part of the L-Series Autonomy Cluster.
+
+> **ADDENDUM (Kyle, 2026-02-16)**: GASP is a legacy supervisory layer. It computes GSI, monitors subsystem stability, and applies dampening — but it does NOT touch the active trade flow. It does not feed into Signal Orchestrator, TradeSafety, DSE, VTS, or Execution Engine. It forms a closed supervisory loop with other L-Series systems (MOF, DCE, APR-SLE, MCP). It is architecturally inert and slated for removal with the entire L-Series autonomy cluster. Not harmful while present, but not connected to trading decisions.
+
+### Purpose (Legacy)
+
+GASP (Global Adaptive Stability Protocol) monitors system-wide stability across multiple learning subsystems and applies dampening when instability is detected.
+
+### Global Stability Index (GSI)
+
+```
+GSI = max(0, min(1, 1 - sqrt(combinedVariance)))
+
+combinedVariance = w1*sigma_lambda^2 + w2*sigma_DI^2 + w3*sigma_alphaBeta^2 + w4*sigma_DRS^2
+
+Default weights: w1=0.4, w2=0.3, w3=0.2, w4=0.1
+```
+
+### Input Sources (collectMetrics)
+
+| Source | Module | Fallback |
+|--------|--------|----------|
+| Lambda weights sum | MOF Orchestrator | 1.0 |
+| Decision Index (DI) | DCE | 0.5 |
+| Alpha/Beta average | APR-SLE Engine | 0.5 |
+| Drawdown Risk Score | PDC Engine | 0 |
+| Regime numeric map | Market Profiler | 0.5 |
+
+**All sources are try/catch wrapped** — GASP continues functioning if any subsystem is unavailable.
+
+### Operating Modes
+
+| Mode | Trigger | Effect |
+|------|---------|--------|
+| normal | GSI >= 0.85 AND correlationMax < 0.8 | Full learning rate and exposure |
+| caution | GSI < 0.85 OR correlationMax >= 0.8 | Monitoring intensified |
+| containment | GSI < 0.65 OR correlationMax >= 0.9 | Cooldown initiated, damping applied |
+| recovery | After cooldown, GSI rising | Gradual restoration |
+
+### Feedback Damping
+
+When GSI < stableThreshold (0.85):
+- Learning rate: `max(0.1, GSI + 0.15)` — applied to MOF learning rate
+- Exposure: `max(0.1, GSI + 0.10)` — exposure reduction factor
+
+### Cooldown Protocol
+
+- Duration: 10 minutes
+- Recovery: 15 minutes of stable GSI >= stableThreshold
+- Alternative exit: 10 minutes elapsed AND GSI >= cautionThreshold
+
+### Correlation Matrix
+
+GASP tracks 6 cross-correlations between subsystems (lambda-DI, lambda-DRS, DI-DRS, regime-lambda, regime-DI, regime-DRS). High correlation (>0.8) indicates subsystems are no longer providing independent signals.
+
+---
+
+## 13. PDC Engine — LEGACY (If Autonomy-Bound, L-Series Cluster)
+
+**File**: `server/services/pdc-engine.ts` (Directive 8.8.4-L18)
+**Pattern**: Lazy singleton via `getPDCEngine()`
+**Status**: ⚠️ **LEGACY (conditional)** — Kyle listed "PDC (if still autonomy-bound)" in the L-Series cluster (2026-02-16). PDC depends on DCE for DI data and feeds DRS to GASP. If PDC has no direct consumers in the active execution path (Signal Orchestrator, TradeSafety, DSE, VTS), it is confirmed legacy and should be removed with the L-Series cluster.
+
+> **Note**: PDC's `recalibrate(tradeResults)` method suggests it was designed to interact with trade outcomes, but verification is needed to confirm whether any active service calls this method or consumes DRS directly for trade decisions. If no active execution path consumer exists, PDC is purely autonomy-bound and part of the closed L-Series loop.
+
+### Purpose (Potentially Legacy)
+
+PDC (Predictive Drawdown Containment) detects early-stage drawdown precursors before they manifest as portfolio losses.
+
+### Drawdown Risk Score (DRS)
+
+```
+DRS = w1 * slopeContribution + w2 * volContribution + w3 * driftContribution
+
+slopeContribution = min(|equitySlope| x 50, 1.0)
+volContribution   = min(max(volRatio - 1.0, 0) x 2, 1.0)
+driftContribution = min(|diDrift| x 5, 1.0)
+
+Default weights: w1=0.5, w2=0.3, w3=0.2
+```
+
+### Three Precursor Signals
+
+1. **Equity slope** (`deltaE/deltaT`): Linear regression over last 20 equity samples, normalized by average equity
+2. **Volatility ratio** (`sigma_recent / sigma_baseline`): Recent return volatility vs baseline. Baseline defaults to 0.02.
+3. **DI decay** (`DI_{t-5} - DI_t`): Change in Decision Index over last 5 samples. Sourced from DCE.
+
+### DRS Thresholds
+
+| Threshold | Value | Action |
+|-----------|-------|--------|
+| Warning | 0.6 | `warningActive = true` |
+| Containment | 0.8 | `containmentActive = true`, exposure reduction |
+| Recovery | 0.4 | Begin counting recovery windows |
+
+Recovery requires 3 consecutive windows below recovery threshold.
+
+### Recalibration
+
+`recalibrate(tradeResults)` adjusts weights based on trade outcomes:
+- If contained trades perform well relative to normal trades, increase equity slope weight (w1)
+- If contained trades underperform, reduce w1 and increase volatility weight (w2)
+- Weights are normalized to sum to 1.0 after adjustment
+- Requires minimum 10 trade results
+
+---
+
+## 14. Risk Concentration Analyzer
+
+**File**: `server/services/risk-concentration.ts` (Directive 9.4)
+**Pattern**: Singleton, exported as `riskConcentrationAnalyzer`
+
+### Purpose
+
+Prevents portfolio concentration in highly correlated assets by calculating correlation-weighted exposure and applying scaling factors.
+
+### Concentration Score
+
+```
+C_i = sum(|rho_ij| x w_j) + w_i    for all j != i
+
+Where:
+  rho_ij = correlation between assets i and j
+  w_j = position weight of asset j
+  w_i = own position weight
+```
+
+### Scaling Factor
+
+```
+If C_i > C_max (default 2.5):
+  ScalingFactor_i = max(minScalingFactor, C_max / C_i)
+Else:
+  ScalingFactor_i = 1.0
+```
+
+### Configuration
+
+| Parameter | Default | Purpose |
+|-----------|---------|---------|
+| correlationThreshold | 0.75 | Minimum correlation to be considered "correlated" |
+| maxConcentration | 2.5 | Maximum allowed concentration score |
+| minScalingFactor | 0.25 | Floor for scaling factor (25% of intended size) |
+| updateIntervalMs | 60,000 | Periodic update interval (1 minute) |
+
+### Integration Points
+
+- **Trade Safety**: `isCorrelatedExposure(symbol)` called during pre-trade checks
+- **Position Sizing**: `getScalingFactor(symbol)` used by sizing helpers to reduce position size for correlated assets
+- **Market Data**: `updateFromMarketData(symbols)` fetches OHLC data from Kraken, computes returns, and updates covariance/correlation matrices
+
+---
+
+## 15. Covariance Engine
+
+**File**: `server/utils/covariance-engine.ts` (Directive 9.4)
+**Pattern**: Singleton, exported as `covarianceEngine`
+
+### Mathematical Foundation
+
+```
+Return: r_i(t) = (P_i(t) - P_i(t-1)) / P_i(t-1)
+Covariance: Sigma = (1/(n-1)) x (R - R_bar)^T (R - R_bar)
+Correlation: rho_ij = Sigma_ij / (sigma_i x sigma_j)
+Portfolio Variance: w^T Sigma w
+Portfolio Volatility: sqrt(w^T Sigma w)
+```
+
+### Configuration
+
+- Return history window: 100 samples (RETURN_HISTORY_SIZE)
+- Minimum returns for calculation: 10 (MIN_RETURNS_FOR_CALCULATION)
+
+### Key Operations
+
+1. `updateFromPrices(symbol, prices)` — converts prices to returns, adds to rolling history
+2. `computeCovarianceMatrix()` — recomputes from all active symbols (>= 10 returns each)
+3. `computeCorrelationMatrix()` — derives from covariance matrix
+4. `calculatePortfolioVariance(weights)` — `w^T Sigma w` for given position weights
+5. `calculatePortfolioVolatility(weights)` — square root of variance
+
+### State Management
+
+Supports `exportState()` / `importState()` for persistence across restarts.
+
+---
+
+## 16. Paper Portfolio Manager
+
+**File**: `server/services/paper-portfolio-manager.ts`
+**Pattern**: Instance per mode (not singleton)
+
+### Responsibilities
+
+1. **Lifecycle management**: Start/stop paper trading engine with full safety checks
+2. **Position management**: Force-close all positions on stop (hard stop behavior)
+3. **Portfolio health**: Monitor drawdown, exposure, and position count
+4. **Signal orchestration**: Manages SignalOrchestrator for automatic signal generation
+5. **Engine registration**: Registers execution engine and micro-execution service with mode registry
+
+### Portfolio-Level Guardrails (Hard-coded)
+
+| Parameter | Value | Purpose |
+|-----------|-------|---------|
+| MAX_DRAWDOWN_PERCENT | 20% | Maximum drawdown before critical |
+| MAX_OPEN_POSITIONS | 10 | Maximum concurrent positions |
+| MAX_PORTFOLIO_EXPOSURE_PERCENT | 80% | Maximum capital deployed |
+
+### Start Sequence
+
+1. Check portfolio health (paper mode: log-only; live mode: blocks if critical)
+2. Set `isRunning = true`, clear stop flag
+3. Register engine with mode registry
+4. Start execution engine
+5. Start micro-execution service
+6. Start signal orchestrator (9 strategies enabled, 30s evaluation interval)
+7. Note: Watchlist refresh is DISABLED — uses Active Filtered Pool from FX5
+
+### Stop Sequence (Hard Stop)
+
+1. Set `isStopInProgress = true` FIRST (prevents late trades)
+2. Set `isRunning = false`
+3. Stop signal orchestrator
+4. Clear watchlist refresh interval
+5. Stop micro-execution service
+6. Stop execution engine
+
+### Force Close on Stop
+
+`forceCloseAllOpenPositionsOnStop()`:
+- Gets all open positions from storage
+- For each position: gets live price via `livePricingAdapter.getPriceWithFallback()` (5s staleness guard)
+- Falls back to entry price if no reliable market price available
+- Calls `executionEngine.forceClosePosition()` with price source tag
+- Logs diagnostics via `i1TradeLifecycleDiagnostics.logHardStopSummary()`
+
+### Portfolio Metrics
+
+Calculates: total P/L, win rate, avg return, avg holding time, max drawdown, Sharpe ratio, profit factor, and per-strategy breakdowns.
+
+---
+
+## 17. Portfolio Aggregator
+
+**File**: `server/services/portfolio-aggregator.ts` (Phase 8.2)
+**Pattern**: Singleton, exported as `portfolioAggregator`
+
+### Purpose
+
+Combines strategy-level metrics into portfolio-level analytics:
+- Total equity curve (last 100 points)
+- Portfolio-level volatility (annualized, assuming 365 trading days)
+- Portfolio Sharpe ratio (annualized, 0% risk-free rate)
+- Capital allocation weightings (by P/L contribution)
+- Diversification index (inverse of win rate variance across strategies)
+
+### Data Sources
+
+- `portfolio_state.balance` for initial capital (Phase 8.5 Addendum K.3)
+- Paper mode: `getAllPaperTrades()`; Live mode: `getTrades('live')`
+- Strategy metrics from `strategy-analytics` module
+
+---
+
+## 18. Kraken Service
+
+**File**: `server/services/kraken.ts` (LOCKED — Directive 8.8.4-A4.R10R-4)
+**Pattern**: Class-based, multiple instances allowed
+
+### Key Capabilities
+
+1. **Public endpoints**: Time, Assets, AssetPairs, Ticker, OHLC, Depth, Trades
+2. **Private endpoints**: Balance, OpenOrders, ClosedOrders, AddOrder, CancelOrder
+3. **Caching**: Balance (60s TTL), OpenOrders (90s), ClosedOrders (600s), History days (24h)
+4. **Rate limiting**: Per-user lockout tracking with 120s cooldown on "Temporary lockout" errors
+5. **Maintenance mode**: All API calls blocked when `MAINTENANCE_MODE=true`
+6. **OHLC pagination**: Supports multi-batch historical data fetching with rate-limit-aware delays
+
+### Spot-Only Safety
+
+`addOrder()` enforces spot-only trading:
+- Rejects any order with `leverage` parameter (except 'none')
+- Blocks margin flags (`viqc` in `oflags`)
+- Logs spot-only enforcement for audit trail
+
+### Rate Limit Graceful Degradation
+
+On "EGeneral:Temporary lockout":
+1. Lock user's API access for 120 seconds
+2. Return stale cache data if available
+3. Throw error only if no cached data exists
+
+### History Days Cache (REB 2.9D)
+
+`getPairHistoryDays(pair, mode)`: Returns number of trading days available for a pair.
+- Uses 1440-minute (daily) OHLC candles
+- Cached for 24 hours per pair
+- Returns `null` on error (caller decides pass/fail semantics)
+
+---
+
+## 19. Legacy Classification: SafetyGuardrails Service
+
+**File**: `server/services/safety-guardrails.ts`
+**Status**: DEPRECATED (Phase 8.8.3-H8)
+
+### Classification: LEGACY — Active wrapper, no runtime authority
+
+The `SafetyGuardrailsService` is marked `@deprecated` across its entire surface. All runtime safety enforcement was migrated to:
+- `guardrails_v2` table (single source of truth)
+- `trade-safety.ts` / `checkGuardrailRisk()` (runtime enforcer)
+- `guardrail-policy.ts` / `GuardrailPolicy` (policy management)
+
+### What It Still Does
+
+1. **Kill switch delegation**: `getKillSwitchStatus()` and `toggleKillSwitch()` now delegate to `guardrailPolicy`. These are thin wrappers that add deprecation warnings.
+2. **API compatibility**: Kept for backward compatibility with admin API routes (`/api/safety/*`)
+3. **Event logging**: Writes to `safety_event_log` table and broadcasts via ContextBridge
+4. **Policy evaluation**: `evaluateAction()` still queries `safetyPolicy` table but emits deprecation warnings and should NOT be used for runtime go/no-go decisions.
+
+### Kill Switch Toggle Path
+
+`toggleKillSwitch(enabled, reason, userId?, mode?)`:
+1. Delegates to `guardrailPolicy.tripKillSwitch()` or `resetKillSwitch()`
+2. Broadcasts via ContextBridge (frontend)
+3. Emits to `clusterBus` (backend services, e.g., TradingStateSync) — Phase 27.4
+
+---
+
+## 20. Legacy Classification: L-Series Autonomy Cluster
+
+> **Source**: Kyle's Phase 4 Addendum (2026-02-16) — Legacy Autonomy Layer & Goal Alignment Deprecation Directive
+
+### Classification: LEGACY — Architecturally Inert Closed Supervisory Loop
+
+The entire L-Series autonomy cluster has been confirmed by Kyle as **architecturally inert**. These systems form a closed supervisory loop that does NOT feed into any active execution component:
+
+- ❌ Does NOT feed into Signal Orchestrator
+- ❌ Does NOT feed into TradeSafety
+- ❌ Does NOT feed into DSE (Dynamic Sizing Engine)
+- ❌ Does NOT feed into VTS
+- ❌ Does NOT feed into Execution Engine
+
+### L-Series Systems (All Legacy — Slated for Coordinated Removal)
+
+| System | File(s) | Role in Closed Loop |
+|--------|---------|-------------------|
+| **MCP** (Market Condition Profiler) | `market-profiler.ts` | Independent regime classifier (T1-C1 taxonomy) |
+| **ARE** (Adaptive Regime Engine) | `adaptive-regime.ts` | Regime adjustment layer for MCP |
+| **GASP** (Global Adaptive Stability Protocol) | `gasp-coordinator.ts` | Supervises MOF/MACO/ECS, computes GSI |
+| **MOF** (Multi-Objective Framework) | `mof-orchestrator.ts` | Multi-objective optimization |
+| **MACO** (Multi-Agent Coordination) | `maco-coordinator.ts` | Agent coordination |
+| **ECS** (Evolutionary Competition System) | `ecs-manager.ts` | Strategy competition |
+| **DCE** (Decision Confidence Engine) | `decision-confidence-engine.ts` | Decision Index computation |
+| **Experience Buffer** | `experience-buffer.ts` | RL-style experience storage |
+| **Reward Evaluator** | `reward-evaluator.ts` | RL reward computation |
+| **Proactive Allocator** | `proactive-allocator.ts` | Proactive capital allocation |
+| **Equilibrium Restorer** | TBD (Phase 6 audit) | System equilibrium maintenance |
+| **APR-SLE** (Adaptive Performance Rating) | `apr-sle-engine.ts` | Performance rating with learning |
+| **PDC** (Predictive Drawdown Containment) | `pdc-engine.ts` | Drawdown prediction (if autonomy-bound) |
+
+### Why These Are Legacy
+
+1. **Independent taxonomy**: MCP/ARE uses T1/T2/R1/V1/C1 — no mapping to canonical 5-regime names
+2. **Stubbed metrics**: MCP never completed (`volume_z = 0`, `correlation = 0.5`)
+3. **No canonical mapping**: None of these systems reference or consume the canonical regime-strategy map
+4. **Closed loop**: They supervise each other but nothing in the active execution path reads their output
+5. **Predecessor architecture**: Built under Directive 8.8.4-L12 (Dec 2025), superseded by canonical map (Directive 11.7F, Jan 2026)
+
+### Removal Directive (Kyle, 2026-02-16)
+
+All L-Series systems must be removed together in a **coordinated wave**. Before removal:
+1. Confirm no hidden execution paths exist (grep for any SO/DSE/TradeSafety/VTS imports)
+2. Confirm no Signal Orchestrator imports from L-Series systems
+3. Confirm no database migration dependencies
+4. Verify all 14+ consumer services of MCP/ARE are catalogued and migrated
+
+### Impact on Phase 4 Findings
+
+- **GASP (Section 12)**: Reclassified from ACTIVE to LEGACY
+- **PDC (Section 13)**: Reclassified from ACTIVE to LEGACY (conditional on being autonomy-bound)
+- **RISK-027**: Superseded — no need to migrate GASP's metric sources; the entire system is removed
+- **Waves 5-7**: Consolidated into a single L-Series cluster removal wave (see LEGACY_DEPRECATION_PLAN.md)
+
+---
+
+## 21. Cross-References
+
+### To Phase 1 (Math & Scoring)
+- DSE uses adaptive weights from VTS learning repository (Phase 6 will validate)
+- Cost pressure factor reads from `cost-drift-monitor` (Phase 1 cost model)
+- Pre-Execution Validator uses `slippage-fee-model` for fee estimation
+
+### To Phase 2 (Strategies)
+- Trade Safety's symbol normalization affects all strategy signals
+- ~~Pre-Execution Validator's goal alignment only has risk profiles for 3 of 17 strategies~~ → **Goal alignment is formally deprecated (Kyle Addendum). To be removed entirely.**
+- ~~GASP collects metrics from MOF Orchestrator and APR-SLE Engine (Phase 2 legacy systems)~~ → **GASP itself is now legacy (L-Series cluster). Both GASP and its metric sources will be removed together.**
+
+### To Phase 3 (Market Scanning)
+- Kill switch triggers `activeFilterPool.enforcePassiveModeIfStopped()` — clears scanning pool
+- Trade Safety reads open positions from storage (paper or live mode)
+- Risk Concentration fetches OHLC from Kraken service for correlation computation
+
+### Forward References
+- Phase 6 (ML/Learning): DSE's adaptive weight extraction. ~~GASP's damping of MOF learning rate~~ → GASP and MOF both legacy (L-Series cluster).
+- Phase 7 (Infrastructure): Circuit Breaker integrates with cluster bus. ~~Boot sequence initializes GASP/PDC~~ → GASP/PDC are legacy; boot init will be removed with L-Series cluster.
+
+---
+
+## 22. Critical Findings
+
+### RISK-026: DSE Diagnostics Use Legacy Regime Names
+- **Severity**: LOW
+- **Location**: `server/core/risk/dynamic-sizing-engine.ts` lines 287-288
+- **Problem**: `getDSEDiagnostics()` references 6 regime names including `EXTREME_NOISE` and `LOW_VOL_CHOP` which do not match the canonical 5-regime taxonomy (`BULL_QUIET`, `BULL_VOLATILE`, `BEAR_QUIET`, `BEAR_VOLATILE`, `CHOPPY`). These are display/diagnostic only and do not affect sizing math.
+- **Fix**: Update regime names in diagnostics to match canonical names
+- **Timing**: Anytime (cosmetic, no trading impact)
+
+### RISK-027: GASP Is Itself Legacy (L-Series Autonomy Cluster) — SUPERSEDED
+- **Severity**: MEDIUM → **RECLASSIFIED** (Kyle Addendum, 2026-02-16)
+- **Location**: `server/services/gasp-coordinator.ts`
+- **Original Problem**: GASP depends on legacy subsystems (MOF, DCE, APR-SLE, MCP).
+- **Updated Status**: Kyle confirmed GASP itself is legacy — part of the L-Series Autonomy Cluster. GASP supervises MOF/MACO/ECS, computes GSI, but does NOT touch the active trade flow. It forms a closed supervisory loop with other L-Series systems. No migration of GASP's metric sources is needed — the entire system (GASP + its sources) will be removed together in the coordinated L-Series cluster removal.
+- **Fix**: Remove GASP along with the entire L-Series autonomy cluster in a single coordinated wave.
+- **Timing**: During L-Series cluster removal (see Section 20)
+
+### RISK-028: Goal Alignment Logic Is Formally Deprecated — Must Be REMOVED
+- **Severity**: LOW → **MEDIUM** (elevated: formal deprecation directive)
+- **Location**: `server/services/pre-execution-validator.ts` — entire goal alignment gate
+- **Original Problem**: Only 3 of 17 strategies had risk profiles.
+- **Updated Status (Kyle Addendum, 2026-02-16)**: Goal alignment is legacy from the Walter-era Goals system. The Goals tab has already been removed from the UI. Kyle directive: this logic must be **REMOVED entirely** — not expanded to cover more strategies, not defaulted to neutral, but deleted from the codebase.
+- **Removal scope**: `computeGoalAlignmentScore()`, `strategyRiskProfile` map, goal alignment gate logic, Walter/Bob provenance references, and `profitability_vs_consistency` field in system_context (if no other consumers).
+- **Fix**: Delete all goal alignment code from pre-execution-validator.ts. Reduce to a two-gate validator (risk checks + fee-aware profitability).
+- **Timing**: Pre-MCE or during MCE — standalone removal, no MCE dependency
+
+### RISK-029: Paper Portfolio Manager Uses Hardcoded Starting Capital — ACCEPTED
+- **Severity**: LOW-MEDIUM → **LOW** (Kyle accepted, 2026-02-16)
+- **Location**: `server/services/paper-portfolio-manager.ts` lines 539-541, 670-672
+- **Problem**: `checkPortfolioHealth()` and `calculateMaxDrawdown()` assume `startingCapital = 10000` (hardcoded) for exposure and drawdown calculations. This does not match the actual portfolio_state.balance which may differ.
+- **Kyle Decision (2026-02-16)**: Hardcoded $10,000 is acceptable for now. Optional future enhancement: throw error if portfolio_state.balance is missing instead of defaulting.
+- **Fix**: No immediate action required. Optional future: throw error on missing balance.
+- **Timing**: Post-MCE (optional)
+
+### RISK-030: Coherency Rules YAML vs Code Mismatch
+- **Severity**: LOW
+- **Location**: `audit/coherency_rules.yaml` line 253 vs `guardrail-policy.ts` line 387
+- **Problem**: The YAML database constraint for kill switch range says `daily_loss_kill_switch_pct >= 1.00 AND <= 20.00` but RULE_007 in the YAML itself and the code both enforce `1.00-25.00`. The database CHECK constraint is stricter than the application rule.
+- **Fix**: Align database CHECK constraint to match RULE_007 (1.00-25.00)
+- **Timing**: Anytime (database migration needed)
+
+### RISK-031: EXECUTION_CONFIG.MAX_POSITION_RISK Contradicts Guardrails — DEFERRED
+- **Severity**: MEDIUM
+- **Location**: `server/config/execution-config.ts` line 15, `server/core/risk/dynamic-sizing-engine.ts` line 211
+- **Problem**: `EXECUTION_CONFIG.MAX_POSITION_RISK = 0.02` (2%) is used by DSE as a hard cap on position size. However, `guardrails_v2.maxPositionPercentPct` defaults to 10% (live) or 30% (paper). The DSE cap at 2% is far stricter than the guardrail setting, meaning the guardrail's `maxPositionPercentPct` may never actually be the binding constraint — DSE caps first.
+- **Dual authority**: Trade Safety checks `maxPositionPercentPct` (guardrails_v2). DSE independently caps at `MAX_POSITION_RISK`. These are different limits checked at different stages of the pipeline.
+- **Kyle Decision (2026-02-16)**: Confirmed this is a real conflict. Do NOT change during audit phase. Add to cleanup docket for post-audit architecture session.
+- **Fix**: Clarify whether DSE should use `maxPositionPercentPct` from guardrails_v2 instead of `EXECUTION_CONFIG.MAX_POSITION_RISK`, or document these as intentionally layered constraints.
+- **Timing**: Post-audit architecture session (deferred per Kyle)
+
+---
+
+## 23. Forward Audit Standard: Parallel System Detection
+
+> **Source**: Kyle's Phase 4 Addendum, Section 8 (2026-02-16)
+
+### New Audit Standard for Phases 5-11
+
+Going forward, any subsystem encountered during the remaining audit phases that meets ANY of the following criteria must be flagged as **"POTENTIAL LEGACY — REQUIRES INTENT VERIFICATION"**:
+
+1. **Independent operation**: Operates independently of canonical routing (Signal Orchestrator → TradeSafety → DSE → Execution Engine)
+2. **Own classification**: Maintains its own regime/market classification taxonomy separate from canonical 5-regime model
+3. **Supervision without execution**: Supervises other subsystems but does not directly influence trade execution decisions
+4. **No canonical references**: Has no imports from or exports to Signal Orchestrator, DSE, TradeSafety, or VTS
+5. **Closed loop**: Forms a closed feedback loop with other subsystems that has no outbound path to execution
+
+### Verification Protocol
+
+When a potential legacy subsystem is flagged:
+1. **Grep test**: Search for imports of the subsystem in SO, DSE, TradeSafety, VTS, and Execution Engine files
+2. **Output trace**: Trace the subsystem's computed outputs — do they reach any active trade decision?
+3. **Taxonomy check**: Does it use canonical regime names or its own taxonomy?
+4. **Intent verification**: Document the subsystem's apparent purpose and flag for Kyle's confirmation
+
+### Rationale
+
+The L-Series autonomy cluster (MCP, ARE, GASP, MOF, MACO, ECS, DCE, etc.) was discovered to be architecturally inert — a closed supervisory loop that ran for months without anyone realizing it had no connection to the active execution path. This standard ensures similar patterns are caught early in subsequent audit phases.
+
+---
+
+## 24. File Catalog
+
+### Active Files (Phase 4 Scope)
+
+| File | Lines | Status | Role |
+|------|-------|--------|------|
+| `server/services/trade-safety.ts` | ~916 | ACTIVE | Runtime pre-trade guardrail enforcement |
+| `server/services/guardrail-policy.ts` | ~670 | ACTIVE | Policy management, coherency validation, kill switch |
+| `server/services/guardrail-settings.ts` | ~233 | ACTIVE | Settings builder from guardrails_v2 |
+| `server/services/adaptive-guardrails.ts` | ~617 | ACTIVE | LATTI adaptive parameter tuning |
+| `server/services/pre-execution-validator.ts` | ~292 | ACTIVE (Goal Alignment DEPRECATED) | Two active gates + one deprecated gate |
+| `server/services/circuit-breaker.ts` | ~336 | ACTIVE | Infrastructure fault tolerance |
+| `server/services/risk-concentration.ts` | ~369 | ACTIVE | Correlation-weighted exposure control |
+| `server/services/paper-portfolio-manager.ts` | ~725 | ACTIVE | Paper trading lifecycle management |
+| `server/services/portfolio-aggregator.ts` | ~243 | ACTIVE | Portfolio-level metrics aggregation |
+| `server/services/kraken.ts` | ~750+ | ACTIVE (LOCKED) | Kraken REST API client |
+| `server/core/risk/dynamic-sizing-engine.ts` | ~314 | ACTIVE | Predictive position sizing |
+| `server/core/risk/index.ts` | ~8 | ACTIVE | Risk module re-export |
+| `server/utils/covariance-engine.ts` | ~371 | ACTIVE | Rolling covariance/correlation matrices |
+| `server/config/execution-config.ts` | ~23 | ACTIVE | TEC configuration constants |
+| `audit/coherency_rules.yaml` | ~360 | ACTIVE | Coherency validation rules definition |
+
+### Legacy Files (Phase 4 Scope)
+
+| File | Lines | Status | Notes |
+|------|-------|--------|-------|
+| `server/services/safety-guardrails.ts` | ~411 | LEGACY (H8) | Deprecated wrapper, kept for API compatibility |
+| `server/services/gasp-coordinator.ts` | ~540 | LEGACY (L-Series) | Closed supervisory loop, does not touch active trade flow (Kyle 2026-02-16) |
+| `server/services/pdc-engine.ts` | ~347 | LEGACY (L-Series, conditional) | Legacy if autonomy-bound; verify no active execution path consumers (Kyle 2026-02-16) |
+
+---
+
+## Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| v1.0 | 2026-02-16 | Initial Phase 4 section: 18 files audited, 6 RISK findings |
+| v1.1 | 2026-02-16 | Phase 4 Addendum: GASP/PDC reclassified to LEGACY (L-Series cluster). Goal Alignment formally deprecated. RISK-027 superseded, RISK-028 elevated, RISK-029 accepted, RISK-031 deferred. Added Section 20 (L-Series Autonomy Cluster), Section 23 (Forward Audit Standard). File catalog updated: 15 active, 3 legacy. |
+
+
+---
+
+# Chapter 5: Trade Execution & Lifecycle
+
+## Table of Contents
+
+1. [Architecture Overview](#1-architecture-overview)
+2. [Dual Execution Engine Architecture](#2-dual-execution-engine-architecture)
+3. [PaperExecutionEngine (Primary)](#3-paperexecutionengine-primary)
+4. [TradingEngine (Live-Capable)](#4-tradingengine-live-capable)
+5. [TrailingExitController](#5-trailingexitcontroller)
+6. [MicroExecutionService](#6-microexecutionservice)
+7. [ModeRegistry & Engine Instance Management](#7-moderegistry--engine-instance-management)
+8. [Lifecycle Events Service](#8-lifecycle-events-service)
+9. [Signal Lifecycle Audit Layer (SLAL)](#9-signal-lifecycle-audit-layer-slal)
+10. [Execution Timing Service](#10-execution-timing-service)
+11. [Trade Flow Types (Directive 11.0B)](#11-trade-flow-types-directive-110b)
+12. [Execution Configuration](#12-execution-configuration)
+13. [TradeBob (Cache Layer)](#13-tradebob-cache-layer)
+14. [Execution Policy Controller (Walter/NLAI)](#14-execution-policy-controller-walternlai)
+15. [NLAI Execution Broker](#15-nlai-execution-broker)
+16. [Unified Price Cache](#16-unified-price-cache)
+17. [Paper Simulation Service](#17-paper-simulation-service)
+18. [Exit Condition Architecture](#18-exit-condition-architecture)
+19. [RTB Promotion Pipeline](#19-rtb-promotion-pipeline)
+20. [Cross-References](#20-cross-references)
+21. [Critical Findings](#21-critical-findings)
+22. [Forward Audit Standard Checks](#22-forward-audit-standard-checks)
+23. [File Catalog](#23-file-catalog)
+24. [Revision History](#24-revision-history)
+
+---
+
+## 1. Architecture Overview
+
+DawnTrader's trade execution operates through a **dual-engine architecture** with clearly separated responsibilities for paper and live trading. The system has evolved organically, with the PaperExecutionEngine becoming the dominant, actively-maintained engine (~2,308 lines) while the TradingEngine (~766 lines) retains live-mode capabilities but contains significant placeholder code.
+
+### High-Level Execution Flow
+
+```
+Signal Source (FX5 → SignalOrchestrator → SQE → RTB → TCL)
+       │
+       ▼
+┌──────────────────────────────────────────────────────┐
+│  EXECUTION ENGINE LAYER                              │
+│                                                      │
+│  PaperExecutionEngine (paper mode — PRIMARY)         │
+│  ├── processSignal() → guardrails → expectancy gate  │
+│  ├── executeSimulatedTrade() → sizing → DB write     │
+│  ├── monitoringCycle() (1.5s loop)                   │
+│  │   └── checkOpenPositions() → exit evaluation      │
+│  └── checkRtbPromotion() → multi-signal promotion    │
+│                                                      │
+│  TradingEngine (live mode — SECONDARY)               │
+│  ├── processSignal() → guardrails → ⚠ Goal Align    │
+│  ├── executeTrade() → Kraken API                     │
+│  │   ⚠ Contains SIMULATED partial fills (Math.random)│
+│  │   ⚠ Contains SIMULATED slippage (Math.random)     │
+│  └── placeStopAndTargetOrders() → bracket orders     │
+└──────────────────────────────────────────────────────┘
+       │
+       ▼
+┌──────────────────────────────────────────────────────┐
+│  EXIT MANAGEMENT LAYER                               │
+│                                                      │
+│  TrailingExitController (Directive 9.2.A)            │
+│  ├── Two-stage latch: Break-Even → Target Lock       │
+│  ├── Cost-aware floors (Directive 11.3A)             │
+│  └── Dynamic trailing: K' from DI + VolNoise         │
+│                                                      │
+│  MicroExecutionService (paper-mode only)             │
+│  ├── 8s recheck loop, 0.30% delta trigger            │
+│  └── ⚠ triggerSymbolCheck() is TODO stub             │
+└──────────────────────────────────────────────────────┘
+       │
+       ▼
+┌──────────────────────────────────────────────────────┐
+│  OBSERVABILITY & INFRASTRUCTURE                      │
+│                                                      │
+│  ModeRegistry — engine instances, telemetry broadcast│
+│  LifecycleEvents — signalValidated/readyToTrade/exec │
+│  SLAL — 7-stage signal lifecycle audit               │
+│  ExecutionTimingService — order timing marks          │
+│  TradeBob — trade data cache (1s TTL)                │
+│  UnifiedPriceCache — multi-bucket price management   │
+└──────────────────────────────────────────────────────┘
+```
+
+### Canonical Signal-to-Trade Pipeline
+
+The canonical trade flow (from Phase 3 scanning through execution) is:
+
+```
+FX5 (30s scans) → SignalOrchestrator (exposure/correlation/cooldown)
+    → SQE (FinalScore + RegimeWeight)
+    → Ready-to-Buy Queue (30s refresh, TTL=30s)
+    → TCL (ranking by FinalScore, 2-min or 15-signal trigger)
+    → PaperExecutionEngine.processSignal()
+    → executeSimulatedTrade() (guardrails → EV gate → sizing → DB)
+```
+
+**Deprecated methods removed by Directive 8.8.4-A3.R9.3:**
+- `scanForSignals()` — removed
+- `checkSymbolForSignal()` — removed
+- `injectForcedTrade()` — removed
+
+All signal generation now flows exclusively through the FX5 → RTB → TCL pipeline.
+
+---
+
+## 2. Dual Execution Engine Architecture
+
+### The Two Engines
+
+| Property | PaperExecutionEngine | TradingEngine |
+|----------|---------------------|---------------|
+| **File** | `paper-execution-engine.ts` | `trading-engine.ts` |
+| **Lines** | ~2,308 | ~766 |
+| **Primary Mode** | Paper | Live + Paper |
+| **Monitoring** | 1.5s cycle with re-entrancy guard | `monitorActiveTrades()` via strategyEngine |
+| **Exit Logic** | Direct SL/TP/trailing/max hold checking | Delegates to `strategyEngine.checkExitConditions()` |
+| **RTB Promotion** | Full multi-signal promotion (C.14.B) | None |
+| **Pricing** | WebSocket priority + REST fallback | Direct Kraken REST |
+| **P/L Breakdown** | Full C2 directive (gross/net/costs) | Basic (no cost breakdown) |
+| **Expectancy Gate** | Yes (Directive 11.8B) | No |
+| **SLAL Integration** | Yes | No |
+| **Goal Alignment** | No (removed) | ⚠ **YES — still active** (lines 246-254) |
+| **Partial Fills** | Not applicable (paper) | ⚠ **SIMULATED** with Math.random() |
+| **Status** | **ACTIVE, primary engine** | **Secondary, contains placeholder code** |
+
+### Key Asymmetry: Goal Alignment
+
+The PaperExecutionEngine does NOT contain Goal Alignment logic (it was architecturally removed). However, the TradingEngine still computes and applies `goalAlignmentScore`:
+
+```typescript
+// TradingEngine, line 249:
+signal.finalScore = (signal.confidence * 0.7) + (goalAlignmentScore * 0.3);
+```
+
+This is a **SECOND location** of Goal Alignment beyond `pre-execution-validator.ts` (identified in Phase 4). Kyle's deprecation directive covers pre-execution-validator.ts, but this TradingEngine location also needs removal.
+
+---
+
+## 3. PaperExecutionEngine (Primary)
+
+**File**: `server/services/paper-execution-engine.ts` (~2,308 lines)
+**Directive**: 11.0E (FinalScore Unification)
+**Class**: `PaperExecutionEngine`
+
+### 3.1 Configuration Constants
+
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| `SLIPPAGE_PERCENT` | 0.15% | Simulated entry/exit slippage |
+| `FEE_PERCENT` | 0.10% | Simulated trading fee (both sides) |
+| `MONITOR_INTERVAL_MS` | 1,500ms | Position check frequency |
+| `MAX_PRICE_HISTORY` | 100 | Candle history per symbol |
+| `RTB_TTL_SECONDS` | 30 | RTB signal expiry time |
+| `CONTINUOUS_PROMOTION_INTERVAL_MS` | 30,000ms | RTB promotion loop interval |
+
+### 3.2 Lifecycle: start()
+
+The `start()` method initializes a comprehensive suite of subsystems:
+
+1. **Idempotency guard** (Directive 8.8.4-A3.R9.0.B) — skips if already running
+2. **LivePricingAdapter** — sets trading mode for WebSocket broadcasts
+3. **Session timestamp** — sets `engineSessionStart` for RTB metrics
+4. **AJ17/AJ18 diagnostics** — starts diagnostic sessions
+5. **Kraken WebSocket** — starts adapter, sets I8C open positions provider
+6. **I8C subscription** — subscribes ALL open position symbols on start
+7. **RTB service** — cleans expired signals, starts 30s refresh cycle, sets engine start time
+8. **TCL Watchdog** — starts with event-driven activation (2-min failsafe)
+9. **Event listeners** — binds TCL_ACTIVATED and TRADE_CLOSED handlers
+10. **Continuous promotion loop** (Directive 8.8.8) — 30s RTB promotion checks
+11. **Covariance engine** (Directive 9.4) — loads OHLC for top 20 symbols, computes initial correlation matrix
+12. **Monitoring interval** — starts 1.5s `monitoringCycle()`
+
+### 3.3 Lifecycle: stop()
+
+Mirrors start() in reverse:
+1. Clears `isRunning`, cancels monitoring interval
+2. Clears session start (zeroes RTB metrics)
+3. Stops AJ17 diagnostics
+4. Stops RTB refresh cycle and clears engine start time
+5. Stops TCL Watchdog
+6. Unbinds event listeners (includes stopping continuous promotion loop)
+7. Stops I8C subscription audit
+8. Stops Kraken WebSocket adapter
+
+### 3.4 Monitoring Cycle
+
+```typescript
+monitoringCycle() // Every 1.5 seconds
+  ├── Re-entrancy guard (isCycleRunning flag)
+  ├── Skip if engine stopped
+  ├── Track cycle timestamp (lastCycleAt)
+  ├── Log ENGINE_TICK with position count
+  ├── checkOpenPositions()  // Exit evaluation
+  └── Note: Signal scanning REMOVED (Directive 8.8.4-A3.R9.3)
+```
+
+### 3.5 Position Exit Evaluation: checkOpenPositions()
+
+For each open position:
+
+1. **Price acquisition** — WebSocket cache first (2s stale threshold), REST fallback
+2. **Mock price rejection** (Phase B9) — skips if price source is 'mock'
+3. **Price tick logging** — ring buffer of last 100 ticks for cadence verification
+4. **P/L calculation** — updates position with unrealized P/L
+5. **Exit condition check** — calls `checkExitConditions()`
+6. **Close if triggered** — calls `closePosition()` with full P/L breakdown
+
+**Price source statistics tracked per cycle**: wsPrice, restPrice, withoutPrice, slHits, tpHits
+
+### 3.6 Exit Conditions
+
+The engine checks four exit conditions in order:
+
+| Exit Type | Condition | Priority |
+|-----------|-----------|----------|
+| `target_hit` | `currentPrice >= takeProfit` | 1st |
+| `stop_hit` | `currentPrice <= stopLoss` | 2nd |
+| `trailing_stop_hit` | `currentPrice <= trailingStopPrice` (from metadata HWM) | 3rd |
+| `max_holding_period` | `hoursHeld >= maxHours` (from metadata) | 4th |
+
+### 3.7 Position Close: closePosition()
+
+Implements Phase 8.8.3-C2 P/L breakdown:
+
+```
+Gross P/L = (exitPrice - intendedEntryPrice) × quantity
+Total Cost = entryFee + exitFee + entrySlippage + exitSlippage
+Net P/L   = Gross P/L - Total Cost
+```
+
+On close, the engine:
+1. Computes full C2 cost breakdown
+2. Applies B8.PNL anomaly guard (>100% move in <5 min)
+3. Updates trade record with all cost fields
+4. Logs exit event with C2 breakdown
+5. Records VTS comparison audit (Directive M5C.1)
+6. Logs AJ19-B close event with slot counts
+7. Deletes open position
+8. Unsubscribes WebSocket
+9. Captures data for learning aggregation (Directive 8.8.4-L1)
+10. Runs C5 P/L sanity check and balance reconciliation
+11. Emits TRADE_CLOSED event (triggers RTB promotion)
+
+### 3.8 Signal Processing: processSignal()
+
+This is called from RTB promotion (`executePromotedSignal`). Flow:
+
+1. Governance checks (strategy eligibility, mode resolution)
+2. Regime stability check
+3. Confidence floor check per strategy mode
+4. Duplicate position guard (I7-PM-FOCUS C1) — **moved BEFORE trade creation**
+5. Forward to `executeSimulatedTrade()`
+
+### 3.9 Trade Execution: executeSimulatedTrade()
+
+1. **Guardrail check** — `checkGuardrailRisk()` with pre-computed notional
+2. **Net Expectancy Gate** (Directive 11.8B) — positive EV required
+3. **Position sizing** — pre-sized quantity from P2 (paper) or fallback calculation
+4. **Slippage/fee application** — SLIPPAGE_PERCENT + FEE_PERCENT
+5. **Trade creation** — DB write with full cost metadata
+6. **Position creation** — open position record
+7. **WebSocket subscription** — subscribe to new symbol
+8. **Trailing state initialization** (Directive 9.2.A)
+9. **SLAL completion event** — records COMPLETED stage
+
+### 3.10 Session Reset: resetSessionState()
+
+Phase 8.8.3-B7.A hard reset clears all in-memory state:
+- Running flags, monitoring interval
+- Price history cache
+- Session start timestamp (zeroes RTB metrics)
+- Price tick diagnostics
+- WebSocket subscriptions
+- AJ17 diagnostics
+- RTB refresh cycle
+
+---
+
+## 4. TradingEngine (Live-Capable) — DEFERRED (Kyle, 2026-02-16)
+
+**File**: `server/services/trading-engine.ts` (~766 lines)
+**Class**: `TradingEngine`
+**Status**: ⏸️ **DEFERRED** — live mode is not in scope for architectural validation. Paper mode is authoritative.
+
+> **Kyle's Decision (Phase 5 Addendum)**: TradingEngine currently uses legacy signal orchestration, contains simulated fills, includes goal alignment logic, and does not mirror paper execution core. **Defer refactor until paper mode is fully stable.** Future strategic fork: (A) Refactor trading-engine to mirror paper core, or (B) Delete and rebuild live engine from paper core. No action required now.
+>
+> **Scope note**: All BUG/RISK items in this section related to TradingEngine live-mode placeholder code (BUG-010, BUG-011, RISK-036) are **informational only** at this stage. They document known deficiencies that must be addressed before live trading, but are non-blocking for the current paper-mode-authoritative architecture.
+
+### 4.1 Architecture
+
+The TradingEngine is the **live-capable** execution engine. It:
+- Manages a `SignalOrchestrator` for automatic signal generation (30s interval, 9 strategies)
+- Processes signals through guardrails and slippage tolerance checks
+- Executes trades via Kraken API for live mode
+- Places bracket orders (stop-loss + take-profit) after live trade execution
+- Monitors active trades via `strategyEngine.checkExitConditions()`
+
+### 4.2 ⚠ CRITICAL: Goal Alignment Still Active
+
+The TradingEngine computes Goal Alignment scores and applies them to FinalScore:
+
+```typescript
+// Lines 247-249:
+const goalAlignmentScore = await this.calculateGoalAlignmentScore(signal, this.mode);
+signal.goalAlignmentScore = goalAlignmentScore;
+signal.finalScore = (signal.confidence * 0.7) + (goalAlignmentScore * 0.3);
+```
+
+**The `calculateGoalAlignmentScore()` method** (lines 128-226):
+- Reads `profitability_vs_consistency` goal (1-10 scale)
+- Computes risk/reward alignment (40% weight)
+- Computes strategy risk profile alignment (30% weight)
+- Computes signal confidence alignment (30% weight)
+- Only covers 3 strategy profiles: `vwap_pullback`, `abcd_long`, `sma_trend_ride`
+
+This is the **SECOND active location** of Goal Alignment. Kyle's deprecation directive in Phase 4 targeted `pre-execution-validator.ts`. This location needs to be added to the deprecation scope.
+
+### 4.3 ⚠ CRITICAL: Simulated Partial Fills in Live Mode
+
+Lines 346-388 of `executeTrade()` simulate partial fills using `Math.random()`:
+
+```typescript
+// Line 347:
+const isPartialFill = Math.random() < 0.1; // 10% chance
+const fillPercent = 50 + Math.random() * 39; // 50-89%
+```
+
+The comment says *"In a real implementation, we'd query the order status to get actual filled quantity"*. This is **placeholder code** that would cause incorrect quantity tracking in production live trading.
+
+### 4.4 ⚠ Simulated Slippage/Fees in Live Mode
+
+Lines 391-393 apply simulated costs even in live mode:
+
+```typescript
+entrySlippage = Math.random() * 0.1; // 0-0.1% slippage
+entryFee = (actualEntryPrice * filledQuantity) * 0.0026; // Kraken taker fee
+```
+
+Live mode should derive actual slippage from fill price vs. signal price, and actual fees from Kraken API response.
+
+### 4.5 Bracket Order Placement
+
+For live trades, `placeStopAndTargetOrders()` places:
+1. **Stop-loss** — `stop-loss` order with configurable buffer (default 5%)
+2. **Take-profit** — `limit` sell order at target price
+
+Includes **rollback logic**: if any bracket order fails, previously placed orders are cancelled. This is well-designed.
+
+### 4.6 Trade Close
+
+`closeTrade()`:
+1. Cancels existing stop and target orders
+2. Executes market sell order (live) or simulates (paper)
+3. ⚠ Uses `Math.random() * 0.1` for exit slippage even in live mode
+4. Records telemetry events
+
+### 4.7 EngineSettingsBus
+
+Hot-reload pub/sub for strategy settings changes. Subscribers can receive mode-based reload notifications. Used to propagate guardrail changes to running engines.
+
+---
+
+## 5. TrailingExitController
+
+**File**: `server/services/trailing-exit-controller.ts` (~335 lines)
+**Directives**: 9.2.A (Dynamic Trailing Exit), 11.3A (Cost-Aware Ratchet)
+
+### 5.1 Two-Stage Latch System
+
+The TrailingExitController implements a sophisticated two-stage exit system:
+
+```
+Stage 0: TARGET mode (initial)
+  │  Price gains 1×ATR above entry
+  ▼
+Stage 1: BREAK-EVEN LATCHED
+  │  Stop moves to netBreakeven (cost-aware)
+  │  Dynamic trailing from HWM begins
+  │  Price reaches target price
+  ▼
+Stage 2: TARGET LATCHED → TRAILING_TAKE mode
+  │  Stop locks to netTargetFloor (cost-aware)
+  │  "MOONBAG" mode activated
+  │  Dynamic trailing continues from HWM
+  └──> shouldClosePosition() returns true when price <= currentStopPrice
+```
+
+### 5.2 Cost-Aware Floors (Directive 11.3A)
+
+Traditional trailing stops use gross prices. Directive 11.3A uses **net-aware floors** that account for execution costs:
+
+- `netBreakeven = computeNetBreakeven(entryPrice, costMetrics)` — accounts for entry/exit fees and slippage
+- `netTargetFloor = computeNetTargetFloor(targetPrice, costMetrics)` — ensures profit target accounts for costs
+
+These floors are imported from `core/math/cost-model.ts`.
+
+### 5.3 Dynamic Trailing Stop Calculation
+
+```
+K' = calculateDynamicStopDistance(DI, VolNoise)
+TrailingStopPrice = calculateTrailingStopPrice(HWM, ATR, DI, VolNoise)
+FinalStop = max(floorStop, dynamicStop)
+```
+
+Where:
+- `HWM` = high water mark (tracks maximum price since entry)
+- `ATR` = average true range
+- `DI` = directional integrity
+- `VolNoise` = volatility noise estimate
+
+### 5.4 State Management
+
+- **In-memory**: `Map<string, TrailingState>` keyed by symbol
+- **Persistence**: Debounced writes (5s) to `/tmp/trailing-states.json` via `schedulePersistence()`
+- **DB sync**: On mode change, `syncTradeModeToStorage()` updates the trade mode in the database
+- **Export/Import**: `exportAllStates()` and `importStates()` for persistence
+
+### 5.5 Interface: TrailingState
+
+```typescript
+interface TrailingState {
+  symbol: string;
+  tradeMode: TradeMode;        // 'TARGET' | 'TRAILING_TAKE'
+  entryPrice: number;
+  targetPrice: number;
+  currentStopPrice: number;
+  highWaterMark: number;
+  breakEvenLatched: boolean;
+  targetLatched: boolean;
+  lastUpdated: number;
+  DI: number;
+  VolNoise: number;
+  ATR: number;
+}
+```
+
+---
+
+## 6. MicroExecutionService — Experimental/Dormant (Kyle Accepted, 2026-02-16)
+
+**File**: `server/services/micro-execution-service.ts` (~374 lines)
+**Phase**: 27.F.14.MICRO
+**Status**: 🟡 **Experimental, dormant, non-interfering** — leave hidden per Kyle. Revisit only if micro-price trading becomes intentional.
+
+### 6.1 Purpose
+
+Lightweight high-frequency loop that re-checks Ready-to-Buy pairs between main monitoring cycles. Triggers execution when price moves significantly.
+
+### 6.2 Safety Parameters
+
+| Parameter | Value | Purpose |
+|-----------|-------|---------|
+| `intervalMs` | 8,000ms | Check frequency |
+| `priceDeltaTrigger` | 0.30% | Minimum price change to trigger |
+| `COOLDOWN_MS` | 15,000ms | Per-symbol cooldown |
+| `MAX_EXECUTIONS_PER_MINUTE` | 5 | Rate limit |
+| `STABILITY_WINDOW_MS` | 3,000ms | Price stability requirement |
+
+### 6.3 Key Behaviors
+
+- **Paper-mode only** — `start()` returns immediately if `mode === 'live'`
+- **Configuration** — loaded from `guardrails_v2` but uses hardcoded defaults for micro-specific params
+- **Price tracking** — via `updatePrice()` from WebSocket feed
+- **Watchlist scanning** — reads from `storage.getWatchlist()` for RTB pairs
+
+### 6.4 ⚠ triggerSymbolCheck() Is a TODO Stub
+
+The method that should actually trigger execution is unimplemented:
+
+```typescript
+// Line ~250 (approximate):
+console.log(`[MicroLoop] Would trigger execution check for ${symbol}`);
+```
+
+This means the MicroExecutionService **detects price movements but cannot act on them**. It logs that a check should happen but does not call the execution engine. Not blocking (the main 1.5s monitoring loop handles execution), but the service is incomplete.
+
+---
+
+## 7. ModeRegistry & Engine Instance Management
+
+**File**: `server/services/mode-registry.ts` (~162 lines)
+**Phase**: 27.F.15.B.4 (Production Telemetry)
+
+### 7.1 Runtime Legacy Guard
+
+At module load time, ModeRegistry blocks legacy engine usage:
+
+```typescript
+if ((global as any).PaperExecutionServiceLegacy) {
+  throw new Error('[B9][FATAL] Legacy PaperExecutionService is not supported...');
+}
+```
+
+### 7.2 Engine Instance Registry
+
+Stores global references to engine instances per mode:
+
+- `registerEngine(mode, engine)` — stores PaperExecutionEngine reference
+- `getEngine(mode)` — retrieves engine for a mode
+- `registerMicroService(mode, service)` — stores MicroExecutionService reference
+- `getMicroService(mode)` — retrieves micro service for a mode
+
+### 7.3 Mode Status Tracking
+
+```typescript
+interface ModeStatus {
+  engineStatus: 'stopped' | 'starting' | 'running' | 'paused' | 'error';
+  riskSummary: Record<string, any>;
+  alerts: number;
+  trades: number;
+  lastUpdate: Date;
+}
+```
+
+Status changes are broadcast via `contextBridge` for real-time UI updates.
+
+---
+
+## 8. Lifecycle Events Service
+
+**File**: `server/services/lifecycle-events.ts` (~177 lines)
+**Directive**: REB 2.12D Part A
+
+### 8.1 Three Lifecycle Events
+
+| Event | Trigger | Payload |
+|-------|---------|---------|
+| `signalValidated` | Signal passes all validation checks | mode, symbol, strategy, confidence, validation details |
+| `readyToTrade` | Signal approved and ready for execution | mode, symbol, strategy, entry/stop/target, quantity, risk |
+| `paperTradeExecuted` | Paper trade successfully executed | tradeId, positionId, symbol, strategy, prices, costs |
+
+All events:
+- Add ISO timestamp
+- Increment internal counters
+- Broadcast via `contextBridge` (type: 'trade_event')
+- Record telemetry metric ('signal_emit')
+
+---
+
+## 9. Signal Lifecycle Audit Layer (SLAL)
+
+**File**: `server/core/audit/signal_lifecycle_audit.ts`
+**Phase**: 8.8.4-A
+
+### 9.1 Seven Lifecycle Stages
+
+```
+GENERATION → SIZING → VALIDATION → QUEUED → PROMOTED → EXECUTION → COMPLETED/REJECTED
+```
+
+### 9.2 Fourteen Rejection Reasons
+
+| Reason | Description |
+|--------|-------------|
+| `INVALID_SIGNAL` | Malformed signal (missing fields) |
+| `ZERO_SIZE` | Sizing returned 0 quantity |
+| `GUARDRAIL_BLOCKED` | Risk guardrail rejected |
+| `MAX_POSITIONS` | Max open positions reached (legacy alias) |
+| `MAX_TRADES` | Max simultaneous open trades limit |
+| `SLOT_CONFLICT` | Post-guardrail slot capacity overflow |
+| `DAILY_LOSS_LIMIT` | Kill switch triggered |
+| `SYMBOL_COOLDOWN` | Symbol on cooldown |
+| `POSITION_CAP` | Position size cap exceeded |
+| `DUPLICATE_POSITION` | Already have position in symbol |
+| `EXECUTION_FAILED` | Trade execution failed |
+| `EXPIRED_SIGNAL` | Signal TTL expired |
+| `NO_PRICE` | Could not get reliable price |
+| `SQE_QUALITY_REJECT` | Failed SQE quality thresholds |
+
+### 9.3 Signal Journey Tracking
+
+Each signal gets a `SignalJourney` with:
+- 30-minute TTL
+- Maximum 5,000 concurrent journeys
+- 10,000 event history ring buffer
+- Strategy-level breakdown metrics
+- Success rate tracking
+
+### 9.4 SLAL Metrics
+
+Exposes comprehensive metrics including:
+- Signals generated/sized/validated/executed/completed/rejected
+- Rejections by reason and by stage
+- Average generation-to-completion time
+- Per-strategy success rates
+
+---
+
+## 10. Execution Timing Service
+
+**File**: `server/services/execution-timing.ts` (~274 lines)
+
+### 10.1 Timing Marks
+
+Tracks four critical timestamps per order:
+
+```
+t_decide → t_submit → t_ack → t_fill
+```
+
+### 10.2 Computed Metrics
+
+- `submit_ack_ms` — time from order submission to exchange acknowledgement
+- `ack_fill_ms` — time from acknowledgement to fill
+- `total_ms` — end-to-end execution time
+- `slippage_bps` — slippage in basis points
+
+### 10.3 Storage
+
+- 1,000-order history ring buffer
+- CSV export capability for external analysis
+
+---
+
+## 11. Trade Flow Types (Directive 11.0B)
+
+**File**: `server/types/trade-flow.ts` (~127 lines)
+
+### 11.1 Type Definitions
+
+| Type | Purpose |
+|------|---------|
+| `TradeSignal` | Signal from strategy engine |
+| `ExecutionIntent` | Intent to execute a trade |
+| `ExitDecision` | Whether to exit a position |
+| `ActiveTrade` | Currently open trade |
+| `TradeOrder` | Order submitted to exchange |
+| `AdaptiveSizeResult` | Position size adjustment |
+| `TradeExecutionController` | TEC interface contract |
+| `Trendline` | Feedback for adaptive sizing |
+
+### 11.2 ⚠ StrategyType Mismatch
+
+The `StrategyType` union type lists only **9 strategies**:
+
+```typescript
+type StrategyType = 'vwap_pullback' | 'abcd_long' | 'sma_trend_ride'
+  | 'breakout' | 'mean_reversion' | 'range_trading'
+  | 'vwap_bounce' | 'liquidity_trap' | 'dhma';
+```
+
+The canonical system defines **17 strategies** (5 quant + 5 pattern + 5 hybrid + 2 special). This mismatch means 8 strategy types cannot be properly typed through the trade flow layer. This is consistent with BUG-002/BUG-003 (DSS/SignalOrchestrator use legacy 9-strategy map) but creates an additional enforcement point for the strategy type mismatch.
+
+### 11.3 Trade Lifecycle Flow Documentation
+
+The file header documents the canonical flow:
+
+```
+[Signal Orchestrator] (exposure, correlation, cooldown)
+     ↓
+[SQE] (FinalScore + RegimeWeight)
+     ↓
+[Ready-to-Buy Queue] (2-min or 15-signal trigger)
+     ↓
+[TCL] (FinalScore ranking)
+     ↓
+[TEC] (adaptive sizing + trailing exits)
+     ↓
+[Order Management]
+```
+
+---
+
+## 12. Execution Configuration
+
+**File**: `server/config/execution-config.ts` (~23 lines)
+**Directive**: 11.0C
+
+### 12.1 TEC Parameters
+
+```typescript
+EXECUTION_CONFIG = Object.freeze({
+  ADAPTIVE_EXPAND_FACTOR: 1.10,      // Expand position by 10%
+  ADAPTIVE_CONTRACT_FACTOR: 0.90,     // Contract position by 10%
+  TRAILING_STOP_BASE: 0.015,          // 1.5% base trailing stop
+  TRAILING_STOP_ACCELERATION: 0.002,  // Acceleration factor
+  MAX_POSITION_RISK: 0.02,            // 2% max position risk
+  TRAILING_STOP_ACTIVATION_PCT: 1.0,  // Activation at 1% gain
+  TRAILING_STOP_DISTANCE_PCT: 0.5,    // Distance at 0.5%
+  MAX_HOLDING_PERIOD_MS: 86400000,    // 24 hours
+  VERSION: "v1.0.0"
+});
+```
+
+**Note**: `MAX_POSITION_RISK: 0.02` (2%) was flagged in Phase 4 as RISK-031 and deferred by Kyle.
+
+---
+
+## 13. TradeBob (Cache Layer)
+
+**File**: `server/services/bob-trade.ts` (~252 lines)
+**Phase**: 27.F.15.A
+
+### 13.1 Purpose
+
+TradeBob is a cache layer for trade data with a 1-second TTL. It sits between API consumers and the database, reducing query load for frequently-accessed trade data.
+
+### 13.2 Key Behaviors
+
+- **1-second TTL** — cache expires after 1s, forcing fresh DB reads
+- **Event-driven invalidation** — trade changes trigger cache clear
+- **Global scope** — Phase 27.F.15.A: no userId filtering for trades (mode-based only)
+- **BobCore integration** — extends the BobCore caching framework
+
+---
+
+## 14. Execution Policy Controller — LEGACY (Kyle Confirmed, 2026-02-16)
+
+**File**: `server/services/execution-policy-controller.ts` (~309 lines)
+**Phase**: 22 (NLAI Autonomy)
+**Status**: 🔴 **LEGACY — Formally deprecated with NLAI system (Kyle, 2026-02-16)**
+
+### 14.1 Purpose (Historical)
+
+The ExecutionPolicyController was the **Walter/NLAI approval layer** for autonomous actions. It checked whether an NLAI agent had permission to execute specific actions based on user-configured approval matrices.
+
+### 14.2 Approval Flow (Historical)
+
+```
+NLAI Action Request
+    → Check user permissions
+    → Map action to approval key (e.g., 'update_risk_per_trade' → 'modifyGuardrails')
+    → Check approval matrix
+    → Calculate projected risk
+    → Create execution log
+    → Approve or create pending approval record
+```
+
+### 14.3 Kyle's Deprecation Decision
+
+**Phase 5 Addendum (Kyle, 2026-02-16)**: NLAI is formally deprecated as legacy conversational control infrastructure.
+
+**What NLAI was**: The Natural Language Action Interpreter — Walter AI's command bridge. It parsed chat commands, routed them through the execution broker, called the same service functions UI buttons call (guardrails, goals, watchlist, start/stop trading), and published events.
+
+**What NLAI did NOT do**: It did NOT inject signals, modify scoring, alter VTS, or override execution math. It was architecturally safe and scoped — but no longer aligned with system direction.
+
+**Why deprecated**: Walter has been deprecated. Conversational goal system removed. Goals tab removed. System now operates via deterministic UI and services. NLAI is legacy conversational control infrastructure.
+
+**Removal scope** (Kyle directive):
+- `nlai-interpreter.ts`
+- `contextual-nlai-interpreter.ts`
+- `nlai-execution-broker.ts`
+- `nlai-action-registry.ts`
+- ExecutionPolicyController approval hooks (if exclusively used by NLAI)
+- NLAI-related cluster bus events
+- NLAI-related routes
+- Goal-update command handlers
+- Any residual Walter-specific context logic
+
+**Note**: Future ML integration may reintroduce command routing, but that will be deliberate and redesigned.
+
+### 14.4 Conditional Removal: ExecutionPolicyController
+
+Kyle's directive: *"If ExecutionPolicyController is used solely as NLAI approval gate: Remove with NLAI. If it also controls execution style within PaperExecutionEngine: Simplify to static behavior."*
+
+**Audit finding**: ExecutionPolicyController is imported only by NLAI-related modules (nlai-execution-broker). It does NOT control execution behavior within PaperExecutionEngine.
+
+**Verdict**: Remove with NLAI.
+
+---
+
+## 15. NLAI Execution Broker — LEGACY (Kyle Confirmed, 2026-02-16)
+
+**File**: `server/services/nlai-execution-broker.ts` (~477 lines)
+**Status**: 🔴 **LEGACY — Remove with NLAI system**
+
+### 15.1 Purpose (Historical)
+
+Dispatched NLAI actions through the ExecutionPolicyController for approval, then executed approved actions through `nlaiActionRegistry`.
+
+### 15.2 Key Features (Historical)
+
+- **30-second execution timeout** per action
+- **100-order execution log** ring buffer
+- **`dispatchMultiple()`** — sequential multi-intent execution
+- **Cluster bus events** — emits coordination events for other services
+- **Conversational filter** — filters out conversational intents before dispatch
+
+### 15.3 Deprecation Verdict
+
+**LEGACY** — deprecated with entire NLAI system per Kyle (2026-02-16). Remove alongside all NLAI files listed in Section 14.3.
+
+---
+
+## 16. Unified Price Cache
+
+**File**: `server/services/price-cache.ts` (~448 lines)
+**Directive**: 8.8.4-A4.R10R-4 (Core System Hardening)
+**Status**: 🔒 **LOCKED MODULE** — changes require formal directive
+
+### 16.1 Priority Buckets
+
+| Bucket | Refresh Interval | Purpose |
+|--------|-----------------|---------|
+| `openTrade` | 2,000ms | Active position monitoring |
+| `readyToBuy` | 15,000ms | RTB candidate pricing |
+| `fx5Snapshot` | 30,000ms | Scanning/analysis |
+| `vtsSimulation` | 60,000ms | VTS cache sandbox (Directive 11.0E.2) |
+
+### 16.2 Rate Governance
+
+- Maximum 10 weighted requests per second to Kraken API
+- Batch size: 100 symbols per API call
+- Weight budget with retry logic (max 20 retries, 250ms delay)
+- Health logging every 60 seconds
+
+### 16.3 Key Methods
+
+- `subscribe(symbol, bucketType)` — add symbol to a bucket
+- `unsubscribe(symbol)` — remove from all buckets
+- `getPrice(symbol, bucketType)` — get cached or fetch fresh
+- `getBatch(bucketType, symbols)` — batch retrieval for FX5
+- `updateFromWebSocket(symbol, price)` — inject WS prices
+- `updateFromRest(symbol, price)` — inject REST prices
+
+---
+
+## 17. Paper Simulation Service
+
+**File**: `server/services/paper-sim-service.ts`
+
+### 17.1 Session Management
+
+Manages paper simulation sessions with:
+- **Idempotent start/stop** — database as single source of truth
+- **Stale busy flag auto-clear** — 10-second threshold
+- **Orphaned manager detection** — cleanup of abandoned sessions
+- **Balance confirmation** — 24-hour staleness check
+
+---
+
+## 18. Exit Condition Architecture
+
+DawnTrader's exit management operates through multiple layers:
+
+### 18.1 Exit Hierarchy
+
+```
+Layer 1: PaperExecutionEngine.checkExitConditions()
+  │  Checks: target_hit, stop_hit, trailing_stop_hit, max_holding_period
+  │  Frequency: Every 1.5 seconds
+  │
+Layer 2: TrailingExitController.updatePosition()
+  │  Checks: break-even latch, target latch, dynamic trailing
+  │  Updates: stop price based on HWM, DI, VolNoise, ATR
+  │  Triggers: shouldClosePosition() when price <= currentStopPrice
+  │
+Layer 3: MicroExecutionService.microCheck()
+  │  Checks: price delta trigger on RTB pairs
+  │  Frequency: Every 8 seconds (paper mode only)
+  │  ⚠ Status: triggerSymbolCheck() is TODO stub
+  │
+Layer 4: Kill Switch (from Phase 4)
+  │  Triggers: daily_loss_kill_switch_pct exceeded
+  │  Effect: Emergency shutdown of all trading
+```
+
+### 18.2 Exit Close Reason Mapping
+
+```typescript
+const closeReasonMap = {
+  'stop_hit': 'SL',
+  'target_hit': 'TP',
+  'trailing_stop_hit': 'TRAILING_STOP',
+  'max_holding_period': 'UNKNOWN',  // ← Could be improved
+  'guardrail': 'KILL_SWITCH',
+  'manual_stop': 'MANUAL'
+};
+```
+
+---
+
+## 19. RTB Promotion Pipeline
+
+### 19.1 Event-Driven Promotion
+
+RTB promotion is triggered by three mechanisms:
+
+1. **TCL_ACTIVATED event** — when TCL watchdog confirms readiness
+2. **TRADE_CLOSED event** — when capacity is freed by a closing trade
+3. **Continuous promotion loop** (Directive 8.8.8) — 30-second timer checks
+
+### 19.2 Multi-Signal Promotion (Phase C.14.B)
+
+```
+checkRtbPromotion()
+  ├── Check TCL active via tclWatchdog
+  ├── Calculate openSlots = maxTrades - openPositions
+  ├── Get rankedSignals (up to openSlots count)
+  └── For each signal:
+        ├── Check FinalScore >= 0.35 (MIN_FINAL_SCORE)
+        ├── Remove from RTB queue FIRST (Directive A3.R1)
+        ├── executePromotedSignal() → processSignal()
+        ├── If success: update signal with tradeId, emit PROMOTION event
+        └── If fail: signal already removed, not restored (⚠ potential issue)
+```
+
+### 19.3 ⚠ Failed Promotion Not Restored
+
+When `executePromotedSignal()` fails, the signal has already been removed from the RTB queue (Step 1 of Directive A3.R1) but is NOT restored. The code explicitly acknowledges this:
+
+```
+console.warn('[8.8.4-A3.R1][PROMOTION_ORDER] Signal was removed from RTB but trade failed - signal not restored');
+```
+
+This is a design trade-off to prevent double-activation, but means failed promotions lose signals permanently.
+
+---
+
+## 20. Cross-References
+
+| This Section | Related To | Connection |
+|-------------|------------|------------|
+| PaperExecutionEngine | Phase 3 (Signal Orchestrator) | Receives signals via RTB → TCL → processSignal() |
+| PaperExecutionEngine | Phase 4 (Trade Safety) | Calls `checkGuardrailRisk()` before execution |
+| PaperExecutionEngine | Phase 4 (Guardrails V2) | Reads guardrails for position limits, kill switch |
+| TrailingExitController | Phase 4 (Cost Model) | Uses `computeNetBreakeven()`, `computeNetTargetFloor()` |
+| TradingEngine Goal Alignment | Phase 4 §7 (Pre-Execution Validator) | SECOND location of deprecated Goal Alignment |
+| SLAL | Phase 3 (Signal Orchestrator) | Instruments GENERATION/SIZING stages |
+| ModeRegistry | All engines | Central registry for engine instances |
+| Price Cache | Phase 4 (Kraken Service) | Rate-governed price fetching |
+| Execution Config | Phase 4 (RISK-031) | MAX_POSITION_RISK contradiction |
+| RTB Promotion | Phase 3 (RTB Service) | Consumes ranked signals from RTB queue |
+
+---
+
+## 21. Critical Findings
+
+### Bugs Found
+
+| ID | Severity | Finding | Kyle Decision |
+|----|----------|---------|---------------|
+| BUG-010 | **CRITICAL** → INFORMATIONAL | TradingEngine uses `Math.random()` for partial fills in live mode (lines 347-388). Placeholder code. | **Deferred** — live mode not in scope. Informational until live refactor. |
+| BUG-011 | **CRITICAL** → INFORMATIONAL | TradingEngine uses `Math.random()` for slippage/fees in live mode (lines 391-393). | **Deferred** — live mode not in scope. Informational until live refactor. |
+| BUG-012 | **HIGH** | TradingEngine still computes and applies Goal Alignment (lines 246-254). Second location of deprecated logic. | **Confirmed** — remove with Goal Alignment. Wave 4.5. |
+
+### Risks Found
+
+| ID | Severity | Finding | Kyle Decision |
+|----|----------|---------|---------------|
+| RISK-032 | **MEDIUM** → ACCEPTED | MicroExecutionService `triggerSymbolCheck()` is a TODO stub. | **Accepted** — experimental/dormant. Leave hidden. |
+| RISK-033 | **LOW** | `trade-flow.ts` StrategyType only lists 9 strategies vs. 17 canonical. | Concurrent with BUG-002/003 fix. |
+| RISK-034 | **LOW** | Failed RTB promotion does not restore signal to queue. | No immediate action. |
+| RISK-035 | **LOW** | `max_holding_period` exit maps to close reason 'UNKNOWN'. | No immediate action. |
+| RISK-036 | **MEDIUM** → INFORMATIONAL | TradingEngine exit slippage uses `Math.random()` in live mode. | **Deferred** — bundled with BUG-010/011. |
+
+### NLAI Deprecation (Phase 5 Addendum — Kyle, 2026-02-16)
+
+| Component | Status | Removal Scope |
+|-----------|--------|---------------|
+| NLAI Interpreter | 🔴 LEGACY | `nlai-interpreter.ts` — remove |
+| Contextual NLAI Interpreter | 🔴 LEGACY | `contextual-nlai-interpreter.ts` — remove |
+| NLAI Execution Broker | 🔴 LEGACY | `nlai-execution-broker.ts` — remove |
+| NLAI Action Registry | 🔴 LEGACY | `nlai-action-registry.ts` — remove |
+| Execution Policy Controller | 🔴 LEGACY | `execution-policy-controller.ts` — remove (NLAI-only consumer) |
+| NLAI cluster bus events | 🔴 LEGACY | Remove event handlers |
+| NLAI API routes | 🔴 LEGACY | Remove route handlers |
+| Goal-update command handlers | 🔴 LEGACY | Remove (Goals tab already removed) |
+
+---
+
+## 22. Forward Audit Standard Checks
+
+Per Phase 4 Section 23, any subsystem operating independently of canonical routing is flagged.
+
+| Subsystem | Verdict | Reasoning |
+|-----------|---------|-----------|
+| ExecutionPolicyController | 🔴 **LEGACY — Remove with NLAI** (Kyle, 2026-02-16) | Used solely as NLAI approval gate. Walter deprecated. Remove with NLAI system. |
+| NLAIExecutionBroker | 🔴 **LEGACY — Remove with NLAI** (Kyle, 2026-02-16) | Part of deprecated NLAI conversational control infrastructure. |
+| NLAI Interpreter + Registry | 🔴 **LEGACY — Remove** (Kyle, 2026-02-16) | `nlai-interpreter.ts`, `contextual-nlai-interpreter.ts`, `nlai-action-registry.ts` — all part of deprecated Walter command bridge. |
+| TradingEngine (Goal Alignment) | **⚠ DEPRECATED CODE — Deferred** | Goal Alignment formally deprecated per Kyle. TradingEngine itself deferred until paper mode stable. Goal Alignment removal still required (Wave 4.5). |
+| TradingEngine (Placeholder Code) | **⚠ INFORMATIONAL ONLY** | BUG-010/011/RISK-036 are live-mode deficiencies. Non-blocking; live mode is deferred. |
+| MicroExecutionService | 🟡 **Experimental/Dormant — Accepted** (Kyle, 2026-02-16) | Paper-only, non-interfering. Leave hidden. Revisit if micro-price trading becomes intentional. |
+
+### Forward Standard for Remaining Phases
+
+Kyle's directive for ongoing audits: if any subsystem operates in parallel to the canonical pipeline, supervises without affecting execution, maintains independent classification logic, exists without being referenced in Signal Orchestrator/DSE/TradeSafety, or appears to be legacy conversational/autonomy scaffolding — it must be flagged as:
+
+> **POTENTIAL LEGACY — REQUIRES INTENT CONFIRMATION**
+
+---
+
+## 23. File Catalog
+
+### Active Execution Files
+
+| File | Lines | Directive | Status |
+|------|-------|-----------|--------|
+| `paper-execution-engine.ts` | ~2,308 | 11.0E | ✅ Primary engine (AUTHORITATIVE) |
+| `trading-engine.ts` | ~766 | Phase 37 | ⏸️ Deferred — live mode not in scope. Contains deprecated Goal Alignment. |
+| `trailing-exit-controller.ts` | ~335 | 9.2.A / 11.3A | ✅ Active trailing exit |
+| `micro-execution-service.ts` | ~374 | 27.F.14.MICRO | 🟡 Experimental/dormant — accepted by Kyle |
+| `mode-registry.ts` | ~162 | 27.F.15.B.4 | ✅ Engine registry + telemetry |
+| `lifecycle-events.ts` | ~177 | REB 2.12D | ✅ Event broadcasting |
+| `execution-timing.ts` | ~274 | — | ✅ Order timing instrumentation |
+| `bob-trade.ts` | ~252 | 27.F.15.A | ✅ Trade data cache |
+| `price-cache.ts` | ~448 | 8.8.4-A4.R10R-4 | 🔒 LOCKED |
+| `paper-sim-service.ts` | ~300+ | — | ✅ Session management |
+
+### LEGACY Execution Files (Phase 5 Addendum — Kyle Deprecated NLAI)
+
+| File | Lines | Status |
+|------|-------|--------|
+| `execution-policy-controller.ts` | ~309 | 🔴 LEGACY — remove with NLAI |
+| `nlai-execution-broker.ts` | ~477 | 🔴 LEGACY — remove with NLAI |
+| `nlai-interpreter.ts` | TBD | 🔴 LEGACY — remove |
+| `contextual-nlai-interpreter.ts` | TBD | 🔴 LEGACY — remove |
+| `nlai-action-registry.ts` | TBD | 🔴 LEGACY — remove |
+
+### Supporting Type/Config Files
+
+| File | Lines | Status |
+|------|-------|--------|
+| `trade-flow.ts` | ~127 | ⚠ 9 strategies vs 17 canonical |
+| `execution-config.ts` | ~23 | ✅ TEC config (RISK-031 noted) |
+| `signal_lifecycle_audit.ts` | ~300+ | ✅ SLAL instrumentation |
+| `covariance-engine.ts` | ~371 | ✅ Portfolio risk math |
+
+---
+
+## 24. Kyle's Architectural Confirmations (Phase 5 Addendum)
+
+### Authoritative Execution Scope
+
+The only execution path currently in scope for architectural validation is:
+
+```
+FX5 → SQE → RTB → TCL → PaperExecutionEngine → DSE → TradeSafety → Exit Loop
+```
+
+Anything outside this path is non-blocking unless it:
+- Interferes with paper execution
+- Mutates shared execution state
+- Overrides guardrails
+- Alters sizing logic
+- Injects signals
+
+### Confirmed: No Hidden Shutdown Logic
+
+Kill switch in guardrails remains the sole automatic shutdown mechanism. No hidden halts exist in the execution layer.
+
+### Confirmed: DSE Cap Authority Deferred
+
+The DSE cap vs guardrail authority conflict (RISK-031) remains on the post-audit design reconciliation list. No change during audit phase.
+
+### Confirmed: Autonomy Cluster Reminder
+
+MCP, GASP, MOF, MACO, ECS, etc. remain legacy autonomy infrastructure — slated for removal. Not part of execution path.
+
+### Summary of Kyle Decisions
+
+| Topic | Decision |
+|-------|----------|
+| Paper mode | **Authoritative** — sole execution path in scope |
+| Live mode | **Deferred** — refactor after paper mode stable |
+| NLAI | **Deprecated** — remove all files |
+| Goal Alignment | **Remove completely** — all locations, all references |
+| MicroExecution | **Accepted** — experimental/dormant, leave hidden |
+| DSE cap conflict | **Deferred** — post-audit reconciliation |
+| TradingEngine | **Deferred** — future fork: refactor or rebuild from paper core |
+
+---
+
+## 25. Revision History
+
+| Version | Date | Changes | Author |
+|---------|------|---------|--------|
+| v1.0 | 2026-02-16 | Initial Phase 5 audit — dual engine architecture, exit management, lifecycle, 3 bugs + 5 risks found | Claude Code |
+| v1.1 | 2026-02-16 | Phase 5 Addendum: NLAI formally deprecated (Kyle), TradingEngine deferred, MicroExecution accepted as experimental, BUG-010/011/RISK-036 reclassified as informational, RISK-032 accepted, NLAI deprecation table added, Forward Audit Standard expanded | Claude Code |
+
+
+---
+
+# Part III: Intelligence & Learning
+
+
+---
+
+# Chapter 6: ML Pipeline, Learning & Calibration
+
+## Table of Contents
+
+1. [Architecture Overview](#1-architecture-overview)
+2. [VTS Runner — The Autonomous Simulation Engine](#2-vts-runner--the-autonomous-simulation-engine)
+3. [VTS Service — Trade Simulation & Calibration Trigger](#3-vts-service--trade-simulation--calibration-trigger)
+4. [ML Calibration Service — Phase-10 Training Loop](#4-ml-calibration-service--phase-10-training-loop)
+5. [Calibration Utilities — Linear Regression Engine](#5-calibration-utilities--linear-regression-engine)
+6. [ML Service Client — Python Microservice Bridge](#6-ml-service-client--python-microservice-bridge)
+7. [Reward Evaluator — Per-Strategy Per-Regime Rewards](#7-reward-evaluator--per-strategy-per-regime-rewards)
+8. [Drift Detector — Calibration Parameter Monitoring](#8-drift-detector--calibration-parameter-monitoring)
+9. [Retraining Freeze Controller — Model Shock Prevention](#9-retraining-freeze-controller--model-shock-prevention)
+10. [Telemetry Aggregator — Performance Data Collection](#10-telemetry-aggregator--performance-data-collection)
+11. [Adaptive Learning Repository — SQL-Backed Weight Persistence](#11-adaptive-learning-repository--sql-backed-weight-persistence)
+12. [Regime Archiver — Long-Term Metric Preservation](#12-regime-archiver--long-term-metric-preservation)
+13. [Learning Cooldown — Regime-Aware Update Gating](#13-learning-cooldown--regime-aware-update-gating)
+14. [Adjustment Stability — Observability Instrumentation](#14-adjustment-stability--observability-instrumentation)
+15. [Continuous Learning Engine — LEGACY](#15-continuous-learning-engine--legacy)
+16. [Learning Cycle Service — LEGACY](#16-learning-cycle-service--legacy)
+17. [Learning Coordinator — LEGACY](#17-learning-coordinator--legacy)
+18. [Learning Bridge — LEGACY](#18-learning-bridge--legacy)
+19. [Learning Gate Validator — LEGACY](#19-learning-gate-validator--legacy)
+20. [Mathematical Validation: VTS Reward & Calibration](#20-mathematical-validation-vts-reward--calibration)
+21. [Data Flow: VTS → ML Pipeline → Parameter Adjustment](#21-data-flow-vts--ml-pipeline--parameter-adjustment)
+22. [Critical Findings](#22-critical-findings)
+23. [File Catalog](#23-file-catalog)
+24. [Kyle's Phase 6 Architectural Confirmations](#24-kyles-phase-6-architectural-confirmations)
+25. [Revision History](#25-revision-history)
+
+---
+
+## 1. Architecture Overview
+
+The ML Pipeline, Learning & Calibration layer is the **feedback loop** that enables DawnTrader to improve over time. Its primary function is:
+
+1. **Simulate** virtual trades using real market data (VTS Runner)
+2. **Record** outcomes with full Phase-10 metric coverage (VTS Service + Telemetry Aggregator)
+3. **Calibrate** profit prediction models from outcomes (ML Calibration + Calibration Utils)
+4. **Evaluate** strategy-regime reward performance (Reward Evaluator)
+5. **Detect** parameter drift and trigger recalibration (Drift Detector)
+6. **Archive** regime-level metrics for long-term seeding (Regime Archiver)
+7. **Gate** learning updates based on regime stability (Learning Cooldown)
+
+### System State Context
+
+DawnTrader is currently in **Paper Mode + Passive Learning**. This means:
+- The VTS Runner is the **only active execution component** generating data
+- No real trades are placed; all outcomes are virtual
+- The ML pipeline consumes VTS-generated data exclusively
+- Learning is **passive** — parameters are adjusted but no live trades are affected
+
+### Core Architectural Problem: Artificial Strategy Differentiation
+
+> **Kyle (Phase 6 Addendum)**: "Strategy differentiation is currently artificial. That is the core architectural problem in Phase 6."
+
+Although the VTS Runner implements multi-strategy simulation (Directive 11.8C) — iterating over ALL strategies compatible with a pair's regime — the underlying signal generation logic in `generatePhase10Signal()` is **identical for all strategies**. Specifically:
+
+| Component | Implementation | Strategy-Specific? |
+|-----------|---------------|-------------------|
+| HybridScore | `simulateHybridScore(regime)` — regime lookup + random noise | ❌ NO |
+| PredictiveConfidence | `hybridScore * 0.8 + 0.1 + noise` | ❌ NO |
+| DecayPenalty | `Math.random() * 0.15` | ❌ NO |
+| FinalScore | `hybridScore * w1 + predictiveConfidence * w2 + regimeWeight * w3 - decayPenalty * w4` | ❌ NO |
+| Stop/Target | `max(config, volatility * multiplier)` | ❌ NO |
+| Entry Logic | Current market price | ❌ NO |
+| Confidence Model | Derived from simulated hybridScore | ❌ NO |
+
+**Consequence**: The system simulates N strategies per pair, but all N strategies produce signals from the same generic math. Only randomness and metadata labels differ. This means:
+- **Per-strategy calibration is statistically diluted** — calibration learns noise, not structural edge
+- **Strategy comparisons are partially artificial** — "Breakout" vs "Mean Reversion" produce effectively identical signals
+- **ML magnitude adjustments are noisy** — performance multipliers modulate based on random variation
+- **True structural edge cannot emerge** — the pipeline cannot discover which strategies genuinely outperform because no strategy has unique signal logic
+
+**Required Correction**: Each strategy must have unique entry logic, unique stop/target logic, unique confidence modeling, and unique feature-derived scoring. Without this, multi-strategy simulation is architectural infrastructure waiting for real strategy engines.
+
+### Two-Layer Learning Architecture
+
+The audit reveals **two distinct learning ecosystems** that operate independently:
+
+| Layer | Purpose | Status | Data Source |
+|-------|---------|--------|-------------|
+| **VTS/ML Pipeline** (Canonical) | Calibrate profit predictions, evaluate strategies, detect drift | **ACTIVE** | VTS virtual trades, real Kraken prices |
+| **Walter-Era Learning** (Legacy) | Cognitive weights, agent feedback, cluster learning deltas | **CONFIRMED LEGACY** (Kyle, Phase 6 Addendum) | Walter/Bob agent interactions, experience memory |
+
+The **VTS/ML Pipeline** is the canonical learning system. It operates within the authoritative execution path and directly affects trading parameters.
+
+The **Walter-Era Learning** system (ContinuousLearningEngine, LearningCoordinator, LearningBridge, LearningCycleService, LearningGateValidator) was built for the Walter/Bob AI ecosystem and manages "cognitive weights" (reasoning, exploration, exploitation, riskAversion, adaptability). These are **not connected to the canonical trading pipeline** — they track agent behavioral tendencies, not trading strategy parameters.
+
+> **CONFIRMED LEGACY (Kyle, Phase 6 Addendum)**: The Walter-Era Learning subsystem operates independently of the canonical trading pipeline, maintains its own classification logic (CognitiveWeights), and supervises without affecting trade execution. Kyle confirmed these are "legacy autonomy-era artifacts" and recommended marking for removal in cleanup wave.
+
+---
+
+## 2. VTS Runner — The Autonomous Simulation Engine
+
+**File**: `server/services/vts-runner.ts` (~1,400 lines)
+**Directive**: 11.0E.1 (Upgraded from 8.8.4-M5C)
+**Status**: 🔒 LOCKED MODULE — Active, Primary
+
+### Purpose
+
+The VTS Runner is the autonomous virtual trading simulator. During Passive Learning mode, it runs a **60-second simulation loop** that:
+1. Fetches 100 pairs from the FX5 Scanner Ideal Pool
+2. Calculates per-pair market regimes from OHLC data
+3. Generates virtual trade signals using Phase-10 canonical math
+4. Opens virtual trades and tracks them against **real Kraken prices**
+5. Closes trades when stop/target/timeout is hit
+6. Persists outcomes to telemetry and ML pipeline
+
+### Simulation Cycle Flow
+
+```
+startAutonomousSimulation()
+  └─ setInterval(runPhase10SimulationCycle, 60s)
+       ├─ resolveOpenVirtualTrades()     ← Close trades hit by real prices
+       ├─ getIdealPoolPairs()            ← FX5 Scanner → up to 100 pairs
+       ├─ For each pair:
+       │    ├─ fetchOHLCForPair()        ← Kraken 15m candles (50 max)
+       │    ├─ calculatePairRegime()     ← Per-pair regime classification
+       │    ├─ getStrategiesForRegime()  ← All compatible strategies (11.8C)
+       │    └─ For each strategy:
+       │         └─ generatePhase10Signal()
+       │              ├─ Governance filter (11.7R-E)
+       │              ├─ Strategy mode modulation (11.7S)
+       │              ├─ Net EV gate (11.8B-A2)
+       │              ├─ ROI pre-filter (11.7C)
+       │              ├─ ADX guard (SMA strategies)
+       │              ├─ Duplicate position guard (11.8C)
+       │              ├─ Position sizing + mode overlay
+       │              └─ Create OpenVirtualTrade
+       └─ Record telemetry for all generated signals
+```
+
+### Key Design Decisions
+
+**Multi-Strategy Simulation (Directive 11.8C)**: The VTS simulates ALL strategies compatible with a pair's regime, not just one "best" strategy. This generates N trades per pair where N equals the regime-compatible strategy count. Each trade has an `executionContext` of either `'VTS'` (single) or `'VTS_MULTI'` (multi-strategy).
+
+**Real-Price Resolution (Directive 11.6)**: Trades are NOT resolved with random simulation. The VTS opens trades at real entry prices and resolves them against real Kraken prices via the price cache's `vtsSimulation` bucket. This replaced the legacy random simulation path (deprecated by 11.6D).
+
+**Pre-Score Governance (Directive 11.7R-E)**: Before any scoring, strategies are checked against regime stability. If a strategy's dependency (trend, volatility, stability) is blocked in the current regime stability state, the signal is never scored, never ranked, and never generates a trade.
+
+**Strategy Mode Modulation (Directive 11.7S)**: After governance, the strategy mode is resolved (AGGRESSIVE, STANDARD, CONSERVATIVE) based on global regime stability. The mode overlay adjusts position size, stop-loss distance, and take-profit distance via multipliers.
+
+### Configuration
+
+```typescript
+DEFAULT_CONFIG = {
+  autonomousMode: true,
+  simulationIntervalSec: 60,      // 60-second cycle
+  pairsPerCycle: 100,              // Up to 100 pairs from Ideal Pool
+  strategies: [...],               // 8 strategies (legacy fallback)
+  targetProfit: 0.015,             // 1.5% target
+  stopLoss: 0.008,                 // 0.8% stop
+  minVolume24h: 50000,
+  minPrice: 0.5
+};
+
+MAX_OPEN_TRADES = 300;             // Directive 11.6E: Kraken API rate limit cap
+MAX_HOLD_MS = 24 * 60 * 60 * 1000; // 24-hour max hold time
+```
+
+### Critical Observations
+
+1. **HybridScore is simulated, not computed**: `simulateHybridScore()` generates a random regime-adjusted score (base ± random * 0.2). This is **BUG-001** from the pre-audit — VTS learns from statistically meaningless hybridScore data.
+
+2. **PredictiveConfidence is simulated**: `simulatePredictiveConfidence()` derives from the simulated hybridScore (base * 0.8 + 0.1 ± random * 0.15). Same data quality issue as hybridScore.
+
+3. **DecayPenalty is random**: `simulateDecayPenalty()` returns `Math.random() * 0.15`. No relationship to actual signal age or staleness.
+
+4. **FinalScore uses real weights but simulated inputs**: The `computeFinalScore()` correctly applies `SCORE_WEIGHTS.FINAL_SCORE` weights, but since hybridScore and predictiveConfidence are simulated, the finalScore is meaningless for strategy comparison.
+
+5. **Net EV Gate uses real math**: The `computeNetExpectancyKernel()` gate is canonical — identical to DSS and Paper Execution. However, it receives `DI = predictiveConfidence * 100`, and since predictiveConfidence is simulated, the DI is also simulated.
+
+> **FINDING**: The VTS Runner's signal generation pipeline uses **real price data, real regime classification, real governance, and real Net EV math**, but feeds them **simulated scoring inputs** (hybridScore, predictiveConfidence, decayPenalty). This creates a paradox where sophisticated governance gates filter signals based on noise. The trade outcomes (entry/exit via real prices) are valid, but the scoring metadata attached to those outcomes is meaningless for calibration purposes.
+
+---
+
+## 3. VTS Service — Trade Simulation & Calibration Trigger
+
+**File**: `server/services/vts-service.ts` (~500+ lines)
+**Directive**: 10.0.A (Upgraded from 8.8.4-L8)
+**Status**: 🔒 LOCKED MODULE — Active, Supporting
+
+### Purpose
+
+The VTS Service provides:
+1. **VirtualSignal / VirtualTrade** type definitions (Phase-10 schema v1.6.7)
+2. **Trade storage** — in-memory map of virtual trades + closed trades array
+3. **Calibration interface** — `runCalibration()` for per-strategy calibration
+4. **ML Calibration trigger** — fires every 10 HYBRID trades (Directive 10.6)
+5. **Session metrics** — rolling averages for Phase-10 metrics
+
+### Deprecated Methods
+
+| Method | Reason | Replacement |
+|--------|--------|-------------|
+| `createVirtualTrade()` | Directive 11.6D — legacy random simulation | `openVirtualTrades` in vts-runner.ts |
+| `closeTrade()` | Directive 11.6D — legacy random exits | `resolveOpenVirtualTrades()` in vts-runner.ts |
+
+### VirtualSignal Schema (Phase-10, M50 Compliant)
+
+```typescript
+interface VirtualSignal {
+  id: string;
+  symbol: string;
+  entryPrice: number; takeProfit: number; stopLoss: number;
+  spread: number; predictedProfit: number;
+  strategy: string;
+  signalType: 'QUANT' | 'PATTERN' | 'HYBRID';
+  patternType?: string | null;
+  // Phase-10 canonical fields
+  finalScore: number; hybridScore: number;
+  predictiveConfidence: number; regimeWeight: number;
+  decayPenalty: number; expectedEdge: number;
+  frictionCost: number;
+  regime: string; regimeScore?: number;
+  pool: 'ideal' | 'rotational';
+  source: 'simulation' | 'live';
+}
+```
+
+### Calibration Trigger Flow
+
+```
+Trade closed → closedTrades.push(trade)
+  └─ if (calibrationCounter++ % 10 === 0)
+       └─ triggerMLCalibration()     ← fire-and-forget
+            └─ MLCalibrationService.analyzePerformance()
+                 └─ MLCalibrationService.logRecommendations()
+```
+
+### Trade Duration
+
+All VTS trades have a **3-hour trade window** (`TRADE_DURATION = 3 * 60 * 60 * 1000`). This is the legacy VTS Service window. However, the VTS Runner uses a **24-hour max hold** (`MAX_HOLD_MS`). The VTS Service's 3-hour window applies to the legacy random simulation pathway (deprecated).
+
+---
+
+## 4. ML Calibration Service — Phase-10 Training Loop
+
+**File**: `server/services/ml-calibration.ts` (~232 lines)
+**Directive**: 11.0E.2
+**Status**: 🔒 LOCKED — Active
+
+### Purpose
+
+Analyzes VTS trade outcomes using Phase-10 metrics and generates learning recommendations for strategy weighting.
+
+### Performance Score Formula
+
+```
+PerformanceScore = (finalScore × 0.5) + (predictiveConfidence × 0.3) + (regimeWeight × 0.2)
+```
+
+### Analysis Pipeline
+
+1. Retrieve recent `windowSize` trades (default: 50) of signal type HYBRID
+2. Group by pattern/strategy
+3. For each group:
+   - Compute win rate, expectancy, avg finalScore, avg edge delta
+   - Compute `performanceScore` using the Phase-10 formula above
+   - Derive `performanceMultiplier = clamp(performanceScore, 0.5, 1.5)`
+   - If win rate > 55%: **INCREASE** weight by `0.05 × performanceMultiplier`
+   - If win rate < 45%: **DECREASE** weight by `0.05 × performanceMultiplier`
+   - Otherwise: **HOLD**
+
+### Edge Delta Tracking
+
+```
+edgeDelta = expectedEdge - realizedPnL
+```
+
+This measures how well the expected edge prediction tracked actual outcomes. A positive delta means the system overestimated; negative means underestimated.
+
+### Critical Observation
+
+The ML Calibration Service consumes the **simulated** metrics from VTS (see Section 2 findings). Since `finalScore`, `predictiveConfidence`, and `regimeWeight` are based on simulated inputs, the `performanceScore` and `performanceMultiplier` are also derived from noise. The **win rate** and **expectancy** are valid (based on real price outcomes), but the performance-weighted adjustment magnitude is meaningless.
+
+> **FINDING**: The calibration adjustment magnitude (±0.05 × performanceMultiplier) is modulated by simulated data, but the directional recommendation (INCREASE/DECREASE/HOLD) is based on real win rate data. The recommendations are directionally valid but their magnitude is noise-modulated.
+
+---
+
+## 5. Calibration Utilities — Linear Regression Engine
+
+**File**: `server/utils/calibration.ts` (~324 lines)
+**Directive**: 8.8.4-L8
+**Status**: 🔒 LOCKED MODULE — Active
+
+### Purpose
+
+Performs linear regression to learn calibration coefficients that map predicted profits to actual realized profits.
+
+### Core Formula
+
+```
+calibrated_profit = αₛ + βₛ × predicted_profit
+```
+
+Where:
+- `αₛ` = intercept (clamped to [-0.01, 0.01])
+- `βₛ` = slope (clamped to [0.05, 0.5])
+- Per-strategy coefficients when sample count ≥ 10, otherwise global fallback
+
+### Default Coefficients
+
+```typescript
+{ alpha: 0.0018, beta: 0.19, rSquared: 0, sampleCount: 0 }
+```
+
+### Linear Fit Implementation
+
+Standard OLS (Ordinary Least Squares) regression with:
+- Minimum 10 samples required
+- R² computation (coefficient of determination)
+- Standard error computation
+- Coefficient clamping for stability
+- Anomaly detection: warns when `|β - 1| > 0.3` or `stdError > 0.05`
+
+### Persistence
+
+- **File**: `logs/vts_calibration.json` — current global + per-strategy calibration
+- **History**: `logs/vts_calibration_history/{date}.json` — daily snapshots
+
+### Per-Strategy Calibration (L8 Enhancement)
+
+`calibrateFromTradesPerStrategy()` runs linear fit separately for each strategy, producing independent α/β/r²/stdError coefficients per strategy plus a global set from all trades combined.
+
+---
+
+## 6. ML Service Client — Python Microservice Bridge
+
+**File**: `server/services/ml-service-client.ts` (~245 lines)
+**Directive**: 8.8.4-L3
+**Status**: Active (but depends on external Python service availability)
+
+### Purpose
+
+Async client for the Python ML microservice (`services/ml_service.py`, ~73KB). Provides:
+- `predictPromotion()` — probability of trade promotion
+- `predictProfit()` — predicted profit value
+- `getMLServiceStatus()` — health check
+- `blendConfidence()` — NGC/promotion blending
+
+### Integration Points
+
+- **Host**: `ML_SERVICE_HOST` env var, default `http://localhost:5001`
+- **Timeout**: 2 seconds per request
+- **Cache**: In-memory with 30-second TTL, 500-entry max
+- **Boot dependency**: Checks `bootOrchestrator.isMLReady()` — returns fallback if not ready
+
+### Fallback Values
+
+When ML service is unavailable:
+- Promotion probability: `0.5` (neutral)
+- Predicted profit: `0.05` (default)
+
+### Legacy Fields in PredictionInput
+
+```typescript
+interface PredictionInput {
+  symbol: string; strategy: string;
+  ngc: number;     // ← Legacy field (NGC removed in Phase 10)
+  cwqi: number;    // ← Legacy field (CWQI removed in Phase 10)
+  riskRatio: number; profitTarget: number;
+  signalAge?: number; entry: number; exit: number; stop: number;
+}
+```
+
+> **FINDING**: The ML Service Client's `PredictionInput` interface still references `ngc` and `cwqi` — both of which were removed in Phase 10. This interface is out of date with the Phase-10 canonical metrics (finalScore, hybridScore, predictiveConfidence, regimeWeight).
+
+---
+
+## 7. Reward Evaluator — Per-Strategy Per-Regime Rewards
+
+**File**: `server/services/reward-evaluator.ts` (~274 lines)
+**Directive**: 8.8.4-L14
+**Status**: 🔒 LOCKED MODULE — Active
+
+### Purpose
+
+Computes per-strategy, per-regime cumulative rewards using a weighted formula.
+
+### Reward Formula
+
+```
+R_{s,r} = α₁ × profit_rate + α₂ × win_rate − α₃ × drawdown
+```
+
+Where:
+- `α₁ = 0.6` (profit rate weight)
+- `α₂ = 0.3` (win rate weight)
+- `α₃ = 0.1` (drawdown penalty weight)
+
+### Operation
+
+- **Evaluation interval**: Every 30 minutes
+- **Trade history**: Rolling window of last 1,000 trades per strategy-regime pair
+- **Drawdown**: Peak-to-current equity drawdown per strategy-regime pair
+- **Persistence**: `logs/rewards/reward_history.json`
+
+### Key Methods
+
+| Method | Description |
+|--------|-------------|
+| `recordTrade(trade)` | Record a trade result for a strategy-regime pair |
+| `getReward(strategy, regime)` | Get current reward for a strategy-regime combination |
+| `getAllRewards()` | Get all strategy-regime reward values |
+| `evaluateAll()` | Recompute all rewards (runs on 30-min interval) |
+
+### Consumer
+
+The Reward Evaluator is imported by the VTS Service (`getRewardEvaluator()`) but the audit found **no evidence of the reward values being fed back into the scoring pipeline**. The rewards are computed and persisted but not consumed by signal generation or trade selection.
+
+> **FINDING**: The Reward Evaluator computes strategy-regime rewards but these values do not appear to be consumed by any downstream scoring or selection logic. The reward data is observability-only in the current architecture.
+
+---
+
+## 8. Drift Detector — Calibration Parameter Monitoring
+
+**File**: `server/services/drift-detector.ts` (~400+ lines)
+**Directive**: 8.8.4-L11
+**Status**: 🔒 LOCKED MODULE — Active
+
+### Purpose
+
+Monitors calibration parameters (α, β, σ) for drift and triggers auto-recalibration when thresholds are exceeded.
+
+### Drift Score Formula
+
+```
+DriftScore = w₁|βₛ - βₛ₋₁| + w₂|αₛ - αₛ₋₁| + w₃(σₛ / σ_baseline)
+```
+
+Where:
+- `w₁ = 0.6` (beta weight — slope drift is most important)
+- `w₂ = 0.2` (alpha weight — intercept drift)
+- `w₃ = 0.2` (sigma weight — error growth)
+
+### Thresholds
+
+| Threshold | DriftScore | Action |
+|-----------|-----------|--------|
+| Warning | > 0.15 | Flag as drifting, emit `drift_warning` |
+| Recalibration | > 0.25 | Trigger auto-recalibration, emit `drift_recalibrate` |
+
+### Operation
+
+- **Check interval**: Every 15 minutes
+- **History depth**: Last 10 snapshots per strategy
+- **Persistence**: `logs/drift_history/`, `logs/drift_events/`
+- **Integration**: Checks retraining freeze controller before triggering recalibration
+
+### Status States
+
+```
+stable → drifting → recalibrating → stable
+```
+
+---
+
+## 9. Retraining Freeze Controller — Model Shock Prevention
+
+**File**: `server/services/retraining-freeze-controller.ts` (~231 lines)
+**Directive**: 10.0.E
+**Status**: 🔒 LOCKED MODULE — Active
+
+### Purpose
+
+Prevents "Model Shock" when fee constants change. Pauses ML retraining for one epoch (default: 1 hour) after activation.
+
+### Behavior
+
+- Auto-activates on construction with Phase 10.0 friction correction message
+- Checks expiry every 60 seconds
+- Provides `isRetrainingAllowed()` gate for ML clients
+- Provides `guardRetraining(fn, fallback)` wrapper that returns fallback if frozen
+
+### Current State
+
+On every server restart, the freeze controller activates a 1-hour freeze for "Phase 10.0 friction correction stabilization (0.26% → 0.50%)". This means **every restart blocks ML retraining for 1 hour**.
+
+> **FINDING**: The retraining freeze controller unconditionally activates a 1-hour freeze on every instantiation (line 64: `this.activatePhase10Freeze()`). This was designed as a one-time Phase 10 deployment measure but runs on every restart. This is likely a stale deployment artifact that should be evaluated for removal.
+
+---
+
+## 10. Telemetry Aggregator — Performance Data Collection
+
+**File**: `server/services/telemetry-aggregator.ts` (~62KB, ~1,500+ lines)
+**Directive**: 10.8
+**Status**: Active (not locked)
+
+### Purpose
+
+Collects and aggregates performance telemetry for adaptive pair selection. The single largest service file in the Phase 6 scope.
+
+### Key Features
+
+- **Rolling 24-hour history window** per pair
+- **Weighted composite scoring** for pair ranking
+- **Pool-level performance tracking** (ideal vs rotational — Directive 11.2 R1)
+- **Source segregation** (simulation vs live — Directive 11.0E.2)
+- **VTS-only write restriction** (Directive 11.4C.1) — only VTS can write telemetry
+- **Z-score tracking** for volatility and trend drift (Directive 11.7F-B)
+
+### PairTelemetry Interface
+
+Tracks per-pair: finalScore, hybridScore, regimeWeight, regimeScore, predictiveConfidence, successRate, avgDecayedStrength, pairRegime, pattern, pool, source, signalType, strategy, volZ, trendZ, volZHistory, trendZHistory.
+
+### Consumer Chain
+
+The telemetry aggregator feeds the **AdaptiveScanManager** with ranked pair lists and the **DynamicStrategySelector** with regime-aware metrics. It is the central data collection point for the entire VTS feedback loop.
+
+---
+
+## 11. Adaptive Learning Repository — SQL-Backed Weight Persistence
+
+**File**: `server/services/adaptive-learning-repository.ts` (~170+ lines)
+**Directive**: 11.1B
+**Status**: Active
+
+### Purpose
+
+Provides SQL-backed persistence for adaptive learning weights per strategy, per regime. Enables rehydration of learning state after restarts with timestamp awareness for time-based decay.
+
+### Features
+
+- **Strategy-specific weights** by regime
+- **Timestamp propagation** for time decay on rehydration
+- **Live mode-only persistence** (consistent with 11.1A1 provenance rules)
+- **Upsert semantics** for weight updates
+
+### Database Schema
+
+Uses the `adaptive_learning` table with columns: strategyId, mode, regime, weights (JSONB), updatedAt.
+
+---
+
+## 12. Regime Archiver — Long-Term Metric Preservation
+
+**File**: `server/core/archival/regime-archiver.ts` (~250+ lines)
+**Directive**: 11.7E
+**Status**: Active
+
+### Purpose
+
+Persistent regime-metric archival for Phase 12 seeding. Archives regime-level predictive metrics (winRate, avgPnL, skipRatio, confidence, dynamicROI, momentum/volatility/trend weights) into compressed daily files with checksums.
+
+### Archive Record Schema (v1.1)
+
+```typescript
+interface RegimeArchiveRecord {
+  _schema: 'regime-archive/v1.1';
+  timestamp: string;
+  source: 'VTS';           // VTS-only source isolation
+  windowDays: number;       // 7 or 30 day window
+  regime: string;
+  strategy: string;
+  metrics: RegimeArchiveMetrics;
+  checksum: string;         // SHA-1 integrity hash
+  _metadata: RegimeArchiveMetadata;
+}
+```
+
+### Features
+
+- **Canonical stringification** for deterministic checksums
+- **SHA-1 integrity** on every record
+- **Manifest tracking** with version and compression metadata
+- **7-day and 30-day windows** for regime metrics
+- **zlib compression** for archival
+
+---
+
+## 13. Learning Cooldown — Regime-Aware Update Gating
+
+**File**: `server/core/governance/learning-cooldown.ts` (~160+ lines)
+**Directive**: 11.7R
+**Status**: Active
+
+### Purpose
+
+Enforces regime-aware learning update rules to prevent learning from noisy data during regime instability.
+
+### Cooldown Rules
+
+| Stability | Positive Reinforcement | Negative Learning |
+|-----------|------------------------|-------------------|
+| **STABLE** | Immediate | Immediate |
+| **TRANSITION** | Batched (≥5 samples) | Immediate |
+| **UNSTABLE** | Deferred & tagged | Immediate |
+
+### Design Rationale
+
+- **Negative learning is always immediate**: Losses during unstable regimes are still real losses
+- **Positive learning is gated**: Wins during instability may be noise (lucky trades in choppy markets)
+- **Deferred updates are replayed** when stability returns to STABLE
+
+### State Tracking
+
+```typescript
+learningStats = {
+  immediatePositive: 0,
+  immediateNegative: 0,
+  batchedPositive: 0,
+  deferredPositive: 0,
+  replayed: 0,
+  lastStableAt: Date.now(),
+};
+```
+
+---
+
+## 14. Adjustment Stability — Observability Instrumentation
+
+**File**: `server/core/learning/adjustment-stability.ts` (~200+ lines)
+**Directive**: 11.7Q
+**Status**: Active — **OBSERVABILITY ONLY**
+
+### Purpose
+
+Read-only instrumentation showing adjustment frequency and stability. Explicitly marked as "no learning logic modifications permitted."
+
+### Features
+
+- **Parameter touch history**: Tracks how often each parameter is adjusted, direction (increasing/decreasing/oscillating/stable), cooldown status
+- **Bursty period detection**: Identifies clusters of rapid adjustments
+- **Safety signals**: Advisory-only flags for rapid adjustment, regime instability, poor performance, oscillation
+- **Lagged outcome context**: Post-adjustment trade outcome measurement
+
+---
+
+## 15. Continuous Learning Engine — LEGACY
+
+**File**: `server/services/continuous-learning.ts` (~389 lines)
+**Status**: ❌ **CONFIRMED LEGACY** (Kyle, Phase 6 Addendum) — "legacy autonomy-era artifact, mark for removal"
+
+### Evidence for Legacy Classification
+
+1. **Manages "CognitiveWeights"** (reasoning, exploration, exploitation, riskAversion, adaptability) — these are Walter/Bob AI behavioral weights, not trading strategy parameters
+2. **Database-backed** via `learningWeightProfile` table with userId/profileId
+3. **Broadcasts via contextBridge** — Walter's inter-agent communication system
+4. **Not connected to VTS/ML pipeline** — no imports from vts-runner, ml-calibration, telemetry-aggregator, or any canonical trading module
+5. **Not imported by any canonical trading service** — imported only by routes and other Walter-era services
+6. **Tracks "experience memory"** via `experienceMemoryLog` table — Walter's memory system
+
+### What It Does
+
+- `initializeProfile()` — Creates learning weight profile for a user
+- `adjustWeights()` — Adjusts cognitive weights with normalization
+- `learnFromExperience()` — Integrates experience memory entries
+- `evaluatePerformance()` — Generates recommendations based on performance metrics
+
+### Key Distinction
+
+This engine manages **behavioral tendency weights for AI agents**, not **trading strategy weights for the execution pipeline**. The canonical system uses `strategyWeights.ts` and `adaptive-learning-repository.ts` for strategy weight management.
+
+---
+
+## 16. Learning Cycle Service — LEGACY
+
+**File**: `server/services/learning-cycle-service.ts` (~350+ lines)
+**Status**: ❌ **CONFIRMED LEGACY** (Kyle, Phase 6 Addendum) — "legacy autonomy-era artifact, mark for removal"
+
+### Evidence for Legacy Classification
+
+1. **Imports from `learning-bob`** — Bob agent module
+2. **Imports from `phase-8.6.5-enhancements`** — Paper→Live knowledge transfer (Walter-era)
+3. **Generates "Cognitive Summary Reports"** — Walter's conversational intelligence
+4. **24-hour analysis cycle** of "learning fragments" from Learning Bob
+5. **Feeds to `feedbackIntegrationService`** — Walter's feedback integration
+
+### What It Does
+
+- Periodically analyzes Learning Fragments from Learning Bob
+- Detects patterns: user preferences, effective phrasing, problematic areas
+- Generates style recommendations for Walter's conversational behavior
+- Promotes paper-mode learnings to live mode via `paperLiveTransferService`
+
+This is **Walter's conversational improvement system**, not a trading learning system.
+
+---
+
+## 17. Learning Coordinator — LEGACY
+
+**File**: `server/services/learning-coordinator.ts` (~269 lines)
+**Status**: ❌ **CONFIRMED LEGACY** (Kyle, Phase 6 Addendum) — "legacy autonomy-era artifact, mark for removal"
+
+### Evidence for Legacy Classification
+
+1. **Phase 18.0** module — from a much earlier development phase
+2. **Subscribes to `learning_delta` events from cluster bus** — inter-node communication (unused in single-tenant mode)
+3. **Imports from `cluster-bus`** — distributed system infrastructure
+4. **Uses `agentLearningDelta` database table** — agent-specific learning, not trading
+5. **Fans out `model_sync` events** — multi-node model synchronization (no cluster exists)
+
+### What It Does
+
+- Validates, scores, and routes learning deltas across cluster nodes
+- Calculates trust (0.4), recency (0.3), and success rate (0.3) scores
+- Accepts deltas with score ≥ 0.75
+- Validates through ethical gate chain (LearningGateValidator)
+- Fans out model_sync events to other nodes
+
+This is a **distributed learning coordination system for a multi-node architecture that does not exist**. DawnTrader runs as a single-tenant application.
+
+---
+
+## 18. Learning Bridge — LEGACY
+
+**File**: `server/services/learning-bridge.ts` (~286 lines)
+**Status**: ❌ **CONFIRMED LEGACY** (Kyle, Phase 6 Addendum) — "legacy autonomy-era artifact, mark for removal"
+
+### Evidence for Legacy Classification
+
+1. **Phase 9.7** module
+2. **Tracks agent performance** (agentName, domain, accuracyScore, consensusAlignment) — agent behavioral tracking
+3. **Uses `agentLearningFeedback` database table** — agent-specific feedback
+4. **No connection to VTS/ML pipeline** or canonical trading logic
+
+### What It Does
+
+- Records feedback for agent performance (accuracy, consensus alignment)
+- Analyzes performance trends (improving/stable/declining)
+- Generates aggregated learning summaries across all agents
+- Identifies top performers and agents needing improvement
+
+This tracks **AI agent performance**, not trading strategy performance.
+
+---
+
+## 19. Learning Gate Validator — LEGACY
+
+**File**: `server/services/learning-gate-validator.ts` (~250+ lines)
+**Status**: ❌ **CONFIRMED LEGACY** (Kyle, Phase 6 Addendum) — "legacy autonomy-era artifact, mark for removal"
+
+### Evidence for Legacy Classification
+
+1. **Phase 18.0** module — same era as Learning Coordinator
+2. **4-gate chain**: Safety → Federated Ethics → Ethical Reasoner → Knowledge
+3. **Imported only by LearningCoordinator** — which is itself potential legacy
+4. **"Federated Ethics" gate** — multi-agent ethical consensus (no multi-agent system exists in production)
+5. **"Ethical Reasoner" gate** — principle-based evaluation (Walter-era AI ethics framework)
+
+### What It Does
+
+Applies a 4-gate validation chain to all learning operations:
+1. **Safety**: Kill switch, policy violations, risk limits
+2. **Federated Ethics**: Multi-agent ethical consensus
+3. **Ethical Reasoner**: Principle-based evaluation
+4. **Knowledge**: Semantic enrichment and gap detection (non-blocking)
+
+This is an **AI ethics framework for learning governance** — sophisticated but unused in the canonical trading pipeline.
+
+---
+
+## 20. Mathematical Validation: VTS Reward & Calibration
+
+### Calibration: Linear Regression (L8)
+
+**Formula**: `calibrated_profit = α + β × predicted_profit`
+
+**Validation**:
+- ✅ Standard OLS regression — mathematically correct
+- ✅ Coefficient clamping prevents extreme values (α: [-0.01, 0.01], β: [0.05, 0.5])
+- ✅ Minimum sample requirement (n ≥ 10)
+- ✅ R² and stdError computation correct
+- ⚠️ The β clamp range [0.05, 0.5] means the calibration can never produce β > 0.5, even if the true relationship has a steeper slope. This biases toward conservative predictions.
+
+### Reward Evaluator (L14)
+
+**Formula**: `R = 0.6 × profit_rate + 0.3 × win_rate − 0.1 × drawdown`
+
+**Validation**:
+- ✅ Weighted sum formula is standard
+- ✅ Drawdown computed correctly (peak-to-current equity)
+- ⚠️ `profit_rate` is `totalPnL / tradeCount` — this is average PnL per trade, not a rate. The name is slightly misleading.
+- ⚠️ The reward values are computed but **not consumed** by any downstream system (see Section 7 finding)
+
+### Drift Detection (L11)
+
+**Formula**: `DriftScore = 0.6|Δβ| + 0.2|Δα| + 0.2(σ / σ_baseline)`
+
+**Validation**:
+- ✅ Weighted change detection — standard approach
+- ✅ Beta drift weighted highest (slope is most impactful)
+- ✅ Sigma normalization against baseline
+- ✅ Two-threshold system (warning + action)
+
+### ML Calibration Performance Score (11.0E.2)
+
+**Formula**: `PerformanceScore = finalScore × 0.5 + predictiveConfidence × 0.3 + regimeWeight × 0.2`
+
+**Validation**:
+- ✅ Formula is a valid weighted average
+- ❌ Inputs (finalScore, predictiveConfidence) are **simulated**, not computed from real indicators — performance score is noise-modulated
+
+### Net EV Gate (11.8B-A2)
+
+**Formula**: `netEV = rawEV − totalFriction` (computed by `computeNetExpectancyKernel()`)
+
+**Validation**:
+- ✅ Canonical kernel — identical to DSS and Paper Execution
+- ⚠️ DI input is `predictiveConfidence × 100` which is simulated (see Section 2)
+
+---
+
+## 21. Data Flow: VTS → ML Pipeline → Parameter Adjustment
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                   VTS RUNNER (60s cycle)                        │
+│  FX5 Scanner → Regime Classification → Multi-Strategy Sim      │
+│  → Governance Gates → Net EV → Position Sizing → Open Trade    │
+└─────────────────────┬───────────────────────────────────────────┘
+                      │ Real price resolution
+                      ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   TRADE RESOLUTION                              │
+│  Price Cache (vtsSimulation bucket) → SL/TP/Timeout check      │
+│  → Calculate P&L → Persist to VTS Service + Telemetry          │
+└─────────────────────┬───────────────────────────────────────────┘
+                      │
+          ┌───────────┼───────────┐
+          ▼           ▼           ▼
+    ┌───────────┐ ┌────────┐ ┌──────────────┐
+    │ Telemetry │ │  VTS   │ │   Regime     │
+    │ Aggregator│ │Service │ │   Archiver   │
+    │ (24h win) │ │(trades)│ │ (7d/30d)     │
+    └─────┬─────┘ └───┬────┘ └──────────────┘
+          │           │
+          │           ▼ (every 10 HYBRID trades)
+          │     ┌──────────────┐
+          │     │ML Calibration│
+          │     │  Service     │
+          │     │(Phase-10     │
+          │     │ analysis)    │
+          │     └──────┬───────┘
+          │            │
+          │            ▼
+          │     ┌──────────────┐    ┌───────────────────┐
+          │     │ Calibration  │◄───│ Drift Detector    │
+          │     │ Utils (OLS)  │    │ (15-min checks)   │
+          │     │ α, β per     │    │ Auto-recalibrate  │
+          │     │ strategy     │    │ when drift > 0.25 │
+          │     └──────┬───────┘    └───────────────────┘
+          │            │
+          │            ▼                    ┌──────────────────┐
+          │     ┌──────────────┐            │Retraining Freeze │
+          │     │ Adaptive     │◄───────────│Controller        │
+          │     │ Learning     │  (blocks   │(1-hour epoch)    │
+          │     │ Repository   │  if frozen)└──────────────────┘
+          │     │ (SQL)        │
+          │     └──────────────┘
+          │
+          ▼
+    ┌──────────────┐    ┌──────────────┐
+    │ Adaptive     │    │  Reward      │
+    │ Scan Manager │    │  Evaluator   │
+    │ (pair        │    │  (30-min     │
+    │  ranking)    │    │   eval)      │
+    └──────────────┘    └──────────────┘
+```
+
+### Disconnected Systems (Walter-Era Learning — CONFIRMED LEGACY)
+
+```
+┌────────────────────────────────────────────────────┐
+│    WALTER-ERA LEARNING (CONFIRMED LEGACY — Kyle)    │
+│                                                     │
+│  ContinuousLearningEngine ← Experience Memory      │
+│       ↓                                             │
+│  LearningCycleService ← Learning Bob               │
+│       ↓                                             │
+│  LearningBridge ← Agent Feedback                   │
+│       ↓                                             │
+│  LearningCoordinator ← Cluster Bus                 │
+│       ↓                                             │
+│  LearningGateValidator ← Ethical Reasoner           │
+│                                                     │
+│  ❌ No connection to VTS/ML Pipeline                │
+│  ❌ No connection to Strategy Weights               │
+│  ❌ No connection to Telemetry Aggregator           │
+│  ❌ No connection to Calibration Utils              │
+└────────────────────────────────────────────────────┘
+```
+
+---
+
+## 22. Critical Findings
+
+### Bugs
+
+| ID | Severity | Description | Location | Kyle Decision |
+|----|----------|-------------|----------|---------------|
+| BUG-001 | CRITICAL | VTS signal generation uses simulated hybridScore/predictiveConfidence/decayPenalty instead of real strategy calculations | `vts-runner.ts`: `simulateHybridScore()`, `simulatePredictiveConfidence()`, `simulateDecayPenalty()` | **CONFIRMED CRITICAL** — Replace with real feature-derived scoring |
+| BUG-013 | MEDIUM | ML Service Client PredictionInput interface references removed `ngc` and `cwqi` fields | `ml-service-client.ts` line 30-31 | **CONFIRMED** — Remove deprecated fields, align with canonical metrics |
+| BUG-014 | LOW | Retraining Freeze Controller activates Phase 10.0 freeze on every restart (stale deployment artifact) | `retraining-freeze-controller.ts` line 64 | **CONFIRMED** — Convert to manual trigger or remove auto-activation |
+
+### Architectural Risks
+
+| ID | Severity | Description | Kyle Decision |
+|----|----------|-------------|---------------|
+| RISK-038 | HIGH | VTS ML calibration performance multiplier is noise-modulated (based on simulated scores), making adjustment magnitudes statistically meaningless | **CONFIRMED** — Downstream of BUG-001, resolves when real scoring implemented |
+| RISK-039 | MEDIUM | Reward Evaluator computes rewards but values are not consumed by any downstream scoring or selection system | **CONFIRMED** — Currently observability-only, not harmful, not integrated |
+| RISK-040 | MEDIUM → **CONFIRMED LEGACY** | Five Walter-era learning services operate independently of canonical trading pipeline | **CONFIRMED LEGACY** — "legacy autonomy-era artifacts, mark for removal in cleanup wave" |
+| RISK-041 | LOW | Calibration β coefficient clamped to [0.05, 0.5] — prevents calibration from learning steep slope relationships | — |
+| RISK-042 | LOW | VTS Service trade duration (3h) vs VTS Runner max hold (24h) mismatch | — |
+| **RISK-043** | **CRITICAL** | **Strategy-specific signal logic is NOT implemented** — all strategies use identical generic scoring math (same hybridScore, same predictiveConfidence, same decayPenalty, same stop/target logic). Multi-strategy simulation infrastructure exists (11.8C) but produces artificially differentiated signals. Per-strategy calibration is statistically diluted; true structural edge cannot emerge. | **Kyle (Phase 6 Addendum)**: "That is the core architectural problem in Phase 6." |
+
+### Kyle Phase 6 Addendum — Decisions Applied
+
+| Item | Decision |
+|------|----------|
+| RISK-040 | **CONFIRMED LEGACY** — All 5 Walter-era learning services are legacy autonomy-era artifacts. Mark for removal in cleanup wave. |
+| RISK-039 | **CONFIRMED OBSERVABILITY-ONLY** — Reward Evaluator is disconnected from scoring, not harmful but not integrated. |
+| BUG-014 | **CONFIRMED** — Retraining freeze auto-activation should be converted to manual trigger or removed. |
+| RISK-043 (NEW) | **CRITICAL** — Strategy differentiation is artificial. Each strategy must have unique entry logic, stop/target logic, confidence modeling, and feature-derived scoring. This is the most serious Phase 6 issue. |
+
+### Required Corrections (Kyle Phase 6 Addendum)
+
+**CRITICAL (Red)**:
+1. **Replace simulated scoring inputs** — Remove `simulateHybridScore()`, `simulatePredictiveConfidence()`, random decay penalty. Replace with real feature-derived, strategy-specific scoring engines.
+2. **Implement strategy-specific signal generators** — Each strategy (Breakout, Mean Reversion, Liquidity Trap, SMA Trend Ride, etc.) must have unique entry logic, unique stop logic, unique target logic, and unique confidence modeling.
+
+**HIGH (Orange)**:
+3. **Remove Walter-era learning stack** — ContinuousLearningEngine, LearningCycleService, LearningCoordinator, LearningBridge, LearningGateValidator. All confirmed legacy.
+4. **Remove freeze auto-activation** — Make RetrainingFreezeController explicitly controlled, not restart-triggered.
+5. **Update ML client schema** — Remove deprecated `ngc`/`cwqi` fields from PredictionInput.
+
+---
+
+## 23. File Catalog
+
+### Active Files (Canonical ML Pipeline)
+
+| File | Lines | Directive | Role |
+|------|-------|-----------|------|
+| `server/services/vts-runner.ts` | ~1,400 | 11.0E.1 🔒 | Autonomous VTS simulation engine |
+| `server/services/vts-service.ts` | ~500+ | 10.0.A 🔒 | Trade simulation, calibration trigger, type definitions |
+| `server/services/ml-calibration.ts` | ~232 | 11.0E.2 🔒 | Phase-10 ML training loop |
+| `server/utils/calibration.ts` | ~324 | 8.8.4-L8 🔒 | Linear regression calibration utilities |
+| `server/services/ml-service-client.ts` | ~245 | 8.8.4-L3 | Python ML microservice client |
+| `server/services/reward-evaluator.ts` | ~274 | 8.8.4-L14 🔒 | Per-strategy per-regime reward computation |
+| `server/services/drift-detector.ts` | ~400+ | 8.8.4-L11 🔒 | Calibration drift detection & auto-recalibration |
+| `server/services/retraining-freeze-controller.ts` | ~231 | 10.0.E 🔒 | Model shock prevention |
+| `server/services/telemetry-aggregator.ts` | ~1,500+ | 10.8 | Telemetry collection & pair ranking |
+| `server/services/adaptive-learning-repository.ts` | ~170+ | 11.1B | SQL-backed weight persistence |
+| `server/core/archival/regime-archiver.ts` | ~250+ | 11.7E | Long-term regime metric archival |
+| `server/core/governance/learning-cooldown.ts` | ~160+ | 11.7R | Regime-aware learning update gating |
+| `server/core/learning/adjustment-stability.ts` | ~200+ | 11.7Q | Adjustment frequency observability |
+| `server/core/learning/adjustment-explainability.ts` | ~200+ | 11.7Q | Adjustment explainability |
+| `server/core/logging/vts-telemetry.ts` | ~300+ | — | VTS telemetry logging |
+| `server/services/telemetry-repository.ts` | ~350+ | — | Telemetry SQL persistence |
+| `server/services/telemetry-compression.ts` | ~150+ | — | Telemetry data compression |
+| `server/core/telemetry/cost-telemetry.ts` | ~200+ | — | Cost-specific telemetry |
+| `server/config/drift-definitions.ts` | ~45 | — | Drift threshold definitions |
+| `server/config/drift-descriptions.ts` | ~60 | — | Drift description templates |
+| `server/core/analytics/mapping-drift-calculator.ts` | ~140+ | — | Mapping drift computation |
+| `server/core/schedulers/ml-calibration-scheduler.ts` | ~160+ | — | ML calibration scheduling |
+| `config/vts.json` | ~10 | — | VTS runtime configuration |
+
+### LEGACY Files — Confirmed by Kyle (Phase 6 Addendum)
+
+| File | Lines | Phase | Role | Kyle Decision |
+|------|-------|-------|------|---------------|
+| `server/services/continuous-learning.ts` | ~389 | — | Cognitive weight management for AI agents | REMOVE |
+| `server/services/learning-cycle-service.ts` | ~350+ | 8.6.1 | Walter's conversational improvement cycle | REMOVE |
+| `server/services/learning-coordinator.ts` | ~269 | 18.0 | Multi-node learning delta coordination | REMOVE |
+| `server/services/learning-bridge.ts` | ~286 | 9.7 | Inter-agent learning feedback | REMOVE |
+| `server/services/learning-gate-validator.ts` | ~250+ | 18.0 | 4-gate ethical validation chain | REMOVE |
+
+### Supporting Data Files
+
+| Location | Contents |
+|----------|----------|
+| `logs/vts_calibration.json` | Current calibration coefficients (global + per-strategy) |
+| `logs/vts_calibration_history/` | Daily calibration snapshots |
+| `logs/rewards/reward_history.json` | Reward evaluator trade history + reward cache |
+| `logs/drift_history/` | Drift detector snapshots |
+| `logs/drift_events/` | Drift warning/recalibration events |
+| `logs/regime_archive/` | Long-term regime metric archives |
+| `logs/virtual_trades/` | Daily VTS trade logs |
+| `data/vts_trades_*.json` | VTS session trade data |
+| `logs/vts_exports/` | CSV exports of VTS trade data |
+
+---
+
+## 24. Kyle's Phase 6 Architectural Confirmations
+
+The following architectural decisions were confirmed by Kyle in the Phase 6 Addendum:
+
+### 1. Directive 11.8C — VERIFIED IMPLEMENTED
+Multi-strategy regime-scoped simulation is active in `runPhase10SimulationCycle()`. VTS simulates every strategy mapped to the pair's regime. No ambiguity.
+
+### 2. Strategy-Specific Signal Math — NOT IMPLEMENTED (CRITICAL)
+Although 11.8C multi-strategy infrastructure exists, `generatePhase10Signal()` uses generic scoring logic for ALL strategies. This is the **most serious Phase 6 issue**. Each strategy must have unique entry/stop/target/confidence logic before per-strategy learning becomes meaningful.
+
+### 3. Walter-Era Learning Stack — CONFIRMED LEGACY
+Five services (ContinuousLearningEngine, LearningCycleService, LearningCoordinator, LearningBridge, LearningGateValidator) are confirmed as "legacy autonomy-era artifacts." They manage cognitive weights and agent behavior, not trading. Zero connection to canonical pipeline. Mark for removal in cleanup wave.
+
+### 4. ML Service Client Schema — CONFIRMED OUTDATED
+`PredictionInput` still references deprecated `ngc` and `cwqi` fields. Must be updated to canonical Phase-10 metrics: `finalScore`, `hybridScore`, `predictiveConfidence`, `regimeWeight`.
+
+### 5. Retraining Freeze Controller — CONFIRMED ARTIFACT
+Auto-activation on every restart is a stale one-time deployment measure. Convert to manual trigger or remove.
+
+### 6. Reward Evaluator — CONFIRMED DISCONNECTED
+Observability-only. Not harmful. Not integrated into scoring or selection. Not a priority to connect.
+
+### 7. TelemetryAggregator — HIGH COUPLING NOTE
+At ~62KB and centralizing strategy/regime/pool metrics, Z-score normalization, and ranking logic, TelemetryAggregator is a future modularization candidate. Not incorrect, not legacy — but high coupling risk.
+
+### 8. ML Calibration — STRUCTURALLY SOUND BUT NOISY
+Directional updates (win/loss) are based on real data. Magnitude scaling is corrupted by simulated scoring. Will self-correct once BUG-001 and strategy-specific signal logic are resolved.
+
+### 9. System Assessment
+Kyle's assessment of Claude's Phase 6 audit: "Largely accurate. Correct on simulated scoring flaw. Correct on legacy learning stack. Correct on freeze artifact. Correct on ML schema drift. But underemphasized the deeper structural issue: strategy differentiation is currently artificial."
+
+---
+
+## 25. Revision History
+
+| Version | Date | Author | Changes |
+|---------|------|--------|---------|
+| 1.0 | 2026-02-16 | Claude Code | Initial Phase 6 audit — ML Pipeline, Learning & Calibration |
+| 1.1 | 2026-02-16 | Claude Code | Phase 6 Addendum — Kyle's architectural confirmations applied: RISK-043 (CRITICAL: artificial strategy differentiation) elevated as core problem; Walter-era learning stack CONFIRMED LEGACY (5 files); BUG-014/RISK-039 confirmed; ML client schema confirmed outdated; Section 24 added (Kyle's confirmations); all POTENTIAL LEGACY sections updated to CONFIRMED LEGACY |
+
+
+---
+
+# Part IV: Infrastructure & Platform
+
+
+---
+
+# Chapter 7: System Lifecycle & Infrastructure
+
+**Version:** 1.1
+**Audit Date:** 2026-02-16
+**Auditor:** Claude Code (System Cartographer & Lead Architect)
+**Scope:** Boot sequence, startup orchestration, scheduler registry, task queues, health monitoring, self-repair, graceful shutdown
+**Status:** COMPLETE
+
+### Kyle's Executive Position (Phase 7 Addendum)
+
+> Phase 7 infrastructure is stable. There are no hidden kill switches, no silent trade shutdown mechanisms, no unexpected execution overrides. However, several subsystems are actively instantiated at boot, running on schedulers, not clearly required for core paper trading, and potentially legacy or autonomy-era artifacts. **These are not being deprecated immediately.** They are flagged for **Post-Audit Cleanup Investigation & Formal Decision.** Architectural simplification is required but will be handled as a deliberate cleanup phase, not as reactive removal.
+
+---
+
+## Table of Contents
+
+1. [Architecture Overview](#1-architecture-overview)
+2. [Server Entry Point (server/index.ts)](#2-server-entry-point)
+3. [Boot Orchestrator](#3-boot-orchestrator)
+4. [Startup Sequence — Deterministic Order](#4-startup-sequence)
+5. [Startup Module: invariants.ts](#5-startup-invariants)
+6. [Startup Module: trading-bootstrap.ts](#6-startup-trading-bootstrap)
+7. [Startup Module: fx5-scanner-bootstrap.ts](#7-startup-fx5-scanner-bootstrap)
+8. [Startup Module: portfolio-initializer.ts](#8-startup-portfolio-initializer)
+9. [Startup Module: lazy-loader.ts](#9-startup-lazy-loader)
+10. [Startup Module: Other Seeders & Utilities](#10-startup-seeders)
+11. [Bootstrap: Schema Validator](#11-bootstrap-schema-validator)
+12. [Scheduler Registry](#12-scheduler-registry)
+13. [System Health (system-health.ts — LOCKED)](#13-system-health-locked)
+14. [System Health Monitor (system-health-monitor.ts)](#14-system-health-monitor)
+15. [Health Monitor (health-monitor.ts — Phase 41F-C)](#15-health-monitor-41f)
+16. [Feed Integrity Monitor](#16-feed-integrity-monitor)
+17. [Self-Repair Service](#17-self-repair-service)
+18. [Operation Queue (operation-queue.ts — Phase 41F-A/B)](#18-operation-queue)
+19. [Task Queue (task-queue.ts)](#19-task-queue)
+20. [Task Router (task-router.ts) — Phase 17.0 Cluster System](#20-task-router)
+21. [Task Worker (task-worker.ts) — Phase 17.0 Cluster System](#21-task-worker)
+22. [Walter Shutdown Gate](#22-walter-shutdown-gate)
+23. [Graceful Shutdown](#23-graceful-shutdown)
+24. [Data Flow — Boot to Steady-State](#24-data-flow)
+25. [Critical Findings](#25-critical-findings)
+26. [Post-Audit Infrastructure Review (Kyle Directive)](#26-post-audit-infrastructure-review)
+27. [File Catalog](#27-file-catalog)
+28. [Revision History](#28-revision-history)
+
+---
+
+## 1. Architecture Overview
+
+DawnTrader's system lifecycle is managed through a **single-file monolithic boot sequence** (`server/index.ts`, ~1,260 lines) that orchestrates ~40+ service initializations in a carefully ordered async IIFE. The system follows a **degraded-mode-first** philosophy — every service initialization is wrapped in try/catch, and failures produce warnings rather than crashes (with one exception: the single-tenant database invariant check, which calls `process.exit(1)`).
+
+### Boot Architecture Layers
+
+```
+┌────────────────────────────────────────────────────────┐
+│                server/index.ts (~1260 lines)            │
+│   Single-file monolithic boot sequence                  │
+├────────────────────────────────────────────────────────┤
+│  Layer 1: Express Setup & Middleware                    │
+│    CORS, JSON parsing, single-tenant guard,            │
+│    telemetry compression, request logging               │
+├────────────────────────────────────────────────────────┤
+│  Layer 2: Core Service Bootstrap (blocking)             │
+│    Boot Orchestrator → Price Cache → Central Clock →    │
+│    RTB Refresh → Data Aggregator → FX5 Scanner         │
+├────────────────────────────────────────────────────────┤
+│  Layer 3: Route Registration & Database Services        │
+│    Routes → Queues → PaperSim Reset → Rate Limiter →   │
+│    Test User → Kraken Metadata → Trading State Sync     │
+├────────────────────────────────────────────────────────┤
+│  Layer 4: Application Services (blocking)               │
+│    Ethical Principles → Strategy Sync → Portfolio Init → │
+│    Trading Bootstrap → Purpose Layer → Context Loader    │
+├────────────────────────────────────────────────────────┤
+│  Layer 5: Non-blocking Background Services              │
+│    Walter (if enabled) → Memory Lifecycle →              │
+│    Scheduler Registry (13 tasks) → Vite/Static          │
+├────────────────────────────────────────────────────────┤
+│  Layer 6: Post-Listen Services (after port binding)     │
+│    Live Pricing → WebSocket → Lazy Loader (+1.5s) →     │
+│    Health Monitor → Heartbeat → Learning Cycle →        │
+│    Autonomy Scheduler → Config Audit Telemetry          │
+├────────────────────────────────────────────────────────┤
+│  Layer 7: Graceful Shutdown Handlers                    │
+│    SIGTERM/SIGINT → queues → RTB → DataAgg → Clock →    │
+│    PriceCache → SystemHealth                            │
+└────────────────────────────────────────────────────────┘
+```
+
+### Dual Shutdown Handler Problem
+
+**⚠️ BUG-015 (MEDIUM):** Both `server/index.ts` and `server/core/boot_orchestrator.ts` independently register SIGTERM/SIGINT handlers. The boot orchestrator registers first (in constructor), then index.ts registers its own handlers later. Node.js allows multiple handlers per signal, so **both execute on shutdown**, but in unpredictable order. The boot orchestrator handler calls `stopVTSRunner()` and `stopMLService()`, while the index.ts handler stops RTB, DataAggregator, CentralClock, PriceCache, SystemHealth, and calls `process.exit(0)`. Since the index.ts handler calls `process.exit()`, the boot orchestrator's handler may not complete.
+
+---
+
+## 2. Server Entry Point
+
+**File:** `server/index.ts` (~1,260 lines)
+**Directive:** A4.R10R-3 (Central Clock Synchronized Startup Sequence)
+
+### Express Configuration
+- **CORS:** Restricts to localhost:3000, localhost:5000, Replit dev domain, and custom ALLOWED_ORIGINS
+- **Body parsing:** JSON with rawBody capture, URL-encoded
+- **Middleware:** Single-tenant guard, telemetry compression, API request logging with 80-char truncation
+- **Profiling:** Phase 4A-5 Gemini profiler records per-endpoint latency
+- **Sampling:** Non-error requests logged at 10% sample rate
+
+### Route Mounting Order
+1. Regime Archive routes (mounted before registerRoutes)
+2. API router from registerRoutes()
+3. Status routes at `/api/status`
+4. Health routes at `/api/health`
+5. DSE routes at `/api/diagnostics`
+6. Chaplet routes at `/chaplet` (read-only)
+7. Phase 8.6.5 enhancement routes
+8. Provenance debug routes
+9. Global error handler (catch-all JSON)
+10. Vite middleware (dev) or static serving (prod)
+
+### Post-Listen Audit Telemetry
+After port binding, the server runs extensive config audit telemetry:
+- **ConfigSnapshot:** Builds MD5 hashes of guardrails/filters/goals for paper & live
+- **FilterCoherence:** Validates LATTI-managed vs manual-override field counts
+- **GuardrailsCoherence:** Validates locked-by-user params vs LATTI-managed
+- **OverridesHistory:** Logs last 10 config changes grouped by mode/type
+- **CrossMode Audit:** Compares paper vs live structural coherence
+
+**Note:** These audit telemetry blocks total ~150 lines of inline code in the server listen callback. This is diagnostic telemetry, not a security gate — mismatches produce log warnings but don't block operation.
+
+---
+
+## 3. Boot Orchestrator
+
+**File:** `server/core/boot_orchestrator.ts` (~348 lines)
+**Directive:** 8.8.4-L3
+**Module Status:** Active (singleton, exports `bootOrchestrator`)
+
+### Purpose
+Manages the Python ML microservice lifecycle: auto-spawn, health check polling, metrics collection, and graceful shutdown. Also initializes the VTS Runner with auto-start logic for passive learning mode.
+
+### Startup Sequence
+1. Check `ML_SERVICE_AUTO_START` env var (default: true)
+2. Probe `localhost:5001/health` for existing ML service
+3. If not found, spawn `python services/ml_service.py`
+4. Poll health endpoint every 1s for up to 15 attempts
+5. Start 30-second recurring health monitoring
+6. Initialize VTS Runner + preload pattern recognition (2,000 entries)
+7. Check system config for passive learning mode → auto-start VTS if applicable
+
+### ML Service States
+| State | Meaning |
+|-------|---------|
+| STARTING | Spawn initiated, waiting for health |
+| READY | Health check passing |
+| DEGRADED | Failed to start, or health check failing after being READY |
+| FAILED | Initialization threw an error |
+| STOPPED | Shutdown complete or not started |
+
+### VTS Auto-Start Logic
+```typescript
+const isPassiveLearning = !paperActive && !liveActive;
+if (isPassiveLearning) {
+  await startAutonomousSimulation(); // VTS auto-start in passive mode
+}
+```
+This correctly prevents VTS from running when trading engines are active.
+
+### Memory Warning Threshold
+ML service memory > 500MB triggers a warning log. No remediation action is taken.
+
+---
+
+## 4. Startup Sequence — Deterministic Order
+
+The startup sequence enforced by `server/index.ts` is:
+
+| Order | Service | Blocking? | Directive | Failure Mode |
+|-------|---------|-----------|-----------|--------------|
+| 1 | Boot Orchestrator (ML + VTS) | ✅ await | 8.8.4-L3 | Degraded mode |
+| 2 | Canonical Consistency Validator | ✅ sync | 11.4H.6G | Warning only |
+| 3 | System Health Monitor | ✅ sync | A4.R10R-4 | Silent failure |
+| 4 | Price Cache | ✅ sync | A4.R10R-1 | Silent failure |
+| 5 | Central Clock | ✅ sync | A4.R10R-3 | Warning only |
+| 6 | RTB Refresh Service | ✅ sync | A4.R10R-3 | Warning only |
+| 7 | Data Aggregator | ✅ import | 8.8.4-L1 | Warning only |
+| 8 | FX5 Scanner Bootstrap | ❌ fire-and-forget | R9.3.HF-5 | Error log |
+| 9 | Route Registration | ✅ await | — | Fatal |
+| 10 | Operation Queues | ✅ await | 41F-B-5 | Warning only |
+| 11 | PaperSim Reset + Resume | ✅ await | 27.F.8 | Warning only |
+| 12 | Rate Limiter Reset | ✅ await | — | Non-prod only |
+| 13 | Test User Seeder | ✅ await | — | Non-prod only |
+| 14 | Permission Cache | ✅ await | 27.3 | Warning only |
+| 15 | Kraken Pair Metadata | ✅ await | 8.8.3 | Non-fatal |
+| 16 | Kraken Auto-Map | ✅ await | I7-MAP-AUTO | Non-fatal |
+| 17 | Trading State Sync | ✅ await | 27.4 | Warning only |
+| 18 | Ethical Principles Seeder | ✅ await | 13.0 | Warning only |
+| 19 | Strategy Sync | ✅ await | 8.5-F | Warning only |
+| 20 | Portfolio Initializer | ✅ await | 8.5-K.4.1 | Warning only |
+| 21 | Trading Bootstrap | ✅ await | A3.R2 | Warning only |
+| 22 | Purpose Layer | ✅ await | 8.6.5 | Warning only |
+| 23 | Corpus Domain Service | ✅ await | 8.6.5 | Warning only |
+| 24 | Context Loader | ✅ await | 27 | Warning only |
+| 25 | Phase 8.6.5 Routes | ✅ sync | 8.6.5 | Warning only |
+| 26 | File Persistence Self-Test | ✅ await | 8.4-E.1 | Degraded mode |
+| 27 | **Single-Tenant DB Invariant** | ✅ await | **2D** | **`process.exit(1)`** |
+| 28 | Route Map Print/Dump | ✅ await | 2E/2F | Warning only |
+| 29 | Walter Services | ❌ fire-and-forget | 27.F.14.B | Error log |
+| 30 | Memory Lifecycle | ❌ fire-and-forget | 8.8.2 | Error log |
+| 31 | Scheduler Registry | ❌ fire-and-forget | — | Error log |
+
+**Key observation:** The single-tenant DB invariant check (step 27) is the **only startup step that causes a hard crash**. Everything else degrades gracefully. This is appropriate — data integrity is non-negotiable.
+
+---
+
+## 5. Startup Module: invariants.ts
+
+**File:** `server/startup/invariants.ts` (~58 lines)
+**Directive:** Phase 2D
+
+### Purpose
+Verifies single-tenant database architecture by checking that no `user_id` columns exist in the 5 core operational tables: `portfolio_state`, `strategy_settings`, `paper_sim_sessions`, `system_context`, `trading_settings_legacy`.
+
+### Behavior
+- If `SINGLE_TENANT=false`: skips check entirely
+- Queries `information_schema.columns` for violations
+- On violation: throws `[SingleTenantViolation]` → caught in index.ts → `process.exit(1)`
+- Only checks operational tables — AI, Walter, audit, and backup tables intentionally keep `user_id`
+
+**This is the only hard-crash invariant in the system.** Correctly implemented.
+
+---
+
+## 6. Startup Module: trading-bootstrap.ts
+
+**File:** `server/startup/trading-bootstrap.ts` (~99 lines)
+**Directive:** 8.8.4-A3.R2, A3.R7
+
+### Purpose
+On server restart, checks if trading engines were active (via `isEngineActive` in system_context) and reinitializes RTB refresh cycle + TCL watchdog for both paper and live modes.
+
+### Startup Order (within this module)
+1. Start Central Clock (idempotent)
+2. Register event listeners (TCL_ACTIVATED, SlotOpened)
+3. For each mode (paper, live):
+   - Check `systemContext.isEngineActive`
+   - If active: cleanup expired signals → start RTB refresh → set engine start time → start TCL watchdog
+
+### Guard
+- Boolean `bootstrapped` flag prevents double-initialization
+- Central Clock start is idempotent (checks `getIsRunning()`)
+
+---
+
+## 7. Startup Module: fx5-scanner-bootstrap.ts
+
+**File:** `server/startup/fx5-scanner-bootstrap.ts` (~33 lines)
+**Directive:** R9.3.HF-5
+
+### Purpose
+Resilient FX5 Scanner initialization. Replaces stale singleton pattern that could block reinit.
+
+### Behavior
+- Prevents duplicate inits unless `force=true` or last attempt >60s ago
+- Called from index.ts with `force=true` (fire-and-forget, non-blocking)
+- On failure: resets `bootstrapped` flag for retry
+
+---
+
+## 8. Startup Module: portfolio-initializer.ts
+
+**File:** `server/startup/portfolio-initializer.ts` (~55 lines)
+**Directive:** 8.5 Addendum K.4.1
+
+### Purpose
+Ensures both `live` and `paper` entries exist in `portfolio_state` table.
+
+### Behavior
+- Live mode: Fetches balance from Kraken API; falls back to $0.00 on failure
+- Paper mode: Creates with default $1000.00
+- Uses `globalContextId = 'default'` (single-tenant)
+- Idempotent — skips creation if entries already exist
+
+---
+
+## 9. Startup Module: lazy-loader.ts
+
+**File:** `server/startup/lazy-loader.ts` (~189 lines)
+**Directive:** Phase 5A (Parallel Lazy Loading + Deferral)
+
+### Purpose
+Loads non-critical services after the main startup sequence, using parallel `Promise.all` for critical services and `setTimeout` deferral for low-priority services.
+
+### Critical Services (loaded in parallel)
+1. **Cortex Core** — core trading intelligence + Bob snapshot sync
+2. **Analytics Scheduler** — 15-min analytics cycle
+3. **System Health Monitor** — wired to BobCore
+4. **LATTI Manager** — **REMOVED** (Directive 11.8B-B, logs removal notice)
+5. **Audit Report** — one-time Phase 30 report generation
+6. **Market Data Health Check** — daily health checks
+
+### Deferred Services
+| Service | Delay | Interval |
+|---------|-------|----------|
+| DatabaseMonitor | +4s | Daily |
+| StrategicDrive (SDPOE) | +6s | Hourly |
+| SQE Distribution Logging | +8s | 10-min for 30min |
+| MarketEventScheduler | +10s | 30s regime/friction checks |
+
+**RISK-044 (LOW):** The lazy loader references the removed LATTI system (Directive 11.8B-B) with a stub that logs its removal. This is correct behavior for now but the stub should be cleaned up.
+
+---
+
+## 10. Startup Module: Other Seeders & Utilities
+
+### ethical-principles-seeder.ts (~92 lines) — Phase 13.0
+Seeds 5 foundational ethical principles to `ethicalPrinciple` table:
+1. `transparency` (foundational, priority 1)
+2. `harm_prevention` (foundational, priority 2)
+3. `fairness` (foundational, priority 3)
+4. `autonomy_bounds` (operational, priority 4)
+5. `accountability` (operational, priority 5)
+
+Idempotent — checks for existing principles before inserting.
+
+**POTENTIAL LEGACY — REQUIRES INTENT CONFIRMATION:** These ethical principles appear to be part of the Walter-era autonomous AI framework. They reference concepts like "autonomous decision-making" and constraints like `require_reasoning_log`, `prohibit_manipulation`, `prohibit_front_running`. If the Walter-era learning stack is confirmed dead (per Phase 6), these principles may have no consumers. However, they may serve as compliance documentation or future-proofing. **Flagged for Kyle review.**
+
+### rate-limiter-reset.ts (~39 lines)
+Resets express-rate-limit store on startup. **Non-production only** (`NODE_ENV !== 'production'`). Logs to transparency system.
+
+### test-user-seeder.ts (~86 lines)
+Creates/updates test user account for automated testing. **Non-production only.** Creates user with `isAdmin: true` and default credentials from environment variables.
+
+### printRoutes.ts (~46 lines) — Phase 2E/2F
+Two functions:
+- `printRoutes()`: Collects and prints registered routes to console
+- `dumpRoutes()`: Writes route manifest to `diagnostics/phase2f_route_manifest.json` and warns about any `:userId` routes
+
+---
+
+## 11. Bootstrap: Schema Validator
+
+**File:** `server/bootstrap/schema-validator.ts` (~97 lines)
+**Directive:** 11.7F
+
+### Purpose
+Validates schema version consistency between canonical TypeScript definitions and bridge JSON files.
+
+### Expected Schema
+`regime-mapping/v1.4b`
+
+### Behavior
+- Reads `bridge/canonical/mapping-regime-strategy.json`
+- Compares `_schema` field against expected version
+- Major mismatch (not v1.4.x): error
+- Minor mismatch (v1.4.x but not v1.4b): warning
+- `validateSchemaVersionsStrict()`: throws on any errors (for production startup)
+
+**Note:** This validator is defined but **not called from server/index.ts**. It must be invoked elsewhere (CI/CD or direct import). If it's not called during startup, schema mismatches would go undetected at runtime.
+
+**RISK-045 (LOW):** Schema validator may not be invoked during server startup. Needs verification of calling site.
+
+---
+
+## 12. Scheduler Registry
+
+**File:** `server/services/scheduler-registry.ts` (~134 lines)
+
+### Purpose
+Centralized registry for all autonomous scheduled tasks. Provides unified start/stop/execute lifecycle management.
+
+### Interface
+```typescript
+interface ScheduledTask {
+  name: string;
+  description: string;
+  frequency: string;
+  intervalMs: number;
+  run: () => Promise<void>;
+  getInitialDelay?: () => number;
+  lastRun: Date | null;
+  nextRun: Date | null;
+  status: 'running' | 'idle' | 'error';
+}
+```
+
+### Registered Tasks (13 total, registered in index.ts)
+| # | Task | Module |
+|---|------|--------|
+| 1 | Screener Recalibration | screener-recalibration-task |
+| 2 | Market Scan | market-scan-task |
+| 3 | AI Summary | ai-summary-task |
+| 4 | System Health Check | system-health-check-task |
+| 5 | CLE (Continuous Learning Engine) | cle-task |
+| 6 | CWA (Cognitive Weight Adjustment) | cwa-task |
+| 7 | Cache Purge | cache-purge-task |
+| 8 | Semantic Ingestion | semantic-ingestion-task |
+| 9 | Diagnostic Analysis | diagnostic-analysis-task |
+| 10 | Optimization Analysis | optimization-analysis-task |
+| 11 | Weekly Expert Insights | weekly-expert-insights-task |
+| 12 | Trading Signals Cleanup | trading-signals-cleanup |
+| 13 | Audit Anomaly Detection | audit-anomaly-task |
+
+**Additionally, 3 jobs registered via their own functions (not through the registry interface):**
+- `registerLearningFeedbackJob()`
+- `registerFormulaAuditJob()`
+- `registerFeedIntegrityJob()`
+
+### Execution
+- `startAllTasks()`: starts all tasks in parallel, each with their interval
+- Initial execution uses `setTimeout` with either custom delay or intervalMs
+- All results logged to `transparencyLog` table
+- Task errors don't crash — caught and logged
+
+**⚠️ POST-AUDIT INVESTIGATION REQUIRED (Kyle, Phase 7 Addendum):** At boot, 15+ scheduled tasks are registered and started, including AI summaries, weekly expert insights, semantic ingestion, optimization analysis, diagnostic analysis, audit anomaly tasks, plus the AutonomyScheduler, AwarenessScheduler, and LearningCycleService started separately. **None of these are directly required for the core paper trading path** (FX5 → SQE → RTB → TCL → PaperExecutionEngine). Kyle's directive: Investigate each scheduled task post-audit — does it directly support core paper trading? Is it autonomy-era infrastructure? Is it observational only? Can it be disabled in a "Core Trading Mode"? Should it be deprecated or removed? **No immediate shutdown required. Formal review required.**
+
+Tasks #5 (CLE) and #6 (CWA) are specifically flagged as Walter-era learning components (Continuous Learning Engine and Cognitive Weight Adjustment). If the Walter-era stack is confirmed dead (Phase 6), these tasks may be executing against dead systems.
+
+---
+
+## 13. System Health (system-health.ts — LOCKED)
+
+**File:** `server/services/system-health.ts` (~147 lines)
+**Directive:** 8.8.4-A4.R10R-4
+**Module Status:** 🔒 LOCKED
+
+### Purpose
+Low-level system health monitor for real-time metrics: CPU load, memory usage, event loop lag, process uptime.
+
+### Implementation
+- **Sampling interval:** 10 seconds
+- **Event loop lag detection:** 100ms setInterval, measures actual vs expected delay
+- **Health thresholds:** Memory <350MB, event loop lag <10ms
+- **Global state:** Sets `global.__eventLoopLag` for cross-service access
+- **Events:** Emits `update` event with full metrics on each sample
+
+### Metrics Collected
+| Metric | Source |
+|--------|--------|
+| CPU load | `os.loadavg()[0]` |
+| RSS memory (MB) | `process.memoryUsage().rss` |
+| Heap used/total | `process.memoryUsage()` |
+| Event loop lag | Timer-based measurement |
+| Uptime | `process.uptime()` |
+
+---
+
+## 14. System Health Monitor (system-health-monitor.ts)
+
+**File:** `server/services/system-health-monitor.ts` (~437 lines)
+
+### Purpose
+Higher-level health analysis with anomaly detection, cache statistics, latency tracking, and scheduler monitoring. Consumed by BobCore and the self-repair service.
+
+### Tracked Domains
+1. **Cache:** Hit/miss rates (from BobCore)
+2. **Latency:** Cortex, database, API (rolling 100-entry windows)
+3. **Schedulers:** CortexSync and Analytics last-run timestamps
+4. **File persistence:** Success/failure/timeout counts
+5. **Execution layer:** Market data source, tick age, slippage, fees, rate pressure
+6. **Context refresh:** Refresh latency, total/failed counts, discrepancy tracking
+
+### Anomaly Thresholds
+| Metric | Warning | Critical |
+|--------|---------|----------|
+| Cortex latency | 200ms | 500ms |
+| Database latency | 500ms | 1000ms |
+| Cache hit rate | <60% | <40% |
+| Memory usage | >80% | >90% |
+| CPU usage | >75% | >90% |
+| Scheduler inactivity | >5 min (after 2min uptime) | — |
+
+### Health States
+- **healthy:** No warnings or critical issues
+- **degraded:** Warnings present, no critical
+- **critical:** One or more critical thresholds breached
+
+---
+
+## 15. Health Monitor (health-monitor.ts — Phase 41F-C)
+
+**File:** `server/services/health-monitor.ts` (~1,495 lines)
+**Directive:** Phase 41F-C/F/G/I
+
+### Purpose
+Comprehensive engine-level health monitoring with 5-second heartbeat, auto-recovery, anomaly detection, circuit breaker, and WebSocket broadcasting.
+
+### Heartbeat Architecture
+- **Interval:** 5 seconds
+- **Ring buffer:** 250 heartbeats (~21 minutes)
+- **Parallel checks:** Paper queue, live queue, paper engine, live engine, market data, SSOT, DB, broadcasts, external connectivity
+- **Overall health:** Logical AND of all component `ok` flags
+
+### Monitored Components
+| Component | Check Method | OK Criteria |
+|-----------|-------------|-------------|
+| Paper/Live Queue | OperationQueue.getStatus() | Depth <10, executing job <3s |
+| Paper/Live Engine | global.tradingEngines map | Running + tick <60s ago |
+| Market Data | MarketDataCoordinator | WS connected or REST fallback <20s |
+| SSOT Cache | MarketEvaluationService | Hit rate >50% |
+| Database | `SELECT 1` probe | Query time <1s |
+| Broadcasts | Internal tracking | Last broadcast <30s, avg latency <100ms |
+| External (Kraken) | Internal tracking | Last success > last error |
+
+### Anomaly Detection (Phase 41F-F)
+| Metric | Warning | Critical |
+|--------|---------|----------|
+| Heartbeat latency | 200ms | 400ms |
+| Broadcast latency | 120ms | 200ms |
+| Queue depth | 5 | 10 |
+| Job age | 15s | 30s |
+| WS silence | 2 cycles | 4 cycles |
+| Trade pipeline idle | — | 60s (while engine active) |
+
+### Auto-Recovery Framework (Phase 41F-G)
+- **Cooldown:** 120 seconds between recovery attempts
+- **Circuit breaker:** Activates after 3 recoveries in 10 minutes, suspends for 10 minutes
+- **Recovery actions:** Currently all "simulated" (log + emit only). No actual restarts are executed.
+
+**RISK-046 (MEDIUM):** Auto-recovery actions are all placeholder implementations. Every recovery handler logs a warning but takes no corrective action. The `executeRecovery()` method has a full framework for planned actions (force_websocket_reconnect, purge_old_queue_jobs, restart_trading_engine, etc.) but all paths end with `success = true` and a console.log. This means the health monitor detects problems but cannot fix them.
+
+---
+
+## 16. Feed Integrity Monitor
+
+**File:** `server/services/feed-integrity-monitor.ts` (~572 lines)
+
+### Purpose
+Monitors Kraken WebSocket and REST fallback feed health with configurable thresholds, grading, and alert deduplication.
+
+### Health Categories
+| Status | Criteria |
+|--------|----------|
+| Healthy | <3 reconnects AND <5s tick age |
+| Warning | ≥3 reconnects OR ≥5s tick age |
+| Critical | ≥5 reconnects OR ≥10s tick age |
+
+### Grading System (A-F)
+| Grade | Max Latency | Min Uptime | Max Reconnects | Max Tick Age |
+|-------|------------|-----------|---------------|-------------|
+| A | 500ms | 99% | 0 | 2s |
+| B | 1000ms | 95% | 2 | 5s |
+| C | 2000ms | 90% | 5 | 10s |
+| D | 3000ms | 80% | 10 | 20s |
+| F | Worse than D | | | |
+
+### Configuration
+All thresholds are env-configurable via `FEED_*` environment variables with sensible defaults.
+
+### Tracking
+- Rolling 12-snapshot history (1 hour at 5-min intervals)
+- Time-based uptime percentage (minutes healthy / total minutes)
+- Alert deduplication with 5-minute cooldown
+- Report export to JSON file
+
+---
+
+## 17. Self-Repair Service
+
+**File:** `server/services/self-repair.ts` (~303 lines)
+
+### Purpose
+Automated repair for critical system health issues. Triggered when SystemHealthMonitor detects critical status.
+
+### Repair Strategies
+| Issue Type | Action |
+|-----------|--------|
+| Cortex latency / Cache | Flush BobCore cache + prefetch rebuild |
+| Database latency | Retry connection 3x with exponential backoff |
+| Memory usage | Force GC (if available) + cache clear |
+| CPU usage | Monitor only (no direct action) |
+| Unknown | Log only |
+
+### Safeguards
+- `isRepairing` flag prevents concurrent repairs
+- Max 3 retry attempts with 1s × attempt delay
+- All actions recorded in repair history (last 100)
+- Manual trigger via `manualRecover()` method
+
+---
+
+## 18. Operation Queue (operation-queue.ts — Phase 41F-A/B)
+
+**File:** `server/utils/operation-queue.ts` (~200+ lines)
+**Directive:** Phase 41F-A/B
+
+### Purpose
+Lightweight in-memory FIFO queue for serializing trading operations (start/stop) to prevent concurrent request collisions.
+
+### Features
+- Sequential execution (one job at a time)
+- Request deduplication by `userId:mode:action` key
+- Duplicate requests piggyback on existing jobs
+- Automatic retry (once) with 500ms backoff
+- Promise-based result notification
+- Telemetry logging with queue depth tracking
+- Graceful shutdown support
+
+### Two Instances
+- `paperOperationQueue` — paper mode operations
+- `liveOperationQueue` — live mode operations
+
+Both initialized in index.ts via `initializeQueues()`.
+
+---
+
+## 19. Task Queue (task-queue.ts)
+
+**File:** `server/services/task-queue.ts` (~367 lines)
+**Directive:** Phase 8.8.3
+
+### Purpose
+PostgreSQL-backed async task queue for AI reasoning tasks (DevOpsBob, FullStackBob, UXBob). Uses optimistic locking with `FOR UPDATE SKIP LOCKED` for concurrent worker safety.
+
+### Implementation
+- **Backing store:** `reasoning_queue` PostgreSQL table
+- **Worker ID:** Random nanoid per instance
+- **Concurrency:** Configurable via `TASK_QUEUE_CONCURRENCY` env (default: 5)
+- **Retry:** 3 attempts with exponential backoff (1s, 2s, 4s) + random jitter
+- **Cleanup:** Auto-deletes completed/failed tasks older than 7 days
+- **Forensics:** Permanent failures logged to `memory_audit_log` table
+- **Broadcasts:** Queue events sent to Context Bridge for real-time UI updates
+
+---
+
+## 20. Task Router (task-router.ts) — Phase 17.0 Cluster System
+
+**File:** `server/services/task-router.ts` (~428 lines)
+**Directive:** Phase 17.0
+
+### Purpose
+Routes cluster tasks to appropriate nodes based on task type affinity, node capacity, and load balancing.
+
+### Task Type → Role Affinity
+| Task Type | Preferred Roles |
+|-----------|----------------|
+| trading_signal | trading, general |
+| market_analysis | analysis, research, general |
+| risk_assessment | analysis, compliance, general |
+| compliance_check | compliance, general |
+| research | research, general |
+| optimization | general |
+| general | general |
+
+### Implementation
+- **Admission control:** Max global queue depth of 1,000 tasks
+- **Load balancing:** Assigns to least-loaded healthy node with matching role
+- **Node health:** Requires heartbeat within 2 minutes
+- **Max load:** Rejects assignment if node >90% capacity
+- **Retry:** Exponential backoff with ±25% jitter, 1s base, 60s max
+- **Dead letter:** Failed tasks after max retries marked as permanently failed
+- **Rebalancing:** `rebalanceStuckTasks()` rescues tasks stuck >30 minutes
+
+**POTENTIAL LEGACY — REQUIRES INTENT CONFIRMATION:** The entire Phase 17.0 cluster system (TaskRouter + TaskWorker + ClusterBus + ClusterRegistry) references multi-node distributed computing capabilities. DawnTrader is currently a single-node system. This cluster infrastructure appears to be pre-built scaffolding for a feature that was never activated. The TaskRouter queries `cluster_node` table for healthy nodes, but there is no evidence of cluster node registration in the startup sequence. **Flagged for Kyle review.**
+
+---
+
+## 21. Task Worker (task-worker.ts) — Phase 17.0 Cluster System
+
+**File:** `server/services/task-worker.ts` (~407 lines)
+**Directive:** Phase 17.0, 17.5, 17.6
+
+### Purpose
+Executes cluster tasks through a full gate pipeline: Circuit Breaker → Safety → Federated Ethics → Ethical Reasoner → Knowledge Acquisition → Execution.
+
+### Implementation
+- **Poll interval:** 5 seconds
+- **Max concurrent:** 5 tasks
+- **Gate pipeline:** Simulated (all gates always pass) — `simulateGateExecution()` returns `true`
+- **Task handlers:** All return placeholder results (e.g., `{ signal: "processed" }`)
+- **Audit logging:** Per-gate execution logged to `cluster_audit_log` table
+- **Circuit breaker:** Integrates with per-node circuit breaker service
+
+**This module is entirely non-functional.** The gate pipeline always passes. The task handlers return stub responses. The worker polls for tasks but the cluster_node registration required for task assignment doesn't exist in the startup sequence. This is dead infrastructure.
+
+---
+
+## 22. Walter Shutdown Gate
+
+**Referenced in:** `server/index.ts` lines 381-420
+**Directive:** 27.F.14.B
+
+### Purpose
+When `WALTER_DISABLED=true`, skips initialization of:
+- AI Opportunities service (hourly)
+- Daily Brief service
+- Market Analysis scheduler
+- AI Orchestrator (already commented out — "Phase 0: Removed")
+- Walter Health Monitor
+
+When enabled, these 4 services start as fire-and-forget promises. Failures are caught and logged but don't affect server startup.
+
+**Note:** The AI Orchestrator import is already commented out with "Phase 0: Removed AI Orchestrator (legacy module)". This confirms the orchestrator was deprecated before the Walter shutdown gate was added.
+
+---
+
+## 23. Graceful Shutdown
+
+**Primary handler:** `server/index.ts` lines 1228-1259
+**Secondary handler:** `server/core/boot_orchestrator.ts` lines 51-73
+
+### Primary Shutdown Order (index.ts)
+1. Operation queues (`shutdownAllQueues`)
+2. RTB Refresh Service (`stop()`)
+3. Data Aggregator (`shutdown()` — flushes pending data)
+4. Central Clock (`stop()`)
+5. Price Cache (`shutdown()`)
+6. System Health (`stop()`)
+7. `process.exit(0)`
+
+### Secondary Shutdown (boot_orchestrator.ts)
+1. VTS Runner (`stopVTSRunner()`)
+2. ML Service (`stopMLService()` — SIGTERM → 5s timeout → SIGKILL)
+3. Health check interval cleared
+
+### Shutdown Race Condition (BUG-015)
+Both handlers register independently for SIGTERM/SIGINT. Since the primary handler calls `process.exit(0)`, the secondary handler's ML service graceful shutdown (5-second timeout for SIGTERM before SIGKILL) may be truncated or never executed.
+
+---
+
+## 24. Data Flow — Boot to Steady-State
+
+```
+Server Start
+    │
+    ▼
+Express Setup (CORS, middleware, guards)
+    │
+    ▼
+Boot Orchestrator → ML Service spawn → VTS init → pattern preload
+    │
+    ▼
+Core Services: PriceCache → CentralClock → RTB Refresh → DataAggregator
+    │
+    ▼
+Route Registration + API mounting
+    │
+    ▼
+Queue Init → PaperSim Reset → Rate Limiter → Test User
+    │
+    ▼
+Kraken Metadata → Auto-Map → Trading State Recovery
+    │
+    ▼
+Ethics Seed → Strategy Sync → Portfolio Init → Trading Bootstrap
+    │
+    ▼
+Purpose Layer → Corpus Domains → Context Loader → Debug Routes
+    │
+    ▼
+File Persistence Self-Test
+    │
+    ▼
+█ HARD GATE: Single-Tenant DB Invariant (exit on failure)
+    │
+    ▼
+Route Map Print/Dump
+    │
+    ▼
+═══════════ server.listen() ═══════════
+    │
+    ▼
+POST-LISTEN (parallel fire-and-forget):
+├── Walter services (if enabled)
+├── Memory Lifecycle
+├── Scheduler Registry (13 tasks)
+│
+▼
+LIVE PRICING + WEBSOCKET CHAIN:
+LivePricingAdapter → WebSocket checker → VolumeClassifier →
+ActiveFilterPool → TrailingStates → KrakenWS start
+    │
+    ▼
+LAZY LOADER (+1.5s):
+├── Cortex Core + Analytics (parallel)
+├── System Health Monitor + BobCore wire-up
+├── Market Data Health Check
+├── DatabaseMonitor (+4s deferred)
+├── StrategicDrive (+6s deferred)
+├── SQE Distribution (+8s deferred)
+├── MarketEventScheduler (+10s deferred)
+│
+▼
+ML Calibration Scheduler (+1.5s, 8-hour cadence)
+Archival Scheduler (+1.5s)
+    │
+    ▼
+Config Audit Telemetry (ConfigSnapshot, FilterCoherence,
+                         GuardrailsCoherence, OverridesHistory,
+                         CrossMode)
+    │
+    ▼
+Health Report Scheduler (hourly)
+PaperSim Heartbeat (recovery + monitoring)
+Learning Cycle Service (24-hour)
+Autonomy Scheduler (hourly self-checks, daily optimization)
+Awareness Scheduler (hourly state, 6-hour reflections)
+Engine Health Monitor (5s heartbeat + WebSocket broadcasting)
+    │
+    ▼
+PRICE FORWARDING LOOP (1s interval):
+LivePricingAdapter → MicroExecutionService (paper + live) ⚠️ [POST-AUDIT REVIEW]
+    │
+    ▼
+═══════════ STEADY STATE ═══════════
+```
+
+**⚠️ Kyle (Phase 7 Addendum) — MicroExecutionService:** Receives price updates every second, wired during boot, but not confirmed to be part of active trade path. Post-audit investigation required: Is it referenced by paper or live execution engines? Is it purely experimental? Is it safe to disable at boot? Should it be deprecated pending future micro-coin strategy work?
+
+---
+
+## 25. Critical Findings
+
+### New Bugs
+
+| ID | Severity | Description | File | Kyle Decision |
+|----|----------|-------------|------|---------------|
+| BUG-015 | MEDIUM | Dual shutdown handlers (index.ts + boot_orchestrator.ts) create race condition. ML service may not get graceful shutdown. | server/index.ts, server/core/boot_orchestrator.ts | Post-audit investigation |
+
+### New Risks
+
+| ID | Severity | Description | File | Kyle Decision |
+|----|----------|-------------|------|---------------|
+| RISK-044 | LOW | Lazy loader contains LATTI removal stub (correct but should be cleaned up) | server/startup/lazy-loader.ts | Post-audit LATTI cleanup |
+| RISK-045 | LOW | Schema validator (11.7F) defined but not called from startup sequence | server/bootstrap/schema-validator.ts | Post-audit verification |
+| RISK-046 | MEDIUM | Health monitor auto-recovery actions are all placeholder implementations — detects but cannot fix | server/services/health-monitor.ts | Post-audit investigation |
+| RISK-047 | INFORMATIONAL | Startup sequence ~1,260 lines in single file. High coupling but functional. | server/index.ts | Acknowledged — architectural accumulation |
+
+### Systems Flagged for Post-Audit Investigation (Kyle Directive)
+
+Kyle's Phase 7 Addendum reclassifies all potential legacy findings from "AWAITING KYLE CONFIRMATION" to **"POST-AUDIT CLEANUP INVESTIGATION REQUIRED"**. These systems are not emergency defects — they are hygiene candidates that will be formally reviewed after the audit is complete.
+
+| System | Status | Investigation Required |
+|--------|--------|----------------------|
+| Phase 17.0 Cluster System (TaskRouter + TaskWorker) | FLAGGED — Post-Audit | Scope verification, dependency tracing, mutation impact review |
+| CLE/CWA Scheduler Tasks | FLAGGED — Post-Audit | Does it support core trading? Is it autonomy-era? Can it be disabled? |
+| Ethical Principles Seeder | FLAGGED — Post-Audit | Are there active consumers? Compliance data or dead code? |
+| Background Scheduler Tasks (13+ tasks) | FLAGGED — Post-Audit | Which tasks support core trading? Which are autonomy-era? |
+| MicroExecutionService | FLAGGED — Post-Audit | Is it part of active trade path? Experimental? Safe to disable? |
+| AutonomyScheduler | FLAGGED — Post-Audit | Does it mutate trading config, risk settings, or filters? Or read-only? |
+| AwarenessScheduler | FLAGGED — Post-Audit | Does it mutate trading config, risk settings, or filters? Or read-only? |
+| LearningCycleService | FLAGGED — Post-Audit | Premature activation during ML refactor? Disable or rebuild after VTS correction? |
+| LATTI/Coherence Residual Flags | FLAGGED — Post-Audit | Do lattiManaged, lockedByUser, manualOverride fields still serve purpose? |
+
+### Required Corrections (from audit findings + Kyle addendum)
+
+1. **POST-AUDIT:** Consolidate shutdown handlers to prevent ML service shutdown race (BUG-015)
+2. **POST-AUDIT:** Formal investigation of all 9 systems listed above — each requires: scope verification, dependency tracing, mutation impact review, performance impact review, and final decision (retain / disable / refactor / deprecate / remove)
+3. **POST-AUDIT:** Determine whether AutonomyScheduler and AwarenessScheduler have write paths that mutate trading configuration, risk settings, or filters
+4. **POST-AUDIT:** Evaluate whether LearningCycleService should remain active during ML refactor, be temporarily disabled, or be rebuilt after strategy-specific VTS correction
+5. **POST-AUDIT:** Confirm whether residual LATTI coherence flags (`lattiManaged`, `lockedByUser`, `manualOverride`) serve any active purpose; if LATTI is fully removed, eliminate residual fields
+6. **POST-AUDIT:** Implement actual auto-recovery actions in health-monitor.ts or remove the framework (RISK-046)
+7. **LOW:** Verify schema-validator.ts is invoked somewhere (CI/CD or startup)
+8. **LOW:** Clean up LATTI removal stub in lazy-loader.ts
+
+---
+
+## 26. Post-Audit Infrastructure Review (Kyle Directive)
+
+> **Kyle (Phase 7 Addendum):** "Phase 7 does not indicate instability. It indicates architectural accumulation. These items must be revisited during the structured cleanup phase after the audit is complete. They are not emergency defects. They are hygiene candidates."
+
+### Post-Audit Cleanup Investigation List
+
+The following systems are flagged for formal investigation after audit completion. Each will undergo:
+
+1. **Scope verification** — What does this system actually do?
+2. **Dependency tracing** — What imports it? What does it import?
+3. **Mutation impact review** — Does it modify any trading state, configuration, or risk parameters?
+4. **Performance impact review** — Does it consume meaningful CPU/memory/database resources?
+5. **Final decision:** Retain | Disable | Refactor | Deprecate | Remove
+
+#### Systems Under Review
+
+| # | System | Core Trading Required? | Risk Level | Notes |
+|---|--------|----------------------|------------|-------|
+| 1 | Background scheduler tasks not on core trading path | Unknown | LOW | AI summaries, weekly insights, semantic ingestion, optimization analysis, diagnostic analysis, audit anomaly |
+| 2 | MicroExecutionService | Unknown | MEDIUM | Receives 1s price updates, wired at boot. May be experimental micro-coin infrastructure. |
+| 3 | AutonomyScheduler | Unknown | MEDIUM | Hourly self-checks, daily optimization. May mutate guardrails or filters. |
+| 4 | AwarenessScheduler | Unknown | MEDIUM | Hourly state updates, 6-hour reflections. Write paths unknown. |
+| 5 | LearningCycleService | Possibly premature | MEDIUM | 24-hour learning cycle running during active ML refactor and VTS correction. |
+| 6 | LATTI/Coherence residual flags | Unknown | LOW | `lattiManaged`, `lockedByUser`, `manualOverride` in boot audit telemetry. |
+| 7 | CLE/CWA Scheduler Tasks | Likely Walter-era | LOW | Continuous Learning Engine and Cognitive Weight Adjustment tasks. |
+| 8 | Ethical Principles Seeder | Unknown | LOW | Seeds autonomous AI decision-making principles. May have no consumers. |
+| 9 | Phase 17.0 Cluster System | No (dead infra) | LOW | TaskRouter + TaskWorker. No cluster nodes registered. Simulated gates. |
+
+#### Core Trading Path (for reference — systems NOT under review)
+
+These systems **directly support** the active paper trading pipeline and are confirmed required:
+
+```
+FX5 Scanner → SQE (Signal Quality Evaluator) → RTB (Ready To Buy) →
+TCL (Trade Candidate List) → PaperExecutionEngine →
+Signal Generation → Risk Management → Execution → Telemetry → Calibration
+```
+
+Any service not directly tied to signal generation, risk management, execution, telemetry, or calibration is a candidate for this review.
+
+---
+
+## 27. File Catalog
+
+| File | Lines | Directive | Status |
+|------|-------|-----------|--------|
+| server/index.ts | ~1,260 | A4.R10R-3 | ACTIVE — monolithic boot |
+| server/core/boot_orchestrator.ts | ~348 | 8.8.4-L3 | ACTIVE |
+| server/startup/invariants.ts | ~58 | 2D | ACTIVE — hard gate |
+| server/startup/trading-bootstrap.ts | ~99 | A3.R2, A3.R7 | ACTIVE |
+| server/startup/fx5-scanner-bootstrap.ts | ~33 | R9.3.HF-5 | ACTIVE |
+| server/startup/portfolio-initializer.ts | ~55 | 8.5-K.4.1 | ACTIVE |
+| server/startup/lazy-loader.ts | ~189 | Phase 5A | ACTIVE |
+| server/startup/ethical-principles-seeder.ts | ~92 | 13.0 | POTENTIAL LEGACY |
+| server/startup/rate-limiter-reset.ts | ~39 | — | ACTIVE (non-prod) |
+| server/startup/test-user-seeder.ts | ~86 | — | ACTIVE (non-prod) |
+| server/startup/printRoutes.ts | ~46 | 2E/2F | ACTIVE |
+| server/bootstrap/schema-validator.ts | ~97 | 11.7F | ACTIVE (call site unknown) |
+| server/services/scheduler-registry.ts | ~134 | — | ACTIVE |
+| server/services/system-health.ts | ~147 | A4.R10R-4 | 🔒 LOCKED |
+| server/services/system-health-monitor.ts | ~437 | — | ACTIVE |
+| server/services/health-monitor.ts | ~1,495 | 41F-C/F/G/I | ACTIVE |
+| server/services/feed-integrity-monitor.ts | ~572 | — | ACTIVE |
+| server/services/self-repair.ts | ~303 | — | ACTIVE |
+| server/utils/operation-queue.ts | ~200+ | 41F-A/B | ACTIVE |
+| server/services/task-queue.ts | ~367 | 8.8.3 | ACTIVE |
+| server/services/task-router.ts | ~428 | 17.0 | POTENTIAL LEGACY |
+| server/services/task-worker.ts | ~407 | 17.0/17.5/17.6 | POTENTIAL LEGACY |
+
+---
+
+## 28. Revision History
+
+| Version | Date | Author | Changes |
+|---------|------|--------|---------|
+| 1.0 | 2026-02-16 | Claude Code | Initial audit: 22 files deep-read, 1 bug, 4 risks, 3 potential legacy systems identified |
+| 1.1 | 2026-02-16 | Claude Code | Phase 7 Addendum applied: Kyle's executive position added. All potential legacy systems reclassified from "AWAITING KYLE CONFIRMATION" to "POST-AUDIT CLEANUP INVESTIGATION REQUIRED". 9 systems added to Post-Audit Infrastructure Review list. MicroExecutionService, AutonomyScheduler, AwarenessScheduler, LearningCycleService, LATTI/coherence residual flags added as investigation items per Kyle's directives. New Section 26 (Post-Audit Infrastructure Review) added. Required Corrections updated from deprecation actions to post-audit investigation items. |
+
+
+---
+
+# Chapter 8: API & Communication Layer
+
+## Table of Contents
+
+1. [Executive Summary](#1-executive-summary)
+2. [API Architecture Overview](#2-api-architecture-overview)
+3. [Authentication System](#3-authentication-system)
+4. [Middleware Stack](#4-middleware-stack)
+5. [The Monolithic Router — routes.ts](#5-the-monolithic-router--routests)
+6. [Route File Catalog — 26 Modular Route Files](#6-route-file-catalog--26-modular-route-files)
+7. [WebSocket Protocol](#7-websocket-protocol)
+8. [Market Data WebSocket — Kraken v2 Adapter](#8-market-data-websocket--kraken-v2-adapter)
+9. [Route Mounting & Registration Patterns](#9-route-mounting--registration-patterns)
+10. [Security Architecture & Findings](#10-security-architecture--findings)
+11. [Deprecated & Legacy Endpoints](#11-deprecated--legacy-endpoints)
+12. [L-Series Route Files — Legacy API Surface](#12-l-series-route-files--legacy-api-surface)
+13. [Data Flow: Request Lifecycle](#13-data-flow-request-lifecycle)
+14. [Critical Findings & Kyle Decision Points](#14-critical-findings--kyle-decision-points)
+15. [Phase 8 Addendum — Kyle Directives](#15-phase-8-addendum--kyle-directives)
+16. [File Catalog](#16-file-catalog)
+17. [Revision History](#17-revision-history)
+
+---
+
+## 1. Executive Summary
+
+DawnTrader's API layer is a **single monolithic Express router** (`routes.ts` at 23,349 lines with ~635 inline endpoints) plus **26 modular route files** mounted via dynamic imports. The combined API surface exposes approximately **750+ endpoints** covering authentication, trading engine control, guardrails, filters, portfolio management, VTS, diagnostics, telemetry, Walter/Bob chat, admin, and system health.
+
+### Key Architectural Observations
+
+1. **routes.ts is the largest file in the entire codebase** — 23,349 lines containing ~635 endpoints, 40+ service imports, full JWT auth middleware, rate limiting, WebSocket server, CSV generation, tax reporting, and the complete route registration for all 26 modular route files. This is the single most extreme monolithic accumulation point in DawnTrader.
+
+2. **Authentication is inconsistent** — routes.ts uses a database-backed `authenticateToken` middleware (fail-closed, fetches user from DB on every request). The 26 modular route files use one of four different auth approaches: (a) copy-pasted JWT-only `requireAuth` with hardcoded fallback secret, (b) `x-internal-audit` header bypass, (c) centralized middleware import, or (d) no authentication at all.
+
+3. **Security findings are significant** — hardcoded JWT fallback secrets, unauthenticated diagnostic/audit endpoints, auth bypass headers, and inconsistent secret values across files. These are documented in detail in §10.
+
+4. **WebSocket is minimal** — A simple 3-message handler (subscribe_prices, subscribe_trades, ping/pong) for frontend real-time updates. The heavier Kraken market data WebSocket is a separate singleton service.
+
+5. **L-Series route files expose dead backend systems** — 8 route files (dce, gasp, mof, maco, pdc-ecs, apr-sle, rl, plus portions of audit/m3b/tlva) expose L-Series autonomy cluster endpoints already confirmed legacy in Phase 4.
+
+---
+
+## 2. API Architecture Overview
+
+### Transport
+
+| Protocol | Path/Port | Purpose |
+|----------|-----------|---------|
+| HTTP/Express | `/api/*` | All REST endpoints (JSON API) |
+| WebSocket | `/ws` | Frontend real-time updates (prices, trades, system events) |
+| WebSocket | `wss://ws.kraken.com/v2` | Kraken market data (ticker + order book) — outbound only |
+
+### Express Application Structure
+
+```
+Express App
+├── Static middleware (Vite dev server in development)
+├── JSON body parser (50mb limit)
+├── Cookie parser
+├── CORS (permissive)
+├── Rate limiter (15min window, 1000 req limit)
+├── Single-tenant guard middleware
+├── Canonical validation middleware
+├── Bob routing middleware (transparent interception)
+│
+├── /api/* ─── apiRouter
+│   ├── Inline endpoints (~635 in routes.ts)
+│   │   ├── /api/auth/* (register, login, verify, refresh)
+│   │   ├── /api/admin/* (users, roles)
+│   │   ├── /api/trading/* (start, stop, status)
+│   │   ├── /api/guardrails-v2/* (CRUD, kill switch)
+│   │   ├── /api/filters-v2/* (filter config, SQE thresholds)
+│   │   ├── /api/paper-sim/* (status, portfolio, trades)
+│   │   ├── /api/telemetry/* (strategy perf, VTP)
+│   │   ├── /api/walter/* (chat, memory, summaries)
+│   │   ├── /api/system/* (health, config, events)
+│   │   ├── /api/governance/* (regime, strategy, mapping)
+│   │   └── ... (~60+ endpoint groups)
+│   │
+│   └── Mounted route files (26 files via dynamic import)
+│       ├── /api/status/* → routes/status.ts
+│       ├── /api/health/* → routes/health.ts
+│       ├── /api/vts/* → routes/vts.ts
+│       ├── /api/market/* → routes/market.ts
+│       └── ... (22 more, see §6)
+│
+├── /api/* (registered on app directly, not apiRouter)
+│   ├── /api/diagnostics/dse/* → routes/dse.ts (via index.ts)
+│   ├── /api/walter/*, /api/learning/*, /api/governance/* → routes/phase-8.6.5.ts (via index.ts)
+│   └── /api/provenance/debug/* → routes/provenance-debug.ts (via index.ts)
+│
+├── WebSocket Server (/ws)
+│
+└── 404 catch-all (returns JSON for /api/*, HTML for others)
+```
+
+### Endpoint Scale
+
+| Category | Approximate Count |
+|----------|-------------------|
+| Inline endpoints in routes.ts | ~635 |
+| Endpoints in 26 route files | ~115 |
+| **Total API surface** | **~750** |
+
+---
+
+## 3. Authentication System
+
+### JWT Token Architecture
+
+| Parameter | Value |
+|-----------|-------|
+| Access token lifetime | 12 hours |
+| Refresh token lifetime | 7 days |
+| Signing algorithm | HS256 (default jsonwebtoken) |
+| Secret source | `JWT_SECRET` environment variable |
+| Password hashing | bcrypt (10 rounds) |
+| Password requirements | 8+ chars, uppercase, number, special character |
+
+### Role-Based Access Control (RBAC)
+
+DawnTrader implements Phase 27.3 permission-based access control:
+
+| Role | Permissions |
+|------|-------------|
+| `owner` | Full access — all read/write operations, user management, system configuration |
+| `editor` | Read + write — can modify guardrails, start/stop trading, manage filters |
+| `viewer` | Read-only — can view dashboards, trades, telemetry but cannot modify |
+
+### Authentication Middleware in routes.ts — `authenticateToken()`
+
+The main router uses a **database-backed, fail-closed** authentication middleware:
+
+1. Extracts JWT from `Authorization: Bearer <token>` header
+2. Verifies token against `JWT_SECRET` (or `JWT_REFRESH_SECRET` for refresh tokens)
+3. **Fetches user record from database on every request** — never trusts stale token data
+4. If user not found in DB → reject (fail-closed)
+5. Attaches `req.userId`, `req.userRole`, `req.userPermissions` to request
+
+**Critical: This is NOT the same middleware used by the 26 route files.** See §10 for the security implications.
+
+### Auth Service — `server/services/auth-service.ts`
+
+Minimal utility module (47 lines):
+- `validatePasswordStrength()` — enforces 8+ chars with uppercase, number, special character
+- `hashPassword()` — bcrypt with 10 rounds
+- `verifyPassword()` — bcrypt compare
+- `getPasswordStrengthMessage()` — human-readable requirements
+
+### Auth Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/auth/register` | None | **DISABLED** — returns 410 "Registration is disabled" |
+| POST | `/api/auth/login` | None | Email/password login → access + refresh tokens |
+| GET | `/api/auth/verify` | Token | Validates token, returns user info |
+| POST | `/api/auth/refresh` | Refresh | Exchanges refresh token for new access token |
+
+---
+
+## 4. Middleware Stack
+
+### Global Middleware (Applied to All Requests)
+
+| Middleware | File | Purpose |
+|-----------|------|---------|
+| Express JSON | Built-in | Body parsing (50MB limit) |
+| Cookie Parser | `cookie-parser` | Cookie handling |
+| CORS | `cors` | Cross-origin (permissive configuration) |
+| Rate Limiter | `express-rate-limit` | 1000 requests per 15-minute window |
+
+### Specialized Middleware
+
+#### 4.1 Single-Tenant Guard — `server/middleware/singleTenantGuard.ts`
+- **57 lines**, Directive 11.4G
+- Scans request body, query params, and route params for `userId`/`user_id` violations
+- Case-insensitive regex: `/user[_\-]?id/i`
+- Exempts `/api/auth` routes (which legitimately handle user identification)
+- Logs violations to `diagnostics/runtime_guard_violations.log`
+- Throws error on violation (passed to Express error handler)
+
+#### 4.2 Canonical Validation — `server/middleware/canonical-validation.ts`
+- **214 lines**, Directive 11.4F.1
+- Validates regime/strategy/signalType against canonical map
+- Three violation levels:
+  - **WARN**: Ghost regime normalization (e.g., `EXTREME_NOISE` → `CHOPPY`)
+  - **ERROR**: signalType mismatch (non-canonical signal type)
+  - **CRITICAL**: Non-canonical regime/strategy combination → **request rejected**
+- Normalizes ghost regimes and legacy strategy names in-place
+- Logs all violations to `audit/logs/canonical_violation.log`
+- Exports: `validateAndNormalizeTrade()`, `getViolationStats()`, `clearViolationLog()`
+
+#### 4.3 Bob Routing — `server/middleware/bob-routing.ts`
+- **101 lines**, Phase 7.2
+- Transparent interception for 2 high-frequency endpoints:
+  - `/api/system/health` → MetricsBob cached response
+  - `/api/paper-sim/status` → MetricsBob cached response
+- Falls back to original handler on Bob failure
+- 10% sampling for verbose logs (Phase 4A noise reduction)
+- Status: Part of Walter/Bob ecosystem (confirmed dead per Kyle)
+
+#### 4.4 Chat Logging — `server/middleware/chat-logging.ts`
+- **317 lines**, Phase 6.3
+- Walter conversation persistence layer
+- File-based storage: daily JSON logs, summaries, chat index
+- Capabilities: log messages, rename chats, save summaries, search, list user chats
+- Singleton export: `chatLogging`
+- Status: Part of Walter/Bob ecosystem (confirmed dead per Kyle)
+
+---
+
+## 5. The Monolithic Router — routes.ts
+
+### File Statistics
+
+| Metric | Value |
+|--------|-------|
+| Total lines | 23,349 |
+| Inline endpoints | ~635 |
+| Service imports | 40+ |
+| Contains | Auth middleware, rate limiting, WebSocket server, CSV generation, tax reporting, full route registration for 26 modular files |
+
+### Major Endpoint Groups (Inline in routes.ts)
+
+| Group | Prefix | Auth | Approx. Endpoints | Purpose |
+|-------|--------|------|-------------------|---------|
+| Auth | `/api/auth/*` | Mixed | 4 | Login, register (disabled), verify, refresh |
+| Admin | `/api/admin/*` | Owner-only | ~8 | User CRUD, role management |
+| Settings | `/api/settings/*` | Token | ~3 | **DEPRECATED** — returns 410 |
+| Trading Engine | `/api/trading/*` | Token+Editor | ~6 | Start/stop engine, preflight checks, status |
+| Guardrails V2 | `/api/guardrails-v2/*` | Token | ~12 | CRUD, coherency validation, kill switch, audit |
+| Filters V2 | `/api/filters-v2/*` | Token | ~8 | SQE thresholds, filter config, enable/disable |
+| Paper Sim | `/api/paper-sim/*` | Token | ~15 | Status, portfolio, trades, positions, RTB |
+| Telemetry | `/api/telemetry/*` | Token | ~10 | Strategy performance, VTP, regime distribution |
+| Walter Chat | `/api/walter/*` | Token | ~20 | Chat sessions, messages, memory, summaries |
+| System | `/api/system/*` | Token | ~8 | Health, config, events, entropy |
+| Governance | `/api/governance/*` | Token | ~10 | Regime stats, strategy mapping, drift |
+| Diagnostics | `/api/diagnostics/*` | Token | ~15 | REB buffers, signal flow, execution trace |
+| Config | `/api/config/*` | Token+Editor | ~6 | Score weights, filter thresholds |
+| Market Events | `/api/market-events/*` | Token | ~4 | Event detection, MBIM status |
+| Predictive Diagnostics | `/api/predictive/*` | Token | ~5 | Confidence breakdown, DSS audit |
+| CSV/Reports | `/api/trades/csv`, `/api/trades/tax-report` | Token | ~4 | Trade history export |
+| State Debug | `/api/state/*` | Token | ~3 | System state snapshots |
+| Passive Learning | `/api/passive-learning/*` | Token | ~2 | REB 2.10 diagnostic buffers |
+| Goals (Legacy) | `/api/goals-learning/*` | Token | ~2 | Goals ML — **Walter-era legacy** |
+| Screeners (Deprecated) | `/api/screeners/*` | Token | 1 | Returns 410 → use filters-v2 |
+
+### Trading Engine Start/Stop — Critical Path
+
+**POST `/api/trading/start`** (Phase 27.F.2):
+
+Performs comprehensive preflight checks before engine activation:
+1. Validates filter configuration (SQE thresholds populated)
+2. Validates guardrail configuration (guardrails_v2 rows exist)
+3. Validates portfolio state (paper_portfolio_state exists)
+4. Tests Kraken API connectivity
+5. Clears kill switch automatically (REB 8.8.3-KS-B)
+6. Activates paper execution engine → starts FX5 scanning
+7. Mode-level configuration only (Phase 41F-L.E2E-PURGE — no per-pair activation)
+
+**POST `/api/trading/stop`**: Stops paper execution engine, stops FX5 scanning.
+
+### Guardrails V2 — Full CRUD with Coherency
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/api/guardrails-v2/config` | Token | Read guardrail configuration |
+| PUT | `/api/guardrails-v2/config` | Token+Editor | Update guardrails with coherency validation |
+| GET | `/api/guardrails-v2/kill-switch/status` | Token | Kill switch state |
+| POST | `/api/guardrails-v2/kill-switch/toggle` | Token+Editor | Toggle kill switch |
+| POST | `/api/guardrails-v2/kill-switch/reset` | N/A | **DEPRECATED** (410) — auto-cleared on start |
+| GET | `/api/guardrails-v2/audit-log` | Token | Phase 28.C audit trail |
+
+Coherency validation: PUT requests pass through `GuardrailPolicy.validateCoherency()` before saving. Violations return 422 with specific rule violation details.
+
+---
+
+## 6. Route File Catalog — 26 Modular Route Files
+
+### Active Diagnostic/Trading Route Files
+
+| # | File | Mount Point | Endpoints | Auth | Lines | Directive | Status |
+|---|------|-------------|-----------|------|-------|-----------|--------|
+| 1 | `health.ts` | `/api/health` | 9 | **NONE** | ~692 | 41F-D | ⚠️ ACTIVE — No auth on any endpoint |
+| 2 | `status.ts` | `/api/status` | 2 | None (intentional) | ~91 | Phase 1 | ACTIVE — health probe endpoints |
+| 3 | `vts.ts` | `/api/vts` | 37 | Mixed | ~1,425 | 8.8.4-L8 | ⚠️ ACTIVE — LOCKED, oversized |
+| 4 | `market.ts` | `/api/market` | 8 | JWT | ~281 | 8.8.4-L12 | ACTIVE — LOCKED |
+| 5 | `vts-audit.ts` | `/api/vts` | 6 | JWT | ~186 | 8.8.4-M3B.2 | ACTIVE — overlaps with vts.ts |
+| 6 | `vts-predictive-adjustments.ts` | `/api/vts/predictive-adjustments` | 7 | **NONE** | ~287 | 11.7D.1 | ACTIVE — read-only |
+| 7 | `dse.ts` | `/api/diagnostics` | 5 | **NONE** | ~87 | 11.3 | ACTIVE — DSE diagnostics |
+| 8 | `calibration.ts` | `/api/calibration` | 8 | Bypass | ~239 | 8.8.4-M5-R1 | ACTIVE — has audit bypass |
+| 9 | `pricing.ts` | `/api/pricing` | 3 | Bypass | ~110 | 8.8.4-M5 | ACTIVE — has audit bypass |
+| 10 | `regime-archive.ts` | `/api` (empty prefix) | 9 | JWT (different secret!) | ~302 | 11.7E | ⚠️ ACTIVE — LOCKED, security issues |
+| 11 | `paper_validation.ts` | `/api/validation` | 6 | Bypass | ~157 | 8.8.4-M5 | ACTIVE — has audit bypass |
+| 12 | `signal-audit.ts` | `/api/signal-audit` | 3 | **NONE** | ~62 | 8.8.4-M2 | ACTIVE — unauthenticated |
+| 13 | `audit.ts` | `/api/audit` | 4 | **NONE** | ~146 | 8.8.4-M1 | ⚠️ ACTIVE — no auth, GET mutates state |
+| 14 | `back_audit.ts` | `/api/back-audit` | 5 | **NONE** | ~134 | 8.8.4-M4 | ACTIVE — unauthenticated |
+| 15 | `learning.ts` | **UNMOUNTED** | 8 | Centralized | ~180 | Phase 18.0 | ⚠️ NOT MOUNTED — route file exists but not imported |
+| 16 | `phase-8.6.5.ts` | `/api/*` (direct on app) | 13 | Upstream | ~277 | Phase 8.6.5 | ACTIVE — Walter/learning routes |
+| 17 | `provenance-debug.ts` | `/api/*` (direct on app) | 12 | **NONE** | ~293 | Phase 8.6.5 | ⚠️ ACTIVE — fully unauthenticated debug |
+
+### L-Series Legacy Route Files
+
+| # | File | Mount Point | Endpoints | Auth | Lines | Directive | Status |
+|---|------|-------------|-----------|------|-------|-----------|--------|
+| 18 | `dce.ts` | `/api/dce` | 5 | **NONE** | ~123 | 8.8.4-L16 | ⚠️ LEGACY — L-Series |
+| 19 | `gasp.ts` | `/api/gasp` | 10 | **NONE** | ~183 | 8.8.4-L20 | ⚠️ LEGACY — L-Series, destructive unauth |
+| 20 | `mof.ts` | `/api/mof` | 9 | **NONE** | ~163 | 8.8.4-L19 | ⚠️ LEGACY — L-Series |
+| 21 | `maco.ts` | `/api/maco` | 4 | JWT | ~203 | 8.8.4-L15 | LEGACY — L-Series, LOCKED |
+| 22 | `pdc-ecs.ts` | `/api/pdc-ecs` | 6 | **NONE** | ~162 | 8.8.4-L18 | ⚠️ LEGACY — L-Series |
+| 23 | `apr-sle.ts` | `/api/apr-sle` | 5 | **NONE** | ~122 | 8.8.4-L17 | ⚠️ LEGACY — L-Series |
+| 24 | `rl.ts` | `/api/rl` | 5 | JWT | ~186 | 8.8.4-L14 | LEGACY — L-Series, LOCKED |
+| 25 | `m3b.ts` | `/api/m3b` | 7 | JWT | ~160 | 8.8.4-M3B | ACTIVE — validation audit |
+| 26 | `tlva.ts` | `/api/tlva` | 6 | JWT | ~166 | 8.8.4-M3A | ACTIVE — training loop audit |
+
+### Authentication Summary Across Route Files
+
+| Auth Method | Files | Count |
+|------------|-------|-------|
+| **No authentication** | health, status, dse, signal-audit, audit, back_audit, provenance-debug, vts-predictive-adjustments, dce, gasp, mof, pdc-ecs, apr-sle | 13 |
+| **Copy-pasted JWT** (`requireAuth` with hardcoded fallback) | market, vts, vts-audit, maco, rl, m3b, tlva, regime-archive | 8 |
+| **Audit bypass headers** (`x-internal-audit`, `x-validation-session`) | pricing, calibration, paper_validation | 3 |
+| **Centralized middleware import** | learning (unmounted) | 1 |
+| **Upstream auth** (registered on app, not apiRouter) | phase-8.6.5 | 1 |
+
+---
+
+## 7. WebSocket Protocol
+
+### Server-Side WebSocket (Frontend Communication)
+
+**Location**: `routes.ts` — WebSocket server created on the HTTP server at path `/ws`
+
+**Protocol**: Simple JSON message exchange
+
+| Message Type | Direction | Purpose |
+|-------------|-----------|---------|
+| `subscribe_prices` | Client → Server | Subscribe to price updates |
+| `subscribe_trades` | Client → Server | Subscribe to trade updates |
+| `ping` | Client → Server | Heartbeat |
+| `pong` | Server → Client | Heartbeat response |
+
+**Context Bridge Integration**: The Context Bridge (Walter-era service) registers WebSocket clients for real-time broadcast of system events, trade updates, and price changes. Despite Walter being deprecated, this broadcast mechanism may still serve the frontend dashboard.
+
+**Implementation Note**: The WebSocket handler is minimal — only 15 lines. The actual real-time data delivery relies on Context Bridge broadcasting to registered clients, not on the WebSocket handler processing subscriptions.
+
+---
+
+## 8. Market Data WebSocket — Kraken v2 Adapter
+
+### File: `server/services/market-data-ws.ts`
+
+**Directive**: 8.9.0-B (Secondary WebSocket Adapter — Analytics)
+**Lines**: ~410
+**Status**: ACTIVE
+
+### Purpose
+
+Secondary outbound WebSocket connection to Kraken's v2 API (`wss://ws.kraken.com/v2`). Used by FeedIntegrityMonitor, MarketDataCoordinator, and SlippageFeeModel for analytics-quality market data.
+
+### Architecture
+
+```
+MarketDataWebSocket (singleton)
+    │
+    ├── Connects to wss://ws.kraken.com/v2
+    ├── Subscribes to:
+    │   ├── ticker channel (trade-based price updates)
+    │   └── book channel (order book, depth=10)
+    │
+    ├── Processes:
+    │   ├── v2 ticker updates → translateV2ToV1() → TickData events
+    │   ├── v2 book updates → stateful mini-book → OrderBookSnapshot events
+    │   └── v2 heartbeats → staleness tracking
+    │
+    └── Emits:
+        ├── 'tick' (TickData) — bid, ask, last, source, volumes
+        ├── 'orderbook' (OrderBookSnapshot) — top 10 bids/asks
+        ├── 'stale' (ageMs) — data freshness alert
+        ├── 'connected' / 'disconnected'
+        └── 'error'
+```
+
+### Key Features
+
+1. **v2→v1 Translation**: Uses `kraken-v2-translator.ts` to convert Kraken v2 ticker format to v1 format for backward compatibility with existing consumers.
+
+2. **Stateful Mini-Book** (Directive 8.9.4-Patch): Maintains in-memory order book per symbol. Applies delta updates from Kraken book channel. Computes best bid/ask from sorted book entries. Emits midpoint price as `last` in tick data for stable pricing.
+
+3. **Sequence Validation** (Directive 8.9.4-Patch): Tracks checksum per symbol. Detects out-of-order deltas and triggers book resync (delete + rebuild).
+
+4. **Auto-Reconnect**: Exponential backoff (1s base, 30s max). Automatic resubscription to all pairs on reconnect.
+
+5. **Staleness Detection**: Heartbeat interval (30s) checks time since last tick. Emits 'stale' event when data age exceeds threshold (2s default).
+
+### Data Types
+
+```typescript
+interface TickData {
+  symbol: string;
+  bid: number;
+  ask: number;
+  last: number;      // Midpoint from book, or last trade from ticker
+  timestamp: string;
+  source: 'ws' | 'rest_fallback';
+  bidVolume?: number;
+  askVolume?: number;
+}
+
+interface OrderBookSnapshot {
+  symbol: string;
+  bids: [number, number][];  // [price, volume], sorted descending
+  asks: [number, number][];  // [price, volume], sorted ascending
+  timestamp: string;
+}
+```
+
+### Configuration
+
+| Parameter | Default | Purpose |
+|-----------|---------|---------|
+| `url` | `wss://ws.kraken.com/v2` | Kraken WebSocket v2 endpoint |
+| `heartbeatInterval` | 30,000ms | Heartbeat check interval |
+| `reconnectDelayBase` | 1,000ms | Base reconnect delay |
+| `reconnectDelayMax` | 30,000ms | Maximum reconnect delay |
+| `staleThresholdMs` | 2,000ms | Data freshness threshold |
+
+---
+
+## 9. Route Mounting & Registration Patterns
+
+### Three Registration Patterns (Inconsistent)
+
+DawnTrader uses **three different patterns** for registering route files, creating architectural inconsistency:
+
+#### Pattern 1: Dynamic Import to apiRouter (Standard — 22 files)
+```typescript
+// In routes.ts (bottom of file, ~line 22465+)
+const { healthRouter } = await import('./routes/health.js');
+apiRouter.use('/health', healthRouter);
+```
+Routes define paths relative to mount point (e.g., `/status` becomes `/api/health/status`).
+
+#### Pattern 2: Direct Registration on Express App (3 files)
+```typescript
+// In index.ts (~line 356)
+const { registerPhase865Routes } = await import('./routes/phase-8.6.5');
+registerPhase865Routes(app);
+// phase-8.6.5.ts defines full paths: /api/walter/secure-core/enable, etc.
+
+app.use(provenanceDebugRoutes.default);
+// provenance-debug.ts defines full paths: /api/provenance/debug/enable, etc.
+```
+These bypass the apiRouter entirely and register directly on the Express app.
+
+#### Pattern 3: Eager Import in index.ts (1 file)
+```typescript
+// In index.ts (top-level import)
+import dseRouter from "./routes/dse.js";
+// Later:
+app.use('/api/diagnostics', dseRouter);
+```
+DSE is eagerly imported (not dynamic) and mounted at `/api/diagnostics`. The route file defines paths as `/dse/status`, making the full path `/api/diagnostics/dse/status`.
+
+### Mounting Anomaly: regime-archive.ts
+
+```typescript
+// In routes.ts (~line 22575)
+apiRouter.use('', regimeArchiveRouter.default);
+```
+
+The regime-archive router is mounted with an **empty prefix** on apiRouter. However, the route file itself defines full paths like `/api/vts/regime-archive/*`. Since apiRouter is already mounted at `/api`, this creates a potential double-prefix issue where paths could resolve as `/api/api/vts/regime-archive/*` depending on how Express resolves the empty mount.
+
+### Unmounted Route File: learning.ts
+
+`server/routes/learning.ts` (Phase 18.0, ~180 lines, 8 endpoints) exists in the codebase but **is not imported or mounted anywhere** — not in routes.ts, not in index.ts. This file is dead code. It is notable as the **only route file that correctly imports authentication from centralized middleware** (`../middleware/auth`).
+
+---
+
+## 10. Security Architecture & Findings
+
+### FINDING-1: Hardcoded JWT Fallback Secret (CRITICAL)
+
+**Affected files** (9 route files):
+- `market.ts`, `vts.ts`, `vts-audit.ts`, `maco.ts`, `rl.ts`, `m3b.ts`, `tlva.ts`, `calibration.ts`, `paper_validation.ts`
+
+**Code pattern** (identical in all 9 files):
+```typescript
+const JWT_SECRET = process.env.JWT_SECRET || 'jwt-development-secret-do-not-use-in-production';
+```
+
+**Impact**: If `JWT_SECRET` environment variable is not set, authentication across all 9 route files is trivially bypassable. Any attacker who knows the fallback string (visible in source code) can forge valid JWT tokens.
+
+**Note**: The main routes.ts also uses `JWT_SECRET` from env but the fallback behavior was not observed in the sampled sections.
+
+### FINDING-2: Inconsistent JWT Secret in regime-archive.ts (HIGH)
+
+**File**: `regime-archive.ts`
+```typescript
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+```
+
+**Impact**: Uses a **different** fallback secret than all other files (`'your-secret-key'` vs `'jwt-development-secret-do-not-use-in-production'`). If `JWT_SECRET` env var is not set, tokens valid for regime-archive would be invalid for all other endpoints, and vice versa. This creates inconsistent authentication behavior.
+
+### FINDING-3: Auth Bypass via `x-internal-audit` Header (HIGH)
+
+**Affected files**: `pricing.ts`, `calibration.ts`, `regime-archive.ts`, `paper_validation.ts`
+
+**Code pattern**:
+```typescript
+function auditOrAuth(req, res, next) {
+  if (req.headers['x-internal-audit'] === 'true') {
+    return next(); // Skip authentication entirely
+  }
+  return requireAuth(req, res, next);
+}
+```
+
+**Impact**: Any request with header `x-internal-audit: true` bypasses JWT authentication completely. This header is not validated against any secret or source — any client can send it.
+
+**Additional bypass**: `calibration.ts` and `regime-archive.ts` also accept `x-validation-session` header as an auth bypass.
+
+### FINDING-4: Unauthenticated Endpoint Groups (MEDIUM-HIGH)
+
+| Route File | Endpoints | Includes Mutating Operations |
+|------------|-----------|------------------------------|
+| `health.ts` | 9 endpoints | **YES** — POST `/recovery/trigger`, POST `/fault-injection/*` |
+| `dse.ts` | 5 endpoints | **YES** — POST `/dse/reset` (clears history + caches) |
+| `signal-audit.ts` | 3 endpoints | No (read-only) |
+| `audit.ts` | 4 endpoints | **YES** — GET `/trigger` (state-changing GET!) |
+| `back_audit.ts` | 5 endpoints | **YES** — POST endpoints |
+| `provenance-debug.ts` | 12 endpoints | **YES** — POST `/enable`, POST `/clear`, POST `/trace/new` |
+| `vts-predictive-adjustments.ts` | 7 endpoints | No (read-only) |
+| `dce.ts` | 5 endpoints | **YES** — POST `/compute`, POST `/recalibrate` |
+| `gasp.ts` | 10 endpoints | **YES** — POST `/reset`, `/rollback`, `/recalibrate`, `/adjust` |
+| `mof.ts` | 9 endpoints | **YES** — POST `/evolve`, `/reset`, `/weights` |
+| `pdc-ecs.ts` | 6 endpoints | **YES** — POST `/reset`, `/recalibrate` |
+| `apr-sle.ts` | 5 endpoints | **YES** — POST `/reset`, `/recalibrate` |
+
+**Of particular concern**: `gasp.ts` exposes destructive operations (reset, rollback, recalibrate with unbounded weight inputs) without any authentication. While GASP is L-Series legacy, these endpoints are actively mounted and reachable.
+
+### FINDING-5: Duplicated Auth Middleware (MEDIUM)
+
+The `requireAuth` function is **copy-pasted** identically in 8+ route files instead of being imported from a shared module. Each copy:
+- Duplicates JWT verification logic
+- Duplicates the hardcoded fallback secret
+- Duplicates the `AuthenticatedRequest` interface
+- Is NOT equivalent to the routes.ts `authenticateToken` middleware (which fetches user from DB)
+
+Only `learning.ts` (unmounted) correctly imports from `../middleware/auth`.
+
+### FINDING-6: REST Violation — GET Mutates State (LOW)
+
+**File**: `audit.ts`
+**Endpoint**: GET `/api/audit/trigger`
+**Problem**: Uses GET method for a state-changing operation (triggers audit). GET requests should be idempotent per HTTP specification.
+
+### FINDING-7: Internal Service Key Bypass in rl.ts (MEDIUM)
+
+**File**: `rl.ts`
+**Endpoint**: GET `/api/rl/internal/buffer`
+
+```typescript
+const expectedKey = process.env.INTERNAL_SERVICE_KEY;
+if (expectedKey && internalKey !== expectedKey) { ... }
+```
+
+If `INTERNAL_SERVICE_KEY` is empty string or not set, the guard is bypassed entirely (empty string is falsy in JavaScript).
+
+### FINDING-8: Path Traversal Risk in tlva.ts (LOW)
+
+**File**: `tlva.ts`
+**Endpoint**: GET `/api/tlva/reports/:filename`
+
+Filename validation only checks prefix (`TLVA_Report_`) and suffix (`.json`). A crafted filename like `TLVA_Report_../../etc/passwd.json` could potentially traverse paths, though the `.json` suffix makes exploitation unlikely on most systems.
+
+### FINDING-9: RBAC Not Enforced in Modular Route Files (HIGH) — Phase 8 Addendum ADD-1
+
+**Affected files**: All 8 route files with copy-pasted `requireAuth` middleware (`market.ts`, `vts.ts`, `vts-audit.ts`, `maco.ts`, `rl.ts`, `m3b.ts`, `tlva.ts`, `regime-archive.ts`)
+
+**Problem**: The copy-pasted `requireAuth` function in modular route files verifies JWT token validity but **never checks the user's role or permissions**. It decodes the token and attaches `req.user = { id, username }` — no role field is extracted or validated. This means any authenticated user (including `viewer` role) can access mutating endpoints.
+
+**Contrast with routes.ts**: The main router's `authenticateToken` middleware fetches the full user record from the database, extracts `userRole` and `userPermissions`, and applies role-specific guards (`requireEditor`, `requireOwner`) on mutating endpoints.
+
+**Impact**: 8 route files with ~90+ authenticated endpoints have JWT verification but zero role enforcement. Any valid JWT (including viewer tokens) grants full access to all endpoints in these files.
+
+**Kyle Directive (ADD-1)**: Standardize permission enforcement across all routes. Consolidate to centralized auth middleware with RBAC.
+
+---
+
+## 11. Deprecated & Legacy Endpoints
+
+### Endpoints Returning HTTP 410 (Gone)
+
+DawnTrader correctly uses HTTP 410 with migration instructions for deprecated endpoints:
+
+| Deprecated Endpoint | Migration Target | Directive |
+|---------------------|-----------------|-----------|
+| PUT `/api/settings` | Use Guardrails tab (guardrails-v2 API) | Phase 8.8.3 |
+| POST `/api/guardrails-v2/kill-switch/reset` | Auto-cleared on engine start | REB 8.8.3-KS-B |
+| `*` `/api/screeners/*` | Use `/api/filters-v2` | Phase 11 |
+| POST `/api/auth/register` | Registration disabled (single-tenant) | — |
+
+### Walter/Bob Endpoints (Legacy — Dead Per Kyle)
+
+The following endpoint groups in routes.ts serve the Walter/Bob AI system confirmed dead by Kyle:
+
+- `/api/walter/*` (~20 endpoints) — Chat sessions, messages, memory, summaries
+- `/api/goals-learning/*` — Goals ML learning triggers
+- Bob routing middleware intercepts (`/api/system/health`, `/api/paper-sim/status`)
+
+### Phase 8.6.5 Endpoints (Walter-Adjacent)
+
+- `/api/walter/secure-core/*` — Secure-Core mode toggle
+- `/api/walter/corpus-domain/*` — Corpus domain management
+- `/api/learning/alignment/*` — Learning alignment weights
+- `/api/learning/cross-mode-lessons` — Paper-to-live knowledge transfer
+- `/api/learning/promote` — Paper learning promotion
+
+---
+
+## 12. L-Series Route Files — Legacy API Surface
+
+Eight route files expose the L-Series autonomy cluster confirmed legacy in Phase 4:
+
+| File | Mount | Backend Service | Legacy Status |
+|------|-------|----------------|---------------|
+| `dce.ts` | `/api/dce` | Decision Confidence Engine | Confirmed legacy (Phase 4) |
+| `gasp.ts` | `/api/gasp` | GASP Coordinator | Confirmed legacy (Phase 4) |
+| `mof.ts` | `/api/mof` | MOF Orchestrator | Confirmed legacy (Phase 4) |
+| `maco.ts` | `/api/maco` | MACO Coordinator | Confirmed legacy (Phase 4) |
+| `pdc-ecs.ts` | `/api/pdc-ecs` | PDC Engine + ECS | Confirmed legacy (Phase 4) |
+| `apr-sle.ts` | `/api/apr-sle` | APR-SLE Engine | Confirmed legacy (Phase 4) |
+| `rl.ts` | `/api/rl` | Reinforcement Learning | Confirmed legacy (Phase 4) |
+| `m3b.ts` | `/api/m3b` | M3B Validation Service | Active (validates VTS/DCE coupling) |
+
+**Note**: `m3b.ts` and `tlva.ts` are validation/audit tools that monitor L-Series systems. When L-Series is removed, these audit routes lose their purpose and should be removed alongside.
+
+### L-Series Route Endpoints Summary
+
+Combined, the L-Series route files expose **~52 endpoints**:
+- 10 endpoints in gasp.ts (reset, rollback, recalibrate — destructive)
+- 9 endpoints in mof.ts (evolve, reset, weights — destructive)
+- 8 endpoints in market.ts (regime profiling, retrain)
+- 7 endpoints in m3b.ts (validation metrics)
+- 6 endpoints in pdc-ecs.ts (drawdown containment)
+- 6 endpoints in tlva.ts (training loop audit)
+- 5 endpoints in dce.ts (decision confidence)
+- 5 endpoints in rl.ts (reinforcement learning, ML service calls)
+- 5 endpoints in apr-sle.ts (adaptive profit/risk)
+- 4 endpoints in maco.ts (multi-agent coordination)
+
+---
+
+## 13. Data Flow: Request Lifecycle
+
+### Authenticated API Request Flow
+
+```
+Client HTTP Request
+    │
+    ├── Express Global Middleware
+    │   ├── JSON body parser (50MB limit)
+    │   ├── CORS
+    │   ├── Rate limiter (1000/15min)
+    │   ├── Single-tenant guard (userId violation scan)
+    │   └── Canonical validation (regime/strategy normalization)
+    │
+    ├── Bob Routing Check (transparent interception for health/status)
+    │   ├── If Bob enabled → return cached response
+    │   └── If Bob disabled or failed → continue to handler
+    │
+    ├── Route Matching
+    │   ├── apiRouter inline endpoints (routes.ts)
+    │   │   └── authenticateToken() → DB lookup → req.userId/userRole
+    │   │
+    │   └── Mounted route files (26 files)
+    │       ├── Files with requireAuth → JWT verify only (no DB lookup)
+    │       ├── Files with auditOrAuth → x-internal-audit bypass OR JWT
+    │       └── Files with no auth → direct handler execution
+    │
+    ├── Handler Execution
+    │   ├── Service calls (import from server/services/*)
+    │   ├── Database queries (via storage layer)
+    │   └── Response generation (JSON)
+    │
+    └── Response
+        ├── 200 OK (success)
+        ├── 401 Unauthorized (auth failure)
+        ├── 403 Forbidden (role insufficient)
+        ├── 410 Gone (deprecated endpoint)
+        ├── 422 Unprocessable (coherency violation)
+        └── 404 Not Found (catch-all JSON response)
+```
+
+### WebSocket Connection Flow
+
+```
+Client WebSocket Connection (/ws)
+    │
+    ├── WSS upgrade on HTTP server
+    ├── Connection registered with Context Bridge
+    │
+    ├── Client Messages:
+    │   ├── subscribe_prices → (handler is empty/stub)
+    │   ├── subscribe_trades → (handler is empty/stub)
+    │   └── ping → pong response
+    │
+    └── Server Broadcasts (via Context Bridge):
+        ├── Price updates
+        ├── Trade updates
+        ├── System events
+        └── Engine status changes
+```
+
+---
+
+## 14. Critical Findings & Kyle Decision Points
+
+### FINDING PRIORITY | Kyle Decision Required
+
+| # | Finding | Severity | Kyle Decision (Phase 8 Addendum) |
+|---|---------|----------|----------------------------------|
+| F-1 | **Hardcoded JWT fallback secret** in 9 route files | CRITICAL | **ADD-2**: Eliminate fallback values entirely. Fail hard if `JWT_SECRET` is not defined. |
+| F-2 | **Inconsistent JWT secret** in regime-archive.ts | HIGH | **ADD-2**: Remove all fallback secrets (superseded by fail-hard directive). |
+| F-3 | **`x-internal-audit` header bypass** in 4 files | HIGH | **ADD-3**: Replace with proper internal service key validation, signed internal JWT, or remove entirely. |
+| F-4 | **13 route files with no authentication** | MEDIUM-HIGH | **ADD-1**: Standardize permission enforcement across all routes. L-Series files removed with Wave 6. |
+| F-5 | **Duplicated auth middleware** in 8+ files | MEDIUM | **ADD-1**: Part of auth consolidation. Centralize RBAC enforcement. |
+| F-6 | **routes.ts at 23,349 lines** | INFORMATIONAL | Kyle: "routes.ts is an architectural accumulation risk." Post-audit cleanup. |
+| F-7 | **learning.ts is unmounted** | LOW | Dead code — remove with Wave 8. |
+| F-8 | **regime-archive.ts empty mount prefix** | LOW | Verify paths resolve correctly or fix mount point. |
+| F-9 | **vts.ts at 1,425 lines / 37 endpoints** | LOW | Oversized route file — split candidate during VTS refactor. |
+| F-10 | **RBAC not enforced in modular route files** | HIGH | **ADD-1**: JWT-only auth without role checks allows any authenticated user to access mutating endpoints. |
+
+### Forward Audit Notes
+
+- **Phase 9 (Frontend)** will reveal which API endpoints the frontend actually consumes. Many of the 750+ endpoints may be unreferenced.
+- **Phase 9: ADD-5 Post-Audit Endpoint Census** — Kyle directive: Cross-reference frontend usage against all endpoints. Mark unused endpoints for removal.
+- **ADD-4: API Versioning Plan** — Introduce `/api/v1/` namespace before next major refactor.
+- **Walter/Bob endpoint removal** should be bundled with Wave 3 (Walter/Bob ecosystem removal).
+- **L-Series route file removal** should be bundled with Wave 6 (L-Series cluster removal).
+
+---
+
+## 15. Phase 8 Addendum — Kyle Directives
+
+> **Kyle's Phase 8 Position**: "Infrastructure is functional. Security hygiene is inconsistent. Legacy L-Series routes remain exposed. Auth layer requires consolidation. routes.ts is an architectural accumulation risk."
+
+### ADD-1: RBAC Enforcement Inconsistency
+
+**Problem**: Many modular route files verify JWT only but do not enforce role-based permission checks. The main routes.ts uses `authenticateToken` (which fetches user from DB including role/permissions), plus role-specific guards (`requireEditor`, `requireOwner`). The 8 route files with copy-pasted `requireAuth` verify the JWT signature but **never check the user's role**. This means any authenticated user — including `viewer` role — can access mutating endpoints like mode changes, recalibration triggers, and configuration updates.
+
+**Examples of RBAC gaps**:
+- `vts-audit.ts` — POST `/update-mode` allows any authenticated user to switch system mode (IDLE/PAPER/LIVE)
+- `market.ts` — POST `/regime/refresh` allows any authenticated user to force regime recheck
+- `calibration.ts` — POST `/ml/trigger` allows any authenticated user (or audit header bypass) to trigger ML calibration
+
+**Kyle Directive**: Standardize permission enforcement across all routes. All mutating endpoints must enforce at minimum `editor` role. All admin/destructive operations must enforce `owner` role.
+
+**Implementation path**:
+1. Consolidate all route-file auth to use the centralized middleware (learning.ts is the template)
+2. Add `requireEditor` / `requireOwner` guards to mutating endpoints
+3. Remove all inline `requireAuth` copies
+
+### ADD-2: Remove JWT Fallback Secrets
+
+**Kyle Directive**: Eliminate fallback values entirely. Fail hard if `JWT_SECRET` is not defined.
+
+**Current state**: 9 route files use `process.env.JWT_SECRET || 'jwt-development-secret-do-not-use-in-production'`. regime-archive.ts uses `|| 'your-secret-key'`. If the environment variable is not set, authentication is trivially bypassable.
+
+**Implementation**:
+```typescript
+// BEFORE (current — insecure):
+const JWT_SECRET = process.env.JWT_SECRET || 'jwt-development-secret-do-not-use-in-production';
+
+// AFTER (Kyle directive — fail-closed):
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('FATAL: JWT_SECRET environment variable is not set. Cannot start server.');
+}
+```
+
+**Affected files** (10 total): `market.ts`, `vts.ts`, `vts-audit.ts`, `maco.ts`, `rl.ts`, `m3b.ts`, `tlva.ts`, `calibration.ts`, `paper_validation.ts`, `regime-archive.ts`
+
+**Note**: If auth is consolidated per ADD-1, this becomes a single-point fix in the centralized middleware.
+
+### ADD-3: Remove Header-Based Auth Bypass
+
+**Kyle Directive**: Replace `x-internal-audit` with proper internal service key validation, signed internal JWT, or remove entirely.
+
+**Current state**: 4 route files (`pricing.ts`, `calibration.ts`, `regime-archive.ts`, `paper_validation.ts`) accept `x-internal-audit: 'true'` header to bypass JWT auth completely. Additional `x-validation-session` bypass in `calibration.ts` and `regime-archive.ts`. No secret validation — any HTTP client can set these headers.
+
+**Replacement options** (Kyle to decide):
+1. **Proper internal service key**: Require `x-internal-key` header validated against `INTERNAL_SERVICE_KEY` env var (fail-closed, not the falsy-bypass pattern in rl.ts)
+2. **Signed internal JWT**: Internal services use a dedicated JWT signed with a separate `INTERNAL_JWT_SECRET`
+3. **Remove entirely**: If no internal service actually uses these bypasses, remove them
+
+**Implementation**: Replace `auditOrAuth` middleware with either the chosen internal auth mechanism or standard `requireAuth`.
+
+### ADD-4: API Versioning Plan
+
+**Kyle Directive**: Introduce `/api/v1/` namespace before next major refactor.
+
+**Current state**: All endpoints use unversioned `/api/*` paths. Any breaking change to endpoint contracts requires coordinating frontend and backend deployments simultaneously.
+
+**Implementation plan**:
+1. **During post-audit cleanup**: Introduce `/api/v1/` as the new canonical prefix
+2. Mount existing `apiRouter` at both `/api/v1` and `/api` (backward-compatible phase)
+3. Frontend migrates to `/api/v1` paths
+4. After migration: deprecate unversioned `/api/*` paths
+5. Future breaking changes can introduce `/api/v2/` without disrupting active consumers
+
+**Timing**: Post-audit cleanup phase, bundled with routes.ts refactoring (RISK-048).
+
+### ADD-5: Post-Audit Endpoint Census
+
+**Kyle Directive**: During Phase 9, cross-reference frontend usage against all endpoints. Mark unused endpoints for removal.
+
+**Method**:
+1. Phase 9 audits frontend `fetch()` / `axios` / API calls to catalog all consumed endpoints
+2. Cross-reference against the ~750 server-side endpoint registrations
+3. Any endpoint not consumed by the frontend AND not consumed by internal service-to-service calls is flagged as a removal candidate
+4. Walter/Bob and L-Series endpoints are pre-flagged for removal (Waves 3 and 6) regardless of frontend usage
+
+**Expected outcome**: Significant reduction in API surface — many diagnostic, audit, and legacy endpoints likely have zero consumers.
+
+---
+
+## 16. File Catalog
+
+| File | Lines | Status | Purpose |
+|------|-------|--------|---------|
+| `server/routes.ts` | 23,349 | ACTIVE | Monolithic router — 635 inline endpoints + 26 route file mounts |
+| `server/services/auth-service.ts` | 47 | ACTIVE | Password utilities (bcrypt, validation) |
+| `server/services/market-data-ws.ts` | 410 | ACTIVE | Kraken WebSocket v2 adapter (analytics) |
+| `server/middleware/singleTenantGuard.ts` | 57 | ACTIVE | userId violation detection |
+| `server/middleware/canonical-validation.ts` | 214 | ACTIVE | Regime/strategy canonical enforcement |
+| `server/middleware/bob-routing.ts` | 101 | LEGACY | Bob Core transparent interception (Walter-era) |
+| `server/middleware/chat-logging.ts` | 317 | LEGACY | Walter chat persistence |
+| `server/routes/health.ts` | 692 | ACTIVE | Health monitoring endpoints (no auth) |
+| `server/routes/status.ts` | 91 | ACTIVE | Health probe endpoints |
+| `server/routes/vts.ts` | 1,425 | ACTIVE (LOCKED) | VTS endpoints (oversized) |
+| `server/routes/market.ts` | 281 | ACTIVE (LOCKED) | Market regime endpoints |
+| `server/routes/vts-audit.ts` | 186 | ACTIVE | VTS passive feed audit |
+| `server/routes/vts-predictive-adjustments.ts` | 287 | ACTIVE | Predictive adjustment queries |
+| `server/routes/dse.ts` | 87 | ACTIVE | DSE diagnostics |
+| `server/routes/calibration.ts` | 239 | ACTIVE | Calibration reports |
+| `server/routes/pricing.ts` | 110 | ACTIVE | Feed latency/cache |
+| `server/routes/regime-archive.ts` | 302 | ACTIVE (LOCKED) | Regime archive queries |
+| `server/routes/paper_validation.ts` | 157 | ACTIVE | Paper mode validation |
+| `server/routes/signal-audit.ts` | 62 | ACTIVE | Signal audit (no auth) |
+| `server/routes/audit.ts` | 146 | ACTIVE | System audit (no auth) |
+| `server/routes/back_audit.ts` | 134 | ACTIVE | Back-audit integrity (no auth) |
+| `server/routes/learning.ts` | 180 | DEAD | Unmounted Phase 18.0 learning routes |
+| `server/routes/phase-8.6.5.ts` | 277 | ACTIVE | Walter/learning enhancement routes |
+| `server/routes/provenance-debug.ts` | 293 | ACTIVE | Provenance debug (no auth) |
+| `server/routes/dce.ts` | 123 | LEGACY | DCE routes (L-Series) |
+| `server/routes/gasp.ts` | 183 | LEGACY | GASP routes (L-Series) |
+| `server/routes/mof.ts` | 163 | LEGACY | MOF routes (L-Series) |
+| `server/routes/maco.ts` | 203 | LEGACY (LOCKED) | MACO routes (L-Series) |
+| `server/routes/pdc-ecs.ts` | 162 | LEGACY | PDC-ECS routes (L-Series) |
+| `server/routes/apr-sle.ts` | 122 | LEGACY | APR-SLE routes (L-Series) |
+| `server/routes/rl.ts` | 186 | LEGACY (LOCKED) | RL routes (L-Series) |
+| `server/routes/m3b.ts` | 160 | ACTIVE | M3B validation audit |
+| `server/routes/tlva.ts` | 166 | ACTIVE | TLVA training audit |
+
+---
+
+## 17. Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0 | 2026-02-17 | Initial Phase 8 audit complete |
+| 1.1 | 2026-02-17 | Phase 8 Addendum applied — Kyle directives ADD-1 through ADD-5. RBAC enforcement gap documented (ADD-1). JWT fallback removal mandated (ADD-2). Header bypass removal mandated (ADD-3). API versioning plan added (ADD-4). Post-audit endpoint census directive added (ADD-5). All Finding decisions updated with Kyle directives. New §15 added. ToC renumbered (16→17 sections). |
+
+
+---
+
+# Chapter 9: Frontend & UI Layer
+
+## Table of Contents
+
+1. [Technology Stack & Build System](#1-technology-stack--build-system)
+2. [Application Shell & Routing](#2-application-shell--routing)
+3. [Authentication & Token Management](#3-authentication--token-management)
+4. [Server State Management (React Query)](#4-server-state-management-react-query)
+5. [Real-Time Communication (WebSocket)](#5-real-time-communication-websocket)
+6. [Trading Mode Context](#6-trading-mode-context)
+7. [Role-Based Access Control (Frontend RBAC)](#7-role-based-access-control-frontend-rbac)
+8. [Core Hooks](#8-core-hooks)
+9. [Layout Architecture](#9-layout-architecture)
+10. [Page Inventory & Routing Map](#10-page-inventory--routing-map)
+11. [Component Inventory](#11-component-inventory)
+12. [Walter AI Integration Points](#12-walter-ai-integration-points)
+13. [Performance Monitoring](#13-performance-monitoring)
+14. [Dead Code & Dead Pages](#14-dead-code--dead-pages)
+15. [ADD-5 Endpoint Census](#15-add-5-endpoint-census)
+16. [Production Readiness Concerns](#16-production-readiness-concerns)
+17. [Architectural Patterns & Conventions](#17-architectural-patterns--conventions)
+
+---
+
+## 1. Technology Stack & Build System
+
+| Layer | Technology | Version Source |
+|-------|-----------|---------------|
+| **Framework** | React 18 | TypeScript, JSX |
+| **Build Tool** | Vite | HMR error suppression in `main.tsx` |
+| **Routing** | wouter | Lightweight, NOT React Router |
+| **Server State** | @tanstack/react-query | v5+ (TanStack Query) |
+| **UI Components** | shadcn/ui | 48 primitives under `components/ui/` |
+| **Styling** | Tailwind CSS | Via `tailwind-merge` + `clsx` in `cn()` |
+| **Charts** | Recharts | Used in portfolio-chart.tsx, analytics |
+| **Icons** | lucide-react | Throughout all pages |
+
+**Entry Point**: `client/src/main.tsx` (17 lines)
+- Mounts React root to `#root`
+- Suppresses Vite HMR overlay errors via `console.error` interception
+
+**Utility Foundation**: `client/src/lib/utils.ts` (21 lines)
+- `cn()` — `twMerge(clsx(...inputs))` for conditional class merging
+- `formatNumberWithCommas()` / `parseCommaFormattedNumber()` — locale-aware number display
+
+---
+
+## 2. Application Shell & Routing
+
+**File**: `client/src/App.tsx` (270 lines)
+
+### Provider Hierarchy (outermost → innermost)
+
+```
+QueryClientProvider
+  └─ TradingModeProvider
+       └─ RequestTraceProvider
+            └─ TooltipProvider
+                 └─ Router (wouter)
+                      └─ Routes
+```
+
+### Route Table
+
+| Path | Component | Auth | Notes |
+|------|-----------|------|-------|
+| `/login` | `LoginPage` | No | Eager-loaded |
+| `/register` | `RegisterPage` | No | Eager-loaded, UI link **commented out** |
+| `/` | `Dashboard` | Yes | Eager-loaded, default redirect |
+| `/dashboard` | `Dashboard` | Yes | Eager-loaded |
+| `/active-trades` | `ActiveTradesPage` | Yes | Lazy |
+| `/walter` | `WalterPage` | Yes | Lazy |
+| `/watchlist` | `WatchlistPage` | Yes | Lazy |
+| `/reports` | `ReportsPage` | Yes | Lazy |
+| `/daily-brief` | `DailyBriefPage` | Yes | Lazy |
+| `/briefings` | `BriefingsPage` | Yes | Lazy |
+| `/goals-engine` | `GoalsEnginePage` | Yes | Lazy |
+| `/ai-transparency` | `AITransparencyPage` | Yes | Lazy |
+| `/analytics` | `AnalyticsPage` | Yes | Lazy |
+| `/machine-learning` | `MachineLearningPage` | Yes | Lazy |
+| `/insights` | `FilterInsightsPage` | Yes | Lazy |
+| `/settings` | `SettingsPage` | Yes | Lazy |
+| `/system/config` | `SystemConfigPage` | Yes | Lazy |
+| `/systems` | `SystemsPage` | Yes | Lazy |
+| `/:rest*` | `NotFound` | No | Catch-all 404 |
+
+### Global Overlays
+
+1. **KillSwitchBanner** — Fixed red banner when `settings.killSwitchTripped === true`. Polls `/api/settings` every 15 seconds.
+2. **WalterFloatingAssistant** — Appears on ALL authenticated pages except `/walter`. Context-aware chat widget.
+3. **DatabaseAlert** — Warns when Neon database storage exceeds 50%/70% thresholds. Polls hourly.
+
+### RequireAuth Guard
+
+```typescript
+function RequireAuth({ children }) {
+  const [isValid, setIsValid] = useState(false);
+  useEffect(() => {
+    ensureValidToken()
+      .then(() => setIsValid(true))
+      .catch(() => navigate('/login'));
+  }, []);
+  return isValid ? children : <Loading />;
+}
+```
+
+Calls `ensureValidToken()` from `lib/auth.ts` on every route transition. If token refresh fails, redirects to `/login`.
+
+---
+
+## 3. Authentication & Token Management
+
+### Token Flow
+
+**File**: `client/src/lib/auth.ts` (118 lines)
+
+```
+Login → POST /api/auth/login → { accessToken, refreshToken }
+  ↓
+saveTokens() → localStorage: accessToken, refreshToken, token (legacy compat)
+  ↓
+Every API call → ensureValidToken() → check expiry with 5-min buffer
+  ↓
+If near-expiry → refreshAccessToken() → POST /api/auth/refresh
+  ↓
+Singleton lock: only ONE refresh request at a time across all tabs/hooks
+```
+
+**Key Design**:
+- **12-hour access tokens**, 7-day refresh tokens
+- **5-minute expiry buffer**: proactive refresh before expiration
+- **Singleton refresh lock**: `let refreshPromise: Promise<string | null> | null = null` prevents concurrent refresh requests
+- **Backward compatibility**: Stores token as both `accessToken` (new) and `token` (legacy) in localStorage
+- On refresh failure: clears all tokens and returns null (caller redirects to login)
+
+### Token Storage Security Concern (Phase 9 Addendum ADD-1)
+
+> **Kyle Directive (Phase 9 Addendum ADD-1)**: Document XSS exposure risk. Recommend future migration to secure cookie or hybrid approach.
+
+**Current state**: JWT tokens are stored in `localStorage`. This is the simplest storage mechanism but has a known security trade-off:
+
+| Storage Method | XSS Risk | CSRF Risk | Current |
+|---|---|---|---|
+| `localStorage` | **Exposed** — any XSS vector can read tokens | Safe — not auto-sent with requests | **Yes** |
+| `httpOnly` cookie | Safe — JavaScript cannot access | Exposed — auto-sent with requests | No |
+| Hybrid (short-lived memory + httpOnly refresh) | Minimal | Minimal | No |
+
+**Exposure**: If an XSS vulnerability exists anywhere in the application (including in third-party dependencies), an attacker could read the JWT from `localStorage` and exfiltrate it. The 12-hour access token lifetime gives a large window for exploitation.
+
+**Recommended migration path** (future, not urgent):
+1. Move `refreshToken` to an `httpOnly`, `Secure`, `SameSite=Strict` cookie
+2. Keep `accessToken` in memory only (not localStorage) — short-lived, re-obtained via refresh cookie
+3. Add CSRF protection if cookie-based auth is adopted
+4. Reduce access token lifetime from 12 hours to 15–30 minutes when refresh cookie is available
+
+### Biometric Authentication (WebAuthn)
+
+**Files**: `client/src/hooks/useBiometricAuth.ts` (107 lines) — used by login.tsx
+
+- Uses WebAuthn API (`PublicKeyCredential`) for Face ID / Touch ID
+- Platform authenticator only (`authenticatorAttachment: "platform"`)
+- Stores `biometricUser` and `biometricEnabled` flags in localStorage
+- Login flow: `tryBiometricLogin()` → credential verification → returns username
+- **Security fix applied**: `disableBiometricLogin()` clears legacy password storage (`biometric_${username}_password`)
+
+**Dead file**: `client/src/hooks/use-biometric-auth.ts` (82 lines) — placeholder, never imported. See [Dead Code](#14-dead-code--dead-pages).
+
+---
+
+## 4. Server State Management (React Query)
+
+**File**: `client/src/lib/queryClient.ts` (144 lines)
+
+### Configuration
+
+| Setting | Value | Purpose |
+|---------|-------|---------|
+| `staleTime` | 15,000ms | Data considered fresh for 15 seconds |
+| `retry` | 1 | Single retry on failure |
+| `gcTime` | Infinity | Never garbage-collect cached data |
+| `refetchOnWindowFocus` | false | No refetch on tab switch |
+
+### Default Query Function: `apiFetch`
+
+**File**: `client/src/lib/api.ts` (118 lines) — Phase 33.C
+
+Every React Query `useQuery` call automatically uses `apiFetch` as the default fetcher. The query key's first element is used as the API URL.
+
+**apiFetch Flow**:
+1. `ensureValidToken()` — proactive refresh if near expiry
+2. Build request with JWT `Authorization: Bearer ${token}` header
+3. Add `x-app-mode: live|paper` header from `getGlobalTradingMode()`
+4. Add `Cache-Control: no-store` for mutations
+5. 30-second timeout via `AbortController`
+6. On 401: attempt token refresh → retry once
+7. Parse JSON response
+
+### Mutation Helper: `apiRequest`
+
+```typescript
+export async function apiRequest(method: string, url: string, data?: unknown) {
+  // Uses apiFetch for the request
+  // Records request trace in dev mode (via import.meta.env.DEV)
+}
+```
+
+### Query Function Factory: `getQueryFn`
+
+Provides configurable 401 behavior:
+- `on401: "returnNull"` — returns `null` instead of throwing (used for optional data)
+- `on401: "throw"` — throws error (default, used for required data)
+
+---
+
+## 5. Real-Time Communication (WebSocket)
+
+**File**: `client/src/hooks/use-websocket.tsx` (192 lines) — Phase 34.A
+
+### Singleton Pattern
+
+```
+Global variables (module scope):
+  - globalWs: WebSocket | null
+  - globalIsConnected: boolean
+  - globalMessages: any[] (last 50, FIFO)
+  - globalListeners: Set<(msg) => void>
+  - subscriberCount: number
+```
+
+The WebSocket is a **true singleton** — shared across all components that call `useWebSocket()`. Connection lifecycle is managed by subscriber counting:
+
+- **First subscriber** (`subscriberCount: 0 → 1`): Opens connection to `ws://host/ws?userId=${userId}`
+- **Last unsubscribe** (`subscriberCount: 1 → 0`): Closes connection
+- **Multiple subscribers**: All share the same `globalWs` instance
+
+### Heartbeat & Reconnect
+
+| Feature | Value |
+|---------|-------|
+| Ping interval | 25 seconds |
+| Pong timeout | 3 missed pongs → close |
+| Reconnect strategy | Exponential backoff |
+| Min delay | 1 second |
+| Max delay | 30 seconds |
+
+### Message Types Consumed by Frontend
+
+| Message Type | Consumer Components |
+|---|---|
+| `trading_state_changed` | TradingModeContext, TopBar |
+| `trade_update` | FilterHealthWidget, AlertBanner |
+| `alerts_updated` | AlertBanner |
+| `aj17_report_ready` | AJ17DiagnosticCard |
+| `override_state_changed` | useOverrideState hook |
+| Context Bridge updates | WalterPage, WalterFloatingAssistant |
+
+---
+
+## 6. Trading Mode Context
+
+**File**: `client/src/contexts/trading-mode-context.tsx` (107 lines) — Phase 27.F.24
+
+### Mode: `'live'` | `'paper'`
+
+**Persistence stack** (multi-layer):
+1. **localStorage**: `trading_mode_preference` key
+2. **Cross-tab sync**: `StorageEvent` listener detects mode changes in other tabs
+3. **WebSocket sync**: `trading_state_changed` event from server overrides local state
+4. **Cache invalidation**: Full `queryClient.invalidateQueries()` on every mode change
+
+**Memoized context value** prevents unnecessary re-renders:
+```typescript
+const value = useMemo(() => ({
+  mode, setMode, isLive: mode === 'live', isPaper: mode === 'paper'
+}), [mode]);
+```
+
+### Trading Mode Singleton
+
+**File**: `client/src/lib/tradingMode.ts` (14 lines)
+
+Global getter/setter (`getGlobalTradingMode()` / `setGlobalTradingMode()`) to avoid circular dependency between `api.ts` and TradingModeContext. Used by `apiFetch` to set `x-app-mode` header.
+
+---
+
+## 7. Role-Based Access Control (Frontend RBAC)
+
+**File**: `client/src/hooks/useUserRole.ts` (109 lines)
+
+### Roles (5 levels)
+
+| Role | Level | Special |
+|------|-------|---------|
+| `owner` | Highest | Bypasses all permission checks |
+| `admin` | High | Bypasses all permission checks |
+| `editor` | Medium | Standard permissions |
+| `trader` | Low | Trading-specific permissions |
+| `viewer` | Lowest | Read-only |
+
+### Permissions (28 types)
+
+Organized into 5 categories:
+- **Trading** (6): `start_trading`, `stop_trading`, `close_trade`, `modify_trade`, `approve_trade`, `reject_trade`
+- **Settings** (6): `view_settings`, `edit_settings`, `manage_users`, `reset_settings`, `edit_config`, `manage_api_keys`
+- **Approval** (4): `approve_actions`, `reject_actions`, `manage_approvals`, `override_approvals`
+- **System** (6): `view_system`, `manage_system`, `view_logs`, `export_data`, `run_diagnostics`, `manage_alerts`
+- **Data** (6): `view_trades`, `view_portfolio`, `view_analytics`, `view_reports`, `view_ai`, `manage_watchlist`
+
+### Usage Pattern
+
+```typescript
+const { can, canAny, canAll, role, isOwner, isAdmin } = useUserRole();
+
+// Permission check
+if (can('start_trading')) { /* show button */ }
+if (canAny('edit_settings', 'manage_system')) { /* show section */ }
+```
+
+**Storage**: Role loaded from `localStorage.getItem('user')` parsed JSON. Synced across tabs via `StorageEvent` listener.
+
+---
+
+## 8. Core Hooks
+
+### use-trading.tsx (461 lines) — Central Trading Hook
+
+The most important hook in the application. Provides all trading-related data and mutations.
+
+**Queries** (all use React Query with auto-refresh):
+
+| Hook | Endpoint | Refresh |
+|------|----------|---------|
+| `useTradingStatus()` | `/api/trading/status` | 5s polling + WebSocket |
+| `useTrading().portfolio` | `/api/portfolio/overview` | 60s |
+| `useTrading().activeTrades` | `/api/trades/active` or `/api/paper/trades/active` | 30s |
+| `useTrading().recentTrades` | `/api/trades?limit=10` | 60s |
+| `useTrading().settings` | `/api/settings` | 300s |
+| `useTrading().watchlist` | `/api/watchlist` | 60s |
+
+**Mutations**:
+- `startTrading(mode)` — `POST /api/trading/start` (paper-new, paper-continue, live)
+- `stopTrading()` — `POST /api/trading/stop`
+- `resetPaperSim()` — `POST /api/paper-sim/reset`
+- `closeTrade(id)` — `POST /api/trades/${id}/close`
+- `updateSettings(data)` — `PUT /api/settings`
+- `addToWatchlist(pair)` / `removeFromWatchlist(pair)` — POST/DELETE `/api/watchlist`
+
+**Debounced Invalidation** (Phase 35.3.A): 500ms debounce on `queryClient.invalidateQueries()` to reduce render bursts after WebSocket updates.
+
+**deriveIsActive()** (Phase 32.D-Fix.Final): The authoritative method for determining if trading is active. Uses the `active` boolean from status response.
+
+### use-system-health.tsx (69 lines)
+
+- Polls `/api/system/health` every 15 seconds
+- Auto-resync: triggers re-fetch when paper trading status or goals count changes
+
+### use-portfolio-balance.tsx (61 lines)
+
+- Dedicated hook optimized to prevent unnecessary re-renders
+- Uses React Query's `select` and `notifyOnChangeProps` for surgical updates
+
+### use-override-state.tsx (89 lines)
+
+- WebSocket listener for `override_state_changed` messages
+- Tracks guardrail/filter override state changes from server
+
+### use-throttle-data.ts (45 lines)
+
+- Generic data throttling for chart components
+- Prevents high-frequency chart redraws from overwhelming the renderer
+
+### useAudioRecorder.ts (101 lines)
+
+- WebM audio recording for Walter voice input
+- Uses `MediaRecorder` API with `audio/webm;codecs=opus`
+
+### useWalterPreferences.tsx (38 lines)
+
+- Manages Walter chat preferences: `viewMode`, `theme`, `tone`, `sendKeyPreference`, `sidebarCollapsed`
+- Queries `GET /api/walter/preferences`, mutates via `PUT /api/walter/preferences`
+
+### use-request-trace.tsx (65 lines)
+
+- Dev-mode only (`import.meta.env.DEV`)
+- Records API call traces for observability overlay
+
+### use-mobile.tsx (19 lines)
+
+- Simple 768px breakpoint detection via `matchMedia`
+
+### use-toast.ts (191 lines)
+
+- Reducer-pattern toast notification system
+- Supports add/update/dismiss/remove operations with auto-dismiss timers
+
+---
+
+## 9. Layout Architecture
+
+### Sidebar (152 lines)
+
+**File**: `client/src/components/layout/sidebar.tsx`
+
+11 navigation items, permission-gated:
+
+| Item | Path | Permission |
+|------|------|-----------|
+| Dashboard | `/dashboard` | — |
+| Active Trades | `/active-trades` | — |
+| Walter AI | `/walter` | — |
+| Watchlist | `/watchlist` | — |
+| Reports | `/reports` | — |
+| Daily Brief | `/daily-brief` | — |
+| Briefings | `/briefings` | — |
+| Goals Engine | `/goals-engine` | — |
+| AI Transparency | `/ai-transparency` | `view_ai` |
+| Analytics | `/analytics` | `view_analytics` |
+| Machine Learning | `/machine-learning` | `view_ai` |
+
+Active trade count badge displayed on "Active Trades" item.
+
+### TopBar (1,042 lines)
+
+**File**: `client/src/components/layout/top-bar.tsx`
+
+The largest layout component. Contains:
+
+1. **Trading Toggle** — Start/Stop trading with confirmation modals
+2. **Mode Switch** — Live/Paper toggle with confirmation for live mode
+3. **Dual Time Display** — UTC + local time (configurable timezone)
+4. **Walter Approvals Bell** — Badge count of pending approvals from `/api/walter/pending-approvals`
+5. **Paper Portfolio Metrics Row** — Balance, P/L, active trade count (paper mode only)
+6. **Confirmation Modals** — Live trading start confirmation, stop confirmation
+
+**Notable**: 30 `console.log` statements — highest of any component. Production logging concern.
+
+---
+
+## 10. Page Inventory & Routing Map
+
+### Actively Routed Pages (18 pages)
+
+| Page | Lines | Primary API Endpoints | Key Features |
+|------|-------|----------------------|-------------|
+| `dashboard.tsx` | 146 | Delegates to child components | Portfolio charts, active trades, strategy performance, filter health, alerts, daily brief card |
+| `active-trades.tsx` | 141 | Delegates to tabs | 4-tab funnel: Filter Insights → Ready to Buy → Open Trades → Trade History |
+| `walter.tsx` | 1,386 | `/api/walter/chats/*`, `/api/transcribe`, `/api/walter/analyze-file` | Full AI chat interface with voice, file upload, approval workflow, conversation management |
+| `watchlist.tsx` | 519 | `/api/symbols/search`, `/api/symbols/details` | 3 tabs: AI Opportunities, User Watchlists, Search & Analysis |
+| `goals-engine.tsx` | 97 | Delegates to tabs | 5 tabs: Guardrails, Screeners/Filters, Strategies, Diagnostics, Coherency Rules |
+| `analytics.tsx` | 1,939 | 8+ endpoints | Market indicators, narrative feed, batch analysis, benchmarks, governance, predictive diagnostics |
+| `machine-learning.tsx` | 1,985 | 15+ endpoints | ML scores, predictive adjustments, stability analysis, safety signals, regime archive |
+| `ai-transparency.tsx` | 2,074 | 20+ endpoints | Transparency logs, screener calibration, error logs, autonomy confidence, semantic memories, orchestrator |
+| `settings.tsx` | 1,122 | `/api/user/profile`, `/api/admin/users/*` | 6 tabs: General, Walter Approvals, Users, API Keys, Audit Log, Config Snapshots |
+| `reports.tsx` | 570 | `/api/trades`, `/api/ai/reports`, `/api/reports/export` | Canned reports (tax, performance), custom reports, CSV/PDF export |
+| `briefings.tsx` | 527 | `/api/daily-briefs`, `/api/daily-briefs/today` | Current brief + historical briefs with date range navigation |
+| `daily-brief.tsx` | 419 | `/api/daily-briefs/today`, `/api/daily-briefs/:date` | Individual brief detail with metrics grid, narrative, trade highlights |
+| `systems.tsx` | 29 | Delegates to EnhancedSystemMonitoring | Thin wrapper for system monitoring dashboard |
+| `system-config.tsx` | 312 | `/api/config` | Runtime config editor (booleans, numbers, strings) |
+| `filter-insights.tsx` | 17 | Delegates to FilterInsights | Minimal wrapper — same component also rendered as tab in active-trades |
+| `login.tsx` | 292 | `POST /api/auth/login` | Username/password + optional biometric |
+| `register.tsx` | 191 | `POST /api/auth/register` | Account creation — **orphaned** (UI link commented out) |
+| `not-found.tsx` | 22 | None | 404 catch-all |
+
+### Dead/Unrouted Pages (7 pages)
+
+See [Dead Code & Dead Pages](#14-dead-code--dead-pages) for full details.
+
+---
+
+## 11. Component Inventory
+
+### Goal Widgets (`components/goals/`)
+
+| Component | Lines | API Endpoints | Notes |
+|-----------|-------|--------------|-------|
+| `portfolio-value-widget.tsx` | 137 | None (context) | Memoized (35.2A). Dead vars: `availableForTrading`, `inOpenTrades` |
+| `earnings-widget.tsx` | 265 | `/api/earnings/summary`, earnings-chart | Hand-rolled SVG sparkline |
+| `trading-activity-widget.tsx` | 170 | `/api/trading/activity`, trades/active | 6-option period selector |
+| `averages-widget.tsx` | 183 | `/api/trading/averages` | Period options differ from trading-activity |
+| `aj17-diagnostic-card.tsx` | 194 | `/api/diagnostics/aj17/*` | Paper-only. AJ16/AJ17 naming inconsistency |
+
+### Trading Components (`components/trading/`)
+
+| Component | Lines | API Endpoints | Notes |
+|-----------|-------|--------------|-------|
+| `active-trades.tsx` | 254 | `/api/paper/trades/active`, `/api/settings` | Current price simulated as `entryPrice * 1.02` |
+| `portfolio-chart.tsx` | 146 | `/api/portfolio/history`, `/api/paper/metrics/history` | Recharts line chart. Dead conditional in `formatDate` |
+| `watchlist.tsx` | 219 | `/api/paper-sim/diagnostics/scan` | 4-pair grid with countdown timer |
+| `confirm-live-trading-modal.tsx` | 69 | None | Pure presentational confirmation dialog |
+
+### Dashboard Components (`components/dashboard/`)
+
+| Component | Lines | API Endpoints | Notes |
+|-----------|-------|--------------|-------|
+| `filter-health-widget.tsx` | 143 | `/api/filters/diagnostics`, `/api/trading/status` | WebSocket-synced, adaptive refresh rate |
+
+### Strategy Components (`components/strategy/`)
+
+| Component | Lines | API Endpoints | Notes |
+|-----------|-------|--------------|-------|
+| `strategy-performance-widget.tsx` | 321 | `/api/metrics/strategies`, `/api/strategy/parameters` | SVG mini bar charts, DHMA params subsection |
+
+### AI Components (`components/ai/`)
+
+| Component | Lines | API Endpoints | Notes |
+|-----------|-------|--------------|-------|
+| `InteractiveNotification.tsx` | 315 | `/api/intent/approve|reject|dismiss|clear` | Core Walter approval workflow. Legacy/new field fallbacks |
+
+### System Components
+
+| Component | Lines | API Endpoints | Notes |
+|-----------|-------|--------------|-------|
+| `DailyBriefCard.tsx` | 332 | `/api/daily-briefs/today`, `/api/market-context/latest`, `/api/walter/auto-resolved-today` | 7 market regime configs. Walter auto-maintenance stats |
+| `alert-banner.tsx` | 288 | `/api/alerts`, `/api/alerts/*/acknowledge` | Full alert management with WebSocket sync. Dead `user` variable |
+| `database-alert.tsx` | 69 | `/api/database/status` | Storage threshold warnings (50%/70%) |
+| `maintenance-banner.tsx` | 32 | `/api/maintenance/status` | Conditional maintenance mode banner |
+| `mode-banner.tsx` | 71 | None (hooks) | Phase 41.2 trading mode/status display |
+
+### Walter Components
+
+| Component | Lines | Notes |
+|-----------|-------|-------|
+| `walter-floating-assistant.tsx` | 501 | Floating chat on all pages except /walter. Context-aware, voice input, file upload, Bob Core prefetch, data provenance footer |
+
+---
+
+## 12. Walter AI Integration Points
+
+Despite Walter being deprecated on the backend, the frontend has extensive Walter integration that remains active:
+
+### Pages with Walter Dependencies
+
+| Page/Component | Walter Integration |
+|---|---|
+| `walter.tsx` | **Entire page** — Full Walter chat interface (1,386 lines) |
+| `settings.tsx` | Walter memory config (depth/limit/auto-summarize), Walter Approvals tab |
+| `top-bar.tsx` | Walter pending approvals notification bell |
+| `walter-floating-assistant.tsx` | Floating Walter chat widget on all authenticated pages |
+| `DailyBriefCard.tsx` | Fetches `/api/walter/auto-resolved-today` |
+| `InteractiveNotification.tsx` | Walter approval workflow (approve/reject/dismiss/clear) |
+| `ai-transparency.tsx` | "Walter Command" and "Walter Action" log categories |
+
+### Walter API Endpoints Referenced by Frontend
+
+- `/api/walter/chats` (GET, POST)
+- `/api/walter/chats/:id` (GET, PATCH, DELETE)
+- `/api/walter/chats/:id/messages` (POST)
+- `/api/walter/chats/:id/pin` / `/unpin` (POST)
+- `/api/walter/chats/:id/export` (GET)
+- `/api/walter/pending-approvals` (GET)
+- `/api/walter/approvals/:id/approve` (POST)
+- `/api/walter/approvals/:id/reject` (POST)
+- `/api/walter/analyze-file` (POST)
+- `/api/walter/preferences` (GET, PUT)
+- `/api/walter/auto-resolved-today` (GET)
+
+**Implication**: When the Walter backend is removed (Wave 3), the entire `/walter` page, the floating assistant, the notification bell in TopBar, the Walter Approvals tab in settings, and the auto-maintenance section in DailyBriefCard will all break or become non-functional. A coordinated frontend cleanup wave is required.
+
+---
+
+## 13. Performance Monitoring
+
+### React Profiler Integration
+
+**File**: `client/src/utils/performance-profiler.ts` (262 lines)
+**File**: `client/src/components/profiled-route.tsx` (27 lines)
+
+Every authenticated route is wrapped in a `<Profiler>` component via `ProfiledRoute`. The profiler captures:
+
+| Metric | Threshold | Behavior |
+|--------|-----------|----------|
+| First-paint latency | 800ms | Warning logged if exceeded |
+| Per-update duration | 60ms | Warning logged if exceeded |
+| Cumulative update time | 120ms | Warning logged if exceeded |
+
+**Console access** (production-exposed via `window.__PERFORMANCE_PROFILER__`):
+- `exportPerformanceReport()` — Full metrics report
+- `checkPerformanceThresholds()` — Validate against targets
+
+---
+
+## 14. Dead Code & Dead Pages
+
+### Dead/Unrouted Pages (7 files, 2,771 total lines)
+
+| File | Lines | Superseded By | Status |
+|------|-------|---------------|--------|
+| `walter-approvals.tsx` | 366 | Walter Approvals tab in `settings.tsx` | Dead — not in router |
+| `history.tsx` | 253 | Trade History tab in `active-trades.tsx` | Dead — imported in App.tsx but never rendered |
+| `admin.tsx` | 303 | Users tab in `settings.tsx` | Dead — not in router |
+| `search.tsx` | 187 | Search & Analysis tab in `watchlist.tsx` | Dead — not in router |
+| `command-center.tsx` | 901 | Absorbed into `ai-transparency.tsx` | Dead — not in router |
+| `analysis.tsx` | 512 | Never wired into router | Dead — unique stock search features lost |
+| `settings-old-backup.tsx` | 249 | Current `settings.tsx` | Dead — explicit backup file |
+
+### Orphaned Route
+
+- `register.tsx` (191 lines) — Route exists (`/register`) but UI link to it is commented out. Only reachable via direct URL. Admin-only user creation now.
+
+### Dead Imports
+
+| File | Dead Import | Notes |
+|------|-------------|-------|
+| `App.tsx` line 7 | `History` from `@/pages/history` | Imported but never rendered in any route |
+| `active-trades.tsx` line 4 | `Watchlist` from `@/components/trading/watchlist` | Imported but never rendered in JSX |
+| `active-trades.tsx` | `useQuery` from `@tanstack/react-query` | Imported but never called |
+
+### Dead Hook File
+
+| File | Lines | Superseded By |
+|------|-------|---------------|
+| `use-biometric-auth.ts` | 82 | `useBiometricAuth.ts` (used by login.tsx) |
+
+### Dead Variables in Active Components
+
+| File | Variable(s) | Notes |
+|------|-------------|-------|
+| `portfolio-value-widget.tsx` lines 67-68 | `availableForTrading`, `inOpenTrades` | Computed but never used in JSX |
+| `alert-banner.tsx` line 32 | `user` from `localStorage.getItem('user')` | Defined but never referenced |
+| `portfolio-chart.tsx` lines 33-38 | `formatDate` branches | Identical branches for 7D and non-7D (dead conditional) |
+
+### Simulated Data in Active Components
+
+| File | Line | Issue |
+|------|------|-------|
+| `active-trades.tsx` (component) line 30 | `currentPrice = entryPrice * 1.02` | Hardcoded 2% gain simulation instead of real-time price |
+
+---
+
+## 15. ADD-5 Endpoint Census
+
+> **Directive**: Phase 8 Addendum ADD-5 — Cross-reference frontend API usage against all ~750 server endpoints. Mark unused for removal.
+
+### Census Summary
+
+| Metric | Count |
+|--------|-------|
+| **Unique API endpoints referenced by frontend** | **~291** |
+| **Server endpoints (estimated from Phase 8)** | **~750** |
+| **Server endpoints with NO frontend consumer** | **~460** |
+| **Frontend coverage of server API** | **~39%** |
+
+### Frontend API Usage by Category
+
+| Category | Count | Key Endpoints |
+|----------|-------|--------------|
+| Trading | 44 | `/api/trading/*`, `/api/trades/*`, `/api/paper-sim/*`, `/api/paper/*`, `/api/pairs/*`, `/api/trading-signals` |
+| System | 21 | `/api/system/*`, `/api/health/*`, `/api/maintenance/*`, `/api/database/*`, `/api/config` |
+| AI / Orchestrator | 21 | `/api/orchestrator/*`, `/api/ai/*`, `/api/semantic/*`, `/api/actuation/*` |
+| Filter / Diagnostics | 20 | `/api/filters/*`, `/api/diagnostics/*`, `/api/screeners/*`, `/api/schedulers/*` |
+| Walter / Bob / Chats | 18 | `/api/walter/*`, `/api/transcribe`, `/api/intent/*` |
+| VTS / ML | 16 | `/api/vts/*`, `/api/metrics/*` |
+| Learning | 9 | `/api/learning/*`, `/api/historic-signals/*` |
+| Auth | 3 | `/api/auth/login`, `/api/auth/register`, `/api/auth/refresh` |
+| Portfolio | 4 | `/api/portfolio/*`, `/api/earnings/*` |
+| Goals | 5 | `/api/goals/*` |
+| Settings | 2 | `/api/settings`, `/api/user/profile` |
+| Export / Reports | 2 | `/api/reports/export`, `/api/system/mapping-drift/export` |
+| Market | 5 | `/api/market-events`, `/api/market-context/*`, `/api/market-indicators` |
+| Admin | 3 | `/api/admin/users`, `/api/admin/users/:id`, `/api/admin/users/:id/reset-password` |
+| Other / Misc | 118 | Various endpoints across pages |
+
+### Top Files by API Density
+
+| File | Unique Endpoints | Notes |
+|------|-----------------|-------|
+| `enhanced-system-monitoring.tsx` | ~60 | **Massive consumer** — includes speculative/aspirational API namespaces |
+| `ai-transparency.tsx` | ~27 | Central observability hub |
+| `use-trading.tsx` | ~24 | Core trading hook |
+| `top-bar.tsx` | ~22 | Layout header with trading controls |
+| `machine-learning.tsx` | ~15 | ML dashboard |
+| `walter.tsx` | ~14 | Walter chat interface |
+
+### Speculative/Aspirational Endpoints (enhanced-system-monitoring.tsx)
+
+The `enhanced-system-monitoring.tsx` component references ~60 endpoints, many of which appear to be aspirational — API namespaces that likely do NOT exist on the server:
+
+- `/api/ethics/*` — AI ethics endpoints
+- `/api/collaboration/*` — Multi-agent collaboration
+- `/api/federation/*` — Federated learning
+- `/api/knowledge/*` — Knowledge management
+- `/api/oversight/*` — System oversight
+- `/api/alignment/*` — AI alignment
+- `/api/introspection/*` — Self-analysis
+- `/api/reasoning/*` — Reasoning chain endpoints
+
+These endpoints were likely added as UI scaffolding for features that were never implemented on the backend. They will return 404s. The component handles this gracefully (React Query error states), but the dead API references should be cleaned up.
+
+### Direct Window/Location API Calls
+
+Two pages bypass React Query and use direct browser navigation for API calls:
+
+| File | Endpoint | Method |
+|------|----------|--------|
+| `analytics.tsx` | `/api/system/mapping-drift/export` | `window.open()` |
+| `reports.tsx` | `/api/reports/export` | `window.open()` |
+
+### system-config.tsx Bypasses apiFetch
+
+`system-config.tsx` uses raw `fetch()` with `localStorage.getItem('token')` instead of the `apiRequest` utility. This bypasses the centralized auth flow, token refresh, timeout handling, and request tracing.
+
+---
+
+## 16. Production Readiness Concerns
+
+### Excessive Console Logging
+
+**Total**: 123 `console.log` statements across the frontend codebase.
+
+| File | Count | Debug Tags |
+|------|-------|-----------|
+| `top-bar.tsx` | 30 | Various |
+| `api.ts` | 16 | `[11.7E]` |
+| `performance-profiler.ts` | 12 | `[35.1]` |
+| `use-websocket.tsx` | 11 | Various |
+| `active-trades-v2.tsx` | 11 | Various |
+| Goal widgets (4 files) | ~8 | `[35.2A]` — log on every render |
+
+**Impact**: Performance degradation on high-frequency components (goal widgets re-render every data refresh). Information leakage in production (API tokens, trading states, internal metrics visible in browser console).
+
+**Recommendation**: Replace all `console.log` debug statements with either:
+- Conditional dev-mode logging (`import.meta.env.DEV && console.log(...)`)
+- Remove entirely for production builds
+
+### Window-Exposed Debug Objects
+
+| Global | Purpose | Risk |
+|--------|---------|------|
+| `window.__PERFORMANCE_PROFILER__` | Profiler metrics | Low — performance data only |
+| `window.exportPerformanceReport` | Full profiler report | Low |
+| `window.checkPerformanceThresholds` | Threshold validation | Low |
+
+---
+
+## 17. Architectural Patterns & Conventions
+
+### Patterns Observed
+
+1. **Paper/Live Mode Branching**: Nearly all data hooks use separate API paths for paper (`/api/paper/*`) vs live (`/api/*`) mode. The `useTradingMode()` context drives this branching.
+
+2. **Lazy Loading**: All authenticated pages except Dashboard and LoginPage use `React.lazy()` for code splitting.
+
+3. **Tab Consolidation Pattern**: The codebase shows an evolution from standalone pages to tabbed consolidation:
+   - Search → watchlist tab
+   - History → active-trades tab
+   - Admin → settings tab
+   - Walter Approvals → settings tab
+   - Command Center → ai-transparency (absorbed)
+
+4. **Widget Memoization**: Phase 35.2A widgets use `React.memo()` to prevent unnecessary re-renders, with debug logging on each render.
+
+5. **WebSocket + Polling Hybrid**: Critical data (trading status) uses both 5s polling AND WebSocket for real-time updates. Non-critical data uses polling only.
+
+6. **Debounced Invalidation**: Phase 35.3.A pattern — 500ms debounce on query invalidation after WebSocket updates to batch re-renders.
+
+7. **Error Boundaries**: Class-based `ErrorBoundary` components wrap critical pages (active-trades.tsx).
+
+### Technology Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| wouter over React Router | Lightweight, minimal bundle size |
+| React Query over Redux/Zustand | Server state management fits query/mutation model |
+| shadcn/ui over Material/Ant | Copy-paste component ownership, full customization control |
+| Recharts over D3 | React-native chart library, simpler API |
+| localStorage for auth/preferences | Simple persistence, no external dependency |
+
+### File Size Distribution
+
+| Category | Largest Files | Concern |
+|----------|--------------|---------|
+| Pages | ai-transparency (2,074), machine-learning (1,985), analytics (1,939) | These are borderline monolithic — should consider component extraction |
+| Components | top-bar (1,042), walter-floating-assistant (501) | TopBar is the largest single component |
+| Hooks | use-trading (461) | Acceptable for a central data hook |
+
+---
+
+## Phase 9 Registry Summary
+
+| Finding Type | Count |
+|---|---|
+| Dead/unrouted pages | 7 |
+| Orphaned route | 1 (register.tsx) |
+| Dead imports in active files | 3 |
+| Dead hook file | 1 |
+| Dead variables in active components | 3 locations |
+| Simulated data in active components | 1 (active-trades currentPrice) |
+| Console.log statements (production) | 123 |
+| Frontend API endpoints referenced | ~291 |
+| Server endpoints with NO frontend consumer | ~460 |
+| Speculative/aspirational endpoints (never implemented) | ~60 (enhanced-system-monitoring.tsx) |
+| Walter-dependent frontend files | 7+ (will break when Walter backend removed) |
+| Files bypassing apiFetch | 1 (system-config.tsx uses raw fetch) |
+
+---
+
+## Phase 9 Addendum — Kyle's Directives (2026-02-17)
+
+> **Kyle's Final Position**: "Phase 9 is mostly accurate. No fabricated claims. No phantom issues. No hidden code misrepresentation. Frontend is stable but: bloated, Walter-heavy, security-light on token handling, and in need of cleanup after audit."
+
+### ADD-1: Token Storage Security Review
+
+JWT tokens stored in `localStorage` create XSS exposure risk. No `httpOnly` cookie protection. Documented in [Section 3 — Token Storage Security Concern](#token-storage-security-concern-phase-9-addendum-add-1).
+
+**Recommendation**: Future migration to secure cookie or hybrid approach (httpOnly refresh cookie + in-memory access token).
+
+### ADD-2: Monolithic Page Refactor Plan
+
+The following pages/components are flagged for component decomposition:
+
+| File | Lines | Decomposition Strategy |
+|------|-------|----------------------|
+| `ai-transparency.tsx` | 2,074 | Extract each section (transparency logs, calibration, error logs, semantic memories, orchestrator, formula audit, feed health) into standalone components |
+| `machine-learning.tsx` | 1,985 | Extract ML scores, predictive adjustments, stability analysis, safety signals, regime archive into individual tab components |
+| `analytics.tsx` | 1,939 | Extract narrative feed, batch analysis, benchmarks, governance, predictive diagnostics into standalone components |
+| `top-bar.tsx` | 1,042 | Extract trading toggle, mode switch, time display, approvals bell, portfolio metrics row into individual components |
+
+**Timing**: Post-audit cleanup. These pages are functional but unmaintainable at their current size. Each should be decomposed into focused components with clear data contracts.
+
+### ADD-3: Centralized Polling Policy
+
+The frontend uses ad-hoc polling intervals with no centralized policy. Kyle directs defining standard refresh tiers:
+
+| Tier | Interval | Use Case | Current Examples |
+|------|----------|----------|-----------------|
+| **Critical** | 5s | Trading status, real-time state | `useTradingStatus()` (5s) |
+| **Semi-critical** | 15–30s | Health, active trades, alerts | `useSystemHealth()` (15s), active trades (30s), alerts (30s) |
+| **Informational** | 60s+ | Portfolio, briefs, settings | Portfolio (60s), settings (300s), database status (3600s) |
+
+**Current inconsistencies**:
+- Filter health polls at 10s (paper active) or 60s (inactive) — adaptive, acceptable
+- Watchlist scan diagnostics polls at 10s — arguably too aggressive for informational data
+- KillSwitchBanner polls `/api/settings` at 15s — could be WebSocket-driven instead
+- Goal widgets have no standardized refresh — each sets its own interval
+
+**Recommendation**: Create a `POLLING_TIERS` constant in `lib/` that all hooks reference. Enforce via code review that new queries use the appropriate tier.
+
+### ADD-4: Remove Speculative Endpoints
+
+`enhanced-system-monitoring.tsx` must be cleaned. The ~60 speculative/aspirational API endpoints across `/api/ethics/*`, `/api/collaboration/*`, `/api/federation/*`, `/api/knowledge/*`, `/api/oversight/*`, `/api/alignment/*`, `/api/introspection/*`, `/api/reasoning/*` generate unnecessary 404 network requests. These should be removed and the component simplified to match actual system capabilities.
+
+**Timing**: Post-audit cleanup (can be bundled with ADD-2 decomposition).
+
+### ADD-5: Remove Simulated Price Display
+
+The `entryPrice * 1.02` hardcoded simulation in `components/trading/active-trades.tsx` (line 30) must be replaced with a real price feed. Active trades should display current market price from the price cache or WebSocket price stream.
+
+**Timing**: Pre-MCE — important for accurate paper trading UI.
+
+---
+
+*Phase 9 complete (with addendum). Next: Phase 10 (Testing & Quality Assurance) and Phase 11 (Database Schema & Migrations).*
+
+
+---
+
+# Part V: Quality & Data
+
+
+---
+
+# Chapter 10: Testing & Quality Assurance
+
+## 1. Testing Infrastructure Overview
+
+DawnTrader uses a **multi-layered quality assurance architecture** spanning compile-time, build-time, runtime, and operational-time validation. The system does NOT rely solely on traditional unit tests — it combines formal test suites with an extensive runtime validation and diagnostic infrastructure.
+
+### Test Frameworks
+
+| Framework | Version | Purpose | Config File |
+|-----------|---------|---------|-------------|
+| **Vitest** | ^3.2.4 | Server-side unit & integration tests | `vitest.config.ts` |
+| **Playwright** | ^1.56.1 | End-to-end browser tests | `playwright.config.ts` |
+| **@vitest/ui** | ^3.2.4 | Vitest visual dashboard | (via vitest) |
+
+### What Is NOT Present
+
+- **No frontend component tests** — zero `*.test.tsx` or `*.spec.tsx` files exist under `client/`
+- **No @testing-library** — React Testing Library is not installed
+- **No Jest** — not configured, not installed
+- **No CI/CD pipelines** — no `.github/workflows/`, `.gitlab-ci.yml`, or `Jenkinsfile`
+- **No test scripts in package.json** — no `"test"`, `"test:unit"`, or `"test:e2e"` scripts defined
+- **No Prettier** — no `.prettierrc` configuration
+- **No Husky** — no `.husky/` directory or pre-commit hooks
+- **No lint-staged** — no pre-commit lint enforcement
+- **No dedicated mock/fixture directories** — no `__mocks__/`, `fixtures/`, or `test-utils/` directories
+- **No coverage reports on disk** — no `coverage/` directory or `lcov.info` files exist
+
+---
+
+## 2. Vitest Configuration
+
+**File**: `vitest.config.ts` (19 lines)
+
+```
+- globals: true (no explicit vitest imports required)
+- environment: 'node'
+- include: ['server/**/*.test.ts']
+- coverage reporters: text, json, html
+- coverage exclude: node_modules/, dist/
+- alias: @shared → shared/
+```
+
+**Key characteristics**:
+- Tests are server-only — the glob pattern `server/**/*.test.ts` excludes all client code
+- The `globals: true` setting allows tests to use `describe`, `it`, `expect` without importing from vitest (explains why `symbol-canonicalizer.test.ts` has no vitest import)
+- Coverage is configured but no coverage reports exist on disk, suggesting coverage has never been run or reports are gitignored
+- No setup files, no global mocks, no test environment customization
+
+---
+
+## 3. Playwright Configuration
+
+**File**: `playwright.config.ts` (31 lines)
+
+```
+- testDir: './e2e'
+- fullyParallel: false (sequential execution)
+- workers: 1 (single worker)
+- retries: 2 in CI, 0 locally
+- forbidOnly: true in CI
+- reporter: html
+- trace: 'on' (always capture)
+- video: 'on' (always record)
+- screenshot: 'on' (always capture)
+- baseURL: http://localhost:5000
+- browser: Chromium only (Desktop Chrome)
+- webServer: expects already-running server (reuseExistingServer: true)
+```
+
+**Key characteristics**:
+- Sequential execution (not parallel) — appropriate for tests that modify system state
+- Full artifact capture (trace, video, screenshot) even in non-CI mode
+- Requires a manually-started server — Playwright does not start the application
+- Only Chromium is configured — no cross-browser testing
+
+---
+
+## 4. Test Suite Inventory
+
+### 4.1 Total Test File Count
+
+| Category | Location | Count | Lines (approx) |
+|----------|----------|-------|-----------------|
+| Server Unit Tests | `server/tests/unit/` | 31 | ~7,100 |
+| Server Integration Tests | `server/tests/integration/` | 13 | ~2,500 |
+| Server System Tests | `server/tests/system/` | 2 | ~640 |
+| Server Invariant Tests | `server/tests/invariants/` | 1 | ~70 |
+| Server Root Tests | `server/tests/*.test.ts` + `*.ts` | 6 | ~1,930 |
+| Server __tests__ | `server/__tests__/` | 3 | ~530 |
+| Server Colocated | `server/services/utils/` | 1 | ~75 |
+| E2E Tests | `e2e/` | 2 | ~750 |
+| Root Tests | `tests/` | 1 | ~140 |
+| **TOTAL (active codebase)** | | **60** | **~13,735** |
+| Training/Docs (stale copies) | `docs/training/Walter_Learning_Files/` | 3 | (copies of server tests) |
+
+### 4.2 Server Unit Tests (31 files in `server/tests/unit/`)
+
+Tests are organized by directive number, reflecting the phased development history:
+
+| File | Lines | Directive | What It Tests |
+|------|-------|-----------|--------------|
+| `adaptive-kalman.test.ts` | 384 | 9.3 | Kalman filter cold start, ER calculator, adaptive R/Q, filter registry, state persistence |
+| `adaptive-scan-manager.test.ts` | 200 | 10.8 | Dual-pool scheduler (60/40 split), PairFailureTracker cooldown, batch generation |
+| `analysis-utils.test.ts` | 186 | 9.1.H | Core metric functions: LQ, DI, VolNoise, Sigma, filter thresholds, volume classification |
+| `canonical-validation.test.ts` | 159 | 11.4F.1 | Trade validation middleware: ghost regime normalization, legacy strategy normalization, violation levels |
+| `canonical_source_lock.test.ts` | 116 | 11.4F.1B | Codebase scan: no legacy `regime-strategy-map.ts` imports; canonical file exports all 15 required items |
+| `covariance-engine.test.ts` | 321 | 9.4 | Covariance matrix symmetry, correlation bounds, portfolio variance, numerical stability |
+| `directive-11.0E.2.test.ts` | 345 | 11.0E.2 | VTS pipeline isolation: Phase-10 metrics, legacy removal from VTS interfaces, cache sandboxing |
+| `directive-11.4B.2-R1.test.ts` | 252 | 11.4B.2-R1 | Adaptive scanning: ideal pool flush, 100-pair cycle guarantee, underflow protection |
+| `directive-11.4C-R2.test.ts` | 222 | 11.4C-R2 | Top batch UI: retry logic, getRankedPairs format, no legacy pool references |
+| `directive-11.4C.3-harmonization.test.ts` | 216 | 11.4F.1 | Strategy/regime harmonization: snake_case naming, legacy mapping, hybrid integrity |
+| `directive-11.7R-E-enforcement.test.ts` | 198 | 11.7R-E | Enforcement regression: UNSTABLE + vwap_pullback blocked pre-score, HIGH dependency blocking |
+| `directive-11.7R-governance.test.ts` | 267 | 11.7R | Regime transition governance: STABLE/TRANSITION/UNSTABLE classification, multipliers, cooldowns |
+| `directive-11.7S-strategy-modes.test.ts` | 257 | 11.7S | Strategy mode modulation: NORMAL/DEFENSIVE/SURVIVAL overlays, confidence floors, mode stats |
+| `execution-config.test.ts` | 54 | 11.0D | EXECUTION_CONFIG immutability, adaptive sizing params, trailing stop params |
+| `filter-insights.test.ts` | 441 | 10.9C | Filter insights service: 9 active filters, schema v1.3.1, rolling 24h window, telemetry |
+| `finalscore-equivalence.test.ts` | 201 | 11.0E | FinalScore formula: canonical weights, fallback, clamping, NaN detection, idempotency |
+| `hybrid-integration.test.ts` | 385 | 10.4 | Ensemble scoring, confluence detection, strategy selection, pattern decay, timeframe guard |
+| `ml-calibration.test.ts` | 173 | 10.6 | ML learning loop: weight adjustment recs (INCREASE/DECREASE/HOLD), pattern grouping |
+| `multi-timeframe.test.ts` | 507 | 10.7 | Fractal vision: timeframe config, weight hierarchy, rate limiter, cascade criteria, decay lambda |
+| `pattern-recognizer.test.ts` | 249 | 10.2 | Candlestick patterns: PINBAR, ENGULFING, INSIDE_BAR, THREE_SOLDIERS, MORNING_STAR |
+| `recalibration_integrity.test.ts` | 361 | 11.7D.1 | Predictive adjustments: file locking, log schema, telemetry integrity validation |
+| `regime_mapping_integrity.test.ts` | 147 | 11.7F | Codebase scan: no hardcoded regime strings outside /config/ — must use REGIMES.* constants |
+| `runtime_signal_consistency.test.ts` | 123 | 11.4F.1 | SignalType consistency: all 17 strategies → canonical type, uppercase enforcement |
+| `score-weights.test.ts` | 253 | 10.9A | SCORE_WEIGHTS: immutability, version v1.0.1, inline FinalScore calculation consistency |
+| `signal_mapping_integrity.test.ts` | 168 | 11.4F.1 | Signal mapping: 17 strategies → signalType, legacy normalization chain, ISO timestamps |
+| `sqe-config-dynamic.test.ts` | 139 | 11.0D | SQE dynamic config: FinalScore backfill, RegimeWeight calculation from trend/volatility |
+| `tco-tec-tcl.test.ts` | 400 | 11.0B | Component boundaries: TCL methods, SQE thresholds, TEC monitoring/trailing, TCO file removed |
+| `telemetry-aggregator.test.ts` | 207 | 10.8 | Telemetry aggregator: pair recording, composite score, top/rotational pairs, cascade efficiency |
+| `trailing-exit.test.ts` | 239 | 9.2.H | Trailing exit controller: dynamic stop distance (K'), break-even trigger, target lock, persistence |
+| `vn_parity.test.ts` | 114 | 11.7H | VN parity: IMF vs canonical analysis-utils produce identical VolNoise values |
+| `vts-modernization.test.ts` | 320 | 11.0E.1 | VTS modernization: regime calculator, strategy mapping, pattern preloader, Phase-10 record structure |
+
+### 4.3 Server Integration Tests (13 files in `server/tests/integration/`)
+
+| File | Lines | Directive | What It Tests |
+|------|-------|-----------|--------------|
+| `adaptive_scanning.test.ts` | 209 | 11.2 R1 | AdaptiveRatioManager, pool score computation, scan batch generation |
+| `config-provenance.test.ts` | ~150 | Phase 27 | Config snapshot provenance metadata and sources |
+| `cost_cache.test.ts` | 215 | 11.3B | Exchange defaults, in-memory cost cache (TTL, clamping, performance <0.1ms/lookup) |
+| `cost_telemetry.test.ts` | ~160 | 11.3 | Cost model telemetry persistence and retrieval |
+| `dss.test.ts` | 177 | 10.1.E | DSS regime detection (6 regimes), veto behavior, strategy selection by confidence + NetEV |
+| `dynamic_sizing.test.ts` | ~180 | 11.0 | Dynamic position sizing: expand/contract multipliers, risk limits |
+| `market_indicators_narrative.test.ts` | ~200 | 10.8 | Market narrative generation from indicators |
+| `net_expectancy.test.ts` | 231 | 11.3A | Net expectancy: canonical cost model, net geometry, conditional refresh logic |
+| `schema_v1_5.test.ts` | 119 | 11.0F | Schema v1.5.0: metric engine version, FinalScore weights, legacy metric removal |
+| `schema_v1_5_1.test.ts` | ~120 | 11.0F | Schema v1.5.1: incremental schema validation |
+| `telemetry_persistence_sql.test.ts` | 206 | 11.1A | SHA-256 checksums, environment guard, true mode provenance |
+| `telemetry_provenance_patch.test.ts` | ~150 | 11.1 | Telemetry provenance patching and migration |
+| `telemetry_rehydration_e2e.test.ts` | ~200 | 11.1 | Telemetry cache rehydration from SQL storage |
+
+### 4.4 Server System Tests (2 files in `server/tests/system/`)
+
+| File | Lines | Directive | What It Tests |
+|------|-------|-----------|--------------|
+| `mapping_drift_integrity.test.ts` | 294 | 11.7F | DriftScore computation, EMA smoothing, bridge JSON/Markdown validation, schema version `v1.4c` |
+| `predictive_diagnostics_integrity.test.ts` | 345 | 11.7G | Predictive diagnostics: filter descriptions, status colors, telemetry stats, decision cap (100), pass rate |
+
+### 4.5 Server Invariant Tests (1 file in `server/tests/invariants/`)
+
+| File | Lines | What It Tests |
+|------|-------|--------------|
+| `guardrails-deprecation.test.ts` | 71 | Legacy `getGuardrails()` throws `[9.7] Deprecated`; V2 methods work; legacy method available for debug |
+
+### 4.6 Server Root Tests (6 files in `server/tests/`)
+
+These are a mix of Vitest tests and standalone scripts:
+
+| File | Lines | Framework | What It Tests |
+|------|-------|-----------|--------------|
+| `diagnostic-system.test.ts` | 466 | **Standalone script** | Phase 5.9: 11 diagnostic scenarios (Walter, Bob, log search, schema verify, patch proposal) |
+| `phase-6.0-simulations.test.ts` | 229 | Vitest | Phase 6.0: Walter expert corpus, Bob identity, UX templates, knowledge refresh |
+| `live-pricing-validation.ts` | 414 | **Standalone script** | Phase 27.F.15.D: Live pricing adapter lifecycle, mock price generation, TTL, multi-symbol |
+| `system-verify.ts` | 242 | **Standalone script** | System sync: health endpoint, paper trading start/stop, goals creation, dashboard resync |
+| `test-force-trade.ts` | 157 | **Standalone script** | Phase 27.F.14: PAPER_FORCE_TRADE_SYMBOL feature, DB query verification |
+| `metrics-core-msi-validation.ts` | ~200 | **Standalone script** | Metrics core MSI validation |
+
+### 4.7 Server __tests__ (3 files in `server/__tests__/`)
+
+| File | Lines | What It Tests |
+|------|-------|--------------|
+| `smoke.test.ts` | 21 | Basic sanity: logger exists, date formatting, P/L percentage math |
+| `config-snapshot-api.test.ts` | 412 | Phase 27.G: Config Snapshot API (HTTP integration, auth, schema, provenance, legacy compliance) |
+| `friction-mapping.test.ts` | 97 | Directive 11.4B: 4-tier friction color mapping boundary tests |
+
+### 4.8 E2E Tests (2 files in `e2e/`)
+
+| File | Lines | Framework | What It Tests |
+|------|-------|-----------|--------------|
+| `config-snapshot.spec.ts` | 248 | Playwright | Phase 27.G: Config Snapshot Viewer UI — tabs, schema hash, clipboard, refresh, legacy badge |
+| `phase-41F-L-e2e-validate-flow.spec.ts` | 505 | Playwright | Phase 41F-L: Full pipeline validation — login, kill switch, engine start, Kraken load, filter insights, RTB signals, trade execution, portfolio update, backend lineage verification. Generates markdown report + NDJSON lineage trace |
+
+### 4.9 Root Tests (1 file in `tests/`)
+
+| File | Lines | Framework | What It Tests |
+|------|-------|-----------|--------------|
+| `phase-41F-L-simulation.spec.ts` | 138 | Playwright | Phase 41F-L: Three-trade paper simulation (BTC, ETH, BTC sell), portfolio state verification |
+
+### 4.10 Colocated Test (1 file)
+
+| File | Lines | What It Tests |
+|------|-------|--------------|
+| `server/services/utils/symbol-canonicalizer.test.ts` | 75 | Symbol canonicalization: Kraken ID ↔ canonical (BTC/USD) conversion |
+
+---
+
+## 5. Test Characteristics and Patterns
+
+### 5.1 Testing Approach: Real Imports, No Mocking
+
+A defining characteristic of DawnTrader's test suite is that **virtually no tests use mocking frameworks**. Tests import and test against **real service code**:
+
+- No `jest.mock()`, no `vi.mock()`, no Sinon
+- No mock objects or test doubles for service dependencies
+- Some tests use `vi.spyOn(console, 'log')` for telemetry output verification
+- `vi.resetModules()` used once (for environment variable isolation in telemetry tests)
+- Two tests use filesystem scanning to enforce codebase-wide invariants
+
+This approach means:
+- Tests are high-fidelity (testing real behavior, not mock behavior)
+- Tests are tightly coupled to implementations (fragile to internal refactoring)
+- Tests cannot run in isolation from the database/server for integration tests
+- Constructor/initialization failures cascade across test suites
+
+### 5.2 Directive-Linked Tests
+
+Tests are systematically linked to specific development directives:
+
+| Directive Range | Phase | Domain |
+|----------------|-------|--------|
+| 9.1 – 9.4 | Phase 9 | Core math (metrics, Kalman, trailing exits, covariance) |
+| 10.1 – 10.9 | Phase 10 | Trading infrastructure (DSS, patterns, hybrid, multi-timeframe, telemetry, filters) |
+| 11.0 – 11.7 | Phase 11 | Architecture modernization (VTS pipeline, component boundaries, governance, enforcement) |
+| Phase 27 | — | Config snapshot, live pricing |
+| Phase 41F | — | Health monitoring, E2E validation |
+
+This provides traceability from tests back to the specifications they verify.
+
+### 5.3 Codebase Scanning Tests
+
+Two unit tests use filesystem scanning to enforce architectural rules:
+
+1. **`regime_mapping_integrity.test.ts`**: Recursively walks `server/` looking for hardcoded regime strings (`BULL_STABLE`, etc.) outside of `/config/` and `/tests/`. Ensures all regime references use `REGIMES.*` constants.
+
+2. **`canonical_source_lock.test.ts`**: Scans all `.ts` files for imports from the legacy `regime-strategy-map.ts` (only `canonical-regime-strategy-map.ts` is allowed). Verifies the legacy file does not exist on disk.
+
+These are architectural invariant tests — they prevent regression at the source code level rather than at runtime.
+
+### 5.4 Governance Invariant System
+
+Tests reference specific **M-numbered governance invariants** (audit checkpoints):
+
+| Invariant Range | Domain |
+|----------------|--------|
+| M45 – M49 | Trade record structure, regime calculation |
+| M50 – M54 | VTS data pipeline isolation |
+| M63 – M64 | Adaptive scanning pool management |
+| M65 – M67 | UI integration, legacy cleanup |
+
+### 5.5 Schema Version Assertions
+
+Multiple tests assert specific schema versions, creating **version lock contracts**:
+
+| Schema | Version | Test File |
+|--------|---------|-----------|
+| Backend | v1.4.3 | `tco-tec-tcl.test.ts` |
+| Schema | v1.5.0 | `schema_v1_5.test.ts` |
+| Schema | v1.5.2 | `telemetry_persistence_sql.test.ts` |
+| Schema | v1.5.7 | `net_expectancy.test.ts` |
+| Schema | v1.5.8 | `cost_cache.test.ts` |
+| VTS Pipeline | v1.6.7 | `directive-11.0E.2.test.ts` |
+| Regime Mapping | v1.4c | `mapping_drift_integrity.test.ts` |
+| Filter | v1.3.1 | `filter-insights.test.ts` |
+| Score Weights | v1.0.1 | `score-weights.test.ts` |
+| Predictive Diagnostics | v1.0 | `predictive_diagnostics_integrity.test.ts` |
+| Governance | v1.0/v1.1 | governance tests |
+| Strategy Modes | v1.0 | `directive-11.7S-strategy-modes.test.ts` |
+| Predictive Adjustments | v1.0 | `recalibration_integrity.test.ts` |
+
+**Risk**: If any schema version is bumped without updating the corresponding test, that test fails. Multiple tests may pin different schema versions (e.g., `schema_v1_5.test.ts` asserts v1.5.0 while `cost_cache.test.ts` asserts v1.5.8), creating a version staleness gradient.
+
+---
+
+## 6. Standalone Test Scripts (Non-Framework)
+
+Four test files in `server/tests/` are NOT Vitest tests — they are standalone scripts with custom test runners:
+
+| File | Lines | Execution | Requires |
+|------|-------|-----------|----------|
+| `diagnostic-system.test.ts` | 466 | `import.meta.url` self-invoke | Running server + database |
+| `live-pricing-validation.ts` | 414 | Exported `runLivePricingValidation()` | Kraken adapter (mock mode) |
+| `system-verify.ts` | 242 | `main()` → `process.exit()` | Running server at localhost:5000 |
+| `test-force-trade.ts` | 157 | Shebang (`#!/usr/bin/env tsx`) | Running server + database |
+
+These scripts:
+- Cannot be discovered or run by Vitest (no `describe`/`it` blocks for most)
+- Require manual invocation (`tsx server/tests/system-verify.ts`)
+- Have custom pass/fail counting with no standard exit codes (except `system-verify.ts`)
+- Mix Vitest-compatible naming (`*.test.ts`) with non-Vitest execution patterns
+
+---
+
+## 7. Runtime Validation Services (Operational QA)
+
+Beyond the formal test suite, DawnTrader has an extensive **runtime validation layer** — services that run during live/paper operation to continuously validate system correctness.
+
+### 7.1 REB (Runtime Evaluation Buffer) Infrastructure
+
+| Service | Lines | What It Validates |
+|---------|-------|-------------------|
+| **REB 2.12 Test Harness** (`reb-2-12-test-harness.ts`) | 879 | 15 deterministic filter validation tests: volume, liquidity, price, volatility, spreads, stablecoins, regulated assets, universe sizing, multi-filter interaction. Bypasses 30s scan interval for controlled testing. |
+| **REB 2.14 Historical Test** (`reb-2-14-historical-test.ts`) | ~300 | Historical data integrity verification |
+| **REB 2.15 Certification** (`reb-2-15-certification.ts`) | 605 | Multi-cycle FX5 pipeline certification (default 6 cycles). Analyzes drift (CV >30% = significant), survivor consistency (>70% = consistent), pool behavior (phantom/duplicate detection), REB 2.10 coupling. PASS criteria: no errors, no significant drift, healthy pool. |
+
+### 7.2 Paper Validation Engine
+
+**File**: `paper_validation_engine.ts` (468 lines)
+**Directive**: 8.8.4-M5
+
+Captures adaptive metrics at 10-second intervals during paper-trading sessions (up to 60 minutes). Validates:
+
+| Criterion | Threshold | Pass Condition |
+|-----------|-----------|----------------|
+| Feed latency | 100ms | Average < 100ms |
+| Cache window | 200 entries | >= 200 latency records |
+| ARA updates | 3 | >= 3 updates |
+| Adaptive relevance variance | 0.01 | Range > 0.01 |
+| CWQI/NGC drift | 10% | Max step-to-step drift < 10% |
+| VTS mode switch delay | 1 | Always passes (placeholder) |
+
+Writes validation reports to `reports/ValidationRun_<timestamp>.json`.
+
+### 7.3 M3B Validation Service
+
+**File**: `m3b-validation-service.ts` (250 lines)
+**Directive**: 8.8.4-M3B
+
+Validates adaptive coupling integrity:
+1. Static decay removed (ARA formula: `relevance = learningRate * (gsi + 0.15)`)
+2. ARA linked to VTS/DCE (contextStability > 0, learningRate > 0)
+3. Adaptive risk working (suggested risk/exposure > 0)
+4. CWQI variance healthy (range [0, 0.5])
+5. NGC average healthy (placeholder — always passes)
+6. Pearson correlation between CWQI variance and exposure > 0.3
+
+Report: PASS (6/6), PARTIAL (≥3/6), or FAIL (<3/6).
+
+### 7.4 Verification Test Protocol
+
+**File**: `verification-test-protocol.ts` (493 lines)
+**Directive**: 8.9.4-VTP
+
+Validates Mini-Book, Sentinel, WebSocket, and REST systems during trading:
+
+| Check | Pass Criteria |
+|-------|--------------|
+| WS Feed Integrity | ≥95% ticks from WebSocket (not REST fallback) |
+| Sentinel Health | <1 reset per hour |
+| Price Drift | Max WS-vs-REST divergence ≤0.2% |
+| UI Sync | <1% mismatch events |
+
+### 7.5 Auto Test Harness
+
+**File**: `auto_test_harness.ts` (386 lines)
+**Phase**: 24
+
+Automates 4 operational test scenarios (13 steps total):
+1. Paper Simulation Start/Stop (3 steps)
+2. Multi-Intent Command Execution (2 steps)
+3. Simulation Heartbeat Monitoring (2 steps)
+4. Live Trading Activation Flow (4 steps — requires approval workflow)
+
+Generates markdown and JSON reports.
+
+---
+
+## 8. Canonical Validation Middleware
+
+**File**: `server/middleware/canonical-validation.ts` (214 lines)
+**Directive**: 11.4F.1
+
+Runtime middleware that validates every trade against canonical rules before execution:
+
+| Violation Level | Trigger | Trade Outcome |
+|----------------|---------|---------------|
+| **WARN** | Ghost regime normalized (e.g., BULL_VOLATILE → HIGH_VOL_IMPULSE) | Trade proceeds with normalized values |
+| **WARN** | Legacy strategy normalized (e.g., TrendFlow → sma_trend_ride) | Trade proceeds with normalized values |
+| **ERROR** | SignalType mismatch for strategy | **Trade rejected** |
+| **CRITICAL** | Non-canonical regime/strategy/signalType combination | **Trade rejected** |
+
+Violations logged to `audit/logs/canonical_violation.log`. Stats queryable by level and source.
+
+---
+
+## 9. Schema Validation
+
+### 9.1 Bootstrap Schema Validator
+
+**File**: `server/bootstrap/schema-validator.ts` (98 lines)
+**Directive**: 11.7F
+
+Runs at server startup:
+- Reads `bridge/canonical/mapping-regime-strategy.json`
+- Compares bridge schema version against expected `regime-mapping/v1.4b`
+- `validateSchemaVersionsStrict()` throws on mismatch (production mode)
+- Minor version differences (within v1.4 family) produce warnings only
+
+### 9.2 Zod Strategy Validators
+
+**File**: `server/services/strategy-validators.ts` (149 lines)
+
+Defines Zod schemas for all 8 strategy parameter sets with numeric constraints:
+
+| Strategy | Key Constraints |
+|----------|----------------|
+| VWAP Pullback | vwapLookbackMin 1-120, pullbackPct 0.1%-5% |
+| ABCD Long | minAtoBStrength 0.1-5, cPullbackPctMax 1%-30% |
+| SMA Trend Ride | fastSma 3-50, slowSma 10-200, trendStrengthMin 0-1 |
+| Breakout | minConsolidationBars 5-30, breakoutBuffer 0.5-2% |
+| Mean Reversion | deviationThreshold 1.5-4%, minRangeTouches 2-4 |
+| Range Trading | minRangeDurationHours 4-48, minRangeWidth 2-8% |
+| VWAP Bounce | vwapProximity 0.2-1%, volumeMultiplier 1.2-2.0 |
+| Liquidity Trap | maxTrapExtension 0.5-2%, trapReturnBars 1-3 |
+
+All strategies share a base schema: `maxConcurrentPositions` (0-20), `riskPerTrade` (0.05%-5%), `takeProfitR` (0.2-10), `stopLossR` (0.1-10), `cooldownMinutes` (0-240).
+
+### 9.3 Drizzle-Zod Database Schema
+
+**File**: `shared/schema.ts`
+
+Uses `createInsertSchema` from `drizzle-zod` for automatic database input validation. Covers 100+ domain-specific enums (trading modes, strategy types, trade status, safety/alignment/policy enums).
+
+---
+
+## 10. Health Monitoring & Diagnostics
+
+### 10.1 Unified Health Monitor
+
+**File**: `server/services/health-monitor.ts`
+**Directive**: Phase 41F-C
+
+5-second heartbeat cycle with 250-entry ring buffer (~21 minutes of history):
+
+| Component | Key Metrics |
+|-----------|-------------|
+| Paper Queue | depth, executing job age, dedup listener count |
+| Live Queue | depth, executing job age |
+| Paper Engine | isRunning, lastTickAge, lastSignalAge, lastTradeAge, sessionId |
+| Live Engine | isRunning, lastTickAge, lastSignalAge |
+| Market Data | websocketStatus, lastMessageAge, restFallbackActive |
+| SSOT Cache | hits, misses, TTL, activeFilterHash |
+| Database | pool (active/idle/total), slowQueries |
+| Broadcast Bus | lastEventType, lastLatency, averageLatency |
+| External Connectivity | krakenLastSuccess, krakenLastError |
+
+**Alert thresholds**:
+- Heartbeat latency: warn 200ms, critical 400ms
+- Queue depth: warn 5, critical 10
+- Job age: warn 15s, critical 30s
+- Broadcast latency: warn 120ms, critical 200ms
+
+### 10.2 Diagnostic Services (15+ files)
+
+Specialized diagnostic modules provide deep inspection of specific subsystems:
+
+| Service | What It Inspects |
+|---------|-----------------|
+| `diagnostic-controller.ts` | Central diagnostic orchestration |
+| `aj16-rtb-diagnostic.ts` | Ready-to-Brief pipeline diagnostics |
+| `aj17-diagnostic-runner.ts` | Phase AJ17 diagnostic flows |
+| `aj18/19-diagnostic.ts` | Advanced phase diagnostics |
+| `b4-diagnostics.ts` | B4 trading diagnostics |
+| `c5-financial-diagnostics.ts` | Financial metric diagnostics |
+| `i1-rtb-diagnostics-service.ts` | I1 Ready-to-Brief pipeline |
+| `paper-sim-diagnostic.ts` | Paper simulation diagnostics |
+| `system-truth-diagnostic.ts` | Ground truth verification |
+| `task-queue-diagnostics.ts` | Task queue health |
+
+### 10.3 Diagnostic Report Archive
+
+The `diagnostic-reports/` directory contains **80+ archived reports** from various development phases:
+- Phase 34-41F validation reports
+- Burn-in stability tests (NDJSON logs)
+- E2E validation results (JSON, markdown)
+- Shell scripts for manual test execution
+- Trace files (NDJSON lineage traces)
+
+These represent a comprehensive history of QA activities performed during development, but are point-in-time artifacts rather than continuously-run regression tests.
+
+---
+
+## 11. Code Quality Tooling
+
+### 11.1 ESLint Configuration
+
+**File**: `.eslintrc.json` (34 lines)
+
+Extends `eslint:recommended` with three custom rules:
+
+| Rule | Type | What It Enforces |
+|------|------|-----------------|
+| No Hardcoded UUIDs | `no-restricted-syntax` (error) | Phase 31.I: UUIDs must come from resolvers/env/config, not inline strings |
+| No Legacy Metric Imports | `no-restricted-imports` (error) | Directive 11.0E: Blocks `calculateCWQI`, `calculateNGC`, `computeProfitRate` imports |
+| Quality Index Warning | `no-restricted-imports` (warn) | Warns on `**/quality_index*` imports, suggests `score-calculator.ts` instead |
+
+**Not configured**: No React-specific ESLint rules, no TypeScript ESLint plugin, no import ordering rules, no Prettier integration.
+
+### 11.2 TypeScript Configuration
+
+**Root `tsconfig.json`**:
+- `"strict": true` — enables all strict type-checking options
+- `"target": "ES2020"`, `"module": "ESNext"`
+- `"skipLibCheck": true` — does not type-check `node_modules`
+- Explicitly **excludes** `**/*.test.ts` from compilation
+- Path aliases: `@/*` → `client/src/*`, `@shared/*` → `shared/*`
+
+**Server `server/tsconfig.json`**:
+- Extends root, overrides to `"target": "ES2022"`, `"moduleResolution": "bundler"`
+- `"noUnusedLocals": false`, `"noUnusedParameters": false` — strict mode but unused variable checks disabled
+
+### 11.3 Build Pipeline
+
+- **Vite** builds the client (`vite build`)
+- **esbuild** bundles the server (`esbuild server/index.ts`)
+- **`tsc`** available via `npm run check` but not enforced pre-commit
+- No build-time test execution — build and test are fully decoupled
+
+---
+
+## 12. Coverage Analysis — What Is Tested vs. What Is Not
+
+### 12.1 Well-Tested Areas
+
+| Domain | Coverage Quality | Key Tests |
+|--------|-----------------|-----------|
+| **Canonical regime/strategy mapping** | Strong | 5+ tests validate mapping integrity, source lock, signal consistency, drift |
+| **FinalScore calculation** | Strong | Equivalence test, score weights, SQE config |
+| **Governance enforcement** | Strong | Regime transition, enforcement regression, strategy modes |
+| **Cost model** | Strong | Cache, exchange defaults, net expectancy, friction mapping |
+| **Telemetry pipeline** | Strong | Persistence, provenance, rehydration, aggregator |
+| **Filter pipeline (FX5)** | Strong | REB 2.12 (15 deterministic tests), filter insights, adaptive scanning |
+| **Mathematical utilities** | Strong | Kalman filter, covariance engine, analysis-utils, trailing exits, VolNoise parity |
+| **E2E paper trading flow** | Strong | Full pipeline validation with lineage tracing (Phase 41F-L) |
+
+### 12.2 Untested Areas
+
+| Domain | Coverage Gap | Risk |
+|--------|-------------|------|
+| **Frontend (React components)** | **Zero test files** — no component tests, no integration tests, no snapshot tests | HIGH — 189 frontend files with zero test coverage |
+| **Signal Orchestrator** | No direct unit tests for the 1,200+ line signal orchestrator | HIGH — core execution path untested |
+| **Paper Execution Engine** | No unit tests — only validated through E2E flows | MEDIUM — relies on E2E tests for correctness |
+| **WebSocket layer** | No tests for the WebSocket singleton, reconnection logic, or heartbeat | MEDIUM |
+| **Authentication/JWT** | No tests for token refresh, singleton lock, backward compatibility | MEDIUM |
+| **API routes** | Only 1 API integration test (config-snapshot). 23,349-line routes.ts has no route-level tests | HIGH — massive untested API surface |
+| **Database migrations** | No migration tests. Schema validated at startup only | LOW-MEDIUM |
+| **Error handling/recovery** | Health monitor tested at schema level but recovery actions are all placeholders | LOW |
+| **Cross-browser compatibility** | Playwright only runs Chromium | LOW |
+
+### 12.3 Legacy System Tests
+
+Two test files test systems that have been confirmed as legacy:
+
+| File | Tests | Legacy Status |
+|------|-------|--------------|
+| `diagnostic-system.test.ts` | Walter diagnostics, Bob inspection | Walter/Bob confirmed dead |
+| `phase-6.0-simulations.test.ts` | Walter corpus, Bob identity, UX templates, knowledge refresh | Walter/Bob confirmed dead |
+
+These tests are stale — they test deprecated systems and will either fail (if services are removed) or provide false confidence (if they pass by testing disconnected code).
+
+---
+
+## 13. Staleness Risk Assessment
+
+### Schema Version Conflicts
+
+Multiple tests pin specific schema versions. If the shared `SCHEMA_VERSION` constant has been bumped, older tests will fail:
+
+| Test | Asserts | Risk |
+|------|---------|------|
+| `schema_v1_5.test.ts` | v1.5.0 | **HIGH** — other tests assert v1.5.2, v1.5.7, v1.5.8 |
+| `cost_cache.test.ts` | v1.5.8 | LOW (likely current) |
+| `net_expectancy.test.ts` | v1.5.7 | LOW-MEDIUM |
+| `telemetry_persistence_sql.test.ts` | v1.5.2 | MEDIUM |
+
+### Test Quality Concerns
+
+| Issue | Files Affected | Impact |
+|-------|---------------|--------|
+| Re-defines validation logic inline instead of importing | `recalibration_integrity.test.ts` | Tests validate mock logic, not real code |
+| Dynamic imports (`await import()`) | `tco-tec-tcl.test.ts`, `net_expectancy.test.ts`, others | Import path correctness only validated at runtime |
+| Tests for deprecated Walter/Bob systems | `diagnostic-system.test.ts`, `phase-6.0-simulations.test.ts` | Will fail when Walter is removed |
+| Auto test harness imports NLAI | `auto_test_harness.ts` | References deprecated NLAI system |
+| Paper validation engine references DCE/GASP | `paper_validation_engine.ts` | References L-Series legacy systems |
+
+---
+
+## 14. Production Concerns
+
+### 14.1 No Test Scripts in package.json
+
+There are no `"test"` scripts defined. To run tests, a developer must know to invoke:
+- `npx vitest` (unit/integration)
+- `npx playwright test` (E2E)
+- `tsx server/tests/system-verify.ts` (standalone scripts)
+
+This means:
+- New team members have no obvious entry point for running tests
+- Build pipelines cannot use `npm test`
+- No single command runs the full test suite
+
+### 14.2 No CI/CD Integration
+
+Without CI/CD pipelines, tests are not automatically run on:
+- Pull requests
+- Merge to main
+- Pre-deployment
+- Scheduled regression runs
+
+Tests only run when a developer manually invokes them.
+
+### 14.3 Test-Production Coupling
+
+Since tests import real services (no mocks), integration and system tests require:
+- A running PostgreSQL database with proper schema
+- A running server at localhost:5000 (for HTTP tests and E2E)
+- Network access to Kraken (for some validation scripts)
+
+This makes tests difficult to run in isolation or in CI environments.
+
+### 14.4 Diagnostic Reports as QA Artifacts
+
+The 80+ diagnostic reports in `diagnostic-reports/` represent valuable QA history but are:
+- Point-in-time artifacts (not regression tests)
+- Not automatically re-generated
+- Not verified against current code
+
+---
+
+## 15. Summary Statistics
+
+| Metric | Value |
+|--------|-------|
+| Total test files | 60 |
+| Total test lines (approx) | ~13,735 |
+| Unit tests | 31 |
+| Integration tests | 13 |
+| System tests | 2 |
+| Invariant tests | 1 |
+| E2E tests | 3 (Playwright) |
+| Standalone scripts | 4 |
+| Other server tests | 6 |
+| Frontend tests | **0** |
+| Runtime validation services | 5 (REB 2.12, REB 2.15, Paper Validation, M3B, VTP) |
+| Diagnostic services | 15+ |
+| Diagnostic reports on disk | 80+ |
+| Test frameworks | 2 (Vitest, Playwright) |
+| Mocking framework usage | None |
+| CI/CD pipelines | **0** |
+| Test scripts in package.json | **0** |
+| Code coverage reports | **0** (configured but never generated) |
+| Pre-commit hooks | **0** |
+| Frontend test coverage | **0%** |
+
+---
+
+## 16. Phase 10 Addendum — Kyle's Directives (2026-02-17)
+
+> **Kyle's Final Verdict**: "Claude's Phase 10 audit is: Accurate. Grounded. Technically strong. Well-cataloged. Not inflated. But: It slightly overstates backend execution risk. It understates frontend blind spot. It understates legacy test contamination. It does not address unified QA architecture. Your backend math QA is elite-tier. Your frontend and API QA are light. Your runtime validation systems are extensive but fragmented."
+
+### ADD-1: Legacy Test Suite Audit Required
+
+**Directive**: Identify and tag all tests that reference deprecated systems: Walter, Bob, DCE, NGC, CWQI, NLAI.
+
+**Decision required per test**: Remove / Archive / Refactor / Keep behind legacy flag.
+
+**Rationale**: The current test suite has legacy contamination that will cause cascading failures when deprecated systems are removed in Waves 3, 4.7, and 6. A systematic audit should precede removal waves to prevent CI pipeline blockage (once CI is established per ADD-2).
+
+**Affected test categories**:
+- Walter/Bob direct imports: `diagnostic-system.test.ts`, `phase-6.0-simulations.test.ts`
+- NLAI references: `auto_test_harness.ts`
+- DCE/GASP references: `paper_validation_engine.ts`, `m3b-validation-service.ts`
+- NGC/CWQI legacy metric assertions: tests that assert these fields do NOT exist (these are actually healthy — they're anti-regression tests)
+
+**Important distinction**: Tests that assert legacy metrics are _absent_ (e.g., `directive-11.0E.2.test.ts` confirming NGC/CWQI removed from VTS interfaces) are **positive architectural guards**, not legacy contamination. These should be KEPT. Only tests that _import and exercise_ deprecated services should be removed/refactored.
+
+### ADD-2: Create Unified Test Runner Script
+
+**Directive**: Add standard test scripts to `package.json`:
+
+```
+"test:unit": "vitest run"
+"test:e2e": "playwright test"
+"test:all": "npm run test:unit && npm run test:e2e"
+```
+
+**Rationale**: Even without CI, standardize the entry point so developers can run `npm run test:unit` instead of discovering `npx vitest` themselves. This is a prerequisite for future CI integration.
+
+### ADD-3: Frontend Test Introduction Plan
+
+**Directive**: Establish minimum frontend test coverage for critical paths:
+
+| Priority | Test Target | Why |
+|----------|------------|-----|
+| 1 | Auth token refresh flow | Core security — untested refresh singleton, backward compatibility |
+| 2 | TradingModeContext | Cross-tab sync, query cache invalidation, mode persistence |
+| 3 | `use-websocket` reconnection | WebSocket singleton, exponential backoff, heartbeat |
+| 4 | TopBar start/stop flow | Primary user interaction with trading engine |
+
+**Framework**: Install `@testing-library/react` + `@testing-library/jest-dom`. Configure Vitest for client-side tests (add `environment: 'jsdom'` config for `client/**/*.test.tsx`).
+
+### ADD-4: Mark Standalone Scripts as QA Tools
+
+**Directive**: Clarify in documentation that the 4 standalone test scripts (`diagnostic-system.test.ts`, `live-pricing-validation.ts`, `system-verify.ts`, `test-force-trade.ts`) are **operational validation tools**, not regression tests.
+
+**Rationale**: These scripts require a running server and database. They serve a different purpose than framework-discoverable regression tests. Renaming or documenting them prevents confusion about what `vitest run` will and won't execute.
+
+### ADD-5: Property-Based Testing for Core Math (Optional, High ROI)
+
+**Directive**: Consider adding property-based tests (e.g., `fast-check`) for core mathematical invariants:
+
+| Property | Invariant |
+|----------|-----------|
+| FinalScore | Always in [0, 1], deterministic for same inputs |
+| VolNoise | Monotonic with respect to price variance |
+| Covariance matrix | Positive semi-definite for all inputs |
+| Regime classification | Deterministic — same metrics always produce same regime |
+
+**Rationale**: The existing 7 math utility tests are strong but use fixed test vectors. Property-based testing would exercise edge cases and boundary conditions automatically across thousands of random inputs, catching subtle numerical issues.
+
+---
+
+*Phase 10 complete. Next: Phase 11 (Database Schema & Migrations).*
+
+
+---
+
+# Chapter 11: Database Schema & Migrations
+
+## 1. Database Infrastructure Overview
+
+| Component | Technology | Version | Config File |
+|-----------|-----------|---------|-------------|
+| **Database** | PostgreSQL (Neon Serverless) | — | `DATABASE_URL` env var |
+| **ORM** | Drizzle ORM | ^0.39.1 | `server/db.ts` |
+| **Schema Validation** | drizzle-zod | ^0.7.0 | `shared/schema.ts` |
+| **Migration Tool** | Drizzle Kit | ^0.31.4 | `drizzle.config.ts` |
+| **Connection Pool** | @neondatabase/serverless | ^0.10.4 | `server/db.ts` |
+| **WebSocket Transport** | ws | ^8.18.0 | `server/db.ts` |
+| **Vector Extension** | pgvector | — | Used for `semantic_memory.embedding` |
+
+### Connection Configuration
+
+**File**: `server/db.ts` (16 lines)
+
+```
+neonConfig.webSocketConstructor = ws;  // WebSocket for Neon serverless
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const db = drizzle({ client: pool, schema });
+```
+
+- **Pool type**: Neon Serverless Pool (built-in connection pooling for edge/serverless)
+- **No explicit pool settings**: max connections, idle timeout, etc. are all Neon defaults
+- **Single export**: `db` instance used throughout the application
+- **No pool monitoring**: Pool stats are not exposed to the health monitor (health monitor checks DB via query, not pool metrics)
+
+### Architecture: Single-Tenant with Mode Isolation
+
+- **Single-tenant**: One user, one database instance. `user_id` columns removed from 5 operational tables (Phase 2C migration)
+- **Mode isolation**: `trading_mode` enum (`live` | `paper`) separates data at the row level. Most trading tables have a `mode` column with unique indexes enforcing one-row-per-mode for config tables
+- **globalContextId**: Present in several tables with default `"default"` — remnant of an earlier multi-context architecture, now vestigial
+
+---
+
+## 2. Schema File Statistics
+
+**File**: `shared/schema.ts` — **4,836 lines**
+
+| Metric | Count |
+|--------|-------|
+| Tables (pgTable) | ~160 |
+| Enum definitions (pgEnum) | ~80 |
+| Insert schemas (createInsertSchema) | ~60 |
+| Type exports (z.infer + $inferSelect) | ~120 |
+| Relations definitions | 14 |
+| Indexes (total) | ~200+ |
+| Vector columns (pgvector) | 1 (`semantic_memory.embedding`, 1536 dimensions) |
+| JSON columns (jsonb) | ~50+ |
+
+---
+
+## 3. Table Classification — Active vs. Legacy
+
+### Tier 1: Core Trading Pipeline (ACTIVE) — ~35 tables
+
+These tables serve the canonical paper/live trading flow:
+
+| Table | Purpose | Key Columns | Mode Isolated |
+|-------|---------|-------------|---------------|
+| `users` | Auth, roles, preferences | id (UUID), username, email, tradingMode, tradingStatus, userRole, approvalMatrix (jsonb) | N (single user) |
+| `trading_settings` | Per-user trading config | ~45 columns, FK to users, uniqueIndex(userId) | Y |
+| `guardrails_v2` | Risk management (active version) | ~25 columns, uniqueIndex(mode) | Y |
+| `screener_filters` | FX5 filter configuration | ~25 columns, uniqueIndex(mode), 4 jsonb columns | Y |
+| `strategy_settings` | Per-strategy parameters | uniqueIndex(contextId, mode, strategy), params (jsonb) | Y |
+| `strategy_settings_audit` | Strategy change history | prevParams/nextParams (jsonb) | Y |
+| `watchlist_pairs` | Active watchlist | unique(mode, symbol) | Y |
+| `trading_signals` | Signal detection log | 3 indexes, metadata (jsonb) | Y |
+| `trades` | Live/paper trade records | 22 columns, 2 indexes, metadata (jsonb) | Y |
+| `portfolio_state` | Balance tracking | uniqueIndex(contextId, mode) | Y |
+| `paper_sim_trades` | Paper simulation trades | ~30 columns, 4 indexes | Y (paper only) |
+| `paper_sim_open_positions` | Open paper positions | ~25 columns, uniqueIdx on symbol | Y (paper only) |
+| `paper_sim_trade_logs` | Paper trade event log | 3 indexes, metadata (jsonb) | N |
+| `paper_sim_sessions` | Paper session management | 3 indexes, metadata (jsonb) | N |
+| `rtb_signals` | Ready-to-Brief signal queue | ~25 columns, 5 indexes | Y |
+| `execution_attempt_audit` | Execution decision log | 14 columns, 5 indexes, executionDecision/blockReason enums | Y |
+| `system_context` | Engine state / LATTI | ~25 columns, 3 indexes, extensive defaults | Y |
+| `telemetry_history` | Signal telemetry persistence | 14 columns, 4 indexes, marketRegime enum | Y |
+| `adaptive_learning` | Adaptive weight persistence | weights/metadata (jsonb), marketRegime enum | Y |
+| `daily_performance_summary` | Performance tracking | 3 indexes | Y |
+| `screener_results` | Screener output | uniqueIndex(mode, scannedAt) | Y |
+| `system_settings` | Key-value system config | PK = varchar(key), FK to users | N |
+| `system_config` | System flags (jsonb typed) | systemFlags with passiveLearning flag | N |
+| `config_registry` | Runtime config | unique(key), value (jsonb) | N |
+| `goals_presets` | Goal configuration | uniqueIndex(mode, name), goalsPresetName enum | Y |
+| `goals_learning_metrics` | Goal learning metrics | index(mode, date) | Y |
+| `goals_live` / `goals_paper` | Goal state per mode | 7 columns each | Y (separate tables) |
+| `goal_audit_log` | Goal change history | 8 columns | N |
+| `safety_telemetry` | Safety guardrail checks | 14 columns | N |
+| `telemetry_lineage` | Data flow lineage | 6 columns | N |
+| `kill_switch_events` | Kill switch history | 12 columns | N |
+| `error_logs` | Error diagnosis | 10 columns | N |
+| `system_alerts` | System alerts | 10 columns | N |
+
+### Tier 2: Walter AI Assistant — 10 tables (LEGACY per Wave 3)
+
+| Table | Purpose | Lines |
+|-------|---------|-------|
+| `walter_chats` | Chat sessions | 939-953 |
+| `walter_pending_approvals` | Approval queue | 956-979 |
+| `walter_chat_logs` | Messages | 982-993 |
+| `walter_approvals_audit` | Approval history | 996-1009 |
+| `walter_execution_log` | Action execution | 1012-1038 |
+| `walter_purpose` | Walter purpose config | 1041-1051 |
+| `walter_memory` | Memory store | 1054-1069 |
+| `walter_user_preferences` | UI preferences | 1072-1082 |
+| `walter_actions` | Autonomous actions | 1087-1139 |
+| `execution_config` | Auto-execution config | 1142-1158 |
+
+All 10 Walter tables have FK relationships to `users`. These tables will become dead when the Walter backend is removed in Wave 3.
+
+### Tier 3: AI Analytics & Reports — 14 tables (ACTIVE)
+
+| Table | Purpose |
+|-------|---------|
+| `ai_reports` | AI-generated reports |
+| `ai_conversations` | AI chat sessions |
+| `ai_chat_logs` | Chat message/token tracking |
+| `conversation_summaries` | Conversation compression |
+| `response_cache` | API response cache |
+| `semantic_memory` | Vector embeddings (pgvector, 1536d) |
+| `ai_market_analyses` | Market regime classification |
+| `ai_opportunity_runs` | Opportunity batch runs |
+| `ai_opportunities` | AI-generated trade opportunities |
+| `daily_briefs` | Daily narrative summaries |
+| `ai_audit_log` | GPT action audit |
+| `ai_transparency_log` | Scheduler transparency |
+| `ai_orchestrator_logs` | AI orchestrator |
+| `context_chats` | Context-tab chats |
+
+### Tier 4: L-Series Cognitive Architecture — ~32 tables (LEGACY)
+
+**Phases 8.6–10.0**: These tables represent an aspirational multi-agent cognitive system that was designed but likely never fully populated:
+
+| Phase | Tables | System |
+|-------|--------|--------|
+| 8.6.3 | `data_lineage`, `bob_trace_log` | Provenance, Bob module traces |
+| 8.7.2-8.7.4 | `intent_audit_log`, `context_bridge_log` | Intent execution, WebSocket bridge |
+| 8.8.1-8.8.4 | `reasoning_trace`, `reasoning_queue`, `memory_audit_log`, `cognitive_tuning_log` | Reasoning orchestrator, memory lifecycle, cognitive tuning |
+| 8.9.1-8.9.4 | `autonomy_audit_log`, `meta_reasoning_log`, `awareness_state_log` | Autonomy, meta-reasoning, awareness |
+| 9.0 | `experience_memory_log`, `alignment_policies`, `alignment_audit_log`, `goal_alignment_profile` | Experience memory, alignment |
+| 9.2 | `strategic_plan_log`, `learning_weight_profile` | Strategic planning, learning weights |
+| 9.3 | `strategic_simulation_log`, `decision_trace_log`, `strategic_memory_snapshot` | Simulations, decision traces |
+| 9.4 | `reflection_log`, `decision_quality_audit` | Self-reflection, decision quality |
+| 9.5 | `value_alignment_matrix` | Value alignment |
+| 9.6 | `collaboration_sessions`, `collaboration_messages`, `consensus_snapshots` | Cross-domain collaboration |
+| 9.7 | `agent_learning_feedback` | Agent feedback |
+| 9.8 | `meta_cognition_log` | Meta-cognition |
+| 9.9 | `strategic_memory_archive`, `model_calibration_log` | Long-term memory, calibration |
+| 10.0 | `cognitive_core_state`, `agent_registry` | Cognitive core, agent registry |
+
+### Tier 5: Safety, Ethics & Governance — ~16 tables (LEGACY)
+
+**Phases 11–16**: An aspirational governance framework:
+
+| Phase | Tables | System |
+|-------|--------|--------|
+| 11.0 | `safety_policy`, `safety_event_log`, `kill_switch` (Phase 11) | Safety guardrails (not the active kill_switch_events) |
+| 13.0 | `ethical_principle`, `ethical_violation_log` | Ethical principles |
+| 14.0 | `federated_ethics_state`, `cross_agent_ethics_session`, `ethics_conflict_register`, `ethics_propagation_journal` | Federated ethics |
+| 15.0 | `bias_observation_log`, `confidence_drift_log`, `introspection_report`, `bias_correction_log` | Bias detection, introspection |
+| 16.0 | `knowledge_retrieval_log`, `knowledge_cache`, `knowledge_trust_record` | Knowledge management |
+
+### Tier 6: Distributed Cluster — 9 tables (LEGACY)
+
+**Phases 17–18**: A distributed multi-node architecture:
+
+| Table | Phase | Purpose |
+|-------|-------|---------|
+| `cluster_node` | 17.0 | Node registry |
+| `cluster_task_queue` | 17.0 | Task queue |
+| `cluster_result_log` | 17.0 | Result tracking |
+| `cluster_bus_event` | 17.0 | Event bus |
+| `cluster_circuit_breaker` | 17.5 | Circuit breaker |
+| `cluster_audit_log` | 17.6 | Gate audit |
+| `agent_learning_delta` | 18 | Learning deltas |
+| `model_consistency_snapshot` | 18 | Model consistency |
+| `cross_node_alignment_log` | 18 | Cross-node alignment |
+
+### Tier 7: Paper-Specific Duplicates — 3 tables (LEGACY)
+
+| Table | Status | Superseded By |
+|-------|--------|--------------|
+| `paper_trades` | Explicitly marked legacy (line 1226 comment) | `trades` table with mode column |
+| `paper_daily_briefs` | Duplicate | `daily_briefs` with mode |
+| `paper_ai_reports` | Duplicate | `ai_reports` |
+
+### Tier 8: Other Active Tables — ~20 tables
+
+Tuning, actuation, strategy drive, learning, behavioral, oversight, audit, expert context — these are actively used by the tuning engine, strategy drive system, and expert context modules.
+
+---
+
+## 4. Legacy Table Count Summary
+
+| Category | Table Count | Status |
+|----------|------------|--------|
+| Core Trading (active) | ~35 | ACTIVE |
+| Walter (Wave 3 removal) | 10 | LEGACY |
+| AI Analytics (active) | 14 | ACTIVE |
+| L-Series Cognitive (Phases 8.6-10.0) | ~32 | LEGACY (aspirational) |
+| Safety/Ethics/Governance (Phases 11-16) | ~16 | LEGACY (aspirational) |
+| Distributed Cluster (Phases 17-18) | 9 | LEGACY (aspirational) |
+| Paper-Specific Duplicates | 3 | LEGACY |
+| Tuning/Strategy/Learning/Expert (active) | ~20 | ACTIVE |
+| `guardrails` (V1, superseded by V2) | 1 | LEGACY |
+| **TOTAL** | **~160** | **~71 legacy (~44%)** |
+
+**~71 tables (~44% of total) serve deprecated or aspirational systems that are not part of the canonical trading pipeline.** These tables exist in the schema definition and presumably in the database, consuming storage and adding DDL complexity. **Important nuance**: Not all legacy tables are fully inert — some (e.g., Walter tables, certain L-Series tables) may still have active writers from background services or lazy-loaded modules that have not been disconnected. These should be classified as "Deprecated — Removal Required" (still written to) rather than "Inert — Safe to Drop" (confirmed zero writers). A pre-drop audit must verify zero active writers for each table before removal.
+
+---
+
+## 5. Enum Definitions (~80 pgEnum)
+
+### Core Trading Enums (actively used)
+
+| Enum | Values | Used By |
+|------|--------|---------|
+| `tradingModeEnum` | live, paper | Most tables |
+| `tradingStatusEnum` | active, stopped | users |
+| `strategyTypeEnum` | vwap_pullback, abcd_long, sma_trend_ride, breakout, mean_reversion, range_trading, vwap_bounce, liquidity_trap, dhma | trades, signals, strategy_settings |
+| `tradeStatusEnum` | open, closed, cancelled | trades |
+| `tradeTypeEnum` | buy, sell | trades |
+| `signalTypeEnum` | QUANT, PATTERN, HYBRID | rtb_signals, trades |
+| `patternTypeEnum` | PINBAR, ENGULFING, INSIDE_BAR, MORNING_STAR, THREE_SOLDIERS | rtb_signals, trades |
+| `rtbSignalStatusEnum` | queued, promoted, expired, rejected, reconfirmed, active | rtb_signals |
+| `executionDecisionEnum` | OPENED, BLOCKED | execution_attempt_audit |
+| `executionBlockReasonEnum` | KILL_SWITCH, NO_STOP_LOSS, ... (13 values) | execution_attempt_audit |
+| `marketRegimeEnum` | EXTREME_NOISE, BULL_STABLE, BULL_VOLATILE, BEAR_STABLE, BEAR_VOLATILE, LOW_VOL_CHOP | telemetry_history |
+| `userRoleEnum` | owner, editor, admin, trader, viewer | users |
+| `goalsPresetNameEnum` | conservative, baseline, optimistic, maximum, custom | goals_presets |
+
+### Walter Enums (legacy)
+
+| Enum | Values | Status |
+|------|--------|--------|
+| `walterActionTypeEnum` | feed_reconnect, feed_pause, formula_recalc, cache_refresh, health_check, threshold_adjust, auto_suppress, escalate | LEGACY (Wave 3) |
+| `walterActionStatusEnum` | pending, in_progress, completed, failed, acknowledged, approved, rejected | LEGACY (Wave 3) |
+| `walterActionCategoryEnum` | feed, formula, system, risk, performance | LEGACY (Wave 3) |
+
+### L-Series / Cognitive Enums (~40, all LEGACY)
+
+Phases 8.x through 18 define approximately 40 enums for the cognitive architecture, ethics, governance, and distributed cluster systems. These include: `agentStateEnum`, `reflectionDepthEnum`, `biasTypeEnum`, `knowledgeSourceEnum`, `federatedScopeEnum`, `consensusStateEnum`, `collaborationRoleEnum`, `learningDeltaTypeEnum`, `alignmentStrategyEnum`, `domainChannelEnum`, and many more.
+
+**All ~40 L-Series enums are legacy** — they exist in the database but have no active producers.
+
+---
+
+## 6. Migration Infrastructure
+
+### Migration Directories (Dual — FINDING)
+
+Two separate migration directories exist:
+
+| Directory | Files | Tracked By | Purpose |
+|-----------|-------|-----------|---------|
+| `migrations/` | 4 files + journal | Drizzle Kit v7 journal (`meta/_journal.json`) | Primary migrations (initial schema + incremental) |
+| `drizzle/migrations/` | 5 files | **No journal** — manually numbered | Secondary directive-based migrations |
+
+### Migration Files
+
+**Primary (`migrations/`)**:
+
+| File | Size | Content |
+|------|------|---------|
+| `0000_flaky_freak.sql` | 162 KB | Initial schema — all tables, 70+ enums, indexes. Single massive DDL file. |
+| `0001_familiar_pete_wisdom.sql` | 4 KB | RTB signals table, pattern recognition columns, signal type additions |
+| `2025-11-06_single_tenant.sql` | 2 KB | Drops user_id from 5 operational tables, adds mode-based indexes |
+| `2025-11-06_value_alignment_mode.sql` | 3 KB | Adds mode column with NOT NULL migration pattern |
+
+**Secondary (`drizzle/migrations/`)**:
+
+| File | Size | Content |
+|------|------|---------|
+| `2026-11-0G-schema-hardening.sql` | 3 KB | Directive 11.0G: hybrid_score, decay_penalty columns |
+| `2026-11-0H-add-pool-to-telemetry.sql` | 594 B | Directive 11.2 R1: pool column on telemetry_history |
+| `2026-11-0J-telemetry-sizes.sql` | 559 B | Telemetry sizing adjustments |
+| `2026-11-1A-persistent-intelligence.sql` | 4 KB | Directive 11.1A: marketRegimeEnum + telemetry_history table |
+| `2026-11-1B-adaptive-learning.sql` | 1.4 KB | Adaptive learning enhancements |
+
+### Migration Management
+
+- **Primary method**: `drizzle-kit push` (pushes schema directly to database — no migration files generated)
+- **Migration journal**: Only 2 entries tracked in `_journal.json` (0000 and 0001). The 2025 date-based files and all `drizzle/migrations/` files are NOT in the journal
+- **No down migrations**: No rollback files exist. Migrations are forward-only
+- **No migration runner in code**: The server does not run migrations on startup. `drizzle-kit push` is the sole mechanism
+- **`db:push` script**: The only migration-related npm script
+
+### Migration Concerns
+
+1. **Dual directories**: `migrations/` and `drizzle/migrations/` create confusion about which is canonical
+2. **Untracked migrations**: 7 of 9 migration files are not in the Drizzle Kit journal
+3. **Push-based workflow**: `drizzle-kit push` compares schema.ts to live DB and pushes changes directly — no review step, no staging
+4. **No rollback capability**: Forward-only migrations with no `down()` functions
+5. **162 KB initial migration**: The initial schema DDL is a single massive file, making it hard to audit what was in the original schema vs. what was added later
+
+---
+
+## 7. Primary Key Strategies
+
+| Strategy | Usage | Tables |
+|----------|-------|--------|
+| `varchar(UUID).default(gen_random_uuid())` | ~90% of tables | Most tables |
+| `serial` (auto-increment) | ~8 tables | aiOrchestratorLogs, contextChats, lattiBaselineHistory, auditLog, behavioralLog, learningHistory, lottieOversightLog, strategyMixLog |
+| `varchar(key)` (natural key) | 1 table | systemSettings |
+| `varchar("global_kill_switch")` | 1 table | kill_switch (Phase 11) |
+
+The predominant UUID strategy is good for distributed systems but generates non-sequential keys, which can cause B-tree index fragmentation on PostgreSQL. This is mitigated by Neon's serverless architecture.
+
+---
+
+## 8. Column Type Patterns
+
+| Type | Usage | Notes |
+|------|-------|-------|
+| `varchar` | IDs, enums, status, symbols | Most common |
+| `text` | Long-form content | Narratives, reasons, messages |
+| `decimal(precision, scale)` | Financial values | `(20, 8)` for prices, `(5, 4)` for percentages |
+| `doublePrecision` | Scores, ratios | Used in later phases (9.x+) instead of decimal |
+| `integer` | Counts, thresholds | Limits, trade counts |
+| `boolean` | Flags | Toggles, status |
+| `jsonb` | Structured metadata | ~50+ columns across all tables |
+| `timestamp with timezone` | All time fields | Universal pattern via `{ withTimezone: true }` |
+| `date` | Calendar dates | Goals, briefs, reports |
+| `text[].array()` | Tag lists | Filter arrays, domain lists |
+| `vector(1536)` | OpenAI embeddings | 1 column in semantic_memory |
+
+### Financial Precision
+
+Trading-related tables consistently use `decimal(20, 8)` for prices and quantities, and `decimal(10, 4)` for percentages. This provides 8 decimal places for crypto prices (necessary for BTC sub-satoshi precision) and 4 decimal places for percentage calculations.
+
+**Concern**: Later-phase tables (9.x+) use `doublePrecision` instead of `decimal` for scores and ratios. `doublePrecision` is a floating-point type subject to rounding errors, while `decimal` is exact. For financial calculations, this inconsistency could cause subtle precision issues if double-precision scores flow into decimal-precision trade calculations.
+
+---
+
+## 9. JSON Column Usage
+
+Approximately 50+ columns use `jsonb` across the schema. Key patterns:
+
+| Table | Column | Typed? | Content |
+|-------|--------|--------|---------|
+| `users` | `approvalMatrix` | No | 15-line default JSON object with approval categories |
+| `screener_filters` | `quoteCurrencies`, `activeTimeframes`, `filterOverrides`, `lockedByUser` | No | Array and object filters |
+| `strategy_settings` | `params` | No | Strategy-specific parameters |
+| `system_context` | `metadata`, `lastSafeState` | No | Engine state snapshots |
+| `system_config` | `systemFlags` | **Yes** (`$type<{passiveLearning?: boolean}>`) | Typed JSON — rare pattern |
+| `config_registry` | `value` | No | Arbitrary config values |
+| `telemetry_history` | `metadata` | No | Signal telemetry context |
+
+**Observation**: Only 1 of ~50 jsonb columns uses Drizzle's `$type<>()` for TypeScript type safety. The rest are untyped `jsonb`, meaning their contents are only validated at the application layer (if at all), not at the ORM/compile level.
+
+---
+
+## 10. Relationship Definitions
+
+14 Drizzle `relations()` are defined (lines 1943–2117), all centered around the `users` table:
+
+```
+users → one-to-many → tradingSettings, aiReports, aiConversations, killSwitchEvents,
+                       aiOpportunityRuns, aiOpportunities, dailyBriefs, paperDailyBriefs,
+                       paperAIReports, learningSources, signalWeights, predictionOutcomes,
+                       walterPendingApprovals, walterChats, walterChatLogs, walterApprovalsAudit
+```
+
+**Missing relations**: The vast majority of tables (~145 of ~160) have NO Drizzle relations defined. This means:
+- Drizzle's relational query API (`db.query.users.findMany({ with: { trades: true } })`) is not available for most tables
+- Joins must be done manually using Drizzle's `leftJoin`/`innerJoin` API
+- The actual FK relationships exist at the database level (via `.references()`) but are not exposed to the ORM's relational API
+
+---
+
+## 11. Database Monitoring
+
+**File**: `server/services/database-monitor.ts` (77 lines)
+
+| Setting | Value |
+|---------|-------|
+| Check interval | 24 hours |
+| Warning threshold | 6.5 GB (65% of 10 GB Neon limit) |
+| Critical threshold | 8 GB (80% of 10 GB limit) |
+| Query | `pg_database_size(current_database())` |
+| Storage | Logs to `database_size_logs` table |
+
+The 10 GB limit is a Neon free/starter tier constraint. With ~71 legacy tables potentially accumulating data, monitoring database growth is important.
+
+---
+
+## 12. Startup Invariant Checks
+
+**File**: `server/startup/invariants.ts` (59 lines)
+
+At server boot, `assertSingleTenantDB()` queries `information_schema.columns` to verify that `user_id` columns do NOT exist in the 5 operational tables:
+- `portfolio_state`
+- `strategy_settings`
+- `paper_sim_sessions`
+- `system_context`
+- `trading_settings_legacy`
+
+If any `user_id` column is found, the server throws a `SingleTenantViolation` error and refuses to start. This is a runtime architectural guard.
+
+**Note**: AI, Walter, audit, and backup tables intentionally KEEP `user_id` for historical data (per comment in code).
+
+---
+
+## 13. Data Access Layer
+
+**File**: `server/storage.ts` — **4,580 lines**
+
+The storage layer is a monolithic service class that wraps all Drizzle ORM operations. It provides typed CRUD methods for every table, organized by domain:
+
+- **Portfolio management** (live/paper modes)
+- **Trading signals and orders**
+- **Strategy settings and audit**
+- **Goals presets and learning metrics**
+- **AI reports, conversations, and transparency**
+- **Walter chats, approvals, and execution**
+- **Telemetry persistence with checksums**
+- **System context and configuration**
+- **Diagnostic and audit logging**
+
+At 4,580 lines, `storage.ts` is the **third-largest file in the codebase** (after `routes.ts` at 23,349 and `schema.ts` at 4,836).
+
+### Storage Layer Concerns
+
+1. **Monolithic**: Single file with all data operations for all domains
+2. **Limited transaction usage**: Transactions exist in the codebase but are limited — most operations are individual queries without multi-table transactional guarantees. Critical financial paths (trade execution, position updates) should be verified for proper transaction wrapping.
+3. **Walter methods still present**: Storage methods for Walter tables will become dead code on Wave 3 removal
+4. **No connection pool tuning**: Uses Neon defaults without explicit pool size or timeout configuration
+5. **Storage layer coupling risk**: storage.ts must be modularized BEFORE legacy tables are dropped. Dropping tables while storage methods still reference them will cause runtime errors. The safe order is: (1) modularize storage.ts → (2) remove legacy storage methods → (3) drop tables from schema → (4) drop tables from database.
+
+---
+
+## 14. Production Concerns
+
+### 14.1 Schema Bloat — 71 Legacy Tables
+
+Approximately 44% of tables serve deprecated or aspirational systems. These tables:
+- Consume database storage (even if empty, they have DDL overhead)
+- Add complexity to the schema file (4,836 lines)
+- Have corresponding enum definitions (~40 legacy enums) that cannot be dropped while tables exist
+- May accumulate stale data if any background processes write to them
+
+### 14.2 No Database Pruning Strategy
+
+There is no mechanism to:
+- Archive old data from active tables (telemetry, signals, logs grow unbounded)
+- Drop legacy tables safely
+- Identify which tables have zero rows (to confirm they're truly dead)
+
+Given the 10 GB Neon limit, this is a capacity planning concern.
+
+### 14.3 Push-Based Migration Workflow
+
+`drizzle-kit push` applies schema changes directly to the live database without:
+- A review/approval step
+- A staging environment
+- Migration versioning (the journal only tracks 2 of 9 files)
+- Rollback capability
+
+This is acceptable for a single-developer project but becomes risky as the codebase matures.
+
+### 14.4 Mixed Numeric Types for Financial Data
+
+Active trading tables use `decimal` (exact arithmetic), but later-phase tables use `doublePrecision` (floating-point). If data flows between these table types, precision loss could occur. A standardization pass should enforce `decimal` for all financial/scoring values and reserve `doublePrecision` only for non-financial floating-point data (e.g., ML features, probabilities where exact precision is not required).
+
+### 14.5 Index Usage Review — ~200+ Indexes Without Audit
+
+The schema defines over 200 indexes across ~160 tables. No index usage review has been performed. In PostgreSQL, unused indexes consume storage, slow down writes (every INSERT/UPDATE/DELETE must maintain the index), and increase vacuum overhead. A `pg_stat_user_indexes` audit should identify:
+- Indexes with zero scans (candidates for removal)
+- Duplicate or overlapping indexes (e.g., single-column index + composite index starting with the same column)
+- Missing indexes on high-cardinality query patterns
+- Legacy table indexes that will be dropped with their tables but currently waste I/O
+
+### 14.6 No Table Partitioning for Append-Only Tables
+
+Several high-volume append-only tables would benefit from time-based partitioning:
+- `telemetry_history` — continuous signal telemetry, grows with every cycle
+- `paper_sim_trade_logs` — every trade event logged
+- `execution_attempt_audit` — every execution decision logged
+- `safety_telemetry` — guardrail check results
+- `error_logs` — diagnostic errors
+- `ai_audit_log`, `ai_transparency_log` — AI action audit trails
+
+Without partitioning, these tables will become large monolithic heaps where queries on recent data must scan entire tables. Time-based partitioning (e.g., monthly) would enable efficient queries on recent data, simpler data retention (drop old partitions), and faster vacuum operations.
+
+### 14.7 Migration Drift — Schema Cannot Be Rebuilt from History
+
+The current migration state has a fundamental integrity issue: the database schema **cannot be reconstructed** from migration history alone. The initial migration (`0000_flaky_freak.sql`, 162 KB) captures the schema at one point, but subsequent changes were applied via `drizzle-kit push` without generating migration files. The 7 untracked migration files were applied manually. This means:
+- A fresh database cannot be reliably set up by replaying migrations
+- There is no way to verify what schema version is running on a given database
+- Disaster recovery requires a full pg_dump, not migration replay
+- **Recommendation**: Perform a migration rebaseline — generate a fresh "baseline" migration from the current schema.ts state that captures the full current schema. This becomes the new `0000` and all previous migration files are archived.
+
+### 14.8 Enum Proliferation — ~80 Enum Types
+
+PostgreSQL enum types (`CREATE TYPE ... AS ENUM`) are schema-level objects. With ~80 enums defined, ~40 of which are legacy:
+- Enums cannot be dropped while any table column references them (even if the table is empty)
+- Adding values to enums requires `ALTER TYPE ... ADD VALUE` (no transaction rollback)
+- Removing values from enums requires dropping and recreating the type
+- Legacy enums for the L-Series cognitive system (agentStateEnum, reflectionDepthEnum, etc.) add clutter to the type catalog
+- **Drop order**: Tables first, then enums — this is already captured in the deprecation plan but bears repeating as an operational constraint
+
+### 14.9 LATTI Residual Fields in system_context
+
+The `system_context` table contains fields that appear to be remnants of the LATTI (Latent Attention Through Transparent Intent) system, which Kyle confirmed as deprecated. These include fields with extensive defaults related to engine state, coherence tracking, and attention management. While the `system_context` table itself is active (it stores engine state and trading mode), LATTI-specific fields within it are dead weight. These should be identified and removed as part of Wave 6 or a dedicated cleanup pass.
+
+### 14.10 No Data Retention Policy
+
+There is no defined data retention policy for any table. Every row ever written is preserved indefinitely. For a 10 GB database limit, this is unsustainable. A retention policy should define:
+- **Hot tier** (0–30 days): Full fidelity, all tables
+- **Warm tier** (30–90 days): Aggregate summaries, prune individual telemetry/log rows
+- **Cold tier** (90+ days): Archive to file-based storage or delete
+- Tables exempt from retention: `users`, `trading_settings`, `guardrails_v2`, `strategy_settings` (configuration, not logs)
+
+---
+
+## 15. Summary Statistics
+
+| Metric | Value |
+|--------|-------|
+| Schema file | `shared/schema.ts` (4,836 lines) |
+| Total tables | ~160 |
+| Active tables | ~89 (~56%) |
+| Legacy tables | ~71 (~44%) |
+| Walter tables | 10 (Wave 3 removal) |
+| L-Series cognitive tables | ~32 (aspirational, likely empty) |
+| Ethics/governance tables | ~16 (aspirational, likely empty) |
+| Cluster tables | 9 (aspirational, likely empty) |
+| Paper duplicate tables | 3 (superseded) |
+| Enum definitions | ~80 |
+| Legacy enums | ~40+ |
+| Migration files | 9 (across 2 directories) |
+| Tracked migrations | 2 (in journal) |
+| Storage layer | `server/storage.ts` (4,580 lines) |
+| Database limit | 10 GB (Neon) |
+| Connection pool | Neon serverless defaults |
+| FK cascade deletes | Selective (6 tables) |
+| Vector columns | 1 (semantic_memory, 1536d HNSW) |
+
+---
+
+---
+
+## 16. Phase 11 Addendum — ChatGPT Feedback Integration
+
+**Received**: 2026-02-17
+**Source**: ChatGPT grounded review of Phase 11 findings
+
+### Corrections Applied
+
+1. **"71 legacy tables" nuance** — Not all legacy tables are fully inert. Some (Walter tables, certain L-Series tables) may still have active writers from lazy-loaded background services. Corrected classification from "no active producers or consumers" to "Deprecated — Removal Required" vs. "Inert — Safe to Drop" distinction. Pre-drop audit must verify zero active writers.
+
+2. **"No transactions" overstatement** — Transactions exist in the codebase but are limited. Corrected from "No transaction patterns observed" to "Limited transaction usage." Critical financial paths should be verified for proper transactional wrapping.
+
+3. **Decimal vs. doublePrecision standardization** — Added recommendation for a type standardization pass. `decimal` for all financial/scoring values, `doublePrecision` reserved for non-financial ML features only.
+
+### Findings Added per ChatGPT Recommendations
+
+4. **Index usage review (Section 14.5)** — ~200+ indexes with no usage audit. Unused indexes waste storage and slow writes. Recommend `pg_stat_user_indexes` audit.
+
+5. **Table partitioning (Section 14.6)** — Append-only tables (telemetry_history, paper_sim_trade_logs, execution_attempt_audit, etc.) need time-based partitioning for retention and performance.
+
+6. **Migration rebaseline (Section 14.7)** — Schema cannot be reconstructed from migration history. Recommend generating a fresh baseline migration from current schema.ts.
+
+7. **Enum proliferation (Section 14.8)** — ~80 enum types, ~40 legacy. Drop order constraint: tables first, then enums.
+
+8. **LATTI residual fields (Section 14.9)** — system_context table contains deprecated LATTI fields that should be identified and removed.
+
+9. **Data retention policy (Section 14.10)** — No retention policy defined for any table. Unsustainable given 10 GB limit. Hot/warm/cold tier model recommended.
+
+10. **Storage layer coupling (Section 13)** — Added critical ordering constraint: modularize storage.ts BEFORE dropping legacy tables. Safe order: modularize → remove methods → drop schema → drop tables.
+
+### ChatGPT's Strategic Cleanup Phases (Endorsed)
+
+ChatGPT recommended a 5-phase database cleanup strategy, which aligns with and extends the existing wave-based deprecation plan:
+
+- **Phase A (Isolation)**: Confirm which legacy tables still have active writers. Tag each as "inert" or "deprecated-with-writers."
+- **Phase B (Modularization)**: Split storage.ts into domain-specific modules. Decouple storage from schema before removals.
+- **Phase C (Schema Simplification)**: Drop legacy tables in wave order (3 → 6 → 10). Remove ~40 legacy enums. Clean dead schema.ts definitions.
+- **Phase D (Migration Rebaseline)**: Generate fresh baseline migration. Archive old migration files. Switch from `drizzle-kit push` to `drizzle-kit generate` + `drizzle-kit migrate`.
+- **Phase E (Index & Retention Hygiene)**: Audit index usage via `pg_stat_user_indexes`. Drop unused indexes. Implement time-based retention policies. Consider partitioning for high-volume append-only tables.
+
+---
+
+*Phase 11 complete (with addendum). This is the final phase of the 11-phase systematic audit.*

@@ -1,58 +1,141 @@
-# Crypto Day Trading Web App
+# DawnTrader — Project Context & Development Governance
 
 ## Overview
-This project is a long-only, spot-trading cryptocurrency day trading web application for the Kraken exchange. It automates sophisticated trading strategies, offers real-time market scanning, and enforces stringent risk management. The application supports both live and paper trading, integrates AI analysis via OpenAI's GPT models, and provides comprehensive trade tracking and performance analytics. The core vision is to develop a resilient, continuously self-optimizing platform with an autonomous learning engine to capitalize on market opportunities through advanced, automated trading capabilities.
+
+DawnTrader is a long-only, spot-trading cryptocurrency day trading web application for the Kraken exchange. It automates sophisticated trading strategies, offers real-time market scanning, and enforces stringent risk management. The application supports both live and paper trading modes.
+
+**Current Phase**: Entering Phase 12 (Cleanup & Foundation). The system has completed an 11-phase systematic repository audit. All changes from this point forward are governed by the Directive Implementation Workflow.
 
 ## User Preferences
+
 Preferred communication style: Simple, everyday language.
 
 ## System Architecture
-The application features a mobile-first frontend built with React, TypeScript, and Vite, communicating with a Node.js/Express backend via RESTful APIs and WebSockets. Data persistence is managed using PostgreSQL with Drizzle ORM. Authentication is secured with username/password, bcrypt, JWT, and WebAuthn.
 
-Core services include `KrakenService`, `TradingEngine`, `StrategyEngine`, `MarketScanner`, `AIAnalyst`, and `AIOpportunitiesService`. Risk management is configurable with guardrail settings. An AI Orchestrator & Command Center, powered by GPT-4o, provides an AI SysAdmin Co-Pilot, Unified Command & Conversation Layer, Semantic Memory, and a Continuous Learning Pipeline, utilizing a Hybrid Cognitive-Operational design with an Intent Gateway, `SecureCoreService`, and an Autonomy Layer with Safety Guardrails.
+- **Frontend**: React + TypeScript + Vite (mobile-first)
+- **Backend**: Node.js + Express (RESTful APIs + WebSockets)
+- **Database**: PostgreSQL via Drizzle ORM (Neon serverless)
+- **Auth**: Username/password, bcrypt, JWT, WebAuthn
+- **External APIs**: Kraken Exchange (trading + WebSocket), OpenAI GPT-4o, Binance (price feed), CoinGecko (fallback price feed)
 
-A global mode-based engine, featuring a `ModeRegistry` and `MetricsCore`, manages live pricing via a `LivePricingAdapter` with dual-source integration and a `KrakenWebSocketAdapter`. A centralized price cache ensures a single source of truth for active trade pricing. The Goals Engine UI offers advanced universe and signal controls, execution rhythm, and daily target goals with validation.
+### Core Trading Pipeline
 
-Architectural enhancements include a Service-Layer Non-Blocking Refactor using an In-Memory Operation Queue, a Unified Engine Health Monitor with auto-recovery, and a Dry-Run Mode for non-mutating trade pipeline validation. An Active Filter Pool with TTL-based expiry and Kraken Canonical Symbol Mapping is implemented. WebSocket Subscription & Tick Flow Diagnostics provide tracing for the WebSocket lifecycle.
+Signal Orchestrator → SQE (FinalScore + RegimeWeight filtering) → Ready-to-Buy Queue → TCL (Trade Criteria Limiter) → TEC (Trade Execution Controller, adaptive sizing + trailing exits) → Order Management
 
-The UI includes an Enhanced Active Trades UI, GlobalMetricsBar, Fee and Slippage Tracking, Full Cost Transparency, and comprehensive Analytics & Diagnostics pages. A Unified Table Schema integrates Market Regime & Friction Visualization into trading tables. A Central Clock Architecture (`CentralClockService`) provides synchronized 1-second ticks for subsystems, and diagnostic signal flow tracing is implemented with a `DiagnosticTraceService`.
+### Key Services
 
-A Passive & Active Learning Data Aggregator captures signal, strategy, and market-level metrics. A Python ML Microservice (Flask) provides real-time predictive modeling for promotion probability and profit prediction, integrated into the Signal Orchestrator. The system incorporates a Tiered Sentinel Architecture with volume-based subscription management, a Mini-Book Integrity Monitor, and dual-channel WebSocket subscriptions. Mark Price Midpoint Valuation is consistently applied. The Virtual Trade Simulator and Per-Strategy Calibration System support Phase 11 Predictive Learning.
+- `KrakenService` — Exchange connectivity and order management
+- `signal-orchestrator.ts` — Signal generation, scoring, FinalScore computation
+- `paper-execution-engine.ts` — Paper mode trade execution
+- `vts-runner.ts` — Virtual Trade Simulator for predictive learning
+- `MLCalibrationService` — Learning calibration pipeline
+- `DynamicStrategySelector` (DSS) — Regime-based strategy deployment
+- `CentralClockService` — Synchronized 1-second ticks for all subsystems
+- `LivePricingAdapter` — Dual-source price integration
+- Price Cache — Single source of truth for active trade pricing
 
-Advanced strategy management includes Strategy Confidence Weighting, Adaptive Strategy Biasing, and Strategy Drift Detection with auto-recalibration. Market Condition Profiling and Adaptive Regime Switching dynamically adjust strategy parameters based on market conditions, leveraging predictive forecasting, a Cross-Regime Reinforcement Learning Engine, and a Multi-Agent Cooperative Optimizer. A Decision Confidence Engine unifies confidence metrics into a Decision Index (DI). Adaptive Profit Realization & Stop-Loss Evolution (APR-SLE) dynamically optimizes trade exit logic. Predictive Drawdown Containment & Equity Curve Smoothing protects capital. A Meta-Optimization Framework provides supervisory control, and the Global Autonomy Stabilization Protocol (GASP) ensures stable dynamic limits for adaptive subsystems.
+### Core Math
 
-Core quantitative metrics include Log-Liquidity (LQ), Directional Integrity (DI), Volatility Noise (VolNoise), and Sigma (σ). Dynamic Trade Management is implemented via an Adaptive Trailing Exit (`trailing-exit-controller.ts`) with a dynamic stop distance formula and a two-stage latching system. An Adaptive Kalman Filter (`adaptive-kalman.ts`) dynamically adjusts smoothing. Covariance Guard and Risk Concentration Control manage portfolio-level correlation and position sizing. Sim-to-Live Parity is ensured by a Configuration Lock (`system-guards.ts`) and a dedicated parity test suite. The system supports both paper and live trading modes.
+- FinalScore (adaptive weights, volatility-adjusted)
+- Net Expectancy Value (NetEV > 0 gate — "Physics First")
+- Directional Integrity (DI)
+- Log-Liquidity (LQ), Volatility Noise (VN), Sigma (σ)
+- HybridScore (ensemble of Quantitative + Pattern signals)
 
-The system enforces a "Physics First" approach (Net Expectancy Value (NetEV) > 0 for trade execution) and an "Extreme Noise Stop." The Dynamic Strategy Selector (DSS) adaptively determines strategy deployment based on market regime and mathematical expectancy. Hybrid Integration (Ensemble Intelligence) merges Quantitative and Pattern signals into Hybrid trades through ensemble scoring. Predictive Calibration (The Training Loop) enables the engine to learn from Virtual Trade Simulator (VTS) outcomes via the `MLCalibrationService`, analyzing Hybrid trades to generate adjustment recommendations for strategy parameters.
+---
 
-Multi-Timeframe Expansion (Fractal Vision) enables cascading timeframe analysis (1H→15m→5m) with Kraken API rate-limit protection. Adaptive Scanning Intelligence (Dual-Pool Scheduler) replaces static pair selection with learning-driven pair selection, using telemetry for optimal pair selection and cooldown management.
+## ⚠️ DEVELOPMENT GOVERNANCE — MANDATORY RULES
 
-VTS Modernization and Regime-Driven Simulation replaces legacy scoring pipelines with Phase-10 canonical metrics, calculating per-pair market regimes dynamically using a 5-class model. The VTS auto-starts during passive learning, runs 60-second simulation cycles with 100 pairs from the Ideal Pool, and generates virtual trades for Telemetry and Predictive Learning.
+**ALL code changes to DawnTrader are governed by the Directive Implementation Workflow.** The full process is documented in `1-system-manual/WORKFLOW.md`. The rules below are non-negotiable.
 
-Strategy & Regime Harmonization unifies VTS and Signal Orchestrator onto a single canonical dictionary, defining canonical snake_case strategy names and normalizing patterns and regimes. A `canonical-regime-strategy-map.ts` serves as the single source of truth for all regime/strategy/signal type/pattern mappings, enforced by validation middleware and `regime_mapping_integrity.test.ts`.
+### The Three Rules
 
-VN Metric Normalization & Cross-Mode Parity ensures consistent Volatility Noise (VN) formulas and centralizes thresholds in `system-guards.ts`. Regime Transition Governance & Strategy Influence Control introduces a deterministic governance layer protecting the system during regime transitions, with a Regime Stability Model, Strategy Governance Profiles, and Learning Cooldown Enforcement. This governance acts as a hard exclusion filter applied before scoring. Strategy Mode Modulation introduces deterministic, observable strategy behavior modulation based on global regime stability (NORMAL, DEFENSIVE, SURVIVAL modes) with overlay parameters. Strategy-Regime Realignment Validation includes realigning specific strategies, robust DriftScore computation, and a mapping drift analytics UI. Predictive Diagnostics, Learning Observability, and Learning Explainability features provide detailed insights into the system's learning and decision-making processes, including decision tracebacks and stability metrics.
+1. **No improvisation.** Implement exactly what the directive specifies. If the directive doesn't mention it, don't do it. If you think something additional should be done, STOP and tell Kyle.
+2. **No stale files.** Always work from the latest code (Kyle manages repository sync).
+3. **No undocumented changes.** Every change flows through: Directive → Implementation → Review → Completion Report → System Manual update.
 
-The trade lifecycle flows from `Signal Orchestrator` to `SQE` (FinalScore + RegimeWeight filtering), then to a `Ready-to-Buy Queue`. Signals are promoted by `TCL` (Trade Criteria Limiter), managed by `TEC` (Trade Execution Controller) for adaptive sizing and trailing exits, and finally proceed to `Order Management`.
+### Role Definition
+
+| Actor | Role |
+|-------|------|
+| **Claude Code** | Writes directives, reviews implementations, updates System Manual. Read-only. |
+| **Replit (You)** | Implements directives. Writes code. Provides validation evidence. Pushes to GitHub. |
+| **Kyle** | Approves directives, manages sync, resolves ambiguities. |
+
+**You are the implementer.** You do not decide what to build. You do not make architectural decisions. You execute directives precisely and provide evidence.
+
+### Directive Protocol
+
+When you receive a directive:
+
+1. **Read the entire directive** before writing any code
+2. **Follow implementation steps in order** — do not skip, do not reorder
+3. **Implement exactly what is specified** — exact file paths, line numbers, code blocks
+4. **If anything is unclear, STOP and ask Kyle** — do not guess
+5. **Provide ALL validation evidence** listed in the directive's checklist — "done" is not evidence, paste actual output
+6. **Do not touch files marked as OUT OF SCOPE**
+7. **Push to GitHub when complete**
+
+### Prohibited Actions
+
+- ❌ Modify any file in `1-system-manual/` (maintained by Claude Code only)
+- ❌ Add features not specified in the directive
+- ❌ Refactor code adjacent to your changes
+- ❌ Rename variables or restructure files unless directed
+- ❌ Start a new directive before the current one is fully APPROVED
+- ❌ Make changes without a directive ("I noticed this could be improved" = NO)
+
+### Required Actions
+
+- ✅ Read the full directive before starting
+- ✅ Ask Kyle if anything is unclear
+- ✅ Provide evidence for every validation item (compiler output, test results, screenshots)
+- ✅ Stay within the directive's specified scope
+- ✅ Push to GitHub when implementation is complete
+- ✅ After APPROVED status, update this file's Recent Changes with a one-line summary
+
+### Review Cycle
+
+After you push, Claude Code reviews your implementation and produces:
+- **APPROVED** — Done. Completion report written.
+- **APPROVED WITH CORRECTIONS** — Fix specific items. Correction steps provided.
+- **REJECTED** — Significant deviations. Re-implementation required.
+
+### Reference Documents
+
+All governance documents are in `1-system-manual/`:
+
+| Document | What It Contains |
+|----------|-----------------|
+| `WORKFLOW.md` | The 7-step directive lifecycle, templates, key principles |
+| `SYSTEM_IMPACT_MAP.md` | 30+ component dependency map, "If I change X, check Y" table |
+| `SYSTEM_MANUAL.md` | Complete system architecture reference (~10,000 lines) |
+| `CHANGES_AND_FIXES.md` | 22 bugs + 85 architectural risks with severity and locations |
+| `LEGACY_DEPRECATION_PLAN.md` | 10 removal waves, ~96 legacy files, ~71 legacy tables |
+| `POST_AUDIT_ROADMAP.md` | Phases 12-22 implementation plan (~43 weeks) |
+| `directives/DIRECTIVE_INDEX.md` | Master tracker for all directive status |
+
+**Before implementing any directive**, Claude Code has already consulted the System Impact Map and included the full impact analysis in the directive document. You do not need to do your own impact analysis — but you should read the impact section to understand what's at stake.
+
+---
 
 ## Recent Changes
-- **2026-02-09**: Directive 11.8C VTS Multi-Strategy Regime-Scoped Simulation — VTS now generates N trades per pair (one per regime-compatible strategy) instead of selecting one "best" strategy; uses getStrategiesForRegime() from canonical map; duplicate guard upgraded to per-symbol+strategy; trade ID includes strategy name; executionContext: VTS_MULTI field added to OpenVirtualTrade, Phase10TradeRecord; MAX_OPEN_TRADES increased 300→500; DSS/Paper/Live paths untouched; data-generation enhancement only
-- **2026-02-06**: Directive 11.8B-D1 Complete Filter Authority Cleanup — updateScreeners() deleted; NLAI screener liquidity action deleted; /api/screeners GET+PUT return 410 Gone; Walter AI filters case returns error; managedByLottie/manualOverrideEnabled removed from FilterParamV2 interface and updateFiltersV2Schema; filterOverrides per-filter override system removed from GET/PUT handlers; toFiltersV2() cleaned; filters-with-override.tsx FilterV2 interface cleaned; permissions.ts and execution-policy-controller.ts screener refs removed; DB columns preserved FROZEN; canonical docs updated
-- **2026-02-04**: Directive 11.8B-C2 Purpose Tab & Strategy Preset Decommission completed - deleted walter-purpose-tab.tsx and strategy-presets.ts; removed /api/strategies/presets routes; removed preset selector UI from strategies-tab; Purpose tab removed from Guardrails & Filters page; tab count reduced to 5
-- **2026-02-04**: Directive 11.8B-C Goals ML & Preset System Decommission completed - deleted tuning-tab.tsx, presets-grid.tsx, adaptive-risk-advisor.tsx, dhma-tuning-service.ts, cognitive-tuning-job.ts; deprecated goals-presets and goals-learning routes; LPCP hidden from UI (backend preserved); Phase 11 Predictive Learning is now the single authority for parameter adjustment
-- **2026-02-04**: Directive 11.8B-B1 Authority Surface Cleanup completed - removed all LATTi authority toggles/badges from UI control surfaces (core guardrails, filters, LPCP); UI now shows "Manual Control" / "Configured" badges; unused imports cleaned; schema defaults updated (managedByLottie=false, manualOverrideEnabled=true); database fields remain FROZEN for future cleanup
-- **2026-02-03**: Directive 11.8B-B LATTi Decommission & Authority Cleanup completed - removed parallel adaptive systems (LATTi/Heuristic Trader backend services, UI components, routes); Phase 11 Predictive Learning is now the single authority for parameter adjustment; database fields (tunedByLatti, managedByLottie) preserved/FROZEN per directive
-- **2026-02-03**: Directive 11.8B-A2 VTS Net Expectancy Alignment completed - VTS now uses canonical `computeNetExpectancyKernel()` for profitability decisions (netEV > 0 gate), eliminating unique EV math
-- **2026-02-03**: Directive 11.8B-A Net Expectancy Authority Unification completed - single `computeNetExpectancyKernel()` function in `server/core/calculations/net-expectancy-kernel.ts` is now the sole authority for all Net EV math (pure synchronous function, no I/O or side effects)
-- **2026-02-02**: Phase 11.8B ARA & Goals Preset Audit completed (`docs/audits/Phase_11.8B_ARA_Goals_Preset_Audit.md`)
-- **2026-02-02**: Phase 11.8A Predictive & Learning Authority Audit completed (`docs/audits/Phase_11.8A_Predictive_Learning_Authority_Audit.md`)
-- **2026-02-02**: Learning calibration pipeline enabled and verified (ML calibration scheduler, canonical weights generation, regime archival)
-- **2026-02-02**: Fixed checksum verification bug in regime archiver (recompute checksum after metadata update)
+
+- **2026-02-19**: Development governance system established. Directive Implementation Workflow, System Impact Map, and Directive Index created. Phase 12 directives pre-loaded (18 PENDING). All changes from this point forward governed by directive lifecycle.
+- **2026-02-09**: Directive 11.8C VTS Multi-Strategy Regime-Scoped Simulation — VTS now generates N trades per pair (one per regime-compatible strategy) instead of selecting one "best" strategy; uses getStrategiesForRegime() from canonical map; duplicate guard upgraded to per-symbol+strategy; trade ID includes strategy name; executionContext: VTS_MULTI field added to OpenVirtualTrade, Phase10TradeRecord; MAX_OPEN_TRADES increased 300→500; DSS/Paper/Live paths untouched; data-g ...[Truncated]
+- **2026-02-06**: Directive 11.8B-D1 Complete Filter Authority Cleanup — updateScreeners() deleted; NLAI screener liquidity action deleted; /api/screeners GET+PUT return 410 Gone; Walter AI filters case returns error; managedByLottie/manualOverrideEnabled removed from FilterParamV2 interface and updateFiltersV2Schema; filterOverrides per-filter override system removed from GET/PUT handlers; toFiltersV2() cleaned; filters-with-override.tsx FilterV2 interface cleaned; permissions. ...[Truncated]
+- **2026-02-04**: Directive 11.8B-C2 Purpose Tab & Strategy Preset Decommission completed
+- **2026-02-04**: Directive 11.8B-C Goals ML & Preset System Decommission completed
+- **2026-02-04**: Directive 11.8B-B1 Authority Surface Cleanup completed
+- **2026-02-03**: Directive 11.8B-B LATTi Decommission & Authority Cleanup completed
+- **2026-02-03**: Directive 11.8B-A2 VTS Net Expectancy Alignment completed
+- **2026-02-03**: Directive 11.8B-A Net Expectancy Authority Unification completed
 
 ## External Dependencies
--   **Kraken Exchange API**: Market data, trade execution, account management.
--   **Kraken WebSocket API**: Real-time ticker feed.
--   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities.
--   **Neon Database**: Serverless PostgreSQL database.
--   **Binance Public API**: Primary external market price feed.
--   **CoinGecko API**: Fallback external market price feed.
+
+- **Kraken Exchange API**: Market data, trade execution, account management
+- **Kraken WebSocket API**: Real-time ticker feed
+- **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance
+- **Neon Database**: Serverless PostgreSQL
+- **Binance Public API**: Primary external market price feed
+- **CoinGecko API**: Fallback external market price feed
