@@ -53,7 +53,7 @@ import { computeNetExpectancyKernel } from '../core/calculations/net-expectancy-
 // import { captureSignalForVTS } from './vts-runner.js';
 // Directive 9.3: Adaptive Kalman Filter integration
 import { getSmoothedPrice, getKalmanFilter } from '../utils/adaptive-kalman.js';
-import { calculateEfficiencyRatio, calculateVolNoise, calculateTrendSlope } from '../utils/analysis-utils.js';
+import { calculateEfficiencyRatio, calculateVolNoise, calculateTrendSlope, calculateDirectionalIntegrity } from '../utils/analysis-utils.js';
 // Directive 10.1: Dynamic Strategy Selector
 import { getDynamicStrategySelector, type DSSMetrics } from './dynamic-strategy-selector.js';
 import { SYSTEM_GUARDS } from '../config/system-guards.js';
@@ -1122,10 +1122,9 @@ export class SignalOrchestrator {
           const frictionPct = SYSTEM_GUARDS.BASE_FEE_SLIPPAGE / 100;
           const frictionPerUnit = 2 * frictionPct * entry;
           
-          // Note: confidence may be 0-1 (NGC) or 0-100 (raw) - normalize to 0-1 first
-          const rawConf = signal.confidence || 0;
-          const normalizedConf = rawConf > 1 ? rawConf / 100 : rawConf;
-          const DI = normalizedConf * 100; // Convert to DI scale (0-100) for kernel
+          // Directive 12.1.1: Use geometric DI from price data (BUG-004 fix)
+          // closePrices is already in scope (line 780: ohlcData.map(c => parseFloat(c.close)))
+          const DI = calculateDirectionalIntegrity(closePrices);
           
           // Kernel computes per-unit EV (absolute price deltas)
           const kernelResult = computeNetExpectancyKernel({
