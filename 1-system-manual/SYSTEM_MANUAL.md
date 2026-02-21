@@ -118,7 +118,7 @@ Legacy systems are not isolated files — they form interconnected clusters that
 
 ### Cluster 1: NGC / CWQI / Rolling Normalization
 - **Core files**: `quality_index.ts`, rolling normalization infrastructure
-- **Contamination**: NGC flows as confidence carrier → DI → kernel. Affects entire signal pipeline.
+- **Contamination**: NGC flows as confidence carrier → ~~DI~~ → kernel. ~~DI path~~ **RESOLVED** by Directive 12.1.1 (BUG-004). NGC still contaminates confidence/FinalScore pipeline.
 - **Removal**: Phase 12.3.3 (Pipeline Unification — replace with interim deterministic confidence)
 - **Risk level**: HIGH — must be replaced, not just removed
 
@@ -795,7 +795,7 @@ The singleton `signalQualityEvaluator` tracks:
 
 NGC is a legacy metric that was not fully removed when it should have been. Anywhere NGC appears in the codebase is incorrect — it is not a calculation DawnTrader should be using anymore. Despite this, the file remains deeply wired into the active pipeline:
 1. **Computes NGC** which incorrectly flows as the `confidence` carrier in signal-orchestrator.ts (line 497: `confidence = extendedMetrics.ngc`) — this legacy value directly enters FinalScore where it should not
-2. **NGC-derived DI feeds the kernel** — signal-orchestrator.ts line 1128 converts NGC to DI (`DI = normalizedConf * 100`) before calling `computeNetExpectancyKernel()`. This means a legacy blended metric directly influences Pwin and therefore NetEV. **See BUG-004 in CHANGES_AND_FIXES.md.**
+2. ~~**NGC-derived DI feeds the kernel**~~ — **RESOLVED by Directive 12.1.1 (BUG-004).** DI is now computed from geometric price data via `calculateDirectionalIntegrity(closePrices)` (commit `ea6551af`). NGC no longer influences Pwin/NetEV through the DI path.
 3. **Provides `calculateExtendedSignalMetrics()`** called during signal generation — this function should be replaced with MCE-provided metrics
 4. **Contains rolling normalization** infrastructure that introduces stateful temporal drift (also legacy — see Rolling Normalization section below)
 5. **Adaptive relevance** links to VTS learning parameters in real-time — unnecessary coupling from legacy architecture
@@ -1095,16 +1095,19 @@ secondary-metrics.ts ──── Macro-state threshold adjustments
 
 **All findings below have been independently verified against source code.**
 
-#### FINDING-P1-01: DI Probability Divergence (CRITICAL)
+#### FINDING-P1-01: DI Probability Divergence (CRITICAL) — **RESOLVED**
 
-**signal-orchestrator.ts line 1128**: `const DI = normalizedConf * 100`
+> **Resolved by**: Directive 12.1.1 (Batch 1), commit `ea6551af`, 2026-02-22
+> **Fix**: `signal-orchestrator.ts` line ~1127 now uses `calculateDirectionalIntegrity(closePrices)` instead of `normalizedConf * 100`
 
-The DSS kernel call site converts NGC (blended confidence) into DI before passing it to `computeNetExpectancyKernel()`. But the kernel was designed to compute `Pwin = 0.40 + DI/200` where DI is Directional Integrity (geometric price path consistency, 0-100).
+~~**signal-orchestrator.ts line 1128**: `const DI = normalizedConf * 100`~~
+
+The DSS kernel call site previously converted NGC (blended confidence) into DI before passing it to `computeNetExpectancyKernel()`. The kernel computes `Pwin = 0.40 + DI/200` where DI is Directional Integrity (geometric price path consistency, 0-100).
 
 - **Expectancy gate** (expectancy.ts line 509): Uses `calculateDirectionalIntegrity(prices)` — correct geometric DI
-- **DSS kernel call** (signal-orchestrator.ts line 1128): Uses NGC × 100 — incorrect, means Pwin is driven by blended confidence, not price geometry
+- **DSS kernel call** (signal-orchestrator.ts line ~1127): ~~Uses NGC × 100~~ **Now uses `calculateDirectionalIntegrity(closePrices)`** — correct geometric DI, consistent with expectancy gate
 
-These are fundamentally different probability inputs feeding the same kernel. **Logged as BUG-004.**
+Both paths now use the same geometric DI source. **BUG-004 RESOLVED.**
 
 #### FINDING-P1-02: Dual Friction Models in Same File (One Is Incorrect)
 
@@ -1119,7 +1122,7 @@ In signal-orchestrator.ts, two different friction calculations coexist:
 NGC is a legacy metric that should have been removed but was not. Anywhere NGC appears in the codebase is incorrect — it is not a calculation DawnTrader should be using anymore. Despite this, NGC remains deeply wired into the active pipeline:
 - Computes NGC which incorrectly flows as the `confidence` carrier through the entire pipeline
 - NGC directly feeds FinalScore via `hybridScore ?? confidence` fallback — meaning FinalScore is contaminated by a legacy metric
-- NGC-derived DI feeds the kernel (FINDING-P1-01) — meaning Pwin/NetEV are contaminated by a legacy metric
+- ~~NGC-derived DI feeds the kernel (FINDING-P1-01)~~ **RESOLVED** — DI now uses geometric price data (Directive 12.1.1). Pwin/NetEV no longer contaminated through DI path.
 - Includes stateful rolling normalization that also becomes legacy infrastructure
 - Links to VTS learning parameters via adaptive relevance — unnecessary coupling
 

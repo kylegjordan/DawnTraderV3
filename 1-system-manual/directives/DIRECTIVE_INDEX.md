@@ -12,7 +12,7 @@
 
 | Directive | Title | Status | Date Issued | Date Complete | Review Cycles | Notes |
 |-----------|-------|--------|-------------|---------------|---------------|-------|
-| 12.1.1 | Fix DI Probability Divergence (BUG-004) | PENDING | — | — | — | PRE-MCE CRITICAL |
+| 12.1.1 | Fix DI Probability Divergence (BUG-004) | COMPLETE | 2026-02-22 | 2026-02-22 | 1 | Batch 1 — geometric DI from closePrices |
 | 12.1.2 | Fix Dual Friction Models (RISK-009) | PENDING | — | — | — | PRE-MCE |
 | 12.1.3 | Security Hardening — JWT Fallback Removal | PENDING | — | — | — | 9 files |
 | 12.1.4 | Remove Simulated Price Display (BUG-020) | PENDING | — | — | — | — |
@@ -47,11 +47,11 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Directives Issued | 0 |
-| Total Directives Complete | 0 |
+| Total Directives Issued | 1 |
+| Total Directives Complete | 1 |
 | Total Directives In Progress | 0 |
-| Total Review Cycles | 0 |
-| Average Review Cycles per Directive | — |
+| Total Review Cycles | 1 |
+| Average Review Cycles per Directive | 1.0 |
 
 ---
 

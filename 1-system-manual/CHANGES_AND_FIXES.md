@@ -60,18 +60,14 @@
 - **Fix**: Replace with canonical map lookup
 - **Phase Found**: Pre-audit (v1.0)
 
-### BUG-004: DI Probability Divergence — NGC Masquerading as Directional Integrity
+### BUG-004: DI Probability Divergence — NGC Masquerading as Directional Integrity — **RESOLVED**
 - **Severity**: CRITICAL
-- **Location**: `signal-orchestrator.ts` line 1128
-- **Code**: `const DI = normalizedConf * 100;`
-- **Problem**: The DSS kernel call converts NGC (blended confidence score) into a fake DI value. The kernel uses DI to compute `Pwin = 0.40 + DI/200`. This means Pwin is driven by blended confidence, NOT by price path geometry as designed.
-- **Contrast**: `expectancy.ts` line 509 correctly uses `calculateDirectionalIntegrity(tradeMeta.prices)` — geometric DI from actual price data
-- **Impact**: The kernel computes a different Pwin (and therefore different NetEV) in the DSS path vs the Expectancy Gate path for the same trade. The DSS path's Pwin has no mathematical relationship to actual price movement consistency.
+- **Location**: `signal-orchestrator.ts` line 1127 (was line 1128)
+- **Code**: `const DI = calculateDirectionalIntegrity(closePrices);`
+- **Status**: **RESOLVED** — Directive 12.1.1, Batch 1, commit `ea6551af` (2026-02-22)
+- **Resolution**: Replaced `DI = normalizedConf * 100` with `calculateDirectionalIntegrity(closePrices)` — geometric DI from OHLC close prices already in scope. DSS path and Expectancy Gate path now use the same DI source.
+- **Original Problem**: The DSS kernel call converted NGC (blended confidence score) into a fake DI value. The kernel uses DI to compute `Pwin = 0.40 + DI/200`. Pwin was driven by blended confidence, NOT by price path geometry as designed.
 - **Verified**: Yes — code-confirmed 2026-02-15, corroborated by ChatGPT grounded review
-- **Timing**: **Pre-MCE recommended** — this is a direct math error that can be fixed independently
-- **Fix**: Replace `DI = normalizedConf * 100` with either:
-  - (a) `DI = calculateDirectionalIntegrity(prices)` using the same price data already available in the orchestrator, or
-  - (b) Pass DI from a centralized computation (MCE) when available
 - **Phase Found**: Phase 1 (ChatGPT review)
 
 ### BUG-005: cost-model.ts getCostMetricsCache() Returns Empty Map
@@ -194,12 +190,12 @@
 - **Timing**: During MCE — this is a core architectural change
 - **Phase Found**: Phase 1 (Kyle-confirmed 2026-02-15)
 
-### UNIFY-003: DI Source Consolidation
-- **Current State**: Two DI sources feeding the same kernel:
+### UNIFY-003: DI Source Consolidation — **RESOLVED**
+- **Status**: **RESOLVED** — Directive 12.1.1, Batch 1 (2026-02-22)
+- **Resolution**: NGC-derived DI path eliminated. Signal orchestrator now uses `calculateDirectionalIntegrity(closePrices)` — the same geometric function used by the Expectancy Gate. All DI inputs to the kernel now come from geometric calculation.
+- **Original State**: Two DI sources feeding the same kernel:
   - Geometric DI: `calculateDirectionalIntegrity(prices)` — correct, from price data
   - NGC-derived DI: `normalizedConf * 100` — incorrect repurposing of confidence as DI
-- **Recommendation**: ALL DI inputs to the kernel must come from geometric calculation. Period.
-- **Timing**: Pre-MCE (BUG-004 fix) or during MCE at latest
 - **Phase Found**: Phase 1
 
 ---

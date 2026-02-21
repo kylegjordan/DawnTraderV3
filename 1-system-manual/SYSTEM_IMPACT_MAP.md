@@ -47,10 +47,10 @@
 - **What**: EV gate. Computes Net Expected Value using Pwin, reward/risk ratio, and friction. Trades with negative NetEV are blocked.
 - **Upstream**: DI (Directional Integrity), cost-model friction, reward/risk estimates
 - **Downstream**: Paper Execution Engine (EV gate), VTS Runner (mirrors gate)
-- **Shared State**: DI calculation (BUG-004 contamination point)
+- **Shared State**: DI calculation (~~BUG-004~~ **RESOLVED** — Directive 12.1.1)
 - **Execution**: Synchronous — computed per signal
 - **Blast Radius**: **CRITICAL** — blocks or allows every trade
-- **Contamination**: DI currently derived from NGC instead of price geometry (BUG-004)
+- **Contamination**: ~~DI derived from NGC (BUG-004)~~ **RESOLVED** — DI now sourced from geometric price data via `calculateDirectionalIntegrity(closePrices)`
 - **Tests**: `expectancy-kernel.test.ts`, `net-ev-validation.test.ts`
 
 ### 1.3 Cost Model
@@ -65,13 +65,13 @@
 - **Tests**: `cost-model.test.ts`
 
 ### 1.4 DI Calculation (Directional Integrity)
-- **File**: `server/core/signal-orchestrator.ts` (line ~1128)
-- **What**: Should compute Pwin from price geometry. Currently: `DI = normalizedConf * 100` (derives from NGC — BUG-004).
-- **Upstream**: NGC/quality_index.ts (current, contaminated), should be: price data
+- **File**: `server/services/signal-orchestrator.ts` (line ~1127)
+- **What**: Computes DI from price geometry. `DI = calculateDirectionalIntegrity(closePrices)` — geometric ratio of net price movement to total path length (0-100).
+- **Upstream**: OHLC close prices (via `ohlcData.map(c => parseFloat(c.close))`)
 - **Downstream**: Net Expectancy Kernel (Pwin), Paper Execution Engine, VTS Runner
 - **Blast Radius**: **CRITICAL** — DI feeds into every EV calculation
-- **Contamination**: THIS IS THE CONTAMINATION POINT (BUG-004)
-- **Tests**: Tests that validate DI behavior need updating when fixed
+- **Contamination**: ~~BUG-004~~ **RESOLVED** — Directive 12.1.1 (2026-02-22). NGC-derived DI eliminated.
+- **Tests**: `analysis-utils.test.ts` validates `calculateDirectionalIntegrity()` function
 
 ---
 
@@ -182,14 +182,14 @@
 ## Layer 4: Signal Generation & Qualification
 
 ### 4.1 Signal Orchestrator
-- **File**: `server/core/signal-orchestrator.ts`
+- **File**: `server/services/signal-orchestrator.ts`
 - **What**: Primary signal generation engine. Pulls pairs from Active Filter Pool, generates signals using regime-compatible strategies, applies exposure/correlation/cooldown checks, computes FinalScore and EV gate.
-- **Upstream**: Active Filter Pool (pairs), Market Regime (regime classification), Cost Model (friction), NGC/quality_index (confidence — contaminated), SYSTEM_GUARDS config
+- **Upstream**: Active Filter Pool (pairs), Market Regime (regime classification), Cost Model (friction), NGC/quality_index (confidence — contaminated), SYSTEM_GUARDS config, OHLC close prices (for DI)
 - **Downstream**: SQE (scored signals), RTB Queue (qualified signals), VTS Runner (mirrors scoring logic), Telemetry (signal metadata)
-- **Shared State**: SYSTEM_GUARDS config, DI calculation (BUG-004), NGC confidence (contamination)
+- **Shared State**: SYSTEM_GUARDS config, DI calculation (~~BUG-004~~ **RESOLVED**), NGC confidence (contamination)
 - **Execution**: **Event-driven** — triggered when pairs enter Active Filter Pool
 - **Blast Radius**: **CRITICAL** — every signal in the system flows through here
-- **Contamination**: NGC→DI (BUG-004), dual friction (RISK-009), legacy DSS routing (BUG-006)
+- **Contamination**: ~~NGC→DI (BUG-004)~~ **RESOLVED**, dual friction (RISK-009), legacy DSS routing (BUG-006)
 - **Tests**: `signal-scoring.test.ts`, `runtime_signal_consistency.test.ts`, `finalScore-kernel.test.ts`
 
 ### 4.2 Signal Quality Evaluator (SQE)
@@ -488,7 +488,7 @@
 
 ### 11.2 NGC / Rolling Normalization — CONTAMINATION SOURCE
 - **File**: `server/services/quality_index.ts`
-- **What**: NGC flows as confidence carrier throughout pipeline. DI derived from NGC (BUG-004).
+- **What**: NGC flows as confidence carrier throughout pipeline. ~~DI derived from NGC (BUG-004)~~ **RESOLVED** — DI now uses geometric price data.
 - **Blast Radius**: **CRITICAL** (contamination spreads to every signal)
 - **Removal**: Phase 12.3.3
 
