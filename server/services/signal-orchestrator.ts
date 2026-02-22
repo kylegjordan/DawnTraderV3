@@ -1117,10 +1117,11 @@ export class SignalOrchestrator {
           const stop = signal.stopPrice || 0;
           const positionSize = signal.quantity || 1;
           
-          // Directive 11.8B-A: Use canonical Net EV kernel for all calculations
-          // Friction formula: 2 × BASE_FEE_SLIPPAGE% × entry (round-trip cost per unit)
-          const frictionPct = SYSTEM_GUARDS.BASE_FEE_SLIPPAGE / 100;
-          const frictionPerUnit = 2 * frictionPct * entry;
+          // Directive 12.1.2: Use canonical cost model — real per-pair fee/slippage/spread
+          // getCachedCostMetrics always returns valid defaults on cache miss (exchange-defaults.ts)
+          const dssLoopCostMetrics = getCachedCostMetrics(symbol);
+          const dssLoopFrictionPct = computeTotalRoundTripCost(dssLoopCostMetrics.fee, dssLoopCostMetrics.slippage, dssLoopCostMetrics.spread);
+          const frictionPerUnit = dssLoopFrictionPct * entry;
           
           // Directive 12.1.1: Use geometric DI from price data (BUG-004 fix)
           // closePrices is already in scope (line 780: ohlcData.map(c => parseFloat(c.close)))
@@ -1162,8 +1163,10 @@ export class SignalOrchestrator {
             const signal = filteredSignals[0];
             const entry = signal.entryPrice || 0;
             const posSize = signal.quantity || 1;
-            const frictionPct = SYSTEM_GUARDS.BASE_FEE_SLIPPAGE / 100;
-            const totalFriction = 2 * frictionPct * entry * posSize;
+            // Directive 12.1.2: Use canonical cost model for snapshot friction
+            const snapshotCostMetrics = getCachedCostMetrics(symbol);
+            const snapshotFrictionPct = computeTotalRoundTripCost(snapshotCostMetrics.fee, snapshotCostMetrics.slippage, snapshotCostMetrics.spread);
+            const totalFriction = snapshotFrictionPct * entry * posSize;
             
             dataAggregator.capture('DSS_TRADE_SNAPSHOT', {
               symbol,

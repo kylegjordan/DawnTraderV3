@@ -33,7 +33,9 @@
  */
 
 import { getRegimePerformance, checkConfidenceDrift } from '../logging/vts-telemetry';
-import { calculateDirectionalIntegrity, calculateVolNoise, calculateFriction } from '../../utils/analysis-utils.js';
+import { calculateDirectionalIntegrity, calculateVolNoise } from '../../utils/analysis-utils.js';
+// Directive 12.1.2: Import canonical cost model (replaces calculateFriction flat-rate helper)
+import { getCachedCostMetrics, computeTotalRoundTripCost } from '../math/cost-model.js';
 import { covarianceEngine } from '../../utils/covariance-engine.js';
 import { SYSTEM_GUARDS } from '../../config/system-guards.js';
 import { 
@@ -516,8 +518,11 @@ export function evaluateTradeExpectancy(symbol: string, tradeMeta: TradeMeta): T
   DI = DI ?? 50;
   VolNoise = VolNoise ?? 0.3;
   
-  // Directive 11.8B-A: Use canonical friction from calculateFriction helper
-  const friction = calculateFriction(tradeMeta.entryPrice, tradeMeta.targetPrice, 1);
+  // Directive 12.1.2: Use canonical cost model — real per-pair fee/slippage/spread
+  // getCachedCostMetrics always returns valid defaults on cache miss (exchange-defaults.ts)
+  const costMetrics = getCachedCostMetrics(symbol);
+  const frictionPct = computeTotalRoundTripCost(costMetrics.fee, costMetrics.slippage, costMetrics.spread);
+  const friction = frictionPct * tradeMeta.entryPrice;
   
   const kernelResult = computeNetExpectancyKernel({
     entryPrice: tradeMeta.entryPrice,

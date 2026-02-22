@@ -325,26 +325,18 @@ export function isTargetLockTriggered(
 }
 
 // ==========================================
-// Directive 9.9.A — Friction Standardization
-// Canonical friction calculation using SYSTEM_GUARDS.BASE_FEE_SLIPPAGE
+// Directive 9.9.A — Friction Standardization (DEPRECATED by Directive 12.1.2)
+// These functions used a flat-rate SYSTEM_GUARDS.BASE_FEE_SLIPPAGE model.
+// The canonical friction model is now computeTotalRoundTripCost() from cost-model.ts
+// which uses real per-pair fee/slippage/spread: (fee × 2) + (slippage × 2) + spread
 // ==========================================
 
 /**
- * Directive 9.9.A: Calculate Total Trade Friction (Fees + Slippage)
- * 
- * Friction represents the total cost of executing a round-trip trade:
- * - Entry side: fees + slippage to buy
- * - Exit side: fees + slippage to sell
- * 
- * Formula: Friction = (entry + exit) × qty × BASE_FEE_SLIPPAGE
- * 
- * Uses SYSTEM_GUARDS.BASE_FEE_SLIPPAGE as the authoritative cost rate.
- * This helper ensures all CWQI computations use identical friction logic.
- * 
- * @param entry - Entry price
- * @param exit - Exit price (target or stop)
- * @param qty - Position quantity (default: 1 for per-unit calculation)
- * @returns Total friction cost in USD
+ * @deprecated Directive 12.1.2: Use getCachedCostMetrics() + computeTotalRoundTripCost()
+ * from server/core/math/cost-model.ts instead. This flat-rate model (BASE_FEE_SLIPPAGE)
+ * is incorrect — it ignores actual per-pair fee, slippage, and spread data.
+ *
+ * Retained for backward compatibility only. Zero runtime callers as of Directive 12.1.2.
  */
 export function calculateFriction(
   entry: number,
@@ -357,20 +349,16 @@ export function calculateFriction(
 }
 
 /**
- * Directive 9.9.A: Calculate Per-Unit Friction
- * Simplified helper for single-unit calculations (qty=1)
- * 
- * @param entry - Entry price
- * @param exit - Exit price
- * @returns Per-unit friction cost
+ * @deprecated Directive 12.1.2: Use getCachedCostMetrics() + computeTotalRoundTripCost()
+ * from server/core/math/cost-model.ts instead.
  */
 export function calculatePerUnitFriction(entry: number, exit: number): number {
   return calculateFriction(entry, exit, 1);
 }
 
 /**
- * Directive 9.9.A: Get current friction rate from SYSTEM_GUARDS
- * @returns Friction rate as decimal (e.g., 0.005 = 0.5%)
+ * @deprecated Directive 12.1.2: Use getCachedCostMetrics() + computeTotalRoundTripCost()
+ * from server/core/math/cost-model.ts instead.
  */
 export function getFrictionRate(): number {
   return SYSTEM_GUARDS.BASE_FEE_SLIPPAGE;
