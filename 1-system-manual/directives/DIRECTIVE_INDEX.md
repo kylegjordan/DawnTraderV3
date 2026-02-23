@@ -14,9 +14,9 @@
 |-----------|-------|--------|-------------|---------------|---------------|-------|
 | 12.1.1 | Fix DI Probability Divergence (BUG-004) | COMPLETE | 2026-02-22 | 2026-02-22 | 1 | Batch 1 — geometric DI from closePrices |
 | 12.1.2 | Fix Dual Friction Models (RISK-009) | COMPLETE | 2026-02-22 | 2026-02-22 | 1 | Batch 2 — canonical cost model replaces BASE_FEE_SLIPPAGE |
-| 12.1.3 | Security Hardening — JWT Fallback Removal | PENDING | — | — | — | 9 files |
-| 12.1.4 | Remove Simulated Price Display (BUG-020) | PENDING | — | — | — | — |
-| 12.1.5 | RiskManager Class Cleanup (RISK-084) | PENDING | — | — | — | 12 import locations |
+| 12.1.3 | Security Hardening — JWT Fallback + Auth Bypass Removal | COMPLETE | 2026-02-23 | 2026-02-23 | 1 | Batch 3 — JWT fallbacks removed from 12 files, bypass headers removed from 4 files |
+| 12.1.4 | Remove Simulated Price Display (BUG-020) | COMPLETE | 2026-02-23 | 2026-02-23 | 1 | Batch 3 — fake entryPrice*1.02 removed from active-trades.tsx |
+| 12.1.5 | RiskManager Comment/Stub Cleanup | COMPLETE | 2026-02-23 | 2026-02-23 | 1 | Batch 3 — orphaned [9.0-FP] and [9.6.3] comments cleaned from 5 files |
 | 12.1.6 | LSP Error Triage (RISK-085) | PENDING | — | — | — | ~620 errors |
 
 ### 12.2 Dead Code Purge
@@ -47,10 +47,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Directives Issued | 2 |
-| Total Directives Complete | 2 |
+| Total Directives Issued | 5 |
+| Total Directives Complete | 5 |
 | Total Directives In Progress | 0 |
-| Total Review Cycles | 2 |
+| Total Review Cycles | 5 |
 | Average Review Cycles per Directive | 1.0 |
 
 ---

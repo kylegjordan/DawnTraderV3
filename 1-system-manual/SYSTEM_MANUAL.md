@@ -100,7 +100,7 @@ Quick reference: which components are authoritative, which are contaminated, and
 | **NLAI system** | LEGACY | 5 files + routes. Pending removal (Wave 4.7). |
 | **Goal Alignment system** | LEGACY | Daily/weekly targets in pre-execution validator. Remove in Wave 4.5. |
 | **Walter/Bob/Cortex** | LEGACY (Kyle confirmed) | ~96 files. Entire AI assistant ecosystem. Remove in Wave 3. |
-| **RiskManager class** | DEPRECATED | Replaced by `checkGuardrailRisk()`. 12 import locations still referencing it. |
+| **RiskManager class** | DEPRECATED | Replaced by `checkGuardrailRisk()`. ~~12 import locations still referencing it.~~ Comment/stub cleanup completed (Directive 12.1.5). |
 | **VTS signal generation** | CONTAMINATED | Uses `simulateHybridScore()` / `simulatePredictiveConfidence()` — generic random noise, not strategy-specific. BUG-001 (CRITICAL). |
 
 ### Development Authority
@@ -7252,10 +7252,10 @@ Coherency validation: PUT requests pass through `GuardrailPolicy.validateCoheren
 | 5 | `vts-audit.ts` | `/api/vts` | 6 | JWT | ~186 | 8.8.4-M3B.2 | ACTIVE — overlaps with vts.ts |
 | 6 | `vts-predictive-adjustments.ts` | `/api/vts/predictive-adjustments` | 7 | **NONE** | ~287 | 11.7D.1 | ACTIVE — read-only |
 | 7 | `dse.ts` | `/api/diagnostics` | 5 | **NONE** | ~87 | 11.3 | ACTIVE — DSE diagnostics |
-| 8 | `calibration.ts` | `/api/calibration` | 8 | Bypass | ~239 | 8.8.4-M5-R1 | ACTIVE — has audit bypass |
-| 9 | `pricing.ts` | `/api/pricing` | 3 | Bypass | ~110 | 8.8.4-M5 | ACTIVE — has audit bypass |
-| 10 | `regime-archive.ts` | `/api` (empty prefix) | 9 | JWT (different secret!) | ~302 | 11.7E | ⚠️ ACTIVE — LOCKED, security issues |
-| 11 | `paper_validation.ts` | `/api/validation` | 6 | Bypass | ~157 | 8.8.4-M5 | ACTIVE — has audit bypass |
+| 8 | `calibration.ts` | `/api/calibration` | 8 | JWT (12.1.3) | ~239 | 8.8.4-M5-R1 | ACTIVE — bypass removed |
+| 9 | `pricing.ts` | `/api/pricing` | 3 | JWT (12.1.3) | ~110 | 8.8.4-M5 | ACTIVE — bypass removed |
+| 10 | `regime-archive.ts` | `/api` (empty prefix) | 9 | JWT (12.1.3) | ~302 | 11.7E | ACTIVE — LOCKED, security fixed |
+| 11 | `paper_validation.ts` | `/api/validation` | 6 | JWT (12.1.3) | ~157 | 8.8.4-M5 | ACTIVE — bypass removed |
 | 12 | `signal-audit.ts` | `/api/signal-audit` | 3 | **NONE** | ~62 | 8.8.4-M2 | ACTIVE — unauthenticated |
 | 13 | `audit.ts` | `/api/audit` | 4 | **NONE** | ~146 | 8.8.4-M1 | ⚠️ ACTIVE — no auth, GET mutates state |
 | 14 | `back_audit.ts` | `/api/back-audit` | 5 | **NONE** | ~134 | 8.8.4-M4 | ACTIVE — unauthenticated |
@@ -7282,8 +7282,8 @@ Coherency validation: PUT requests pass through `GuardrailPolicy.validateCoheren
 | Auth Method | Files | Count |
 |------------|-------|-------|
 | **No authentication** | health, status, dse, signal-audit, audit, back_audit, provenance-debug, vts-predictive-adjustments, dce, gasp, mof, pdc-ecs, apr-sle | 13 |
-| **Copy-pasted JWT** (`requireAuth` with hardcoded fallback) | market, vts, vts-audit, maco, rl, m3b, tlva, regime-archive | 8 |
-| **Audit bypass headers** (`x-internal-audit`, `x-validation-session`) | pricing, calibration, paper_validation | 3 |
+| **Copy-pasted JWT** (`requireAuth` — ~~hardcoded fallback~~ fail-hard, Directive 12.1.3) | market, vts, vts-audit, maco, rl, m3b, tlva, regime-archive | 8 |
+| **~~Audit bypass headers~~** (removed, Directive 12.1.3 — now standard JWT) | pricing, calibration, paper_validation, regime-archive | 4 |
 | **Centralized middleware import** | learning (unmounted) | 1 |
 | **Upstream auth** (registered on app, not apiRouter) | phase-8.6.5 | 1 |
 
@@ -7443,46 +7443,32 @@ The regime-archive router is mounted with an **empty prefix** on apiRouter. Howe
 
 ## 10. Security Architecture & Findings
 
-### FINDING-1: Hardcoded JWT Fallback Secret (CRITICAL)
+### FINDING-1: ~~Hardcoded JWT Fallback Secret~~ **RESOLVED** — Directive 12.1.3
 
-**Affected files** (9 route files):
-- `market.ts`, `vts.ts`, `vts-audit.ts`, `maco.ts`, `rl.ts`, `m3b.ts`, `tlva.ts`, `calibration.ts`, `paper_validation.ts`
+**Status**: **RESOLVED** — Batch 3, commit `0ddc8db1` (2026-02-23)
 
-**Code pattern** (identical in all 9 files):
-```typescript
-const JWT_SECRET = process.env.JWT_SECRET || 'jwt-development-secret-do-not-use-in-production';
-```
+All JWT fallback secrets removed from 12 route files. Server now throws a fatal error and refuses to start if `JWT_SECRET` or `JWT_REFRESH_SECRET` environment variables are not set. This includes `routes.ts` which had both `JWT_SECRET` and `JWT_REFRESH_SECRET` fallbacks.
 
-**Impact**: If `JWT_SECRET` environment variable is not set, authentication across all 9 route files is trivially bypassable. Any attacker who knows the fallback string (visible in source code) can forge valid JWT tokens.
+**Previous state**: 9 route files + `regime-archive.ts` (different fallback) + `routes.ts` (2 secrets) had hardcoded fallback strings.
+**Current state**: All files use `process.env.JWT_SECRET` with no fallback and a fail-hard `throw new Error()` if missing.
 
-**Note**: The main routes.ts also uses `JWT_SECRET` from env but the fallback behavior was not observed in the sampled sections.
+### FINDING-2: ~~Inconsistent JWT Secret in regime-archive.ts~~ **RESOLVED** — Directive 12.1.3
 
-### FINDING-2: Inconsistent JWT Secret in regime-archive.ts (HIGH)
+**Status**: **RESOLVED** — Batch 3, commit `0ddc8db1` (2026-02-23)
 
-**File**: `regime-archive.ts`
-```typescript
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-```
+Fallback removed. `regime-archive.ts` now uses the same fail-hard pattern as all other route files.
 
-**Impact**: Uses a **different** fallback secret than all other files (`'your-secret-key'` vs `'jwt-development-secret-do-not-use-in-production'`). If `JWT_SECRET` env var is not set, tokens valid for regime-archive would be invalid for all other endpoints, and vice versa. This creates inconsistent authentication behavior.
+**Previous state**: Used `'your-secret-key'` fallback (different from all other files).
+**Current state**: No fallback — fails hard if env var missing.
 
-### FINDING-3: Auth Bypass via `x-internal-audit` Header (HIGH)
+### FINDING-3: ~~Auth Bypass via `x-internal-audit` Header~~ **RESOLVED** — Directive 12.1.3
 
-**Affected files**: `pricing.ts`, `calibration.ts`, `regime-archive.ts`, `paper_validation.ts`
+**Status**: **RESOLVED** — Batch 3, commit `0ddc8db1` (2026-02-23)
 
-**Code pattern**:
-```typescript
-function auditOrAuth(req, res, next) {
-  if (req.headers['x-internal-audit'] === 'true') {
-    return next(); // Skip authentication entirely
-  }
-  return requireAuth(req, res, next);
-}
-```
+All `x-internal-audit` and `x-validation-session` bypass header checks removed from all 4 files. Every request now requires valid JWT authentication.
 
-**Impact**: Any request with header `x-internal-audit: true` bypasses JWT authentication completely. This header is not validated against any secret or source — any client can send it.
-
-**Additional bypass**: `calibration.ts` and `regime-archive.ts` also accept `x-validation-session` header as an auth bypass.
+**Previous state**: 4 files allowed unauthenticated access via special headers.
+**Current state**: No bypass path — all requests must present a valid JWT token.
 
 ### FINDING-4: Unauthenticated Endpoint Groups (MEDIUM-HIGH)
 

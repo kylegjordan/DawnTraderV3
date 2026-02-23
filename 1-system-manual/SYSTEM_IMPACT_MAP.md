@@ -466,6 +466,7 @@
 - **What**: ~750 endpoints (of which ~460 have no frontend consumer). Express.js route handlers.
 - **Blast Radius**: **MEDIUM** — large surface area but most endpoints are isolated
 - **Note**: Decomposition into domain-specific route files planned for Phase 20
+- **Security**: ~~Hardcoded JWT fallback secrets in 12 route files~~ **RESOLVED** (Directive 12.1.3). ~~Auth bypass headers in 4 files~~ **RESOLVED** (Directive 12.1.3). All route files now require valid JWT; server fails to start without JWT_SECRET env var.
 
 ### 10.3 Frontend Pages & Tabs
 - **What**: 25 pages (14 active, 7 dead), 91 tab sub-pages. React SPA.

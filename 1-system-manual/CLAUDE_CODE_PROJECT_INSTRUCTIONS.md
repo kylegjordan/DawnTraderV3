@@ -3,7 +3,7 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-02-22 (after Batch 2 — RISK-009 fix, expanded expertise, workflow rules hardened)
+> **Last Updated**: 2026-02-23 (after Batch 3B — Directives 12.1.3/12.1.4/12.1.5 governance, checkpoint commit documentation added)
 
 ---
 
@@ -114,6 +114,13 @@ Each completed directive gets its own folder under `1-system-manual/directives/`
 ├── 12.1.2/
 │   ├── DIRECTIVE_12.1.2.md
 │   └── BATCH_2_README.md
+├── 12.1.3/
+│   ├── DIRECTIVE_12.1.3.md
+│   └── BATCH_3_README.md           ← Covers all 3 directives in Batch 3
+├── 12.1.4/
+│   └── DIRECTIVE_12.1.4.md
+├── 12.1.5/
+│   └── DIRECTIVE_12.1.5.md
 └── [future directives follow same pattern]
 ```
 
@@ -141,7 +148,8 @@ BATCH_N-DIR_X.Y.Z_DESCRIPTION.zip
 Examples:
 - `BATCH_2-DIR_12.1.2_DUAL_FRICTION_FIX.zip` (code batch)
 - `BATCH_2B-DIR_12.1.2_GOVERNANCE_UPDATES.zip` (governance batch)
-- `BATCH_3-DIR_12.1.3_JWT_FALLBACK_REMOVAL.zip` (code batch)
+- `BATCH_3-DIR_12.1.3_12.1.4_12.1.5_SECURITY_PRICE_CLEANUP.zip` (multi-directive code batch)
+- `BATCH_3B-DIR_12.1.3_12.1.4_12.1.5_GOVERNANCE_UPDATES.zip` (governance batch)
 
 ### Zip Contents
 
@@ -187,8 +195,54 @@ Replit operates under strict autonomy limits defined in `replit.md`. Claude Code
 
 1. **Replit must NOT modify source code autonomously.** No improvements, optimizations, reformatting, or fixes unless explicitly instructed through a batch zip or direct Kyle message.
 2. **Replit must NOT reformat files.** Files from batch zips must be placed byte-for-byte as provided. No Prettier, no ESLint fix, no auto-formatter.
-3. **Replit makes automatic checkpoint commits** for runtime state (logs, JSON caches, cortex memory). These are expected for non-source files. Source code (`.ts`, `.tsx`) appearing in checkpoint commits indicates a violation.
+3. **Replit's platform creates automatic checkpoint commits** — this is a known, unavoidable platform behavior (see Checkpoint Commits section below).
 4. **If Replit sees something that needs fixing**, it must tell Kyle — not fix it itself. All code changes go through the batch process.
+
+### Replit Autonomy Reminder (Required in Every INSTRUCTIONS.md)
+
+Every batch INSTRUCTIONS.md sent to Replit MUST include the following autonomy constraints block at the top:
+
+```
+> **CRITICAL — REPLIT AUTONOMY CONSTRAINTS**
+>
+> You are receiving a batch of changes prepared by Claude Code (the System Cartographer).
+> Your role is to **apply these changes exactly as specified**, validate them, and push.
+>
+> **DO NOT:**
+> - Make any changes beyond what is specified in this document
+> - Reformat, restructure, or "improve" any files
+> - Add your own commits between batch application and validation
+> - Modify any files not listed in this document
+> - Run any automated tools that modify source code (linters, formatters, etc.)
+>
+> **DO:**
+> - Apply changes exactly as written
+> - Run validation after ALL changes are applied
+> - Report results back to Kyle
+> - Commit with the message provided at the bottom of this document
+```
+
+### Checkpoint Commits (Platform Behavior)
+
+**Replit's platform automatically creates checkpoint commits when files change.** This is not something Replit Agent controls — it's baked into the Replit platform infrastructure. These checkpoints:
+
+- Fire whenever files are saved/modified (including during batch application)
+- Create a commit with an auto-generated message (not our governance-controlled message)
+- May duplicate our batch changes, making the official batch commit appear to have fewer file changes
+- May bundle runtime state changes (logs, JSON caches) with source code changes
+
+**This is expected and unavoidable.** The workflow accommodates it:
+
+1. The **official batch commit** is always the one whose message matches our governance format: `Batch N: Directives X.Y.Z...`
+2. Checkpoint commits between batches are platform artifacts — ignore them for audit purposes
+3. For `git log` auditing, identify batch commits by their message format, not by their position
+4. If a batch rollback is needed, revert to the SNAPSHOT commit hash (pre-batch), not to the official batch commit — this cleanly removes both the checkpoint and the batch commit
+
+**History of checkpoint commits**:
+- Batch 2: `c566fbc2` ("Update trading cost calculations...") appeared before official `8393a1ef`
+- Batch 2B: `2047d2a4` ("Update friction calculation...") appeared before official `67dd76d1`
+- Batch 3: `f22d1bfa` ("Remove simulated trade prices...") appeared before official `0ddc8db1`
+- Batch 3: `5c5dcbfd` ("Update system logs...") — runtime state checkpoint
 
 ### Post-Push Verification (Required After Every Batch)
 
@@ -199,11 +253,9 @@ git log --oneline -5
 
 Check for any commits between the last known snapshot and the current batch commit. If unexpected commits exist:
 1. Run `git show --stat <commit>` to see what files were touched
-2. If source code files (`.ts`, `.tsx`) were modified, run `git diff -w <commit>^..<commit> -- <file>` to check for logic changes vs. formatting-only changes
-3. Flag any logic changes to Kyle immediately
-4. Document unexpected commits in the snapshot log with a note
-
-**Known issue**: Replit's checkpoint system may bundle source code changes with runtime state changes. This has happened before (commit `c566fbc2` duplicated our Batch 2 friction fix + reformatted files). The `replit.md` constraints are designed to prevent this going forward.
+2. Checkpoint commits that only touch logs/JSON/runtime state are normal (platform behavior)
+3. If checkpoint commits modified source code (`.ts`, `.tsx`): verify the official batch commit has the correct final state by spot-checking modified files
+4. Document all checkpoint commits in the snapshot log with a note
 
 ---
 
@@ -215,6 +267,10 @@ Check for any commits between the last known snapshot and the current batch comm
 | 12.1.1 | Fix DI Probability Divergence (BUG-004) | Batch 1 | `ea6551af` |
 | — | Governance docs updated (BUG-004 RESOLVED) | Batch 1B | `dc17cfd6` |
 | 12.1.2 | Fix Dual Friction Models (RISK-009) | Batch 2 | `8393a1ef` |
+| — | Governance docs updated (RISK-009 RESOLVED) | Batch 2B | `67dd76d1` |
+| 12.1.3 | Security Hardening — JWT + Auth Bypass | Batch 3 | `0ddc8db1` |
+| 12.1.4 | Remove Simulated Price Display (BUG-020) | Batch 3 | `0ddc8db1` |
+| 12.1.5 | RiskManager Comment/Stub Cleanup | Batch 3 | `0ddc8db1` |
 
 ### Snapshot Log
 | Snapshot | Commit | Description |
@@ -224,12 +280,19 @@ Check for any commits between the last known snapshot and the current batch comm
 | SNAPSHOT-002 | `dc17cfd6` | After Batch 1B (governance updates) |
 | SNAPSHOT-003 | `dc17cfd6` | Pre-Batch 2 freeze (same as 002) |
 | SNAPSHOT-004 | `8393a1ef` | After Batch 2 (RISK-009 fix) |
+| SNAPSHOT-005 | `67dd76d1` | After Batch 2B (governance updates) |
+| SNAPSHOT-006 | `67dd76d1` | Pre-Batch 3 freeze (same as 005) |
 
 ### Pending Directives (Phase 12)
-See `directives/DIRECTIVE_INDEX.md` for the full list. 16 remaining:
-- 12.1.3 through 12.1.6 (Critical Math & Security)
+See `directives/DIRECTIVE_INDEX.md` for the full list. 13 remaining:
+- 12.1.6 (LSP Error Triage)
 - 12.2.1 through 12.2.9 (Dead Code Purge)
 - 12.3.1 through 12.3.3 (Pipeline Unification)
+
+### Test Baseline
+- **816 pass / 81 fail** (897 total across 27 pass / 26 fail test files)
+- 20 pre-existing TSC errors in files not modified by any directive
+- Baseline confirmed stable across Batches 1, 2, and 3
 
 ---
 
@@ -242,9 +305,10 @@ See `directives/DIRECTIVE_INDEX.md` for the full list. 16 remaining:
 5. **Read the actual source code** before writing any changes. Never write changes based on memory or assumptions about file contents.
 6. **Consult SYSTEM_IMPACT_MAP.md** before every directive to understand blast radius.
 7. **`CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` is always updated in every governance batch.** It captures current state so the next session starts with accurate context. This is not optional.
-8. **Replit may make autonomous checkpoint commits between batches.** After every sync, check `git log` for unexpected commits. If source code files appear in checkpoint diffs, flag it to Kyle. See Post-Push Verification section.
+8. **Replit's platform creates automatic checkpoint commits between batches.** After every sync, check `git log` for unexpected commits. Checkpoint commits are normal — identify the official batch commit by its message format. See Checkpoint Commits section.
 9. **Zip naming must include directive numbers.** Format: `BATCH_N-DIR_X.Y.Z_DESCRIPTION.zip`. This makes batches self-documenting.
 10. **Zips go to `Claude Comms and Packages/`** (Batch Zips/ or Governance Zips/), not the Desktop.
+11. **Every INSTRUCTIONS.md sent to Replit must include the Replit Autonomy Reminder** at the top. This reminds Replit of its constraints on every batch, not just in `replit.md`.
 
 ---
 

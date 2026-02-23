@@ -677,33 +677,30 @@
 - **Timing**: Post-audit cleanup (refactoring opportunity, not urgent)
 - **Phase Found**: Phase 8
 
-### RISK-049: Hardcoded JWT Fallback Secret in 9 Route Files
+### RISK-049: Hardcoded JWT Fallback Secret in 9 Route Files — **RESOLVED**
 - **Severity**: **CRITICAL** (security — if JWT_SECRET env var not set, auth is trivially bypassable)
 - **Location**: `server/routes/market.ts`, `vts.ts`, `vts-audit.ts`, `maco.ts`, `rl.ts`, `m3b.ts`, `tlva.ts`, `calibration.ts`, `paper_validation.ts`
-- **Code**: `const JWT_SECRET = process.env.JWT_SECRET || 'jwt-development-secret-do-not-use-in-production';`
-- **Problem**: If the `JWT_SECRET` environment variable is not set, all 9 route files fall back to a hardcoded string that is visible in source code. Any attacker who knows this string can forge valid JWT tokens to access all authenticated endpoints in these files.
-- **Impact**: Complete authentication bypass for 9 route files (~90+ endpoints) if env var is misconfigured.
-- **Kyle Decision (Phase 8 Addendum, ADD-2)**: Eliminate fallback values entirely. Fail hard if `JWT_SECRET` is not defined. Server must not start without `JWT_SECRET` set.
-- **Timing**: **Pre-MCE** — remove all fallback secrets (fail-closed).
+- **Status**: **RESOLVED** — Directive 12.1.3, Batch 3, commit `0ddc8db1` (2026-02-23)
+- **Resolution**: JWT fallback secrets removed from all 12 route files (9 original + regime-archive.ts + routes.ts JWT_SECRET + routes.ts JWT_REFRESH_SECRET). Server now throws a fatal error and refuses to start if `JWT_SECRET` or `JWT_REFRESH_SECRET` environment variables are not set. Fail-hard, fail-closed.
+- **Original Problem**: If the `JWT_SECRET` environment variable was not set, all 9 route files fell back to a hardcoded string visible in source code. Any attacker who knew this string could forge valid JWT tokens.
+- **Kyle Decision (Phase 8 Addendum, ADD-2)**: Eliminate fallback values entirely. Fail hard if `JWT_SECRET` is not defined.
 - **Phase Found**: Phase 8
 
-### RISK-050: Inconsistent JWT Fallback Secret in regime-archive.ts
+### RISK-050: Inconsistent JWT Fallback Secret in regime-archive.ts — **RESOLVED**
 - **Severity**: HIGH
 - **Location**: `server/routes/regime-archive.ts`
-- **Code**: `const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';`
-- **Problem**: Uses a **different** fallback secret (`'your-secret-key'`) than all other route files (`'jwt-development-secret-do-not-use-in-production'`). If `JWT_SECRET` env var is not set, tokens forged for regime-archive are invalid for other endpoints and vice versa. This creates inconsistent authentication behavior.
-- **Kyle Decision (Phase 8 Addendum, ADD-2)**: Superseded — all fallbacks removed per ADD-2.
-- **Timing**: Pre-MCE (bundled with RISK-049)
+- **Status**: **RESOLVED** — Directive 12.1.3, Batch 3, commit `0ddc8db1` (2026-02-23)
+- **Resolution**: Fallback secret removed. `regime-archive.ts` now uses the same fail-hard pattern as all other route files. No more inconsistent authentication behavior.
+- **Original Problem**: Used a different fallback secret (`'your-secret-key'`) than all other route files. Tokens would be incompatible across endpoints if env var was missing.
 - **Phase Found**: Phase 8
 
-### RISK-051: Auth Bypass via `x-internal-audit` Header in 4 Route Files
+### RISK-051: Auth Bypass via `x-internal-audit` Header in 4 Route Files — **RESOLVED**
 - **Severity**: HIGH
 - **Location**: `server/routes/pricing.ts`, `calibration.ts`, `regime-archive.ts`, `paper_validation.ts`
-- **Code**: `if (req.headers['x-internal-audit'] === 'true') { return next(); }`
-- **Problem**: Any request with the header `x-internal-audit: true` bypasses JWT authentication entirely. This header is not validated against any secret, token, or source IP — any client can send it. Additional bypass via `x-validation-session` header in `calibration.ts` and `regime-archive.ts`.
-- **Impact**: ~26 endpoints across 4 files accessible without authentication to any client that sets the header.
-- **Kyle Decision (Phase 8 Addendum, ADD-3)**: Remove `x-internal-audit` bypass. Replace with: (a) proper internal service key validation, (b) signed internal JWT, or (c) remove entirely. Kyle to decide replacement mechanism.
-- **Timing**: Pre-MCE — remove bypass, implement proper internal auth.
+- **Status**: **RESOLVED** — Directive 12.1.3, Batch 3, commit `0ddc8db1` (2026-02-23)
+- **Resolution**: All `x-internal-audit` and `x-validation-session` bypass header checks removed from all 4 files. The `auditOrAuth` middleware functions now enforce JWT authentication on every request with no bypass path. Replit confirmed no dependency on these headers before removal.
+- **Original Problem**: Any request with `x-internal-audit: true` header bypassed JWT authentication entirely. `calibration.ts` and `regime-archive.ts` also accepted `x-validation-session` as a second bypass.
+- **Kyle Decision (Phase 8 Addendum, ADD-3)**: Remove entirely (option c selected).
 - **Phase Found**: Phase 8
 
 ### RISK-052: 13 Route Files Have Zero Authentication
@@ -798,15 +795,12 @@
 - **Fix**: Remove unused imports.
 - **Phase Found**: Phase 9
 
-### BUG-020: Simulated Current Price in Active Trades Component
+### BUG-020: Simulated Current Price in Active Trades Component — **RESOLVED**
 - **Severity**: MEDIUM
 - **Location**: `client/src/components/trading/active-trades.tsx` — line 30
-- **Code**: `const currentPrice = trade.entryPrice * 1.02;`
-- **Problem**: The current price for active trades is simulated as a hardcoded 2% gain above entry price, rather than fetched from real-time market data. This means the P/L display for active trades is always a fabricated 2% gain.
-- **Impact**: Users see misleading P/L numbers for active trades. The entire P/L column is incorrect.
-- **Verified**: Yes — code-confirmed in component source.
-- **Timing**: Pre-MCE (important for accurate paper trading UI)
-- **Fix**: Fetch real-time prices from the price cache or WebSocket price feed.
+- **Status**: **RESOLVED** — Directive 12.1.4, Batch 3, commit `0ddc8db1` (2026-02-23)
+- **Resolution**: Removed `entryPrice * 1.02` simulated price. Component now shows entry price with "(entry)" label and "Awaiting live price" for P/L column. The v2 component (`active-trades-v2.tsx`) already fetches real prices via WebSocket and is the correct production implementation.
+- **Original Problem**: Current price was simulated as a hardcoded 2% gain above entry price. Users saw fabricated green P/L numbers with no connection to market reality.
 - **Phase Found**: Phase 9
 
 ### BUG-021: system-config.tsx Uses Raw fetch() Instead of apiFetch
@@ -919,10 +913,10 @@
 - **Kyle Directive**: Clean `enhanced-system-monitoring.tsx`. Remove the ~60 speculative/aspirational API endpoints that generate unnecessary 404 network requests. Simplify the component to match actual system capabilities.
 - **Timing**: Post-audit cleanup (can be bundled with ADD-2 decomposition)
 
-### Phase 9 Addendum ADD-5: Remove Simulated Price Display
-- **Status**: Directive — linked to BUG-020
+### Phase 9 Addendum ADD-5: Remove Simulated Price Display — **RESOLVED**
+- **Status**: **RESOLVED** — Directive 12.1.4, Batch 3, commit `0ddc8db1` (2026-02-23)
 - **Kyle Directive**: Replace `entryPrice * 1.02` hardcoded simulation with real price feed from price cache or WebSocket price stream.
-- **Timing**: Pre-MCE — important for accurate paper trading UI
+- **Resolution**: Simulated price removed. Shows entry price with honest "Awaiting live price" label. Full live price integration exists in v2 component.
 - **Kyle's elevation**: BUG-020 timing confirmed as Pre-MCE by Kyle.
 
 ---
@@ -938,7 +932,7 @@
 | Medium Bugs | 4 (BUG-013, BUG-015, BUG-017, BUG-020) |
 | Low Bugs | 6 (BUG-005, BUG-014, BUG-016, BUG-018, BUG-019, BUG-021) |
 | Architectural Risks | 65 (RISK-001 through RISK-065) |
-| Critical Architectural Risks | 2 (RISK-043 — artificial strategy differentiation; RISK-049 — hardcoded JWT fallback secret) |
+| Critical Architectural Risks | 2 (RISK-043 — artificial strategy differentiation; ~~RISK-049~~ RESOLVED) |
 | Informational Risks | 3 (RISK-047 — monolithic index.ts; RISK-048 — monolithic routes.ts; RISK-058 — endpoint census) |
 | Phase 9 Addendum Risks | 3 (RISK-063 — XSS token exposure; RISK-064 — monolithic pages; RISK-065 — no polling policy) |
 | Phase 9 Addendum Directives | 2 (ADD-4 — remove speculative endpoints; ADD-5 — remove simulated price) |
@@ -1204,7 +1198,7 @@ Total: 21 bugs, 65 risks.
 | Medium Bugs | 4 (BUG-013, BUG-015, BUG-017, BUG-020) |
 | Low Bugs | 7 (BUG-005, BUG-014, BUG-016, BUG-018, BUG-019, BUG-021, BUG-022) |
 | Architectural Risks | 85 (RISK-001 through RISK-085) |
-| Critical Architectural Risks | 2 (RISK-043 — artificial strategy differentiation; RISK-049 — hardcoded JWT fallback secret) |
+| Critical Architectural Risks | 2 (RISK-043 — artificial strategy differentiation; ~~RISK-049~~ RESOLVED) |
 | Informational Risks | 3 (RISK-047 — monolithic index.ts; RISK-048 — monolithic routes.ts; RISK-058 — endpoint census) |
 | Phase 9 Addendum Risks | 3 (RISK-063 — XSS token exposure; RISK-064 — monolithic pages; RISK-065 — no polling policy) |
 | Phase 9 Addendum Directives | 2 (ADD-4 — remove speculative endpoints; ADD-5 — remove simulated price) |
