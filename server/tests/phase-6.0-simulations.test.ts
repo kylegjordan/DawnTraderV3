@@ -14,15 +14,8 @@ import {
   getAllArtifacts,
   formatCorpusForPrompt 
 } from '../services/walter-expert-corpus';
-import { 
-  createArchitectureTrace,
-  createDevOpsDiagnosis,
-  createDatabaseInsight,
-  createDesignReview,
-  createAestheticEvaluation,
-  createAccessibilityCheck
-} from '../services/walter-reasoning-templates';
-import { walterKnowledgeRefresh } from '../services/walter-knowledge-refresh';
+// Directive 12.2.3: walter-reasoning-templates import removed (file deleted in Batch 5)
+// Directive 12.2.3: walter-knowledge-refresh import removed (file deleted in Batch 5)
 import { BOB_IDENTITY, createSystemKnowledgeSection } from '../services/walter-purpose';
 
 describe('Phase 6.0 - Walter Expert Knowledge & Bob Integration', () => {
@@ -129,84 +122,10 @@ describe('Phase 6.0 - Walter Expert Knowledge & Bob Integration', () => {
     });
   });
 
-  describe('UX Reasoning Templates', () => {
-    test('should generate design review with actionable suggestions', async () => {
-      const review = await createDesignReview(
-        'Settings Panel',
-        ['Complex with multiple tabs and nested options']
-      );
-      
-      expect(review.analysis).toBeDefined();
-      expect(review.suggestions.length).toBeGreaterThan(0);
-      expect(Array.isArray(review.suggestions)).toBe(true);
-    });
+  // Directive 12.2.3: 'UX Reasoning Templates' test block removed (walter-reasoning-templates.ts deleted in Batch 5)
+  // Directive 12.2.3: 'Architecture & Database Reasoning' test block removed (walter-reasoning-templates.ts deleted in Batch 5)
 
-    test('should provide aesthetic evaluation', async () => {
-      const evaluation = await createAestheticEvaluation(
-        'Dashboard',
-        'Has charts, cards, and status indicators'
-      );
-      
-      // Check structure based on actual implementation
-      expect(evaluation).toBeDefined();
-      expect(typeof evaluation).toBe('object');
-    });
-
-    test('should perform accessibility check', async () => {
-      const check = await createAccessibilityCheck(
-        'Login Form',
-        'Email and password inputs with submit button'
-      );
-      
-      expect(check.findings.length).toBeGreaterThan(0);
-      expect(check.recommendations.length).toBeGreaterThan(0);
-      expect(check.overallScore).toBeGreaterThanOrEqual(0);
-      expect(check.overallScore).toBeLessThanOrEqual(10);
-    });
-  });
-
-  describe('Architecture & Database Reasoning', () => {
-    test('should trace request flow through architecture', async () => {
-      const trace = await createArchitectureTrace(
-        'Dashboard page'
-      );
-      
-      expect(trace.flow.length).toBeGreaterThan(0);
-      expect(trace.artifacts.length).toBeGreaterThan(0);
-      expect(trace.dataFlow).toBeDefined();
-    });
-
-    test('should provide database insights with relationships', async () => {
-      const insight = await createDatabaseInsight(
-        'trading'
-      );
-      
-      expect(insight.tables.length).toBeGreaterThan(0);
-      expect(insight.relationships).toBeDefined();
-      expect(insight.dataFlow).toBeDefined();
-    });
-  });
-
-  describe('Weekly Knowledge Refresh', () => {
-    test('should execute knowledge refresh scan', async () => {
-      const result = await walterKnowledgeRefresh.runWeeklyScan(testUserId);
-      
-      expect(result.weekNumber).toBeDefined();
-      expect(result.summary).toBeDefined();
-      expect(result.updatesCount).toBeGreaterThan(0);
-    });
-
-    test('should track services, schema, and files', async () => {
-      const result = await walterKnowledgeRefresh.runWeeklyScan(testUserId);
-      
-      const summaryLower = result.summary.toLowerCase();
-      const hasServiceTracking = summaryLower.includes('service');
-      const hasSchemaTracking = summaryLower.includes('schema') || summaryLower.includes('table');
-      const hasFileTracking = summaryLower.includes('file');
-      
-      expect(hasServiceTracking || hasSchemaTracking || hasFileTracking).toBe(true);
-    });
-  });
+  // Directive 12.2.3: 'Weekly Knowledge Refresh' test block removed (walter-knowledge-refresh.ts deleted in Batch 5)
 
   describe('Corpus Formatting', () => {
     test('should format corpus for AI prompt', () => {
