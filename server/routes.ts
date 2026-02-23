@@ -31,9 +31,7 @@ import { chatLogging } from "./middleware/chat-logging";
 import { parseIntent } from "./services/intent-parser";
 import { CommandRouter } from "./services/command-router";
 import { commandLogger } from "./services/command-logger";
-import { nlaiInterpreter } from "./services/nlai-interpreter";
-import { nlaiExecutionBroker } from "./services/nlai-execution-broker";
-import ExecutionPolicyController from "./services/execution-policy-controller";
+// Directive 12.2.7: NLAI imports removed (nlai-interpreter, nlai-execution-broker, execution-policy-controller)
 import { textToSpeech, estimateTTSCost } from "./services/walter-tts";
 import { ingestLearningFile, getIngestionHistory } from "./services/walter-ingest";
 import OpenAI from "openai";
@@ -108,9 +106,7 @@ const globalPaperEngine = new TradingEngine('paper');
 // Phase 27.F.15.B.3: CommandRouter uses global engines
 const commandRouter = new CommandRouter(globalLiveEngine, globalPaperEngine);
 
-// Phase 22: Initialize ExecutionPolicyController for autonomous execution layer
-const executionPolicyController = new ExecutionPolicyController(storage as any);
-nlaiExecutionBroker.initialize(storage, executionPolicyController);
+// Directive 12.2.7: ExecutionPolicyController + NLAI broker initialization removed (deprecated)
 
 // Phase 6.8: Store pending confirmations per user for bare "yes/no" replies
 const userPendingConfirmations = new Map<string, string>(); // userId -> confirmationId
@@ -17416,13 +17412,7 @@ Please:
         content: content.trim(),
       });
       
-      // Phase 19+: Try NLAI interpreter first for simulation and action commands
-      // Phase 22: Pass mode (default to paper for safety) and chatSessionId for execution logging
-      const nlaiResponse = await nlaiInterpreter.interpret(userId, content.trim(), {
-        mode: 'paper', // Default to paper mode for safety in chat context
-        chatSessionId: id,
-        source: 'chat',
-      });
+      // Directive 12.2.7: NLAI interpreter removed — chat commands now go directly to intent parser + command router
       let aiResponse: string;
       
       // Get pending confirmation ID for this user FIRST
@@ -17453,18 +17443,7 @@ Please:
         // User has pending confirmation but didn't say yes/no - remind them
         aiResponse = `⚠️  You have a pending confirmation. Please reply with "yes" or "no" first, or say "cancel" to clear it. Then you can issue new commands.`;
       }
-      // Phase 19+: If NLAI recognized an actionable intent (simulation, system commands, reports)
-      else if (nlaiResponse.isActionable && nlaiResponse.executionResult) {
-        aiResponse = nlaiResponse.executionResult.success
-          ? `✅ ${nlaiResponse.executionResult.message}${nlaiResponse.executionResult.data ? '\n\n📊 Data:\n```json\n' + JSON.stringify(nlaiResponse.executionResult.data, null, 2) + '\n```' : ''}`
-          : `❌ ${nlaiResponse.executionResult.message}`;
-        
-        console.log(`[NLAI] User ${userId} executed: ${nlaiResponse.actionId}`, { 
-          processingTime: nlaiResponse.processingTimeMs,
-          success: nlaiResponse.executionResult.success 
-        });
-      }
-      // Fallback to old intent parser for trading commands
+      // Directive 12.2.7: NLAI response handler removed — intent parser is now primary
       else {
         const parsedIntent = parseIntent(content.trim());
         

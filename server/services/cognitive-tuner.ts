@@ -112,7 +112,7 @@ class CognitiveTunerService {
 
   /**
    * Scenario 1: Intent Parsing Accuracy
-   * Validate NLAI/CIE with 100+ test cases, ≥90% accuracy target
+   * Validate reasoning load with 100+ test cases, ≥90% accuracy target
    */
   private async testTradingReasoningLoad(runId: string, userId: string): Promise<BenchmarkResult> {
     console.log(`[CognitiveTuner] Scenario: Intent Parsing Accuracy - START`);
@@ -147,7 +147,7 @@ class CognitiveTunerService {
         runId,
         scenario: 'Intent Parsing Accuracy',
         avgLatencyMs: avgLatency,
-        domainAccuracy: { NLAI: { passed: 100 - errors.length, failed: errors.length } },
+        domainAccuracy: { reasoning: { passed: 100 - errors.length, failed: errors.length } },
         memoryChecksumStatus: 'VERIFIED',
         queueThroughput: 100 / ((performance.now() - startTime) / 1000),
         result,
@@ -159,7 +159,7 @@ class CognitiveTunerService {
         runId,
         scenario: 'Intent Parsing Accuracy',
         avgLatencyMs: 0,
-        domainAccuracy: { NLAI: { passed: 0, failed: 100 } },
+        domainAccuracy: { reasoning: { passed: 0, failed: 100 } },
         memoryChecksumStatus: 'UNVERIFIED',
         queueThroughput: 0,
         result: 'FAIL',

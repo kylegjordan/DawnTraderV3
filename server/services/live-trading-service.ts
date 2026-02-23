@@ -2,24 +2,29 @@
  * Live Trading Service
  * Phase 22.3 - Live Trading Voice/Chat Activation
  * Phase 41F-A-5 - Live Mode Queue Integration
- * 
+ *
  * Manages live trading mode with manual approval requirements
- * Integrates with ExecutionPolicyController for safety
  * Uses OperationQueue for serialized execution (Phase 41F)
+ *
+ * Directive 12.2.7: Removed NLAI/ExecutionPolicyController dependencies (deprecated)
  */
 
 import { storage } from '../storage';
 import { clusterBus } from './cluster-bus';
-import ExecutionPolicyController from './execution-policy-controller';
-import type { ActionResult } from './nlai-action-registry';
 import { permissionCache } from './permission-cache.js';
 import type { UserRole } from '../config/permissions.js';
 import { liveOperationQueue } from '../utils/operation-queue';
 import { reset24hWindow, resetHourlyScanHistory } from './fx5-24h-window.js';
 import { livePricingAdapter } from './live-pricing-adapter.js';
 
-// Initialize ExecutionPolicyController instance
-const executionPolicyController = new ExecutionPolicyController(storage as any);
+// Directive 12.2.7: ActionResult type inlined from removed nlai-action-registry.ts
+export interface ActionResult {
+  success: boolean;
+  message: string;
+  data?: any;
+  error?: string;
+  shouldBroadcast?: boolean;
+}
 
 interface LiveTradingSession {
   userId: string;
@@ -50,7 +55,7 @@ class LiveTradingService {
       // 2. Check global trading engines map
       const tradingEngines = (global as any).tradingEngines as Map<string, any>;
       const existingEngine = tradingEngines?.get(userId);
-      
+
       if (existingEngine && existingEngine.isRunning) {
         // Sync with global state
         this.sessions.set(userId, {
@@ -58,7 +63,7 @@ class LiveTradingService {
           startedAt: new Date(),
           engine: existingEngine,
         });
-        
+
         return {
           success: true,
           message: 'Live trading is already active. No action needed.',
@@ -70,7 +75,7 @@ class LiveTradingService {
       // This message matches the UI modal requirement
       const confirmationMessage = `⚠️ **Manual Approval Required**
 
-Are you sure you want to start **LIVE TRADING**? 
+Are you sure you want to start **LIVE TRADING**?
 
 This will enable **real orders** with actual funds on Kraken. Please confirm by:
 - Typing "Yes, I approve" in chat, or
@@ -108,7 +113,7 @@ This is a high-risk operation and requires your explicit consent.`;
    */
   async activateLiveTrading(userId: string): Promise<ActionResult> {
     console.log(`[41F][QUEUE][LIVE] activateLiveTrading called (userId: ${userId})`);
-    
+
     try {
       const queueResult = await liveOperationQueue.enqueue(
         async () => {
@@ -124,10 +129,10 @@ This is a high-risk operation and requires your explicit consent.`;
           message: 'Permission denied: User account not found or improperly configured.',
         };
       }
-      
+
       const userRole = user.role as UserRole;
       const hasPermission = await permissionCache.hasPermission(userId, userRole, 'trade_live');
-      
+
       if (!hasPermission) {
         console.log(`[LiveTrading] ❌ Permission denied: user ${userId} (${userRole}) lacks trade_live permission`);
         return {
@@ -146,9 +151,8 @@ This is a high-risk operation and requires your explicit consent.`;
         };
       }
 
-      // 3. Note: Since this is called AFTER approval, we skip additional policy evaluation
-      // The approval flow already went through ExecutionPolicyController.evaluateExecution()
-      // This method is only called when user has explicitly approved the action
+      // 3. Directive 12.2.7: ExecutionPolicyController removed — approval is handled
+      // by the two-step flow (startLiveTrading prompt → activateLiveTrading after user confirms)
       console.log(`[LiveTrading] ✅ Permission verified and activation approved by user, proceeding with engine startup`);
 
       // 4. Initialize trading engine (placeholder for now)
@@ -191,7 +195,7 @@ This is a high-risk operation and requires your explicit consent.`;
           riskLevel: 'critical',
           timestamp: new Date().toISOString(),
         }, 'live_trading');
-        
+
         console.log(`[LiveTrading] ✅ Cluster bus event emitted: task_completed (live trading started, policy approved)`);
       } catch (busError: any) {
         // Non-blocking - log but continue
@@ -228,11 +232,11 @@ This is a high-risk operation and requires your explicit consent.`;
           action: 'start',
         }
       );
-      
+
       // Phase 41F-B-3: Fire WebSocket broadcasts OUTSIDE queue job (non-blocking)
       if (queueResult.shouldBroadcast) {
         console.log('[41F-B][BROADCAST] Firing live mode state broadcasts (async, non-blocking)');
-        
+
         // Fire broadcast asynchronously - don't block HTTP response
         const { contextBridge } = await import('./context-bridge');
         contextBridge.broadcast({
@@ -243,7 +247,7 @@ This is a high-risk operation and requires your explicit consent.`;
           console.error('[41F-B][BROADCAST] Error broadcasting live mode activation:', err);
         });
       }
-      
+
       return queueResult;
     } catch (error: any) {
       console.error(`[41F][QUEUE][LIVE] activateLiveTrading queue error:`, error);
@@ -261,7 +265,7 @@ This is a high-risk operation and requires your explicit consent.`;
    */
   async stopLiveTrading(userId: string): Promise<ActionResult> {
     console.log(`[41F][QUEUE][LIVE] stopLiveTrading called (userId: ${userId})`);
-    
+
     try {
       const queueResult = await liveOperationQueue.enqueue(
         async () => {
@@ -274,7 +278,7 @@ This is a high-risk operation and requires your explicit consent.`;
         // Check global state
         const tradingEngines = (global as any).tradingEngines as Map<string, any>;
         const engine = tradingEngines?.get(userId);
-        
+
         if (!engine || !engine.isRunning || engine.mode !== 'live') {
           return {
             success: true,
@@ -315,7 +319,7 @@ This is a high-risk operation and requires your explicit consent.`;
           success: true,
           timestamp: new Date().toISOString(),
         }, 'live_trading');
-        
+
         console.log(`[LiveTrading] ✅ Cluster bus event emitted: task_completed (live trading stopped)`);
       } catch (busError: any) {
         console.warn(`[LiveTrading] Failed to emit cluster bus event:`, busError.message);
@@ -351,11 +355,11 @@ This is a high-risk operation and requires your explicit consent.`;
           action: 'stop',
         }
       );
-      
+
       // Phase 41F-B-3: Fire WebSocket broadcasts OUTSIDE queue job (non-blocking)
       if (queueResult.shouldBroadcast) {
         console.log('[41F-B][BROADCAST] Firing live mode stop broadcasts (async, non-blocking)');
-        
+
         // Fire broadcast asynchronously - don't block HTTP response
         const { contextBridge } = await import('./context-bridge');
         contextBridge.broadcast({
@@ -366,7 +370,7 @@ This is a high-risk operation and requires your explicit consent.`;
           console.error('[41F-B][BROADCAST] Error broadcasting live mode stop:', err);
         });
       }
-      
+
       return queueResult;
     } catch (error: any) {
       console.error(`[41F][QUEUE][LIVE] stopLiveTrading queue error:`, error);
@@ -385,11 +389,11 @@ This is a high-risk operation and requires your explicit consent.`;
     try {
       // Check local sessions
       const session = this.sessions.get(userId);
-      
+
       // Check global trading engines
       const tradingEngines = (global as any).tradingEngines as Map<string, any>;
       const engine = tradingEngines?.get(userId);
-      
+
       const isActive = !!(
         (session && session.engine?.isRunning) ||
         (engine && engine.isRunning && engine.mode === 'live')
@@ -442,7 +446,7 @@ This is a high-risk operation and requires your explicit consent.`;
 // Export singleton instance
 export const liveTradingService = new LiveTradingService();
 
-// Export functions for NLAI registry
+// Export functions for service consumers
 export async function startLiveTrading(userId: string): Promise<ActionResult> {
   return await liveTradingService.startLiveTrading(userId);
 }

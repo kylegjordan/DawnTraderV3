@@ -1,7 +1,7 @@
 /**
  * Configuration Update Service
  * Provides direct function calls for updating guardrails, goals, and screeners
- * Used by both API endpoints and NLAI action handlers
+ * Used by API endpoints for configuration management
  */
 
 import { storage } from '../storage';
@@ -133,7 +133,7 @@ export async function updateGoals(
         goalValue: goal.goalValue?.toString(),
         actualValue: goal.actualValue?.toString() || '0',
         percentAchieved: goal.percentAchieved?.toString() || '0',
-        aiValidationNotes: goal.aiValidationNotes || 'Updated via Walter NLAI',
+        aiValidationNotes: goal.aiValidationNotes || 'Updated via API',
       };
       
       const result = mode === 'live'

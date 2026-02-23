@@ -7,7 +7,7 @@
  */
 
 import { storage } from '../storage';
-import { nlaiActionRegistry } from './nlai-action-registry';
+// Directive 12.2.7: nlai-action-registry import removed (deprecated)
 import { paperSimHeartbeat } from './paper_sim_heartbeat';
 import { startPaperSimulation, stopPaperSimulation, getPaperSimulationStatus } from './paper-sim-service';
 import { startLiveTrading, stopLiveTrading, checkLiveTradingStatus } from './live-trading-service';
@@ -57,7 +57,7 @@ class AutoTestHarness {
 
     const scenarios: TestScenario[] = [
       this.createPaperSimStartStopScenario(),
-      this.createMultiIntentScenario(),
+      // Directive 12.2.7: createMultiIntentScenario removed (depended on NLAI)
       this.createHeartbeatScenario(),
       this.createLiveTradingScenario(),
     ];
@@ -187,44 +187,7 @@ class AutoTestHarness {
     };
   }
 
-  /**
-   * Scenario 2: Multi-Intent Command
-   */
-  private createMultiIntentScenario(): TestScenario {
-    return {
-      name: 'Multi-Intent Command Execution',
-      steps: [
-        {
-          action: 'multi_intent_parse',
-          description: 'Parse multi-intent message',
-          execute: async () => {
-            const { parseMultipleIntents } = await import('./intent-parser');
-            return parseMultipleIntents('start paper trading and check system health');
-          },
-          verify: async (intents) => {
-            return intents.length === 2; // Should parse 2 intents
-          },
-        },
-        {
-          action: 'multi_intent_execute',
-          description: 'Execute multi-intent batch',
-          execute: async () => {
-            const { nlaiExecutionBroker } = await import('./nlai-execution-broker');
-            const { parseMultipleIntents } = await import('./intent-parser');
-            
-            const intents = parseMultipleIntents('update risk per trade to 2% and check system health');
-            return await nlaiExecutionBroker.dispatchMultiple(this.testUserId, intents, {
-              mode: 'paper',
-              source: 'auto_test',
-            });
-          },
-          verify: async (result) => {
-            return result.totalIntents >= 1 && result.successfulIntents > 0;
-          },
-        },
-      ],
-    };
-  }
+  // Directive 12.2.7: Multi-Intent Command scenario removed (depended on nlai-execution-broker)
 
   /**
    * Scenario 3: Heartbeat Monitoring
@@ -291,7 +254,7 @@ class AutoTestHarness {
             return await activateLiveTrading(this.testUserId);
           },
           verify: async (result) => {
-            // Should successfully activate (ExecutionPolicyController will auto-approve in test mode)
+            // Should successfully activate via two-step approval flow
             // Or may return policy block if kill switch is enabled
             return result.success || result.data?.policyBlocked === true;
           },

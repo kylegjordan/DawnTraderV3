@@ -2,7 +2,7 @@
  * Paper Trading Simulation Service
  * Provides idempotent function calls for starting/stopping paper trading simulation
  * Uses database as single source of truth for session state
- * Integrated with ExecutionPolicyController and ClusterBus
+ * Integrated with ClusterBus for event coordination
  */
 
 import { nanoid } from 'nanoid';
