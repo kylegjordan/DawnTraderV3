@@ -1,12 +1,11 @@
 import { storage } from '../storage';
-// [9.0-FP] RiskManager removed - using inline storage-based metrics
 import OpenAI from "openai";
 import { estimateMessagesTokens, calculateCost } from '../utils/token-counter';
 import { OpenAIRateLimiter } from './openai-rate-limiter';
 
 const rateLimiter = OpenAIRateLimiter.getInstance();
 
-// [9.0-FP] Inline stub for portfolio metrics (replaces RiskManager.getPortfolioMetrics)
+// Portfolio metrics helper (storage-based)
 async function getPortfolioMetricsStub(mode: 'live' | 'paper' = 'paper') {
   const activeTrades = await storage.getActiveTrades(mode);
   const closedTrades = await storage.getTrades(mode, { status: 'closed' });
@@ -32,7 +31,7 @@ async function getPortfolioMetricsStub(mode: 'live' | 'paper' = 'paper') {
   };
 }
 
-// [9.0-FP] Inline stub for win rate (replaces RiskManager.getWinRate)
+// Win rate calculation helper (storage-based)
 async function getWinRateStub(mode: 'live' | 'paper' = 'paper', days: number = 30) {
   const fromDate = new Date();
   fromDate.setDate(fromDate.getDate() - days);
@@ -87,10 +86,8 @@ export class DailyBriefService {
   private updateIntervalId: NodeJS.Timeout | null = null;
   private finalizationTimeoutId: NodeJS.Timeout | null = null;
   private creationTimeoutId: NodeJS.Timeout | null = null;
-  // [9.0-FP] RiskManager instance removed - using stub functions
 
   constructor() {
-    // [9.0-FP] No RiskManager instantiation needed
   }
 
   async startDailyBriefScheduler(): Promise<void> {
@@ -234,17 +231,15 @@ export class DailyBriefService {
     const todayStart = new Date(today + 'T00:00:00Z');
     
     // Get today's trades
-    // [9.0-FP] Fixed: getTrades and getActiveTrades require mode parameter
     const allTrades = await storage.getTrades('paper', { status: 'closed' });
     const todayTrades = allTrades.filter(trade => 
       trade.exitTime && new Date(trade.exitTime) >= todayStart
     );
     
-    // [9.0-FP] Fixed: getActiveTrades requires mode parameter
     const openTrades = await storage.getActiveTrades('paper');
     console.log('[Phase-27.F.15.B.2] Updated service daily-brief → mode-based only');
     
-    // [9.0-FP] Get metrics from stub functions (replaces RiskManager)
+    // Get metrics from helper functions
     const portfolioMetrics = await getPortfolioMetricsStub('paper');
     const winRateData = await getWinRateStub('paper', 1); // Today only
     

@@ -5,7 +5,6 @@
 
 import { KrakenService } from './kraken.js';
 import { StrategyEngine, type TechnicalIndicators } from './strategy-engine.js';
-// [9.0-FP] RiskManager import removed - was imported but never used
 import { storage } from '../storage.js';
 import { toCanonical, canonicalFromPairInfo, normalizeSymbolArray } from './utils/symbol-canonicalizer.js';
 import type { TradingSettings, PriceData } from '@shared/schema';
@@ -68,7 +67,6 @@ interface UniverseScanResult {
 export class PaperSimDiagnosticService {
   private krakenService: KrakenService;
   private strategyEngine: StrategyEngine;
-  // [9.0-FP] RiskManager instance removed - was never used
 
   constructor() {
     this.krakenService = new KrakenService();

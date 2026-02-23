@@ -27,11 +27,13 @@ function TradeRow({ trade }: { trade: Trade }) {
   const { closeTrade, isClosingTrade } = useTrading();
   const { toast } = useToast();
   
-  const currentPrice = parseFloat(trade.entryPrice) * 1.02; // Simulated current price
+  // Directive 12.1.4 (BUG-020): Removed simulated price (was entryPrice * 1.02)
+  // Current price display now shows entry price until live price feed is integrated (v2 component)
   const entryPrice = parseFloat(trade.entryPrice);
-  const unrealizedPL = (currentPrice - entryPrice) * parseFloat(trade.quantity);
-  const unrealizedPLPercent = ((currentPrice - entryPrice) / entryPrice) * 100;
-  const unrealizedR = unrealizedPL / parseFloat(trade.riskAmount);
+  const currentPrice = entryPrice; // No simulated price — shows entry until live feed available
+  const unrealizedPL = 0; // Cannot calculate without live price
+  const unrealizedPLPercent = 0;
+  const unrealizedR = 0;
   
   // Fetch user settings for timezone conversion
   const { data: settings } = useQuery<{ timezone?: string; timeFormat?: string }>({ 
@@ -98,8 +100,9 @@ function TradeRow({ trade }: { trade: Trade }) {
       </td>
       
       <td className="px-4 py-4">
-        <div className="font-mono text-sm font-semibold text-success">
+        <div className="font-mono text-sm text-muted-foreground">
           ${currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+          <span className="text-xs ml-1">(entry)</span>
         </div>
       </td>
       
@@ -116,11 +119,11 @@ function TradeRow({ trade }: { trade: Trade }) {
       </td>
       
       <td className="px-4 py-4">
-        <div className={cn("font-mono text-sm font-semibold", unrealizedPL >= 0 ? "text-success" : "text-destructive")}>
-          {unrealizedPL >= 0 ? '+' : ''}${unrealizedPL.toFixed(2)}
+        <div className="font-mono text-sm text-muted-foreground">
+          —
         </div>
         <div className="text-xs text-muted-foreground">
-          {unrealizedPLPercent >= 0 ? '+' : ''}{unrealizedPLPercent.toFixed(2)}% • {unrealizedR >= 0 ? '+' : ''}{unrealizedR.toFixed(2)}R
+          Awaiting live price
         </div>
       </td>
       

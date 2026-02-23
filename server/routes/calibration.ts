@@ -1,6 +1,6 @@
 /**
  * Directive 8.8.4-M5-R1 — Calibration API Routes
- * 
+ *
  * Endpoints:
  * - GET /api/calibration/report – current per-strategy reliability and weight distribution
  * - GET /api/calibration/latest – most recent saved calibration report
@@ -21,17 +21,18 @@ import { recalibratePredictiveWeights, getRecalibrationStatus } from '../scripts
 
 const router = Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'jwt-development-secret-do-not-use-in-production';
+// Directive 12.1.3: JWT_SECRET must come from environment — no fallback
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('FATAL: JWT_SECRET environment variable is not set. Server cannot start without it.');
+}
 
 interface AuthenticatedRequest extends Request {
   user?: { id: string; username: string };
 }
 
+// Directive 12.1.3: Removed x-internal-audit and x-validation-session bypass headers
 function auditOrAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  if (req.headers['x-internal-audit'] === 'true' || req.headers['x-validation-session'] === 'true') {
-    return next();
-  }
-  
   const authHeader = req.headers.authorization;
   if (!authHeader) {
     return res.status(401).json({ error: 'Authentication required' });
@@ -114,7 +115,7 @@ router.get('/raw', auditOrAuth, async (_req: Request, res: Response) => {
     const fullCalibration = await loadFullCalibration();
     const vtsStats = vtsService.getStats();
     const strategyStats = vtsService.getStrategyStats();
-    
+
     res.json({
       ok: true,
       globalCalibration: fullCalibration.global,
@@ -136,10 +137,10 @@ router.get('/raw', auditOrAuth, async (_req: Request, res: Response) => {
 router.post('/ml/trigger', auditOrAuth, async (_req: Request, res: Response) => {
   try {
     console.log('[11.7I-04][Manual] Calibration triggered via API');
-    
+
     const schedulerStatus = getMLCalibrationSchedulerStatus();
     const result = await triggerManualCalibration();
-    
+
     res.json({
       ok: result.success,
       result,
@@ -147,8 +148,8 @@ router.post('/ml/trigger', auditOrAuth, async (_req: Request, res: Response) => 
     });
   } catch (error: any) {
     console.error('[11.7I-04][Manual] Calibration trigger error:', error.message);
-    res.status(500).json({ 
-      ok: false, 
+    res.status(500).json({
+      ok: false,
       error: 'Failed to trigger ML calibration',
       message: error.message
     });
@@ -158,21 +159,21 @@ router.post('/ml/trigger', auditOrAuth, async (_req: Request, res: Response) => 
 /**
  * Directive 11.7D — Manual Canonical Weight Recalibration Trigger
  * POST /api/ml/recalibration/trigger
- * 
+ *
  * Produces canonical weights file: bridge/canonical/phase9_predictive-learning.json
  */
 router.post('/ml/recalibration/trigger', auditOrAuth, async (_req: Request, res: Response) => {
   try {
     console.log('[11.7D][Manual] Canonical weight recalibration triggered via API');
-    
+
     const canonicalPath = 'bridge/canonical/phase9_predictive-learning.json';
     const beforeExists = fs.existsSync(canonicalPath);
-    
+
     const success = recalibratePredictiveWeights();
-    
+
     const afterExists = fs.existsSync(canonicalPath);
     let fileInfo = null;
-    
+
     if (afterExists) {
       const stats = fs.statSync(canonicalPath);
       fileInfo = {
@@ -183,9 +184,9 @@ router.post('/ml/recalibration/trigger', auditOrAuth, async (_req: Request, res:
       };
       console.log(`[11.7D][Manual] ✅ Canonical weights file created: ${canonicalPath} (${stats.size} bytes)`);
     }
-    
+
     const recalibrationStatus = getRecalibrationStatus();
-    
+
     res.json({
       ok: success,
       beforeExists,
@@ -195,8 +196,8 @@ router.post('/ml/recalibration/trigger', auditOrAuth, async (_req: Request, res:
     });
   } catch (error: any) {
     console.error('[11.7D][Manual] Recalibration trigger error:', error.message);
-    res.status(500).json({ 
-      ok: false, 
+    res.status(500).json({
+      ok: false,
       error: 'Failed to trigger canonical weight recalibration',
       message: error.message
     });
@@ -210,11 +211,11 @@ router.get('/ml/status', auditOrAuth, async (_req: Request, res: Response) => {
   try {
     const schedulerStatus = getMLCalibrationSchedulerStatus();
     const recalibrationStatus = getRecalibrationStatus();
-    
+
     const canonicalPath = 'bridge/canonical/phase9_predictive-learning.json';
     const canonicalExists = fs.existsSync(canonicalPath);
     let canonicalInfo = null;
-    
+
     if (canonicalExists) {
       const stats = fs.statSync(canonicalPath);
       canonicalInfo = {
@@ -223,7 +224,7 @@ router.get('/ml/status', auditOrAuth, async (_req: Request, res: Response) => {
         modified: stats.mtime.toISOString()
       };
     }
-    
+
     res.json({
       ok: true,
       schedulerStatus,

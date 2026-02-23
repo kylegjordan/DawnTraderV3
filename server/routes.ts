@@ -10,7 +10,6 @@ import { KrakenService } from "./services/kraken";
 import { TradingEngine, EngineSettingsBus } from "./services/trading-engine";
 import { AIAnalyst } from "./services/ai-analyst";
 import { MarketScanner, getPassiveLearningBuffer, getREB211DriftBuffer, getREB211IntegrityBuffer, getREB211TimingBuffer, getREB211MismatchBuffer, getREB211StressBuffer, getActiveAuditBuffer, getReb211bSymbolTraces } from "./services/market-scanner";
-// [9.6.3] RiskManager removed - use guardrail-settings.ts and trade-safety.ts instead
 import { getPortfolioBalanceV2, buildSettingsFromGuardrails as buildSettingsFromModeLevel } from "./services/guardrail-settings";
 import { buildSettingsFromGuardrails, checkGuardrailRisk, calculateRiskAmount, type TradeCandidate } from "./services/trade-safety";
 import { aiOpportunitiesService } from "./services/ai-opportunities";
@@ -86,7 +85,6 @@ export const loginLimiter = rateLimit({
 
 const marketScanner = new MarketScanner();
 const aiAnalyst = new AIAnalyst();
-// [9.6.3] RiskManager instance removed - risk control unified under TradeSafety & SizingHelper
 
 // [41F-L.2] Trade test request schema
 const TradeTestSchema = z.object({
@@ -118,8 +116,15 @@ nlaiExecutionBroker.initialize(storage, executionPolicyController);
 const userPendingConfirmations = new Map<string, string>(); // userId -> confirmationId
 
 // JWT secrets for authentication
-const JWT_SECRET = process.env.JWT_SECRET || "development_secret_change_in_production";
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || "development_refresh_secret_change_in_production";
+// Directive 12.1.3: JWT secrets must come from environment — no fallback
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('FATAL: JWT_SECRET environment variable is not set. Server cannot start without it.');
+}
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
+if (!JWT_REFRESH_SECRET) {
+  throw new Error('FATAL: JWT_REFRESH_SECRET environment variable is not set. Server cannot start without it.');
+}
 
 // Issue access and refresh tokens (Phase 27.3: includes permissions, fail closed)
 function issueTokens(user: { id: string; username: string; role?: UserRole }) {

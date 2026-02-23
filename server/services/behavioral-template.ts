@@ -1,8 +1,7 @@
 import type { TradingSettings } from '@shared/schema';
 import { storage } from '../storage';
-// [9.0-FP] RiskManager import removed - using inline stub
 
-// [9.0-FP] Inline stub for portfolio metrics (replaces RiskManager.getPortfolioMetrics)
+// Portfolio metrics helper (storage-based)
 async function getPortfolioMetricsStub(mode: 'live' | 'paper' = 'paper') {
   const activeTrades = await storage.getActiveTrades(mode);
   const closedTrades = await storage.getTrades(mode, { status: 'closed' });
@@ -180,7 +179,7 @@ export async function fetchUserContext(userId: string): Promise<UserTradingConte
     // [8.8.3-H11] Fixed: getActiveTrades requires mode parameter
     const activeTrades = await storage.getActiveTrades(mode);
     
-    // [9.0-FP] Get portfolio metrics from stub (replaces RiskManager)
+    // Get portfolio metrics
     const metrics = await getPortfolioMetricsStub(mode);
 
     // Phase 8.5 Addendum I: Get portfolio value from portfolio_state table
@@ -191,7 +190,7 @@ export async function fetchUserContext(userId: string): Promise<UserTradingConte
       ? parseFloat(portfolioState.balance) 
       : 0;
     
-    // [9.0-FP] Use default values (settings removed in E2E-PURGE)
+    // Default values
     const riskPerTrade = 0;
     const dailyLossKillSwitch = 7.0;
     const maxExposurePercent = 100;

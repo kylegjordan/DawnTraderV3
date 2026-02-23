@@ -25,7 +25,11 @@ import { getActionExecutor } from '../services/action-executor';
 
 const router = Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'jwt-development-secret-do-not-use-in-production';
+// Directive 12.1.3: JWT_SECRET must come from environment — no fallback
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('FATAL: JWT_SECRET environment variable is not set. Server cannot start without it.');
+}
 
 interface AuthenticatedRequest extends Request {
   user?: { id: string; username: string };

@@ -1,6 +1,6 @@
 /**
  * Directive 8.8.4-M5 — Pricing Feed API Routes
- * 
+ *
  * Endpoints for feed latency and cache information:
  * - GET /api/pricing/latency – rolling latency averages (1m/5m/15m)
  * - GET /api/pricing/cache-info – cache length and average latency
@@ -14,17 +14,18 @@ import { paperValidationEngine } from '../services/paper_validation_engine';
 
 const router = Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'jwt-development-secret-do-not-use-in-production';
+// Directive 12.1.3: JWT_SECRET must come from environment — no fallback
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('FATAL: JWT_SECRET environment variable is not set. Server cannot start without it.');
+}
 
 interface AuthenticatedRequest extends Request {
   user?: { id: string; username: string };
 }
 
+// Directive 12.1.3: Removed x-internal-audit bypass header
 function auditOrAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  if (req.headers['x-internal-audit'] === 'true') {
-    return next();
-  }
-  
   const authHeader = req.headers.authorization;
   if (!authHeader) {
     return res.status(401).json({ error: 'Authentication required' });
@@ -63,7 +64,7 @@ router.get('/cache-info', auditOrAuth, (_req: Request, res: Response) => {
   try {
     const health = priceCache.getHealthMetrics();
     const latencyAverages = paperValidationEngine.getRollingLatencyAverages();
-    
+
     res.json({
       cache_length: health.cacheSize,
       avg_latency_ms: Math.round(latencyAverages.oneMin * 10) / 10,
@@ -83,7 +84,7 @@ router.get('/status', auditOrAuth, (_req: Request, res: Response) => {
   try {
     const health = priceCache.getHealthMetrics();
     const latencyAverages = paperValidationEngine.getRollingLatencyAverages();
-    
+
     res.json({
       ok: true,
       cacheSize: health.cacheSize,

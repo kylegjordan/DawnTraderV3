@@ -11,7 +11,6 @@
 
 import { storage } from './storage';
 import { TradingEngine, TradeSignal } from './services/trading-engine';
-// [9.0-FP] RiskManager import removed - replaced by checkGuardrailRisk in trade-safety
 
 const TEST_USER_ID = 'default-user';
 
@@ -31,7 +30,6 @@ async function runTests() {
   console.log('║  GUARDRAILS ROUND-2 TEST SUITE                         ║');
   console.log('╚════════════════════════════════════════════════════════╝\n');
 
-  // [9.0-FP] RiskManager instance removed - guardrail checks now use trade-safety.ts
   const tradingEngine = new TradingEngine(TEST_USER_ID);
 
   try {

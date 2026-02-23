@@ -2,20 +2,20 @@
  * ══════════════════════════════════════════════════════════════════════════════
  * Directive 11.7E — Regime Archive API Endpoints
  * ══════════════════════════════════════════════════════════════════════════════
- * 
+ *
  * Phase: 11.7 | Series: Predictive Learning Feedback Loop
  * Dependencies: 11.7E Task 1 (Archival Schema)
  * Implements: Query, inspect, and export archived regime-metric data
- * 
+ *
  * Routes:
  * - GET /api/vts/regime-archive - Paginated archive list
  * - GET /api/vts/regime-archive/latest - Fetch most recent
  * - GET /api/vts/regime-archive/summary - Summary statistics
  * - GET /api/vts/regime-archive/export - CSV export
  * - GET /api/vts/regime-archive/manifest - Get manifest entries
- * 
+ *
  * All routes secured with requireAuth.
- * 
+ *
  * DO NOT MODIFY without architectural review.
  * ══════════════════════════════════════════════════════════════════════════════
  */
@@ -35,17 +35,19 @@ import { verifyArchiveIntegrity } from '../scripts/verify-archive-integrity';
 import { compressOldArchives } from '../scripts/compress-old-archives';
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+
+// Directive 12.1.3: JWT_SECRET must come from environment — no fallback
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('FATAL: JWT_SECRET environment variable is not set. Server cannot start without it.');
+}
 
 interface AuthenticatedRequest extends Request {
   user?: { id: string; username: string };
 }
 
+// Directive 12.1.3: Removed x-internal-audit and x-validation-session bypass headers
 function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
-  if (req.headers['x-internal-audit'] === 'true' || req.headers['x-validation-session'] === 'true') {
-    return next();
-  }
-  
   const authHeader = req.headers.authorization;
   if (!authHeader) {
     res.status(401).json({ error: 'Authentication required' });
@@ -71,9 +73,9 @@ router.get('/api/vts/regime-archive', requireAuth, (req: Request, res: Response)
     const to = req.query.to as string | undefined;
     const limit = Math.min(parseInt(req.query.limit as string) || 100, 1000);
     const offset = parseInt(req.query.offset as string) || 0;
-    
+
     const records = getArchiveRecords({ from, to, limit, offset });
-    
+
     res.json({
       ok: true,
       records,
@@ -95,7 +97,7 @@ router.get('/api/vts/regime-archive', requireAuth, (req: Request, res: Response)
 router.get('/api/vts/regime-archive/latest', requireAuth, (req: Request, res: Response): void => {
   try {
     const records = getLatestArchive();
-    
+
     if (!records) {
       res.json({
         ok: true,
@@ -104,7 +106,7 @@ router.get('/api/vts/regime-archive/latest', requireAuth, (req: Request, res: Re
       });
       return;
     }
-    
+
     res.json({
       ok: true,
       data: records,
@@ -122,7 +124,7 @@ router.get('/api/vts/regime-archive/latest', requireAuth, (req: Request, res: Re
 router.get('/api/vts/regime-archive/summary', requireAuth, (req: Request, res: Response): void => {
   try {
     const summary = getArchiveSummary();
-    
+
     res.json({
       ok: true,
       summary,
@@ -139,11 +141,11 @@ router.get('/api/vts/regime-archive/summary', requireAuth, (req: Request, res: R
 router.get('/api/vts/regime-archive/manifest', requireAuth, (req: Request, res: Response): void => {
   try {
     const manifest = getManifest();
-    
-    const sortedManifest = [...manifest].sort((a, b) => 
+
+    const sortedManifest = [...manifest].sort((a, b) =>
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
-    
+
     res.json({
       ok: true,
       manifest: sortedManifest,
@@ -163,9 +165,9 @@ router.get('/api/vts/regime-archive/export', requireAuth, (req: Request, res: Re
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
     const limit = Math.min(parseInt(req.query.limit as string) || 10000, 50000);
-    
+
     const records = getArchiveRecords({ from, to, limit, offset: 0 });
-    
+
     if (records.length === 0) {
       res.status(404).json({
         ok: false,
@@ -173,9 +175,9 @@ router.get('/api/vts/regime-archive/export', requireAuth, (req: Request, res: Re
       });
       return;
     }
-    
+
     const csv = exportArchiveToCSV(records);
-    
+
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename=regime_archive_export_${new Date().toISOString().slice(0, 10)}.csv`);
     res.send(csv);
@@ -191,9 +193,9 @@ router.get('/api/vts/regime-archive/export', requireAuth, (req: Request, res: Re
 router.post('/api/vts/regime-archive/trigger', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     console.log('[11.7E][API] Manual archive trigger requested');
-    
+
     const result = await archiveRegimeMetrics();
-    
+
     res.json({
       ok: result.success,
       data: result,
@@ -210,9 +212,9 @@ router.post('/api/vts/regime-archive/trigger', requireAuth, async (req: Request,
 router.post('/api/vts/regime-archive/verify', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     console.log('[11.7E][API] Manual integrity verification requested');
-    
+
     const result = await verifyArchiveIntegrity();
-    
+
     res.json({
       ok: result.success,
       data: result,
@@ -229,9 +231,9 @@ router.post('/api/vts/regime-archive/verify', requireAuth, async (req: Request, 
 router.post('/api/vts/regime-archive/compress', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     console.log('[11.7E][API] Manual compression requested');
-    
+
     const result = await compressOldArchives();
-    
+
     res.json({
       ok: result.success,
       data: result,
@@ -250,12 +252,12 @@ router.get('/api/vts/regime-archive/drift', requireAuth, (req: Request, res: Res
     const days = Math.min(parseInt(req.query.days as string) || 30, 90);
     const fromDate = new Date();
     fromDate.setDate(fromDate.getDate() - days);
-    
-    const records = getArchiveRecords({ 
-      from: fromDate.toISOString(), 
-      limit: 10000 
+
+    const records = getArchiveRecords({
+      from: fromDate.toISOString(),
+      limit: 10000
     });
-    
+
     const driftData: Record<string, {
       dates: string[];
       confidence: number[];
@@ -263,7 +265,7 @@ router.get('/api/vts/regime-archive/drift', requireAuth, (req: Request, res: Res
       avgPnL: number[];
       dynamicROI: number[];
     }> = {};
-    
+
     for (const record of records) {
       const key = `${record.regime}/${record.strategy}`;
       if (!driftData[key]) {
@@ -275,14 +277,14 @@ router.get('/api/vts/regime-archive/drift', requireAuth, (req: Request, res: Res
           dynamicROI: [],
         };
       }
-      
+
       driftData[key].dates.push(record.timestamp);
       driftData[key].confidence.push(record.metrics.confidence);
       driftData[key].winRate.push(record.metrics.winRate);
       driftData[key].avgPnL.push(record.metrics.avgPnL);
       driftData[key].dynamicROI.push(record.metrics.dynamicROI);
     }
-    
+
     res.json({
       ok: true,
       data: driftData,

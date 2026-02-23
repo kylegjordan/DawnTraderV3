@@ -1,6 +1,6 @@
 /**
  * Directive 8.8.4-M5 — Paper Validation API Routes
- * 
+ *
  * Endpoints:
  * - POST /api/validation/run – start supervised paper test
  * - GET /api/validation/status – session metrics
@@ -15,17 +15,18 @@ import { paperValidationEngine } from '../services/paper_validation_engine';
 
 const router = Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'jwt-development-secret-do-not-use-in-production';
+// Directive 12.1.3: JWT_SECRET must come from environment — no fallback
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('FATAL: JWT_SECRET environment variable is not set. Server cannot start without it.');
+}
 
 interface AuthenticatedRequest extends Request {
   user?: { id: string; username: string };
 }
 
+// Directive 12.1.3: Removed x-internal-audit bypass header
 function auditOrAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  if (req.headers['x-internal-audit'] === 'true') {
-    return next();
-  }
-  
   const authHeader = req.headers.authorization;
   if (!authHeader) {
     return res.status(401).json({ error: 'Authentication required' });
@@ -60,7 +61,7 @@ router.post('/run', auditOrAuth, async (req: Request, res: Response) => {
         durationMinutes = parseInt(match[1], 10);
       }
     }
-    
+
     // Parse capture interval
     let captureIntervalSeconds = 10;
     const intervalParam = req.query.interval as string;
@@ -70,7 +71,7 @@ router.post('/run', auditOrAuth, async (req: Request, res: Response) => {
 
     console.log(`[M5-R1][API] Starting validation: duration=${durationMinutes}m, interval=${captureIntervalSeconds}s`);
     const result = await paperValidationEngine.startValidationSession(durationMinutes, captureIntervalSeconds);
-    
+
     res.json({
       ok: true,
       ...result
