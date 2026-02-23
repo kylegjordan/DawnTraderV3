@@ -23,13 +23,13 @@
 
 | Directive | Title | Status | Date Issued | Date Complete | Review Cycles | Notes |
 |-----------|-------|--------|-------------|---------------|---------------|-------|
-| 12.2.1 | Wave 1: Safe Deletions | PENDING | — | — | — | ~12 LATTi files + more |
+| 12.2.1 | Wave 1: Safe Deletions | PENDING | — | — | — | Largely done — only LATTi residuals remain |
 | 12.2.2 | Wave 1.5: MarketScanner Class Removal | PENDING | — | — | — | Preserve collectAdaptiveBatch |
-| 12.2.3 | Wave 3: Walter/Bob/Cortex Removal | PENDING | — | — | — | ~96 files |
+| 12.2.3 | Wave 3: Walter/Bob/Cortex Removal | PENDING | — | — | — | ~40+ files, ~16,800 lines |
 | 12.2.4 | Wave 3.1: Frontend Walter Cleanup | PENDING | — | — | — | — |
 | 12.2.5 | Wave 4: Friction Model Unification | PENDING | — | — | — | — |
 | 12.2.6 | Wave 4.5: Goal Alignment Removal | PENDING | — | — | — | — |
-| 12.2.7 | Wave 4.7: NLAI System Removal | PENDING | — | — | — | 5 files |
+| 12.2.7 | Wave 4.7: NLAI System Removal | COMPLETE | 2026-02-24 | 2026-02-24 | 1 | Batch 4 — 5 files deleted, 6 files modified, ~2,147 lines removed |
 | 12.2.8 | Wave 8: Walter-Era Learning Services | PENDING | — | — | — | 5+ files |
 | 12.2.9 | Wave 9: Frontend Dead Code | PENDING | — | — | — | 7 dead pages |
 
@@ -47,10 +47,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Directives Issued | 5 |
-| Total Directives Complete | 5 |
+| Total Directives Issued | 6 |
+| Total Directives Complete | 6 |
 | Total Directives In Progress | 0 |
-| Total Review Cycles | 5 |
+| Total Review Cycles | 6 |
 | Average Review Cycles per Directive | 1.0 |
 
 ---

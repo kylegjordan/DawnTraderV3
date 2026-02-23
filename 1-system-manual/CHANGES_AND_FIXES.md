@@ -535,15 +535,11 @@
 - **Fix**: Derive actual exit slippage from fill response.
 - **Phase Found**: Phase 5 (updated by Phase 5 Addendum)
 
-### RISK-037: NLAI System Is Legacy Conversational Control Infrastructure — Formally Deprecated
-- **Severity**: MEDIUM → **FORMALLY DEPRECATED** (Kyle, 2026-02-16)
-- **Location**: `server/services/nlai-interpreter.ts`, `contextual-nlai-interpreter.ts`, `nlai-execution-broker.ts`, `nlai-action-registry.ts`, `execution-policy-controller.ts`
-- **Problem**: NLAI (Natural Language Action Interpreter) was Walter AI's command bridge. It parsed chat commands, routed through execution broker, called service functions for guardrails/goals/watchlist/start-stop. Walter has been deprecated, conversational goal system removed, Goals tab removed.
-- **What NLAI does NOT do**: Does not inject signals, modify scoring, alter VTS, or override execution math. Architecturally safe and scoped.
-- **Kyle Decision (2026-02-16)**: NLAI is legacy conversational control infrastructure, no longer aligned with system direction. Formally deprecated.
-- **Removal scope**: nlai-interpreter.ts, contextual-nlai-interpreter.ts, nlai-execution-broker.ts, nlai-action-registry.ts, ExecutionPolicyController (NLAI-only consumer), NLAI cluster bus events, NLAI API routes, goal-update command handlers, residual Walter-specific context logic.
-- **Future note**: ML integration may reintroduce command routing, but will be deliberate and redesigned.
-- **Timing**: Pre-MCE or during MCE (EASY to MODERATE — scoped removal)
+### RISK-037: NLAI System Is Legacy Conversational Control Infrastructure — **RESOLVED**
+- **Severity**: MEDIUM → **FORMALLY DEPRECATED** (Kyle, 2026-02-16) → **RESOLVED**
+- **Status**: **RESOLVED** — Directive 12.2.7, Batch 4, commit `5d5c2051` (2026-02-24)
+- **Resolution**: All 5 NLAI files deleted (nlai-interpreter.ts, contextual-nlai-interpreter.ts, nlai-execution-broker.ts, nlai-action-registry.ts, execution-policy-controller.ts). All references cleaned from 6 consuming files (routes.ts, live-trading-service.ts, auto_test_harness.ts, paper-sim-service.ts, config-update-service.ts, cognitive-tuner.ts). ActionResult type inlined in live-trading-service.ts. Chat handler in routes.ts now routes directly to intent-parser + command-router.
+- **Original Problem**: NLAI (Natural Language Action Interpreter) was Walter AI's command bridge. It parsed chat commands, routed through execution broker, called service functions for guardrails/goals/watchlist/start-stop. Walter has been deprecated, conversational goal system removed, Goals tab removed.
 - **Phase Found**: Phase 5 Addendum (Kyle directive)
 
 ### BUG-013: ML Service Client PredictionInput References Removed Phase-10 Fields
@@ -938,7 +934,7 @@
 | Phase 9 Addendum Directives | 2 (ADD-4 — remove speculative endpoints; ADD-5 — remove simulated price) |
 | Unification Recommendations | 3 |
 | Kyle-Accepted/Deferred | 6 (RISK-029 accepted, RISK-031 deferred, RISK-027 superseded, BUG-010/011 deferred, RISK-032 accepted, RISK-036 deferred) |
-| Formally Deprecated | 3 (RISK-028 — Goal Alignment, RISK-037 — NLAI system, BUG-012 — Goal Alignment Location 2) |
+| Formally Deprecated | 2 (RISK-028 — Goal Alignment, BUG-012 — Goal Alignment Location 2). ~~RISK-037~~ RESOLVED. |
 | Confirmed Legacy | 1 (RISK-040 — 5 Walter-era learning services, confirmed Kyle Phase 6 Addendum) |
 | Live Mode Deferred | 3 (BUG-010, BUG-011, RISK-036 — informational until live refactor) |
 | Items Pre-MCE Timing | 20 (BUG-004, BUG-006, BUG-007, BUG-008, BUG-009, BUG-012, BUG-014, BUG-017, BUG-020, RISK-013, RISK-014/015, RISK-016/017/018, RISK-023, RISK-028, RISK-037, RISK-045, RISK-049, RISK-050, RISK-051, RISK-057) |
@@ -1023,7 +1019,7 @@ Total: 21 bugs, 65 risks.
 ### RISK-070: Test Files for Deprecated Walter/Bob Systems — Will Break on Removal
 - **Severity**: LOW (planning concern)
 - **Location**: `server/tests/diagnostic-system.test.ts` (466 lines), `server/tests/phase-6.0-simulations.test.ts` (229 lines)
-- **Problem**: Two test files import and test Walter/Bob services (diagnostic-controller, bob-inspector, walter-expert-corpus, walter-reasoning-templates, walter-knowledge-refresh, walter-purpose). When Walter is removed in Wave 3, these tests will fail with import errors. Additionally, `auto_test_harness.ts` imports from the deprecated NLAI system and `paper_validation_engine.ts` references L-Series legacy systems (DCE, GASP).
+- **Problem**: Two test files import and test Walter/Bob services (diagnostic-controller, bob-inspector, walter-expert-corpus, walter-reasoning-templates, walter-knowledge-refresh, walter-purpose). When Walter is removed in Wave 3, these tests will fail with import errors. Additionally, `paper_validation_engine.ts` references L-Series legacy systems (DCE, GASP). (Note: `auto_test_harness.ts` NLAI imports were cleaned in Directive 12.2.7.)
 - **Impact**: If CI/CD is enabled before Walter removal, these stale tests will block the pipeline. If CI/CD is enabled after Walter removal, these tests must be removed first.
 - **Recommended**: Remove or skip these tests during Wave 3 (Walter removal). Update `paper_validation_engine.ts` during Wave 6 (L-Series removal) to remove DCE/GASP references.
 - **Timing**: During Wave 3 and Wave 6 respectively
@@ -1208,7 +1204,7 @@ Total: 21 bugs, 65 risks.
 | Post-Audit Bugs | 1 (BUG-022 — duplicate tab value in enhanced-system-monitoring.tsx) |
 | Unification Recommendations | 3 |
 | Kyle-Accepted/Deferred | 6 (RISK-029 accepted, RISK-031 deferred, RISK-027 superseded, BUG-010/011 deferred, RISK-032 accepted, RISK-036 deferred) |
-| Formally Deprecated | 3 (RISK-028 — Goal Alignment, RISK-037 — NLAI system, BUG-012 — Goal Alignment Location 2) |
+| Formally Deprecated | 2 (RISK-028 — Goal Alignment, BUG-012 — Goal Alignment Location 2). ~~RISK-037~~ RESOLVED. |
 | Confirmed Legacy | 1 (RISK-040 — 5 Walter-era learning services, confirmed Kyle Phase 6 Addendum) |
 | Live Mode Deferred | 3 (BUG-010, BUG-011, RISK-036 — informational until live refactor) |
 | Items Pre-MCE Timing | 20 (BUG-004, BUG-006, BUG-007, BUG-008, BUG-009, BUG-012, BUG-014, BUG-017, BUG-020, RISK-013, RISK-014/015, RISK-016/017/018, RISK-023, RISK-028, RISK-037, RISK-045, RISK-049, RISK-050, RISK-051, RISK-057) |

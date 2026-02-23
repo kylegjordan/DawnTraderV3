@@ -498,10 +498,10 @@
 - **Blast Radius**: **LOW** to trading pipeline (mostly disconnected), but Cortex consumes memory
 - **Removal**: Phase 12.2.3-12.2.4 (Waves 3, 3.1)
 
-### 11.4 NLAI — 5 FILES
-- **What**: Natural Language Action Interpreter. Event handlers active.
-- **Blast Radius**: **LOW** — not in trading pipeline
-- **Removal**: Phase 12.2.7 (Wave 4.7)
+### 11.4 ~~NLAI~~ — REMOVED (Directive 12.2.7)
+- **What**: ~~Natural Language Action Interpreter. Event handlers active.~~ REMOVED — All 5 files deleted, 6 consumer files cleaned. Commit `5d5c2051` (2026-02-24).
+- **Blast Radius**: **ZERO** — completely removed
+- **Status**: COMPLETE. No NLAI code remains in server/.
 
 ### 11.5 Goal Alignment
 - **What**: Daily/weekly targets in pre-execution-validator.ts and trading-engine.ts.

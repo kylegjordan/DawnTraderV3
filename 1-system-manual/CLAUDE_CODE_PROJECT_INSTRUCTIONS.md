@@ -3,7 +3,7 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-02-23 (after Batch 3B — Directives 12.1.3/12.1.4/12.1.5 governance, checkpoint commit documentation added)
+> **Last Updated**: 2026-02-24 (after Batch 4B — Directive 12.2.7 governance, permission settings documented, Scope Files path added)
 
 ---
 
@@ -81,7 +81,8 @@ This replaces the original 7-step directive lifecycle with a more efficient batc
 | `G:\My Drive\Dawn Trader\DT_Clone_Repo\DawnTraderV3\` | The repo clone. **READ ONLY for Claude Code.** Read source files from here, but NEVER write modified files here. |
 | `G:\My Drive\Dawn Trader\DT_Staged_Changes\` | **Staging area for all batch changes.** Each batch gets a subfolder (e.g., `BATCH_2/`, `BATCH_2B/`) with modified files in repo-relative paths, plus README.md and INSTRUCTIONS.md. This is OUTSIDE the repo — edits here never cause sync conflicts. |
 | `G:\My Drive\Dawn Trader\DT_Frozen_Snapshots\` | Snapshot log tracking every freeze point with commit hashes for rollback. |
-| `G:\My Drive\Dawn Trader\DT_Clone_Repo\Claude Comms and Packages\` | **Zip drop zone.** Code batch zips go in `Batch Zips/`. Governance batch zips go in `Governance Zips/`. Loose files (scope docs, directive write-ups) go in the parent folder. This is OUTSIDE the git repo (sibling to `DawnTraderV3/`). |
+| `G:\My Drive\Dawn Trader\DT_Clone_Repo\Claude Comms and Packages\` | **Zip drop zone.** Code batch zips go in `Batch Zips/`. Governance batch zips go in `Governance Zips/`. Scope files go in `Scope Files/`. This is OUTSIDE the git repo (sibling to `DawnTraderV3/`). |
+| `G:\My Drive\Dawn Trader\DT_Clone_Repo\Claude Comms and Packages\Scope Files\` | **Batch scope documents.** Each batch scope is written here before implementation begins (e.g., `BATCH_4_SCOPE.md`). |
 
 **IMPORTANT**: The Desktop (`C:\Users\kyleg\Desktop\`) is NOT a drop zone. All zips go to `Claude Comms and Packages/`.
 
@@ -98,8 +99,6 @@ This replaces the original 7-step directive lifecycle with a more efficient batc
 | `SYSTEM_MANUAL_OVERVIEW.md` | Orientation document. |
 | `CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` | This file. |
 | `REPLIT_ONBOARDING_PROMPT.md` | Prompt pasted into Replit to onboard it to the governance system. |
-| `sync-repo.bat` | One-click sync: pulls from GitHub into local clone. |
-| `directives/DIRECTIVE_INDEX.md` | Master tracker for all directives. 18 Phase 12 directives queued. |
 
 ### Directive Folder Structure
 
@@ -121,6 +120,9 @@ Each completed directive gets its own folder under `1-system-manual/directives/`
 │   └── DIRECTIVE_12.1.4.md
 ├── 12.1.5/
 │   └── DIRECTIVE_12.1.5.md
+├── 12.2.7/
+│   ├── DIRECTIVE_12.2.7.md
+│   └── BATCH_4_README.md
 └── [future directives follow same pattern]
 ```
 
@@ -130,7 +132,7 @@ Every governance batch must create this folder for the directive it documents.
 
 | File | Purpose |
 |------|---------|
-| `scripts/github-push.sh` | Replit's push script. 7 steps, 3 safety layers (size gate, pattern filter, error handling). |
+| `scripts/github-push.sh` | Replit's push script. 7 steps, 3 safety layers (size gate, pattern filter, error handling). NOTE: May fail when checkpoint commits pre-capture changes — manual `git push` via Replit Shell may be needed. |
 | `REPLIT_VALIDATION.sh` | Post-batch validation. TypeScript compilation, test suite, server startup, batch-specific checks. |
 
 ---
@@ -149,7 +151,7 @@ Examples:
 - `BATCH_2-DIR_12.1.2_DUAL_FRICTION_FIX.zip` (code batch)
 - `BATCH_2B-DIR_12.1.2_GOVERNANCE_UPDATES.zip` (governance batch)
 - `BATCH_3-DIR_12.1.3_12.1.4_12.1.5_SECURITY_PRICE_CLEANUP.zip` (multi-directive code batch)
-- `BATCH_3B-DIR_12.1.3_12.1.4_12.1.5_GOVERNANCE_UPDATES.zip` (governance batch)
+- `BATCH_4-DIR_12.2.7_NLAI_SYSTEM_REMOVAL.zip` (dead code removal batch)
 
 ### Zip Contents
 
@@ -243,6 +245,17 @@ Every batch INSTRUCTIONS.md sent to Replit MUST include the following autonomy c
 - Batch 2B: `2047d2a4` ("Update friction calculation...") appeared before official `67dd76d1`
 - Batch 3: `f22d1bfa` ("Remove simulated trade prices...") appeared before official `0ddc8db1`
 - Batch 3: `5c5dcbfd` ("Update system logs...") — runtime state checkpoint
+- Batch 4: `080078bd` ("Remove natural language action interpretation..."), `b271610e`, `ddc77d86` appeared before official `5d5c2051`
+
+### Push Script Limitations
+
+Batch 4 revealed that Replit's `github-push.sh` script may fail to recognize changes when checkpoint commits have already captured them locally. In this case, the official commit must be created manually via the **Replit Shell tab**:
+
+```bash
+git add -A && git commit -m "Batch N: ..." && git push origin dawntrader-v4
+```
+
+This is a known workaround. Monitor in future batches.
 
 ### Post-Push Verification (Required After Every Batch)
 
@@ -259,6 +272,27 @@ Check for any commits between the last known snapshot and the current batch comm
 
 ---
 
+## Claude Code Permission Settings
+
+The project uses a `settings.local.json` to pre-approve common tool operations, reducing permission prompts during work sessions. The current settings are:
+
+**Auto-approved (no prompts)**:
+- All `git` read operations: `log`, `status`, `diff`, `show`, `rev-parse`, `pull`, `restore`
+- File operations: `ls`, `mkdir`, `cat`, `echo`, `wc`, `test`, `cd`
+- Build tools: `npx tsc`, `npm install`, `npm ls`, `node`
+- Zip creation: `powershell.exe -Command`, `zip`
+- Search: `grep`
+
+**Explicitly blocked**:
+- `git push` — only Replit pushes
+- `git reset --hard` — destructive, requires manual approval
+- `git checkout` / `git clean` / `git branch -D` — destructive operations
+- `rm -rf` / `del` — bulk file deletion
+
+These settings are stored in `.claude/worktrees/wizardly-einstein/.claude/settings.local.json`. At the start of each session, verify this file exists with the correct permissions. If it's missing or stale, recreate it with the patterns above.
+
+---
+
 ## Current State
 
 ### Completed Directives
@@ -271,6 +305,8 @@ Check for any commits between the last known snapshot and the current batch comm
 | 12.1.3 | Security Hardening — JWT + Auth Bypass | Batch 3 | `0ddc8db1` |
 | 12.1.4 | Remove Simulated Price Display (BUG-020) | Batch 3 | `0ddc8db1` |
 | 12.1.5 | RiskManager Comment/Stub Cleanup | Batch 3 | `0ddc8db1` |
+| — | Governance docs updated (12.1.3/4/5 RESOLVED) | Batch 3B | `b52e40ea` |
+| 12.2.7 | NLAI System Removal (Wave 4.7) | Batch 4 | `5d5c2051` |
 
 ### Snapshot Log
 | Snapshot | Commit | Description |
@@ -282,17 +318,23 @@ Check for any commits between the last known snapshot and the current batch comm
 | SNAPSHOT-004 | `8393a1ef` | After Batch 2 (RISK-009 fix) |
 | SNAPSHOT-005 | `67dd76d1` | After Batch 2B (governance updates) |
 | SNAPSHOT-006 | `67dd76d1` | Pre-Batch 3 freeze (same as 005) |
+| SNAPSHOT-007 | `b52e40ea` | After Batch 3B (governance updates) |
 
 ### Pending Directives (Phase 12)
-See `directives/DIRECTIVE_INDEX.md` for the full list. 13 remaining:
+See `directives/DIRECTIVE_INDEX.md` for the full list. 12 remaining:
 - 12.1.6 (LSP Error Triage)
-- 12.2.1 through 12.2.9 (Dead Code Purge)
+- 12.2.1 through 12.2.6, 12.2.8, 12.2.9 (Dead Code Purge — 8 remaining)
 - 12.3.1 through 12.3.3 (Pipeline Unification)
+
+### Investigation Notes for Future Batches
+- **12.2.1 (Wave 1)** is largely already done — LATTi files were deleted in a prior cleanup. Only `client/src/components/system/latti-safety-monitor.tsx` remains, plus schema/route residuals. Can be folded into another batch.
+- **12.2.3 (Wave 3) Walter/Bob** is the biggest remaining removal: ~40+ files, ~16,800 lines across server services, middleware, routes, and client components. Should be split into multiple batches.
+- **12.1.6 (LSP Error Triage)** — ~620 errors from Replit audit are LOW severity. Most are type annotation gaps, not logic bugs. Tied to routes.ts/storage.ts monolith decomposition. Not recommended for near-term batches.
 
 ### Test Baseline
 - **816 pass / 81 fail** (897 total across 27 pass / 26 fail test files)
 - 20 pre-existing TSC errors in files not modified by any directive
-- Baseline confirmed stable across Batches 1, 2, and 3
+- Baseline confirmed stable across Batches 1, 2, 3, and 4
 
 ---
 
@@ -309,6 +351,8 @@ See `directives/DIRECTIVE_INDEX.md` for the full list. 13 remaining:
 9. **Zip naming must include directive numbers.** Format: `BATCH_N-DIR_X.Y.Z_DESCRIPTION.zip`. This makes batches self-documenting.
 10. **Zips go to `Claude Comms and Packages/`** (Batch Zips/ or Governance Zips/), not the Desktop.
 11. **Every INSTRUCTIONS.md sent to Replit must include the Replit Autonomy Reminder** at the top. This reminds Replit of its constraints on every batch, not just in `replit.md`.
+12. **Scope files go to `Claude Comms and Packages/Scope Files/`** before implementation begins. Each scope document is named `BATCH_N_SCOPE.md`.
+13. **If Replit's push script fails**, instruct Kyle to use the **Replit Shell tab** directly with: `git add -A && git commit -m "Batch N: ..." && git push origin dawntrader-v4`. The push script (`github-push.sh`) may fail when checkpoint commits have already captured changes locally. The Shell tab bypasses the Agent's git restrictions.
 
 ---
 
@@ -317,7 +361,8 @@ See `directives/DIRECTIVE_INDEX.md` for the full list. 13 remaining:
 1. Read this file (`1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`)
 2. Read the snapshot log (`DT_Frozen_Snapshots/SNAPSHOT_LOG.md`) to know current state
 3. Read `directives/DIRECTIVE_INDEX.md` to see what's completed and what's next
-4. Ask Kyle what to work on, or continue from where the previous session left off
+4. Verify permission settings in `.claude/worktrees/wizardly-einstein/.claude/settings.local.json` — recreate if missing (see Claude Code Permission Settings section)
+5. Ask Kyle what to work on, or continue from where the previous session left off
 
 ---
 

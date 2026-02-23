@@ -155,6 +155,7 @@ All governance documents are in `1-system-manual/`:
 
 ## Recent Changes
 
+- **2026-02-23**: Directive 12.2.7 (Batch 4/4B) — NLAI system removal. 5 files deleted, 6 consumer files cleaned, governance docs updated. RISK-037 RESOLVED. DIRECTIVE_INDEX 6/18 complete.
 - **2026-02-22**: Directive 12.1.2 (Batch 2) — Fixed dual friction models (RISK-009). Replaced `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE` flat rate with canonical `computeTotalRoundTripCost()` in signal-orchestrator.ts, expectancy.ts. Deprecated `calculateFriction()` in analysis-utils.ts. Autonomy constraints added to this file.
 - **2026-02-22**: Directive 12.1.1 (Batch 1) — Fixed DI Probability Divergence (BUG-004). Signal orchestrator now uses `calculateDirectionalIntegrity(closePrices)` instead of NGC-derived confidence.
 - **2026-02-19**: Development governance system established. Directive Implementation Workflow, System Impact Map, and Directive Index created. Phase 12 directives pre-loaded (18 PENDING). All changes from this point forward governed by directive lifecycle.
