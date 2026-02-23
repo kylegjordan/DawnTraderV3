@@ -137,20 +137,19 @@
 - **Timing**: Pre-live
 - **Phase Found**: Pre-audit
 
-### RISK-009: Dual Friction Models in Signal Orchestrator
+### RISK-009: Dual Friction Models in Signal Orchestrator — **RESOLVED**
+- **Status**: **RESOLVED** — Directive 12.1.2, Batch 2 (2026-02-22), commit `8393a1ef`
 - **Severity**: HIGH
-- **Location**: `signal-orchestrator.ts` lines 557 and 1122
+- **Location**: `signal-orchestrator.ts` lines 557 and 1122 (pre-fix)
 - **Problem**: Two different friction calculations in the same file:
   - Line 557: `computeTotalRoundTripCost(fee, slippage, spread)` from cost-model.ts — **CORRECT**
   - Line 1122: `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE / 100` flat percentage — **INCORRECT**
-- **Kyle confirmed**: `computeTotalRoundTripCost` is the correct friction model. Formula: `(fee × 2) + (slippage × 2) + spread`. This correctly accounts for fees and slippage being charged on BOTH entry and exit legs, with spread charged once at entry. `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE` (flat 0.5%) is incorrect and must be replaced.
-- **Impact**: Same pair gets different cost calculations depending on which code path evaluates it. The SYSTEM_GUARDS path produces incorrect friction estimates.
-- **Verified**: Yes — code-confirmed 2026-02-15, Kyle-confirmed 2026-02-15
-- **Timing**: During MCE — unify under cost-model as canonical friction provider (or pre-MCE if standalone fix is feasible)
-- **Fix**: Replace ALL `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE` friction calculations with `computeTotalRoundTripCost()` from cost-model.ts. This includes:
-  - signal-orchestrator.ts line 1122
-  - analysis-utils.ts `calculateFriction()` function (lines 349-357)
-  - Any other consumers of `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE`
+- **Resolution**: All `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE` friction consumers replaced with `getCachedCostMetrics(symbol)` + `computeTotalRoundTripCost()` from cost-model.ts:
+  - signal-orchestrator.ts DSS evaluation loop (line ~1122) — now uses per-pair cost metrics
+  - signal-orchestrator.ts DSS_TRADE_SNAPSHOT capture (line ~1165) — now uses per-pair cost metrics
+  - expectancy.ts `evaluateTradeExpectancy()` (line ~520) — now calls cost-model directly instead of `calculateFriction()`
+  - analysis-utils.ts `calculateFriction()`, `calculatePerUnitFriction()`, `getFrictionRate()` — marked `@deprecated`, zero runtime callers
+- **Impact of fix**: The old code underestimated friction by 72× (0.01% vs 0.72% for default cost metrics). The DSS NetEV gate now correctly accounts for real trading costs.
 - **Phase Found**: Phase 1 (ChatGPT review, Kyle-confirmed)
 
 ### RISK-010: Rolling Normalization Is Legacy Infrastructure
@@ -165,16 +164,15 @@
 
 ## UNIFICATION RECOMMENDATIONS
 
-### UNIFY-001: Friction Model Consolidation
-- **Current State**: Three friction/cost calculation sources:
-  1. `analysis-utils.calculateFriction()` — flat `BASE_FEE_SLIPPAGE` from SYSTEM_GUARDS
-  2. `cost-model.computeTotalRoundTripCost()` — component-separated (fee + slippage + spread)
-  3. `cost-metrics.updateCostData()` — costFactor calculation for sizing
-- **Recommendation**: Make `cost-model.ts` the canonical friction provider. It is the most realistic (spread + slippage + fee separation). Then:
-  - Remove or deprecate `calculateFriction()` from analysis-utils.ts
-  - Replace `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE` usage in signal-orchestrator.ts with cost-model calls
-  - Pass `totalCost` from cost-model into the kernel
-- **Timing**: During MCE (natural integration point)
+### UNIFY-001: Friction Model Consolidation — **PARTIALLY RESOLVED**
+- **Status**: **PARTIALLY RESOLVED** — Directive 12.1.2, Batch 2 (2026-02-22)
+- **Current State**: `cost-model.ts` is now the canonical friction provider for all runtime friction calculations:
+  - ✅ `calculateFriction()` deprecated in analysis-utils.ts (zero runtime callers)
+  - ✅ `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE` removed from signal-orchestrator.ts friction paths
+  - ✅ `computeTotalRoundTripCost()` used in signal-orchestrator.ts DSS evaluation and expectancy.ts
+  - ⬜ `cost-metrics.updateCostData()` costFactor calculation for sizing — not yet addressed (separate concern)
+  - ⬜ `calculateFriction()` functions still exist as deprecated code — physical removal deferred to Wave 4 (Directive 12.2.5: Friction Model Unification)
+- **Remaining work**: Remove deprecated friction functions and `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE` constant (if no non-friction consumers remain) during dead code purge
 - **Phase Found**: Phase 1
 
 ### UNIFY-002: Confidence Authority Consolidation (NGC Is Legacy — Kyle Confirmed)

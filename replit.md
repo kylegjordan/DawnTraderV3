@@ -84,6 +84,26 @@ When you receive a directive:
 - ❌ Rename variables or restructure files unless directed
 - ❌ Start a new directive before the current one is fully APPROVED
 - ❌ Make changes without a directive ("I noticed this could be improved" = NO)
+- ❌ **Reformat files.** Do not run Prettier, ESLint fix, or any auto-formatter on files placed from a batch zip. Place files exactly as they are in the zip — byte for byte.
+- ❌ **Make autonomous code changes between batches.** Do not modify source code files (`.ts`, `.tsx`, `.js`, `.jsx`) unless explicitly instructed by Kyle through a batch zip or direct chat message.
+
+### INVARIANT: No Autonomous Changes
+
+This is a hard constraint that overrides all other behavior:
+
+1. **Never modify source code files** (`server/**/*.ts`, `client/**/*.tsx`, `server/utils/**/*.ts`, `server/core/**/*.ts`, or any `.ts`/`.tsx`/`.js`/`.jsx` file) unless explicitly instructed by Kyle through a batch zip or direct chat message.
+
+2. **Never reformat files.** When placing files from a batch zip, place them exactly as provided. Do not run any code formatter, linter auto-fix, or restructuring tool. The formatting in the zip is intentional and reviewed.
+
+3. **Checkpoint commits must exclude source code.** If the platform makes automatic checkpoint commits for runtime state (logs, JSON state files, cortex memory), that is acceptable. But source code files must NEVER appear in checkpoint diffs unless they were part of an explicitly requested batch.
+
+4. **If you see something that needs fixing** — a bug, a formatting inconsistency, a TypeScript error, a deprecation warning — **tell Kyle.** Do not fix it yourself. All code changes go through the batch process managed by Claude Code.
+
+5. **After placing files from a batch zip**, commit and push exactly those changes and nothing else. Do not bundle runtime state changes (logs, JSON caches) with batch code changes in the same commit.
+
+6. **If you are unsure whether an action is allowed**, ask Kyle. The default answer is "don't do it."
+
+**Why this matters**: Claude Code reviews every commit after sync. Autonomous changes create noise that obscures real batch changes and can introduce undetected logic modifications. This constraint protects the integrity of the entire governance system.
 
 ### Required Actions
 
@@ -135,6 +155,8 @@ All governance documents are in `1-system-manual/`:
 
 ## Recent Changes
 
+- **2026-02-22**: Directive 12.1.2 (Batch 2) — Fixed dual friction models (RISK-009). Replaced `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE` flat rate with canonical `computeTotalRoundTripCost()` in signal-orchestrator.ts, expectancy.ts. Deprecated `calculateFriction()` in analysis-utils.ts. Autonomy constraints added to this file.
+- **2026-02-22**: Directive 12.1.1 (Batch 1) — Fixed DI Probability Divergence (BUG-004). Signal orchestrator now uses `calculateDirectionalIntegrity(closePrices)` instead of NGC-derived confidence.
 - **2026-02-19**: Development governance system established. Directive Implementation Workflow, System Impact Map, and Directive Index created. Phase 12 directives pre-loaded (18 PENDING). All changes from this point forward governed by directive lifecycle.
 - **2026-02-09**: Directive 11.8C VTS Multi-Strategy Regime-Scoped Simulation — VTS now generates N trades per pair (one per regime-compatible strategy) instead of selecting one "best" strategy; uses getStrategiesForRegime() from canonical map; duplicate guard upgraded to per-symbol+strategy; trade ID includes strategy name; executionContext: VTS_MULTI field added to OpenVirtualTrade, Phase10TradeRecord; MAX_OPEN_TRADES increased 300→500; DSS/Paper/Live paths untouched; data-generation enhancement only
 - **2026-02-06**: Directive 11.8B-D1 Complete Filter Authority Cleanup — updateScreeners() deleted; NLAI screener liquidity action deleted; /api/screeners GET+PUT return 410 Gone; Walter AI filters case returns error; managedByLottie/manualOverrideEnabled removed from FilterParamV2 interface and updateFiltersV2Schema; filterOverrides per-filter override system removed from GET/PUT handlers; toFiltersV2() cleaned; filters-with-override.tsx FilterV2 interface cleaned; permissions.ts and execution-policy-controller.ts screener refs removed; DB columns preserved FROZEN; canonical docs updated

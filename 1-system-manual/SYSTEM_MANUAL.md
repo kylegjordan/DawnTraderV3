@@ -94,7 +94,7 @@ Quick reference: which components are authoritative, which are contaminated, and
 | Component | Status | Problem |
 |-----------|--------|---------|
 | **quality_index.ts (NGC)** | LEGACY | Confidence carrier throughout pipeline. Must be replaced, not extended. |
-| **SYSTEM_GUARDS friction** | LEGACY | Flat 0.5% fee — bypasses real cost model. |
+| **SYSTEM_GUARDS friction** | ~~LEGACY~~ **RESOLVED** | ~~Flat 0.5% fee — bypasses real cost model.~~ Directive 12.1.2: All runtime friction now uses `computeTotalRoundTripCost()`. Deprecated functions remain for dead code purge (Wave 4). |
 | **DSS volNoise/trendSlope classifier** | LEGACY | 6-regime / 9-quant-only. Must be replaced with canonical map. |
 | **MCP/ARE ecosystem** | LEGACY (Kyle confirmed) | High-Impact Legacy Cluster. 14+ consumers, own strategy matrix, own regime taxonomy. Remove in Wave 6. |
 | **NLAI system** | LEGACY | 5 files + routes. Pending removal (Wave 4.7). |
@@ -638,20 +638,21 @@ breakEvenTriggered = (currentPrice - entryPrice) ≥ ATR
 targetLockTriggered = currentPrice ≥ targetPrice
 ```
 
-### Trade Friction — ⚠️ INCORRECT MODEL (Legacy)
+### Trade Friction — Canonical Model (RISK-009 RESOLVED)
 
-```
-friction = (entryPrice + exitPrice) × quantity × BASE_FEE_SLIPPAGE
-perUnitFriction = (entry + exit) × 1 × BASE_FEE_SLIPPAGE
-```
-Where `BASE_FEE_SLIPPAGE = 0.005` (0.5%) from `SYSTEM_GUARDS`.
+**Directive 12.1.2** (Batch 2, commit `8393a1ef`) unified all runtime friction under the canonical cost model:
 
-**This is the WRONG friction model.** It uses a flat percentage instead of component-separated costs. The correct friction model is in `cost-model.ts`:
 ```
 TotalRoundTripCost = (fee × 2) + (slippage × 2) + spread
 ```
 
-The `calculateFriction()` function in analysis-utils.ts and all uses of `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE` for friction calculations should be replaced with `computeTotalRoundTripCost()` from cost-model.ts. **See RISK-009 and UNIFY-001 in CHANGES_AND_FIXES.md.**
+This is computed by `computeTotalRoundTripCost()` in `server/core/math/cost-model.ts`. Per-pair cost metrics (fee, slippage, spread) are sourced from `getCachedCostMetrics(symbol)`, which returns real data from the cost cache or conservative defaults from `exchange-defaults.ts` on cache miss (fee=0.26%, slippage=0.05%, spread=0.10% → total=0.72%).
+
+**Previously incorrect model** (deprecated, zero runtime callers as of Directive 12.1.2):
+```
+friction = (entryPrice + exitPrice) × quantity × BASE_FEE_SLIPPAGE   // DEPRECATED
+```
+Where `BASE_FEE_SLIPPAGE = 0.005` (flat 0.5%) from `SYSTEM_GUARDS`. The `calculateFriction()` function in analysis-utils.ts is marked `@deprecated` — physical removal deferred to Wave 4 (Directive 12.2.5).
 
 ### Trend Slope
 
@@ -1109,13 +1110,15 @@ The DSS kernel call site previously converted NGC (blended confidence) into DI b
 
 Both paths now use the same geometric DI source. **BUG-004 RESOLVED.**
 
-#### FINDING-P1-02: Dual Friction Models in Same File (One Is Incorrect)
+#### FINDING-P1-02: Dual Friction Models in Same File (One Is Incorrect) — **RESOLVED**
 
-In signal-orchestrator.ts, two different friction calculations coexist:
-- **Line 557**: `computeTotalRoundTripCost(fee, slippage, spread)` from cost-model.ts — **CORRECT**: `(fee × 2) + (slippage × 2) + spread`
-- **Line 1122**: `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE / 100` — **INCORRECT**: flat 0.005% approximation that does not account for component separation
+**Status**: **RESOLVED** — Directive 12.1.2, Batch 2 (2026-02-22), commit `8393a1ef`
 
-**Kyle confirmed**: `computeTotalRoundTripCost` is the correct friction model. The formula `(fee × 2) + (slippage × 2) + spread` correctly accounts for fees and slippage being incurred on both entry AND exit legs of the trade, while spread is incurred once at entry. `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE` is incorrect and should be replaced everywhere it is used for friction. **Logged as RISK-009 and UNIFY-001.**
+~~In signal-orchestrator.ts, two different friction calculations coexist:~~
+- ~~**Line 557**: `computeTotalRoundTripCost(fee, slippage, spread)` from cost-model.ts — **CORRECT**~~
+- ~~**Line 1122**: `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE / 100` — **INCORRECT**~~
+
+**Resolution**: All friction calculations in signal-orchestrator.ts and expectancy.ts now use `getCachedCostMetrics(symbol)` + `computeTotalRoundTripCost()` from cost-model.ts. The incorrect `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE` path has been eliminated from all runtime code. The old code underestimated friction by 72× (0.01% vs 0.72%). `calculateFriction()` in analysis-utils.ts marked `@deprecated` with zero runtime callers. **RISK-009 RESOLVED, UNIFY-001 PARTIALLY RESOLVED.**
 
 #### FINDING-P1-03: NGC Is Legacy That Was Not Fully Removed
 
@@ -1181,6 +1184,8 @@ This means the learning system has **architectural coupling to the scoring syste
 | 2026-02-15 | v1 | Initial draft | Phase 1 deep-read |
 | 2026-02-15 | v1.1 | ChatGPT corrections | DI divergence, NGC status, dual friction, rolling normalization risk |
 | 2026-02-15 | v2 | Kyle corrections | NGC confirmed legacy (not active), friction model clarified (cost-model correct, SYSTEM_GUARDS incorrect), rolling normalization explained in detail, version numbering added |
+| 2026-02-22 | v2.1 | Directive 12.1.1 (Batch 1) | BUG-004 RESOLVED — DI Probability Divergence fix. FINDING-P1-01 marked RESOLVED. |
+| 2026-02-22 | v2.2 | Directive 12.1.2 (Batch 2) | RISK-009 RESOLVED — Dual friction models fix. FINDING-P1-02 marked RESOLVED. Trade Friction section updated to reflect canonical model. SYSTEM_GUARDS friction marked RESOLVED in Contaminated/Legacy table. |
 
 ---
 

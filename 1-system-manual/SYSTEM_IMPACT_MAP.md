@@ -61,7 +61,7 @@
 - **Shared State**: None — self-contained calculation
 - **Execution**: Synchronous — called per signal/trade
 - **Blast Radius**: **HIGH** — affects EV calculations and filter thresholds
-- **Contamination**: Bypassed by `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE` in some paths (RISK-009)
+- **Contamination**: ~~Bypassed by `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE` in some paths (RISK-009)~~ **RESOLVED** — Directive 12.1.2. All friction consumers now use `getCachedCostMetrics()` + `computeTotalRoundTripCost()`.
 - **Tests**: `cost-model.test.ts`
 
 ### 1.4 DI Calculation (Directional Integrity)
@@ -189,7 +189,7 @@
 - **Shared State**: SYSTEM_GUARDS config, DI calculation (~~BUG-004~~ **RESOLVED**), NGC confidence (contamination)
 - **Execution**: **Event-driven** — triggered when pairs enter Active Filter Pool
 - **Blast Radius**: **CRITICAL** — every signal in the system flows through here
-- **Contamination**: ~~NGC→DI (BUG-004)~~ **RESOLVED**, dual friction (RISK-009), legacy DSS routing (BUG-006)
+- **Contamination**: ~~NGC→DI (BUG-004)~~ **RESOLVED**, ~~dual friction (RISK-009)~~ **RESOLVED**, legacy DSS routing (BUG-006)
 - **Tests**: `signal-scoring.test.ts`, `runtime_signal_consistency.test.ts`, `finalScore-kernel.test.ts`
 
 ### 4.2 Signal Quality Evaluator (SQE)

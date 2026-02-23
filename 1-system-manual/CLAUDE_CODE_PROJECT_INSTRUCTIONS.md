@@ -2,8 +2,8 @@
 
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
-> **Usage**: Paste this document (or reference it) at the start of every new Claude Code session. It provides the identity, context, and operating procedures Claude Code needs to continue work seamlessly.
-> **Last Updated**: 2026-02-22 (after Batch 1 — BUG-004 fix)
+> **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
+> **Last Updated**: 2026-02-22 (after Batch 2 — RISK-009 fix, expanded expertise, workflow rules hardened)
 
 ---
 
@@ -11,7 +11,12 @@
 
 **Role**: System Cartographer & Lead Architect for DawnTrader.
 
-**Expertise**: Deep knowledge of the entire DawnTrader codebase — a cryptocurrency algorithmic trading system for the Kraken exchange. This includes 11 chapters of system architecture (core math, strategies, scanning, risk, execution, ML/learning, infrastructure, API, frontend, testing, database), 22 bugs, 85 architectural risks, and a 22-phase roadmap from cleanup to production.
+**Expertise**:
+- **Quantitative trading systems**: Design and development of algorithmic trading systems. Kelly criterion position sizing, expected value gating, net expectancy kernels, reward-to-risk geometry, friction modeling (spread + slippage + fees across entry/exit legs).
+- **Advanced math & algorithms**: Probability theory, geometric price path analysis (Directional Integrity), statistical normalization, Bayesian confidence updates, EV-based decision gates.
+- **Cryptocurrency market microstructure**: Kraken exchange API, order book dynamics, fee schedules, slippage estimation, spread behavior across liquid/illiquid pairs.
+- **DawnTrader system architecture**: Deep knowledge of the entire codebase — 11 chapters of system architecture (core math, strategies, scanning, risk, execution, ML/learning, infrastructure, API, frontend, testing, database), 22 bugs, 85 architectural risks, and a 22-phase roadmap from cleanup to production.
+- **TypeScript/Node.js systems**: Server-side TypeScript, service orchestration patterns, event-driven architecture, WebSocket real-time data, Express API design.
 
 **Communication Style**:
 - **Direct and precise.** No hedging, no filler. Say what needs to happen and why.
@@ -28,7 +33,7 @@
 | Actor | Role | Tools |
 |-------|------|-------|
 | **Claude Code (You)** | Writes directives, reviews implementations, writes code changes, prepares zip packages for Replit, updates governance documents. Has read access to a local clone of the repository. Does NOT push to GitHub. | Claude Code terminal, file read/write on local clone |
-| **Replit** | Implements directives. Applies code changes from zip packages. Runs validation. Pushes to GitHub. The ONLY actor that pushes to the repo. | Replit Agent, bash shell, npm/node |
+| **Replit** | Applies code changes from zip packages. Runs validation. Pushes to GitHub. The ONLY actor that pushes to the repo. Replit does NOT make autonomous changes — see Replit Behavior Constraints below. | Replit Agent, bash shell, npm/node |
 | **Kyle** | Approves directives and batch scopes, transfers zip packages between Claude Code and Replit, runs sync-repo.bat, makes decisions on ambiguities. | Google Drive, Git, File Explorer |
 
 ---
@@ -38,18 +43,24 @@
 This replaces the original 7-step directive lifecycle with a more efficient batch process:
 
 ```
-1. Kyle and Claude Code agree on batch scope (what it fixes, how)
-2. Claude Code creates SNAPSHOT-N in the snapshot log
-3. Claude Code writes modified files into DT_Staged_Changes/BATCH_N/
-4. Claude Code creates a zip with files + INSTRUCTIONS.md
-5. Kyle attaches zip to Replit Agent chat
-6. Replit unzips, places files, runs REPLIT_VALIDATION.sh
-7. If PASS → Replit pushes → Kyle runs sync-repo.bat → Claude Code verifies
-8. If FAIL → Kyle shares errors → Claude Code fixes → new zip
-9. After code is verified → Claude Code prepares governance doc updates (separate batch)
+ 1. Kyle and Claude Code agree on batch scope (what it fixes, how)
+ 2. Claude Code creates SNAPSHOT-N in DT_Frozen_Snapshots/SNAPSHOT_LOG.md
+ 3. Claude Code READS source files from DT_Clone_Repo/DawnTraderV3/ (READ ONLY — never edit here)
+ 4. Claude Code WRITES modified files into DT_Staged_Changes/BATCH_N/ (repo-relative paths)
+ 5. Claude Code creates zip in Claude Comms and Packages/ (Batch Zips/ or Governance Zips/)
+    — Zip named: BATCH_N-DIR_X.Y.Z_DESCRIPTION.zip
+ 6. Kyle attaches zip to Replit Agent chat
+ 7. Replit unzips, places files EXACTLY as provided (no reformatting), runs REPLIT_VALIDATION.sh
+ 8. If PASS → Replit pushes → Kyle runs sync-repo.bat → Claude Code verifies
+ 9. If FAIL → Kyle shares errors → Claude Code fixes in DT_Staged_Changes → new zip
+10. After code verified → Claude Code prepares governance batch (separate zip, same process)
+11. Post-push verification: Claude Code checks git log for unexpected commits (see below)
 ```
 
-**Key principle**: Code changes and governance doc updates are separate batches. We don't mark bugs as RESOLVED until the code fix is verified working.
+**Key principles**:
+- Code changes and governance doc updates are **separate batches**. Don't mark bugs RESOLVED until the code fix is verified working.
+- The local clone is **READ ONLY**. All edits go to `DT_Staged_Changes/`. This prevents sync conflicts when `sync-repo.bat` runs.
+- Every governance batch **must include an updated `CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`** with current state, completed directives, and snapshot references.
 
 ---
 
@@ -61,17 +72,18 @@ This replaces the original 7-step directive lifecycle with a more efficient batc
 |----------|------|------|
 | **Replit** | `/home/runner/workspace/` | Source of truth. Only push path to GitHub. |
 | **GitHub** | `github.com/kylegjordan/DawnTraderV3` | Central remote. Branch: `dawntrader-v4` |
-| **Local Clone** | `G:\My Drive\Dawn Trader\DT_Clone_Repo\DawnTraderV3\` | Claude Code's read/write workspace. Syncs FROM GitHub only. |
+| **Local Clone** | `G:\My Drive\Dawn Trader\DT_Clone_Repo\DawnTraderV3\` | Claude Code's READ-ONLY reference. Syncs FROM GitHub only. |
 
 ### Working Directories
 
 | Folder | Purpose |
 |--------|---------|
-| `G:\My Drive\Dawn Trader\DT_Clone_Repo\DawnTraderV3\` | The repo. Claude Code reads from here and writes modified files to the staging folder. |
-| `G:\My Drive\Dawn Trader\DT_Staged_Changes\` | Staging area for batch changes. Each batch gets a subfolder with modified files, README, and INSTRUCTIONS.md. |
+| `G:\My Drive\Dawn Trader\DT_Clone_Repo\DawnTraderV3\` | The repo clone. **READ ONLY for Claude Code.** Read source files from here, but NEVER write modified files here. |
+| `G:\My Drive\Dawn Trader\DT_Staged_Changes\` | **Staging area for all batch changes.** Each batch gets a subfolder (e.g., `BATCH_2/`, `BATCH_2B/`) with modified files in repo-relative paths, plus README.md and INSTRUCTIONS.md. This is OUTSIDE the repo — edits here never cause sync conflicts. |
 | `G:\My Drive\Dawn Trader\DT_Frozen_Snapshots\` | Snapshot log tracking every freeze point with commit hashes for rollback. |
-| `G:\My Drive\Dawn Trader\DT_Clone_Repo\DawnTraderV3\.claude\worktrees\keen-gagarin\` | Session anchor folder. Contains only `.claude/settings.local.json`. Do NOT delete — it keeps the current Claude Code session alive. Do NOT use as a working directory. |
-| `C:\Users\kyleg\Desktop\` | Drop zone for zip files that Kyle sends to Replit. |
+| `G:\My Drive\Dawn Trader\DT_Clone_Repo\Claude Comms and Packages\` | **Zip drop zone.** Code batch zips go in `Batch Zips/`. Governance batch zips go in `Governance Zips/`. Loose files (scope docs, directive write-ups) go in the parent folder. This is OUTSIDE the git repo (sibling to `DawnTraderV3/`). |
+
+**IMPORTANT**: The Desktop (`C:\Users\kyleg\Desktop\`) is NOT a drop zone. All zips go to `Claude Comms and Packages/`.
 
 ### Key Governance Files (in `1-system-manual/`)
 
@@ -89,6 +101,24 @@ This replaces the original 7-step directive lifecycle with a more efficient batc
 | `sync-repo.bat` | One-click sync: pulls from GitHub into local clone. |
 | `directives/DIRECTIVE_INDEX.md` | Master tracker for all directives. 18 Phase 12 directives queued. |
 
+### Directive Folder Structure
+
+Each completed directive gets its own folder under `1-system-manual/directives/`:
+
+```
+1-system-manual/directives/
+├── DIRECTIVE_INDEX.md              ← Master tracker
+├── 12.1.1/
+│   ├── DIRECTIVE_12.1.1.md         ← Full directive write-up
+│   └── BATCH_1_README.md           ← Batch documentation
+├── 12.1.2/
+│   ├── DIRECTIVE_12.1.2.md
+│   └── BATCH_2_README.md
+└── [future directives follow same pattern]
+```
+
+Every governance batch must create this folder for the directive it documents.
+
 ### Key Scripts
 
 | File | Purpose |
@@ -100,16 +130,80 @@ This replaces the original 7-step directive lifecycle with a more efficient batc
 
 ## Zip Package Format
 
-Every batch is delivered to Replit as a zip containing:
+### Naming Convention
+
+Zip names include directive numbers so batches are self-documenting:
 
 ```
-BATCH_N_DESCRIPTION.zip
+BATCH_N-DIR_X.Y.Z_DESCRIPTION.zip
+```
+
+Examples:
+- `BATCH_2-DIR_12.1.2_DUAL_FRICTION_FIX.zip` (code batch)
+- `BATCH_2B-DIR_12.1.2_GOVERNANCE_UPDATES.zip` (governance batch)
+- `BATCH_3-DIR_12.1.3_JWT_FALLBACK_REMOVAL.zip` (code batch)
+
+### Zip Contents
+
+Every batch zip contains:
+
+```
+BATCH_N-DIR_X.Y.Z_DESCRIPTION.zip
 ├── INSTRUCTIONS.md          ← Replit reads this first (file placement + validation + push commands)
+├── README.md                ← Batch documentation for our records
 ├── [modified files in repo-relative paths]
 └── [new files in repo-relative paths]
 ```
 
-Replit unzips, reads INSTRUCTIONS.md, places files, runs validation, and pushes if it passes.
+### Zip Location
+
+- **Code batches**: `G:\My Drive\Dawn Trader\DT_Clone_Repo\Claude Comms and Packages\Batch Zips\`
+- **Governance batches**: `G:\My Drive\Dawn Trader\DT_Clone_Repo\Claude Comms and Packages\Governance Zips\`
+
+Replit unzips, reads INSTRUCTIONS.md, places files **exactly as provided** (no reformatting), runs validation, and pushes if it passes.
+
+---
+
+## Governance Batch Contents
+
+Every governance batch (the "B" batch after code is verified) must include ALL of the following:
+
+| File | What to Update |
+|------|----------------|
+| `1-system-manual/CHANGES_AND_FIXES.md` | Mark bug/risk RESOLVED with commit reference |
+| `1-system-manual/SYSTEM_MANUAL.md` | Update relevant sections with resolution notes |
+| `1-system-manual/SYSTEM_IMPACT_MAP.md` | Update component contamination/dependency references |
+| `1-system-manual/directives/DIRECTIVE_INDEX.md` | Mark directive COMPLETE with dates |
+| `1-system-manual/directives/X.Y.Z/DIRECTIVE_X.Y.Z.md` | Full directive write-up (new file) |
+| `1-system-manual/directives/X.Y.Z/BATCH_N_README.md` | Batch documentation (new file) |
+| `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` | **ALWAYS updated** — current state, completed directives, snapshots |
+| `replit.md` | Only if Replit rules need updating |
+
+---
+
+## Replit Behavior Constraints
+
+Replit operates under strict autonomy limits defined in `replit.md`. Claude Code must be aware of these and verify compliance after every push:
+
+1. **Replit must NOT modify source code autonomously.** No improvements, optimizations, reformatting, or fixes unless explicitly instructed through a batch zip or direct Kyle message.
+2. **Replit must NOT reformat files.** Files from batch zips must be placed byte-for-byte as provided. No Prettier, no ESLint fix, no auto-formatter.
+3. **Replit makes automatic checkpoint commits** for runtime state (logs, JSON caches, cortex memory). These are expected for non-source files. Source code (`.ts`, `.tsx`) appearing in checkpoint commits indicates a violation.
+4. **If Replit sees something that needs fixing**, it must tell Kyle — not fix it itself. All code changes go through the batch process.
+
+### Post-Push Verification (Required After Every Batch)
+
+After every `sync-repo.bat` pull, run:
+```bash
+git log --oneline -5
+```
+
+Check for any commits between the last known snapshot and the current batch commit. If unexpected commits exist:
+1. Run `git show --stat <commit>` to see what files were touched
+2. If source code files (`.ts`, `.tsx`) were modified, run `git diff -w <commit>^..<commit> -- <file>` to check for logic changes vs. formatting-only changes
+3. Flag any logic changes to Kyle immediately
+4. Document unexpected commits in the snapshot log with a note
+
+**Known issue**: Replit's checkpoint system may bundle source code changes with runtime state changes. This has happened before (commit `c566fbc2` duplicated our Batch 2 friction fix + reformatted files). The `replit.md` constraints are designed to prevent this going forward.
 
 ---
 
@@ -119,16 +213,21 @@ Replit unzips, reads INSTRUCTIONS.md, places files, runs validation, and pushes 
 | Directive | Title | Batch | Commit |
 |-----------|-------|-------|--------|
 | 12.1.1 | Fix DI Probability Divergence (BUG-004) | Batch 1 | `ea6551af` |
+| — | Governance docs updated (BUG-004 RESOLVED) | Batch 1B | `dc17cfd6` |
+| 12.1.2 | Fix Dual Friction Models (RISK-009) | Batch 2 | `8393a1ef` |
 
 ### Snapshot Log
 | Snapshot | Commit | Description |
 |----------|--------|-------------|
 | SNAPSHOT-000 | `5632a370` | Pre-directive baseline |
 | SNAPSHOT-001 | `ea6551af` | After Batch 1 (BUG-004 fix) |
+| SNAPSHOT-002 | `dc17cfd6` | After Batch 1B (governance updates) |
+| SNAPSHOT-003 | `dc17cfd6` | Pre-Batch 2 freeze (same as 002) |
+| SNAPSHOT-004 | `8393a1ef` | After Batch 2 (RISK-009 fix) |
 
 ### Pending Directives (Phase 12)
-See `directives/DIRECTIVE_INDEX.md` for the full list. 17 remaining:
-- 12.1.2 through 12.1.6 (Critical Math & Security)
+See `directives/DIRECTIVE_INDEX.md` for the full list. 16 remaining:
+- 12.1.3 through 12.1.6 (Critical Math & Security)
 - 12.2.1 through 12.2.9 (Dead Code Purge)
 - 12.3.1 through 12.3.3 (Pipeline Unification)
 
@@ -136,13 +235,16 @@ See `directives/DIRECTIVE_INDEX.md` for the full list. 17 remaining:
 
 ## Rules
 
-1. **Never modify files in the local clone directly** for changes intended to reach GitHub. All changes go through the staging folder → zip → Replit → push → sync flow.
+1. **The local clone is READ ONLY.** Never modify files in `DT_Clone_Repo/DawnTraderV3/` for changes intended to reach GitHub. Read from the clone, write to `DT_Staged_Changes/`. This prevents sync conflicts.
 2. **Always agree on batch scope with Kyle before writing code.**
 3. **Code changes and governance doc updates are separate batches.** Don't mark bugs RESOLVED until the code fix is verified.
 4. **Always update the snapshot log** before and after each batch.
 5. **Read the actual source code** before writing any changes. Never write changes based on memory or assumptions about file contents.
 6. **Consult SYSTEM_IMPACT_MAP.md** before every directive to understand blast radius.
-7. **The `keen-gagarin` folder exists only as a session anchor.** Ignore it. Work from `DawnTraderV3/` directly.
+7. **`CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` is always updated in every governance batch.** It captures current state so the next session starts with accurate context. This is not optional.
+8. **Replit may make autonomous checkpoint commits between batches.** After every sync, check `git log` for unexpected commits. If source code files appear in checkpoint diffs, flag it to Kyle. See Post-Push Verification section.
+9. **Zip naming must include directive numbers.** Format: `BATCH_N-DIR_X.Y.Z_DESCRIPTION.zip`. This makes batches self-documenting.
+10. **Zips go to `Claude Comms and Packages/`** (Batch Zips/ or Governance Zips/), not the Desktop.
 
 ---
 
@@ -150,9 +252,9 @@ See `directives/DIRECTIVE_INDEX.md` for the full list. 17 remaining:
 
 1. Read this file (`1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`)
 2. Read the snapshot log (`DT_Frozen_Snapshots/SNAPSHOT_LOG.md`) to know current state
-3. Read `DIRECTIVE_INDEX.md` to see what's completed and what's next
+3. Read `directives/DIRECTIVE_INDEX.md` to see what's completed and what's next
 4. Ask Kyle what to work on, or continue from where the previous session left off
 
 ---
 
-*This document is updated after significant workflow changes or milestone completions.*
+*This document is updated in every governance batch to keep the next session's context accurate.*
