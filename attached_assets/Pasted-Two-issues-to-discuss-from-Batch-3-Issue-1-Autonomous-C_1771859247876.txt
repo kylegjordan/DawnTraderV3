@@ -1,0 +1,46 @@
+Two issues to discuss from Batch 3:
+
+Issue 1: Autonomous Checkpoint Commits
+
+After you applied Batch 3, the git history shows:
+
+0ddc8db1 Batch 3: Directives 12.1.3 + 12.1.4 + 12.1.5 [official batch commit]
+f22d1bfa Remove simulated trade prices and enforce JWT secret configuration [your checkpoint]
+5c5dcbfd Update system logs and memory cache statistics with recent data [your checkpoint]
+67dd76d1 docs: Batch 2B governance updates [previous batch]
+
+Commit f22d1bfa was created by you before the official batch commit. It duplicated all of our Batch 3 changes, which means the official commit 0ddc8db1 only shows 2 files changed (runtime logs) instead of the 17 source files it was supposed to record.
+
+This is the 3rd time this has happened:
+
+Batch 2: c566fbc2 appeared before 8393a1ef
+Batch 2B: 2047d2a4 appeared before 67dd76d1
+Batch 3: f22d1bfa appeared before 0ddc8db1
+Why this is a problem for us:
+
+The official batch commit becomes meaningless in git log — it looks like it only changed 2 runtime files, not 17 source files. If we ever need to audit what a batch actually did, the commit diff doesn't show it.
+The checkpoint commit message ("Remove simulated trade prices and enforce JWT secret configuration") doesn't match our governance-controlled commit message format that documents all 3 directives.
+If we ever need to git revert a batch, we'd need to revert TWO commits instead of one, and the checkpoint commit may have bundled runtime state changes that shouldn't be reverted.
+The replit.md file in the repo root contains a "No Autonomous Changes" invariant that specifically says not to create commits outside of explicit batch instructions. Can you explain why these checkpoint commits are still happening? Is this an automatic Replit platform behavior that triggers whenever files are saved/modified — something outside your control? Or is this something you're doing intentionally that can be disabled?
+
+If it's a platform-level auto-checkpoint, is there a way to disable it during batch application? For example, could you apply all changes first without saving intermediate states, then create only the official commit? We need to understand whether this is fixable or something we need to build our workflow around.
+
+Issue 2: TSC and Vitest Timeout
+
+You reported that both npx tsc --noEmit and npx vitest run timed out during validation. Our previous batches reported 816 pass / 81 fail as the baseline. Without these numbers, we can't confirm zero regressions.
+
+We need to understand the root cause:
+
+Is this a memory/resource issue caused by background processes? The system runs several persistent services (VTS runner, FX5 scanner, paper-sim engine, WebSocket feeds, price cache, etc.). Are these consuming enough memory that TSC and Vitest can't allocate what they need?
+
+Is this a Replit environment constraint? Has the environment's available memory or CPU changed? Are you hitting a resource ceiling that didn't exist during Batch 2 validation?
+
+Was this a one-time issue (e.g., a restart, temporary resource spike) that wouldn't reproduce if you tried again?
+
+Can you try running validation again now? Specifically:
+
+npx tsc --noEmit 2>&1 | tail -20 (just need to know if it completes with 0 errors)
+npx vitest run 2>&1 | tail -30 (need the pass/fail counts)
+If memory is the issue, could you stop the background services first (pm2 stop all or equivalent), run validation, then restart them?
+
+We need to re-establish the test baseline so we know our regression check is still working for future batches.
