@@ -1016,10 +1016,10 @@ Total: 21 bugs, 65 risks.
 - **Timing**: Post-audit (should be addressed before enabling CI/CD)
 - **Phase Found**: Phase 10
 
-### RISK-070: Test Files for Deprecated Walter/Bob Systems — Will Break on Removal
+### RISK-070: Test Files for Deprecated Walter/Bob Systems — Will Break on Removal — PARTIALLY RESOLVED
 - **Severity**: LOW (planning concern)
-- **Location**: `server/tests/diagnostic-system.test.ts` (466 lines), `server/tests/phase-6.0-simulations.test.ts` (229 lines)
-- **Problem**: Two test files import and test Walter/Bob services (diagnostic-controller, bob-inspector, walter-expert-corpus, walter-reasoning-templates, walter-knowledge-refresh, walter-purpose). When Walter is removed in Wave 3, these tests will fail with import errors. Additionally, `paper_validation_engine.ts` references L-Series legacy systems (DCE, GASP). (Note: `auto_test_harness.ts` NLAI imports were cleaned in Directive 12.2.7.)
+- **Location**: `server/tests/diagnostic-system.test.ts` (466 lines), `server/tests/phase-6.0-simulations.test.ts` (229→136 lines, cleaned in Batch 5)
+- **Problem**: Two test files import and test Walter/Bob services (diagnostic-controller, bob-inspector, walter-expert-corpus, ~~walter-reasoning-templates~~, ~~walter-knowledge-refresh~~, walter-purpose). When Walter is removed in Wave 3, these tests will fail with import errors. Additionally, `paper_validation_engine.ts` references L-Series legacy systems (DCE, GASP). (Note: `auto_test_harness.ts` NLAI imports were cleaned in Directive 12.2.7. `phase-6.0-simulations.test.ts` walter-reasoning-templates and walter-knowledge-refresh imports removed in Directive 12.2.3 Sub-Batch A.)
 - **Impact**: If CI/CD is enabled before Walter removal, these stale tests will block the pipeline. If CI/CD is enabled after Walter removal, these tests must be removed first.
 - **Recommended**: Remove or skip these tests during Wave 3 (Walter removal). Update `paper_validation_engine.ts` during Wave 6 (L-Series removal) to remove DCE/GASP references.
 - **Timing**: During Wave 3 and Wave 6 respectively
@@ -1266,6 +1266,7 @@ Total: 21 bugs, 72 risks (no new risks — all directives are improvement action
 - **ChatGPT corrections**: "71 legacy tables" nuanced — some have active writers, need pre-drop audit. "No transactions" corrected to "limited transactions." Storage layer coupling order constraint added.
 - **6 new risks from ChatGPT feedback**: RISK-078 (index usage audit, MEDIUM), RISK-079 (no table partitioning, MEDIUM), RISK-080 (migration drift/rebaseline, MEDIUM), RISK-081 (LATTI residual fields, LOW), RISK-082 (no data retention policy, MEDIUM), RISK-083 (Cortex undocumented dependency, MEDIUM).
 - **Cortex system identified**: ACTIVE in-memory caching layer between Bob and Walter. 6 files, 4 API endpoints, 9+ consuming services. Must be included in Wave 3 removal scope (RISK-083).
+- **Directive 12.2.3 Sub-Batch A** (Batch 5, commit `cc320466`): 9 Walter service files with zero external importers deleted (~2,792 lines). Test file `phase-6.0-simulations.test.ts` cleaned (7 tests removed). RISK-070 partially resolved. Directive IN PROGRESS — Sub-Batches B+C pending.
 - **1 new bug from tab catalog**: BUG-022 (duplicate `value="learning"` in enhanced-system-monitoring.tsx, LOW). Second tab with same value is unreachable.
 - **5-phase database cleanup strategy** endorsed from ChatGPT: Phase A (Isolation) → B (Modularization) → C (Schema Simplification) → D (Migration Rebaseline) → E (Index & Retention Hygiene).
 Total: **22 bugs, 83 architectural risks**.

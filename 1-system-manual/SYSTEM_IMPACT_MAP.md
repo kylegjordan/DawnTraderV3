@@ -493,10 +493,10 @@
 - **Blast Radius**: **CRITICAL** (contamination spreads to every signal)
 - **Removal**: Phase 12.3.3
 
-### 11.3 Walter/Bob/Cortex — ~96 FILES
-- **What**: AI assistant ecosystem. Cortex is ACTIVE (in-memory cache, 15-min analytics). Walter lazy-loaded.
+### 11.3 Walter/Bob/Cortex — ~87 FILES (was ~96, 9 removed in Sub-Batch A)
+- **What**: AI assistant ecosystem. Cortex is ACTIVE (in-memory cache, 15-min analytics). Walter lazy-loaded. 9 zero-dependency Walter service files removed in Directive 12.2.3 Sub-Batch A (~2,792 lines).
 - **Blast Radius**: **LOW** to trading pipeline (mostly disconnected), but Cortex consumes memory
-- **Removal**: Phase 12.2.3-12.2.4 (Waves 3, 3.1)
+- **Removal**: Phase 12.2.3-12.2.4 (Waves 3, 3.1) — IN PROGRESS (Sub-Batch A complete, B+C pending)
 
 ### 11.4 ~~NLAI~~ — REMOVED (Directive 12.2.7)
 - **What**: ~~Natural Language Action Interpreter. Event handlers active.~~ REMOVED — All 5 files deleted, 6 consumer files cleaned. Commit `5d5c2051` (2026-02-24).

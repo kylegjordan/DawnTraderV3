@@ -129,8 +129,8 @@ Legacy systems are not isolated files — they form interconnected clusters that
 - **Risk level**: DANGEROUS — largest consumer dependency count of any legacy system
 
 ### Cluster 3: Walter / Bob / Cortex / ~~NLAI~~ / Goal Alignment
-- **Core files**: ~96 walter-*.ts, bob-*.ts, bobs/*.ts, cortex/*.ts, ~~5 NLAI files~~ (REMOVED — Directive 12.2.7), goal alignment in pre-execution-validator
-- **Contamination**: Cortex is ACTIVE at runtime (in-memory cache, 15-min analytics cycle). Walter lazy-loaded at startup. ~~NLAI event handlers active.~~ NLAI removed.
+- **Core files**: ~87 walter-*.ts, bob-*.ts, bobs/*.ts, cortex/*.ts, ~~5 NLAI files~~ (REMOVED — Directive 12.2.7), ~~9 Walter service files~~ (REMOVED — Directive 12.2.3 Sub-Batch A), goal alignment in pre-execution-validator
+- **Contamination**: Cortex is ACTIVE at runtime (in-memory cache, 15-min analytics cycle). Walter lazy-loaded at startup. ~~NLAI event handlers active.~~ NLAI removed. 9 zero-dependency Walter files removed.
 - **Removal**: Waves 3, 3.1, 4.5 remaining (Wave 4.7 COMPLETE). Phase 12.2 — pre-MCE cleanup.
 - **Risk level**: MODERATE — large surface area but mostly disconnected from trading pipeline
 

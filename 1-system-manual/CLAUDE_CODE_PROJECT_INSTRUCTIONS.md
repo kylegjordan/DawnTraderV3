@@ -3,7 +3,7 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-02-24 (after Batch 4B — Directive 12.2.7 governance, permission settings documented, Scope Files path added)
+> **Last Updated**: 2026-02-25 (after Batch 5B — Directive 12.2.3 Sub-Batch A governance, test baseline updated to 809/81, Google Drive cache fix documented)
 
 ---
 
@@ -120,6 +120,9 @@ Each completed directive gets its own folder under `1-system-manual/directives/`
 │   └── DIRECTIVE_12.1.4.md
 ├── 12.1.5/
 │   └── DIRECTIVE_12.1.5.md
+├── 12.2.3/
+│   ├── DIRECTIVE_12.2.3.md         ← IN PROGRESS (Sub-Batch A done)
+│   └── BATCH_5_README.md
 ├── 12.2.7/
 │   ├── DIRECTIVE_12.2.7.md
 │   └── BATCH_4_README.md
@@ -152,6 +155,7 @@ Examples:
 - `BATCH_2B-DIR_12.1.2_GOVERNANCE_UPDATES.zip` (governance batch)
 - `BATCH_3-DIR_12.1.3_12.1.4_12.1.5_SECURITY_PRICE_CLEANUP.zip` (multi-directive code batch)
 - `BATCH_4-DIR_12.2.7_NLAI_SYSTEM_REMOVAL.zip` (dead code removal batch)
+- `BATCH_5-DIR_12.2.3_WALTER_SAFE_DELETIONS.zip` (Wave 3 Sub-Batch A)
 
 ### Zip Contents
 
@@ -246,6 +250,8 @@ Every batch INSTRUCTIONS.md sent to Replit MUST include the following autonomy c
 - Batch 3: `f22d1bfa` ("Remove simulated trade prices...") appeared before official `0ddc8db1`
 - Batch 3: `5c5dcbfd` ("Update system logs...") — runtime state checkpoint
 - Batch 4: `080078bd` ("Remove natural language action interpretation..."), `b271610e`, `ddc77d86` appeared before official `5d5c2051`
+- Batch 4B: `8a0f387c` ("Update system documentation...") appeared before official `dbe063d4`
+- Batch 5: `be98d1b2` ("Update system logs and adjust cache configurations") appeared before official `cc320466`
 
 ### Push Script Limitations
 
@@ -293,6 +299,22 @@ These settings are stored in `.claude/worktrees/wizardly-einstein/.claude/settin
 
 ---
 
+## Google Drive Cache Warning
+
+On 2026-02-25, clearing Google Drive for Desktop's application cache caused corruption of the clone repo's `.git` pack files. Google Drive's streaming mode replaces large files with cloud placeholders, which Git cannot read. The fix was:
+
+1. Delete the corrupted `DawnTraderV3` folder
+2. Fresh `git clone` from GitHub to the same Google Drive location
+3. The ~400 MB `.pack` file was missing (Google Drive evicted it to cloud)
+4. Cloned to a local `C:\` temp directory, copied the `.pack` file to the Google Drive pack directory
+5. Repo health restored
+
+**If this happens again**: Clone to `C:\DawnTraderV3_temp` (bare clone), copy `.git/objects/pack/*.pack` to the Google Drive clone's `.git/objects/pack/`, then clean up the temp clone.
+
+**Prevention**: Do not clear Google Drive for Desktop's application cache while the clone repo is on Google Drive. If the cache must be cleared, back up the `.git/objects/pack/` directory first.
+
+---
+
 ## Current State
 
 ### Completed Directives
@@ -307,6 +329,13 @@ These settings are stored in `.claude/worktrees/wizardly-einstein/.claude/settin
 | 12.1.5 | RiskManager Comment/Stub Cleanup | Batch 3 | `0ddc8db1` |
 | — | Governance docs updated (12.1.3/4/5 RESOLVED) | Batch 3B | `b52e40ea` |
 | 12.2.7 | NLAI System Removal (Wave 4.7) | Batch 4 | `5d5c2051` |
+| — | Governance docs updated (12.2.7 COMPLETE) | Batch 4B | `dbe063d4` |
+| 12.2.3 | Wave 3 Sub-Batch A: 9 Walter safe deletions | Batch 5 | `cc320466` |
+
+### In-Progress Directives
+| Directive | Title | Status | Notes |
+|-----------|-------|--------|-------|
+| 12.2.3 | Wave 3: Walter/Bob/Cortex Removal | IN PROGRESS | Sub-Batch A done (9 files). Sub-Batches B (Walter+routes) and C (Bob+Cortex) pending. |
 
 ### Snapshot Log
 | Snapshot | Commit | Description |
@@ -319,22 +348,26 @@ These settings are stored in `.claude/worktrees/wizardly-einstein/.claude/settin
 | SNAPSHOT-005 | `67dd76d1` | After Batch 2B (governance updates) |
 | SNAPSHOT-006 | `67dd76d1` | Pre-Batch 3 freeze (same as 005) |
 | SNAPSHOT-007 | `b52e40ea` | After Batch 3B (governance updates) |
+| SNAPSHOT-008 | `5d5c2051` | After Batch 4 (NLAI removal) |
+| SNAPSHOT-009 | `dbe063d4` | After Batch 4B (governance updates) |
+| SNAPSHOT-010 | `dbe063d4` | Pre-Batch 5 freeze (same as 009) |
 
 ### Pending Directives (Phase 12)
-See `directives/DIRECTIVE_INDEX.md` for the full list. 12 remaining:
+See `directives/DIRECTIVE_INDEX.md` for the full list. 11 remaining:
 - 12.1.6 (LSP Error Triage)
-- 12.2.1 through 12.2.6, 12.2.8, 12.2.9 (Dead Code Purge — 8 remaining)
+- 12.2.1, 12.2.2, 12.2.4 through 12.2.6, 12.2.8, 12.2.9 (Dead Code Purge — 7 remaining + 12.2.3 in progress)
 - 12.3.1 through 12.3.3 (Pipeline Unification)
 
 ### Investigation Notes for Future Batches
+- **12.2.3 Sub-Batch B**: 9 Walter files with active external importers. Requires routes.ts, index.ts, ai-analyst.ts, context-refresh-coordinator.ts, event-broker.ts, corpus-domain-service.ts surgery. Frontend cleanup: walter.tsx, walter-floating-assistant.tsx, walter-approvals.tsx, sidebar.tsx nav item. HIGH complexity.
+- **12.2.3 Sub-Batch C**: Bob ecosystem (bob-core is critical hub with 9+ importers) + Cortex (cortex-core has 8 active service consumers + lazy-loader). HIGH complexity.
 - **12.2.1 (Wave 1)** is largely already done — LATTi files were deleted in a prior cleanup. Only `client/src/components/system/latti-safety-monitor.tsx` remains, plus schema/route residuals. Can be folded into another batch.
-- **12.2.3 (Wave 3) Walter/Bob** is the biggest remaining removal: ~40+ files, ~16,800 lines across server services, middleware, routes, and client components. Should be split into multiple batches.
 - **12.1.6 (LSP Error Triage)** — ~620 errors from Replit audit are LOW severity. Most are type annotation gaps, not logic bugs. Tied to routes.ts/storage.ts monolith decomposition. Not recommended for near-term batches.
 
 ### Test Baseline
-- **816 pass / 81 fail** (897 total across 27 pass / 26 fail test files)
+- **809 pass / 81 fail** (890 total across test files)
 - 20 pre-existing TSC errors in files not modified by any directive
-- Baseline confirmed stable across Batches 1, 2, 3, and 4
+- Baseline history: 816/81 (Batches 1-4) → 809/81 (Batch 5, 7 Walter tests removed)
 
 ---
 
@@ -353,6 +386,7 @@ See `directives/DIRECTIVE_INDEX.md` for the full list. 12 remaining:
 11. **Every INSTRUCTIONS.md sent to Replit must include the Replit Autonomy Reminder** at the top. This reminds Replit of its constraints on every batch, not just in `replit.md`.
 12. **Scope files go to `Claude Comms and Packages/Scope Files/`** before implementation begins. Each scope document is named `BATCH_N_SCOPE.md`.
 13. **If Replit's push script fails**, instruct Kyle to use the **Replit Shell tab** directly with: `git add -A && git commit -m "Batch N: ..." && git push origin dawntrader-v4`. The push script (`github-push.sh`) may fail when checkpoint commits have already captured changes locally. The Shell tab bypasses the Agent's git restrictions.
+14. **Google Drive cache warning**: Do not clear Google Drive for Desktop's application cache while the clone repo is on Google Drive. If the cache must be cleared, back up `.git/objects/pack/` first. See Google Drive Cache Warning section for recovery procedure.
 
 ---
 
