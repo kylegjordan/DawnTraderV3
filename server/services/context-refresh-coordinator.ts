@@ -11,7 +11,7 @@ import { strategyAnalytics } from './strategy-analytics';
 import { portfolioAggregator } from './portfolio-aggregator';
 import { systemHealthMonitor } from './system-health-monitor';
 import { EventEmitter } from 'events';
-import { createMemory } from './walter-memory';
+// Directive 12.2.3: walter-memory import removed (file deleted in Batch 6)
 import { systemTruthDiagnostic } from './system-truth-diagnostic';
 import { provenanceLogger } from './provenance-logger'; // Phase 8.6.3: Provenance tracking
 
@@ -531,36 +531,23 @@ class ContextRefreshCoordinator extends EventEmitter {
       return;
     }
 
-    // Context has changed, create memory and update tracking
-    await createMemory(
-      userId,
-      'observation',
-      memoryContent,
-      2, // Importance: medium (routine context update)
-      {
-        source: 'ContextRefreshCoordinator',
-        portfolioBalance: freshData.portfolioBalance,
-        activeStrategiesCount: freshData.activeStrategiesCount,
-        engineActive: freshData.engineActive,
-        mode
-      }
-    );
-
+    // Directive 12.2.3: Walter memory creation removed (Batch 6)
+    // Context change still tracked for deduplication
     this.lastContextByMode.set(mode, memoryContent);
-    
-    // Phase 8.6.3: Log provenance - Walter → UI data flow
+
+    // Phase 8.6.3: Log provenance data flow
     if (traceId) {
       await provenanceLogger.logWalterToUI({
         traceId,
-        endpoint: '/api/walter/context',
+        endpoint: '/api/context-refresh',
         mode,
         globalContextId: 'default',
         data: { memoryContent, ...freshData },
         userId,
       });
     }
-    
-    console.log(`[${this.MODULE_NAME}] ✅ Walter memory updated (context changed)`);
+
+    console.log(`[${this.MODULE_NAME}] ✅ Context refresh completed (context changed)`);
   }
 
   /**

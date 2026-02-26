@@ -3,7 +3,7 @@ import { KrakenService } from './kraken';
 import { storage } from '../storage';
 import { InsertAIOpportunity, InsertAIOpportunityRun, InsertAIAuditLog } from '@shared/schema';
 import { estimateMessagesTokens, calculateCost } from '../utils/token-counter';
-import { getWalterPurpose, createPurposePromptSection, logPurposeUsage } from './walter-purpose';
+// Directive 12.2.3: walter-purpose import removed (file deleted in Batch 6)
 import { OpenAIRateLimiter } from './openai-rate-limiter';
 
 const rateLimiter = OpenAIRateLimiter.getInstance();
@@ -264,14 +264,9 @@ export class AIOpportunitiesService {
         trend: p.trendMarkers
       }));
 
-      // Fetch Walter's purpose if userId is provided
-      let purposeSection = '';
-      if (userId) {
-        const walterPurpose = await getWalterPurpose(userId);
-        purposeSection = createPurposePromptSection(walterPurpose);
-      }
+      // Directive 12.2.3: Walter purpose prompt injection removed (Batch 6)
 
-      const systemPrompt = `${purposeSection}You are a cryptocurrency trading analyst. Analyze the provided market data and identify trading opportunities.
+      const systemPrompt = `You are a cryptocurrency trading analyst. Analyze the provided market data and identify trading opportunities.
 
 IMPORTANT CONSTRAINTS:
 - You are ONLY proposing opportunities, NOT placing orders
@@ -331,10 +326,7 @@ Return ONLY a JSON array of opportunities, no other text. Maximum ${maxOpportuni
 
       console.log(`💰 API call cost: $${cost.toFixed(4)} (${totalTokens} tokens)`);
 
-      // Log purpose usage if userId was provided
-      if (userId) {
-        await logPurposeUsage(userId, 'ai_opportunities', { pairCount: pairs.length });
-      }
+      // Directive 12.2.3: Walter purpose usage logging removed (Batch 6)
 
       const responseText = completion.choices[0].message.content || '{"opportunities": []}';
       const parsed = JSON.parse(responseText);

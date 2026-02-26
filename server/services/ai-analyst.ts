@@ -3,8 +3,7 @@ import { storage } from '../storage';
 import { Trade, TradingSettings, AIReport, InsertAIAuditLog, InsertErrorLog } from '@shared/schema';
 import { databaseQueryService } from './database-query';
 import { marketDataService } from './market-data';
-import { getWalterPurpose, createPurposePromptSection, logPurposeUsage } from './walter-purpose';
-import { createMemoryPromptSection } from './walter-memory';
+// Directive 12.2.3: walter-purpose and walter-memory imports removed (files deleted in Batch 6)
 import { 
   estimateMessagesTokens, 
   calculateCost, 
@@ -182,11 +181,8 @@ export class AIAnalyst {
       const priceData = await storage.getPriceData(symbol);
       const userTrades = await storage.getTrades(userId, { symbol, limit: 50 });
       
-      // Fetch Walter's purpose and memory for this user
-      const walterPurpose = await getWalterPurpose(userId);
-      const purposeSection = createPurposePromptSection(walterPurpose);
-      const memorySection = await createMemoryPromptSection(userId, 5); // Get top 5 high-importance memories
-      
+      // Directive 12.2.3: Walter purpose/memory prompt injection removed (Batch 6)
+
       const liveDataSection = liveMarketData ? `
         LIVE MARKET DATA (${liveMarketData.source}):
         - Asset Type: ${assetType.toUpperCase()}
@@ -200,9 +196,7 @@ export class AIAnalyst {
 
       const assetTypeDescription = assetType === 'stock' ? 'stock' : 'cryptocurrency trading pair';
       
-      const prompt = `${purposeSection}${memorySection}
-        
-        Analyze the ${assetTypeDescription} ${symbol} with the following context:
+      const prompt = `Analyze the ${assetTypeDescription} ${symbol} with the following context:
         
         ${liveDataSection}Historical Performance:
         - User has made ${userTrades.length} trades on this symbol
@@ -235,8 +229,7 @@ export class AIAnalyst {
         max_completion_tokens: 2048
       });
 
-      // Log purpose usage for transparency
-      await logPurposeUsage(userId, 'trade_recommendation', { symbol, assetType });
+      // Directive 12.2.3: Walter purpose usage logging removed (Batch 6)
 
       const analysis = JSON.parse(response.choices[0].message.content || '{}');
 

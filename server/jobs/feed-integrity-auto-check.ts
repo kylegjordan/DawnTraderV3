@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { getFeedIntegrityMonitor } from '../services/feed-integrity-monitor';
 import { AlertsService } from '../services/alerts-service';
-import { WalterOpsEngine, type AnomalyInput } from '../services/walter-ops-engine';
+// Directive 12.2.3: walter-ops-engine import removed (file deleted in Batch 6)
 import { storage } from '../storage';
 import { tradingStateSync } from '../services/trading-state-sync';
 import { clusterBus } from '../services/cluster-bus';
@@ -92,64 +92,7 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
     // Check if feed recovered to healthy (auto-resolve independent of alert throttling)
     if (metrics.status === 'healthy' && monitor.getActiveAlertId()) {
       console.log(`[FeedIntegrity] Feed recovered - auto-resolving incident`);
-      
-      // Get all admin users to record auto-resolution
-      const users = await storage.getAllUsers();
-      const adminUsers = users.filter(u => u.isAdmin);
-      
-      if (adminUsers.length > 0) {
-          const primaryAdmin = adminUsers[0];
-          
-          // Create auto-resolution records for both modes
-          try {
-            await WalterOpsEngine.autoResolveIncident(
-              primaryAdmin.id,
-              'live',
-              'feed',
-              'Kraken WebSocket',
-              {
-                previousIssue: `Feed health degraded (Grade ${monitor.getActiveAlertId()})`,
-                normalizedMetrics: {
-                  latency_ms: metrics.latencyMs,
-                  tick_age_sec: metrics.tickAgeSec,
-                  reconnect_count: metrics.reconnectCount,
-                  uptime_percent: metrics.uptimePercent,
-                  grade: overallGrade,
-                },
-                confidence: metrics.latencyMs < 1000 && metrics.reconnectCount === 0 ? 95 : 80,
-                timestamp: new Date(),
-              }
-            );
-            console.log(`[FeedIntegrity] ✅ Live auto-resolution recorded`);
-          } catch (error) {
-            console.error(`[FeedIntegrity] Failed to record live auto-resolution:`, error);
-          }
-          
-          try {
-            await WalterOpsEngine.autoResolveIncident(
-              primaryAdmin.id,
-              'paper',
-              'feed',
-              'Kraken WebSocket',
-              {
-                previousIssue: `Feed health degraded (Grade ${monitor.getActiveAlertId()})`,
-                normalizedMetrics: {
-                  latency_ms: metrics.latencyMs,
-                  tick_age_sec: metrics.tickAgeSec,
-                  reconnect_count: metrics.reconnectCount,
-                  uptime_percent: metrics.uptimePercent,
-                  grade: overallGrade,
-                },
-                confidence: metrics.latencyMs < 1000 && metrics.reconnectCount === 0 ? 95 : 80,
-                timestamp: new Date(),
-              }
-            );
-            console.log(`[FeedIntegrity] ✅ Paper auto-resolution recorded`);
-          } catch (error) {
-            console.error(`[FeedIntegrity] Failed to record paper auto-resolution:`, error);
-          }
-        }
-        
+      // Directive 12.2.3: Walter auto-resolve recording removed (Batch 6)
       monitor.updateAlertState(metrics.status, overallGrade, null);
     }
     
@@ -176,61 +119,20 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
         if (isDormantMode) {
           console.log(`[FeedIntegrity] 🔇 Dormant mode detected: Suppressing dashboard alerts (trading inactive)`);
         } else {
-          console.log(`[FeedIntegrity] Creating ${severity} alert for admin users + triggering Walter autonomous maintenance`);
+          console.log(`[FeedIntegrity] Creating ${severity} alert for admin users`);
         }
         
         // Get all admin users
         const adminUsers = users.filter(u => u.isAdmin);
         
-        // Prepare anomaly for Walter autonomous maintenance (global system-level)
-        const anomaly: AnomalyInput = {
-          source: 'feed',
-          component: 'Kraken WebSocket',
-          anomaly: message,
-          metrics: {
-            latency_ms: metrics.latencyMs,
-            deviation_percent: undefined,
-            reconnect_count: metrics.reconnectCount,
-            tick_age_sec: metrics.tickAgeSec,
-            uptime_percent: metrics.uptimePercent,
-          },
-          severity,
-        };
-        
         // PHASE 27.F.21: Dormant Mode Handling
-        // In dormant mode: Skip user-facing alerts but still log to Walter's action system
+        // In dormant mode: Skip user-facing alerts (trading inactive, no active stream to monitor)
+        // Directive 12.2.3: Walter anomaly object and dormant logging removed (Batch 6)
         if (isDormantMode) {
-          console.log(`[FeedIntegrity-Alert] Dormant mode: Suppressing user-facing alerts, logging to Walter only`);
-          
-          // Log to Walter's action system for both modes (silent logging)
-          if (adminUsers.length > 0) {
-            const primaryAdmin = adminUsers[0];
-            
-            // Tag anomaly with dormant flag in description
-            const dormantAnomaly: AnomalyInput = {
-              ...anomaly,
-              anomaly: `${anomaly.anomaly} (Dormant: Trading inactive - no active stream to monitor)`,
-            };
-            
-            try {
-              console.log(`[WalterOps-FeedIntegrity] Dormant mode: Logging to Walter (live) without user alert`);
-              const liveAction = await WalterOpsEngine.processAnomaly(primaryAdmin.id, 'live', dormantAnomaly);
-              console.log(`[WalterOps-FeedIntegrity] Live action logged: ${liveAction.actionType} - ${liveAction.status}`);
-            } catch (walterError) {
-              console.error(`[WalterOps-FeedIntegrity] Failed to log dormant live anomaly:`, walterError);
-            }
-            
-            try {
-              console.log(`[WalterOps-FeedIntegrity] Dormant mode: Logging to Walter (paper) without user alert`);
-              const paperAction = await WalterOpsEngine.processAnomaly(primaryAdmin.id, 'paper', dormantAnomaly);
-              console.log(`[WalterOps-FeedIntegrity] Paper action logged: ${paperAction.actionType} - ${paperAction.status}`);
-            } catch (walterError) {
-              console.error(`[WalterOps-FeedIntegrity] Failed to log dormant paper anomaly:`, walterError);
-            }
-          }
+          console.log(`[FeedIntegrity-Alert] Dormant mode: Suppressing user-facing alerts (trading inactive)`);
         } else {
-          // Active Mode: Create user-facing alerts AND process via Walter
-          console.log(`[FeedIntegrity-Alert] Active mode: Creating user-facing alerts + Walter actions`);
+          // Active Mode: Create user-facing alerts
+          console.log(`[FeedIntegrity-Alert] Active mode: Creating user-facing alerts`);
           
           const alertCategory = severity === 'critical' ? 'critical' : 'actionable';
           
@@ -274,26 +176,7 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
             });
           }
           
-          // Trigger Walter autonomous maintenance for active mode
-          if (adminUsers.length > 0) {
-            const primaryAdmin = adminUsers[0];
-            
-            try {
-              console.log(`[WalterOps-FeedIntegrity] Processing global feed anomaly (live mode)`);
-              const liveAction = await WalterOpsEngine.processAnomaly(primaryAdmin.id, 'live', anomaly);
-              console.log(`[WalterOps-FeedIntegrity] Live action result: ${liveAction.actionType} - ${liveAction.status}`);
-            } catch (walterError) {
-              console.error(`[WalterOps-FeedIntegrity] Failed to process live anomaly:`, walterError);
-            }
-            
-            try {
-              console.log(`[WalterOps-FeedIntegrity] Processing global feed anomaly (paper mode)`);
-              const paperAction = await WalterOpsEngine.processAnomaly(primaryAdmin.id, 'paper', anomaly);
-              console.log(`[WalterOps-FeedIntegrity] Paper action result: ${paperAction.actionType} - ${paperAction.status}`);
-            } catch (walterError) {
-              console.error(`[WalterOps-FeedIntegrity] Failed to process paper anomaly:`, walterError);
-            }
-          }
+          // Directive 12.2.3: Walter active anomaly processing removed (Batch 6)
         }
         
         monitor.updateAlertState(metrics.status, overallGrade, null);
@@ -453,7 +336,6 @@ export function registerFeedIntegrityJob() {
  * 
  * Enhanced to:
  * - Clear only feed-related alerts
- * - Log to Walter for transparency
  * - Broadcast state update via context bridge
  * 
  * @param userId - User ID to clear alerts for
@@ -473,21 +355,7 @@ export async function clearFeedHealthAlertsOnStop(userId: string): Promise<void>
       
       console.log(`[FeedIntegrity] ✅ Cleared ${totalCleared} feed-health alerts (${liveFeedAlerts.length} live, ${paperFeedAlerts.length} paper)`);
       
-      // Create Walter action log entry for transparency (both modes)
-      try {
-        const logMessage = `Feed alerts cleared automatically on trading stop (${totalCleared} total: ${liveFeedAlerts.length} live, ${paperFeedAlerts.length} paper). Trading inactive - no active stream to monitor.`;
-        
-        await WalterOpsEngine.processAnomaly(userId, 'live', {
-          source: 'feed',
-          component: 'Feed Monitor',
-          anomaly: logMessage,
-          severity: 'info'
-        });
-        
-        console.log(`[FeedIntegrity] ✅ Walter action logged (live mode)`);
-      } catch (walterError) {
-        console.error(`[FeedIntegrity] Failed to log Walter action:`, walterError);
-      }
+      // Directive 12.2.3: Walter action logging removed (Batch 6)
       
       // Broadcast state update to refresh UI
       try {

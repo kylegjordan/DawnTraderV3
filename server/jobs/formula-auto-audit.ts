@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { FormulaAuditService } from '../services/formula-audit';
 import { AlertsService } from '../services/alerts-service';
-import { WalterOpsEngine, type AnomalyInput } from '../services/walter-ops-engine';
+// Directive 12.2.3: walter-ops-engine import removed (file deleted in Batch 6)
 import { storage } from '../storage';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -75,7 +75,7 @@ function validateReportFile(filePath: string): boolean {
 }
 
 /**
- * Create system notification for formula deviations + trigger Walter autonomous maintenance
+ * Create system notification for formula deviations
  */
 async function createAlertNotification(formulaName: string, deviation: number, status: 'WARNING' | 'FAIL') {
   try {
@@ -89,21 +89,6 @@ async function createAlertNotification(formulaName: string, deviation: number, s
     const message = status === 'FAIL' 
       ? `Formula Audit FAILURE — ${formulaName} deviated ${deviation.toFixed(2)}% (≥1%)`
       : `Formula Audit Warning — ${formulaName} deviated ${deviation.toFixed(2)}% (0.1-1%)`;
-    
-    // Prepare anomaly for Walter autonomous maintenance (global system-level)
-    const anomaly: AnomalyInput = {
-      source: 'formula',
-      component: formulaName,
-      anomaly: message,
-      metrics: {
-        deviation_percent: deviation,
-        latency_ms: undefined,
-        reconnect_count: undefined,
-        tick_age_sec: undefined,
-        uptime_percent: undefined,
-      },
-      severity,
-    };
     
     // Create alerts for each admin user (existing AlertsService flow)
     for (const admin of adminUsers) {
@@ -130,27 +115,7 @@ async function createAlertNotification(formulaName: string, deviation: number, s
     
     console.log(`[ALERT] Formula ${status.toLowerCase()} detected in ${formulaName} (${deviation.toFixed(2)}%)`);
     
-    // NEW: Trigger Walter autonomous maintenance ONCE per mode (formula ops are global, not per-user)
-    // Use first admin as representative user for action tracking
-    if (adminUsers.length > 0) {
-      const primaryAdmin = adminUsers[0];
-      
-      try {
-        console.log(`[WalterOps-FormulaAudit] Processing formula anomaly for ${formulaName} (live mode)`);
-        const liveAction = await WalterOpsEngine.processAnomaly(primaryAdmin.id, 'live', anomaly);
-        console.log(`[WalterOps-FormulaAudit] Live action result: ${liveAction.actionType} - ${liveAction.status}`);
-      } catch (walterError) {
-        console.error(`[WalterOps-FormulaAudit] Failed to process live anomaly:`, walterError);
-      }
-      
-      try {
-        console.log(`[WalterOps-FormulaAudit] Processing formula anomaly for ${formulaName} (paper mode)`);
-        const paperAction = await WalterOpsEngine.processAnomaly(primaryAdmin.id, 'paper', anomaly);
-        console.log(`[WalterOps-FormulaAudit] Paper action result: ${paperAction.actionType} - ${paperAction.status}`);
-      } catch (walterError) {
-        console.error(`[WalterOps-FormulaAudit] Failed to process paper anomaly:`, walterError);
-      }
-    }
+    // Directive 12.2.3: Walter autonomous maintenance trigger removed (Batch 6)
   } catch (error: any) {
     console.error('[FORMULA-AUDIT] ❌ Alert creation error:', error.message);
   }

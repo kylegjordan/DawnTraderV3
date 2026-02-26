@@ -409,14 +409,9 @@ app.use((req, res, next) => {
     //   });
     // });
 
-    // Start Walter Health Monitor (async, non-blocking)
-    import('./services/walter-health-monitor').then(({ walterHealthMonitor }) => {
-      walterHealthMonitor.start().catch((error) => {
-        console.error('[Server] Failed to start Walter Health Monitor:', error);
-      });
-    });
+    // Directive 12.2.3: Walter Health Monitor startup removed (file deleted in Batch 6)
   } else {
-    console.log('[Walter] Standby mode – AI adjustment disabled');
+    console.log('[Server] Standby mode – AI services disabled');
   }
 
   // Directive 11.8B: LATTI system removed - parallel adaptive systems eliminated

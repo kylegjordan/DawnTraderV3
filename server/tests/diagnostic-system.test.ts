@@ -9,7 +9,7 @@
 
 import { diagnosticController } from '../services/diagnostic-controller';
 import { bobInspector } from '../services/bob-inspector';
-import { walterPatchAnalyst } from '../services/walter-patch-analyst';
+// Directive 12.2.3: walterPatchAnalyst import removed (file deleted in Batch 6)
 import { storage } from '../storage';
 
 // Test suite
@@ -253,58 +253,7 @@ async function runDiagnosticTests() {
     console.log('');
   }
 
-  // Test 8: Patch Proposal Generation (if OpenAI key available)
-  if (process.env.OPENAI_API_KEY) {
-    try {
-      console.log('Test 8: Patch Proposal Generation');
-      console.log('----------------------------------');
-      
-      // Create a mock finding
-      const mockReport = {
-        timestamp: new Date().toISOString(),
-        triggerType: 'user_initiated' as const,
-        inspectionType: 'error_trace' as const,
-        findings: [
-          {
-            severity: 'high' as const,
-            category: 'data_integrity',
-            description: 'Test finding for patch generation',
-            location: { file: 'test.ts', line: 42 },
-            suggestedAction: 'Fix the test issue'
-          }
-        ],
-        status: 'completed' as const
-      };
-      
-      const proposals = await walterPatchAnalyst.analyzeAndPropose(mockReport, 'test-user');
-      
-      console.log(`✅ Patch proposal generated`);
-      console.log(`   - Proposals count: ${proposals.length}`);
-      
-      if (proposals.length > 0) {
-        const proposal = proposals[0];
-        console.log(`   - Proposal ID: ${proposal.proposalId}`);
-        console.log(`   - File: ${proposal.file}`);
-        console.log(`   - Severity: ${proposal.severity}`);
-        console.log(`   - Testing required: ${proposal.testingRequired}`);
-        console.log(`   - Kyle approved: ${proposal.kyleApproved}`);
-      }
-      
-      if (proposals.length > 0 && !proposals[0].kyleApproved) {
-        testsPassed++;
-        console.log('✅ Test 8 PASSED\n');
-      } else {
-        testsFailed++;
-        console.log('❌ Test 8 FAILED\n');
-      }
-    } catch (error) {
-      testsFailed++;
-      console.error('❌ Test 8 FAILED:', error);
-      console.log('');
-    }
-  } else {
-    console.log('Test 8: SKIPPED (No OpenAI API key)\n');
-  }
+  // Directive 12.2.3: Test 8 (Patch Proposal Generation) removed — walterPatchAnalyst deleted in Batch 6
 
   // Test 9: Transparency Logging
   try {

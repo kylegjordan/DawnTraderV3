@@ -12,7 +12,7 @@
 
 import { EventEmitter } from 'events';
 import { cognitiveInterpreter, type ExecutionEvent, type InterpretedResponse } from './cognitive-interpreter';
-import { createMemory } from './walter-memory';
+// Directive 12.2.3: walter-memory import removed (file deleted in Batch 6)
 import { storage } from '../storage';
 
 export interface BrokerEventPayload {
@@ -59,9 +59,8 @@ class EventBroker extends EventEmitter {
       `"${interpretation.narrative.substring(0, 60)}..."`
     );
     
-    // Store in Walter's memory for context
-    await this.storeInWalterMemory(payload.userId, interpretation);
-    
+    // Directive 12.2.3: Walter memory storage removed (Batch 6)
+
     // Emit interpreted event for WebSocket broadcasting
     this.emit('interpretedEvent', {
       userId: payload.userId,
@@ -219,62 +218,7 @@ class EventBroker extends EventEmitter {
     });
   }
   
-  /**
-   * Store interpreted narrative in Walter's memory
-   */
-  private async storeInWalterMemory(
-    userId: string,
-    interpretation: InterpretedResponse
-  ): Promise<void> {
-    try {
-      // Determine memory importance based on event significance
-      // Map to createMemory's 1-5 scale
-      const importanceMap = {
-        minor: 2,
-        significant: 4,
-        critical: 5
-      };
-      
-      const importance = importanceMap[interpretation.significance];
-      
-      // Determine memory type based on event
-      const memoryType = interpretation.provenance.originalData.tradeType ? 'result' : 'observation';
-      
-      // Create formatted memory content
-      let memoryContent = interpretation.narrative;
-      
-      if (interpretation.reasoning) {
-        memoryContent += `\n\nReasoning: ${interpretation.reasoning}`;
-      }
-      
-      if (interpretation.implications && interpretation.implications.length > 0) {
-        memoryContent += `\n\nImplications: ${interpretation.implications.join(', ')}`;
-      }
-      
-      if (interpretation.actionableSuggestion) {
-        memoryContent += `\n\nSuggestion: ${interpretation.actionableSuggestion}`;
-      }
-      
-      // Store in Walter's memory with proper arguments
-      await createMemory(
-        userId,
-        memoryType,
-        memoryContent,
-        importance,
-        {
-          source: interpretation.provenance.source,
-          significance: interpretation.significance,
-          strategy: interpretation.provenance.originalData.strategy,
-          symbol: interpretation.provenance.originalData.symbol,
-          timestamp: interpretation.provenance.timestamp.toISOString()
-        }
-      );
-      
-      console.log(`[${this.MODULE_NAME}] 💾 Stored interpretation in Walter memory (importance: ${importance})`);
-    } catch (error) {
-      console.error(`[${this.MODULE_NAME}] Failed to store in Walter memory:`, error);
-    }
-  }
+  // Directive 12.2.3: storeInWalterMemory method removed (Batch 6)
   
   /**
    * Format interpreted response for user display

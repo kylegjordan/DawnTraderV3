@@ -13,7 +13,6 @@ import {
   Activity,
   Newspaper,
   Sparkles,
-  Bot,
   Brain
 } from "lucide-react";
 import { useTrading } from "@/hooks/use-trading";
@@ -34,7 +33,7 @@ const navigation = [
   { name: "Guardrails & Filters", href: "/goals-engine", icon: Shield },
   { name: "Analytics & Diagnostics", href: "/analytics", icon: Activity },
   { name: "Machine Learning", href: "/machine-learning", icon: Brain },
-  { name: "Walter", href: "/walter", icon: Bot },
+  // Directive 12.2.3: Walter nav item removed (Batch 6)
   { name: "Briefings", href: "/briefings", icon: Newspaper },
   { name: "Reports", href: "/reports", icon: FileText },
   { name: "AI Transparency", href: "/ai-transparency", icon: Sparkles },
