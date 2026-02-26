@@ -136,7 +136,8 @@ Every governance batch must create this folder for the directive it documents.
 
 | File | Purpose |
 |------|---------|
-| `scripts/github-push.sh` | Replit's push script. 7 steps, 3 safety layers (size gate, pattern filter, error handling). NOTE: May fail when checkpoint commits pre-capture changes — manual `git push` via Replit Shell may be needed. |
+| `scripts/github-push.sh` | Replit's original push script. 7 steps, 3 safety layers (size gate, pattern filter, error handling). **DEPRECATED** — often fails when checkpoint commits pre-capture changes. |
+| `REPLIT_PUSH_SCRIPT.sh` | **Primary push script** (project root). Handles Replit's checkpoint system automatically: commits if needed, amends checkpoint message if already committed, then pushes. Usage: `bash REPLIT_PUSH_SCRIPT.sh "Your commit message"` |
 | `REPLIT_VALIDATION.sh` | Post-batch validation. TypeScript compilation, test suite, server startup, batch-specific checks. |
 
 ---
@@ -255,15 +256,22 @@ Every batch INSTRUCTIONS.md sent to Replit MUST include the following autonomy c
 - Batch 4B: `8a0f387c` ("Update system documentation...") appeared before official `dbe063d4`
 - Batch 5: `be98d1b2` ("Update system logs and adjust cache configurations") appeared before official `cc320466`
 
-### Push Script Limitations
+### Push Script
 
-Batch 4 revealed that Replit's `github-push.sh` script may fail to recognize changes when checkpoint commits have already captured them locally. In this case, the official commit must be created manually via the **Replit Shell tab**:
+Replit's original `github-push.sh` frequently fails because Replit's automatic checkpoint system commits changes before the push script runs, causing "nothing to commit" errors. Starting with Batch 7B-hotfix, use `REPLIT_PUSH_SCRIPT.sh` (project root) instead:
 
 ```bash
-git add -A && git commit -m "Batch N: ..." && git push origin dawntrader-v4
+bash REPLIT_PUSH_SCRIPT.sh "Batch N: Your commit message here"
 ```
 
-This is a known workaround. Monitor in future batches.
+This script handles three scenarios automatically:
+1. **Uncommitted changes** — commits with your message and pushes
+2. **Checkpoint already committed** — amends the checkpoint's commit message to yours, then pushes
+3. **Already in sync** — reports that nothing needs pushing
+
+**Important:** The file must have Unix line endings (LF, not CRLF). If uploaded from Windows, run `sed -i 's/\r$//' REPLIT_PUSH_SCRIPT.sh` once on Replit before first use.
+
+All INSTRUCTIONS.md files should include the push command using this script.
 
 ### Post-Push Verification (Required After Every Batch)
 
@@ -395,7 +403,7 @@ See `directives/DIRECTIVE_INDEX.md` for the full list. 10 remaining:
 10. **Zips go to `Claude Comms and Packages/`** (Batch Zips/ or Governance Zips/), not the Desktop.
 11. **Every INSTRUCTIONS.md sent to Replit must include the Replit Autonomy Reminder** at the top. This reminds Replit of its constraints on every batch, not just in `replit.md`.
 12. **Scope files go to `Claude Comms and Packages/Scope Files/`** before implementation begins. Each scope document is named `BATCH_N_SCOPE.md`.
-13. **If Replit's push script fails**, instruct Kyle to use the **Replit Shell tab** directly with: `git add -A && git commit -m "Batch N: ..." && git push origin dawntrader-v4`. The push script (`github-push.sh`) may fail when checkpoint commits have already captured changes locally. The Shell tab bypasses the Agent's git restrictions.
+13. **For pushing to GitHub**, all INSTRUCTIONS.md files must include the push command using `REPLIT_PUSH_SCRIPT.sh`: `bash REPLIT_PUSH_SCRIPT.sh "Batch N: ..."`. This script handles Replit's checkpoint auto-commit behavior. The old `github-push.sh` is deprecated.
 14. **Google Drive cache warning**: Do not clear Google Drive for Desktop's application cache while the clone repo is on Google Drive. If the cache must be cleared, back up `.git/objects/pack/` first. See Google Drive Cache Warning section for recovery procedure.
 
 ---
