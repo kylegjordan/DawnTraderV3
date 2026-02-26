@@ -335,11 +335,12 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 | 12.2.3 | Wave 3 Sub-Batch A: 9 Walter safe deletions | Batch 5 | `cc320466` |
 | — | Governance docs updated (Sub-Batch A) | Batch 5B | `8a286e64` |
 | 12.2.3 | Wave 3 Sub-Batch B: Walter importers + frontend + routes | Batch 6 | `1ea3bb38` |
+| — | Governance docs updated (Sub-Batch B) | Batch 6B | `eaacf34c` |
+| 12.2.3 | Wave 3 Sub-Batch C: Bob + Cortex removal (7A deletions + 7B surgery + 7B-hotfix) | Batch 7 | `39dc23b1` |
+| — | **Directive 12.2.3 COMPLETE** — ~17,100 lines removed across ~65 files | — | — |
 
 ### In-Progress Directives
-| Directive | Title | Status | Notes |
-|-----------|-------|--------|-------|
-| 12.2.3 | Wave 3: Walter/Bob/Cortex Removal | IN PROGRESS | Sub-Batches A+B done (Walter fully removed). Sub-Batch C (Bob+Cortex) pending. |
+*None — all issued directives are COMPLETE.*
 
 ### Snapshot Log
 | Snapshot | Commit | Description |
@@ -356,25 +357,27 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 | SNAPSHOT-009 | `dbe063d4` | After Batch 4B (governance updates) |
 | SNAPSHOT-010 | `dbe063d4` | Pre-Batch 5 freeze (same as 009) |
 | SNAPSHOT-011 | `8a286e64` | Pre-Batch 6 freeze (after Batch 5B governance) |
+| SNAPSHOT-012 | `eaacf34c` | Pre-Batch 7 freeze (after Batch 6B governance) |
+| SNAPSHOT-013 | `39dc23b1` | After Batch 7B + hotfix (Directive 12.2.3 COMPLETE) |
 
 ### Pending Directives (Phase 12)
 See `directives/DIRECTIVE_INDEX.md` for the full list. 10 remaining:
 - 12.1.6 (LSP Error Triage)
-- 12.2.1, 12.2.2, 12.2.5, 12.2.6, 12.2.8, 12.2.9 (Dead Code Purge — 6 remaining + 12.2.3 in progress)
+- 12.2.1, 12.2.2, 12.2.5, 12.2.6, 12.2.8, 12.2.9 (Dead Code Purge — 6 remaining)
 - 12.3.1 through 12.3.3 (Pipeline Unification)
-- Note: 12.2.4 (Wave 3.1 Frontend Walter Cleanup) is now COMPLETE — absorbed into Batch 6 as part of Sub-Batch B
+- Note: 12.2.3 (Wave 3 Walter/Bob/Cortex) and 12.2.4 (Wave 3.1 Frontend Walter) are both COMPLETE
 
 ### Investigation Notes for Future Batches
-- **12.2.3 Sub-Batch B**: ~~9 Walter files with active external importers~~ DONE (Batch 6). 10 Walter backend files + 1 middleware + 5 frontend files + ancillary docs deleted. 13 consuming files surgically modified. 28 Walter route handlers removed from routes.ts. ~8,600 lines removed.
-- **12.2.3 Sub-Batch C**: Bob ecosystem (bob-core is critical hub with 9+ importers) + Cortex (cortex-core has 8 active service consumers + lazy-loader + phase-8.6.5.ts routes). HIGH complexity. corpus-domain-service.ts stubbed in Batch 6 — full removal when Cortex is cleaned.
+- **12.2.3**: ~~Wave 3 Walter/Bob/Cortex~~ **COMPLETE** (Batches 5-7). Sub-Batch A: 9 Walter files deleted (~2,792 lines). Sub-Batch B: 10 Walter files + 1 middleware + 5 frontend + ancillary docs deleted, 13 consuming files modified, 28 route handlers removed (~8,600 lines). Sub-Batch C: 28 Bob/Cortex files + training data deleted, 16 consuming files modified, 11 broken imports fixed in hotfix (~5,700 lines). Total: ~17,100 lines across ~65 files.
+- **12.2.8 (Wave 8)**: Walter-era Learning Services. `cognitive-interpreter.ts` has standalone logic but learning persistence is dead (learningBob removed). `learning-cycle-service.ts` was deleted in 7B-hotfix (100% orphaned). Remaining candidates: services that used learningBob.storeFragment for persistence — now no-op stubs. Scope reduced from original estimate.
 - **12.2.1 (Wave 1)** is largely already done — LATTi files were deleted in a prior cleanup. Only `client/src/components/system/latti-safety-monitor.tsx` remains, plus schema/route residuals. Can be folded into another batch.
 - **12.1.6 (LSP Error Triage)** — ~620 errors from Replit audit are LOW severity. Most are type annotation gaps, not logic bugs. Tied to routes.ts/storage.ts monolith decomposition. Not recommended for near-term batches.
-- **Walter peripheral references**: 2 read-only DB references remain in routes.ts (walterActions table in health-summary, getWalterActivity in diagnostics export). Return empty data. Will be cleaned in Bob/Cortex batch or schema cleanup.
+- **Walter peripheral references**: 2 read-only DB references remain in routes.ts (walterActions table in health-summary, getWalterActivity in diagnostics export). Return empty data. Can be cleaned in schema cleanup.
 
 ### Test Baseline
-- **802 pass / 81 fail** (883 total across test files)
+- **800 pass / 81 fail** (881 total across test files)
 - 20 pre-existing TSC errors in files not modified by any directive
-- Baseline history: 816/81 (Batches 1-4) → 809/81 (Batch 5, 7 Walter tests removed) → 802/81 (Batch 6, 7 more Walter tests removed from phase-6.0-simulations + diagnostic-system)
+- Baseline history: 816/81 (Batches 1-4) → 809/81 (Batch 5, 7 Walter tests removed) → 802/81 (Batch 6, 7 more Walter tests removed) → 800/81 (Batch 7, 4 Bob tests removed from diagnostic-system.test.ts, 2 tests net from learning-cycle-service deletion)
 
 ---
 

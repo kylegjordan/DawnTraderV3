@@ -1014,12 +1014,13 @@ Total: 21 bugs, 65 risks.
 - **Timing**: Post-audit (should be addressed before enabling CI/CD)
 - **Phase Found**: Phase 10
 
-### RISK-070: Test Files for Deprecated Walter/Bob Systems — Will Break on Removal — MOSTLY RESOLVED
-- **Status**: **MOSTLY RESOLVED** — Directive 12.2.3 Sub-Batch B, Batch 6 (2026-02-26)
+### RISK-070: Test Files for Deprecated Walter/Bob Systems — Will Break on Removal — RESOLVED
+- **Status**: **RESOLVED** — Directive 12.2.3 (Batches 5-7B, completed 2026-02-26)
 - **Severity**: LOW (planning concern)
-- **Location**: `server/tests/diagnostic-system.test.ts` (466→414 lines), `server/tests/phase-6.0-simulations.test.ts` (136→65 lines, cleaned in Batches 5+6)
+- **Location**: `server/tests/diagnostic-system.test.ts` (466→414→~285 lines), `server/tests/phase-6.0-simulations.test.ts` (136→65 lines, cleaned in Batches 5+6)
 - **Resolution (Walter)**: All Walter imports and test blocks removed from both test files in Batch 6. `phase-6.0-simulations.test.ts` retains only 2 Bob diagnostic tests (deferred to Bob cleanup batch). `diagnostic-system.test.ts` retains Tests 1-7 and 9+ (diagnostic-controller/bob-inspector tests); Test 8 (walterPatchAnalyst) removed.
-- **Remaining**: Bob/diagnostic-controller test dependencies in both files will need cleanup during Bob removal (Sub-Batch C). `paper_validation_engine.ts` DCE/GASP references remain for Wave 6 (L-Series removal).
+- **Resolution (Bob)**: Batch 7B removed bobInspector import and Tests 4-7 from diagnostic-system.test.ts (~129 lines). All Walter/Bob test dependencies now fully removed.
+- **Remaining**: `paper_validation_engine.ts` DCE/GASP references remain for Wave 6 (L-Series removal).
 - **Phase Found**: Phase 10
 
 ### RISK-071: Standalone Test Scripts Not Discoverable by Test Framework
@@ -1137,7 +1138,7 @@ Total: 21 bugs, 65 risks.
 
 ## PHASE 11 ADDENDUM — CORTEX AND TAB CATALOG FINDINGS
 
-### RISK-083: Cortex System — Active but Undocumented Walter Dependency
+### RISK-083: Cortex System — Active but Undocumented Walter Dependency — **RESOLVED**
 - **Severity**: MEDIUM
 - **Location**: `server/services/cortex/cortex-core.ts` (393 lines), `cortex-config.yaml`, `cortex-memory.json`, `cortex-registry.json`, `analytics-scheduler.ts` (250 lines)
 - **Problem**: The Cortex system is an ACTIVE in-memory caching/orchestration layer sitting between Bob modules and Walter. It maintains a TTL-based memory cache, performs snapshot syncs, and runs a 15-minute analytics cycle. It is initialized at startup via lazy-loader.ts, exposes 4 API endpoints (`/api/cortex/status`, `/api/cortex/snapshot`, `/api/cortex/flush`, `/api/cortex/force-sync`), and is consumed by 9+ service files (config-change-handler.ts, context-refresh-coordinator.ts, contextual-nlai-interpreter.ts, corpus-domain-service.ts, phase-8.6.5-enhancements.ts, purpose-layer.ts, bob-config.ts, autonomy-controller.ts, system-truth-diagnostic.ts). Despite being architecturally coupled to both Bob and Walter, Cortex was not mentioned in any prior audit phase. It must be included in Wave 3 (Walter/Bob removal) scope.
@@ -1145,6 +1146,7 @@ Total: 21 bugs, 65 risks.
 - **Recommended**: Add Cortex to Wave 3 removal scope. 6 files to remove, 4 API endpoints to remove, 9+ consuming services to audit and decouple.
 - **Timing**: During Wave 3 (Walter/Bob removal)
 - **Phase Found**: Post-audit investigation (Cortex audit 2026-02-17)
+- **Resolution**: Directive 12.2.3 Sub-Batch C (Batches 7A + 7B + 7B-hotfix, commit `39dc23b1`). All 5 Cortex files deleted (cortex-core.ts, analytics-scheduler.ts, cortex-config.yaml, cortex-memory.json, cortex-registry.json). All 4 API endpoints removed from routes.ts. All 9+ consuming services surgically decoupled. Cortex is fully removed.
 
 ### BUG-022: Duplicate Tab Value "learning" in enhanced-system-monitoring.tsx
 - **Severity**: LOW
@@ -1263,7 +1265,7 @@ Total: 21 bugs, 72 risks (no new risks — all directives are improvement action
 - **ChatGPT corrections**: "71 legacy tables" nuanced — some have active writers, need pre-drop audit. "No transactions" corrected to "limited transactions." Storage layer coupling order constraint added.
 - **6 new risks from ChatGPT feedback**: RISK-078 (index usage audit, MEDIUM), RISK-079 (no table partitioning, MEDIUM), RISK-080 (migration drift/rebaseline, MEDIUM), RISK-081 (LATTI residual fields, LOW), RISK-082 (no data retention policy, MEDIUM), RISK-083 (Cortex undocumented dependency, MEDIUM).
 - **Cortex system identified**: ACTIVE in-memory caching layer between Bob and Walter. 6 files, 4 API endpoints, 9+ consuming services. Must be included in Wave 3 removal scope (RISK-083).
-- **Directive 12.2.3 Sub-Batch A** (Batch 5, commit `cc320466`): 9 Walter service files with zero external importers deleted (~2,792 lines). Test file `phase-6.0-simulations.test.ts` cleaned (7 tests removed). RISK-070 partially resolved. Directive IN PROGRESS — Sub-Batches B+C pending.
+- **Directive 12.2.3 Sub-Batch A** (Batch 5, commit `cc320466`): 9 Walter service files with zero external importers deleted (~2,792 lines). Test file `phase-6.0-simulations.test.ts` cleaned (7 tests removed). RISK-070 partially resolved. Directive completed in Batches 5-7B (see Directive 12.2.3 Completion Log below).
 - **1 new bug from tab catalog**: BUG-022 (duplicate `value="learning"` in enhanced-system-monitoring.tsx, LOW). Second tab with same value is unreachable.
 - **5-phase database cleanup strategy** endorsed from ChatGPT: Phase A (Isolation) → B (Modularization) → C (Schema Simplification) → D (Migration Rebaseline) → E (Index & Retention Hygiene).
 Total: **22 bugs, 83 architectural risks**.
@@ -1312,3 +1314,31 @@ Total: **22 bugs, 85 architectural risks**.
 ---
 
 *Registry now entering implementation phase. Future entries will track directive-resolved bugs/risks as they are completed.*
+
+---
+
+## DIRECTIVE 12.2.3 COMPLETION LOG (2026-02-26)
+
+**Directive 12.2.3: Wave 3 — Walter/Bob/Cortex Removal — COMPLETE**
+
+Total removal: ~17,100 lines across ~65 files over 7 batches (5, 5B, 6, 6B, 7A, 7B, 7B-hotfix).
+
+| Batch | Scope | Lines Removed | Commit |
+|-------|-------|---------------|--------|
+| Batch 5 (Sub-Batch A) | 9 Walter files with zero external importers | ~2,792 | `cc320466` |
+| Batch 5B | Governance update | — | `8a286e64` |
+| Batch 6 (Sub-Batch B) | 10 Walter backend + 1 middleware + 5 frontend + docs. 13 consuming files modified. 28 route handlers removed. | ~8,600 | `1ea3bb38` |
+| Batch 6B | Governance update | — | `eaacf34c` |
+| Batch 7A (Sub-Batch C) | 28 Bob/Cortex files + 3 directories + 718-file training data tree deleted | ~4,500 | `5fc79598` |
+| Batch 7B (Sub-Batch C) | 12 consuming files surgically modified (routes.ts, index.ts, lazy-loader.ts, config-change-handler.ts, diagnostic-controller.ts, cognitive-interpreter.ts, phase-8.6.5-enhancements.ts, self-repair.ts, intent-executor.ts, context-refresh-coordinator.ts, enhanced-system-monitoring.tsx, diagnostic-system.test.ts) | ~1,000 | `8cc362cc` |
+| Batch 7B-hotfix | 11 missed broken imports fixed across 4 files (routes.ts, reasoning-orchestrator.ts, autonomy-controller.ts). learning-cycle-service.ts deleted. | ~200 | `39dc23b1` |
+
+**Risks resolved by this directive:**
+- RISK-070 (legacy test files) — RESOLVED: All Walter/Bob test dependencies removed
+- RISK-083 (Cortex undocumented dependency) — RESOLVED: All Cortex files, endpoints, and consuming service imports removed
+
+**Test baseline progression:**
+- Pre-directive: 816/81 (897 total)
+- After Sub-Batch A (Batch 5): 809/81 (890 total, 7 Walter tests removed)
+- After Sub-Batch B (Batch 6): 802/81 (883 total, 7 more Walter tests removed)
+- After Sub-Batch C (Batch 7): 800/81 (881 total, 4 Bob tests removed, 2 tests net from file deletion)
