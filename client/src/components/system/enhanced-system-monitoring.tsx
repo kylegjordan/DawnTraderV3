@@ -41,7 +41,7 @@ import ClusterTab from "./cluster-tab";
 import LearningNetworkTab from "./learning-network-tab";
 import { LATTISafetyMonitor } from "./latti-safety-monitor";
 import { DataFlowTracePanel } from "@/components/dashboard/data-flow-trace-panel";
-import { SystemTruthPanel } from "@/components/dashboard/system-truth-panel";
+// Directive 12.2.3: SystemTruthPanel import removed (file deleted in Batch 7A)
 import SystemHealthSummary from "@/components/system-health-summary";
 import EngineTelemetry from "@/components/monitoring/engine-telemetry";
 import SystemConfigTab from "./system-config-tab";
@@ -157,9 +157,8 @@ export default function EnhancedSystemMonitoring() {
   const { toast } = useToast();
   const logEndRef = useRef<HTMLDivElement>(null);
   
-  // Phase 27.F.31: System Truth telemetry for Diagnostics tab
-  const [truthData, setTruthData] = useState<any>(null);
-  
+  // Directive 12.2.3: truthData state removed (SystemTruthPanel deleted in Batch 7A)
+
   // Enable auto-refresh every 10 seconds
   const refetchInterval = 10000;
   
@@ -173,21 +172,7 @@ export default function EnhancedSystemMonitoring() {
     }
   }, [messages, activeTab]);
 
-  // Phase 27.F.31: Fetch truth data for Diagnostics tab
-  useEffect(() => {
-    const fetchTruthData = async () => {
-      try {
-        const response = await apiRequest('GET', '/api/system/truth-check');
-        setTruthData(response);
-      } catch (error) {
-        console.error('[SystemMonitoring] Error fetching truth data:', error);
-      }
-    };
-
-    fetchTruthData();
-    const timer = setInterval(fetchTruthData, 30000); // Poll every 30 seconds
-    return () => clearInterval(timer);
-  }, []);
+  // Directive 12.2.3: Truth data polling removed (SystemTruthPanel + system-truth-diagnostic deleted in Batch 7A)
   
   // Acknowledge alert mutation
   const acknowledgeMutation = useMutation({
@@ -1121,8 +1106,7 @@ export default function EnhancedSystemMonitoring() {
               Real-time system truth synchronization, data flow diagnostics, and Walter activity monitoring
             </p>
             
-            {/* System Truth Synchronization Panel */}
-            <SystemTruthPanel truthData={truthData} />
+            {/* Directive 12.2.3: SystemTruthPanel removed (file deleted in Batch 7A) */}
             
             {/* Developer-Only Data Flow Trace */}
             <DataFlowTracePanel />

@@ -222,11 +222,8 @@ class IntentExecutionService {
       // Update user status
       await storage.updateUser(userId, { tradingStatus: 'active', tradingMode: mode });
       
-      // Invalidate BobCore cache for paper sim status
-      const { bobCore } = await import('../services/bob-core');
-      bobCore.invalidate('metrics:paperSimStatus');
-      console.log('[IntentExecutor] Invalidated BobCore cache: metrics:paperSimStatus');
-      
+      // Directive 12.2.3: BobCore cache invalidation removed (file deleted in Batch 7A)
+
       return {
         message: 'Paper trading started successfully',
         data: { mode, status: 'active' }
@@ -273,12 +270,8 @@ class IntentExecutionService {
       // Update user status
       await storage.updateUser(userId, { tradingStatus: 'stopped' });
       
-      // Invalidate BobCore cache for paper sim status
-      const { bobCore } = await import('../services/bob-core');
-      bobCore.invalidate('metrics:paperSimStatus');
-      bobCore.invalidateMode('paper'); // Also invalidate all paper mode caches
-      console.log('[IntentExecutor] Invalidated BobCore cache: metrics:paperSimStatus and paper mode');
-      
+      // Directive 12.2.3: BobCore cache invalidation removed (file deleted in Batch 7A)
+
       return {
         message: 'Paper trading stopped successfully',
         data: { mode, status: 'stopped' }

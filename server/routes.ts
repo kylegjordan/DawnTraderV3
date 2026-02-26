@@ -36,16 +36,16 @@ import multer from "multer";
 import fs from 'fs/promises';
 import path from 'path';
 import { validatePasswordStrength, hashPassword, verifyPassword, getPasswordStrengthMessage } from "./services/auth-service";
-import { bobStatsHandler } from "./middleware/bob-routing";
-import { bobCore } from "./services/bob-core";
-import { metricsBob } from "./services/bob-metrics";
-import { dataBob } from "./services/bob-data";
-import { configBob } from "./services/bob-config";
-import { strategyBob } from "./services/bob-strategy";
-import { tradeBob } from "./services/bob-trade";
-import { insightBob } from "./services/bob-insight";
-import { uiBob } from "./services/bob-ui";
-import { cortexCore } from "./services/cortex/cortex-core";
+// Directive 12.2.3: bobStatsHandler import removed (file deleted in Batch 7A)
+// Directive 12.2.3: bobCore import removed (file deleted in Batch 7A)
+// Directive 12.2.3: metricsBob import removed (file deleted in Batch 7A)
+// Directive 12.2.3: dataBob import removed (file deleted in Batch 7A)
+// Directive 12.2.3: configBob import removed (file deleted in Batch 7A)
+// Directive 12.2.3: strategyBob import removed (file deleted in Batch 7A)
+// Directive 12.2.3: tradeBob import removed (file deleted in Batch 7A)
+// Directive 12.2.3: insightBob import removed (file deleted in Batch 7A)
+// Directive 12.2.3: uiBob import removed (file deleted in Batch 7A)
+// Directive 12.2.3: cortexCore import removed (file deleted in Batch 7A)
 import { filePersistence } from "./services/file-persistence";
 import { memoryLifecycle } from "./services/memory-lifecycle";
 import { getPermissionsForRole, Permission } from './config/permissions.js';
@@ -1249,17 +1249,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(400).json({ error: 'Mode parameter is required and must be "live" or "paper"' });
       }
 
-      // Phase 7.4: Try ConfigBob first if enabled
-      if (bobCore.isEnabled()) {
-        try {
-          console.log('[BobRouting] 🎯 Using ConfigBob for /api/guardrails');
-          const guardrailsData = await configBob.getGuardrails(userId, mode);
-          return res.json(guardrailsData);
-        } catch (bobError: any) {
-          console.error('[BobRouting] ⚠️ ConfigBob failed, using original handler:', bobError.message);
-          // Fall through to original implementation below
-        }
-      }
+      // Directive 12.2.3: ConfigBob transparent routing removed (Batch 7B)
 
       // [9.7] Use guardrails_v2 instead of legacy guardrails table
       let guardrailsData = await storage.getGuardrailsV2({ mode });
@@ -1421,7 +1411,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         payload: { cooldownMinutes: cooldownValue }
       });
 
-      // Phase 8.6.5: Invalidate caches and refresh context for Walter AI
+      // Phase 8.6.5: Invalidate caches and refresh context
       const { configChangeHandler } = await import('./services/config-change-handler');
       await configChangeHandler.handleConfigChange({
         userId,
@@ -4504,10 +4494,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Phase 27.F.15.B.3: Get mode from query, default to paper
       const mode = (req.query.mode as 'live' | 'paper') || 'paper';
-      // Phase 7.6: Use TradeBob for caching if enabled, otherwise fallback
-      const trades = tradeBob.isEnabled()
-        ? await tradeBob.getAllActiveTrades(userId)
-        : await storage.getActiveTrades(mode);
+      // Directive 12.2.3: TradeBob transparent routing removed (Batch 7B)
+      const trades = await storage.getActiveTrades(mode);
       console.log('[Phase-27.F.15.B.1] Updated route /api/trades/active → mode-based only');
       
       res.json(trades);
@@ -4527,13 +4515,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const engine = tradeMode === 'live' ? globalLiveEngine : globalPaperEngine;
       
       const closedTrade = await engine.closeTrade(id, 'manual');
-      
-      // Phase 7.6: Invalidate TradeBob cache on trade close
-      tradeBob.invalidateActiveTrades(userId);
-      if (closedTrade.mode === 'paper') {
-        tradeBob.invalidatePaperTrades(userId);
-      }
-      
+      // Directive 12.2.3: TradeBob cache invalidation removed (Batch 7B)
+
       res.json(closedTrade);
     } catch (error) {
       console.error('Error closing trade:', error);
@@ -4810,10 +4793,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const userId = req.user!.id;
       
-      // Phase 7.6: Use TradeBob for caching if enabled, otherwise fallback
-      const trades = tradeBob.isEnabled()
-        ? await tradeBob.getOpenPaperTrades(userId)
-        : await storage.getOpenPaperTrades();
+      // Directive 12.2.3: TradeBob transparent routing removed (Batch 7B)
+      const trades = await storage.getOpenPaperTrades();
       console.log('[Phase-27.F.15.B.1] Updated route /api/paper/trades/open → mode-based only');
       
       res.json(trades);
@@ -4828,11 +4809,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const userId = req.user!.id;
       await storage.deleteAllPaperTrades();
       console.log('[Phase-27.F.15.B.1] Updated route /api/paper/trades/clear → mode-based only');
-      
-      // Phase 7.6: Invalidate TradeBob cache when paper trades are cleared
-      tradeBob.invalidateActiveTrades(userId); // Invalidate combined cache
-      tradeBob.invalidatePaperTrades(userId);   // Invalidate paper-specific cache
-      
+      // Directive 12.2.3: TradeBob cache invalidation removed (Batch 7B)
+
       res.json({ success: true, message: 'All paper trades cleared' });
     } catch (error) {
       console.error('Error clearing paper trades:', error);
@@ -5622,184 +5600,16 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // ========================================
-  // BOB CORE - PHASE 7.2
-  // Transparent optimization layer for health/metrics
-  // ========================================
+  // Directive 12.2.3: Bob Core route section removed (Batch 7B) — bob/stats, bob/insight, ui/state GET+POST, bob/prefetch
 
-  // Bob stats endpoint for monitoring cache performance (no auth for monitoring tools)
-  apiRouter.get('/bob/stats', bobStatsHandler);
-
-  // Phase 7.7: Bob Insight endpoint - system introspection and meta-information
-  apiRouter.get('/bob/insight', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const summary = await insightBob.getInsightSummary();
-      res.json(summary);
-    } catch (error: any) {
-      console.error('[BobInsight] Error fetching insight summary:', error);
-      res.status(500).json({ error: 'Failed to fetch insight summary' });
-    }
-  });
-
-  // Phase 7.7: UI State endpoint - current UI context and visibility
-  apiRouter.get('/ui/state', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const mode = (req.query.mode as 'live' | 'paper') || 'live';
-      const uiState = await uiBob.getUIState(userId, mode);
-      res.json(uiState);
-    } catch (error: any) {
-      console.error('[UIBob] Error fetching UI state:', error);
-      res.status(500).json({ error: 'Failed to fetch UI state' });
-    }
-  });
-
-  // Phase 7.7: Update UI State endpoint - frontend sends current view context
-  apiRouter.post('/ui/state', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const { view, subView, mode, filters } = req.body;
-      
-      uiBob.updateUIState(userId, { view, subView, mode, filters });
-      
-      res.json({ success: true });
-    } catch (error: any) {
-      console.error('[UIBob] Error updating UI state:', error);
-      res.status(500).json({ error: 'Failed to update UI state' });
-    }
-  });
-
-  // Bob prefetch endpoint - triggered by Walter chat open or mode change
-  // Phase 7.3: Extended to include DataBob prefetch
-  // Phase 7.4: Extended to include ConfigBob prefetch
-  apiRouter.post('/bob/prefetch', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    const { mode, trigger } = req.body;
-    const userId = req.user!.id;
-    
-    if (!mode || !['live', 'paper'].includes(mode)) {
-      return res.status(400).json({ error: 'Invalid mode. Must be "live" or "paper"' });
-    }
-
-    try {
-      console.log(`[BobCore] 🔄 Prefetch triggered by ${trigger || 'unknown'} for ${mode} mode`);
-      
-      // Phase 7.2: Prefetch MetricsBob
-      await metricsBob.prefetchForMode(mode as 'live' | 'paper');
-      
-      // Phase 7.3: Prefetch DataBob
-      await dataBob.prefetchForMode(userId, mode as 'live' | 'paper', 'today');
-      
-      // Phase 7.4: Prefetch ConfigBob (all 5 config types)
-      await configBob.prefetchForMode(userId, mode as 'live' | 'paper');
-      
-      // Phase 7.5: Prefetch StrategyBob (signals only on mode_change)
-      const includeSignals = trigger === 'mode_change';
-      await strategyBob.prefetchForMode(userId, mode as 'live' | 'paper', includeSignals);
-      
-      // Phase 7.6: Prefetch TradeBob (active/open trades)
-      if (tradeBob.isEnabled()) {
-        await tradeBob.prefetchForMode(userId, mode as 'live' | 'paper');
-      }
-      
-      res.json({ success: true, mode, trigger });
-    } catch (error: any) {
-      console.error('[BobCore] ⚠️ Prefetch failed:', error);
-      res.status(500).json({ error: 'Prefetch failed', details: error.message });
-    }
-  });
-
-  // ========================================
-  // CORTEX CORE - PHASE 8.0
-  // Hybrid memory layer for Walter context
-  // ========================================
-
-  // Cortex status endpoint - provides memory and sync status
-  apiRouter.get('/cortex/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const status = cortexCore.getStatus();
-      res.json(status);
-    } catch (error: any) {
-      console.error('[Cortex] Error fetching status:', error);
-      res.status(500).json({ error: 'Failed to fetch Cortex status' });
-    }
-  });
-
-  // Cortex snapshot endpoint - get Bob/UI snapshots
-  apiRouter.get('/cortex/snapshot', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const type = req.query.type as 'bob' | 'ui' | undefined;
-      
-      if (type && !['bob', 'ui'].includes(type)) {
-        return res.status(400).json({ error: 'Invalid snapshot type. Must be "bob" or "ui"' });
-      }
-
-      if (type) {
-        const snapshot = cortexCore.getSnapshot(type);
-        res.json({ type, snapshot });
-      } else {
-        // Return both snapshots
-        const bobSnapshot = cortexCore.getSnapshot('bob');
-        const uiSnapshot = cortexCore.getSnapshot('ui');
-        res.json({ bob: bobSnapshot, ui: uiSnapshot });
-      }
-    } catch (error: any) {
-      console.error('[Cortex] Error fetching snapshot:', error);
-      res.status(500).json({ error: 'Failed to fetch snapshot' });
-    }
-  });
-
-  // Cortex flush endpoint - clear memory cache
-  apiRouter.post('/cortex/flush', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      await cortexCore.flush();
-      res.json({ success: true, message: 'Memory flushed' });
-    } catch (error: any) {
-      console.error('[Cortex] Error flushing memory:', error);
-      res.status(500).json({ error: 'Failed to flush memory' });
-    }
-  });
-
-  // Cortex force sync endpoint - manually trigger snapshot sync
-  apiRouter.post('/cortex/force-sync', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      // Define snapshot fetch functions
-      const fetchBobSnapshot = async () => {
-        return await insightBob.getInsightSummary();
-      };
-
-      const fetchUISnapshot = async () => {
-        const userId = req.user!.id;
-        const mode = (req.query.mode as 'live' | 'paper') || 'live';
-        return await uiBob.getUIState(userId, mode);
-      };
-
-      await cortexCore.forceSync(fetchBobSnapshot, fetchUISnapshot);
-      res.json({ success: true, message: 'Force sync completed' });
-    } catch (error: any) {
-      console.error('[Cortex] Error during force sync:', error);
-      res.status(500).json({ error: 'Failed to force sync' });
-    }
-  });
+  // Directive 12.2.3: Cortex Core route section removed (Batch 7B) — cortex/status, cortex/snapshot, cortex/flush, cortex/force-sync
 
   // Global System Health Endpoint - provides comprehensive system status
-  // Phase 7.2: Uses Bob Core for caching with transparent fallback
   apiRouter.get('/system/health', authenticateToken, async (req: AuthenticatedRequest, res) => {
     const userId = req.user!.id;
     const mode = (req.query.mode as string) || 'live';
 
-    // Phase 7.2: Try Bob Core first if enabled
-    if (bobCore.isEnabled()) {
-      try {
-        console.log('[BobRouting] 🎯 Using Bob Core for /api/system/health');
-        const healthData = await metricsBob.getSystemHealth(mode as 'live' | 'paper');
-        return res.json(healthData);
-      } catch (bobError: any) {
-        console.error('[BobRouting] ⚠️ Bob Core failed, using original handler:', bobError.message);
-        // Fall through to original implementation below
-      }
-    }
-
-    // Original implementation (fallback or when Bob disabled)
+    // Directive 12.2.3: Bob Core transparent routing removed (Batch 7B)
     try {
       let allHealthy = true;
       const healthData: any = {
@@ -5881,16 +5691,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Phase 8.3: Detailed System Health Metrics from SystemHealthMonitor
-  apiRouter.get('/system/health-metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const healthMetrics = await metricsBob.getSystemHealthMetrics(5); // 5s TTL
-      res.json(healthMetrics);
-    } catch (error: any) {
-      console.error('[SystemHealthMetrics] Error:', error);
-      res.status(500).json({ error: 'Failed to get health metrics', message: error.message });
-    }
-  });
+  // Directive 12.2.3: Bob route handler removed (Batch 7B) — system/health-metrics (depended on metricsBob)
 
   // Phase 30.FX.A: System Health with Oversight & Strategy Mix
   apiRouter.get('/system/health-30fx', async (_, res) => {
@@ -6233,7 +6034,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   // ==================== Phase 8.5 Addendum G + H: System Truth & Context Refresh ====================
 
-  // GET /api/system/truth-check - Compare backend, Cortex, and Walter snapshots
+  // GET /api/system/truth-check - Compare backend snapshots (Cortex + Walter refs removed in Batch 7B)
   // Phase 3B: Removed userId parameter - single-tenant architecture
   apiRouter.get('/system/truth-check', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
@@ -9862,12 +9663,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           mode: 'paper'
         });
         
-        // Invalidate Bob Core caches after reset
-        bobCore.invalidate('metrics:paperSimStatus');
-        bobCore.invalidate('metrics:portfolioOverview');
-        bobCore.invalidate('metrics:openPositions');
-        bobCore.invalidate('metrics:recentTrades');
-        console.log(`[B7.1][HARD_RESET] UI caches invalidated`);
+        // Directive 12.2.3: Bob Core cache invalidation removed (Batch 7B)
+        console.log(`[B7.1][HARD_RESET] Simulation reset complete`);
       } else {
         console.log(`[B7.1][CONTINUE] Preserving existing state (no hard reset)`);
       }
@@ -9934,10 +9731,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // REB 2.8.13: Pass startingBalance to startPaperSimulation (required after REB 2.8.12)
         const result = await startPaperSimulation(userId, { startingBalance: balance });
         
-        // Invalidate Bob Core cache
-        bobCore.invalidate('metrics:paperSimStatus');
-        bobCore.invalidate('metrics:portfolioOverview');
-        
+        // Directive 12.2.3: Bob Core cache invalidation removed (Batch 7B)
+
         if (!result.success) {
           return res.status(400).json({ error: result.message || result.error });
         }
@@ -9991,9 +9786,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // REB 2.8.13: Pass startingBalance to startPaperSimulation (required after REB 2.8.12)
       const result = await startPaperSimulation(userId, { startingBalance: existingBalance });
       
-      // Invalidate Bob Core cache for paper-sim status
-      bobCore.invalidate('metrics:paperSimStatus');
-      console.log('[PaperSim] Invalidated paperSimStatus cache after start');
+      // Directive 12.2.3: Bob Core cache invalidation removed (Batch 7B)
       
       // Return success/error based on service result
       if (!result.success) {
@@ -10030,9 +9823,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const { stopPaperSimulation } = await import('./services/paper-sim-service.js');
       const result = await stopPaperSimulation(userId);
       
-      // Invalidate Bob Core cache for paper-sim status
-      bobCore.invalidate('metrics:paperSimStatus');
-      console.log('[PaperSim] Invalidated paperSimStatus cache after stop');
+      // Directive 12.2.3: Bob Core cache invalidation removed (Batch 7B)
       
       // Return success/error based on service result
       if (!result.success) {
@@ -10101,9 +9892,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       if (!resetResult.success) {
         console.error(`[B7.A] Hard reset failed:`, resetResult.message);
-        // Continue with legacy cleanup as fallback, but still invalidate caches
-        bobCore.invalidate('metrics:paperSimStatus');
-        bobCore.invalidate('metrics:portfolioOverview');
+        // Continue with legacy cleanup as fallback
+        // Directive 12.2.3: Bob Core cache invalidation removed (Batch 7B)
       }
       
       console.log(`[B7.A] Hard reset result:`, resetResult.details);
@@ -10139,10 +9929,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         lastUpdated: new Date()
       });
       
-      // Invalidate Bob Core cache
-      bobCore.invalidate('metrics:paperSimStatus');
-      bobCore.invalidate('metrics:portfolioOverview');
-      
+      // Directive 12.2.3: Bob Core cache invalidation removed (Batch 7B)
+
       console.log(`[PaperSim] Reset complete - new balance: $${balance}`);
       
       res.json({
@@ -10479,21 +10267,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Phase 7.2: Paper trading status with Bob Core caching
+  // Paper trading status
   apiRouter.get('/paper-sim/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    // Phase 7.2: Try Bob Core first if enabled
-    if (bobCore.isEnabled()) {
-      try {
-        console.log('[BobRouting] 🎯 Using Bob Core for /api/paper-sim/status');
-        const status = await metricsBob.getPaperSimStatus();
-        return res.json(status);
-      } catch (bobError: any) {
-        console.error('[BobRouting] ⚠️ Bob Core failed, using original handler:', bobError.message);
-        // Fall through to original implementation below
-      }
-    }
-
-    // Original implementation (fallback or when Bob disabled)
+    // Directive 12.2.3: Bob Core transparent routing removed (Batch 7B)
     try {
       // Return GLOBAL system-wide status (same for all users)
       const hasUISimulation = (global as any).globalPaperPortfolioManager !== null;
@@ -13768,52 +13544,7 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  // System Health Summary - Get today's feed/formula issue counts for dashboard widget
-  apiRouter.get('/system/health-summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const { walterActions } = await import('@shared/schema');
-      
-      // Get start of today in UTC
-      const today = new Date();
-      today.setUTCHours(0, 0, 0, 0);
-      
-      // Query walter_actions for today's feed and formula events
-      const todayActions = await db
-        .select()
-        .from(walterActions)
-        .where(
-          and(
-            eq(walterActions.userId, userId),
-            sql`${walterActions.createdAt} >= ${today.toISOString()}`
-          )
-        );
-      
-      // Count by category
-      const feedActions = todayActions.filter(a => a.category === 'feed');
-      const formulaActions = todayActions.filter(a => a.category === 'formula');
-      
-      // Count detected (all actions) vs resolved (completed status)
-      const feedDetected = feedActions.length;
-      const feedResolved = feedActions.filter(a => a.status === 'completed').length;
-      const formulaDetected = formulaActions.length;
-      const formulaResolved = formulaActions.filter(a => a.status === 'completed').length;
-      
-      res.json({
-        ok: true,
-        timestamp: new Date().toISOString(),
-        summary: {
-          feedHealthIssuesDetected: feedDetected,
-          feedHealthIssuesResolved: feedResolved,
-          formulaHealthIssuesDetected: formulaDetected,
-          formulaHealthIssuesResolved: formulaResolved
-        }
-      });
-    } catch (error: any) {
-      console.error('[SYSTEM-HEALTH-SUMMARY] Error fetching summary:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
+  // Directive 12.2.3: Walter health-summary route removed (Batch 7B) — depended on walterActions table
 
   // One-time cleanup: Acknowledge all feed_health and formula_audit alerts
   apiRouter.post('/system/cleanup-health-alerts', authenticateToken, async (req: AuthenticatedRequest, res) => {
@@ -14046,22 +13777,22 @@ Provide specific, actionable recommendations.`,
   // Export System Report
   apiRouter.get('/diagnostics/export-report', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
-      const { getSystemMetrics, getTradingEngineStatus, getWalterActivity, getDatabaseHealth } = await import('./diagnostics/metrics.js');
+      const { getSystemMetrics, getTradingEngineStatus, getDatabaseHealth } = await import('./diagnostics/metrics.js');
+      // Directive 12.2.3: getWalterActivity removed (Batch 7B)
       const { getExpertInsightsMetrics } = await import('./diagnostics/expert-insights-metrics.js');
-      
-      const [systemMetrics, tradingEngine, walterActivity, databaseHealth, expertInsights] = await Promise.all([
+
+      const [systemMetrics, tradingEngine, databaseHealth, expertInsights] = await Promise.all([
         getSystemMetrics(),
         getTradingEngineStatus(),
-        getWalterActivity(),
         getDatabaseHealth(),
         getExpertInsightsMetrics()
       ]);
-      
+
       const report = {
         timestamp: new Date().toISOString(),
         systemMetrics,
         tradingEngine,
-        walterActivity,
+        // Directive 12.2.3: walterActivity field removed (Batch 7B)
         databaseHealth,
         expertInsights
       };
@@ -14739,17 +14470,7 @@ Provide specific, actionable recommendations.`,
       const userId = req.user!.id;
       const days = parseInt(req.query.days as string) || 7;
 
-      // Phase 7.5: Try StrategyBob first if enabled
-      if (bobCore.isEnabled()) {
-        try {
-          console.log('[BobRouting] 🎯 Using StrategyBob for /api/metrics/strategies');
-          const performanceData = await strategyBob.getPerformance(userId, 'live', days);
-          return res.json(performanceData);
-        } catch (bobError: any) {
-          console.error('[BobRouting] ⚠️ StrategyBob failed, using original handler:', bobError.message);
-          // Fall through to original implementation below
-        }
-      }
+      // Directive 12.2.3: StrategyBob transparent routing removed (Batch 7B)
 
       const fromDate = new Date();
       fromDate.setDate(fromDate.getDate() - days);
@@ -14836,17 +14557,7 @@ Provide specific, actionable recommendations.`,
       const userId = req.user!.id;
       const days = parseInt(req.query.days as string) || 7;
 
-      // Phase 7.5: Try StrategyBob first if enabled
-      if (bobCore.isEnabled()) {
-        try {
-          console.log('[BobRouting] 🎯 Using StrategyBob for /api/paper/metrics/strategies');
-          const performanceData = await strategyBob.getPerformance(userId, 'paper', days);
-          return res.json(performanceData);
-        } catch (bobError: any) {
-          console.error('[BobRouting] ⚠️ StrategyBob failed, using original handler:', bobError.message);
-          // Fall through to original implementation below
-        }
-      }
+      // Directive 12.2.3: StrategyBob transparent routing removed (Batch 7B)
 
       const fromDate = new Date();
       fromDate.setDate(fromDate.getDate() - days);
@@ -15446,17 +15157,7 @@ Provide specific, actionable recommendations.`,
       const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'live';
 
-      // Phase 7.4: Try ConfigBob first if enabled
-      if (bobCore.isEnabled()) {
-        try {
-          console.log('[BobRouting] 🎯 Using ConfigBob for /api/goals/summary');
-          const goalsData = await configBob.getGoals(userId, mode as 'live' | 'paper');
-          return res.json(goalsData);
-        } catch (bobError: any) {
-          console.error('[BobRouting] ⚠️ ConfigBob failed, using original handler:', bobError.message);
-          // Fall through to original implementation below
-        }
-      }
+      // Directive 12.2.3: ConfigBob transparent routing removed (Batch 7B)
 
       console.log(`[Goals] Fetching goals summary for user ${userId} in ${mode} mode`);
 
@@ -15921,17 +15622,7 @@ Please:
       const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'live';
 
-      // Phase 7.3: Try DataBob first if enabled
-      if (bobCore.isEnabled()) {
-        try {
-          console.log('[BobRouting] 🎯 Using DataBob for /api/trading/averages');
-          const averagesData = await dataBob.getAverages(userId, mode as 'live' | 'paper');
-          return res.json(averagesData);
-        } catch (bobError: any) {
-          console.error('[BobRouting] ⚠️ DataBob failed, using original handler:', bobError.message);
-          // Fall through to original implementation below
-        }
-      }
+      // Directive 12.2.3: DataBob transparent routing removed (Batch 7B)
       const period = (req.query.period as string) || '1d';
 
       const periodMap: { [key: string]: number } = {
@@ -16012,17 +15703,7 @@ Please:
       const mode = (req.query.mode as string) || 'live';
       const period = (req.query.period as string) || '1d';
 
-      // Phase 7.3: Try DataBob first if enabled
-      if (bobCore.isEnabled()) {
-        try {
-          console.log('[BobRouting] 🎯 Using DataBob for /api/trading/results');
-          const resultsData = await dataBob.getResults(userId, mode as 'live' | 'paper', period as any);
-          return res.json(resultsData);
-        } catch (bobError: any) {
-          console.error('[BobRouting] ⚠️ DataBob failed, using original handler:', bobError.message);
-          // Fall through to original implementation below
-        }
-      }
+      // Directive 12.2.3: DataBob transparent routing removed (Batch 7B)
 
       const periodMap: { [key: string]: number } = {
         '1d': 1,
@@ -16198,17 +15879,7 @@ Please:
       const globalContextId = 'default';
       const mode = (String(req.query.mode) === 'paper' ? 'paper' : 'live') as 'live' | 'paper';
       
-      // Phase 7.4: Try ConfigBob first if enabled
-      if (bobCore.isEnabled()) {
-        try {
-          console.log('[BobRouting] 🎯 Using ConfigBob for /api/strategies/settings/all');
-          const rows = await configBob.getStrategies(globalContextId, mode);
-          return res.json(rows);
-        } catch (bobError: any) {
-          console.error('[BobRouting] ⚠️ ConfigBob failed, using original handler:', bobError.message);
-          // Fall through to original implementation below
-        }
-      }
+      // Directive 12.2.3: ConfigBob transparent routing removed (Batch 7B)
 
       const rows = await storage.listStrategySettings({ globalContextId, mode });
       return res.json(rows);
@@ -16369,7 +16040,7 @@ Please:
         reason: req.body?.reason || 'manual update',
       });
 
-      // Phase 8.6.5: Invalidate caches and refresh context for Walter AI
+      // Phase 8.6.5: Invalidate caches and refresh context
       const { configChangeHandler } = await import('./services/config-change-handler');
       await configChangeHandler.handleConfigChange({
         userId,
@@ -17023,17 +16694,7 @@ Please:
       const userId = req.user!.id;
       const limit = parseInt(req.query.limit as string) || 50;
 
-      // Phase 7.5: Try StrategyBob first if enabled
-      if (bobCore.isEnabled()) {
-        try {
-          console.log('[BobRouting] 🎯 Using StrategyBob for /api/historic-signals');
-          const signals = await strategyBob.getSignals(userId, 'live', limit);
-          return res.json({ ok: true, signals });
-        } catch (bobError: any) {
-          console.error('[BobRouting] ⚠️ StrategyBob failed, using original handler:', bobError.message);
-          // Fall through to original implementation below
-        }
-      }
+      // Directive 12.2.3: StrategyBob transparent routing removed (Batch 7B)
 
       const signals = await storage.getHistoricSignals(userId, limit);
       res.json({ ok: true, signals });
@@ -17759,7 +17420,7 @@ Please:
 
         console.info(`[Orchestrator][9.7] Guardrail V2 updated: ${validated.field} = ${validated.value} (${validated.mode} mode)`);
         
-        // Phase 8.6.5: Invalidate caches and refresh context for Walter AI
+        // Phase 8.6.5: Invalidate caches and refresh context
         const { configChangeHandler } = await import('./services/config-change-handler');
         await configChangeHandler.handleConfigChange({
           userId,
@@ -17829,7 +17490,7 @@ Please:
 
         console.info(`[Orchestrator] Strategy updated: ${validated.strategy}.${validated.field} (${validated.mode} mode)`);
         
-        // Phase 8.6.5: Invalidate caches and refresh context for Walter AI
+        // Phase 8.6.5: Invalidate caches and refresh context
         const { configChangeHandler } = await import('./services/config-change-handler');
         await configChangeHandler.handleConfigChange({
           userId,
@@ -18022,7 +17683,7 @@ Please:
   });
 
   // ==============================================================================
-  // DIAGNOSTIC API ROUTES - Phase 5.9: Bob v2 / Walter v2
+  // DIAGNOSTIC API ROUTES - Phase 5.9 (Bob + Walter refs removed in Batch 7B)
   // ==============================================================================
 
   // Trigger user-initiated diagnostic

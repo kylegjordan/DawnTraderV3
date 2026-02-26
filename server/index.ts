@@ -340,27 +340,17 @@ app.use((req, res, next) => {
   const { bootstrapTradingServices } = await import('./startup/trading-bootstrap');
   await bootstrapTradingServices();
 
-  // Phase 8.6.5 Task 1: Initialize Purpose Layer - Restore system.purpose semantic nodes
-  const { purposeLayer } = await import('./services/purpose-layer');
-  await purposeLayer.initialize();
+  // Directive 12.2.3: Purpose Layer initialization removed (file deleted in Batch 7A)
 
-  // Phase 8.6.5 Task 2: Initialize Corpus Domains - Re-register domain knowledge modules
-  const { corpusDomainService } = await import('./services/corpus-domain-service');
-  await corpusDomainService.initialize();
+  // Directive 12.2.3: corpusDomainService initialization removed (file deleted in Batch 7A)
 
   // Phase 27: Initialize Context Persistence Framework - Load replit.md and context files
   const { contextLoader } = await import('./services/context-loader');
   await contextLoader.initialize();
 
-  // Phase 8.6.5: Register API routes for enhancements
-  const { registerPhase865Routes } = await import('./routes/phase-8.6.5');
-  registerPhase865Routes(app);
+  // Directive 12.2.3: Phase 8.6.5 route registration removed (file deleted in Batch 7A)
 
-  // Phase 8.6.5 Validation: Register provenance debug routes and enable verbose mode
-  const provenanceDebugRoutes = await import('./routes/provenance-debug');
-  app.use(provenanceDebugRoutes.default);
-  const { provenanceDebug } = await import('./services/provenance-debug');
-  provenanceDebug.enableVerboseMode();
+  // Directive 12.2.3: Provenance debug routes and service removed (files deleted in Batch 7A)
 
   // Phase 8.4 Addendum E.1: Run file persistence self-test
   const { filePersistence } = await import('./services/file-persistence');
@@ -671,14 +661,7 @@ app.use((req, res, next) => {
       console.error('[I7-MAP-AUTO-FIX][VERIFY] Failed to check status:', err);
     }
 
-    // Phase 7.2: Prefetch metrics on server startup to warm Bob Core cache (CRITICAL PATH)
-    try {
-      const { metricsBob } = await import('./services/bob-metrics');
-      await metricsBob.prefetchForMode('live');
-      console.log('[BobCore] ✅ Server startup prefetch complete');
-    } catch (error) {
-      console.error('[BobCore] ⚠️ Server startup prefetch failed:', error);
-    }
+    // Directive 12.2.3: MetricsBob prefetch removed (file deleted in Batch 7A)
 
     // Phase 27.F.15.D: Start Live Pricing Adapter (CRITICAL PATH)
     try {

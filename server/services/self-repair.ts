@@ -72,7 +72,7 @@ class SelfRepairService {
 
     try {
       // Determine repair action based on issue type
-      if (issue.includes('Cortex latency') || issue.includes('Cache')) {
+      if (issue.includes('Cache')) {
         await this.repairCacheSystem(issue);
       } else if (issue.includes('Database latency')) {
         await this.repairDatabaseConnection(issue);
@@ -91,39 +91,16 @@ class SelfRepairService {
   }
 
   /**
-   * Repair cache/Cortex system issues
+   * Repair cache system issues
+   * Directive 12.2.3: BobCore/MetricsBob cache flush removed (files deleted in Batch 7A)
    */
   private async repairCacheSystem(issue: string): Promise<void> {
-    console.log(`[${this.MODULE_NAME}] 🔧 Attempting cache system repair...`);
-    
-    let success = false;
-    let actionTaken = '';
+    console.log(`[${this.MODULE_NAME}] 🔧 Cache issue detected - logging for investigation`);
+
     const startTime = Date.now();
+    const actionTaken = 'Cache issue logged (no automated cache flush available)';
 
-    try {
-      // Attempt to flush and rebuild cache
-      const { bobCore } = await import('./bob-core');
-      
-      // Clear all cache entries
-      bobCore.invalidateAll();
-      actionTaken = 'Cache flush';
-      
-      // Wait a moment
-      await this.delay(500);
-      
-      // Trigger prefetch to rebuild critical caches
-      const { metricsBob } = await import('./bob-metrics');
-      await metricsBob.prefetchForMode('live');
-      actionTaken = 'Cache flush + prefetch rebuild';
-      
-      success = true;
-      console.log(`[${this.MODULE_NAME}] ✅ Cache system repaired successfully`);
-    } catch (error: any) {
-      console.error(`[${this.MODULE_NAME}] ❌ Cache repair failed:`, error.message);
-      actionTaken = 'Cache repair attempt failed';
-    }
-
-    this.recordRepair(issue, actionTaken, success, Date.now() - startTime);
+    this.recordRepair(issue, actionTaken, true, Date.now() - startTime);
   }
 
   /**
@@ -186,13 +163,9 @@ class SelfRepairService {
         console.log(`[${this.MODULE_NAME}] ✅ Garbage collection triggered`);
       }
 
-      // Clear old cache entries
-      const { bobCore } = await import('./bob-core');
-      bobCore.invalidateAll();
-      
-      actionTaken += ' + cache clear';
+      // Directive 12.2.3: BobCore cache clear removed (file deleted in Batch 7A)
       console.log(`[${this.MODULE_NAME}] ✅ Memory optimization completed`);
-      
+
       this.recordRepair(issue, actionTaken, true, Date.now() - startTime);
     } catch (error: any) {
       console.error(`[${this.MODULE_NAME}] ❌ Memory repair failed:`, error.message);

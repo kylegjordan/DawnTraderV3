@@ -4,7 +4,7 @@
  * Refactored from Phase 4A to achieve ≤10s startup time through:
  * - Parallel loading (Promise.all) instead of sequential
  * - Defer non-critical services (DatabaseMonitor, StrategicDrive) by 4-6s
- * - Immediate critical services (Cortex, Analytics, LATTI)
+ * - Immediate critical services (AuditReport, MarketDataHealthCheck)
  */
 
 import { profiler } from '../services/gemini-profiler';
@@ -18,61 +18,22 @@ export async function lazyLoadServices() {
   try {
     // Phase 5A: Load critical services in PARALLEL
     const criticalServices = await Promise.all([
-      // Cortex Core (core trading intelligence)
-      (async () => {
-        try {
-          const { cortexCore } = await import('../services/cortex/cortex-core');
-          const { insightBob } = await import('../services/bob-insight');
-          
-          await cortexCore.initialize();
-          
-          const fetchBobSnapshot = async () => {
-            return await insightBob.getInsightSummary();
-          };
-          
-          const fetchUISnapshot = async () => {
-            return { 
-              current: { 
-                view: 'Dashboard', 
-                mode: 'live' as const, 
-                timestamp: new Date().toISOString() 
-              } 
-            };
-          };
-          
-          await cortexCore.startSync(fetchBobSnapshot, fetchUISnapshot);
-          return 'Cortex';
-        } catch (error) {
-          console.error('[Lazy] Cortex initialization failed:', error);
-          return null;
-        }
-      })(),
-      
-      // Analytics Scheduler (15-min cycle)
-      (async () => {
-        try {
-          const { analyticsScheduler } = await import('../services/cortex/analytics-scheduler');
-          await analyticsScheduler.start();
-          return 'AnalyticsScheduler';
-        } catch (error) {
-          console.error('[Lazy] AnalyticsScheduler failed:', error);
-          return null;
-        }
-      })(),
-      
-      // System Health Monitor
+      // Directive 12.2.3: Cortex Core + insightBob initialization removed (files deleted in Batch 7A)
+      // Directive 12.2.3: Analytics Scheduler removed (file deleted in Batch 7A)
+      // Directive 12.2.3: System Health Monitor / BobCore integration removed (bob-core deleted in Batch 7A)
+
+      // System Health Monitor (standalone — no longer integrated with BobCore)
       (async () => {
         try {
           const { systemHealthMonitor } = await import('../services/system-health-monitor');
-          const { bobCore } = await import('../services/bob-core');
-          bobCore.setHealthMonitor(systemHealthMonitor);
+          systemHealthMonitor.startPeriodicChecks();
           return 'SystemHealthMonitor';
         } catch (error) {
           console.error('[Lazy] SystemHealthMonitor failed:', error);
           return null;
         }
       })(),
-      
+
       // Directive 11.8B-B: LATTIManager and LottieOversight removed - parallel adaptive systems eliminated
       (async () => {
         console.log('[Lazy] [11.8B-B] LATTi system fully removed - Predictive Learning is single authority');

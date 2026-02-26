@@ -1,17 +1,14 @@
 /**
  * Config Change Handler
- * 
+ *
  * Unified handler for configuration changes that ensures:
- * 1. ConfigBob cache invalidation
- * 2. Cortex cache clearing
- * 3. ContextRefreshCoordinator triggering
- * 4. EngineSettingsBus notification (for strategies)
- * 
- * Phase 8.6.5 Addendum: Ensures Walter AI receives fresh data after config changes
+ * 1. ContextRefreshCoordinator triggering
+ * 2. EngineSettingsBus notification (for strategies)
+ * 3. StateAwareness cache invalidation
+ * 4. Context Bridge broadcast
  */
 
-import { bobCore } from './bob-core';
-import { cortexCore } from './cortex/cortex-core';
+// Directive 12.2.3: bobCore and cortexCore imports removed (files deleted in Batch 7A)
 import { contextRefreshCoordinator } from './context-refresh-coordinator';
 
 type ConfigType = 'strategies' | 'guardrails' | 'guardrails_v2' | 'screeners' | 'goals' | 'purpose' | 'goals_preset';
@@ -37,36 +34,20 @@ class ConfigChangeHandler {
     console.log(`[${this.MODULE_NAME}] 🔄 Handling ${configType} change for ${mode} mode (source: ${source})`);
 
     try {
-      // Step 1: Invalidate ConfigBob cache for this specific config type
-      const { configBob } = await import('./bob-config');
-      configBob.invalidateConfig(userId, mode, configType);
-      console.log(`[${this.MODULE_NAME}] ✅ ConfigBob cache invalidated for ${configType}`);
+      // Directive 12.2.3: ConfigBob cache invalidation removed (bob-config deleted in Batch 7A)
+      // Directive 12.2.3: Cortex cache clearing removed (cortex-core deleted in Batch 7A)
 
-      // Step 2: Clear Cortex cache for this config type
-      // Cortex keys follow pattern: config:configType:mode:userId
-      const cortexKey = `config:${configType}:${mode}:${userId}`;
-      cortexCore.delete(cortexKey);
-      console.log(`[${this.MODULE_NAME}] ✅ Cortex cache cleared for ${cortexKey}`);
-
-      // Step 3: For global context (strategy_settings), also clear global keys
-      if (configType === 'strategies' && globalContextId) {
-        const globalCortexKey = `config:${configType}:${mode}:${globalContextId}`;
-        cortexCore.delete(globalCortexKey);
-        console.log(`[${this.MODULE_NAME}] ✅ Cortex cache cleared for global context: ${globalCortexKey}`);
-      }
-
-      // Step 3.5: Invalidate StateAwarenessService cache for this user
+      // Step 1: Invalidate StateAwarenessService cache for this user
       const { stateAwarenessService } = await import('./state-awareness');
       stateAwarenessService.invalidateCache(userId);
       console.log(`[${this.MODULE_NAME}] ✅ StateAwareness cache invalidated for user ${userId.substring(0, 8)}`);
 
-      // Step 4: Trigger ContextRefreshCoordinator to re-sync all layers
-      // This ensures Walter AI gets fresh data
+      // Step 2: Trigger ContextRefreshCoordinator to re-sync
       // Phase 3: refresh now uses mode only (single-tenant)
       const refreshResult = await contextRefreshCoordinator.refresh(mode, source);
       console.log(`[${this.MODULE_NAME}] ✅ Context refreshed in ${refreshResult.latencyMs}ms`);
 
-      // Step 5: If this is a strategy change, notify EngineSettingsBus
+      // Step 3: If this is a strategy change, notify EngineSettingsBus
       // Phase 3: EngineSettingsBus now uses mode only (single-tenant)
       if (configType === 'strategies') {
         const { EngineSettingsBus } = await import('./trading-engine');
@@ -74,7 +55,7 @@ class ConfigChangeHandler {
         console.log(`[${this.MODULE_NAME}] ✅ EngineSettingsBus notified for strategy change`);
       }
 
-      // Step 6: Broadcast config update via Context Bridge
+      // Step 4: Broadcast config update via Context Bridge
       try {
         const { contextBridge } = await import('./context-bridge');
         await contextBridge.broadcast({
@@ -102,15 +83,8 @@ class ConfigChangeHandler {
   async invalidateAllConfig(userId: string, mode: 'live' | 'paper'): Promise<void> {
     console.log(`[${this.MODULE_NAME}] 🗑️ Invalidating ALL config for ${mode} mode`);
     
-    const { configBob } = await import('./bob-config');
-    configBob.invalidateMode(userId, mode);
-    
-    // Clear all Cortex config keys for this mode
-    const configTypes: ConfigType[] = ['strategies', 'guardrails', 'screeners', 'goals', 'purpose'];
-    configTypes.forEach(type => {
-      cortexCore.delete(`config:${type}:${mode}:${userId}`);
-    });
-    
+    // Directive 12.2.3: ConfigBob + Cortex cache invalidation removed (files deleted in Batch 7A)
+
     // Invalidate StateAwarenessService cache for this user
     const { stateAwarenessService } = await import('./state-awareness');
     stateAwarenessService.invalidateCache(userId);

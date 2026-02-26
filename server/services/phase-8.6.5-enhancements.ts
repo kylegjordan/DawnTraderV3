@@ -11,8 +11,8 @@
 import { db } from '../db';
 import { learningFragments } from '../../shared/schema';
 import { eq, and, sql, desc } from 'drizzle-orm';
-import { cortexCore } from './cortex/cortex-core';
-import { learningBob } from './bob-modules/learning-bob';
+// Directive 12.2.3: cortexCore import removed (file deleted in Batch 7A)
+// Directive 12.2.3: learningBob import removed (file deleted in Batch 7A)
 import { createHash } from 'crypto';
 
 // Task 3: Secure-Core Mode Configuration
@@ -372,18 +372,7 @@ class PaperLiveTransferService {
 
     for (const lesson of crossModeLessons) {
       if (lesson.canPromote) {
-        // Store promotion metadata in Cortex
-        cortexCore.set(
-          `Learning.Promoted.${lesson.lessonHash}`,
-          {
-            lessonHash: lesson.lessonHash,
-            paperOccurrences: lesson.paperOccurrences,
-            avgConfidence: lesson.avgConfidence,
-            promotedAt: new Date(),
-            status: 'adopted'
-          },
-          86400 // 24h TTL
-        );
+        // Directive 12.2.3: Cortex promotion metadata storage removed (file deleted in Batch 7A)
 
         results.promoted++;
         results.details.push({
@@ -442,8 +431,9 @@ class FeedbackIntegrationService {
   }> {
     console.log(`[FeedbackIntegration] Aggregating patterns for ${mode} mode`);
 
-    const stats = await learningBob.getStats(globalContextId, mode);
-    
+    // Directive 12.2.3: learningBob.getStats() removed (file deleted in Batch 7A)
+    const stats = { topCategories: [] as Array<{ category: string; count: number }> };
+
     const highConfidencePatterns = stats.topCategories
       .filter(cat => cat.count >= 3) // Recurring patterns
       .length;
@@ -471,16 +461,7 @@ class FeedbackIntegrationService {
       recommendations
     };
 
-    // Store in Cortex for Walter access
-    cortexCore.set(
-      `Learning.PatternReport.${mode}`,
-      {
-        ...result,
-        generatedAt: new Date(),
-        mode
-      },
-      1800 // 30min TTL
-    );
+    // Directive 12.2.3: Cortex pattern report storage removed (file deleted in Batch 7A)
 
     console.log(
       `[FeedbackIntegration] Pattern report generated: ${result.totalPatterns} patterns, ` +
@@ -528,19 +509,7 @@ class FeedbackIntegrationService {
       }
     }
 
-    // Store adjustments in Cortex for Strategy Bob
-    if (adjustments.length > 0) {
-      cortexCore.set(
-        `Strategy.GuardrailAdjustments.${mode}`,
-        {
-          adjustments,
-          appliedAt: new Date(),
-          mode,
-          sourceReport: patternReport
-        },
-        3600 // 1h TTL
-      );
-    }
+    // Directive 12.2.3: Cortex guardrail adjustments storage removed (file deleted in Batch 7A)
 
     console.log(`[FeedbackIntegration] ${adjustments.length} guardrail adjustments recommended`);
 

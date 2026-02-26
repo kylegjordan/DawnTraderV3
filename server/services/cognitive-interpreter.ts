@@ -12,7 +12,7 @@
  */
 
 import { storage } from '../storage';
-import { learningBob } from './bob-modules/learning-bob';
+// Directive 12.2.3: learningBob import removed (file deleted in Batch 7A)
 import type { InsertLearningFragment } from '../../shared/schema';
 
 export type EventSignificance = 'minor' | 'significant' | 'critical';
@@ -468,10 +468,9 @@ export class CognitiveInterpreter {
       traceId: event.traceId // Phase 8.6.4: Inherit traceId from event
     };
     
-    // Store in database via Learning Bob
-    await learningBob.storeFragment(fragment);
-    
-    console.log(`[${this.MODULE_NAME}] 💾 Learning fragment saved: ${eventCategory}`);
+    // Directive 12.2.3: learningBob.storeFragment() call removed (file deleted in Batch 7A)
+    // Learning fragment persistence deferred to Directive 12.2.8 (Learning Framework Simplification)
+    console.log(`[${this.MODULE_NAME}] Learning fragment skipped (Bob removed): ${eventCategory}`);
   }
   
   /**

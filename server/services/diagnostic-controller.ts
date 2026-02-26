@@ -1,12 +1,13 @@
 /**
  * Diagnostic Controller - Phase 5.9
- * 
- * Coordinates diagnostic workflows between Bob (inspector) and Walter (analyst)
- * Handles three trigger types: error-based, user-initiated, Walter-initiated
+ *
+ * Coordinates diagnostic workflows and patch proposal management.
+ * Directive 12.2.3: Bob inspector integration removed (file deleted in Batch 7A).
+ * Inspection methods now return empty reports. Patch proposal/approval logic preserved.
  */
 
 import { storage } from '../storage';
-import { bobInspector } from './bob-inspector';
+// Directive 12.2.3: bobInspector import removed (file deleted in Batch 7A)
 import { v4 as uuidv4 } from 'uuid';
 import {
   DiagnosticTriggerType,
@@ -48,7 +49,8 @@ export class DiagnosticController {
       priority: 'urgent'
     };
 
-    const report = await bobInspector.executeInspection(command);
+    // Directive 12.2.3: bobInspector removed — return empty report
+    const report: BobInspectionReport = { status: 'completed', findings: [], commandId: command.commandId, timestamp: new Date().toISOString() };
 
     await this.logDiagnosticEvent({
       eventId: uuidv4(),
@@ -101,7 +103,8 @@ export class DiagnosticController {
       priority: 'normal'
     };
 
-    const report = await bobInspector.executeInspection(command);
+    // Directive 12.2.3: bobInspector removed — return empty report
+    const report: BobInspectionReport = { status: 'completed', findings: [], commandId: command.commandId, timestamp: new Date().toISOString() };
 
     await this.logDiagnosticEvent({
       eventId: uuidv4(),
@@ -155,7 +158,8 @@ export class DiagnosticController {
       priority: 'normal'
     };
 
-    const report = await bobInspector.executeInspection(command);
+    // Directive 12.2.3: bobInspector removed — return empty report
+    const report: BobInspectionReport = { status: 'completed', findings: [], commandId: command.commandId, timestamp: new Date().toISOString() };
 
     await this.logDiagnosticEvent({
       eventId: uuidv4(),

@@ -6,13 +6,13 @@
  */
 
 import { storage } from '../storage';
-import { cortexCore } from './cortex/cortex-core';
+// Directive 12.2.3: cortexCore import removed (file deleted in Batch 7A)
 import { strategyAnalytics } from './strategy-analytics';
 import { portfolioAggregator } from './portfolio-aggregator';
 import { systemHealthMonitor } from './system-health-monitor';
 import { EventEmitter } from 'events';
 // Directive 12.2.3: walter-memory import removed (file deleted in Batch 6)
-import { systemTruthDiagnostic } from './system-truth-diagnostic';
+// Directive 12.2.3: systemTruthDiagnostic import removed (file deleted in Batch 7A)
 import { provenanceLogger } from './provenance-logger'; // Phase 8.6.3: Provenance tracking
 
 const MODULE_NAME = 'ContextRefresh';
@@ -110,25 +110,15 @@ class ContextRefreshCoordinator extends EventEmitter {
       // Update Walter's semantic memory with refreshed context (Phase 8.5 Addendum H)
       await this.updateWalterMemory(mode, freshData, traceId);
 
-      // Run truth check to detect any remaining discrepancies
-      // [8.8.3-H11] Fixed: Pre-H9 signature uses mode-only (single-tenant architecture)
-      const truthCheck = await systemTruthDiagnostic.runTruthCheck(mode);
-      const discrepanciesFound = truthCheck.discrepancies.length;
-
-      // Phase 8.5 Addendum I: Auto-resync if discrepancies detected
-      if (discrepanciesFound > 0 && source !== 'resync') {
-        console.log(`[${this.MODULE_NAME}] [TruthSync] mismatch detected (${discrepanciesFound} discrepancies) → forced resync`);
-        // Trigger secondary refresh to resolve misalignments
-        return await this.refresh(mode, 'resync');
-      }
+      // Directive 12.2.3: systemTruthDiagnostic truth check removed (file deleted in Batch 7A)
 
       // Calculate latency and update metrics (Phase 8.5 Addendum I: track lastLivePortfolio)
       const latencyMs = Date.now() - start;
       this.updateMetrics(latencyMs, true);
       this.metrics.lastLivePortfolio = freshData.portfolioBalance;
 
-      // Record in SystemHealthMonitor with actual discrepancy count (Phase 8.5 Addendum H)
-      systemHealthMonitor.recordContextRefresh(latencyMs, true, discrepanciesFound);
+      // Record in SystemHealthMonitor
+      systemHealthMonitor.recordContextRefresh(latencyMs, true, 0);
 
       // Emit WebSocket event for real-time UI updates
       this.emit('contextRefreshed', {
@@ -487,26 +477,9 @@ class ContextRefreshCoordinator extends EventEmitter {
       refreshed_by: 'ContextRefreshCoordinator'
     };
     
-    // Phase 8.6.4: Pass provenance metadata to Cortex
-    cortexCore.set(cacheKey, cortexData, ttl, { 
-      traceId,
-      mode,
-      sourceTable: 'portfolio_state' 
-    });
+    // Directive 12.2.3: cortexCore.set() and Cortex→Walter provenance logging removed (files deleted in Batch 7A)
 
-    // Phase 8.6.3: Log provenance - Cortex → Walter data flow
-    if (traceId) {
-      await provenanceLogger.logCortexToWalter({
-        traceId,
-        sourceTable: 'cortex_cache',
-        mode,
-        globalContextId: 'default',
-        data: cortexData,
-        contextType: 'analytics_snapshot',
-      });
-    }
-
-    console.log(`[${this.MODULE_NAME}] ✅ Cortex cache updated (key: ${cacheKey}, TTL: ${ttl}s)`);
+    console.log(`[${this.MODULE_NAME}] ✅ Analytics data computed (key: ${cacheKey})`);
   }
 
   /**
@@ -584,17 +557,15 @@ class ContextRefreshCoordinator extends EventEmitter {
    * Phase 3: Removed userId parameter (single-tenant, mode-based cache keys)
    */
   getContextAge(mode: 'live' | 'paper'): number | null {
-    const cacheKey = `analytics_${mode}`;
-    const analytics = cortexCore.get(cacheKey);
-
-    if (!analytics || !analytics.computed_at) {
+    // Directive 12.2.3: Cortex cache removed — use last refresh timestamp instead
+    if (!this.metrics.lastRefreshISO) {
       return null;
     }
 
-    const computedAt = new Date(analytics.computed_at).getTime();
+    const lastRefresh = new Date(this.metrics.lastRefreshISO).getTime();
     const now = Date.now();
-    const ageMs = now - computedAt;
-    
+    const ageMs = now - lastRefresh;
+
     return Math.floor(ageMs / 1000); // Return age in seconds
   }
 
@@ -744,25 +715,15 @@ class ContextRefreshCoordinator extends EventEmitter {
       // Update Walter's semantic memory with refreshed context (Phase 8.5 Addendum H)
       await this.updateWalterMemory(mode, freshData, finalTraceId);
 
-      // Run truth check to detect any remaining discrepancies
-      // [8.8.3-H11] Fixed: Pre-H9 signature uses mode-only (single-tenant architecture)
-      const truthCheck = await systemTruthDiagnostic.runTruthCheck(mode);
-      const discrepanciesFound = truthCheck.discrepancies.length;
-
-      // Phase 8.5 Addendum I: Auto-resync if discrepancies detected
-      if (discrepanciesFound > 0 && source !== 'resync') {
-        console.log(`[${this.MODULE_NAME}] [TruthSync] mismatch detected (${discrepanciesFound} discrepancies) → forced resync`);
-        // Trigger secondary refresh to resolve misalignments
-        return await this.refresh(mode, 'resync');
-      }
+      // Directive 12.2.3: systemTruthDiagnostic truth check removed (file deleted in Batch 7A)
 
       // Calculate latency and update metrics (Phase 8.5 Addendum I: track lastLivePortfolio)
       const latencyMs = Date.now() - start;
       this.updateMetrics(latencyMs, true);
       this.metrics.lastLivePortfolio = freshData.portfolioBalance;
 
-      // Record in SystemHealthMonitor with actual discrepancy count (Phase 8.5 Addendum H)
-      systemHealthMonitor.recordContextRefresh(latencyMs, true, discrepanciesFound);
+      // Record in SystemHealthMonitor
+      systemHealthMonitor.recordContextRefresh(latencyMs, true, 0);
 
       // Emit WebSocket event for real-time UI updates
       this.emit('contextRefreshed', {

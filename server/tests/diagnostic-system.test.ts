@@ -8,7 +8,7 @@
  */
 
 import { diagnosticController } from '../services/diagnostic-controller';
-import { bobInspector } from '../services/bob-inspector';
+// Directive 12.2.3: bobInspector import removed (file deleted in Batch 7A)
 // Directive 12.2.3: walterPatchAnalyst import removed (file deleted in Batch 6)
 import { storage } from '../storage';
 
@@ -123,136 +123,8 @@ async function runDiagnosticTests() {
     console.log('');
   }
 
-  // Test 4: Bob Code Analysis
-  try {
-    console.log('Test 4: Bob Code Analysis');
-    console.log('-------------------------');
-    
-    const report = await bobInspector.executeInspection({
-      commandId: 'test-code-analysis',
-      triggerType: 'user_initiated',
-      triggerSource: 'test-suite',
-      inspectionType: 'code_analysis',
-      searchScope: {
-        files: ['server/services/diagnostic-controller.ts']
-      },
-      priority: 'normal'
-    });
-    
-    console.log(`✅ Code analysis completed`);
-    console.log(`   - Status: ${report.status}`);
-    console.log(`   - Files analyzed: 1`);
-    console.log(`   - Findings: ${report.findings.length}`);
-    
-    if (report.status === 'completed') {
-      testsPassed++;
-      console.log('✅ Test 4 PASSED\n');
-    } else {
-      testsFailed++;
-      console.log('❌ Test 4 FAILED\n');
-    }
-  } catch (error) {
-    testsFailed++;
-    console.error('❌ Test 4 FAILED:', error);
-    console.log('');
-  }
-
-  // Test 5: Log Search Inspection
-  try {
-    console.log('Test 5: Log Search Inspection');
-    console.log('-----------------------------');
-    
-    const report = await bobInspector.executeInspection({
-      commandId: 'test-log-search',
-      triggerType: 'user_initiated',
-      triggerSource: 'test-suite',
-      inspectionType: 'log_search',
-      searchCriteria: {
-        logLevel: ['error', 'warn']
-      },
-      priority: 'normal'
-    });
-    
-    console.log(`✅ Log search completed`);
-    console.log(`   - Status: ${report.status}`);
-    console.log(`   - Findings: ${report.findings.length}`);
-    
-    if (report.status === 'completed') {
-      testsPassed++;
-      console.log('✅ Test 5 PASSED\n');
-    } else {
-      testsFailed++;
-      console.log('❌ Test 5 FAILED\n');
-    }
-  } catch (error) {
-    testsFailed++;
-    console.error('❌ Test 5 FAILED:', error);
-    console.log('');
-  }
-
-  // Test 6: Data Consistency Check
-  try {
-    console.log('Test 6: Data Consistency Check');
-    console.log('-------------------------------');
-    
-    const report = await bobInspector.executeInspection({
-      commandId: 'test-data-consistency',
-      triggerType: 'walter_initiated',
-      triggerSource: 'walter:data-anomaly',
-      inspectionType: 'data_consistency',
-      priority: 'urgent'
-    });
-    
-    console.log(`✅ Data consistency check completed`);
-    console.log(`   - Status: ${report.status}`);
-    console.log(`   - Findings: ${report.findings.length}`);
-    
-    if (report.status === 'completed') {
-      testsPassed++;
-      console.log('✅ Test 6 PASSED\n');
-    } else {
-      testsFailed++;
-      console.log('❌ Test 6 FAILED\n');
-    }
-  } catch (error) {
-    testsFailed++;
-    console.error('❌ Test 6 FAILED:', error);
-    console.log('');
-  }
-
-  // Test 7: Schema Verification
-  try {
-    console.log('Test 7: Schema Verification');
-    console.log('---------------------------');
-    
-    const report = await bobInspector.executeInspection({
-      commandId: 'test-schema-check',
-      triggerType: 'user_initiated',
-      triggerSource: 'test-suite',
-      inspectionType: 'schema_verification',
-      priority: 'normal'
-    });
-    
-    console.log(`✅ Schema verification completed`);
-    console.log(`   - Status: ${report.status}`);
-    console.log(`   - Findings: ${report.findings.length}`);
-    
-    const criticalIssues = report.findings.filter(f => f.severity === 'critical');
-    console.log(`   - Critical issues: ${criticalIssues.length}`);
-    
-    if (report.status === 'completed') {
-      testsPassed++;
-      console.log('✅ Test 7 PASSED\n');
-    } else {
-      testsFailed++;
-      console.log('❌ Test 7 FAILED\n');
-    }
-  } catch (error) {
-    testsFailed++;
-    console.error('❌ Test 7 FAILED:', error);
-    console.log('');
-  }
-
+  // Directive 12.2.3: Tests 4-7 (Bob Code Analysis, Log Search, Data Consistency, Schema Verification)
+  // removed — bobInspector deleted in Batch 7A
   // Directive 12.2.3: Test 8 (Patch Proposal Generation) removed — walterPatchAnalyst deleted in Batch 6
 
   // Test 9: Transparency Logging

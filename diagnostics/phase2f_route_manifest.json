@@ -1474,96 +1474,6 @@
     ]
   },
   {
-    "path": "/api/bob/stats",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "bobStatsHandler"
-    ]
-  },
-  {
-    "path": "/api/bob/insight",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/ui/state",
-    "methods": [
-      "GET",
-      "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/bob/prefetch",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/cortex/status",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/cortex/snapshot",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/cortex/flush",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/cortex/force-sync",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/system/health-metrics",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
     "path": "/api/system/health-30fx",
     "methods": [
       "GET"
@@ -3232,37 +3142,6 @@
     ]
   },
   {
-    "path": "/api/walter/tts",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/walter/ingest",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/walter/ingest/history",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
     "path": "/api/context/ingest",
     "methods": [
       "POST"
@@ -3696,67 +3575,7 @@
     ]
   },
   {
-    "path": "/api/system/health-summary",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
     "path": "/api/system/cleanup-health-alerts",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/walter/actions",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/walter/auto-resolved-today",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/walter/actions/:id/approve",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/walter/actions/:id/reject",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/walter/actions/:id/acknowledge",
     "methods": [
       "POST"
     ],
@@ -3827,16 +3646,6 @@
   },
   {
     "path": "/api/diagnostics/trading-engine",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/diagnostics/walter-activity",
     "methods": [
       "GET"
     ],
@@ -4336,36 +4145,6 @@
     ]
   },
   {
-    "path": "/api/walter/pending-approvals",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/walter/approvals/:id/approve",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/walter/approvals/:id/reject",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
     "path": "/api/intent/approve",
     "methods": [
       "POST"
@@ -4409,114 +4188,6 @@
     "path": "/api/intent/cleanup-ghosts",
     "methods": [
       "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/walter/chats",
-    "methods": [
-      "GET",
-      "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/walter/chats/:id",
-    "methods": [
-      "GET",
-      "PATCH",
-      "DELETE"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/walter/chats/:id/messages",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/walter/purpose",
-    "methods": [
-      "GET",
-      "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "validateMode",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/walter/memory",
-    "methods": [
-      "GET",
-      "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/walter/analyze-file",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "multerMiddleware",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/walter/preferences",
-    "methods": [
-      "GET",
-      "PUT"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/walter/chats/:id/pin",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/walter/chats/:id/unpin",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/walter/chats/:id/export",
-    "methods": [
-      "GET"
     ],
     "middlewares": [
       "authenticateToken",
@@ -4851,16 +4522,6 @@
     ]
   },
   {
-    "path": "/api/walter/interpret-command",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
     "path": "/api/alerts",
     "methods": [
       "GET"
@@ -4922,16 +4583,6 @@
   },
   {
     "path": "/api/diagnostics/inspect-error/:errorId",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/diagnostics/analyze-report",
     "methods": [
       "POST"
     ],
@@ -7864,231 +7515,6 @@
   },
   {
     "path": "/chaplet/health",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/walter/secure-core/enable",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/walter/secure-core/disable",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/walter/secure-core/status",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/learning/alignment/weights",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/learning/alignment/validate",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/learning/cross-mode-lessons",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/learning/promote",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/learning/promotion-criteria",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/learning/pattern-report/:mode",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/learning/update-guardrails/:mode",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/governance/phase-8.6.5-metrics",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/walter/corpus-domain/:domainName",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/walter/corpus-domains",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/provenance/debug/enable",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/provenance/debug/disable",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/provenance/debug/status",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/provenance/debug/lineage/recent",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/provenance/debug/bob-traces/recent",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/provenance/debug/trace/:traceId",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/provenance/debug/walter-memory/search",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/provenance/debug/report",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/provenance/debug/trace/new",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/provenance/debug/trace/:traceId/chain",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/provenance/debug/trace/clear",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/provenance/debug/diagnostic",
     "methods": [
       "GET"
     ],
