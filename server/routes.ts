@@ -6032,60 +6032,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // ==================== Phase 8.5 Addendum G + H: System Truth & Context Refresh ====================
-
-  // GET /api/system/truth-check - Compare backend snapshots (Cortex + Walter refs removed in Batch 7B)
-  // Phase 3B: Removed userId parameter - single-tenant architecture
-  apiRouter.get('/system/truth-check', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const user = await storage.getUser(userId);
-      const mode = (user?.tradingMode || 'paper') as 'live' | 'paper';
-
-      const { systemTruthDiagnostic } = await import('./services/system-truth-diagnostic');
-      
-      const truthComparison = await systemTruthDiagnostic.runTruthCheck(mode);
-      
-      res.json({
-        ok: true,
-        comparison: truthComparison,
-        isAligned: truthComparison.isAligned,
-        discrepanciesCount: truthComparison.discrepancies.length,
-        timestamp: truthComparison.timestamp
-      });
-    } catch (error: any) {
-      console.error('[TruthCheck] Error:', error);
-      res.status(500).json({ 
-        ok: false,
-        error: 'Failed to run truth check', 
-        message: error.message 
-      });
-    }
-  });
-
-  // GET /api/system/truth-check/report - Get truth check as Markdown report
-  // Phase 3B: Removed userId parameter - single-tenant architecture
-  apiRouter.get('/system/truth-check/report', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const user = await storage.getUser(userId);
-      const mode = (user?.tradingMode || 'paper') as 'live' | 'paper';
-
-      const { systemTruthDiagnostic } = await import('./services/system-truth-diagnostic');
-      
-      const truthComparison = await systemTruthDiagnostic.runTruthCheck(mode);
-      const markdownReport = systemTruthDiagnostic.generateMarkdownReport(truthComparison);
-      
-      res.type('text/markdown').send(markdownReport);
-    } catch (error: any) {
-      console.error('[TruthCheckReport] Error:', error);
-      res.status(500).json({ 
-        ok: false,
-        error: 'Failed to generate truth check report', 
-        message: error.message 
-      });
-    }
-  });
+  // ==================== Phase 8.5 Addendum G + H: Context Refresh ====================
+  // Directive 12.2.3 Batch 7B-hotfix: System Truth routes removed (system-truth-diagnostic.ts deleted in Batch 7A)
 
   // POST /api/context/refresh - Force context refresh across all layers
   apiRouter.post('/context/refresh', authenticateToken, async (req: AuthenticatedRequest, res) => {

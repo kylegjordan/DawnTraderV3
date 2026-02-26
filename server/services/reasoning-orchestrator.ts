@@ -49,7 +49,8 @@ class ReasoningOrchestrator {
 
   constructor() {
     this.workerId = `worker_${nanoid(8)}`;
-    this.registerDefaultDomains(); // Phase 8.8.3: Auto-register Bob domains
+    // Directive 12.2.3 Batch 7B-hotfix: Bob domain auto-registration removed (specialist Bobs deleted in Batch 7A)
+    console.log('[ReasoningOrchestrator] No default domains registered (Bob domains removed — Directive 12.2.3)');
   }
 
   /**
@@ -58,47 +59,6 @@ class ReasoningOrchestrator {
   registerDomain(domain: string, handler: DomainHandler): void {
     this.domainHandlers.set(domain.toLowerCase(), handler);
     console.log(`[ReasoningOrchestrator] Domain registered: ${domain}`);
-  }
-
-  /**
-   * Phase 8.8.3: Register default Bob domains
-   */
-  private async registerDefaultDomains(): Promise<void> {
-    // DevOpsBob: System health, deployment, CI/CD
-    this.registerDomain('devops', async (task) => {
-      const { devopsBob } = await import('./bobs/devops-bob');
-      const query = task.payload?.params?.query || task.userMessage || 'system status';
-      const analysis = await devopsBob.runAnalysis(query);
-      return await devopsBob.returnFindings(analysis);
-    });
-
-    // FullStackBob: Code generation, error repair, schema analysis
-    this.registerDomain('fullstack', async (task) => {
-      const { fullstackBob } = await import('./bobs/fullstack-bob');
-      const query = task.payload?.params?.query || task.userMessage || 'code analysis';
-      const analysis = await fullstackBob.runAnalysis(query);
-      return await fullstackBob.returnFindings(analysis);
-    });
-
-    // UXBob: UI layout, user flows, interface feedback
-    this.registerDomain('ux', async (task) => {
-      const { uxBob } = await import('./bobs/ux-bob');
-      const query = task.payload?.params?.query || task.userMessage || 'ux review';
-      const analysis = await uxBob.runAnalysis(query);
-      return await uxBob.returnFindings(analysis);
-    });
-
-    // TradingBob: Market analysis, portfolio health, risk coherence (Phase 8.9.1)
-    this.registerDomain('trading', async (task) => {
-      const { tradingBob } = await import('./bobs/trading-bob');
-      const userId = task.payload?.userId || task.userId || 'default';
-      const mode = task.payload?.mode || 'paper';
-      const query = task.payload?.params?.query || task.userMessage || 'market analysis';
-      const analysis = await tradingBob.runAnalysis(userId, mode, query);
-      return await tradingBob.returnFindings(analysis);
-    });
-
-    console.log('[ReasoningOrchestrator] Default domains registered (DevOps, FullStack, UX, Trading)');
   }
 
   /**
@@ -511,32 +471,9 @@ class ReasoningOrchestrator {
     try {
       switch (taskType) {
         case 'query_bob': {
-          // Dynamically import and query the appropriate Bob
+          // Directive 12.2.3 Batch 7B-hotfix: Specialist Bobs removed (deleted in Batch 7A)
           const target = payload.target;
-          const query = payload.params?.query || '';
-
-          switch (target) {
-            case 'devops_bob': {
-              const { devopsBob } = await import('./bobs/devops-bob');
-              const analysis = await devopsBob.runAnalysis(query);
-              const findings = await devopsBob.returnFindings(analysis);
-              return { status: 'ok', findings, analysis };
-            }
-            case 'fullstack_bob': {
-              const { fullstackBob } = await import('./bobs/fullstack-bob');
-              const analysis = await fullstackBob.runAnalysis(query);
-              const findings = await fullstackBob.returnFindings(analysis);
-              return { status: 'ok', findings, analysis };
-            }
-            case 'ux_bob': {
-              const { uxBob } = await import('./bobs/ux-bob');
-              const analysis = await uxBob.runAnalysis(query);
-              const findings = await uxBob.returnFindings(analysis);
-              return { status: 'ok', findings, analysis };
-            }
-            default:
-              return { status: 'ok', message: `Unknown Bob: ${target}` };
-          }
+          return { status: 'ok', message: `Bob domain '${target}' removed (Directive 12.2.3)`, findings: [] };
         }
         
         case 'fetch_strategies': {

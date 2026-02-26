@@ -705,8 +705,7 @@ class AutonomyControllerService {
               userId,
               { parentRunId, actionType: 'health_investigation' }
             );
-            // Phase 8.9.1: Also trigger trading-domain analysis for market/portfolio health
-            await this.triggerTradingDomainAnalysis(userId, parentRunId, 'paper');
+            // Directive 12.2.3 Batch 7B-hotfix: TradingBob analysis call removed (trading-bob deleted in Batch 7A)
             break;
 
           case 'trigger_cognitive_tuning':
@@ -725,95 +724,16 @@ class AutonomyControllerService {
   }
 
   /**
-   * Phase 8.9.1: Trigger trading-domain analysis via TradingBob
-   * Analyzes market conditions, portfolio health, and risk coherence
+   * Phase 8.9.1: Trigger trading-domain analysis
+   * Directive 12.2.3 Batch 7B-hotfix: TradingBob removed (file deleted in Batch 7A)
+   * Method retained as no-op stub to preserve interface contract
    */
   private async triggerTradingDomainAnalysis(
-    userId: string,
-    parentRunId: string,
-    mode: 'live' | 'paper'
+    _userId: string,
+    _parentRunId: string,
+    _mode: 'live' | 'paper'
   ): Promise<void> {
-    const runId = `trading_analysis_${nanoid(10)}`;
-    const startTime = performance.now();
-
-    try {
-      console.log(`[AutonomyController] 📊 Triggering trading-domain analysis (mode: ${mode})`);
-
-      const { tradingBob } = await import('./bobs/trading-bob');
-      
-      // Run comprehensive trading analysis
-      const analysis = await tradingBob.analyzeMarketData(userId, mode, 'autonomous system health check');
-      const riskCoherence = await tradingBob.evaluateRiskCoherence(userId, mode);
-      const insights = await tradingBob.generateTradingInsights(userId, mode);
-
-      const executionTimeMs = Math.round(performance.now() - startTime);
-
-      // Record trading analysis in autonomy audit log
-      await this.recordAssessment({
-        runId,
-        actionType: 'exploration',
-        triggerSource: 'autonomous',
-        assessmentResult: {
-          domain: 'trading',
-          marketSentiment: analysis.sentiment,
-          riskLevel: analysis.riskLevel,
-          confidence: analysis.confidence,
-          findings: analysis.findings,
-          recommendations: analysis.recommendations,
-          insights: analysis.insights,
-          riskCoherence: {
-            aligned: riskCoherence.aligned,
-            score: riskCoherence.score,
-            issues: riskCoherence.issues,
-          },
-          tradingInsights: insights,
-        },
-        actionsTriggered: ['trading_domain_analysis'],
-        success: true,
-        executionTimeMs,
-        metadata: { 
-          userId, 
-          mode, 
-          parentRunId,
-          healthAdjustment: riskCoherence.aligned ? '+0.12' : '-0.05',
-        },
-      });
-
-      // Emit UX Monitor event
-      await contextBridge.broadcast({
-        type: 'state_update',
-        userId,
-        payload: {
-          runId,
-          eventSubtype: 'autonomy_trading_analysis_complete',
-          domain: 'trading',
-          sentiment: analysis.sentiment,
-          riskLevel: analysis.riskLevel,
-          riskAligned: riskCoherence.aligned,
-          riskScore: riskCoherence.score,
-        },
-      });
-
-      console.log(`[AutonomyController] ✅ Trading analysis complete - Sentiment: ${analysis.sentiment}, Risk: ${analysis.riskLevel}`);
-    } catch (error) {
-      const executionTimeMs = Math.round(performance.now() - startTime);
-      
-      await this.recordAssessment({
-        runId,
-        actionType: 'exploration',
-        triggerSource: 'autonomous',
-        assessmentResult: { 
-          error: error instanceof Error ? error.message : String(error),
-          domain: 'trading',
-        },
-        actionsTriggered: [],
-        success: false,
-        executionTimeMs,
-        metadata: { userId, mode, parentRunId, error: String(error) },
-      });
-
-      console.error(`[AutonomyController] ❌ Trading analysis failed:`, error);
-    }
+    console.log('[AutonomyController] Trading domain analysis skipped (TradingBob removed — Directive 12.2.3)');
   }
 
   /**

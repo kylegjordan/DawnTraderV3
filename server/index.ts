@@ -1113,14 +1113,7 @@ app.use((req, res, next) => {
       console.error('[PaperSimHeartbeat] ⚠️ Startup failed:', error);
     }
 
-    // Phase 8.6.1: Start Learning Cycle Service (24-hour analysis cycle)
-    try {
-      const { learningCycleService } = await import('./services/learning-cycle-service');
-      learningCycleService.start();
-      console.log('[LearningCycleService] ✅ Started successfully');
-    } catch (error) {
-      console.error('[LearningCycleService] ⚠️ Startup failed:', error);
-    }
+    // Directive 12.2.3 Batch 7B-hotfix: LearningCycleService init removed (100% Bob-dependent, file deleted)
 
     // Phase 8.8.4-C.6: RTB Queue Refresher DEPRECATED
     // The old rtbQueueRefresher is now replaced by ReadyToBuyService.startRefreshCycle()
