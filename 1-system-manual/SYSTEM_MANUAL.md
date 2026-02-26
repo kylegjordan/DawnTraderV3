@@ -1531,7 +1531,7 @@ Strategy-Specific Exit: Price goes above trap level × 1.002.
 
 ### 3.9 DHMA (Dual-Horizon Microstructure Alpha)
 **Canonical Regime**: HIGH_VOL_IMPULSE
-**File**: `server/strategies/dhma.ts` (657 lines)
+**File**: ~~`server/strategies/dhma.ts`~~ **DELETED** (Directive 12.2.1, Batch 8). Standalone DHMA module was orphaned — never instantiated by strategy-engine. Active DHMA detection runs inline via `server/strategies/strategy-engine.ts:detectDHMA()`.
 
 The most sophisticated strategy — uses Level-2 order book data, not OHLCV candles.
 
@@ -1877,7 +1877,7 @@ VTS warm-up preloader — ensures pattern detection is initialized with ≥2000 
 | strategy-mapper.ts | 50 | Canonical enforcement layer | ACTIVE |
 | dynamic-strategy-selector.ts | 214 | Engine #1: legacy regime classification + routing | LEGACY (must replace) |
 | strategy-engine.ts | 999 | 8 core quant strategies | ACTIVE |
-| dhma.ts | 657 | DHMA microstructure strategy | ACTIVE |
+| ~~dhma.ts~~ | ~~657~~ | DHMA microstructure strategy (standalone module) | **DELETED** (Directive 12.2.1) — DHMA runs via strategy-engine.ts:detectDHMA() |
 | pattern-recognizer.ts | 481 | 5 candlestick pattern detectors | ACTIVE-LOCKED |
 | pattern-recognition.ts | 66 | Pattern preloader for VTS | ACTIVE |
 | hybrid-integration.ts | 239 | Quant+Pattern confluence scoring | ACTIVE (legacy hybrid types) |
@@ -6147,8 +6147,8 @@ DawnTrader's system lifecycle is managed through a **single-file monolithic boot
 ### Post-Listen Audit Telemetry
 After port binding, the server runs extensive config audit telemetry:
 - **ConfigSnapshot:** Builds MD5 hashes of guardrails/filters/goals for paper & live
-- **FilterCoherence:** Validates LATTI-managed vs manual-override field counts
-- **GuardrailsCoherence:** Validates locked-by-user params vs LATTI-managed
+- **FilterCoherence:** Validates system-managed vs manual-override field counts
+- **GuardrailsCoherence:** Validates locked-by-user params vs system-managed
 - **OverridesHistory:** Logs last 10 config changes grouped by mode/type
 - **CrossMode Audit:** Compares paper vs live structural coherence
 

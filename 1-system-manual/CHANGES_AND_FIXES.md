@@ -641,12 +641,13 @@
 
 ### RISK-044: Lazy Loader Contains LATTI Removal Stub
 - **Severity**: LOW
-- **Location**: `server/startup/lazy-loader.ts` — LATTI Manager section
+- **Location**: `server/startup/lazy-loader.ts` — LATTI Manager section (lines 37-40)
 - **Problem**: The lazy loader still references the removed LATTI system (Directive 11.8B-B) with a stub function that logs a removal notice. This is correct transitional behavior but should be cleaned up once all references to LATTI are confirmed removed.
 - **Impact**: None — the stub is harmless and produces only an informational log line.
 - **Kyle Decision (Phase 7 Addendum)**: Part of broader LATTI/coherence residue investigation. Confirm whether residual `lattiManaged`, `lockedByUser`, `manualOverride` fields still serve active purpose. If LATTI is fully removed, eliminate all residual flags.
 - **Timing**: Post-audit cleanup (bundled with LATTI file cleanup)
 - **Phase Found**: Phase 7
+- **Batch 8 Update (2026-02-27)**: Directive 12.2.1 removed all other LATTI code/UI residuals (latti-safety-monitor.tsx deleted, schema.ts LATTI ORM definitions removed, routes.ts handleLATTITargets removed, 7 client goal components cleaned, index.ts lattiManaged→systemManaged renamed). This lazy-loader stub (2 lines) and DB column names (`tunedByLatti`, `managedByLottie`) are the only remaining LATTI references in the codebase. Stub can be removed in any future cleanup batch.
 
 ### RISK-045: Schema Validator Defined But Call Site Unknown
 - **Severity**: LOW
@@ -1116,14 +1117,16 @@ Total: 21 bugs, 65 risks.
 - **Timing**: Post-audit (Phase D of database cleanup, recommended before production deployment)
 - **Phase Found**: Phase 11 Addendum (ChatGPT feedback)
 
-### RISK-081: LATTI Residual Fields in system_context Table
+### RISK-081: LATTI Residual Fields in system_context Table — PARTIALLY RESOLVED
 - **Severity**: LOW
+- **Status**: **PARTIALLY RESOLVED** — Directive 12.2.1, Batch 8 (2026-02-27), commit `8086264c`
 - **Location**: `shared/schema.ts` — `system_context` table, `server/storage.ts`
 - **Problem**: The `system_context` table contains fields that are remnants of the deprecated LATTI (Latent Attention Through Transparent Intent) system. While the table itself is active (stores engine state and trading mode), LATTI-specific fields for coherence tracking, attention management, and intent tracking are dead weight. These fields have default values that are maintained but serve no active purpose.
 - **Impact**: Schema noise, confusing field semantics for developers, potential for stale LATTI defaults to leak into active code paths.
 - **Recommended**: Audit system_context columns, identify LATTI-specific fields, remove them in a targeted migration.
 - **Timing**: During Wave 6 or dedicated cleanup pass
 - **Phase Found**: Phase 11 Addendum (ChatGPT feedback)
+- **Resolution**: Batch 8 removed 3 LATTI-specific ORM field definitions from `systemContext` in `schema.ts` and deleted the `lattiBaselineHistory` table ORM definition (+ insert schema + types). Physical database columns and table remain in Neon (no migration was run — only ORM definitions removed). Remaining LATTI-branded DB columns (`tunedByLatti`, `managedByLottie`, etc.) are still referenced by active code (`adaptive-guardrails.ts`) and cannot be removed without a migration + code update.
 
 ### RISK-082: No Data Retention Policy — Unbounded Row Growth
 - **Severity**: MEDIUM
@@ -1342,3 +1345,21 @@ Total removal: ~17,100 lines across ~65 files over 7 batches (5, 5B, 6, 6B, 7A, 
 - After Sub-Batch A (Batch 5): 809/81 (890 total, 7 Walter tests removed)
 - After Sub-Batch B (Batch 6): 802/81 (883 total, 7 more Walter tests removed)
 - After Sub-Batch C (Batch 7): 800/81 (881 total, 4 Bob tests removed, 2 tests net from file deletion)
+
+---
+
+## DIRECTIVE 12.2.1 COMPLETION LOG (2026-02-27)
+
+**Directive 12.2.1: Wave 1 — Safe Deletions — COMPLETE**
+
+Total removal: ~1,254 lines across 13 files in 1 batch.
+
+| Batch | Scope | Lines Removed | Commit |
+|-------|-------|---------------|--------|
+| Batch 8 | 2 files deleted (dhma.ts, latti-safety-monitor.tsx). 11 files modified: routes.ts (handleLATTITargets + comment), index.ts (LATTI audit→systemManaged), schema.ts (lattiBaselineHistory + 3 fields), enhanced-system-monitoring.tsx, target-daily-goals.tsx (full rewrite), 5 goal component text replacements, signal-orchestrator.ts (expectedDuration). | ~1,254 | `8086264c` |
+
+**Risks addressed by this directive:**
+- RISK-081 (LATTI residual fields) — PARTIALLY RESOLVED: ORM definitions removed, physical DB columns remain
+- RISK-044 (lazy-loader LATTI stub) — UPDATED: All other LATTI residuals removed; lazy-loader stub (2 lines) remains
+
+**Test baseline**: 800/81 (881 total) — unchanged
