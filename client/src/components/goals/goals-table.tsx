@@ -244,7 +244,7 @@ export default function GoalsTable() {
           </div>
         </div>
         <p className="text-sm text-muted-foreground mt-2">
-          Set your daily trading targets - LATTI will tune strategies to achieve these goals
+          Set your daily trading targets to guide strategy tuning toward these goals
         </p>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -288,7 +288,7 @@ export default function GoalsTable() {
                     <Info className="w-4 h-4 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Target number of trades to execute daily. LATTI tunes based on mode.</p>
+                    <p>Target number of trades to execute daily. System tunes based on mode.</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -361,7 +361,7 @@ export default function GoalsTable() {
         <div className="p-4 bg-muted/50 rounded-lg">
           <p className="text-sm text-muted-foreground">
             <Info className="w-4 h-4 inline mr-2" />
-            LATTI automatically adjusts trading parameters nightly to pursue these goals while respecting your risk guardrails.
+            Trading parameters are automatically adjusted nightly to pursue these goals while respecting your risk guardrails.
           </p>
         </div>
       </CardContent>

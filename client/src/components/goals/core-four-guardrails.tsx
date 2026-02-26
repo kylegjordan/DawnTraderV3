@@ -22,7 +22,7 @@ import { ModeIndicator } from "./mode-indicator";
  * Phase 3b: Core Guardrails Component (now 5 guardrails as of REB 8.8.3-G)
  * 
  * Directive 11.8B-B1: Guardrails are now explicitly MANUAL controls.
- * All LATTi authority surfaces removed - user has direct control.
+ * User has direct control over all guardrail parameters.
  * 
  * REB 8.8.3-G: Added maxPositionPercentPct as 5th core guardrail
  */

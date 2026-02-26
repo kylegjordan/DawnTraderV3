@@ -56,7 +56,7 @@ const coherencyRules: CoherencyRule[] = [
   {
     id: "RULE_005",
     name: "Manual Override Exclusivity",
-    description: "Parameters cannot be locked by both user and LATTI simultaneously",
+    description: "Parameters cannot be locked by both user and system simultaneously",
     severity: "error",
     status: "PASS"
   },
@@ -284,7 +284,7 @@ export default function CoherencyRulesTab() {
             </TooltipProvider>
           </div>
           <CardDescription>
-            How LATTI and manual control modes work together (Phase 28.E Final)
+            How system and manual control modes work together (Phase 28.E Final)
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 text-sm">
@@ -298,11 +298,11 @@ export default function CoherencyRulesTab() {
               <p className="font-medium text-foreground mb-1">
                 <span className="inline-flex items-center gap-1.5">
                   <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                  LATTI Controlled
+                  System Controlled
                 </span>
               </p>
               <p className="text-muted-foreground">
-                LATTI dynamically adjusts this value during trading based on performance metrics and learning algorithms. 
+                System dynamically adjusts this value during trading based on performance metrics and learning algorithms. 
                 User can view but not edit the value.
               </p>
             </div>
@@ -315,7 +315,7 @@ export default function CoherencyRulesTab() {
                 </span>
               </p>
               <p className="text-muted-foreground">
-                User sets the value manually through the UI. LATTI cannot override it. 
+                User sets the value manually through the UI. System cannot override it. 
                 The parameter is locked from autonomous adjustments.
               </p>
             </div>
@@ -328,8 +328,8 @@ export default function CoherencyRulesTab() {
                 </span>
               </p>
               <p className="text-muted-foreground">
-                Combination of Manual + LATTI controls across different parameters. 
-                Only LATTI-managed fields are adjusted by the learning engine.
+                Combination of Manual + System controls across different parameters. 
+                Only system-managed fields are adjusted by the learning engine.
               </p>
             </div>
           </div>
@@ -339,11 +339,11 @@ export default function CoherencyRulesTab() {
             <ul className="space-y-2 text-muted-foreground">
               <li className="flex gap-2">
                 <span className="text-primary mt-0.5">•</span>
-                <span><strong className="text-foreground">Switching from Manual to LATTI:</strong> Retains the user's last manual value as LATTI's new baseline for future adjustments</span>
+                <span><strong className="text-foreground">Switching from Manual to System:</strong> Retains the user's last manual value as the system's new baseline for future adjustments</span>
               </li>
               <li className="flex gap-2">
                 <span className="text-primary mt-0.5">•</span>
-                <span><strong className="text-foreground">Switching from LATTI to Manual:</strong> Locks the current LATTI value until the user explicitly edits it</span>
+                <span><strong className="text-foreground">Switching from System to Manual:</strong> Locks the current system value until the user explicitly edits it</span>
               </li>
               <li className="flex gap-2">
                 <span className="text-primary mt-0.5">•</span>

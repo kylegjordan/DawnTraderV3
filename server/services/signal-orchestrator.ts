@@ -102,7 +102,6 @@ interface SizedStrategySignal extends StrategySignal {
   ngc?: number;           // Normalized Global Confidence
   riskScore?: number;     // Computed risk score
   volatility?: number;    // Estimated volatility
-  expectedDuration?: number; // Expected hold time in minutes
   profitRate?: number;    // Profit per time unit
   cwqi?: number;          // Confidence-Weighted Quality Index
   // Directive 11.3A: Net Expectancy fields
@@ -571,7 +570,6 @@ export class SignalOrchestrator {
       regimeWeight: regimeWeight,
       hybridScore: hybridScore,
       volatility: extendedMetrics.volatility,
-      expectedDuration: extendedMetrics.expectedDuration,
       // Directive 11.3A: Net expectancy fields
       netExpectedEdge: netGeometry.netExpectedEdge,
       netRewardToRisk: netGeometry.netRewardToRisk,

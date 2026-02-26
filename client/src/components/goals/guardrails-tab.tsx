@@ -679,7 +679,7 @@ export default function GuardrailsTab() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <DollarSign className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                <h3 className="font-semibold text-blue-900 dark:text-blue-100">LATTI Baseline Status</h3>
+                <h3 className="font-semibold text-blue-900 dark:text-blue-100">Paper Baseline Status</h3>
               </div>
               {baselineStatus.snapshot?.established ? (
                 <Badge variant="default" className="bg-green-600" data-testid="baseline-badge-established">

@@ -39,7 +39,6 @@ import {
 } from "lucide-react";
 import ClusterTab from "./cluster-tab";
 import LearningNetworkTab from "./learning-network-tab";
-import { LATTISafetyMonitor } from "./latti-safety-monitor";
 import { DataFlowTracePanel } from "@/components/dashboard/data-flow-trace-panel";
 // Directive 12.2.3: SystemTruthPanel import removed (file deleted in Batch 7A)
 import SystemHealthSummary from "@/components/system-health-summary";
@@ -3454,8 +3453,6 @@ function SafetyTab() {
         </Card>
       </div>
       
-      {/* Phase 27.F.14.B Task 6: LATTI Safety Audit & Bound Verification */}
-      <LATTISafetyMonitor />
     </div>
   );
 }

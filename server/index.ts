@@ -404,9 +404,6 @@ app.use((req, res, next) => {
     console.log('[Server] Standby mode – AI services disabled');
   }
 
-  // Directive 11.8B: LATTI system removed - parallel adaptive systems eliminated
-  // Phase 11 Predictive Learning is the single authority for parameter adjustment
-  console.log('[11.8B] LATTI system removed - Predictive Learning is single authority');
 
   // Phase 8.8.2: Initialize Memory Lifecycle Manager (async, non-blocking)
   import('./services/memory-lifecycle').then(({ memoryLifecycle }) => {
@@ -897,7 +894,7 @@ app.use((req, res, next) => {
             return { 
               status: 'MISSING', 
               filterCount: 0, 
-              lattiManaged: 0, 
+              systemManaged: 0, 
               manualOverride: 0, 
               coherent: false,
               note: 'Filter data not found in database'
@@ -922,14 +919,14 @@ app.use((req, res, next) => {
           const manualOverrideEnabled = (filtersData as any).manualOverrideEnabled ?? false;
           
           // Calculate counts based on override flags
-          const lattiManaged = managedByLottie && !manualOverrideEnabled ? filterCount : 0;
+          const systemManaged = managedByLottie && !manualOverrideEnabled ? filterCount : 0;
           const manualOverride = manualOverrideEnabled ? filterCount : 0;
-          const coherent = (lattiManaged + manualOverride) === filterCount;
+          const coherent = (systemManaged + manualOverride) === filterCount;
           
           return {
             status: coherent ? 'PASS' : 'WARN',
             filterCount,
-            lattiManaged,
+            systemManaged,
             manualOverride,
             coherent
           };
@@ -938,9 +935,9 @@ app.use((req, res, next) => {
         const paperFiltersStatus = await validateFilterCoherence('paper');
         const liveFiltersStatus = await validateFilterCoherence('live');
         
-        console.log(`[Audit] FilterCoherence ${paperFiltersStatus.status} | mode=paper | total=${paperFiltersStatus.filterCount} | lattiManaged=${paperFiltersStatus.lattiManaged} | manualOverride=${paperFiltersStatus.manualOverride} | coherent=${paperFiltersStatus.coherent}`);
+        console.log(`[Audit] FilterCoherence ${paperFiltersStatus.status} | mode=paper | total=${paperFiltersStatus.filterCount} | systemManaged=${paperFiltersStatus.systemManaged} | manualOverride=${paperFiltersStatus.manualOverride} | coherent=${paperFiltersStatus.coherent}`);
         
-        console.log(`[Audit] FilterCoherence ${liveFiltersStatus.status} | mode=live | total=${liveFiltersStatus.filterCount} | lattiManaged=${liveFiltersStatus.lattiManaged} | manualOverride=${liveFiltersStatus.manualOverride} | coherent=${liveFiltersStatus.coherent}`);
+        console.log(`[Audit] FilterCoherence ${liveFiltersStatus.status} | mode=live | total=${liveFiltersStatus.filterCount} | systemManaged=${liveFiltersStatus.systemManaged} | manualOverride=${liveFiltersStatus.manualOverride} | coherent=${liveFiltersStatus.coherent}`);
       } catch (error) {
         console.error('[Audit] ⚠️ FilterCoherence telemetry failed:', error);
       }
@@ -955,7 +952,7 @@ app.use((req, res, next) => {
             return {
               status: 'MISSING',
               paramCount: 0,
-              lattiManaged: 0,
+              systemManaged: 0,
               manualOverride: 0,
               coherent: false,
               note: 'Guardrails data not found in database'
@@ -973,14 +970,14 @@ app.use((req, res, next) => {
           // Count how many params are locked by user (manual override)
           const lockedByUser = (guardrailsData as any).lockedByUser || {};
           const manualOverrideCount = coreParams.filter(param => lockedByUser[param] === true).length;
-          const lattiManagedCount = coreParams.length - manualOverrideCount;
+          const systemManagedCount = coreParams.length - manualOverrideCount;
           
-          const coherent = (lattiManagedCount + manualOverrideCount) === coreParams.length;
+          const coherent = (systemManagedCount + manualOverrideCount) === coreParams.length;
           
           return {
             status: coherent ? 'PASS' : 'WARN',
             paramCount: coreParams.length,
-            lattiManaged: lattiManagedCount,
+            systemManaged: systemManagedCount,
             manualOverride: manualOverrideCount,
             coherent,
             lockedParams: Object.keys(lockedByUser).filter(k => lockedByUser[k] === true)
@@ -990,9 +987,9 @@ app.use((req, res, next) => {
         const paperGuardrailsStatus = await validateGuardrailsCoherence('paper');
         const liveGuardrailsStatus = await validateGuardrailsCoherence('live');
         
-        console.log(`[Audit] GuardrailsCoherence ${paperGuardrailsStatus.status} | mode=paper | total=${paperGuardrailsStatus.paramCount} | lattiManaged=${paperGuardrailsStatus.lattiManaged} | manualOverride=${paperGuardrailsStatus.manualOverride} | coherent=${paperGuardrailsStatus.coherent}`);
+        console.log(`[Audit] GuardrailsCoherence ${paperGuardrailsStatus.status} | mode=paper | total=${paperGuardrailsStatus.paramCount} | systemManaged=${paperGuardrailsStatus.systemManaged} | manualOverride=${paperGuardrailsStatus.manualOverride} | coherent=${paperGuardrailsStatus.coherent}`);
         
-        console.log(`[Audit] GuardrailsCoherence ${liveGuardrailsStatus.status} | mode=live | total=${liveGuardrailsStatus.paramCount} | lattiManaged=${liveGuardrailsStatus.lattiManaged} | manualOverride=${liveGuardrailsStatus.manualOverride} | coherent=${liveGuardrailsStatus.coherent}`);
+        console.log(`[Audit] GuardrailsCoherence ${liveGuardrailsStatus.status} | mode=live | total=${liveGuardrailsStatus.paramCount} | systemManaged=${liveGuardrailsStatus.systemManaged} | manualOverride=${liveGuardrailsStatus.manualOverride} | coherent=${liveGuardrailsStatus.coherent}`);
         
         // If any params are manually locked, log which ones
         if (paperGuardrailsStatus.manualOverride > 0 && paperGuardrailsStatus.lockedParams) {

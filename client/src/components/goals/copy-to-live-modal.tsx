@@ -38,7 +38,7 @@ export function CopyToLiveModal({
             Copy Optimized Parameters to Live Mode
           </DialogTitle>
           <DialogDescription>
-            Transfer LATTI-optimized paper trading parameters to your Live mode guardrails.
+            Transfer optimized paper trading parameters to your Live mode guardrails.
             You must still click "Save" in Live mode to persist these changes.
           </DialogDescription>
         </DialogHeader>
