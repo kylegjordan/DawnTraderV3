@@ -6,8 +6,8 @@
     "previousValue": "LOW_VOL_CHOP",
     "newValue": "BULL_STABLE",
     "severity": "info",
-    "id": "mkt_evt_1772131790288_5",
-    "timestamp": "2026-02-26T18:49:50.288Z"
+    "id": "mkt_evt_1772132021132_6",
+    "timestamp": "2026-02-26T18:53:41.132Z"
   },
   {
     "type": "REGIME_TRANSITION",
