@@ -493,10 +493,10 @@
 - **Blast Radius**: **CRITICAL** (contamination spreads to every signal)
 - **Removal**: Phase 12.3.3
 
-### 11.3 Walter/Bob/Cortex — ~87 FILES (was ~96, 9 removed in Sub-Batch A)
-- **What**: AI assistant ecosystem. Cortex is ACTIVE (in-memory cache, 15-min analytics). Walter lazy-loaded. 9 zero-dependency Walter service files removed in Directive 12.2.3 Sub-Batch A (~2,792 lines).
-- **Blast Radius**: **LOW** to trading pipeline (mostly disconnected), but Cortex consumes memory
-- **Removal**: Phase 12.2.3-12.2.4 (Waves 3, 3.1) — IN PROGRESS (Sub-Batch A complete, B+C pending)
+### 11.3 ~~Walter~~/Bob/Cortex — ~70 FILES (was ~96; Walter fully removed in Sub-Batches A+B)
+- **What**: AI assistant ecosystem. Cortex is ACTIVE (in-memory cache, 15-min analytics). **Walter fully removed** (Sub-Batches A+B: 19 Walter backend files + 1 middleware + 5 frontend files + ancillary docs deleted, 13 consuming files surgically modified, 28 Walter route handlers excised from routes.ts). corpus-domain-service.ts stubbed pending Cortex cleanup. Bob modules + Cortex remain.
+- **Blast Radius**: **LOW** to trading pipeline (mostly disconnected), but Cortex still consumes memory
+- **Removal**: Phase 12.2.3 Sub-Batch C (Bob+Cortex). Wave 3.1 (12.2.4) COMPLETE — absorbed into Batch 6.
 
 ### 11.4 ~~NLAI~~ — REMOVED (Directive 12.2.7)
 - **What**: ~~Natural Language Action Interpreter. Event handlers active.~~ REMOVED — All 5 files deleted, 6 consumer files cleaned. Commit `5d5c2051` (2026-02-24).

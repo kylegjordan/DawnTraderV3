@@ -99,7 +99,7 @@ Quick reference: which components are authoritative, which are contaminated, and
 | **MCP/ARE ecosystem** | LEGACY (Kyle confirmed) | High-Impact Legacy Cluster. 14+ consumers, own strategy matrix, own regime taxonomy. Remove in Wave 6. |
 | ~~NLAI system~~ | ~~LEGACY~~ **REMOVED** | Directive 12.2.7: All 5 NLAI files deleted, 6 consumer files cleaned. Commit `5d5c2051`. |
 | **Goal Alignment system** | LEGACY | Daily/weekly targets in pre-execution validator. Remove in Wave 4.5. |
-| **Walter/Bob/Cortex** | LEGACY (Kyle confirmed) | ~96 files. Entire AI assistant ecosystem. Remove in Wave 3. |
+| **Walter/Bob/Cortex** | LEGACY (Kyle confirmed) | ~~~96~~ ~70 files remaining (Walter fully removed in Batches 5+6). Bob+Cortex remain. Remove in Wave 3 Sub-Batch C. |
 | **RiskManager class** | DEPRECATED | Replaced by `checkGuardrailRisk()`. ~~12 import locations still referencing it.~~ Comment/stub cleanup completed (Directive 12.1.5). |
 | **VTS signal generation** | CONTAMINATED | Uses `simulateHybridScore()` / `simulatePredictiveConfidence()` — generic random noise, not strategy-specific. BUG-001 (CRITICAL). |
 
@@ -128,11 +128,11 @@ Legacy systems are not isolated files — they form interconnected clusters that
 - **Removal**: Wave 6 (Phase 16, during/after MCE — MCE must absorb portfolio-risk responsibilities first)
 - **Risk level**: DANGEROUS — largest consumer dependency count of any legacy system
 
-### Cluster 3: Walter / Bob / Cortex / ~~NLAI~~ / Goal Alignment
-- **Core files**: ~87 walter-*.ts, bob-*.ts, bobs/*.ts, cortex/*.ts, ~~5 NLAI files~~ (REMOVED — Directive 12.2.7), ~~9 Walter service files~~ (REMOVED — Directive 12.2.3 Sub-Batch A), goal alignment in pre-execution-validator
-- **Contamination**: Cortex is ACTIVE at runtime (in-memory cache, 15-min analytics cycle). Walter lazy-loaded at startup. ~~NLAI event handlers active.~~ NLAI removed. 9 zero-dependency Walter files removed.
-- **Removal**: Waves 3, 3.1, 4.5 remaining (Wave 4.7 COMPLETE). Phase 12.2 — pre-MCE cleanup.
-- **Risk level**: MODERATE — large surface area but mostly disconnected from trading pipeline
+### Cluster 3: ~~Walter~~ / Bob / Cortex / ~~NLAI~~ / Goal Alignment
+- **Core files**: ~~walter-*.ts~~ (ALL REMOVED — Directive 12.2.3 Sub-Batches A+B), bob-*.ts, bobs/*.ts, cortex/*.ts, ~~5 NLAI files~~ (REMOVED — Directive 12.2.7), goal alignment in pre-execution-validator
+- **Contamination**: Cortex is ACTIVE at runtime (in-memory cache, 15-min analytics cycle). ~~Walter lazy-loaded at startup.~~ Walter fully removed. ~~NLAI event handlers active.~~ NLAI removed. Bob modules still active. corpus-domain-service.ts stubbed (awaiting Cortex cleanup).
+- **Removal**: ~~Wave 3~~ Walter DONE. Wave 3 Bob+Cortex remaining. Waves 3.1 (DONE — absorbed into Batch 6), 4.5 pending. Phase 12.2 — pre-MCE cleanup.
+- **Risk level**: MODERATE — Bob+Cortex remain, mostly disconnected from trading pipeline
 
 ### Cluster 4: DSS Legacy Regime Engine
 - **Core files**: `dynamic-strategy-selector.ts` (214 lines)

@@ -25,8 +25,8 @@
 |-----------|-------|--------|-------------|---------------|---------------|-------|
 | 12.2.1 | Wave 1: Safe Deletions | PENDING | — | — | — | Largely done — only LATTi residuals remain |
 | 12.2.2 | Wave 1.5: MarketScanner Class Removal | PENDING | — | — | — | Preserve collectAdaptiveBatch |
-| 12.2.3 | Wave 3: Walter/Bob/Cortex Removal | IN PROGRESS | 2026-02-24 | — | — | Sub-Batch A done (Batch 5): 9 Walter files deleted, ~2,792 lines. Sub-Batches B+C pending. |
-| 12.2.4 | Wave 3.1: Frontend Walter Cleanup | PENDING | — | — | — | — |
+| 12.2.3 | Wave 3: Walter/Bob/Cortex Removal | IN PROGRESS | 2026-02-24 | — | — | Sub-Batches A+B done: Walter fully removed (~11,400 lines across Batches 5+6). Sub-Batch C (Bob+Cortex) pending. |
+| 12.2.4 | Wave 3.1: Frontend Walter Cleanup | COMPLETE | 2026-02-24 | 2026-02-26 | 1 | Absorbed into 12.2.3 Sub-Batch B (Batch 6). 5 frontend files deleted, App.tsx + sidebar.tsx modified. |
 | 12.2.5 | Wave 4: Friction Model Unification | PENDING | — | — | — | — |
 | 12.2.6 | Wave 4.5: Goal Alignment Removal | PENDING | — | — | — | — |
 | 12.2.7 | Wave 4.7: NLAI System Removal | COMPLETE | 2026-02-24 | 2026-02-24 | 1 | Batch 4 — 5 files deleted, 6 files modified, ~2,147 lines removed |
@@ -47,11 +47,11 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Directives Issued | 7 |
-| Total Directives Complete | 6 |
+| Total Directives Issued | 8 |
+| Total Directives Complete | 7 |
 | Total Directives In Progress | 1 |
-| Total Review Cycles | 6 |
-| Average Review Cycles per Directive | 0.86 |
+| Total Review Cycles | 7 |
+| Average Review Cycles per Directive | 0.88 |
 
 ---
 

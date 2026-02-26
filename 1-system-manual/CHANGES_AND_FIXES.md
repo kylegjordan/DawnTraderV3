@@ -838,13 +838,11 @@
 - **Timing**: Post-audit cleanup
 - **Phase Found**: Phase 9
 
-### RISK-060: Walter Frontend Integration Will Break on Backend Removal (Wave 3)
+### RISK-060: Walter Frontend Integration Will Break on Backend Removal (Wave 3) — RESOLVED
+- **Status**: **RESOLVED** — Directive 12.2.3 Sub-Batch B, Batch 6 (2026-02-26), commit `1ea3bb38`
 - **Severity**: MEDIUM (planning concern)
-- **Location**: 7+ frontend files with Walter dependencies: `walter.tsx` (1,386 lines), `settings.tsx` (Walter Approvals tab, Walter memory config), `top-bar.tsx` (Walter approvals bell), `walter-floating-assistant.tsx` (501 lines), `DailyBriefCard.tsx` (auto-resolved stats), `InteractiveNotification.tsx` (approval workflow), `ai-transparency.tsx` (Walter log categories)
-- **Problem**: When the Walter backend is removed in Wave 3, these frontend files will break or become non-functional. The Walter page alone is 1,386 lines. The floating assistant (501 lines) renders on every authenticated page. The TopBar notification bell polls for pending approvals.
-- **Impact**: Without coordinated frontend cleanup, Wave 3 backend removal will cause runtime errors, broken UI sections, and dead API calls across the application.
-- **Recommended action**: Create a frontend Wave 3.1 that removes/replaces all Walter frontend integration concurrent with backend Wave 3.
-- **Timing**: Concurrent with Wave 3 (Walter/Bob backend removal)
+- **Location**: 7+ frontend files with Walter dependencies
+- **Resolution**: Frontend Walter cleanup was absorbed into Sub-Batch B (Batch 6) alongside the backend removal. 5 frontend files deleted (`walter.tsx`, `walter-floating-assistant.tsx`, `walter-approvals.tsx`, `chat-file-attachment.tsx`, `useWalterPreferences.tsx`). App.tsx modified (removed Walter route, floating assistant render, getPageContext). sidebar.tsx modified (removed Walter nav item). Backend and frontend were removed in a single coordinated batch, preventing the broken-state window.
 - **Phase Found**: Phase 9
 
 ### RISK-061: Per-TradeRow Settings Fetch Creates N+1 Query Pattern
@@ -1016,13 +1014,12 @@ Total: 21 bugs, 65 risks.
 - **Timing**: Post-audit (should be addressed before enabling CI/CD)
 - **Phase Found**: Phase 10
 
-### RISK-070: Test Files for Deprecated Walter/Bob Systems — Will Break on Removal — PARTIALLY RESOLVED
+### RISK-070: Test Files for Deprecated Walter/Bob Systems — Will Break on Removal — MOSTLY RESOLVED
+- **Status**: **MOSTLY RESOLVED** — Directive 12.2.3 Sub-Batch B, Batch 6 (2026-02-26)
 - **Severity**: LOW (planning concern)
-- **Location**: `server/tests/diagnostic-system.test.ts` (466 lines), `server/tests/phase-6.0-simulations.test.ts` (229→136 lines, cleaned in Batch 5)
-- **Problem**: Two test files import and test Walter/Bob services (diagnostic-controller, bob-inspector, walter-expert-corpus, ~~walter-reasoning-templates~~, ~~walter-knowledge-refresh~~, walter-purpose). When Walter is removed in Wave 3, these tests will fail with import errors. Additionally, `paper_validation_engine.ts` references L-Series legacy systems (DCE, GASP). (Note: `auto_test_harness.ts` NLAI imports were cleaned in Directive 12.2.7. `phase-6.0-simulations.test.ts` walter-reasoning-templates and walter-knowledge-refresh imports removed in Directive 12.2.3 Sub-Batch A.)
-- **Impact**: If CI/CD is enabled before Walter removal, these stale tests will block the pipeline. If CI/CD is enabled after Walter removal, these tests must be removed first.
-- **Recommended**: Remove or skip these tests during Wave 3 (Walter removal). Update `paper_validation_engine.ts` during Wave 6 (L-Series removal) to remove DCE/GASP references.
-- **Timing**: During Wave 3 and Wave 6 respectively
+- **Location**: `server/tests/diagnostic-system.test.ts` (466→414 lines), `server/tests/phase-6.0-simulations.test.ts` (136→65 lines, cleaned in Batches 5+6)
+- **Resolution (Walter)**: All Walter imports and test blocks removed from both test files in Batch 6. `phase-6.0-simulations.test.ts` retains only 2 Bob diagnostic tests (deferred to Bob cleanup batch). `diagnostic-system.test.ts` retains Tests 1-7 and 9+ (diagnostic-controller/bob-inspector tests); Test 8 (walterPatchAnalyst) removed.
+- **Remaining**: Bob/diagnostic-controller test dependencies in both files will need cleanup during Bob removal (Sub-Batch C). `paper_validation_engine.ts` DCE/GASP references remain for Wave 6 (L-Series removal).
 - **Phase Found**: Phase 10
 
 ### RISK-071: Standalone Test Scripts Not Discoverable by Test Framework
