@@ -27,8 +27,8 @@
 | 12.2.2 | Wave 1.5: MarketScanner Class Removal | COMPLETE | 2026-02-27 | 2026-02-27 | 1 | Batch 9 — MarketScanner class removed (~637 lines), collectAdaptiveBatch preserved. 5 consuming files cleaned. BUG-009 RESOLVED. |
 | 12.2.3 | Wave 3: Walter/Bob/Cortex Removal | COMPLETE | 2026-02-24 | 2026-02-26 | 1 | Sub-Batch A (Batch 5): 9 Walter files deleted. Sub-Batch B (Batch 6): Walter importers + frontend + routes cleaned. Sub-Batch C (Batch 7): Bob+Cortex ecosystems removed. ~17,100 lines across ~65 files. |
 | 12.2.4 | Wave 3.1: Frontend Walter Cleanup | COMPLETE | 2026-02-24 | 2026-02-26 | 1 | Absorbed into 12.2.3 Sub-Batch B (Batch 6). 5 frontend files deleted, App.tsx + sidebar.tsx modified. |
-| 12.2.5 | Wave 4: Friction Model Unification | PENDING | — | — | — | — |
-| 12.2.6 | Wave 4.5: Goal Alignment Removal | PENDING | — | — | — | Investigation revealed gate is FULLY OPERATIONAL — needs Kyle decision |
+| 12.2.5 | Wave 4: Friction Model Unification | COMPLETE | 2026-02-27 | 2026-02-27 | 1 | Batch 11 — 3 deprecated friction functions removed from analysis-utils.ts. vts-service.ts migrated to canonical cost model. UNIFY-001 RESOLVED. |
+| 12.2.6 | Wave 4.5: Goal Alignment Gate Removal | COMPLETE | 2026-02-27 | 2026-02-27 | 1 | Batch 11 — Phase 9.0 alignment verification system removed: alignment-verifier.ts + strategic-policy-guard.ts deleted, AlignmentTab UI removed, /alignment routes removed, 2 schema tables removed. ~1,400 lines. Note: Phase 4 Goal Alignment in pre-execution-validator.ts and trading-engine.ts (RISK-028, BUG-012) remains — separate system. |
 | 12.2.7 | Wave 4.7: NLAI System Removal | COMPLETE | 2026-02-24 | 2026-02-24 | 1 | Batch 4 — 5 files deleted, 6 files modified, ~2,147 lines removed |
 | 12.2.8 | Wave 8: Walter-Era Learning Services | COMPLETE | 2026-02-27 | 2026-02-27 | 1 | Batch 10 — 3 dead services deleted (cognitive-interpreter, event-broker, phase-8.6.5-enhancements, ~1,363 lines). autonomy-controller bug fixed. RISK-044 RESOLVED. Walter storage methods removed. |
 | 12.2.9 | Wave 9: Frontend Dead Code | COMPLETE | 2026-02-27 | 2026-02-27 | 1 | Batch 9 — 6 dead pages deleted (~2,453 lines), stale History import removed from App.tsx. |
@@ -47,10 +47,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Directives Issued | 12 |
-| Total Directives Complete | 12 |
+| Total Directives Issued | 14 |
+| Total Directives Complete | 14 |
 | Total Directives In Progress | 0 |
-| Total Review Cycles | 12 |
+| Total Review Cycles | 14 |
 | Average Review Cycles per Directive | 1.00 |
 
 ---

@@ -148,7 +148,7 @@
   - signal-orchestrator.ts DSS evaluation loop (line ~1122) — now uses per-pair cost metrics
   - signal-orchestrator.ts DSS_TRADE_SNAPSHOT capture (line ~1165) — now uses per-pair cost metrics
   - expectancy.ts `evaluateTradeExpectancy()` (line ~520) — now calls cost-model directly instead of `calculateFriction()`
-  - analysis-utils.ts `calculateFriction()`, `calculatePerUnitFriction()`, `getFrictionRate()` — marked `@deprecated`, zero runtime callers
+  - analysis-utils.ts `calculateFriction()`, `calculatePerUnitFriction()`, `getFrictionRate()` — ~~marked `@deprecated`, zero runtime callers~~ **PHYSICALLY REMOVED** (Directive 12.2.5, Batch 11, commit `b3a1526c`). vts-service.ts (last active caller) migrated to canonical cost model.
 - **Impact of fix**: The old code underestimated friction by 72× (0.01% vs 0.72% for default cost metrics). The DSS NetEV gate now correctly accounts for real trading costs.
 - **Phase Found**: Phase 1 (ChatGPT review, Kyle-confirmed)
 
@@ -164,15 +164,15 @@
 
 ## UNIFICATION RECOMMENDATIONS
 
-### UNIFY-001: Friction Model Consolidation — **PARTIALLY RESOLVED**
-- **Status**: **PARTIALLY RESOLVED** — Directive 12.1.2, Batch 2 (2026-02-22)
-- **Current State**: `cost-model.ts` is now the canonical friction provider for all runtime friction calculations:
-  - ✅ `calculateFriction()` deprecated in analysis-utils.ts (zero runtime callers)
-  - ✅ `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE` removed from signal-orchestrator.ts friction paths
-  - ✅ `computeTotalRoundTripCost()` used in signal-orchestrator.ts DSS evaluation and expectancy.ts
-  - ⬜ `cost-metrics.updateCostData()` costFactor calculation for sizing — not yet addressed (separate concern)
-  - ⬜ `calculateFriction()` functions still exist as deprecated code — physical removal deferred to Wave 4 (Directive 12.2.5: Friction Model Unification)
-- **Remaining work**: Remove deprecated friction functions and `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE` constant (if no non-friction consumers remain) during dead code purge
+### UNIFY-001: Friction Model Consolidation — **RESOLVED**
+- **Status**: **RESOLVED** — Directive 12.1.2 (Batch 2) + Directive 12.2.5 (Batch 11, commit `b3a1526c`)
+- **Current State**: `cost-model.ts` is the canonical friction provider for ALL friction calculations:
+  - ✅ `calculateFriction()`, `calculatePerUnitFriction()`, `getFrictionRate()` **REMOVED** from analysis-utils.ts (Directive 12.2.5, Batch 11)
+  - ✅ `SYSTEM_GUARDS.BASE_FEE_SLIPPAGE` removed from signal-orchestrator.ts friction paths (Directive 12.1.2, Batch 2)
+  - ✅ `computeTotalRoundTripCost()` used in signal-orchestrator.ts, expectancy.ts, and vts-service.ts
+  - ✅ `vts-service.ts` migrated from `calculateFriction()` to canonical `getCachedCostMetrics()` + `computeTotalRoundTripCost()` (Batch 11)
+  - ⬜ `cost-metrics.updateCostData()` costFactor calculation for sizing — not yet addressed (separate concern, non-blocking)
+- **Remaining work**: costFactor sizing path (separate concern, tracked independently)
 - **Phase Found**: Phase 1
 
 ### UNIFY-002: Confidence Authority Consolidation (NGC Is Legacy — Kyle Confirmed)
@@ -1401,5 +1401,28 @@ Total removal: ~1,460 lines across 7 files in 1 batch.
 
 **Risks resolved by this directive:**
 - RISK-044 (lazy-loader LATTI stub) — RESOLVED: Stub removed, only DB column names remain
+
+**Test baseline**: 800/81 (881 total) — unchanged
+
+---
+
+## DIRECTIVE 12.2.6 + 12.2.5 COMPLETION LOG (2026-02-27)
+
+**Directive 12.2.6: Wave 4.5 — Goal Alignment Gate Removal — COMPLETE**
+**Directive 12.2.5: Wave 4 — Friction Model Unification — COMPLETE**
+
+Total removal: ~1,440 lines across 10 files in 1 batch.
+
+| Batch | Scope | Lines Removed | Commit |
+|-------|-------|---------------|--------|
+| Batch 11 | **12.2.6**: alignment-verifier.ts + strategic-policy-guard.ts deleted (~758 lines). autonomy-controller.ts gate check removed. routes.ts: 7 /alignment routes + 3 strategicPolicyGuard refs + compliance endpoint removed (~180 lines). schema.ts: alignmentAuditLog + valueAlignmentMatrix tables + 3 derived types removed (~38 lines). enhanced-system-monitoring.tsx: AlignmentTab removed (~296 lines). **12.2.5**: vts-service.ts migrated to canonical cost model. 3 deprecated friction functions removed from analysis-utils.ts (~39 lines). expectancy.ts comment updated. | ~1,440 | `b3a1526c` |
+
+**Items resolved by this batch:**
+- UNIFY-001 (Friction Model Consolidation) — RESOLVED: All deprecated friction functions removed, all callers migrated to canonical cost model
+- Phase 9.0 Alignment Verification System — REMOVED: AlignmentVerifier gate no longer blocks autonomy actions
+
+**Items NOT resolved (separate systems):**
+- RISK-028 (Goal Alignment in pre-execution-validator.ts) — Phase 4 system, separate from Phase 9.0
+- BUG-012 (Goal Alignment in trading-engine.ts) — Phase 5 finding, separate from Phase 9.0
 
 **Test baseline**: 800/81 (881 total) — unchanged

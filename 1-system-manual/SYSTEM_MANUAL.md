@@ -94,11 +94,11 @@ Quick reference: which components are authoritative, which are contaminated, and
 | Component | Status | Problem |
 |-----------|--------|---------|
 | **quality_index.ts (NGC)** | LEGACY | Confidence carrier throughout pipeline. Must be replaced, not extended. |
-| **SYSTEM_GUARDS friction** | ~~LEGACY~~ **RESOLVED** | ~~Flat 0.5% fee — bypasses real cost model.~~ Directive 12.1.2: All runtime friction now uses `computeTotalRoundTripCost()`. Deprecated functions remain for dead code purge (Wave 4). |
+| **SYSTEM_GUARDS friction** | ~~LEGACY~~ **RESOLVED** | ~~Flat 0.5% fee — bypasses real cost model.~~ Directive 12.1.2: All runtime friction now uses `computeTotalRoundTripCost()`. ~~Deprecated functions remain for dead code purge (Wave 4).~~ Deprecated functions **REMOVED** (Directive 12.2.5, Batch 11). |
 | **DSS volNoise/trendSlope classifier** | LEGACY | 6-regime / 9-quant-only. Must be replaced with canonical map. |
 | **MCP/ARE ecosystem** | LEGACY (Kyle confirmed) | High-Impact Legacy Cluster. 14+ consumers, own strategy matrix, own regime taxonomy. Remove in Wave 6. |
 | ~~NLAI system~~ | ~~LEGACY~~ **REMOVED** | Directive 12.2.7: All 5 NLAI files deleted, 6 consumer files cleaned. Commit `5d5c2051`. |
-| **Goal Alignment system** | LEGACY | Daily/weekly targets in pre-execution validator. Remove in Wave 4.5. |
+| **Goal Alignment system** | LEGACY (PARTIALLY REMOVED) | Phase 9.0 alignment verification system **REMOVED** (Directive 12.2.6, Batch 11). Phase 4 Goal Alignment in pre-execution-validator.ts and trading-engine.ts **REMAINS** (RISK-028, BUG-012). |
 | **Walter/Bob/Cortex** | LEGACY (Kyle confirmed) | ~~~96~~ ~70 files remaining (Walter fully removed in Batches 5+6). Bob+Cortex remain. Remove in Wave 3 Sub-Batch C. |
 | **RiskManager class** | DEPRECATED | Replaced by `checkGuardrailRisk()`. ~~12 import locations still referencing it.~~ Comment/stub cleanup completed (Directive 12.1.5). |
 | **VTS signal generation** | CONTAMINATED | Uses `simulateHybridScore()` / `simulatePredictiveConfidence()` — generic random noise, not strategy-specific. BUG-001 (CRITICAL). |
@@ -652,7 +652,7 @@ This is computed by `computeTotalRoundTripCost()` in `server/core/math/cost-mode
 ```
 friction = (entryPrice + exitPrice) × quantity × BASE_FEE_SLIPPAGE   // DEPRECATED
 ```
-Where `BASE_FEE_SLIPPAGE = 0.005` (flat 0.5%) from `SYSTEM_GUARDS`. The `calculateFriction()` function in analysis-utils.ts is marked `@deprecated` — physical removal deferred to Wave 4 (Directive 12.2.5).
+Where `BASE_FEE_SLIPPAGE = 0.005` (flat 0.5%) from `SYSTEM_GUARDS`. ~~The `calculateFriction()` function in analysis-utils.ts is marked `@deprecated` — physical removal deferred to Wave 4 (Directive 12.2.5).~~ **REMOVED** — `calculateFriction()`, `calculatePerUnitFriction()`, and `getFrictionRate()` physically deleted in Directive 12.2.5 (Batch 11, commit `b3a1526c`). `vts-service.ts` (last active caller) migrated to canonical cost model.
 
 ### Trend Slope
 
@@ -3169,7 +3169,7 @@ PASS if netExpectedGainPct >= minNetProfitThreshold * 100
 
 Fee rates sourced from `system_context.makerFeePct` / `takerFeePct` (default: 0.16% maker, 0.26% taker).
 
-### Goal Alignment Scoring — FORMALLY DEPRECATED
+### Goal Alignment Scoring — FORMALLY DEPRECATED (Phase 9.0 System REMOVED, Phase 4 System REMAINS)
 
 > **⚠️ DEPRECATION DIRECTIVE (Kyle, 2026-02-16)**: Goal alignment logic is legacy from the Walter-era Goals system. The Goals tab has already been removed from the UI. This entire gate must be **REMOVED** from `pre-execution-validator.ts` — not defaulted to neutral, not skipped, but deleted. The Pre-Execution Validator should become a two-gate system (risk checks + fee-aware profitability).
 

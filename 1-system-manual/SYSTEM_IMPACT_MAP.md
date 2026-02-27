@@ -503,10 +503,11 @@
 - **Blast Radius**: **ZERO** — completely removed
 - **Status**: COMPLETE. No NLAI code remains in server/.
 
-### 11.5 Goal Alignment
-- **What**: Daily/weekly targets in pre-execution-validator.ts and trading-engine.ts.
-- **Blast Radius**: **MEDIUM** — adds a gate in the pre-execution validator
-- **Removal**: Phase 12.2.6 (Wave 4.5)
+### 11.5 Goal Alignment — PARTIALLY REMOVED (Directive 12.2.6)
+- **What**: ~~Daily/weekly targets in pre-execution-validator.ts and trading-engine.ts.~~ **Phase 9.0 alignment verification system REMOVED** (Batch 11, commit `b3a1526c`): alignment-verifier.ts, strategic-policy-guard.ts deleted; /alignment routes, AlignmentTab UI, autonomy-controller gate check all removed.
+- **Remaining**: Phase 4 Goal Alignment in pre-execution-validator.ts (RISK-028) and trading-engine.ts calculateGoalAlignmentScore (BUG-012) — separate system, not yet removed.
+- **Blast Radius**: **LOW** (Phase 9.0 removed, Phase 4 targets are isolated)
+- **Removal**: Phase 4 targets: future directive (pre-execution-validator.ts gate + trading-engine.ts calculateGoalAlignmentScore)
 
 ### 11.6 Walter-Era Learning Services — 5+ FILES
 - **What**: continuous-learning.ts, learning-cycle-service.ts, etc. Lazy-loaded, orphaned.
@@ -534,7 +535,7 @@
 | **Paper Execution Engine** | Portfolio state, Guardrails V2, Pre-Execution Validator, WebSocket broadcasts, trade history DB |
 | **VTS Runner** | VTS Service, ML Calibration, Telemetry Aggregator, Drift Detector, Adaptive Ratio Manager |
 | **Guardrails V2** | Pre-Execution Validator, Paper Execution Engine, Kill Switch |
-| **Pre-Execution Validator** | Paper Execution Engine, Trading Engine (live), Goal Alignment (until removed) |
+| **Pre-Execution Validator** | Paper Execution Engine, Trading Engine (live), Goal Alignment (Phase 4 — RISK-028, still active) |
 | **Boot sequence (index.ts)** | Lazy Loader, Trading Bootstrap, FX5 Bootstrap, Portfolio Initializer, all services initialized there |
 | **Kraken WebSocket** | Price Cache, Live Pricing Adapter, MicroExecutionService, Symbol Normalization |
 | **Any database schema** | storage.ts, all queries referencing that table, frontend consuming those endpoints |
