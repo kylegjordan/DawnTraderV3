@@ -30,7 +30,7 @@
 | 12.2.5 | Wave 4: Friction Model Unification | PENDING | — | — | — | — |
 | 12.2.6 | Wave 4.5: Goal Alignment Removal | PENDING | — | — | — | Investigation revealed gate is FULLY OPERATIONAL — needs Kyle decision |
 | 12.2.7 | Wave 4.7: NLAI System Removal | COMPLETE | 2026-02-24 | 2026-02-24 | 1 | Batch 4 — 5 files deleted, 6 files modified, ~2,147 lines removed |
-| 12.2.8 | Wave 8: Walter-Era Learning Services | PENDING | — | — | — | Scope reduced: only cognitive-interpreter.ts + parts of phase-8.6.5-enhancements.ts are dead |
+| 12.2.8 | Wave 8: Walter-Era Learning Services | COMPLETE | 2026-02-27 | 2026-02-27 | 1 | Batch 10 — 3 dead services deleted (cognitive-interpreter, event-broker, phase-8.6.5-enhancements, ~1,363 lines). autonomy-controller bug fixed. RISK-044 RESOLVED. Walter storage methods removed. |
 | 12.2.9 | Wave 9: Frontend Dead Code | COMPLETE | 2026-02-27 | 2026-02-27 | 1 | Batch 9 — 6 dead pages deleted (~2,453 lines), stale History import removed from App.tsx. |
 
 ### 12.3 Pipeline Unification
@@ -47,10 +47,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Directives Issued | 11 |
-| Total Directives Complete | 11 |
+| Total Directives Issued | 12 |
+| Total Directives Complete | 12 |
 | Total Directives In Progress | 0 |
-| Total Review Cycles | 11 |
+| Total Review Cycles | 12 |
 | Average Review Cycles per Directive | 1.00 |
 
 ---

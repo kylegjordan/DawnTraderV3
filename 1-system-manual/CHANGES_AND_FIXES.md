@@ -599,7 +599,8 @@
 - **Severity**: MEDIUM → **CONFIRMED LEGACY** (Kyle, Phase 6 Addendum)
 - **Location**: `server/services/continuous-learning.ts`, `learning-cycle-service.ts`, `learning-coordinator.ts`, `learning-bridge.ts`, `learning-gate-validator.ts`
 - **Problem**: These 5 services form a complete learning subsystem that manages AI agent behavioral weights (CognitiveWeights: reasoning, exploration, exploitation, riskAversion, adaptability), agent feedback, cluster learning deltas, and ethical gate validation. They were built for the Walter/Bob AI ecosystem and have **zero connection** to the canonical VTS/ML pipeline, strategy weights, telemetry aggregator, or calibration utilities.
-- **Evidence**: No imports from any canonical trading module. Imports only from Walter-era services (learning-bob, cluster-bus, phase-8.6.5-enhancements). Database tables used are agent-specific (agentLearningDelta, agentLearningFeedback, learningWeightProfile).
+- **Evidence**: No imports from any canonical trading module. Imports only from Walter-era services (learning-bob, cluster-bus, phase-8.6.5-enhancements — all now deleted). Database tables used are agent-specific (agentLearningDelta, agentLearningFeedback, learningWeightProfile).
+- **Batch 10 Update (2026-02-27)**: `learning-cycle-service.ts` deleted in Batch 7B-hotfix. `cognitive-interpreter.ts` and `phase-8.6.5-enhancements.ts` deleted in Batch 10 (Directive 12.2.8). Remaining files (`continuous-learning.ts`, `learning-coordinator.ts`, `learning-bridge.ts`, `learning-gate-validator.ts`) are still ACTIVE — imported by autonomy-controller and other services.
 - **Kyle Decision (Phase 6 Addendum)**: "Legacy autonomy-era artifacts. Mark for removal in cleanup wave." These do not feed VTS, TelemetryAggregator, MLCalibrationService, StrategyEngine, or PaperExecutionEngine.
 - **Timing**: Pre-MCE or during MCE (removal is EASY to MODERATE)
 - **Phase Found**: Phase 6 (confirmed by Phase 6 Addendum)
@@ -640,7 +641,7 @@
 - **Timing**: During MCE (MCE-5 phase or dedicated strategy engine sprint)
 - **Phase Found**: Phase 6 Addendum (Kyle directive)
 
-### RISK-044: Lazy Loader Contains LATTI Removal Stub
+### RISK-044: Lazy Loader Contains LATTI Removal Stub — RESOLVED
 - **Severity**: LOW
 - **Location**: `server/startup/lazy-loader.ts` — LATTI Manager section (lines 37-40)
 - **Problem**: The lazy loader still references the removed LATTI system (Directive 11.8B-B) with a stub function that logs a removal notice. This is correct transitional behavior but should be cleaned up once all references to LATTI are confirmed removed.
@@ -648,7 +649,7 @@
 - **Kyle Decision (Phase 7 Addendum)**: Part of broader LATTI/coherence residue investigation. Confirm whether residual `lattiManaged`, `lockedByUser`, `manualOverride` fields still serve active purpose. If LATTI is fully removed, eliminate all residual flags.
 - **Timing**: Post-audit cleanup (bundled with LATTI file cleanup)
 - **Phase Found**: Phase 7
-- **Batch 8 Update (2026-02-27)**: Directive 12.2.1 removed all other LATTI code/UI residuals (latti-safety-monitor.tsx deleted, schema.ts LATTI ORM definitions removed, routes.ts handleLATTITargets removed, 7 client goal components cleaned, index.ts lattiManaged→systemManaged renamed). This lazy-loader stub (2 lines) and DB column names (`tunedByLatti`, `managedByLottie`) are the only remaining LATTI references in the codebase. Stub can be removed in any future cleanup batch.
+- **Status**: **RESOLVED** — Directive 12.2.8, Batch 10 (commit `189fe0b2`). Lazy-loader stub removed. Remaining LATTI references: DB column names only (`tunedByLatti`, `managedByLottie`) — renaming requires migration.
 
 ### RISK-045: Schema Validator Defined But Call Site Unknown
 - **Severity**: LOW
@@ -1383,5 +1384,22 @@ Total removal: ~3,110 lines across 12 files in 1 batch.
 
 **Risks addressed:**
 - RISK-081 (LATTI residual fields) — No change (remains PARTIALLY RESOLVED)
+
+**Test baseline**: 800/81 (881 total) — unchanged
+
+---
+
+## DIRECTIVE 12.2.8 COMPLETION LOG (2026-02-27)
+
+**Directive 12.2.8: Wave 8 — Walter-Era Learning Services + Residual Cleanup — COMPLETE**
+
+Total removal: ~1,460 lines across 7 files in 1 batch.
+
+| Batch | Scope | Lines Removed | Commit |
+|-------|-------|---------------|--------|
+| Batch 10 | 3 dead services deleted (cognitive-interpreter.ts 589, event-broker.ts 247, phase-8.6.5-enhancements.ts 527). autonomy-controller.ts bug fixed (4 broken references). LATTi lazy-loader stub removed. [LATTIManager] log prefixes cleaned. 3 Walter storage methods removed. | ~1,460 | `189fe0b2` |
+
+**Risks resolved by this directive:**
+- RISK-044 (lazy-loader LATTI stub) — RESOLVED: Stub removed, only DB column names remain
 
 **Test baseline**: 800/81 (881 total) — unchanged

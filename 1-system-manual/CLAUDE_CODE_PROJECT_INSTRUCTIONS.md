@@ -3,7 +3,7 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-02-27 (after Batch 9B — Directives 12.2.9 + 12.2.2 governance, Frontend Dead Pages + MarketScanner COMPLETE, 11/18 directives done)
+> **Last Updated**: 2026-02-27 (after Batch 10B — Directive 12.2.8 governance, Walter-Era Learning Services + Residual Cleanup COMPLETE, 12/18 directives done)
 
 ---
 
@@ -359,6 +359,8 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 | — | Governance docs updated (12.2.1 COMPLETE) | Batch 8B | `8e6e18aa` |
 | 12.2.9 | Frontend Dead Pages — 6 orphaned pages deleted (~2,453 lines) | Batch 9 | `8b6bb540` |
 | 12.2.2 | MarketScanner Class Removal — legacy class removed (~637 lines), BUG-009 RESOLVED | Batch 9 | `8b6bb540` |
+| — | Governance docs updated (12.2.9 + 12.2.2 COMPLETE) | Batch 9B | `19e2c376` |
+| 12.2.8 | Walter-Era Learning Services — 3 dead services deleted, autonomy-controller bug fixed, RISK-044 RESOLVED | Batch 10 | `189fe0b2` |
 
 ### In-Progress Directives
 *None — all issued directives are COMPLETE.*
@@ -384,29 +386,30 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 | SNAPSHOT-015 | `8086264c` | After Batch 8 (Directive 12.2.1 COMPLETE) |
 | SNAPSHOT-016 | `8e6e18aa` | Pre-Batch 9 freeze (after Batch 8B governance) |
 | SNAPSHOT-017 | `8b6bb540` | After Batch 9 (Directives 12.2.9 + 12.2.2 COMPLETE) |
+| SNAPSHOT-018 | `19e2c376` | Pre-Batch 10 freeze (after Batch 9B governance) |
 
 ### Pending Directives (Phase 12)
-See `directives/DIRECTIVE_INDEX.md` for the full list. 7 remaining:
+See `directives/DIRECTIVE_INDEX.md` for the full list. 6 remaining:
 - 12.1.6 (LSP Error Triage)
-- 12.2.5, 12.2.6, 12.2.8 (Dead Code Purge — 3 remaining)
+- 12.2.5, 12.2.6 (Dead Code Purge — 2 remaining)
 - 12.3.1 through 12.3.3 (Pipeline Unification)
-- Note: 12.2.1 (Wave 1), 12.2.2 (MarketScanner), 12.2.3 (Walter/Bob/Cortex), 12.2.4 (Frontend Walter), 12.2.7 (NLAI), and 12.2.9 (Frontend Dead Pages) are all COMPLETE
+- Note: 12.2.1, 12.2.2, 12.2.3, 12.2.4, 12.2.7, 12.2.8, and 12.2.9 are all COMPLETE — dead code purge is nearly done
 
 ### Investigation Notes for Future Batches
 - **12.2.1**: ~~Wave 1 Safe Deletions~~ **COMPLETE** (Batch 8). 2 files deleted (dhma.ts, latti-safety-monitor.tsx). 11 files surgically modified. ~1,254 lines removed. LATTi lazy-loader stub (RISK-044) remains — can be cleaned in a future batch.
 - **12.2.2**: ~~MarketScanner Class Removal~~ **COMPLETE** (Batch 9). MarketScanner class removed (~637 lines). collectAdaptiveBatch + diagnostic buffers preserved. 5 consuming files cleaned. BUG-009 RESOLVED.
 - **12.2.3**: ~~Wave 3 Walter/Bob/Cortex~~ **COMPLETE** (Batches 5-7). ~17,100 lines across ~65 files.
+- **12.2.8**: ~~Walter-Era Learning Services~~ **COMPLETE** (Batch 10). 3 dead services deleted (cognitive-interpreter, event-broker, phase-8.6.5-enhancements, ~1,363 lines). autonomy-controller bug fixed. RISK-044 RESOLVED. Walter storage methods removed.
 - **12.2.9**: ~~Frontend Dead Pages~~ **COMPLETE** (Batch 9). 6 dead pages deleted (~2,453 lines). Stale History import removed from App.tsx.
 - **12.2.6 (Wave 4.5)**: Goal Alignment gate is FULLY OPERATIONAL — blocks trades below 75% alignment score. NOT deprecated. Needs explicit Kyle decision before removal.
-- **12.2.8 (Wave 8)**: Walter-era Learning Services. Scope much smaller than expected. Only `cognitive-interpreter.ts` (dead stub) and parts of `phase-8.6.5-enhancements.ts` are removable. 6 other learning services are ACTIVE. Bug found: `autonomy-controller.ts:1087` calls non-existent method.
 - **12.1.6 (LSP Error Triage)** — ~620 errors from Replit audit are LOW severity. Most are type annotation gaps, not logic bugs. Not recommended for near-term batches.
-- **Walter peripheral references**: 2 read-only DB references remain in routes.ts (walterActions table in health-summary, getWalterActivity in diagnostics export). Return empty data. Can be cleaned in schema cleanup.
-- **LATTi remaining residuals**: `lazy-loader.ts` LATTI stub (lines 37-40, RISK-044). DB column names (`tunedByLatti`, `managedByLottie`) preserved — renaming requires migration. `adaptive-guardrails.ts` still active (LATTI adaptive tuning system, not dead code).
+- **Walter peripheral references**: 2 read-only DB references remain in routes.ts (walterActions table in health-summary, getWalterActivity in diagnostics export). Return empty data. Storage method implementations removed in Batch 10.
+- **LATTi remaining residuals**: DB column names (`tunedByLatti`, `managedByLottie`) preserved — renaming requires migration. `adaptive-guardrails.ts` still active (LATTI adaptive tuning system, not dead code). Lazy-loader stub removed (RISK-044 RESOLVED, Batch 10).
 
 ### Test Baseline
 - **800 pass / 81 fail** (881 total across test files)
 - 20 pre-existing TSC errors in files not modified by any directive
-- Baseline history: 816/81 (Batches 1-4) → 809/81 (Batch 5, 7 Walter tests removed) → 802/81 (Batch 6, 7 more Walter tests removed) → 800/81 (Batch 7, 4 Bob tests removed from diagnostic-system.test.ts, 2 tests net from learning-cycle-service deletion) → 800/81 (Batches 8-9, no test changes)
+- Baseline history: 816/81 (Batches 1-4) → 809/81 (Batch 5, 7 Walter tests removed) → 802/81 (Batch 6, 7 more Walter tests removed) → 800/81 (Batch 7, 4 Bob tests removed from diagnostic-system.test.ts, 2 tests net from learning-cycle-service deletion) → 800/81 (Batches 8-10, no test changes)
 
 ---
 

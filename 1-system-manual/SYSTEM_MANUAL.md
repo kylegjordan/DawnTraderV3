@@ -5657,7 +5657,7 @@ This engine manages **behavioral tendency weights for AI agents**, not **trading
 ### Evidence for Legacy Classification
 
 1. **Imports from `learning-bob`** — Bob agent module
-2. **Imports from `phase-8.6.5-enhancements`** — Paper→Live knowledge transfer (Walter-era)
+2. ~~**Imports from `phase-8.6.5-enhancements`**~~ — **DELETED** (Batch 10, Directive 12.2.8)
 3. **Generates "Cognitive Summary Reports"** — Walter's conversational intelligence
 4. **24-hour analysis cycle** of "learning fragments" from Learning Bob
 5. **Feeds to `feedbackIntegrationService`** — Walter's feedback integration
