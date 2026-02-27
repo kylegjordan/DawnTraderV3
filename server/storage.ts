@@ -678,10 +678,7 @@ export interface IStorage {
   upsertSystemContext(data: Partial<InsertSystemContext> & { tradingMode: 'live' | 'paper' }): Promise<SystemContext>;
   updateSystemContext(mode: 'live' | 'paper', updates: Partial<SystemContext>): Promise<SystemContext>;
   
-  // Walter Actions methods (Phase 27.F)
-  getWalterActions(userId: string, mode: 'live' | 'paper', filters?: { status?: string; source?: string; limit?: number }): Promise<WalterAction[]>;
-  getWalterActionById(actionId: string, userId: string, mode: 'live' | 'paper'): Promise<WalterAction | undefined>;
-  updateWalterAction(actionId: string, userId: string, mode: 'live' | 'paper', updates: Partial<WalterAction>): Promise<WalterAction>;
+  // Directive 12.2.8: Walter Actions methods removed (Batch 10) — zero callers after Walter removal
   
   // Execution Config methods (Phase 27.F.20)
   getExecutionConfigs(userId: string, mode: 'live' | 'paper'): Promise<ExecutionConfig[]>;
@@ -4157,87 +4154,7 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
   
-  // Walter Actions methods (Phase 27.F: Autonomous Maintenance System)
-  async getWalterActions(
-    userId: string,
-    mode: 'live' | 'paper',
-    filters?: { status?: string; source?: string; limit?: number }
-  ): Promise<WalterAction[]> {
-    let baseQuery = db
-      .select()
-      .from(walterActions)
-      .where(and(
-        eq(walterActions.userId, userId),
-        eq(walterActions.mode, mode)
-      ));
-    
-    // Apply status filter if provided
-    if (filters?.status) {
-      baseQuery = db
-        .select()
-        .from(walterActions)
-        .where(and(
-          eq(walterActions.userId, userId),
-          eq(walterActions.mode, mode),
-          eq(walterActions.status, filters.status)
-        ));
-    }
-    
-    // Apply source filter if provided
-    if (filters?.source) {
-      baseQuery = db
-        .select()
-        .from(walterActions)
-        .where(and(
-          eq(walterActions.userId, userId),
-          eq(walterActions.mode, mode),
-          filters.status ? eq(walterActions.status, filters.status) : sql`true`,
-          eq(walterActions.source, filters.source)
-        ));
-    }
-    
-    const actions = await baseQuery
-      .orderBy(desc(walterActions.createdAt))
-      .limit(filters?.limit || 50);
-    
-    return actions;
-  }
-  
-  async getWalterActionById(
-    actionId: string,
-    userId: string,
-    mode: 'live' | 'paper'
-  ): Promise<WalterAction | undefined> {
-    const [action] = await db
-      .select()
-      .from(walterActions)
-      .where(and(
-        eq(walterActions.id, actionId),
-        eq(walterActions.userId, userId),
-        eq(walterActions.mode, mode)
-      ));
-    
-    return action || undefined;
-  }
-  
-  async updateWalterAction(
-    actionId: string,
-    userId: string,
-    mode: 'live' | 'paper',
-    updates: Partial<WalterAction>
-  ): Promise<WalterAction> {
-    const [updated] = await db
-      .update(walterActions)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(and(
-        eq(walterActions.id, actionId),
-        eq(walterActions.userId, userId),
-        eq(walterActions.mode, mode)
-      ))
-      .returning();
-    
-    return updated;
-  }
+  // Directive 12.2.8: Walter Actions methods removed (Batch 10) — zero callers after Walter removal
   
   // Execution Config methods (Phase 27.F.20: Auto-Execution Settings)
   async getExecutionConfigs(userId: string, mode: 'live' | 'paper'): Promise<ExecutionConfig[]> {

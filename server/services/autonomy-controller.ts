@@ -1084,8 +1084,8 @@ class AutonomyControllerService {
       const startTime = performance.now();
 
       // 1. Get learning summary for all agents
-      const learningSummary = await learningBridge.getLearningStats();
-      const agentsToCalibrate = ['DevOps', 'FullStack', 'UX', 'TradingBob'];
+      const learningSummary = await learningBridge.generateLearningSummary();
+      const agentsToCalibrate = ['DevOps', 'FullStack', 'UX'];
       
       let insightsArchived = 0;
       let agentsCalibrated = 0;
@@ -1093,9 +1093,9 @@ class AutonomyControllerService {
 
       // 2. For each major agent, analyze performance and calibrate
       for (const agentName of agentsToCalibrate) {
-        const agentStats = learningSummary.byAgent.find(a => a.agentName === agentName);
+        const agentStats = learningSummary.agentMetrics.find(a => a.agentName === agentName);
         
-        if (!agentStats || agentStats.total === 0) {
+        if (!agentStats || agentStats.feedbackCount === 0) {
           console.log(`[AutonomyController] Skipping ${agentName} - no learning data`);
           continue;
         }

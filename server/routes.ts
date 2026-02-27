@@ -9612,7 +9612,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         
         // Reset baseline and portfolio state
         const systemContext = await storage.getSystemContext('paper');
-        console.log('[LATTIManager] Retrieved system context for mode: paper');
+        console.log('[PaperSimReset] Retrieved system context for mode: paper');
         
         // Phase 27.F.14.M: Reset portfolio balance for paper mode using updatePortfolioBalance
         await storage.updatePortfolioBalance({ mode: 'paper', balance });
@@ -9845,7 +9845,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Reset portfolio state for paper mode
       const systemContext = await storage.getSystemContext('paper');
-      console.log('[LATTIManager] Retrieved system context for mode: paper');
+      console.log('[PaperSimReset] Retrieved system context for mode: paper');
       await storage.upsertPortfolioState({
         globalContextId: systemContext!.id,
         mode: 'paper',

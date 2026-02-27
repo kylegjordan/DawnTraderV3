@@ -34,11 +34,7 @@ export async function lazyLoadServices() {
         }
       })(),
 
-      // Directive 11.8B-B: LATTIManager and LottieOversight removed - parallel adaptive systems eliminated
-      (async () => {
-        console.log('[Lazy] [11.8B-B] LATTi system fully removed - Predictive Learning is single authority');
-        return null;
-      })(),
+      // Directive 11.8B-B: LATTIManager and LottieOversight removed (Directive 12.2.8, Batch 10)
       
       // Audit Report Generation (one-time task)
       (async () => {
