@@ -481,11 +481,11 @@
 
 ## Layer 11: Legacy (Active but Pending Removal)
 
-### 11.1 MarketScanner Class — ACTIVE LEGACY
-- **File**: `server/services/market-scanner.ts` (class, lines ~385-1013)
-- **What**: Legacy 10-minute scanner. Started via `startHourlyScanning()` in routes.ts line 371.
-- **Blast Radius**: **MEDIUM** — runs parallel to FX5, doubles Kraken API load (BUG-009)
-- **Removal**: Phase 12.2.2 (preserve `collectAdaptiveBatch()` only)
+### 11.1 ~~MarketScanner Class~~ — REMOVED (Directive 12.2.2, Batch 9)
+- **File**: `server/services/market-scanner.ts` — class **REMOVED** (commit `8b6bb540`)
+- **What**: Legacy 10-minute scanner. Was started via `startHourlyScanning()` in routes.ts.
+- **Blast Radius**: **NONE** — removed. `collectAdaptiveBatch()` and diagnostic buffers preserved.
+- **Status**: COMPLETE — BUG-009 RESOLVED. Only FX5 Scanner runs now.
 
 ### 11.2 NGC / Rolling Normalization — CONTAMINATION SOURCE
 - **File**: `server/services/quality_index.ts`

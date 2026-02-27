@@ -24,14 +24,14 @@
 | Directive | Title | Status | Date Issued | Date Complete | Review Cycles | Notes |
 |-----------|-------|--------|-------------|---------------|---------------|-------|
 | 12.2.1 | Wave 1: Safe Deletions | COMPLETE | 2026-02-27 | 2026-02-27 | 1 | Batch 8 — LATTi residuals + DHMA orphan + expectedDuration. 2 files deleted, 11 files modified, ~1,254 lines removed. |
-| 12.2.2 | Wave 1.5: MarketScanner Class Removal | PENDING | — | — | — | Preserve collectAdaptiveBatch |
+| 12.2.2 | Wave 1.5: MarketScanner Class Removal | COMPLETE | 2026-02-27 | 2026-02-27 | 1 | Batch 9 — MarketScanner class removed (~637 lines), collectAdaptiveBatch preserved. 5 consuming files cleaned. BUG-009 RESOLVED. |
 | 12.2.3 | Wave 3: Walter/Bob/Cortex Removal | COMPLETE | 2026-02-24 | 2026-02-26 | 1 | Sub-Batch A (Batch 5): 9 Walter files deleted. Sub-Batch B (Batch 6): Walter importers + frontend + routes cleaned. Sub-Batch C (Batch 7): Bob+Cortex ecosystems removed. ~17,100 lines across ~65 files. |
 | 12.2.4 | Wave 3.1: Frontend Walter Cleanup | COMPLETE | 2026-02-24 | 2026-02-26 | 1 | Absorbed into 12.2.3 Sub-Batch B (Batch 6). 5 frontend files deleted, App.tsx + sidebar.tsx modified. |
 | 12.2.5 | Wave 4: Friction Model Unification | PENDING | — | — | — | — |
-| 12.2.6 | Wave 4.5: Goal Alignment Removal | PENDING | — | — | — | — |
+| 12.2.6 | Wave 4.5: Goal Alignment Removal | PENDING | — | — | — | Investigation revealed gate is FULLY OPERATIONAL — needs Kyle decision |
 | 12.2.7 | Wave 4.7: NLAI System Removal | COMPLETE | 2026-02-24 | 2026-02-24 | 1 | Batch 4 — 5 files deleted, 6 files modified, ~2,147 lines removed |
-| 12.2.8 | Wave 8: Walter-Era Learning Services | PENDING | — | — | — | 5+ files |
-| 12.2.9 | Wave 9: Frontend Dead Code | PENDING | — | — | — | 7 dead pages |
+| 12.2.8 | Wave 8: Walter-Era Learning Services | PENDING | — | — | — | Scope reduced: only cognitive-interpreter.ts + parts of phase-8.6.5-enhancements.ts are dead |
+| 12.2.9 | Wave 9: Frontend Dead Code | COMPLETE | 2026-02-27 | 2026-02-27 | 1 | Batch 9 — 6 dead pages deleted (~2,453 lines), stale History import removed from App.tsx. |
 
 ### 12.3 Pipeline Unification
 
@@ -47,10 +47,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Directives Issued | 9 |
-| Total Directives Complete | 9 |
+| Total Directives Issued | 11 |
+| Total Directives Complete | 11 |
 | Total Directives In Progress | 0 |
-| Total Review Cycles | 9 |
+| Total Review Cycles | 11 |
 | Average Review Cycles per Directive | 1.00 |
 
 ---

@@ -356,6 +356,7 @@
   - Wasted computation (10-min scanner evaluates pairs FX5 already evaluates every 30s with better filtering)
 - **Verified**: Yes — code-confirmed 2026-02-16. Initial Phase 3 audit incorrectly stated MarketScanner was "believed to be disconnected." ChatGPT flagged this assumption; grep verification proved it is actively instantiated and started in production boot sequence.
 - **Fix**: Stop instantiating MarketScanner class in `server/routes.ts`. Remove `startHourlyScanning()` call. Remove from `startup.ts` service list. The `collectAdaptiveBatch()` function in the same file must NOT be removed.
+- **Status**: **RESOLVED** — Directive 12.2.2, Batch 9 (commit `8b6bb540`). MarketScanner class removed. Only FX5 Scanner runs now.
 - **Timing**: Pre-MCE — standalone fix, zero dependencies on MCE
 - **Phase Found**: Phase 3 (ChatGPT review correction)
 
@@ -1361,5 +1362,26 @@ Total removal: ~1,254 lines across 13 files in 1 batch.
 **Risks addressed by this directive:**
 - RISK-081 (LATTI residual fields) — PARTIALLY RESOLVED: ORM definitions removed, physical DB columns remain
 - RISK-044 (lazy-loader LATTI stub) — UPDATED: All other LATTI residuals removed; lazy-loader stub (2 lines) remains
+
+**Test baseline**: 800/81 (881 total) — unchanged
+
+---
+
+## DIRECTIVE 12.2.9 + 12.2.2 COMPLETION LOG (2026-02-27)
+
+**Directive 12.2.9: Wave 9 — Frontend Dead Pages — COMPLETE**
+**Directive 12.2.2: Wave 1.5 — MarketScanner Class Removal — COMPLETE**
+
+Total removal: ~3,110 lines across 12 files in 1 batch.
+
+| Batch | Scope | Lines Removed | Commit |
+|-------|-------|---------------|--------|
+| Batch 9 | 6 frontend pages deleted (admin.tsx, analysis.tsx, command-center.tsx, history.tsx, search.tsx, settings-old-backup.tsx). MarketScanner class removed from market-scanner.ts (~637 lines). 5 consuming files cleaned (routes.ts, market-scan-task.ts, startup.ts, status.ts, App.tsx). | ~3,110 | `8b6bb540` |
+
+**Bugs resolved by this directive:**
+- BUG-009 (Two Parallel Scanning Systems) — RESOLVED: MarketScanner class removed, only FX5 Scanner runs
+
+**Risks addressed:**
+- RISK-081 (LATTI residual fields) — No change (remains PARTIALLY RESOLVED)
 
 **Test baseline**: 800/81 (881 total) — unchanged

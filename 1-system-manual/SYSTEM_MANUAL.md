@@ -2705,10 +2705,10 @@ This capture is fire-and-forget (`.catch(() => {})`) — scanning never blocks o
 
 ---
 
-## 16. ⚠️ CRITICAL: MarketScanner Class — NOT Dead, Runs In Parallel With FX5
+## 16. ~~MarketScanner Class~~ — REMOVED (Directive 12.2.2, Batch 9)
 
-**File**: `server/services/market-scanner.ts` — class `MarketScanner` (lines 385-1013)
-**Status**: LEGACY — but **ACTIVELY RUNNING IN PRODUCTION** (BUG-009)
+**File**: `server/services/market-scanner.ts` — class `MarketScanner` **REMOVED** (Batch 9, commit `8b6bb540`)
+**Status**: REMOVED — MarketScanner class deleted. `collectAdaptiveBatch()` and diagnostic buffers preserved. BUG-009 RESOLVED.
 
 **ChatGPT review correction**: The initial Phase 3 audit stated this class was "believed to be disconnected from boot sequence." Code verification proves this wrong:
 
@@ -2767,7 +2767,7 @@ Additionally imported by:
 |------|-------|--------|------|
 | `server/services/central-clock.ts` | ~100+ | ACTIVE (LOCKED) | 1-second tick source for all timing |
 | `server/services/fx5-scanner.ts` | 887 | ACTIVE (LOCKED) | 30-second scanner, post-processing, pool gate |
-| `server/services/market-scanner.ts` | 1,364 | MIXED | `collectAdaptiveBatch()` = ACTIVE; `MarketScanner` class = LEGACY |
+| `server/services/market-scanner.ts` | 726 | ACTIVE | `collectAdaptiveBatch()` + diagnostic buffers only. MarketScanner class REMOVED (Batch 9). |
 | `server/services/adaptive-scan-manager.ts` | 405 | ACTIVE | Batch composition: Ideal/Rotational pools, failure tracker |
 | `server/services/adaptive-ratio-manager.ts` | 298 | ACTIVE | Dynamic pool ratio based on performance telemetry |
 | `server/services/active-filter-pool.ts` | 413 | ACTIVE | In-memory 5-min TTL holding pool |
@@ -2802,6 +2802,7 @@ Additionally imported by:
   - **Wasted computation**: 10-minute scanner evaluates pairs that FX5 already evaluates every 30 seconds, but with less sophisticated filtering (no adaptive ratio, no failure tracking, no IMF metrics)
 - **Verified**: Yes — code-confirmed 2026-02-16 (ChatGPT review prompted verification)
 - **Fix**: Stop instantiating MarketScanner class in `server/routes.ts`. Remove `startHourlyScanning()` call. Remove from `startup.ts` service list. The `collectAdaptiveBatch()` function in the same file must NOT be removed.
+- **Status**: **RESOLVED** — Directive 12.2.2, Batch 9 (commit `8b6bb540`). Class removed, consuming files cleaned.
 - **Timing**: Pre-MCE — this is a standalone fix. The legacy scanner adds API load and potential signal conflicts with zero benefit.
 - **Phase Found**: Phase 3 (ChatGPT review correction)
 
@@ -8409,17 +8410,17 @@ Every authenticated route is wrapped in a `<Profiler>` component via `ProfiledRo
 
 ## 14. Dead Code & Dead Pages
 
-### Dead/Unrouted Pages (7 files, 2,771 total lines)
+### Dead/Unrouted Pages (1 remaining, was 7 files)
 
 | File | Lines | Superseded By | Status |
 |------|-------|---------------|--------|
-| `walter-approvals.tsx` | 366 | Walter Approvals tab in `settings.tsx` | Dead — not in router |
-| `history.tsx` | 253 | Trade History tab in `active-trades.tsx` | Dead — imported in App.tsx but never rendered |
-| `admin.tsx` | 303 | Users tab in `settings.tsx` | Dead — not in router |
-| `search.tsx` | 187 | Search & Analysis tab in `watchlist.tsx` | Dead — not in router |
-| `command-center.tsx` | 901 | Absorbed into `ai-transparency.tsx` | Dead — not in router |
-| `analysis.tsx` | 512 | Never wired into router | Dead — unique stock search features lost |
-| `settings-old-backup.tsx` | 249 | Current `settings.tsx` | Dead — explicit backup file |
+| `walter-approvals.tsx` | 366 | Walter Approvals tab in `settings.tsx` | Dead — not in router. ~~Deleted in Batch 6 (Directive 12.2.3)~~ |
+| ~~`history.tsx`~~ | ~~253~~ | ~~Trade History tab in `active-trades.tsx`~~ | **DELETED** — Batch 9 (Directive 12.2.9) |
+| ~~`admin.tsx`~~ | ~~303~~ | ~~Users tab in `settings.tsx`~~ | **DELETED** — Batch 9 (Directive 12.2.9) |
+| ~~`search.tsx`~~ | ~~187~~ | ~~Search & Analysis tab in `watchlist.tsx`~~ | **DELETED** — Batch 9 (Directive 12.2.9) |
+| ~~`command-center.tsx`~~ | ~~901~~ | ~~Absorbed into `ai-transparency.tsx`~~ | **DELETED** — Batch 9 (Directive 12.2.9) |
+| ~~`analysis.tsx`~~ | ~~512~~ | ~~Never wired into router~~ | **DELETED** — Batch 9 (Directive 12.2.9) |
+| ~~`settings-old-backup.tsx`~~ | ~~249~~ | ~~Current `settings.tsx`~~ | **DELETED** — Batch 9 (Directive 12.2.9) |
 
 ### Orphaned Route
 
@@ -8429,7 +8430,7 @@ Every authenticated route is wrapped in a `<Profiler>` component via `ProfiledRo
 
 | File | Dead Import | Notes |
 |------|-------------|-------|
-| `App.tsx` line 7 | `History` from `@/pages/history` | Imported but never rendered in any route |
+| ~~`App.tsx` line 7~~ | ~~`History` from `@/pages/history`~~ | **REMOVED** — Batch 9 (Directive 12.2.9) |
 | `active-trades.tsx` line 4 | `Watchlist` from `@/components/trading/watchlist` | Imported but never rendered in JSX |
 | `active-trades.tsx` | `useQuery` from `@tanstack/react-query` | Imported but never called |
 
