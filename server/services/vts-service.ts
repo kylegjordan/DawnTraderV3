@@ -27,7 +27,7 @@ import { getMarketProfiler, RegimeId } from './market-profiler';
 import { getRegimePerformanceTracker } from './regime-performance';
 import { getRewardEvaluator } from './reward-evaluator';
 import { SYSTEM_GUARDS } from '../config/system-guards.js';
-import { calculateFriction } from '../utils/analysis-utils.js';
+import { computeTotalRoundTripCost, getCachedCostMetrics } from '../core/math/cost-model.js';
 import { MLCalibrationService, setGetRecentTradesFn } from './ml-calibration';
 import { REGIMES } from '../config/canonical-regime-strategy-map.js';
 
@@ -315,8 +315,8 @@ export class VTSService extends EventEmitter {
     }
 
     const grossProfit = (exitPrice - entry) / entry;
-    const friction = calculateFriction(entry, exitPrice, 1);
-    const frictionRate = friction / entry;
+    const costMetrics = getCachedCostMetrics(signal.symbol);
+    const frictionRate = computeTotalRoundTripCost(costMetrics.fee, costMetrics.slippage, costMetrics.spread);
     const netProfit = grossProfit - frictionRate;
 
     const isLoss = netProfit <= 0;

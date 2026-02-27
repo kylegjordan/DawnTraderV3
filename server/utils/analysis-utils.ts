@@ -324,45 +324,6 @@ export function isTargetLockTriggered(
   return currentPrice >= targetPrice;
 }
 
-// ==========================================
-// Directive 9.9.A — Friction Standardization (DEPRECATED by Directive 12.1.2)
-// These functions used a flat-rate SYSTEM_GUARDS.BASE_FEE_SLIPPAGE model.
-// The canonical friction model is now computeTotalRoundTripCost() from cost-model.ts
-// which uses real per-pair fee/slippage/spread: (fee × 2) + (slippage × 2) + spread
-// ==========================================
-
-/**
- * @deprecated Directive 12.1.2: Use getCachedCostMetrics() + computeTotalRoundTripCost()
- * from server/core/math/cost-model.ts instead. This flat-rate model (BASE_FEE_SLIPPAGE)
- * is incorrect — it ignores actual per-pair fee, slippage, and spread data.
- *
- * Retained for backward compatibility only. Zero runtime callers as of Directive 12.1.2.
- */
-export function calculateFriction(
-  entry: number,
-  exit: number,
-  qty: number = 1
-): number {
-  const roundTripValue = (entry + exit) * qty;
-  const friction = roundTripValue * SYSTEM_GUARDS.BASE_FEE_SLIPPAGE;
-  return friction;
-}
-
-/**
- * @deprecated Directive 12.1.2: Use getCachedCostMetrics() + computeTotalRoundTripCost()
- * from server/core/math/cost-model.ts instead.
- */
-export function calculatePerUnitFriction(entry: number, exit: number): number {
-  return calculateFriction(entry, exit, 1);
-}
-
-/**
- * @deprecated Directive 12.1.2: Use getCachedCostMetrics() + computeTotalRoundTripCost()
- * from server/core/math/cost-model.ts instead.
- */
-export function getFrictionRate(): number {
-  return SYSTEM_GUARDS.BASE_FEE_SLIPPAGE;
-}
 
 /**
  * Directive 10.1.B: Calculate Trend Slope

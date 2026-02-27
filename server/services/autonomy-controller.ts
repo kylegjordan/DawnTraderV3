@@ -7,7 +7,6 @@ import { contextBridge } from './context-bridge';
 import { systemHealthMonitor } from './system-health-monitor';
 import { ExperienceMemoryService } from './experience-memory';
 import { AdaptiveObjectiveEngine } from './adaptive-objective-engine';
-import { AlignmentVerifier } from './alignment-verifier';
 import { strategicPlannerService } from './strategic-planner';
 import { continuousLearningEngine } from './continuous-learning';
 import { collaborationManager } from './collaboration-manager';
@@ -67,12 +66,10 @@ class AutonomyControllerService {
   // Phase 9.0: Adaptive Learning Services
   private experienceMemory: ExperienceMemoryService;
   private adaptiveEngine: AdaptiveObjectiveEngine;
-  private alignmentVerifier: AlignmentVerifier;
 
   constructor() {
     this.experienceMemory = new ExperienceMemoryService(contextBridge);
     this.adaptiveEngine = new AdaptiveObjectiveEngine(contextBridge);
-    this.alignmentVerifier = new AlignmentVerifier(contextBridge);
   }
 
   /**
@@ -676,27 +673,6 @@ class AutonomyControllerService {
   ): Promise<void> {
     for (const action of actions) {
       try {
-        // Phase 9.0: Verify action against alignment policies before execution
-        // REB 8.8.3-KS-FINAL: Use 'operational' policy type (valid enum value)
-        const verification = await this.alignmentVerifier.verifyAction({
-          actionType: action,
-          actionParams: { userId, parentRunId },
-          policyType: 'operational',
-          requestedBy: 'AutonomyController'
-        });
-
-        if (!verification.approved) {
-          console.warn(
-            `[AutonomyController] ⛔ Action blocked by alignment verifier: ${action}`,
-            `\n  Rationale: ${verification.rationale}`,
-            `\n  Score: ${verification.alignmentScore.toFixed(2)}`
-          );
-          continue; // Skip this action
-        }
-
-        console.log(
-          `[AutonomyController] ✅ Action verified: ${action} (score: ${verification.alignmentScore.toFixed(2)})`
-        );
 
         switch (action) {
           case 'trigger_health_investigation':

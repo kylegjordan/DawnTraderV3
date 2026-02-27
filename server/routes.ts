@@ -18163,157 +18163,17 @@ Please:
     }
   });
 
-  // ===== PHASE 9.0: ADAPTIVE LEARNING & ALIGNMENT ROUTES =====
-
-  // Verify action alignment
-  apiRouter.post('/alignment/verify', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
-    try {
-      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
-      const { AlignmentVerifier } = await import('./services/alignment-verifier');
-      const { contextBridge } = await import('./services/context-bridge');
-      
-      const verifier = new AlignmentVerifier(contextBridge);
-      
-      const { actionType, actionParams, policyType, requestedBy } = req.body;
-      
-      if (!actionType || !policyType) {
-        return res.status(400).json({ error: 'actionType and policyType are required' });
-      }
-      
-      const result = await verifier.verifyAction({
-        actionType,
-        actionParams: actionParams || {},
-        policyType,
-        requestedBy: requestedBy || req.user?.username || 'unknown',
-        mode
-      });
-      
-      res.json({ ok: true, verification: result });
-    } catch (error: any) {
-      console.error('[Alignment] Verification failed:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Get verification history
-  apiRouter.get('/alignment/history', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
-    try {
-      const { AlignmentVerifier } = await import('./services/alignment-verifier');
-      const { contextBridge } = await import('./services/context-bridge');
-      
-      const verifier = new AlignmentVerifier(contextBridge);
-      const limit = parseInt(req.query.limit as string) || 20;
-      
-      const history = await verifier.getVerificationHistory(limit);
-      
-      res.json({ ok: true, history });
-    } catch (error: any) {
-      console.error('[Alignment] History fetch failed:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Trigger experience synthesis
-  apiRouter.post('/alignment/synthesize', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
-    try {
-      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
-      const { ExperienceMemoryService } = await import('./services/experience-memory');
-      const { contextBridge } = await import('./services/context-bridge');
-      
-      const experienceMemory = new ExperienceMemoryService(contextBridge);
-      
-      const result = await experienceMemory.synthesizeExperiences(mode);
-      
-      res.json({ ok: true, synthesis: result });
-    } catch (error: any) {
-      console.error('[Alignment] Synthesis failed:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Get recent experience insights
-  apiRouter.get('/alignment/experiences', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
-    try {
-      const { ExperienceMemoryService } = await import('./services/experience-memory');
-      const { contextBridge } = await import('./services/context-bridge');
-      
-      const experienceMemory = new ExperienceMemoryService(contextBridge);
-      const limit = parseInt(req.query.limit as string) || 20;
-      
-      const experiences = await experienceMemory.getRecentExperiences(limit);
-      
-      res.json({ ok: true, experiences });
-    } catch (error: any) {
-      console.error('[Alignment] Experience fetch failed:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Evaluate performance drift
-  apiRouter.post('/alignment/evaluate-drift', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
-    try {
-      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
-      const { AdaptiveObjectiveEngine } = await import('./services/adaptive-objective-engine');
-      const { contextBridge } = await import('./services/context-bridge');
-      
-      const adaptiveEngine = new AdaptiveObjectiveEngine(contextBridge);
-      
-      const drift = await adaptiveEngine.evaluatePerformanceDrift(mode);
-      
-      res.json({ ok: true, drift });
-    } catch (error: any) {
-      console.error('[Alignment] Drift evaluation failed:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Get current alignment profile
-  apiRouter.get('/alignment/profile', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
-    try {
-      const { AdaptiveObjectiveEngine } = await import('./services/adaptive-objective-engine');
-      const { contextBridge } = await import('./services/context-bridge');
-      
-      const adaptiveEngine = new AdaptiveObjectiveEngine(contextBridge);
-      
-      const profile = await adaptiveEngine.getCurrentProfile();
-      
-      res.json({ ok: true, profile });
-    } catch (error: any) {
-      console.error('[Alignment] Profile fetch failed:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Get alignment adjustment history
-  apiRouter.get('/alignment/adjustments', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
-    try {
-      const { AdaptiveObjectiveEngine } = await import('./services/adaptive-objective-engine');
-      const { contextBridge } = await import('./services/context-bridge');
-      
-      const adaptiveEngine = new AdaptiveObjectiveEngine(contextBridge);
-      const limit = parseInt(req.query.limit as string) || 10;
-      
-      const adjustments = await adaptiveEngine.getAdjustmentHistory(limit);
-      
-      res.json({ ok: true, adjustments });
-    } catch (error: any) {
-      console.error('[Alignment] Adjustment history fetch failed:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
 
   // Phase 9.2: Strategic Plan Management
   apiRouter.post('/strategic/plans', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       const { strategicPlannerService } = await import('./services/strategic-planner');
-      const { strategicPolicyGuard } = await import('./services/strategic-policy-guard');
       
       const plan = await strategicPlannerService.createPlan(req.user!.id, req.body, mode);
       
-      const validation = await strategicPolicyGuard.validateStrategicPlan(plan.planId, req.user!.id, mode);
       
-      res.json({ ok: true, plan, validation });
+      res.json({ ok: true, plan });
     } catch (error: any) {
       console.error('[Strategic] Plan creation failed:', error);
       res.status(500).json({ error: error.message });
@@ -18369,20 +18229,7 @@ Please:
     try {
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       const { strategicPlannerService } = await import('./services/strategic-planner');
-      const { strategicPolicyGuard } = await import('./services/strategic-policy-guard');
       
-      if (req.body.status === 'active') {
-        const enforcement = await strategicPolicyGuard.enforceGuardrails(
-          'activate_plan',
-          { planId: req.params.planId, alignmentScore: 0.8 },
-          req.user!.id,
-          mode
-        );
-        
-        if (!enforcement.allowed) {
-          return res.status(403).json({ error: enforcement.reason });
-        }
-      }
       
       const plan = await strategicPlannerService.updatePlanStatus(
         req.params.planId,
@@ -18444,19 +18291,7 @@ Please:
     try {
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       const { continuousLearningEngine } = await import('./services/continuous-learning');
-      const { strategicPolicyGuard } = await import('./services/strategic-policy-guard');
       
-      const validation = await strategicPolicyGuard.validateWeightAdjustment(
-        req.params.profileId,
-        req.body.weights,
-        req.body.rationale,
-        req.user!.id,
-        mode
-      );
-      
-      if (!validation.approved) {
-        return res.status(403).json({ error: 'Weight adjustment rejected', violations: validation.violations });
-      }
       
       const profile = await continuousLearningEngine.adjustWeights(
         req.params.profileId,
@@ -18466,7 +18301,7 @@ Please:
         mode
       );
       
-      res.json({ ok: true, profile, validation });
+      res.json({ ok: true, profile });
     } catch (error: any) {
       console.error('[Learning] Weight adjustment failed:', error);
       res.status(500).json({ error: error.message });
@@ -18510,19 +18345,6 @@ Please:
     }
   });
 
-  // Phase 9.2: Policy Compliance
-  apiRouter.get('/strategic/compliance', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
-    try {
-      const { strategicPolicyGuard } = await import('./services/strategic-policy-guard');
-      
-      const status = await strategicPolicyGuard.getComplianceStatus(req.user!.id);
-      
-      res.json({ ok: true, status });
-    } catch (error: any) {
-      console.error('[Strategic] Compliance status fetch failed:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
 
   // Phase 9.3: Strategic Simulation & Memory
   apiRouter.post('/simulation/run', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {

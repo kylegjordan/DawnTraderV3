@@ -420,7 +420,7 @@ export function validateROIThresholdBounds(
  * 
  * Mathematical Foundation (now delegated to net-expectancy-kernel.ts):
  * - RawEV = (Pwin × DistTarget) - (Ploss × DistStop)
- * - Friction = calculateFriction(entry, exit, qty) via canonical helper
+ * - Friction = computeTotalRoundTripCost(fee, slippage, spread) via canonical cost-model
  * - NetEV = RawEV - Friction
  * - Pwin = 0.40 + (DI / 200), capped at 0.60
  * - Score = normalize(netEV / risk) × DI × (1 - VolNoise) × (1 - ρ̄)

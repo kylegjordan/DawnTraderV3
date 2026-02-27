@@ -3159,41 +3159,6 @@ export const alignmentPolicies = pgTable("alignment_policies", {
   isActiveIdx: index("alignment_policies_is_active_idx").on(table.isActive),
 }));
 
-// Phase 9.0: Alignment Audit Log - Verification Results
-export const alignmentAuditLog = pgTable("alignment_audit_log", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  auditId: varchar("audit_id", { length: 50 }).notNull().unique(),
-  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
-  verificationResult: alignmentVerificationResultEnum("verification_result").notNull(),
-  proposedChange: jsonb("proposed_change").notNull(), // The change being validated
-  violatedPolicies: text("violated_policies").array().default(sql`ARRAY[]::text[]`),
-  alignmentScore: doublePrecision("alignment_score"), // 0-1 score for how aligned the change is
-  recommendations: text("recommendations").array().default(sql`ARRAY[]::text[]`),
-  metadata: jsonb("metadata"),
-}, (table) => ({
-  auditIdIdx: index("alignment_audit_log_audit_id_idx").on(table.auditId),
-  timestampIdx: index("alignment_audit_log_timestamp_idx").on(table.timestamp),
-  verificationResultIdx: index("alignment_audit_log_verification_result_idx").on(table.verificationResult),
-}));
-
-// Phase 9.5: Value Alignment Matrix - Objective to Value Category Mapping
-// Phase 3B: Migrated from user_id to mode for single-tenant architecture
-export const valueAlignmentMatrix = pgTable("value_alignment_matrix", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  mode: tradingModeEnum("mode").notNull(), // Phase 3B: Replaced user_id with mode
-  objectiveName: varchar("objective_name").notNull(),
-  valueCategory: valueCategoryEnum("value_category").notNull(),
-  alignmentScore: doublePrecision("alignment_score").notNull(),
-  weighting: doublePrecision("weighting").default(1.0).notNull(),
-  constraints: jsonb("constraints"),
-  lastEvaluated: timestamp("last_evaluated", { withTimezone: true }),
-  metadata: jsonb("metadata"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-}, (table) => ({
-  modeObjectiveIdx: index("value_alignment_matrix_mode_objective_idx").on(table.mode, table.objectiveName),
-  valueCategoryIdx: index("value_alignment_matrix_value_category_idx").on(table.valueCategory),
-}));
 
 // Phase 9.0: Goal Alignment Profile - Current Objectives and Weights
 export const goalAlignmentProfile = pgTable("goal_alignment_profile", {
@@ -3831,7 +3796,6 @@ export const insertMetaReasoningLogSchema = createInsertSchema(metaReasoningLog)
 export const insertAwarenessStateLogSchema = createInsertSchema(awarenessStateLog).omit({ id: true, timestamp: true });
 export const insertExperienceMemoryLogSchema = createInsertSchema(experienceMemoryLog).omit({ id: true, timestamp: true });
 export const insertAlignmentPolicySchema = createInsertSchema(alignmentPolicies).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertAlignmentAuditLogSchema = createInsertSchema(alignmentAuditLog).omit({ id: true, timestamp: true });
 export const insertGoalAlignmentProfileSchema = createInsertSchema(goalAlignmentProfile).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertStrategicPlanLogSchema = createInsertSchema(strategicPlanLog).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertLearningWeightProfileSchema = createInsertSchema(learningWeightProfile).omit({ id: true, createdAt: true, updatedAt: true });
@@ -3919,8 +3883,6 @@ export type ExperienceMemoryLog = typeof experienceMemoryLog.$inferSelect;
 export type InsertAlignmentPolicy = z.infer<typeof insertAlignmentPolicySchema>;
 export type AlignmentPolicy = typeof alignmentPolicies.$inferSelect;
 
-export type InsertAlignmentAuditLog = z.infer<typeof insertAlignmentAuditLogSchema>;
-export type AlignmentAuditLog = typeof alignmentAuditLog.$inferSelect;
 
 export type InsertGoalAlignmentProfile = z.infer<typeof insertGoalAlignmentProfileSchema>;
 export type GoalAlignmentProfile = typeof goalAlignmentProfile.$inferSelect;
