@@ -1550,26 +1550,6 @@
     ]
   },
   {
-    "path": "/api/system/truth-check",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/system/truth-check/report",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "anonymous"
-    ]
-  },
-  {
     "path": "/api/context/refresh",
     "methods": [
       "POST"

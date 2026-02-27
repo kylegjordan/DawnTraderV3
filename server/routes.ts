@@ -9,7 +9,7 @@ import { sql, eq, and, desc } from "drizzle-orm";
 import { KrakenService } from "./services/kraken";
 import { TradingEngine, EngineSettingsBus } from "./services/trading-engine";
 import { AIAnalyst } from "./services/ai-analyst";
-import { MarketScanner, getPassiveLearningBuffer, getREB211DriftBuffer, getREB211IntegrityBuffer, getREB211TimingBuffer, getREB211MismatchBuffer, getREB211StressBuffer, getActiveAuditBuffer, getReb211bSymbolTraces } from "./services/market-scanner";
+import { getPassiveLearningBuffer, getREB211DriftBuffer, getREB211IntegrityBuffer, getREB211TimingBuffer, getREB211MismatchBuffer, getREB211StressBuffer, getActiveAuditBuffer, getReb211bSymbolTraces } from "./services/market-scanner";
 import { getPortfolioBalanceV2, buildSettingsFromGuardrails as buildSettingsFromModeLevel } from "./services/guardrail-settings";
 import { buildSettingsFromGuardrails, checkGuardrailRisk, calculateRiskAmount, type TradeCandidate } from "./services/trade-safety";
 import { aiOpportunitiesService } from "./services/ai-opportunities";
@@ -77,7 +77,6 @@ export const loginLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-const marketScanner = new MarketScanner();
 const aiAnalyst = new AIAnalyst();
 
 // [41F-L.2] Trade test request schema
@@ -363,11 +362,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     });
   });
 
-  // Start market scanner after WebSocket is initialized (runs every 10 minutes)
-  // Run asynchronously to not block server startup
-  marketScanner.startHourlyScanning().catch((error) => {
-    console.error('[MarketScanner] Failed to start:', error);
-  });
 
   // REB 2.7: FX5Scanner now starts from server/startup/fx5-scanner-bootstrap.ts
   // Called early from server/index.ts BEFORE registerRoutes to ensure unconditional startup
@@ -4630,17 +4624,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     } catch (error) {
       console.error('Error fetching trading signals:', error);
       res.status(500).json({ error: 'Failed to fetch trading signals' });
-    }
-  });
-
-  // Market Data
-  apiRouter.get('/market/overview', async (req: AuthenticatedRequest, res) => {
-    try {
-      const overview = await marketScanner.getMarketOverview();
-      res.json(overview);
-    } catch (error) {
-      console.error('Error fetching market overview:', error);
-      res.status(500).json({ error: 'Failed to fetch market overview' });
     }
   });
 

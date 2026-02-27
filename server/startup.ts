@@ -32,8 +32,6 @@ export async function initializeServices() {
     // Trading Engine is initialized via tradingStateSync in main startup
     services.push('TradingEngine');
 
-    // Market Scanner (already auto-starts based on feature flags)
-    services.push('MarketScanner');
 
     // Context Bridge WebSocket (initialized in routes)
     services.push('ContextBridge');
@@ -54,7 +52,7 @@ export async function initializeServices() {
  * Phase 11 Predictive Learning is now the single authority
  */
 export function getInitializedServices(): string[] {
-  const services = ['PredictiveLearning', 'TradingEngine', 'MarketScanner'];
+  const services = ['PredictiveLearning', 'TradingEngine'];
   
   if (env.WALTER_DISABLED) {
     return services;

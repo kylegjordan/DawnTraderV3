@@ -37,12 +37,6 @@ export class MarketScanTask implements Omit<ScheduledTask, 'lastRun' | 'nextRun'
     try {
       console.log(`[MarketScan] Scanning ${mode} mode for user ${userId}...`);
       
-      // Import and run the actual market scanner's scan logic
-      const { MarketScanner } = await import('./market-scanner');
-      const scanner = new MarketScanner();
-      
-      // The market scanner's performScan is private, so we'll trigger it by calling its public scan method
-      // For now, just retrieve existing results - the MarketScanner already runs its own interval
       const results = await storage.getScreenerResults({ userId, mode, limit: 100 });
       
       console.log(`[MarketScan] Found ${results.length} eligible pairs for user ${userId} (${mode} mode)`);

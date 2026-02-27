@@ -53,7 +53,6 @@ statusRouter.get('/health', async (req, res) => {
         'LATTI',
         'GoalsEngine',
         'TradingEngine',
-        'MarketScanner',
         'ContextBridge',
       ],
       features: {
