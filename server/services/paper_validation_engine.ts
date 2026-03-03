@@ -12,8 +12,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { priceCache } from './price-cache';
 import { vtsService } from './vts-service';
-import { getDecisionConfidenceEngine } from './decision-confidence-engine';
-import { getGASPCoordinator } from './gasp-coordinator';
+// Phase 13: Removed L-series imports (decision-confidence-engine, gasp-coordinator)
 import { vtsModeAuditService } from './vts-mode-audit';
 import { getAdaptiveRelevance, getRollingNormalizerStats } from '../core/metrics/quality_index';
 
@@ -156,25 +155,15 @@ class PaperValidationEngine {
 
   private async captureMetrics(): Promise<void> {
     try {
-      const dce = getDecisionConfidenceEngine();
-      const dceContext = dce.getContextStability();
-      const dceStatus = dce.getStatus();
-      
+      // Phase 13: DCE and GASP removed (L-series legacy). Use deterministic defaults.
       const vtsParams = vtsService.getLearningParams();
       const vtsModeState = vtsModeAuditService.getState();
       const currentVtsMode = vtsModeState.mode;
-      
+
       const adaptiveParams = getAdaptiveRelevance();
       const normalizerStats = getRollingNormalizerStats();
-      
-      let gsi = vtsParams.gsi;
-      try {
-        const gaspCoordinator = getGASPCoordinator();
-        const gaspStatus = gaspCoordinator.getStatus();
-        gsi = gaspStatus.gsi;
-      } catch {
-        gsi = vtsParams.gsi || 0.85;
-      }
+
+      const gsi = vtsParams.gsi || 0.85;
 
       const cacheHealth = priceCache.getHealthMetrics();
 
@@ -185,19 +174,19 @@ class PaperValidationEngine {
         this.recordFeedLatency(fetchLatency);
       } catch {
       }
-      
+
       const avgLatency = this.getAverageLatency();
 
       const baseRisk = 2.5;
       const computedRisk = baseRisk + (vtsParams.learningRate * 5);
       const baseExposure = 25;
-      const computedExposure = baseExposure + (dceContext.volatilityIndex * 40);
+      const computedExposure = baseExposure + (0.5 * 40); // Phase 13: Default volatility index 0.5
 
-      const ngcValue = normalizerStats.ngc.initialized 
+      const ngcValue = normalizerStats.ngc.initialized
         ? (normalizerStats.ngc.min + normalizerStats.ngc.max) / 2
         : vtsParams.gsi || 0.6;
-      const cwqiValue = dceStatus.meanDI > 0 ? dceStatus.meanDI : 0.65;
-      const diValue = dceStatus.meanDI > 0 ? dceStatus.meanDI : 0.5;
+      const cwqiValue = 0.65; // Phase 13: DCE removed, use deterministic default
+      const diValue = 0.5; // Phase 13: DCE removed, use deterministic default
 
       const metrics: ValidationMetrics = {
         timestamp: new Date().toISOString(),

@@ -23,9 +23,7 @@ import { EventEmitter } from 'events';
 import fs from 'fs/promises';
 import path from 'path';
 import { loadCalibration, loadFullCalibration, calibrateFromTradesPerStrategy, type CalibrationCoefficients, type FullCalibration } from '../utils/calibration';
-import { getMarketProfiler, RegimeId } from './market-profiler';
-import { getRegimePerformanceTracker } from './regime-performance';
-import { getRewardEvaluator } from './reward-evaluator';
+// Phase 13: Removed L-series imports (market-profiler, regime-performance, reward-evaluator)
 import { SYSTEM_GUARDS } from '../config/system-guards.js';
 import { computeTotalRoundTripCost, getCachedCostMetrics } from '../core/math/cost-model.js';
 import { MLCalibrationService, setGetRecentTradesFn } from './ml-calibration';

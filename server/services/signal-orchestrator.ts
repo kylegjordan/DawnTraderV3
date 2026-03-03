@@ -80,6 +80,8 @@ import {
 } from '../config/canonical-regime-strategy-map.js';
 // Directive 11.4H Task 1: Symbol normalization at data ingress
 import { normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver.js';
+// Phase 13: Market Context Engine for centralized indicator + regime computation
+import { getMarketContextEngine } from './market-context-engine.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -801,8 +803,7 @@ export class SignalOrchestrator {
       
       console.log(`[9.3][ER] ${symbol}=${ER.toFixed(4)} VolNoise=${VolNoise.toFixed(4)}`);
       
-      // Directive 12.3.1: Canonical Regime from OHLC data via calculatePairRegime()
-      // Convert Kraken OHLC to OHLCData format for regime calculator
+      // Phase 13: Convert Kraken OHLC to OHLCData format for MCE
       const ohlcForRegime: OHLCData[] = ohlcData.map((c: any) => ({
         open: parseFloat(c.open || c[1]),
         high: parseFloat(c.high || c[2]),
@@ -812,45 +813,42 @@ export class SignalOrchestrator {
         timestamp: parseFloat(c.timestamp || c[0]) || Date.now()
       }));
 
-      const dss = getDynamicStrategySelector();
-      const regimeInfo = dss.getRegimeInfoFromOHLC(ohlcForRegime, VolNoise, trendSlope);
+      // Phase 13: EXTREME_NOISE veto (preserved from DSS, pre-filter before MCE)
+      if (VolNoise > SYSTEM_GUARDS.MAX_VOL_NOISE) {
+        console.log(`[Phase13][MCE] SKIP ${symbol}: Extreme Noise veto (volNoise=${VolNoise.toFixed(4)} > ${SYSTEM_GUARDS.MAX_VOL_NOISE})`);
+        return signals;
+      }
 
-      console.log(`[12.3.1][DSS] ${symbol}: regime=${regimeInfo.regime}, trendSlope=${trendSlope.toFixed(4)}, volNoise=${VolNoise.toFixed(4)}`);
-      
-      // Veto on Extreme Noise - skip all strategy evaluation for this symbol
-      if (regimeInfo.isVeto) {
-        console.log(`[10.1][DSS] SKIP ${symbol}: Extreme Noise veto (volNoise=${VolNoise.toFixed(4)} > 0.6)`);
-        return signals;
-      }
-      
-      // Directive 10.1: Get regime-allowed strategies from DSS
-      const regimeStrategies = this.getRegimeAllowedStrategies(regimeInfo.regime);
-      const activeStrategies = new Set(
-        [...this.enabledStrategies].filter(s => regimeStrategies.has(s))
-      );
-      
-      if (activeStrategies.size === 0) {
-        console.log(`[10.1][DSS] SKIP ${symbol}: No enabled strategies for regime ${regimeInfo.regime}`);
-        return signals;
-      }
-      
-      console.log(`[10.1][DSS] ${symbol}: activeStrategies=[${[...activeStrategies].join(',')}] for regime=${regimeInfo.regime}`);
-      
       // Use smoothed price for strategy evaluation
       const currentPrice = smoothedPrice;
 
-      const vwap = this.calculateVWAP(ohlcData);
-      const sma = this.calculateSMA(ohlcData, settings.smaLength || 20);
-      const high24h = Math.max(...ohlcData.slice(-24).map(c => parseFloat(c.high)));
-      const low24h = Math.min(...ohlcData.slice(-24).map(c => parseFloat(c.low)));
+      // Phase 13: MCE computes indicators + regime in a single pass
+      const mce = getMarketContextEngine();
+      const mceContext = mce.computeContext(symbol, ohlcForRegime, currentPrice, currentVolume, settings.smaLength || 20);
 
+      console.log(`[Phase13][MCE] ${symbol}: regime=${mceContext.regime.regime}, weight=${mceContext.regime.regimeWeight.toFixed(2)}, trendSlope=${trendSlope.toFixed(4)}, volNoise=${VolNoise.toFixed(4)}`);
+
+      // Phase 13: Strategy filtering from MCE regime (replaces DSS getRegimeAllowedStrategies)
+      const regimeStrategies = new Set(mceContext.regime.allowedStrategies);
+      const activeStrategies = new Set(
+        [...this.enabledStrategies].filter(s => regimeStrategies.has(s))
+      );
+
+      if (activeStrategies.size === 0) {
+        console.log(`[Phase13][MCE] SKIP ${symbol}: No enabled strategies for regime ${mceContext.regime.regime}`);
+        return signals;
+      }
+
+      console.log(`[Phase13][MCE] ${symbol}: activeStrategies=[${[...activeStrategies].join(',')}] for regime=${mceContext.regime.regime}`);
+
+      // Phase 13: Use MCE pre-computed indicators (eliminates duplicate VWAP/SMA)
       const indicators = {
-        vwap,
-        sma,
-        currentPrice,
-        volume: currentVolume,
-        high24h,
-        low24h,
+        vwap: mceContext.indicators.vwap,
+        sma: mceContext.indicators.sma,
+        currentPrice: mceContext.indicators.currentPrice,
+        volume: mceContext.indicators.volume,
+        high24h: mceContext.indicators.high24h,
+        low24h: mceContext.indicators.low24h,
       };
 
       const ohlcAsAny = ohlcData as any[];
@@ -1024,13 +1022,8 @@ export class SignalOrchestrator {
         }
       }
       
-      // Calculate ATR for stop/target placement
-      const atrPeriod = Math.min(14, candles.length);
-      let atr = 0;
-      if (candles.length >= atrPeriod) {
-        const ranges = candles.slice(-atrPeriod).map(c => c.high - c.low);
-        atr = ranges.reduce((a, b) => a + b, 0) / atrPeriod;
-      }
+      // Phase 13: ATR from MCE (proper True Range formula, replaces inline range average)
+      const atr = mceContext.indicators.atr;
       
       // ═══════════════════════════════════════════════════════════════
       // Directive 12.3.2: 8 New Strategy Evaluations

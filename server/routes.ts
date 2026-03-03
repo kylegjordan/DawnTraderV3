@@ -20167,45 +20167,8 @@ Please:
   apiRouter.use('/vts', vtsRouter.default);
   console.log('[L6] VTS routes mounted at /api/vts');
 
-  // Directive 8.8.4-L12: Mount Market Regime routes
-  const { marketRouter } = await import('./routes/market.js');
-  apiRouter.use('/market', marketRouter);
-  console.log('[L12] Market routes mounted at /api/market');
-
-  // Directive 8.8.4-L14: Mount RL (Reinforcement Learning) routes
-  const rlRouter = await import('./routes/rl.js');
-  apiRouter.use('/rl', rlRouter.default);
-  console.log('[L14] RL routes mounted at /api/rl');
-
-  // Directive 8.8.4-L15: Mount MACO (Multi-Agent Cooperative Optimizer) routes
-  const macoRouter = await import('./routes/maco.js');
-  apiRouter.use('/maco', macoRouter.default);
-  console.log('[L15] MACO routes mounted at /api/maco');
-
-  // Directive 8.8.4-L16: Mount DCE (Decision Confidence Engine) routes
-  const dceRouter = await import('./routes/dce.js');
-  apiRouter.use('/dce', dceRouter.default);
-  console.log('[L16] DCE routes mounted at /api/dce');
-
-  // Directive 8.8.4-L17: Mount APR-SLE (Adaptive Profit Realization & Stop-Loss Evolution) routes
-  const aprSleRouter = await import('./routes/apr-sle.js');
-  apiRouter.use('/apr-sle', aprSleRouter.default);
-  console.log('[L17] APR-SLE routes mounted at /api/apr-sle');
-
-  // Directive 8.8.4-L18: Mount PDC-ECS (Predictive Drawdown Containment & Equity Curve Smoothing) routes
-  const pdcEcsRouter = await import('./routes/pdc-ecs.js');
-  apiRouter.use('/pdc-ecs', pdcEcsRouter.default);
-  console.log('[L18] PDC-ECS routes mounted at /api/pdc-ecs');
-
-  // Directive 8.8.4-L19: Mount MOF (Meta-Optimization Framework) routes
-  const mofRouter = await import('./routes/mof.js');
-  apiRouter.use('/mof', mofRouter.default);
-  console.log('[L19] MOF routes mounted at /api/mof');
-
-  // Directive 8.8.4-L20: Mount GASP (Global Autonomy Stabilization Protocol) routes
-  const gaspRouter = await import('./routes/gasp.js');
-  apiRouter.use('/gasp', gaspRouter.default);
-  console.log('[L20] GASP routes mounted at /api/gasp');
+  // Phase 13: L12-L20 route mounts removed (legacy supervisory loop)
+  // Removed: /market, /rl, /maco, /dce, /apr-sle, /pdc-ecs, /mof, /gasp
 
   // Directive 8.8.4-M1: Mount Audit (Comprehensive System Audit & Validation) routes
   const auditRouter = await import('./routes/audit.js');
@@ -20222,10 +20185,7 @@ Please:
   apiRouter.use('/tlva', tlvaRouter.default);
   console.log('[M3A] TLVA routes mounted at /api/tlva');
 
-  // Directive 8.8.4-M3B: Mount M3B (Live Validation & Adaptive Coupling Audit) routes
-  const m3bRouter = await import('./routes/m3b.js');
-  apiRouter.use('/m3b', m3bRouter.default);
-  console.log('[M3B] Live Validation & Adaptive Coupling routes mounted at /api/m3b');
+  // Phase 13: M3B routes removed (legacy — m3b-validation-service deleted)
 
   // Directive 8.8.4-M3B.2: Mount VTS Audit (Passive Feed Integration & Mode Audit) routes
   const vtsAuditRouter = await import('./routes/vts-audit.js');

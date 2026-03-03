@@ -47,6 +47,8 @@ import { getCachedCostMetrics, computeNetGeometry } from '../core/math/cost-mode
 import { compareLatestSessions, savePaperSessionTrades, getPaperSessionTrades } from './vts-live-comparison-audit.js';
 import { SCORE_WEIGHTS } from '../config/score-weights.config.js';
 import { calculatePairRegime, getRegimeWeight, calculateRegimeScore, getNormalizedRegimeWithDetails } from '../core/metrics/market-regime.js';
+// Phase 13: Market Context Engine for centralized indicator + regime computation
+import { getMarketContextEngine } from './market-context-engine.js';
 import { 
   CANONICAL_REGIME_STRATEGY_MAP as REGIME_STRATEGY_MAP, 
   selectContextAwareStrategy,
@@ -305,9 +307,12 @@ async function generatePhase10Signal(
   pool: 'ideal' | 'rotational',
   strategyOverride?: StrategyDefinition
 ): Promise<{ signal: VirtualSignal; tradeRecord: Phase10TradeRecord } | null> {
-  const regimeResult = calculatePairRegime(ohlcData);
+  // Phase 13: MCE computes regime (uses cache from main loop call)
+  const mce = getMarketContextEngine();
+  const mceContext = mce.computeContext(symbol, ohlcData, priceData.price, 0);
+  const regimeResult = mceContext.raw;
   const regime = regimeResult.regime;
-  
+
   // Directive 11.5 Task 2: Z-Score normalization for regime classification
   const zScoreResult = getNormalizedRegimeWithDetails({
     adx: regimeResult.adx,
@@ -1094,8 +1099,10 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       // and simulate trades for ALL strategies mapped to that regime.
       // This generates N trades per pair (where N = regime-compatible strategy count).
       // ══════════════════════════════════════════════════════════════════════════════
-      const pairRegimeResult = calculatePairRegime(ohlcData);
-      const pairRegime = pairRegimeResult.regime as MarketRegimeType;
+      // Phase 13: MCE computes regime + indicators in a single pass (cached per symbol)
+      const mce = getMarketContextEngine();
+      const mceContext = mce.computeContext(pair.symbol, ohlcData, priceData.price, 0);
+      const pairRegime = mceContext.regime.regime as MarketRegimeType;
       const regimeStrategies = getStrategiesForRegime(pairRegime);
       
       if (regimeStrategies.length === 0) {

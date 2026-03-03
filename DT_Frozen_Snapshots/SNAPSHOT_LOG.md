@@ -198,6 +198,14 @@
 - **Rollback command**: `git reset --hard aa269823` (reverts to SNAPSHOT-020, before Batch 13)
 - **NOTE**: Replit checkpoint commit `67afdc1e` appeared before our official batch commit `4d8ef060`. The checkpoint contains all actual code changes (18 files, 5087 ins / 2414 del). The official batch commit only contains a trivial log file change. Platform behavior — expected and documented.
 
+### SNAPSHOT-022: Before Batch 14 (Phase 13 — MCE Installation + L12-L20 Legacy Removal)
+- **Date**: 2026-03-04
+- **Commit**: `589be749` (After Batch 13B governance)
+- **Branch**: `dawntrader-v4`
+- **Description**: Pre-batch freeze point for Batch 14. Phase 13 mega-batch: MCE (Market Context Engine) installation + full L12-L20 legacy cluster removal. Create 2 new files (market-context-engine.ts, market-context.ts types). Delete 29 legacy files (17 L-series services, 9 route files, 1 M-series service, 2 utilities). Modify ~9 files (signal-orchestrator.ts, strategy-engine.ts, vts-runner.ts, dynamic-strategy-selector.ts, autonomy-scheduler.ts, health.ts, routes.ts, paper_validation_engine.ts, vts-service.ts). MCE centralizes indicator computation (VWAP, SMA, ATR, volatility, momentum, ADX) + regime classification. PredictiveConfidence deferred to future batch.
+- **What comes next**: Batch 14 — MCE core build + pipeline wiring + L12-L20 removal (~29 files deleted, ~9 modified, 2 created)
+- **Rollback command**: `git reset --hard 589be749` (reverts to Batch 13B governance)
+
 ---
 
 *New snapshots added before each batch of changes.*
