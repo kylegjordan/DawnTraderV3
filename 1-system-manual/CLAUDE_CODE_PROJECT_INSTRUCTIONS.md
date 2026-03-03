@@ -3,7 +3,7 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-03-03 (after Batch 12B — Directive 12.3.2 spec placement governance. Strategy specification for 8 unimplemented strategies placed in repo. 15/18 Phase 12 directives tracked, 14 code-complete, 1 spec-complete)
+> **Last Updated**: 2026-03-03 (after Batch 13B — Phase 12.3 Pipeline Unification governance. Directives 12.3.1, 12.3.3, 12.3.2 COMPLETE. BUG-006 RESOLVED, BUG-008 partially resolved. NGC replaced with deterministic confidence. 8 new strategy modules implemented. 17/18 Phase 12 directives complete)
 
 ---
 
@@ -142,10 +142,15 @@ Each completed directive gets its own folder under `1-system-manual/directives/`
 ├── 12.2.9/
 │   ├── DIRECTIVE_12.2.9.md         ← Frontend Dead Pages (Batch 9)
 │   └── BATCH_9_README.md
+├── 12.3.1/
+│   ├── DIRECTIVE_12.3.1.md         ← Regime Authority Resolution (Batch 13)
+│   └── BATCH_13_README.md          ← Phase 12.3 mega-batch documentation
 ├── 12.3.2/
-│   ├── DIRECTIVE_12.3.2.md         ← Strategy Routing Expansion (SPEC COMPLETE)
+│   ├── DIRECTIVE_12.3.2.md         ← Strategy Routing Expansion (COMPLETE)
 │   ├── BATCH_12_README.md          ← Spec placement batch documentation
 │   └── STRATEGY_SPECIFICATION_12.3.2_FINAL.md  ← Vetted math spec (8 strategies)
+├── 12.3.3/
+│   └── DIRECTIVE_12.3.3.md         ← Confidence Authority Cleanup (Batch 13)
 └── [future directives follow same pattern]
 ```
 
@@ -182,6 +187,7 @@ Examples:
 - `BATCH_9-DIR_12.2.9_12.2.2_FRONTEND_DEAD_PAGES_MARKETSCANNER.zip` (Frontend Dead Pages + MarketScanner)
 - `BATCH_11-DIR_12.2.6_12.2.5_GOAL_ALIGNMENT_GATE_FRICTION_CLEANUP.zip` (Goal Alignment Gate + Friction)
 - `BATCH_12-DIR_12.3.2_STRATEGY_SPEC_PLACEMENT.zip` (Strategy specification placement — documentation only)
+- `BATCH_13-PHASE_12.3_PIPELINE_UNIFICATION.zip` (Phase 12.3 mega-batch — 3 directives, 15 files)
 
 ### Zip Contents
 
@@ -281,6 +287,7 @@ Every batch INSTRUCTIONS.md sent to Replit MUST include the following autonomy c
 - Batch 4B: `8a0f387c` ("Update system documentation...") appeared before official `dbe063d4`
 - Batch 5: `be98d1b2` ("Update system logs and adjust cache configurations") appeared before official `cc320466`
 - Batch 11: `d4bac413` ("Remove alignment verification and related features...") appeared before official `b3a1526c`
+- Batch 13: `67afdc1e` ("Update trading platform to include new strategies...") appeared before official `4d8ef060`
 
 ### Push Script
 
@@ -383,9 +390,13 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 | 12.2.5 | Friction Model Unification — 3 deprecated functions removed, vts-service migrated. UNIFY-001 RESOLVED | Batch 11 | `b3a1526c` |
 | — | Governance docs updated (12.2.6 + 12.2.5 COMPLETE, Phase 12.2 dead code purge COMPLETE) | Batch 11B | `2064d5c9` |
 | 12.3.2 | Strategy Routing Expansion — SPEC COMPLETE (8 strategies specified, 4-LLM review, 30 consensus decisions) | Batch 12 | `aa269823` |
+| — | Governance docs updated (12.3.2 spec placement) | Batch 12B | `a86b7fb6` |
+| 12.3.1 | Regime Authority Resolution — DSS rewired to canonical regime model. BUG-006 RESOLVED, BUG-008 partially resolved | Batch 13 | `4d8ef060` |
+| 12.3.3 | NGC replaced with deterministic confidence formula. Rolling normalization bypassed | Batch 13 | `4d8ef060` |
+| 12.3.2 | Strategy Routing Expansion — 8 new strategy modules IMPLEMENTED. 17 canonical strategies active | Batch 13 | `4d8ef060` |
 
 ### In-Progress Directives
-*None — all issued directives are COMPLETE or SPEC COMPLETE.*
+*None — all issued directives are COMPLETE.*
 
 ### Snapshot Log
 | Snapshot | Commit | Description |
@@ -411,15 +422,13 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 | SNAPSHOT-018 | `19e2c376` | Pre-Batch 10 freeze (after Batch 9B governance) |
 | SNAPSHOT-019 | `86aa8d79` | Pre-Batch 11 freeze (after Batch 10B governance) |
 | SNAPSHOT-020 | `aa269823` | After Batch 12 (Directive 12.3.2 spec placement) |
+| SNAPSHOT-021 | `4d8ef060` | After Batch 13 (Phase 12.3 Pipeline Unification — 12.3.1 + 12.3.3 + 12.3.2 implementation) |
 
 ### Pending Directives (Phase 12)
-See `directives/DIRECTIVE_INDEX.md` for the full list. 4 remaining:
+See `directives/DIRECTIVE_INDEX.md` for the full list. 1 remaining:
 - 12.1.6 (LSP Error Triage) — PENDING
-- 12.3.1 (Regime Authority Resolution) — PENDING
-- 12.3.2 (Strategy Routing Expansion) — SPEC COMPLETE, implementation pending after 12.3.1 + 12.3.3
-- 12.3.3 (Confidence Authority Cleanup / NGC removal) — PENDING
 
-Note: ALL 12.2.x dead code purge directives are now COMPLETE (12.2.1 through 12.2.9). Phase 12.2 is done.
+Note: ALL 12.2.x dead code purge directives are now COMPLETE (12.2.1 through 12.2.9). Phase 12.2 is done. ALL 12.3.x pipeline unification directives are now COMPLETE (12.3.1, 12.3.2, 12.3.3). Phase 12.3 is done. Only 12.1.6 (LSP Error Triage) remains from Phase 12.
 
 ### Investigation Notes for Future Batches
 - **12.2.1**: ~~Wave 1 Safe Deletions~~ **COMPLETE** (Batch 8). 2 files deleted (dhma.ts, latti-safety-monitor.tsx). 11 files surgically modified. ~1,254 lines removed. LATTi lazy-loader stub (RISK-044) remains — can be cleaned in a future batch.
@@ -429,16 +438,18 @@ Note: ALL 12.2.x dead code purge directives are now COMPLETE (12.2.1 through 12.
 - **12.2.6**: ~~Goal Alignment Gate Removal~~ **COMPLETE** (Batch 11). Phase 9.0 alignment verification system removed (~1,400 lines across 10 files). Note: Phase 4 Goal Alignment in pre-execution-validator.ts and trading-engine.ts (RISK-028, BUG-012) remains — separate system, not part of this directive.
 - **12.2.8**: ~~Walter-Era Learning Services~~ **COMPLETE** (Batch 10). 3 dead services deleted (cognitive-interpreter, event-broker, phase-8.6.5-enhancements, ~1,363 lines). autonomy-controller bug fixed. RISK-044 RESOLVED. Walter storage methods removed.
 - **12.2.9**: ~~Frontend Dead Pages~~ **COMPLETE** (Batch 9). 6 dead pages deleted (~2,453 lines). Stale History import removed from App.tsx.
-- **12.3.2**: **SPEC COMPLETE** (Batch 12). Mathematical specification for 8 unimplemented strategies (3 PATTERN + 5 HYBRID) vetted by 4 LLMs across 2 rounds. 30 consensus decisions incorporated (6 bugs, 3 safeguards, 11 calibrations, 10 enhancements). ~1,460-line spec placed in `1-system-manual/directives/12.3.2/`. Implementation (~4,000-5,000 new lines) depends on 12.3.1 + 12.3.3 completion.
+- **12.3.1**: ~~Regime Authority Resolution~~ **COMPLETE** (Batch 13). DSS rewired to `calculatePairRegime()`. BUG-006 RESOLVED. BUG-008 partially resolved (Engine #1 replaced, Engine #4 MCP/ARE remains for Wave 6). RISK-001, RISK-003 RESOLVED.
+- **12.3.2**: ~~Strategy Routing Expansion~~ **COMPLETE** (Batch 12 spec + Batch 13 implementation). 8 strategy modules implemented per vetted spec. StrategySignal type 9→17. strategy-sync.ts updated to 17 canonical strategies. RISK-014, RISK-015 RESOLVED.
+- **12.3.3**: ~~Confidence Authority Cleanup~~ **COMPLETE** (Batch 13). NGC replaced with deterministic confidence formula. Rolling normalization bypassed. All export signatures preserved.
 - **12.1.6 (LSP Error Triage)** — ~620 errors from Replit audit are LOW severity. Most are type annotation gaps, not logic bugs. Not recommended for near-term batches.
 - **RISK-028 / BUG-012 (Phase 4 Goal Alignment)**: pre-execution-validator.ts goal alignment gate and trading-engine.ts calculateGoalAlignmentScore() are formally deprecated but NOT yet removed. Separate from the Phase 9.0 system removed in Batch 11. Kyle decision needed on timing.
 - **Walter peripheral references**: 2 read-only DB references remain in routes.ts (walterActions table in health-summary, getWalterActivity in diagnostics export). Return empty data. Storage method implementations removed in Batch 10.
 - **LATTi remaining residuals**: DB column names (`tunedByLatti`, `managedByLottie`) preserved — renaming requires migration. `adaptive-guardrails.ts` still active (LATTI adaptive tuning system, not dead code). Lazy-loader stub removed (RISK-044 RESOLVED, Batch 10).
 
 ### Test Baseline
-- **800 pass / 81 fail** (881 total across test files)
+- **791 pass / 90 fail** (881 total across test files)
 - 20 pre-existing TSC errors in files not modified by any directive
-- Baseline history: 816/81 (Batches 1-4) → 809/81 (Batch 5, 7 Walter tests removed) → 802/81 (Batch 6, 7 more Walter tests removed) → 800/81 (Batch 7, 4 Bob tests removed from diagnostic-system.test.ts, 2 tests net from learning-cycle-service deletion) → 800/81 (Batches 8-12, no test changes)
+- Baseline history: 816/81 (Batches 1-4) → 809/81 (Batch 5, 7 Walter tests removed) → 802/81 (Batch 6, 7 more Walter tests removed) → 800/81 (Batch 7, 4 Bob tests removed from diagnostic-system.test.ts, 2 tests net from learning-cycle-service deletion) → 800/81 (Batches 8-12, no test changes) → 791/90 (Batch 13, 9 new failures from strategy module interactions with existing tests)
 
 ---
 

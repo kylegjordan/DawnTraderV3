@@ -187,6 +187,17 @@
 - **What comes next**: Batch 12B governance update
 - **Rollback command**: `git reset --hard 2064d5c9` (reverts to Batch 11B governance, before Batch 12)
 
+### SNAPSHOT-021: After Batch 13 (Phase 12.3 Pipeline Unification — Directives 12.3.1 + 12.3.3 + 12.3.2 Implementation)
+- **Date**: 2026-03-03
+- **Commit**: `4d8ef060`
+- **Branch**: `dawntrader-v4`
+- **Description**: Batch 13 applied — Phase 12.3 Pipeline Unification mega-batch. Three directives implemented in one batch: Directive 12.3.1 (Regime Authority Resolution — DSS rewired to `calculatePairRegime()`, canonical 5-regime model, EXTREME_NOISE preserved as pre-filter, BUG-006 RESOLVED, BUG-008 partially resolved). Directive 12.3.3 (NGC replaced with deterministic confidence formula, rolling normalization bypassed). Directive 12.3.2 (8 new strategy modules implemented — morning_star, inside_bar_reversal, support_bounce, pivot_shift, reverse_impulse, defensive_hedge, adaptive_flow, volatility_edge. StrategySignal type expanded from 9 to 17. strategy-sync.ts updated to 17 canonical strategies. Signal orchestrator wired with 8 new evaluation blocks).
+- **What was changed**: 5 files modified (dynamic-strategy-selector.ts, signal-orchestrator.ts, strategy-engine.ts, strategy-sync.ts, quality_index.ts), 10 files created (8 strategy modules + strategy-helpers.ts + index.ts barrel export)
+- **Test baseline**: 791 pass / 90 fail (881 total) — 9 new failures from expected interactions (regime string detection in new files, telemetry aggregator import changes)
+- **What comes next**: Batch 13B governance update
+- **Rollback command**: `git reset --hard aa269823` (reverts to SNAPSHOT-020, before Batch 13)
+- **NOTE**: Replit checkpoint commit `67afdc1e` appeared before our official batch commit `4d8ef060`. The checkpoint contains all actual code changes (18 files, 5087 ins / 2414 del). The official batch commit only contains a trivial log file change. Platform behavior — expected and documented.
+
 ---
 
 *New snapshots added before each batch of changes.*

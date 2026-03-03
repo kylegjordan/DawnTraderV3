@@ -184,12 +184,12 @@
 ### 4.1 Signal Orchestrator
 - **File**: `server/services/signal-orchestrator.ts`
 - **What**: Primary signal generation engine. Pulls pairs from Active Filter Pool, generates signals using regime-compatible strategies, applies exposure/correlation/cooldown checks, computes FinalScore and EV gate.
-- **Upstream**: Active Filter Pool (pairs), Market Regime (regime classification), Cost Model (friction), NGC/quality_index (confidence — contaminated), SYSTEM_GUARDS config, OHLC close prices (for DI)
+- **Upstream**: Active Filter Pool (pairs), Market Regime (regime classification via `calculatePairRegime()`), Cost Model (friction), quality_index (deterministic confidence — NGC replaced), SYSTEM_GUARDS config, OHLC close prices (for DI)
 - **Downstream**: SQE (scored signals), RTB Queue (qualified signals), VTS Runner (mirrors scoring logic), Telemetry (signal metadata)
-- **Shared State**: SYSTEM_GUARDS config, DI calculation (~~BUG-004~~ **RESOLVED**), NGC confidence (contamination)
+- **Shared State**: SYSTEM_GUARDS config, DI calculation (~~BUG-004~~ **RESOLVED**), deterministic confidence (~~NGC contamination~~ **RESOLVED** — Directive 12.3.3)
 - **Execution**: **Event-driven** — triggered when pairs enter Active Filter Pool
 - **Blast Radius**: **CRITICAL** — every signal in the system flows through here
-- **Contamination**: ~~NGC→DI (BUG-004)~~ **RESOLVED**, ~~dual friction (RISK-009)~~ **RESOLVED**, legacy DSS routing (BUG-006)
+- **Contamination**: ~~NGC→DI (BUG-004)~~ **RESOLVED**, ~~dual friction (RISK-009)~~ **RESOLVED**, ~~legacy DSS routing (BUG-006)~~ **RESOLVED** (Directive 12.3.1)
 - **Tests**: `signal-scoring.test.ts`, `runtime_signal_consistency.test.ts`, `finalScore-kernel.test.ts`
 
 ### 4.2 Signal Quality Evaluator (SQE)
@@ -220,24 +220,24 @@
 
 ## Layer 5: Regime Classification
 
-### 5.1 calculatePairRegime() — CANONICAL
+### 5.1 calculatePairRegime() — CANONICAL (ACTIVE)
 - **File**: `server/core/metrics/market-regime.ts`
 - **What**: Canonical pair-level regime classification. 5 regimes (BULL_STABLE, BEAR_VOLATILE, LOW_VOL_CHOP, HIGH_VOL_IMPULSE, TRANSITION). Uses volatility, momentum, ADX.
 - **Upstream**: OHLC price data
-- **Downstream**: VTS Runner (heavy use), Diagnostic 11.4G, Signal Orchestrator (intended — not yet wired via DSS)
+- **Downstream**: VTS Runner (heavy use), Diagnostic 11.4G, Signal Orchestrator (via DSS — **WIRED**, Directive 12.3.1)
 - **Execution**: Synchronous — called per pair
 - **Blast Radius**: **HIGH** — regime determines strategy selection
-- **Note**: This is the INTENDED authority. DSS does not yet call it (BUG-006).
+- **Status**: **ACTIVE** — sole pair-level regime authority for both VTS and active trading (~~BUG-006~~ RESOLVED, Batch 13).
 
-### 5.2 DSS Legacy Engine — LEGACY
-- **File**: `server/services/dynamic-strategy-selector.ts` (~214 lines)
-- **What**: Legacy 6-regime / 9-quant-only classifier. Uses raw volNoise + trendSlope thresholds.
-- **Upstream**: analysis-utils (volNoise, trendSlope)
-- **Downstream**: Signal Orchestrator (ACTIVE trading path — this is what's actually used)
-- **Shared State**: `SYSTEM_GUARDS.STRATEGY_MAP` (legacy 9-strategy map)
+### 5.2 DSS — REWIRED (Directive 12.3.1)
+- **File**: `server/services/dynamic-strategy-selector.ts` (~270 lines, rewritten)
+- **What**: ~~Legacy 6-regime / 9-quant-only classifier.~~ Canonical regime classifier via `calculatePairRegime()`. 5 regimes, 17 strategies. EXTREME_NOISE pre-filter preserved (volNoise > 0.6).
+- **Upstream**: OHLC price data (via Signal Orchestrator), analysis-utils (volNoise for EXTREME_NOISE veto)
+- **Downstream**: Signal Orchestrator (ACTIVE trading path — canonical regime + strategy routing)
+- **Shared State**: `CANONICAL_REGIME_STRATEGY_MAP` (17-strategy canonical map)
 - **Execution**: Synchronous — called per signal
-- **Blast Radius**: **CRITICAL** — this IS the active regime authority (until replaced)
-- **Contamination**: Legacy map, 6 regimes instead of 5, 9 strategies instead of 17
+- **Blast Radius**: **HIGH** — regime determines strategy selection (now using canonical model)
+- **Status**: **ACTIVE** — rewired from legacy to canonical (~~BUG-006~~ RESOLVED, Batch 13, commit `4d8ef060`)
 
 ### 5.3 MCP/ARE — HIGH-IMPACT LEGACY CLUSTER
 - **Files**: `server/services/market-profiler.ts`, `server/services/adaptive-regime.ts`
@@ -487,11 +487,11 @@
 - **Blast Radius**: **NONE** — removed. `collectAdaptiveBatch()` and diagnostic buffers preserved.
 - **Status**: COMPLETE — BUG-009 RESOLVED. Only FX5 Scanner runs now.
 
-### 11.2 NGC / Rolling Normalization — CONTAMINATION SOURCE
-- **File**: `server/services/quality_index.ts`
-- **What**: NGC flows as confidence carrier throughout pipeline. ~~DI derived from NGC (BUG-004)~~ **RESOLVED** — DI now uses geometric price data.
-- **Blast Radius**: **CRITICAL** (contamination spreads to every signal)
-- **Removal**: Phase 12.3.3
+### 11.2 NGC / Rolling Normalization — ~~CONTAMINATION SOURCE~~ **REPLACED** (Directive 12.3.3)
+- **File**: `server/core/metrics/quality_index.ts`
+- **What**: ~~NGC flows as confidence carrier throughout pipeline.~~ NGC computation replaced with deterministic confidence formula (Directive 12.3.3, Batch 13). Formula: `(stratConf * 0.60) + ((1-vol) * 0.20) + ((1-risk) * 0.20)`. Rolling normalization infrastructure preserved but bypassed. Function signatures maintained for backward compatibility.
+- **Blast Radius**: ~~**CRITICAL**~~ **LOW** — deterministic, no contamination path
+- **Removal**: ~~Phase 12.3.3~~ **NGC REPLACED**. Full file removal deferred to MCE (PredictiveConfidence replaces entire quality_index.ts).
 
 ### 11.3 ~~Walter~~/Bob/Cortex — ~70 FILES (was ~96; Walter fully removed in Sub-Batches A+B)
 - **What**: AI assistant ecosystem. Cortex is ACTIVE (in-memory cache, 15-min analytics). **Walter fully removed** (Sub-Batches A+B: 19 Walter backend files + 1 middleware + 5 frontend files + ancillary docs deleted, 13 consuming files surgically modified, 28 Walter route handlers excised from routes.ts). corpus-domain-service.ts stubbed pending Cortex cleanup. Bob modules + Cortex remain.

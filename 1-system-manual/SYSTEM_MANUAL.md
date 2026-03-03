@@ -93,9 +93,9 @@ Quick reference: which components are authoritative, which are contaminated, and
 ### Contaminated / Legacy (Do Not Build On)
 | Component | Status | Problem |
 |-----------|--------|---------|
-| **quality_index.ts (NGC)** | LEGACY | Confidence carrier throughout pipeline. Must be replaced, not extended. |
+| **quality_index.ts (NGC)** | ~~LEGACY~~ **REPLACED** | ~~Confidence carrier throughout pipeline. Must be replaced, not extended.~~ NGC replaced with deterministic confidence formula (Directive 12.3.3, Batch 13). Function signatures preserved for backward compatibility. Full file removal deferred to MCE. |
 | **SYSTEM_GUARDS friction** | ~~LEGACY~~ **RESOLVED** | ~~Flat 0.5% fee — bypasses real cost model.~~ Directive 12.1.2: All runtime friction now uses `computeTotalRoundTripCost()`. ~~Deprecated functions remain for dead code purge (Wave 4).~~ Deprecated functions **REMOVED** (Directive 12.2.5, Batch 11). |
-| **DSS volNoise/trendSlope classifier** | LEGACY | 6-regime / 9-quant-only. Must be replaced with canonical map. |
+| **DSS volNoise/trendSlope classifier** | ~~LEGACY~~ **REPLACED** | ~~6-regime / 9-quant-only. Must be replaced with canonical map.~~ DSS rewired to `calculatePairRegime()` with canonical 5-regime / 17-strategy map (Directive 12.3.1, Batch 13). EXTREME_NOISE preserved as pre-filter. |
 | **MCP/ARE ecosystem** | LEGACY (Kyle confirmed) | High-Impact Legacy Cluster. 14+ consumers, own strategy matrix, own regime taxonomy. Remove in Wave 6. |
 | ~~NLAI system~~ | ~~LEGACY~~ **REMOVED** | Directive 12.2.7: All 5 NLAI files deleted, 6 consumer files cleaned. Commit `5d5c2051`. |
 | **Goal Alignment system** | LEGACY (PARTIALLY REMOVED) | Phase 9.0 alignment verification system **REMOVED** (Directive 12.2.6, Batch 11). Phase 4 Goal Alignment in pre-execution-validator.ts and trading-engine.ts **REMAINS** (RISK-028, BUG-012). |
@@ -116,11 +116,11 @@ Quick reference: which components are authoritative, which are contaminated, and
 
 Legacy systems are not isolated files — they form interconnected clusters that must be removed together. Full removal details are in LEGACY_DEPRECATION_PLAN.md.
 
-### Cluster 1: NGC / CWQI / Rolling Normalization
+### Cluster 1: NGC / CWQI / Rolling Normalization — **NGC REPLACED** (Directive 12.3.3)
 - **Core files**: `quality_index.ts`, rolling normalization infrastructure
-- **Contamination**: NGC flows as confidence carrier → ~~DI~~ → kernel. ~~DI path~~ **RESOLVED** by Directive 12.1.1 (BUG-004). NGC still contaminates confidence/FinalScore pipeline.
-- **Removal**: Phase 12.3.3 (Pipeline Unification — replace with interim deterministic confidence)
-- **Risk level**: HIGH — must be replaced, not just removed
+- **Contamination**: ~~NGC flows as confidence carrier → DI → kernel.~~ ~~DI path~~ **RESOLVED** by Directive 12.1.1 (BUG-004). ~~NGC still contaminates confidence/FinalScore pipeline.~~ **NGC REPLACED** with deterministic confidence formula (Directive 12.3.3, Batch 13, commit `4d8ef060`). Formula: `(stratConf * 0.60) + ((1-vol) * 0.20) + ((1-risk) * 0.20)`. Rolling normalization infrastructure preserved but bypassed.
+- **Removal**: ~~Phase 12.3.3~~ **COMPLETE** — NGC computation replaced. Full quality_index.ts file removal deferred to MCE (when PredictiveConfidence replaces the entire file).
+- **Risk level**: ~~HIGH~~ **LOW** — deterministic formula in place, no legacy contamination path
 
 ### Cluster 2: MCP/ARE + Autonomy Layer (High-Impact)
 - **Core files**: `market-profiler.ts`, `adaptive-regime.ts`, autonomy-scheduler, action-executor, MOF/MACO/ECS/GASP coordinators
@@ -134,11 +134,11 @@ Legacy systems are not isolated files — they form interconnected clusters that
 - **Removal**: ~~Wave 3~~ Walter DONE. Wave 3 Bob+Cortex remaining. Waves 3.1 (DONE — absorbed into Batch 6), 4.5 pending. Phase 12.2 — pre-MCE cleanup.
 - **Risk level**: MODERATE — Bob+Cortex remain, mostly disconnected from trading pipeline
 
-### Cluster 4: DSS Legacy Regime Engine
-- **Core files**: `dynamic-strategy-selector.ts` (214 lines)
-- **Contamination**: Active trading path routes through legacy 6-regime / 9-quant map instead of canonical 5-regime / 17-strategy map
-- **Removal**: Phase 12.3.1 (Pipeline Unification — rewire to canonical map)
-- **Risk level**: HIGH — this IS the active trading path
+### Cluster 4: DSS Legacy Regime Engine — **REPLACED** (Directive 12.3.1)
+- **Core files**: `dynamic-strategy-selector.ts` (~270 lines, rewritten)
+- **Contamination**: ~~Active trading path routes through legacy 6-regime / 9-quant map~~ **RESOLVED** — DSS now calls `calculatePairRegime()` and uses `CANONICAL_REGIME_STRATEGY_MAP` with 5 regimes and 17 strategies.
+- **Removal**: ~~Phase 12.3.1~~ **COMPLETE** — DSS rewired (Batch 13, commit `4d8ef060`)
+- **Risk level**: ~~HIGH~~ **LOW** — canonical regime model active
 
 ### Cluster 5: L-Series Systems
 - **Core files**: ~13 L-Series modules + ~52 route endpoints + ~57 database tables + ~40 enums
@@ -1718,7 +1718,7 @@ Per-strategy performance metrics: cumulative P/L, rolling Sharpe (7-day), max dr
 Event logging with severity levels (INFO/WARNING/CRITICAL). In-memory buffer, max 1000 alerts.
 
 ### Strategy Sync (111 lines)
-Ensures all core strategies exist in strategy_settings on startup. **Note**: Currently syncs only the 8 quant strategies — does NOT include pattern or hybrid strategies. Must be updated when canonical map is wired.
+Ensures all core strategies exist in strategy_settings on startup. ~~**Note**: Currently syncs only the 8 quant strategies — does NOT include pattern or hybrid strategies. Must be updated when canonical map is wired.~~ **Updated** (Directive 12.3.2, Batch 13): Now syncs all 17 canonical strategies (9 quant + 3 pattern + 5 hybrid).
 
 ### Strategy Signal Audit Engine (160 lines)
 **⚠️ LEGACY**: Recomputes NGC/CWQI/DI using stale formulas that don't match the pipeline. Since NGC is legacy (Kyle-confirmed), this engine's purpose is questionable. See CHANGES_AND_FIXES.md RISK-011.

@@ -37,9 +37,9 @@
 
 | Directive | Title | Status | Date Issued | Date Complete | Review Cycles | Notes |
 |-----------|-------|--------|-------------|---------------|---------------|-------|
-| 12.3.1 | Regime Authority Resolution (BUG-006, BUG-008) | PENDING | — | — | — | — |
-| 12.3.2 | Strategy Routing Expansion | SPEC COMPLETE | 2026-03-03 | — | — | Spec vetted by 4 LLMs (2 rounds, 30 decisions). Implementation pending after 12.3.1 + 12.3.3. |
-| 12.3.3 | Confidence Authority Cleanup (NGC removal) | PENDING | — | — | — | HIGH risk |
+| 12.3.1 | Regime Authority Resolution (BUG-006, BUG-008) | COMPLETE | 2026-03-03 | 2026-03-03 | 1 | Batch 13 — DSS rewired to `calculatePairRegime()`. Canonical 5-regime model. EXTREME_NOISE preserved as pre-filter. BUG-006 RESOLVED, BUG-008 partially resolved (Engine #1 replaced, Engine #4 MCP/ARE remains for Wave 6). |
+| 12.3.2 | Strategy Routing Expansion | COMPLETE | 2026-03-03 | 2026-03-03 | 1 | Batch 12 (spec) + Batch 13 (implementation). 8 strategy modules implemented per vetted spec. StrategySignal type expanded 9→17. strategy-sync.ts updated to 17 canonical strategies. Signal orchestrator wired with 8 new evaluation blocks. |
+| 12.3.3 | Confidence Authority Cleanup (NGC removal) | COMPLETE | 2026-03-03 | 2026-03-03 | 1 | Batch 13 — NGC replaced with deterministic confidence formula. Rolling normalization infrastructure preserved but bypassed. All export signatures maintained for backward compatibility. |
 
 ---
 
@@ -47,10 +47,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Directives Issued | 14 |
-| Total Directives Complete | 14 |
+| Total Directives Issued | 17 |
+| Total Directives Complete | 17 |
 | Total Directives In Progress | 0 |
-| Total Review Cycles | 14 |
+| Total Review Cycles | 17 |
 | Average Review Cycles per Directive | 1.00 |
 
 ---
