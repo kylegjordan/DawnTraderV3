@@ -41,23 +41,18 @@
 - **Fix**: Wire VTS to real Strategy Engine or MCE-provided indicators
 - **Phase Found**: Pre-audit (v1.0)
 
-### BUG-002: Active Trading Path Uses Legacy DSS Regime Model
-- **Severity**: CRITICAL
-- **Location**: `server/services/dynamic-strategy-selector.ts`
-- **Problem**: Uses `SYSTEM_GUARDS.STRATEGY_MAP` (6 regimes, 9 quant) instead of canonical map (5 regimes, 17 strategies)
-- **Impact**: 8 of 17 canonical strategies unreachable
-- **Verified**: Yes
-- **Timing**: During MCE (MCE-4 phase)
-- **Fix**: Replace DSS with canonical regime classification + canonical map lookup
+### ~~BUG-002~~: Active Trading Path Uses Legacy DSS Regime Model — **RESOLVED**
+- **Severity**: ~~CRITICAL~~ **RESOLVED** (Directive 12.3.1 Batch 13 `4d8ef060` + Phase 13 Batch 14 `8f26369a`)
+- **Location**: `server/services/dynamic-strategy-selector.ts`, `server/services/signal-orchestrator.ts`
+- **Problem**: ~~Uses `SYSTEM_GUARDS.STRATEGY_MAP` (6 regimes, 9 quant) instead of canonical map (5 regimes, 17 strategies)~~ DSS rewired to `calculatePairRegime()` in Batch 13. Signal orchestrator now uses MCE (`computeContext()`) for regime + indicators in Batch 14. All 17 strategies reachable.
+- **Resolution**: Batch 13 rewired DSS to canonical map. Batch 14 installed MCE as centralized regime/indicator service — signal orchestrator calls `MCE.computeContext()` instead of DSS for regime. `CANONICAL_REGIME_STRATEGY_MAP` is the sole strategy routing authority.
 - **Phase Found**: Pre-audit (v1.0)
 
-### BUG-003: Signal Orchestrator Legacy Strategy Map
-- **Severity**: CRITICAL
-- **Location**: `signal-orchestrator.ts` — `getRegimeAllowedStrategies()`
-- **Problem**: Reads from `SYSTEM_GUARDS.STRATEGY_MAP`, complementary layer to DSS both using legacy source
-- **Verified**: Yes
-- **Timing**: During MCE (MCE-3 phase)
-- **Fix**: Replace with canonical map lookup
+### ~~BUG-003~~: Signal Orchestrator Legacy Strategy Map — **RESOLVED**
+- **Severity**: ~~CRITICAL~~ **RESOLVED** (Directive 12.3.1 Batch 13 `4d8ef060` + Phase 13 Batch 14 `8f26369a`)
+- **Location**: `signal-orchestrator.ts`
+- **Problem**: ~~Reads from `SYSTEM_GUARDS.STRATEGY_MAP`, complementary layer to DSS both using legacy source~~ Signal orchestrator now uses `mceContext.regime.allowedStrategies` from MCE, which looks up strategies via `CANONICAL_REGIME_STRATEGY_MAP`. Legacy `getRegimeAllowedStrategies()` no longer called for regime routing.
+- **Resolution**: Batch 13 wired DSS to canonical map. Batch 14 replaced DSS regime call + inline VWAP/SMA with MCE's `computeContext()`. Strategy filtering now uses MCE's pre-computed `allowedStrategies`.
 - **Phase Found**: Pre-audit (v1.0)
 
 ### BUG-004: DI Probability Divergence — NGC Masquerading as Directional Integrity — **RESOLVED**
@@ -91,11 +86,10 @@
 - **Resolution**: DSS rewired to call `calculatePairRegime()` (Directive 12.3.1). Engine #1 (DSS legacy) replaced with Engine #2 (canonical).
 - **Phase Found**: Pre-audit, deepened Phase 2 (ChatGPT/Replit analysis)
 
-### RISK-002: OHLC Indicator Computation Duplication
-- **Severity**: MEDIUM
-- **Location**: VWAP, SMA computed independently in signal-orchestrator.ts AND strategy-engine.ts
-- **Impact**: Wasted computation, potential for divergence
-- **Timing**: During MCE (MCE-1)
+### ~~RISK-002~~: OHLC Indicator Computation Duplication — **RESOLVED**
+- **Severity**: ~~MEDIUM~~ **RESOLVED** (Phase 13, Batch 14, commit `8f26369a`)
+- **Location**: ~~VWAP, SMA computed independently in signal-orchestrator.ts AND strategy-engine.ts~~ MCE now centralizes VWAP/SMA/ATR computation. Signal orchestrator and VTS runner both call `MCE.computeContext()`.
+- **Resolution**: Market Context Engine (MCE) installed as centralized indicator service (Batch 14). Signal orchestrator's inline VWAP/SMA computation replaced with MCE pre-computed values. VTS runner's direct `calculatePairRegime()` calls replaced with MCE. Note: strategy-engine.ts retains internal VWAP/SMA methods — these operate on different data subsets (session candles, specific SMA lengths) and are not the same duplication MCE fixes.
 - **Phase Found**: Pre-audit
 
 ### ~~RISK-003~~: DSS Gating Prevents PATTERN and HYBRID Strategies — **RESOLVED**
@@ -252,33 +246,23 @@
 - **Resolution**: Canonical name is `range_trade`. Both `range_trading` (legacy alias) and `range_trade` are accepted in enabledStrategies. strategy-sync.ts uses canonical `range_trade`.
 - **Phase Found**: Phase 2
 
-### BUG-008: Four Parallel Regime Classification Systems With No Cross-Reference — **PARTIALLY RESOLVED**
-- **Severity**: CRITICAL → **HIGH** (Engine #1 replaced, Engine #4 remains)
+### ~~BUG-008~~: Four Parallel Regime Classification Systems With No Cross-Reference — **RESOLVED**
+- **Severity**: ~~CRITICAL~~ **RESOLVED** (Batch 13 `4d8ef060` + Batch 14 `8f26369a`)
 - **Locations**:
-  - Engine 1: `server/services/dynamic-strategy-selector.ts` — DSS legacy (volNoise/trendSlope → 6 regimes → SYSTEM_GUARDS.STRATEGY_MAP). **Active trading path. LEGACY.**
-  - Engine 2: `server/core/metrics/market-regime.ts` — `calculatePairRegime()` (OHLC → volatility/momentum/ADX → 5 canonical regimes). **VTS only. CANONICAL CANDIDATE.**
-  - Engine 3: `server/core/metrics/market-regime.ts` — `getNormalizedRegime()` (Z-Score normalized version of Engine 2). **Advisory only. PRESERVE FOR ML.**
-  - Engine 4: `server/services/market-profiler.ts` + `server/services/adaptive-regime.ts` — MCP/ARE (live price/volume → T1/T2/R1/V1/C1 regimes). **14+ services. LEGACY — Kyle confirmed (see below).**
-- **Problem**: Four independent regime systems, three naming conventions, zero cross-referencing. VTS learns from Engine #2 while active trading uses Engine #1 — ML calibration from VTS data is suspect. Engine #4 has its own hardcoded strategy mix matrix that doesn't reference the canonical map.
-- **Impact**: The system cannot agree on what market conditions it's trading in. Trade-level and portfolio-level decisions are made on completely different regime classifications.
-- **Verified**: Yes — code-confirmed 2026-02-16. ChatGPT/Replit identified Engines 1-3; Claude Code identified Engine 4 (MCP/ARE).
-- **Kyle Decision (2026-02-16)**: MCP/ARE (Engine #4) is LEGACY. It was the predecessor regime system built under Directive 8.8.4-L12 (Dec 27, 2025). When the canonical regime map (Directive 11.7F, Jan 2026) and DSS were built to replace it, MCP/ARE was never decommissioned — the LOCK designation made it invisible during architectural evolution. Kyle confirmed it was never the intention to have two systems creating signals and making adjustments to signal generation. MCP/ARE must be removed.
-- **Fix**:
-  1. Engine #2 (`calculatePairRegime`) → sole pair-level regime authority (replaces Engine #1)
-  2. Engine #3 (Z-Score) → preserved as ML advisory for Phase 12
-  3. Engine #1 (DSS legacy) → remove (Wave 2, pre-MCE)
-  4. Engine #4 (MCP/ARE) → remove entirely (during/after MCE, see Wave 6). 14+ consumer services must be migrated to consume `calculatePairRegime()` output or MCE output.
-- **Partial Resolution (Batch 13)**: Engine #1 (DSS legacy) replaced — now calls `calculatePairRegime()` (Engine #2). Engines #1 and #2 unified. Engine #3 (Z-Score) preserved for ML. Engine #4 (MCP/ARE) still operates independently — removal deferred to Wave 6 (MCE).
-- **Timing**: Pre-MCE for Engines 1 & 2 (BUG-006). During/after MCE for Engine 4 removal (Wave 6).
+  - ~~Engine 1~~: `server/services/dynamic-strategy-selector.ts` — **REPLACED** (Batch 13). DSS now calls `calculatePairRegime()`.
+  - Engine 2: `server/core/metrics/market-regime.ts` — `calculatePairRegime()`. **CANONICAL — sole pair-level authority via MCE.**
+  - Engine 3: `server/core/metrics/market-regime.ts` — `getNormalizedRegime()`. **Advisory only. Preserved for ML.**
+  - ~~Engine 4~~: `server/services/market-profiler.ts` + `server/services/adaptive-regime.ts` — **REMOVED** (Batch 14). MCP/ARE deleted along with all 14+ L12-L20 consumer services.
+- **Resolution**:
+  - Batch 13 (Directive 12.3.1): Engine #1 (DSS legacy) replaced — now calls `calculatePairRegime()` (Engine #2). Active trading and VTS unified on same regime model.
+  - Batch 14 (Phase 13 MCE): Engine #4 (MCP/ARE) fully removed. All 17 L-series services + 9 routes deleted. MCE installed as centralized indicator/regime service. Only Engine #2 (canonical, via MCE) and Engine #3 (advisory) remain. System now has ONE regime authority.
+  - Batch 14-hotfix: `strategy_type` PostgreSQL enum expanded 9 → 18 values to match 17 canonical strategies.
 - **Phase Found**: Phase 2 (ChatGPT/Replit review + Claude Code deep trace, Kyle-confirmed legacy 2026-02-16)
 
-### RISK-016: MCP/ARE Legacy System Creates Parallel Strategy Authority (Kyle Confirmed Legacy)
-- **Severity**: HIGH
-- **Location**: `server/services/market-profiler.ts`, `server/services/adaptive-regime.ts`
-- **Problem**: MCP/ARE operates as a parallel regime-to-strategy system with its own taxonomy (T1-C1), its own strategy mix matrix (`REGIME_STRATEGY_MATRIX`), and its own exposure/risk multipliers — all independent of the canonical map. This creates cross-layer incoherence where three independent authorities influence strategy selection with no cross-reference.
-- **Kyle Decision (2026-02-16)**: MCP/ARE is LEGACY. It was the predecessor regime system that was never decommissioned when canonical map and DSS were built to replace it. It must be removed entirely.
-- **Fix**: Remove MCP/ARE entirely. Migrate 14+ consumer services to use `calculatePairRegime()` output or MCE output. Any portfolio-level exposure/risk modulation that was provided by MCP/ARE must be absorbed by MCE.
-- **Timing**: During/after MCE (Wave 6) — requires full consumer migration
+### ~~RISK-016~~: MCP/ARE Legacy System Creates Parallel Strategy Authority — **RESOLVED**
+- **Severity**: ~~HIGH~~ **RESOLVED** (Phase 13, Batch 14, commit `8f26369a`)
+- **Location**: ~~`server/services/market-profiler.ts`, `server/services/adaptive-regime.ts`~~ Both files DELETED.
+- **Resolution**: MCP/ARE and all 14+ consumer services (the entire L12-L20 cluster) removed in Batch 14. No migration needed — the L-series was a closed supervisory loop with zero downstream impact on the active trading path. MCE installed as the sole centralized regime/indicator service.
 - **Phase Found**: Phase 2 (Claude Code deep trace, ChatGPT verification, Kyle-confirmed legacy 2026-02-16)
 
 ### RISK-017: Bridge JSON Staleness Risk
@@ -297,26 +281,18 @@
 - **Timing**: Concurrent with BUG-006 fix
 - **Phase Found**: Phase 2 (ChatGPT review, validated by Claude Code)
 
-### RISK-019: MCP Uses Stubbed Metrics for Regime Classification (Legacy System)
-- **Severity**: HIGH (additional evidence MCP is legacy)
-- **Location**: `server/services/market-profiler.ts`, `classifyRegime()` method
-- **Problem**: Two of five `RegimeMetrics` inputs are never actually computed from market data:
-  - `volume_z` = hardcoded `0` (volume z-score — should measure unusual volume activity)
-  - `correlation` = hardcoded `0.5` (cross-asset correlation — should measure BTC/altcoin correlation dynamics)
-  These stubbed values feed into MCP's regime classification scoring, creating false regime confidence. This further confirms MCP was never fully completed — it was locked before implementation was finished.
-- **Impact**: 14+ services downstream of MCP receive regime classifications with false precision.
-- **Fix**: Remove MCP/ARE entirely (Kyle-confirmed legacy). Do NOT invest in fixing stubbed metrics for a system being removed.
-- **Timing**: During Wave 6 (MCP/ARE removal)
+### ~~RISK-019~~: MCP Uses Stubbed Metrics for Regime Classification — **RESOLVED**
+- **Severity**: ~~HIGH~~ **RESOLVED** (Phase 13, Batch 14, commit `8f26369a`)
+- **Location**: ~~`server/services/market-profiler.ts`, `classifyRegime()` method~~ File DELETED.
+- **Resolution**: MCP/ARE removed entirely in Batch 14 (L12-L20 full removal). Stubbed metrics no longer feed any system. MCE uses real OHLC-derived indicators (VWAP, SMA, ATR, volatility, momentum, ADX) via `calculatePairRegime()`.
 - **Phase Found**: Phase 2 (ChatGPT verification, Claude Code confirmed)
 
-### RISK-020: MCP/ARE Is Legacy Predecessor System, Never Decommissioned (Kyle Confirmed)
-- **Severity**: HIGH
-- **Location**: `server/services/market-profiler.ts`, `server/services/adaptive-regime.ts`
+### ~~RISK-020~~: MCP/ARE Is Legacy Predecessor System, Never Decommissioned — **RESOLVED**
+- **Severity**: ~~HIGH~~ **RESOLVED** (Phase 13, Batch 14, commit `8f26369a`)
+- **Location**: ~~`server/services/market-profiler.ts`, `server/services/adaptive-regime.ts`~~ Both files DELETED.
 - **Historical Context**: MCP/ARE was built Dec 27, 2025 under Directive 8.8.4-L12 as the original regime-to-strategy system. It was immediately LOCKED. Starting Jan 2026, the canonical regime map (Directive 11.7F) and DSS were built as replacement systems. Each new system was designed in isolation — neither acknowledged MCP/ARE's existence. MCP/ARE was left running in the background, feeding T1/T2/R1/V1/C1 classifications to 14+ services, while newer systems were built alongside it without coordination. The LOCK designation made it invisible during architectural discussions.
-- **Problem**: MCP/ARE continues to run on a 15-minute timer, computing regime classifications with stubbed metrics (RISK-019), applying strategy weights via its own matrix, and feeding exposure/risk multipliers to 14+ services — all independent of and unaligned with the canonical system that was meant to replace it.
-- **Kyle Decision (2026-02-16)**: MCP/ARE is LEGACY. Kyle confirmed it was never the intention to have two systems creating signals and making adjustments to signal generation. The canonical map and DSS were built to replace MCP/ARE. MCP/ARE must be removed entirely.
-- **Fix**: Full removal. 14+ consumer services must be migrated to consume `calculatePairRegime()` output or MCE output. Any portfolio-level exposure/risk modulation currently provided by MCP/ARE must be absorbed by MCE or rebuilt as a lightweight module that consumes canonical regime output.
-- **Timing**: During/after MCE (Wave 6) — DANGEROUS due to 14+ active importers requiring migration
+- **Problem**: ~~MCP/ARE continues to run on a 15-minute timer, computing regime classifications with stubbed metrics (RISK-019), applying strategy weights via its own matrix, and feeding exposure/risk multipliers to 14+ services~~ MCP/ARE and all L12-L20 consumer services fully removed.
+- **Resolution**: Entire L12-L20 autonomy/RL cluster removed in Batch 14 (Phase 13). 17 L-series services, 9 route files, 1 M-series service, 2 utilities deleted (~8,200 lines). The cluster was a closed supervisory loop — none of its outputs reached the active trading path. MCE installed as centralized replacement.
 - **Phase Found**: Phase 2 (Claude Code deep trace, ChatGPT/Replit verification, Kyle-confirmed legacy 2026-02-16)
 
 ---

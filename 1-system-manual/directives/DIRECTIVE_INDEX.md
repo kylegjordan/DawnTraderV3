@@ -43,16 +43,26 @@
 
 ---
 
+## Phase 13: MCE Installation
+
+### 13.1 Market Context Engine + L12-L20 Legacy Removal
+
+| Directive | Title | Status | Date Issued | Date Complete | Review Cycles | Notes |
+|-----------|-------|--------|-------------|---------------|---------------|-------|
+| 13.1 | MCE Installation + L12-L20 Legacy Removal | COMPLETE | 2026-03-04 | 2026-03-04 | 1 | Batch 14 (`8f26369a`) + Batch 14-hotfix (`db521adc`). MCE created as centralized VWAP/SMA/ATR/regime service. Signal orchestrator + VTS runner wired to MCE. 29 legacy files deleted (entire L12-L20 cluster). strategy_type enum expanded 9→18 (hotfix). BUG-002, BUG-003, BUG-008, RISK-002, RISK-016, RISK-019, RISK-020 RESOLVED. Net ~-8,200 lines. |
+
+---
+
 ## Summary Statistics
 
 | Metric | Value |
 |--------|-------|
-| Total Directives Issued | 17 |
-| Total Directives Complete | 17 |
+| Total Directives Issued | 18 |
+| Total Directives Complete | 18 |
 | Total Directives In Progress | 0 |
-| Total Review Cycles | 17 |
+| Total Review Cycles | 18 |
 | Average Review Cycles per Directive | 1.00 |
 
 ---
 
-*Index updated after each directive status change. Future phases (13-22) will be added as Phase 12 nears completion.*
+*Index updated after each directive status change.*

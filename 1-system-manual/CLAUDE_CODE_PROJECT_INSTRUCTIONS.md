@@ -3,7 +3,7 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-03-03 (after Batch 13B — Phase 12.3 Pipeline Unification governance. Directives 12.3.1, 12.3.3, 12.3.2 COMPLETE. BUG-006 RESOLVED, BUG-008 partially resolved. NGC replaced with deterministic confidence. 8 new strategy modules implemented. 17/18 Phase 12 directives complete)
+> **Last Updated**: 2026-03-04 (after Batch 14B — Phase 13 MCE Installation governance. Directive 13.1 COMPLETE. MCE installed, L12-L20 removed (29 files, ~8,200 lines). BUG-002, BUG-003, BUG-008, RISK-002, RISK-016, RISK-019, RISK-020 RESOLVED. strategy_type enum expanded 9→18 (hotfix). 18/18 directives complete across Phases 12-13)
 
 ---
 
@@ -188,6 +188,8 @@ Examples:
 - `BATCH_11-DIR_12.2.6_12.2.5_GOAL_ALIGNMENT_GATE_FRICTION_CLEANUP.zip` (Goal Alignment Gate + Friction)
 - `BATCH_12-DIR_12.3.2_STRATEGY_SPEC_PLACEMENT.zip` (Strategy specification placement — documentation only)
 - `BATCH_13-PHASE_12.3_PIPELINE_UNIFICATION.zip` (Phase 12.3 mega-batch — 3 directives, 15 files)
+- `BATCH_14-PHASE_13_MCE_INSTALLATION_L12_L20_REMOVAL.zip` (MCE + L12-L20 removal — 29 deleted, 7 modified, 2 new)
+- `BATCH_14-HOTFIX-STRATEGY_ENUM_EXPANSION.zip` (strategy_type enum 9→18)
 
 ### Zip Contents
 
@@ -394,6 +396,9 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 | 12.3.1 | Regime Authority Resolution — DSS rewired to canonical regime model. BUG-006 RESOLVED, BUG-008 partially resolved | Batch 13 | `4d8ef060` |
 | 12.3.3 | NGC replaced with deterministic confidence formula. Rolling normalization bypassed | Batch 13 | `4d8ef060` |
 | 12.3.2 | Strategy Routing Expansion — 8 new strategy modules IMPLEMENTED. 17 canonical strategies active | Batch 13 | `4d8ef060` |
+| — | Governance docs updated (Phase 12.3 Pipeline Unification COMPLETE) | Batch 13B | `589be749` |
+| 13.1 | MCE Installation + L12-L20 Legacy Removal — MCE centralized VWAP/SMA/ATR/regime. 29 legacy files deleted. BUG-002, BUG-003, BUG-008, RISK-002, RISK-016, RISK-019, RISK-020 RESOLVED | Batch 14 | `8f26369a` |
+| — | Strategy enum expansion hotfix — strategy_type 9→18 values, syncGlobalStrategies() crash fixed | Batch 14-hotfix | `db521adc` |
 
 ### In-Progress Directives
 *None — all issued directives are COMPLETE.*
@@ -423,12 +428,13 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 | SNAPSHOT-019 | `86aa8d79` | Pre-Batch 11 freeze (after Batch 10B governance) |
 | SNAPSHOT-020 | `aa269823` | After Batch 12 (Directive 12.3.2 spec placement) |
 | SNAPSHOT-021 | `4d8ef060` | After Batch 13 (Phase 12.3 Pipeline Unification — 12.3.1 + 12.3.3 + 12.3.2 implementation) |
+| SNAPSHOT-022 | `589be749` | Pre-Batch 14 freeze (after Batch 13B governance) |
 
-### Pending Directives (Phase 12)
-See `directives/DIRECTIVE_INDEX.md` for the full list. 1 remaining:
+### Pending Directives
+See `directives/DIRECTIVE_INDEX.md` for the full list. 1 remaining from Phase 12:
 - 12.1.6 (LSP Error Triage) — PENDING
 
-Note: ALL 12.2.x dead code purge directives are now COMPLETE (12.2.1 through 12.2.9). Phase 12.2 is done. ALL 12.3.x pipeline unification directives are now COMPLETE (12.3.1, 12.3.2, 12.3.3). Phase 12.3 is done. Only 12.1.6 (LSP Error Triage) remains from Phase 12.
+Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation) is COMPLETE (Directive 13.1, Batch 14 + hotfix).
 
 ### Investigation Notes for Future Batches
 - **12.2.1**: ~~Wave 1 Safe Deletions~~ **COMPLETE** (Batch 8). 2 files deleted (dhma.ts, latti-safety-monitor.tsx). 11 files surgically modified. ~1,254 lines removed. LATTi lazy-loader stub (RISK-044) remains — can be cleaned in a future batch.
@@ -438,9 +444,10 @@ Note: ALL 12.2.x dead code purge directives are now COMPLETE (12.2.1 through 12.
 - **12.2.6**: ~~Goal Alignment Gate Removal~~ **COMPLETE** (Batch 11). Phase 9.0 alignment verification system removed (~1,400 lines across 10 files). Note: Phase 4 Goal Alignment in pre-execution-validator.ts and trading-engine.ts (RISK-028, BUG-012) remains — separate system, not part of this directive.
 - **12.2.8**: ~~Walter-Era Learning Services~~ **COMPLETE** (Batch 10). 3 dead services deleted (cognitive-interpreter, event-broker, phase-8.6.5-enhancements, ~1,363 lines). autonomy-controller bug fixed. RISK-044 RESOLVED. Walter storage methods removed.
 - **12.2.9**: ~~Frontend Dead Pages~~ **COMPLETE** (Batch 9). 6 dead pages deleted (~2,453 lines). Stale History import removed from App.tsx.
-- **12.3.1**: ~~Regime Authority Resolution~~ **COMPLETE** (Batch 13). DSS rewired to `calculatePairRegime()`. BUG-006 RESOLVED. BUG-008 partially resolved (Engine #1 replaced, Engine #4 MCP/ARE remains for Wave 6). RISK-001, RISK-003 RESOLVED.
+- **12.3.1**: ~~Regime Authority Resolution~~ **COMPLETE** (Batch 13). DSS rewired to `calculatePairRegime()`. BUG-006 RESOLVED. ~~BUG-008 partially resolved~~ BUG-008 FULLY RESOLVED (Batch 14 removed Engine #4 MCP/ARE). RISK-001, RISK-003 RESOLVED.
 - **12.3.2**: ~~Strategy Routing Expansion~~ **COMPLETE** (Batch 12 spec + Batch 13 implementation). 8 strategy modules implemented per vetted spec. StrategySignal type 9→17. strategy-sync.ts updated to 17 canonical strategies. RISK-014, RISK-015 RESOLVED.
 - **12.3.3**: ~~Confidence Authority Cleanup~~ **COMPLETE** (Batch 13). NGC replaced with deterministic confidence formula. Rolling normalization bypassed. All export signatures preserved.
+- **13.1**: ~~MCE Installation + L12-L20 Removal~~ **COMPLETE** (Batch 14 + hotfix). MCE installed as centralized VWAP/SMA/ATR/regime service. Signal orchestrator + VTS runner wired to MCE. 29 legacy files deleted (entire L12-L20 cluster). strategy_type enum expanded 9→18. BUG-002, BUG-003, BUG-008, RISK-002, RISK-016, RISK-019, RISK-020 RESOLVED. Net ~-8,200 lines.
 - **12.1.6 (LSP Error Triage)** — ~620 errors from Replit audit are LOW severity. Most are type annotation gaps, not logic bugs. Not recommended for near-term batches.
 - **RISK-028 / BUG-012 (Phase 4 Goal Alignment)**: pre-execution-validator.ts goal alignment gate and trading-engine.ts calculateGoalAlignmentScore() are formally deprecated but NOT yet removed. Separate from the Phase 9.0 system removed in Batch 11. Kyle decision needed on timing.
 - **Walter peripheral references**: 2 read-only DB references remain in routes.ts (walterActions table in health-summary, getWalterActivity in diagnostics export). Return empty data. Storage method implementations removed in Batch 10.
@@ -449,7 +456,7 @@ Note: ALL 12.2.x dead code purge directives are now COMPLETE (12.2.1 through 12.
 ### Test Baseline
 - **791 pass / 90 fail** (881 total across test files)
 - 20 pre-existing TSC errors in files not modified by any directive
-- Baseline history: 816/81 (Batches 1-4) → 809/81 (Batch 5, 7 Walter tests removed) → 802/81 (Batch 6, 7 more Walter tests removed) → 800/81 (Batch 7, 4 Bob tests removed from diagnostic-system.test.ts, 2 tests net from learning-cycle-service deletion) → 800/81 (Batches 8-12, no test changes) → 791/90 (Batch 13, 9 new failures from strategy module interactions with existing tests)
+- Baseline history: 816/81 (Batches 1-4) → 809/81 (Batch 5, 7 Walter tests removed) → 802/81 (Batch 6, 7 more Walter tests removed) → 800/81 (Batch 7, 4 Bob tests removed from diagnostic-system.test.ts, 2 tests net from learning-cycle-service deletion) → 800/81 (Batches 8-12, no test changes) → 791/90 (Batch 13, 9 new failures from strategy module interactions with existing tests) → 782/84/15skip (Batch 14, 15 L-series tests skipped) → 791/90 (Batch 14-hotfix, baseline restored after schema fix)
 
 ---
 

@@ -237,16 +237,24 @@
 - **Shared State**: `CANONICAL_REGIME_STRATEGY_MAP` (17-strategy canonical map)
 - **Execution**: Synchronous — called per signal
 - **Blast Radius**: **HIGH** — regime determines strategy selection (now using canonical model)
-- **Status**: **ACTIVE** — rewired from legacy to canonical (~~BUG-006~~ RESOLVED, Batch 13, commit `4d8ef060`)
+- **Status**: **ACTIVE** — rewired from legacy to canonical (~~BUG-006~~ RESOLVED, Batch 13, commit `4d8ef060`). Signal orchestrator now calls MCE instead of DSS directly for regime (Batch 14).
 
-### 5.3 MCP/ARE — HIGH-IMPACT LEGACY CLUSTER
-- **Files**: `server/services/market-profiler.ts`, `server/services/adaptive-regime.ts`
-- **What**: Predecessor regime system. Own T1-C1 taxonomy, strategy mix matrix, exposure/risk multipliers. Feeds 14+ services. Stubbed metrics (volume_z=0, correlation=0.5).
-- **Upstream**: Live price/volume data
-- **Downstream**: 14+ services (autonomy-scheduler, action-executor, APR-SLE, MACO, GASP, experience-buffer, reward-evaluator, proactive-allocator, regime-performance tracker, regime archiver, regime-stability governance, market routes, health routes)
-- **Execution**: **15-minute timer** (`checkInterval`)
-- **Blast Radius**: **HIGH** (within legacy ecosystem) — but isolated from canonical trading path
-- **Status**: LEGACY — Kyle confirmed removal (Wave 6)
+### 5.2.5 Market Context Engine (MCE) — NEW (Phase 13, Batch 14)
+- **Files**: `server/services/market-context-engine.ts` (~280 lines), `server/types/market-context.ts` (~80 lines)
+- **What**: Centralized market indicator and regime computation service. Computes VWAP, SMA, ATR, volatility, momentum, ADX and regime classification in a single pass per symbol. Singleton with 60-second cache TTL. Does NOT fetch data — callers provide OHLC.
+- **Upstream**: OHLC data (provided by callers), `calculatePairRegime()` from market-regime.ts, `CANONICAL_REGIME_STRATEGY_MAP`
+- **Downstream**: Signal Orchestrator (active trading path — indicators + regime + allowed strategies), VTS Runner (passive learning path — regime + raw Z-score data)
+- **Shared State**: Per-symbol context cache (60s TTL), singleton instance
+- **Execution**: Synchronous — called per symbol per cycle by orchestrator (60s) and VTS (60s)
+- **Blast Radius**: **HIGH** — all regime classification and indicator data flows through MCE
+- **Status**: **ACTIVE** — installed Batch 14 (`8f26369a`). Resolves RISK-002 (indicator duplication).
+- **Tests**: Zero direct MCE test files yet. Validated via integration through signal-orchestrator and VTS.
+
+### 5.3 ~~MCP/ARE~~ — **REMOVED** (Phase 13, Batch 14, commit `8f26369a`)
+- **Files**: ~~`server/services/market-profiler.ts`, `server/services/adaptive-regime.ts`~~ DELETED
+- **What**: ~~Predecessor regime system. Own T1-C1 taxonomy, strategy mix matrix, exposure/risk multipliers. Feeds 14+ services.~~ Removed along with all 14+ L12-L20 consumer services. Replaced by MCE.
+- **Blast Radius**: **NONE** — completely removed
+- **Status**: COMPLETE — entire L12-L20 cluster deleted (17 services + 9 routes + 2 utilities)
 
 ### 5.4 getNormalizedRegime() — Advisory
 - **File**: `server/core/metrics/market-regime.ts` (same file as 5.1)
@@ -514,10 +522,10 @@
 - **Blast Radius**: **LOW** — not connected to trading/VTS pipeline
 - **Removal**: Phase 12.2.8 (Wave 8)
 
-### 11.7 L-Series Systems — ~13 MODULES
-- **What**: 14+ MCP/ARE importers, 12+ DCE importers, ~57 tables, ~40 enums.
-- **Blast Radius**: **DANGEROUS** — deep dependency web
-- **Removal**: Phase 16 (Wave 6, requires MCE first)
+### 11.7 ~~L-Series Systems~~ — **SERVICE FILES REMOVED** (Phase 13, Batch 14)
+- **What**: ~~14+ MCP/ARE importers, 12+ DCE importers, ~57 tables, ~40 enums.~~ All 17 L-series services, 9 route files, 1 M-series service, 2 utilities DELETED (Batch 14, `8f26369a`). ~57 database tables + ~40 enums remain as inert DB artifacts.
+- **Blast Radius**: **NONE** (service layer) — DB artifacts are orphaned, harmless
+- **Status**: COMPLETE (service layer). DB cleanup is a future migration task.
 
 ---
 
@@ -529,7 +537,8 @@
 | **FinalScore weights** | SQE thresholds, VTS Runner, TCL ranking, all scoring tests |
 | **DI calculation** | Net Expectancy Kernel (Pwin), Paper Execution Engine, VTS Runner, Trailing Exit Controller |
 | **Cost Model** | Signal Orchestrator (EV gate), Paper Execution Engine, FX5 Scanner (cost filtering) |
-| **calculatePairRegime()** | VTS Runner, Signal Orchestrator (when wired), canonical regime map, drift detector baselines |
+| **Market Context Engine (MCE)** | Signal Orchestrator (active trading), VTS Runner (passive learning), calculatePairRegime(), canonical regime map |
+| **calculatePairRegime()** | MCE (calls it internally), VTS Runner (via MCE), Signal Orchestrator (via MCE), canonical regime map, drift detector baselines |
 | **Price Cache** | Paper Execution Engine, VTS Runner, FX5 Scanner, MicroExecutionService, all frontend price displays |
 | **FX5 Scanner** | Active Filter Pool, Signal Orchestrator, Cost Cache, Telemetry Aggregator, Stage-3 Emitter, screener_filters DB table |
 | **Paper Execution Engine** | Portfolio state, Guardrails V2, Pre-Execution Validator, WebSocket broadcasts, trade history DB |

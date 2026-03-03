@@ -25,7 +25,7 @@ This manual documents both **what the system currently does** and **what it is d
 - Components are labeled with their status: **ACTIVE**, **LEGACY**, **CANONICAL CANDIDATE**, **DEPRECATED**, **LOCKED**, etc.
 - The phrase "defined but not wired" or "implemented but not actively selected" indicates a component that exists in code but is not in the live execution path
 
-**When in doubt**: The active trading path uses what the DSS selects. As of 2026-02, that is the legacy 6-regime / 9-quant-only map. The canonical 5-regime / 17-strategy map exists and is correct but is not yet wired to the DSS. See Chapter 2 for the full regime architecture breakdown.
+**When in doubt**: The active trading path uses the Market Context Engine (MCE), which calls `calculatePairRegime()` for canonical 5-regime classification and looks up strategies via `CANONICAL_REGIME_STRATEGY_MAP` (17 strategies). The legacy 6-regime / 9-quant-only map has been fully replaced (Batch 13 DSS rewire + Batch 14 MCE installation). See Chapter 2 for the full regime architecture breakdown.
 
 ### System Overview
 
@@ -85,7 +85,8 @@ Quick reference: which components are authoritative, which are contaminated, and
 | **Net Expectancy Kernel** | `signal-orchestrator.ts`, `paper-execution-engine.ts` | Sole EV authority. Mathematically correct. |
 | **cost-model.ts** | `server/core/cost-model.ts` | Cost-of-trade authority. Real spread + slippage + fees. |
 | **calculatePairRegime()** | `server/core/metrics/market-regime.ts` | Canonical pair-level regime classification. 5 regimes. |
-| **Canonical Regime Strategy Map** | `server/config/canonical-regime-strategy-map.ts` | SSOT: 5 regimes, 17 strategies. Defined, correct, **not yet wired to DSS**. |
+| **Market Context Engine (MCE)** | `server/services/market-context-engine.ts`, `server/types/market-context.ts` | Centralized VWAP/SMA/ATR/regime computation. Signal orchestrator and VTS both call `MCE.computeContext()`. Singleton, 60s cache TTL. |
+| **Canonical Regime Strategy Map** | `server/config/canonical-regime-strategy-map.ts` | SSOT: 5 regimes, 17 strategies. **Wired via MCE** (Batch 14). |
 | **Guardrails V2** | `guardrails-v2.ts` | Risk gate authority. 10 named guardrails + kill switch. |
 | **Pre-Execution Validator** | `pre-execution-validator.ts` | Final gate before trade execution. Two-gate system (post goal-alignment removal). |
 | **FinalScore Kernel** | `signal-orchestrator.ts` | Score authority. Adaptive weighting with volatility adjustment. |
@@ -96,7 +97,7 @@ Quick reference: which components are authoritative, which are contaminated, and
 | **quality_index.ts (NGC)** | ~~LEGACY~~ **REPLACED** | ~~Confidence carrier throughout pipeline. Must be replaced, not extended.~~ NGC replaced with deterministic confidence formula (Directive 12.3.3, Batch 13). Function signatures preserved for backward compatibility. Full file removal deferred to MCE. |
 | **SYSTEM_GUARDS friction** | ~~LEGACY~~ **RESOLVED** | ~~Flat 0.5% fee — bypasses real cost model.~~ Directive 12.1.2: All runtime friction now uses `computeTotalRoundTripCost()`. ~~Deprecated functions remain for dead code purge (Wave 4).~~ Deprecated functions **REMOVED** (Directive 12.2.5, Batch 11). |
 | **DSS volNoise/trendSlope classifier** | ~~LEGACY~~ **REPLACED** | ~~6-regime / 9-quant-only. Must be replaced with canonical map.~~ DSS rewired to `calculatePairRegime()` with canonical 5-regime / 17-strategy map (Directive 12.3.1, Batch 13). EXTREME_NOISE preserved as pre-filter. |
-| **MCP/ARE ecosystem** | LEGACY (Kyle confirmed) | High-Impact Legacy Cluster. 14+ consumers, own strategy matrix, own regime taxonomy. Remove in Wave 6. |
+| ~~MCP/ARE ecosystem~~ | ~~LEGACY~~ **REMOVED** | Entire L12-L20 cluster deleted (Batch 14, Phase 13). 17 services + 9 routes + 2 utilities. MCE installed as replacement. |
 | ~~NLAI system~~ | ~~LEGACY~~ **REMOVED** | Directive 12.2.7: All 5 NLAI files deleted, 6 consumer files cleaned. Commit `5d5c2051`. |
 | **Goal Alignment system** | LEGACY (PARTIALLY REMOVED) | Phase 9.0 alignment verification system **REMOVED** (Directive 12.2.6, Batch 11). Phase 4 Goal Alignment in pre-execution-validator.ts and trading-engine.ts **REMAINS** (RISK-028, BUG-012). |
 | **Walter/Bob/Cortex** | LEGACY (Kyle confirmed) | ~~~96~~ ~70 files remaining (Walter fully removed in Batches 5+6). Bob+Cortex remain. Remove in Wave 3 Sub-Batch C. |
@@ -122,11 +123,10 @@ Legacy systems are not isolated files — they form interconnected clusters that
 - **Removal**: ~~Phase 12.3.3~~ **COMPLETE** — NGC computation replaced. Full quality_index.ts file removal deferred to MCE (when PredictiveConfidence replaces the entire file).
 - **Risk level**: ~~HIGH~~ **LOW** — deterministic formula in place, no legacy contamination path
 
-### Cluster 2: MCP/ARE + Autonomy Layer (High-Impact)
-- **Core files**: `market-profiler.ts`, `adaptive-regime.ts`, autonomy-scheduler, action-executor, MOF/MACO/ECS/GASP coordinators
-- **Contamination**: Exposure multipliers, strategy mix matrix, regime classifications flowing to 14+ services on 15-minute timer
-- **Removal**: Wave 6 (Phase 16, during/after MCE — MCE must absorb portfolio-risk responsibilities first)
-- **Risk level**: DANGEROUS — largest consumer dependency count of any legacy system
+### Cluster 2: ~~MCP/ARE + Autonomy Layer~~ — **REMOVED** (Phase 13, Batch 14)
+- **Core files**: ~~`market-profiler.ts`, `adaptive-regime.ts`, autonomy-scheduler L-series tasks, action-executor, MOF/MACO/ECS/GASP coordinators~~ ALL DELETED (17 services + 9 routes + 1 M-series + 2 utilities = 29 files, ~8,200 lines)
+- **Resolution**: The entire L12-L20 cluster was confirmed as a closed supervisory loop with zero active path connection. All files deleted in Batch 14 (`8f26369a`). MCE installed as centralized regime/indicator service. Autonomy-scheduler stripped of all L-series imports and scheduled tasks; now only initializes MCE.
+- **Risk level**: **ZERO** — completely removed
 
 ### Cluster 3: ~~Walter~~ / Bob / Cortex / ~~NLAI~~ / Goal Alignment
 - **Core files**: ~~walter-*.ts~~ (ALL REMOVED — Directive 12.2.3 Sub-Batches A+B), bob-*.ts, bobs/*.ts, cortex/*.ts, ~~5 NLAI files~~ (REMOVED — Directive 12.2.7), goal alignment in pre-execution-validator
@@ -140,11 +140,10 @@ Legacy systems are not isolated files — they form interconnected clusters that
 - **Removal**: ~~Phase 12.3.1~~ **COMPLETE** — DSS rewired (Batch 13, commit `4d8ef060`)
 - **Risk level**: ~~HIGH~~ **LOW** — canonical regime model active
 
-### Cluster 5: L-Series Systems
-- **Core files**: ~13 L-Series modules + ~52 route endpoints + ~57 database tables + ~40 enums
-- **Contamination**: 14+ MCP/ARE importers, 12+ DCE importers depend on L-Series infrastructure
-- **Removal**: Wave 6 (Phase 16 — requires MCE to absorb responsibilities first)
-- **Risk level**: DANGEROUS — deep dependency web, largest table removal batch
+### Cluster 5: ~~L-Series Systems~~ — **SERVICE FILES REMOVED** (Phase 13, Batch 14)
+- **Core files**: ~~~13 L-Series modules + ~52 route endpoints~~ ALL service and route files DELETED (Batch 14). ~57 database tables + ~40 enums remain in PostgreSQL (no schema migration to remove them yet).
+- **Resolution**: All L-series service files (17) and route files (9) deleted in Batch 14. The service layer is clean. Database tables and enums remain as orphaned artifacts — harmless but candidates for a future DB cleanup migration.
+- **Risk level**: **ZERO** (service layer) / **LOW** (DB artifacts — inert, no code references them)
 
 ### Cluster 6: Walter-Era Learning Services
 - **Core files**: continuous-learning.ts, learning-cycle-service.ts, learning-coordinator.ts, learning-bridge.ts, learning-gate-validator.ts, learning-bob.ts
@@ -1240,7 +1239,7 @@ DawnTrader contains **four** independent regime classification systems operating
 - **Consumers**: VTS Runner (advisory logging only, Directive 11.5 Task 2)
 - **Status**: ACTIVE — advisory only, not used for routing decisions. Preserve for Phase 12 ML retraining.
 
-#### Engine 4: Market Condition Profiler / Adaptive Regime Engine (Market-Level) — HIGH-IMPACT LEGACY CLUSTER, REMOVE (Kyle Confirmed)
+#### ~~Engine 4~~: Market Condition Profiler / Adaptive Regime Engine (Market-Level) — **REMOVED** (Phase 13, Batch 14, commit `8f26369a`)
 - **Files**: `server/services/market-profiler.ts` + `server/services/adaptive-regime.ts`
 - **Directive**: 8.8.4-L12 (LOCKED — predecessor system, lock made it invisible during canonical evolution)
 - **Built**: Dec 27, 2025. Immediately locked. The canonical regime map (Directive 11.7F) and DSS were built starting Jan 2026 to replace it, but MCP/ARE was never decommissioned.
@@ -1263,20 +1262,20 @@ DawnTrader contains **four** independent regime classification systems operating
 | Engine #4 uses stubbed metrics | `volume_z = 0` and `correlation = 0.5` are hardcoded — never computed from market data. System was locked before implementation was finished (RISK-019) |
 | Two systems generating signals and adjustments simultaneously | Kyle confirmed this was never the intention. Canonical map and DSS were built to replace MCP/ARE, not coexist with it |
 
-### Recommended Regime Architecture (Post-Fix)
+### Current Regime Architecture (Post-Batch 14)
 
-**Layer 1 — Pair-Level Regime Authority (Strategy Routing):**
-`calculatePairRegime()` from `market-regime.ts` → 5 canonical regime names → canonical strategy map lookup. This replaces DSS Engine #1. Both VTS and active trading call the same function. This is the **BUG-006 fix**.
+**Layer 1 — Pair-Level Regime Authority (Strategy Routing) — ACTIVE:**
+Market Context Engine (MCE) calls `calculatePairRegime()` from `market-regime.ts` → 5 canonical regime names → `CANONICAL_REGIME_STRATEGY_MAP` lookup → allowed strategies. Both signal orchestrator (active trading) and VTS runner (passive learning) call `MCE.computeContext()`. ~~BUG-006~~ RESOLVED (Batch 13). ~~BUG-002, BUG-003~~ RESOLVED (Batch 14).
 
-**Layer 2 — Z-Score Normalized Regime (ML Advisory):**
-`getNormalizedRegime()` from `market-regime.ts`. Advisory only. Preserved for Phase 12 ML retraining. Not used for routing.
+**Layer 2 — Z-Score Normalized Regime (ML Advisory) — ACTIVE:**
+`getNormalizedRegime()` from `market-regime.ts`. Advisory only. Preserved for Phase 12 ML retraining. Not used for routing. VTS uses MCE's `raw` output for Z-score normalization.
 
-**Layer 3 — Portfolio-Level Risk/Exposure Modulation (Post-MCP):**
-When MCP/ARE is removed, any portfolio-level exposure/risk modulation it was providing must be absorbed by MCE or rebuilt as a lightweight module that consumes `calculatePairRegime()` canonical regime output. This is NOT a new parallel regime engine — it is a downstream consumer of the canonical regime, applying exposure multipliers and risk adjustments at the portfolio level.
+**Layer 3 — Portfolio-Level Risk/Exposure Modulation — FUTURE:**
+MCP/ARE has been removed (Batch 14). Any future portfolio-level exposure/risk modulation should be built as a lightweight module that consumes MCE's canonical regime output. This is NOT a new parallel regime engine — it is a downstream consumer.
 
-**REMOVE — Two Systems:**
-1. DSS volNoise/trendSlope classification → `SYSTEM_GUARDS.STRATEGY_MAP`. Remove in Wave 2 (pre-MCE).
-2. MCP/ARE (`market-profiler.ts` + `adaptive-regime.ts`). Remove in Wave 6 (during/after MCE). 14+ consumer services must be migrated. Kyle confirmed legacy 2026-02-16.
+**COMPLETED — Two Systems Removed:**
+1. ~~DSS volNoise/trendSlope classification → `SYSTEM_GUARDS.STRATEGY_MAP`.~~ **REMOVED** — DSS rewired to `calculatePairRegime()` (Batch 13, Directive 12.3.1).
+2. ~~MCP/ARE (`market-profiler.ts` + `adaptive-regime.ts`).~~ **REMOVED** — Entire L12-L20 cluster deleted (Batch 14, Phase 13). MCE installed as replacement.
 
 ---
 
