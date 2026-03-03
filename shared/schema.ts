@@ -25,15 +25,24 @@ import { z } from "zod";
 export const tradingModeEnum = pgEnum("trading_mode", ["live", "paper"]);
 export const tradingStatusEnum = pgEnum("trading_status", ["active", "stopped"]);
 export const strategyTypeEnum = pgEnum("strategy_type", [
-  "vwap_pullback", 
-  "abcd_long", 
+  "vwap_pullback",
+  "abcd_long",
   "sma_trend_ride",
   "breakout",
   "mean_reversion",
   "range_trading",
+  "range_trade",
   "vwap_bounce",
   "liquidity_trap",
-  "dhma"
+  "dhma",
+  "morning_star",
+  "inside_bar_reversal",
+  "support_bounce",
+  "pivot_shift",
+  "reverse_impulse",
+  "defensive_hedge",
+  "adaptive_flow",
+  "volatility_edge"
 ]);
 export const tradeStatusEnum = pgEnum("trade_status", ["open", "closed", "cancelled"]);
 export const tradeTypeEnum = pgEnum("trade_type", ["buy", "sell"]);
