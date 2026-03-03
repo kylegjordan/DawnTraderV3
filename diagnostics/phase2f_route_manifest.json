@@ -1137,15 +1137,6 @@
     ]
   },
   {
-    "path": "/api/market/overview",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "anonymous"
-    ]
-  },
-  {
     "path": "/api/market/ticker/:symbol",
     "methods": [
       "GET"
@@ -4861,83 +4852,6 @@
     ]
   },
   {
-    "path": "/api/alignment/verify",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "requireAdmin",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/alignment/history",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "requireAdmin",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/alignment/synthesize",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "requireAdmin",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/alignment/experiences",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "requireAdmin",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/alignment/evaluate-drift",
-    "methods": [
-      "POST"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "requireAdmin",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/alignment/profile",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "requireAdmin",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/alignment/adjustments",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "requireAdmin",
-      "anonymous"
-    ]
-  },
-  {
     "path": "/api/strategic/plans",
     "methods": [
       "POST",
@@ -5029,17 +4943,6 @@
   },
   {
     "path": "/api/learning/profile/:profileId/evaluate",
-    "methods": [
-      "GET"
-    ],
-    "middlewares": [
-      "authenticateToken",
-      "requireAdmin",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/strategic/compliance",
     "methods": [
       "GET"
     ],

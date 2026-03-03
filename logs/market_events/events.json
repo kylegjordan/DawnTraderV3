@@ -6,8 +6,8 @@
     "previousValue": "LOW_VOL_CHOP",
     "newValue": "BULL_STABLE",
     "severity": "info",
-    "id": "mkt_evt_1772207240719_7",
-    "timestamp": "2026-02-27T15:47:20.719Z"
+    "id": "mkt_evt_1772542590911_9",
+    "timestamp": "2026-03-03T12:56:30.911Z"
   },
   {
     "type": "REGIME_TRANSITION",
@@ -16,8 +16,8 @@
     "previousValue": "BULL_STABLE",
     "newValue": "LOW_VOL_CHOP",
     "severity": "info",
-    "id": "mkt_evt_1772207240671_6",
-    "timestamp": "2026-02-27T15:47:20.671Z"
+    "id": "mkt_evt_1772542590858_8",
+    "timestamp": "2026-03-03T12:56:30.858Z"
   },
   {
     "type": "REGIME_TRANSITION",
@@ -26,8 +26,8 @@
     "previousValue": "LOW_VOL_CHOP",
     "newValue": "BULL_STABLE",
     "severity": "info",
-    "id": "mkt_evt_1772198379732_7",
-    "timestamp": "2026-02-27T13:19:39.732Z"
+    "id": "mkt_evt_1772542555503_9",
+    "timestamp": "2026-03-03T12:55:55.503Z"
   },
   {
     "type": "REGIME_TRANSITION",
@@ -36,8 +36,8 @@
     "previousValue": "BULL_STABLE",
     "newValue": "LOW_VOL_CHOP",
     "severity": "info",
-    "id": "mkt_evt_1772198379687_6",
-    "timestamp": "2026-02-27T13:19:39.687Z"
+    "id": "mkt_evt_1772542555467_8",
+    "timestamp": "2026-03-03T12:55:55.467Z"
   },
   {
     "type": "REGIME_TRANSITION",
@@ -46,8 +46,8 @@
     "previousValue": "LOW_VOL_CHOP",
     "newValue": "BULL_STABLE",
     "severity": "info",
-    "id": "mkt_evt_1772195782938_7",
-    "timestamp": "2026-02-27T12:36:22.938Z"
+    "id": "mkt_evt_1772541143070_11",
+    "timestamp": "2026-03-03T12:32:23.070Z"
   },
   {
     "type": "REGIME_TRANSITION",
@@ -56,8 +56,8 @@
     "previousValue": "BULL_STABLE",
     "newValue": "LOW_VOL_CHOP",
     "severity": "info",
-    "id": "mkt_evt_1772195782895_6",
-    "timestamp": "2026-02-27T12:36:22.895Z"
+    "id": "mkt_evt_1772517377174_10",
+    "timestamp": "2026-03-03T05:56:17.174Z"
   },
   {
     "type": "REGIME_TRANSITION",
@@ -66,8 +66,8 @@
     "previousValue": "LOW_VOL_CHOP",
     "newValue": "BULL_STABLE",
     "severity": "info",
-    "id": "mkt_evt_1772195767220_7",
-    "timestamp": "2026-02-27T12:36:07.220Z"
+    "id": "mkt_evt_1772517287158_9",
+    "timestamp": "2026-03-03T05:54:47.158Z"
   },
   {
     "type": "REGIME_TRANSITION",
@@ -76,8 +76,88 @@
     "previousValue": "BULL_STABLE",
     "newValue": "LOW_VOL_CHOP",
     "severity": "info",
-    "id": "mkt_evt_1772195767161_6",
-    "timestamp": "2026-02-27T12:36:07.161Z"
+    "id": "mkt_evt_1772516086954_8",
+    "timestamp": "2026-03-03T05:34:46.954Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
+    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
+    "previousValue": "LOW_VOL_CHOP",
+    "newValue": "BULL_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1772452056498_7",
+    "timestamp": "2026-03-02T11:47:36.498Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
+    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
+    "previousValue": "BULL_STABLE",
+    "newValue": "LOW_VOL_CHOP",
+    "severity": "info",
+    "id": "mkt_evt_1772451996605_6",
+    "timestamp": "2026-03-02T11:46:36.605Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
+    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
+    "previousValue": "LOW_VOL_CHOP",
+    "newValue": "BULL_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1772450314928_7",
+    "timestamp": "2026-03-02T11:18:34.928Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
+    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
+    "previousValue": "BULL_STABLE",
+    "newValue": "LOW_VOL_CHOP",
+    "severity": "info",
+    "id": "mkt_evt_1772450255285_6",
+    "timestamp": "2026-03-02T11:17:35.285Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
+    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
+    "previousValue": "LOW_VOL_CHOP",
+    "newValue": "BULL_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1772235985325_11",
+    "timestamp": "2026-02-27T23:46:25.325Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
+    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
+    "previousValue": "BULL_STABLE",
+    "newValue": "LOW_VOL_CHOP",
+    "severity": "info",
+    "id": "mkt_evt_1772233163663_10",
+    "timestamp": "2026-02-27T22:59:23.663Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
+    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
+    "previousValue": "LOW_VOL_CHOP",
+    "newValue": "BULL_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1772233043514_9",
+    "timestamp": "2026-02-27T22:57:23.514Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
+    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
+    "previousValue": "BULL_STABLE",
+    "newValue": "LOW_VOL_CHOP",
+    "severity": "info",
+    "id": "mkt_evt_1772232863410_8",
+    "timestamp": "2026-02-27T22:54:23.410Z"
   },
   {
     "type": "REGIME_TRANSITION",
@@ -278,365 +358,5 @@
     "severity": "info",
     "id": "mkt_evt_1772029553642_7",
     "timestamp": "2026-02-25T14:25:53.642Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
-    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "LOW_VOL_CHOP",
-    "newValue": "BULL_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1771921517645_6",
-    "timestamp": "2026-02-24T08:25:17.645Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "BULL_STABLE",
-    "newValue": "LOW_VOL_CHOP",
-    "severity": "info",
-    "id": "mkt_evt_1771920377878_5",
-    "timestamp": "2026-02-24T08:06:17.878Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
-    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "LOW_VOL_CHOP",
-    "newValue": "BULL_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1771915135186_6",
-    "timestamp": "2026-02-24T06:38:55.186Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "BULL_STABLE",
-    "newValue": "LOW_VOL_CHOP",
-    "severity": "info",
-    "id": "mkt_evt_1771915015451_5",
-    "timestamp": "2026-02-24T06:36:55.451Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
-    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "LOW_VOL_CHOP",
-    "newValue": "BULL_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1771882175140_6",
-    "timestamp": "2026-02-23T21:29:35.140Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "BULL_STABLE",
-    "newValue": "LOW_VOL_CHOP",
-    "severity": "info",
-    "id": "mkt_evt_1771882175045_5",
-    "timestamp": "2026-02-23T21:29:35.045Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
-    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "LOW_VOL_CHOP",
-    "newValue": "BULL_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1771878638797_6",
-    "timestamp": "2026-02-23T20:30:38.797Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "BULL_STABLE",
-    "newValue": "LOW_VOL_CHOP",
-    "severity": "info",
-    "id": "mkt_evt_1771875936724_5",
-    "timestamp": "2026-02-23T19:45:36.724Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
-    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "LOW_VOL_CHOP",
-    "newValue": "BULL_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1771875870052_6",
-    "timestamp": "2026-02-23T19:44:30.052Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "BULL_STABLE",
-    "newValue": "LOW_VOL_CHOP",
-    "severity": "info",
-    "id": "mkt_evt_1771875869968_5",
-    "timestamp": "2026-02-23T19:44:29.968Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
-    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "LOW_VOL_CHOP",
-    "newValue": "BULL_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1771862602272_6",
-    "timestamp": "2026-02-23T16:03:22.272Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "BULL_STABLE",
-    "newValue": "LOW_VOL_CHOP",
-    "severity": "info",
-    "id": "mkt_evt_1771862301863_5",
-    "timestamp": "2026-02-23T15:58:21.863Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
-    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "LOW_VOL_CHOP",
-    "newValue": "BULL_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1771859331033_6",
-    "timestamp": "2026-02-23T15:08:51.033Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "BULL_STABLE",
-    "newValue": "LOW_VOL_CHOP",
-    "severity": "info",
-    "id": "mkt_evt_1771859330833_5",
-    "timestamp": "2026-02-23T15:08:50.833Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
-    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "LOW_VOL_CHOP",
-    "newValue": "BULL_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1771858065661_6",
-    "timestamp": "2026-02-23T14:47:45.661Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "BULL_STABLE",
-    "newValue": "LOW_VOL_CHOP",
-    "severity": "info",
-    "id": "mkt_evt_1771857886164_5",
-    "timestamp": "2026-02-23T14:44:46.164Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
-    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "LOW_VOL_CHOP",
-    "newValue": "BULL_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1771854902078_6",
-    "timestamp": "2026-02-23T13:55:02.078Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "BULL_STABLE",
-    "newValue": "LOW_VOL_CHOP",
-    "severity": "info",
-    "id": "mkt_evt_1771854901709_5",
-    "timestamp": "2026-02-23T13:55:01.709Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
-    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "LOW_VOL_CHOP",
-    "newValue": "BULL_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1771833542163_6",
-    "timestamp": "2026-02-23T07:59:02.163Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "BULL_STABLE",
-    "newValue": "LOW_VOL_CHOP",
-    "severity": "info",
-    "id": "mkt_evt_1771833482538_5",
-    "timestamp": "2026-02-23T07:58:02.538Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
-    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "LOW_VOL_CHOP",
-    "newValue": "BULL_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1771831819175_6",
-    "timestamp": "2026-02-23T07:30:19.175Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "BULL_STABLE",
-    "newValue": "LOW_VOL_CHOP",
-    "severity": "info",
-    "id": "mkt_evt_1771831760046_5",
-    "timestamp": "2026-02-23T07:29:20.046Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
-    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "LOW_VOL_CHOP",
-    "newValue": "BULL_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1771795515596_10",
-    "timestamp": "2026-02-22T21:25:15.596Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "BULL_STABLE",
-    "newValue": "LOW_VOL_CHOP",
-    "severity": "info",
-    "id": "mkt_evt_1771794555241_9",
-    "timestamp": "2026-02-22T21:09:15.241Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
-    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "LOW_VOL_CHOP",
-    "newValue": "BULL_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1771794195068_8",
-    "timestamp": "2026-02-22T21:03:15.068Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "BULL_STABLE",
-    "newValue": "LOW_VOL_CHOP",
-    "severity": "info",
-    "id": "mkt_evt_1771791494002_7",
-    "timestamp": "2026-02-22T20:18:14.002Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
-    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "LOW_VOL_CHOP",
-    "newValue": "BULL_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1771782849584_6",
-    "timestamp": "2026-02-22T17:54:09.584Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "BULL_STABLE",
-    "newValue": "LOW_VOL_CHOP",
-    "severity": "info",
-    "id": "mkt_evt_1771782790114_5",
-    "timestamp": "2026-02-22T17:53:10.114Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
-    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "LOW_VOL_CHOP",
-    "newValue": "BULL_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1771761559739_6",
-    "timestamp": "2026-02-22T11:59:19.739Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "BULL_STABLE",
-    "newValue": "LOW_VOL_CHOP",
-    "severity": "info",
-    "id": "mkt_evt_1771761559685_5",
-    "timestamp": "2026-02-22T11:59:19.685Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
-    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "LOW_VOL_CHOP",
-    "newValue": "BULL_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1771760757987_8",
-    "timestamp": "2026-02-22T11:45:57.987Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "BULL_STABLE",
-    "newValue": "LOW_VOL_CHOP",
-    "severity": "info",
-    "id": "mkt_evt_1771760157821_7",
-    "timestamp": "2026-02-22T11:35:57.821Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
-    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "LOW_VOL_CHOP",
-    "newValue": "BULL_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1771734771626_6",
-    "timestamp": "2026-02-22T04:32:51.626Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "BULL_STABLE",
-    "newValue": "LOW_VOL_CHOP",
-    "severity": "info",
-    "id": "mkt_evt_1771734651855_5",
-    "timestamp": "2026-02-22T04:30:51.855Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
-    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "LOW_VOL_CHOP",
-    "newValue": "BULL_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1771707771074_6",
-    "timestamp": "2026-02-21T21:02:51.074Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "BULL_STABLE",
-    "newValue": "LOW_VOL_CHOP",
-    "severity": "info",
-    "id": "mkt_evt_1771707771015_5",
-    "timestamp": "2026-02-21T21:02:51.015Z"
   }
 ]

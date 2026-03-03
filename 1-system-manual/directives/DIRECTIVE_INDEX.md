@@ -38,7 +38,7 @@
 | Directive | Title | Status | Date Issued | Date Complete | Review Cycles | Notes |
 |-----------|-------|--------|-------------|---------------|---------------|-------|
 | 12.3.1 | Regime Authority Resolution (BUG-006, BUG-008) | PENDING | — | — | — | — |
-| 12.3.2 | Strategy Routing Expansion | PENDING | — | — | — | 17 canonical strategies |
+| 12.3.2 | Strategy Routing Expansion | SPEC COMPLETE | 2026-03-03 | — | — | Spec vetted by 4 LLMs (2 rounds, 30 decisions). Implementation pending after 12.3.1 + 12.3.3. |
 | 12.3.3 | Confidence Authority Cleanup (NGC removal) | PENDING | — | — | — | HIGH risk |
 
 ---
