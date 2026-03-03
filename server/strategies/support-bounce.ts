@@ -1,0 +1,273 @@
+/**
+ * ============================================================================
+ * Directive 12.3.2 -- Support Bounce Strategy
+ * ============================================================================
+ *
+ * Type:      PATTERN
+ * Direction: BUY only
+ * Key:       support_bounce
+ *
+ * Identifies horizontal support levels from clustered local minima, then
+ * fires a BUY signal when price bounces off a valid support zone with a
+ * confirming pinbar pattern and volume surge.
+ *
+ * Support detection:
+ *   1. Find local minima in last 50 candles.
+ *   2. Cluster nearby lows (tolerance = max(0.5%, ATR/price * 0.5)).
+ *   3. Require >= 3 touches per cluster.
+ *   4. Select nearest valid support within 3% of current price.
+ *
+ * Entry: Slight premium above current price (0.1%).
+ * Stop:  Below support level minus buffer (0.5%).
+ * Target: Entry + 2.0 ATR(14).
+ *
+ * Confidence built from pattern strength, support quality (touch count),
+ * proximity to the support level, and volume surge.
+ * ============================================================================
+ */
+
+import type { StrategySignal, TechnicalIndicators } from '../services/strategy-engine';
+import type { PriceData } from '@shared/schema';
+import {
+  calculateATR, calculateRSI, calculateSMA, calculateAvgVolume, calculateMomentum,
+  minMomentum, calculateADXSeries, calculateADX, calculateReturnStdDev,
+  volatilityPercentile, countMomentumInversions, spearmanRankCorrelation,
+  getEffectiveATR, applyGlobalGuards, clampConfidence, parseCandles,
+  findLocalMinima, GLOBAL_CONSTANTS,
+  type OHLCCandle, type PatternInput
+} from './strategy-helpers';
+
+// ============================================================================
+// Strategy Constants
+// ============================================================================
+
+const SB_LOOKBACK_CANDLES       = 50;    // Candles to scan for local minima
+const SB_CLUSTER_TOLERANCE_BASE = 0.005; // 0.5% base cluster tolerance
+const SB_MIN_TOUCHES            = 3;     // Minimum touches to validate support
+const SB_MAX_DISTANCE           = 0.03;  // Support must be within 3% of price
+const SB_PROXIMITY              = 0.015; // 1.5% proximity for bounce entry
+const SB_VOL_MULT               = 1.2;   // Volume must be >= avgVol * this
+const SB_STOP_BELOW_SUPPORT     = 0.005; // 0.5% below support for stop
+const SB_TARGET_ATR_MULT        = 2.0;   // Target = entry + 2.0 * ATR
+const SB_PATTERN_WEIGHT         = 0.40;  // Weight of pattern strength
+const SB_SUPPORT_WEIGHT         = 0.30;  // Weight of support quality score
+const SB_PROXIMITY_WEIGHT       = 0.15;  // Weight of proximity to support
+const SB_HIGH_VOL_BONUS         = 0.08;  // Bonus when volume >= 2x average
+
+const STRATEGY_KEY = 'support_bounce';
+const LOG_PREFIX = '[12.3.2][SUPPORT_BOUNCE]';
+
+// ============================================================================
+// Support Level Identification
+// ============================================================================
+
+interface SupportCluster {
+  level: number;
+  touchCount: number;
+}
+
+/**
+ * Identify horizontal support levels by clustering local minima.
+ *
+ * Steps:
+ *   1. Find local minima (low < prev.low AND low < next.low).
+ *   2. Sort minima ascending.
+ *   3. Group minima where |a - b| / a <= tolerance.
+ *   4. Cluster level = mean of grouped values.
+ *   5. Filter for clusters with >= SB_MIN_TOUCHES touches.
+ *
+ * @param ohlc - Parsed OHLC candles
+ * @param currentPrice - Current market price
+ * @param effectiveATR - Clamped ATR value for dynamic tolerance
+ * @returns Array of valid support clusters, sorted nearest-first
+ */
+function identifySupportLevels(
+  ohlc: OHLCCandle[],
+  currentPrice: number,
+  effectiveATR: number
+): SupportCluster[] {
+  // Step 1: Find local minima
+  const minima = findLocalMinima(ohlc, SB_LOOKBACK_CANDLES);
+  if (minima.length === 0) return [];
+
+  // Step 2: Dynamic cluster tolerance
+  const tolerance = Math.max(SB_CLUSTER_TOLERANCE_BASE, (effectiveATR / currentPrice) * 0.5);
+
+  // Step 3: Sort and cluster
+  const sorted = [...minima].sort((a, b) => a - b);
+  const clusters: SupportCluster[] = [];
+  let clusterValues: number[] = [sorted[0]];
+
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = clusterValues[clusterValues.length - 1];
+    if (Math.abs(sorted[i] - prev) / prev <= tolerance) {
+      clusterValues.push(sorted[i]);
+    } else {
+      // Finalise current cluster
+      const level = clusterValues.reduce((a, b) => a + b, 0) / clusterValues.length;
+      clusters.push({ level, touchCount: clusterValues.length });
+      clusterValues = [sorted[i]];
+    }
+  }
+  // Finalise last cluster
+  if (clusterValues.length > 0) {
+    const level = clusterValues.reduce((a, b) => a + b, 0) / clusterValues.length;
+    clusters.push({ level, touchCount: clusterValues.length });
+  }
+
+  // Step 4: Filter for minimum touches and valid position (below price, within max distance)
+  return clusters
+    .filter(c => {
+      if (c.touchCount < SB_MIN_TOUCHES) return false;
+      if (c.level >= currentPrice) return false;
+      const distance = (currentPrice - c.level) / c.level;
+      return distance <= SB_MAX_DISTANCE;
+    })
+    .sort((a, b) => {
+      // Nearest first (closest to current price)
+      const distA = currentPrice - a.level;
+      const distB = currentPrice - b.level;
+      return distA - distB;
+    });
+}
+
+// ============================================================================
+// Main Detection Function
+// ============================================================================
+
+/**
+ * Detect a Support Bounce BUY signal.
+ *
+ * Identifies a valid horizontal support level, confirms a PINBAR bounce
+ * pattern with volume surge, and generates a long entry near support.
+ *
+ * @param indicators - Technical indicators snapshot (currentPrice, volume, etc.)
+ * @param candles    - Raw candle array from the data feed
+ * @param patternSignal - Pre-detected pattern input (from pattern recogniser)
+ * @returns StrategySignal if all conditions are met, null otherwise
+ */
+export function detectSupportBounce(
+  indicators: TechnicalIndicators,
+  candles: any[],
+  patternSignal: PatternInput | null
+): StrategySignal | null {
+  const { currentPrice, volume } = indicators;
+
+  // ── Guard: Parse candles ─────────────────────────────────────────────────
+  const ohlc = parseCandles(candles);
+  if (ohlc.length < SB_LOOKBACK_CANDLES) {
+    console.log(`${LOG_PREFIX} Insufficient candle data (${ohlc.length} < ${SB_LOOKBACK_CANDLES}). Skipping.`);
+    return null;
+  }
+
+  // ── Compute effective ATR early (needed for support identification) ──────
+  const effectiveATR = getEffectiveATR(ohlc, currentPrice);
+  if (effectiveATR === null) {
+    console.log(`${LOG_PREFIX} ATR guard failed (ATR too small or zero). Skipping.`);
+    return null;
+  }
+
+  // ── Condition 1: Valid support level exists ──────────────────────────────
+  const supportLevels = identifySupportLevels(ohlc, currentPrice, effectiveATR);
+  if (supportLevels.length === 0) {
+    console.log(`${LOG_PREFIX} No valid support level found within ${(SB_MAX_DISTANCE * 100).toFixed(1)}%. Skipping.`);
+    return null;
+  }
+
+  const nearestSupport = supportLevels[0];
+  const supportLevel = nearestSupport.level;
+  const touchCount = nearestSupport.touchCount;
+
+  // ── Condition 2: Price is proximate to support ──────────────────────────
+  const proximityDistance = (currentPrice - supportLevel) / supportLevel;
+  if (proximityDistance > SB_PROXIMITY) {
+    console.log(
+      `${LOG_PREFIX} Price too far from support: distance=${(proximityDistance * 100).toFixed(3)}% > ` +
+      `${(SB_PROXIMITY * 100).toFixed(1)}%. Skipping.`
+    );
+    return null;
+  }
+
+  // ── Condition 3: Pattern must be PINBAR / BUY ────────────────────────────
+  if (!patternSignal || patternSignal.pattern !== 'PINBAR' || patternSignal.direction !== 'BUY') {
+    return null;
+  }
+
+  // ── Condition 4: Minimum pattern strength ────────────────────────────────
+  if (patternSignal.strength < 0.55) {
+    console.log(`${LOG_PREFIX} Pattern strength ${patternSignal.strength.toFixed(3)} < 0.55. Skipping.`);
+    return null;
+  }
+
+  // ── Condition 5: Volume confirmation (bounce candle) ─────────────────────
+  const avgVolume = calculateAvgVolume(ohlc, 20);
+  const bounceVolume = ohlc[ohlc.length - 1].volume;
+  if (avgVolume === 0 || bounceVolume < avgVolume * SB_VOL_MULT) {
+    console.log(
+      `${LOG_PREFIX} Volume check failed: bounceVol=${bounceVolume.toFixed(2)}, ` +
+      `avgVol=${avgVolume.toFixed(2)}, threshold=${(avgVolume * SB_VOL_MULT).toFixed(2)}. Skipping.`
+    );
+    return null;
+  }
+
+  // ── Price calculations ───────────────────────────────────────────────────
+  const entryPrice = currentPrice * 1.001;
+  const stopPrice = supportLevel * (1 - SB_STOP_BELOW_SUPPORT);
+  const targetPrice = entryPrice + SB_TARGET_ATR_MULT * effectiveATR;
+
+  // ── Global guards (ATR, stop distance, R:R) ──────────────────────────────
+  if (!applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR)) {
+    console.log(`${LOG_PREFIX} Global guards failed. Skipping.`);
+    return null;
+  }
+
+  // ── Confidence calculation ───────────────────────────────────────────────
+  const patternScore = patternSignal.strength * SB_PATTERN_WEIGHT;
+  const supportScore = Math.min(1.0, touchCount / 3) * SB_SUPPORT_WEIGHT;
+  const proximityDenom = supportLevel * SB_PROXIMITY;
+  const proximityScore = proximityDenom > 0
+    ? Math.max(0, (1 - (currentPrice - supportLevel) / proximityDenom)) * SB_PROXIMITY_WEIGHT
+    : 0;
+  const volumeBonus = (bounceVolume >= avgVolume * 2.0) ? SB_HIGH_VOL_BONUS : 0;
+
+  // Cap confidence at 0.93 for support bounce (spec constraint)
+  const rawConfidence = patternScore + supportScore + proximityScore + volumeBonus;
+  const confidence = Math.max(0, Math.min(0.93, rawConfidence));
+
+  // ── Build and return signal ──────────────────────────────────────────────
+  console.log(
+    `${LOG_PREFIX} SIGNAL | entry=${entryPrice.toFixed(4)} stop=${stopPrice.toFixed(4)} ` +
+    `target=${targetPrice.toFixed(4)} conf=${confidence.toFixed(3)} | ` +
+    `support=${supportLevel.toFixed(4)} touches=${touchCount} ` +
+    `proximity=${(proximityDistance * 100).toFixed(3)}% ` +
+    `bounceVol=${bounceVolume.toFixed(2)} avgVol=${avgVolume.toFixed(2)}`
+  );
+
+  return {
+    symbol: '',  // Populated by caller
+    strategy: STRATEGY_KEY as any,
+    entryPrice,
+    stopPrice,
+    targetPrice,
+    confidence,
+    metadata: {
+      directive: '12.3.2',
+      type: 'PATTERN',
+      direction: 'BUY',
+      supportLevel,
+      touchCount,
+      proximityDistance,
+      patternStrength: patternSignal.strength,
+      bounceVolume,
+      avgVolume,
+      effectiveATR,
+      patternScore,
+      supportScore,
+      proximityScore,
+      volumeBonus,
+    },
+  };
+}
+
+// Default export for strategy module resolution
+export const detect = detectSupportBounce;

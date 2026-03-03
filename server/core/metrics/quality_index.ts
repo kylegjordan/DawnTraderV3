@@ -306,24 +306,23 @@ function clamp01(value: number): number {
 }
 
 /**
- * Calculate Normalized Global Confidence (NGC)
- * 
- * NGC combines the base signal confidence with market conditions (volatility, risk)
- * to produce a more robust confidence measure that accounts for adverse conditions.
- * 
- * Directive A3.R9.0: System Harmonization NGC Formula
- * Step 1: Normalize base components
- *   NGC_normalized = normalize(conf, vol, risk)
- * Step 2: Additive blending with profitRate influence
- *   NGC = 0.4 * NGC_normalized + 0.4 * profitRate + 0.2 * (1 - risk)
- * 
- * This yields NGC in typical range 0.40-0.75 for a ~35-50% SQE pass rate
- * 
+ * Directive 12.3.3: Deterministic Confidence (replaces NGC)
+ *
+ * NGC (Normalized Global Confidence) has been replaced with a deterministic
+ * confidence formula that is transparent, reproducible, and free of rolling
+ * normalization artifacts.
+ *
+ * Formula:
+ *   confidence = (strategyConfidence * 0.60) + ((1 - volatility) * 0.20) + ((1 - riskScore) * 0.20)
+ *
+ * This produces values in [0.0, 1.0] directly without normalization.
+ * The function name and signature are preserved for backward compatibility.
+ *
  * @param baseConfidence - Raw signal confidence from strategy (0-1)
  * @param volatility - Market volatility factor (0-1, default 0.3)
  * @param riskScore - Risk assessment score (0-1)
- * @param trackSample - Whether to track this sample for rolling normalization (default true)
- * @returns Normalized global confidence (0-1)
+ * @param trackSample - DEPRECATED: no-op, kept for backward compatibility
+ * @returns Deterministic confidence (0-1)
  */
 export function calculateNGC(
   baseConfidence: number,
@@ -334,20 +333,13 @@ export function calculateNGC(
   const conf = clamp01(baseConfidence);
   const vol = clamp01(volatility);
   const risk = clamp01(riskScore);
-  
-  // Directive A3.R9.0: Normalize then apply additive blending
-  // Step 1: Base NGC from confidence with volatility/risk dampening
-  const rawNGC = (conf * 0.5) + ((1 - vol) * 0.3) + ((1 - risk) * 0.2);
-  
-  if (trackSample) {
-    ngcNormalizer.addSample(rawNGC);
-    console.log(`[A3.R9.0][NGC_BASE] conf=${conf.toFixed(3)} vol=${vol.toFixed(3)} risk=${risk.toFixed(3)} → rawNGC=${rawNGC.toFixed(4)}`);
-  }
-  
-  // A3.R9.0: Normalize to ensure consistent scaling
-  const ngc = ngcNormalizer.normalize(rawNGC);
-  
-  return Math.round(ngc * 10000) / 10000;
+
+  // Directive 12.3.3: Deterministic confidence — no rolling normalization
+  const deterministicConfidence = (conf * 0.60) + ((1 - vol) * 0.20) + ((1 - risk) * 0.20);
+
+  console.log(`[12.3.3][CONFIDENCE] conf=${conf.toFixed(3)} vol=${vol.toFixed(3)} risk=${risk.toFixed(3)} → confidence=${deterministicConfidence.toFixed(4)}`);
+
+  return Math.round(clamp01(deterministicConfidence) * 10000) / 10000;
 }
 
 /**
@@ -729,25 +721,18 @@ export function calculateExtendedSignalMetrics(signal: {
   
   const profitRate = calculateProfitRate(expectedReturn, expectedDuration);
   
-  // Step 2: Directive A3.R9.0.A (R9-D1) - Pre-Blend Normalization
-  // Move normalization into explicit pre-blend stage for variance transparency
-  // baseNGC = traditional confidence-based calculation (not tracked to avoid double-sampling)
-  const baseNGC = calculateNGC(signal.confidence, volatility, riskScore, false);
-  
-  // A3.R9.0.A: Explicit pre-blend normalization (prevents double compression)
-  const nBase = clamp01(baseNGC);      // baseNGC already normalized via calculateNGC
-  const nProfit = clamp01(profitRate); // profitRate already normalized via calculateProfitRate  
-  const nRisk = clamp01(1 - riskScore); // Risk inverted and clamped
-  
-  // A3.R9.0.A: Additive blending with pre-normalized components
-  // NGC = 0.4 * nBase + 0.4 * nProfit + 0.2 * nRisk
-  const profitabilityInformedNGC = (nBase * 0.4) + (nProfit * 0.4) + (nRisk * 0.2);
-  
-  // A3.R9.0.A: No scaling factor - formula already produces appropriate distribution
-  const ngc = clamp01(profitabilityInformedNGC);
-  
-  // A3.R9.0.A: Diagnostic visibility log with normalized components
-  console.log(`[A3.R9.0.A][NGC_NORMALIZED] base=${nBase.toFixed(3)} profit=${nProfit.toFixed(3)} risk=${nRisk.toFixed(3)} blended=${ngc.toFixed(3)}`);
+  // Directive 12.3.3: Deterministic confidence (replaces NGC blending)
+  // Formula: confidence = (strategyConf * 0.60) + ((1-vol) * 0.20) + ((1-risk) * 0.20)
+  // Then blend with profitRate for final quality metric:
+  // finalConfidence = (baseConfidence * 0.50) + (profitRate * 0.30) + ((1-risk) * 0.20)
+  const baseConfidence = calculateNGC(signal.confidence, volatility, riskScore, false);
+  const nProfit = clamp01(profitRate);
+  const nRisk = clamp01(1 - riskScore);
+
+  // Directive 12.3.3: Deterministic blending — transparent, no rolling normalization
+  const ngc = clamp01((baseConfidence * 0.50) + (nProfit * 0.30) + (nRisk * 0.20));
+
+  console.log(`[12.3.3][CONFIDENCE_EXTENDED] base=${baseConfidence.toFixed(3)} profit=${nProfit.toFixed(3)} risk=${nRisk.toFixed(3)} → confidence=${ngc.toFixed(3)}`);
   
   // Step 3: Directive A3.R8.3 - Compute CWQI using the profitability-informed NGC
   // Using calculateCWQIWithPrecomputedMetrics ensures CWQI reflects profitability

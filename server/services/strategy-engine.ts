@@ -3,10 +3,29 @@ import { storage } from '../storage';
 import { detectRange, detectStopZone, type RangeDetectionResult, type StopZoneResult } from './strategy-filters';
 import { telemetryService } from './telemetry-service.js';
 import { confirmMultiTimeframe } from './strategy-features.js';
+// Directive 12.3.2: Import 8 new strategy modules
+import { detectMorningStar } from '../strategies/morning-star.js';
+import { detectInsideBarReversal } from '../strategies/inside-bar-reversal.js';
+import { detectSupportBounce } from '../strategies/support-bounce.js';
+import { detectPivotShift } from '../strategies/pivot-shift.js';
+import { detectReverseImpulse } from '../strategies/reverse-impulse.js';
+import { detectDefensiveHedge } from '../strategies/defensive-hedge.js';
+import { detectAdaptiveFlow } from '../strategies/adaptive-flow.js';
+import { detectVolatilityEdge } from '../strategies/volatility-edge.js';
+import type { PatternInput } from '../strategies/strategy-helpers.js';
 
+/**
+ * Directive 12.3.2: Expanded to 17 canonical strategies
+ * Original 9: vwap_pullback, abcd_long, sma_trend_ride, breakout, mean_reversion, range_trading, vwap_bounce, liquidity_trap, dhma
+ * New 8: morning_star, inside_bar_reversal, support_bounce, pivot_shift, reverse_impulse, defensive_hedge, adaptive_flow, volatility_edge
+ */
 export interface StrategySignal {
   symbol: string;
-  strategy: 'vwap_pullback' | 'abcd_long' | 'sma_trend_ride' | 'breakout' | 'mean_reversion' | 'range_trading' | 'vwap_bounce' | 'liquidity_trap' | 'dhma';
+  strategy:
+    | 'vwap_pullback' | 'abcd_long' | 'sma_trend_ride' | 'breakout'
+    | 'mean_reversion' | 'range_trading' | 'vwap_bounce' | 'liquidity_trap' | 'dhma'
+    | 'morning_star' | 'inside_bar_reversal' | 'support_bounce' | 'pivot_shift'
+    | 'reverse_impulse' | 'defensive_hedge' | 'adaptive_flow' | 'volatility_edge';
   entryPrice: number;
   stopPrice: number;
   targetPrice: number;
@@ -1231,6 +1250,108 @@ export class StrategyEngine {
     }).catch(err => console.error('[Strategy] Telemetry error:', err));
     
     return signal;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // Directive 12.3.2: 8 New Strategy Detection Methods
+  // Each delegates to its corresponding module in server/strategies/
+  // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * Directive 12.3.2: Morning Star / Evening Star (PATTERN)
+   * 3-bar reversal pattern with volume confirmation
+   */
+  detectMorningStar(
+    indicators: TechnicalIndicators,
+    candles: PriceData[],
+    patternSignal: PatternInput | null
+  ): StrategySignal | null {
+    return detectMorningStar(indicators, candles, patternSignal);
+  }
+
+  /**
+   * Directive 12.3.2: Inside Bar Reversal (PATTERN)
+   * Compression breakout with BUY/SELL support
+   */
+  detectInsideBarReversal(
+    indicators: TechnicalIndicators,
+    candles: PriceData[],
+    patternSignal: PatternInput | null
+  ): StrategySignal | null {
+    return detectInsideBarReversal(indicators, candles, patternSignal);
+  }
+
+  /**
+   * Directive 12.3.2: Support Bounce (PATTERN)
+   * Multi-touch support level with pinbar confirmation
+   */
+  detectSupportBounce(
+    indicators: TechnicalIndicators,
+    candles: PriceData[],
+    patternSignal: PatternInput | null
+  ): StrategySignal | null {
+    return detectSupportBounce(indicators, candles, patternSignal);
+  }
+
+  /**
+   * Directive 12.3.2: Pivot Shift (HYBRID)
+   * RSI neutral zone + ADX acceleration with MORNING_STAR pattern
+   */
+  detectPivotShift(
+    indicators: TechnicalIndicators,
+    candles: PriceData[],
+    patternSignal: PatternInput | null
+  ): StrategySignal | null {
+    return detectPivotShift(indicators, candles, patternSignal);
+  }
+
+  /**
+   * Directive 12.3.2: Reverse Impulse (HYBRID)
+   * Counter-trend bounce after momentum exhaustion
+   */
+  detectReverseImpulse(
+    indicators: TechnicalIndicators,
+    candles: PriceData[],
+    patternSignal: PatternInput | null
+  ): StrategySignal | null {
+    return detectReverseImpulse(indicators, candles, patternSignal);
+  }
+
+  /**
+   * Directive 12.3.2: Defensive Hedge (HYBRID)
+   * Decorrelated asset selection in bear volatile regime
+   */
+  detectDefensiveHedge(
+    indicators: TechnicalIndicators,
+    candles: PriceData[],
+    patternSignal: PatternInput | null,
+    btcCandles?: PriceData[]
+  ): StrategySignal | null {
+    return detectDefensiveHedge(indicators, candles, patternSignal, btcCandles);
+  }
+
+  /**
+   * Directive 12.3.2: Adaptive Flow (HYBRID)
+   * Momentum inversion detection in low-vol chop
+   */
+  detectAdaptiveFlow(
+    indicators: TechnicalIndicators,
+    candles: PriceData[],
+    patternSignal: PatternInput | null
+  ): StrategySignal | null {
+    return detectAdaptiveFlow(indicators, candles, patternSignal);
+  }
+
+  /**
+   * Directive 12.3.2: Volatility Edge (HYBRID)
+   * ABCD pattern with volatility premium in high-vol impulse
+   */
+  detectVolatilityEdge(
+    indicators: TechnicalIndicators,
+    candles: PriceData[],
+    patternSignal: PatternInput | null
+  ): StrategySignal | null {
+    return detectVolatilityEdge(indicators, candles, patternSignal);
   }
 
   private calculateVolatility(data: PriceData[]): number {

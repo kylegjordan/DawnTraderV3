@@ -1,0 +1,214 @@
+/**
+ * ============================================================================
+ * Directive 12.3.2 -- Pivot Shift Strategy
+ * ============================================================================
+ *
+ * Type:      HYBRID (pattern + momentum indicators)
+ * Direction: BUY only
+ * Key:       pivot_shift
+ *
+ * Combines a Morning Star candlestick reversal with momentum confirmation
+ * from RSI neutrality and rising ADX slope. The strategy targets pivots
+ * where price is shifting from consolidation/decline into a new uptrend,
+ * confirmed by two consecutive positive ADX slope readings.
+ *
+ * Entry: Slight premium above current price (0.1%).
+ * Stop:  Max of (morning star low, entry - 1.5 * ATR) -- picks tighter stop.
+ * Target: Entry + 3.0 ATR(14).
+ *
+ * Confidence built from pattern strength, RSI neutrality score, ADX
+ * slope acceleration, and volume surge.
+ * ============================================================================
+ */
+
+import type { StrategySignal, TechnicalIndicators } from '../services/strategy-engine';
+import type { PriceData } from '@shared/schema';
+import {
+  calculateATR, calculateRSI, calculateSMA, calculateAvgVolume, calculateMomentum,
+  minMomentum, calculateADXSeries, calculateADX, calculateReturnStdDev,
+  volatilityPercentile, countMomentumInversions, spearmanRankCorrelation,
+  getEffectiveATR, applyGlobalGuards, clampConfidence, parseCandles,
+  findLocalMinima, GLOBAL_CONSTANTS,
+  type OHLCCandle, type PatternInput
+} from './strategy-helpers';
+
+// ============================================================================
+// Strategy Constants
+// ============================================================================
+
+const PS_RSI_LOW           = 40;    // RSI lower bound (inclusive)
+const PS_RSI_HIGH          = 60;    // RSI upper bound (inclusive)
+const PS_ADX_SLOPE_MIN     = 0.5;   // Minimum positive ADX slope per period
+const PS_VOL_MULT          = 1.3;   // Volume must be >= avgVol * this
+const PS_STOP_ATR_MULT     = 1.5;   // ATR-based stop = entry - 1.5 * ATR
+const PS_TARGET_ATR_MULT   = 3.0;   // Target = entry + 3.0 * ATR
+const PS_PATTERN_WEIGHT    = 0.40;  // Weight of pattern strength
+const PS_RSI_WEIGHT        = 0.25;  // Weight of RSI neutrality score
+const PS_ADX_SCORE_RATE    = 0.05;  // Rate at which ADX slope adds confidence
+const PS_MAX_ADX_BONUS     = 0.20;  // Maximum ADX-slope confidence bonus
+const PS_HIGH_VOL_BONUS    = 0.08;  // Bonus when volume >= 2x average
+
+const STRATEGY_KEY = 'pivot_shift';
+const LOG_PREFIX = '[12.3.2][PIVOT_SHIFT]';
+
+// ============================================================================
+// Main Detection Function
+// ============================================================================
+
+/**
+ * Detect a Pivot Shift BUY signal (hybrid pattern + momentum).
+ *
+ * Requires a Morning Star pattern, RSI in the neutral zone (40-60),
+ * two consecutive rising ADX periods, and volume confirmation.
+ *
+ * @param indicators - Technical indicators snapshot (currentPrice, volume, etc.)
+ * @param candles    - Raw candle array from the data feed
+ * @param patternSignal - Pre-detected pattern input (from pattern recogniser)
+ * @returns StrategySignal if all conditions are met, null otherwise
+ */
+export function detectPivotShift(
+  indicators: TechnicalIndicators,
+  candles: any[],
+  patternSignal: PatternInput | null
+): StrategySignal | null {
+  const { currentPrice, volume } = indicators;
+
+  // ── Guard: Parse candles ─────────────────────────────────────────────────
+  const ohlc = parseCandles(candles);
+  if (ohlc.length < 30) {
+    console.log(`${LOG_PREFIX} Insufficient candle data (${ohlc.length} < 30). Skipping.`);
+    return null;
+  }
+
+  // ── Condition 1: Pattern must be MORNING_STAR / BUY ──────────────────────
+  if (!patternSignal || patternSignal.pattern !== 'MORNING_STAR' || patternSignal.direction !== 'BUY') {
+    return null;
+  }
+
+  // ── Condition 2: Minimum pattern strength ────────────────────────────────
+  if (patternSignal.strength < 0.55) {
+    console.log(`${LOG_PREFIX} Pattern strength ${patternSignal.strength.toFixed(3)} < 0.55. Skipping.`);
+    return null;
+  }
+
+  // ── Condition 3: RSI in neutral zone [40, 60] ────────────────────────────
+  const rsi = calculateRSI(ohlc, 14);
+  if (rsi < PS_RSI_LOW || rsi > PS_RSI_HIGH) {
+    console.log(`${LOG_PREFIX} RSI ${rsi.toFixed(2)} outside [${PS_RSI_LOW}, ${PS_RSI_HIGH}]. Skipping.`);
+    return null;
+  }
+
+  // ── Condition 4: ADX slope -- two consecutive positive slopes >= 0.5 ─────
+  const adxSeries = calculateADXSeries(ohlc, 14);
+  if (adxSeries.length < 3) {
+    console.log(`${LOG_PREFIX} ADX series too short (${adxSeries.length} < 3). Skipping.`);
+    return null;
+  }
+
+  const adxCurrent = adxSeries[adxSeries.length - 1];
+  const adxPrev    = adxSeries[adxSeries.length - 2];
+  const adxPrevPrev = adxSeries[adxSeries.length - 3];
+
+  const slope1 = adxCurrent - adxPrev;
+  const slope2 = adxPrev - adxPrevPrev;
+
+  if (slope1 < PS_ADX_SLOPE_MIN || slope2 < PS_ADX_SLOPE_MIN) {
+    console.log(
+      `${LOG_PREFIX} ADX slope check failed: slope1=${slope1.toFixed(3)}, slope2=${slope2.toFixed(3)} ` +
+      `(min=${PS_ADX_SLOPE_MIN}). Skipping.`
+    );
+    return null;
+  }
+
+  // ── Condition 5: Volume confirmation ─────────────────────────────────────
+  const avgVolume = calculateAvgVolume(ohlc, 20);
+  const currentVolume = ohlc[ohlc.length - 1].volume;
+  if (avgVolume === 0 || currentVolume < avgVolume * PS_VOL_MULT) {
+    console.log(
+      `${LOG_PREFIX} Volume check failed: currentVol=${currentVolume.toFixed(2)}, ` +
+      `avgVol=${avgVolume.toFixed(2)}, threshold=${(avgVolume * PS_VOL_MULT).toFixed(2)}. Skipping.`
+    );
+    return null;
+  }
+
+  // ── Compute effective ATR ────────────────────────────────────────────────
+  const effectiveATR = getEffectiveATR(ohlc, currentPrice);
+  if (effectiveATR === null) {
+    console.log(`${LOG_PREFIX} ATR guard failed (ATR too small or zero). Skipping.`);
+    return null;
+  }
+
+  // ── Price calculations ───────────────────────────────────────────────────
+  const entryPrice = currentPrice * 1.001;
+
+  // Morning star low = min of last 3 candle lows
+  const morningStarLow = Math.min(
+    ohlc[ohlc.length - 1].low,
+    ohlc[ohlc.length - 2].low,
+    ohlc[ohlc.length - 3].low
+  );
+
+  // Stop: max of (morning star low, entry - 1.5 * ATR) -- picks tighter stop for BUY
+  const atrBasedStop = entryPrice - PS_STOP_ATR_MULT * effectiveATR;
+  const stopPrice = Math.max(morningStarLow, atrBasedStop);
+
+  const targetPrice = entryPrice + PS_TARGET_ATR_MULT * effectiveATR;
+
+  // ── Global guards (ATR, stop distance, R:R) ──────────────────────────────
+  if (!applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR)) {
+    console.log(`${LOG_PREFIX} Global guards failed. Skipping.`);
+    return null;
+  }
+
+  // ── Confidence calculation ───────────────────────────────────────────────
+  const patternScore = patternSignal.strength * PS_PATTERN_WEIGHT;
+  const rsiScore = (1 - Math.abs(rsi - 50) / 50) * PS_RSI_WEIGHT;
+  const adxSlope = adxCurrent - adxPrev;
+  const adxSlopeScore = Math.max(0, Math.min(PS_MAX_ADX_BONUS, adxSlope * PS_ADX_SCORE_RATE));
+  const volumeBonus = (currentVolume >= avgVolume * 2.0) ? PS_HIGH_VOL_BONUS : 0;
+
+  // Cap confidence at 0.93 for pivot shift (spec constraint)
+  const rawConfidence = patternScore + rsiScore + adxSlopeScore + volumeBonus;
+  const confidence = Math.max(0, Math.min(0.93, rawConfidence));
+
+  // ── Build and return signal ──────────────────────────────────────────────
+  console.log(
+    `${LOG_PREFIX} SIGNAL | entry=${entryPrice.toFixed(4)} stop=${stopPrice.toFixed(4)} ` +
+    `target=${targetPrice.toFixed(4)} conf=${confidence.toFixed(3)} | ` +
+    `rsi=${rsi.toFixed(2)} adxSlope=${adxSlope.toFixed(3)} adxCurrent=${adxCurrent.toFixed(2)} ` +
+    `currentVol=${currentVolume.toFixed(2)} avgVol=${avgVolume.toFixed(2)} ` +
+    `morningStarLow=${morningStarLow.toFixed(4)}`
+  );
+
+  return {
+    symbol: '',  // Populated by caller
+    strategy: STRATEGY_KEY as any,
+    entryPrice,
+    stopPrice,
+    targetPrice,
+    confidence,
+    metadata: {
+      directive: '12.3.2',
+      type: 'HYBRID',
+      direction: 'BUY',
+      patternStrength: patternSignal.strength,
+      rsi,
+      adxCurrent,
+      adxPrev,
+      adxPrevPrev,
+      adxSlope,
+      slope2,
+      morningStarLow,
+      currentVolume,
+      avgVolume,
+      effectiveATR,
+      patternScore,
+      rsiScore,
+      adxSlopeScore,
+      volumeBonus,
+    },
+  };
+}
+
+// Default export for strategy module resolution
+export const detect = detectPivotShift;

@@ -54,9 +54,12 @@ import { computeNetExpectancyKernel } from '../core/calculations/net-expectancy-
 // Directive 9.3: Adaptive Kalman Filter integration
 import { getSmoothedPrice, getKalmanFilter } from '../utils/adaptive-kalman.js';
 import { calculateEfficiencyRatio, calculateVolNoise, calculateTrendSlope, calculateDirectionalIntegrity } from '../utils/analysis-utils.js';
-// Directive 10.1: Dynamic Strategy Selector
+// Directive 10.1 / 12.3.1: Dynamic Strategy Selector (now uses canonical regimes)
 import { getDynamicStrategySelector, type DSSMetrics } from './dynamic-strategy-selector.js';
 import { SYSTEM_GUARDS } from '../config/system-guards.js';
+// Directive 12.3.1: Canonical regime calculator for pair-level regime
+import { calculatePairRegime } from '../core/metrics/market-regime.js';
+import type { OHLCData } from '../types/market-regime.types';
 // Directive 10.2: Pattern Recognizer
 import { getPatternRecognizer, type Candle, type PatternSignal, type SignalType } from './pattern-recognizer.js';
 // Directive 10.4: Hybrid Integration
@@ -141,16 +144,28 @@ export class SignalOrchestrator {
   constructor(config: SignalOrchestratorConfig) {
     this.mode = config.mode;
     this.evaluationIntervalMs = config.evaluationIntervalMs || 30000;
+    // Directive 12.3.2: All 17 canonical strategies enabled by default
     this.enabledStrategies = new Set(config.enabledStrategies || [
+      // Original 9
       'vwap_pullback',
       'abcd_long',
       'sma_trend_ride',
       'breakout',
       'mean_reversion',
-      'range_trading',
+      'range_trading',      // Legacy name — canonical map uses 'range_trade'
+      'range_trade',        // Directive 12.3.2: Canonical name added
       'vwap_bounce',
       'liquidity_trap',
-      'dhma'
+      'dhma',
+      // Directive 12.3.2: 8 new strategies
+      'morning_star',
+      'inside_bar_reversal',
+      'support_bounce',
+      'pivot_shift',
+      'reverse_impulse',
+      'defensive_hedge',
+      'adaptive_flow',
+      'volatility_edge'
     ]);
     
     this.strategyEngine = new StrategyEngine();
@@ -412,7 +427,8 @@ export class SignalOrchestrator {
       low24h: marketContext?.low24h,
     });
 
-    console.log(`[11.0E][METRICS] ${rawSignal.symbol}/${strategyId}: confidence=${extendedMetrics.ngc.toFixed(4)}, volatility=${(extendedMetrics.volatility ?? 0.3).toFixed(4)}`);
+    // Directive 12.3.3: NGC renamed to confidence (deterministic)
+    console.log(`[12.3.3][METRICS] ${rawSignal.symbol}/${strategyId}: confidence=${extendedMetrics.ngc.toFixed(4)}, volatility=${(extendedMetrics.volatility ?? 0.3).toFixed(4)}`);
 
     // Directive 11.0E: ML-enhanced predictions (non-blocking fire-and-forget)
     // Note: ML service still accepts ngc/cwqi for backward compatibility during transition
@@ -785,12 +801,21 @@ export class SignalOrchestrator {
       
       console.log(`[9.3][ER] ${symbol}=${ER.toFixed(4)} VolNoise=${VolNoise.toFixed(4)}`);
       
-      // Directive 10.1: DSS Regime Check
+      // Directive 12.3.1: Canonical Regime from OHLC data via calculatePairRegime()
+      // Convert Kraken OHLC to OHLCData format for regime calculator
+      const ohlcForRegime: OHLCData[] = ohlcData.map((c: any) => ({
+        open: parseFloat(c.open || c[1]),
+        high: parseFloat(c.high || c[2]),
+        low: parseFloat(c.low || c[3]),
+        close: parseFloat(c.close || c[4]),
+        volume: parseFloat(c.volume || c[6]),
+        timestamp: parseFloat(c.timestamp || c[0]) || Date.now()
+      }));
+
       const dss = getDynamicStrategySelector();
-      const dssMetrics: DSSMetrics = { volNoise: VolNoise, trendSlope };
-      const regimeInfo = dss.getRegimeInfo(dssMetrics);
-      
-      console.log(`[10.1][DSS] ${symbol}: regime=${regimeInfo.regime}, trendSlope=${trendSlope.toFixed(4)}, volNoise=${VolNoise.toFixed(4)}`);
+      const regimeInfo = dss.getRegimeInfoFromOHLC(ohlcForRegime, VolNoise, trendSlope);
+
+      console.log(`[12.3.1][DSS] ${symbol}: regime=${regimeInfo.regime}, trendSlope=${trendSlope.toFixed(4)}, volNoise=${VolNoise.toFixed(4)}`);
       
       // Veto on Extreme Noise - skip all strategy evaluation for this symbol
       if (regimeInfo.isVeto) {
@@ -1007,6 +1032,114 @@ export class SignalOrchestrator {
         atr = ranges.reduce((a, b) => a + b, 0) / atrPeriod;
       }
       
+      // ═══════════════════════════════════════════════════════════════
+      // Directive 12.3.2: 8 New Strategy Evaluations
+      // These strategies require pattern signals as input.
+      // Convert detected patterns to PatternInput format for strategy modules.
+      // ═══════════════════════════════════════════════════════════════
+      const bestPattern = patternSignals.length > 0 ? patternSignals.reduce((best, p) =>
+        p.strength > best.strength ? p : best, patternSignals[0]) : null;
+
+      const patternInput = bestPattern ? {
+        pattern: bestPattern.pattern,
+        direction: bestPattern.direction as 'BUY' | 'SELL',
+        strength: bestPattern.strength,
+        metadata: {
+          ...bestPattern,
+          // Support-bounce needs low values
+          parentHigh: bestPattern.metadata?.parentHigh ?? (candles.length >= 2 ? candles[candles.length - 2].high : 0),
+          parentLow: bestPattern.metadata?.parentLow ?? (candles.length >= 2 ? candles[candles.length - 2].low : 0),
+          compressionRatio: bestPattern.metadata?.compressionRatio ?? 0.5,
+          pinbarLow: bestPattern.metadata?.pinbarLow ?? (candles.length > 0 ? candles[candles.length - 1].low : 0),
+          engulfingLow: bestPattern.metadata?.engulfingLow ??
+            (candles.length >= 2 ? Math.min(candles[candles.length - 1].low, candles[candles.length - 2].low) : 0),
+          engulfRatio: bestPattern.metadata?.engulfRatio ?? 1.0,
+          hasGap: bestPattern.metadata?.hasGap ?? false,
+          recoveryRatio: bestPattern.metadata?.recoveryRatio ?? 0,
+          // ABCD metadata for volatility_edge
+          aPointLow: bestPattern.metadata?.aPointLow,
+          bPointHigh: bestPattern.metadata?.bPointHigh,
+          cPointLow: bestPattern.metadata?.cPointLow,
+          cPointHigh: bestPattern.metadata?.cPointHigh,
+        }
+      } : null;
+
+      if (activeStrategies.has('morning_star')) {
+        const rawSignal = this.strategyEngine.detectMorningStar(indicators, ohlcAsAny, patternInput);
+        if (rawSignal) {
+          rawSignal.symbol = symbol;
+          const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'morning_star' as any, sizingContext);
+          if (sizedSignal) signals.push(sizedSignal);
+        }
+      }
+
+      if (activeStrategies.has('inside_bar_reversal')) {
+        const rawSignal = this.strategyEngine.detectInsideBarReversal(indicators, ohlcAsAny, patternInput);
+        if (rawSignal) {
+          rawSignal.symbol = symbol;
+          const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'inside_bar_reversal' as any, sizingContext);
+          if (sizedSignal) signals.push(sizedSignal);
+        }
+      }
+
+      if (activeStrategies.has('support_bounce')) {
+        const rawSignal = this.strategyEngine.detectSupportBounce(indicators, ohlcAsAny, patternInput);
+        if (rawSignal) {
+          rawSignal.symbol = symbol;
+          const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'support_bounce' as any, sizingContext);
+          if (sizedSignal) signals.push(sizedSignal);
+        }
+      }
+
+      if (activeStrategies.has('pivot_shift')) {
+        const rawSignal = this.strategyEngine.detectPivotShift(indicators, ohlcAsAny, patternInput);
+        if (rawSignal) {
+          rawSignal.symbol = symbol;
+          const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'pivot_shift' as any, sizingContext);
+          if (sizedSignal) signals.push(sizedSignal);
+        }
+      }
+
+      if (activeStrategies.has('reverse_impulse')) {
+        const rawSignal = this.strategyEngine.detectReverseImpulse(indicators, ohlcAsAny, patternInput);
+        if (rawSignal) {
+          rawSignal.symbol = symbol;
+          const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'reverse_impulse' as any, sizingContext);
+          if (sizedSignal) signals.push(sizedSignal);
+        }
+      }
+
+      if (activeStrategies.has('defensive_hedge')) {
+        // Defensive hedge requires BTC candle data for correlation calculation
+        // TODO: Pass BTC OHLC from pricing service cache when available
+        const rawSignal = this.strategyEngine.detectDefensiveHedge(indicators, ohlcAsAny, patternInput);
+        if (rawSignal) {
+          rawSignal.symbol = symbol;
+          const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'defensive_hedge' as any, sizingContext);
+          if (sizedSignal) signals.push(sizedSignal);
+        }
+      }
+
+      if (activeStrategies.has('adaptive_flow')) {
+        const rawSignal = this.strategyEngine.detectAdaptiveFlow(indicators, ohlcAsAny, patternInput);
+        if (rawSignal) {
+          rawSignal.symbol = symbol;
+          const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'adaptive_flow' as any, sizingContext);
+          if (sizedSignal) signals.push(sizedSignal);
+        }
+      }
+
+      if (activeStrategies.has('volatility_edge')) {
+        const rawSignal = this.strategyEngine.detectVolatilityEdge(indicators, ohlcAsAny, patternInput);
+        if (rawSignal) {
+          rawSignal.symbol = symbol;
+          const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'volatility_edge' as any, sizingContext);
+          if (sizedSignal) signals.push(sizedSignal);
+        }
+      }
+
+      console.log(`[12.3.2][EVAL] ${symbol}: ${signals.length} signals from ${activeStrategies.size} strategies (pattern=${bestPattern?.pattern ?? 'none'})`);
+
       // Convert pattern signals to trade signals and add to queue
       for (const patternSig of patternSignals) {
         // Only process BUY patterns for long-only trading
@@ -1193,9 +1326,17 @@ export class SignalOrchestrator {
   /**
    * Directive 10.1: Get strategies allowed for the current market regime
    */
+  /**
+   * Directive 12.3.1: Get regime-allowed strategies from CANONICAL_REGIME_STRATEGY_MAP
+   * Replaces SYSTEM_GUARDS.STRATEGY_MAP (old 5-regime model with wrong strategy assignments)
+   */
   private getRegimeAllowedStrategies(regime: string): Set<string> {
-    const map = SYSTEM_GUARDS.STRATEGY_MAP as Record<string, readonly string[]>;
-    const strategies = map[regime] || [];
+    const mapping = REGIME_STRATEGY_MAP[regime as MarketRegimeType];
+    if (!mapping) {
+      console.log(`[12.3.1][REGIME] Unknown regime '${regime}', returning empty strategy set`);
+      return new Set();
+    }
+    const strategies = mapping.strategies.map(s => s.strategyKey);
     return new Set(strategies);
   }
   
