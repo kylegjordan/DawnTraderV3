@@ -6,6 +6,46 @@
     "previousValue": "LOW_VOL_CHOP",
     "newValue": "BULL_STABLE",
     "severity": "info",
+    "id": "mkt_evt_1772625262998_9",
+    "timestamp": "2026-03-04T11:54:22.998Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
+    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
+    "previousValue": "BULL_STABLE",
+    "newValue": "LOW_VOL_CHOP",
+    "severity": "info",
+    "id": "mkt_evt_1772625203345_8",
+    "timestamp": "2026-03-04T11:53:23.345Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
+    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
+    "previousValue": "LOW_VOL_CHOP",
+    "newValue": "BULL_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1772607029300_11",
+    "timestamp": "2026-03-04T06:50:29.300Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
+    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
+    "previousValue": "BULL_STABLE",
+    "newValue": "LOW_VOL_CHOP",
+    "severity": "info",
+    "id": "mkt_evt_1772605199064_10",
+    "timestamp": "2026-03-04T06:19:59.064Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
+    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
+    "previousValue": "LOW_VOL_CHOP",
+    "newValue": "BULL_STABLE",
+    "severity": "info",
     "id": "mkt_evt_1772578164717_9",
     "timestamp": "2026-03-03T22:49:24.717Z"
   },

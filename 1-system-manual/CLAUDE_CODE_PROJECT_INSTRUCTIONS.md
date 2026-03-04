@@ -3,7 +3,7 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-03-04 (after Batch 14B — Phase 13 MCE Installation governance. Directive 13.1 COMPLETE. MCE installed, L12-L20 removed (29 files, ~8,200 lines). BUG-002, BUG-003, BUG-008, RISK-002, RISK-016, RISK-019, RISK-020 RESOLVED. strategy_type enum expanded 9→18 (hotfix). 18/18 directives complete across Phases 12-13)
+> **Last Updated**: 2026-03-04 (after Batch 14B — Phase 13 MCE Installation governance. Added workflow clarity: mega-batch approach, critical mistakes section, rules 15-17. Roadmap updated to reflect Phase 12-13 completion.)
 
 ---
 
@@ -61,6 +61,33 @@ This replaces the original 7-step directive lifecycle with a more efficient batc
 - Code changes and governance doc updates are **separate batches**. Don't mark bugs RESOLVED until the code fix is verified working.
 - The local clone is **READ ONLY**. All edits go to `DT_Staged_Changes/`. This prevents sync conflicts when `sync-repo.bat` runs.
 - Every governance batch **must include an updated `CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`** with current state, completed directives, and snapshot references.
+
+### Mega-Batch Approach
+
+Kyle's preference: **one mega-batch per phase, not sub-batches**. Each roadmap phase (e.g., Phase 13) should be scoped and delivered as a single batch covering everything in that phase. Do NOT break phases into multiple batches unless the phase is genuinely too large (and even then, discuss with Kyle first).
+
+Before every batch:
+1. Write a scope document (`BATCH_N_SCOPE.md` in `Claude Comms and Packages/Scope Files/`)
+2. Conduct a thorough pre-implementation audit (read every source file that will be touched, verify all assumptions — Kyle catches oversights)
+3. Get Kyle's approval on the scope before writing any code
+
+### ⚠️ Critical Mistakes to Avoid
+
+Previous sessions have made these errors. **Do NOT repeat them:**
+
+1. **DO NOT edit files in the clone repo** (`DT_Clone_Repo/DawnTraderV3/`). It is READ ONLY. All changes go to `DT_Staged_Changes/BATCH_N/`. Editing the clone causes sync conflicts when `sync-repo.bat` pulls from GitHub.
+
+2. **DO NOT deliver files without a zip package.** Every batch must be zipped and placed in `Claude Comms and Packages/` (Batch Zips/ or Governance Zips/). Kyle transfers zips to Replit — loose files cannot be transferred.
+
+3. **DO NOT deliver a batch without INSTRUCTIONS.md.** Replit needs INSTRUCTIONS.md to know what files to place, what surgical edits to make (for large files), and what commit message to use. Without it, the batch is incomplete and Replit cannot apply it.
+
+4. **DO NOT skip the Replit Autonomy Constraints block.** Every INSTRUCTIONS.md must begin with the autonomy constraints block (see Replit Behavior Constraints section below). This prevents Replit from making autonomous changes.
+
+5. **DO NOT combine code and governance in one batch.** Code changes first (Batch N), verify they work in the repo, THEN governance updates in a separate batch (Batch NB).
+
+6. **DO NOT write code before agreeing on scope with Kyle.** Always produce a scope document first and get Kyle's approval.
+
+7. **DO NOT split a phase into sub-batches.** Use one mega-batch per phase unless Kyle explicitly approves splitting.
 
 ---
 
@@ -476,16 +503,20 @@ Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation
 12. **Scope files go to `Claude Comms and Packages/Scope Files/`** before implementation begins. Each scope document is named `BATCH_N_SCOPE.md`.
 13. **For pushing to GitHub**, all INSTRUCTIONS.md files must include the push command using `REPLIT_PUSH_SCRIPT.sh`: `bash REPLIT_PUSH_SCRIPT.sh "Batch N: ..."`. This script handles Replit's checkpoint auto-commit behavior. The old `github-push.sh` is deprecated.
 14. **Google Drive cache warning**: Do not clear Google Drive for Desktop's application cache while the clone repo is on Google Drive. If the cache must be cleared, back up `.git/objects/pack/` first. See Google Drive Cache Warning section for recovery procedure.
+15. **One mega-batch per phase.** Don't break phases into sub-batches. Each roadmap phase is one scope document → one code batch → one governance batch. Discuss with Kyle before splitting.
+16. **Every batch produces a zip.** No exceptions. The zip contains modified files in repo-relative paths, INSTRUCTIONS.md, and README.md. Without a zip, the work can't reach Replit.
+17. **Pre-implementation audit before every phase.** Read every source file that will be touched. Verify all assumptions about imports, consumers, and dependencies. Kyle catches oversights — be thorough.
 
 ---
 
 ## How to Start a New Session
 
-1. Read this file (`1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`)
+1. Read this file (`1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`) — **read it fully, not just the headers**
 2. Read the snapshot log (`DT_Frozen_Snapshots/SNAPSHOT_LOG.md`) to know current state
 3. Read `directives/DIRECTIVE_INDEX.md` to see what's completed and what's next
 4. Verify permission settings in `.claude/worktrees/wizardly-einstein/.claude/settings.local.json` — recreate if missing (see Claude Code Permission Settings section)
 5. Ask Kyle what to work on, or continue from where the previous session left off
+6. **Before writing any code**: agree on scope with Kyle, write a scope document, and conduct a pre-implementation audit
 
 ---
 

@@ -2,7 +2,7 @@
 
 > **Author**: Claude Code (System Cartographer & Lead Architect)
 > **Created**: 2026-02-17
-> **Revised**: 2026-02-17 (v2 — incorporates Kyle's Next Steps, Phase 11.8 final steps, Directional Bias, Short Trading, and ML planning documents)
+> **Revised**: 2026-03-04 (v3 — updated to reflect Phase 12 and Phase 13 completion. L-Series removal moved from Phase 16 to Phase 13 per actual execution. Mega-batch approach documented.)
 > **Purpose**: Complete roadmap from current state (Phase 11.8B-D1) through live mode trading and publication. Uses formal DawnTrader phase numbering.
 > **Companion Documents**: SYSTEM_MANUAL.md (what the system IS), CHANGES_AND_FIXES.md (22 bugs, 85 risks), LEGACY_DEPRECATION_PLAN.md (removal waves)
 > **Source Documents Incorporated**: "Dawn Trader Next Steps After MCE Build" (2.14.26), "DT Phase 11.8 Final Steps" (2.6.26), "DT Predictive Learning Calibration" (2.2.26), "The Plan to Create A Plan for Machine Learning" (1.17.26)
@@ -11,9 +11,11 @@
 
 ## Where We Are
 
-**Last completed phase**: 11.8B-D1 (Clean Authority)
-**Phase 11 status**: Open — 11.8B-E and 11.8C remain to be completed after MCE
-**Next phase**: Phase 12 (Cleanup & Foundation)
+**Last completed phase**: Phase 13 (MCE Installation + L-Series Removal)
+**Phase 11 status**: Open — 11.8B-E and 11.8C remain to be completed after VTS real calculations
+**Phase 12 status**: COMPLETE — 17/18 directives done (only 12.1.6 LSP Error Triage remains, LOW priority, deferred)
+**Phase 13 status**: COMPLETE — MCE installed, L12-L20 cluster fully removed (29 files, ~8,200 lines). Batch 14 + hotfix + Batch 14B governance.
+**Next phase**: Phase 14 (VTS Real Calculations & Signal Model Enrichment) — or Kyle’s direction
 
 ---
 
@@ -69,9 +71,20 @@ These items are now placed in the roadmap at their correct dependency points. Th
 16. Create Live Mode
 17. Publication
 
+
+### Batch Approach
+
+All phases use a **mega-batch approach**: one scope document → one code batch → one governance batch per phase. Sub-batches within a phase are avoided unless the phase is genuinely too large. This reduces coordination overhead and ensures each batch is a complete, self-contained unit of work.
+
+The batch sequence for each phase is:
+1. **Scope document** — write `BATCH_N_SCOPE.md` to `Claude Comms and Packages/Scope Files/`
+2. **Pre-implementation audit** — read every source file, verify all assumptions
+3. **Kyle approval** — scope must be approved before code is written
+4. **Code batch** (Batch N) — modified files + INSTRUCTIONS.md + README.md → zip → Replit applies → push
+5. **Governance batch** (Batch NB) — documentation updates → zip → Replit applies → push
 ---
 
-## Phase 12: Cleanup & Foundation (Weeks 1-6)
+## Phase 12: Cleanup & Foundation (Weeks 1-6) — ✅ COMPLETE
 
 **Goal**: Fix critical math errors, harden security, remove all dead code, and unify the active trading pipeline. Creates the clean foundation that everything else depends on.
 
@@ -184,9 +197,14 @@ These items are now placed in the roadmap at their correct dependency points. Th
 
 ---
 
-## Phase 13: MCE Installation (Weeks 6-10)
+## Phase 13: MCE Installation (Weeks 6-10) — ✅ COMPLETE
 
 **Goal**: Install the Market Calculation Engine (Counsel/Group Think) as the authoritative data provider for the trading pipeline.
+
+> **Completed**: 2026-03-04 (Batch 14 code + Batch 14-hotfix + Batch 14B governance)
+> **Actual scope**: MCE core build + pipeline integration + full L12-L20 removal (originally planned for Phase 16, pulled forward). PredictiveConfidence DEFERRED to a future batch.
+> **Bugs/risks resolved**: BUG-002, BUG-003, BUG-008, RISK-002, RISK-016, RISK-019, RISK-020
+> **Net result**: ~8,200 lines removed, 29 legacy files deleted, 59 API endpoints removed, strategy_type enum expanded 9→18
 
 ### 13.1 MCE Core Build
 - MCE becomes the single source of truth for market data, indicators, and regime classification
@@ -359,17 +377,14 @@ This is the authoritative "Version 1.0" of the system's learned knowledge, estab
 
 ---
 
-## Phase 16: L-Series Removal & Legacy Cleanup (Weeks 20-23)
+## Phase 16: Database & Remaining Legacy Cleanup (Weeks 20-23)
 
-**Goal**: Remove the remaining legacy infrastructure — L-Series cluster, legacy database tables, and remaining dead code. This was deferred because L-Series removal requires MCE to absorb MCP's responsibilities.
+**Goal**: Clean remaining legacy infrastructure — legacy database tables, remaining dead code, and schema simplification.
 
-### 16.1 Wave 6: L-Series Cluster Removal (DANGEROUS)
-- Consumer audit of all 14+ MCP/ARE importers, 12 DCE importers
-- Build replacement portfolio-risk module on MCE/canonical regimes
-- Remove ~13 L-Series systems
-- Remove L-Series route files (~52 endpoints)
-- Drop ~57 L-Series/ethics/governance/cluster database tables
-- Drop ~40 legacy enum definitions
+> **Note**: Wave 6 L-Series Cluster Removal was completed early in Phase 13 (Batch 14, 2026-03-04). The entire L12-L20 cluster (29 files, 59 endpoints, ~8,200 lines) has been permanently deleted. What remains for Phase 16 is database table cleanup, schema work, and any remaining legacy cleanup.
+
+### ~~16.1 Wave 6: L-Series Cluster Removal~~ — ✅ DONE (Phase 13, Batch 14)
+All L-Series services (17), route files (9), and utilities (2) removed. M3B validation service also removed. See Phase 13 completion notes above.
 
 ### 16.2 Database Phase A-B: Isolation & Modularization
 - Confirm which legacy tables still have active writers (Phase A)
