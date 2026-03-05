@@ -422,30 +422,16 @@ async function generatePhase10Signal(
   // - ❌ Never ranked  
   // - ❌ Never generates a virtual trade
   // ══════════════════════════════════════════════════════════════════════════════
-  const dependency = getStrategyDependency(strategy);
-  
-  // Compute global stability for this cycle
+  // Phase 14: Governance gate REMOVED from VTS path — generates trades for ALL strategies
+  // Governance remains in active trading path (paper-execution-engine.ts processSignal)
+
+  // Compute global stability (kept for observability — stored on trade record)
   const stabilityResult = computeGlobalStability(
-    zScoreResult.isWarmedUp ? Math.abs(zScoreResult.zScores.volZ) : 0.5, // driftScore approximation
+    zScoreResult.isWarmedUp ? Math.abs(zScoreResult.zScores.volZ) : 0.5,
     zScoreResult.isWarmedUp ? zScoreResult.zScores.volZ : 0,
     predictiveConfidence
   );
   const regimeStability: RegimeStability = stabilityResult.stability;
-  
-  if (!isStrategyEligible(strategy, regimeStability, dependency)) {
-    logGovernanceBlock({ strategy, pair: symbol }, regimeStability);
-    logSkippedSignal({
-      symbol,
-      reason: 'BLOCKED_GOVERNANCE',
-      regime,
-      signalType,
-      strategy,
-      source: 'VTS',
-      governanceReason: `UNSTABLE_REGIME: ${dependency} dependency blocked in ${regimeStability}`,
-    });
-    console.log(`[11.7R-E][VTS] PRE-SCORE BLOCK: ${symbol} ${strategy} (${dependency} dep) blocked in ${regimeStability}`);
-    return null;
-  }
   // ══════════════════════════════════════════════════════════════════════════════
   
   // ══════════════════════════════════════════════════════════════════════════════
@@ -1586,7 +1572,12 @@ export function getOpenVirtualTradesForML(): Array<{
       expectedEdge: trade.predictiveConfidence,
       regimeWeight: trade.regimeWeight,
       entryTime: new Date(trade.openedAt).toISOString(),
-      durationOpenMinutes: durationMinutes
+      durationOpenMinutes: durationMinutes,
+      globalRegime: trade.globalRegime || null,
+      pairFriction: trade.pairFriction ?? null,
+      globalFriction: trade.globalFriction ?? null,
+      pairDirectionalBias: trade.pairDirectionalBias || null,
+      globalDirectionalBias: trade.globalDirectionalBias || null
     });
   }
   

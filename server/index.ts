@@ -789,6 +789,8 @@ app.use((req, res, next) => {
         const { initArchivalScheduler } = await import('./core/archival/archival-scheduler');
         initArchivalScheduler();
         console.log('[11.7I-03] ✅ Archival scheduler initialized');
+        const { clearArchiveForFreshStart } = await import('./core/archival/regime-archiver');
+        clearArchiveForFreshStart();
       } catch (archiveError) {
         console.error('[11.7I-03] ⚠️ Archival scheduler init failed:', archiveError);
       }

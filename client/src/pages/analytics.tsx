@@ -33,6 +33,9 @@ interface MarketIndicatorsData {
     frictionEmoji: string;
     frictionNarrative: string;
     frictionDisplay: string;
+    globalDBSScore: number | null;
+    globalDBSCategory: string;
+    globalDBSPairCount: number;
   };
   timestamp: string;
 }
@@ -138,10 +141,30 @@ interface PredictiveDiagnosticsData {
 }
 
 const getRegimeIcon = (regime: string) => {
-  if (regime.includes('BULL')) return <TrendingUp className="w-5 h-5 text-green-500" />;
-  if (regime.includes('BEAR')) return <TrendingDown className="w-5 h-5 text-red-500" />;
+  if (regime.includes('TREND_FRIENDLY') || regime.includes('BULL')) return <TrendingUp className="w-5 h-5 text-green-500" />;
+  if (regime.includes('HIGH_VOLATILITY') || regime.includes('BEAR')) return <TrendingDown className="w-5 h-5 text-red-500" />;
+  if (regime.includes('IMPULSE_EXPANSION') || regime.includes('HIGH_VOL_IMPULSE')) return <Zap className="w-5 h-5 text-emerald-500" />;
   if (regime === 'EXTREME_NOISE') return <AlertCircle className="w-5 h-5 text-red-500 animate-pulse" />;
   return <Activity className="w-5 h-5 text-yellow-500" />;
+};
+
+const getDBSColor = (category: string): string => {
+  if (category.includes('UP_STRONG') || category.includes('UP_MODERATE')) return 'text-green-400';
+  if (category.includes('UP_WEAK')) return 'text-green-300';
+  if (category === 'NEUTRAL') return 'text-yellow-400';
+  if (category.includes('DOWN_WEAK')) return 'text-yellow-300';
+  if (category.includes('DOWN_MODERATE') || category.includes('DOWN_STRONG')) return 'text-red-400';
+  return 'text-muted-foreground';
+};
+
+const getDBSBadgeColor = (category: string): string => {
+  if (category.includes('UP_STRONG') || category.includes('UP_MODERATE')) return 'bg-green-500/20 text-green-400 border-green-500/30';
+  if (category.includes('UP_WEAK')) return 'bg-green-500/10 text-green-300 border-green-500/20';
+  if (category === 'NEUTRAL') return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+  if (category.includes('DOWN_WEAK')) return 'bg-yellow-500/10 text-yellow-300 border-yellow-500/20';
+  if (category.includes('DOWN_MODERATE')) return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
+  if (category.includes('DOWN_STRONG')) return 'bg-red-500/20 text-red-400 border-red-500/30';
+  return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
 };
 
 const getRegimeBadgeColor = (regime: string) => {
@@ -455,7 +478,54 @@ function MarketOverviewSection({ indicators }: { indicators: MarketIndicatorsDat
         </div>
         
         <Separator />
-        
+
+        {/* Phase 14: Global Directional Bias Section */}
+        <div>
+          <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+            <TrendingUp className="w-4 h-4" />
+            Global Directional Bias
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-xs text-muted-foreground cursor-help flex items-center gap-1 ml-auto">
+                    <HelpCircle className="w-3.5 h-3.5" />
+                    Sample: {data.globalDBSPairCount || 0} pairs
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-sm">
+                  <p className="text-sm font-medium mb-1">How Directional Bias is Calculated</p>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Global DBS is the median of pair-level bias scores across active VTS pairs.
+                    Each pair's bias is computed from log-price slope, normalized returns, and EMA trend alignment.
+                  </p>
+                  <p className="text-xs">
+                    <span className="font-medium">Score range:</span> -1.0 (strong downward) to +1.0 (strong upward)
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </h4>
+          <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
+            <div className="flex items-center gap-4">
+              <span className={`text-3xl font-mono font-bold ${getDBSColor(data.globalDBSCategory || 'NEUTRAL')}`}>
+                {data.globalDBSScore !== null && data.globalDBSScore !== undefined
+                  ? (data.globalDBSScore >= 0 ? '+' : '') + data.globalDBSScore.toFixed(3)
+                  : '\u2014'}
+              </span>
+              <Badge variant="outline" className={getDBSBadgeColor(data.globalDBSCategory || 'NEUTRAL')}>
+                {(data.globalDBSCategory || 'NEUTRAL').replace(/_/g, ' ')}
+              </Badge>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {(data.globalDBSPairCount || 0) > 0
+                ? `Based on ${data.globalDBSPairCount} pairs`
+                : 'Awaiting pair data...'}
+            </div>
+          </div>
+        </div>
+
+        <Separator />
+
         <DefinitionsReference />
       </CardContent>
     </Card>
@@ -1570,7 +1640,7 @@ function PredictiveDiagnosticsSection() {
                               <Badge variant="secondary" className="text-xs">{decision.signalType}</Badge>
                             </div>
                             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <span>{decision.regime}</span>
+                              <span>{(decision.regime || '').replace(/BULL_STABLE/g, 'TREND_FRIENDLY_STABLE').replace(/BEAR_VOLATILE/g, 'HIGH_VOLATILITY_UNSTABLE').replace(/LOW_VOL_CHOP/g, 'RANGE_BOUND_STABLE').replace(/HIGH_VOL_IMPULSE/g, 'IMPULSE_EXPANSION').replace(/^TRANSITION$/g, 'STRUCTURAL_TRANSITION')}</span>
                               <ChevronDown className="w-4 h-4" />
                             </div>
                           </div>

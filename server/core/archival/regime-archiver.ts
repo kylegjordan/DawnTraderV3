@@ -343,4 +343,22 @@ export function exportArchiveToCSV(records: RegimeArchiveRecord[]): string {
   return [headers.join(','), ...rows].join('\n');
 }
 
+export function clearArchiveForFreshStart(): void {
+  ensureDirectories();
+  try {
+    const files = fs.readdirSync(ARCHIVE_DIR);
+    let deletedCount = 0;
+    for (const file of files) {
+      if (file.endsWith('.json') || file.endsWith('.json.gz')) {
+        fs.unlinkSync(path.join(ARCHIVE_DIR, file));
+        deletedCount++;
+      }
+    }
+    saveManifest([]);
+    console.log(`[Phase14][RegimeArchive] Fresh start: cleared ${deletedCount} archive files and reset manifest`);
+  } catch (err) {
+    console.warn('[Phase14][RegimeArchive] Error clearing archive:', err);
+  }
+}
+
 console.log('[11.7E][RegimeArchiver] Module initialized');

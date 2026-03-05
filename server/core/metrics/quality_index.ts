@@ -19,6 +19,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { calculateFinalScore, calculateRegimeWeight } from '../utils/score-calculator.js';
 
 interface MetricsConfig {
   NGC_MIN: number;
@@ -665,13 +666,14 @@ export function calculateCWQIFromSignal(signal: {
 
 /**
  * Calculate extended metrics for a signal (used by Signal Orchestrator)
- * Returns all derived metrics: NGC, ExpectedDuration, ProfitRate, CWQI
+ * Returns all derived metrics: confidence, FinalScore, RegimeWeight, ExpectedDuration, ProfitRate, CWQI
  * 
- * Directive A3.R8.3: Restructured calculation order to incorporate profitability into NGC
+ * Phase 14: Deterministic confidence + FinalScore pipeline
  * 1. First compute base metrics (expectedReturn, riskScore, volatility, expectedDuration, profitRate)
- * 2. Then compute NGC as a blend including profitability: 
- *    NGC = (baseNGC * 0.4) + (profitRate * 0.4) + ((1-risk) * 0.2)
- * 3. Finally compute CWQI using this profitability-informed NGC
+ * 2. Compute confidence as deterministic blend:
+ *    confidence = (baseConfidence * 0.50) + (profitRate * 0.30) + ((1-risk) * 0.20)
+ * 3. Compute RegimeWeight and FinalScore using centralized score-calculator
+ * 4. Finally compute CWQI using this profitability-informed confidence
  */
 export function calculateExtendedSignalMetrics(signal: {
   confidence: number;
@@ -683,8 +685,13 @@ export function calculateExtendedSignalMetrics(signal: {
   high24h?: number;
   low24h?: number;
   historicalHoldTime?: number;
+  // Phase 14: Additional inputs for FinalScore/RegimeWeight computation
+  hybridScore?: number;
+  trendStrength?: number;
 }): {
-  ngc: number;
+  confidence: number;
+  finalScore: number;
+  regimeWeight: number;
   expectedReturn: number;
   riskScore: number;
   volatility: number;
@@ -730,24 +737,37 @@ export function calculateExtendedSignalMetrics(signal: {
   const nRisk = clamp01(1 - riskScore);
 
   // Directive 12.3.3: Deterministic blending — transparent, no rolling normalization
-  const ngc = clamp01((baseConfidence * 0.50) + (nProfit * 0.30) + (nRisk * 0.20));
+  const confidence = clamp01((baseConfidence * 0.50) + (nProfit * 0.30) + (nRisk * 0.20));
 
-  console.log(`[12.3.3][CONFIDENCE_EXTENDED] base=${baseConfidence.toFixed(3)} profit=${nProfit.toFixed(3)} risk=${nRisk.toFixed(3)} → confidence=${ngc.toFixed(3)}`);
-  
-  // Step 3: Directive A3.R8.3 - Compute CWQI using the profitability-informed NGC
-  // Using calculateCWQIWithPrecomputedMetrics ensures CWQI reflects profitability
+  console.log(`[12.3.3][CONFIDENCE] base=${baseConfidence.toFixed(3)} profit=${nProfit.toFixed(3)} risk=${nRisk.toFixed(3)} → confidence=${confidence.toFixed(3)}`);
+
+  // Step 3: Compute RegimeWeight and FinalScore
+  const regimeWeight = calculateRegimeWeight({
+    trendStrength: signal.trendStrength ?? 0.5,
+    volatility,
+  });
+  const finalScore = calculateFinalScore({
+    confidence,
+    hybridScore: signal.hybridScore ?? confidence,
+    regimeWeight,
+  });
+  console.log(`[Phase14][EXTENDED_METRICS] regimeWeight=${regimeWeight.toFixed(4)} finalScore=${finalScore.toFixed(4)}`);
+
+  // Step 4: Compute CWQI using the profitability-informed confidence
   const cwqiResult = calculateCWQIWithPrecomputedMetrics({
     confidence: signal.confidence,
     riskScore,
     expectedReturn,
     volatility,
-    ngc: ngc,
+    ngc: confidence,
     expectedDuration,
     profitRate,
   });
-  
+
   return {
-    ngc: Math.round(ngc * 10000) / 10000,
+    confidence: Math.round(confidence * 10000) / 10000,
+    finalScore,
+    regimeWeight,
     expectedReturn,
     riskScore,
     volatility,

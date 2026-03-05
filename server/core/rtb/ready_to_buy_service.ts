@@ -611,13 +611,15 @@ class ReadyToBuyService {
       (decayPenalty ?? 0) * W.DECAY
     ));
     
-    // Directive 11.0E: SQE revalidation with FinalScore/RegimeWeight only
+    // Phase 14: SQE revalidation — pass pre-computed FinalScore/RegimeWeight (no backfill)
     const sqeInput: SQEInput = {
       signalId: signal.signalId,
       symbol: normalizedSymbol,
       strategy: signal.strategy,
       mode,
       confidence: confidence,
+      finalScore: refreshedFinalScore,
+      regimeWeight: regimeWeight,
       trendStrength: metadata.trendStrength ?? 0.5,
       volatility: currentVol,
     };
@@ -827,13 +829,15 @@ class ReadyToBuyService {
                 (decayPenalty ?? 0) * W.DECAY
               ));
               
-              // Directive 11.0E: SQE revalidation with FinalScore/RegimeWeight only
+              // Phase 14: SQE revalidation — pass pre-computed FinalScore/RegimeWeight (no backfill)
               const sqeInput: SQEInput = {
                 signalId: signal.signalId,
                 symbol: normalizedSymbol,
                 strategy: signal.strategy,
                 mode,
                 confidence: confidence,
+                finalScore: refreshedFinalScore,
+                regimeWeight: regimeWeight,
                 trendStrength: metadata.trendStrength ?? 0.5,
                 volatility: metadata.volatility ?? 0.3,
               };

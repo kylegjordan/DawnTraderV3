@@ -7437,6 +7437,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           frictionEmoji: indicators.frictionDescription.emoji,
           frictionNarrative: indicators.frictionNarrative,
           frictionDisplay: `${indicators.globalFrictionScore}: ${indicators.frictionDescription.status} ${indicators.frictionDescription.emoji}`,
+          globalDBSScore: indicators.globalDBS?.score ?? null,
+          globalDBSCategory: indicators.globalDBS?.category ?? 'NEUTRAL',
+          globalDBSPairCount: indicators.globalDBS?.pairCount ?? 0,
         },
         timestamp: indicators.timestamp.toISOString(),
       });

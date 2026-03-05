@@ -176,7 +176,12 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
             regimeWeight: trade.regimeWeight || 0,
             entryTime: new Date(entryTimestamp).toISOString(),
             exitTime: new Date(exitTimestamp).toISOString(),
-            durationMinutes
+            durationMinutes,
+            globalRegime: trade.globalRegime || null,
+            pairFriction: trade.pairFriction ?? null,
+            globalFriction: trade.globalFriction ?? null,
+            pairDirectionalBias: trade.pairDirectionalBias || null,
+            globalDirectionalBias: trade.globalDirectionalBias || null
           });
         }
       } catch (err) {

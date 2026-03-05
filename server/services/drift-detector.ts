@@ -90,6 +90,8 @@ export class DriftDetectorService extends EventEmitter {
       await fs.mkdir(DRIFT_HISTORY_DIR, { recursive: true });
       await fs.mkdir(DRIFT_EVENTS_DIR, { recursive: true });
       await this.loadHistoryFromDisk();
+      this.baselineSigma.clear();
+      console.log('[Phase14][DRIFT] Baselines reset for Phase 14 fresh start');
       console.log('[L11][DRIFT] INIT_OK - Drift detector initialized');
     } catch (error) {
       console.error('[L11][DRIFT] Init failed:', error);

@@ -111,30 +111,16 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
   
   const canonicalSymbol = normalizeInternal(input.symbol);
   
-  // Directive 11.0E: Dynamic backfill - recalculate missing metrics using score-calculator
-  // No legacy metrics (NGC, CWQI, ProfitRate) - FinalScore only
-  let finalScore = input.finalScore;
-  let regimeWeight = input.regimeWeight;
-  let backfilled = false;
-  
-  if (finalScore === undefined || finalScore === null) {
-    finalScore = calculateFinalScore({
-      confidence: input.confidence ?? 0.5,
-      regimeWeight: input.regimeWeight ?? 0.5,
-    });
-    backfilled = true;
+  // Phase 14: FinalScore and RegimeWeight must be pre-computed by extended metrics
+  // Backfill removed — callers must provide these values
+  const finalScore = input.finalScore ?? 0;
+  const regimeWeight = input.regimeWeight ?? 0;
+
+  if (input.finalScore === undefined || input.finalScore === null) {
+    console.warn(`[SQE][MISSING] FinalScore not pre-computed for ${canonicalSymbol}/${input.strategy} — defaulting to 0`);
   }
-  
-  if (regimeWeight === undefined || regimeWeight === null) {
-    regimeWeight = calculateRegimeWeight({
-      trendStrength: (input as any).trendStrength ?? 0.5,
-      volatility: (input as any).volatility ?? 0.3,
-    });
-    backfilled = true;
-  }
-  
-  if (backfilled) {
-    console.log(`[11.0D][SQE_BACKFILL] FinalScore=${finalScore.toFixed(3)}, RegimeWeight=${regimeWeight.toFixed(3)} for ${canonicalSymbol}`);
+  if (input.regimeWeight === undefined || input.regimeWeight === null) {
+    console.warn(`[SQE][MISSING] RegimeWeight not pre-computed for ${canonicalSymbol}/${input.strategy} — defaulting to 0`);
   }
   
   // Load thresholds from screener config (configurable via UI)

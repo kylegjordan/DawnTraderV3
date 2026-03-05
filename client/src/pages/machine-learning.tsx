@@ -36,6 +36,11 @@ interface OpenTrade {
   regimeWeight: number;
   entryTime: string;
   durationOpenMinutes: number;
+  globalRegime: string | null;
+  pairFriction: number | null;
+  globalFriction: number | null;
+  pairDirectionalBias: string | null;
+  globalDirectionalBias: string | null;
 }
 
 interface ClosedTrade {
@@ -64,6 +69,11 @@ interface ClosedTrade {
   entryTime: string;
   exitTime: string;
   durationMinutes: number;
+  globalRegime: string | null;
+  pairFriction: number | null;
+  globalFriction: number | null;
+  pairDirectionalBias: string | null;
+  globalDirectionalBias: string | null;
 }
 
 type AdjustmentType = 
@@ -382,7 +392,7 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
         onScroll={handleMainScroll}
         style={{ scrollbarWidth: 'thin' }}
       >
-        <table className="w-full min-w-[1800px] text-sm">
+        <table className="w-full min-w-[2300px] text-sm">
           <thead className="sticky top-0 bg-card z-10">
             <tr className="border-b border-border">
               <SortableHeader label="Symbol" field="symbol" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
@@ -400,6 +410,11 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
               <SortableHeader label="Final/Hybrid" field="finalScore" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <SortableHeader label="Edge" field="expectedEdge" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <SortableHeader label="Regime Wt" field="regimeWeight" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Glbl Regime</th>
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Pair Fric.</th>
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Glbl Fric.</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Pair DBS</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Glbl DBS</th>
               <SortableHeader label="Entry Time" field="entryTime" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Duration" field="durationOpenMinutes" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
             </tr>
@@ -407,7 +422,7 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
           <tbody>
             {sortedTrades.length === 0 ? (
               <tr>
-                <td colSpan={17} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={22} className="px-3 py-8 text-center text-muted-foreground">
                   No open simulated trades
                 </td>
               </tr>
@@ -497,6 +512,11 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
                   </td>
                   <td className="px-3 py-2 text-right font-mono text-xs">{trade.expectedEdge.toFixed(2)}</td>
                   <td className="px-3 py-2 text-right font-mono text-xs">{trade.regimeWeight.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-xs">{trade.globalRegime || '\u2014'}</td>
+                  <td className="px-3 py-2 text-right font-mono text-xs">{trade.pairFriction != null ? trade.pairFriction.toFixed(1) : '\u2014'}</td>
+                  <td className="px-3 py-2 text-right font-mono text-xs">{trade.globalFriction != null ? trade.globalFriction.toFixed(1) : '\u2014'}</td>
+                  <td className="px-3 py-2 text-xs">{trade.pairDirectionalBias || '\u2014'}</td>
+                  <td className="px-3 py-2 text-xs">{trade.globalDirectionalBias || '\u2014'}</td>
                   <td className="px-3 py-2 text-xs">
                     {format(new Date(trade.entryTime), 'MM/dd HH:mm')}
                   </td>
@@ -589,7 +609,7 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
         onScroll={handleMainScroll}
         style={{ scrollbarWidth: 'thin' }}
       >
-        <table className="w-full min-w-[1800px] text-sm">
+        <table className="w-full min-w-[2300px] text-sm">
           <thead className="sticky top-0 bg-card z-10">
             <tr className="border-b border-border">
               <SortableHeader label="Symbol" field="symbol" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
@@ -607,6 +627,11 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
               <SortableHeader label="Final/Hybrid" field="finalScore" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <SortableHeader label="Edge" field="expectedEdge" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <SortableHeader label="Regime Wt" field="regimeWeight" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Glbl Regime</th>
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Pair Fric.</th>
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Glbl Fric.</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Pair DBS</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Glbl DBS</th>
               <SortableHeader label="Entry/Exit Time" field="exitTime" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Duration" field="durationMinutes" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
             </tr>
@@ -614,7 +639,7 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
           <tbody>
             {sortedTrades.length === 0 ? (
               <tr>
-                <td colSpan={17} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={22} className="px-3 py-8 text-center text-muted-foreground">
                   No closed trades in the last 7 days
                 </td>
               </tr>
@@ -700,6 +725,11 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
                   </td>
                   <td className="px-3 py-2 text-right font-mono text-xs">{trade.expectedEdge.toFixed(2)}</td>
                   <td className="px-3 py-2 text-right font-mono text-xs">{trade.regimeWeight.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-xs">{trade.globalRegime || '\u2014'}</td>
+                  <td className="px-3 py-2 text-right font-mono text-xs">{trade.pairFriction != null ? trade.pairFriction.toFixed(1) : '\u2014'}</td>
+                  <td className="px-3 py-2 text-right font-mono text-xs">{trade.globalFriction != null ? trade.globalFriction.toFixed(1) : '\u2014'}</td>
+                  <td className="px-3 py-2 text-xs">{trade.pairDirectionalBias || '\u2014'}</td>
+                  <td className="px-3 py-2 text-xs">{trade.globalDirectionalBias || '\u2014'}</td>
                   <td className="px-3 py-2 text-xs">
                     <div className="flex flex-col gap-0.5">
                       <span>{format(new Date(trade.entryTime), 'MM/dd HH:mm')}</span>

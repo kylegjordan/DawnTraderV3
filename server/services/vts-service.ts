@@ -191,6 +191,7 @@ export class VTSService extends EventEmitter {
       await fs.mkdir(VTS_LOGS_DIR, { recursive: true });
       this.fullCalibration = await loadFullCalibration();
       this.calibration = this.fullCalibration.global;
+      this.phase14FreshStart();
       const strategyCount = Object.keys(this.fullCalibration.strategies).length;
       console.log(`[L8][VTS] INIT_OK - calibration loaded (global + ${strategyCount} strategies)`);
       
@@ -512,7 +513,12 @@ export class VTSService extends EventEmitter {
         } catch {}
       }
       
-      return allTrades;
+      // Phase 14: Exclude legacy simulation trades — only include Phase 14+ trades
+      const phase14Trades = allTrades.filter(t => t.signal?.source === 'vts');
+      if (phase14Trades.length < allTrades.length) {
+        console.log(`[Phase14][VTS] Filtered ${allTrades.length - phase14Trades.length} legacy simulation trades from history (keeping ${phase14Trades.length} Phase 14 trades)`);
+      }
+      return phase14Trades;
     } catch {
       return [];
     }
@@ -559,6 +565,15 @@ export class VTSService extends EventEmitter {
       totalRealizedPnL: 0
     };
     console.log('[11.0E.2][VTS] Session metrics reset (Phase-10)');
+  }
+
+  phase14FreshStart(): void {
+    const oldClosedCount = this.closedTrades.length;
+    const oldOpenCount = this.virtualTrades.size;
+    this.closedTrades = [];
+    this.virtualTrades.clear();
+    this.resetSessionMetrics();
+    console.log(`[Phase14][VTS] Fresh start: cleared ${oldClosedCount} closed + ${oldOpenCount} open in-memory trades`);
   }
 
   /**

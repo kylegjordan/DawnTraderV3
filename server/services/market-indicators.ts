@@ -28,6 +28,8 @@ import {
   normalizeRegime,
 } from '../config/canonical-regime-strategy-map.js';
 import { computeMarketFriction, describeFriction, type FrictionStatus } from '../core/metrics/cost-metrics.js';
+import { getMarketContextEngine } from './market-context-engine.js';
+import type { GlobalDirectionalBias } from '../types/directional-bias.types.js';
 import { getCostMetrics as getCacheMetrics, getCacheSize } from '../core/cache/cost-cache.js';
 import { activeFilterPool } from './active-filter-pool.js';
 import { getTelemetryAggregator } from './telemetry-aggregator.js';
@@ -66,6 +68,8 @@ export interface MarketIndicators {
   frictionSampleSize: number;
   frictionDescription: FrictionStatus;
   frictionNarrative: string;
+  // Phase 14: Global Directional Bias
+  globalDBS: GlobalDirectionalBias | null;
   timestamp: Date;
 }
 
@@ -266,6 +270,19 @@ export function getMarketIndicators(): MarketIndicators {
   // Directive 11.4H.6G: Canonical logging for regime-strategy mapping
   console.log(`[11.4H.6G][Canonical] Regime=${effectiveRegime} | Strategies=${favoredStrategies.join(", ")} | Signals=${favoredSignalTypes.join(", ")}`);
 
+  // Phase 14: Compute global directional bias from MCE cache
+  let globalDBS: GlobalDirectionalBias | null = null;
+  try {
+    const mce = getMarketContextEngine();
+    const emptyVolumes = new Map<string, number>();
+    globalDBS = mce.computeGlobalBias(emptyVolumes);
+    if (globalDBS.pairCount > 0) {
+      console.log(`[Phase14][MarketIndicators] Global DBS: score=${globalDBS.score.toFixed(3)} category=${globalDBS.category} pairs=${globalDBS.pairCount}`);
+    }
+  } catch (err) {
+    console.warn('[Phase14][MarketIndicators] Global DBS unavailable:', err);
+  }
+
   // Directive 11.4H.5 Task 3: Check for market event transitions
   checkRegimeTransition(effectiveRegime);
   checkFrictionTransition(frictionStatus.status);
@@ -282,6 +299,7 @@ export function getMarketIndicators(): MarketIndicators {
     frictionSampleSize: frictionResult.sampleSize,
     frictionDescription: frictionStatus,
     frictionNarrative: frictionStatus.narrative,
+    globalDBS,
     timestamp: lastUpdate,
   };
 }

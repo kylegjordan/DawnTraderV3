@@ -82,6 +82,7 @@ import {
 import { normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver.js';
 // Phase 13: Market Context Engine for centralized indicator + regime computation
 import { getMarketContextEngine } from './market-context-engine.js';
+import { computeBiasConfidenceModifier } from '../core/metrics/directional-bias.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -427,17 +428,41 @@ export class SignalOrchestrator {
       atr: marketContext?.atr,
       high24h: marketContext?.high24h,
       low24h: marketContext?.low24h,
+      // Phase 14: Additional inputs for FinalScore/RegimeWeight computation
+      hybridScore: (rawSignal as any).hybridScore,
+      trendStrength: 0.5, // Default for legacy signals
     });
 
-    // Directive 12.3.3: NGC renamed to confidence (deterministic)
-    console.log(`[12.3.3][METRICS] ${rawSignal.symbol}/${strategyId}: confidence=${extendedMetrics.ngc.toFixed(4)}, volatility=${(extendedMetrics.volatility ?? 0.3).toFixed(4)}`);
+    // Directive 12.3.3: Deterministic confidence + FinalScore from extended metrics
+    console.log(`[12.3.3][METRICS] ${rawSignal.symbol}/${strategyId}: confidence=${extendedMetrics.confidence.toFixed(4)}, finalScore=${extendedMetrics.finalScore.toFixed(4)}, volatility=${(extendedMetrics.volatility ?? 0.3).toFixed(4)}`);
+
+    // Phase 14: Apply DBS confidence modifier BEFORE SQE evaluation (parity with VTS path)
+    // Adjusts confidence and recomputes FinalScore since it depends on confidence.
+    let dbsModifier = 1.0;
+    try {
+      const mce = getMarketContextEngine();
+      const mceCtx = mce.computeContext(rawSignal.symbol);
+      dbsModifier = computeBiasConfidenceModifier(mceCtx.directionalBias?.category);
+    } catch { /* MCE not ready — use neutral modifier */ }
+    if (dbsModifier !== 1.0) {
+      const rawConfidenceBeforeDBS = extendedMetrics.confidence;
+      extendedMetrics.confidence = rawConfidenceBeforeDBS * dbsModifier;
+      // Recompute FinalScore with DBS-adjusted confidence
+      const adjHybrid = (rawSignal as any).hybridScore ?? extendedMetrics.confidence;
+      extendedMetrics.finalScore = Math.max(0, Math.min(1,
+        adjHybrid * SCORE_WEIGHTS.FINAL_SCORE.HYBRID +
+        extendedMetrics.confidence * SCORE_WEIGHTS.FINAL_SCORE.CONFIDENCE +
+        extendedMetrics.regimeWeight * SCORE_WEIGHTS.FINAL_SCORE.REGIME
+      ));
+      console.log(`[Phase14][DBS] ${rawSignal.symbol}/${strategyId}: dbsMod=${dbsModifier.toFixed(3)} adjConf=${extendedMetrics.confidence.toFixed(3)} adjFinalScore=${extendedMetrics.finalScore.toFixed(4)}`);
+    }
 
     // Directive 11.0E: ML-enhanced predictions (non-blocking fire-and-forget)
     // Note: ML service still accepts ngc/cwqi for backward compatibility during transition
     const mlInput: PredictionInput = {
       symbol: rawSignal.symbol,
       strategy: strategyId,
-      ngc: extendedMetrics.ngc, // Directive 11.0E: transitional - confidence value
+      ngc: extendedMetrics.confidence, // Phase 14: ML interface keeps ngc field name for compat
       cwqi: extendedMetrics.cwqi, // Directive 11.0E: transitional - kept for ML backward compat
       riskRatio: extendedMetrics.riskScore,
       profitTarget: extendedMetrics.profitRate,
@@ -453,7 +478,7 @@ export class SignalOrchestrator {
       predictProfit(mlInput)
     ]).then(([promotionResult, profitResult]) => {
       if (promotionResult.success && profitResult.success) {
-        const blendedConfidence = blendConfidence(extendedMetrics.ngc, promotionResult.probability, 0.6);
+        const blendedConfidence = blendConfidence(extendedMetrics.confidence, promotionResult.probability, 0.6);
         console.log(`[L3][MODEL_INFER] ${rawSignal.symbol}/${strategyId}: promotion=${promotionResult.probability.toFixed(4)}, profit=${profitResult.predicted_profit.toFixed(4)}, blendedConfidence=${blendedConfidence.toFixed(4)}`);
       }
     }).catch(() => {});
@@ -463,7 +488,7 @@ export class SignalOrchestrator {
       rawSignal.symbol,
       strategyId,
       {
-        confidence: extendedMetrics.ngc, // Directive 11.0E: renamed from ngc
+        confidence: extendedMetrics.confidence,
         volatility: extendedMetrics.volatility ?? 0.3,
         trendStrength: 0.5, // Default for legacy signals
         entryPrice: rawSignal.entryPrice,
@@ -472,13 +497,16 @@ export class SignalOrchestrator {
     );
 
     // Directive 11.0E: Apply SQE quality filter with FinalScore and RegimeWeight only
+    // Phase 14: Pass pre-computed FinalScore and RegimeWeight — SQE no longer backfills
     const sqeInput: SQEInput = {
       signalId,
       symbol: rawSignal.symbol,
       strategy: strategyId,
       mode: sizingContext.mode,
-      confidence: extendedMetrics.ngc, // Directive 11.0E: Use confidence (formerly NGC)
-      trendStrength: 0.5, // Default for legacy signals
+      confidence: extendedMetrics.confidence,
+      finalScore: extendedMetrics.finalScore,
+      regimeWeight: extendedMetrics.regimeWeight,
+      trendStrength: 0.5,
       volatility: extendedMetrics.volatility ?? 0.3,
     };
 
@@ -507,23 +535,8 @@ export class SignalOrchestrator {
     // L10: Fetch exposure bias multiplier for this strategy
     const exposureBias = getExposureMultiplierSync(strategyId);
     
-    // Directive 11.0E: FinalScore calculation using centralized weights
-    // Formula: hybridScore × 0.4 + confidence × 0.3 + regimeWeight × 0.2 - decayPenalty × 0.1
-    // Note: confidence from extended metrics used directly (NGC deprecated as term, value preserved)
-    const W = SCORE_WEIGHTS.FINAL_SCORE;
-    const confidence = extendedMetrics.ngc; // Directive 11.0E: ngc value preserved, renamed as confidence
-    const hybridScore = (rawSignal as any).hybridScore ?? confidence;
-    const regimeWeight = (rawSignal as any).regimeWeight ?? 0.5;
-    const decayPenalty = 0; // New signals have no decay
-    const signalFinalScore = Math.max(0, Math.min(1,
-      (hybridScore ?? 0) * W.HYBRID +
-      (confidence ?? 0) * W.CONFIDENCE +
-      (regimeWeight ?? 0) * W.REGIME -
-      (decayPenalty ?? 0) * W.DECAY
-    ));
-    console.log(`[10.9A][FinalScore] symbol=${rawSignal.symbol} finalScore=${signalFinalScore.toFixed(4)} version=${SCORE_WEIGHTS_VERSION}`);
-    
-    // Directive 11.0E: Use FinalScore-native interface (legacy ngc/cwqi/profitRate removed)
+    // Phase 14: FinalScore computed in extended metrics — no duplicate calculation needed
+    // Build RTB signal using pre-computed values from extendedMetrics
     const sqeSignalInput: SQESignalInput = {
       signalId,
       mode: sizingContext.mode,
@@ -534,24 +547,23 @@ export class SignalOrchestrator {
       targetPrice: rawSignal.targetPrice,
       quantity: sizingResult.quantity,
       notional: sizingResult.estimatedValue,
-      confidence: confidence, // Directive 11.0E: Use calculated confidence (not NGC)
-      finalScore: signalFinalScore, // Directive 11.0E: PRIMARY ranking metric
-      regimeWeight: regimeWeight, // Directive 11.0E: Market regime alignment
-      hybridScore: hybridScore, // Directive 11.0E: Combined quant+pattern score
-      decayPenalty: decayPenalty, // Directive 11.0E: Freshness penalty (0 for new signals)
-      trendStrength: 0.5, // Directive 11.0E: Default for legacy signals, TODO: calculate from market data
-      volatility: extendedMetrics.volatility ?? 0.3, // Directive 11.0E: From market context
-      currentPrice: rawSignal.entryPrice, // Directive 8.8.4-C.14.B: Use entry price as current market price
-      volume24h: activeFilterPool.getFX5DataForSymbol(rawSignal.symbol, sizingContext.mode)?.volume24h ?? null, // Directive 8.8.4-C.14.B: FX5 data only, NULL if not found
+      confidence: extendedMetrics.confidence,
+      finalScore: extendedMetrics.finalScore,
+      regimeWeight: extendedMetrics.regimeWeight,
+      hybridScore: (rawSignal as any).hybridScore ?? extendedMetrics.confidence,
+      decayPenalty: 0,
+      trendStrength: 0.5,
+      volatility: extendedMetrics.volatility ?? 0.3,
+      currentPrice: rawSignal.entryPrice,
+      volume24h: activeFilterPool.getFX5DataForSymbol(rawSignal.symbol, sizingContext.mode)?.volume24h ?? null,
       metadata: {
-        strategyWeight, // L9: Strategy reliability weight for finalRank computation
-        exposureBias, // L10: Exposure bias multiplier for risk allocation
+        strategyWeight,
+        exposureBias,
       },
     };
-    
+
     console.log(`[L9][SIGNAL_WEIGHT] ${rawSignal.symbol}/${strategyId}: strategyWeight=${strategyWeight.toFixed(4)}`);
     console.log(`[L10][EXPOSURE_BIAS] ${rawSignal.symbol}/${strategyId}: exposureBias=${exposureBias.toFixed(4)}`);
-    console.log(`[10.9][FINAL_SCORE] ${rawSignal.symbol}/${strategyId}: finalScore=${signalFinalScore.toFixed(4)}`);
 
     // Queue to RTB pool (fire-and-forget, non-blocking)
     readyToBuyService.queueSQESignal(sqeSignalInput).catch(err => {
