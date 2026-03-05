@@ -455,19 +455,15 @@ async function generatePhase10Signal(
   const strategyMode: StrategyMode = resolveStrategyMode(regimeStability);
   const modeOverlay: StrategyModeOverlay = getModeOverlay(strategyMode);
   
-  // 11.7S: Check if signal meets confidence floor for current mode
+  // 11.7S: Confidence floor check — VTS COLD-START BYPASS
+  // VTS is a simulation system that generates virtual trades for ML calibration.
+  // Blocking signals at the confidence floor creates a cold-start paradox:
+  //   no trades → no data → confidence stuck at 0.50 → no trades (forever).
+  // The bypass lets VTS generate trades so the ML calibration service can compute
+  // real confidence values. The mode overlay (position sizing, stops) still applies.
+  // Downstream gates (Net EV kernel, ROI gate, strategy guardrails) remain active.
   if (!meetsConfidenceFloor(predictiveConfidence, regimeStability)) {
-    logSkippedSignal({
-      symbol,
-      reason: 'Confidence_Floor',
-      regime,
-      signalType,
-      strategy,
-      source: 'VTS',
-      modeSkipReason: `${strategyMode} mode requires confidence >= ${modeOverlay.confidenceFloor}, got ${predictiveConfidence.toFixed(2)}`,
-    });
-    console.log(`[11.7S][VTS] SKIP: ${symbol} ${strategy} - confidence ${predictiveConfidence.toFixed(2)} < floor ${modeOverlay.confidenceFloor} (mode=${strategyMode})`);
-    return null;
+    console.log(`[11.7S][VTS] BELOW_FLOOR (bypassed): ${symbol} ${strategy} - confidence ${predictiveConfidence.toFixed(2)} < floor ${modeOverlay.confidenceFloor} (mode=${strategyMode})`);
   }
   
   console.log(`[11.7S][VTS] Mode: ${strategyMode} | Size×${modeOverlay.positionSizeMultiplier} | Stop×${modeOverlay.stopLossDistanceMultiplier} | TP×${modeOverlay.takeProfitDistanceMultiplier}`);
