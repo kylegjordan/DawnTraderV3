@@ -8,7 +8,7 @@ import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
 import Sidebar from "@/components/layout/sidebar";
 import TopBar from "@/components/layout/top-bar";
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect, lazy, Suspense, Component, ReactNode } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import NotFound from "@/pages/not-found";
 import { TradingModeProvider } from "@/contexts/trading-mode-context";
@@ -32,6 +32,35 @@ const SystemConfigPage = lazy(() => import("@/pages/system-config"));
 const FilterInsightsPage = lazy(() => import("@/pages/filter-insights"));
 const AnalyticsPage = lazy(() => import("@/pages/analytics"));
 const MachineLearningPage = lazy(() => import("@/pages/machine-learning"));
+
+class DiagnosticErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: Error, info: { componentStack: string }) {
+    console.error('[DiagnosticErrorBoundary] CAUGHT RENDER ERROR:', error.message);
+    console.error('[DiagnosticErrorBoundary] Stack:', error.stack);
+    console.error('[DiagnosticErrorBoundary] Component Stack:', info.componentStack);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: 32, color: 'red', fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
+          <strong>Render Error Caught — check DevTools console for details</strong>
+          <br /><br />
+          {this.state.error?.message}
+          <br /><br />
+          {this.state.error?.stack}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function LoadingFallback() {
   return (
@@ -175,6 +204,7 @@ function Router() {
             showMenuButton={isMobile}
           />
           
+          <DiagnosticErrorBoundary>
           <Suspense fallback={<LoadingFallback />}>
             <Switch>
               {/* Phase 35.1 - Profiled Routes for Performance Monitoring */}
@@ -209,6 +239,7 @@ function Router() {
               </Route>
             </Switch>
           </Suspense>
+          </DiagnosticErrorBoundary>
         </main>
         
         {isMobile && sidebarOpen && (
