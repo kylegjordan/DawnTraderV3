@@ -626,7 +626,7 @@ async function generatePhase10Signal(
     executionContext: isMultiStrategy ? 'VTS_MULTI' : 'VTS', // 11.8C: Multi-strategy identification
     // Phase 14: Snapshot 6 context dimensions at trade OPEN
     globalRegime: (() => {
-      try { const ta = getTelemetryAggregator(); return ta.getDominantRegime?.() ?? regime; } catch { return regime; }
+      try { const ta = getTelemetryAggregator(); return ta.getDominantRegime?.()?.regime ?? regime; } catch { return regime; }
     })(),
     pairFriction: (() => {
       const cm = getCachedCostMetrics(symbol);
