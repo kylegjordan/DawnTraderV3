@@ -6,7 +6,7 @@
  * Validates DriftScore computation, boundary conditions, and bridge integrity.
  * Extended for Directive 11.7F-B with per-strategy DriftScore validation.
  * 
- * Schema Version: regime-mapping/v1.4c
+ * Schema Version: regime-mapping/v2.0.0
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
@@ -137,7 +137,7 @@ describe('Mapping Drift Integrity — Directive 11.7F', () => {
       const bridge = JSON.parse(content);
       
       expect(bridge._schema).toBeDefined();
-      expect(bridge._schema).toContain('v1.4');
+      expect(bridge._schema).toContain('v2.0');
     });
     
     test('Bridge JSON contains all canonical regimes', () => {
@@ -154,13 +154,13 @@ describe('Mapping Drift Integrity — Directive 11.7F', () => {
       }
     });
     
-    test('SMA Trend Ride is in HIGH_VOL_IMPULSE (v1.4b realignment)', () => {
+    test('SMA Trend Ride is in IMPULSE_EXPANSION (v2.0.0 realignment)', () => {
       const jsonPath = path.join(process.cwd(), 'bridge/canonical/mapping-regime-strategy.json');
       const content = fs.readFileSync(jsonPath, 'utf8');
       const bridge = JSON.parse(content);
       
-      expect(bridge.HIGH_VOL_IMPULSE.favoredStrategies).toContain('sma_trend_ride');
-      expect(bridge.BULL_STABLE.favoredStrategies).not.toContain('sma_trend_ride');
+      expect(bridge.IMPULSE_EXPANSION.favoredStrategies).toContain('sma_trend_ride');
+      expect(bridge.TREND_FRIENDLY_STABLE.favoredStrategies).not.toContain('sma_trend_ride');
     });
     
   });
@@ -192,8 +192,8 @@ describe('Mapping Drift Integrity — Directive 11.7F', () => {
 
   describe('Directive 11.7F-B — Per-Strategy DriftScore Integration', () => {
     
-    test('Schema version is v1.4c', () => {
-      expect(CANONICAL_SCHEMA_VERSION).toBe('regime-mapping/v1.4c');
+    test('Schema version is v2.0.0', () => {
+      expect(CANONICAL_SCHEMA_VERSION).toBe('regime-mapping/v2.0.0');
     });
 
     test('Simulated drift data with 10 pairs and random Z-scores', () => {

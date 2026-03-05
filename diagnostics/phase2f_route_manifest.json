@@ -90,6 +90,15 @@
     ]
   },
   {
+    "path": "/api/regime-map",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/metrics",
     "methods": [
       "GET"

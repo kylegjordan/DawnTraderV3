@@ -25,6 +25,7 @@ import {
   findLocalMinima, GLOBAL_CONSTANTS,
   type OHLCCandle, type PatternInput
 } from './strategy-helpers';
+import { REGIMES } from '../config/canonical-regime-strategy-map';
 
 // ═══════════════════════════════════════════════════════════════
 // Strategy Constants
@@ -197,7 +198,7 @@ export function detectAdaptiveFlow(
       strategyVersion: '12.3.2',
       type: 'HYBRID',
       direction: 'BUY',
-      regime: 'RANGE_BOUND_STABLE',
+      regime: REGIMES.RANGE_BOUND_STABLE,
       pattern: 'THREE_SOLDIERS',
       patternStrength: patternSignal.strength,
       inversionCount,

@@ -29,6 +29,7 @@ import {
   findLocalMinima, GLOBAL_CONSTANTS,
   type OHLCCandle, type PatternInput
 } from './strategy-helpers';
+import { REGIMES } from '../config/canonical-regime-strategy-map';
 
 // ═══════════════════════════════════════════════════════════════
 // Strategy Constants
@@ -228,7 +229,7 @@ export function detectVolatilityEdge(
       strategyVersion: '12.3.2',
       type: 'HYBRID',
       direction: 'BUY',
-      regime: 'IMPULSE_EXPANSION',
+      regime: REGIMES.IMPULSE_EXPANSION,
       pattern: 'ABCD',
       aPointLow,
       bPointHigh,
