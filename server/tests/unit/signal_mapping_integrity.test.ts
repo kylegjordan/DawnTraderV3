@@ -114,11 +114,11 @@ describe('Directive 11.4F.1 — Canonical Signal Mapping Integrity', () => {
   describe('CANONICAL_REGIME_STRATEGY_MAP structure', () => {
     test('All 5 canonical regimes exist', () => {
       expect(Object.keys(CANONICAL_REGIME_STRATEGY_MAP)).toHaveLength(5);
-      expect(CANONICAL_REGIME_STRATEGY_MAP).toHaveProperty('BULL_STABLE');
-      expect(CANONICAL_REGIME_STRATEGY_MAP).toHaveProperty('BEAR_VOLATILE');
-      expect(CANONICAL_REGIME_STRATEGY_MAP).toHaveProperty('LOW_VOL_CHOP');
-      expect(CANONICAL_REGIME_STRATEGY_MAP).toHaveProperty('HIGH_VOL_IMPULSE');
-      expect(CANONICAL_REGIME_STRATEGY_MAP).toHaveProperty('TRANSITION');
+      expect(CANONICAL_REGIME_STRATEGY_MAP).toHaveProperty('TREND_FRIENDLY_STABLE');
+      expect(CANONICAL_REGIME_STRATEGY_MAP).toHaveProperty('HIGH_VOLATILITY_UNSTABLE');
+      expect(CANONICAL_REGIME_STRATEGY_MAP).toHaveProperty('RANGE_BOUND_STABLE');
+      expect(CANONICAL_REGIME_STRATEGY_MAP).toHaveProperty('IMPULSE_EXPANSION');
+      expect(CANONICAL_REGIME_STRATEGY_MAP).toHaveProperty('STRUCTURAL_TRANSITION');
     });
 
     test('Each regime has at least one strategy', () => {
@@ -140,7 +140,7 @@ describe('Directive 11.4F.1 — Canonical Signal Mapping Integrity', () => {
 
   describe('selectPrimaryStrategy - Directive 11.4F.1A deterministic selection', () => {
     const regimes: CanonicalRegimeType[] = [
-      'BULL_STABLE', 'BEAR_VOLATILE', 'LOW_VOL_CHOP', 'HIGH_VOL_IMPULSE', 'TRANSITION'
+      'TREND_FRIENDLY_STABLE', 'HIGH_VOLATILITY_UNSTABLE', 'RANGE_BOUND_STABLE', 'IMPULSE_EXPANSION', 'STRUCTURAL_TRANSITION'
     ];
 
     test('Returns consistent (deterministic) strategy for same regime across calls', () => {

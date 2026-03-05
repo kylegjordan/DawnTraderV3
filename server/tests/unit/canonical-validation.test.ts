@@ -20,7 +20,7 @@ describe('Directive 11.4F.1 — Canonical Validation Middleware', () => {
   describe('validateAndNormalizeTrade', () => {
     it('validates canonical trade data correctly', () => {
       const input: TradeValidationInput = {
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         strategy: 'sma_trend_ride',
         signalType: 'QUANT',
         symbol: 'BTC/USD'
@@ -30,7 +30,7 @@ describe('Directive 11.4F.1 — Canonical Validation Middleware', () => {
       
       expect(result.valid).toBe(true);
       expect(result.violations).toHaveLength(0);
-      expect(result.normalized.regime).toBe('BULL_STABLE');
+      expect(result.normalized.regime).toBe('TREND_FRIENDLY_STABLE');
       expect(result.normalized.strategy).toBe('sma_trend_ride');
       expect(result.normalized.signalType).toBe('QUANT');
     });
@@ -46,13 +46,13 @@ describe('Directive 11.4F.1 — Canonical Validation Middleware', () => {
       const result = validateAndNormalizeTrade(input, 'test');
       
       expect(result.valid).toBe(true);
-      expect(result.normalized.regime).toBe('HIGH_VOL_IMPULSE');
+      expect(result.normalized.regime).toBe('IMPULSE_EXPANSION');
       expect(result.violations.some(v => v.level === 'WARN' && v.message.includes('Ghost regime normalized'))).toBe(true);
     });
 
     it('normalizes legacy strategies with WARN violation', () => {
       const input: TradeValidationInput = {
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         strategy: 'TrendFlow',
         signalType: 'QUANT',
         symbol: 'SOL/USD'
@@ -67,7 +67,7 @@ describe('Directive 11.4F.1 — Canonical Validation Middleware', () => {
 
     it('fails validation with ERROR for signalType mismatch', () => {
       const input: TradeValidationInput = {
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         strategy: 'sma_trend_ride',
         signalType: 'PATTERN',
         symbol: 'BTC/USD'
@@ -81,7 +81,7 @@ describe('Directive 11.4F.1 — Canonical Validation Middleware', () => {
 
     it('fails validation with CRITICAL for non-canonical combination', () => {
       const input: TradeValidationInput = {
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         strategy: 'unknown_strategy_xyz',
         signalType: 'HYBRID',
         symbol: 'XRP/USD'
@@ -95,7 +95,7 @@ describe('Directive 11.4F.1 — Canonical Validation Middleware', () => {
 
     it('accepts PATTERN strategies with correct patternType', () => {
       const input: TradeValidationInput = {
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         strategy: 'morning_star',
         signalType: 'PATTERN',
         patternType: 'MORNING_STAR',
@@ -111,7 +111,7 @@ describe('Directive 11.4F.1 — Canonical Validation Middleware', () => {
 
     it('accepts HYBRID strategies with patternType', () => {
       const input: TradeValidationInput = {
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         strategy: 'pivot_shift',
         signalType: 'HYBRID',
         patternType: 'MORNING_STAR',
@@ -126,7 +126,7 @@ describe('Directive 11.4F.1 — Canonical Validation Middleware', () => {
 
     it('accepts QUANT strategies with null patternType', () => {
       const input: TradeValidationInput = {
-        regime: 'HIGH_VOL_IMPULSE',
+        regime: 'IMPULSE_EXPANSION',
         strategy: 'breakout',
         signalType: 'QUANT',
         patternType: null,

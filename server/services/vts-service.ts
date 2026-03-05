@@ -245,7 +245,7 @@ export class VTSService extends EventEmitter {
       frictionCost: 0,
       signalType: signal.signalType ?? 'HYBRID',
       strategy: signal.strategy ?? 'unknown',
-      regime: signal.regime ?? REGIMES.TRANSITION,
+      regime: signal.regime ?? REGIMES.STRUCTURAL_TRANSITION,
       pool: signal.pool ?? 'rotational',
       source: 'simulation',
       schemaVersion: '1.6.7'

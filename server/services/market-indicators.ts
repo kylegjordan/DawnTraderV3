@@ -2,25 +2,44 @@
  * ══════════════════════════════════════════════════════════════════════════════
  * Directive 11.4A — Market Indicators Service
  * ══════════════════════════════════════════════════════════════════════════════
- * 
+ *
  * Provides global market intelligence for the operator dashboard:
  * - Market Regime (global macro climate)
  * - Global Friction Score (execution environment from Top-100 FX5 pool)
- * 
+ * - Global Directional Bias (Phase 14)
+ *
+ * Phase 14 (Batch 15): Critical fix — eliminated stale parallel regime data.
+ *   - Removed mapToBaseRegime() lossy adapter
+ *   - Removed hardcoded regimeNarratives (8-value, non-canonical)
+ *   - Now reads regime names, descriptions, and strategies from canonical map SSOT
+ *   - MarketRegime type updated to use canonical CanonicalRegimeType
+ *
  * Governance Invariants:
  * - M14: Global Friction derived only from Top-100 FX5 pool
  * - M15: Market Regime remains globally calculated
- * 
+ *
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-import { type MarketRegime } from './dynamic-strategy-selector.js';
+import {
+  type CanonicalRegimeType,
+  REGIME_NARRATIVES,
+  REGIME_DISPLAY_NAMES,
+  normalizeRegime,
+} from '../config/canonical-regime-strategy-map.js';
 import { computeMarketFriction, describeFriction, type FrictionStatus } from '../core/metrics/cost-metrics.js';
 import { getCostMetrics as getCacheMetrics, getCacheSize } from '../core/cache/cost-cache.js';
 import { activeFilterPool } from './active-filter-pool.js';
 import { getTelemetryAggregator } from './telemetry-aggregator.js';
 import { checkRegimeTransition, checkFrictionTransition } from '../utils/market-events.js';
 import { getFavoredStrategiesForRegime, getFavoredSignalTypesForRegime } from '../core/strategy-mapper.js';
+
+/**
+ * Phase 14: MarketRegime is now CanonicalRegimeType directly.
+ * No more lossy 6-value type with EXTREME_NOISE as the only non-canonical member.
+ * EXTREME_NOISE is handled by normalizeRegime() -> RANGE_BOUND_STABLE.
+ */
+export type MarketRegime = CanonicalRegimeType;
 
 export interface RegimeInfo {
   name: MarketRegime;
@@ -39,111 +58,83 @@ export interface MarketIndicators {
   marketRegime: MarketRegime;
   regimeDescription: string;
   regimeTitle: string;
-  regimeScore: number; // Directive 11.4H.4A-Fix: Dynamic 0-100 regime score from telemetry
-  regimePercentage: number; // Directive 11.4H.4A-Fix: Percentage of pairs in this regime
+  regimeScore: number;
+  regimePercentage: number;
   favoredSignalTypes: string[];
   favoredStrategies: string[];
   globalFrictionScore: number;
-  frictionSampleSize: number; // Directive 11.7I.a-03: Transparency - number of symbols used in friction calculation
+  frictionSampleSize: number;
   frictionDescription: FrictionStatus;
   frictionNarrative: string;
   timestamp: Date;
 }
 
 /**
- * Directive 11.4A.1 — Expanded Market Regime Definitions (M19 Governance Invariant)
- * Full-text regime definitions in simplified, narrative language for non-expert users.
- * 
- * Directive 11.4H.6G-Fix: Descriptions only - strategies/signals derived from canonical mapper at runtime.
+ * Phase 14: Get expanded regime description from canonical SSOT.
+ * No more hardcoded regimeNarratives — reads from REGIME_NARRATIVES in canonical map.
  */
-interface RegimeNarrative {
-  title: string;
-  description: string;
-}
-
-const regimeNarratives: Record<string, RegimeNarrative> = {
-  BULL_STABLE: {
-    title: "Bull Stable",
-    description: `The market is in a clear upward trend, moving steadily higher with moderate volatility. This usually means that confidence is high and most buyers are stepping in at pullbacks. Momentum-based or trend-following signals are more likely to succeed here because the overall direction is upward. You can expect trades to stay open longer, aiming for larger gains.`
-  },
-  BULL_VOLATILE: {
-    title: "Bull Volatile",
-    description: `The market is trending upward but with larger price swings and higher volatility. Opportunities exist but require quicker decision-making and tighter risk management. Momentum strategies work well but position sizes are typically smaller to account for the wider swings. Expect faster trade cycles with more active trailing stop adjustments.`
-  },
-  BEAR_STABLE: {
-    title: "Bear Stable",
-    description: `The market is in a downward trend with moderate, predictable volatility. Prices are declining but doing so in an orderly fashion. Since this is a long-only system, trading is more selective, focusing on counter-trend bounces and oversold reversals. Position sizes are reduced and holding periods are shorter.`
-  },
-  BEAR_VOLATILE: {
-    title: "Bear Volatile",
-    description: `The market is trending downward and swinging sharply from highs to lows. Prices often drop quickly and recover partially before continuing down. Short-term trades that favor quick exits or reversal signals may perform better. It's a defensive environment, so position sizes are often smaller and stops tighter.`
-  },
-  LOW_VOL_CHOP: {
-    title: "Low Volatility Chop",
-    description: `The market is moving sideways with little clear direction and small price changes. Trends do not hold well, so breakout attempts usually fail or reverse quickly. Range-based or counter-trend signals tend to work best because prices often bounce between support and resistance levels. Trades will usually be smaller and shorter, focusing on quick gains.`
-  },
-  HIGH_VOL_CHOP: {
-    title: "High Volatility Chop",
-    description: `The market has no clear direction and price movements are wide and unpredictable. Big swings up and down can trigger both stop losses and entries in quick succession. The system will generally trade less or use wider stops to avoid getting chopped up. Only high-confidence hybrid signals will activate in this kind of environment.`
-  },
-  MIXED_TRANSITION: {
-    title: "Mixed Transition",
-    description: `The market is shifting from one regime to another, often from bullish to bearish or vice versa. Conditions are unclear — volatility changes, trend indicators disagree, and signals can conflict. This is when the system becomes more selective and cautious, often reducing position sizes until a new regime stabilizes.`
-  },
-  EXTREME_NOISE: {
-    title: "Extreme Noise",
-    description: `The market is in chaotic conditions with no discernible pattern or direction. Price action is erratic and unpredictable, making any trading extremely risky. The system enters capital preservation mode, avoiding new entries entirely. This is a time to wait on the sidelines until conditions stabilize.`
-  }
-};
-
 function getExpandedRegimeDescriptionFromCanonical(regime: string): ExpandedRegimeDescription {
-  const narrative = regimeNarratives[regime] || regimeNarratives['LOW_VOL_CHOP'];
+  // Normalize to canonical name (handles old names via GHOST_REGIME_NORMALIZATION)
+  const canonicalRegime = normalizeRegime(regime);
+  const narrative = REGIME_NARRATIVES[canonicalRegime];
+
   return {
     title: narrative.title,
     description: narrative.description,
-    favoredStrategies: getFavoredStrategiesForRegime(regime),
-    favoredSignalTypes: getFavoredSignalTypesForRegime(regime)
+    favoredStrategies: getFavoredStrategiesForRegime(canonicalRegime),
+    favoredSignalTypes: getFavoredSignalTypesForRegime(canonicalRegime)
   };
 }
 
-export const regimeDescriptions: Record<string, ExpandedRegimeDescription> = Object.fromEntries(
-  Object.keys(regimeNarratives).map(regime => [regime, getExpandedRegimeDescriptionFromCanonical(regime)])
-);
+/**
+ * Phase 14: Build regime descriptions dynamically from canonical map.
+ * This replaces the old static regimeDescriptions object that had 8 hardcoded entries.
+ */
+export function getRegimeDescriptions(): Record<string, ExpandedRegimeDescription> {
+  const descriptions: Record<string, ExpandedRegimeDescription> = {};
+  for (const regime of Object.keys(REGIME_NARRATIVES)) {
+    descriptions[regime] = getExpandedRegimeDescriptionFromCanonical(regime);
+  }
+  return descriptions;
+}
 
-const REGIME_DESCRIPTIONS: Record<MarketRegime, RegimeInfo> = {
-  'BULL_STABLE': {
-    name: 'BULL_STABLE',
-    description: regimeDescriptions.BULL_STABLE.description,
-    favoredStrategies: regimeDescriptions.BULL_STABLE.favoredStrategies,
-  },
-  'BULL_VOLATILE': {
-    name: 'BULL_VOLATILE',
-    description: regimeDescriptions.BULL_VOLATILE.description,
-    favoredStrategies: regimeDescriptions.BULL_VOLATILE.favoredStrategies,
-  },
-  'BEAR_STABLE': {
-    name: 'BEAR_STABLE',
-    description: regimeDescriptions.BEAR_STABLE.description,
-    favoredStrategies: regimeDescriptions.BEAR_STABLE.favoredStrategies,
-  },
-  'BEAR_VOLATILE': {
-    name: 'BEAR_VOLATILE',
-    description: regimeDescriptions.BEAR_VOLATILE.description,
-    favoredStrategies: regimeDescriptions.BEAR_VOLATILE.favoredStrategies,
-  },
-  'LOW_VOL_CHOP': {
-    name: 'LOW_VOL_CHOP',
-    description: regimeDescriptions.LOW_VOL_CHOP.description,
-    favoredStrategies: regimeDescriptions.LOW_VOL_CHOP.favoredStrategies,
-  },
-  'EXTREME_NOISE': {
-    name: 'EXTREME_NOISE',
-    description: regimeDescriptions.EXTREME_NOISE.description,
-    favoredStrategies: regimeDescriptions.EXTREME_NOISE.favoredStrategies,
-  },
-};
+// Lazy-initialized cache
+let _regimeDescriptionsCache: Record<string, ExpandedRegimeDescription> | null = null;
+function getCachedRegimeDescriptions(): Record<string, ExpandedRegimeDescription> {
+  if (!_regimeDescriptionsCache) {
+    _regimeDescriptionsCache = getRegimeDescriptions();
+  }
+  return _regimeDescriptionsCache;
+}
 
-let cachedGlobalRegime: MarketRegime = 'LOW_VOL_CHOP';
+// Re-export for backward compatibility (some files import regimeDescriptions)
+export const regimeDescriptions = new Proxy({} as Record<string, ExpandedRegimeDescription>, {
+  get(_, key: string) {
+    return getCachedRegimeDescriptions()[key];
+  },
+  ownKeys() {
+    return Object.keys(getCachedRegimeDescriptions());
+  },
+  getOwnPropertyDescriptor(_, key: string) {
+    const desc = getCachedRegimeDescriptions();
+    if (key in desc) {
+      return { configurable: true, enumerable: true, value: desc[key] };
+    }
+    return undefined;
+  }
+});
+
+const REGIME_DESCRIPTIONS_COMPAT: Record<string, RegimeInfo> = {};
+for (const regime of Object.keys(REGIME_NARRATIVES) as CanonicalRegimeType[]) {
+  const desc = getExpandedRegimeDescriptionFromCanonical(regime);
+  REGIME_DESCRIPTIONS_COMPAT[regime] = {
+    name: regime,
+    description: desc.description,
+    favoredStrategies: desc.favoredStrategies,
+  };
+}
+
+let cachedGlobalRegime: MarketRegime = 'RANGE_BOUND_STABLE';
 let cachedGlobalFriction: number = 25;
 let lastUpdate: Date = new Date();
 
@@ -176,23 +167,23 @@ export function computeGlobalFrictionWithDetails(): FrictionResult {
   try {
     // Use paper mode for global friction calculation (default mode)
     const pool = activeFilterPool.getActivePool('paper');
-    const symbolsToSample = pool.length >= 50 
+    const symbolsToSample = pool.length >= 50
       ? pool.slice(0, 100).map(p => p.symbol)
       : TOP_100_FALLBACK_PAIRS;
-    
+
     let totalFriction = 0;
     let count = 0;
-    
+
     // Directive 11.4H.3 Task 1: Collect raw data for audit logging
     const auditData: { symbol: string; spread: number; mid: number; friction: number }[] = [];
-    
+
     for (const symbol of symbolsToSample) {
       const metrics = getCacheMetrics(symbol);
       if (metrics) {
         const friction = computeMarketFriction(metrics.spread, metrics.slippage, metrics.fee);
         totalFriction += friction;
         count++;
-        
+
         // Directive 11.4H.3: Collect for audit (spread is in decimal form)
         auditData.push({
           symbol,
@@ -202,27 +193,27 @@ export function computeGlobalFrictionWithDetails(): FrictionResult {
         });
       }
     }
-    
+
     if (count === 0) {
       console.log(`[GlobalFriction][Audit] Sample size: 0 (no metrics available)`);
       lastFrictionSampleSize = 0;
       return { score: 25, sampleSize: 0, symbolCount: symbolsToSample.length };
     }
-    
+
     const avgFriction = Math.round(totalFriction / count);
     cachedGlobalFriction = avgFriction;
     lastFrictionSampleSize = count;
     lastUpdate = new Date();
-    
+
     // Directive 11.4H.3 Task 1: Global Friction Audit Logging
     const spreads = auditData.map(d => d.spread);
     const frictionScores = auditData.map(d => d.friction);
-    const spreadVariance = spreads.length > 1 
-      ? spreads.reduce((sum, s) => sum + Math.pow(s - (spreads.reduce((a, b) => a + b, 0) / spreads.length), 2), 0) / spreads.length 
+    const spreadVariance = spreads.length > 1
+      ? spreads.reduce((sum, s) => sum + Math.pow(s - (spreads.reduce((a, b) => a + b, 0) / spreads.length), 2), 0) / spreads.length
       : 0;
     const frictionMin = Math.min(...frictionScores);
     const frictionMax = Math.max(...frictionScores);
-    
+
     console.log(`[GlobalFriction][Audit] Sample size: ${count}`);
     console.log(`[GlobalFriction][Audit] Spread range: ${(Math.min(...spreads) * 100).toFixed(4)}% - ${(Math.max(...spreads) * 100).toFixed(4)}%`);
     console.log(`[GlobalFriction][Audit] Spread variance: ${(spreadVariance * 10000).toFixed(6)}`);
@@ -230,7 +221,7 @@ export function computeGlobalFrictionWithDetails(): FrictionResult {
     // Directive 11.4H.6 Task 6: Global Friction Continuous Audit Logging
     console.log(`[11.4H.6][FrictionAudit] Global friction recalculated: ${avgFriction} | Spread range: ${(Math.min(...spreads) * 100).toFixed(4)}%-${(Math.max(...spreads) * 100).toFixed(4)}% | Sample size: ${count}`);
     console.log(`[GlobalFriction][Audit] Global friction result: ${avgFriction}`);
-    
+
     return { score: avgFriction, sampleSize: count, symbolCount: symbolsToSample.length };
   } catch (err) {
     console.warn('[11.4A][MarketIndicators] Error computing global friction:', err);
@@ -246,48 +237,39 @@ export function getMarketIndicators(): MarketIndicators {
   // Directive 11.4H.4A-Fix: Get dominant regime from live telemetry instead of stale cache
   const telemetry = getTelemetryAggregator();
   const dominantRegime = telemetry.getDominantRegime();
-  
-  // Map extended regime types to base MarketRegime (handle type differences)
-  const mapToBaseRegime = (regime: string): MarketRegime => {
-    const regimeMap: Record<string, MarketRegime> = {
-      'HIGH_VOL_IMPULSE': 'BULL_VOLATILE',
-      'TRANSITION': 'LOW_VOL_CHOP',
-      'HIGH_VOL_CHOP': 'BULL_VOLATILE',
-      'MIXED_TRANSITION': 'LOW_VOL_CHOP',
-    };
-    return (regimeMap[regime] ?? regime) as MarketRegime;
-  };
-  
-  // Use dynamic regime from telemetry if available, fallback to cached
-  const effectiveRegime: MarketRegime = dominantRegime 
-    ? mapToBaseRegime(dominantRegime.regime) 
+
+  // Phase 14: Use normalizeRegime() instead of lossy mapToBaseRegime()
+  // This correctly maps any regime name (old canonical, ghost, or new canonical) to current canonical
+  const effectiveRegime: MarketRegime = dominantRegime
+    ? normalizeRegime(dominantRegime.regime)
     : cachedGlobalRegime;
   const effectiveRegimeScore = dominantRegime?.avgRegimeScore ?? 50;
   const effectivePercentage = dominantRegime?.percentage ?? 0;
-  
+
   // Update cache for consistency
   if (dominantRegime) {
     cachedGlobalRegime = effectiveRegime;
     lastUpdate = new Date();
   }
-  
+
   const regimeKey = effectiveRegime as string;
-  const expandedRegime = regimeDescriptions[regimeKey] || regimeDescriptions['LOW_VOL_CHOP'];
+  const expandedRegime = getCachedRegimeDescriptions()[regimeKey]
+    ?? getCachedRegimeDescriptions()['RANGE_BOUND_STABLE'];
   const frictionResult = computeGlobalFrictionWithDetails();
   const frictionStatus = describeFriction(frictionResult.score);
-  
+
   // Directive 11.4H.6A Task 1: Use strategy mapper for dynamic regime-based strategies/signals
   const favoredStrategies = getFavoredStrategiesForRegime(regimeKey);
   const favoredSignalTypes = getFavoredSignalTypesForRegime(regimeKey);
-  
-  console.log(`[11.4H.4A-Fix][MarketIndicators] regime=${effectiveRegime} score=${effectiveRegimeScore} percentage=${effectivePercentage}%`);
+
+  console.log(`[Phase14][MarketIndicators] regime=${effectiveRegime} score=${effectiveRegimeScore} percentage=${effectivePercentage}%`);
   // Directive 11.4H.6G: Canonical logging for regime-strategy mapping
   console.log(`[11.4H.6G][Canonical] Regime=${effectiveRegime} | Strategies=${favoredStrategies.join(", ")} | Signals=${favoredSignalTypes.join(", ")}`);
-  
+
   // Directive 11.4H.5 Task 3: Check for market event transitions
   checkRegimeTransition(effectiveRegime);
   checkFrictionTransition(frictionStatus.status);
-  
+
   return {
     marketRegime: effectiveRegime,
     regimeTitle: expandedRegime.title,
@@ -305,11 +287,13 @@ export function getMarketIndicators(): MarketIndicators {
 }
 
 export function getExpandedRegimeDescription(regime: string): ExpandedRegimeDescription | undefined {
-  return regimeDescriptions[regime];
+  // Normalize to canonical name first
+  const canonical = normalizeRegime(regime);
+  return getCachedRegimeDescriptions()[canonical];
 }
 
 export function getRegimeInfo(regime: MarketRegime): RegimeInfo {
-  return REGIME_DESCRIPTIONS[regime] || REGIME_DESCRIPTIONS['LOW_VOL_CHOP'];
+  return REGIME_DESCRIPTIONS_COMPAT[regime] || REGIME_DESCRIPTIONS_COMPAT['RANGE_BOUND_STABLE'];
 }
 
 export function getCurrentRegime(): MarketRegime {

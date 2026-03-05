@@ -150,7 +150,7 @@ describe('Directive 11.7G — Predictive Diagnostics Integrity', () => {
       service.recordDecision({
         pair: 'BTC/USD',
         signalType: 'HYBRID',
-        predictedRegime: 'BULL_STABLE',
+        predictedRegime: 'TREND_FRIENDLY_STABLE',
         modelUsed: 'ensemble_primary',
         decision: 'APPROVED',
         tracePath: ['Signal', 'Filter', 'Model', 'Execution'],
@@ -168,7 +168,7 @@ describe('Directive 11.7G — Predictive Diagnostics Integrity', () => {
         service.recordDecision({
           pair: `PAIR${i}/USD`,
           signalType: 'QUANT',
-          predictedRegime: 'BULL_STABLE',
+          predictedRegime: 'TREND_FRIENDLY_STABLE',
           modelUsed: 'ensemble_primary',
           decision: 'APPROVED',
           tracePath: ['Signal', 'Execution']
@@ -230,7 +230,7 @@ describe('Directive 11.7G — Predictive Diagnostics Integrity', () => {
       service.recordDecision({
         pair: 'BTC/USD',
         signalType: 'HYBRID',
-        predictedRegime: 'BULL_STABLE',
+        predictedRegime: 'TREND_FRIENDLY_STABLE',
         modelUsed: 'ensemble_primary',
         decision: 'APPROVED',
         tracePath: ['Signal']
@@ -239,7 +239,7 @@ describe('Directive 11.7G — Predictive Diagnostics Integrity', () => {
       service.recordDecision({
         pair: 'ETH/USD',
         signalType: 'HYBRID',
-        predictedRegime: 'BULL_STABLE',
+        predictedRegime: 'TREND_FRIENDLY_STABLE',
         modelUsed: 'ensemble_primary',
         decision: 'BLOCKED',
         tracePath: ['Signal']
@@ -296,7 +296,7 @@ describe('Directive 11.7G — Predictive Diagnostics Integrity', () => {
         service.recordDecision({
           pair: `TEST${i}/USD`,
           signalType: 'HYBRID',
-          predictedRegime: 'BULL_STABLE',
+          predictedRegime: 'TREND_FRIENDLY_STABLE',
           modelUsed: 'ensemble_primary',
           decision: 'APPROVED',
           tracePath: ['Signal']

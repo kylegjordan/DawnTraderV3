@@ -41,7 +41,7 @@ describe('Directive 11.0E.2 — VTS Data Pipeline Isolation', () => {
           decayPenalty: 0.05,
           expectedEdge: 0.015,
           frictionCost: 0.003,
-          regime: 'BULL_STABLE',
+          regime: 'TREND_FRIENDLY_STABLE',
           pool: 'ideal',
           source: 'simulation',
         },
@@ -63,7 +63,7 @@ describe('Directive 11.0E.2 — VTS Data Pipeline Isolation', () => {
         frictionCost: 0.005,
         signalType: 'Hybrid',
         strategy: 'MomentumPulse',
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         pool: 'ideal',
         source: 'simulation',
         schemaVersion: '1.6.7',
@@ -99,7 +99,7 @@ describe('Directive 11.0E.2 — VTS Data Pipeline Isolation', () => {
         decayPenalty: 0.03,
         expectedEdge: 0.025,
         frictionCost: 0.004,
-        regime: 'HIGH_VOL_IMPULSE',
+        regime: 'IMPULSE_EXPANSION',
         pool: 'rotational',
         source: 'simulation',
       };
@@ -110,7 +110,7 @@ describe('Directive 11.0E.2 — VTS Data Pipeline Isolation', () => {
       expect(mockSignal.regimeWeight).toBe(0.85);
       expect(mockSignal.decayPenalty).toBe(0.03);
       expect(mockSignal.expectedEdge).toBe(0.025);
-      expect(mockSignal.regime).toBe('HIGH_VOL_IMPULSE');
+      expect(mockSignal.regime).toBe('IMPULSE_EXPANSION');
       expect(mockSignal.pool).toBe('rotational');
     });
   });
@@ -175,7 +175,7 @@ describe('Directive 11.0E.2 — VTS Data Pipeline Isolation', () => {
         decayPenalty: 0.05,
         expectedEdge: 0.018,
         frictionCost: 0.003,
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         strategy: 'MomentumPulse',
         source: 'simulation',
       };

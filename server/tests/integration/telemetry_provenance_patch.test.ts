@@ -154,11 +154,11 @@ describe('Directive 11.1A1 - Telemetry Provenance Patch', () => {
   describe('Market Regime Types', () => {
     const validRegimes: MarketRegime[] = [
       'EXTREME_NOISE',
-      'BULL_STABLE',
+      'TREND_FRIENDLY_STABLE',
       'BULL_VOLATILE',
       'BEAR_STABLE',
-      'BEAR_VOLATILE',
-      'LOW_VOL_CHOP',
+      'HIGH_VOLATILITY_UNSTABLE',
+      'RANGE_BOUND_STABLE',
     ];
 
     it('should define exactly 6 market regimes', () => {
@@ -167,11 +167,11 @@ describe('Directive 11.1A1 - Telemetry Provenance Patch', () => {
 
     it('should include all regime types', () => {
       expect(validRegimes).toContain('EXTREME_NOISE');
-      expect(validRegimes).toContain('BULL_STABLE');
+      expect(validRegimes).toContain('TREND_FRIENDLY_STABLE');
       expect(validRegimes).toContain('BULL_VOLATILE');
       expect(validRegimes).toContain('BEAR_STABLE');
-      expect(validRegimes).toContain('BEAR_VOLATILE');
-      expect(validRegimes).toContain('LOW_VOL_CHOP');
+      expect(validRegimes).toContain('HIGH_VOLATILITY_UNSTABLE');
+      expect(validRegimes).toContain('RANGE_BOUND_STABLE');
     });
   });
 
@@ -180,7 +180,7 @@ describe('Directive 11.1A1 - Telemetry Provenance Patch', () => {
       const entry: TelemetryEntry = {
         symbol: 'BTC/USD',
         mode: 'paper',
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         finalScore: 0.75,
         hybridScore: 0.80,
         regimeWeight: 0.65,
@@ -193,14 +193,14 @@ describe('Directive 11.1A1 - Telemetry Provenance Patch', () => {
 
       expect(entry.symbol).toBe('BTC/USD');
       expect(entry.mode).toBe('paper');
-      expect(entry.regime).toBe('BULL_STABLE');
+      expect(entry.regime).toBe('TREND_FRIENDLY_STABLE');
     });
 
     it('should allow minimal required fields', () => {
       const minimalEntry: TelemetryEntry = {
         symbol: 'ETH/USD',
         mode: 'live',
-        regime: 'LOW_VOL_CHOP',
+        regime: 'RANGE_BOUND_STABLE',
         finalScore: 0.50,
       };
 

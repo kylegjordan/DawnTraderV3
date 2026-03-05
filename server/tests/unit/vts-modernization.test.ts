@@ -85,7 +85,7 @@ describe('Market Regime Calculator', () => {
     expect(result).toHaveProperty('adx');
     expect(result).toHaveProperty('confidence');
     
-    const validRegimes: MarketRegimeType[] = ['BULL_STABLE', 'BEAR_VOLATILE', 'LOW_VOL_CHOP', 'HIGH_VOL_IMPULSE', 'TRANSITION'];
+    const validRegimes: MarketRegimeType[] = ['TREND_FRIENDLY_STABLE', 'HIGH_VOLATILITY_UNSTABLE', 'RANGE_BOUND_STABLE', 'IMPULSE_EXPANSION', 'STRUCTURAL_TRANSITION'];
     expect(validRegimes).toContain(result.regime);
     
     expect(result.confidence).toBeGreaterThanOrEqual(0.4);
@@ -93,7 +93,7 @@ describe('Market Regime Calculator', () => {
   });
   
   it('should return regime weight for valid regimes', () => {
-    const regimes: MarketRegimeType[] = ['BULL_STABLE', 'BEAR_VOLATILE', 'LOW_VOL_CHOP', 'HIGH_VOL_IMPULSE', 'TRANSITION'];
+    const regimes: MarketRegimeType[] = ['TREND_FRIENDLY_STABLE', 'HIGH_VOLATILITY_UNSTABLE', 'RANGE_BOUND_STABLE', 'IMPULSE_EXPANSION', 'STRUCTURAL_TRANSITION'];
     
     for (const regime of regimes) {
       const weight = getRegimeWeight(regime);
@@ -105,7 +105,7 @@ describe('Market Regime Calculator', () => {
 
 describe('Regime Strategy Mapping', () => {
   it('should have strategy mapping for all regime types', () => {
-    const regimes: MarketRegimeType[] = ['BULL_STABLE', 'BEAR_VOLATILE', 'LOW_VOL_CHOP', 'HIGH_VOL_IMPULSE', 'TRANSITION'];
+    const regimes: MarketRegimeType[] = ['TREND_FRIENDLY_STABLE', 'HIGH_VOLATILITY_UNSTABLE', 'RANGE_BOUND_STABLE', 'IMPULSE_EXPANSION', 'STRUCTURAL_TRANSITION'];
     
     for (const regime of regimes) {
       const mapping = regimeStrategyMap[regime];
@@ -119,7 +119,7 @@ describe('Regime Strategy Mapping', () => {
   });
   
   it('should select valid strategy for each regime', () => {
-    const regimes: MarketRegimeType[] = ['BULL_STABLE', 'BEAR_VOLATILE', 'LOW_VOL_CHOP', 'HIGH_VOL_IMPULSE', 'TRANSITION'];
+    const regimes: MarketRegimeType[] = ['TREND_FRIENDLY_STABLE', 'HIGH_VOLATILITY_UNSTABLE', 'RANGE_BOUND_STABLE', 'IMPULSE_EXPANSION', 'STRUCTURAL_TRANSITION'];
     
     for (const regime of regimes) {
       const { signalType, strategy } = selectRandomStrategy(regime);
@@ -135,7 +135,7 @@ describe('Regime Strategy Mapping', () => {
   });
   
   it('should return valid risk multipliers', () => {
-    const regimes: MarketRegimeType[] = ['BULL_STABLE', 'BEAR_VOLATILE', 'LOW_VOL_CHOP', 'HIGH_VOL_IMPULSE', 'TRANSITION'];
+    const regimes: MarketRegimeType[] = ['TREND_FRIENDLY_STABLE', 'HIGH_VOLATILITY_UNSTABLE', 'RANGE_BOUND_STABLE', 'IMPULSE_EXPANSION', 'STRUCTURAL_TRANSITION'];
     
     for (const regime of regimes) {
       const multiplier = getRegimeRiskMultiplier(regime);
@@ -228,7 +228,7 @@ describe('VTS Phase-10 Trade Record', () => {
   it('should validate Phase-10 trade record structure', () => {
     const mockTradeRecord = {
       symbol: 'BTC/USD',
-      regime: 'BULL_STABLE' as MarketRegimeType,
+      regime: 'TREND_FRIENDLY_STABLE' as MarketRegimeType,
       signalType: 'Hybrid' as const,
       strategy: 'MomentumPulse',
       finalScore: 0.72,
@@ -261,7 +261,7 @@ describe('VTS Phase-10 Trade Record', () => {
 
 describe('Governance Invariants', () => {
   it('M45: All trade records include regime, signalType, strategy', () => {
-    const regimes: MarketRegimeType[] = ['BULL_STABLE', 'BEAR_VOLATILE', 'LOW_VOL_CHOP', 'HIGH_VOL_IMPULSE', 'TRANSITION'];
+    const regimes: MarketRegimeType[] = ['TREND_FRIENDLY_STABLE', 'HIGH_VOLATILITY_UNSTABLE', 'RANGE_BOUND_STABLE', 'IMPULSE_EXPANSION', 'STRUCTURAL_TRANSITION'];
     
     for (const regime of regimes) {
       const { signalType, strategy } = selectRandomStrategy(regime);
@@ -291,7 +291,7 @@ describe('Governance Invariants', () => {
     
     const mockRecord = {
       symbol: 'ETH/USD',
-      regime: 'TRANSITION',
+      regime: 'STRUCTURAL_TRANSITION',
       signalType: 'Hybrid',
       strategy: 'MeanReversion',
       finalScore: 0.65,
@@ -311,7 +311,7 @@ describe('Governance Invariants', () => {
   });
   
   it('M49: Strategy selection should not throw for any regime', () => {
-    const regimes: MarketRegimeType[] = ['BULL_STABLE', 'BEAR_VOLATILE', 'LOW_VOL_CHOP', 'HIGH_VOL_IMPULSE', 'TRANSITION'];
+    const regimes: MarketRegimeType[] = ['TREND_FRIENDLY_STABLE', 'HIGH_VOLATILITY_UNSTABLE', 'RANGE_BOUND_STABLE', 'IMPULSE_EXPANSION', 'STRUCTURAL_TRANSITION'];
     
     for (const regime of regimes) {
       expect(() => selectRandomStrategy(regime)).not.toThrow();

@@ -98,23 +98,23 @@ describe('Directive 11.4A: Market Friction Computation (M10 Governance)', () => 
 describe('Directive 11.4A: Market Indicators Service (M14, M15 Governance)', () => {
   
   it('should update and retrieve global regime', () => {
-    updateGlobalRegime('BULL_STABLE');
-    expect(getCurrentRegime()).toBe('BULL_STABLE');
+    updateGlobalRegime('TREND_FRIENDLY_STABLE');
+    expect(getCurrentRegime()).toBe('TREND_FRIENDLY_STABLE');
     
-    updateGlobalRegime('BEAR_VOLATILE');
-    expect(getCurrentRegime()).toBe('BEAR_VOLATILE');
+    updateGlobalRegime('HIGH_VOLATILITY_UNSTABLE');
+    expect(getCurrentRegime()).toBe('HIGH_VOLATILITY_UNSTABLE');
   });
   
   it('should provide regime info with description and favored strategies', () => {
-    const info = getRegimeInfo('BULL_STABLE');
-    expect(info.name).toBe('BULL_STABLE');
+    const info = getRegimeInfo('TREND_FRIENDLY_STABLE');
+    expect(info.name).toBe('TREND_FRIENDLY_STABLE');
     expect(typeof info.description).toBe('string');
     expect(Array.isArray(info.favoredStrategies)).toBe(true);
     expect(info.favoredStrategies.length).toBeGreaterThan(0);
   });
   
   it('should return market indicators with all required fields', () => {
-    updateGlobalRegime('LOW_VOL_CHOP');
+    updateGlobalRegime('RANGE_BOUND_STABLE');
     const indicators = getMarketIndicators();
     
     expect(indicators).toHaveProperty('marketRegime');
@@ -130,7 +130,7 @@ describe('Directive 11.4A: Market Indicators Service (M14, M15 Governance)', () 
   
   it('should fallback to LOW_VOL_CHOP for unknown regimes', () => {
     const info = getRegimeInfo('UNKNOWN_REGIME' as any);
-    expect(info.name).toBe('LOW_VOL_CHOP');
+    expect(info.name).toBe('RANGE_BOUND_STABLE');
   });
 });
 
@@ -146,7 +146,7 @@ describe('Directive 11.4A: Narrative Feed Service (M12, M16 Governance)', () => 
       side: 'LONG',
       entryPrice: 45000,
       strategy: 'EMA_CROSS',
-      regime: 'BULL_STABLE',
+      regime: 'TREND_FRIENDLY_STABLE',
     });
     
     expect(event).toHaveProperty('id');
@@ -254,7 +254,7 @@ describe('Directive 11.4A: Narrative Feed Service (M12, M16 Governance)', () => 
 describe('Directive 11.4A.1: Expanded Market Regime Definitions (M19 Governance)', () => {
   
   it('should have expanded descriptions for all regimes', () => {
-    const regimes = ['BULL_STABLE', 'BULL_VOLATILE', 'BEAR_STABLE', 'BEAR_VOLATILE', 'LOW_VOL_CHOP', 'HIGH_VOL_CHOP', 'MIXED_TRANSITION', 'EXTREME_NOISE'];
+    const regimes = ['TREND_FRIENDLY_STABLE', 'BULL_VOLATILE', 'BEAR_STABLE', 'HIGH_VOLATILITY_UNSTABLE', 'RANGE_BOUND_STABLE', 'HIGH_VOL_CHOP', 'MIXED_TRANSITION', 'EXTREME_NOISE'];
     
     for (const regime of regimes) {
       const desc = regimeDescriptions[regime];
@@ -267,17 +267,17 @@ describe('Directive 11.4A.1: Expanded Market Regime Definitions (M19 Governance)
   });
   
   it('should return complete 3-4 sentence descriptions for each regime', () => {
-    const bullStable = regimeDescriptions['BULL_STABLE'];
+    const bullStable = regimeDescriptions['TREND_FRIENDLY_STABLE'];
     expect(bullStable.description).toContain('upward trend');
     expect(bullStable.description.split('.').length).toBeGreaterThanOrEqual(3);
     
-    const bearVolatile = regimeDescriptions['BEAR_VOLATILE'];
+    const bearVolatile = regimeDescriptions['HIGH_VOLATILITY_UNSTABLE'];
     expect(bearVolatile.description).toContain('downward');
     expect(bearVolatile.description.split('.').length).toBeGreaterThanOrEqual(3);
   });
   
   it('should return expanded regime via getExpandedRegimeDescription', () => {
-    const expanded = getExpandedRegimeDescription('BULL_STABLE');
+    const expanded = getExpandedRegimeDescription('TREND_FRIENDLY_STABLE');
     expect(expanded).toBeDefined();
     expect(expanded!.title).toBe('Bull Stable');
     expect(expanded!.favoredSignalTypes).toContain('Quantitative');
@@ -319,7 +319,7 @@ describe('Directive 11.4A.1: Expanded Market Friction Narratives (M20 Governance
 describe('Directive 11.4A.1: Market Indicators with Expanded Fields', () => {
   
   it('should return indicators with regimeTitle and frictionNarrative', () => {
-    updateGlobalRegime('BULL_STABLE');
+    updateGlobalRegime('TREND_FRIENDLY_STABLE');
     const indicators = getMarketIndicators();
     
     expect(indicators).toHaveProperty('regimeTitle');

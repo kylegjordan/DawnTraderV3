@@ -145,11 +145,12 @@ const getRegimeIcon = (regime: string) => {
 };
 
 const getRegimeBadgeColor = (regime: string) => {
-  if (regime.includes('BULL_STABLE')) return 'bg-green-500/20 text-green-400 border-green-500/30';
-  if (regime.includes('BULL_VOLATILE')) return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
-  if (regime.includes('BEAR_STABLE')) return 'bg-red-500/20 text-red-400 border-red-500/30';
-  if (regime.includes('BEAR_VOLATILE')) return 'bg-rose-500/20 text-rose-400 border-rose-500/30';
+  if (regime.includes('TREND_FRIENDLY_STABLE') || regime.includes('BULL_STABLE')) return 'bg-green-500/20 text-green-400 border-green-500/30';
+  if (regime.includes('IMPULSE_EXPANSION') || regime.includes('HIGH_VOL_IMPULSE') || regime.includes('BULL_VOLATILE')) return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+  if (regime.includes('HIGH_VOLATILITY_UNSTABLE') || regime.includes('BEAR_VOLATILE') || regime.includes('BEAR_STABLE')) return 'bg-rose-500/20 text-rose-400 border-rose-500/30';
+  if (regime.includes('RANGE_BOUND_STABLE') || regime.includes('LOW_VOL_CHOP')) return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
   if (regime === 'EXTREME_NOISE') return 'bg-red-600/30 text-red-300 border-red-600/50';
+  if (regime.includes('STRUCTURAL_TRANSITION') || regime.includes('TRANSITION')) return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
   return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
 };
 
@@ -482,29 +483,29 @@ function DefinitionsReference() {
             </thead>
             <tbody className="text-muted-foreground">
               <tr className="border-b">
-                <td className="py-2 pr-4"><Badge variant="outline" className="bg-green-500/20 text-green-400 border-green-500/30">BULL_STABLE</Badge></td>
+                <td className="py-2 pr-4"><Badge variant="outline" className="bg-green-500/20 text-green-400 border-green-500/30">TREND_FRIENDLY_STABLE</Badge></td>
                 <td className="py-2 pr-4 font-mono text-xs">Mom &gt; +0.005 | ADX &gt; 25 | Vol &lt; 0.025</td>
-                <td className="py-2">Markets are trending upward steadily. Buyers are in control, and momentum strategies work best.</td>
+                <td className="py-2">Market is trending steadily. Momentum and trend-following strategies work best.</td>
               </tr>
               <tr className="border-b">
-                <td className="py-2 pr-4"><Badge variant="outline" className="bg-red-500/20 text-red-400 border-red-500/30">BEAR_VOLATILE</Badge></td>
+                <td className="py-2 pr-4"><Badge variant="outline" className="bg-rose-500/20 text-rose-400 border-rose-500/30">HIGH_VOLATILITY_UNSTABLE</Badge></td>
                 <td className="py-2 pr-4 font-mono text-xs">Mom &lt; -0.005 | ADX &gt; 25 | Vol &gt; 0.03</td>
-                <td className="py-2">Markets are dropping sharply or swinging wildly. It's better to be cautious or trade defensive setups.</td>
+                <td className="py-2">High volatility with sharp swings. Cautious positioning and defensive setups are preferred.</td>
               </tr>
               <tr className="border-b">
-                <td className="py-2 pr-4"><Badge variant="outline" className="bg-gray-500/20 text-gray-400 border-gray-500/30">LOW_VOL_CHOP</Badge></td>
+                <td className="py-2 pr-4"><Badge variant="outline" className="bg-gray-500/20 text-gray-400 border-gray-500/30">RANGE_BOUND_STABLE</Badge></td>
                 <td className="py-2 pr-4 font-mono text-xs">Mom abs &lt; 0.002 | ADX &lt; 20 | Vol &lt; 0.015</td>
                 <td className="py-2">Prices move sideways without clear direction. Range trading works best here.</td>
               </tr>
               <tr className="border-b">
-                <td className="py-2 pr-4"><Badge variant="outline" className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">HIGH_VOL_IMPULSE</Badge></td>
+                <td className="py-2 pr-4"><Badge variant="outline" className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">IMPULSE_EXPANSION</Badge></td>
                 <td className="py-2 pr-4 font-mono text-xs">Mom abs &gt; 0.010 | ADX &gt; 30 | Vol &gt; 0.030</td>
                 <td className="py-2">Prices move very fast and sharply. Short-term breakout and scalp trades work well.</td>
               </tr>
               <tr>
-                <td className="py-2 pr-4"><Badge variant="outline" className="bg-blue-500/20 text-blue-400 border-blue-500/30">TRANSITION</Badge></td>
+                <td className="py-2 pr-4"><Badge variant="outline" className="bg-blue-500/20 text-blue-400 border-blue-500/30">STRUCTURAL_TRANSITION</Badge></td>
                 <td className="py-2 pr-4 font-mono text-xs">Mom ± 0.004 | ADX 20-25 | Vol 0.015-0.030</td>
-                <td className="py-2">The market is changing direction or finding a new trend. Keep trades small and flexible.</td>
+                <td className="py-2">The market structure is changing. Keep trades small and flexible.</td>
               </tr>
             </tbody>
           </table>
@@ -562,7 +563,7 @@ function DefinitionsReference() {
             </thead>
             <tbody className="text-muted-foreground">
               <tr className="border-b">
-                <td className="py-2 px-2 font-medium text-foreground" rowSpan={4}>BULL_STABLE</td>
+                <td className="py-2 px-2 font-medium text-foreground" rowSpan={4}>TREND_FRIENDLY_STABLE</td>
                 <td className="py-2 px-2">SMA Trend Ride</td>
                 <td className="py-2 px-2 font-mono">Price &gt; SMA(50) by &gt; 0.5% | ADX &gt; 25</td>
                 <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">QUANT</Badge></td>
@@ -587,7 +588,7 @@ function DefinitionsReference() {
                 <td className="py-2 px-2">Morning / Evening Star</td>
               </tr>
               <tr className="border-b">
-                <td className="py-2 px-2 font-medium text-foreground" rowSpan={4}>BEAR_VOLATILE</td>
+                <td className="py-2 px-2 font-medium text-foreground" rowSpan={4}>HIGH_VOLATILITY_UNSTABLE</td>
                 <td className="py-2 px-2">Mean Reversion</td>
                 <td className="py-2 px-2 font-mono">RSI &lt; 30 or &gt; 70 | Price Dev &gt; 1σ | Vol &lt; 0.025</td>
                 <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">QUANT</Badge></td>
@@ -612,7 +613,7 @@ function DefinitionsReference() {
                 <td className="py-2 px-2">Inside Bar / Engulfing</td>
               </tr>
               <tr className="border-b">
-                <td className="py-2 px-2 font-medium text-foreground" rowSpan={4}>LOW_VOL_CHOP</td>
+                <td className="py-2 px-2 font-medium text-foreground" rowSpan={4}>RANGE_BOUND_STABLE</td>
                 <td className="py-2 px-2">Range Trading</td>
                 <td className="py-2 px-2 font-mono">Bollinger Bandwidth &lt; 0.10 | ADX &lt; 20</td>
                 <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">QUANT</Badge></td>
@@ -637,7 +638,7 @@ function DefinitionsReference() {
                 <td className="py-2 px-2">Tri-Star / Three Soldiers</td>
               </tr>
               <tr className="border-b">
-                <td className="py-2 px-2 font-medium text-foreground" rowSpan={4}>HIGH_VOL_IMPULSE</td>
+                <td className="py-2 px-2 font-medium text-foreground" rowSpan={4}>IMPULSE_EXPANSION</td>
                 <td className="py-2 px-2">Breakout</td>
                 <td className="py-2 px-2 font-mono">Momentum &gt; +0.7% | Volume &gt; 2× avg</td>
                 <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">QUANT</Badge></td>
@@ -662,7 +663,7 @@ function DefinitionsReference() {
                 <td className="py-2 px-2">—</td>
               </tr>
               <tr className="border-b">
-                <td className="py-2 px-2 font-medium text-foreground" rowSpan={3}>TRANSITION</td>
+                <td className="py-2 px-2 font-medium text-foreground" rowSpan={3}>STRUCTURAL_TRANSITION</td>
                 <td className="py-2 px-2">Liquidity Trap</td>
                 <td className="py-2 px-2 font-mono">(Lower Wick / Body) &gt; 2 or Depth Imbalance &gt; 1.4</td>
                 <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">QUANT</Badge></td>

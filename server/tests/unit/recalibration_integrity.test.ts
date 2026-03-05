@@ -132,7 +132,7 @@ describe('Directive 11.7D.1 — Recalibration Integrity', () => {
         parameter: 'dynamicROI',
         oldValue: 0.02,
         newValue: 0.025,
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         reason: 'Test adjustment'
       });
 
@@ -143,7 +143,7 @@ describe('Directive 11.7D.1 — Recalibration Integrity', () => {
       expect(entry.newValue).toBe(0.025);
       expect(entry.delta).toBeCloseTo(0.005, 4);
       expect(entry.impact).toBeGreaterThan(0);
-      expect(entry.regime).toBe('BULL_STABLE');
+      expect(entry.regime).toBe('TREND_FRIENDLY_STABLE');
       expect(entry.reason).toBe('Test adjustment');
       expect(entry.timestamp).toBeDefined();
     });
@@ -257,7 +257,7 @@ describe('Directive 11.7D.1 — Recalibration Integrity', () => {
       
       consoleWarnSpy.mockClear();
       
-      validateTelemetryIntegrity('BULL_STABLE', { avgPnL: 0.05, skipRatio: 0.1 }, 3);
+      validateTelemetryIntegrity('TREND_FRIENDLY_STABLE', { avgPnL: 0.05, skipRatio: 0.1 }, 3);
       
       expect(consoleWarnSpy).toHaveBeenCalledWith(
         expect.stringContaining('Missing key metrics for BULL_STABLE')
@@ -353,7 +353,7 @@ describe('Directive 11.7D.1 — Recalibration Integrity', () => {
       
       consoleWarnSpy.mockClear();
       
-      validateTelemetryIntegrity('BEAR_VOLATILE', { winRate: 0.6, avgPnL: 0.05, skipRatio: 0.1 }, 3);
+      validateTelemetryIntegrity('HIGH_VOLATILITY_UNSTABLE', { winRate: 0.6, avgPnL: 0.05, skipRatio: 0.1 }, 3);
       
       expect(consoleWarnSpy).not.toHaveBeenCalled();
     });

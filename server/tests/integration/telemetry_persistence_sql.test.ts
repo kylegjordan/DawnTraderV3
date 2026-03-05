@@ -41,7 +41,7 @@ describe('Directive 11.1A - Telemetry Persistence SQL', () => {
       const entry: TelemetryEntry = {
         symbol: 'BTCUSD',
         mode: 'live',
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         finalScore: 0.75,
       };
       
@@ -56,7 +56,7 @@ describe('Directive 11.1A - Telemetry Persistence SQL', () => {
       const entry: TelemetryEntry = {
         symbol: 'ETHUSD',
         mode: 'paper',
-        regime: 'BEAR_VOLATILE',
+        regime: 'HIGH_VOLATILITY_UNSTABLE',
         finalScore: 0.45,
       };
       
@@ -70,7 +70,7 @@ describe('Directive 11.1A - Telemetry Persistence SQL', () => {
       const entry1: TelemetryEntry = {
         symbol: 'BTCUSD',
         mode: 'live',
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         finalScore: 0.75,
       };
       
@@ -182,11 +182,11 @@ describe('Directive 11.1A - Telemetry Persistence SQL', () => {
   describe('Market Regime Types', () => {
     const validRegimes: MarketRegime[] = [
       'EXTREME_NOISE',
-      'BULL_STABLE',
+      'TREND_FRIENDLY_STABLE',
       'BULL_VOLATILE',
       'BEAR_STABLE',
-      'BEAR_VOLATILE',
-      'LOW_VOL_CHOP'
+      'HIGH_VOLATILITY_UNSTABLE',
+      'RANGE_BOUND_STABLE'
     ];
 
     it('should accept all valid market regime values', () => {

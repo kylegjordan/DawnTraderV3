@@ -55,7 +55,7 @@ describe('Directive 10.1 — Dynamic Strategy Selector (DSS)', () => {
     const metrics: DSSMetrics = { volNoise: 0.25, trendSlope: 0.02 };
     const regime = dss.determineRegime(metrics);
     
-    expect(regime).toBe('LOW_VOL_CHOP');
+    expect(regime).toBe('RANGE_BOUND_STABLE');
     console.log(`[10.1][TEST] trend=0.02 → regime=${regime}`);
   });
 
@@ -63,7 +63,7 @@ describe('Directive 10.1 — Dynamic Strategy Selector (DSS)', () => {
     const metrics: DSSMetrics = { volNoise: 0.2, trendSlope: -0.03 };
     const regime = dss.determineRegime(metrics);
     
-    expect(regime).toBe('LOW_VOL_CHOP');
+    expect(regime).toBe('RANGE_BOUND_STABLE');
     console.log(`[10.1][TEST] trend=-0.03 → regime=${regime}`);
   });
 
@@ -71,7 +71,7 @@ describe('Directive 10.1 — Dynamic Strategy Selector (DSS)', () => {
     const metrics: DSSMetrics = { volNoise: 0.2, trendSlope: 0.08 };
     const regime = dss.determineRegime(metrics);
     
-    expect(regime).toBe('BULL_STABLE');
+    expect(regime).toBe('TREND_FRIENDLY_STABLE');
     console.log(`[10.1][TEST] trend=0.08, vol=0.2 → regime=${regime}`);
   });
 
@@ -95,7 +95,7 @@ describe('Directive 10.1 — Dynamic Strategy Selector (DSS)', () => {
     const metrics: DSSMetrics = { volNoise: 0.5, trendSlope: -0.12 };
     const regime = dss.determineRegime(metrics);
     
-    expect(regime).toBe('BEAR_VOLATILE');
+    expect(regime).toBe('HIGH_VOLATILITY_UNSTABLE');
     console.log(`[10.1][TEST] trend=-0.12, vol=0.5 → regime=${regime}`);
   });
 
@@ -147,7 +147,7 @@ describe('Directive 10.1 — Dynamic Strategy Selector (DSS)', () => {
     const metrics: DSSMetrics = { volNoise: 0.2, trendSlope: 0.051 };
     const regime = dss.determineRegime(metrics);
     
-    expect(regime).toBe('BULL_STABLE');
+    expect(regime).toBe('TREND_FRIENDLY_STABLE');
     console.log(`[10.1][BOUNDARY] trend=0.051 → regime=${regime}`);
   });
 
@@ -158,7 +158,7 @@ describe('Directive 10.1 — Dynamic Strategy Selector (DSS)', () => {
     const regimeLow = dss.determineRegime(metricsLow);
     const regimeHigh = dss.determineRegime(metricsHigh);
     
-    expect(regimeLow).toBe('BULL_STABLE');
+    expect(regimeLow).toBe('TREND_FRIENDLY_STABLE');
     expect(regimeHigh).toBe('BULL_VOLATILE');
     console.log(`[10.1][BOUNDARY] vol=0.29 → ${regimeLow}, vol=0.31 → ${regimeHigh}`);
   });

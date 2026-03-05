@@ -114,7 +114,7 @@ describe('Directive 11.2 R1: Adaptive Scanning Fairness', () => {
       const ratio = manager.getCurrentRatio();
       
       expect(ratio.regime).toBeDefined();
-      expect(['EXTREME_NOISE', 'BULL_STABLE', 'BULL_VOLATILE', 'BEAR_STABLE', 'BEAR_VOLATILE', 'LOW_VOL_CHOP'])
+      expect(['EXTREME_NOISE', 'TREND_FRIENDLY_STABLE', 'BULL_VOLATILE', 'BEAR_STABLE', 'HIGH_VOLATILITY_UNSTABLE', 'RANGE_BOUND_STABLE'])
         .toContain(ratio.regime);
     });
   });

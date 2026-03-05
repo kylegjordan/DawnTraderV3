@@ -12,6 +12,7 @@ import dseRouter from "./routes/dse.js"; // Directive 11.3: Dynamic Sizing Engin
 import chapletRouter from "../chaplet/index.js"; // Phase M4: Chaplet Context Service
 import { env } from "./config/index.js"; // Phase 1: Typed environment config
 import regimeArchiveRouter from "./routes/regime-archive.js"; // Directive 11.7E: Regime Archive API
+import regimeMapRouter from "./routes/regime-map.js"; // Phase 14: Dynamic regime map API
 import version from "./version.json";
 
 // Phase 3C: Performance profiling
@@ -202,6 +203,8 @@ app.use((req, res, next) => {
   // Directive 11.7E: Mount Regime Archive routes BEFORE registerRoutes to ensure availability
   app.use('', regimeArchiveRouter);
   console.log('[11.7E] Regime Archive routes mounted at /api/vts/regime-archive');
+  app.use('/api', regimeMapRouter);
+  console.log('[Phase14] Regime Map routes mounted at /api/regime-map');
 
   // Register routes and get the API router + HTTP server
   const { httpServer: server, apiRouter } = await registerRoutes(app);

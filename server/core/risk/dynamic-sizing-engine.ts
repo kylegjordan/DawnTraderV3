@@ -284,7 +284,7 @@ export function getDSEDiagnostics(): {
 } {
   const byRegime: Record<string, { avgMultiplier: number; count: number }> = {};
   
-  const regimes = ['EXTREME_NOISE', 'BULL_STABLE', 'BULL_VOLATILE', 'BEAR_STABLE', 'BEAR_VOLATILE', 'LOW_VOL_CHOP'];
+  const regimes = ['EXTREME_NOISE', 'TREND_FRIENDLY_STABLE', 'HIGH_VOLATILITY_UNSTABLE', 'RANGE_BOUND_STABLE', 'IMPULSE_EXPANSION', 'STRUCTURAL_TRANSITION'];
   for (const regime of regimes) {
     const regimeHistory = sizeHistory.filter(t => t.regime === regime);
     if (regimeHistory.length > 0) {

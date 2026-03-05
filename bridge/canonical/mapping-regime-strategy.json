@@ -1,39 +1,39 @@
 {
-  "_schema": "regime-mapping/v1.4c",
+  "_schema": "regime-mapping/v2.0.0",
   "_metadata": {
-    "updatedAt": "2026-01-23T00:00:00Z",
+    "updatedAt": "2026-03-05T00:00:00Z",
     "source": "VTS",
     "canonical": true,
     "includesDriftScore": true,
-    "generatedAt": "2026-01-23T00:00:00Z",
+    "generatedAt": "2026-03-05T00:00:00Z",
     "generator": "sync-canonical-bridge.ts",
     "_fields": ["driftScores", "volZ", "trendZ"]
   },
-  "BEAR_VOLATILE": {
+  "HIGH_VOLATILITY_UNSTABLE": {
     "favoredStrategies": ["mean_reversion", "reverse_impulse", "defensive_hedge", "inside_bar_reversal"],
     "favoredSignalTypes": ["QUANT", "HYBRID", "PATTERN"],
     "minConfidence": 0.75,
     "riskMultiplier": 0.7
   },
-  "BULL_STABLE": {
+  "TREND_FRIENDLY_STABLE": {
     "favoredStrategies": ["vwap_pullback", "morning_star", "pivot_shift"],
     "favoredSignalTypes": ["QUANT", "PATTERN", "HYBRID"],
     "minConfidence": 0.65,
     "riskMultiplier": 1.2
   },
-  "HIGH_VOL_IMPULSE": {
+  "IMPULSE_EXPANSION": {
     "favoredStrategies": ["sma_trend_ride", "breakout", "vwap_bounce", "volatility_edge", "dhma"],
     "favoredSignalTypes": ["QUANT", "HYBRID"],
     "minConfidence": 0.7,
     "riskMultiplier": 0.8
   },
-  "LOW_VOL_CHOP": {
+  "RANGE_BOUND_STABLE": {
     "favoredStrategies": ["range_trade", "support_bounce", "abcd_long", "adaptive_flow"],
     "favoredSignalTypes": ["QUANT", "PATTERN", "HYBRID"],
     "minConfidence": 0.6,
     "riskMultiplier": 0.9
   },
-  "TRANSITION": {
+  "STRUCTURAL_TRANSITION": {
     "favoredStrategies": ["liquidity_trap", "pivot_shift", "morning_star"],
     "favoredSignalTypes": ["QUANT", "HYBRID", "PATTERN"],
     "minConfidence": 0.55,

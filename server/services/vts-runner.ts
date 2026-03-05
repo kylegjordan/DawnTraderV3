@@ -9,7 +9,7 @@
  * 
  * Directive 11.0E.1 Features:
  * - Phase-10 canonical math (finalScore, hybridScore, regimeWeight, decayPenalty)
- * - Per-pair regime calculation (BULL_STABLE, BEAR_VOLATILE, LOW_VOL_CHOP, etc.)
+ * - Per-pair regime calculation (TREND_FRIENDLY_STABLE, HIGH_VOLATILITY_UNSTABLE, etc.)
  * - Regime → Strategy mapping with signalType selection
  * - 100-pair Ideal Pool integration
  * - Automatic stop when tradingActive=true
@@ -49,6 +49,9 @@ import { SCORE_WEIGHTS } from '../config/score-weights.config.js';
 import { calculatePairRegime, getRegimeWeight, calculateRegimeScore, getNormalizedRegimeWithDetails } from '../core/metrics/market-regime.js';
 // Phase 13: Market Context Engine for centralized indicator + regime computation
 import { getMarketContextEngine } from './market-context-engine.js';
+// Phase 14: Real score calculator replaces simulation stubs
+import { computeRealHybridScore, computeRealDecayPenalty } from '../core/utils/vts-real-score.js';
+import { computeBiasConfidenceModifier } from '../core/metrics/directional-bias.js';
 import { 
   CANONICAL_REGIME_STRATEGY_MAP as REGIME_STRATEGY_MAP, 
   selectContextAwareStrategy,
@@ -154,6 +157,12 @@ interface Phase10TradeRecord {
   volZ?: number; // Directive 11.7F-B: Volatility Z-score for drift calculation
   trendZ?: number; // Directive 11.7F-B: Trend Z-score (momentum) for drift calculation
   executionContext?: 'VTS' | 'VTS_MULTI'; // 11.8C: Multi-strategy identification
+  // Phase 14: 6 context dimensions captured at trade OPEN
+  globalRegime?: string;
+  pairFriction?: number;
+  globalFriction?: number;
+  pairDirectionalBias?: string;
+  globalDirectionalBias?: string;
 }
 
 /**
@@ -189,6 +198,12 @@ interface OpenVirtualTrade {
   modeOverlay?: StrategyModeOverlay;   // 11.7S: Overlay values for observability
   regimeStability?: RegimeStability;   // 11.7S: Regime stability for observability
   executionContext?: 'VTS' | 'VTS_MULTI'; // 11.8C: Identifies multi-strategy trades
+  // Phase 14: 6 context dimensions captured at trade OPEN
+  globalRegime?: string;
+  pairFriction?: number;
+  globalFriction?: number;
+  pairDirectionalBias?: string;
+  globalDirectionalBias?: string;
 }
 
 const openVirtualTrades: Map<string, OpenVirtualTrade> = new Map();
@@ -279,26 +294,14 @@ async function fetchOHLCForPair(symbol: string): Promise<OHLCData[]> {
   }
 }
 
-function simulateHybridScore(regime: MarketRegimeType): number {
-  const baseScores: Record<MarketRegimeType, number> = {
-    BULL_STABLE: 0.75,
-    BEAR_VOLATILE: 0.45,
-    LOW_VOL_CHOP: 0.55,
-    HIGH_VOL_IMPULSE: 0.65,
-    TRANSITION: 0.50
-  };
-  const base = baseScores[regime] ?? 0.5;
-  return Math.min(0.95, Math.max(0.1, base + (Math.random() - 0.5) * 0.2));
-}
+// Phase 14: simulateHybridScore REMOVED — replaced by computeRealHybridScore()
+// from server/core/utils/vts-real-score.ts (imported above)
 
-function simulatePredictiveConfidence(regime: MarketRegimeType, hybridScore: number): number {
-  const base = hybridScore * 0.8 + 0.1;
-  return Math.min(0.95, Math.max(0.1, base + (Math.random() - 0.5) * 0.15));
-}
+// Phase 14: simulatePredictiveConfidence REMOVED — replaced by getPredictiveConfidence()
+// from server/core/utils/score-calculator.ts (already imported at line 35)
 
-function simulateDecayPenalty(): number {
-  return Math.random() * 0.15;
-}
+// Phase 14: simulateDecayPenalty REMOVED — replaced by computeRealDecayPenalty()
+// from server/core/utils/vts-real-score.ts (imported above)
 
 async function generatePhase10Signal(
   symbol: string, 
@@ -403,8 +406,13 @@ async function generatePhase10Signal(
     ? (priceData.ask - priceData.bid) / priceData.price
     : 0.001;
   
-  const hybridScore = simulateHybridScore(regime);
-  const predictiveConfidence = simulatePredictiveConfidence(regime, hybridScore);
+  // Phase 14: Real strategy score calculation (no Math.random)
+  const hybridScore = computeRealHybridScore(strategy, mceContext.indicators, ohlcData, regime);
+  const predictiveConfidence = getPredictiveConfidence(symbol, regime, strategy);
+
+  // Phase 14: Apply Directional Bias confidence modifier
+  const biasCategory = mceContext.directionalBias?.category ?? 'NEUTRAL';
+  const biasModifier = computeBiasConfidenceModifier(biasCategory);
   
   // ══════════════════════════════════════════════════════════════════════════════
   // Directive 11.7R-E: HARD GOVERNANCE FILTER (BEFORE SCORING)
@@ -471,7 +479,7 @@ async function generatePhase10Signal(
     volatility: regimeResult.volatility
   });
   const regimeWeight = regimeScoreRaw / 100; // Normalize to 0-1 range for finalScore calculation
-  const decayPenalty = simulateDecayPenalty();
+  const decayPenalty = computeRealDecayPenalty(); // Phase 14: 0 for fresh signals
   
   const finalScore = computeFinalScore(hybridScore, predictiveConfidence, regimeWeight, decayPenalty);
   
@@ -634,6 +642,17 @@ async function generatePhase10Signal(
     modeOverlay,          // 11.7S: Overlay values for observability
     regimeStability,      // 11.7S: Regime stability for observability
     executionContext: isMultiStrategy ? 'VTS_MULTI' : 'VTS', // 11.8C: Multi-strategy identification
+    // Phase 14: Snapshot 6 context dimensions at trade OPEN
+    globalRegime: (() => {
+      try { const ta = getTelemetryAggregator(); return ta.getDominantRegime?.() ?? regime; } catch { return regime; }
+    })(),
+    pairFriction: (() => {
+      const cm = getCachedCostMetrics(symbol);
+      return Math.min(((cm.fee * 2 + cm.slippage * 2 + cm.spread) * 10000) / 3, 100);
+    })(),
+    globalFriction: undefined, // Filled by telemetry aggregator at persistence
+    pairDirectionalBias: mceContext.directionalBias?.category ?? 'NEUTRAL',
+    globalDirectionalBias: undefined, // Filled by MCE global bias at persistence
   };
   
   openVirtualTrades.set(tradeId, openTrade);
@@ -666,7 +685,7 @@ async function generatePhase10Signal(
     regime,
     regimeScore: regimeScoreRaw, // Directive 11.4H.4A: Raw 0-100 score for UI display
     pool,
-    source: 'simulation', // M50/M53: VTS-generated signals marked as simulation
+    source: 'vts', // Phase 14: Source tag for fresh VTS data (legacy 'simulation' records flagged by migration)
   };
   
   // Directive 11.6: Trade record marked as pending - exit determined by resolveOpenVirtualTrades()
@@ -885,6 +904,12 @@ async function resolveOpenVirtualTrades(): Promise<{
       timestamp: new Date(trade.openedAt).toISOString(),
       exitType: exitReason,
       executionContext: trade.executionContext, // 11.8C: Preserve multi-strategy context
+      // Phase 14: Preserve context from trade OPEN
+      globalRegime: trade.globalRegime,
+      pairFriction: trade.pairFriction,
+      globalFriction: trade.globalFriction,
+      pairDirectionalBias: trade.pairDirectionalBias,
+      globalDirectionalBias: trade.globalDirectionalBias,
     };
     
     // Add to session trades
@@ -1059,11 +1084,11 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   console.log(`[11.0E.1][VTS] Running cycle with ${pairs.length} pairs`);
   
   const regimeDistribution: Record<MarketRegimeType, number> = {
-    BULL_STABLE: 0,
-    BEAR_VOLATILE: 0,
-    LOW_VOL_CHOP: 0,
-    HIGH_VOL_IMPULSE: 0,
-    TRANSITION: 0
+    TREND_FRIENDLY_STABLE: 0,
+    HIGH_VOLATILITY_UNSTABLE: 0,
+    RANGE_BOUND_STABLE: 0,
+    IMPULSE_EXPANSION: 0,
+    STRUCTURAL_TRANSITION: 0
   };
   const signalTypeDistribution: Record<string, number> = {};
   const strategiesExecuted: Set<string> = new Set();
@@ -1156,7 +1181,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   const avgFinalScore = simulatedCount > 0 ? totalFinalScore / simulatedCount : 0;
   const cycleDurationMs = Date.now() - cycleStart;
   
-  console.log(`[VTS][Cycle ${cycleCount}] Ideal Pool: ${pairs.length} | Regime Dist: BULL=${regimeDistribution.BULL_STABLE}, CHOP=${regimeDistribution.LOW_VOL_CHOP}, BEAR=${regimeDistribution.BEAR_VOLATILE}`);
+  console.log(`[VTS][Cycle ${cycleCount}] Ideal Pool: ${pairs.length} | Regime Dist: TREND=${regimeDistribution.TREND_FRIENDLY_STABLE}, RANGE=${regimeDistribution.RANGE_BOUND_STABLE}, HIVOL=${regimeDistribution.HIGH_VOLATILITY_UNSTABLE}`);
   console.log(`[VTS][Cycle ${cycleCount}] Executing ${simulatedCount} signals across ${Object.keys(signalTypeDistribution).length} signal types`);
   console.log(`[VTS][Cycle ${cycleCount}] Completed: ${simulatedCount} trades simulated | Avg finalScore=${avgFinalScore.toFixed(2)}`);
   

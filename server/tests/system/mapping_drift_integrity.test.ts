@@ -23,21 +23,21 @@ describe('Mapping Drift Integrity — Directive 11.7F', () => {
   describe('DriftScore Computation', () => {
     
     test('DriftScore bounds — low drift scenario', () => {
-      const sLow = computeDriftScore([-1, -0.9, -1.1], [1.4, 1.5, 1.6], 'BULL_STABLE');
+      const sLow = computeDriftScore([-1, -0.9, -1.1], [1.4, 1.5, 1.6], 'TREND_FRIENDLY_STABLE');
       expect(sLow.score).toBeGreaterThanOrEqual(0);
       expect(sLow.score).toBeLessThanOrEqual(3);
       expect(sLow.score).toBeLessThan(0.5);
     });
     
     test('DriftScore bounds — high drift scenario', () => {
-      const sHigh = computeDriftScore([5, 5, 5], [5, 5, 5], 'BULL_STABLE');
+      const sHigh = computeDriftScore([5, 5, 5], [5, 5, 5], 'TREND_FRIENDLY_STABLE');
       expect(sHigh.score).toBeGreaterThanOrEqual(0);
       expect(sHigh.score).toBeLessThanOrEqual(3);
       expect(sHigh.score).toBeGreaterThan(1.5);
     });
     
     test('DriftScore returns proper structure', () => {
-      const result = computeDriftScore([0.5, 0.6, 0.7], [0.8, 0.9, 1.0], 'HIGH_VOL_IMPULSE');
+      const result = computeDriftScore([0.5, 0.6, 0.7], [0.8, 0.9, 1.0], 'IMPULSE_EXPANSION');
       
       expect(result).toHaveProperty('score');
       expect(result).toHaveProperty('regime');
@@ -67,7 +67,7 @@ describe('Mapping Drift Integrity — Directive 11.7F', () => {
   describe('Drift Definitions', () => {
     
     test('All canonical regimes have drift definitions', () => {
-      const expectedRegimes = ['BULL_STABLE', 'BEAR_VOLATILE', 'LOW_VOL_CHOP', 'HIGH_VOL_IMPULSE', 'TRANSITION'];
+      const expectedRegimes = ['TREND_FRIENDLY_STABLE', 'HIGH_VOLATILITY_UNSTABLE', 'RANGE_BOUND_STABLE', 'IMPULSE_EXPANSION', 'STRUCTURAL_TRANSITION'];
       
       for (const regime of expectedRegimes) {
         expect(DRIFT_CANONICAL[regime]).toBeDefined();
@@ -145,7 +145,7 @@ describe('Mapping Drift Integrity — Directive 11.7F', () => {
       const content = fs.readFileSync(jsonPath, 'utf8');
       const bridge = JSON.parse(content);
       
-      const expectedRegimes = ['BULL_STABLE', 'BEAR_VOLATILE', 'LOW_VOL_CHOP', 'HIGH_VOL_IMPULSE', 'TRANSITION'];
+      const expectedRegimes = ['TREND_FRIENDLY_STABLE', 'HIGH_VOLATILITY_UNSTABLE', 'RANGE_BOUND_STABLE', 'IMPULSE_EXPANSION', 'STRUCTURAL_TRANSITION'];
       
       for (const regime of expectedRegimes) {
         expect(bridge[regime]).toBeDefined();
@@ -175,9 +175,9 @@ describe('Mapping Drift Integrity — Directive 11.7F', () => {
     
     test('aggregateDriftStats computes correctly', () => {
       const results = [
-        computeDriftScore([-1, -1, -1], [1.5, 1.5, 1.5], 'BULL_STABLE'),
-        computeDriftScore([1.2, 1.2, 1.2], [-0.8, -0.8, -0.8], 'BEAR_VOLATILE'),
-        computeDriftScore([5, 5, 5], [5, 5, 5], 'TRANSITION')
+        computeDriftScore([-1, -1, -1], [1.5, 1.5, 1.5], 'TREND_FRIENDLY_STABLE'),
+        computeDriftScore([1.2, 1.2, 1.2], [-0.8, -0.8, -0.8], 'HIGH_VOLATILITY_UNSTABLE'),
+        computeDriftScore([5, 5, 5], [5, 5, 5], 'STRUCTURAL_TRANSITION')
       ];
       
       const stats = aggregateDriftStats(results);
@@ -197,7 +197,7 @@ describe('Mapping Drift Integrity — Directive 11.7F', () => {
     });
 
     test('Simulated drift data with 10 pairs and random Z-scores', () => {
-      const regimes = ['BULL_STABLE', 'BEAR_VOLATILE', 'HIGH_VOL_IMPULSE', 'LOW_VOL_CHOP', 'TRANSITION'];
+      const regimes = ['TREND_FRIENDLY_STABLE', 'HIGH_VOLATILITY_UNSTABLE', 'IMPULSE_EXPANSION', 'RANGE_BOUND_STABLE', 'STRUCTURAL_TRANSITION'];
       const strategies = ['vwap_pullback', 'mean_reversion', 'sma_trend_ride', 'range_trade', 'breakout'];
       
       const results: ReturnType<typeof computeDriftScore>[] = [];
@@ -222,11 +222,11 @@ describe('Mapping Drift Integrity — Directive 11.7F', () => {
 
     test('Per-regime-strategy aggregation structure', () => {
       const regimeStrategyData: Record<string, Record<string, { volZ: number[]; trendZ: number[] }>> = {
-        'BULL_STABLE': {
+        'TREND_FRIENDLY_STABLE': {
           'vwap_pullback': { volZ: [-0.8, -1.0, -0.9], trendZ: [1.2, 1.4, 1.3] },
           'pivot_shift': { volZ: [-0.5, -0.6, -0.7], trendZ: [1.0, 1.1, 1.2] }
         },
-        'BEAR_VOLATILE': {
+        'HIGH_VOLATILITY_UNSTABLE': {
           'mean_reversion': { volZ: [1.0, 1.2, 1.1], trendZ: [-0.9, -0.8, -1.0] }
         }
       };
@@ -241,10 +241,10 @@ describe('Mapping Drift Integrity — Directive 11.7F', () => {
         }
       }
       
-      expect(driftScores['BULL_STABLE']).toBeDefined();
-      expect(driftScores['BULL_STABLE']['vwap_pullback']).toBeDefined();
-      expect(driftScores['BULL_STABLE']['vwap_pullback'].score).toBeGreaterThanOrEqual(0);
-      expect(driftScores['BEAR_VOLATILE']['mean_reversion']).toBeDefined();
+      expect(driftScores['TREND_FRIENDLY_STABLE']).toBeDefined();
+      expect(driftScores['TREND_FRIENDLY_STABLE']['vwap_pullback']).toBeDefined();
+      expect(driftScores['TREND_FRIENDLY_STABLE']['vwap_pullback'].score).toBeGreaterThanOrEqual(0);
+      expect(driftScores['HIGH_VOLATILITY_UNSTABLE']['mean_reversion']).toBeDefined();
     });
 
     test('Bridge JSON schema version matches canonical', () => {
@@ -257,7 +257,7 @@ describe('Mapping Drift Integrity — Directive 11.7F', () => {
     });
 
     test('DriftScoreResult has required fields for UI', () => {
-      const result = computeDriftScore([0.5, 0.6, 0.7], [1.2, 1.1, 1.3], 'BULL_STABLE');
+      const result = computeDriftScore([0.5, 0.6, 0.7], [1.2, 1.1, 1.3], 'TREND_FRIENDLY_STABLE');
       
       expect(result).toHaveProperty('score');
       expect(result).toHaveProperty('regime');

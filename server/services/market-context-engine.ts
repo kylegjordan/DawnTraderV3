@@ -1,23 +1,29 @@
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * Phase 13 — Market Context Engine (MCE)
+ * Phase 13/14 — Market Context Engine (MCE)
  * ══════════════════════════════════════════════════════════════════════════════
  *
  * Centralized market context computation service. Receives OHLC data from callers
- * (signal-orchestrator, vts-runner) and computes all indicators + regime in a
- * single pass per symbol, eliminating duplicate VWAP/SMA computation.
+ * (signal-orchestrator, vts-runner) and computes all indicators + regime + directional
+ * bias in a single pass per symbol, eliminating duplicate VWAP/SMA computation.
  *
  * MCE does NOT:
  *   - Fetch OHLC data (callers provide it)
  *   - Generate signals (that's strategy-engine's job)
- *   - Add new math (uses existing calculatePairRegime, same VWAP/SMA formulas)
+ *   - Add new math beyond regime + indicators + directional bias
  *   - Compute strategy weights or exposure/risk multipliers
  *
  * MCE DOES:
  *   - Compute VWAP, SMA, ATR from provided OHLC
  *   - Call calculatePairRegime() for regime + volatility/momentum/ADX
+ *   - Compute Directional Bias Score (Phase 14)
  *   - Look up regimeWeight and allowedStrategies from canonical maps
  *   - Cache results per symbol for the current cycle
+ *
+ * Phase 14 additions:
+ *   - Directional Bias Score (DBS) computed per symbol
+ *   - computeGlobalBias() for global directional bias
+ *   - Regime names updated to Phase 14 canonical names
  *
  * Addresses: RISK-002 (OHLC Indicator Computation Duplication)
  * Singleton: getMarketContextEngine() / initMarketContextEngine()
@@ -42,6 +48,8 @@ import {
   CANONICAL_REGIME_STRATEGY_MAP,
   type CanonicalRegimeType,
 } from '../config/canonical-regime-strategy-map.js';
+import { computeDirectionalBias, computeGlobalDirectionalBias } from '../core/metrics/directional-bias.js';
+import type { GlobalDirectionalBias } from '../types/directional-bias.types.js';
 
 // ─── Cache Entry ─────────────────────────────────────────────────────────────
 
@@ -59,20 +67,20 @@ export class MarketContextEngine {
 
   constructor(config: Partial<MCEConfig> = {}) {
     this.config = { ...DEFAULT_MCE_CONFIG, ...config };
-    console.log('[Phase13][MCE] Market Context Engine created');
+    console.log('[Phase14][MCE] Market Context Engine created');
   }
 
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
 
   start(): void {
     this.running = true;
-    console.log('[Phase13][MCE] Started');
+    console.log('[Phase14][MCE] Started');
   }
 
   stop(): void {
     this.running = false;
     this.cache.clear();
-    console.log('[Phase13][MCE] Stopped, cache cleared');
+    console.log('[Phase14][MCE] Stopped, cache cleared');
   }
 
   isRunning(): boolean {
@@ -84,8 +92,7 @@ export class MarketContextEngine {
   /**
    * Compute full market context for a symbol from OHLC data.
    *
-   * Callers provide OHLC + current price + volume. MCE computes all indicators
-   * and regime in one pass. Results are cached per symbol for cacheTTLMs.
+   * Phase 14: Now also computes Directional Bias Score (DBS).
    *
    * @param symbol - Trading pair symbol (e.g., 'XXBTZUSD')
    * @param ohlcData - OHLC candles in OHLCData format
@@ -142,12 +149,16 @@ export class MarketContextEngine {
       allowedStrategies,
     };
 
+    // ── Phase 14: Directional Bias ──
+    const directionalBias = computeDirectionalBias(ohlcData, atr);
+
     const context: MarketContext = {
       symbol,
       timestamp: now,
       indicators,
       regime,
       raw: regimeResult,
+      directionalBias,
     };
 
     // Cache
@@ -157,12 +168,35 @@ export class MarketContextEngine {
     });
 
     console.log(
-      `[Phase13][MCE] ${symbol}: regime=${regimeResult.regime} conf=${regimeResult.confidence.toFixed(3)} ` +
+      `[Phase14][MCE] ${symbol}: regime=${regimeResult.regime} conf=${regimeResult.confidence.toFixed(3)} ` +
       `vwap=${vwap.toFixed(2)} sma=${sma.toFixed(2)} atr=${atr.toFixed(4)} ` +
-      `vol=${regimeResult.volatility.toFixed(4)} mom=${regimeResult.momentum.toFixed(4)} adx=${regimeResult.adx.toFixed(1)}`
+      `vol=${regimeResult.volatility.toFixed(4)} mom=${regimeResult.momentum.toFixed(4)} adx=${regimeResult.adx.toFixed(1)} ` +
+      `dbs=${directionalBias.score.toFixed(3)} bias=${directionalBias.category}`
     );
 
     return context;
+  }
+
+  // ─── Phase 14: Global Directional Bias ──────────────────────────────────────
+
+  /**
+   * Compute global directional bias from cached pair contexts.
+   * Should be called after all pair contexts are computed for the cycle.
+   *
+   * @param volumes - Map of symbol -> 24h volume (for weighting)
+   * @returns GlobalDirectionalBias
+   */
+  computeGlobalBias(volumes: Map<string, number>): GlobalDirectionalBias {
+    const now = Date.now();
+    const pairScores = new Map<string, number>();
+
+    for (const [symbol, entry] of this.cache.entries()) {
+      if (entry.expiresAt > now) {
+        pairScores.set(symbol, entry.context.directionalBias.score);
+      }
+    }
+
+    return computeGlobalDirectionalBias(pairScores, volumes);
   }
 
   // ─── Lookups ───────────────────────────────────────────────────────────────
@@ -238,7 +272,6 @@ export class MarketContextEngine {
 
   /**
    * VWAP = sum(typical_price * volume) / sum(volume)
-   * Same formula as signal-orchestrator.ts calculateVWAP (lines 1343-1361)
    */
   private computeVWAP(ohlcData: OHLCData[]): number {
     if (ohlcData.length === 0) return 0;
@@ -257,7 +290,6 @@ export class MarketContextEngine {
 
   /**
    * SMA = average of last N close prices.
-   * Same formula as signal-orchestrator.ts calculateSMA (lines 1363-1368)
    */
   private computeSMA(ohlcData: OHLCData[], period: number): number {
     if (ohlcData.length < period) return 0;
@@ -299,7 +331,6 @@ export class MarketContextEngine {
 
   /**
    * Highest high in last 24 candles.
-   * Same logic as signal-orchestrator.ts (line 844)
    */
   private computeHigh24h(ohlcData: OHLCData[]): number {
     if (ohlcData.length === 0) return 0;
@@ -309,7 +340,6 @@ export class MarketContextEngine {
 
   /**
    * Lowest low in last 24 candles.
-   * Same logic as signal-orchestrator.ts (line 845)
    */
   private computeLow24h(ohlcData: OHLCData[]): number {
     if (ohlcData.length === 0) return 0;
@@ -343,7 +373,7 @@ let mceInstance: MarketContextEngine | null = null;
 
 export function initMarketContextEngine(config?: Partial<MCEConfig>): MarketContextEngine {
   if (mceInstance) {
-    console.log('[Phase13][MCE] Already initialized, returning existing instance');
+    console.log('[Phase14][MCE] Already initialized, returning existing instance');
     return mceInstance;
   }
   mceInstance = new MarketContextEngine(config);
@@ -354,7 +384,7 @@ export function initMarketContextEngine(config?: Partial<MCEConfig>): MarketCont
 export function getMarketContextEngine(): MarketContextEngine {
   if (!mceInstance) {
     // Auto-init with defaults if not explicitly initialized
-    console.log('[Phase13][MCE] Auto-initializing with default config');
+    console.log('[Phase14][MCE] Auto-initializing with default config');
     mceInstance = new MarketContextEngine();
     mceInstance.start();
   }

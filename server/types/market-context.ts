@@ -1,11 +1,16 @@
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * Phase 13 — Market Context Engine Type Definitions
+ * Phase 13/14 — Market Context Engine Type Definitions
  * ══════════════════════════════════════════════════════════════════════════════
  *
  * Centralized type definitions for the Market Context Engine (MCE).
- * MCE computes indicators + regime in a single pass per symbol, eliminating
- * duplicate VWAP/SMA computation across signal-orchestrator and strategy-engine.
+ * MCE computes indicators + regime + directional bias in a single pass per
+ * symbol, eliminating duplicate computation across signal-orchestrator and
+ * strategy-engine.
+ *
+ * Phase 14 additions:
+ *   - DirectionalBias field in MarketContext
+ *   - Regime names updated to canonical Phase 14 names
  *
  * Addresses: RISK-002 (OHLC Indicator Computation Duplication)
  *
@@ -15,6 +20,7 @@
 
 import type { OHLCData, MarketRegimeType, RegimeCalculationResult } from './market-regime.types';
 import type { CanonicalRegimeType } from '../config/canonical-regime-strategy-map';
+import type { DirectionalBiasResult } from './directional-bias.types';
 
 /**
  * MarketIndicators — Superset of strategy-engine's TechnicalIndicators.
@@ -44,14 +50,14 @@ export interface MarketIndicators {
  */
 export interface RegimeContext {
   regime: MarketRegimeType;
-  confidence: number;         // Regime classification confidence (0.4–0.95)
+  confidence: number;         // Regime classification confidence (0.4-0.95)
   regimeWeight: number;       // From REGIME_WEIGHTS lookup (used in FinalScore)
   allowedStrategies: string[]; // Strategy keys allowed for this regime
 }
 
 /**
  * MarketContext — The complete output of MCE.computeContext().
- * Contains pre-computed indicators + regime context for a single symbol + OHLC pass.
+ * Contains pre-computed indicators + regime context + directional bias for a single symbol + OHLC pass.
  */
 export interface MarketContext {
   symbol: string;
@@ -59,6 +65,8 @@ export interface MarketContext {
   indicators: MarketIndicators;
   regime: RegimeContext;
   raw: RegimeCalculationResult; // Full regime result for consumers that need raw metrics
+  // Phase 14: Directional Bias
+  directionalBias: DirectionalBiasResult;
 }
 
 /**

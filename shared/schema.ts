@@ -822,7 +822,13 @@ export const marketRegimeEnum = pgEnum("market_regime", [
   "BULL_VOLATILE",
   "BEAR_STABLE",
   "BEAR_VOLATILE",
-  "LOW_VOL_CHOP"
+  "LOW_VOL_CHOP",
+  "TREND_FRIENDLY_STABLE",
+  "HIGH_VOLATILITY_UNSTABLE",
+  "RANGE_BOUND_STABLE",
+  "IMPULSE_EXPANSION",
+  "STRUCTURAL_TRANSITION",
+  "HIGH_VOL_IMPULSE"
 ]);
 
 export const telemetryHistory = pgTable("telemetry_history", {
@@ -842,6 +848,14 @@ export const telemetryHistory = pgTable("telemetry_history", {
   timeframe: varchar("timeframe", { length: 10 }),
   checksum: varchar("checksum", { length: 64 }),
   metadata: jsonb("metadata"),
+  // Phase 14: 6 context dimensions + source tag
+  source: varchar("source", { length: 20 }).default("unknown"),
+  globalRegime: varchar("global_regime", { length: 40 }),
+  pairFriction: decimal("pair_friction", { precision: 5, scale: 2 }),
+  globalFriction: decimal("global_friction", { precision: 5, scale: 2 }),
+  pairDirectionalBias: varchar("pair_directional_bias", { length: 20 }),
+  globalDirectionalBias: varchar("global_directional_bias", { length: 20 }),
+  decayPenalty: decimal("decay_penalty", { precision: 5, scale: 4 }),
   timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
   persistedAt: timestamp("persisted_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({

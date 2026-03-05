@@ -86,7 +86,7 @@ describe('Directive 11.4F.1 — Hybrid Integrity', () => {
   });
 
   it('selectRandomStrategy should return valid signalType and strategy', () => {
-    const regimes: CanonicalRegimeType[] = ['BULL_STABLE', 'BEAR_VOLATILE', 'LOW_VOL_CHOP', 'HIGH_VOL_IMPULSE', 'TRANSITION'];
+    const regimes: CanonicalRegimeType[] = ['TREND_FRIENDLY_STABLE', 'HIGH_VOLATILITY_UNSTABLE', 'RANGE_BOUND_STABLE', 'IMPULSE_EXPANSION', 'STRUCTURAL_TRANSITION'];
     
     for (const regime of regimes) {
       const result = selectRandomStrategy(regime);
@@ -132,11 +132,11 @@ describe('Directive 11.4F.1 — Hybrid Integrity', () => {
 describe('Directive 11.4F.1 — Regime Strictness', () => {
   it('should have exactly 5 canonical regimes', () => {
     expect(CANONICAL_REGIMES).toHaveLength(5);
-    expect(CANONICAL_REGIMES).toContain('BULL_STABLE');
-    expect(CANONICAL_REGIMES).toContain('BEAR_VOLATILE');
-    expect(CANONICAL_REGIMES).toContain('LOW_VOL_CHOP');
-    expect(CANONICAL_REGIMES).toContain('HIGH_VOL_IMPULSE');
-    expect(CANONICAL_REGIMES).toContain('TRANSITION');
+    expect(CANONICAL_REGIMES).toContain('TREND_FRIENDLY_STABLE');
+    expect(CANONICAL_REGIMES).toContain('HIGH_VOLATILITY_UNSTABLE');
+    expect(CANONICAL_REGIMES).toContain('RANGE_BOUND_STABLE');
+    expect(CANONICAL_REGIMES).toContain('IMPULSE_EXPANSION');
+    expect(CANONICAL_REGIMES).toContain('STRUCTURAL_TRANSITION');
   });
 
   it('should NOT include ghost regimes in canonical list', () => {
@@ -147,19 +147,19 @@ describe('Directive 11.4F.1 — Regime Strictness', () => {
   });
 
   it('normalizeRegime should convert ghost regimes to canonical', () => {
-    expect(normalizeRegime('BULL_VOLATILE')).toBe('HIGH_VOL_IMPULSE');
-    expect(normalizeRegime('BEAR_STABLE')).toBe('BEAR_VOLATILE');
-    expect(normalizeRegime('EXTREME_NOISE')).toBe('LOW_VOL_CHOP');
-    expect(normalizeRegime('HIGH_VOL_CHOP')).toBe('HIGH_VOL_IMPULSE');
-    expect(normalizeRegime('MIXED_TRANSITION')).toBe('TRANSITION');
+    expect(normalizeRegime('BULL_VOLATILE')).toBe('IMPULSE_EXPANSION');
+    expect(normalizeRegime('BEAR_STABLE')).toBe('HIGH_VOLATILITY_UNSTABLE');
+    expect(normalizeRegime('EXTREME_NOISE')).toBe('RANGE_BOUND_STABLE');
+    expect(normalizeRegime('HIGH_VOL_CHOP')).toBe('IMPULSE_EXPANSION');
+    expect(normalizeRegime('MIXED_TRANSITION')).toBe('STRUCTURAL_TRANSITION');
   });
 
   it('normalizeRegime should preserve canonical regimes', () => {
-    expect(normalizeRegime('BULL_STABLE')).toBe('BULL_STABLE');
-    expect(normalizeRegime('BEAR_VOLATILE')).toBe('BEAR_VOLATILE');
-    expect(normalizeRegime('LOW_VOL_CHOP')).toBe('LOW_VOL_CHOP');
-    expect(normalizeRegime('HIGH_VOL_IMPULSE')).toBe('HIGH_VOL_IMPULSE');
-    expect(normalizeRegime('TRANSITION')).toBe('TRANSITION');
+    expect(normalizeRegime('TREND_FRIENDLY_STABLE')).toBe('TREND_FRIENDLY_STABLE');
+    expect(normalizeRegime('HIGH_VOLATILITY_UNSTABLE')).toBe('HIGH_VOLATILITY_UNSTABLE');
+    expect(normalizeRegime('RANGE_BOUND_STABLE')).toBe('RANGE_BOUND_STABLE');
+    expect(normalizeRegime('IMPULSE_EXPANSION')).toBe('IMPULSE_EXPANSION');
+    expect(normalizeRegime('STRUCTURAL_TRANSITION')).toBe('STRUCTURAL_TRANSITION');
   });
 
   it('CANONICAL_REGIME_STRATEGY_MAP should only contain canonical regimes', () => {

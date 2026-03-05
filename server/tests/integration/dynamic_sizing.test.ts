@@ -21,7 +21,7 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       const result1 = await computeDynamicSize({
         strategyId: 'test_strategy',
         symbol: 'BTC/USD',
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         pool: 'ideal',
         volatility: 0.015,
         cost: 0.0003,
@@ -31,7 +31,7 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       const result2 = await computeDynamicSize({
         strategyId: 'test_strategy',
         symbol: 'BTC/USD',
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         pool: 'ideal',
         volatility: 0.015,
         cost: 0.0003,
@@ -67,7 +67,7 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       const result = await computeDynamicSize({
         strategyId: 'high_confidence',
         symbol: 'BTC/USD',
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         pool: 'ideal',
         volatility: 0.001,
         cost: 0.0001,
@@ -89,7 +89,7 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       const lowVolResult = await computeDynamicSize({
         strategyId: 'test_strategy',
         symbol: 'BTC/USD',
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         pool: 'ideal',
         volatility: 0.005,
         cost: 0.0003,
@@ -99,7 +99,7 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       const highVolResult = await computeDynamicSize({
         strategyId: 'test_strategy',
         symbol: 'BTC/USD',
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         pool: 'ideal',
         volatility: 0.04,
         cost: 0.0003,
@@ -116,7 +116,7 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       const lowCostResult = await computeDynamicSize({
         strategyId: 'test_strategy',
         symbol: 'BTC/USD',
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         pool: 'ideal',
         volatility: 0.015,
         cost: 0.0001,
@@ -126,7 +126,7 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       const highCostResult = await computeDynamicSize({
         strategyId: 'test_strategy',
         symbol: 'BTC/USD',
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         pool: 'ideal',
         volatility: 0.015,
         cost: 0.002,
@@ -145,7 +145,7 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       await computeDynamicSize({
         strategyId: 'test_strategy',
         symbol: 'BTC/USD',
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         pool: 'ideal',
         volatility: 0.015,
         cost: 0.0003,
@@ -155,7 +155,7 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       await computeDynamicSize({
         strategyId: 'test_strategy',
         symbol: 'ETH/USD',
-        regime: 'BEAR_VOLATILE',
+        regime: 'HIGH_VOLATILITY_UNSTABLE',
         pool: 'rotational',
         volatility: 0.025,
         cost: 0.0005,
@@ -175,7 +175,7 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       await computeDynamicSize({
         strategyId: 'test_strategy',
         symbol: 'SOL/USD',
-        regime: 'LOW_VOL_CHOP',
+        regime: 'RANGE_BOUND_STABLE',
         pool: 'ideal',
         volatility: 0.01,
         cost: 0.0002,
@@ -185,7 +185,7 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       const lastDecision = getLastSizeDecision();
       expect(lastDecision).not.toBeNull();
       expect(lastDecision?.symbol).toBe('SOL/USD');
-      expect(lastDecision?.regime).toBe('LOW_VOL_CHOP');
+      expect(lastDecision?.regime).toBe('RANGE_BOUND_STABLE');
     });
 
     it('should compute average multiplier by regime', async () => {
@@ -195,7 +195,7 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       await computeDynamicSize({
         strategyId: 'test_strategy',
         symbol: 'BTC/USD',
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         pool: 'ideal',
         volatility: 0.015,
         cost: 0.0003,
@@ -205,14 +205,14 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       await computeDynamicSize({
         strategyId: 'test_strategy',
         symbol: 'ETH/USD',
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         pool: 'ideal',
         volatility: 0.015,
         cost: 0.0003,
         balance: 1000,
       });
       
-      const avgMultiplier = getAverageSizeMultiplierByRegime('BULL_STABLE');
+      const avgMultiplier = getAverageSizeMultiplierByRegime('TREND_FRIENDLY_STABLE');
       expect(avgMultiplier).toBeGreaterThan(0);
       expect(avgMultiplier).toBeLessThanOrEqual(1.2);
     });
@@ -303,7 +303,7 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       await computeDynamicSize({
         strategyId: 'test_strategy',
         symbol: 'BTC/USD',
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         pool: 'ideal',
         volatility: 0.015,
         cost: 0.0003,
@@ -328,13 +328,13 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       const mockWeights = new Map<string, Map<string, { [key: string]: number }>>();
       const regimeWeights = new Map<string, { [key: string]: number }>();
       regimeWeights.set('high_edge_strategy', { expectedEdge: 0.12, confidence: 0.9 });
-      mockWeights.set('BULL_STABLE', regimeWeights);
+      mockWeights.set('TREND_FRIENDLY_STABLE', regimeWeights);
       setMockAdaptiveWeights(mockWeights);
       
       const resultWithWeights = await computeDynamicSize({
         strategyId: 'high_edge_strategy',
         symbol: 'BTC/USD',
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         pool: 'ideal',
         volatility: 0.01,
         cost: 0.0002,
@@ -346,7 +346,7 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       const resultDefault = await computeDynamicSize({
         strategyId: 'default_strategy',
         symbol: 'BTC/USD',
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         pool: 'ideal',
         volatility: 0.01,
         cost: 0.0002,
@@ -363,13 +363,13 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       const mockWeights = new Map<string, Map<string, { [key: string]: number }>>();
       const regimeWeights = new Map<string, { [key: string]: number }>();
       regimeWeights.set('low_edge_strategy', { expectedEdge: 0.01, confidence: 0.2 });
-      mockWeights.set('BEAR_VOLATILE', regimeWeights);
+      mockWeights.set('HIGH_VOLATILITY_UNSTABLE', regimeWeights);
       setMockAdaptiveWeights(mockWeights);
       
       const resultWithWeights = await computeDynamicSize({
         strategyId: 'low_edge_strategy',
         symbol: 'BTC/USD',
-        regime: 'BEAR_VOLATILE',
+        regime: 'HIGH_VOLATILITY_UNSTABLE',
         pool: 'rotational',
         volatility: 0.01,
         cost: 0.0002,
@@ -381,7 +381,7 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       const resultDefault = await computeDynamicSize({
         strategyId: 'default_strategy',
         symbol: 'BTC/USD',
-        regime: 'BEAR_VOLATILE',
+        regime: 'HIGH_VOLATILITY_UNSTABLE',
         pool: 'rotational',
         volatility: 0.01,
         cost: 0.0002,
@@ -398,13 +398,13 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       const mockWeights = new Map<string, Map<string, { [key: string]: number }>>();
       const regimeWeights = new Map<string, { [key: string]: number }>();
       regimeWeights.set('winrate_strategy', { winRate: 0.85, sampleCount: 50 });
-      mockWeights.set('BULL_STABLE', regimeWeights);
+      mockWeights.set('TREND_FRIENDLY_STABLE', regimeWeights);
       setMockAdaptiveWeights(mockWeights);
       
       const result = await computeDynamicSize({
         strategyId: 'winrate_strategy',
         symbol: 'BTC/USD',
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         pool: 'ideal',
         volatility: 0.01,
         cost: 0.0002,
@@ -424,13 +424,13 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       const mockWeights = new Map<string, Map<string, { [key: string]: number }>>();
       const regimeWeights = new Map<string, { [key: string]: number }>();
       regimeWeights.set('generic_strategy', { param1: 0.8, param2: 0.7, param3: 0.9, momentum: 0.6, drawdown: 0.4 });
-      mockWeights.set('LOW_VOL_CHOP', regimeWeights);
+      mockWeights.set('RANGE_BOUND_STABLE', regimeWeights);
       setMockAdaptiveWeights(mockWeights);
       
       const resultWithWeights = await computeDynamicSize({
         strategyId: 'generic_strategy',
         symbol: 'BTC/USD',
-        regime: 'LOW_VOL_CHOP',
+        regime: 'RANGE_BOUND_STABLE',
         pool: 'rotational',
         volatility: 0.01,
         cost: 0.0002,
@@ -442,7 +442,7 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       const resultDefault = await computeDynamicSize({
         strategyId: 'default_strategy',
         symbol: 'BTC/USD',
-        regime: 'LOW_VOL_CHOP',
+        regime: 'RANGE_BOUND_STABLE',
         pool: 'rotational',
         volatility: 0.01,
         cost: 0.0002,
@@ -460,18 +460,18 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       
       const bullRegime = new Map<string, { [key: string]: number }>();
       bullRegime.set('H1_TREND_SNIPER', { expectedEdge: 0.08, confidence: 0.75, momentum: 0.6, patternStrength: 0.7 });
-      mockWeights.set('BULL_STABLE', bullRegime);
+      mockWeights.set('TREND_FRIENDLY_STABLE', bullRegime);
       
       const bearRegime = new Map<string, { [key: string]: number }>();
       bearRegime.set('H1_TREND_SNIPER', { expectedEdge: 0.03, confidence: 0.4, momentum: 0.3, patternStrength: 0.4 });
-      mockWeights.set('BEAR_VOLATILE', bearRegime);
+      mockWeights.set('HIGH_VOLATILITY_UNSTABLE', bearRegime);
       
       setMockAdaptiveWeights(mockWeights);
       
       const bullResult = await computeDynamicSize({
         strategyId: 'H1_TREND_SNIPER',
         symbol: 'BTC/USD',
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         pool: 'ideal',
         volatility: 0.01,
         cost: 0.0002,
@@ -481,7 +481,7 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       const bearResult = await computeDynamicSize({
         strategyId: 'H1_TREND_SNIPER',
         symbol: 'BTC/USD',
-        regime: 'BEAR_VOLATILE',
+        regime: 'HIGH_VOLATILITY_UNSTABLE',
         pool: 'rotational',
         volatility: 0.025,
         cost: 0.0005,
@@ -504,7 +504,7 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       const bullResult = await computeDynamicSize({
         strategyId: 'test_strategy',
         symbol: 'BTC/USD',
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         pool: 'ideal',
         volatility: 0.005,
         cost: 0.0001,
@@ -514,7 +514,7 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       const bearResult = await computeDynamicSize({
         strategyId: 'test_strategy',
         symbol: 'BTC/USD',
-        regime: 'BEAR_VOLATILE',
+        regime: 'HIGH_VOLATILITY_UNSTABLE',
         pool: 'ideal',
         volatility: 0.04,
         cost: 0.001,
@@ -532,7 +532,7 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       await computeDynamicSize({
         strategyId: 'test_strategy',
         symbol: 'BTC/USD',
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         pool: 'ideal',
         volatility: 0.015,
         cost: 0.0003,
@@ -542,7 +542,7 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
       await computeDynamicSize({
         strategyId: 'test_strategy',
         symbol: 'ETH/USD',
-        regime: 'BULL_STABLE',
+        regime: 'TREND_FRIENDLY_STABLE',
         pool: 'rotational',
         volatility: 0.015,
         cost: 0.0003,

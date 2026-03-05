@@ -174,15 +174,15 @@ export function getExpectancyBreakdown(params: ExpectancyParams): {
  */
 export function getMinROIForRegime(regime: string): number {
   switch (regime) {
-    case REGIMES.BULL_STABLE:
-      return 0.0125;      // 1.25% - Lower threshold in stable uptrend
-    case REGIMES.BEAR_VOLATILE:
+    case REGIMES.TREND_FRIENDLY_STABLE:
+      return 0.0125;      // 1.25% - Lower threshold in stable trending market
+    case REGIMES.HIGH_VOLATILITY_UNSTABLE:
       return 0.0250;      // 2.50% - Higher threshold due to elevated risk
-    case REGIMES.LOW_VOL_CHOP:
-      return 0.0175;      // 1.75% - Moderate threshold for choppy conditions
-    case REGIMES.HIGH_VOL_IMPULSE:
+    case REGIMES.RANGE_BOUND_STABLE:
+      return 0.0175;      // 1.75% - Moderate threshold for range-bound conditions
+    case REGIMES.IMPULSE_EXPANSION:
       return 0.0300;      // 3.00% - Highest threshold for volatile impulse moves
-    case REGIMES.TRANSITION:
+    case REGIMES.STRUCTURAL_TRANSITION:
       return 0.0200;      // 2.00% - Default for transitional regimes
     default:
       return 0.0200;      // 2.00% - Safe default for unknown regimes
@@ -574,7 +574,7 @@ export function runRegressionGuardSuite(): Array<{
   isValid: boolean;
   threshold: number;
 }> {
-  const ALL_REGIMES = [REGIMES.BULL_STABLE, REGIMES.BEAR_VOLATILE, REGIMES.LOW_VOL_CHOP, REGIMES.HIGH_VOL_IMPULSE, REGIMES.TRANSITION];
+  const ALL_REGIMES = [REGIMES.TREND_FRIENDLY_STABLE, REGIMES.HIGH_VOLATILITY_UNSTABLE, REGIMES.RANGE_BOUND_STABLE, REGIMES.IMPULSE_EXPANSION, REGIMES.STRUCTURAL_TRANSITION];
   const CONFIDENCE_LEVELS = [0.0, 0.25, 0.5, 0.75, 1.0];
   const results: Array<{ regime: string; confidence: number; isValid: boolean; threshold: number }> = [];
   

@@ -9,6 +9,9 @@
  * - Strategy candidates now sourced from CANONICAL_REGIME_STRATEGY_MAP
  * - Old SYSTEM_GUARDS.STRATEGY_MAP dependency REMOVED
  *
+ * Phase 14 (Batch 15): Regime names updated to canonical direction-neutral names.
+ *   Legacy determineRegime() updated to return new canonical names.
+ *
  * Previous: Used internal 6-regime model (BULL_STABLE, BULL_VOLATILE, BEAR_STABLE,
  *           BEAR_VOLATILE, LOW_VOL_CHOP, EXTREME_NOISE) with SYSTEM_GUARDS thresholds.
  * Now:      Uses canonical 5-regime model from calculatePairRegime() + EXTREME_NOISE veto.
@@ -28,6 +31,7 @@ import { calculatePairRegime } from '../core/metrics/market-regime.js';
 import type { OHLCData } from '../types/market-regime.types';
 import {
   CANONICAL_REGIME_STRATEGY_MAP,
+  REGIMES,
   type CanonicalRegimeType
 } from '../config/canonical-regime-strategy-map.js';
 
@@ -98,6 +102,7 @@ export class DynamicStrategySelector {
   /**
    * Legacy determineRegime() — preserved for backward compatibility
    * Directive 12.3.1: Maps old DSSMetrics to canonical regimes via heuristic
+   * Phase 14: Updated to return new canonical regime names.
    *
    * NOTE: Callers should migrate to determineRegimeFromOHLC() when OHLC data is available.
    * This method uses a simplified mapping and may not match calculatePairRegime() exactly.
@@ -122,21 +127,21 @@ export class DynamicStrategySelector {
       return 'EXTREME_NOISE';
     }
 
-    // 2️⃣ Directive 12.3.1: Map to canonical 5-regime model
+    // 2️⃣ Phase 14: Map to canonical 5-regime model with direction-neutral names
     // This is a simplified heuristic — prefer determineRegimeFromOHLC() for accuracy
     if (vol < 0.015 && Math.abs(trend) < 0.002) {
-      return 'LOW_VOL_CHOP';
+      return REGIMES.RANGE_BOUND_STABLE;
     }
     if (trend > SYSTEM_GUARDS.REGIME_THRESHOLDS.TREND_POSITIVE) {
-      return vol >= SYSTEM_GUARDS.REGIME_THRESHOLDS.VOL_LOW ? 'HIGH_VOL_IMPULSE' : 'BULL_STABLE';
+      return vol >= SYSTEM_GUARDS.REGIME_THRESHOLDS.VOL_LOW ? REGIMES.IMPULSE_EXPANSION : REGIMES.TREND_FRIENDLY_STABLE;
     }
     if (trend < -SYSTEM_GUARDS.REGIME_THRESHOLDS.TREND_POSITIVE) {
-      return 'BEAR_VOLATILE';
+      return REGIMES.HIGH_VOLATILITY_UNSTABLE;
     }
     if (vol > 0.025) {
-      return 'HIGH_VOL_IMPULSE';
+      return REGIMES.IMPULSE_EXPANSION;
     }
-    return 'TRANSITION';
+    return REGIMES.STRUCTURAL_TRANSITION;
   }
 
   /**

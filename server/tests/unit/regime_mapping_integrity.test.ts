@@ -36,11 +36,11 @@ import path from 'path';
 describe('Regime Mapping Integrity — No Hardcoded Regime Strings', () => {
   
   const REGIMES_TO_CHECK = [
-    'BULL_STABLE',
-    'BEAR_VOLATILE',
-    'LOW_VOL_CHOP',
-    'HIGH_VOL_IMPULSE',
-    'TRANSITION'
+    'TREND_FRIENDLY_STABLE',
+    'HIGH_VOLATILITY_UNSTABLE',
+    'RANGE_BOUND_STABLE',
+    'IMPULSE_EXPANSION',
+    'STRUCTURAL_TRANSITION'
   ];
   
   const EXCLUDED_PATHS = [
@@ -55,7 +55,7 @@ describe('Regime Mapping Integrity — No Hardcoded Regime Strings', () => {
   ];
   
   const ALLOWED_PATTERNS = [
-    /\.includes\s*\(\s*['"]/, // .includes('TRANSITION') pattern matching is OK
+    /\.includes\s*\(\s*['"]/, // .includes('STRUCTURAL_TRANSITION') pattern matching is OK
     /REGIMES\./,              // REGIMES.* usage is OK
     /type\s+\w+\s*=/,         // Type definitions are OK
     /^\s*\|/,                 // Type union members are OK
@@ -127,11 +127,11 @@ describe('Regime Mapping Integrity — No Hardcoded Regime Strings', () => {
     const { REGIMES } = await import('../../config/canonical-regime-strategy-map');
     
     expect(REGIMES).toBeDefined();
-    expect(REGIMES.BULL_STABLE).toBe('BULL_STABLE');
-    expect(REGIMES.BEAR_VOLATILE).toBe('BEAR_VOLATILE');
-    expect(REGIMES.LOW_VOL_CHOP).toBe('LOW_VOL_CHOP');
-    expect(REGIMES.HIGH_VOL_IMPULSE).toBe('HIGH_VOL_IMPULSE');
-    expect(REGIMES.TRANSITION).toBe('TRANSITION');
+    expect(REGIMES.BULL_STABLE).toBe('TREND_FRIENDLY_STABLE');
+    expect(REGIMES.BEAR_VOLATILE).toBe('HIGH_VOLATILITY_UNSTABLE');
+    expect(REGIMES.LOW_VOL_CHOP).toBe('RANGE_BOUND_STABLE');
+    expect(REGIMES.HIGH_VOL_IMPULSE).toBe('IMPULSE_EXPANSION');
+    expect(REGIMES.TRANSITION).toBe('STRUCTURAL_TRANSITION');
   });
   
   test('STRATEGIES constant is exported from canonical-regime-strategy-map', async () => {

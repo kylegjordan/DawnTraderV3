@@ -69,7 +69,7 @@ export class AdaptiveRatioManager {
     this.currentRatio = {
       idealRatio: this.config.defaultRatio,
       rotationalRatio: 1 - this.config.defaultRatio,
-      regime: REGIMES.LOW_VOL_CHOP,
+      regime: REGIMES.RANGE_BOUND_STABLE,
       confidence: 0,
       adjustedAt: Date.now(),
       reasoning: 'Initial default ratio - no performance data yet',
@@ -284,7 +284,7 @@ export class AdaptiveRatioManager {
     this.currentRatio = {
       idealRatio: this.config.defaultRatio,
       rotationalRatio: 1 - this.config.defaultRatio,
-      regime: REGIMES.LOW_VOL_CHOP,
+      regime: REGIMES.RANGE_BOUND_STABLE,
       confidence: 0,
       adjustedAt: Date.now(),
       reasoning: 'Manual reset to default ratio',

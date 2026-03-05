@@ -2,50 +2,56 @@
  * ══════════════════════════════════════════════════════════════════════════════
  * Directive 11.7F — Canonical Regime & Strategy Lock-In
  * ══════════════════════════════════════════════════════════════════════════════
- * 
+ *
  * This file is the SINGLE SOURCE OF TRUTH for all regime, strategy, signal type,
  * and pattern mappings across the entire DawnTrader system.
- * 
+ *
  * ALL subsystems (VTS, Signal Orchestrator, Telemetry, DSE, RTB, Bridge) MUST
  * import from this file. Local inference or mapping logic is PROHIBITED.
- * 
- * Schema Version: regime-mapping/v1.4c
- * Last Updated: 2026-01-23
- * 
+ *
+ * Schema Version: regime-mapping/v2.0.0
+ * Last Updated: 2026-03-05
+ *
+ * Changes in v2.0.0 (Phase 14 — Batch 15):
+ *   - Regime rename: removed directional language from 5 canonical regime names
+ *     BULL_STABLE -> TREND_FRIENDLY_STABLE
+ *     BEAR_VOLATILE -> HIGH_VOLATILITY_UNSTABLE
+ *     LOW_VOL_CHOP -> RANGE_BOUND_STABLE
+ *     HIGH_VOL_IMPULSE -> IMPULSE_EXPANSION
+ *     TRANSITION -> STRUCTURAL_TRANSITION
+ *   - GHOST_REGIME_NORMALIZATION expanded: old canonical names mapped to new
+ *   - Regime descriptions updated to remove directional language
+ *   - All strategy mappings preserved (strategies unchanged)
+ *
  * Changes in v1.4c (Directive 11.7F-B):
  *   - volZ/trendZ Z-score persistence in telemetry
  *   - Per-regime-strategy DriftScore computation
  *   - Rolling 50-sample Z-score history buffer
  *   - Enhanced API with driftScores payload
- * 
- * Changes in v1.4b:
- *   - SMA Trend Ride realigned from BULL_STABLE → HIGH_VOL_IMPULSE
- *   - Range Trade confirmed in LOW_VOL_CHOP with updated metrics
- *   - DriftScore integration enabled
- * 
+ *
  * DO NOT MODIFY without architectural review and full system audit.
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-export const CANONICAL_SCHEMA_VERSION = 'regime-mapping/v1.4c';
+export const CANONICAL_SCHEMA_VERSION = 'regime-mapping/v2.0.0';
 export const CANONICAL_SCHEMA_METADATA = {
-  updatedAt: '2026-01-23T00:00:00Z',
+  updatedAt: '2026-03-05T00:00:00Z',
   source: 'VTS',
   canonical: true,
   includesDriftScore: true,
   _fields: ['driftScores', 'volZ', 'trendZ']
 };
 
-export type CanonicalRegimeType = 
-  | 'BULL_STABLE'
-  | 'BEAR_VOLATILE'
-  | 'LOW_VOL_CHOP'
-  | 'HIGH_VOL_IMPULSE'
-  | 'TRANSITION';
+export type CanonicalRegimeType =
+  | 'TREND_FRIENDLY_STABLE'
+  | 'HIGH_VOLATILITY_UNSTABLE'
+  | 'RANGE_BOUND_STABLE'
+  | 'IMPULSE_EXPANSION'
+  | 'STRUCTURAL_TRANSITION';
 
 export type CanonicalSignalType = 'QUANT' | 'PATTERN' | 'HYBRID';
 
-export type CanonicalPatternType = 
+export type CanonicalPatternType =
   | 'PINBAR'
   | 'ENGULFING'
   | 'MORNING_STAR'
@@ -76,11 +82,11 @@ export interface RegimeStrategyMapping {
 }
 
 export const CANONICAL_REGIMES: readonly CanonicalRegimeType[] = [
-  'BULL_STABLE',
-  'BEAR_VOLATILE',
-  'LOW_VOL_CHOP',
-  'HIGH_VOL_IMPULSE',
-  'TRANSITION'
+  'TREND_FRIENDLY_STABLE',
+  'HIGH_VOLATILITY_UNSTABLE',
+  'RANGE_BOUND_STABLE',
+  'IMPULSE_EXPANSION',
+  'STRUCTURAL_TRANSITION'
 ] as const;
 
 export const CANONICAL_SIGNAL_TYPES: readonly CanonicalSignalType[] = [
@@ -99,200 +105,200 @@ export const CANONICAL_PATTERN_TYPES: readonly CanonicalPatternType[] = [
 ] as const;
 
 export const REGIME_METRICS: Record<CanonicalRegimeType, RegimeMetrics> = {
-  BULL_STABLE: {
+  TREND_FRIENDLY_STABLE: {
     momentum: '>0.005',
     adx: '>25',
     volatility: '<0.025',
-    description: 'Sustained uptrend with confirmed directional trend and stable volatility'
+    description: 'Low noise, low volatility, orderly price action with confirmed directional trend'
   },
-  BEAR_VOLATILE: {
+  HIGH_VOLATILITY_UNSTABLE: {
     momentum: '<-0.005',
     adx: '>25',
     volatility: '>0.03',
-    description: 'Downward impulse with strong bearish trend and high turbulence'
+    description: 'High volatility, high noise, wide dispersion with strong trend confirmation'
   },
-  LOW_VOL_CHOP: {
+  RANGE_BOUND_STABLE: {
     momentum: 'abs<0.002',
     adx: '<20',
     volatility: '<0.015',
     description: 'Flat market with no directionality and narrow range'
   },
-  HIGH_VOL_IMPULSE: {
+  IMPULSE_EXPANSION: {
     momentum: '>0.010',
     adx: '>30',
     volatility: '>0.03',
-    description: 'Strong breakout with trend acceleration and violent expansion'
+    description: 'Sharp moves with trend acceleration and violent expansion'
   },
-  TRANSITION: {
-    momentum: '±0.004',
+  STRUCTURAL_TRANSITION: {
+    momentum: '\u00b10.004',
     adx: '20-25',
     volatility: '0.015-0.03',
-    description: 'Reversal zone with weakening trend and volatility uplift'
+    description: 'Boundary state between regimes with weakening trend and volatility uplift'
   }
 };
 
 export const CANONICAL_REGIME_STRATEGY_MAP: Record<CanonicalRegimeType, RegimeStrategyMapping> = {
-  BULL_STABLE: {
-    metrics: REGIME_METRICS.BULL_STABLE,
+  TREND_FRIENDLY_STABLE: {
+    metrics: REGIME_METRICS.TREND_FRIENDLY_STABLE,
     strategies: [
-      { 
-        strategy: 'VWAP Pullback', 
+      {
+        strategy: 'VWAP Pullback',
         strategyKey: 'vwap_pullback',
-        signalType: 'QUANT', 
+        signalType: 'QUANT',
         patternType: null,
-        secondaryMetrics: 'VWAP deviation < −1σ • Momentum > 0'
+        secondaryMetrics: 'VWAP deviation < \u22121\u03c3 \u2022 Momentum > 0'
       },
-      { 
-        strategy: 'Morning Star / Evening Star', 
+      {
+        strategy: 'Morning Star / Evening Star',
         strategyKey: 'morning_star',
-        signalType: 'PATTERN', 
+        signalType: 'PATTERN',
         patternType: 'MORNING_STAR',
         secondaryMetrics: '3-bar sequence; momentum flip > 0.3%'
       },
-      { 
-        strategy: 'Pivot Shift', 
+      {
+        strategy: 'Pivot Shift',
         strategyKey: 'pivot_shift',
-        signalType: 'HYBRID', 
+        signalType: 'HYBRID',
         patternType: 'MORNING_STAR',
-        secondaryMetrics: 'RSI 45–55 • ADX slope > 0.5'
+        secondaryMetrics: 'RSI 45\u201355 \u2022 ADX slope > 0.5'
       }
     ],
     riskMultiplier: 1.2,
     minConfidence: 0.65
   },
-  BEAR_VOLATILE: {
-    metrics: REGIME_METRICS.BEAR_VOLATILE,
+  HIGH_VOLATILITY_UNSTABLE: {
+    metrics: REGIME_METRICS.HIGH_VOLATILITY_UNSTABLE,
     strategies: [
-      { 
-        strategy: 'Mean Reversion', 
+      {
+        strategy: 'Mean Reversion',
         strategyKey: 'mean_reversion',
-        signalType: 'QUANT', 
+        signalType: 'QUANT',
         patternType: null,
-        secondaryMetrics: 'RSI < 30 or > 70 • Price deviation > 1σ'
+        secondaryMetrics: 'RSI < 30 or > 70 \u2022 Price deviation > 1\u03c3'
       },
-      { 
-        strategy: 'Reverse Impulse', 
+      {
+        strategy: 'Reverse Impulse',
         strategyKey: 'reverse_impulse',
-        signalType: 'HYBRID', 
+        signalType: 'HYBRID',
         patternType: 'PINBAR',
-        secondaryMetrics: 'Volume > 1.5× avg • Momentum spike < −0.5%'
+        secondaryMetrics: 'Volume > 1.5\u00d7 avg \u2022 Momentum spike < \u22120.5%'
       },
-      { 
-        strategy: 'Defensive Hedge', 
+      {
+        strategy: 'Defensive Hedge',
         strategyKey: 'defensive_hedge',
-        signalType: 'HYBRID', 
+        signalType: 'HYBRID',
         patternType: 'ENGULFING',
-        secondaryMetrics: 'BTC Corr < 0.3 • Vol Offset > 1σ'
+        secondaryMetrics: 'BTC Corr < 0.3 \u2022 Vol Offset > 1\u03c3'
       },
-      { 
-        strategy: 'Inside Bar Reversal', 
+      {
+        strategy: 'Inside Bar Reversal',
         strategyKey: 'inside_bar_reversal',
-        signalType: 'PATTERN', 
+        signalType: 'PATTERN',
         patternType: 'ENGULFING',
-        secondaryMetrics: 'Parent > Child × 1.3 • Breakout Volume > 1.5× avg'
+        secondaryMetrics: 'Parent > Child \u00d7 1.3 \u2022 Breakout Volume > 1.5\u00d7 avg'
       }
     ],
     riskMultiplier: 0.7,
     minConfidence: 0.75
   },
-  LOW_VOL_CHOP: {
-    metrics: REGIME_METRICS.LOW_VOL_CHOP,
+  RANGE_BOUND_STABLE: {
+    metrics: REGIME_METRICS.RANGE_BOUND_STABLE,
     strategies: [
-      { 
-        strategy: 'Range Trading', 
+      {
+        strategy: 'Range Trading',
         strategyKey: 'range_trade',
-        signalType: 'QUANT', 
+        signalType: 'QUANT',
         patternType: null,
-        secondaryMetrics: 'Bollinger Bandwidth < 0.14 • RSI 45–55 • ADX < 20'
+        secondaryMetrics: 'Bollinger Bandwidth < 0.14 \u2022 RSI 45\u201355 \u2022 ADX < 20'
       },
-      { 
-        strategy: 'Support Bounce', 
+      {
+        strategy: 'Support Bounce',
         strategyKey: 'support_bounce',
-        signalType: 'PATTERN', 
+        signalType: 'PATTERN',
         patternType: 'PINBAR',
-        secondaryMetrics: 'Price ≈ Local Min ± 1σ • Volume > 1.2× avg'
+        secondaryMetrics: 'Price \u2248 Local Min \u00b1 1\u03c3 \u2022 Volume > 1.2\u00d7 avg'
       },
-      { 
-        strategy: 'ABCD Long', 
+      {
+        strategy: 'ABCD Long',
         strategyKey: 'abcd_long',
-        signalType: 'QUANT', 
+        signalType: 'QUANT',
         patternType: null,
-        secondaryMetrics: 'AB:CD ≈ 1.0 • Volume > 1.2× avg'
+        secondaryMetrics: 'AB:CD \u2248 1.0 \u2022 Volume > 1.2\u00d7 avg'
       },
-      { 
-        strategy: 'Adaptive Flow', 
+      {
+        strategy: 'Adaptive Flow',
         strategyKey: 'adaptive_flow',
-        signalType: 'HYBRID', 
+        signalType: 'HYBRID',
         patternType: 'TRI_STAR',
-        secondaryMetrics: 'Momentum inversion ≥ 3 • Volatility percentile > 70%'
+        secondaryMetrics: 'Momentum inversion \u2265 3 \u2022 Volatility percentile > 70%'
       }
     ],
     riskMultiplier: 0.9,
     minConfidence: 0.60
   },
-  HIGH_VOL_IMPULSE: {
-    metrics: REGIME_METRICS.HIGH_VOL_IMPULSE,
+  IMPULSE_EXPANSION: {
+    metrics: REGIME_METRICS.IMPULSE_EXPANSION,
     strategies: [
-      { 
-        strategy: 'SMA Trend Ride', 
+      {
+        strategy: 'SMA Trend Ride',
         strategyKey: 'sma_trend_ride',
-        signalType: 'QUANT', 
+        signalType: 'QUANT',
         patternType: null,
-        secondaryMetrics: 'SMA(50) > SMA(100) • ADX > 25 • RSI 55–70'
+        secondaryMetrics: 'SMA(50) > SMA(100) \u2022 ADX > 25 \u2022 RSI 55\u201370'
       },
-      { 
-        strategy: 'Breakout', 
+      {
+        strategy: 'Breakout',
         strategyKey: 'breakout',
-        signalType: 'QUANT', 
+        signalType: 'QUANT',
         patternType: null,
-        secondaryMetrics: 'Momentum > +0.7% • Volume > 2× avg'
+        secondaryMetrics: 'Momentum > +0.7% \u2022 Volume > 2\u00d7 avg'
       },
-      { 
-        strategy: 'VWAP Bounce', 
+      {
+        strategy: 'VWAP Bounce',
         strategyKey: 'vwap_bounce',
-        signalType: 'QUANT', 
+        signalType: 'QUANT',
         patternType: null,
-        secondaryMetrics: 'VWAP deviation > +1σ • Momentum −0.3–−0.6%'
+        secondaryMetrics: 'VWAP deviation > +1\u03c3 \u2022 Momentum \u22120.3\u2013\u22120.6%'
       },
-      { 
-        strategy: 'Volatility Edge', 
+      {
+        strategy: 'Volatility Edge',
         strategyKey: 'volatility_edge',
-        signalType: 'HYBRID', 
+        signalType: 'HYBRID',
         patternType: 'ABCD',
-        secondaryMetrics: 'Volatility Percentile > 80 • Regime mismatch = True'
+        secondaryMetrics: 'Volatility Percentile > 80 \u2022 Regime mismatch = True'
       },
-      { 
-        strategy: 'DHMA', 
+      {
+        strategy: 'DHMA',
         strategyKey: 'dhma',
-        signalType: 'QUANT', 
+        signalType: 'QUANT',
         patternType: null,
-        secondaryMetrics: 'HMA(9) cross HMA(21) • ADX flat'
+        secondaryMetrics: 'HMA(9) cross HMA(21) \u2022 ADX flat'
       }
     ],
     riskMultiplier: 0.8,
     minConfidence: 0.70
   },
-  TRANSITION: {
-    metrics: REGIME_METRICS.TRANSITION,
+  STRUCTURAL_TRANSITION: {
+    metrics: REGIME_METRICS.STRUCTURAL_TRANSITION,
     strategies: [
-      { 
-        strategy: 'Liquidity Trap', 
+      {
+        strategy: 'Liquidity Trap',
         strategyKey: 'liquidity_trap',
-        signalType: 'QUANT', 
+        signalType: 'QUANT',
         patternType: null,
         secondaryMetrics: 'Wick/Body > 2 or Depth Imbalance > 1.4'
       },
-      { 
-        strategy: 'Pivot Shift', 
+      {
+        strategy: 'Pivot Shift',
         strategyKey: 'pivot_shift',
-        signalType: 'HYBRID', 
+        signalType: 'HYBRID',
         patternType: 'MORNING_STAR',
-        secondaryMetrics: 'RSI 45–55 • ADX slope > 0.5'
+        secondaryMetrics: 'RSI 45\u201355 \u2022 ADX slope > 0.5'
       },
-      { 
-        strategy: 'Morning Star / Evening Star', 
+      {
+        strategy: 'Morning Star / Evening Star',
         strategyKey: 'morning_star',
-        signalType: 'PATTERN', 
+        signalType: 'PATTERN',
         patternType: 'MORNING_STAR',
         secondaryMetrics: '3-bar sequence; momentum flip > 0.3%'
       }
@@ -303,11 +309,11 @@ export const CANONICAL_REGIME_STRATEGY_MAP: Record<CanonicalRegimeType, RegimeSt
 };
 
 export const REGIMES = {
-  BULL_STABLE: 'BULL_STABLE' as const,
-  BEAR_VOLATILE: 'BEAR_VOLATILE' as const,
-  LOW_VOL_CHOP: 'LOW_VOL_CHOP' as const,
-  HIGH_VOL_IMPULSE: 'HIGH_VOL_IMPULSE' as const,
-  TRANSITION: 'TRANSITION' as const
+  TREND_FRIENDLY_STABLE: 'TREND_FRIENDLY_STABLE' as const,
+  HIGH_VOLATILITY_UNSTABLE: 'HIGH_VOLATILITY_UNSTABLE' as const,
+  RANGE_BOUND_STABLE: 'RANGE_BOUND_STABLE' as const,
+  IMPULSE_EXPANSION: 'IMPULSE_EXPANSION' as const,
+  STRUCTURAL_TRANSITION: 'STRUCTURAL_TRANSITION' as const
 } as const;
 
 export const STRATEGIES = {
@@ -350,6 +356,45 @@ export const STRATEGY_DISPLAY_NAMES: Record<string, string> = {
   liquidity_trap: 'Liquidity Trap'
 };
 
+/**
+ * Phase 14: Regime display names for UI rendering.
+ * Used by analytics page, market-indicators, and any UI component showing regime labels.
+ */
+export const REGIME_DISPLAY_NAMES: Record<CanonicalRegimeType, string> = {
+  TREND_FRIENDLY_STABLE: 'Trend-Friendly Stable',
+  HIGH_VOLATILITY_UNSTABLE: 'High-Volatility Unstable',
+  RANGE_BOUND_STABLE: 'Range-Bound Stable',
+  IMPULSE_EXPANSION: 'Impulse Expansion',
+  STRUCTURAL_TRANSITION: 'Structural Transition'
+};
+
+/**
+ * Phase 14: Regime narrative descriptions for UI display.
+ * Replaces hardcoded regimeNarratives in market-indicators.ts.
+ */
+export const REGIME_NARRATIVES: Record<CanonicalRegimeType, { title: string; description: string }> = {
+  TREND_FRIENDLY_STABLE: {
+    title: 'Trend-Friendly Stable',
+    description: 'The market is in a steady structural trend with controlled volatility. Price action is orderly and pullbacks are shallow. Momentum-based or trend-following signals are more likely to succeed here because the market structure supports continuation. You can expect trades to stay open longer, aiming for larger gains.'
+  },
+  HIGH_VOLATILITY_UNSTABLE: {
+    title: 'High-Volatility Unstable',
+    description: 'The market has high volatility with wide dispersion and noisy price action. Sharp moves and reversals are common. Defensive strategies that favor quick exits or reversal signals may perform better. Position sizes are reduced and stops tighter to account for the wider swings.'
+  },
+  RANGE_BOUND_STABLE: {
+    title: 'Range-Bound Stable',
+    description: 'The market is moving sideways with little clear direction and small price changes. Trends do not hold well, so breakout attempts usually fail or reverse quickly. Range-based or counter-trend signals tend to work best because prices often bounce between support and resistance levels. Trades will usually be smaller and shorter, focusing on quick gains.'
+  },
+  IMPULSE_EXPANSION: {
+    title: 'Impulse Expansion',
+    description: 'The market is experiencing sharp, impulsive moves with high momentum bursts. Breakouts are more likely to follow through, and trend-following strategies can capture large moves. However, volatility is elevated so position sizing accounts for wider swings. Expect faster trade cycles with active trailing stop adjustments.'
+  },
+  STRUCTURAL_TRANSITION: {
+    title: 'Structural Transition',
+    description: 'The market is shifting from one structural regime to another. Conditions are unclear \u2014 volatility changes, trend indicators disagree, and signals can conflict. This is when the system becomes more selective and cautious, often reducing position sizes until a new regime stabilizes.'
+  }
+};
+
 export const LEGACY_TO_CANONICAL: Record<string, string> = {
   MomentumPulse: 'vwap_pullback',
   TrendFlow: 'sma_trend_ride',
@@ -370,12 +415,24 @@ export const LEGACY_TO_CANONICAL: Record<string, string> = {
   DHMA: 'dhma'
 };
 
+/**
+ * Phase 14: Ghost Regime Normalization
+ * Maps legacy/old regime names to current canonical names.
+ * Includes both pre-Phase-14 ghost regimes AND the old Phase-13 canonical names.
+ */
 export const GHOST_REGIME_NORMALIZATION: Record<string, CanonicalRegimeType> = {
-  BULL_VOLATILE: 'HIGH_VOL_IMPULSE',
-  BEAR_STABLE: 'BEAR_VOLATILE',
-  EXTREME_NOISE: 'LOW_VOL_CHOP',
-  HIGH_VOL_CHOP: 'HIGH_VOL_IMPULSE',
-  MIXED_TRANSITION: 'TRANSITION'
+  // Legacy ghost regimes (pre-Phase-14)
+  BULL_VOLATILE: 'IMPULSE_EXPANSION',
+  BEAR_STABLE: 'HIGH_VOLATILITY_UNSTABLE',
+  EXTREME_NOISE: 'RANGE_BOUND_STABLE',
+  HIGH_VOL_CHOP: 'IMPULSE_EXPANSION',
+  MIXED_TRANSITION: 'STRUCTURAL_TRANSITION',
+  // Old canonical names (Phase 13 era -> Phase 14 renamed)
+  BULL_STABLE: 'TREND_FRIENDLY_STABLE',
+  BEAR_VOLATILE: 'HIGH_VOLATILITY_UNSTABLE',
+  LOW_VOL_CHOP: 'RANGE_BOUND_STABLE',
+  HIGH_VOL_IMPULSE: 'IMPULSE_EXPANSION',
+  TRANSITION: 'STRUCTURAL_TRANSITION',
 };
 
 let strategyToSignalTypeCache: Map<string, CanonicalSignalType> | null = null;
@@ -383,10 +440,10 @@ let strategyToPatternTypeCache: Map<string, CanonicalPatternType> | null = null;
 
 function buildStrategyCache(): void {
   if (strategyToSignalTypeCache && strategyToPatternTypeCache) return;
-  
+
   strategyToSignalTypeCache = new Map();
   strategyToPatternTypeCache = new Map();
-  
+
   for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP)) {
     for (const stratDef of mapping.strategies) {
       strategyToSignalTypeCache.set(stratDef.strategyKey, stratDef.signalType);
@@ -399,7 +456,7 @@ export function normalizeRegime(regime: string): CanonicalRegimeType {
   if (CANONICAL_REGIMES.includes(regime as CanonicalRegimeType)) {
     return regime as CanonicalRegimeType;
   }
-  return GHOST_REGIME_NORMALIZATION[regime] ?? 'TRANSITION';
+  return GHOST_REGIME_NORMALIZATION[regime] ?? 'STRUCTURAL_TRANSITION';
 }
 
 export function normalizeStrategy(strategy: string): string {
@@ -421,7 +478,7 @@ export function getTypeForStrategy(strategy: string, throwOnUnknown: boolean = f
     if (throwOnUnknown) {
       throw new Error(`[11.4F.1] Unknown strategy: ${strategy} (normalized: ${normalized}). Non-canonical strategies are prohibited.`);
     }
-    console.warn(`[11.4F.1][Canonical] Unknown strategy fallback: ${strategy} → HYBRID`);
+    console.warn(`[11.4F.1][Canonical] Unknown strategy fallback: ${strategy} \u2192 HYBRID`);
     return 'HYBRID';
   }
   return signalType;
@@ -437,8 +494,8 @@ export function getStrategiesForRegime(regime: CanonicalRegimeType): StrategyDef
   return CANONICAL_REGIME_STRATEGY_MAP[regime]?.strategies ?? [];
 }
 
-export function selectRandomStrategy(regime: CanonicalRegimeType): { 
-  signalType: CanonicalSignalType; 
+export function selectRandomStrategy(regime: CanonicalRegimeType): {
+  signalType: CanonicalSignalType;
   strategy: string;
   patternType: CanonicalPatternType;
 } {
@@ -446,7 +503,7 @@ export function selectRandomStrategy(regime: CanonicalRegimeType): {
   if (!mapping || mapping.strategies.length === 0) {
     return { signalType: 'HYBRID', strategy: 'adaptive_flow', patternType: null };
   }
-  
+
   const stratDef = mapping.strategies[Math.floor(Math.random() * mapping.strategies.length)];
   return {
     signalType: stratDef.signalType,
@@ -459,8 +516,8 @@ export function selectRandomStrategy(regime: CanonicalRegimeType): {
  * Directive 11.4F.1A: Deterministic strategy selection
  * Returns the primary (first) strategy for a regime - stable across calls
  */
-export function selectPrimaryStrategy(regime: CanonicalRegimeType): { 
-  signalType: CanonicalSignalType; 
+export function selectPrimaryStrategy(regime: CanonicalRegimeType): {
+  signalType: CanonicalSignalType;
   strategy: string;
   patternType: CanonicalPatternType;
 } {
@@ -468,7 +525,7 @@ export function selectPrimaryStrategy(regime: CanonicalRegimeType): {
   if (!mapping || mapping.strategies.length === 0) {
     return { signalType: 'HYBRID', strategy: 'adaptive_flow', patternType: null };
   }
-  
+
   const stratDef = mapping.strategies[0]; // Always return first/primary strategy
   return {
     signalType: stratDef.signalType,
@@ -492,12 +549,12 @@ const PATTERN_TO_CANONICAL: Record<string, CanonicalPatternType> = {
   'MORNING_STAR': 'MORNING_STAR',
   'ABCD': 'ABCD',
   'TRI_STAR': 'TRI_STAR',
-  'INSIDE_BAR': 'ENGULFING',     // Compression → Engulfing-like breakout
-  'THREE_SOLDIERS': 'MORNING_STAR', // Bullish continuation → Morning Star family
+  'INSIDE_BAR': 'ENGULFING',     // Compression -> Engulfing-like breakout
+  'THREE_SOLDIERS': 'MORNING_STAR', // Bullish continuation -> Morning Star family
   'EVENING_STAR': 'MORNING_STAR',   // Same pattern family
-  'DOJI': 'TRI_STAR',              // Indecision → TriStar family
-  'HAMMER': 'PINBAR',              // Wick-based reversal → Pinbar family
-  'SHOOTING_STAR': 'PINBAR',       // Wick-based reversal → Pinbar family
+  'DOJI': 'TRI_STAR',              // Indecision -> TriStar family
+  'HAMMER': 'PINBAR',              // Wick-based reversal -> Pinbar family
+  'SHOOTING_STAR': 'PINBAR',       // Wick-based reversal -> Pinbar family
 };
 
 /**
@@ -515,18 +572,18 @@ export function normalizePatternToCanonical(pattern: string | null): CanonicalPa
  * Considers detected patterns when selecting strategy from regime mapping.
  * If a pattern is detected and matches a HYBRID/PATTERN strategy, prefer that strategy.
  * This ensures HYBRID/PATTERN signals appear when pattern recognition detects matches.
- * 
+ *
  * @param regime - Current market regime
  * @param detectedPattern - Pattern detected by pattern recognizer (null if none)
  * @param symbolHash - Optional hash for deterministic diversity (0-99)
  * @returns Strategy definition matching the context, plus trace info
  */
 export function selectContextAwareStrategy(
-  regime: CanonicalRegimeType, 
+  regime: CanonicalRegimeType,
   detectedPattern: string | null,
   symbolHash?: number
-): { 
-  signalType: CanonicalSignalType; 
+): {
+  signalType: CanonicalSignalType;
   strategy: string;
   patternType: CanonicalPatternType;
   selectionReason: 'exact_match' | 'hybrid_fallback' | 'pattern_fallback' | 'diversity' | 'primary';
@@ -535,18 +592,18 @@ export function selectContextAwareStrategy(
   if (!mapping || mapping.strategies.length === 0) {
     return { signalType: 'HYBRID', strategy: 'adaptive_flow', patternType: null, selectionReason: 'primary' };
   }
-  
+
   // Normalize detected pattern to canonical type
   const canonicalPattern = normalizePatternToCanonical(detectedPattern);
-  
+
   // If pattern detected and maps to canonical, find a matching HYBRID/PATTERN strategy
   if (canonicalPattern) {
     // First try: Find exact pattern match in HYBRID/PATTERN strategies
-    const patternMatch = mapping.strategies.find(s => 
+    const patternMatch = mapping.strategies.find(s =>
       (s.signalType === 'HYBRID' || s.signalType === 'PATTERN') &&
       s.patternType === canonicalPattern
     );
-    
+
     if (patternMatch) {
       return {
         signalType: patternMatch.signalType,
@@ -555,7 +612,7 @@ export function selectContextAwareStrategy(
         selectionReason: 'exact_match'
       };
     }
-    
+
     // Second try: Any HYBRID strategy for this regime (pattern provides confluence)
     const hybridFallback = mapping.strategies.find(s => s.signalType === 'HYBRID');
     if (hybridFallback) {
@@ -566,7 +623,7 @@ export function selectContextAwareStrategy(
         selectionReason: 'hybrid_fallback'
       };
     }
-    
+
     // Third try: Any PATTERN strategy for this regime
     const patternFallback = mapping.strategies.find(s => s.signalType === 'PATTERN');
     if (patternFallback) {
@@ -578,7 +635,7 @@ export function selectContextAwareStrategy(
       };
     }
   }
-  
+
   // Deterministic diversity: use hash % 100 to select strategy index
   // ~25% of symbols will get non-primary strategy for natural diversity
   if (symbolHash !== undefined && mapping.strategies.length > 1) {
@@ -593,7 +650,7 @@ export function selectContextAwareStrategy(
       };
     }
   }
-  
+
   // Default: primary strategy
   const stratDef = mapping.strategies[0];
   return {
@@ -628,28 +685,28 @@ export function isValidCanonicalCombination(
 ): { valid: boolean; reason?: string } {
   const normalizedRegime = normalizeRegime(regime);
   const normalizedStrategy = normalizeStrategy(strategy);
-  
+
   const mapping = CANONICAL_REGIME_STRATEGY_MAP[normalizedRegime];
   if (!mapping) {
     return { valid: false, reason: `Unknown regime: ${regime}` };
   }
-  
+
   const stratDef = mapping.strategies.find(s => s.strategyKey === normalizedStrategy);
   if (!stratDef) {
     return { valid: false, reason: `Strategy ${strategy} not valid for regime ${regime}` };
   }
-  
+
   if (stratDef.signalType !== signalType) {
     return { valid: false, reason: `SignalType mismatch: expected ${stratDef.signalType}, got ${signalType}` };
   }
-  
+
   if (stratDef.signalType !== 'QUANT' && patternType) {
     const expectedPattern = stratDef.patternType;
     if (expectedPattern && patternType !== expectedPattern) {
       return { valid: false, reason: `PatternType mismatch: expected ${expectedPattern}, got ${patternType}` };
     }
   }
-  
+
   return { valid: true };
 }
 
@@ -675,5 +732,5 @@ export function getAllStrategiesForSignalType(signalType: CanonicalSignalType): 
   return strategies;
 }
 
-export const CANONICAL_VERSION = '11.4F.1';
-export const CANONICAL_SCHEMA_DATE = '2026-01-12';
+export const CANONICAL_VERSION = '14.0.0';
+export const CANONICAL_SCHEMA_DATE = '2026-03-05';
