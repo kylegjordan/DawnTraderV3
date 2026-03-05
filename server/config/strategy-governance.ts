@@ -44,6 +44,13 @@ export const STRATEGY_GOVERNANCE: Record<string, StrategyDependency> = {
   volatility_edge: 'LOW',
   volsurf:         'LOW',
   gridflow:        'LOW',
+
+  // Phase 14: Previously missing — defaulted to HIGH (fail-safe), now explicitly classified
+  abcd_long:           'MEDIUM',
+  adaptive_flow:       'MEDIUM',
+  dhma:                'MEDIUM',
+  reverse_impulse:     'HIGH',
+  inside_bar_reversal: 'HIGH',
 };
 
 export const STRATEGY_GOVERNANCE_PROFILES: Record<string, StrategyGovernanceProfile> = {
@@ -65,6 +72,13 @@ export const STRATEGY_GOVERNANCE_PROFILES: Record<string, StrategyGovernanceProf
   volatility_edge: { dependency: 'LOW', description: 'Volatility strategies benefit from regime instability' },
   volsurf:         { dependency: 'LOW', description: 'Volatility surface trading adapts to conditions' },
   gridflow:        { dependency: 'LOW', description: 'Grid trading less sensitive to directional regimes' },
+
+  // Phase 14: Previously missing — now explicitly classified
+  abcd_long:           { dependency: 'MEDIUM', description: 'Harmonic pattern partially regime-independent' },
+  adaptive_flow:       { dependency: 'MEDIUM', description: 'Chop breakout strategy adapts to regime transitions' },
+  dhma:                { dependency: 'MEDIUM', description: 'Dynamic hull MA partially adapts to regime changes' },
+  reverse_impulse:     { dependency: 'HIGH', description: 'Reversal signals highly sensitive to regime accuracy' },
+  inside_bar_reversal: { dependency: 'HIGH', description: 'Inside bar pattern needs stable context for validation' },
 };
 
 export const INFLUENCE_RULES: Record<RegimeStability, Record<StrategyDependency, number>> = {

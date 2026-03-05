@@ -228,6 +228,24 @@ const getRegimeBadgeColor = (regime: string) => {
   return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
 };
 
+const normalizeRegimeDisplay = (regime: string): string => {
+  const displayMap: Record<string, string> = {
+    // Old canonical → new canonical
+    BULL_STABLE: 'TREND_FRIENDLY_STABLE',
+    BEAR_VOLATILE: 'HIGH_VOLATILITY_UNSTABLE',
+    LOW_VOL_CHOP: 'RANGE_BOUND_STABLE',
+    HIGH_VOL_IMPULSE: 'IMPULSE_EXPANSION',
+    TRANSITION: 'STRUCTURAL_TRANSITION',
+    // Ghost regimes → new canonical
+    BULL_VOLATILE: 'IMPULSE_EXPANSION',
+    BEAR_STABLE: 'HIGH_VOLATILITY_UNSTABLE',
+    EXTREME_NOISE: 'RANGE_BOUND_STABLE',
+    HIGH_VOL_CHOP: 'IMPULSE_EXPANSION',
+    MIXED_TRANSITION: 'STRUCTURAL_TRANSITION',
+  };
+  return displayMap[regime] ?? regime;
+};
+
 const getPoolBadgeColor = (pool: string) => {
   if (pool === 'IDEAL') return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
   if (pool === 'ROTATIONAL') return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
@@ -399,7 +417,7 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
                   <td className="px-3 py-2 font-medium">{trade.symbol}</td>
                   <td className="px-3 py-2">
                     <Badge variant="outline" className={`text-xs ${getRegimeBadgeColor(trade.regime)}`}>
-                      {trade.regime}
+                      {normalizeRegimeDisplay(trade.regime)}
                     </Badge>
                   </td>
                   <td className="px-3 py-2 text-xs">{trade.strategy}</td>
@@ -606,7 +624,7 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
                   <td className="px-3 py-2 font-medium">{trade.symbol}</td>
                   <td className="px-3 py-2">
                     <Badge variant="outline" className={`text-xs ${getRegimeBadgeColor(trade.regime)}`}>
-                      {trade.regime}
+                      {normalizeRegimeDisplay(trade.regime)}
                     </Badge>
                   </td>
                   <td className="px-3 py-2 text-xs">{trade.strategy}</td>
@@ -926,7 +944,7 @@ function RegimeArchivePanel({
               >
                 <option value="">All Regimes</option>
                 {uniqueRegimes.map(regime => (
-                  <option key={regime} value={regime}>{regime}</option>
+                  <option key={regime} value={regime}>{normalizeRegimeDisplay(regime)}</option>
                 ))}
               </select>
               <Button 
@@ -989,7 +1007,7 @@ function RegimeArchivePanel({
                       </td>
                       <td className="px-3 py-2">
                         <Badge variant="outline" className={`text-xs ${getRegimeBadgeColor(record.regime)}`}>
-                          {record.regime}
+                          {normalizeRegimeDisplay(record.regime)}
                         </Badge>
                       </td>
                       <td className="px-3 py-2 text-xs font-mono">{record.strategy}</td>
@@ -1324,7 +1342,7 @@ function PredictiveAdjustmentsPanel({
                       <td className="px-3 py-2">
                         {adj.regime ? (
                           <Badge variant="outline" className={`text-xs ${getRegimeBadgeColor(adj.regime)}`}>
-                            {adj.regime}
+                            {normalizeRegimeDisplay(adj.regime)}
                           </Badge>
                         ) : (
                           <span className="text-muted-foreground">-</span>
@@ -1536,7 +1554,7 @@ function PredictiveAdjustmentsPanel({
                                       adj.explanation.performanceRationale.direction === 'improved' ? 'text-green-400' :
                                       adj.explanation.performanceRationale.direction === 'degraded' ? 'text-red-400' : ''
                                     }>{adj.explanation.performanceRationale.direction}</span></p>
-                                    <p>Regimes: {adj.explanation.performanceRationale.regimesInvolved.join(', ')}</p>
+                                    <p>Regimes: {adj.explanation.performanceRationale.regimesInvolved.map(normalizeRegimeDisplay).join(', ')}</p>
                                   </div>
                                 </div>
                               </div>
