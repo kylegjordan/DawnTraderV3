@@ -1,6 +1,66 @@
 [
   {
     "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from RANGE_BOUND_STABLE to TREND_FRIENDLY_STABLE",
+    "explanation": "Market regime changed from RANGE_BOUND_STABLE to TREND_FRIENDLY_STABLE. Strategy selection and position sizing will adjust accordingly.",
+    "previousValue": "RANGE_BOUND_STABLE",
+    "newValue": "TREND_FRIENDLY_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1772715623458_7",
+    "timestamp": "2026-03-05T13:00:23.458Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from TREND_FRIENDLY_STABLE to RANGE_BOUND_STABLE",
+    "explanation": "Market regime changed from TREND_FRIENDLY_STABLE to RANGE_BOUND_STABLE. Strategy selection and position sizing will adjust accordingly.",
+    "previousValue": "TREND_FRIENDLY_STABLE",
+    "newValue": "RANGE_BOUND_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1772715623422_6",
+    "timestamp": "2026-03-05T13:00:23.422Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from RANGE_BOUND_STABLE to TREND_FRIENDLY_STABLE",
+    "explanation": "Market regime changed from RANGE_BOUND_STABLE to TREND_FRIENDLY_STABLE. Strategy selection and position sizing will adjust accordingly.",
+    "previousValue": "RANGE_BOUND_STABLE",
+    "newValue": "TREND_FRIENDLY_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1772715547265_7",
+    "timestamp": "2026-03-05T12:59:07.265Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from TREND_FRIENDLY_STABLE to RANGE_BOUND_STABLE",
+    "explanation": "Market regime changed from TREND_FRIENDLY_STABLE to RANGE_BOUND_STABLE. Strategy selection and position sizing will adjust accordingly.",
+    "previousValue": "TREND_FRIENDLY_STABLE",
+    "newValue": "RANGE_BOUND_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1772715547226_6",
+    "timestamp": "2026-03-05T12:59:07.226Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from RANGE_BOUND_STABLE to TREND_FRIENDLY_STABLE",
+    "explanation": "Market regime changed from RANGE_BOUND_STABLE to TREND_FRIENDLY_STABLE. Strategy selection and position sizing will adjust accordingly.",
+    "previousValue": "RANGE_BOUND_STABLE",
+    "newValue": "TREND_FRIENDLY_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1772715480942_7",
+    "timestamp": "2026-03-05T12:58:00.942Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Bull Stable to RANGE_BOUND_STABLE",
+    "explanation": "Market regime changed from Bull Stable to RANGE_BOUND_STABLE. Strategy selection and position sizing will adjust accordingly.",
+    "previousValue": "BULL_STABLE",
+    "newValue": "RANGE_BOUND_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1772715480903_6",
+    "timestamp": "2026-03-05T12:58:00.903Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
     "message": "Global regime changed from Low Volatility Chop to Bull Stable",
     "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
     "previousValue": "LOW_VOL_CHOP",
@@ -498,45 +558,5 @@
     "severity": "info",
     "id": "mkt_evt_1772125721993_5",
     "timestamp": "2026-02-26T17:08:41.993Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
-    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "LOW_VOL_CHOP",
-    "newValue": "BULL_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1772103481241_6",
-    "timestamp": "2026-02-26T10:58:01.241Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "BULL_STABLE",
-    "newValue": "LOW_VOL_CHOP",
-    "severity": "info",
-    "id": "mkt_evt_1772103481187_5",
-    "timestamp": "2026-02-26T10:58:01.187Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Low Volatility Chop to Bull Stable",
-    "explanation": "Market regime changed from Low Volatility Chop to Bull Stable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "LOW_VOL_CHOP",
-    "newValue": "BULL_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1772029613443_8",
-    "timestamp": "2026-02-25T14:26:53.443Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Bull Stable to Low Volatility Chop",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "BULL_STABLE",
-    "newValue": "LOW_VOL_CHOP",
-    "severity": "info",
-    "id": "mkt_evt_1772029553642_7",
-    "timestamp": "2026-02-25T14:25:53.642Z"
   }
 ]
