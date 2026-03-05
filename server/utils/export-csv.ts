@@ -105,6 +105,8 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
         
         for (const trade of fileTrades) {
           if (!trade.id?.startsWith('vts_')) continue;
+          // Phase 14: Exclude legacy simulation trades — only show Phase 14+ real-price trades
+          if (trade.source !== 'vts') continue;
           
           const exitTime = trade.exitTime || trade.closedAt || trade.resolvedAt;
           if (!exitTime) continue;
