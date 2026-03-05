@@ -260,7 +260,7 @@ describe('Directive 11.7D.1 — Recalibration Integrity', () => {
       validateTelemetryIntegrity('TREND_FRIENDLY_STABLE', { avgPnL: 0.05, skipRatio: 0.1 }, 3);
       
       expect(consoleWarnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Missing key metrics for BULL_STABLE')
+        expect.stringContaining('Missing key metrics for TREND_FRIENDLY_STABLE')
       );
     });
 

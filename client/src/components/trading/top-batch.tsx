@@ -68,22 +68,29 @@ function getSignalTypeIcon(signalType: string) {
 
 function normalizeRegime(regime: string): string {
   const ghostToCanonical: Record<string, string> = {
-    BULL_VOLATILE: 'HIGH_VOL_IMPULSE',
-    BEAR_STABLE: 'BEAR_VOLATILE',
-    EXTREME_NOISE: 'LOW_VOL_CHOP',
-    HIGH_VOL_CHOP: 'HIGH_VOL_IMPULSE',
-    MIXED_TRANSITION: 'TRANSITION'
+    // Legacy ghost regimes → new canonical
+    BULL_VOLATILE: 'IMPULSE_EXPANSION',
+    BEAR_STABLE: 'HIGH_VOLATILITY_UNSTABLE',
+    EXTREME_NOISE: 'RANGE_BOUND_STABLE',
+    HIGH_VOL_CHOP: 'IMPULSE_EXPANSION',
+    MIXED_TRANSITION: 'STRUCTURAL_TRANSITION',
+    // Old canonical → new canonical
+    BULL_STABLE: 'TREND_FRIENDLY_STABLE',
+    BEAR_VOLATILE: 'HIGH_VOLATILITY_UNSTABLE',
+    LOW_VOL_CHOP: 'RANGE_BOUND_STABLE',
+    HIGH_VOL_IMPULSE: 'IMPULSE_EXPANSION',
+    TRANSITION: 'STRUCTURAL_TRANSITION'
   };
   return ghostToCanonical[regime] ?? regime;
 }
 
 // Directive 11.4H.4A: Fallback static regime weights (used when dynamic score unavailable)
 const REGIME_WEIGHTS_FALLBACK: Record<string, number> = {
-  BULL_STABLE: 85,
-  BEAR_VOLATILE: 40,
-  LOW_VOL_CHOP: 55,
-  HIGH_VOL_IMPULSE: 70,
-  TRANSITION: 50
+  TREND_FRIENDLY_STABLE: 85,
+  HIGH_VOLATILITY_UNSTABLE: 40,
+  RANGE_BOUND_STABLE: 55,
+  IMPULSE_EXPANSION: 70,
+  STRUCTURAL_TRANSITION: 50
 };
 
 // Directive 11.4H.4A: Get regime score - prefer dynamic, fallback to static
@@ -98,15 +105,15 @@ function getRegimeScoreDisplay(regimeScore: number | undefined, regime: string):
 function getRegimeBadgeClass(regime: string): string {
   const normalizedRegime = normalizeRegime(regime);
   switch (normalizedRegime) {
-    case 'BULL_STABLE':
+    case 'TREND_FRIENDLY_STABLE':
       return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
-    case 'HIGH_VOL_IMPULSE':
+    case 'IMPULSE_EXPANSION':
       return "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300";
-    case 'BEAR_VOLATILE':
+    case 'HIGH_VOLATILITY_UNSTABLE':
       return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300";
-    case 'LOW_VOL_CHOP':
+    case 'RANGE_BOUND_STABLE':
       return "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300";
-    case 'TRANSITION':
+    case 'STRUCTURAL_TRANSITION':
       return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
     default:
       return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";

@@ -52,6 +52,13 @@ let lastRegime: MarketRegime | null = null;
 let lastFrictionBand: string | null = null;
 
 const REGIME_DISPLAY_NAMES: Record<string, string> = {
+  // Phase 14 canonical regime names
+  TREND_FRIENDLY_STABLE: 'Trend-Friendly Stable',
+  HIGH_VOLATILITY_UNSTABLE: 'High-Volatility Unstable',
+  RANGE_BOUND_STABLE: 'Range-Bound Stable',
+  IMPULSE_EXPANSION: 'Impulse Expansion',
+  STRUCTURAL_TRANSITION: 'Structural Transition',
+  // Legacy names (backward compat for stored events)
   BULL_STABLE: 'Bull Stable',
   BULL_VOLATILE: 'Bull Volatile',
   BEAR_STABLE: 'Bear Stable',
@@ -153,9 +160,9 @@ function explainRegimeChange(prev: string, next: string): string {
   const prevDisplay = REGIME_DISPLAY_NAMES[prev] || prev;
   const nextDisplay = REGIME_DISPLAY_NAMES[next] || next;
   
-  const isBullish = (regime: string) => regime.includes('BULL');
-  const isBearish = (regime: string) => regime.includes('BEAR');
-  const isChoppy = (regime: string) => regime.includes('CHOP') || regime.includes('NOISE');
+  const isBullish = (regime: string) => regime.includes('BULL') || regime.includes('TREND_FRIENDLY');
+  const isBearish = (regime: string) => regime.includes('BEAR') || regime.includes('HIGH_VOLATILITY_UNSTABLE');
+  const isChoppy = (regime: string) => regime.includes('CHOP') || regime.includes('NOISE') || regime.includes('RANGE_BOUND');
   const isTransition = (regime: string) => regime.includes('TRANSITION');
   
   if (isBullish(prev) && isBearish(next)) {

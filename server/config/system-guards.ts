@@ -31,11 +31,11 @@ export const SYSTEM_GUARDS = {
   },
 
   STRATEGY_MAP: {
-    BULL_STABLE: ['vwap_pullback', 'vwap_bounce', 'sma_trend_ride', 'abcd_long', 'dhma'],
-    BULL_VOLATILE: ['breakout', 'sma_trend_ride', 'liquidity_trap'],
-    BEAR_STABLE: ['mean_reversion', 'range_trading'],
-    BEAR_VOLATILE: ['mean_reversion', 'liquidity_trap'],
-    LOW_VOL_CHOP: ['mean_reversion', 'range_trading'],
+    TREND_FRIENDLY_STABLE: ['vwap_pullback', 'vwap_bounce', 'sma_trend_ride', 'abcd_long', 'dhma'],
+    IMPULSE_EXPANSION: ['breakout', 'sma_trend_ride', 'liquidity_trap'],
+    HIGH_VOLATILITY_UNSTABLE: ['mean_reversion', 'range_trading'],
+    RANGE_BOUND_STABLE: ['mean_reversion', 'range_trading'],
+    STRUCTURAL_TRANSITION: ['mean_reversion', 'liquidity_trap'],
   },
 } as const;
 

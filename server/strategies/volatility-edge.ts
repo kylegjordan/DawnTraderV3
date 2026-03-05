@@ -228,7 +228,7 @@ export function detectVolatilityEdge(
       strategyVersion: '12.3.2',
       type: 'HYBRID',
       direction: 'BUY',
-      regime: 'HIGH_VOL_IMPULSE',
+      regime: 'IMPULSE_EXPANSION',
       pattern: 'ABCD',
       aPointLow,
       bPointHigh,

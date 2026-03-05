@@ -127,11 +127,11 @@ describe('Regime Mapping Integrity — No Hardcoded Regime Strings', () => {
     const { REGIMES } = await import('../../config/canonical-regime-strategy-map');
     
     expect(REGIMES).toBeDefined();
-    expect(REGIMES.BULL_STABLE).toBe('TREND_FRIENDLY_STABLE');
-    expect(REGIMES.BEAR_VOLATILE).toBe('HIGH_VOLATILITY_UNSTABLE');
-    expect(REGIMES.LOW_VOL_CHOP).toBe('RANGE_BOUND_STABLE');
-    expect(REGIMES.HIGH_VOL_IMPULSE).toBe('IMPULSE_EXPANSION');
-    expect(REGIMES.TRANSITION).toBe('STRUCTURAL_TRANSITION');
+    expect(REGIMES.TREND_FRIENDLY_STABLE).toBe('TREND_FRIENDLY_STABLE');
+    expect(REGIMES.HIGH_VOLATILITY_UNSTABLE).toBe('HIGH_VOLATILITY_UNSTABLE');
+    expect(REGIMES.RANGE_BOUND_STABLE).toBe('RANGE_BOUND_STABLE');
+    expect(REGIMES.IMPULSE_EXPANSION).toBe('IMPULSE_EXPANSION');
+    expect(REGIMES.STRUCTURAL_TRANSITION).toBe('STRUCTURAL_TRANSITION');
   });
   
   test('STRATEGIES constant is exported from canonical-regime-strategy-map', async () => {

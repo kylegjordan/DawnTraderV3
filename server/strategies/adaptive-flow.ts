@@ -197,7 +197,7 @@ export function detectAdaptiveFlow(
       strategyVersion: '12.3.2',
       type: 'HYBRID',
       direction: 'BUY',
-      regime: 'LOW_VOL_CHOP',
+      regime: 'RANGE_BOUND_STABLE',
       pattern: 'THREE_SOLDIERS',
       patternStrength: patternSignal.strength,
       inversionCount,
