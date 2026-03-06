@@ -360,6 +360,7 @@ function callStrategyDetect(
         stopLossBuffer: 1
       });
     case 'range_trading':
+    case 'range_trade':  // HF6B: Alias for canonical strategy map name
       return strategyEngine.detectRangeTrading(ohlcData, {
         minRangeDurationHours: 12,
         minRangeWidth: 3,
@@ -427,7 +428,7 @@ async function generatePhase10Signal(
 ): Promise<{ signal: VirtualSignal; tradeRecord: Phase10TradeRecord } | null> {
   // Phase 13: MCE computes regime (uses cache from main loop call)
   const mce = getMarketContextEngine();
-  const mceContext = mce.computeContext(symbol, ohlcData, priceData.price, 0);
+  const mceContext = mce.computeContext(symbol, ohlcData, priceData.price, priceData.volume24h ?? 0);  // HF6B: Pass real ticker volume instead of 0
   const regimeResult = mceContext.raw;
   const regime = regimeResult.regime;
 
@@ -1266,7 +1267,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       // ══════════════════════════════════════════════════════════════════════════════
       // Phase 13: MCE computes regime + indicators in a single pass (cached per symbol)
       const mce = getMarketContextEngine();
-      const mceContext = mce.computeContext(pair.symbol, ohlcData, priceData.price, 0);
+      const mceContext = mce.computeContext(pair.symbol, ohlcData, priceData.price, priceData.volume24h ?? 0);  // HF6B: Pass real ticker volume instead of 0
       const pairRegime = mceContext.regime.regime as MarketRegimeType;
       const regimeStrategies = getStrategiesForRegime(pairRegime);
       

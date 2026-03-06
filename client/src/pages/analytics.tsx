@@ -167,6 +167,31 @@ const getDBSBadgeColor = (category: string): string => {
   return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
 };
 
+/**
+ * HF6B: Dynamic narrative for Global Directional Bias.
+ * Matches the friction narrative pattern — adjusts text based on current category.
+ */
+const getDBSNarrative = (category: string): string => {
+  switch (category) {
+    case 'UP_STRONG':
+      return 'Strong upward momentum across the market. Most pairs are trending up with high conviction. Long-only strategies should find abundant opportunities with favorable directional alignment.';
+    case 'UP_MODERATE':
+      return 'Moderate upward bias in the market. A majority of pairs are trending upward, creating a favorable environment for long positions. Strategy confidence receives a boost from directional alignment.';
+    case 'UP_WEAK':
+      return 'Slight upward tilt in the market. Marginally more pairs are trending up than down, but conviction is low. Strategies should not rely heavily on directional alignment.';
+    case 'NEUTRAL':
+      return 'No clear directional bias. The market is balanced between upward and downward pressure. Strategies perform based on their own merit without directional tailwind or headwind.';
+    case 'DOWN_WEAK':
+      return 'Slight downward tilt in the market. Marginally more pairs are trending down, creating a mild headwind for long-only strategies. Exercise caution with aggressive entries.';
+    case 'DOWN_MODERATE':
+      return 'Moderate downward pressure across the market. Many pairs are declining, making long entries more challenging. Strategy confidence is penalized for counter-trend positioning.';
+    case 'DOWN_STRONG':
+      return 'Strong downward momentum across the market. Most pairs are in decline. Long-only strategies face significant headwinds. Defensive and mean-reversion setups are preferred.';
+    default:
+      return 'Directional bias data is being calculated. The score will update as pair-level data becomes available.';
+  }
+};
+
 const getRegimeBadgeColor = (regime: string) => {
   if (regime.includes('TREND_FRIENDLY_STABLE') || regime.includes('BULL_STABLE')) return 'bg-green-500/20 text-green-400 border-green-500/30';
   if (regime.includes('IMPULSE_EXPANSION') || regime.includes('HIGH_VOL_IMPULSE') || regime.includes('BULL_VOLATILE')) return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
@@ -538,6 +563,11 @@ function MarketOverviewSection({ indicators, error, onRetry }: { indicators: Mar
                 : 'Awaiting pair data...'}
             </div>
           </div>
+          <div className="p-4 rounded-lg bg-muted/50 mt-4">
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              {getDBSNarrative(data.globalDBSCategory || 'NEUTRAL')}
+            </p>
+          </div>
         </div>
 
         <Separator />
@@ -633,7 +663,69 @@ function DefinitionsReference() {
       </div>
       
       <Separator />
-      
+
+      <div>
+        <h4 className="text-sm font-semibold mb-3">Global Directional Bias Definitions</h4>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left py-2 pr-4 font-medium">Category</th>
+                <th className="text-left py-2 pr-4 font-medium">Score Range</th>
+                <th className="text-left py-2 pr-4 font-medium">Confidence Effect</th>
+                <th className="text-left py-2 font-medium">What It Means</th>
+              </tr>
+            </thead>
+            <tbody className="text-muted-foreground">
+              <tr className="border-b">
+                <td className="py-2 pr-4"><Badge className="bg-green-500/20 text-green-400">UP STRONG</Badge></td>
+                <td className="py-2 pr-4 font-mono">&ge; +0.60</td>
+                <td className="py-2 pr-4 font-mono text-green-400">+15%</td>
+                <td className="py-2">Strong upward trend. Ideal for long-only entries.</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 pr-4"><Badge className="bg-green-500/20 text-green-400">UP MODERATE</Badge></td>
+                <td className="py-2 pr-4 font-mono">+0.30 to +0.59</td>
+                <td className="py-2 pr-4 font-mono text-green-400">+10%</td>
+                <td className="py-2">Moderate upward bias. Favorable for long trades.</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 pr-4"><Badge className="bg-green-500/10 text-green-300">UP WEAK</Badge></td>
+                <td className="py-2 pr-4 font-mono">+0.10 to +0.29</td>
+                <td className="py-2 pr-4 font-mono text-green-300">+5%</td>
+                <td className="py-2">Slight upward lean. Marginal directional benefit.</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 pr-4"><Badge className="bg-yellow-500/20 text-yellow-400">NEUTRAL</Badge></td>
+                <td className="py-2 pr-4 font-mono">-0.09 to +0.09</td>
+                <td className="py-2 pr-4 font-mono text-yellow-400">0%</td>
+                <td className="py-2">No directional bias. Market is balanced.</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 pr-4"><Badge className="bg-yellow-500/10 text-yellow-300">DOWN WEAK</Badge></td>
+                <td className="py-2 pr-4 font-mono">-0.10 to -0.29</td>
+                <td className="py-2 pr-4 font-mono text-yellow-300">-5%</td>
+                <td className="py-2">Slight downward lean. Minor headwind for longs.</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 pr-4"><Badge className="bg-orange-500/20 text-orange-400">DOWN MODERATE</Badge></td>
+                <td className="py-2 pr-4 font-mono">-0.30 to -0.59</td>
+                <td className="py-2 pr-4 font-mono text-orange-400">-10%</td>
+                <td className="py-2">Moderate selling pressure. Long trades face resistance.</td>
+              </tr>
+              <tr>
+                <td className="py-2 pr-4"><Badge className="bg-red-500/20 text-red-400">DOWN STRONG</Badge></td>
+                <td className="py-2 pr-4 font-mono">&le; -0.60</td>
+                <td className="py-2 pr-4 font-mono text-red-400">-15%</td>
+                <td className="py-2">Strong downtrend. Defensive strategies preferred.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <Separator />
+
       <div>
         <h4 className="text-sm font-semibold mb-3">Complete Regime to Strategy Mapping</h4>
         <div className="overflow-x-auto">
