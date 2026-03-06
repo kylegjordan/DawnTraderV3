@@ -428,7 +428,12 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 | — | Strategy enum expansion hotfix — strategy_type 9→18 values, syncGlobalStrategies() crash fixed | Batch 14-hotfix | `db521adc` |
 
 ### In-Progress Directives
-*None — all issued directives are COMPLETE.*
+| Directive | Title | Batch | Status |
+|-----------|-------|-------|--------|
+| 14.1 | Strategy-Specific VTS (BUG-001) | Batch 15 (HF1-HF7) | Core wiring complete. 8 remaining items for HF8-HF9. |
+
+> **Last commit**: `64014bd2` (HF7 — regime recalibration + scrollbar sync)
+> **Next step**: Complete Phase 14.1 remaining items (HF8-HF9), then Phase 14.1B or 14.2
 
 ### Snapshot Log
 | Snapshot | Commit | Description |
@@ -481,7 +486,7 @@ Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation
 - **LATTi remaining residuals**: DB column names (`tunedByLatti`, `managedByLottie`) preserved — renaming requires migration. `adaptive-guardrails.ts` still active (LATTI adaptive tuning system, not dead code). Lazy-loader stub removed (RISK-044 RESOLVED, Batch 10).
 
 ### Test Baseline
-- **791 pass / 90 fail** (881 total across test files)
+- **790 pass / 91 fail** (881 total across test files)
 - 20 pre-existing TSC errors in files not modified by any directive
 - Baseline history: 816/81 (Batches 1-4) → 809/81 (Batch 5, 7 Walter tests removed) → 802/81 (Batch 6, 7 more Walter tests removed) → 800/81 (Batch 7, 4 Bob tests removed from diagnostic-system.test.ts, 2 tests net from learning-cycle-service deletion) → 800/81 (Batches 8-12, no test changes) → 791/90 (Batch 13, 9 new failures from strategy module interactions with existing tests) → 782/84/15skip (Batch 14, 15 L-series tests skipped) → 791/90 (Batch 14-hotfix, baseline restored after schema fix)
 

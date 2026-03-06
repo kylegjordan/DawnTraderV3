@@ -231,13 +231,36 @@ The batch sequence for each phase is:
 
 **Goal**: Replace VTS simulation stubs with real strategy-specific calculations, add Directional Bias to the regime model, add Short trading capability, and clear/backfill VTS data. This is the "make the signals real" phase.
 
-### 14.1 Strategy-Specific VTS (BUG-001, RISK-043) — Weeks 10-12
+### 14.1 Strategy-Specific VTS (BUG-001, RISK-043) — Weeks 10-12 — IN PROGRESS
+
+> **Status**: Core wiring complete (Batch 15, HF1-HF7). VTS calls real StrategyEngine detect functions. Regime classification recalibrated for crypto market data. 9 QUANT strategies producing trades with regime diversity.
+>
+> **Commits**: Batch 15 through HF7 `64014bd2`
+>
+> **Remaining 14.1 work** (HF8-HF9):
+> 1. Analytics tab: wire `/api/regime-map` to replace hardcoded mapping table in analytics.tsx
+> 2. Governance gate into SQE: move trade quality check and confidence floor from paper-execution-engine into SQE so VTS and active trading share same qualification
+> 3. TCL duplicate FinalScore check: remove duplicate FinalScore > 0.35 from c13-validation-service.ts
+> 4. DSS pre-selector: change DSS from post-filter to pre-selector in dynamic-strategy-selector.ts
+> 5. Secondary metrics: make secondaryMetrics fields programmatically evaluable instead of display-only strings
+> 6. Return type fix: fix getOpenVirtualTradesForML() return type declaration
+> 7. Increase VTS OHLC fetch 50 to 100 candles (adaptive_flow needs 65, support_bounce needs 50)
+> 8. Provide BTC candles to VTS for defensive_hedge (currently always returns null in simulation)
+
 - Each of 17 strategies gets unique entry logic, stop logic, target logic, and confidence modeling
 - Kyle: "Each strategy must have unique entry logic, unique stop logic, unique target logic, unique confidence modeling"
 - Replace `simulateHybridScore()`, `simulatePredictiveConfidence()`, `simulateDecayPenalty()` with real calculations
 - VTS consumes MCE indicators for realistic strategy evaluation
 - VTS calculates signals for all strategies for the calculated regime
 - Ensure FinalScore, Hybrid Score, Confidence, Regime Weight, etc. are being calculated in VTS and fed into predictive learning
+
+### 14.1B VTS/Orchestrator Timeframe Alignment — NEW
+
+The VTS uses 15-minute candles and the signal orchestrator uses 60-minute candles. This means the same pair at the same moment gets different regime classifications from each system. If VTS learns on 15-min conditions and active trading executes on 60-min conditions, the ML learning may not transfer accurately. Must be resolved before Phase 14.4 (VTS Data Clear and Backfill).
+
+### 14.5 Parallel Pattern Scanning Path — NEW PHASE
+
+Pattern and hybrid strategies are structurally unable to fire in the current architecture. The quant-oriented filtering pipeline eliminates pairs before pattern detection runs. Two strategies are structurally broken (volatility_edge needs ABCD metadata no recognizer produces, defensive_hedge needs BTC candles VTS does not provide). This phase creates a parallel pattern scanning pipeline with looser filters, a unified opportunity pool for both pattern and quant trades ranked by quality not type, risk guardrails for pattern trades, and hybrid strategy evaluation at the intersection of pattern and quant signals. Must come BEFORE Phase 14.4 so pattern trade data is included in the clean dataset.
 
 ### 14.2 Directional Bias & Structural Regime Rework — Weeks 12-14
 

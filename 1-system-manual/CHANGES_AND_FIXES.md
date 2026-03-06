@@ -31,14 +31,12 @@
 
 ## BUGS
 
-### BUG-001: VTS Signal Generation Is Generic
-- **Severity**: CRITICAL
-- **Location**: `server/services/vts-runner.ts` — `simulateHybridScore()`, `simulateDecayPenalty()`
-- **Problem**: Generates random regime-adjusted scores instead of real strategy-specific calculations
-- **Impact**: VTS learns from statistically meaningless data
-- **Verified**: Yes (prior audit)
-- **Timing**: During MCE (MCE-5 phase)
-- **Fix**: Wire VTS to real Strategy Engine or MCE-provided indicators
+### BUG-001: VTS Signal Generation Is Generic — **PARTIALLY RESOLVED**
+- **Severity**: ~~CRITICAL~~ **PARTIALLY RESOLVED** (Phase 14.1, Batch 15, HF6 `048bbc16` + HF6B `ae431e17` + HF7 `64014bd2`)
+- **Location**: `server/services/vts-runner.ts`
+- **Problem**: ~~Generates random regime-adjusted scores instead of real strategy-specific calculations~~ VTS now wired to real strategy detect functions (HF6). Volume=0 bug fixed (HF6B). Regime classification recalibrated for crypto DX values (HF7).
+- **Impact**: VTS now produces real strategy-specific entry/stop/target from StrategyEngine detect functions.
+- **Remaining work**: 5 deferred items (governance gate into SQE, TCL duplicate, DSS pre-selector, secondary metrics, return type fix), plus: increase OHLC fetch 50 to 100 candles, provide BTC candles to VTS, wire analytics tab to /api/regime-map. Pattern/hybrid strategies structurally unable to fire (Phase 14.5 needed).
 - **Phase Found**: Pre-audit (v1.0)
 
 ### ~~BUG-002~~: Active Trading Path Uses Legacy DSS Regime Model — **RESOLVED**
@@ -98,10 +96,10 @@
 - **Resolution**: DSS rewired to `CANONICAL_REGIME_STRATEGY_MAP` (12.3.1). 8 new strategy modules created in `server/strategies/` (12.3.2). Signal orchestrator wired with evaluation blocks for all new strategies.
 - **Phase Found**: Pre-audit
 
-### RISK-004: Strategy Key Mismatch
-- **Severity**: MEDIUM
-- **Location**: Canonical map uses `range_trade`, strategy engine uses `range_trading`
-- **Timing**: During MCE
+### ~~RISK-004~~: Strategy Key Mismatch — **RESOLVED**
+- **Severity**: ~~MEDIUM~~ **RESOLVED** (Phase 14.1, Batch 15, HF6B commit `ae431e17`)
+- **Location**: `server/services/vts-runner.ts` line 363
+- **Resolution**: Added `case 'range_trade':` fallthrough alias alongside existing `case 'range_trading':` in VTS callStrategyDetect(). Both names now route to detectRangeTrading().
 - **Phase Found**: Pre-audit
 
 ### RISK-005: HybridScore Falls Back to Confidence

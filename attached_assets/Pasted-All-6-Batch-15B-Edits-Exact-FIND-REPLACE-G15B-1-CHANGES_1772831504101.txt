@@ -1,0 +1,115 @@
+All 6 Batch 15B Edits — Exact FIND/REPLACE
+G15B.1 — CHANGES_AND_FIXES.md (Update BUG-001)
+FIND:
+
+### BUG-001: VTS Signal Generation Is Generic
+- **Severity**: CRITICAL
+- **Location**: `server/services/vts-runner.ts` — `simulateHybridScore()`, `simulateDecayPenalty()`
+- **Problem**: Generates random regime-adjusted scores instead of real strategy-specific calculations
+- **Impact**: VTS learns from statistically meaningless data
+- **Verified**: Yes (prior audit)
+- **Timing**: During MCE (MCE-5 phase)
+- **Fix**: Wire VTS to real Strategy Engine or MCE-provided indicators
+- **Phase Found**: Pre-audit (v1.0)
+
+REPLACE:
+
+### BUG-001: VTS Signal Generation Is Generic — **PARTIALLY RESOLVED**
+- **Severity**: ~~CRITICAL~~ **PARTIALLY RESOLVED** (Phase 14.1, Batch 15, HF6 `048bbc16` + HF6B `ae431e17` + HF7 `64014bd2`)
+- **Location**: `server/services/vts-runner.ts`
+- **Problem**: ~~Generates random regime-adjusted scores instead of real strategy-specific calculations~~ VTS now wired to real strategy detect functions (HF6). Volume=0 bug fixed (HF6B). Regime classification recalibrated for crypto DX values (HF7).
+- **Impact**: VTS now produces real strategy-specific entry/stop/target from StrategyEngine detect functions.
+- **Remaining work**: 5 deferred items (governance gate into SQE, TCL duplicate, DSS pre-selector, secondary metrics, return type fix), plus: increase OHLC fetch 50 to 100 candles, provide BTC candles to VTS, wire analytics tab to /api/regime-map. Pattern/hybrid strategies structurally unable to fire (Phase 14.5 needed).
+- **Phase Found**: Pre-audit (v1.0)
+
+G15B.2 — CHANGES_AND_FIXES.md (Update RISK-004)
+FIND:
+
+### RISK-004: Strategy Key Mismatch
+- **Severity**: MEDIUM
+- **Location**: Canonical map uses `range_trade`, strategy engine uses `range_trading`
+- **Timing**: During MCE
+- **Phase Found**: Pre-audit
+
+REPLACE:
+
+### ~~RISK-004~~: Strategy Key Mismatch — **RESOLVED**
+- **Severity**: ~~MEDIUM~~ **RESOLVED** (Phase 14.1, Batch 15, HF6B commit `ae431e17`)
+- **Location**: `server/services/vts-runner.ts` line 363
+- **Resolution**: Added `case 'range_trade':` fallthrough alias alongside existing `case 'range_trading':` in VTS callStrategyDetect(). Both names now route to detectRangeTrading().
+- **Phase Found**: Pre-audit
+
+G15B.3 — POST_AUDIT_ROADMAP.md (Update Phase 14.1 status)
+FIND:
+
+### 14.1 Strategy-Specific VTS (BUG-001, RISK-043) — Weeks 10-12
+- Each of 17 strategies gets unique entry logic, stop logic, target logic, and confidence modeling
+
+REPLACE:
+
+### 14.1 Strategy-Specific VTS (BUG-001, RISK-043) — Weeks 10-12 — IN PROGRESS
+
+> **Status**: Core wiring complete (Batch 15, HF1-HF7). VTS calls real StrategyEngine detect functions. Regime classification recalibrated for crypto market data. 9 QUANT strategies producing trades with regime diversity.
+>
+> **Commits**: Batch 15 through HF7 `64014bd2`
+>
+> **Remaining 14.1 work** (HF8-HF9):
+> 1. Analytics tab: wire `/api/regime-map` to replace hardcoded mapping table in analytics.tsx
+> 2. Governance gate into SQE: move trade quality check and confidence floor from paper-execution-engine into SQE so VTS and active trading share same qualification
+> 3. TCL duplicate FinalScore check: remove duplicate FinalScore > 0.35 from c13-validation-service.ts
+> 4. DSS pre-selector: change DSS from post-filter to pre-selector in dynamic-strategy-selector.ts
+> 5. Secondary metrics: make secondaryMetrics fields programmatically evaluable instead of display-only strings
+> 6. Return type fix: fix getOpenVirtualTradesForML() return type declaration
+> 7. Increase VTS OHLC fetch 50 to 100 candles (adaptive_flow needs 65, support_bounce needs 50)
+> 8. Provide BTC candles to VTS for defensive_hedge (currently always returns null in simulation)
+
+- Each of 17 strategies gets unique entry logic, stop logic, target logic, and confidence modeling
+
+G15B.4 — POST_AUDIT_ROADMAP.md (Add new roadmap blocks)
+FIND:
+
+### 14.2 Directional Bias & Structural Regime Rework — Weeks 12-14
+
+This is a significant enrichment of the regime model. The current system classifies regime but has no concept of directional bias or the distinction between global and pair-level structural regime.
+
+REPLACE:
+
+### 14.1B VTS/Orchestrator Timeframe Alignment — NEW
+
+The VTS uses 15-minute candles and the signal orchestrator uses 60-minute candles. This means the same pair at the same moment gets different regime classifications from each system. If VTS learns on 15-min conditions and active trading executes on 60-min conditions, the ML learning may not transfer accurately. Must be resolved before Phase 14.4 (VTS Data Clear and Backfill).
+
+### 14.5 Parallel Pattern Scanning Path — NEW PHASE
+
+Pattern and hybrid strategies are structurally unable to fire in the current architecture. The quant-oriented filtering pipeline eliminates pairs before pattern detection runs. Two strategies are structurally broken (volatility_edge needs ABCD metadata no recognizer produces, defensive_hedge needs BTC candles VTS does not provide). This phase creates a parallel pattern scanning pipeline with looser filters, a unified opportunity pool for both pattern and quant trades ranked by quality not type, risk guardrails for pattern trades, and hybrid strategy evaluation at the intersection of pattern and quant signals. Must come BEFORE Phase 14.4 so pattern trade data is included in the clean dataset.
+
+### 14.2 Directional Bias & Structural Regime Rework — Weeks 12-14
+
+This is a significant enrichment of the regime model. The current system classifies regime but has no concept of directional bias or the distinction between global and pair-level structural regime.
+
+G15B.5 — CLAUDE_CODE_PROJECT_INSTRUCTIONS.md (Update In-Progress + Test Baseline)
+FIND:
+
+### In-Progress Directives
+*None — all issued directives are COMPLETE.*
+
+REPLACE:
+
+### In-Progress Directives
+| Directive | Title | Batch | Status |
+|-----------|-------|-------|--------|
+| 14.1 | Strategy-Specific VTS (BUG-001) | Batch 15 (HF1-HF7) | Core wiring complete. 8 remaining items for HF8-HF9. |
+
+> **Last commit**: `64014bd2` (HF7 — regime recalibration + scrollbar sync)
+> **Next step**: Complete Phase 14.1 remaining items (HF8-HF9), then Phase 14.1B or 14.2
+
+G15B.6 — CLAUDE_CODE_PROJECT_INSTRUCTIONS.md (Update Test Baseline)
+FIND:
+
+### Test Baseline
+- **791 pass / 90 fail** (881 total across test files)
+
+REPLACE:
+
+### Test Baseline
+- **790 pass / 91 fail** (881 total across test files)
+
