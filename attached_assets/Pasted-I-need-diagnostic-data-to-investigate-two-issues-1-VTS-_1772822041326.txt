@@ -1,0 +1,24 @@
+I need diagnostic data to investigate two issues: (1) VTS regime uniformity (all pairs showing HIGH_VOLATILITY_UNSTABLE) and (2) whether the pair filtering pipeline is reducing the pool size more than expected. Please do the following:
+
+Task 1: Filtering Pipeline Statistics (last 2 hours)
+Search the server logs from the last 2 hours and compile these counts:
+
+Total pairs scanned by FX5 — look for [FX5] scan cycle logs showing how many pairs enter each 30-second scan
+Pairs eliminated by global filters — look for global filter rejection logs (price floor, volume floor, spread limits, etc.)
+Pairs eliminated by IMF filters — look for IMF/Ideal Market Filter rejection logs
+Pairs that survived into the VTS ideal pool — look for [11.4C.1][VTS] Using FX5 scan batch: showing how many pairs the VTS receives each cycle
+Pairs skipped by duplicate position guard — look for [11.8C][VTS][DUP_GUARD] logs showing how many pairs were skipped because they already had an open simulated trade
+Pairs that actually called a strategy detect function — look for [11.8C][VTS] lines showing Simulating N strategies
+Pairs where ALL strategies returned null — look for [HF6][VTS] lines showing returned null - conditions not met
+Present this as a funnel: scanned → survived global → survived IMF → entered VTS → passed dup guard → called detect → generated trade. Include total counts over 2 hours AND a breakdown for 2-3 individual cycles so we can see per-cycle numbers.
+
+Task 2: Capture MCE regime log sample
+Search the server logs for lines matching [Phase14][MCE] from the most recent VTS cycle. Provide the raw output for at least 15-20 pairs. Each line contains: symbol, regime, confidence, vwap, sma, atr, vol, mom, adx, dbs, bias. I need to see the actual vol, mom, and adx values across pairs to determine if regime uniformity is a threshold issue or a data issue.
+
+Task 3: Verify OHLC data quality
+For any 3 pairs from the current ideal pool, log the first and last candle returned by fetchOHLCForPair() — specifically the timestamp, open, high, low, close, and volume. This confirms we're getting real 15-min candle data with proper time coverage (should span ~12.5 hours).
+
+Task 4: Report current DX vs theoretical ADX
+In the computeADX() function in server/core/metrics/market-regime.ts, the function returns a single DX value (line 99: return dx), NOT a smoothed ADX average. For 3 sample pairs, report the raw DX value that computeADX returns. This helps confirm whether DX consistently exceeds 25.
+
+Governance: Do NOT modify any code. This is a read-only diagnostic request. Report findings and wait for Kyle's directive.
