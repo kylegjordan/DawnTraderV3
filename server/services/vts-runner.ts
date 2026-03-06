@@ -49,6 +49,11 @@ import { SCORE_WEIGHTS } from '../config/score-weights.config.js';
 import { calculatePairRegime, getRegimeWeight, calculateRegimeScore, getNormalizedRegimeWithDetails } from '../core/metrics/market-regime.js';
 // Phase 13: Market Context Engine for centralized indicator + regime computation
 import { getMarketContextEngine } from './market-context-engine.js';
+// Phase 14 HF6: StrategyEngine for strategy-specific detect functions
+import { StrategyEngine, type StrategySignal } from './strategy-engine.js';
+import type { PatternInput } from '../strategies/strategy-helpers.js';
+// Phase 14 HF6: Global friction/DBS getters for trade context dimensions
+import { getGlobalFriction, getLastGlobalDBSCategory } from './market-indicators.js';
 // Phase 14: Real score calculator replaces simulation stubs
 import { computeRealHybridScore, computeRealDecayPenalty } from '../core/utils/vts-real-score.js';
 import { computeBiasConfidenceModifier } from '../core/metrics/directional-bias.js';
@@ -77,6 +82,17 @@ import { resolveStrategyMode, getModeOverlay, meetsConfidenceFloor, recordModeEx
 import fs from 'fs/promises';
 import path from 'path';
 
+// Phase 14 HF6: Strategy call settings (same defaults as signal orchestrator lines 680-688)
+const STRATEGY_CALL_SETTINGS = {
+  smaLength: 20,
+  riskPerTradePercent: 2.0,
+  maxOpenPositions: 5,
+  dailyLossLimitPercent: 10.0,
+  whitelistedSymbols: [],
+  blacklistedSymbols: [],
+  allowedTradingPairs: [],
+} as any;
+
 async function getSystemConfig() {
   const config = await systemConfigService.getConfig();
   return {
@@ -92,6 +108,9 @@ let isAutonomousRunning = false;
 let sessionStartTime: number | null = null;
 let cycleCount = 0;
 let patternRecognitionWarmedUp = false;
+
+// Phase 14 HF6: Strategy engine instance for detect function calls
+const strategyEngine = new StrategyEngine();
 
 interface VTSConfig {
   autonomousMode: boolean;
@@ -208,6 +227,8 @@ interface OpenVirtualTrade {
 
 const openVirtualTrades: Map<string, OpenVirtualTrade> = new Map();
 const MAX_OPEN_TRADES = 300; // Directive 11.6E: Capped at 300 to respect Kraken API rate limits
+// HF6 Item 3: openVirtualTrades is cleared at startup via vtsService.hf6ClearStaleTrades()
+// which handles the vts-service side. Runner-side Map starts empty on module load.
 console.log(`[11.6E][Registry] Max open trades set to ${MAX_OPEN_TRADES}`);
 const MAX_HOLD_MS = 24 * 60 * 60 * 1000; // Directive 11.6: 24 hours max hold time (configurable)
 
@@ -303,6 +324,100 @@ async function fetchOHLCForPair(symbol: string): Promise<OHLCData[]> {
 // Phase 14: simulateDecayPenalty REMOVED — replaced by computeRealDecayPenalty()
 // from server/core/utils/vts-real-score.ts (imported above)
 
+/**
+ * Phase 14 HF6: Call strategy-specific detect function.
+ * Maps strategy name to the correct StrategyEngine detect method.
+ * Uses the EXACT same parameters as the signal orchestrator for parity.
+ */
+function callStrategyDetect(
+  strategy: string,
+  indicators: any,
+  ohlcData: any[],
+  patternInput: PatternInput | null
+): StrategySignal | null {
+  switch (strategy) {
+    // ── Quant strategies ──
+    case 'vwap_pullback':
+      return strategyEngine.detectVWAPPullback(indicators, STRATEGY_CALL_SETTINGS, ohlcData);
+    case 'abcd_long':
+      return strategyEngine.detectABCDLong(ohlcData, STRATEGY_CALL_SETTINGS);
+    case 'sma_trend_ride':
+      return strategyEngine.detectSMATrendRide(indicators, ohlcData, STRATEGY_CALL_SETTINGS);
+    case 'breakout':
+      return strategyEngine.detectBreakout(ohlcData, {
+        minConsolidationBars: 10,
+        maxRangeWidth: 3,
+        breakoutBuffer: 1,
+        volumeMultiplier: 2,
+        maxHoldingHours: 12
+      });
+    case 'mean_reversion':
+      return strategyEngine.detectMeanReversion(indicators, ohlcData, {
+        meanType: 'vwap',
+        smaLength: 20,
+        deviationThreshold: 2.5,
+        partialExitPercent: 50,
+        stopLossBuffer: 1
+      });
+    case 'range_trading':
+      return strategyEngine.detectRangeTrading(ohlcData, {
+        minRangeDurationHours: 12,
+        minRangeWidth: 3,
+        minBoundaryTouches: 3,
+        entryZoneWidth: 0.5,
+        stopLossBeyond: 1
+      });
+    case 'vwap_bounce':
+      return strategyEngine.detectVWAPBounce(indicators, ohlcData, {
+        vwapProximity: 0.5,
+        minVWAPSlope: 0.3,
+        volumeMultiplier: 1.3,
+        maxPullbackBars: 5,
+        partialExitR: 1.5
+      });
+    case 'liquidity_trap':
+      return strategyEngine.detectLiquidityTrap(ohlcData, {
+        maxTrapExtension: 1.2,
+        trapReturnBars: 2,
+        minStopZoneSize: 'medium',
+        minLevelTouches: 3,
+        volumeRatio: 1.5
+      });
+    case 'dhma':
+      return strategyEngine.detectDHMA(indicators, ohlcData, {
+        theta_OBI: 0.3,
+        epsilon_micro: 0.2,
+        tau_toxicity: 0.7,
+        maxSpread: 5,
+        k_tp: 1.5,
+        N_flow: 50,
+        N_burst: 10,
+        window_session: 20
+      });
+    // ── Pattern + Hybrid strategies ──
+    case 'morning_star':
+      return strategyEngine.detectMorningStar(indicators, ohlcData, patternInput);
+    case 'inside_bar_reversal':
+      return strategyEngine.detectInsideBarReversal(indicators, ohlcData, patternInput);
+    case 'support_bounce':
+      return strategyEngine.detectSupportBounce(indicators, ohlcData, patternInput);
+    case 'pivot_shift':
+      return strategyEngine.detectPivotShift(indicators, ohlcData, patternInput);
+    case 'reverse_impulse':
+      return strategyEngine.detectReverseImpulse(indicators, ohlcData, patternInput);
+    case 'defensive_hedge':
+      // btcCandles omitted — degrades gracefully (same as signal orchestrator line 1120)
+      return strategyEngine.detectDefensiveHedge(indicators, ohlcData, patternInput);
+    case 'adaptive_flow':
+      return strategyEngine.detectAdaptiveFlow(indicators, ohlcData, patternInput);
+    case 'volatility_edge':
+      return strategyEngine.detectVolatilityEdge(indicators, ohlcData, patternInput);
+    default:
+      console.warn(`[HF6][VTS] Unknown strategy: ${strategy}, no detect function available`);
+      return null;
+  }
+}
+
 async function generatePhase10Signal(
   symbol: string, 
   priceData: CachedPrice, 
@@ -392,16 +507,59 @@ async function generatePhase10Signal(
     console.debug(`[11.4G][VTS] ${symbol}: Detected ${detectedPattern.pattern} → canonical ${canonicalPatternType}`);
   }
   
-  const entryPrice = priceData.price;
-  const volatility = priceData.high24h > 0 && priceData.low24h > 0
-    ? (priceData.high24h - priceData.low24h) / priceData.price
-    : 0.02;
-  
-  const dynamicTarget = Math.max(vtsConfig.targetProfit, volatility * 0.5);
-  const dynamicStop = Math.max(vtsConfig.stopLoss, volatility * 0.3);
-  
-  const takeProfit = entryPrice * (1 + dynamicTarget);
-  const stopLoss = entryPrice * (1 - dynamicStop);
+  // Phase 14 HF6: Call strategy-specific detect function for real entry/stop/target
+  // Build indicators (same format as signal orchestrator lines 857-864)
+  const stratDetectIndicators = {
+    vwap: mceContext.indicators.vwap,
+    sma: mceContext.indicators.sma,
+    currentPrice: mceContext.indicators.currentPrice,
+    volume: mceContext.indicators.volume,
+    high24h: mceContext.indicators.high24h,
+    low24h: mceContext.indicators.low24h,
+  };
+
+  // Build patternInput from detected patterns (same as orchestrator lines 1048-1070)
+  const bestDetectedPattern = detectedPatterns.length > 0 ? detectedPatterns.reduce((best: any, p: any) =>
+    p.strength > best.strength ? p : best, detectedPatterns[0]) : null;
+
+  const stratPatternInput: PatternInput | null = bestDetectedPattern ? {
+    pattern: bestDetectedPattern.pattern,
+    direction: bestDetectedPattern.direction as 'BUY' | 'SELL',
+    strength: bestDetectedPattern.strength,
+    metadata: {
+      ...bestDetectedPattern,
+      parentHigh: bestDetectedPattern.metadata?.parentHigh ?? (candles.length >= 2 ? candles[candles.length - 2].high : 0),
+      parentLow: bestDetectedPattern.metadata?.parentLow ?? (candles.length >= 2 ? candles[candles.length - 2].low : 0),
+      compressionRatio: bestDetectedPattern.metadata?.compressionRatio ?? 0.5,
+      pinbarLow: bestDetectedPattern.metadata?.pinbarLow ?? (candles.length > 0 ? candles[candles.length - 1].low : 0),
+      engulfingLow: bestDetectedPattern.metadata?.engulfingLow ??
+        (candles.length >= 2 ? Math.min(candles[candles.length - 1].low, candles[candles.length - 2].low) : 0),
+      engulfRatio: bestDetectedPattern.metadata?.engulfRatio ?? 1.0,
+      hasGap: bestDetectedPattern.metadata?.hasGap ?? false,
+      recoveryRatio: bestDetectedPattern.metadata?.recoveryRatio ?? 0,
+      aPointLow: bestDetectedPattern.metadata?.aPointLow,
+      bPointHigh: bestDetectedPattern.metadata?.bPointHigh,
+      cPointLow: bestDetectedPattern.metadata?.cPointLow,
+      cPointHigh: bestDetectedPattern.metadata?.cPointHigh,
+    }
+  } : null;
+
+  // Call strategy-specific detect function (replaces generic volatility formula)
+  const ohlcAsAny = ohlcData as any[];
+  const strategySignal = callStrategyDetect(strategy, stratDetectIndicators, ohlcAsAny, stratPatternInput);
+
+  if (!strategySignal) {
+    console.log(`[HF6][VTS] ${symbol}: Strategy ${strategy} returned null - conditions not met, skipping`);
+    return null;
+  }
+
+  // Use strategy-computed entry/stop/target (replaces generic volatility formula)
+  strategySignal.symbol = symbol;
+  const entryPrice = strategySignal.entryPrice;
+  const takeProfit = strategySignal.targetPrice;
+  const stopLoss = strategySignal.stopPrice;
+  // Compute proportional target distance for downstream calcs (lines 653, 665)
+  const dynamicTarget = Math.abs(takeProfit - entryPrice) / entryPrice;
   const spread = priceData.ask > 0 && priceData.bid > 0
     ? (priceData.ask - priceData.bid) / priceData.price
     : 0.001;
@@ -632,9 +790,9 @@ async function generatePhase10Signal(
       const cm = getCachedCostMetrics(symbol);
       return Math.min(((cm.fee * 2 + cm.slippage * 2 + cm.spread) * 10000) / 3, 100);
     })(),
-    globalFriction: undefined, // Filled by telemetry aggregator at persistence
+    globalFriction: getGlobalFriction(), // HF6: Read cached global friction from market-indicators
     pairDirectionalBias: mceContext.directionalBias?.category ?? 'NEUTRAL',
-    globalDirectionalBias: undefined, // Filled by MCE global bias at persistence
+    globalDirectionalBias: getLastGlobalDBSCategory(), // HF6: Read cached global DBS from market-indicators
   };
   
   openVirtualTrades.set(tradeId, openTrade);

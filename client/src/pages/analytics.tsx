@@ -340,7 +340,23 @@ function FrozenHeader({ indicators, isLoading }: { indicators: MarketIndicatorsD
   );
 }
 
-function MarketOverviewSection({ indicators }: { indicators: MarketIndicatorsData | undefined }) {
+function MarketOverviewSection({ indicators, error, onRetry }: { indicators: MarketIndicatorsData | undefined; error?: any; onRetry?: () => void }) {
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center justify-center p-8">
+          <AlertCircle className="w-10 h-10 text-yellow-500 mb-3" />
+          <p className="text-sm text-muted-foreground mb-3">Market indicators temporarily unavailable</p>
+          {onRetry && (
+            <Button variant="outline" size="sm" onClick={onRetry}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Retry
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
   if (!indicators?.data) return null;
   
   const { data } = indicators;
@@ -1892,20 +1908,11 @@ export default function AnalyticsPage() {
     staleTime: 0, // Always treat data as stale to force refetch
   });
   
-  // Directive 11.4H.6E Task 2: Error boundary for unauthorized response
+  // HF6: Log indicator errors without blocking the full page.
+  // MarketOverviewSection handles missing data gracefully (returns null).
+  // Other tabs (Governance, Predictive, etc.) remain accessible regardless.
   if (indicatorsError) {
     console.error('[11.4H.6E][Overview] API error:', indicatorsError);
-    return (
-      <div className="flex flex-col h-full items-center justify-center p-6">
-        <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-        <h2 className="text-xl font-semibold text-red-500 mb-2">Failed to load market indicators</h2>
-        <p className="text-muted-foreground text-center mb-4">Please verify authentication and try again.</p>
-        <Button variant="outline" onClick={() => refetchIndicators()}>
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Retry
-        </Button>
-      </div>
-    );
   }
   
   // Directive 11.4H.6D Task 1B: Reactive effect to log updates when favored arrays change
@@ -1977,7 +1984,7 @@ export default function AnalyticsPage() {
           </TabsList>
           
           <TabsContent value="overview" className="space-y-6 mt-6">
-            <MarketOverviewSection indicators={indicatorsData} />
+            <MarketOverviewSection indicators={indicatorsData} error={indicatorsError} onRetry={refetchIndicators} />
           </TabsContent>
 
           <TabsContent value="governance" className="mt-6">

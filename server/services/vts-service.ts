@@ -192,6 +192,7 @@ export class VTSService extends EventEmitter {
       this.fullCalibration = await loadFullCalibration();
       this.calibration = this.fullCalibration.global;
       this.phase14FreshStart();
+      this.hf6ClearStaleTrades(); // HF6 Item 3: Clear pre-strategy-module stale trades
       const strategyCount = Object.keys(this.fullCalibration.strategies).length;
       console.log(`[L8][VTS] INIT_OK - calibration loaded (global + ${strategyCount} strategies)`);
       
@@ -577,6 +578,21 @@ export class VTSService extends EventEmitter {
   }
 
   /**
+   * HF6 Item 3: Clear stale trades after strategy module wiring.
+   * All pre-HF6 trades used the generic volatility formula for entry/stop/target.
+   * This method is called at initialization to ensure only strategy-module-calculated
+   * trades accumulate going forward.
+   */
+  hf6ClearStaleTrades(): void {
+    const oldClosedCount = this.closedTrades.length;
+    const oldOpenCount = this.virtualTrades.size;
+    this.closedTrades = [];
+    this.virtualTrades.clear();
+    this.resetSessionMetrics();
+    console.log(`[HF6][VTS] Stale trade clearing: removed ${oldClosedCount} closed + ${oldOpenCount} open trades (pre-strategy-module data)`);
+  }
+
+  /**
    * M5B: Get current session metrics
    * Directive 11.0E.2: Returns Phase-10 aggregates
    */
@@ -709,7 +725,7 @@ export class VTSService extends EventEmitter {
       frictionCost: tradeData.frictionCost,
       regime: tradeData.regime,
       pool: tradeData.pool,
-      source: 'simulation'
+      source: 'vts'  // HF6: Fix source tag so closed trades pass H5.10/H5.45 filter
     };
 
     // Directive 11.6D: Unified trade ID format - vts_{symbol}_{timestamp}
@@ -739,7 +755,7 @@ export class VTSService extends EventEmitter {
       strategy: tradeData.strategy,
       regime: tradeData.regime,
       pool: tradeData.pool,
-      source: 'simulation', // Directive 11.6D: VTS_REAL_PRICE trades marked via ID prefix
+      source: 'vts', // HF6: Fix source tag for Phase 14 trade visibility
       schemaVersion: '1.6.7'
     };
 

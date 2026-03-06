@@ -140,6 +140,7 @@ for (const regime of Object.keys(REGIME_NARRATIVES) as CanonicalRegimeType[]) {
 
 let cachedGlobalRegime: MarketRegime = 'RANGE_BOUND_STABLE';
 let cachedGlobalFriction: number = 25;
+let cachedGlobalDBSCategory: string = 'NEUTRAL'; // HF6: Cached global DBS category for VTS trade context
 let lastUpdate: Date = new Date();
 
 const TOP_100_FALLBACK_PAIRS = [
@@ -283,6 +284,11 @@ export function getMarketIndicators(): MarketIndicators {
     console.warn('[Phase14][MarketIndicators] Global DBS unavailable:', err);
   }
 
+  // HF6: Cache DBS category for VTS trade context getter
+  if (globalDBS) {
+    cachedGlobalDBSCategory = globalDBS.category;
+  }
+
   // Directive 11.4H.5 Task 3: Check for market event transitions
   checkRegimeTransition(effectiveRegime);
   checkFrictionTransition(frictionStatus.status);
@@ -320,4 +326,12 @@ export function getCurrentRegime(): MarketRegime {
 
 export function getGlobalFriction(): number {
   return cachedGlobalFriction;
+}
+
+/**
+ * HF6: Get last computed global DBS category for VTS trade context.
+ * Updated each cycle by getMarketIndicators().
+ */
+export function getLastGlobalDBSCategory(): string {
+  return cachedGlobalDBSCategory;
 }

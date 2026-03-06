@@ -8,6 +8,7 @@ import { Brain, RefreshCw, Download, TrendingUp, TrendingDown, Clock, Target, Al
 import { apiFetch } from "@/lib/api";
 import { ensureValidToken } from "@/lib/auth";
 import { format } from "date-fns";
+import { getFrictionLabel } from "@/utils/frictionColor";
 
 interface OpenTrade {
   symbol: string;
@@ -384,7 +385,7 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
         onScroll={handleTopScroll}
         style={{ scrollbarWidth: 'thin' }}
       >
-        <div style={{ width: '1800px', height: '1px' }} />
+        <div style={{ width: '2300px', height: '1px' }} />
       </div>
       <div 
         ref={scrollRef}
@@ -513,8 +514,8 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
                   <td className="px-3 py-2 text-right font-mono text-xs">{trade.expectedEdge.toFixed(2)}</td>
                   <td className="px-3 py-2 text-right font-mono text-xs">{trade.regimeWeight.toFixed(2)}</td>
                   <td className="px-3 py-2 text-xs">{trade.globalRegime || '\u2014'}</td>
-                  <td className="px-3 py-2 text-right font-mono text-xs">{trade.pairFriction != null ? trade.pairFriction.toFixed(1) : '\u2014'}</td>
-                  <td className="px-3 py-2 text-right font-mono text-xs">{trade.globalFriction != null ? trade.globalFriction.toFixed(1) : '\u2014'}</td>
+                  <td className="px-3 py-2 text-right font-mono text-xs">{trade.pairFriction != null ? getFrictionLabel(Math.round(trade.pairFriction)) : '\u2014'}</td>
+                  <td className="px-3 py-2 text-right font-mono text-xs">{trade.globalFriction != null ? getFrictionLabel(Math.round(trade.globalFriction)) : '\u2014'}</td>
                   <td className="px-3 py-2 text-xs">{trade.pairDirectionalBias || '\u2014'}</td>
                   <td className="px-3 py-2 text-xs">{trade.globalDirectionalBias || '\u2014'}</td>
                   <td className="px-3 py-2 text-xs">
@@ -601,7 +602,7 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
         onScroll={handleTopScroll}
         style={{ scrollbarWidth: 'thin' }}
       >
-        <div style={{ width: '1800px', height: '1px' }} />
+        <div style={{ width: '2300px', height: '1px' }} />
       </div>
       <div 
         ref={scrollRef}
@@ -726,8 +727,8 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
                   <td className="px-3 py-2 text-right font-mono text-xs">{trade.expectedEdge.toFixed(2)}</td>
                   <td className="px-3 py-2 text-right font-mono text-xs">{trade.regimeWeight.toFixed(2)}</td>
                   <td className="px-3 py-2 text-xs">{trade.globalRegime || '\u2014'}</td>
-                  <td className="px-3 py-2 text-right font-mono text-xs">{trade.pairFriction != null ? trade.pairFriction.toFixed(1) : '\u2014'}</td>
-                  <td className="px-3 py-2 text-right font-mono text-xs">{trade.globalFriction != null ? trade.globalFriction.toFixed(1) : '\u2014'}</td>
+                  <td className="px-3 py-2 text-right font-mono text-xs">{trade.pairFriction != null ? getFrictionLabel(Math.round(trade.pairFriction)) : '\u2014'}</td>
+                  <td className="px-3 py-2 text-right font-mono text-xs">{trade.globalFriction != null ? getFrictionLabel(Math.round(trade.globalFriction)) : '\u2014'}</td>
                   <td className="px-3 py-2 text-xs">{trade.pairDirectionalBias || '\u2014'}</td>
                   <td className="px-3 py-2 text-xs">{trade.globalDirectionalBias || '\u2014'}</td>
                   <td className="px-3 py-2 text-xs">
