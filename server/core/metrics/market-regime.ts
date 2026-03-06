@@ -45,9 +45,14 @@ export function computeVolatility(ohlcData: OHLCData[]): number {
 }
 
 export function computeMomentum(ohlcData: OHLCData[]): number {
-  if (ohlcData.length < 14) return 0;
+  // HF7: Extended lookback from 14 to 30 candles for more stable momentum
+  // 14 candles at 15-min = 3.5hr (too jittery, single pullback flips sign)
+  // 30 candles at 15-min = 7.5hr (captures intraday trends, reduces noise)
+  // Signal orchestrator uses 60-min candles so 14*60=14hr; 30*15=7.5hr is closer parity
+  const lookback = Math.min(30, ohlcData.length);
+  if (lookback < 5) return 0;
 
-  const recentSlice = ohlcData.slice(-14);
+  const recentSlice = ohlcData.slice(-lookback);
   const startPrice = recentSlice[0].close;
   const endPrice = recentSlice[recentSlice.length - 1].close;
 
@@ -102,26 +107,41 @@ export function computeADX(ohlcData: OHLCData[], period: number = 14): number {
 export function calculatePairRegime(ohlcData: OHLCData[]): RegimeCalculationResult {
   const vol = computeVolatility(ohlcData);
   const mom = computeMomentum(ohlcData);
-  const adx = computeADX(ohlcData);
+  const dx = computeADX(ohlcData);
 
   let regime: MarketRegimeType;
   let confidence: number;
 
-  if (vol < 0.015 && Math.abs(mom) < 0.002) {
+  // HF7: Recalibrated thresholds for crypto market data
+  // computeADX returns DX (not Wilder's smoothed ADX). Crypto DX runs 35-90 on 15-min.
+  // Old threshold of 25 was always exceeded -> meaningless. Recalibrated tiers:
+  //   DX < 45 = balanced/ranging (weak directional pressure)
+  //   DX 45-55 = moderate directional movement
+  //   DX > 55 = strong directional movement (equivalent to classic ADX > 25)
+  //   DX > 60 = very strong directional pressure
+  // Volatility (std dev of returns): < 0.012 = quiet, > 0.020 = elevated
+  // Momentum (30-candle price change ratio): |mom| < 0.003 = noise, > 0.005 = meaningful
+
+  if (vol < 0.012 && dx < 45) {
+    // Low volatility + no strong directional pressure -> ranging market
     regime = REGIMES.RANGE_BOUND_STABLE;
-    confidence = 0.75 + (0.015 - vol) * 10;
-  } else if (mom > 0.002 && adx > 25) {
+    confidence = 0.75 + (0.012 - vol) * 12;
+  } else if (vol > 0.020 && dx > 55) {
+    // Elevated volatility + strong directional movement -> impulse expansion
+    regime = REGIMES.IMPULSE_EXPANSION;
+    confidence = 0.65 + (vol - 0.020) * 6 + (dx - 55) * 0.003;
+  } else if (mom > 0.003 && dx > 50) {
+    // Positive momentum + directional strength -> uptrend
     regime = REGIMES.TREND_FRIENDLY_STABLE;
-    confidence = 0.70 + Math.min(mom * 10, 0.2) + (adx - 25) * 0.005;
-  } else if (mom < -0.002 && adx > 25) {
+    confidence = 0.70 + Math.min(mom * 8, 0.2) + (dx - 50) * 0.003;
+  } else if ((vol > 0.015 && mom < -0.003) || (dx > 60 && mom < -0.005)) {
+    // Elevated vol in decline OR very strong downward direction -> volatile/unstable
     regime = REGIMES.HIGH_VOLATILITY_UNSTABLE;
     confidence = 0.65 + Math.min(Math.abs(mom) * 8, 0.2);
-  } else if (vol > 0.025) {
-    regime = REGIMES.IMPULSE_EXPANSION;
-    confidence = 0.60 + (vol - 0.025) * 8;
   } else {
+    // No strong classification -> structural transition
     regime = REGIMES.STRUCTURAL_TRANSITION;
-    confidence = 0.50;
+    confidence = 0.50 + Math.min(vol * 5, 0.15);
   }
 
   confidence = Math.min(Math.max(confidence, 0.4), 0.95);
@@ -130,7 +150,7 @@ export function calculatePairRegime(ohlcData: OHLCData[]): RegimeCalculationResu
     regime,
     volatility: vol,
     momentum: mom,
-    adx,
+    adx: dx,
     confidence
   };
 }

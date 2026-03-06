@@ -377,6 +377,14 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
     }
   }, []);
 
+  // HF7: Sync top scrollbar width to match actual table content width
+  useEffect(() => {
+    if (scrollRef.current && topScrollRef.current) {
+      const spacer = topScrollRef.current.firstElementChild as HTMLElement;
+      if (spacer) spacer.style.width = `${scrollRef.current.scrollWidth}px`;
+    }
+  });
+
   return (
     <div className="relative">
       <div 
@@ -593,6 +601,14 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
       scrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
     }
   }, []);
+
+  // HF7: Sync top scrollbar width to match actual table content width
+  useEffect(() => {
+    if (scrollRef.current && topScrollRef.current) {
+      const spacer = topScrollRef.current.firstElementChild as HTMLElement;
+      if (spacer) spacer.style.width = `${scrollRef.current.scrollWidth}px`;
+    }
+  });
 
   return (
     <div className="relative">
