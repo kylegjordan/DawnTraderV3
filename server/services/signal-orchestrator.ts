@@ -54,8 +54,7 @@ import { computeNetExpectancyKernel } from '../core/calculations/net-expectancy-
 // Directive 9.3: Adaptive Kalman Filter integration
 import { getSmoothedPrice, getKalmanFilter } from '../utils/adaptive-kalman.js';
 import { calculateEfficiencyRatio, calculateVolNoise, calculateTrendSlope, calculateDirectionalIntegrity } from '../utils/analysis-utils.js';
-// Directive 10.1 / 12.3.1: Dynamic Strategy Selector (now uses canonical regimes)
-import { getDynamicStrategySelector, type DSSMetrics } from './dynamic-strategy-selector.js';
+// HF9: DSS import removed — DSS deleted (superseded by MCE regime filtering + detect functions)
 import { SYSTEM_GUARDS } from '../config/system-guards.js';
 // Directive 12.3.1: Canonical regime calculator for pair-level regime
 import { calculatePairRegime } from '../core/metrics/market-regime.js';
@@ -498,6 +497,18 @@ export class SignalOrchestrator {
 
     // Directive 11.0E: Apply SQE quality filter with FinalScore and RegimeWeight only
     // Phase 14: Pass pre-computed FinalScore and RegimeWeight — SQE no longer backfills
+    // HF9 Item B: Compute regimeStability for governance gate in SQE
+    let sqeRegimeStability: import('../../config/strategy-governance.js').RegimeStability | undefined;
+    try {
+      const { computeGlobalStability } = await import('../core/governance/regime-stability.js');
+      const stabilityResult = computeGlobalStability(
+        extendedMetrics.driftScore || 0.5,
+        extendedMetrics.volZ || 0,
+        extendedMetrics.confidence || 0.5
+      );
+      sqeRegimeStability = stabilityResult.stability;
+    } catch { /* stability unavailable — SQE governance gate will be skipped */ }
+
     const sqeInput: SQEInput = {
       signalId,
       symbol: rawSignal.symbol,
@@ -508,6 +519,7 @@ export class SignalOrchestrator {
       regimeWeight: extendedMetrics.regimeWeight,
       trendStrength: 0.5,
       volatility: extendedMetrics.volatility ?? 0.3,
+      regimeStability: sqeRegimeStability,  // HF9: For governance gate + confidence floor in SQE
     };
 
     const sqeResult = await signalQualityEvaluator.evaluate(sqeInput);
@@ -1240,30 +1252,25 @@ export class SignalOrchestrator {
         }
       }
 
-      // Directive 10.1 + 11.8B-A: Apply DSS.evaluate() for NetEV > 0 enforcement and strategy selection
-      // All Net EV math now uses computeNetExpectancyKernel (single authority)
+      // HF9: DSS replaced with inline NetEV > 0 filter using canonical expectancy kernel
+      // DSS.evaluate() was never reachable (crashed on undefined `dss` variable).
+      // This inline filter preserves the NetEV > 0 enforcement that DSS was supposed to provide.
       if (signals.length > 0) {
         console.log(`[37.A][SIGNAL] ${symbol}: Generated ${signals.length} sized signal(s) - ${signals.map(s => s.strategy).join(', ')}`);
-        
-        // Compute strategy metrics for DSS evaluation using canonical kernel
-        const strategyMetrics: Record<string, { netEV: number; confidence: number }> = {};
-        for (const signal of signals) {
+
+        // Filter signals by NetEV > 0 using canonical expectancy kernel
+        const evFilteredSignals = signals.filter(signal => {
           const entry = signal.entryPrice || 0;
           const target = signal.targetPrice || 0;
           const stop = signal.stopPrice || 0;
-          const positionSize = signal.quantity || 1;
-          
-          // Directive 12.1.2: Use canonical cost model — real per-pair fee/slippage/spread
-          // getCachedCostMetrics always returns valid defaults on cache miss (exchange-defaults.ts)
-          const dssLoopCostMetrics = getCachedCostMetrics(symbol);
-          const dssLoopFrictionPct = computeTotalRoundTripCost(dssLoopCostMetrics.fee, dssLoopCostMetrics.slippage, dssLoopCostMetrics.spread);
-          const frictionPerUnit = dssLoopFrictionPct * entry;
-          
-          // Directive 12.1.1: Use geometric DI from price data (BUG-004 fix)
-          // closePrices is already in scope (line 780: ohlcData.map(c => parseFloat(c.close)))
+
+          if (entry <= 0 || target <= 0 || stop <= 0) return false;
+
+          const costMetrics = getCachedCostMetrics(symbol);
+          const frictionPct = computeTotalRoundTripCost(costMetrics.fee, costMetrics.slippage, costMetrics.spread);
+          const frictionPerUnit = frictionPct * entry;
           const DI = calculateDirectionalIntegrity(closePrices);
-          
-          // Kernel computes per-unit EV (absolute price deltas)
+
           const kernelResult = computeNetExpectancyKernel({
             entryPrice: entry,
             stopPrice: stop,
@@ -1271,54 +1278,19 @@ export class SignalOrchestrator {
             totalFriction: frictionPerUnit,
             DI,
           });
-          
-          // Scale kernel netEV by position size for total dollar EV
-          strategyMetrics[signal.strategy] = {
-            netEV: kernelResult.netEV * positionSize,
-            confidence: signal.confidence || 0
-          };
-        }
-        
-        // Call DSS.evaluate() to select best strategy with NetEV > 0
-        const dssResult = dss.evaluate(dssMetrics, strategyMetrics);
-        
-        if (dssResult.veto) {
-          console.log(`[10.1][DSS] VETO ${symbol}: ${dssResult.reason}`);
-          signals.length = 0; // Clear all signals - Physics First enforcement
-        } else if (dssResult.strategy) {
-          // Only keep signals from the DSS-selected strategy
-          const selectedStrategy = dssResult.strategy;
-          const filteredSignals = signals.filter(s => s.strategy === selectedStrategy);
-          console.log(`[10.1][DSS] ${symbol}: Selected ${selectedStrategy}, filtered ${signals.length} → ${filteredSignals.length} signals`);
-          signals.length = 0;
-          signals.push(...filteredSignals);
-          
-          // Directive 10.2 + 11.8B-A: Capture trade snapshot with DSS fields for Predictive Position Sizing
-          const selectedMetrics = strategyMetrics[selectedStrategy];
-          if (selectedMetrics && filteredSignals.length > 0) {
-            const signal = filteredSignals[0];
-            const entry = signal.entryPrice || 0;
-            const posSize = signal.quantity || 1;
-            // Directive 12.1.2: Use canonical cost model for snapshot friction
-            const snapshotCostMetrics = getCachedCostMetrics(symbol);
-            const snapshotFrictionPct = computeTotalRoundTripCost(snapshotCostMetrics.fee, snapshotCostMetrics.slippage, snapshotCostMetrics.spread);
-            const totalFriction = snapshotFrictionPct * entry * posSize;
-            
-            dataAggregator.capture('DSS_TRADE_SNAPSHOT', {
-              symbol,
-              regimeId: regimeInfo.regime,
-              strategySelected: selectedStrategy,
-              netEV: selectedMetrics.netEV,
-              confidenceScore: signal.ngc || signal.confidence || 0,
-              frictionCost: totalFriction,
-              volNoise: dssMetrics.volNoise,
-              trendSlope: dssMetrics.trendSlope,
-              strategy: selectedStrategy,
-            }).catch(() => {});
-            
-            console.log(`[11.8B-A][DSS_CAPTURE] ${symbol}: regimeId=${regimeInfo.regime}, strategy=${selectedStrategy}, netEV=${selectedMetrics.netEV.toFixed(4)}, friction=${totalFriction.toFixed(4)}`);
+
+          if (kernelResult.netEV <= 0) {
+            console.log(`[HF9][NetEV] Filtering ${symbol}/${signal.strategy}: netEV=${kernelResult.netEV.toFixed(6)} <= 0`);
+            return false;
           }
+          return true;
+        });
+
+        if (evFilteredSignals.length < signals.length) {
+          console.log(`[HF9][NetEV] ${symbol}: Filtered ${signals.length} → ${evFilteredSignals.length} signals by NetEV > 0`);
         }
+        signals.length = 0;
+        signals.push(...evFilteredSignals);
       }
 
     } catch (error) {

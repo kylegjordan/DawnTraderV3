@@ -81,7 +81,7 @@ import { dataAggregator } from './data-aggregator.js';
 import { covarianceEngine } from '../utils/covariance-engine.js';
 import { recordPaperTrade, type PaperTradeRecord } from './vts-live-comparison-audit.js';
 import { evaluateTradeExpectancy } from '../core/calculations/expectancy.js';
-import { applyGovernance, getGovernanceStateForUI } from '../core/governance/governance-engine.js';
+// HF9: applyGovernance + getGovernanceStateForUI removed (dead imports — never called in function body)
 import { getCachedStability, computeGlobalStability } from '../core/governance/regime-stability.js';
 import { isStrategyEligible, logGovernanceBlock } from '../core/governance/strategy-eligibility.js';
 import { getStrategyDependency, type RegimeStability } from '../config/strategy-governance.js';
@@ -2124,31 +2124,20 @@ export class PaperExecutionEngine {
       }
 
       // ══════════════════════════════════════════════════════════════════════════════
-      // Directive 11.7R-E: HARD GOVERNANCE FILTER (BEFORE SIZING)
-      // ══════════════════════════════════════════════════════════════════════════════
-      // This is the authoritative enforcement point for Paper Execution.
-      // If a strategy is not eligible:
-      // - ❌ Never sized
-      // - ❌ Never creates execution intent
-      // - ❌ Never creates simulated order
+      // Directive 11.7R-E: Governance gate MOVED to SQE (HF9 Item B)
+      // SQE now enforces strategy eligibility before signals reach paper execution.
+      // We KEEP the stability computation here because 11.7S mode modulation below
+      // depends on regimeStability for sizing, stop, and target adjustments.
       // ══════════════════════════════════════════════════════════════════════════════
       const signalMetadata = signalAny.metadata || {};
-      const regime = signalMetadata.regime || 'TRANSITION';
-      const dependency = getStrategyDependency(signal.strategy);
-      
-      // Compute global stability from available metrics
+
+      // Compute global stability from available metrics (needed by 11.7S mode modulation)
       const stabilityResult = computeGlobalStability(
         signalMetadata.driftScore || 0.5,
         signalMetadata.volZ || 0,
         signalMetadata.regimeConfidence || signal.confidence || 0.5
       );
       const regimeStability: RegimeStability = stabilityResult.stability;
-      
-      if (!isStrategyEligible(signal.strategy, regimeStability, dependency)) {
-        logGovernanceBlock({ strategy: signal.strategy, symbol: signal.symbol }, regimeStability);
-        console.log(`[11.7R-E][Paper] PRE-SIZE BLOCK: ${signal.symbol} ${signal.strategy} (${dependency} dep) blocked in ${regimeStability}`);
-        return;
-      }
       // ══════════════════════════════════════════════════════════════════════════════
       
       // ══════════════════════════════════════════════════════════════════════════════

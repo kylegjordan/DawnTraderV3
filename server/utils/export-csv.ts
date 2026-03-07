@@ -87,6 +87,12 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
   entryTime: string;
   exitTime: string;
   durationMinutes: number;
+  globalRegime: string | null;
+  pairFriction: number | null;
+  globalFriction: number | null;
+  pairDirectionalBias: string | null;
+  globalDirectionalBias: string | null;
+  filterTier: string | null;
 }>> {
   const vtsDir = path.join(process.cwd(), 'logs', 'virtual_trades');
   const cutoffDate = Date.now() - (days * 24 * 60 * 60 * 1000);

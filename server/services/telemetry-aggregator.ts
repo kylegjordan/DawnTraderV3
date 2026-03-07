@@ -35,7 +35,7 @@ import {
   type AdaptiveWeights 
 } from './adaptive-learning-repository.js';
 import { adaptiveManager, type TimestampedWeightEntry } from '../core/adaptive-manager.js';
-import { DynamicStrategySelector, type DSSMetrics } from './dynamic-strategy-selector.js';
+// HF9: DSS import removed — DSS deleted
 import {
   getTypeForStrategy,
   getPatternForStrategy,
@@ -124,8 +124,8 @@ export class TelemetryAggregatorService {
   private cascadeHistory: CascadeEfficiency[] = [];
   private readonly historyWindowMs = SCANNER_PARAMS.TELEMETRY.HISTORY_WINDOW_MS;
   private readonly minSamples = SCANNER_PARAMS.TELEMETRY.MIN_SAMPLES;
-  private dss = new DynamicStrategySelector();
-  private currentRegime: MarketRegime = REGIMES.LOW_VOL_CHOP as MarketRegime;
+  // HF9: DSS instance removed — DSS deleted
+  private currentRegime: string = REGIMES.RANGE_BOUND_STABLE;  // HF9: Fixed stale LOW_VOL_CHOP → canonical name
   private rehydrated = false;
   
   // Directive 11.2 R1: Pool-level performance tracking
@@ -447,27 +447,22 @@ export class TelemetryAggregatorService {
     const SCHEMA = 'regime-mapping/v1.4c';
     
     const CANONICAL_SET = new Set([
-      REGIMES.BULL_STABLE,
-      REGIMES.BEAR_VOLATILE,
-      REGIMES.LOW_VOL_CHOP,
-      REGIMES.HIGH_VOL_IMPULSE,
-      REGIMES.TRANSITION
+      REGIMES.TREND_FRIENDLY_STABLE,
+      REGIMES.HIGH_VOLATILITY_UNSTABLE,
+      REGIMES.RANGE_BOUND_STABLE,
+      REGIMES.IMPULSE_EXPANSION,
+      REGIMES.STRUCTURAL_TRANSITION
     ]);
     
-    // DSS extended regimes that map to canonical regimes
-    const DSS_TO_CANONICAL: Record<string, string> = {
-      'EXTREME_NOISE': REGIMES.TRANSITION,
-      'BULL_VOLATILE': REGIMES.HIGH_VOL_IMPULSE,
-      'BEAR_STABLE': REGIMES.LOW_VOL_CHOP,
-    };
+    // HF9: DSS_TO_CANONICAL mapping removed — DSS deleted, only canonical regimes exist
     
     const empiricalCounts: Record<string, number> = {};
     const normalizedCounts: Record<string, number> = {
-      [REGIMES.BULL_STABLE]: 0,
-      [REGIMES.BEAR_VOLATILE]: 0,
-      [REGIMES.LOW_VOL_CHOP]: 0,
-      [REGIMES.HIGH_VOL_IMPULSE]: 0,
-      [REGIMES.TRANSITION]: 0
+      [REGIMES.TREND_FRIENDLY_STABLE]: 0,
+      [REGIMES.HIGH_VOLATILITY_UNSTABLE]: 0,
+      [REGIMES.RANGE_BOUND_STABLE]: 0,
+      [REGIMES.IMPULSE_EXPANSION]: 0,
+      [REGIMES.STRUCTURAL_TRANSITION]: 0
     };
     
     // Directive 11.7F-B: Aggregate Z-scores per regime-strategy pair
@@ -486,8 +481,8 @@ export class TelemetryAggregatorService {
       validPairs++;
       empiricalCounts[regime] = (empiricalCounts[regime] || 0) + 1;
       
-      // Normalize DSS extended regimes to canonical for alignment check
-      const normalizedRegime = DSS_TO_CANONICAL[regime] || regime;
+      // HF9: Direct canonical regime (DSS extended types removed)
+      const normalizedRegime = regime;
       if (normalizedCounts[normalizedRegime] !== undefined) {
         normalizedCounts[normalizedRegime]++;
       }
@@ -546,14 +541,12 @@ export class TelemetryAggregatorService {
     
     const empiricalRegimes = Object.keys(empiricalCounts);
     const canonicalArray = [...CANONICAL_SET] as string[];
-    const dssExtendedRegimes = new Set(Object.keys(DSS_TO_CANONICAL));
-    
     // Missing = canonical regimes with 0 counts in normalized distribution
     const missingCanonical = canonicalArray.filter(r => normalizedCounts[r] === 0);
     
-    // Extra = regimes that aren't canonical AND aren't known DSS extended types
-    const extraEmpirical = empiricalRegimes.filter(r => 
-      !canonicalArray.includes(r) && !dssExtendedRegimes.has(r)
+    // Extra = regimes that aren't in the canonical set
+    const extraEmpirical = empiricalRegimes.filter(r =>
+      !canonicalArray.includes(r)
     );
     
     const observedCanonical = canonicalArray.length - missingCanonical.length;
@@ -763,8 +756,12 @@ export class TelemetryAggregatorService {
    * Directive 11.1A: Update current market regime
    * Call this when market conditions change
    */
-  updateMarketRegime(metrics: DSSMetrics): MarketRegime {
-    this.currentRegime = this.dss.determineRegime(metrics);
+  /**
+   * HF9: Update current market regime (DSS removed — accepts canonical regime string directly)
+   * Note: This method was never called at runtime. Kept for interface compatibility.
+   */
+  updateMarketRegime(regime: string): string {
+    this.currentRegime = regime;
     console.log(`[11.1A][Telemetry] Market regime updated: ${this.currentRegime}`);
     return this.currentRegime;
   }
@@ -772,7 +769,7 @@ export class TelemetryAggregatorService {
   /**
    * Directive 11.1A: Get current market regime
    */
-  getCurrentMarketRegime(): MarketRegime {
+  getCurrentMarketRegime(): string {
     return this.currentRegime;
   }
 

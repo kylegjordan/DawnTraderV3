@@ -14,7 +14,7 @@
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-import type { MarketRegime } from '../services/dynamic-strategy-selector.js';
+import type { MarketRegime } from '../services/market-indicators.js';
 import * as fs from 'fs';
 import * as path from 'path';
 

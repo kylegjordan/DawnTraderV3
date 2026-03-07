@@ -99,9 +99,17 @@ export interface VirtualTrade {
   strategy: string;
   regime: string;
   pool: 'ideal' | 'rotational';
-  
+
+  // Phase 14: Context dimensions persisted at trade close (from trade OPEN snapshot)
+  globalRegime?: string;
+  pairFriction?: number;
+  globalFriction?: number;
+  pairDirectionalBias?: string;
+  globalDirectionalBias?: string;
+  filterTier?: 'standard' | 'relaxed';  // HF9: IMF filter tier for ML segmentation
+
   // Metadata
-  source: 'simulation' | 'live';
+  source: 'simulation' | 'live' | 'vts';
   schemaVersion: '1.6.7';
 }
 
@@ -691,6 +699,12 @@ export class VTSService extends EventEmitter {
     decayPenalty: number;
     frictionCost: number;
     pool: 'ideal' | 'rotational';
+    globalRegime?: string;
+    pairFriction?: number;
+    globalFriction?: number;
+    pairDirectionalBias?: string;
+    globalDirectionalBias?: string;
+    filterTier?: 'standard' | 'relaxed';
   }): Promise<{ persisted: boolean; mlTriggered: boolean }> {
     // Compute expected edge at entry time (predicted profit based on take profit distance)
     const tpDistance = (tradeData.takeProfit - tradeData.entryPrice) / tradeData.entryPrice;
@@ -755,6 +769,13 @@ export class VTSService extends EventEmitter {
       strategy: tradeData.strategy,
       regime: tradeData.regime,
       pool: tradeData.pool,
+      // HF9: Context dimensions from trade OPEN snapshot
+      globalRegime: tradeData.globalRegime,
+      pairFriction: tradeData.pairFriction,
+      globalFriction: tradeData.globalFriction,
+      pairDirectionalBias: tradeData.pairDirectionalBias,
+      globalDirectionalBias: tradeData.globalDirectionalBias,
+      filterTier: tradeData.filterTier,
       source: 'vts', // HF6: Fix source tag for Phase 14 trade visibility
       schemaVersion: '1.6.7'
     };

@@ -1425,4 +1425,42 @@ router.get('/passive-decisions', requireAuth, async (req: Request, res: Response
   }
 });
 
+/**
+ * HF9 Item D: VTS IMF Filter Status
+ * Returns active vs VTS thresholds and pair counts for Screeners tab UI panel
+ */
+router.get('/imf-status', authMiddleware, async (_req: Request, res: Response) => {
+  try {
+    const { SYSTEM_GUARDS, VTS_IMF_THRESHOLDS } = await import('../config/system-guards.js');
+    const { fx5Scanner } = await import('../services/fx5-scanner.js');
+
+    const scanBatch = fx5Scanner.getCurrentScanBatch('paper');
+    const standardCount = scanBatch.filter(p => p.filterTier === 'standard' || !p.filterTier).length;
+    const relaxedCount = scanBatch.filter(p => p.filterTier === 'relaxed').length;
+    const totalCount = scanBatch.length;
+
+    res.json({
+      activeTrading: {
+        LQ_MIN: SYSTEM_GUARDS.MIN_LIQUIDITY_SCORE,
+        VN_MAX: SYSTEM_GUARDS.MAX_VOL_NOISE,
+        CORR_MAX: SYSTEM_GUARDS.CORRELATION_THRESHOLD,
+      },
+      vtsLearning: {
+        LQ_MIN: VTS_IMF_THRESHOLDS.LQ_MIN,
+        VN_MAX: VTS_IMF_THRESHOLDS.VN_MAX,
+        CORR_MAX: VTS_IMF_THRESHOLDS.CORR_MAX,
+      },
+      pairCounts: {
+        standard: standardCount,
+        relaxed: relaxedCount,
+        total: totalCount,
+      },
+      schema: 'vts-imf-status/v1.0'
+    });
+  } catch (error) {
+    console.error('[HF9][API] VTS IMF status failed:', error);
+    res.status(500).json({ error: 'Failed to get VTS IMF status' });
+  }
+});
+
 export default router;

@@ -73,7 +73,7 @@ import type { VTSCycleMetrics } from '../types/virtual-trade.interface';
 import { scanPatterns } from './pattern-recognizer.js';
 import type { PatternType } from '../types';
 import { normalizeToInternalSymbol, getSymbolMappingDetails } from '../markets/kraken-symbol-resolver.js';
-import { applyGovernance, type GovernanceDecision } from '../core/governance/governance-engine.js';
+// HF9: applyGovernance removed (dead import — governance gate moved to SQE)
 import { isStrategyEligible, logGovernanceBlock, getPreScoreExclusionStats } from '../core/governance/strategy-eligibility.js';
 import { getStrategyDependency, type RegimeStability } from '../config/strategy-governance.js';
 import { computeGlobalStability } from '../core/governance/regime-stability.js';
@@ -182,6 +182,7 @@ interface Phase10TradeRecord {
   globalFriction?: number;
   pairDirectionalBias?: string;
   globalDirectionalBias?: string;
+  filterTier?: 'standard' | 'relaxed';  // HF9: IMF filter tier
 }
 
 /**
@@ -429,7 +430,8 @@ async function generatePhase10Signal(
   priceData: CachedPrice, 
   ohlcData: OHLCData[],
   pool: 'ideal' | 'rotational',
-  strategyOverride?: StrategyDefinition
+  strategyOverride?: StrategyDefinition,
+  filterTier?: 'standard' | 'relaxed'
 ): Promise<{ signal: VirtualSignal; tradeRecord: Phase10TradeRecord } | null> {
   // Phase 13: MCE computes regime (uses cache from main loop call)
   const mce = getMarketContextEngine();
@@ -799,6 +801,7 @@ async function generatePhase10Signal(
     globalFriction: getGlobalFriction(), // HF6: Read cached global friction from market-indicators
     pairDirectionalBias: mceContext.directionalBias?.category ?? 'NEUTRAL',
     globalDirectionalBias: getLastGlobalDBSCategory(), // HF6: Read cached global DBS from market-indicators
+    filterTier,  // HF9: IMF filter tier from FX5 scanner
   };
   
   openVirtualTrades.set(tradeId, openTrade);
@@ -870,7 +873,7 @@ async function generatePhase10Signal(
  * Directive 11.4C.1: Get pairs directly from FX5 Scanner (not telemetry)
  * VTS is the sole source of telemetry writes - it gets raw pairs from FX5 and generates signal data
  */
-async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal' | 'rotational' }>> {
+async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal' | 'rotational'; filterTier?: 'standard' | 'relaxed' }>> {
   try {
     // Directive 11.4C.1: Get pairs directly from FX5 scanner's current batch
     const scanBatch = fx5Scanner.getCurrentScanBatch('paper');
@@ -882,7 +885,7 @@ async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal
       console.log(`[11.4C.1][VTS] Using FX5 scan batch: ${scanBatch.length} pairs (${benchmarkCount} benchmarks excluded, ${tradablePairs.length} tradable)`);
       
       // Directive 11.4H.1 Task 1: Normalize symbols at ingress with fallback and tier logging
-      const validPairs: Array<{ symbol: string; pool: 'ideal' | 'rotational' }> = [];
+      const validPairs: Array<{ symbol: string; pool: 'ideal' | 'rotational'; filterTier?: 'standard' | 'relaxed' }> = [];
       for (const p of tradablePairs) {
         const rawSymbol = p.symbol;
         const canonicalSymbol = normalizeToInternalSymbol(rawSymbol);
@@ -902,7 +905,7 @@ async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal
           console.warn(`[11.4H.1][Mapping Tier 3] ${rawSymbol} → ${canonicalSymbol}`);
         }
         
-        validPairs.push({ symbol: canonicalSymbol, pool: p.pool });
+        validPairs.push({ symbol: canonicalSymbol, pool: p.pool, filterTier: p.filterTier });
       }
       return validPairs;
     }
@@ -1103,7 +1106,14 @@ async function resolveOpenVirtualTrades(): Promise<{
         regimeWeight: trade.regimeWeight,
         decayPenalty: trade.decayPenalty,
         frictionCost: trade.frictionCost,
-        pool: trade.pool
+        pool: trade.pool,
+        // HF9 Item A: Persist context dimensions from trade OPEN snapshot
+        globalRegime: trade.globalRegime,
+        pairFriction: trade.pairFriction,
+        globalFriction: trade.globalFriction,
+        pairDirectionalBias: trade.pairDirectionalBias,
+        globalDirectionalBias: trade.globalDirectionalBias,
+        filterTier: trade.filterTier,
       });
       if (result.persisted) persisted++;
       if (result.mlTriggered) mlQueued++;
@@ -1306,7 +1316,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       vtsService.updateMarketPrice(pair.symbol, priceData.price);
       
       for (const stratDef of regimeStrategies) {
-        const result = await generatePhase10Signal(pair.symbol, priceData, ohlcData, pair.pool, stratDef);
+        const result = await generatePhase10Signal(pair.symbol, priceData, ohlcData, pair.pool, stratDef, pair.filterTier);
         if (!result) continue;
         
         const { signal, tradeRecord } = result;

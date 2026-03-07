@@ -124,7 +124,6 @@
             "vts-runner.ts",
             "vts-service.ts",
             "fx5-scanner.ts",
-            "dynamic-strategy-selector.ts",
             "signal-orchestrator.ts",
             "telemetry-aggregator.ts",
             "adaptive-scan-manager.ts",
@@ -336,8 +335,7 @@
       "rolling_stats": "server/utils/rolling-stats.ts",
       "macro_state": "server/core/metrics/macro-state.ts",
       "secondary_metrics": "server/core/metrics/secondary-metrics.ts",
-      "strategy_analyzer": "server/core/strategy-analyzer.ts",
-      "dynamic_strategy_selector": "server/services/dynamic-strategy-selector.ts"
+      "strategy_analyzer": "server/core/strategy-analyzer.ts"
     },
     "documentation": {
       "directive_summary": "docs/directive_11_summary.md",

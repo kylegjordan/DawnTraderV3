@@ -22,6 +22,9 @@ import { logSkippedSignal } from '../logging/skipped-signals-logger.js';
 // Phase 14.1 HF8 (B3): Confidence floor imports for centralized mode-based qualification
 import { resolveStrategyMode, getModeOverlay, meetsConfidenceFloor } from '../governance/strategy-modes.js';
 import type { RegimeStability } from '../../config/strategy-governance.js';
+// HF9 Item B: Governance gate imports (migrated from paper-execution-engine)
+import { isStrategyEligible } from '../governance/strategy-eligibility.js';
+import { getStrategyDependency } from '../../config/strategy-governance.js';
 
 /**
  * Directive 11.0B: SQE Thresholds - Default values used when screener config is unavailable
@@ -54,6 +57,7 @@ export interface SQEInput {
 export interface SQEOptions {
   skipDecay?: boolean;
   skipConfidenceFloor?: boolean;  // Phase 14.1 HF8 (B3): VTS cold-start bypass
+  skipGovernanceGate?: boolean;   // HF9 Item B: VTS bypass (VTS has own inline governance)
 }
 
 export interface SQEResult {
@@ -173,6 +177,17 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
       const mode = resolveStrategyMode(input.regimeStability);
       const overlay = getModeOverlay(mode);
       failures.push(`Confidence ${input.confidence.toFixed(2)} < floor ${overlay.confidenceFloor} (mode=${mode})`);
+    }
+  }
+
+  // HF9 Item B: Governance gate (migrated from paper-execution-engine Directive 11.7R-E)
+  // Checks strategy eligibility based on regime stability and dependency level.
+  // VTS signals pass skipGovernanceGate=true (VTS has its own inline governance checks).
+  if (!options.skipGovernanceGate && input.strategy && input.regimeStability) {
+    const dependency = getStrategyDependency(input.strategy);
+    if (!isStrategyEligible(input.strategy, input.regimeStability, dependency)) {
+      failures.push(`Governance: ${input.strategy} (${dependency} dep) blocked in ${input.regimeStability}`);
+      console.log(`[11.7R-E][SQE] GOVERNANCE BLOCK: ${canonicalSymbol} ${input.strategy} (${dependency} dep) in ${input.regimeStability}`);
     }
   }
 

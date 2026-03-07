@@ -45,7 +45,7 @@ import {
   CORE_METRIC_THRESHOLDS
 } from '../utils/analysis-utils.js';
 import { getTelemetryAggregator } from './telemetry-aggregator.js';
-import { SCANNER_PARAMS } from '../config/system-guards.js';
+import { SCANNER_PARAMS, VTS_IMF_THRESHOLDS } from '../config/system-guards.js';
 import { normalizeToInternalSymbol, getSymbolMappingDetails } from '../markets/kraken-symbol-resolver.js';
 import { setCostMetrics, getCostMetrics } from '../core/cache/cost-cache.js';
 
@@ -159,6 +159,9 @@ export interface ScanBatchPair {
   frictionScore?: number; // Directive 11.4H.2: Friction score for UI
   frictionLabel?: string; // Directive 11.4H.2: Friction label for UI
   frictionColor?: 'green' | 'yellow' | 'orange' | 'red'; // Directive 11.4H.2: Friction color
+  lqScore?: number;         // HF9: Log-Liquidity score for IMF diagnostics
+  volNoiseScore?: number;   // HF9: VolNoise score for IMF diagnostics
+  filterTier?: 'standard' | 'relaxed'; // HF9: IMF filter tier (standard=strict, relaxed=VTS-only)
 }
 
 export class Fx5ScannerService {
@@ -686,10 +689,27 @@ export class Fx5ScannerService {
         volumeStats
       }).catch(() => {});
       
+      // HF9 Item D: VTS gets relaxed-filter pairs for broader ML training data
+      // Active trading pool continues using strict metricFilteredSurvivors (no change)
+      // VTS batch uses relaxed thresholds — pairs that only pass relaxed are tagged filterTier='relaxed'
+      const vtsFilteredSurvivors = classifiedSurvivors.filter(s => {
+        if (s.passesMetricFilter || s.bypassVolatilityReject || s.bypassBoringReject) return true;
+        // Apply VTS relaxed thresholds
+        return s.LQ >= VTS_IMF_THRESHOLDS.LQ_MIN && s.VolNoise <= VTS_IMF_THRESHOLDS.VN_MAX;
+      }).map(s => ({
+        ...s,
+        filterTier: (s.passesMetricFilter ? 'standard' : 'relaxed') as 'standard' | 'relaxed'
+      }));
+
+      const relaxedOnlyCount = vtsFilteredSurvivors.filter(s => s.filterTier === 'relaxed').length;
+      if (relaxedOnlyCount > 0) {
+        console.log(`[HF9][IMF] VTS relaxed filter added ${relaxedOnlyCount} pairs (LQ>=${VTS_IMF_THRESHOLDS.LQ_MIN}, VN<=${VTS_IMF_THRESHOLDS.VN_MAX})`);
+      }
+
       // Directive 11.4C.1: FX5 does NOT write to telemetry (M70)
       // VTS is the sole source of telemetry writes - FX5 outputs raw data only
       // VTS gets pairs directly from FX5's current scan batch via getCurrentScanBatch()
-      this.updateCurrentBatch(mode, metricFilteredSurvivors);
+      this.updateCurrentBatch(mode, vtsFilteredSurvivors);
       
       // REB 2.8.4: Generate unique scan cycle ID (survives server restarts)
       const scanCycleId = `cycle_${mode}_${nanoid(12)}`;
@@ -864,6 +884,9 @@ export class Fx5ScannerService {
     liquidity?: number;
     volatility?: number;
     isBenchmark?: boolean;
+    LQ?: number;          // HF9: Log-Liquidity score
+    VolNoise?: number;    // HF9: VolNoise score
+    filterTier?: 'standard' | 'relaxed';  // HF9: IMF filter tier
   }>): void {
     const batch: ScanBatchPair[] = survivors.map(s => ({
       symbol: s.symbol,
@@ -875,10 +898,14 @@ export class Fx5ScannerService {
       liquidity: s.liquidity,
       volatility: s.volatility,
       isBenchmark: s.isBenchmark, // Directive 11.6F: Propagate benchmark flag for VTS filtering
+      lqScore: s.LQ,             // HF9: Propagate LQ for IMF diagnostics
+      volNoiseScore: s.VolNoise,  // HF9: Propagate VN for IMF diagnostics
+      filterTier: s.filterTier,   // HF9: Propagate filter tier for ML segmentation
     }));
     this.currentBatch.set(mode, batch);
     const benchmarkCount = batch.filter(b => b.isBenchmark).length;
-    console.log(`[FX5][11.4C.1] Updated batch for ${mode}: ${batch.length} pairs (${benchmarkCount} benchmarks, raw data only, no telemetry writes)`);
+    const relaxedCount = batch.filter(b => b.filterTier === 'relaxed').length;
+    console.log(`[FX5][11.4C.1] Updated batch for ${mode}: ${batch.length} pairs (${benchmarkCount} benchmarks, ${relaxedCount} relaxed-filter, raw data only)`);
   }
 }
 

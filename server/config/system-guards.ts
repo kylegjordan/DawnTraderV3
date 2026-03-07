@@ -9,7 +9,7 @@
  */
 
 export const SYSTEM_GUARDS = {
-  VERSION: "Phase10_DSS",
+  VERSION: "Phase14_HF9",
   
   MIN_LIQUIDITY_SCORE: 40,
   MAX_VOL_NOISE: 0.6,
@@ -57,6 +57,23 @@ export const IMF_THRESHOLDS = {
 } as const;
 
 export type IMFThresholdsType = typeof IMF_THRESHOLDS;
+
+/**
+ * HF9 Item D: VTS-specific IMF thresholds (relaxed for ML training data collection)
+ *
+ * These looser thresholds allow more pairs into the VTS pipeline while active
+ * trading continues using strict SYSTEM_GUARDS thresholds. Trades from pairs
+ * that only pass relaxed filters are tagged with filterTier='relaxed' so ML
+ * can analyze their performance separately.
+ *
+ * Active Trading: LQ >= 40, VN <= 0.60, rho <= 0.75 (SYSTEM_GUARDS)
+ * VTS Learning:   LQ >= 25, VN <= 0.80, rho <= 0.95 (VTS_IMF_THRESHOLDS)
+ */
+export const VTS_IMF_THRESHOLDS = {
+  LQ_MIN: 25,
+  VN_MAX: 0.80,
+  CORR_MAX: 0.95,
+} as const;
 
 /**
  * Directive 10.4 — Hybrid Integration Parameters

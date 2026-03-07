@@ -28,6 +28,61 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+
+/**
+ * HF9 Item D: VTS IMF Filters Panel
+ * Shows relaxed IMF thresholds used for VTS ML training data collection
+ */
+function VtsImfPanel() {
+  const { data: imfStatus } = useQuery<{
+    activeTrading: { LQ_MIN: number; VN_MAX: number; CORR_MAX: number };
+    vtsLearning: { LQ_MIN: number; VN_MAX: number; CORR_MAX: number };
+    pairCounts: { standard: number; relaxed: number; total: number };
+  }>({
+    queryKey: ['/api/vts/imf-status'],
+    refetchInterval: 30000,
+  });
+
+  if (!imfStatus) return null;
+
+  return (
+    <div className="px-6 py-4 border-b bg-gradient-to-r from-cyan-50 to-teal-50 dark:from-cyan-900/10 dark:to-teal-900/10">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
+        <span className="font-semibold text-sm text-cyan-700 dark:text-cyan-300">VTS Learning Filters (Relaxed)</span>
+        <span className="text-xs text-muted-foreground ml-auto">
+          {imfStatus.pairCounts.standard} standard + {imfStatus.pairCounts.relaxed} relaxed = {imfStatus.pairCounts.total} pairs
+        </span>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="p-3 border rounded-lg bg-white dark:bg-gray-900/50">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-medium text-muted-foreground">Liquidity Guard</span>
+            <span className="text-xs bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 px-1.5 py-0.5 rounded">Relaxed</span>
+          </div>
+          <div className="text-xl font-bold text-cyan-600 dark:text-cyan-400">LQ &ge; {imfStatus.vtsLearning.LQ_MIN}</div>
+          <p className="text-xs text-muted-foreground mt-0.5">vs Active: LQ &ge; {imfStatus.activeTrading.LQ_MIN}</p>
+        </div>
+        <div className="p-3 border rounded-lg bg-white dark:bg-gray-900/50">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-medium text-muted-foreground">Noise Guard</span>
+            <span className="text-xs bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 px-1.5 py-0.5 rounded">Relaxed</span>
+          </div>
+          <div className="text-xl font-bold text-cyan-600 dark:text-cyan-400">VN &le; {imfStatus.vtsLearning.VN_MAX}</div>
+          <p className="text-xs text-muted-foreground mt-0.5">vs Active: VN &le; {imfStatus.activeTrading.VN_MAX}</p>
+        </div>
+        <div className="p-3 border rounded-lg bg-white dark:bg-gray-900/50">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-medium text-muted-foreground">Correlation Guard</span>
+            <span className="text-xs bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 px-1.5 py-0.5 rounded">Relaxed</span>
+          </div>
+          <div className="text-xl font-bold text-cyan-600 dark:text-cyan-400">&rho; &le; {imfStatus.vtsLearning.CORR_MAX}</div>
+          <p className="text-xs text-muted-foreground mt-0.5">vs Active: &rho; &le; {imfStatus.activeTrading.CORR_MAX}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
 import { Button } from "@/components/ui/button";
 import { ModeIndicator } from "./mode-indicator";
 
@@ -520,7 +575,10 @@ export function FiltersWithOverride() {
           </div>
         </div>
       </div>
-      
+
+      {/* HF9 Item D: VTS IMF Filters Panel — Relaxed thresholds for ML training data */}
+      <VtsImfPanel />
+
       <CardContent className="mt-6">
         <div className="space-y-6">
           {Object.entries(filtersByCategory).map(([category, filters]) => {
