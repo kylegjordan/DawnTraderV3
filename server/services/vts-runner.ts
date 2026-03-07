@@ -41,6 +41,8 @@ import { activeFilterPool } from './active-filter-pool.js';
 import { getTelemetryAggregator } from './telemetry-aggregator.js';
 import { fx5Scanner, type ScanBatchPair } from './fx5-scanner.js';
 import { KrakenService } from './kraken.js';
+// Batch 18: OHLC cache (5-min TTL) eliminates redundant per-symbol OHLC fetches
+import { ohlcCache } from './ohlc-cache.js';
 import { computeStrategyWeights, getWeightSync } from '../utils/strategyWeights.js';
 import { computeExposureBias, getExposureMultiplierSync } from '../utils/strategyBias.js';
 import { getCachedCostMetrics, computeNetGeometry } from '../core/math/cost-model.js';
@@ -294,8 +296,9 @@ let btcOhlcCache: any[] = [];
 
 async function fetchOHLCForPair(symbol: string): Promise<OHLCData[]> {
   try {
-    // Phase 14.1 HF8 (A1+A2): 60-min candles (matches signal orchestrator) + 100 candle lookback (unblocks adaptive_flow/volatility_edge)
-    const { ohlc } = await vtsKrakenService.getOHLCData(symbol, 60, undefined, { maxCandlesTotal: 100 });
+    // Phase 14.1 HF8 (A1+A2): 60-min candles (matches signal orchestrator) + 100 candle lookback
+    // Batch 18: Use OHLC cache (5-min TTL) — 60-min candles only change once/hour
+    const { ohlc } = await ohlcCache.getOHLCData(symbol, 60);
     
     if (!ohlc || ohlc.length === 0) {
       return [];
@@ -1265,7 +1268,8 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   // Phase 14.1 HF8 (A3): Fetch BTC OHLC once per cycle for defensive_hedge correlation
   // BTC is a separate pair with its own rate limit counter — negligible API impact
   try {
-    const { ohlc: btcOhlc } = await vtsKrakenService.getOHLCData('XXBTZUSD', 60, undefined, { maxCandlesTotal: 100 });
+    // Batch 18: Use OHLC cache for BTC too — fetched at most once per 5 minutes
+    const { ohlc: btcOhlc } = await ohlcCache.getOHLCData('XXBTZUSD', 60);
     if (btcOhlc && btcOhlc.length > 0) {
       btcOhlcCache = btcOhlc.map((candle: any) => ({
         open: parseFloat(candle.open || candle[1]),

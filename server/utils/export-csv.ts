@@ -189,7 +189,8 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
             pairFriction: trade.pairFriction ?? null,
             globalFriction: trade.globalFriction ?? null,
             pairDirectionalBias: trade.pairDirectionalBias || null,
-            globalDirectionalBias: trade.globalDirectionalBias || null
+            globalDirectionalBias: trade.globalDirectionalBias || null,
+            filterTier: trade.filterTier || null
           });
         }
       } catch (err) {

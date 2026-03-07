@@ -206,7 +206,7 @@ export const SCANNER_PARAMS = {
     HISTORY_WINDOW_MS: 86400000,    // 24-hour history for telemetry
     MIN_SAMPLES: 3,                 // Minimum samples for reliable ranking
   },
-  BATCH_SIZE: 100,                  // Total pairs per scan batch
+  BATCH_SIZE: 300,                  // Total pairs per scan batch (Batch 18: increased from 100)
 } as const;
 
 export type ScannerParamsType = typeof SCANNER_PARAMS;

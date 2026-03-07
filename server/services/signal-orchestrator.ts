@@ -56,6 +56,10 @@ import { getSmoothedPrice, getKalmanFilter } from '../utils/adaptive-kalman.js';
 import { calculateEfficiencyRatio, calculateVolNoise, calculateTrendSlope, calculateDirectionalIntegrity } from '../utils/analysis-utils.js';
 // HF9: DSS import removed — DSS deleted (superseded by MCE regime filtering + detect functions)
 import { SYSTEM_GUARDS } from '../config/system-guards.js';
+// Batch 18: OHLC cache (5-min TTL) eliminates redundant per-symbol OHLC fetches
+import { ohlcCache } from './ohlc-cache.js';
+// Batch 18: Use priceCache for ticker data instead of per-symbol getTicker calls
+import { priceCache } from './price-cache.js';
 // Directive 12.3.1: Canonical regime calculator for pair-level regime
 import { calculatePairRegime } from '../core/metrics/market-regime.js';
 import type { OHLCData } from '../types/market-regime.types';
@@ -800,19 +804,22 @@ export class SignalOrchestrator {
     const signals: SizedStrategySignal[] = [];
 
     try {
-      const ohlcResponse = await this.kraken.getOHLCData(symbol, 60);
+      // Batch 18: Use OHLC cache (5-min TTL) — 60-min candles only change once/hour
+      const ohlcResponse = await ohlcCache.getOHLCData(symbol, 60);
       const ohlcData = ohlcResponse.ohlc;
       
       if (!ohlcData || ohlcData.length < 20) {
         return signals;
       }
 
-      const ticker = await this.kraken.getTicker(symbol);
-      const rawPrice = parseFloat(ticker[symbol]?.c[0] || '0');
-      const currentVolume = parseFloat(ticker[symbol]?.v[1] || '0');
-      
+      // Batch 18: Use priceCache instead of per-symbol getTicker — these symbols are already
+      // in the fx5Snapshot bucket (refreshed every 30s). Eliminates ~N redundant API calls/cycle.
+      const cachedPrice = priceCache.getCachedPrice(symbol);
+      const rawPrice = cachedPrice?.price || 0;
+      const currentVolume = cachedPrice?.volume24h || 0;
+
       if (!rawPrice || rawPrice === 0) {
-        console.log(`[37.A][SIGNAL] Invalid price for ${symbol}`);
+        console.log(`[37.A][SIGNAL] Invalid price for ${symbol} (not in priceCache)`);
         return signals;
       }
 
