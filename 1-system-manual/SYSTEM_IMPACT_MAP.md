@@ -229,15 +229,13 @@
 - **Blast Radius**: **HIGH** — regime determines strategy selection
 - **Status**: **ACTIVE** — sole pair-level regime authority for both VTS and active trading (~~BUG-006~~ RESOLVED, Batch 13). DX thresholds recalibrated for crypto in HF7 (`64014bd2`).
 
-### 5.2 DSS — REWIRED (Directive 12.3.1)
-- **File**: `server/services/dynamic-strategy-selector.ts` (~270 lines, rewritten)
-- **What**: ~~Legacy 6-regime / 9-quant-only classifier.~~ Canonical regime classifier via `calculatePairRegime()`. 5 regimes, 17 strategies. EXTREME_NOISE pre-filter preserved (volNoise > 0.6).
-- **Upstream**: OHLC price data (via Signal Orchestrator), analysis-utils (volNoise for EXTREME_NOISE veto)
-- **Downstream**: Signal Orchestrator (ACTIVE trading path — canonical regime + strategy routing)
-- **Shared State**: `CANONICAL_REGIME_STRATEGY_MAP` (17-strategy canonical map)
-- **Execution**: Synchronous — called per signal
-- **Blast Radius**: **HIGH** — regime determines strategy selection (now using canonical model)
-- **Status**: **ACTIVE** — rewired from legacy to canonical (~~BUG-006~~ RESOLVED, Batch 13, commit `4d8ef060`). Signal orchestrator now calls MCE instead of DSS directly for regime (Batch 14).
+### ~~5.2 DSS~~ — **DELETED** (Batch 17, HF9 `f9fa56c6`)
+- **File**: ~~`server/services/dynamic-strategy-selector.ts`~~ **FILE DELETED**
+- **What**: ~~Legacy classifier.~~ Was rewired to canonical map in Batch 13, then **fully deleted** in Batch 17 (HF9). Superseded by MCE regime filtering + StrategyEngine detect functions.
+- ~~**Upstream**: OHLC price data~~
+- ~~**Downstream**: Signal Orchestrator~~
+- **Blast Radius**: **ZERO** — completely removed. Signal orchestrator uses inline NetEV > 0 filter. All DSS imports purged from signal-orchestrator, telemetry-aggregator, market-events.
+- **Status**: **DELETED** — ~~BUG-006~~ RESOLVED (Batch 13 rewire → Batch 17 deletion)
 
 ### 5.2.5 Market Context Engine (MCE) — NEW (Phase 13, Batch 14)
 - **Files**: `server/services/market-context-engine.ts` (~280 lines), `server/types/market-context.ts` (~80 lines)

@@ -96,13 +96,13 @@ Quick reference: which components are authoritative, which are contaminated, and
 |-----------|--------|---------|
 | **quality_index.ts (NGC)** | ~~LEGACY~~ **REPLACED** | ~~Confidence carrier throughout pipeline. Must be replaced, not extended.~~ NGC replaced with deterministic confidence formula (Directive 12.3.3, Batch 13). Function signatures preserved for backward compatibility. Full file removal deferred to MCE. |
 | **SYSTEM_GUARDS friction** | ~~LEGACY~~ **RESOLVED** | ~~Flat 0.5% fee — bypasses real cost model.~~ Directive 12.1.2: All runtime friction now uses `computeTotalRoundTripCost()`. ~~Deprecated functions remain for dead code purge (Wave 4).~~ Deprecated functions **REMOVED** (Directive 12.2.5, Batch 11). |
-| **DSS volNoise/trendSlope classifier** | ~~LEGACY~~ **REPLACED** | ~~6-regime / 9-quant-only. Must be replaced with canonical map.~~ DSS rewired to `calculatePairRegime()` with canonical 5-regime / 17-strategy map (Directive 12.3.1, Batch 13). EXTREME_NOISE preserved as pre-filter. |
+| ~~**DSS volNoise/trendSlope classifier**~~ | ~~LEGACY~~ **DELETED** | ~~6-regime / 9-quant-only. Must be replaced with canonical map.~~ DSS rewired to canonical map (Batch 13), then **fully deleted** (Batch 17, HF9 `f9fa56c6`). Superseded by MCE regime filtering + StrategyEngine detect functions. Signal orchestrator NetEV > 0 filter is now inline. |
 | ~~MCP/ARE ecosystem~~ | ~~LEGACY~~ **REMOVED** | Entire L12-L20 cluster deleted (Batch 14, Phase 13). 17 services + 9 routes + 2 utilities. MCE installed as replacement. |
 | ~~NLAI system~~ | ~~LEGACY~~ **REMOVED** | Directive 12.2.7: All 5 NLAI files deleted, 6 consumer files cleaned. Commit `5d5c2051`. |
 | **Goal Alignment system** | LEGACY (PARTIALLY REMOVED) | Phase 9.0 alignment verification system **REMOVED** (Directive 12.2.6, Batch 11). Phase 4 Goal Alignment in pre-execution-validator.ts and trading-engine.ts **REMAINS** (RISK-028, BUG-012). |
 | **Walter/Bob/Cortex** | LEGACY (Kyle confirmed) | ~~~96~~ ~70 files remaining (Walter fully removed in Batches 5+6). Bob+Cortex remain. Remove in Wave 3 Sub-Batch C. |
 | **RiskManager class** | DEPRECATED | Replaced by `checkGuardrailRisk()`. ~~12 import locations still referencing it.~~ Comment/stub cleanup completed (Directive 12.1.5). |
-| **VTS signal generation** | CONTAMINATED | Uses `simulateHybridScore()` / `simulatePredictiveConfidence()` — generic random noise, not strategy-specific. BUG-001 (CRITICAL). |
+| ~~**VTS signal generation**~~ | ~~CONTAMINATED~~ **RESOLVED** | ~~Uses `simulateHybridScore()` / `simulatePredictiveConfidence()` — generic random noise, not strategy-specific.~~ BUG-001 RESOLVED (Batch 15-17). VTS now uses real StrategyEngine detect functions, real scoring, real governance. DSS deleted. IMF filters relaxed for broader ML training data (HF9). |
 
 ### Development Authority
 | Component | Status | Notes |
@@ -134,11 +134,11 @@ Legacy systems are not isolated files — they form interconnected clusters that
 - **Removal**: ~~Wave 3~~ Walter DONE. Wave 3 Bob+Cortex remaining. Waves 3.1 (DONE — absorbed into Batch 6), 4.5 pending. Phase 12.2 — pre-MCE cleanup.
 - **Risk level**: MODERATE — Bob+Cortex remain, mostly disconnected from trading pipeline
 
-### Cluster 4: DSS Legacy Regime Engine — **REPLACED** (Directive 12.3.1)
-- **Core files**: `dynamic-strategy-selector.ts` (~270 lines, rewritten)
-- **Contamination**: ~~Active trading path routes through legacy 6-regime / 9-quant map~~ **RESOLVED** — DSS now calls `calculatePairRegime()` and uses `CANONICAL_REGIME_STRATEGY_MAP` with 5 regimes and 17 strategies.
-- **Removal**: ~~Phase 12.3.1~~ **COMPLETE** — DSS rewired (Batch 13, commit `4d8ef060`)
-- **Risk level**: ~~HIGH~~ **LOW** — canonical regime model active
+### ~~Cluster 4~~: DSS Legacy Regime Engine — **DELETED** (Batch 17, HF9)
+- **Core files**: ~~`dynamic-strategy-selector.ts` (~270 lines)~~ **FILE DELETED** (Batch 17, `f9fa56c6`). `dss.test.ts` also deleted.
+- **Contamination**: **FULLY RESOLVED** — DSS rewired to canonical map (Batch 13), then deleted entirely (Batch 17). MCE provides regime classification. StrategyEngine detect functions provide strategy selection. Signal orchestrator uses inline NetEV > 0 filter. All DSS imports removed from signal-orchestrator, telemetry-aggregator, market-events. Stale regime names fixed.
+- **Removal**: **COMPLETE** — DSS file deleted, all references purged (Batch 17, `f9fa56c6`)
+- **Risk level**: **ZERO** — completely removed
 
 ### Cluster 5: ~~L-Series Systems~~ — **SERVICE FILES REMOVED** (Phase 13, Batch 14)
 - **Core files**: ~~~13 L-Series modules + ~52 route endpoints~~ ALL service and route files DELETED (Batch 14). ~57 database tables + ~40 enums remain in PostgreSQL (no schema migration to remove them yet).
@@ -748,6 +748,7 @@ SQE is the final signal gatekeeper before signals enter the RTB queue. It evalua
 | RegimeWeight | ≥ 0.30 | Computed or backfilled |
 | ROI Gate | ≥ dynamic threshold | Regime + PredictiveConfidence |
 | Confidence Floor | Mode-dependent | NORMAL=0.60, DEFENSIVE=0.70, SURVIVAL=0.80 (Directive 11.7S). Requires `regimeStability` in input. VTS signals bypass via `skipConfidenceFloor` option (cold-start). Added HF8. |
+| Governance Gate (11.7R-E) | Strategy-dependent | Checks `isStrategyEligible()` based on `regimeStability` + `getStrategyDependency()`. HIGH-dependency strategies blocked in UNSTABLE regime. Requires `strategy` + `regimeStability` in input. VTS bypass via `skipGovernanceGate` option (VTS has own inline governance). Migrated from paper-execution-engine in HF9. |
 
 **All legacy metrics purged**: NGC, CWQI, ProfitRate, and Risk are no longer gating factors. The interface still carries `ngc` as a field name (it's the confidence carrier), but it is NOT independently gated.
 
@@ -1196,17 +1197,15 @@ This means the learning system has **architectural coupling to the scoring syste
 
 # Chapter 2: Strategy Deep Dives
 
-## ⚠️ CRITICAL: Current State vs Intended State
+## Current State (Post-HF9)
 
-**The DSS is currently broken.** It imports `SYSTEM_GUARDS.STRATEGY_MAP` — a legacy 6-regime / 9-quant-only map that does not include pattern or hybrid strategies. This means:
+**The DSS has been fully deleted** (Batch 17, HF9 `f9fa56c6`). Strategy selection is now handled by:
+1. **MCE** (`computeContext()`) — provides canonical 5-regime classification per pair
+2. **`CANONICAL_REGIME_STRATEGY_MAP`** — maps regimes to allowed strategies (9 quant + 3 pattern + 5 hybrid)
+3. **StrategyEngine detect functions** — evaluate real market conditions per strategy and return entry/stop/target or null
+4. **SQE** — centralized quality gate with FinalScore, RegimeWeight, ROI, confidence floor, and governance gate (11.7R-E)
 
-- Only QUANT signals are generated and routed to trades
-- Pattern strategies and Hybrid strategies are never selected
-- The regime classification uses 6 legacy regimes instead of 5 canonical regimes
-
-**The canonical source of truth** is `server/config/canonical-regime-strategy-map.ts` (Directive 11.7F), which defines 5 regimes and 17 strategies (9 quant + 3 pattern + 5 hybrid). The file exists, is comprehensive, and includes all the infrastructure needed (normalization, context-aware selection, validation) — but the DSS does not import or use it.
-
-This section documents **the intended system** based on the canonical map, with the current (legacy) state clearly flagged where it differs. The transition from legacy to canonical is logged in CHANGES_AND_FIXES.md and LEGACY_DEPRECATION_PLAN.md.
+Pattern/hybrid strategies are structurally unable to fire in VTS (Phase 14.5 needed for parallel pattern scanning path). Quant strategies (mean_reversion, range_trade, breakout, etc.) fire successfully via detect functions.
 
 ---
 
@@ -1216,14 +1215,12 @@ DawnTrader contains **four** independent regime classification systems operating
 
 ### The Four Engines
 
-#### Engine 1: DSS Legacy (Active Trading Path) — DEPRECATED
-- **File**: `server/services/dynamic-strategy-selector.ts` (214 lines)
-- **Input**: `volNoise` + `trendSlope` from analysis-utils (raw thresholds)
-- **Output**: 6 legacy regimes (EXTREME_NOISE, BULL_STABLE, BULL_VOLATILE, BEAR_STABLE, BEAR_VOLATILE, LOW_VOL_CHOP)
-- **Consumers**: Signal Orchestrator → active trades
-- **Strategy Map**: `SYSTEM_GUARDS.STRATEGY_MAP` → 9 quant strategies only
-- **Z-Scores**: Computed via RollingStats(300) but **IGNORED** for classification — raw thresholds used
-- **Status**: LEGACY — must be replaced (BUG-006)
+#### ~~Engine 1~~: DSS Legacy (Active Trading Path) — **DELETED** (Batch 17, HF9)
+- **File**: ~~`server/services/dynamic-strategy-selector.ts`~~ **DELETED** (`f9fa56c6`)
+- ~~**Input**: `volNoise` + `trendSlope` from analysis-utils (raw thresholds)~~
+- ~~**Output**: 6 legacy regimes~~
+- ~~**Consumers**: Signal Orchestrator → active trades~~
+- **Status**: **DELETED** — superseded by MCE regime filtering + StrategyEngine detect functions. ~~BUG-006~~ RESOLVED (Batch 13 rewire + Batch 17 deletion). Signal orchestrator NetEV > 0 filter is now inline (replaced broken DSS.evaluate() call that never executed).
 
 #### Engine 2: calculatePairRegime (VTS / Pair-Level) — CANONICAL CANDIDATE
 - **File**: `server/core/metrics/market-regime.ts`
@@ -5162,7 +5159,7 @@ MAX_HOLD_MS = 24 * 60 * 60 * 1000; // 24-hour max hold time
 
 ### Critical Observations
 
-> **Phase 14.1 HF6-HF8 Resolution**: Observations 1-5 below were the pre-HF6 state (BUG-001). HF6 (`048bbc16`) replaced simulated scoring with real computation. HF8 (`052fb224`) aligned VTS timeframe to 60-min and relaxed strategy parameters. The VTS pipeline now uses **real scoring, real strategy detect functions, real regime classification, and real governance** throughout. BUG-001 is PARTIALLY RESOLVED — remaining items: DSS pre-selector, secondary metrics. Pattern/hybrid strategies still return null (Phase 14.5 gap).
+> **Phase 14.1 HF6-HF9 Resolution**: Observations 1-5 below were the pre-HF6 state (BUG-001). HF6 (`048bbc16`) replaced simulated scoring with real computation. HF8 (`052fb224`) aligned VTS timeframe to 60-min and relaxed strategy parameters. HF9 (`f9fa56c6`) deleted DSS entirely, migrated governance gate to SQE, relaxed VTS IMF filters, fixed closed trades context columns. The VTS pipeline now uses **real scoring, real strategy detect functions, real regime classification, and real governance** throughout. BUG-001 is **RESOLVED** — DSS deleted (superseded by MCE + detect functions), secondary metrics deemed redundant (detect functions already check these conditions internally). Pattern/hybrid strategies still return null (Phase 14.5 gap).
 
 1. ~~**HybridScore is simulated, not computed**~~: **RESOLVED** (HF6) — `computeRealHybridScore()` from `vts-real-score.ts` replaces `simulateHybridScore()`.
 

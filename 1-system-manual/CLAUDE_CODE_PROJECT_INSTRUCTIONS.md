@@ -431,15 +431,16 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 | 14.1 (HF6B) | Fix VTS volume=0 bug + range_trade alias | Batch 15 | `ae431e17` |
 | 14.1 (HF7) | Regime classification recalibration for crypto DX values | Batch 15 | `64014bd2` |
 | 14.1 (HF8) | VTS throughput fixes — 60-min candles, OHLC 100, BTC candles, param relaxation, FinalScore dedup, SQE confidence floor, analytics regime-map, config fix | Batch 16 | `052fb224` |
+| 14.1 (HF9) | Column fix + Governance gate SQE migration + DSS deletion + VTS IMF relaxation | Batch 17 | `f9fa56c6` |
 
 ### In-Progress Directives
 | Directive | Title | Batch | Status |
 |-----------|-------|-------|--------|
-| 14.1 | Strategy-Specific VTS (BUG-001) | Batch 15 (HF1-HF7) + Batch 16 (HF8) | HF8 complete. 2 remaining items for HF9 (DSS pre-selector, secondary metrics). |
+| (none currently in progress) | | | |
 
-> **Last commit**: `052fb224` (Batch 16 — HF8: VTS throughput fixes + remaining items)
-> **Next step**: Complete Phase 14.1 HF9, then Phase 14.2 (Directional Bias & Structural Regime)
-> **Note**: Phase 14.1B (VTS/Orchestrator Timeframe Alignment) ELIMINATED — completed in HF8
+> **Last commit**: `f9fa56c6` (Batch 17 — HF9: Column fix + Gov gate SQE migration + DSS deletion + VTS IMF relaxation)
+> **Next step**: Phase 14.2 (Directional Bias & Structural Regime)
+> **Note**: Phase 14.1 **COMPLETE** (HF9 done, Batch 17). Phase 14.1B ELIMINATED (completed in HF8).
 
 ### Snapshot Log
 | Snapshot | Commit | Description |
@@ -471,9 +472,8 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 ### Pending Directives
 See `directives/DIRECTIVE_INDEX.md` for the full list.
 - 12.1.6 (LSP Error Triage) — PENDING (LOW priority, deferred)
-- 14.1 HF9 (DSS pre-selector + secondary metrics) — remaining Phase 14.1 items
 
-Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation) is COMPLETE. Phase 14.1 is IN PROGRESS (HF8 complete, HF9 remaining). Phase 14.1B ELIMINATED (completed in HF8).
+Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation) is COMPLETE. Phase 14.1 is **COMPLETE** (HF9 done, Batch 17 `f9fa56c6`). Phase 14.1B ELIMINATED (completed in HF8). Next: Phase 14.2 (Directional Bias & Structural Regime).
 
 ### Investigation Notes for Future Batches
 - **12.2.1**: ~~Wave 1 Safe Deletions~~ **COMPLETE** (Batch 8). 2 files deleted (dhma.ts, latti-safety-monitor.tsx). 11 files surgically modified. ~1,254 lines removed. LATTi lazy-loader stub (RISK-044) remains — can be cleaned in a future batch.
