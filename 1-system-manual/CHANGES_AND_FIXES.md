@@ -32,11 +32,11 @@
 ## BUGS
 
 ### BUG-001: VTS Signal Generation Is Generic — **PARTIALLY RESOLVED**
-- **Severity**: ~~CRITICAL~~ **PARTIALLY RESOLVED** (Phase 14.1, Batch 15, HF6 `048bbc16` + HF6B `ae431e17` + HF7 `64014bd2`)
+- **Severity**: ~~CRITICAL~~ **PARTIALLY RESOLVED** (Phase 14.1, Batch 15 HF6-HF7, Batch 16 HF8 `052fb224`)
 - **Location**: `server/services/vts-runner.ts`
-- **Problem**: ~~Generates random regime-adjusted scores instead of real strategy-specific calculations~~ VTS now wired to real strategy detect functions (HF6). Volume=0 bug fixed (HF6B). Regime classification recalibrated for crypto DX values (HF7).
-- **Impact**: VTS now produces real strategy-specific entry/stop/target from StrategyEngine detect functions.
-- **Remaining work**: 5 deferred items (governance gate into SQE, TCL duplicate, DSS pre-selector, secondary metrics, return type fix), plus: increase OHLC fetch 50 to 100 candles, provide BTC candles to VTS, wire analytics tab to /api/regime-map. Pattern/hybrid strategies structurally unable to fire (Phase 14.5 needed).
+- **Problem**: ~~Generates random regime-adjusted scores instead of real strategy-specific calculations~~ VTS now wired to real strategy detect functions (HF6). Volume=0 bug fixed (HF6B). Regime classification recalibrated for crypto DX values (HF7). VTS timeframe aligned to 60-min (matching orchestrator), OHLC increased to 100 candles, BTC candles provided for defensive_hedge, strategy params relaxed, duplicate FinalScore checks removed from paper-execution-engine + RTB, return type fixed, confidence floor centralized to SQE, analytics tab wired to /api/regime-map (HF8).
+- **Impact**: VTS now produces real strategy-specific entry/stop/target from StrategyEngine detect functions. VTS and orchestrator use same 60-min timeframe — ML learning transfers directly. Mean_reversion and range_trade strategies confirmed firing in production (~2 trades/cycle). Phase 14.1B (timeframe alignment) eliminated from roadmap.
+- **Remaining work**: 2 deferred items (DSS pre-selector, secondary metrics programmatic format). Pattern/hybrid strategies structurally unable to fire — returns "No pattern signal" across all pairs (Phase 14.5 needed). `config/vts.json` `pairsPerCycle` field is NOT consumed by vts-runner.ts — pair count comes from FX5 scanner output (typically ~11 pairs after VolNoise/LQ gating).
 - **Phase Found**: Pre-audit (v1.0)
 
 ### ~~BUG-002~~: Active Trading Path Uses Legacy DSS Regime Model — **RESOLVED**

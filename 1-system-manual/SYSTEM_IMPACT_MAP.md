@@ -194,7 +194,7 @@
 
 ### 4.2 Signal Quality Evaluator (SQE)
 - **File**: `server/core/filters/signal_quality_evaluator.ts`
-- **What**: Final signal gatekeeper before RTB. Evaluates FinalScore (≥ 0.35) and RegimeWeight (≥ 0.30) with regime-aware ROI check.
+- **What**: Final signal gatekeeper before RTB. Evaluates FinalScore (≥ 0.35), RegimeWeight (≥ 0.30), regime-aware ROI check, and confidence floor (Phase 14.1 HF8 — Directive 11.7S mode-based floor: NORMAL=0.60, DEFENSIVE=0.70, SURVIVAL=0.80). VTS signals skip confidence floor via `skipConfidenceFloor` option (cold-start bypass). Duplicate FinalScore checks in paper-execution-engine and RTB removed in HF8 — SQE is sole FinalScore authority.
 - **Upstream**: Signal Orchestrator (scored signals)
 - **Downstream**: RTB Service (only passing signals enter queue)
 - **Execution**: Synchronous — per signal
@@ -222,12 +222,12 @@
 
 ### 5.1 calculatePairRegime() — CANONICAL (ACTIVE)
 - **File**: `server/core/metrics/market-regime.ts`
-- **What**: Canonical pair-level regime classification. 5 regimes (BULL_STABLE, BEAR_VOLATILE, LOW_VOL_CHOP, HIGH_VOL_IMPULSE, TRANSITION). Uses volatility, momentum, ADX.
-- **Upstream**: OHLC price data
-- **Downstream**: VTS Runner (heavy use), Diagnostic 11.4G, Signal Orchestrator (via DSS — **WIRED**, Directive 12.3.1)
-- **Execution**: Synchronous — called per pair
+- **What**: Canonical pair-level regime classification. 5 regimes (TREND_FRIENDLY_STABLE, HIGH_VOLATILITY_UNSTABLE, RANGE_BOUND_STABLE, IMPULSE_EXPANSION, STRUCTURAL_TRANSITION). Uses volatility, momentum, DX (raw, not smoothed ADX). DX thresholds recalibrated for crypto in HF7 (25 to 45/50/55/60).
+- **Upstream**: OHLC price data (60-min candles from both VTS and orchestrator — aligned in HF8)
+- **Downstream**: VTS Runner (heavy use via MCE), Signal Orchestrator (via MCE — **WIRED**, Phase 13 Batch 14)
+- **Execution**: Synchronous — called per pair via MCE
 - **Blast Radius**: **HIGH** — regime determines strategy selection
-- **Status**: **ACTIVE** — sole pair-level regime authority for both VTS and active trading (~~BUG-006~~ RESOLVED, Batch 13).
+- **Status**: **ACTIVE** — sole pair-level regime authority for both VTS and active trading (~~BUG-006~~ RESOLVED, Batch 13). DX thresholds recalibrated for crypto in HF7 (`64014bd2`).
 
 ### 5.2 DSS — REWIRED (Directive 12.3.1)
 - **File**: `server/services/dynamic-strategy-selector.ts` (~270 lines, rewritten)
@@ -316,13 +316,13 @@
 ## Layer 7: Learning & Calibration
 
 ### 7.1 VTS Runner
-- **File**: `server/services/vts-runner.ts` (~1,400 lines)
-- **What**: Autonomous virtual trading simulator. 60-second cycles. Evaluates ALL strategies per regime. Uses real market data but simulated scoring inputs.
-- **Upstream**: Price Cache (VTS bucket), calculatePairRegime(), Pattern Recognition, OHLC data
+- **File**: `server/services/vts-runner.ts` (~1,750 lines)
+- **What**: Autonomous virtual trading simulator. 60-second cycles. Evaluates ALL strategies per regime via real StrategyEngine detect functions (HF6). Uses real market data with real scoring pipeline.
+- **Upstream**: Price Cache (VTS bucket), MCE (regime + indicators via `computeContext()`), Pattern Recognition, OHLC data (60-min candles, 100-candle lookback — aligned with orchestrator in HF8), BTC OHLC cache (for defensive_hedge Spearman correlation — HF8)
 - **Downstream**: VTS Service (trade storage), Telemetry Aggregator (M70: only VTS writes telemetry), ML Calibration (trade outcomes)
 - **Execution**: **60-second interval** (passive learning mode)
 - **Blast Radius**: **HIGH** — all learning data flows through VTS
-- **Contamination**: `simulateHybridScore()`, `simulatePredictiveConfidence()`, `simulateDecayPenalty()` — BUG-001 (CRITICAL)
+- **Contamination**: ~~`simulateHybridScore()`, `simulatePredictiveConfidence()`, `simulateDecayPenalty()` — BUG-001 (CRITICAL)~~ **REPLACED** (HF6) with real score computation: `computeRealHybridScore()`, `getPredictiveConfidence()`, `computeRealDecayPenalty()`. Strategy-specific entry/stop/target from StrategyEngine detect functions. BUG-001 PARTIALLY RESOLVED.
 - **Tests**: `vts-modernization.test.ts`, `vts-signal-generation.test.ts`
 
 ### 7.2 VTS Service

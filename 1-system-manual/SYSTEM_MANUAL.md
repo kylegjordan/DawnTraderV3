@@ -740,13 +740,14 @@ Dynamically adjusts metric thresholds based on macro market conditions.
 
 SQE is the final signal gatekeeper before signals enter the RTB queue. It evaluates signals on two primary dimensions plus a regime-aware ROI check.
 
-### Evaluation Criteria (Post-Directive 11.0E)
+### Evaluation Criteria (Post-Directive 11.0E + Phase 14.1 HF8)
 
 | Gate | Threshold | Source |
 |------|-----------|--------|
-| FinalScore | ≥ 0.35 | Computed or backfilled |
+| FinalScore | ≥ 0.35 | Computed or backfilled. SQE is sole authority — duplicate checks in paper-execution-engine and RTB removed (HF8). |
 | RegimeWeight | ≥ 0.30 | Computed or backfilled |
 | ROI Gate | ≥ dynamic threshold | Regime + PredictiveConfidence |
+| Confidence Floor | Mode-dependent | NORMAL=0.60, DEFENSIVE=0.70, SURVIVAL=0.80 (Directive 11.7S). Requires `regimeStability` in input. VTS signals bypass via `skipConfidenceFloor` option (cold-start). Added HF8. |
 
 **All legacy metrics purged**: NGC, CWQI, ProfitRate, and Risk are no longer gating factors. The interface still carries `ngc` as a field name (it's the confidence carrier), but it is NOT independently gated.
 
@@ -5106,15 +5107,17 @@ The VTS Runner is the autonomous virtual trading simulator. During Passive Learn
 startAutonomousSimulation()
   └─ setInterval(runPhase10SimulationCycle, 60s)
        ├─ resolveOpenVirtualTrades()     ← Close trades hit by real prices
-       ├─ getIdealPoolPairs()            ← FX5 Scanner → up to 100 pairs
+       ├─ getIdealPoolPairs()            ← FX5 Scanner → ~11 pairs (after VolNoise/LQ gating)
+       ├─ fetchBTCOHLC()                 ← Kraken 60m candles for defensive_hedge (HF8)
        ├─ For each pair:
-       │    ├─ fetchOHLCForPair()        ← Kraken 15m candles (50 max)
-       │    ├─ calculatePairRegime()     ← Per-pair regime classification
+       │    ├─ fetchOHLCForPair()        ← Kraken 60m candles, 100 max (HF8 — aligned with orchestrator)
+       │    ├─ MCE.computeContext()      ← Per-pair regime + indicators via MCE (Phase 13)
        │    ├─ getStrategiesForRegime()  ← All compatible strategies (11.8C)
        │    └─ For each strategy:
+       │         ├─ callStrategyDetect() ← Real StrategyEngine detect function (HF6)
        │         └─ generatePhase10Signal()
        │              ├─ Governance filter (11.7R-E)
-       │              ├─ Strategy mode modulation (11.7S)
+       │              ├─ Strategy mode modulation (11.7S — confidence floor bypassed)
        │              ├─ Net EV gate (11.8B-A2)
        │              ├─ ROI pre-filter (11.7C)
        │              ├─ ADX guard (SMA strategies)
@@ -5140,13 +5143,18 @@ startAutonomousSimulation()
 DEFAULT_CONFIG = {
   autonomousMode: true,
   simulationIntervalSec: 60,      // 60-second cycle
-  pairsPerCycle: 100,              // Up to 100 pairs from Ideal Pool
-  strategies: [...],               // 8 strategies (legacy fallback)
+  pairsPerCycle: 100,              // NOTE: config/vts.json is NOT imported by vts-runner.ts
+  strategies: [...],               // Legacy — actual strategies come from canonical regime map
   targetProfit: 0.015,             // 1.5% target
   stopLoss: 0.008,                 // 0.8% stop
   minVolume24h: 50000,
   minPrice: 0.5
 };
+
+// HF8 additions:
+//   OHLC fetch: 60-min interval, 100-candle lookback (matches signal orchestrator)
+//   BTC OHLC: fetched once per cycle for defensive_hedge correlation
+//   Pair count: determined by FX5 scanner output (~11 pairs), NOT by pairsPerCycle config
 
 MAX_OPEN_TRADES = 300;             // Directive 11.6E: Kraken API rate limit cap
 MAX_HOLD_MS = 24 * 60 * 60 * 1000; // 24-hour max hold time
@@ -5154,17 +5162,23 @@ MAX_HOLD_MS = 24 * 60 * 60 * 1000; // 24-hour max hold time
 
 ### Critical Observations
 
-1. **HybridScore is simulated, not computed**: `simulateHybridScore()` generates a random regime-adjusted score (base ± random * 0.2). This is **BUG-001** from the pre-audit — VTS learns from statistically meaningless hybridScore data.
+> **Phase 14.1 HF6-HF8 Resolution**: Observations 1-5 below were the pre-HF6 state (BUG-001). HF6 (`048bbc16`) replaced simulated scoring with real computation. HF8 (`052fb224`) aligned VTS timeframe to 60-min and relaxed strategy parameters. The VTS pipeline now uses **real scoring, real strategy detect functions, real regime classification, and real governance** throughout. BUG-001 is PARTIALLY RESOLVED — remaining items: DSS pre-selector, secondary metrics. Pattern/hybrid strategies still return null (Phase 14.5 gap).
 
-2. **PredictiveConfidence is simulated**: `simulatePredictiveConfidence()` derives from the simulated hybridScore (base * 0.8 + 0.1 ± random * 0.15). Same data quality issue as hybridScore.
+1. ~~**HybridScore is simulated, not computed**~~: **RESOLVED** (HF6) — `computeRealHybridScore()` from `vts-real-score.ts` replaces `simulateHybridScore()`.
 
-3. **DecayPenalty is random**: `simulateDecayPenalty()` returns `Math.random() * 0.15`. No relationship to actual signal age or staleness.
+2. ~~**PredictiveConfidence is simulated**~~: **RESOLVED** (HF6) — `getPredictiveConfidence()` from `score-calculator.ts` replaces `simulatePredictiveConfidence()`.
 
-4. **FinalScore uses real weights but simulated inputs**: The `computeFinalScore()` correctly applies `SCORE_WEIGHTS.FINAL_SCORE` weights, but since hybridScore and predictiveConfidence are simulated, the finalScore is meaningless for strategy comparison.
+3. ~~**DecayPenalty is random**~~: **RESOLVED** (HF6) — `computeRealDecayPenalty()` from `vts-real-score.ts` replaces `simulateDecayPenalty()`.
 
-5. **Net EV Gate uses real math**: The `computeNetExpectancyKernel()` gate is canonical — identical to DSS and Paper Execution. However, it receives `DI = predictiveConfidence * 100`, and since predictiveConfidence is simulated, the DI is also simulated.
+4. ~~**FinalScore uses real weights but simulated inputs**~~: **RESOLVED** (HF6) — `computeFinalScore()` now receives real hybridScore, predictiveConfidence, and decayPenalty.
 
-> **FINDING**: The VTS Runner's signal generation pipeline uses **real price data, real regime classification, real governance, and real Net EV math**, but feeds them **simulated scoring inputs** (hybridScore, predictiveConfidence, decayPenalty). This creates a paradox where sophisticated governance gates filter signals based on noise. The trade outcomes (entry/exit via real prices) are valid, but the scoring metadata attached to those outcomes is meaningless for calibration purposes.
+5. **Net EV Gate uses real math**: Still true, and now receives **real DI** (from real predictiveConfidence). The gate correctly blocks trades where friction exceeds raw EV (e.g., range_trade signals with tight targets — observed in production diagnostics HF8).
+
+6. **Strategy detect functions are the primary bottleneck** (HF8 finding): Only mean_reversion fires consistently among quant strategies. Other quant strategies (breakout, range_trade, liquidity_trap) fire occasionally but are gated by strict internal conditions in StrategyEngine. Pattern/hybrid strategies universally return null ("No pattern signal") — structural gap requiring Phase 14.5 (parallel pattern scanning path).
+
+7. **VTS pair count is FX5-determined, not config-determined**: `config/vts.json` `pairsPerCycle` is not consumed by vts-runner.ts. The actual pair count (~11) comes from FX5 scanner output after VolNoise/LQ gating.
+
+> **CURRENT STATE** (post-HF8): The VTS Runner is producing **real trades with real scoring** at ~2 trades/cycle (primarily mean_reversion in HIGH_VOLATILITY_UNSTABLE regime). Strategy diversity is limited by pattern strategy gap (Phase 14.5) and strict quant strategy conditions. Timeframe alignment with orchestrator (60-min) means ML learning transfers directly to active trading.
 
 ---
 

@@ -426,14 +426,20 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 | — | Governance docs updated (Phase 12.3 Pipeline Unification COMPLETE) | Batch 13B | `589be749` |
 | 13.1 | MCE Installation + L12-L20 Legacy Removal — MCE centralized VWAP/SMA/ATR/regime. 29 legacy files deleted. BUG-002, BUG-003, BUG-008, RISK-002, RISK-016, RISK-019, RISK-020 RESOLVED | Batch 14 | `8f26369a` |
 | — | Strategy enum expansion hotfix — strategy_type 9→18 values, syncGlobalStrategies() crash fixed | Batch 14-hotfix | `db521adc` |
+| — | Governance docs updated (Phase 13 MCE COMPLETE) | Batch 14B | `8cfd34ed` |
+| 14.1 (HF6) | Wire VTS to real StrategyEngine detect functions — 17 strategies with real entry/stop/target | Batch 15 | `048bbc16` |
+| 14.1 (HF6B) | Fix VTS volume=0 bug + range_trade alias | Batch 15 | `ae431e17` |
+| 14.1 (HF7) | Regime classification recalibration for crypto DX values | Batch 15 | `64014bd2` |
+| 14.1 (HF8) | VTS throughput fixes — 60-min candles, OHLC 100, BTC candles, param relaxation, FinalScore dedup, SQE confidence floor, analytics regime-map, config fix | Batch 16 | `052fb224` |
 
 ### In-Progress Directives
 | Directive | Title | Batch | Status |
 |-----------|-------|-------|--------|
-| 14.1 | Strategy-Specific VTS (BUG-001) | Batch 15 (HF1-HF7) | Core wiring complete. 8 remaining items for HF8-HF9. |
+| 14.1 | Strategy-Specific VTS (BUG-001) | Batch 15 (HF1-HF7) + Batch 16 (HF8) | HF8 complete. 2 remaining items for HF9 (DSS pre-selector, secondary metrics). |
 
-> **Last commit**: `64014bd2` (HF7 — regime recalibration + scrollbar sync)
-> **Next step**: Complete Phase 14.1 remaining items (HF8-HF9), then Phase 14.1B or 14.2
+> **Last commit**: `052fb224` (Batch 16 — HF8: VTS throughput fixes + remaining items)
+> **Next step**: Complete Phase 14.1 HF9, then Phase 14.2 (Directional Bias & Structural Regime)
+> **Note**: Phase 14.1B (VTS/Orchestrator Timeframe Alignment) ELIMINATED — completed in HF8
 
 ### Snapshot Log
 | Snapshot | Commit | Description |
@@ -463,10 +469,11 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 | SNAPSHOT-022 | `589be749` | Pre-Batch 14 freeze (after Batch 13B governance) |
 
 ### Pending Directives
-See `directives/DIRECTIVE_INDEX.md` for the full list. 1 remaining from Phase 12:
-- 12.1.6 (LSP Error Triage) — PENDING
+See `directives/DIRECTIVE_INDEX.md` for the full list.
+- 12.1.6 (LSP Error Triage) — PENDING (LOW priority, deferred)
+- 14.1 HF9 (DSS pre-selector + secondary metrics) — remaining Phase 14.1 items
 
-Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation) is COMPLETE (Directive 13.1, Batch 14 + hotfix).
+Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation) is COMPLETE. Phase 14.1 is IN PROGRESS (HF8 complete, HF9 remaining). Phase 14.1B ELIMINATED (completed in HF8).
 
 ### Investigation Notes for Future Batches
 - **12.2.1**: ~~Wave 1 Safe Deletions~~ **COMPLETE** (Batch 8). 2 files deleted (dhma.ts, latti-safety-monitor.tsx). 11 files surgically modified. ~1,254 lines removed. LATTi lazy-loader stub (RISK-044) remains — can be cleaned in a future batch.

@@ -53,14 +53,30 @@
 
 ---
 
+---
+
+## Phase 14: Strategy-Specific VTS & Pipeline Refinement
+
+### 14.1 Strategy-Specific VTS (BUG-001)
+
+| Hotfix | Title | Status | Date Complete | Batch | Notes |
+|--------|-------|--------|---------------|-------|-------|
+| HF1-HF5 | VTS core wiring prep | COMPLETE | 2026-03-05 | Batch 15 | Foundation for strategy detect integration |
+| HF6 | Wire VTS to real StrategyEngine detect functions | COMPLETE | 2026-03-05 | Batch 15 | `048bbc16` — 17 strategies with real entry/stop/target |
+| HF6B | Fix VTS volume=0 bug + range_trade alias | COMPLETE | 2026-03-05 | Batch 15 | `ae431e17` — ticker volume passed to MCE |
+| HF7 | Regime classification recalibration for crypto DX | COMPLETE | 2026-03-06 | Batch 15 | `64014bd2` — DX thresholds 25 to 45/50/55/60, momentum window 14 to 30 |
+| HF8 | VTS throughput fixes + remaining items | COMPLETE | 2026-03-07 | Batch 16 | `052fb224` — 60-min candles, 100 OHLC, BTC candles, param relaxation, FinalScore dedup, SQE confidence floor, analytics regime-map, config fix. Eliminates Phase 14.1B from roadmap. |
+
+---
+
 ## Summary Statistics
 
 | Metric | Value |
 |--------|-------|
-| Total Directives Issued | 18 |
-| Total Directives Complete | 18 |
+| Total Directives Issued | 18 + 5 HF |
+| Total Directives Complete | 18 + 5 HF |
 | Total Directives In Progress | 0 |
-| Total Review Cycles | 18 |
+| Total Review Cycles | 23 |
 | Average Review Cycles per Directive | 1.00 |
 
 ---
