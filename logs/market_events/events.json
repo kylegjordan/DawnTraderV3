@@ -6,6 +6,26 @@
     "previousValue": "RANGE_BOUND_STABLE",
     "newValue": "HIGH_VOLATILITY_UNSTABLE",
     "severity": "info",
+    "id": "mkt_evt_1772882189528_8",
+    "timestamp": "2026-03-07T11:16:29.528Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from High-Volatility Unstable to Range-Bound Stable",
+    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
+    "previousValue": "HIGH_VOLATILITY_UNSTABLE",
+    "newValue": "RANGE_BOUND_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1772881950317_7",
+    "timestamp": "2026-03-07T11:12:30.317Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Range-Bound Stable to High-Volatility Unstable",
+    "explanation": "Market regime changed from Range-Bound Stable to High-Volatility Unstable. Strategy selection and position sizing will adjust accordingly.",
+    "previousValue": "RANGE_BOUND_STABLE",
+    "newValue": "HIGH_VOLATILITY_UNSTABLE",
+    "severity": "info",
     "id": "mkt_evt_1772879624199_8",
     "timestamp": "2026-03-07T10:33:44.199Z"
   },

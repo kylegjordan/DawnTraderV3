@@ -1,0 +1,55 @@
+VTS HF8 Diagnostics — Zero Trade Investigation
+
+After applying Batch 16 HF8, the VTS is producing 0 open simulated trades after multiple FX5 scan cycles. Please run the following diagnostic checks and report findings for each:
+
+1. VTS Cycle Confirmation
+Check recent server logs for these patterns:
+
+[11.0E.1][VTS] Running cycle with X pairs — Is VTS cycling? How many pairs per cycle?
+[HF8][VTS] BTC OHLC cached — Is the BTC OHLC fetch working?
+Any errors or warnings containing [VTS] or [HF8]
+2. OHLC Fetch Results
+Check logs for:
+
+[11.0E.1][VTS] OHLC fetch failed — Are any 60-min OHLC fetches failing?
+How many candles are being returned per pair? (The new fetch requests 100 candles at 60-min interval — does Kraken return that many for altcoin pairs?)
+Add a temporary diagnostic log if needed: After the fetchOHLCForPair call in the pair loop (around line 1257 of vts-runner.ts), log console.log('[HF8-DIAG] ${pair.symbol}: ${ohlcData.length} candles fetched');
+3. Regime Distribution
+Check logs for:
+
+[11.8C][VTS] SYMBOL | Regime=X | Simulating Y strategies — What regimes are pairs being classified into? Is there diversity or all one regime?
+[11.8C][VTS] No strategies mapped for regime X — Any regime-mapping failures?
+4. Strategy Detect Results
+This is likely the key bottleneck. Check logs for:
+
+[HF6][VTS] SYMBOL: Strategy X returned null — Which strategies are returning null and how many?
+Are ANY strategy detect calls returning non-null results?
+For each strategy type that returns null, log what's failing. The most useful would be adding a brief diagnostic inside callStrategyDetect for the top 3 strategies (breakout, mean_reversion, range_trading) to log the specific condition that caused the null.
+5. Downstream Signal Gates
+If any strategy detect calls DO return non-null, check:
+
+[11.7R-E] — Governance gate blocking?
+[11.7S][VTS] — Confidence floor blocking (should be bypassed)?
+[SQE] — FinalScore or RegimeWeight too low?
+Net EV or ROI_Gate — Profitability gates blocking?
+[SKIP] — Any skip reasons logged?
+6. Config Verification
+
+Confirm config/vts.json is loaded with pairsPerCycle: 100
+Check if there's any runtime override or environment variable overriding the config
+7. Quick Sanity Check
+Run this one-time diagnostic (can be a temporary script or console command):
+
+// Fetch 60-min OHLC for a known liquid pair and check candle count
+const kraken = new KrakenService();
+const result = await kraken.getOHLCData('XXBTZUSD', 60, undefined, { maxCandlesTotal: 100 });
+console.log('BTC 60-min candles:', result.ohlc?.length);
+// Try an altcoin too
+const altResult = await kraken.getOHLCData('XETHZUSD', 60, undefined, { maxCandlesTotal: 100 });
+console.log('ETH 60-min candles:', altResult.ohlc?.length);
+
+Report format:
+For each numbered section, report what you found. The most likely failure point is #4 (strategy detect still returning null for all strategies) — if that's the case, please include the specific detect function logs showing WHY each strategy is rejecting (which condition fails: consolidation bars? volume? boundary touches? VWAP deviation? etc.).
+
+Do NOT make any code changes. Report findings only.
+
