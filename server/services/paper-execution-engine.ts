@@ -1330,15 +1330,9 @@ export class PaperExecutionEngine {
           break;
         }
 
-        // Directive 11.0E: Check FinalScore threshold (replaces CWQI/NGC)
+        // Phase 14.1 HF8 (B1): Duplicate FinalScore check REMOVED — SQE already enforces FinalScore >= 0.35
+        // (signal_quality_evaluator.ts line 130). Signals reaching this point have already passed SQE.
         const finalScore = parseFloat(signal.finalScore || signal.cwqi || '0');
-        const MIN_FINAL_SCORE = 0.35;
-
-        if (finalScore < MIN_FINAL_SCORE) {
-          console.log(`[11.0E][QUALITY_SKIP] ${signal.symbol}/${signal.strategy}: FinalScore=${finalScore.toFixed(4)} (min=${MIN_FINAL_SCORE})`);
-          continue;
-        }
-
         console.log(`[11.0E][TCL_PROMOTE] ${signal.symbol}/${signal.strategy} with FinalScore ${finalScore.toFixed(4)}`);
 
         // Directive 8.8.4-A3.R1: RTB removal must precede trade creation to prevent double-activation

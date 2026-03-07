@@ -19,6 +19,9 @@ import { calculateFinalScore, calculateRegimeWeight } from '../utils/score-calcu
 import { isSignalProfitable, getMinROIForRegime, getDynamicROIThreshold } from '../calculations/expectancy.js';
 import { getPredictiveConfidence } from '../utils/score-calculator.js';
 import { logSkippedSignal } from '../logging/skipped-signals-logger.js';
+// Phase 14.1 HF8 (B3): Confidence floor imports for centralized mode-based qualification
+import { resolveStrategyMode, getModeOverlay, meetsConfidenceFloor } from '../governance/strategy-modes.js';
+import type { RegimeStability } from '../../config/strategy-governance.js';
 
 /**
  * Directive 11.0B: SQE Thresholds - Default values used when screener config is unavailable
@@ -45,10 +48,12 @@ export interface SQEInput {
   targetPrice?: number;
   regime?: string;
   signalType?: string;
+  regimeStability?: RegimeStability;  // Phase 14.1 HF8 (B3): For confidence floor check
 }
 
 export interface SQEOptions {
   skipDecay?: boolean;
+  skipConfidenceFloor?: boolean;  // Phase 14.1 HF8 (B3): VTS cold-start bypass
 }
 
 export interface SQEResult {
@@ -160,6 +165,17 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
     }
   }
   
+  // Phase 14.1 HF8 (B3): Confidence floor check (Directive 11.7S)
+  // Centralized here so both VTS and active trading use the same qualification gate.
+  // VTS signals pass skipConfidenceFloor=true for cold-start bypass (no data -> no confidence -> no trades loop).
+  if (!options.skipConfidenceFloor && input.regimeStability && input.confidence !== undefined) {
+    if (!meetsConfidenceFloor(input.confidence, input.regimeStability)) {
+      const mode = resolveStrategyMode(input.regimeStability);
+      const overlay = getModeOverlay(mode);
+      failures.push(`Confidence ${input.confidence.toFixed(2)} < floor ${overlay.confidenceFloor} (mode=${mode})`);
+    }
+  }
+
   const passed = failures.length === 0;
   
   const status = passed ? 'PASS' : 'FAIL';

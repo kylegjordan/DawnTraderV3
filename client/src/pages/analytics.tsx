@@ -365,6 +365,31 @@ function FrozenHeader({ indicators, isLoading }: { indicators: MarketIndicatorsD
   );
 }
 
+// Phase 14.1 HF8 (C1): Interface for /api/regime-map response
+interface RegimeMapStrategy {
+  strategy: string;
+  strategyKey: string;
+  signalType: 'QUANT' | 'PATTERN' | 'HYBRID';
+  patternType: string | null;
+  secondaryMetrics: string;
+}
+
+interface RegimeMapEntry {
+  regime: string;
+  displayName: string;
+  title: string;
+  description: string;
+  strategies: RegimeMapStrategy[];
+  riskMultiplier: number;
+  minConfidence: number;
+}
+
+interface RegimeMapData {
+  schemaVersion: string;
+  regimeCount: number;
+  regimes: RegimeMapEntry[];
+}
+
 function MarketOverviewSection({ indicators, error, onRetry }: { indicators: MarketIndicatorsData | undefined; error?: any; onRetry?: () => void }) {
   if (error) {
     return (
@@ -579,6 +604,13 @@ function MarketOverviewSection({ indicators, error, onRetry }: { indicators: Mar
 }
 
 function DefinitionsReference() {
+  // Phase 14.1 HF8 (C1): Fetch canonical regime-strategy map from API (replaces hardcoded table)
+  const { data: regimeMapData, isLoading: regimeMapLoading } = useQuery<RegimeMapData>({
+    queryKey: ['/api/regime-map'],
+    queryFn: () => apiFetch('/api/regime-map'),
+    staleTime: 300000,  // 5 minutes — canonical map rarely changes
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2 mb-4">
@@ -728,140 +760,49 @@ function DefinitionsReference() {
 
       <div>
         <h4 className="text-sm font-semibold mb-3">Complete Regime to Strategy Mapping</h4>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="text-left py-2 px-2 font-medium">Regime</th>
-                <th className="text-left py-2 px-2 font-medium">Strategy</th>
-                <th className="text-left py-2 px-2 font-medium">Secondary Metrics & Ranges</th>
-                <th className="text-left py-2 px-2 font-medium">Signal Type</th>
-                <th className="text-left py-2 px-2 font-medium">Pattern Type</th>
-              </tr>
-            </thead>
-            <tbody className="text-muted-foreground">
-              <tr className="border-b">
-                <td className="py-2 px-2 font-medium text-foreground" rowSpan={4}>TREND_FRIENDLY_STABLE</td>
-                <td className="py-2 px-2">SMA Trend Ride</td>
-                <td className="py-2 px-2 font-mono">Price &gt; SMA(50) by &gt; 0.5% | ADX &gt; 25</td>
-                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">QUANT</Badge></td>
-                <td className="py-2 px-2">—</td>
-              </tr>
-              <tr className="border-b">
-                <td className="py-2 px-2">VWAP Pullback</td>
-                <td className="py-2 px-2 font-mono">VWAP Deviation &lt; -1σ | Momentum &gt; 0</td>
-                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">QUANT</Badge></td>
-                <td className="py-2 px-2">—</td>
-              </tr>
-              <tr className="border-b">
-                <td className="py-2 px-2">Morning Star / Evening Star</td>
-                <td className="py-2 px-2 font-mono">3-Bar Sequence (Bear→Doji→Bull) | Mom Flip &gt; 0.3%</td>
-                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">PATTERN</Badge></td>
-                <td className="py-2 px-2">Morning Star / Evening Star</td>
-              </tr>
-              <tr className="border-b">
-                <td className="py-2 px-2">Pivot Shift</td>
-                <td className="py-2 px-2 font-mono">RSI 45-55 | ADX Slope &gt; 0.5</td>
-                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">HYBRID</Badge></td>
-                <td className="py-2 px-2">Morning / Evening Star</td>
-              </tr>
-              <tr className="border-b">
-                <td className="py-2 px-2 font-medium text-foreground" rowSpan={4}>HIGH_VOLATILITY_UNSTABLE</td>
-                <td className="py-2 px-2">Mean Reversion</td>
-                <td className="py-2 px-2 font-mono">RSI &lt; 30 or &gt; 70 | Price Dev &gt; 1σ | Vol &lt; 0.025</td>
-                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">QUANT</Badge></td>
-                <td className="py-2 px-2">—</td>
-              </tr>
-              <tr className="border-b">
-                <td className="py-2 px-2">Reverse Impulse</td>
-                <td className="py-2 px-2 font-mono">Volume &gt; 1.5× avg | Mom Spike &lt; -0.5%</td>
-                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">HYBRID</Badge></td>
-                <td className="py-2 px-2">Pinbar (optional)</td>
-              </tr>
-              <tr className="border-b">
-                <td className="py-2 px-2">Defensive Hedge</td>
-                <td className="py-2 px-2 font-mono">BTC Correlation &lt; 0.3 | Vol Offset &gt; 1σ</td>
-                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">HYBRID</Badge></td>
-                <td className="py-2 px-2">Engulfing / Inside Bar</td>
-              </tr>
-              <tr className="border-b">
-                <td className="py-2 px-2">Inside Bar Reversal</td>
-                <td className="py-2 px-2 font-mono">Parent Range &gt; Child × 1.3 | Breakout Vol &gt; 1.5× avg</td>
-                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">PATTERN</Badge></td>
-                <td className="py-2 px-2">Inside Bar / Engulfing</td>
-              </tr>
-              <tr className="border-b">
-                <td className="py-2 px-2 font-medium text-foreground" rowSpan={4}>RANGE_BOUND_STABLE</td>
-                <td className="py-2 px-2">Range Trading</td>
-                <td className="py-2 px-2 font-mono">Bollinger Bandwidth &lt; 0.10 | ADX &lt; 20</td>
-                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">QUANT</Badge></td>
-                <td className="py-2 px-2">—</td>
-              </tr>
-              <tr className="border-b">
-                <td className="py-2 px-2">Support Bounce</td>
-                <td className="py-2 px-2 font-mono">Price = Local Min ± 1σ | Volume &gt; 1.2× avg</td>
-                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">PATTERN</Badge></td>
-                <td className="py-2 px-2">Pinbar / Rejection Wick</td>
-              </tr>
-              <tr className="border-b">
-                <td className="py-2 px-2">ABCD Long</td>
-                <td className="py-2 px-2 font-mono">AB:CD Ratio 0.95-1.05 | Volume &gt; 1.2× avg</td>
-                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">QUANT</Badge></td>
-                <td className="py-2 px-2">—</td>
-              </tr>
-              <tr className="border-b">
-                <td className="py-2 px-2">Adaptive Flow</td>
-                <td className="py-2 px-2 font-mono">Mom Inversion = 3 | Vol Percentile &gt; 70%</td>
-                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">HYBRID</Badge></td>
-                <td className="py-2 px-2">Tri-Star / Three Soldiers</td>
-              </tr>
-              <tr className="border-b">
-                <td className="py-2 px-2 font-medium text-foreground" rowSpan={4}>IMPULSE_EXPANSION</td>
-                <td className="py-2 px-2">Breakout</td>
-                <td className="py-2 px-2 font-mono">Momentum &gt; +0.7% | Volume &gt; 2× avg</td>
-                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">QUANT</Badge></td>
-                <td className="py-2 px-2">—</td>
-              </tr>
-              <tr className="border-b">
-                <td className="py-2 px-2">VWAP Bounce</td>
-                <td className="py-2 px-2 font-mono">VWAP Deviation &gt; +1σ | Momentum -0.3 to -0.6%</td>
-                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">QUANT</Badge></td>
-                <td className="py-2 px-2">—</td>
-              </tr>
-              <tr className="border-b">
-                <td className="py-2 px-2">Volatility Edge</td>
-                <td className="py-2 px-2 font-mono">Vol Percentile &gt; 80 | Regime Mismatch = True</td>
-                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">HYBRID</Badge></td>
-                <td className="py-2 px-2">ABCD Geometric</td>
-              </tr>
-              <tr className="border-b">
-                <td className="py-2 px-2">DHMA</td>
-                <td className="py-2 px-2 font-mono">HMA(9) cross HMA(21) | ADX Slope Flattening</td>
-                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">QUANT</Badge></td>
-                <td className="py-2 px-2">—</td>
-              </tr>
-              <tr className="border-b">
-                <td className="py-2 px-2 font-medium text-foreground" rowSpan={3}>STRUCTURAL_TRANSITION</td>
-                <td className="py-2 px-2">Liquidity Trap</td>
-                <td className="py-2 px-2 font-mono">(Lower Wick / Body) &gt; 2 or Depth Imbalance &gt; 1.4</td>
-                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">QUANT</Badge></td>
-                <td className="py-2 px-2">Pinbar (proxy)</td>
-              </tr>
-              <tr className="border-b">
-                <td className="py-2 px-2">Pivot Shift</td>
-                <td className="py-2 px-2 font-mono">RSI 45-55 | ADX Slope &gt; 0.5</td>
-                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">HYBRID</Badge></td>
-                <td className="py-2 px-2">Morning / Evening Star</td>
-              </tr>
-              <tr className="border-b">
-                <td className="py-2 px-2">Morning Star / Evening Star</td>
-                <td className="py-2 px-2 font-mono">3-Bar Sequence (Bear→Doji→Bull) | Mom Flip &gt; 0.3%</td>
-                <td className="py-2 px-2"><Badge variant="secondary" className="text-xs">PATTERN</Badge></td>
-                <td className="py-2 px-2">Morning / Evening Star</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        {regimeMapLoading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+            <RefreshCw className="w-4 h-4 animate-spin" />
+            Loading regime-strategy map...
+          </div>
+        ) : regimeMapData?.regimes ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="text-left py-2 px-2 font-medium">Regime</th>
+                  <th className="text-left py-2 px-2 font-medium">Strategy</th>
+                  <th className="text-left py-2 px-2 font-medium">Secondary Metrics & Ranges</th>
+                  <th className="text-left py-2 px-2 font-medium">Signal Type</th>
+                  <th className="text-left py-2 px-2 font-medium">Pattern Type</th>
+                </tr>
+              </thead>
+              <tbody className="text-muted-foreground">
+                {regimeMapData.regimes.map((regime) =>
+                  regime.strategies.map((strat, idx) => (
+                    <tr key={`${regime.regime}-${strat.strategyKey}`} className="border-b">
+                      {idx === 0 && (
+                        <td className="py-2 px-2 font-medium text-foreground" rowSpan={regime.strategies.length}>
+                          {regime.regime}
+                        </td>
+                      )}
+                      <td className="py-2 px-2">{strat.strategy}</td>
+                      <td className="py-2 px-2 font-mono">{strat.secondaryMetrics}</td>
+                      <td className="py-2 px-2">
+                        <Badge variant="secondary" className="text-xs">{strat.signalType}</Badge>
+                      </td>
+                      <td className="py-2 px-2">{strat.patternType || '\u2014'}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="text-sm text-muted-foreground py-4">
+            Failed to load regime-strategy map. Check server connection.
+          </div>
+        )}
       </div>
       
       <Separator />

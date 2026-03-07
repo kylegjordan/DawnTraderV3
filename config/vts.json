@@ -1,17 +1,11 @@
 {
   "autonomousMode": true,
   "simulationIntervalSec": 60,
-  "pairsPerCycle": 20,
+  "pairsPerCycle": 100,
   "strategies": [
-    "EMA_RSI",
-    "MACD_Crossover",
-    "Bollinger_Breakout",
-    "Momentum_Surge",
-    "Mean_Reversion",
-    "Volume_Spike",
-    "Trend_Follow",
-    "Range_Bound",
-    "Breakout_Confirm"
+    "EMA_RSI", "MACD_Crossover", "Bollinger_Breakout",
+    "Momentum_Surge", "Mean_Reversion", "Volume_Spike",
+    "Trend_Follow", "Range_Bound", "Breakout_Confirm"
   ],
   "targetProfit": 0.015,
   "stopLoss": 0.008,

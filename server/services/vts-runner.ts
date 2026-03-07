@@ -287,9 +287,14 @@ function computeFinalScore(
 
 const vtsKrakenService = new KrakenService();
 
+// Phase 14.1 HF8 (A3): BTC OHLC cache for defensive_hedge Spearman correlation analysis
+// Fetched once per VTS cycle (before pair loop), consumed by callStrategyDetect
+let btcOhlcCache: any[] = [];
+
 async function fetchOHLCForPair(symbol: string): Promise<OHLCData[]> {
   try {
-    const { ohlc } = await vtsKrakenService.getOHLCData(symbol, 15, undefined, { maxCandlesTotal: 50 });
+    // Phase 14.1 HF8 (A1+A2): 60-min candles (matches signal orchestrator) + 100 candle lookback (unblocks adaptive_flow/volatility_edge)
+    const { ohlc } = await vtsKrakenService.getOHLCData(symbol, 60, undefined, { maxCandlesTotal: 100 });
     
     if (!ohlc || ohlc.length === 0) {
       return [];
@@ -348,14 +353,14 @@ function callStrategyDetect(
         minConsolidationBars: 10,
         maxRangeWidth: 3,
         breakoutBuffer: 1,
-        volumeMultiplier: 2,
+        volumeMultiplier: 1.5,    // HF8: Relaxed from 2 — 1.5x avg volume still confirms breakout interest
         maxHoldingHours: 12
       });
     case 'mean_reversion':
       return strategyEngine.detectMeanReversion(indicators, ohlcData, {
         meanType: 'vwap',
         smaLength: 20,
-        deviationThreshold: 2.5,
+        deviationThreshold: 2.0,  // HF8: Relaxed from 2.5 — 2% VWAP deviation is significant for 60-min
         partialExitPercent: 50,
         stopLossBuffer: 1
       });
@@ -363,8 +368,8 @@ function callStrategyDetect(
     case 'range_trade':  // HF6B: Alias for canonical strategy map name
       return strategyEngine.detectRangeTrading(ohlcData, {
         minRangeDurationHours: 12,
-        minRangeWidth: 3,
-        minBoundaryTouches: 3,
+        minRangeWidth: 2,           // HF8: Relaxed from 3 — 2% range width is meaningful
+        minBoundaryTouches: 2,      // HF8: Relaxed from 3 — 2 touches per boundary in 12 hourly bars is valid
         entryZoneWidth: 0.5,
         stopLossBeyond: 1
       });
@@ -381,7 +386,7 @@ function callStrategyDetect(
         maxTrapExtension: 1.2,
         trapReturnBars: 2,
         minStopZoneSize: 'medium',
-        minLevelTouches: 3,
+        minLevelTouches: 2,         // HF8: Relaxed from 3 — 2 level touches confirms a real level
         volumeRatio: 1.5
       });
     case 'dhma':
@@ -407,8 +412,8 @@ function callStrategyDetect(
     case 'reverse_impulse':
       return strategyEngine.detectReverseImpulse(indicators, ohlcData, patternInput);
     case 'defensive_hedge':
-      // btcCandles omitted — degrades gracefully (same as signal orchestrator line 1120)
-      return strategyEngine.detectDefensiveHedge(indicators, ohlcData, patternInput);
+      // Phase 14.1 HF8 (A3): Pass BTC candles for Spearman correlation (needs >= 32 candles)
+      return strategyEngine.detectDefensiveHedge(indicators, ohlcData, patternInput, btcOhlcCache.length >= 32 ? btcOhlcCache : undefined);
     case 'adaptive_flow':
       return strategyEngine.detectAdaptiveFlow(indicators, ohlcData, patternInput);
     case 'volatility_edge':
@@ -1246,7 +1251,27 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   
   const symbols = pairs.map(p => p.symbol);
   const priceDataMap = await priceCache.getBatch(bucketType, symbols);
-  
+
+  // Phase 14.1 HF8 (A3): Fetch BTC OHLC once per cycle for defensive_hedge correlation
+  // BTC is a separate pair with its own rate limit counter — negligible API impact
+  try {
+    const { ohlc: btcOhlc } = await vtsKrakenService.getOHLCData('XXBTZUSD', 60, undefined, { maxCandlesTotal: 100 });
+    if (btcOhlc && btcOhlc.length > 0) {
+      btcOhlcCache = btcOhlc.map((candle: any) => ({
+        open: parseFloat(candle.open || candle[1]),
+        high: parseFloat(candle.high || candle[2]),
+        low: parseFloat(candle.low || candle[3]),
+        close: parseFloat(candle.close || candle[4]),
+        volume: parseFloat(candle.volume || candle[6] || 0),
+        timestamp: candle.timestamp || candle[0] * 1000
+      }));
+      console.log(`[HF8][VTS] BTC OHLC cached: ${btcOhlcCache.length} candles for defensive_hedge`);
+    }
+  } catch (err) {
+    console.warn('[HF8][VTS] BTC OHLC fetch failed, defensive_hedge will degrade gracefully:', err);
+    btcOhlcCache = [];
+  }
+
   for (const pair of pairs) {
     try {
       const priceData = priceDataMap.get(pair.symbol);
@@ -1664,6 +1689,11 @@ export function getOpenVirtualTradesForML(): Array<{
   regimeWeight: number;
   entryTime: string;
   durationOpenMinutes: number;
+  globalRegime: string | null;
+  pairFriction: number | null;
+  globalFriction: number | null;
+  pairDirectionalBias: string | null;
+  globalDirectionalBias: string | null;
 }> {
   const now = Date.now();
   const trades: Array<any> = [];

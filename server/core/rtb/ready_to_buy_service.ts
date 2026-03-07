@@ -1053,12 +1053,9 @@ class ReadyToBuyService {
       decayPenalty: 0, // No decay for new signals
     });
 
-    // Directive 11.0E: FinalScore threshold (replaces MIN_QUEUE_CWQI)
-    const MIN_FINAL_SCORE_THRESHOLD = 0.35;
-    if (finalScore < MIN_FINAL_SCORE_THRESHOLD) {
-      console.log(`[11.0E][RTB] Rejecting signal ${input.symbol}/${input.strategy} - FinalScore ${finalScore.toFixed(4)} below threshold ${MIN_FINAL_SCORE_THRESHOLD}`);
-      return null;
-    }
+    // Phase 14.1 HF8 (B1): Duplicate FinalScore check REMOVED — SQE already enforces FinalScore >= 0.35
+    // (signal_quality_evaluator.ts line 130). Signals reaching RTB have already passed SQE.
+    console.log(`[11.0E][RTB] Processing signal ${input.symbol}/${input.strategy} - FinalScore ${finalScore.toFixed(4)}`);
 
     const now = new Date();
     // R9.3-C: TTL removed - lifecycle governed by SQE results only
