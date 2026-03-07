@@ -101,7 +101,7 @@ describe('Directive 11.4B.2-R1 — Adaptive Scanning Governance', () => {
     });
   });
 
-  describe('M64: 100-Pair Cycle Guarantee', () => {
+  describe('M64: Batch-Size Cycle Guarantee', () => {
     let telemetry: TelemetryAggregatorService;
     let failureTracker: PairFailureTracker;
     let manager: AdaptiveScanManager;
@@ -113,14 +113,14 @@ describe('Directive 11.4B.2-R1 — Adaptive Scanning Governance', () => {
       manager.setAdaptiveRatioEnabled(false);
     });
 
-    it('batch size is configured to 100', () => {
-      expect(SCANNER_PARAMS.BATCH_SIZE).toBe(100);
+    it('batch size is configured to 300', () => {
+      expect(SCANNER_PARAMS.BATCH_SIZE).toBe(300);
     });
 
-    it('getNextScanBatch aims for 100 pairs when sufficient pairs available', async () => {
-      for (let i = 0; i < 60; i++) {
+    it('getNextScanBatch aims for BATCH_SIZE pairs when sufficient pairs available', async () => {
+      for (let i = 0; i < 200; i++) {
         telemetry.recordPairTelemetry(`PAIR${i}USD`, {
-          finalScore: 0.7 + (i * 0.003),
+          finalScore: 0.7 + (i * 0.001),
           hybridScore: 0.6,
           regimeWeight: 0.8,
           predictiveConfidence: 0.5,
@@ -130,14 +130,14 @@ describe('Directive 11.4B.2-R1 — Adaptive Scanning Governance', () => {
       }
       
       const allPairs: string[] = [];
-      for (let i = 0; i < 150; i++) {
+      for (let i = 0; i < 400; i++) {
         allPairs.push(`PAIR${i}USD`);
       }
       
       const batch = await manager.getNextScanBatch(allPairs);
       
-      expect(batch.idealPairs.length + batch.rotationalPairs.length).toBe(100);
-      expect(batch.totalBatch.length).toBeLessThanOrEqual(100);
+      expect(batch.idealPairs.length + batch.rotationalPairs.length).toBe(SCANNER_PARAMS.BATCH_SIZE);
+      expect(batch.totalBatch.length).toBeLessThanOrEqual(SCANNER_PARAMS.BATCH_SIZE);
     });
 
     it('uses underflow protection when ideal pool is sparse', async () => {
@@ -153,30 +153,30 @@ describe('Directive 11.4B.2-R1 — Adaptive Scanning Governance', () => {
       }
       
       const allPairs: string[] = [];
-      for (let i = 0; i < 150; i++) {
+      for (let i = 0; i < 400; i++) {
         allPairs.push(`PAIR${i}USD`);
       }
       
       const batch = await manager.getNextScanBatch(allPairs);
       
       expect(batch.idealPairs.length).toBeLessThanOrEqual(20);
-      expect(batch.idealPairs.length + batch.rotationalPairs.length).toBe(100);
+      expect(batch.idealPairs.length + batch.rotationalPairs.length).toBe(SCANNER_PARAMS.BATCH_SIZE);
     });
 
     it('fills entire batch from rotational when ideal pool is empty', async () => {
       const allPairs: string[] = [];
-      for (let i = 0; i < 150; i++) {
+      for (let i = 0; i < 400; i++) {
         allPairs.push(`PAIR${i}USD`);
       }
       
       const batch = await manager.getNextScanBatch(allPairs);
       
       expect(batch.idealPairs.length).toBe(0);
-      expect(batch.rotationalPairs.length).toBe(100);
-      expect(batch.totalBatch.length).toBeLessThanOrEqual(100);
+      expect(batch.rotationalPairs.length).toBe(SCANNER_PARAMS.BATCH_SIZE);
+      expect(batch.totalBatch.length).toBeLessThanOrEqual(SCANNER_PARAMS.BATCH_SIZE);
     });
 
-    it('actualIdeal + actualRotational = 100 regardless of available ideal count', async () => {
+    it('actualIdeal + actualRotational = BATCH_SIZE regardless of available ideal count', async () => {
       for (let i = 0; i < 45; i++) {
         telemetry.recordPairTelemetry(`IDEAL${i}`, {
           finalScore: 0.75,
@@ -189,14 +189,14 @@ describe('Directive 11.4B.2-R1 — Adaptive Scanning Governance', () => {
       }
       
       const allPairs: string[] = [];
-      for (let i = 0; i < 200; i++) {
+      for (let i = 0; i < 400; i++) {
         allPairs.push(`PAIR${i}USD`);
       }
       
       const batch = await manager.getNextScanBatch(allPairs);
       
       const total = batch.idealPairs.length + batch.rotationalPairs.length;
-      expect(total).toBe(100);
+      expect(total).toBe(SCANNER_PARAMS.BATCH_SIZE);
     });
   });
 
@@ -226,7 +226,7 @@ describe('Directive 11.4B.2-R1 — Adaptive Scanning Governance', () => {
       
       const allPairs: string[] = [];
       for (let i = 0; i < 30; i++) allPairs.push(`IDEAL${i}`);
-      for (let i = 0; i < 100; i++) allPairs.push(`NEW${i}`);
+      for (let i = 0; i < 370; i++) allPairs.push(`NEW${i}`);
       
       const batch = await manager.getNextScanBatch(allPairs);
       
@@ -236,7 +236,7 @@ describe('Directive 11.4B.2-R1 — Adaptive Scanning Governance', () => {
         expect(symbol.startsWith('IDEAL')).toBe(true);
       });
       
-      expect(batch.idealPairs.length + batch.rotationalPairs.length).toBe(100);
+      expect(batch.idealPairs.length + batch.rotationalPairs.length).toBe(SCANNER_PARAMS.BATCH_SIZE);
     });
 
     it('meritocracy pipeline starts clean with no legacy survivors', async () => {

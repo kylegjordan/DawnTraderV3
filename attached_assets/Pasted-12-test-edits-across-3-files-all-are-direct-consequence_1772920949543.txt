@@ -1,0 +1,269 @@
+12 test edits across 3 files — all are direct consequences of BATCH_SIZE: 100 → 300. Tests need (a) assertions updated from 100 to SCANNER_PARAMS.BATCH_SIZE and (b) test pair arrays expanded from 150/200 to 400+ so there are enough pairs to fill a 300-pair batch.
+
+File 1: server/tests/unit/directive-11.4B.2-R1.test.ts
+Edit 9.1 — Line 104: Update describe block
+
+FIND:   describe('M64: 100-Pair Cycle Guarantee', () => {
+REPLACE: describe('M64: Batch-Size Cycle Guarantee', () => {
+
+Edit 9.2 — Lines 116-118: Update config assertion
+
+FIND:
+    it('batch size is configured to 100', () => {
+      expect(SCANNER_PARAMS.BATCH_SIZE).toBe(100);
+    });
+REPLACE:
+    it('batch size is configured to 300', () => {
+      expect(SCANNER_PARAMS.BATCH_SIZE).toBe(300);
+    });
+
+Edit 9.3 — Lines 120-141: Update "aims for N pairs" test
+
+FIND:
+    it('getNextScanBatch aims for 100 pairs when sufficient pairs available', async () => {
+      for (let i = 0; i < 60; i++) {
+        telemetry.recordPairTelemetry(`PAIR${i}USD`, {
+          finalScore: 0.7 + (i * 0.003),
+          hybridScore: 0.6,
+          regimeWeight: 0.8,
+          predictiveConfidence: 0.5,
+          success: true,
+          pool: 'ideal',
+        });
+      }
+      
+      const allPairs: string[] = [];
+      for (let i = 0; i < 150; i++) {
+        allPairs.push(`PAIR${i}USD`);
+      }
+      
+      const batch = await manager.getNextScanBatch(allPairs);
+      
+      expect(batch.idealPairs.length + batch.rotationalPairs.length).toBe(100);
+      expect(batch.totalBatch.length).toBeLessThanOrEqual(100);
+    });
+REPLACE:
+    it('getNextScanBatch aims for BATCH_SIZE pairs when sufficient pairs available', async () => {
+      for (let i = 0; i < 200; i++) {
+        telemetry.recordPairTelemetry(`PAIR${i}USD`, {
+          finalScore: 0.7 + (i * 0.001),
+          hybridScore: 0.6,
+          regimeWeight: 0.8,
+          predictiveConfidence: 0.5,
+          success: true,
+          pool: 'ideal',
+        });
+      }
+      
+      const allPairs: string[] = [];
+      for (let i = 0; i < 400; i++) {
+        allPairs.push(`PAIR${i}USD`);
+      }
+      
+      const batch = await manager.getNextScanBatch(allPairs);
+      
+      expect(batch.idealPairs.length + batch.rotationalPairs.length).toBe(SCANNER_PARAMS.BATCH_SIZE);
+      expect(batch.totalBatch.length).toBeLessThanOrEqual(SCANNER_PARAMS.BATCH_SIZE);
+    });
+
+Edit 9.4 — Lines 143-164: Update underflow protection test
+
+FIND:
+    it('uses underflow protection when ideal pool is sparse', async () => {
+      for (let i = 0; i < 20; i++) {
+        telemetry.recordPairTelemetry(`IDEAL${i}`, {
+          finalScore: 0.8,
+          hybridScore: 0.7,
+          regimeWeight: 0.9,
+          predictiveConfidence: 0.6,
+          success: true,
+          pool: 'ideal',
+        });
+      }
+      
+      const allPairs: string[] = [];
+      for (let i = 0; i < 150; i++) {
+        allPairs.push(`PAIR${i}USD`);
+      }
+      
+      const batch = await manager.getNextScanBatch(allPairs);
+      
+      expect(batch.idealPairs.length).toBeLessThanOrEqual(20);
+      expect(batch.idealPairs.length + batch.rotationalPairs.length).toBe(100);
+    });
+REPLACE:
+    it('uses underflow protection when ideal pool is sparse', async () => {
+      for (let i = 0; i < 20; i++) {
+        telemetry.recordPairTelemetry(`IDEAL${i}`, {
+          finalScore: 0.8,
+          hybridScore: 0.7,
+          regimeWeight: 0.9,
+          predictiveConfidence: 0.6,
+          success: true,
+          pool: 'ideal',
+        });
+      }
+      
+      const allPairs: string[] = [];
+      for (let i = 0; i < 400; i++) {
+        allPairs.push(`PAIR${i}USD`);
+      }
+      
+      const batch = await manager.getNextScanBatch(allPairs);
+      
+      expect(batch.idealPairs.length).toBeLessThanOrEqual(20);
+      expect(batch.idealPairs.length + batch.rotationalPairs.length).toBe(SCANNER_PARAMS.BATCH_SIZE);
+    });
+
+Edit 9.5 — Lines 166-177: Update "fills from rotational" test
+
+FIND:
+    it('fills entire batch from rotational when ideal pool is empty', async () => {
+      const allPairs: string[] = [];
+      for (let i = 0; i < 150; i++) {
+        allPairs.push(`PAIR${i}USD`);
+      }
+      
+      const batch = await manager.getNextScanBatch(allPairs);
+      
+      expect(batch.idealPairs.length).toBe(0);
+      expect(batch.rotationalPairs.length).toBe(100);
+      expect(batch.totalBatch.length).toBeLessThanOrEqual(100);
+    });
+REPLACE:
+    it('fills entire batch from rotational when ideal pool is empty', async () => {
+      const allPairs: string[] = [];
+      for (let i = 0; i < 400; i++) {
+        allPairs.push(`PAIR${i}USD`);
+      }
+      
+      const batch = await manager.getNextScanBatch(allPairs);
+      
+      expect(batch.idealPairs.length).toBe(0);
+      expect(batch.rotationalPairs.length).toBe(SCANNER_PARAMS.BATCH_SIZE);
+      expect(batch.totalBatch.length).toBeLessThanOrEqual(SCANNER_PARAMS.BATCH_SIZE);
+    });
+
+Edit 9.6 — Lines 179-200: Update "total = BATCH_SIZE" test
+
+FIND:
+    it('actualIdeal + actualRotational = 100 regardless of available ideal count', async () => {
+      for (let i = 0; i < 45; i++) {
+        telemetry.recordPairTelemetry(`IDEAL${i}`, {
+          finalScore: 0.75,
+          hybridScore: 0.7,
+          regimeWeight: 0.8,
+          predictiveConfidence: 0.6,
+          success: true,
+          pool: 'ideal',
+        });
+      }
+      
+      const allPairs: string[] = [];
+      for (let i = 0; i < 200; i++) {
+        allPairs.push(`PAIR${i}USD`);
+      }
+      
+      const batch = await manager.getNextScanBatch(allPairs);
+      
+      const total = batch.idealPairs.length + batch.rotationalPairs.length;
+      expect(total).toBe(100);
+    });
+REPLACE:
+    it('actualIdeal + actualRotational = BATCH_SIZE regardless of available ideal count', async () => {
+      for (let i = 0; i < 45; i++) {
+        telemetry.recordPairTelemetry(`IDEAL${i}`, {
+          finalScore: 0.75,
+          hybridScore: 0.7,
+          regimeWeight: 0.8,
+          predictiveConfidence: 0.6,
+          success: true,
+          pool: 'ideal',
+        });
+      }
+      
+      const allPairs: string[] = [];
+      for (let i = 0; i < 400; i++) {
+        allPairs.push(`PAIR${i}USD`);
+      }
+      
+      const batch = await manager.getNextScanBatch(allPairs);
+      
+      const total = batch.idealPairs.length + batch.rotationalPairs.length;
+      expect(total).toBe(SCANNER_PARAMS.BATCH_SIZE);
+    });
+
+Edit 9.7 — Lines 215-240: Update integration test
+
+FIND:
+    it('pairs with scored telemetry go to ideal pool (M63 + M64)', async () => {
+      for (let i = 0; i < 30; i++) {
+        telemetry.recordPairTelemetry(`IDEAL${i}`, {
+          finalScore: 0.8,
+          hybridScore: 0.7,
+          regimeWeight: 0.9,
+          predictiveConfidence: 0.6,
+          success: true,
+          pool: 'ideal',
+        });
+      }
+      
+      const allPairs: string[] = [];
+      for (let i = 0; i < 30; i++) allPairs.push(`IDEAL${i}`);
+      for (let i = 0; i < 100; i++) allPairs.push(`NEW${i}`);
+      
+      const batch = await manager.getNextScanBatch(allPairs);
+      
+      expect(batch.idealPairs.length).toBe(30);
+      
+      batch.idealPairs.forEach(symbol => {
+        expect(symbol.startsWith('IDEAL')).toBe(true);
+      });
+      
+      expect(batch.idealPairs.length + batch.rotationalPairs.length).toBe(100);
+    });
+REPLACE:
+    it('pairs with scored telemetry go to ideal pool (M63 + M64)', async () => {
+      for (let i = 0; i < 30; i++) {
+        telemetry.recordPairTelemetry(`IDEAL${i}`, {
+          finalScore: 0.8,
+          hybridScore: 0.7,
+          regimeWeight: 0.9,
+          predictiveConfidence: 0.6,
+          success: true,
+          pool: 'ideal',
+        });
+      }
+      
+      const allPairs: string[] = [];
+      for (let i = 0; i < 30; i++) allPairs.push(`IDEAL${i}`);
+      for (let i = 0; i < 370; i++) allPairs.push(`NEW${i}`);
+      
+      const batch = await manager.getNextScanBatch(allPairs);
+      
+      expect(batch.idealPairs.length).toBe(30);
+      
+      batch.idealPairs.forEach(symbol => {
+        expect(symbol.startsWith('IDEAL')).toBe(true);
+      });
+      
+      expect(batch.idealPairs.length + batch.rotationalPairs.length).toBe(SCANNER_PARAMS.BATCH_SIZE);
+    });
+
+File 2: server/tests/unit/adaptive-scan-manager.test.ts
+Edit 9.8 — Line 159: Update getParamsInfo assertion
+
+FIND:
+      expect(info).toContain('batch=100');
+REPLACE:
+      expect(info).toContain('batch=300');
+
+File 3: server/tests/unit/directive-11.4C-R2.test.ts
+Edit 9.9 — Lines 28, 37, 44, 54, 211: All Array.from({ length: 100 } → Array.from({ length: 400 }
+
+There are 5 occurrences. Apply as a global find/replace within this file:
+
+FIND:    Array.from({ length: 100 },
+REPLACE: Array.from({ length: 400 },
+
+This applies to lines 28, 37, 44, 54, and 211.

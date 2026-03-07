@@ -25,7 +25,7 @@ describe('Directive 11.4C-R2 — Top Batch UI Integration & Diagnostics', () => 
     });
     
     it('should include retryCount in batch result', async () => {
-      const allPairs = Array.from({ length: 100 }, (_, i) => `PAIR${i}USD`);
+      const allPairs = Array.from({ length: 400 }, (_, i) => `PAIR${i}USD`);
       
       const batch = await manager.getNextScanBatch(allPairs);
       
@@ -34,7 +34,7 @@ describe('Directive 11.4C-R2 — Top Batch UI Integration & Diagnostics', () => 
     });
     
     it('should have retryCount of 0 when batch succeeds on first try', async () => {
-      const allPairs = Array.from({ length: 100 }, (_, i) => `PAIR${i}USD`);
+      const allPairs = Array.from({ length: 400 }, (_, i) => `PAIR${i}USD`);
       
       const batch = await manager.getNextScanBatch(allPairs);
       
@@ -42,7 +42,7 @@ describe('Directive 11.4C-R2 — Top Batch UI Integration & Diagnostics', () => 
     });
     
     it('should still produce batch when pairs available but ideal pool empty', async () => {
-      const allPairs = Array.from({ length: 100 }, (_, i) => `PAIR${i}USD`);
+      const allPairs = Array.from({ length: 400 }, (_, i) => `PAIR${i}USD`);
       
       const batch = await manager.getNextScanBatch(allPairs);
       
@@ -51,7 +51,7 @@ describe('Directive 11.4C-R2 — Top Batch UI Integration & Diagnostics', () => 
     });
     
     it('should expand rotational pool when ideal pool is empty (M64/M65 combined)', async () => {
-      const allPairs = Array.from({ length: 100 }, (_, i) => `PAIR${i}USD`);
+      const allPairs = Array.from({ length: 400 }, (_, i) => `PAIR${i}USD`);
       
       const batch = await manager.getNextScanBatch(allPairs);
       
@@ -208,7 +208,7 @@ describe('Directive 11.4C-R2 — Top Batch UI Integration & Diagnostics', () => 
       const failureTracker = new PairFailureTracker();
       const manager = new AdaptiveScanManager(telemetry, failureTracker);
       
-      const allPairs = Array.from({ length: 100 }, (_, i) => `PAIR${i}USD`);
+      const allPairs = Array.from({ length: 400 }, (_, i) => `PAIR${i}USD`);
       await manager.getNextScanBatch(allPairs);
       
       const logCalls = consoleSpy.mock.calls.map(call => call.join(' '));
