@@ -1429,7 +1429,7 @@ router.get('/passive-decisions', requireAuth, async (req: Request, res: Response
  * HF9 Item D: VTS IMF Filter Status
  * Returns active vs VTS thresholds and pair counts for Screeners tab UI panel
  */
-router.get('/imf-status', authMiddleware, async (_req: Request, res: Response) => {
+router.get('/imf-status', requireAuth, async (_req: Request, res: Response) => {
   try {
     const { SYSTEM_GUARDS, VTS_IMF_THRESHOLDS } = await import('../config/system-guards.js');
     const { fx5Scanner } = await import('../services/fx5-scanner.js');
