@@ -325,11 +325,11 @@ export class TelemetryAggregatorService {
    */
   computeRegimeEntropy(): { entropy: number; distribution: Record<string, number>; totalPairs: number; validPairs: number } {
     const regimeCounts: Record<string, number> = {
-      BULL_STABLE: 0,
-      BEAR_VOLATILE: 0,
-      LOW_VOL_CHOP: 0,
-      HIGH_VOL_IMPULSE: 0,
-      TRANSITION: 0
+      TREND_FRIENDLY_STABLE: 0,
+      HIGH_VOLATILITY_UNSTABLE: 0,
+      RANGE_BOUND_STABLE: 0,
+      IMPULSE_EXPANSION: 0,
+      STRUCTURAL_TRANSITION: 0
     };
     
     let totalPairs = 0;
