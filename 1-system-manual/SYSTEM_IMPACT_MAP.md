@@ -89,9 +89,9 @@
 
 ### 2.2 Price Cache
 - **File**: `server/services/price-cache.ts` (~448 lines)
-- **What**: Multi-bucket unified price management. Separate buckets for regular trading, paper simulation, VTS simulation. 2-second stale threshold with REST fallback.
+- **What**: Multi-bucket unified price management. Separate buckets for regular trading, paper simulation, VTS simulation. 2-second stale threshold with REST fallback. Signal Orchestrator migrated from per-symbol `getTicker()` to `getCachedPrice()` (Batch 18 — eliminates ~4,800 redundant API calls/hr).
 - **Upstream**: Kraken WebSocket (primary), Kraken REST API (fallback)
-- **Downstream**: Paper Execution Engine, VTS Runner, Signal Orchestrator, Dynamic Sizing Engine, MicroExecutionService, frontend price display
+- **Downstream**: Paper Execution Engine, VTS Runner, Signal Orchestrator (ticker data via `getCachedPrice()` — Batch 18), Dynamic Sizing Engine, MicroExecutionService, frontend price display
 - **Shared State**: In-memory price map with bucket isolation
 - **Execution**: **Event-driven** — updates on WebSocket messages, polled on REST fallback
 - **Blast Radius**: **CRITICAL** — every component that uses price data reads from this cache
@@ -122,6 +122,16 @@
 - **Downstream**: Cost Model friction calculations, execution sizing
 - **Execution**: **Passive** — populated by FX5, read on-demand
 - **Blast Radius**: **LOW** — fallback cache, not primary data path
+
+### 2.6 OHLC Cache (Batch 18 — NEW)
+- **File**: `server/services/ohlc-cache.ts`
+- **What**: Centralized OHLC data cache with 5-minute TTL. Wraps `KrakenService.getOHLCData()` with in-memory cache keyed by `symbol:interval`. Bypasses cache for paginated/historical fetches. Periodic cleanup every 10 minutes.
+- **Upstream**: Kraken REST API (via KrakenService)
+- **Downstream**: Signal Orchestrator (OHLC for regime/indicator computation), VTS Runner (OHLC for strategy detection + BTC candles for defensive_hedge)
+- **Shared State**: In-memory cache map, singleton instance (`ohlcCache`)
+- **Execution**: **Passive** — populated on first fetch, cached for 5 minutes
+- **Blast Radius**: **MEDIUM** — all OHLC consumers route through this cache. Cache miss falls through to Kraken API transparently.
+- **Tests**: None specific (validated via integration through signal-orchestrator and VTS)
 
 ---
 
@@ -184,7 +194,7 @@
 ### 4.1 Signal Orchestrator
 - **File**: `server/services/signal-orchestrator.ts`
 - **What**: Primary signal generation engine. Pulls pairs from Active Filter Pool, generates signals using regime-compatible strategies, applies exposure/correlation/cooldown checks, computes FinalScore and EV gate.
-- **Upstream**: Active Filter Pool (pairs), Market Regime (regime classification via `calculatePairRegime()`), Cost Model (friction), quality_index (deterministic confidence — NGC replaced), SYSTEM_GUARDS config, OHLC close prices (for DI)
+- **Upstream**: Active Filter Pool (pairs), Market Regime (regime classification via `calculatePairRegime()`), Cost Model (friction), quality_index (deterministic confidence — NGC replaced), SYSTEM_GUARDS config, OHLC Cache (60-min candles via `ohlcCache.getOHLCData()` — Batch 18), Price Cache (ticker data via `priceCache.getCachedPrice()` — Batch 18, replaces per-symbol `getTicker()`)
 - **Downstream**: SQE (scored signals), RTB Queue (qualified signals), VTS Runner (mirrors scoring logic), Telemetry (signal metadata)
 - **Shared State**: SYSTEM_GUARDS config, DI calculation (~~BUG-004~~ **RESOLVED**), deterministic confidence (~~NGC contamination~~ **RESOLVED** — Directive 12.3.3)
 - **Execution**: **Event-driven** — triggered when pairs enter Active Filter Pool
@@ -316,7 +326,7 @@
 ### 7.1 VTS Runner
 - **File**: `server/services/vts-runner.ts` (~1,750 lines)
 - **What**: Autonomous virtual trading simulator. 60-second cycles. Evaluates ALL strategies per regime via real StrategyEngine detect functions (HF6). Uses real market data with real scoring pipeline.
-- **Upstream**: Price Cache (VTS bucket), MCE (regime + indicators via `computeContext()`), Pattern Recognition, OHLC data (60-min candles, 100-candle lookback — aligned with orchestrator in HF8), BTC OHLC cache (for defensive_hedge Spearman correlation — HF8)
+- **Upstream**: Price Cache (VTS bucket), MCE (regime + indicators via `computeContext()`), Pattern Recognition, OHLC Cache (60-min candles, 100-candle lookback via `ohlcCache.getOHLCData()` — Batch 18), BTC OHLC via OHLC Cache (for defensive_hedge Spearman correlation — HF8, routed through ohlcCache in Batch 18)
 - **Downstream**: VTS Service (trade storage), Telemetry Aggregator (M70: only VTS writes telemetry), ML Calibration (trade outcomes)
 - **Execution**: **60-second interval** (passive learning mode)
 - **Blast Radius**: **HIGH** — all learning data flows through VTS
@@ -531,13 +541,14 @@
 
 | If You Change... | Also Check... |
 |-------------------|---------------|
-| **Signal Orchestrator** | VTS Runner (mirrors scoring), SQE (thresholds), Paper Execution Engine (EV gate), Cost Model, Price Cache, all signal tests |
+| **Signal Orchestrator** | VTS Runner (mirrors scoring), SQE (thresholds), Paper Execution Engine (EV gate), Cost Model, Price Cache, OHLC Cache, all signal tests |
 | **FinalScore weights** | SQE thresholds, VTS Runner, TCL ranking, all scoring tests |
 | **DI calculation** | Net Expectancy Kernel (Pwin), Paper Execution Engine, VTS Runner, Trailing Exit Controller |
 | **Cost Model** | Signal Orchestrator (EV gate), Paper Execution Engine, FX5 Scanner (cost filtering) |
 | **Market Context Engine (MCE)** | Signal Orchestrator (active trading), VTS Runner (passive learning), calculatePairRegime(), canonical regime map |
 | **calculatePairRegime()** | MCE (calls it internally), VTS Runner (via MCE), Signal Orchestrator (via MCE), canonical regime map, drift detector baselines |
-| **Price Cache** | Paper Execution Engine, VTS Runner, FX5 Scanner, MicroExecutionService, all frontend price displays |
+| **Price Cache** | Paper Execution Engine, VTS Runner, Signal Orchestrator (ticker via `getCachedPrice()` — Batch 18), FX5 Scanner, MicroExecutionService, all frontend price displays |
+| **OHLC Cache** | Signal Orchestrator (OHLC data), VTS Runner (OHLC data + BTC candles), KrakenService (wrapped by cache) |
 | **FX5 Scanner** | Active Filter Pool, Signal Orchestrator, Cost Cache, Telemetry Aggregator, Stage-3 Emitter, screener_filters DB table |
 | **Paper Execution Engine** | Portfolio state, Guardrails V2, Pre-Execution Validator, WebSocket broadcasts, trade history DB |
 | **VTS Runner** | VTS Service, ML Calibration, Telemetry Aggregator, Drift Detector, Adaptive Ratio Manager |

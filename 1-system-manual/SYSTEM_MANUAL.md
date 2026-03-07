@@ -553,7 +553,9 @@ Thresholds imported from `SYSTEM_GUARDS.IMF_THRESHOLDS`.
 
 ### OHLC Cache
 
-5-minute TTL cache for OHLC data per symbol. During passive learning, uses cached data if live data unavailable. Active trading mode caches after computation.
+**File**: `server/services/ohlc-cache.ts` (Batch 18 — NEW)
+
+Centralized OHLC data cache with 5-minute TTL. Wraps `KrakenService.getOHLCData()` with an in-memory cache keyed by `symbol:interval`. Both signal-orchestrator and vts-runner route OHLC fetches through `ohlcCache.getOHLCData()`. Bypasses cache for paginated/historical fetches (when `since` or `paginationEnabled` is set). Periodic cleanup every 10 minutes removes entries older than 2x TTL. Reduces redundant Kraken OHLC API calls from ~12x per symbol per hour to ~12 (one fetch per 5-minute window). Net API budget reduction: ~18,200 calls/hr to ~7,520 calls/hr (58% reduction) despite 3x pair increase (100→300).
 
 ---
 
@@ -1992,10 +1994,10 @@ FEEDBACK LOOP
 | ID | Invariant | Enforced By |
 |----|-----------|-------------|
 | M27 | AdaptiveScanManager is the sole batch generator | Code structure — `collectAdaptiveBatch()` is the only batch function |
-| M29 | Batch size = 100 pairs; default split = 60% Ideal / 40% Rotational | `SCANNER_PARAMS.BATCH_SIZE = 100` + `AdaptiveRatioManager` |
+| M29 | Batch size = 300 pairs; default split = 60% Ideal / 40% Rotational | `SCANNER_PARAMS.BATCH_SIZE = 300` + `AdaptiveRatioManager` (Batch 18 — increased from 100) |
 | M31 | Scan cycle runtime ≤ 30 seconds | 25-second timeout + runtime warning |
-| M64 | Underflow protection — batch always totals 100 | If Ideal < target, Rotational expands to compensate |
-| M65 | Initialization guard with retry | `getNextScanBatch()` retries if batch < 100 |
+| M64 | Underflow protection — batch always totals 300 | If Ideal < target, Rotational expands to compensate (Batch 18 — was 100) |
+| M65 | Initialization guard with retry | `getNextScanBatch()` retries if batch < 300 (Batch 18 — was 100) |
 | M70 | Only VTS writes telemetry | Guard in TelemetryAggregator rejects non-VTS callers |
 
 ---
@@ -2842,7 +2844,7 @@ Additionally imported by:
 ### RISK-025: History Filter Sequential Async Risk
 - **Severity**: LOW
 - **Location**: `market-scanner.ts` `collectAdaptiveBatch()` lines 1280-1286, `kraken.ts` `getPairHistoryDays()`
-- **Problem**: The history filter calls `passesHistoryFilter()` inside a sequential `for` loop over 100 pairs. Each call potentially hits Kraken's REST API for daily OHLC data. While results are cached for 24 hours (`HISTORY_CACHE_TTL_MS`), the first scan cycle after restart (cold cache) makes up to 100 sequential Kraken API calls.
+- **Problem**: The history filter calls `passesHistoryFilter()` inside a sequential `for` loop over 300 pairs (Batch 18 — was 100). Each call potentially hits Kraken's REST API for daily OHLC data. While results are cached for 24 hours (`HISTORY_CACHE_TTL_MS`), the first scan cycle after restart (cold cache) makes up to 300 sequential Kraken API calls.
 - **Mitigations**: Results are cached per-pair for 24 hours. On cache hit, the filter is instant. On cache miss with Kraken error, the pair conservatively fails (null = fail). After the first cycle, nearly all pairs are cached.
 - **Fix**: Consider batching history checks or pre-warming the cache during boot. The M31 invariant (30-second runtime limit) already protects against unbounded latency.
 
@@ -5091,7 +5093,7 @@ The **Walter-Era Learning** system (ContinuousLearningEngine, LearningCoordinato
 ### Purpose
 
 The VTS Runner is the autonomous virtual trading simulator. During Passive Learning mode, it runs a **60-second simulation loop** that:
-1. Fetches 100 pairs from the FX5 Scanner Ideal Pool
+1. Fetches up to 300 pairs from the FX5 Scanner batch (Batch 18 — was 100)
 2. Calculates per-pair market regimes from OHLC data
 3. Generates virtual trade signals using Phase-10 canonical math
 4. Opens virtual trades and tracks them against **real Kraken prices**

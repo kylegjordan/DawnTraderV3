@@ -3,7 +3,7 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-03-04 (after Batch 14B — Phase 13 MCE Installation governance. Added workflow clarity: mega-batch approach, critical mistakes section, rules 15-17. Roadmap updated to reflect Phase 12-13 completion.)
+> **Last Updated**: 2026-03-08 (after Batch 18B — API Budget Optimization governance. OHLC cache, orchestrator priceCache migration, BATCH_SIZE 300, filterTier fix. Roadmap updated to reflect Batch 18 completion.)
 
 ---
 
@@ -432,15 +432,17 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 | 14.1 (HF7) | Regime classification recalibration for crypto DX values | Batch 15 | `64014bd2` |
 | 14.1 (HF8) | VTS throughput fixes — 60-min candles, OHLC 100, BTC candles, param relaxation, FinalScore dedup, SQE confidence floor, analytics regime-map, config fix | Batch 16 | `052fb224` |
 | 14.1 (HF9) | Column fix + Governance gate SQE migration + DSS deletion + VTS IMF relaxation | Batch 17 | `f9fa56c6` |
+| — | Governance docs updated (Phase 14.1 HF9 COMPLETE) | Batch 17B | (governance) |
+| Inter-phase | API Budget Optimization — OHLC cache, orchestrator priceCache migration, BATCH_SIZE 100→300, filterTier fix | Batch 18 | `4b6b2fa9` |
 
 ### In-Progress Directives
 | Directive | Title | Batch | Status |
 |-----------|-------|-------|--------|
 | (none currently in progress) | | | |
 
-> **Last commit**: `f9fa56c6` (Batch 17 — HF9: Column fix + Gov gate SQE migration + DSS deletion + VTS IMF relaxation)
+> **Last commit**: `4c36ab34` (Batch 18 — API Budget Optimization + FX5 300 Pairs)
 > **Next step**: Phase 14.2 (Directional Bias & Structural Regime)
-> **Note**: Phase 14.1 **COMPLETE** (HF9 done, Batch 17). Phase 14.1B ELIMINATED (completed in HF8).
+> **Note**: Phase 14.1 **COMPLETE** (HF9 done, Batch 17). Batch 18 (inter-phase optimization) COMPLETE. Phase 14.1B ELIMINATED (completed in HF8).
 
 ### Snapshot Log
 | Snapshot | Commit | Description |
@@ -473,7 +475,7 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 See `directives/DIRECTIVE_INDEX.md` for the full list.
 - 12.1.6 (LSP Error Triage) — PENDING (LOW priority, deferred)
 
-Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation) is COMPLETE. Phase 14.1 is **COMPLETE** (HF9 done, Batch 17 `f9fa56c6`). Phase 14.1B ELIMINATED (completed in HF8). Next: Phase 14.2 (Directional Bias & Structural Regime).
+Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation) is COMPLETE. Phase 14.1 is **COMPLETE** (HF9 done, Batch 17 `f9fa56c6`). Batch 18 (inter-phase optimization) COMPLETE (`4c36ab34` — OHLC cache, orchestrator priceCache migration, BATCH_SIZE 100→300, filterTier fix). Phase 14.1B ELIMINATED (completed in HF8). Next: Phase 14.2 (Directional Bias & Structural Regime).
 
 ### Investigation Notes for Future Batches
 - **12.2.1**: ~~Wave 1 Safe Deletions~~ **COMPLETE** (Batch 8). 2 files deleted (dhma.ts, latti-safety-monitor.tsx). 11 files surgically modified. ~1,254 lines removed. LATTi lazy-loader stub (RISK-044) remains — can be cleaned in a future batch.
