@@ -11,11 +11,15 @@
 
 ## Where We Are
 
-**Last completed phase**: Phase 13 (MCE Installation + L-Series Removal)
+**Last completed phase**: Phase 14.1 (VTS Real Calculations — Batches 15-18, HF6-HF9)
 **Phase 11 status**: Open — 11.8B-E and 11.8C remain to be completed after VTS real calculations
 **Phase 12 status**: COMPLETE — 17/18 directives done (only 12.1.6 LSP Error Triage remains, LOW priority, deferred)
 **Phase 13 status**: COMPLETE — MCE installed, L12-L20 cluster fully removed (29 files, ~8,200 lines). Batch 14 + hotfix + Batch 14B governance.
-**Next phase**: Phase 14 (VTS Real Calculations & Signal Model Enrichment) — or Kyle’s direction
+**Phase 14.1 status**: COMPLETE — VTS wired to real detect functions, regime recalibrated, DSS deleted, IMF relaxed, OHLC cache, 300 pairs. Batches 15-18.
+**Phase 14.2 status**: EFFECTIVELY COMPLETE — DBS implemented (Batch 15). Regime rename, DBS backfill, and Global Structural Regime all SKIPPED per Kyle decision.
+**Phase 14.4 status**: CANCELED — Kyle decision 2026-03-08
+**Phase 14.3 status**: DEFERRED INDEFINITELY — requires capital not available. Replaced by Exchange Expansion (post-launch).
+**Next phase**: Phase 14.5 (Parallel Pattern Scanning + Signal Ranking Overhaul + Global Regime Pre-Filter) — Block 3, Batch 19
 
 ---
 
@@ -233,7 +237,7 @@ The batch sequence for each phase is:
 
 ### 14.1 Strategy-Specific VTS (BUG-001, RISK-043) — Weeks 10-12 — IN PROGRESS
 
-> **Status**: Core wiring complete (Batch 15, HF1-HF7). VTS calls real StrategyEngine detect functions. Regime classification recalibrated for crypto market data. 9 QUANT strategies producing trades with regime diversity.
+> **Status**: COMPLETE (Batches 15-18, HF6-HF9). VTS wired to real detect functions. DSS fully deleted. IMF filters relaxed for VTS. OHLC cache. 300 pairs. Governance gate centralized to SQE. All 9 QUANT strategies producing trades. Pattern/hybrid strategies structurally unable to fire — requires Phase 14.5.
 >
 > **Commits**: Batch 15 through HF7 `64014bd2`
 >
@@ -258,13 +262,47 @@ The batch sequence for each phase is:
 
 The VTS uses 15-minute candles and the signal orchestrator uses 60-minute candles. This means the same pair at the same moment gets different regime classifications from each system. If VTS learns on 15-min conditions and active trading executes on 60-min conditions, the ML learning may not transfer accurately. Must be resolved before Phase 14.4 (VTS Data Clear and Backfill).
 
-### 14.5 Parallel Pattern Scanning Path — NEW PHASE
+### 14.5 Parallel Pattern Scanning + Signal Ranking Overhaul + Global Regime Pre-Filter — NEXT (Block 3, Batch 19)
 
-Pattern and hybrid strategies are structurally unable to fire in the current architecture. The quant-oriented filtering pipeline eliminates pairs before pattern detection runs. Two strategies are structurally broken (volatility_edge needs ABCD metadata no recognizer produces, defensive_hedge needs BTC candles VTS does not provide). This phase creates a parallel pattern scanning pipeline with looser filters, a unified opportunity pool for both pattern and quant trades ranked by quality not type, risk guardrails for pattern trades, and hybrid strategy evaluation at the intersection of pattern and quant signals. Must come BEFORE Phase 14.4 so pattern trade data is included in the clean dataset.
+**Goal**: With $834 portfolio and ~4-5 open trade slots, ensure the RTB queue always has the best possible opportunities at the top. Achieved through three integrated changes:
 
-### 14.2 Directional Bias & Structural Regime Rework — Weeks 12-14
+**Guiding principle**: The bottleneck is not signal generation speed — it's signal quality at the top of the RTB queue.
 
-This is a significant enrichment of the regime model. The current system classifies regime but has no concept of directional bias or the distinction between global and pair-level structural regime.
+#### 14.5.1 Dual-Path Pattern Scanning
+Pattern and hybrid strategies are structurally unable to fire in the current architecture. The quant-oriented filtering pipeline (min volume $1M, RSI 30-70, volatility 0.5-5%) eliminates pairs before pattern detection runs.
+
+**Design**: FX5 scanner outputs two pools:
+- **Quant pool** (existing filters): Available to ALL strategies (quant + pattern + hybrid)
+- **Pattern pool** (new looser filters: $250K volume, RSI 15-85, wider volatility, maxVolNoise 0.7): Available to PATTERN + HYBRID strategies only
+
+Signal orchestrator evaluates both pools (confirmed strategy-agnostic — doesn't care about signal type). Both pools feed into the same RTB queue. Pattern-pool signals tagged `sourcePool: 'pattern'` for telemetry.
+
+**Pattern-specific risk guardrails**: Elevated FinalScore threshold (0.45 vs 0.35 for quant), tighter position sizing (15% max vs 25%). Pattern signals must be BETTER than quant signals to execute, not just equal.
+
+**VTS integration**: VTS gets same dual-path scanning for ML training data across all strategy types.
+
+**UI**: New Pattern Scanning tab in Trading page showing pattern filter process.
+
+#### 14.5.2 Expected Return Magnitude in Signal Ranking
+New composite `rankingScore` for RTB queue ordering:
+```
+rankingScore = (FinalScore x QUALITY_WEIGHT) + (returnMagnitude x RETURN_WEIGHT)
+```
+- SQE gating stays on FinalScore alone (0.35 minimum, non-negotiable quality floor)
+- rankingScore used ONLY for RTB queue ordering
+- returnMagnitude is net-of-fees, normalized (5% net = 1.0 ceiling)
+- Weights are regime-conditional (RANGE_BOUND: 0.10, IMPULSE_EXPANSION: 0.20, default: 0.15)
+- Safety rule: FinalScore gap > 0.10 → FinalScore always wins. Gap < 0.05 → higher returnMagnitude wins.
+- Solves the "apples to apples" problem: quant and pattern signals compared on same composite score
+
+#### 14.5.3 Global Regime Pre-Filter (small effort, bundled)
+New `GlobalRegimeService` (~150 lines): BTC regime snapshot + scan hints on 60-second cache. FX5 adjusts filter parameters per global regime. Signal orchestrator skips regime-inappropriate strategy types. No new Kraken API calls. Reduces pipeline noise by 30-50%.
+
+### 14.2 Directional Bias & Structural Regime Rework — Weeks 12-14 — EFFECTIVELY COMPLETE
+
+> **Status**: DBS (Directional Bias Score) implemented in Batch 15 — pair-level + global bias calculation, DBS confidence modifier applied to trade scoring, 6 context dimensions captured at trade OPEN. Kyle decisions (2026-03-08): Skip regime→structural regime rename (no value). Skip DBS backfill into VTS signals (unnecessary). Skip Global Structural Regime feature (low incremental value). No further work needed.
+
+~~This is a significant enrichment of the regime model. The current system classifies regime but has no concept of directional bias or the distinction between global and pair-level structural regime.~~
 
 #### 14.2.1 Rename & Restructure: "Regime" → "Structural Regime"
 - Rename regime classification throughout the codebase
@@ -285,7 +323,8 @@ This is a significant enrichment of the regime model. The current system classif
 
 > **Note**: Kyle has an existing Word document with detailed steps for this work. That document should be referenced when this phase begins.
 
-### 14.3 Short Trading — Weeks 14-15
+### 14.3 Short Trading — DEFERRED INDEFINITELY
+> Requires significant capital not currently available. Replaced on roadmap by Exchange Expansion (post-launch): adding an exchange supporting stocks/ETFs/tokenized assets/futures to expand tradeable asset classes with limited portfolio.
 
 #### 14.3.1 Kraken Confirmation
 - Confirm Kraken allows short trading on target pairs
@@ -299,7 +338,8 @@ This is a significant enrichment of the regime model. The current system classif
 
 > **Note**: Kyle has an existing Word document with detailed steps for short trading implementation. That document should be referenced when this phase begins.
 
-### 14.4 VTS Data Clear & Backfill — Week 15-16
+### 14.4 VTS Data Clear & Backfill — CANCELED
+> Kyle decision 2026-03-08. VTS data will not be cleared/backfilled.
 
 #### 14.4.1 Clear Simulated Data
 - Clear all simulated trading results data/learning from VTS simulations
@@ -660,6 +700,36 @@ All L-Series services (17), route files (9), and utilities (2) removed. M3B vali
 - Error alerting
 - ML performance dashboards (live)
 
+
+---
+
+## Post-Launch Enhancement Priorities
+
+These items are deferred to after live mode activation (Phase 21). Listed in Kyle's priority order:
+
+### Exchange Expansion (replaces Short Trading)
+- Add exchange supporting stocks, ETFs, tokenized stocks, futures, or commodities
+- Expands tradeable asset classes with limited portfolio
+- Requires exchange API integration, asset-type-specific strategies, and cross-exchange risk management
+
+### Machine Learning (Phases 17-18)
+- Phase 17: Design — XGBoost/LightGBM for confidence filtering, HMM for regime prediction, local LLM advisor
+- Phase 18: Implementation — ML service (Python) + Ollama advisor + monitoring dashboard
+- Needs live trade data to train on; most value from selective execution (trade only high-confidence signals)
+
+### AWS/Supabase Migration
+- Move from Replit production servers to AWS cloud + Supabase database
+- Improves latency, reliability, and scalability
+- Timing depends on when Replit constraints become limiting
+
+### WebSocket Event Triggers
+- Real-time Kraken WebSocket feeds for time-sensitive opportunity detection between scan cycles
+- Supplements (does not replace) timer-based scanning
+
+### Parallel Signal Generation
+- Promise.all batching in evaluateMarket() for concurrent pair evaluation
+- Only if Phase 14.5 creates throughput demand
+
 ---
 
 ## Timeline Summary
@@ -668,7 +738,8 @@ All L-Series services (17), route files (9), and utilities (2) removed. M3B vali
 |-------|-------|---------------|
 | **Phase 12: Cleanup & Foundation** | 1-6 | Math fixed, ~200+ dead files removed, pipeline unified |
 | **Phase 13: MCE Installation** | 6-10 | MCE as authoritative data provider |
-| **Phase 14: VTS + Directional Bias + Shorts** | 10-16 | Real signals, enriched regime model, short trading |
+| **Phase 14.1: VTS Real Calculations** | 10-12 | Real signals, regime recalibration, DSS deletion — COMPLETE |
+| **Phase 14.5: Pattern Scanning + Ranking** | 12-14 | Dual-path scanning, return magnitude ranking, global regime pre-filter |
 | **Phase 11 Finalization (11.8B-E, 11.8C)** | 16-18 | Adjustment Framework + Authority Baseline. Phase 11 closed. |
 | **Phase 15: Rules-Based Predictive Execution** | 18-20 | "Smart Thermostat" — adaptive pre-ML filters |
 | **Phase 16: L-Series Removal & Legacy Cleanup** | 20-23 | All legacy infrastructure permanently removed |
