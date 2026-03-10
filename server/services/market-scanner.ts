@@ -508,8 +508,8 @@ export async function collectAdaptiveBatch(
     };
   }).filter(p => p.pairInfo);
   
-  // Directive 11.4C-R2: Guarantee 100-pair batch by refilling from Kraken universe
-  const targetBatchSize = 100;
+  // Directive 11.4C-R2: Guarantee BATCH_SIZE-pair batch by refilling from Kraken universe
+  const targetBatchSize = SCANNER_PARAMS.BATCH_SIZE;
   if (batch.length < targetBatchSize) {
     const usedSymbols = new Set(batch.map(p => p.symbol));
     const fillCandidates = allPairs

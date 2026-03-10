@@ -175,11 +175,11 @@ export class AdaptiveScanManager {
    * Get the next batch of pairs to scan using dynamic Ideal/Rotational split
    * Directive 11.2 R1: Ratios now computed by AdaptiveRatioManager based on pool performance
    * Directive 11.4C.2: Dynamic Fill - always scan batchSize pairs, fill deficit from rotational
-   * Directive 11.4B.2-R1: Underflow protection guarantees 100-pair cycles (M64)
+   * Directive 11.4B.2-R1: Underflow protection guarantees BATCH_SIZE-pair cycles (M64)
    * Directive 11.4C-R2: Initialization guard with retry logic (M65)
    */
   async getNextScanBatch(allAvailablePairs: string[], retryAttempt: number = 0): Promise<AdaptiveScanBatch> {
-    const batchSize = SCANNER_PARAMS.BATCH_SIZE; // Always 100 (M64)
+    const batchSize = SCANNER_PARAMS.BATCH_SIZE; // 300 pairs per Batch 18 (M64)
     const MAX_RETRIES = 1; // Directive 11.4C-R2: Maximum retry attempts
     
     // Directive 11.2 R1: Compute dynamic ratio based on pool performance

@@ -67,11 +67,19 @@ export type IMFThresholdsType = typeof IMF_THRESHOLDS;
  * can analyze their performance separately.
  *
  * Active Trading: LQ >= 40, VN <= 0.60, rho <= 0.75 (SYSTEM_GUARDS)
- * VTS Learning:   LQ >= 25, VN <= 0.80, rho <= 0.95 (VTS_IMF_THRESHOLDS)
+ * VTS Learning:   LQ >= 25, VN <= 0.95, rho <= 0.95 (VTS_IMF_THRESHOLDS)
+ *
+ * Note (Batch 18E): VN_MAX raised from 0.80 to 0.95. Market data shows most
+ * non-benchmark pairs produce VN=0.82-1.00 on 60-min candles (partly due to
+ * short ticker-based price history feeding into VN calculations). At 0.80,
+ * the relaxed threshold matched the passive learning strict threshold
+ * (IMF_THRESHOLDS.VN_MAX), capturing zero additional pairs. At 0.95, pairs
+ * with VN between 0.80-0.95 enter VTS tagged filterTier='relaxed' for ML
+ * segmentation.
  */
 export const VTS_IMF_THRESHOLDS = {
   LQ_MIN: 25,
-  VN_MAX: 0.80,
+  VN_MAX: 0.95,
   CORR_MAX: 0.95,
 } as const;
 
