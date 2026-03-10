@@ -446,25 +446,33 @@ export class Fx5ScannerService {
       // Directive 11.4H.1 Task 2: Validate metrics before processing
       // Handle undefined/null volume24h gracefully with safe defaults
       
-      // Batch 18F: Pre-fetch OHLC data for survivors to populate ohlcCache.
-      // Prior to this fix, VN/σ/DI were computed on empty arrays because market-scanner.ts
-      // never populates priceHistory/history fields. The ohlcCache (Batch 18) provides
-      // ~720 60-min candles with 5-min TTL. Sequential fetches avoid Kraken rate limiting.
+      // Batch 18F+18G: Pre-fetch OHLC data for survivors to populate ohlcCache.
+      // Provides ~720 60-min candles for VN/σ/DI (close prices) and LQ (per-candle volume).
+      // Sequential fetches avoid Kraken rate limiting.
       // First scan after restart: ~60-70 API calls (~17s). Subsequent: mostly cache hits (<1s).
-      const ohlcDataMap = new Map<string, number[]>();
+      const ohlcDataMap = new Map<string, { prices: number[], avgVolumeUSD: number }>();
       for (const s of survivors) {
         if (s.volume24h == null || s.dailyRange == null) continue;
         const sym = normalizeToInternalSymbol(s.symbol);
         try {
           const { ohlc } = await ohlcCache.getOHLCData(sym, 60);
           if (ohlc && ohlc.length >= 10) {
-            ohlcDataMap.set(sym, ohlc.map((c: any) => parseFloat(c.close)));
+            const closePrices = ohlc.map((c: any) => parseFloat(c.close));
+            // Batch 18G: Compute avg USD volume per candle for OHLC-based LQ.
+            // Uses typicalPrice × volume (same formula as imf-metrics.ts).
+            let totalPriceVolume = 0;
+            for (const c of ohlc) {
+              const tp = (parseFloat(c.high) + parseFloat(c.low) + parseFloat(c.close)) / 3;
+              totalPriceVolume += tp * parseFloat(c.volume || '0');
+            }
+            const avgVolumeUSD = totalPriceVolume / ohlc.length;
+            ohlcDataMap.set(sym, { prices: closePrices, avgVolumeUSD });
           }
         } catch {
           // OHLC fetch failed for this symbol — will fall back to ticker data
         }
       }
-      console.log(`[Batch18F][OHLC] Pre-fetched ${ohlcDataMap.size}/${survivors.length} survivors`);
+      console.log(`[Batch18G][OHLC] Pre-fetched ${ohlcDataMap.size}/${survivors.length} survivors`);
 
       const classifiedSurvivors = survivors
         .filter(s => {
@@ -536,15 +544,22 @@ export class Fx5ScannerService {
         // This ensures friction scores vary based on actual market data
         setCostMetrics(normalizedSymbol, { spread });
         
-        // Batch 18F: Use pre-fetched OHLC data for accurate VN/σ/DI calculations.
-        // ohlcDataMap populated above the .map() chain with ~720 60-min candles per symbol.
-        // Falls back to ticker prices (usually empty) if OHLC unavailable for this symbol.
-        const ohlcPrices = ohlcDataMap.get(normalizedSymbol) || prices;
-        const imfSource = ohlcDataMap.has(normalizedSymbol)
+        // Batch 18F+18G: Use pre-fetched OHLC data for ALL IMF metrics.
+        // ohlcDataMap provides ~720 60-min candles per symbol: close prices for VN/σ/DI,
+        // per-candle avg volume for LQ. Falls back to ticker data if OHLC unavailable.
+        const ohlcEntry = ohlcDataMap.get(normalizedSymbol);
+        const ohlcPrices = ohlcEntry ? ohlcEntry.prices : prices;
+        const imfSource = ohlcEntry
           ? `ohlc(${ohlcPrices.length})`
           : `ticker(${prices.length}pts)`;
 
-        const LQ = calculateLogLiquidity(volumeUSD, tradeCount, spread);
+        // Batch 18G: LQ from per-candle OHLC volume (log10 scale, 0-100).
+        // The standard calculateLogLiquidity(V, C, S) saturates at 100 for all crypto
+        // because 24h aggregate volume is too large for the ln-based formula.
+        // Per-candle avg volume produces discriminating values (typically 30-60).
+        const LQ = (ohlcEntry && ohlcEntry.avgVolumeUSD > 0)
+          ? Math.min(100, Math.max(0, Math.log10(ohlcEntry.avgVolumeUSD + 1) * 10))
+          : calculateLogLiquidity(volumeUSD, tradeCount, spread);
         let VolNoise = calculateVolNoise(ohlcPrices);
         const passesMetricFilter = passesCoreMetricFilters(LQ, VolNoise);
 
