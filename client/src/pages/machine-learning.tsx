@@ -830,7 +830,7 @@ function RegimeArchivePanel({
 }) {
   const [selectedRegime, setSelectedRegime] = useState<string | null>(null);
 
-  if (isLoading) {  if (isLoading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
