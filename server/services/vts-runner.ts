@@ -987,31 +987,39 @@ async function resolveOpenVirtualTrades(): Promise<{
   }> = [];
   
   for (const [tradeId, trade] of openVirtualTrades) {
+    const holdDurationMs = now - trade.openedAt;
     const priceData = priceDataMap.get(trade.symbol);
-    
-    if (!priceData || priceData.price <= 0) {
-      // No price data - skip this cycle
+
+    // Batch 18I: Force-close stale positions even without price data.
+    // Previously, trades with unavailable prices were skipped entirely via
+    // `continue`, causing indefinite accumulation in the in-memory Map.
+    // Timeout check now runs BEFORE price availability check.
+    if (holdDurationMs > MAX_HOLD_MS) {
+      const exitPrice = (priceData && priceData.price > 0) ? priceData.price : trade.entryPrice;
+      tradesToClose.push({ id: tradeId, trade, exitPrice, exitReason: 'timeout' });
+      console.log(`[11.6][STALE_CLEANUP] Force-closing ${trade.symbol}/${trade.strategy} after ${Math.round(holdDurationMs / 3600000)}h (price=${(priceData && priceData.price > 0) ? 'live' : 'entry-fallback'})`);
       continue;
     }
-    
+
+    if (!priceData || priceData.price <= 0) {
+      // No price data - skip this cycle (stale trades handled above)
+      continue;
+    }
+
     const currentPrice = priceData.price;
-    const holdDurationMs = now - trade.openedAt;
-    
+
     // Directive 11.6 Task 3: Trade Exit Conditions
     let exitReason: 'stop_hit' | 'target_hit' | 'timeout' | null = null;
     let exitPrice = currentPrice;
-    
+
     if (currentPrice <= trade.stopLoss) {
       exitReason = 'stop_hit';
       exitPrice = trade.stopLoss; // Exit at stop level
     } else if (currentPrice >= trade.takeProfit) {
       exitReason = 'target_hit';
       exitPrice = trade.takeProfit; // Exit at target level
-    } else if (holdDurationMs > MAX_HOLD_MS) {
-      exitReason = 'timeout';
-      exitPrice = currentPrice; // Exit at current market price
     }
-    
+
     if (exitReason) {
       tradesToClose.push({ id: tradeId, trade, exitPrice, exitReason });
     }
