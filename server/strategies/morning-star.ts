@@ -35,7 +35,7 @@ import {
 // Strategy Constants
 // ============================================================================
 
-const MS_MIN_STRENGTH      = 0.60;   // Minimum pattern strength to consider
+const MS_MIN_STRENGTH      = 0.55;   // Minimum pattern strength — Crypto-calibrated (Batch 18H): 0.60 → 0.55
 const MS_VOL_MULT          = 1.2;    // Volume must be >= avgVol * this
 const MS_STOP_BUFFER       = 0.003;  // 0.3% buffer below stop reference
 const MS_TARGET_ATR_MULT   = 2.5;    // Target = entry + 2.5 * ATR

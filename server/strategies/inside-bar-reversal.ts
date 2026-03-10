@@ -37,7 +37,7 @@ import {
 // Strategy Constants
 // ============================================================================
 
-const IB_MAX_COMPRESSION    = 0.75;  // Maximum compression ratio to accept
+const IB_MAX_COMPRESSION    = 0.80;  // Maximum compression ratio — Crypto-calibrated (Batch 18H): 0.75 → 0.80
 const IB_BREAKOUT_BUFFER    = 0.002; // 0.2% breakout buffer above/below parent
 const IB_VOL_MULT           = 1.5;   // Volume must be >= avgVol * this
 const IB_STOP_BUFFER        = 0.003; // 0.3% buffer beyond parent extreme

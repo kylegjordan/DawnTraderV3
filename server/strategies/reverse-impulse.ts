@@ -30,11 +30,11 @@ import {
 // Strategy Constants
 // ═══════════════════════════════════════════════════════════════
 
-const RI_MIN_STRENGTH       = 0.65;
+const RI_MIN_STRENGTH       = 0.58;  // Crypto-calibrated (Batch 18H): 0.65 → 0.58
 const RI_MOMENTUM_THRESHOLD = -0.01;
 const RI_LOOKBACK           = 5;
 const RI_VOL_MULT           = 1.5;
-const RI_RSI_MAX            = 35;
+const RI_RSI_MAX            = 38;    // Crypto-calibrated (Batch 18H): 35 → 38
 const RI_STOP_BUFFER        = 0.005;
 const RI_TARGET_ATR_MULT    = 2.0;
 const RI_PATTERN_WEIGHT     = 0.40;

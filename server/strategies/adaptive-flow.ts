@@ -34,9 +34,9 @@ import { REGIMES } from '../config/canonical-regime-strategy-map';
 const AF_LOOKBACK              = 20;
 const AF_MIN_INVERSIONS        = 3;
 const AF_VOL_PERCENTILE_WINDOW = 50;
-const AF_MIN_VOL_PERCENTILE    = 70;
+const AF_MIN_VOL_PERCENTILE    = 60;   // Crypto-calibrated (Batch 18H): 70 → 60
 const AF_VOL_MULT              = 1.3;
-const AF_ADX_MAX               = 25;
+const AF_ADX_MAX               = 30;   // Crypto-calibrated (Batch 18H): 25 → 30
 const AF_STOP_ATR_MULT         = 1.5;
 const AF_STOP_BUFFER           = 0.003;
 const AF_TARGET_ATR_MULT       = 3.0;
@@ -88,8 +88,8 @@ export function detectAdaptiveFlow(
     console.log(`${LOG_PREFIX} Pattern mismatch: ${patternSignal.pattern}/${patternSignal.direction}`);
     return null;
   }
-  if (patternSignal.strength < 0.55) {
-    console.log(`${LOG_PREFIX} Strength too low: ${patternSignal.strength.toFixed(3)} < 0.55`);
+  if (patternSignal.strength < 0.50) {  // Crypto-calibrated (Batch 18H): 0.55 → 0.50
+    console.log(`${LOG_PREFIX} Strength too low: ${patternSignal.strength.toFixed(3)} < 0.50`);
     return null;
   }
 

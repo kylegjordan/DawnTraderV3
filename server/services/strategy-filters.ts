@@ -47,7 +47,8 @@ export function detectRange(
   priceHistory: PriceData[],
   minBars: number = 10,
   maxRangeWidthPct: number = 5.0,
-  minTouches: number = 2
+  minTouches: number = 2,
+  touchTolerance: number = 0.003 // Batch 18H: ATR/4 tolerance when provided, default 0.3%
 ): RangeDetectionResult {
   
   if (priceHistory.length < minBars) {
@@ -91,8 +92,8 @@ export function detectRange(
     };
   }
 
-  // Count boundary touches (within 0.3% of high/low)
-  const touchThreshold = 0.003; // 0.3%
+  // Count boundary touches (Batch 18H: ATR/4 tolerance when caller provides it, default 0.3%)
+  const touchThreshold = touchTolerance;
   let highTouches = 0;
   let lowTouches = 0;
 

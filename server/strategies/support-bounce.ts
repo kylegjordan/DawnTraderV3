@@ -43,7 +43,7 @@ import {
 
 const SB_LOOKBACK_CANDLES       = 50;    // Candles to scan for local minima
 const SB_CLUSTER_TOLERANCE_BASE = 0.005; // 0.5% base cluster tolerance
-const SB_MIN_TOUCHES            = 3;     // Minimum touches to validate support
+const SB_MIN_TOUCHES            = 2;     // Minimum touches — Crypto-calibrated (Batch 18H): 3 → 2
 const SB_MAX_DISTANCE           = 0.03;  // Support must be within 3% of price
 const SB_PROXIMITY              = 0.015; // 1.5% proximity for bounce entry
 const SB_VOL_MULT               = 1.2;   // Volume must be >= avgVol * this
@@ -194,8 +194,8 @@ export function detectSupportBounce(
   }
 
   // ── Condition 4: Minimum pattern strength ────────────────────────────────
-  if (patternSignal.strength < 0.55) {
-    console.log(`${LOG_PREFIX} Pattern strength ${patternSignal.strength.toFixed(3)} < 0.55. Skipping.`);
+  if (patternSignal.strength < 0.50) {  // Crypto-calibrated (Batch 18H): 0.55 → 0.50
+    console.log(`${LOG_PREFIX} Pattern strength ${patternSignal.strength.toFixed(3)} < 0.50. Skipping.`);
     return null;
   }
 

@@ -36,8 +36,8 @@ import {
 // Strategy Constants
 // ============================================================================
 
-const PS_RSI_LOW           = 40;    // RSI lower bound (inclusive)
-const PS_RSI_HIGH          = 60;    // RSI upper bound (inclusive)
+const PS_RSI_LOW           = 35;    // RSI lower bound — Crypto-calibrated (Batch 18H): 40 → 35
+const PS_RSI_HIGH          = 65;    // RSI upper bound — Crypto-calibrated (Batch 18H): 60 → 65
 const PS_ADX_SLOPE_MIN     = 0.5;   // Minimum positive ADX slope per period
 const PS_VOL_MULT          = 1.3;   // Volume must be >= avgVol * this
 const PS_STOP_ATR_MULT     = 1.5;   // ATR-based stop = entry - 1.5 * ATR
@@ -86,8 +86,8 @@ export function detectPivotShift(
   }
 
   // ── Condition 2: Minimum pattern strength ────────────────────────────────
-  if (patternSignal.strength < 0.55) {
-    console.log(`${LOG_PREFIX} Pattern strength ${patternSignal.strength.toFixed(3)} < 0.55. Skipping.`);
+  if (patternSignal.strength < 0.50) {  // Crypto-calibrated (Batch 18H): 0.55 → 0.50
+    console.log(`${LOG_PREFIX} Pattern strength ${patternSignal.strength.toFixed(3)} < 0.50. Skipping.`);
     return null;
   }
 

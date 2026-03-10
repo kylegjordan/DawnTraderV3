@@ -15,6 +15,27 @@ import { detectVolatilityEdge } from '../strategies/volatility-edge.js';
 import type { PatternInput } from '../strategies/strategy-helpers.js';
 
 /**
+ * Compute ATR (Average True Range) from PriceData array.
+ * Added in Batch 18H for crypto-calibrated dynamic thresholds.
+ * @param priceHistory - Array of price data (OHLCV strings)
+ * @param period - ATR period (default: 14)
+ * @returns ATR value in price units
+ */
+function computeATR(priceHistory: PriceData[], period: number = 14): number {
+  if (priceHistory.length < period + 1) return 0;
+  const recent = priceHistory.slice(-(period + 1));
+  let trSum = 0;
+  for (let i = 1; i < recent.length; i++) {
+    const high = parseFloat(recent[i].high);
+    const low = parseFloat(recent[i].low);
+    const prevClose = parseFloat(recent[i - 1].close);
+    const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
+    trSum += tr;
+  }
+  return trSum / period;
+}
+
+/**
  * Directive 12.3.2: Expanded to 17 canonical strategies
  * Original 9: vwap_pullback, abcd_long, sma_trend_ride, breakout, mean_reversion, range_trading, vwap_bounce, liquidity_trap, dhma
  * New 8: morning_star, inside_bar_reversal, support_bounce, pivot_shift, reverse_impulse, defensive_hedge, adaptive_flow, volatility_edge
@@ -53,7 +74,7 @@ export class StrategyEngine {
     const { currentPrice, vwap, high24h, low24h, volume } = indicators;
     
     // User-configured settings with defaults
-    const pullbackThreshold = parseFloat(settings.vwapPullbackThreshold || '2.0') / 100; // Default 2%
+    const pullbackThreshold = parseFloat(settings.vwapPullbackThreshold || '3.0') / 100; // Crypto-calibrated (Batch 18H): 2% → 3%
     const volumeMultiplier = parseFloat(settings.vwapVolumeMultiplier || '1.5'); // Default 1.5x
     const maxHoldingPeriod = settings.vwapMaxHoldingPeriod || 24; // Default 24 bars
     
@@ -362,15 +383,21 @@ export class StrategyEngine {
     params: any
   ): StrategySignal | null {
     const minConsolidationBars = params.minConsolidationBars || 10;
-    const maxRangeWidth = params.maxRangeWidth || 3;
     const breakoutBuffer = (params.breakoutBuffer || 1) / 100;
-    const volumeMultiplier = params.volumeMultiplier || 2;
+    const volumeMultiplier = params.volumeMultiplier || 1.5; // Crypto-calibrated (Batch 18H): 2.0 → 1.5
     const maxHoldingHours = params.maxHoldingHours || 12;
     
     if (priceHistory.length < minConsolidationBars + 5) return null;
     
+    // Batch 18H: ATR-based dynamic range width for crypto markets
+    const atr = computeATR(priceHistory);
+    const refPrice = parseFloat(priceHistory[priceHistory.length - 1].close);
+    const atrPct = refPrice > 0 ? (atr / refPrice) * 100 : 0;
+    const maxRangeWidth = params.maxRangeWidth || Math.max(7, 5.0 * atrPct); // Crypto ceiling: max(7%, 5×ATR%)
+    const touchTolerance = refPrice > 0 ? atr / (4 * refPrice) : 0.003; // ATR/4 tolerance zone
+    
     // Use Range Detection filter to find consolidation
-    const rangeResult = detectRange(priceHistory, minConsolidationBars, maxRangeWidth, 3);
+    const rangeResult = detectRange(priceHistory, minConsolidationBars, maxRangeWidth, 2, touchTolerance); // Crypto: 3→2 touches + ATR/4 tolerance
     
     if (!rangeResult.isRange) {
       console.log('[Breakout] No valid consolidation range detected');
@@ -442,7 +469,11 @@ export class StrategyEngine {
   ): StrategySignal | null {
     const meanType = params.meanType || 'vwap';
     const smaLength = params.smaLength || 20;
-    const deviationThreshold = (params.deviationThreshold || 2.5) / 100;
+    // Batch 18H: ATR-based dynamic deviation for crypto markets — max(3%, 1.5×ATR/price)
+    const atr = computeATR(priceHistory);
+    const deviationThreshold = params.deviationThreshold
+      ? params.deviationThreshold / 100
+      : Math.max(0.03, indicators.currentPrice > 0 ? 1.5 * atr / indicators.currentPrice : 0.03);
     const partialExitPercent = params.partialExitPercent || 50;
     const stopLossBuffer = (params.stopLossBuffer || 1) / 100;
     
@@ -518,19 +549,27 @@ export class StrategyEngine {
     priceHistory: PriceData[],
     params: any
   ): StrategySignal | null {
-    const minRangeDurationHours = params.minRangeDurationHours || 12;
-    const minRangeWidth = (params.minRangeWidth || 3) / 100;
-    const minBoundaryTouches = params.minBoundaryTouches || 3;
+    const minRangeDurationHours = params.minRangeDurationHours || 10; // Crypto-calibrated (Batch 18H): 12 → 10 hours
+    const minBoundaryTouches = params.minBoundaryTouches || 2; // Crypto-calibrated (Batch 18H): 3 → 2 touches
     const entryZoneWidth = (params.entryZoneWidth || 0.5) / 100;
     const stopLossBeyond = (params.stopLossBeyond || 1) / 100;
     
     if (priceHistory.length < 30) return null;
     
+    // Batch 18H: ATR-based dynamic range width for crypto markets
+    const atr = computeATR(priceHistory);
+    const refPrice = parseFloat(priceHistory[priceHistory.length - 1].close);
+    const atrPct = refPrice > 0 ? atr / refPrice : 0;
+    const minRangeWidth = params.minRangeWidth
+      ? params.minRangeWidth / 100
+      : Math.max(0.03, 2.5 * atrPct); // Crypto floor: max(3%, 2.5×ATR/price)
+    const touchTolerance = refPrice > 0 ? atr / (4 * refPrice) : 0.003; // ATR/4 tolerance zone
+    
     // Convert hours to bars (assuming 1h bars)
     const minBars = minRangeDurationHours;
     
     // Detect established range
-    const rangeResult = detectRange(priceHistory, minBars, 20, minBoundaryTouches);
+    const rangeResult = detectRange(priceHistory, minBars, 20, minBoundaryTouches, touchTolerance);
     
     if (!rangeResult.isRange) return null;
     
@@ -596,7 +635,7 @@ export class StrategyEngine {
     priceHistory: PriceData[],
     params: any
   ): StrategySignal | null {
-    const vwapProximity = (params.vwapProximity || 0.5) / 100;
+    const vwapProximity = (params.vwapProximity || 1.5) / 100; // Crypto-calibrated (Batch 18H): 0.5% → 1.5%
     const minVWAPSlope = (params.minVWAPSlope || 0.3) / 100;
     const volumeMultiplier = params.volumeMultiplier || 1.3;
     const maxPullbackBars = params.maxPullbackBars || 5;
@@ -681,7 +720,7 @@ export class StrategyEngine {
     const maxTrapExtension = (params.maxTrapExtension || 1.2) / 100;
     const trapReturnBars = params.trapReturnBars || 2;
     const minStopZoneSize = params.minStopZoneSize || 'medium';
-    const minLevelTouches = params.minLevelTouches || 3;
+    const minLevelTouches = params.minLevelTouches || 2; // Crypto-calibrated (Batch 18H): 3 → 2 touches
     const volumeRatio = params.volumeRatio || 1.5;
     
     if (priceHistory.length < 30) return null;

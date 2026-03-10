@@ -33,7 +33,7 @@ import {
 
 const DH_CORR_WINDOW        = 30;
 const DH_VOL_WINDOW         = 20;
-const DH_MAX_CORRELATION    = 0.30;
+const DH_MAX_CORRELATION    = 0.45;  // Crypto-calibrated (Batch 18H): 0.30 → 0.45
 const DH_MIN_VOL_OFFSET     = 0.10;
 const DH_VOL_MULT           = 1.3;
 const DH_STOP_BUFFER        = 0.005;
@@ -129,8 +129,8 @@ export function detectDefensiveHedge(
     console.log(`${LOG_PREFIX} Pattern mismatch: ${patternSignal.pattern}/${patternSignal.direction}`);
     return null;
   }
-  if (patternSignal.strength < 0.55) {
-    console.log(`${LOG_PREFIX} Strength too low: ${patternSignal.strength.toFixed(3)} < 0.55`);
+  if (patternSignal.strength < 0.50) {  // Crypto-calibrated (Batch 18H): 0.55 → 0.50
+    console.log(`${LOG_PREFIX} Strength too low: ${patternSignal.strength.toFixed(3)} < 0.50`);
     return null;
   }
 

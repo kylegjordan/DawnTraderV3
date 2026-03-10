@@ -36,7 +36,7 @@ import { REGIMES } from '../config/canonical-regime-strategy-map';
 // ═══════════════════════════════════════════════════════════════
 
 const VE_A_VOL_MULT          = 2.0;
-const VE_MIN_VOL_PERCENTILE  = 80;
+const VE_MIN_VOL_PERCENTILE  = 70;   // Crypto-calibrated (Batch 18H): 80 → 70
 const VE_BREAKOUT_BUFFER     = 0.002;
 const VE_BREAKOUT_VOL_MULT   = 1.5;
 const VE_STOP_BUFFER         = 0.003;
