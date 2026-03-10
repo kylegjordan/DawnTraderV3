@@ -11,7 +11,6 @@ import { statusRouter } from "./routes/status.js"; // Phase 1: Status and versio
 import dseRouter from "./routes/dse.js"; // Directive 11.3: Dynamic Sizing Engine routes
 import chapletRouter from "../chaplet/index.js"; // Phase M4: Chaplet Context Service
 import { env } from "./config/index.js"; // Phase 1: Typed environment config
-import regimeArchiveRouter from "./routes/regime-archive.js"; // Directive 11.7E: Regime Archive API
 import regimeMapRouter from "./routes/regime-map.js"; // Phase 14: Dynamic regime map API
 import version from "./version.json";
 
@@ -200,9 +199,7 @@ app.use((req, res, next) => {
       console.error('[R9.3.HF-5] ❌ Failed to reinitialize FX5 Scanner:', err);
     });
 
-  // Directive 11.7E: Mount Regime Archive routes BEFORE registerRoutes to ensure availability
-  app.use('', regimeArchiveRouter);
-  console.log('[11.7E] Regime Archive routes mounted at /api/vts/regime-archive');
+  // Directive 11.7E: Regime Archive routes mounted via routes.ts apiRouter (line 20224)
   app.use('/api', regimeMapRouter);
   console.log('[Phase14] Regime Map routes mounted at /api/regime-map');
 
@@ -789,8 +786,6 @@ app.use((req, res, next) => {
         const { initArchivalScheduler } = await import('./core/archival/archival-scheduler');
         initArchivalScheduler();
         console.log('[11.7I-03] ✅ Archival scheduler initialized');
-        const { clearArchiveForFreshStart } = await import('./core/archival/regime-archiver');
-        clearArchiveForFreshStart();
       } catch (archiveError) {
         console.error('[11.7I-03] ⚠️ Archival scheduler init failed:', archiveError);
       }
