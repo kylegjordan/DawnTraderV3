@@ -1,0 +1,94 @@
+Replit Monitoring Prompt — Batch 18H Runtime Verification
+
+After pushing Batch 18H and allowing the system to complete at least 2-3 full scan cycles (~2-3 hours with 60-min candles), run the following checks and report the results.
+
+Check 1: Signal Generation Rate (Primary Success Metric)
+# Count total signals generated in recent scan cycles
+# BEFORE 18H: ~2 signals per 12 cycles (~0.17/cycle)
+# AFTER 18H: expecting 5-15+ signals per 12 cycles
+grep -c "SIGNAL\|Signal detected\|✅ Signal" logs/server.log | tail -1
+
+# Count signals per strategy type in last 12 hours of logs
+grep -oP '(?<=strategy[":= ]+)[a-z_]+(?=[",])' logs/server.log | sort | uniq -c | sort -rn
+
+Report: Total signal count over the monitoring period, broken down by strategy name.
+
+Check 2: ATR-Based Dynamic Thresholds Are Working
+# Mean reversion: should show varying deviation thresholds (not fixed 2.5%)
+grep "MeanReversion" logs/server.log | grep -oP 'deviation[= ]+[-0-9.]+' | sort -u | head -20
+
+# Breakout: should show varying maxRangeWidth values (not fixed 3%)
+grep "Breakout" logs/server.log | grep -oP 'maxRangeWidth[= ]+[0-9.]+' | sort -u | head -20
+
+# Verify computeATR is being called (look for ATR-related log output)
+grep "atrPct\|touchTolerance\|ATR" logs/server.log | head -10
+
+Report: Are the dynamic thresholds producing varying values across different pairs? Or are they all the same (which would indicate the ATR computation isn't working)?
+
+Check 3: Filter Funnel Comparison
+# How many pairs enter strategy detection per cycle?
+grep "Running strategy detection\|evaluating\|Processing pair" logs/server.log | tail -20
+
+# How many signals pass SQE FinalScore gate?
+grep "FinalScore\|SQE.*pass\|SQE.*reject" logs/server.log | tail -20
+
+# How many signals reach RTB queue?
+grep "RTB\|ready-to-buy\|queued" logs/server.log | tail -20
+
+Report: The approximate counts at each stage of the pipeline for the most recent scan cycle.
+
+Check 4: Strategy-Specific Gate Behavior
+# Reverse Impulse: RSI gate should now pass at RSI < 38 (was < 35)
+grep "REVERSE_IMPULSE.*RSI" logs/server.log | tail -10
+
+# Pivot Shift: RSI zone should show [35, 65] (was [40, 60])
+grep "PIVOT_SHIFT.*RSI" logs/server.log | tail -10
+
+# Defensive Hedge: correlation gate should show 0.45 threshold (was 0.30)
+grep "DEFENSIVE_HEDGE.*orrelation" logs/server.log | tail -10
+
+# Adaptive Flow: ADX gate should show < 30 (was < 25)
+grep "ADAPTIVE_FLOW.*ADX" logs/server.log | tail -10
+
+# Volatility Edge: percentile gate should show 70 (was 80)
+grep "VOLATILITY_EDGE.*percentile" logs/server.log | tail -10
+
+Report: For each strategy, paste the most recent 2-3 log lines showing the gate check. We want to confirm the new threshold values appear in the log output.
+
+Check 5: detectRange Touch Tolerance
+# Look for range detection results — touch counts and tolerance values
+grep "detectRange\|boundary touches\|high touches\|low touches\|Range too wide\|Valid range\|Insufficient boundary" logs/server.log | tail -20
+
+Report: Are ranges being detected with 2 touches (not 3)? Is the tolerance zone wider than 0.3%?
+
+Check 6: No Regressions — Error Check
+# Check for any new runtime errors since 18H push
+grep -i "error\|TypeError\|ReferenceError\|cannot read\|undefined.*null\|NaN" logs/server.log | grep -v "pre-existing\|expected" | tail -20
+
+# Specifically check computeATR isn't returning NaN or 0 for all pairs
+grep "computeATR\|atr.*=.*0[^0-9]\|atr.*NaN" logs/server.log | tail -10
+
+# Check strategy-engine isn't crashing on the new code paths
+grep "strategy-engine.*error\|strategy-engine.*crash\|Unhandled" logs/server.log | tail -10
+
+Report: Any new errors or crashes since the push? Specifically any related to computeATR, touchTolerance, or the modified strategy functions.
+
+Check 7: Signal Quality Sanity Check
+# Check that signals passing SQE still have reasonable FinalScore values
+# (should still be >= 0.35 — the quality floor hasn't changed)
+grep "FinalScore" logs/server.log | grep -oP 'FinalScore[= :]+[0-9.]+' | sort -n | head -5
+
+# Check confidence values of generated signals (should be 0.35-0.95 range)
+grep "confidence\|conf=" logs/server.log | grep -oP 'conf[idence= :]+[0-9.]+' | sort -n | tail -20
+
+Report: What is the range of FinalScore and confidence values for signals generated post-18H? We want to confirm we're not generating garbage signals with very low quality scores.
+
+Summary Table (please fill in)
+Metric	Pre-18H Baseline	Post-18H Observed
+Signals per 12 scan cycles	~2	?
+Unique strategies generating signals	?	?
+ATR-based thresholds varying per pair?	N/A (fixed)	Yes/No
+New runtime errors?	0	?
+FinalScore range of passing signals	?	?
+Pairs reaching strategy detection	?	?
+Note: If the server log path differs, substitute the correct path. If the system uses structured JSON logging, adjust grep patterns accordingly. The key data points are: signal count (up from ~2), threshold variation (dynamic, not fixed), and no new errors.
