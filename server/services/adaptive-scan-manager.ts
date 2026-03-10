@@ -199,7 +199,7 @@ export class AdaptiveScanManager {
       rotationalRatio = SCANNER_PARAMS.DUAL_POOL.ROTATIONAL_RATIO;
     }
     
-    // Directive 11.4B.2-R1 (M64): Underflow Protection with guaranteed 100-pair cycles
+    // Directive 11.4B.2-R1 (M64): Underflow Protection with guaranteed BATCH_SIZE-pair cycles
     // 1. Check available ideal pool pairs first
     // 2. Calculate actualIdeal = min(target, available)
     // 3. actualRotational = 100 - actualIdeal (guarantees full batch)
