@@ -48,6 +48,7 @@ import { getTelemetryAggregator } from './telemetry-aggregator.js';
 import { SCANNER_PARAMS, VTS_IMF_THRESHOLDS } from '../config/system-guards.js';
 import { normalizeToInternalSymbol, getSymbolMappingDetails } from '../markets/kraken-symbol-resolver.js';
 import { setCostMetrics, getCostMetrics } from '../core/cache/cost-cache.js';
+import { ohlcCache } from './ohlc-cache.js';
 
 const SCAN_INTERVAL_SECONDS = 30; // 30 seconds aligned with clock ticks
 const SCAN_INTERVAL_MS = SCAN_INTERVAL_SECONDS * 1000; // For backwards compatibility
@@ -445,16 +446,26 @@ export class Fx5ScannerService {
       // Directive 11.4H.1 Task 2: Validate metrics before processing
       // Handle undefined/null volume24h gracefully with safe defaults
       
-      // Directive 11.4H.6A Task 3: Pre-load IMF module for passive learning OHLC cache access
-      let imfModule: { getCachedOHLCData: (s: string) => any[] | null; calculateLogLiquidity: (d: any[]) => number; calculateVolNoise: (d: any[]) => number; getIMFThresholds: () => { LQ_MIN: number; VN_MAX: number; CORR_MAX: number } } | null = null;
-      if (isPassiveLearningMode) {
+      // Batch 18F: Pre-fetch OHLC data for survivors to populate ohlcCache.
+      // Prior to this fix, VN/σ/DI were computed on empty arrays because market-scanner.ts
+      // never populates priceHistory/history fields. The ohlcCache (Batch 18) provides
+      // ~720 60-min candles with 5-min TTL. Sequential fetches avoid Kraken rate limiting.
+      // First scan after restart: ~60-70 API calls (~17s). Subsequent: mostly cache hits (<1s).
+      const ohlcDataMap = new Map<string, number[]>();
+      for (const s of survivors) {
+        if (s.volume24h == null || s.dailyRange == null) continue;
+        const sym = normalizeToInternalSymbol(s.symbol);
         try {
-          imfModule = await import('../core/metrics/imf-metrics.js');
-        } catch (err) {
-          console.warn('[11.4H.6A] Failed to load IMF module:', err);
+          const { ohlc } = await ohlcCache.getOHLCData(sym, 60);
+          if (ohlc && ohlc.length >= 10) {
+            ohlcDataMap.set(sym, ohlc.map((c: any) => parseFloat(c.close)));
+          }
+        } catch {
+          // OHLC fetch failed for this symbol — will fall back to ticker data
         }
       }
-      
+      console.log(`[Batch18F][OHLC] Pre-fetched ${ohlcDataMap.size}/${survivors.length} survivors`);
+
       const classifiedSurvivors = survivors
         .filter(s => {
           // Directive 11.4H.1 Task 2: Skip pairs with incomplete metrics
@@ -525,47 +536,27 @@ export class Fx5ScannerService {
         // This ensures friction scores vary based on actual market data
         setCostMetrics(normalizedSymbol, { spread });
         
-        // Directive 11.4H.6A Task 3: Use cached OHLC data for IMF during passive learning
-        let LQ: number;
-        let VolNoise: number;
-        let passesMetricFilter: boolean;
-        let imfSource = 'ticker';
-        
-        if (isPassiveLearningMode && imfModule) {
-          // Try to get cached OHLC data from VTS for better IMF calculation
-          const cachedOHLC = imfModule.getCachedOHLCData(normalizedSymbol);
-          
-          if (cachedOHLC && cachedOHLC.length >= 10) {
-            // Use OHLC-based calculation
-            LQ = imfModule.calculateLogLiquidity(cachedOHLC);
-            VolNoise = imfModule.calculateVolNoise(cachedOHLC);
-            const thresholds = imfModule.getIMFThresholds();
-            passesMetricFilter = LQ >= thresholds.LQ_MIN && VolNoise <= thresholds.VN_MAX;
-            imfSource = 'ohlc_cache';
-            console.log(`[11.4H.6A][IMF OHLC] ${normalizedSymbol} => LQ=${LQ.toFixed(2)} VN=${VolNoise.toFixed(3)} Filter=${passesMetricFilter} Candles=${cachedOHLC.length}`);
-          } else {
-            // Fallback to ticker-based calculation
-            LQ = calculateLogLiquidity(volumeUSD, tradeCount, spread);
-            VolNoise = calculateVolNoise(prices);
-            passesMetricFilter = passesCoreMetricFilters(LQ, VolNoise);
-            console.log(`[11.4H.6A][IMF Passive] ${normalizedSymbol} => LQ=${LQ.toFixed(2)} VN=${VolNoise.toFixed(3)} Filter=${passesMetricFilter} DataQuality=TICKER(${prices.length}pts)`);
-          }
-        } else {
-          // Active trading or no IMF module: use standard ticker-based calculation
-          LQ = calculateLogLiquidity(volumeUSD, tradeCount, spread);
-          VolNoise = calculateVolNoise(prices);
-          passesMetricFilter = passesCoreMetricFilters(LQ, VolNoise);
-        }
-        
+        // Batch 18F: Use pre-fetched OHLC data for accurate VN/σ/DI calculations.
+        // ohlcDataMap populated above the .map() chain with ~720 60-min candles per symbol.
+        // Falls back to ticker prices (usually empty) if OHLC unavailable for this symbol.
+        const ohlcPrices = ohlcDataMap.get(normalizedSymbol) || prices;
+        const imfSource = ohlcDataMap.has(normalizedSymbol)
+          ? `ohlc(${ohlcPrices.length})`
+          : `ticker(${prices.length}pts)`;
+
+        const LQ = calculateLogLiquidity(volumeUSD, tradeCount, spread);
+        let VolNoise = calculateVolNoise(ohlcPrices);
+        const passesMetricFilter = passesCoreMetricFilters(LQ, VolNoise);
+
         // Directive 11.7H Task H-04: Sanity clamp for out-of-range VN values
         // Prevents rare division or empty-array anomalies from blocking scans
         if (VolNoise > 2 || VolNoise < 0 || !Number.isFinite(VolNoise)) {
           console.warn(`[11.7H][VN] Out-of-range VN=${VolNoise} for ${normalizedSymbol} — defaulting to 0.6`);
           VolNoise = 0.6;
         }
-        
-        const DI = calculateDirectionalIntegrity(prices);
-        const Sigma = calculateSigma(prices);
+
+        const DI = calculateDirectionalIntegrity(ohlcPrices);
+        const Sigma = calculateSigma(ohlcPrices);
         
         // Directive 9.1.G: Telemetry logging with [9.1] tags
         console.log(`[9.1][FX5] ${s.symbol} LQ=${LQ.toFixed(1)} DI=${DI.toFixed(1)} VN=${VolNoise.toFixed(2)} σ=${Sigma.toFixed(4)} src=${imfSource}`);

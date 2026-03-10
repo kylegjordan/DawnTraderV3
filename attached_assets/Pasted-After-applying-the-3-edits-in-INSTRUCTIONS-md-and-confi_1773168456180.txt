@@ -1,0 +1,47 @@
+After applying the 3 edits in INSTRUCTIONS.md and confirming all verification commands pass, restart the server and monitor the first 2-3 FX5 scan cycles. Run these checks:
+
+# 1. Confirm OHLC pre-fetch is running (should appear every scan cycle)
+# Look for the new log line showing how many survivors got OHLC data
+# Expected: [Batch18F][OHLC] Pre-fetched X/Y survivors (X should be close to Y)
+
+# 2. Confirm OHLC data is being used (not ticker fallback)
+# The src= field in the [9.1][FX5] log lines should show ohlc(N) not ticker(0pts)
+# Expected: src=ohlc(720) or similar — NOT src=ticker(0pts)
+
+# 3. Check sigma values — should NO LONGER be all zeros
+# Before fix: σ=0.0000 for every pair (empty array default)
+# After fix: σ should show real non-zero values (e.g., σ=0.0023, σ=0.0147)
+# A few zeros are OK if OHLC fetch failed for that pair, but most should be non-zero
+
+# 4. Check VN values — should NO LONGER be all 0.50
+# Before fix: VN=0.50 for every pair (empty array default)
+# After fix: VN should show varied real values (e.g., VN=0.42, VN=0.78, VN=0.91)
+# Many crypto pairs legitimately have high VN on 60-min candles — that's real data
+
+# 5. Check DI values — should NO LONGER be all 0.50
+# Before fix: DI=0.5 for every pair (empty array default)  
+# After fix: DI should show varied real values
+
+# 6. Check that imfModule is fully removed
+grep "imfModule" server/services/fx5-scanner.ts
+# Expected: 0 matches
+
+grep "imf-metrics" server/services/fx5-scanner.ts
+# Expected: 0 matches
+
+# 7. Confirm first scan timing
+# The first scan after restart will be slower (~15-20 seconds) because the OHLC
+# cache is cold and needs to fetch from Kraken for each survivor. This is expected.
+# Subsequent scans should be fast (<2 seconds for OHLC portion) due to 5-min TTL cache hits.
+
+# 8. Run tests
+npx vitest run server/tests/unit/analysis-utils.test.ts
+npx vitest run server/tests/unit/system-guards.test.ts
+
+What to report back:
+
+Copy 3-5 sample [9.1][FX5] log lines from the SECOND scan cycle (after cache is warm) showing the new VN/σ/DI/src values
+The [Batch18F][OHLC] Pre-fetched X/Y survivors line
+Any errors or warnings related to OHLC fetching
+Test results
+First scan cycle duration (expected: 15-20s cold, then normal ~5-8s after)
