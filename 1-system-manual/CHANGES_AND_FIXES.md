@@ -1121,6 +1121,50 @@ Total: 21 bugs, 65 risks.
 - **Fix**: Rename the second tab's value attribute to a unique identifier (e.g., `"adaptive-learning"` or `"learning-metrics"`)
 - **Phase Found**: Post-audit investigation (Tab catalog 2026-02-17)
 
+### BUG-023: Regime Archive Data Wiped on Every Server Restart — **RESOLVED**
+- **Severity**: HIGH
+- **Location**: `server/index.ts` (startup sequence), `client/src/pages/machine-learning.tsx` (debug UI)
+- **Status**: **RESOLVED** — Batch 18C, commit `c42283f1` (2026-03-10)
+- **Resolution**: Three compounding issues fixed in 11 surgical edits across 2 files:
+  1. **Primary**: Removed `clearArchiveForFreshStart()` call from server startup (index.ts). This function deleted all archive JSON files and reset the manifest on every Replit restart, destroying weekly archive data created by the cron job.
+  2. **Secondary**: Removed debug UI scaffolding from machine-learning.tsx — yellow test button, `[DIAG]` console.log statements, WeakMap handler identity tracking, DOM visibility checks, mount/unmount trackers, render counters.
+  3. **Minor**: Removed duplicate regime-archive route mount from index.ts (was mounted in both index.ts and routes.ts). Removed unused `regimeArchiveRouter` import.
+- **Original Problem**: The Regime Archive tab on the Machine Learning page showed 0 records. A debug test button was visible in production UI. Root cause: `clearArchiveForFreshStart()` in the startup sequence wiped all archive data every time the server restarted (which happens frequently on Replit).
+- **Phase Found**: Post-Batch 18 investigation (2026-03-10)
+
+### BUG-024: VTS Pipeline Starved — Batch Size Hardcode + Relaxed Filter Dead Path — **RESOLVED**
+- **Severity**: HIGH
+- **Location**: `server/services/market-scanner.ts` (batch size), `server/config/system-guards.ts` (VTS thresholds)
+- **Status**: **RESOLVED** — Batch 18E, commit `5d774fb2` (2026-03-10)
+- **Resolution**: Two compounding bugs fixed in 4 surgical edits across 3 files:
+  1. **Primary**: `targetBatchSize = 100` hardcoded in market-scanner.ts line 512. This Directive 11.4C-R2 refill mechanism was written when BATCH_SIZE was 100 and was missed during Batch 18's increase to 300. Changed to `SCANNER_PARAMS.BATCH_SIZE`.
+  2. **Secondary**: `VTS_IMF_THRESHOLDS.VN_MAX = 0.80` matched `IMF_THRESHOLDS.VN_MAX = 0.80` (passive learning strict threshold), creating zero gap between strict and relaxed filtering. Market VN values are 0.82-1.00 on 60-min candles. VN_MAX raised to 0.95 to create a meaningful 0.80-0.95 relaxed gap. Stale "100-pair" comments fixed in adaptive-scan-manager.ts.
+- **Original Problem**: VTS producing zero new simulated trades per session. FX5 scanner sometimes scanning only 100 pairs (should be 300). Log showed "0 relaxed-filter" pairs consistently. VTS received 1-45 non-benchmark pairs per cycle, all producing null from strategy detect functions.
+- **Additional Findings (NOT bugs)**: 252 "conditions not met" nulls (expected — 8 pattern strategies require Phase 14.5 dual-path). sigma and VN data quality issues traced to priceHistory empty arrays — root cause fixed in Batch 18F (BUG-025).
+- **Phase Found**: Post-Batch 18 investigation (2026-03-10)
+
+### BUG-025: FX5 Scanner VN/σ/DI Computed on Empty Arrays — **RESOLVED**
+- **Severity**: HIGH
+- **Location**: `server/services/fx5-scanner.ts` (lines 502, 528-568)
+- **Status**: **RESOLVED** — Batch 18F, commit `9de4afc7` (2026-03-10)
+- **Resolution**: Three surgical edits in fx5-scanner.ts:
+  1. **Import**: Added `import { ohlcCache } from './ohlc-cache.js'` — gives FX5 access to the OHLC cache singleton (Batch 18, 5-min TTL, ~720 60-min candles per symbol).
+  2. **Pre-fetch loop**: Replaced `imfModule` dynamic import (passive-learning-only, VTS-cache-dependent, limited coverage) with universal OHLC pre-fetch loop that runs sequentially for all post-global-filter survivors (~60-70 per cycle). Results stored in `Map<string, number[]>` for synchronous access inside `.map()` chain.
+  3. **IMF calculation block**: Replaced 3-branch conditional (passive+OHLC, passive+ticker, active+ticker) with single OHLC-first path. VN, DI, and Sigma now computed from real ~720 close prices. LQ unchanged (uses ticker-derived volume/trades/spread). Falls back to ticker data if OHLC unavailable.
+- **Original Problem**: `priceHistory` and `history` fields declared in market-scanner.ts BatchResult interface but NEVER populated. `const prices = s.priceHistory || s.history || []` always resolved to `[]`. `calculateVolNoise([])` returned 0.5 (pairs passed VN≤0.60 strict filter for wrong reason — no data, not low noise). `calculateSigma([])` returned 0. `calculateDirectionalIntegrity([])` returned 0.5. The entire IMF classification operated on fabricated metrics.
+- **Phase Found**: Post-Batch 18E investigation (2026-03-10)
+
+### BUG-026: LQ (Log Liquidity) Saturates at 100 for All Crypto Pairs — **RESOLVED**
+- **Severity**: MEDIUM
+- **Location**: `server/services/fx5-scanner.ts` (LQ calculation)
+- **Status**: **RESOLVED** — Batch 18G, commit `f82b7b66` (2026-03-10)
+- **Resolution**: Two surgical edits in fx5-scanner.ts:
+  1. **ohlcDataMap expanded**: `Map<string, number[]>` changed to `Map<string, { prices: number[], avgVolumeUSD: number }>`. Pre-fetch loop now computes per-candle average USD volume using `typicalPrice × volume` (same formula as imf-metrics.ts).
+  2. **LQ formula replaced**: When OHLC data available, uses `log10(avgVolumeUSD + 1) * 10` instead of `calculateLogLiquidity(volumeUSD, tradeCount, spread)`. Standard formula retained as fallback when OHLC unavailable.
+- **Original Problem**: The standard `calculateLogLiquidity(V, C, S)` in analysis-utils.ts uses `10 * (ln(V*C) - ln(S/C) - 10)` capped at `Math.min(100, raw)`. For crypto, 24h aggregate volume is so large that the formula always hits 100. All pairs showed LQ=100.0 — BTC/USD, memecoins, micro-caps, everything identical. The LQ≥40 filter (strict) and LQ≥25 filter (VTS) never excluded anything.
+- **Fix Approach**: Per-candle volume on 60-min candles is ~1/24th of 24h volume, and `log10` instead of `ln` produces values in the 30-60 range — exactly where LQ thresholds can discriminate. Unified across both VTS and active trading paths.
+- **Phase Found**: Post-Batch 18F monitoring (2026-03-10)
+
 ---
 
 ## REPLIT LSP AUDIT CROSS-REFERENCE FINDINGS

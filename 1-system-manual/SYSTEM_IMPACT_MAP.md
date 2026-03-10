@@ -2,6 +2,7 @@
 
 > **Author**: Claude Code (System Cartographer)
 > **Created**: 2026-02-19
+> **Last Updated**: 2026-03-10 (Batch 18D — Comprehensive Governance Catch-Up)
 > **Purpose**: Component dependency reference for directive authoring. Before writing any directive, consult this map to identify all upstream, downstream, and shared-state impacts of the proposed change.
 > **Usage**: Claude Code looks up every affected component BEFORE writing a directive. The directive's Impact Analysis section must reference this map.
 
@@ -432,7 +433,7 @@
 - **File**: `server/startup/lazy-loader.ts` (~189 lines)
 - **What**: Loads non-critical services after main startup. Parallel Promise.all for critical, setTimeout for low-priority.
 - **Blast Radius**: **MEDIUM** — controls deferred service loading
-- **Note**: Walter/Cortex services loaded here — removing them requires updating lazy loader
+- **Note**: Walter/Cortex services removed from lazy loader (Phases 12-13, HF9). Remaining deferred loads are non-legacy utility services.
 
 ### 9.4 Trading Bootstrap
 - **File**: `server/startup/trading-bootstrap.ts` (~99 lines)

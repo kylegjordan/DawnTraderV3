@@ -5574,6 +5574,10 @@ interface RegimeArchiveRecord {
 - **7-day and 30-day windows** for regime metrics
 - **zlib compression** for archival
 
+### Startup Behavior (Updated Batch 18C)
+
+> **IMPORTANT**: Prior to Batch 18C (`c42283f1`), `clearArchiveForFreshStart()` was called during server startup in `index.ts`, which deleted all archive JSON files and reset the manifest to `[]` on every restart. This was removed in Batch 18C — archives now persist across server restarts. The weekly cron job (`0 0 * * 0`) creates archives, and they accumulate over time as intended. Debug UI scaffolding (test button, diagnostic logging) was also cleaned from machine-learning.tsx.
+
 ---
 
 ## 13. Learning Cooldown — Regime-Aware Update Gating
@@ -6146,15 +6150,14 @@ DawnTrader's system lifecycle is managed through a **single-file monolithic boot
 - **Sampling:** Non-error requests logged at 10% sample rate
 
 ### Route Mounting Order
-1. Regime Archive routes (mounted before registerRoutes)
-2. API router from registerRoutes()
-3. Status routes at `/api/status`
-4. Health routes at `/api/health`
-5. DSE routes at `/api/diagnostics`
-6. Chaplet routes at `/chaplet` (read-only)
-7. Phase 8.6.5 enhancement routes
-8. Provenance debug routes
-9. Global error handler (catch-all JSON)
+1. API router from registerRoutes() (includes regime-archive routes via routes.ts)
+2. Status routes at `/api/status`
+3. Health routes at `/api/health`
+4. DSE routes at `/api/diagnostics`
+5. Chaplet routes at `/chaplet` (read-only)
+6. Phase 8.6.5 enhancement routes
+7. Provenance debug routes
+8. Global error handler (catch-all JSON)
 10. Vite middleware (dev) or static serving (prod)
 
 ### Post-Listen Audit Telemetry
@@ -7447,6 +7450,8 @@ apiRouter.use('', regimeArchiveRouter.default);
 ```
 
 The regime-archive router is mounted with an **empty prefix** on apiRouter. However, the route file itself defines full paths like `/api/vts/regime-archive/*`. Since apiRouter is already mounted at `/api`, this creates a potential double-prefix issue where paths could resolve as `/api/api/vts/regime-archive/*` depending on how Express resolves the empty mount.
+
+> **UPDATE (Batch 18C, `c42283f1`)**: The duplicate mount in index.ts (`app.use('', regimeArchiveRouter)`) was removed. Regime-archive routes are now mounted exclusively via routes.ts. The empty-prefix mount in routes.ts remains but functions correctly — Express resolves the empty mount string as a pass-through, so paths resolve as `/api/vts/regime-archive/*` as intended.
 
 ### Unmounted Route File: learning.ts
 

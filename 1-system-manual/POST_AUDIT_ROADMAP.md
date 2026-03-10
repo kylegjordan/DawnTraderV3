@@ -2,7 +2,7 @@
 
 > **Author**: Claude Code (System Cartographer & Lead Architect)
 > **Created**: 2026-02-17
-> **Revised**: 2026-03-04 (v3 — updated to reflect Phase 12 and Phase 13 completion. L-Series removal moved from Phase 16 to Phase 13 per actual execution. Mega-batch approach documented.)
+> **Revised**: 2026-03-10 (v4 — Comprehensive governance catch-up. Current State Assessment updated (MCE installed, DSS deleted, DBS implemented, regime archive fixed). Risk Assessment updated (completed items removed). Dependency chain updated (14.2 SKIP, 14.3 DEFERRED, 14.4 CANCELED, 14.5 NEXT). Phase 16 absorbed into Phase 13.)
 > **Purpose**: Complete roadmap from current state (Phase 11.8B-D1) through live mode trading and publication. Uses formal DawnTrader phase numbering.
 > **Companion Documents**: SYSTEM_MANUAL.md (what the system IS), CHANGES_AND_FIXES.md (22 bugs, 85 risks), LEGACY_DEPRECATION_PLAN.md (removal waves)
 > **Source Documents Incorporated**: "Dawn Trader Next Steps After MCE Build" (2.14.26), "DT Phase 11.8 Final Steps" (2.6.26), "DT Predictive Learning Calibration" (2.2.26), "The Plan to Create A Plan for Machine Learning" (1.17.26)
@@ -30,15 +30,15 @@ DawnTrader is a functional paper-trading system with elite-tier backend math and
 | Dimension | State |
 |-----------|-------|
 | **Core Math** | Strong — FinalScore kernel, Expectancy Gate, cost-model are correct and well-tested |
-| **Trading Pipeline** | Functional but contaminated — NGC (legacy) flows as confidence carrier, DSS uses legacy regime map |
+| **Trading Pipeline** | Functional — MCE centralized regime/indicators, NGC replaced with deterministic confidence (Batch 13), DSS deleted (HF9), 17 canonical strategies active |
 | **Risk Management** | Active — Guardrails V2, kill switch, pre-execution validator, REB diagnostics |
 | **Predictive Learning** | Observational only — Predictive Adjustments, Calibration, and Regime Archive exist but cannot execute filter changes. No adjustment framework. No authority baseline. |
 | **Test Coverage** | Backend math: elite. Frontend: zero. Integration: fragile. CI/CD: absent. |
-| **Legacy Code** | ~96 Walter/Bob/Cortex files, ~71 legacy DB tables, ~460 unused API endpoints, ~40 legacy enums |
+| **Legacy Code** | Significantly reduced — Walter/Bob/Cortex major files deleted (Phases 12-13). ~71 legacy DB tables, residual unused API endpoints, ~40 legacy enums. 2 read-only Walter DB refs remain in routes.ts. |
 | **Database** | ~160 tables (44% legacy), no retention policy, no partitioning, 10 GB limit |
-| **Frontend** | Functional but bloated — Walter-heavy, 91 tab sub-pages, 7 dead pages, monolithic components |
-| **Regime Model** | No Directional Bias. No distinction between Global and Pair-level Structural Regime. No Friction feed into predictive learning. |
-| **Trading Modes** | Long-only. No short trading capability. |
+| **Frontend** | Improved — 7 dead pages removed (Batch 9), Walter references reduced, regime archive debug UI cleaned (Batch 18C). Still has 91 tab sub-pages and monolithic components. |
+| **Regime Model** | DBS implemented (Batch 15) with pair-level + global bias. Structural Regime rename SKIPPED (no value). 5 canonical regimes active. Friction feed deferred to Phase 11 finalization. |
+| **Trading Modes** | Long-only. Short trading DEFERRED INDEFINITELY (capital constraint). Replaced by Exchange Expansion (post-launch). |
 | **Machine Learning** | Not designed. Prerequisites (Feature Store, Touchpoint Matrix, Infrastructure Proposal) do not exist. |
 
 ---
@@ -759,30 +759,21 @@ These items are deferred to after live mode activation (Phase 21). Listed in Kyl
 ## Phase Dependency Chain
 
 ```
-Phase 12.1 (Math/Security) ─┐
-                             ├→ Phase 12.2 (Dead Code Purge) → Phase 12.3 (Pipeline Unification)
-                             │
-                             └→ Phase 13 (MCE) → Phase 14.1 (VTS Real Calcs)
-                                                 │
-                                                 ├→ Phase 14.2 (Directional Bias)
-                                                 ├→ Phase 14.3 (Short Trading)
-                                                 └→ Phase 14.4 (Data Backfill)
-                                                     │
-                                                     └→ Phase 11 Final (11.8B-E, 11.8C)
-                                                         │
-                                                         └→ Phase 15 (Predictive Execution)
-                                                             │
-                                                             ├→ Phase 16 (L-Series Removal)
-                                                             │
-                                                             └→ Phase 17 (ML Design) → Phase 18 (ML Build)
-                                                                                         │
-                                                                                         └→ Phase 19 (Paper Debug)
-                                                                                             │
-                                                                                             └→ Phase 20 (Hardening)
-                                                                                                 │
-                                                                                                 └→ Phase 21 (Live Mode)
-                                                                                                     │
-                                                                                                     └→ Phase 22 (Publication)
+Phase 12 (Math + Dead Code + Pipeline) ── COMPLETE
+    └→ Phase 13 (MCE) ── COMPLETE
+        └→ Phase 14.1 (VTS Real Calcs) ── COMPLETE
+            ├→ Phase 14.2 (DBS) ── EFFECTIVELY COMPLETE (Batch 15)
+            ├→ Phase 14.3 (Short Trading) ── DEFERRED INDEFINITELY
+            ├→ Phase 14.4 (Data Backfill) ── CANCELED
+            │
+            └→ Phase 14.5 (Pattern Scanning + Ranking + Regime Pre-Filter) ← NEXT
+                └→ Phase 11 Final (11.8B-E, 11.8C)
+                    └→ Phase 15 (Adaptive Weights + Rules Engine + Monitor)
+                        └→ Phase 19 (Paper Debug)
+                            └→ Phase 20 (Hardening)
+                                └→ Phase 21 (Live Mode)
+
+Post-Launch: Exchange Expansion → ML (Phase 17+18) → AWS/Supabase Migration
 ```
 
 ---
@@ -790,24 +781,25 @@ Phase 12.1 (Math/Security) ─┐
 ## Risk Assessment
 
 ### Highest Risk Actions
-1. **Wave 6 L-Series Removal** (Phase 16.1) — 14+ consumer services depend on MCP/ARE. Requires careful migration. DANGEROUS rating.
-2. **MCE Installation** (Phase 13) — Fundamental architectural change. Must be thoroughly tested.
-3. **NGC Removal** (Phase 12.3.3) — NGC flows as confidence carrier throughout the pipeline. Must be replaced, not just removed.
-4. **ML Integration** (Phase 18.3) — Wiring ML output into live decision systems. Requires Safe Mode fallback.
-5. **Short Trading** (Phase 14.3) — Different risk profile from long-only. Requires Kraken confirmation and careful guardrail adaptation.
+1. **Phase 14.5 Dual-Path Pattern Scanning** (Batch 19) — Adds pattern pool alongside existing quant pool in FX5 scanner and signal orchestrator. Risk: Pattern signals with lower quality could dilute RTB queue if ranking weights miscalibrated.
+2. **Phase 11 Finalization — Adjustment Framework** (11.8B-E) — Wiring predictive learning adjustments into live filter modifications. Risk: Bad adjustments could systematically degrade signal quality.
+3. **ML Integration** (Phase 18.3) — Wiring ML output into live decision systems. Requires Safe Mode fallback.
+4. **Live Mode Activation** (Phase 21) — Transitioning from paper to real money. Risk: Any latent bugs in execution pipeline become financial losses.
+5. **Exchange Expansion** (Post-launch) — Adding new exchange with different API, order types, and fee structures. Risk: Integration complexity and regulatory differences.
 
 ### Lowest Risk Actions (Quick Wins)
-1. **BUG-004 DI fix** (Phase 12.1.1) — Standalone math fix, no dependencies
-2. **Wave 1 safe deletions** (Phase 12.2.1) — No active importers, pure cleanup
-3. **Wave 9 dead frontend code** (Phase 12.2.9) — No runtime impact
-4. **Security fixes** (Phase 12.1.3) — Standalone, no architectural changes
-5. **RiskManager cleanup** (Phase 12.1.5) — Deprecated class, replacement already in place
+1. **12.1.6 LSP Error Triage** — ~620 type annotation errors. Low severity, no logic impact. Deferred.
+2. **BUG-021 system-config.tsx fetch** — Replace raw fetch() with apiRequest. Standalone, no dependencies.
+3. **BUG-022 duplicate tab value** — Rename duplicate "learning" tab value. Trivial UI fix.
+4. **Global Regime Pre-Filter** (Phase 14.5 Part C) — Small effort, uses existing BTC OHLC from MCE. Low risk.
+5. **Regime archive stale data cleanup** — Purge pre-HF9 telemetry with old regime names from archive files.
 
 ### Critical Decision Points Requiring Kyle Input
-1. **Phase 14.3**: Does Kraken confirm short trading? If no, this sub-phase is skipped and short strategies are deferred.
+1. ~~**Phase 14.3**: Does Kraken confirm short trading?~~ **RESOLVED** — DEFERRED INDEFINITELY (capital constraint). Replaced by Exchange Expansion post-launch.
 2. **Phase 17**: ML architecture brainstorming session needed. In-process vs microservice? Which ML libraries? What's the inference latency budget?
 3. **Phase 18**: Crawl-Walk-Run-Fly milestones — at what point is ML "good enough" to proceed to Paper Debug?
 4. **Phase 21**: Position sizes for parallel paper+live testing. What's the risk budget for live validation?
+5. **Exchange Selection**: Which exchange to add post-launch? Must support stocks/ETFs/tokenized assets/futures.
 
 ---
 

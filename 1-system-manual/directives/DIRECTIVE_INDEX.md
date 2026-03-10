@@ -66,6 +66,22 @@
 | HF6B | Fix VTS volume=0 bug + range_trade alias | COMPLETE | 2026-03-05 | Batch 15 | `ae431e17` — ticker volume passed to MCE |
 | HF7 | Regime classification recalibration for crypto DX | COMPLETE | 2026-03-06 | Batch 15 | `64014bd2` — DX thresholds 25 to 45/50/55/60, momentum window 14 to 30 |
 | HF8 | VTS throughput fixes + remaining items | COMPLETE | 2026-03-07 | Batch 16 | `052fb224` — 60-min candles, 100 OHLC, BTC candles, param relaxation, FinalScore dedup, SQE confidence floor, analytics regime-map, config fix. Eliminates Phase 14.1B from roadmap. |
+| HF9 | Column fix + Governance gate SQE migration + DSS deletion + VTS IMF relaxation | COMPLETE | 2026-03-07 | Batch 17 | `f9fa56c6` — 5 context fields + filterTier persisted, governance gate moved to SQE, DSS fully deleted, VTS IMF relaxation with dual-path strict/relaxed filtering |
+
+### Inter-Phase Optimization
+
+| Batch | Title | Status | Date Complete | Commit | Notes |
+|-------|-------|--------|---------------|--------|-------|
+| Batch 18 | API Budget Optimization + FX5 300 Pairs | COMPLETE | 2026-03-08 | `4b6b2fa9` | OHLC cache, orchestrator priceCache migration, BATCH_SIZE 100 to 300, filterTier fix. API calls ~18,200 to ~7,520/hr (58% reduction) |
+
+### Standalone Hotfixes
+
+| Batch | Title | Status | Date Complete | Commit | Notes |
+|-------|-------|--------|---------------|--------|-------|
+| Batch 18C | Regime Archive Fix | COMPLETE | 2026-03-10 | `c42283f1` | clearArchiveForFreshStart startup wipe removed, debug UI cleaned, route double-mount fixed |
+| Batch 18E | VTS Pipeline Hotfix | COMPLETE | 2026-03-10 | `5d774fb2` | Batch size hardcode 100 to BATCH_SIZE, VTS VN_MAX 0.80 to 0.95, stale comments fixed |
+| Batch 18F | FX5 OHLC Wiring | COMPLETE | 2026-03-10 | `9de4afc7` | FX5 wired to ohlcCache for real VN/σ/DI. Replaced imfModule with universal OHLC pre-fetch. |
+| Batch 18G | OHLC-Based LQ | COMPLETE | 2026-03-10 | `f82b7b66` | Per-candle volume LQ replacing saturating 24h aggregate. LQ now 30-60 range, unified VTS+active. |
 
 ---
 
@@ -73,10 +89,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Directives Issued | 18 + 5 HF |
-| Total Directives Complete | 18 + 5 HF |
+| Total Directives Issued | 18 + 6 HF + 1 inter-phase + 4 standalone hotfixes |
+| Total Directives Complete | 18 + 6 HF + 1 inter-phase + 4 standalone hotfixes |
 | Total Directives In Progress | 0 |
-| Total Review Cycles | 23 |
+| Total Review Cycles | 27 |
 | Average Review Cycles per Directive | 1.00 |
 
 ---

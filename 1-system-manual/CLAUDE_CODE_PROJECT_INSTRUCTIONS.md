@@ -3,7 +3,7 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-03-08 (after Batch 18B — API Budget Optimization governance. OHLC cache, orchestrator priceCache migration, BATCH_SIZE 300, filterTier fix. Roadmap updated to reflect Batch 18 completion.)
+> **Last Updated**: 2026-03-10 (after Batch 18D — Comprehensive Governance Catch-Up + Update Rules Matrix. All governance files brought current. Governance Update Rules codified as Tier 1/2/3 matrix.)
 
 ---
 
@@ -88,6 +88,37 @@ Previous sessions have made these errors. **Do NOT repeat them:**
 6. **DO NOT write code before agreeing on scope with Kyle.** Always produce a scope document first and get Kyle's approval.
 
 7. **DO NOT split a phase into sub-batches.** Use one mega-batch per phase unless Kyle explicitly approves splitting.
+
+### Governance Update Rules
+
+Every governance batch MUST follow these rules. No exceptions, no gut-feel.
+
+**Tier 1 — EVERY code batch (mandatory, no exceptions):**
+
+| File | What Gets Updated |
+|------|------------------|
+| CLAUDE_CODE_PROJECT_INSTRUCTIONS | Completed Directives table, Last commit, Next step, Last Updated date |
+| DIRECTIVE_INDEX | New row for each batch/hotfix with status and commit hash |
+| MEMORY.md | Current state, last commit, completed items (end of every session) |
+
+**Tier 2 — When the change touches that file's domain:**
+
+| File | Update When... |
+|------|---------------|
+| CHANGES_AND_FIXES | A bug is fixed, a risk is resolved, or a new bug/risk is discovered |
+| SYSTEM_MANUAL | System behavior changes (new service, changed config, deleted component, modified invariant) |
+| SYSTEM_IMPACT_MAP | Component dependencies change (new service, wiring changes, upstream/downstream modifications) |
+| POST_AUDIT_ROADMAP | Roadmap decisions are made (skip, cancel, defer, reorder, scope changes, phase completion) |
+
+**Tier 3 — Periodic cleanup (when noticed or quarterly):**
+
+| File | Update When... |
+|------|---------------|
+| LEGACY_DEPRECATION_PLAN | A cleanup wave completes |
+| POST_AUDIT_ROADMAP Risk Assessment | Completed items should be removed from risk list |
+| POST_AUDIT_ROADMAP Current State Assessment | After major architectural changes |
+
+**Enforcement**: Claude Code checks this matrix at the START of every governance batch to ensure no files are missed. If a Tier 1 file wasn't updated, the batch is incomplete.
 
 ---
 
@@ -434,15 +465,21 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 | 14.1 (HF9) | Column fix + Governance gate SQE migration + DSS deletion + VTS IMF relaxation | Batch 17 | `f9fa56c6` |
 | — | Governance docs updated (Phase 14.1 HF9 COMPLETE) | Batch 17B | (governance) |
 | Inter-phase | API Budget Optimization — OHLC cache, orchestrator priceCache migration, BATCH_SIZE 100→300, filterTier fix | Batch 18 | `4b6b2fa9` |
+| — | Governance docs updated (Batch 18 — API Budget Optimization + FX5 300 Pairs) | Batch 18B | `ed9bb0a7` |
+| Hotfix | Regime Archive Fix — clearArchiveForFreshStart startup wipe removed, debug UI cleaned, route double-mount fixed | Batch 18C | `c42283f1` |
+| — | Comprehensive Governance Catch-Up + Update Rules Matrix | Batch 18D | (governance) |
+| Hotfix | VTS Pipeline Hotfix — batch size hardcode fix (100 to BATCH_SIZE), VTS VN threshold 0.80 to 0.95 | Batch 18E | `5d774fb2` |
+| Hotfix | FX5 OHLC Wiring — real VN/σ/DI calculations using ohlcCache instead of empty arrays | Batch 18F | `9de4afc7` |
+| Hotfix | OHLC-Based LQ — per-candle volume liquidity replacing saturating 24h aggregate formula | Batch 18G | `f82b7b66` |
 
 ### In-Progress Directives
 | Directive | Title | Batch | Status |
 |-----------|-------|-------|--------|
 | (none currently in progress) | | | |
 
-> **Last commit**: `4c36ab34` (Batch 18 — API Budget Optimization + FX5 300 Pairs)
-> **Next step**: Phase 14.2 (Directional Bias & Structural Regime)
-> **Note**: Phase 14.1 **COMPLETE** (HF9 done, Batch 17). Batch 18 (inter-phase optimization) COMPLETE. Phase 14.1B ELIMINATED (completed in HF8).
+> **Last commit**: `f82b7b66` (Batch 18G — OHLC-Based LQ Fix)
+> **Next step**: Phase 14.5 (Block 3, Batch 19 — Parallel Pattern Scanning + Signal Ranking Overhaul + Global Regime Pre-Filter)
+> **Note**: Phase 14.1 **COMPLETE** (HF9, Batch 17). Batch 18 (inter-phase optimization) COMPLETE. Batch 18C (regime archive hotfix) COMPLETE. Batch 18E (VTS pipeline hotfix) COMPLETE. Batch 18F (FX5 OHLC wiring) COMPLETE. Batch 18G (OHLC-based LQ) COMPLETE. Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE (DBS in Batch 15; rename/backfill/structural regime SKIPPED). Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED.
 
 ### Snapshot Log
 | Snapshot | Commit | Description |
@@ -475,7 +512,7 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 See `directives/DIRECTIVE_INDEX.md` for the full list.
 - 12.1.6 (LSP Error Triage) — PENDING (LOW priority, deferred)
 
-Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation) is COMPLETE. Phase 14.1 is **COMPLETE** (HF9 done, Batch 17 `f9fa56c6`). Batch 18 (inter-phase optimization) COMPLETE (`4c36ab34` — OHLC cache, orchestrator priceCache migration, BATCH_SIZE 100→300, filterTier fix). Phase 14.1B ELIMINATED (completed in HF8). Next: Phase 14.2 (Directional Bias & Structural Regime).
+Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation) is COMPLETE. Phase 14.1 is **COMPLETE** (HF9 done, Batch 17 `f9fa56c6`). Batch 18 (inter-phase optimization) COMPLETE (`4b6b2fa9`). Batch 18C (regime archive hotfix) COMPLETE (`c42283f1`). Batch 18E (VTS pipeline hotfix) COMPLETE (`5d774fb2`). Batch 18F (FX5 OHLC wiring) COMPLETE (`9de4afc7`). Batch 18G (OHLC-based LQ) COMPLETE (`f82b7b66`). Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE (DBS in Batch 15). Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED. Next: Phase 14.5 (Block 3, Batch 19).
 
 ### Investigation Notes for Future Batches
 - **12.2.1**: ~~Wave 1 Safe Deletions~~ **COMPLETE** (Batch 8). 2 files deleted (dhma.ts, latti-safety-monitor.tsx). 11 files surgically modified. ~1,254 lines removed. LATTi lazy-loader stub (RISK-044) remains — can be cleaned in a future batch.
@@ -493,6 +530,11 @@ Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation
 - **RISK-028 / BUG-012 (Phase 4 Goal Alignment)**: pre-execution-validator.ts goal alignment gate and trading-engine.ts calculateGoalAlignmentScore() are formally deprecated but NOT yet removed. Separate from the Phase 9.0 system removed in Batch 11. Kyle decision needed on timing.
 - **Walter peripheral references**: 2 read-only DB references remain in routes.ts (walterActions table in health-summary, getWalterActivity in diagnostics export). Return empty data. Storage method implementations removed in Batch 10.
 - **LATTi remaining residuals**: DB column names (`tunedByLatti`, `managedByLottie`) preserved — renaming requires migration. `adaptive-guardrails.ts` still active (LATTI adaptive tuning system, not dead code). Lazy-loader stub removed (RISK-044 RESOLVED, Batch 10).
+- **Batch 18 (Inter-Phase Optimization)**: OHLC cache (5-min TTL wrapping KrakenService.getOHLCData()), orchestrator priceCache migration (per-symbol getTicker to getCachedPrice), BATCH_SIZE 100 to 300, filterTier fix. Net API budget: ~18,200 to ~7,520 calls/hr (58% reduction despite 3x pair increase). Commit `4b6b2fa9` (code), `ed9bb0a7` (governance).
+- **Batch 18C (Regime Archive Fix)**: `clearArchiveForFreshStart()` called on every server startup, wiping weekly archive data. Debug UI scaffolding (test button, [DIAG] logging, WeakMap handler tracking, render counters) left in machine-learning.tsx. Regime-archive routes double-mounted in index.ts and routes.ts. All fixed — 11 surgical edits across 2 files. Commit `c42283f1`.
+- **Batch 18E (VTS Pipeline Hotfix)**: Two compounding bugs starving VTS of data: (1) `targetBatchSize = 100` hardcoded in market-scanner.ts (missed during Batch 18 BATCH_SIZE increase to 300), causing some cycles to scan only 100 pairs. (2) VTS_IMF_THRESHOLDS.VN_MAX = 0.80 matched the passive learning strict threshold, creating zero gap for relaxed-filter pairs. Market VN values are 0.82-1.00. VN_MAX raised to 0.95. Commit `5d774fb2`.
+- **Batch 18F (FX5 OHLC Wiring)**: Third root cause of VTS starvation: `priceHistory` and `history` fields DECLARED in market-scanner.ts BatchResult interface but NEVER POPULATED. `prices = s.priceHistory || s.history || []` always resolved to `[]`. VN defaulted to 0.5 (pass strict for wrong reason), σ always 0, DI always 0.5. FX5 scanner wired to ohlcCache (Batch 18) for real ~720 60-min candle data. Replaced passive-learning-only `imfModule` dynamic import with universal OHLC pre-fetch loop. Commit `9de4afc7`.
+- **Batch 18G (OHLC-Based LQ)**: `calculateLogLiquidity(volumeUSD, tradeCount, spread)` in analysis-utils.ts uses `10*(ln(V*C)-ln(S/C)-10)` which saturates at 100 for all crypto pairs (24h aggregate volume too large). LQ=100 for everything — filter never discriminates. Replaced with per-candle OHLC volume formula: `log10(avgVolumeUSD_per_candle + 1) * 10` producing 30-60 range. Matches imf-metrics.ts formula. Both VTS and active trading now unified on same OHLC-based LQ. Commit `f82b7b66`.
 
 ### Test Baseline
 - **790 pass / 91 fail** (881 total across test files)
