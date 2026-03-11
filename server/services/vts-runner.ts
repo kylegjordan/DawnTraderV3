@@ -125,12 +125,23 @@ interface VTSConfig {
   minPrice: number;
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// Batch 18L: VTS Throughput Constants
+// These constants control VTS-ONLY behavior. Active trading is NOT affected.
+// Purpose: Increase VTS simulated trade volume for ML learning data.
+// ══════════════════════════════════════════════════════════════════════════════
+const VTS_NET_EV_FLOOR = -0.005;       // Option A: Allow marginally negative EV (down to -0.5%)
+const VTS_MAX_CONCURRENT_PER_COMBO = 3; // Option B: Max 3 concurrent trades per symbol+strategy
+// Option C: ROI gate skipped entirely for VTS (see Edit 3)
+// Option D: simulationIntervalSec reduced to 30s (aligned with FX5 scan cycle)
+// Option E: pairsPerCycle increased to 200 (capture all FX5 output)
+
 const DEFAULT_CONFIG: VTSConfig = {
   autonomousMode: true,
-  simulationIntervalSec: 60,
-  pairsPerCycle: 100,
+  simulationIntervalSec: 30,  // Batch 18L Option D: was 60, now aligned with FX5 30s scan cycle
+  pairsPerCycle: 200,         // Batch 18L Option E: was 100, now captures all FX5 survivors
   strategies: [
-    'vwap_pullback', 'sma_trend_ride', 'breakout', 'range_trade', 
+    'vwap_pullback', 'sma_trend_ride', 'breakout', 'range_trade',
     'support_bounce', 'vwap_bounce', 'mean_reversion', 'liquidity_trap'
   ],
   targetProfit: 0.015,
@@ -229,7 +240,7 @@ interface OpenVirtualTrade {
 }
 
 const openVirtualTrades: Map<string, OpenVirtualTrade> = new Map();
-const MAX_OPEN_TRADES = 300; // Directive 11.6E: Capped at 300 to respect Kraken API rate limits
+const MAX_OPEN_TRADES = 500; // Batch 18L: Increased from 300 to accommodate VTS throughput boost (VTS trades don't make Kraken API calls for execution)
 // HF6 Item 3: openVirtualTrades is cleared at startup via vtsService.hf6ClearStaleTrades()
 // which handles the vts-service side. Runner-side Map starts empty on module load.
 console.log(`[11.6E][Registry] Max open trades set to ${MAX_OPEN_TRADES}`);
@@ -657,39 +668,35 @@ async function generatePhase10Signal(
     DI
   });
   
-  // Canonical profitability gate: netEV > 0
-  if (kernelResult.netEV <= 0) {
+  // Batch 18L Option A: VTS-specific relaxed Net EV gate
+  // Active trading still uses strict netEV > 0 (in signal-orchestrator.ts)
+  // VTS allows marginally negative EV for ML boundary learning
+  // Signals with slightly negative EV teach the model where the profitability edge is
+  if (kernelResult.netEV <= VTS_NET_EV_FLOOR) {
     logSkippedSignal({
       symbol,
-      reason: 'Net_EV_Negative',
+      reason: 'Net_EV_Below_VTS_Floor',
       regime,
       signalType,
       strategy,
       source: 'VTS'
     });
-    console.log(`[11.8B-A2][NetEV] Skipping ${symbol}: Net EV=${kernelResult.netEV.toFixed(6)} <= 0 (rawEV=${kernelResult.rawEV.toFixed(6)}, friction=${totalFriction.toFixed(6)})`);
+    console.log(`[18L][NetEV] Skipping ${symbol}: Net EV=${kernelResult.netEV.toFixed(6)} <= ${VTS_NET_EV_FLOOR} (rawEV=${kernelResult.rawEV.toFixed(6)}, friction=${totalFriction.toFixed(6)})`);
     return null;
   }
   
   // ══════════════════════════════════════════════════════════════════════════════
-  // Directive 11.7C / 11.8B-A2: Regime-Aware ROI Pre-Filter (NOT EV math)
-  // This is a pure ROI threshold gate applied AFTER canonical Net EV validation
-  // Purpose: Regime-specific ROI minimums ensure trade quality matches market conditions
+  // Batch 18L Option C: ROI gate SKIPPED for VTS
+  // Active trading still enforces ROI gate (in signal-orchestrator.ts / SQE)
+  // VTS relaxes this because:
+  //   1. Net EV gate already validates trade geometry (even with relaxed floor)
+  //   2. ROI gate is redundant filtering for ML learning purposes
+  //   3. ML needs to see trades across ROI spectrum to learn optimal thresholds
+  // The ROI values are still logged for ML feature extraction
   // ══════════════════════════════════════════════════════════════════════════════
+  const roiDetails = getROIDetails(entryPrice, takeProfit, regime, predictiveConfidence);
   if (!isSignalProfitable(entryPrice, takeProfit, regime, predictiveConfidence)) {
-    const roiDetails = getROIDetails(entryPrice, takeProfit, regime, predictiveConfidence);
-    logSkippedSignal({
-      symbol,
-      reason: 'Low_ROI',
-      regime,
-      expectedROI: roiDetails.expectedROI,
-      minROI: roiDetails.requiredROI,
-      signalType,
-      strategy,
-      source: 'VTS'
-    });
-    console.log(`[11.7C][ROI_Gate] Skipping ${symbol}: ROI ${roiDetails.roiPercent} < min ${roiDetails.minROIPercent} (conf=${predictiveConfidence.toFixed(2)}) for ${regime}`);
-    return null;
+    console.log(`[18L][ROI_Gate] VTS BYPASS: ${symbol} ROI ${roiDetails.roiPercent} < min ${roiDetails.minROIPercent} — allowing for ML learning`);
   }
   
   // Directive 11.5 Task 5: Strategy-Specific Guardrails
@@ -736,22 +743,23 @@ async function generatePhase10Signal(
   console.log(`[VTS][11.6H][Sizing] ${symbol}: $${dollarValue.toFixed(2)} exposure → ${quantity.toFixed(6)} units @ $${entryPrice.toFixed(4)}`);
   console.log(`[11.7S][VTS] ${symbol}: Stop ${stopLoss.toFixed(4)}→${adjustedStopLoss.toFixed(4)} | TP ${takeProfit.toFixed(4)}→${adjustedTakeProfit.toFixed(4)} (mode=${strategyMode})`);
   
-  // Directive 11.8C: Per-symbol+strategy duplicate guard (upgraded from per-symbol only)
-  // In multi-strategy mode, allows multiple trades per symbol (one per strategy)
-  // In legacy mode, prevents duplicate trades per symbol entirely
-  const hasExistingTrade = Array.from(openVirtualTrades.values()).some(t => 
-    t.symbol === symbol && (isMultiStrategy ? t.strategy === strategy : true)
-  );
-  if (hasExistingTrade) {
+  // Batch 18L Option B: Relaxed duplicate guard for VTS
+  // Active trading still enforces strict 1-per-symbol+strategy (in paper-execution-engine.ts)
+  // VTS allows up to VTS_MAX_CONCURRENT_PER_COMBO (3) concurrent trades per symbol+strategy
+  // Rationale: Same strategy on same symbol under different market conditions = valuable ML data
+  const existingTradeCount = Array.from(openVirtualTrades.values()).filter(t =>
+    t.symbol === symbol && t.strategy === strategy
+  ).length;
+  if (existingTradeCount >= VTS_MAX_CONCURRENT_PER_COMBO) {
     logSkippedSignal({
       symbol,
-      reason: 'Duplicate_Position',
+      reason: 'Duplicate_Position_Max',
       regime,
       signalType,
       strategy,
       source: 'VTS'
     });
-    console.log(`[11.8C][VTS][DUP_GUARD] Skipping ${symbol}/${strategy}: already has open VTS trade`);
+    console.log(`[18L][DUP_GUARD] Skipping ${symbol}/${strategy}: ${existingTradeCount}/${VTS_MAX_CONCURRENT_PER_COMBO} concurrent VTS trades`);
     return null;
   }
   
