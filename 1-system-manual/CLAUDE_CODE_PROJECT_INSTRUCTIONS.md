@@ -3,7 +3,7 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-03-10 (after Batch 18D — Comprehensive Governance Catch-Up + Update Rules Matrix. All governance files brought current. Governance Update Rules codified as Tier 1/2/3 matrix.)
+> **Last Updated**: 2026-03-11 (after Batch 18K — Governance docs for Batches 18H/18I/18J: crypto strategy recalibration, VTS stale position fix, IMF filter recalibration + fee unification + LQ standardization.)
 
 ---
 
@@ -471,15 +471,19 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 | Hotfix | VTS Pipeline Hotfix — batch size hardcode fix (100 to BATCH_SIZE), VTS VN threshold 0.80 to 0.95 | Batch 18E | `5d774fb2` |
 | Hotfix | FX5 OHLC Wiring — real VN/σ/DI calculations using ohlcCache instead of empty arrays | Batch 18F | `9de4afc7` |
 | Hotfix | OHLC-Based LQ — per-candle volume liquidity replacing saturating 24h aggregate formula | Batch 18G | `f82b7b66` |
+| Inter-phase | Crypto Strategy Recalibration — ATR-based dynamic thresholds, relaxed pattern strengths, widened RSI/ADX/volatility gates (24 edits, 10 files, 4-LLM consensus) | Batch 18H | `ca2f8b5f` |
+| Hotfix | VTS Stale Position Cleanup — move timeout check before price availability to prevent indefinite Map accumulation | Batch 18I | `3d907032` |
+| Inter-phase | IMF Filter Recalibration + Fee Unification + LQ Standardization — VN/LQ/correlation/DI/volume thresholds crypto-calibrated via 4-LLM consensus; 4 files migrated to exchange-defaults.ts; LQ fallback standardized on Formula B | Batch 18J | `5eae1601` |
+| — | Governance docs updated (Batches 18H/18I/18J) | Batch 18K | (governance) |
 
 ### In-Progress Directives
 | Directive | Title | Batch | Status |
 |-----------|-------|-------|--------|
 | (none currently in progress) | | | |
 
-> **Last commit**: `f82b7b66` (Batch 18G — OHLC-Based LQ Fix)
+> **Last commit**: `5eae1601` (Batch 18J — IMF Filter Recalibration + Fee Unification + LQ Standardization)
 > **Next step**: Phase 14.5 (Block 3, Batch 19 — Parallel Pattern Scanning + Signal Ranking Overhaul + Global Regime Pre-Filter)
-> **Note**: Phase 14.1 **COMPLETE** (HF9, Batch 17). Batch 18 (inter-phase optimization) COMPLETE. Batch 18C (regime archive hotfix) COMPLETE. Batch 18E (VTS pipeline hotfix) COMPLETE. Batch 18F (FX5 OHLC wiring) COMPLETE. Batch 18G (OHLC-based LQ) COMPLETE. Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE (DBS in Batch 15; rename/backfill/structural regime SKIPPED). Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED.
+> **Note**: Phase 14.1 **COMPLETE** (HF9, Batch 17). Batches 18-18J (inter-phase optimization + hotfixes + recalibration) ALL COMPLETE. Batch 18H: crypto strategy recalibration (4-LLM consensus, 24 edits/10 files). Batch 18I: VTS stale position fix. Batch 18J: IMF filter recalibration (VN 0.60→0.93, correlation 0.75→0.92, volume $2M→$500K, fee unification to exchange-defaults.ts). Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE (DBS in Batch 15; rename/backfill/structural regime SKIPPED). Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED.
 
 ### Snapshot Log
 | Snapshot | Commit | Description |

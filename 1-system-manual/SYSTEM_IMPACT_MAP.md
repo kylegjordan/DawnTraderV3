@@ -2,7 +2,7 @@
 
 > **Author**: Claude Code (System Cartographer)
 > **Created**: 2026-02-19
-> **Last Updated**: 2026-03-10 (Batch 18D — Comprehensive Governance Catch-Up)
+> **Last Updated**: 2026-03-11 (Batch 18K — Governance for Batches 18H/18I/18J)
 > **Purpose**: Component dependency reference for directive authoring. Before writing any directive, consult this map to identify all upstream, downstream, and shared-state impacts of the proposed change.
 > **Usage**: Claude Code looks up every affected component BEFORE writing a directive. The directive's Impact Analysis section must reference this map.
 
@@ -166,8 +166,8 @@
 
 ### 3.4 IMF Metrics (Adaptive Filters)
 - **File**: Computed within FX5 Scanner pipeline
-- **What**: Liquidity Quality (LQ), Volume Noise (VN), Correlation metrics. Stage 3 filtering.
-- **Upstream**: Market data (volume, spread, trading activity)
+- **What**: Liquidity Quality (LQ), Volume Noise (VN), Correlation metrics. Stage 3 filtering. LQ uses Formula B (log10-based, per-candle OHLC volume — Batch 18G/18J). Three-tier thresholds: Active (LQ≥35, VN≤0.93, rho≤0.92), Passive (LQ≥35, VN≤0.96), VTS (LQ≥25, VN≤0.98) — Batch 18J.
+- **Upstream**: Market data (volume, spread, trading activity), OHLC Cache (per-candle volume for LQ)
 - **Downstream**: FX5 Stage 3 filtering gate (LQ ≥ threshold, VN ≤ threshold)
 - **Execution**: Synchronous — per-pair during scan
 - **Blast Radius**: **MEDIUM** — affects pair eligibility

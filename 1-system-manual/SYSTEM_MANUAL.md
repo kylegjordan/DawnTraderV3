@@ -502,6 +502,19 @@ totalFees = grossAmount × feeRate
 netAmount = grossAmount - totalFees
 ```
 
+#### Fee/Slippage Constants (Batch 18J — Unified to exchange-defaults.ts)
+
+All fee and slippage constants across the codebase now import from the canonical source (`server/config/exchange-defaults.ts`, Directive 11.3B):
+
+| Constant | Value | Source |
+|----------|-------|--------|
+| Taker Fee | 0.26% (0.0026) | `DEFAULT_TAKER_FEE` |
+| Maker Fee | 0.16% (0.0016) | `DEFAULT_MAKER_FEE` |
+| Slippage | 0.05% (0.0005) | `DEFAULT_SLIPPAGE` |
+| Spread | 0.10% (0.0010) | `DEFAULT_SPREAD` |
+
+Files migrated in Batch 18J: `paper-execution-engine.ts`, `routes.ts` (2 locations), `adaptive-thresholds.ts`, `cost-metrics.ts`. These previously had hardcoded old values (FEE=0.10%, SLIPPAGE=0.15%) that predated the exchange-defaults.ts unification.
+
 ---
 
 ## 8. IMF (Integrated Market Filters) Metrics
@@ -549,7 +562,15 @@ Returns abs(correlation). Returns 0.5 if < 5 data points or no benchmark.
 passesMetricFilter = (LQ ≥ LQ_MIN) AND (VolNoise ≤ VN_MAX) AND (Correlation ≤ CORR_MAX)
 ```
 
-Thresholds imported from `SYSTEM_GUARDS.IMF_THRESHOLDS`.
+Thresholds imported from `SYSTEM_GUARDS.IMF_THRESHOLDS`. Batch 18J recalibrated all values for crypto via 4-LLM consensus:
+
+| Tier | LQ | VN | rho | Source |
+|------|----|----|-----|--------|
+| Active Trading | ≥ 35 | ≤ 0.93 | ≤ 0.92 | `SYSTEM_GUARDS` |
+| Passive Learning | ≥ 35 | ≤ 0.96 | ≤ 0.95 | `IMF_THRESHOLDS` |
+| VTS Learning | ≥ 25 | ≤ 0.98 | ≤ 0.95 | `VTS_IMF_THRESHOLDS` |
+
+Additional recalibrated constants (Batch 18J): DI_TRENDING 55 (was 65), DI_CHOPPY 35 (was 30), MIN_VOLUME_THRESHOLD_USD $500K (was $2M), BASE_FEE_SLIPPAGE 0.006 (was 0.005), CORRELATION_THRESHOLD 0.92 (was 0.75), MIN_STOP_DISTANCE_BPS 30 (was 20).
 
 ### OHLC Cache
 

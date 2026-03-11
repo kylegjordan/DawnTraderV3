@@ -82,6 +82,9 @@
 | Batch 18E | VTS Pipeline Hotfix | COMPLETE | 2026-03-10 | `5d774fb2` | Batch size hardcode 100 to BATCH_SIZE, VTS VN_MAX 0.80 to 0.95, stale comments fixed |
 | Batch 18F | FX5 OHLC Wiring | COMPLETE | 2026-03-10 | `9de4afc7` | FX5 wired to ohlcCache for real VN/σ/DI. Replaced imfModule with universal OHLC pre-fetch. |
 | Batch 18G | OHLC-Based LQ | COMPLETE | 2026-03-10 | `f82b7b66` | Per-candle volume LQ replacing saturating 24h aggregate. LQ now 30-60 range, unified VTS+active. |
+| Batch 18H | Crypto Strategy Recalibration | COMPLETE | 2026-03-10 | `ca2f8b5f` | ATR-based dynamic thresholds (3 strategies), touch count + tolerance zones (4 strategies), RSI/ADX/volatility gates relaxed (4 strategies), pattern strengths reduced (7 strategies), BTC correlation widened. 24 edits, 10 files. 4-LLM consensus. |
+| Batch 18I | VTS Stale Position Cleanup | COMPLETE | 2026-03-11 | `3d907032` | Move timeout check before price availability in resolveOpenVirtualTrades(). Prevents indefinite Map accumulation for symbols with unavailable prices. BUG-027 RESOLVED. |
+| Batch 18J | IMF Filter Recalibration + Fee Unification + LQ Standardization | COMPLETE | 2026-03-11 | `5eae1601` | VN 0.60 to 0.93 (active), 0.80 to 0.96 (passive), 0.95 to 0.98 (VTS). LQ 40 to 35. Correlation 0.75 to 0.92. DI trending 65 to 55. Volume $2M to $500K. Fee constants unified to exchange-defaults.ts (4 files migrated). LQ fallback standardized on Formula B. 15 edits, 7 files. 4-LLM consensus. BUG-028 RESOLVED. |
 
 ---
 
@@ -89,10 +92,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Directives Issued | 18 + 6 HF + 1 inter-phase + 4 standalone hotfixes |
-| Total Directives Complete | 18 + 6 HF + 1 inter-phase + 4 standalone hotfixes |
+| Total Directives Issued | 18 + 6 HF + 1 inter-phase + 7 standalone hotfixes |
+| Total Directives Complete | 18 + 6 HF + 1 inter-phase + 7 standalone hotfixes |
 | Total Directives In Progress | 0 |
-| Total Review Cycles | 27 |
+| Total Review Cycles | 30 |
 | Average Review Cycles per Directive | 1.00 |
 
 ---

@@ -1165,6 +1165,22 @@ Total: 21 bugs, 65 risks.
 - **Fix Approach**: Per-candle volume on 60-min candles is ~1/24th of 24h volume, and `log10` instead of `ln` produces values in the 30-60 range — exactly where LQ thresholds can discriminate. Unified across both VTS and active trading paths.
 - **Phase Found**: Post-Batch 18F monitoring (2026-03-10)
 
+### BUG-027: VTS In-Memory Map Accumulates Stale Positions Indefinitely — **RESOLVED**
+- **Severity**: ~~MEDIUM~~ **RESOLVED** (Batch 18I, commit `3d907032`, 2026-03-11)
+- **Location**: `server/services/vts-runner.ts`, `resolveOpenVirtualTrades()` method
+- **Problem**: The `openVirtualTrades` Map holds open VTS trades in memory. When price data is unavailable for a symbol (cache miss, API rate limit, delisted pair), the code executed `continue` BEFORE reaching the 24-hour timeout check. Trades with unavailable prices were never closed, accumulating indefinitely. DUP_GUARD checks found stale entries and blocked new trades on those symbol+strategy combos.
+- **Impact**: 47 stale positions observed, ~1,041 DUP_GUARD blocks/day (47 combos x ~22 cycles). VTS throughput degraded over time as more symbol+strategy combos became blocked.
+- **Resolution**: Moved timeout check (`holdDurationMs > MAX_HOLD_MS`) BEFORE the price availability check. Trades older than 24 hours are force-closed using live price if available, or entry price as fallback (0% gross P&L minus friction).
+- **Phase Found**: Post-Batch 18H monitoring (2026-03-11)
+
+### BUG-028: Fee Constants Fragmented — 4 Files Using Hardcoded Pre-Unification Values — **RESOLVED**
+- **Severity**: ~~MEDIUM~~ **RESOLVED** (Batch 18J, commit `5eae1601`, 2026-03-11)
+- **Location**: `paper-execution-engine.ts`, `routes.ts` (2 locations), `adaptive-thresholds.ts`, `cost-metrics.ts`
+- **Problem**: The canonical fee source (`exchange-defaults.ts`, Directive 11.3B) correctly defines `DEFAULT_TAKER_FEE = 0.0026` (0.26%) and `DEFAULT_SLIPPAGE = 0.0005` (0.05%). However, 4 files still had OLD hardcoded values: paper-execution-engine (FEE=0.10%, SLIP=0.15%), routes.ts 2 locations (FEE=0.10%, SLIP=0.15%), adaptive-thresholds (FEE=0.10%, SLIP=0.15%), cost-metrics (FEE=0.25%). Paper trading was undercharging fees by ~0.16% per side (0.32% round trip), making paper results systematically more profitable than real trading.
+- **Impact**: Paper trade P&L calculations showed inflated profits. The friction floor in `isSignalProfitable()` was 0.00365 instead of the correct 0.00575, allowing marginal signals through.
+- **Resolution**: All 4 files migrated to import from `exchange-defaults.ts` using `DEFAULT_TAKER_FEE * 100` for percentage-based consumers and `DEFAULT_TAKER_FEE` for decimal-based consumers. cost-metrics.ts DEFAULT_FEE also corrected from 0.0025 to 0.0026.
+- **Phase Found**: Batch 18J fee constant audit (2026-03-11)
+
 ---
 
 ## REPLIT LSP AUDIT CROSS-REFERENCE FINDINGS
@@ -1193,11 +1209,11 @@ Total: 21 bugs, 65 risks.
 
 | Metric | Count |
 |--------|-------|
-| Total Bugs | 22 |
+| Total Bugs | 28 |
 | Critical Bugs | 7 (BUG-001 through BUG-004, ~~BUG-006~~ RESOLVED, BUG-008 partial, ~~BUG-009~~ RESOLVED) |
 | Informational Bugs | 2 (BUG-010, BUG-011 — deferred, live mode not in scope) |
 | High Bugs | 2 (BUG-007, BUG-012) |
-| Medium Bugs | 4 (BUG-013, BUG-015, BUG-017, BUG-020) |
+| Medium Bugs | 6 (BUG-013, BUG-015, BUG-017, BUG-020, ~~BUG-027~~ RESOLVED, ~~BUG-028~~ RESOLVED) |
 | Low Bugs | 7 (BUG-005, BUG-014, BUG-016, BUG-018, BUG-019, BUG-021, BUG-022) |
 | Architectural Risks | 85 (RISK-001 through RISK-085) |
 | Critical Architectural Risks | 2 (RISK-043 — artificial strategy differentiation; ~~RISK-049~~ RESOLVED) |
