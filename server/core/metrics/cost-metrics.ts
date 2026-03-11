@@ -26,6 +26,7 @@
  */
 
 import { updateCachedCostMetrics, getCachedCostMetrics as getCostModelMetrics } from '../math/cost-model.js';
+import { DEFAULT_TAKER_FEE, DEFAULT_SLIPPAGE as CANONICAL_SLIPPAGE, DEFAULT_SPREAD as CANONICAL_SPREAD } from '../../config/exchange-defaults.js';
 
 export interface CostData {
   symbol: string;
@@ -42,10 +43,10 @@ const spreadCache: Map<string, { spread: number; timestamp: number }> = new Map(
 const CACHE_TTL_MS = 60_000;
 const SPREAD_CACHE_TTL_MS = 30_000;
 
-const DEFAULT_SLIPPAGE = 0.0005;
+const DEFAULT_SLIPPAGE = CANONICAL_SLIPPAGE;     // Batch 18J: from exchange-defaults.ts (0.05%)
 const DEFAULT_AVG_RETURN = 0.005;
-const DEFAULT_FEE = 0.0025;
-const DEFAULT_SPREAD = 0.001;
+const DEFAULT_FEE = DEFAULT_TAKER_FEE;           // Batch 18J: from exchange-defaults.ts (0.26%)
+const DEFAULT_SPREAD = CANONICAL_SPREAD;          // Batch 18J: from exchange-defaults.ts (0.10%)
 
 export function getTransactionCostFactor(symbol: string): number {
   const cached = costCache.get(symbol);

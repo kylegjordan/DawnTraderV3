@@ -9,17 +9,17 @@
  */
 
 export const SYSTEM_GUARDS = {
-  VERSION: "Phase14_HF9",
-  
-  MIN_LIQUIDITY_SCORE: 40,
-  MAX_VOL_NOISE: 0.6,
-  BASE_FEE_SLIPPAGE: 0.005,
-  CORRELATION_THRESHOLD: 0.75,
+  VERSION: "Phase14_Batch18J",
+
+  MIN_LIQUIDITY_SCORE: 35,       // Batch 18J: 40 → 35 (4-LLM consensus)
+  MAX_VOL_NOISE: 0.93,           // Batch 18J: 0.60 → 0.93 (crypto-calibrated, 4-LLM consensus)
+  BASE_FEE_SLIPPAGE: 0.006,      // Batch 18J: 0.005 → 0.006 (4-LLM consensus)
+  CORRELATION_THRESHOLD: 0.92,   // Batch 18J: 0.75 → 0.92 (crypto pair correlation, 4-LLM consensus)
   PARITY_TOLERANCE: 0.000001,
-  MIN_VOLUME_THRESHOLD_USD: 2_000_000,
-  
-  DI_TRENDING: 65,
-  DI_CHOPPY: 30,
+  MIN_VOLUME_THRESHOLD_USD: 500_000,  // Batch 18J: 2M → 500K (4-LLM consensus)
+
+  DI_TRENDING: 55,               // Batch 18J: 65 → 55 (4-LLM consensus)
+  DI_CHOPPY: 35,                 // Batch 18J: 30 → 35 (4-LLM consensus)
   
   MIN_PWIN: 0.40,
   MAX_PWIN: 0.60,
@@ -41,18 +41,19 @@ export const SYSTEM_GUARDS = {
 
 /**
  * Directive 11.7H — IMF (Institutional Math Filters) Thresholds
- * 
+ *
  * Schema: metrics-calibration/v1.2
- * 
+ *
  * Centralized thresholds for passive learning mode IMF filtering.
  * Used by imf-metrics.ts for OHLC-based pair qualification.
- * 
- * VN_MAX = 0.8 allows broader passive learning data collection
- * while active trading uses stricter SYSTEM_GUARDS.MAX_VOL_NOISE = 0.6
+ *
+ * Batch 18J: Recalibrated for crypto via 4-LLM consensus.
+ * VN_MAX = 0.96 allows broader passive learning data collection
+ * while active trading uses stricter SYSTEM_GUARDS.MAX_VOL_NOISE = 0.93
  */
 export const IMF_THRESHOLDS = {
-  LQ_MIN: 40,           // Minimum log-liquidity score
-  VN_MAX: 0.80,         // Maximum volatility noise (passive learning)
+  LQ_MIN: 35,           // Minimum log-liquidity score (Batch 18J: 40 → 35, matches active)
+  VN_MAX: 0.96,         // Maximum volatility noise (passive learning) (Batch 18J: 0.80 → 0.96)
   CORR_MAX: 0.95,       // Maximum correlation with benchmark
 } as const;
 
@@ -66,20 +67,16 @@ export type IMFThresholdsType = typeof IMF_THRESHOLDS;
  * that only pass relaxed filters are tagged with filterTier='relaxed' so ML
  * can analyze their performance separately.
  *
- * Active Trading: LQ >= 40, VN <= 0.60, rho <= 0.75 (SYSTEM_GUARDS)
- * VTS Learning:   LQ >= 25, VN <= 0.95, rho <= 0.95 (VTS_IMF_THRESHOLDS)
+ * Active Trading:    LQ >= 35, VN <= 0.93, rho <= 0.92 (SYSTEM_GUARDS)
+ * Passive Learning:  LQ >= 35, VN <= 0.96, rho <= 0.95 (IMF_THRESHOLDS)
+ * VTS Learning:      LQ >= 25, VN <= 0.98, rho <= 0.95 (VTS_IMF_THRESHOLDS)
  *
- * Note (Batch 18E): VN_MAX raised from 0.80 to 0.95. Market data shows most
- * non-benchmark pairs produce VN=0.82-1.00 on 60-min candles (partly due to
- * short ticker-based price history feeding into VN calculations). At 0.80,
- * the relaxed threshold matched the passive learning strict threshold
- * (IMF_THRESHOLDS.VN_MAX), capturing zero additional pairs. At 0.95, pairs
- * with VN between 0.80-0.95 enter VTS tagged filterTier='relaxed' for ML
- * segmentation.
+ * Batch 18J: All VN thresholds recalibrated for crypto via 4-LLM consensus.
+ * VTS VN_MAX raised from 0.95 → 0.98 to maintain hierarchy above passive (0.96).
  */
 export const VTS_IMF_THRESHOLDS = {
   LQ_MIN: 25,
-  VN_MAX: 0.95,
+  VN_MAX: 0.98,
   CORR_MAX: 0.95,
 } as const;
 

@@ -67,6 +67,7 @@ import { clearReadyToBuy } from './utils/clear-routines.js';
 import { verificationTestProtocol } from './services/verification-test-protocol.js';
 import { miniBookIntegrityMonitor } from './services/monitoring/mini-book-integrity-monitor.js';
 import os from 'os';
+import { DEFAULT_TAKER_FEE, DEFAULT_SLIPPAGE as CANONICAL_SLIPPAGE } from './config/exchange-defaults.js';
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
 export const loginLimiter = rateLimit({
@@ -10369,8 +10370,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         const unrealizedPnlPercent = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice) * 100 : 0;
         
         // Phase 8.8.3-C2: P/L Breakdown for cost transparency
-        const SLIPPAGE_PCT = 0.15; // 0.15% slippage
-        const FEE_PCT = 0.10; // 0.10% fee
+        // Batch 18J: Canonical fee/slippage from exchange-defaults.ts
+        const SLIPPAGE_PCT = CANONICAL_SLIPPAGE * 100; // 0.05% from exchange-defaults
+        const FEE_PCT = DEFAULT_TAKER_FEE * 100; // 0.26% from exchange-defaults
         
         // Get intended entry price (signal price before slippage)
         const intendedEntryPrice = pos.intendedEntryPrice 
@@ -10708,9 +10710,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       console.log(`[8.8.3-I6][CLOSE_TRADE_LIVE_PRICE] symbol=${position.symbol} price=${currentPrice} source=${priceSource} fallbackType=${fallbackType}`);
       
       // Phase 8.8.3-C7-FIX: Calculate exit slippage and fees mirroring engine's closePosition method
-      // Engine uses SLIPPAGE_PERCENT = 0.15% and FEE_PERCENT = 0.10%
-      const SLIPPAGE_PERCENT = 0.15;
-      const FEE_PERCENT = 0.10;
+      // Batch 18J: Canonical fee/slippage from exchange-defaults.ts
+      const SLIPPAGE_PERCENT = CANONICAL_SLIPPAGE * 100; // 0.05% from exchange-defaults
+      const FEE_PERCENT = DEFAULT_TAKER_FEE * 100; // 0.26% from exchange-defaults
       
       // Calculate exit slippage (same formula as paper-execution-engine.ts line 772-780)
       const exitSlippagePerUnit = currentPrice * (SLIPPAGE_PERCENT / 100);

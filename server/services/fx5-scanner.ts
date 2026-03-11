@@ -34,10 +34,9 @@ import { recordScanFor24h, recordScanCompletion, getCyclesPerHour, get24hSummary
 import { readyToBuyService } from '../core/rtb/ready_to_buy_service.js';
 import { centralClock, ClockTick } from './central-clock.js';
 import { dataAggregator } from './data-aggregator.js';
-import { 
-  classifyVolume, 
+import {
+  classifyVolume,
   type VolumeClass,
-  calculateLogLiquidity,
   calculateDirectionalIntegrity,
   calculateVolNoise,
   calculateSigma,
@@ -553,13 +552,13 @@ export class Fx5ScannerService {
           ? `ohlc(${ohlcPrices.length})`
           : `ticker(${prices.length}pts)`;
 
-        // Batch 18G: LQ from per-candle OHLC volume (log10 scale, 0-100).
-        // The standard calculateLogLiquidity(V, C, S) saturates at 100 for all crypto
-        // because 24h aggregate volume is too large for the ln-based formula.
-        // Per-candle avg volume produces discriminating values (typically 30-60).
+        // Batch 18J: LQ standardized on Formula B (log10 scale, 0-100).
+        // Formula A (calculateLogLiquidity) saturates at 100 for all crypto pairs.
+        // Formula B produces discriminating values: per-candle avg → 30-60, 24h ticker → 50-80.
+        // Primary: per-candle OHLC volume. Fallback: 24h ticker volume (same formula).
         const LQ = (ohlcEntry && ohlcEntry.avgVolumeUSD > 0)
           ? Math.min(100, Math.max(0, Math.log10(ohlcEntry.avgVolumeUSD + 1) * 10))
-          : calculateLogLiquidity(volumeUSD, tradeCount, spread);
+          : Math.min(100, Math.max(0, Math.log10(volumeUSD + 1) * 10));
         let VolNoise = calculateVolNoise(ohlcPrices);
         const passesMetricFilter = passesCoreMetricFilters(LQ, VolNoise);
 

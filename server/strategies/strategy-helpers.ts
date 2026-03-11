@@ -22,7 +22,7 @@ export const GLOBAL_CONSTANTS = {
   ENTRY_PREMIUM_BPS: 10,       // 0.1% above current price
   MAX_CONFIDENCE: 1.0,
   MIN_CONFIDENCE: 0.0,
-  MIN_STOP_DISTANCE_BPS: 20,   // 0.2% minimum stop distance (GUARD-1)
+  MIN_STOP_DISTANCE_BPS: 30,   // 0.3% minimum stop distance (GUARD-1, Batch 18J: 20 → 30 per 4-LLM consensus)
   ATR_MIN_RATIO: 0.001,        // Reject if ATR(14) < price * 0.001
   ATR_MAX_RATIO: 0.10,         // Clamp: effectiveATR = min(ATR(14), price * 0.10)
 } as const;

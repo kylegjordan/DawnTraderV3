@@ -78,6 +78,7 @@ import { readyToBuyService } from '../core/rtb/ready_to_buy_service.js';
 import { tclWatchdog } from '../core/rtb/tcl_watchdog.js';
 import { eventBus, type TCLActivatedEvent, type TradeClosedEvent } from '../lib/event-bus.js';
 import { dataAggregator } from './data-aggregator.js';
+import { DEFAULT_TAKER_FEE, DEFAULT_SLIPPAGE as CANONICAL_SLIPPAGE } from '../config/exchange-defaults';
 import { covarianceEngine } from '../utils/covariance-engine.js';
 import { recordPaperTrade, type PaperTradeRecord } from './vts-live-comparison-audit.js';
 import { evaluateTradeExpectancy } from '../core/calculations/expectancy.js';
@@ -112,8 +113,8 @@ export class PaperExecutionEngine {
   private lastCycleSummary: any = {}; // Phase 27.F.14.DIAG: Cache last cycle for telemetry
   
   // Configuration
-  private readonly SLIPPAGE_PERCENT = 0.15; // 0.15% slippage
-  private readonly FEE_PERCENT = 0.10; // 0.10% trading fee
+  private readonly SLIPPAGE_PERCENT = CANONICAL_SLIPPAGE * 100; // Batch 18J: from exchange-defaults.ts (0.05%)
+  private readonly FEE_PERCENT = DEFAULT_TAKER_FEE * 100; // Batch 18J: from exchange-defaults.ts (0.26%)
   private readonly MONITOR_INTERVAL_MS = 1500; // Phase 8.8.3-B3.5: Check every 1.5 seconds for real-time TP/SL evaluation
   private readonly MAX_PRICE_HISTORY = 100; // Keep last 100 candles per symbol
   private readonly RTB_TTL_SECONDS = 30; // REB 8.8.3-I: RTB signals expire after one FX5 cycle (30 seconds)
