@@ -1033,7 +1033,7 @@ export class SignalOrchestrator {
           }];
           
           const { globalPairs, tacticalPairs, precisionPairs } = await cascadingScan(
-            this.krakenService, 
+            this.kraken, 
             [symbol],
             { preloadedGlobalData }
           );
