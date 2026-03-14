@@ -85,6 +85,12 @@
 | Batch 18H | Crypto Strategy Recalibration | COMPLETE | 2026-03-10 | `ca2f8b5f` | ATR-based dynamic thresholds (3 strategies), touch count + tolerance zones (4 strategies), RSI/ADX/volatility gates relaxed (4 strategies), pattern strengths reduced (7 strategies), BTC correlation widened. 24 edits, 10 files. 4-LLM consensus. |
 | Batch 18I | VTS Stale Position Cleanup | COMPLETE | 2026-03-11 | `3d907032` | Move timeout check before price availability in resolveOpenVirtualTrades(). Prevents indefinite Map accumulation for symbols with unavailable prices. BUG-027 RESOLVED. |
 | Batch 18J | IMF Filter Recalibration + Fee Unification + LQ Standardization | COMPLETE | 2026-03-11 | `5eae1601` | VN 0.60 to 0.93 (active), 0.80 to 0.96 (passive), 0.95 to 0.98 (VTS). LQ 40 to 35. Correlation 0.75 to 0.92. DI trending 65 to 55. Volume $2M to $500K. Fee constants unified to exchange-defaults.ts (4 files migrated). LQ fallback standardized on Formula B. 15 edits, 7 files. 4-LLM consensus. BUG-028 RESOLVED. |
+| Batch 18K | Governance docs for Batches 18H/18I/18J | COMPLETE | 2026-03-11 | `1fd16fb0` | CCPI, DIRECTIVE_INDEX, CHANGES_AND_FIXES, SYSTEM_IMPACT_MAP, SYSTEM_MANUAL updated |
+| Batch 18L | VTS Throughput Hotfix | COMPLETE | 2026-03-13 | `d1e2329b` | Relax Net EV floor (-0.005), skip ROI gate (log-only), 3 concurrent trades per combo, interval 30s, pairs 200, MAX_OPEN_TRADES 500 |
+| BATCH_GOV_LANGSTON | Add Langston autonomous agent section to CCPI | COMPLETE | 2026-03-14 | `48648f72` | Four Actors table, Langston section (infrastructure, SSH, Telegram, 3-way comms, CLI tools, capabilities, common issues) |
+| BATCH_GOV_LANGSTON_UPDATE | Update Langston CCPI section with Replit automation learnings | COMPLETE | 2026-03-14 | `7698462f` | 12 replit-cmd commands, Replit Automation Details subsection, 5 new common issues |
+| HF10 | KrakenService Property Name Fix | COMPLETE | 2026-03-14 | `5f04e4eb` | signal-orchestrator.ts line 1036: this.krakenService to this.kraken. Latent bug in cascadingScan (Directive 10.7 CASCADE path, currently disabled). |
+| HF10B | Governance for HF10 + Process Updates | COMPLETE | 2026-03-14 | (this batch) | CCPI workflow updated for autonomous pipeline (Langston deploys, Claude Code syncs). Session transition protocol documented. |
 
 ---
 
@@ -92,8 +98,8 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Directives Issued | 18 + 6 HF + 1 inter-phase + 7 standalone hotfixes |
-| Total Directives Complete | 18 + 6 HF + 1 inter-phase + 7 standalone hotfixes |
+| Total Directives Issued | 18 + 6 HF + 1 inter-phase + 13 standalone hotfixes/governance |
+| Total Directives Complete | 18 + 6 HF + 1 inter-phase + 13 standalone hotfixes/governance |
 | Total Directives In Progress | 0 |
 | Total Review Cycles | 30 |
 | Average Review Cycles per Directive | 1.00 |

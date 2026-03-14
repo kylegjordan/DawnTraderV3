@@ -3,7 +3,7 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-03-14 (after BATCH_GOV_LANGSTON_UPDATE — Updated Langston section with Replit automation learnings: 12 replit-cmd commands, Enter/Shift+Enter behavior, collapsed messages, modal handling, GitHub auth dialog, shell limitations, message queue, common issues.)
+> **Last Updated**: 2026-03-14 (after HF10B — KrakenService fix governance + autonomous pipeline process updates: Langston deploys zips, Claude Code runs git pull, session transition protocol.)
 
 ---
 
@@ -195,18 +195,20 @@ This replaces the original 7-step directive lifecycle with a more efficient batc
  4. Claude Code WRITES modified files into DT_Staged_Changes/BATCH_N/ (repo-relative paths)
  5. Claude Code creates zip in Claude Comms and Packages/ (Batch Zips/ or Governance Zips/)
     — Zip named: BATCH_N-DIR_X.Y.Z_DESCRIPTION.zip
- 6. Kyle attaches zip to Replit Agent chat
- 7. Replit unzips, places files EXACTLY as provided (no reformatting), runs REPLIT_VALIDATION.sh
- 8. If PASS → Replit pushes → Kyle runs sync-repo.bat → Claude Code verifies
- 9. If FAIL → Kyle shares errors → Claude Code fixes in DT_Staged_Changes → new zip
-10. After code verified → Claude Code prepares governance batch (separate zip, same process)
-11. Post-push verification: Claude Code checks git log for unexpected commits (see below)
+ 6. Langston reviews scope doc and staged files, then deploys zip to Replit Agent
+ 7. Replit Agent applies edits per INSTRUCTIONS.md (no autonomous changes)
+ 8. Langston pushes to GitHub via REPLIT_PUSH_SCRIPT.sh (handles GitHub auth dialog)
+ 9. Claude Code runs git pull to sync clone repo, verifies changes landed correctly
+10. If issues found → Claude Code fixes in DT_Staged_Changes → new zip → repeat from step 6
+11. After code verified → Claude Code prepares governance batch (separate zip, same process)
+12. Post-push verification: Claude Code checks git log for unexpected commits (see below)
 ```
 
 **Key principles**:
 - Code changes and governance doc updates are **separate batches**. Don't mark bugs RESOLVED until the code fix is verified working.
-- The local clone is **READ ONLY**. All edits go to `DT_Staged_Changes/`. This prevents sync conflicts when `sync-repo.bat` runs.
+- The local clone is **READ ONLY** (exception: Claude Code runs `git pull` to sync from GitHub). All edits go to `DT_Staged_Changes/`.
 - Every governance batch **must include an updated `CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`** with current state, completed directives, and snapshot references.
+- Langston reviews scope documents and understands the code changes before deploying — he is building deep system knowledge, not just running deployments.
 
 ### Mega-Batch Approach
 
@@ -221,9 +223,9 @@ Before every batch:
 
 Previous sessions have made these errors. **Do NOT repeat them:**
 
-1. **DO NOT edit files in the clone repo** (`DT_Clone_Repo/DawnTraderV3/`). It is READ ONLY. All changes go to `DT_Staged_Changes/BATCH_N/`. Editing the clone causes sync conflicts when `sync-repo.bat` pulls from GitHub.
+1. **DO NOT edit files in the clone repo** (`DT_Clone_Repo/DawnTraderV3/`). It is READ ONLY (exception: `git pull` to sync). All changes go to `DT_Staged_Changes/BATCH_N/`.
 
-2. **DO NOT deliver files without a zip package.** Every batch must be zipped and placed in `Claude Comms and Packages/` (Batch Zips/ or Governance Zips/). Kyle transfers zips to Replit — loose files cannot be transferred.
+2. **DO NOT deliver files without a zip package.** Every batch must be zipped and placed in `Claude Comms and Packages/` (Batch Zips/ or Governance Zips/). Langston deploys zips to Replit via Google Drive.
 
 3. **DO NOT deliver a batch without INSTRUCTIONS.md.** Replit needs INSTRUCTIONS.md to know what files to place, what surgical edits to make (for large files), and what commit message to use. Without it, the batch is incomplete and Replit cannot apply it.
 
@@ -621,15 +623,20 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 | Hotfix | VTS Stale Position Cleanup — move timeout check before price availability to prevent indefinite Map accumulation | Batch 18I | `3d907032` |
 | Inter-phase | IMF Filter Recalibration + Fee Unification + LQ Standardization — VN/LQ/correlation/DI/volume thresholds crypto-calibrated via 4-LLM consensus; 4 files migrated to exchange-defaults.ts; LQ fallback standardized on Formula B | Batch 18J | `5eae1601` |
 | — | Governance docs updated (Batches 18H/18I/18J) | Batch 18K | (governance) |
+| — | VTS throughput hotfix — relax Net EV floor, skip ROI gate, 3 concurrent trades, interval 30s, pairs 200 | Batch 18L | `d1e2329b` |
+| Governance | Add Langston autonomous agent section to CCPI — infrastructure, 3-way comms, CLI tools, Telegram topics | BATCH_GOV_LANGSTON | `48648f72` |
+| Governance | Update Langston CCPI section — 12 replit-cmd commands, Replit automation details, common issues | BATCH_GOV_LANGSTON_UPDATE | `7698462f` |
+| Hotfix | KrakenService property name fix — this.krakenService to this.kraken in cascadingScan call (line 1036) | HF10 | `5f04e4eb` |
+| — | Governance docs for HF10 + process updates (autonomous pipeline, session transitions) | HF10B | (governance) |
 
 ### In-Progress Directives
 | Directive | Title | Batch | Status |
 |-----------|-------|-------|--------|
 | (none currently in progress) | | | |
 
-> **Last commit**: `5eae1601` (Batch 18J — IMF Filter Recalibration + Fee Unification + LQ Standardization)
+> **Last commit**: `5f04e4eb` (HF10 — KrakenService property name fix in signal-orchestrator cascadingScan)
 > **Next step**: Phase 14.5 (Block 3, Batch 19 — Parallel Pattern Scanning + Signal Ranking Overhaul + Global Regime Pre-Filter)
-> **Note**: Phase 14.1 **COMPLETE** (HF9, Batch 17). Batches 18-18J (inter-phase optimization + hotfixes + recalibration) ALL COMPLETE. Batch 18H: crypto strategy recalibration (4-LLM consensus, 24 edits/10 files). Batch 18I: VTS stale position fix. Batch 18J: IMF filter recalibration (VN 0.60→0.93, correlation 0.75→0.92, volume $2M→$500K, fee unification to exchange-defaults.ts). Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE (DBS in Batch 15; rename/backfill/structural regime SKIPPED). Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED.
+> **Note**: Autonomous deployment pipeline OPERATIONAL (Langston deploys to Replit, Claude Code syncs via git pull). HF10 fixes latent this.krakenService bug (dormant until CASCADE enabled in Phase 14.5). All prior phases/batches complete through Batch 18L. Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE. Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED.
 
 ### Snapshot Log
 | Snapshot | Commit | Description |
