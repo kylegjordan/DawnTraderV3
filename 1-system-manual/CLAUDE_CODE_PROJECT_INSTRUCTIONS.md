@@ -3,7 +3,7 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-03-13 (after BATCH_GOV_LANGSTON — Added Langston autonomous agent section: infrastructure, 3-way communication protocol, live session polling, CLI tools, Telegram forum topics.)
+> **Last Updated**: 2026-03-14 (after BATCH_GOV_LANGSTON_UPDATE — Updated Langston section with Replit automation learnings: 12 replit-cmd commands, Enter/Shift+Enter behavior, collapsed messages, modal handling, GitHub auth dialog, shell limitations, message queue, common issues.)
 
 ---
 
@@ -111,7 +111,18 @@ Real-time conversation mode where Claude Code actively polls the inbox every 5 s
 | Tool | Purpose |
 |------|---------|
 | `report-gen` | Generate Word doc reports (batch, hotfix, daily, troubleshooting, urgent) |
-| `replit-cmd` | Replit browser automation (status, shell, upload, deploy, screenshot) |
+| `replit-cmd status` | Take Replit screenshot, dismiss overlays, return status |
+| `replit-cmd screenshot` | Take and save a Replit screenshot |
+| `replit-cmd upload <file>` | Upload a file to Replit via drag-and-drop |
+| `replit-cmd agent <msg>` | Send a message to Replit Agent and wait for response |
+| `replit-cmd agent-nowait <msg>` | Send to Replit Agent, return immediately (fire-and-forget) |
+| `replit-cmd shell <cmd>` | Type a command directly into Replit Shell (cannot read output) |
+| `replit-cmd shell-via-agent <cmd>` | Ask Replit Agent to run a shell command and return readable output |
+| `replit-cmd queue-send <msg>` | Interrupt busy Replit Agent with a priority message |
+| `replit-cmd read-agent` | Read latest Replit Agent chat (expands last collapsed section) |
+| `replit-cmd read-agent-all` | Read full Replit Agent chat (expands ALL collapsed sections) |
+| `replit-cmd expand-messages` | Expand all collapsed message sections in Agent chat |
+| `replit-cmd deploy <zip>` | Upload zip + send Agent instructions to apply batch |
 | `openclaw message send` | Send messages/files to Telegram |
 | `cc-inbox` | Claude Code inbox manager (write/read/mark-read) |
 | `cc-poll` | Live 3-way session inbox poller (5s interval, 15-min idle timeout) |
@@ -128,18 +139,43 @@ Real-time conversation mode where Claude Code actively polls the inbox every 5 s
 | `/mnt/gdrive/` | Google Drive mount (shared drive) |
 
 ### Langston's Capabilities
-1. **Replit Operations**: Deploy batches, run tests, take screenshots, push to GitHub
+1. **Replit Operations**: Deploy batches, run tests, take screenshots, push to GitHub via Playwright browser automation
 2. **Report Generation**: Create Word doc reports and deliver via Telegram
 3. **Web Research**: Use lynx browser and Gemini web search for research tasks
 4. **Claude Code Relay**: Pass messages between Kyle and Claude Code via inbox system
 5. **Project Management**: Review roadmap, suggest changes, track batch progress
 6. **Design Discussions**: Participate in feature discussions in the Design forum topic
 
+### Replit Automation Details (replit.js)
+
+Langston controls Replit via Playwright (headless Chromium) running under Xvfb on the Hetzner server. Key behaviors:
+
+**Agent Chat Input**: The Replit Agent chat input is a CodeMirror 6 editor (`div.cm-content[role="textbox"]`), NOT a textarea. Text is entered via `keyboard.type()`. The send button is an anonymous 24x24px button (no aria-label) — the rightmost button in the `_sdz_text-input` container.
+
+**Enter vs Shift+Enter**: In the Agent chat, pressing Enter SUBMITS the message. To add line breaks within a message, use Shift+Enter. When typing multi-line messages, split on newlines and use `keyboard.press('Shift+Enter')` between segments.
+
+**Collapsed Messages**: Replit Agent auto-collapses its previous response when a new response is posted. Collapsed sections show as "X messages & Y actions". Must click to expand before reading. `read-agent` expands the last collapsed section by default. `read-agent-all` expands ALL collapsed sections.
+
+**Message Queue**: When the Agent is busy, new messages queue with a "Next" label. `queue-send` clicks the "Send message" button to interrupt the Agent. "Add to Queue" is the default behavior.
+
+**Modal Dialog Handling**: An app description dialog ("Name: The Dawn Trader") appears on Chromium launch and steals focus from the CodeMirror editor. Handled by pressing Escape, then re-finding the input element (DOM re-renders on dismiss), then verifying focus is on the CodeMirror editor before typing.
+
+**GitHub Auth Dialog**: When running `git push` from Replit Shell, a browser dialog titled "Pass GitHub Credentials" appears with buttons "Deny" and "Confirm for this session" (green). This is an HTML dialog within the page (not native OS), so Playwright can detect and click it: look for `button:has-text("Confirm for this session")`.
+
+**Shell Limitations**: The Replit Shell renders via xterm.js (canvas-based) — DOM text extraction returns empty. `replit-cmd shell` can TYPE commands but cannot READ output. Use `shell-via-agent` for readable output (routes command through Agent chat). Copy/paste (Ctrl+C/Ctrl+V) does not work in Shell — requires right-click context menu.
+
+**Replit Directory**: The repo lives at `~/workspace` on Replit (NOT `~/The-Dawn-Trader`).
+
 ### Common Issues
 - **Replit login expires**: VNC re-login required (open port 6080 temporarily)
 - **OAuth token expiry** (~10hr lifetime): Langston shows "OAuth token refresh failed" errors. Fix: grab fresh token from active Claude Code session (`echo $CLAUDE_CODE_OAUTH_TOKEN`), update server auth files, restart gateway.
 - **Forum topic responses**: Requires OpenClaw >= v2026.3.12 (earlier versions have bug #727)
 - **Config changes**: After editing `/root/.openclaw/openclaw.json`, restart: `systemctl --user restart openclaw-gateway`
+- **GitHub auth dialog on push**: "Pass GitHub Credentials" dialog blocks git push. Playwright must detect and click "Confirm for this session" button.
+- **App description modal**: Steals focus from Agent chat input on first navigation. Fix: Escape key → re-find input → verify focus on CodeMirror.
+- **Agent messages truncated**: Enter key submits prematurely. Multi-line messages must use Shift+Enter for line breaks.
+- **Shell output unreadable**: xterm canvas rendering. Use `shell-via-agent` for readable output.
+- **index.lock blocks git**: Replit checkpoint process holds `.git/index.lock`. Fix: `rm -f .git/index.lock` before git operations.
 
 ### Memory Files Reference
 - **Local (Claude Code)**: `langston-infrastructure.md` in Claude Code memory folder
