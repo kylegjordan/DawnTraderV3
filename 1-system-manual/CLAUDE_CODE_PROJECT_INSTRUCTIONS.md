@@ -3,7 +3,7 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-03-14 (after HF10B — KrakenService fix governance + autonomous pipeline process updates: Langston deploys zips, Claude Code runs git pull, session transition protocol.)
+> **Last Updated**: 2026-03-14 (after HF11B — Governance enforcement mechanisms, session transition protocol, cross-actor capacity monitoring, pre-flight checklist, stale reference fixes.)
 
 ---
 
@@ -32,22 +32,22 @@
 
 | Actor | Role | Tools |
 |-------|------|-------|
-| **Claude Code (You)** | Writes directives, reviews implementations, writes code changes, prepares zip packages for Replit, updates governance documents. Has read access to a local clone of the repository. Does NOT push to GitHub. | Claude Code terminal, file read/write on local clone |
-| **Replit** | Applies code changes from zip packages. Runs validation. Pushes to GitHub. The ONLY actor that pushes to the repo. Replit does NOT make autonomous changes — see Replit Behavior Constraints below. | Replit Agent, bash shell, npm/node |
-| **Langston** | Autonomous AI project manager on Hetzner server. Manages Replit operations (deploy, test, push), generates reports, communicates with Kyle via Telegram. Can relay messages between Kyle and Claude Code. | OpenClaw gateway (Claude Opus 4.6), Replit browser automation, Telegram, Google Drive, report-gen |
-| **Kyle** | Approves directives and batch scopes, transfers zip packages between Claude Code and Replit, runs sync-repo.bat, makes decisions on ambiguities. | Google Drive, Git, File Explorer, Telegram |
+| **Claude Code (You)** | Reads source code, writes scope docs, creates batch zips, runs `git pull` to sync clone from GitHub, monitors Langston's capacity. Does NOT push to GitHub. | Claude Code terminal, file read/write on local clone, SSH to Langston's server |
+| **Replit** | Applies code changes from zip packages. Runs validation. Does NOT make autonomous changes — see Replit Behavior Constraints below. | Replit Agent, bash shell, npm/node |
+| **Langston** | Autonomous AI on Hetzner server. Deploys zips to Replit, pushes to GitHub, generates reports, monitors Claude Code's capacity. Reviews scope docs and builds deep system knowledge before deploying. | OpenClaw gateway (GPT-5.4 via OpenAI API), Replit browser automation, Telegram, Google Drive, report-gen |
+| **Kyle** | Approves scopes, makes decisions on ambiguities, sets up OAuth auth sessions. | Google Drive, Telegram |
 
 ---
 
 ## Langston (Autonomous Agent)
 
-Langston is an autonomous AI agent running 24/7 on a Hetzner server. He serves as the project manager for DawnTrader, bridging Kyle, Claude Code, and Replit.
+Langston is an autonomous AI agent running 24/7 on a Hetzner server (204.168.141.77). He serves as the project manager for DawnTrader — deploying batches to Replit, pushing to GitHub, generating reports, and bridging Kyle and Claude Code.
 
-### Infrastructure
-- **Server**: Hetzner CPX22 (204.168.141.77, Helsinki) — Ubuntu 24.04, 2 vCPU, 4GB RAM
-- **Brain**: OpenClaw gateway running Claude Opus 4.6 (persistent systemd service, auth via Claude Max OAuth)
-- **Telegram**: @LangstonDTBot — connected to "Dawn Trader HQ" forum group with 5 topics
-- **Google Drive**: Mounted at `/mnt/gdrive/` via rclone (read/write access to shared drive)
+### Quick Reference
+- **Server**: Hetzner CPX22 (204.168.141.77, Helsinki) — Ubuntu 24.04
+- **Brain**: OpenClaw gateway running OpenAI GPT-5.4 (persistent systemd service, auth via OpenAI API key). Fallback: Google Gemini. Switched from Anthropic Opus 4.6 on 2026-03-16 due to Anthropic's third-party OAuth ban.
+- **Telegram**: @LangstonDTBot in "Dawn Trader HQ" forum group
+- **Google Drive**: Mounted at `/mnt/gdrive/` via rclone
 
 ### SSH Access
 ```
@@ -67,8 +67,6 @@ Group chat ID: `-1003575211453`
 
 ### 3-Way Communication (Kyle <-> Langston <-> Claude Code)
 
-Claude Code sessions can send and receive messages through Telegram via SSH.
-
 **Message Prefix**: All Claude Code messages MUST start with `**CLAUDE CODE SPEAKING:**` (all caps, bold).
 
 **2-Step Send Process** (ensures Kyle sees the message AND Langston responds):
@@ -83,104 +81,11 @@ ssh root@204.168.141.77 "cc-inbox read"        # Read unread messages
 ssh root@204.168.141.77 "cc-inbox mark-read"    # Mark all as read
 ```
 
-**How it works:**
-- Langston writes to `/root/claude-code-inbox.json` when Kyle says "CC: Claude Code" or on significant events
-- **Persistent CC**: Once "CC: Claude Code" is said in a thread, Langston CCs ALL subsequent messages until topic changes or Kyle says stop
-- Claude Code sessions read the inbox via SSH at session start or when Kyle says "check Telegram"
-- Only one Claude Code session is active at a time — no conflicts
-- The inbox persists between sessions; new sessions pick up unread messages
+### Detailed Reference
 
-### Live 3-Way Sessions
-
-Real-time conversation mode where Claude Code actively polls the inbox every 5 seconds.
-
-**Startup:**
-1. Kyle tells Langston in Telegram: "start 3-way" → Langston activates persistent CC
-2. Kyle tells Claude Code in chat: "start 3-way session"
-3. Claude Code runs `ssh root@204.168.141.77 "cc-poll"` to begin polling
-
-**During session:**
-- Kyle types in Telegram → Langston CCs inbox → cc-poll detects (≤5s) → Claude Code processes and responds via 2-step send
-- Round-trip: ~15-25 seconds (5s poll + 5-15s thinking + 3-5s delivery)
-
-**Shutdown:** Kyle says "end 3-way" in Telegram, OR 15-minute idle timeout, OR Kyle tells Claude Code directly
-
-**cc-poll**: Server-side Python script (`/usr/local/bin/cc-poll`) that polls the inbox every 5 seconds. Exits with code 0 when new messages arrive (Claude Code processes then re-launches), or code 2 on 15-minute idle timeout.
-
-### CLI Tools on Server
-| Tool | Purpose |
-|------|---------|
-| `report-gen` | Generate Word doc reports (batch, hotfix, daily, troubleshooting, urgent) |
-| `replit-cmd status` | Take Replit screenshot, dismiss overlays, return status |
-| `replit-cmd screenshot` | Take and save a Replit screenshot |
-| `replit-cmd upload <file>` | Upload a file to Replit via drag-and-drop |
-| `replit-cmd agent <msg>` | Send a message to Replit Agent and wait for response |
-| `replit-cmd agent-nowait <msg>` | Send to Replit Agent, return immediately (fire-and-forget) |
-| `replit-cmd shell <cmd>` | Type a command directly into Replit Shell (cannot read output) |
-| `replit-cmd shell-via-agent <cmd>` | Ask Replit Agent to run a shell command and return readable output |
-| `replit-cmd queue-send <msg>` | Interrupt busy Replit Agent with a priority message |
-| `replit-cmd read-agent` | Read latest Replit Agent chat (expands last collapsed section) |
-| `replit-cmd read-agent-all` | Read full Replit Agent chat (expands ALL collapsed sections) |
-| `replit-cmd expand-messages` | Expand all collapsed message sections in Agent chat |
-| `replit-cmd deploy <zip>` | Upload zip + send Agent instructions to apply batch |
-| `openclaw message send` | Send messages/files to Telegram |
-| `cc-inbox` | Claude Code inbox manager (write/read/mark-read) |
-| `cc-poll` | Live 3-way session inbox poller (5s interval, 15-min idle timeout) |
-| `claude` | Claude Code CLI (for Langston to invoke Claude Code directly) |
-
-### Key File Paths on Server
-| Path | Purpose |
-|------|---------|
-| `/root/.openclaw/openclaw.json` | OpenClaw master config |
-| `/root/.openclaw/workspace/` | Langston's identity (SOUL.md, IDENTITY.md, memory, skills) |
-| `/root/replit-automation/` | Replit browser automation scripts |
-| `/root/telegram-bot/` | Report generator, inbox CLI |
-| `/root/claude-code-inbox.json` | Claude Code inbox file |
-| `/mnt/gdrive/` | Google Drive mount (shared drive) |
-
-### Langston's Capabilities
-1. **Replit Operations**: Deploy batches, run tests, take screenshots, push to GitHub via Playwright browser automation
-2. **Report Generation**: Create Word doc reports and deliver via Telegram
-3. **Web Research**: Use lynx browser and Gemini web search for research tasks
-4. **Claude Code Relay**: Pass messages between Kyle and Claude Code via inbox system
-5. **Project Management**: Review roadmap, suggest changes, track batch progress
-6. **Design Discussions**: Participate in feature discussions in the Design forum topic
-
-### Replit Automation Details (replit.js)
-
-Langston controls Replit via Playwright (headless Chromium) running under Xvfb on the Hetzner server. Key behaviors:
-
-**Agent Chat Input**: The Replit Agent chat input is a CodeMirror 6 editor (`div.cm-content[role="textbox"]`), NOT a textarea. Text is entered via `keyboard.type()`. The send button is an anonymous 24x24px button (no aria-label) — the rightmost button in the `_sdz_text-input` container.
-
-**Enter vs Shift+Enter**: In the Agent chat, pressing Enter SUBMITS the message. To add line breaks within a message, use Shift+Enter. When typing multi-line messages, split on newlines and use `keyboard.press('Shift+Enter')` between segments.
-
-**Collapsed Messages**: Replit Agent auto-collapses its previous response when a new response is posted. Collapsed sections show as "X messages & Y actions". Must click to expand before reading. `read-agent` expands the last collapsed section by default. `read-agent-all` expands ALL collapsed sections.
-
-**Message Queue**: When the Agent is busy, new messages queue with a "Next" label. `queue-send` clicks the "Send message" button to interrupt the Agent. "Add to Queue" is the default behavior.
-
-**Modal Dialog Handling**: An app description dialog ("Name: The Dawn Trader") appears on Chromium launch and steals focus from the CodeMirror editor. Handled by pressing Escape, then re-finding the input element (DOM re-renders on dismiss), then verifying focus is on the CodeMirror editor before typing.
-
-**GitHub Auth Dialog**: When running `git push` from Replit Shell, a browser dialog titled "Pass GitHub Credentials" appears with buttons "Deny" and "Confirm for this session" (green). This is an HTML dialog within the page (not native OS), so Playwright can detect and click it: look for `button:has-text("Confirm for this session")`.
-
-**Shell Limitations**: The Replit Shell renders via xterm.js (canvas-based) — DOM text extraction returns empty. `replit-cmd shell` can TYPE commands but cannot READ output. Use `shell-via-agent` for readable output (routes command through Agent chat). Copy/paste (Ctrl+C/Ctrl+V) does not work in Shell — requires right-click context menu.
-
-**Replit Directory**: The repo lives at `~/workspace` on Replit (NOT `~/The-Dawn-Trader`).
-
-### Common Issues
-- **Replit login expires**: VNC re-login required (open port 6080 temporarily)
-- **OAuth token expiry** (~10hr lifetime): Langston shows "OAuth token refresh failed" errors. Fix: grab fresh token from active Claude Code session (`echo $CLAUDE_CODE_OAUTH_TOKEN`), update server auth files, restart gateway.
-- **Forum topic responses**: Requires OpenClaw >= v2026.3.12 (earlier versions have bug #727)
-- **Config changes**: After editing `/root/.openclaw/openclaw.json`, restart: `systemctl --user restart openclaw-gateway`
-- **GitHub auth dialog on push**: "Pass GitHub Credentials" dialog blocks git push. Playwright must detect and click "Confirm for this session" button.
-- **App description modal**: Steals focus from Agent chat input on first navigation. Fix: Escape key → re-find input → verify focus on CodeMirror.
-- **Agent messages truncated**: Enter key submits prematurely. Multi-line messages must use Shift+Enter for line breaks.
-- **Shell output unreadable**: xterm canvas rendering. Use `shell-via-agent` for readable output.
-- **index.lock blocks git**: Replit checkpoint process holds `.git/index.lock`. Fix: `rm -f .git/index.lock` before git operations.
-
-### Memory Files Reference
-- **Local (Claude Code)**: `langston-infrastructure.md` in Claude Code memory folder
-- **Server (Langston)**: `/root/.openclaw/workspace/memory/` — FORUM_THREADS.md, CLAUDE_CODE_COMMS.md, GOVERNANCE_RULES.md
-- **Shared (Google Drive)**: `Claude Comms and Packages/Langston/` — setup docs, identity files, skills
+For full details on Langston's infrastructure, CLI tools, Replit automation, credentials, and troubleshooting, see:
+- **`Claude Comms and Packages/Langston/LANGSTON_SETUP_REFERENCE.md`** — canonical infrastructure reference
+- **Server**: `/root/.openclaw/workspace/TOOLS.md` — CLI tool syntax and usage
 
 ---
 
@@ -516,7 +421,7 @@ All INSTRUCTIONS.md files should include the push command using this script.
 
 ### Post-Push Verification (Required After Every Batch)
 
-After every `sync-repo.bat` pull, run:
+After every `git pull` sync, run:
 ```bash
 git log --oneline -5
 ```
@@ -628,13 +533,14 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 | Governance | Update Langston CCPI section — 12 replit-cmd commands, Replit automation details, common issues | BATCH_GOV_LANGSTON_UPDATE | `7698462f` |
 | Hotfix | KrakenService property name fix — this.krakenService to this.kraken in cascadingScan call (line 1036) | HF10 | `5f04e4eb` |
 | — | Governance docs for HF10 + process updates (autonomous pipeline, session transitions) | HF10B | (governance) |
+| Governance | Governance enforcement mechanisms — pre-flight checklist, post-batch audit, cross-actor capacity monitoring, session transition protocol, batch report template, stale reference fixes | HF11B | (governance) |
 
 ### In-Progress Directives
 | Directive | Title | Batch | Status |
 |-----------|-------|-------|--------|
 | (none currently in progress) | | | |
 
-> **Last commit**: `5f04e4eb` (HF10 — KrakenService property name fix in signal-orchestrator cascadingScan)
+> **Last commit**: `bbb4612f` (HF10B — Governance docs for HF10 + process updates)
 > **Next step**: Phase 14.5 (Block 3, Batch 19 — Parallel Pattern Scanning + Signal Ranking Overhaul + Global Regime Pre-Filter)
 > **Note**: Autonomous deployment pipeline OPERATIONAL (Langston deploys to Replit, Claude Code syncs via git pull). HF10 fixes latent this.krakenService bug (dormant until CASCADE enabled in Phase 14.5). All prior phases/batches complete through Batch 18L. Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE. Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED.
 
@@ -719,17 +625,138 @@ Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation
 15. **One mega-batch per phase.** Don't break phases into sub-batches. Each roadmap phase is one scope document → one code batch → one governance batch. Discuss with Kyle before splitting.
 16. **Every batch produces a zip.** No exceptions. The zip contains modified files in repo-relative paths, INSTRUCTIONS.md, and README.md. Without a zip, the work can't reach Replit.
 17. **Pre-implementation audit before every phase.** Read every source file that will be touched. Verify all assumptions about imports, consumers, and dependencies. Kyle catches oversights — be thorough.
+18. **Communicate deviations clearly.** When troubleshooting or changing architecture, any deviation from the established setup must be explicitly called out in plain English before implementation. Technical changes cannot be buried in technical speak — Kyle must understand what's changing and why. If the change alters which systems are active, which tools are available, or how actors interact, it requires Kyle's explicit approval first.
+19. **Don't confabulate when context is degraded.** When context has been compacted or is approaching limits, flag uncertainty explicitly. Never state information confidently that may have been lost or compressed during compaction. If unsure, say "I'm not certain — my context has been compacted" rather than guessing. Wrong information delivered confidently is worse than admitting uncertainty.
+20. **Single source of truth for every governance domain.** Each domain has ONE canonical file. Other files reference it, never redefine it. When updating a policy, update the canonical file and verify no other file contradicts it. Canonical files:
+
+| Domain | Canonical File |
+|--------|---------------|
+| Workflow, actor roles, rules | This file (CCPI) |
+| Langston infrastructure & credentials | `LANGSTON_SETUP_REFERENCE.md` (in Claude Comms and Packages/Langston/) |
+| Langston identity & personality | `SOUL.md` + `IDENTITY.md` (on server) |
+| Langston operational procedures | Skill files (dt-master-workflow, dt-replit-ops, etc.) |
+| Communication rules | `memory/GOVERNANCE_RULES.md` (on server) |
+| System architecture | `SYSTEM_MANUAL.md` |
+| Bug/risk registry | `CHANGES_AND_FIXES.md` |
+| Component dependencies | `SYSTEM_IMPACT_MAP.md` |
 
 ---
 
 ## How to Start a New Session
 
-1. Read this file (`1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`) — **read it fully, not just the headers**
-2. Read the snapshot log (`DT_Frozen_Snapshots/SNAPSHOT_LOG.md`) to know current state
-3. Read `directives/DIRECTIVE_INDEX.md` to see what's completed and what's next
-4. Verify permission settings in `.claude/worktrees/wizardly-einstein/.claude/settings.local.json` — recreate if missing (see Claude Code Permission Settings section)
-5. Ask Kyle what to work on, or continue from where the previous session left off
-6. **Before writing any code**: agree on scope with Kyle, write a scope document, and conduct a pre-implementation audit
+1. Read this file (CCPI) — **read it fully, not just the headers**
+2. Read MEMORY.md for learnings and context from previous sessions
+3. Read the snapshot log (`DT_Frozen_Snapshots/SNAPSHOT_LOG.md`) to know current state
+4. Read `directives/DIRECTIVE_INDEX.md` to see what's completed and what's next
+5. Verify permission settings in `.claude/` settings files — recreate if missing (see Claude Code Permission Settings section)
+6. Complete the Pre-Flight Checklist (see Governance Enforcement section below)
+7. Report capacity status for self and Langston to Kyle
+8. Ask Kyle what to work on, or continue from where the previous session left off
+9. **Before writing any code**: agree on scope with Kyle, write a scope document, and conduct a pre-implementation audit
+
+---
+
+## Session Lifecycle & Transitions
+
+### Token Budget Awareness
+
+Both Claude Code and Langston operate with ~200,000 token context windows. Context degrades as usage increases — responses become repetitive, earlier context is lost, and critical details get dropped. Transitions must be planned, never reactive.
+
+**Warning Thresholds:**
+| Usage | Action |
+|-------|--------|
+| **50%** | Note in conversation: "Session at ~50% context. Current batch can continue." |
+| **75%** | Active warning: "Session at ~75% context. Wrap up current task. Do NOT start new batches." |
+| **90%** / frequent compaction | Transition required: "Session must transition. Completing handoff now." |
+
+### Cross-Actor Capacity Monitoring
+
+Each actor monitors the OTHER's capacity — not their own. A degrading session is the least reliable reporter of its own degradation.
+
+| Monitor | Monitored | How |
+|---------|-----------|-----|
+| **Claude Code** | Langston | SSH to check session health: `openclaw sessions --json`. Watch for repetitive messages, lost context, inability to follow multi-step instructions. |
+| **Langston** | Claude Code | Watch for signs in Claude Code's messages: repeated questions, lost awareness of recent batches, contradicting earlier statements. Report to Kyle via Telegram. |
+
+**Escalation:** If either actor detects the other is degrading, notify Kyle immediately with: (1) which actor is degrading, (2) evidence (specific examples), (3) recommended action (transition now vs. finish current task first).
+
+### Post-Batch Capacity Announcement
+
+After every batch closeout (once governance push is verified), each actor announces the OTHER's capacity status. This is not in the batch completion report — it is a live announcement in the conversation/Telegram.
+
+- **Claude Code** announces: "Langston capacity: ~X%" (based on session health check via SSH)
+- **Langston** announces: "Claude Code capacity: ~X%" (based on observed message quality)
+
+This creates a regular heartbeat so Kyle always knows where both actors stand — not just at emergency thresholds.
+
+### Claude Code Session Handoff
+
+When approaching token limits or context compaction:
+1. Complete the current task (never leave mid-batch)
+2. Update MEMORY.md and topic files with any new learnings
+3. Update CCPI "Current State" section if batch status changed
+4. Write a handoff summary to the cc-inbox or Telegram thread 21 so Langston knows
+5. Tell Kyle: "Session reaching context limits. Please start a new session."
+6. The new session reads MEMORY.md + CCPI and picks up where the old one left off
+
+### Langston Session Handoff
+
+When Langston's context is degrading:
+1. Langston should complete current task and save state to his memory files
+2. Claude Code or Kyle clears his session: `openclaw sessions` to manage
+3. His persistent memory at `/root/.openclaw/workspace/memory/` survives session clears
+4. Kyle sets up fresh OAuth auth for the new session
+5. New session reads SOUL.md, IDENTITY.md, TOOLS.md, and memory files to restore context
+6. Claude Code sends a context briefing to the new session via cc-inbox
+
+**Important:** Never transition both Claude Code and Langston simultaneously. Transition one, let the new session stabilize, then transition the other if needed. At least one actor must maintain full context continuity at all times.
+
+---
+
+## Governance Enforcement
+
+### Pre-Flight Checklist (Every Session Start)
+
+Before doing ANY work, every Claude Code session must complete this checklist. No exceptions.
+
+- [ ] Read full CCPI (this file) — not just headers
+- [ ] Read MEMORY.md for learnings from previous sessions
+- [ ] Verify last commit in CCPI matches `git log --oneline -1`
+- [ ] Read DIRECTIVE_INDEX.md for current state
+- [ ] Check cc-inbox for unread messages from Langston
+- [ ] Report own capacity status to conversation
+- [ ] Check Langston's capacity: `ssh root@204.168.141.77 "openclaw sessions --json"`
+- [ ] Report Langston's capacity status to Kyle
+
+If any checklist item reveals a discrepancy (e.g., last commit doesn't match, stale references found), flag it immediately before starting work.
+
+### Post-Batch Governance Audit
+
+After every code batch is verified (git pull confirms changes landed), before writing the governance batch:
+
+1. **Tier 1 check**: Open the Governance Update Rules matrix (above). For each Tier 1 file, confirm it will be updated in the governance batch.
+2. **Stale reference scan**: Search CCPI for references to the changed functionality. Are any descriptions, role tables, workflow steps, or line references now outdated?
+3. **Four Actors table check**: Do the role descriptions still accurately reflect what each actor does?
+4. **Rules section check**: Do any rules need updating based on process changes?
+5. **"How to Start a New Session" check**: Is the startup procedure still accurate?
+
+This audit is a STEP in the process, not something hoped-for. The governance batch is incomplete without it.
+
+### Batch Completion Report — Mandatory Sections
+
+Every batch completion report (generated by Langston) must include ALL of the following sections:
+
+| Section | Content |
+|---------|---------|
+| **Executive Summary** | What was deployed, how many batches, pipeline status |
+| **Per-Batch Details** | For each batch: commit hash, type (code/governance), files changed, what was fixed/added |
+| **Governance Updates** | Which governance files were updated and what changed. If process/workflow changes were made, call them out explicitly |
+| **Capacity Status** | Current token usage estimates for both Claude Code and Langston. Flag if either is above 75%. |
+| **Auth Status** | Langston's auth session expiry ETA. Flag if <2 hours remaining. |
+| **Stale Reference Check** | Confirmation that CCPI was audited for stale references after governance batch |
+| **Next Steps** | What comes next, any blockers, any decisions needed from Kyle |
+
+If a section is empty or missing, the report is incomplete. Langston should not send incomplete reports.
 
 ---
 
