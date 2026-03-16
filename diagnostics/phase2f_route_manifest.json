@@ -6631,6 +6631,16 @@
     ]
   },
   {
+    "path": "/api/api/vts/regime-archive/scheduler-status",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/api/vts/regime-archive/export",
     "methods": [
       "GET"
