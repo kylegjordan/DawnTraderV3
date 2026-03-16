@@ -13,6 +13,7 @@
  * - GET /api/vts/regime-archive/summary - Summary statistics
  * - GET /api/vts/regime-archive/export - CSV export
  * - GET /api/vts/regime-archive/manifest - Get manifest entries
+ * - GET /api/vts/regime-archive/scheduler-status - Scheduler health (HF12)
  *
  * All routes secured with requireAuth.
  *
@@ -33,6 +34,7 @@ import {
 import { archiveRegimeMetrics } from '../scripts/archive-regime-metrics';
 import { verifyArchiveIntegrity } from '../scripts/verify-archive-integrity';
 import { compressOldArchives } from '../scripts/compress-old-archives';
+import { getSchedulerStatus } from '../core/archival/archival-scheduler';
 
 const router = Router();
 
@@ -156,6 +158,28 @@ router.get('/api/vts/regime-archive/manifest', requireAuth, (req: Request, res: 
     res.status(500).json({
       ok: false,
       error: 'Failed to fetch archive manifest',
+    });
+  }
+});
+
+/**
+ * HF12: Scheduler status endpoint — read-only health check.
+ * Returns scheduler initialization state, next scheduled runs,
+ * startup catch-up results, and overdue status.
+ */
+router.get('/api/vts/regime-archive/scheduler-status', requireAuth, (req: Request, res: Response): void => {
+  try {
+    const status = getSchedulerStatus();
+
+    res.json({
+      ok: true,
+      scheduler: status,
+    });
+  } catch (err) {
+    console.error('[11.7E][API] Error fetching scheduler status:', err);
+    res.status(500).json({
+      ok: false,
+      error: 'Failed to fetch scheduler status',
     });
   }
 });
