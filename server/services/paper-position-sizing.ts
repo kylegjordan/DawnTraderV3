@@ -25,6 +25,8 @@
 import type { GuardrailsV2 } from '@shared/schema';
 import { b5SizingAudit } from './b5-sizing-audit.js';
 import { getScalingFactor } from './risk-concentration.js';
+// Phase 14.5: Pattern pool position sizing guardrails
+import { PATTERN_POOL_GUARDRAILS } from '../config/pattern-filter-profile.js';
 
 /**
  * AJ9: Buffer factor for max position sizing.
@@ -117,6 +119,16 @@ export function sizePaperPositionForSignal(params: PaperPositionSizingParams): P
   const safeRiskPct = Number.isFinite(riskPerTradePct) && riskPerTradePct > 0 ? riskPerTradePct : 1.50;
   const safeMaxPositionPct = Number.isFinite(maxPositionPct) && maxPositionPct > 0 ? maxPositionPct : 10.00;
   const safeMaxTotalExposurePct = Number.isFinite(maxTotalExposurePct) && maxTotalExposurePct > 0 ? maxTotalExposurePct : 100;
+  // Phase 14.5: Pattern pool signals use reduced position sizing (15% vs 25%)
+  const signalSourcePool = (signal as any)?.metadata?.sourcePool || 'quant';
+  let effectiveMaxPositionPct = safeMaxPositionPct;
+  if (signalSourcePool === 'pattern') {
+    const patternMaxPct = PATTERN_POOL_GUARDRAILS.MAX_POSITION_PCT * 100; // 15
+    if (effectiveMaxPositionPct > patternMaxPct) {
+      effectiveMaxPositionPct = patternMaxPct;
+      console.log(`[14.5][SIZING] Pattern pool signal — capping position at ${patternMaxPct}% (vs ${safeMaxPositionPct}% quant)`);
+    }
+  }
   
   const riskAmount = (portfolioValue * safeRiskPct) / 100;
   
@@ -128,7 +140,7 @@ export function sizePaperPositionForSignal(params: PaperPositionSizingParams): P
   }
   
   const exposureBudget = portfolioValue * (safeMaxTotalExposurePct / 100);
-  const maxNotional = exposureBudget * (safeMaxPositionPct / 100);
+  const maxNotional = exposureBudget * (effectiveMaxPositionPct / 100);
   const bufferedMaxNotional = maxNotional * MAX_POSITION_BUFFER_FACTOR;
   
   let riskBasedNotional = quantity * entryPrice;

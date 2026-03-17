@@ -86,6 +86,9 @@ import { normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver.js'
 // Phase 13: Market Context Engine for centralized indicator + regime computation
 import { getMarketContextEngine } from './market-context-engine.js';
 import { computeBiasConfidenceModifier } from '../core/metrics/directional-bias.js';
+// Phase 14.5: Pattern pool configuration
+import { PATTERN_POOL_STRATEGIES, PATTERN_POOL_GUARDRAILS, DEFAULT_ASSET_CLASS } from '../config/pattern-filter-profile.js';
+import { computeRankingScore, normalizeNetReturn, CONTEXT_BONUS } from '../config/ranking-weights.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -524,6 +527,7 @@ export class SignalOrchestrator {
       trendStrength: 0.5,
       volatility: extendedMetrics.volatility ?? 0.3,
       regimeStability: sqeRegimeStability,  // HF9: For governance gate + confidence floor in SQE
+      sourcePool: rawSignal.metadata?.sourcePool || 'quant',
     };
 
     const sqeResult = await signalQualityEvaluator.evaluate(sqeInput);
@@ -572,6 +576,9 @@ export class SignalOrchestrator {
       volatility: extendedMetrics.volatility ?? 0.3,
       currentPrice: rawSignal.entryPrice,
       volume24h: activeFilterPool.getFX5DataForSymbol(rawSignal.symbol, sizingContext.mode)?.volume24h ?? null,
+      sourcePool: rawSignal.metadata?.sourcePool || 'quant',
+      signalType: (rawSignal as any).signalType || rawSignal.metadata?.signalType || 'QUANT',
+      assetClass: rawSignal.metadata?.assetClass || DEFAULT_ASSET_CLASS,
       metadata: {
         strategyWeight,
         exposureBias,
@@ -677,8 +684,13 @@ export class SignalOrchestrator {
         console.warn(`[8.8.7][Orchestrator] Skipping signal generation – no FX5 survivors (mode=${this.mode})`);
         return;
       }
+      // Phase 14.5: Get pattern pool pairs for separate evaluation
+      const patternPoolPairs = activeFilterPool.getPatternPool(this.mode);
+      const patternSymbols = patternPoolPairs.map(p => normalizeToInternalSymbol(p.symbol));
+      console.log(`[14.5][ORCHESTRATOR] Pattern pool: ${patternSymbols.length} pairs for pattern/hybrid strategy evaluation`);
       // Directive 11.4H Task 1: Normalize symbols at data ingress
       const eligibleSymbols = fx5Survivors.map(p => normalizeToInternalSymbol(p.symbol));
+      const fx5SymbolSet = new Set(eligibleSymbols);
       
       console.info(`[8.8.7][Orchestrator] Using FX5 Active Filter Pool – ${eligibleSymbols.length} eligible symbols.`);
       console.log(`[37.A][SIGNAL] Evaluating ${eligibleSymbols.length} eligible symbols`);
@@ -773,6 +785,75 @@ export class SignalOrchestrator {
           }
         } catch (error) {
           console.error(`[37.A][SIGNAL] Error evaluating ${symbol}:`, error);
+        }
+      }
+
+      // Phase 14.5: Process pattern pool — PATTERN + HYBRID strategies only
+      for (const symbol of patternSymbols) {
+        try {
+          // Skip if already processed in quant pool
+          if (fx5SymbolSet.has(symbol)) continue;
+
+          // Get OHLC data (uses ohlcCache — no new API calls)
+          const ohlcData = await ohlcCache.getOHLCData(symbol, 60);
+          if (!ohlcData || ohlcData.length < 10) continue;
+
+          const currentPrice = parseFloat(ohlcData[ohlcData.length - 1].close);
+
+          // Get MCE context for regime + indicators
+          const mce = getMarketContextEngine();
+          const volume24h = patternPoolPairs.find(p => normalizeToInternalSymbol(p.symbol) === symbol)?.volume24h ?? 0;
+          const context = mce.computeContext(symbol, ohlcData, currentPrice, volume24h);
+
+          // Pattern recognition
+          const candles = ohlcData.map(d => ({
+            open: parseFloat(d.open),
+            high: parseFloat(d.high),
+            low: parseFloat(d.low),
+            close: parseFloat(d.close),
+            volume: parseFloat(d.volume || '0'),
+            timestamp: d.time * 1000,
+          }));
+
+          const patternSignals = getPatternRecognizer().scanPatterns(candles, symbol);
+          const buyPatterns = patternSignals.filter(p => p.direction === 'BUY');
+
+          for (const patternSig of buyPatterns) {
+            const atr = context.indicators?.atr ?? (currentPrice * 0.02);
+            const tradeSignal = getPatternRecognizer().patternToTradeSignal(patternSig, currentPrice, atr);
+
+            const rawSignal = {
+              symbol,
+              strategy: tradeSignal.strategy || patternSig.pattern,
+              entryPrice: tradeSignal.entryPrice ?? currentPrice,
+              stopPrice: tradeSignal.stopPrice ?? currentPrice * 0.97,
+              targetPrice: tradeSignal.targetPrice ?? currentPrice * 1.03,
+              confidence: tradeSignal.confidence ?? patternSig.strength,
+              metadata: {
+                signalType: 'PATTERN',
+                sourcePool: 'pattern',
+                assetClass: DEFAULT_ASSET_CLASS,
+                patternType: patternSig.pattern,
+                patternStrength: patternSig.strength,
+              },
+            };
+
+            const sizedSignal = await this.buildSizedSignalForStrategy(
+              rawSignal, rawSignal.strategy, sizingContext
+            );
+
+            if (sizedSignal) {
+              (sizedSignal as any).signalType = 'PATTERN';
+              (sizedSignal as any).sourcePool = 'pattern';
+              signals.push(sizedSignal);
+            }
+          }
+
+          // Hybrid confluence check for pattern-pool pairs (PATTERN + QUANT from same pair)
+          // Only if both quant and pattern signals exist for this symbol
+          // (Hybrid strategies require both signal types to confluence)
+        } catch (err) {
+          console.warn(`[14.5][ORCHESTRATOR] Pattern pool eval failed for ${symbol}:`, err);
         }
       }
 

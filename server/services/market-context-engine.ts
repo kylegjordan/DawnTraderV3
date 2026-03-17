@@ -365,6 +365,44 @@ export class MarketContextEngine {
       config: { ...this.config },
     };
   }
+  /**
+   * Phase 14.5: Compute global dominant regime from MCE cache
+   * Aggregates per-pair regimes across all cached symbols using majority vote.
+   * Returns null if cache is empty or all entries expired.
+   */
+  getDominantRegime(): { regime: string; avgScore: number; pairCount: number; percentage: number } | null {
+    const now = Date.now();
+    const regimeCounts: Record<string, { count: number; totalScore: number }> = {};
+    let totalPairs = 0;
+
+    for (const [, entry] of this.cache.entries()) {
+      if (now >= entry.expiresAt) continue; // Skip expired
+
+      const regime = entry.context.regime?.regime;
+      if (!regime) continue;
+
+      if (!regimeCounts[regime]) {
+        regimeCounts[regime] = { count: 0, totalScore: 0 };
+      }
+      regimeCounts[regime].count += 1;
+      regimeCounts[regime].totalScore += entry.context.raw?.regimeScore ?? 50;
+      totalPairs++;
+    }
+
+    if (totalPairs === 0) return null;
+
+    const sorted = Object.entries(regimeCounts).sort((a, b) => b[1].count - a[1].count);
+    if (sorted.length === 0) return null;
+
+    const [regime, stats] = sorted[0];
+    return {
+      regime,
+      avgScore: Math.round(stats.totalScore / stats.count),
+      pairCount: totalPairs,
+      percentage: Math.round((stats.count / totalPairs) * 100),
+    };
+  }
+
 }
 
 // ─── Singleton ──────────────────────────────────────────────────────────────

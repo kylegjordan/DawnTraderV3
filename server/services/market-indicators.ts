@@ -241,7 +241,23 @@ export function getFrictionSampleSize(): number {
 export function getMarketIndicators(): MarketIndicators {
   // Directive 11.4H.4A-Fix: Get dominant regime from live telemetry instead of stale cache
   const telemetry = getTelemetryAggregator();
-  const dominantRegime = telemetry.getDominantRegime();
+  // Phase 14.5: Mode-aware regime sourcing
+  // Active trading mode: MCE-derived (broader upstream population ~100-300 pairs)
+  // Passive/VTS mode: VTS-telemetry-derived (existing, valid when VTS is the live population)
+  let dominantRegime: { regime: any; avgRegimeScore?: number; avgScore?: number; pairCount: number; percentage: number } | null = null;
+  try {
+    const mce = getMarketContextEngine();
+    const mceRegime = mce.getDominantRegime();
+    if (mceRegime && mceRegime.pairCount >= 5) {
+      // MCE has sufficient data — use it (active mode or warm cache)
+      dominantRegime = { regime: mceRegime.regime, avgRegimeScore: mceRegime.avgScore, pairCount: mceRegime.pairCount, percentage: mceRegime.percentage };
+    } else {
+      // Fall back to VTS telemetry (passive mode or cold MCE cache)
+      dominantRegime = telemetry.getDominantRegime();
+    }
+  } catch {
+    dominantRegime = telemetry.getDominantRegime();
+  }
 
   // Phase 14: Use normalizeRegime() instead of lossy mapToBaseRegime()
   // This correctly maps any regime name (old canonical, ghost, or new canonical) to current canonical

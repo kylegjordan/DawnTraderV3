@@ -25,6 +25,8 @@ import type { RegimeStability } from '../../config/strategy-governance.js';
 // HF9 Item B: Governance gate imports (migrated from paper-execution-engine)
 import { isStrategyEligible } from '../governance/strategy-eligibility.js';
 import { getStrategyDependency } from '../../config/strategy-governance.js';
+// Phase 14.5: Pattern pool elevated quality floor
+import { PATTERN_POOL_GUARDRAILS } from '../../config/pattern-filter-profile.js';
 
 /**
  * Directive 11.0B: SQE Thresholds - Default values used when screener config is unavailable
@@ -52,6 +54,7 @@ export interface SQEInput {
   regime?: string;
   signalType?: string;
   regimeStability?: RegimeStability;  // Phase 14.1 HF8 (B3): For confidence floor check
+  sourcePool?: 'quant' | 'pattern';  // Phase 14.5: active filter path origin
 }
 
 export interface SQEOptions {
@@ -135,9 +138,13 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
   // Load thresholds from screener config (configurable via UI)
   const thresholds = await getSQEThresholdsFromConfig(input.mode);
   
-  // Directive 11.0B: FinalScore check
-  if (finalScore < thresholds.finalScoreMin) {
-    failures.push(`FinalScore ${finalScore.toFixed(4)} < ${thresholds.finalScoreMin}`);
+  // Phase 14.5: Pattern pool signals use elevated quality floor
+  const effectiveMinFinalScore = input.sourcePool === 'pattern'
+    ? PATTERN_POOL_GUARDRAILS.FINAL_SCORE_FLOOR  // 0.45 for pattern pool
+    : thresholds.finalScoreMin;                    // 0.35 for quant (default)
+
+  if (finalScore < effectiveMinFinalScore) {
+    failures.push(`FinalScore ${finalScore.toFixed(4)} < ${effectiveMinFinalScore} (${input.sourcePool === 'pattern' ? 'pattern' : 'quant'} threshold)`);
   }
   
   // Directive 11.0B: RegimeWeight check

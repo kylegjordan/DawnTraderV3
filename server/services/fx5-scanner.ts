@@ -70,6 +70,8 @@ import {
   CANONICAL_BENCHMARK_SYMBOLS,
   isBenchmarkSymbolStrict 
 } from '../config/benchmark-regex.js';
+// Phase 14.5: Pattern pool filter thresholds
+import { PATTERN_POOL_THRESHOLDS } from '../config/pattern-filter-profile.js';
 
 export const BENCHMARK_BASES = [
   'BTC', 'XBT',           // Bitcoin (standard and Kraken)
@@ -624,6 +626,30 @@ export class Fx5ScannerService {
         s.bypassVolatilityReject ||
         s.bypassBoringReject
       );
+
+      // Phase 14.5: Pattern pool — pairs that fail quant metric filters but pass relaxed thresholds
+      const patternPoolCandidates = classifiedSurvivors.filter(s =>
+        !s.passesMetricFilter &&
+        !s.bypassVolatilityReject &&
+        !s.bypassBoringReject
+      );
+
+      const patternPoolSurvivors = patternPoolCandidates.filter(s => {
+        const volumeUSD = s.volume24h ?? 0;
+        const lq = s.LQ ?? 0;
+        const vn = s.VolNoise ?? 1.0;
+        const di = s.DI ?? 0;
+
+        return (
+          volumeUSD >= PATTERN_POOL_THRESHOLDS.MIN_VOLUME_USD &&
+          lq >= PATTERN_POOL_THRESHOLDS.LQ_MIN &&
+          vn <= PATTERN_POOL_THRESHOLDS.VN_MAX &&
+          di >= PATTERN_POOL_THRESHOLDS.DI_TRENDING_MIN
+        );
+      });
+
+      console.log(`[14.5][PATTERN_POOL] Pattern pool: ${patternPoolSurvivors.length}/${patternPoolCandidates.length} metric-rejected pairs passed relaxed thresholds`);
+
       const metricFilteredCount = classifiedSurvivors.length - metricFilteredSurvivors.length;
       const forceIncludedCount = classifiedSurvivors.filter(s => !s.passesMetricFilter && s.forceInclude).length;
       const benchmarkBypassedCount = classifiedSurvivors.filter(s => !s.passesMetricFilter && (s.bypassVolatilityReject || s.bypassBoringReject)).length;
@@ -659,6 +685,16 @@ export class Fx5ScannerService {
         // Engine ACTIVE: Add survivors to Active Filter Pool (with volume classification and metric filtering)
         const poolStats = activeFilterPool.addSurvivors(mode, metricFilteredSurvivors);
         console.log(`[REB 2.8.7][ActivePool] Pool populated: added=${poolStats.added}, updated=${poolStats.updated}, skipped=${poolStats.skipped}, survivors=${metricFilteredSurvivors.length} (${metricFilteredCount} filtered by 9.1)`);
+        // Phase 14.5: Add pattern pool survivors
+        if (patternPoolSurvivors.length > 0) {
+          const patternStats = activeFilterPool.addPatternPoolSurvivors(mode, patternPoolSurvivors.map(s => ({
+            symbol: s.symbol,
+            currentPrice: s.currentPrice ?? 0,
+            volume24h: s.volume24h ?? 0,
+            dailyRange: s.dailyRange ?? 0,
+          })));
+          console.log(`[14.5][PATTERN_POOL] Pattern pool populated: added=${patternStats.added}, skipped=${patternStats.skipped}`);
+        }
       } else {
         // Engine STOPPED: Pool cleared by enforcePassiveModeIfStopped (passive learning)
         // Directive 11.4H.6 Task 3: IMF metrics still persisted above even in passive mode

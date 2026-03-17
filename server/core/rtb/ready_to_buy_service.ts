@@ -52,6 +52,9 @@ import { SCORE_WEIGHTS, SCORE_WEIGHTS_VERSION } from '../../config/score-weights
 import { getCachedCostMetrics, computeTotalRoundTripCost, computeNetGeometry } from '../math/cost-model.js';
 import { getCachedSpread } from '../metrics/cost-metrics.js';
 import { getNormalizedVolatility as getVolatility } from '../metrics/market-metrics.js';
+// Phase 14.5: Ranking weights for cross-family signal comparison
+import { computeRankingScore, normalizeNetReturn, FINAL_SCORE_GAP_OVERRIDE } from '../../config/ranking-weights.js';
+import { computeTotalRoundTripCost } from '../cost-model.js';
 
 // T5: Subscribe to pool size updates from RTB Refresh Service
 let currentPoolSize = getAdaptivePoolSize();
@@ -105,6 +108,10 @@ export interface SQESignalInput {
   volume24h?: number | null; // Directive 8.8.4-C.14.B: 24h USD volume (NULL if not in FX5 pool)
   metadata?: Record<string, unknown>;
   skipSelfCheck?: boolean; // Directive 8.8.4-A3.R2: Skip self-dedupe during refreshAndRank
+  sourcePool?: 'quant' | 'pattern';    // Phase 14.5: active filter path origin
+  signalType?: 'QUANT' | 'PATTERN' | 'HYBRID';  // Phase 14.5: signal family
+  assetClass?: string;                  // Phase 14.5: 'crypto_spot' default
+  rankingScore?: number;                // Phase 14.5: cross-family desirability score
 }
 
 export interface RTBQueueStats {
@@ -1129,37 +1136,43 @@ class ReadyToBuyService {
    * Uses FinalScore as primary ranking metric (replaces CWQI)
    */
   async getTopSignal(mode: TradingMode): Promise<RtbSignal | null> {
-    const signals = await storage.getRtbSignals({
-      mode,
-      status: 'queued',
-    });
-    
-    if (signals.length === 0) {
-      return null;
-    }
-    
+    const signals = await storage.getRtbSignals({ mode, status: 'queued' });
+    if (signals.length === 0) return null;
+
     let bestSignal: RtbSignal | null = null;
-    let bestFinalScore = -1;
-    
+    let bestRankingScore = -1;
+
     for (const signal of signals) {
-      // Directive 11.0E: Use FinalScore with fallback to cwqi for compatibility
       const signalFinalScore = parseFloat(signal.finalScore || signal.cwqi || '0');
-      
-      if (signalFinalScore > bestFinalScore) {
-        bestFinalScore = signalFinalScore;
+
+      // Phase 14.5: Use rankingScore from metadata if available, otherwise fall back to FinalScore
+      const metadata = signal.metadata as Record<string, unknown> | null;
+      let signalRankingScore = (metadata?.rankingScore as number) ?? signalFinalScore;
+
+      // Phase 14.5: FinalScore gap safety rule
+      // If gap > 0.10, FinalScore always wins (prevents return-magnitude gaming)
+      if (bestSignal) {
+        const bestFinalScore = parseFloat(bestSignal.finalScore || bestSignal.cwqi || '0');
+        const gap = Math.abs(signalFinalScore - bestFinalScore);
+        if (gap > FINAL_SCORE_GAP_OVERRIDE) {
+          // Large quality gap — use FinalScore directly
+          signalRankingScore = signalFinalScore;
+        }
+      }
+
+      if (signalRankingScore > bestRankingScore) {
+        bestRankingScore = signalRankingScore;
         bestSignal = signal;
       }
     }
-    
+
     if (bestSignal) {
-      const ageMinutes = (Date.now() - new Date(bestSignal.queuedAt).getTime()) / (60 * 1000);
-      console.log(
-        `[11.0E][TOP_SIGNAL] ${bestSignal.symbol}/${bestSignal.strategy}: ` +
-        `FinalScore=${bestFinalScore.toFixed(4)}, ` +
-        `age=${ageMinutes.toFixed(1)}min`
-      );
+      const ageMinutes = bestSignal.queuedAt
+        ? ((Date.now() - new Date(bestSignal.queuedAt).getTime()) / 60000).toFixed(1)
+        : 'unknown';
+      console.log(`[RTB] Top signal: ${bestSignal.symbol} ${bestSignal.strategy} rankingScore=${bestRankingScore.toFixed(4)} age=${ageMinutes}min`);
     }
-    
+
     return bestSignal;
   }
 
@@ -1632,6 +1645,15 @@ class ReadyToBuyService {
       await this.expireSignal(existingSignal.id, 'Replaced by higher-CWQI SQE signal');
     }
 
+    // Phase 14.5: Persist routing and ranking metadata for auditability
+    const enrichedMetadata = {
+      ...(input.metadata || {}),
+      sourcePool: input.sourcePool || 'quant',
+      signalType: input.signalType || 'QUANT',
+      assetClass: input.assetClass || 'crypto_spot',
+      rankingScore: input.rankingScore ?? parseFloat(String(input.finalScore || '0')),
+    };
+
     // Insert new signal with pre-computed metrics from SQE
     // Directive 8.8.4-A3.R1: Store with normalized pair key
       // R9.3-C: expiresAt removed - lifecycle governed by SQE, not TTL
@@ -1656,7 +1678,7 @@ class ReadyToBuyService {
       queuedAt: now,
       // R9.3-C: expiresAt omitted - field is now optional
       blockReason: 'SQE_QUALIFIED', // Mark as SQE-qualified, not capacity-blocked
-      metadata: input.metadata as any,
+      metadata: enrichedMetadata as any,
     };
 
     // Directive 8.8.4-A3.R8: Log trace event for new signal insertion
