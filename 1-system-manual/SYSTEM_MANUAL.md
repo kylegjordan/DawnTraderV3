@@ -8721,6 +8721,67 @@ The `entryPrice * 1.02` hardcoded simulation in `components/trading/active-trade
 
 ---
 
+# Operational Model — Development Pipeline & Actor Roles
+
+**Added**: 2026-03-17 (HF12B)
+**Canonical Reference**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` (CCPI)
+
+> This section provides a summary of the operational model. The CCPI is the single source of truth for workflow rules, actor roles, and governance procedures. Do not duplicate detailed rules here — reference the CCPI.
+
+## Four-Actor Model
+
+DawnTrader is developed and maintained by four actors working in a batch-based pipeline:
+
+| Actor | Role | Primary Tools |
+|-------|------|---------------|
+| **Kyle** | Product owner and decision authority. Approves scopes, resolves ambiguities, makes strategic decisions. | Google Drive, Telegram |
+| **Claude Code** | System cartographer and lead architect. Reads source code, writes scope docs, creates batch zips, syncs clone repo via git pull. Does NOT push to GitHub. | Claude Code terminal, local file system, SSH to Langston server |
+| **Langston** | Autonomous AI agent (GPT-5.4 on Hetzner server). Deploys zips to Replit, pushes verified code to GitHub, generates reports, monitors Claude Code capacity. | OpenClaw gateway, Replit browser automation, Telegram, Google Drive |
+| **Replit** | Applies code changes from zip packages. Runs validation. Does NOT make autonomous changes beyond what the batch specifies. | Replit Agent, bash shell, npm/node |
+
+## Batch-Based Workflow (Summary)
+
+All code changes flow through a structured batch process:
+
+1. **Scope Agreement** — Kyle and Claude Code agree on what the batch fixes and how
+2. **Snapshot** — Claude Code creates a frozen snapshot of pre-change state
+3. **Batch Creation** — Claude Code writes the batch (code zips with INSTRUCTIONS.md + README.md)
+4. **Deployment** — Langston uploads the zip to Replit and directs Replit to apply changes per INSTRUCTIONS.md
+5. **Verification** — Langston verifies: server starts, tests pass, endpoints work, no regressions
+6. **Push** — Langston pushes verified code to GitHub via Replit shell
+7. **Sync** — Claude Code runs git pull to sync the local clone repo
+8. **Governance** — Claude Code creates a governance batch (CCPI updates, directive index, manual updates)
+
+Governance batches follow the same pipeline but modify documentation files instead of code.
+
+## Scheduling & Automated Jobs
+
+DawnTrader runs several scheduled jobs via `node-schedule` (in-process):
+
+| Job | Schedule | File |
+|-----|----------|------|
+| Weekly regime archive | Sunday 00:45 UTC | `server/core/archival/archival-scheduler.ts` |
+| Nightly archive integrity check | Daily 02:00 UTC | `server/core/archival/archival-scheduler.ts` |
+| Monthly archive compression | 1st of month 03:00 UTC | `server/core/archival/archival-scheduler.ts` |
+
+**Important**: These are in-process jobs. If the server is not running at scheduled time, the job silently misses. A startup catch-up mechanism (added HF12) detects missed archive runs and executes them on next boot.
+
+## Communication Channels
+
+The team communicates via Telegram ("Dawn Trader HQ" forum group) with topic-based threads:
+
+| Topic | Purpose |
+|-------|---------|
+| General (#20) | Kyle <-> Langston direct |
+| Claude Code Sessions (#21) | Langston <-> Claude Code exchanges |
+| Replit Operations (#22) | Langston <-> Replit deployment logs |
+| Reports (#23) | Formal reports (batch completion, hotfix, daily summary) |
+| Design (#28) | Feature design discussions |
+
+For detailed rules on 3-way communication protocol, message formatting, and session management, see the CCPI.
+
+---
+
 # Part V: Quality & Data
 
 

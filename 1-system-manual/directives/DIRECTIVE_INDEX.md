@@ -91,6 +91,8 @@
 | BATCH_GOV_LANGSTON_UPDATE | Update Langston CCPI section with Replit automation learnings | COMPLETE | 2026-03-14 | `7698462f` | 12 replit-cmd commands, Replit Automation Details subsection, 5 new common issues |
 | HF10 | KrakenService Property Name Fix | COMPLETE | 2026-03-14 | `5f04e4eb` | signal-orchestrator.ts line 1036: this.krakenService to this.kraken. Latent bug in cascadingScan (Directive 10.7 CASCADE path, currently disabled). |
 | HF10B | Governance for HF10 + Process Updates | COMPLETE | 2026-03-14 | (this batch) | CCPI workflow updated for autonomous pipeline (Langston deploys, Claude Code syncs). Session transition protocol documented. |
+| HF11B | Governance Enforcement Mechanisms | COMPLETE | 2026-03-16 | `32f1d13f` | Pre-flight checklist, post-batch audit, cross-actor capacity monitoring, session transition protocol, batch report template, Rules 18-20, CCPI Langston slimdown, WORKFLOW.md redirect, GPT-5.4 brain update |
+| HF12 | Regime Archive Startup Catch-Up | COMPLETE | 2026-03-17 | `3fb344eb` | Startup catch-up check (auto-archive if >7 days stale), scheduler-status health endpoint |
 
 ---
 
@@ -98,8 +100,8 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Directives Issued | 18 + 6 HF + 1 inter-phase + 13 standalone hotfixes/governance |
-| Total Directives Complete | 18 + 6 HF + 1 inter-phase + 13 standalone hotfixes/governance |
+| Total Directives Issued | 18 + 6 HF + 1 inter-phase + 15 standalone hotfixes/governance |
+| Total Directives Complete | 18 + 6 HF + 1 inter-phase + 15 standalone hotfixes/governance |
 | Total Directives In Progress | 0 |
 | Total Review Cycles | 30 |
 | Average Review Cycles per Directive | 1.00 |

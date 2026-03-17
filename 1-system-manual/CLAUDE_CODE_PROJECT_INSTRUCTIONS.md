@@ -3,7 +3,7 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-03-14 (after HF11B — Governance enforcement mechanisms, session transition protocol, cross-actor capacity monitoring, pre-flight checklist, stale reference fixes.)
+> **Last Updated**: 2026-03-17 (after HF12B — Regime archive catch-up governance + operational model)
 
 ---
 
@@ -534,13 +534,14 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 | Hotfix | KrakenService property name fix — this.krakenService to this.kraken in cascadingScan call (line 1036) | HF10 | `5f04e4eb` |
 | — | Governance docs for HF10 + process updates (autonomous pipeline, session transitions) | HF10B | (governance) |
 | Governance | Governance enforcement mechanisms — pre-flight checklist, post-batch audit, cross-actor capacity monitoring, session transition protocol, batch report template, stale reference fixes | HF11B | (governance) |
+| Hotfix | Regime archive startup catch-up — detect missed cron, auto-archive on boot if >7 days stale, scheduler-status endpoint | HF12 | `3fb344eb` |
 
 ### In-Progress Directives
 | Directive | Title | Batch | Status |
 |-----------|-------|-------|--------|
 | (none currently in progress) | | | |
 
-> **Last commit**: `bbb4612f` (HF10B — Governance docs for HF10 + process updates)
+> **Last commit**: `3fb344eb` (HF12 — Regime archive startup catch-up fix)
 > **Next step**: Phase 14.5 (Block 3, Batch 19 — Parallel Pattern Scanning + Signal Ranking Overhaul + Global Regime Pre-Filter)
 > **Note**: Autonomous deployment pipeline OPERATIONAL (Langston deploys to Replit, Claude Code syncs via git pull). HF10 fixes latent this.krakenService bug (dormant until CASCADE enabled in Phase 14.5). All prior phases/batches complete through Batch 18L. Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE. Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED.
 
