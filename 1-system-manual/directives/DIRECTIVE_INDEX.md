@@ -93,6 +93,9 @@
 | HF10B | Governance for HF10 + Process Updates | COMPLETE | 2026-03-14 | (this batch) | CCPI workflow updated for autonomous pipeline (Langston deploys, Claude Code syncs). Session transition protocol documented. |
 | HF11B | Governance Enforcement Mechanisms | COMPLETE | 2026-03-16 | `32f1d13f` | Pre-flight checklist, post-batch audit, cross-actor capacity monitoring, session transition protocol, batch report template, Rules 18-20, CCPI Langston slimdown, WORKFLOW.md redirect, GPT-5.4 brain update |
 | HF12 | Regime Archive Startup Catch-Up | COMPLETE | 2026-03-17 | `3fb344eb` | Startup catch-up check (auto-archive if >7 days stale), scheduler-status health endpoint |
+| HF12B | Governance for HF12 + Operational Model | COMPLETE | 2026-03-17 | `f3f70781` | CCPI updates (HF12 in completed directives, last commit), SYSTEM_MANUAL.md operational model section, DIRECTIVE_INDEX updates (HF11B + HF12 rows) |
+| HF12C | Regime Archive Route Path Prefix Fix | COMPLETE | 2026-03-17 | `3edf80d4` | All 10 route registrations in regime-archive.ts had redundant `/api` prefix causing double-prefix 404s. Manual archive trigger confirmed working (26 records, 2 manifest files). |
+| HF12D | Governance for HF12C + Claude Code UI Debugging Capability | COMPLETE | 2026-03-17 | (this batch) | CCPI updated with HF12B/HF12C in completed directives, last commit updated, new "Claude Code UI Testing & Debugging Capabilities" section documenting browser access, preview URL, test credentials, debugging workflow, trading pipeline debug sequence. DIRECTIVE_INDEX updated with HF12B/HF12C/HF12D rows. |
 
 ---
 

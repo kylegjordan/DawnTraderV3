@@ -455,6 +455,66 @@ These settings are stored in `.claude/worktrees/wizardly-einstein/.claude/settin
 
 ---
 
+## Claude Code UI Testing & Debugging Capabilities
+
+Claude Code has direct browser access via the Claude-in-Chrome MCP tools. This enables interactive UI testing, debugging, and verification without Kyle needing to take screenshots.
+
+### What Claude Code Can Do
+
+- **Navigate the app preview** via the standalone Replit URL (not the iframe)
+- **Log in** with test credentials and interact with authenticated pages
+- **Click buttons, fill forms, switch tabs** — full UI interaction
+- **Take screenshots** and read page content (accessibility tree)
+- **Read browser console errors** in real-time — catch JavaScript exceptions, failed API calls
+- **Read network requests** — see which API endpoints are called, response codes, payload data
+- **Cross-reference UI behavior with backend code** — trace a UI error to the specific route handler, service function, or database query
+
+### Standalone Preview URL
+
+The Replit app preview is accessible at a standalone URL (not inside the Replit IDE iframe). This URL changes when Replit redeploys, so always verify it's current:
+
+```
+Current: https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev
+```
+
+**Test credentials**: testuser123 / SecurePass123!
+
+### Debugging Workflow
+
+When debugging the trading pipeline or testing new features:
+
+1. **Open the standalone preview URL** in Chrome via Claude-in-Chrome tools
+2. **Log in** with test credentials
+3. **Navigate to the relevant page** (e.g., Machine Learning → Regime Archive, Trading, etc.)
+4. **Interact with UI elements** — click buttons, toggle switches, trigger actions
+5. **Monitor console errors and network requests** simultaneously
+6. **Trace failures** from the UI → API call → backend handler → root cause in code
+7. **Write fixes** and verify after Langston deploys
+
+### Trading Pipeline Debugging Sequence
+
+When paper trading is enabled for testing, debug the pipeline in order:
+
+1. **FX5 Scanner** — Are pairs being scanned? Check Trading page filters tab.
+2. **Filters** — Are IMF/VN/LQ/correlation filters applied correctly? Check active trading pool.
+3. **Signal Orchestrator** — Are signals being created? Check signal flow.
+4. **MCE** — Is the Market Context Engine providing correct regime/strategy data?
+5. **SQE** — Is the Signal Quality Engine scoring signals?
+6. **Ready-to-Buy** — Are qualified signals queuing for execution?
+7. **Open Trades** — Are trades opening with correct parameters?
+8. **Closed Trades** — Are trades closing properly with accurate P&L?
+
+Document progress in MEMORY.md so session continuity is maintained across context breaks.
+
+### Important Notes
+
+- **Do NOT brute-force retry** if login fails — diagnose why (rate limiting, wrong credentials, server down)
+- **The standalone URL may change** after Replit redeploys — Kyle or Langston should update it in this file
+- **Langston can also use the standalone URL** via his replit-cmd browser automation for basic verification
+- **For heavy debugging sessions**, expect to burn through multiple Claude Code context windows — maintain a debugging tracker in MEMORY.md
+
+---
+
 ## Google Drive Cache Warning
 
 On 2026-02-25, clearing Google Drive for Desktop's application cache caused corruption of the clone repo's `.git` pack files. Google Drive's streaming mode replaces large files with cloud placeholders, which Git cannot read. The fix was:
@@ -535,13 +595,15 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 | — | Governance docs for HF10 + process updates (autonomous pipeline, session transitions) | HF10B | (governance) |
 | Governance | Governance enforcement mechanisms — pre-flight checklist, post-batch audit, cross-actor capacity monitoring, session transition protocol, batch report template, stale reference fixes | HF11B | (governance) |
 | Hotfix | Regime archive startup catch-up — detect missed cron, auto-archive on boot if >7 days stale, scheduler-status endpoint | HF12 | `3fb344eb` |
+| — | Governance for HF12 + operational model documentation in SYSTEM_MANUAL | HF12B | `f3f70781` |
+| Hotfix | Regime archive route path prefix fix — all 10 routes had redundant `/api` prefix causing 404s | HF12C | `3edf80d4` |
 
 ### In-Progress Directives
 | Directive | Title | Batch | Status |
 |-----------|-------|-------|--------|
 | (none currently in progress) | | | |
 
-> **Last commit**: `3fb344eb` (HF12 — Regime archive startup catch-up fix)
+> **Last commit**: `3edf80d4` (HF12C — Regime archive route path prefix fix)
 > **Next step**: Phase 14.5 (Block 3, Batch 19 — Parallel Pattern Scanning + Signal Ranking Overhaul + Global Regime Pre-Filter)
 > **Note**: Autonomous deployment pipeline OPERATIONAL (Langston deploys to Replit, Claude Code syncs via git pull). HF10 fixes latent this.krakenService bug (dormant until CASCADE enabled in Phase 14.5). All prior phases/batches complete through Batch 18L. Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE. Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED.
 
