@@ -789,6 +789,7 @@ export class SignalOrchestrator {
       }
 
       // Phase 14.5: Process pattern pool — PATTERN + HYBRID strategies only
+      let patternSignalsGenerated = 0;
       for (const symbol of patternSymbols) {
         try {
           // Skip if already processed in quant pool
@@ -845,7 +846,7 @@ export class SignalOrchestrator {
             if (sizedSignal) {
               (sizedSignal as any).signalType = 'PATTERN';
               (sizedSignal as any).sourcePool = 'pattern';
-              signals.push(sizedSignal);
+              patternSignalsGenerated++;
             }
           }
 
@@ -856,6 +857,7 @@ export class SignalOrchestrator {
           console.warn(`[14.5][ORCHESTRATOR] Pattern pool eval failed for ${symbol}:`, err);
         }
       }
+      console.log(`[14.5][ORCHESTRATOR] Pattern pool complete: ${patternSignalsGenerated} signal(s) generated from ${patternSymbols.length} pair(s)`);
 
       const now = new Date();
       this.stats = {

@@ -54,7 +54,6 @@ import { getCachedSpread } from '../metrics/cost-metrics.js';
 import { getNormalizedVolatility as getVolatility } from '../metrics/market-metrics.js';
 // Phase 14.5: Ranking weights for cross-family signal comparison
 import { computeRankingScore, normalizeNetReturn, FINAL_SCORE_GAP_OVERRIDE } from '../../config/ranking-weights.js';
-import { computeTotalRoundTripCost } from '../cost-model.js';
 
 // T5: Subscribe to pool size updates from RTB Refresh Service
 let currentPoolSize = getAdaptivePoolSize();
