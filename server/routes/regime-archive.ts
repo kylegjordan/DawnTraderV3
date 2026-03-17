@@ -7,13 +7,13 @@
  * Dependencies: 11.7E Task 1 (Archival Schema)
  * Implements: Query, inspect, and export archived regime-metric data
  *
- * Routes:
- * - GET /api/vts/regime-archive - Paginated archive list
- * - GET /api/vts/regime-archive/latest - Fetch most recent
- * - GET /api/vts/regime-archive/summary - Summary statistics
- * - GET /api/vts/regime-archive/export - CSV export
- * - GET /api/vts/regime-archive/manifest - Get manifest entries
- * - GET /api/vts/regime-archive/scheduler-status - Scheduler health (HF12)
+ * Routes (relative to apiRouter mounted at /api):
+ * - GET /vts/regime-archive - Paginated archive list
+ * - GET /vts/regime-archive/latest - Fetch most recent
+ * - GET /vts/regime-archive/summary - Summary statistics
+ * - GET /vts/regime-archive/export - CSV export
+ * - GET /vts/regime-archive/manifest - Get manifest entries
+ * - GET /vts/regime-archive/scheduler-status - Scheduler health (HF12)
  *
  * All routes secured with requireAuth.
  *
@@ -69,7 +69,7 @@ function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunctio
   }
 }
 
-router.get('/api/vts/regime-archive', requireAuth, (req: Request, res: Response): void => {
+router.get('/vts/regime-archive', requireAuth, (req: Request, res: Response): void => {
   try {
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
@@ -96,7 +96,7 @@ router.get('/api/vts/regime-archive', requireAuth, (req: Request, res: Response)
   }
 });
 
-router.get('/api/vts/regime-archive/latest', requireAuth, (req: Request, res: Response): void => {
+router.get('/vts/regime-archive/latest', requireAuth, (req: Request, res: Response): void => {
   try {
     const records = getLatestArchive();
 
@@ -123,7 +123,7 @@ router.get('/api/vts/regime-archive/latest', requireAuth, (req: Request, res: Re
   }
 });
 
-router.get('/api/vts/regime-archive/summary', requireAuth, (req: Request, res: Response): void => {
+router.get('/vts/regime-archive/summary', requireAuth, (req: Request, res: Response): void => {
   try {
     const summary = getArchiveSummary();
 
@@ -140,7 +140,7 @@ router.get('/api/vts/regime-archive/summary', requireAuth, (req: Request, res: R
   }
 });
 
-router.get('/api/vts/regime-archive/manifest', requireAuth, (req: Request, res: Response): void => {
+router.get('/vts/regime-archive/manifest', requireAuth, (req: Request, res: Response): void => {
   try {
     const manifest = getManifest();
 
@@ -167,7 +167,7 @@ router.get('/api/vts/regime-archive/manifest', requireAuth, (req: Request, res: 
  * Returns scheduler initialization state, next scheduled runs,
  * startup catch-up results, and overdue status.
  */
-router.get('/api/vts/regime-archive/scheduler-status', requireAuth, (req: Request, res: Response): void => {
+router.get('/vts/regime-archive/scheduler-status', requireAuth, (req: Request, res: Response): void => {
   try {
     const status = getSchedulerStatus();
 
@@ -184,7 +184,7 @@ router.get('/api/vts/regime-archive/scheduler-status', requireAuth, (req: Reques
   }
 });
 
-router.get('/api/vts/regime-archive/export', requireAuth, (req: Request, res: Response): void => {
+router.get('/vts/regime-archive/export', requireAuth, (req: Request, res: Response): void => {
   try {
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
@@ -214,7 +214,7 @@ router.get('/api/vts/regime-archive/export', requireAuth, (req: Request, res: Re
   }
 });
 
-router.post('/api/vts/regime-archive/trigger', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/vts/regime-archive/trigger', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     console.log('[11.7E][API] Manual archive trigger requested');
 
@@ -233,7 +233,7 @@ router.post('/api/vts/regime-archive/trigger', requireAuth, async (req: Request,
   }
 });
 
-router.post('/api/vts/regime-archive/verify', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/vts/regime-archive/verify', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     console.log('[11.7E][API] Manual integrity verification requested');
 
@@ -252,7 +252,7 @@ router.post('/api/vts/regime-archive/verify', requireAuth, async (req: Request, 
   }
 });
 
-router.post('/api/vts/regime-archive/compress', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/vts/regime-archive/compress', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     console.log('[11.7E][API] Manual compression requested');
 
@@ -271,7 +271,7 @@ router.post('/api/vts/regime-archive/compress', requireAuth, async (req: Request
   }
 });
 
-router.get('/api/vts/regime-archive/drift', requireAuth, (req: Request, res: Response): void => {
+router.get('/vts/regime-archive/drift', requireAuth, (req: Request, res: Response): void => {
   try {
     const days = Math.min(parseInt(req.query.days as string) || 30, 90);
     const fromDate = new Date();
