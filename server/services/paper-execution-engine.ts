@@ -1760,6 +1760,8 @@ export class PaperExecutionEngine {
         signalType: signalType as 'QUANT' | 'PATTERN' | 'HYBRID',
         patternType: patternType as any,
         patternStrength: patternStrength,
+        // Batch 19E: Persist sourcePool from signal metadata
+        sourcePool: (signal as any)?.metadata?.sourcePool || (signal as any)?.sourcePool || null,
         metadata: signal.metadata || {}
       });
 
@@ -1828,6 +1830,8 @@ export class PaperExecutionEngine {
         signalType: signalType as 'QUANT' | 'PATTERN' | 'HYBRID',
         patternType: patternType as any,
         patternStrength: patternStrength,
+        // Batch 19E: Persist sourcePool from signal metadata
+        sourcePool: (signal as any)?.metadata?.sourcePool || (signal as any)?.sourcePool || null,
         metadata: {
           ...signal.metadata,
           tradeId: trade.id,

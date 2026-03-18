@@ -712,6 +712,7 @@ export function TradeHistoryTab() {
                       {/* Phase 8.8.3-C2A: Final column order per directive */}
                       <SortableHeader column="symbol" label="Symbol" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
                       <SortableHeader column="strategyName" label="Strategy" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
+                      <th className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pool</th>
                       <SortableHeader column="quantity" label="Qty" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
                       <SortableHeader column="entryPrice" label="Entry" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
                       <SortableHeader column="exitPrice" label="Exit" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
@@ -769,7 +770,20 @@ export function TradeHistoryTab() {
                               {strategyNames[trade.strategyName as keyof typeof strategyNames] || trade.strategyName}
                             </Badge>
                           </td>
-                          
+
+                          {/* Batch 19E: Source Pool */}
+                          <td className="p-2">
+                            {(trade as any).sourcePool ? (
+                              <Badge className={cn("text-xs",
+                                (trade as any).sourcePool === 'quant' ? "bg-blue-500/10 text-blue-600" :
+                                (trade as any).sourcePool === 'pattern' ? "bg-purple-500/10 text-purple-600" :
+                                "bg-gray-500/10 text-gray-600"
+                              )}>
+                                {((trade as any).sourcePool as string).toUpperCase()}
+                              </Badge>
+                            ) : <span className="text-muted-foreground text-xs">—</span>}
+                          </td>
+
                           {/* 3. Quantity - C2A */}
                           <td className="p-2 text-right font-mono text-xs">
                             {trade.quantity ? formatNumber(trade.quantity, 4) : '-'}

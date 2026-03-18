@@ -122,6 +122,8 @@ interface ActiveTrade {
   marketRegime?: string;
   marketFrictionScore?: number;
   marketFrictionLabel?: string;
+  // Batch 19E: Source pool tracking
+  sourcePool?: 'quant' | 'pattern' | null;
 }
 
 interface PortfolioSummary {
@@ -350,13 +352,26 @@ function TradeRow({
           {/* Directive 9.2: Trade Mode Indicator */}
           <span className={cn(
             "px-2 py-0.5 rounded text-xs font-bold",
-            trade.tradeMode === 'TRAILING_TAKE' 
-              ? 'bg-amber-100 text-amber-700 border border-amber-300' 
+            trade.tradeMode === 'TRAILING_TAKE'
+              ? 'bg-amber-100 text-amber-700 border border-amber-300'
               : 'text-gray-500'
           )}>
             {trade.tradeMode === 'TRAILING_TAKE' ? 'MOONBAG' : 'Targeting'}
           </span>
         </div>
+      </td>
+
+      {/* Batch 19E: Source Pool */}
+      <td className="px-3 py-3">
+        {trade.sourcePool ? (
+          <Badge className={cn("text-xs font-medium",
+            trade.sourcePool === 'quant' ? "bg-blue-500/10 text-blue-600" :
+            trade.sourcePool === 'pattern' ? "bg-purple-500/10 text-purple-600" :
+            "bg-gray-500/10 text-gray-600"
+          )}>
+            {trade.sourcePool.toUpperCase()}
+          </Badge>
+        ) : <span className="text-muted-foreground">—</span>}
       </td>
       
       {/* 4. Qty / Value (stacked) */}
@@ -1205,6 +1220,7 @@ export default function ActiveTradesV2() {
                   <SortableHeader field="symbol" label="Symbol" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="slotNumber" label="Slot" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="strategy" label="Strategy" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pool</th>
                   <SortableHeader field="quantity" label="Qty / Value" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="intendedEntryPrice" label="Entry" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="takeProfit" label="Target (TP)" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />

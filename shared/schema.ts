@@ -1784,6 +1784,8 @@ export const paperSimTrades = pgTable("paper_sim_trades", {
   signalType: signalTypeEnum("signal_type").default("QUANT").notNull(), // QUANT | PATTERN | HYBRID
   patternType: patternTypeEnum("pattern_type"), // Candlestick pattern (if PATTERN/HYBRID)
   patternStrength: decimal("pattern_strength", { precision: 4, scale: 3 }), // 0.000-1.000 clarity score
+  // Batch 19E: Source pool tracking for pattern scanning analysis
+  sourcePool: varchar("source_pool", { length: 20 }), // 'quant' | 'pattern' | 'xstock' (nullable for existing records)
   metadata: jsonb("metadata"), // Signal details, market context, etc.
 }, (table) => ({
   symbolIdx: index("paper_sim_trades_symbol_idx").on(table.symbol),
@@ -1822,6 +1824,8 @@ export const paperSimOpenPositions = pgTable("paper_sim_open_positions", {
   signalType: signalTypeEnum("signal_type").default("QUANT").notNull(), // QUANT | PATTERN | HYBRID
   patternType: patternTypeEnum("pattern_type"), // Candlestick pattern (if PATTERN/HYBRID)
   patternStrength: decimal("pattern_strength", { precision: 4, scale: 3 }), // 0.000-1.000 clarity score
+  // Batch 19E: Source pool tracking for pattern scanning analysis
+  sourcePool: varchar("source_pool", { length: 20 }), // 'quant' | 'pattern' | 'xstock' (nullable for existing records)
   metadata: jsonb("metadata"), // Signal details, entry reasons, etc.
 }, (table) => ({
   symbolIdx: uniqueIndex("paper_sim_open_positions_symbol_idx").on(table.symbol),

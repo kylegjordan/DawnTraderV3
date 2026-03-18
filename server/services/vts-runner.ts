@@ -186,6 +186,7 @@ interface Phase10TradeRecord {
   profit?: number;
   positionSize: number;
   pool?: 'ideal' | 'rotational';
+  sourcePool?: 'quant' | 'pattern'; // Batch 19E: Track origin pool for pattern scanning analysis
   timestamp: string;
   exitType?: 'stop_hit' | 'target_hit' | 'timeout' | 'pending';
   volZ?: number; // Directive 11.7F-B: Volatility Z-score for drift calculation
@@ -442,12 +443,13 @@ function callStrategyDetect(
 }
 
 async function generatePhase10Signal(
-  symbol: string, 
-  priceData: CachedPrice, 
+  symbol: string,
+  priceData: CachedPrice,
   ohlcData: OHLCData[],
   pool: 'ideal' | 'rotational',
   strategyOverride?: StrategyDefinition,
-  filterTier?: 'standard' | 'relaxed'
+  filterTier?: 'standard' | 'relaxed',
+  sourcePool?: 'quant' | 'pattern' // Batch 19E: Track origin pool
 ): Promise<{ signal: VirtualSignal; tradeRecord: Phase10TradeRecord } | null> {
   // Phase 13: MCE computes regime (uses cache from main loop call)
   const mce = getMarketContextEngine();
@@ -870,6 +872,7 @@ async function generatePhase10Signal(
     profit: undefined, // Directive 11.6: P&L calculated at exit
     positionSize,
     pool,
+    sourcePool: sourcePool ?? 'quant', // Batch 19E: Track origin pool for pattern scanning analysis
     timestamp: new Date().toISOString(),
     exitType: 'pending', // Directive 11.6: Awaiting real-price resolution
     volZ: zScoreResult.isWarmedUp ? zScoreResult.zScores.volZ : undefined, // Directive 11.7F-B
@@ -877,7 +880,7 @@ async function generatePhase10Signal(
     executionContext: isMultiStrategy ? 'VTS_MULTI' : 'VTS', // 11.8C
   };
   
-  console.log(`[11.0E.1][VTS] Trade: ${symbol} regime=${regime} signalType=${signalType} strategy=${strategy} finalScore=${finalScore.toFixed(3)} pool=${pool} context=${isMultiStrategy ? 'VTS_MULTI' : 'VTS'}`);
+  console.log(`[11.0E.1][VTS] Trade: ${symbol} regime=${regime} signalType=${signalType} strategy=${strategy} finalScore=${finalScore.toFixed(3)} pool=${pool} sourcePool=${sourcePool ?? 'quant'} context=${isMultiStrategy ? 'VTS_MULTI' : 'VTS'}`);
   
   return { signal, tradeRecord };
 }
@@ -1241,8 +1244,25 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
     };
   }
   
-  const pairs = await getIdealPoolPairs();
-  
+  const quantPairs = await getIdealPoolPairs();
+
+  // Batch 19E: Also fetch pattern pool pairs for dual-path VTS simulation
+  const patternPoolRaw = activeFilterPool.getPatternPool('paper');
+  const patternPairs: Array<{ symbol: string; pool: 'ideal' | 'rotational'; sourcePool: 'pattern'; filterTier?: 'standard' | 'relaxed' }> = [];
+  for (const p of patternPoolRaw) {
+    const canonicalSymbol = normalizeToInternalSymbol(p.symbol);
+    if (!canonicalSymbol) continue;
+    // Skip if already in quant pool (avoid duplicate processing)
+    if (quantPairs.some(qp => qp.symbol === canonicalSymbol)) continue;
+    patternPairs.push({ symbol: canonicalSymbol, pool: 'rotational' as const, sourcePool: 'pattern' as const, filterTier: 'relaxed' });
+  }
+
+  // Combine: quant pairs tagged with sourcePool 'quant', pattern pairs tagged 'pattern'
+  const pairs = [
+    ...quantPairs.map(p => ({ ...p, sourcePool: 'quant' as const })),
+    ...patternPairs
+  ];
+
   if (pairs.length === 0) {
     console.warn(`[11.0E.1][VTS] No pairs available for simulation cycle`);
     return {
@@ -1257,8 +1277,8 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       timestamp: Date.now()
     };
   }
-  
-  console.log(`[11.0E.1][VTS] Running cycle with ${pairs.length} pairs`);
+
+  console.log(`[11.0E.1][VTS] Running cycle with ${pairs.length} pairs (${quantPairs.length} quant + ${patternPairs.length} pattern)`);
   
   const regimeDistribution: Record<MarketRegimeType, number> = {
     TREND_FRIENDLY_STABLE: 0,
@@ -1338,7 +1358,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       vtsService.updateMarketPrice(pair.symbol, priceData.price);
       
       for (const stratDef of regimeStrategies) {
-        const result = await generatePhase10Signal(pair.symbol, priceData, ohlcData, pair.pool, stratDef, pair.filterTier);
+        const result = await generatePhase10Signal(pair.symbol, priceData, ohlcData, pair.pool, stratDef, pair.filterTier, pair.sourcePool);
         if (!result) continue;
         
         const { signal, tradeRecord } = result;
