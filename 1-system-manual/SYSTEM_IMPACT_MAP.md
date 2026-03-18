@@ -2,7 +2,7 @@
 
 > **Author**: Claude Code (System Cartographer)
 > **Created**: 2026-02-19
-> **Last Updated**: 2026-03-18 (Batch 19D — Phase 14.5 deferred items governance)
+> **Last Updated**: 2026-03-18 (Batch 19E — Phase 14.5 extension: VTS pattern pool + sourcePool persistence)
 > **Purpose**: Component dependency reference for directive authoring. Before writing any directive, consult this map to identify all upstream, downstream, and shared-state impacts of the proposed change.
 > **Usage**: Claude Code looks up every affected component BEFORE writing a directive. The directive's Impact Analysis section must reference this map.
 
@@ -303,9 +303,9 @@
 
 ### 6.1 Paper Execution Engine — PRIMARY
 - **File**: `server/services/paper-execution-engine.ts` (~2,308 lines)
-- **What**: Authoritative execution engine. Handles order lifecycle, position management, exit logic (trailing stop, target, stop loss, max hold).
-- **Upstream**: TCL (ranked candidates), Price Cache (current prices), Guardrails V2, Pre-Execution Validator, Net Expectancy Kernel
-- **Downstream**: Portfolio state (DB), trade history (DB), Telemetry, WebSocket broadcasts, TRADE_CLOSED events
+- **What**: Authoritative execution engine. Handles order lifecycle, position management, exit logic (trailing stop, target, stop loss, max hold). **Batch 19E**: Persists `sourcePool` from signal metadata on trade creation and position opening (written to `paper_sim_trades.source_pool` and `paper_sim_open_positions.source_pool` DB columns).
+- **Upstream**: TCL (ranked candidates), Price Cache (current prices), Guardrails V2, Pre-Execution Validator, Net Expectancy Kernel, Signal metadata (sourcePool — Batch 19E)
+- **Downstream**: Portfolio state (DB — including sourcePool column, Batch 19E), trade history (DB — including sourcePool column, Batch 19E), Telemetry, WebSocket broadcasts, TRADE_CLOSED events
 - **Shared State**: Portfolio position tracking, open trade state
 - **Execution**: **1.5-second monitoring loop** + signal-driven entry
 - **Blast Radius**: **CRITICAL** — this executes every paper trade
@@ -352,8 +352,8 @@
 
 ### 7.1 VTS Runner
 - **File**: `server/services/vts-runner.ts` (~1,850 lines)
-- **What**: Autonomous virtual trading simulator. 60-second cycles. **Dual-path** (Batch 19C): (1) Quant path — evaluates FX5 quant-pool pairs with all regime-compatible strategies. (2) Pattern path — evaluates `activeFilterPool.getPatternPool('paper')` pairs with PATTERN + HYBRID strategies only (filtered via `PATTERN_POOL_STRATEGIES`). `sourcePool` metadata tagged on VTS trade records. Uses real market data with real scoring pipeline.
-- **Upstream**: Price Cache (VTS bucket), MCE (regime + indicators via `computeContext()`), Pattern Recognition, OHLC Cache (60-min candles, 100-candle lookback via `ohlcCache.getOHLCData()` — Batch 18), BTC OHLC via OHLC Cache (for defensive_hedge Spearman correlation — HF8), Active Filter Pool (pattern pool pairs — Batch 19C), PATTERN_POOL_STRATEGIES config (Batch 19C)
+- **What**: Autonomous virtual trading simulator. 60-second cycles. **Dual-path** (Batch 19C, extended Batch 19E): (1) Quant path — evaluates FX5 quant-pool pairs with all regime-compatible strategies. (2) Pattern path — fetches pattern pool pairs via `activeFilterPool.getPatternPool('paper')` alongside quant pool (Batch 19E), evaluates with PATTERN + HYBRID strategies only (filtered via `PATTERN_POOL_STRATEGIES`). `sourcePool` metadata tagged on VTS trade records. Uses real market data with real scoring pipeline.
+- **Upstream**: Price Cache (VTS bucket), MCE (regime + indicators via `computeContext()`), Pattern Recognition, OHLC Cache (60-min candles, 100-candle lookback via `ohlcCache.getOHLCData()` — Batch 18), BTC OHLC via OHLC Cache (for defensive_hedge Spearman correlation — HF8), Active Filter Pool (quant pool + pattern pool pairs — Batch 19C/19E), PATTERN_POOL_STRATEGIES config (Batch 19C)
 - **Downstream**: VTS Service (trade storage), Telemetry Aggregator (M70: only VTS writes telemetry), ML Calibration (trade outcomes)
 - **Execution**: **60-second interval** (passive learning mode)
 - **Blast Radius**: **HIGH** — all learning data flows through VTS
@@ -515,6 +515,9 @@
 - **What**: 25 pages (14 active, 7 dead), 91 tab sub-pages. React SPA.
 - **Blast Radius**: **LOW** per component — frontend changes are isolated from backend logic
 - **Note**: 7 dead pages and Walter-related tabs to be removed (Phase 12.2)
+- **Batch 19E updates**:
+  - `client/src/pages/active-trades-v2.tsx`: Source Pool column with colored badges (blue QUANT / purple PATTERN) added to open simulated trades table.
+  - `client/src/pages/trade-history-tab.tsx`: Source Pool column with colored badges added to closed simulated trades table.
 
 ### 10.4 TradingModeContext
 - **What**: Paper/Live mode toggle. Controls which execution engine receives signals.
@@ -583,11 +586,11 @@
 | **Pre-Execution Validator** | Paper Execution Engine, Trading Engine (live), Goal Alignment (Phase 4 — RISK-028, still active) |
 | **Boot sequence (index.ts)** | Lazy Loader, Trading Bootstrap, FX5 Bootstrap, Portfolio Initializer, all services initialized there |
 | **Kraken WebSocket** | Price Cache, Live Pricing Adapter, MicroExecutionService, Symbol Normalization |
-| **Any database schema** | storage.ts, all queries referencing that table, frontend consuming those endpoints |
+| **Any database schema** | storage.ts, all queries referencing that table, frontend consuming those endpoints. **Batch 19E**: `paper_sim_trades` and `paper_sim_open_positions` gained `source_pool` column (via schema.ts migration). Paper Execution Engine writes it; active-trades-v2.tsx and trade-history-tab.tsx display it. |
 | **Any API endpoint** | Frontend components consuming it, WebSocket events, other routes referencing it |
 | **Predictive Adjustments** | Hybrid score composition, canonical weights, learning governance |
 | **ML Calibration** | Python microservice, drift detector, retraining freeze, VTS service |
-| **Pattern Filter Profile** | FX5 Scanner (pattern pool thresholds), SQE (elevated FinalScore floor), Paper Position Sizing (15% cap), Signal Orchestrator (PATTERN_POOL_STRATEGIES list) |
+| **Pattern Filter Profile** | FX5 Scanner (pattern pool thresholds), SQE (elevated FinalScore floor), Paper Position Sizing (15% cap), Signal Orchestrator (PATTERN_POOL_STRATEGIES list), VTS Runner (pattern pool fetch — Batch 19E), Paper Execution Engine (sourcePool persistence — Batch 19E) |
 | **Ranking Weights** | RTB getTopSignal() (queue ordering), Signal Orchestrator (context bonus computation), FINAL_SCORE_GAP_OVERRIDE safety rule |
 | **Active Filter Pool (pattern pool)** | FX5 Scanner (populates), Signal Orchestrator (reads pattern pool), pattern-filter-profile.ts config |
 

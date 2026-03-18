@@ -3,7 +3,7 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-03-18 (after Batch 19D — Phase 14.5 deferred items governance)
+> **Last Updated**: 2026-03-18 (after Batch 19E — Phase 14.5 extension: VTS pattern pool + sourcePool persistence + Rule 22)
 
 ---
 
@@ -666,15 +666,16 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 | — | Governance for HF12C + Claude Code UI debugging capability documented | HF12D | `8cae5317` |
 | 14.5 | Phase 14.5: Dual-Path Pattern Scanning + Merit-Based Ranking + MCE Global Regime Overlay — pattern pool filter pipeline, rankingScore cross-family ordering, MCE getDominantRegime(), sourcePool/signalType/assetClass identity tuple, pattern position sizing 15% cap | Batch 19 | `106996ab` + `1b917598` + `2ade1370` |
 | 14.5 | Phase 14.5 Deferred Items — VTS pattern pool integration, frontend Pattern Scanning tab + /api/pattern-pool endpoint, regime-aware pattern pool thresholds | Batch 19C | `422fa479` |
+| 14.5 | Phase 14.5 Extension — VTS runner pattern pool fetch, sourcePool field in Phase10TradeRecord + DB schema (paper_sim_trades, paper_sim_open_positions), paper-execution-engine sourcePool persistence, frontend Source Pool badges (open + closed trades) | Batch 19E | `170dba7a` |
 
 ### In-Progress Directives
 | Directive | Title | Batch | Status |
 |-----------|-------|-------|--------|
 | (none currently in progress) | | | |
 
-> **Last commit**: `422fa479` (Batch 19C — Phase 14.5 deferred items)
+> **Last commit**: `170dba7a` (Batch 19E — Phase 14.5 extension: VTS pattern pool + sourcePool persistence)
 > **Next step**: Phase 11 Finalization (Block 4, Batch 20). Remaining roadmap: 11.8 → 14.6 → Phase 15 → Phase 19 → Phase 20 → Phase 21.
-> **Note**: Autonomous deployment pipeline OPERATIONAL. Phase 14.5 FULLY COMPLETE (Batch 19 core + 19C deferred items). All deferred items resolved: VTS pattern pool, frontend Pattern Scanning tab, regime-aware thresholds. Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE. Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED.
+> **Note**: Autonomous deployment pipeline OPERATIONAL. Phase 14.5 FULLY COMPLETE (Batch 19 core + 19C deferred + 19E extension). sourcePool now persisted end-to-end: signal metadata → DB columns → frontend badges. Rule 22 added (Langston mandatory acknowledgment protocol). Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE. Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED.
 
 ### Snapshot Log
 | Snapshot | Commit | Description |
@@ -783,6 +784,13 @@ Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation
       1. **Telegram:** Upload the .docx file to the Reports topic (thread #23) with a brief summary message.
       2. **Cloud repo:** Save the same .docx file to `Claude Comms and Packages/Reports/Batch Completion/`
     - Reports pasted as raw text in Telegram do NOT satisfy this requirement. The Word document is the canonical artifact.
+
+22. **Langston must acknowledge all requests promptly.** When Claude Code or Kyle sends a request to Langston (deployment, scope review, 3-way discussion opener, batch zip, etc.), Langston must:
+    - **Acknowledge receipt immediately** — even before the work is done. A simple "Received, reviewing now" is sufficient.
+    - **Provide a time estimate** if the work will take more than 2 minutes (e.g., "Reviewing scope — will respond with feedback in ~5 minutes").
+    - **Never go silent.** Silence after a request is unacceptable. If Langston encounters an error, blocker, or confusion, he must say so immediately rather than going quiet.
+    - **Confirm completion explicitly** when done (e.g., "Deployment complete, push successful, verification passed").
+    - This applies to all communication channels — Telegram topics, DMs, and cc-inbox responses.
 
 ---
 
