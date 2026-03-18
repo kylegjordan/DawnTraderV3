@@ -2,7 +2,7 @@
 
 > **Author**: Claude Code (System Cartographer)
 > **Created**: 2026-02-19
-> **Last Updated**: 2026-03-11 (Batch 18K — Governance for Batches 18H/18I/18J)
+> **Last Updated**: 2026-03-18 (Batch 19B — Phase 14.5 governance)
 > **Purpose**: Component dependency reference for directive authoring. Before writing any directive, consult this map to identify all upstream, downstream, and shared-state impacts of the proposed change.
 > **Usage**: Claude Code looks up every affected component BEFORE writing a directive. The directive's Impact Analysis section must reference this map.
 
@@ -73,6 +73,25 @@
 - **Blast Radius**: **CRITICAL** — DI feeds into every EV calculation
 - **Contamination**: ~~BUG-004~~ **RESOLVED** — Directive 12.1.1 (2026-02-22). NGC-derived DI eliminated.
 - **Tests**: `analysis-utils.test.ts` validates `calculateDirectionalIntegrity()` function
+
+### 1.5 rankingScore — NEW (Phase 14.5, Batch 19)
+- **File**: `server/config/ranking-weights.ts` (~110 lines)
+- **What**: Cross-family signal desirability score for RTB queue ordering. Formula: `rankingScore = FinalScore * qualityWeight + normalizedNetReturn * returnWeight - frictionPenalty * frictionWeight + contextBonus`. Three weight profiles: QUANT (quality-heavy), PATTERN (context-heavy, higher friction penalty), HYBRID (balanced). FinalScore gap safety rule: if quality gap > 0.10, FinalScore wins. Context bonus/penalty for pair-global regime agreement (±0.06/0.04) and BTC confirmation (±0.03/0.02). Net return normalized to 0-1 (5% ceiling).
+- **Upstream**: FinalScore (from SQE), net return (from cost model), friction (from cost model), regime data (from MCE global regime)
+- **Downstream**: RTB `getTopSignal()` (queue ordering), RTB metadata persistence
+- **Shared State**: RANKING_WEIGHTS config object, CONTEXT_BONUS config
+- **Execution**: Synchronous — computed per signal during RTB insertion
+- **Blast Radius**: **HIGH** — determines which signal gets selected for execution when multiple are queued
+- **Tests**: None yet (new component, validated via integration)
+
+### 1.6 Pattern Filter Profile — NEW (Phase 14.5, Batch 19)
+- **File**: `server/config/pattern-filter-profile.ts` (~64 lines)
+- **What**: Configuration for the pattern pool pipeline. Defines: PATTERN_POOL_THRESHOLDS (relaxed filter values: volume $250K, LQ≥20, VN≤0.98, DI≥30), PATTERN_POOL_GUARDRAILS (elevated FinalScore floor 0.45, max position 15%), PATTERN_POOL_STRATEGIES (3 pattern + 5 hybrid = 8 strategies), SourcePool/AssetClass types, DEFAULT_ASSET_CLASS.
+- **Upstream**: None — static configuration
+- **Downstream**: FX5 Scanner (pattern pool filtering), SQE (elevated FinalScore floor), Paper Position Sizing (15% cap), Signal Orchestrator (strategy list for pattern pool evaluation)
+- **Shared State**: None — exported constants
+- **Execution**: Synchronous — imported at module load
+- **Blast Radius**: **MEDIUM** — affects pattern pool pipeline thresholds and constraints
 
 ---
 
@@ -147,22 +166,22 @@
 - **Blast Radius**: **HIGH** — all time-dependent subsystems synchronize to this
 
 ### 3.2 FX5 Scanner
-- **File**: `server/services/market-scanner.ts` (`collectAdaptiveBatch()` function, lines ~1085-1363)
-- **What**: Always-on 30-second market scanner. Multi-stage filtering pipeline: Stage 1 (volume/price), Stage 2 (cost/liquidity), Stage 3 (IMF adaptive), Stage 4 (regime compatibility). Drives pair selection.
-- **Upstream**: Central Clock (trigger), Kraken REST API (market data), Price Cache, Telemetry Aggregator (performance data for adaptive ratio)
-- **Downstream**: Active Filter Pool (qualifying pairs), Signal Orchestrator (indirectly via pool), Cost Cache (populates during scan), Stage-3 Emitter (WebSocket events), Data Aggregator (async logging)
+- **File**: `server/services/market-scanner.ts` (`collectAdaptiveBatch()` function) + `server/services/fx5-scanner.ts`
+- **What**: Always-on 30-second market scanner. Multi-stage filtering pipeline: Stage 1 (volume/price), Stage 2 (cost/liquidity), Stage 3 (IMF adaptive), Stage 4 (regime compatibility). Drives pair selection. **Phase 14.5**: Pairs rejected by quant metric filters are re-evaluated against relaxed PATTERN_POOL_THRESHOLDS and routed to the pattern pool via `activeFilterPool.addPatternPoolSurvivors()`.
+- **Upstream**: Central Clock (trigger), Kraken REST API (market data), Price Cache, Telemetry Aggregator (performance data for adaptive ratio), PATTERN_POOL_THRESHOLDS config (Phase 14.5)
+- **Downstream**: Active Filter Pool (quant qualifying pairs + pattern pool pairs — Phase 14.5), Signal Orchestrator (indirectly via both pools), Cost Cache (populates during scan), Stage-3 Emitter (WebSocket events), Data Aggregator (async logging)
 - **Shared State**: Screener filter thresholds (from DB `screener_filters` table)
 - **Execution**: **30-second interval** — triggered by Central Clock
 - **Blast Radius**: **CRITICAL** — determines which pairs enter the trading pipeline
 - **Tests**: Scanner-related tests, filter validation tests
 
 ### 3.3 Active Filter Pool
-- **File**: `server/services/adaptive-ratio-manager.ts`
-- **What**: In-memory staging area for pairs passing all FX5 filters. 5-minute temporal windowing (pair eligible for one window per entry). Only populated when trading engine is active.
-- **Upstream**: FX5 Scanner (populates), Adaptive Ratio Manager (pool split logic)
-- **Downstream**: Signal Orchestrator (pulls pairs for signal evaluation)
+- **File**: `server/services/active-filter-pool.ts` (rewritten in Phase 14.5, Batch 19)
+- **What**: In-memory dual-pool staging area. **Quant pool**: pairs passing all FX5 metric filters (5-minute temporal windowing). **Pattern pool** (Phase 14.5): pairs rejected by quant metrics but passing relaxed PATTERN_POOL_THRESHOLDS (volume $250K, LQ≥20, VN≤0.98, DI≥30). Methods: `addSurvivors()` (quant), `addPatternPoolSurvivors()` (pattern), `getPatternPool()`, `getPatternPoolSize()`. Only populated when trading engine is active.
+- **Upstream**: FX5 Scanner (populates both pools — quant via `addSurvivors()`, pattern via `addPatternPoolSurvivors()`), Adaptive Ratio Manager (pool split logic)
+- **Downstream**: Signal Orchestrator (pulls quant pairs via `getFilteredPairs()`, pattern pairs via `getPatternPool()`)
 - **Execution**: **Event-driven** — updated on each scan cycle
-- **Blast Radius**: **HIGH** — controls what the Signal Orchestrator can see
+- **Blast Radius**: **HIGH** — controls what the Signal Orchestrator can see for both quant and pattern evaluation
 
 ### 3.4 IMF Metrics (Adaptive Filters)
 - **File**: Computed within FX5 Scanner pipeline
@@ -194,9 +213,9 @@
 
 ### 4.1 Signal Orchestrator
 - **File**: `server/services/signal-orchestrator.ts`
-- **What**: Primary signal generation engine. Pulls pairs from Active Filter Pool, generates signals using regime-compatible strategies, applies exposure/correlation/cooldown checks, computes FinalScore and EV gate.
-- **Upstream**: Active Filter Pool (pairs), Market Regime (regime classification via `calculatePairRegime()`), Cost Model (friction), quality_index (deterministic confidence — NGC replaced), SYSTEM_GUARDS config, OHLC Cache (60-min candles via `ohlcCache.getOHLCData()` — Batch 18), Price Cache (ticker data via `priceCache.getCachedPrice()` — Batch 18, replaces per-symbol `getTicker()`)
-- **Downstream**: SQE (scored signals), RTB Queue (qualified signals), VTS Runner (mirrors scoring logic), Telemetry (signal metadata)
+- **What**: Primary signal generation engine. **Dual-path** (Phase 14.5): (1) Quant path — pulls pairs from Active Filter Pool quant pool, generates signals using all regime-compatible strategies. (2) Pattern path — pulls pairs from Active Filter Pool pattern pool, evaluates PATTERN + HYBRID strategies only via PatternRecognizer.scanPatterns(). Both paths apply exposure/correlation/cooldown checks, compute FinalScore and EV gate. Passes `sourcePool`, `signalType`, `assetClass` to SQE and RTB.
+- **Upstream**: Active Filter Pool (quant pairs + pattern pairs — Phase 14.5), Market Regime (regime classification via `calculatePairRegime()`), Cost Model (friction), quality_index (deterministic confidence — NGC replaced), SYSTEM_GUARDS config, OHLC Cache (60-min candles via `ohlcCache.getOHLCData()` — Batch 18), Price Cache (ticker data via `priceCache.getCachedPrice()` — Batch 18), PATTERN_POOL_STRATEGIES config (Phase 14.5), ranking-weights.ts (Phase 14.5)
+- **Downstream**: SQE (scored signals with sourcePool metadata), RTB Queue (qualified signals with rankingScore + identity tuple), VTS Runner (mirrors scoring logic), Telemetry (signal metadata)
 - **Shared State**: SYSTEM_GUARDS config, DI calculation (~~BUG-004~~ **RESOLVED**), deterministic confidence (~~NGC contamination~~ **RESOLVED** — Directive 12.3.3)
 - **Execution**: **Event-driven** — triggered when pairs enter Active Filter Pool
 - **Blast Radius**: **CRITICAL** — every signal in the system flows through here
@@ -205,19 +224,19 @@
 
 ### 4.2 Signal Quality Evaluator (SQE)
 - **File**: `server/core/filters/signal_quality_evaluator.ts`
-- **What**: Final signal gatekeeper before RTB. Evaluates FinalScore (≥ 0.35), RegimeWeight (≥ 0.30), regime-aware ROI check, and confidence floor (Phase 14.1 HF8 — Directive 11.7S mode-based floor: NORMAL=0.60, DEFENSIVE=0.70, SURVIVAL=0.80). VTS signals skip confidence floor via `skipConfidenceFloor` option (cold-start bypass). Duplicate FinalScore checks in paper-execution-engine and RTB removed in HF8 — SQE is sole FinalScore authority.
-- **Upstream**: Signal Orchestrator (scored signals)
+- **What**: Final signal gatekeeper before RTB. Evaluates FinalScore, RegimeWeight (≥ 0.30), regime-aware ROI check, and confidence floor (Phase 14.1 HF8). **Phase 14.5**: FinalScore threshold is now sourcePool-aware — quant signals use 0.35 (default), pattern-pool signals use elevated 0.45 (PATTERN_POOL_GUARDRAILS.FINAL_SCORE_FLOOR). `sourcePool` field added to SQEInput interface. VTS signals skip confidence floor via `skipConfidenceFloor` option (cold-start bypass). SQE is sole FinalScore authority.
+- **Upstream**: Signal Orchestrator (scored signals with `sourcePool` metadata — Phase 14.5), PATTERN_POOL_GUARDRAILS config
 - **Downstream**: RTB Service (only passing signals enter queue)
 - **Execution**: Synchronous — per signal
 - **Blast Radius**: **HIGH** — controls which signals can become trades
 
 ### 4.3 RTB Service (Ready-to-Buy Queue)
-- **File**: `server/services/rtb-service.ts`
-- **What**: Signal queue with 30-second TTL. Refreshes every 1 second to check TTL expiration. Promotes ready signals to TCL.
-- **Upstream**: SQE (qualified signals), Central Clock (1-second refresh)
-- **Downstream**: TCL (promoted signals)
+- **File**: `server/core/rtb/ready_to_buy_service.ts`
+- **What**: Signal queue with 30-second TTL. Refreshes every 1 second to check TTL expiration. Promotes ready signals to TCL. **Phase 14.5**: `getTopSignal()` now ranks by `rankingScore` (from metadata) instead of FinalScore alone. FinalScore gap safety rule: if gap > 0.10 between two signals, FinalScore wins (prevents return-magnitude gaming). Signal insertion enriches metadata with `sourcePool`, `signalType`, `assetClass`, `rankingScore` identity tuple. SQESignalInput interface extended with Phase 14.5 fields.
+- **Upstream**: SQE (qualified signals), Central Clock (1-second refresh), ranking-weights.ts (FINAL_SCORE_GAP_OVERRIDE — Phase 14.5)
+- **Downstream**: TCL (promoted signals with enriched metadata)
 - **Execution**: **1-second interval** via Central Clock
-- **Blast Radius**: **MEDIUM** — affects signal aging and selection timing
+- **Blast Radius**: **MEDIUM** — affects signal aging, selection timing, and cross-family ranking
 
 ### 4.4 TCL Watchdog (Trade Candidate List)
 - **File**: `server/startup/trading-bootstrap.ts`
@@ -248,15 +267,15 @@
 - **Blast Radius**: **ZERO** — completely removed. Signal orchestrator uses inline NetEV > 0 filter. All DSS imports purged from signal-orchestrator, telemetry-aggregator, market-events.
 - **Status**: **DELETED** — ~~BUG-006~~ RESOLVED (Batch 13 rewire → Batch 17 deletion)
 
-### 5.2.5 Market Context Engine (MCE) — NEW (Phase 13, Batch 14)
-- **Files**: `server/services/market-context-engine.ts` (~280 lines), `server/types/market-context.ts` (~80 lines)
-- **What**: Centralized market indicator and regime computation service. Computes VWAP, SMA, ATR, volatility, momentum, ADX and regime classification in a single pass per symbol. Singleton with 60-second cache TTL. Does NOT fetch data — callers provide OHLC.
+### 5.2.5 Market Context Engine (MCE) — (Phase 13, Batch 14; updated Phase 14.5, Batch 19)
+- **Files**: `server/services/market-context-engine.ts` (~320 lines), `server/types/market-context.ts` (~80 lines)
+- **What**: Centralized market indicator and regime computation service. Computes VWAP, SMA, ATR, volatility, momentum, ADX and regime classification in a single pass per symbol. Singleton with 60-second cache TTL. Does NOT fetch data — callers provide OHLC. **Phase 14.5**: New `getDominantRegime()` method aggregates per-pair regimes across all cached symbols via majority vote, returning dominant regime, average score, pair count, and percentage. Used by market-indicators.ts for mode-aware global regime sourcing.
 - **Upstream**: OHLC data (provided by callers), `calculatePairRegime()` from market-regime.ts, `CANONICAL_REGIME_STRATEGY_MAP`
-- **Downstream**: Signal Orchestrator (active trading path — indicators + regime + allowed strategies), VTS Runner (passive learning path — regime + raw Z-score data)
+- **Downstream**: Signal Orchestrator (active trading path — indicators + regime + allowed strategies + pattern pool evaluation — Phase 14.5), VTS Runner (passive learning path — regime + raw Z-score data), market-indicators.ts `getMarketIndicators()` (global dominant regime — Phase 14.5)
 - **Shared State**: Per-symbol context cache (60s TTL), singleton instance
-- **Execution**: Synchronous — called per symbol per cycle by orchestrator (60s) and VTS (60s)
-- **Blast Radius**: **HIGH** — all regime classification and indicator data flows through MCE
-- **Status**: **ACTIVE** — installed Batch 14 (`8f26369a`). Resolves RISK-002 (indicator duplication).
+- **Execution**: Synchronous — called per symbol per cycle by orchestrator (60s) and VTS (60s). `getDominantRegime()` iterates cache on-demand.
+- **Blast Radius**: **HIGH** — all regime classification and indicator data flows through MCE. Global regime now derived from MCE cache population.
+- **Status**: **ACTIVE** — installed Batch 14 (`8f26369a`), extended Batch 19 (`getDominantRegime()`). Resolves RISK-002 (indicator duplication).
 - **Tests**: Zero direct MCE test files yet. Validated via integration through signal-orchestrator and VTS.
 
 ### 5.3 ~~MCP/ARE~~ — **REMOVED** (Phase 13, Batch 14, commit `8f26369a`)
@@ -270,6 +289,13 @@
 - **What**: Z-score normalized regime classification. Advisory only, not used for routing. Preserved for future ML.
 - **Downstream**: VTS Runner (advisory logging)
 - **Blast Radius**: **LOW** — advisory only
+
+### 5.5 getMarketIndicators() — Global Regime Sourcing (Updated Phase 14.5, Batch 19)
+- **File**: `server/services/market-indicators.ts`
+- **What**: Returns current market indicators including dominant regime. **Phase 14.5**: Now mode-aware — uses MCE `getDominantRegime()` when MCE cache has ≥5 pairs (active mode or warm cache), falls back to VTS telemetry `getDominantRegime()` when MCE is cold (passive mode). Previously always used VTS telemetry.
+- **Upstream**: MCE singleton (Phase 14.5 — primary), Telemetry Aggregator (fallback)
+- **Downstream**: Signal Orchestrator (market indicators), ranking context bonus computation
+- **Blast Radius**: **MEDIUM** — affects global regime determination which influences ranking context bonuses
 
 ---
 
@@ -290,10 +316,10 @@
 - **Status**: DORMANT — defer rebuild until paper mode stable
 - **Blast Radius**: **LOW** (currently not executing trades)
 
-### 6.3 Dynamic Sizing Engine (DSE)
-- **File**: Referenced throughout Phase 5
-- **What**: Position sizing based on edge, confidence, ATR, volatility. Hard cap: MAX_POSITION_RISK = 0.02 (2%).
-- **Upstream**: VTS learning repository, Price Cache, volatility metrics
+### 6.3 Dynamic Sizing Engine (DSE) / Paper Position Sizing
+- **Files**: Referenced throughout Phase 5; `server/services/paper-position-sizing.ts` (concrete implementation)
+- **What**: Position sizing based on edge, confidence, ATR, volatility. Hard cap: MAX_POSITION_RISK = 0.02 (2%). **Phase 14.5**: Pattern-pool signals capped at 15% max portfolio per trade (PATTERN_POOL_GUARDRAILS.MAX_POSITION_PCT) vs 25% quant default. sourcePool read from signal metadata.
+- **Upstream**: VTS learning repository, Price Cache, volatility metrics, PATTERN_POOL_GUARDRAILS config (Phase 14.5)
 - **Downstream**: Paper Execution Engine (size determination)
 - **Blast Radius**: **HIGH** — determines how much capital is at risk per trade
 
@@ -546,11 +572,11 @@
 | **FinalScore weights** | SQE thresholds, VTS Runner, TCL ranking, all scoring tests |
 | **DI calculation** | Net Expectancy Kernel (Pwin), Paper Execution Engine, VTS Runner, Trailing Exit Controller |
 | **Cost Model** | Signal Orchestrator (EV gate), Paper Execution Engine, FX5 Scanner (cost filtering) |
-| **Market Context Engine (MCE)** | Signal Orchestrator (active trading), VTS Runner (passive learning), calculatePairRegime(), canonical regime map |
+| **Market Context Engine (MCE)** | Signal Orchestrator (active trading + pattern pool), VTS Runner (passive learning), calculatePairRegime(), canonical regime map, market-indicators.ts (getDominantRegime — Phase 14.5), ranking context bonus |
 | **calculatePairRegime()** | MCE (calls it internally), VTS Runner (via MCE), Signal Orchestrator (via MCE), canonical regime map, drift detector baselines |
 | **Price Cache** | Paper Execution Engine, VTS Runner, Signal Orchestrator (ticker via `getCachedPrice()` — Batch 18), FX5 Scanner, MicroExecutionService, all frontend price displays |
 | **OHLC Cache** | Signal Orchestrator (OHLC data), VTS Runner (OHLC data + BTC candles), KrakenService (wrapped by cache) |
-| **FX5 Scanner** | Active Filter Pool, Signal Orchestrator, Cost Cache, Telemetry Aggregator, Stage-3 Emitter, screener_filters DB table |
+| **FX5 Scanner** | Active Filter Pool (quant + pattern pools), Signal Orchestrator, Cost Cache, Telemetry Aggregator, Stage-3 Emitter, screener_filters DB table, PATTERN_POOL_THRESHOLDS config |
 | **Paper Execution Engine** | Portfolio state, Guardrails V2, Pre-Execution Validator, WebSocket broadcasts, trade history DB |
 | **VTS Runner** | VTS Service, ML Calibration, Telemetry Aggregator, Drift Detector, Adaptive Ratio Manager |
 | **Guardrails V2** | Pre-Execution Validator, Paper Execution Engine, Kill Switch |
@@ -561,6 +587,9 @@
 | **Any API endpoint** | Frontend components consuming it, WebSocket events, other routes referencing it |
 | **Predictive Adjustments** | Hybrid score composition, canonical weights, learning governance |
 | **ML Calibration** | Python microservice, drift detector, retraining freeze, VTS service |
+| **Pattern Filter Profile** | FX5 Scanner (pattern pool thresholds), SQE (elevated FinalScore floor), Paper Position Sizing (15% cap), Signal Orchestrator (PATTERN_POOL_STRATEGIES list) |
+| **Ranking Weights** | RTB getTopSignal() (queue ordering), Signal Orchestrator (context bonus computation), FINAL_SCORE_GAP_OVERRIDE safety rule |
+| **Active Filter Pool (pattern pool)** | FX5 Scanner (populates), Signal Orchestrator (reads pattern pool), pattern-filter-profile.ts config |
 
 ---
 

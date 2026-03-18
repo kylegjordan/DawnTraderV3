@@ -3,7 +3,7 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-03-17 (after HF12B — Regime archive catch-up governance + operational model)
+> **Last Updated**: 2026-03-18 (after Batch 19B — Phase 14.5 governance)
 
 ---
 
@@ -80,6 +80,70 @@ Session UUIDs change when sessions are cleared. Use `openclaw sessions --json` t
 ssh root@204.168.141.77 "cc-inbox read"        # Read unread messages
 ssh root@204.168.141.77 "cc-inbox mark-read"    # Mark all as read
 ```
+
+### Three-Way Discussion Protocol — Polling for New Messages
+
+**CRITICAL: Read this entire section before starting a three-way discussion.**
+
+#### Why Background Polling Loops Do NOT Work
+
+Claude Code's `run_in_background` Bash tool only notifies you when the background task **completes and exits**. A `while true; do ... done` loop never exits, so you are NEVER notified of new messages. Do not attempt background polling loops — they will silently accumulate output in a file that you never see.
+
+#### How To Poll: Foreground Sequential Checking
+
+During a three-way discussion, you must actively poll for messages in the **foreground** between your own actions. This is not automated — it is a manual, sequential workflow that you execute repeatedly.
+
+**The exact commands:**
+
+```bash
+# CHECK for new messages (foreground — you will see the output immediately):
+ssh root@204.168.141.77 "cc-inbox read"
+
+# MARK messages as read (so they don't show up again on next check):
+ssh root@204.168.141.77 "cc-inbox mark-read"
+
+# COMBINED — check and mark in one call:
+ssh root@204.168.141.77 "cc-inbox read && cc-inbox mark-read"
+```
+
+#### The Three-Way Discussion Loop (Step by Step)
+
+When you are in an active three-way discussion (e.g., scope review, debugging session, batch planning), follow this exact loop:
+
+**Step 1: Send your message**
+Run BOTH commands (broadcast to Telegram + deliver to Langston's brain):
+```bash
+ssh root@204.168.141.77 "openclaw message send --channel telegram --target '-1003575211453' --thread-id <THREAD_ID> --message '**CLAUDE CODE SPEAKING:** <your message>'"
+ssh root@204.168.141.77 "openclaw agent --session-id '<UUID>' --message '**CLAUDE CODE SPEAKING:** <your message>' --deliver"
+```
+
+**Step 2: Wait for responses**
+Give Kyle and Langston time to read and respond. Wait 10-15 seconds:
+```bash
+ssh root@204.168.141.77 "sleep 10"
+```
+
+**Step 3: Check inbox**
+Read any new messages that arrived while you waited:
+```bash
+ssh root@204.168.141.77 "cc-inbox read && cc-inbox mark-read"
+```
+
+**Step 4: Process and respond**
+- If new messages arrived: read them, formulate your response, go back to Step 1.
+- If no new messages arrived: wait another 10-15 seconds (repeat Step 2), then check again (Step 3).
+- If you've checked 3-4 times with no new messages, tell Kyle in the Claude Code chat that you're waiting and ask if the discussion is still active.
+
+**Step 5: Repeat**
+Continue this loop (send → wait → check → respond) for the entire duration of the three-way discussion. This is your primary activity during a live discussion — do not start other tasks while a three-way conversation is active.
+
+#### Rules for Three-Way Discussions
+
+1. **Stay engaged.** Once a three-way discussion starts, polling for messages is your top priority. Do not wander off to do other tasks.
+2. **Check frequently.** Poll every 10-15 seconds during active exchanges. If the discussion has natural pauses (e.g., waiting for Kyle to review something), you can extend to 30 seconds.
+3. **Always mark read.** Use `cc-inbox mark-read` after every read, or use the combined command. If you don't mark read, you will keep seeing the same messages repeatedly.
+4. **All polling is foreground.** Never use `run_in_background` for inbox polling. You need to see the output immediately in your conversation context.
+5. **Post to Telegram, not just the Claude Code chat.** Kyle and Langston cannot see your Claude Code chat window. Every response you want them to see must go through `openclaw message send`. Responding only in the Claude Code UI means you are talking to yourself.
 
 ### Detailed Reference
 
@@ -597,15 +661,17 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 | Hotfix | Regime archive startup catch-up — detect missed cron, auto-archive on boot if >7 days stale, scheduler-status endpoint | HF12 | `3fb344eb` |
 | — | Governance for HF12 + operational model documentation in SYSTEM_MANUAL | HF12B | `f3f70781` |
 | Hotfix | Regime archive route path prefix fix — all 10 routes had redundant `/api` prefix causing 404s | HF12C | `3edf80d4` |
+| — | Governance for HF12C + Claude Code UI debugging capability documented | HF12D | `8cae5317` |
+| 14.5 | Phase 14.5: Dual-Path Pattern Scanning + Merit-Based Ranking + MCE Global Regime Overlay — pattern pool filter pipeline, rankingScore cross-family ordering, MCE getDominantRegime(), sourcePool/signalType/assetClass identity tuple, pattern position sizing 15% cap | Batch 19 | `106996ab` + `1b917598` + `2ade1370` |
 
 ### In-Progress Directives
 | Directive | Title | Batch | Status |
 |-----------|-------|-------|--------|
 | (none currently in progress) | | | |
 
-> **Last commit**: `3edf80d4` (HF12C — Regime archive route path prefix fix)
-> **Next step**: Phase 14.5 (Block 3, Batch 19 — Parallel Pattern Scanning + Signal Ranking Overhaul + Global Regime Pre-Filter)
-> **Note**: Autonomous deployment pipeline OPERATIONAL (Langston deploys to Replit, Claude Code syncs via git pull). HF10 fixes latent this.krakenService bug (dormant until CASCADE enabled in Phase 14.5). All prior phases/batches complete through Batch 18L. Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE. Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED.
+> **Last commit**: `2ade1370` (Batch 19 — Phase 14.5 surgical edits + import fix)
+> **Next step**: Phase 11 Finalization (Block 4, Batch 20). Remaining roadmap: 11.8 → 14.6 → Phase 15 → Phase 19 → Phase 20 → Phase 21.
+> **Note**: Autonomous deployment pipeline OPERATIONAL (Langston deploys to Replit, Claude Code syncs via git pull). Phase 14.5 COMPLETE (Batch 19). All prior phases/batches complete through Batch 19. Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE. Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED. Deferred from Phase 14.5: Frontend Pattern Scanning tab, VTS runner pattern pool changes, FX5 global regime threshold adjustments.
 
 ### Snapshot Log
 | Snapshot | Commit | Description |
@@ -638,7 +704,7 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 See `directives/DIRECTIVE_INDEX.md` for the full list.
 - 12.1.6 (LSP Error Triage) — PENDING (LOW priority, deferred)
 
-Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation) is COMPLETE. Phase 14.1 is **COMPLETE** (HF9 done, Batch 17 `f9fa56c6`). Batch 18 (inter-phase optimization) COMPLETE (`4b6b2fa9`). Batch 18C (regime archive hotfix) COMPLETE (`c42283f1`). Batch 18E (VTS pipeline hotfix) COMPLETE (`5d774fb2`). Batch 18F (FX5 OHLC wiring) COMPLETE (`9de4afc7`). Batch 18G (OHLC-based LQ) COMPLETE (`f82b7b66`). Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE (DBS in Batch 15). Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED. Next: Phase 14.5 (Block 3, Batch 19).
+Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation) is COMPLETE. Phase 14.1 is **COMPLETE** (HF9 done, Batch 17 `f9fa56c6`). Batch 18 (inter-phase optimization) COMPLETE (`4b6b2fa9`). Batch 18C (regime archive hotfix) COMPLETE (`c42283f1`). Batch 18E (VTS pipeline hotfix) COMPLETE (`5d774fb2`). Batch 18F (FX5 OHLC wiring) COMPLETE (`9de4afc7`). Batch 18G (OHLC-based LQ) COMPLETE (`f82b7b66`). Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE (DBS in Batch 15). Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED. **Phase 14.5 COMPLETE** (Batch 19 — Dual-Path Pattern Scanning + Merit-Based Ranking + MCE Global Regime). Next: Phase 11 Finalization (Block 4, Batch 20).
 
 ### Investigation Notes for Future Batches
 - **12.2.1**: ~~Wave 1 Safe Deletions~~ **COMPLETE** (Batch 8). 2 files deleted (dhma.ts, latti-safety-monitor.tsx). 11 files surgically modified. ~1,254 lines removed. LATTi lazy-loader stub (RISK-044) remains — can be cleaned in a future batch.
@@ -661,6 +727,7 @@ Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation
 - **Batch 18E (VTS Pipeline Hotfix)**: Two compounding bugs starving VTS of data: (1) `targetBatchSize = 100` hardcoded in market-scanner.ts (missed during Batch 18 BATCH_SIZE increase to 300), causing some cycles to scan only 100 pairs. (2) VTS_IMF_THRESHOLDS.VN_MAX = 0.80 matched the passive learning strict threshold, creating zero gap for relaxed-filter pairs. Market VN values are 0.82-1.00. VN_MAX raised to 0.95. Commit `5d774fb2`.
 - **Batch 18F (FX5 OHLC Wiring)**: Third root cause of VTS starvation: `priceHistory` and `history` fields DECLARED in market-scanner.ts BatchResult interface but NEVER POPULATED. `prices = s.priceHistory || s.history || []` always resolved to `[]`. VN defaulted to 0.5 (pass strict for wrong reason), σ always 0, DI always 0.5. FX5 scanner wired to ohlcCache (Batch 18) for real ~720 60-min candle data. Replaced passive-learning-only `imfModule` dynamic import with universal OHLC pre-fetch loop. Commit `9de4afc7`.
 - **Batch 18G (OHLC-Based LQ)**: `calculateLogLiquidity(volumeUSD, tradeCount, spread)` in analysis-utils.ts uses `10*(ln(V*C)-ln(S/C)-10)` which saturates at 100 for all crypto pairs (24h aggregate volume too large). LQ=100 for everything — filter never discriminates. Replaced with per-candle OHLC volume formula: `log10(avgVolumeUSD_per_candle + 1) * 10` producing 30-60 range. Matches imf-metrics.ts formula. Both VTS and active trading now unified on same OHLC-based LQ. Commit `f82b7b66`.
+- **Batch 19 (Phase 14.5 — Dual-Path Pattern Scanning + Merit-Based Ranking + MCE Global Regime)**: Three major subsystems added in a single mega-batch across 10 files (2 new configs, 1 full rewrite, 7 surgical edits). Commits `106996ab` + `1b917598` + `2ade1370`. (1) **Pattern Pool Pipeline**: FX5 scanner routes metric-rejected pairs through relaxed thresholds (PATTERN_POOL_THRESHOLDS in pattern-filter-profile.ts) into a separate pattern pool in active-filter-pool.ts. Signal orchestrator evaluates pattern pool pairs with PATTERN + HYBRID strategies only. SQE applies elevated FinalScore floor (0.45 vs 0.35). Paper-position-sizing caps pattern-pool trades at 15% portfolio. (2) **rankingScore**: New cross-family signal ordering formula in ranking-weights.ts. Three weight profiles (QUANT/PATTERN/HYBRID) with quality, return, friction, context components. RTB getTopSignal() uses rankingScore instead of FinalScore for queue ordering. FinalScore gap safety rule prevents return-magnitude gaming (>0.10 gap → FinalScore wins). (3) **MCE Global Regime**: getDominantRegime() on MCE aggregates per-pair regimes via majority vote. market-indicators.ts getDominantRegime() is now mode-aware — uses MCE when ≥5 pairs cached, falls back to VTS telemetry otherwise. Context bonus/penalty in ranking-weights.ts rewards pair-global regime agreement. **Identity tuple**: sourcePool + signalType + assetClass persisted in RTB metadata for full signal provenance. **Deferred**: Frontend Pattern Scanning tab, VTS runner pattern pool changes, FX5 global regime threshold adjustments.
 
 ### Test Baseline
 - **790 pass / 91 fail** (881 total across test files)

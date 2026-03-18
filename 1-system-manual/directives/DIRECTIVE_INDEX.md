@@ -95,7 +95,18 @@
 | HF12 | Regime Archive Startup Catch-Up | COMPLETE | 2026-03-17 | `3fb344eb` | Startup catch-up check (auto-archive if >7 days stale), scheduler-status health endpoint |
 | HF12B | Governance for HF12 + Operational Model | COMPLETE | 2026-03-17 | `f3f70781` | CCPI updates (HF12 in completed directives, last commit), SYSTEM_MANUAL.md operational model section, DIRECTIVE_INDEX updates (HF11B + HF12 rows) |
 | HF12C | Regime Archive Route Path Prefix Fix | COMPLETE | 2026-03-17 | `3edf80d4` | All 10 route registrations in regime-archive.ts had redundant `/api` prefix causing double-prefix 404s. Manual archive trigger confirmed working (26 records, 2 manifest files). |
-| HF12D | Governance for HF12C + Claude Code UI Debugging Capability | COMPLETE | 2026-03-17 | (this batch) | CCPI updated with HF12B/HF12C in completed directives, last commit updated, new "Claude Code UI Testing & Debugging Capabilities" section documenting browser access, preview URL, test credentials, debugging workflow, trading pipeline debug sequence. DIRECTIVE_INDEX updated with HF12B/HF12C/HF12D rows. |
+| HF12D | Governance for HF12C + Claude Code UI Debugging Capability | COMPLETE | 2026-03-17 | `8cae5317` | CCPI updated with HF12B/HF12C in completed directives, last commit updated, new "Claude Code UI Testing & Debugging Capabilities" section documenting browser access, preview URL, test credentials, debugging workflow, trading pipeline debug sequence. DIRECTIVE_INDEX updated with HF12B/HF12C/HF12D rows. |
+
+---
+
+## Phase 14.5: Dual-Path Pattern Scanning + Merit-Based Ranking + MCE Global Regime
+
+### 14.5 Pattern Scanning + Ranking + Global Regime (Block 3)
+
+| Batch | Title | Status | Date Complete | Commit | Notes |
+|-------|-------|--------|---------------|--------|-------|
+| Batch 19 | Phase 14.5: Dual-Path Pattern Scanning + Merit-Based Ranking + MCE Global Regime Overlay | COMPLETE | 2026-03-18 | `106996ab` + `1b917598` + `2ade1370` | 10 files (2 new configs, 1 full rewrite, 7 surgical edits). Pattern pool pipeline (FX5 → active-filter-pool → orchestrator → SQE → RTB → sizing). rankingScore cross-family ordering (QUANT/PATTERN/HYBRID weight profiles). MCE getDominantRegime() with mode-aware sourcing. sourcePool/signalType/assetClass identity tuple persisted in RTB metadata. Pattern sizing 15% cap. Elevated SQE floor (0.45). FinalScore gap safety rule. |
+| Batch 19B | Governance for Phase 14.5 | COMPLETE | 2026-03-18 | (this batch) | CCPI, DIRECTIVE_INDEX, SYSTEM_IMPACT_MAP updated. batch-history.md updated. |
 
 ---
 
@@ -103,10 +114,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Directives Issued | 18 + 6 HF + 1 inter-phase + 15 standalone hotfixes/governance |
-| Total Directives Complete | 18 + 6 HF + 1 inter-phase + 15 standalone hotfixes/governance |
+| Total Directives Issued | 18 + 6 HF + 1 inter-phase + 15 standalone hotfixes/governance + 1 phase (14.5) |
+| Total Directives Complete | 18 + 6 HF + 1 inter-phase + 15 standalone hotfixes/governance + 1 phase (14.5) |
 | Total Directives In Progress | 0 |
-| Total Review Cycles | 30 |
+| Total Review Cycles | 31 |
 | Average Review Cycles per Directive | 1.00 |
 
 ---
