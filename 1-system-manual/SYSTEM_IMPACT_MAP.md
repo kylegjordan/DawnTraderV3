@@ -2,7 +2,7 @@
 
 > **Author**: Claude Code (System Cartographer)
 > **Created**: 2026-02-19
-> **Last Updated**: 2026-03-18 (Batch 19B — Phase 14.5 governance)
+> **Last Updated**: 2026-03-18 (Batch 19D — Phase 14.5 deferred items governance)
 > **Purpose**: Component dependency reference for directive authoring. Before writing any directive, consult this map to identify all upstream, downstream, and shared-state impacts of the proposed change.
 > **Usage**: Claude Code looks up every affected component BEFORE writing a directive. The directive's Impact Analysis section must reference this map.
 
@@ -84,13 +84,13 @@
 - **Blast Radius**: **HIGH** — determines which signal gets selected for execution when multiple are queued
 - **Tests**: None yet (new component, validated via integration)
 
-### 1.6 Pattern Filter Profile — NEW (Phase 14.5, Batch 19)
-- **File**: `server/config/pattern-filter-profile.ts` (~64 lines)
-- **What**: Configuration for the pattern pool pipeline. Defines: PATTERN_POOL_THRESHOLDS (relaxed filter values: volume $250K, LQ≥20, VN≤0.98, DI≥30), PATTERN_POOL_GUARDRAILS (elevated FinalScore floor 0.45, max position 15%), PATTERN_POOL_STRATEGIES (3 pattern + 5 hybrid = 8 strategies), SourcePool/AssetClass types, DEFAULT_ASSET_CLASS.
-- **Upstream**: None — static configuration
-- **Downstream**: FX5 Scanner (pattern pool filtering), SQE (elevated FinalScore floor), Paper Position Sizing (15% cap), Signal Orchestrator (strategy list for pattern pool evaluation)
-- **Shared State**: None — exported constants
-- **Execution**: Synchronous — imported at module load
+### 1.6 Pattern Filter Profile — (Phase 14.5, Batch 19; updated Batch 19C)
+- **File**: `server/config/pattern-filter-profile.ts` (~120 lines)
+- **What**: Configuration for the pattern pool pipeline. Defines: PATTERN_POOL_THRESHOLDS (static defaults: volume $250K, LQ≥20, VN≤0.98, DI≥30), PATTERN_POOL_GUARDRAILS (elevated FinalScore floor 0.45, max position 15%), PATTERN_POOL_STRATEGIES (3 pattern + 5 hybrid = 8 strategies), SourcePool/AssetClass types. **Batch 19C**: Added `REGIME_PATTERN_THRESHOLDS` lookup table with per-regime threshold sets (5 regimes) and `getPatternPoolThresholds(regime)` function. FX5 scanner calls this to select regime-appropriate thresholds, falling back to static defaults when MCE is cold.
+- **Upstream**: None — static configuration + runtime regime lookup
+- **Downstream**: FX5 Scanner (pattern pool filtering — regime-aware since Batch 19C), SQE (elevated FinalScore floor), Paper Position Sizing (15% cap), Signal Orchestrator (strategy list), VTS Runner (PATTERN_POOL_STRATEGIES for dual-path — Batch 19C)
+- **Shared State**: None — exported constants and pure function
+- **Execution**: Synchronous — imported at module load, `getPatternPoolThresholds()` called per FX5 scan cycle
 - **Blast Radius**: **MEDIUM** — affects pattern pool pipeline thresholds and constraints
 
 ---
@@ -351,9 +351,9 @@
 ## Layer 7: Learning & Calibration
 
 ### 7.1 VTS Runner
-- **File**: `server/services/vts-runner.ts` (~1,750 lines)
-- **What**: Autonomous virtual trading simulator. 60-second cycles. Evaluates ALL strategies per regime via real StrategyEngine detect functions (HF6). Uses real market data with real scoring pipeline.
-- **Upstream**: Price Cache (VTS bucket), MCE (regime + indicators via `computeContext()`), Pattern Recognition, OHLC Cache (60-min candles, 100-candle lookback via `ohlcCache.getOHLCData()` — Batch 18), BTC OHLC via OHLC Cache (for defensive_hedge Spearman correlation — HF8, routed through ohlcCache in Batch 18)
+- **File**: `server/services/vts-runner.ts` (~1,850 lines)
+- **What**: Autonomous virtual trading simulator. 60-second cycles. **Dual-path** (Batch 19C): (1) Quant path — evaluates FX5 quant-pool pairs with all regime-compatible strategies. (2) Pattern path — evaluates `activeFilterPool.getPatternPool('paper')` pairs with PATTERN + HYBRID strategies only (filtered via `PATTERN_POOL_STRATEGIES`). `sourcePool` metadata tagged on VTS trade records. Uses real market data with real scoring pipeline.
+- **Upstream**: Price Cache (VTS bucket), MCE (regime + indicators via `computeContext()`), Pattern Recognition, OHLC Cache (60-min candles, 100-candle lookback via `ohlcCache.getOHLCData()` — Batch 18), BTC OHLC via OHLC Cache (for defensive_hedge Spearman correlation — HF8), Active Filter Pool (pattern pool pairs — Batch 19C), PATTERN_POOL_STRATEGIES config (Batch 19C)
 - **Downstream**: VTS Service (trade storage), Telemetry Aggregator (M70: only VTS writes telemetry), ML Calibration (trade outcomes)
 - **Execution**: **60-second interval** (passive learning mode)
 - **Blast Radius**: **HIGH** — all learning data flows through VTS

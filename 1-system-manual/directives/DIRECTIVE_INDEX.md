@@ -106,7 +106,9 @@
 | Batch | Title | Status | Date Complete | Commit | Notes |
 |-------|-------|--------|---------------|--------|-------|
 | Batch 19 | Phase 14.5: Dual-Path Pattern Scanning + Merit-Based Ranking + MCE Global Regime Overlay | COMPLETE | 2026-03-18 | `106996ab` + `1b917598` + `2ade1370` | 10 files (2 new configs, 1 full rewrite, 7 surgical edits). Pattern pool pipeline (FX5 → active-filter-pool → orchestrator → SQE → RTB → sizing). rankingScore cross-family ordering (QUANT/PATTERN/HYBRID weight profiles). MCE getDominantRegime() with mode-aware sourcing. sourcePool/signalType/assetClass identity tuple persisted in RTB metadata. Pattern sizing 15% cap. Elevated SQE floor (0.45). FinalScore gap safety rule. |
-| Batch 19B | Governance for Phase 14.5 | COMPLETE | 2026-03-18 | (this batch) | CCPI, DIRECTIVE_INDEX, SYSTEM_IMPACT_MAP updated. batch-history.md updated. |
+| Batch 19B | Governance for Phase 14.5 | COMPLETE | 2026-03-18 | `906ef370` | CCPI, DIRECTIVE_INDEX, SYSTEM_IMPACT_MAP updated. batch-history.md updated. |
+| Batch 19C | Phase 14.5 Deferred Items — VTS pattern pool, frontend Pattern Scanning tab, regime-aware thresholds | COMPLETE | 2026-03-18 | `422fa479` | 6 files (1 new component, 1 full replacement, 4 surgical edits). VTS dual-path pattern pool evaluation. New /api/pattern-pool endpoint + Pattern Scanning tab (5th tab on Trading page). REGIME_PATTERN_THRESHOLDS lookup table with per-regime threshold sets. |
+| Batch 19D | Governance for Phase 14.5 deferred items | COMPLETE | 2026-03-18 | (this batch) | CCPI, DIRECTIVE_INDEX, SYSTEM_IMPACT_MAP updated. Phase 14.5 fully closed. |
 
 ---
 
@@ -114,10 +116,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Directives Issued | 18 + 6 HF + 1 inter-phase + 15 standalone hotfixes/governance + 1 phase (14.5) |
-| Total Directives Complete | 18 + 6 HF + 1 inter-phase + 15 standalone hotfixes/governance + 1 phase (14.5) |
+| Total Directives Issued | 18 + 6 HF + 1 inter-phase + 15 standalone hotfixes/governance + 1 phase (14.5 — 4 batches) |
+| Total Directives Complete | 18 + 6 HF + 1 inter-phase + 15 standalone hotfixes/governance + 1 phase (14.5 — 4 batches) |
 | Total Directives In Progress | 0 |
-| Total Review Cycles | 31 |
+| Total Review Cycles | 32 |
 | Average Review Cycles per Directive | 1.00 |
 
 ---
