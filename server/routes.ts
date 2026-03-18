@@ -11318,6 +11318,59 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Batch 19C: Pattern pool status endpoint
+  apiRouter.get('/pattern-pool', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.query.mode as 'paper' | 'live') || 'paper';
+      const { activeFilterPool } = await import('./services/active-filter-pool.js');
+      const { PATTERN_POOL_THRESHOLDS, PATTERN_POOL_GUARDRAILS, PATTERN_POOL_STRATEGIES, getPatternPoolThresholds } = await import('./config/pattern-filter-profile.js');
+      const { getMarketContextEngine } = await import('./services/market-context-engine.js');
+
+      const patternPool = activeFilterPool.getPatternPool(mode);
+      const patternPoolSize = activeFilterPool.getPatternPoolSize(mode);
+      const quantPoolSize = activeFilterPool.getPoolSize(mode);
+
+      let globalRegime = null;
+      let activeThresholds = PATTERN_POOL_THRESHOLDS;
+      let regimeThresholdsActive = false;
+      try {
+        const mce = getMarketContextEngine();
+        globalRegime = mce.getDominantRegime();
+        if (globalRegime && globalRegime.pairCount >= 5) {
+          const regimeThresholds = getPatternPoolThresholds(globalRegime.regime);
+          regimeThresholdsActive = regimeThresholds !== PATTERN_POOL_THRESHOLDS;
+          activeThresholds = regimeThresholds;
+        }
+      } catch { /* MCE not ready */ }
+
+      res.json({
+        ok: true,
+        data: {
+          patternPool: patternPool.map(p => ({
+            symbol: p.symbol,
+            price: p.price ?? 0,
+            volume24h: p.volume24h ?? 0,
+            dailyRange: p.dailyRange ?? 0,
+            firstSeen: p.firstSeen,
+            lastUpdated: p.lastUpdated,
+            expiresAt: p.expiresAt,
+          })),
+          patternPoolSize,
+          quantPoolSize,
+          thresholds: activeThresholds,
+          guardrails: PATTERN_POOL_GUARDRAILS,
+          strategies: PATTERN_POOL_STRATEGIES,
+          globalRegime,
+          regimeThresholdsActive,
+          activeRegimeThresholds: regimeThresholdsActive ? activeThresholds : null,
+        },
+      });
+    } catch (error) {
+      console.error('[19C] Pattern pool endpoint error:', error);
+      res.status(500).json({ ok: false, error: 'Failed to fetch pattern pool data' });
+    }
+  });
+
   // Phase 27.F.12: Universe Scan & Filter Trace (read-only diagnostic, admin/owner only)
   // Phase 4A Remediation: Added caching with 45s TTL
   apiRouter.get('/paper-sim/diagnostics/scan', authenticateToken, async (req: AuthenticatedRequest, res) => {

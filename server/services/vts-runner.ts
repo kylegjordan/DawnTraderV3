@@ -38,6 +38,8 @@ import { loadCalibration, applyCalibration, type CalibrationCoefficients } from 
 import { priceCache, type CachedPrice, type CacheBucketType } from './price-cache.js';
 import { systemConfigService } from './system-config.js';
 import { activeFilterPool } from './active-filter-pool.js';
+// Batch 19C: Pattern pool strategy filtering for VTS dual-path
+import { PATTERN_POOL_STRATEGIES } from '../config/pattern-filter-profile.js';
 import { getTelemetryAggregator } from './telemetry-aggregator.js';
 import { fx5Scanner, type ScanBatchPair } from './fx5-scanner.js';
 import { KrakenService } from './kraken.js';
@@ -1373,7 +1375,76 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       console.warn(`[11.0E.1][VTS] Strategy execution failed for ${pair.symbol}:`, error);
     }
   }
-  
+
+  // Batch 19C: Pattern pool evaluation — PATTERN + HYBRID strategies only
+  const patternPoolPairs = activeFilterPool.getPatternPool('paper');
+  let patternPoolSimulated = 0;
+  const patternPoolStrategiesSet = new Set(PATTERN_POOL_STRATEGIES);
+
+  for (const patternPair of patternPoolPairs) {
+    try {
+      const symbol = normalizeToInternalSymbol(patternPair.symbol);
+      // Skip if already processed in quant pool
+      if (pairs.some(p => p.symbol === symbol)) continue;
+
+      const priceData = priceDataMap.get(symbol);
+      if (!priceData || priceData.price <= 0) continue;
+
+      const ohlcData = await fetchOHLCForPair(symbol);
+      if (ohlcData.length < 10) continue;
+
+      const mce = getMarketContextEngine();
+      const mceContext = mce.computeContext(symbol, ohlcData, priceData.price, priceData.volume24h ?? 0);
+      const pairRegime = mceContext.regime.regime as MarketRegimeType;
+      const regimeStrategies = getStrategiesForRegime(pairRegime);
+
+      // Filter to PATTERN + HYBRID strategies only
+      const patternStrategies = regimeStrategies.filter(s => patternPoolStrategiesSet.has(s.strategyKey));
+      if (patternStrategies.length === 0) continue;
+
+      vtsService.updateMarketPrice(symbol, priceData.price);
+
+      for (const stratDef of patternStrategies) {
+        const result = await generatePhase10Signal(symbol, priceData, ohlcData, 'rotational', stratDef);
+        if (!result) continue;
+
+        const { signal, tradeRecord } = result;
+
+        const telemetry = getTelemetryAggregator();
+        telemetry.recordPairTelemetry(symbol, {
+          finalScore: tradeRecord.finalScore,
+          hybridScore: tradeRecord.hybridScore,
+          regimeWeight: tradeRecord.regimeWeight,
+          regimeScore: tradeRecord.regimeScore,
+          predictiveConfidence: tradeRecord.predictiveConfidence,
+          success: (tradeRecord.profit ?? 0) > 0,
+          pool: 'rotational',
+          source: 'simulation',
+          pairRegime: tradeRecord.regime,
+          signalType: tradeRecord.signalType,
+          strategy: tradeRecord.strategy,
+          pattern: tradeRecord.signalType !== 'QUANT' ? (tradeRecord.patternType ?? undefined) : undefined,
+          caller: 'vts',
+          volZ: tradeRecord.volZ,
+          trendZ: tradeRecord.trendZ,
+        });
+
+        phase10SessionTrades.push(tradeRecord);
+        regimeDistribution[tradeRecord.regime]++;
+        signalTypeDistribution[tradeRecord.signalType] = (signalTypeDistribution[tradeRecord.signalType] || 0) + 1;
+        strategiesExecuted.add(tradeRecord.strategy);
+        totalFinalScore += tradeRecord.finalScore;
+        simulatedCount++;
+        patternPoolSimulated++;
+      }
+    } catch (error) {
+      console.warn(`[19C][VTS] Pattern pool eval failed for ${patternPair.symbol}:`, error);
+    }
+  }
+  if (patternPoolSimulated > 0) {
+    console.log(`[19C][VTS] Pattern pool: ${patternPoolSimulated} trades from ${patternPoolPairs.length} pairs`);
+  }
+
   const avgFinalScore = simulatedCount > 0 ? totalFinalScore / simulatedCount : 0;
   const cycleDurationMs = Date.now() - cycleStart;
   

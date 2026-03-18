@@ -1,5 +1,5 @@
 /**
- * Pattern Filter Profile — Phase 14.5 (Batch 19)
+ * Pattern Filter Profile — Phase 14.5 (Batch 19 + 19C)
  *
  * Defines relaxed filter thresholds for the pattern scanning pool.
  * Pairs that fail quant metric filters but pass these thresholds
@@ -9,11 +9,15 @@
  * - Merit-based: no hard concurrent cap on pattern trades
  * - sourcePool tracks active filter path (quant/pattern), separate from VTS pool
  * - Pattern sizing surfaced in Guardrails as 15% display-only
+ *
+ * Batch 19C: Regime-aware thresholds — FX5 selects threshold set based on
+ * MCE getDominantRegime() global regime. Fallback to static defaults when
+ * regime is unknown or MCE cache is cold.
  */
 
 import type { CanonicalRegimeType } from './canonical-regime-strategy-map.js';
 
-// --- Pattern Pool Filter Thresholds ---
+// --- Pattern Pool Filter Thresholds (Static Defaults) ---
 // Applied to pairs that FAIL quant metric filters (LQ>=35, VN<=0.93, Vol>=$500K, DI>=55)
 // These are intentionally relaxed to admit pairs where pattern/hybrid strategies can operate
 
@@ -25,6 +29,69 @@ export const PATTERN_POOL_THRESHOLDS = {
   RSI_MIN: 15,                  // wider RSI band for reversal patterns
   RSI_MAX: 85,                  // wider RSI band for reversal patterns
 };
+
+// --- Regime-Aware Pattern Pool Thresholds (Batch 19C) ---
+// Each canonical regime gets a tailored threshold set.
+// Rationale per regime:
+//   TREND_FRIENDLY_STABLE:    Loosen — patterns thrive in trending markets, lower barriers
+//   HIGH_VOLATILITY_UNSTABLE: Tighten — raise floors to avoid noise-dominated pairs
+//   RANGE_BOUND_STABLE:       Default — patterns work well in range-bound, keep relaxed
+//   IMPULSE_EXPANSION:        Moderate — keep DI floor, slightly tighten VN
+//   STRUCTURAL_TRANSITION:    Tighten — raise quality floors during regime transitions
+
+export const REGIME_PATTERN_THRESHOLDS: Record<string, typeof PATTERN_POOL_THRESHOLDS> = {
+  TREND_FRIENDLY_STABLE: {
+    MIN_VOLUME_USD: 200_000,
+    LQ_MIN: 18,
+    VN_MAX: 0.96,
+    DI_TRENDING_MIN: 25,
+    RSI_MIN: 15,
+    RSI_MAX: 85,
+  },
+  HIGH_VOLATILITY_UNSTABLE: {
+    MIN_VOLUME_USD: 300_000,
+    LQ_MIN: 25,
+    VN_MAX: 0.95,
+    DI_TRENDING_MIN: 35,
+    RSI_MIN: 20,
+    RSI_MAX: 80,
+  },
+  RANGE_BOUND_STABLE: {
+    MIN_VOLUME_USD: 250_000,
+    LQ_MIN: 20,
+    VN_MAX: 0.98,
+    DI_TRENDING_MIN: 20,
+    RSI_MIN: 15,
+    RSI_MAX: 85,
+  },
+  IMPULSE_EXPANSION: {
+    MIN_VOLUME_USD: 250_000,
+    LQ_MIN: 20,
+    VN_MAX: 0.97,
+    DI_TRENDING_MIN: 30,
+    RSI_MIN: 15,
+    RSI_MAX: 85,
+  },
+  STRUCTURAL_TRANSITION: {
+    MIN_VOLUME_USD: 300_000,
+    LQ_MIN: 22,
+    VN_MAX: 0.96,
+    DI_TRENDING_MIN: 30,
+    RSI_MIN: 18,
+    RSI_MAX: 82,
+  },
+};
+
+/**
+ * Get pattern pool thresholds for the current global regime.
+ * Falls back to static PATTERN_POOL_THRESHOLDS if regime is unknown.
+ */
+export function getPatternPoolThresholds(regime: string | null | undefined): typeof PATTERN_POOL_THRESHOLDS {
+  if (regime && REGIME_PATTERN_THRESHOLDS[regime]) {
+    return REGIME_PATTERN_THRESHOLDS[regime];
+  }
+  return PATTERN_POOL_THRESHOLDS;
+}
 
 // --- Pattern Pool Guardrails ---
 // Elevated quality floor compensates for lower-quality pair metrics

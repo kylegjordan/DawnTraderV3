@@ -70,8 +70,9 @@ import {
   CANONICAL_BENCHMARK_SYMBOLS,
   isBenchmarkSymbolStrict 
 } from '../config/benchmark-regex.js';
-// Phase 14.5: Pattern pool filter thresholds
-import { PATTERN_POOL_THRESHOLDS } from '../config/pattern-filter-profile.js';
+// Phase 14.5: Pattern pool filter thresholds (Batch 19C: regime-aware)
+import { PATTERN_POOL_THRESHOLDS, getPatternPoolThresholds } from '../config/pattern-filter-profile.js';
+import { getMarketContextEngine } from './market-context-engine.js';
 
 export const BENCHMARK_BASES = [
   'BTC', 'XBT',           // Bitcoin (standard and Kraken)
@@ -634,6 +635,18 @@ export class Fx5ScannerService {
         !s.bypassBoringReject
       );
 
+      // Batch 19C: Regime-aware pattern pool thresholds
+      let activePatternThresholds = PATTERN_POOL_THRESHOLDS;
+      let regimeThresholdsActive = false;
+      try {
+        const mce = getMarketContextEngine();
+        const globalRegime = mce.getDominantRegime();
+        if (globalRegime && globalRegime.pairCount >= 5) {
+          activePatternThresholds = getPatternPoolThresholds(globalRegime.regime);
+          regimeThresholdsActive = activePatternThresholds !== PATTERN_POOL_THRESHOLDS;
+        }
+      } catch { /* MCE not ready — use static defaults */ }
+
       const patternPoolSurvivors = patternPoolCandidates.filter(s => {
         const volumeUSD = s.volume24h ?? 0;
         const lq = s.LQ ?? 0;
@@ -641,14 +654,14 @@ export class Fx5ScannerService {
         const di = s.DI ?? 0;
 
         return (
-          volumeUSD >= PATTERN_POOL_THRESHOLDS.MIN_VOLUME_USD &&
-          lq >= PATTERN_POOL_THRESHOLDS.LQ_MIN &&
-          vn <= PATTERN_POOL_THRESHOLDS.VN_MAX &&
-          di >= PATTERN_POOL_THRESHOLDS.DI_TRENDING_MIN
+          volumeUSD >= activePatternThresholds.MIN_VOLUME_USD &&
+          lq >= activePatternThresholds.LQ_MIN &&
+          vn <= activePatternThresholds.VN_MAX &&
+          di >= activePatternThresholds.DI_TRENDING_MIN
         );
       });
 
-      console.log(`[14.5][PATTERN_POOL] Pattern pool: ${patternPoolSurvivors.length}/${patternPoolCandidates.length} metric-rejected pairs passed relaxed thresholds`);
+      console.log(`[14.5][PATTERN_POOL] Pattern pool: ${patternPoolSurvivors.length}/${patternPoolCandidates.length} passed${regimeThresholdsActive ? ' (regime-adjusted)' : ' (static)'} thresholds`);
 
       const metricFilteredCount = classifiedSurvivors.length - metricFilteredSurvivors.length;
       const forceIncludedCount = classifiedSurvivors.filter(s => !s.passesMetricFilter && s.forceInclude).length;
