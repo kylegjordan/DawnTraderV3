@@ -2828,6 +2828,16 @@
     ]
   },
   {
+    "path": "/api/pattern-pool",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/paper-sim/diagnostics/scan",
     "methods": [
       "GET"
