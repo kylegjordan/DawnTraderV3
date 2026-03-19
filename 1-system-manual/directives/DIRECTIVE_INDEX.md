@@ -110,6 +110,9 @@
 | Batch 19C | Phase 14.5 Deferred Items — VTS pattern pool, frontend Pattern Scanning tab, regime-aware thresholds | COMPLETE | 2026-03-18 | `422fa479` | 6 files (1 new component, 1 full replacement, 4 surgical edits). VTS dual-path pattern pool evaluation. New /api/pattern-pool endpoint + Pattern Scanning tab (5th tab on Trading page). REGIME_PATTERN_THRESHOLDS lookup table with per-regime threshold sets. |
 | Batch 19D | Governance for Phase 14.5 deferred items | COMPLETE | 2026-03-18 | `5c44b035` | CCPI, DIRECTIVE_INDEX, SYSTEM_IMPACT_MAP updated. Phase 14.5 fully closed. |
 | Batch 19E | Phase 14.5 Extension — VTS pattern pool integration + sourcePool end-to-end persistence | COMPLETE | 2026-03-18 | `170dba7a` | 5 files modified. VTS runner fetches pattern pool pairs. sourcePool field added to Phase10TradeRecord interface + paper_sim_trades + paper_sim_open_positions DB schema. paper-execution-engine persists sourcePool from signal metadata. Frontend Source Pool badges (blue QUANT / purple PATTERN) on open + closed trades tables. |
+| Batch 19E GOV | Governance for Batch 19E — CCPI Rule 22, sourcePool docs | COMPLETE | 2026-03-18 | `e9de7352` | CCPI, DIRECTIVE_INDEX updated. Rule 22 (Langston mandatory acknowledgment). |
+| Batch 19G | Phase 14.5 Completion — DB-driven 4-path filter architecture | COMPLETE | 2026-03-19 | `d418c726` | DB-driven filter architecture: screener_filters table expanded (8 rows, 4 per mode, new columns filter_path/lq_min/vn_max/corr_max/di_min). FX5 scanner reads from DB. pattern-global-filters.ts deleted. system-guards.ts filter constants deprecated. VTS hybrid confluence buffer. hybrid-compatibility-registry.ts created. 4-column filter display in Screeners tab. Legacy filter UI inputs removed. VTS dedup 3→1. Pattern Scanning tab 401 fix. VTS pattern path parity. Pattern IMF hybrid architecture (DB defaults + regime overrides). |
+| Batch 19G HF1 | Pattern IMF metrics for pattern-only pairs — OHLC pre-fetch for DI=0 fix | COMPLETE | 2026-03-19 | `15e90f09` | Pre-fetches OHLC data for pattern-only pairs that lack cached data, preventing DI=0 rejection at IMF stage. |
 
 ---
 
@@ -117,10 +120,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Directives Issued | 18 + 6 HF + 1 inter-phase + 15 standalone hotfixes/governance + 1 phase (14.5 — 5 batches + 1 governance) |
-| Total Directives Complete | 18 + 6 HF + 1 inter-phase + 15 standalone hotfixes/governance + 1 phase (14.5 — 5 batches + 1 governance) |
+| Total Directives Issued | 18 + 6 HF + 1 inter-phase + 15 standalone hotfixes/governance + 1 phase (14.5 — 8 batches including governance + HF1) |
+| Total Directives Complete | 18 + 6 HF + 1 inter-phase + 15 standalone hotfixes/governance + 1 phase (14.5 — 8 batches including governance + HF1) |
 | Total Directives In Progress | 0 |
-| Total Review Cycles | 33 |
+| Total Review Cycles | 36 |
 | Average Review Cycles per Directive | 1.00 |
 
 ---

@@ -1,51 +1,49 @@
-# BATCH_19G_HF1 — Hotfix: Remove legacy filter UI, fix VTS dedup, fix Pattern Scanning 401, fix VTS pattern path
+> **CRITICAL — REPLIT AUTONOMY CONSTRAINTS**
+>
+> You are receiving a batch of changes prepared by Claude Code (the System Cartographer).
+> Your role is to **apply these changes exactly as specified**, validate them, and push.
+>
+> **DO NOT:**
+> - Make any changes beyond what is specified in this document
+> - Reformat, restructure, or "improve" any files
+> - Add your own commits between batch application and validation
+> - Modify any files not listed in this document
+> - Run any automated tools that modify source code (linters, formatters, etc.)
+>
+> **DO:**
+> - Apply changes exactly as written
+> - Run validation after ALL changes are applied
+> - Report results back to Kyle
+> - Commit with the message provided at the bottom of this document
 
-## Modified Files
+---
 
-1. **client/src/components/goals/filters-with-override.tsx**
-   - Removed hardcoded "Institutional Math Filters" panel (LQ >= 40, VolNoise <= 0.6, Corr <= 0.75 cards)
-   - Removed legacy VtsImfPanel 2-section fallback (the old "VTS Learning Filters (Relaxed)" display)
-   - Removed ALL editable filter input fields (Volume & Liquidity, Price Range, Market Quality, Asset Type, Data Quality, Market Configuration, Execution Quality category cards with Input/Select/Dropdown controls)
-   - Removed unused imports: Input, Label, Badge, useState, useEffect, CircleDot, useToast, queryClient, useMutation, Select/*, DropdownMenu/*, Button
-   - Removed dead code: FilterV2 interface, FiltersV2Response interface, FILTER_CATEGORIES, TIMEFRAME_OPTIONS, MARKET_UNIVERSE_OPTIONS, formatNumber, unformatNumber, isNumericAmountFilter, renderFilterInput, updateValueMutation, localValues state, filtersData query
-   - Renamed VtsImfPanel -> DualPathFilterPanel for clarity
-   - DualPathFilterPanel now shows a "waiting for data" message instead of legacy fallback when 4-column data is unavailable
-   - Kept: 4-column Dual-Path Filter Thresholds table (sole source of truth), SQE Filters display, SQE ROI Gate display, SQE Liquidity Filter display
-   - Kept exports: ADAPTIVE_SCANNING_ENABLED, LEGACY_METRICS_ENABLED, FINAL_SCORE_CONFIG (may be imported elsewhere)
+# Batch 19G Governance — INSTRUCTIONS
 
-2. **server/services/vts-runner.ts**
-   - Changed VTS_MAX_CONCURRENT_PER_COMBO from 3 to 1
-   - Updated comments at constant definition and duplicate guard check
-   - Duplicate guard logic (`existingTradeCount >= VTS_MAX_CONCURRENT_PER_COMBO`) works correctly with value 1: any existing open trade for the same symbol+strategy combo will block new entries
+## Batch Type
+Governance documentation update (no code changes).
 
-3. **client/src/components/trading/pattern-scanning.tsx**
-   - Added Bearer token header to fetchPatternPool() — reads from localStorage (accessToken or token)
-   - Root cause: the /api/pattern-pool route uses authenticateToken middleware which requires Authorization header, but the original fetch only sent credentials: "include" (cookies) without the JWT Bearer token
+## Files to Place (3 files)
 
-4. **server/services/vts-runner.ts** (Item 4 — VTS pattern path parity with active trading path)
-   - **Problem**: VTS pattern pool pairs used regime-driven strategy selection (getStrategiesForRegime → filter to PATTERN_POOL_STRATEGIES). This is wrong — pattern pool pairs should have pattern detection drive strategy selection, not regime. The active trading path (signal-orchestrator.ts) already does this correctly.
-   - **Fix**: Pattern pool pairs now mirror the active trading path:
-     1. MCE computes regime + indicators (for context only, not strategy selection)
-     2. `scanPatterns()` runs on the OHLC candles
-     3. If no BUY pattern detected → pair is skipped for this cycle
-     4. Each detected BUY pattern is normalized to canonical type via `normalizePatternToCanonical()`
-     5. The canonical pattern is matched to a PATTERN or HYBRID strategy definition from the canonical regime-strategy map (searches ALL regimes, not just current)
-     6. The matched strategy is passed to `generatePhase10Signal()` as before
-   - Added imports: `normalizePatternToCanonical`, `CanonicalPatternType` from canonical-regime-strategy-map
-   - Removed unused import: `PATTERN_POOL_STRATEGIES` from pattern-filter-profile (no longer needed)
-   - Quant pairs are unchanged — still use all regime strategies
-   - Pattern-to-strategy resolution (via canonical map): MORNING_STAR→morning_star, INSIDE_BAR→inside_bar_reversal, PINBAR→support_bounce, ENGULFING→defensive_hedge, TRI_STAR→adaptive_flow, ABCD→volatility_edge
+### 1. CLAUDE_CODE_PROJECT_INSTRUCTIONS.md
+- **Source**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` (in this zip)
+- **Destination**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` (replace entire file)
+- **Changes**: Phase 14.5 marked COMPLETE with all batches listed (19 core through 19G HF1). Last commit updated to `15e90f09`. Rules 23-26 added (post-implementation audit, batch reports ownership, DB queries via Replit Agent, replit-cmd screenshot limitation). Workflow updated with post-implementation audit step and scope checklist requirement. Batch 19G + HF1 investigation notes added.
+
+### 2. DIRECTIVE_INDEX.md
+- **Source**: `1-system-manual/directives/DIRECTIVE_INDEX.md` (in this zip)
+- **Destination**: `1-system-manual/directives/DIRECTIVE_INDEX.md` (replace entire file)
+- **Changes**: Added Batch 19E GOV, Batch 19G, and Batch 19G HF1 rows. Summary statistics updated.
+
+### 3. SYSTEM_IMPACT_MAP.md
+- **Source**: `1-system-manual/SYSTEM_IMPACT_MAP.md` (in this zip)
+- **Destination**: `1-system-manual/SYSTEM_IMPACT_MAP.md` (replace entire file)
+- **Changes**: Updated screener_filters table (new columns, 8 rows, 4-path architecture). FX5 scanner updated (DB-driven filters, OHLC pre-fetch for pattern pairs). Added hybrid-compatibility-registry.ts entry (section 1.7). VTS runner updated (hybrid buffer, pattern path parity, dedup=1). filters-with-override.tsx updated (4-column DB-driven table, legacy inputs removed). pattern-global-filters.ts noted as DELETED. system-guards.ts filter constants noted as DEPRECATED. Quick lookup table expanded with screener_filters and hybrid registry entries.
+
+---
 
 ## Commit Message
 
-```
-Batch 19G HF1: Remove legacy filter UI, fix VTS dedup, fix Pattern Scanning 401, fix VTS pattern path
-```
-
-## Push Command
-
 ```bash
-git add client/src/components/goals/filters-with-override.tsx server/services/vts-runner.ts client/src/components/trading/pattern-scanning.tsx
-git commit -m "Batch 19G HF1: Remove legacy filter UI, fix VTS dedup, fix Pattern Scanning 401, fix VTS pattern path"
-git push origin dawntrader-v4
+bash REPLIT_PUSH_SCRIPT.sh "Batch 19G governance: CCPI Rules 23-26, post-implementation audit workflow, DB-driven filter docs"
 ```

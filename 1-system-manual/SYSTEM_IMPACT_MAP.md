@@ -2,7 +2,7 @@
 
 > **Author**: Claude Code (System Cartographer)
 > **Created**: 2026-02-19
-> **Last Updated**: 2026-03-18 (Batch 19E — Phase 14.5 extension: VTS pattern pool + sourcePool persistence)
+> **Last Updated**: 2026-03-19 (Batch 19G + HF1 — Phase 14.5 Completion: DB-driven 4-path filter architecture, VTS hybrid confluence, system-guards cleanup)
 > **Purpose**: Component dependency reference for directive authoring. Before writing any directive, consult this map to identify all upstream, downstream, and shared-state impacts of the proposed change.
 > **Usage**: Claude Code looks up every affected component BEFORE writing a directive. The directive's Impact Analysis section must reference this map.
 
@@ -84,14 +84,23 @@
 - **Blast Radius**: **HIGH** — determines which signal gets selected for execution when multiple are queued
 - **Tests**: None yet (new component, validated via integration)
 
-### 1.6 Pattern Filter Profile — (Phase 14.5, Batch 19; updated Batch 19C)
+### 1.6 Pattern Filter Profile — (Phase 14.5, Batch 19; updated Batch 19C; partially superseded Batch 19G)
 - **File**: `server/config/pattern-filter-profile.ts` (~120 lines)
-- **What**: Configuration for the pattern pool pipeline. Defines: PATTERN_POOL_THRESHOLDS (static defaults: volume $250K, LQ≥20, VN≤0.98, DI≥30), PATTERN_POOL_GUARDRAILS (elevated FinalScore floor 0.45, max position 15%), PATTERN_POOL_STRATEGIES (3 pattern + 5 hybrid = 8 strategies), SourcePool/AssetClass types. **Batch 19C**: Added `REGIME_PATTERN_THRESHOLDS` lookup table with per-regime threshold sets (5 regimes) and `getPatternPoolThresholds(regime)` function. FX5 scanner calls this to select regime-appropriate thresholds, falling back to static defaults when MCE is cold.
-- **Upstream**: None — static configuration + runtime regime lookup
-- **Downstream**: FX5 Scanner (pattern pool filtering — regime-aware since Batch 19C), SQE (elevated FinalScore floor), Paper Position Sizing (15% cap), Signal Orchestrator (strategy list), VTS Runner (PATTERN_POOL_STRATEGIES for dual-path — Batch 19C)
+- **What**: Configuration for the pattern pool pipeline. Defines: PATTERN_POOL_GUARDRAILS (elevated FinalScore floor 0.45, max position 15%), PATTERN_POOL_STRATEGIES (3 pattern + 5 hybrid = 8 strategies), SourcePool/AssetClass types. **Batch 19G**: PATTERN_POOL_THRESHOLDS and REGIME_PATTERN_THRESHOLDS are now **superseded by DB** — `screener_filters` table rows with `filter_path='active_pattern'` and `filter_path='vts_pattern'` provide these values. The file still exports guardrails and strategy list constants (not in DB). `getPatternPoolThresholds()` function may still be called as fallback but DB is primary source.
+- **Upstream**: None — static configuration (guardrails/strategies), DB `screener_filters` table (thresholds — Batch 19G)
+- **Downstream**: FX5 Scanner (pattern pool filtering — now via DB since Batch 19G), SQE (elevated FinalScore floor), Paper Position Sizing (15% cap), Signal Orchestrator (strategy list), VTS Runner (PATTERN_POOL_STRATEGIES for dual-path — Batch 19C)
 - **Shared State**: None — exported constants and pure function
-- **Execution**: Synchronous — imported at module load, `getPatternPoolThresholds()` called per FX5 scan cycle
+- **Execution**: Synchronous — imported at module load
 - **Blast Radius**: **MEDIUM** — affects pattern pool pipeline thresholds and constraints
+
+### 1.7 Hybrid Compatibility Registry — NEW (Phase 14.5, Batch 19G)
+- **File**: `server/config/hybrid-compatibility-registry.ts`
+- **What**: Shared registry mapping hybrid strategy names to their required quant + pattern constituent strategies. Used by both signal orchestrator (active trading) and VTS runner (passive learning) for hybrid confluence detection.
+- **Upstream**: None — static configuration
+- **Downstream**: Signal Orchestrator (hybrid confluence checking), VTS Runner (hybrid confluence buffer)
+- **Shared State**: None — exported constants
+- **Execution**: Synchronous — imported at module load
+- **Blast Radius**: **LOW** — configuration only, consumed by two services
 
 ---
 
@@ -167,10 +176,10 @@
 
 ### 3.2 FX5 Scanner
 - **File**: `server/services/market-scanner.ts` (`collectAdaptiveBatch()` function) + `server/services/fx5-scanner.ts`
-- **What**: Always-on 30-second market scanner. Multi-stage filtering pipeline: Stage 1 (volume/price), Stage 2 (cost/liquidity), Stage 3 (IMF adaptive), Stage 4 (regime compatibility). Drives pair selection. **Phase 14.5**: Pairs rejected by quant metric filters are re-evaluated against relaxed PATTERN_POOL_THRESHOLDS and routed to the pattern pool via `activeFilterPool.addPatternPoolSurvivors()`.
-- **Upstream**: Central Clock (trigger), Kraken REST API (market data), Price Cache, Telemetry Aggregator (performance data for adaptive ratio), PATTERN_POOL_THRESHOLDS config (Phase 14.5)
+- **What**: Always-on 30-second market scanner. Multi-stage filtering pipeline: Stage 1 (volume/price), Stage 2 (cost/liquidity), Stage 3 (IMF adaptive), Stage 4 (regime compatibility). Drives pair selection. **Phase 14.5**: Pairs rejected by quant metric filters are re-evaluated against relaxed pattern thresholds and routed to the pattern pool via `activeFilterPool.addPatternPoolSurvivors()`. **Batch 19G**: All filter thresholds now read from DB `screener_filters` table (8 rows: active_quant, active_pattern, vts_quant, vts_pattern per mode). Hardcoded `PATTERN_POOL_THRESHOLDS` config and `pattern-global-filters.ts` no longer used as primary source. **Batch 19G HF1**: Pre-fetches OHLC data for pattern-only pairs that lack cached data, fixing DI=0 rejection at pattern IMF stage.
+- **Upstream**: Central Clock (trigger), Kraken REST API (market data), Price Cache, Telemetry Aggregator (performance data for adaptive ratio), DB `screener_filters` table (4-path filter thresholds — Batch 19G), OHLC Cache (pattern-only pair pre-fetch — Batch 19G HF1)
 - **Downstream**: Active Filter Pool (quant qualifying pairs + pattern pool pairs — Phase 14.5), Signal Orchestrator (indirectly via both pools), Cost Cache (populates during scan), Stage-3 Emitter (WebSocket events), Data Aggregator (async logging)
-- **Shared State**: Screener filter thresholds (from DB `screener_filters` table)
+- **Shared State**: Screener filter thresholds (from DB `screener_filters` table — 8 rows with columns: filter_path, lq_min, vn_max, corr_max, di_min — Batch 19G)
 - **Execution**: **30-second interval** — triggered by Central Clock
 - **Blast Radius**: **CRITICAL** — determines which pairs enter the trading pipeline
 - **Tests**: Scanner-related tests, filter validation tests
@@ -185,9 +194,9 @@
 
 ### 3.4 IMF Metrics (Adaptive Filters)
 - **File**: Computed within FX5 Scanner pipeline
-- **What**: Liquidity Quality (LQ), Volume Noise (VN), Correlation metrics. Stage 3 filtering. LQ uses Formula B (log10-based, per-candle OHLC volume — Batch 18G/18J). Three-tier thresholds: Active (LQ≥35, VN≤0.93, rho≤0.92), Passive (LQ≥35, VN≤0.96), VTS (LQ≥25, VN≤0.98) — Batch 18J.
-- **Upstream**: Market data (volume, spread, trading activity), OHLC Cache (per-candle volume for LQ)
-- **Downstream**: FX5 Stage 3 filtering gate (LQ ≥ threshold, VN ≤ threshold)
+- **What**: Liquidity Quality (LQ), Volume Noise (VN), Correlation, Directional Integrity (DI) metrics. Stage 3 filtering. LQ uses Formula B (log10-based, per-candle OHLC volume — Batch 18G/18J). **Batch 19G**: Filter thresholds now DB-driven — 4 paths per mode (active_quant, active_pattern, vts_quant, vts_pattern) with distinct lq_min, vn_max, corr_max, di_min columns. Previous hardcoded three-tier thresholds in system-guards.ts are DEPRECATED. Pattern IMF uses hybrid architecture: DB defaults for base thresholds + code-driven regime overrides for dynamic adjustment. `system-guards.ts` constants (ACTIVE_IMF_THRESHOLDS, VTS_IMF_THRESHOLDS, PASSIVE_IMF_THRESHOLDS) retained as guardrails only, not primary filter source.
+- **Upstream**: Market data (volume, spread, trading activity), OHLC Cache (per-candle volume for LQ), DB `screener_filters` table (threshold values — Batch 19G)
+- **Downstream**: FX5 Stage 3 filtering gate (LQ ≥ threshold, VN ≤ threshold, DI ≥ threshold)
 - **Execution**: Synchronous — per-pair during scan
 - **Blast Radius**: **MEDIUM** — affects pair eligibility
 
@@ -352,8 +361,8 @@
 
 ### 7.1 VTS Runner
 - **File**: `server/services/vts-runner.ts` (~1,850 lines)
-- **What**: Autonomous virtual trading simulator. 60-second cycles. **Dual-path** (Batch 19C, extended Batch 19E): (1) Quant path — evaluates FX5 quant-pool pairs with all regime-compatible strategies. (2) Pattern path — fetches pattern pool pairs via `activeFilterPool.getPatternPool('paper')` alongside quant pool (Batch 19E), evaluates with PATTERN + HYBRID strategies only (filtered via `PATTERN_POOL_STRATEGIES`). `sourcePool` metadata tagged on VTS trade records. Uses real market data with real scoring pipeline.
-- **Upstream**: Price Cache (VTS bucket), MCE (regime + indicators via `computeContext()`), Pattern Recognition, OHLC Cache (60-min candles, 100-candle lookback via `ohlcCache.getOHLCData()` — Batch 18), BTC OHLC via OHLC Cache (for defensive_hedge Spearman correlation — HF8), Active Filter Pool (quant pool + pattern pool pairs — Batch 19C/19E), PATTERN_POOL_STRATEGIES config (Batch 19C)
+- **What**: Autonomous virtual trading simulator. 60-second cycles. **Dual-path** (Batch 19C, extended Batch 19E, improved Batch 19G): (1) Quant path — evaluates FX5 quant-pool pairs with all regime-compatible strategies. (2) Pattern path — fetches pattern pool pairs via `activeFilterPool.getPatternPool('paper')` alongside quant pool (Batch 19E), evaluates with PATTERN + HYBRID strategies only (filtered via `PATTERN_POOL_STRATEGIES`). `sourcePool` metadata tagged on VTS trade records. Uses real market data with real scoring pipeline. **Batch 19G**: Hybrid confluence buffer integrated (via hybrid-compatibility-registry.ts) for cross-signal detection. Dedup changed from 3 to 1 per symbol+strategy combination. Pattern path parity — scanPatterns now drives strategy selection instead of regime, matching the signal orchestrator's active trading behavior.
+- **Upstream**: Price Cache (VTS bucket), MCE (regime + indicators via `computeContext()`), Pattern Recognition, OHLC Cache (60-min candles, 100-candle lookback via `ohlcCache.getOHLCData()` — Batch 18), BTC OHLC via OHLC Cache (for defensive_hedge Spearman correlation — HF8), Active Filter Pool (quant pool + pattern pool pairs — Batch 19C/19E), PATTERN_POOL_STRATEGIES config (Batch 19C), hybrid-compatibility-registry.ts (Batch 19G)
 - **Downstream**: VTS Service (trade storage), Telemetry Aggregator (M70: only VTS writes telemetry), ML Calibration (trade outcomes)
 - **Execution**: **60-second interval** (passive learning mode)
 - **Blast Radius**: **HIGH** — all learning data flows through VTS
@@ -518,6 +527,8 @@
 - **Batch 19E updates**:
   - `client/src/pages/active-trades-v2.tsx`: Source Pool column with colored badges (blue QUANT / purple PATTERN) added to open simulated trades table.
   - `client/src/pages/trade-history-tab.tsx`: Source Pool column with colored badges added to closed simulated trades table.
+- **Batch 19G updates**:
+  - `client/src/pages/filters-with-override.tsx`: Redesigned to show 4-column Dual-Path Filter Thresholds table (Active Quant | Active Pattern | VTS Quant | VTS Pattern), reading from DB `screener_filters` table via API. Legacy filter override UI inputs REMOVED — all filter configuration now managed through DB. Screeners tab is now a read-only display of DB-driven filter values.
 
 ### 10.4 TradingModeContext
 - **What**: Paper/Live mode toggle. Controls which execution engine receives signals.
@@ -579,20 +590,22 @@
 | **calculatePairRegime()** | MCE (calls it internally), VTS Runner (via MCE), Signal Orchestrator (via MCE), canonical regime map, drift detector baselines |
 | **Price Cache** | Paper Execution Engine, VTS Runner, Signal Orchestrator (ticker via `getCachedPrice()` — Batch 18), FX5 Scanner, MicroExecutionService, all frontend price displays |
 | **OHLC Cache** | Signal Orchestrator (OHLC data), VTS Runner (OHLC data + BTC candles), KrakenService (wrapped by cache) |
-| **FX5 Scanner** | Active Filter Pool (quant + pattern pools), Signal Orchestrator, Cost Cache, Telemetry Aggregator, Stage-3 Emitter, screener_filters DB table, PATTERN_POOL_THRESHOLDS config |
+| **FX5 Scanner** | Active Filter Pool (quant + pattern pools), Signal Orchestrator, Cost Cache, Telemetry Aggregator, Stage-3 Emitter, screener_filters DB table (8 rows, 4-path — Batch 19G), OHLC Cache (pattern-only pre-fetch — Batch 19G HF1) |
 | **Paper Execution Engine** | Portfolio state, Guardrails V2, Pre-Execution Validator, WebSocket broadcasts, trade history DB |
 | **VTS Runner** | VTS Service, ML Calibration, Telemetry Aggregator, Drift Detector, Adaptive Ratio Manager |
 | **Guardrails V2** | Pre-Execution Validator, Paper Execution Engine, Kill Switch |
 | **Pre-Execution Validator** | Paper Execution Engine, Trading Engine (live), Goal Alignment (Phase 4 — RISK-028, still active) |
 | **Boot sequence (index.ts)** | Lazy Loader, Trading Bootstrap, FX5 Bootstrap, Portfolio Initializer, all services initialized there |
 | **Kraken WebSocket** | Price Cache, Live Pricing Adapter, MicroExecutionService, Symbol Normalization |
-| **Any database schema** | storage.ts, all queries referencing that table, frontend consuming those endpoints. **Batch 19E**: `paper_sim_trades` and `paper_sim_open_positions` gained `source_pool` column (via schema.ts migration). Paper Execution Engine writes it; active-trades-v2.tsx and trade-history-tab.tsx display it. |
+| **Any database schema** | storage.ts, all queries referencing that table, frontend consuming those endpoints. **Batch 19E**: `paper_sim_trades` and `paper_sim_open_positions` gained `source_pool` column (via schema.ts migration). Paper Execution Engine writes it; active-trades-v2.tsx and trade-history-tab.tsx display it. **Batch 19G**: `screener_filters` table gained columns `filter_path`, `lq_min`, `vn_max`, `corr_max`, `di_min` and expanded to 8 rows (4 per mode). FX5 scanner reads; filters-with-override.tsx displays. |
 | **Any API endpoint** | Frontend components consuming it, WebSocket events, other routes referencing it |
 | **Predictive Adjustments** | Hybrid score composition, canonical weights, learning governance |
 | **ML Calibration** | Python microservice, drift detector, retraining freeze, VTS service |
-| **Pattern Filter Profile** | FX5 Scanner (pattern pool thresholds), SQE (elevated FinalScore floor), Paper Position Sizing (15% cap), Signal Orchestrator (PATTERN_POOL_STRATEGIES list), VTS Runner (pattern pool fetch — Batch 19E), Paper Execution Engine (sourcePool persistence — Batch 19E) |
+| **Pattern Filter Profile** | FX5 Scanner (pattern pool thresholds — now DB-driven, Batch 19G), SQE (elevated FinalScore floor), Paper Position Sizing (15% cap), Signal Orchestrator (PATTERN_POOL_STRATEGIES list), VTS Runner (pattern pool fetch — Batch 19E), Paper Execution Engine (sourcePool persistence — Batch 19E) |
 | **Ranking Weights** | RTB getTopSignal() (queue ordering), Signal Orchestrator (context bonus computation), FINAL_SCORE_GAP_OVERRIDE safety rule |
 | **Active Filter Pool (pattern pool)** | FX5 Scanner (populates), Signal Orchestrator (reads pattern pool), pattern-filter-profile.ts config |
+| **screener_filters DB table** | FX5 Scanner (reads 8 rows for 4-path filtering — Batch 19G), filters-with-override.tsx (displays 4-column table — Batch 19G). **Columns**: id, mode, filter_path, volume_min, spread_max, history_days, lq_min, vn_max, corr_max, di_min. **Rows**: 8 total (active_quant, active_pattern, vts_quant, vts_pattern per paper/live mode). Replaces hardcoded configs in pattern-global-filters.ts (DELETED) and system-guards.ts (DEPRECATED for filters, guardrails kept). |
+| **Hybrid Compatibility Registry** | Signal Orchestrator (hybrid confluence), VTS Runner (hybrid confluence buffer — Batch 19G) |
 
 ---
 

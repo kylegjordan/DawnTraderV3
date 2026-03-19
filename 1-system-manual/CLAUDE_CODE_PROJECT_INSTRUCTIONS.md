@@ -3,7 +3,7 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-03-18 (after Batch 19E — Phase 14.5 extension: VTS pattern pool + sourcePool persistence + Rule 22)
+> **Last Updated**: 2026-03-19 (after Batch 19G + HF1 — Phase 14.5 Completion: DB-driven 4-path filter architecture, VTS hybrid confluence, system-guards cleanup + Rules 23-26)
 
 ---
 
@@ -159,6 +159,7 @@ This replaces the original 7-step directive lifecycle with a more efficient batc
 
 ```
  1. Kyle and Claude Code agree on batch scope (what it fixes, how)
+    — Scope must include a numbered checklist of all items (see Scope Checklist Requirement below)
  2. Claude Code creates SNAPSHOT-N in DT_Frozen_Snapshots/SNAPSHOT_LOG.md
  3. Claude Code READS source files from DT_Clone_Repo/DawnTraderV3/ (READ ONLY — never edit here)
  4. Claude Code WRITES modified files into DT_Staged_Changes/BATCH_N/ (repo-relative paths)
@@ -169,10 +170,11 @@ This replaces the original 7-step directive lifecycle with a more efficient batc
  8. Langston pushes to GitHub via REPLIT_PUSH_SCRIPT.sh (handles GitHub auth dialog)
  9. Claude Code runs git pull to sync clone repo, verifies changes landed correctly
 10. If issues found → Claude Code fixes in DT_Staged_Changes → new zip → repeat from step 6
-11. After code verified → Claude Code prepares governance batch (separate zip, same process)
-12. Post-push verification: Claude Code checks git log for unexpected commits (see below)
-13. Langston posts Batch Completion Report to Telegram Reports topic (#23) — AUTOMATIC, no reminder needed
-14. Batch is NOT operationally complete until: verification ✓, push ✓, report posted ✓, memory updated ✓
+11. Post-implementation audit: Claude Code verifies ALL scope items on preview site (see Rule 23)
+12. After code verified → Claude Code prepares governance batch (separate zip, same process)
+13. Post-push verification: Claude Code checks git log for unexpected commits (see below)
+14. Langston posts Batch Completion Report to Telegram Reports topic (#23) — AUTOMATIC, no reminder needed
+15. Batch is NOT operationally complete until: verification ✓, audit ✓, push ✓, report posted ✓, memory updated ✓
 ```
 
 **Key principles**:
@@ -189,6 +191,15 @@ Before every batch:
 1. Write a scope document (`BATCH_N_SCOPE.md` in `Claude Comms and Packages/Scope Files/`)
 2. Conduct a thorough pre-implementation audit (read every source file that will be touched, verify all assumptions — Kyle catches oversights)
 3. Get Kyle's approval on the scope before writing any code
+
+### Scope Checklist Requirement
+
+Every scope document must include a **numbered checklist** of all items to be implemented. This checklist serves as:
+- The acceptance criteria for the batch (every item must be verified on the preview site after deployment)
+- The reference for post-implementation audit (Rule 23)
+- The splitting guide if a batch needs to be divided (update scope showing which items go in which sub-batch)
+
+If a batch is split mid-implementation (e.g., Batch 19G becomes 19G + 19G HF1), the scope document must be updated to show which checklist items landed in which batch. This prevents items from being silently dropped during splits.
 
 ### ⚠️ Critical Mistakes to Avoid
 
@@ -667,15 +678,18 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 | 14.5 | Phase 14.5: Dual-Path Pattern Scanning + Merit-Based Ranking + MCE Global Regime Overlay — pattern pool filter pipeline, rankingScore cross-family ordering, MCE getDominantRegime(), sourcePool/signalType/assetClass identity tuple, pattern position sizing 15% cap | Batch 19 | `106996ab` + `1b917598` + `2ade1370` |
 | 14.5 | Phase 14.5 Deferred Items — VTS pattern pool integration, frontend Pattern Scanning tab + /api/pattern-pool endpoint, regime-aware pattern pool thresholds | Batch 19C | `422fa479` |
 | 14.5 | Phase 14.5 Extension — VTS runner pattern pool fetch, sourcePool field in Phase10TradeRecord + DB schema (paper_sim_trades, paper_sim_open_positions), paper-execution-engine sourcePool persistence, frontend Source Pool badges (open + closed trades) | Batch 19E | `170dba7a` |
+| — | Governance for Phase 14.5 (Batch 19E) — CCPI Rule 22, sourcePool docs | Batch 19E GOV | `e9de7352` |
+| 14.5 | Phase 14.5 Completion — DB-driven 4-path filter architecture (screener_filters 8 rows with filter_path/lq_min/vn_max/corr_max/di_min), FX5 scanner reads filters from DB, pattern-global-filters.ts deleted, system-guards.ts filter constants deprecated, VTS hybrid confluence buffer, shared hybrid-compatibility-registry.ts, 4-column Dual-Path Filter Thresholds display (DB-driven), legacy filter UI inputs removed, VTS dedup 3→1 per symbol+strategy, Pattern Scanning tab 401 fix, VTS pattern path parity (scanPatterns drives strategy selection), pattern IMF hybrid architecture (DB defaults + code-driven regime overrides) | Batch 19G | `d418c726` |
+| 14.5 | Batch 19G HF1 — Pattern IMF metrics for pattern-only pairs (DI=0 rejection fix via OHLC pre-fetch) | Batch 19G HF1 | `15e90f09` |
 
 ### In-Progress Directives
 | Directive | Title | Batch | Status |
 |-----------|-------|-------|--------|
 | (none currently in progress) | | | |
 
-> **Last commit**: `170dba7a` (Batch 19E — Phase 14.5 extension: VTS pattern pool + sourcePool persistence)
+> **Last commit**: `15e90f09` (Batch 19G HF1 — Pattern IMF metrics for pattern-only pairs)
 > **Next step**: Phase 11 Finalization (Block 4, Batch 20). Remaining roadmap: 11.8 → 14.6 → Phase 15 → Phase 19 → Phase 20 → Phase 21.
-> **Note**: Autonomous deployment pipeline OPERATIONAL. Phase 14.5 FULLY COMPLETE (Batch 19 core + 19C deferred + 19E extension). sourcePool now persisted end-to-end: signal metadata → DB columns → frontend badges. Rule 22 added (Langston mandatory acknowledgment protocol). Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE. Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED.
+> **Note**: Autonomous deployment pipeline OPERATIONAL. **Phase 14.5 FULLY COMPLETE** (Batch 19 core + 19C deferred + 19E extension + 19G completion + 19G HF1). DB-driven 4-path filter architecture live (screener_filters table, 8 rows). Filter constants migrated from code to DB. VTS hybrid confluence buffer operational. Rules 23-26 added (post-implementation audit, batch reports, DB queries via Replit Agent, replit-cmd screenshot limitation). Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE. Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED.
 
 ### Snapshot Log
 | Snapshot | Commit | Description |
@@ -708,7 +722,7 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 See `directives/DIRECTIVE_INDEX.md` for the full list.
 - 12.1.6 (LSP Error Triage) — PENDING (LOW priority, deferred)
 
-Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation) is COMPLETE. Phase 14.1 is **COMPLETE** (HF9 done, Batch 17 `f9fa56c6`). Batch 18 (inter-phase optimization) COMPLETE (`4b6b2fa9`). Batch 18C (regime archive hotfix) COMPLETE (`c42283f1`). Batch 18E (VTS pipeline hotfix) COMPLETE (`5d774fb2`). Batch 18F (FX5 OHLC wiring) COMPLETE (`9de4afc7`). Batch 18G (OHLC-based LQ) COMPLETE (`f82b7b66`). Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE (DBS in Batch 15). Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED. **Phase 14.5 FULLY COMPLETE** (Batch 19 core + Batch 19C deferred items — VTS pattern pool, frontend Pattern Scanning tab, regime-aware thresholds). Next: Phase 11 Finalization (Block 4, Batch 20).
+Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation) is COMPLETE. Phase 14.1 is **COMPLETE** (HF9 done, Batch 17 `f9fa56c6`). Batch 18 (inter-phase optimization) COMPLETE (`4b6b2fa9`). Batch 18C (regime archive hotfix) COMPLETE (`c42283f1`). Batch 18E (VTS pipeline hotfix) COMPLETE (`5d774fb2`). Batch 18F (FX5 OHLC wiring) COMPLETE (`9de4afc7`). Batch 18G (OHLC-based LQ) COMPLETE (`f82b7b66`). Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE (DBS in Batch 15). Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED. **Phase 14.5 FULLY COMPLETE** (Batch 19 core + 19C deferred + 19E extension + 19G completion + 19G HF1). DB-driven 4-path filter architecture: screener_filters table with 8 rows (4 per mode), FX5 reads from DB, pattern-global-filters.ts deleted, system-guards filter constants deprecated. Next: Phase 11 Finalization (Block 4, Batch 20).
 
 ### Investigation Notes for Future Batches
 - **12.2.1**: ~~Wave 1 Safe Deletions~~ **COMPLETE** (Batch 8). 2 files deleted (dhma.ts, latti-safety-monitor.tsx). 11 files surgically modified. ~1,254 lines removed. LATTi lazy-loader stub (RISK-044) remains — can be cleaned in a future batch.
@@ -733,6 +747,7 @@ Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation
 - **Batch 18G (OHLC-Based LQ)**: `calculateLogLiquidity(volumeUSD, tradeCount, spread)` in analysis-utils.ts uses `10*(ln(V*C)-ln(S/C)-10)` which saturates at 100 for all crypto pairs (24h aggregate volume too large). LQ=100 for everything — filter never discriminates. Replaced with per-candle OHLC volume formula: `log10(avgVolumeUSD_per_candle + 1) * 10` producing 30-60 range. Matches imf-metrics.ts formula. Both VTS and active trading now unified on same OHLC-based LQ. Commit `f82b7b66`.
 - **Batch 19 (Phase 14.5 — Dual-Path Pattern Scanning + Merit-Based Ranking + MCE Global Regime)**: Three major subsystems added in a single mega-batch across 10 files (2 new configs, 1 full rewrite, 7 surgical edits). Commits `106996ab` + `1b917598` + `2ade1370`. (1) **Pattern Pool Pipeline**: FX5 scanner routes metric-rejected pairs through relaxed thresholds (PATTERN_POOL_THRESHOLDS in pattern-filter-profile.ts) into a separate pattern pool in active-filter-pool.ts. Signal orchestrator evaluates pattern pool pairs with PATTERN + HYBRID strategies only. SQE applies elevated FinalScore floor (0.45 vs 0.35). Paper-position-sizing caps pattern-pool trades at 15% portfolio. (2) **rankingScore**: New cross-family signal ordering formula in ranking-weights.ts. Three weight profiles (QUANT/PATTERN/HYBRID) with quality, return, friction, context components. RTB getTopSignal() uses rankingScore instead of FinalScore for queue ordering. FinalScore gap safety rule prevents return-magnitude gaming (>0.10 gap → FinalScore wins). (3) **MCE Global Regime**: getDominantRegime() on MCE aggregates per-pair regimes via majority vote. market-indicators.ts getDominantRegime() is now mode-aware — uses MCE when ≥5 pairs cached, falls back to VTS telemetry otherwise. Context bonus/penalty in ranking-weights.ts rewards pair-global regime agreement. **Identity tuple**: sourcePool + signalType + assetClass persisted in RTB metadata for full signal provenance. **Deferred items completed in Batch 19C** (see below).
 - **Batch 19C (Phase 14.5 Deferred Items)**: Three deferred items completed in a single batch. Commit `422fa479`. (1) **VTS Pattern Pool**: VTS runner now evaluates pattern-pool pairs with PATTERN + HYBRID strategies (dual-path matching signal orchestrator). `sourcePool` metadata added to VTS trade records. (2) **Frontend Pattern Scanning Tab**: New 5th tab on Trading page showing pattern pool pairs, thresholds, guardrails, strategies, and global regime. New `/api/pattern-pool` endpoint exposes pattern pool data. (3) **Regime-Aware Pattern Pool Thresholds**: `REGIME_PATTERN_THRESHOLDS` lookup table with per-regime threshold sets. FX5 scanner calls `mce.getDominantRegime()` to select thresholds dynamically. Fallback to static defaults when MCE cache is cold.
+- **Batch 19G (Phase 14.5 Completion — DB-Driven 4-Path Filter Architecture)**: Major architecture shift from hardcoded filter constants to database-driven configuration. Commits `d418c726` (main) + `15e90f09` (HF1). (1) **DB-driven filters**: `screener_filters` table expanded with new columns (`filter_path`, `lq_min`, `vn_max`, `corr_max`, `di_min`) and now has 8 rows — 4 per mode (active_quant, active_pattern, vts_quant, vts_pattern). FX5 scanner reads all filter thresholds from DB instead of hardcoded configs. `pattern-global-filters.ts` DELETED. `system-guards.ts` filter constants DEPRECATED (guardrails kept). (2) **VTS hybrid confluence**: Hybrid-compatibility-registry.ts created as shared registry. VTS integrates confluence buffer for cross-signal detection. (3) **Frontend**: 4-column Dual-Path Filter Thresholds display in Screeners tab (reads from DB). Legacy filter UI inputs removed. (4) **VTS improvements**: Dedup changed from 3 to 1 per symbol+strategy. Pattern path parity — scanPatterns drives strategy selection, not regime. (5) **Pattern IMF**: Hybrid architecture with DB defaults + code-driven regime overrides. (6) **HF1**: Pre-fetches OHLC data for pattern-only pairs, fixing DI=0 rejection bug that was blocking pattern pool entries.
 
 ### Test Baseline
 - **790 pass / 91 fail** (881 total across test files)
@@ -791,6 +806,14 @@ Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation
     - **Never go silent.** Silence after a request is unacceptable. If Langston encounters an error, blocker, or confusion, he must say so immediately rather than going quiet.
     - **Confirm completion explicitly** when done (e.g., "Deployment complete, push successful, verification passed").
     - This applies to all communication channels — Telegram topics, DMs, and cc-inbox responses.
+
+23. **Post-implementation audit is MANDATORY after every code batch.** After deployment and git pull, Claude Code must verify ALL scope checklist items on the preview site before writing the governance batch. This includes: navigating to affected pages, checking that new UI elements render, verifying API endpoints return expected data, and confirming no regressions on adjacent features. The audit findings are documented in the batch completion report. A governance batch written without a post-implementation audit is incomplete.
+
+24. **Batch completion reports are Claude Code's responsibility.** Claude Code writes batch completion reports as part of the post-implementation audit, not Langston. The report is created as a Word document per Rule 21 naming convention and filed in `Claude Comms and Packages/Reports/Batch Completion/`. Langston posts it to Telegram Reports topic (#23).
+
+25. **DB queries can be run through natural language requests to the Replit Agent.** When Claude Code or Langston needs to query the database (e.g., verify `screener_filters` table contents, check trade records), they can ask the Replit Agent in natural language. No shell commands needed — Replit Agent translates to SQL and returns results. Example: "Query the screener_filters table and show all rows" is sufficient.
+
+26. **replit-cmd shell output appears as screenshots that LLMs cannot read as text.** When Langston uses `replit-cmd shell` to run commands on Replit, the output is rendered as a screenshot image. LLMs (including Langston) cannot extract text from these screenshots — they can only confirm the command was entered. Commands execute successfully regardless of whether the output is readable. After pushing code, Claude Code should verify on GitHub directly rather than relying on replit-cmd shell output.
 
 ---
 
