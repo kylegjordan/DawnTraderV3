@@ -38,8 +38,8 @@ import { loadCalibration, applyCalibration, type CalibrationCoefficients } from 
 import { priceCache, type CachedPrice, type CacheBucketType } from './price-cache.js';
 import { systemConfigService } from './system-config.js';
 import { activeFilterPool } from './active-filter-pool.js';
-// Batch 19C: Pattern pool strategy filtering for VTS dual-path
-import { PATTERN_POOL_STRATEGIES } from '../config/pattern-filter-profile.js';
+// Batch 19C import removed by 19G HF1 Item 4: PATTERN_POOL_STRATEGIES no longer used
+// Pattern pool pairs now use scanPatterns() detection to drive strategy selection (mirrors active trading path)
 // Batch 19G: Hybrid confluence buffer for VTS — same mechanism as signal-orchestrator
 import { hybridConfluenceBuffer, type BufferedPatternSignal } from './hybrid-confluence-buffer.js';
 // Batch 19G Fix 5: Shared hybrid compatibility registry (single source of truth)
@@ -65,15 +65,17 @@ import { getGlobalFriction, getLastGlobalDBSCategory } from './market-indicators
 // Phase 14: Real score calculator replaces simulation stubs
 import { computeRealHybridScore, computeRealDecayPenalty } from '../core/utils/vts-real-score.js';
 import { computeBiasConfidenceModifier } from '../core/metrics/directional-bias.js';
-import { 
-  CANONICAL_REGIME_STRATEGY_MAP as REGIME_STRATEGY_MAP, 
+import {
+  CANONICAL_REGIME_STRATEGY_MAP as REGIME_STRATEGY_MAP,
   selectContextAwareStrategy,
   symbolToHash,
   getRegimeRiskMultiplier,
   getStrategiesForRegime,
   normalizeStrategy,
+  normalizePatternToCanonical,
   type CanonicalRegimeType as MarketRegimeType,
   type CanonicalSignalType,
+  type CanonicalPatternType,
   type StrategyDefinition
 } from '../config/canonical-regime-strategy-map.js';
 import type { OHLCData } from '../types/market-regime.types';
@@ -137,7 +139,7 @@ interface VTSConfig {
 // Purpose: Increase VTS simulated trade volume for ML learning data.
 // ══════════════════════════════════════════════════════════════════════════════
 const VTS_NET_EV_FLOOR = -0.005;       // Option A: Allow marginally negative EV (down to -0.5%)
-const VTS_MAX_CONCURRENT_PER_COMBO = 3; // Option B: Max 3 concurrent trades per symbol+strategy
+const VTS_MAX_CONCURRENT_PER_COMBO = 1; // Batch 19G HF1: Strict 1-per-combo (was 3). Only 1 open VTS trade per symbol+strategy.
 // Option C: ROI gate skipped entirely for VTS (see Edit 3)
 // Option D: simulationIntervalSec reduced to 30s (aligned with FX5 scan cycle)
 // Option E: pairsPerCycle increased to 200 (capture all FX5 output)
@@ -752,10 +754,8 @@ async function generatePhase10Signal(
   console.log(`[VTS][11.6H][Sizing] ${symbol}: $${dollarValue.toFixed(2)} exposure → ${quantity.toFixed(6)} units @ $${entryPrice.toFixed(4)}`);
   console.log(`[11.7S][VTS] ${symbol}: Stop ${stopLoss.toFixed(4)}→${adjustedStopLoss.toFixed(4)} | TP ${takeProfit.toFixed(4)}→${adjustedTakeProfit.toFixed(4)} (mode=${strategyMode})`);
   
-  // Batch 18L Option B: Relaxed duplicate guard for VTS
-  // Active trading still enforces strict 1-per-symbol+strategy (in paper-execution-engine.ts)
-  // VTS allows up to VTS_MAX_CONCURRENT_PER_COMBO (3) concurrent trades per symbol+strategy
-  // Rationale: Same strategy on same symbol under different market conditions = valuable ML data
+  // Batch 19G HF1: Strict duplicate guard — only 1 open trade per symbol+strategy combo
+  // Previously allowed 3 (Batch 18L Option B), now aligned with active trading policy
   const existingTradeCount = Array.from(openVirtualTrades.values()).filter(t =>
     t.symbol === symbol && t.strategy === strategy
   ).length;
@@ -1375,19 +1375,71 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         continue;
       }
       
-      // Batch 19F Phase 2: Route strategies based on sourcePool
+      // Batch 19G HF1 Item 4: Route based on sourcePool — mirrors active trading path
       // - Quant pairs: ALL regime strategies (existing behavior)
-      // - Pattern pairs: PATTERN + HYBRID strategies ONLY (filtered by PATTERN_POOL_STRATEGIES)
-      const patternPoolStrategiesSet = new Set(PATTERN_POOL_STRATEGIES);
-      const effectiveStrategies = pair.sourcePool === 'pattern'
-        ? regimeStrategies.filter(s => patternPoolStrategiesSet.has(s.strategyKey))
-        : regimeStrategies;
+      // - Pattern pairs: Pattern detection drives strategy selection, NOT regime
+      //   1. scanPatterns() runs first
+      //   2. If pattern detected → canonical pattern determines strategy
+      //   3. If no pattern detected → pair is skipped for this cycle
+      //   4. Regime is used for MCE context/indicators only, not strategy selection
 
-      if (effectiveStrategies.length === 0) {
-        continue;
+      let effectiveStrategies: StrategyDefinition[] = [];
+
+      if (pair.sourcePool === 'pattern') {
+        // Convert OHLC to Candle[] for scanPatterns
+        const candles = ohlcData.map(o => ({
+          timestamp: o.timestamp,
+          open: o.open,
+          high: o.high,
+          low: o.low,
+          close: o.close,
+          volume: o.volume,
+        }));
+
+        const detectedPatterns = scanPatterns(candles, pair.symbol);
+        const buyPatterns = detectedPatterns.filter(p => p.direction === 'BUY');
+
+        if (buyPatterns.length === 0) {
+          // No BUY pattern detected — skip this pair for this cycle (mirrors active trading path)
+          continue;
+        }
+
+        // Map each detected BUY pattern to a canonical strategy definition.
+        // Search ALL regimes (not just current) because pattern detection drives strategy,
+        // not regime — this mirrors the active trading path in signal-orchestrator.
+        for (const patternSig of buyPatterns) {
+          const canonicalPattern: CanonicalPatternType = normalizePatternToCanonical(patternSig.pattern);
+          if (!canonicalPattern) continue;
+
+          // Find a PATTERN or HYBRID strategy whose patternType matches the canonical pattern
+          let matchedStratDef: StrategyDefinition | undefined;
+          for (const regimeMapping of Object.values(REGIME_STRATEGY_MAP)) {
+            matchedStratDef = regimeMapping.strategies.find(
+              s => s.patternType === canonicalPattern && (s.signalType === 'PATTERN' || s.signalType === 'HYBRID')
+            );
+            if (matchedStratDef) break; // Prefer first match (PATTERN strategies appear before HYBRID in most regimes)
+          }
+
+          if (matchedStratDef && !effectiveStrategies.some(s => s.strategyKey === matchedStratDef!.strategyKey)) {
+            effectiveStrategies.push(matchedStratDef);
+          }
+        }
+
+        if (effectiveStrategies.length === 0) {
+          continue;
+        }
+
+        console.log(`[19G_HF1][VTS] ${pair.symbol} | Regime=${pairRegime} | sourcePool=pattern | Pattern-driven: ${effectiveStrategies.map(s => `${s.strategyKey}(${s.patternType})`).join(', ')}`);
+      } else {
+        // Quant pairs: ALL regime strategies (existing behavior)
+        effectiveStrategies = regimeStrategies;
+
+        if (effectiveStrategies.length === 0) {
+          continue;
+        }
+
+        console.log(`[11.8C][VTS] ${pair.symbol} | Regime=${pairRegime} | sourcePool=${pair.sourcePool ?? 'quant'} | Simulating ${effectiveStrategies.length} strategies: ${effectiveStrategies.map(s => s.strategyKey).join(', ')}`);
       }
-
-      console.log(`[11.8C][VTS] ${pair.symbol} | Regime=${pairRegime} | sourcePool=${pair.sourcePool ?? 'quant'} | Simulating ${effectiveStrategies.length} strategies: ${effectiveStrategies.map(s => s.strategyKey).join(', ')}`);
 
       vtsService.updateMarketPrice(pair.symbol, priceData.price);
 

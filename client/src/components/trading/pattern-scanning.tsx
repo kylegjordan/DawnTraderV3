@@ -53,8 +53,15 @@ interface PatternPoolData {
   activeRegimeThresholds: Record<string, number> | null;
 }
 
+// Batch 19G HF1: Include Bearer token to fix 401 error (authenticateToken middleware requires it)
 async function fetchPatternPool(): Promise<PatternPoolData> {
-  const res = await fetch("/api/pattern-pool?mode=paper", { credentials: "include" });
+  const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+  const res = await fetch("/api/pattern-pool?mode=paper", {
+    credentials: "include",
+    headers: {
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+  });
   if (!res.ok) throw new Error(`Pattern pool fetch failed: ${res.status}`);
   const json = await res.json();
   return json.data;
