@@ -641,6 +641,43 @@ export class Fx5ScannerService {
       // Pattern global survivors are further filtered by pattern IMF thresholds here
       const patternGlobalSurvivors = batchResult.patternSurvivors || [];
 
+      // Batch 19F HF: Compute IMF metrics for pattern-only survivors
+      // Pattern global filter may admit pairs that FAILED the quant global filter.
+      // Those pairs have no IMF metrics in classifiedSurvivors (which only contains quant survivors).
+      // We must compute LQ, VN, DI for these pattern-only pairs so the IMF filter can evaluate them.
+      const classifiedSymbolSet = new Set(classifiedSurvivors.map(cs => cs.symbol));
+      const patternOnlySurvivors = patternGlobalSurvivors.filter(s => {
+        const normalizedSym = normalizeToInternalSymbol(s.symbol);
+        return !classifiedSymbolSet.has(normalizedSym) && !classifiedSymbolSet.has(s.symbol);
+      });
+
+      // Compute IMF metrics for pattern-only pairs (same computation as classifiedSurvivors)
+      const patternOnlyClassified = patternOnlySurvivors.map(s => {
+        const normalizedSymbol = normalizeToInternalSymbol(s.symbol);
+        const volumeUSD = typeof s.volume24h === 'number' && !isNaN(s.volume24h) ? s.volume24h : 0;
+        const ohlcEntry = ohlcDataMap.get(normalizedSymbol);
+        const ohlcPrices = ohlcEntry ? ohlcEntry.prices : [];
+
+        // Same LQ computation as main classifiedSurvivors (Formula B, log10 scale)
+        const LQ = (ohlcEntry && ohlcEntry.avgVolumeUSD > 0)
+          ? Math.min(100, Math.max(0, Math.log10(ohlcEntry.avgVolumeUSD + 1) * 10))
+          : Math.min(100, Math.max(0, Math.log10(volumeUSD + 1) * 10));
+        let VolNoise = ohlcPrices.length > 0 ? calculateVolNoise(ohlcPrices) : 0.6;
+        if (VolNoise > 2 || VolNoise < 0 || !Number.isFinite(VolNoise)) VolNoise = 0.6;
+        const DI = ohlcPrices.length > 0 ? calculateDirectionalIntegrity(ohlcPrices) : 0;
+
+        console.log(`[19F][PATTERN_IMF] Computing IMF for pattern-only pair ${normalizedSymbol}: LQ=${LQ.toFixed(1)} VN=${VolNoise.toFixed(2)} DI=${DI.toFixed(1)}`);
+
+        return { ...s, symbol: normalizedSymbol, LQ, VolNoise, DI, volumeUSD };
+      });
+
+      if (patternOnlyClassified.length > 0) {
+        console.log(`[19F][PATTERN_IMF] Computed IMF metrics for ${patternOnlyClassified.length} pattern-only pairs (not in quant survivors)`);
+      }
+
+      // Merge: classifiedSurvivors (quant) + patternOnlyClassified (pattern-only) for IMF lookup
+      const allClassifiedForPatternLookup = [...classifiedSurvivors, ...patternOnlyClassified];
+
       // Batch 19C: Regime-aware pattern pool thresholds (IMF-level)
       let activePatternThresholds = PATTERN_POOL_THRESHOLDS;
       let regimeThresholdsActive = false;
@@ -654,10 +691,12 @@ export class Fx5ScannerService {
       } catch { /* MCE not ready — use static defaults */ }
 
       // Apply pattern IMF thresholds to pattern global survivors
+      // Now uses allClassifiedForPatternLookup which includes BOTH quant survivors AND pattern-only pairs
       const patternPoolSurvivors = patternGlobalSurvivors
         .map(s => {
-          // Find IMF metrics from classifiedSurvivors (already computed)
-          const classified = classifiedSurvivors.find(cs => cs.symbol === s.symbol);
+          const normalizedSym = normalizeToInternalSymbol(s.symbol);
+          // Find IMF metrics from ALL classified pairs (quant + pattern-only)
+          const classified = allClassifiedForPatternLookup.find(cs => cs.symbol === normalizedSym || cs.symbol === s.symbol);
           return classified ? { ...classified, ...s } : null;
         })
         .filter((s): s is NonNullable<typeof s> => s !== null)
