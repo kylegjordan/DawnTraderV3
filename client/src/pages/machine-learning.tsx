@@ -17,6 +17,7 @@ interface OpenTrade {
   signalType: string;
   patternType: string | null;
   pool: string;
+  sourcePool?: string;    // Batch 19F Phase 2: Filter path origin (quant/pattern)
   dollarValue: number;    // Directive 11.6H: Fixed USD exposure
   quantity: number;       // Directive 11.6H: Variable coin units
   entryPrice: number;
@@ -51,6 +52,7 @@ interface ClosedTrade {
   signalType: string;
   patternType: string | null;
   pool: string;
+  sourcePool?: string;    // Batch 19F Phase 2: Filter path origin (quant/pattern)
   dollarValue: number;    // Directive 11.6H: Fixed USD exposure
   quantity: number;       // Directive 11.6H: Variable coin units
   entryPrice: number;
@@ -263,6 +265,15 @@ const getPoolBadgeColor = (pool: string) => {
   return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
 };
 
+// Batch 19F Phase 2: Source pool badge colors
+const getSourcePoolBadgeColor = (sourcePool: string) => {
+  const sp = sourcePool?.toUpperCase() ?? 'QUANT';
+  if (sp === 'QUANT') return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+  if (sp === 'PATTERN') return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+  if (sp === 'HYBRID') return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
+  return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+};
+
 const getResultBadgeColor = (result: string) => {
   if (result.includes('TARGET') || result.includes('PROFIT')) return 'bg-green-500/20 text-green-400 border-green-500/30';
   if (result.includes('STOP')) return 'bg-red-500/20 text-red-400 border-red-500/30';
@@ -401,7 +412,7 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
         onScroll={handleMainScroll}
         style={{ scrollbarWidth: 'thin' }}
       >
-        <table className="w-full min-w-[2300px] text-sm">
+        <table className="w-full min-w-[2400px] text-sm">
           <thead className="sticky top-0 bg-card z-10">
             <tr className="border-b border-border">
               <SortableHeader label="Symbol" field="symbol" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
@@ -409,6 +420,7 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
               <SortableHeader label="Strategy" field="strategy" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Signal/Pattern</th>
               <SortableHeader label="Pool" field="pool" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Source</th>
               <SortableHeader label="$ Value / Qty" field="dollarValue" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <SortableHeader label="Entry/Current" field="entryPrice" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Target/Stop</th>
@@ -431,7 +443,7 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
           <tbody>
             {sortedTrades.length === 0 ? (
               <tr>
-                <td colSpan={22} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={23} className="px-3 py-8 text-center text-muted-foreground">
                   No open simulated trades
                 </td>
               </tr>
@@ -454,6 +466,11 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
                   <td className="px-3 py-2">
                     <Badge variant="outline" className={`text-xs ${getPoolBadgeColor(trade.pool)}`}>
                       {trade.pool}
+                    </Badge>
+                  </td>
+                  <td className="px-3 py-2">
+                    <Badge variant="outline" className={`text-xs ${getSourcePoolBadgeColor(trade.sourcePool ?? 'quant')}`}>
+                      {(trade.sourcePool ?? 'quant').toUpperCase()}
                     </Badge>
                   </td>
                   <td className="px-3 py-2 text-right">
@@ -626,7 +643,7 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
         onScroll={handleMainScroll}
         style={{ scrollbarWidth: 'thin' }}
       >
-        <table className="w-full min-w-[2300px] text-sm">
+        <table className="w-full min-w-[2400px] text-sm">
           <thead className="sticky top-0 bg-card z-10">
             <tr className="border-b border-border">
               <SortableHeader label="Symbol" field="symbol" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
@@ -634,6 +651,7 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
               <SortableHeader label="Strategy" field="strategy" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Signal/Pattern</th>
               <SortableHeader label="Pool" field="pool" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Source</th>
               <SortableHeader label="$ Value / Qty" field="dollarValue" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <SortableHeader label="Entry/Exit" field="entryPrice" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Target/Stop</th>
@@ -656,7 +674,7 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
           <tbody>
             {sortedTrades.length === 0 ? (
               <tr>
-                <td colSpan={22} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={23} className="px-3 py-8 text-center text-muted-foreground">
                   No closed trades in the last 7 days
                 </td>
               </tr>
@@ -679,6 +697,11 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
                   <td className="px-3 py-2">
                     <Badge variant="outline" className={`text-xs ${getPoolBadgeColor(trade.pool)}`}>
                       {trade.pool}
+                    </Badge>
+                  </td>
+                  <td className="px-3 py-2">
+                    <Badge variant="outline" className={`text-xs ${getSourcePoolBadgeColor(trade.sourcePool ?? 'quant')}`}>
+                      {(trade.sourcePool ?? 'quant').toUpperCase()}
                     </Badge>
                   </td>
                   <td className="px-3 py-2 text-right">

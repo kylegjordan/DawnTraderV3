@@ -234,6 +234,7 @@ interface OpenVirtualTrade {
   modeOverlay?: StrategyModeOverlay;   // 11.7S: Overlay values for observability
   regimeStability?: RegimeStability;   // 11.7S: Regime stability for observability
   executionContext?: 'VTS' | 'VTS_MULTI'; // 11.8C: Identifies multi-strategy trades
+  sourcePool?: 'quant' | 'pattern';        // Batch 19F Phase 2: Track filter path origin
   // Phase 14: 6 context dimensions captured at trade OPEN
   globalRegime?: string;
   pairFriction?: number;
@@ -817,8 +818,9 @@ async function generatePhase10Signal(
     pairDirectionalBias: mceContext.directionalBias?.category ?? 'NEUTRAL',
     globalDirectionalBias: getLastGlobalDBSCategory(), // HF6: Read cached global DBS from market-indicators
     filterTier,  // HF9: IMF filter tier from FX5 scanner
+    sourcePool: sourcePool ?? 'quant',  // Batch 19F Phase 2: Persist sourcePool on open trade
   };
-  
+
   openVirtualTrades.set(tradeId, openTrade);
   // Directive 11.8C: Enhanced entry logging with execution context
   console.log(`[11.8C][Entry] ${symbol} opened @ ${entryPrice.toFixed(6)} | stop=${stopLoss.toFixed(6)} target=${takeProfit.toFixed(6)} strategy=${strategy} context=${isMultiStrategy ? 'VTS_MULTI' : 'VTS'}`);
@@ -889,23 +891,27 @@ async function generatePhase10Signal(
  * Directive 11.4C.1: Get pairs directly from FX5 Scanner (not telemetry)
  * VTS is the sole source of telemetry writes - it gets raw pairs from FX5 and generates signal data
  */
-async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal' | 'rotational'; filterTier?: 'standard' | 'relaxed' }>> {
+async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal' | 'rotational'; filterTier?: 'standard' | 'relaxed'; sourcePool?: 'quant' | 'pattern' }>> {
   try {
     // Directive 11.4C.1: Get pairs directly from FX5 scanner's current batch
+    // Batch 19F Phase 2: FX5 scan batch now includes sourcePool tags from dual-path filters.
+    // This is the CORRECT source for VTS — NOT activeFilterPool (which is EMPTY during passive learning).
     const scanBatch = fx5Scanner.getCurrentScanBatch('paper');
-    
+
     if (scanBatch.length >= 10) {
       // Directive 11.6F: Filter out benchmarks before processing - they stay in pool but don't trade
       const tradablePairs = scanBatch.filter(p => !p.isBenchmark);
       const benchmarkCount = scanBatch.length - tradablePairs.length;
-      console.log(`[11.4C.1][VTS] Using FX5 scan batch: ${scanBatch.length} pairs (${benchmarkCount} benchmarks excluded, ${tradablePairs.length} tradable)`);
-      
+      const patternCount = tradablePairs.filter(p => p.sourcePool === 'pattern').length;
+      const quantCount = tradablePairs.filter(p => p.sourcePool === 'quant' || !p.sourcePool).length;
+      console.log(`[11.4C.1][VTS] Using FX5 scan batch: ${scanBatch.length} pairs (${benchmarkCount} benchmarks excluded, ${tradablePairs.length} tradable: ${quantCount} quant + ${patternCount} pattern)`);
+
       // Directive 11.4H.1 Task 1: Normalize symbols at ingress with fallback and tier logging
-      const validPairs: Array<{ symbol: string; pool: 'ideal' | 'rotational'; filterTier?: 'standard' | 'relaxed' }> = [];
+      const validPairs: Array<{ symbol: string; pool: 'ideal' | 'rotational'; filterTier?: 'standard' | 'relaxed'; sourcePool?: 'quant' | 'pattern' }> = [];
       for (const p of tradablePairs) {
         const rawSymbol = p.symbol;
         const canonicalSymbol = normalizeToInternalSymbol(rawSymbol);
-        
+
         // Directive 11.4H.1: Fallback for unmappable symbols
         if (!canonicalSymbol || canonicalSymbol === rawSymbol.toUpperCase()) {
           const mappingDetails = getSymbolMappingDetails(rawSymbol);
@@ -914,25 +920,26 @@ async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal
             continue; // Skip processing this symbol
           }
         }
-        
+
         // Directive 11.4H.1: Audit Tier-3 mappings
         const mappingDetails = getSymbolMappingDetails(rawSymbol);
         if (mappingDetails?.tier === 3) {
           console.warn(`[11.4H.1][Mapping Tier 3] ${rawSymbol} → ${canonicalSymbol}`);
         }
-        
-        validPairs.push({ symbol: canonicalSymbol, pool: p.pool, filterTier: p.filterTier });
+
+        // Batch 19F Phase 2: Propagate sourcePool from FX5 scan batch
+        validPairs.push({ symbol: canonicalSymbol, pool: p.pool, filterTier: p.filterTier, sourcePool: p.sourcePool ?? 'quant' });
       }
       return validPairs;
     }
-    
+
     // Cold start fallback: If FX5 hasn't scanned yet, check active filter pool
     console.log('[11.4C.1][VTS] Scan batch too small, checking Active Filter Pool...');
     const fx5Survivors = activeFilterPool.getActivePool('paper');
-    
+
     if (fx5Survivors && fx5Survivors.length >= 10) {
       console.log(`[11.4C.1][VTS] Using Active Filter Pool: ${fx5Survivors.length} pairs`);
-      const validPairs: Array<{ symbol: string; pool: 'ideal' | 'rotational' }> = [];
+      const validPairs: Array<{ symbol: string; pool: 'ideal' | 'rotational'; sourcePool: 'quant' }> = [];
       for (const p of fx5Survivors) {
         if ((p.price ?? 0) < vtsConfig.minPrice || (p.volume24h ?? 0) < vtsConfig.minVolume24h) {
           continue;
@@ -942,12 +949,12 @@ async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal
           console.warn(`[11.4H.1][Symbol Warning] Unmappable symbol in fallback: ${p.symbol}`);
           continue;
         }
-        validPairs.push({ symbol: canonicalSymbol, pool: 'rotational' as const });
+        validPairs.push({ symbol: canonicalSymbol, pool: 'rotational' as const, sourcePool: 'quant' as const });
         if (validPairs.length >= vtsConfig.pairsPerCycle) break;
       }
       return validPairs;
     }
-    
+
     console.log('[11.4C.1][VTS] No pairs available (cold start) - waiting for FX5 scan');
     return [];
   } catch (error) {
@@ -1197,6 +1204,12 @@ export function getOpenVirtualTradesStatus(): {
     openedAt: string;
     strategy: string;
     regime: string;
+    signalType: string;         // Batch 19F Phase 2: Expose signal type for ML page
+    sourcePool: string;         // Batch 19F Phase 2: Expose source pool for ML page
+    patternType: string | null; // Batch 19F Phase 2: Expose pattern type for ML page
+    pool: string;               // Batch 19F Phase 2: Expose pool tier for ML page
+    finalScore: number;         // Batch 19F Phase 2: Expose finalScore for ML page
+    hybridScore: number;        // Batch 19F Phase 2: Expose hybridScore for ML page
   }>;
 } {
   const now = Date.now();
@@ -1208,7 +1221,13 @@ export function getOpenVirtualTradesStatus(): {
     holdDurationMs: now - t.openedAt,
     openedAt: new Date(t.openedAt).toISOString(),
     strategy: t.strategy,
-    regime: t.regime
+    regime: t.regime,
+    signalType: t.signalType ?? 'QUANT',
+    sourcePool: t.sourcePool ?? 'quant',
+    patternType: t.patternType ?? null,
+    pool: t.pool ?? 'rotational',
+    finalScore: t.finalScore ?? 0,
+    hybridScore: t.hybridScore ?? 0,
   }));
   
   const sortedByTime = trades.slice().sort((a, b) => new Date(a.openedAt).getTime() - new Date(b.openedAt).getTime());
@@ -1244,24 +1263,20 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
     };
   }
   
-  const quantPairs = await getIdealPoolPairs();
+  // Batch 19F Phase 2: getIdealPoolPairs() now returns ALL pairs from FX5 scan batch
+  // with sourcePool tags (quant/pattern) already set. This is the SOLE pair source for VTS.
+  // The FX5 scan batch includes duplicated entries for pairs that pass BOTH filter paths
+  // (each entry tagged with the respective sourcePool), matching active trading path parity.
+  // CRITICAL FIX: Previous code called activeFilterPool.getPatternPool('paper') which returns
+  // EMPTY during passive learning — active filter pool only populates when trading is ACTIVE.
+  const allPairs = await getIdealPoolPairs();
 
-  // Batch 19E: Also fetch pattern pool pairs for dual-path VTS simulation
-  const patternPoolRaw = activeFilterPool.getPatternPool('paper');
-  const patternPairs: Array<{ symbol: string; pool: 'ideal' | 'rotational'; sourcePool: 'pattern'; filterTier?: 'standard' | 'relaxed' }> = [];
-  for (const p of patternPoolRaw) {
-    const canonicalSymbol = normalizeToInternalSymbol(p.symbol);
-    if (!canonicalSymbol) continue;
-    // Skip if already in quant pool (avoid duplicate processing)
-    if (quantPairs.some(qp => qp.symbol === canonicalSymbol)) continue;
-    patternPairs.push({ symbol: canonicalSymbol, pool: 'rotational' as const, sourcePool: 'pattern' as const, filterTier: 'relaxed' });
-  }
+  // Split pairs by sourcePool for logging and strategy routing
+  const quantPairs = allPairs.filter(p => p.sourcePool === 'quant' || !p.sourcePool);
+  const patternPairs = allPairs.filter(p => p.sourcePool === 'pattern');
 
-  // Combine: quant pairs tagged with sourcePool 'quant', pattern pairs tagged 'pattern'
-  const pairs = [
-    ...quantPairs.map(p => ({ ...p, sourcePool: 'quant' as const })),
-    ...patternPairs
-  ];
+  // Use all pairs (quant + pattern) for the simulation loop
+  const pairs = allPairs;
 
   if (pairs.length === 0) {
     console.warn(`[11.0E.1][VTS] No pairs available for simulation cycle`);
@@ -1353,11 +1368,23 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         continue;
       }
       
-      console.log(`[11.8C][VTS] ${pair.symbol} | Regime=${pairRegime} | Simulating ${regimeStrategies.length} strategies: ${regimeStrategies.map(s => s.strategyKey).join(', ')}`);
-      
+      // Batch 19F Phase 2: Route strategies based on sourcePool
+      // - Quant pairs: ALL regime strategies (existing behavior)
+      // - Pattern pairs: PATTERN + HYBRID strategies ONLY (filtered by PATTERN_POOL_STRATEGIES)
+      const patternPoolStrategiesSet = new Set(PATTERN_POOL_STRATEGIES);
+      const effectiveStrategies = pair.sourcePool === 'pattern'
+        ? regimeStrategies.filter(s => patternPoolStrategiesSet.has(s.strategyKey))
+        : regimeStrategies;
+
+      if (effectiveStrategies.length === 0) {
+        continue;
+      }
+
+      console.log(`[11.8C][VTS] ${pair.symbol} | Regime=${pairRegime} | sourcePool=${pair.sourcePool ?? 'quant'} | Simulating ${effectiveStrategies.length} strategies: ${effectiveStrategies.map(s => s.strategyKey).join(', ')}`);
+
       vtsService.updateMarketPrice(pair.symbol, priceData.price);
-      
-      for (const stratDef of regimeStrategies) {
+
+      for (const stratDef of effectiveStrategies) {
         const result = await generatePhase10Signal(pair.symbol, priceData, ohlcData, pair.pool, stratDef, pair.filterTier, pair.sourcePool);
         if (!result) continue;
         
@@ -1396,74 +1423,11 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
     }
   }
 
-  // Batch 19C: Pattern pool evaluation — PATTERN + HYBRID strategies only
-  const patternPoolPairs = activeFilterPool.getPatternPool('paper');
-  let patternPoolSimulated = 0;
-  const patternPoolStrategiesSet = new Set(PATTERN_POOL_STRATEGIES);
-
-  for (const patternPair of patternPoolPairs) {
-    try {
-      const symbol = normalizeToInternalSymbol(patternPair.symbol);
-      // Skip if already processed in quant pool
-      if (pairs.some(p => p.symbol === symbol)) continue;
-
-      const priceData = priceDataMap.get(symbol);
-      if (!priceData || priceData.price <= 0) continue;
-
-      const ohlcData = await fetchOHLCForPair(symbol);
-      if (ohlcData.length < 10) continue;
-
-      const mce = getMarketContextEngine();
-      const mceContext = mce.computeContext(symbol, ohlcData, priceData.price, priceData.volume24h ?? 0);
-      const pairRegime = mceContext.regime.regime as MarketRegimeType;
-      const regimeStrategies = getStrategiesForRegime(pairRegime);
-
-      // Filter to PATTERN + HYBRID strategies only
-      const patternStrategies = regimeStrategies.filter(s => patternPoolStrategiesSet.has(s.strategyKey));
-      if (patternStrategies.length === 0) continue;
-
-      vtsService.updateMarketPrice(symbol, priceData.price);
-
-      for (const stratDef of patternStrategies) {
-        const result = await generatePhase10Signal(symbol, priceData, ohlcData, 'rotational', stratDef);
-        if (!result) continue;
-
-        const { signal, tradeRecord } = result;
-
-        const telemetry = getTelemetryAggregator();
-        telemetry.recordPairTelemetry(symbol, {
-          finalScore: tradeRecord.finalScore,
-          hybridScore: tradeRecord.hybridScore,
-          regimeWeight: tradeRecord.regimeWeight,
-          regimeScore: tradeRecord.regimeScore,
-          predictiveConfidence: tradeRecord.predictiveConfidence,
-          success: (tradeRecord.profit ?? 0) > 0,
-          pool: 'rotational',
-          source: 'simulation',
-          pairRegime: tradeRecord.regime,
-          signalType: tradeRecord.signalType,
-          strategy: tradeRecord.strategy,
-          pattern: tradeRecord.signalType !== 'QUANT' ? (tradeRecord.patternType ?? undefined) : undefined,
-          caller: 'vts',
-          volZ: tradeRecord.volZ,
-          trendZ: tradeRecord.trendZ,
-        });
-
-        phase10SessionTrades.push(tradeRecord);
-        regimeDistribution[tradeRecord.regime]++;
-        signalTypeDistribution[tradeRecord.signalType] = (signalTypeDistribution[tradeRecord.signalType] || 0) + 1;
-        strategiesExecuted.add(tradeRecord.strategy);
-        totalFinalScore += tradeRecord.finalScore;
-        simulatedCount++;
-        patternPoolSimulated++;
-      }
-    } catch (error) {
-      console.warn(`[19C][VTS] Pattern pool eval failed for ${patternPair.symbol}:`, error);
-    }
-  }
-  if (patternPoolSimulated > 0) {
-    console.log(`[19C][VTS] Pattern pool: ${patternPoolSimulated} trades from ${patternPoolPairs.length} pairs`);
-  }
+  // Batch 19F Phase 2: Removed legacy Batch 19C pattern pool section.
+  // Pattern pairs are now routed through PATTERN+HYBRID strategies in the main loop above,
+  // sourced directly from FX5 scan batch (which works during passive learning).
+  // The old code called activeFilterPool.getPatternPool('paper') which returns EMPTY
+  // during passive learning because activeFilterPool only populates when trading is ACTIVE.
 
   const avgFinalScore = simulatedCount > 0 ? totalFinalScore / simulatedCount : 0;
   const cycleDurationMs = Date.now() - cycleStart;

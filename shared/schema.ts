@@ -102,7 +102,7 @@ export const agentStateEnum = pgEnum("agent_state", ["active", "idle", "suspende
 
 // Phase 10.2 enums - Pattern Recognition
 export const signalTypeEnum = pgEnum("signal_type", ["QUANT", "PATTERN", "HYBRID"]);
-export const patternTypeEnum = pgEnum("pattern_type", ["PINBAR", "ENGULFING", "INSIDE_BAR", "MORNING_STAR", "THREE_SOLDIERS"]);
+export const patternTypeEnum = pgEnum("pattern_type", ["PINBAR", "ENGULFING", "INSIDE_BAR", "MORNING_STAR", "THREE_SOLDIERS", "ABCD"]);
 
 // Phase 11.0 enums
 export const safetySeverityEnum = pgEnum("safety_severity", ["low", "medium", "high", "critical"]);

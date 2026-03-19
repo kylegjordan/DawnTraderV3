@@ -1432,14 +1432,55 @@ router.get('/passive-decisions', requireAuth, async (req: Request, res: Response
 router.get('/imf-status', requireAuth, async (_req: Request, res: Response) => {
   try {
     const { SYSTEM_GUARDS, VTS_IMF_THRESHOLDS } = await import('../config/system-guards.js');
+    const { PATTERN_POOL_THRESHOLDS, getPatternPoolThresholds } = await import('../config/pattern-filter-profile.js');
+    const { PATTERN_GLOBAL_FILTERS, VTS_PATTERN_GLOBAL_FILTERS } = await import('../config/pattern-global-filters.js');
     const { fx5Scanner } = await import('../services/fx5-scanner.js');
 
     const scanBatch = fx5Scanner.getCurrentScanBatch('paper');
     const standardCount = scanBatch.filter(p => p.filterTier === 'standard' || !p.filterTier).length;
     const relaxedCount = scanBatch.filter(p => p.filterTier === 'relaxed').length;
+    const quantCount = scanBatch.filter(p => p.sourcePool === 'quant' || !p.sourcePool).length;
+    const patternCount = scanBatch.filter(p => p.sourcePool === 'pattern').length;
     const totalCount = scanBatch.length;
 
+    // Get regime-aware pattern thresholds (may differ from static defaults)
+    const currentPatternThresholds = getPatternPoolThresholds(null); // Static defaults
+
     res.json({
+      // Batch 19F Phase 2: 4-column filter status for Guardrails & Filters page
+      activeQuant: {
+        LQ_MIN: SYSTEM_GUARDS.MIN_LIQUIDITY_SCORE,
+        VN_MAX: SYSTEM_GUARDS.MAX_VOL_NOISE,
+        CORR_MAX: SYSTEM_GUARDS.CORRELATION_THRESHOLD,
+        MIN_VOLUME_USD: 500_000, // From screener_filters defaults
+        MAX_SPREAD: 0.5,
+        MIN_HISTORY_DAYS: 30,
+      },
+      activePattern: {
+        LQ_MIN: currentPatternThresholds.LQ_MIN,
+        VN_MAX: currentPatternThresholds.VN_MAX,
+        CORR_MAX: SYSTEM_GUARDS.CORRELATION_THRESHOLD, // Pattern uses same correlation guard
+        MIN_VOLUME_USD: PATTERN_GLOBAL_FILTERS.MIN_VOLUME_USD,
+        MAX_SPREAD: PATTERN_GLOBAL_FILTERS.MAX_BID_ASK_SPREAD,
+        MIN_HISTORY_DAYS: PATTERN_GLOBAL_FILTERS.MIN_HISTORY_DAYS,
+      },
+      vtsQuant: {
+        LQ_MIN: VTS_IMF_THRESHOLDS.LQ_MIN,
+        VN_MAX: VTS_IMF_THRESHOLDS.VN_MAX,
+        CORR_MAX: VTS_IMF_THRESHOLDS.CORR_MAX,
+        MIN_VOLUME_USD: 500_000,
+        MAX_SPREAD: 0.5,
+        MIN_HISTORY_DAYS: 30,
+      },
+      vtsPattern: {
+        LQ_MIN: currentPatternThresholds.LQ_MIN,
+        VN_MAX: currentPatternThresholds.VN_MAX,
+        CORR_MAX: VTS_IMF_THRESHOLDS.CORR_MAX, // VTS pattern uses VTS correlation
+        MIN_VOLUME_USD: VTS_PATTERN_GLOBAL_FILTERS.MIN_VOLUME_USD,
+        MAX_SPREAD: VTS_PATTERN_GLOBAL_FILTERS.MAX_BID_ASK_SPREAD,
+        MIN_HISTORY_DAYS: VTS_PATTERN_GLOBAL_FILTERS.MIN_HISTORY_DAYS,
+      },
+      // Legacy fields preserved for backward compatibility
       activeTrading: {
         LQ_MIN: SYSTEM_GUARDS.MIN_LIQUIDITY_SCORE,
         VN_MAX: SYSTEM_GUARDS.MAX_VOL_NOISE,
@@ -1453,9 +1494,11 @@ router.get('/imf-status', requireAuth, async (_req: Request, res: Response) => {
       pairCounts: {
         standard: standardCount,
         relaxed: relaxedCount,
+        quant: quantCount,
+        pattern: patternCount,
         total: totalCount,
       },
-      schema: 'vts-imf-status/v1.0'
+      schema: 'vts-imf-status/v2.0'
     });
   } catch (error) {
     console.error('[HF9][API] VTS IMF status failed:', error);

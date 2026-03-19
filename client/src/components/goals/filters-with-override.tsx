@@ -30,14 +30,76 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 /**
- * HF9 Item D: VTS IMF Filters Panel
- * Shows relaxed IMF thresholds used for VTS ML training data collection
+ * Batch 19F Phase 2: 4-Column Dual-Path Filter Display
+ * Shows all filter thresholds across 4 paths: Active Quant, Active Pattern, VTS Quant, VTS Pattern
+ * Replaces the old 2-section VTS IMF panel with full transparency into all filter paths.
  */
+interface FilterColumnData {
+  LQ_MIN: number;
+  VN_MAX: number;
+  CORR_MAX: number;
+  MIN_VOLUME_USD: number;
+  MAX_SPREAD: number;
+  MIN_HISTORY_DAYS: number;
+}
+
+function FilterColumn({ title, data, color, tagLabel }: { title: string; data: FilterColumnData; color: string; tagLabel: string }) {
+  const colorMap: Record<string, { bg: string; text: string; tag: string; border: string }> = {
+    blue: { bg: 'bg-blue-50 dark:bg-blue-900/10', text: 'text-blue-600 dark:text-blue-400', tag: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300', border: 'border-blue-200 dark:border-blue-800' },
+    purple: { bg: 'bg-purple-50 dark:bg-purple-900/10', text: 'text-purple-600 dark:text-purple-400', tag: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300', border: 'border-purple-200 dark:border-purple-800' },
+    cyan: { bg: 'bg-cyan-50 dark:bg-cyan-900/10', text: 'text-cyan-600 dark:text-cyan-400', tag: 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300', border: 'border-cyan-200 dark:border-cyan-800' },
+    teal: { bg: 'bg-teal-50 dark:bg-teal-900/10', text: 'text-teal-600 dark:text-teal-400', tag: 'bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300', border: 'border-teal-200 dark:border-teal-800' },
+  };
+  const c = colorMap[color] || colorMap.blue;
+
+  const formatVol = (v: number) => v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(1)}M` : `$${(v / 1_000).toFixed(0)}K`;
+
+  return (
+    <div className={`p-3 border rounded-lg ${c.bg} ${c.border}`}>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-semibold text-muted-foreground">{title}</span>
+        <span className={`text-xs px-1.5 py-0.5 rounded ${c.tag}`}>{tagLabel}</span>
+      </div>
+      <div className="space-y-1.5">
+        <div className="flex justify-between items-center">
+          <span className="text-xs text-muted-foreground">Volume</span>
+          <span className={`text-sm font-mono font-bold ${c.text}`}>{formatVol(data.MIN_VOLUME_USD)}</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-xs text-muted-foreground">Spread</span>
+          <span className={`text-sm font-mono font-bold ${c.text}`}>&le; {data.MAX_SPREAD}%</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-xs text-muted-foreground">History</span>
+          <span className={`text-sm font-mono font-bold ${c.text}`}>&ge; {data.MIN_HISTORY_DAYS}d</span>
+        </div>
+        <div className="border-t border-dashed my-1 opacity-30" />
+        <div className="flex justify-between items-center">
+          <span className="text-xs text-muted-foreground">LQ Min</span>
+          <span className={`text-sm font-mono font-bold ${c.text}`}>&ge; {data.LQ_MIN}</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-xs text-muted-foreground">VN Max</span>
+          <span className={`text-sm font-mono font-bold ${c.text}`}>&le; {data.VN_MAX}</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-xs text-muted-foreground">Corr Max</span>
+          <span className={`text-sm font-mono font-bold ${c.text}`}>&rho; &le; {data.CORR_MAX}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function VtsImfPanel() {
   const { data: imfStatus } = useQuery<{
+    activeQuant?: FilterColumnData;
+    activePattern?: FilterColumnData;
+    vtsQuant?: FilterColumnData;
+    vtsPattern?: FilterColumnData;
     activeTrading: { LQ_MIN: number; VN_MAX: number; CORR_MAX: number };
     vtsLearning: { LQ_MIN: number; VN_MAX: number; CORR_MAX: number };
-    pairCounts: { standard: number; relaxed: number; total: number };
+    pairCounts: { standard: number; relaxed: number; quant?: number; pattern?: number; total: number };
   }>({
     queryKey: ['/api/vts/imf-status'],
     refetchInterval: 30000,
@@ -45,41 +107,54 @@ function VtsImfPanel() {
 
   if (!imfStatus) return null;
 
+  // Use new 4-column data if available, fall back to legacy 2-section format
+  const has4Column = imfStatus.activeQuant && imfStatus.activePattern && imfStatus.vtsQuant && imfStatus.vtsPattern;
+
   return (
     <div className="px-6 py-4 border-b bg-gradient-to-r from-cyan-50 to-teal-50 dark:from-cyan-900/10 dark:to-teal-900/10">
       <div className="flex items-center gap-2 mb-3">
         <div className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
-        <span className="font-semibold text-sm text-cyan-700 dark:text-cyan-300">VTS Learning Filters (Relaxed)</span>
+        <span className="font-semibold text-sm text-cyan-700 dark:text-cyan-300">Dual-Path Filter Thresholds</span>
         <span className="text-xs text-muted-foreground ml-auto">
-          {imfStatus.pairCounts.standard} standard + {imfStatus.pairCounts.relaxed} relaxed = {imfStatus.pairCounts.total} pairs
+          {imfStatus.pairCounts.quant ?? imfStatus.pairCounts.standard} quant + {imfStatus.pairCounts.pattern ?? 0} pattern = {imfStatus.pairCounts.total} pairs
         </span>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="p-3 border rounded-lg bg-white dark:bg-gray-900/50">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-medium text-muted-foreground">Liquidity Guard</span>
-            <span className="text-xs bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 px-1.5 py-0.5 rounded">Relaxed</span>
-          </div>
-          <div className="text-xl font-bold text-cyan-600 dark:text-cyan-400">LQ &ge; {imfStatus.vtsLearning.LQ_MIN}</div>
-          <p className="text-xs text-muted-foreground mt-0.5">vs Active: LQ &ge; {imfStatus.activeTrading.LQ_MIN}</p>
+      {has4Column ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <FilterColumn title="Active Quant" data={imfStatus.activeQuant!} color="blue" tagLabel="Strict" />
+          <FilterColumn title="Active Pattern" data={imfStatus.activePattern!} color="purple" tagLabel="Relaxed" />
+          <FilterColumn title="VTS Quant" data={imfStatus.vtsQuant!} color="cyan" tagLabel="Learning" />
+          <FilterColumn title="VTS Pattern" data={imfStatus.vtsPattern!} color="teal" tagLabel="Exploratory" />
         </div>
-        <div className="p-3 border rounded-lg bg-white dark:bg-gray-900/50">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-medium text-muted-foreground">Noise Guard</span>
-            <span className="text-xs bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 px-1.5 py-0.5 rounded">Relaxed</span>
+      ) : (
+        /* Legacy 2-section fallback */
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="p-3 border rounded-lg bg-white dark:bg-gray-900/50">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-medium text-muted-foreground">Liquidity Guard</span>
+              <span className="text-xs bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 px-1.5 py-0.5 rounded">Relaxed</span>
+            </div>
+            <div className="text-xl font-bold text-cyan-600 dark:text-cyan-400">LQ &ge; {imfStatus.vtsLearning.LQ_MIN}</div>
+            <p className="text-xs text-muted-foreground mt-0.5">vs Active: LQ &ge; {imfStatus.activeTrading.LQ_MIN}</p>
           </div>
-          <div className="text-xl font-bold text-cyan-600 dark:text-cyan-400">VN &le; {imfStatus.vtsLearning.VN_MAX}</div>
-          <p className="text-xs text-muted-foreground mt-0.5">vs Active: VN &le; {imfStatus.activeTrading.VN_MAX}</p>
-        </div>
-        <div className="p-3 border rounded-lg bg-white dark:bg-gray-900/50">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-medium text-muted-foreground">Correlation Guard</span>
-            <span className="text-xs bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 px-1.5 py-0.5 rounded">Relaxed</span>
+          <div className="p-3 border rounded-lg bg-white dark:bg-gray-900/50">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-medium text-muted-foreground">Noise Guard</span>
+              <span className="text-xs bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 px-1.5 py-0.5 rounded">Relaxed</span>
+            </div>
+            <div className="text-xl font-bold text-cyan-600 dark:text-cyan-400">VN &le; {imfStatus.vtsLearning.VN_MAX}</div>
+            <p className="text-xs text-muted-foreground mt-0.5">vs Active: VN &le; {imfStatus.activeTrading.VN_MAX}</p>
           </div>
-          <div className="text-xl font-bold text-cyan-600 dark:text-cyan-400">&rho; &le; {imfStatus.vtsLearning.CORR_MAX}</div>
-          <p className="text-xs text-muted-foreground mt-0.5">vs Active: &rho; &le; {imfStatus.activeTrading.CORR_MAX}</p>
+          <div className="p-3 border rounded-lg bg-white dark:bg-gray-900/50">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-medium text-muted-foreground">Correlation Guard</span>
+              <span className="text-xs bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 px-1.5 py-0.5 rounded">Relaxed</span>
+            </div>
+            <div className="text-xl font-bold text-cyan-600 dark:text-cyan-400">&rho; &le; {imfStatus.vtsLearning.CORR_MAX}</div>
+            <p className="text-xs text-muted-foreground mt-0.5">vs Active: &rho; &le; {imfStatus.activeTrading.CORR_MAX}</p>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
