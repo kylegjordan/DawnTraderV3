@@ -1,0 +1,21 @@
+I need a diagnostic report on the pattern filter pipeline. Please add temporary logging to server/services/market-scanner.ts inside the pattern global filter loop (the section starting around line 744 with the comment "Pattern global filters"). 
+
+Before any filtering, add this log at the start of the loop:
+console.log(`[DIAG_PATTERN] Evaluating pair ${pair.symbol}: price=${currentPrice}, volume24hCoins=${parseFloat(ticker.v[1])}, volume24hUSD=${volume24h}, spread=${bidAskSpread}%`);
+
+After each filter check that causes a "continue", add a log identifying which filter rejected the pair:
+- After stablecoin filter: console.log(`[DIAG_PATTERN] REJECTED ${pair.symbol}: stablecoin`);
+- After min price filter: console.log(`[DIAG_PATTERN] REJECTED ${pair.symbol}: price ${currentPrice} < ${minPrice}`);
+- After min volume filter: console.log(`[DIAG_PATTERN] REJECTED ${pair.symbol}: volume ${volume24h} < ${patternMinVolume}`);
+- After spread filter: console.log(`[DIAG_PATTERN] REJECTED ${pair.symbol}: spread ${bidAskSpread}% > ${patternMaxSpread}%`);
+- After history filter: console.log(`[DIAG_PATTERN] REJECTED ${pair.symbol}: history failed`);
+
+At the end of the pattern filter section, after the patternResults array is complete, add:
+console.log(`[DIAG_PATTERN] SUMMARY: ${patternResults.length} survived out of ${batch.length} total. Rejections: stablecoin=${stableRejects}, price=${priceRejects}, volume=${volumeRejects}, spread=${spreadRejects}, history=${historyRejects}`);
+
+You will need to add counter variables (stableRejects, priceRejects, volumeRejects, spreadRejects, historyRejects) initialized to 0 at the start of the pattern filter section and incremented at each rejection point.
+
+Also log the actual threshold values being used:
+console.log(`[DIAG_PATTERN] THRESHOLDS: minVolume=${patternMinVolume}, maxSpread=${patternMaxSpread}%, minHistory=${patternMinHistoryDays}d, minPrice=${minPrice}`);
+
+After adding the logging, restart the server and wait for 2-3 scan cycles (about 90 seconds). Then show me the console output filtered for [DIAG_PATTERN]. Do NOT make any other changes.

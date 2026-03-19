@@ -741,6 +741,9 @@ export async function collectAdaptiveBatch(
     const patternMinHistoryDays = patternFilters.MIN_HISTORY_DAYS;
     const patternResults: NonNullable<BatchResult['patternSurvivors']> = [];
 
+    let stableRejects = 0, priceRejects = 0, volumeRejects = 0, spreadRejects = 0, historyRejects = 0;
+    console.log(`[DIAG_PATTERN] THRESHOLDS: minVolume=${patternMinVolume}, maxSpread=${patternMaxSpread}%, minHistory=${patternMinHistoryDays}d, minPrice=${minPrice}`);
+
     for (const pair of batch) {
       const ticker = pair.ticker as any;
       const pairInfo = pair.pairInfo;
@@ -755,18 +758,36 @@ export async function collectAdaptiveBatch(
       const bidPrice = parseFloat(ticker.b[0]);
       const bidAskSpread = bidPrice > 0 ? ((askPrice - bidPrice) / bidPrice) * 100 : 0;
 
+      console.log(`[DIAG_PATTERN] Evaluating pair ${pair.symbol}: price=${currentPrice}, volume24hCoins=${parseFloat(ticker.v[1])}, volume24hUSD=${volume24h}, spread=${bidAskSpread}%`);
+
       // Pattern global filters (relaxed thresholds)
       // Stablecoin filter: same as quant (always exclude)
-      if (excludeStablecoins && isStablePairRegex.test(pair.symbol)) continue;
+      if (excludeStablecoins && isStablePairRegex.test(pair.symbol)) {
+        console.log(`[DIAG_PATTERN] REJECTED ${pair.symbol}: stablecoin`);
+        stableRejects++;
+        continue;
+      }
 
       // Min price: same as quant
-      if (currentPrice < minPrice) continue;
+      if (currentPrice < minPrice) {
+        console.log(`[DIAG_PATTERN] REJECTED ${pair.symbol}: price ${currentPrice} < ${minPrice}`);
+        priceRejects++;
+        continue;
+      }
 
       // Min volume: pattern threshold (lower than quant)
-      if (volume24h < patternMinVolume) continue;
+      if (volume24h < patternMinVolume) {
+        console.log(`[DIAG_PATTERN] REJECTED ${pair.symbol}: volume ${volume24h} < ${patternMinVolume}`);
+        volumeRejects++;
+        continue;
+      }
 
       // Bid-ask spread: pattern threshold (wider than quant)
-      if (bidAskSpread > patternMaxSpread) continue;
+      if (bidAskSpread > patternMaxSpread) {
+        console.log(`[DIAG_PATTERN] REJECTED ${pair.symbol}: spread ${bidAskSpread}% > ${patternMaxSpread}%`);
+        spreadRejects++;
+        continue;
+      }
 
       // History: pattern threshold (shorter than quant)
       if (patternMinHistoryDays > 0) {
@@ -775,7 +796,11 @@ export async function collectAdaptiveBatch(
           mode,
           krakenService,
         });
-        if (!historyResult.passed) continue;
+        if (!historyResult.passed) {
+          console.log(`[DIAG_PATTERN] REJECTED ${pair.symbol}: history failed`);
+          historyRejects++;
+          continue;
+        }
       }
 
       patternResults.push({
@@ -787,6 +812,8 @@ export async function collectAdaptiveBatch(
         bidAskSpread,
       });
     }
+
+    console.log(`[DIAG_PATTERN] SUMMARY: ${patternResults.length} survived out of ${batch.length} total. Rejections: stablecoin=${stableRejects}, price=${priceRejects}, volume=${volumeRejects}, spread=${spreadRejects}, history=${historyRejects}`);
 
     patternSurvivors = patternResults;
     console.log(`[19F][PATTERN_GLOBAL] Pattern global filter: ${patternResults.length}/${batch.length} pairs passed relaxed thresholds`);
