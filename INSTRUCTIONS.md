@@ -1,42 +1,31 @@
-# Batch 19F HF2 — Volume Unit Mismatch Fix (CRITICAL)
+# Batch 19F HF3 — Pattern-Only OHLC Pre-Fetch Fix
 
 ## Root Cause
-Kraken's `ticker.v[1]` returns 24h volume in BASE CURRENCY (coin units), not USD.
-All filter thresholds (minVolume=$500K quant, $250K pattern) are in USD.
-The code was comparing COINS directly against USD thresholds — incompatible units.
-
-Example: BTC with 100 coins traded = $8.5M USD volume.
-Old code: `100 < 500,000` → REJECTED (wrong — $8.5M should pass)
-Fixed code: `100 * 85,000 = 8,500,000 > 500,000` → ACCEPTED (correct)
-
-This bug affected BOTH the quant AND pattern global filter paths.
+Pattern-only pairs (passed pattern global filter, failed quant global filter) had no OHLC data pre-fetched. The OHLC pre-fetch at lines 459-484 only iterates over `survivors` (quant global survivors). Without OHLC data, pattern-only pairs get DI=0 (empty array default), which is below the pattern IMF threshold of DI ≥ 30. Result: ALL pattern-only pairs rejected at IMF stage.
 
 ## Fix
-Applied coin-to-USD conversion (Directive 8.8.4-C.13.D) in market-scanner.ts:
-- Quant path (line ~599): `volume24h = volume24hCoins * currentPrice`
-- Pattern path (line ~748): `volume24h = volume24hCoins * currentPrice`
-
-Both survivor outputs now carry USD-denominated volume for downstream consumers.
+Added OHLC pre-fetch for pattern global survivors that aren't already in the ohlcDataMap. Inserted after the existing quant OHLC pre-fetch, before `classifiedSurvivors` computation. Pattern-only pairs now get proper OHLC candle data for VN, DI, and LQ computation.
 
 ## Files Modified (1)
 
-### server/services/market-scanner.ts
-- Line ~599: Added `volume24hCoins` intermediate + USD conversion for quant global filter
-- Line ~748: Same conversion for pattern global filter second pass
-- Comments reference Directive 8.8.4-C.13.D and Batch 19F HF2
+### server/services/fx5-scanner.ts
+- Added pattern-only OHLC pre-fetch block after line 485
+- Filters to only fetch for pairs NOT already in ohlcDataMap (avoids duplicate fetches)
+- Same OHLC processing logic as quant path (close prices + avg volume USD)
+- Diagnostic logging: `[19F][PATTERN_OHLC]` for pre-fetch counts
 
 ## Commit Message
 ```
-Batch 19F HF2: Fix volume unit mismatch — convert coins to USD before filter comparison
+Batch 19F HF3: Pre-fetch OHLC data for pattern-only pairs — fixes DI=0 rejection
 ```
 
-## Impact
-- Quant filter: Pairs with high USD volume but low coin count (BTC, ETH) will now correctly pass
-- Pattern filter: Same fix ensures accurate volume filtering
-- All downstream volume values (active filter pool, FX5 scanner) now consistently receive USD
-- Filter counts on Guardrails page should change (may see more or fewer survivors depending on market conditions)
+## Verification
+After deployment, check:
+1. Server logs for `[19F][PATTERN_OHLC] Pre-fetched OHLC for X/Y pattern-only pairs`
+2. Guardrails Screeners tab: pattern count should be > 0
+3. Machine Learning page: should see PATTERN sourcePool trades within minutes
 
 ## Push Command
 ```
-cd /home/runner/DawnTraderV3 && git add -A && git commit -m "Batch 19F HF2: Fix volume unit mismatch — convert coins to USD before filter comparison" && git push origin dawntrader-v4
+cd /home/runner/DawnTraderV3 && git add -A && git commit -m "Batch 19F HF3: Pre-fetch OHLC data for pattern-only pairs — fixes DI=0 rejection" && git push origin dawntrader-v4
 ```

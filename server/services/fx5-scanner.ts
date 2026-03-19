@@ -484,6 +484,37 @@ export class Fx5ScannerService {
       }
       console.log(`[Batch18G][OHLC] Pre-fetched ${ohlcDataMap.size}/${survivors.length} survivors`);
 
+      // Batch 19F HF3: Also pre-fetch OHLC for pattern-only global survivors.
+      // Pattern global filter may admit pairs that FAILED quant global filters.
+      // Without OHLC data, pattern-only pairs get DI=0 and are rejected by pattern IMF (DI >= 30).
+      const patternGlobalSurvivorsForOhlc = (batchResult.patternSurvivors || []).filter(ps => {
+        const sym = normalizeToInternalSymbol(ps.symbol);
+        return !ohlcDataMap.has(sym); // Only fetch for pairs not already in ohlcDataMap
+      });
+      if (patternGlobalSurvivorsForOhlc.length > 0) {
+        let patternOhlcFetched = 0;
+        for (const ps of patternGlobalSurvivorsForOhlc) {
+          const sym = normalizeToInternalSymbol(ps.symbol);
+          try {
+            const { ohlc } = await ohlcCache.getOHLCData(sym, 60);
+            if (ohlc && ohlc.length >= 10) {
+              const closePrices = ohlc.map((c: any) => parseFloat(c.close));
+              let totalPriceVolume = 0;
+              for (const c of ohlc) {
+                const tp = (parseFloat(c.high) + parseFloat(c.low) + parseFloat(c.close)) / 3;
+                totalPriceVolume += tp * parseFloat(c.volume || '0');
+              }
+              const avgVolumeUSD = totalPriceVolume / ohlc.length;
+              ohlcDataMap.set(sym, { prices: closePrices, avgVolumeUSD });
+              patternOhlcFetched++;
+            }
+          } catch {
+            // OHLC fetch failed — pattern-only pair will use fallback defaults
+          }
+        }
+        console.log(`[19F][PATTERN_OHLC] Pre-fetched OHLC for ${patternOhlcFetched}/${patternGlobalSurvivorsForOhlc.length} pattern-only pairs`);
+      }
+
       const classifiedSurvivors = survivors
         .filter(s => {
           // Directive 11.4H.1 Task 2: Skip pairs with incomplete metrics
