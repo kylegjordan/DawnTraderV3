@@ -89,6 +89,8 @@ import { computeBiasConfidenceModifier } from '../core/metrics/directional-bias.
 // Phase 14.5: Pattern pool configuration
 import { PATTERN_POOL_STRATEGIES, PATTERN_POOL_GUARDRAILS, DEFAULT_ASSET_CLASS } from '../config/pattern-filter-profile.js';
 import { computeRankingScore, normalizeNetReturn, CONTEXT_BONUS } from '../config/ranking-weights.js';
+// Batch 19F: Hybrid confluence buffer for pattern+quant signal matching
+import { hybridConfluenceBuffer } from './hybrid-confluence-buffer.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -782,11 +784,51 @@ export class SignalOrchestrator {
               await this.onSignalCallback(signal);
               signalsForwarded++;
             }
+
+            // Batch 19F: Check hybrid confluence buffer for compatible pattern signal
+            const compatiblePatterns = hybridConfluenceBuffer.findCompatiblePatterns(signal.symbol);
+            if (compatiblePatterns.length > 0) {
+              for (const patternSig of compatiblePatterns) {
+                const hybridStrategy = findHybridMatch(signal.strategy, patternSig.patternType);
+                if (hybridStrategy) {
+                  const decayFactor = hybridConfluenceBuffer.getDecayFactor(patternSig);
+                  const hybridConfidence = (signal.confidence * 0.4 + patternSig.strength * 0.4 + 0.2) * decayFactor;
+
+                  // Create hybrid signal (goes through SQE independently)
+                  const hybridSignal = {
+                    ...signal,
+                    strategy: hybridStrategy,
+                    confidence: hybridConfidence,
+                    signalType: 'HYBRID',
+                    sourcePool: 'hybrid',
+                    metadata: {
+                      ...((signal as any).metadata || {}),
+                      hybridSource: {
+                        quantStrategy: signal.strategy,
+                        patternType: patternSig.patternType,
+                        patternStrategy: patternSig.strategy,
+                        decayFactor,
+                        confluenceAge: Date.now() - patternSig.timestamp,
+                      },
+                    },
+                  };
+
+                  // Forward hybrid signal through SQE
+                  if (this.onSignalCallback) {
+                    await this.onSignalCallback(hybridSignal as any);
+                  }
+                  console.log(`[19F][HYBRID] Confluence detected: ${signal.symbol} quant=${signal.strategy} + pattern=${patternSig.patternType} → hybrid=${hybridStrategy} (decay=${decayFactor.toFixed(2)})`);
+                }
+              }
+            }
           }
         } catch (error) {
           console.error(`[37.A][SIGNAL] Error evaluating ${symbol}:`, error);
         }
       }
+
+      // Batch 19F: Sweep expired entries from hybrid confluence buffer
+      hybridConfluenceBuffer.sweep();
 
       // Phase 14.5: Process pattern pool — PATTERN + HYBRID strategies only
       let patternSignalsGenerated = 0;
@@ -847,12 +889,19 @@ export class SignalOrchestrator {
               (sizedSignal as any).signalType = 'PATTERN';
               (sizedSignal as any).sourcePool = 'pattern';
               patternSignalsGenerated++;
+
+              // Batch 19F: Store pattern signal in hybrid confluence buffer
+              hybridConfluenceBuffer.addPatternSignal({
+                symbol: sizedSignal.symbol,
+                patternType: (patternSig as any).pattern || 'UNKNOWN',
+                strategy: sizedSignal.strategy,
+                strength: patternSig.strength,
+                direction: 'BUY',
+                timestamp: Date.now(),
+                metadata: (patternSig as any).metadata,
+              });
             }
           }
-
-          // Hybrid confluence check for pattern-pool pairs (PATTERN + QUANT from same pair)
-          // Only if both quant and pattern signals exist for this symbol
-          // (Hybrid strategies require both signal types to confluence)
         } catch (err) {
           console.warn(`[14.5][ORCHESTRATOR] Pattern pool eval failed for ${symbol}:`, err);
         }
@@ -1453,4 +1502,26 @@ export class SignalOrchestrator {
 
     return { ok: true };
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Batch 19F: Hybrid strategy compatibility registry
+// Defines which quant strategy + pattern type combinations produce hybrid signals
+// ══════════════════════════════════════════════════════════════════════════════
+
+const HYBRID_COMPATIBILITY: Record<string, { patterns: string[], quantStrategies: string[] }> = {
+  pivot_shift: { patterns: ['MORNING_STAR'], quantStrategies: ['vwap_pullback', 'sma_trend_ride', 'dhma'] },
+  reverse_impulse: { patterns: ['PINBAR'], quantStrategies: ['mean_reversion', 'range_trade'] },
+  defensive_hedge: { patterns: ['ENGULFING'], quantStrategies: ['mean_reversion', 'breakout'] },
+  adaptive_flow: { patterns: ['THREE_SOLDIERS'], quantStrategies: ['range_trade', 'abcd_long'] },
+  volatility_edge: { patterns: ['ABCD'], quantStrategies: ['breakout', 'vwap_bounce', 'dhma'] },
+};
+
+function findHybridMatch(quantStrategy: string, patternType: string): string | null {
+  for (const [hybridName, requirements] of Object.entries(HYBRID_COMPATIBILITY)) {
+    if (requirements.patterns.includes(patternType) && requirements.quantStrategies.includes(quantStrategy)) {
+      return hybridName;
+    }
+  }
+  return null;
 }

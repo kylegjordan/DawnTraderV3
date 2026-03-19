@@ -1521,7 +1521,7 @@ class ReadyToBuyService {
   async checkForPromotion(mode: TradingMode): Promise<RtbSignal | null> {
     // Get the top signal (already filtered by SQE revalidation)
     const topSignal = await this.getTopSignal(mode);
-    
+
     if (!topSignal) {
       return null;
     }
@@ -1531,6 +1531,19 @@ class ReadyToBuyService {
     if (this.isSignalRefreshing(topSignal.signalId)) {
       console.log(`[A3.R9.3][PROMOTION] Signal ${topSignal.symbol}/${topSignal.strategy} is refreshing - skipping`);
       return null;
+    }
+
+    // Batch 19F: Pair-level promotion guard (prevent overexposure)
+    // Skip promotion if an active trade already exists for this pair (regardless of strategy)
+    try {
+      const activeTrades = await storage.getActiveTrades(mode as 'paper' | 'live');
+      const existingTrade = activeTrades.find(t => t.symbol === topSignal.symbol);
+      if (existingTrade) {
+        console.log(`[19F][RTB] Skipping promotion for ${topSignal.symbol}/${topSignal.strategy} — active trade already exists for this pair`);
+        return null;
+      }
+    } catch (err) {
+      console.warn(`[19F][RTB] Pair-level guard check failed, proceeding with promotion:`, err);
     }
 
     return topSignal;
@@ -1543,15 +1556,30 @@ class ReadyToBuyService {
    */
   async getRankedSignals(mode: TradingMode, limit: number = 15): Promise<RtbSignal[]> {
     const signals = await this.getQueuedSignals(mode);
-    
+
     if (signals.length === 0) {
       return [];
     }
 
     // R9.3-C: No expiry filter - all queued signals are valid (SQE governs lifecycle)
     // R9.3-A: Filter out signals currently being refreshed
-    const validSignals = signals.filter(s => !this.isSignalRefreshing(s.signalId));
-    
+    let validSignals = signals.filter(s => !this.isSignalRefreshing(s.signalId));
+
+    // Batch 19F: Pair-level promotion guard (prevent overexposure)
+    // Filter out signals for pairs that already have active trades
+    try {
+      const activeTrades = await storage.getActiveTrades(mode as 'paper' | 'live');
+      const activeSymbols = new Set(activeTrades.map(t => t.symbol));
+      const beforeCount = validSignals.length;
+      validSignals = validSignals.filter(s => !activeSymbols.has(s.symbol));
+      const pairGuardFiltered = beforeCount - validSignals.length;
+      if (pairGuardFiltered > 0) {
+        console.log(`[19F][RTB] Pair-level guard filtered ${pairGuardFiltered} signals (active trades exist for those pairs)`);
+      }
+    } catch (err) {
+      console.warn(`[19F][RTB] Pair-level guard check failed in getRankedSignals:`, err);
+    }
+
     // Sort by CWQI descending (highest quality first)
     validSignals.sort((a, b) => {
       const cwqiA = parseFloat(a.cwqi || '0');
@@ -1560,7 +1588,7 @@ class ReadyToBuyService {
     });
 
     console.log(`[8.8.4-C.14.B][RTB_RANKED] mode=${mode}, total=${signals.length}, valid=${validSignals.length}, returning top ${Math.min(limit, validSignals.length)}`);
-    
+
     return validSignals.slice(0, limit);
   }
 

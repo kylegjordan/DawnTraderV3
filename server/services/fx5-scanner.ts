@@ -72,6 +72,8 @@ import {
 } from '../config/benchmark-regex.js';
 // Phase 14.5: Pattern pool filter thresholds (Batch 19C: regime-aware)
 import { PATTERN_POOL_THRESHOLDS, getPatternPoolThresholds } from '../config/pattern-filter-profile.js';
+// Batch 19F: Pattern global filters for dual-path scanning
+import { PATTERN_GLOBAL_FILTERS, VTS_PATTERN_GLOBAL_FILTERS } from '../config/pattern-global-filters.js';
 import { getMarketContextEngine } from './market-context-engine.js';
 
 export const BENCHMARK_BASES = [
@@ -165,6 +167,7 @@ export interface ScanBatchPair {
   lqScore?: number;         // HF9: Log-Liquidity score for IMF diagnostics
   volNoiseScore?: number;   // HF9: VolNoise score for IMF diagnostics
   filterTier?: 'standard' | 'relaxed'; // HF9: IMF filter tier (standard=strict, relaxed=VTS-only)
+  sourcePool?: 'quant' | 'pattern'; // Batch 19F: Filter path that admitted this pair
 }
 
 export class Fx5ScannerService {
@@ -388,11 +391,16 @@ export class Fx5ScannerService {
       console.log(`[FX5Scanner][11.4H.4][${mode}] Passive learning mode: ${isPassiveLearningMode} (contextFailed=${contextFailed}, isEngineActive=${earlyContext?.isEngineActive})`);
       
       // Directive 11.4C.1: Execute adaptive batch scanning (100 pairs: 60% Ideal + 40% Rotational)
+      // Batch 19F: Pass pattern global filters for dual-path scanning
+      const activePatternGlobalFilters = isPassiveLearningMode ? VTS_PATTERN_GLOBAL_FILTERS : PATTERN_GLOBAL_FILTERS;
       const batchResult: BatchResult = await collectAdaptiveBatch(
         this.krakenService,
         filters,
         mode,
-        { passiveLearning: isPassiveLearningMode } // Directive 11.4H.4 Task 5: Pass passive learning flag
+        {
+          passiveLearning: isPassiveLearningMode, // Directive 11.4H.4 Task 5: Pass passive learning flag
+          patternFilters: activePatternGlobalFilters, // Batch 19F: Dual-path pattern global filters
+        }
       );
       
       // Extract results from batch pipeline
@@ -628,14 +636,12 @@ export class Fx5ScannerService {
         s.bypassBoringReject
       );
 
-      // Phase 14.5: Pattern pool — pairs that fail quant metric filters but pass relaxed thresholds
-      const patternPoolCandidates = classifiedSurvivors.filter(s =>
-        !s.passesMetricFilter &&
-        !s.bypassVolatilityReject &&
-        !s.bypassBoringReject
-      );
+      // Batch 19F: Pattern pool from dual global filter path
+      // ALL 300 pairs went through pattern global filters in collectAdaptiveBatch()
+      // Pattern global survivors are further filtered by pattern IMF thresholds here
+      const patternGlobalSurvivors = batchResult.patternSurvivors || [];
 
-      // Batch 19C: Regime-aware pattern pool thresholds
+      // Batch 19C: Regime-aware pattern pool thresholds (IMF-level)
       let activePatternThresholds = PATTERN_POOL_THRESHOLDS;
       let regimeThresholdsActive = false;
       try {
@@ -647,21 +653,26 @@ export class Fx5ScannerService {
         }
       } catch { /* MCE not ready — use static defaults */ }
 
-      const patternPoolSurvivors = patternPoolCandidates.filter(s => {
-        const volumeUSD = s.volume24h ?? 0;
-        const lq = s.LQ ?? 0;
-        const vn = s.VolNoise ?? 1.0;
-        const di = s.DI ?? 0;
+      // Apply pattern IMF thresholds to pattern global survivors
+      const patternPoolSurvivors = patternGlobalSurvivors
+        .map(s => {
+          // Find IMF metrics from classifiedSurvivors (already computed)
+          const classified = classifiedSurvivors.find(cs => cs.symbol === s.symbol);
+          return classified ? { ...classified, ...s } : null;
+        })
+        .filter((s): s is NonNullable<typeof s> => s !== null)
+        .filter(s => {
+          const lq = s.LQ ?? 0;
+          const vn = s.VolNoise ?? 1.0;
+          const di = s.DI ?? 0;
+          return (
+            lq >= activePatternThresholds.LQ_MIN &&
+            vn <= activePatternThresholds.VN_MAX &&
+            di >= activePatternThresholds.DI_TRENDING_MIN
+          );
+        });
 
-        return (
-          volumeUSD >= activePatternThresholds.MIN_VOLUME_USD &&
-          lq >= activePatternThresholds.LQ_MIN &&
-          vn <= activePatternThresholds.VN_MAX &&
-          di >= activePatternThresholds.DI_TRENDING_MIN
-        );
-      });
-
-      console.log(`[14.5][PATTERN_POOL] Pattern pool: ${patternPoolSurvivors.length}/${patternPoolCandidates.length} passed${regimeThresholdsActive ? ' (regime-adjusted)' : ' (static)'} thresholds`);
+      console.log(`[19F][PATTERN_POOL] Pattern pool: ${patternPoolSurvivors.length}/${patternGlobalSurvivors.length} passed IMF${regimeThresholdsActive ? ' (regime-adjusted)' : ' (static)'} thresholds (dual-path)`);
 
       const metricFilteredCount = classifiedSurvivors.length - metricFilteredSurvivors.length;
       const forceIncludedCount = classifiedSurvivors.filter(s => !s.passesMetricFilter && s.forceInclude).length;
@@ -760,10 +771,41 @@ export class Fx5ScannerService {
         console.log(`[HF9][IMF] VTS relaxed filter added ${relaxedOnlyCount} pairs (LQ>=${VTS_IMF_THRESHOLDS.LQ_MIN}, VN<=${VTS_IMF_THRESHOLDS.VN_MAX})`);
       }
 
+      // Batch 19F: Tag sourcePool based on filter results for VTS consumption
+      const quantSymbols = new Set(metricFilteredSurvivors.map(s => s.symbol));
+      const patternSymbolSet = new Set(patternPoolSurvivors.map(s => s.symbol));
+
+      // Batch 19F: VTS Sim-to-Live Parity — duplicate pairs that pass BOTH filters
+      // A pair in both quant and pattern pools appears TWICE (once per sourcePool)
+      // This matches active trading path behavior where the same pair can be in both pools
+      const taggedVtsSurvivors: Array<typeof vtsFilteredSurvivors[0] & { sourcePool: 'quant' | 'pattern' }> = [];
+      const bothPoolsCount = { count: 0 };
+
+      for (const s of vtsFilteredSurvivors) {
+        const inQuant = quantSymbols.has(s.symbol);
+        const inPattern = patternSymbolSet.has(s.symbol);
+
+        if (inQuant) {
+          taggedVtsSurvivors.push({ ...s, sourcePool: 'quant' as const });
+        }
+        if (inPattern) {
+          taggedVtsSurvivors.push({ ...s, sourcePool: 'pattern' as const });
+          if (inQuant) bothPoolsCount.count++;
+        }
+        if (!inQuant && !inPattern) {
+          // Fallback: pairs that passed VTS-relaxed but neither strict quant nor pattern
+          taggedVtsSurvivors.push({ ...s, sourcePool: 'quant' as const });
+        }
+      }
+
+      if (bothPoolsCount.count > 0) {
+        console.log(`[19F][VTS_PARITY] ${bothPoolsCount.count} pairs duplicated in both quant+pattern pools for VTS parity`);
+      }
+
       // Directive 11.4C.1: FX5 does NOT write to telemetry (M70)
       // VTS is the sole source of telemetry writes - FX5 outputs raw data only
       // VTS gets pairs directly from FX5's current scan batch via getCurrentScanBatch()
-      this.updateCurrentBatch(mode, vtsFilteredSurvivors);
+      this.updateCurrentBatch(mode, taggedVtsSurvivors);
       
       // REB 2.8.4: Generate unique scan cycle ID (survives server restarts)
       const scanCycleId = `cycle_${mode}_${nanoid(12)}`;
@@ -941,6 +983,7 @@ export class Fx5ScannerService {
     LQ?: number;          // HF9: Log-Liquidity score
     VolNoise?: number;    // HF9: VolNoise score
     filterTier?: 'standard' | 'relaxed';  // HF9: IMF filter tier
+    sourcePool?: 'quant' | 'pattern';     // Batch 19F: Filter path source
   }>): void {
     const batch: ScanBatchPair[] = survivors.map(s => ({
       symbol: s.symbol,
@@ -955,11 +998,13 @@ export class Fx5ScannerService {
       lqScore: s.LQ,             // HF9: Propagate LQ for IMF diagnostics
       volNoiseScore: s.VolNoise,  // HF9: Propagate VN for IMF diagnostics
       filterTier: s.filterTier,   // HF9: Propagate filter tier for ML segmentation
+      sourcePool: s.sourcePool,   // Batch 19F: Propagate filter path source
     }));
     this.currentBatch.set(mode, batch);
     const benchmarkCount = batch.filter(b => b.isBenchmark).length;
     const relaxedCount = batch.filter(b => b.filterTier === 'relaxed').length;
-    console.log(`[FX5][11.4C.1] Updated batch for ${mode}: ${batch.length} pairs (${benchmarkCount} benchmarks, ${relaxedCount} relaxed-filter, raw data only)`);
+    const patternPoolCount = batch.filter(b => b.sourcePool === 'pattern').length;
+    console.log(`[FX5][19F] Updated batch for ${mode}: ${batch.length} pairs (${benchmarkCount} benchmarks, ${relaxedCount} relaxed-filter, ${patternPoolCount} pattern-path, raw data only)`);
   }
 }
 

@@ -424,6 +424,15 @@ export interface BatchResult {
     rotationalCount: number; // Directive 11.4C.1: Rotational pool survivors
     krakenUniverseSize: number;
   };
+  // Batch 19F: Pattern global filter survivors (dual-path)
+  patternSurvivors?: Array<{
+    symbol: string;
+    currentPrice: number;
+    volume24h: number;
+    dailyRange: number;
+    poolType: 'ideal' | 'rotational';
+    bidAskSpread?: number;
+  }>;
 }
 
 
@@ -449,11 +458,19 @@ export async function collectAdaptiveBatch(
   krakenService: KrakenService,
   filters: any,
   mode: 'paper' | 'live',
-  options?: { passiveLearning?: boolean } // Directive 11.4H.4 Task 5: Optional passive learning flag
+  options?: {
+    passiveLearning?: boolean; // Directive 11.4H.4 Task 5: Optional passive learning flag
+    patternFilters?: {         // Batch 19F: Pattern global filter thresholds for dual-path
+      MIN_VOLUME_USD: number;
+      MAX_BID_ASK_SPREAD: number;
+      MIN_HISTORY_DAYS: number;
+    };
+  }
 ): Promise<BatchResult> {
   const startTime = Date.now();
   const cycleId = `adaptive_${mode}_${Date.now()}`;
   const isPassiveLearning = options?.passiveLearning ?? false;
+  const patternFilters = options?.patternFilters ?? null;
   
   console.log(`[AdaptiveScan][11.4C.1] Starting adaptive batch scan (mode=${mode}, passiveLearning=${isPassiveLearning}, cycleId=${cycleId})`);
   
@@ -710,6 +727,65 @@ export async function collectAdaptiveBatch(
     breakdown.failed_market_cap +
     breakdown.failed_guardrail_risk;
   
+  // Batch 19F: Pattern global filter second pass (dual-path)
+  // Runs ALL batch pairs through relaxed pattern thresholds in parallel with quant filters
+  let patternSurvivors: BatchResult['patternSurvivors'] = undefined;
+
+  if (patternFilters) {
+    const patternMinVolume = patternFilters.MIN_VOLUME_USD;
+    const patternMaxSpread = patternFilters.MAX_BID_ASK_SPREAD;
+    const patternMinHistoryDays = patternFilters.MIN_HISTORY_DAYS;
+    const patternResults: NonNullable<BatchResult['patternSurvivors']> = [];
+
+    for (const pair of batch) {
+      const ticker = pair.ticker as any;
+      const pairInfo = pair.pairInfo;
+      const currentPrice = parseFloat(ticker.c[0]);
+      const volume24h = parseFloat(ticker.v[1]);
+      const high24h = parseFloat(ticker.h[1]);
+      const low24h = parseFloat(ticker.l[1]);
+      const dailyRange = low24h > 0 ? ((high24h - low24h) / low24h) * 100 : 0;
+      const askPrice = parseFloat(ticker.a[0]);
+      const bidPrice = parseFloat(ticker.b[0]);
+      const bidAskSpread = bidPrice > 0 ? ((askPrice - bidPrice) / bidPrice) * 100 : 0;
+
+      // Pattern global filters (relaxed thresholds)
+      // Stablecoin filter: same as quant (always exclude)
+      if (excludeStablecoins && isStablePairRegex.test(pair.symbol)) continue;
+
+      // Min price: same as quant
+      if (currentPrice < minPrice) continue;
+
+      // Min volume: pattern threshold (lower than quant)
+      if (volume24h < patternMinVolume) continue;
+
+      // Bid-ask spread: pattern threshold (wider than quant)
+      if (bidAskSpread > patternMaxSpread) continue;
+
+      // History: pattern threshold (shorter than quant)
+      if (patternMinHistoryDays > 0) {
+        const historyResult = await passesHistoryFilter(pair.symbol, {
+          minHistoryDays: patternMinHistoryDays,
+          mode,
+          krakenService,
+        });
+        if (!historyResult.passed) continue;
+      }
+
+      patternResults.push({
+        symbol: pair.symbol,
+        currentPrice,
+        volume24h,
+        dailyRange,
+        poolType: pair.poolType,
+        bidAskSpread,
+      });
+    }
+
+    patternSurvivors = patternResults;
+    console.log(`[19F][PATTERN_GLOBAL] Pattern global filter: ${patternResults.length}/${batch.length} pairs passed relaxed thresholds`);
+  }
+
   return {
     survivors,
     evaluatedSymbols,
@@ -722,5 +798,6 @@ export async function collectAdaptiveBatch(
       rotationalCount: rotationalSurvivors,
       krakenUniverseSize,
     },
+    patternSurvivors,
   };
 }

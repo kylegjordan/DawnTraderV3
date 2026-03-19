@@ -352,6 +352,114 @@ function detectMorningStar(candles: Candle[], symbol: string): PatternSignal | n
 }
 
 /**
+ * Batch 19F: Detect ABCD Harmonic Measured-Move Pattern
+ * A = swing low, B = swing high (rally), C = higher low (pullback), D = breakout
+ * BC retrace must be 38.2%-78.6% of AB leg (Fibonacci zone)
+ * Scans the last 15-50 candles for the A-B-C-D sequence
+ */
+function detectABCD(candles: Candle[], symbol: string): PatternSignal | null {
+  if (candles.length < 15) return null;
+
+  // Use last 50 candles (or less if not available)
+  const lookback = Math.min(50, candles.length);
+  const window = candles.slice(-lookback);
+
+  // Find swing lows and swing highs (using 3-bar pivot detection)
+  const swingLows: { index: number; price: number; volume: number }[] = [];
+  const swingHighs: { index: number; price: number }[] = [];
+
+  for (let i = 2; i < window.length - 2; i++) {
+    const prev2 = window[i - 2];
+    const prev1 = window[i - 1];
+    const curr = window[i];
+    const next1 = window[i + 1];
+    const next2 = window[i + 2];
+
+    // Swing low: current low is lower than surrounding 2 bars on each side
+    if (curr.low < prev1.low && curr.low < prev2.low &&
+        curr.low < next1.low && curr.low < next2.low) {
+      swingLows.push({ index: i, price: curr.low, volume: curr.volume });
+    }
+
+    // Swing high: current high is higher than surrounding 2 bars on each side
+    if (curr.high > prev1.high && curr.high > prev2.high &&
+        curr.high > next1.high && curr.high > next2.high) {
+      swingHighs.push({ index: i, price: curr.high });
+    }
+  }
+
+  // Need at least 1 swing low and 1 swing high to form A-B-C pattern
+  if (swingLows.length < 2 || swingHighs.length < 1) return null;
+
+  // Try to find the most recent valid A-B-C-D sequence
+  // Iterate from most recent swing lows backwards
+  for (let ci = swingLows.length - 1; ci >= 1; ci--) {
+    const cPoint = swingLows[ci]; // C = more recent higher low
+
+    // Find B (swing high BEFORE C)
+    const bCandidates = swingHighs.filter(h => h.index < cPoint.index && h.index > cPoint.index - 20);
+    if (bCandidates.length === 0) continue;
+
+    const bPoint = bCandidates[bCandidates.length - 1]; // Most recent B before C
+
+    // Find A (swing low BEFORE B, must be lower than C)
+    const aCandidates = swingLows.filter(l =>
+      l.index < bPoint.index && l.index > bPoint.index - 25 && l.price < cPoint.price
+    );
+    if (aCandidates.length === 0) continue;
+
+    const aPoint = aCandidates[aCandidates.length - 1]; // Most recent A before B
+
+    // Validate: B > A (rally)
+    if (bPoint.price <= aPoint.price) continue;
+
+    // Validate: C > A and C < B (pullback, higher low)
+    if (cPoint.price <= aPoint.price || cPoint.price >= bPoint.price) continue;
+
+    // Calculate BC retrace as percentage of AB leg
+    const abLeg = bPoint.price - aPoint.price;
+    const bcRetrace = (bPoint.price - cPoint.price) / abLeg;
+
+    // BC retrace must be 38.2%-78.6% of AB leg (Fibonacci zone)
+    if (bcRetrace < 0.382 || bcRetrace > 0.786) continue;
+
+    // Check for D point (breakout above C's high in subsequent candles)
+    const cHigh = window[cPoint.index].high;
+    let dFound = false;
+    for (let d = cPoint.index + 1; d < window.length; d++) {
+      if (window[d].high > cHigh) {
+        dFound = true;
+        break;
+      }
+    }
+
+    if (!dFound) continue;
+
+    // Strength: closer to 61.8% retrace = higher strength (golden ratio)
+    const retraceQuality = 1 - Math.abs(bcRetrace - 0.618) / 0.236; // 0.236 = max distance from 0.618 within [0.382, 0.786]
+    const strength = Math.min(1.0, 0.6 + Math.max(0, retraceQuality) * 0.35);
+
+    return {
+      symbol,
+      pattern: 'ABCD' as PatternType,
+      direction: 'BUY',
+      strength,
+      timestamp: window[window.length - 1].timestamp,
+      metadata: {
+        aPointLow: aPoint.price,
+        bPointHigh: bPoint.price,
+        cPointLow: cPoint.price,
+        cPointHigh: cHigh,
+        aPointVolume: aPoint.volume,
+        bcRetrace: parseFloat(bcRetrace.toFixed(4)),
+      },
+    };
+  }
+
+  return null;
+}
+
+/**
  * Calculate average volume from candle data
  */
 function calculateAvgVolume(candles: Candle[], lookback: number = 20): number {
@@ -390,7 +498,11 @@ export function scanPatterns(candles: Candle[], symbol: string = 'UNKNOWN'): Pat
   
   const morningStar = detectMorningStar(candles, symbol);
   if (morningStar) signals.push(morningStar);
-  
+
+  // Batch 19F: ABCD harmonic measured-move pattern
+  const abcd = detectABCD(candles, symbol);
+  if (abcd) signals.push(abcd);
+
   for (const signal of signals) {
     const rawStrength = signal.strength;
     signal.strength = applyTimeframeWeightedStrength(rawStrength, timeframe);

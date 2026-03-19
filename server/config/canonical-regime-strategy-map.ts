@@ -54,6 +54,7 @@ export type CanonicalSignalType = 'QUANT' | 'PATTERN' | 'HYBRID';
 export type CanonicalPatternType =
   | 'PINBAR'
   | 'ENGULFING'
+  | 'INSIDE_BAR'    // Batch 19F: Promoted to canonical (was mapped to ENGULFING)
   | 'MORNING_STAR'
   | 'ABCD'
   | 'TRI_STAR'
@@ -98,6 +99,7 @@ export const CANONICAL_SIGNAL_TYPES: readonly CanonicalSignalType[] = [
 export const CANONICAL_PATTERN_TYPES: readonly CanonicalPatternType[] = [
   'PINBAR',
   'ENGULFING',
+  'INSIDE_BAR',    // Batch 19F: Promoted to canonical
   'MORNING_STAR',
   'ABCD',
   'TRI_STAR',
@@ -194,7 +196,7 @@ export const CANONICAL_REGIME_STRATEGY_MAP: Record<CanonicalRegimeType, RegimeSt
         strategy: 'Inside Bar Reversal',
         strategyKey: 'inside_bar_reversal',
         signalType: 'PATTERN',
-        patternType: 'ENGULFING',
+        patternType: 'INSIDE_BAR',  // Batch 19F: Corrected from ENGULFING
         secondaryMetrics: 'Parent > Child \u00d7 1.3 \u2022 Breakout Volume > 1.5\u00d7 avg'
       }
     ],
@@ -549,7 +551,7 @@ const PATTERN_TO_CANONICAL: Record<string, CanonicalPatternType> = {
   'MORNING_STAR': 'MORNING_STAR',
   'ABCD': 'ABCD',
   'TRI_STAR': 'TRI_STAR',
-  'INSIDE_BAR': 'ENGULFING',     // Compression -> Engulfing-like breakout
+  'INSIDE_BAR': 'INSIDE_BAR',    // Batch 19F: Now canonical (was mapped to ENGULFING)
   'THREE_SOLDIERS': 'MORNING_STAR', // Bullish continuation -> Morning Star family
   'EVENING_STAR': 'MORNING_STAR',   // Same pattern family
   'DOJI': 'TRI_STAR',              // Indecision -> TriStar family

@@ -34,12 +34,13 @@ export type SignalType = 'QUANT' | 'PATTERN' | 'HYBRID';
 /**
  * The specific candlestick formations the "Eyes" of the system can see.
  */
-export type PatternType = 
+export type PatternType =
   | 'PINBAR'           // Rejection (Wick > Body)
   | 'ENGULFING'        // Momentum (Body engulfs previous)
   | 'INSIDE_BAR'       // Compression (Coiling energy)
   | 'MORNING_STAR'     // Reversal (Bear -> Doji -> Bull)
-  | 'THREE_SOLDIERS';  // Trend Birth (3 Strong Bulls)
+  | 'THREE_SOLDIERS'   // Trend Birth (3 Strong Bulls)
+  | 'ABCD';            // Batch 19F: Harmonic Measured-Move
 
 /**
  * Raw candle data structure for pattern recognition.
