@@ -596,7 +596,11 @@ export async function collectAdaptiveBatch(
     const pairInfo = pair.pairInfo;
     const baseCurrency = pairInfo.base;
     const currentPrice = parseFloat(ticker.c[0]);
-    const volume24h = parseFloat(ticker.v[1]);
+    // Batch 19F HF2: Kraken ticker.v[1] returns volume in BASE CURRENCY (coins), not USD.
+    // Directive 8.8.4-C.13.D mandates USD conversion: volume_coins × currentPrice = volume_USD.
+    // All filter thresholds (minVolume, patternMinVolume) are in USD. Must compare like units.
+    const volume24hCoins = parseFloat(ticker.v[1]);
+    const volume24h = volume24hCoins * currentPrice; // Convert to USD for filter comparison
     const high24h = parseFloat(ticker.h[1]);
     const low24h = parseFloat(ticker.l[1]);
     const dailyRange = low24h > 0 ? ((high24h - low24h) / low24h) * 100 : 0;
@@ -741,7 +745,9 @@ export async function collectAdaptiveBatch(
       const ticker = pair.ticker as any;
       const pairInfo = pair.pairInfo;
       const currentPrice = parseFloat(ticker.c[0]);
-      const volume24h = parseFloat(ticker.v[1]);
+      // Batch 19F HF2: Same coin-to-USD conversion as quant path (Directive 8.8.4-C.13.D)
+      const volume24hCoins = parseFloat(ticker.v[1]);
+      const volume24h = volume24hCoins * currentPrice; // USD for filter comparison
       const high24h = parseFloat(ticker.h[1]);
       const low24h = parseFloat(ticker.l[1]);
       const dailyRange = low24h > 0 ? ((high24h - low24h) / low24h) * 100 : 0;
