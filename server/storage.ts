@@ -257,8 +257,9 @@ export interface IStorage {
   updatePresetLearningStatus(params: { mode: 'live' | 'paper'; presetName: string; lastAdjustedAt: Date; learningActive: boolean }): Promise<GoalsPresets>;
 
   // Screener filters methods (global settings per mode)
-  getScreenerFilters(params: { mode: 'live' | 'paper' }): Promise<ScreenerFilters | null>;
-  upsertScreenerFilters(data: Omit<InsertScreenerFilters, 'userId'> & { lastUpdatedBy?: string }): Promise<ScreenerFilters>;
+  // Batch 19G: filterPath support for 4-path filter architecture
+  getScreenerFilters(params: { mode: 'live' | 'paper'; filterPath?: string }): Promise<ScreenerFilters | null>;
+  upsertScreenerFilters(data: Omit<InsertScreenerFilters, 'userId'> & { lastUpdatedBy?: string; filterPath?: string }): Promise<ScreenerFilters>;
 
   // Filter diagnostics methods
   getFilterDiagnostics(params: { mode: 'live' | 'paper'; hours?: number }): Promise<any[]>;
@@ -1015,27 +1016,38 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Screener filters methods (global settings per mode - Phase 27.F.15.A)
-  async getScreenerFilters(params: { mode: 'live' | 'paper' }): Promise<ScreenerFilters | null> {
+  // Batch 19G: filterPath support — defaults to 'active_quant' for backward compatibility
+  async getScreenerFilters(params: { mode: 'live' | 'paper'; filterPath?: string }): Promise<ScreenerFilters | null> {
+    const filterPath = params.filterPath || 'active_quant';
     const [result] = await db
       .select()
       .from(screenerFilters)
-      .where(eq(screenerFilters.mode, params.mode));
+      .where(and(
+        eq(screenerFilters.mode, params.mode),
+        eq(screenerFilters.filterPath, filterPath)
+      ));
     return result || null;
   }
 
-  async upsertScreenerFilters(data: Omit<InsertScreenerFilters, 'userId'> & { lastUpdatedBy?: string }): Promise<ScreenerFilters> {
-    const existing = await this.getScreenerFilters({ mode: data.mode });
-    
+  // Batch 19G: Upsert by (mode, filterPath) composite key
+  async upsertScreenerFilters(data: Omit<InsertScreenerFilters, 'userId'> & { lastUpdatedBy?: string; filterPath?: string }): Promise<ScreenerFilters> {
+    const filterPath = data.filterPath || 'active_quant';
+    const existing = await this.getScreenerFilters({ mode: data.mode, filterPath });
+
     const updateData = {
       ...data,
+      filterPath,
       updatedAt: new Date()
     };
-    
+
     if (existing) {
       const [result] = await db
         .update(screenerFilters)
         .set(updateData)
-        .where(eq(screenerFilters.mode, data.mode))
+        .where(and(
+          eq(screenerFilters.mode, data.mode),
+          eq(screenerFilters.filterPath, filterPath)
+        ))
         .returning();
       return result;
     } else {

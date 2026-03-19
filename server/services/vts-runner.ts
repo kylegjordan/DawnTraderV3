@@ -40,6 +40,10 @@ import { systemConfigService } from './system-config.js';
 import { activeFilterPool } from './active-filter-pool.js';
 // Batch 19C: Pattern pool strategy filtering for VTS dual-path
 import { PATTERN_POOL_STRATEGIES } from '../config/pattern-filter-profile.js';
+// Batch 19G: Hybrid confluence buffer for VTS — same mechanism as signal-orchestrator
+import { hybridConfluenceBuffer, type BufferedPatternSignal } from './hybrid-confluence-buffer.js';
+// Batch 19G Fix 5: Shared hybrid compatibility registry (single source of truth)
+import { findHybridMatch as findVTSHybridMatch } from '../config/hybrid-compatibility-registry.js';
 import { getTelemetryAggregator } from './telemetry-aggregator.js';
 import { fx5Scanner, type ScanBatchPair } from './fx5-scanner.js';
 import { KrakenService } from './kraken.js';
@@ -1339,6 +1343,9 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
     btcOhlcCache = [];
   }
 
+  // Batch 19G: Hybrid confluence dedupe guard — prevent duplicate hybrids per cycle
+  const hybridDedupeSet = new Set<string>();
+
   for (const pair of pairs) {
     try {
       const priceData = priceDataMap.get(pair.symbol);
@@ -1387,9 +1394,9 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       for (const stratDef of effectiveStrategies) {
         const result = await generatePhase10Signal(pair.symbol, priceData, ohlcData, pair.pool, stratDef, pair.filterTier, pair.sourcePool);
         if (!result) continue;
-        
+
         const { signal, tradeRecord } = result;
-        
+
         const telemetry = getTelemetryAggregator();
         telemetry.recordPairTelemetry(pair.symbol, {
           finalScore: tradeRecord.finalScore,
@@ -1408,9 +1415,64 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
           volZ: tradeRecord.volZ,
           trendZ: tradeRecord.trendZ,
         });
-        
+
         phase10SessionTrades.push(tradeRecord);
-        
+
+        // Batch 19G: Hybrid confluence buffer integration
+        // (a) If PATTERN signal: add to buffer for potential hybrid match with future quant signals
+        if (tradeRecord.signalType === 'PATTERN' && tradeRecord.patternType) {
+          hybridConfluenceBuffer.addPatternSignal({
+            symbol: pair.symbol,
+            patternType: tradeRecord.patternType,
+            strategy: tradeRecord.strategy,
+            strength: tradeRecord.hybridScore ?? 0.5,
+            direction: 'BUY',
+            timestamp: Date.now(),
+          });
+        }
+
+        // (b) If QUANT signal: check buffer for compatible pattern signals → create hybrid
+        if (tradeRecord.signalType === 'QUANT') {
+          const compatiblePatterns = hybridConfluenceBuffer.findCompatiblePatterns(pair.symbol);
+          for (const patternSig of compatiblePatterns) {
+            // Check if this quant strategy + pattern type maps to a known hybrid strategy
+            const hybridStrategy = findVTSHybridMatch(tradeRecord.strategy, patternSig.patternType);
+            if (hybridStrategy) {
+              // Dedupe guard: don't create hybrid if same symbol+hybrid already in this cycle
+              const hybridKey = `${pair.symbol}_${hybridStrategy}`;
+              if (!hybridDedupeSet.has(hybridKey)) {
+                hybridDedupeSet.add(hybridKey);
+                const decayFactor = hybridConfluenceBuffer.getDecayFactor(patternSig);
+                const hybridConfidence = (tradeRecord.finalScore * 0.4 + patternSig.strength * 0.4 + 0.2) * decayFactor;
+
+                // Create hybrid trade record (independent of the quant trade)
+                const hybridTradeRecord = {
+                  ...tradeRecord,
+                  strategy: hybridStrategy,
+                  signalType: 'HYBRID' as const,
+                  sourcePool: 'hybrid' as const,
+                  finalScore: hybridConfidence,
+                  patternType: patternSig.patternType,
+                  hybridSource: {
+                    quantStrategy: tradeRecord.strategy,
+                    patternType: patternSig.patternType,
+                    patternStrategy: patternSig.strategy,
+                    decayFactor,
+                    confluenceAge: Date.now() - patternSig.timestamp,
+                  },
+                };
+
+                phase10SessionTrades.push(hybridTradeRecord);
+                signalTypeDistribution['HYBRID'] = (signalTypeDistribution['HYBRID'] || 0) + 1;
+                strategiesExecuted.add(hybridStrategy);
+                totalFinalScore += hybridConfidence;
+                simulatedCount++;
+                console.log(`[19G][VTS_HYBRID] Confluence: ${pair.symbol} quant=${tradeRecord.strategy} + pattern=${patternSig.patternType} → hybrid=${hybridStrategy} (decay=${decayFactor.toFixed(2)}, conf=${hybridConfidence.toFixed(3)})`);
+              }
+            }
+          }
+        }
+
         regimeDistribution[tradeRecord.regime]++;
         signalTypeDistribution[tradeRecord.signalType] = (signalTypeDistribution[tradeRecord.signalType] || 0) + 1;
         strategiesExecuted.add(tradeRecord.strategy);
@@ -1428,6 +1490,12 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   // sourced directly from FX5 scan batch (which works during passive learning).
   // The old code called activeFilterPool.getPatternPool('paper') which returns EMPTY
   // during passive learning because activeFilterPool only populates when trading is ACTIVE.
+
+  // Batch 19G: Sweep expired entries from hybrid confluence buffer
+  const evictedCount = hybridConfluenceBuffer.sweep();
+  if (evictedCount > 0) {
+    console.log(`[19G][VTS_HYBRID] Buffer sweep: evicted ${evictedCount} expired entries, ${hybridConfluenceBuffer.size} remaining`);
+  }
 
   const avgFinalScore = simulatedCount > 0 ? totalFinalScore / simulatedCount : 0;
   const cycleDurationMs = Date.now() - cycleStart;
@@ -1857,3 +1925,6 @@ export function getOpenVirtualTradesForML(): Array<{
   
   return trades.sort((a, b) => new Date(b.entryTime).getTime() - new Date(a.entryTime).getTime());
 }
+
+// Batch 19G Fix 5: VTS_HYBRID_COMPATIBILITY and findVTSHybridMatch removed —
+// now imported from shared hybrid-compatibility-registry.ts (single source of truth)

@@ -9,18 +9,27 @@
  */
 
 export const SYSTEM_GUARDS = {
-  VERSION: "Phase14_Batch18J",
+  VERSION: "Phase14_Batch19G",
 
-  MIN_LIQUIDITY_SCORE: 35,       // Batch 18J: 40 → 35 (4-LLM consensus)
-  MAX_VOL_NOISE: 0.93,           // Batch 18J: 0.60 → 0.93 (crypto-calibrated, 4-LLM consensus)
-  BASE_FEE_SLIPPAGE: 0.006,      // Batch 18J: 0.005 → 0.006 (4-LLM consensus)
-  CORRELATION_THRESHOLD: 0.92,   // Batch 18J: 0.75 → 0.92 (crypto pair correlation, 4-LLM consensus)
-  PARITY_TOLERANCE: 0.000001,
-  MIN_VOLUME_THRESHOLD_USD: 500_000,  // Batch 18J: 2M → 500K (4-LLM consensus)
+  // Batch 19G: MIN_LIQUIDITY_SCORE, MAX_VOL_NOISE, CORRELATION_THRESHOLD, MIN_VOLUME_THRESHOLD_USD
+  // moved to DB (screener_filters table, 4 filter path rows). These legacy aliases remain for
+  // backward compatibility with code that reads them (signal-orchestrator, analysis-utils).
+  // They reflect the ACTIVE QUANT defaults and will be removed in a future cleanup batch.
+  /** @deprecated Batch 19G: Use DB screener_filters.lq_min instead */
+  MIN_LIQUIDITY_SCORE: 35,
+  /** @deprecated Batch 19G: Use DB screener_filters.vn_max instead */
+  MAX_VOL_NOISE: 0.93,
+  /** @deprecated Batch 19G: Use DB screener_filters.corr_max instead */
+  CORRELATION_THRESHOLD: 0.92,
+  /** @deprecated Batch 19G: Use DB screener_filters.min_volume instead */
+  MIN_VOLUME_THRESHOLD_USD: 500_000,
 
-  DI_TRENDING: 55,               // Batch 18J: 65 → 55 (4-LLM consensus)
-  DI_CHOPPY: 35,                 // Batch 18J: 30 → 35 (4-LLM consensus)
-  
+  BASE_FEE_SLIPPAGE: 0.006,      // Batch 18J: 0.005 → 0.006 (4-LLM consensus) — KEEP (guardrail)
+  PARITY_TOLERANCE: 0.000001,    // KEEP (guardrail)
+
+  DI_TRENDING: 55,               // KEEP (used in regime detection, NOT filtering)
+  DI_CHOPPY: 35,                 // KEEP (used in regime detection, NOT filtering)
+
   MIN_PWIN: 0.40,
   MAX_PWIN: 0.60,
   DI_PWIN_FACTOR: 200,
@@ -51,10 +60,16 @@ export const SYSTEM_GUARDS = {
  * VN_MAX = 0.96 allows broader passive learning data collection
  * while active trading uses stricter SYSTEM_GUARDS.MAX_VOL_NOISE = 0.93
  */
+/**
+ * @deprecated Batch 19G: IMF_THRESHOLDS moved to DB (screener_filters table).
+ * Retained for backward compatibility with imf-metrics.ts which imports it.
+ * Values here reflect the legacy active quant defaults.
+ * TODO: Update imf-metrics.ts to accept DB values, then remove this.
+ */
 export const IMF_THRESHOLDS = {
-  LQ_MIN: 35,           // Minimum log-liquidity score (Batch 18J: 40 → 35, matches active)
-  VN_MAX: 0.96,         // Maximum volatility noise (passive learning) (Batch 18J: 0.80 → 0.96)
-  CORR_MAX: 0.95,       // Maximum correlation with benchmark
+  LQ_MIN: 35,
+  VN_MAX: 0.96,
+  CORR_MAX: 0.95,
 } as const;
 
 export type IMFThresholdsType = typeof IMF_THRESHOLDS;
@@ -73,6 +88,11 @@ export type IMFThresholdsType = typeof IMF_THRESHOLDS;
  *
  * Batch 18J: All VN thresholds recalibrated for crypto via 4-LLM consensus.
  * VTS VN_MAX raised from 0.95 → 0.98 to maintain hierarchy above passive (0.96).
+ */
+/**
+ * @deprecated Batch 19G: VTS_IMF_THRESHOLDS moved to DB (screener_filters table, vts_quant row).
+ * FX5 scanner now reads from DB. This constant retained ONLY for any remaining
+ * importers that haven't been updated yet. Will be removed in a future cleanup batch.
  */
 export const VTS_IMF_THRESHOLDS = {
   LQ_MIN: 25,
@@ -219,7 +239,7 @@ export type ScannerParamsType = typeof SCANNER_PARAMS;
 export type SystemGuardsType = typeof SYSTEM_GUARDS;
 
 export function getSystemGuardsInfo(): string {
-  return `[9.6][CONFIG] Guards Locked – LQ≥${SYSTEM_GUARDS.MIN_LIQUIDITY_SCORE}, Noise≤${SYSTEM_GUARDS.MAX_VOL_NOISE}, Fee=${(SYSTEM_GUARDS.BASE_FEE_SLIPPAGE * 100).toFixed(1)}%`;
+  return `[19G][CONFIG] Guards — LQ≥${SYSTEM_GUARDS.MIN_LIQUIDITY_SCORE}(legacy), Noise≤${SYSTEM_GUARDS.MAX_VOL_NOISE}(legacy), Fee=${(SYSTEM_GUARDS.BASE_FEE_SLIPPAGE * 100).toFixed(1)}% | Filter thresholds now DB-driven`;
 }
 
 console.log(getSystemGuardsInfo());

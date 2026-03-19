@@ -91,6 +91,8 @@ import { PATTERN_POOL_STRATEGIES, PATTERN_POOL_GUARDRAILS, DEFAULT_ASSET_CLASS }
 import { computeRankingScore, normalizeNetReturn, CONTEXT_BONUS } from '../config/ranking-weights.js';
 // Batch 19F: Hybrid confluence buffer for pattern+quant signal matching
 import { hybridConfluenceBuffer } from './hybrid-confluence-buffer.js';
+// Batch 19G Fix 5: Shared hybrid compatibility registry (single source of truth)
+import { findHybridMatch, HYBRID_COMPATIBILITY } from '../config/hybrid-compatibility-registry.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -1504,24 +1506,5 @@ export class SignalOrchestrator {
   }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// Batch 19F: Hybrid strategy compatibility registry
-// Defines which quant strategy + pattern type combinations produce hybrid signals
-// ══════════════════════════════════════════════════════════════════════════════
-
-const HYBRID_COMPATIBILITY: Record<string, { patterns: string[], quantStrategies: string[] }> = {
-  pivot_shift: { patterns: ['MORNING_STAR'], quantStrategies: ['vwap_pullback', 'sma_trend_ride', 'dhma'] },
-  reverse_impulse: { patterns: ['PINBAR'], quantStrategies: ['mean_reversion', 'range_trade'] },
-  defensive_hedge: { patterns: ['ENGULFING'], quantStrategies: ['mean_reversion', 'breakout'] },
-  adaptive_flow: { patterns: ['THREE_SOLDIERS'], quantStrategies: ['range_trade', 'abcd_long'] },
-  volatility_edge: { patterns: ['ABCD'], quantStrategies: ['breakout', 'vwap_bounce', 'dhma'] },
-};
-
-function findHybridMatch(quantStrategy: string, patternType: string): string | null {
-  for (const [hybridName, requirements] of Object.entries(HYBRID_COMPATIBILITY)) {
-    if (requirements.patterns.includes(patternType) && requirements.quantStrategies.includes(quantStrategy)) {
-      return hybridName;
-    }
-  }
-  return null;
-}
+// Batch 19G Fix 5: HYBRID_COMPATIBILITY and findHybridMatch removed —
+// now imported from shared hybrid-compatibility-registry.ts (single source of truth)

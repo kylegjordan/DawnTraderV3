@@ -44,7 +44,7 @@ import {
   CORE_METRIC_THRESHOLDS
 } from '../utils/analysis-utils.js';
 import { getTelemetryAggregator } from './telemetry-aggregator.js';
-import { SCANNER_PARAMS, VTS_IMF_THRESHOLDS } from '../config/system-guards.js';
+import { SCANNER_PARAMS } from '../config/system-guards.js';
 import { normalizeToInternalSymbol, getSymbolMappingDetails } from '../markets/kraken-symbol-resolver.js';
 import { setCostMetrics, getCostMetrics } from '../core/cache/cost-cache.js';
 import { ohlcCache } from './ohlc-cache.js';
@@ -72,8 +72,7 @@ import {
 } from '../config/benchmark-regex.js';
 // Phase 14.5: Pattern pool filter thresholds (Batch 19C: regime-aware)
 import { PATTERN_POOL_THRESHOLDS, getPatternPoolThresholds } from '../config/pattern-filter-profile.js';
-// Batch 19F: Pattern global filters for dual-path scanning
-import { PATTERN_GLOBAL_FILTERS, VTS_PATTERN_GLOBAL_FILTERS } from '../config/pattern-global-filters.js';
+// Batch 19G: PATTERN_GLOBAL_FILTERS and VTS_PATTERN_GLOBAL_FILTERS removed — now read from DB
 import { getMarketContextEngine } from './market-context-engine.js';
 
 export const BENCHMARK_BASES = [
@@ -344,10 +343,10 @@ export class Fx5ScannerService {
    */
   private async scanMode(mode: 'paper' | 'live'): Promise<ScanResult | null> {
     try {
-      // Load screener filters for this mode
-      const filters = await storage.getScreenerFilters({ mode });
+      // Batch 19G: Load quant filters (primary) — backward compatible default path
+      const filters = await storage.getScreenerFilters({ mode, filterPath: 'active_quant' });
       if (!filters) {
-        console.warn(`[FX5Scanner][${mode}] No filters found, skipping scan`);
+        console.warn(`[FX5Scanner][${mode}] No filters found for active_quant, skipping scan`);
         return null;
       }
 
@@ -390,16 +389,46 @@ export class Fx5ScannerService {
       const isPassiveLearningMode = contextFailed ? false : !(earlyContext?.isEngineActive ?? true);
       console.log(`[FX5Scanner][11.4H.4][${mode}] Passive learning mode: ${isPassiveLearningMode} (contextFailed=${contextFailed}, isEngineActive=${earlyContext?.isEngineActive})`);
       
+      // Batch 19G: Load pattern filter row from DB for dual-path scanning
+      const patternFilterPath = isPassiveLearningMode ? 'vts_pattern' : 'active_pattern';
+      const patternDbRow = await storage.getScreenerFilters({ mode, filterPath: patternFilterPath });
+      const activePatternGlobalFilters = patternDbRow ? {
+        MIN_VOLUME_USD: parseFloat(patternDbRow.minVolume ?? '250000'),
+        MAX_BID_ASK_SPREAD: parseFloat(patternDbRow.maxBidAskSpread ?? '1.0'),
+        MIN_HISTORY_DAYS: patternDbRow.minHistoryDays ?? 14,
+      } : {
+        MIN_VOLUME_USD: 250_000, // Fallback if DB row missing
+        MAX_BID_ASK_SPREAD: 1.0,
+        MIN_HISTORY_DAYS: 14,
+      };
+      console.log(`[19G][FX5] Pattern global filters from DB (${patternFilterPath}):`, activePatternGlobalFilters);
+
+      // Batch 19G: Also load quant IMF DB row for VTS relaxed thresholds
+      const quantFilterPath = isPassiveLearningMode ? 'vts_quant' : 'active_quant';
+      const quantDbRow = isPassiveLearningMode
+        ? await storage.getScreenerFilters({ mode, filterPath: 'vts_quant' })
+        : filters; // Active quant is already loaded as 'filters'
+      const dbVtsImfThresholds = {
+        LQ_MIN: parseFloat(quantDbRow?.lqMin ?? '25'),
+        VN_MAX: parseFloat(quantDbRow?.vnMax ?? '0.98'),
+        CORR_MAX: parseFloat(quantDbRow?.corrMax ?? '0.95'),
+      };
+
+      // Batch 19G: Load pattern IMF thresholds from DB for pattern pool filtering
+      const patternImfThresholds = {
+        LQ_MIN: parseFloat(patternDbRow?.lqMin ?? '20'),
+        VN_MAX: parseFloat(patternDbRow?.vnMax ?? '0.98'),
+        DI_MIN: parseFloat(patternDbRow?.diMin ?? '30'),
+      };
+
       // Directive 11.4C.1: Execute adaptive batch scanning (100 pairs: 60% Ideal + 40% Rotational)
-      // Batch 19F: Pass pattern global filters for dual-path scanning
-      const activePatternGlobalFilters = isPassiveLearningMode ? VTS_PATTERN_GLOBAL_FILTERS : PATTERN_GLOBAL_FILTERS;
       const batchResult: BatchResult = await collectAdaptiveBatch(
         this.krakenService,
         filters,
         mode,
         {
           passiveLearning: isPassiveLearningMode, // Directive 11.4H.4 Task 5: Pass passive learning flag
-          patternFilters: activePatternGlobalFilters, // Batch 19F: Dual-path pattern global filters
+          patternFilters: activePatternGlobalFilters, // Batch 19G: Pattern global filters from DB
         }
       );
       
@@ -709,17 +738,27 @@ export class Fx5ScannerService {
       // Merge: classifiedSurvivors (quant) + patternOnlyClassified (pattern-only) for IMF lookup
       const allClassifiedForPatternLookup = [...classifiedSurvivors, ...patternOnlyClassified];
 
-      // Batch 19C: Regime-aware pattern pool thresholds (IMF-level)
-      let activePatternThresholds = PATTERN_POOL_THRESHOLDS;
+      // Batch 19G: Pattern IMF thresholds — DB values as base, regime-aware overrides from code
+      // DB provides the defaults; getPatternPoolThresholds() overrides when regime data is available
+      let activePatternThresholds = {
+        LQ_MIN: patternImfThresholds.LQ_MIN,
+        VN_MAX: patternImfThresholds.VN_MAX,
+        DI_TRENDING_MIN: patternImfThresholds.DI_MIN,
+      };
       let regimeThresholdsActive = false;
       try {
         const mce = getMarketContextEngine();
         const globalRegime = mce.getDominantRegime();
         if (globalRegime && globalRegime.pairCount >= 5) {
-          activePatternThresholds = getPatternPoolThresholds(globalRegime.regime);
-          regimeThresholdsActive = activePatternThresholds !== PATTERN_POOL_THRESHOLDS;
+          const regimeOverrides = getPatternPoolThresholds(globalRegime.regime);
+          activePatternThresholds = {
+            LQ_MIN: regimeOverrides.LQ_MIN,
+            VN_MAX: regimeOverrides.VN_MAX,
+            DI_TRENDING_MIN: regimeOverrides.DI_TRENDING_MIN,
+          };
+          regimeThresholdsActive = true;
         }
-      } catch { /* MCE not ready — use static defaults */ }
+      } catch { /* MCE not ready — use DB defaults */ }
 
       // Apply pattern IMF thresholds to pattern global survivors
       // Now uses allClassifiedForPatternLookup which includes BOTH quant survivors AND pattern-only pairs
@@ -827,10 +866,11 @@ export class Fx5ScannerService {
       // HF9 Item D: VTS gets relaxed-filter pairs for broader ML training data
       // Active trading pool continues using strict metricFilteredSurvivors (no change)
       // VTS batch uses relaxed thresholds — pairs that only pass relaxed are tagged filterTier='relaxed'
+      // Batch 19G: Use DB-driven VTS IMF thresholds instead of hardcoded VTS_IMF_THRESHOLDS
       const vtsFilteredSurvivors = classifiedSurvivors.filter(s => {
         if (s.passesMetricFilter || s.bypassVolatilityReject || s.bypassBoringReject) return true;
-        // Apply VTS relaxed thresholds
-        return s.LQ >= VTS_IMF_THRESHOLDS.LQ_MIN && s.VolNoise <= VTS_IMF_THRESHOLDS.VN_MAX;
+        // Apply VTS relaxed thresholds from DB
+        return s.LQ >= dbVtsImfThresholds.LQ_MIN && s.VolNoise <= dbVtsImfThresholds.VN_MAX;
       }).map(s => ({
         ...s,
         filterTier: (s.passesMetricFilter ? 'standard' : 'relaxed') as 'standard' | 'relaxed'
@@ -838,7 +878,7 @@ export class Fx5ScannerService {
 
       const relaxedOnlyCount = vtsFilteredSurvivors.filter(s => s.filterTier === 'relaxed').length;
       if (relaxedOnlyCount > 0) {
-        console.log(`[HF9][IMF] VTS relaxed filter added ${relaxedOnlyCount} pairs (LQ>=${VTS_IMF_THRESHOLDS.LQ_MIN}, VN<=${VTS_IMF_THRESHOLDS.VN_MAX})`);
+        console.log(`[19G][IMF] VTS relaxed filter added ${relaxedOnlyCount} pairs (LQ>=${dbVtsImfThresholds.LQ_MIN}, VN<=${dbVtsImfThresholds.VN_MAX})`);
       }
 
       // Batch 19F: Tag sourcePool based on filter results for VTS consumption

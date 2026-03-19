@@ -2140,16 +2140,24 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.get('/filters-v2', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = req.query.mode as 'live' | 'paper';
+      // Batch 19G: Accept optional filterPath query parameter (default: 'active_quant')
+      const filterPath = (req.query.filterPath as string) || 'active_quant';
 
       if (!mode || (mode !== 'live' && mode !== 'paper')) {
         return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
       }
 
-      // Get screener filters from storage
-      const screenerData = await storage.getScreenerFilters({ mode });
+      // Batch 19G: Validate filterPath
+      const validPaths = ['active_quant', 'active_pattern', 'vts_quant', 'vts_pattern'];
+      if (!validPaths.includes(filterPath)) {
+        return res.status(400).json({ ok: false, code: 'INVALID_FILTER_PATH', detail: `filterPath must be one of: ${validPaths.join(', ')}` });
+      }
+
+      // Get screener filters from storage (Batch 19G: with filterPath)
+      const screenerData = await storage.getScreenerFilters({ mode, filterPath });
 
       if (!screenerData) {
-        return res.status(404).json({ ok: false, code: 'NOT_FOUND', detail: `No filters found for mode: ${mode}` });
+        return res.status(404).json({ ok: false, code: 'NOT_FOUND', detail: `No filters found for mode: ${mode}, filterPath: ${filterPath}` });
       }
 
       // Directive 11.8B-D1: All filters are manual-only. No authority flags in response.
@@ -2227,8 +2235,34 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             value: screenerData.minHistoryDays ?? 30,
             displayName: "Minimum History (Days)",
             category: "Data Quality"
+          },
+          // Batch 19G: IMF threshold fields from DB
+          {
+            name: "lqMin",
+            value: parseFloat(screenerData.lqMin ?? '35'),
+            displayName: "LQ Minimum",
+            category: "IMF Thresholds"
+          },
+          {
+            name: "vnMax",
+            value: parseFloat(screenerData.vnMax ?? '0.93'),
+            displayName: "VolNoise Maximum",
+            category: "IMF Thresholds"
+          },
+          {
+            name: "corrMax",
+            value: parseFloat(screenerData.corrMax ?? '0.92'),
+            displayName: "Correlation Maximum",
+            category: "IMF Thresholds"
+          },
+          {
+            name: "diMin",
+            value: parseFloat(screenerData.diMin ?? '55'),
+            displayName: "DI Minimum",
+            category: "IMF Thresholds"
           }
         ],
+        filterPath, // Batch 19G: Include filterPath in response
         lastUpdated: screenerData.updatedAt
       };
 
@@ -2252,31 +2286,40 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const userId = req.user!.id;
       const mode = req.query.mode as 'live' | 'paper';
+      // Batch 19G: Accept optional filterPath in request body or query
+      const filterPath = (req.body.filterPath || req.query.filterPath || 'active_quant') as string;
 
       if (!mode || (mode !== 'live' && mode !== 'paper')) {
         return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
       }
 
+      // Batch 19G: Validate filterPath
+      const validFilterPaths = ['active_quant', 'active_pattern', 'vts_quant', 'vts_pattern'];
+      if (!validFilterPaths.includes(filterPath)) {
+        return res.status(400).json({ ok: false, code: 'INVALID_FILTER_PATH', detail: `filterPath must be one of: ${validFilterPaths.join(', ')}` });
+      }
+
       const { filterName, value } = req.body;
 
+      // Fix per Langston review: range validation (7-365) allows 14 and 21 for pattern/VTS paths
       if (filterName === 'minHistoryDays' && value !== undefined) {
-        const allowedValues = [30, 60, 90, 180];
         const numValue = typeof value === 'string' ? parseInt(value, 10) : value;
-        if (!allowedValues.includes(numValue)) {
-          return res.status(400).json({ 
-            ok: false, 
-            code: 'INVALID_INPUT', 
-            detail: `minHistoryDays must be one of: ${allowedValues.join(', ')}` 
+        if (typeof numValue !== 'number' || isNaN(numValue) || numValue < 7 || numValue > 365) {
+          return res.status(400).json({
+            ok: false,
+            code: 'INVALID_INPUT',
+            detail: `minHistoryDays must be between 7 and 365`
           });
         }
       }
       
       console.log(`[FiltersV2:${requestId}] Updating - filterName=${filterName}, value=${value}`);
       
-      const current = await storage.getScreenerFilters({ mode });
-      
+      // Batch 19G: Read by (mode, filterPath) composite key
+      const current = await storage.getScreenerFilters({ mode, filterPath });
+
       if (!current) {
-        return res.status(404).json({ ok: false, code: 'NOT_FOUND', detail: `No filters found for mode: ${mode}` });
+        return res.status(404).json({ ok: false, code: 'NOT_FOUND', detail: `No filters found for mode: ${mode}, filterPath: ${filterPath}` });
       }
       
       const {
@@ -2296,7 +2339,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // Numeric filters
         const numericFilters = ['minVolume', 'minLiquidity', 'minPrice', 'maxPrice', 'maxBidAskSpread',
           'volatilityMin', 'volatilityMax', 'minMarketCap', 'rsiMin', 'rsiMax',
-          'universeSize', 'confidenceThreshold', 'minHistoryDays'];
+          'universeSize', 'confidenceThreshold', 'minHistoryDays',
+          'lqMin', 'vnMax', 'corrMax', 'diMin']; // Batch 19G: IMF threshold fields
         
         // Boolean filters
         const booleanFilters = ['excludeStablecoins', 'allowRegulatedOnly'];
@@ -2318,12 +2362,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       const updatePayload = {
         mode: current.mode,
+        filterPath, // Batch 19G: Include filterPath in upsert
         ...updatedFilterValues,
         managedByLottie: false,
         manualOverrideEnabled: true,
         lastUpdatedBy: userId
       };
-      
+
+      // Batch 19G: Upsert by (mode, filterPath) composite key
       const updated = await storage.upsertScreenerFilters(updatePayload);
       
       const auditPromises = [];

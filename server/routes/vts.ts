@@ -1429,12 +1429,41 @@ router.get('/passive-decisions', requireAuth, async (req: Request, res: Response
  * HF9 Item D: VTS IMF Filter Status
  * Returns active vs VTS thresholds and pair counts for Screeners tab UI panel
  */
+/**
+ * Batch 19G: VTS IMF Filter Status — reads all 4 filter paths from DB
+ * Returns actual DB values instead of hardcoded constants.
+ */
 router.get('/imf-status', requireAuth, async (_req: Request, res: Response) => {
   try {
-    const { SYSTEM_GUARDS, VTS_IMF_THRESHOLDS } = await import('../config/system-guards.js');
-    const { PATTERN_POOL_THRESHOLDS, getPatternPoolThresholds } = await import('../config/pattern-filter-profile.js');
-    const { PATTERN_GLOBAL_FILTERS, VTS_PATTERN_GLOBAL_FILTERS } = await import('../config/pattern-global-filters.js');
+    const { storage } = await import('../storage.js');
     const { fx5Scanner } = await import('../services/fx5-scanner.js');
+
+    const mode = 'paper' as const; // IMF status always shows paper mode filters
+
+    // Batch 19G: Read all 4 filter rows from DB
+    const [activeQuantRow, activePatternRow, vtsQuantRow, vtsPatternRow] = await Promise.all([
+      storage.getScreenerFilters({ mode, filterPath: 'active_quant' }),
+      storage.getScreenerFilters({ mode, filterPath: 'active_pattern' }),
+      storage.getScreenerFilters({ mode, filterPath: 'vts_quant' }),
+      storage.getScreenerFilters({ mode, filterPath: 'vts_pattern' }),
+    ]);
+
+    // Helper to extract filter column data from DB row
+    const toFilterColumnData = (row: any) => ({
+      LQ_MIN: parseFloat(row?.lqMin ?? '35'),
+      VN_MAX: parseFloat(row?.vnMax ?? '0.93'),
+      CORR_MAX: parseFloat(row?.corrMax ?? '0.92'),
+      DI_MIN: parseFloat(row?.diMin ?? '55'),
+      MIN_VOLUME_USD: parseFloat(row?.minVolume ?? '500000'),
+      MAX_SPREAD: parseFloat(row?.maxBidAskSpread ?? '0.50'),
+      MIN_HISTORY_DAYS: row?.minHistoryDays ?? 30,
+      MIN_PRICE: parseFloat(row?.minPrice ?? '0.25'),
+      MAX_PRICE: parseFloat(row?.maxPrice ?? '100000'),
+      MIN_LIQUIDITY: parseFloat(row?.minLiquidity ?? '500000'),
+      MIN_MARKET_CAP: parseFloat(row?.minMarketCap ?? '250000000'),
+      EXCLUDE_STABLECOINS: row?.excludeStablecoins ?? true,
+      ACTIVE_TIMEFRAMES: row?.activeTimeframes ?? ['5m', '15m', '1h'],
+    });
 
     const scanBatch = fx5Scanner.getCurrentScanBatch('paper');
     const standardCount = scanBatch.filter(p => p.filterTier === 'standard' || !p.filterTier).length;
@@ -1443,53 +1472,27 @@ router.get('/imf-status', requireAuth, async (_req: Request, res: Response) => {
     const patternCount = scanBatch.filter(p => p.sourcePool === 'pattern').length;
     const totalCount = scanBatch.length;
 
-    // Get regime-aware pattern thresholds (may differ from static defaults)
-    const currentPatternThresholds = getPatternPoolThresholds(null); // Static defaults
+    const activeQuant = toFilterColumnData(activeQuantRow);
+    const activePattern = toFilterColumnData(activePatternRow);
+    const vtsQuant = toFilterColumnData(vtsQuantRow);
+    const vtsPattern = toFilterColumnData(vtsPatternRow);
 
     res.json({
-      // Batch 19F Phase 2: 4-column filter status for Guardrails & Filters page
-      activeQuant: {
-        LQ_MIN: SYSTEM_GUARDS.MIN_LIQUIDITY_SCORE,
-        VN_MAX: SYSTEM_GUARDS.MAX_VOL_NOISE,
-        CORR_MAX: SYSTEM_GUARDS.CORRELATION_THRESHOLD,
-        MIN_VOLUME_USD: 500_000, // From screener_filters defaults
-        MAX_SPREAD: 0.5,
-        MIN_HISTORY_DAYS: 30,
-      },
-      activePattern: {
-        LQ_MIN: currentPatternThresholds.LQ_MIN,
-        VN_MAX: currentPatternThresholds.VN_MAX,
-        CORR_MAX: SYSTEM_GUARDS.CORRELATION_THRESHOLD, // Pattern uses same correlation guard
-        MIN_VOLUME_USD: PATTERN_GLOBAL_FILTERS.MIN_VOLUME_USD,
-        MAX_SPREAD: PATTERN_GLOBAL_FILTERS.MAX_BID_ASK_SPREAD,
-        MIN_HISTORY_DAYS: PATTERN_GLOBAL_FILTERS.MIN_HISTORY_DAYS,
-      },
-      vtsQuant: {
-        LQ_MIN: VTS_IMF_THRESHOLDS.LQ_MIN,
-        VN_MAX: VTS_IMF_THRESHOLDS.VN_MAX,
-        CORR_MAX: VTS_IMF_THRESHOLDS.CORR_MAX,
-        MIN_VOLUME_USD: 500_000,
-        MAX_SPREAD: 0.5,
-        MIN_HISTORY_DAYS: 30,
-      },
-      vtsPattern: {
-        LQ_MIN: currentPatternThresholds.LQ_MIN,
-        VN_MAX: currentPatternThresholds.VN_MAX,
-        CORR_MAX: VTS_IMF_THRESHOLDS.CORR_MAX, // VTS pattern uses VTS correlation
-        MIN_VOLUME_USD: VTS_PATTERN_GLOBAL_FILTERS.MIN_VOLUME_USD,
-        MAX_SPREAD: VTS_PATTERN_GLOBAL_FILTERS.MAX_BID_ASK_SPREAD,
-        MIN_HISTORY_DAYS: VTS_PATTERN_GLOBAL_FILTERS.MIN_HISTORY_DAYS,
-      },
+      // Batch 19G: All values from DB — no hardcoded constants
+      activeQuant,
+      activePattern,
+      vtsQuant,
+      vtsPattern,
       // Legacy fields preserved for backward compatibility
       activeTrading: {
-        LQ_MIN: SYSTEM_GUARDS.MIN_LIQUIDITY_SCORE,
-        VN_MAX: SYSTEM_GUARDS.MAX_VOL_NOISE,
-        CORR_MAX: SYSTEM_GUARDS.CORRELATION_THRESHOLD,
+        LQ_MIN: activeQuant.LQ_MIN,
+        VN_MAX: activeQuant.VN_MAX,
+        CORR_MAX: activeQuant.CORR_MAX,
       },
       vtsLearning: {
-        LQ_MIN: VTS_IMF_THRESHOLDS.LQ_MIN,
-        VN_MAX: VTS_IMF_THRESHOLDS.VN_MAX,
-        CORR_MAX: VTS_IMF_THRESHOLDS.CORR_MAX,
+        LQ_MIN: vtsQuant.LQ_MIN,
+        VN_MAX: vtsQuant.VN_MAX,
+        CORR_MAX: vtsQuant.CORR_MAX,
       },
       pairCounts: {
         standard: standardCount,
@@ -1498,10 +1501,10 @@ router.get('/imf-status', requireAuth, async (_req: Request, res: Response) => {
         pattern: patternCount,
         total: totalCount,
       },
-      schema: 'vts-imf-status/v2.0'
+      schema: 'vts-imf-status/v3.0' // Batch 19G: bumped schema version
     });
   } catch (error) {
-    console.error('[HF9][API] VTS IMF status failed:', error);
+    console.error('[19G][API] VTS IMF status failed:', error);
     res.status(500).json({ error: 'Failed to get VTS IMF status' });
   }
 });

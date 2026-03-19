@@ -468,11 +468,21 @@ export const screenerFilters = pgTable("screener_filters", {
   // Directive 11.0B: SQE Thresholds (configurable via screeners tab)
   finalScoreMin: decimal("final_score_min", { precision: 5, scale: 4 }).default("0.35"), // Minimum FinalScore for SQE (0.35 default)
   regimeWeightMin: decimal("regime_weight_min", { precision: 5, scale: 4 }).default("0.30"), // Minimum RegimeWeight for SQE (0.30 default)
-  
+
+  // Batch 19G: Filter path discriminator — 4 filter profiles per mode
+  filterPath: varchar("filter_path", { length: 20 }).notNull().default('active_quant'),
+
+  // Batch 19G: IMF (Institutional Math Filters) columns — previously hardcoded in system-guards.ts
+  lqMin: decimal("lq_min", { precision: 5, scale: 2 }).default("35.00"),
+  vnMax: decimal("vn_max", { precision: 5, scale: 4 }).default("0.9300"),
+  corrMax: decimal("corr_max", { precision: 5, scale: 4 }).default("0.9200"),
+  diMin: decimal("di_min", { precision: 5, scale: 2 }).default("55.00"),
+
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  uniqueMode: uniqueIndex("screener_filters_mode_idx").on(table.mode),
+  // Batch 19G: Composite unique index — one row per (mode, filterPath)
+  uniqueModePath: uniqueIndex("screener_filters_mode_path_idx").on(table.mode, table.filterPath),
 }));
 
 // Strategy Settings (per mode, per user, per strategy)
@@ -2240,6 +2250,12 @@ export const insertScreenerFiltersSchema = createInsertSchema(screenerFilters).o
   // Directive 11.0B: SQE Thresholds
   finalScoreMin: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
   regimeWeightMin: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  // Batch 19G: Filter path and IMF columns
+  filterPath: z.string().optional(),
+  lqMin: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  vnMax: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  corrMax: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  diMin: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
 });
 
 export const insertStrategySettingsSchema = createInsertSchema(strategySettings).omit({

@@ -21,13 +21,18 @@ import type { CanonicalRegimeType } from './canonical-regime-strategy-map.js';
 // Applied to pairs that FAIL quant metric filters (LQ>=35, VN<=0.93, Vol>=$500K, DI>=55)
 // These are intentionally relaxed to admit pairs where pattern/hybrid strategies can operate
 
+/**
+ * @deprecated Batch 19G: Static defaults moved to DB (screener_filters, filterPath='active_pattern').
+ * Retained as fallback for getPatternPoolThresholds() when DB is unavailable.
+ * REGIME_PATTERN_THRESHOLDS still override these when regime data is available.
+ */
 export const PATTERN_POOL_THRESHOLDS = {
-  MIN_VOLUME_USD: 250_000,      // vs $500K quant — patterns work at lower volumes
-  LQ_MIN: 20,                   // vs 35 quant — lower liquidity OK for pattern formations
-  VN_MAX: 0.98,                 // vs 0.93 quant — patterns thrive at inflection points (higher volatility)
-  DI_TRENDING_MIN: 30,          // vs 55 quant — patterns don't need strong directional trends
-  RSI_MIN: 15,                  // wider RSI band for reversal patterns
-  RSI_MAX: 85,                  // wider RSI band for reversal patterns
+  MIN_VOLUME_USD: 250_000,      // DB: screener_filters.min_volume where filterPath='active_pattern'
+  LQ_MIN: 20,                   // DB: screener_filters.lq_min where filterPath='active_pattern'
+  VN_MAX: 0.98,                 // DB: screener_filters.vn_max where filterPath='active_pattern'
+  DI_TRENDING_MIN: 30,          // DB: screener_filters.di_min where filterPath='active_pattern'
+  RSI_MIN: 15,                  // Not yet in DB — stays hardcoded
+  RSI_MAX: 85,                  // Not yet in DB — stays hardcoded
 };
 
 // --- Regime-Aware Pattern Pool Thresholds (Batch 19C) ---

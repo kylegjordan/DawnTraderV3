@@ -34,13 +34,21 @@ import {
  * Shows all filter thresholds across 4 paths: Active Quant, Active Pattern, VTS Quant, VTS Pattern
  * Replaces the old 2-section VTS IMF panel with full transparency into all filter paths.
  */
+/** Batch 19G: Expanded to show ALL DB fields from screener_filters */
 interface FilterColumnData {
   LQ_MIN: number;
   VN_MAX: number;
   CORR_MAX: number;
+  DI_MIN: number;
   MIN_VOLUME_USD: number;
   MAX_SPREAD: number;
   MIN_HISTORY_DAYS: number;
+  MIN_PRICE: number;
+  MAX_PRICE: number;
+  MIN_LIQUIDITY: number;
+  MIN_MARKET_CAP: number;
+  EXCLUDE_STABLECOINS: boolean;
+  ACTIVE_TIMEFRAMES: string[];
 }
 
 function FilterColumn({ title, data, color, tagLabel }: { title: string; data: FilterColumnData; color: string; tagLabel: string }) {
@@ -53,6 +61,7 @@ function FilterColumn({ title, data, color, tagLabel }: { title: string; data: F
   const c = colorMap[color] || colorMap.blue;
 
   const formatVol = (v: number) => v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(1)}M` : `$${(v / 1_000).toFixed(0)}K`;
+  const formatPrice = (v: number) => v >= 1000 ? `$${(v / 1000).toFixed(0)}K` : `$${v.toFixed(2)}`;
 
   return (
     <div className={`p-3 border rounded-lg ${c.bg} ${c.border}`}>
@@ -61,9 +70,15 @@ function FilterColumn({ title, data, color, tagLabel }: { title: string; data: F
         <span className={`text-xs px-1.5 py-0.5 rounded ${c.tag}`}>{tagLabel}</span>
       </div>
       <div className="space-y-1.5">
+        {/* Global Filters Section */}
+        <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Global</div>
         <div className="flex justify-between items-center">
           <span className="text-xs text-muted-foreground">Volume</span>
           <span className={`text-sm font-mono font-bold ${c.text}`}>{formatVol(data.MIN_VOLUME_USD)}</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-xs text-muted-foreground">Liquidity</span>
+          <span className={`text-sm font-mono font-bold ${c.text}`}>{formatVol(data.MIN_LIQUIDITY)}</span>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-xs text-muted-foreground">Spread</span>
@@ -73,7 +88,25 @@ function FilterColumn({ title, data, color, tagLabel }: { title: string; data: F
           <span className="text-xs text-muted-foreground">History</span>
           <span className={`text-sm font-mono font-bold ${c.text}`}>&ge; {data.MIN_HISTORY_DAYS}d</span>
         </div>
+        <div className="flex justify-between items-center">
+          <span className="text-xs text-muted-foreground">Price Range</span>
+          <span className={`text-xs font-mono ${c.text}`}>{formatPrice(data.MIN_PRICE)} - {formatPrice(data.MAX_PRICE)}</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-xs text-muted-foreground">Mkt Cap</span>
+          <span className={`text-sm font-mono font-bold ${c.text}`}>{formatVol(data.MIN_MARKET_CAP)}</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-xs text-muted-foreground">Stables</span>
+          <span className={`text-xs font-mono ${c.text}`}>{data.EXCLUDE_STABLECOINS ? 'Excluded' : 'Included'}</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-xs text-muted-foreground">Timeframes</span>
+          <span className={`text-xs font-mono ${c.text}`}>{(data.ACTIVE_TIMEFRAMES || []).join(', ')}</span>
+        </div>
         <div className="border-t border-dashed my-1 opacity-30" />
+        {/* IMF Section */}
+        <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">IMF</div>
         <div className="flex justify-between items-center">
           <span className="text-xs text-muted-foreground">LQ Min</span>
           <span className={`text-sm font-mono font-bold ${c.text}`}>&ge; {data.LQ_MIN}</span>
@@ -85,6 +118,10 @@ function FilterColumn({ title, data, color, tagLabel }: { title: string; data: F
         <div className="flex justify-between items-center">
           <span className="text-xs text-muted-foreground">Corr Max</span>
           <span className={`text-sm font-mono font-bold ${c.text}`}>&rho; &le; {data.CORR_MAX}</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-xs text-muted-foreground">DI Min</span>
+          <span className={`text-sm font-mono font-bold ${c.text}`}>&ge; {data.DI_MIN}</span>
         </div>
       </div>
     </div>
