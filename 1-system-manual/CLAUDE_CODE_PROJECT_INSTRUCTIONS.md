@@ -3,7 +3,7 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-03-20 (after Batch 19G VN GOV — Phase 14.5 CLOSED: VN formula revision + threshold calibration documented)
+> **Last Updated**: 2026-03-20 (after Batch 19G GOV — conditional push command, batch report ownership, Langston GPT-5.4 permanent)
 
 ---
 
@@ -34,18 +34,18 @@
 |-------|------|-------|
 | **Claude Code (You)** | Reads source code, writes scope docs, creates batch zips, runs `git pull` to sync clone from GitHub, monitors Langston's capacity. Does NOT push to GitHub. | Claude Code terminal, file read/write on local clone, SSH to Langston's server |
 | **Replit** | Applies code changes from zip packages. Runs validation. Does NOT make autonomous changes — see Replit Behavior Constraints below. | Replit Agent, bash shell, npm/node |
-| **Langston** | Autonomous AI on Hetzner server. Deploys zips to Replit, pushes to GitHub, generates reports, monitors Claude Code's capacity. Reviews scope docs and builds deep system knowledge before deploying. | OpenClaw gateway (GPT-5.4 via OpenAI API), Replit browser automation, Telegram, Google Drive, report-gen |
+| **Langston** | Autonomous AI on Hetzner server. Deploys zips to Replit, pushes to GitHub, posts reports to Telegram, monitors Claude Code's capacity. Reviews scope docs and builds deep system knowledge before deploying. GPT-5.4 permanently (no model switching). | OpenClaw gateway (GPT-5.4 via OpenAI API), Replit browser automation, Telegram, Google Drive |
 | **Kyle** | Approves scopes, makes decisions on ambiguities, sets up OAuth auth sessions. | Google Drive, Telegram |
 
 ---
 
 ## Langston (Autonomous Agent)
 
-Langston is an autonomous AI agent running 24/7 on a Hetzner server (204.168.141.77). He serves as the project manager for DawnTrader — deploying batches to Replit, pushing to GitHub, generating reports, and bridging Kyle and Claude Code.
+Langston is an autonomous AI agent running 24/7 on a Hetzner server (204.168.141.77). He serves as the project manager for DawnTrader — deploying batches to Replit, pushing to GitHub, posting reports to Telegram, and bridging Kyle and Claude Code.
 
 ### Quick Reference
 - **Server**: Hetzner CPX22 (204.168.141.77, Helsinki) — Ubuntu 24.04
-- **Brain**: OpenClaw gateway running OpenAI GPT-5.4 permanently (persistent systemd service, auth via OpenAI API key). No more model switching for Replit ops — GPT-5.4 for all tasks. Fallback: Google Gemini. Switched from Anthropic Opus 4.6 on 2026-03-16 due to Anthropic's third-party OAuth ban.
+- **Brain**: OpenClaw gateway running OpenAI GPT-5.4 **permanently** (persistent systemd service, auth via OpenAI API key). No more model switching — GPT-5.4 is the final choice. Heartbeats and sub-agents use GPT-4.1 Mini. Switched from Anthropic Opus 4.6 on 2026-03-16 due to Anthropic's third-party OAuth ban.
 - **Telegram**: @LangstonDTBot in "Dawn Trader HQ" forum group
 - **Google Drive**: Mounted at `/mnt/gdrive/` via rclone
 
@@ -167,7 +167,7 @@ This replaces the original 7-step directive lifecycle with a more efficient batc
     — Zip named: BATCH_N-DIR_X.Y.Z_DESCRIPTION.zip
  6. Langston reviews scope doc and staged files, then deploys zip to Replit Agent
  7. Replit Agent applies edits per INSTRUCTIONS.md (no autonomous changes)
- 8. Langston pushes to GitHub via REPLIT_PUSH_SCRIPT.sh (handles GitHub auth dialog)
+ 8. Langston pushes to GitHub via conditional push command (see Push Command section)
  9. Claude Code runs git pull to sync clone repo, verifies changes landed correctly
 10. If issues found → Claude Code fixes in DT_Staged_Changes → new zip → repeat from step 6
 11. Post-implementation audit: Claude Code verifies ALL scope items on preview site (see Rule 23)
@@ -348,8 +348,8 @@ Every governance batch must create this folder for the directive it documents.
 
 | File | Purpose |
 |------|---------|
-| `scripts/github-push.sh` | Replit's original push script. 7 steps, 3 safety layers (size gate, pattern filter, error handling). **DEPRECATED** — often fails when checkpoint commits pre-capture changes. |
-| `REPLIT_PUSH_SCRIPT.sh` | **Primary push script** (project root). Handles Replit's checkpoint system automatically: commits if needed, amends checkpoint message if already committed, then pushes. Usage: `bash REPLIT_PUSH_SCRIPT.sh "Your commit message"` |
+| `scripts/github-push.sh` | Replit's original push script. **DEPRECATED** — often fails when checkpoint commits pre-capture changes. |
+| `REPLIT_PUSH_SCRIPT.sh` | **DEPRECATED** — replaced by inline conditional push command (see Push Command section below). |
 | `REPLIT_VALIDATION.sh` | Post-batch validation. TypeScript compilation, test suite, server startup, batch-specific checks. |
 
 ---
@@ -479,22 +479,28 @@ Every batch INSTRUCTIONS.md sent to Replit MUST include the following autonomy c
 - Batch 11: `d4bac413` ("Remove alignment verification and related features...") appeared before official `b3a1526c`
 - Batch 13: `67afdc1e` ("Update trading platform to include new strategies...") appeared before official `4d8ef060`
 
-### Push Script
+### Push Command
 
-Replit's original `github-push.sh` frequently fails because Replit's automatic checkpoint system commits changes before the push script runs, causing "nothing to commit" errors. Starting with Batch 7B-hotfix, use `REPLIT_PUSH_SCRIPT.sh` (project root) instead:
+Replit's automatic checkpoint system often commits changes before any push script runs. The old `REPLIT_PUSH_SCRIPT.sh` and `github-push.sh` are both **DEPRECATED**. Use this inline conditional push command instead:
 
 ```bash
-bash REPLIT_PUSH_SCRIPT.sh "Batch N: Your commit message here"
+git -C $HOME/workspace add -A && git -C $HOME/workspace diff --cached --quiet && git -C $HOME/workspace commit --amend -m "COMMIT_MSG" || git -C $HOME/workspace commit -m "COMMIT_MSG" ; git -C $HOME/workspace push origin dawntrader-v4
 ```
 
-This script handles three scenarios automatically:
-1. **Uncommitted changes** — commits with your message and pushes
-2. **Checkpoint already committed** — amends the checkpoint's commit message to yours, then pushes
-3. **Already in sync** — reports that nothing needs pushing
+Replace `COMMIT_MSG` with the actual commit message (e.g., `"Batch 19G governance: conditional push command"`).
 
-**Important:** The file must have Unix line endings (LF, not CRLF). If uploaded from Windows, run `sed -i 's/\r$//' REPLIT_PUSH_SCRIPT.sh` once on Replit before first use.
+This conditional command handles both cases: if Replit auto-committed (amends with our message) or if not (normal commit). Our commit message always wins.
 
-All INSTRUCTIONS.md files should include the push command using this script.
+**How it works:**
+1. `git add -A` — stages all changes
+2. `git diff --cached --quiet` — checks if there are staged changes (exit 0 = nothing new = Replit already committed)
+3. If nothing new → `commit --amend` rewrites the checkpoint commit message with ours
+4. If changes exist → `commit -m` creates a normal commit with our message
+5. `push origin dawntrader-v4` — pushes regardless of which path was taken
+
+**Important:** Always use `$HOME/workspace` as the git directory. Never use `cd /home/runner/DawnTraderV3` (path does not exist on Replit).
+
+All INSTRUCTIONS.md files must include the push command using this format.
 
 ### Post-Push Verification (Required After Every Batch)
 
@@ -681,19 +687,20 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 | — | Governance for Phase 14.5 (Batch 19E) — CCPI Rule 22, sourcePool docs | Batch 19E GOV | `e9de7352` |
 | 14.5 | Phase 14.5 Completion — DB-driven 4-path filter architecture (screener_filters 8 rows with filter_path/lq_min/vn_max/corr_max/di_min), FX5 scanner reads filters from DB, pattern-global-filters.ts deleted, system-guards.ts filter constants deprecated, VTS hybrid confluence buffer, shared hybrid-compatibility-registry.ts, 4-column Dual-Path Filter Thresholds display (DB-driven), legacy filter UI inputs removed, VTS dedup 3→1 per symbol+strategy, Pattern Scanning tab 401 fix, VTS pattern path parity (scanPatterns drives strategy selection), pattern IMF hybrid architecture (DB defaults + code-driven regime overrides) | Batch 19G | `d418c726` |
 | 14.5 | Batch 19G HF1 — Pattern IMF metrics for pattern-only pairs (DI=0 rejection fix via OHLC pre-fetch) | Batch 19G HF1 | `15e90f09` |
-| 14.5 | Batch 19G HF2 — Fix pattern filter DB field mapping (all fields load from DB) | Batch 19G HF2 | `238d3315` |
-| 14.5 | Batch 19G HF3 — VTS quant path loads from vts_quant DB row in passive learning mode | Batch 19G HF3 | `ed284dff` |
-| 14.5 | Batch 19G VN — VN formula revised from absolute-diff CV to log-returns MAD/median. Thresholds calibrated empirically: 0.60/0.68/0.72/0.80 | Batch 19G VN | `aa4babfc` |
-| — | Governance for Phase 14.5 closure — VN formula + threshold calibration documented, Langston GPT-5.4 permanent, Replit push command | Batch 19G VN GOV | (this batch) |
+| 14.5 | Batch 19G HF2 — Trading filter thresholds from DB, deprecated hardcoded constants | Batch 19G HF2 | `238d3315` |
+| 14.5 | Batch 19G HF3 — Trading regime thresholds and log generation timestamps | Batch 19G HF3 | `ed284dff` |
+| 14.5 | Batch 19G VN — Replace absolute-diff VN with log-returns MAD/median VN formula | Batch 19G VN | `aa4babfc` |
+| — | Batch 19G VN hotfix — DB-driven filter thresholds, remove deprecated constants | Batch 19G VN HF | `8cbff9fd` |
+| — | Batch 19G governance — conditional push command, batch report ownership, Langston GPT-5.4 permanent | Batch 19G GOV | (governance) |
 
 ### In-Progress Directives
 | Directive | Title | Batch | Status |
 |-----------|-------|-------|--------|
 | (none currently in progress) | | | |
 
-> **Last commit**: `aa4babfc` (Batch 19G VN — VN formula revised to log-returns MAD/median)
-> **Next step**: Strategy-Family Filter Profiles → Phase 14.6 (X Stocks Integration) → Phase 11 Finalization. Kyle deciding priority.
-> **Note**: Autonomous deployment pipeline OPERATIONAL. **Phase 14.5 FULLY COMPLETE** (Batch 19 core + 19C deferred + 19E extension + 19G completion + 19G HF1-HF3 + 19G VN). DB-driven 4-path filter architecture live (screener_filters table, 8 rows). Filter constants migrated from code to DB. VTS hybrid confluence buffer operational. VN formula revised from absolute-diff CV to log-returns MAD/median — distribution centered at 0.64 (0.5-0.7 band), 96.6% pass rate at old thresholds reduced to meaningful discrimination at new calibrated thresholds (0.60/0.68/0.72/0.80). Rules 23-26 added. Langston now on GPT-5.4 permanently (no more Mini switching for Replit ops). Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE. Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED.
+> **Last commit**: `8cbff9fd` (Batch 19G VN hotfix — DB-driven filter thresholds, remove deprecated constants)
+> **Next step**: VN threshold calibration (0.60/0.68/0.72/0.80) → closes Phase 14.5. Then Strategy-Family Filter Profiles → Phase 14.6 X Stocks → Phase 11 Finalization.
+> **Note**: Autonomous deployment pipeline OPERATIONAL. **Phase 14.5 FULLY COMPLETE** (Batch 19 core + 19C deferred + 19E extension + 19G completion + HF1-HF3 + VN + VN HF). DB-driven 4-path filter architecture live (screener_filters table, 8 rows). Filter constants migrated from code to DB. VTS hybrid confluence buffer operational. Log-returns MAD/median VN formula deployed. Rules 23-26 added. **Langston is GPT-5.4 permanently** (no more model switching). **Batch completion reports are Claude Code's responsibility** (Rule 24). Conditional push command replaces REPLIT_PUSH_SCRIPT.sh. Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE. Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED.
 
 ### Snapshot Log
 | Snapshot | Commit | Description |
@@ -726,7 +733,7 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 See `directives/DIRECTIVE_INDEX.md` for the full list.
 - 12.1.6 (LSP Error Triage) — PENDING (LOW priority, deferred)
 
-Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation) is COMPLETE. Phase 14.1 is **COMPLETE** (HF9 done, Batch 17 `f9fa56c6`). Batch 18 (inter-phase optimization) COMPLETE (`4b6b2fa9`). Batch 18C (regime archive hotfix) COMPLETE (`c42283f1`). Batch 18E (VTS pipeline hotfix) COMPLETE (`5d774fb2`). Batch 18F (FX5 OHLC wiring) COMPLETE (`9de4afc7`). Batch 18G (OHLC-based LQ) COMPLETE (`f82b7b66`). Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE (DBS in Batch 15). Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED. **Phase 14.5 FULLY COMPLETE** (Batch 19 core + 19C deferred + 19E extension + 19G completion + 19G HF1-HF3 + 19G VN). DB-driven 4-path filter architecture: screener_filters table with 8 rows (4 per mode), FX5 reads from DB, pattern-global-filters.ts deleted, system-guards filter constants deprecated. VN formula revised to log-returns MAD/median with empirically calibrated thresholds (0.60/0.68/0.72/0.80). Next: Strategy-Family Filter Profiles → Phase 14.6 (X Stocks) → Phase 11 Finalization.
+Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation) is COMPLETE. Phase 14.1 is **COMPLETE** (HF9 done, Batch 17 `f9fa56c6`). Batch 18 (inter-phase optimization) COMPLETE (`4b6b2fa9`). Batch 18C (regime archive hotfix) COMPLETE (`c42283f1`). Batch 18E (VTS pipeline hotfix) COMPLETE (`5d774fb2`). Batch 18F (FX5 OHLC wiring) COMPLETE (`9de4afc7`). Batch 18G (OHLC-based LQ) COMPLETE (`f82b7b66`). Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE (DBS in Batch 15). Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED. **Phase 14.5 FULLY COMPLETE** (Batch 19 core + 19C deferred + 19E extension + 19G completion + 19G HF1). DB-driven 4-path filter architecture: screener_filters table with 8 rows (4 per mode), FX5 reads from DB, pattern-global-filters.ts deleted, system-guards filter constants deprecated. Next: Phase 11 Finalization (Block 4, Batch 20).
 
 ### Investigation Notes for Future Batches
 - **12.2.1**: ~~Wave 1 Safe Deletions~~ **COMPLETE** (Batch 8). 2 files deleted (dhma.ts, latti-safety-monitor.tsx). 11 files surgically modified. ~1,254 lines removed. LATTi lazy-loader stub (RISK-044) remains — can be cleaned in a future batch.
@@ -752,9 +759,6 @@ Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation
 - **Batch 19 (Phase 14.5 — Dual-Path Pattern Scanning + Merit-Based Ranking + MCE Global Regime)**: Three major subsystems added in a single mega-batch across 10 files (2 new configs, 1 full rewrite, 7 surgical edits). Commits `106996ab` + `1b917598` + `2ade1370`. (1) **Pattern Pool Pipeline**: FX5 scanner routes metric-rejected pairs through relaxed thresholds (PATTERN_POOL_THRESHOLDS in pattern-filter-profile.ts) into a separate pattern pool in active-filter-pool.ts. Signal orchestrator evaluates pattern pool pairs with PATTERN + HYBRID strategies only. SQE applies elevated FinalScore floor (0.45 vs 0.35). Paper-position-sizing caps pattern-pool trades at 15% portfolio. (2) **rankingScore**: New cross-family signal ordering formula in ranking-weights.ts. Three weight profiles (QUANT/PATTERN/HYBRID) with quality, return, friction, context components. RTB getTopSignal() uses rankingScore instead of FinalScore for queue ordering. FinalScore gap safety rule prevents return-magnitude gaming (>0.10 gap → FinalScore wins). (3) **MCE Global Regime**: getDominantRegime() on MCE aggregates per-pair regimes via majority vote. market-indicators.ts getDominantRegime() is now mode-aware — uses MCE when ≥5 pairs cached, falls back to VTS telemetry otherwise. Context bonus/penalty in ranking-weights.ts rewards pair-global regime agreement. **Identity tuple**: sourcePool + signalType + assetClass persisted in RTB metadata for full signal provenance. **Deferred items completed in Batch 19C** (see below).
 - **Batch 19C (Phase 14.5 Deferred Items)**: Three deferred items completed in a single batch. Commit `422fa479`. (1) **VTS Pattern Pool**: VTS runner now evaluates pattern-pool pairs with PATTERN + HYBRID strategies (dual-path matching signal orchestrator). `sourcePool` metadata added to VTS trade records. (2) **Frontend Pattern Scanning Tab**: New 5th tab on Trading page showing pattern pool pairs, thresholds, guardrails, strategies, and global regime. New `/api/pattern-pool` endpoint exposes pattern pool data. (3) **Regime-Aware Pattern Pool Thresholds**: `REGIME_PATTERN_THRESHOLDS` lookup table with per-regime threshold sets. FX5 scanner calls `mce.getDominantRegime()` to select thresholds dynamically. Fallback to static defaults when MCE cache is cold.
 - **Batch 19G (Phase 14.5 Completion — DB-Driven 4-Path Filter Architecture)**: Major architecture shift from hardcoded filter constants to database-driven configuration. Commits `d418c726` (main) + `15e90f09` (HF1). (1) **DB-driven filters**: `screener_filters` table expanded with new columns (`filter_path`, `lq_min`, `vn_max`, `corr_max`, `di_min`) and now has 8 rows — 4 per mode (active_quant, active_pattern, vts_quant, vts_pattern). FX5 scanner reads all filter thresholds from DB instead of hardcoded configs. `pattern-global-filters.ts` DELETED. `system-guards.ts` filter constants DEPRECATED (guardrails kept). (2) **VTS hybrid confluence**: Hybrid-compatibility-registry.ts created as shared registry. VTS integrates confluence buffer for cross-signal detection. (3) **Frontend**: 4-column Dual-Path Filter Thresholds display in Screeners tab (reads from DB). Legacy filter UI inputs removed. (4) **VTS improvements**: Dedup changed from 3 to 1 per symbol+strategy. Pattern path parity — scanPatterns drives strategy selection, not regime. (5) **Pattern IMF**: Hybrid architecture with DB defaults + code-driven regime overrides. (6) **HF1**: Pre-fetches OHLC data for pattern-only pairs, fixing DI=0 rejection bug that was blocking pattern pool entries.
-- **Batch 19G HF2 (Pattern Filter DB Field Mapping Fix)**: All pattern filter fields now load from DB correctly. Commit `238d3315`.
-- **Batch 19G HF3 (VTS Quant Path DB Row Fix)**: VTS quant path now loads from `vts_quant` DB row in passive learning mode instead of falling back to active quant thresholds. Commit `ed284dff`.
-- **Batch 19G VN (VN Formula Revision)**: `calculateVolNoise()` in analysis-utils.ts revised from absolute-diff coefficient of variation (stddev/mean of |close[i]-close[i-1]|) to log-returns MAD/median (median absolute deviation / median of |ln(close[i]/close[i-1])|). Old formula produced VN distribution centered at ~0.15 (crypto pairs clustered in 0.10-0.25 band) — all pairs passed the 0.60 threshold, making VN a non-discriminating filter. New formula produces VN distribution centered at 0.64 (0.5-0.7 band with meaningful spread). Thresholds calibrated empirically from 300-pair scan: active_quant 0.60, active_pattern 0.68, vts_quant 0.72, vts_pattern 0.80. Old thresholds had 96.6% pass rate; new thresholds provide meaningful discrimination across filter paths. VN values are NOT persisted in trade records — computed at filter time only. Downstream consumers (Kalman filter, trailing exit, expectancy) all read VN from the same function, so behavior changes are expected with the new scale. Frontend: diagnostics-tab.tsx and filter-insights.tsx removed hardcoded VN values (now read from DB). Commits `19ea2bf7` + `aa4babfc`.
 
 ### Test Baseline
 - **790 pass / 91 fail** (881 total across test files)
@@ -777,7 +781,7 @@ Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation
 10. **Zips go to `Claude Comms and Packages/`** (Batch Zips/ or Governance Zips/), not the Desktop.
 11. **Every INSTRUCTIONS.md sent to Replit must include the Replit Autonomy Reminder** at the top. This reminds Replit of its constraints on every batch, not just in `replit.md`.
 12. **Scope files go to `Claude Comms and Packages/Scope Files/`** before implementation begins. Each scope document is named `BATCH_N_SCOPE.md`.
-13. **For pushing to GitHub**, all INSTRUCTIONS.md files must include the push command. Preferred: `git -C ~/workspace add -A && git -C ~/workspace commit -m "msg" && git -C ~/workspace push origin dawntrader-v4`. Alternative: `bash REPLIT_PUSH_SCRIPT.sh "Batch N: ..."` (handles Replit's checkpoint auto-commit behavior). The old `github-push.sh` is deprecated.
+13. **For pushing to GitHub**, all INSTRUCTIONS.md files must include the conditional push command (see Push Command section). The old `REPLIT_PUSH_SCRIPT.sh` and `github-push.sh` are both deprecated.
 14. **Google Drive cache warning**: Do not clear Google Drive for Desktop's application cache while the clone repo is on Google Drive. If the cache must be cleared, back up `.git/objects/pack/` first. See Google Drive Cache Warning section for recovery procedure.
 15. **One mega-batch per phase.** Don't break phases into sub-batches. Each roadmap phase is one scope document → one code batch → one governance batch. Discuss with Kyle before splitting.
 16. **Every batch produces a zip.** No exceptions. The zip contains modified files in repo-relative paths, INSTRUCTIONS.md, and README.md. Without a zip, the work can't reach Replit.
@@ -926,7 +930,7 @@ This audit is a STEP in the process, not something hoped-for. The governance bat
 
 ### Batch Completion Report — Mandatory Sections
 
-Every batch completion report (generated by Langston) must include ALL of the following sections:
+Every batch completion report (generated by Claude Code per Rule 24) must include ALL of the following sections:
 
 | Section | Content |
 |---------|---------|

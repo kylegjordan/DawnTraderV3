@@ -1,53 +1,32 @@
-# BATCH 19G VN GOVERNANCE — Deployment Instructions
+# BATCH_19G_PUSH_GOV — Deployment Instructions
 
-## Commit Message
-```
-Batch 19G VN governance: Phase 14.5 CLOSED — VN formula + threshold calibration documented
-```
+> **REPLIT AUTONOMY REMINDER**: You are applying a governance batch. Follow these instructions exactly. Do NOT make autonomous changes, add features, refactor code, or modify files not listed here. If something is unclear, stop and ask.
 
-## Push Command
+## Files to Update
+
+| File | Action |
+|------|--------|
+| `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` | **REPLACE** with the version in this zip |
+
+## Steps
+
+1. Replace `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` with the file from this zip (overwrite the existing file completely).
+
+2. Push to GitHub using the conditional push command:
+
 ```bash
-git -C ~/workspace add -A && git -C ~/workspace commit -m "Batch 19G VN governance: Phase 14.5 CLOSED — VN formula + threshold calibration documented" && git -C ~/workspace push origin dawntrader-v4
+git -C $HOME/workspace add -A && git -C $HOME/workspace diff --cached --quiet && git -C $HOME/workspace commit --amend -m "Batch 19G governance: conditional push command, batch report ownership, Langston GPT-5.4 permanent" || git -C $HOME/workspace commit -m "Batch 19G governance: conditional push command, batch report ownership, Langston GPT-5.4 permanent" ; git -C $HOME/workspace push origin dawntrader-v4
 ```
-
-## Files to Place (repo-relative paths)
-
-| File | Destination |
-|------|-------------|
-| `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` | Replace existing |
-| `1-system-manual/directives/DIRECTIVE_INDEX.md` | Replace existing |
-| `1-system-manual/SYSTEM_IMPACT_MAP.md` | Replace existing |
 
 ## What Changed
 
-### CLAUDE_CODE_PROJECT_INSTRUCTIONS.md
-- **Last Updated** line updated to 2026-03-20 (Batch 19G VN GOV)
-- **Completed Directives table**: Added Batch 19G HF2 (`238d3315`), HF3 (`ed284dff`), VN (`aa4babfc`), and VN GOV rows
-- **Last commit** updated to `aa4babfc` (Batch 19G VN)
-- **Next step** updated: Strategy-Family Filter Profiles -> Phase 14.6 (X Stocks) -> Phase 11 Finalization
-- **Phase 14.5 status note** expanded with VN formula revision details and threshold calibration
-- **Langston Brain** (Quick Reference): GPT-5.4 permanently, no more model switching
-- **Rule 13** (push command): Added `git -C ~/workspace` as preferred push method
-- **Investigation Notes**: Added Batch 19G HF2, HF3, and VN entries
-- **Pending Directives note**: Updated with VN revision details and new roadmap
-
-### DIRECTIVE_INDEX.md
-- Added 3 new rows to Phase 14.5 table: Batch 19G HF2, HF3, VN
-- Summary statistics updated (8 -> 11 batches in Phase 14.5, review cycles 36 -> 39)
-
-### SYSTEM_IMPACT_MAP.md
-- **Last Updated** line updated to 2026-03-20
-- **Section 3.4 (IMF Metrics)**: Added Batch 19G VN details — new `calculateVolNoise()` formula (log-returns MAD/median), distribution shift from ~0.15 to ~0.64, empirically calibrated thresholds (0.60/0.68/0.72/0.80), frontend hardcoded values removed, downstream consumer impact noted
+- **Push command updated**: `REPLIT_PUSH_SCRIPT.sh` deprecated. All push references now use the inline conditional command (`git add → diff --cached --quiet → amend or commit → push`). This handles Replit auto-commits cleanly — our commit message always wins.
+- **Completed directives updated**: Added Batch 19G HF2, HF3, VN, VN HF to the completed table. Last commit updated to `8cbff9fd`.
+- **Langston GPT-5.4 permanent**: Brain description updated to note GPT-5.4 is the final model choice (no more switching).
+- **Batch report ownership**: Clarified that Claude Code writes batch completion reports (Rule 24), Langston posts them to Telegram.
+- **Next step updated**: VN threshold calibration → Strategy-Family Filter Profiles → Phase 14.6 X Stocks → Phase 11 Finalization.
 
 ## Validation
-- Governance-only batch — no code changes, no compilation needed
-- Verify files are placed at correct repo-relative paths
-- Verify git push succeeds
 
-## Replit Autonomy Reminder
-You are Replit. You apply file changes exactly as provided. You do NOT:
-- Reformat, restructure, or "improve" any files
-- Add comments, headers, or metadata not in the original
-- Skip or reorder any files
-- Make autonomous decisions about file placement
-Place files exactly as specified, run the push command, report the result.
+- Verify the file was replaced by checking the `Last Updated` line reads: `2026-03-20 (after Batch 19G GOV ...)`
+- Verify the `Last commit` line reads: `8cbff9fd`
