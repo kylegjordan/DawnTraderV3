@@ -1,10 +1,13 @@
 /**
  * Directive 11.0D - UI Diagnostics Tab with Dynamic Telemetry, Filter Performance, TEC Config & Config Provenance
- * 
+ *
  * Displays math integrity status, guard configuration, and dynamic backend telemetry.
  * Shows Phase 11 system guards, schema version synchronization, filter pass rates, TEC parameters,
  * and configuration provenance for full audit trail visibility.
- * 
+ *
+ * Batch 19G VN: Removed hardcoded MAX_VOL_NOISE=0.6. VN threshold now shown from telemetry API
+ * or marked as "DB-driven" when not available, since VN formula changed to log-returns MAD/median.
+ *
  * Tags: [11.0D][UI]
  */
 
@@ -18,10 +21,13 @@ import { useState, useEffect } from "react";
 const UI_SCHEMA_VERSION = "v1.4.5"; // Directive 11.0D
 const UI_PHASE_DIRECTIVE = "11.0D";
 
+// Batch 19G VN: Removed hardcoded MAX_VOL_NOISE. VN threshold is now DB-driven
+// and will be recalibrated after the log-returns MAD/median formula produces
+// empirical distribution data. Other guards remain as display defaults.
 const SYSTEM_GUARDS = {
   VERSION: "Phase10_Final",
   MIN_LIQUIDITY_SCORE: 40,
-  MAX_VOL_NOISE: 0.6,
+  MAX_VOL_NOISE: null as number | null, // Batch 19G: Now dynamic from telemetry API
   BASE_FEE_SLIPPAGE: 0.005,
   CORRELATION_THRESHOLD: 0.75,
   MIN_FINAL_SCORE: 0.35,
@@ -60,6 +66,9 @@ interface TelemetrySummary {
     executionConfigVersion: string;
     screenerConfigVersion: string;
   };
+  systemGuards?: {
+    maxVolNoise?: number;
+  };
 }
 
 export default function DiagnosticsTab() {
@@ -91,6 +100,13 @@ export default function DiagnosticsTab() {
   const backendPhase = telemetry?.phaseDirective || 'Unknown';
   const hasVersionMismatch = backendPhase !== UI_PHASE_DIRECTIVE;
 
+  // Batch 19G VN: Resolve VN threshold from telemetry API or show DB-driven indicator
+  const vnThresholdDisplay = SYSTEM_GUARDS.MAX_VOL_NOISE !== null
+    ? `\u2264 ${SYSTEM_GUARDS.MAX_VOL_NOISE}`
+    : telemetry?.systemGuards?.maxVolNoise
+      ? `\u2264 ${telemetry.systemGuards.maxVolNoise}`
+      : 'DB-driven';
+
   return (
     <div className="space-y-6">
       {/* Telemetry Snapshot Panel - Directive 10.9D */}
@@ -99,8 +115,8 @@ export default function DiagnosticsTab() {
           <CardTitle className="flex items-center gap-2">
             <Database className="w-5 h-5 text-blue-600" />
             Telemetry Snapshot (Phase 10.9)
-            <button 
-              onClick={() => refetch()} 
+            <button
+              onClick={() => refetch()}
               className="ml-auto p-1 hover:bg-blue-100 dark:hover:bg-blue-800 rounded"
               title="Refresh telemetry"
             >
@@ -211,8 +227,8 @@ export default function DiagnosticsTab() {
                   <span className="text-2xl font-bold text-emerald-600">{(telemetry?.fx5Passed24h ?? 0).toLocaleString()}</span>
                 </div>
                 <div className={`p-3 border rounded-lg text-center ${
-                  (telemetry?.passRate24h ?? 0) < 10 
-                    ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800' 
+                  (telemetry?.passRate24h ?? 0) < 10
+                    ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
                     : 'bg-muted/30'
                 }`}>
                   <div className="text-xs text-muted-foreground mb-1">Pass Rate</div>
@@ -261,7 +277,7 @@ export default function DiagnosticsTab() {
             </div>
             <Badge className="bg-emerald-600 text-white">Synced ✓</Badge>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="p-4 border rounded-lg bg-muted/30">
               <div className="flex items-center gap-2 mb-2">
@@ -271,15 +287,15 @@ export default function DiagnosticsTab() {
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Liquidity (LQ)</span>
-                  <span className="font-mono font-semibold">≥ {SYSTEM_GUARDS.MIN_LIQUIDITY_SCORE}</span>
+                  <span className="font-mono font-semibold">{'\u2265'} {SYSTEM_GUARDS.MIN_LIQUIDITY_SCORE}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Noise Limit (VolNoise)</span>
-                  <span className="font-mono font-semibold">≤ {SYSTEM_GUARDS.MAX_VOL_NOISE}</span>
+                  <span className="font-mono font-semibold">{vnThresholdDisplay}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Correlation (ρ)</span>
-                  <span className="font-mono font-semibold">≤ {SYSTEM_GUARDS.CORRELATION_THRESHOLD}</span>
+                  <span className="text-muted-foreground">Correlation ({'\u03C1'})</span>
+                  <span className="font-mono font-semibold">{'\u2264'} {SYSTEM_GUARDS.CORRELATION_THRESHOLD}</span>
                 </div>
               </div>
             </div>
@@ -292,11 +308,11 @@ export default function DiagnosticsTab() {
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">FinalScore Gate</span>
-                  <span className="font-mono font-semibold">≥ {SYSTEM_GUARDS.MIN_FINAL_SCORE}</span>
+                  <span className="font-mono font-semibold">{'\u2265'} {SYSTEM_GUARDS.MIN_FINAL_SCORE}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">RegimeWeight Gate</span>
-                  <span className="font-mono font-semibold">≥ {SYSTEM_GUARDS.MIN_REGIME_WEIGHT}</span>
+                  <span className="font-mono font-semibold">{'\u2265'} {SYSTEM_GUARDS.MIN_REGIME_WEIGHT}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Fee + Slippage</span>
@@ -433,7 +449,7 @@ export default function DiagnosticsTab() {
 
       <div className="p-4 bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 rounded-lg">
         <p className="text-xs text-violet-700 dark:text-violet-300">
-          <strong>Directive 11.0C:</strong> SQE & TEC Stabilization complete - EXECUTION_CONFIG centralized, adaptive sizing factors normalized (1.10x/0.90x), 
+          <strong>Directive 11.0C:</strong> SQE & TEC Stabilization complete - EXECUTION_CONFIG centralized, adaptive sizing factors normalized (1.10x/0.90x),
           SQE backfill logic for missing FinalScore/RegimeWeight implemented, TEC config exposed in telemetry summary for diagnostics visibility.
         </p>
       </div>

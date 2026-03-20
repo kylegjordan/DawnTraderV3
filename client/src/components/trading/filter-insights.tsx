@@ -124,8 +124,9 @@ const FILTER_DESCRIPTIONS: Record<string, string> = {
   failed_history: "Filters out pairs lacking the required minimum number of historical trading days",
   // Directive 10.9C: Institutional Math Guards (LQ, VolNoise, Correlation active; CWQI deprecated)
   failed_lq: "Log-Liquidity Index below threshold (LQ < 40) - insufficient market depth",
-  failed_noise: "Volatility Noise exceeds threshold (VolNoise > 0.6) - too choppy for reliable trading",
-  failed_correlation: "Portfolio correlation exceeds threshold (ρ > 0.75) - too correlated with existing positions",
+  // Batch 19G VN: Removed hardcoded threshold value from description — threshold is now DB-driven
+  failed_noise: "Volatility Noise exceeds threshold - too choppy for reliable trading",
+  failed_correlation: "Portfolio correlation exceeds threshold (\u03C1 > 0.75) - too correlated with existing positions",
   // failed_cwqi: deprecated in 10.9C - replaced by FinalScore/RegimeWeight at SQE level
 };
 
@@ -140,16 +141,17 @@ const FILTER_DISPLAY_NAMES: Record<string, string> = {
   already_active: "Already Active",
   failed_history: "History",
   // Directive 10.9C: Institutional Math Guards (LQ, VolNoise, Correlation active; CWQI deprecated)
-  failed_lq: "Liquidity Guard (LQ ≥ 40)",
-  failed_noise: "Noise Guard (VolNoise ≤ 0.6)",
-  failed_correlation: "Correlation Guard (ρ ≤ 0.75)",
+  failed_lq: "Liquidity Guard (LQ \u2265 40)",
+  // Batch 19G VN: Removed hardcoded threshold from display name — threshold is now DB-driven
+  failed_noise: "Noise Guard (VolNoise)",
+  failed_correlation: "Correlation Guard (\u03C1 \u2264 0.75)",
   // failed_cwqi: deprecated - replaced by FinalScore at SQE level
 };
 
 // Threshold conceptual text for non-numeric filters
 const THRESHOLD_CONCEPTUAL: Record<string, string> = {
   already_active: "Any pair already in an open trade will be excluded",
-  passed_all_filters: "No extra rules — count of pairs that passed every filter this scan",
+  passed_all_filters: "No extra rules \u2014 count of pairs that passed every filter this scan",
 };
 
 // Directive 10.9C: Active filter categories (11 filters)
@@ -175,15 +177,15 @@ const ALLOWED_FILTER_CATEGORIES: (keyof FilterBreakdown)[] = [
 function formatScanTimestamp(value: string | null | undefined): { display: string; relative: string } {
   // Guard against falsy, empty strings, or string literal 'undefined'
   if (!value || value === '' || value === 'undefined' || value === 'null') {
-    return { display: '—', relative: '' };
+    return { display: '\u2014', relative: '' };
   }
-  
+
   try {
     const date = new Date(value);
     if (isNaN(date.getTime())) {
-      return { display: '—', relative: '' };
+      return { display: '\u2014', relative: '' };
     }
-    
+
     // Format in UTC with explicit zone label
     const utcString = new Intl.DateTimeFormat('en-US', {
       timeZone: 'UTC',
@@ -195,14 +197,14 @@ function formatScanTimestamp(value: string | null | undefined): { display: strin
       second: '2-digit',
       timeZoneName: 'short'
     }).format(date);
-    
+
     // Calculate relative time
     const now = Date.now();
     const diffMs = now - date.getTime();
     const diffMinutes = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
-    
+
     let relative = '';
     if (diffMinutes < 1) {
       relative = 'just now';
@@ -213,19 +215,19 @@ function formatScanTimestamp(value: string | null | undefined): { display: strin
     } else {
       relative = `${diffDays}d ago`;
     }
-    
+
     return { display: utcString, relative };
   } catch (error) {
-    return { display: '—', relative: '' };
+    return { display: '\u2014', relative: '' };
   }
 }
 
 export function FilterInsights() {
   const { messages: wsMessages } = useWebSocket();
   const [currentTime, setCurrentTime] = useState<number>(Date.now());
-  
+
   // REB 2.8.8: breakdown state REMOVED - now using REST-only (scan24hData.breakdown24h)
-  
+
   // REB 2.8.5A: Track when REST data was fetched for countdown calculation
   const [restFetchTime, setRestFetchTime] = useState<number>(Date.now());
 
@@ -282,7 +284,7 @@ export function FilterInsights() {
   const serverNextScanMs = scanLatestData?.data?.nextScanInMs ?? 0;
   const elapsedSinceFetch = currentTime - restFetchTime;
   const remainingMs = Math.max(0, serverNextScanMs - elapsedSinceFetch);
-  
+
   const nextScanSeconds = Math.floor(remainingMs / 1000);
   const countdownDisplay = nextScanSeconds > 0 ? `${nextScanSeconds}s` : '0s';
 
@@ -293,23 +295,23 @@ export function FilterInsights() {
     }
 
     if (!filtersSettings?.filters) return null;
-    
+
     const filters = filtersSettings.filters;
-    
+
     // REB 2.12A: Threshold display fixes
     // - maxBidAskSpread is stored as percentage (e.g., 2.00 = 2%) - no multiplication needed
     // - minDailyRange (from volatilityMin) is stored as percentage (e.g., 0.50 = 0.5%) - no multiplication needed
     // - minHistoryDays displayed as "X days" format
     const map: Record<string, string> = {
-      'failed_min_volume': filters.minVolume ? `≥ $${filters.minVolume.toLocaleString()}` : '',
-      'failed_min_price': filters.minPrice ? `≥ $${filters.minPrice.toFixed(2)}` : '',
-      'failed_spread': filters.maxBidAskSpread ? `≤ ${filters.maxBidAskSpread.toFixed(1)}%` : '',
-      'failed_daily_range': filters.minDailyRange ? `≥ ${filters.minDailyRange.toFixed(1)}%` : '',
+      'failed_min_volume': filters.minVolume ? `\u2265 $${filters.minVolume.toLocaleString()}` : '',
+      'failed_min_price': filters.minPrice ? `\u2265 $${filters.minPrice.toFixed(2)}` : '',
+      'failed_spread': filters.maxBidAskSpread ? `\u2264 ${filters.maxBidAskSpread.toFixed(1)}%` : '',
+      'failed_daily_range': filters.minDailyRange ? `\u2265 ${filters.minDailyRange.toFixed(1)}%` : '',
       'failed_stablecoin': filters.excludeStablecoins ? 'Excluded' : 'Allowed',
       'failed_quote_currency': filters.allowedQuoteCurrencies ? filters.allowedQuoteCurrencies.join(', ') : '',
       'failed_history': filters.minHistoryDays ? `${filters.minHistoryDays} days` : '',
     };
-    
+
     return map[filterKey] || null;
   };
 
@@ -320,7 +322,7 @@ export function FilterInsights() {
     : '0.0';
 
   // REB 2.8.3: Format scan frequency from REST data (or static fallback)
-  const scanFrequency = scanData 
+  const scanFrequency = scanData
     ? `Every ${(scanData.cycleFrequencyMs / 1000).toFixed(0)}s`
     : 'Every 30s';
 
@@ -555,7 +557,7 @@ export function FilterInsights() {
                   {scanData.activeFilteredPool.map((pair, index) => {
                     const firstSeenFormatted = formatScanTimestamp(pair.firstSeen);
                     const lastUpdatedFormatted = formatScanTimestamp(pair.lastUpdated);
-                    
+
                     return (
                       <tr key={`${pair.symbol}-${index}`} className="border-b hover:bg-muted/50">
                         <td className="py-2 px-3 font-medium">{pair.symbol}</td>
@@ -605,7 +607,7 @@ export function FilterInsights() {
                   <span className="text-sm font-semibold text-destructive">{scan24hData.data.breakdown24h.ineligible.toLocaleString()}</span>
                 </div>
               </div>
-              
+
               <div className="space-y-2">
                 {ALLOWED_FILTER_CATEGORIES.map((key) => {
                   const filterData = scan24hData.data.breakdown24h.byFilter[key];
@@ -614,13 +616,13 @@ export function FilterInsights() {
                   const displayName = FILTER_DISPLAY_NAMES[key] || key;
                   const description = FILTER_DESCRIPTIONS[key];
                   const isPassedAllFilters = key === 'passed_all_filters';
-                  
+
                   return (
-                    <div 
-                      key={key} 
+                    <div
+                      key={key}
                       className={`flex items-start justify-between p-3 rounded border ${
-                        isPassedAllFilters 
-                          ? 'border-success bg-success/10' 
+                        isPassedAllFilters
+                          ? 'border-success bg-success/10'
                           : 'border-border hover:bg-muted/30'
                       }`}
                     >
@@ -642,12 +644,12 @@ export function FilterInsights() {
                         )}
                       </div>
                       <div className="ml-4 shrink-0">
-                        <p 
+                        <p
                           className={`text-lg font-bold ${isPassedAllFilters ? 'text-success' : ''}`}
                           data-testid={`count-filter-${key}`}
                           data-count={count}
                         >
-                          {isPassedAllFilters 
+                          {isPassedAllFilters
                             ? (filterData?.survivedCount?.toLocaleString() ?? '0')
                             : count.toLocaleString()
                           }

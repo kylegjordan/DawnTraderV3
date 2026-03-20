@@ -1,0 +1,46 @@
+--- PATCH INSTRUCTIONS ---
+File: server/core/metrics/imf-metrics.ts
+Action: Replace lines 79-97 (the calculateVolNoise comment + function)
+
+FIND THIS:
+/**
+ * Directive 11.7H: Calculate Volatility Noise using canonical price-difference formula
+ *
+ * Delegates to analysis-utils.ts canonical function for cross-mode parity.
+ * This ensures passive learning (OHLC cache) and active trading use identical math.
+ *
+ * Formula: stdDev(|price_diffs|) / mean(|price_diffs|)
+ * Typical range: 0.2 – 0.7 for stable markets
+ *
+ * @param ohlcData - Array of OHLC candles
+ * @returns VolNoise value between 0-1
+ */
+export function calculateVolNoise(ohlcData: OHLCData[]): number {
+  if (ohlcData.length < 3) return 0.5; // Default for insufficient data (matches analysis-utils)
+
+  // Extract close prices and delegate to canonical function
+  const closes = ohlcData.map(c => c.close);
+  return canonicalCalculateVolNoise(closes);
+}
+
+REPLACE WITH:
+/**
+ * Directive 11.7H: Calculate Volatility Noise using canonical log-returns MAD/median formula
+ *
+ * Delegates to analysis-utils.ts canonical function for cross-mode parity.
+ * This ensures passive learning (OHLC cache) and active trading use identical math.
+ *
+ * Batch 19G VN: Formula updated to log returns + MAD/median (robust statistics)
+ * Formula: VN = MAD(|ln(close[i]/close[i-1])|) / max(median(|ln returns|), 0.0001)
+ * Typical range: 0.0 – 1.0 (new distribution — thresholds need post-deployment recalibration)
+ *
+ * @param ohlcData - Array of OHLC candles
+ * @returns VolNoise value between 0-1
+ */
+export function calculateVolNoise(ohlcData: OHLCData[]): number {
+  if (ohlcData.length < 3) return 0.5; // Default for insufficient data (matches analysis-utils)
+
+  // Extract close prices and delegate to canonical function
+  const closes = ohlcData.map(c => c.close);
+  return canonicalCalculateVolNoise(closes);
+}

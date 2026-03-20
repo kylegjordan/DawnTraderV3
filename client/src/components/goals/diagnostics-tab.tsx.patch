@@ -1,0 +1,52 @@
+--- PATCH INSTRUCTIONS ---
+File: client/src/components/goals/diagnostics-tab.tsx
+Action: Replace the hardcoded SYSTEM_GUARDS object (lines 21-30)
+
+FIND THIS:
+const SYSTEM_GUARDS = {
+  VERSION: "Phase10_Final",
+  MIN_LIQUIDITY_SCORE: 40,
+  MAX_VOL_NOISE: 0.6,
+  BASE_FEE_SLIPPAGE: 0.005,
+  CORRELATION_THRESHOLD: 0.75,
+  MIN_FINAL_SCORE: 0.35,
+  MIN_REGIME_WEIGHT: 0.30,
+  PARITY_TOLERANCE: 0.000001,
+};
+
+REPLACE WITH:
+// Batch 19G VN: Removed hardcoded MAX_VOL_NOISE. VN threshold is now DB-driven
+// and will be recalibrated after the log-returns MAD/median formula produces
+// empirical distribution data. Other guards remain as display defaults.
+const SYSTEM_GUARDS = {
+  VERSION: "Phase10_Final",
+  MIN_LIQUIDITY_SCORE: 40,
+  MAX_VOL_NOISE: null as number | null, // Batch 19G: Now dynamic from telemetry API
+  BASE_FEE_SLIPPAGE: 0.005,
+  CORRELATION_THRESHOLD: 0.75,
+  MIN_FINAL_SCORE: 0.35,
+  MIN_REGIME_WEIGHT: 0.30,
+  PARITY_TOLERANCE: 0.000001,
+};
+
+---
+
+ALSO in the JSX display section (around line 277), find:
+
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Noise Limit (VolNoise)</span>
+                  <span className="font-mono font-semibold">≤ {SYSTEM_GUARDS.MAX_VOL_NOISE}</span>
+                </div>
+
+REPLACE WITH:
+
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Noise Limit (VolNoise)</span>
+                  <span className="font-mono font-semibold">
+                    {SYSTEM_GUARDS.MAX_VOL_NOISE !== null
+                      ? `≤ ${SYSTEM_GUARDS.MAX_VOL_NOISE}`
+                      : (telemetry as any)?.systemGuards?.maxVolNoise
+                        ? `≤ ${(telemetry as any).systemGuards.maxVolNoise}`
+                        : 'DB-driven'}
+                  </span>
+                </div>

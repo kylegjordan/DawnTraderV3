@@ -1,6 +1,15 @@
 /**
  * Directive 9.1.H: Unit Test Suite for Analysis Utils
  * Tests core metric functions: LQ, DI, VolNoise, Sigma
+ *
+ * Batch 19G VN: Updated VolNoise tests for log-returns MAD/median formula.
+ * The new formula uses log returns (price-level normalized) and robust statistics
+ * (MAD/median instead of stddev/mean), producing different values than the old
+ * absolute-diff formula but preserving the same behavioral contracts:
+ * - Smooth trends → low VN
+ * - Choppy data → high VN
+ * - Range 0-1
+ * - Insufficient data → 0.5
  */
 
 import { describe, test, expect } from 'vitest';
@@ -74,20 +83,29 @@ describe('Directive 9.1 - Analysis Utils Core Tests', () => {
     });
   });
 
-  describe('9.1.C - Volatility Noise (VolNoise)', () => {
-    test('VolNoise low for smooth trend series', () => {
-      const prices = [1, 2, 3, 4, 5];
+  describe('9.1.C - Volatility Noise (VolNoise) — Batch 19G: Log-Returns MAD/Median', () => {
+    test('VolNoise low for smooth constant-step trend', () => {
+      // Constant step sizes → all log returns identical → MAD = 0 → VN = 0
+      const prices = [100, 101, 102, 103, 104, 105];
       const vn = calculateVolNoise(prices);
-      expect(vn).toBeLessThan(0.4);
+      expect(vn).toBeLessThan(0.2);
     });
 
-    test('VolNoise high for irregular oscillating series', () => {
-      const prices = [10, 15, 8, 20, 5, 18];
+    test('VolNoise low for smooth exponential growth', () => {
+      // Constant percentage growth → all log returns identical → MAD = 0 → VN = 0
+      const prices = [100, 102, 104.04, 106.1208, 108.2432, 110.4081];
       const vn = calculateVolNoise(prices);
-      expect(vn).toBeGreaterThan(0.3);
+      expect(vn).toBeLessThan(0.1);
     });
 
-    test('VolNoise within 0-1 range', () => {
+    test('VolNoise higher for irregular oscillating series', () => {
+      // Mixed large and small moves → high deviation from median → higher VN
+      const prices = [100, 105, 98, 110, 95, 108];
+      const vn = calculateVolNoise(prices);
+      expect(vn).toBeGreaterThan(0.1);
+    });
+
+    test('VolNoise within 0-1 range for various inputs', () => {
       const smooth = calculateVolNoise([10, 11, 12, 13, 14]);
       const choppy = calculateVolNoise([10, 20, 10, 20, 10]);
       expect(smooth).toBeGreaterThanOrEqual(0);
@@ -99,6 +117,41 @@ describe('Directive 9.1 - Analysis Utils Core Tests', () => {
     test('VolNoise returns 0.5 for insufficient data', () => {
       expect(calculateVolNoise([1])).toBe(0.5);
       expect(calculateVolNoise([1, 2])).toBe(0.5);
+    });
+
+    test('VolNoise returns 0.5 for empty array', () => {
+      expect(calculateVolNoise([])).toBe(0.5);
+    });
+
+    test('VolNoise handles zero prices gracefully', () => {
+      // Zero prices should be skipped, and if not enough valid returns, return 0.5
+      const prices = [0, 100, 200];
+      const vn = calculateVolNoise(prices);
+      expect(vn).toBeGreaterThanOrEqual(0);
+      expect(vn).toBeLessThanOrEqual(1);
+    });
+
+    test('VolNoise is scale-independent (same percentage moves = same VN)', () => {
+      // This is the key property of the new log-returns formula
+      const lowPrice = [1, 1.01, 0.99, 1.02, 0.98, 1.01];
+      const highPrice = [10000, 10100, 9900, 10200, 9800, 10100];
+      const vnLow = calculateVolNoise(lowPrice);
+      const vnHigh = calculateVolNoise(highPrice);
+      // Same percentage moves should produce same VN (within floating point tolerance)
+      expect(vnLow).toBeCloseTo(vnHigh, 2);
+    });
+
+    test('VolNoise = 0 for perfectly constant price', () => {
+      // All returns = 0, median = 0, MAD = 0, VN = 0/0.0001 = 0
+      const prices = [100, 100, 100, 100, 100];
+      const vn = calculateVolNoise(prices);
+      expect(vn).toBe(0);
+    });
+
+    test('Choppy prices produce higher VN than smooth trends', () => {
+      const smooth = calculateVolNoise([100, 101, 102, 103, 104, 105, 106, 107, 108]);
+      const choppy = calculateVolNoise([100, 110, 95, 115, 90, 120, 85, 125, 80]);
+      expect(choppy).toBeGreaterThan(smooth);
     });
   });
 
@@ -152,13 +205,13 @@ describe('Directive 9.1 - Analysis Utils Core Tests', () => {
     test('returns all metrics in correct format', () => {
       const prices = Array.from({ length: 25 }, (_, i) => 100 + i);
       const metrics = computeCoreMetrics(prices, 5_000_000, 500, 0.05);
-      
+
       expect(metrics).toHaveProperty('LQ');
       expect(metrics).toHaveProperty('DI');
       expect(metrics).toHaveProperty('VolNoise');
       expect(metrics).toHaveProperty('Sigma');
       expect(metrics).toHaveProperty('passesFilter');
-      
+
       expect(typeof metrics.LQ).toBe('number');
       expect(typeof metrics.DI).toBe('number');
       expect(typeof metrics.VolNoise).toBe('number');

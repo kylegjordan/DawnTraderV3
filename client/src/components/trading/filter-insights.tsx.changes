@@ -1,0 +1,13 @@
+--- EXACT TEXT REPLACEMENTS for filter-insights.tsx ---
+
+These are the two exact string replacements to make in the file.
+The file is too large (672 lines) to include as a full replacement.
+Apply these two find-and-replace operations:
+
+REPLACEMENT 1:
+Find:    failed_noise: "Volatility Noise exceeds threshold (VolNoise > 0.6) - too choppy for reliable trading",
+Replace: failed_noise: "Volatility Noise exceeds threshold - too choppy for reliable trading",
+
+REPLACEMENT 2:
+Find:    failed_noise: "Noise Guard (VolNoise ≤ 0.6)",
+Replace: failed_noise: "Noise Guard (VolNoise)",

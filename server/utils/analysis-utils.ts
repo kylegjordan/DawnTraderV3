@@ -2,19 +2,19 @@
  * Directive 9.0.B - Volume Classifier Utility
  * Directive 9.6.A - Now imports thresholds from centralized SYSTEM_GUARDS configuration
  * Directive 10.9B - Verified Pre-Signal Math Guards (non-conflicting with SQE scoring)
- * 
+ *
  * Provides standardized classification for liquidity tiers based on 24h volume (USD).
  * Used by FX5 Scanner and Filter Engine to categorize trading pairs.
- * 
+ *
  * Pre-Signal Math Guards (Institutional Math):
  * - Log-Liquidity (LQ): Logarithmic liquidity index (0-100)
  * - Directional Integrity (DI): Trend straightness measure (0-100)
  * - Volatility Noise (VolNoise): Market choppiness quantifier (0-1)
  * - Sigma (σ): Standard deviation of returns
- * 
+ *
  * These guards execute BEFORE signal orchestration but AFTER FX5 universe selection.
  * They do NOT conflict with SQE scoring which uses FinalScore/RegimeWeight.
- * 
+ *
  * Tiers:
  * - SMALL: < $1M USD 24h volume (low liquidity, higher spread risk)
  * - MID: $1M - $10M USD 24h volume (moderate liquidity)
@@ -52,7 +52,7 @@ export function classifyVolume(volumeUSD: number): VolumeClass {
  */
 export function formatVolumeClass(volumeUSD: number): string {
   const volumeClass = classifyVolume(volumeUSD);
-  const formattedVol = volumeUSD >= 1_000_000 
+  const formattedVol = volumeUSD >= 1_000_000
     ? `$${(volumeUSD / 1_000_000).toFixed(1)}M`
     : `$${(volumeUSD / 1_000).toFixed(0)}K`;
   return `${volumeClass} (${formattedVol})`;
@@ -65,7 +65,7 @@ export function formatVolumeClass(volumeUSD: number): string {
  * @returns true if pair meets minimum liquidity
  */
 export function meetsLiquidityRequirement(
-  volumeUSD: number, 
+  volumeUSD: number,
   minClass: VolumeClass = 'MID'
 ): boolean {
   const volumeClass = classifyVolume(volumeUSD);
@@ -82,7 +82,7 @@ export function meetsLiquidityRequirement(
  * Directive 9.1.A: Log-Liquidity (LQ)
  * Logarithmic liquidity index on 0-100 scale.
  * High = stable market depth, Low = illiquid.
- * 
+ *
  * @param V - 24h trading volume (USD)
  * @param C - Trade count (24h)
  * @param S - Bid-ask spread
@@ -100,7 +100,7 @@ export function calculateLogLiquidity(V: number, C: number, S: number): number {
  * Measures directional persistence (trend straightness).
  * - >= 65: stable trend
  * - < 30: choppy / non-directional
- * 
+ *
  * @param prices - Array of price points
  * @returns DI value between 0-100
  */
@@ -114,18 +114,58 @@ export function calculateDirectionalIntegrity(prices: number[]): number {
 
 /**
  * Directive 9.1.C: Volatility Noise (VolNoise)
- * Quantifies market choppiness.
+ * Quantifies market choppiness using robust statistics.
  * Lower = smoother trends, Higher = instability.
- * 
+ *
+ * Batch 19G VN: Log returns + MAD/median (robust statistics)
+ * Consensus from 5-source review: log returns normalize across price levels,
+ * MAD/median handles fat tails and flash crashes without clipping.
+ * Previous formula used absolute diffs which caused VN=1.00 for most crypto.
+ *
+ * Formula:
+ *   returns[i] = |ln(close[i] / close[i-1])|
+ *   VN = MAD(returns) / max(median(returns), 0.0001)
+ *   VN = clamp(VN, 0, 1)
+ *
  * @param prices - Array of price points
  * @returns VolNoise value between 0-1
  */
 export function calculateVolNoise(prices: number[]): number {
   if (prices.length < 3) return 0.5;
-  const diffs = prices.slice(1).map((p, i) => Math.abs(p - prices[i]));
-  const mean = diffs.reduce((a, b) => a + b, 0) / diffs.length;
-  const variance = diffs.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / diffs.length;
-  const noise = Math.sqrt(variance) / (mean || 1);
+
+  // Batch 19G VN: Log returns + MAD/median (robust statistics)
+  // Consensus from 5-source review: log returns normalize across price levels,
+  // MAD/median handles fat tails and flash crashes without clipping.
+  // Previous formula used absolute diffs which caused VN=1.00 for most crypto.
+
+  // Compute absolute log returns
+  const absLogReturns: number[] = [];
+  for (let i = 1; i < prices.length; i++) {
+    if (prices[i] <= 0 || prices[i - 1] <= 0) continue; // Guard against zero/negative prices
+    absLogReturns.push(Math.abs(Math.log(prices[i] / prices[i - 1])));
+  }
+
+  if (absLogReturns.length < 2) return 0.5;
+
+  // Compute median of absolute log returns
+  const sorted = [...absLogReturns].sort((a, b) => a - b);
+  const medianIdx = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 === 0
+    ? (sorted[medianIdx - 1] + sorted[medianIdx]) / 2
+    : sorted[medianIdx];
+
+  // Compute MAD (Median Absolute Deviation)
+  const deviations = absLogReturns.map(r => Math.abs(r - median));
+  const sortedDev = [...deviations].sort((a, b) => a - b);
+  const madIdx = Math.floor(sortedDev.length / 2);
+  const mad = sortedDev.length % 2 === 0
+    ? (sortedDev[madIdx - 1] + sortedDev[madIdx]) / 2
+    : sortedDev[madIdx];
+
+  // VN = MAD / max(median, floor) — floor prevents division by zero for flat assets
+  const DENOMINATOR_FLOOR = 0.0001;
+  const noise = mad / Math.max(median, DENOMINATOR_FLOOR);
+
   return Math.min(1, Math.max(0, noise));
 }
 
@@ -134,14 +174,14 @@ export function calculateVolNoise(prices: number[]): number {
  * Standard deviation of returns (not raw prices).
  * Adaptive volatility estimator for 3σ spike detection.
  * Smooth trends → low σ, erratic prices → high σ.
- * 
+ *
  * @param prices - Array of price points
  * @param window - Rolling window size (default: 20)
  * @returns Sigma value (standard deviation of returns)
  */
 export function calculateSigma(prices: number[], window: number = 20): number {
   if (prices.length < window + 1) return 0;
-  
+
   const diffs = prices.slice(1).map((p, i) => p - prices[i]);
   const segment = diffs.slice(-window);
 
@@ -155,22 +195,22 @@ export function calculateSigma(prices: number[], window: number = 20): number {
  * Measures trend efficiency/directional strength.
  * ER → 1.0: Perfectly smooth trend (net change equals total path)
  * ER → 0.0: Random, noisy chop (net change is small vs total path)
- * 
+ *
  * Formula: ER = |Price_t - Price_{t-n}| / Σ|ΔPrice_i|
- * 
+ *
  * @param prices - Array of price points
  * @param window - Lookback window (default: 20)
  * @returns ER value between 0-1
  */
 export function calculateEfficiencyRatio(prices: number[], window: number = 20): number {
   if (prices.length < window + 1) return 0;
-  
+
   const change = Math.abs(prices[prices.length - 1] - prices[prices.length - window - 1]);
   const volatility = prices.slice(-window).reduce((sum, p, i, arr) =>
     i > 0 ? sum + Math.abs(p - arr[i - 1]) : sum, 0);
-  
+
   if (volatility === 0) return 0;
-  
+
   const ER = +(change / volatility).toFixed(4);
   return Math.min(1, Math.max(0, ER));
 }
@@ -225,7 +265,7 @@ export function computeCoreMetrics(
   const Sigma = calculateSigma(prices);
   const ER = calculateEfficiencyRatio(prices);
   const passesFilter = passesCoreMetricFilters(LQ, VolNoise);
-  
+
   return { LQ, DI, VolNoise, Sigma, ER, passesFilter };
 }
 
@@ -237,14 +277,14 @@ export function computeCoreMetrics(
 /**
  * Directive 9.2.B: Dynamic Stop Distance Formula
  * Computes K' (adaptive trailing multiplier) from DI and VolNoise.
- * 
+ *
  * Formula: K' = K_base × (1 + α×(1 - DI/100) + β×VolNoise)
- * 
+ *
  * Where:
  * - K_base: Base trailing multiplier (default: 1.0 ATR)
  * - α: DI sensitivity coefficient (default: 0.5) - lower DI = wider stop
  * - β: VolNoise sensitivity coefficient (default: 0.8) - higher noise = wider stop
- * 
+ *
  * @param DI - Directional Integrity (0-100)
  * @param VolNoise - Volatility Noise (0-1)
  * @param K_base - Base trailing multiplier (default: 1.0)
@@ -268,7 +308,7 @@ export function calculateDynamicStopDistance(
 /**
  * Directive 9.2.B: Calculate trailing stop price
  * Uses adaptive K' multiplier with ATR to compute trailing stop distance.
- * 
+ *
  * @param currentPrice - Current market price
  * @param ATR - Average True Range
  * @param DI - Directional Integrity (0-100)
@@ -294,7 +334,7 @@ export type TradeMode = 'TARGET' | 'TRAILING_TAKE';
 /**
  * Directive 9.2.C: Break-Even trigger calculation
  * Returns true if price has reached 1×ATR gain from entry.
- * 
+ *
  * @param currentPrice - Current market price
  * @param entryPrice - Trade entry price
  * @param ATR - Average True Range
@@ -312,7 +352,7 @@ export function isBreakEvenTriggered(
 /**
  * Directive 9.2.C: Target Lock trigger calculation
  * Returns true if price has reached the target price.
- * 
+ *
  * @param currentPrice - Current market price
  * @param targetPrice - Trade target price
  * @returns true if target lock trigger is reached
@@ -329,19 +369,19 @@ export function isTargetLockTriggered(
  * Directive 10.1.B: Calculate Trend Slope
  * Measures the normalized price change over a period.
  * Positive = bullish trend, Negative = bearish trend, Near 0 = sideways.
- * 
+ *
  * Formula: (P_last - P_first) / P_first
- * 
+ *
  * @param prices - Array of price points (oldest to newest)
  * @returns Trend slope as decimal (e.g., 0.05 = +5% bullish, -0.05 = -5% bearish)
  */
 export function calculateTrendSlope(prices: number[]): number {
   if (prices.length < 2) return 0;
-  
+
   const first = prices[0];
   const last = prices[prices.length - 1];
-  
+
   if (first === 0) return 0;
-  
+
   return (last - first) / first;
 }
