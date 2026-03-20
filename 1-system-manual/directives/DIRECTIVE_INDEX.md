@@ -113,6 +113,9 @@
 | Batch 19E GOV | Governance for Batch 19E — CCPI Rule 22, sourcePool docs | COMPLETE | 2026-03-18 | `e9de7352` | CCPI, DIRECTIVE_INDEX updated. Rule 22 (Langston mandatory acknowledgment). |
 | Batch 19G | Phase 14.5 Completion — DB-driven 4-path filter architecture | COMPLETE | 2026-03-19 | `d418c726` | DB-driven filter architecture: screener_filters table expanded (8 rows, 4 per mode, new columns filter_path/lq_min/vn_max/corr_max/di_min). FX5 scanner reads from DB. pattern-global-filters.ts deleted. system-guards.ts filter constants deprecated. VTS hybrid confluence buffer. hybrid-compatibility-registry.ts created. 4-column filter display in Screeners tab. Legacy filter UI inputs removed. VTS dedup 3→1. Pattern Scanning tab 401 fix. VTS pattern path parity. Pattern IMF hybrid architecture (DB defaults + regime overrides). |
 | Batch 19G HF1 | Pattern IMF metrics for pattern-only pairs — OHLC pre-fetch for DI=0 fix | COMPLETE | 2026-03-19 | `15e90f09` | Pre-fetches OHLC data for pattern-only pairs that lack cached data, preventing DI=0 rejection at IMF stage. |
+| Batch 19G HF2 | Fix pattern filter DB field mapping — all fields load from DB correctly | COMPLETE | 2026-03-19 | `238d3315` | Pattern filter thresholds (lq_min, vn_max, corr_max, di_min) now correctly mapped from screener_filters DB rows. |
+| Batch 19G HF3 | VTS quant path loads from vts_quant DB row in passive learning mode | COMPLETE | 2026-03-19 | `ed284dff` | VTS quant path was falling back to active quant thresholds. Now correctly loads from vts_quant filter row. |
+| Batch 19G VN | VN formula revised to log-returns MAD/median — thresholds calibrated 0.60/0.68/0.72/0.80 | COMPLETE | 2026-03-20 | `aa4babfc` | calculateVolNoise() changed from absolute-diff CV to log-returns MAD/median. Old distribution centered at ~0.15 (non-discriminating). New distribution centered at 0.64. Thresholds calibrated from 300-pair empirical scan. Frontend hardcoded VN values removed. |
 
 ---
 
@@ -120,10 +123,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Directives Issued | 18 + 6 HF + 1 inter-phase + 15 standalone hotfixes/governance + 1 phase (14.5 — 8 batches including governance + HF1) |
-| Total Directives Complete | 18 + 6 HF + 1 inter-phase + 15 standalone hotfixes/governance + 1 phase (14.5 — 8 batches including governance + HF1) |
+| Total Directives Issued | 18 + 6 HF + 1 inter-phase + 15 standalone hotfixes/governance + 1 phase (14.5 — 11 batches including governance + HF1-HF3 + VN) |
+| Total Directives Complete | 18 + 6 HF + 1 inter-phase + 15 standalone hotfixes/governance + 1 phase (14.5 — 11 batches including governance + HF1-HF3 + VN) |
 | Total Directives In Progress | 0 |
-| Total Review Cycles | 36 |
+| Total Review Cycles | 39 |
 | Average Review Cycles per Directive | 1.00 |
 
 ---

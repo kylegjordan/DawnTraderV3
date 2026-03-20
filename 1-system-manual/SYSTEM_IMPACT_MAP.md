@@ -2,7 +2,7 @@
 
 > **Author**: Claude Code (System Cartographer)
 > **Created**: 2026-02-19
-> **Last Updated**: 2026-03-19 (Batch 19G + HF1 — Phase 14.5 Completion: DB-driven 4-path filter architecture, VTS hybrid confluence, system-guards cleanup)
+> **Last Updated**: 2026-03-20 (Batch 19G VN GOV — Phase 14.5 CLOSED: VN formula revision + threshold calibration, HF2/HF3 DB field fixes)
 > **Purpose**: Component dependency reference for directive authoring. Before writing any directive, consult this map to identify all upstream, downstream, and shared-state impacts of the proposed change.
 > **Usage**: Claude Code looks up every affected component BEFORE writing a directive. The directive's Impact Analysis section must reference this map.
 
@@ -194,7 +194,7 @@
 
 ### 3.4 IMF Metrics (Adaptive Filters)
 - **File**: Computed within FX5 Scanner pipeline
-- **What**: Liquidity Quality (LQ), Volume Noise (VN), Correlation, Directional Integrity (DI) metrics. Stage 3 filtering. LQ uses Formula B (log10-based, per-candle OHLC volume — Batch 18G/18J). **Batch 19G**: Filter thresholds now DB-driven — 4 paths per mode (active_quant, active_pattern, vts_quant, vts_pattern) with distinct lq_min, vn_max, corr_max, di_min columns. Previous hardcoded three-tier thresholds in system-guards.ts are DEPRECATED. Pattern IMF uses hybrid architecture: DB defaults for base thresholds + code-driven regime overrides for dynamic adjustment. `system-guards.ts` constants (ACTIVE_IMF_THRESHOLDS, VTS_IMF_THRESHOLDS, PASSIVE_IMF_THRESHOLDS) retained as guardrails only, not primary filter source.
+- **What**: Liquidity Quality (LQ), Volume Noise (VN), Correlation, Directional Integrity (DI) metrics. Stage 3 filtering. LQ uses Formula B (log10-based, per-candle OHLC volume — Batch 18G/18J). **Batch 19G**: Filter thresholds now DB-driven — 4 paths per mode (active_quant, active_pattern, vts_quant, vts_pattern) with distinct lq_min, vn_max, corr_max, di_min columns. Previous hardcoded three-tier thresholds in system-guards.ts are DEPRECATED. Pattern IMF uses hybrid architecture: DB defaults for base thresholds + code-driven regime overrides for dynamic adjustment. `system-guards.ts` constants (ACTIVE_IMF_THRESHOLDS, VTS_IMF_THRESHOLDS, PASSIVE_IMF_THRESHOLDS) retained as guardrails only, not primary filter source. **Batch 19G VN**: `calculateVolNoise()` in `analysis-utils.ts` revised from absolute-diff CV (stddev/mean of |close[i]-close[i-1]|) to log-returns MAD/median (median absolute deviation / median of |ln(close[i]/close[i-1])|). VN distribution shifted from ~0.15 center (non-discriminating) to ~0.64 center (meaningful spread). Thresholds calibrated empirically from 300-pair scan: active_quant 0.60, active_pattern 0.68, vts_quant 0.72, vts_pattern 0.80 (updated in DB). VN is compute-time only — not persisted in trade records. Frontend hardcoded VN values removed from diagnostics-tab.tsx and filter-insights.tsx (now read from DB). Downstream consumers (Kalman filter, trailing exit, expectancy kernel) all call the same `calculateVolNoise()` function, so they now receive values on the new 0.5-0.8 scale instead of the old 0.1-0.25 scale.
 - **Upstream**: Market data (volume, spread, trading activity), OHLC Cache (per-candle volume for LQ), DB `screener_filters` table (threshold values — Batch 19G)
 - **Downstream**: FX5 Stage 3 filtering gate (LQ ≥ threshold, VN ≤ threshold, DI ≥ threshold)
 - **Execution**: Synchronous — per-pair during scan
