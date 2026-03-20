@@ -1,79 +1,76 @@
-# BATCH 19G-VN: Volatility Noise Formula Revision
+# Batch 19G VN Hotfix — Remove ALL Deprecated Filter Constants
+
+## Commit Message
+```
+Batch 19G VN hotfix: Remove ALL deprecated filter constants — signal orchestrator, analysis-utils, imf-metrics now DB-driven
+```
+
+## Push Command
+```bash
+git -C ~/workspace add -A && git -C ~/workspace commit -m "Batch 19G VN hotfix: Remove ALL deprecated filter constants — signal orchestrator, analysis-utils, imf-metrics now DB-driven" && git -C ~/workspace push origin dawntrader-v4
+```
 
 ## Summary
-Replace the VN (Volatility Noise) formula from absolute-diff stddev/mean to log-returns MAD/median. Fixes the issue where most crypto pairs hit VN=1.00 ceiling due to scale-dependent absolute price differences.
+
+This hotfix removes all deprecated filter constants from `system-guards.ts` that were still being consumed by active code. All filter thresholds are now exclusively DB-driven (screener_filters table).
+
+### What Was Wrong
+- `SYSTEM_GUARDS.MAX_VOL_NOISE` (0.93), `MIN_LIQUIDITY_SCORE` (35), `CORRELATION_THRESHOLD` (0.92), `MIN_VOLUME_THRESHOLD_USD` (500K) were deprecated but still used by signal-orchestrator and analysis-utils
+- `IMF_THRESHOLDS` (LQ_MIN: 35, VN_MAX: 0.96, CORR_MAX: 0.95) was still imported by imf-metrics.ts
+- `VTS_IMF_THRESHOLDS` (LQ_MIN: 25, VN_MAX: 0.98, CORR_MAX: 0.95) was also present but already unused
+- `verify-phase-9.ts` was completely stale (expected Phase 9 values)
+
+### What Changed
 
 ## Files Modified
 
-| File (repo-relative) | Action |
-|----------------------|--------|
-| `server/utils/analysis-utils.ts` | **FULL REPLACE** — New `calculateVolNoise()` using log-returns MAD/median |
-| `server/core/metrics/imf-metrics.ts` | **COMMENT UPDATE ONLY** — Update formula description in JSDoc (lines 79-86). Code unchanged (delegates to analysis-utils). See `.patch` file for exact text. |
-| `client/src/components/goals/diagnostics-tab.tsx` | **FULL REPLACE** — Remove hardcoded `MAX_VOL_NOISE: 0.6`, show dynamic value from telemetry API |
-| `client/src/components/trading/filter-insights.tsx` | **FULL REPLACE** — Remove hardcoded "VolNoise > 0.6" and "VolNoise <= 0.6" labels |
-| `server/tests/unit/analysis-utils.test.ts` | **FULL REPLACE** — Updated VN tests for new formula behavior + scale-independence test |
-| `server/tests/unit/vn_parity.test.ts` | **FULL REPLACE** — Updated parity test + scale-independence test |
+### 1. `server/services/signal-orchestrator.ts`
+- **SYSTEM_GUARDS import removed** — no longer needed
+- **EXTREME_NOISE veto** (line ~988): Now loads `vnMaxVeto` from DB via `storage.getScreenerFilters({ mode, filterPath: 'active_quant' })` at cycle start
+- `evaluateSymbol()` method: Added `vnMaxVeto` parameter (default 0.93 for safety)
+- Call site passes DB-loaded `vnMaxVeto` value
 
-## Deployment
+### 2. `server/utils/analysis-utils.ts`
+- `CORE_METRIC_THRESHOLDS.LQ_MIN` and `.VOL_NOISE_MAX`: Changed from `SYSTEM_GUARDS.*` references to inline safe defaults (35, 0.93), marked `@deprecated`
+- `passesCoreMetricFilters()`: Now accepts optional `lqMin` and `vnMax` override parameters for DB-driven values
+- `computeCoreMetrics()`: Unchanged (uses defaults — callers with DB access pass overrides directly)
+- SYSTEM_GUARDS import KEPT (still needed for `DI_TRENDING` and `DI_CHOPPY`)
 
-### Commit message
-```
-Batch 19G VN: Replace absolute-diff VN with log-returns MAD/median — robust crypto noise metric
-```
+### 3. `server/services/fx5-scanner.ts`
+- `CORE_METRIC_THRESHOLDS` import removed
+- `passesCoreMetricFilters()` call now passes DB-driven `lqMin` and `vnMax` from `filters` (active_quant row)
+- Filter exclusion log now shows `[DB]` tag for threshold source
 
-### Push command
-```bash
-bash REPLIT_PUSH_SCRIPT.sh "Batch 19G VN: Replace absolute-diff VN with log-returns MAD/median — robust crypto noise metric"
-```
+### 4. `server/core/metrics/imf-metrics.ts`
+- `IMF_THRESHOLDS` import from system-guards.ts **removed**
+- Module-level constants replaced with inline safe defaults (`DEFAULT_LQ_MIN=35`, `DEFAULT_VN_MAX=0.96`, `DEFAULT_CORR_MAX=0.95`)
+- `calculateIMFMetrics()`: Now accepts optional `thresholds?: IMFThresholdOverrides` parameter
+- `getIMFThresholds()`: Returns the safe defaults
+- New exported interface: `IMFThresholdOverrides`
 
-### Apply order
-1. Replace `server/utils/analysis-utils.ts` (full file)
-2. Apply patch to `server/core/metrics/imf-metrics.ts` (comment only — see `.patch` file)
-3. Replace `client/src/components/goals/diagnostics-tab.tsx` (full file)
-4. Replace `client/src/components/trading/filter-insights.tsx` (full file)
-5. Replace `server/tests/unit/analysis-utils.test.ts` (full file)
-6. Replace `server/tests/unit/vn_parity.test.ts` (full file)
-7. Run tests: `npx vitest run server/tests/unit/analysis-utils.test.ts server/tests/unit/vn_parity.test.ts`
-8. Commit and push
+### 5. `server/config/system-guards.ts`
+- **REMOVED**: `MIN_LIQUIDITY_SCORE`, `MAX_VOL_NOISE`, `CORRELATION_THRESHOLD`, `MIN_VOLUME_THRESHOLD_USD` from `SYSTEM_GUARDS` object
+- **REMOVED**: `IMF_THRESHOLDS` export (and `IMFThresholdsType`)
+- **REMOVED**: `VTS_IMF_THRESHOLDS` export
+- `VERSION` updated to `Phase14_Batch19G_VN_HF`
+- `getSystemGuardsInfo()` updated to reflect DB-driven architecture
+- **KEPT**: `BASE_FEE_SLIPPAGE`, `PARITY_TOLERANCE`, `DI_TRENDING`, `DI_CHOPPY`, `MIN_PWIN`, `MAX_PWIN`, `DI_PWIN_FACTOR`, `REGIME_THRESHOLDS`, `STRATEGY_MAP`, `HYBRID_PARAMS`, `TIMEFRAME_CONFIG`, `SCANNER_PARAMS`, `FILTER_FLAGS`, `FILTER_SCHEMA_VERSION`, etc.
 
-## Post-Deployment Verification
+### 6. `server/core/calculations/expectancy.ts`
+- Unused `SYSTEM_GUARDS` import removed
 
-1. **Run diagnostic**: Compute new VN values across all 300+ pairs
-2. **Verify distribution**: VN values should now be spread across 0-1 (not clustered at 1.00)
-3. **Check frontend**:
-   - Diagnostics tab: VolNoise threshold should show "DB-driven" (not hardcoded 0.6)
-   - Filter Insights: Noise Guard label should show "Noise Guard (VolNoise)" without hardcoded threshold
-4. **Monitor for 24h**: Watch Kalman filter and trailing exit behavior
-5. **Collect percentile data**: After 24-48h, export VN distribution for threshold recalibration
+### 7. `server/tests/unit/analysis-utils.test.ts`
+- Added test for DB-driven threshold override parameters in `passesCoreMetricFilters()`
+- Existing tests unchanged (use defaults which match old values)
 
-## IMPORTANT: What NOT to change
-- Do NOT change `SYSTEM_GUARDS.MAX_VOL_NOISE` value in `system-guards.ts`
-- Do NOT change `vn_max` values in `screener_filters` DB table
-- Do NOT change VTS_IMF_THRESHOLDS
-- Threshold recalibration is a SEPARATE follow-up batch after empirical data collection
+## File DELETED
 
-## imf-metrics.ts Patch Details
-The `imf-metrics.ts` file only needs a comment update. The actual `calculateVolNoise` function in that file is a one-line delegate to the canonical function in `analysis-utils.ts`. Apply the changes described in `server/core/metrics/imf-metrics.ts.patch`.
+### `server/scripts/verify-phase-9.ts`
+Completely stale verification script that expected Phase 9 values (LQ=40, VN=0.6, VERSION=Phase9_Final). None of these match current system state. DELETE this file entirely.
 
-Find lines 79-86:
-```
- * Directive 11.7H: Calculate Volatility Noise using canonical price-difference formula
- *
- * Delegates to analysis-utils.ts canonical function for cross-mode parity.
- * This ensures passive learning (OHLC cache) and active trading use identical math.
- *
- * Formula: stdDev(|price_diffs|) / mean(|price_diffs|)
- * Typical range: 0.2 – 0.7 for stable markets
-```
-
-Replace with:
-```
- * Directive 11.7H: Calculate Volatility Noise using canonical log-returns MAD/median formula
- *
- * Delegates to analysis-utils.ts canonical function for cross-mode parity.
- * This ensures passive learning (OHLC cache) and active trading use identical math.
- *
- * Batch 19G VN: Formula updated to log returns + MAD/median (robust statistics)
- * Formula: VN = MAD(|ln(close[i]/close[i-1])|) / max(median(|ln returns|), 0.0001)
- * Typical range: 0.0 – 1.0 (new distribution — thresholds need post-deployment recalibration)
-```
+## Verification Notes
+- All remaining SYSTEM_GUARDS importers checked — none reference removed constants
+- `risk_index.ts` and `data-normalization.ts` have their own local CORRELATION_THRESHOLD/MIN_LIQUIDITY_SCORE constants (unrelated to system-guards)
+- `signal-weight-optimizer.ts` has its own CORRELATION_THRESHOLD (unrelated)
+- `diagnostic-11.4G-5.ts` imports SYSTEM_GUARDS for HYBRID_PARAMS only — unaffected
+- VN parity test (`vn_parity.test.ts`) unchanged — still valid

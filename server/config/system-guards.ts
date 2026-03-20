@@ -9,20 +9,12 @@
  */
 
 export const SYSTEM_GUARDS = {
-  VERSION: "Phase14_Batch19G",
+  VERSION: "Phase14_Batch19G_VN_HF",
 
-  // Batch 19G: MIN_LIQUIDITY_SCORE, MAX_VOL_NOISE, CORRELATION_THRESHOLD, MIN_VOLUME_THRESHOLD_USD
-  // moved to DB (screener_filters table, 4 filter path rows). These legacy aliases remain for
-  // backward compatibility with code that reads them (signal-orchestrator, analysis-utils).
-  // They reflect the ACTIVE QUANT defaults and will be removed in a future cleanup batch.
-  /** @deprecated Batch 19G: Use DB screener_filters.lq_min instead */
-  MIN_LIQUIDITY_SCORE: 35,
-  /** @deprecated Batch 19G: Use DB screener_filters.vn_max instead */
-  MAX_VOL_NOISE: 0.93,
-  /** @deprecated Batch 19G: Use DB screener_filters.corr_max instead */
-  CORRELATION_THRESHOLD: 0.92,
-  /** @deprecated Batch 19G: Use DB screener_filters.min_volume instead */
-  MIN_VOLUME_THRESHOLD_USD: 500_000,
+  // Batch 19G VN HF: Deprecated filter constants REMOVED.
+  // MIN_LIQUIDITY_SCORE, MAX_VOL_NOISE, CORRELATION_THRESHOLD, MIN_VOLUME_THRESHOLD_USD
+  // are now exclusively in the DB (screener_filters table, 4 filter path rows).
+  // All consumers migrated to DB-driven or parameterized thresholds.
 
   BASE_FEE_SLIPPAGE: 0.006,      // Batch 18J: 0.005 → 0.006 (4-LLM consensus) — KEEP (guardrail)
   PARITY_TOLERANCE: 0.000001,    // KEEP (guardrail)
@@ -48,57 +40,10 @@ export const SYSTEM_GUARDS = {
   },
 } as const;
 
-/**
- * Directive 11.7H — IMF (Institutional Math Filters) Thresholds
- *
- * Schema: metrics-calibration/v1.2
- *
- * Centralized thresholds for passive learning mode IMF filtering.
- * Used by imf-metrics.ts for OHLC-based pair qualification.
- *
- * Batch 18J: Recalibrated for crypto via 4-LLM consensus.
- * VN_MAX = 0.96 allows broader passive learning data collection
- * while active trading uses stricter SYSTEM_GUARDS.MAX_VOL_NOISE = 0.93
- */
-/**
- * @deprecated Batch 19G: IMF_THRESHOLDS moved to DB (screener_filters table).
- * Retained for backward compatibility with imf-metrics.ts which imports it.
- * Values here reflect the legacy active quant defaults.
- * TODO: Update imf-metrics.ts to accept DB values, then remove this.
- */
-export const IMF_THRESHOLDS = {
-  LQ_MIN: 35,
-  VN_MAX: 0.96,
-  CORR_MAX: 0.95,
-} as const;
-
-export type IMFThresholdsType = typeof IMF_THRESHOLDS;
-
-/**
- * HF9 Item D: VTS-specific IMF thresholds (relaxed for ML training data collection)
- *
- * These looser thresholds allow more pairs into the VTS pipeline while active
- * trading continues using strict SYSTEM_GUARDS thresholds. Trades from pairs
- * that only pass relaxed filters are tagged with filterTier='relaxed' so ML
- * can analyze their performance separately.
- *
- * Active Trading:    LQ >= 35, VN <= 0.93, rho <= 0.92 (SYSTEM_GUARDS)
- * Passive Learning:  LQ >= 35, VN <= 0.96, rho <= 0.95 (IMF_THRESHOLDS)
- * VTS Learning:      LQ >= 25, VN <= 0.98, rho <= 0.95 (VTS_IMF_THRESHOLDS)
- *
- * Batch 18J: All VN thresholds recalibrated for crypto via 4-LLM consensus.
- * VTS VN_MAX raised from 0.95 → 0.98 to maintain hierarchy above passive (0.96).
- */
-/**
- * @deprecated Batch 19G: VTS_IMF_THRESHOLDS moved to DB (screener_filters table, vts_quant row).
- * FX5 scanner now reads from DB. This constant retained ONLY for any remaining
- * importers that haven't been updated yet. Will be removed in a future cleanup batch.
- */
-export const VTS_IMF_THRESHOLDS = {
-  LQ_MIN: 25,
-  VN_MAX: 0.98,
-  CORR_MAX: 0.95,
-} as const;
+// Batch 19G VN HF: IMF_THRESHOLDS and VTS_IMF_THRESHOLDS REMOVED.
+// All IMF thresholds are now exclusively in the DB (screener_filters table).
+// imf-metrics.ts uses inline safe defaults and accepts threshold overrides.
+// FX5 scanner reads from DB rows (active_quant, active_pattern, vts_quant, vts_pattern).
 
 /**
  * Directive 10.4 — Hybrid Integration Parameters
@@ -239,7 +184,8 @@ export type ScannerParamsType = typeof SCANNER_PARAMS;
 export type SystemGuardsType = typeof SYSTEM_GUARDS;
 
 export function getSystemGuardsInfo(): string {
-  return `[19G][CONFIG] Guards — LQ≥${SYSTEM_GUARDS.MIN_LIQUIDITY_SCORE}(legacy), Noise≤${SYSTEM_GUARDS.MAX_VOL_NOISE}(legacy), Fee=${(SYSTEM_GUARDS.BASE_FEE_SLIPPAGE * 100).toFixed(1)}% | Filter thresholds now DB-driven`;
+  // Batch 19G VN HF: Deprecated filter constants removed. All filter thresholds are DB-driven.
+  return `[19G_VN_HF][CONFIG] Guards — Fee=${(SYSTEM_GUARDS.BASE_FEE_SLIPPAGE * 100).toFixed(1)}% | All filter thresholds DB-driven (screener_filters table)`;
 }
 
 console.log(getSystemGuardsInfo());

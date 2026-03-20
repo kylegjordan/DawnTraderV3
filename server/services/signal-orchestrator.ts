@@ -55,7 +55,8 @@ import { computeNetExpectancyKernel } from '../core/calculations/net-expectancy-
 import { getSmoothedPrice, getKalmanFilter } from '../utils/adaptive-kalman.js';
 import { calculateEfficiencyRatio, calculateVolNoise, calculateTrendSlope, calculateDirectionalIntegrity } from '../utils/analysis-utils.js';
 // HF9: DSS import removed — DSS deleted (superseded by MCE regime filtering + detect functions)
-import { SYSTEM_GUARDS } from '../config/system-guards.js';
+// Batch 19G VN HF: SYSTEM_GUARDS import removed — deprecated filter constants deleted.
+// VN veto threshold now loaded from DB (screener_filters active_quant row).
 // Batch 18: OHLC cache (5-min TTL) eliminates redundant per-symbol OHLC fetches
 import { ohlcCache } from './ohlc-cache.js';
 // Batch 18: Use priceCache for ticker data instead of per-symbol getTicker calls
@@ -681,6 +682,11 @@ export class SignalOrchestrator {
         return;
       }
 
+      // Batch 19G VN HF: Load active_quant VN threshold from DB for EXTREME_NOISE veto
+      const activeQuantFilters = await storage.getScreenerFilters({ mode: this.mode, filterPath: 'active_quant' });
+      const vnMaxVeto = parseFloat(activeQuantFilters?.vnMax ?? '0.93');
+      console.log(`[19G_VN_HF][ORCHESTRATOR] VN veto threshold loaded from DB: ${vnMaxVeto}`);
+
       // Phase 8.8.7: Use ONLY FX5 Active Filter Pool survivors for signal generation
       // This fixes the filter bypass where FilteredPairsService returned pairs that hadn't passed FX5 filters
       const fx5Survivors = activeFilterPool.getActivePool(this.mode);
@@ -751,7 +757,7 @@ export class SignalOrchestrator {
             enabledCount: selectedStrategies.length
           }));
 
-          const signals = await this.evaluateSymbol(symbol, settings, filters, sizingContext);
+          const signals = await this.evaluateSymbol(symbol, settings, filters, sizingContext, vnMaxVeto);
           symbolsEvaluated++;
           strategiesRun += this.enabledStrategies.size;
           signalsGenerated += signals.length;
@@ -933,7 +939,8 @@ export class SignalOrchestrator {
     symbol: string,
     settings: TradingSettings,
     filters: ScreenerFilters,
-    sizingContext: SizingContext
+    sizingContext: SizingContext,
+    vnMaxVeto: number = 0.93  // Batch 19G VN HF: DB-driven VN veto threshold
   ): Promise<SizedStrategySignal[]> {
     const signals: SizedStrategySignal[] = [];
 
@@ -979,8 +986,9 @@ export class SignalOrchestrator {
       }));
 
       // Phase 13: EXTREME_NOISE veto (preserved from DSS, pre-filter before MCE)
-      if (VolNoise > SYSTEM_GUARDS.MAX_VOL_NOISE) {
-        console.log(`[Phase13][MCE] SKIP ${symbol}: Extreme Noise veto (volNoise=${VolNoise.toFixed(4)} > ${SYSTEM_GUARDS.MAX_VOL_NOISE})`);
+      // Batch 19G VN HF: Threshold now DB-driven (was hardcoded SYSTEM_GUARDS.MAX_VOL_NOISE = 0.93)
+      if (VolNoise > vnMaxVeto) {
+        console.log(`[Phase13][MCE] SKIP ${symbol}: Extreme Noise veto (volNoise=${VolNoise.toFixed(4)} > ${vnMaxVeto} [DB])`);
         return signals;
       }
 

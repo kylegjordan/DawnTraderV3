@@ -41,7 +41,7 @@ import {
   calculateVolNoise,
   calculateSigma,
   passesCoreMetricFilters,
-  CORE_METRIC_THRESHOLDS
+  // Batch 19G VN HF: CORE_METRIC_THRESHOLDS import removed — DB-driven thresholds used directly
 } from '../utils/analysis-utils.js';
 import { getTelemetryAggregator } from './telemetry-aggregator.js';
 import { SCANNER_PARAMS } from '../config/system-guards.js';
@@ -655,7 +655,10 @@ export class Fx5ScannerService {
           ? Math.min(100, Math.max(0, Math.log10(ohlcEntry.avgVolumeUSD + 1) * 10))
           : Math.min(100, Math.max(0, Math.log10(volumeUSD + 1) * 10));
         let VolNoise = calculateVolNoise(ohlcPrices);
-        const passesMetricFilter = passesCoreMetricFilters(LQ, VolNoise);
+        // Batch 19G VN HF: Pass DB-driven thresholds to passesCoreMetricFilters
+        const dbLqMin = parseFloat(filters.lqMin ?? '35');
+        const dbVnMax = parseFloat(filters.vnMax ?? '0.93');
+        const passesMetricFilter = passesCoreMetricFilters(LQ, VolNoise, dbLqMin, dbVnMax);
 
         // Directive 11.7H Task H-04: Sanity clamp for out-of-range VN values
         // Prevents rare division or empty-array anomalies from blocking scans
@@ -672,7 +675,8 @@ export class Fx5ScannerService {
         
         // Directive 9.1.F: Log if pair fails core metric filters
         if (!passesMetricFilter) {
-          console.log(`[9.1][FILTER] Excluding ${s.symbol} - LQ=${LQ.toFixed(1)}, VN=${VolNoise.toFixed(2)} (threshold: LQ>=${CORE_METRIC_THRESHOLDS.LQ_MIN}, VN<=${CORE_METRIC_THRESHOLDS.VOL_NOISE_MAX})`);
+          // Batch 19G VN HF: Log DB-driven thresholds instead of hardcoded CORE_METRIC_THRESHOLDS
+          console.log(`[9.1][FILTER] Excluding ${s.symbol} - LQ=${LQ.toFixed(1)}, VN=${VolNoise.toFixed(2)} (threshold: LQ>=${dbLqMin}[DB], VN<=${dbVnMax}[DB])`);
         }
         
         return { 

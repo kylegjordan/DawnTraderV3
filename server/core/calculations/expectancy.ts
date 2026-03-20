@@ -37,7 +37,7 @@ import { calculateDirectionalIntegrity, calculateVolNoise } from '../../utils/an
 // Directive 12.1.2: Import canonical cost model (replaces calculateFriction flat-rate helper)
 import { getCachedCostMetrics, computeTotalRoundTripCost } from '../math/cost-model.js';
 import { covarianceEngine } from '../../utils/covariance-engine.js';
-import { SYSTEM_GUARDS } from '../../config/system-guards.js';
+// Batch 19G VN HF: Unused SYSTEM_GUARDS import removed
 import { 
   ROI_FLEX_MULTIPLIER, 
   ROI_MIN, 

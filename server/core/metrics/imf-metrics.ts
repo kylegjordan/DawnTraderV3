@@ -12,14 +12,16 @@
  * from analysis-utils.ts to ensure cross-mode parity between passive learning
  * and active trading.
  * 
- * Thresholds imported from system-guards.ts for centralized governance.
+ * Batch 19G VN HF: Thresholds no longer imported from system-guards.ts.
+ * Safe defaults are inline; callers should pass DB values via thresholds parameter.
  * 
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
 import type { OHLCData } from '../../types/market-regime.types';
 import { calculateVolNoise as canonicalCalculateVolNoise } from '../../utils/analysis-utils.js';
-import { IMF_THRESHOLDS } from '../../config/system-guards.js';
+// Batch 19G VN HF: IMF_THRESHOLDS import removed — thresholds now DB-driven.
+// Safe defaults are inline; callers should pass DB values via thresholds parameter.
 
 export interface IMFMetrics {
   LQ: number;
@@ -28,9 +30,16 @@ export interface IMFMetrics {
   passesMetricFilter: boolean;
 }
 
-const LQ_MIN = IMF_THRESHOLDS.LQ_MIN;
-const VN_MAX = IMF_THRESHOLDS.VN_MAX;
-const CORR_MAX = IMF_THRESHOLDS.CORR_MAX;
+export interface IMFThresholdOverrides {
+  LQ_MIN?: number;
+  VN_MAX?: number;
+  CORR_MAX?: number;
+}
+
+// Batch 19G VN HF: Safe defaults (match old IMF_THRESHOLDS). Callers should use DB values.
+const DEFAULT_LQ_MIN = 35;
+const DEFAULT_VN_MAX = 0.96;
+const DEFAULT_CORR_MAX = 0.95;
 
 const ohlcCache = new Map<string, { data: OHLCData[]; timestamp: number }>();
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -142,48 +151,62 @@ export function calculateCorrelation(ohlcData: OHLCData[], benchmarkData?: OHLCD
   return Math.abs(covariance / denominator);
 }
 
+/**
+ * Batch 19G VN HF: calculateIMFMetrics now accepts optional threshold overrides.
+ * When thresholds are not provided, uses safe defaults (match old IMF_THRESHOLDS).
+ * Callers should pass DB-driven values from screener_filters table.
+ */
 export async function calculateIMFMetrics(
   symbol: string,
   ohlcData: OHLCData[] | null,
   isPassive: boolean,
-  benchmarkOHLC?: OHLCData[]
+  benchmarkOHLC?: OHLCData[],
+  thresholds?: IMFThresholdOverrides
 ): Promise<IMFMetrics> {
+  const lqMin = thresholds?.LQ_MIN ?? DEFAULT_LQ_MIN;
+  const vnMax = thresholds?.VN_MAX ?? DEFAULT_VN_MAX;
+  const corrMax = thresholds?.CORR_MAX ?? DEFAULT_CORR_MAX;
+
   let data = ohlcData;
-  
+
   if (isPassive && (!data || data.length === 0)) {
     data = getCachedOHLCData(symbol);
   }
-  
+
   if (!data || data.length < 10) {
     console.log(`[11.4H.6A][IMF] ${symbol}: Insufficient data (${data?.length || 0} candles) - using defaults`);
     return { LQ: 0, VolNoise: 0.5, Correlation: 0.5, passesMetricFilter: false };
   }
-  
+
   if (!isPassive && data.length >= 10) {
     cacheOHLCData(symbol, data);
   }
-  
+
   const LQ = calculateLogLiquidity(data);
   const VolNoise = calculateVolNoise(data);
   const Correlation = calculateCorrelation(data, benchmarkOHLC);
-  const passesMetricFilter = LQ >= LQ_MIN && VolNoise <= VN_MAX && Correlation <= CORR_MAX;
-  
+  const passesMetricFilter = LQ >= lqMin && VolNoise <= vnMax && Correlation <= corrMax;
+
   return { LQ, VolNoise, Correlation, passesMetricFilter };
 }
 
+/**
+ * Batch 19G VN HF: Returns default IMF thresholds.
+ * These are safe fallbacks — callers should prefer DB values from screener_filters.
+ */
 export function getIMFThresholds(): { LQ_MIN: number; VN_MAX: number; CORR_MAX: number } {
-  return { LQ_MIN, VN_MAX, CORR_MAX };
+  return { LQ_MIN: DEFAULT_LQ_MIN, VN_MAX: DEFAULT_VN_MAX, CORR_MAX: DEFAULT_CORR_MAX };
 }
 
 /**
  * Directive 11.7H Task H-06: VN Parity Logging
- * 
+ *
  * Logs calibration status to confirm IMF and analysis-utils functions
  * produce identical VN values.
  */
 export function logVNParityStatus(): void {
   const timestamp = new Date().toISOString();
-  const status = `[11.7H][Calibration] VN parity validated | imf-metrics=OK | analysis-utils=OK | threshold=${VN_MAX}`;
+  const status = `[11.7H][Calibration] VN parity validated | imf-metrics=OK | analysis-utils=OK | threshold=${DEFAULT_VN_MAX} (default)`;
   console.log(`${timestamp} ${status}`);
 }
 

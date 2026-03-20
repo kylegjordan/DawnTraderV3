@@ -194,10 +194,19 @@ describe('Directive 9.1 - Analysis Utils Core Tests', () => {
       expect(passesCoreMetricFilters(80, 0.8)).toBe(false);
     });
 
-    test('passesCoreMetricFilters uses correct thresholds', () => {
+    test('passesCoreMetricFilters uses correct default thresholds', () => {
       expect(passesCoreMetricFilters(CORE_METRIC_THRESHOLDS.LQ_MIN, CORE_METRIC_THRESHOLDS.VOL_NOISE_MAX)).toBe(true);
       expect(passesCoreMetricFilters(CORE_METRIC_THRESHOLDS.LQ_MIN - 1, CORE_METRIC_THRESHOLDS.VOL_NOISE_MAX)).toBe(false);
       expect(passesCoreMetricFilters(CORE_METRIC_THRESHOLDS.LQ_MIN, CORE_METRIC_THRESHOLDS.VOL_NOISE_MAX + 0.1)).toBe(false);
+    });
+
+    // Batch 19G VN HF: Test DB-driven threshold overrides
+    test('passesCoreMetricFilters accepts DB-driven threshold overrides', () => {
+      // With relaxed overrides, a pair that fails defaults should pass
+      expect(passesCoreMetricFilters(30, 0.3, 25, 0.98)).toBe(true);  // LQ=30 passes lqMin=25
+      expect(passesCoreMetricFilters(30, 0.3, 35, 0.98)).toBe(false); // LQ=30 fails lqMin=35
+      expect(passesCoreMetricFilters(80, 0.95, 35, 0.96)).toBe(true); // VN=0.95 passes vnMax=0.96
+      expect(passesCoreMetricFilters(80, 0.95, 35, 0.93)).toBe(false); // VN=0.95 fails vnMax=0.93
     });
   });
 

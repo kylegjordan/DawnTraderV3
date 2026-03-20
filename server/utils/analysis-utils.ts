@@ -217,23 +217,39 @@ export function calculateEfficiencyRatio(prices: number[], window: number = 20):
 
 /**
  * Directive 9.1.F: Filter thresholds for core metrics
- * Directive 9.6.A: Now imports from centralized SYSTEM_GUARDS configuration
+ * Batch 19G VN HF: LQ_MIN and VOL_NOISE_MAX are now safe defaults only.
+ * Real thresholds are DB-driven (screener_filters table).
+ * Callers should pass DB values to passesCoreMetricFilters() when available.
+ * DI thresholds remain in SYSTEM_GUARDS (regime detection, NOT filtering).
  */
 export const CORE_METRIC_THRESHOLDS = {
-  LQ_MIN: SYSTEM_GUARDS.MIN_LIQUIDITY_SCORE,
-  VOL_NOISE_MAX: SYSTEM_GUARDS.MAX_VOL_NOISE,
+  /** @deprecated Batch 19G VN HF: Use DB screener_filters.lq_min instead. Default fallback only. */
+  LQ_MIN: 35,
+  /** @deprecated Batch 19G VN HF: Use DB screener_filters.vn_max instead. Default fallback only. */
+  VOL_NOISE_MAX: 0.93,
   DI_TRENDING: SYSTEM_GUARDS.DI_TRENDING,
   DI_CHOPPY: SYSTEM_GUARDS.DI_CHOPPY,
 };
 
 /**
  * Directive 9.1.F: Check if pair meets core metric filters
+ * Batch 19G VN HF: Now accepts optional DB-driven thresholds.
+ * When called without overrides, uses CORE_METRIC_THRESHOLDS defaults.
  * @param LQ - Log-Liquidity value
  * @param VolNoise - Volatility Noise value
+ * @param lqMin - Override LQ minimum (from DB screener_filters.lq_min)
+ * @param vnMax - Override VN maximum (from DB screener_filters.vn_max)
  * @returns true if pair passes filters
  */
-export function passesCoreMetricFilters(LQ: number, VolNoise: number): boolean {
-  return LQ >= CORE_METRIC_THRESHOLDS.LQ_MIN && VolNoise <= CORE_METRIC_THRESHOLDS.VOL_NOISE_MAX;
+export function passesCoreMetricFilters(
+  LQ: number,
+  VolNoise: number,
+  lqMin?: number,
+  vnMax?: number
+): boolean {
+  const effectiveLqMin = lqMin ?? CORE_METRIC_THRESHOLDS.LQ_MIN;
+  const effectiveVnMax = vnMax ?? CORE_METRIC_THRESHOLDS.VOL_NOISE_MAX;
+  return LQ >= effectiveLqMin && VolNoise <= effectiveVnMax;
 }
 
 /**
