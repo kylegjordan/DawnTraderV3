@@ -106,8 +106,14 @@ export function calculateLogLiquidity(V: number, C: number, S: number): number {
  */
 export function calculateDirectionalIntegrity(prices: number[]): number {
   if (prices.length < 3) return 50;
-  const net = Math.abs(prices[prices.length - 1] - prices[0]);
-  const total = prices.slice(1).reduce((s, p, i) => s + Math.abs(p - prices[i]), 0);
+  // Batch 19G DI: Use rolling 48-candle window (consensus from 5-source review)
+  // Full-history DI collapses to 0-12 for crypto due to sqrt(n)/n decay (Kaufman ER property).
+  // At 48 candles, DI produces meaningful 15-60 range for trend classification.
+  // Keep absolute prices — ratio already normalizes across price levels.
+  const DI_WINDOW = Math.min(48, prices.length);
+  const windowPrices = prices.slice(-DI_WINDOW);
+  const net = Math.abs(windowPrices[windowPrices.length - 1] - windowPrices[0]);
+  const total = windowPrices.slice(1).reduce((s, p, i) => s + Math.abs(p - windowPrices[i]), 0);
   const ratio = net / (total || 1);
   return Math.min(100, Math.max(0, ratio * 100));
 }

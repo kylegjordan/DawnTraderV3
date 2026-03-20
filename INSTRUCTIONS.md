@@ -1,21 +1,23 @@
-# Batch 19G VN HF2B — Active Trading Pattern Pool Dual-Pass Fix
+# Batch 19G DI: Rolling 48-Candle Window for Directional Integrity
 
 ## Problem
-In the active trading path (signal-orchestrator.ts), pairs that survive BOTH quant and pattern filter paths only get processed through the quant loop. The pattern loop skips them with `if (fx5SymbolSet.has(symbol)) continue`. This means these pairs never get pattern detection evaluation in active trading mode.
-
-The VTS was already fixed to process pairs through both paths. This fix applies the same logic to active trading.
+DI (Directional Integrity) was computed over ALL available OHLC candles (~721 hourly = ~30 days). Due to the mathematical property of Kaufman's Efficiency Ratio (net displacement grows as sqrt(n) while total path grows as n), DI collapsed to 0-12 range for all crypto pairs. Pattern IMF thresholds (DI >= 20-35) were mathematically unreachable, blocking 100% of pattern-only pairs in ALL regimes.
 
 ## Fix
-Removed the `fx5SymbolSet.has(symbol) continue` skip on line 846 of signal-orchestrator.ts. Now pairs that survive both paths get:
-- Loop 1 (quant): Regime-driven strategy selection, all enabled strategies
-- Loop 2 (pattern): Pattern detection, PATTERN + HYBRID strategies only
-
-Both loops can generate independent signals for the same pair.
+Changed `calculateDirectionalIntegrity()` in analysis-utils.ts to use a rolling 48-candle window instead of all candles. This is the consensus recommendation from 5 independent sources (Gemini, ChatGPT 5.4, Claude Opus 4.6, Claude Code, Langston GPT-5.4). At 48 candles, DI produces meaningful values in the 15-60 range for trend classification.
 
 ## File Changed
-- `server/services/signal-orchestrator.ts` — line 846: removed quant-pool skip in pattern loop
+- `server/utils/analysis-utils.ts` — calculateDirectionalIntegrity() uses 48-candle window
 
 ## Push Command
 ```
-git -C $HOME/workspace add -A ; git -C $HOME/workspace commit --amend -m "Batch 19G VN HF2B: Active trading pattern pool dual-pass — pairs in both pools now evaluated by both paths" 2>/dev/null ; git -C $HOME/workspace commit -m "Batch 19G VN HF2B: Active trading pattern pool dual-pass — pairs in both pools now evaluated by both paths" 2>/dev/null ; git -C $HOME/workspace push origin dawntrader-v4
+git -C ~/workspace add -A ; git -C ~/workspace commit --amend -m "Batch 19G DI: Rolling 48-candle window for Directional Integrity — fixes pattern IMF 100% rejection" 2>/dev/null ; git -C ~/workspace commit -m "Batch 19G DI: Rolling 48-candle window for Directional Integrity — fixes pattern IMF 100% rejection" 2>/dev/null ; git -C ~/workspace push origin dawntrader-v4
 ```
+
+## Post-Deployment Verification
+1. Check server logs for DI values — should now range 15-60 for most pairs (was 0-12)
+2. Check pattern IMF pass rate — should be > 0 (was 0% before)
+3. Run Replit diagnostic: "Show me the DI distribution across all scanned pairs for the last 3 scan cycles"
+
+## Note
+DI thresholds in the DB are NOT changed in this batch. After measuring the new distribution, thresholds will be calibrated empirically (same approach as VN).
