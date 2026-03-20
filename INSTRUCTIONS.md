@@ -1,49 +1,26 @@
-> **CRITICAL — REPLIT AUTONOMY CONSTRAINTS**
->
-> You are receiving a batch of changes prepared by Claude Code (the System Cartographer).
-> Your role is to **apply these changes exactly as specified**, validate them, and push.
->
-> **DO NOT:**
-> - Make any changes beyond what is specified in this document
-> - Reformat, restructure, or "improve" any files
-> - Add your own commits between batch application and validation
-> - Modify any files not listed in this document
-> - Run any automated tools that modify source code (linters, formatters, etc.)
->
-> **DO:**
-> - Apply changes exactly as written
-> - Run validation after ALL changes are applied
-> - Report results back to Kyle
-> - Commit with the message provided at the bottom of this document
+# Batch 19G HF3 — VTS Quant Path Filter Loading Fix
 
----
+## Summary
+The quant global filter path always loaded from `active_quant` DB row regardless of whether the system was in passive learning (VTS) mode. This meant `vts_quant` DB values (e.g., minPrice $0.05, minVolume $300K) were ignored — the quant path always used active trading thresholds ($0.25, $500K).
 
-# Batch 19G Governance — INSTRUCTIONS
+## Fix
+After determining `isPassiveLearningMode`, reload the quant filters from `vts_quant` DB row if in passive learning mode. Uses `Object.assign(filters, vtsQuantRow)` to override all fields.
 
-## Batch Type
-Governance documentation update (no code changes).
+## Files Modified
+1. `server/services/fx5-scanner.ts` — Added VTS quant filter reload after passive learning determination (~line 391)
 
-## Files to Place (3 files)
+## Deployment
+1. Replace `server/services/fx5-scanner.ts` with the version from this zip
+2. Restart server
 
-### 1. CLAUDE_CODE_PROJECT_INSTRUCTIONS.md
-- **Source**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` (in this zip)
-- **Destination**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` (replace entire file)
-- **Changes**: Phase 14.5 marked COMPLETE with all batches listed (19 core through 19G HF1). Last commit updated to `15e90f09`. Rules 23-26 added (post-implementation audit, batch reports ownership, DB queries via Replit Agent, replit-cmd screenshot limitation). Workflow updated with post-implementation audit step and scope checklist requirement. Batch 19G + HF1 investigation notes added.
-
-### 2. DIRECTIVE_INDEX.md
-- **Source**: `1-system-manual/directives/DIRECTIVE_INDEX.md` (in this zip)
-- **Destination**: `1-system-manual/directives/DIRECTIVE_INDEX.md` (replace entire file)
-- **Changes**: Added Batch 19E GOV, Batch 19G, and Batch 19G HF1 rows. Summary statistics updated.
-
-### 3. SYSTEM_IMPACT_MAP.md
-- **Source**: `1-system-manual/SYSTEM_IMPACT_MAP.md` (in this zip)
-- **Destination**: `1-system-manual/SYSTEM_IMPACT_MAP.md` (replace entire file)
-- **Changes**: Updated screener_filters table (new columns, 8 rows, 4-path architecture). FX5 scanner updated (DB-driven filters, OHLC pre-fetch for pattern pairs). Added hybrid-compatibility-registry.ts entry (section 1.7). VTS runner updated (hybrid buffer, pattern path parity, dedup=1). filters-with-override.tsx updated (4-column DB-driven table, legacy inputs removed). pattern-global-filters.ts noted as DELETED. system-guards.ts filter constants noted as DEPRECATED. Quick lookup table expanded with screener_filters and hybrid registry entries.
-
----
-
-## Commit Message
-
-```bash
-bash REPLIT_PUSH_SCRIPT.sh "Batch 19G governance: CCPI Rules 23-26, post-implementation audit workflow, DB-driven filter docs"
+## Push Command
 ```
+bash REPLIT_PUSH_SCRIPT.sh "Batch 19G HF3: VTS quant path now loads from vts_quant DB row in passive learning mode"
+```
+
+## Verification
+After restart, check logs for:
+```
+[19G][HF3][FX5] Quant filters reloaded from vts_quant (passive learning): minPrice=0.05...
+```
+And verify quant path price rejections decrease (fewer pairs rejected at $0.05 vs $0.25).

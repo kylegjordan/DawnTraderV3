@@ -388,7 +388,18 @@ export class Fx5ScannerService {
       // Only allow passive mode when we have confirmed engine is stopped
       const isPassiveLearningMode = contextFailed ? false : !(earlyContext?.isEngineActive ?? true);
       console.log(`[FX5Scanner][11.4H.4][${mode}] Passive learning mode: ${isPassiveLearningMode} (contextFailed=${contextFailed}, isEngineActive=${earlyContext?.isEngineActive})`);
-      
+
+      // Batch 19G HF3: Reload quant filters from correct DB row based on mode
+      // Previously always loaded 'active_quant' regardless of passive learning state.
+      // In VTS/passive learning, vts_quant has different thresholds (e.g., minPrice $0.05 vs $0.25).
+      if (isPassiveLearningMode) {
+        const vtsQuantRow = await storage.getScreenerFilters({ mode, filterPath: 'vts_quant' });
+        if (vtsQuantRow) {
+          Object.assign(filters, vtsQuantRow);
+          console.log(`[19G][HF3][FX5] Quant filters reloaded from vts_quant (passive learning): minPrice=${vtsQuantRow.minPrice}, minVolume=${vtsQuantRow.minVolume}`);
+        }
+      }
+
       // Batch 19G: Load pattern filter row from DB for dual-path scanning
       const patternFilterPath = isPassiveLearningMode ? 'vts_pattern' : 'active_pattern';
       const patternDbRow = await storage.getScreenerFilters({ mode, filterPath: patternFilterPath });
