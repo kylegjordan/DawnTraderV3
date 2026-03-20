@@ -842,8 +842,10 @@ export class SignalOrchestrator {
       let patternSignalsGenerated = 0;
       for (const symbol of patternSymbols) {
         try {
-          // Skip if already processed in quant pool
-          if (fx5SymbolSet.has(symbol)) continue;
+          // Batch 19G VN HF2: Do NOT skip quant pool pairs — they deserve pattern evaluation too
+          // A pair surviving both quant and pattern paths should generate signals from BOTH paths
+          // Quant path: regime-driven strategy selection (Loop 1 above)
+          // Pattern path: pattern-detection-driven strategy selection (this loop)
 
           // Get OHLC data (uses ohlcCache — no new API calls)
           const ohlcData = await ohlcCache.getOHLCData(symbol, 60);

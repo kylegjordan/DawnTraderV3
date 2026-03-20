@@ -1,23 +1,21 @@
-# Batch 19G VN HF2 — Independent Pattern IMF for VTS
+# Batch 19G VN HF2B — Active Trading Pattern Pool Dual-Pass Fix
 
-## Files Modified
+## Problem
+In the active trading path (signal-orchestrator.ts), pairs that survive BOTH quant and pattern filter paths only get processed through the quant loop. The pattern loop skips them with `if (fx5SymbolSet.has(symbol)) continue`. This means these pairs never get pattern detection evaluation in active trading mode.
 
-- `server/services/fx5-scanner.ts` — Merge pattern-only IMF survivors into VTS scan batch
+The VTS was already fixed to process pairs through both paths. This fix applies the same logic to active trading.
 
-## What Changed
+## Fix
+Removed the `fx5SymbolSet.has(symbol) continue` skip on line 846 of signal-orchestrator.ts. Now pairs that survive both paths get:
+- Loop 1 (quant): Regime-driven strategy selection, all enabled strategies
+- Loop 2 (pattern): Pattern detection, PATTERN + HYBRID strategies only
 
-The VTS scan batch was built exclusively from `classifiedSurvivors` (quant global filter survivors). Pattern-only pairs — those that passed pattern global filter and pattern IMF but failed quant global filter — were never included in the VTS batch. This meant VTS/passive learning never processed pattern-only pairs.
+Both loops can generate independent signals for the same pair.
 
-**Fix:** After computing `vtsQuantSurvivors` (renamed from `vtsFilteredSurvivors`), we identify pattern-only IMF survivors from `patternPoolSurvivors` that are NOT already in the quant survivors, then merge them in. The combined array becomes the new `vtsFilteredSurvivors`. The existing sourcePool tagging logic correctly handles these pattern-only pairs (they get `sourcePool: 'pattern'`).
+## File Changed
+- `server/services/signal-orchestrator.ts` — line 846: removed quant-pool skip in pattern loop
 
-## Commit Message
-
+## Push Command
 ```
-Batch 19G VN HF2: Independent pattern IMF — all pattern global survivors go through pattern IMF regardless of quant results
-```
-
-## Push Command (bulletproof)
-
-```bash
-git -C $HOME/workspace add -A ; git -C $HOME/workspace commit --amend -m "Batch 19G VN HF2: Independent pattern IMF — all pattern global survivors go through pattern IMF regardless of quant results" 2>/dev/null ; git -C $HOME/workspace commit -m "Batch 19G VN HF2: Independent pattern IMF — all pattern global survivors go through pattern IMF regardless of quant results" 2>/dev/null ; git -C $HOME/workspace push origin dawntrader-v4
+git -C $HOME/workspace add -A ; git -C $HOME/workspace commit --amend -m "Batch 19G VN HF2B: Active trading pattern pool dual-pass — pairs in both pools now evaluated by both paths" 2>/dev/null ; git -C $HOME/workspace commit -m "Batch 19G VN HF2B: Active trading pattern pool dual-pass — pairs in both pools now evaluated by both paths" 2>/dev/null ; git -C $HOME/workspace push origin dawntrader-v4
 ```
