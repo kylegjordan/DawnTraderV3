@@ -1866,73 +1866,106 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
         </CardContent>
       </Card>
 
-      {/* Table 4: VTS Evaluation Breakdown */}
+      {/* TABLE 4: VTS Evaluation Breakdown (Batch 19I) */}
       <Card className="max-w-4xl">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Table 4: VTS Evaluation Breakdown (Last Cycle)</CardTitle>
-          <p className="text-xs text-muted-foreground">Outcomes by pool and strategy from most recent VTS simulation cycle</p>
+        <CardHeader className="py-3">
+          <CardTitle className="text-lg flex items-center justify-between">
+            <span>VTS Evaluation Breakdown</span>
+            <span className="text-sm font-normal text-muted-foreground">
+              {data?.vtsEvaluation ? 'Last VTS cycle' : 'No VTS data yet'}
+            </span>
+          </CardTitle>
         </CardHeader>
-        <CardContent>
-          {data.vtsEvaluation ? (
-            <div className="space-y-4">
-              {/* Summary Row */}
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                <div className="rounded-md border p-3">
-                  <div className="text-xs text-muted-foreground">Quant Pairs</div>
-                  <div className="text-lg font-semibold">{fmt(data.vtsEvaluation.quantPairsEvaluated)}</div>
-                </div>
-                <div className="rounded-md border p-3">
-                  <div className="text-xs text-muted-foreground">Pattern Pairs</div>
-                  <div className="text-lg font-semibold">{fmt(data.vtsEvaluation.patternPairsEvaluated)}</div>
-                </div>
-                <div className="rounded-md border p-3">
-                  <div className="text-xs text-muted-foreground">Signals Generated</div>
-                  <div className="text-lg font-semibold text-green-600">{fmt(data.vtsEvaluation.signalsGenerated)}</div>
-                </div>
-                <div className="rounded-md border p-3">
-                  <div className="text-xs text-muted-foreground">Pattern Detected</div>
-                  <div className="text-lg font-semibold text-blue-500">{fmt(data.vtsEvaluation.patternDetected)}</div>
-                </div>
-                <div className="rounded-md border p-3">
-                  <div className="text-xs text-muted-foreground">Pattern No-Detect</div>
-                  <div className="text-lg font-semibold text-orange-500">{fmt(data.vtsEvaluation.patternNoDetection)}</div>
-                </div>
-                <div className="rounded-md border p-3">
-                  <div className="text-xs text-muted-foreground">Strategy Nulls</div>
-                  <div className="text-lg font-semibold text-red-500">{fmt(data.vtsEvaluation.quantStrategyNulls)}</div>
-                </div>
-              </div>
-              {/* Per-Strategy Breakdown */}
-              {Object.keys(data.vtsEvaluation.byStrategy).length > 0 && (
-                <div>
-                  <h4 className="text-sm font-medium mb-2">By Strategy</h4>
+        <CardContent className="p-0">
+          {data?.vtsEvaluation ? (() => {
+            const ve = data.vtsEvaluation!;
+            return (
+              <div className="space-y-4">
+                {/* Source Pool Summary */}
+                <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/50">
-                        <th className="text-left p-2 font-medium">Strategy</th>
-                        <th className="text-right p-2 font-medium">Evaluated</th>
-                        <th className="text-right p-2 font-medium">Nulls</th>
-                        <th className="text-right p-2 font-medium">Signals</th>
+                        <th className="text-left p-2 font-medium">Metric</th>
+                        <th className="text-right p-2 font-medium">Quant Pool</th>
+                        <th className="text-right p-2 font-medium">Pattern Pool</th>
+                        <th className="text-right p-2 font-medium">Total</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {Object.entries(data.vtsEvaluation.byStrategy)
-                        .sort(([, a], [, b]) => b.evaluated - a.evaluated)
-                        .map(([stratKey, s]) => (
-                          <tr key={stratKey} className="border-b hover:bg-muted/30">
-                            <td className="p-2 font-mono text-xs">{stratKey}</td>
-                            <td className="p-2 text-right">{fmt(s.evaluated)}</td>
-                            <td className="p-2 text-right text-red-500">{fmt(s.nulls)}</td>
-                            <td className="p-2 text-right text-green-600">{fmt(s.signals)}</td>
-                          </tr>
-                        ))}
+                      <tr className="border-b hover:bg-muted/30">
+                        <td className="p-2">Pairs Evaluated</td>
+                        <td className="p-2 text-right">{fmt(ve.quantPairsEvaluated)}</td>
+                        <td className="p-2 text-right">{fmt(ve.patternPairsEvaluated)}</td>
+                        <td className="p-2 text-right font-semibold">{fmt(ve.quantPairsEvaluated + ve.patternPairsEvaluated)}</td>
+                      </tr>
+                      <tr className="border-b hover:bg-muted/30">
+                        <td className="p-2">Pattern Detection</td>
+                        <td className="p-2 text-right text-muted-foreground">—</td>
+                        <td className="p-2 text-right">
+                          <span className="text-green-600">{fmt(ve.patternDetected)}</span>
+                          {' / '}
+                          <span className="text-red-500">{fmt(ve.patternNoDetection)}</span>
+                          <span className="text-xs text-muted-foreground ml-1">
+                            ({ve.patternPairsEvaluated > 0 ? Math.round(ve.patternDetected / ve.patternPairsEvaluated * 100) : 0}% hit)
+                          </span>
+                        </td>
+                        <td className="p-2 text-right text-muted-foreground">—</td>
+                      </tr>
+                      <tr className="border-b hover:bg-muted/30">
+                        <td className="p-2">Strategy Returned Null</td>
+                        <td className="p-2 text-right text-orange-500">{fmt(ve.quantStrategyNulls)}</td>
+                        <td className="p-2 text-right text-muted-foreground">—</td>
+                        <td className="p-2 text-right text-orange-500">{fmt(ve.quantStrategyNulls)}</td>
+                      </tr>
+                      <tr className="bg-muted/30 font-semibold">
+                        <td className="p-2">Signals Generated</td>
+                        <td colSpan={2} className="p-2 text-right text-green-600">{fmt(ve.signalsGenerated)}</td>
+                        <td className="p-2 text-right text-green-600">{fmt(ve.signalsGenerated)}</td>
+                      </tr>
                     </tbody>
                   </table>
                 </div>
-              )}
-            </div>
-          ) : (
-            <div className="p-4 text-muted-foreground text-center">No VTS cycle data yet — waiting for first simulation cycle</div>
+
+                {/* By Strategy Breakdown */}
+                {Object.keys(ve.byStrategy).length > 0 && (
+                  <div className="overflow-x-auto">
+                    <div className="px-2 py-1 text-xs font-medium uppercase tracking-wider text-muted-foreground bg-muted/50">
+                      By Strategy
+                    </div>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/30">
+                          <th className="text-left p-2 font-medium">Strategy</th>
+                          <th className="text-right p-2 font-medium">Evaluated</th>
+                          <th className="text-right p-2 font-medium">Nulls</th>
+                          <th className="text-right p-2 font-medium">Signals</th>
+                          <th className="text-right p-2 font-medium">Hit Rate</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(ve.byStrategy)
+                          .sort(([,a], [,b]) => b.evaluated - a.evaluated)
+                          .map(([strategy, counts]) => (
+                            <tr key={strategy} className="border-b hover:bg-muted/30">
+                              <td className="p-2 font-mono text-xs">{strategy}</td>
+                              <td className="p-2 text-right">{fmt(counts.evaluated)}</td>
+                              <td className="p-2 text-right text-orange-500">{fmt(counts.nulls)}</td>
+                              <td className="p-2 text-right text-green-600">{fmt(counts.signals)}</td>
+                              <td className="p-2 text-right">
+                                {counts.evaluated > 0 ? `${Math.round(counts.signals / counts.evaluated * 100)}%` : '—'}
+                              </td>
+                            </tr>
+                          ))
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })() : (
+            <div className="p-4 text-muted-foreground text-center">No VTS evaluation data yet — waiting for next VTS cycle</div>
           )}
         </CardContent>
       </Card>
