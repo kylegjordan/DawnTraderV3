@@ -1872,7 +1872,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
           <CardTitle className="text-lg flex items-center justify-between">
             <span>VTS Evaluation Breakdown</span>
             <span className="text-sm font-normal text-muted-foreground">
-              {data?.vtsEvaluation ? 'Last VTS cycle' : 'No VTS data yet'}
+              {data?.vtsEvaluation ? '24-Hour Rolling' : 'No VTS data yet'}
             </span>
           </CardTitle>
         </CardHeader>

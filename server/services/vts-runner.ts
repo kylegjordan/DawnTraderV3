@@ -119,8 +119,9 @@ let sessionStartTime: number | null = null;
 let cycleCount = 0;
 let patternRecognitionWarmedUp = false;
 
-// Batch 19I: VTS evaluation diagnostics
-let lastVTSEvalCounters: {
+// Batch 19J: VTS evaluation diagnostics — 24h rolling history
+interface VTSEvalSnapshot {
+  timestamp: number;
   quantPairsEvaluated: number;
   patternPairsEvaluated: number;
   quantStrategyNulls: number;
@@ -128,10 +129,54 @@ let lastVTSEvalCounters: {
   patternDetected: number;
   signalsGenerated: number;
   byStrategy: Record<string, { evaluated: number; nulls: number; signals: number }>;
-} | null = null;
+}
 
+const VTS_EVAL_ROLLING_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
+let vtsEvalHistory: VTSEvalSnapshot[] = [];
+
+export function getVTSEvalRolling24h(): VTSEvalSnapshot | null {
+  // Prune entries older than 24h
+  const cutoff = Date.now() - VTS_EVAL_ROLLING_WINDOW_MS;
+  vtsEvalHistory = vtsEvalHistory.filter(s => s.timestamp > cutoff);
+
+  if (vtsEvalHistory.length === 0) return null;
+
+  // Aggregate all snapshots into a single rolled-up object
+  const aggregated: VTSEvalSnapshot = {
+    timestamp: Date.now(),
+    quantPairsEvaluated: 0,
+    patternPairsEvaluated: 0,
+    quantStrategyNulls: 0,
+    patternNoDetection: 0,
+    patternDetected: 0,
+    signalsGenerated: 0,
+    byStrategy: {},
+  };
+
+  for (const snap of vtsEvalHistory) {
+    aggregated.quantPairsEvaluated += snap.quantPairsEvaluated;
+    aggregated.patternPairsEvaluated += snap.patternPairsEvaluated;
+    aggregated.quantStrategyNulls += snap.quantStrategyNulls;
+    aggregated.patternNoDetection += snap.patternNoDetection;
+    aggregated.patternDetected += snap.patternDetected;
+    aggregated.signalsGenerated += snap.signalsGenerated;
+
+    for (const [strat, counts] of Object.entries(snap.byStrategy)) {
+      if (!aggregated.byStrategy[strat]) {
+        aggregated.byStrategy[strat] = { evaluated: 0, nulls: 0, signals: 0 };
+      }
+      aggregated.byStrategy[strat].evaluated += counts.evaluated;
+      aggregated.byStrategy[strat].nulls += counts.nulls;
+      aggregated.byStrategy[strat].signals += counts.signals;
+    }
+  }
+
+  return aggregated;
+}
+
+// Keep backward compat for any other callers
 export function getLastVTSEvalCounters() {
-  return lastVTSEvalCounters;
+  return getVTSEvalRolling24h();
 }
 
 // Phase 14 HF6: Strategy engine instance for detect function calls
@@ -1599,7 +1644,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   console.log(`[VTS][Cycle ${cycleCount}] Completed: ${simulatedCount} trades simulated | Avg finalScore=${avgFinalScore.toFixed(2)}`);
   
   // Batch 19I: Store VTS evaluation diagnostics
-  lastVTSEvalCounters = vtsEvalCounters;
+  vtsEvalHistory.push({ ...vtsEvalCounters, timestamp: Date.now() });
   console.log(`[19I][VTS_EVAL] quant=${vtsEvalCounters.quantPairsEvaluated} pattern=${vtsEvalCounters.patternPairsEvaluated} noDetect=${vtsEvalCounters.patternNoDetection} detected=${vtsEvalCounters.patternDetected} stratNulls=${vtsEvalCounters.quantStrategyNulls} signals=${vtsEvalCounters.signalsGenerated}`);
 
   return {
