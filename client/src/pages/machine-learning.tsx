@@ -1624,7 +1624,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 max-w-4xl">
       {/* TABLE 1: Last Scan Stats */}
       <Card>
         <CardHeader className="py-3">

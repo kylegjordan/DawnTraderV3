@@ -173,8 +173,9 @@ This replaces the original 7-step directive lifecycle with a more efficient batc
 11. Post-implementation audit: Claude Code verifies ALL scope items on preview site (see Rule 23)
 12. After code verified → Claude Code prepares governance batch (separate zip, same process)
 13. Post-push verification: Claude Code checks git log for unexpected commits (see below)
-14. Langston posts Batch Completion Report to Telegram Reports topic (#23) — AUTOMATIC, no reminder needed
-15. Batch is NOT operationally complete until: verification ✓, audit ✓, push ✓, report posted ✓, memory updated ✓
+14. Claude Code writes the Batch Completion Report and posts to Telegram Reports topic (#23)
+15. Claude Code updates MEMORY.md with current state, commit hash, completed items
+16. Batch is NOT operationally complete until: verification ✓, audit ✓, push ✓, report posted ✓, memory updated ✓
 ```
 
 **Key principles**:
@@ -218,6 +219,12 @@ Previous sessions have made these errors. **Do NOT repeat them:**
 6. **DO NOT write code before agreeing on scope with Kyle.** Always produce a scope document first and get Kyle's approval.
 
 7. **DO NOT split a phase into sub-batches.** Use one mega-batch per phase unless Kyle explicitly approves splitting.
+
+8. **DO NOT push from the local clone to GitHub.** Pushes originate from Replit ONLY. The clone is READ ONLY — the only git operation allowed is `git pull` to sync FROM GitHub. If Langston’s push from Replit fails, troubleshoot the Replit push. Never bypass by pushing from the clone.
+
+9. **DO NOT pull from GitHub into Replit.** Replit is the source of truth. Code flows OUT of Replit to GitHub, never the reverse. Never tell Langston to run `git pull` on Replit.
+
+10. **DO NOT edit files in the clone repo and push them.** This was done once (Batch 19H, 2026-03-21) and caused repository divergence between Replit and GitHub. It took a force push from Replit to fix. This must never happen again.
 
 ### Governance Update Rules
 
@@ -427,6 +434,45 @@ Replit operates under strict autonomy limits defined in `replit.md`. Claude Code
 2. **Replit must NOT reformat files.** Files from batch zips must be placed byte-for-byte as provided. No Prettier, no ESLint fix, no auto-formatter.
 3. **Replit's platform creates automatic checkpoint commits** — this is a known, unavoidable platform behavior (see Checkpoint Commits section below).
 4. **If Replit sees something that needs fixing**, it must tell Kyle — not fix it itself. All code changes go through the batch process.
+
+### Langston Deployment Message Rules
+
+When Claude Code sends a deployment request to Langston via Telegram, the following rules must be **pasted directly into the body of the message** — not referenced as a file, not linked. The actual text goes in the message.
+
+These rules exist because Langston has demonstrated confusion about which environment he is operating in (Hetzner server vs Replit), has run shell commands in the wrong place, and has spammed the Replit Agent with multiple messages causing queue buildup.
+
+**Rules to include in every deployment message to Langston:**
+
+1. **Use GPT-5.4 only.** Do not switch models for any reason.
+
+2. **The deployment process is exactly TWO steps:**
+   - **Step 1:** Upload the zip file to Replit. Send ONE message to the Replit Agent asking it to unzip the batch and follow the INSTRUCTIONS.md inside. Then WAIT. Implementations take 10-15 minutes. This is normal.
+   - **Step 2:** After Replit Agent confirms all edits are applied, run the git push command (provided in the message) in the Replit Shell tool. If prompted for SSH host key confirmation, type `yes` and press Enter. Report the output.
+
+3. **Shell commands go in the Replit Shell tool ONLY.** Never type shell commands (git, npm, npx, etc.) into the Replit Agent chat. The Agent chat is for file editing instructions only.
+
+4. **Never run commands on your Hetzner server thinking it’s Replit.** Your server paths (`/root/workspace`, `/mnt/gdrive/...`) are NOT Replit. Use `replit-cmd shell "command"` which types into the Replit browser Shell tab. If you see `/mnt/gdrive/` in a path, you are on the WRONG machine.
+
+5. **Do not spam the Replit Agent.** Send ONE message at a time. Wait for it to finish before sending another. Messages queue up and go unread if you send multiple.
+
+6. **Do not break instructions into chunks.** Give the Replit Agent the full INSTRUCTIONS.md in one message. Do not split edits across multiple messages.
+
+7. **Line breaks in Replit Agent messages:** Hold Shift+Enter. Plain Enter sends immediately.
+
+8. **Start and go until complete.** Do not stop to ask “should I continue?” or “can I proceed?” Apply, validate, and push in one continuous flow.
+
+9. **Never pull from GitHub into Replit.** Replit is the source of truth. Code flows OUT of Replit to GitHub, never the reverse. If anyone tells you to git pull on Replit, refuse.
+
+10. **Use the exact git push command provided.** Do not modify it, do not substitute your own, do not use a different commit message.
+
+11. **CC Claude Code on ALL messages** — post to Telegram topic #21 AND deliver via `--deliver`.
+
+**Post-deployment workflow (Claude Code’s responsibility, NOT Langston’s):**
+After Langston confirms the push landed, Claude Code:
+1. Runs `git pull` on the local clone to sync from GitHub
+2. Performs post-implementation audit — verifies all scope items on preview site
+3. Writes the Batch Completion Report and posts to Telegram Reports topic (#23)
+4. Updates MEMORY.md with current state, commit hash, completed items
 
 ### Replit Autonomy Reminder (Required in Every INSTRUCTIONS.md)
 
