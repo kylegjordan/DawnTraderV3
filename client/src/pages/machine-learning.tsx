@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Brain, RefreshCw, Download, TrendingUp, TrendingDown, Clock, Target, AlertTriangle, Sliders, Activity, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Brain, RefreshCw, Download, TrendingUp, TrendingDown, Clock, Target, AlertTriangle, Sliders, Activity, ArrowUpDown, ArrowUp, ArrowDown, Filter } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { ensureValidToken } from "@/lib/auth";
 import { format } from "date-fns";
@@ -87,6 +87,45 @@ type AdjustmentType =
   | "filter_adjustment";
 
 type Reversibility = "automatic" | "manual" | "irreversible";
+
+// Batch 19H: Filter Pipeline Diagnostics types
+interface ScanDiagnostics {
+  timestamp: string;
+  mode: string;
+  totalPairsScanned: number;
+  allSymbolsScanned: string[];
+  quant: {
+    global: Record<string, number>;
+    imf: { failedLQ: number; failedVN: number; passed: number; total: number; benchmarkBypassed: number };
+    survivors: number;
+  };
+  pattern: {
+    global: Record<string, number> | null;
+    imf: { failedLQ: number; failedVN: number; failedDI: number; passed: number; total: number } | null;
+    survivors: number;
+  };
+  destination: string;
+  destinationCount: number;
+}
+
+interface FilterDiagnosticsData {
+  ok: boolean;
+  lastScan: ScanDiagnostics | null;
+  rolling24h: {
+    totalScans: number;
+    totalPairsScanned: number;
+    uniquePairsScanned: number;
+    aggregated: {
+      quant: ScanDiagnostics['quant'];
+      pattern: ScanDiagnostics['pattern'];
+    };
+  };
+  signalRejections: {
+    total: number;
+    byReason: Record<string, number>;
+    byRegime: Record<string, number>;
+  };
+}
 
 interface PredictiveAdjustment {
   _schema: string;
@@ -1532,6 +1571,299 @@ function PredictiveAdjustmentsPanel({
 }
 
 
+// Batch 19H: Filter Pipeline Diagnostics Panel
+function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsData | undefined; isLoading: boolean }) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!data || !data.ok) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        No diagnostics data available. Waiting for first FX5 scan cycle...
+      </div>
+    );
+  }
+
+  const { lastScan, rolling24h, signalRejections } = data;
+
+  const formatFilterName = (key: string): string => {
+    const names: Record<string, string> = {
+      failed_min_volume: 'Min Volume',
+      failed_spread: 'Max Spread',
+      failed_daily_range: 'Daily Range',
+      failed_min_price: 'Min Price',
+      failed_max_price: 'Max Price',
+      failed_stablecoin: 'Stablecoin',
+      failed_quote_currency: 'Quote Currency',
+      failed_history: 'Min History',
+      failed_market_cap: 'Market Cap',
+      failed_guardrail_risk: 'Guardrail Risk',
+      failed_correlation: 'Correlation',
+      already_active: 'Already Active',
+      passed_all_filters: 'Passed All',
+    };
+    return names[key] || key;
+  };
+
+  const getRejectionColor = (count: number, total: number): string => {
+    if (total === 0) return '';
+    const pct = count / total;
+    if (pct > 0.5) return 'text-red-500 font-semibold';
+    if (pct > 0.2) return 'text-orange-500';
+    if (pct > 0) return 'text-yellow-600';
+    return 'text-green-600';
+  };
+
+  const formatReasonName = (reason: string): string => {
+    return reason.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* TABLE 1: Last Scan Stats */}
+      <Card>
+        <CardHeader className="py-3">
+          <CardTitle className="text-lg flex items-center justify-between">
+            <span>Last Scan — Filter Breakdown</span>
+            <span className="text-sm font-normal text-muted-foreground">
+              {lastScan ? `${new Date(lastScan.timestamp).toLocaleTimeString()} · ${lastScan.mode} · ${lastScan.totalPairsScanned} pairs scanned` : 'No scan data'}
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {lastScan ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="text-left p-2 font-medium">Filter</th>
+                    <th className="text-right p-2 font-medium">Quant Global</th>
+                    <th className="text-right p-2 font-medium">Pattern Global</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(lastScan.quant.global).map(([key, value]) => (
+                    <tr key={key} className="border-b hover:bg-muted/30">
+                      <td className="p-2">{formatFilterName(key)}</td>
+                      <td className={`p-2 text-right ${key === 'passed_all_filters' ? 'text-green-600 font-semibold' : getRejectionColor(value as number, lastScan.totalPairsScanned)}`}>
+                        {value as number}
+                      </td>
+                      <td className={`p-2 text-right ${lastScan.pattern.global && key in lastScan.pattern.global ? (key === 'passed_all_filters' ? 'text-green-600 font-semibold' : getRejectionColor((lastScan.pattern.global as Record<string, number>)[key] || 0, lastScan.totalPairsScanned)) : 'text-muted-foreground'}`}>
+                        {lastScan.pattern.global && key in (lastScan.pattern.global as Record<string, number>)
+                          ? (lastScan.pattern.global as Record<string, number>)[key]
+                          : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                  {/* IMF Section Header */}
+                  <tr className="border-b bg-muted/50">
+                    <td colSpan={3} className="p-2 font-medium text-xs uppercase tracking-wider">IMF Metrics (Post-Global)</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2">Failed LQ</td>
+                    <td className={`p-2 text-right ${getRejectionColor(lastScan.quant.imf.failedLQ, lastScan.quant.imf.total)}`}>{lastScan.quant.imf.failedLQ}</td>
+                    <td className={`p-2 text-right ${lastScan.pattern.imf ? getRejectionColor(lastScan.pattern.imf.failedLQ, lastScan.pattern.imf.total) : 'text-muted-foreground'}`}>
+                      {lastScan.pattern.imf?.failedLQ ?? '—'}
+                    </td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2">Failed VN</td>
+                    <td className={`p-2 text-right ${getRejectionColor(lastScan.quant.imf.failedVN, lastScan.quant.imf.total)}`}>{lastScan.quant.imf.failedVN}</td>
+                    <td className={`p-2 text-right ${lastScan.pattern.imf ? getRejectionColor(lastScan.pattern.imf.failedVN, lastScan.pattern.imf.total) : 'text-muted-foreground'}`}>
+                      {lastScan.pattern.imf?.failedVN ?? '—'}
+                    </td>
+                  </tr>
+                  {lastScan.pattern.imf && (
+                    <tr className="border-b hover:bg-muted/30">
+                      <td className="p-2">Failed DI</td>
+                      <td className="p-2 text-right text-muted-foreground">—</td>
+                      <td className={`p-2 text-right ${getRejectionColor(lastScan.pattern.imf.failedDI, lastScan.pattern.imf.total)}`}>
+                        {lastScan.pattern.imf.failedDI}
+                      </td>
+                    </tr>
+                  )}
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2">Benchmark Bypassed</td>
+                    <td className="p-2 text-right text-blue-500">{lastScan.quant.imf.benchmarkBypassed}</td>
+                    <td className="p-2 text-right text-muted-foreground">—</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30 font-semibold">
+                    <td className="p-2">IMF Passed</td>
+                    <td className="p-2 text-right text-green-600">{lastScan.quant.imf.passed}</td>
+                    <td className="p-2 text-right text-green-600">{lastScan.pattern.imf?.passed ?? '—'}</td>
+                  </tr>
+                  {/* Summary Row */}
+                  <tr className="bg-muted/30 font-semibold">
+                    <td className="p-2">Final Survivors</td>
+                    <td className="p-2 text-right text-green-600">{lastScan.quant.survivors}</td>
+                    <td className="p-2 text-right text-green-600">{lastScan.pattern.survivors}</td>
+                  </tr>
+                  <tr className="bg-muted/50 font-semibold">
+                    <td className="p-2">Destination: {lastScan.destination === 'active_pool' ? 'Active Pool' : 'VTS Batch'}</td>
+                    <td colSpan={2} className="p-2 text-right text-primary">{lastScan.destinationCount} pairs total</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="p-4 text-muted-foreground text-center">No scan data yet</div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* TABLE 2: 24-Hour Rolling Aggregates */}
+      <Card>
+        <CardHeader className="py-3">
+          <CardTitle className="text-lg flex items-center justify-between">
+            <span>24-Hour Rolling Aggregates</span>
+            <span className="text-sm font-normal text-muted-foreground">
+              {rolling24h.totalScans} scans · {rolling24h.totalPairsScanned} total pairs · {rolling24h.uniquePairsScanned} unique
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {rolling24h.totalScans > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="text-left p-2 font-medium">Filter</th>
+                    <th className="text-right p-2 font-medium">Quant Global (24h)</th>
+                    <th className="text-right p-2 font-medium">Pattern Global (24h)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(rolling24h.aggregated.quant.global).map(([key, value]) => (
+                    <tr key={key} className="border-b hover:bg-muted/30">
+                      <td className="p-2">{formatFilterName(key)}</td>
+                      <td className={`p-2 text-right ${key === 'passed_all_filters' ? 'text-green-600 font-semibold' : getRejectionColor(value as number, rolling24h.totalPairsScanned)}`}>
+                        {value as number}
+                      </td>
+                      <td className={`p-2 text-right ${rolling24h.aggregated.pattern.global && key in rolling24h.aggregated.pattern.global ? (key === 'passed_all_filters' ? 'text-green-600 font-semibold' : '') : 'text-muted-foreground'}`}>
+                        {rolling24h.aggregated.pattern.global && key in (rolling24h.aggregated.pattern.global as Record<string, number>)
+                          ? (rolling24h.aggregated.pattern.global as Record<string, number>)[key]
+                          : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="border-b bg-muted/50">
+                    <td colSpan={3} className="p-2 font-medium text-xs uppercase tracking-wider">IMF Metrics (24h Totals)</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2">Failed LQ</td>
+                    <td className="p-2 text-right">{rolling24h.aggregated.quant.imf.failedLQ}</td>
+                    <td className="p-2 text-right">{rolling24h.aggregated.pattern.imf?.failedLQ ?? '—'}</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2">Failed VN</td>
+                    <td className="p-2 text-right">{rolling24h.aggregated.quant.imf.failedVN}</td>
+                    <td className="p-2 text-right">{rolling24h.aggregated.pattern.imf?.failedVN ?? '—'}</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2">Failed DI</td>
+                    <td className="p-2 text-right text-muted-foreground">—</td>
+                    <td className="p-2 text-right">{rolling24h.aggregated.pattern.imf?.failedDI ?? '—'}</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2">Benchmark Bypassed</td>
+                    <td className="p-2 text-right text-blue-500">{rolling24h.aggregated.quant.imf.benchmarkBypassed}</td>
+                    <td className="p-2 text-right text-muted-foreground">—</td>
+                  </tr>
+                  <tr className="bg-muted/30 font-semibold">
+                    <td className="p-2">Total Survivors (24h)</td>
+                    <td className="p-2 text-right text-green-600">{rolling24h.aggregated.quant.survivors}</td>
+                    <td className="p-2 text-right text-green-600">{rolling24h.aggregated.pattern.survivors}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="p-4 text-muted-foreground text-center">No 24h data accumulated yet</div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* TABLE 3: Signal Rejection Breakdown */}
+      <Card>
+        <CardHeader className="py-3">
+          <CardTitle className="text-lg flex items-center justify-between">
+            <span>Signal Rejection Breakdown (24h)</span>
+            <span className="text-sm font-normal text-muted-foreground">
+              {signalRejections.total} total rejections
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {signalRejections.total > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
+              {/* By Reason */}
+              <div>
+                <h4 className="text-sm font-medium mb-2">By Rejection Reason</h4>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left p-2 font-medium">Reason</th>
+                      <th className="text-right p-2 font-medium">Count</th>
+                      <th className="text-right p-2 font-medium">%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(signalRejections.byReason)
+                      .sort(([, a], [, b]) => (b as number) - (a as number))
+                      .map(([reason, count]) => (
+                        <tr key={reason} className="border-b hover:bg-muted/30">
+                          <td className="p-2">{formatReasonName(reason)}</td>
+                          <td className="p-2 text-right">{count as number}</td>
+                          <td className="p-2 text-right text-muted-foreground">
+                            {signalRejections.total > 0 ? ((count as number) / signalRejections.total * 100).toFixed(1) : 0}%
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+              {/* By Regime */}
+              <div>
+                <h4 className="text-sm font-medium mb-2">By Market Regime</h4>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left p-2 font-medium">Regime</th>
+                      <th className="text-right p-2 font-medium">Count</th>
+                      <th className="text-right p-2 font-medium">%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(signalRejections.byRegime)
+                      .sort(([, a], [, b]) => (b as number) - (a as number))
+                      .map(([regime, count]) => (
+                        <tr key={regime} className="border-b hover:bg-muted/30">
+                          <td className="p-2">{regime}</td>
+                          <td className="p-2 text-right">{count as number}</td>
+                          <td className="p-2 text-right text-muted-foreground">
+                            {signalRejections.total > 0 ? ((count as number) / signalRejections.total * 100).toFixed(1) : 0}%
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 text-muted-foreground text-center">No signal rejections in the last 24 hours</div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+
 export default function MachineLearningPage() {
   const [activeTab, setActiveTab] = useState("open");
   const queryClient = useQueryClient();
@@ -1618,6 +1950,14 @@ export default function MachineLearningPage() {
     queryFn: () => apiFetch('/api/vts/regime-archive/manifest'),
     refetchInterval: 300000,
     staleTime: 120000,
+  });
+
+  // Batch 19H: Filter Pipeline Diagnostics
+  const { data: diagnosticsData, isLoading: diagnosticsLoading } = useQuery<FilterDiagnosticsData>({
+    queryKey: ['/api/vts/filter-diagnostics'],
+    queryFn: () => apiFetch('/api/vts/filter-diagnostics'),
+    refetchInterval: 60000,
+    staleTime: 30000,
   });
 
   const handleTriggerArchive = async () => {
@@ -1754,6 +2094,10 @@ export default function MachineLearningPage() {
               Regime Archive
               <Badge variant="secondary" className="ml-1">{archiveRecords.length}</Badge>
             </TabsTrigger>
+            <TabsTrigger value="diagnostics" className="flex items-center gap-2">
+              <Filter className="w-4 h-4" />
+              Filter Diagnostics
+            </TabsTrigger>
           </TabsList>
 
           <div className="flex items-center gap-2">
@@ -1862,6 +2206,13 @@ export default function MachineLearningPage() {
             manifest={archiveManifest}
             isLoading={archiveLoading}
             onTriggerArchive={handleTriggerArchive}
+          />
+        </TabsContent>
+
+        <TabsContent value="diagnostics">
+          <FilterDiagnosticsPanel
+            data={diagnosticsData}
+            isLoading={diagnosticsLoading}
           />
         </TabsContent>
       </Tabs>

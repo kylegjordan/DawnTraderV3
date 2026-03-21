@@ -6170,6 +6170,16 @@
     ]
   },
   {
+    "path": "/api/vts/filter-diagnostics",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "requireAuth",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/audit/run",
     "methods": [
       "GET"

@@ -132,6 +132,49 @@ export const BENCHMARK_SYMBOLS = [
   'DAI/USD', 'BUSD/USD', 'TUSD/USD'
 ];
 
+// Batch 19H: Filter Pipeline Diagnostics — per-scan and 24h rolling data
+export interface ScanDiagnostics {
+  timestamp: string;
+  mode: 'paper' | 'live';
+  totalPairsScanned: number;
+  allSymbolsScanned: string[];
+  quant: {
+    global: {
+      failed_min_volume: number;
+      failed_spread: number;
+      failed_daily_range: number;
+      failed_min_price: number;
+      failed_stablecoin: number;
+      failed_quote_currency: number;
+      failed_history: number;
+      failed_market_cap: number;
+      failed_guardrail_risk: number;
+      failed_correlation: number;
+      already_active: number;
+      passed_all_filters: number;
+    };
+    imf: { failedLQ: number; failedVN: number; passed: number; total: number; benchmarkBypassed: number };
+    survivors: number;
+  };
+  pattern: {
+    global: {
+      failed_stablecoin: number;
+      failed_min_price: number;
+      failed_max_price: number;
+      failed_min_volume: number;
+      failed_spread: number;
+      failed_history: number;
+      passed_all_filters: number;
+    } | null;
+    imf: { failedLQ: number; failedVN: number; failedDI: number; passed: number; total: number } | null;
+    survivors: number;
+  };
+  destination: 'active_pool' | 'vts_batch';
+  destinationCount: number;
+}
+
+const DIAGNOSTICS_ROLLING_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
+
 // Directive 11.4C.1: ScanResult uses Ideal/Rotational pool terminology
 interface ScanResult {
   mode: 'paper' | 'live';
@@ -185,6 +228,10 @@ export class Fx5ScannerService {
     ['live', []]
   ]);
 
+  // Batch 19H: Filter Pipeline Diagnostics
+  private lastScanDiagnostics: ScanDiagnostics | null = null;
+  private scanDiagnosticsHistory: ScanDiagnostics[] = [];
+
   constructor() {
     // Phase 8.8.7: FilteredPairsService DEPRECATED - removed
     this.krakenService = new KrakenService();
@@ -193,6 +240,110 @@ export class Fx5ScannerService {
   // REB 2.8.5B: Get scanner start time for countdown calculation
   getStartTime(): number {
     return this.startTime;
+  }
+
+  // Batch 19H: Get last scan diagnostics for API
+  getLastScanDiagnostics(): ScanDiagnostics | null {
+    return this.lastScanDiagnostics;
+  }
+
+  // Batch 19H: Get 24h rolling diagnostics with aggregation
+  getRolling24hDiagnostics(): {
+    totalScans: number;
+    totalPairsScanned: number;
+    uniquePairsScanned: number;
+    aggregated: {
+      quant: ScanDiagnostics['quant'];
+      pattern: ScanDiagnostics['pattern'];
+    };
+  } {
+    // Prune entries older than 24h
+    const cutoff = Date.now() - DIAGNOSTICS_ROLLING_WINDOW_MS;
+    this.scanDiagnosticsHistory = this.scanDiagnosticsHistory.filter(
+      d => new Date(d.timestamp).getTime() > cutoff
+    );
+
+    const history = this.scanDiagnosticsHistory;
+    if (history.length === 0) {
+      return {
+        totalScans: 0,
+        totalPairsScanned: 0,
+        uniquePairsScanned: 0,
+        aggregated: {
+          quant: {
+            global: { failed_min_volume: 0, failed_spread: 0, failed_daily_range: 0, failed_min_price: 0, failed_stablecoin: 0, failed_quote_currency: 0, failed_history: 0, failed_market_cap: 0, failed_guardrail_risk: 0, failed_correlation: 0, already_active: 0, passed_all_filters: 0 },
+            imf: { failedLQ: 0, failedVN: 0, passed: 0, total: 0, benchmarkBypassed: 0 },
+            survivors: 0,
+          },
+          pattern: { global: null, imf: null, survivors: 0 },
+        },
+      };
+    }
+
+    // Collect unique symbols across all scans
+    const uniqueSymbols = new Set<string>();
+    let totalPairsScanned = 0;
+
+    // Aggregate quant global
+    const aggQuantGlobal = { failed_min_volume: 0, failed_spread: 0, failed_daily_range: 0, failed_min_price: 0, failed_stablecoin: 0, failed_quote_currency: 0, failed_history: 0, failed_market_cap: 0, failed_guardrail_risk: 0, failed_correlation: 0, already_active: 0, passed_all_filters: 0 };
+    const aggQuantImf = { failedLQ: 0, failedVN: 0, passed: 0, total: 0, benchmarkBypassed: 0 };
+    let aggQuantSurvivors = 0;
+
+    // Aggregate pattern global
+    const aggPatternGlobal = { failed_stablecoin: 0, failed_min_price: 0, failed_max_price: 0, failed_min_volume: 0, failed_spread: 0, failed_history: 0, passed_all_filters: 0 };
+    const aggPatternImf = { failedLQ: 0, failedVN: 0, failedDI: 0, passed: 0, total: 0 };
+    let aggPatternSurvivors = 0;
+    let hasPatternData = false;
+
+    for (const d of history) {
+      totalPairsScanned += d.totalPairsScanned;
+      for (const sym of d.allSymbolsScanned) uniqueSymbols.add(sym);
+
+      // Quant global
+      for (const key of Object.keys(aggQuantGlobal) as (keyof typeof aggQuantGlobal)[]) {
+        aggQuantGlobal[key] += d.quant.global[key];
+      }
+      aggQuantImf.failedLQ += d.quant.imf.failedLQ;
+      aggQuantImf.failedVN += d.quant.imf.failedVN;
+      aggQuantImf.passed += d.quant.imf.passed;
+      aggQuantImf.total += d.quant.imf.total;
+      aggQuantImf.benchmarkBypassed += d.quant.imf.benchmarkBypassed;
+      aggQuantSurvivors += d.quant.survivors;
+
+      // Pattern global
+      if (d.pattern.global) {
+        hasPatternData = true;
+        for (const key of Object.keys(aggPatternGlobal) as (keyof typeof aggPatternGlobal)[]) {
+          aggPatternGlobal[key] += d.pattern.global[key];
+        }
+      }
+      if (d.pattern.imf) {
+        aggPatternImf.failedLQ += d.pattern.imf.failedLQ;
+        aggPatternImf.failedVN += d.pattern.imf.failedVN;
+        aggPatternImf.failedDI += d.pattern.imf.failedDI;
+        aggPatternImf.passed += d.pattern.imf.passed;
+        aggPatternImf.total += d.pattern.imf.total;
+      }
+      aggPatternSurvivors += d.pattern.survivors;
+    }
+
+    return {
+      totalScans: history.length,
+      totalPairsScanned,
+      uniquePairsScanned: uniqueSymbols.size,
+      aggregated: {
+        quant: {
+          global: aggQuantGlobal,
+          imf: aggQuantImf,
+          survivors: aggQuantSurvivors,
+        },
+        pattern: {
+          global: hasPatternData ? aggPatternGlobal : null,
+          imf: hasPatternData ? aggPatternImf : null,
+          survivors: aggPatternSurvivors,
+        },
+      },
+    };
   }
 
   /**
@@ -724,6 +875,23 @@ export class Fx5ScannerService {
         s.bypassBoringReject
       );
 
+      // Batch 19H: Compute per-metric IMF breakdown for diagnostics
+      const dbLqMinVal = parseFloat(filters.lqMin ?? '35');
+      const dbVnMaxVal = parseFloat(filters.vnMax ?? '0.93');
+      let quantImfFailedLQ = 0;
+      let quantImfFailedVN = 0;
+      let quantImfBenchmarkBypassed = 0;
+      for (const s of classifiedSurvivors) {
+        if (s.passesMetricFilter) continue;
+        if (s.bypassVolatilityReject || s.bypassBoringReject) {
+          quantImfBenchmarkBypassed++;
+          continue;
+        }
+        // Determine which metric(s) failed
+        if ((s.LQ ?? 0) < dbLqMinVal) quantImfFailedLQ++;
+        if ((s.VolNoise ?? 1) > dbVnMaxVal) quantImfFailedVN++;
+      }
+
       // Batch 19F: Pattern pool from dual global filter path
       // ALL 300 pairs went through pattern global filters in collectAdaptiveBatch()
       // Pattern global survivors are further filtered by pattern IMF thresholds here
@@ -811,6 +979,27 @@ export class Fx5ScannerService {
 
       console.log(`[19F][PATTERN_POOL] Pattern pool: ${patternPoolSurvivors.length}/${patternGlobalSurvivors.length} passed IMF${regimeThresholdsActive ? ' (regime-adjusted)' : ' (static)'} thresholds (dual-path)`);
 
+      // Batch 19H: Pattern IMF per-metric breakdown
+      let patternImfFailedLQ = 0;
+      let patternImfFailedVN = 0;
+      let patternImfFailedDI = 0;
+      const patternImfTotal = patternGlobalSurvivors.length;
+      // Re-evaluate which metric failed for each rejected pair
+      for (const s of patternGlobalSurvivors) {
+        const normalizedSym = normalizeToInternalSymbol(s.symbol);
+        const classified = allClassifiedForPatternLookup.find(cs => cs.symbol === normalizedSym || cs.symbol === s.symbol);
+        if (!classified) continue;
+        const lq = classified.LQ ?? 0;
+        const vn = classified.VolNoise ?? 1.0;
+        const di = classified.DI ?? 0;
+        const passedAll = lq >= activePatternThresholds.LQ_MIN && vn <= activePatternThresholds.VN_MAX && di >= activePatternThresholds.DI_TRENDING_MIN;
+        if (!passedAll) {
+          if (lq < activePatternThresholds.LQ_MIN) patternImfFailedLQ++;
+          if (vn > activePatternThresholds.VN_MAX) patternImfFailedVN++;
+          if (di < activePatternThresholds.DI_TRENDING_MIN) patternImfFailedDI++;
+        }
+      }
+
       const metricFilteredCount = classifiedSurvivors.length - metricFilteredSurvivors.length;
       const forceIncludedCount = classifiedSurvivors.filter(s => !s.passesMetricFilter && s.forceInclude).length;
       const benchmarkBypassedCount = classifiedSurvivors.filter(s => !s.passesMetricFilter && (s.bypassVolatilityReject || s.bypassBoringReject)).length;
@@ -868,6 +1057,46 @@ export class Fx5ScannerService {
       const cycleStartTimestamp = new Date().toISOString();
       const cycleEndTimestamp = new Date().toISOString();
       
+      // Batch 19H: Store scan diagnostics for Filter Pipeline Diagnostics tab
+      const scanDiag: ScanDiagnostics = {
+        timestamp: new Date().toISOString(),
+        mode,
+        totalPairsScanned: evaluatedCount,
+        allSymbolsScanned: evaluatedSymbols,
+        quant: {
+          global: { ...breakdown },
+          imf: {
+            failedLQ: quantImfFailedLQ,
+            failedVN: quantImfFailedVN,
+            passed: metricFilteredSurvivors.length,
+            total: classifiedSurvivors.length,
+            benchmarkBypassed: quantImfBenchmarkBypassed,
+          },
+          survivors: metricFilteredSurvivors.length,
+        },
+        pattern: {
+          global: batchResult.patternBreakdown ?? null,
+          imf: batchResult.patternBreakdown ? {
+            failedLQ: patternImfFailedLQ,
+            failedVN: patternImfFailedVN,
+            failedDI: patternImfFailedDI,
+            passed: patternPoolSurvivors.length,
+            total: patternImfTotal,
+          } : null,
+          survivors: patternPoolSurvivors.length,
+        },
+        destination: isEngineActive ? 'active_pool' : 'vts_batch',
+        destinationCount: metricFilteredSurvivors.length + patternPoolSurvivors.length,
+      };
+      this.lastScanDiagnostics = scanDiag;
+      this.scanDiagnosticsHistory.push(scanDiag);
+      // Prune history older than 24h
+      const diagCutoff = Date.now() - DIAGNOSTICS_ROLLING_WINDOW_MS;
+      this.scanDiagnosticsHistory = this.scanDiagnosticsHistory.filter(
+        d => new Date(d.timestamp).getTime() > diagCutoff
+      );
+      console.log(`[19H][DIAG] Scan diagnostics stored: quant=${scanDiag.quant.survivors} pattern=${scanDiag.pattern.survivors} → ${scanDiag.destination}(${scanDiag.destinationCount})`);
+
       // Directive 8.8.4-L1: Capture FX5 scan data for learning aggregation
       // Directive 9.0.B: Include volume classification stats
       const volumeStats = {

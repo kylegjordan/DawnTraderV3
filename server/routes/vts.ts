@@ -1509,4 +1509,36 @@ router.get('/imf-status', requireAuth, async (_req: Request, res: Response) => {
   }
 });
 
+/**
+ * Batch 19H: GET /api/vts/filter-diagnostics
+ * Filter Pipeline Diagnostics — last scan stats, 24h rolling, signal rejections
+ */
+router.get('/filter-diagnostics', requireAuth, async (_req: Request, res: Response) => {
+  try {
+    const { fx5Scanner } = await import('../services/fx5-scanner.js');
+
+    const lastScan = fx5Scanner.getLastScanDiagnostics();
+    const rolling24h = fx5Scanner.getRolling24hDiagnostics();
+
+    // Signal rejections from existing skipped-signals logger (last 24h)
+    let signalRejections = { total: 0, byReason: {} as Record<string, number>, byRegime: {} as Record<string, number> };
+    try {
+      signalRejections = await getSkippedSignalsSummary(1);
+    } catch (err) {
+      console.warn('[19H][API] Failed to get skipped signals summary:', err);
+    }
+
+    res.json({
+      ok: true,
+      lastScan,
+      rolling24h,
+      signalRejections,
+      schema: 'filter-diagnostics/v1.0',
+    });
+  } catch (error) {
+    console.error('[19H][API] Filter diagnostics failed:', error);
+    res.status(500).json({ error: 'Failed to get filter diagnostics' });
+  }
+});
+
 export default router;

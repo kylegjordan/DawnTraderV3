@@ -433,6 +433,16 @@ export interface BatchResult {
     poolType: 'ideal' | 'rotational';
     bidAskSpread?: number;
   }>;
+  // Batch 19H: Pattern global filter per-filter rejection counts
+  patternBreakdown?: {
+    failed_stablecoin: number;
+    failed_min_price: number;
+    failed_max_price: number;
+    failed_min_volume: number;
+    failed_spread: number;
+    failed_history: number;
+    passed_all_filters: number;
+  };
 }
 
 
@@ -740,6 +750,7 @@ export async function collectAdaptiveBatch(
   // Batch 19F: Pattern global filter second pass (dual-path)
   // Runs ALL batch pairs through relaxed pattern thresholds in parallel with quant filters
   let patternSurvivors: BatchResult['patternSurvivors'] = undefined;
+  let patternBreakdown: BatchResult['patternBreakdown'] = undefined;
 
   if (patternFilters) {
     const patternMinVolume = patternFilters.MIN_VOLUME_USD;
@@ -833,6 +844,16 @@ export async function collectAdaptiveBatch(
     console.log(`[DIAG_PATTERN] SUMMARY: ${patternResults.length} survived out of ${batch.length} total. Rejections: stablecoin=${stableRejects}, price=${priceRejects}, maxPrice=${maxPriceRejects}, volume=${volumeRejects}, spread=${spreadRejects}, history=${historyRejects}`);
 
     patternSurvivors = patternResults;
+    // Batch 19H: Capture per-filter rejection counts for diagnostics
+    patternBreakdown = {
+      failed_stablecoin: stableRejects,
+      failed_min_price: priceRejects,
+      failed_max_price: maxPriceRejects,
+      failed_min_volume: volumeRejects,
+      failed_spread: spreadRejects,
+      failed_history: historyRejects,
+      passed_all_filters: patternResults.length,
+    };
     console.log(`[19F][PATTERN_GLOBAL] Pattern global filter: ${patternResults.length}/${batch.length} pairs passed relaxed thresholds`);
   }
 
@@ -849,5 +870,6 @@ export async function collectAdaptiveBatch(
       krakenUniverseSize,
     },
     patternSurvivors,
+    patternBreakdown,
   };
 }
