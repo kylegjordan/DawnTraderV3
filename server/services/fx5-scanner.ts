@@ -891,23 +891,16 @@ export class Fx5ScannerService {
         volumeStats
       }).catch(() => {});
       
-      // HF9 Item D: VTS gets relaxed-filter pairs for broader ML training data
-      // Active trading pool continues using strict metricFilteredSurvivors (no change)
-      // VTS batch uses relaxed thresholds — pairs that only pass relaxed are tagged filterTier='relaxed'
-      // Batch 19G: Use DB-driven VTS IMF thresholds instead of hardcoded VTS_IMF_THRESHOLDS
-      const vtsQuantSurvivors = classifiedSurvivors.filter(s => {
-        if (s.passesMetricFilter || s.bypassVolatilityReject || s.bypassBoringReject) return true;
-        // Apply VTS relaxed thresholds from DB
-        return s.LQ >= dbVtsImfThresholds.LQ_MIN && s.VolNoise <= dbVtsImfThresholds.VN_MAX;
-      }).map(s => ({
+      // Batch 19G GOV: Relaxed filter pass REMOVED — all filtering now comes from DB-driven
+      // screener_filters table (4-column architecture). The VTS Pattern path serves the
+      // "broader ML training data" purpose with its own relaxed thresholds.
+      // No hidden secondary passes outside the screeners tab.
+      const vtsQuantSurvivors = classifiedSurvivors.filter(s =>
+        s.passesMetricFilter || s.bypassVolatilityReject || s.bypassBoringReject
+      ).map(s => ({
         ...s,
-        filterTier: (s.passesMetricFilter ? 'standard' : 'relaxed') as 'standard' | 'relaxed'
+        filterTier: 'standard' as 'standard' | 'relaxed'
       }));
-
-      const relaxedOnlyCount = vtsQuantSurvivors.filter(s => s.filterTier === 'relaxed').length;
-      if (relaxedOnlyCount > 0) {
-        console.log(`[19G][IMF] VTS relaxed filter added ${relaxedOnlyCount} pairs (LQ>=${dbVtsImfThresholds.LQ_MIN}, VN<=${dbVtsImfThresholds.VN_MAX})`);
-      }
 
       // Batch 19G VN HF2: Merge pattern-only IMF survivors into VTS batch
       // Pattern-only pairs passed pattern global + pattern IMF but NOT quant global.
