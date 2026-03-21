@@ -1623,6 +1623,12 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
     return reason.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   };
 
+  // Batch 19I: Format numbers with comma separators
+  const fmt = (n: number | undefined | null): string => {
+    if (n === undefined || n === null) return '—';
+    return n.toLocaleString();
+  };
+
   return (
     <div className="space-y-4 max-w-4xl">
       {/* TABLE 1: Last Scan Stats */}
@@ -1651,11 +1657,11 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     <tr key={key} className="border-b hover:bg-muted/30">
                       <td className="p-2">{formatFilterName(key)}</td>
                       <td className={`p-2 text-right ${key === 'passed_all_filters' ? 'text-green-600 font-semibold' : getRejectionColor(value as number, lastScan.totalPairsScanned)}`}>
-                        {value as number}
+                        {fmt(value as number)}
                       </td>
                       <td className={`p-2 text-right ${lastScan.pattern.global && key in lastScan.pattern.global ? (key === 'passed_all_filters' ? 'text-green-600 font-semibold' : getRejectionColor((lastScan.pattern.global as Record<string, number>)[key] || 0, lastScan.totalPairsScanned)) : 'text-muted-foreground'}`}>
                         {lastScan.pattern.global && key in (lastScan.pattern.global as Record<string, number>)
-                          ? (lastScan.pattern.global as Record<string, number>)[key]
+                          ? fmt((lastScan.pattern.global as Record<string, number>)[key])
                           : '—'}
                       </td>
                     </tr>
@@ -1666,16 +1672,16 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                   </tr>
                   <tr className="border-b hover:bg-muted/30">
                     <td className="p-2">Failed LQ</td>
-                    <td className={`p-2 text-right ${getRejectionColor(lastScan.quant.imf.failedLQ, lastScan.quant.imf.total)}`}>{lastScan.quant.imf.failedLQ}</td>
+                    <td className={`p-2 text-right ${getRejectionColor(lastScan.quant.imf.failedLQ, lastScan.quant.imf.total)}`}>{fmt(lastScan.quant.imf.failedLQ)}</td>
                     <td className={`p-2 text-right ${lastScan.pattern.imf ? getRejectionColor(lastScan.pattern.imf.failedLQ, lastScan.pattern.imf.total) : 'text-muted-foreground'}`}>
-                      {lastScan.pattern.imf?.failedLQ ?? '—'}
+                      {lastScan.pattern.imf ? fmt(lastScan.pattern.imf.failedLQ) : '—'}
                     </td>
                   </tr>
                   <tr className="border-b hover:bg-muted/30">
                     <td className="p-2">Failed VN</td>
-                    <td className={`p-2 text-right ${getRejectionColor(lastScan.quant.imf.failedVN, lastScan.quant.imf.total)}`}>{lastScan.quant.imf.failedVN}</td>
+                    <td className={`p-2 text-right ${getRejectionColor(lastScan.quant.imf.failedVN, lastScan.quant.imf.total)}`}>{fmt(lastScan.quant.imf.failedVN)}</td>
                     <td className={`p-2 text-right ${lastScan.pattern.imf ? getRejectionColor(lastScan.pattern.imf.failedVN, lastScan.pattern.imf.total) : 'text-muted-foreground'}`}>
-                      {lastScan.pattern.imf?.failedVN ?? '—'}
+                      {lastScan.pattern.imf ? fmt(lastScan.pattern.imf.failedVN) : '—'}
                     </td>
                   </tr>
                   {lastScan.pattern.imf && (
@@ -1683,29 +1689,29 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                       <td className="p-2">Failed DI</td>
                       <td className="p-2 text-right text-muted-foreground">—</td>
                       <td className={`p-2 text-right ${getRejectionColor(lastScan.pattern.imf.failedDI, lastScan.pattern.imf.total)}`}>
-                        {lastScan.pattern.imf.failedDI}
+                        {fmt(lastScan.pattern.imf.failedDI)}
                       </td>
                     </tr>
                   )}
                   <tr className="border-b hover:bg-muted/30">
                     <td className="p-2">Benchmark Bypassed</td>
-                    <td className="p-2 text-right text-blue-500">{lastScan.quant.imf.benchmarkBypassed}</td>
+                    <td className="p-2 text-right text-blue-500">{fmt(lastScan.quant.imf.benchmarkBypassed)}</td>
                     <td className="p-2 text-right text-muted-foreground">—</td>
                   </tr>
                   <tr className="border-b hover:bg-muted/30 font-semibold">
                     <td className="p-2">IMF Passed</td>
-                    <td className="p-2 text-right text-green-600">{lastScan.quant.imf.passed}</td>
-                    <td className="p-2 text-right text-green-600">{lastScan.pattern.imf?.passed ?? '—'}</td>
+                    <td className="p-2 text-right text-green-600">{fmt(lastScan.quant.imf.passed)}</td>
+                    <td className="p-2 text-right text-green-600">{lastScan.pattern.imf ? fmt(lastScan.pattern.imf.passed) : '—'}</td>
                   </tr>
                   {/* Summary Row */}
                   <tr className="bg-muted/30 font-semibold">
                     <td className="p-2">Final Survivors</td>
-                    <td className="p-2 text-right text-green-600">{lastScan.quant.survivors}</td>
-                    <td className="p-2 text-right text-green-600">{lastScan.pattern.survivors}</td>
+                    <td className="p-2 text-right text-green-600">{fmt(lastScan.quant.survivors)}</td>
+                    <td className="p-2 text-right text-green-600">{fmt(lastScan.pattern.survivors)}</td>
                   </tr>
                   <tr className="bg-muted/50 font-semibold">
                     <td className="p-2">Destination: {lastScan.destination === 'active_pool' ? 'Active Pool' : 'VTS Batch'}</td>
-                    <td colSpan={2} className="p-2 text-right text-primary">{lastScan.destinationCount} pairs total</td>
+                    <td colSpan={2} className="p-2 text-right text-primary">{fmt(lastScan.destinationCount)} pairs total</td>
                   </tr>
                 </tbody>
               </table>
@@ -1722,7 +1728,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
           <CardTitle className="text-lg flex items-center justify-between">
             <span>24-Hour Rolling Aggregates</span>
             <span className="text-sm font-normal text-muted-foreground">
-              {rolling24h.totalScans} scans · {rolling24h.totalPairsScanned} total pairs · {rolling24h.uniquePairsScanned} unique
+              {rolling24h.totalScans} scans · {fmt(rolling24h.totalPairsScanned)} total pairs · {fmt(rolling24h.uniquePairsScanned)} unique
             </span>
           </CardTitle>
         </CardHeader>
@@ -1742,11 +1748,11 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     <tr key={key} className="border-b hover:bg-muted/30">
                       <td className="p-2">{formatFilterName(key)}</td>
                       <td className={`p-2 text-right ${key === 'passed_all_filters' ? 'text-green-600 font-semibold' : getRejectionColor(value as number, rolling24h.totalPairsScanned)}`}>
-                        {value as number}
+                        {fmt(value as number)}
                       </td>
                       <td className={`p-2 text-right ${rolling24h.aggregated.pattern.global && key in rolling24h.aggregated.pattern.global ? (key === 'passed_all_filters' ? 'text-green-600 font-semibold' : '') : 'text-muted-foreground'}`}>
                         {rolling24h.aggregated.pattern.global && key in (rolling24h.aggregated.pattern.global as Record<string, number>)
-                          ? (rolling24h.aggregated.pattern.global as Record<string, number>)[key]
+                          ? fmt((rolling24h.aggregated.pattern.global as Record<string, number>)[key])
                           : '—'}
                       </td>
                     </tr>
@@ -1756,28 +1762,28 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                   </tr>
                   <tr className="border-b hover:bg-muted/30">
                     <td className="p-2">Failed LQ</td>
-                    <td className="p-2 text-right">{rolling24h.aggregated.quant.imf.failedLQ}</td>
-                    <td className="p-2 text-right">{rolling24h.aggregated.pattern.imf?.failedLQ ?? '—'}</td>
+                    <td className="p-2 text-right">{fmt(rolling24h.aggregated.quant.imf.failedLQ)}</td>
+                    <td className="p-2 text-right">{rolling24h.aggregated.pattern.imf ? fmt(rolling24h.aggregated.pattern.imf.failedLQ) : '—'}</td>
                   </tr>
                   <tr className="border-b hover:bg-muted/30">
                     <td className="p-2">Failed VN</td>
-                    <td className="p-2 text-right">{rolling24h.aggregated.quant.imf.failedVN}</td>
-                    <td className="p-2 text-right">{rolling24h.aggregated.pattern.imf?.failedVN ?? '—'}</td>
+                    <td className="p-2 text-right">{fmt(rolling24h.aggregated.quant.imf.failedVN)}</td>
+                    <td className="p-2 text-right">{rolling24h.aggregated.pattern.imf ? fmt(rolling24h.aggregated.pattern.imf.failedVN) : '—'}</td>
                   </tr>
                   <tr className="border-b hover:bg-muted/30">
                     <td className="p-2">Failed DI</td>
                     <td className="p-2 text-right text-muted-foreground">—</td>
-                    <td className="p-2 text-right">{rolling24h.aggregated.pattern.imf?.failedDI ?? '—'}</td>
+                    <td className="p-2 text-right">{rolling24h.aggregated.pattern.imf ? fmt(rolling24h.aggregated.pattern.imf.failedDI) : '—'}</td>
                   </tr>
                   <tr className="border-b hover:bg-muted/30">
                     <td className="p-2">Benchmark Bypassed</td>
-                    <td className="p-2 text-right text-blue-500">{rolling24h.aggregated.quant.imf.benchmarkBypassed}</td>
+                    <td className="p-2 text-right text-blue-500">{fmt(rolling24h.aggregated.quant.imf.benchmarkBypassed)}</td>
                     <td className="p-2 text-right text-muted-foreground">—</td>
                   </tr>
                   <tr className="bg-muted/30 font-semibold">
                     <td className="p-2">Total Survivors (24h)</td>
-                    <td className="p-2 text-right text-green-600">{rolling24h.aggregated.quant.survivors}</td>
-                    <td className="p-2 text-right text-green-600">{rolling24h.aggregated.pattern.survivors}</td>
+                    <td className="p-2 text-right text-green-600">{fmt(rolling24h.aggregated.quant.survivors)}</td>
+                    <td className="p-2 text-right text-green-600">{fmt(rolling24h.aggregated.pattern.survivors)}</td>
                   </tr>
                 </tbody>
               </table>
@@ -1794,7 +1800,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
           <CardTitle className="text-lg flex items-center justify-between">
             <span>Signal Rejection Breakdown (24h)</span>
             <span className="text-sm font-normal text-muted-foreground">
-              {signalRejections.total} total rejections
+              {fmt(signalRejections.total)} total rejections
             </span>
           </CardTitle>
         </CardHeader>
@@ -1818,7 +1824,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                       .map(([reason, count]) => (
                         <tr key={reason} className="border-b hover:bg-muted/30">
                           <td className="p-2">{formatReasonName(reason)}</td>
-                          <td className="p-2 text-right">{count as number}</td>
+                          <td className="p-2 text-right">{fmt(count as number)}</td>
                           <td className="p-2 text-right text-muted-foreground">
                             {signalRejections.total > 0 ? ((count as number) / signalRejections.total * 100).toFixed(1) : 0}%
                           </td>
@@ -1844,7 +1850,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                       .map(([regime, count]) => (
                         <tr key={regime} className="border-b hover:bg-muted/30">
                           <td className="p-2">{regime}</td>
-                          <td className="p-2 text-right">{count as number}</td>
+                          <td className="p-2 text-right">{fmt(count as number)}</td>
                           <td className="p-2 text-right text-muted-foreground">
                             {signalRejections.total > 0 ? ((count as number) / signalRejections.total * 100).toFixed(1) : 0}%
                           </td>
@@ -1856,6 +1862,77 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
             </div>
           ) : (
             <div className="p-4 text-muted-foreground text-center">No signal rejections in the last 24 hours</div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Table 4: VTS Evaluation Breakdown */}
+      <Card className="max-w-4xl">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Table 4: VTS Evaluation Breakdown (Last Cycle)</CardTitle>
+          <p className="text-xs text-muted-foreground">Outcomes by pool and strategy from most recent VTS simulation cycle</p>
+        </CardHeader>
+        <CardContent>
+          {data.vtsEvaluation ? (
+            <div className="space-y-4">
+              {/* Summary Row */}
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <div className="rounded-md border p-3">
+                  <div className="text-xs text-muted-foreground">Quant Pairs</div>
+                  <div className="text-lg font-semibold">{fmt(data.vtsEvaluation.quantPairsEvaluated)}</div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-xs text-muted-foreground">Pattern Pairs</div>
+                  <div className="text-lg font-semibold">{fmt(data.vtsEvaluation.patternPairsEvaluated)}</div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-xs text-muted-foreground">Signals Generated</div>
+                  <div className="text-lg font-semibold text-green-600">{fmt(data.vtsEvaluation.signalsGenerated)}</div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-xs text-muted-foreground">Pattern Detected</div>
+                  <div className="text-lg font-semibold text-blue-500">{fmt(data.vtsEvaluation.patternDetected)}</div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-xs text-muted-foreground">Pattern No-Detect</div>
+                  <div className="text-lg font-semibold text-orange-500">{fmt(data.vtsEvaluation.patternNoDetection)}</div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-xs text-muted-foreground">Strategy Nulls</div>
+                  <div className="text-lg font-semibold text-red-500">{fmt(data.vtsEvaluation.quantStrategyNulls)}</div>
+                </div>
+              </div>
+              {/* Per-Strategy Breakdown */}
+              {Object.keys(data.vtsEvaluation.byStrategy).length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium mb-2">By Strategy</h4>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left p-2 font-medium">Strategy</th>
+                        <th className="text-right p-2 font-medium">Evaluated</th>
+                        <th className="text-right p-2 font-medium">Nulls</th>
+                        <th className="text-right p-2 font-medium">Signals</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(data.vtsEvaluation.byStrategy)
+                        .sort(([, a], [, b]) => b.evaluated - a.evaluated)
+                        .map(([stratKey, s]) => (
+                          <tr key={stratKey} className="border-b hover:bg-muted/30">
+                            <td className="p-2 font-mono text-xs">{stratKey}</td>
+                            <td className="p-2 text-right">{fmt(s.evaluated)}</td>
+                            <td className="p-2 text-right text-red-500">{fmt(s.nulls)}</td>
+                            <td className="p-2 text-right text-green-600">{fmt(s.signals)}</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="p-4 text-muted-foreground text-center">No VTS cycle data yet — waiting for first simulation cycle</div>
           )}
         </CardContent>
       </Card>
@@ -1952,12 +2029,12 @@ export default function MachineLearningPage() {
     staleTime: 120000,
   });
 
-  // Batch 19H: Filter Pipeline Diagnostics
+  // Batch 19H: Filter Pipeline Diagnostics (19I: faster refresh for Last Scan)
   const { data: diagnosticsData, isLoading: diagnosticsLoading } = useQuery<FilterDiagnosticsData>({
     queryKey: ['/api/vts/filter-diagnostics'],
     queryFn: () => apiFetch('/api/vts/filter-diagnostics'),
-    refetchInterval: 60000,
-    staleTime: 30000,
+    refetchInterval: 15000,
+    staleTime: 10000,
   });
 
   const handleTriggerArchive = async () => {

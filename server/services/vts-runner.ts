@@ -119,6 +119,21 @@ let sessionStartTime: number | null = null;
 let cycleCount = 0;
 let patternRecognitionWarmedUp = false;
 
+// Batch 19I: VTS evaluation diagnostics
+let lastVTSEvalCounters: {
+  quantPairsEvaluated: number;
+  patternPairsEvaluated: number;
+  quantStrategyNulls: number;
+  patternNoDetection: number;
+  patternDetected: number;
+  signalsGenerated: number;
+  byStrategy: Record<string, { evaluated: number; nulls: number; signals: number }>;
+} | null = null;
+
+export function getLastVTSEvalCounters() {
+  return lastVTSEvalCounters;
+}
+
 // Phase 14 HF6: Strategy engine instance for detect function calls
 const strategyEngine = new StrategyEngine();
 
@@ -1310,6 +1325,17 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   const strategiesExecuted: Set<string> = new Set();
   let simulatedCount = 0;
   let totalFinalScore = 0;
+
+  // Batch 19I: VTS evaluation outcome counters
+  let vtsEvalCounters = {
+    quantPairsEvaluated: 0,
+    patternPairsEvaluated: 0,
+    quantStrategyNulls: 0,
+    patternNoDetection: 0,
+    patternDetected: 0,
+    signalsGenerated: 0,
+    byStrategy: {} as Record<string, { evaluated: number; nulls: number; signals: number }>,
+  };
   
   // Directive 11.0E.2: Use isolated VTS cache bucket for sandboxing
   const bucketType: CacheBucketType = 'vtsSimulation';
@@ -1386,6 +1412,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       let effectiveStrategies: StrategyDefinition[] = [];
 
       if (pair.sourcePool === 'pattern') {
+        vtsEvalCounters.patternPairsEvaluated++;
         // Convert OHLC to Candle[] for scanPatterns
         const candles = ohlcData.map(o => ({
           timestamp: o.timestamp,
@@ -1401,8 +1428,10 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
 
         if (buyPatterns.length === 0) {
           // No BUY pattern detected — skip this pair for this cycle (mirrors active trading path)
+          vtsEvalCounters.patternNoDetection++;
           continue;
         }
+        vtsEvalCounters.patternDetected++;
 
         // Map each detected BUY pattern to a canonical strategy definition.
         // Search ALL regimes (not just current) because pattern detection drives strategy,
@@ -1431,6 +1460,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
 
         console.log(`[19G_HF1][VTS] ${pair.symbol} | Regime=${pairRegime} | sourcePool=pattern | Pattern-driven: ${effectiveStrategies.map(s => `${s.strategyKey}(${s.patternType})`).join(', ')}`);
       } else {
+        vtsEvalCounters.quantPairsEvaluated++;
         // Quant pairs: ALL regime strategies (existing behavior)
         effectiveStrategies = regimeStrategies;
 
@@ -1445,7 +1475,19 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
 
       for (const stratDef of effectiveStrategies) {
         const result = await generatePhase10Signal(pair.symbol, priceData, ohlcData, pair.pool, stratDef, pair.filterTier, pair.sourcePool);
-        if (!result) continue;
+        // Batch 19I: Track strategy outcomes
+        const stratKey = stratDef.strategyKey;
+        if (!vtsEvalCounters.byStrategy[stratKey]) {
+          vtsEvalCounters.byStrategy[stratKey] = { evaluated: 0, nulls: 0, signals: 0 };
+        }
+        vtsEvalCounters.byStrategy[stratKey].evaluated++;
+        if (!result) {
+          vtsEvalCounters.byStrategy[stratKey].nulls++;
+          vtsEvalCounters.quantStrategyNulls++;
+          continue;
+        }
+        vtsEvalCounters.byStrategy[stratKey].signals++;
+        vtsEvalCounters.signalsGenerated++;
 
         const { signal, tradeRecord } = result;
 
@@ -1556,6 +1598,10 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   console.log(`[VTS][Cycle ${cycleCount}] Executing ${simulatedCount} signals across ${Object.keys(signalTypeDistribution).length} signal types`);
   console.log(`[VTS][Cycle ${cycleCount}] Completed: ${simulatedCount} trades simulated | Avg finalScore=${avgFinalScore.toFixed(2)}`);
   
+  // Batch 19I: Store VTS evaluation diagnostics
+  lastVTSEvalCounters = vtsEvalCounters;
+  console.log(`[19I][VTS_EVAL] quant=${vtsEvalCounters.quantPairsEvaluated} pattern=${vtsEvalCounters.patternPairsEvaluated} noDetect=${vtsEvalCounters.patternNoDetection} detected=${vtsEvalCounters.patternDetected} stratNulls=${vtsEvalCounters.quantStrategyNulls} signals=${vtsEvalCounters.signalsGenerated}`);
+
   return {
     cycleId: cycleCount,
     pairsEvaluated: pairs.length,

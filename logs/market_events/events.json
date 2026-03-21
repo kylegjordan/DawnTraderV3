@@ -6,6 +6,26 @@
     "previousValue": "STRUCTURAL_TRANSITION",
     "newValue": "RANGE_BOUND_STABLE",
     "severity": "info",
+    "id": "mkt_evt_1774101534123_72",
+    "timestamp": "2026-03-21T13:58:54.123Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Range-Bound Stable to Structural Transition",
+    "explanation": "Market is transitioning between regimes. Conditions are uncertain - the system will be more selective until a clear trend emerges.",
+    "previousValue": "RANGE_BOUND_STABLE",
+    "newValue": "STRUCTURAL_TRANSITION",
+    "severity": "info",
+    "id": "mkt_evt_1774101474118_71",
+    "timestamp": "2026-03-21T13:57:54.118Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Structural Transition to Range-Bound Stable",
+    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
+    "previousValue": "STRUCTURAL_TRANSITION",
+    "newValue": "RANGE_BOUND_STABLE",
+    "severity": "info",
     "id": "mkt_evt_1774100934054_70",
     "timestamp": "2026-03-21T13:48:54.054Z"
   },
@@ -4978,25 +4998,5 @@
     "severity": "info",
     "id": "mkt_evt_1773924951205_72",
     "timestamp": "2026-03-19T12:55:51.205Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from High-Volatility Unstable to Range-Bound Stable",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "HIGH_VOLATILITY_UNSTABLE",
-    "newValue": "RANGE_BOUND_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1773924891194_71",
-    "timestamp": "2026-03-19T12:54:51.194Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Range-Bound Stable to High-Volatility Unstable",
-    "explanation": "Market regime changed from Range-Bound Stable to High-Volatility Unstable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "RANGE_BOUND_STABLE",
-    "newValue": "HIGH_VOLATILITY_UNSTABLE",
-    "severity": "info",
-    "id": "mkt_evt_1773924651149_70",
-    "timestamp": "2026-03-19T12:50:51.149Z"
   }
 ]

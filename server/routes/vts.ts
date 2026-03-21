@@ -1528,12 +1528,22 @@ router.get('/filter-diagnostics', requireAuth, async (_req: Request, res: Respon
       console.warn('[19H][API] Failed to get skipped signals summary:', err);
     }
 
+    // Batch 19I: Include VTS evaluation counters
+    let vtsEvaluation = null;
+    try {
+      const { getLastVTSEvalCounters } = await import('../services/vts-runner.js');
+      vtsEvaluation = getLastVTSEvalCounters();
+    } catch (err) {
+      console.warn('[19I][API] Could not get VTS eval counters:', err);
+    }
+
     res.json({
       ok: true,
       lastScan,
       rolling24h,
       signalRejections,
-      schema: 'filter-diagnostics/v1.0',
+      vtsEvaluation,
+      schema: 'filter-diagnostics/v1.1',
     });
   } catch (error) {
     console.error('[19H][API] Filter diagnostics failed:', error);
