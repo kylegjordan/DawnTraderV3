@@ -1,66 +1,91 @@
 # DawnTrader Batch Catalog
 
-> **Purpose**: Master index of every batch deployed to the DawnTrader system.
-> **Updated by**: Claude Code (mandatory after every batch — code and governance)
+> **Purpose**: Master index of batches deployed to the DawnTrader system.
+> **Updated by**: Langston (compiled from current repo docs, snapshot log, scope files, and available completion reports)
 > **Location**: `1-system-manual/BATCH_CATALOG.md`
+>
+> **Note on commit hashes**: This catalog includes commit hashes where they could be verified from the frozen snapshot log, current CCPI, or other canonical governance material. Where a hash could not be recovered confidently from the currently accessible source set, the entry is marked `—` rather than guessing.
 
 ---
 
 ## Batch Index
 
-| Batch | Date | Phase | Description | Scope File | Completion Report |
-|-------|------|-------|-------------|------------|-------------------|
-| Batch 1 | 2026-02-22 | 12.1 | Fix DI probability divergence (BUG-004) — geometric DI from closePrices | — | — |
-| Batch 1B | 2026-02-22 | 12.1 | Governance docs updated for BUG-004 RESOLVED | — | — |
-| Batch 2 | 2026-02-22 | 12.1 | Fix dual friction models (RISK-009) — canonical cost model replaces BASE_FEE_SLIPPAGE | — | — |
-| Batch 3 | 2026-02-23 | 12.1 | Security hardening — JWT fallbacks removed from 12 files, bypass headers removed from 4 files | — | — |
-| Batch 4 | 2026-02-24 | 12.2 | NLAI system removal — neural-layer AI references cleaned from 8 files | — | — |
-| Batch 5 | 2026-02-24 | 12.2 | Walter safe deletions — 9 Walter files deleted | — | — |
-| Batch 6 | 2026-02-26 | 12.2 | Walter importers + frontend + routes cleaned | — | — |
-| Batch 7A | 2026-02-26 | 12.2 | Bob + Cortex deletions | — | — |
-| Batch 7B | 2026-02-26 | 12.2 | Bob + Cortex surgery — ~17,100 lines across ~65 files | — | — |
-| Batch 8 | 2026-02-27 | 12.2 | Wave 1 safe deletions — LATTi residuals + DHMA orphan | — | — |
-| Batch 9 | 2026-02-27 | 12.2 | MarketScanner class removal (~637 lines), frontend dead pages | — | — |
-| Batch 10 | 2026-02-27 | 12.2 | Learning services residual cleanup | — | — |
-| Batch 11 | 2026-02-27 | 12.2 | Goal alignment gate + friction cleanup — Wave 4 friction model unification | — | — |
-| Batch 12 | 2026-02-28 | 12.3 | Strategy spec placement | — | — |
-| Batch 13 | 2026-03-01 | 12.3 | Phase 12.3 pipeline unification | — | — |
-| Batch 14 | 2026-03-03 | 13 | Phase 13 MCE installation + L12/L20 removal + strategy enum expansion hotfix | — | — |
-| Batch 15 | 2026-03-04 | 14.1 | Phase 14 VTS real calculations + DBS + regime rename | — | — |
-| HF6 | 2026-03-05 | 14.1 | Regime rename completion | — | — |
-| HF7 | 2026-03-06 | 14.1 | Regime recalibration | — | — |
-| HF8 | 2026-03-07 | 14.1 | VTS throughput fixes | — | — |
-| HF9 | 2026-03-08 | 14.1 | Column fix, governance gate, DSS deletion, VTS IMF | — | — |
-| Batch 16 | 2026-03-07 | 14.1 | VTS throughput (absorbed into HF8) | — | — |
-| Batch 17 | 2026-03-08 | 14.1 | Column fix + VTS IMF (absorbed into HF9) | — | — |
-| Batch 18 | 2026-03-09 | Inter-phase | API budget optimization — OHLC cache, priceCache, BATCH_SIZE 100→300 | — | — |
-| HF10 | 2026-03-14 | Inter-phase | KrakenService property name fix | — | — |
-| HF10B | 2026-03-14 | Inter-phase | Governance for HF10 + process updates | — | — |
-| HF11B | 2026-03-16 | Inter-phase | Governance enforcement + consolidation | — | — |
-| HF12 | 2026-03-17 | Inter-phase | Regime archive catch-up fix + scheduler-status endpoint | — | — |
-| HF12B | 2026-03-17 | Inter-phase | Governance for HF12 + operational model in SYSTEM_MANUAL | — | — |
-| HF12C | 2026-03-17 | Inter-phase | Route path prefix fix — all endpoints reachable | — | — |
-| HF12D | 2026-03-17 | Inter-phase | Governance for HF12C + Claude Code UI debugging in CCPI | — | — |
-| Batch 19 | 2026-03-18 | 14.5 | Phase 14.5: Dual-path pattern scanning + merit-based ranking + MCE global regime overlay | `SCOPE_19.md` | `Batch_Completion_19_03.18.26.md` |
-| Batch 19B | 2026-03-18 | 14.5 | Governance for Batch 19 | — | — |
-| Batch 19C | 2026-03-18 | 14.5 | Deferred VTS + frontend + regime items | `SCOPE_19C.md` | — |
-| Batch 19E | 2026-03-19 | 14.5 | VTS pattern pool — sourcePool field, DB schema, frontend badges | `SCOPE_19E.md` | — |
-| Batch 19F | 2026-03-19 | 14.5 | Phase 14.5 completion — DB-driven filters, hybrid confluence, ABCD pattern | `SCOPE_19F.md` | — |
-| Batch 19F HF1 | 2026-03-19 | 14.5 | Pattern IMF metrics fix (DI=0 rejection via OHLC pre-fetch) | — | — |
-| Batch 19F HF2 | 2026-03-19 | 14.5 | Trading filter thresholds from DB, deprecated hardcoded constants | — | — |
-| Batch 19F HF3 | 2026-03-20 | 14.5 | Trading regime thresholds and log generation timestamps | — | — |
-| Batch 19G | 2026-03-20 | 14.5 | DB-driven 4-path filter architecture, FX5 reads from DB, VTS dedup, pattern scanning tab | `SCOPE_19G.md` | `Batch_Completion_19G_03.20.26.md` |
-| Batch 19G HF1 | 2026-03-20 | 14.5 | Pattern IMF metrics for pattern-only pairs | — | — |
-| Batch 19G HF2 | 2026-03-20 | 14.5 | Trading filter thresholds from DB | — | — |
-| Batch 19G HF3 | 2026-03-20 | 14.5 | Trading regime thresholds + log timestamps | — | — |
-| Batch 19G VN | 2026-03-20 | 14.5 | Log-returns MAD/median VN formula revision | — | — |
-| Batch 19G VN HF | 2026-03-20 | 14.5 | Remove deprecated VN/DI constants | — | — |
-| Batch 19G VN HF2 | 2026-03-20 | 14.5 | Independent pattern IMF | — | — |
-| Batch 19G VN HF2B | 2026-03-20 | 14.5 | Active trading pattern pool dual-pass | — | — |
-| Batch 19G DI | 2026-03-20 | 14.5 | Rolling 48-candle window for DI | — | — |
-| Batch 19G GOV | 2026-03-20 | 14.5 | Remove hidden relaxed filter pass — all filtering DB-driven | — | — |
-| Batch 19H | 2026-03-21 | 14.5 | Filter Pipeline Diagnostics tab — per-filter rejection visibility | `SCOPE_19H.md` | — |
-| Batch 19H GOV | 2026-03-21 | 14.5 | CCPI governance — deployment rules, workflow ownership, table width fix | — | — |
-| Batch 19I | 2026-03-21 | 14.5 | Filter Diagnostics enhancement — number formatting, VTS evaluation breakdown | — | — |
-| Batch 19J | 2026-03-21 | 14.5 | VTS Evaluation Breakdown — 24-hour rolling aggregation | — | — |
-| Batch 19K GOV | 2026-03-22 | 14.5 | CCPI overhaul — essentials section, workflow update, new governance docs | — | — |
+| Batch | Date | Commit Hash | Description | Scope File | Completion Report |
+|-------|------|-------------|-------------|------------|-------------------|
+| Batch 1 | 2026-02-22 | `ea6551af` | Fixed BUG-004 (DI probability divergence) by switching signal orchestration to geometric directional integrity from real close-price data instead of confidence-derived fake DI. This established the first Phase 12 math correction and became the post-audit baseline for subsequent cleanup work. | — | — |
+| Batch 1B | 2026-02-22 | `dc17cfd6` | Governance closure for Batch 1. Updated the core governance set to mark BUG-004 resolved and establish the early workflow/state tracking that later evolved into the modern governance model. | — | — |
+| Batch 2 | 2026-02-22 | `8393a1ef` | Fixed RISK-009 by replacing the flat friction shortcut with the canonical round-trip cost model in the trading math path. This unified the way friction was calculated between expectancy and live signal evaluation. | — | — |
+| Batch 2B | 2026-02-23 | `67dd76d1` | Governance closure for Batch 2. Updated the governance stack to record the dual-friction fix, partial UNIFY-001 progress, and hardened workflow rules after checkpoint-commit issues surfaced during deployment. | — | — |
+| Batch 3 | 2026-02-23 | `0ddc8db1` | Combined three early directives into one security-and-cleanup batch: removed insecure JWT fallback/bypass behavior, removed misleading simulated trade price display, and cleaned RiskManager stub/comment noise. This was the first broad hardening batch rather than a single narrow bug fix. | — | — |
+| Batch 3B | 2026-02-23 | `b52e40ea` | Governance closure for Batch 3. Marked the related security risks and BUG-020 resolved, updated system documentation, and expanded the governance rules around checkpoint commits and review discipline. | — | — |
+| Batch 4 | 2026-02-24 | `5d5c2051` | Removed the NLAI subsystem and its surrounding wiring. This deleted dead AI-control files, cleaned consuming services, and established the first real dead-code purge batch in the post-audit cleanup program. | — | — |
+| Batch 4B | 2026-02-24 | `dbe063d4` | Governance closure for Batch 4. Marked NLAI-related risk resolved, documented the removal across governance files, and strengthened project rules around scope files and permission settings. | — | — |
+| Batch 5 | 2026-02-24 | — | Wave 3 safe deletions focused on Walter-era services with zero active importers. This batch removed low-risk Walter files to begin the larger Walter/Bob/Cortex teardown program without destabilizing active runtime flows. | — | — |
+| Batch 5B | 2026-02-26 | `8a286e64` | Governance closure for Batch 5. Served as the stabilized pre-Batch-6 baseline after the first Walter safe-deletion wave. | — | — |
+| Batch 6 | 2026-02-26 | — | Removed remaining Walter backend/frontend surface area and cleaned the routing and import graph that still referenced it. This was a high-complexity batch because it touched routes, startup, frontend navigation, tests, and supporting services together. | — | — |
+| Batch 6B | 2026-02-26 | `eaacf34c` | Governance closure for Batch 6. Established the pre-Batch-7 baseline after the broader Walter importer/frontend cleanup. | — | — |
+| Batch 7A | 2026-02-26 | — | Deletion half of the Bob/Cortex removal wave. Removed the raw dead files and training-data surface before the surgical cleanup pass landed. | — | — |
+| Batch 7B | 2026-02-26 | `39dc23b1` | Surgical cleanup half of the Bob/Cortex removal wave, plus the associated hotfix that repaired missed imports and broken references. This completed Directive 12.2.3 and removed a massive Walter/Bob/Cortex legacy cluster across dozens of files. | — | — |
+| Batch 7B GOV | 2026-02-27 | `e74e4646` | Governance closure after Batch 7B, used as the frozen baseline before Batch 8. This recorded completion of the Walter/Bob/Cortex removal directive family. | — | — |
+| Batch 8 | 2026-02-27 | `8086264c` | Completed Wave 1 safe deletions by removing the orphaned DHMA strategy module, the LATTi safety monitor, and multiple LATTI/Lottie residual references across server, schema, and client files. This materially reduced contamination from inactive legacy tuning systems. | — | — |
+| Batch 8B | 2026-02-27 | `8e6e18aa` | Governance closure for Batch 8 and frozen baseline before Batch 9. Recorded completion of Directive 12.2.1 and kept the system docs aligned with the LATTi cleanup. | — | — |
+| Batch 9 | 2026-02-27 | `8b6bb540` | Combined two major cleanup directives: deleted six dead frontend pages and removed the old MarketScanner class while preserving the useful adaptive-batch diagnostics pieces. This completed both the frontend dead-pages cleanup and the MarketScanner-class-removal directive. | — | — |
+| Batch 9B | 2026-02-27 | `19e2c376` | Governance closure for Batch 9 and frozen baseline before Batch 10. Captured the state after the frontend/page purge and MarketScanner cleanup. | — | — |
+| Batch 10 | 2026-02-27 | — | Removed dead Walter-era learning services and cleaned related residuals, including orphaned service files and stale references that survived earlier cleanup waves. This batch also fixed associated breakage in autonomy-controller/storage-adjacent paths. | `BATCH_10_SCOPE.md` | `Batch_Completion_10B_03.14.26.docx` |
+| Batch 10B | 2026-02-27 | `86aa8d79` | Governance closure for Batch 10 and frozen baseline before Batch 11. Preserved the state after the learning-service purge and residual cleanup. | — | — |
+| Batch 11 | 2026-02-27 | — | Removed the Phase 9-era goal-alignment gate system and deprecated friction helper functions, while migrating VTS cost handling toward the canonical cost model. This completed Directives 12.2.6 and 12.2.5 on the code side. | — | `Batch_Completion_11B_03.17.26.docx` |
+| Batch 11B | 2026-03-16 | — | Governance enforcement and consolidation pass around the Batch 11-era cleanup set. This helped harden the governance model before later inter-phase and Phase 14.5 work accelerated. | `HF11B_GOVERNANCE_SCOPE.md` | `Batch_Completion_11B_03.17.26.docx` |
+| Batch 12 | 2026-02-28 | `aa269823` | Strategy specification placement batch. This staged the vetted strategy expansion specification so the later Phase 12.3 implementation could wire the 17-strategy architecture against an agreed source of truth. | `BATCH_12_SCOPE.md` | `Batch_Completion_12B_03.17.26.docx` |
+| Batch 12B | 2026-03-17 | — | Governance closure around the Batch 12 specification placement work. Recorded the strategy-spec milestone in the governance trail. | — | `Batch_Completion_12B_03.17.26.docx` |
+| Batch 13 | 2026-03-01 | `4d8ef060` | Phase 12.3 pipeline unification batch. Completed regime authority resolution, confidence authority cleanup, and 17-strategy routing implementation, turning the Phase 12.3 spec work into a unified live pipeline. | `BATCH_13_SCOPE.md` | — |
+| Batch 13B | 2026-03-03 | `589be749` | Governance closure for Batch 13 and frozen baseline before Batch 14. Captured the post-unification system state before MCE installation. | — | — |
+| Batch 14 | 2026-03-03 | — | Phase 13 MCE installation + L12/L20 cluster removal. Introduced MCE as the centralized market-context authority, rewired major consumers to it, and removed a large legacy cluster in one of the most consequential architecture shifts in the project. | `BATCH_14_SCOPE.md` | — |
+| Batch 15 | 2026-03-04 | — | Phase 14.1 batch covering VTS real calculations, DBS, and regime rename work. This advanced the live math and VTS realism path while bridging toward later Phase 14.x refinements. | `BATCH_15_SCOPE.md`, `BATCH_15_HOTFIX_6_SCOPE.md` | — |
+| HF6 | 2026-03-05 | — | Regime rename completion work that cleaned up the transition started in Batch 15. This ensured the renamed regime concepts were applied more consistently through the system. | — | — |
+| HF7 | 2026-03-06 | — | Regime recalibration hotfix. Refined the regime layer after the earlier rename and VTS-real-calculation work surfaced additional adjustments. | — | — |
+| HF8 | 2026-03-07 | — | VTS throughput fixes. Addressed performance and throughput issues in the VTS path before the later Phase 14.1 closure work. | — | — |
+| HF9 | 2026-03-08 | `f9fa56c6` | Column fix, governance gate, DSS deletion, and VTS IMF improvements. This effectively closed out the remaining Phase 14.1 work and eliminated Phase 14.1B as a separate path. | — | — |
+| Batch 16 | 2026-03-07 | — | Scoped VTS throughput batch that was later absorbed into HF8. It remains part of the historical record but did not stand alone as the lasting delivery artifact. | `BATCH_16_SCOPE.md` | — |
+| Batch 17 | 2026-03-08 | — | Scoped column-fix + VTS IMF batch that was later absorbed into HF9. It remains historically useful for tracing intent, even though the actual closure landed through the hotfix path. | `BATCH_17_SCOPE.md` | — |
+| Batch 18 | 2026-03-09 | `4b6b2fa9` | Inter-phase API-budget optimization batch. Added OHLC caching, moved orchestrator price access to priceCache, and increased BATCH_SIZE from 100 to 300, cutting API usage materially while supporting broader scanning. | `BATCH_18_SCOPE.md` | — |
+| Batch 18B | 2026-03-09 | `ed9bb0a7` | Governance closure for Batch 18. Documented the inter-phase optimization work and preserved the new API-budget baseline. | — | — |
+| HF10 | 2026-03-14 | — | KrakenService property-name fix. Narrow hotfix to correct a service-level mismatch without reopening broader inter-phase work. | `HF10_SCOPE.md` | `Batch_Completion_HF10_03.14.26.docx` |
+| HF10B | 2026-03-14 | — | Governance closure for HF10 plus process updates. Helped tighten workflow and governance handling while documenting the hotfix. | — | — |
+| HF11B | 2026-03-16 | — | Governance-enforcement pass that consolidated and strengthened process rules during the inter-phase stretch. This is preserved separately because it influenced later workflow ownership and reporting rules. | `HF11B_GOVERNANCE_SCOPE.md` | `Batch_Completion_11B_03.17.26.docx` |
+| HF12 | 2026-03-17 | — | Regime archive catch-up fix plus scheduler-status endpoint. This repaired archive behavior and improved visibility into scheduled system activity. | `HF12_SCOPE.md` | `Batch_Completion_HF12_03.17.26.docx` |
+| HF12B | 2026-03-17 | — | Governance closure for HF12 and operational-model updates in SYSTEM_MANUAL. Preserved the corrected archive/scheduler state in governance docs. | — | — |
+| HF12C | 2026-03-17 | — | Route path prefix fix to restore endpoint reachability. This was a focused routing hotfix immediately before Phase 14.5. | — | `Batch_Completion_HF12C_03.17.26.docx` |
+| HF12D | 2026-03-17 | `8cae5317` | Governance closure for HF12C plus Claude Code UI-debugging guidance in CCPI. This became the pre-Batch-19 frozen baseline. | — | — |
+| Batch 19 | 2026-03-18 | `106996ab`, `1b917598`, `2ade1370` | Phase 14.5 core implementation: dual-path pattern scanning, merit-based ranking, and MCE global-regime overlay. This batch changed DawnTrader from a quant-only path into a dual-path architecture where quant and pattern logic could coexist and be ranked on merit. | `BATCH_19_SCOPE.md` | `Batch_Completion_03.18.26.docx` |
+| Batch 19B | 2026-03-18 | `906ef370` | Governance closure for Batch 19. Recorded the initial Phase 14.5 landing in the governance stack. | — | — |
+| Batch 19C | 2026-03-18 | `422fa479` | Deferred-items batch for Phase 14.5. Added VTS pattern-pool handling, frontend pattern-scanning visibility, and regime-aware pattern-pool threshold work that had been scoped out of the original 19 core landing. | `BATCH_19C_SCOPE.md` | — |
+| Batch 19D | 2026-03-19 | `5c44b035` | Governance follow-up covering deferred/cleanup documentation in the 19-series governance chain. Preserved the Phase 14.5 deferred-item state and related governance corrections. | — | `Batch_Completion_19D_03.19.26.docx` |
+| Batch 19E | 2026-03-19 | — | Extended Phase 14.5 into VTS pattern-pool persistence and frontend source-pool visibility. Added sourcePool-aware persistence and surfaced the distinction in the UI. | `BATCH_19E_SCOPE.md` | `Batch_Completion_19E_03.18.26.docx` |
+| Batch 19F | 2026-03-19 | — | Phase 14.5 completion batch focused on DB-driven filters, hybrid confluence, and ABCD pattern support, followed by hotfixes to clean up the threshold and IMF edge cases it exposed. This was the batch series that moved filter logic decisively into a configurable architecture. | `BATCH_19F_SCOPE.md` | — |
+| Batch 19F HF1 | 2026-03-19 | — | Pattern IMF metrics fix to repair DI=0 rejection behavior via OHLC prefetching. Helped stabilize the pattern path after the 19F expansion. | — | — |
+| Batch 19F HF2 | 2026-03-19 | — | Trading filter thresholds moved to the DB-driven path instead of stale hardcoded constants. This reduced hidden divergence between configured and active thresholds. | — | — |
+| Batch 19F HF3 | 2026-03-20 | — | Trading regime-threshold and logging-timestamp hotfix. Tightened the observability and regime-calibration path after 19F/HF2. | — | — |
+| Batch 19G | 2026-03-20 | `d418c726`, `15e90f09` | Major DB-driven 4-path filter architecture batch. Reworked FX5 to read filters from the database, improved VTS dedup behavior, and expanded the diagnostics/visibility layer around the filter system. | `BATCH_19G_SCOPE.md` | `Batch_Completion_19G_03.19.26.docx` |
+| Batch 19G HF1 | 2026-03-20 | — | Pattern IMF metrics fix for pattern-only pairs. Restored parity in the pattern filter path after the larger 19G architecture change. | — | — |
+| Batch 19G HF2 | 2026-03-20 | — | Trading filter thresholds from DB. Reinforced the transition away from hardcoded constants after the 19G rollout. | — | — |
+| Batch 19G HF3 | 2026-03-20 | — | Trading regime-threshold and log-timestamp cleanup hotfix. Closed follow-up anomalies in the 19G rollout. | — | — |
+| Batch 19G VN | 2026-03-20 | — | Revised the VN formula to a log-returns MAD/median approach and recalibrated thresholds from empirical behavior. This was the quantitative cleanup pass that made the volatility-normalization path more realistic. | `BATCH_19G_VN_SCOPE.md` | `Batch_Completion_19G_VN_03.20.26.docx` |
+| Batch 19G VN HF | 2026-03-20 | — | Removed deprecated VN/DI constants left behind after the new VN formula landed. This reduced hidden split-brain risk in the filter math path. | — | — |
+| Batch 19G VN HF2 | 2026-03-20 | — | Independent pattern IMF follow-up for the VN/filter overhaul. Helped preserve pattern-path autonomy after the formula revision. | `BATCH_19G_VN_HF2_SCOPE.md` | — |
+| Batch 19G VN HF2B | 2026-03-20 | — | Active-trading pattern-pool dual-pass refinement. Continued the tightening of pattern-path filter behavior after the VN recalibration wave. | — | — |
+| Batch 19G DI | 2026-03-20 | — | Shifted DI to a rolling 48-candle window so the metric would stay meaningful instead of decaying toward useless values on full-history inputs. This became one of the key math corrections in the 19G family. | — | — |
+| Batch 19G GOV | 2026-03-20 | — | Governance/documentation pass tied to the 19G filter overhaul. Captured the removal of hidden relaxed-filter behavior and the move toward fully DB-driven filtering. | — | — |
+| Batch 19H | 2026-03-21 | — | Added the Filter Pipeline Diagnostics tab to expose per-filter rejection visibility. This was the first real UI surface for understanding how quant and pattern pairs were being filtered out. | `BATCH_19H_SCOPE.md` | `Batch_Completion_19H_03.21.26.md` |
+| Batch 19H GOV | 2026-03-21 | — | Governance patch around deployment rules, workflow ownership, and diagnostics table sizing. Functioned as a transitionary governance pass during the shift in deployment responsibility. | — | — |
+| Batch 19I | 2026-03-21 | `3b27a3efb` | Enhanced Filter Diagnostics with number formatting, faster refresh, VTS evaluation counters, and a fuller breakdown of where signals died in the evaluation path. This improved both visibility and readability of the diagnostics UI. | `BATCH_19I.zip` | `Batch_Completion_19I_03.21.26.md` |
+| Batch 19J | 2026-03-21 | `4deae999` | Changed VTS Evaluation Breakdown from last-cycle-only to 24-hour rolling aggregation. This made the diagnostics more analytically meaningful by reflecting sustained behavior rather than a single cycle snapshot. | — | — |
+| Batch 19K GOV | 2026-03-22 | `050a6e0b` | Major governance overhaul: new CCPI essentials section, workflow-ownership transfer, new canonical `BATCH_CATALOG.md` and `PHASE_HISTORY.md`, WORKFLOW retirement, and directives archive rename. This batch is the documentation reset that standardizes the new operating model. | — | `Batch_Completion_GOV_Combined_03.22.26.md` |
+| Batch 19L GOV | 2026-03-22 | — | Governance finalization: populated BATCH_CATALOG with all batches (Batch 1–19K GOV), populated PHASE_HISTORY with phase-to-batch mapping and detailed phase chronology (Phases 12–14.5 plus reconstructed pre-governance history), added background inbox polling protocol to CCPI essentials and body. Combined batch completion report covers 19H through 19L GOV. | — | `Batch_Completion_GOV_Combined_03.22.26.md` |
+
+---
+
+## Notes
+
+- Some early and mid-series commit hashes are still unavailable from the currently accessible source set and are intentionally left as `—`.
+- Several historical completion reports exist only as `.docx` artifacts; where a report filename could be confirmed, it is listed even if the report body was not machine-readable in this review pass.
+- Scope/report names are recorded where a matching file could be verified in the package folders.
