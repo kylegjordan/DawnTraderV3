@@ -3,7 +3,7 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-03-22 (Batch 19K GOV — governance overhaul, essentials section, deployment ownership transfer, BATCH_CATALOG + PHASE_HISTORY)
+> **Last Updated**: 2026-03-22 (Batch 19L GOV HF — scope + completion reports added to Tier 1 governance, polling protocol, batch catalog, phase history)
 
 ---
 
@@ -48,7 +48,7 @@
 | 14 | Write batch completion report (includes audit findings) as Markdown file in Reports/Batch Completion/ | Claude Code |
 | 15 | Send report to Langston for review — if disagreements, work toward consensus; if consensus cannot be reached, escalate to Kyle | Claude Code sends, Langston reviews |
 | **GOVERNANCE** | | |
-| 16 | Governance batch — update: CCPI, BATCH_CATALOG.md, PHASE_HISTORY.md, MEMORY.md, SYSTEM_MANUAL (if behavior changed), SYSTEM_IMPACT_MAP (if dependencies changed), CHANGES_AND_FIXES (if bugs resolved), POST_AUDIT_ROADMAP (if roadmap changed) | Claude Code |
+| 16 | Governance batch — update: CCPI, BATCH_CATALOG.md, PHASE_HISTORY.md, MEMORY.md, Scope File, Batch Completion Report, SYSTEM_MANUAL (if behavior changed), SYSTEM_IMPACT_MAP (if dependencies changed), CHANGES_AND_FIXES (if bugs resolved), POST_AUDIT_ROADMAP (if roadmap changed) | Claude Code |
 | 17 | Update MEMORY.md with current state, commit hash, batch status | Claude Code |
 
 **NEVER skip steps. NEVER improvise. If blocked, tell Kyle.**
@@ -447,6 +447,8 @@ Every governance batch MUST follow these rules. No exceptions, no gut-feel.
 | BATCH_CATALOG.md | New row for each batch/hotfix with description, scope file, and completion report |
 | PHASE_HISTORY.md | Phase-to-batch mapping updated if new batch belongs to a phase |
 | MEMORY.md | Current state, last commit, completed items (end of every session) |
+| Scope File (in Scope Files/) | Every batch must have a scope file (BATCH_N_SCOPE.md) written before implementation begins |
+| Batch Completion Report (in Reports/Batch Completion/) | Every batch must have a completion report filed after post-implementation audit |
 
 **Tier 2 — When the change touches that file's domain:**
 
