@@ -8746,9 +8746,9 @@ All code changes flow through a structured batch process:
 1. **Scope Agreement** — Kyle and Claude Code agree on what the batch fixes and how
 2. **Snapshot** — Claude Code creates a frozen snapshot of pre-change state
 3. **Batch Creation** — Claude Code writes the batch (code zips with INSTRUCTIONS.md + README.md)
-4. **Deployment** — Langston uploads the zip to Replit and directs Replit to apply changes per INSTRUCTIONS.md
+4. **Deployment** — Claude Code uploads the zip to Replit via replit-cmd and directs Replit to apply changes per INSTRUCTIONS.md
 5. **Verification** — Langston verifies: server starts, tests pass, endpoints work, no regressions
-6. **Push** — Langston pushes verified code to GitHub via Replit shell
+6. **Push** — Claude Code pushes verified code to GitHub via replit-cmd shell
 7. **Sync** — Claude Code runs git pull to sync the local clone repo
 8. **Governance** — Claude Code creates a governance batch (CCPI updates, directive index, manual updates)
 

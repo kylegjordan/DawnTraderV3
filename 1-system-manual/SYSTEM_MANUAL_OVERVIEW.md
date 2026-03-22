@@ -45,38 +45,43 @@ Everything in this folder is authoritative. When there is a question about how t
 │
 │  ── GOVERNANCE DOCUMENTS ───────────────────────────────────
 │
-├── WORKFLOW.md                   The directive lifecycle
-│                                 7-step process: Sync → Author → Implement →
-│                                 Sync → Review → Complete → Update Docs.
-│                                 Includes templates for Directive, Review,
-│                                 and Completion Report documents.
+├── CLAUDE_CODE_PROJECT_INSTRUCTIONS.md
+│                                 The CCPI — workflow, roles, rules,
+│                                 current state. Essentials section at top
+│                                 covers batch checklist, operations,
+│                                 audit procedures, and canonical docs.
+│                                 This is THE governance document.
+│
+├── BATCH_CATALOG.md              Index of every batch
+│                                 Batch ID, description, scope file,
+│                                 completion report, commit hash, date.
+│                                 Updated every governance batch.
+│
+├── PHASE_HISTORY.md              Phase chronology
+│                                 Phase-to-batch mapping, timeline,
+│                                 and key milestones. Updated every
+│                                 governance batch.
 │
 ├── SYSTEM_IMPACT_MAP.md          Component dependency map
 │                                 30+ services across 11 layers. For each:
 │                                 upstream deps, downstream consumers, shared
 │                                 state, execution model, blast radius rating.
 │                                 "If I change X, check Y" quick lookup table.
-│                                 Consulted BEFORE writing any directive.
+│                                 Consulted BEFORE writing any batch.
 │
 ├── sync-repo.bat                 One-click repository sync
 │                                 Pulls latest from GitHub into local clone.
-│                                 Used between directive steps to keep all
+│                                 Used between steps to keep all
 │                                 parties working from current code.
 │
-│  ── DIRECTIVES ─────────────────────────────────────────────
-│
-├── directives/
-│   ├── DIRECTIVE_INDEX.md         Master tracker for all directives
-│   │                              Status, dates, review cycle count.
-│   │
-│   ├── 12.1.1/                    (Created when directive is issued)
-│   │   ├── DIRECTIVE_12.1.1.md    The directive itself
-│   │   ├── REVIEW_12.1.1.md      Post-implementation review
-│   │   └── COMPLETION_12.1.1.md  Completion report
-│   │
-│   └── [X.Y.Z]/                   One folder per directive
-│
 │  ── REFERENCE / ARCHIVE ────────────────────────────────────
+│
+├── directives-archive/           Historical directive folders
+│                                 Legacy directive system (pre-batch workflow).
+│                                 Contains DIRECTIVE_INDEX.md and per-directive
+│                                 folders with directive, review, and completion
+│                                 documents. Retained for historical reference.
+│                                 New batches do NOT create directive folders.
 │
 ├── AUDIT_PLAN.md                 Historical — original audit plan
 │                                 Documents how the 11-phase audit was
@@ -117,7 +122,7 @@ Front matter includes:
 - **Legacy Clusters** — 6 removal groupings showing how legacy systems are interconnected
 - **Reading guidance** — how to distinguish current state from intended state in the document
 
-**This is the living document.** It is updated after every completed directive to reflect what the system IS today.
+**This is the living document.** It is updated after every completed batch to reflect what the system IS today.
 
 ### CHANGES_AND_FIXES.md — "What needs to be fixed"
 The action registry tracking every bug and architectural risk discovered during the audit:
@@ -125,7 +130,7 @@ The action registry tracking every bug and architectural risk discovered during 
 - **22 bugs** (7 CRITICAL, 2 HIGH, 4 MEDIUM, 7 LOW, 2 Informational)
 - **85 architectural risks** (RISK-001 through RISK-085)
 
-Each entry includes severity, file location, description, verification status, recommended timing (pre-MCE / during-MCE / post-MCE), and the phase where it was discovered. As directives resolve bugs and risks, they are marked RESOLVED with a reference to the completing directive.
+Each entry includes severity, file location, description, verification status, recommended timing (pre-MCE / during-MCE / post-MCE), and the phase where it was discovered. As batches resolve bugs and risks, they are marked RESOLVED with a reference to the completing batch.
 
 ### LEGACY_DEPRECATION_PLAN.md — "What needs to be removed"
 The removal roadmap for all legacy, deprecated, and dead code:
@@ -139,7 +144,7 @@ The removal roadmap for all legacy, deprecated, and dead code:
 Each entry includes file count, difficulty rating, dependency risks, and recommended removal order. Waves are mapped to roadmap phases.
 
 ### POST_AUDIT_ROADMAP.md — "The plan, in order"
-The complete implementation roadmap from current state (Phase 11.8B-D1) to production:
+The complete implementation roadmap from current state to production:
 
 | Phase | What |
 |-------|------|
@@ -158,18 +163,19 @@ The complete implementation roadmap from current state (Phase 11.8B-D1) to produ
 
 Includes dependency chain, risk assessment, decision points requiring Kyle's input, and a cross-reference table mapping Kyle's "Next Steps" document to roadmap phases.
 
-### WORKFLOW.md — "How we implement changes"
-The governing process for all directive work. Defines the 7-step lifecycle:
+### CLAUDE_CODE_PROJECT_INSTRUCTIONS.md — "How we work"
+The CCPI is the canonical governance document. It defines:
 
-1. **Pre-Directive Sync** — Ensure Claude Code has the latest codebase
-2. **Directive Authoring** — Claude Code writes a detailed directive with impact analysis
-3. **Implementation** — Replit implements exactly as specified, provides validation evidence
-4. **Post-Implementation Sync** — Updated code pulled to Claude Code's view
-5. **Implementation Review** — Claude Code verifies correctness and completeness
-6. **Completion Report** — Permanent record of what was done
-7. **Document Updates** — System Manual and registries updated
+- **Essentials section** (at the top) — roles, mandatory batch checklist, operations reference, audit procedures, templates, canonical document index, and critical rules. This is the first thing any actor reads.
+- **Body sections** — detailed reference for Langston infrastructure, session lifecycle, rules, investigation notes, and identity/expertise definitions.
 
-Includes full templates for Directive, Review, and Completion Report documents. Key principles: no improvisation, no stale files, no undocumented changes.
+The Essentials section is designed to be self-contained for most batch work. The body provides deeper context when needed.
+
+### BATCH_CATALOG.md — "Index of every batch"
+Master index of all batches with batch ID, description, scope file location, completion report location, commit hash, and date. Updated in every governance batch. This replaces the legacy DIRECTIVE_INDEX.md.
+
+### PHASE_HISTORY.md — "Phase chronology"
+Phase-to-batch mapping showing which batches belong to which phase, timeline, and key milestones. Updated in every governance batch. Provides the high-level view of project progress.
 
 ### SYSTEM_IMPACT_MAP.md — "If I change X, what else is affected?"
 Component dependency reference covering 30+ services and modules across 11 system layers. For each component:
@@ -185,77 +191,34 @@ Component dependency reference covering 30+ services and modules across 11 syste
 
 Includes a quick lookup table: "If I change Signal Orchestrator, also check VTS Runner, SQE, Paper Execution Engine, Cost Model, Price Cache, and all signal tests."
 
-**This map is consulted before every directive is written** to ensure system-wide awareness of impacts.
+**This map is consulted before every batch is written** to ensure system-wide awareness of impacts.
 
-### directives/DIRECTIVE_INDEX.md — "Status of all directives"
-Master tracker showing every directive's status (PENDING → ISSUED → IN PROGRESS → IN REVIEW → CORRECTIONS → COMPLETE), dates, and review cycle count. Currently pre-loaded with 18 Phase 12 directives.
+### directives-archive/ — "Historical directive system"
+The legacy directive folders from the pre-batch workflow era. Contains DIRECTIVE_INDEX.md and per-directive folders with directive, review, and completion documents. Retained for historical reference only. New batches do NOT create directive folders — batch tracking is now handled by BATCH_CATALOG.md and PHASE_HISTORY.md.
 
 ---
 
-## The Directive Implementation Cycle
+## The Batch Implementation Cycle
 
-### The Three Actors
+### The Four Actors
 
 | Actor | Role |
 |-------|------|
-| **Claude Code** | Writes directives, reviews implementations, updates System Manual. Has read-only access to a local clone of the repository. |
-| **Replit** | Implements directives. Writes code. Provides validation evidence. Pushes to GitHub. |
-| **Kyle** | Approves directives, manages repository sync between GitHub and the local clone, makes decisions on disagreements or ambiguities. |
+| **Claude Code** | Implements code, deploys to Replit (through Langston's server), pushes to GitHub, pulls to clone, runs audits, writes batch completion reports, writes governance batches, participates in design. |
+| **Langston** | Reviews and validates: scope/intent, pre-implementation audit, completed batch folder, batch completion reports. Cross-actor capacity monitoring. Participates in design. |
+| **Replit Agent** | Applies file changes per INSTRUCTIONS.md. Source of truth for live codebase. Runs diagnostics when requested. Does NOT run shell commands — shell commands go through the Replit Shell tool only. |
+| **Kyle** | Approves scope/direction/architecture. Breaks ties. Only person who can override governance. Reviews batch completion reports at his discretion. |
 
-### How a Directive Flows
+### How a Batch Flows
 
-```
-Kyle syncs repo → Claude Code reads current code
-                → Claude Code consults System Impact Map
-                → Claude Code writes DIRECTIVE_X.Y.Z.md
-                → Kyle reviews and approves directive
-                → Kyle sends directive to Replit
+See the **Mandatory Batch Checklist** in the CCPI Essentials section for the complete step-by-step workflow. The checklist is the canonical workflow reference.
 
-Replit implements → Replit provides validation evidence
-                 → Replit pushes to GitHub
-
-Kyle syncs repo → Claude Code reads updated code
-                → Claude Code writes REVIEW_X.Y.Z.md
-                → If corrections needed: correction cycle
-                → If approved: Claude Code writes COMPLETION_X.Y.Z.md
-
-Claude Code writes DOC_UPDATE_X.Y.Z.md (Document Update Package)
-Kyle sends package to Replit
-Replit applies doc updates verbatim → pushes to GitHub
-Kyle syncs repo
-→ READY FOR NEXT DIRECTIVE
-```
-
-### What Makes a Good Directive
-
-Directives are written so that Replit has **zero ambiguity**. They include:
-
-- **Context**: What the system currently does and why it needs to change
-- **Impact Analysis**: All upstream, downstream, and shared-state effects (from the System Impact Map)
-- **Exact implementation steps**: File paths, line numbers, code blocks showing what to remove and what to replace it with
-- **Validation requirements**: Specific checks Replit must perform and evidence Replit must provide (TypeScript compilation, test results, behavioral verification, screenshots)
-- **Expected outcomes**: Before/after comparison
-- **Risks and rollback**: What could go wrong and how to revert
-
-The directive's job is to make it impossible for the implementer to misunderstand what needs to be done.
-
-### What Replit Must Do
-
-1. **Follow the directive literally** — do not improvise, add features, or "improve" anything not specified
-2. **If the directive is unclear, STOP and ask Kyle** — do not guess
-3. **Provide the validation evidence specified in the directive** — "done" is not evidence
-4. **Push to GitHub when implementation is complete**
-5. **Apply Document Update Packages verbatim** when provided by Kyle after directive approval — this is the one exception to the `1-system-manual/` read-only rule
-
-### What Happens After Implementation
-
-Claude Code reviews the implementation against the directive and produces one of three verdicts:
-
-- **APPROVED** — Implementation matches directive. Proceed to completion report.
-- **APPROVED WITH CORRECTIONS** — Mostly correct but needs specific fixes. Correction steps provided.
-- **REJECTED** — Significant deviations. Requires re-implementation.
-
-After approval, Claude Code writes a **Document Update Package** containing all governance document edits (completion report, System Manual updates, registry status changes). Kyle sends the package to Replit, Replit applies the edits verbatim and pushes to GitHub. This ensures the System Manual always reflects the current state of the system, and the only path to GitHub remains through Replit.
+In summary:
+1. Scope and planning (capacity check, scope discussion, pre-implementation audit, Langston review)
+2. Code writing (write changes, create batch folder, Langston reviews, zip and stage)
+3. Deployment (upload to Replit via replit-cmd, Agent applies changes, push to GitHub, pull to clone)
+4. Verification (post-implementation audit, batch completion report, Langston reviews)
+5. Governance (update CCPI, BATCH_CATALOG, PHASE_HISTORY, MEMORY, and any relevant Tier 2 documents)
 
 ---
 
@@ -264,10 +227,10 @@ After approval, Claude Code writes a **Document Update Package** containing all 
 DawnTrader has accumulated significant technical debt from organic development across many phases, multiple AI assistants, and evolving requirements. The 11-phase audit surfaced 22 bugs and 85 architectural risks. The codebase contains ~96 legacy files, ~71 legacy database tables, and ~460 unused API endpoints.
 
 Going forward, every change to the system must be:
-- **Intentional** — driven by a directive with clear purpose
-- **Traceable** — documented in the directive chain (directive → review → completion)
+- **Intentional** — driven by a batch with clear purpose
+- **Traceable** — documented in the batch catalog and completion reports
 - **System-aware** — impact-analyzed against the full component dependency map
 - **Verified** — validated with evidence before acceptance
 - **Recorded** — reflected in the System Manual so it always describes reality
 
-This process ensures that as we implement Phases 12-22, we build on a clean foundation with full visibility into what we're changing and why.
+This process ensures that as we implement the remaining roadmap phases, we build on a clean foundation with full visibility into what we're changing and why.

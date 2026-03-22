@@ -3,7 +3,257 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-03-20 (after Batch 19G GOV — conditional push command, batch report ownership, Langston GPT-5.4 permanent)
+> **Last Updated**: 2026-03-22 (Batch 19K GOV — governance overhaul, essentials section, deployment ownership transfer, BATCH_CATALOG + PHASE_HISTORY)
+
+---
+
+# ESSENTIALS (Pages 1-7)
+
+> **Read this section first every session.** It contains everything you need to operate. The body sections below provide deeper reference when needed.
+
+---
+
+## Page 1 — Roles & Responsibilities
+
+| Actor | Role | Tools |
+|-------|------|-------|
+| **Claude Code (You)** | Implements code, deploys to Replit (through Langston's server), pushes to GitHub, pulls to clone, runs post-implementation audits, writes batch completion reports, writes governance batches, participates in design of new features | Claude Code terminal, file read/write on staged changes, SSH to Langston's server (replit-cmd), preview site |
+| **Langston** | Reviews and validates: reviews scope/intent before implementation, reviews pre-implementation audit, reviews completed batch folder before upload, reviews batch completion reports after deployment, cross-actor capacity monitoring, participates in design of new features | OpenClaw gateway (GPT-5.4), Telegram, Google Drive, sub-agents for research |
+| **Replit Agent** | Applies surgical code edits and file changes per INSTRUCTIONS.md, source of truth for live codebase, runs diagnostics/troubleshooting/reporting when requested, provides implementation feedback. Does NOT run shell commands — shell commands go through the Replit Shell tool only. | Replit Agent chat, Replit file system |
+| **Kyle** | Approves scope/direction/architecture, breaks ties when Claude Code and Langston disagree, only person who can override governance with explicit exception declaration, reviews batch completion reports at his discretion | Google Drive, Telegram, Replit browser |
+
+---
+
+## Page 2 — Mandatory Batch Checklist
+
+| Step | Action | Responsible |
+|------|--------|-------------|
+| **SCOPE & PLANNING** | | |
+| 1 | Check capacity for both Claude Code and Langston before starting | Claude Code |
+| 2 | Scope discussion — agree on what batch will include | Kyle + Claude Code (+ Langston for major features) |
+| 3 | Pre-implementation audit (trace data flow through ALL system states) | Claude Code |
+| 4 | Send audit + planned implementation overview to Langston — if rejected, revise and resubmit | Claude Code sends, Langston reviews |
+| **CODE WRITING** | | |
+| 5 | Write code changes, create new files, write INSTRUCTIONS.md for Replit | Claude Code |
+| 6 | Create batch folder in DT_Staged_Changes with all files | Claude Code |
+| 7 | Notify Langston to review batch folder — if rejected, revise and resubmit | Claude Code sends, Langston reviews |
+| 8 | Zip batch folder and place zip in Claude Comms and Packages/Batch Zips/ | Claude Code |
+| **DEPLOYMENT** | | |
+| 9 | Upload zip to Replit via replit-cmd upload | Claude Code (through Langston's server) |
+| 10 | Tell Replit Agent to unzip and follow INSTRUCTIONS.md | Claude Code (via replit-cmd agent) |
+| 11 | Wait for Agent completion — verify no red flags in summary, no additional info requested. Then push to GitHub via replit-cmd shell | Claude Code |
+| 12 | Pull to clone repo — verify clean fast-forward merge | Claude Code |
+| **VERIFICATION** | | |
+| 13 | Post-implementation audit (see Page 4) — if issues found: troubleshoot, fix, send to Langston for review, re-deploy, re-audit. Repeat until clean. | Claude Code |
+| 14 | Write batch completion report (includes audit findings) as Markdown file in Reports/Batch Completion/ | Claude Code |
+| 15 | Send report to Langston for review — if disagreements, work toward consensus; if consensus cannot be reached, escalate to Kyle | Claude Code sends, Langston reviews |
+| **GOVERNANCE** | | |
+| 16 | Governance batch — update: CCPI, BATCH_CATALOG.md, PHASE_HISTORY.md, MEMORY.md, SYSTEM_MANUAL (if behavior changed), SYSTEM_IMPACT_MAP (if dependencies changed), CHANGES_AND_FIXES (if bugs resolved), POST_AUDIT_ROADMAP (if roadmap changed) | Claude Code |
+| 17 | Update MEMORY.md with current state, commit hash, batch status | Claude Code |
+
+**NEVER skip steps. NEVER improvise. If blocked, tell Kyle.**
+
+---
+
+## Page 3 — How to Execute (Operations Reference)
+
+### SSH to Langston's Server
+```
+ssh -i C:/Users/kyleg/.ssh/id_ed25519 root@204.168.141.77
+```
+
+### Replit Commands (via SSH)
+```bash
+# Upload a zip to Replit
+ssh root@204.168.141.77 "replit-cmd upload /mnt/gdrive/path/to/BATCH.zip"
+
+# Send instructions to Replit Agent
+ssh root@204.168.141.77 "replit-cmd agent 'Unzip BATCH.zip and follow INSTRUCTIONS.md inside.'"
+
+# Wait for Replit Agent to finish
+ssh root@204.168.141.77 "replit-cmd wait-for-agent 900"
+
+# Run a shell command on Replit
+ssh root@204.168.141.77 "replit-cmd shell 'command here'"
+
+# Read Replit Agent's latest output
+ssh root@204.168.141.77 "replit-cmd read-agent"
+```
+
+**Note:** replit-cmd shell output appears as screenshots that LLMs cannot read as text. Commands execute successfully regardless. Verify results on GitHub directly.
+
+### Git Push Command (via replit-cmd shell)
+```bash
+git -C $HOME/workspace add -A && git -C $HOME/workspace diff --cached --quiet && git -C $HOME/workspace commit --amend -m "MSG" || git -C $HOME/workspace commit -m "MSG" ; git -C $HOME/workspace push origin dawntrader-v4
+```
+Replace `MSG` with the actual commit message. Always use `$HOME/workspace` — never `cd /home/runner/DawnTraderV3` (path does not exist).
+
+### Git Pull to Clone
+```bash
+git -C "G:/My Drive/Dawn Trader/DT_Clone_Repo/DawnTraderV3" pull
+```
+
+### Three-Way Discussion Protocol
+
+**Message Prefix**: All Claude Code messages MUST start with `**CLAUDE CODE SPEAKING:**` (all caps, bold).
+
+**2-Step Send Process** (ensures Kyle sees the message AND Langston responds):
+1. Broadcast to Telegram: `ssh root@204.168.141.77 "openclaw message send --channel telegram --target '-1003575211453' --thread-id <THREAD_ID> --reply-to '-1003575211453:<THREAD_ID>' --message '**CLAUDE CODE SPEAKING:** <message>'"`
+2. Feed to Langston's brain: `ssh root@204.168.141.77 "openclaw agent --session-id '<UUID>' --message '**CLAUDE CODE SPEAKING:** <message>' --deliver"`
+
+**Reading messages:**
+```bash
+ssh root@204.168.141.77 "cc-inbox read"          # Read unread messages
+ssh root@204.168.141.77 "cc-inbox mark-read"      # Mark all as read
+ssh root@204.168.141.77 "cc-inbox read && cc-inbox mark-read"  # Combined
+ssh root@204.168.141.77 "cc-poll"                 # Alternative polling command
+```
+
+### Telegram Topic IDs
+| Topic | Thread ID | Purpose | Status |
+|-------|-----------|---------|--------|
+| Batch Implementation | 21 | Langston <-> Claude Code exchanges | ACTIVE |
+| Design | 28 | New features and functionality | ACTIVE |
+| General | 20 | Direct chat between Kyle and Langston | INACTIVE |
+| Replit Operations | 22 | Langston <-> Replit interactions | INACTIVE |
+| Reports | 23 | Reports now filed directly as Markdown | INACTIVE |
+
+**Session ID for topic 21**: `d26fe220-dfef-4fce-9093-7bf0748833e3`
+
+Session UUIDs change when sessions are cleared. Use `openclaw sessions --json` to get current values.
+
+### Replit Interaction Rules
+
+1. Natural language requests to Agent for file edits and diagnostics
+2. Shell commands through replit-cmd shell ONLY — never in Agent chat
+3. Do not spam Agent — ONE message, wait for finish
+4. Do not break instructions into chunks — full INSTRUCTIONS.md in one message
+5. Shift+Enter for line breaks in Agent messages
+6. Verify edits before pushing
+7. If Agent gets stuck, refresh session
+
+---
+
+## Page 4 — Post-Implementation Audit Procedure
+
+**Mandatory steps (every batch):**
+1. **Code review** — verify surgical edits landed correctly by reading changed files in clone
+2. **Git log check** — verify commit message, no unexpected commits
+3. **API verification** — hit relevant endpoints to confirm they return expected data
+
+**Conditional steps (based on batch type):**
+4. **Preview site check** — if batch includes UI changes, navigate and verify rendering
+5. **Console/network check** — if batch includes API changes, check for errors
+6. **Database verification** — if batch includes DB changes, query to verify
+
+---
+
+## Page 5 — Standard Tools & Templates
+
+### Batch Folder Structure
+```
+DT_Staged_Changes/BATCH_N/
+  INSTRUCTIONS.md          -- Replit reads this first
+  README.md                -- Batch documentation for our records
+  [modified files in repo-relative paths]
+  [new files in repo-relative paths]
+```
+
+### INSTRUCTIONS.md Template
+Every INSTRUCTIONS.md must begin with the Replit Autonomy Constraints block (see Replit Behavior Constraints section in body).
+
+### Batch Completion Report Template (Markdown)
+**Filename:** `Batch_Completion_{BATCH_ID}_{MM.DD.YY}.md`
+**Location:** `Claude Comms and Packages/Reports/Batch Completion/`
+
+Required sections:
+
+| Section | Content |
+|---------|---------|
+| **Executive Summary** | What was deployed, how many batches, pipeline status |
+| **Per-Batch Details** | For each batch: commit hash, type (code/governance), files changed, what was fixed/added |
+| **Governance Updates** | Which governance files were updated and what changed |
+| **Capacity Status** | Current token usage estimates for both Claude Code and Langston |
+| **Auth Status** | Langston's auth session status |
+| **Stale Reference Check** | Confirmation that CCPI was audited for stale references |
+| **Next Steps** | What comes next, any blockers, any decisions needed from Kyle |
+
+### Scope Document Template
+```
+# Batch XX Scope: [Title]
+## Purpose
+[Why this batch exists — 2-3 sentences]
+## Changes
+[Numbered checklist of all items to implement]
+## Files Affected
+[List of files that will be modified/created]
+## Acceptance Criteria
+[How to verify the batch is correct — maps to checklist items]
+## Risks / Dependencies
+[Anything that could go wrong or depends on other work]
+```
+
+---
+
+## Page 6 — Canonical Documents & When to Read Deeper
+
+| Document | Purpose | Update Frequency |
+|----------|---------|-----------------|
+| CCPI (this file) | Workflow, roles, rules, current state | Every governance batch |
+| BATCH_CATALOG.md | Index of every batch with description, scope, and report | Every batch |
+| PHASE_HISTORY.md | Phase chronology with batch mapping | Every batch |
+| SYSTEM_MANUAL.md | System architecture, math, behavior | When system behavior changes |
+| SYSTEM_IMPACT_MAP.md | Component dependencies | When dependencies change |
+| CHANGES_AND_FIXES.md | Bug/risk registry | When bugs resolved/discovered |
+| POST_AUDIT_ROADMAP.md | Phases 12-22 roadmap | When roadmap changes |
+| MEMORY.md | Session state, handoff notes | Every session |
+
+**When to read deeper into the CCPI body:**
+- New feature architecture decisions: read Identity & Expertise section
+- Strategy/filter math changes: read SYSTEM_MANUAL.md
+- Langston infrastructure issues: read Langston section in CCPI body
+- System impact questions: read SYSTEM_IMPACT_MAP.md
+- Debugging the trading pipeline: read Claude Code UI Testing section
+
+---
+
+## Page 7 — Critical Rules + Governance Summary
+
+### Non-Negotiable Rules
+1. Clone is READ ONLY
+2. Never pull into Replit
+3. Never skip the checklist
+4. Never improvise under pressure
+5. Communicate deviations before acting
+6. Do not confabulate when context degraded
+7. Single source of truth per domain (CCPI is canonical)
+8. Batch completion reports mandatory
+9. Langston reviews mandatory at each gate
+10. Essentials changes must be mirrored in CCPI body
+
+### Capacity Management
+- **Claude Code**: 1,000,000 token context (Opus 4.6)
+- **Langston**: 272,000 tokens per topic (GPT-5.4, pending OpenClaw upgrade for 1M)
+- Check both capacities at start of every batch
+- Claude Code checks Langston via: `ssh root@204.168.141.77 "openclaw sessions --json"`
+
+**Warning Thresholds:**
+| Usage | Action |
+|-------|--------|
+| **50%** | Note: "Session at ~50% context. Current batch can continue." |
+| **75%** | Warning: "Session at ~75% context. Wrap up current task. Do NOT start new batches." |
+| **90%** | Transition required: "Session must transition. Completing handoff now." |
+
+### Governance Update Requirements
+- **Tier 1 (every batch):** CCPI, BATCH_CATALOG.md, PHASE_HISTORY.md, MEMORY.md
+- **Tier 2 (when relevant):** SYSTEM_MANUAL, SYSTEM_IMPACT_MAP, CHANGES_AND_FIXES, POST_AUDIT_ROADMAP
+- **Rule:** Essentials changes must also be applied to corresponding body sections
+
+---
+
+# BODY — Detailed Reference
+
+> The sections below provide full context for areas summarized in the Essentials. Read these when you need deeper detail.
 
 ---
 
@@ -32,20 +282,20 @@
 
 | Actor | Role | Tools |
 |-------|------|-------|
-| **Claude Code (You)** | Reads source code, writes scope docs, creates batch zips, runs `git pull` to sync clone from GitHub, monitors Langston's capacity. Does NOT push to GitHub. | Claude Code terminal, file read/write on local clone, SSH to Langston's server |
-| **Replit** | Applies code changes from zip packages. Runs validation. Does NOT make autonomous changes — see Replit Behavior Constraints below. | Replit Agent, bash shell, npm/node |
-| **Langston** | Autonomous AI on Hetzner server. Deploys zips to Replit, pushes to GitHub, posts reports to Telegram, monitors Claude Code's capacity. Reviews scope docs and builds deep system knowledge before deploying. GPT-5.4 permanently (no model switching). | OpenClaw gateway (GPT-5.4 via OpenAI API), Replit browser automation, Telegram, Google Drive |
-| **Kyle** | Approves scopes, makes decisions on ambiguities, sets up OAuth auth sessions. | Google Drive, Telegram |
+| **Claude Code (You)** | Implements code, deploys to Replit (through Langston's server), pushes to GitHub, pulls to clone, runs post-implementation audits, writes batch completion reports, writes governance batches, participates in design of new features | Claude Code terminal, file read/write on staged changes, SSH to Langston's server (replit-cmd), preview site |
+| **Replit Agent** | Applies surgical code edits and file changes per INSTRUCTIONS.md, source of truth for live codebase, runs diagnostics/troubleshooting/reporting when requested, provides implementation feedback. Does NOT run shell commands — shell commands go through the Replit Shell tool only. | Replit Agent chat, Replit file system |
+| **Langston** | Reviews and validates: reviews scope/intent before implementation, reviews pre-implementation audit, reviews completed batch folder before upload, reviews batch completion reports after deployment, cross-actor capacity monitoring, participates in design of new features. GPT-5.4 permanently (no model switching). | OpenClaw gateway (GPT-5.4 via OpenAI API), Telegram, Google Drive, sub-agents for research |
+| **Kyle** | Approves scope/direction/architecture, breaks ties when Claude Code and Langston disagree, only person who can override governance with explicit exception declaration, reviews batch completion reports at his discretion. | Google Drive, Telegram, Replit browser |
 
 ---
 
 ## Langston (Autonomous Agent)
 
-Langston is an autonomous AI agent running 24/7 on a Hetzner server (204.168.141.77). He serves as the project manager for DawnTrader — deploying batches to Replit, pushing to GitHub, posting reports to Telegram, and bridging Kyle and Claude Code.
+Langston is an autonomous AI agent running 24/7 on a Hetzner server (204.168.141.77). He serves as the project reviewer and validator for DawnTrader — reviewing scope, code, and reports. Provides feedback during design and implementation.
 
 ### Quick Reference
 - **Server**: Hetzner CPX22 (204.168.141.77, Helsinki) — Ubuntu 24.04
-- **Brain**: OpenClaw gateway running OpenAI GPT-5.4 **permanently** (persistent systemd service, auth via OpenAI API key). No more model switching — GPT-5.4 is the final choice. Heartbeats and sub-agents use GPT-4.1 Mini. Switched from Anthropic Opus 4.6 on 2026-03-16 due to Anthropic's third-party OAuth ban.
+- **Brain**: OpenClaw gateway running OpenAI GPT-5.4 **permanently** (persistent systemd service, auth via OpenAI API key). 272,000 tokens per topic (pending OpenClaw upgrade for 1M). No more model switching — GPT-5.4 is the final choice. Heartbeats and sub-agents use GPT-4.1 Mini. Switched from Anthropic Opus 4.6 on 2026-03-16 due to Anthropic's third-party OAuth ban.
 - **Telegram**: @LangstonDTBot in "Dawn Trader HQ" forum group
 - **Google Drive**: Mounted at `/mnt/gdrive/` via rclone
 
@@ -57,28 +307,30 @@ ssh -i C:\Users\kyleg\.ssh\id_ed25519 root@204.168.141.77
 ### Telegram Forum (Dawn Trader HQ)
 Group chat ID: `-1003575211453`
 
-| Topic | Thread ID | Purpose |
-|-------|-----------|---------|
-| General | 20 | Direct chat between Kyle and Langston |
-| Claude Code Sessions | 21 | Langston <-> Claude Code exchanges |
-| Replit Operations | 22 | Langston <-> Replit interactions |
-| Reports | 23 | Formal Word doc reports (batch, hotfix, daily, etc.) |
-| Design | 28 | New features and functionality not on the roadmap |
+| Topic | Thread ID | Purpose | Status |
+|-------|-----------|---------|--------|
+| General | 20 | Direct chat between Kyle and Langston | INACTIVE |
+| Batch Implementation | 21 | Langston <-> Claude Code exchanges | ACTIVE |
+| Replit Operations | 22 | Langston <-> Replit interactions | INACTIVE |
+| Reports | 23 | INACTIVE — reports now Markdown files filed directly | INACTIVE |
+| Design | 28 | New features and functionality not on the roadmap | ACTIVE |
 
 ### 3-Way Communication (Kyle <-> Langston <-> Claude Code)
 
 **Message Prefix**: All Claude Code messages MUST start with `**CLAUDE CODE SPEAKING:**` (all caps, bold).
 
 **2-Step Send Process** (ensures Kyle sees the message AND Langston responds):
-1. Broadcast for visibility: `ssh root@204.168.141.77 "openclaw message send --channel telegram --target '-1003575211453' --thread-id <THREAD_ID> --message '**CLAUDE CODE SPEAKING:** <message>'"`
+1. Broadcast for visibility: `ssh root@204.168.141.77 "openclaw message send --channel telegram --target '-1003575211453' --thread-id <THREAD_ID> --reply-to '-1003575211453:<THREAD_ID>' --message '**CLAUDE CODE SPEAKING:** <message>'"`
 2. Feed to Langston's brain: `ssh root@204.168.141.77 "openclaw agent --session-id '<UUID>' --message '**CLAUDE CODE SPEAKING:** <message>' --deliver"`
 
 Session UUIDs change when sessions are cleared. Use `openclaw sessions --json` to get current values.
 
 **Reading messages (Telegram -> Claude Code):**
 ```bash
-ssh root@204.168.141.77 "cc-inbox read"        # Read unread messages
-ssh root@204.168.141.77 "cc-inbox mark-read"    # Mark all as read
+ssh root@204.168.141.77 "cc-inbox read"          # Read unread messages
+ssh root@204.168.141.77 "cc-inbox mark-read"      # Mark all as read
+ssh root@204.168.141.77 "cc-inbox read && cc-inbox mark-read"  # Combined
+ssh root@204.168.141.77 "cc-poll"                 # Alternative polling command
 ```
 
 ### Three-Way Discussion Protocol — Polling for New Messages
@@ -135,7 +387,7 @@ ssh root@204.168.141.77 "cc-inbox read && cc-inbox mark-read"
 - If you've checked 3-4 times with no new messages, tell Kyle in the Claude Code chat that you're waiting and ask if the discussion is still active.
 
 **Step 5: Repeat**
-Continue this loop (send → wait → check → respond) for the entire duration of the three-way discussion. This is your primary activity during a live discussion — do not start other tasks while a three-way conversation is active.
+Continue this loop (send, wait, check, respond) for the entire duration of the three-way discussion. This is your primary activity during a live discussion — do not start other tasks while a three-way conversation is active.
 
 #### Rules for Three-Way Discussions
 
@@ -155,43 +407,24 @@ For full details on Langston's infrastructure, CLI tools, Replit automation, cre
 
 ## The Workflow (Batch Process)
 
-This replaces the original 7-step directive lifecycle with a more efficient batch process:
-
-```
- 1. Kyle and Claude Code agree on batch scope (what it fixes, how)
-    — Scope must include a numbered checklist of all items (see Scope Checklist Requirement below)
- 2. Claude Code creates SNAPSHOT-N in DT_Frozen_Snapshots/SNAPSHOT_LOG.md
- 3. Claude Code READS source files from DT_Clone_Repo/DawnTraderV3/ (READ ONLY — never edit here)
- 4. Claude Code WRITES modified files into DT_Staged_Changes/BATCH_N/ (repo-relative paths)
- 5. Claude Code creates zip in Claude Comms and Packages/ (Batch Zips/ or Governance Zips/)
-    — Zip named: BATCH_N-DIR_X.Y.Z_DESCRIPTION.zip
- 6. Langston reviews scope doc and staged files, then deploys zip to Replit Agent
- 7. Replit Agent applies edits per INSTRUCTIONS.md (no autonomous changes)
- 8. Langston pushes to GitHub via conditional push command (see Push Command section)
- 9. Claude Code runs git pull to sync clone repo, verifies changes landed correctly
-10. If issues found → Claude Code fixes in DT_Staged_Changes → new zip → repeat from step 6
-11. Post-implementation audit: Claude Code verifies ALL scope items on preview site (see Rule 23)
-12. After code verified → Claude Code prepares governance batch (separate zip, same process)
-13. Post-push verification: Claude Code checks git log for unexpected commits (see below)
-14. Claude Code writes the Batch Completion Report and posts to Telegram Reports topic (#23)
-15. Claude Code updates MEMORY.md with current state, commit hash, completed items
-16. Batch is NOT operationally complete until: verification ✓, audit ✓, push ✓, report posted ✓, memory updated ✓
-```
+See the **Mandatory Batch Checklist** in the Essentials section (Page 2) for the complete step-by-step workflow. The checklist is the canonical workflow reference.
 
 **Key principles**:
 - Code changes and governance doc updates are **separate batches**. Don't mark bugs RESOLVED until the code fix is verified working.
 - The local clone is **READ ONLY** (exception: Claude Code runs `git pull` to sync from GitHub). All edits go to `DT_Staged_Changes/`.
 - Every governance batch **must include an updated `CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`** with current state, completed directives, and snapshot references.
-- Langston reviews scope documents and understands the code changes before deploying — he is building deep system knowledge, not just running deployments.
+- Langston reviews scope documents and understands the code changes before approving — he is building deep system knowledge, not just reviewing.
+- Claude Code drives deployment. Langston's role is to review and approve.
 
 ### Mega-Batch Approach
 
 Kyle's preference: **one mega-batch per phase, not sub-batches**. Each roadmap phase (e.g., Phase 13) should be scoped and delivered as a single batch covering everything in that phase. Do NOT break phases into multiple batches unless the phase is genuinely too large (and even then, discuss with Kyle first).
 
 Before every batch:
-1. Write a scope document (`BATCH_N_SCOPE.md` in `Claude Comms and Packages/Scope Files/`)
-2. Conduct a thorough pre-implementation audit (read every source file that will be touched, verify all assumptions — Kyle catches oversights)
-3. Get Kyle's approval on the scope before writing any code
+1. Check capacity for both Claude Code and Langston
+2. Write a scope document (`BATCH_N_SCOPE.md` in `Claude Comms and Packages/Scope Files/`)
+3. Conduct a thorough pre-implementation audit (read every source file that will be touched, verify all assumptions — Kyle catches oversights)
+4. Get Kyle's approval on the scope before writing any code
 
 ### Scope Checklist Requirement
 
@@ -202,13 +435,13 @@ Every scope document must include a **numbered checklist** of all items to be im
 
 If a batch is split mid-implementation (e.g., Batch 19G becomes 19G + 19G HF1), the scope document must be updated to show which checklist items landed in which batch. This prevents items from being silently dropped during splits.
 
-### ⚠️ Critical Mistakes to Avoid
+### Critical Mistakes to Avoid
 
 Previous sessions have made these errors. **Do NOT repeat them:**
 
 1. **DO NOT edit files in the clone repo** (`DT_Clone_Repo/DawnTraderV3/`). It is READ ONLY (exception: `git pull` to sync). All changes go to `DT_Staged_Changes/BATCH_N/`.
 
-2. **DO NOT deliver files without a zip package.** Every batch must be zipped and placed in `Claude Comms and Packages/` (Batch Zips/ or Governance Zips/). Langston deploys zips to Replit via Google Drive.
+2. **DO NOT deliver files without a zip package.** Every batch must be zipped and placed in `Claude Comms and Packages/` (Batch Zips/ or Governance Zips/). Claude Code deploys zips to Replit via replit-cmd through Langston's server.
 
 3. **DO NOT deliver a batch without INSTRUCTIONS.md.** Replit needs INSTRUCTIONS.md to know what files to place, what surgical edits to make (for large files), and what commit message to use. Without it, the batch is incomplete and Replit cannot apply it.
 
@@ -220,11 +453,13 @@ Previous sessions have made these errors. **Do NOT repeat them:**
 
 7. **DO NOT split a phase into sub-batches.** Use one mega-batch per phase unless Kyle explicitly approves splitting.
 
-8. **DO NOT push from the local clone to GitHub.** Pushes originate from Replit ONLY. The clone is READ ONLY — the only git operation allowed is `git pull` to sync FROM GitHub. If Langston’s push from Replit fails, troubleshoot the Replit push. Never bypass by pushing from the clone.
+8. **DO NOT push from the local clone to GitHub.** Pushes originate from Replit ONLY. The clone is READ ONLY — the only git operation allowed is `git pull` to sync FROM GitHub. If the push from Replit fails, troubleshoot the Replit push. Never bypass by pushing from the clone.
 
-9. **DO NOT pull from GitHub into Replit.** Replit is the source of truth. Code flows OUT of Replit to GitHub, never the reverse. Never tell Langston to run `git pull` on Replit.
+9. **DO NOT pull from GitHub into Replit.** Replit is the source of truth. Code flows OUT of Replit to GitHub, never the reverse. Never run `git pull` on Replit.
 
 10. **DO NOT edit files in the clone repo and push them.** This was done once (Batch 19H, 2026-03-21) and caused repository divergence between Replit and GitHub. It took a force push from Replit to fix. This must never happen again.
+
+11. **DO NOT try to push from Langston's Hetzner server.** Pushes go through replit-cmd shell which types into Replit's Shell tab. Langston's server paths (`/root/workspace`, `/mnt/gdrive/...`) are NOT Replit.
 
 ### Governance Update Rules
 
@@ -234,8 +469,9 @@ Every governance batch MUST follow these rules. No exceptions, no gut-feel.
 
 | File | What Gets Updated |
 |------|------------------|
-| CLAUDE_CODE_PROJECT_INSTRUCTIONS | Completed Directives table, Last commit, Next step, Last Updated date |
-| DIRECTIVE_INDEX | New row for each batch/hotfix with status and commit hash |
+| CLAUDE_CODE_PROJECT_INSTRUCTIONS | Current state, completed batches, Last commit, Next step, Last Updated date |
+| BATCH_CATALOG.md | New row for each batch/hotfix with description, scope file, and completion report |
+| PHASE_HISTORY.md | Phase-to-batch mapping updated if new batch belongs to a phase |
 | MEMORY.md | Current state, last commit, completed items (end of every session) |
 
 **Tier 2 — When the change touches that file's domain:**
@@ -285,71 +521,24 @@ Every governance batch MUST follow these rules. No exceptions, no gut-feel.
 
 | File | Purpose |
 |------|---------|
-| `SYSTEM_MANUAL.md` | What the system IS today (~10,000 lines). Updated after every completed directive. |
-| `CHANGES_AND_FIXES.md` | Bug & risk registry (22 bugs, 85 risks). Bugs/risks marked RESOLVED as directives complete. |
+| `SYSTEM_MANUAL.md` | What the system IS today (~10,000 lines). Updated after every completed batch. |
+| `CHANGES_AND_FIXES.md` | Bug & risk registry (22 bugs, 85 risks). Bugs/risks marked RESOLVED as batches complete. |
 | `LEGACY_DEPRECATION_PLAN.md` | 10 removal waves, ~96 legacy files, ~71 legacy tables. |
 | `POST_AUDIT_ROADMAP.md` | Phases 12-22, ~43 week timeline. |
-| `WORKFLOW.md` | 7-step directive lifecycle and templates. |
+| `BATCH_CATALOG.md` | Index of every batch — description, scope file, completion report, commit hash. |
+| `PHASE_HISTORY.md` | Phase chronology with phase-to-batch mapping. |
 | `SYSTEM_IMPACT_MAP.md` | Component dependency map. 30+ services, 11 layers. Consulted before every directive. |
 | `SYSTEM_MANUAL_OVERVIEW.md` | Orientation document. |
 | `CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` | This file. |
 | `REPLIT_ONBOARDING_PROMPT.md` | Prompt pasted into Replit to onboard it to the governance system. |
 
-### Directive Folder Structure
+### Batch & Phase Documentation
 
-Each completed directive gets its own folder under `1-system-manual/directives/`:
+Batch-level documentation is tracked in two canonical files:
+- `1-system-manual/BATCH_CATALOG.md` — index of every batch with description, scope file, and completion report
+- `1-system-manual/PHASE_HISTORY.md` — phase chronology with phase-to-batch mapping
 
-```
-1-system-manual/directives/
-├── DIRECTIVE_INDEX.md              ← Master tracker
-├── 12.1.1/
-│   ├── DIRECTIVE_12.1.1.md         ← Full directive write-up
-│   └── BATCH_1_README.md           ← Batch documentation
-├── 12.1.2/
-│   ├── DIRECTIVE_12.1.2.md
-│   └── BATCH_2_README.md
-├── 12.1.3/
-│   ├── DIRECTIVE_12.1.3.md
-│   └── BATCH_3_README.md           ← Covers all 3 directives in Batch 3
-├── 12.1.4/
-│   └── DIRECTIVE_12.1.4.md
-├── 12.1.5/
-│   └── DIRECTIVE_12.1.5.md
-├── 12.2.1/
-│   ├── DIRECTIVE_12.2.1.md         ← Wave 1 Safe Deletions (Batch 8)
-│   └── BATCH_8_README.md
-├── 12.2.2/
-│   └── DIRECTIVE_12.2.2.md         ← MarketScanner Class Removal (Batch 9)
-├── 12.2.3/
-│   ├── DIRECTIVE_12.2.3.md         ← COMPLETE (Sub-Batches A+B+C, Batches 5-7)
-│   └── BATCH_5_README.md
-├── 12.2.5/
-│   └── DIRECTIVE_12.2.5.md         ← Friction Model Unification (Batch 11)
-├── 12.2.6/
-│   ├── DIRECTIVE_12.2.6.md         ← Goal Alignment Gate Removal (Batch 11)
-│   └── BATCH_11_README.md
-├── 12.2.7/
-│   ├── DIRECTIVE_12.2.7.md
-│   └── BATCH_4_README.md
-├── 12.2.8/
-│   ├── DIRECTIVE_12.2.8.md         ← Walter-Era Learning Services (Batch 10)
-│   └── BATCH_10_README.md
-├── 12.2.9/
-│   ├── DIRECTIVE_12.2.9.md         ← Frontend Dead Pages (Batch 9)
-│   └── BATCH_9_README.md
-├── 12.3.1/
-│   ├── DIRECTIVE_12.3.1.md         ← Regime Authority Resolution (Batch 13)
-│   └── BATCH_13_README.md          ← Phase 12.3 mega-batch documentation
-├── 12.3.2/
-│   ├── DIRECTIVE_12.3.2.md         ← Strategy Routing Expansion (COMPLETE)
-│   ├── BATCH_12_README.md          ← Spec placement batch documentation
-│   └── STRATEGY_SPECIFICATION_12.3.2_FINAL.md  ← Vetted math spec (8 strategies)
-├── 12.3.3/
-│   └── DIRECTIVE_12.3.3.md         ← Confidence Authority Cleanup (Batch 13)
-└── [future directives follow same pattern]
-```
-
-Every governance batch must create this folder for the directive it documents.
+The legacy `directives/` folder has been archived to `directives-archive/`. New batches do NOT create directive folders.
 
 ### Key Scripts
 
@@ -365,37 +554,28 @@ Every governance batch must create this folder for the directive it documents.
 
 ### Naming Convention
 
-Zip names include directive numbers so batches are self-documenting:
+Zip names include batch identifiers so batches are self-documenting:
 
 ```
-BATCH_N-DIR_X.Y.Z_DESCRIPTION.zip
+BATCH_N-DESCRIPTION.zip
 ```
 
 Examples:
 - `BATCH_2-DIR_12.1.2_DUAL_FRICTION_FIX.zip` (code batch)
 - `BATCH_2B-DIR_12.1.2_GOVERNANCE_UPDATES.zip` (governance batch)
-- `BATCH_3-DIR_12.1.3_12.1.4_12.1.5_SECURITY_PRICE_CLEANUP.zip` (multi-directive code batch)
-- `BATCH_4-DIR_12.2.7_NLAI_SYSTEM_REMOVAL.zip` (dead code removal batch)
-- `BATCH_5-DIR_12.2.3_WALTER_SAFE_DELETIONS.zip` (Wave 3 Sub-Batch A)
-- `BATCH_6-DIR_12.2.3_WALTER_IMPORTERS_FRONTEND_ROUTES.zip` (Wave 3 Sub-Batch B)
-- `BATCH_8-DIR_12.2.1_WAVE1_SAFE_DELETIONS.zip` (Wave 1 Safe Deletions)
-- `BATCH_9-DIR_12.2.9_12.2.2_FRONTEND_DEAD_PAGES_MARKETSCANNER.zip` (Frontend Dead Pages + MarketScanner)
-- `BATCH_11-DIR_12.2.6_12.2.5_GOAL_ALIGNMENT_GATE_FRICTION_CLEANUP.zip` (Goal Alignment Gate + Friction)
-- `BATCH_12-DIR_12.3.2_STRATEGY_SPEC_PLACEMENT.zip` (Strategy specification placement — documentation only)
-- `BATCH_13-PHASE_12.3_PIPELINE_UNIFICATION.zip` (Phase 12.3 mega-batch — 3 directives, 15 files)
-- `BATCH_14-PHASE_13_MCE_INSTALLATION_L12_L20_REMOVAL.zip` (MCE + L12-L20 removal — 29 deleted, 7 modified, 2 new)
-- `BATCH_14-HOTFIX-STRATEGY_ENUM_EXPANSION.zip` (strategy_type enum 9→18)
+- `BATCH_19H-FILTER_PIPELINE_DIAGNOSTICS.zip` (code batch)
+- `BATCH_19K_GOV-GOVERNANCE_OVERHAUL.zip` (governance batch)
 
 ### Zip Contents
 
 Every batch zip contains:
 
 ```
-BATCH_N-DIR_X.Y.Z_DESCRIPTION.zip
-├── INSTRUCTIONS.md          ← Replit reads this first (file placement + validation + push commands)
-├── README.md                ← Batch documentation for our records
-├── [modified files in repo-relative paths]
-└── [new files in repo-relative paths]
+BATCH_N-DESCRIPTION.zip
++-- INSTRUCTIONS.md          <-- Replit reads this first (file placement + validation + push commands)
++-- README.md                <-- Batch documentation for our records
++-- [modified files in repo-relative paths]
++-- [new files in repo-relative paths]
 ```
 
 ### Zip Location
@@ -416,13 +596,12 @@ Every governance batch (the "B" batch after code is verified) must include ALL o
 | `1-system-manual/CHANGES_AND_FIXES.md` | Mark bug/risk RESOLVED with commit reference |
 | `1-system-manual/SYSTEM_MANUAL.md` | Update relevant sections with resolution notes |
 | `1-system-manual/SYSTEM_IMPACT_MAP.md` | Update component contamination/dependency references |
-| `1-system-manual/directives/DIRECTIVE_INDEX.md` | Mark directive COMPLETE with dates |
-| `1-system-manual/directives/X.Y.Z/DIRECTIVE_X.Y.Z.md` | Full directive write-up (new file) |
-| `1-system-manual/directives/X.Y.Z/BATCH_N_README.md` | Batch documentation (new file) |
-| `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` | **ALWAYS updated** — current state, completed directives, snapshots |
+| `1-system-manual/BATCH_CATALOG.md` | New row for each batch with description, scope, report |
+| `1-system-manual/PHASE_HISTORY.md` | Update phase-to-batch mapping if applicable |
+| `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` | **ALWAYS updated** — current state, completed batches, snapshots |
 | `replit.md` | Only if Replit rules need updating |
 
-**Note**: Not every governance batch requires updates to every file. For documentation-only batches (like Batch 12 — strategy spec placement), CHANGES_AND_FIXES.md, SYSTEM_MANUAL.md, and SYSTEM_IMPACT_MAP.md may not need changes if no bugs/risks were resolved and no runtime behavior changed. The governance batch should include the files that actually need updates, plus CLAUDE_CODE_PROJECT_INSTRUCTIONS.md (always required).
+**Note**: Not every governance batch requires updates to every file. For documentation-only batches, CHANGES_AND_FIXES.md, SYSTEM_MANUAL.md, and SYSTEM_IMPACT_MAP.md may not need changes if no bugs/risks were resolved and no runtime behavior changed. The governance batch should include the files that actually need updates, plus CLAUDE_CODE_PROJECT_INSTRUCTIONS.md (always required) and BATCH_CATALOG.md (always required).
 
 ---
 
@@ -435,23 +614,17 @@ Replit operates under strict autonomy limits defined in `replit.md`. Claude Code
 3. **Replit's platform creates automatic checkpoint commits** — this is a known, unavoidable platform behavior (see Checkpoint Commits section below).
 4. **If Replit sees something that needs fixing**, it must tell Kyle — not fix it itself. All code changes go through the batch process.
 
-### Langston Deployment Message Rules
+### Langston Review & Approval Rules
 
-When Claude Code sends a deployment request to Langston via Telegram, the following rules must be **pasted directly into the body of the message** — not referenced as a file, not linked. The actual text goes in the message.
-
-These rules exist because Langston has demonstrated confusion about which environment he is operating in (Hetzner server vs Replit), has run shell commands in the wrong place, and has spammed the Replit Agent with multiple messages causing queue buildup.
-
-**Rules to include in every deployment message to Langston:**
+Claude Code drives deployment. Langston's role is to review and approve at each gate in the batch checklist. The following rules apply to Langston's participation:
 
 1. **Use GPT-5.4 only.** Do not switch models for any reason.
 
-2. **The deployment process is exactly TWO steps:**
-   - **Step 1:** Upload the zip file to Replit. Send ONE message to the Replit Agent asking it to unzip the batch and follow the INSTRUCTIONS.md inside. Then WAIT. Implementations take 10-15 minutes. This is normal.
-   - **Step 2:** After Replit Agent confirms all edits are applied, run the git push command (provided in the message) in the Replit Shell tool. If prompted for SSH host key confirmation, type `yes` and press Enter. Report the output.
+2. **Review at each gate.** Langston reviews scope (Step 4), batch folder (Step 7), and completion report (Step 15) per the checklist. Approvals and rejections must be explicit and reasoned.
 
 3. **Shell commands go in the Replit Shell tool ONLY.** Never type shell commands (git, npm, npx, etc.) into the Replit Agent chat. The Agent chat is for file editing instructions only.
 
-4. **Never run commands on your Hetzner server thinking it’s Replit.** Your server paths (`/root/workspace`, `/mnt/gdrive/...`) are NOT Replit. Use `replit-cmd shell "command"` which types into the Replit browser Shell tab. If you see `/mnt/gdrive/` in a path, you are on the WRONG machine.
+4. **Never run commands on the Hetzner server thinking it's Replit.** Server paths (`/root/workspace`, `/mnt/gdrive/...`) are NOT Replit. Use `replit-cmd shell "command"` which types into the Replit browser Shell tab. If you see `/mnt/gdrive/` in a path, you are on the WRONG machine.
 
 5. **Do not spam the Replit Agent.** Send ONE message at a time. Wait for it to finish before sending another. Messages queue up and go unread if you send multiple.
 
@@ -459,20 +632,11 @@ These rules exist because Langston has demonstrated confusion about which enviro
 
 7. **Line breaks in Replit Agent messages:** Hold Shift+Enter. Plain Enter sends immediately.
 
-8. **Start and go until complete.** Do not stop to ask “should I continue?” or “can I proceed?” Apply, validate, and push in one continuous flow.
+8. **Acknowledge all requests promptly.** When Claude Code or Kyle sends a request, acknowledge receipt immediately. Provide a time estimate if the work will take more than 2 minutes. Never go silent — if blocked, say so.
 
-9. **Never pull from GitHub into Replit.** Replit is the source of truth. Code flows OUT of Replit to GitHub, never the reverse. If anyone tells you to git pull on Replit, refuse.
+9. **Never pull from GitHub into Replit.** Replit is the source of truth. Code flows OUT of Replit to GitHub, never the reverse.
 
-10. **Use the exact git push command provided.** Do not modify it, do not substitute your own, do not use a different commit message.
-
-11. **CC Claude Code on ALL messages** — post to Telegram topic #21 AND deliver via `--deliver`.
-
-**Post-deployment workflow (Claude Code’s responsibility, NOT Langston’s):**
-After Langston confirms the push landed, Claude Code:
-1. Runs `git pull` on the local clone to sync from GitHub
-2. Performs post-implementation audit — verifies all scope items on preview site
-3. Writes the Batch Completion Report and posts to Telegram Reports topic (#23)
-4. Updates MEMORY.md with current state, commit hash, completed items
+10. **CC Claude Code on ALL messages** — post to Telegram topic #21 AND deliver via `--deliver`.
 
 ### Replit Autonomy Reminder (Required in Every INSTRUCTIONS.md)
 
@@ -509,7 +673,7 @@ Every batch INSTRUCTIONS.md sent to Replit MUST include the following autonomy c
 
 **This is expected and unavoidable.** The workflow accommodates it:
 
-1. The **official batch commit** is always the one whose message matches our governance format: `Batch N: Directives X.Y.Z...`
+1. The **official batch commit** is always the one whose message matches our governance format: `Batch N: ...`
 2. Checkpoint commits between batches are platform artifacts — ignore them for audit purposes
 3. For `git log` auditing, identify batch commits by their message format, not by their position
 4. If a batch rollback is needed, revert to the SNAPSHOT commit hash (pre-batch), not to the official batch commit — this cleanly removes both the checkpoint and the batch commit
@@ -533,15 +697,17 @@ Replit's automatic checkpoint system often commits changes before any push scrip
 git -C $HOME/workspace add -A && git -C $HOME/workspace diff --cached --quiet && git -C $HOME/workspace commit --amend -m "COMMIT_MSG" || git -C $HOME/workspace commit -m "COMMIT_MSG" ; git -C $HOME/workspace push origin dawntrader-v4
 ```
 
-Replace `COMMIT_MSG` with the actual commit message (e.g., `"Batch 19G governance: conditional push command"`).
+Replace `COMMIT_MSG` with the actual commit message (e.g., `"Batch 19K GOV: governance overhaul"`).
 
 This conditional command handles both cases: if Replit auto-committed (amends with our message) or if not (normal commit). Our commit message always wins.
+
+Claude Code runs this via `replit-cmd shell`, not Langston.
 
 **How it works:**
 1. `git add -A` — stages all changes
 2. `git diff --cached --quiet` — checks if there are staged changes (exit 0 = nothing new = Replit already committed)
-3. If nothing new → `commit --amend` rewrites the checkpoint commit message with ours
-4. If changes exist → `commit -m` creates a normal commit with our message
+3. If nothing new: `commit --amend` rewrites the checkpoint commit message with ours
+4. If changes exist: `commit -m` creates a normal commit with our message
 5. `push origin dawntrader-v4` — pushes regardless of which path was taken
 
 **Important:** Always use `$HOME/workspace` as the git directory. Never use `cd /home/runner/DawnTraderV3` (path does not exist on Replit).
@@ -614,11 +780,11 @@ When debugging the trading pipeline or testing new features:
 
 1. **Open the standalone preview URL** in Chrome via Claude-in-Chrome tools
 2. **Log in** with test credentials
-3. **Navigate to the relevant page** (e.g., Machine Learning → Regime Archive, Trading, etc.)
+3. **Navigate to the relevant page** (e.g., Machine Learning, Trading, etc.)
 4. **Interact with UI elements** — click buttons, toggle switches, trigger actions
 5. **Monitor console errors and network requests** simultaneously
-6. **Trace failures** from the UI → API call → backend handler → root cause in code
-7. **Write fixes** and verify after Langston deploys
+6. **Trace failures** from the UI to API call to backend handler to root cause in code
+7. **Write fixes** and deploy through the batch process
 
 ### Trading Pipeline Debugging Sequence
 
@@ -662,91 +828,19 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 
 ## Current State
 
-### Completed Directives
-| Directive | Title | Batch | Commit |
-|-----------|-------|-------|--------|
-| 12.1.1 | Fix DI Probability Divergence (BUG-004) | Batch 1 | `ea6551af` |
-| — | Governance docs updated (BUG-004 RESOLVED) | Batch 1B | `dc17cfd6` |
-| 12.1.2 | Fix Dual Friction Models (RISK-009) | Batch 2 | `8393a1ef` |
-| — | Governance docs updated (RISK-009 RESOLVED) | Batch 2B | `67dd76d1` |
-| 12.1.3 | Security Hardening — JWT + Auth Bypass | Batch 3 | `0ddc8db1` |
-| 12.1.4 | Remove Simulated Price Display (BUG-020) | Batch 3 | `0ddc8db1` |
-| 12.1.5 | RiskManager Comment/Stub Cleanup | Batch 3 | `0ddc8db1` |
-| — | Governance docs updated (12.1.3/4/5 RESOLVED) | Batch 3B | `b52e40ea` |
-| 12.2.7 | NLAI System Removal (Wave 4.7) | Batch 4 | `5d5c2051` |
-| — | Governance docs updated (12.2.7 COMPLETE) | Batch 4B | `dbe063d4` |
-| 12.2.3 | Wave 3 Sub-Batch A: 9 Walter safe deletions | Batch 5 | `cc320466` |
-| — | Governance docs updated (Sub-Batch A) | Batch 5B | `8a286e64` |
-| 12.2.3 | Wave 3 Sub-Batch B: Walter importers + frontend + routes | Batch 6 | `1ea3bb38` |
-| — | Governance docs updated (Sub-Batch B) | Batch 6B | `eaacf34c` |
-| 12.2.3 | Wave 3 Sub-Batch C: Bob + Cortex removal (7A deletions + 7B surgery + 7B-hotfix) | Batch 7 | `39dc23b1` |
-| — | Governance docs updated (12.2.3 COMPLETE) | Batch 7B | `e74e4646` |
-| 12.2.1 | Wave 1 Safe Deletions — LATTi residuals + DHMA orphan + expectedDuration | Batch 8 | `8086264c` |
-| — | Governance docs updated (12.2.1 COMPLETE) | Batch 8B | `8e6e18aa` |
-| 12.2.9 | Frontend Dead Pages — 6 orphaned pages deleted (~2,453 lines) | Batch 9 | `8b6bb540` |
-| 12.2.2 | MarketScanner Class Removal — legacy class removed (~637 lines), BUG-009 RESOLVED | Batch 9 | `8b6bb540` |
-| — | Governance docs updated (12.2.9 + 12.2.2 COMPLETE) | Batch 9B | `19e2c376` |
-| 12.2.8 | Walter-Era Learning Services — 3 dead services deleted, autonomy-controller bug fixed, RISK-044 RESOLVED | Batch 10 | `189fe0b2` |
-| — | Governance docs updated (12.2.8 COMPLETE) | Batch 10B | `86aa8d79` |
-| 12.2.6 | Goal Alignment Gate Removal — Phase 9.0 alignment verification system removed (~1,400 lines) | Batch 11 | `b3a1526c` |
-| 12.2.5 | Friction Model Unification — 3 deprecated functions removed, vts-service migrated. UNIFY-001 RESOLVED | Batch 11 | `b3a1526c` |
-| — | Governance docs updated (12.2.6 + 12.2.5 COMPLETE, Phase 12.2 dead code purge COMPLETE) | Batch 11B | `2064d5c9` |
-| 12.3.2 | Strategy Routing Expansion — SPEC COMPLETE (8 strategies specified, 4-LLM review, 30 consensus decisions) | Batch 12 | `aa269823` |
-| — | Governance docs updated (12.3.2 spec placement) | Batch 12B | `a86b7fb6` |
-| 12.3.1 | Regime Authority Resolution — DSS rewired to canonical regime model. BUG-006 RESOLVED, BUG-008 partially resolved | Batch 13 | `4d8ef060` |
-| 12.3.3 | NGC replaced with deterministic confidence formula. Rolling normalization bypassed | Batch 13 | `4d8ef060` |
-| 12.3.2 | Strategy Routing Expansion — 8 new strategy modules IMPLEMENTED. 17 canonical strategies active | Batch 13 | `4d8ef060` |
-| — | Governance docs updated (Phase 12.3 Pipeline Unification COMPLETE) | Batch 13B | `589be749` |
-| 13.1 | MCE Installation + L12-L20 Legacy Removal — MCE centralized VWAP/SMA/ATR/regime. 29 legacy files deleted. BUG-002, BUG-003, BUG-008, RISK-002, RISK-016, RISK-019, RISK-020 RESOLVED | Batch 14 | `8f26369a` |
-| — | Strategy enum expansion hotfix — strategy_type 9→18 values, syncGlobalStrategies() crash fixed | Batch 14-hotfix | `db521adc` |
-| — | Governance docs updated (Phase 13 MCE COMPLETE) | Batch 14B | `8cfd34ed` |
-| 14.1 (HF6) | Wire VTS to real StrategyEngine detect functions — 17 strategies with real entry/stop/target | Batch 15 | `048bbc16` |
-| 14.1 (HF6B) | Fix VTS volume=0 bug + range_trade alias | Batch 15 | `ae431e17` |
-| 14.1 (HF7) | Regime classification recalibration for crypto DX values | Batch 15 | `64014bd2` |
-| 14.1 (HF8) | VTS throughput fixes — 60-min candles, OHLC 100, BTC candles, param relaxation, FinalScore dedup, SQE confidence floor, analytics regime-map, config fix | Batch 16 | `052fb224` |
-| 14.1 (HF9) | Column fix + Governance gate SQE migration + DSS deletion + VTS IMF relaxation | Batch 17 | `f9fa56c6` |
-| — | Governance docs updated (Phase 14.1 HF9 COMPLETE) | Batch 17B | (governance) |
-| Inter-phase | API Budget Optimization — OHLC cache, orchestrator priceCache migration, BATCH_SIZE 100→300, filterTier fix | Batch 18 | `4b6b2fa9` |
-| — | Governance docs updated (Batch 18 — API Budget Optimization + FX5 300 Pairs) | Batch 18B | `ed9bb0a7` |
-| Hotfix | Regime Archive Fix — clearArchiveForFreshStart startup wipe removed, debug UI cleaned, route double-mount fixed | Batch 18C | `c42283f1` |
-| — | Comprehensive Governance Catch-Up + Update Rules Matrix | Batch 18D | (governance) |
-| Hotfix | VTS Pipeline Hotfix — batch size hardcode fix (100 to BATCH_SIZE), VTS VN threshold 0.80 to 0.95 | Batch 18E | `5d774fb2` |
-| Hotfix | FX5 OHLC Wiring — real VN/σ/DI calculations using ohlcCache instead of empty arrays | Batch 18F | `9de4afc7` |
-| Hotfix | OHLC-Based LQ — per-candle volume liquidity replacing saturating 24h aggregate formula | Batch 18G | `f82b7b66` |
-| Inter-phase | Crypto Strategy Recalibration — ATR-based dynamic thresholds, relaxed pattern strengths, widened RSI/ADX/volatility gates (24 edits, 10 files, 4-LLM consensus) | Batch 18H | `ca2f8b5f` |
-| Hotfix | VTS Stale Position Cleanup — move timeout check before price availability to prevent indefinite Map accumulation | Batch 18I | `3d907032` |
-| Inter-phase | IMF Filter Recalibration + Fee Unification + LQ Standardization — VN/LQ/correlation/DI/volume thresholds crypto-calibrated via 4-LLM consensus; 4 files migrated to exchange-defaults.ts; LQ fallback standardized on Formula B | Batch 18J | `5eae1601` |
-| — | Governance docs updated (Batches 18H/18I/18J) | Batch 18K | (governance) |
-| — | VTS throughput hotfix — relax Net EV floor, skip ROI gate, 3 concurrent trades, interval 30s, pairs 200 | Batch 18L | `d1e2329b` |
-| Governance | Add Langston autonomous agent section to CCPI — infrastructure, 3-way comms, CLI tools, Telegram topics | BATCH_GOV_LANGSTON | `48648f72` |
-| Governance | Update Langston CCPI section — 12 replit-cmd commands, Replit automation details, common issues | BATCH_GOV_LANGSTON_UPDATE | `7698462f` |
-| Hotfix | KrakenService property name fix — this.krakenService to this.kraken in cascadingScan call (line 1036) | HF10 | `5f04e4eb` |
-| — | Governance docs for HF10 + process updates (autonomous pipeline, session transitions) | HF10B | (governance) |
-| Governance | Governance enforcement mechanisms — pre-flight checklist, post-batch audit, cross-actor capacity monitoring, session transition protocol, batch report template, stale reference fixes | HF11B | (governance) |
-| Hotfix | Regime archive startup catch-up — detect missed cron, auto-archive on boot if >7 days stale, scheduler-status endpoint | HF12 | `3fb344eb` |
-| — | Governance for HF12 + operational model documentation in SYSTEM_MANUAL | HF12B | `f3f70781` |
-| Hotfix | Regime archive route path prefix fix — all 10 routes had redundant `/api` prefix causing 404s | HF12C | `3edf80d4` |
-| — | Governance for HF12C + Claude Code UI debugging capability documented | HF12D | `8cae5317` |
-| 14.5 | Phase 14.5: Dual-Path Pattern Scanning + Merit-Based Ranking + MCE Global Regime Overlay — pattern pool filter pipeline, rankingScore cross-family ordering, MCE getDominantRegime(), sourcePool/signalType/assetClass identity tuple, pattern position sizing 15% cap | Batch 19 | `106996ab` + `1b917598` + `2ade1370` |
-| 14.5 | Phase 14.5 Deferred Items — VTS pattern pool integration, frontend Pattern Scanning tab + /api/pattern-pool endpoint, regime-aware pattern pool thresholds | Batch 19C | `422fa479` |
-| 14.5 | Phase 14.5 Extension — VTS runner pattern pool fetch, sourcePool field in Phase10TradeRecord + DB schema (paper_sim_trades, paper_sim_open_positions), paper-execution-engine sourcePool persistence, frontend Source Pool badges (open + closed trades) | Batch 19E | `170dba7a` |
-| — | Governance for Phase 14.5 (Batch 19E) — CCPI Rule 22, sourcePool docs | Batch 19E GOV | `e9de7352` |
-| 14.5 | Phase 14.5 Completion — DB-driven 4-path filter architecture (screener_filters 8 rows with filter_path/lq_min/vn_max/corr_max/di_min), FX5 scanner reads filters from DB, pattern-global-filters.ts deleted, system-guards.ts filter constants deprecated, VTS hybrid confluence buffer, shared hybrid-compatibility-registry.ts, 4-column Dual-Path Filter Thresholds display (DB-driven), legacy filter UI inputs removed, VTS dedup 3→1 per symbol+strategy, Pattern Scanning tab 401 fix, VTS pattern path parity (scanPatterns drives strategy selection), pattern IMF hybrid architecture (DB defaults + code-driven regime overrides) | Batch 19G | `d418c726` |
-| 14.5 | Batch 19G HF1 — Pattern IMF metrics for pattern-only pairs (DI=0 rejection fix via OHLC pre-fetch) | Batch 19G HF1 | `15e90f09` |
-| 14.5 | Batch 19G HF2 — Trading filter thresholds from DB, deprecated hardcoded constants | Batch 19G HF2 | `238d3315` |
-| 14.5 | Batch 19G HF3 — Trading regime thresholds and log generation timestamps | Batch 19G HF3 | `ed284dff` |
-| 14.5 | Batch 19G VN — Replace absolute-diff VN with log-returns MAD/median VN formula | Batch 19G VN | `aa4babfc` |
-| — | Batch 19G VN hotfix — DB-driven filter thresholds, remove deprecated constants | Batch 19G VN HF | `8cbff9fd` |
-| — | Batch 19G governance — conditional push command, batch report ownership, Langston GPT-5.4 permanent | Batch 19G GOV | (governance) |
+### Batch History
+
+See `1-system-manual/BATCH_CATALOG.md` for the complete index of all batches.
+See `1-system-manual/PHASE_HISTORY.md` for phase-to-batch mapping and chronology.
 
 ### In-Progress Directives
 | Directive | Title | Batch | Status |
 |-----------|-------|-------|--------|
 | (none currently in progress) | | | |
 
-> **Last commit**: `8cbff9fd` (Batch 19G VN hotfix — DB-driven filter thresholds, remove deprecated constants)
-> **Next step**: VN threshold calibration (0.60/0.68/0.72/0.80) → closes Phase 14.5. Then Strategy-Family Filter Profiles → Phase 14.6 X Stocks → Phase 11 Finalization.
-> **Note**: Autonomous deployment pipeline OPERATIONAL. **Phase 14.5 FULLY COMPLETE** (Batch 19 core + 19C deferred + 19E extension + 19G completion + HF1-HF3 + VN + VN HF). DB-driven 4-path filter architecture live (screener_filters table, 8 rows). Filter constants migrated from code to DB. VTS hybrid confluence buffer operational. Log-returns MAD/median VN formula deployed. Rules 23-26 added. **Langston is GPT-5.4 permanently** (no more model switching). **Batch completion reports are Claude Code's responsibility** (Rule 24). Conditional push command replaces REPLIT_PUSH_SCRIPT.sh. Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE. Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED.
+> **Last commit**: `4deae999` (Batch 19J: VTS Evaluation Breakdown — 24-hour rolling aggregation)
+> **Next step**: Strategy-Family Filter Profiles (filter redesign — quant path applies different filters based on pair's initial strategy-family leanings). Then Phase 14.6 X Stocks, then Phase 11 Finalization.
+> **Note**: Autonomous deployment pipeline OPERATIONAL. **Phase 14.5 FULLY COMPLETE** (Batch 19 core + 19C deferred + 19E extension + 19G completion + HF1-HF3 + VN + VN HF). DB-driven 4-path filter architecture live (screener_filters table, 8 rows). Filter constants migrated from code to DB. VTS hybrid confluence buffer operational. Log-returns MAD/median VN formula deployed. **Filter Pipeline Diagnostics tab** deployed (Batch 19H). **Filter Diagnostics enhancement** deployed (Batch 19I — number formatting, VTS eval counters). **VTS Evaluation Breakdown** deployed (Batch 19J — 24-hour rolling aggregation). **Langston is GPT-5.4 permanently** (no more model switching). **Batch completion reports are Claude Code's responsibility** (Rule 24, Markdown format). **Claude Code drives deployment** via replit-cmd through Langston's server. Conditional push command replaces REPLIT_PUSH_SCRIPT.sh. Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE. Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED.
 
 ### Snapshot Log
 | Snapshot | Commit | Description |
@@ -775,11 +869,12 @@ On 2026-02-25, clearing Google Drive for Desktop's application cache caused corr
 | SNAPSHOT-021 | `4d8ef060` | After Batch 13 (Phase 12.3 Pipeline Unification — 12.3.1 + 12.3.3 + 12.3.2 implementation) |
 | SNAPSHOT-022 | `589be749` | Pre-Batch 14 freeze (after Batch 13B governance) |
 
-### Pending Directives
-See `directives/DIRECTIVE_INDEX.md` for the full list.
+### Pending Items
+See `1-system-manual/BATCH_CATALOG.md` for batch status and `1-system-manual/POST_AUDIT_ROADMAP.md` for phase-level planning.
+
 - 12.1.6 (LSP Error Triage) — PENDING (LOW priority, deferred)
 
-Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation) is COMPLETE. Phase 14.1 is **COMPLETE** (HF9 done, Batch 17 `f9fa56c6`). Batch 18 (inter-phase optimization) COMPLETE (`4b6b2fa9`). Batch 18C (regime archive hotfix) COMPLETE (`c42283f1`). Batch 18E (VTS pipeline hotfix) COMPLETE (`5d774fb2`). Batch 18F (FX5 OHLC wiring) COMPLETE (`9de4afc7`). Batch 18G (OHLC-based LQ) COMPLETE (`f82b7b66`). Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE (DBS in Batch 15). Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED. **Phase 14.5 FULLY COMPLETE** (Batch 19 core + 19C deferred + 19E extension + 19G completion + 19G HF1). DB-driven 4-path filter architecture: screener_filters table with 8 rows (4 per mode), FX5 reads from DB, pattern-global-filters.ts deleted, system-guards filter constants deprecated. Next: Phase 11 Finalization (Block 4, Batch 20).
+Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation) is COMPLETE. Phase 14.1 is **COMPLETE** (HF9 done, Batch 17 `f9fa56c6`). Batch 18 (inter-phase optimization) COMPLETE (`4b6b2fa9`). **Phase 14.5 FULLY COMPLETE** (all batches 19 through 19J deployed). Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE (DBS in Batch 15). Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED. Next: Strategy-Family Filter Profiles, then Phase 14.6 X Stocks, then Phase 11 Finalization.
 
 ### Investigation Notes for Future Batches
 - **12.2.1**: ~~Wave 1 Safe Deletions~~ **COMPLETE** (Batch 8). 2 files deleted (dhma.ts, latti-safety-monitor.tsx). 11 files surgically modified. ~1,254 lines removed. LATTi lazy-loader stub (RISK-044) remains — can be cleaned in a future batch.
@@ -790,26 +885,26 @@ Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation
 - **12.2.8**: ~~Walter-Era Learning Services~~ **COMPLETE** (Batch 10). 3 dead services deleted (cognitive-interpreter, event-broker, phase-8.6.5-enhancements, ~1,363 lines). autonomy-controller bug fixed. RISK-044 RESOLVED. Walter storage methods removed.
 - **12.2.9**: ~~Frontend Dead Pages~~ **COMPLETE** (Batch 9). 6 dead pages deleted (~2,453 lines). Stale History import removed from App.tsx.
 - **12.3.1**: ~~Regime Authority Resolution~~ **COMPLETE** (Batch 13). DSS rewired to `calculatePairRegime()`. BUG-006 RESOLVED. ~~BUG-008 partially resolved~~ BUG-008 FULLY RESOLVED (Batch 14 removed Engine #4 MCP/ARE). RISK-001, RISK-003 RESOLVED.
-- **12.3.2**: ~~Strategy Routing Expansion~~ **COMPLETE** (Batch 12 spec + Batch 13 implementation). 8 strategy modules implemented per vetted spec. StrategySignal type 9→17. strategy-sync.ts updated to 17 canonical strategies. RISK-014, RISK-015 RESOLVED.
+- **12.3.2**: ~~Strategy Routing Expansion~~ **COMPLETE** (Batch 12 spec + Batch 13 implementation). 8 strategy modules implemented per vetted spec. StrategySignal type 9->17. strategy-sync.ts updated to 17 canonical strategies. RISK-014, RISK-015 RESOLVED.
 - **12.3.3**: ~~Confidence Authority Cleanup~~ **COMPLETE** (Batch 13). NGC replaced with deterministic confidence formula. Rolling normalization bypassed. All export signatures preserved.
-- **13.1**: ~~MCE Installation + L12-L20 Removal~~ **COMPLETE** (Batch 14 + hotfix). MCE installed as centralized VWAP/SMA/ATR/regime service. Signal orchestrator + VTS runner wired to MCE. 29 legacy files deleted (entire L12-L20 cluster). strategy_type enum expanded 9→18. BUG-002, BUG-003, BUG-008, RISK-002, RISK-016, RISK-019, RISK-020 RESOLVED. Net ~-8,200 lines.
+- **13.1**: ~~MCE Installation + L12-L20 Removal~~ **COMPLETE** (Batch 14 + hotfix). MCE installed as centralized VWAP/SMA/ATR/regime service. Signal orchestrator + VTS runner wired to MCE. 29 legacy files deleted (entire L12-L20 cluster). strategy_type enum expanded 9->18. BUG-002, BUG-003, BUG-008, RISK-002, RISK-016, RISK-019, RISK-020 RESOLVED. Net ~-8,200 lines.
 - **12.1.6 (LSP Error Triage)** — ~620 errors from Replit audit are LOW severity. Most are type annotation gaps, not logic bugs. Not recommended for near-term batches.
 - **RISK-028 / BUG-012 (Phase 4 Goal Alignment)**: pre-execution-validator.ts goal alignment gate and trading-engine.ts calculateGoalAlignmentScore() are formally deprecated but NOT yet removed. Separate from the Phase 9.0 system removed in Batch 11. Kyle decision needed on timing.
 - **Walter peripheral references**: 2 read-only DB references remain in routes.ts (walterActions table in health-summary, getWalterActivity in diagnostics export). Return empty data. Storage method implementations removed in Batch 10.
 - **LATTi remaining residuals**: DB column names (`tunedByLatti`, `managedByLottie`) preserved — renaming requires migration. `adaptive-guardrails.ts` still active (LATTI adaptive tuning system, not dead code). Lazy-loader stub removed (RISK-044 RESOLVED, Batch 10).
 - **Batch 18 (Inter-Phase Optimization)**: OHLC cache (5-min TTL wrapping KrakenService.getOHLCData()), orchestrator priceCache migration (per-symbol getTicker to getCachedPrice), BATCH_SIZE 100 to 300, filterTier fix. Net API budget: ~18,200 to ~7,520 calls/hr (58% reduction despite 3x pair increase). Commit `4b6b2fa9` (code), `ed9bb0a7` (governance).
-- **Batch 18C (Regime Archive Fix)**: `clearArchiveForFreshStart()` called on every server startup, wiping weekly archive data. Debug UI scaffolding (test button, [DIAG] logging, WeakMap handler tracking, render counters) left in machine-learning.tsx. Regime-archive routes double-mounted in index.ts and routes.ts. All fixed — 11 surgical edits across 2 files. Commit `c42283f1`.
-- **Batch 18E (VTS Pipeline Hotfix)**: Two compounding bugs starving VTS of data: (1) `targetBatchSize = 100` hardcoded in market-scanner.ts (missed during Batch 18 BATCH_SIZE increase to 300), causing some cycles to scan only 100 pairs. (2) VTS_IMF_THRESHOLDS.VN_MAX = 0.80 matched the passive learning strict threshold, creating zero gap for relaxed-filter pairs. Market VN values are 0.82-1.00. VN_MAX raised to 0.95. Commit `5d774fb2`.
-- **Batch 18F (FX5 OHLC Wiring)**: Third root cause of VTS starvation: `priceHistory` and `history` fields DECLARED in market-scanner.ts BatchResult interface but NEVER POPULATED. `prices = s.priceHistory || s.history || []` always resolved to `[]`. VN defaulted to 0.5 (pass strict for wrong reason), σ always 0, DI always 0.5. FX5 scanner wired to ohlcCache (Batch 18) for real ~720 60-min candle data. Replaced passive-learning-only `imfModule` dynamic import with universal OHLC pre-fetch loop. Commit `9de4afc7`.
-- **Batch 18G (OHLC-Based LQ)**: `calculateLogLiquidity(volumeUSD, tradeCount, spread)` in analysis-utils.ts uses `10*(ln(V*C)-ln(S/C)-10)` which saturates at 100 for all crypto pairs (24h aggregate volume too large). LQ=100 for everything — filter never discriminates. Replaced with per-candle OHLC volume formula: `log10(avgVolumeUSD_per_candle + 1) * 10` producing 30-60 range. Matches imf-metrics.ts formula. Both VTS and active trading now unified on same OHLC-based LQ. Commit `f82b7b66`.
-- **Batch 19 (Phase 14.5 — Dual-Path Pattern Scanning + Merit-Based Ranking + MCE Global Regime)**: Three major subsystems added in a single mega-batch across 10 files (2 new configs, 1 full rewrite, 7 surgical edits). Commits `106996ab` + `1b917598` + `2ade1370`. (1) **Pattern Pool Pipeline**: FX5 scanner routes metric-rejected pairs through relaxed thresholds (PATTERN_POOL_THRESHOLDS in pattern-filter-profile.ts) into a separate pattern pool in active-filter-pool.ts. Signal orchestrator evaluates pattern pool pairs with PATTERN + HYBRID strategies only. SQE applies elevated FinalScore floor (0.45 vs 0.35). Paper-position-sizing caps pattern-pool trades at 15% portfolio. (2) **rankingScore**: New cross-family signal ordering formula in ranking-weights.ts. Three weight profiles (QUANT/PATTERN/HYBRID) with quality, return, friction, context components. RTB getTopSignal() uses rankingScore instead of FinalScore for queue ordering. FinalScore gap safety rule prevents return-magnitude gaming (>0.10 gap → FinalScore wins). (3) **MCE Global Regime**: getDominantRegime() on MCE aggregates per-pair regimes via majority vote. market-indicators.ts getDominantRegime() is now mode-aware — uses MCE when ≥5 pairs cached, falls back to VTS telemetry otherwise. Context bonus/penalty in ranking-weights.ts rewards pair-global regime agreement. **Identity tuple**: sourcePool + signalType + assetClass persisted in RTB metadata for full signal provenance. **Deferred items completed in Batch 19C** (see below).
-- **Batch 19C (Phase 14.5 Deferred Items)**: Three deferred items completed in a single batch. Commit `422fa479`. (1) **VTS Pattern Pool**: VTS runner now evaluates pattern-pool pairs with PATTERN + HYBRID strategies (dual-path matching signal orchestrator). `sourcePool` metadata added to VTS trade records. (2) **Frontend Pattern Scanning Tab**: New 5th tab on Trading page showing pattern pool pairs, thresholds, guardrails, strategies, and global regime. New `/api/pattern-pool` endpoint exposes pattern pool data. (3) **Regime-Aware Pattern Pool Thresholds**: `REGIME_PATTERN_THRESHOLDS` lookup table with per-regime threshold sets. FX5 scanner calls `mce.getDominantRegime()` to select thresholds dynamically. Fallback to static defaults when MCE cache is cold.
-- **Batch 19G (Phase 14.5 Completion — DB-Driven 4-Path Filter Architecture)**: Major architecture shift from hardcoded filter constants to database-driven configuration. Commits `d418c726` (main) + `15e90f09` (HF1). (1) **DB-driven filters**: `screener_filters` table expanded with new columns (`filter_path`, `lq_min`, `vn_max`, `corr_max`, `di_min`) and now has 8 rows — 4 per mode (active_quant, active_pattern, vts_quant, vts_pattern). FX5 scanner reads all filter thresholds from DB instead of hardcoded configs. `pattern-global-filters.ts` DELETED. `system-guards.ts` filter constants DEPRECATED (guardrails kept). (2) **VTS hybrid confluence**: Hybrid-compatibility-registry.ts created as shared registry. VTS integrates confluence buffer for cross-signal detection. (3) **Frontend**: 4-column Dual-Path Filter Thresholds display in Screeners tab (reads from DB). Legacy filter UI inputs removed. (4) **VTS improvements**: Dedup changed from 3 to 1 per symbol+strategy. Pattern path parity — scanPatterns drives strategy selection, not regime. (5) **Pattern IMF**: Hybrid architecture with DB defaults + code-driven regime overrides. (6) **HF1**: Pre-fetches OHLC data for pattern-only pairs, fixing DI=0 rejection bug that was blocking pattern pool entries.
+- **Batch 18C (Regime Archive Fix)**: `clearArchiveForFreshStart()` called on every server startup, wiping weekly archive data. Debug UI scaffolding left in machine-learning.tsx. Regime-archive routes double-mounted in index.ts and routes.ts. All fixed — 11 surgical edits across 2 files. Commit `c42283f1`.
+- **Batch 18E (VTS Pipeline Hotfix)**: Two compounding bugs starving VTS of data: (1) `targetBatchSize = 100` hardcoded in market-scanner.ts (missed during Batch 18 BATCH_SIZE increase to 300). (2) VTS_IMF_THRESHOLDS.VN_MAX = 0.80 matched the passive learning strict threshold, creating zero gap for relaxed-filter pairs. VN_MAX raised to 0.95. Commit `5d774fb2`.
+- **Batch 18F (FX5 OHLC Wiring)**: Third root cause of VTS starvation: `priceHistory` and `history` fields DECLARED in market-scanner.ts BatchResult interface but NEVER POPULATED. VN defaulted to 0.5, DI always 0.5. FX5 scanner wired to ohlcCache for real ~720 60-min candle data. Commit `9de4afc7`.
+- **Batch 18G (OHLC-Based LQ)**: `calculateLogLiquidity()` saturates at 100 for all crypto pairs (24h aggregate volume too large). Replaced with per-candle OHLC volume formula producing 30-60 range. Commit `f82b7b66`.
+- **Batch 19 (Phase 14.5 — Dual-Path Pattern Scanning + Merit-Based Ranking + MCE Global Regime)**: Three major subsystems in a single mega-batch. Pattern Pool Pipeline, rankingScore cross-family ordering, MCE getDominantRegime(). Commits `106996ab` + `1b917598` + `2ade1370`.
+- **Batch 19C (Phase 14.5 Deferred Items)**: VTS Pattern Pool, Frontend Pattern Scanning Tab, Regime-Aware Pattern Pool Thresholds. Commit `422fa479`.
+- **Batch 19G (Phase 14.5 Completion — DB-Driven 4-Path Filter Architecture)**: Major architecture shift from hardcoded filter constants to database-driven configuration. `screener_filters` table with 8 rows, 4-column filter display, VTS hybrid confluence, pattern IMF hybrid architecture. Commits `d418c726` + `15e90f09`.
 
 ### Test Baseline
 - **790 pass / 91 fail** (881 total across test files)
 - 20 pre-existing TSC errors in files not modified by any directive
-- Baseline history: 816/81 (Batches 1-4) → 809/81 (Batch 5, 7 Walter tests removed) → 802/81 (Batch 6, 7 more Walter tests removed) → 800/81 (Batch 7, 4 Bob tests removed from diagnostic-system.test.ts, 2 tests net from learning-cycle-service deletion) → 800/81 (Batches 8-12, no test changes) → 791/90 (Batch 13, 9 new failures from strategy module interactions with existing tests) → 782/84/15skip (Batch 14, 15 L-series tests skipped) → 791/90 (Batch 14-hotfix, baseline restored after schema fix)
+- Baseline history: 816/81 (Batches 1-4) -> 809/81 (Batch 5) -> 802/81 (Batch 6) -> 800/81 (Batch 7) -> 800/81 (Batches 8-12) -> 791/90 (Batch 13) -> 782/84/15skip (Batch 14) -> 791/90 (Batch 14-hotfix)
 
 ---
 
@@ -823,13 +918,13 @@ Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation
 6. **Consult SYSTEM_IMPACT_MAP.md** before every directive to understand blast radius.
 7. **`CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` is always updated in every governance batch.** It captures current state so the next session starts with accurate context. This is not optional.
 8. **Replit's platform creates automatic checkpoint commits between batches.** After every sync, check `git log` for unexpected commits. Checkpoint commits are normal — identify the official batch commit by its message format. See Checkpoint Commits section.
-9. **Zip naming must include directive numbers.** Format: `BATCH_N-DIR_X.Y.Z_DESCRIPTION.zip`. This makes batches self-documenting.
+9. **Zip naming must include batch identifiers.** Format: `BATCH_N-DESCRIPTION.zip`. This makes batches self-documenting.
 10. **Zips go to `Claude Comms and Packages/`** (Batch Zips/ or Governance Zips/), not the Desktop.
 11. **Every INSTRUCTIONS.md sent to Replit must include the Replit Autonomy Reminder** at the top. This reminds Replit of its constraints on every batch, not just in `replit.md`.
 12. **Scope files go to `Claude Comms and Packages/Scope Files/`** before implementation begins. Each scope document is named `BATCH_N_SCOPE.md`.
 13. **For pushing to GitHub**, all INSTRUCTIONS.md files must include the conditional push command (see Push Command section). The old `REPLIT_PUSH_SCRIPT.sh` and `github-push.sh` are both deprecated.
 14. **Google Drive cache warning**: Do not clear Google Drive for Desktop's application cache while the clone repo is on Google Drive. If the cache must be cleared, back up `.git/objects/pack/` first. See Google Drive Cache Warning section for recovery procedure.
-15. **One mega-batch per phase.** Don't break phases into sub-batches. Each roadmap phase is one scope document → one code batch → one governance batch. Discuss with Kyle before splitting.
+15. **One mega-batch per phase.** Don't break phases into sub-batches. Each roadmap phase is one scope document, one code batch, one governance batch. Discuss with Kyle before splitting.
 16. **Every batch produces a zip.** No exceptions. The zip contains modified files in repo-relative paths, INSTRUCTIONS.md, and README.md. Without a zip, the work can't reach Replit.
 17. **Pre-implementation audit before every phase.** Read every source file that will be touched. Verify all assumptions about imports, consumers, and dependencies. Kyle catches oversights — be thorough.
 18. **Communicate deviations clearly.** When troubleshooting or changing architecture, any deviation from the established setup must be explicitly called out in plain English before implementation. Technical changes cannot be buried in technical speak — Kyle must understand what's changing and why. If the change alters which systems are active, which tools are available, or how actors interact, it requires Kyle's explicit approval first.
@@ -839,6 +934,8 @@ Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation
 | Domain | Canonical File |
 |--------|---------------|
 | Workflow, actor roles, rules | This file (CCPI) |
+| Batch index | `BATCH_CATALOG.md` |
+| Phase chronology | `PHASE_HISTORY.md` |
 | Langston infrastructure & credentials | `LANGSTON_SETUP_REFERENCE.md` (in Claude Comms and Packages/Langston/) |
 | Langston identity & personality | `SOUL.md` + `IDENTITY.md` (on server) |
 | Langston operational procedures | Skill files (dt-master-workflow, dt-replit-ops, etc.) |
@@ -847,39 +944,35 @@ Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation
 | Bug/risk registry | `CHANGES_AND_FIXES.md` |
 | Component dependencies | `SYSTEM_IMPACT_MAP.md` |
 
-21. **Langston must automatically post a Batch Completion Report after every batch.** After every completed batch — both code batches and governance batches — Langston must post a Batch Completion Report. This is mandatory and does not require Kyle to ask. A batch is not considered operationally complete until the report is posted. This is a closure gate: verification complete → push complete → report posted → memory updated. Only then is the batch "done."
+21. **Batch completion reports are Claude Code's responsibility.** Claude Code writes batch completion reports as part of the post-implementation audit. Reports are Markdown files (.md). **File naming convention:** `Batch_Completion_{BATCH_ID}_{MM.DD.YY}.md` (e.g., `Batch_Completion_19H_03.21.26.md`). **Filing location:** `Claude Comms and Packages/Reports/Batch Completion/`. Reports are the canonical artifact — they are not pasted as raw text in Telegram. A batch is not considered operationally complete until the report is filed. This is a closure gate: verification complete, push complete, report filed, memory updated. Only then is the batch "done."
 
-    **Report format and filing requirements:**
-    - Reports must be generated as **Word documents (.docx)**, not pasted as plain text in Telegram.
-    - **File naming convention:** `Batch_Completion_{BATCH_ID}_{MM.DD.YY}.docx` (e.g., `Batch_Completion_19B_03.18.26.docx`, `Batch_Completion_HF12_03.17.26.docx`)
-    - **Dual posting required — both locations, every time:**
-      1. **Telegram:** Upload the .docx file to the Reports topic (thread #23) with a brief summary message.
-      2. **Cloud repo:** Save the same .docx file to `Claude Comms and Packages/Reports/Batch Completion/`
-    - Reports pasted as raw text in Telegram do NOT satisfy this requirement. The Word document is the canonical artifact.
-
-22. **Langston must acknowledge all requests promptly.** When Claude Code or Kyle sends a request to Langston (deployment, scope review, 3-way discussion opener, batch zip, etc.), Langston must:
+22. **Langston must acknowledge all requests promptly.** When Claude Code or Kyle sends a request to Langston (scope review, 3-way discussion opener, batch folder review, etc.), Langston must:
     - **Acknowledge receipt immediately** — even before the work is done. A simple "Received, reviewing now" is sufficient.
     - **Provide a time estimate** if the work will take more than 2 minutes (e.g., "Reviewing scope — will respond with feedback in ~5 minutes").
     - **Never go silent.** Silence after a request is unacceptable. If Langston encounters an error, blocker, or confusion, he must say so immediately rather than going quiet.
-    - **Confirm completion explicitly** when done (e.g., "Deployment complete, push successful, verification passed").
+    - **Confirm completion explicitly** when done (e.g., "Review complete, approved with no issues").
     - This applies to all communication channels — Telegram topics, DMs, and cc-inbox responses.
 
 23. **Post-implementation audit is MANDATORY after every code batch.** After deployment and git pull, Claude Code must verify ALL scope checklist items on the preview site before writing the governance batch. This includes: navigating to affected pages, checking that new UI elements render, verifying API endpoints return expected data, and confirming no regressions on adjacent features. The audit findings are documented in the batch completion report. A governance batch written without a post-implementation audit is incomplete.
 
-24. **Batch completion reports are Claude Code's responsibility.** Claude Code writes batch completion reports as part of the post-implementation audit, not Langston. The report is created as a Word document per Rule 21 naming convention and filed in `Claude Comms and Packages/Reports/Batch Completion/`. Langston posts it to Telegram Reports topic (#23).
+24. **Batch completion reports are Markdown files (.md).** All reports use the template in Page 5. Named `Batch_Completion_{BATCH_ID}_{MM.DD.YY}.md`. Filed in `Claude Comms and Packages/Reports/Batch Completion/`. Langston reviews reports at gate 15 of the checklist.
 
 25. **DB queries can be run through natural language requests to the Replit Agent.** When Claude Code or Langston needs to query the database (e.g., verify `screener_filters` table contents, check trade records), they can ask the Replit Agent in natural language. No shell commands needed — Replit Agent translates to SQL and returns results. Example: "Query the screener_filters table and show all rows" is sufficient.
 
-26. **replit-cmd shell output appears as screenshots that LLMs cannot read as text.** When Langston uses `replit-cmd shell` to run commands on Replit, the output is rendered as a screenshot image. LLMs (including Langston) cannot extract text from these screenshots — they can only confirm the command was entered. Commands execute successfully regardless of whether the output is readable. After pushing code, Claude Code should verify on GitHub directly rather than relying on replit-cmd shell output.
+26. **replit-cmd shell output appears as screenshots that LLMs cannot read as text.** When using `replit-cmd shell` to run commands on Replit, the output is rendered as a screenshot image. LLMs cannot extract text from these screenshots — they can only confirm the command was entered. Commands execute successfully regardless of whether the output is readable. After pushing code, Claude Code should verify on GitHub directly rather than relying on replit-cmd shell output.
+
+27. **BATCH_CATALOG.md and PHASE_HISTORY.md are updated in every governance batch.** These are Tier 1 governance files. Every batch gets a row in BATCH_CATALOG with its description, scope file reference, and completion report reference. PHASE_HISTORY is updated whenever a batch completes or advances a phase. Skipping these updates makes the governance batch incomplete.
+
+28. **Changes to the Essentials section must be mirrored in the corresponding CCPI body section.** The Essentials section (Pages 1-7) is a condensed reference. The body sections contain full detail. If the Essentials are updated (e.g., a new checklist step, a new rule, a role change), the corresponding body section must also be updated to maintain consistency. Neither section should contradict the other.
 
 ---
 
 ## How to Start a New Session
 
-1. Read this file (CCPI) — **read it fully, not just the headers**
+1. Read this file (CCPI) — **read the Essentials section fully, then skim the body for any needed detail**
 2. Read MEMORY.md for learnings and context from previous sessions
 3. Read the snapshot log (`DT_Frozen_Snapshots/SNAPSHOT_LOG.md`) to know current state
-4. Read `directives/DIRECTIVE_INDEX.md` to see what's completed and what's next
+4. Read `BATCH_CATALOG.md` for recent batch history
 5. Verify permission settings in `.claude/` settings files — recreate if missing (see Claude Code Permission Settings section)
 6. Complete the Pre-Flight Checklist (see Governance Enforcement section below)
 7. Report capacity status for self and Langston to Kyle
@@ -892,7 +985,7 @@ Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation
 
 ### Token Budget Awareness
 
-Both Claude Code and Langston operate with ~200,000 token context windows. Context degrades as usage increases — responses become repetitive, earlier context is lost, and critical details get dropped. Transitions must be planned, never reactive.
+Claude Code operates with a 1,000,000 token context window (Opus 4.6). Langston operates with 272,000 tokens per topic (GPT-5.4, pending OpenClaw upgrade for 1M). Context degrades as usage increases — responses become repetitive, earlier context is lost, and critical details get dropped. Transitions must be planned, never reactive.
 
 **Warning Thresholds:**
 | Usage | Action |
@@ -951,10 +1044,10 @@ When Langston's context is degrading:
 
 Before doing ANY work, every Claude Code session must complete this checklist. No exceptions.
 
-- [ ] Read full CCPI (this file) — not just headers
+- [ ] Read full CCPI (this file) — Essentials fully, body as needed
 - [ ] Read MEMORY.md for learnings from previous sessions
 - [ ] Verify last commit in CCPI matches `git log --oneline -1`
-- [ ] Read DIRECTIVE_INDEX.md for current state
+- [ ] Read BATCH_CATALOG.md for recent batch history
 - [ ] Check cc-inbox for unread messages from Langston
 - [ ] Report own capacity status to conversation
 - [ ] Check Langston's capacity: `ssh root@204.168.141.77 "openclaw sessions --json"`
@@ -976,7 +1069,7 @@ This audit is a STEP in the process, not something hoped-for. The governance bat
 
 ### Batch Completion Report — Mandatory Sections
 
-Every batch completion report (generated by Claude Code per Rule 24) must include ALL of the following sections:
+Every batch completion report (generated by Claude Code per Rule 21) must include ALL of the following sections:
 
 | Section | Content |
 |---------|---------|
@@ -984,13 +1077,13 @@ Every batch completion report (generated by Claude Code per Rule 24) must includ
 | **Per-Batch Details** | For each batch: commit hash, type (code/governance), files changed, what was fixed/added |
 | **Governance Updates** | Which governance files were updated and what changed. If process/workflow changes were made, call them out explicitly |
 | **Capacity Status** | Current token usage estimates for both Claude Code and Langston. Flag if either is above 75%. |
-| **Auth Status** | Langston's auth session expiry ETA. Flag if <2 hours remaining. |
+| **Auth Status** | Langston's auth session status |
 | **Stale Reference Check** | Confirmation that CCPI was audited for stale references after governance batch |
 | **Next Steps** | What comes next, any blockers, any decisions needed from Kyle |
 
-If a section is empty or missing, the report is incomplete. Langston should not send incomplete reports.
+If a section is empty or missing, the report is incomplete.
 
-**Format:** All reports must be Word documents (.docx) per Rule 21. See Rule 21 for naming convention and filing locations.
+**Format:** All reports must be Markdown files (.md) per Rule 24. See Rule 24 for naming convention and filing locations.
 
 ---
 
