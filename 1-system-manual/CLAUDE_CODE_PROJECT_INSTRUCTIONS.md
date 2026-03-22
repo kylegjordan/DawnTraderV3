@@ -109,6 +109,13 @@ ssh root@204.168.141.77 "cc-inbox read && cc-inbox mark-read"  # Combined
 ssh root@204.168.141.77 "cc-poll"                 # Alternative polling command
 ```
 
+**Background Inbox Monitoring (mandatory during three-way discussions):**
+Launch a repeating background check that notifies you every ~15 seconds:
+```bash
+ssh root@204.168.141.77 "sleep 15 && cc-inbox read && cc-inbox mark-read"   (run_in_background: true)
+```
+When the task-notification arrives: read the output, process any new messages, then immediately relaunch the same command. If no messages, relaunch immediately anyway. Continue this cycle for the entire three-way discussion. Stop only after 10 minutes of silence or when someone declares the discussion over.
+
 ### Telegram Topic IDs
 | Topic | Thread ID | Purpose | Status |
 |-------|-----------|---------|--------|
@@ -337,65 +344,32 @@ ssh root@204.168.141.77 "cc-poll"                 # Alternative polling command
 
 **CRITICAL: Read this entire section before starting a three-way discussion.**
 
-#### Why Background Polling Loops Do NOT Work
+#### Background Inbox Monitoring Protocol
 
-Claude Code's `run_in_background` Bash tool only notifies you when the background task **completes and exits**. A `while true; do ... done` loop never exits, so you are NEVER notified of new messages. Do not attempt background polling loops — they will silently accumulate output in a file that you never see.
-
-#### How To Poll: Foreground Sequential Checking
-
-During a three-way discussion, you must actively poll for messages in the **foreground** between your own actions. This is not automated — it is a manual, sequential workflow that you execute repeatedly.
-
-**The exact commands:**
+During three-way discussions, use `run_in_background` with a single-shot delayed inbox check. This notifies you every ~15 seconds without blocking your other work:
 
 ```bash
-# CHECK for new messages (foreground — you will see the output immediately):
-ssh root@204.168.141.77 "cc-inbox read"
-
-# MARK messages as read (so they don't show up again on next check):
-ssh root@204.168.141.77 "cc-inbox mark-read"
-
-# COMBINED — check and mark in one call:
-ssh root@204.168.141.77 "cc-inbox read && cc-inbox mark-read"
+ssh root@204.168.141.77 "sleep 15 && cc-inbox read && cc-inbox mark-read"   (run_in_background: true)
 ```
 
-#### The Three-Way Discussion Loop (Step by Step)
+**How it works:**
+1. The command sleeps 15 seconds, then checks the inbox, then exits
+2. Because it exits, `run_in_background` sends you a task-notification with the output
+3. You read the notification — if new messages exist, process them
+4. Immediately relaunch the same command (another 15-second cycle)
+5. If no messages, relaunch immediately anyway
+6. Continue this cycle for the entire three-way discussion
+7. Stop only after 10 minutes of silence or when someone declares the discussion over
 
-When you are in an active three-way discussion (e.g., scope review, debugging session, batch planning), follow this exact loop:
-
-**Step 1: Send your message**
-Run BOTH commands (broadcast to Telegram + deliver to Langston's brain):
-```bash
-ssh root@204.168.141.77 "openclaw message send --channel telegram --target '-1003575211453' --thread-id <THREAD_ID> --message '**CLAUDE CODE SPEAKING:** <your message>'"
-ssh root@204.168.141.77 "openclaw agent --session-id '<UUID>' --message '**CLAUDE CODE SPEAKING:** <your message>' --deliver"
-```
-
-**Step 2: Wait for responses**
-Give Kyle and Langston time to read and respond. Wait 10-15 seconds:
-```bash
-ssh root@204.168.141.77 "sleep 10"
-```
-
-**Step 3: Check inbox**
-Read any new messages that arrived while you waited:
-```bash
-ssh root@204.168.141.77 "cc-inbox read && cc-inbox mark-read"
-```
-
-**Step 4: Process and respond**
-- If new messages arrived: read them, formulate your response, go back to Step 1.
-- If no new messages arrived: wait another 10-15 seconds (repeat Step 2), then check again (Step 3).
-- If you've checked 3-4 times with no new messages, tell Kyle in the Claude Code chat that you're waiting and ask if the discussion is still active.
-
-**Step 5: Repeat**
-Continue this loop (send, wait, check, respond) for the entire duration of the three-way discussion. This is your primary activity during a live discussion — do not start other tasks while a three-way conversation is active.
+**Important:** Do NOT use `while true` loops — they never exit and you are never notified. Each cycle must be a single-shot command that exits after one check.
 
 #### Rules for Three-Way Discussions
 
-1. **Stay engaged.** Once a three-way discussion starts, polling for messages is your top priority. Do not wander off to do other tasks.
-2. **Check frequently.** Poll every 10-15 seconds during active exchanges. If the discussion has natural pauses (e.g., waiting for Kyle to review something), you can extend to 30 seconds.
-3. **Always mark read.** Use `cc-inbox mark-read` after every read, or use the combined command. If you don't mark read, you will keep seeing the same messages repeatedly.
-4. **All polling is foreground.** Never use `run_in_background` for inbox polling. You need to see the output immediately in your conversation context.
-5. **Post to Telegram, not just the Claude Code chat.** Kyle and Langston cannot see your Claude Code chat window. Every response you want them to see must go through `openclaw message send`. Responding only in the Claude Code UI means you are talking to yourself.
+1. **Stay engaged.** Once a three-way discussion starts, launch the background polling immediately. Do not wait to be reminded.
+2. **Always use 2-step send.** Every message you send must go to BOTH Telegram (for Kyle visibility) AND Langston's brain. Never send to only one.
+3. **Always mark read.** The combined command `cc-inbox read && cc-inbox mark-read` handles this. If you don't mark read, you will keep seeing the same messages.
+4. **Post to Telegram, not just the Claude Code chat.** Kyle and Langston cannot see your Claude Code chat window. Every response you want them to see must go through `openclaw message send`. Responding only in the Claude Code UI means you are talking to yourself.
+5. **Relaunch immediately after every notification.** Whether there are messages or not, relaunch the background check. Never let the polling lapse during an active discussion.
 
 ### Detailed Reference
 
