@@ -3,7 +3,7 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-03-23 (Batch 20 GOV — Strategy-Family Filter Profiles audit complete, Architecture B selected, DI threshold recalibration identified, whole-number batch numbering resumed)
+> **Last Updated**: 2026-03-23 (Batch 21 GOV — Telemetry & Calibration Scaffolding deployed, PAT auth note added to push command section)
 
 ---
 
@@ -87,6 +87,11 @@ ssh root@204.168.141.77 "replit-cmd read-agent"
 git -C $HOME/workspace add -A && git -C $HOME/workspace diff --cached --quiet && git -C $HOME/workspace commit --amend -m "MSG" || git -C $HOME/workspace commit -m "MSG" ; git -C $HOME/workspace push origin dawntrader-v4
 ```
 Replace `MSG` with the actual commit message. Always use `$HOME/workspace` — never `cd /home/runner/DawnTraderV3` (path does not exist).
+
+**PAT Authentication**: The push relies on a GitHub PAT stored as a Replit Secret (`GITHUB_PAT`) embedded in the remote URL. If push fails with auth errors, reset with:
+```bash
+git -C ~/workspace remote set-url origin https://kylegjordan:$GITHUB_PAT@github.com/kylegjordan/DawnTraderV3.git
+```
 
 ### Git Pull to Clone
 ```bash
@@ -814,8 +819,8 @@ See `1-system-manual/PHASE_HISTORY.md` for phase-to-batch mapping and chronology
 |-----------|-------|-------|--------|
 | (none currently in progress) | | | |
 
-> **Last commit**: `4deae999` (Batch 19J: VTS Evaluation Breakdown — 24-hour rolling aggregation)
-> **Next step**: Batch 21 — Telemetry & Calibration Scaffolding (DI distribution analysis, skipped-signal analysis, null reason breakdown, totalStrategyEvaluations counter). Then Batch 22 — Architecture B Implementation (family-specific filter paths). Then Phase 14.6 X Stocks, then Phase 11 Finalization.
+> **Last commit**: `bf291992` (Batch 21: Telemetry and Calibration Scaffolding)
+> **Next step**: Batch 22 — Architecture B Implementation (family-specific filter paths, DI threshold calibration). Then Phase 14.6 X Stocks, then Phase 11 Finalization.
 > **Note**: Autonomous deployment pipeline OPERATIONAL. **Phase 14.5 FULLY COMPLETE** (Batch 19 core + 19C deferred + 19E extension + 19G completion + HF1-HF3 + VN + VN HF). DB-driven 4-path filter architecture live (screener_filters table, 8 rows). Filter constants migrated from code to DB. VTS hybrid confluence buffer operational. Log-returns MAD/median VN formula deployed. **Filter Pipeline Diagnostics tab** deployed (Batch 19H). **Filter Diagnostics enhancement** deployed (Batch 19I — number formatting, VTS eval counters). **VTS Evaluation Breakdown** deployed (Batch 19J — 24-hour rolling aggregation). **Batch 20 COMPLETE** (Strategy-Family Filter Profiles audit — no code changes, Architecture B selected, 10 findings, 5 artifacts, DI threshold recalibration identified). **Whole-number batch numbering resumed** (Batch 20+). **Langston is GPT-5.4 permanently** (no more model switching). **Batch completion reports are Claude Code's responsibility** (Rule 24, Markdown format). **Claude Code drives deployment** via replit-cmd through Langston's server. Conditional push command replaces REPLIT_PUSH_SCRIPT.sh. Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE. Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED.
 
 ### Snapshot Log
