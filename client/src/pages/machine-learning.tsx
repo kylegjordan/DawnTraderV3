@@ -2063,6 +2063,18 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                             );
                           })
                         }
+                        {/* Batch 22 HF3: Unique Combos Blocked sub-row */}
+                        {((ve.nullReasons as any).uniqueDuplicateCombos ?? 0) > 0 && (
+                          <tr className="border-b hover:bg-muted/30">
+                            <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Unique Combos Blocked</td>
+                            <td className="p-2 text-right text-orange-400">{(ve.nullReasons as any).uniqueDuplicateCombos ?? 0}</td>
+                            <td className="p-2 text-right text-xs text-muted-foreground">
+                              {((ve.nullReasons as any).uniqueDuplicateCombos ?? 0) > 0
+                                ? `avg ${((ve.nullReasons as any).duplicatePosition / (ve.nullReasons as any).uniqueDuplicateCombos).toFixed(1)} attempts/combo`
+                                : '—'}
+                            </td>
+                          </tr>
+                        )}
                       </tbody>
                     </table>
                   </div>

@@ -86,7 +86,8 @@ export interface NullReasonBreakdown {
   conditionsNotMet: number;    // Strategy detect() returned null (no specific reason)
   netEvBelowFloor: number;    // Net EV < VTS floor
   adxGuard: number;           // ADX < 25 guard (sma_trend_ride)
-  duplicatePosition: number;  // Already have pair+strategy combo open
+  duplicatePosition: number;  // Already have pair+strategy combo open (event count)
+  uniqueDuplicateCombos: number; // Batch 22 HF3: Distinct pair+strategy combos blocked
   maxOpenTrades: number;      // Portfolio full
   regimeNoStrategies: number; // No strategies enabled for this regime
 }

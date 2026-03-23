@@ -167,6 +167,7 @@ export function getVTSEvalRolling24h(): VTSEvalSnapshot | null {
       aggregated.nullReasons.netEvBelowFloor += snap.nullReasons.netEvBelowFloor;
       aggregated.nullReasons.adxGuard += snap.nullReasons.adxGuard;
       aggregated.nullReasons.duplicatePosition += snap.nullReasons.duplicatePosition;
+      aggregated.nullReasons.uniqueDuplicateCombos += snap.nullReasons.uniqueDuplicateCombos ?? 0;
       aggregated.nullReasons.maxOpenTrades += snap.nullReasons.maxOpenTrades;
       aggregated.nullReasons.regimeNoStrategies += snap.nullReasons.regimeNoStrategies;
     }
@@ -839,6 +840,7 @@ async function generatePhase10Signal(
       source: 'VTS'
     });
     console.log(`[18L][DUP_GUARD] Skipping ${symbol}/${strategy}: ${existingTradeCount}/${VTS_MAX_CONCURRENT_PER_COMBO} concurrent VTS trades`);
+    blockedDupCombos.add(`${symbol}:${strategy}`);
     return null;
   }
   
@@ -1395,6 +1397,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       netEvBelowFloor: 0,
       adxGuard: 0,
       duplicatePosition: 0,
+      uniqueDuplicateCombos: 0,
       maxOpenTrades: 0,
       regimeNoStrategies: 0,
     },
@@ -1464,6 +1467,9 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
     }
 
     console.log(`[22][VTS] Family tags built: ${vtsSymbolFamilies.size} symbols with family data`);
+
+  // Batch 22 HF3: Track unique duplicate combos for observability
+  const blockedDupCombos = new Set<string>();
 
   for (const pair of pairs) {
     try {
@@ -1707,6 +1713,13 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   console.log(`[VTS][Cycle ${cycleCount}] Executing ${simulatedCount} signals across ${Object.keys(signalTypeDistribution).length} signal types`);
   console.log(`[VTS][Cycle ${cycleCount}] Completed: ${simulatedCount} trades simulated | Avg finalScore=${avgFinalScore.toFixed(2)}`);
   
+  // Batch 22 HF3: Record unique duplicate combos count
+  vtsEvalCounters.nullReasons.uniqueDuplicateCombos = blockedDupCombos.size;
+  if (blockedDupCombos.size > 0) {
+    const avgAttempts = vtsEvalCounters.nullReasons.duplicatePosition / blockedDupCombos.size;
+    console.log(`[22HF3][DUP_STATS] ${vtsEvalCounters.nullReasons.duplicatePosition} dup events from ${blockedDupCombos.size} unique combos (avg ${avgAttempts.toFixed(1)} attempts/combo): ${Array.from(blockedDupCombos).slice(0, 5).join(', ')}${blockedDupCombos.size > 5 ? '...' : ''}`);
+  }
+
   // Batch 19I: Store VTS evaluation diagnostics
   vtsEvalHistory.push({ ...vtsEvalCounters, timestamp: Date.now() });
   console.log(`[19I][VTS_EVAL] quant=${vtsEvalCounters.quantPairsEvaluated} pattern=${vtsEvalCounters.patternPairsEvaluated} noDetect=${vtsEvalCounters.patternNoDetection} detected=${vtsEvalCounters.patternDetected} stratNulls=${vtsEvalCounters.quantStrategyNulls} signals=${vtsEvalCounters.signalsGenerated}`);
