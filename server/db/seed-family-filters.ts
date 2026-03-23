@@ -6,7 +6,7 @@
  *   npx tsx server/db/seed-family-filters.ts
  */
 
-import { db } from '../../db.js';
+import { db } from '../db.js';
 import { screenerFilters } from '../../shared/schema.js';
 
 const FAMILY_FILTER_SEEDS = [
