@@ -6,6 +6,26 @@
     "previousValue": "STRUCTURAL_TRANSITION",
     "newValue": "RANGE_BOUND_STABLE",
     "severity": "info",
+    "id": "mkt_evt_1774290944147_228",
+    "timestamp": "2026-03-23T18:35:44.147Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Range-Bound Stable to Structural Transition",
+    "explanation": "Market is transitioning between regimes. Conditions are uncertain - the system will be more selective until a clear trend emerges.",
+    "previousValue": "RANGE_BOUND_STABLE",
+    "newValue": "STRUCTURAL_TRANSITION",
+    "severity": "info",
+    "id": "mkt_evt_1774290884138_227",
+    "timestamp": "2026-03-23T18:34:44.138Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Structural Transition to Range-Bound Stable",
+    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
+    "previousValue": "STRUCTURAL_TRANSITION",
+    "newValue": "RANGE_BOUND_STABLE",
+    "severity": "info",
     "id": "mkt_evt_1774290343972_226",
     "timestamp": "2026-03-23T18:25:43.972Z"
   },
@@ -4978,25 +4998,5 @@
     "severity": "info",
     "id": "mkt_evt_1774189035483_228",
     "timestamp": "2026-03-22T14:17:15.483Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Range-Bound Stable to High-Volatility Unstable",
-    "explanation": "Market regime changed from Range-Bound Stable to High-Volatility Unstable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "RANGE_BOUND_STABLE",
-    "newValue": "HIGH_VOLATILITY_UNSTABLE",
-    "severity": "info",
-    "id": "mkt_evt_1774188975473_227",
-    "timestamp": "2026-03-22T14:16:15.473Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from High-Volatility Unstable to Range-Bound Stable",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "HIGH_VOLATILITY_UNSTABLE",
-    "newValue": "RANGE_BOUND_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1774188735404_226",
-    "timestamp": "2026-03-22T14:12:15.404Z"
   }
 ]
