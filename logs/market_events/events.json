@@ -1,6 +1,136 @@
 [
   {
     "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Trend-Friendly Stable to Range-Bound Stable",
+    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
+    "previousValue": "TREND_FRIENDLY_STABLE",
+    "newValue": "RANGE_BOUND_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1774280655202_482",
+    "timestamp": "2026-03-23T15:44:15.202Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Range-Bound Stable to Trend-Friendly Stable",
+    "explanation": "Market regime changed from Range-Bound Stable to Trend-Friendly Stable. Strategy selection and position sizing will adjust accordingly.",
+    "previousValue": "RANGE_BOUND_STABLE",
+    "newValue": "TREND_FRIENDLY_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1774280535177_481",
+    "timestamp": "2026-03-23T15:42:15.177Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Trend-Friendly Stable to Range-Bound Stable",
+    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
+    "previousValue": "TREND_FRIENDLY_STABLE",
+    "newValue": "RANGE_BOUND_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1774280475169_480",
+    "timestamp": "2026-03-23T15:41:15.169Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Structural Transition to Trend-Friendly Stable",
+    "explanation": "Market regime changed from Structural Transition to Trend-Friendly Stable. Strategy selection and position sizing will adjust accordingly.",
+    "previousValue": "STRUCTURAL_TRANSITION",
+    "newValue": "TREND_FRIENDLY_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1774280415163_479",
+    "timestamp": "2026-03-23T15:40:15.163Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Trend-Friendly Stable to Structural Transition",
+    "explanation": "Market is transitioning between regimes. Conditions are uncertain - the system will be more selective until a clear trend emerges.",
+    "previousValue": "TREND_FRIENDLY_STABLE",
+    "newValue": "STRUCTURAL_TRANSITION",
+    "severity": "info",
+    "id": "mkt_evt_1774280355155_478",
+    "timestamp": "2026-03-23T15:39:15.155Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Range-Bound Stable to Trend-Friendly Stable",
+    "explanation": "Market regime changed from Range-Bound Stable to Trend-Friendly Stable. Strategy selection and position sizing will adjust accordingly.",
+    "previousValue": "RANGE_BOUND_STABLE",
+    "newValue": "TREND_FRIENDLY_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1774280115135_477",
+    "timestamp": "2026-03-23T15:35:15.135Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Trend-Friendly Stable to Range-Bound Stable",
+    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
+    "previousValue": "TREND_FRIENDLY_STABLE",
+    "newValue": "RANGE_BOUND_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1774280055123_476",
+    "timestamp": "2026-03-23T15:34:15.123Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Range-Bound Stable to Trend-Friendly Stable",
+    "explanation": "Market regime changed from Range-Bound Stable to Trend-Friendly Stable. Strategy selection and position sizing will adjust accordingly.",
+    "previousValue": "RANGE_BOUND_STABLE",
+    "newValue": "TREND_FRIENDLY_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1774279815092_475",
+    "timestamp": "2026-03-23T15:30:15.092Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Trend-Friendly Stable to Range-Bound Stable",
+    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
+    "previousValue": "TREND_FRIENDLY_STABLE",
+    "newValue": "RANGE_BOUND_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1774279755088_474",
+    "timestamp": "2026-03-23T15:29:15.088Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Range-Bound Stable to Trend-Friendly Stable",
+    "explanation": "Market regime changed from Range-Bound Stable to Trend-Friendly Stable. Strategy selection and position sizing will adjust accordingly.",
+    "previousValue": "RANGE_BOUND_STABLE",
+    "newValue": "TREND_FRIENDLY_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1774279695077_473",
+    "timestamp": "2026-03-23T15:28:15.077Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Trend-Friendly Stable to Range-Bound Stable",
+    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
+    "previousValue": "TREND_FRIENDLY_STABLE",
+    "newValue": "RANGE_BOUND_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1774279635063_472",
+    "timestamp": "2026-03-23T15:27:15.063Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Range-Bound Stable to Trend-Friendly Stable",
+    "explanation": "Market regime changed from Range-Bound Stable to Trend-Friendly Stable. Strategy selection and position sizing will adjust accordingly.",
+    "previousValue": "RANGE_BOUND_STABLE",
+    "newValue": "TREND_FRIENDLY_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1774279575053_471",
+    "timestamp": "2026-03-23T15:26:15.053Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Trend-Friendly Stable to Range-Bound Stable",
+    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
+    "previousValue": "TREND_FRIENDLY_STABLE",
+    "newValue": "RANGE_BOUND_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1774279515041_470",
+    "timestamp": "2026-03-23T15:25:15.041Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
     "message": "Global regime changed from Range-Bound Stable to Trend-Friendly Stable",
     "explanation": "Market regime changed from Range-Bound Stable to Trend-Friendly Stable. Strategy selection and position sizing will adjust accordingly.",
     "previousValue": "RANGE_BOUND_STABLE",
@@ -4868,135 +4998,5 @@
     "severity": "info",
     "id": "mkt_evt_1774186154987_201",
     "timestamp": "2026-03-22T13:29:14.987Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Structural Transition to Range-Bound Stable",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "STRUCTURAL_TRANSITION",
-    "newValue": "RANGE_BOUND_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1774185974955_200",
-    "timestamp": "2026-03-22T13:26:14.955Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Range-Bound Stable to Structural Transition",
-    "explanation": "Market is transitioning between regimes. Conditions are uncertain - the system will be more selective until a clear trend emerges.",
-    "previousValue": "RANGE_BOUND_STABLE",
-    "newValue": "STRUCTURAL_TRANSITION",
-    "severity": "info",
-    "id": "mkt_evt_1774185914946_199",
-    "timestamp": "2026-03-22T13:25:14.946Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from High-Volatility Unstable to Range-Bound Stable",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "HIGH_VOLATILITY_UNSTABLE",
-    "newValue": "RANGE_BOUND_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1774185794916_198",
-    "timestamp": "2026-03-22T13:23:14.916Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Range-Bound Stable to High-Volatility Unstable",
-    "explanation": "Market regime changed from Range-Bound Stable to High-Volatility Unstable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "RANGE_BOUND_STABLE",
-    "newValue": "HIGH_VOLATILITY_UNSTABLE",
-    "severity": "info",
-    "id": "mkt_evt_1774185734906_197",
-    "timestamp": "2026-03-22T13:22:14.906Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from High-Volatility Unstable to Range-Bound Stable",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "HIGH_VOLATILITY_UNSTABLE",
-    "newValue": "RANGE_BOUND_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1774185314813_196",
-    "timestamp": "2026-03-22T13:15:14.813Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Range-Bound Stable to High-Volatility Unstable",
-    "explanation": "Market regime changed from Range-Bound Stable to High-Volatility Unstable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "RANGE_BOUND_STABLE",
-    "newValue": "HIGH_VOLATILITY_UNSTABLE",
-    "severity": "info",
-    "id": "mkt_evt_1774185254802_195",
-    "timestamp": "2026-03-22T13:14:14.802Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from High-Volatility Unstable to Range-Bound Stable",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "HIGH_VOLATILITY_UNSTABLE",
-    "newValue": "RANGE_BOUND_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1774185194793_194",
-    "timestamp": "2026-03-22T13:13:14.793Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Range-Bound Stable to High-Volatility Unstable",
-    "explanation": "Market regime changed from Range-Bound Stable to High-Volatility Unstable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "RANGE_BOUND_STABLE",
-    "newValue": "HIGH_VOLATILITY_UNSTABLE",
-    "severity": "info",
-    "id": "mkt_evt_1774185134790_193",
-    "timestamp": "2026-03-22T13:12:14.790Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from High-Volatility Unstable to Range-Bound Stable",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "HIGH_VOLATILITY_UNSTABLE",
-    "newValue": "RANGE_BOUND_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1774184954771_192",
-    "timestamp": "2026-03-22T13:09:14.771Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Range-Bound Stable to High-Volatility Unstable",
-    "explanation": "Market regime changed from Range-Bound Stable to High-Volatility Unstable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "RANGE_BOUND_STABLE",
-    "newValue": "HIGH_VOLATILITY_UNSTABLE",
-    "severity": "info",
-    "id": "mkt_evt_1774184894768_191",
-    "timestamp": "2026-03-22T13:08:14.768Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Structural Transition to Range-Bound Stable",
-    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
-    "previousValue": "STRUCTURAL_TRANSITION",
-    "newValue": "RANGE_BOUND_STABLE",
-    "severity": "info",
-    "id": "mkt_evt_1774184714759_190",
-    "timestamp": "2026-03-22T13:05:14.759Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from High-Volatility Unstable to Structural Transition",
-    "explanation": "Market is transitioning between regimes. Conditions are uncertain - the system will be more selective until a clear trend emerges.",
-    "previousValue": "HIGH_VOLATILITY_UNSTABLE",
-    "newValue": "STRUCTURAL_TRANSITION",
-    "severity": "info",
-    "id": "mkt_evt_1774184534721_189",
-    "timestamp": "2026-03-22T13:02:14.721Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Structural Transition to High-Volatility Unstable",
-    "explanation": "Market regime changed from Structural Transition to High-Volatility Unstable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "STRUCTURAL_TRANSITION",
-    "newValue": "HIGH_VOLATILITY_UNSTABLE",
-    "severity": "info",
-    "id": "mkt_evt_1774184174684_188",
-    "timestamp": "2026-03-22T12:56:14.684Z"
   }
 ]
