@@ -840,7 +840,6 @@ async function generatePhase10Signal(
       source: 'VTS'
     });
     console.log(`[18L][DUP_GUARD] Skipping ${symbol}/${strategy}: ${existingTradeCount}/${VTS_MAX_CONCURRENT_PER_COMBO} concurrent VTS trades`);
-    blockedDupCombos.add(`${symbol}:${strategy}`);
     return null;
   }
   
@@ -1587,6 +1586,18 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
             continue;
           }
         }
+        // Batch 22 HF3: Duplicate pre-check at outer loop level (blockedDupCombos in scope)
+        const dupCheckCount = Array.from(openVirtualTrades.values()).filter(t =>
+          t.symbol === pair.symbol && t.strategy === stratDef.strategyKey
+        ).length;
+        if (dupCheckCount >= VTS_MAX_CONCURRENT_PER_COMBO) {
+          vtsEvalCounters.totalStrategyEvaluations++;
+          vtsEvalCounters.quantStrategyNulls++;
+          vtsEvalCounters.nullReasons.duplicatePosition++;
+          blockedDupCombos.add(`${pair.symbol}:${stratDef.strategyKey}`);
+          continue;
+        }
+
         const result = await generatePhase10Signal(pair.symbol, priceData, ohlcData, pair.pool, stratDef, pair.filterTier, pair.sourcePool);
         // Batch 19I: Track strategy outcomes
         const stratKey = stratDef.strategyKey;
