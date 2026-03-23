@@ -72,11 +72,34 @@ export interface VirtualSignalPhase10 {
 export interface VTSCycleMetrics {
   cycleId: number;
   pairsEvaluated: number;
-  tradesSimulated: number;
+  signalsGenerated: number;  // Batch 21: renamed from tradesSimulated for clarity
   avgFinalScore: number;
   regimeDistribution: Record<MarketRegimeType, number>;
   signalTypeDistribution: Record<string, number>;
   strategiesExecuted: string[];
   cycleDurationMs: number;
   timestamp: number;
+}
+
+// Batch 21: VTS evaluation diagnostics — exported for API routes and UI
+export interface NullReasonBreakdown {
+  conditionsNotMet: number;    // Strategy detect() returned null (no specific reason)
+  netEvBelowFloor: number;    // Net EV < VTS floor
+  adxGuard: number;           // ADX < 25 guard (sma_trend_ride)
+  duplicatePosition: number;  // Already have pair+strategy combo open
+  maxOpenTrades: number;      // Portfolio full
+  regimeNoStrategies: number; // No strategies enabled for this regime
+}
+
+export interface VTSEvalSnapshot {
+  timestamp: number;
+  quantPairsEvaluated: number;
+  patternPairsEvaluated: number;
+  quantStrategyNulls: number;
+  patternNoDetection: number;
+  patternDetected: number;
+  signalsGenerated: number;
+  totalStrategyEvaluations: number;  // Batch 21: total detect() calls across all pairs
+  nullReasons: NullReasonBreakdown;  // Batch 21: granular null reason tracking
+  byStrategy: Record<string, { evaluated: number; nulls: number; signals: number }>;
 }

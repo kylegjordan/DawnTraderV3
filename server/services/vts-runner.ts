@@ -119,17 +119,8 @@ let sessionStartTime: number | null = null;
 let cycleCount = 0;
 let patternRecognitionWarmedUp = false;
 
-// Batch 19J: VTS evaluation diagnostics — 24h rolling history
-interface VTSEvalSnapshot {
-  timestamp: number;
-  quantPairsEvaluated: number;
-  patternPairsEvaluated: number;
-  quantStrategyNulls: number;
-  patternNoDetection: number;
-  patternDetected: number;
-  signalsGenerated: number;
-  byStrategy: Record<string, { evaluated: number; nulls: number; signals: number }>;
-}
+// Batch 21: VTS evaluation diagnostics — imported from shared types
+import type { VTSEvalSnapshot, NullReasonBreakdown } from '../types/virtual-trade.interface.js';
 
 const VTS_EVAL_ROLLING_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
 let vtsEvalHistory: VTSEvalSnapshot[] = [];
@@ -150,6 +141,15 @@ export function getVTSEvalRolling24h(): VTSEvalSnapshot | null {
     patternNoDetection: 0,
     patternDetected: 0,
     signalsGenerated: 0,
+    totalStrategyEvaluations: 0,
+    nullReasons: {
+      conditionsNotMet: 0,
+      netEvBelowFloor: 0,
+      adxGuard: 0,
+      duplicatePosition: 0,
+      maxOpenTrades: 0,
+      regimeNoStrategies: 0,
+    },
     byStrategy: {},
   };
 
@@ -160,6 +160,16 @@ export function getVTSEvalRolling24h(): VTSEvalSnapshot | null {
     aggregated.patternNoDetection += snap.patternNoDetection;
     aggregated.patternDetected += snap.patternDetected;
     aggregated.signalsGenerated += snap.signalsGenerated;
+    aggregated.totalStrategyEvaluations += snap.totalStrategyEvaluations;
+    // Batch 21: Aggregate null reasons
+    if (snap.nullReasons) {
+      aggregated.nullReasons.conditionsNotMet += snap.nullReasons.conditionsNotMet;
+      aggregated.nullReasons.netEvBelowFloor += snap.nullReasons.netEvBelowFloor;
+      aggregated.nullReasons.adxGuard += snap.nullReasons.adxGuard;
+      aggregated.nullReasons.duplicatePosition += snap.nullReasons.duplicatePosition;
+      aggregated.nullReasons.maxOpenTrades += snap.nullReasons.maxOpenTrades;
+      aggregated.nullReasons.regimeNoStrategies += snap.nullReasons.regimeNoStrategies;
+    }
 
     for (const [strat, counts] of Object.entries(snap.byStrategy)) {
       if (!aggregated.byStrategy[strat]) {
@@ -1371,14 +1381,23 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   let simulatedCount = 0;
   let totalFinalScore = 0;
 
-  // Batch 19I: VTS evaluation outcome counters
-  let vtsEvalCounters = {
+  // Batch 21: VTS evaluation outcome counters (expanded with null reasons + totalStrategyEvaluations)
+  let vtsEvalCounters: Omit<VTSEvalSnapshot, 'timestamp'> = {
     quantPairsEvaluated: 0,
     patternPairsEvaluated: 0,
     quantStrategyNulls: 0,
     patternNoDetection: 0,
     patternDetected: 0,
     signalsGenerated: 0,
+    totalStrategyEvaluations: 0,
+    nullReasons: {
+      conditionsNotMet: 0,
+      netEvBelowFloor: 0,
+      adxGuard: 0,
+      duplicatePosition: 0,
+      maxOpenTrades: 0,
+      regimeNoStrategies: 0,
+    },
     byStrategy: {} as Record<string, { evaluated: number; nulls: number; signals: number }>,
   };
   
@@ -1500,6 +1519,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         }
 
         if (effectiveStrategies.length === 0) {
+          vtsEvalCounters.nullReasons.regimeNoStrategies++;
           continue;
         }
 
@@ -1510,6 +1530,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         effectiveStrategies = regimeStrategies;
 
         if (effectiveStrategies.length === 0) {
+          vtsEvalCounters.nullReasons.regimeNoStrategies++;
           continue;
         }
 
@@ -1526,9 +1547,11 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
           vtsEvalCounters.byStrategy[stratKey] = { evaluated: 0, nulls: 0, signals: 0 };
         }
         vtsEvalCounters.byStrategy[stratKey].evaluated++;
+        vtsEvalCounters.totalStrategyEvaluations++;
         if (!result) {
           vtsEvalCounters.byStrategy[stratKey].nulls++;
           vtsEvalCounters.quantStrategyNulls++;
+          vtsEvalCounters.nullReasons.conditionsNotMet++;
           continue;
         }
         vtsEvalCounters.byStrategy[stratKey].signals++;
@@ -1646,11 +1669,19 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   // Batch 19I: Store VTS evaluation diagnostics
   vtsEvalHistory.push({ ...vtsEvalCounters, timestamp: Date.now() });
   console.log(`[19I][VTS_EVAL] quant=${vtsEvalCounters.quantPairsEvaluated} pattern=${vtsEvalCounters.patternPairsEvaluated} noDetect=${vtsEvalCounters.patternNoDetection} detected=${vtsEvalCounters.patternDetected} stratNulls=${vtsEvalCounters.quantStrategyNulls} signals=${vtsEvalCounters.signalsGenerated}`);
+  console.log(`[21][VTS_EVAL] totalStratEvals=${vtsEvalCounters.totalStrategyEvaluations} nullReasons: conditions=${vtsEvalCounters.nullReasons.conditionsNotMet} netEV=${vtsEvalCounters.nullReasons.netEvBelowFloor} adx=${vtsEvalCounters.nullReasons.adxGuard} dup=${vtsEvalCounters.nullReasons.duplicatePosition} maxTrades=${vtsEvalCounters.nullReasons.maxOpenTrades} noRegimeStrats=${vtsEvalCounters.nullReasons.regimeNoStrategies}`);
+
+  // Batch 21: DI distribution logging — capture actual DI values for threshold calibration
+  for (const pair of pairs) {
+    if ((pair as any).DI !== undefined) {
+      console.log(`[21][DI_DIST] ${pair.symbol} DI=${((pair as any).DI as number).toFixed(2)} pool=${pair.sourcePool ?? 'quant'}`);
+    }
+  }
 
   return {
     cycleId: cycleCount,
     pairsEvaluated: pairs.length,
-    tradesSimulated: simulatedCount,
+    signalsGenerated: simulatedCount,  // Batch 21: renamed from tradesSimulated
     avgFinalScore,
     regimeDistribution,
     signalTypeDistribution,

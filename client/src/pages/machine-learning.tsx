@@ -1918,6 +1918,13 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                         <td className="p-2 text-right text-muted-foreground">—</td>
                         <td className="p-2 text-right text-orange-500">{fmt(ve.quantStrategyNulls)}</td>
                       </tr>
+                      {ve.totalStrategyEvaluations > 0 && (
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2">Total Strategy Evaluations</td>
+                          <td colSpan={2} className="p-2 text-right">{fmt(ve.totalStrategyEvaluations)}</td>
+                          <td className="p-2 text-right font-semibold">{fmt(ve.totalStrategyEvaluations)}</td>
+                        </tr>
+                      )}
                       <tr className="bg-muted/30 font-semibold">
                         <td className="p-2">Signals Generated</td>
                         <td colSpan={2} className="p-2 text-right text-green-600">{fmt(ve.signalsGenerated)}</td>
@@ -1957,6 +1964,47 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                               </td>
                             </tr>
                           ))
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Batch 21: Null Reason Breakdown */}
+                {ve.nullReasons && Object.values(ve.nullReasons).some((v: number) => v > 0) && (
+                  <div className="overflow-x-auto">
+                    <div className="px-2 py-1 text-xs font-medium uppercase tracking-wider text-muted-foreground bg-muted/50">
+                      Null Reason Breakdown (24h)
+                    </div>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/30">
+                          <th className="text-left p-2 font-medium">Reason</th>
+                          <th className="text-right p-2 font-medium">Count</th>
+                          <th className="text-right p-2 font-medium">% of Nulls</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[
+                          { key: 'conditionsNotMet', label: 'Strategy Conditions Not Met' },
+                          { key: 'netEvBelowFloor', label: 'Net EV Below Floor' },
+                          { key: 'adxGuard', label: 'ADX Guard (< 25)' },
+                          { key: 'duplicatePosition', label: 'Duplicate Position' },
+                          { key: 'maxOpenTrades', label: 'Max Open Trades' },
+                          { key: 'regimeNoStrategies', label: 'No Strategies for Regime' },
+                        ].filter(r => (ve.nullReasons as any)[r.key] > 0)
+                          .sort((a, b) => (ve.nullReasons as any)[b.key] - (ve.nullReasons as any)[a.key])
+                          .map(r => {
+                            const count = (ve.nullReasons as any)[r.key] as number;
+                            const totalNulls = ve.quantStrategyNulls || 1;
+                            return (
+                              <tr key={r.key} className="border-b hover:bg-muted/30">
+                                <td className="p-2">{r.label}</td>
+                                <td className="p-2 text-right text-orange-500">{fmt(count)}</td>
+                                <td className="p-2 text-right">{Math.round(count / totalNulls * 100)}%</td>
+                              </tr>
+                            );
+                          })
                         }
                       </tbody>
                     </table>
