@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -1879,13 +1879,24 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     {Object.entries(signalRejections.byReason)
                       .sort(([, a], [, b]) => (b as number) - (a as number))
                       .map(([reason, count]) => (
-                        <tr key={reason} className="border-b hover:bg-muted/30">
-                          <td className="p-2">{formatReasonName(reason)}</td>
-                          <td className="p-2 text-right">{fmt(count as number)}</td>
-                          <td className="p-2 text-right text-muted-foreground">
-                            {signalRejections.total > 0 ? ((count as number) / signalRejections.total * 100).toFixed(1) : 0}%
-                          </td>
-                        </tr>
+                        <React.Fragment key={reason}>
+                          <tr className="border-b hover:bg-muted/30">
+                            <td className="p-2">{formatReasonName(reason)}</td>
+                            <td className="p-2 text-right">{fmt(count as number)}</td>
+                            <td className="p-2 text-right text-muted-foreground">
+                              {signalRejections.total > 0 ? ((count as number) / signalRejections.total * 100).toFixed(1) : 0}%
+                            </td>
+                          </tr>
+                          {reason === 'Duplicate_Position_Max' && (data as any)?.vtsEvaluation?.nullReasons?.uniqueDuplicateCombos > 0 && (
+                            <tr className="border-b hover:bg-muted/20">
+                              <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Unique Combos Blocked</td>
+                              <td className="p-2 text-right text-orange-400 text-xs">{(data as any).vtsEvaluation.nullReasons.uniqueDuplicateCombos}</td>
+                              <td className="p-2 text-right text-xs text-muted-foreground">
+                                avg {((count as number) / (data as any).vtsEvaluation.nullReasons.uniqueDuplicateCombos).toFixed(1)} attempts/combo
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
                       ))}
                   </tbody>
                 </table>
@@ -2022,6 +2033,24 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                             </tr>
                           ))
                         }
+                        {/* Batch 22 HF4: Total row for by-strategy breakdown */}
+                        {(() => {
+                          const totals = Object.values(ve.byStrategy).reduce(
+                            (acc, c) => ({ evaluated: acc.evaluated + c.evaluated, nulls: acc.nulls + c.nulls, signals: acc.signals + c.signals }),
+                            { evaluated: 0, nulls: 0, signals: 0 }
+                          );
+                          return (
+                            <tr className="border-t-2 bg-muted/30 font-semibold">
+                              <td className="p-2">TOTAL</td>
+                              <td className="p-2 text-right">{fmt(totals.evaluated)}</td>
+                              <td className="p-2 text-right text-orange-500">{fmt(totals.nulls)}</td>
+                              <td className="p-2 text-right text-green-600">{fmt(totals.signals)}</td>
+                              <td className="p-2 text-right">
+                                {totals.evaluated > 0 ? `${Math.round(totals.signals / totals.evaluated * 100)}%` : '—'}
+                              </td>
+                            </tr>
+                          );
+                        })()}
                       </tbody>
                     </table>
                   </div>
