@@ -1887,12 +1887,12 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                               {signalRejections.total > 0 ? ((count as number) / signalRejections.total * 100).toFixed(1) : 0}%
                             </td>
                           </tr>
-                          {reason === 'Duplicate_Position_Max' && (data as any)?.vtsEvaluation?.nullReasons?.uniqueDuplicateCombos > 0 && (
+                          {reason === 'Duplicate_Position_Max' && (signalRejections as any)?.duplicateUniqueCombos > 0 && (
                             <tr className="border-b hover:bg-muted/20">
                               <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Unique Combos Blocked</td>
-                              <td className="p-2 text-right text-orange-400 text-xs">{(data as any).vtsEvaluation.nullReasons.uniqueDuplicateCombos}</td>
+                              <td className="p-2 text-right text-orange-400 text-xs">{(signalRejections as any).duplicateUniqueCombos}</td>
                               <td className="p-2 text-right text-xs text-muted-foreground">
-                                avg {((count as number) / (data as any).vtsEvaluation.nullReasons.uniqueDuplicateCombos).toFixed(1)} attempts/combo
+                                avg {((count as number) / (signalRejections as any).duplicateUniqueCombos).toFixed(1)} attempts/combo
                               </td>
                             </tr>
                           )}

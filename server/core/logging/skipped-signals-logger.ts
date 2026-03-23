@@ -128,29 +128,39 @@ export async function getSkippedSignalsSummary(days: number = 7): Promise<{
   total: number;
   byReason: Record<SkipReason, number>;
   byRegime: Record<string, number>;
+  duplicateUniqueCombos: number;  // Batch 22 HF5: unique symbol+strategy combos blocked as duplicates
 }> {
   const summary = {
     total: 0,
     byReason: {} as Record<SkipReason, number>,
-    byRegime: {} as Record<string, number>
+    byRegime: {} as Record<string, number>,
+    duplicateUniqueCombos: 0,
   };
-  
+
+  // Batch 22 HF5: Track unique duplicate combos from disk-persisted data
+  const duplicateCombos = new Set<string>();
+
   const now = new Date();
   for (let i = 0; i < days; i++) {
     const date = new Date(now);
     date.setDate(date.getDate() - i);
     const dateStr = date.toISOString().slice(0, 10);
-    
+
     const entries = await getSkippedSignalsForDate(dateStr);
     summary.total += entries.length;
-    
+
     for (const entry of entries) {
       summary.byReason[entry.reason] = (summary.byReason[entry.reason] || 0) + 1;
       if (entry.regime) {
         summary.byRegime[entry.regime] = (summary.byRegime[entry.regime] || 0) + 1;
       }
+      // Batch 22 HF5: Track unique duplicate combos
+      if (entry.reason === 'Duplicate_Position' && entry.symbol && entry.strategy) {
+        duplicateCombos.add(`${entry.symbol}:${entry.strategy}`);
+      }
     }
   }
-  
+
+  summary.duplicateUniqueCombos = duplicateCombos.size;
   return summary;
 }
