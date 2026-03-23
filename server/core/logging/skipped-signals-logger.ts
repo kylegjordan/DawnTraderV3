@@ -155,7 +155,7 @@ export async function getSkippedSignalsSummary(days: number = 7): Promise<{
         summary.byRegime[entry.regime] = (summary.byRegime[entry.regime] || 0) + 1;
       }
       // Batch 22 HF5: Track unique duplicate combos
-      if (entry.reason === 'Duplicate_Position' && entry.symbol && entry.strategy) {
+      if ((entry.reason === 'Duplicate_Position' || entry.reason === 'Duplicate_Position_Max') && entry.symbol && entry.strategy) {
         duplicateCombos.add(`${entry.symbol}:${entry.strategy}`);
       }
     }
